@@ -17,6 +17,8 @@ export type Conversation = Readonly<{
   title: string
   type: ChatRow['type']
   model: string | null
+  reasoningEffort: ChatRow['reasoningEffort']
+  gitBranch: string | null
   ownerName: string
   origin: Readonly<{ chatId: ChatId; name: string }> | null
   isAgentWorking: boolean
@@ -39,6 +41,8 @@ export const getConversation =
       title: chat.name,
       type: chat.type,
       model: chat.model,
+      reasoningEffort: chat.reasoningEffort,
+      gitBranch: chat.gitBranch,
       ownerName: memberName(chat.ownerId),
       origin: origin ? { chatId: origin.id, name: origin.name } : null,
       isAgentWorking: chatMessages.some((message) => message.needsReply),

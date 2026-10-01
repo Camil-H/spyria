@@ -9,6 +9,7 @@ import { createUuidIdGenerator } from '../workspace/integrations/uuid-id-generat
 import type { Session } from './session.tsx'
 
 const defaultRuntimeModel = 'Claude Sonnet 5.5'
+const defaultReasoningEffort = 'Medium'
 
 export type Application = {
   store: Store
@@ -20,7 +21,12 @@ export type Application = {
 export const createApp = (): Application => {
   const store = createStore(createMockSnapshot())
   const idGenerator = createUuidIdGenerator()
-  const workspaceDependencies = { transactor: createStoreTransactor(store), idGenerator, defaultRuntimeModel }
+  const workspaceDependencies = {
+    transactor: createStoreTransactor(store),
+    idGenerator,
+    defaultRuntimeModel,
+    defaultReasoningEffort,
+  }
   return {
     store,
     session: { memberId: currentMemberId, defaultWorkspaceId },

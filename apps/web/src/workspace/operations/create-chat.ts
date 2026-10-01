@@ -4,7 +4,12 @@ import type { Transactor } from '../contracts/transactor.ts'
 import { type Chat, moveChat } from '../domain/chat.ts'
 import type { Name } from '../domain/name.ts'
 
-type Dependencies = { transactor: Transactor; idGenerator: IdGenerator; defaultRuntimeModel: string }
+type Dependencies = {
+  transactor: Transactor
+  idGenerator: IdGenerator
+  defaultRuntimeModel: string
+  defaultReasoningEffort: string
+}
 type Input = {
   workspaceId: WorkspaceId
   ownerId: MemberId
@@ -13,12 +18,17 @@ type Input = {
   projectId: ProjectId | null
 }
 
-export const createChat = ({ transactor, idGenerator, defaultRuntimeModel }: Dependencies, input: Input) =>
+export const createChat = (
+  { transactor, idGenerator, defaultRuntimeModel, defaultReasoningEffort }: Dependencies,
+  input: Input,
+) =>
   transactor.run(async (unitOfWork) => {
     const { projectId, ...fields } = input
     const looseChat: Chat = {
       ...fields,
       model: input.type === 'runtime' ? defaultRuntimeModel : null,
+      reasoningEffort: input.type === 'runtime' ? defaultReasoningEffort : null,
+      gitBranch: null,
       originChatId: null,
       id: chatId(idGenerator.next()),
       projectId: null,

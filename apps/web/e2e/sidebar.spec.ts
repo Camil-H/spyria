@@ -84,13 +84,15 @@ test.describe('3. chat rows and selection', () => {
   test('opens a runtime chat in the runtime view', async ({ page }) => {
     await chatRowIn(projectGroupOf(page, 'Billing'), 'Invoice bug').click()
     await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Invoice bug' })).toBeVisible()
-    await expect(mainOf(page)).toContainText('Runtime view')
+    await expect(mainOf(page).getByRole('img', { name: 'Runtime chat' })).toBeVisible()
+    await expect(mainOf(page)).not.toContainText('Runtime view')
   })
 
   test('opens a channel in the channel view', async ({ page }) => {
     await chatRowIn(projectGroupOf(page, 'Onboarding'), 'Welcome').click()
     await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Welcome' })).toBeVisible()
-    await expect(mainOf(page)).toContainText('Channel view')
+    await expect(mainOf(page).getByRole('img', { name: 'Channel' })).toBeVisible()
+    await expect(mainOf(page)).not.toContainText('Channel view')
   })
 })
 
@@ -238,7 +240,8 @@ test.describe('8. create a chat', () => {
 
     await expect(chatRowIn(projectGroupOf(page, 'Billing'), 'Planning')).toBeVisible()
     await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Planning' })).toBeVisible()
-    await expect(mainOf(page)).toContainText('Channel view')
+    await expect(mainOf(page).getByRole('img', { name: 'Channel' })).toBeVisible()
+    await expect(mainOf(page)).not.toContainText('Channel view')
   })
 
   test('creates a runtime chat without a project as a loose chat', async ({ page }) => {
@@ -249,7 +252,8 @@ test.describe('8. create a chat', () => {
 
     await expect(chatRowIn(looseChatsOf(page), 'Scratchpad')).toBeVisible()
     await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Scratchpad' })).toBeVisible()
-    await expect(mainOf(page)).toContainText('Runtime view')
+    await expect(mainOf(page).getByRole('img', { name: 'Runtime chat' })).toBeVisible()
+    await expect(mainOf(page)).not.toContainText('Runtime view')
   })
 
   test('offers channel and runtime as one row of options', async ({ page }) => {
@@ -307,5 +311,40 @@ test.describe('11. focus rings', () => {
     await welcomeRow.focus()
     await expect(welcomeRow).toHaveCSS('outline-style', 'solid')
     await expect(welcomeRow).toHaveCSS('outline-offset', '-2px')
+  })
+})
+
+test.describe('12. dialog colors in dark mode', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'dark' })
+  })
+
+  const expectDialogTitleToUseAppTextColor = async (page: Page, dialogName: string) => {
+    const dialogTitleColor = await page
+      .getByRole('dialog', { name: dialogName })
+      .getByRole('heading', { name: dialogName })
+      .evaluate((element) => getComputedStyle(element).color)
+    const sidebarTextColor = await sidebarOf(page).evaluate((element) => getComputedStyle(element).color)
+    expect(dialogTitleColor).toBe(sidebarTextColor)
+  }
+
+  test('uses the app text color for the new project and new chat dialogs', async ({ page }) => {
+    await page.getByRole('button', { name: 'New project' }).click()
+    await expectDialogTitleToUseAppTextColor(page, 'New project')
+    await page.getByRole('button', { name: 'Cancel' }).click()
+
+    await page.getByRole('button', { name: 'New chat' }).click()
+    await expectDialogTitleToUseAppTextColor(page, 'New chat')
+  })
+
+  test('uses the app text color for the archive dialogs', async ({ page }) => {
+    await page.getByRole('button', { name: 'Chat actions for Research' }).click()
+    await page.getByRole('menuitem', { name: 'Archive chat' }).click()
+    await expectDialogTitleToUseAppTextColor(page, 'Archive chat')
+    await page.getByRole('button', { name: 'Cancel' }).click()
+
+    await page.getByRole('button', { name: 'Project actions for Billing' }).click()
+    await page.getByRole('menuitem', { name: 'Archive project' }).click()
+    await expectDialogTitleToUseAppTextColor(page, 'Archive project')
   })
 })

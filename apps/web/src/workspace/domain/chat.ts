@@ -11,6 +11,8 @@ export type Chat = Readonly<{
   ownerId: MemberId
   archived: boolean
   model: string | null
+  reasoningEffort: string | null
+  gitBranch: string | null
   originChatId: ChatId | null
 }>
 
@@ -23,7 +25,7 @@ export const archiveChat = (chat: Chat): Chat => ({ ...chat, archived: true })
 
 export const startRuntimeChat = (
   source: Chat,
-  fields: { id: ChatId; name: Name; ownerId: MemberId; model: string },
+  fields: { id: ChatId; name: Name; ownerId: MemberId; model: string; reasoningEffort: string },
 ): Chat => {
   if (source.archived) throw new SourceChatArchived()
   return {
@@ -31,6 +33,7 @@ export const startRuntimeChat = (
     workspaceId: source.workspaceId,
     projectId: source.projectId,
     type: 'runtime',
+    gitBranch: null,
     originChatId: source.id,
     archived: false,
   }

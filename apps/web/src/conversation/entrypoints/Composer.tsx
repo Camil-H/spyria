@@ -2,7 +2,7 @@ import { useStore } from '@hq/db'
 import type { ChatId, WorkspaceId } from '@hq/kernel'
 import { Content, Portal, Provider, Root, Trigger } from '@radix-ui/react-tooltip'
 import { ArrowUp } from 'lucide-react'
-import { type KeyboardEvent, useRef, useState } from 'react'
+import { type KeyboardEvent, useEffect, useRef, useState } from 'react'
 import { useSession } from '../../app/session.tsx'
 import { saveDraft } from '../operations/save-draft.ts'
 import { sendMessage } from '../operations/send-message.ts'
@@ -16,6 +16,7 @@ export const Composer = ({ workspaceId, chatId }: { workspaceId: WorkspaceId; ch
   const store = useStore()
   const [text, setText] = useState(() => getDraft(workspaceId, chatId, memberId)(store.read()))
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => textareaRef.current?.focus(), [])
   const isBlank = text.trim() === ''
   const send = async () => {
     if (isBlank) return

@@ -2,7 +2,12 @@ import { createContext, type ReactNode, use } from 'react'
 import type { IdGenerator } from '../contracts/id-generator.ts'
 import type { Transactor } from '../contracts/transactor.ts'
 
-export type WorkspaceDependencies = { transactor: Transactor; idGenerator: IdGenerator; defaultRuntimeModel: string }
+export type WorkspaceDependencies = {
+  transactor: Transactor
+  idGenerator: IdGenerator
+  defaultRuntimeModel: string
+  defaultReasoningEffort: string
+}
 
 const WorkspaceDependenciesContext = createContext<WorkspaceDependencies | null>(null)
 

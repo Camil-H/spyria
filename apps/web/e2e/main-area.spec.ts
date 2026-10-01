@@ -34,10 +34,12 @@ test.beforeEach(async ({ page }) => {
 test.describe('1. channel history', () => {
   test('shows the channel header and its messages with author, time and body', async ({ page }) => {
     await openChat(page, 'Welcome')
-    await expect(mainOf(page)).toContainText('Channel view')
+    await expect(mainOf(page).getByRole('img', { name: 'Channel' })).toBeVisible()
+    await expect(mainOf(page)).not.toContainText('Channel view')
     await expect(mainOf(page)).not.toContainText('Agent acts as')
     await expect(mainOf(page)).not.toContainText('GPT-5')
     await expect(mainOf(page)).not.toContainText('Claude Sonnet 5.5')
+    await expect(mainOf(page).getByRole('img', { name: 'Git branch' })).toHaveCount(0)
 
     await expect(messageItemsOf(page)).toHaveCount(2)
     await expect(messageItemsOf(page).nth(0)).toContainText('Bob')
@@ -52,9 +54,12 @@ test.describe('1. channel history', () => {
 test.describe('2. runtime history', () => {
   test('shows member and agent messages and the runtime header', async ({ page }) => {
     await openChat(page, 'Invoice bug')
-    await expect(mainOf(page)).toContainText('Runtime view')
+    await expect(mainOf(page).getByRole('img', { name: 'Runtime chat' })).toBeVisible()
+    await expect(mainOf(page)).not.toContainText('Runtime view')
     await expect(mainOf(page)).toContainText('Agent acts as Alice')
-    await expect(mainOf(page)).toContainText('Claude Sonnet 5.5')
+    await expect(mainOf(page)).toContainText('Claude Sonnet 5.5 · High')
+    await expect(mainOf(page)).toContainText('fix/invoice-tax')
+    await expect(mainOf(page).getByRole('img', { name: 'Git branch' })).toBeVisible()
 
     await expect(messageContaining(page, 'Why do invoices show the wrong total?')).toContainText('Alice')
     await expect(messageContaining(page, 'Checking the invoice calculation.')).toContainText('Agent')
@@ -78,8 +83,46 @@ test.describe('2. runtime history', () => {
   test('shows the owner and the model of another runtime chat', async ({ page }) => {
     await openChat(page, 'Setup helper')
     await expect(mainOf(page)).toContainText('Agent acts as Bob')
-    await expect(mainOf(page)).toContainText('GPT-5')
+    await expect(mainOf(page)).toContainText('GPT-5 · Medium')
+    await expect(mainOf(page)).toContainText('main')
+    await expect(mainOf(page).getByRole('img', { name: 'Git branch' })).toBeVisible()
     await expect(messageContaining(page, 'Dependencies installed.')).toContainText('Agent')
+  })
+})
+
+test.describe('2b. runtime header row', () => {
+  test('puts the owner, the model with its reasoning effort and the git branch on the title row, aligned right', async ({
+    page,
+  }) => {
+    await openChat(page, 'Invoice bug')
+    const titleBox = await mainOf(page).getByRole('heading', { level: 1, name: 'Invoice bug' }).boundingBox()
+    const ownerBox = await mainOf(page).getByText('Agent acts as Alice').boundingBox()
+    const modelBox = await mainOf(page).getByText('Claude Sonnet 5.5 · High').boundingBox()
+    const branchBox = await mainOf(page).getByText('fix/invoice-tax').boundingBox()
+
+    for (const itemBox of [ownerBox, modelBox, branchBox]) {
+      expect(Math.abs(itemBox!.y + itemBox!.height / 2 - (titleBox!.y + titleBox!.height / 2))).toBeLessThan(16)
+    }
+    const mainBox = await mainOf(page).boundingBox()
+    expect(mainBox!.x + mainBox!.width - (branchBox!.x + branchBox!.width)).toBeLessThan(48)
+    expect(ownerBox!.x).toBeGreaterThan(titleBox!.x + titleBox!.width + 100)
+    expect(modelBox!.x).toBeGreaterThan(ownerBox!.x + ownerBox!.width)
+    expect(branchBox!.x).toBeGreaterThan(modelBox!.x + modelBox!.width)
+  })
+
+  test('shows the name of the member the agent acts as in bold', async ({ page }) => {
+    await openChat(page, 'Invoice bug')
+    const ownerNameWeight = await mainOf(page)
+      .getByText('Alice', { exact: true })
+      .first()
+      .evaluate((element) => Number(getComputedStyle(element).fontWeight))
+    expect(ownerNameWeight).toBeGreaterThanOrEqual(600)
+  })
+
+  test('shows no git branch for a runtime chat without a repository', async ({ page }) => {
+    await openChat(page, 'Research')
+    await expect(mainOf(page)).toContainText('Claude Sonnet 5.5 · Medium')
+    await expect(mainOf(page).getByRole('img', { name: 'Git branch' })).toHaveCount(0)
   })
 })
 
@@ -258,9 +301,11 @@ test.describe('9. start a runtime from a message', () => {
     const onboardingGroup = sidebarOf(page).getByRole('group', { name: 'Onboarding' })
     await expect(onboardingGroup.getByRole('link', { name: 'Thanks, glad to be here.' })).toBeVisible()
     await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Thanks, glad to be here.' })).toBeVisible()
-    await expect(mainOf(page)).toContainText('Runtime view')
+    await expect(mainOf(page).getByRole('img', { name: 'Runtime chat' })).toBeVisible()
+    await expect(mainOf(page)).not.toContainText('Runtime view')
     await expect(mainOf(page)).toContainText('Agent acts as Alice')
-    await expect(mainOf(page)).toContainText('Claude Sonnet 5.5')
+    await expect(mainOf(page)).toContainText('Claude Sonnet 5.5 · Medium')
+    await expect(mainOf(page).getByRole('img', { name: 'Git branch' })).toHaveCount(0)
     await expect(messageItemsOf(page).nth(0)).toContainText('Thanks, glad to be here.')
   })
 
@@ -275,7 +320,8 @@ test.describe('9. start a runtime from a message', () => {
 
     await mainOf(page).getByRole('link', { name: 'Started from Welcome' }).click()
     await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Welcome' })).toBeVisible()
-    await expect(mainOf(page)).toContainText('Channel view')
+    await expect(mainOf(page).getByRole('img', { name: 'Channel' })).toBeVisible()
+    await expect(mainOf(page)).not.toContainText('Channel view')
   })
 
   test('creates a loose runtime chat from a message of a loose channel', async ({ page }) => {
@@ -285,7 +331,8 @@ test.describe('9. start a runtime from a message', () => {
 
     const looseChatsGroup = sidebarOf(page).getByRole('group', { name: 'Loose chats' })
     await expect(looseChatsGroup.getByRole('link', { name: 'Standup at 10.' })).toBeVisible()
-    await expect(mainOf(page)).toContainText('Runtime view')
+    await expect(mainOf(page).getByRole('img', { name: 'Runtime chat' })).toBeVisible()
+    await expect(mainOf(page)).not.toContainText('Runtime view')
   })
 })
 
@@ -394,5 +441,40 @@ test.describe('12. drafts', () => {
     const menuButtonBox = await page.getByRole('button', { name: 'Chat actions for Welcome' }).boundingBox()
     expect(pencilBox!.x).toBeGreaterThan(chatNameBox!.x + chatNameBox!.width)
     expect(pencilBox!.x + pencilBox!.width).toBeLessThanOrEqual(menuButtonBox!.x)
+  })
+})
+
+test.describe('13. focus on open', () => {
+  test('moves focus to the composer when a chat is opened from the sidebar', async ({ page }) => {
+    await sidebarChatLink(page, 'Welcome').click()
+    await expect(composerOf(page)).toBeFocused()
+
+    await sidebarChatLink(page, 'Invoice bug').click()
+    await expect(composerOf(page)).toBeFocused()
+  })
+
+  test('moves focus to the composer of a chat started from a message', async ({ page }) => {
+    await openChat(page, 'Welcome')
+    await openMessageMenu(messageContaining(page, 'Thanks, glad to be here.'))
+    await page.getByRole('menuitem', { name: 'Start runtime from this message' }).click()
+    await expect(composerOf(page)).toBeFocused()
+  })
+})
+
+test.describe('14. dialog colors in dark mode', () => {
+  test('uses the text color of the app for the delete message dialog title', async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'dark' })
+    await openChat(page, 'Welcome')
+    await openMessageMenu(messageContaining(page, 'Thanks, glad to be here.'))
+    await page.getByRole('menuitem', { name: 'Delete' }).click()
+
+    const dialogTitleColor = await page
+      .getByRole('dialog', { name: 'Delete message' })
+      .getByRole('heading', { name: 'Delete message' })
+      .evaluate((element) => getComputedStyle(element).color)
+    const pageTitleColor = await mainOf(page)
+      .getByRole('heading', { level: 1 })
+      .evaluate((element) => getComputedStyle(element).color)
+    expect(dialogTitleColor).toBe(pageTitleColor)
   })
 })

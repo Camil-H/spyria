@@ -13,6 +13,8 @@ export type ChatRow = {
   ownerId: MemberId
   archived: boolean
   model: string | null
+  reasoningEffort: string | null
+  gitBranch: string | null
   originChatId: ChatId | null
 }
 export type MessageRow = {

@@ -24,6 +24,8 @@ const chatInAcme: Chat = {
   ownerId: memberId('alice'),
   archived: false,
   model: 'GPT-5',
+  reasoningEffort: 'Medium',
+  gitBranch: 'main',
   originChatId: null,
 }
 
@@ -66,15 +68,17 @@ const runtimeFields = {
   name: Name('From message'),
   ownerId: memberId('bob'),
   model: 'Claude Sonnet 5.5',
+  reasoningEffort: 'Medium',
 }
 
 test('startRuntimeChat creates a runtime chat in the source workspace and project, linked to the source', () => {
-  const channel: Chat = { ...chatInAcme, type: 'channel', model: null }
+  const channel: Chat = { ...chatInAcme, type: 'channel', model: null, reasoningEffort: null, gitBranch: null }
   expect(startRuntimeChat(channel, runtimeFields)).toEqual({
     ...runtimeFields,
     workspaceId: acme,
     projectId: channel.projectId,
     type: 'runtime',
+    gitBranch: null,
     originChatId: channel.id,
     archived: false,
   })

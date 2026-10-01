@@ -17,7 +17,7 @@ export const DeleteMessageDialog = ({ messageId, onClose }: { messageId: Message
       aria-label="Delete message"
       className="fixed inset-0 z-40 m-auto flex h-fit w-80 flex-col gap-3 rounded-xl border border-line bg-raised p-5 text-ink shadow-2xl"
     >
-      <h2 className="text-base font-medium">Delete message</h2>
+      <h2 className="text-[1rem] font-medium">Delete message</h2>
       <button type="button" className={buttonClass} onClick={confirm}>
         Delete
       </button>

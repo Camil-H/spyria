@@ -75,6 +75,8 @@ export const createMockSnapshot = (): Snapshot => ({
       ownerId: alice,
       archived: false,
       model: null,
+      reasoningEffort: null,
+      gitBranch: null,
       originChatId: null,
     },
     {
@@ -86,6 +88,8 @@ export const createMockSnapshot = (): Snapshot => ({
       ownerId: bob,
       archived: false,
       model: 'GPT-5',
+      reasoningEffort: 'Medium',
+      gitBranch: 'main',
       originChatId: null,
     },
     {
@@ -97,6 +101,8 @@ export const createMockSnapshot = (): Snapshot => ({
       ownerId: alice,
       archived: false,
       model: 'Claude Sonnet 5.5',
+      reasoningEffort: 'High',
+      gitBranch: 'fix/invoice-tax',
       originChatId: null,
     },
     {
@@ -108,6 +114,8 @@ export const createMockSnapshot = (): Snapshot => ({
       ownerId: bob,
       archived: false,
       model: null,
+      reasoningEffort: null,
+      gitBranch: null,
       originChatId: null,
     },
     {
@@ -119,6 +127,8 @@ export const createMockSnapshot = (): Snapshot => ({
       ownerId: alice,
       archived: false,
       model: 'Claude Sonnet 5.5',
+      reasoningEffort: 'Medium',
+      gitBranch: null,
       originChatId: null,
     },
     {
@@ -130,6 +140,8 @@ export const createMockSnapshot = (): Snapshot => ({
       ownerId: alice,
       archived: false,
       model: 'Claude Sonnet 5.5',
+      reasoningEffort: 'Medium',
+      gitBranch: null,
       originChatId: null,
     },
     {
@@ -141,6 +153,8 @@ export const createMockSnapshot = (): Snapshot => ({
       ownerId: alice,
       archived: false,
       model: null,
+      reasoningEffort: null,
+      gitBranch: null,
       originChatId: null,
     },
   ],

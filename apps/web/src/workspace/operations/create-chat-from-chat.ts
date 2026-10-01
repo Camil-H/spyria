@@ -8,11 +8,12 @@ export type CreateChatFromChatDependencies = {
   transactor: Transactor
   idGenerator: IdGenerator
   defaultRuntimeModel: string
+  defaultReasoningEffort: string
 }
 export type CreateChatFromChatInput = { sourceChatId: ChatId; name: string; ownerId: MemberId }
 
 export const createChatFromChat = (
-  { transactor, idGenerator, defaultRuntimeModel }: CreateChatFromChatDependencies,
+  { transactor, idGenerator, defaultRuntimeModel, defaultReasoningEffort }: CreateChatFromChatDependencies,
   { sourceChatId, name, ownerId }: CreateChatFromChatInput,
 ) =>
   transactor.run(async (unitOfWork) => {
@@ -22,6 +23,7 @@ export const createChatFromChat = (
       name: Name(name),
       ownerId,
       model: defaultRuntimeModel,
+      reasoningEffort: defaultReasoningEffort,
     })
     await unitOfWork.chats.add(chat)
     return chat.id
