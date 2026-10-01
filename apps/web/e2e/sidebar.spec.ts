@@ -179,6 +179,43 @@ test.describe('6. archive a project', () => {
     await expect(mainOf(page).getByRole('heading', { level: 1 })).toHaveCount(0)
     await expect(mainOf(page)).toContainText('Select a chat')
   })
+
+  const openArchiveChatDialog = async (page: Page, chatName: string) => {
+    await page.getByRole('button', { name: `Chat actions for ${chatName}` }).click()
+    await page.getByRole('menuitem', { name: 'Archive chat' }).click()
+  }
+
+  test('archives a loose chat after confirmation', async ({ page }) => {
+    await openArchiveChatDialog(page, 'Research')
+    await page.getByRole('dialog', { name: 'Archive chat' }).getByRole('button', { name: 'Archive' }).click()
+
+    await expect(sidebarOf(page).getByRole('link', { name: 'Research' })).toHaveCount(0)
+    await expect(chatRowIn(looseChatsOf(page), 'Standup')).toBeVisible()
+  })
+
+  test('archives a chat of a project and keeps the project', async ({ page }) => {
+    await openArchiveChatDialog(page, 'Invoice bug')
+    await page.getByRole('dialog', { name: 'Archive chat' }).getByRole('button', { name: 'Archive' }).click()
+
+    await expect(sidebarOf(page).getByRole('link', { name: 'Invoice bug' })).toHaveCount(0)
+    await expect(projectGroupOf(page, 'Billing')).toBeVisible()
+  })
+
+  test('keeps the chat when the archive is cancelled', async ({ page }) => {
+    await openArchiveChatDialog(page, 'Research')
+    await page.getByRole('dialog', { name: 'Archive chat' }).getByRole('button', { name: 'Cancel' }).click()
+
+    await expect(page.getByRole('dialog', { name: 'Archive chat' })).toHaveCount(0)
+    await expect(chatRowIn(looseChatsOf(page), 'Research')).toBeVisible()
+  })
+
+  test('returns the main area to its empty state when the selected chat is archived by itself', async ({ page }) => {
+    await chatRowIn(looseChatsOf(page), 'Research').click()
+    await openArchiveChatDialog(page, 'Research')
+    await page.getByRole('dialog', { name: 'Archive chat' }).getByRole('button', { name: 'Archive' }).click()
+
+    await expect(mainOf(page)).toContainText('Select a chat')
+  })
 })
 
 test.describe('7. profile', () => {
@@ -213,6 +250,14 @@ test.describe('8. create a chat', () => {
     await expect(chatRowIn(looseChatsOf(page), 'Scratchpad')).toBeVisible()
     await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Scratchpad' })).toBeVisible()
     await expect(mainOf(page)).toContainText('Runtime view')
+  })
+
+  test('offers channel and runtime as one row of options', async ({ page }) => {
+    await openNewChatDialog(page)
+    const channelOptionBox = await page.getByRole('radio', { name: 'Channel' }).locator('..').boundingBox()
+    const runtimeOptionBox = await page.getByRole('radio', { name: 'Runtime' }).locator('..').boundingBox()
+    expect(Math.abs(channelOptionBox!.y - runtimeOptionBox!.y)).toBeLessThan(2)
+    expect(runtimeOptionBox!.x).toBeGreaterThan(channelOptionBox!.x + channelOptionBox!.width - 1)
   })
 
   test('cannot confirm a blank name', async ({ page }) => {

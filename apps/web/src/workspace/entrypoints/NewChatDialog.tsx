@@ -40,18 +40,23 @@ export const NewChatDialog = ({
   return (
     <Dialog label="New chat" onClose={onClose}>
       <form onSubmit={submit} className="flex flex-col gap-3">
-        {(['channel', 'runtime'] as const).map((option) => (
-          <label key={option} className="flex items-center gap-2 text-sm">
-            <input
-              type="radio"
-              className="accent-focus"
-              name="type"
-              checked={type === option}
-              onChange={() => setType(option)}
-            />
-            {option === 'channel' ? 'Channel' : 'Runtime'}
-          </label>
-        ))}
+        <div className="flex gap-1 rounded-lg border border-line bg-app p-1">
+          {(['channel', 'runtime'] as const).map((option) => (
+            <label
+              key={option}
+              className="relative flex flex-1 cursor-pointer items-center justify-center rounded-md px-3 py-1 text-sm text-muted hover:bg-hover hover:text-ink has-checked:bg-selected has-checked:font-medium has-checked:text-ink has-focus-visible:outline-2 has-focus-visible:outline-focus"
+            >
+              <input
+                type="radio"
+                className="absolute inset-0 cursor-pointer opacity-0"
+                name="type"
+                checked={type === option}
+                onChange={() => setType(option)}
+              />
+              {option === 'channel' ? 'Channel' : 'Runtime'}
+            </label>
+          ))}
+        </div>
         <label className="flex flex-col gap-1 text-sm text-muted">
           Chat name
           <input className={fieldClass} value={draftName} onChange={(event) => setDraftName(event.target.value)} />

@@ -43,7 +43,9 @@ export const ProjectGroup = ({
           </Content>
         </Root>
       </div>
-      {isArchiving && <ArchiveProjectDialog projectId={project.id} onClose={() => setIsArchiving(false)} />}
+      {isArchiving && (
+        <ArchiveProjectDialog projectId={project.id} projectName={project.name} onClose={() => setIsArchiving(false)} />
+      )}
       {isExpanded && (
         <ul className="ml-3 flex flex-col border-l border-line pl-1">
           {project.chats.map((chat) => (

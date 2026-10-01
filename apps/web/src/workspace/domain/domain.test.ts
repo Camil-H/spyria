@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { chatId, memberId, projectId, workspaceId } from '@hq/kernel'
-import { type Chat, moveChat } from './chat.ts'
+import { archiveChat, type Chat, moveChat } from './chat.ts'
 import { BlankName, CrossWorkspaceMove } from './errors.ts'
 import { Name } from './name.ts'
 import { archiveProject, type Project } from './project.ts'
@@ -53,4 +53,8 @@ test('archiveProject with the release policy detaches the chats', () => {
   const result = archiveProject(projectIn(acme), [chatInAcme], 'release')
   expect(result.project.archived).toBe(true)
   expect(result.chats[0]).toMatchObject({ archived: false, projectId: null })
+})
+
+test('archiveChat marks the chat archived and keeps the rest', () => {
+  expect(archiveChat(chatInAcme)).toEqual({ ...chatInAcme, archived: true })
 })

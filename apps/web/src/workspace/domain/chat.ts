@@ -16,3 +16,5 @@ export const moveChat = (chat: Chat, project: { id: ProjectId; workspaceId: Work
   if (project && project.workspaceId !== chat.workspaceId) throw new CrossWorkspaceMove()
   return { ...chat, projectId: project?.id ?? null }
 }
+
+export const archiveChat = (chat: Chat): Chat => ({ ...chat, archived: true })

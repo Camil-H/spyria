@@ -7,9 +7,11 @@ import {
   Trigger as TooltipTrigger,
 } from '@radix-ui/react-tooltip'
 import { Bot, Ellipsis, Hash } from 'lucide-react'
+import { useState } from 'react'
 import { NavLink } from 'react-router'
 import { moveChat } from '../operations/move-chat.ts'
 import type { Sidebar } from '../queries/get-sidebar.ts'
+import { ArchiveChatDialog } from './ArchiveChatDialog.tsx'
 import { useWorkspaceDependencies } from './providers.tsx'
 import { focusRing, menuContentClass, menuItemClass, menuTriggerClass, tooltipClass } from './ui.ts'
 
@@ -25,6 +27,7 @@ export const ChatRow = ({
   projects: Sidebar['projects']
 }) => {
   const dependencies = useWorkspaceDependencies()
+  const [isArchiving, setIsArchiving] = useState(false)
   const ChatTypeIcon = chat.type === 'channel' ? Hash : Bot
   const chatTypeLabel = chat.type === 'channel' ? 'Channel' : 'Runtime chat'
   return (
@@ -72,8 +75,12 @@ export const ChatRow = ({
               </Item>
             </SubContent>
           </Sub>
+          <Item className={menuItemClass} onSelect={() => setIsArchiving(true)}>
+            Archive chat
+          </Item>
         </Content>
       </Root>
+      {isArchiving && <ArchiveChatDialog chatId={chat.id} chatName={chat.name} onClose={() => setIsArchiving(false)} />}
     </li>
   )
 }
