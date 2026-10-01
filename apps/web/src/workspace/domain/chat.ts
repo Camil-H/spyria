@@ -1,5 +1,5 @@
 import type { ChatId, MemberId, ProjectId, WorkspaceId } from '@hq/kernel'
-import { CrossWorkspaceMove } from './errors.ts'
+import { CrossWorkspaceMove, SourceChatArchived } from './errors.ts'
 import type { Name } from './name.ts'
 
 export type Chat = Readonly<{
@@ -10,6 +10,8 @@ export type Chat = Readonly<{
   name: Name
   ownerId: MemberId
   archived: boolean
+  model: string | null
+  originChatId: ChatId | null
 }>
 
 export const moveChat = (chat: Chat, project: { id: ProjectId; workspaceId: WorkspaceId } | null): Chat => {
@@ -18,3 +20,18 @@ export const moveChat = (chat: Chat, project: { id: ProjectId; workspaceId: Work
 }
 
 export const archiveChat = (chat: Chat): Chat => ({ ...chat, archived: true })
+
+export const startRuntimeChat = (
+  source: Chat,
+  fields: { id: ChatId; name: Name; ownerId: MemberId; model: string },
+): Chat => {
+  if (source.archived) throw new SourceChatArchived()
+  return {
+    ...fields,
+    workspaceId: source.workspaceId,
+    projectId: source.projectId,
+    type: 'runtime',
+    originChatId: source.id,
+    archived: false,
+  }
+}

@@ -5,7 +5,7 @@ import { FolderPlus, SquarePen } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink } from 'react-router'
 import { getSidebar } from '../queries/get-sidebar.ts'
-import { ChatRow } from './ChatRow.tsx'
+import { type ChatAdornment, ChatRow } from './ChatRow.tsx'
 import { IconButton } from './IconButton.tsx'
 import { NewChatDialog } from './NewChatDialog.tsx'
 import { NewProjectDialog } from './NewProjectDialog.tsx'
@@ -13,7 +13,13 @@ import { ProjectGroup } from './ProjectGroup.tsx'
 import { focusRing } from './ui.ts'
 import { WorkspaceSwitcher } from './WorkspaceSwitcher.tsx'
 
-export const Sidebar = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
+export const Sidebar = ({
+  workspaceId,
+  chatAdornment,
+}: {
+  workspaceId: WorkspaceId
+  chatAdornment?: ChatAdornment
+}) => {
   const sidebar = useQuery(getSidebar(workspaceId))
   const [openDialog, setOpenDialog] = useState<'project' | 'chat' | null>(null)
   const closeDialog = () => setOpenDialog(null)
@@ -36,7 +42,13 @@ export const Sidebar = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
         )}
         <div className="-m-1 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-1 scrollbar-thin">
           {sidebar.projects.map((project) => (
-            <ProjectGroup key={project.id} workspaceId={workspaceId} project={project} projects={sidebar.projects} />
+            <ProjectGroup
+              key={project.id}
+              workspaceId={workspaceId}
+              project={project}
+              projects={sidebar.projects}
+              chatAdornment={chatAdornment}
+            />
           ))}
           <fieldset aria-label="Loose chats" className="m-0 min-w-0 border-0 p-0">
             <strong className="block px-2 py-1 text-xs font-medium uppercase tracking-wide text-muted">
@@ -44,7 +56,13 @@ export const Sidebar = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
             </strong>
             <ul className="flex flex-col">
               {sidebar.looseChats.map((chat) => (
-                <ChatRow key={chat.id} workspaceId={workspaceId} chat={chat} projects={sidebar.projects} />
+                <ChatRow
+                  key={chat.id}
+                  workspaceId={workspaceId}
+                  chat={chat}
+                  projects={sidebar.projects}
+                  chatAdornment={chatAdornment}
+                />
               ))}
             </ul>
           </fieldset>

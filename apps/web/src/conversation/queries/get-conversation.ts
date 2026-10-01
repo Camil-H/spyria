@@ -1,0 +1,57 @@
+import type { ChatRow, Snapshot } from '@hq/db'
+import type { ChatId, MemberId, MessageId, WorkspaceId } from '@hq/kernel'
+
+export type ConversationMessage = Readonly<{
+  id: MessageId
+  kind: 'member' | 'agent' | 'tool-call'
+  authorName: string
+  createdAt: string
+  body: string
+  detail: string | null
+  isOwn: boolean
+  isDeleted: boolean
+  isEdited: boolean
+}>
+
+export type Conversation = Readonly<{
+  title: string
+  type: ChatRow['type']
+  model: string | null
+  ownerName: string
+  origin: Readonly<{ chatId: ChatId; name: string }> | null
+  isAgentWorking: boolean
+  messages: readonly ConversationMessage[]
+}>
+
+export const getConversation =
+  (workspaceId: WorkspaceId, chatId: ChatId, viewerId: MemberId) =>
+  (snapshot: Snapshot): Conversation | null => {
+    const inWorkspace = (chat: ChatRow) => chat.workspaceId === workspaceId && !chat.archived
+    const chat = snapshot.chats.find((candidate) => candidate.id === chatId && inWorkspace(candidate))
+    if (!chat) return null
+    const memberNames = new Map(snapshot.members.map((member) => [member.id, member.name]))
+    const memberName = (memberId: MemberId | null) => (memberId && memberNames.get(memberId)) || 'Agent'
+    const origin = chat.originChatId
+      ? snapshot.chats.find((candidate) => candidate.id === chat.originChatId && inWorkspace(candidate))
+      : undefined
+    const chatMessages = snapshot.messages.filter((message) => message.chatId === chatId)
+    return {
+      title: chat.name,
+      type: chat.type,
+      model: chat.model,
+      ownerName: memberName(chat.ownerId),
+      origin: origin ? { chatId: origin.id, name: origin.name } : null,
+      isAgentWorking: chatMessages.some((message) => message.needsReply),
+      messages: chatMessages.map((message) => ({
+        id: message.id,
+        kind: message.kind,
+        authorName: memberName(message.authorId),
+        createdAt: message.createdAt,
+        body: message.deletedAt ? '' : message.body,
+        detail: message.detail,
+        isOwn: message.authorId === viewerId,
+        isDeleted: message.deletedAt !== null,
+        isEdited: message.editedAt !== null,
+      })),
+    }
+  }

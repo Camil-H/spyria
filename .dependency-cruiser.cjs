@@ -1,4 +1,5 @@
-const contexts = '(workspace|profile)'
+const contexts = '(workspace|profile|conversation)'
+const publishedSurface = '^apps/web/src/[^/]+/surface\\.tsx?$'
 const contextLayers = ['domain', 'contracts', 'operations', 'queries', 'integrations', 'entrypoints']
 const inContext = (layers) => `^apps/web/src/${contexts}/(${layers.join('|')})/`
 const layerRule = (name, layer, allowedLayers) => ({
@@ -28,7 +29,7 @@ module.exports = {
       name: 'layers-are-exhaustive',
       severity: 'error',
       from: { path: `^apps/web/src/${contexts}/` },
-      to: { path: `^apps/web/src/${contexts}/`, pathNot: inContext(contextLayers) },
+      to: { path: '^apps/web/src/$1/', pathNot: inContext(contextLayers) },
     },
     {
       name: 'context-reachable-only-through-entrypoints-and-factory',
@@ -43,7 +44,13 @@ module.exports = {
       name: 'contexts-do-not-import-each-other',
       severity: 'error',
       from: { path: `^apps/web/src/${contexts}/` },
-      to: { path: `^apps/web/src/${contexts}/`, pathNot: '^apps/web/src/$1/' },
+      to: { path: `^apps/web/src/${contexts}/`, pathNot: ['^apps/web/src/$1/', publishedSurface] },
+    },
+    {
+      name: 'surface-imported-only-by-integrations-and-app',
+      severity: 'error',
+      from: { path: `^apps/web/src/${contexts}/(domain|contracts|operations|queries|entrypoints)/` },
+      to: { path: publishedSurface, pathNot: '^apps/web/src/$1/' },
     },
     {
       name: 'contexts-import-app-only-through-session',

@@ -1,16 +1,35 @@
 import { createMockSnapshot, createStore, currentMemberId, defaultWorkspaceId, type Store } from '@hq/db'
+import type { ConversationDependencies } from '../conversation/entrypoints/providers.tsx'
+import { createStoreTransactor as createConversationTransactor } from '../conversation/integrations/store-transactor.ts'
+import { createSystemClock } from '../conversation/integrations/system-clock.ts'
+import { createWorkspaceRuntimeChatStarter } from '../conversation/integrations/workspace-runtime-chat-starter.ts'
 import type { WorkspaceDependencies } from '../workspace/entrypoints/providers.tsx'
 import { createStoreTransactor } from '../workspace/integrations/store-transactor.ts'
 import { createUuidIdGenerator } from '../workspace/integrations/uuid-id-generator.ts'
 import type { Session } from './session.tsx'
 
-export type Application = { store: Store; session: Session; workspaceDependencies: WorkspaceDependencies }
+const defaultRuntimeModel = 'Claude Sonnet 5.5'
+
+export type Application = {
+  store: Store
+  session: Session
+  workspaceDependencies: WorkspaceDependencies
+  conversationDependencies: ConversationDependencies
+}
 
 export const createApp = (): Application => {
   const store = createStore(createMockSnapshot())
+  const idGenerator = createUuidIdGenerator()
+  const workspaceDependencies = { transactor: createStoreTransactor(store), idGenerator, defaultRuntimeModel }
   return {
     store,
     session: { memberId: currentMemberId, defaultWorkspaceId },
-    workspaceDependencies: { transactor: createStoreTransactor(store), idGenerator: createUuidIdGenerator() },
+    workspaceDependencies,
+    conversationDependencies: {
+      transactor: createConversationTransactor(store),
+      idGenerator,
+      clock: createSystemClock(),
+      runtimeChatStarter: createWorkspaceRuntimeChatStarter(workspaceDependencies),
+    },
   }
 }

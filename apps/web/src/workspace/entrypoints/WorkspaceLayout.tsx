@@ -2,9 +2,10 @@ import { useQuery } from '@hq/db'
 import { Navigate, Outlet, useParams } from 'react-router'
 import { useSession } from '../../app/session.tsx'
 import { listWorkspaces } from '../queries/list-workspaces.ts'
+import type { ChatAdornment } from './ChatRow.tsx'
 import { Sidebar } from './Sidebar.tsx'
 
-export const WorkspaceLayout = () => {
+export const WorkspaceLayout = ({ chatAdornment }: { chatAdornment?: ChatAdornment }) => {
   const { memberId, defaultWorkspaceId } = useSession()
   const routeWorkspaceId = useParams().workspaceId
   const workspaces = useQuery(listWorkspaces(memberId))
@@ -12,7 +13,7 @@ export const WorkspaceLayout = () => {
   if (!workspaceId) return <Navigate to={`/w/${defaultWorkspaceId}`} replace />
   return (
     <div className="flex h-screen">
-      <Sidebar workspaceId={workspaceId} />
+      <Sidebar workspaceId={workspaceId} chatAdornment={chatAdornment} />
       <main className="min-w-0 flex-1 overflow-y-auto p-6">
         <Outlet context={workspaceId} />
       </main>

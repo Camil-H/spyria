@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { chatId, memberId, projectId, workspaceId } from '@hq/kernel'
-import { archiveChat, type Chat, moveChat } from './chat.ts'
-import { BlankName, CrossWorkspaceMove } from './errors.ts'
+import { archiveChat, type Chat, moveChat, startRuntimeChat } from './chat.ts'
+import { BlankName, CrossWorkspaceMove, SourceChatArchived } from './errors.ts'
 import { Name } from './name.ts'
 import { archiveProject, type Project } from './project.ts'
 
@@ -23,6 +23,8 @@ const chatInAcme: Chat = {
   name: Name('Invoice bug'),
   ownerId: memberId('alice'),
   archived: false,
+  model: 'GPT-5',
+  originChatId: null,
 }
 
 test('Name trims its value', () => {
@@ -57,4 +59,31 @@ test('archiveProject with the release policy detaches the chats', () => {
 
 test('archiveChat marks the chat archived and keeps the rest', () => {
   expect(archiveChat(chatInAcme)).toEqual({ ...chatInAcme, archived: true })
+})
+
+const runtimeFields = {
+  id: chatId('new'),
+  name: Name('From message'),
+  ownerId: memberId('bob'),
+  model: 'Claude Sonnet 5.5',
+}
+
+test('startRuntimeChat creates a runtime chat in the source workspace and project, linked to the source', () => {
+  const channel: Chat = { ...chatInAcme, type: 'channel', model: null }
+  expect(startRuntimeChat(channel, runtimeFields)).toEqual({
+    ...runtimeFields,
+    workspaceId: acme,
+    projectId: channel.projectId,
+    type: 'runtime',
+    originChatId: channel.id,
+    archived: false,
+  })
+})
+
+test('startRuntimeChat keeps a loose source loose', () => {
+  expect(startRuntimeChat({ ...chatInAcme, projectId: null }, runtimeFields).projectId).toBeNull()
+})
+
+test('startRuntimeChat rejects an archived source', () => {
+  expect(() => startRuntimeChat(archiveChat(chatInAcme), runtimeFields)).toThrow(SourceChatArchived)
 })

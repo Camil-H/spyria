@@ -1,4 +1,4 @@
-import type { WorkspaceId } from '@hq/kernel'
+import type { ChatId, WorkspaceId } from '@hq/kernel'
 import { Content, Item, Root, Sub, SubContent, SubTrigger, Trigger } from '@radix-ui/react-dropdown-menu'
 import {
   Content as TooltipContent,
@@ -7,7 +7,7 @@ import {
   Trigger as TooltipTrigger,
 } from '@radix-ui/react-tooltip'
 import { Bot, Ellipsis, Hash } from 'lucide-react'
-import { useState } from 'react'
+import { type ReactNode, useState } from 'react'
 import { NavLink } from 'react-router'
 import { moveChat } from '../operations/move-chat.ts'
 import type { Sidebar } from '../queries/get-sidebar.ts'
@@ -16,15 +16,18 @@ import { useWorkspaceDependencies } from './providers.tsx'
 import { focusRing, menuContentClass, menuItemClass, menuTriggerClass, tooltipClass } from './ui.ts'
 
 type SidebarChat = Sidebar['looseChats'][number]
+export type ChatAdornment = (chatId: ChatId) => ReactNode
 
 export const ChatRow = ({
   workspaceId,
   chat,
   projects,
+  chatAdornment,
 }: {
   workspaceId: WorkspaceId
   chat: SidebarChat
   projects: Sidebar['projects']
+  chatAdornment?: ChatAdornment
 }) => {
   const dependencies = useWorkspaceDependencies()
   const [isArchiving, setIsArchiving] = useState(false)
@@ -48,7 +51,8 @@ export const ChatRow = ({
             </TooltipContent>
           </TooltipPortal>
         </TooltipRoot>
-        <span className="min-w-0 truncate">{chat.name}</span>
+        <span className="min-w-0 flex-1 truncate">{chat.name}</span>
+        {chatAdornment?.(chat.id)}
       </NavLink>
       <Root>
         <Trigger aria-label={`Chat actions for ${chat.name}`} className={menuTriggerClass}>

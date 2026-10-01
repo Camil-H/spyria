@@ -1,5 +1,5 @@
-import { chatId, memberId, projectId, workspaceId } from '@hq/kernel'
-import type { Snapshot } from './schema.ts'
+import { chatId, type MemberId, memberId, messageId, projectId, type WorkspaceId, workspaceId } from '@hq/kernel'
+import type { MessageRow, Snapshot } from './schema.ts'
 
 const acme = workspaceId('workspace-acme')
 const globex = workspaceId('workspace-globex')
@@ -11,6 +11,40 @@ const launch = projectId('project-launch')
 
 export const currentMemberId = alice
 export const defaultWorkspaceId = acme
+
+const message = (
+  id: string,
+  chat: string,
+  workspace: WorkspaceId,
+  authorId: MemberId | null,
+  kind: MessageRow['kind'],
+  body: string,
+  time: string,
+  detail: string | null = null,
+): MessageRow => ({
+  id: messageId(`message-${id}`),
+  workspaceId: workspace,
+  chatId: chatId(chat),
+  kind,
+  authorId,
+  body,
+  detail,
+  createdAt: `2026-09-30T${time}:00.000Z`,
+  editedAt: null,
+  deletedAt: null,
+  needsReply: false,
+})
+const member = (id: string, chat: string, workspace: WorkspaceId, author: MemberId, body: string, time: string) =>
+  message(id, chat, workspace, author, 'member', body, time)
+const agent = (
+  id: string,
+  chat: string,
+  workspace: WorkspaceId,
+  kind: 'agent' | 'tool-call',
+  body: string,
+  time: string,
+  detail: string | null = null,
+) => message(id, chat, workspace, null, kind, body, time, detail)
 
 export const createMockSnapshot = (): Snapshot => ({
   workspaces: [
@@ -40,6 +74,8 @@ export const createMockSnapshot = (): Snapshot => ({
       name: 'Welcome',
       ownerId: alice,
       archived: false,
+      model: null,
+      originChatId: null,
     },
     {
       id: chatId('chat-setup-helper'),
@@ -49,6 +85,8 @@ export const createMockSnapshot = (): Snapshot => ({
       name: 'Setup helper',
       ownerId: bob,
       archived: false,
+      model: 'GPT-5',
+      originChatId: null,
     },
     {
       id: chatId('chat-invoice-bug'),
@@ -58,6 +96,8 @@ export const createMockSnapshot = (): Snapshot => ({
       name: 'Invoice bug',
       ownerId: alice,
       archived: false,
+      model: 'Claude Sonnet 5.5',
+      originChatId: null,
     },
     {
       id: chatId('chat-standup'),
@@ -67,6 +107,8 @@ export const createMockSnapshot = (): Snapshot => ({
       name: 'Standup',
       ownerId: bob,
       archived: false,
+      model: null,
+      originChatId: null,
     },
     {
       id: chatId('chat-research'),
@@ -76,6 +118,8 @@ export const createMockSnapshot = (): Snapshot => ({
       name: 'Research',
       ownerId: alice,
       archived: false,
+      model: 'Claude Sonnet 5.5',
+      originChatId: null,
     },
     {
       id: chatId('chat-launch-plan'),
@@ -85,6 +129,8 @@ export const createMockSnapshot = (): Snapshot => ({
       name: 'Launch plan',
       ownerId: alice,
       archived: false,
+      model: 'Claude Sonnet 5.5',
+      originChatId: null,
     },
     {
       id: chatId('chat-general'),
@@ -94,6 +140,31 @@ export const createMockSnapshot = (): Snapshot => ({
       name: 'General',
       ownerId: alice,
       archived: false,
+      model: null,
+      originChatId: null,
     },
   ],
+  messages: [
+    member('welcome-1', 'chat-welcome', acme, bob, 'Welcome to the team!', '09:00'),
+    member('welcome-2', 'chat-welcome', acme, alice, 'Thanks, glad to be here.', '09:02'),
+    member('standup-1', 'chat-standup', acme, bob, 'Standup at 10.', '09:30'),
+    member('general-1', 'chat-general', globex, alice, 'Hello Globex.', '08:00'),
+    member('setup-1', 'chat-setup-helper', acme, bob, 'Set up the dev environment.', '10:00'),
+    agent('setup-2', 'chat-setup-helper', acme, 'agent', "I'll install the dependencies first.", '10:01'),
+    agent('setup-3', 'chat-setup-helper', acme, 'tool-call', 'Ran: bun install', '10:02', 'Done in 35s'),
+    agent('setup-4', 'chat-setup-helper', acme, 'agent', 'Dependencies installed.', '10:03'),
+    member('invoice-1', 'chat-invoice-bug', acme, alice, 'Why do invoices show the wrong total?', '11:00'),
+    agent('invoice-2', 'chat-invoice-bug', acme, 'agent', 'Checking the invoice calculation.', '11:01'),
+    agent(
+      'invoice-3',
+      'chat-invoice-bug',
+      acme,
+      'tool-call',
+      'Read: billing/invoice.ts',
+      '11:02',
+      'export const total = ...',
+    ),
+    agent('invoice-4', 'chat-invoice-bug', acme, 'agent', 'The tax is applied twice.', '11:03'),
+  ],
+  drafts: [],
 })

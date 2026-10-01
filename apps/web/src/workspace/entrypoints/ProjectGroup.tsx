@@ -4,17 +4,19 @@ import { Ellipsis } from 'lucide-react'
 import { useState } from 'react'
 import type { Sidebar } from '../queries/get-sidebar.ts'
 import { ArchiveProjectDialog } from './ArchiveProjectDialog.tsx'
-import { ChatRow } from './ChatRow.tsx'
+import { type ChatAdornment, ChatRow } from './ChatRow.tsx'
 import { focusRing, menuContentClass, menuItemClass, menuTriggerClass } from './ui.ts'
 
 export const ProjectGroup = ({
   workspaceId,
   project,
   projects,
+  chatAdornment,
 }: {
   workspaceId: WorkspaceId
   project: Sidebar['projects'][number]
   projects: Sidebar['projects']
+  chatAdornment?: ChatAdornment
 }) => {
   const [isExpanded, setIsExpanded] = useState(true)
   const [isArchiving, setIsArchiving] = useState(false)
@@ -49,7 +51,13 @@ export const ProjectGroup = ({
       {isExpanded && (
         <ul className="ml-3 flex flex-col border-l border-line pl-1">
           {project.chats.map((chat) => (
-            <ChatRow key={chat.id} workspaceId={workspaceId} chat={chat} projects={projects} />
+            <ChatRow
+              key={chat.id}
+              workspaceId={workspaceId}
+              chat={chat}
+              projects={projects}
+              chatAdornment={chatAdornment}
+            />
           ))}
         </ul>
       )}
