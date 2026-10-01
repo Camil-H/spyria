@@ -1,0 +1,21 @@
+{
+  "name": "hq",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "typecheck": "bun run --filter '*' typecheck",
+    "lint": "biome check .",
+    "test": "bun test apps/web/src",
+    "check:boundaries": "depcruise apps/web/src --config .dependency-cruiser.cjs"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.15",
+    "@swc/core": "^1.16.13",
+    "@types/bun": "^1.4.2",
+    "dependency-cruiser": "^18.5.0",
+    "typescript": "^7.0.2"
+  }
+}

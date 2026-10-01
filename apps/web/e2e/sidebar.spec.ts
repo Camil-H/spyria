@@ -1,0 +1,214 @@
+import { expect, type Page, test } from '@playwright/test'
+
+const sidebarOf = (page: Page) => page.getByRole('navigation', { name: 'Sidebar' })
+const projectGroupOf = (page: Page, projectName: string) => sidebarOf(page).getByRole('group', { name: projectName })
+const looseChatsOf = (page: Page) => sidebarOf(page).getByRole('group', { name: 'Loose chats' })
+const chatRowIn = (group: ReturnType<typeof projectGroupOf>, chatName: string) =>
+  group.getByRole('link', { name: chatName })
+const mainOf = (page: Page) => page.getByRole('main')
+
+const moveChatTo = async (page: Page, chatName: string, destination: string) => {
+  await page.getByRole('button', { name: `Chat actions for ${chatName}` }).click()
+  await page.getByRole('menuitem', { name: 'Move to' }).click()
+  await page.getByRole('menuitem', { name: destination }).click()
+}
+
+const createProjectNamed = async (page: Page, projectName: string) => {
+  await page.getByRole('button', { name: 'New project' }).click()
+  await page.getByRole('textbox', { name: 'Project name' }).fill(projectName)
+  await page.getByRole('button', { name: 'Confirm' }).click()
+}
+
+test.beforeEach(async ({ page }) => {
+  await page.goto('/')
+})
+
+test.describe('1. switch workspace', () => {
+  test('lists both workspaces and shows only the selected workspace content', async ({ page }) => {
+    await page.getByRole('button', { name: 'Switch workspace' }).click()
+    await expect(page.getByRole('menuitem', { name: 'Acme' })).toBeVisible()
+    await expect(page.getByRole('menuitem', { name: 'Globex' })).toBeVisible()
+
+    await page.getByRole('menuitem', { name: 'Globex' }).click()
+
+    await expect(chatRowIn(projectGroupOf(page, 'Launch'), 'Launch plan')).toBeVisible()
+    await expect(chatRowIn(looseChatsOf(page), 'General')).toBeVisible()
+    await expect(projectGroupOf(page, 'Onboarding')).toHaveCount(0)
+    await expect(projectGroupOf(page, 'Billing')).toHaveCount(0)
+    await expect(sidebarOf(page).getByRole('link', { name: 'Standup' })).toHaveCount(0)
+  })
+})
+
+test.describe('2. tree structure', () => {
+  test('shows projects with their chats and a separate loose chats group', async ({ page }) => {
+    await expect(chatRowIn(projectGroupOf(page, 'Onboarding'), 'Welcome')).toBeVisible()
+    await expect(chatRowIn(projectGroupOf(page, 'Onboarding'), 'Setup helper')).toBeVisible()
+    await expect(chatRowIn(projectGroupOf(page, 'Billing'), 'Invoice bug')).toBeVisible()
+    await expect(chatRowIn(looseChatsOf(page), 'Standup')).toBeVisible()
+    await expect(chatRowIn(looseChatsOf(page), 'Research')).toBeVisible()
+  })
+
+  test('collapses and expands a project on click', async ({ page }) => {
+    const billingToggle = sidebarOf(page).getByRole('button', { name: 'Billing', exact: true })
+    await expect(billingToggle).toHaveAttribute('aria-expanded', 'true')
+
+    await billingToggle.click()
+    await expect(billingToggle).toHaveAttribute('aria-expanded', 'false')
+    await expect(sidebarOf(page).getByRole('link', { name: 'Invoice bug' })).toBeHidden()
+
+    await billingToggle.click()
+    await expect(sidebarOf(page).getByRole('link', { name: 'Invoice bug' })).toBeVisible()
+  })
+})
+
+test.describe('3. chat rows and selection', () => {
+  test('shows chat type and owner name on every row', async ({ page }) => {
+    await expect(chatRowIn(projectGroupOf(page, 'Billing'), 'Invoice bug')).toContainText('runtime')
+    await expect(chatRowIn(projectGroupOf(page, 'Billing'), 'Invoice bug')).toContainText('Alice')
+    await expect(chatRowIn(projectGroupOf(page, 'Onboarding'), 'Welcome')).toContainText('channel')
+    await expect(chatRowIn(projectGroupOf(page, 'Onboarding'), 'Setup helper')).toContainText('Bob')
+    await expect(chatRowIn(looseChatsOf(page), 'Standup')).toContainText('Bob')
+  })
+
+  test('opens a runtime chat in the runtime view', async ({ page }) => {
+    await chatRowIn(projectGroupOf(page, 'Billing'), 'Invoice bug').click()
+    await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Invoice bug' })).toBeVisible()
+    await expect(mainOf(page)).toContainText('Runtime view')
+  })
+
+  test('opens a channel in the channel view', async ({ page }) => {
+    await chatRowIn(projectGroupOf(page, 'Onboarding'), 'Welcome').click()
+    await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Welcome' })).toBeVisible()
+    await expect(mainOf(page)).toContainText('Channel view')
+  })
+})
+
+test.describe('4. move a chat', () => {
+  test('lists the projects and "No project" as destinations', async ({ page }) => {
+    await page.getByRole('button', { name: 'Chat actions for Research' }).click()
+    await page.getByRole('menuitem', { name: 'Move to' }).click()
+    await expect(page.getByRole('menuitem', { name: 'Onboarding' })).toBeVisible()
+    await expect(page.getByRole('menuitem', { name: 'Billing' })).toBeVisible()
+    await expect(page.getByRole('menuitem', { name: 'No project' })).toBeVisible()
+  })
+
+  test('moves a loose chat into a project', async ({ page }) => {
+    await moveChatTo(page, 'Research', 'Billing')
+    await expect(chatRowIn(projectGroupOf(page, 'Billing'), 'Research')).toBeVisible()
+    await expect(chatRowIn(looseChatsOf(page), 'Research')).toHaveCount(0)
+  })
+
+  test('moves a chat out of its project', async ({ page }) => {
+    await moveChatTo(page, 'Invoice bug', 'No project')
+    await expect(chatRowIn(looseChatsOf(page), 'Invoice bug')).toBeVisible()
+    await expect(chatRowIn(projectGroupOf(page, 'Billing'), 'Invoice bug')).toHaveCount(0)
+  })
+
+  test('moves a chat between projects', async ({ page }) => {
+    await moveChatTo(page, 'Welcome', 'Billing')
+    await expect(chatRowIn(projectGroupOf(page, 'Billing'), 'Welcome')).toBeVisible()
+    await expect(chatRowIn(projectGroupOf(page, 'Onboarding'), 'Welcome')).toHaveCount(0)
+  })
+
+  test('keeps the selected chat selected after it moves', async ({ page }) => {
+    await chatRowIn(looseChatsOf(page), 'Research').click()
+    const urlBeforeMove = page.url()
+
+    await moveChatTo(page, 'Research', 'Billing')
+
+    await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Research' })).toBeVisible()
+    expect(page.url()).toBe(urlBeforeMove)
+  })
+})
+
+test.describe('5. create a project', () => {
+  test('adds an empty project to the list', async ({ page }) => {
+    await createProjectNamed(page, 'Marketing')
+    await expect(projectGroupOf(page, 'Marketing')).toBeVisible()
+    await expect(projectGroupOf(page, 'Marketing').getByRole('link')).toHaveCount(0)
+  })
+
+  test('cannot confirm a blank name', async ({ page }) => {
+    await page.getByRole('button', { name: 'New project' }).click()
+    await expect(page.getByRole('button', { name: 'Confirm' })).toBeDisabled()
+    await page.getByRole('textbox', { name: 'Project name' }).fill('   ')
+    await expect(page.getByRole('button', { name: 'Confirm' })).toBeDisabled()
+  })
+})
+
+test.describe('6. archive a project', () => {
+  const openArchiveChoices = async (page: Page, projectName: string) => {
+    await page.getByRole('button', { name: `Project actions for ${projectName}` }).click()
+    await page.getByRole('menuitem', { name: 'Archive project' }).click()
+  }
+
+  test('archives the project with its chats', async ({ page }) => {
+    await openArchiveChoices(page, 'Billing')
+    await page.getByRole('button', { name: 'Archive with its chats' }).click()
+
+    await expect(projectGroupOf(page, 'Billing')).toHaveCount(0)
+    await expect(sidebarOf(page).getByRole('link', { name: 'Invoice bug' })).toHaveCount(0)
+  })
+
+  test('archives the project and releases its chats as loose chats', async ({ page }) => {
+    await openArchiveChoices(page, 'Billing')
+    await page.getByRole('button', { name: 'Archive, keep chats' }).click()
+
+    await expect(projectGroupOf(page, 'Billing')).toHaveCount(0)
+    await expect(chatRowIn(looseChatsOf(page), 'Invoice bug')).toBeVisible()
+  })
+
+  test('returns the main area to its empty state when the selected chat is archived', async ({ page }) => {
+    await chatRowIn(projectGroupOf(page, 'Billing'), 'Invoice bug').click()
+    await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Invoice bug' })).toBeVisible()
+
+    await openArchiveChoices(page, 'Billing')
+    await page.getByRole('button', { name: 'Archive with its chats' }).click()
+
+    await expect(mainOf(page).getByRole('heading', { level: 1 })).toHaveCount(0)
+    await expect(mainOf(page)).toContainText('Select a chat')
+  })
+})
+
+test.describe('7. profile', () => {
+  test('opens the profile view with the member name', async ({ page }) => {
+    await sidebarOf(page).getByRole('link', { name: 'Profile' }).click()
+    await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Profile' })).toBeVisible()
+    await expect(mainOf(page)).toContainText('Alice')
+  })
+})
+
+test.describe('8. create a chat', () => {
+  const openNewChatDialog = (page: Page) => page.getByRole('button', { name: 'New chat' }).click()
+
+  test('creates a channel inside a project and selects it', async ({ page }) => {
+    await openNewChatDialog(page)
+    await page.getByRole('radio', { name: 'Channel' }).check()
+    await page.getByRole('textbox', { name: 'Chat name' }).fill('Planning')
+    await page.getByRole('combobox', { name: 'Project' }).selectOption('Billing')
+    await page.getByRole('button', { name: 'Confirm' }).click()
+
+    await expect(chatRowIn(projectGroupOf(page, 'Billing'), 'Planning')).toBeVisible()
+    await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Planning' })).toBeVisible()
+    await expect(mainOf(page)).toContainText('Channel view')
+  })
+
+  test('creates a runtime chat without a project as a loose chat', async ({ page }) => {
+    await openNewChatDialog(page)
+    await page.getByRole('radio', { name: 'Runtime' }).check()
+    await page.getByRole('textbox', { name: 'Chat name' }).fill('Scratchpad')
+    await page.getByRole('button', { name: 'Confirm' }).click()
+
+    await expect(chatRowIn(looseChatsOf(page), 'Scratchpad')).toBeVisible()
+    await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Scratchpad' })).toBeVisible()
+    await expect(mainOf(page)).toContainText('Runtime view')
+  })
+
+  test('cannot confirm a blank name', async ({ page }) => {
+    await openNewChatDialog(page)
+    await page.getByRole('radio', { name: 'Channel' }).check()
+    await expect(page.getByRole('button', { name: 'Confirm' })).toBeDisabled()
+    await page.getByRole('textbox', { name: 'Chat name' }).fill('   ')
+    await expect(page.getByRole('button', { name: 'Confirm' })).toBeDisabled()
+  })
+})

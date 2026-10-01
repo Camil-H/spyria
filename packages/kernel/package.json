@@ -1,0 +1,9 @@
+{
+  "name": "@hq/kernel",
+  "private": true,
+  "type": "module",
+  "exports": "./src/ids.ts",
+  "scripts": {
+    "typecheck": "tsc -p ."
+  }
+}
