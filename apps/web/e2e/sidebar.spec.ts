@@ -300,3 +300,12 @@ test.describe('10. menu triggers', () => {
     }
   })
 })
+
+test.describe('11. focus rings', () => {
+  test('keeps the keyboard focus ring of a chat row inside the row so neighbours are not cut', async ({ page }) => {
+    const welcomeRow = chatRowIn(projectGroupOf(page, 'Onboarding'), 'Welcome')
+    await welcomeRow.focus()
+    await expect(welcomeRow).toHaveCSS('outline-style', 'solid')
+    await expect(welcomeRow).toHaveCSS('outline-offset', '-2px')
+  })
+})
