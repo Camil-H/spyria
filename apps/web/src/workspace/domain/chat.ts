@@ -23,6 +23,8 @@ export const moveChat = (chat: Chat, project: { id: ProjectId; workspaceId: Work
 
 export const archiveChat = (chat: Chat): Chat => ({ ...chat, archived: true })
 
+export const renameChat = (chat: Chat, name: Name): Chat => ({ ...chat, name })
+
 export const startRuntimeChat = (
   source: Chat,
   fields: { id: ChatId; name: Name; ownerId: MemberId; model: string; reasoningEffort: string },

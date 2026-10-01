@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test'
 import { chatId, memberId, projectId, workspaceId } from '@hq/kernel'
-import { archiveChat, type Chat, moveChat, startRuntimeChat } from './chat.ts'
+import { archiveChat, type Chat, moveChat, renameChat, startRuntimeChat } from './chat.ts'
 import { BlankName, CrossWorkspaceMove, SourceChatArchived } from './errors.ts'
 import { Name } from './name.ts'
-import { archiveProject, type Project } from './project.ts'
+import { archiveProject, type Project, renameProject } from './project.ts'
 
 const acme = workspaceId('acme')
 const globex = workspaceId('globex')
@@ -61,6 +61,17 @@ test('archiveProject with the release policy detaches the chats', () => {
 
 test('archiveChat marks the chat archived and keeps the rest', () => {
   expect(archiveChat(chatInAcme)).toEqual({ ...chatInAcme, archived: true })
+})
+
+test('renameChat sets the name and keeps the rest', () => {
+  expect(renameChat(chatInAcme, Name('  Invoice total bug '))).toEqual({
+    ...chatInAcme,
+    name: Name('Invoice total bug'),
+  })
+})
+
+test('renameProject sets the name and keeps the rest', () => {
+  expect(renameProject(projectIn(acme), Name(' Invoicing '))).toEqual({ ...projectIn(acme), name: Name('Invoicing') })
 })
 
 const runtimeFields = {

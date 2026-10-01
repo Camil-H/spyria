@@ -6,6 +6,8 @@ export type Project = Readonly<{ id: ProjectId; workspaceId: WorkspaceId; name: 
 
 export type ChatsPolicy = 'archive' | 'release'
 
+export const renameProject = (project: Project, name: Name): Project => ({ ...project, name })
+
 export const archiveProject = (project: Project, chats: readonly Chat[], chatsPolicy: ChatsPolicy) => ({
   project: { ...project, archived: true },
   chats: chats.map((chat) => (chatsPolicy === 'archive' ? { ...chat, archived: true } : moveChat(chat, null))),

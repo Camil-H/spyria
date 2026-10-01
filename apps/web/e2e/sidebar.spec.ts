@@ -343,8 +343,133 @@ test.describe('12. dialog colors in dark mode', () => {
     await expectDialogTitleToUseAppTextColor(page, 'Archive chat')
     await page.getByRole('button', { name: 'Cancel' }).click()
 
+    await page.getByRole('button', { name: 'Chat actions for Research' }).click()
+    await page.getByRole('menuitem', { name: 'Rename chat' }).click()
+    await expectDialogTitleToUseAppTextColor(page, 'Rename chat')
+    await page.getByRole('button', { name: 'Cancel' }).click()
+
     await page.getByRole('button', { name: 'Project actions for Billing' }).click()
     await page.getByRole('menuitem', { name: 'Archive project' }).click()
     await expectDialogTitleToUseAppTextColor(page, 'Archive project')
+    await page.getByRole('button', { name: 'Cancel' }).click()
+
+    await page.getByRole('button', { name: 'Project actions for Billing' }).click()
+    await page.getByRole('menuitem', { name: 'Rename project' }).click()
+    await expectDialogTitleToUseAppTextColor(page, 'Rename project')
+  })
+})
+
+test.describe('13. rename a chat', () => {
+  const openRenameDialog = async (page: Page, chatName: string) => {
+    await page.getByRole('button', { name: `Chat actions for ${chatName}` }).click()
+    await page.getByRole('menuitem', { name: 'Rename chat' }).click()
+  }
+  const renameDialogOf = (page: Page) => page.getByRole('dialog', { name: 'Rename chat' })
+
+  test('opens a dialog prefilled with the current name', async ({ page }) => {
+    await openRenameDialog(page, 'Research')
+    await expect(renameDialogOf(page).getByRole('textbox', { name: 'Chat name' })).toHaveValue('Research')
+    await expect(renameDialogOf(page).getByRole('textbox', { name: 'Chat name' })).toBeFocused()
+  })
+
+  test('renames a loose chat in place', async ({ page }) => {
+    await openRenameDialog(page, 'Research')
+    await renameDialogOf(page).getByRole('textbox', { name: 'Chat name' }).fill('  Market research  ')
+    await renameDialogOf(page).getByRole('button', { name: 'Confirm' }).click()
+
+    await expect(chatRowIn(looseChatsOf(page), 'Market research')).toBeVisible()
+    await expect(sidebarOf(page).getByRole('link', { name: 'Research', exact: true })).toHaveCount(0)
+    await expect(renameDialogOf(page)).toHaveCount(0)
+  })
+
+  test('renames a chat of a project and keeps it in the project', async ({ page }) => {
+    await openRenameDialog(page, 'Invoice bug')
+    await renameDialogOf(page).getByRole('textbox', { name: 'Chat name' }).fill('Invoice total bug')
+    await renameDialogOf(page).getByRole('button', { name: 'Confirm' }).click()
+
+    await expect(chatRowIn(projectGroupOf(page, 'Billing'), 'Invoice total bug')).toBeVisible()
+  })
+
+  test('updates the header of the open chat and keeps it selected', async ({ page }) => {
+    await chatRowIn(looseChatsOf(page), 'Research').click()
+    const urlBeforeRename = page.url()
+
+    await openRenameDialog(page, 'Research')
+    await renameDialogOf(page).getByRole('textbox', { name: 'Chat name' }).fill('Market research')
+    await renameDialogOf(page).getByRole('button', { name: 'Confirm' }).click()
+
+    await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Market research' })).toBeVisible()
+    expect(page.url()).toBe(urlBeforeRename)
+  })
+
+  test('keeps the old name when cancelled', async ({ page }) => {
+    await openRenameDialog(page, 'Research')
+    await renameDialogOf(page).getByRole('textbox', { name: 'Chat name' }).fill('Something else')
+    await renameDialogOf(page).getByRole('button', { name: 'Cancel' }).click()
+
+    await expect(renameDialogOf(page)).toHaveCount(0)
+    await expect(chatRowIn(looseChatsOf(page), 'Research')).toBeVisible()
+  })
+
+  test('cannot confirm a blank name', async ({ page }) => {
+    await openRenameDialog(page, 'Research')
+    await renameDialogOf(page).getByRole('textbox', { name: 'Chat name' }).fill('   ')
+    await expect(renameDialogOf(page).getByRole('button', { name: 'Confirm' })).toBeDisabled()
+  })
+
+  test('confirms with Enter', async ({ page }) => {
+    await openRenameDialog(page, 'Standup')
+    await renameDialogOf(page).getByRole('textbox', { name: 'Chat name' }).fill('Daily standup')
+    await page.keyboard.press('Enter')
+    await expect(chatRowIn(looseChatsOf(page), 'Daily standup')).toBeVisible()
+  })
+})
+
+test.describe('14. rename a project', () => {
+  const openRenameProjectDialog = async (page: Page, projectName: string) => {
+    await page.getByRole('button', { name: `Project actions for ${projectName}` }).click()
+    await page.getByRole('menuitem', { name: 'Rename project' }).click()
+  }
+  const renameProjectDialogOf = (page: Page) => page.getByRole('dialog', { name: 'Rename project' })
+
+  test('opens a dialog prefilled with the current name', async ({ page }) => {
+    await openRenameProjectDialog(page, 'Billing')
+    await expect(renameProjectDialogOf(page).getByRole('textbox', { name: 'Project name' })).toHaveValue('Billing')
+    await expect(renameProjectDialogOf(page).getByRole('textbox', { name: 'Project name' })).toBeFocused()
+  })
+
+  test('renames the project and keeps its chats in it', async ({ page }) => {
+    await openRenameProjectDialog(page, 'Billing')
+    await renameProjectDialogOf(page).getByRole('textbox', { name: 'Project name' }).fill('  Invoicing  ')
+    await renameProjectDialogOf(page).getByRole('button', { name: 'Confirm' }).click()
+
+    await expect(projectGroupOf(page, 'Invoicing')).toBeVisible()
+    await expect(chatRowIn(projectGroupOf(page, 'Invoicing'), 'Invoice bug')).toBeVisible()
+    await expect(projectGroupOf(page, 'Billing')).toHaveCount(0)
+    await expect(renameProjectDialogOf(page)).toHaveCount(0)
+  })
+
+  test('shows the new name as a destination of the move menu', async ({ page }) => {
+    await openRenameProjectDialog(page, 'Billing')
+    await renameProjectDialogOf(page).getByRole('textbox', { name: 'Project name' }).fill('Invoicing')
+    await page.keyboard.press('Enter')
+
+    await moveChatTo(page, 'Research', 'Invoicing')
+    await expect(chatRowIn(projectGroupOf(page, 'Invoicing'), 'Research')).toBeVisible()
+  })
+
+  test('keeps the old name when cancelled', async ({ page }) => {
+    await openRenameProjectDialog(page, 'Billing')
+    await renameProjectDialogOf(page).getByRole('textbox', { name: 'Project name' }).fill('Something else')
+    await renameProjectDialogOf(page).getByRole('button', { name: 'Cancel' }).click()
+
+    await expect(renameProjectDialogOf(page)).toHaveCount(0)
+    await expect(projectGroupOf(page, 'Billing')).toBeVisible()
+  })
+
+  test('cannot confirm a blank name', async ({ page }) => {
+    await openRenameProjectDialog(page, 'Billing')
+    await renameProjectDialogOf(page).getByRole('textbox', { name: 'Project name' }).fill('   ')
+    await expect(renameProjectDialogOf(page).getByRole('button', { name: 'Confirm' })).toBeDisabled()
   })
 })

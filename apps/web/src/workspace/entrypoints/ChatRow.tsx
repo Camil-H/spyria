@@ -10,9 +10,11 @@ import { Bot, Ellipsis, Hash } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { NavLink } from 'react-router'
 import { moveChat } from '../operations/move-chat.ts'
+import { renameChat } from '../operations/rename-chat.ts'
 import type { Sidebar } from '../queries/get-sidebar.ts'
 import { ArchiveChatDialog } from './ArchiveChatDialog.tsx'
 import { useWorkspaceDependencies } from './providers.tsx'
+import { RenameDialog } from './RenameDialog.tsx'
 import { focusRing, menuContentClass, menuItemClass, menuTriggerClass, tooltipClass } from './ui.ts'
 
 type SidebarChat = Sidebar['looseChats'][number]
@@ -30,6 +32,7 @@ export const ChatRow = ({
   chatAdornment?: ChatAdornment
 }) => {
   const dependencies = useWorkspaceDependencies()
+  const [isRenaming, setIsRenaming] = useState(false)
   const [isArchiving, setIsArchiving] = useState(false)
   const ChatTypeIcon = chat.type === 'channel' ? Hash : Bot
   const chatTypeLabel = chat.type === 'channel' ? 'Channel' : 'Runtime chat'
@@ -58,7 +61,14 @@ export const ChatRow = ({
         <Trigger aria-label={`Chat actions for ${chat.name}`} className={menuTriggerClass}>
           <Ellipsis aria-hidden className="size-4" />
         </Trigger>
-        <Content align="start" className={menuContentClass}>
+        <Content
+          align="start"
+          className={menuContentClass}
+          onCloseAutoFocus={(event) => isRenaming && event.preventDefault()}
+        >
+          <Item className={menuItemClass} onSelect={() => setIsRenaming(true)}>
+            Rename chat
+          </Item>
           <Sub>
             <SubTrigger className={menuItemClass}>Move to</SubTrigger>
             <SubContent sideOffset={4} className={menuContentClass}>
@@ -84,6 +94,15 @@ export const ChatRow = ({
           </Item>
         </Content>
       </Root>
+      {isRenaming && (
+        <RenameDialog
+          label="Rename chat"
+          fieldLabel="Chat name"
+          currentName={chat.name}
+          rename={(name) => renameChat(dependencies, { chatId: chat.id, name })}
+          onClose={() => setIsRenaming(false)}
+        />
+      )}
       {isArchiving && <ArchiveChatDialog chatId={chat.id} chatName={chat.name} onClose={() => setIsArchiving(false)} />}
     </li>
   )
