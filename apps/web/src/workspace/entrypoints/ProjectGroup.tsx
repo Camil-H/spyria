@@ -1,5 +1,6 @@
 import type { WorkspaceId } from '@hq/kernel'
 import { Content, Item, Root, Trigger } from '@radix-ui/react-dropdown-menu'
+import { Ellipsis } from 'lucide-react'
 import { useState } from 'react'
 import type { Sidebar } from '../queries/get-sidebar.ts'
 import { ArchiveProjectDialog } from './ArchiveProjectDialog.tsx'
@@ -33,7 +34,7 @@ export const ProjectGroup = ({
         </button>
         <Root>
           <Trigger aria-label={`Project actions for ${project.name}`} className={menuTriggerClass}>
-            ...
+            <Ellipsis aria-hidden className="size-4" />
           </Trigger>
           <Content align="start" className={menuContentClass}>
             <Item className={menuItemClass} onSelect={() => setIsArchiving(true)}>

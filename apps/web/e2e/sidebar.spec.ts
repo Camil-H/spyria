@@ -62,12 +62,23 @@ test.describe('2. tree structure', () => {
 })
 
 test.describe('3. chat rows and selection', () => {
-  test('shows chat type and owner name on every row', async ({ page }) => {
-    await expect(chatRowIn(projectGroupOf(page, 'Billing'), 'Invoice bug')).toContainText('runtime')
-    await expect(chatRowIn(projectGroupOf(page, 'Billing'), 'Invoice bug')).toContainText('Alice')
-    await expect(chatRowIn(projectGroupOf(page, 'Onboarding'), 'Welcome')).toContainText('channel')
-    await expect(chatRowIn(projectGroupOf(page, 'Onboarding'), 'Setup helper')).toContainText('Bob')
-    await expect(chatRowIn(looseChatsOf(page), 'Standup')).toContainText('Bob')
+  test('hints the chat type with an icon and shows no type text or owner name', async ({ page }) => {
+    const invoiceBugRow = chatRowIn(projectGroupOf(page, 'Billing'), 'Invoice bug')
+    await expect(invoiceBugRow.getByRole('img', { name: 'Runtime chat' })).toBeVisible()
+    await expect(invoiceBugRow).toHaveText('Invoice bug')
+
+    const welcomeRow = chatRowIn(projectGroupOf(page, 'Onboarding'), 'Welcome')
+    await expect(welcomeRow.getByRole('img', { name: 'Channel' })).toBeVisible()
+    await expect(welcomeRow).toHaveText('Welcome')
+    await expect(sidebarOf(page)).not.toContainText('Bob')
+  })
+
+  test('explains the chat type in a tooltip when hovering its icon', async ({ page }) => {
+    await chatRowIn(projectGroupOf(page, 'Billing'), 'Invoice bug').getByRole('img', { name: 'Runtime chat' }).hover()
+    await expect(page.getByRole('tooltip', { name: 'Runtime chat' })).toBeVisible()
+
+    await chatRowIn(projectGroupOf(page, 'Onboarding'), 'Welcome').getByRole('img', { name: 'Channel' }).hover()
+    await expect(page.getByRole('tooltip', { name: 'Channel' })).toBeVisible()
   })
 
   test('opens a runtime chat in the runtime view', async ({ page }) => {
@@ -210,5 +221,37 @@ test.describe('8. create a chat', () => {
     await expect(page.getByRole('button', { name: 'Confirm' })).toBeDisabled()
     await page.getByRole('textbox', { name: 'Chat name' }).fill('   ')
     await expect(page.getByRole('button', { name: 'Confirm' })).toBeDisabled()
+  })
+})
+
+test.describe('9. sidebar toolbar', () => {
+  for (const actionName of ['New project', 'New chat']) {
+    test(`shows ${actionName} as an icon at the top right with a tooltip`, async ({ page }) => {
+      const actionButton = sidebarOf(page).getByRole('button', { name: actionName })
+      await expect(actionButton).toHaveText('')
+      const sidebarBox = await sidebarOf(page).boundingBox()
+      const buttonBox = await actionButton.boundingBox()
+      expect(buttonBox!.x).toBeGreaterThan(sidebarBox!.x + sidebarBox!.width / 2)
+      expect(buttonBox!.y).toBeLessThan(sidebarBox!.y + 60)
+
+      await actionButton.hover()
+      await expect(page.getByRole('tooltip', { name: actionName })).toBeVisible()
+    })
+  }
+})
+
+test.describe('10. menu triggers', () => {
+  const triggerNames = ['Project actions for Billing', 'Chat actions for Invoice bug']
+
+  test('keeps hovered menu triggers inset from the scroll area edge so their highlight is not clipped', async ({
+    page,
+  }) => {
+    const scrollAreaBox = await looseChatsOf(page).locator('..').boundingBox()
+    for (const triggerName of triggerNames) {
+      const trigger = sidebarOf(page).getByRole('button', { name: triggerName })
+      await trigger.hover()
+      const triggerBox = await trigger.boundingBox()
+      expect(scrollAreaBox!.x + scrollAreaBox!.width - (triggerBox!.x + triggerBox!.width)).toBeGreaterThanOrEqual(4)
+    }
   })
 })

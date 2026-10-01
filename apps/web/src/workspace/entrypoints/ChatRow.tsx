@@ -1,10 +1,17 @@
 import type { WorkspaceId } from '@hq/kernel'
 import { Content, Item, Root, Sub, SubContent, SubTrigger, Trigger } from '@radix-ui/react-dropdown-menu'
+import {
+  Content as TooltipContent,
+  Portal as TooltipPortal,
+  Root as TooltipRoot,
+  Trigger as TooltipTrigger,
+} from '@radix-ui/react-tooltip'
+import { Bot, Ellipsis, Hash } from 'lucide-react'
 import { NavLink } from 'react-router'
 import { moveChat } from '../operations/move-chat.ts'
 import type { Sidebar } from '../queries/get-sidebar.ts'
 import { useWorkspaceDependencies } from './providers.tsx'
-import { focusRing, menuContentClass, menuItemClass, menuTriggerClass } from './ui.ts'
+import { focusRing, menuContentClass, menuItemClass, menuTriggerClass, tooltipClass } from './ui.ts'
 
 type SidebarChat = Sidebar['looseChats'][number]
 
@@ -18,24 +25,31 @@ export const ChatRow = ({
   projects: Sidebar['projects']
 }) => {
   const dependencies = useWorkspaceDependencies()
+  const ChatTypeIcon = chat.type === 'channel' ? Hash : Bot
+  const chatTypeLabel = chat.type === 'channel' ? 'Channel' : 'Runtime chat'
   return (
     <li className="flex items-center">
       <NavLink
         to={`/w/${workspaceId}/chats/${chat.id}`}
         className={({ isActive }) =>
-          `flex min-w-0 flex-1 flex-col rounded-md px-2 py-1 text-sm ${focusRing} ${isActive ? 'bg-selected font-medium' : 'hover:bg-hover'}`
+          `flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-sm ${focusRing} ${isActive ? 'bg-selected font-medium' : 'hover:bg-hover'}`
         }
       >
-        <span className="truncate">{chat.name}</span>{' '}
-        <small className="flex items-center gap-1.5 text-xs font-normal text-muted">
-          <span className="rounded-full border border-line px-1.5">{chat.type}</span>
-          <span aria-hidden>·</span>
-          <span className="truncate">{chat.ownerName}</span>
-        </small>
+        <TooltipRoot disableHoverableContent>
+          <TooltipTrigger asChild>
+            <ChatTypeIcon aria-label={chatTypeLabel} role="img" size={14} className="shrink-0 text-muted" />
+          </TooltipTrigger>
+          <TooltipPortal>
+            <TooltipContent sideOffset={6} className={tooltipClass}>
+              {chatTypeLabel}
+            </TooltipContent>
+          </TooltipPortal>
+        </TooltipRoot>
+        <span className="min-w-0 truncate">{chat.name}</span>
       </NavLink>
       <Root>
         <Trigger aria-label={`Chat actions for ${chat.name}`} className={menuTriggerClass}>
-          ...
+          <Ellipsis aria-hidden className="size-4" />
         </Trigger>
         <Content align="start" className={menuContentClass}>
           <Sub>

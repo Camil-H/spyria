@@ -5,4 +5,6 @@ export const fieldClass = `rounded-md border border-line bg-app px-2 py-1.5 text
 export const menuContentClass = 'z-50 min-w-40 rounded-lg border border-line bg-raised p-1 text-sm text-ink shadow-lg'
 export const menuItemClass =
   'flex cursor-pointer items-center justify-between rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-hover data-[state=open]:bg-hover'
-export const menuTriggerClass = `rounded-md px-2 text-muted hover:bg-hover hover:text-ink data-[state=open]:bg-hover ${focusRing}`
+export const menuTriggerClass = `flex items-center rounded-md p-1.5 text-muted hover:bg-hover hover:text-ink data-[state=open]:bg-hover ${focusRing}`
+export const iconButtonClass = `rounded-md p-1.5 text-muted hover:bg-hover hover:text-ink ${focusRing}`
+export const tooltipClass = 'z-50 rounded-md border border-line bg-raised px-2 py-1 text-xs text-ink shadow-lg'
