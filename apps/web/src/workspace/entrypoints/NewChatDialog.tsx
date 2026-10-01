@@ -8,6 +8,7 @@ import { createChat } from '../operations/create-chat.ts'
 import type { Sidebar } from '../queries/get-sidebar.ts'
 import { Dialog } from './Dialog.tsx'
 import { useWorkspaceDependencies } from './providers.tsx'
+import { buttonClass, fieldClass } from './ui.ts'
 
 export const NewChatDialog = ({
   workspaceId,
@@ -38,20 +39,27 @@ export const NewChatDialog = ({
   }
   return (
     <Dialog label="New chat" onClose={onClose}>
-      <form onSubmit={submit}>
+      <form onSubmit={submit} className="flex flex-col gap-3">
         {(['channel', 'runtime'] as const).map((option) => (
-          <label key={option}>
-            <input type="radio" name="type" checked={type === option} onChange={() => setType(option)} />
+          <label key={option} className="flex items-center gap-2 text-sm">
+            <input
+              type="radio"
+              className="accent-focus"
+              name="type"
+              checked={type === option}
+              onChange={() => setType(option)}
+            />
             {option === 'channel' ? 'Channel' : 'Runtime'}
           </label>
         ))}
-        <label>
+        <label className="flex flex-col gap-1 text-sm text-muted">
           Chat name
-          <input value={draftName} onChange={(event) => setDraftName(event.target.value)} />
+          <input className={fieldClass} value={draftName} onChange={(event) => setDraftName(event.target.value)} />
         </label>
-        <label>
+        <label className="flex flex-col gap-1 text-sm text-muted">
           Project
           <select
+            className={fieldClass}
             value={selectedProjectId ?? ''}
             onChange={(event) => setSelectedProjectId(event.target.value ? projectId(event.target.value) : null)}
           >
@@ -63,7 +71,7 @@ export const NewChatDialog = ({
             ))}
           </select>
         </label>
-        <button type="submit" disabled={draftName.trim() === ''}>
+        <button type="submit" className={buttonClass} disabled={draftName.trim() === ''}>
           Confirm
         </button>
       </form>

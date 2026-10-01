@@ -11,9 +11,9 @@ export const WorkspaceLayout = () => {
   const workspaceId = workspaces.find((workspace) => workspace.id === routeWorkspaceId)?.id
   if (!workspaceId) return <Navigate to={`/w/${defaultWorkspaceId}`} replace />
   return (
-    <div style={{ display: 'flex', gap: '1rem' }}>
+    <div className="flex h-screen">
       <Sidebar workspaceId={workspaceId} />
-      <main>
+      <main className="min-w-0 flex-1 overflow-y-auto p-6">
         <Outlet context={workspaceId} />
       </main>
     </div>

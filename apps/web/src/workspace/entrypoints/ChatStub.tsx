@@ -9,8 +9,8 @@ export const ChatStub = () => {
   if (!chat) return <Navigate to={`/w/${workspaceId}`} replace />
   return (
     <>
-      <h1>{chat.name}</h1>
-      <p>{chat.type === 'runtime' ? 'Runtime view' : 'Channel view'}</p>
+      <h1 className="text-2xl font-semibold">{chat.name}</h1>
+      <p className="mt-1 text-sm text-muted">{chat.type === 'runtime' ? 'Runtime view' : 'Channel view'}</p>
     </>
   )
 }

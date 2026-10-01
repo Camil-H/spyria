@@ -4,6 +4,7 @@ import { Name } from '../domain/name.ts'
 import { createProject } from '../operations/create-project.ts'
 import { Dialog } from './Dialog.tsx'
 import { useWorkspaceDependencies } from './providers.tsx'
+import { buttonClass, fieldClass } from './ui.ts'
 
 export const NewProjectDialog = ({ workspaceId, onClose }: { workspaceId: WorkspaceId; onClose: () => void }) => {
   const dependencies = useWorkspaceDependencies()
@@ -15,12 +16,12 @@ export const NewProjectDialog = ({ workspaceId, onClose }: { workspaceId: Worksp
   }
   return (
     <Dialog label="New project" onClose={onClose}>
-      <form onSubmit={submit}>
-        <label>
+      <form onSubmit={submit} className="flex flex-col gap-3">
+        <label className="flex flex-col gap-1 text-sm text-muted">
           Project name
-          <input value={draftName} onChange={(event) => setDraftName(event.target.value)} />
+          <input className={fieldClass} value={draftName} onChange={(event) => setDraftName(event.target.value)} />
         </label>
-        <button type="submit" disabled={draftName.trim() === ''}>
+        <button type="submit" className={buttonClass} disabled={draftName.trim() === ''}>
           Confirm
         </button>
       </form>

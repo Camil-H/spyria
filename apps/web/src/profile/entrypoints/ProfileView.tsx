@@ -6,8 +6,8 @@ export const ProfileView = () => {
   const profile = useQuery(getProfile(useSession().memberId))
   return (
     <>
-      <h1>Profile</h1>
-      <p>{profile?.name}</p>
+      <h1 className="text-2xl font-semibold">Profile</h1>
+      <p className="mt-2 text-muted">{profile?.name}</p>
     </>
   )
 }

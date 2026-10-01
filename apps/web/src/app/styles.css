@@ -1,0 +1,30 @@
+@import "tailwindcss";
+@import "@openhands/ui/styles";
+@import "../../node_modules/@openhands/ui/dist/tokens.css";
+@plugin "tailwind-scrollbar";
+
+@theme inline {
+  --color-app: light-dark(var(--color-light-neutral-15), var(--color-grey-985));
+  --color-sidebar: light-dark(var(--color-light-neutral-30), var(--color-grey-970));
+  --color-raised: light-dark(white, var(--color-grey-900));
+  --color-line: light-dark(var(--color-light-neutral-100), var(--color-grey-800));
+  --color-ink: light-dark(var(--color-light-neutral-985), var(--color-light-neutral-50));
+  --color-muted: light-dark(var(--color-light-neutral-800), var(--color-grey-200));
+  --color-hover: light-dark(var(--color-light-neutral-50), var(--color-grey-900));
+  --color-selected: light-dark(var(--color-light-neutral-100), var(--color-grey-800));
+  --color-accent: var(--color-primary-500);
+  --color-accent-hover: var(--color-primary-400);
+  --color-accent-ink: var(--color-primary-985);
+  --color-focus: light-dark(var(--color-primary-800), var(--color-primary-500));
+}
+
+:root {
+  color-scheme: light dark;
+}
+
+body {
+  background-color: var(--color-app);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+  font-family: Outfit, system-ui, sans-serif;
+}

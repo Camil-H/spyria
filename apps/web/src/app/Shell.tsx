@@ -14,7 +14,7 @@ export const App = ({ app }: { app: Application }) => (
         <BrowserRouter>
           <Routes>
             <Route path="/w/:workspaceId" element={<WorkspaceLayout />}>
-              <Route index element={<p>Select a chat</p>} />
+              <Route index element={<p className="p-6 text-muted">Select a chat</p>} />
               <Route path="chats/:chatId" element={<ChatStub />} />
               <Route path="profile" element={<ProfileView />} />
             </Route>
