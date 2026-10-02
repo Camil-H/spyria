@@ -1,4 +1,5 @@
 import { type ProjectId, projectId, type WorkspaceId } from '@hq/kernel'
+import { buttonClass, Dialog, fieldClass } from '@hq/ui'
 import { type SubmitEvent, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { useSession } from '../../app/session.tsx'
@@ -6,9 +7,7 @@ import type { Chat } from '../domain/chat.ts'
 import { Name } from '../domain/name.ts'
 import { createChat } from '../operations/create-chat.ts'
 import type { Sidebar } from '../queries/get-sidebar.ts'
-import { Dialog } from './Dialog.tsx'
 import { useWorkspaceDependencies } from './providers.tsx'
-import { buttonClass, fieldClass } from './ui.ts'
 
 export const NewChatDialog = ({
   workspaceId,

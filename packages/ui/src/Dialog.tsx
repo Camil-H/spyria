@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { ghostButtonClass } from './ui.ts'
+import { ghostButtonClass } from './classes.ts'
 
 export const Dialog = ({
   label,

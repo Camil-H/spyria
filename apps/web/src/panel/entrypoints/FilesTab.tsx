@@ -1,9 +1,10 @@
 import { type FileRow, useQuery } from '@hq/db'
+import { focusRing } from '@hq/ui'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import { getFiles } from '../queries/get-files.ts'
 import type { TabProps } from './TabProps.ts'
-import { emptyClass, focusRing } from './ui.ts'
+import { emptyClass } from './ui.ts'
 
 type TreeNode = { name: string; isFolder: boolean; children: TreeNode[] }
 

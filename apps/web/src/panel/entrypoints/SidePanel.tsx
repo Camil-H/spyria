@@ -1,4 +1,5 @@
 import { useQuery } from '@hq/db'
+import { tooltipClass } from '@hq/ui'
 import { Content, List, Root, Trigger } from '@radix-ui/react-tabs'
 import {
   Content as TooltipContent,
@@ -35,7 +36,7 @@ import { SourcesTab } from './SourcesTab.tsx'
 import type { TabProps } from './TabProps.ts'
 import { TerminalTab } from './TerminalTab.tsx'
 import { UsageTab } from './UsageTab.tsx'
-import { tabClass, tooltipClass } from './ui.ts'
+import { tabClass } from './ui.ts'
 
 const tabs: Record<PanelTabId, { label: string; Icon: LucideIcon; Component: ComponentType<TabProps> }> = {
   files: { label: 'Files', Icon: FolderTree, Component: FilesTab },

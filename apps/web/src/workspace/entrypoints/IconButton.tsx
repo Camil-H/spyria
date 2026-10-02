@@ -1,6 +1,6 @@
+import { iconButtonClass, tooltipClass } from '@hq/ui'
 import { Content, Portal, Root, Trigger } from '@radix-ui/react-tooltip'
 import type { LucideIcon } from 'lucide-react'
-import { iconButtonClass, tooltipClass } from './ui.ts'
 
 export const IconButton = ({
   label,

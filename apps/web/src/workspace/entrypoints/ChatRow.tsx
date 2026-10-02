@@ -1,4 +1,5 @@
 import type { ChatId, WorkspaceId } from '@hq/kernel'
+import { focusRing, menuContentClass, tooltipClass } from '@hq/ui'
 import { Content, Item, Root, Sub, SubContent, SubTrigger, Trigger } from '@radix-ui/react-dropdown-menu'
 import {
   Content as TooltipContent,
@@ -15,7 +16,7 @@ import type { Sidebar } from '../queries/get-sidebar.ts'
 import { ArchiveChatDialog } from './ArchiveChatDialog.tsx'
 import { useWorkspaceDependencies } from './providers.tsx'
 import { RenameDialog } from './RenameDialog.tsx'
-import { focusRing, menuContentClass, menuItemClass, menuTriggerClass, tooltipClass } from './ui.ts'
+import { menuItemClass, menuTriggerClass } from './ui.ts'
 
 type SidebarChat = Sidebar['looseChats'][number]
 export type ChatAdornment = (chatId: ChatId) => ReactNode

@@ -1,5 +1,6 @@
 import { useQuery } from '@hq/db'
 import type { WorkspaceId } from '@hq/kernel'
+import { focusRing } from '@hq/ui'
 import { Provider } from '@radix-ui/react-tooltip'
 import { FolderPlus, SquarePen } from 'lucide-react'
 import { useState } from 'react'
@@ -10,7 +11,6 @@ import { IconButton } from './IconButton.tsx'
 import { NewChatDialog } from './NewChatDialog.tsx'
 import { NewProjectDialog } from './NewProjectDialog.tsx'
 import { ProjectGroup } from './ProjectGroup.tsx'
-import { focusRing } from './ui.ts'
 import { WorkspaceSwitcher } from './WorkspaceSwitcher.tsx'
 
 export const Sidebar = ({

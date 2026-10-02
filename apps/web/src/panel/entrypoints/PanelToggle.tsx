@@ -1,6 +1,6 @@
+import { focusRing } from '@hq/ui'
 import { PanelRightClose, PanelRightOpen } from 'lucide-react'
 import { usePanel } from './providers.tsx'
-import { focusRing } from './ui.ts'
 
 export const PanelToggle = () => {
   const { isOpen, toggle } = usePanel()

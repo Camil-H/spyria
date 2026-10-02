@@ -1,7 +1,6 @@
+import { buttonClass, Dialog, fieldClass } from '@hq/ui'
 import { type SubmitEvent, useState } from 'react'
 import { Name } from '../domain/name.ts'
-import { Dialog } from './Dialog.tsx'
-import { buttonClass, fieldClass } from './ui.ts'
 
 export const RenameDialog = ({
   label,

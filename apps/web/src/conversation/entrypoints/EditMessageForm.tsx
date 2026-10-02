@@ -1,9 +1,9 @@
 import type { MessageId } from '@hq/kernel'
+import { buttonClass, fieldClass, ghostButtonClass } from '@hq/ui'
 import { type SubmitEvent, useState } from 'react'
 import { useSession } from '../../app/session.tsx'
 import { editMessage } from '../operations/edit-message.ts'
 import { useConversationDependencies } from './providers.tsx'
-import { buttonClass, fieldClass, ghostButtonClass } from './ui.ts'
 
 const focusOnMount = (element: HTMLTextAreaElement | null) => element?.focus()
 

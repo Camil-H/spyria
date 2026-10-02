@@ -1,10 +1,10 @@
+import { focusRing } from '@hq/ui'
 import { ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import type { ConversationMessage } from '../queries/get-conversation.ts'
 import { DeleteMessageDialog } from './DeleteMessageDialog.tsx'
 import { EditMessageForm } from './EditMessageForm.tsx'
 import { MessageMenu } from './MessageMenu.tsx'
-import { focusRing } from './ui.ts'
 
 const timeFormat = new Intl.DateTimeFormat('en-GB', {
   hour: '2-digit',

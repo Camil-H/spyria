@@ -1,9 +1,8 @@
 import type { ProjectId } from '@hq/kernel'
+import { buttonClass, Dialog } from '@hq/ui'
 import type { ChatsPolicy } from '../domain/project.ts'
 import { archiveProject } from '../operations/archive-project.ts'
-import { Dialog } from './Dialog.tsx'
 import { useWorkspaceDependencies } from './providers.tsx'
-import { buttonClass } from './ui.ts'
 
 export const ArchiveProjectDialog = ({
   projectId,

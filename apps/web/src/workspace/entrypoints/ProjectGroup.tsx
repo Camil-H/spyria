@@ -1,4 +1,5 @@
 import type { WorkspaceId } from '@hq/kernel'
+import { focusRing, menuContentClass } from '@hq/ui'
 import { Content, Item, Root, Trigger } from '@radix-ui/react-dropdown-menu'
 import { Ellipsis } from 'lucide-react'
 import { useState } from 'react'
@@ -8,7 +9,7 @@ import { ArchiveProjectDialog } from './ArchiveProjectDialog.tsx'
 import { type ChatAdornment, ChatRow } from './ChatRow.tsx'
 import { useWorkspaceDependencies } from './providers.tsx'
 import { RenameDialog } from './RenameDialog.tsx'
-import { focusRing, menuContentClass, menuItemClass, menuTriggerClass } from './ui.ts'
+import { menuItemClass, menuTriggerClass } from './ui.ts'
 
 export const ProjectGroup = ({
   workspaceId,

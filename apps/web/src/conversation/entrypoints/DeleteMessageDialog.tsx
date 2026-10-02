@@ -1,8 +1,8 @@
 import type { MessageId } from '@hq/kernel'
+import { buttonClass, Dialog } from '@hq/ui'
 import { useSession } from '../../app/session.tsx'
 import { deleteMessage } from '../operations/delete-message.ts'
 import { useConversationDependencies } from './providers.tsx'
-import { buttonClass, ghostButtonClass } from './ui.ts'
 
 export const DeleteMessageDialog = ({ messageId, onClose }: { messageId: MessageId; onClose: () => void }) => {
   const dependencies = useConversationDependencies()
@@ -12,18 +12,10 @@ export const DeleteMessageDialog = ({ messageId, onClose }: { messageId: Message
     onClose()
   }
   return (
-    <dialog
-      open
-      aria-label="Delete message"
-      className="fixed inset-0 z-40 m-auto flex h-fit w-80 flex-col gap-3 rounded-xl border border-line bg-raised p-5 text-ink shadow-2xl"
-    >
-      <h2 className="text-[1rem] font-medium">Delete message</h2>
+    <Dialog label="Delete message" onClose={onClose}>
       <button type="button" className={buttonClass} onClick={confirm}>
         Delete
       </button>
-      <button type="button" className={ghostButtonClass} onClick={onClose}>
-        Cancel
-      </button>
-    </dialog>
+    </Dialog>
   )
 }

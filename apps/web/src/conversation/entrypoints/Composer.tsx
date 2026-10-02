@@ -1,5 +1,6 @@
 import { useStore } from '@hq/db'
 import type { ChatId, WorkspaceId } from '@hq/kernel'
+import { focusRing, tooltipClass } from '@hq/ui'
 import { Content, Portal, Provider, Root, Trigger } from '@radix-ui/react-tooltip'
 import { ArrowUp } from 'lucide-react'
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react'
@@ -8,7 +9,6 @@ import { saveDraft } from '../operations/save-draft.ts'
 import { sendMessage } from '../operations/send-message.ts'
 import { getDraft } from '../queries/get-draft.ts'
 import { useConversationDependencies } from './providers.tsx'
-import { focusRing, tooltipClass } from './ui.ts'
 
 export const Composer = ({ workspaceId, chatId }: { workspaceId: WorkspaceId; chatId: ChatId }) => {
   const dependencies = useConversationDependencies()

@@ -1,11 +1,12 @@
 import type { MessageId } from '@hq/kernel'
+import { focusRing, menuContentClass } from '@hq/ui'
 import { Content, Item, Root, Trigger } from '@radix-ui/react-dropdown-menu'
 import { Ellipsis } from 'lucide-react'
 import { useNavigate } from 'react-router'
 import { useSession } from '../../app/session.tsx'
 import { startRuntimeFromMessage } from '../operations/start-runtime-from-message.ts'
 import { useConversationDependencies } from './providers.tsx'
-import { focusRing, menuContentClass, menuItemClass } from './ui.ts'
+import { menuItemClass } from './ui.ts'
 
 export const MessageMenu = ({
   messageId,

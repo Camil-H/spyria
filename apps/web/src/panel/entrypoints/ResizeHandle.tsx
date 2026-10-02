@@ -1,6 +1,6 @@
+import { focusRing } from '@hq/ui'
 import { type KeyboardEvent, type PointerEvent, useRef } from 'react'
 import { maximumPanelWidth, minimumPanelWidth, usePanel } from './providers.tsx'
-import { focusRing } from './ui.ts'
 
 const keyboardStep = 16
 

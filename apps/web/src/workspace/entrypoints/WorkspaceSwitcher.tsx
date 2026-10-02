@@ -1,10 +1,11 @@
 import { useQuery } from '@hq/db'
 import type { WorkspaceId } from '@hq/kernel'
+import { focusRing, menuContentClass } from '@hq/ui'
 import { Content, Item, Root, Trigger } from '@radix-ui/react-dropdown-menu'
 import { useNavigate } from 'react-router'
 import { useSession } from '../../app/session.tsx'
 import { listWorkspaces } from '../queries/list-workspaces.ts'
-import { focusRing, menuContentClass, menuItemClass } from './ui.ts'
+import { menuItemClass } from './ui.ts'
 
 export const WorkspaceSwitcher = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
   const navigate = useNavigate()

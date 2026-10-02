@@ -1,8 +1,9 @@
 import { useQuery } from '@hq/db'
+import { focusRing } from '@hq/ui'
 import { useState } from 'react'
 import { getChanges } from '../queries/get-changes.ts'
 import type { TabProps } from './TabProps.ts'
-import { emptyClass, focusRing } from './ui.ts'
+import { emptyClass } from './ui.ts'
 
 const lineStyles = {
   added: { marker: '+', className: 'bg-added' },

@@ -2,6 +2,7 @@
 @import "@openhands/ui/styles";
 @import "../../node_modules/@openhands/ui/dist/tokens.css";
 @plugin "tailwind-scrollbar";
+@source "../../../../packages/ui/src";
 
 @theme inline {
   --color-app: light-dark(var(--color-light-neutral-15), var(--color-grey-985));
