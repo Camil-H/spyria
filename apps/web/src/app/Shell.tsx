@@ -13,7 +13,12 @@ import { SessionProvider } from './session.tsx'
 const ChatRoute = () => {
   const workspaceId = useOutletContext<WorkspaceId>()
   const chatId = toChatId(useParams().chatId ?? '')
-  return <ChatView headerActions={<PanelToggle />} aside={<SidePanel workspaceId={workspaceId} chatId={chatId} />} />
+  return (
+    <div className="flex h-full">
+      <ChatView headerActions={<PanelToggle />} />
+      <SidePanel workspaceId={workspaceId} chatId={chatId} />
+    </div>
+  )
 }
 
 export const App = ({ app }: { app: Application }) => (
@@ -30,7 +35,14 @@ export const App = ({ app }: { app: Application }) => (
                 >
                   <Route index element={<p className="p-6 text-muted">Select a chat</p>} />
                   <Route path="chats/:chatId" element={<ChatRoute />} />
-                  <Route path="profile" element={<ProfileView />} />
+                  <Route
+                    path="profile"
+                    element={
+                      <div className="p-6">
+                        <ProfileView />
+                      </div>
+                    }
+                  />
                 </Route>
                 <Route path="*" element={<Navigate to={`/w/${app.session.defaultWorkspaceId}`} replace />} />
               </Routes>

@@ -336,7 +336,8 @@ test.describe('11. connected tools', () => {
   for (const chatName of ['Welcome', 'Invoice bug']) {
     test(`lists the connections of the owner on ${chatName}`, async ({ page }) => {
       await openTab(page, chatName, 'Connected tools')
-      await expect(tabPanelOf(page)).toContainText('Connections of Alice')
+      await expect(tabPanelOf(page).getByRole('heading', { name: 'Connected tools' })).toBeVisible()
+      await expect(tabPanelOf(page)).not.toContainText('Connections of')
       const tools = tabPanelOf(page).getByRole('listitem')
       await expect(tools.filter({ hasText: 'GitHub' })).toContainText('Connected')
       await expect(tools.filter({ hasText: 'Slack' })).toContainText('Connected')
@@ -346,6 +347,7 @@ test.describe('11. connected tools', () => {
 
   test('shows an empty state for an owner without connections', async ({ page }) => {
     await openTab(page, 'Setup helper', 'Connected tools')
+    await expect(tabPanelOf(page).getByRole('heading', { name: 'Connected tools' })).toBeVisible()
     await expect(tabPanelOf(page)).toContainText('No tools connected')
   })
 })
@@ -485,5 +487,33 @@ test.describe('15. theming', () => {
       .getByRole('heading', { level: 1 })
       .evaluate((element) => getComputedStyle(element).color)
     expect(panelContentColor).toBe(pageTitleColor)
+  })
+})
+
+test.describe('16. full height', () => {
+  test('spans the full height of the window, flush with the right edge', async ({ page }) => {
+    await openChat(page, 'Invoice bug')
+    const viewport = page.viewportSize()!
+    const panelBox = (await panelOf(page).boundingBox())!
+    expect(panelBox.y).toBeLessThan(2)
+    expect(panelBox.y + panelBox.height).toBeGreaterThan(viewport.height - 2)
+    expect(panelBox.x + panelBox.width).toBeGreaterThan(viewport.width - 2)
+  })
+
+  test('keeps the chat header in the chat column, beside the panel', async ({ page }) => {
+    await openChat(page, 'Invoice bug')
+    const panelBox = (await panelOf(page).boundingBox())!
+    const titleBox = (await mainOf(page).getByRole('heading', { level: 1 }).boundingBox())!
+    const toggleBox = (await page.getByRole('button', { name: 'Hide panel' }).boundingBox())!
+    expect(titleBox.x + titleBox.width).toBeLessThan(panelBox.x)
+    expect(toggleBox.x + toggleBox.width).toBeLessThanOrEqual(panelBox.x)
+  })
+
+  test('gives the full height back to the chat view when hidden', async ({ page }) => {
+    await openChat(page, 'Invoice bug')
+    await page.getByRole('button', { name: 'Hide panel' }).click()
+    const viewport = page.viewportSize()!
+    const composerBox = (await composerOf(page).boundingBox())!
+    expect(composerBox.x + composerBox.width).toBeGreaterThan(viewport.width - 96)
   })
 })

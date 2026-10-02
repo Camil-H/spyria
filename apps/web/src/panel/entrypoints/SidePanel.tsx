@@ -85,7 +85,7 @@ export const SidePanel = ({ workspaceId, chatId }: TabProps) => {
       <section
         aria-label="Side panel"
         style={{ width }}
-        className="relative flex min-w-0 shrink-0 flex-col rounded-lg border border-line bg-raised text-ink"
+        className="relative flex min-w-0 shrink-0 flex-col border-l border-line bg-raised text-ink"
       >
         <ResizeHandle />
         <Root key={chatId} defaultValue={tabIds[0]} className="flex min-h-0 flex-1 flex-col">

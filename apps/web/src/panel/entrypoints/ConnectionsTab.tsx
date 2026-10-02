@@ -4,14 +4,14 @@ import { LabelList } from './LabelList.tsx'
 import type { TabProps } from './TabProps.ts'
 
 export const ConnectionsTab = ({ workspaceId, chatId }: TabProps) => {
-  const owned = useQuery(getConnections(workspaceId, chatId))
-  if (!owned) return null
+  const connections = useQuery(getConnections(workspaceId, chatId))
+  if (!connections) return null
   return (
     <div className="flex flex-col gap-3">
-      <h2 className="text-sm font-semibold">Connections of {owned.ownerName}</h2>
+      <h2 className="text-sm font-semibold">Connected tools</h2>
       <LabelList
         emptyMessage="No tools connected"
-        rows={owned.connections.map((connection) => ({
+        rows={connections.map((connection) => ({
           key: connection.tool,
           label: connection.tool,
           value: connection.status,

@@ -10,7 +10,7 @@ import { MessageList } from './MessageList.tsx'
 
 const bubbleClassName = 'rounded-full border border-line px-2 py-0.5 text-xs text-muted'
 
-export const ChatView = ({ headerActions, aside }: { headerActions?: ReactNode; aside?: ReactNode }) => {
+export const ChatView = ({ headerActions }: { headerActions?: ReactNode }) => {
   const workspaceId = useOutletContext<WorkspaceId>()
   const { memberId } = useSession()
   const chatId = toChatId(useParams().chatId ?? '')
@@ -19,14 +19,14 @@ export const ChatView = ({ headerActions, aside }: { headerActions?: ReactNode; 
   const ChatTypeIcon = conversation.type === 'runtime' ? Bot : Hash
   const chatTypeLabel = conversation.type === 'runtime' ? 'Runtime chat' : 'Channel'
   return (
-    <div key={chatId} className="flex h-full min-h-0 flex-col gap-4">
+    <div key={chatId} className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-4 px-4 py-6">
       <header>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-x-3">
+          <div className="flex min-w-0 items-center gap-2">
             <ChatTypeIcon aria-label={chatTypeLabel} role="img" size={20} className="shrink-0 text-muted" />
-            <h1 className="text-2xl font-semibold">{conversation.title}</h1>
+            <h1 className="truncate text-2xl font-semibold">{conversation.title}</h1>
           </div>
-          <div className="ml-auto flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+          <div className="ml-auto flex shrink-0 items-center gap-x-2">
             {conversation.type === 'runtime' && (
               <>
                 <span className="text-sm text-muted">
@@ -55,13 +55,8 @@ export const ChatView = ({ headerActions, aside }: { headerActions?: ReactNode; 
           </Link>
         )}
       </header>
-      <div className="flex min-h-0 flex-1 gap-6">
-        <div className="flex min-w-0 flex-1 flex-col gap-4">
-          <MessageList conversation={conversation} />
-          <Composer workspaceId={workspaceId} chatId={chatId} />
-        </div>
-        {aside}
-      </div>
+      <MessageList conversation={conversation} />
+      <Composer workspaceId={workspaceId} chatId={chatId} />
     </div>
   )
 }

@@ -14,7 +14,7 @@ export const WorkspaceLayout = ({ chatAdornment }: { chatAdornment?: ChatAdornme
   return (
     <div className="flex h-screen">
       <Sidebar workspaceId={workspaceId} chatAdornment={chatAdornment} />
-      <main className="min-w-0 flex-1 overflow-y-auto p-6">
+      <main className="min-w-0 flex-1 overflow-y-auto">
         <Outlet context={workspaceId} />
       </main>
     </div>

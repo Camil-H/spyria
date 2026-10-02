@@ -103,9 +103,9 @@ test.describe('2b. runtime header row', () => {
     for (const itemBox of [ownerBox, modelBox, branchBox]) {
       expect(Math.abs(itemBox!.y + itemBox!.height / 2 - (titleBox!.y + titleBox!.height / 2))).toBeLessThan(16)
     }
-    const mainBox = await mainOf(page).boundingBox()
-    expect(mainBox!.x + mainBox!.width - (branchBox!.x + branchBox!.width)).toBeLessThan(96)
-    expect(ownerBox!.x).toBeGreaterThan(titleBox!.x + titleBox!.width + 100)
+    const composerBox = await composerOf(page).boundingBox()
+    expect(composerBox!.x + composerBox!.width - (branchBox!.x + branchBox!.width)).toBeLessThan(96)
+    expect(ownerBox!.x).toBeGreaterThan(titleBox!.x + titleBox!.width)
     expect(modelBox!.x).toBeGreaterThan(ownerBox!.x + ownerBox!.width)
     expect(branchBox!.x).toBeGreaterThan(modelBox!.x + modelBox!.width)
   })
