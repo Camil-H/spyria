@@ -8,15 +8,14 @@ export type LlmCredential = Readonly<{
   memberId: MemberId
   provider: string
   kind: 'api-key' | 'plan-login'
-  label: string
   last4: string
   status: string | null
 }>
 
 type NewLlmCredential = Omit<LlmCredential, 'last4' | 'status'> & { secret: Secret; status: string | null }
 
-export const newLlmCredential = ({ secret, provider, label, ...fields }: NewLlmCredential): LlmCredential => {
+export const newLlmCredential = ({ secret, provider, ...fields }: NewLlmCredential): LlmCredential => {
   const trimmedProvider = provider.trim()
   if (trimmedProvider === '') throw new BlankProvider()
-  return { ...fields, provider: trimmedProvider, label: label.trim(), last4: secret.last4() }
+  return { ...fields, provider: trimmedProvider, last4: secret.last4() }
 }

@@ -78,7 +78,6 @@ export type LlmCredentialRow = {
   memberId: MemberId
   provider: string
   kind: 'api-key' | 'plan-login'
-  label: string
   last4: string
   status: string | null
 }

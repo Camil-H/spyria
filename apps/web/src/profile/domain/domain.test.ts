@@ -36,11 +36,10 @@ test('newLlmCredential trims, derives last4 and never carries the secret', () =>
     id: 'credential' as never,
     provider: '  OpenAI ',
     kind: 'api-key',
-    label: ' Work ',
     secret: new Secret('sk-test-1234567890'),
     status: null,
   })
-  expect(credential).toMatchObject({ provider: 'OpenAI', label: 'Work', last4: '7890' })
+  expect(credential).toMatchObject({ provider: 'OpenAI', last4: '7890' })
   expect(JSON.stringify(credential)).not.toContain('sk-test')
 })
 
@@ -51,7 +50,6 @@ test('newLlmCredential rejects a blank provider', () => {
       id: 'credential' as never,
       provider: ' ',
       kind: 'api-key',
-      label: '',
       secret: new Secret('abcd'),
       status: null,
     }),

@@ -26,23 +26,25 @@ export const DisplayNameForm = ({
     setIsSaved(await run(() => renameMember(dependencies, { workspaceId, memberId, name: DisplayName(draftName) })))
   }
   return (
-    <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
-      <label className={labelClass}>
-        Display name
-        <input
-          className={`${fieldClass} w-64`}
-          value={draftName}
-          onChange={(event) => {
-            setDraftName(event.target.value)
-            setIsSaved(false)
-          }}
-        />
-      </label>
-      <button type="submit" className={buttonClass} disabled={trimmedName === '' || trimmedName === currentName}>
-        Save
-      </button>
-      {isSaved && <p className="text-sm text-muted">Saved</p>}
-      <ErrorMessage message={errorMessage} />
-    </form>
+    <section aria-label="Display name">
+      <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
+        <label className={labelClass}>
+          Display name
+          <input
+            className={`${fieldClass} w-64`}
+            value={draftName}
+            onChange={(event) => {
+              setDraftName(event.target.value)
+              setIsSaved(false)
+            }}
+          />
+        </label>
+        <button type="submit" className={buttonClass} disabled={trimmedName === '' || trimmedName === currentName}>
+          Save
+        </button>
+        {isSaved && <p className="text-sm text-muted">Saved</p>}
+        <ErrorMessage message={errorMessage} />
+      </form>
+    </section>
   )
 }

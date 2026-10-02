@@ -1,4 +1,4 @@
-import { expect, type Page, test } from '@playwright/test'
+import { expect, type Locator, type Page, test } from '@playwright/test'
 
 const sidebarOf = (page: Page) => page.getByRole('navigation', { name: 'Sidebar' })
 const mainOf = (page: Page) => page.getByRole('main')
@@ -19,14 +19,21 @@ const openChat = async (page: Page, chatName: string) => {
 
 const addCredential = async (
   page: Page,
-  credential: { provider: string; kind: 'API key' | 'Plan login'; secret: string; label?: string },
+  credential: { provider: string; kind: 'API key' | 'Plan login'; secret: string },
 ) => {
   const llmSection = sectionOf(page, 'LLM access')
   await llmSection.getByLabel('Provider').fill(credential.provider)
   await llmSection.getByLabel('Kind').selectOption(credential.kind)
-  if (credential.label) await llmSection.getByLabel('Label').fill(credential.label)
   await llmSection.getByLabel(credential.kind === 'Plan login' ? 'Credential' : 'Secret').fill(credential.secret)
   await llmSection.getByRole('button', { name: 'Add' }).click()
+}
+
+const connectionsTabOf = (page: Page, tabName: 'Shared with me' | 'My connections') =>
+  sectionOf(page, 'Connections').getByRole('tab', { name: tabName })
+const connectionsPanelOf = (page: Page) => sectionOf(page, 'Connections').getByRole('tabpanel')
+const openMyConnections = async (page: Page) => {
+  await connectionsTabOf(page, 'My connections').click()
+  await expect(connectionsTabOf(page, 'My connections')).toHaveAttribute('aria-selected', 'true')
 }
 
 const removeCredential = async (page: Page, provider: string) => {
@@ -41,13 +48,14 @@ test.beforeEach(async ({ page }) => {
 })
 
 test.describe('1. layout', () => {
-  test('shows the heading and the three sections', async ({ page }) => {
+  test('shows the heading and two sections, without a name subtitle or a Display name heading', async ({ page }) => {
     await openProfile(page)
-    await expect(sectionOf(page, 'Display name').getByRole('heading', { level: 2, name: 'Display name' })).toBeVisible()
+    await expect(mainOf(page).getByText('Alice', { exact: true })).toHaveCount(0)
+    await expect(mainOf(page).getByRole('heading', { name: 'Display name' })).toHaveCount(0)
+    await expect(sectionOf(page, 'Display name').getByRole('textbox', { name: 'Display name' })).toBeVisible()
+    await expect(sectionOf(page, 'Display name').getByText('Display name', { exact: true })).toBeVisible()
     await expect(sectionOf(page, 'LLM access').getByRole('heading', { level: 2, name: 'LLM access' })).toBeVisible()
     await expect(sectionOf(page, 'Connections').getByRole('heading', { level: 2, name: 'Connections' })).toBeVisible()
-    await expect(sectionOf(page, 'Shared with me').getByRole('heading', { level: 3 })).toBeVisible()
-    await expect(sectionOf(page, 'My personal connections').getByRole('heading', { level: 3 })).toBeVisible()
   })
 })
 
@@ -90,8 +98,130 @@ test.describe('3. LLM credentials list', () => {
     await openProfile(page)
     const credential = sectionOf(page, 'LLM access').getByRole('listitem').filter({ hasText: 'Anthropic' })
     await expect(credential).toContainText('API key')
-    await expect(credential).toContainText('Work key')
     await expect(credential).toContainText('••••a1b2')
+  })
+})
+
+test.describe('3b. add form layout', () => {
+  test('has no Label field', async ({ page }) => {
+    await openProfile(page)
+    await expect(sectionOf(page, 'LLM access').getByLabel('Label')).toHaveCount(0)
+  })
+
+  test('aligns the fields and the Add button on one grid row', async ({ page }) => {
+    await openProfile(page)
+    const llmSection = sectionOf(page, 'LLM access')
+    const fieldBoxes = await Promise.all(
+      ['Provider', 'Kind', 'Secret'].map((fieldName) => llmSection.getByLabel(fieldName).boundingBox()),
+    )
+    const addBox = (await llmSection.getByRole('button', { name: 'Add' }).boundingBox())!
+    const tops = fieldBoxes.map((box) => box!.y)
+    const heights = fieldBoxes.map((box) => box!.height)
+    expect(Math.max(...tops) - Math.min(...tops)).toBeLessThan(1.5)
+    expect(Math.max(...heights) - Math.min(...heights)).toBeLessThan(1.5)
+    expect(Math.abs(addBox.y + addBox.height / 2 - (tops[0]! + heights[0]! / 2))).toBeLessThan(2)
+
+    const gaps = fieldBoxes.slice(1).map((box, index) => box!.x - (fieldBoxes[index]!.x + fieldBoxes[index]!.width))
+    expect(Math.min(...gaps)).toBeGreaterThan(0)
+    expect(Math.abs(gaps[0]! - gaps[1]!)).toBeLessThan(1.5)
+    expect(addBox.x).toBeGreaterThan(fieldBoxes[2]!.x + fieldBoxes[2]!.width)
+  })
+
+  test('keeps the grid when the kind is Plan login', async ({ page }) => {
+    await openProfile(page)
+    const llmSection = sectionOf(page, 'LLM access')
+    await llmSection.getByLabel('Kind').selectOption('Plan login')
+    const providerBox = (await llmSection.getByLabel('Provider').boundingBox())!
+    const credentialBox = (await llmSection.getByLabel('Credential').boundingBox())!
+    expect(Math.abs(providerBox.y - credentialBox.y)).toBeLessThan(1.5)
+    expect(Math.abs(providerBox.height - credentialBox.height)).toBeLessThan(1.5)
+  })
+})
+
+test.describe('3d. add form above the list', () => {
+  test('puts the add form above the registered credentials', async ({ page }) => {
+    await openProfile(page)
+    const llmSection = sectionOf(page, 'LLM access')
+    const addButtonBox = (await llmSection.getByRole('button', { name: 'Add' }).boundingBox())!
+    const firstCredentialBox = (await llmSection.getByRole('listitem').first().boundingBox())!
+    expect(addButtonBox.y + addButtonBox.height).toBeLessThan(firstCredentialBox.y)
+  })
+
+  test('keeps a newly added credential below the form', async ({ page }) => {
+    await openProfile(page)
+    await addCredential(page, { provider: 'OpenAI', kind: 'API key', secret: 'sk-test-1234567890' })
+    const llmSection = sectionOf(page, 'LLM access')
+    const providerFieldBox = (await llmSection.getByLabel('Provider').boundingBox())!
+    const newCredentialBox = (await llmSection.getByRole('listitem').filter({ hasText: 'OpenAI' }).boundingBox())!
+    expect(providerFieldBox.y + providerFieldBox.height).toBeLessThan(newCredentialBox.y)
+  })
+
+  test('shows the empty message below the form', async ({ page }) => {
+    await openProfile(page)
+    await removeCredential(page, 'Anthropic')
+    const llmSection = sectionOf(page, 'LLM access')
+    const addButtonBox = (await llmSection.getByRole('button', { name: 'Add' }).boundingBox())!
+    const emptyMessageBox = (await llmSection.getByText('No LLM keys yet').boundingBox())!
+    expect(addButtonBox.y + addButtonBox.height).toBeLessThan(emptyMessageBox.y)
+  })
+})
+
+test.describe('3c. credential list grid', () => {
+  test('aligns provider, kind, mask and Remove in columns across rows and with the add form', async ({ page }) => {
+    await openProfile(page)
+    await addCredential(page, { provider: 'OpenAI', kind: 'API key', secret: 'sk-test-1234567890' })
+    await addCredential(page, { provider: 'Claude Code', kind: 'Plan login', secret: 'oauth-token-abcdef9999' })
+
+    const llmSection = sectionOf(page, 'LLM access')
+    const rowOf = (provider: string) => llmSection.getByRole('listitem').filter({ hasText: provider })
+    const leftEdgeOf = async (locator: Locator) => (await locator.boundingBox())!.x
+    const rightEdgeOf = async (locator: Locator) => {
+      const box = (await locator.boundingBox())!
+      return box.x + box.width
+    }
+
+    const providerEdges = await Promise.all(
+      ['Anthropic', 'OpenAI', 'Claude Code'].map((provider) =>
+        leftEdgeOf(rowOf(provider).getByText(provider, { exact: true })),
+      ),
+    )
+    const kindEdges = await Promise.all([
+      leftEdgeOf(rowOf('Anthropic').getByText('API key', { exact: true })),
+      leftEdgeOf(rowOf('OpenAI').getByText('API key', { exact: true })),
+      leftEdgeOf(rowOf('Claude Code').getByText('Plan login', { exact: true })),
+    ])
+    const maskEdges = await Promise.all([
+      leftEdgeOf(rowOf('Anthropic').getByText('••••a1b2')),
+      leftEdgeOf(rowOf('OpenAI').getByText('••••7890')),
+      leftEdgeOf(rowOf('Claude Code').getByText('••••9999')),
+    ])
+    const removeEdges = await Promise.all(
+      ['Anthropic', 'OpenAI', 'Claude Code'].map((provider) =>
+        rightEdgeOf(rowOf(provider).getByRole('button', { name: `Remove ${provider}` })),
+      ),
+    )
+    const spread = (edges: number[]) => Math.max(...edges) - Math.min(...edges)
+    expect(spread(providerEdges)).toBeLessThan(1.5)
+    expect(spread(kindEdges)).toBeLessThan(1.5)
+    expect(spread(maskEdges)).toBeLessThan(1.5)
+    expect(spread(removeEdges)).toBeLessThan(1.5)
+
+    expect(Math.abs(providerEdges[0]! - (await leftEdgeOf(llmSection.getByLabel('Provider'))))).toBeLessThan(1.5)
+    expect(Math.abs(kindEdges[0]! - (await leftEdgeOf(llmSection.getByLabel('Kind'))))).toBeLessThan(1.5)
+    expect(Math.abs(maskEdges[0]! - (await leftEdgeOf(llmSection.getByLabel('Secret'))))).toBeLessThan(1.5)
+    expect(
+      Math.abs(removeEdges[0]! - (await rightEdgeOf(llmSection.getByRole('button', { name: 'Add' })))),
+    ).toBeLessThan(1.5)
+  })
+
+  test('keeps the rows on equal heights and does not shift columns for plan logins', async ({ page }) => {
+    await openProfile(page)
+    await addCredential(page, { provider: 'Claude Code', kind: 'Plan login', secret: 'oauth-token-abcdef9999' })
+    const llmSection = sectionOf(page, 'LLM access')
+    const planRowBox = (await llmSection.getByRole('listitem').filter({ hasText: 'Claude Code' }).boundingBox())!
+    const keyRowBox = (await llmSection.getByRole('listitem').filter({ hasText: 'Anthropic' }).boundingBox())!
+    expect(Math.abs(planRowBox.x - keyRowBox.x)).toBeLessThan(1.5)
+    expect(Math.abs(planRowBox.width - keyRowBox.width)).toBeLessThan(1.5)
   })
 })
 
@@ -224,10 +354,31 @@ test.describe('6. prompting needs a key', () => {
   })
 })
 
-test.describe('7. workspace connections shared with me', () => {
+test.describe('7. connections tabs and shared connections', () => {
+  test('shows the two tabs with Shared with me selected first', async ({ page }) => {
+    await openProfile(page)
+    await expect(sectionOf(page, 'Connections').getByRole('tablist', { name: 'Connections' })).toBeVisible()
+    await expect(sectionOf(page, 'Connections').getByRole('tab')).toHaveText(['Shared with me', 'My connections'])
+    await expect(connectionsTabOf(page, 'Shared with me')).toHaveAttribute('aria-selected', 'true')
+  })
+
+  test('switches tabs with the mouse and the arrow keys', async ({ page }) => {
+    await openProfile(page)
+    await connectionsTabOf(page, 'My connections').click()
+    await expect(connectionsPanelOf(page)).toContainText('GitHub')
+    await expect(connectionsPanelOf(page)).not.toContainText('2 of 5 tables')
+
+    await connectionsTabOf(page, 'Shared with me').focus()
+    await page.keyboard.press('ArrowRight')
+    await expect(connectionsTabOf(page, 'My connections')).toBeFocused()
+    await expect(connectionsTabOf(page, 'My connections')).toHaveAttribute('aria-selected', 'true')
+    await page.keyboard.press('ArrowLeft')
+    await expect(connectionsTabOf(page, 'Shared with me')).toHaveAttribute('aria-selected', 'true')
+  })
+
   test('lists the shared connections with the access of the member, read-only', async ({ page }) => {
     await openProfile(page)
-    const sharedSection = sectionOf(page, 'Shared with me')
+    const sharedSection = connectionsPanelOf(page)
     await expect(sharedSection.getByRole('listitem').filter({ hasText: 'Postgres' })).toContainText('2 of 5 tables')
     await expect(sharedSection.getByRole('listitem').filter({ hasText: 'Onyx' })).toContainText('All sources')
     await expect(sharedSection.getByRole('button')).toHaveCount(0)
@@ -235,10 +386,11 @@ test.describe('7. workspace connections shared with me', () => {
 })
 
 test.describe('8. personal connections', () => {
-  const personalSectionOf = (page: Page) => sectionOf(page, 'My personal connections')
+  const personalSectionOf = connectionsPanelOf
 
   test('lists the connections with their status and the matching actions', async ({ page }) => {
     await openProfile(page)
+    await openMyConnections(page)
     const personalSection = personalSectionOf(page)
     await expect(personalSection.getByRole('listitem').filter({ hasText: 'GitHub' })).toContainText('Connected')
     await expect(personalSection.getByRole('listitem').filter({ hasText: 'Slack' })).toContainText('Connected')
@@ -252,6 +404,7 @@ test.describe('8. personal connections', () => {
 
   test('reconnects a tool that needs reconnection', async ({ page }) => {
     await openProfile(page)
+    await openMyConnections(page)
     await personalSectionOf(page).getByRole('button', { name: 'Reconnect Notion' }).click()
     await expect(personalSectionOf(page).getByRole('listitem').filter({ hasText: 'Notion' })).toContainText('Connected')
     await expect(personalSectionOf(page).getByRole('listitem').filter({ hasText: 'Notion' })).not.toContainText(
@@ -262,6 +415,7 @@ test.describe('8. personal connections', () => {
 
   test('connects a tool of the catalog', async ({ page }) => {
     await openProfile(page)
+    await openMyConnections(page)
     await personalSectionOf(page).getByRole('button', { name: 'Connect Linear', exact: true }).click()
     await expect(personalSectionOf(page).getByRole('listitem').filter({ hasText: 'Linear' })).toContainText('Connected')
     await expect(personalSectionOf(page).getByRole('button', { name: 'Connect Linear', exact: true })).toHaveCount(0)
@@ -269,6 +423,7 @@ test.describe('8. personal connections', () => {
 
   test('disconnects a tool and offers to connect it again', async ({ page }) => {
     await openProfile(page)
+    await openMyConnections(page)
     await personalSectionOf(page).getByRole('button', { name: 'Disconnect GitHub' }).click()
     await expect(personalSectionOf(page).getByRole('listitem').filter({ hasText: 'GitHub' })).toHaveCount(0)
     await expect(personalSectionOf(page).getByRole('button', { name: 'Connect GitHub', exact: true })).toBeVisible()
@@ -288,7 +443,8 @@ test.describe('9. panel follows', () => {
 
   test('reflects a disconnection made in the profile', async ({ page }) => {
     await openProfile(page)
-    await sectionOf(page, 'My personal connections').getByRole('button', { name: 'Disconnect GitHub' }).click()
+    await openMyConnections(page)
+    await connectionsPanelOf(page).getByRole('button', { name: 'Disconnect GitHub' }).click()
 
     await openChat(page, 'Invoice bug')
     await page.getByRole('tab', { name: 'Connected tools' }).click()
@@ -314,7 +470,7 @@ test.describe('10. theming and access', () => {
     const pageTitleColor = await mainOf(page)
       .getByRole('heading', { level: 1 })
       .evaluate((element) => getComputedStyle(element).color)
-    for (const sectionName of ['Display name', 'LLM access', 'Connections']) {
+    for (const sectionName of ['LLM access', 'Connections']) {
       const headingColor = await sectionOf(page, sectionName)
         .getByRole('heading', { level: 2, name: sectionName })
         .evaluate((element) => getComputedStyle(element).color)

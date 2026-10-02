@@ -313,7 +313,6 @@ export const createMockSnapshot = (): Snapshot => ({
       memberId: alice,
       provider: 'Anthropic',
       kind: 'api-key',
-      label: 'Work key',
       last4: 'a1b2',
       status: null,
     },

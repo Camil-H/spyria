@@ -10,7 +10,6 @@ type Input = {
   memberId: MemberId
   provider: string
   kind: 'api-key' | 'plan-login'
-  label: string
   secret: string
 }
 

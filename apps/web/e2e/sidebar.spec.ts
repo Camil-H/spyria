@@ -221,10 +221,10 @@ test.describe('6. archive a project', () => {
 })
 
 test.describe('7. profile', () => {
-  test('opens the profile view with the member name', async ({ page }) => {
+  test('opens the profile view with the member name in the display name field', async ({ page }) => {
     await sidebarOf(page).getByRole('link', { name: 'Profile' }).click()
     await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Profile' })).toBeVisible()
-    await expect(mainOf(page)).toContainText('Alice')
+    await expect(mainOf(page).getByRole('textbox', { name: 'Display name' })).toHaveValue('Alice')
   })
 })
 
