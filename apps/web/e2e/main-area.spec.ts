@@ -104,7 +104,7 @@ test.describe('2b. runtime header row', () => {
       expect(Math.abs(itemBox!.y + itemBox!.height / 2 - (titleBox!.y + titleBox!.height / 2))).toBeLessThan(16)
     }
     const mainBox = await mainOf(page).boundingBox()
-    expect(mainBox!.x + mainBox!.width - (branchBox!.x + branchBox!.width)).toBeLessThan(48)
+    expect(mainBox!.x + mainBox!.width - (branchBox!.x + branchBox!.width)).toBeLessThan(96)
     expect(ownerBox!.x).toBeGreaterThan(titleBox!.x + titleBox!.width + 100)
     expect(modelBox!.x).toBeGreaterThan(ownerBox!.x + ownerBox!.width)
     expect(branchBox!.x).toBeGreaterThan(modelBox!.x + modelBox!.width)

@@ -31,6 +31,53 @@ export type MessageRow = {
   needsReply: boolean
 }
 export type DraftRow = { workspaceId: WorkspaceId; chatId: ChatId; memberId: MemberId; text: string }
+export type FileRow = { workspaceId: WorkspaceId; chatId: ChatId; path: string; kind: 'file' | 'folder' }
+export type DiffLine = { kind: 'added' | 'removed' | 'context'; text: string }
+export type ChangeRow = {
+  workspaceId: WorkspaceId
+  chatId: ChatId
+  path: string
+  additions: number
+  deletions: number
+  diffLines: readonly DiffLine[]
+}
+export type TerminalLineRow = { workspaceId: WorkspaceId; chatId: ChatId; text: string }
+export type PlanStepRow = { workspaceId: WorkspaceId; chatId: ChatId; title: string; status: string }
+export type CommitRow = {
+  workspaceId: WorkspaceId
+  chatId: ChatId
+  sha: string
+  message: string
+  authorId: MemberId
+  committedAt: string
+}
+export type BrowserPageRow = {
+  workspaceId: WorkspaceId
+  chatId: ChatId
+  url: string
+  title: string
+  bodyText: string
+}
+export type UsageEntryRow = {
+  workspaceId: WorkspaceId
+  chatId: ChatId
+  memberId: MemberId
+  tokens: number
+  costCents: number
+}
+export type SourceRow = { workspaceId: WorkspaceId; chatId: ChatId; name: string; origin: string }
+export type ToolConnectionRow = {
+  workspaceId: WorkspaceId
+  memberId: MemberId
+  tool: string
+  status: string
+}
+export type ChatMemberRow = {
+  workspaceId: WorkspaceId
+  chatId: ChatId
+  memberId: MemberId
+  role: string
+}
 
 export type Snapshot = {
   workspaces: readonly WorkspaceRow[]
@@ -40,4 +87,25 @@ export type Snapshot = {
   chats: readonly ChatRow[]
   messages: readonly MessageRow[]
   drafts: readonly DraftRow[]
+  files: readonly FileRow[]
+  changes: readonly ChangeRow[]
+  terminalLines: readonly TerminalLineRow[]
+  planSteps: readonly PlanStepRow[]
+  commits: readonly CommitRow[]
+  browserPages: readonly BrowserPageRow[]
+  usageEntries: readonly UsageEntryRow[]
+  sources: readonly SourceRow[]
+  toolConnections: readonly ToolConnectionRow[]
+  chatMembers: readonly ChatMemberRow[]
 }
+
+type ChatScoped = { workspaceId: WorkspaceId; chatId: ChatId }
+
+export const findChat = (snapshot: Snapshot, workspaceId: WorkspaceId, chatId: ChatId) =>
+  snapshot.chats.find((chat) => chat.id === chatId && chat.workspaceId === workspaceId && !chat.archived)
+
+export const inChat = (workspaceId: WorkspaceId, chatId: ChatId) => (row: ChatScoped) =>
+  row.workspaceId === workspaceId && row.chatId === chatId
+
+export const memberName = (snapshot: Snapshot, memberId: MemberId) =>
+  snapshot.members.find((member) => member.id === memberId)?.name ?? 'Unknown'

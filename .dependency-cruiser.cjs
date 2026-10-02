@@ -1,4 +1,4 @@
-const contexts = '(workspace|profile|conversation)'
+const contexts = '(workspace|profile|conversation|panel)'
 const publishedSurface = '^apps/web/src/[^/]+/surface\\.tsx?$'
 const contextLayers = ['domain', 'contracts', 'operations', 'queries', 'integrations', 'entrypoints']
 const inContext = (layers) => `^apps/web/src/${contexts}/(${layers.join('|')})/`
@@ -51,6 +51,12 @@ module.exports = {
       severity: 'error',
       from: { path: `^apps/web/src/${contexts}/(domain|contracts|operations|queries|entrypoints)/` },
       to: { path: publishedSurface, pathNot: '^apps/web/src/$1/' },
+    },
+    {
+      name: 'panel-surface-imported-only-by-app',
+      severity: 'error',
+      from: { path: '^apps/web/src/', pathNot: '^apps/web/src/(app|panel)/' },
+      to: { path: '^apps/web/src/panel/surface\\.ts$' },
     },
     {
       name: 'contexts-import-app-only-through-session',

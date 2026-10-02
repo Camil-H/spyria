@@ -1,4 +1,4 @@
-import type { ChatRow, Snapshot } from '@hq/db'
+import { type ChatRow, findChat, type Snapshot } from '@hq/db'
 import type { ChatId, MemberId, MessageId, WorkspaceId } from '@hq/kernel'
 
 export type ConversationMessage = Readonly<{
@@ -28,14 +28,11 @@ export type Conversation = Readonly<{
 export const getConversation =
   (workspaceId: WorkspaceId, chatId: ChatId, viewerId: MemberId) =>
   (snapshot: Snapshot): Conversation | null => {
-    const inWorkspace = (chat: ChatRow) => chat.workspaceId === workspaceId && !chat.archived
-    const chat = snapshot.chats.find((candidate) => candidate.id === chatId && inWorkspace(candidate))
+    const chat = findChat(snapshot, workspaceId, chatId)
     if (!chat) return null
     const memberNames = new Map(snapshot.members.map((member) => [member.id, member.name]))
     const memberName = (memberId: MemberId | null) => (memberId && memberNames.get(memberId)) || 'Agent'
-    const origin = chat.originChatId
-      ? snapshot.chats.find((candidate) => candidate.id === chat.originChatId && inWorkspace(candidate))
-      : undefined
+    const origin = chat.originChatId ? findChat(snapshot, workspaceId, chat.originChatId) : undefined
     const chatMessages = snapshot.messages.filter((message) => message.chatId === chatId)
     return {
       title: chat.name,

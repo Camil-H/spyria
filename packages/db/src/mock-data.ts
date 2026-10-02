@@ -1,5 +1,5 @@
 import { chatId, type MemberId, memberId, messageId, projectId, type WorkspaceId, workspaceId } from '@hq/kernel'
-import type { MessageRow, Snapshot } from './schema.ts'
+import type { ChangeRow, FileRow, MessageRow, Snapshot } from './schema.ts'
 
 const acme = workspaceId('workspace-acme')
 const globex = workspaceId('workspace-globex')
@@ -11,6 +11,47 @@ const launch = projectId('project-launch')
 
 export const currentMemberId = alice
 export const defaultWorkspaceId = acme
+
+const invoiceChat = chatId('chat-invoice-bug')
+const welcomeChat = chatId('chat-welcome')
+
+const file = (path: string, kind: FileRow['kind'] = 'file'): FileRow => ({
+  workspaceId: acme,
+  chatId: invoiceChat,
+  path,
+  kind,
+})
+const change = (path: string, additions: number, deletions: number, diffLines: ChangeRow['diffLines']): ChangeRow => ({
+  workspaceId: acme,
+  chatId: invoiceChat,
+  path,
+  additions,
+  deletions,
+  diffLines,
+})
+const terminalLine = (text: string) => ({
+  workspaceId: acme,
+  chatId: invoiceChat,
+  text,
+})
+const planStep = (title: string, status: string) => ({
+  workspaceId: acme,
+  chatId: invoiceChat,
+  title,
+  status,
+})
+const toolConnection = (tool: string, status: string) => ({
+  workspaceId: acme,
+  memberId: alice,
+  tool,
+  status,
+})
+const bobCanPrompt = (chat: string) => ({
+  workspaceId: acme,
+  chatId: chatId(chat),
+  memberId: bob,
+  role: 'Can prompt',
+})
 
 const message = (
   id: string,
@@ -181,4 +222,73 @@ export const createMockSnapshot = (): Snapshot => ({
     agent('invoice-4', 'chat-invoice-bug', acme, 'agent', 'The tax is applied twice.', '11:03'),
   ],
   drafts: [],
+  files: [
+    file('billing', 'folder'),
+    file('billing/invoice.ts'),
+    file('billing/tax.ts'),
+    file('tests', 'folder'),
+    file('tests/invoice.test.ts'),
+    file('package.json'),
+  ],
+  changes: [
+    change('billing/tax.ts', 3, 5, [
+      { kind: 'context', text: 'export const invoiceTotal = (net: number) => {' },
+      { kind: 'removed', text: 'const total = applyTax(applyTax(net))' },
+      { kind: 'added', text: 'const total = applyTax(net)' },
+      { kind: 'context', text: 'return total' },
+    ]),
+    change('tests/invoice.test.ts', 12, 0, [{ kind: 'added', text: "test('applies tax once', () => {})" }]),
+  ],
+  terminalLines: [terminalLine('$ bun test'), terminalLine('3 pass'), terminalLine('0 fail')],
+  planSteps: [
+    planStep('Reproduce the bug', 'done'),
+    planStep('Fix the tax calculation', 'in-progress'),
+    planStep('Add a regression test', 'todo'),
+  ],
+  commits: [
+    {
+      workspaceId: acme,
+      chatId: invoiceChat,
+      sha: 'a1b2c3d',
+      message: 'Fix tax applied twice',
+      authorId: alice,
+      committedAt: '2026-09-30T11:20:00.000Z',
+    },
+  ],
+  browserPages: [
+    {
+      workspaceId: acme,
+      chatId: invoiceChat,
+      url: 'http://localhost:3000/invoices',
+      title: 'Invoices',
+      bodyText: 'Invoice total: 120.00',
+    },
+    {
+      workspaceId: acme,
+      chatId: welcomeChat,
+      url: 'https://example.com/onboarding',
+      title: 'Onboarding guide',
+      bodyText: 'Welcome to the team.',
+    },
+  ],
+  usageEntries: [
+    {
+      workspaceId: acme,
+      chatId: invoiceChat,
+      memberId: alice,
+      tokens: 12400,
+      costCents: 18,
+    },
+    { workspaceId: acme, chatId: invoiceChat, memberId: bob, tokens: 3100, costCents: 5 },
+  ],
+  sources: [
+    { workspaceId: acme, chatId: welcomeChat, name: 'Employee handbook', origin: 'Onyx' },
+    { workspaceId: acme, chatId: welcomeChat, name: 'Onboarding wiki page', origin: 'Wiki' },
+  ],
+  toolConnections: [
+    toolConnection('GitHub', 'Connected'),
+    toolConnection('Slack', 'Connected'),
+    toolConnection('Notion', 'Needs reconnection'),
+  ],
+  chatMembers: [bobCanPrompt('chat-invoice-bug'), bobCanPrompt('chat-welcome')],
 })
