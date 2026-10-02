@@ -1,10 +1,12 @@
-import { findChat, type Snapshot } from '@hq/db'
+import { findChat, ownedBy, type Snapshot } from '@hq/db'
 import type { ChatId, WorkspaceId } from '@hq/kernel'
 
 export const getConnections = (workspaceId: WorkspaceId, chatId: ChatId) => (snapshot: Snapshot) => {
   const chat = findChat(snapshot, workspaceId, chatId)
   if (!chat) return null
-  return snapshot.toolConnections.filter(
-    (connection) => connection.workspaceId === workspaceId && connection.memberId === chat.ownerId,
-  )
+  const ownedByChatOwner = ownedBy(workspaceId, chat.ownerId)
+  return {
+    workspace: snapshot.workspaceConnections.filter(ownedByChatOwner).map(({ tool, access }) => ({ tool, access })),
+    personal: snapshot.toolConnections.filter(ownedByChatOwner).map(({ tool, status }) => ({ tool, status })),
+  }
 }

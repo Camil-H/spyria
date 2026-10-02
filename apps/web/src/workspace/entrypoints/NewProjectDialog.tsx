@@ -1,5 +1,5 @@
 import type { WorkspaceId } from '@hq/kernel'
-import { buttonClass, Dialog, fieldClass } from '@hq/ui'
+import { buttonClass, Dialog, fieldClass, labelClass } from '@hq/ui'
 import { type SubmitEvent, useState } from 'react'
 import { Name } from '../domain/name.ts'
 import { createProject } from '../operations/create-project.ts'
@@ -16,7 +16,7 @@ export const NewProjectDialog = ({ workspaceId, onClose }: { workspaceId: Worksp
   return (
     <Dialog label="New project" onClose={onClose}>
       <form onSubmit={submit} className="flex flex-col gap-3">
-        <label className="flex flex-col gap-1 text-sm text-muted">
+        <label className={labelClass}>
           Project name
           <input className={fieldClass} value={draftName} onChange={(event) => setDraftName(event.target.value)} />
         </label>

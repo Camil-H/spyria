@@ -3,6 +3,9 @@ import type { ConversationDependencies } from '../conversation/entrypoints/provi
 import { createStoreTransactor as createConversationTransactor } from '../conversation/integrations/store-transactor.ts'
 import { createSystemClock } from '../conversation/integrations/system-clock.ts'
 import { createWorkspaceRuntimeChatStarter } from '../conversation/integrations/workspace-runtime-chat-starter.ts'
+import type { ProfileDependencies } from '../profile/entrypoints/providers.tsx'
+import { createSimulatedPlanLoginProbe } from '../profile/integrations/simulated-plan-login-probe.ts'
+import { createStoreTransactor as createProfileTransactor } from '../profile/integrations/store-transactor.ts'
 import type { WorkspaceDependencies } from '../workspace/entrypoints/providers.tsx'
 import { createStoreTransactor } from '../workspace/integrations/store-transactor.ts'
 import { createUuidIdGenerator } from '../workspace/integrations/uuid-id-generator.ts'
@@ -16,6 +19,7 @@ export type Application = {
   session: Session
   workspaceDependencies: WorkspaceDependencies
   conversationDependencies: ConversationDependencies
+  profileDependencies: ProfileDependencies
 }
 
 export const createApp = (): Application => {
@@ -36,6 +40,11 @@ export const createApp = (): Application => {
       idGenerator,
       clock: createSystemClock(),
       runtimeChatStarter: createWorkspaceRuntimeChatStarter(workspaceDependencies),
+    },
+    profileDependencies: {
+      transactor: createProfileTransactor(store),
+      idGenerator,
+      planLoginProbe: createSimulatedPlanLoginProbe(),
     },
   }
 }

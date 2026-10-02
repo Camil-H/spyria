@@ -1,3 +1,3 @@
-import type { IdGenerator } from '../contracts/id-generator.ts'
+import type { IdGenerator } from '@hq/kernel'
 
 export const createUuidIdGenerator = (): IdGenerator => ({ next: () => crypto.randomUUID() })

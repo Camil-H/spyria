@@ -334,21 +334,32 @@ test.describe('10. sources', () => {
 
 test.describe('11. connected tools', () => {
   for (const chatName of ['Welcome', 'Invoice bug']) {
-    test(`lists the connections of the owner on ${chatName}`, async ({ page }) => {
+    test(`lists the workspace and personal connections of the owner on ${chatName}`, async ({ page }) => {
       await openTab(page, chatName, 'Connected tools')
       await expect(tabPanelOf(page).getByRole('heading', { name: 'Connected tools' })).toBeVisible()
       await expect(tabPanelOf(page)).not.toContainText('Connections of')
-      const tools = tabPanelOf(page).getByRole('listitem')
-      await expect(tools.filter({ hasText: 'GitHub' })).toContainText('Connected')
-      await expect(tools.filter({ hasText: 'Slack' })).toContainText('Connected')
-      await expect(tools.filter({ hasText: 'Notion' })).toContainText('Needs reconnection')
+
+      const workspaceGroup = tabPanelOf(page).getByRole('region', { name: 'Workspace' })
+      await expect(workspaceGroup.getByRole('listitem').filter({ hasText: 'Postgres' })).toContainText('2 of 5 tables')
+      await expect(workspaceGroup.getByRole('listitem').filter({ hasText: 'Onyx' })).toContainText('All sources')
+
+      const personalGroup = tabPanelOf(page).getByRole('region', { name: 'Personal' })
+      await expect(personalGroup.getByRole('listitem').filter({ hasText: 'GitHub' })).toContainText('Connected')
+      await expect(personalGroup.getByRole('listitem').filter({ hasText: 'Slack' })).toContainText('Connected')
+      await expect(personalGroup.getByRole('listitem').filter({ hasText: 'Notion' })).toContainText(
+        'Needs reconnection',
+      )
     })
   }
 
-  test('shows an empty state for an owner without connections', async ({ page }) => {
+  test('shows the shared connections and an empty message for an owner without personal connections', async ({
+    page,
+  }) => {
     await openTab(page, 'Setup helper', 'Connected tools')
     await expect(tabPanelOf(page).getByRole('heading', { name: 'Connected tools' })).toBeVisible()
-    await expect(tabPanelOf(page)).toContainText('No tools connected')
+    const workspaceGroup = tabPanelOf(page).getByRole('region', { name: 'Workspace' })
+    await expect(workspaceGroup.getByRole('listitem').filter({ hasText: 'Postgres' })).toContainText('1 of 5 tables')
+    await expect(tabPanelOf(page).getByRole('region', { name: 'Personal' })).toContainText('No personal connections')
   })
 })
 

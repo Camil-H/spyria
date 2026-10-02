@@ -1,7 +1,10 @@
 import type { Snapshot } from '@hq/db'
-import type { MemberId } from '@hq/kernel'
+import type { MemberId, WorkspaceId } from '@hq/kernel'
 
-export const getProfile = (memberId: MemberId) => (snapshot: Snapshot) => {
+export const getProfile = (workspaceId: WorkspaceId, memberId: MemberId) => (snapshot: Snapshot) => {
+  const isMember = snapshot.memberships.some(
+    (membership) => membership.workspaceId === workspaceId && membership.memberId === memberId,
+  )
   const member = snapshot.members.find((candidate) => candidate.id === memberId)
-  return member ? { id: member.id, name: member.name } : null
+  return isMember && member ? { name: member.name } : null
 }

@@ -1,5 +1,5 @@
 import { type ProjectId, projectId, type WorkspaceId } from '@hq/kernel'
-import { buttonClass, Dialog, fieldClass } from '@hq/ui'
+import { buttonClass, Dialog, fieldClass, labelClass } from '@hq/ui'
 import { type SubmitEvent, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { useSession } from '../../app/session.tsx'
@@ -56,11 +56,11 @@ export const NewChatDialog = ({
             </label>
           ))}
         </div>
-        <label className="flex flex-col gap-1 text-sm text-muted">
+        <label className={labelClass}>
           Chat name
           <input className={fieldClass} value={draftName} onChange={(event) => setDraftName(event.target.value)} />
         </label>
-        <label className="flex flex-col gap-1 text-sm text-muted">
+        <label className={labelClass}>
           Project
           <select
             className={fieldClass}

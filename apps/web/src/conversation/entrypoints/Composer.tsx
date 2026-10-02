@@ -8,18 +8,29 @@ import { useSession } from '../../app/session.tsx'
 import { saveDraft } from '../operations/save-draft.ts'
 import { sendMessage } from '../operations/send-message.ts'
 import { getDraft } from '../queries/get-draft.ts'
+import { usePromptAccess } from './prompt-access.tsx'
 import { useConversationDependencies } from './providers.tsx'
 
-export const Composer = ({ workspaceId, chatId }: { workspaceId: WorkspaceId; chatId: ChatId }) => {
+export const Composer = ({
+  workspaceId,
+  chatId,
+  isRuntime,
+}: {
+  workspaceId: WorkspaceId
+  chatId: ChatId
+  isRuntime: boolean
+}) => {
+  const { canPrompt, blockedNotice } = usePromptAccess()
   const dependencies = useConversationDependencies()
   const { memberId } = useSession()
   const store = useStore()
   const [text, setText] = useState(() => getDraft(workspaceId, chatId, memberId)(store.read()))
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   useEffect(() => textareaRef.current?.focus(), [])
-  const isBlank = text.trim() === ''
+  const isBlocked = isRuntime && !canPrompt
+  const isUnsendable = text.trim() === '' || isBlocked
   const send = async () => {
-    if (isBlank) return
+    if (isUnsendable) return
     setText('')
     textareaRef.current?.focus()
     await sendMessage(dependencies, { chatId, authorId: memberId, text })
@@ -36,6 +47,7 @@ export const Composer = ({ workspaceId, chatId }: { workspaceId: WorkspaceId; ch
   }
   return (
     <Provider>
+      {isBlocked && <div className="text-sm text-muted">{blockedNotice}</div>}
       <div className="flex items-end gap-2 rounded-xl border border-line bg-raised p-2">
         <textarea
           ref={textareaRef}
@@ -50,7 +62,7 @@ export const Composer = ({ workspaceId, chatId }: { workspaceId: WorkspaceId; ch
           <Trigger
             type="button"
             aria-label="Send"
-            disabled={isBlank}
+            disabled={isUnsendable}
             onClick={send}
             className={`rounded-full bg-accent p-2 text-accent-ink hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent ${focusRing}`}
           >

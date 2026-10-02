@@ -1,5 +1,4 @@
-import { chatId, type MemberId, type ProjectId, type WorkspaceId } from '@hq/kernel'
-import type { IdGenerator } from '../contracts/id-generator.ts'
+import { chatId, type IdGenerator, type MemberId, type ProjectId, type WorkspaceId } from '@hq/kernel'
 import type { Transactor } from '../contracts/transactor.ts'
 import { type Chat, moveChat } from '../domain/chat.ts'
 import type { Name } from '../domain/name.ts'

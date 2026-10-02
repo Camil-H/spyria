@@ -56,7 +56,7 @@ export const ChatView = ({ headerActions }: { headerActions?: ReactNode }) => {
         )}
       </header>
       <MessageList conversation={conversation} />
-      <Composer workspaceId={workspaceId} chatId={chatId} />
+      <Composer workspaceId={workspaceId} chatId={chatId} isRuntime={conversation.type === 'runtime'} />
     </div>
   )
 }

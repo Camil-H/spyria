@@ -1,7 +1,7 @@
-import type { ChatId, MemberId, MessageId, ProjectId, WorkspaceId } from '@hq/kernel'
+import type { ChatId, CredentialId, MemberId, MessageId, ProjectId, WorkspaceId } from '@hq/kernel'
 
 type WorkspaceRow = { id: WorkspaceId; name: string }
-type MemberRow = { id: MemberId; name: string }
+export type MemberRow = { id: MemberId; name: string }
 type MembershipRow = { memberId: MemberId; workspaceId: WorkspaceId }
 export type ProjectRow = { id: ProjectId; workspaceId: WorkspaceId; name: string; archived: boolean }
 export type ChatRow = {
@@ -72,6 +72,22 @@ export type ToolConnectionRow = {
   tool: string
   status: string
 }
+export type LlmCredentialRow = {
+  id: CredentialId
+  workspaceId: WorkspaceId
+  memberId: MemberId
+  provider: string
+  kind: 'api-key' | 'plan-login'
+  label: string
+  last4: string
+  status: string | null
+}
+export type WorkspaceConnectionRow = {
+  workspaceId: WorkspaceId
+  memberId: MemberId
+  tool: string
+  access: string
+}
 export type ChatMemberRow = {
   workspaceId: WorkspaceId
   chatId: ChatId
@@ -97,6 +113,10 @@ export type Snapshot = {
   sources: readonly SourceRow[]
   toolConnections: readonly ToolConnectionRow[]
   chatMembers: readonly ChatMemberRow[]
+  llmCredentials: readonly LlmCredentialRow[]
+  workspaceConnections: readonly WorkspaceConnectionRow[]
+  toolCatalog: readonly string[]
+  planLoginHarnesses: readonly string[]
 }
 
 type ChatScoped = { workspaceId: WorkspaceId; chatId: ChatId }
@@ -106,6 +126,10 @@ export const findChat = (snapshot: Snapshot, workspaceId: WorkspaceId, chatId: C
 
 export const inChat = (workspaceId: WorkspaceId, chatId: ChatId) => (row: ChatScoped) =>
   row.workspaceId === workspaceId && row.chatId === chatId
+
+export const ownedBy =
+  (workspaceId: WorkspaceId, memberId: MemberId) => (row: { workspaceId: WorkspaceId; memberId: MemberId }) =>
+    row.workspaceId === workspaceId && row.memberId === memberId
 
 export const memberName = (snapshot: Snapshot, memberId: MemberId) =>
   snapshot.members.find((member) => member.id === memberId)?.name ?? 'Unknown'

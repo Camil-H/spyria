@@ -1,4 +1,4 @@
-import { buttonClass, Dialog, fieldClass } from '@hq/ui'
+import { buttonClass, Dialog, fieldClass, labelClass } from '@hq/ui'
 import { type SubmitEvent, useState } from 'react'
 import { Name } from '../domain/name.ts'
 
@@ -24,7 +24,7 @@ export const RenameDialog = ({
   return (
     <Dialog label={label} onClose={onClose}>
       <form onSubmit={submit} className="flex flex-col gap-3">
-        <label className="flex flex-col gap-1 text-sm text-muted">
+        <label className={labelClass}>
           {fieldLabel}
           <input
             className={fieldClass}

@@ -1,6 +1,6 @@
+import type { IdGenerator } from '@hq/kernel'
 import { createContext, type ReactNode, use } from 'react'
 import type { Clock } from '../contracts/clock.ts'
-import type { IdGenerator } from '../contracts/id-generator.ts'
 import type { RuntimeChatStarter } from '../contracts/runtime-chat-starter.ts'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 

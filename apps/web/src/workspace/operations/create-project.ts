@@ -1,5 +1,4 @@
-import { projectId, type WorkspaceId } from '@hq/kernel'
-import type { IdGenerator } from '../contracts/id-generator.ts'
+import { type IdGenerator, projectId, type WorkspaceId } from '@hq/kernel'
 import type { Transactor } from '../contracts/transactor.ts'
 import type { Name } from '../domain/name.ts'
 

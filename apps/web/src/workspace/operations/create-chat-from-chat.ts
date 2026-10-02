@@ -1,5 +1,4 @@
-import { type ChatId, chatId, type MemberId } from '@hq/kernel'
-import type { IdGenerator } from '../contracts/id-generator.ts'
+import { type ChatId, chatId, type IdGenerator, type MemberId } from '@hq/kernel'
 import type { Transactor } from '../contracts/transactor.ts'
 import { startRuntimeChat } from '../domain/chat.ts'
 import { Name } from '../domain/name.ts'

@@ -1,5 +1,5 @@
+import type { IdGenerator } from '@hq/kernel'
 import { createContext, type ReactNode, use } from 'react'
-import type { IdGenerator } from '../contracts/id-generator.ts'
 import type { Transactor } from '../contracts/transactor.ts'
 
 export type WorkspaceDependencies = {

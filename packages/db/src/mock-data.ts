@@ -1,4 +1,13 @@
-import { chatId, type MemberId, memberId, messageId, projectId, type WorkspaceId, workspaceId } from '@hq/kernel'
+import {
+  chatId,
+  credentialId,
+  type MemberId,
+  memberId,
+  messageId,
+  projectId,
+  type WorkspaceId,
+  workspaceId,
+} from '@hq/kernel'
 import type { ChangeRow, FileRow, MessageRow, Snapshot } from './schema.ts'
 
 const acme = workspaceId('workspace-acme')
@@ -45,6 +54,12 @@ const toolConnection = (tool: string, status: string) => ({
   memberId: alice,
   tool,
   status,
+})
+const workspaceConnection = (memberId: MemberId, tool: string, access: string) => ({
+  workspaceId: acme,
+  memberId,
+  tool,
+  access,
 })
 const bobCanPrompt = (chat: string) => ({
   workspaceId: acme,
@@ -291,4 +306,23 @@ export const createMockSnapshot = (): Snapshot => ({
     toolConnection('Notion', 'Needs reconnection'),
   ],
   chatMembers: [bobCanPrompt('chat-invoice-bug'), bobCanPrompt('chat-welcome')],
+  llmCredentials: [
+    {
+      id: credentialId('credential-alice-anthropic'),
+      workspaceId: acme,
+      memberId: alice,
+      provider: 'Anthropic',
+      kind: 'api-key',
+      label: 'Work key',
+      last4: 'a1b2',
+      status: null,
+    },
+  ],
+  workspaceConnections: [
+    workspaceConnection(alice, 'Postgres', '2 of 5 tables'),
+    workspaceConnection(alice, 'Onyx', 'All sources'),
+    workspaceConnection(bob, 'Postgres', '1 of 5 tables'),
+  ],
+  toolCatalog: ['GitHub', 'Slack', 'Notion', 'Linear'],
+  planLoginHarnesses: ['Claude Code', 'Codex', 'Gemini CLI'],
 })

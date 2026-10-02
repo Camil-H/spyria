@@ -1,6 +1,5 @@
-import { type ChatId, type MemberId, messageId } from '@hq/kernel'
+import { type ChatId, type IdGenerator, type MemberId, messageId } from '@hq/kernel'
 import type { Clock } from '../contracts/clock.ts'
-import type { IdGenerator } from '../contracts/id-generator.ts'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { newMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
