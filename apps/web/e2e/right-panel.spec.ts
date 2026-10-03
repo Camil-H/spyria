@@ -107,6 +107,7 @@ test.describe('2. tab navigation', () => {
     await expect(tabOf(page, 'Changes')).toHaveAttribute('aria-selected', 'true')
 
     await page.keyboard.press('ArrowLeft')
+    await expect(tabOf(page, 'Files')).toBeFocused()
     await page.keyboard.press('ArrowLeft')
     await expect(tabOf(page, 'Members')).toBeFocused()
     await expect(tabOf(page, 'Members')).toHaveAttribute('aria-selected', 'true')
