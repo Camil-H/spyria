@@ -13,8 +13,18 @@ const replaceById = <Row extends { id: string }>(rows: readonly Row[], replaceme
 export const createStoreTransactor = (store: Store): Transactor => ({
   run: async (work) => {
     const initial = store.read()
-    let { projects, chats } = initial
+    let { workspaces, memberships, projects, chats } = initial
     const unitOfWork: UnitOfWork = {
+      workspaces: {
+        add: async (workspace) => {
+          workspaces = [...workspaces, workspace]
+        },
+      },
+      memberships: {
+        add: async (membership) => {
+          memberships = [...memberships, membership]
+        },
+      },
       projects: {
         get: async (projectId) => {
           const row = projects.find((candidate) => candidate.id === projectId)
@@ -44,8 +54,13 @@ export const createStoreTransactor = (store: Store): Transactor => ({
       },
     }
     const result = await work(unitOfWork)
-    if (projects !== initial.projects || chats !== initial.chats)
-      store.write((current) => ({ ...current, projects, chats }))
+    if (
+      workspaces !== initial.workspaces ||
+      memberships !== initial.memberships ||
+      projects !== initial.projects ||
+      chats !== initial.chats
+    )
+      store.write((current) => ({ ...current, workspaces, memberships, projects, chats }))
     return result
   },
 })

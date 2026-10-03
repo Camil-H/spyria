@@ -26,10 +26,10 @@ test.beforeEach(async ({ page }) => {
 test.describe('1. switch workspace', () => {
   test('lists both workspaces and shows only the selected workspace content', async ({ page }) => {
     await page.getByRole('button', { name: 'Switch workspace' }).click()
-    await expect(page.getByRole('menuitem', { name: 'Acme' })).toBeVisible()
-    await expect(page.getByRole('menuitem', { name: 'Globex' })).toBeVisible()
+    await expect(page.getByRole('menuitem', { name: 'Acme', exact: true })).toBeVisible()
+    await expect(page.getByRole('menuitem', { name: 'Globex', exact: true })).toBeVisible()
 
-    await page.getByRole('menuitem', { name: 'Globex' }).click()
+    await page.getByRole('menuitem', { name: 'Globex', exact: true }).click()
 
     await expect(chatRowIn(projectGroupOf(page, 'Launch'), 'Launch plan')).toBeVisible()
     await expect(chatRowIn(looseChatsOf(page), 'General')).toBeVisible()
