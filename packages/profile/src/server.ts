@@ -1,22 +1,29 @@
-export * from './contracts/repositories.ts'
-export * from './contracts/transactor.ts'
-export * from './domain/display-name.ts'
-export * from './domain/errors.ts'
-export * from './domain/llm-credential.ts'
-export * from './domain/member.ts'
-export * from './domain/personal-connection.ts'
-export * from './domain/secret.ts'
-export * from './integrations/store-transactor.ts'
-export * from './operations/add-llm-credential.ts'
-export * from './operations/connect-tool.ts'
+export type {
+  LlmCredentialRepository,
+  MemberRepository,
+  PersonalConnectionRepository,
+} from './contracts/repositories.ts'
+export type { ProfileTransactor, UnitOfWork } from './contracts/transactor.ts'
+export { DisplayName } from './domain/display-name.ts'
+export {
+  BlankDisplayName,
+  BlankProvider,
+  BlankSecret,
+  MemberNotFound,
+  ProfileError,
+  ToolNotInCatalog,
+} from './domain/errors.ts'
+export type { LlmCredential } from './domain/llm-credential.ts'
+export type { Member } from './domain/member.ts'
+export type { PersonalConnection } from './domain/personal-connection.ts'
+export { createStoreTransactor } from './integrations/store-transactor.ts'
+export { addLlmCredential } from './operations/add-llm-credential.ts'
 export { connectTool } from './operations/connect-tool.ts'
-export * from './operations/disconnect-tool.ts'
 export { disconnectTool } from './operations/disconnect-tool.ts'
-export * from './operations/remove-llm-credential.ts'
-export * from './operations/rename-member.ts'
+export { removeLlmCredential } from './operations/remove-llm-credential.ts'
 export { renameMember } from './operations/rename-member.ts'
-export * from './queries/get-llm-credentials.ts'
-export * from './queries/get-personal-connections.ts'
-export * from './queries/get-profile.ts'
-export * from './queries/get-shared-connections.ts'
-export * from './queries/has-llm-credential.ts'
+export { getLlmCredentials } from './queries/get-llm-credentials.ts'
+export { getPersonalConnections } from './queries/get-personal-connections.ts'
+export { getProfile } from './queries/get-profile.ts'
+export { getSharedConnections } from './queries/get-shared-connections.ts'
+export { hasLlmCredential } from './queries/has-llm-credential.ts'

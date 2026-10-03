@@ -7,5 +7,5 @@ export type ReadMarker = Readonly<{
   lastReadMessageId: MessageId
 }>
 
-export const markChatRead = (lastReadMessageId: MessageId | null, chatMessageIds: readonly MessageId[]) =>
+export const advancedReadMarker = (lastReadMessageId: MessageId | null, chatMessageIds: readonly MessageId[]) =>
   chatMessageIds.at(-1) ?? lastReadMessageId

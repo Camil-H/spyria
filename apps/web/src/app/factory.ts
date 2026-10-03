@@ -3,13 +3,13 @@ import {
   createStoreTransactor as createConversationTransactor,
   createSystemClock,
   createWorkspaceRuntimeChatStarter,
-} from '@hq/conversation/core'
+} from '@hq/conversation/server'
 import { createMockSnapshot, createStore, currentMemberId, defaultWorkspaceId, type Store } from '@hq/db'
 import type { ProfileDependencies } from '@hq/profile'
-import { createStoreTransactor as createProfileTransactor } from '@hq/profile/core'
+import { createStoreTransactor as createProfileTransactor } from '@hq/profile/server'
 import type { Session } from '@hq/session'
 import type { WorkspaceDependencies } from '@hq/workspace'
-import { createStoreTransactor, createUuidIdGenerator } from '@hq/workspace/core'
+import { createStoreTransactor, createUuidIdGenerator } from '@hq/workspace/server'
 
 const defaultRuntimeModel = 'Claude Sonnet 5.5'
 const defaultReasoningEffort = 'Medium'

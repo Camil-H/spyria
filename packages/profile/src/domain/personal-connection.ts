@@ -10,7 +10,7 @@ export type PersonalConnection = Readonly<{
 
 const connected = 'Connected'
 
-export const connectTool = (
+export const connectionsWithTool = (
   connections: readonly PersonalConnection[],
   owner: Pick<PersonalConnection, 'workspaceId' | 'memberId'>,
   tool: string,
@@ -21,5 +21,5 @@ export const connectTool = (
   return [...others, { ...owner, tool, status: connected }]
 }
 
-export const disconnectTool = (connections: readonly PersonalConnection[], tool: string) =>
+export const connectionsWithoutTool = (connections: readonly PersonalConnection[], tool: string) =>
   connections.filter((connection) => connection.tool !== tool)

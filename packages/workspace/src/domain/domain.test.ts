@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test'
 import { chatId, memberId, projectId, workspaceId } from '@hq/kernel'
-import { archiveChat, type Chat, moveChat, renameChat, startRuntimeChat } from './chat.ts'
+import { archivedChat, type Chat, movedChat, renamedChat, startRuntimeChat } from './chat.ts'
 import { BlankName, CrossWorkspaceMove, SourceChatArchived } from './errors.ts'
 import { Name } from './name.ts'
-import { archiveProject, type Project, renameProject } from './project.ts'
+import { archivedProject, type Project, renamedProject } from './project.ts'
 
 const acme = workspaceId('acme')
 const globex = workspaceId('globex')
@@ -37,41 +37,41 @@ test('Name rejects blank values', () => {
   expect(() => Name('   ')).toThrow(BlankName)
 })
 
-test('moveChat rejects a project of another workspace', () => {
-  expect(() => moveChat(chatInAcme, projectIn(globex))).toThrow(CrossWorkspaceMove)
+test('movedChat rejects a project of another workspace', () => {
+  expect(() => movedChat(chatInAcme, projectIn(globex))).toThrow(CrossWorkspaceMove)
 })
 
-test('moveChat sets and clears the project', () => {
+test('movedChat sets and clears the project', () => {
   const otherProject = { ...projectIn(acme), id: projectId('other') }
-  expect(moveChat(chatInAcme, otherProject).projectId).toBe(otherProject.id)
-  expect(moveChat(chatInAcme, null).projectId).toBeNull()
+  expect(movedChat(chatInAcme, otherProject).projectId).toBe(otherProject.id)
+  expect(movedChat(chatInAcme, null).projectId).toBeNull()
 })
 
-test('archiveProject with the archive policy archives the chats', () => {
-  const result = archiveProject(projectIn(acme), [chatInAcme], 'archive')
+test('archivedProject with the archive policy archives the chats', () => {
+  const result = archivedProject(projectIn(acme), [chatInAcme], 'archive')
   expect(result.project.archived).toBe(true)
   expect(result.chats[0]).toMatchObject({ archived: true, projectId: chatInAcme.projectId })
 })
 
-test('archiveProject with the release policy detaches the chats', () => {
-  const result = archiveProject(projectIn(acme), [chatInAcme], 'release')
+test('archivedProject with the release policy detaches the chats', () => {
+  const result = archivedProject(projectIn(acme), [chatInAcme], 'release')
   expect(result.project.archived).toBe(true)
   expect(result.chats[0]).toMatchObject({ archived: false, projectId: null })
 })
 
-test('archiveChat marks the chat archived and keeps the rest', () => {
-  expect(archiveChat(chatInAcme)).toEqual({ ...chatInAcme, archived: true })
+test('archivedChat marks the chat archived and keeps the rest', () => {
+  expect(archivedChat(chatInAcme)).toEqual({ ...chatInAcme, archived: true })
 })
 
-test('renameChat sets the name and keeps the rest', () => {
-  expect(renameChat(chatInAcme, Name('  Invoice total bug '))).toEqual({
+test('renamedChat sets the name and keeps the rest', () => {
+  expect(renamedChat(chatInAcme, Name('  Invoice total bug '))).toEqual({
     ...chatInAcme,
     name: Name('Invoice total bug'),
   })
 })
 
-test('renameProject sets the name and keeps the rest', () => {
-  expect(renameProject(projectIn(acme), Name(' Invoicing '))).toEqual({ ...projectIn(acme), name: Name('Invoicing') })
+test('renamedProject sets the name and keeps the rest', () => {
+  expect(renamedProject(projectIn(acme), Name(' Invoicing '))).toEqual({ ...projectIn(acme), name: Name('Invoicing') })
 })
 
 const runtimeFields = {
@@ -100,5 +100,5 @@ test('startRuntimeChat keeps a loose source loose', () => {
 })
 
 test('startRuntimeChat rejects an archived source', () => {
-  expect(() => startRuntimeChat(archiveChat(chatInAcme), runtimeFields)).toThrow(SourceChatArchived)
+  expect(() => startRuntimeChat(archivedChat(chatInAcme), runtimeFields)).toThrow(SourceChatArchived)
 })

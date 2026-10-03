@@ -1,6 +1,6 @@
 import type { MemberId, WorkspaceId } from '@hq/kernel'
 import type { ProfileTransactor } from '../contracts/transactor.ts'
-import { connectTool as connectToolRecord } from '../domain/personal-connection.ts'
+import { connectionsWithTool } from '../domain/personal-connection.ts'
 
 type Dependencies = { transactor: ProfileTransactor }
 type Input = { workspaceId: WorkspaceId; memberId: MemberId; tool: string }
@@ -12,6 +12,6 @@ export const connectTool = ({ transactor }: Dependencies, { workspaceId, memberI
     await personalConnections.replace(
       workspaceId,
       memberId,
-      connectToolRecord(connections, { workspaceId, memberId }, tool, catalog),
+      connectionsWithTool(connections, { workspaceId, memberId }, tool, catalog),
     )
   })

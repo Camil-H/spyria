@@ -23,12 +23,12 @@ const assertChangeable = (message: Message, memberId: MemberId) => {
   if (message.deletedAt) throw new MessageDeleted()
 }
 
-export const editMessage = (message: Message, editorId: MemberId, body: MessageBody, at: Date): Message => {
+export const editedMessage = (message: Message, editorId: MemberId, body: MessageBody, at: Date): Message => {
   assertChangeable(message, editorId)
   return { ...message, body, editedAt: at }
 }
 
-export const deleteMessage = (message: Message, deleterId: MemberId, at: Date): Message => {
+export const deletedMessage = (message: Message, deleterId: MemberId, at: Date): Message => {
   assertChangeable(message, deleterId)
   return { ...message, deletedAt: at }
 }

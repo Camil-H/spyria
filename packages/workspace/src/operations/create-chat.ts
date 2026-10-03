@@ -1,6 +1,6 @@
 import { chatId, type IdGenerator, type MemberId, type ProjectId, type WorkspaceId } from '@hq/kernel'
 import type { Transactor } from '../contracts/transactor.ts'
-import { type Chat, moveChat } from '../domain/chat.ts'
+import { type Chat, movedChat } from '../domain/chat.ts'
 import type { Name } from '../domain/name.ts'
 
 type Dependencies = {
@@ -34,6 +34,6 @@ export const createChat = (
       archived: false,
     }
     const project = projectId ? await unitOfWork.projects.get(projectId) : null
-    await unitOfWork.chats.add(moveChat(looseChat, project))
+    await unitOfWork.chats.add(movedChat(looseChat, project))
     return looseChat.id
   })

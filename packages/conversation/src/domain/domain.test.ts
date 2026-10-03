@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test'
 import { chatId, memberId, messageId, workspaceId } from '@hq/kernel'
 import { BlankMessageBody, MessageDeleted, NotMessageAuthor } from './errors.ts'
-import { deleteMessage, editMessage, type Message } from './message.ts'
+import { deletedMessage, editedMessage, type Message } from './message.ts'
 import { chatNameFrom, MessageBody } from './message-body.ts'
-import { markChatRead } from './read-marker.ts'
+import { advancedReadMarker } from './read-marker.ts'
 
 const alice = memberId('alice')
 const bob = memberId('bob')
@@ -31,24 +31,24 @@ test('MessageBody rejects blank values', () => {
   expect(() => MessageBody('  \n ')).toThrow(BlankMessageBody)
 })
 
-test('editMessage replaces the body and records the edit time', () => {
-  const edited = editMessage(messageByAlice, alice, MessageBody('Hi'), editedAt)
+test('editedMessage replaces the body and records the edit time', () => {
+  const edited = editedMessage(messageByAlice, alice, MessageBody('Hi'), editedAt)
   expect(edited).toEqual({ ...messageByAlice, body: MessageBody('Hi'), editedAt })
 })
 
-test('editMessage and deleteMessage reject other members', () => {
-  expect(() => editMessage(messageByAlice, bob, MessageBody('Hi'), editedAt)).toThrow(NotMessageAuthor)
-  expect(() => deleteMessage(messageByAlice, bob, editedAt)).toThrow(NotMessageAuthor)
+test('editedMessage and deletedMessage reject other members', () => {
+  expect(() => editedMessage(messageByAlice, bob, MessageBody('Hi'), editedAt)).toThrow(NotMessageAuthor)
+  expect(() => deletedMessage(messageByAlice, bob, editedAt)).toThrow(NotMessageAuthor)
 })
 
-test('deleteMessage keeps the row and records the deletion time', () => {
-  expect(deleteMessage(messageByAlice, alice, editedAt)).toEqual({ ...messageByAlice, deletedAt: editedAt })
+test('deletedMessage keeps the row and records the deletion time', () => {
+  expect(deletedMessage(messageByAlice, alice, editedAt)).toEqual({ ...messageByAlice, deletedAt: editedAt })
 })
 
 test('a deleted message can be neither edited nor deleted', () => {
-  const deleted = deleteMessage(messageByAlice, alice, editedAt)
-  expect(() => editMessage(deleted, alice, MessageBody('Hi'), editedAt)).toThrow(MessageDeleted)
-  expect(() => deleteMessage(deleted, alice, editedAt)).toThrow(MessageDeleted)
+  const deleted = deletedMessage(messageByAlice, alice, editedAt)
+  expect(() => editedMessage(deleted, alice, MessageBody('Hi'), editedAt)).toThrow(MessageDeleted)
+  expect(() => deletedMessage(deleted, alice, editedAt)).toThrow(MessageDeleted)
 })
 
 test('chatNameFrom keeps short single-line messages', () => {
@@ -63,14 +63,14 @@ test('chatNameFrom truncates long first lines to 60 characters plus an ellipsis'
   expect(chatNameFrom(MessageBody('x'.repeat(70)))).toBe(`${'x'.repeat(60)}…`)
 })
 
-test('markChatRead moves the marker to the newest message of the chat', () => {
+test('advancedReadMarker moves the marker to the newest message of the chat', () => {
   const first = messageId('first')
   const second = messageId('second')
-  expect(markChatRead(null, [first, second])).toBe(second)
-  expect(markChatRead(first, [first, second])).toBe(second)
-  expect(markChatRead(second, [first, second])).toBe(second)
+  expect(advancedReadMarker(null, [first, second])).toBe(second)
+  expect(advancedReadMarker(first, [first, second])).toBe(second)
+  expect(advancedReadMarker(second, [first, second])).toBe(second)
 })
 
-test('markChatRead leaves a chat without messages unmarked', () => {
-  expect(markChatRead(null, [])).toBeNull()
+test('advancedReadMarker leaves a chat without messages unmarked', () => {
+  expect(advancedReadMarker(null, [])).toBeNull()
 })

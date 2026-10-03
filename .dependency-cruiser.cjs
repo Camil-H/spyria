@@ -1,11 +1,14 @@
 const contexts = '(workspace|conversation|profile|panel)'
 const contextLayers = ['domain', 'contracts', 'operations', 'queries', 'integrations', 'entrypoints']
-const contextCore = `^packages/${contexts}/src/core\\.ts$`
-const contextEntries = `^packages/${contexts}/src/(surface|core)\\.ts$`
+const contextEntry = (entry) => `^packages/${contexts}/src/${entry}\\.ts$`
+const clientEntry = contextEntry('client')
+const serverEntry = contextEntry('server')
+const publishedEntry = contextEntry('published')
 const clientModules = [
-  '/node_modules/(react|react-dom|react-router)/',
-  `^packages/${contexts}/src/entrypoints/`,
+  '(^|/)node_modules/(react|react-dom|react-router|@radix-ui|lucide-react)/',
+  `^packages/${contexts}/src/(entrypoints/|client\\.ts$)`,
   '^packages/(ui|session)/',
+  '^packages/db/src/useQuery\\.tsx$',
 ]
 const layerRule = (name, layer, allowedLayers) => ({
   name,
@@ -37,10 +40,28 @@ module.exports = {
       to: { path: '^packages/$1/', pathNot: `^packages/$1/src/(${contextLayers.join('|')})/` },
     },
     {
-      name: 'context-reachable-only-through-its-exports',
+      name: 'context-reachable-only-through-its-entries',
       severity: 'error',
       from: { path: '^(apps|packages)/([^/]+)/' },
-      to: { path: `^packages/${contexts}/`, pathNot: ['^$1/$2/', contextEntries] },
+      to: { path: `^packages/${contexts}/`, pathNot: ['^$1/$2/', contextEntry('(client|server|published)')] },
+    },
+    {
+      name: 'client-entry-imported-only-by-web',
+      severity: 'error',
+      from: { pathNot: '^apps/web/' },
+      to: { path: clientEntry },
+    },
+    {
+      name: 'server-entry-imported-only-by-server-and-web-composition-root',
+      severity: 'error',
+      from: { pathNot: ['^apps/server/', '^apps/web/src/app/factory\\.ts$'] },
+      to: { path: serverEntry },
+    },
+    {
+      name: 'published-entry-imported-only-from-integrations',
+      severity: 'error',
+      from: { pathNot: `^packages/${contexts}/src/integrations/` },
+      to: { path: publishedEntry },
     },
     {
       name: 'contexts-import-each-other-only-from-integrations',
@@ -49,28 +70,22 @@ module.exports = {
       to: { path: `^packages/${contexts}/`, pathNot: '^packages/$1/' },
     },
     {
-      name: 'panel-imported-only-by-web',
+      name: 'panel-imported-only-by-apps',
       severity: 'error',
-      from: { path: '^(apps|packages)/', pathNot: '^(apps/web|packages/panel)/' },
+      from: { path: '^(apps|packages)/', pathNot: '^(apps/(web|server)|packages/panel)/' },
       to: { path: '^packages/panel/' },
     },
     {
-      name: 'web-imports-core-only-from-composition-root',
+      name: 'server-and-published-entries-never-reach-client-code',
       severity: 'error',
-      from: { path: '^apps/web/', pathNot: '^apps/web/src/app/factory\\.ts$' },
-      to: { path: contextCore },
-    },
-    {
-      name: 'core-and-server-never-reach-client-code',
-      severity: 'error',
-      from: { path: [contextCore, '^apps/server/'] },
+      from: { path: [serverEntry, publishedEntry, '^apps/server/'] },
       to: { path: clientModules, reachable: true },
     },
     {
-      name: 'server-imports-only-cores-kernel-and-db',
+      name: 'server-imports-only-server-entries-kernel-and-db',
       severity: 'error',
       from: { path: '^apps/server/' },
-      to: { path: '^(apps|packages)/', pathNot: ['^apps/server/', contextCore, '^packages/(kernel|db)/'] },
+      to: { path: '^(apps|packages)/', pathNot: ['^apps/server/', serverEntry, '^packages/(kernel|db)/'] },
     },
     {
       name: 'packages-never-import-apps',

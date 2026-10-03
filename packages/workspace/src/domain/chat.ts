@@ -16,14 +16,14 @@ export type Chat = Readonly<{
   originChatId: ChatId | null
 }>
 
-export const moveChat = (chat: Chat, project: { id: ProjectId; workspaceId: WorkspaceId } | null): Chat => {
+export const movedChat = (chat: Chat, project: { id: ProjectId; workspaceId: WorkspaceId } | null): Chat => {
   if (project && project.workspaceId !== chat.workspaceId) throw new CrossWorkspaceMove()
   return { ...chat, projectId: project?.id ?? null }
 }
 
-export const archiveChat = (chat: Chat): Chat => ({ ...chat, archived: true })
+export const archivedChat = (chat: Chat): Chat => ({ ...chat, archived: true })
 
-export const renameChat = (chat: Chat, name: Name): Chat => ({ ...chat, name })
+export const renamedChat = (chat: Chat, name: Name): Chat => ({ ...chat, name })
 
 export const startRuntimeChat = (
   source: Chat,
