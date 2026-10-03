@@ -4,7 +4,6 @@ import { createStoreTransactor as createConversationTransactor } from '../conver
 import { createSystemClock } from '../conversation/integrations/system-clock.ts'
 import { createWorkspaceRuntimeChatStarter } from '../conversation/integrations/workspace-runtime-chat-starter.ts'
 import type { ProfileDependencies } from '../profile/entrypoints/providers.tsx'
-import { createSimulatedPlanLoginProbe } from '../profile/integrations/simulated-plan-login-probe.ts'
 import { createStoreTransactor as createProfileTransactor } from '../profile/integrations/store-transactor.ts'
 import type { WorkspaceDependencies } from '../workspace/entrypoints/providers.tsx'
 import { createStoreTransactor } from '../workspace/integrations/store-transactor.ts'
@@ -44,7 +43,6 @@ export const createApp = (): Application => {
     profileDependencies: {
       transactor: createProfileTransactor(store),
       idGenerator,
-      planLoginProbe: createSimulatedPlanLoginProbe(),
     },
   }
 }

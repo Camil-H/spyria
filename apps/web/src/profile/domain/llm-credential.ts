@@ -7,12 +7,10 @@ export type LlmCredential = Readonly<{
   workspaceId: WorkspaceId
   memberId: MemberId
   provider: string
-  kind: 'api-key' | 'plan-login'
   last4: string
-  status: string | null
 }>
 
-type NewLlmCredential = Omit<LlmCredential, 'last4' | 'status'> & { secret: Secret; status: string | null }
+type NewLlmCredential = Omit<LlmCredential, 'last4'> & { secret: Secret }
 
 export const newLlmCredential = ({ secret, provider, ...fields }: NewLlmCredential): LlmCredential => {
   const trimmedProvider = provider.trim()

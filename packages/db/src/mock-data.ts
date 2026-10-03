@@ -316,9 +316,7 @@ export const createMockSnapshot = (): Snapshot => ({
       workspaceId: acme,
       memberId: alice,
       provider: 'Anthropic',
-      kind: 'api-key',
       last4: 'a1b2',
-      status: null,
     },
   ],
   workspaceConnections: [
@@ -327,5 +325,4 @@ export const createMockSnapshot = (): Snapshot => ({
     workspaceConnection(bob, 'Postgres', '1 of 5 tables'),
   ],
   toolCatalog: ['GitHub', 'Slack', 'Notion', 'Linear'],
-  planLoginHarnesses: ['Claude Code', 'Codex', 'Gemini CLI'],
 })

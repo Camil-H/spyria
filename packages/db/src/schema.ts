@@ -83,9 +83,7 @@ export type LlmCredentialRow = {
   workspaceId: WorkspaceId
   memberId: MemberId
   provider: string
-  kind: 'api-key' | 'plan-login'
   last4: string
-  status: string | null
 }
 export type WorkspaceConnectionRow = {
   workspaceId: WorkspaceId
@@ -122,7 +120,6 @@ export type Snapshot = {
   llmCredentials: readonly LlmCredentialRow[]
   workspaceConnections: readonly WorkspaceConnectionRow[]
   toolCatalog: readonly string[]
-  planLoginHarnesses: readonly string[]
 }
 
 type ChatScoped = { workspaceId: WorkspaceId; chatId: ChatId }
