@@ -4,19 +4,29 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./react": "./src/useQuery.tsx"
+    "./react": "./src/useQuery.tsx",
+    "./postgres": "./src/postgres.ts",
+    "./zero": "./src/zero.ts"
   },
   "scripts": {
-    "typecheck": "tsc -p ."
+    "typecheck": "tsc -p .",
+    "generate": "drizzle-kit generate",
+    "migrate": "drizzle-kit migrate",
+    "generate-zero": "drizzle-zero generate -c drizzle-zero.config.ts -o src/zero.ts && biome format --write src/zero.ts"
   },
   "dependencies": {
-    "@hq/kernel": "workspace:*"
+    "@hq/kernel": "workspace:*",
+    "@rocicorp/zero": "1.9.0",
+    "drizzle-orm": "1.0.0-rc.4",
+    "postgres": "3.4.9"
   },
   "peerDependencies": {
     "react": "^19"
   },
   "devDependencies": {
     "@types/react": "^19.3.0",
+    "drizzle-kit": "1.0.0-rc.4",
+    "drizzle-zero": "1.0.0-beta.1",
     "react": "^19.3.0"
   }
 }

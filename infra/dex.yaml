@@ -1,0 +1,24 @@
+issuer: http://localhost:5556/dex
+storage:
+  type: memory
+web:
+  http: 0.0.0.0:5556
+oauth2:
+  skipApprovalScreen: true
+  responseTypes: [code]
+enablePasswordDB: true
+staticClients:
+  - id: hq
+    name: HQ
+    public: true
+    redirectURIs:
+      - http://localhost:3000/auth/callback
+staticPasswords:
+  - email: alice@example.com
+    hash: "$2b$10$VQQ8E.Dr9ub0UjJjMVwrZ.z8mmsId1wLzJ7vu9Bnkm1mbOIqJk45y"
+    username: alice
+    userID: 08a8684b-db88-4b73-90a9-3cd1661f5466
+  - email: bob@example.com
+    hash: "$2b$10$VQQ8E.Dr9ub0UjJjMVwrZ.z8mmsId1wLzJ7vu9Bnkm1mbOIqJk45y"
+    username: bob
+    userID: 41331323-6f44-45e6-b3b9-2c4b60c02be5

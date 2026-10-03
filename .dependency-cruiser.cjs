@@ -10,6 +10,11 @@ const clientModules = [
   '^packages/(ui|session)/',
   '^packages/db/src/useQuery\\.tsx$',
 ]
+const serverOnlyModules = [
+  '^packages/db/src/postgres(\\.ts$|/)',
+  '(^|/node_modules/)(postgres|drizzle-orm|drizzle-kit)(/|$)',
+]
+const zeroConfig = '^packages/db/drizzle-zero\\.config\\.ts$'
 const layerRule = (name, layer, allowedLayers) => ({
   name,
   severity: 'error',
@@ -82,6 +87,18 @@ module.exports = {
       to: { path: clientModules, reachable: true },
     },
     {
+      name: 'postgres-and-drizzle-never-reach-client-code',
+      severity: 'error',
+      from: { path: ['^apps/web/', ...clientModules.slice(1)] },
+      to: { path: serverOnlyModules, reachable: true },
+    },
+    {
+      name: 'drizzle-zero-config-imported-only-by-the-generated-zero-schema',
+      severity: 'error',
+      from: { pathNot: '^packages/db/src/zero\\.ts$' },
+      to: { path: zeroConfig },
+    },
+    {
       name: 'server-imports-only-server-entries-kernel-and-db',
       severity: 'error',
       from: { path: '^apps/server/' },
@@ -110,7 +127,7 @@ module.exports = {
   options: {
     tsConfig: { fileName: 'tsconfig.base.json' },
     exclude: { path: '^(apps|packages)/[^/]+/(node_modules|dist|test-results|playwright-report)/' },
-    doNotFollow: { path: 'node_modules' },
+    doNotFollow: { path: ['node_modules', zeroConfig] },
     enhancedResolveOptions: { exportsFields: ['exports'], conditionNames: ['import', 'default'] },
   },
 }

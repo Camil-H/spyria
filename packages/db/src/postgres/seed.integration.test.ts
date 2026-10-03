@@ -1,0 +1,114 @@
+import { afterAll, expect, test } from 'bun:test'
+import { createMockSnapshot } from '../mock-data.ts'
+import { resetDatabase } from './seed.ts'
+import * as tables from './tables.ts'
+import { createTestDatabase } from './test-database.ts'
+
+const seededDatabase = await createTestDatabase()
+const { database } = seededDatabase
+afterAll(() => seededDatabase.drop())
+
+const isoOrNull = (date: Date | null) => date?.toISOString() ?? null
+const canonical = (row: object) =>
+  JSON.stringify(Object.entries(row).sort(([first], [second]) => first.localeCompare(second)))
+const unordered = (rows: readonly object[]) =>
+  rows.toSorted((first, second) => canonical(first).localeCompare(canonical(second)))
+const groupedByChat = <Row extends { chatId: string }>(rows: readonly Row[]) =>
+  rows.toSorted((first, second) => first.chatId.localeCompare(second.chatId))
+const userAsMember = <Row extends { userId: string }>({ userId, ...row }: Row) => ({ ...row, memberId: userId })
+
+const readSnapshot = async () => {
+  const [memberships, chats, messages, readMarkers] = await Promise.all([
+    database.select().from(tables.memberships),
+    database.select().from(tables.chats),
+    database.select().from(tables.messages).orderBy(tables.messages.chatId, tables.messages.seq),
+    database.select().from(tables.readMarkers),
+  ])
+  const chatType = new Map(chats.map((chat) => [chat.id, chat.type]))
+  const answeredIds = new Set(messages.map((message) => message.replyToId))
+  const messageIdBySeq = new Map(messages.map((message) => [`${message.chatId}/${message.seq}`, message.id]))
+  return {
+    workspaces: (await database.select().from(tables.workspaces)).map(({ workspaceId, name }) => ({
+      id: workspaceId,
+      name,
+    })),
+    members: [...new Map(memberships.map((membership) => [membership.userId, membership.displayName]))].map(
+      ([id, name]) => ({ id, name }),
+    ),
+    memberships: memberships.map(({ userId, workspaceId }) => ({ memberId: userId, workspaceId })),
+    projects: await database.select().from(tables.projects),
+    chats: chats.map(({ ownerUserId, ownerKind, ownerServiceIdentityId, mode, ...chat }) => ({
+      ...chat,
+      ownerId: ownerUserId,
+    })),
+    messages: messages.map(({ seq, replyToId, createdAt, editedAt, deletedAt, ...message }) => ({
+      ...message,
+      createdAt: createdAt.toISOString(),
+      editedAt: isoOrNull(editedAt),
+      deletedAt: isoOrNull(deletedAt),
+      needsReply:
+        chatType.get(message.chatId) === 'runtime' && message.kind === 'member' && !answeredIds.has(message.id),
+    })),
+    readMarkers: readMarkers.map(({ lastReadSeq, ...marker }) => ({
+      ...userAsMember(marker),
+      lastReadMessageId: messageIdBySeq.get(`${marker.chatId}/${lastReadSeq}`),
+    })),
+    llmCredentials: (await database.select().from(tables.llmCredentials)).map(({ secretRef, ...credential }) =>
+      userAsMember(credential),
+    ),
+    workspaceConnections: (await database.select().from(tables.workspaceConnections)).map(userAsMember),
+    toolConnections: (await database.select().from(tables.toolConnections)).map(userAsMember),
+    chatMembers: (await database.select().from(tables.chatParticipants)).map(userAsMember),
+    files: await database.select().from(tables.files),
+    changes: await database.select().from(tables.changes),
+    terminalLines: (
+      await database
+        .select()
+        .from(tables.terminalLines)
+        .orderBy(tables.terminalLines.chatId, tables.terminalLines.position)
+    ).map(({ position, ...line }) => line),
+    planSteps: (
+      await database.select().from(tables.planSteps).orderBy(tables.planSteps.chatId, tables.planSteps.position)
+    ).map(({ position, ...step }) => step),
+    commits: (await database.select().from(tables.commits)).map(({ committedAt, ...commit }) => ({
+      ...commit,
+      committedAt: committedAt.toISOString(),
+    })),
+    browserPages: await database.select().from(tables.browserPages),
+    sources: await database.select().from(tables.sources),
+    usageEntries: (await database.select().from(tables.usageEntries)).map(userAsMember),
+  }
+}
+
+const expectSnapshotRoundTrip = async () => {
+  const { drafts, toolCatalog, messages, terminalLines, planSteps, ...unorderedCollections } = createMockSnapshot()
+  const stored = await readSnapshot()
+  expect(stored.messages).toEqual(groupedByChat(messages))
+  expect(stored.terminalLines).toEqual(groupedByChat(terminalLines))
+  expect(stored.planSteps).toEqual(groupedByChat(planSteps))
+  for (const [name, rows] of Object.entries(unorderedCollections))
+    expect({ [name]: unordered(stored[name as keyof typeof unorderedCollections]) }).toEqual({
+      [name]: unordered(rows),
+    })
+}
+
+test('the seed stores exactly the mock snapshot', async () => {
+  await expectSnapshotRoundTrip()
+})
+
+test('every message has its event with the same seq', async () => {
+  const [messages, events] = await Promise.all([
+    database.select().from(tables.messages).orderBy(tables.messages.id),
+    database.select().from(tables.events).orderBy(tables.events.id),
+  ])
+  expect(events.map(({ id, chatId, seq, actor }) => ({ id, chatId, seq, authorId: actor }))).toEqual(
+    messages.map(({ id, chatId, seq, authorId }) => ({ id, chatId, seq, authorId })),
+  )
+})
+
+test('reset is idempotent and restores the snapshot after changes', async () => {
+  await database.delete(tables.readMarkers)
+  await resetDatabase(database)
+  await resetDatabase(database)
+  await expectSnapshotRoundTrip()
+})

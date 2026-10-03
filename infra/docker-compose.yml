@@ -1,0 +1,67 @@
+name: hq
+
+services:
+  postgres:
+    image: postgres:18
+    container_name: hq-postgres
+    command: postgres -c wal_level=logical -c max_replication_slots=20 -c max_wal_senders=20
+    environment:
+      POSTGRES_USER: hq
+      POSTGRES_PASSWORD: hq
+      POSTGRES_DB: hq
+    ports:
+      - 5434:5432
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: pg_isready -U hq -d hq
+      interval: 1s
+      retries: 30
+
+  dex:
+    image: dexidp/dex:v2.43.1
+    container_name: hq-dex
+    command: dex serve /etc/dex/config.yaml
+    ports:
+      - 5556:5556
+    volumes:
+      - ./dex.yaml:/etc/dex/config.yaml:ro
+    healthcheck:
+      test: wget -qO- http://localhost:5556/dex/.well-known/openid-configuration
+      interval: 1s
+      retries: 30
+
+  zero-cache:
+    image: rocicorp/zero:1.9.0
+    container_name: hq-zero-cache
+    profiles: [zero]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ZERO_APP_ID: hq
+      ZERO_UPSTREAM_DB: postgres://hq:hq@postgres:5432/hq
+      ZERO_QUERY_URL: http://host.docker.internal:3000/api/query
+      ZERO_MUTATE_URL: http://host.docker.internal:3000/api/mutate
+      ZERO_PORT: 4848
+      ZERO_CHANGE_STREAMER_PORT: 4849
+      ZERO_REPLICA_FILE: /tmp/hq-replica.db
+      ZERO_NUM_SYNC_WORKERS: 1
+      ZERO_ADMIN_PASSWORD: hq-dev
+      ZERO_ENABLE_TELEMETRY: false
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    ports:
+      - 4848:4848
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://localhost:4848/keepalive').then((response) => process.exit(response.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 1s
+      retries: 60
+
+volumes:
+  postgres-data:
+    name: hq-postgres-data
+
+networks:
+  default:
+    name: hq-network
