@@ -12,17 +12,30 @@
         "typescript": "^7.0.2",
       },
     },
+    "apps/server": {
+      "name": "@hq/server",
+      "dependencies": {
+        "@hq/conversation": "workspace:*",
+        "@hq/db": "workspace:*",
+        "@hq/kernel": "workspace:*",
+        "@hq/panel": "workspace:*",
+        "@hq/profile": "workspace:*",
+        "@hq/workspace": "workspace:*",
+        "hono": "4.13.12",
+      },
+    },
     "apps/web": {
       "name": "@hq/web",
       "dependencies": {
+        "@hq/conversation": "workspace:*",
         "@hq/db": "workspace:*",
         "@hq/kernel": "workspace:*",
+        "@hq/panel": "workspace:*",
+        "@hq/profile": "workspace:*",
+        "@hq/session": "workspace:*",
         "@hq/ui": "workspace:*",
+        "@hq/workspace": "workspace:*",
         "@openhands/ui": "1.0.0-beta.9",
-        "@radix-ui/react-dropdown-menu": "^2.1.24",
-        "@radix-ui/react-tabs": "1.1.21",
-        "@radix-ui/react-tooltip": "1.2.16",
-        "lucide-react": "1.49.0",
         "react": "19.2.8",
         "react-dom": "19.2.8",
         "react-router": "7.18.2",
@@ -42,6 +55,24 @@
         "vite": "^8.3.2",
       },
     },
+    "packages/conversation": {
+      "name": "@hq/conversation",
+      "dependencies": {
+        "@hq/db": "workspace:*",
+        "@hq/kernel": "workspace:*",
+        "@hq/session": "workspace:*",
+        "@hq/ui": "workspace:*",
+        "@hq/workspace": "workspace:*",
+        "@radix-ui/react-dropdown-menu": "2.1.24",
+        "@radix-ui/react-tooltip": "1.2.16",
+        "lucide-react": "1.49.0",
+        "react": "19.2.8",
+        "react-router": "7.18.2",
+      },
+      "devDependencies": {
+        "@types/react": "19.3.0",
+      },
+    },
     "packages/db": {
       "name": "@hq/db",
       "dependencies": {
@@ -58,6 +89,46 @@
     "packages/kernel": {
       "name": "@hq/kernel",
     },
+    "packages/panel": {
+      "name": "@hq/panel",
+      "dependencies": {
+        "@hq/db": "workspace:*",
+        "@hq/kernel": "workspace:*",
+        "@hq/ui": "workspace:*",
+        "@radix-ui/react-tabs": "1.1.21",
+        "@radix-ui/react-tooltip": "1.2.16",
+        "lucide-react": "1.49.0",
+        "react": "19.2.8",
+      },
+      "devDependencies": {
+        "@types/react": "19.3.0",
+      },
+    },
+    "packages/profile": {
+      "name": "@hq/profile",
+      "dependencies": {
+        "@hq/db": "workspace:*",
+        "@hq/kernel": "workspace:*",
+        "@hq/session": "workspace:*",
+        "@hq/ui": "workspace:*",
+        "@radix-ui/react-tabs": "1.1.21",
+        "react": "19.2.8",
+        "react-router": "7.18.2",
+      },
+      "devDependencies": {
+        "@types/react": "19.3.0",
+      },
+    },
+    "packages/session": {
+      "name": "@hq/session",
+      "dependencies": {
+        "@hq/kernel": "workspace:*",
+        "react": "19.2.8",
+      },
+      "devDependencies": {
+        "@types/react": "19.3.0",
+      },
+    },
     "packages/ui": {
       "name": "@hq/ui",
       "devDependencies": {
@@ -66,6 +137,23 @@
       },
       "peerDependencies": {
         "react": "^19",
+      },
+    },
+    "packages/workspace": {
+      "name": "@hq/workspace",
+      "dependencies": {
+        "@hq/db": "workspace:*",
+        "@hq/kernel": "workspace:*",
+        "@hq/session": "workspace:*",
+        "@hq/ui": "workspace:*",
+        "@radix-ui/react-dropdown-menu": "2.1.24",
+        "@radix-ui/react-tooltip": "1.2.16",
+        "lucide-react": "1.49.0",
+        "react": "19.2.8",
+        "react-router": "7.18.2",
+      },
+      "devDependencies": {
+        "@types/react": "19.3.0",
       },
     },
   },
@@ -154,13 +242,25 @@
 
     "@floating-ui/utils": ["@floating-ui/utils@0.2.12", "", {}, "sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww=="],
 
+    "@hq/conversation": ["@hq/conversation@workspace:packages/conversation"],
+
     "@hq/db": ["@hq/db@workspace:packages/db"],
 
     "@hq/kernel": ["@hq/kernel@workspace:packages/kernel"],
 
+    "@hq/panel": ["@hq/panel@workspace:packages/panel"],
+
+    "@hq/profile": ["@hq/profile@workspace:packages/profile"],
+
+    "@hq/server": ["@hq/server@workspace:apps/server"],
+
+    "@hq/session": ["@hq/session@workspace:packages/session"],
+
     "@hq/ui": ["@hq/ui@workspace:packages/ui"],
 
     "@hq/web": ["@hq/web@workspace:apps/web"],
+
+    "@hq/workspace": ["@hq/workspace@workspace:packages/workspace"],
 
     "@jridgewell/gen-mapping": ["@jridgewell/gen-mapping@0.3.13", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.5.0", "@jridgewell/trace-mapping": "^0.3.24" } }, "sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA=="],
 
@@ -522,6 +622,8 @@
 
     "hoist-non-react-statics": ["hoist-non-react-statics@3.3.2", "", { "dependencies": { "react-is": "^16.7.0" } }, "sha512-/gGivxi8JPKWNm/W0jSmzcMPpfpPLc3dY/6GxhX2hQ9iGj3aDfklV4ET7NjKpSinLpJ5vafa9iiGIEZg10SfBw=="],
 
+    "hono": ["hono@4.13.12", "", {}, "sha512-6E2QDAc9Ick9Sq77ZrGS/dk2WUYni91aufTw6LJKpV7w8kW5/GxVUc650FOADOmlwg3K+f7Pun6XlV+pYmW6gw=="],
+
     "ignore": ["ignore@7.0.11", "", {}, "sha512-YChdK5txDjwGUvgR7oCJcLGkwi3LDh8Zx8tS7ndYciLEg/oOCL26VUBSUEtgS7EjiybcBqFxh5j0rAdDX7/bbg=="],
 
     "import-fresh": ["import-fresh@3.3.1", "", { "dependencies": { "parent-module": "^1.0.0", "resolve-from": "^4.0.0" } }, "sha512-TR3KfrTZTYLPB6jUjfx6MF9WcWrHL9su5TObK4ZkYgBdWKPOFoSoQIdEuTuR82pmtxH2spWG9h6etwfr1pLBqQ=="],
@@ -666,7 +768,7 @@
 
     "prop-types": ["prop-types@15.8.1", "", { "dependencies": { "loose-envify": "^1.4.0", "object-assign": "^4.1.1", "react-is": "^16.13.1" } }, "sha512-oj87CgZICdulUohogVAR7AjlC0327U4el4L6eAvOqCeudMDVU0NThNaV+b9Df4dXgSP1gXMTnPdhfe/2qDH5cg=="],
 
-    "react": ["react@19.3.0", "", {}, "sha512-E8LUcbtBWt20bbl2YoHfx4ZDBdxVTfOKtCZn9cDSJ4l6/nuoApcpIBcj47t2wZoVX8g2ZHuMHbiShgCR1T5Sog=="],
+    "react": ["react@19.2.8", "", {}, "sha512-PWaYA1L/q9u2u7xYQi+Y3L3Yfnie7XyLeaJICV1MGD6LprsBxcAqGjYyr0eY3p+QdsA+x/Irkt4Qif8D63+Sbw=="],
 
     "react-bootstrap-icons": ["react-bootstrap-icons@1.11.6", "", { "dependencies": { "prop-types": "^15.7.2" }, "peerDependencies": { "react": ">=16.8.6" } }, "sha512-ycXiyeSyzbS1C4+MlPTYe0riB+UlZ7LV7YZQYqlERV2cxDiKtntI0huHmP/3VVvzPt4tGxqK0K+Y6g7We3U6tQ=="],
 
@@ -788,7 +890,9 @@
 
     "@emotion/babel-plugin/convert-source-map": ["convert-source-map@1.9.0", "", {}, "sha512-ASFBup0Mz1uyiIjANan1jzLQami9z1PoYSZCiiYW2FczPbenXc45FZdBZLzOT+r6+iciuEModtmCti+hjaAk0A=="],
 
-    "@hq/web/react": ["react@19.2.8", "", {}, "sha512-PWaYA1L/q9u2u7xYQi+Y3L3Yfnie7XyLeaJICV1MGD6LprsBxcAqGjYyr0eY3p+QdsA+x/Irkt4Qif8D63+Sbw=="],
+    "@hq/db/react": ["react@19.3.0", "", {}, "sha512-E8LUcbtBWt20bbl2YoHfx4ZDBdxVTfOKtCZn9cDSJ4l6/nuoApcpIBcj47t2wZoVX8g2ZHuMHbiShgCR1T5Sog=="],
+
+    "@hq/ui/react": ["react@19.3.0", "", {}, "sha512-E8LUcbtBWt20bbl2YoHfx4ZDBdxVTfOKtCZn9cDSJ4l6/nuoApcpIBcj47t2wZoVX8g2ZHuMHbiShgCR1T5Sog=="],
 
     "@tailwindcss/node/lightningcss": ["lightningcss@1.32.0", "", { "dependencies": { "detect-libc": "^2.0.3" }, "optionalDependencies": { "lightningcss-android-arm64": "1.32.0", "lightningcss-darwin-arm64": "1.32.0", "lightningcss-darwin-x64": "1.32.0", "lightningcss-freebsd-x64": "1.32.0", "lightningcss-linux-arm-gnueabihf": "1.32.0", "lightningcss-linux-arm64-gnu": "1.32.0", "lightningcss-linux-arm64-musl": "1.32.0", "lightningcss-linux-x64-gnu": "1.32.0", "lightningcss-linux-x64-musl": "1.32.0", "lightningcss-win32-arm64-msvc": "1.32.0", "lightningcss-win32-x64-msvc": "1.32.0" } }, "sha512-NXYBzinNrblfraPGyrbPoD19C1h9lfI/1mzgWYvXUTe414Gz/X1FD2XBZSZM7rRTrMA8JL3OtAaGifrIKhQ5yQ=="],
 

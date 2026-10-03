@@ -1,0 +1,27 @@
+{
+  "name": "@hq/conversation",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/surface.ts",
+    "./core": "./src/core.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@hq/db": "workspace:*",
+    "@hq/kernel": "workspace:*",
+    "@hq/session": "workspace:*",
+    "@hq/ui": "workspace:*",
+    "@hq/workspace": "workspace:*",
+    "@radix-ui/react-dropdown-menu": "2.1.24",
+    "@radix-ui/react-tooltip": "1.2.16",
+    "lucide-react": "1.49.0",
+    "react": "19.2.8",
+    "react-router": "7.18.2"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0"
+  }
+}

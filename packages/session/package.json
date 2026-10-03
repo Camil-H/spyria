@@ -1,0 +1,16 @@
+{
+  "name": "@hq/session",
+  "private": true,
+  "type": "module",
+  "exports": "./src/session.tsx",
+  "scripts": {
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@hq/kernel": "workspace:*",
+    "react": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0"
+  }
+}

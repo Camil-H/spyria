@@ -1,0 +1,74 @@
+import { useQuery } from '@hq/db/react'
+import type { WorkspaceId } from '@hq/kernel'
+import { useSession } from '@hq/session'
+import { focusRing, menuContentClass } from '@hq/ui'
+import { Content, Item, Root, Trigger } from '@radix-ui/react-dropdown-menu'
+import { LogOut, Plus } from 'lucide-react'
+import { useState } from 'react'
+import { useNavigate } from 'react-router'
+import { listWorkspaces } from '../queries/list-workspaces.ts'
+import { LogOutDialog } from './LogOutDialog.tsx'
+import { NewWorkspaceDialog } from './NewWorkspaceDialog.tsx'
+import { menuItemClass } from './ui.ts'
+
+type OpenDialog = { kind: 'new' } | { kind: 'logOut'; workspaceId: WorkspaceId; workspaceName: string } | null
+
+export const WorkspaceSwitcher = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
+  const navigate = useNavigate()
+  const { memberId, signedOutWorkspaceIds, signOut } = useSession()
+  const workspaces = useQuery(listWorkspaces(memberId))
+  const [openDialog, setOpenDialog] = useState<OpenDialog>(null)
+  const closeDialog = () => setOpenDialog(null)
+  return (
+    <>
+      <Root>
+        <Trigger
+          aria-label="Switch workspace"
+          className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left font-semibold hover:bg-hover data-[state=open]:bg-hover ${focusRing}`}
+        >
+          {workspaces.find((workspace) => workspace.id === workspaceId)?.name}
+        </Trigger>
+        <Content
+          align="start"
+          sideOffset={4}
+          className={menuContentClass}
+          onCloseAutoFocus={(event) => openDialog && event.preventDefault()}
+        >
+          <div>
+            <Item className={`${menuItemClass} justify-start gap-2`} onSelect={() => setOpenDialog({ kind: 'new' })}>
+              <Plus aria-hidden className="size-4" />
+              New workspace
+            </Item>
+            {workspaces.map((workspace) => (
+              <div key={workspace.id} className="flex items-center gap-1">
+                <Item className={`${menuItemClass} flex-1 gap-4`} onSelect={() => navigate(`/w/${workspace.id}`)}>
+                  {workspace.name}
+                  {signedOutWorkspaceIds.has(workspace.id) && <span className="text-muted">Signed out</span>}
+                </Item>
+                {!signedOutWorkspaceIds.has(workspace.id) && (
+                  <Item
+                    aria-label={`Log out of ${workspace.name}`}
+                    className={`${menuItemClass} p-1.5`}
+                    onSelect={() =>
+                      setOpenDialog({ kind: 'logOut', workspaceId: workspace.id, workspaceName: workspace.name })
+                    }
+                  >
+                    <LogOut aria-hidden className="size-4" />
+                  </Item>
+                )}
+              </div>
+            ))}
+          </div>
+        </Content>
+      </Root>
+      {openDialog?.kind === 'new' && <NewWorkspaceDialog onClose={closeDialog} />}
+      {openDialog?.kind === 'logOut' && (
+        <LogOutDialog
+          workspaceName={openDialog.workspaceName}
+          onConfirm={() => signOut(openDialog.workspaceId)}
+          onClose={closeDialog}
+        />
+      )}
+    </>
+  )
+}

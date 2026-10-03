@@ -1,15 +1,12 @@
-import { StoreProvider } from '@hq/db'
+import { ChatView, ConversationProvider, DraftIndicator, PromptAccessProvider, UnreadIndicator } from '@hq/conversation'
+import { StoreProvider } from '@hq/db/react'
 import { chatId as toChatId, type WorkspaceId } from '@hq/kernel'
+import { PanelProvider, PanelToggle, SidePanel } from '@hq/panel'
+import { ProfileProvider, ProfileView, useHasLlmCredential } from '@hq/profile'
+import { SessionProvider } from '@hq/session'
+import { WorkspaceLayout, WorkspaceProvider } from '@hq/workspace'
 import { BrowserRouter, Link, Navigate, Route, Routes, useOutletContext, useParams } from 'react-router'
-import { ConversationProvider } from '../conversation/entrypoints/providers.tsx'
-import { ChatView, DraftIndicator, PromptAccessProvider, UnreadIndicator } from '../conversation/surface.ts'
-import { PanelProvider, PanelToggle, SidePanel } from '../panel/surface.ts'
-import { ProfileView } from '../profile/entrypoints/ProfileView.tsx'
-import { ProfileProvider, useHasLlmCredential } from '../profile/surface.ts'
-import { WorkspaceProvider } from '../workspace/entrypoints/providers.tsx'
-import { WorkspaceLayout } from '../workspace/entrypoints/WorkspaceLayout.tsx'
 import type { Application } from './factory.ts'
-import { SessionProvider } from './session.tsx'
 
 const ChatRoute = () => {
   const workspaceId = useOutletContext<WorkspaceId>()

@@ -1,14 +1,19 @@
-const contexts = '(workspace|profile|conversation|panel)'
-const publishedSurface = '^apps/web/src/[^/]+/surface\\.tsx?$'
+const contexts = '(workspace|conversation|profile|panel)'
 const contextLayers = ['domain', 'contracts', 'operations', 'queries', 'integrations', 'entrypoints']
-const inContext = (layers) => `^apps/web/src/${contexts}/(${layers.join('|')})/`
+const contextCore = `^packages/${contexts}/src/core\\.ts$`
+const contextEntries = `^packages/${contexts}/src/(surface|core)\\.ts$`
+const clientModules = [
+  '/node_modules/(react|react-dom|react-router)/',
+  `^packages/${contexts}/src/entrypoints/`,
+  '^packages/(ui|session)/',
+]
 const layerRule = (name, layer, allowedLayers) => ({
   name,
   severity: 'error',
-  from: { path: `^apps/web/src/([^/]+)/${layer}/` },
+  from: { path: `^packages/${contexts}/src/${layer}/` },
   to: {
-    path: `^apps/web/src/$1/`,
-    pathNot: [`^apps/web/src/$1/(${[layer, ...allowedLayers].join('|')})/`],
+    path: '^packages/$1/src/',
+    pathNot: [`^packages/$1/src/(${[layer, ...allowedLayers].join('|')})/`],
   },
 })
 
@@ -22,52 +27,61 @@ module.exports = {
     {
       name: 'entrypoints-never-import-integrations',
       severity: 'error',
-      from: { path: '^apps/web/src/[^/]+/entrypoints/' },
-      to: { path: '^apps/web/src/[^/]+/integrations/' },
+      from: { path: `^packages/${contexts}/src/entrypoints/` },
+      to: { path: '^packages/$1/src/integrations/' },
     },
     {
       name: 'layers-are-exhaustive',
       severity: 'error',
-      from: { path: `^apps/web/src/${contexts}/` },
-      to: { path: '^apps/web/src/$1/', pathNot: inContext(contextLayers) },
+      from: { path: `^packages/${contexts}/src/` },
+      to: { path: '^packages/$1/', pathNot: `^packages/$1/src/(${contextLayers.join('|')})/` },
     },
     {
-      name: 'context-reachable-only-through-entrypoints-and-factory',
+      name: 'context-reachable-only-through-its-exports',
       severity: 'error',
-      from: {
-        path: '^apps/web/src/',
-        pathNot: [`^apps/web/src/${contexts}/`, '^apps/web/src/app/factory\\.ts$'],
-      },
-      to: { path: '^apps/web/src/[^/]+/(domain|contracts|operations|queries|integrations)/' },
+      from: { path: '^(apps|packages)/([^/]+)/' },
+      to: { path: `^packages/${contexts}/`, pathNot: ['^$1/$2/', contextEntries] },
     },
     {
-      name: 'contexts-do-not-import-each-other',
+      name: 'contexts-import-each-other-only-from-integrations',
       severity: 'error',
-      from: { path: `^apps/web/src/${contexts}/` },
-      to: { path: `^apps/web/src/${contexts}/`, pathNot: ['^apps/web/src/$1/', publishedSurface] },
+      from: { path: `^packages/${contexts}/src/`, pathNot: `^packages/${contexts}/src/integrations/` },
+      to: { path: `^packages/${contexts}/`, pathNot: '^packages/$1/' },
     },
     {
-      name: 'surface-imported-only-by-integrations-and-app',
+      name: 'panel-imported-only-by-web',
       severity: 'error',
-      from: { path: `^apps/web/src/${contexts}/(domain|contracts|operations|queries|entrypoints)/` },
-      to: { path: publishedSurface, pathNot: '^apps/web/src/$1/' },
+      from: { path: '^(apps|packages)/', pathNot: '^(apps/web|packages/panel)/' },
+      to: { path: '^packages/panel/' },
     },
     {
-      name: 'panel-surface-imported-only-by-app',
+      name: 'web-imports-core-only-from-composition-root',
       severity: 'error',
-      from: { path: '^apps/web/src/', pathNot: '^apps/web/src/(app|panel)/' },
-      to: { path: '^apps/web/src/panel/surface\\.ts$' },
+      from: { path: '^apps/web/', pathNot: '^apps/web/src/app/factory\\.ts$' },
+      to: { path: contextCore },
     },
     {
-      name: 'contexts-import-app-only-through-session',
+      name: 'core-and-server-never-reach-client-code',
       severity: 'error',
-      from: { path: `^apps/web/src/${contexts}/` },
-      to: { path: '^apps/web/src/app/', pathNot: '^apps/web/src/app/session\\.tsx$' },
+      from: { path: [contextCore, '^apps/server/'] },
+      to: { path: clientModules, reachable: true },
+    },
+    {
+      name: 'server-imports-only-cores-kernel-and-db',
+      severity: 'error',
+      from: { path: '^apps/server/' },
+      to: { path: '^(apps|packages)/', pathNot: ['^apps/server/', contextCore, '^packages/(kernel|db)/'] },
+    },
+    {
+      name: 'packages-never-import-apps',
+      severity: 'error',
+      from: { path: '^packages/' },
+      to: { path: '^apps/' },
     },
     {
       name: 'domain-imports-no-third-party-package',
       severity: 'error',
-      from: { path: '^apps/web/src/[^/]+/domain/', pathNot: '\\.test\\.ts$' },
+      from: { path: `^packages/${contexts}/src/domain/`, pathNot: '\\.test\\.ts$' },
       to: { dependencyTypesNot: ['local'], pathNot: '^packages/kernel/' },
     },
     {
@@ -79,7 +93,8 @@ module.exports = {
     { name: 'no-cycles', severity: 'error', from: {}, to: { circular: true } },
   ],
   options: {
-    tsConfig: { fileName: 'apps/web/tsconfig.json' },
+    tsConfig: { fileName: 'tsconfig.base.json' },
+    exclude: { path: '^(apps|packages)/[^/]+/(node_modules|dist|test-results|playwright-report)/' },
     doNotFollow: { path: 'node_modules' },
     enhancedResolveOptions: { exportsFields: ['exports'], conditionNames: ['import', 'default'] },
   },

@@ -8,8 +8,8 @@
   "scripts": {
     "typecheck": "bun run --filter '*' typecheck",
     "lint": "biome check .",
-    "test": "bun test apps/web/src",
-    "check:boundaries": "depcruise apps/web/src --config .dependency-cruiser.cjs"
+    "test": "bun test ./packages ./apps/server",
+    "check:boundaries": "depcruise apps packages --config .dependency-cruiser.cjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",

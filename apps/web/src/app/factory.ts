@@ -1,14 +1,15 @@
+import type { ConversationDependencies } from '@hq/conversation'
+import {
+  createStoreTransactor as createConversationTransactor,
+  createSystemClock,
+  createWorkspaceRuntimeChatStarter,
+} from '@hq/conversation/core'
 import { createMockSnapshot, createStore, currentMemberId, defaultWorkspaceId, type Store } from '@hq/db'
-import type { ConversationDependencies } from '../conversation/entrypoints/providers.tsx'
-import { createStoreTransactor as createConversationTransactor } from '../conversation/integrations/store-transactor.ts'
-import { createSystemClock } from '../conversation/integrations/system-clock.ts'
-import { createWorkspaceRuntimeChatStarter } from '../conversation/integrations/workspace-runtime-chat-starter.ts'
-import type { ProfileDependencies } from '../profile/entrypoints/providers.tsx'
-import { createStoreTransactor as createProfileTransactor } from '../profile/integrations/store-transactor.ts'
-import type { WorkspaceDependencies } from '../workspace/entrypoints/providers.tsx'
-import { createStoreTransactor } from '../workspace/integrations/store-transactor.ts'
-import { createUuidIdGenerator } from '../workspace/integrations/uuid-id-generator.ts'
-import type { Session } from './session.tsx'
+import type { ProfileDependencies } from '@hq/profile'
+import { createStoreTransactor as createProfileTransactor } from '@hq/profile/core'
+import type { Session } from '@hq/session'
+import type { WorkspaceDependencies } from '@hq/workspace'
+import { createStoreTransactor, createUuidIdGenerator } from '@hq/workspace/core'
 
 const defaultRuntimeModel = 'Claude Sonnet 5.5'
 const defaultReasoningEffort = 'Medium'

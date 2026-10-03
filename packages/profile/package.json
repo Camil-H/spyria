@@ -1,0 +1,24 @@
+{
+  "name": "@hq/profile",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/surface.ts",
+    "./core": "./src/core.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@hq/db": "workspace:*",
+    "@hq/kernel": "workspace:*",
+    "@hq/session": "workspace:*",
+    "@hq/ui": "workspace:*",
+    "@radix-ui/react-tabs": "1.1.21",
+    "react": "19.2.8",
+    "react-router": "7.18.2"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0"
+  }
+}
