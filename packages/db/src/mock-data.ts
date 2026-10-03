@@ -237,6 +237,10 @@ export const createMockSnapshot = (): Snapshot => ({
     agent('invoice-4', 'chat-invoice-bug', acme, 'agent', 'The tax is applied twice.', '11:03'),
   ],
   drafts: [],
+  readMarkers: [
+    { workspaceId: acme, memberId: alice, chatId: welcomeChat, lastReadMessageId: messageId('message-welcome-2') },
+    { workspaceId: acme, memberId: alice, chatId: invoiceChat, lastReadMessageId: messageId('message-invoice-4') },
+  ],
   files: [
     file('billing', 'folder'),
     file('billing/invoice.ts'),

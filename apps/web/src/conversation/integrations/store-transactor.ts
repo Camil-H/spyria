@@ -24,7 +24,7 @@ const isSameDraftOwner = (draft: DraftRow, chatId: string, memberId: string) =>
 export const createStoreTransactor = (store: Store): ConversationTransactor => ({
   run: async (work) => {
     const initial = store.read()
-    let { messages, drafts } = initial
+    let { messages, drafts, readMarkers } = initial
     const unitOfWork: UnitOfWork = {
       messages: {
         get: async (messageId) => {
@@ -42,6 +42,7 @@ export const createStoreTransactor = (store: Store): ConversationTransactor => (
         save: async (message) => {
           messages = messages.map((row) => (row.id === message.id ? toRow(message) : row))
         },
+        idsInChat: async (chatId) => messages.filter((row) => row.chatId === chatId).map((row) => row.id),
       },
       drafts: {
         save: async (draft) => {
@@ -54,6 +55,16 @@ export const createStoreTransactor = (store: Store): ConversationTransactor => (
             drafts = drafts.filter((row) => !isSameDraftOwner(row, chatId, memberId))
         },
       },
+      readMarkers: {
+        get: async (chatId, memberId) =>
+          readMarkers.find((row) => row.chatId === chatId && row.memberId === memberId)?.lastReadMessageId ?? null,
+        save: async (marker) => {
+          readMarkers = [
+            ...readMarkers.filter((row) => row.chatId !== marker.chatId || row.memberId !== marker.memberId),
+            marker,
+          ]
+        },
+      },
       chats: {
         get: async (chatId) => {
           const row = initial.chats.find((candidate) => candidate.id === chatId)
@@ -63,8 +74,8 @@ export const createStoreTransactor = (store: Store): ConversationTransactor => (
       },
     }
     const result = await work(unitOfWork)
-    if (messages !== initial.messages || drafts !== initial.drafts)
-      store.write((current) => ({ ...current, messages, drafts }))
+    if (messages !== initial.messages || drafts !== initial.drafts || readMarkers !== initial.readMarkers)
+      store.write((current) => ({ ...current, messages, drafts, readMarkers }))
     return result
   },
 })

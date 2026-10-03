@@ -31,6 +31,12 @@ export type MessageRow = {
   needsReply: boolean
 }
 export type DraftRow = { workspaceId: WorkspaceId; chatId: ChatId; memberId: MemberId; text: string }
+export type ReadMarkerRow = {
+  workspaceId: WorkspaceId
+  memberId: MemberId
+  chatId: ChatId
+  lastReadMessageId: MessageId
+}
 export type FileRow = { workspaceId: WorkspaceId; chatId: ChatId; path: string; kind: 'file' | 'folder' }
 export type DiffLine = { kind: 'added' | 'removed' | 'context'; text: string }
 export type ChangeRow = {
@@ -102,6 +108,7 @@ export type Snapshot = {
   chats: readonly ChatRow[]
   messages: readonly MessageRow[]
   drafts: readonly DraftRow[]
+  readMarkers: readonly ReadMarkerRow[]
   files: readonly FileRow[]
   changes: readonly ChangeRow[]
   terminalLines: readonly TerminalLineRow[]

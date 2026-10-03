@@ -2,7 +2,7 @@ import { StoreProvider } from '@hq/db'
 import { chatId as toChatId, type WorkspaceId } from '@hq/kernel'
 import { BrowserRouter, Link, Navigate, Route, Routes, useOutletContext, useParams } from 'react-router'
 import { ConversationProvider } from '../conversation/entrypoints/providers.tsx'
-import { ChatView, DraftIndicator, PromptAccessProvider } from '../conversation/surface.ts'
+import { ChatView, DraftIndicator, PromptAccessProvider, UnreadIndicator } from '../conversation/surface.ts'
 import { PanelProvider, PanelToggle, SidePanel } from '../panel/surface.ts'
 import { ProfileView } from '../profile/entrypoints/ProfileView.tsx'
 import { ProfileProvider, useHasLlmCredential } from '../profile/surface.ts'
@@ -44,7 +44,16 @@ export const App = ({ app }: { app: Application }) => (
                 <Routes>
                   <Route
                     path="/w/:workspaceId"
-                    element={<WorkspaceLayout chatAdornment={(chatId) => <DraftIndicator chatId={chatId} />} />}
+                    element={
+                      <WorkspaceLayout
+                        chatAdornment={(chatId) => (
+                          <>
+                            <UnreadIndicator chatId={chatId} />
+                            <DraftIndicator chatId={chatId} />
+                          </>
+                        )}
+                      />
+                    }
                   >
                     <Route index element={<p className="p-6 text-muted">Select a chat</p>} />
                     <Route path="chats/:chatId" element={<ChatRoute />} />

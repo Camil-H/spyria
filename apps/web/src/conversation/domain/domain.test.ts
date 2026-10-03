@@ -3,6 +3,7 @@ import { chatId, memberId, messageId, workspaceId } from '@hq/kernel'
 import { BlankMessageBody, MessageDeleted, NotMessageAuthor } from './errors.ts'
 import { deleteMessage, editMessage, type Message } from './message.ts'
 import { chatNameFrom, MessageBody } from './message-body.ts'
+import { markChatRead } from './read-marker.ts'
 
 const alice = memberId('alice')
 const bob = memberId('bob')
@@ -60,4 +61,16 @@ test('chatNameFrom takes the trimmed first line', () => {
 
 test('chatNameFrom truncates long first lines to 60 characters plus an ellipsis', () => {
   expect(chatNameFrom(MessageBody('x'.repeat(70)))).toBe(`${'x'.repeat(60)}…`)
+})
+
+test('markChatRead moves the marker to the newest message of the chat', () => {
+  const first = messageId('first')
+  const second = messageId('second')
+  expect(markChatRead(null, [first, second])).toBe(second)
+  expect(markChatRead(first, [first, second])).toBe(second)
+  expect(markChatRead(second, [first, second])).toBe(second)
+})
+
+test('markChatRead leaves a chat without messages unmarked', () => {
+  expect(markChatRead(null, [])).toBeNull()
 })
