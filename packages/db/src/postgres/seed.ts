@@ -21,6 +21,11 @@ const numberedWithinChat = <Row extends { workspaceId: string; chatId: string }>
 
 const withUserId = <Row extends { memberId: string }>({ memberId, ...row }: Row) => ({ ...row, userId: memberId })
 
+const withUserIdAndPosition = <Row extends { memberId: string }>(row: Row, index: number) => ({
+  ...withUserId(row),
+  position: index + 1,
+})
+
 const replyTargets = (snapshot: Snapshot) => {
   const replyToByMessageId = new Map<string, string>()
   const answeredMessageIdByChat = new Map<string, string | null>()
@@ -114,8 +119,8 @@ const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
       secretRef: `gateway:${credential.id}`,
     })),
   )
-  await transaction.insert(tables.workspaceConnections).values(snapshot.workspaceConnections.map(withUserId))
-  await transaction.insert(tables.toolConnections).values(snapshot.toolConnections.map(withUserId))
+  await transaction.insert(tables.workspaceConnections).values(snapshot.workspaceConnections.map(withUserIdAndPosition))
+  await transaction.insert(tables.toolConnections).values(snapshot.toolConnections.map(withUserIdAndPosition))
   await transaction.insert(tables.files).values([...snapshot.files])
   await transaction.insert(tables.changes).values([...snapshot.changes])
   await transaction

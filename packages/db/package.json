@@ -6,13 +6,15 @@
     ".": "./src/index.ts",
     "./react": "./src/useQuery.tsx",
     "./postgres": "./src/postgres.ts",
-    "./zero": "./src/zero.ts"
+    "./testing": "./src/postgres/test-database.ts",
+    "./zero": "./src/zero.ts",
+    "./zero-queries": "./src/zero-queries.ts"
   },
   "scripts": {
     "typecheck": "tsc -p .",
     "generate": "drizzle-kit generate",
     "migrate": "drizzle-kit migrate",
-    "generate-zero": "drizzle-zero generate -c drizzle-zero.config.ts -o src/zero.ts && biome format --write src/zero.ts"
+    "generate-zero": "drizzle-zero generate --force -c drizzle-zero.config.ts -o src/zero.ts && biome format --write src/zero.ts"
   },
   "dependencies": {
     "@hq/kernel": "workspace:*",

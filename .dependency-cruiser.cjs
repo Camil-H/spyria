@@ -93,6 +93,12 @@ module.exports = {
       to: { path: serverOnlyModules, reachable: true },
     },
     {
+      name: 'zero-schema-and-queries-never-reach-client-or-server-only-code',
+      severity: 'error',
+      from: { path: '^packages/db/src/zero(-queries)?\\.ts$' },
+      to: { path: [...clientModules, ...serverOnlyModules], reachable: true },
+    },
+    {
       name: 'drizzle-zero-config-imported-only-by-the-generated-zero-schema',
       severity: 'error',
       from: { pathNot: '^packages/db/src/zero\\.ts$' },

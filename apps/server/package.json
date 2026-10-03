@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun --watch src/index.ts",
+    "dev": "HQ_DEV_AUTH=1 bun --watch src/index.ts",
     "typecheck": "tsc -p ."
   },
   "dependencies": {
@@ -13,6 +13,8 @@
     "@hq/panel": "workspace:*",
     "@hq/profile": "workspace:*",
     "@hq/workspace": "workspace:*",
-    "hono": "4.13.12"
+    "@rocicorp/zero": "1.9.0",
+    "hono": "4.13.12",
+    "jose": "6.2.12"
   }
 }

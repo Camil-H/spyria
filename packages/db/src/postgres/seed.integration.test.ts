@@ -56,8 +56,12 @@ const readSnapshot = async () => {
     llmCredentials: (await database.select().from(tables.llmCredentials)).map(({ secretRef, ...credential }) =>
       userAsMember(credential),
     ),
-    workspaceConnections: (await database.select().from(tables.workspaceConnections)).map(userAsMember),
-    toolConnections: (await database.select().from(tables.toolConnections)).map(userAsMember),
+    workspaceConnections: (
+      await database.select().from(tables.workspaceConnections).orderBy(tables.workspaceConnections.position)
+    ).map(({ position, ...connection }) => userAsMember(connection)),
+    toolConnections: (
+      await database.select().from(tables.toolConnections).orderBy(tables.toolConnections.position)
+    ).map(({ position, ...connection }) => userAsMember(connection)),
     chatMembers: (await database.select().from(tables.chatParticipants)).map(userAsMember),
     files: await database.select().from(tables.files),
     changes: await database.select().from(tables.changes),
@@ -81,8 +85,19 @@ const readSnapshot = async () => {
 }
 
 const expectSnapshotRoundTrip = async () => {
-  const { drafts, toolCatalog, messages, terminalLines, planSteps, ...unorderedCollections } = createMockSnapshot()
+  const {
+    drafts,
+    toolCatalog,
+    messages,
+    terminalLines,
+    planSteps,
+    workspaceConnections,
+    toolConnections,
+    ...unorderedCollections
+  } = createMockSnapshot()
   const stored = await readSnapshot()
+  expect(stored.workspaceConnections).toEqual([...workspaceConnections])
+  expect(stored.toolConnections).toEqual([...toolConnections])
   expect(stored.messages).toEqual(groupedByChat(messages))
   expect(stored.terminalLines).toEqual(groupedByChat(terminalLines))
   expect(stored.planSteps).toEqual(groupedByChat(planSteps))

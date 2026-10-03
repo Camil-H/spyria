@@ -217,7 +217,13 @@ export const llmCredentials = table(
 
 export const workspaceConnections = table(
   'workspace_connections',
-  { ...tenant, userId: text().notNull(), tool: text().notNull(), access: text().notNull() },
+  {
+    ...tenant,
+    userId: text().notNull(),
+    tool: text().notNull(),
+    access: text().notNull(),
+    position: integer().notNull(),
+  },
   (table) => [
     primaryKey({ columns: [table.workspaceId, table.userId, table.tool] }),
     memberReference(table, table.userId),
@@ -226,7 +232,13 @@ export const workspaceConnections = table(
 
 export const toolConnections = table(
   'tool_connections',
-  { ...tenant, userId: text().notNull(), tool: text().notNull(), status: text().notNull() },
+  {
+    ...tenant,
+    userId: text().notNull(),
+    tool: text().notNull(),
+    status: text().notNull(),
+    position: integer().notNull(),
+  },
   (table) => [
     primaryKey({ columns: [table.workspaceId, table.userId, table.tool] }),
     memberReference(table, table.userId),
@@ -329,6 +341,9 @@ export const relations = defineRelations(
     readMarkers,
   },
   (r) => ({
+    users: {
+      memberships: r.many.memberships({ from: r.users.id, to: r.memberships.userId }),
+    },
     workspaces: {
       memberships: r.many.memberships({ from: r.workspaces.workspaceId, to: r.memberships.workspaceId }),
       projects: r.many.projects({ from: r.workspaces.workspaceId, to: r.projects.workspaceId }),

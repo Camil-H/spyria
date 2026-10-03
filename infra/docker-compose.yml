@@ -40,6 +40,7 @@ services:
         condition: service_healthy
     environment:
       ZERO_APP_ID: hq
+      ZERO_APP_PUBLICATIONS: hq_zero
       ZERO_UPSTREAM_DB: postgres://hq:hq@postgres:5432/hq
       ZERO_QUERY_URL: http://host.docker.internal:3000/api/query
       ZERO_MUTATE_URL: http://host.docker.internal:3000/api/mutate
