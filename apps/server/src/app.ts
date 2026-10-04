@@ -2,7 +2,8 @@ import type { Database } from '@hq/db/postgres'
 import { schema } from '@hq/db/zero'
 import { queries, type ZeroContext } from '@hq/db/zero-queries'
 import { memberId, workspaceId } from '@hq/kernel'
-import { mustGetQuery } from '@rocicorp/zero'
+import { workspaceMutators } from '@hq/workspace/server'
+import { mustGetMutator, mustGetQuery } from '@rocicorp/zero'
 import { handleMutateRequest, handleQueryRequest } from '@rocicorp/zero/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { Hono } from 'hono'
@@ -53,9 +54,7 @@ export const createApp = ({
         await handleMutateRequest({
           dbProvider: zeroDrizzle(schema, context.get('database')),
           handler: (transact) =>
-            transact((_, name) => {
-              throw new Error(`Mutator not found: ${name}`)
-            }),
+            transact((tx, name, args) => mustGetMutator(workspaceMutators, name).fn({ args, tx, ctx })),
           request: context.req.raw,
           userID: ctx.userId,
         }),

@@ -3,6 +3,7 @@ import { createMockSnapshot, type Snapshot } from '@hq/db'
 import { createTestDatabase, startZeroCache } from '@hq/db/testing'
 import { createZeroStore, type WorkspaceSession } from '@hq/db/zero-store'
 import { type MemberId, memberId, type WorkspaceId, workspaceId } from '@hq/kernel'
+import { workspaceMutators } from '@hq/workspace/server'
 import { createApp } from './app.ts'
 
 const testDatabase = await createTestDatabase()
@@ -41,6 +42,7 @@ const openStore = async (viewerId: MemberId, workspaceIds: readonly WorkspaceId[
     defaultWorkspaceId: acme,
     cacheURL: zeroCache.url,
     kvStore: 'mem',
+    mutators: workspaceMutators,
     fetchSession: async (workspace) => {
       const response = await app.request('/auth/dev-token', {
         method: 'POST',
@@ -118,7 +120,21 @@ test('signing out of a workspace removes its rows but keeps it listed, signing i
   expect(store.read().chats.filter((chat) => chat.workspaceId === globex).length).toBe(2)
 })
 
-test('writes are refused until stage 0.4', async () => {
+test('a mutation through the store reaches the replica and, once the server confirms, Postgres', async () => {
   const store = await openStore(alice, [acme])
-  expect(() => store.write((snapshot) => snapshot)).toThrow('not available until stage 0.4')
+  const { confirmation } = await store.mutate(
+    acme,
+    workspaceMutators.workspace.createProject({ workspaceId: acme, id: 'project-stored', name: 'Stored' }),
+  )
+  await confirmation
+  expect(
+    store
+      .read()
+      .projects.filter((project) => project.workspaceId === acme)
+      .map((project) => project.name),
+  ).toEqual(['Onboarding', 'Billing', 'Stored'])
+  expect(await testDatabase.database.query.projects.findFirst({ where: { id: 'project-stored' } })).toMatchObject({
+    workspaceId: acme,
+    name: 'Stored',
+  })
 })

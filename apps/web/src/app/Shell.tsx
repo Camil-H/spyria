@@ -33,7 +33,7 @@ const ChatRoute = () => {
 export const App = ({ app }: { app: Application }) => (
   <StoreProvider store={app.store}>
     <SessionProvider session={app.session}>
-      <WorkspaceProvider dependencies={app.workspaceDependencies}>
+      <WorkspaceProvider commands={app.workspaceCommands}>
         <ConversationProvider dependencies={app.conversationDependencies}>
           <ProfileProvider dependencies={app.profileDependencies}>
             <BrowserRouter>

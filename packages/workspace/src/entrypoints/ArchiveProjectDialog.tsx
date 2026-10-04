@@ -1,21 +1,22 @@
-import type { ProjectId } from '@hq/kernel'
+import type { ProjectId, WorkspaceId } from '@hq/kernel'
 import { buttonClass, Dialog } from '@hq/ui'
 import type { ChatsPolicy } from '../domain/project.ts'
-import { archiveProject } from '../operations/archive-project.ts'
-import { useWorkspaceDependencies } from './providers.tsx'
+import { useWorkspaceCommands } from './providers.tsx'
 
 export const ArchiveProjectDialog = ({
+  workspaceId,
   projectId,
   projectName,
   onClose,
 }: {
+  workspaceId: WorkspaceId
   projectId: ProjectId
   projectName: string
   onClose: () => void
 }) => {
-  const dependencies = useWorkspaceDependencies()
+  const commands = useWorkspaceCommands()
   const archiveWith = async (chatsPolicy: ChatsPolicy) => {
-    await archiveProject(dependencies, { projectId, chatsPolicy })
+    await commands.archiveProject({ workspaceId, projectId, chatsPolicy })
     onClose()
   }
   return (

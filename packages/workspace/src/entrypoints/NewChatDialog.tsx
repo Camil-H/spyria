@@ -5,9 +5,8 @@ import { type SubmitEvent, useState } from 'react'
 import { useNavigate } from 'react-router'
 import type { Chat } from '../domain/chat.ts'
 import { Name } from '../domain/name.ts'
-import { createChat } from '../operations/create-chat.ts'
 import type { Sidebar } from '../queries/get-sidebar.ts'
-import { useWorkspaceDependencies } from './providers.tsx'
+import { useWorkspaceCommands } from './providers.tsx'
 
 export const NewChatDialog = ({
   workspaceId,
@@ -18,7 +17,7 @@ export const NewChatDialog = ({
   projects: Sidebar['projects']
   onClose: () => void
 }) => {
-  const dependencies = useWorkspaceDependencies()
+  const commands = useWorkspaceCommands()
   const { memberId } = useSession()
   const navigate = useNavigate()
   const [type, setType] = useState<Chat['type']>('channel')
@@ -26,7 +25,7 @@ export const NewChatDialog = ({
   const [selectedProjectId, setSelectedProjectId] = useState<ProjectId | null>(null)
   const submit = async (event: SubmitEvent) => {
     event.preventDefault()
-    const chatId = await createChat(dependencies, {
+    const chatId = await commands.createChat({
       workspaceId,
       ownerId: memberId,
       type,

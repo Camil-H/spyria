@@ -20,7 +20,7 @@ const userAsMember = <Row extends { userId: string }>({ userId, ...row }: Row) =
 const readSnapshot = async () => {
   const [memberships, chats, messages, readMarkers] = await Promise.all([
     database.select().from(tables.memberships),
-    database.select().from(tables.chats),
+    database.select().from(tables.chats).orderBy(tables.chats.createdAt),
     database.select().from(tables.messages).orderBy(tables.messages.chatId, tables.messages.seq),
     database.select().from(tables.readMarkers),
   ])
@@ -36,8 +36,10 @@ const readSnapshot = async () => {
       ([id, name]) => ({ id, name }),
     ),
     memberships: memberships.map(({ userId, workspaceId }) => ({ memberId: userId, workspaceId })),
-    projects: await database.select().from(tables.projects),
-    chats: chats.map(({ ownerUserId, ownerKind, ownerServiceIdentityId, mode, ...chat }) => ({
+    projects: (await database.select().from(tables.projects).orderBy(tables.projects.createdAt)).map(
+      ({ createdAt, ...project }) => project,
+    ),
+    chats: chats.map(({ ownerUserId, ownerKind, ownerServiceIdentityId, mode, createdAt, ...chat }) => ({
       ...chat,
       ownerId: ownerUserId,
     })),
@@ -88,6 +90,8 @@ const expectSnapshotRoundTrip = async () => {
   const {
     drafts,
     toolCatalog,
+    projects,
+    chats,
     messages,
     terminalLines,
     planSteps,
@@ -98,6 +102,8 @@ const expectSnapshotRoundTrip = async () => {
   const stored = await readSnapshot()
   expect(stored.workspaceConnections).toEqual([...workspaceConnections])
   expect(stored.toolConnections).toEqual([...toolConnections])
+  expect(stored.projects).toEqual([...projects])
+  expect(stored.chats).toEqual([...chats])
   expect(stored.messages).toEqual(groupedByChat(messages))
   expect(stored.terminalLines).toEqual(groupedByChat(terminalLines))
   expect(stored.planSteps).toEqual(groupedByChat(planSteps))

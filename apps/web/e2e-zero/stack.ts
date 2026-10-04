@@ -44,7 +44,7 @@ export const test = base.extend<{ resetStack: undefined }, { workerStack: Worker
           await transaction.insert(users).values({ id: barrierMemberId, email: 'e2e-barrier@example.com' })
           await transaction
             .insert(workspaces)
-            .values({ workspaceId: barrierWorkspaceId, name: epoch, createdBy: barrierMemberId })
+            .values({ workspaceId: barrierWorkspaceId, name: epoch, createdBy: barrierMemberId, createdAt: new Date() })
           await transaction.insert(memberships).values({
             workspaceId: barrierWorkspaceId,
             userId: barrierMemberId,

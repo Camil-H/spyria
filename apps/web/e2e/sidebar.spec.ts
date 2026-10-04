@@ -1,4 +1,4 @@
-import { expect, type Page, test } from '@playwright/test'
+import { expect, type Page, test } from './fixtures'
 
 const sidebarOf = (page: Page) => page.getByRole('navigation', { name: 'Sidebar' })
 const projectGroupOf = (page: Page, projectName: string) => sidebarOf(page).getByRole('group', { name: projectName })

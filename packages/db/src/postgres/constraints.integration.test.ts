@@ -55,6 +55,7 @@ const crossTenantWrites = {
       ownerUserId: 'member-alice',
       name: 'Cross tenant',
       archived: false,
+      createdAt: new Date(),
     }),
   'a read marker on a chat of another workspace': () =>
     database

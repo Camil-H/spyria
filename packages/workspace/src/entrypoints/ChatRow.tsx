@@ -10,11 +10,9 @@ import {
 import { Bot, Ellipsis, Hash } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { NavLink } from 'react-router'
-import { moveChat } from '../operations/move-chat.ts'
-import { renameChat } from '../operations/rename-chat.ts'
 import type { Sidebar } from '../queries/get-sidebar.ts'
 import { ArchiveChatDialog } from './ArchiveChatDialog.tsx'
-import { useWorkspaceDependencies } from './providers.tsx'
+import { useWorkspaceCommands } from './providers.tsx'
 import { RenameDialog } from './RenameDialog.tsx'
 import { menuItemClass, menuTriggerClass } from './ui.ts'
 
@@ -32,7 +30,7 @@ export const ChatRow = ({
   projects: Sidebar['projects']
   chatAdornment?: ChatAdornment
 }) => {
-  const dependencies = useWorkspaceDependencies()
+  const commands = useWorkspaceCommands()
   const [isRenaming, setIsRenaming] = useState(false)
   const [isArchiving, setIsArchiving] = useState(false)
   const ChatTypeIcon = chat.type === 'channel' ? Hash : Bot
@@ -77,14 +75,14 @@ export const ChatRow = ({
                 <Item
                   className={menuItemClass}
                   key={project.id}
-                  onSelect={() => moveChat(dependencies, { chatId: chat.id, projectId: project.id })}
+                  onSelect={() => commands.moveChat({ workspaceId, chatId: chat.id, projectId: project.id })}
                 >
                   {project.name}
                 </Item>
               ))}
               <Item
                 className={menuItemClass}
-                onSelect={() => moveChat(dependencies, { chatId: chat.id, projectId: null })}
+                onSelect={() => commands.moveChat({ workspaceId, chatId: chat.id, projectId: null })}
               >
                 No project
               </Item>
@@ -100,11 +98,18 @@ export const ChatRow = ({
           label="Rename chat"
           fieldLabel="Chat name"
           currentName={chat.name}
-          rename={(name) => renameChat(dependencies, { chatId: chat.id, name })}
+          rename={(name) => commands.renameChat({ workspaceId, chatId: chat.id, name })}
           onClose={() => setIsRenaming(false)}
         />
       )}
-      {isArchiving && <ArchiveChatDialog chatId={chat.id} chatName={chat.name} onClose={() => setIsArchiving(false)} />}
+      {isArchiving && (
+        <ArchiveChatDialog
+          workspaceId={workspaceId}
+          chatId={chat.id}
+          chatName={chat.name}
+          onClose={() => setIsArchiving(false)}
+        />
+      )}
     </li>
   )
 }

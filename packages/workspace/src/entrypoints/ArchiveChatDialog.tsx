@@ -1,20 +1,21 @@
-import type { ChatId } from '@hq/kernel'
+import type { ChatId, WorkspaceId } from '@hq/kernel'
 import { buttonClass, Dialog } from '@hq/ui'
-import { archiveChat } from '../operations/archive-chat.ts'
-import { useWorkspaceDependencies } from './providers.tsx'
+import { useWorkspaceCommands } from './providers.tsx'
 
 export const ArchiveChatDialog = ({
+  workspaceId,
   chatId,
   chatName,
   onClose,
 }: {
+  workspaceId: WorkspaceId
   chatId: ChatId
   chatName: string
   onClose: () => void
 }) => {
-  const dependencies = useWorkspaceDependencies()
+  const commands = useWorkspaceCommands()
   const confirm = async () => {
-    await archiveChat(dependencies, { chatId })
+    await commands.archiveChat({ workspaceId, chatId })
     onClose()
   }
   return (

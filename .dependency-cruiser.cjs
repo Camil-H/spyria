@@ -6,7 +6,7 @@ const serverEntry = contextEntry('server')
 const publishedEntry = contextEntry('published')
 const clientModules = [
   '(^|/)node_modules/(react|react-dom|react-router|@radix-ui|lucide-react)/',
-  `^packages/${contexts}/src/(entrypoints/|client\\.ts$)`,
+  `^packages/${contexts}/src/(entrypoints/.+\\.tsx$|client\\.ts$)`,
   '^packages/(ui|session)/',
   '^packages/db/src/useQuery\\.tsx$',
   '^packages/db/src/zero-store\\.ts$',
@@ -23,7 +23,7 @@ const testOnlyModules = [
   '^apps/web/(e2e|e2e-zero)/',
   '\\.test\\.ts$',
 ]
-const zeroTestHarness = '^apps/web/(e2e-zero/|playwright\\.zero\\.config\\.ts$)'
+const zeroTestHarness = '^apps/web/(e2e/|e2e-zero/|playwright\\.zero\\.config\\.ts$)'
 const zeroConfig = '^packages/db/drizzle-zero\\.config\\.ts$'
 const layerRule = (name, layer, allowedLayers) => ({
   name,
@@ -45,7 +45,10 @@ module.exports = {
     {
       name: 'entrypoints-never-import-integrations',
       severity: 'error',
-      from: { path: `^packages/${contexts}/src/entrypoints/` },
+      from: {
+        path: `^packages/${contexts}/src/entrypoints/`,
+        pathNot: `^packages/${contexts}/src/entrypoints/mutators\\.ts$`,
+      },
       to: { path: '^packages/$1/src/integrations/' },
     },
     {

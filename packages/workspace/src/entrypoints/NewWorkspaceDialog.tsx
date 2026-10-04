@@ -1,19 +1,19 @@
+import type { WorkspaceId } from '@hq/kernel'
 import { useSession } from '@hq/session'
 import { buttonClass, Dialog, fieldClass, labelClass } from '@hq/ui'
 import { type SubmitEvent, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { Name } from '../domain/name.ts'
-import { createWorkspace } from '../operations/create-workspace.ts'
-import { useWorkspaceDependencies } from './providers.tsx'
+import { useWorkspaceCommands } from './providers.tsx'
 
-export const NewWorkspaceDialog = ({ onClose }: { onClose: () => void }) => {
-  const dependencies = useWorkspaceDependencies()
+export const NewWorkspaceDialog = ({ workspaceId, onClose }: { workspaceId: WorkspaceId; onClose: () => void }) => {
+  const commands = useWorkspaceCommands()
   const { memberId } = useSession()
   const navigate = useNavigate()
   const [draftName, setDraftName] = useState('')
   const submit = async (event: SubmitEvent) => {
     event.preventDefault()
-    const newWorkspaceId = await createWorkspace(dependencies, { ownerId: memberId, name: Name(draftName) })
+    const newWorkspaceId = await commands.createWorkspace({ workspaceId, ownerId: memberId, name: Name(draftName) })
     onClose()
     navigate(`/w/${newWorkspaceId}`)
   }

@@ -58,9 +58,13 @@ test.describe('reset between tests', () => {
   test('a project inserted through SQL shows up live', async ({ page, workerStack }) => {
     await page.goto('/')
     await expect(projectGroupOf(page, 'Onboarding')).toBeVisible()
-    await workerStack.database
-      .insert(projects)
-      .values({ workspaceId: 'workspace-acme', id: 'project-leftover', name: 'Leftover', archived: false })
+    await workerStack.database.insert(projects).values({
+      workspaceId: 'workspace-acme',
+      id: 'project-leftover',
+      name: 'Leftover',
+      archived: false,
+      createdAt: new Date(),
+    })
     await expect(projectGroupOf(page, 'Leftover')).toBeVisible()
   })
 

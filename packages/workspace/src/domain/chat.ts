@@ -40,3 +40,5 @@ export const startRuntimeChat = (
     archived: false,
   }
 }
+
+export const runtimeChatDefaults = { defaultRuntimeModel: 'Claude Sonnet 5.5', defaultReasoningEffort: 'Medium' }

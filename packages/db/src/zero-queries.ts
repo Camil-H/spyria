@@ -15,12 +15,14 @@ export const queries = defineQueries({
     zql.users.whereExists('memberships', (membership) => membership.where('workspaceId', ctx.workspaceId)),
   ),
   workspaces: defineQuery(({ ctx }) =>
-    zql.workspaces.whereExists('memberships', (membership) => membership.where('userId', ctx.userId)),
+    zql.workspaces
+      .whereExists('memberships', (membership) => membership.where('userId', ctx.userId))
+      .orderBy('createdAt', 'asc'),
   ),
   memberships: defineQuery(({ ctx }) => zql.memberships.where('workspaceId', ctx.workspaceId)),
   serviceIdentities: defineQuery(({ ctx }) => zql.serviceIdentities.where('workspaceId', ctx.workspaceId)),
-  projects: defineQuery(({ ctx }) => zql.projects.where('workspaceId', ctx.workspaceId)),
-  chats: defineQuery(({ ctx }) => zql.chats.where('workspaceId', ctx.workspaceId)),
+  projects: defineQuery(({ ctx }) => zql.projects.where('workspaceId', ctx.workspaceId).orderBy('createdAt', 'asc')),
+  chats: defineQuery(({ ctx }) => zql.chats.where('workspaceId', ctx.workspaceId).orderBy('createdAt', 'asc')),
   chatParticipants: defineQuery(({ ctx }) => zql.chatParticipants.where('workspaceId', ctx.workspaceId)),
   messages: defineQuery(({ ctx }) =>
     zql.messages.where('workspaceId', ctx.workspaceId).orderBy('chatId', 'asc').orderBy('seq', 'asc'),

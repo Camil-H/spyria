@@ -3,11 +3,10 @@ import { focusRing, menuContentClass } from '@hq/ui'
 import { Content, Item, Root, Trigger } from '@radix-ui/react-dropdown-menu'
 import { Ellipsis } from 'lucide-react'
 import { useState } from 'react'
-import { renameProject } from '../operations/rename-project.ts'
 import type { Sidebar } from '../queries/get-sidebar.ts'
 import { ArchiveProjectDialog } from './ArchiveProjectDialog.tsx'
 import { type ChatAdornment, ChatRow } from './ChatRow.tsx'
-import { useWorkspaceDependencies } from './providers.tsx'
+import { useWorkspaceCommands } from './providers.tsx'
 import { RenameDialog } from './RenameDialog.tsx'
 import { menuItemClass, menuTriggerClass } from './ui.ts'
 
@@ -23,7 +22,7 @@ export const ProjectGroup = ({
   chatAdornment?: ChatAdornment
 }) => {
   const [isExpanded, setIsExpanded] = useState(true)
-  const dependencies = useWorkspaceDependencies()
+  const commands = useWorkspaceCommands()
   const [isRenaming, setIsRenaming] = useState(false)
   const [isArchiving, setIsArchiving] = useState(false)
   return (
@@ -63,12 +62,17 @@ export const ProjectGroup = ({
           label="Rename project"
           fieldLabel="Project name"
           currentName={project.name}
-          rename={(name) => renameProject(dependencies, { projectId: project.id, name })}
+          rename={(name) => commands.renameProject({ workspaceId, projectId: project.id, name })}
           onClose={() => setIsRenaming(false)}
         />
       )}
       {isArchiving && (
-        <ArchiveProjectDialog projectId={project.id} projectName={project.name} onClose={() => setIsArchiving(false)} />
+        <ArchiveProjectDialog
+          workspaceId={workspaceId}
+          projectId={project.id}
+          projectName={project.name}
+          onClose={() => setIsArchiving(false)}
+        />
       )}
       {isExpanded && (
         <ul className="ml-3 flex flex-col border-l border-line pl-1">

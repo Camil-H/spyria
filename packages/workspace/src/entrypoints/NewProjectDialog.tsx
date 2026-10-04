@@ -2,15 +2,14 @@ import type { WorkspaceId } from '@hq/kernel'
 import { buttonClass, Dialog, fieldClass, labelClass } from '@hq/ui'
 import { type SubmitEvent, useState } from 'react'
 import { Name } from '../domain/name.ts'
-import { createProject } from '../operations/create-project.ts'
-import { useWorkspaceDependencies } from './providers.tsx'
+import { useWorkspaceCommands } from './providers.tsx'
 
 export const NewProjectDialog = ({ workspaceId, onClose }: { workspaceId: WorkspaceId; onClose: () => void }) => {
-  const dependencies = useWorkspaceDependencies()
+  const commands = useWorkspaceCommands()
   const [draftName, setDraftName] = useState('')
   const submit = async (event: SubmitEvent) => {
     event.preventDefault()
-    await createProject(dependencies, { workspaceId, name: Name(draftName) })
+    await commands.createProject({ workspaceId, name: Name(draftName) })
     onClose()
   }
   return (

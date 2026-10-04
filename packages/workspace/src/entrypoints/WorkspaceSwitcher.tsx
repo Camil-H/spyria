@@ -61,7 +61,7 @@ export const WorkspaceSwitcher = ({ workspaceId }: { workspaceId: WorkspaceId })
           </div>
         </Content>
       </Root>
-      {openDialog?.kind === 'new' && <NewWorkspaceDialog onClose={closeDialog} />}
+      {openDialog?.kind === 'new' && <NewWorkspaceDialog workspaceId={workspaceId} onClose={closeDialog} />}
       {openDialog?.kind === 'logOut' && (
         <LogOutDialog
           workspaceName={openDialog.workspaceName}

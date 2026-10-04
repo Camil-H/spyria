@@ -5,7 +5,7 @@ export type Session = {
   memberId: MemberId
   defaultWorkspaceId: WorkspaceId
   onSignOut?: (workspaceId: WorkspaceId) => void
-  onSignIn?: (workspaceId: WorkspaceId) => void
+  onSignIn?: (workspaceId: WorkspaceId) => void | Promise<void>
 }
 
 type SessionState = Session & {
@@ -22,13 +22,13 @@ export const SessionProvider = ({ session, children }: { session: Session; child
     setSignedOutWorkspaceIds((current) => new Set(current).add(workspaceId))
     session.onSignOut?.(workspaceId)
   }
-  const signIn = (workspaceId: WorkspaceId) => {
+  const signIn = async (workspaceId: WorkspaceId) => {
+    await session.onSignIn?.(workspaceId)
     setSignedOutWorkspaceIds((current) => {
       const next = new Set(current)
       next.delete(workspaceId)
       return next
     })
-    session.onSignIn?.(workspaceId)
   }
   return <SessionContext value={{ ...session, signedOutWorkspaceIds, signOut, signIn }}>{children}</SessionContext>
 }

@@ -19,6 +19,12 @@ const numberedWithinChat = <Row extends { workspaceId: string; chatId: string }>
   })
 }
 
+const seedCreationEpoch = Date.parse('2026-01-01T00:00:00Z')
+const createdInOrder = <Row>(row: Row, index: number) => ({
+  ...row,
+  createdAt: new Date(seedCreationEpoch + index * 1000),
+})
+
 const withUserId = <Row extends { memberId: string }>({ memberId, ...row }: Row) => ({ ...row, userId: memberId })
 
 const withUserIdAndPosition = <Row extends { memberId: string }>(row: Row, index: number) => ({
@@ -51,13 +57,16 @@ const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
   await transaction
     .insert(tables.users)
     .values(snapshot.members.map((member) => ({ id: member.id, email: `${member.name.toLowerCase()}@example.com` })))
-  await transaction.insert(tables.workspaces).values(
-    snapshot.workspaces.map((workspace) => ({
-      workspaceId: workspace.id,
-      name: workspace.name,
-      createdBy: creatorByWorkspace.get(workspace.id) ?? '',
-    })),
-  )
+  await transaction
+    .insert(tables.workspaces)
+    .values(
+      snapshot.workspaces.map((workspace, index) =>
+        createdInOrder(
+          { workspaceId: workspace.id, name: workspace.name, createdBy: creatorByWorkspace.get(workspace.id) ?? '' },
+          index,
+        ),
+      ),
+    )
   await transaction.insert(tables.memberships).values(
     snapshot.memberships.map((membership) => ({
       workspaceId: membership.workspaceId,
@@ -69,10 +78,10 @@ const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
       displayName: memberName.get(membership.memberId) ?? '',
     })),
   )
-  await transaction.insert(tables.projects).values([...snapshot.projects])
+  await transaction.insert(tables.projects).values(snapshot.projects.map(createdInOrder))
   await transaction.insert(tables.chats).values(
-    snapshot.chats.map(({ ownerId, ...chat }) => ({
-      ...chat,
+    snapshot.chats.map(({ ownerId, ...chat }, index) => ({
+      ...createdInOrder(chat, index),
       mode: null,
       ownerKind: 'user' as const,
       ownerUserId: ownerId,

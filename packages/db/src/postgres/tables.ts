@@ -34,6 +34,7 @@ export const workspaces = table('workspaces', {
   createdBy: text()
     .notNull()
     .references(() => users.id),
+  createdAt: instant().notNull(),
 })
 
 export const memberships = table(
@@ -99,6 +100,7 @@ export const projects = table(
     id: text().notNull(),
     name: text().notNull(),
     archived: boolean().notNull(),
+    createdAt: instant().notNull(),
   },
   (table) => [primaryKey({ columns: [table.workspaceId, table.id] })],
 )
@@ -120,6 +122,7 @@ export const chats = table(
     gitBranch: text(),
     originChatId: text(),
     archived: boolean().notNull(),
+    createdAt: instant().notNull(),
   },
   (table) => [
     primaryKey({ columns: [table.workspaceId, table.id] }),

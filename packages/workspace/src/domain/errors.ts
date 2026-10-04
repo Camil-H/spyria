@@ -36,3 +36,9 @@ export class SourceChatArchived extends WorkspaceError {
     super('source_chat_archived', 'A runtime chat cannot start from an archived chat')
   }
 }
+
+export class ForeignWorkspace extends WorkspaceError {
+  constructor() {
+    super('foreign_workspace', 'The change targets a workspace other than the current one')
+  }
+}

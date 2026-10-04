@@ -1,5 +1,5 @@
 import type { MemberId, WorkspaceId } from '@hq/kernel'
-import { type Row, Zero } from '@rocicorp/zero'
+import { type AnyMutatorRegistry, type MutatorResultDetails, type Row, Zero } from '@rocicorp/zero'
 import { toolCatalog } from './mock-data.ts'
 import type { Snapshot } from './schema.ts'
 import { createStore, type Store } from './store.ts'
@@ -15,6 +15,7 @@ export type ZeroStoreOptions = {
   cacheURL: string
   fetchSession: (workspaceId: WorkspaceId) => Promise<WorkspaceSession>
   kvStore?: 'mem' | 'idb'
+  mutators?: AnyMutatorRegistry
 }
 
 type Unbranded<Value> = Value extends string
@@ -31,6 +32,7 @@ const isoOf = (time: number) => new Date(time).toISOString()
 const isoOrNull = (time: number | null) => (time === null ? null : isoOf(time))
 const withMemberId = <Row extends { userId: string }>({ userId, ...row }: Row) => ({ ...row, memberId: userId })
 const withoutPosition = <Row extends { position: number }>({ position, ...row }: Row) => row
+const withoutCreatedAt = <Row extends { createdAt: number }>({ createdAt, ...row }: Row) => row
 const uniqueBy = <Row>(rows: readonly Row[], keyOf: (row: Row) => string) => [
   ...new Map(rows.map((row) => [keyOf(row), row])).values(),
 ]
@@ -54,8 +56,8 @@ export const snapshotFromZeroRows = (viewerId: MemberId, rowsByWorkspace: readon
       [...memberships, ...workspaces.map(({ workspaceId }) => ({ workspaceId, userId: viewerId }))],
       (membership) => `${membership.workspaceId}/${membership.userId}`,
     ).map(({ workspaceId, userId }) => ({ workspaceId, memberId: userId })),
-    projects: rowsOf('projects'),
-    chats: rowsOf('chats').map(({ ownerKind, ownerUserId, ownerServiceIdentityId, mode, ...chat }) => ({
+    projects: rowsOf('projects').map(withoutCreatedAt),
+    chats: rowsOf('chats').map(({ ownerKind, ownerUserId, ownerServiceIdentityId, mode, createdAt, ...chat }) => ({
       ...chat,
       ownerId: ownerUserId ?? '',
     })),
@@ -90,8 +92,11 @@ export const snapshotFromZeroRows = (viewerId: MemberId, rowsByWorkspace: readon
 }
 
 const writesUnavailable: Store['write'] = () => {
-  throw new Error('Writes through Zero are not available until stage 0.4')
+  throw new Error('Writes through Zero go through mutators')
 }
+
+const failureOf = (details: MutatorResultDetails) =>
+  details.type === 'error' ? new Error(details.error.message) : undefined
 
 export const createZeroStore = ({
   memberId,
@@ -99,6 +104,7 @@ export const createZeroStore = ({
   cacheURL,
   fetchSession,
   kvStore,
+  mutators,
 }: ZeroStoreOptions) => {
   const store = createStore(snapshotFromZeroRows(memberId, []))
   const rowsByWorkspace = new Map<WorkspaceId, Partial<ZeroRows>>()
@@ -129,6 +135,7 @@ export const createZeroStore = ({
       context: { userId: memberId, workspaceId, role },
       storageKey: workspaceId,
       kvStore,
+      mutators,
     })
     const rows: Partial<ZeroRows> = {}
     const completeTables = new Set<TableName>()
@@ -173,13 +180,29 @@ export const createZeroStore = ({
     subscribe: store.subscribe,
     write: writesUnavailable,
     whenLoaded: (workspaceId: WorkspaceId) => loadedOf(workspaceId).promise,
+    mutate: async (workspaceId: WorkspaceId, request: Parameters<Zero['mutate']>[0]) => {
+      await loadedOf(workspaceId).promise
+      const zero = await zeroByWorkspace.get(workspaceId)
+      if (!zero) throw new Error(`Workspace ${workspaceId} is not open`)
+      const result = zero.mutate(request)
+      const clientFailure = failureOf(await result.client)
+      if (clientFailure) throw clientFailure
+      const confirmation = result.server.then((details) => {
+        const serverFailure = failureOf(details)
+        if (serverFailure) throw serverFailure
+      })
+      confirmation.catch(console.error)
+      return { confirmation }
+    },
     signOut: async (workspaceId: WorkspaceId) => {
       signedOutWorkspaceIds.add(workspaceId)
       await (await close(workspaceId))?.delete()
     },
-    signIn: (workspaceId: WorkspaceId) => {
+    signIn: async (workspaceId: WorkspaceId) => {
       signedOutWorkspaceIds.delete(workspaceId)
+      await zeroByWorkspace.get(workspaceId)
       open(workspaceId)
+      await loadedOf(workspaceId).promise
     },
     close: () => {
       isClosed = true
