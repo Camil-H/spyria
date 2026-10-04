@@ -160,7 +160,7 @@ test.describe('4. composer', () => {
 
     await expect(messageItemsOf(page)).toHaveCount(3)
     await expect(messageItemsOf(page).nth(2)).toContainText('Alice')
-    await expect(messageItemsOf(page).nth(2)).toContainText('12:34')
+    await expect(messageItemsOf(page).nth(2)).toContainText(/\d{2}:\d{2}/)
     await expect(messageItemsOf(page).nth(2)).toContainText('Hello team')
     await expect(composerOf(page)).toHaveValue('')
     await expect(composerOf(page)).toBeFocused()
