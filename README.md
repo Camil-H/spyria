@@ -20,6 +20,16 @@ bun run dev           # adds zero-cache, then the server on 3000 and the app on 
 
 Migrate and seed before the first `bun run dev`: zero-cache needs the `hq_zero` publication the migrations create.
 
+## Signing in locally
+
+The app signs in through Dex in a popup (allow popups for `localhost:5173`). The Dex users all have the password `password`:
+
+- `alice@example.com`: member of Acme and Globex
+- `bob@example.com`: member of Acme
+- `nina@example.com`: no membership (shows the "not invited" screen)
+
+`bun run dev` sets dev values for `HQ_TOKEN_SECRET`, `HQ_OIDC_ISSUER`, `HQ_OIDC_CLIENT_ID`, `HQ_OIDC_REDIRECT_URI` and `HQ_APP_ORIGIN`; the server refuses to start without them.
+
 ## Day to day
 
 ```sh

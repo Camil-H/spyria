@@ -8,7 +8,7 @@ import {
   type WorkspaceId,
   workspaceId,
 } from '@hq/kernel'
-import type { ChangeRow, FileRow, MessageRow, Snapshot } from './schema.ts'
+import { type ChangeRow, type FileRow, type MessageRow, type Snapshot, toolCatalog } from './schema.ts'
 
 const acme = workspaceId('workspace-acme')
 const globex = workspaceId('workspace-globex')
@@ -17,10 +17,6 @@ const bob = memberId('member-bob')
 const onboarding = projectId('project-onboarding')
 const billing = projectId('project-billing')
 const launch = projectId('project-launch')
-
-export const currentMemberId = alice
-export const defaultWorkspaceId = acme
-export const toolCatalog = ['GitHub', 'Slack', 'Notion', 'Linear']
 
 const invoiceChat = chatId('chat-invoice-bug')
 const welcomeChat = chatId('chat-welcome')

@@ -6,11 +6,11 @@ import { Link } from 'react-router'
 import { listWorkspaces } from '../queries/list-workspaces.ts'
 
 export const SignedOutScreen = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
-  const { memberId, signedOutWorkspaceIds, signIn } = useSession()
+  const { memberId, signedInWorkspaceIds, signIn } = useSession()
   const workspaces = useQuery(listWorkspaces(memberId))
   const signedOutName = workspaces.find((workspace) => workspace.id === workspaceId)?.name
   const otherWorkspaces = workspaces.filter(
-    (workspace) => workspace.id !== workspaceId && !signedOutWorkspaceIds.has(workspace.id),
+    (workspace) => workspace.id !== workspaceId && signedInWorkspaceIds.has(workspace.id),
   )
   return (
     <main className="flex h-screen flex-col items-center justify-center gap-4 bg-app p-6 text-center text-ink">

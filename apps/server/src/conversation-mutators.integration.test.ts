@@ -4,10 +4,11 @@ import { events, jobs } from '@hq/db/postgres'
 import { createTestDatabase, startZeroCache } from '@hq/db/testing'
 import { createApp } from './app.ts'
 import { maximumJobAttempts, startJobWorker } from './job-worker.ts'
+import { sessionTokenOf, testAuthSettings } from './testing.ts'
 
 const testDatabase = await createTestDatabase()
 const { database } = testDatabase
-const app = createApp({ database, tokenSecret: 'conversation-test-secret', isDevAuthEnabled: true })
+const app = createApp({ database, ...testAuthSettings })
 const server = Bun.serve({ port: 0, fetch: app.fetch })
 const appId = 'hqconversationtest'
 const zeroCache = await startZeroCache({
@@ -36,13 +37,7 @@ const succeeded = {}
 const failedWith = (message: string) => ({ error: 'app', message })
 const agentReplyText = 'Understood, working on it.'
 
-const tokenOf = async (workspaceId: string, userId: string) => {
-  const response = await app.request('/auth/dev-token', {
-    method: 'POST',
-    body: JSON.stringify({ workspaceId, userId }),
-  })
-  return ((await response.json()) as { token: string }).token
-}
+const tokenOf = (workspaceId: string, userId: string) => sessionTokenOf(database, workspaceId, userId)
 
 const resultOf = async (
   { workspaceId, userId }: { workspaceId: string; userId: string },

@@ -2,13 +2,23 @@ import { createDatabase } from '@hq/db/postgres'
 import { createApp } from './app.ts'
 import { startJobWorker } from './job-worker.ts'
 
-const isDevAuthEnabled = process.env.HQ_DEV_AUTH === '1'
-const tokenSecret =
-  process.env.HQ_TOKEN_SECRET ?? (isDevAuthEnabled ? `${crypto.randomUUID()}${crypto.randomUUID()}` : undefined)
-if (!tokenSecret) throw new Error('HQ_TOKEN_SECRET is required')
+const requiredEnvironment = (name: string) => {
+  const value = process.env[name]
+  if (!value) throw new Error(`${name} is required`)
+  return value
+}
 
 const database = createDatabase()
-const app = createApp({ database, tokenSecret, isDevAuthEnabled })
+const app = createApp({
+  database,
+  tokenSecret: requiredEnvironment('HQ_TOKEN_SECRET'),
+  oidc: {
+    issuer: requiredEnvironment('HQ_OIDC_ISSUER'),
+    clientId: requiredEnvironment('HQ_OIDC_CLIENT_ID'),
+    redirectUri: requiredEnvironment('HQ_OIDC_REDIRECT_URI'),
+  },
+  appOrigin: requiredEnvironment('HQ_APP_ORIGIN'),
+})
 startJobWorker(database)
 
 export default { port: 3000, hostname: '0.0.0.0', fetch: app.fetch }

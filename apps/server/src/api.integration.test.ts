@@ -2,19 +2,19 @@ import { afterAll, expect, test } from 'bun:test'
 import { createTestDatabase } from '@hq/db/testing'
 import { schema } from '@hq/db/zero'
 import { queries } from '@hq/db/zero-queries'
-import { memberId, workspaceId } from '@hq/kernel'
 import type { AST } from '@rocicorp/zero'
 import type { ServerSchema } from '@rocicorp/zero/server'
 import { executePostgresQuery } from '@rocicorp/zero/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { createApp } from './app.ts'
-import { createSessionTokens } from './session-tokens.ts'
+import { issueSessionToken } from './auth/session-tokens.ts'
+import { openSessions } from './auth/sessions.ts'
+import { sessionTokenOf, testAuthSettings } from './testing.ts'
 
 const testDatabase = await createTestDatabase()
 afterAll(() => testDatabase.drop())
 
-const tokenSecret = 'integration-test-secret'
-const app = createApp({ database: testDatabase.database, tokenSecret, isDevAuthEnabled: true })
+const app = createApp({ database: testDatabase.database, ...testAuthSettings })
 const acme = 'workspace-acme'
 const globex = 'workspace-globex'
 const alice = 'member-alice'
@@ -71,13 +71,7 @@ const rowsOf = (ast: AST) =>
       ) as Promise<Record<string, unknown>[]>,
   )
 
-const devToken = async (workspace: string, user: string) => {
-  const response = await app.request('/auth/dev-token', {
-    method: 'POST',
-    body: JSON.stringify({ workspaceId: workspace, userId: user }),
-  })
-  return { status: response.status, token: ((await response.json()) as { token?: string }).token }
-}
+const tokenOf = (workspace: string, user: string) => sessionTokenOf(testDatabase.database, workspace, user)
 
 const transform = async (token: string, args: unknown[] = []) => {
   const response = await app.request('/api/query', {
@@ -90,8 +84,7 @@ const transform = async (token: string, args: unknown[] = []) => {
 }
 
 const readAll = async (workspace: string, user: string) => {
-  const { token } = await devToken(workspace, user)
-  const { astByTable } = await transform(token ?? '')
+  const { astByTable } = await transform(await tokenOf(workspace, user))
   return new Map(
     await Promise.all(
       replicatedTables.map(
@@ -196,24 +189,24 @@ test('the connections keep their position order', () => {
 })
 
 test('crafted query arguments cannot reach another workspace or member', async () => {
-  const { token } = await devToken(acme, alice)
-  const plain = await transform(token ?? '')
-  const crafted = await transform(token ?? '', [{ workspaceId: globex, userId: bob }])
+  const token = await tokenOf(acme, alice)
+  const plain = await transform(token)
+  const crafted = await transform(token, [{ workspaceId: globex, userId: bob }])
   expect(crafted.status).toBe(200)
   expect(crafted.astByTable).toEqual(plain.astByTable)
   expect(JSON.stringify([...crafted.astByTable.values()])).not.toContain(globex)
 })
 
-test('the dev token endpoint refuses a non-member', async () => {
-  expect(await devToken(globex, bob)).toEqual({ status: 403, token: undefined })
+test('a sign-in opens no session in a workspace without membership', async () => {
+  expect(await openSessions(testDatabase.database, bob, globex)).toHaveLength(0)
 })
 
 test.each(['/api/query', '/api/mutate'])('%s refuses with 403 a valid token without membership', async (path) => {
-  const unvalidatedTokens = createSessionTokens(tokenSecret, async () => 'member')
-  const token = await unvalidatedTokens.issue({
-    userId: memberId(bob),
-    workspaceId: workspaceId(globex),
+  const { token } = await issueSessionToken(testAuthSettings.tokenSecret, {
+    userId: bob,
+    workspaceId: globex,
     role: 'member',
+    sessionId: 'no-session',
   })
   const response = await app.request(path, {
     method: 'POST',
@@ -223,7 +216,7 @@ test.each(['/api/query', '/api/mutate'])('%s refuses with 403 a valid token with
   expect(response.status).toBe(403)
 })
 
-test('with dev auth, the database claim of a token selects the database the server reads', async () => {
+test('with test hooks, the database claim of a token selects the database the server reads', async () => {
   const otherDatabase = await createTestDatabase()
   try {
     await otherDatabase.database.$client`insert into users (id, email) values ('member-dana', 'dana@example.com')`
@@ -232,18 +225,16 @@ test('with dev auth, the database claim of a token selects the database the serv
       values (${acme}, 'member-dana', 'member', 'Dana')`
     const multiDatabaseApp = createApp({
       database: testDatabase.database,
-      tokenSecret,
-      isDevAuthEnabled: true,
-      databaseByName: () => otherDatabase.database,
+      ...testAuthSettings,
+      testDatabaseByName: () => otherDatabase.database,
     })
-    const requestDevToken = (databaseName?: string) =>
-      multiDatabaseApp.request('/auth/dev-token', {
-        method: 'POST',
-        body: JSON.stringify({ workspaceId: acme, userId: 'member-dana', db: databaseName }),
-      })
-    expect((await requestDevToken()).status).toBe(403)
-    const issued = (await (await requestDevToken(otherDatabase.name)).json()) as { token: string; role: string }
-    expect(issued.role).toBe('member')
+    expect(await openSessions(testDatabase.database, 'member-dana', acme)).toHaveLength(0)
+    const [danaSession] = await openSessions(otherDatabase.database, 'member-dana', acme)
+    if (!danaSession) throw new Error('Dana has no session')
+    expect(danaSession.role).toBe('member')
+    const issued = await issueSessionToken(testAuthSettings.tokenSecret, danaSession, {
+      databaseName: otherDatabase.name,
+    })
     const queryWith = (server: typeof app) =>
       server.request('/api/query', {
         method: 'POST',

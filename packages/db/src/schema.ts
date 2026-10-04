@@ -134,3 +134,5 @@ export const ownedBy =
 
 export const memberName = (snapshot: Snapshot, workspaceId: WorkspaceId, memberId: MemberId) =>
   snapshot.memberships.find(ownedBy(workspaceId, memberId))?.displayName ?? 'Unknown'
+
+export const toolCatalog = ['GitHub', 'Slack', 'Notion', 'Linear']

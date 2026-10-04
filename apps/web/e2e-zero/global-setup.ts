@@ -59,13 +59,16 @@ const startDetached = async (command: string[], cwd: string, env: Record<string,
 }
 
 export default async function globalSetup() {
-  execSync('docker compose -f infra/docker-compose.yml up -d --wait postgres', { cwd: repositoryRoot, stdio: 'ignore' })
+  execSync('docker compose -f infra/docker-compose.yml up -d --wait postgres dex', {
+    cwd: repositoryRoot,
+    stdio: 'ignore',
+  })
   await sweepLeftovers()
   await buildTemplateDatabase(templateDatabaseName)
   const stopServer = await startDetached(
     ['bun', 'src/test-server.ts'],
     `${repositoryRoot}apps/server`,
-    { HQ_DEV_AUTH: '1', PORT: new URL(serverUrl).port },
+    { PORT: new URL(serverUrl).port, HQ_APP_ORIGIN: viteUrl },
     `${serverUrl}/health`,
   )
   const stopVite = await startDetached(

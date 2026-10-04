@@ -18,7 +18,7 @@ const serverOnlyModules = [
 ]
 const productionEntries = '^apps/(server/src/index\\.ts|web/src/main\\.tsx)$'
 const testOnlyModules = [
-  '^apps/server/src/test-server\\.ts$',
+  '^apps/server/src/(test-server|testing)\\.ts$',
   '^packages/db/src/postgres/(test-database|build-test-template)\\.ts$',
   '^apps/web/(e2e|e2e-zero)/',
   '\\.test\\.ts$',

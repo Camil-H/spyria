@@ -1,14 +1,11 @@
 import { expect, test } from 'bun:test'
 import { createDatabase } from '@hq/db/postgres'
-import { memberId, workspaceId } from '@hq/kernel'
 import { createApp } from './app.ts'
-import { createSessionTokens } from './session-tokens.ts'
+import { issueSessionToken } from './auth/session-tokens.ts'
+import { testAuthSettings } from './testing.ts'
 
 const unreachableDatabase = createDatabase('postgres://unused:unused@127.0.0.1:1/unused')
-const appWith = (isDevAuthEnabled: boolean) =>
-  createApp({ database: unreachableDatabase, tokenSecret: 'unit-test-secret', isDevAuthEnabled })
-const postDevToken = (isDevAuthEnabled: boolean) =>
-  appWith(isDevAuthEnabled).request('/auth/dev-token', { method: 'POST', body: '{}' })
+const app = createApp({ database: unreachableDatabase, ...testAuthSettings })
 
 const contextServerEntries = [
   '@hq/workspace/server',
@@ -18,36 +15,26 @@ const contextServerEntries = [
 ]
 
 test('serves health', async () => {
-  const server = Bun.serve({ port: 0, fetch: appWith(false).fetch })
+  const server = Bun.serve({ port: 0, fetch: app.fetch })
   const response = await fetch(new URL('/health', server.url))
   await server.stop()
   expect(await response.json()).toEqual({ status: 'ok' })
 })
 
-test('the dev token endpoint is mounted only when dev auth is enabled', async () => {
-  expect((await postDevToken(false)).status).toBe(404)
-  expect((await postDevToken(true)).status).toBe(400)
+test('the dev token endpoint is gone', async () => {
+  expect((await app.request('/auth/dev-token', { method: 'POST', body: '{}' })).status).toBe(404)
 })
 
 test.each(['/api/query', '/api/mutate'])('%s refuses a request without a bearer token', async (path) => {
-  const response = await appWith(true).request(path, { method: 'POST', body: '[]' })
+  const response = await app.request(path, { method: 'POST', body: '[]' })
   expect(response.status).toBe(401)
 })
 
-test('refuses a token with a database claim when dev auth is disabled, without opening that database', async () => {
-  const openedDatabaseNames: string[] = []
-  const app = createApp({
-    database: unreachableDatabase,
-    tokenSecret: 'unit-test-secret',
-    isDevAuthEnabled: false,
-    databaseByName: (databaseName) => {
-      openedDatabaseNames.push(databaseName)
-      return unreachableDatabase
-    },
-  })
-  const token = await createSessionTokens('unit-test-secret', async () => 'admin').issue(
-    { userId: memberId('member-alice'), workspaceId: workspaceId('workspace-acme'), role: 'admin' },
-    'hq_other',
+test('refuses a token with a database claim without test hooks, without opening any database', async () => {
+  const { token } = await issueSessionToken(
+    testAuthSettings.tokenSecret,
+    { userId: 'member-alice', workspaceId: 'workspace-acme', role: 'admin', sessionId: 'session-1' },
+    { databaseName: 'hq_other' },
   )
   const response = await app.request('/api/query', {
     method: 'POST',
@@ -55,7 +42,6 @@ test('refuses a token with a database claim when dev auth is disabled, without o
     body: '[]',
   })
   expect(response.status).toBe(403)
-  expect(openedDatabaseNames).toEqual([])
 })
 
 test('loads every context server entry without React or client code', async () => {

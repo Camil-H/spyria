@@ -13,6 +13,7 @@ staticClients:
     public: true
     redirectURIs:
       - http://localhost:3000/auth/callback
+      - http://localhost:3100/auth/callback
 staticPasswords:
   - email: alice@example.com
     hash: "$2b$10$VQQ8E.Dr9ub0UjJjMVwrZ.z8mmsId1wLzJ7vu9Bnkm1mbOIqJk45y"
@@ -22,3 +23,7 @@ staticPasswords:
     hash: "$2b$10$VQQ8E.Dr9ub0UjJjMVwrZ.z8mmsId1wLzJ7vu9Bnkm1mbOIqJk45y"
     username: bob
     userID: 41331323-6f44-45e6-b3b9-2c4b60c02be5
+  - email: nina@example.com
+    hash: "$2b$10$VQQ8E.Dr9ub0UjJjMVwrZ.z8mmsId1wLzJ7vu9Bnkm1mbOIqJk45y"
+    username: nina
+    userID: 6f1c2a4e-8d3b-4f7a-9c5e-2b1d0e9a7c31

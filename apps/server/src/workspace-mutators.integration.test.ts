@@ -1,10 +1,11 @@
 import { afterAll, expect, test } from 'bun:test'
 import { createTestDatabase, startZeroCache } from '@hq/db/testing'
 import { createApp } from './app.ts'
+import { sessionTokenOf, testAuthSettings } from './testing.ts'
 
 const testDatabase = await createTestDatabase()
 const { database } = testDatabase
-const app = createApp({ database, tokenSecret: 'mutator-test-secret', isDevAuthEnabled: true })
+const app = createApp({ database, ...testAuthSettings })
 const server = Bun.serve({ port: 0, fetch: app.fetch })
 const appId = 'hqmutatortest'
 const zeroCache = await startZeroCache({
@@ -28,13 +29,7 @@ const globex = 'workspace-globex'
 const alice = 'member-alice'
 const bob = 'member-bob'
 
-const tokenOf = async (workspaceId: string, userId: string) => {
-  const response = await app.request('/auth/dev-token', {
-    method: 'POST',
-    body: JSON.stringify({ workspaceId, userId }),
-  })
-  return ((await response.json()) as { token: string }).token
-}
+const tokenOf = (workspaceId: string, userId: string) => sessionTokenOf(database, workspaceId, userId)
 
 const mutate = async (
   { workspaceId, userId }: { workspaceId: string; userId: string },

@@ -1,7 +1,21 @@
+import { SignInScreen } from '@hq/workspace'
 import { createRoot } from 'react-dom/client'
+import { loadSessions, signInWithPopup } from './app/auth.ts'
 import { createApp } from './app/factory.ts'
 import './app/styles.css'
 import { App } from './app/Shell.tsx'
 
-const app = await createApp()
-createRoot(document.getElementById('root') as HTMLElement).render(<App app={app} />)
+const root = createRoot(document.getElementById('root') as HTMLElement)
+
+const start = async () => {
+  const { userId, sessions } = await loadSessions()
+  if (userId && sessions.length > 0) return root.render(<App app={await createApp(userId, sessions)} />)
+  const signIn = async () => {
+    const result = await signInWithPopup()
+    if (result.status === 'signed_in') await start()
+    return result
+  }
+  root.render(<SignInScreen signIn={signIn} />)
+}
+
+await start()

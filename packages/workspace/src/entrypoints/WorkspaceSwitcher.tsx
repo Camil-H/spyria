@@ -15,7 +15,7 @@ type OpenDialog = { kind: 'new' } | { kind: 'logOut'; workspaceId: WorkspaceId; 
 
 export const WorkspaceSwitcher = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
   const navigate = useNavigate()
-  const { memberId, signedOutWorkspaceIds, signOut } = useSession()
+  const { memberId, signedInWorkspaceIds, signOut } = useSession()
   const workspaces = useQuery(listWorkspaces(memberId))
   const [openDialog, setOpenDialog] = useState<OpenDialog>(null)
   const closeDialog = () => setOpenDialog(null)
@@ -43,9 +43,9 @@ export const WorkspaceSwitcher = ({ workspaceId }: { workspaceId: WorkspaceId })
               <div key={workspace.id} className="flex items-center gap-1">
                 <Item className={`${menuItemClass} flex-1 gap-4`} onSelect={() => navigate(`/w/${workspace.id}`)}>
                   {workspace.name}
-                  {signedOutWorkspaceIds.has(workspace.id) && <span className="text-muted">Signed out</span>}
+                  {!signedInWorkspaceIds.has(workspace.id) && <span className="text-muted">Signed out</span>}
                 </Item>
-                {!signedOutWorkspaceIds.has(workspace.id) && (
+                {signedInWorkspaceIds.has(workspace.id) && (
                   <Item
                     aria-label={`Log out of ${workspace.name}`}
                     className={`${menuItemClass} p-1.5`}

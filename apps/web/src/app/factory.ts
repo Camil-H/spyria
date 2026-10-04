@@ -4,36 +4,39 @@ import {
   conversationOperations,
   createStoreDraftRepository,
 } from '@hq/conversation/server'
-import { currentMemberId, defaultWorkspaceId, type Store } from '@hq/db'
-import { createZeroStore } from '@hq/db/zero-store'
-import { chatId, type IdGenerator, type WorkspaceId, workspaceId } from '@hq/kernel'
+import type { Store } from '@hq/db'
+import { createZeroStore, type WorkspaceSession } from '@hq/db/zero-store'
+import { chatId, type IdGenerator, type MemberId, type WorkspaceId, workspaceId } from '@hq/kernel'
 import { createHttpLlmCredentialAdder, type ProfileCommands, profileMutators } from '@hq/profile/server'
 import type { Session } from '@hq/session'
 import { createUuidIdGenerator, type WorkspaceCommands, workspaceMutators } from '@hq/workspace/server'
+import { loadSessions, logOut, openSession, renew, signInWithPopup } from './auth.ts'
 
 const zeroCacheURL = import.meta.env.VITE_ZERO_URL ?? 'http://localhost:4848'
-type TestStack = { zeroCacheURL: string; databaseName: string }
-const testStack = import.meta.env.DEV ? (window as Window & { hqTestStack?: TestStack }).hqTestStack : undefined
+const testStack = import.meta.env.DEV
+  ? (window as Window & { hqTestStack?: { zeroCacheURL: string } }).hqTestStack
+  : undefined
 const sessionTokenByWorkspace = new Map<WorkspaceId, string>()
+const remembered = (session: WorkspaceSession) => {
+  sessionTokenByWorkspace.set(session.workspaceId, session.token)
+  return session
+}
 
-const openZeroStore = async () => {
+const openZeroStore = async (
+  memberId: MemberId,
+  sessions: readonly WorkspaceSession[],
+  defaultWorkspaceId: WorkspaceId,
+) => {
   const store = createZeroStore({
-    memberId: currentMemberId,
-    defaultWorkspaceId,
+    memberId,
+    sessions: sessions.map(remembered),
+    renew: async (workspaceId) => {
+      const session = await renew(workspaceId)
+      return session && remembered(session)
+    },
     cacheURL: testStack?.zeroCacheURL ?? zeroCacheURL,
     mutators: { ...workspaceMutators, ...conversationMutators, ...profileMutators },
     draftStorage: localStorage,
-    fetchSession: async (workspaceId) => {
-      const response = await fetch('/auth/dev-token', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ workspaceId, userId: currentMemberId, db: testStack?.databaseName }),
-      })
-      if (!response.ok) throw new Error(`The dev token for ${workspaceId} was refused with ${response.status}`)
-      const session = await response.json()
-      sessionTokenByWorkspace.set(workspaceId, session.token)
-      return session
-    },
   })
   await store.whenLoaded(defaultWorkspaceId)
   return store
@@ -67,10 +70,9 @@ const zeroWorkspaceCommands = (zeroStore: ZeroStore, idGenerator: IdGenerator) =
       'createWorkspace',
       async (input) => {
         const { id, confirmation } = await mutate(workspaceMutators.workspace.createWorkspace, input)
-        confirmation.then(
-          () => zeroStore.signIn(workspaceId(id)),
-          () => {},
-        )
+        const bearerToken = sessionTokenByWorkspace.get(input.workspaceId) ?? ''
+        const session = confirmation.then(() => openSession(workspaceId(id), bearerToken))
+        zeroStore.signInToNew(workspaceId(id), session.then(remembered))
         return id
       },
     ],
@@ -122,16 +124,26 @@ export type Application = {
   profileCommands: ProfileCommands
 }
 
-export const createApp = async (): Promise<Application> => {
-  const zeroStore = await openZeroStore()
+export const createApp = async (memberId: MemberId, sessions: readonly WorkspaceSession[]): Promise<Application> => {
+  const defaultWorkspaceId = sessions[0]?.workspaceId ?? workspaceId('')
+  const zeroStore = await openZeroStore(memberId, sessions, defaultWorkspaceId)
   const idGenerator = createUuidIdGenerator()
   return {
     store: zeroStore,
     session: {
-      memberId: currentMemberId,
+      memberId,
       defaultWorkspaceId,
-      onSignOut: zeroStore.signOut,
-      onSignIn: zeroStore.signIn,
+      signedInWorkspaceIds: zeroStore.signedInWorkspaceIds,
+      subscribe: zeroStore.subscribe,
+      signOut: async (workspaceId) => {
+        await logOut(workspaceId).catch(console.error)
+        await zeroStore.signOut(workspaceId)
+      },
+      signIn: async (workspaceId) => {
+        if ((await signInWithPopup(workspaceId)).status !== 'signed_in') return
+        const session = (await loadSessions()).sessions.find((live) => live.workspaceId === workspaceId)
+        if (session) await zeroStore.signIn(remembered(session))
+      },
     },
     workspaceCommands: zeroWorkspaceCommands(zeroStore, idGenerator),
     conversationCommands: zeroConversationCommands(zeroStore, idGenerator),

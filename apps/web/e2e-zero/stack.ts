@@ -1,6 +1,6 @@
 import { execSync } from 'node:child_process'
 import { createMockSnapshot } from '@hq/db'
-import { type Database, memberships, resetDatabase, users, workspaces } from '@hq/db/postgres'
+import { type Database, memberships, resetDatabase, sessions, users, workspaces } from '@hq/db/postgres'
 import { createTestDatabase, startZeroCache } from '@hq/db/testing'
 import { createZeroStore, type WorkspaceSession } from '@hq/db/zero-store'
 import { memberId, workspaceId } from '@hq/kernel'
@@ -11,11 +11,13 @@ export { expect } from '@playwright/test'
 
 type WorkerStack = { databaseName: string; zeroCacheURL: string; database: Database; reset: () => Promise<void> }
 
+const aliceMemberId = 'member-alice'
 const barrierMemberId = memberId('member-e2e-barrier')
 const barrierWorkspaceId = workspaceId('workspace-e2e-barrier')
 const barrierTimeoutMilliseconds = 15_000
 const maximumResetAttempts = 5
 const deadlockCode = '40P01'
+const barrierSessionMilliseconds = 24 * 60 * 60 * 1000
 
 const processTreeMemoryMegabytes = (rootProcessId: number) => {
   const processes = execSync('ps -axo pid=,ppid=,rss=')
@@ -34,7 +36,11 @@ const processTreeMemoryMegabytes = (rootProcessId: number) => {
   return residentKilobytes / 1024
 }
 
-export const test = base.extend<{ resetStack: undefined }, { workerStack: WorkerStack }>({
+type TestOptions = { signedInAs: string | null; tokenSeconds: number | undefined; resetStack: undefined }
+
+export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
+  signedInAs: [aliceMemberId, { option: true }],
+  tokenSeconds: [undefined, { option: true }],
   workerStack: [
     async ({ browserName: _ }, use, workerInfo) => {
       const index = workerInfo.parallelIndex
@@ -43,6 +49,7 @@ export const test = base.extend<{ resetStack: undefined }, { workerStack: Worker
       await releaseServerDatabase()
       const testDatabase = await createTestDatabase(templateDatabaseName, workerDatabaseNameOf(index))
       let epochNumber = 0
+      let barrierSessionId: string | undefined
       const writeReset = async () => {
         const epoch = `epoch-${workerInfo.workerIndex}-${++epochNumber}`
         const reset = () =>
@@ -60,6 +67,14 @@ export const test = base.extend<{ resetStack: undefined }, { workerStack: Worker
               role: 'member',
               displayName: 'Barrier',
             })
+            if (barrierSessionId)
+              await transaction.insert(sessions).values({
+                workspaceId: barrierWorkspaceId,
+                id: barrierSessionId,
+                userId: barrierMemberId,
+                createdAt: new Date(),
+                expiresAt: new Date(Date.now() + barrierSessionMilliseconds),
+              })
           })
         for (let attempt = 1; ; attempt++)
           try {
@@ -80,18 +95,22 @@ export const test = base.extend<{ resetStack: undefined }, { workerStack: Worker
         appId: `hqe2e${index}`,
         serverUrl,
       })
+      const barrierSession = async () => {
+        const query = new URLSearchParams({
+          db: testDatabase.name,
+          user: barrierMemberId,
+          workspace: barrierWorkspaceId,
+        })
+        const session = await (await fetch(`${serverUrl}/test/token?${query}`, { method: 'POST' })).json()
+        barrierSessionId = session.sessionId
+        return session as WorkspaceSession
+      }
       const barrier = createZeroStore({
         memberId: barrierMemberId,
-        defaultWorkspaceId: barrierWorkspaceId,
+        sessions: [await barrierSession()],
+        renew: barrierSession,
         cacheURL: zeroCache.url,
         kvStore: 'mem',
-        fetchSession: async (workspace) => {
-          const response = await fetch(`${serverUrl}/auth/dev-token`, {
-            method: 'POST',
-            body: JSON.stringify({ workspaceId: workspace, userId: barrierMemberId, db: testDatabase.name }),
-          })
-          return (await response.json()) as WorkspaceSession
-        },
       })
       const waitForEpoch = (epoch: string) =>
         new Promise<void>((resolve, reject) => {
@@ -127,14 +146,18 @@ export const test = base.extend<{ resetStack: undefined }, { workerStack: Worker
     { scope: 'worker', timeout: 60_000 },
   ],
   resetStack: [
-    async ({ workerStack, context }, use) => {
+    async ({ workerStack, context, signedInAs, tokenSeconds }, use) => {
       await context.addInitScript(
         (testStack) => {
           Object.assign(window, { hqTestStack: testStack })
         },
-        { zeroCacheURL: workerStack.zeroCacheURL, databaseName: workerStack.databaseName },
+        { zeroCacheURL: workerStack.zeroCacheURL },
       )
       await workerStack.reset()
+      const signIn = { db: workerStack.databaseName, user: signedInAs, tokenSeconds: tokenSeconds?.toString() }
+      const query = new URLSearchParams(Object.entries(signIn).filter((entry): entry is [string, string] => !!entry[1]))
+      const signedIn = await context.request.post(`${serverUrl}/test/sign-in?${query}`)
+      if (!signedIn.ok()) throw new Error(`The test sign-in failed with ${signedIn.status()}`)
       await use(undefined)
     },
     { auto: true },

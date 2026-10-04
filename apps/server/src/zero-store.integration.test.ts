@@ -1,17 +1,16 @@
 import { afterAll, expect, test } from 'bun:test'
 import { createMockSnapshot, type Snapshot } from '@hq/db'
 import { createTestDatabase, startZeroCache } from '@hq/db/testing'
-import { createZeroStore, type WorkspaceSession } from '@hq/db/zero-store'
+import { createZeroStore } from '@hq/db/zero-store'
 import { type MemberId, memberId, type WorkspaceId, workspaceId } from '@hq/kernel'
 import { workspaceMutators } from '@hq/workspace/server'
 import { createApp } from './app.ts'
+import { issueSessionToken } from './auth/session-tokens.ts'
+import { openSessions } from './auth/sessions.ts'
+import { testAuthSettings } from './testing.ts'
 
 const testDatabase = await createTestDatabase()
-const app = createApp({
-  database: testDatabase.database,
-  tokenSecret: 'zero-store-test-secret',
-  isDevAuthEnabled: true,
-})
+const app = createApp({ database: testDatabase.database, ...testAuthSettings })
 const server = Bun.serve({ port: 0, fetch: app.fetch })
 const zeroCache = await startZeroCache({
   databaseName: testDatabase.name,
@@ -36,20 +35,24 @@ const globex = workspaceId('workspace-globex')
 const alice = memberId('member-alice')
 const bob = memberId('member-bob')
 
+const sessionsOf = async (viewerId: MemberId, workspaceIds: readonly WorkspaceId[]) =>
+  Promise.all(
+    (await openSessions(testDatabase.database, viewerId))
+      .filter((session) => workspaceIds.includes(workspaceId(session.workspaceId)))
+      .map(async (session) => {
+        const issued = await issueSessionToken(testAuthSettings.tokenSecret, session)
+        return { ...issued, workspaceId: workspaceId(issued.workspaceId) }
+      }),
+  )
+
 const openStore = async (viewerId: MemberId, workspaceIds: readonly WorkspaceId[]) => {
   const store = createZeroStore({
     memberId: viewerId,
-    defaultWorkspaceId: acme,
+    sessions: await sessionsOf(viewerId, workspaceIds),
+    renew: async (workspace) => (await sessionsOf(viewerId, [workspace]))[0],
     cacheURL: zeroCache.url,
     kvStore: 'mem',
     mutators: workspaceMutators,
-    fetchSession: async (workspace) => {
-      const response = await app.request('/auth/dev-token', {
-        method: 'POST',
-        body: JSON.stringify({ workspaceId: workspace, userId: viewerId }),
-      })
-      return (await response.json()) as WorkspaceSession
-    },
   })
   openedStores.push(store)
   await Promise.all(workspaceIds.map((workspace) => store.whenLoaded(workspace)))
@@ -118,10 +121,13 @@ test.each([
 test('signing out of a workspace removes its rows but keeps it listed, signing in brings them back', async () => {
   const store = await openStore(alice, [acme, globex])
   await store.signOut(globex)
+  expect(store.signedInWorkspaceIds()).toEqual(new Set([acme]))
   expect(store.read().chats.filter((chat) => chat.workspaceId === globex)).toEqual([])
   expect(store.read().workspaces.map((workspace) => workspace.name)).toEqual(['Acme', 'Globex'])
-  store.signIn(globex)
-  await store.whenLoaded(globex)
+  const [globexSession] = await sessionsOf(alice, [globex])
+  if (!globexSession) throw new Error('Alice has no Globex session')
+  await store.signIn(globexSession)
+  expect(store.signedInWorkspaceIds()).toEqual(new Set([acme, globex]))
   expect(store.read().chats.filter((chat) => chat.workspaceId === globex).length).toBe(2)
 })
 

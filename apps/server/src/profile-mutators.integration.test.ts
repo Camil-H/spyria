@@ -5,12 +5,12 @@ import { queries } from '@hq/db/zero-queries'
 import { memberId, workspaceId } from '@hq/kernel'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { createApp } from './app.ts'
-import { createSessionTokens } from './session-tokens.ts'
+import { issueSessionToken } from './auth/session-tokens.ts'
+import { sessionTokenOf, testAuthSettings } from './testing.ts'
 
 const testDatabase = await createTestDatabase()
 const { database } = testDatabase
-const tokenSecret = 'profile-test-secret'
-const app = createApp({ database, tokenSecret, isDevAuthEnabled: true })
+const app = createApp({ database, ...testAuthSettings })
 const server = Bun.serve({ port: 0, fetch: app.fetch })
 const appId = 'hqprofiletest'
 const zeroCache = await startZeroCache({
@@ -39,13 +39,7 @@ const succeeded = {}
 const failedWith = (message: string) => ({ error: 'app', message })
 const secretValue = 'sk-integration-secret-4321'
 
-const tokenOf = async (workspaceId: string, userId: string) => {
-  const response = await app.request('/auth/dev-token', {
-    method: 'POST',
-    body: JSON.stringify({ workspaceId, userId }),
-  })
-  return ((await response.json()) as { token: string }).token
-}
+const tokenOf = (workspaceId: string, userId: string) => sessionTokenOf(database, workspaceId, userId)
 
 const resultOf = async (
   { workspaceId, userId }: { workspaceId: string; userId: string },
@@ -101,10 +95,11 @@ const visibleWorkspaceConnections = (workspace: string, user: string) =>
 
 test('the credential endpoint refuses a missing, invalid or non-member token', async () => {
   const body = JSON.stringify({ provider: 'OpenAI', secret: secretValue })
-  const nonMemberToken = await createSessionTokens(tokenSecret, async () => 'member').issue({
-    userId: memberId(bob),
-    workspaceId: workspaceId(globex),
+  const { token: nonMemberToken } = await issueSessionToken(testAuthSettings.tokenSecret, {
+    userId: bob,
+    workspaceId: globex,
     role: 'member',
+    sessionId: 'no-session',
   })
   expect((await postCredential(undefined, body)).status).toBe(401)
   expect((await postCredential('Bearer not-a-token', body)).status).toBe(401)

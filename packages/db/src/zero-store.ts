@@ -1,19 +1,18 @@
 import type { MemberId, WorkspaceId } from '@hq/kernel'
 import { type AnyMutatorRegistry, type MutatorResultDetails, type Row, Zero } from '@rocicorp/zero'
-import { toolCatalog } from './mock-data.ts'
-import type { DraftRow, Snapshot } from './schema.ts'
+import { type DraftRow, type Snapshot, toolCatalog } from './schema.ts'
 import { createStore } from './store.ts'
 import { type Schema, schema } from './zero.ts'
 import { queries, type ZeroContext } from './zero-queries.ts'
 
 type TableName = keyof Schema['tables']
 export type ZeroRows = { [Table in TableName]: readonly Row<Schema['tables'][Table]>[] }
-export type WorkspaceSession = { token: string; role: ZeroContext['role'] }
+export type WorkspaceSession = { workspaceId: WorkspaceId; token: string; role: ZeroContext['role']; expiresAt: number }
 export type ZeroStoreOptions = {
   memberId: MemberId
-  defaultWorkspaceId: WorkspaceId
+  sessions: readonly WorkspaceSession[]
+  renew: (workspaceId: WorkspaceId) => Promise<WorkspaceSession | undefined>
   cacheURL: string
-  fetchSession: (workspaceId: WorkspaceId) => Promise<WorkspaceSession>
   kvStore?: 'mem' | 'idb'
   mutators?: AnyMutatorRegistry
   draftStorage?: Storage
@@ -38,6 +37,8 @@ const uniqueBy = <Row>(rows: readonly Row[], keyOf: (row: Row) => string) => [
   ...new Map(rows.map((row) => [keyOf(row), row])).values(),
 ]
 const draftPersistDelayMilliseconds = 300
+const renewalLeadMilliseconds = 60_000
+const renewalRetryMilliseconds = 5_000
 
 export const snapshotFromZeroRows = (
   viewerId: MemberId,
@@ -111,9 +112,9 @@ const failureOf = (details: MutatorResultDetails) =>
 
 export const createZeroStore = ({
   memberId,
-  defaultWorkspaceId,
+  sessions,
+  renew,
   cacheURL,
-  fetchSession,
   kvStore,
   mutators,
   draftStorage,
@@ -133,10 +134,10 @@ export const createZeroStore = ({
   }
   const store = createStore(snapshotFromZeroRows(memberId, [], drafts))
   const rowsByWorkspace = new Map<WorkspaceId, Partial<ZeroRows>>()
-  const zeroByWorkspace = new Map<WorkspaceId, Promise<Zero | undefined>>()
+  const zeroByWorkspace = new Map<WorkspaceId, Zero>()
   const loadedByWorkspace = new Map<WorkspaceId, PromiseWithResolvers<void>>()
-  const signedOutWorkspaceIds = new Set<WorkspaceId>()
-  let isClosed = false
+  const renewalTimerByWorkspace = new Map<WorkspaceId, ReturnType<typeof setTimeout>>()
+  let signedInWorkspaceIds: ReadonlySet<WorkspaceId> = new Set(sessions.map((session) => session.workspaceId))
   let isPublishScheduled = false
   const publish = () => {
     if (isPublishScheduled) return
@@ -151,7 +152,25 @@ export const createZeroStore = ({
     loadedByWorkspace.set(workspaceId, loaded)
     return loaded
   }
-  const connect = (workspaceId: WorkspaceId, { token, role }: WorkspaceSession) => {
+  const renewLater = (workspaceId: WorkspaceId, delayMilliseconds: number) => {
+    clearTimeout(renewalTimerByWorkspace.get(workspaceId))
+    renewalTimerByWorkspace.set(workspaceId, setTimeout(renewNow, delayMilliseconds, workspaceId))
+  }
+  const scheduleRenewal = ({ workspaceId, expiresAt }: WorkspaceSession) => {
+    const remainingMilliseconds = expiresAt - Date.now()
+    renewLater(workspaceId, Math.max(remainingMilliseconds - renewalLeadMilliseconds, remainingMilliseconds / 2))
+  }
+  const renewNow = async (workspaceId: WorkspaceId) => {
+    const zero = zeroByWorkspace.get(workspaceId)
+    const renewed = await renew(workspaceId).catch(() => null)
+    if (!zero || zeroByWorkspace.get(workspaceId) !== zero) return
+    if (renewed === null) return renewLater(workspaceId, renewalRetryMilliseconds)
+    if (renewed === undefined) return signOut(workspaceId)
+    scheduleRenewal(renewed)
+    await zero.connection.connect({ auth: renewed.token })
+  }
+  const connect = (session: WorkspaceSession) => {
+    const { workspaceId, token, role } = session
     const zero = new Zero({
       cacheURL,
       schema,
@@ -165,6 +184,7 @@ export const createZeroStore = ({
     const rows: Partial<ZeroRows> = {}
     const completeTables = new Set<TableName>()
     rowsByWorkspace.set(workspaceId, rows)
+    zeroByWorkspace.set(workspaceId, zero)
     for (const table of tableNames)
       zero
         .materialize((queries[table] as () => Parameters<typeof zero.materialize>[0])())
@@ -172,34 +192,32 @@ export const createZeroStore = ({
           if (rowsByWorkspace.get(workspaceId) !== rows) return
           rows[table] = (data as readonly object[]).map((row) => Object.fromEntries(Object.entries(row))) as never
           publish()
-          if (table === 'workspaces')
-            for (const workspace of data as ZeroRows['workspaces']) open(workspace.workspaceId as WorkspaceId)
           if (result === 'complete') completeTables.add(table)
           if (completeTables.size === tableNames.length) loadedOf(workspaceId).resolve()
         })
-    return zero
+    zero.connection.state.subscribe((state) => {
+      if (state.name === 'needs-auth') renewNow(workspaceId)
+    })
+    scheduleRenewal(session)
   }
-  const open = (workspaceId: WorkspaceId) => {
-    if (isClosed || zeroByWorkspace.has(workspaceId) || signedOutWorkspaceIds.has(workspaceId)) return
-    const opening: Promise<Zero | undefined> = fetchSession(workspaceId).then(
-      (session) => (zeroByWorkspace.get(workspaceId) === opening ? connect(workspaceId, session) : undefined),
-      (error) => {
-        zeroByWorkspace.delete(workspaceId)
-        console.error(error)
-        return undefined
-      },
-    )
-    zeroByWorkspace.set(workspaceId, opening)
-  }
-  const close = async (workspaceId: WorkspaceId) => {
+  const close = (workspaceId: WorkspaceId) => {
     const zero = zeroByWorkspace.get(workspaceId)
+    clearTimeout(renewalTimerByWorkspace.get(workspaceId))
     zeroByWorkspace.delete(workspaceId)
     loadedByWorkspace.delete(workspaceId)
+    signedInWorkspaceIds = new Set([...signedInWorkspaceIds].filter((signedInId) => signedInId !== workspaceId))
     rowsByWorkspace.set(workspaceId, { workspaces: rowsByWorkspace.get(workspaceId)?.workspaces ?? [] })
     publish()
     return zero
   }
-  open(defaultWorkspaceId)
+  const markSignedIn = (workspaceId: WorkspaceId) => {
+    signedInWorkspaceIds = new Set([...signedInWorkspaceIds, workspaceId])
+    publish()
+  }
+  const signOut = async (workspaceId: WorkspaceId) => {
+    await close(workspaceId)?.delete()
+  }
+  for (const session of sessions) connect(session)
   return {
     read: store.read,
     subscribe: store.subscribe,
@@ -220,7 +238,7 @@ export const createZeroStore = ({
     whenLoaded: (workspaceId: WorkspaceId) => loadedOf(workspaceId).promise,
     mutate: async (workspaceId: WorkspaceId, request: Parameters<Zero['mutate']>[0]) => {
       await loadedOf(workspaceId).promise
-      const zero = await zeroByWorkspace.get(workspaceId)
+      const zero = zeroByWorkspace.get(workspaceId)
       if (!zero) throw new Error(`Workspace ${workspaceId} is not open`)
       const result = zero.mutate(request)
       const clientFailure = failureOf(await result.client)
@@ -232,19 +250,20 @@ export const createZeroStore = ({
       confirmation.catch(console.error)
       return { confirmation }
     },
-    signOut: async (workspaceId: WorkspaceId) => {
-      signedOutWorkspaceIds.add(workspaceId)
-      await (await close(workspaceId))?.delete()
+    signedInWorkspaceIds: () => signedInWorkspaceIds,
+    signOut,
+    signIn: async (session: WorkspaceSession) => {
+      if (!zeroByWorkspace.has(session.workspaceId)) connect(session)
+      await loadedOf(session.workspaceId).promise
+      markSignedIn(session.workspaceId)
     },
-    signIn: async (workspaceId: WorkspaceId) => {
-      signedOutWorkspaceIds.delete(workspaceId)
-      await zeroByWorkspace.get(workspaceId)
-      open(workspaceId)
-      await loadedOf(workspaceId).promise
+    signInToNew: (workspaceId: WorkspaceId, session: Promise<WorkspaceSession>) => {
+      markSignedIn(workspaceId)
+      session.then(connect, (error) => {
+        close(workspaceId)
+        console.error(error)
+      })
     },
-    close: () => {
-      isClosed = true
-      return Promise.all([...zeroByWorkspace.keys()].map(async (workspaceId) => (await close(workspaceId))?.close()))
-    },
+    close: () => Promise.all([...zeroByWorkspace.keys()].map((workspaceId) => close(workspaceId)?.close())),
   }
 }
