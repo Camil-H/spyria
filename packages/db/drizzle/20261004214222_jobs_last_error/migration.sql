@@ -1,0 +1,2 @@
+ALTER TABLE "jobs" ADD COLUMN "last_error" text;--> statement-breakpoint
+CREATE UNIQUE INDEX "jobs_one_queued_session_sweep" ON "jobs" ("workspace_id") WHERE "type" = 'sessions.sweep' and "state" = 'queued';

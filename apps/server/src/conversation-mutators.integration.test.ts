@@ -163,9 +163,12 @@ test('startRuntimeFromMessage creates the runtime chat and its seed message in o
     ownerUserId: alice,
   })
   expect(await messagesOf('chat-started')).toMatchObject([
-    { id: 'message-seed', seq: 1, authorId: alice, body: 'Welcome to the team!', replyToId: 'message-welcome-1' },
+    { id: 'message-seed', seq: 2, authorId: alice, body: 'Welcome to the team!', replyToId: 'message-welcome-1' },
   ])
-  expect(await eventsOf('chat-started')).toMatchObject([{ id: 'message-seed', seq: 1, type: 'message.posted' }])
+  expect(await eventsOf('chat-started')).toMatchObject([
+    { seq: 1, type: 'chat.created' },
+    { id: 'message-seed', seq: 2, type: 'message.posted' },
+  ])
   expect(await jobsOf('message-seed')).toEqual([])
 })
 

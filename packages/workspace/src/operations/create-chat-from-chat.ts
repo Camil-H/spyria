@@ -24,6 +24,6 @@ export const createChatFromChat = (
       model: defaultRuntimeModel,
       reasoningEffort: defaultReasoningEffort,
     })
-    await unitOfWork.chats.add(chat)
+    await unitOfWork.chats.record({ type: 'chat.created', chat, actorId: ownerId })
     return chat.id
   })

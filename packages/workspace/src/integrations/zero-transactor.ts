@@ -1,9 +1,10 @@
+import { appendChatEvent } from '@hq/db/events'
 import { type Chat as ChatRow, type Project as ProjectRow, zql } from '@hq/db/zero'
 import type { ZeroContext } from '@hq/db/zero-queries'
 import { type ChatId, chatId, memberId, type ProjectId, projectId, workspaceId } from '@hq/kernel'
 import type { Transaction } from '@rocicorp/zero'
 import type { Transactor, UnitOfWork } from '../contracts/transactor.ts'
-import type { Chat } from '../domain/chat.ts'
+import type { Chat, ChatChange } from '../domain/chat.ts'
 import { ChatNotFound, ForeignWorkspace, ProjectNotFound } from '../domain/errors.ts'
 import { Name } from '../domain/name.ts'
 import type { Project } from '../domain/project.ts'
@@ -26,6 +27,13 @@ const toChat = ({ createdAt, mode, ownerKind, ownerUserId, ownerServiceIdentityI
 })
 
 const chatFields = ({ ownerId, ...chat }: Chat) => chat
+
+const eventPayloadOf: Record<ChatChange['type'], (chat: Chat) => object> = {
+  'chat.created': ({ name, type, projectId }) => ({ name, type, projectId }),
+  'chat.renamed': ({ name }) => ({ name }),
+  'chat.moved': ({ projectId }) => ({ projectId }),
+  'chat.archived': () => ({}),
+}
 
 export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Transactor => {
   const createdWorkspaceIds = new Set<string>()
@@ -74,16 +82,28 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Tra
         if (!row) throw new ChatNotFound(id)
         return toChat(row)
       },
-      add: (chat) =>
-        tx.mutate.chats.insert({
-          ...chatFields(inContextWorkspace(chat)),
-          mode: null,
-          ownerKind: 'user',
-          ownerUserId: chat.ownerId,
-          ownerServiceIdentityId: null,
-          createdAt: Date.now(),
-        }),
-      save: (chat) => tx.mutate.chats.update(chatFields(inContextWorkspace(chat))),
+      record: async ({ type, chat, actorId }) => {
+        const changedAt = new Date()
+        if (type === 'chat.created')
+          await tx.mutate.chats.insert({
+            ...chatFields(inContextWorkspace(chat)),
+            mode: null,
+            ownerKind: 'user',
+            ownerUserId: chat.ownerId,
+            ownerServiceIdentityId: null,
+            createdAt: changedAt.getTime(),
+          })
+        else await tx.mutate.chats.update(chatFields(inContextWorkspace(chat)))
+        if (tx.location === 'server')
+          await appendChatEvent(tx, {
+            workspaceId: chat.workspaceId,
+            chatId: chat.id,
+            type,
+            actor: actorId,
+            payload: eventPayloadOf[type](chat),
+            createdAt: changedAt,
+          })
+      },
       listByProject: async (id) =>
         (await tx.run(zql.chats.where('workspaceId', context.workspaceId).where('projectId', id))).map(toChat),
     },

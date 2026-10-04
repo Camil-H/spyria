@@ -35,6 +35,9 @@ The app signs in through Dex in a popup (allow popups for `localhost:5173`). The
 bun run dev           # stack, server and app
 bun run db:migrate    # after pulling new migrations
 bun run db:reset      # wipe the data and seed again
+bun run db:rebuild-messages [--chat <id>]   # rebuild the messages projection from the events
+bun run jobs:failed                         # list dead jobs with their last error
+bun run jobs:retry <id>|--all               # requeue dead jobs with their attempts reset
 bun run stack:down    # stop the containers (data is kept in the volume)
 ```
 

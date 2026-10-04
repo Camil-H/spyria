@@ -23,6 +23,6 @@ type WorkspaceOperations = typeof workspaceOperations
 
 export type WorkspaceCommands = {
   [Name in keyof WorkspaceOperations]: (
-    input: Parameters<WorkspaceOperations[Name]>[1] & { workspaceId: WorkspaceId },
+    input: Omit<Parameters<WorkspaceOperations[Name]>[1], 'actorId'> & { workspaceId: WorkspaceId },
   ) => ReturnType<WorkspaceOperations[Name]>
 }

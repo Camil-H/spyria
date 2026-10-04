@@ -1,5 +1,5 @@
 import type { ChatId, ProjectId } from '@hq/kernel'
-import type { Chat } from '../domain/chat.ts'
+import type { Chat, ChatChange } from '../domain/chat.ts'
 import type { Project } from '../domain/project.ts'
 import type { Membership, Workspace } from '../domain/workspace.ts'
 
@@ -11,8 +11,7 @@ export type ProjectRepository = {
 
 export type ChatRepository = {
   get(chatId: ChatId): Promise<Chat>
-  add(chat: Chat): Promise<void>
-  save(chat: Chat): Promise<void>
+  record(change: ChatChange): Promise<void>
   listByProject(projectId: ProjectId): Promise<Chat[]>
 }
 

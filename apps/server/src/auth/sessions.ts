@@ -1,4 +1,6 @@
 import type { Database } from '@hq/db/postgres'
+import type { WorkspaceId } from '@hq/kernel'
+import type { ServerTransaction } from '@rocicorp/zero'
 import type { FindMember, SessionClaims } from './session-tokens.ts'
 
 export type LiveSession = SessionClaims & { createdAt: Date }
@@ -40,3 +42,19 @@ export const findMemberIn =
       from memberships where workspace_id = ${workspaceId} and user_id = ${userId}`
     return member
   }
+
+const enqueueSessionSweepStatement = `
+  insert into jobs (workspace_id, id, type, payload, run_at, attempts, state)
+  select workspace_id, gen_random_uuid()::text, 'sessions.sweep', '{}'::jsonb, now() + $2::interval, 0, 'queued'
+  from workspaces where workspace_id = coalesce($1::text, workspace_id)
+  on conflict do nothing`
+
+export const enqueueSessionSweeps = (database: Database) =>
+  database.$client.unsafe(enqueueSessionSweepStatement, [null, '0 seconds'])
+
+export const sessionJobs = {
+  'sessions.sweep': async (tx: ServerTransaction, workspaceId: WorkspaceId) => {
+    await tx.dbTransaction.query('delete from sessions where workspace_id = $1 and expires_at < now()', [workspaceId])
+    await tx.dbTransaction.query(enqueueSessionSweepStatement, [workspaceId, '1 day'])
+  },
+}

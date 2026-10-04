@@ -1,3 +1,4 @@
+import { appendChatEvent } from '@hq/db/events'
 import { type Message as MessageRow, zql } from '@hq/db/zero'
 import { type ChatId, chatId, type MessageId, memberId, messageId, type WorkspaceId, workspaceId } from '@hq/kernel'
 import type { Transaction } from '@rocicorp/zero'
@@ -23,16 +24,17 @@ const toMessage = ({ seq, ...row }: MessageRow): Message => ({
   replyToId: row.replyToId === null ? null : messageId(row.replyToId),
 })
 
-const eventOf = ({ type, message }: MessageChange) =>
-  type === 'message.posted' || type === 'message.replied'
+const eventOf = ({ type, message }: MessageChange) => ({
+  createdAt: message.deletedAt ?? message.editedAt ?? message.createdAt,
+  ...(type === 'message.posted' || type === 'message.replied'
     ? {
         id: message.id,
         payload: { kind: message.kind, body: message.body, detail: message.detail, replyToId: message.replyToId },
       }
     : {
-        id: crypto.randomUUID(),
         payload: type === 'message.edited' ? { messageId: message.id, body: message.body } : { messageId: message.id },
-      }
+      }),
+})
 
 export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: WorkspaceId): ConversationTransactor => {
   const serverQuery = async (statement: string, parameters: unknown[]) =>
@@ -41,18 +43,16 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
     tx.run(zql.messages.where('workspaceId', contextWorkspaceId).where('id', id).one())
   const messagesInChat = (id: ChatId) =>
     zql.messages.where('workspaceId', contextWorkspaceId).where('chatId', id).orderBy('seq', 'asc')
-  const nextSeqLockingChat = async (id: ChatId) => {
+  const appendEvent = async (change: MessageChange) => {
+    const { chatId: id, workspaceId } = change.message
     if (tx.location === 'client') return ((await tx.run(messagesInChat(id).orderBy('seq', 'desc').one()))?.seq ?? 0) + 1
-    const lockedChats = await serverQuery('select 1 from chats where workspace_id = $1 and id = $2 for update', [
-      contextWorkspaceId,
-      id,
-    ])
-    if (lockedChats.length === 0) throw new ChatNotFound(id)
-    const [next] = await serverQuery(
-      'select coalesce(max(seq), 0) + 1 as seq from events where workspace_id = $1 and chat_id = $2',
-      [contextWorkspaceId, id],
-    )
-    return Number((next as { seq: number }).seq)
+    return appendChatEvent(tx, {
+      workspaceId,
+      chatId: id,
+      type: change.type,
+      actor: change.actorId,
+      ...eventOf(change),
+    })
   }
   const inContextWorkspace = (message: Message) => {
     if (message.workspaceId !== contextWorkspaceId) throw new ForeignWorkspace()
@@ -66,10 +66,9 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         return toMessage(row)
       },
       record: async (change) => {
-        const { type, actorId } = change
         const message = inContextWorkspace(change.message)
-        const seq = await nextSeqLockingChat(message.chatId)
-        if (type === 'message.posted' || type === 'message.replied')
+        const seq = await appendEvent(change)
+        if (change.type === 'message.posted' || change.type === 'message.replied')
           await tx.mutate.messages.insert({
             ...message,
             seq,
@@ -85,11 +84,6 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
             editedAt: timeOrNull(message.editedAt),
             deletedAt: timeOrNull(message.deletedAt),
           })
-        const event = eventOf(change)
-        await serverQuery(
-          'insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at) values ($1, $2, $3, $4, $5, $6, $7::jsonb, now())',
-          [message.workspaceId, message.chatId, event.id, seq, type, actorId, JSON.stringify(event.payload)],
-        )
       },
       idsInChat: async (id) => (await tx.run(messagesInChat(id))).map((row) => messageId(row.id)),
     },

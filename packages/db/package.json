@@ -4,6 +4,10 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./events": {
+      "browser": "./src/events.browser.ts",
+      "default": "./src/events.ts"
+    },
     "./react": "./src/useQuery.tsx",
     "./postgres": "./src/postgres.ts",
     "./testing": "./src/postgres/test-database.ts",

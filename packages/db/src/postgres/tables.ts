@@ -12,6 +12,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core'
 import { defineRelations } from 'drizzle-orm/relations'
 import type { DiffLine } from '../schema.ts'
@@ -273,8 +274,15 @@ export const jobs = table(
     runAt: instant().notNull(),
     attempts: integer().notNull(),
     state: text().$type<'queued' | 'running' | 'done' | 'failed'>().notNull(),
+    lastError: text(),
   },
-  (table) => [primaryKey({ columns: [table.workspaceId, table.id] }), index().on(table.state, table.runAt)],
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.id] }),
+    index().on(table.state, table.runAt),
+    uniqueIndex('jobs_one_queued_session_sweep')
+      .on(table.workspaceId)
+      .where(sql`${table.type} = 'sessions.sweep' and ${table.state} = 'queued'`),
+  ],
 )
 
 export const files = table(

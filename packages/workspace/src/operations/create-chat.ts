@@ -34,6 +34,6 @@ export const createChat = (
       archived: false,
     }
     const project = projectId ? await unitOfWork.projects.get(projectId) : null
-    await unitOfWork.chats.add(movedChat(looseChat, project))
+    await unitOfWork.chats.record({ type: 'chat.created', chat: movedChat(looseChat, project), actorId: input.ownerId })
     return looseChat.id
   })

@@ -66,17 +66,17 @@ export const workspaceMutators = defineMutators({
     ),
     moveChat: defineMutator(
       z.extend(workspaceArguments, { chatId: chatIdArgument, projectId: z.nullable(projectIdArgument) }),
-      ({ tx, ctx, args }) => moveChat(dependenciesOf(tx, ctx, args), args),
+      ({ tx, ctx, args }) => moveChat(dependenciesOf(tx, ctx, args), { ...args, actorId: ctx.userId }),
     ),
     archiveChat: defineMutator(z.extend(workspaceArguments, { chatId: chatIdArgument }), ({ tx, ctx, args }) =>
-      archiveChat(dependenciesOf(tx, ctx, args), args),
+      archiveChat(dependenciesOf(tx, ctx, args), { ...args, actorId: ctx.userId }),
     ),
     archiveProject: defineMutator(
       z.extend(workspaceArguments, { projectId: projectIdArgument, chatsPolicy: z.enum(['archive', 'release']) }),
-      ({ tx, ctx, args }) => archiveProject(dependenciesOf(tx, ctx, args), args),
+      ({ tx, ctx, args }) => archiveProject(dependenciesOf(tx, ctx, args), { ...args, actorId: ctx.userId }),
     ),
     renameChat: defineMutator(z.extend(workspaceArguments, { chatId: chatIdArgument, name }), ({ tx, ctx, args }) =>
-      renameChat(dependenciesOf(tx, ctx, args), args),
+      renameChat(dependenciesOf(tx, ctx, args), { ...args, actorId: ctx.userId }),
     ),
     renameProject: defineMutator(
       z.extend(workspaceArguments, { projectId: projectIdArgument, name }),
