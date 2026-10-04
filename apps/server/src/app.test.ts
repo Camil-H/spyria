@@ -1,6 +1,8 @@
 import { expect, test } from 'bun:test'
 import { createDatabase } from '@hq/db/postgres'
+import { memberId, workspaceId } from '@hq/kernel'
 import { createApp } from './app.ts'
+import { createSessionTokens } from './session-tokens.ts'
 
 const unreachableDatabase = createDatabase('postgres://unused:unused@127.0.0.1:1/unused')
 const appWith = (isDevAuthEnabled: boolean) =>
@@ -30,6 +32,30 @@ test('the dev token endpoint is mounted only when dev auth is enabled', async ()
 test.each(['/api/query', '/api/mutate'])('%s refuses a request without a bearer token', async (path) => {
   const response = await appWith(true).request(path, { method: 'POST', body: '[]' })
   expect(response.status).toBe(401)
+})
+
+test('refuses a token with a database claim when dev auth is disabled, without opening that database', async () => {
+  const openedDatabaseNames: string[] = []
+  const app = createApp({
+    database: unreachableDatabase,
+    tokenSecret: 'unit-test-secret',
+    isDevAuthEnabled: false,
+    databaseByName: (databaseName) => {
+      openedDatabaseNames.push(databaseName)
+      return unreachableDatabase
+    },
+  })
+  const token = await createSessionTokens('unit-test-secret', async () => 'admin').issue(
+    { userId: memberId('member-alice'), workspaceId: workspaceId('workspace-acme'), role: 'admin' },
+    'hq_other',
+  )
+  const response = await app.request('/api/query', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}` },
+    body: '[]',
+  })
+  expect(response.status).toBe(403)
+  expect(openedDatabaseNames).toEqual([])
 })
 
 test('loads every context server entry without React or client code', async () => {

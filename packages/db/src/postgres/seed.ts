@@ -140,12 +140,17 @@ const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
 export const seedDatabase = (database: Database, snapshot = createMockSnapshot()) =>
   database.transaction((transaction) => insertSnapshot(transaction, snapshot))
 
-export const resetDatabase = (database: Database, snapshot = createMockSnapshot()) =>
+export const resetDatabase = (
+  database: Database,
+  snapshot = createMockSnapshot(),
+  afterSeed: (transaction: Transaction) => Promise<unknown> = async () => {},
+) =>
   database.transaction(async (transaction) => {
     await transaction.execute(
       sql.raw(`truncate ${allTables.map((table) => `"${getTableName(table)}"`).join(', ')} restart identity cascade`),
     )
     await insertSnapshot(transaction, snapshot)
+    await afterSeed(transaction)
   })
 
 if (import.meta.main) {

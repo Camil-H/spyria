@@ -211,3 +211,37 @@ test.each(['/api/query', '/api/mutate'])('%s refuses with 403 a valid token with
   })
   expect(response.status).toBe(403)
 })
+
+test('with dev auth, the database claim of a token selects the database the server reads', async () => {
+  const otherDatabase = await createTestDatabase()
+  try {
+    await otherDatabase.database.$client`insert into users (id, email) values ('member-dana', 'dana@example.com')`
+    await otherDatabase.database.$client`
+      insert into memberships (workspace_id, user_id, role, display_name)
+      values (${acme}, 'member-dana', 'member', 'Dana')`
+    const multiDatabaseApp = createApp({
+      database: testDatabase.database,
+      tokenSecret,
+      isDevAuthEnabled: true,
+      databaseByName: () => otherDatabase.database,
+    })
+    const requestDevToken = (databaseName?: string) =>
+      multiDatabaseApp.request('/auth/dev-token', {
+        method: 'POST',
+        body: JSON.stringify({ workspaceId: acme, userId: 'member-dana', db: databaseName }),
+      })
+    expect((await requestDevToken()).status).toBe(403)
+    const issued = (await (await requestDevToken(otherDatabase.name)).json()) as { token: string; role: string }
+    expect(issued.role).toBe('member')
+    const queryWith = (server: typeof app) =>
+      server.request('/api/query', {
+        method: 'POST',
+        headers: { authorization: `Bearer ${issued.token}` },
+        body: JSON.stringify(['transform', []]),
+      })
+    expect((await queryWith(multiDatabaseApp)).status).toBe(200)
+    expect((await queryWith(app)).status).toBe(403)
+  } finally {
+    await otherDatabase.drop()
+  }
+})

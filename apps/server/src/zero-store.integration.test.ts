@@ -1,0 +1,124 @@
+import { afterAll, expect, test } from 'bun:test'
+import { createMockSnapshot, type Snapshot } from '@hq/db'
+import { createTestDatabase, startZeroCache } from '@hq/db/testing'
+import { createZeroStore, type WorkspaceSession } from '@hq/db/zero-store'
+import { type MemberId, memberId, type WorkspaceId, workspaceId } from '@hq/kernel'
+import { createApp } from './app.ts'
+
+const testDatabase = await createTestDatabase()
+const app = createApp({
+  database: testDatabase.database,
+  tokenSecret: 'zero-store-test-secret',
+  isDevAuthEnabled: true,
+})
+const server = Bun.serve({ port: 0, fetch: app.fetch })
+const zeroCache = await startZeroCache({
+  databaseName: testDatabase.name,
+  port: 4890,
+  appId: 'hqstoretest',
+  serverUrl: server.url.origin,
+}).catch(async (error) => {
+  await server.stop(true)
+  await testDatabase.drop()
+  throw error
+})
+const openedStores: ReturnType<typeof createZeroStore>[] = []
+afterAll(async () => {
+  await Promise.all(openedStores.map((store) => store.close()))
+  await zeroCache.stop()
+  await server.stop(true)
+  await testDatabase.drop()
+})
+
+const acme = workspaceId('workspace-acme')
+const globex = workspaceId('workspace-globex')
+const alice = memberId('member-alice')
+const bob = memberId('member-bob')
+
+const openStore = async (viewerId: MemberId, workspaceIds: readonly WorkspaceId[]) => {
+  const store = createZeroStore({
+    memberId: viewerId,
+    defaultWorkspaceId: acme,
+    cacheURL: zeroCache.url,
+    kvStore: 'mem',
+    fetchSession: async (workspace) => {
+      const response = await app.request('/auth/dev-token', {
+        method: 'POST',
+        body: JSON.stringify({ workspaceId: workspace, userId: viewerId }),
+      })
+      return (await response.json()) as WorkspaceSession
+    },
+  })
+  openedStores.push(store)
+  await Promise.all(workspaceIds.map((workspace) => store.whenLoaded(workspace)))
+  return store
+}
+
+const collectionsInStoredOrder = ['messages', 'terminalLines', 'planSteps', 'workspaceConnections', 'toolConnections']
+
+const visibleTo = (snapshot: Snapshot, viewerId: MemberId, workspaceIds: readonly WorkspaceId[]): Snapshot => {
+  const inWorkspaces = <Row extends { workspaceId: WorkspaceId }>(rows: readonly Row[]) =>
+    rows.filter((row) => workspaceIds.includes(row.workspaceId))
+  const ownedByViewer = <Row extends { workspaceId: WorkspaceId; memberId: MemberId }>(rows: readonly Row[]) =>
+    inWorkspaces(rows).filter((row) => row.memberId === viewerId)
+  const memberships = inWorkspaces(snapshot.memberships)
+  return {
+    ...snapshot,
+    workspaces: snapshot.workspaces.filter((workspace) => workspaceIds.includes(workspace.id)),
+    members: snapshot.members.filter((member) => memberships.some((membership) => membership.memberId === member.id)),
+    memberships,
+    projects: inWorkspaces(snapshot.projects),
+    chats: inWorkspaces(snapshot.chats),
+    messages: inWorkspaces(snapshot.messages),
+    files: inWorkspaces(snapshot.files),
+    changes: inWorkspaces(snapshot.changes),
+    terminalLines: inWorkspaces(snapshot.terminalLines),
+    planSteps: inWorkspaces(snapshot.planSteps),
+    commits: inWorkspaces(snapshot.commits),
+    browserPages: inWorkspaces(snapshot.browserPages),
+    usageEntries: inWorkspaces(snapshot.usageEntries),
+    sources: inWorkspaces(snapshot.sources),
+    chatMembers: inWorkspaces(snapshot.chatMembers),
+    readMarkers: ownedByViewer(snapshot.readMarkers),
+    llmCredentials: ownedByViewer(snapshot.llmCredentials),
+    workspaceConnections: ownedByViewer(snapshot.workspaceConnections),
+    toolConnections: ownedByViewer(snapshot.toolConnections),
+  }
+}
+
+const canonical = (row: unknown) =>
+  JSON.stringify(Object.entries(row as object).sort(([first], [second]) => first.localeCompare(second)))
+const normalized = (snapshot: Snapshot) =>
+  Object.fromEntries(
+    Object.entries(snapshot).map(([name, rows]) => [
+      name,
+      collectionsInStoredOrder.includes(name)
+        ? (rows as unknown as { chatId?: string }[]).toSorted((first, second) =>
+            (first.chatId ?? '').localeCompare(second.chatId ?? ''),
+          )
+        : (rows as unknown[]).toSorted((first, second) => canonical(first).localeCompare(canonical(second))),
+    ]),
+  )
+
+test.each([
+  { viewer: 'Alice', viewerId: alice, workspaceIds: [acme, globex] },
+  { viewer: 'Bob', viewerId: bob, workspaceIds: [acme] },
+])('$viewer reads through Zero exactly the mock snapshot visible to them', async ({ viewerId, workspaceIds }) => {
+  const store = await openStore(viewerId, workspaceIds)
+  expect(normalized(store.read())).toEqual(normalized(visibleTo(createMockSnapshot(), viewerId, workspaceIds)))
+})
+
+test('signing out of a workspace removes its rows but keeps it listed, signing in brings them back', async () => {
+  const store = await openStore(alice, [acme, globex])
+  await store.signOut(globex)
+  expect(store.read().chats.filter((chat) => chat.workspaceId === globex)).toEqual([])
+  expect(store.read().workspaces.map((workspace) => workspace.name)).toEqual(['Acme', 'Globex'])
+  store.signIn(globex)
+  await store.whenLoaded(globex)
+  expect(store.read().chats.filter((chat) => chat.workspaceId === globex).length).toBe(2)
+})
+
+test('writes are refused until stage 0.4', async () => {
+  const store = await openStore(alice, [acme])
+  expect(() => store.write((snapshot) => snapshot)).toThrow('not available until stage 0.4')
+})

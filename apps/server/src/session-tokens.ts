@@ -5,9 +5,10 @@ import { jwtVerify, SignJWT } from 'jose'
 export type FindMembershipRole = (
   workspaceId: WorkspaceId,
   userId: MemberId,
+  databaseName: string | undefined,
 ) => Promise<ZeroContext['role'] | undefined>
 
-type Authentication = { status: 200; context: ZeroContext } | { status: 401 | 403 }
+type Authentication = { status: 200; context: ZeroContext; databaseName?: string } | { status: 401 | 403 }
 
 const algorithm = 'HS256'
 const lifetimeSeconds = 15 * 60
@@ -25,8 +26,8 @@ export const createSessionTokens = (secret: string, findMembershipRole: FindMemb
       () => undefined,
     )
   return {
-    issue: (context: ZeroContext) =>
-      new SignJWT({ workspaceId: context.workspaceId, role: context.role, sid: crypto.randomUUID() })
+    issue: (context: ZeroContext, databaseName?: string) =>
+      new SignJWT({ workspaceId: context.workspaceId, role: context.role, sid: crypto.randomUUID(), db: databaseName })
         .setProtectedHeader({ alg: algorithm })
         .setSubject(context.userId)
         .setIssuedAt()
@@ -37,8 +38,9 @@ export const createSessionTokens = (secret: string, findMembershipRole: FindMemb
       const claims = token === undefined ? undefined : await readClaims(token)
       if (claims?.sub === undefined || typeof claims.workspaceId !== 'string') return { status: 401 }
       const context = { userId: memberId(claims.sub), workspaceId: workspaceId(claims.workspaceId) }
-      const role = await findMembershipRole(context.workspaceId, context.userId)
-      return role === undefined ? { status: 403 } : { status: 200, context: { ...context, role } }
+      const databaseName = typeof claims.db === 'string' ? claims.db : undefined
+      const role = await findMembershipRole(context.workspaceId, context.userId, databaseName)
+      return role === undefined ? { status: 403 } : { status: 200, context: { ...context, role }, databaseName }
     },
   }
 }

@@ -14,22 +14,26 @@ export const createApp = ({
   database,
   tokenSecret,
   isDevAuthEnabled,
+  databaseByName,
 }: {
   database: Database
   tokenSecret: string
   isDevAuthEnabled: boolean
+  databaseByName?: (databaseName: string) => Database
 }) => {
-  const findMembershipRole: FindMembershipRole = async (workspaceId, userId) =>
-    (await database.query.memberships.findFirst({ where: { workspaceId, userId } }))?.role
+  const databaseOf = (databaseName: string | undefined) =>
+    databaseName === undefined ? database : isDevAuthEnabled ? databaseByName?.(databaseName) : undefined
+  const findMembershipRole: FindMembershipRole = async (workspaceId, userId, databaseName) =>
+    (await databaseOf(databaseName)?.query.memberships.findFirst({ where: { workspaceId, userId } }))?.role
   const sessionTokens = createSessionTokens(tokenSecret, findMembershipRole)
-  const dbProvider = zeroDrizzle(schema, database)
-  const app = new Hono<{ Variables: { zeroContext: ZeroContext } }>()
+  const app = new Hono<{ Variables: { zeroContext: ZeroContext; database: Database } }>()
     .get('/health', (context) => context.json({ status: 'ok' }))
     .use('/api/*', async (context, next) => {
       const authentication = await sessionTokens.authenticate(context.req.header('authorization'))
       if (authentication.status !== 200)
         return context.json({ error: errorByStatus[authentication.status] }, authentication.status)
       context.set('zeroContext', authentication.context)
+      context.set('database', databaseOf(authentication.databaseName) ?? database)
       await next()
     })
     .post('/api/query', async (context) => {
@@ -47,7 +51,7 @@ export const createApp = ({
       const ctx = context.get('zeroContext')
       return context.json(
         await handleMutateRequest({
-          dbProvider,
+          dbProvider: zeroDrizzle(schema, context.get('database')),
           handler: (transact) =>
             transact((_, name) => {
               throw new Error(`Mutator not found: ${name}`)
@@ -63,9 +67,10 @@ export const createApp = ({
       if (typeof body?.workspaceId !== 'string' || typeof body?.userId !== 'string')
         return context.json({ error: 'workspaceId and userId are required' }, 400)
       const member = { workspaceId: workspaceId(body.workspaceId), userId: memberId(body.userId) }
-      const role = await findMembershipRole(member.workspaceId, member.userId)
+      const databaseName = typeof body.db === 'string' ? body.db : undefined
+      const role = await findMembershipRole(member.workspaceId, member.userId, databaseName)
       if (role === undefined) return context.json({ error: errorByStatus[403] }, 403)
-      return context.json({ token: await sessionTokens.issue({ ...member, role }) })
+      return context.json({ token: await sessionTokens.issue({ ...member, role }, databaseName), role })
     })
   return app
 }

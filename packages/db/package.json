@@ -8,7 +8,8 @@
     "./postgres": "./src/postgres.ts",
     "./testing": "./src/postgres/test-database.ts",
     "./zero": "./src/zero.ts",
-    "./zero-queries": "./src/zero-queries.ts"
+    "./zero-queries": "./src/zero-queries.ts",
+    "./zero-store": "./src/zero-store.ts"
   },
   "scripts": {
     "typecheck": "tsc -p .",

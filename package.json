@@ -10,6 +10,7 @@
     "lint": "biome check .",
     "test": "bun test ./packages ./apps/server --path-ignore-patterns='**/*.integration.test.ts'",
     "test:integration": "bun test --preload ./packages/db/src/postgres/build-test-template.ts .integration.test.ts",
+    "test:e2e:zero": "bun run --cwd apps/web test:e2e:zero",
     "check:boundaries": "depcruise apps packages --config .dependency-cruiser.cjs",
     "stack:up": "docker compose -f infra/docker-compose.yml up -d --wait",
     "stack:down": "docker compose -f infra/docker-compose.yml --profile zero down",

@@ -20,6 +20,7 @@ const launch = projectId('project-launch')
 
 export const currentMemberId = alice
 export const defaultWorkspaceId = acme
+export const toolCatalog = ['GitHub', 'Slack', 'Notion', 'Linear']
 
 const invoiceChat = chatId('chat-invoice-bug')
 const welcomeChat = chatId('chat-welcome')
@@ -324,5 +325,5 @@ export const createMockSnapshot = (): Snapshot => ({
     workspaceConnection(alice, 'Onyx', 'All sources'),
     workspaceConnection(bob, 'Postgres', '1 of 5 tables'),
   ],
-  toolCatalog: ['GitHub', 'Slack', 'Notion', 'Linear'],
+  toolCatalog,
 })

@@ -9,11 +9,21 @@ const clientModules = [
   `^packages/${contexts}/src/(entrypoints/|client\\.ts$)`,
   '^packages/(ui|session)/',
   '^packages/db/src/useQuery\\.tsx$',
+  '^packages/db/src/zero-store\\.ts$',
 ]
 const serverOnlyModules = [
   '^packages/db/src/postgres(\\.ts$|/)',
   '(^|/node_modules/)(postgres|drizzle-orm|drizzle-kit)(/|$)',
+  '^apps/server/',
 ]
+const productionEntries = '^apps/(server/src/index\\.ts|web/src/main\\.tsx)$'
+const testOnlyModules = [
+  '^apps/server/src/test-server\\.ts$',
+  '^packages/db/src/postgres/(test-database|build-test-template)\\.ts$',
+  '^apps/web/(e2e|e2e-zero)/',
+  '\\.test\\.ts$',
+]
+const zeroTestHarness = '^apps/web/(e2e-zero/|playwright\\.zero\\.config\\.ts$)'
 const zeroConfig = '^packages/db/drizzle-zero\\.config\\.ts$'
 const layerRule = (name, layer, allowedLayers) => ({
   name,
@@ -83,14 +93,20 @@ module.exports = {
     {
       name: 'server-and-published-entries-never-reach-client-code',
       severity: 'error',
-      from: { path: [serverEntry, publishedEntry, '^apps/server/'] },
+      from: { path: [serverEntry, publishedEntry, '^apps/server/'], pathNot: '\\.test\\.ts$' },
       to: { path: clientModules, reachable: true },
     },
     {
-      name: 'postgres-and-drizzle-never-reach-client-code',
+      name: 'postgres-drizzle-and-server-never-reach-client-code',
       severity: 'error',
-      from: { path: ['^apps/web/', ...clientModules.slice(1)] },
+      from: { path: ['^apps/web/', ...clientModules.slice(1)], pathNot: zeroTestHarness },
       to: { path: serverOnlyModules, reachable: true },
+    },
+    {
+      name: 'test-only-modules-unreachable-from-production-entries',
+      severity: 'error',
+      from: { path: productionEntries },
+      to: { path: testOnlyModules, reachable: true },
     },
     {
       name: 'zero-schema-and-queries-never-reach-client-or-server-only-code',
