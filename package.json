@@ -15,9 +15,9 @@
     "check:boundaries": "depcruise apps packages --config .dependency-cruiser.cjs",
     "stack:up": "docker compose -f infra/docker-compose.yml up -d --wait",
     "stack:down": "docker compose -f infra/docker-compose.yml --profile zero down",
-    "db:migrate": "bun run --cwd packages/db migrate",
-    "db:seed": "bun packages/db/src/postgres/seed.ts",
-    "db:reset": "bun packages/db/src/postgres/seed.ts --reset",
+    "db:migrate": "bun run stack:up && bun run --cwd packages/db migrate",
+    "db:seed": "bun run stack:up && bun packages/db/src/postgres/seed.ts",
+    "db:reset": "bun run stack:up && bun packages/db/src/postgres/seed.ts --reset",
     "db:generate-zero": "bun run --cwd packages/db generate-zero"
   },
   "devDependencies": {

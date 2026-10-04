@@ -12,9 +12,8 @@ Org-agnostic, model-agnostic AI workspace: agent chats, dev sessions and knowled
 
 ```sh
 bun install
-bun run stack:up      # Postgres and Dex
-bun run db:migrate
-bun run db:seed       # once: the seed is not idempotent
+bun run db:migrate    # starts Postgres and Dex if needed
+bun run db:seed       # skips when the data is already there
 bun run dev           # adds zero-cache, then the server on 3000 and the app on http://localhost:5173
 ```
 

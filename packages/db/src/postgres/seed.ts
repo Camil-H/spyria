@@ -168,7 +168,14 @@ export const resetDatabase = (
 if (import.meta.main) {
   const database = createDatabase()
   const shouldReset = process.argv.includes('--reset')
-  await (shouldReset ? resetDatabase : seedDatabase)(database)
+  const isSeeded = !shouldReset && (await database.$count(tables.users)) > 0
+  if (!isSeeded) await (shouldReset ? resetDatabase : seedDatabase)(database)
   await database.$client.end()
-  console.log(shouldReset ? 'database reset and seeded' : 'database seeded')
+  console.log(
+    isSeeded
+      ? 'database already seeded; run bun run db:reset to wipe it and seed again'
+      : shouldReset
+        ? 'database reset and seeded'
+        : 'database seeded',
+  )
 }
