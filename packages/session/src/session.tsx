@@ -4,8 +4,8 @@ import { createContext, type ReactNode, use, useState } from 'react'
 export type Session = {
   memberId: MemberId
   defaultWorkspaceId: WorkspaceId
-  onSignOut?: (workspaceId: WorkspaceId) => void
-  onSignIn?: (workspaceId: WorkspaceId) => void | Promise<void>
+  onSignOut: (workspaceId: WorkspaceId) => void
+  onSignIn: (workspaceId: WorkspaceId) => void | Promise<void>
 }
 
 type SessionState = Session & {
@@ -20,10 +20,10 @@ export const SessionProvider = ({ session, children }: { session: Session; child
   const [signedOutWorkspaceIds, setSignedOutWorkspaceIds] = useState<ReadonlySet<WorkspaceId>>(new Set())
   const signOut = (workspaceId: WorkspaceId) => {
     setSignedOutWorkspaceIds((current) => new Set(current).add(workspaceId))
-    session.onSignOut?.(workspaceId)
+    session.onSignOut(workspaceId)
   }
   const signIn = async (workspaceId: WorkspaceId) => {
-    await session.onSignIn?.(workspaceId)
+    await session.onSignIn(workspaceId)
     setSignedOutWorkspaceIds((current) => {
       const next = new Set(current)
       next.delete(workspaceId)

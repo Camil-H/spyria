@@ -1,8 +1,11 @@
 import { defineConfig } from '@playwright/test'
+import { viteUrl } from './e2e-zero/stack-ports.ts'
 
 export default defineConfig({
-  testDir: './e2e',
+  testDir: '.',
+  testMatch: /^.*\/e2e(-zero)?\/.+\.spec\.ts$/,
   fullyParallel: true,
-  use: { baseURL: 'http://localhost:5173', timezoneId: 'UTC' },
-  webServer: { command: 'bun run dev', url: 'http://localhost:5173', reuseExistingServer: true },
+  workers: Number(process.env.WORKERS ?? 2),
+  globalSetup: './e2e-zero/global-setup.ts',
+  use: { baseURL: viteUrl, timezoneId: 'UTC', trace: 'retain-on-failure' },
 })

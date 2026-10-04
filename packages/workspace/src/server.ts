@@ -6,7 +6,6 @@ export type {
 } from './contracts/repositories.ts'
 export type { Transactor, UnitOfWork } from './contracts/transactor.ts'
 export type { Chat } from './domain/chat.ts'
-export { runtimeChatDefaults } from './domain/chat.ts'
 export {
   BlankName,
   ChatNotFound,
@@ -18,19 +17,14 @@ export {
 export { Name } from './domain/name.ts'
 export type { ChatsPolicy, Project } from './domain/project.ts'
 export type { Membership, Workspace } from './domain/workspace.ts'
-export { type WorkspaceCommands, workspaceOperations } from './entrypoints/commands.ts'
+export type { WorkspaceCommands } from './entrypoints/commands.ts'
 export { workspaceMutators } from './entrypoints/mutators.ts'
-export { createStoreTransactor } from './integrations/store-transactor.ts'
 export { createUuidIdGenerator } from './integrations/uuid-id-generator.ts'
 export { createZeroTransactor } from './integrations/zero-transactor.ts'
 export { archiveChat } from './operations/archive-chat.ts'
 export { archiveProject } from './operations/archive-project.ts'
 export { createChat } from './operations/create-chat.ts'
-export {
-  type CreateChatFromChatDependencies,
-  type CreateChatFromChatInput,
-  createChatFromChat,
-} from './operations/create-chat-from-chat.ts'
+export { createChatFromChat } from './operations/create-chat-from-chat.ts'
 export { createProject } from './operations/create-project.ts'
 export { createWorkspace } from './operations/create-workspace.ts'
 export { moveChat } from './operations/move-chat.ts'

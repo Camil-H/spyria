@@ -3,12 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --port 5173 --strictPort",
-    "dev:zero": "VITE_DATA=zero vite --config vite.zero.config.ts",
+    "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc -p .",
-    "test:e2e": "playwright test",
-    "test:e2e:zero": "playwright test -c playwright.zero.config.ts"
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@hq/conversation": "workspace:*",

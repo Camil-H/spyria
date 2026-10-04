@@ -4,5 +4,4 @@ import './app/styles.css'
 import { App } from './app/Shell.tsx'
 
 const app = await createApp()
-app.startMockAgent?.()
 createRoot(document.getElementById('root') as HTMLElement).render(<App app={app} />)

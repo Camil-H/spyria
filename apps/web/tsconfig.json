@@ -1,13 +1,5 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": [
-    "src",
-    "e2e",
-    "e2e-zero",
-    "vite.config.ts",
-    "vite.zero.config.ts",
-    "playwright.config.ts",
-    "playwright.zero.config.ts"
-  ],
+  "include": ["src", "e2e", "e2e-zero", "vite.config.ts", "playwright.config.ts"],
   "compilerOptions": { "types": ["vite/client", "bun"] }
 }

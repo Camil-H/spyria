@@ -69,9 +69,9 @@ export default async function globalSetup() {
     `${serverUrl}/health`,
   )
   const stopVite = await startDetached(
-    ['bun', 'run', 'dev:zero', '--port', new URL(viteUrl).port, '--strictPort'],
+    ['bun', 'run', 'dev', '--port', new URL(viteUrl).port],
     `${repositoryRoot}apps/web`,
-    { HQ_SERVER_URL: serverUrl },
+    { HQ_SERVER_URL: serverUrl, HQ_VITE_CACHE_DIR: 'node_modules/.vite-e2e' },
     viteUrl,
   )
   return () => {

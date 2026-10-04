@@ -1,7 +1,7 @@
 import type { ZeroContext } from '@hq/db/zero-queries'
 import { chatId, messageId } from '@hq/kernel'
 import { defineMutator, defineMutators, type Transaction } from '@rocicorp/zero'
-import { z } from 'zod'
+import { z } from 'zod/mini'
 import { ForeignWorkspace } from '../domain/errors.ts'
 import { createSystemClock } from '../integrations/system-clock.ts'
 import { createZeroRuntimeChatStarter } from '../integrations/workspace-runtime-chat-starter.ts'
@@ -12,9 +12,9 @@ import { markChatRead } from '../operations/mark-chat-read.ts'
 import { sendMessage } from '../operations/send-message.ts'
 import { startRuntimeFromMessage } from '../operations/start-runtime-from-message.ts'
 
-const id = z.string().min(1)
-const chatIdArgument = id.transform(chatId)
-const messageIdArgument = id.transform(messageId)
+const id = z.string().check(z.minLength(1))
+const chatIdArgument = z.pipe(id, z.transform(chatId))
+const messageIdArgument = z.pipe(id, z.transform(messageId))
 
 const workspaceArguments = z.object({ workspaceId: id })
 
@@ -30,12 +30,12 @@ const dependenciesOf = (tx: Transaction, context: ZeroContext, args: { workspace
 export const conversationMutators = defineMutators({
   conversation: {
     sendMessage: defineMutator(
-      workspaceArguments.extend({ id, chatId: chatIdArgument, text: z.string() }),
+      z.extend(workspaceArguments, { id, chatId: chatIdArgument, text: z.string() }),
       ({ tx, ctx, args }) =>
         sendMessage(dependenciesOf(tx, ctx, args), { chatId: args.chatId, authorId: ctx.userId, text: args.text }),
     ),
     editMessage: defineMutator(
-      workspaceArguments.extend({ messageId: messageIdArgument, text: z.string() }),
+      z.extend(workspaceArguments, { messageId: messageIdArgument, text: z.string() }),
       ({ tx, ctx, args }) =>
         editMessage(dependenciesOf(tx, ctx, args), {
           messageId: args.messageId,
@@ -43,10 +43,10 @@ export const conversationMutators = defineMutators({
           text: args.text,
         }),
     ),
-    deleteMessage: defineMutator(workspaceArguments.extend({ messageId: messageIdArgument }), ({ tx, ctx, args }) =>
+    deleteMessage: defineMutator(z.extend(workspaceArguments, { messageId: messageIdArgument }), ({ tx, ctx, args }) =>
       deleteMessage(dependenciesOf(tx, ctx, args), { messageId: args.messageId, deleterId: ctx.userId }),
     ),
-    markChatRead: defineMutator(workspaceArguments.extend({ chatId: chatIdArgument }), ({ tx, ctx, args }) =>
+    markChatRead: defineMutator(z.extend(workspaceArguments, { chatId: chatIdArgument }), ({ tx, ctx, args }) =>
       markChatRead(dependenciesOf(tx, ctx, args), {
         workspaceId: ctx.workspaceId,
         chatId: args.chatId,
@@ -54,7 +54,7 @@ export const conversationMutators = defineMutators({
       }),
     ),
     startRuntimeFromMessage: defineMutator(
-      workspaceArguments.extend({ id, chatId: chatIdArgument, messageId: messageIdArgument }),
+      z.extend(workspaceArguments, { id, chatId: chatIdArgument, messageId: messageIdArgument }),
       async ({ tx, ctx, args }) => {
         await startRuntimeFromMessage(
           { ...dependenciesOf(tx, ctx, args), runtimeChatStarter: createZeroRuntimeChatStarter(tx, ctx, args.chatId) },

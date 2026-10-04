@@ -1,40 +1,22 @@
-import { startMockAgent } from '@hq/conversation'
 import {
   type ConversationCommands,
   conversationMutators,
   conversationOperations,
-  createStoreTransactor as createConversationTransactor,
   createStoreDraftRepository,
-  createSystemClock,
-  createWorkspaceRuntimeChatStarter,
 } from '@hq/conversation/server'
-import { createMockSnapshot, createStore, currentMemberId, defaultWorkspaceId, type Store } from '@hq/db'
+import { currentMemberId, defaultWorkspaceId, type Store } from '@hq/db'
+import { createZeroStore } from '@hq/db/zero-store'
 import { chatId, type IdGenerator, type WorkspaceId, workspaceId } from '@hq/kernel'
-import {
-  createHttpLlmCredentialAdder,
-  createStoreTransactor as createProfileTransactor,
-  type ProfileCommands,
-  profileMutators,
-  profileOperations,
-} from '@hq/profile/server'
+import { createHttpLlmCredentialAdder, type ProfileCommands, profileMutators } from '@hq/profile/server'
 import type { Session } from '@hq/session'
-import {
-  createStoreTransactor,
-  createUuidIdGenerator,
-  runtimeChatDefaults,
-  type WorkspaceCommands,
-  workspaceMutators,
-  workspaceOperations,
-} from '@hq/workspace/server'
+import { createUuidIdGenerator, type WorkspaceCommands, workspaceMutators } from '@hq/workspace/server'
 
-const dataSource = import.meta.env.VITE_DATA ?? 'memory'
 const zeroCacheURL = import.meta.env.VITE_ZERO_URL ?? 'http://localhost:4848'
 type TestStack = { zeroCacheURL: string; databaseName: string }
 const testStack = import.meta.env.DEV ? (window as Window & { hqTestStack?: TestStack }).hqTestStack : undefined
 const sessionTokenByWorkspace = new Map<WorkspaceId, string>()
 
 const openZeroStore = async () => {
-  const { createZeroStore } = await import('@hq/db/zero-store')
   const store = createZeroStore({
     memberId: currentMemberId,
     defaultWorkspaceId,
@@ -138,48 +120,21 @@ export type Application = {
   workspaceCommands: WorkspaceCommands
   conversationCommands: ConversationCommands
   profileCommands: ProfileCommands
-  startMockAgent?: () => void
 }
 
 export const createApp = async (): Promise<Application> => {
-  const zeroStore = dataSource === 'zero' ? await openZeroStore() : undefined
-  const store = zeroStore ?? createStore(createMockSnapshot())
+  const zeroStore = await openZeroStore()
   const idGenerator = createUuidIdGenerator()
-  const workspaceDependencies = { transactor: createStoreTransactor(store), idGenerator, ...runtimeChatDefaults }
-  const conversationDependencies = {
-    transactor: createConversationTransactor(store),
-    idGenerator,
-    clock: createSystemClock(),
-    runtimeChatStarter: createWorkspaceRuntimeChatStarter(workspaceDependencies),
-    drafts: createStoreDraftRepository(store),
-  }
-  const bound = <Commands>(
-    operations: Record<string, (dependencies: never, input: never) => Promise<unknown>>,
-    dependencies: object,
-  ) =>
-    commandsOf<Commands>(
-      Object.entries(operations).map(([name, operation]) => [
-        name,
-        (input) => operation(dependencies as never, input as never),
-      ]),
-    )
   return {
-    store,
+    store: zeroStore,
     session: {
       memberId: currentMemberId,
       defaultWorkspaceId,
-      onSignOut: zeroStore?.signOut,
-      onSignIn: zeroStore?.signIn,
+      onSignOut: zeroStore.signOut,
+      onSignIn: zeroStore.signIn,
     },
-    workspaceCommands: zeroStore
-      ? zeroWorkspaceCommands(zeroStore, idGenerator)
-      : bound<WorkspaceCommands>(workspaceOperations, workspaceDependencies),
-    conversationCommands: zeroStore
-      ? zeroConversationCommands(zeroStore, idGenerator)
-      : bound<ConversationCommands>(conversationOperations, conversationDependencies),
-    profileCommands: zeroStore
-      ? zeroProfileCommands(zeroStore, idGenerator)
-      : bound<ProfileCommands>(profileOperations, { transactor: createProfileTransactor(store), idGenerator }),
-    startMockAgent: zeroStore ? undefined : () => startMockAgent(store, conversationDependencies),
+    workspaceCommands: zeroWorkspaceCommands(zeroStore, idGenerator),
+    conversationCommands: zeroConversationCommands(zeroStore, idGenerator),
+    profileCommands: zeroProfileCommands(zeroStore, idGenerator),
   }
 }

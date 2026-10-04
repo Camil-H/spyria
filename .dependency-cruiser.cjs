@@ -23,7 +23,7 @@ const testOnlyModules = [
   '^apps/web/(e2e|e2e-zero)/',
   '\\.test\\.ts$',
 ]
-const zeroTestHarness = '^apps/web/(e2e/|e2e-zero/|playwright\\.zero\\.config\\.ts$)'
+const zeroTestHarness = '^apps/web/(e2e/|e2e-zero/|playwright\\.config\\.ts$)'
 const zeroConfig = '^packages/db/drizzle-zero\\.config\\.ts$'
 const layerRule = (name, layer, allowedLayers) => ({
   name,
