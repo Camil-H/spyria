@@ -1,11 +1,15 @@
-import type { ConversationDependencies } from '@hq/conversation'
+import { startMockAgent } from '@hq/conversation'
 import {
+  type ConversationCommands,
+  conversationMutators,
+  conversationOperations,
   createStoreTransactor as createConversationTransactor,
+  createStoreDraftRepository,
   createSystemClock,
   createWorkspaceRuntimeChatStarter,
 } from '@hq/conversation/server'
 import { createMockSnapshot, createStore, currentMemberId, defaultWorkspaceId, type Store } from '@hq/db'
-import { type IdGenerator, type WorkspaceId, workspaceId } from '@hq/kernel'
+import { chatId, type IdGenerator, type WorkspaceId, workspaceId } from '@hq/kernel'
 import type { ProfileDependencies } from '@hq/profile'
 import { createStoreTransactor as createProfileTransactor } from '@hq/profile/server'
 import type { Session } from '@hq/session'
@@ -29,7 +33,8 @@ const openZeroStore = async () => {
     memberId: currentMemberId,
     defaultWorkspaceId,
     cacheURL: testStack?.zeroCacheURL ?? zeroCacheURL,
-    mutators: workspaceMutators,
+    mutators: { ...workspaceMutators, ...conversationMutators },
+    draftStorage: localStorage,
     fetchSession: async (workspaceId) => {
       const response = await fetch('/auth/dev-token', {
         method: 'POST',
@@ -46,20 +51,28 @@ const openZeroStore = async () => {
 
 type ZeroStore = Awaited<ReturnType<typeof openZeroStore>>
 type CommandInput = { workspaceId: WorkspaceId }
+type Mutator = (args: never) => Parameters<ZeroStore['mutate']>[1]
 
 const commandsOf = <Commands>(entries: readonly (readonly [string, (input: CommandInput) => Promise<unknown>])[]) =>
   Object.fromEntries(entries) as Commands
 
-const zeroWorkspaceCommands = (zeroStore: ZeroStore, idGenerator: IdGenerator) => {
-  const mutate = async (mutator: (args: never) => Parameters<ZeroStore['mutate']>[1], input: CommandInput) => {
-    const id = idGenerator.next()
+const zeroCommandsOf = (zeroStore: ZeroStore, idGenerator: IdGenerator) => {
+  const mutate = async (mutator: Mutator, input: CommandInput & { id?: string }) => {
+    const id = input.id ?? idGenerator.next()
     const { confirmation } = await zeroStore.mutate(input.workspaceId, mutator({ ...input, id } as never))
     return { id, confirmation }
   }
-  return commandsOf<WorkspaceCommands>([
-    ...Object.entries(workspaceMutators.workspace).map(
+  const entriesOf = (mutators: Record<string, Mutator>) =>
+    Object.entries(mutators).map(
       ([name, mutator]) => [name, async (input: CommandInput) => (await mutate(mutator, input)).id] as const,
-    ),
+    )
+  return { mutate, entriesOf }
+}
+
+const zeroWorkspaceCommands = (zeroStore: ZeroStore, idGenerator: IdGenerator) => {
+  const { mutate, entriesOf } = zeroCommandsOf(zeroStore, idGenerator)
+  return commandsOf<WorkspaceCommands>([
+    ...entriesOf(workspaceMutators.workspace),
     [
       'createWorkspace',
       async (input) => {
@@ -74,12 +87,33 @@ const zeroWorkspaceCommands = (zeroStore: ZeroStore, idGenerator: IdGenerator) =
   ])
 }
 
+const zeroConversationCommands = (zeroStore: ZeroStore, idGenerator: IdGenerator) => {
+  const { mutate, entriesOf } = zeroCommandsOf(zeroStore, idGenerator)
+  const drafts = createStoreDraftRepository(zeroStore)
+  return commandsOf<ConversationCommands>([
+    ...entriesOf(conversationMutators.conversation),
+    ['saveDraft', (input) => conversationOperations.saveDraft({ drafts }, input as never)],
+    [
+      'startRuntimeFromMessage',
+      async (input) => {
+        const newChatId = chatId(idGenerator.next())
+        await mutate(conversationMutators.conversation.startRuntimeFromMessage, {
+          ...input,
+          chatId: newChatId,
+        } as never)
+        return newChatId
+      },
+    ],
+  ])
+}
+
 export type Application = {
   store: Store
   session: Session
   workspaceCommands: WorkspaceCommands
-  conversationDependencies: ConversationDependencies
+  conversationCommands: ConversationCommands
   profileDependencies: ProfileDependencies
+  startMockAgent?: () => void
 }
 
 export const createApp = async (): Promise<Application> => {
@@ -87,6 +121,23 @@ export const createApp = async (): Promise<Application> => {
   const store = zeroStore ?? createStore(createMockSnapshot())
   const idGenerator = createUuidIdGenerator()
   const workspaceDependencies = { transactor: createStoreTransactor(store), idGenerator, ...runtimeChatDefaults }
+  const conversationDependencies = {
+    transactor: createConversationTransactor(store),
+    idGenerator,
+    clock: createSystemClock(),
+    runtimeChatStarter: createWorkspaceRuntimeChatStarter(workspaceDependencies),
+    drafts: createStoreDraftRepository(store),
+  }
+  const bound = <Commands>(
+    operations: Record<string, (dependencies: never, input: never) => Promise<unknown>>,
+    dependencies: object,
+  ) =>
+    commandsOf<Commands>(
+      Object.entries(operations).map(([name, operation]) => [
+        name,
+        (input) => operation(dependencies as never, input as never),
+      ]),
+    )
   return {
     store,
     session: {
@@ -97,21 +148,14 @@ export const createApp = async (): Promise<Application> => {
     },
     workspaceCommands: zeroStore
       ? zeroWorkspaceCommands(zeroStore, idGenerator)
-      : commandsOf<WorkspaceCommands>(
-          Object.entries(workspaceOperations).map(([name, operation]) => [
-            name,
-            (input) => operation(workspaceDependencies, input as never),
-          ]),
-        ),
-    conversationDependencies: {
-      transactor: createConversationTransactor(store),
-      idGenerator,
-      clock: createSystemClock(),
-      runtimeChatStarter: createWorkspaceRuntimeChatStarter(workspaceDependencies),
-    },
+      : bound<WorkspaceCommands>(workspaceOperations, workspaceDependencies),
+    conversationCommands: zeroStore
+      ? zeroConversationCommands(zeroStore, idGenerator)
+      : bound<ConversationCommands>(conversationOperations, conversationDependencies),
     profileDependencies: {
       transactor: createProfileTransactor(store),
       idGenerator,
     },
+    startMockAgent: zeroStore ? undefined : () => startMockAgent(store, conversationDependencies),
   }
 }

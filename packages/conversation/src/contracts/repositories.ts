@@ -1,16 +1,16 @@
 import type { ChatId, MemberId, MessageId, WorkspaceId } from '@hq/kernel'
-import type { ConversationChat, Message } from '../domain/message.ts'
+import type { ConversationChat, Message, MessageChange } from '../domain/message.ts'
 import type { ReadMarker } from '../domain/read-marker.ts'
 
 export type Draft = Readonly<{ workspaceId: WorkspaceId; chatId: ChatId; memberId: MemberId; text: string }>
 
 export type MessageRepository = {
   get(messageId: MessageId): Promise<Message>
-  add(message: Message): Promise<void>
-  insertAfter(message: Message, previousMessageId: MessageId): Promise<void>
-  save(message: Message): Promise<void>
+  record(change: MessageChange): Promise<void>
   idsInChat(chatId: ChatId): Promise<readonly MessageId[]>
 }
+
+export type AgentReplyRequests = { request(message: Message): Promise<void> }
 
 export type DraftRepository = {
   save(draft: Draft): Promise<void>

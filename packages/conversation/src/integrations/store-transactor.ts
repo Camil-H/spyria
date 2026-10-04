@@ -1,30 +1,34 @@
-import type { DraftRow, MessageRow, Store } from '@hq/db'
+import type { MessageRow, Store } from '@hq/db'
+import type { MessageId } from '@hq/kernel'
 import type { ConversationTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import { ChatNotFound, MessageNotFound } from '../domain/errors.ts'
 import type { Message } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
 
 const toDate = (iso: string | null) => (iso ? new Date(iso) : null)
-const toMessage = (row: MessageRow): Message => ({
+const toMessage = ({ needsReply, ...row }: MessageRow): Message => ({
   ...row,
   body: MessageBody(row.body),
   createdAt: new Date(row.createdAt),
   editedAt: toDate(row.editedAt),
   deletedAt: toDate(row.deletedAt),
+  replyToId: null,
 })
-const toRow = (message: Message): MessageRow => ({
+const toRow = ({ replyToId, ...message }: Message, needsReply: boolean): MessageRow => ({
   ...message,
   createdAt: message.createdAt.toISOString(),
   editedAt: message.editedAt?.toISOString() ?? null,
   deletedAt: message.deletedAt?.toISOString() ?? null,
+  needsReply,
 })
-const isSameDraftOwner = (draft: DraftRow, chatId: string, memberId: string) =>
-  draft.chatId === chatId && draft.memberId === memberId
 
 export const createStoreTransactor = (store: Store): ConversationTransactor => ({
   run: async (work) => {
     const initial = store.read()
-    let { messages, drafts, readMarkers } = initial
+    let { messages, readMarkers } = initial
+    const updateRow = (messageId: MessageId, update: (row: MessageRow) => MessageRow) => {
+      messages = messages.map((row) => (row.id === messageId ? update(row) : row))
+    }
     const unitOfWork: UnitOfWork = {
       messages: {
         get: async (messageId) => {
@@ -32,28 +36,20 @@ export const createStoreTransactor = (store: Store): ConversationTransactor => (
           if (!row) throw new MessageNotFound(messageId)
           return toMessage(row)
         },
-        add: async (message) => {
-          messages = [...messages, toRow(message)]
-        },
-        insertAfter: async (message, previousMessageId) => {
-          const index = messages.findIndex((row) => row.id === previousMessageId) + 1
-          messages = [...messages.slice(0, index), toRow(message), ...messages.slice(index)]
-        },
-        save: async (message) => {
-          messages = messages.map((row) => (row.id === message.id ? toRow(message) : row))
+        record: async ({ type, message }) => {
+          if (type === 'message.edited' || type === 'message.deleted')
+            return updateRow(message.id, (row) => toRow(message, row.needsReply))
+          if (type === 'message.replied' && message.replyToId)
+            updateRow(message.replyToId, (row) => ({ ...row, needsReply: false }))
+          const index =
+            messages.findIndex((row) => row.id === message.replyToId && row.chatId === message.chatId) + 1 ||
+            messages.length
+          messages = [...messages.slice(0, index), toRow(message, false), ...messages.slice(index)]
         },
         idsInChat: async (chatId) => messages.filter((row) => row.chatId === chatId).map((row) => row.id),
       },
-      drafts: {
-        save: async (draft) => {
-          const stored = drafts.find((row) => isSameDraftOwner(row, draft.chatId, draft.memberId))
-          if (stored?.text === draft.text) return
-          drafts = [...drafts.filter((row) => row !== stored), draft]
-        },
-        remove: async (chatId, memberId) => {
-          if (drafts.some((row) => isSameDraftOwner(row, chatId, memberId)))
-            drafts = drafts.filter((row) => !isSameDraftOwner(row, chatId, memberId))
-        },
+      agentReplies: {
+        request: async (message) => updateRow(message.id, (row) => ({ ...row, needsReply: true })),
       },
       readMarkers: {
         get: async (chatId, memberId) =>
@@ -74,8 +70,8 @@ export const createStoreTransactor = (store: Store): ConversationTransactor => (
       },
     }
     const result = await work(unitOfWork)
-    if (messages !== initial.messages || drafts !== initial.drafts || readMarkers !== initial.readMarkers)
-      store.write((current) => ({ ...current, messages, drafts, readMarkers }))
+    if (messages !== initial.messages || readMarkers !== initial.readMarkers)
+      store.write((current) => ({ ...current, messages, readMarkers }))
     return result
   },
 })

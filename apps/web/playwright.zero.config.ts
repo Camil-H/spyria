@@ -9,5 +9,5 @@ export default defineConfig({
   fullyParallel: true,
   workers: Number(process.env.WORKERS ?? 2),
   globalSetup: './e2e-zero/global-setup.ts',
-  use: { baseURL: viteUrl, timezoneId: 'UTC' },
+  use: { baseURL: viteUrl, timezoneId: 'UTC', trace: 'retain-on-failure' },
 })

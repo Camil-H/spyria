@@ -1,6 +1,7 @@
 export { ChatView } from './entrypoints/ChatView.tsx'
+export type { ConversationCommands } from './entrypoints/commands.ts'
 export { DraftIndicator } from './entrypoints/DraftIndicator.tsx'
 export { startMockAgent } from './entrypoints/mock-agent.ts'
 export { PromptAccessProvider } from './entrypoints/prompt-access.tsx'
-export { type ConversationDependencies, ConversationProvider } from './entrypoints/providers.tsx'
+export { ConversationProvider } from './entrypoints/providers.tsx'
 export { UnreadIndicator } from './entrypoints/UnreadIndicator.tsx'

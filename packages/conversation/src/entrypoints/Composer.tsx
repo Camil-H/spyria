@@ -5,11 +5,9 @@ import { focusRing, tooltipClass } from '@hq/ui'
 import { Content, Portal, Provider, Root, Trigger } from '@radix-ui/react-tooltip'
 import { ArrowUp } from 'lucide-react'
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react'
-import { saveDraft } from '../operations/save-draft.ts'
-import { sendMessage } from '../operations/send-message.ts'
 import { getDraft } from '../queries/get-draft.ts'
 import { usePromptAccess } from './prompt-access.tsx'
-import { useConversationDependencies } from './providers.tsx'
+import { useConversationCommands } from './providers.tsx'
 
 export const Composer = ({
   workspaceId,
@@ -21,7 +19,7 @@ export const Composer = ({
   isRuntime: boolean
 }) => {
   const { canPrompt, blockedNotice } = usePromptAccess()
-  const dependencies = useConversationDependencies()
+  const commands = useConversationCommands()
   const { memberId } = useSession()
   const store = useStore()
   const [text, setText] = useState(() => getDraft(workspaceId, chatId, memberId)(store.read()))
@@ -31,13 +29,13 @@ export const Composer = ({
   const isUnsendable = text.trim() === '' || isBlocked
   const send = async () => {
     if (isUnsendable) return
-    setText('')
+    change('')
     textareaRef.current?.focus()
-    await sendMessage(dependencies, { chatId, authorId: memberId, text })
+    await commands.sendMessage({ workspaceId, chatId, authorId: memberId, text })
   }
   const change = (nextText: string) => {
     setText(nextText)
-    saveDraft(dependencies, { workspaceId, chatId, memberId, text: nextText })
+    commands.saveDraft({ workspaceId, chatId, memberId, text: nextText })
   }
   const sendOnShortcut = (event: KeyboardEvent) => {
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {

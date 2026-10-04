@@ -1,4 +1,7 @@
 import { execSync, spawn } from 'node:child_process'
+import { openSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { createDatabase } from '@hq/db/postgres'
 import { buildTemplateDatabase, databaseUrlOf, dropDatabase } from '@hq/db/testing'
@@ -34,7 +37,13 @@ const sweepLeftovers = async () => {
 
 const startDetached = async (command: string[], cwd: string, env: Record<string, string>, readyUrl: string) => {
   const [executable = '', ...args] = command
-  const child = spawn(executable, args, { cwd, env: { ...process.env, ...env }, detached: true, stdio: 'ignore' })
+  const logFile = openSync(join(tmpdir(), `hq-e2e-${new URL(readyUrl).port}.log`), 'w')
+  const child = spawn(executable, args, {
+    cwd,
+    env: { ...process.env, ...env },
+    detached: true,
+    stdio: ['ignore', logFile, logFile],
+  })
   for (
     let attempt = 1;
     !(await fetch(readyUrl).then(

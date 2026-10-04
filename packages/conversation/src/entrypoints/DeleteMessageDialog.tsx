@@ -1,14 +1,15 @@
-import type { MessageId } from '@hq/kernel'
+import type { MessageId, WorkspaceId } from '@hq/kernel'
 import { useSession } from '@hq/session'
 import { buttonClass, Dialog } from '@hq/ui'
-import { deleteMessage } from '../operations/delete-message.ts'
-import { useConversationDependencies } from './providers.tsx'
+import { useOutletContext } from 'react-router'
+import { useConversationCommands } from './providers.tsx'
 
 export const DeleteMessageDialog = ({ messageId, onClose }: { messageId: MessageId; onClose: () => void }) => {
-  const dependencies = useConversationDependencies()
+  const commands = useConversationCommands()
+  const workspaceId = useOutletContext<WorkspaceId>()
   const { memberId } = useSession()
   const confirm = async () => {
-    await deleteMessage(dependencies, { messageId, deleterId: memberId })
+    await commands.deleteMessage({ workspaceId, messageId, deleterId: memberId })
     onClose()
   }
   return (

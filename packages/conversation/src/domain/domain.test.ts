@@ -20,7 +20,7 @@ const messageByAlice: Message = {
   createdAt: new Date('2026-10-01T09:00:00Z'),
   editedAt: null,
   deletedAt: null,
-  needsReply: false,
+  replyToId: null,
 }
 
 test('MessageBody trims its value', () => {

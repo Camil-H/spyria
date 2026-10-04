@@ -29,8 +29,10 @@ export const startRuntimeFromMessage = async (
     ownerId: memberId,
   })
   await transactor.run((unitOfWork) =>
-    unitOfWork.messages.add(
-      newMessage({
+    unitOfWork.messages.record({
+      type: 'message.posted',
+      actorId: memberId,
+      message: newMessage({
         id: toMessageId(idGenerator.next()),
         workspaceId: source.workspaceId,
         chatId,
@@ -38,9 +40,9 @@ export const startRuntimeFromMessage = async (
         authorId: memberId,
         body: source.body,
         createdAt: clock.now(),
-        needsReply: false,
+        replyToId: source.id,
       }),
-    ),
+    }),
   )
   return chatId
 }

@@ -1,8 +1,8 @@
 import type { MemberId, WorkspaceId } from '@hq/kernel'
 import { type AnyMutatorRegistry, type MutatorResultDetails, type Row, Zero } from '@rocicorp/zero'
 import { toolCatalog } from './mock-data.ts'
-import type { Snapshot } from './schema.ts'
-import { createStore, type Store } from './store.ts'
+import type { DraftRow, Snapshot } from './schema.ts'
+import { createStore } from './store.ts'
 import { type Schema, schema } from './zero.ts'
 import { queries, type ZeroContext } from './zero-queries.ts'
 
@@ -16,6 +16,7 @@ export type ZeroStoreOptions = {
   fetchSession: (workspaceId: WorkspaceId) => Promise<WorkspaceSession>
   kvStore?: 'mem' | 'idb'
   mutators?: AnyMutatorRegistry
+  draftStorage?: Storage
 }
 
 type Unbranded<Value> = Value extends string
@@ -36,8 +37,13 @@ const withoutCreatedAt = <Row extends { createdAt: number }>({ createdAt, ...row
 const uniqueBy = <Row>(rows: readonly Row[], keyOf: (row: Row) => string) => [
   ...new Map(rows.map((row) => [keyOf(row), row])).values(),
 ]
+const draftPersistDelayMilliseconds = 300
 
-export const snapshotFromZeroRows = (viewerId: MemberId, rowsByWorkspace: readonly Partial<ZeroRows>[]) => {
+export const snapshotFromZeroRows = (
+  viewerId: MemberId,
+  rowsByWorkspace: readonly Partial<ZeroRows>[],
+  drafts: readonly DraftRow[] = [],
+) => {
   const rowsOf = <Table extends TableName>(table: Table) =>
     rowsByWorkspace.flatMap((rows) => rows[table] ?? []) as ZeroRows[Table]
   const workspaces = uniqueBy(rowsOf('workspaces'), (workspace) => workspace.workspaceId)
@@ -46,6 +52,9 @@ export const snapshotFromZeroRows = (viewerId: MemberId, rowsByWorkspace: readon
   const runtimeChatIds = new Set(rowsOf('chats').flatMap((chat) => (chat.type === 'runtime' ? [chat.id] : [])))
   const answeredMessageIds = new Set(messages.map((message) => message.replyToId))
   const messageIdBySeq = new Map(messages.map((message) => [`${message.chatId}/${message.seq}`, message.id]))
+  const seqByMessageId = new Map(messages.map((message) => [`${message.chatId}/${message.id}`, message.seq]))
+  const threadSeqOf = (message: ZeroRows['messages'][number]) =>
+    seqByMessageId.get(`${message.chatId}/${message.replyToId}`) ?? message.seq
   const snapshot: Unbranded<Snapshot> = {
     workspaces: workspaces.map(({ workspaceId, name }) => ({ id: workspaceId, name })),
     members: uniqueBy(memberships, (membership) => membership.userId).map(({ userId, displayName }) => ({
@@ -61,15 +70,25 @@ export const snapshotFromZeroRows = (viewerId: MemberId, rowsByWorkspace: readon
       ...chat,
       ownerId: ownerUserId ?? '',
     })),
-    messages: messages.map(({ seq, replyToId, createdAt, editedAt, deletedAt, ...message }) => ({
-      ...message,
-      createdAt: isoOf(createdAt),
-      editedAt: isoOrNull(editedAt),
-      deletedAt: isoOrNull(deletedAt),
-      needsReply:
-        runtimeChatIds.has(message.chatId) && message.kind === 'member' && !answeredMessageIds.has(message.id),
-    })),
-    drafts: [],
+    messages: messages
+      .toSorted(
+        (first, second) =>
+          first.chatId.localeCompare(second.chatId) ||
+          threadSeqOf(first) - threadSeqOf(second) ||
+          first.seq - second.seq,
+      )
+      .map(({ seq, replyToId, createdAt, editedAt, deletedAt, ...message }) => ({
+        ...message,
+        createdAt: isoOf(createdAt),
+        editedAt: isoOrNull(editedAt),
+        deletedAt: isoOrNull(deletedAt),
+        needsReply:
+          runtimeChatIds.has(message.chatId) &&
+          message.kind === 'member' &&
+          replyToId === null &&
+          !answeredMessageIds.has(message.id),
+      })),
+    drafts,
     readMarkers: rowsOf('readMarkers').map(({ lastReadSeq, ...marker }) => ({
       ...withMemberId(marker),
       lastReadMessageId: messageIdBySeq.get(`${marker.chatId}/${lastReadSeq}`) ?? '',
@@ -91,10 +110,6 @@ export const snapshotFromZeroRows = (viewerId: MemberId, rowsByWorkspace: readon
   return snapshot as Snapshot
 }
 
-const writesUnavailable: Store['write'] = () => {
-  throw new Error('Writes through Zero go through mutators')
-}
-
 const failureOf = (details: MutatorResultDetails) =>
   details.type === 'error' ? new Error(details.error.message) : undefined
 
@@ -105,8 +120,22 @@ export const createZeroStore = ({
   fetchSession,
   kvStore,
   mutators,
+  draftStorage,
 }: ZeroStoreOptions) => {
-  const store = createStore(snapshotFromZeroRows(memberId, []))
+  const draftKeyPrefix = `hq.draft:${memberId}:`
+  const draftKeyOf = (draft: DraftRow) => `${draftKeyPrefix}${draft.workspaceId}:${draft.chatId}`
+  const storedDraftKeys = () =>
+    Array.from({ length: draftStorage?.length ?? 0 }, (_, index) => draftStorage?.key(index) ?? '').filter((key) =>
+      key.startsWith(draftKeyPrefix),
+    )
+  let drafts: readonly DraftRow[] = storedDraftKeys().map((key) => JSON.parse(draftStorage?.getItem(key) ?? '{}'))
+  let draftPersistTimer: ReturnType<typeof setTimeout> | undefined
+  const persistDrafts = () => {
+    const currentDraftKeys = new Set(drafts.map(draftKeyOf))
+    for (const key of storedDraftKeys()) if (!currentDraftKeys.has(key)) draftStorage?.removeItem(key)
+    for (const draft of drafts) draftStorage?.setItem(draftKeyOf(draft), JSON.stringify(draft))
+  }
+  const store = createStore(snapshotFromZeroRows(memberId, [], drafts))
   const rowsByWorkspace = new Map<WorkspaceId, Partial<ZeroRows>>()
   const zeroByWorkspace = new Map<WorkspaceId, Promise<Zero | undefined>>()
   const loadedByWorkspace = new Map<WorkspaceId, PromiseWithResolvers<void>>()
@@ -118,7 +147,7 @@ export const createZeroStore = ({
     isPublishScheduled = true
     queueMicrotask(() => {
       isPublishScheduled = false
-      store.write(() => snapshotFromZeroRows(memberId, [...rowsByWorkspace.values()]))
+      store.write(() => snapshotFromZeroRows(memberId, [...rowsByWorkspace.values()], drafts))
     })
   }
   const loadedOf = (workspaceId: WorkspaceId) => {
@@ -178,7 +207,20 @@ export const createZeroStore = ({
   return {
     read: store.read,
     subscribe: store.subscribe,
-    write: writesUnavailable,
+    write: (updater: (current: Snapshot) => Snapshot) =>
+      store.write((current) => {
+        const next = updater(current)
+        const changedTables = (Object.keys(next) as (keyof Snapshot)[]).filter(
+          (table) => next[table] !== current[table],
+        )
+        if (changedTables.some((table) => table !== 'drafts'))
+          throw new Error('Writes through Zero go through mutators')
+        if (next.drafts === current.drafts) return current
+        drafts = next.drafts
+        clearTimeout(draftPersistTimer)
+        draftPersistTimer = setTimeout(persistDrafts, draftPersistDelayMilliseconds)
+        return next
+      }),
     whenLoaded: (workspaceId: WorkspaceId) => loadedOf(workspaceId).promise,
     mutate: async (workspaceId: WorkspaceId, request: Parameters<Zero['mutate']>[0]) => {
       await loadedOf(workspaceId).promise

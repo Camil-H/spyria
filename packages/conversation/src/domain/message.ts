@@ -13,7 +13,13 @@ export type Message = Readonly<{
   createdAt: Date
   editedAt: Date | null
   deletedAt: Date | null
-  needsReply: boolean
+  replyToId: MessageId | null
+}>
+
+export type MessageChange = Readonly<{
+  type: 'message.posted' | 'message.replied' | 'message.edited' | 'message.deleted'
+  actorId: MemberId | null
+  message: Message
 }>
 
 export type ConversationChat = Readonly<{ id: ChatId; workspaceId: WorkspaceId; type: 'channel' | 'runtime' }>
@@ -34,5 +40,5 @@ export const deletedMessage = (message: Message, deleterId: MemberId, at: Date):
 }
 
 export const newMessage = (
-  fields: Pick<Message, 'id' | 'workspaceId' | 'chatId' | 'kind' | 'authorId' | 'body' | 'createdAt' | 'needsReply'>,
+  fields: Pick<Message, 'id' | 'workspaceId' | 'chatId' | 'kind' | 'authorId' | 'body' | 'createdAt' | 'replyToId'>,
 ): Message => ({ ...fields, detail: null, editedAt: null, deletedAt: null })

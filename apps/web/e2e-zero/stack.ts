@@ -14,6 +14,8 @@ type WorkerStack = { databaseName: string; zeroCacheURL: string; database: Datab
 const barrierMemberId = memberId('member-e2e-barrier')
 const barrierWorkspaceId = workspaceId('workspace-e2e-barrier')
 const barrierTimeoutMilliseconds = 15_000
+const maximumResetAttempts = 5
+const deadlockCode = '40P01'
 
 const processTreeMemoryMegabytes = (rootProcessId: number) => {
   const processes = execSync('ps -axo pid=,ppid=,rss=')
@@ -36,23 +38,40 @@ export const test = base.extend<{ resetStack: undefined }, { workerStack: Worker
   workerStack: [
     async ({ browserName: _ }, use, workerInfo) => {
       const index = workerInfo.parallelIndex
+      const releaseServerDatabase = () =>
+        fetch(`${serverUrl}/test/release-database?db=${workerDatabaseNameOf(index)}`, { method: 'POST' })
+      await releaseServerDatabase()
       const testDatabase = await createTestDatabase(templateDatabaseName, workerDatabaseNameOf(index))
       let epochNumber = 0
       const writeReset = async () => {
         const epoch = `epoch-${workerInfo.workerIndex}-${++epochNumber}`
-        await resetDatabase(testDatabase.database, createMockSnapshot(), async (transaction) => {
-          await transaction.insert(users).values({ id: barrierMemberId, email: 'e2e-barrier@example.com' })
-          await transaction
-            .insert(workspaces)
-            .values({ workspaceId: barrierWorkspaceId, name: epoch, createdBy: barrierMemberId, createdAt: new Date() })
-          await transaction.insert(memberships).values({
-            workspaceId: barrierWorkspaceId,
-            userId: barrierMemberId,
-            role: 'member',
-            displayName: 'Barrier',
+        const reset = () =>
+          resetDatabase(testDatabase.database, createMockSnapshot(), async (transaction) => {
+            await transaction.insert(users).values({ id: barrierMemberId, email: 'e2e-barrier@example.com' })
+            await transaction.insert(workspaces).values({
+              workspaceId: barrierWorkspaceId,
+              name: epoch,
+              createdBy: barrierMemberId,
+              createdAt: new Date(),
+            })
+            await transaction.insert(memberships).values({
+              workspaceId: barrierWorkspaceId,
+              userId: barrierMemberId,
+              role: 'member',
+              displayName: 'Barrier',
+            })
           })
-        })
-        return epoch
+        for (let attempt = 1; ; attempt++)
+          try {
+            await reset()
+            return epoch
+          } catch (error) {
+            if (
+              attempt === maximumResetAttempts ||
+              (error as { cause?: { code?: string } }).cause?.code !== deadlockCode
+            )
+              throw error
+          }
       }
       const firstEpoch = await writeReset()
       const zeroCache = await startZeroCache({
@@ -102,6 +121,7 @@ export const test = base.extend<{ resetStack: undefined }, { workerStack: Worker
       )
       await barrier.close()
       await zeroCache.stop()
+      await releaseServerDatabase()
       await testDatabase.drop()
     },
     { scope: 'worker', timeout: 60_000 },

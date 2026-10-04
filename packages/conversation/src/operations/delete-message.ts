@@ -9,5 +9,9 @@ type Input = { messageId: MessageId; deleterId: MemberId }
 export const deleteMessage = ({ transactor, clock }: Dependencies, { messageId, deleterId }: Input) =>
   transactor.run(async (unitOfWork) => {
     const message = await unitOfWork.messages.get(messageId)
-    await unitOfWork.messages.save(deletedMessage(message, deleterId, clock.now()))
+    await unitOfWork.messages.record({
+      type: 'message.deleted',
+      actorId: deleterId,
+      message: deletedMessage(message, deleterId, clock.now()),
+    })
   })

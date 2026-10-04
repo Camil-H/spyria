@@ -4,11 +4,10 @@ import { useSession } from '@hq/session'
 import { Bot, GitBranch, Hash } from 'lucide-react'
 import { type ReactNode, useEffect } from 'react'
 import { Link, Navigate, useOutletContext, useParams } from 'react-router'
-import { markChatRead } from '../operations/mark-chat-read.ts'
 import { getConversation } from '../queries/get-conversation.ts'
 import { Composer } from './Composer.tsx'
 import { MessageList } from './MessageList.tsx'
-import { useConversationDependencies } from './providers.tsx'
+import { useConversationCommands } from './providers.tsx'
 
 const bubbleClassName = 'rounded-full border border-line px-2 py-0.5 text-xs text-muted'
 
@@ -17,11 +16,11 @@ export const ChatView = ({ headerActions }: { headerActions?: ReactNode }) => {
   const { memberId } = useSession()
   const chatId = toChatId(useParams().chatId ?? '')
   const conversation = useQuery(getConversation(workspaceId, chatId, memberId))
-  const dependencies = useConversationDependencies()
+  const commands = useConversationCommands()
   const newestMessageId = conversation?.messages.at(-1)?.id
   useEffect(() => {
-    if (newestMessageId) markChatRead(dependencies, { workspaceId, chatId, memberId })
-  }, [dependencies, workspaceId, chatId, memberId, newestMessageId])
+    if (newestMessageId) commands.markChatRead({ workspaceId, chatId, memberId })
+  }, [commands, workspaceId, chatId, memberId, newestMessageId])
   if (!conversation) return <Navigate to={`/w/${workspaceId}`} replace />
   const ChatTypeIcon = conversation.type === 'runtime' ? Bot : Hash
   const chatTypeLabel = conversation.type === 'runtime' ? 'Runtime chat' : 'Channel'

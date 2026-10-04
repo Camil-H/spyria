@@ -36,3 +36,9 @@ export class ChatNotFound extends ConversationError {
     super('chat_not_found', `Chat ${chatId} was not found`)
   }
 }
+
+export class ForeignWorkspace extends ConversationError {
+  constructor() {
+    super('foreign_workspace', 'The change targets a workspace other than the current one')
+  }
+}

@@ -10,17 +10,16 @@ type Input = { chatId: ChatId; authorId: MemberId; text: string }
 export const sendMessage = ({ transactor, idGenerator, clock }: Dependencies, { chatId, authorId, text }: Input) =>
   transactor.run(async (unitOfWork) => {
     const chat = await unitOfWork.chats.get(chatId)
-    await unitOfWork.messages.add(
-      newMessage({
-        id: messageId(idGenerator.next()),
-        workspaceId: chat.workspaceId,
-        chatId,
-        kind: 'member',
-        authorId,
-        body: MessageBody(text),
-        createdAt: clock.now(),
-        needsReply: chat.type === 'runtime',
-      }),
-    )
-    await unitOfWork.drafts.remove(chatId, authorId)
+    const message = newMessage({
+      id: messageId(idGenerator.next()),
+      workspaceId: chat.workspaceId,
+      chatId,
+      kind: 'member',
+      authorId,
+      body: MessageBody(text),
+      createdAt: clock.now(),
+      replyToId: null,
+    })
+    await unitOfWork.messages.record({ type: 'message.posted', actorId: authorId, message })
+    if (chat.type === 'runtime') await unitOfWork.agentReplies.request(message)
   })

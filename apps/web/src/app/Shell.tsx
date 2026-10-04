@@ -34,7 +34,7 @@ export const App = ({ app }: { app: Application }) => (
   <StoreProvider store={app.store}>
     <SessionProvider session={app.session}>
       <WorkspaceProvider commands={app.workspaceCommands}>
-        <ConversationProvider dependencies={app.conversationDependencies}>
+        <ConversationProvider commands={app.conversationCommands}>
           <ProfileProvider dependencies={app.profileDependencies}>
             <BrowserRouter>
               <PanelProvider>

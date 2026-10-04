@@ -1,28 +1,18 @@
-import type { IdGenerator } from '@hq/kernel'
 import { createContext, type ReactNode, use } from 'react'
-import type { Clock } from '../contracts/clock.ts'
-import type { RuntimeChatStarter } from '../contracts/runtime-chat-starter.ts'
-import type { ConversationTransactor } from '../contracts/transactor.ts'
+import type { ConversationCommands } from './commands.ts'
 
-export type ConversationDependencies = {
-  transactor: ConversationTransactor
-  idGenerator: IdGenerator
-  clock: Clock
-  runtimeChatStarter: RuntimeChatStarter
-}
-
-const ConversationDependenciesContext = createContext<ConversationDependencies | null>(null)
+const ConversationCommandsContext = createContext<ConversationCommands | null>(null)
 
 export const ConversationProvider = ({
-  dependencies,
+  commands,
   children,
 }: {
-  dependencies: ConversationDependencies
+  commands: ConversationCommands
   children: ReactNode
-}) => <ConversationDependenciesContext value={dependencies}>{children}</ConversationDependenciesContext>
+}) => <ConversationCommandsContext value={commands}>{children}</ConversationCommandsContext>
 
-export const useConversationDependencies = () => {
-  const dependencies = use(ConversationDependenciesContext)
-  if (!dependencies) throw new Error('ConversationProvider is missing')
-  return dependencies
+export const useConversationCommands = () => {
+  const commands = use(ConversationCommandsContext)
+  if (!commands) throw new Error('ConversationProvider is missing')
+  return commands
 }

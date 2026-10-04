@@ -1,15 +1,17 @@
+import { conversationMutators } from '@hq/conversation/server'
 import type { Database } from '@hq/db/postgres'
 import { schema } from '@hq/db/zero'
 import { queries, type ZeroContext } from '@hq/db/zero-queries'
 import { memberId, workspaceId } from '@hq/kernel'
 import { workspaceMutators } from '@hq/workspace/server'
-import { mustGetMutator, mustGetQuery } from '@rocicorp/zero'
+import { getMutator, mustGetMutator, mustGetQuery } from '@rocicorp/zero'
 import { handleMutateRequest, handleQueryRequest } from '@rocicorp/zero/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { Hono } from 'hono'
 import { createSessionTokens, type FindMembershipRole } from './session-tokens.ts'
 
 const errorByStatus = { 401: 'unauthorized', 403: 'forbidden' } as const
+const mutatorNamed = (name: string) => getMutator(workspaceMutators, name) ?? mustGetMutator(conversationMutators, name)
 
 export const createApp = ({
   database,
@@ -53,8 +55,7 @@ export const createApp = ({
       return context.json(
         await handleMutateRequest({
           dbProvider: zeroDrizzle(schema, context.get('database')),
-          handler: (transact) =>
-            transact((tx, name, args) => mustGetMutator(workspaceMutators, name).fn({ args, tx, ctx })),
+          handler: (transact) => transact((tx, name, args) => mutatorNamed(name).fn({ args, tx, ctx })),
           request: context.req.raw,
           userID: ctx.userId,
         }),

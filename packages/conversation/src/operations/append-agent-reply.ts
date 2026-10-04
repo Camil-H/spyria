@@ -13,9 +13,10 @@ export const appendAgentReply = (
 ) =>
   transactor.run(async (unitOfWork) => {
     const answered = await unitOfWork.messages.get(answeredMessageId)
-    await unitOfWork.messages.save({ ...answered, needsReply: false })
-    await unitOfWork.messages.insertAfter(
-      newMessage({
+    await unitOfWork.messages.record({
+      type: 'message.replied',
+      actorId: null,
+      message: newMessage({
         id: toMessageId(idGenerator.next()),
         workspaceId: answered.workspaceId,
         chatId: answered.chatId,
@@ -23,8 +24,7 @@ export const appendAgentReply = (
         authorId: null,
         body: MessageBody(text),
         createdAt: clock.now(),
-        needsReply: false,
+        replyToId: answered.id,
       }),
-      answered.id,
-    )
+    })
   })

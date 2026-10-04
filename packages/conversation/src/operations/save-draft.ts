@@ -1,12 +1,8 @@
 import type { ChatId, MemberId, WorkspaceId } from '@hq/kernel'
-import type { ConversationTransactor } from '../contracts/transactor.ts'
+import type { DraftRepository } from '../contracts/repositories.ts'
 
-type Dependencies = { transactor: ConversationTransactor }
+type Dependencies = { drafts: DraftRepository }
 type Input = { workspaceId: WorkspaceId; chatId: ChatId; memberId: MemberId; text: string }
 
-export const saveDraft = ({ transactor }: Dependencies, { workspaceId, chatId, memberId, text }: Input) =>
-  transactor.run((unitOfWork) =>
-    text.trim() === ''
-      ? unitOfWork.drafts.remove(chatId, memberId)
-      : unitOfWork.drafts.save({ workspaceId, chatId, memberId, text }),
-  )
+export const saveDraft = ({ drafts }: Dependencies, { workspaceId, chatId, memberId, text }: Input) =>
+  text.trim() === '' ? drafts.remove(chatId, memberId) : drafts.save({ workspaceId, chatId, memberId, text })

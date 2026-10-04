@@ -1,9 +1,9 @@
-import type { MessageId } from '@hq/kernel'
+import type { MessageId, WorkspaceId } from '@hq/kernel'
 import { useSession } from '@hq/session'
 import { buttonClass, fieldClass, ghostButtonClass } from '@hq/ui'
 import { type SubmitEvent, useState } from 'react'
-import { editMessage } from '../operations/edit-message.ts'
-import { useConversationDependencies } from './providers.tsx'
+import { useOutletContext } from 'react-router'
+import { useConversationCommands } from './providers.tsx'
 
 const focusOnMount = (element: HTMLTextAreaElement | null) => element?.focus()
 
@@ -16,12 +16,13 @@ export const EditMessageForm = ({
   initialText: string
   onClose: () => void
 }) => {
-  const dependencies = useConversationDependencies()
+  const commands = useConversationCommands()
+  const workspaceId = useOutletContext<WorkspaceId>()
   const { memberId } = useSession()
   const [text, setText] = useState(initialText)
   const save = async (event: SubmitEvent) => {
     event.preventDefault()
-    await editMessage(dependencies, { messageId, editorId: memberId, text })
+    await commands.editMessage({ workspaceId, messageId, editorId: memberId, text })
     onClose()
   }
   return (
