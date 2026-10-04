@@ -1,8 +1,14 @@
-import type { LlmCredentialRepository, MemberRepository, PersonalConnectionRepository } from './repositories.ts'
+import type {
+  LlmCredentialRepository,
+  MemberRepository,
+  PersonalConnectionRepository,
+  SecretStore,
+} from './repositories.ts'
 
 export type UnitOfWork = {
   members: MemberRepository
   llmCredentials: LlmCredentialRepository
+  secrets: SecretStore
   personalConnections: PersonalConnectionRepository
 }
 

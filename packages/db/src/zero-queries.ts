@@ -36,11 +36,14 @@ export const queries = defineQueries({
   workspaceConnections: defineQuery(({ ctx }) =>
     zql.workspaceConnections
       .where('workspaceId', ctx.workspaceId)
-      .where('userId', ctx.userId)
+      .where(({ or, cmp, exists }) => or(cmp('userId', ctx.userId), exists('ownedChats')))
       .orderBy('position', 'asc'),
   ),
   toolConnections: defineQuery(({ ctx }) =>
-    zql.toolConnections.where('workspaceId', ctx.workspaceId).where('userId', ctx.userId).orderBy('position', 'asc'),
+    zql.toolConnections
+      .where('workspaceId', ctx.workspaceId)
+      .where(({ or, cmp, exists }) => or(cmp('userId', ctx.userId), exists('ownedChats')))
+      .orderBy('position', 'asc'),
   ),
   files: defineQuery(({ ctx }) => zql.files.where('workspaceId', ctx.workspaceId)),
   changes: defineQuery(({ ctx }) => zql.changes.where('workspaceId', ctx.workspaceId)),

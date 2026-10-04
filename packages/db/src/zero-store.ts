@@ -57,14 +57,10 @@ export const snapshotFromZeroRows = (
     seqByMessageId.get(`${message.chatId}/${message.replyToId}`) ?? message.seq
   const snapshot: Unbranded<Snapshot> = {
     workspaces: workspaces.map(({ workspaceId, name }) => ({ id: workspaceId, name })),
-    members: uniqueBy(memberships, (membership) => membership.userId).map(({ userId, displayName }) => ({
-      id: userId,
-      name: displayName,
-    })),
     memberships: uniqueBy(
-      [...memberships, ...workspaces.map(({ workspaceId }) => ({ workspaceId, userId: viewerId }))],
+      [...workspaces.map(({ workspaceId }) => ({ workspaceId, userId: viewerId, displayName: '' })), ...memberships],
       (membership) => `${membership.workspaceId}/${membership.userId}`,
-    ).map(({ workspaceId, userId }) => ({ workspaceId, memberId: userId })),
+    ).map(({ workspaceId, userId, displayName }) => ({ workspaceId, memberId: userId, displayName })),
     projects: rowsOf('projects').map(withoutCreatedAt),
     chats: rowsOf('chats').map(({ ownerKind, ownerUserId, ownerServiceIdentityId, mode, createdAt, ...chat }) => ({
       ...chat,

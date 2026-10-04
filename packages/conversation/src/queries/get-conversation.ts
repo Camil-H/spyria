@@ -30,7 +30,11 @@ export const getConversation =
   (snapshot: Snapshot): Conversation | null => {
     const chat = findChat(snapshot, workspaceId, chatId)
     if (!chat) return null
-    const memberNames = new Map(snapshot.members.map((member) => [member.id, member.name]))
+    const memberNames = new Map(
+      snapshot.memberships
+        .filter((membership) => membership.workspaceId === workspaceId)
+        .map((membership) => [membership.memberId, membership.displayName]),
+    )
     const memberName = (memberId: MemberId | null) => (memberId && memberNames.get(memberId)) || 'Agent'
     const origin = chat.originChatId ? findChat(snapshot, workspaceId, chat.originChatId) : undefined
     const chatMessages = snapshot.messages.filter((message) => message.chatId === chatId)

@@ -16,7 +16,7 @@ export const getUsage = (workspaceId: WorkspaceId, chatId: ChatId) => (snapshot:
   ].filter((memberId, index, memberIds) => memberIds.indexOf(memberId) === index)
   const rows = promptingMemberIds.map((memberId) => ({
     memberId,
-    name: memberName(snapshot, memberId),
+    name: memberName(snapshot, workspaceId, memberId),
     ...sumBy(snapshot.usageEntries.filter((entry) => isInChat(entry) && entry.memberId === memberId)),
   }))
   return { rows, total: sumBy(rows) }

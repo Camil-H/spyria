@@ -1,4 +1,4 @@
-import type { CredentialId, MemberId, WorkspaceId } from '@hq/kernel'
+import type { Brand, CredentialId, MemberId, WorkspaceId } from '@hq/kernel'
 import { BlankProvider } from './errors.ts'
 import type { Secret } from './secret.ts'
 
@@ -9,6 +9,10 @@ export type LlmCredential = Readonly<{
   provider: string
   last4: string
 }>
+
+export type SecretRef = Brand<'SecretRef'>
+
+export const secretRef = (value: string) => value as SecretRef
 
 type NewLlmCredential = Omit<LlmCredential, 'last4'> & { secret: Secret }
 

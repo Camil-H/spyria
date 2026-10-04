@@ -32,10 +32,7 @@ const readSnapshot = async () => {
       id: workspaceId,
       name,
     })),
-    members: [...new Map(memberships.map((membership) => [membership.userId, membership.displayName]))].map(
-      ([id, name]) => ({ id, name }),
-    ),
-    memberships: memberships.map(({ userId, workspaceId }) => ({ memberId: userId, workspaceId })),
+    memberships: memberships.map(({ role, ...membership }) => userAsMember(membership)),
     projects: (await database.select().from(tables.projects).orderBy(tables.projects.createdAt)).map(
       ({ createdAt, ...project }) => project,
     ),

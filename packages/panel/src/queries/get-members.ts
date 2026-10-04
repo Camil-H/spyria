@@ -10,6 +10,6 @@ export const getMembers = (workspaceId: WorkspaceId, chatId: ChatId) => (snapsho
   return [{ memberId: chat.ownerId, role: 'Owner' }, ...explicitMembers].map(({ memberId, role }) => ({
     memberId,
     role,
-    name: memberName(snapshot, memberId),
+    name: memberName(snapshot, workspaceId, memberId),
   }))
 }

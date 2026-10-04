@@ -25,6 +25,18 @@ export class BlankSecret extends ProfileError {
   }
 }
 
+export class CredentialNotFound extends ProfileError {
+  constructor(credentialId: string) {
+    super('credential_not_found', `LLM credential ${credentialId} was not found`)
+  }
+}
+
+export class NotOwnProfile extends ProfileError {
+  constructor() {
+    super('not_own_profile', 'A member can only change their own profile in their current workspace')
+  }
+}
+
 export class MemberNotFound extends ProfileError {
   constructor(memberId: string) {
     super('member_not_found', `Member ${memberId} was not found`)

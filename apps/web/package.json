@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port 5173 --strictPort",
-    "dev:zero": "VITE_DATA=zero bun --bun vite --config vite.zero.config.ts",
+    "dev:zero": "VITE_DATA=zero vite --config vite.zero.config.ts",
     "build": "vite build",
     "typecheck": "tsc -p .",
     "test:e2e": "playwright test",

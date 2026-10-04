@@ -22,7 +22,8 @@ export const createStoreTransactor = (store: Store): Transactor => ({
       },
       memberships: {
         add: async (membership) => {
-          memberships = [...memberships, membership]
+          const creator = memberships.find((row) => row.memberId === membership.memberId)
+          memberships = [...memberships, { ...membership, displayName: creator?.displayName ?? '' }]
         },
       },
       projects: {

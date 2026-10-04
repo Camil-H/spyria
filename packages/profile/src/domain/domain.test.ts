@@ -27,6 +27,7 @@ test('Secret redacts itself in text, JSON and inspection', () => {
 
 test('last4 derives the last four characters and Secret rejects blank values', () => {
   expect(new Secret('sk-test-1234567890').last4()).toBe('7890')
+  expect(new Secret('sk-test-1234567890').reveal()).toBe('sk-test-1234567890')
   expect(() => new Secret('   ')).toThrow(BlankSecret)
 })
 
@@ -55,6 +56,14 @@ test('newLlmCredential rejects a blank provider', () => {
 test('connectionsWithTool adds a Connected tool of the catalog and rejects others', () => {
   expect(connectionsWithTool([], owner, 'Linear', catalog)).toEqual([{ ...owner, tool: 'Linear', status: 'Connected' }])
   expect(() => connectionsWithTool([], owner, 'Jira', catalog)).toThrow(ToolNotInCatalog)
+})
+
+test('connectionsWithTool reconnects a tool in place', () => {
+  const github: PersonalConnection = { ...owner, tool: 'GitHub', status: 'Connected' }
+  expect(connectionsWithTool([slackNeedingReconnection, github], owner, 'Slack', catalog)).toEqual([
+    { ...owner, tool: 'Slack', status: 'Connected' },
+    github,
+  ])
 })
 
 test('connectionsWithoutTool removes the tool', () => {

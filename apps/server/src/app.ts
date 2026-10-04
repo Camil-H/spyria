@@ -3,6 +3,7 @@ import type { Database } from '@hq/db/postgres'
 import { schema } from '@hq/db/zero'
 import { queries, type ZeroContext } from '@hq/db/zero-queries'
 import { memberId, workspaceId } from '@hq/kernel'
+import { addLlmCredentialFromRequest, llmCredentialsPath, ProfileError, profileMutators } from '@hq/profile/server'
 import { workspaceMutators } from '@hq/workspace/server'
 import { getMutator, mustGetMutator, mustGetQuery } from '@rocicorp/zero'
 import { handleMutateRequest, handleQueryRequest } from '@rocicorp/zero/server'
@@ -11,7 +12,8 @@ import { Hono } from 'hono'
 import { createSessionTokens, type FindMembershipRole } from './session-tokens.ts'
 
 const errorByStatus = { 401: 'unauthorized', 403: 'forbidden' } as const
-const mutatorNamed = (name: string) => getMutator(workspaceMutators, name) ?? mustGetMutator(conversationMutators, name)
+const mutatorNamed = (name: string) =>
+  getMutator(workspaceMutators, name) ?? getMutator(profileMutators, name) ?? mustGetMutator(conversationMutators, name)
 
 export const createApp = ({
   database,
@@ -60,6 +62,20 @@ export const createApp = ({
           userID: ctx.userId,
         }),
       )
+    })
+    .post(llmCredentialsPath, async (context) => {
+      const body = await context.req.json().catch(() => null)
+      const zeroDatabase = zeroDrizzle(schema, context.get('database'))
+      try {
+        await zeroDatabase.transaction((tx) => addLlmCredentialFromRequest(tx, context.get('zeroContext'), body))
+      } catch (error) {
+        if (error instanceof ProfileError) return context.json({ error: error.code, message: error.message }, 400)
+        console.error(
+          `Adding an LLM credential failed with ${error instanceof Error ? error.name : 'an unknown error'}`,
+        )
+        return context.json({ error: 'internal' }, 500)
+      }
+      return context.body(null, 201)
     })
   if (isDevAuthEnabled)
     app.post('/auth/dev-token', async (context) => {

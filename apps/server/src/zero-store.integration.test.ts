@@ -63,12 +63,17 @@ const visibleTo = (snapshot: Snapshot, viewerId: MemberId, workspaceIds: readonl
     rows.filter((row) => workspaceIds.includes(row.workspaceId))
   const ownedByViewer = <Row extends { workspaceId: WorkspaceId; memberId: MemberId }>(rows: readonly Row[]) =>
     inWorkspaces(rows).filter((row) => row.memberId === viewerId)
-  const memberships = inWorkspaces(snapshot.memberships)
+  const chatOwners = new Set(inWorkspaces(snapshot.chats).map((chat) => `${chat.workspaceId}/${chat.ownerId}`))
+  const ownedByViewerOrChatOwner = <Row extends { workspaceId: WorkspaceId; memberId: MemberId }>(
+    rows: readonly Row[],
+  ) =>
+    inWorkspaces(rows).filter(
+      (row) => row.memberId === viewerId || chatOwners.has(`${row.workspaceId}/${row.memberId}`),
+    )
   return {
     ...snapshot,
     workspaces: snapshot.workspaces.filter((workspace) => workspaceIds.includes(workspace.id)),
-    members: snapshot.members.filter((member) => memberships.some((membership) => membership.memberId === member.id)),
-    memberships,
+    memberships: inWorkspaces(snapshot.memberships),
     projects: inWorkspaces(snapshot.projects),
     chats: inWorkspaces(snapshot.chats),
     messages: inWorkspaces(snapshot.messages),
@@ -83,8 +88,8 @@ const visibleTo = (snapshot: Snapshot, viewerId: MemberId, workspaceIds: readonl
     chatMembers: inWorkspaces(snapshot.chatMembers),
     readMarkers: ownedByViewer(snapshot.readMarkers),
     llmCredentials: ownedByViewer(snapshot.llmCredentials),
-    workspaceConnections: ownedByViewer(snapshot.workspaceConnections),
-    toolConnections: ownedByViewer(snapshot.toolConnections),
+    workspaceConnections: ownedByViewerOrChatOwner(snapshot.workspaceConnections),
+    toolConnections: ownedByViewerOrChatOwner(snapshot.toolConnections),
   }
 }
 

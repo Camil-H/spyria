@@ -19,7 +19,8 @@ const acme = 'workspace-acme'
 const globex = 'workspace-globex'
 const alice = 'member-alice'
 const bob = 'member-bob'
-const memberPrivateTables = ['read_markers', 'llm_credentials', 'workspace_connections', 'tool_connections']
+const memberPrivateTables = ['read_markers', 'llm_credentials']
+const chatOwnerConnectionTables = ['workspace_connections', 'tool_connections']
 type ReplicatedTable = {
   name: string
   serverName?: string
@@ -101,7 +102,11 @@ const readAll = async (workspace: string, user: string) => {
 }
 
 const expectedCount = async (table: string, workspace: string, user: string) => {
-  const userCondition = memberPrivateTables.includes(table) ? `and user_id = '${user}'` : ''
+  const userCondition = memberPrivateTables.includes(table)
+    ? `and user_id = '${user}'`
+    : chatOwnerConnectionTables.includes(table)
+      ? `and (user_id = '${user}' or user_id in (select owner_user_id from chats where workspace_id = '${workspace}'))`
+      : ''
   const [{ count }] = await testDatabase.database.$client.unsafe<[{ count: number }]>(
     `select count(*)::int as count from "${table}" where workspace_id = '${workspace}' ${userCondition}`,
   )
@@ -154,12 +159,18 @@ test('the member-private rows of Bob are not visible to Alice', () => {
         ?.filter((row) => row.user_id !== bob),
     ).toEqual([])
   }
-  expect(
+})
+
+test('connections are visible to the members of the workspace of a chat their owner owns', () => {
+  const accessOf = (reader: string) =>
     rowsByReader
-      .get('Bob in Acme')
+      .get(reader)
       ?.get('workspace_connections')
-      ?.map((row) => row.access),
-  ).toEqual(['1 of 5 tables'])
+      ?.map((row) => `${row.user_id}: ${row.access}`)
+  const acmeConnections = [`${alice}: 2 of 5 tables`, `${alice}: All sources`, `${bob}: 1 of 5 tables`]
+  expect(accessOf('Bob in Acme')).toEqual(acmeConnections)
+  expect(accessOf('Alice in Acme')).toEqual(acmeConnections)
+  expect(accessOf('Alice in Globex')).toEqual([])
 })
 
 test('workspaces lists every workspace of the member and users lists the members of the current workspace', () => {

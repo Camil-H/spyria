@@ -218,6 +218,18 @@ export const llmCredentials = table(
   (table) => [primaryKey({ columns: [table.workspaceId, table.id] }), memberReference(table, table.userId)],
 )
 
+export const placeholderSecrets = table(
+  'placeholder_secrets',
+  {
+    workspaceId: text()
+      .notNull()
+      .references(() => workspaces.workspaceId),
+    ref: text().notNull(),
+    value: text().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.workspaceId, table.ref] })],
+)
+
 export const workspaceConnections = table(
   'workspace_connections',
   {
@@ -244,6 +256,7 @@ export const toolConnections = table(
   },
   (table) => [
     primaryKey({ columns: [table.workspaceId, table.userId, table.tool] }),
+    unique().on(table.workspaceId, table.userId, table.position),
     memberReference(table, table.userId),
   ],
 )
@@ -342,6 +355,8 @@ export const relations = defineRelations(
     chatParticipants,
     messages,
     readMarkers,
+    workspaceConnections,
+    toolConnections,
   },
   (r) => ({
     users: {
@@ -387,6 +402,18 @@ export const relations = defineRelations(
       author: r.one.memberships({
         from: [r.messages.workspaceId, r.messages.authorId],
         to: [r.memberships.workspaceId, r.memberships.userId],
+      }),
+    },
+    workspaceConnections: {
+      ownedChats: r.many.chats({
+        from: [r.workspaceConnections.workspaceId, r.workspaceConnections.userId],
+        to: [r.chats.workspaceId, r.chats.ownerUserId],
+      }),
+    },
+    toolConnections: {
+      ownedChats: r.many.chats({
+        from: [r.toolConnections.workspaceId, r.toolConnections.userId],
+        to: [r.chats.workspaceId, r.chats.ownerUserId],
       }),
     },
   }),

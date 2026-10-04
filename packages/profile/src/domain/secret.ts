@@ -19,6 +19,10 @@ export class Secret {
     return redaction
   }
 
+  reveal() {
+    return this.#value
+  }
+
   last4() {
     return this.#value.trimEnd().slice(-lastCharacterCount)
   }

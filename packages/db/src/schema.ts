@@ -1,8 +1,7 @@
 import type { ChatId, CredentialId, MemberId, MessageId, ProjectId, WorkspaceId } from '@hq/kernel'
 
 type WorkspaceRow = { id: WorkspaceId; name: string }
-export type MemberRow = { id: MemberId; name: string }
-type MembershipRow = { memberId: MemberId; workspaceId: WorkspaceId }
+export type MembershipRow = { memberId: MemberId; workspaceId: WorkspaceId; displayName: string }
 export type ProjectRow = { id: ProjectId; workspaceId: WorkspaceId; name: string; archived: boolean }
 export type ChatRow = {
   id: ChatId
@@ -100,7 +99,6 @@ export type ChatMemberRow = {
 
 export type Snapshot = {
   workspaces: readonly WorkspaceRow[]
-  members: readonly MemberRow[]
   memberships: readonly MembershipRow[]
   projects: readonly ProjectRow[]
   chats: readonly ChatRow[]
@@ -134,5 +132,5 @@ export const ownedBy =
   (workspaceId: WorkspaceId, memberId: MemberId) => (row: { workspaceId: WorkspaceId; memberId: MemberId }) =>
     row.workspaceId === workspaceId && row.memberId === memberId
 
-export const memberName = (snapshot: Snapshot, memberId: MemberId) =>
-  snapshot.members.find((member) => member.id === memberId)?.name ?? 'Unknown'
+export const memberName = (snapshot: Snapshot, workspaceId: WorkspaceId, memberId: MemberId) =>
+  snapshot.memberships.find(ownedBy(workspaceId, memberId))?.displayName ?? 'Unknown'

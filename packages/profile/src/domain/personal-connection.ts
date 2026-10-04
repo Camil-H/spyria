@@ -17,8 +17,10 @@ export const connectionsWithTool = (
   catalog: readonly string[],
 ): readonly PersonalConnection[] => {
   if (!catalog.includes(tool)) throw new ToolNotInCatalog(tool)
-  const others = connections.filter((connection) => connection.tool !== tool)
-  return [...others, { ...owner, tool, status: connected }]
+  const connection = { ...owner, tool, status: connected }
+  return connections.some((candidate) => candidate.tool === tool)
+    ? connections.map((candidate) => (candidate.tool === tool ? connection : candidate))
+    : [...connections, connection]
 }
 
 export const connectionsWithoutTool = (connections: readonly PersonalConnection[], tool: string) =>

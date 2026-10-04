@@ -47,16 +47,19 @@ const replyTargets = (snapshot: Snapshot) => {
 }
 
 const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
-  const memberName = new Map(snapshot.members.map((member) => [member.id, member.name]))
   const creatorByWorkspace = new Map(
     snapshot.memberships.toReversed().map((membership) => [membership.workspaceId, membership.memberId]),
   )
   const numberedMessages = numberedWithinChat(snapshot.messages)
   const seqByMessageId = new Map(numberedMessages.map(({ row, number }) => [row.id, number]))
   const replyToByMessageId = replyTargets(snapshot)
-  await transaction
-    .insert(tables.users)
-    .values(snapshot.members.map((member) => ({ id: member.id, email: `${member.name.toLowerCase()}@example.com` })))
+  const emailByUserId = new Map(
+    snapshot.memberships.map((membership) => [
+      membership.memberId,
+      `${membership.displayName.toLowerCase()}@example.com`,
+    ]),
+  )
+  await transaction.insert(tables.users).values([...emailByUserId].map(([id, email]) => ({ id, email })))
   await transaction
     .insert(tables.workspaces)
     .values(
@@ -75,7 +78,7 @@ const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
         creatorByWorkspace.get(membership.workspaceId) === membership.memberId
           ? ('admin' as const)
           : ('member' as const),
-      displayName: memberName.get(membership.memberId) ?? '',
+      displayName: membership.displayName,
     })),
   )
   await transaction.insert(tables.projects).values(snapshot.projects.map(createdInOrder))

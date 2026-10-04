@@ -108,14 +108,10 @@ export const createMockSnapshot = (): Snapshot => ({
     { id: acme, name: 'Acme' },
     { id: globex, name: 'Globex' },
   ],
-  members: [
-    { id: alice, name: 'Alice' },
-    { id: bob, name: 'Bob' },
-  ],
   memberships: [
-    { memberId: alice, workspaceId: acme },
-    { memberId: bob, workspaceId: acme },
-    { memberId: alice, workspaceId: globex },
+    { memberId: alice, workspaceId: acme, displayName: 'Alice' },
+    { memberId: bob, workspaceId: acme, displayName: 'Bob' },
+    { memberId: alice, workspaceId: globex, displayName: 'Alice' },
   ],
   projects: [
     { id: onboarding, workspaceId: acme, name: 'Onboarding', archived: false },

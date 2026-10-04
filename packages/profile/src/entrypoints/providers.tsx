@@ -1,24 +1,14 @@
-import type { IdGenerator } from '@hq/kernel'
 import { createContext, type ReactNode, use } from 'react'
-import type { ProfileTransactor } from '../contracts/transactor.ts'
+import type { ProfileCommands } from './commands.ts'
 
-export type ProfileDependencies = {
-  transactor: ProfileTransactor
-  idGenerator: IdGenerator
-}
+const ProfileCommandsContext = createContext<ProfileCommands | null>(null)
 
-const ProfileDependenciesContext = createContext<ProfileDependencies | null>(null)
+export const ProfileProvider = ({ commands, children }: { commands: ProfileCommands; children: ReactNode }) => (
+  <ProfileCommandsContext value={commands}>{children}</ProfileCommandsContext>
+)
 
-export const ProfileProvider = ({
-  dependencies,
-  children,
-}: {
-  dependencies: ProfileDependencies
-  children: ReactNode
-}) => <ProfileDependenciesContext value={dependencies}>{children}</ProfileDependenciesContext>
-
-export const useProfileDependencies = () => {
-  const dependencies = use(ProfileDependenciesContext)
-  if (!dependencies) throw new Error('ProfileProvider is missing')
-  return dependencies
+export const useProfileCommands = () => {
+  const commands = use(ProfileCommandsContext)
+  if (!commands) throw new Error('ProfileProvider is missing')
+  return commands
 }

@@ -5,6 +5,6 @@ export const getCommits = (workspaceId: WorkspaceId, chatId: ChatId) => (snapsho
   snapshot.commits.filter(inChat(workspaceId, chatId)).map(({ sha, message, authorId, committedAt }) => ({
     sha,
     message,
-    authorName: memberName(snapshot, authorId),
+    authorName: memberName(snapshot, workspaceId, authorId),
     committedAt,
   }))

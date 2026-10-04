@@ -2,12 +2,10 @@ import { useQuery } from '@hq/db/react'
 import type { MemberId, WorkspaceId } from '@hq/kernel'
 import { focusRing, ghostButtonClass } from '@hq/ui'
 import { Content, List, Root, Trigger } from '@radix-ui/react-tabs'
-import { connectTool } from '../operations/connect-tool.ts'
-import { disconnectTool } from '../operations/disconnect-tool.ts'
 import { getPersonalConnections } from '../queries/get-personal-connections.ts'
 import { getSharedConnections } from '../queries/get-shared-connections.ts'
 import { ErrorMessage } from './ErrorMessage.tsx'
-import { useProfileDependencies } from './providers.tsx'
+import { useProfileCommands } from './providers.tsx'
 import { Section } from './Section.tsx'
 import { useGuardedAction } from './useGuardedAction.ts'
 
@@ -15,12 +13,12 @@ const rowClass = 'flex flex-wrap items-center gap-x-3 gap-y-1'
 const tabClass = `border-b-2 border-transparent px-3 py-2 text-sm text-muted hover:text-ink data-[state=active]:border-accent data-[state=active]:text-ink ${focusRing}`
 
 export const ConnectionsSection = ({ workspaceId, memberId }: { workspaceId: WorkspaceId; memberId: MemberId }) => {
-  const dependencies = useProfileDependencies()
+  const commands = useProfileCommands()
   const { errorMessage, run } = useGuardedAction()
   const shared = useQuery(getSharedConnections(workspaceId, memberId))
   const { connected, available } = useQuery(getPersonalConnections(workspaceId, memberId))
-  const act = (operation: typeof connectTool, tool: string) => () =>
-    run(() => operation(dependencies, { workspaceId, memberId, tool }))
+  const act = (command: 'connectTool' | 'disconnectTool', tool: string) => () =>
+    run(() => commands[command]({ workspaceId, memberId, tool }))
   return (
     <Section title="Connections">
       <Root defaultValue="shared" className="flex flex-col gap-3">
@@ -55,11 +53,11 @@ export const ConnectionsSection = ({ workspaceId, memberId }: { workspaceId: Wor
                 <span className="text-muted">{status}</span>
                 <span className="ml-auto flex gap-2">
                   {status === 'Needs reconnection' && (
-                    <button type="button" className={ghostButtonClass} onClick={act(connectTool, tool)}>
+                    <button type="button" className={ghostButtonClass} onClick={act('connectTool', tool)}>
                       Reconnect {tool}
                     </button>
                   )}
-                  <button type="button" className={ghostButtonClass} onClick={act(disconnectTool, tool)}>
+                  <button type="button" className={ghostButtonClass} onClick={act('disconnectTool', tool)}>
                     Disconnect {tool}
                   </button>
                 </span>
@@ -69,7 +67,7 @@ export const ConnectionsSection = ({ workspaceId, memberId }: { workspaceId: Wor
           {available.length > 0 && (
             <div className="flex flex-wrap gap-2 text-sm">
               {available.map((tool) => (
-                <button key={tool} type="button" className={ghostButtonClass} onClick={act(connectTool, tool)}>
+                <button key={tool} type="button" className={ghostButtonClass} onClick={act('connectTool', tool)}>
                   Connect {tool}
                 </button>
               ))}

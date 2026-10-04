@@ -2,6 +2,7 @@ export type {
   LlmCredentialRepository,
   MemberRepository,
   PersonalConnectionRepository,
+  SecretStore,
 } from './contracts/repositories.ts'
 export type { ProfileTransactor, UnitOfWork } from './contracts/transactor.ts'
 export { DisplayName } from './domain/display-name.ts'
@@ -9,14 +10,22 @@ export {
   BlankDisplayName,
   BlankProvider,
   BlankSecret,
+  CredentialNotFound,
   MemberNotFound,
+  NotOwnProfile,
   ProfileError,
   ToolNotInCatalog,
 } from './domain/errors.ts'
-export type { LlmCredential } from './domain/llm-credential.ts'
+export type { LlmCredential, SecretRef } from './domain/llm-credential.ts'
 export type { Member } from './domain/member.ts'
 export type { PersonalConnection } from './domain/personal-connection.ts'
+export { Secret } from './domain/secret.ts'
+export { type ProfileCommands, profileOperations } from './entrypoints/commands.ts'
+export { addLlmCredentialFromRequest } from './entrypoints/endpoints.ts'
+export { profileMutators } from './entrypoints/mutators.ts'
+export { createHttpLlmCredentialAdder, llmCredentialsPath } from './integrations/http-llm-credentials.ts'
 export { createStoreTransactor } from './integrations/store-transactor.ts'
+export { createZeroTransactor } from './integrations/zero-transactor.ts'
 export { addLlmCredential } from './operations/add-llm-credential.ts'
 export { connectTool } from './operations/connect-tool.ts'
 export { disconnectTool } from './operations/disconnect-tool.ts'

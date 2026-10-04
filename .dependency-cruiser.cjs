@@ -47,7 +47,7 @@ module.exports = {
       severity: 'error',
       from: {
         path: `^packages/${contexts}/src/entrypoints/`,
-        pathNot: `^packages/${contexts}/src/entrypoints/(mutators|jobs)\\.ts$`,
+        pathNot: `^packages/${contexts}/src/entrypoints/(mutators|jobs|endpoints)\\.ts$`,
       },
       to: { path: '^packages/$1/src/integrations/' },
     },

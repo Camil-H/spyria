@@ -10,8 +10,13 @@ import {
 } from '@hq/conversation/server'
 import { createMockSnapshot, createStore, currentMemberId, defaultWorkspaceId, type Store } from '@hq/db'
 import { chatId, type IdGenerator, type WorkspaceId, workspaceId } from '@hq/kernel'
-import type { ProfileDependencies } from '@hq/profile'
-import { createStoreTransactor as createProfileTransactor } from '@hq/profile/server'
+import {
+  createHttpLlmCredentialAdder,
+  createStoreTransactor as createProfileTransactor,
+  type ProfileCommands,
+  profileMutators,
+  profileOperations,
+} from '@hq/profile/server'
 import type { Session } from '@hq/session'
 import {
   createStoreTransactor,
@@ -26,6 +31,7 @@ const dataSource = import.meta.env.VITE_DATA ?? 'memory'
 const zeroCacheURL = import.meta.env.VITE_ZERO_URL ?? 'http://localhost:4848'
 type TestStack = { zeroCacheURL: string; databaseName: string }
 const testStack = import.meta.env.DEV ? (window as Window & { hqTestStack?: TestStack }).hqTestStack : undefined
+const sessionTokenByWorkspace = new Map<WorkspaceId, string>()
 
 const openZeroStore = async () => {
   const { createZeroStore } = await import('@hq/db/zero-store')
@@ -33,7 +39,7 @@ const openZeroStore = async () => {
     memberId: currentMemberId,
     defaultWorkspaceId,
     cacheURL: testStack?.zeroCacheURL ?? zeroCacheURL,
-    mutators: { ...workspaceMutators, ...conversationMutators },
+    mutators: { ...workspaceMutators, ...conversationMutators, ...profileMutators },
     draftStorage: localStorage,
     fetchSession: async (workspaceId) => {
       const response = await fetch('/auth/dev-token', {
@@ -42,7 +48,9 @@ const openZeroStore = async () => {
         body: JSON.stringify({ workspaceId, userId: currentMemberId, db: testStack?.databaseName }),
       })
       if (!response.ok) throw new Error(`The dev token for ${workspaceId} was refused with ${response.status}`)
-      return response.json()
+      const session = await response.json()
+      sessionTokenByWorkspace.set(workspaceId, session.token)
+      return session
     },
   })
   await store.whenLoaded(defaultWorkspaceId)
@@ -107,12 +115,29 @@ const zeroConversationCommands = (zeroStore: ZeroStore, idGenerator: IdGenerator
   ])
 }
 
+const addLlmCredentialAsMember = createHttpLlmCredentialAdder((workspaceId, path, body) =>
+  fetch(path, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${sessionTokenByWorkspace.get(workspaceId)}`,
+      'content-type': 'application/json',
+    },
+    body,
+  }),
+)
+
+const zeroProfileCommands = (zeroStore: ZeroStore, idGenerator: IdGenerator) =>
+  commandsOf<ProfileCommands>([
+    ...zeroCommandsOf(zeroStore, idGenerator).entriesOf(profileMutators.profile),
+    ['addLlmCredential', (input) => addLlmCredentialAsMember(input as never)],
+  ])
+
 export type Application = {
   store: Store
   session: Session
   workspaceCommands: WorkspaceCommands
   conversationCommands: ConversationCommands
-  profileDependencies: ProfileDependencies
+  profileCommands: ProfileCommands
   startMockAgent?: () => void
 }
 
@@ -152,10 +177,9 @@ export const createApp = async (): Promise<Application> => {
     conversationCommands: zeroStore
       ? zeroConversationCommands(zeroStore, idGenerator)
       : bound<ConversationCommands>(conversationOperations, conversationDependencies),
-    profileDependencies: {
-      transactor: createProfileTransactor(store),
-      idGenerator,
-    },
+    profileCommands: zeroStore
+      ? zeroProfileCommands(zeroStore, idGenerator)
+      : bound<ProfileCommands>(profileOperations, { transactor: createProfileTransactor(store), idGenerator }),
     startMockAgent: zeroStore ? undefined : () => startMockAgent(store, conversationDependencies),
   }
 }
