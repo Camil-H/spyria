@@ -13,6 +13,8 @@
     "dev": "COMPOSE_PROFILES=zero bun run stack:up && bun run --filter '@hq/server' --filter '@hq/web' dev",
     "test:e2e": "bun run --cwd apps/web test:e2e",
     "check:boundaries": "depcruise apps packages --config .dependency-cruiser.cjs",
+    "check:bundle": "bun run --cwd apps/web build && bun scripts/check-bundle.ts",
+    "check:all": "bun run lint && bun run typecheck && bun run check:boundaries && bun run test && bun run check:bundle && bun run stack:up && bun run test:integration && bun run test:e2e",
     "stack:up": "docker compose -f infra/docker-compose.yml up -d --wait",
     "stack:down": "docker compose -f infra/docker-compose.yml --profile zero down",
     "db:migrate": "bun run stack:up && bun run --cwd packages/db migrate",

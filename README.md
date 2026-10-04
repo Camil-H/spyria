@@ -44,10 +44,12 @@ bun run stack:down    # stop the containers (data is kept in the volume)
 ## Checks
 
 ```sh
+bun run check:all          # everything below in order, failing fast; starts Postgres and Dex, leaves the stack running
 bun run typecheck
 bun run test
 bun run test:integration   # needs bun run stack:up
 bun run check:boundaries
 bun run lint
+bun run check:bundle       # builds the app, main chunk at most 720 kB, no new server-only SQL
 bun run test:e2e           # starts its own stack per worker
 ```
