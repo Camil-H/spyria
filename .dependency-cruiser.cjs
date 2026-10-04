@@ -114,7 +114,7 @@ module.exports = {
     {
       name: 'zero-schema-queries-and-events-never-reach-client-or-server-only-code',
       severity: 'error',
-      from: { path: '^packages/db/src/(zero(-queries)?|events)\\.ts$' },
+      from: { path: '^packages/db/src/(zero(-queries)?|events|server-writes)\\.ts$' },
       to: { path: [...clientModules, ...serverOnlyModules], reachable: true },
     },
     {

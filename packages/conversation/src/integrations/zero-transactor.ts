@@ -1,4 +1,5 @@
 import { appendChatEvent } from '@hq/db/events'
+import { enqueueJob } from '@hq/db/server-writes'
 import { type Message as MessageRow, zql } from '@hq/db/zero'
 import { type ChatId, chatId, type MessageId, memberId, messageId, type WorkspaceId, workspaceId } from '@hq/kernel'
 import type { Transaction } from '@rocicorp/zero'
@@ -37,8 +38,6 @@ const eventOf = ({ type, message }: MessageChange) => ({
 })
 
 export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: WorkspaceId): ConversationTransactor => {
-  const serverQuery = async (statement: string, parameters: unknown[]) =>
-    tx.location === 'server' ? [...(await tx.dbTransaction.query(statement, parameters))] : []
   const findMessage = (id: MessageId) =>
     tx.run(zql.messages.where('workspaceId', contextWorkspaceId).where('id', id).one())
   const messagesInChat = (id: ChatId) =>
@@ -89,16 +88,12 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
     },
     agentReplies: {
       request: async (message) => {
-        await serverQuery(
-          `insert into jobs (workspace_id, id, type, payload, run_at, attempts, state) values ($1, $2, $3, $4::jsonb, now() + make_interval(secs => $5::double precision / 1000), 0, 'queued')`,
-          [
-            message.workspaceId,
-            crypto.randomUUID(),
-            scriptedAgentReply.jobType,
-            JSON.stringify({ messageId: message.id }),
-            scriptedAgentReply.delayMilliseconds,
-          ],
-        )
+        await enqueueJob(tx, {
+          workspaceId: message.workspaceId,
+          type: scriptedAgentReply.jobType,
+          payload: { messageId: message.id },
+          delayMilliseconds: scriptedAgentReply.delayMilliseconds,
+        })
       },
     },
     readMarkers: {

@@ -9,6 +9,10 @@
       "default": "./src/events.ts"
     },
     "./react": "./src/useQuery.tsx",
+    "./server-writes": {
+      "browser": "./src/server-writes.browser.ts",
+      "default": "./src/server-writes.ts"
+    },
     "./postgres": "./src/postgres.ts",
     "./testing": "./src/postgres/test-database.ts",
     "./zero": "./src/zero.ts",

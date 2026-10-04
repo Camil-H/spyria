@@ -85,7 +85,7 @@ Every rule of the architecture standard (`.claude/skills/architecture`) and what
 | Gate | Mechanism |
 |---|---|
 | Main chunk at most 720 kB | `scripts/check-bundle.ts` on `apps/web/dist` |
-| No new server-only SQL in client assets | `scripts/check-bundle.ts` counts `into events`, `into sessions`, `skip locked`, `for update`, `into jobs`, `into llm_credentials`, `placeholder_secrets`; the allowed counts are today's leaks (see Gaps) and only go down |
+| No server-only SQL in client assets | `scripts/check-bundle.ts` fails on `into events`, `into sessions`, `skip locked`, `for update`, `into jobs`, `into llm_credentials` or `placeholder_secrets` in any client asset; server SQL that runs in shared mutator code lives in `@hq/db/events` and `@hq/db/server-writes`, whose `browser` condition points at stubs |
 | `workspace_id` on every table but `users` | integration `schema` "every table except users carries a non-null workspace_id" |
 | Append-only events | trigger plus integration `constraints` and `event-store` "refuse updates and deletes" |
 | Zero publication = Zero schema | integration `schema` "the zero publication replicates exactly ..." |
@@ -141,4 +141,4 @@ Rules that apply today without a mechanism, or with a known hole.
 | N1 | return types are inferred, not annotated (`isolatedDeclarations` is off) |
 | N3 | Biome `noExplicitAny` is only a warning, and warnings do not fail; zero explicit `any` today |
 
-Known holes in applied rules: client assets still ship server-only SQL from the profile and conversation zero-transactors (`insert into llm_credentials`, `placeholder_secrets`, `select ... for update` on memberships, `insert into jobs`), allowed by the bundle gate's counts until it moves behind a `browser` export condition like `@hq/db/events`; L5 is mechanical for `domain/` only; B5a does not catch a new shared package; T10's suite (212 tests) is wider than a bounded set of journeys.
+Known holes in applied rules: L5 is mechanical for `domain/` only; B5a does not catch a new shared package; T10's suite (212 tests) is wider than a bounded set of journeys.
