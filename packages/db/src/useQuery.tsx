@@ -1,6 +1,6 @@
 import { createContext, type ReactNode, use, useRef, useSyncExternalStore } from 'react'
 import type { Snapshot } from './schema.ts'
-import type { Store } from './store.ts'
+import type { Store } from './zero-store.ts'
 
 const isContainer = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
 

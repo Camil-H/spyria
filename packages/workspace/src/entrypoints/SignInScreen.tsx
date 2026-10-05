@@ -1,5 +1,6 @@
 import { buttonClass } from '@hq/ui'
 import { useState } from 'react'
+import { fullScreenClass } from './ui.ts'
 
 type SignInOutcome = { status: string; email?: string }
 
@@ -13,7 +14,7 @@ export const SignInScreen = ({ signIn }: { signIn: () => Promise<SignInOutcome> 
     setUninvitedEmail(outcome.status === 'not_invited' ? outcome.email : undefined)
   }
   return (
-    <main className="flex h-screen flex-col items-center justify-center gap-4 bg-app p-6 text-center text-ink">
+    <main className={fullScreenClass}>
       <h1 className="text-xl font-medium">Sign in to HQ</h1>
       <button type="button" className={buttonClass} disabled={isSigningIn} onClick={startSignIn}>
         Sign in

@@ -3,7 +3,7 @@ import type { WorkspaceId } from '@hq/kernel'
 import type { ServerTransaction } from '@rocicorp/zero'
 import type { FindMember, SessionClaims } from './session-tokens.ts'
 
-export type LiveSession = SessionClaims & { createdAt: Date }
+type LiveSession = SessionClaims & { createdAt: Date }
 
 export const openSessions = (database: Database, userId: string, workspaceId?: string) =>
   database.$client<LiveSession[]>`
@@ -17,12 +17,16 @@ export const openSessions = (database: Database, userId: string, workspaceId?: s
     from opened join memberships using (workspace_id, user_id) join workspaces using (workspace_id)
     order by workspaces.created_at`
 
-export const findLiveSessions = (database: Database, sessionIdByWorkspace: [string, string][]) =>
-  database.$client<LiveSession[]>`
+export const findLiveSessions = async (database: Database, sessionIdByWorkspace: [string, string][]) =>
+  sessionIdByWorkspace.length === 0
+    ? []
+    : database.$client<LiveSession[]>`
     select sessions.workspace_id as "workspaceId", sessions.user_id as "userId", sessions.id as "sessionId",
       memberships.role, sessions.created_at as "createdAt"
     from sessions join memberships using (workspace_id, user_id) join workspaces using (workspace_id)
-    where sessions.workspace_id || '/' || sessions.id = any(${sessionIdByWorkspace.map((pair) => pair.join('/'))}::text[])
+    where (sessions.workspace_id, sessions.id) in (
+        select * from unnest(${sessionIdByWorkspace.map(([workspaceId]) => workspaceId)}::text[],
+          ${sessionIdByWorkspace.map(([, sessionId]) => sessionId)}::text[]))
       and sessions.expires_at > now()
     order by workspaces.created_at`
 

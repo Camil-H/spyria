@@ -7,28 +7,29 @@ import { getFiles } from '../queries/get-files.ts'
 import type { TabProps } from './TabProps.ts'
 import { emptyClass } from './ui.ts'
 
-type TreeNode = { name: string; isFolder: boolean; children: TreeNode[] }
+type TreeNode = { name: string; isFolder: boolean; children: Map<string, TreeNode> }
 
 const buildTree = (files: readonly FileRow[]) => {
-  const root: TreeNode = { name: '', isFolder: true, children: [] }
+  const root: TreeNode = { name: '', isFolder: true, children: new Map() }
   for (const file of files) {
     const segments = file.path.split('/')
     let node = root
     segments.forEach((segment, index) => {
-      let child = node.children.find((candidate) => candidate.name === segment)
-      if (!child) {
-        child = { name: segment, isFolder: index < segments.length - 1 || file.kind === 'folder', children: [] }
-        node.children.push(child)
+      const child = node.children.get(segment) ?? {
+        name: segment,
+        isFolder: index < segments.length - 1 || file.kind === 'folder',
+        children: new Map(),
       }
+      node.children.set(segment, child)
       node = child
     })
   }
   return root.children
 }
 
-const TreeItems = ({ nodes }: { nodes: TreeNode[] }) => (
+const TreeItems = ({ nodes }: { nodes: TreeNode['children'] }) => (
   <ul className="flex flex-col gap-1 text-sm">
-    {nodes.map((node) => (
+    {[...nodes.values()].map((node) => (
       <TreeItem key={node.name} node={node} />
     ))}
   </ul>

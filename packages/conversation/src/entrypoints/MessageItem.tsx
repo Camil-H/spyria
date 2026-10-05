@@ -1,6 +1,6 @@
 import { focusRing } from '@hq/ui'
 import { ChevronRight } from 'lucide-react'
-import { useState } from 'react'
+import { type Ref, useState } from 'react'
 import type { ConversationMessage } from '../queries/get-conversation.ts'
 import { DeleteMessageDialog } from './DeleteMessageDialog.tsx'
 import { EditMessageForm } from './EditMessageForm.tsx'
@@ -12,22 +12,21 @@ const timeFormat = new Intl.DateTimeFormat('en-GB', {
   hourCycle: 'h23',
   timeZone: 'UTC',
 })
-const scrollIntoView = (element: HTMLElement | null) => element?.scrollIntoView({ block: 'end' })
 
 export const MessageItem = ({
   message,
   hasMenu,
-  isLast,
+  ref,
 }: {
   message: ConversationMessage
   hasMenu: boolean
-  isLast: boolean
+  ref?: Ref<HTMLLIElement>
 }) => {
   const [mode, setMode] = useState<'view' | 'edit' | 'delete'>('view')
   const [isExpanded, setIsExpanded] = useState(false)
   const close = () => setMode('view')
   return (
-    <li ref={isLast ? scrollIntoView : undefined} className="group relative rounded-md px-3 py-2 hover:bg-hover">
+    <li ref={ref} className="group relative rounded-md px-3 py-2 hover:bg-hover">
       {message.kind === 'tool-call' ? (
         <>
           <button

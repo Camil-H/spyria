@@ -4,12 +4,11 @@ import { memberId, workspaceId } from '@hq/kernel'
 import { DisplayName } from './display-name.ts'
 import { BlankDisplayName, BlankProvider, BlankSecret, ToolNotInCatalog } from './errors.ts'
 import { newLlmCredential } from './llm-credential.ts'
-import { connectionsWithoutTool, connectionsWithTool, type PersonalConnection } from './personal-connection.ts'
+import { connectedTool } from './personal-connection.ts'
 import { Secret } from './secret.ts'
 
 const owner = { workspaceId: workspaceId('acme'), memberId: memberId('alice') }
 const catalog = ['GitHub', 'Slack', 'Linear']
-const slackNeedingReconnection: PersonalConnection = { ...owner, tool: 'Slack', status: 'Needs reconnection' }
 
 test('DisplayName trims and rejects blank values', () => {
   expect(String(DisplayName('  Alice D.  '))).toBe('Alice D.')
@@ -53,19 +52,7 @@ test('newLlmCredential rejects a blank provider', () => {
   ).toThrow(BlankProvider)
 })
 
-test('connectionsWithTool adds a Connected tool of the catalog and rejects others', () => {
-  expect(connectionsWithTool([], owner, 'Linear', catalog)).toEqual([{ ...owner, tool: 'Linear', status: 'Connected' }])
-  expect(() => connectionsWithTool([], owner, 'Jira', catalog)).toThrow(ToolNotInCatalog)
-})
-
-test('connectionsWithTool reconnects a tool in place', () => {
-  const github: PersonalConnection = { ...owner, tool: 'GitHub', status: 'Connected' }
-  expect(connectionsWithTool([slackNeedingReconnection, github], owner, 'Slack', catalog)).toEqual([
-    { ...owner, tool: 'Slack', status: 'Connected' },
-    github,
-  ])
-})
-
-test('connectionsWithoutTool removes the tool', () => {
-  expect(connectionsWithoutTool([slackNeedingReconnection], 'Slack')).toEqual([])
+test('connectedTool connects a tool of the catalog and rejects others', () => {
+  expect(connectedTool(owner, 'Linear', catalog)).toEqual({ ...owner, tool: 'Linear', status: 'Connected' })
+  expect(() => connectedTool(owner, 'Jira', catalog)).toThrow(ToolNotInCatalog)
 })

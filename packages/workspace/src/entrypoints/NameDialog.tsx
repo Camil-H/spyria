@@ -2,28 +2,28 @@ import { buttonClass, Dialog, fieldClass, labelClass } from '@hq/ui'
 import { type SubmitEvent, useState } from 'react'
 import { Name } from '../domain/name.ts'
 
-export const RenameDialog = ({
+export const NameDialog = ({
   label,
   fieldLabel,
-  currentName,
-  rename,
+  initialName = '',
+  submit,
   onClose,
 }: {
   label: string
   fieldLabel: string
-  currentName: string
-  rename: (name: Name) => Promise<void>
+  initialName?: string
+  submit: (name: Name) => Promise<unknown>
   onClose: () => void
 }) => {
-  const [draftName, setDraftName] = useState(currentName)
-  const submit = async (event: SubmitEvent) => {
+  const [draftName, setDraftName] = useState(initialName)
+  const confirm = async (event: SubmitEvent) => {
     event.preventDefault()
-    await rename(Name(draftName))
+    await submit(Name(draftName))
     onClose()
   }
   return (
     <Dialog label={label} onClose={onClose}>
-      <form onSubmit={submit} className="flex flex-col gap-3">
+      <form onSubmit={confirm} className="flex flex-col gap-3">
         <label className={labelClass}>
           {fieldLabel}
           <input

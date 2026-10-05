@@ -1,6 +1,5 @@
 import { useQuery } from '@hq/db/react'
 import type { WorkspaceId } from '@hq/kernel'
-import { focusRing } from '@hq/ui'
 import { Provider } from '@radix-ui/react-tooltip'
 import { FolderPlus, SquarePen } from 'lucide-react'
 import { useState } from 'react'
@@ -8,9 +7,11 @@ import { NavLink } from 'react-router'
 import { getSidebar } from '../queries/get-sidebar.ts'
 import { type ChatAdornment, ChatRow } from './ChatRow.tsx'
 import { IconButton } from './IconButton.tsx'
+import { NameDialog } from './NameDialog.tsx'
 import { NewChatDialog } from './NewChatDialog.tsx'
-import { NewProjectDialog } from './NewProjectDialog.tsx'
 import { ProjectGroup } from './ProjectGroup.tsx'
+import { useWorkspaceCommands } from './providers.tsx'
+import { navLinkClass } from './ui.ts'
 import { WorkspaceSwitcher } from './WorkspaceSwitcher.tsx'
 
 export const Sidebar = ({
@@ -21,6 +22,7 @@ export const Sidebar = ({
   chatAdornment?: ChatAdornment
 }) => {
   const sidebar = useQuery(getSidebar(workspaceId))
+  const commands = useWorkspaceCommands()
   const [openDialog, setOpenDialog] = useState<'project' | 'chat' | null>(null)
   const closeDialog = () => setOpenDialog(null)
   return (
@@ -36,7 +38,14 @@ export const Sidebar = ({
             <IconButton label="New chat" icon={SquarePen} onClick={() => setOpenDialog('chat')} />
           </div>
         </div>
-        {openDialog === 'project' && <NewProjectDialog workspaceId={workspaceId} onClose={closeDialog} />}
+        {openDialog === 'project' && (
+          <NameDialog
+            label="New project"
+            fieldLabel="Project name"
+            submit={(name) => commands.createProject({ workspaceId, name })}
+            onClose={closeDialog}
+          />
+        )}
         {openDialog === 'chat' && (
           <NewChatDialog workspaceId={workspaceId} projects={sidebar.projects} onClose={closeDialog} />
         )}
@@ -67,12 +76,7 @@ export const Sidebar = ({
             </ul>
           </fieldset>
         </div>
-        <NavLink
-          to={`/w/${workspaceId}/profile`}
-          className={({ isActive }) =>
-            `rounded-md px-2 py-1.5 text-sm ${focusRing} ${isActive ? 'bg-selected font-medium' : 'hover:bg-hover'}`
-          }
-        >
+        <NavLink to={`/w/${workspaceId}/profile`} className={navLinkClass('py-1.5')}>
           Profile
         </NavLink>
       </nav>

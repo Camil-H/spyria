@@ -1,22 +1,13 @@
-import type { WorkspaceId } from '@hq/kernel'
-import { addLlmCredential } from '../operations/add-llm-credential.ts'
-import { connectTool } from '../operations/connect-tool.ts'
-import { disconnectTool } from '../operations/disconnect-tool.ts'
-import { removeLlmCredential } from '../operations/remove-llm-credential.ts'
-import { renameMember } from '../operations/rename-member.ts'
+import type { CredentialId, WorkspaceId } from '@hq/kernel'
+import type { DisplayName } from '../domain/display-name.ts'
+import type { Secret } from '../domain/secret.ts'
 
-export const profileOperations = {
-  addLlmCredential,
-  connectTool,
-  disconnectTool,
-  removeLlmCredential,
-  renameMember,
-}
-
-type ProfileOperations = typeof profileOperations
+type Command<Input> = (input: Input & { workspaceId: WorkspaceId }) => Promise<unknown>
 
 export type ProfileCommands = {
-  [Name in keyof ProfileOperations]: (
-    input: Parameters<ProfileOperations[Name]>[1] & { workspaceId: WorkspaceId },
-  ) => ReturnType<ProfileOperations[Name]>
+  renameMember: Command<{ name: DisplayName }>
+  removeLlmCredential: Command<{ credentialId: CredentialId }>
+  connectTool: Command<{ tool: string }>
+  disconnectTool: Command<{ tool: string }>
+  addLlmCredential: Command<{ provider: string; secret: Secret }>
 }

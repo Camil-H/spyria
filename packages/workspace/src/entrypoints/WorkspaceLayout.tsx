@@ -13,7 +13,8 @@ export const WorkspaceLayout = ({ chatAdornment }: { chatAdornment?: ChatAdornme
   const workspaces = useQuery(listWorkspaces(memberId))
   const workspaceId = workspaces.find((workspace) => workspace.id === routeWorkspaceId)?.id
   if (!workspaceId) return <NoAccessScreen />
-  if (!signedInWorkspaceIds.has(workspaceId)) return <SignedOutScreen workspaceId={workspaceId} />
+  if (!signedInWorkspaceIds.has(workspaceId))
+    return <SignedOutScreen workspaceId={workspaceId} workspaces={workspaces} />
   return (
     <div className="flex h-screen">
       <Sidebar workspaceId={workspaceId} chatAdornment={chatAdornment} />

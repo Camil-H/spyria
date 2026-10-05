@@ -1,4 +1,5 @@
 import { afterAll, expect, test } from 'bun:test'
+import { conversationMutators } from '@hq/conversation/server'
 import { createMockSnapshot, type Snapshot } from '@hq/db'
 import { createTestDatabase, startZeroCache } from '@hq/db/testing'
 import { createZeroStore } from '@hq/db/zero-store'
@@ -52,7 +53,7 @@ const openStore = async (viewerId: MemberId, workspaceIds: readonly WorkspaceId[
     renew: async (workspace) => (await sessionsOf(viewerId, [workspace]))[0],
     cacheURL: zeroCache.url,
     kvStore: 'mem',
-    mutators: workspaceMutators,
+    mutators: { ...workspaceMutators, ...conversationMutators },
   })
   openedStores.push(store)
   await Promise.all(workspaceIds.map((workspace) => store.whenLoaded(workspace)))
@@ -124,6 +125,12 @@ test('signing out of a workspace removes its rows but keeps it listed, signing i
   expect(store.signedInWorkspaceIds()).toEqual(new Set([acme]))
   expect(store.read().chats.filter((chat) => chat.workspaceId === globex)).toEqual([])
   expect(store.read().workspaces.map((workspace) => workspace.name)).toEqual(['Acme', 'Globex'])
+  await expect(
+    store.mutate(
+      globex,
+      workspaceMutators.workspace.createProject({ workspaceId: globex, id: 'project-signed-out', name: 'Signed out' }),
+    ),
+  ).rejects.toThrow('Workspace workspace-globex is not open')
   const [globexSession] = await sessionsOf(alice, [globex])
   if (!globexSession) throw new Error('Alice has no Globex session')
   await store.signIn(globexSession)
@@ -148,4 +155,21 @@ test('a mutation through the store reaches the replica and, once the server conf
     workspaceId: acme,
     name: 'Stored',
   })
+})
+
+test('an optimistic message takes the next seq of its chat before the server confirms it', async () => {
+  const store = await openStore(alice, [acme])
+  const { confirmation } = await store.mutate(
+    acme,
+    conversationMutators.conversation.sendMessage({
+      workspaceId: acme,
+      id: 'message-optimistic',
+      chatId: 'chat-invoice-bug',
+      text: 'Optimistic',
+    }),
+  )
+  await Bun.sleep(0)
+  const invoiceMessages = store.read().messages.filter((message) => message.chatId === 'chat-invoice-bug')
+  expect(invoiceMessages.at(-1)).toMatchObject({ id: 'message-optimistic', seq: 5 })
+  await confirmation
 })

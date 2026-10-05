@@ -8,20 +8,11 @@ export type PersonalConnection = Readonly<{
   status: string
 }>
 
-const connected = 'Connected'
-
-export const connectionsWithTool = (
-  connections: readonly PersonalConnection[],
+export const connectedTool = (
   owner: Pick<PersonalConnection, 'workspaceId' | 'memberId'>,
   tool: string,
   catalog: readonly string[],
-): readonly PersonalConnection[] => {
+): PersonalConnection => {
   if (!catalog.includes(tool)) throw new ToolNotInCatalog(tool)
-  const connection = { ...owner, tool, status: connected }
-  return connections.some((candidate) => candidate.tool === tool)
-    ? connections.map((candidate) => (candidate.tool === tool ? connection : candidate))
-    : [...connections, connection]
+  return { ...owner, tool, status: 'Connected' }
 }
-
-export const connectionsWithoutTool = (connections: readonly PersonalConnection[], tool: string) =>
-  connections.filter((connection) => connection.tool !== tool)

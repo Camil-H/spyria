@@ -1,7 +1,7 @@
 import type { WorkspaceSession } from '@hq/db/zero-store'
 import type { MemberId, WorkspaceId } from '@hq/kernel'
 
-export type SignInResult =
+type SignInResult =
   | { status: 'signed_in' }
   | { status: 'not_invited'; email: string }
   | { status: 'failed' }

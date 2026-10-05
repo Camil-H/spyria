@@ -8,8 +8,17 @@ export const testAuthSettings = {
   oidc: { issuer: 'http://localhost:5556/dex', clientId: 'hq', redirectUri: 'http://localhost:3100/auth/callback' },
 }
 
-export const sessionTokenOf = async (database: Database, workspaceId: string, userId: string) => {
+export const issueTestSession = async (
+  database: Database,
+  workspaceId: string,
+  userId: string,
+  databaseName?: string,
+) => {
   const [session] = await openSessions(database, userId, workspaceId)
   if (!session) throw new Error(`${userId} is not a member of ${workspaceId}`)
-  return (await issueSessionToken(testAuthSettings.tokenSecret, session)).token
+  const issued = await issueSessionToken(testAuthSettings.tokenSecret, session, { databaseName })
+  return { ...issued, sessionId: session.sessionId }
 }
+
+export const sessionTokenOf = async (database: Database, workspaceId: string, userId: string) =>
+  (await issueTestSession(database, workspaceId, userId)).token

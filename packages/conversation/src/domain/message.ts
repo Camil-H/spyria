@@ -22,7 +22,7 @@ export type MessageChange = Readonly<{
   message: Message
 }>
 
-export type ConversationChat = Readonly<{ id: ChatId; workspaceId: WorkspaceId; type: 'channel' | 'runtime' }>
+export type ConversationChat = Readonly<{ workspaceId: WorkspaceId; type: 'channel' | 'runtime' }>
 
 const assertChangeable = (message: Message, memberId: MemberId) => {
   if (message.authorId !== memberId) throw new NotMessageAuthor()

@@ -2,7 +2,7 @@ import { createRemoteJWKSet, jwtVerify } from 'jose'
 import * as oauth from 'oauth4webapi'
 
 export type OidcSettings = { issuer: string; clientId: string; redirectUri: string }
-export type LoginState = { state: string; nonce: string; codeVerifier: string }
+type LoginState = { state: string; nonce: string; codeVerifier: string }
 
 const idTokenClockToleranceSeconds = 30
 
@@ -16,9 +16,10 @@ export const createOidc = ({ issuer, clientId, redirectUri }: OidcSettings) => {
       .discoveryRequest(issuerUrl, { algorithm: 'oidc', ...insecureOption })
       .then((response) => oauth.processDiscoveryResponse(issuerUrl, response))
       .then((server) => ({ server, keys: createRemoteJWKSet(new URL(server.jwks_uri ?? '')) }))
-    discovery.catch(() => {
-      discovery = undefined
-    })
+      .catch((error) => {
+        discovery = undefined
+        throw error
+      })
     return discovery
   }
   return {

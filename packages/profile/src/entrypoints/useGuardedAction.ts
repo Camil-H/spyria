@@ -3,7 +3,7 @@ import { ProfileError } from '../domain/errors.ts'
 
 export const useGuardedAction = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const run = async (action: () => Promise<void>) => {
+  const run = async (action: () => Promise<unknown>) => {
     try {
       await action()
       setErrorMessage(null)

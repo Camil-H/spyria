@@ -92,23 +92,6 @@ test('createChat inserts a runtime chat owned by the caller in the given project
   })
 })
 
-test('createChatFromChat starts a runtime chat linked to its source', async () => {
-  expect(
-    await resultOf(aliceInAcme, 'workspace.createChatFromChat', {
-      workspaceId: acme,
-      id: 'chat-from-welcome',
-      name: 'From welcome',
-      sourceChatId: 'chat-welcome',
-    }),
-  ).toEqual(succeeded)
-  expect(await chatRow('chat-from-welcome')).toMatchObject({
-    type: 'runtime',
-    originChatId: 'chat-welcome',
-    projectId: 'project-onboarding',
-    ownerUserId: alice,
-  })
-})
-
 test('moveChat, renameChat and archiveChat update the chat', async () => {
   expect(
     await resultOf(aliceInAcme, 'workspace.moveChat', {
@@ -195,12 +178,6 @@ test.each([
     'workspace.archiveProject',
     { projectId: 'project-launch', chatsPolicy: 'archive' },
     'Project project-launch was not found',
-  ],
-  [
-    'createChatFromChat from a chat of another workspace',
-    'workspace.createChatFromChat',
-    { id: 'chat-y', name: 'Y', sourceChatId: 'chat-launch-plan' },
-    'Chat chat-launch-plan was not found',
   ],
   [
     'createWorkspace over an existing workspace id',

@@ -1,14 +1,13 @@
 import type { MemberId, WorkspaceId } from '@hq/kernel'
 import { type AnyMutatorRegistry, type MutatorResultDetails, type Row, Zero } from '@rocicorp/zero'
-import { type DraftRow, type Snapshot, toolCatalog } from './schema.ts'
-import { createStore } from './store.ts'
+import type { DraftRow, Snapshot } from './schema.ts'
 import { type Schema, schema } from './zero.ts'
 import { queries, type ZeroContext } from './zero-queries.ts'
 
 type TableName = keyof Schema['tables']
-export type ZeroRows = { [Table in TableName]: readonly Row<Schema['tables'][Table]>[] }
+type ZeroRows = { [Table in TableName]: readonly Row<Schema['tables'][Table]>[] }
 export type WorkspaceSession = { workspaceId: WorkspaceId; token: string; role: ZeroContext['role']; expiresAt: number }
-export type ZeroStoreOptions = {
+type ZeroStoreOptions = {
   memberId: MemberId
   sessions: readonly WorkspaceSession[]
   renew: (workspaceId: WorkspaceId) => Promise<WorkspaceSession | undefined>
@@ -26,7 +25,10 @@ type Unbranded<Value> = Value extends string
       ? { [Key in keyof Value]: Unbranded<Value[Key]> }
       : Value
 
-const tableNames = Object.keys(schema.tables) as TableName[]
+const unmaterializedQueries = ['~', 'users', 'serviceIdentities'] as const
+const materializedTables = Object.keys(queries).filter(
+  (table) => !unmaterializedQueries.includes(table as never),
+) as Exclude<keyof typeof queries, (typeof unmaterializedQueries)[number]>[]
 
 const isoOf = (time: number) => new Date(time).toISOString()
 const isoOrNull = (time: number | null) => (time === null ? null : isoOf(time))
@@ -36,11 +38,10 @@ const withoutCreatedAt = <Row extends { createdAt: number }>({ createdAt, ...row
 const uniqueBy = <Row>(rows: readonly Row[], keyOf: (row: Row) => string) => [
   ...new Map(rows.map((row) => [keyOf(row), row])).values(),
 ]
-const draftPersistDelayMilliseconds = 300
 const renewalLeadMilliseconds = 60_000
 const renewalRetryMilliseconds = 5_000
 
-export const snapshotFromZeroRows = (
+const snapshotFromZeroRows = (
   viewerId: MemberId,
   rowsByWorkspace: readonly Partial<ZeroRows>[],
   drafts: readonly DraftRow[] = [],
@@ -52,7 +53,6 @@ export const snapshotFromZeroRows = (
   const messages = rowsOf('messages')
   const runtimeChatIds = new Set(rowsOf('chats').flatMap((chat) => (chat.type === 'runtime' ? [chat.id] : [])))
   const answeredMessageIds = new Set(messages.map((message) => message.replyToId))
-  const messageIdBySeq = new Map(messages.map((message) => [`${message.chatId}/${message.seq}`, message.id]))
   const seqByMessageId = new Map(messages.map((message) => [`${message.chatId}/${message.id}`, message.seq]))
   const threadSeqOf = (message: ZeroRows['messages'][number]) =>
     seqByMessageId.get(`${message.chatId}/${message.replyToId}`) ?? message.seq
@@ -74,7 +74,7 @@ export const snapshotFromZeroRows = (
           threadSeqOf(first) - threadSeqOf(second) ||
           first.seq - second.seq,
       )
-      .map(({ seq, replyToId, createdAt, editedAt, deletedAt, ...message }) => ({
+      .map(({ replyToId, createdAt, editedAt, deletedAt, ...message }) => ({
         ...message,
         createdAt: isoOf(createdAt),
         editedAt: isoOrNull(editedAt),
@@ -86,10 +86,7 @@ export const snapshotFromZeroRows = (
           !answeredMessageIds.has(message.id),
       })),
     drafts,
-    readMarkers: rowsOf('readMarkers').map(({ lastReadSeq, ...marker }) => ({
-      ...withMemberId(marker),
-      lastReadMessageId: messageIdBySeq.get(`${marker.chatId}/${lastReadSeq}`) ?? '',
-    })),
+    readMarkers: rowsOf('readMarkers').map(withMemberId),
     files: rowsOf('files'),
     changes: rowsOf('changes'),
     terminalLines: rowsOf('terminalLines').map(withoutPosition),
@@ -102,10 +99,11 @@ export const snapshotFromZeroRows = (
     chatMembers: rowsOf('chatParticipants').map(withMemberId),
     llmCredentials: rowsOf('llmCredentials').map(withMemberId),
     workspaceConnections: rowsOf('workspaceConnections').map((connection) => withoutPosition(withMemberId(connection))),
-    toolCatalog,
   }
   return snapshot as Snapshot
 }
+
+export type Store = ReturnType<typeof createZeroStore>
 
 const failureOf = (details: MutatorResultDetails) =>
   details.type === 'error' ? new Error(details.error.message) : undefined
@@ -121,20 +119,14 @@ export const createZeroStore = ({
 }: ZeroStoreOptions) => {
   const draftKeyPrefix = `hq.draft:${memberId}:`
   const draftKeyOf = (draft: DraftRow) => `${draftKeyPrefix}${draft.workspaceId}:${draft.chatId}`
-  const storedDraftKeys = () =>
-    Array.from({ length: draftStorage?.length ?? 0 }, (_, index) => draftStorage?.key(index) ?? '').filter((key) =>
-      key.startsWith(draftKeyPrefix),
-    )
-  let drafts: readonly DraftRow[] = storedDraftKeys().map((key) => JSON.parse(draftStorage?.getItem(key) ?? '{}'))
-  let draftPersistTimer: ReturnType<typeof setTimeout> | undefined
-  const persistDrafts = () => {
-    const currentDraftKeys = new Set(drafts.map(draftKeyOf))
-    for (const key of storedDraftKeys()) if (!currentDraftKeys.has(key)) draftStorage?.removeItem(key)
-    for (const draft of drafts) draftStorage?.setItem(draftKeyOf(draft), JSON.stringify(draft))
-  }
-  const store = createStore(snapshotFromZeroRows(memberId, [], drafts))
+  let drafts: readonly DraftRow[] = Array.from({ length: draftStorage?.length ?? 0 }, (_, index) =>
+    draftStorage?.key(index),
+  ).flatMap((key) => (key?.startsWith(draftKeyPrefix) ? [JSON.parse(draftStorage?.getItem(key) ?? '{}')] : []))
+  let snapshot = snapshotFromZeroRows(memberId, [], drafts)
+  const listeners = new Set<() => void>()
   const rowsByWorkspace = new Map<WorkspaceId, Partial<ZeroRows>>()
   const zeroByWorkspace = new Map<WorkspaceId, Zero>()
+  const tokenByWorkspace = new Map<WorkspaceId, string>()
   const loadedByWorkspace = new Map<WorkspaceId, PromiseWithResolvers<void>>()
   const renewalTimerByWorkspace = new Map<WorkspaceId, ReturnType<typeof setTimeout>>()
   let signedInWorkspaceIds: ReadonlySet<WorkspaceId> = new Set(sessions.map((session) => session.workspaceId))
@@ -144,7 +136,8 @@ export const createZeroStore = ({
     isPublishScheduled = true
     queueMicrotask(() => {
       isPublishScheduled = false
-      store.write(() => snapshotFromZeroRows(memberId, [...rowsByWorkspace.values()], drafts))
+      snapshot = snapshotFromZeroRows(memberId, [...rowsByWorkspace.values()], drafts)
+      for (const listener of listeners) listener()
     })
   }
   const loadedOf = (workspaceId: WorkspaceId) => {
@@ -167,6 +160,7 @@ export const createZeroStore = ({
     if (renewed === null) return renewLater(workspaceId, renewalRetryMilliseconds)
     if (renewed === undefined) return signOut(workspaceId)
     scheduleRenewal(renewed)
+    tokenByWorkspace.set(workspaceId, renewed.token)
     await zero.connection.connect({ auth: renewed.token })
   }
   const connect = (session: WorkspaceSession) => {
@@ -185,7 +179,8 @@ export const createZeroStore = ({
     const completeTables = new Set<TableName>()
     rowsByWorkspace.set(workspaceId, rows)
     zeroByWorkspace.set(workspaceId, zero)
-    for (const table of tableNames)
+    tokenByWorkspace.set(workspaceId, token)
+    for (const table of materializedTables)
       zero
         .materialize((queries[table] as () => Parameters<typeof zero.materialize>[0])())
         .addListener((data, result) => {
@@ -193,7 +188,7 @@ export const createZeroStore = ({
           rows[table] = (data as readonly object[]).map((row) => Object.fromEntries(Object.entries(row))) as never
           publish()
           if (result === 'complete') completeTables.add(table)
-          if (completeTables.size === tableNames.length) loadedOf(workspaceId).resolve()
+          if (completeTables.size === materializedTables.length) loadedOf(workspaceId).resolve()
         })
     zero.connection.state.subscribe((state) => {
       if (state.name === 'needs-auth') renewNow(workspaceId)
@@ -219,25 +214,25 @@ export const createZeroStore = ({
   }
   for (const session of sessions) connect(session)
   return {
-    read: store.read,
-    subscribe: store.subscribe,
-    write: (updater: (current: Snapshot) => Snapshot) =>
-      store.write((current) => {
-        const next = updater(current)
-        const changedTables = (Object.keys(next) as (keyof Snapshot)[]).filter(
-          (table) => next[table] !== current[table],
-        )
-        if (changedTables.some((table) => table !== 'drafts'))
-          throw new Error('Writes through Zero go through mutators')
-        if (next.drafts === current.drafts) return current
-        drafts = next.drafts
-        clearTimeout(draftPersistTimer)
-        draftPersistTimer = setTimeout(persistDrafts, draftPersistDelayMilliseconds)
-        return next
-      }),
+    read: () => snapshot,
+    subscribe: (listener: () => void) => {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+      }
+    },
+    replaceDraft: (draft: DraftRow) => {
+      const isReplaced = (stored: DraftRow) =>
+        stored.workspaceId === draft.workspaceId && stored.chatId === draft.chatId && stored.memberId === draft.memberId
+      if ((drafts.find(isReplaced)?.text ?? '') === draft.text) return
+      drafts = [...drafts.filter((stored) => !isReplaced(stored)), ...(draft.text === '' ? [] : [draft])]
+      if (draft.text === '') draftStorage?.removeItem(draftKeyOf(draft))
+      else draftStorage?.setItem(draftKeyOf(draft), JSON.stringify(draft))
+      publish()
+    },
     whenLoaded: (workspaceId: WorkspaceId) => loadedOf(workspaceId).promise,
     mutate: async (workspaceId: WorkspaceId, request: Parameters<Zero['mutate']>[0]) => {
-      await loadedOf(workspaceId).promise
+      if (signedInWorkspaceIds.has(workspaceId)) await loadedOf(workspaceId).promise
       const zero = zeroByWorkspace.get(workspaceId)
       if (!zero) throw new Error(`Workspace ${workspaceId} is not open`)
       const result = zero.mutate(request)
@@ -251,6 +246,7 @@ export const createZeroStore = ({
       return { confirmation }
     },
     signedInWorkspaceIds: () => signedInWorkspaceIds,
+    tokenOf: (workspaceId: WorkspaceId) => tokenByWorkspace.get(workspaceId) ?? '',
     signOut,
     signIn: async (session: WorkspaceSession) => {
       if (!zeroByWorkspace.has(session.workspaceId)) connect(session)

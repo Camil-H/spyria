@@ -10,12 +10,12 @@ import { LlmAccessSection } from './LlmAccessSection.tsx'
 export const ProfileView = () => {
   const workspaceId = useOutletContext<WorkspaceId>()
   const { memberId } = useSession()
-  const profile = useQuery(getProfile(workspaceId, memberId))
-  if (!profile) return null
+  const displayName = useQuery(getProfile(workspaceId, memberId))
+  if (!displayName) return null
   return (
     <div className="flex max-w-3xl flex-col gap-8">
       <h1 className="text-2xl font-semibold">Profile</h1>
-      <DisplayNameForm workspaceId={workspaceId} memberId={memberId} currentName={profile.name} />
+      <DisplayNameForm workspaceId={workspaceId} currentName={displayName} />
       <LlmAccessSection workspaceId={workspaceId} memberId={memberId} />
       <ConnectionsSection workspaceId={workspaceId} memberId={memberId} />
     </div>

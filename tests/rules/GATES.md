@@ -28,7 +28,7 @@ Every rule of the architecture standard (`.claude/skills/architecture`) and what
 | B5a | Closed shared layer | depcruise `context-reachable-only-through-its-entries`, `panel-imported-only-by-apps`, `server-imports-only-server-entries-kernel-and-db`; a new shared package by review |
 | C1 | Contracts in `contracts/` | review |
 | C2a | Interfaces for seams | review |
-| C3 | Static conformance | typecheck: every integration factory declares its contract as return type (`createZeroTransactor(...): ProfileTransactor`, `createSystemClock(): Clock`, ...) |
+| C3 | Static conformance | typecheck: every integration factory declares its contract as return type (`createZeroTransactor(...): ProfileTransactor`, `createZeroRuntimeChatStarter(...): RuntimeChatStarter`, ...) |
 | C4 | Dependencies as parameters | review |
 | C5a | One composition root | depcruise `packages-never-import-apps`, `drizzle-zero-config-imported-only-by-the-generated-zero-schema`; roots are `apps/web/src/app/factory.ts`, `apps/server/src/index.ts` and the server wiring entrypoints |
 | C5b | Only the root names implementations | review |
@@ -85,11 +85,11 @@ Every rule of the architecture standard (`.claude/skills/architecture`) and what
 | Gate | Mechanism |
 |---|---|
 | Main chunk at most 720 kB | `scripts/check-bundle.ts` on `apps/web/dist` |
-| No server-only SQL in client assets | `scripts/check-bundle.ts` fails on `into events`, `into sessions`, `skip locked`, `for update`, `into jobs`, `into llm_credentials` or `placeholder_secrets` in any client asset; server SQL that runs in shared mutator code lives in `@hq/db/events` and `@hq/db/server-writes`, whose `browser` condition points at stubs |
+| No server-only SQL in client assets | `scripts/check-bundle.ts` fails on `into events`, `into sessions`, `skip locked`, `for update`, `into jobs`, `into llm_credentials` or `placeholder_secrets` in any client asset; server SQL that runs in shared mutator code lives in `@hq/db/server-writes`, whose `browser` condition points at stubs |
 | `workspace_id` on every table but `users` | integration `schema` "every table except users carries a non-null workspace_id" |
 | Append-only events | trigger plus integration `constraints` and `event-store` "refuse updates and deletes" |
 | Zero publication = Zero schema | integration `schema` "the zero publication replicates exactly ..." |
-| Server code never reaches client code | depcruise `server-and-published-entries-never-reach-client-code`, `postgres-drizzle-and-server-never-reach-client-code`, `zero-schema-queries-and-events-never-reach-client-or-server-only-code`; unit `app.test.ts` "loads every context server entry without React or client code" |
+| Server code never reaches client code | depcruise `server-and-published-entries-never-reach-client-code`, `postgres-drizzle-and-server-never-reach-client-code`, `zero-schema-queries-and-server-writes-never-reach-client-or-server-only-code`; unit `app.test.ts` "loads every context server entry without React or client code" |
 | Test code unreachable from production | depcruise `test-only-modules-unreachable-from-production-entries`; integration `auth` "without test hooks ..." |
 
 ## Dormant

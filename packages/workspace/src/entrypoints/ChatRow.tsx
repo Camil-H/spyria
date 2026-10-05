@@ -1,5 +1,5 @@
 import type { ChatId, WorkspaceId } from '@hq/kernel'
-import { focusRing, menuContentClass, tooltipClass } from '@hq/ui'
+import { buttonClass, Dialog, menuContentClass, tooltipClass } from '@hq/ui'
 import { Content, Item, Root, Sub, SubContent, SubTrigger, Trigger } from '@radix-ui/react-dropdown-menu'
 import {
   Content as TooltipContent,
@@ -11,10 +11,9 @@ import { Bot, Ellipsis, Hash } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { NavLink } from 'react-router'
 import type { Sidebar } from '../queries/get-sidebar.ts'
-import { ArchiveChatDialog } from './ArchiveChatDialog.tsx'
+import { NameDialog } from './NameDialog.tsx'
 import { useWorkspaceCommands } from './providers.tsx'
-import { RenameDialog } from './RenameDialog.tsx'
-import { menuItemClass, menuTriggerClass } from './ui.ts'
+import { menuItemClass, menuTriggerClass, navLinkClass } from './ui.ts'
 
 type SidebarChat = Sidebar['looseChats'][number]
 export type ChatAdornment = (chatId: ChatId) => ReactNode
@@ -31,17 +30,15 @@ export const ChatRow = ({
   chatAdornment?: ChatAdornment
 }) => {
   const commands = useWorkspaceCommands()
-  const [isRenaming, setIsRenaming] = useState(false)
-  const [isArchiving, setIsArchiving] = useState(false)
+  const [openDialog, setOpenDialog] = useState<'rename' | 'archive' | null>(null)
+  const closeDialog = () => setOpenDialog(null)
   const ChatTypeIcon = chat.type === 'channel' ? Hash : Bot
   const chatTypeLabel = chat.type === 'channel' ? 'Channel' : 'Runtime chat'
   return (
     <li className="flex items-center">
       <NavLink
         to={`/w/${workspaceId}/chats/${chat.id}`}
-        className={({ isActive }) =>
-          `flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-sm ${focusRing} ${isActive ? 'bg-selected font-medium' : 'hover:bg-hover'}`
-        }
+        className={navLinkClass('flex min-w-0 flex-1 items-center gap-2 py-1')}
       >
         <TooltipRoot disableHoverableContent>
           <TooltipTrigger asChild>
@@ -63,52 +60,52 @@ export const ChatRow = ({
         <Content
           align="start"
           className={menuContentClass}
-          onCloseAutoFocus={(event) => isRenaming && event.preventDefault()}
+          onCloseAutoFocus={(event) => openDialog === 'rename' && event.preventDefault()}
         >
-          <Item className={menuItemClass} onSelect={() => setIsRenaming(true)}>
+          <Item className={menuItemClass} onSelect={() => setOpenDialog('rename')}>
             Rename chat
           </Item>
           <Sub>
             <SubTrigger className={menuItemClass}>Move to</SubTrigger>
             <SubContent sideOffset={4} className={menuContentClass}>
-              {projects.map((project) => (
+              {[...projects, { id: null, name: 'No project' }].map((project) => (
                 <Item
                   className={menuItemClass}
-                  key={project.id}
+                  key={project.id ?? ''}
                   onSelect={() => commands.moveChat({ workspaceId, chatId: chat.id, projectId: project.id })}
                 >
                   {project.name}
                 </Item>
               ))}
-              <Item
-                className={menuItemClass}
-                onSelect={() => commands.moveChat({ workspaceId, chatId: chat.id, projectId: null })}
-              >
-                No project
-              </Item>
             </SubContent>
           </Sub>
-          <Item className={menuItemClass} onSelect={() => setIsArchiving(true)}>
+          <Item className={menuItemClass} onSelect={() => setOpenDialog('archive')}>
             Archive chat
           </Item>
         </Content>
       </Root>
-      {isRenaming && (
-        <RenameDialog
+      {openDialog === 'rename' && (
+        <NameDialog
           label="Rename chat"
           fieldLabel="Chat name"
-          currentName={chat.name}
-          rename={(name) => commands.renameChat({ workspaceId, chatId: chat.id, name })}
-          onClose={() => setIsRenaming(false)}
+          initialName={chat.name}
+          submit={(name) => commands.renameChat({ workspaceId, chatId: chat.id, name })}
+          onClose={closeDialog}
         />
       )}
-      {isArchiving && (
-        <ArchiveChatDialog
-          workspaceId={workspaceId}
-          chatId={chat.id}
-          chatName={chat.name}
-          onClose={() => setIsArchiving(false)}
-        />
+      {openDialog === 'archive' && (
+        <Dialog label="Archive chat" subject={chat.name} onClose={closeDialog}>
+          <button
+            type="button"
+            className={buttonClass}
+            onClick={async () => {
+              await commands.archiveChat({ workspaceId, chatId: chat.id })
+              closeDialog()
+            }}
+          >
+            Archive
+          </button>
+        </Dialog>
       )}
     </li>
   )

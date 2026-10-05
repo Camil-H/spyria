@@ -6,28 +6,19 @@ import {
   lockMembership,
   secretRefOfLlmCredential,
 } from '@hq/db/server-writes'
-import { type ToolConnection as ToolConnectionRow, zql } from '@hq/db/zero'
-import type { ZeroContext } from '@hq/db/zero-queries'
-import { type MemberId, memberId, type WorkspaceId, workspaceId } from '@hq/kernel'
+import { type ZeroContext, zql } from '@hq/db/zero-queries'
+import type { MemberId, WorkspaceId } from '@hq/kernel'
 import type { Transaction } from '@rocicorp/zero'
 import type { ProfileTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import { DisplayName } from '../domain/display-name.ts'
 import { CredentialNotFound, MemberNotFound, NotOwnProfile } from '../domain/errors.ts'
 import { secretRef } from '../domain/llm-credential.ts'
 
-const toConnection = ({ userId, position, ...row }: ToolConnectionRow) => ({
-  ...row,
-  workspaceId: workspaceId(row.workspaceId),
-  memberId: memberId(userId),
-})
-
 export const createZeroTransactor = (tx: Transaction, context: ZeroContext): ProfileTransactor => {
   const asContextMember = (workspaceId: WorkspaceId, memberId: MemberId) => {
     if (workspaceId !== context.workspaceId || memberId !== context.userId) throw new NotOwnProfile()
     return { workspaceId, userId: memberId }
   }
-  const connectionsOf = (workspaceId: WorkspaceId, memberId: MemberId) =>
-    tx.run(zql.toolConnections.where('workspaceId', workspaceId).where('userId', memberId).orderBy('position', 'asc'))
   const unitOfWork: UnitOfWork = {
     members: {
       get: async (workspaceId, memberId) => {
@@ -66,26 +57,18 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
       },
     },
     personalConnections: {
-      list: async (workspaceId, memberId) => {
-        asContextMember(workspaceId, memberId)
-        await lockMembership(tx, workspaceId, memberId)
-        return (await connectionsOf(workspaceId, memberId)).map(toConnection)
-      },
-      replace: async (workspaceId, memberId, connections) => {
+      connect: async ({ workspaceId, memberId, tool, status }) => {
         const owner = asContextMember(workspaceId, memberId)
-        const stored = await connectionsOf(workspaceId, memberId)
-        const nextTools = new Set(connections.map(({ tool }) => tool))
-        for (const { tool } of stored)
-          if (!nextTools.has(tool)) await tx.mutate.toolConnections.delete({ ...owner, tool })
-        let nextPosition = Math.max(0, ...stored.map(({ position }) => position)) + 1
-        for (const { tool, status } of connections) {
-          const storedConnection = stored.find((row) => row.tool === tool)
-          if (!storedConnection)
-            await tx.mutate.toolConnections.insert({ ...owner, tool, status, position: nextPosition++ })
-          else if (storedConnection.status !== status)
-            await tx.mutate.toolConnections.update({ ...owner, tool, status })
+        await lockMembership(tx, workspaceId, memberId)
+        const stored = await tx.run(zql.toolConnections.where('workspaceId', workspaceId).where('userId', memberId))
+        if (stored.some((row) => row.tool === tool)) await tx.mutate.toolConnections.update({ ...owner, tool, status })
+        else {
+          const position = Math.max(0, ...stored.map((row) => row.position)) + 1
+          await tx.mutate.toolConnections.insert({ ...owner, tool, status, position })
         }
       },
+      disconnect: (workspaceId, memberId, tool) =>
+        tx.mutate.toolConnections.delete({ ...asContextMember(workspaceId, memberId), tool }),
       toolCatalog: async () => toolCatalog,
     },
   }

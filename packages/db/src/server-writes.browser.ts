@@ -6,3 +6,4 @@ export const keepPlaceholderSecret = skippedOnClient
 export const discardPlaceholderSecret = skippedOnClient
 export const lockMembership = skippedOnClient
 export const enqueueJob = skippedOnClient
+export const appendChatEvent = () => Promise.reject(new Error('Chat events are appended on the server only'))

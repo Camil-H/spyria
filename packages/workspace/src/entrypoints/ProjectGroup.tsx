@@ -1,13 +1,13 @@
 import type { WorkspaceId } from '@hq/kernel'
-import { focusRing, menuContentClass } from '@hq/ui'
+import { buttonClass, Dialog, focusRing, menuContentClass } from '@hq/ui'
 import { Content, Item, Root, Trigger } from '@radix-ui/react-dropdown-menu'
 import { Ellipsis } from 'lucide-react'
 import { useState } from 'react'
+import type { ChatsPolicy } from '../domain/project.ts'
 import type { Sidebar } from '../queries/get-sidebar.ts'
-import { ArchiveProjectDialog } from './ArchiveProjectDialog.tsx'
 import { type ChatAdornment, ChatRow } from './ChatRow.tsx'
+import { NameDialog } from './NameDialog.tsx'
 import { useWorkspaceCommands } from './providers.tsx'
-import { RenameDialog } from './RenameDialog.tsx'
 import { menuItemClass, menuTriggerClass } from './ui.ts'
 
 export const ProjectGroup = ({
@@ -23,8 +23,12 @@ export const ProjectGroup = ({
 }) => {
   const [isExpanded, setIsExpanded] = useState(true)
   const commands = useWorkspaceCommands()
-  const [isRenaming, setIsRenaming] = useState(false)
-  const [isArchiving, setIsArchiving] = useState(false)
+  const [openDialog, setOpenDialog] = useState<'rename' | 'archive' | null>(null)
+  const closeDialog = () => setOpenDialog(null)
+  const archiveWith = async (chatsPolicy: ChatsPolicy) => {
+    await commands.archiveProject({ workspaceId, projectId: project.id, chatsPolicy })
+    closeDialog()
+  }
   return (
     <fieldset aria-label={project.name} className="m-0 min-w-0 border-0 p-0">
       <div className="flex items-center">
@@ -46,33 +50,35 @@ export const ProjectGroup = ({
           <Content
             align="start"
             className={menuContentClass}
-            onCloseAutoFocus={(event) => isRenaming && event.preventDefault()}
+            onCloseAutoFocus={(event) => openDialog === 'rename' && event.preventDefault()}
           >
-            <Item className={menuItemClass} onSelect={() => setIsRenaming(true)}>
+            <Item className={menuItemClass} onSelect={() => setOpenDialog('rename')}>
               Rename project
             </Item>
-            <Item className={menuItemClass} onSelect={() => setIsArchiving(true)}>
+            <Item className={menuItemClass} onSelect={() => setOpenDialog('archive')}>
               Archive project
             </Item>
           </Content>
         </Root>
       </div>
-      {isRenaming && (
-        <RenameDialog
+      {openDialog === 'rename' && (
+        <NameDialog
           label="Rename project"
           fieldLabel="Project name"
-          currentName={project.name}
-          rename={(name) => commands.renameProject({ workspaceId, projectId: project.id, name })}
-          onClose={() => setIsRenaming(false)}
+          initialName={project.name}
+          submit={(name) => commands.renameProject({ workspaceId, projectId: project.id, name })}
+          onClose={closeDialog}
         />
       )}
-      {isArchiving && (
-        <ArchiveProjectDialog
-          workspaceId={workspaceId}
-          projectId={project.id}
-          projectName={project.name}
-          onClose={() => setIsArchiving(false)}
-        />
+      {openDialog === 'archive' && (
+        <Dialog label="Archive project" subject={project.name} onClose={closeDialog}>
+          <button type="button" className={buttonClass} onClick={() => archiveWith('archive')}>
+            Archive with its chats
+          </button>
+          <button type="button" className={buttonClass} onClick={() => archiveWith('release')}>
+            Archive, keep chats
+          </button>
+        </Dialog>
       )}
       {isExpanded && (
         <ul className="ml-3 flex flex-col border-l border-line pl-1">

@@ -1,5 +1,4 @@
 import { execSync } from 'node:child_process'
-import { createMockSnapshot } from '@hq/db'
 import { type Database, memberships, resetDatabase, sessions, users, workspaces } from '@hq/db/postgres'
 import { createTestDatabase, startZeroCache } from '@hq/db/testing'
 import { createZeroStore, type WorkspaceSession } from '@hq/db/zero-store'
@@ -53,7 +52,7 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
       const writeReset = async () => {
         const epoch = `epoch-${workerInfo.workerIndex}-${++epochNumber}`
         const reset = () =>
-          resetDatabase(testDatabase.database, createMockSnapshot(), async (transaction) => {
+          resetDatabase(testDatabase.database, async (transaction) => {
             await transaction.insert(users).values({ id: barrierMemberId, email: 'e2e-barrier@example.com' })
             await transaction.insert(workspaces).values({
               workspaceId: barrierWorkspaceId,

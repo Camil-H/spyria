@@ -1,5 +1,4 @@
 import { type ProjectId, projectId, type WorkspaceId } from '@hq/kernel'
-import { useSession } from '@hq/session'
 import { buttonClass, Dialog, fieldClass, labelClass } from '@hq/ui'
 import { type SubmitEvent, useState } from 'react'
 import { useNavigate } from 'react-router'
@@ -18,20 +17,13 @@ export const NewChatDialog = ({
   onClose: () => void
 }) => {
   const commands = useWorkspaceCommands()
-  const { memberId } = useSession()
   const navigate = useNavigate()
   const [type, setType] = useState<Chat['type']>('channel')
   const [draftName, setDraftName] = useState('')
   const [selectedProjectId, setSelectedProjectId] = useState<ProjectId | null>(null)
   const submit = async (event: SubmitEvent) => {
     event.preventDefault()
-    const chatId = await commands.createChat({
-      workspaceId,
-      ownerId: memberId,
-      type,
-      name: Name(draftName),
-      projectId: selectedProjectId,
-    })
+    const chatId = await commands.createChat({ workspaceId, type, name: Name(draftName), projectId: selectedProjectId })
     onClose()
     navigate(`/w/${workspaceId}/chats/${chatId}`)
   }

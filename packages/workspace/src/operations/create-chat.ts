@@ -1,15 +1,11 @@
-import { chatId, type IdGenerator, type MemberId, type ProjectId, type WorkspaceId } from '@hq/kernel'
+import { chatId, type MemberId, type ProjectId, type WorkspaceId } from '@hq/kernel'
 import type { Transactor } from '../contracts/transactor.ts'
 import { type Chat, movedChat } from '../domain/chat.ts'
 import type { Name } from '../domain/name.ts'
 
-type Dependencies = {
-  transactor: Transactor
-  idGenerator: IdGenerator
-  defaultRuntimeModel: string
-  defaultReasoningEffort: string
-}
+type Dependencies = { transactor: Transactor; defaultRuntimeModel: string; defaultReasoningEffort: string }
 type Input = {
+  id: string
   workspaceId: WorkspaceId
   ownerId: MemberId
   type: Chat['type']
@@ -18,22 +14,23 @@ type Input = {
 }
 
 export const createChat = (
-  { transactor, idGenerator, defaultRuntimeModel, defaultReasoningEffort }: Dependencies,
-  input: Input,
+  { transactor, defaultRuntimeModel, defaultReasoningEffort }: Dependencies,
+  { id, workspaceId, ownerId, type, name, projectId }: Input,
 ) =>
   transactor.run(async (unitOfWork) => {
-    const { projectId, ...fields } = input
     const looseChat: Chat = {
-      ...fields,
-      model: input.type === 'runtime' ? defaultRuntimeModel : null,
-      reasoningEffort: input.type === 'runtime' ? defaultReasoningEffort : null,
+      id: chatId(id),
+      workspaceId,
+      projectId: null,
+      type,
+      name,
+      ownerId,
+      archived: false,
+      model: type === 'runtime' ? defaultRuntimeModel : null,
+      reasoningEffort: type === 'runtime' ? defaultReasoningEffort : null,
       gitBranch: null,
       originChatId: null,
-      id: chatId(idGenerator.next()),
-      projectId: null,
-      archived: false,
     }
     const project = projectId ? await unitOfWork.projects.get(projectId) : null
-    await unitOfWork.chats.record({ type: 'chat.created', chat: movedChat(looseChat, project), actorId: input.ownerId })
-    return looseChat.id
+    await unitOfWork.chats.record({ type: 'chat.created', chat: movedChat(looseChat, project), actorId: ownerId })
   })

@@ -4,38 +4,49 @@ import { useSession } from '@hq/session'
 import { focusRing, tooltipClass } from '@hq/ui'
 import { Content, Portal, Provider, Root, Trigger } from '@radix-ui/react-tooltip'
 import { ArrowUp } from 'lucide-react'
-import { type KeyboardEvent, useEffect, useRef, useState } from 'react'
+import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from 'react'
 import { getDraft } from '../queries/get-draft.ts'
-import { usePromptAccess } from './prompt-access.tsx'
 import { useConversationCommands } from './providers.tsx'
+
+const isBlank = (text: string) => text.trim() === ''
 
 export const Composer = ({
   workspaceId,
   chatId,
-  isRuntime,
+  isBlocked,
+  blockedNotice,
 }: {
   workspaceId: WorkspaceId
   chatId: ChatId
-  isRuntime: boolean
+  isBlocked: boolean
+  blockedNotice: ReactNode
 }) => {
-  const { canPrompt, blockedNotice } = usePromptAccess()
   const commands = useConversationCommands()
   const { memberId } = useSession()
   const store = useStore()
   const [text, setText] = useState(() => getDraft(workspaceId, chatId, memberId)(store.read()))
+  const latestText = useRef(text)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  useEffect(() => textareaRef.current?.focus(), [])
-  const isBlocked = isRuntime && !canPrompt
-  const isUnsendable = text.trim() === '' || isBlocked
+  useEffect(() => {
+    textareaRef.current?.focus()
+    const saveLatestText = () => commands.saveDraft({ workspaceId, chatId, text: latestText.current })
+    window.addEventListener('pagehide', saveLatestText)
+    return () => {
+      window.removeEventListener('pagehide', saveLatestText)
+      saveLatestText()
+    }
+  }, [commands, workspaceId, chatId])
+  const isUnsendable = isBlank(text) || isBlocked
+  const change = (nextText: string) => {
+    if (isBlank(nextText) !== isBlank(latestText.current)) commands.saveDraft({ workspaceId, chatId, text: nextText })
+    latestText.current = nextText
+    setText(nextText)
+  }
   const send = async () => {
     if (isUnsendable) return
     change('')
     textareaRef.current?.focus()
-    await commands.sendMessage({ workspaceId, chatId, authorId: memberId, text })
-  }
-  const change = (nextText: string) => {
-    setText(nextText)
-    commands.saveDraft({ workspaceId, chatId, memberId, text: nextText })
+    await commands.sendMessage({ workspaceId, chatId, text })
   }
   const sendOnShortcut = (event: KeyboardEvent) => {
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {

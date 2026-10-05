@@ -10,10 +10,9 @@ import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { Hono } from 'hono'
 import { createOidc, type OidcSettings } from './auth/oidc.ts'
 import { createAuthRoutes } from './auth/routes.ts'
-import { createSessionAuthenticator } from './auth/session-tokens.ts'
+import { createSessionAuthenticator, errorByStatus } from './auth/session-tokens.ts'
 import { findMemberIn } from './auth/sessions.ts'
 
-const errorByStatus = { 401: 'unauthorized', 403: 'forbidden' } as const
 const mutatorNamed = (name: string) =>
   getMutator(workspaceMutators, name) ?? getMutator(profileMutators, name) ?? mustGetMutator(conversationMutators, name)
 
@@ -33,7 +32,9 @@ export const createApp = ({
   const databaseOf = (databaseName: string | undefined) =>
     databaseName === undefined ? database : testDatabaseByName?.(databaseName)
   const authenticate = createSessionAuthenticator(tokenSecret, findMemberIn(databaseOf))
-  return new Hono<{ Variables: { zeroContext: ZeroContext; database: Database } }>()
+  return new Hono<{
+    Variables: { zeroContext: ZeroContext; zeroDatabase: ReturnType<typeof zeroDrizzle<typeof schema, Database>> }
+  }>()
     .get('/health', (context) => context.json({ status: 'ok' }))
     .route(
       '/auth',
@@ -44,7 +45,7 @@ export const createApp = ({
       if (authentication.status !== 200)
         return context.json({ error: errorByStatus[authentication.status] }, authentication.status)
       context.set('zeroContext', authentication.context)
-      context.set('database', databaseOf(authentication.databaseName) ?? database)
+      context.set('zeroDatabase', zeroDrizzle(schema, databaseOf(authentication.databaseName) ?? database))
       await next()
     })
     .post('/api/query', async (context) => {
@@ -62,7 +63,7 @@ export const createApp = ({
       const ctx = context.get('zeroContext')
       return context.json(
         await handleMutateRequest({
-          dbProvider: zeroDrizzle(schema, context.get('database')),
+          dbProvider: context.get('zeroDatabase'),
           handler: (transact) => transact((tx, name, args) => mutatorNamed(name).fn({ args, tx, ctx })),
           request: context.req.raw,
           userID: ctx.userId,
@@ -71,9 +72,10 @@ export const createApp = ({
     })
     .post(llmCredentialsPath, async (context) => {
       const body = await context.req.json().catch(() => null)
-      const zeroDatabase = zeroDrizzle(schema, context.get('database'))
       try {
-        await zeroDatabase.transaction((tx) => addLlmCredentialFromRequest(tx, context.get('zeroContext'), body))
+        await context
+          .get('zeroDatabase')
+          .transaction((tx) => addLlmCredentialFromRequest(tx, context.get('zeroContext'), body))
       } catch (error) {
         if (error instanceof ProfileError) return context.json({ error: error.code, message: error.message }, 400)
         console.error(

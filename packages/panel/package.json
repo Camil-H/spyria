@@ -2,10 +2,7 @@
   "name": "@hq/panel",
   "private": true,
   "type": "module",
-  "exports": {
-    ".": "./src/client.ts",
-    "./server": "./src/server.ts"
-  },
+  "exports": "./src/client.ts",
   "scripts": {
     "typecheck": "tsc -p ."
   },

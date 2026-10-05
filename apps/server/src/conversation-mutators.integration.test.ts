@@ -160,6 +160,7 @@ test('startRuntimeFromMessage creates the runtime chat and its seed message in o
     type: 'runtime',
     name: 'Welcome to the team!',
     originChatId: 'chat-welcome',
+    projectId: 'project-onboarding',
     ownerUserId: alice,
   })
   expect(await messagesOf('chat-started')).toMatchObject([

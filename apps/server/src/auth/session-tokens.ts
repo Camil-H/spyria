@@ -7,9 +7,9 @@ export type FindMember = (
   claims: Omit<SessionClaims, 'role'>,
   databaseName: string | undefined,
 ) => Promise<{ role: ZeroContext['role']; hasLiveSession: boolean } | undefined>
-export type Authentication =
-  | { status: 200; context: ZeroContext; sessionId: string; databaseName?: string }
-  | { status: 401 | 403 }
+export type Authentication = { status: 200; context: ZeroContext; databaseName?: string } | { status: 401 | 403 }
+
+export const errorByStatus = { 401: 'unauthorized', 403: 'forbidden' } as const
 
 const algorithm = 'HS256'
 const defaultLifetimeSeconds = 15 * 60
@@ -22,7 +22,7 @@ export const issueSessionToken = async (
   { databaseName, lifetimeSeconds = defaultLifetimeSeconds }: { databaseName?: string; lifetimeSeconds?: number } = {},
 ) => {
   const expiresAt = Date.now() + lifetimeSeconds * 1000
-  const token = await new SignJWT({ workspaceId, role, sid: sessionId, db: databaseName })
+  const token = await new SignJWT({ workspaceId, sid: sessionId, db: databaseName })
     .setProtectedHeader({ alg: algorithm })
     .setSubject(userId)
     .setIssuedAt()
@@ -35,17 +35,14 @@ export const createSessionAuthenticator =
   (secret: string, findMember: FindMember) =>
   async (authorization: string | undefined): Promise<Authentication> => {
     const token = authorization?.match(/^Bearer (\S+)$/)?.[1]
-    const claims =
-      token === undefined
-        ? undefined
-        : await jwtVerify(token, keyOf(secret), {
-            algorithms: [algorithm],
-            clockTolerance: clockToleranceSeconds,
-            requiredClaims: ['sub', 'exp', 'sid'],
-          }).then(
-            ({ payload }) => payload,
-            () => undefined,
-          )
+    const claims = await jwtVerify(token ?? '', keyOf(secret), {
+      algorithms: [algorithm],
+      clockTolerance: clockToleranceSeconds,
+      requiredClaims: ['sub', 'exp', 'sid'],
+    }).then(
+      ({ payload }) => payload,
+      () => undefined,
+    )
     if (claims?.sub === undefined || typeof claims.workspaceId !== 'string' || typeof claims.sid !== 'string')
       return { status: 401 }
     const context = { userId: memberId(claims.sub), workspaceId: workspaceId(claims.workspaceId) }
@@ -53,5 +50,5 @@ export const createSessionAuthenticator =
     const member = await findMember({ ...context, sessionId: claims.sid }, databaseName)
     if (member === undefined) return { status: 403 }
     if (!member.hasLiveSession) return { status: 401 }
-    return { status: 200, context: { ...context, role: member.role }, sessionId: claims.sid, databaseName }
+    return { status: 200, context: { ...context, role: member.role }, databaseName }
   }

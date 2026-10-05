@@ -1,19 +1,24 @@
-import { useQuery } from '@hq/db/react'
+import type { Snapshot } from '@hq/db'
 import type { WorkspaceId } from '@hq/kernel'
 import { useSession } from '@hq/session'
 import { buttonClass, focusRing } from '@hq/ui'
 import { Link } from 'react-router'
-import { listWorkspaces } from '../queries/list-workspaces.ts'
+import { fullScreenClass } from './ui.ts'
 
-export const SignedOutScreen = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
-  const { memberId, signedInWorkspaceIds, signIn } = useSession()
-  const workspaces = useQuery(listWorkspaces(memberId))
+export const SignedOutScreen = ({
+  workspaceId,
+  workspaces,
+}: {
+  workspaceId: WorkspaceId
+  workspaces: Snapshot['workspaces']
+}) => {
+  const { signedInWorkspaceIds, signIn } = useSession()
   const signedOutName = workspaces.find((workspace) => workspace.id === workspaceId)?.name
   const otherWorkspaces = workspaces.filter(
     (workspace) => workspace.id !== workspaceId && signedInWorkspaceIds.has(workspace.id),
   )
   return (
-    <main className="flex h-screen flex-col items-center justify-center gap-4 bg-app p-6 text-center text-ink">
+    <main className={fullScreenClass}>
       <p className="text-xl font-medium">You are signed out of {signedOutName}</p>
       <button type="button" className={buttonClass} onClick={() => signIn(workspaceId)}>
         Sign in

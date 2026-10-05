@@ -1,5 +1,4 @@
 import type { MessageId, WorkspaceId } from '@hq/kernel'
-import { useSession } from '@hq/session'
 import { buttonClass, fieldClass, ghostButtonClass } from '@hq/ui'
 import { type SubmitEvent, useState } from 'react'
 import { useOutletContext } from 'react-router'
@@ -18,11 +17,10 @@ export const EditMessageForm = ({
 }) => {
   const commands = useConversationCommands()
   const workspaceId = useOutletContext<WorkspaceId>()
-  const { memberId } = useSession()
   const [text, setText] = useState(initialText)
   const save = async (event: SubmitEvent) => {
     event.preventDefault()
-    await commands.editMessage({ workspaceId, messageId, editorId: memberId, text })
+    await commands.editMessage({ workspaceId, messageId, text })
     onClose()
   }
   return (

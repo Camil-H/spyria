@@ -1,4 +1,4 @@
-import type { MemberId, WorkspaceId } from '@hq/kernel'
+import type { WorkspaceId } from '@hq/kernel'
 import { buttonClass, fieldClass, labelClass } from '@hq/ui'
 import { type SubmitEvent, useState } from 'react'
 import { Secret } from '../domain/secret.ts'
@@ -9,7 +9,7 @@ import { useGuardedAction } from './useGuardedAction.ts'
 
 const emptyForm = { provider: '', secret: '' }
 
-export const AddCredentialForm = ({ workspaceId, memberId }: { workspaceId: WorkspaceId; memberId: MemberId }) => {
+export const AddCredentialForm = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
   const commands = useProfileCommands()
   const { errorMessage, run } = useGuardedAction()
   const [form, setForm] = useState(emptyForm)
@@ -20,7 +20,6 @@ export const AddCredentialForm = ({ workspaceId, memberId }: { workspaceId: Work
     const addSubmitted = () =>
       commands.addLlmCredential({
         workspaceId,
-        memberId,
         provider: submittedForm.provider,
         secret: new Secret(submittedForm.secret),
       })

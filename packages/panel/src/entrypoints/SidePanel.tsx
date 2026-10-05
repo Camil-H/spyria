@@ -51,8 +51,9 @@ const tabs: Record<PanelTabId, { label: string; Icon: LucideIcon; Component: Com
   members: { label: 'Members', Icon: Users, Component: MembersTab },
 }
 
-const TabTrigger = ({ tabId, label, Icon }: { tabId: PanelTabId; label: string; Icon: LucideIcon }) => {
+const TabTrigger = ({ tabId }: { tabId: PanelTabId }) => {
   const [isTooltipOpen, setIsTooltipOpen] = useState(false)
+  const { label, Icon } = tabs[tabId]
   return (
     <TooltipRoot
       open={isTooltipOpen}
@@ -92,10 +93,9 @@ export const SidePanel = ({ workspaceId, chatId }: TabProps) => {
         <Root key={chatId} defaultValue={tabIds[0]} className="flex min-h-0 flex-1 flex-col">
           <TooltipProvider>
             <List aria-label="Panel tabs" className="flex overflow-x-auto border-b border-line px-1 scrollbar-thin">
-              {tabIds.map((tabId) => {
-                const { label, Icon } = tabs[tabId]
-                return <TabTrigger key={tabId} tabId={tabId} label={label} Icon={Icon} />
-              })}
+              {tabIds.map((tabId) => (
+                <TabTrigger key={tabId} tabId={tabId} />
+              ))}
             </List>
           </TooltipProvider>
           {tabIds.map((tabId) => {

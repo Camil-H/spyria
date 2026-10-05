@@ -7,9 +7,9 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import postgres from 'postgres'
 import { createDatabase, databaseUrl } from './client.ts'
-import { seedDatabase } from './seed.ts'
+import { resetDatabase } from './seed.ts'
 
-export const templateDatabaseName = 'hq_test_template'
+const templateDatabaseName = 'hq_test_template'
 
 export const databaseUrlOf = (databaseName: string) =>
   Object.assign(new URL(databaseUrl), { pathname: `/${databaseName}` }).href
@@ -58,7 +58,7 @@ export const buildTemplateDatabase = async (name = templateDatabaseName) => {
   await withAdmin(`create database "${name}"`)
   const database = createDatabase(databaseUrlOf(name))
   await migrateDatabase(database)
-  await seedDatabase(database)
+  await resetDatabase(database)
   await database.$client.end()
 }
 

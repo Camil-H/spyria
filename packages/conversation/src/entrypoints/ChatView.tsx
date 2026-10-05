@@ -11,7 +11,15 @@ import { useConversationCommands } from './providers.tsx'
 
 const bubbleClassName = 'rounded-full border border-line px-2 py-0.5 text-xs text-muted'
 
-export const ChatView = ({ headerActions }: { headerActions?: ReactNode }) => {
+export const ChatView = ({
+  headerActions,
+  canPrompt,
+  blockedNotice,
+}: {
+  headerActions: ReactNode
+  canPrompt: boolean
+  blockedNotice: ReactNode
+}) => {
   const workspaceId = useOutletContext<WorkspaceId>()
   const { memberId } = useSession()
   const chatId = toChatId(useParams().chatId ?? '')
@@ -19,8 +27,8 @@ export const ChatView = ({ headerActions }: { headerActions?: ReactNode }) => {
   const commands = useConversationCommands()
   const newestMessageId = conversation?.messages.at(-1)?.id
   useEffect(() => {
-    if (newestMessageId) commands.markChatRead({ workspaceId, chatId, memberId })
-  }, [commands, workspaceId, chatId, memberId, newestMessageId])
+    if (newestMessageId) commands.markChatRead({ workspaceId, chatId })
+  }, [commands, workspaceId, chatId, newestMessageId])
   if (!conversation) return <Navigate to={`/w/${workspaceId}`} replace />
   const ChatTypeIcon = conversation.type === 'runtime' ? Bot : Hash
   const chatTypeLabel = conversation.type === 'runtime' ? 'Runtime chat' : 'Channel'
@@ -62,7 +70,12 @@ export const ChatView = ({ headerActions }: { headerActions?: ReactNode }) => {
         )}
       </header>
       <MessageList conversation={conversation} />
-      <Composer workspaceId={workspaceId} chatId={chatId} isRuntime={conversation.type === 'runtime'} />
+      <Composer
+        workspaceId={workspaceId}
+        chatId={chatId}
+        isBlocked={conversation.type === 'runtime' && !canPrompt}
+        blockedNotice={blockedNotice}
+      />
     </div>
   )
 }

@@ -1,28 +1,17 @@
-import type { WorkspaceId } from '@hq/kernel'
-import { archiveChat } from '../operations/archive-chat.ts'
-import { archiveProject } from '../operations/archive-project.ts'
-import { createChat } from '../operations/create-chat.ts'
-import { createProject } from '../operations/create-project.ts'
-import { createWorkspace } from '../operations/create-workspace.ts'
-import { moveChat } from '../operations/move-chat.ts'
-import { renameChat } from '../operations/rename-chat.ts'
-import { renameProject } from '../operations/rename-project.ts'
+import type { ChatId, ProjectId, WorkspaceId } from '@hq/kernel'
+import type { Chat } from '../domain/chat.ts'
+import type { Name } from '../domain/name.ts'
+import type { ChatsPolicy } from '../domain/project.ts'
 
-export const workspaceOperations = {
-  archiveChat,
-  archiveProject,
-  createChat,
-  createProject,
-  createWorkspace,
-  moveChat,
-  renameChat,
-  renameProject,
-}
-
-type WorkspaceOperations = typeof workspaceOperations
+type Command<Input> = (input: Input & { workspaceId: WorkspaceId }) => Promise<string>
 
 export type WorkspaceCommands = {
-  [Name in keyof WorkspaceOperations]: (
-    input: Omit<Parameters<WorkspaceOperations[Name]>[1], 'actorId'> & { workspaceId: WorkspaceId },
-  ) => ReturnType<WorkspaceOperations[Name]>
+  createProject: Command<{ name: Name }>
+  createChat: Command<{ type: Chat['type']; name: Name; projectId: ProjectId | null }>
+  moveChat: Command<{ chatId: ChatId; projectId: ProjectId | null }>
+  archiveChat: Command<{ chatId: ChatId }>
+  archiveProject: Command<{ projectId: ProjectId; chatsPolicy: ChatsPolicy }>
+  renameChat: Command<{ chatId: ChatId; name: Name }>
+  renameProject: Command<{ projectId: ProjectId; name: Name }>
+  createWorkspace: Command<{ name: Name }>
 }

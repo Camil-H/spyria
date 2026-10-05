@@ -10,5 +10,7 @@ export const renamedProject = (project: Project, name: Name): Project => ({ ...p
 
 export const archivedProject = (project: Project, chats: readonly Chat[], chatsPolicy: ChatsPolicy) => ({
   project: { ...project, archived: true },
-  chats: chats.map((chat) => (chatsPolicy === 'archive' ? { ...chat, archived: true } : movedChat(chat, null))),
+  chats: chats
+    .filter((chat) => !chat.archived)
+    .map((chat) => (chatsPolicy === 'archive' ? { ...chat, archived: true } : movedChat(chat, null))),
 })

@@ -1,4 +1,4 @@
-import { findChat, inChat, memberName, type Snapshot } from '@hq/db'
+import { findChat, inChat, memberNamesIn, type Snapshot } from '@hq/db'
 import type { ChatId, WorkspaceId } from '@hq/kernel'
 
 export const getMembers = (workspaceId: WorkspaceId, chatId: ChatId) => (snapshot: Snapshot) => {
@@ -7,9 +7,10 @@ export const getMembers = (workspaceId: WorkspaceId, chatId: ChatId) => (snapsho
   const explicitMembers = snapshot.chatMembers.filter(
     (row) => inChat(workspaceId, chatId)(row) && row.memberId !== chat.ownerId,
   )
+  const memberName = memberNamesIn(snapshot, workspaceId)
   return [{ memberId: chat.ownerId, role: 'Owner' }, ...explicitMembers].map(({ memberId, role }) => ({
     memberId,
     role,
-    name: memberName(snapshot, workspaceId, memberId),
+    name: memberName(memberId),
   }))
 }

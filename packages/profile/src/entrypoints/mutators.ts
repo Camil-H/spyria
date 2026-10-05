@@ -24,20 +24,19 @@ export const profileMutators = defineMutators({
   profile: {
     renameMember: defineMutator(
       z.extend(workspaceArguments, { name: z.pipe(z.string(), z.transform(DisplayName)) }),
-      ({ tx, ctx, args }) => renameMember(dependenciesOf(tx, ctx, args), { ...contextMember(ctx), name: args.name }),
+      ({ tx, ctx, args }) => renameMember(dependenciesOf(tx, ctx, args), { ...args, ...contextMember(ctx) }),
     ),
     removeLlmCredential: defineMutator(
       z.extend(workspaceArguments, {
         credentialId: z.pipe(z.string().check(z.minLength(1)), z.transform(credentialId)),
       }),
-      ({ tx, ctx, args }) =>
-        removeLlmCredential(dependenciesOf(tx, ctx, args), { ...contextMember(ctx), credentialId: args.credentialId }),
+      ({ tx, ctx, args }) => removeLlmCredential(dependenciesOf(tx, ctx, args), { ...args, ...contextMember(ctx) }),
     ),
     connectTool: defineMutator(toolArguments, ({ tx, ctx, args }) =>
-      connectTool(dependenciesOf(tx, ctx, args), { ...contextMember(ctx), tool: args.tool }),
+      connectTool(dependenciesOf(tx, ctx, args), { ...args, ...contextMember(ctx) }),
     ),
     disconnectTool: defineMutator(toolArguments, ({ tx, ctx, args }) =>
-      disconnectTool(dependenciesOf(tx, ctx, args), { ...contextMember(ctx), tool: args.tool }),
+      disconnectTool(dependenciesOf(tx, ctx, args), { ...args, ...contextMember(ctx) }),
     ),
   },
 })

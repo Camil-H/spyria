@@ -1,4 +1,4 @@
-import { focusRing } from '@hq/ui'
+import { iconButtonClass } from '@hq/ui'
 import { PanelRightClose, PanelRightOpen } from 'lucide-react'
 import { usePanel } from './providers.tsx'
 
@@ -10,7 +10,7 @@ export const PanelToggle = () => {
       type="button"
       aria-label={isOpen ? 'Hide panel' : 'Show panel'}
       onClick={toggle}
-      className={`rounded-md p-1.5 text-muted hover:bg-hover hover:text-ink ${focusRing}`}
+      className={iconButtonClass}
     >
       <Icon size={18} />
     </button>

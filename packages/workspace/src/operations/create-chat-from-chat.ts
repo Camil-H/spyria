@@ -1,29 +1,22 @@
-import { type ChatId, chatId, type IdGenerator, type MemberId } from '@hq/kernel'
+import { type ChatId, chatId, type MemberId } from '@hq/kernel'
 import type { Transactor } from '../contracts/transactor.ts'
 import { startRuntimeChat } from '../domain/chat.ts'
 import { Name } from '../domain/name.ts'
 
-export type CreateChatFromChatDependencies = {
-  transactor: Transactor
-  idGenerator: IdGenerator
-  defaultRuntimeModel: string
-  defaultReasoningEffort: string
-}
-export type CreateChatFromChatInput = { sourceChatId: ChatId; name: string; ownerId: MemberId }
+type Dependencies = { transactor: Transactor; defaultRuntimeModel: string; defaultReasoningEffort: string }
+type Input = { id: string; sourceChatId: ChatId; name: string; ownerId: MemberId }
 
 export const createChatFromChat = (
-  { transactor, idGenerator, defaultRuntimeModel, defaultReasoningEffort }: CreateChatFromChatDependencies,
-  { sourceChatId, name, ownerId }: CreateChatFromChatInput,
+  { transactor, defaultRuntimeModel, defaultReasoningEffort }: Dependencies,
+  { id, sourceChatId, name, ownerId }: Input,
 ) =>
   transactor.run(async (unitOfWork) => {
-    const source = await unitOfWork.chats.get(sourceChatId)
-    const chat = startRuntimeChat(source, {
-      id: chatId(idGenerator.next()),
+    const chat = startRuntimeChat(await unitOfWork.chats.get(sourceChatId), {
+      id: chatId(id),
       name: Name(name),
       ownerId,
       model: defaultRuntimeModel,
       reasoningEffort: defaultReasoningEffort,
     })
     await unitOfWork.chats.record({ type: 'chat.created', chat, actorId: ownerId })
-    return chat.id
   })

@@ -18,19 +18,21 @@ export const startJobWorker = (
   { pollIntervalMilliseconds = 100, retryDelayMilliseconds = 1000 } = {},
 ) => {
   const zeroDatabase = zeroDrizzle(schema, database)
+  const jobTypes = Object.keys(jobHandlers)
+  const runnableJobs = `from jobs where state = 'queued' and run_at <= now() and type = any($1::text[])`
   let isRunning = true
   let hasLoggedPollFailure = false
-  const runNextJob = () =>
+  const hasRunnableJob = async () =>
+    (await database.$client.unsafe<[{ exists: boolean }]>(`select exists(select 1 ${runnableJobs})`, [jobTypes]))[0]
+      .exists
+  const runNextJob = async () =>
+    (await hasRunnableJob()) &&
     zeroDatabase.transaction(async (tx) => {
-      const query = async (statement: string, parameters: unknown[] = []) => [
-        ...(await tx.dbTransaction.query(statement, parameters)),
-      ]
+      const query = (statement: string, parameters: unknown[] = []) => tx.dbTransaction.query(statement, parameters)
       const [job] = (await query(
-        `select workspace_id, id, type, payload, attempts from jobs
-         where state = 'queued' and run_at <= now() and type = any($1::text[])
-         order by run_at limit 1 for update skip locked`,
-        [Object.keys(jobHandlers)],
-      )) as ClaimedJob[]
+        `select workspace_id, id, type, payload, attempts ${runnableJobs} order by run_at limit 1 for update skip locked`,
+        [jobTypes],
+      )) as Iterable<ClaimedJob>
       if (!job) return false
       const jobKey = [job.workspace_id, job.id]
       const attempts = job.attempts + 1

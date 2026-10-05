@@ -52,7 +52,7 @@ export const getConversation =
         kind: message.kind,
         authorName: memberName(message.authorId),
         createdAt: message.createdAt,
-        body: message.deletedAt ? '' : message.body,
+        body: message.body,
         detail: message.detail,
         isOwn: message.authorId === viewerId,
         isDeleted: message.deletedAt !== null,

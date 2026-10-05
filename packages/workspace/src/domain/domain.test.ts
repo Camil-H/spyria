@@ -102,3 +102,11 @@ test('startRuntimeChat keeps a loose source loose', () => {
 test('startRuntimeChat rejects an archived source', () => {
   expect(() => startRuntimeChat(archivedChat(chatInAcme), runtimeFields)).toThrow(SourceChatArchived)
 })
+
+test('archivedProject leaves already archived chats alone under both policies', () => {
+  const archived = archivedChat({ ...chatInAcme, id: chatId('archived') })
+  expect(archivedProject(projectIn(acme), [chatInAcme, archived], 'archive').chats).toEqual([archivedChat(chatInAcme)])
+  expect(archivedProject(projectIn(acme), [chatInAcme, archived], 'release').chats).toEqual([
+    movedChat(chatInAcme, null),
+  ])
+})

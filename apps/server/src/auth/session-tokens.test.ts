@@ -30,7 +30,6 @@ test('accepts an issued token and builds the context from the membership', async
   expect(await authenticate(bearer(await issued(aliceInAcme)))).toMatchObject({
     status: 200,
     context: { userId: aliceInAcme.userId, workspaceId: aliceInAcme.workspaceId, role: 'admin' },
-    sessionId: 'session-1',
   })
 })
 

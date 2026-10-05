@@ -372,45 +372,6 @@ export const relations = defineRelations(
     },
     workspaces: {
       memberships: r.many.memberships({ from: r.workspaces.workspaceId, to: r.memberships.workspaceId }),
-      projects: r.many.projects({ from: r.workspaces.workspaceId, to: r.projects.workspaceId }),
-      chats: r.many.chats({ from: r.workspaces.workspaceId, to: r.chats.workspaceId }),
-    },
-    memberships: {
-      user: r.one.users({ from: r.memberships.userId, to: r.users.id, optional: false }),
-    },
-    projects: {
-      chats: r.many.chats({
-        from: [r.projects.workspaceId, r.projects.id],
-        to: [r.chats.workspaceId, r.chats.projectId],
-      }),
-    },
-    chats: {
-      owner: r.one.memberships({
-        from: [r.chats.workspaceId, r.chats.ownerUserId],
-        to: [r.memberships.workspaceId, r.memberships.userId],
-      }),
-      originChat: r.one.chats({
-        from: [r.chats.workspaceId, r.chats.originChatId],
-        to: [r.chats.workspaceId, r.chats.id],
-      }),
-      participants: r.many.chatParticipants({
-        from: [r.chats.workspaceId, r.chats.id],
-        to: [r.chatParticipants.workspaceId, r.chatParticipants.chatId],
-      }),
-      messages: r.many.messages({
-        from: [r.chats.workspaceId, r.chats.id],
-        to: [r.messages.workspaceId, r.messages.chatId],
-      }),
-      readMarkers: r.many.readMarkers({
-        from: [r.chats.workspaceId, r.chats.id],
-        to: [r.readMarkers.workspaceId, r.readMarkers.chatId],
-      }),
-    },
-    messages: {
-      author: r.one.memberships({
-        from: [r.messages.workspaceId, r.messages.authorId],
-        to: [r.memberships.workspaceId, r.memberships.userId],
-      }),
     },
     workspaceConnections: {
       ownedChats: r.many.chats({

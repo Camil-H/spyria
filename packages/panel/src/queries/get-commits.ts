@@ -1,10 +1,9 @@
-import { inChat, memberName, type Snapshot } from '@hq/db'
+import { inChat, memberNamesIn, type Snapshot } from '@hq/db'
 import type { ChatId, WorkspaceId } from '@hq/kernel'
 
-export const getCommits = (workspaceId: WorkspaceId, chatId: ChatId) => (snapshot: Snapshot) =>
-  snapshot.commits.filter(inChat(workspaceId, chatId)).map(({ sha, message, authorId, committedAt }) => ({
-    sha,
-    message,
-    authorName: memberName(snapshot, workspaceId, authorId),
-    committedAt,
-  }))
+export const getCommits = (workspaceId: WorkspaceId, chatId: ChatId) => (snapshot: Snapshot) => {
+  const memberName = memberNamesIn(snapshot, workspaceId)
+  return snapshot.commits
+    .filter(inChat(workspaceId, chatId))
+    .map(({ sha, message, authorId, committedAt }) => ({ sha, message, authorName: memberName(authorId), committedAt }))
+}

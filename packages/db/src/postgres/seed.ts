@@ -9,13 +9,13 @@ type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0]
 
 export const allTables = Object.values(tables).filter((value) => is(value, PgTable))
 
-const numberedWithinChat = <Row extends { workspaceId: string; chatId: string }>(rows: readonly Row[]) => {
+const positionedWithinChat = <Row extends { workspaceId: string; chatId: string }>(rows: readonly Row[]) => {
   const countByChat = new Map<string, number>()
   return rows.map((row) => {
     const chatKey = `${row.workspaceId}/${row.chatId}`
-    const number = (countByChat.get(chatKey) ?? 0) + 1
-    countByChat.set(chatKey, number)
-    return { row, number }
+    const position = (countByChat.get(chatKey) ?? 0) + 1
+    countByChat.set(chatKey, position)
+    return { ...row, position }
   })
 }
 
@@ -50,8 +50,6 @@ const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
   const creatorByWorkspace = new Map(
     snapshot.memberships.toReversed().map((membership) => [membership.workspaceId, membership.memberId]),
   )
-  const numberedMessages = numberedWithinChat(snapshot.messages)
-  const seqByMessageId = new Map(numberedMessages.map(({ row, number }) => [row.id, number]))
   const replyToByMessageId = replyTargets(snapshot)
   const emailByUserId = new Map(
     snapshot.memberships.map((membership) => [
@@ -93,9 +91,8 @@ const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
   )
   await transaction.insert(tables.chatParticipants).values(snapshot.chatMembers.map(withUserId))
   await transaction.insert(tables.messages).values(
-    numberedMessages.map(({ row: { needsReply, createdAt, editedAt, deletedAt, ...message }, number }) => ({
+    snapshot.messages.map(({ needsReply, createdAt, editedAt, deletedAt, ...message }) => ({
       ...message,
-      seq: number,
       replyToId: replyToByMessageId.get(message.id) ?? null,
       createdAt: new Date(createdAt),
       editedAt: editedAt === null ? null : new Date(editedAt),
@@ -103,11 +100,11 @@ const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
     })),
   )
   await transaction.insert(tables.events).values(
-    numberedMessages.map(({ row: message, number }) => ({
+    snapshot.messages.map((message) => ({
       workspaceId: message.workspaceId,
       chatId: message.chatId,
       id: message.id,
-      seq: number,
+      seq: message.seq,
       type: 'message.posted',
       actor: message.authorId,
       payload: {
@@ -119,12 +116,7 @@ const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
       createdAt: new Date(message.createdAt),
     })),
   )
-  await transaction.insert(tables.readMarkers).values(
-    snapshot.readMarkers.map(({ lastReadMessageId, ...marker }) => ({
-      ...withUserId(marker),
-      lastReadSeq: seqByMessageId.get(lastReadMessageId) ?? 0,
-    })),
-  )
+  await transaction.insert(tables.readMarkers).values(snapshot.readMarkers.map(withUserId))
   await transaction.insert(tables.llmCredentials).values(
     snapshot.llmCredentials.map((credential) => ({
       ...withUserId(credential),
@@ -135,12 +127,8 @@ const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
   await transaction.insert(tables.toolConnections).values(snapshot.toolConnections.map(withUserIdAndPosition))
   await transaction.insert(tables.files).values([...snapshot.files])
   await transaction.insert(tables.changes).values([...snapshot.changes])
-  await transaction
-    .insert(tables.terminalLines)
-    .values(numberedWithinChat(snapshot.terminalLines).map(({ row, number }) => ({ ...row, position: number })))
-  await transaction
-    .insert(tables.planSteps)
-    .values(numberedWithinChat(snapshot.planSteps).map(({ row, number }) => ({ ...row, position: number })))
+  await transaction.insert(tables.terminalLines).values(positionedWithinChat(snapshot.terminalLines))
+  await transaction.insert(tables.planSteps).values(positionedWithinChat(snapshot.planSteps))
   await transaction
     .insert(tables.commits)
     .values(snapshot.commits.map(({ committedAt, ...commit }) => ({ ...commit, committedAt: new Date(committedAt) })))
@@ -149,19 +137,15 @@ const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
   await transaction.insert(tables.usageEntries).values(snapshot.usageEntries.map(withUserId))
 }
 
-export const seedDatabase = (database: Database, snapshot = createMockSnapshot()) =>
-  database.transaction((transaction) => insertSnapshot(transaction, snapshot))
-
 export const resetDatabase = (
   database: Database,
-  snapshot = createMockSnapshot(),
   afterSeed: (transaction: Transaction) => Promise<unknown> = async () => {},
 ) =>
   database.transaction(async (transaction) => {
     await transaction.execute(
       sql.raw(`truncate ${allTables.map((table) => `"${getTableName(table)}"`).join(', ')} restart identity cascade`),
     )
-    await insertSnapshot(transaction, snapshot)
+    await insertSnapshot(transaction, createMockSnapshot())
     await afterSeed(transaction)
   })
 
@@ -169,7 +153,7 @@ if (import.meta.main) {
   const database = createDatabase()
   const shouldReset = process.argv.includes('--reset')
   const isSeeded = !shouldReset && (await database.$count(tables.users)) > 0
-  if (!isSeeded) await (shouldReset ? resetDatabase : seedDatabase)(database)
+  if (!isSeeded) await resetDatabase(database)
   await database.$client.end()
   console.log(
     isSeeded

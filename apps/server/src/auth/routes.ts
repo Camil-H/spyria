@@ -1,12 +1,12 @@
 import type { Database } from '@hq/db/postgres'
-import { type Context, Hono, type MiddlewareHandler } from 'hono'
+import { type Context, Hono } from 'hono'
 import { deleteCookie, getCookie, getSignedCookie, setCookie, setSignedCookie } from 'hono/cookie'
 import { HTTPException } from 'hono/http-exception'
 import type { Oidc } from './oidc.ts'
-import { type Authentication, issueSessionToken, type SessionClaims } from './session-tokens.ts'
+import { type Authentication, errorByStatus, issueSessionToken, type SessionClaims } from './session-tokens.ts'
 import { deleteSession, findLiveSessions, openSessions } from './sessions.ts'
 
-export type AuthRouteSettings = {
+type AuthRouteSettings = {
   oidc: Oidc
   tokenSecret: string
   appOrigin: string
@@ -73,17 +73,15 @@ export const createAuthRoutes = ({
     for (const session of opened) setSessionCookie(context, appOrigin, session)
     return popup(context, { status: 'signed_in' })
   }
-  const sameAppOnly: MiddlewareHandler = async (context, next) => {
-    if (context.req.header('origin') !== appOrigin || context.req.header('x-hq-csrf') !== '1')
-      return context.json({ error: 'forbidden' }, 403)
-    await next()
-  }
   const sessionIdOf = (context: Context, workspaceId: string) =>
     getCookie(context, `${sessionCookiePrefix}${workspaceId}`) ?? ''
 
   return new Hono()
-    .use('/renew', sameAppOnly)
-    .use('/logout', sameAppOnly)
+    .use('/:action{renew|logout}', async (context, next) => {
+      if (context.req.header('origin') !== appOrigin || context.req.header('x-hq-csrf') !== '1')
+        return context.json({ error: 'forbidden' }, 403)
+      await next()
+    })
     .get('/login', async (context) => {
       const scope = scopeOf(context)
       const workspaceId = context.req.query('workspace')
@@ -134,7 +132,8 @@ export const createAuthRoutes = ({
     })
     .post('/sessions', async (context) => {
       const authentication = await authenticate(context.req.header('authorization'))
-      if (authentication.status !== 200) return context.json({ error: 'unauthorized' }, authentication.status)
+      if (authentication.status !== 200)
+        return context.json({ error: errorByStatus[authentication.status] }, authentication.status)
       const workspaceId = await workspaceIdOfBody(context)
       const scope = scopeOf(context, authentication.databaseName)
       const [session] = await openSessions(scope.database, authentication.context.userId, workspaceId)

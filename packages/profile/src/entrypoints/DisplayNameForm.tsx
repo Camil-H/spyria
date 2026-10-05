@@ -1,4 +1,4 @@
-import type { MemberId, WorkspaceId } from '@hq/kernel'
+import type { WorkspaceId } from '@hq/kernel'
 import { buttonClass, fieldClass, labelClass } from '@hq/ui'
 import { type SubmitEvent, useState } from 'react'
 import { DisplayName } from '../domain/display-name.ts'
@@ -6,15 +6,7 @@ import { ErrorMessage } from './ErrorMessage.tsx'
 import { useProfileCommands } from './providers.tsx'
 import { useGuardedAction } from './useGuardedAction.ts'
 
-export const DisplayNameForm = ({
-  workspaceId,
-  memberId,
-  currentName,
-}: {
-  workspaceId: WorkspaceId
-  memberId: MemberId
-  currentName: string
-}) => {
+export const DisplayNameForm = ({ workspaceId, currentName }: { workspaceId: WorkspaceId; currentName: string }) => {
   const commands = useProfileCommands()
   const { errorMessage, run } = useGuardedAction()
   const [draftName, setDraftName] = useState(currentName)
@@ -22,7 +14,7 @@ export const DisplayNameForm = ({
   const trimmedName = draftName.trim()
   const submit = async (event: SubmitEvent) => {
     event.preventDefault()
-    setIsSaved(await run(() => commands.renameMember({ workspaceId, memberId, name: DisplayName(draftName) })))
+    setIsSaved(await run(() => commands.renameMember({ workspaceId, name: DisplayName(draftName) })))
   }
   return (
     <section aria-label="Display name">

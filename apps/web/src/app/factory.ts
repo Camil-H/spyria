@@ -1,120 +1,23 @@
 import {
   type ConversationCommands,
   conversationMutators,
-  conversationOperations,
   createStoreDraftRepository,
+  saveDraft,
 } from '@hq/conversation/server'
-import type { Store } from '@hq/db'
-import { createZeroStore, type WorkspaceSession } from '@hq/db/zero-store'
-import { chatId, type IdGenerator, type MemberId, type WorkspaceId, workspaceId } from '@hq/kernel'
+import { createZeroStore, type Store, type WorkspaceSession } from '@hq/db/zero-store'
+import { type MemberId, type WorkspaceId, workspaceId } from '@hq/kernel'
 import { createHttpLlmCredentialAdder, type ProfileCommands, profileMutators } from '@hq/profile/server'
 import type { Session } from '@hq/session'
-import { createUuidIdGenerator, type WorkspaceCommands, workspaceMutators } from '@hq/workspace/server'
-import { loadSessions, logOut, openSession, renew, signInWithPopup } from './auth.ts'
+import { type WorkspaceCommands, workspaceMutators } from '@hq/workspace/server'
+import { logOut, openSession, renew, signInWithPopup } from './auth.ts'
 
 const zeroCacheURL = import.meta.env.VITE_ZERO_URL ?? 'http://localhost:4848'
 const testStack = import.meta.env.DEV
   ? (window as Window & { hqTestStack?: { zeroCacheURL: string } }).hqTestStack
   : undefined
-const sessionTokenByWorkspace = new Map<WorkspaceId, string>()
-const remembered = (session: WorkspaceSession) => {
-  sessionTokenByWorkspace.set(session.workspaceId, session.token)
-  return session
-}
 
-const openZeroStore = async (
-  memberId: MemberId,
-  sessions: readonly WorkspaceSession[],
-  defaultWorkspaceId: WorkspaceId,
-) => {
-  const store = createZeroStore({
-    memberId,
-    sessions: sessions.map(remembered),
-    renew: async (workspaceId) => {
-      const session = await renew(workspaceId)
-      return session && remembered(session)
-    },
-    cacheURL: testStack?.zeroCacheURL ?? zeroCacheURL,
-    mutators: { ...workspaceMutators, ...conversationMutators, ...profileMutators },
-    draftStorage: localStorage,
-  })
-  await store.whenLoaded(defaultWorkspaceId)
-  return store
-}
-
-type ZeroStore = Awaited<ReturnType<typeof openZeroStore>>
-type CommandInput = { workspaceId: WorkspaceId }
-type Mutator = (args: never) => Parameters<ZeroStore['mutate']>[1]
-
-const commandsOf = <Commands>(entries: readonly (readonly [string, (input: CommandInput) => Promise<unknown>])[]) =>
-  Object.fromEntries(entries) as Commands
-
-const zeroCommandsOf = (zeroStore: ZeroStore, idGenerator: IdGenerator) => {
-  const mutate = async (mutator: Mutator, input: CommandInput & { id?: string }) => {
-    const id = input.id ?? idGenerator.next()
-    const { confirmation } = await zeroStore.mutate(input.workspaceId, mutator({ ...input, id } as never))
-    return { id, confirmation }
-  }
-  const entriesOf = (mutators: Record<string, Mutator>) =>
-    Object.entries(mutators).map(
-      ([name, mutator]) => [name, async (input: CommandInput) => (await mutate(mutator, input)).id] as const,
-    )
-  return { mutate, entriesOf }
-}
-
-const zeroWorkspaceCommands = (zeroStore: ZeroStore, idGenerator: IdGenerator) => {
-  const { mutate, entriesOf } = zeroCommandsOf(zeroStore, idGenerator)
-  return commandsOf<WorkspaceCommands>([
-    ...entriesOf(workspaceMutators.workspace),
-    [
-      'createWorkspace',
-      async (input) => {
-        const { id, confirmation } = await mutate(workspaceMutators.workspace.createWorkspace, input)
-        const bearerToken = sessionTokenByWorkspace.get(input.workspaceId) ?? ''
-        const session = confirmation.then(() => openSession(workspaceId(id), bearerToken))
-        zeroStore.signInToNew(workspaceId(id), session.then(remembered))
-        return id
-      },
-    ],
-  ])
-}
-
-const zeroConversationCommands = (zeroStore: ZeroStore, idGenerator: IdGenerator) => {
-  const { mutate, entriesOf } = zeroCommandsOf(zeroStore, idGenerator)
-  const drafts = createStoreDraftRepository(zeroStore)
-  return commandsOf<ConversationCommands>([
-    ...entriesOf(conversationMutators.conversation),
-    ['saveDraft', (input) => conversationOperations.saveDraft({ drafts }, input as never)],
-    [
-      'startRuntimeFromMessage',
-      async (input) => {
-        const newChatId = chatId(idGenerator.next())
-        await mutate(conversationMutators.conversation.startRuntimeFromMessage, {
-          ...input,
-          chatId: newChatId,
-        } as never)
-        return newChatId
-      },
-    ],
-  ])
-}
-
-const addLlmCredentialAsMember = createHttpLlmCredentialAdder((workspaceId, path, body) =>
-  fetch(path, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${sessionTokenByWorkspace.get(workspaceId)}`,
-      'content-type': 'application/json',
-    },
-    body,
-  }),
-)
-
-const zeroProfileCommands = (zeroStore: ZeroStore, idGenerator: IdGenerator) =>
-  commandsOf<ProfileCommands>([
-    ...zeroCommandsOf(zeroStore, idGenerator).entriesOf(profileMutators.profile),
-    ['addLlmCredential', (input) => addLlmCredentialAsMember(input as never)],
-  ])
+type CommandInput = { workspaceId: WorkspaceId; [argument: string]: unknown }
+type Mutator = (args: never) => Parameters<Store['mutate']>[1]
 
 export type Application = {
   store: Store
@@ -124,29 +27,80 @@ export type Application = {
   profileCommands: ProfileCommands
 }
 
-export const createApp = async (memberId: MemberId, sessions: readonly WorkspaceSession[]): Promise<Application> => {
-  const defaultWorkspaceId = sessions[0]?.workspaceId ?? workspaceId('')
-  const zeroStore = await openZeroStore(memberId, sessions, defaultWorkspaceId)
-  const idGenerator = createUuidIdGenerator()
+export const createApp = async (
+  memberId: MemberId,
+  defaultWorkspaceId: WorkspaceId,
+  sessions: readonly WorkspaceSession[],
+): Promise<Application> => {
+  const store = createZeroStore({
+    memberId,
+    sessions,
+    renew,
+    cacheURL: testStack?.zeroCacheURL ?? zeroCacheURL,
+    mutators: { ...workspaceMutators, ...conversationMutators, ...profileMutators },
+    draftStorage: localStorage,
+  })
+  await store.whenLoaded(defaultWorkspaceId)
+  const mutate = async (mutator: Mutator, input: CommandInput) => {
+    const id = crypto.randomUUID()
+    const { confirmation } = await store.mutate(input.workspaceId, mutator({ ...input, id } as never))
+    return { id, confirmation }
+  }
+  const commandsOf = <Commands>(mutators: Record<string, Mutator>, overrides: Partial<Commands>) =>
+    ({
+      ...Object.fromEntries(
+        Object.entries(mutators).map(([name, mutator]) => [
+          name,
+          async (input: CommandInput) => (await mutate(mutator, input)).id,
+        ]),
+      ),
+      ...overrides,
+    }) as Commands
+  const drafts = createStoreDraftRepository(store)
   return {
-    store: zeroStore,
+    store,
     session: {
       memberId,
       defaultWorkspaceId,
-      signedInWorkspaceIds: zeroStore.signedInWorkspaceIds,
-      subscribe: zeroStore.subscribe,
+      signedInWorkspaceIds: store.signedInWorkspaceIds,
+      subscribe: store.subscribe,
       signOut: async (workspaceId) => {
         await logOut(workspaceId).catch(console.error)
-        await zeroStore.signOut(workspaceId)
+        await store.signOut(workspaceId)
       },
       signIn: async (workspaceId) => {
         if ((await signInWithPopup(workspaceId)).status !== 'signed_in') return
-        const session = (await loadSessions()).sessions.find((live) => live.workspaceId === workspaceId)
-        if (session) await zeroStore.signIn(remembered(session))
+        const session = await renew(workspaceId)
+        if (session) await store.signIn(session)
       },
     },
-    workspaceCommands: zeroWorkspaceCommands(zeroStore, idGenerator),
-    conversationCommands: zeroConversationCommands(zeroStore, idGenerator),
-    profileCommands: zeroProfileCommands(zeroStore, idGenerator),
+    workspaceCommands: commandsOf<WorkspaceCommands>(workspaceMutators.workspace, {
+      createWorkspace: async (input) => {
+        const bearerToken = store.tokenOf(input.workspaceId)
+        const { id, confirmation } = await mutate(workspaceMutators.workspace.createWorkspace, input)
+        store.signInToNew(
+          workspaceId(id),
+          confirmation.then(() => openSession(workspaceId(id), bearerToken)),
+        )
+        return id
+      },
+    }),
+    conversationCommands: commandsOf<ConversationCommands>(conversationMutators.conversation, {
+      saveDraft: (input) => saveDraft({ drafts }, { ...input, memberId }),
+      startRuntimeFromMessage: async (input) => {
+        const newChatId = crypto.randomUUID()
+        await mutate(conversationMutators.conversation.startRuntimeFromMessage, { ...input, chatId: newChatId })
+        return newChatId
+      },
+    }),
+    profileCommands: commandsOf<ProfileCommands>(profileMutators.profile, {
+      addLlmCredential: createHttpLlmCredentialAdder((workspaceId, path, body) =>
+        fetch(path, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${store.tokenOf(workspaceId)}`, 'content-type': 'application/json' },
+          body,
+        }),
+      ),
+    }),
   }
 }

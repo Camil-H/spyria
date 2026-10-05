@@ -1,7 +1,7 @@
-import { appendChatEvent } from '@hq/db/events'
-import { type Chat as ChatRow, type Project as ProjectRow, zql } from '@hq/db/zero'
-import type { ZeroContext } from '@hq/db/zero-queries'
-import { type ChatId, chatId, memberId, type ProjectId, projectId, workspaceId } from '@hq/kernel'
+import { appendChatEvent } from '@hq/db/server-writes'
+import type { Chat as ChatRow, Project as ProjectRow } from '@hq/db/zero'
+import { type ZeroContext, zql } from '@hq/db/zero-queries'
+import { chatId, memberId, projectId, workspaceId } from '@hq/kernel'
 import type { Transaction } from '@rocicorp/zero'
 import type { Transactor, UnitOfWork } from '../contracts/transactor.ts'
 import type { Chat, ChatChange } from '../domain/chat.ts'
@@ -41,9 +41,6 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Tra
     if (row.workspaceId !== context.workspaceId) throw new ForeignWorkspace()
     return row
   }
-  const findProject = (id: ProjectId) =>
-    tx.run(zql.projects.where('workspaceId', context.workspaceId).where('id', id).one())
-  const findChat = (id: ChatId) => tx.run(zql.chats.where('workspaceId', context.workspaceId).where('id', id).one())
   const unitOfWork: UnitOfWork = {
     workspaces: {
       add: async ({ id, name }) => {
@@ -69,7 +66,7 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Tra
     },
     projects: {
       get: async (id) => {
-        const row = await findProject(id)
+        const row = await tx.run(zql.projects.where('workspaceId', context.workspaceId).where('id', id).one())
         if (!row) throw new ProjectNotFound(id)
         return toProject(row)
       },
@@ -78,7 +75,7 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Tra
     },
     chats: {
       get: async (id) => {
-        const row = await findChat(id)
+        const row = await tx.run(zql.chats.where('workspaceId', context.workspaceId).where('id', id).one())
         if (!row) throw new ChatNotFound(id)
         return toChat(row)
       },

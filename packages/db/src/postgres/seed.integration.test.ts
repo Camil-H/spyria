@@ -26,7 +26,6 @@ const readSnapshot = async () => {
   ])
   const chatType = new Map(chats.map((chat) => [chat.id, chat.type]))
   const answeredIds = new Set(messages.map((message) => message.replyToId))
-  const messageIdBySeq = new Map(messages.map((message) => [`${message.chatId}/${message.seq}`, message.id]))
   return {
     workspaces: (await database.select().from(tables.workspaces)).map(({ workspaceId, name }) => ({
       id: workspaceId,
@@ -40,7 +39,7 @@ const readSnapshot = async () => {
       ...chat,
       ownerId: ownerUserId,
     })),
-    messages: messages.map(({ seq, replyToId, createdAt, editedAt, deletedAt, ...message }) => ({
+    messages: messages.map(({ replyToId, createdAt, editedAt, deletedAt, ...message }) => ({
       ...message,
       createdAt: createdAt.toISOString(),
       editedAt: isoOrNull(editedAt),
@@ -48,10 +47,7 @@ const readSnapshot = async () => {
       needsReply:
         chatType.get(message.chatId) === 'runtime' && message.kind === 'member' && !answeredIds.has(message.id),
     })),
-    readMarkers: readMarkers.map(({ lastReadSeq, ...marker }) => ({
-      ...userAsMember(marker),
-      lastReadMessageId: messageIdBySeq.get(`${marker.chatId}/${lastReadSeq}`),
-    })),
+    readMarkers: readMarkers.map(userAsMember),
     llmCredentials: (await database.select().from(tables.llmCredentials)).map(({ secretRef, ...credential }) =>
       userAsMember(credential),
     ),
@@ -86,7 +82,6 @@ const readSnapshot = async () => {
 const expectSnapshotRoundTrip = async () => {
   const {
     drafts,
-    toolCatalog,
     projects,
     chats,
     messages,

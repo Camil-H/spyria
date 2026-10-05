@@ -1,14 +1,12 @@
-import { type IdGenerator, type MemberId, workspaceId } from '@hq/kernel'
+import { type MemberId, workspaceId } from '@hq/kernel'
 import type { Transactor } from '../contracts/transactor.ts'
 import type { Name } from '../domain/name.ts'
 
-type Dependencies = { transactor: Transactor; idGenerator: IdGenerator }
-type Input = { ownerId: MemberId; name: Name }
+type Dependencies = { transactor: Transactor }
+type Input = { id: string; ownerId: MemberId; name: Name }
 
-export const createWorkspace = ({ transactor, idGenerator }: Dependencies, { ownerId, name }: Input) =>
+export const createWorkspace = ({ transactor }: Dependencies, { id, ownerId, name }: Input) =>
   transactor.run(async (unitOfWork) => {
-    const newWorkspaceId = workspaceId(idGenerator.next())
-    await unitOfWork.workspaces.add({ id: newWorkspaceId, name })
-    await unitOfWork.memberships.add({ memberId: ownerId, workspaceId: newWorkspaceId })
-    return newWorkspaceId
+    await unitOfWork.workspaces.add({ id: workspaceId(id), name })
+    await unitOfWork.memberships.add({ memberId: ownerId, workspaceId: workspaceId(id) })
   })

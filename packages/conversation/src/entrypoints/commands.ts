@@ -1,24 +1,12 @@
-import type { WorkspaceId } from '@hq/kernel'
-import { deleteMessage } from '../operations/delete-message.ts'
-import { editMessage } from '../operations/edit-message.ts'
-import { markChatRead } from '../operations/mark-chat-read.ts'
-import { saveDraft } from '../operations/save-draft.ts'
-import { sendMessage } from '../operations/send-message.ts'
-import { startRuntimeFromMessage } from '../operations/start-runtime-from-message.ts'
+import type { ChatId, MessageId, WorkspaceId } from '@hq/kernel'
 
-export const conversationOperations = {
-  deleteMessage,
-  editMessage,
-  markChatRead,
-  saveDraft,
-  sendMessage,
-  startRuntimeFromMessage,
-}
-
-type ConversationOperations = typeof conversationOperations
+type Command<Input, Result = string> = (input: Input & { workspaceId: WorkspaceId }) => Promise<Result>
 
 export type ConversationCommands = {
-  [Name in keyof ConversationOperations]: (
-    input: Parameters<ConversationOperations[Name]>[1] & { workspaceId: WorkspaceId },
-  ) => ReturnType<ConversationOperations[Name]>
+  sendMessage: Command<{ chatId: ChatId; text: string }>
+  editMessage: Command<{ messageId: MessageId; text: string }>
+  deleteMessage: Command<{ messageId: MessageId }>
+  markChatRead: Command<{ chatId: ChatId }>
+  startRuntimeFromMessage: Command<{ messageId: MessageId }>
+  saveDraft: Command<{ chatId: ChatId; text: string }, void>
 }

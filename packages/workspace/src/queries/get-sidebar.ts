@@ -13,8 +13,9 @@ export const getSidebar =
     const chatsByProjectId = new Map<ProjectId | null, ChatSummaryRow[]>()
     for (const chat of snapshot.chats) {
       if (chat.workspaceId !== workspaceId || chat.archived) continue
-      const row = { id: chat.id, name: chat.name, type: chat.type }
-      chatsByProjectId.set(chat.projectId, [...(chatsByProjectId.get(chat.projectId) ?? []), row])
+      const projectChats = chatsByProjectId.get(chat.projectId) ?? []
+      projectChats.push({ id: chat.id, name: chat.name, type: chat.type })
+      chatsByProjectId.set(chat.projectId, projectChats)
     }
     return {
       projects: snapshot.projects

@@ -4,10 +4,6 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./events": {
-      "browser": "./src/events.browser.ts",
-      "default": "./src/events.ts"
-    },
     "./react": "./src/useQuery.tsx",
     "./server-writes": {
       "browser": "./src/server-writes.browser.ts",
@@ -23,7 +19,7 @@
     "typecheck": "tsc -p .",
     "generate": "drizzle-kit generate",
     "migrate": "drizzle-kit migrate",
-    "generate-zero": "drizzle-zero generate --force -c drizzle-zero.config.ts -o src/zero.ts && biome format --write src/zero.ts"
+    "generate-zero": "drizzle-zero generate --force --skip-builder -c drizzle-zero.config.ts -o src/zero.ts && biome format --write src/zero.ts"
   },
   "dependencies": {
     "@hq/kernel": "workspace:*",
@@ -38,6 +34,6 @@
     "@types/react": "^19.3.0",
     "drizzle-kit": "1.0.0-rc.4",
     "drizzle-zero": "1.0.0-beta.1",
-    "react": "^19.3.0"
+    "react": "19.2.8"
   }
 }

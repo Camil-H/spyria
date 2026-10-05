@@ -1,8 +1,8 @@
 import type { ChatId, CredentialId, MemberId, MessageId, ProjectId, WorkspaceId } from '@hq/kernel'
 
 type WorkspaceRow = { id: WorkspaceId; name: string }
-export type MembershipRow = { memberId: MemberId; workspaceId: WorkspaceId; displayName: string }
-export type ProjectRow = { id: ProjectId; workspaceId: WorkspaceId; name: string; archived: boolean }
+type MembershipRow = { memberId: MemberId; workspaceId: WorkspaceId; displayName: string }
+type ProjectRow = { id: ProjectId; workspaceId: WorkspaceId; name: string; archived: boolean }
 export type ChatRow = {
   id: ChatId
   workspaceId: WorkspaceId
@@ -20,6 +20,7 @@ export type MessageRow = {
   id: MessageId
   workspaceId: WorkspaceId
   chatId: ChatId
+  seq: number
   kind: 'member' | 'agent' | 'tool-call'
   authorId: MemberId | null
   body: string
@@ -30,12 +31,7 @@ export type MessageRow = {
   needsReply: boolean
 }
 export type DraftRow = { workspaceId: WorkspaceId; chatId: ChatId; memberId: MemberId; text: string }
-export type ReadMarkerRow = {
-  workspaceId: WorkspaceId
-  memberId: MemberId
-  chatId: ChatId
-  lastReadMessageId: MessageId
-}
+type ReadMarkerRow = { workspaceId: WorkspaceId; memberId: MemberId; chatId: ChatId; lastReadSeq: number }
 export type FileRow = { workspaceId: WorkspaceId; chatId: ChatId; path: string; kind: 'file' | 'folder' }
 export type DiffLine = { kind: 'added' | 'removed' | 'context'; text: string }
 export type ChangeRow = {
@@ -46,9 +42,9 @@ export type ChangeRow = {
   deletions: number
   diffLines: readonly DiffLine[]
 }
-export type TerminalLineRow = { workspaceId: WorkspaceId; chatId: ChatId; text: string }
-export type PlanStepRow = { workspaceId: WorkspaceId; chatId: ChatId; title: string; status: string }
-export type CommitRow = {
+type TerminalLineRow = { workspaceId: WorkspaceId; chatId: ChatId; text: string }
+type PlanStepRow = { workspaceId: WorkspaceId; chatId: ChatId; title: string; status: string }
+type CommitRow = {
   workspaceId: WorkspaceId
   chatId: ChatId
   sha: string
@@ -56,41 +52,41 @@ export type CommitRow = {
   authorId: MemberId
   committedAt: string
 }
-export type BrowserPageRow = {
+type BrowserPageRow = {
   workspaceId: WorkspaceId
   chatId: ChatId
   url: string
   title: string
   bodyText: string
 }
-export type UsageEntryRow = {
+type UsageEntryRow = {
   workspaceId: WorkspaceId
   chatId: ChatId
   memberId: MemberId
   tokens: number
   costCents: number
 }
-export type SourceRow = { workspaceId: WorkspaceId; chatId: ChatId; name: string; origin: string }
-export type ToolConnectionRow = {
+type SourceRow = { workspaceId: WorkspaceId; chatId: ChatId; name: string; origin: string }
+type ToolConnectionRow = {
   workspaceId: WorkspaceId
   memberId: MemberId
   tool: string
   status: string
 }
-export type LlmCredentialRow = {
+type LlmCredentialRow = {
   id: CredentialId
   workspaceId: WorkspaceId
   memberId: MemberId
   provider: string
   last4: string
 }
-export type WorkspaceConnectionRow = {
+type WorkspaceConnectionRow = {
   workspaceId: WorkspaceId
   memberId: MemberId
   tool: string
   access: string
 }
-export type ChatMemberRow = {
+type ChatMemberRow = {
   workspaceId: WorkspaceId
   chatId: ChatId
   memberId: MemberId
@@ -117,7 +113,6 @@ export type Snapshot = {
   chatMembers: readonly ChatMemberRow[]
   llmCredentials: readonly LlmCredentialRow[]
   workspaceConnections: readonly WorkspaceConnectionRow[]
-  toolCatalog: readonly string[]
 }
 
 type ChatScoped = { workspaceId: WorkspaceId; chatId: ChatId }
@@ -132,7 +127,13 @@ export const ownedBy =
   (workspaceId: WorkspaceId, memberId: MemberId) => (row: { workspaceId: WorkspaceId; memberId: MemberId }) =>
     row.workspaceId === workspaceId && row.memberId === memberId
 
-export const memberName = (snapshot: Snapshot, workspaceId: WorkspaceId, memberId: MemberId) =>
-  snapshot.memberships.find(ownedBy(workspaceId, memberId))?.displayName ?? 'Unknown'
+export const memberNamesIn = (snapshot: Snapshot, workspaceId: WorkspaceId) => {
+  const nameByMemberId = new Map(
+    snapshot.memberships
+      .filter((membership) => membership.workspaceId === workspaceId)
+      .map((membership) => [membership.memberId, membership.displayName]),
+  )
+  return (memberId: MemberId) => nameByMemberId.get(memberId) ?? 'Unknown'
+}
 
 export const toolCatalog = ['GitHub', 'Slack', 'Notion', 'Linear']

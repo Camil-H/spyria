@@ -1,11 +1,12 @@
 import type { MessageId, WorkspaceId } from '@hq/kernel'
-import { useSession } from '@hq/session'
 import { focusRing, menuContentClass } from '@hq/ui'
 import { Content, Item, Root, Trigger } from '@radix-ui/react-dropdown-menu'
 import { Ellipsis } from 'lucide-react'
 import { useNavigate, useOutletContext } from 'react-router'
 import { useConversationCommands } from './providers.tsx'
-import { menuItemClass } from './ui.ts'
+
+const menuItemClass =
+  'flex cursor-pointer items-center rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-hover data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40'
 
 export const MessageMenu = ({
   messageId,
@@ -20,10 +21,9 @@ export const MessageMenu = ({
 }) => {
   const commands = useConversationCommands()
   const workspaceId = useOutletContext<WorkspaceId>()
-  const { memberId } = useSession()
   const navigate = useNavigate()
   const startRuntime = async () => {
-    const newChatId = await commands.startRuntimeFromMessage({ workspaceId, messageId, memberId })
+    const newChatId = await commands.startRuntimeFromMessage({ workspaceId, messageId })
     navigate(`../${newChatId}`, { relative: 'path' })
   }
   return (

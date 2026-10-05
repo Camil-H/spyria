@@ -4,7 +4,6 @@ import { BlankMessageBody, MessageDeleted, NotMessageAuthor } from './errors.ts'
 import { deletedMessage, editedMessage, type Message } from './message.ts'
 import { chatNameFrom, MessageBody } from './message-body.ts'
 import { messagesFromEvents, type StoredEvent } from './message-events.ts'
-import { advancedReadMarker } from './read-marker.ts'
 
 const alice = memberId('alice')
 const bob = memberId('bob')
@@ -62,18 +61,6 @@ test('chatNameFrom takes the trimmed first line', () => {
 
 test('chatNameFrom truncates long first lines to 60 characters plus an ellipsis', () => {
   expect(chatNameFrom(MessageBody('x'.repeat(70)))).toBe(`${'x'.repeat(60)}…`)
-})
-
-test('advancedReadMarker moves the marker to the newest message of the chat', () => {
-  const first = messageId('first')
-  const second = messageId('second')
-  expect(advancedReadMarker(null, [first, second])).toBe(second)
-  expect(advancedReadMarker(first, [first, second])).toBe(second)
-  expect(advancedReadMarker(second, [first, second])).toBe(second)
-})
-
-test('advancedReadMarker leaves a chat without messages unmarked', () => {
-  expect(advancedReadMarker(null, [])).toBeNull()
 })
 
 const minute = (value: number) => new Date(Date.UTC(2026, 9, 1, 9, value))

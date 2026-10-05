@@ -4,11 +4,12 @@ import {
   type MemberId,
   memberId,
   messageId,
+  type ProjectId,
   projectId,
   type WorkspaceId,
   workspaceId,
 } from '@hq/kernel'
-import { type ChangeRow, type FileRow, type MessageRow, type Snapshot, toolCatalog } from './schema.ts'
+import type { ChangeRow, ChatRow, FileRow, MessageRow, Snapshot } from './schema.ts'
 
 const acme = workspaceId('workspace-acme')
 const globex = workspaceId('workspace-globex')
@@ -21,42 +22,43 @@ const launch = projectId('project-launch')
 const invoiceChat = chatId('chat-invoice-bug')
 const welcomeChat = chatId('chat-welcome')
 
-const file = (path: string, kind: FileRow['kind'] = 'file'): FileRow => ({
-  workspaceId: acme,
-  chatId: invoiceChat,
-  path,
-  kind,
-})
+const invoiceBug = { workspaceId: acme, chatId: invoiceChat }
+const file = (path: string, kind: FileRow['kind'] = 'file'): FileRow => ({ ...invoiceBug, path, kind })
 const change = (path: string, additions: number, deletions: number, diffLines: ChangeRow['diffLines']): ChangeRow => ({
-  workspaceId: acme,
-  chatId: invoiceChat,
+  ...invoiceBug,
   path,
   additions,
   deletions,
   diffLines,
 })
-const terminalLine = (text: string) => ({
-  workspaceId: acme,
-  chatId: invoiceChat,
-  text,
-})
-const planStep = (title: string, status: string) => ({
-  workspaceId: acme,
-  chatId: invoiceChat,
-  title,
-  status,
-})
-const toolConnection = (tool: string, status: string) => ({
-  workspaceId: acme,
-  memberId: alice,
-  tool,
-  status,
-})
+const terminalLine = (text: string) => ({ ...invoiceBug, text })
+const planStep = (title: string, status: string) => ({ ...invoiceBug, title, status })
+const toolConnection = (tool: string, status: string) => ({ workspaceId: acme, memberId: alice, tool, status })
 const workspaceConnection = (memberId: MemberId, tool: string, access: string) => ({
   workspaceId: acme,
   memberId,
   tool,
   access,
+})
+const chat = (
+  id: string,
+  workspace: WorkspaceId,
+  project: ProjectId | null,
+  name: string,
+  ownerId: MemberId,
+  runtime?: { model: string; reasoningEffort: string; gitBranch: string | null },
+): ChatRow => ({
+  id: chatId(id),
+  workspaceId: workspace,
+  projectId: project,
+  type: runtime ? 'runtime' : 'channel',
+  name,
+  ownerId,
+  archived: false,
+  model: runtime?.model ?? null,
+  reasoningEffort: runtime?.reasoningEffort ?? null,
+  gitBranch: runtime?.gitBranch ?? null,
+  originChatId: null,
 })
 const bobCanPrompt = (chat: string) => ({
   workspaceId: acme,
@@ -78,6 +80,7 @@ const message = (
   id: messageId(`message-${id}`),
   workspaceId: workspace,
   chatId: chatId(chat),
+  seq: Number(id.slice(id.lastIndexOf('-') + 1)),
   kind,
   authorId,
   body,
@@ -115,97 +118,29 @@ export const createMockSnapshot = (): Snapshot => ({
     { id: launch, workspaceId: globex, name: 'Launch', archived: false },
   ],
   chats: [
-    {
-      id: chatId('chat-welcome'),
-      workspaceId: acme,
-      projectId: onboarding,
-      type: 'channel',
-      name: 'Welcome',
-      ownerId: alice,
-      archived: false,
-      model: null,
-      reasoningEffort: null,
-      gitBranch: null,
-      originChatId: null,
-    },
-    {
-      id: chatId('chat-setup-helper'),
-      workspaceId: acme,
-      projectId: onboarding,
-      type: 'runtime',
-      name: 'Setup helper',
-      ownerId: bob,
-      archived: false,
+    chat('chat-welcome', acme, onboarding, 'Welcome', alice),
+    chat('chat-setup-helper', acme, onboarding, 'Setup helper', bob, {
       model: 'GPT-5',
       reasoningEffort: 'Medium',
       gitBranch: 'main',
-      originChatId: null,
-    },
-    {
-      id: chatId('chat-invoice-bug'),
-      workspaceId: acme,
-      projectId: billing,
-      type: 'runtime',
-      name: 'Invoice bug',
-      ownerId: alice,
-      archived: false,
+    }),
+    chat('chat-invoice-bug', acme, billing, 'Invoice bug', alice, {
       model: 'Claude Sonnet 5.5',
       reasoningEffort: 'High',
       gitBranch: 'fix/invoice-tax',
-      originChatId: null,
-    },
-    {
-      id: chatId('chat-standup'),
-      workspaceId: acme,
-      projectId: null,
-      type: 'channel',
-      name: 'Standup',
-      ownerId: bob,
-      archived: false,
-      model: null,
-      reasoningEffort: null,
-      gitBranch: null,
-      originChatId: null,
-    },
-    {
-      id: chatId('chat-research'),
-      workspaceId: acme,
-      projectId: null,
-      type: 'runtime',
-      name: 'Research',
-      ownerId: alice,
-      archived: false,
+    }),
+    chat('chat-standup', acme, null, 'Standup', bob),
+    chat('chat-research', acme, null, 'Research', alice, {
       model: 'Claude Sonnet 5.5',
       reasoningEffort: 'Medium',
       gitBranch: null,
-      originChatId: null,
-    },
-    {
-      id: chatId('chat-launch-plan'),
-      workspaceId: globex,
-      projectId: launch,
-      type: 'runtime',
-      name: 'Launch plan',
-      ownerId: alice,
-      archived: false,
+    }),
+    chat('chat-launch-plan', globex, launch, 'Launch plan', alice, {
       model: 'Claude Sonnet 5.5',
       reasoningEffort: 'Medium',
       gitBranch: null,
-      originChatId: null,
-    },
-    {
-      id: chatId('chat-general'),
-      workspaceId: globex,
-      projectId: null,
-      type: 'channel',
-      name: 'General',
-      ownerId: alice,
-      archived: false,
-      model: null,
-      reasoningEffort: null,
-      gitBranch: null,
-      originChatId: null,
-    },
+    }),
+    chat('chat-general', globex, null, 'General', alice),
   ],
   messages: [
     member('welcome-1', 'chat-welcome', acme, bob, 'Welcome to the team!', '09:00'),
@@ -231,8 +166,8 @@ export const createMockSnapshot = (): Snapshot => ({
   ],
   drafts: [],
   readMarkers: [
-    { workspaceId: acme, memberId: alice, chatId: welcomeChat, lastReadMessageId: messageId('message-welcome-2') },
-    { workspaceId: acme, memberId: alice, chatId: invoiceChat, lastReadMessageId: messageId('message-invoice-4') },
+    { workspaceId: acme, memberId: alice, chatId: welcomeChat, lastReadSeq: 2 },
+    { workspaceId: acme, memberId: alice, chatId: invoiceChat, lastReadSeq: 4 },
   ],
   files: [
     file('billing', 'folder'),
@@ -259,8 +194,7 @@ export const createMockSnapshot = (): Snapshot => ({
   ],
   commits: [
     {
-      workspaceId: acme,
-      chatId: invoiceChat,
+      ...invoiceBug,
       sha: 'a1b2c3d',
       message: 'Fix tax applied twice',
       authorId: alice,
@@ -269,8 +203,7 @@ export const createMockSnapshot = (): Snapshot => ({
   ],
   browserPages: [
     {
-      workspaceId: acme,
-      chatId: invoiceChat,
+      ...invoiceBug,
       url: 'http://localhost:3000/invoices',
       title: 'Invoices',
       bodyText: 'Invoice total: 120.00',
@@ -284,14 +217,8 @@ export const createMockSnapshot = (): Snapshot => ({
     },
   ],
   usageEntries: [
-    {
-      workspaceId: acme,
-      chatId: invoiceChat,
-      memberId: alice,
-      tokens: 12400,
-      costCents: 18,
-    },
-    { workspaceId: acme, chatId: invoiceChat, memberId: bob, tokens: 3100, costCents: 5 },
+    { ...invoiceBug, memberId: alice, tokens: 12400, costCents: 18 },
+    { ...invoiceBug, memberId: bob, tokens: 3100, costCents: 5 },
   ],
   sources: [
     { workspaceId: acme, chatId: welcomeChat, name: 'Employee handbook', origin: 'Onyx' },
@@ -317,5 +244,4 @@ export const createMockSnapshot = (): Snapshot => ({
     workspaceConnection(alice, 'Onyx', 'All sources'),
     workspaceConnection(bob, 'Postgres', '1 of 5 tables'),
   ],
-  toolCatalog,
 })

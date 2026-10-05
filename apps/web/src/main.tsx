@@ -9,7 +9,9 @@ const root = createRoot(document.getElementById('root') as HTMLElement)
 
 const start = async () => {
   const { userId, sessions } = await loadSessions()
-  if (userId && sessions.length > 0) return root.render(<App app={await createApp(userId, sessions)} />)
+  const [defaultSession] = sessions
+  if (userId && defaultSession)
+    return root.render(<App app={await createApp(userId, defaultSession.workspaceId, sessions)} />)
   const signIn = async () => {
     const result = await signInWithPopup()
     if (result.status === 'signed_in') await start()

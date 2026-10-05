@@ -1,20 +1,19 @@
 import { useQuery } from '@hq/db/react'
-import { useId } from 'react'
+import { LabelledSection } from '@hq/ui'
 import { getConnections } from '../queries/get-connections.ts'
 import { LabelList } from './LabelList.tsx'
 import type { TabProps } from './TabProps.ts'
 
-const ConnectionGroup = ({ title, ...list }: { title: string } & Parameters<typeof LabelList>[0]) => {
-  const headingId = useId()
-  return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-2">
-      <h3 id={headingId} className="text-xs font-semibold uppercase text-muted">
-        {title}
-      </h3>
-      <LabelList {...list} />
-    </section>
-  )
-}
+const ConnectionGroup = ({ title, ...list }: { title: string } & Parameters<typeof LabelList>[0]) => (
+  <LabelledSection
+    title={title}
+    Heading="h3"
+    className="flex flex-col gap-2"
+    titleClass="text-xs font-semibold uppercase text-muted"
+  >
+    <LabelList {...list} />
+  </LabelledSection>
+)
 
 export const ConnectionsTab = ({ workspaceId, chatId }: TabProps) => {
   const connections = useQuery(getConnections(workspaceId, chatId))

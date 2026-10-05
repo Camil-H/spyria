@@ -1,16 +1,15 @@
 import { useQuery } from '@hq/db/react'
 import type { MemberId, WorkspaceId } from '@hq/kernel'
-import { focusRing, ghostButtonClass } from '@hq/ui'
+import { ghostButtonClass, LabelledSection, tabTriggerClass } from '@hq/ui'
 import { Content, List, Root, Trigger } from '@radix-ui/react-tabs'
 import { getPersonalConnections } from '../queries/get-personal-connections.ts'
 import { getSharedConnections } from '../queries/get-shared-connections.ts'
 import { ErrorMessage } from './ErrorMessage.tsx'
 import { useProfileCommands } from './providers.tsx'
-import { Section } from './Section.tsx'
 import { useGuardedAction } from './useGuardedAction.ts'
 
 const rowClass = 'flex flex-wrap items-center gap-x-3 gap-y-1'
-const tabClass = `border-b-2 border-transparent px-3 py-2 text-sm text-muted hover:text-ink data-[state=active]:border-accent data-[state=active]:text-ink ${focusRing}`
+const tabClass = `${tabTriggerClass} px-3 text-sm`
 
 export const ConnectionsSection = ({ workspaceId, memberId }: { workspaceId: WorkspaceId; memberId: MemberId }) => {
   const commands = useProfileCommands()
@@ -18,9 +17,9 @@ export const ConnectionsSection = ({ workspaceId, memberId }: { workspaceId: Wor
   const shared = useQuery(getSharedConnections(workspaceId, memberId))
   const { connected, available } = useQuery(getPersonalConnections(workspaceId, memberId))
   const act = (command: 'connectTool' | 'disconnectTool', tool: string) => () =>
-    run(() => commands[command]({ workspaceId, memberId, tool }))
+    run(() => commands[command]({ workspaceId, tool }))
   return (
-    <Section title="Connections">
+    <LabelledSection title="Connections">
       <Root defaultValue="shared" className="flex flex-col gap-3">
         <List aria-label="Connections" className="flex gap-1 border-b border-line">
           <Trigger value="shared" className={tabClass}>
@@ -76,6 +75,6 @@ export const ConnectionsSection = ({ workspaceId, memberId }: { workspaceId: Wor
           <ErrorMessage message={errorMessage} />
         </Content>
       </Root>
-    </Section>
+    </LabelledSection>
   )
 }

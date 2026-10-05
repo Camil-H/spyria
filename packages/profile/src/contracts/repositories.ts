@@ -20,7 +20,7 @@ export type SecretStore = {
 }
 
 export type PersonalConnectionRepository = {
-  list(workspaceId: WorkspaceId, memberId: MemberId): Promise<readonly PersonalConnection[]>
-  replace(workspaceId: WorkspaceId, memberId: MemberId, connections: readonly PersonalConnection[]): Promise<void>
+  connect(connection: PersonalConnection): Promise<void>
+  disconnect(workspaceId: WorkspaceId, memberId: MemberId, tool: string): Promise<void>
   toolCatalog(): Promise<readonly string[]>
 }

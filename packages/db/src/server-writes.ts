@@ -1,4 +1,4 @@
-import type { Transaction } from '@rocicorp/zero'
+import type { ServerTransaction, Transaction } from '@rocicorp/zero'
 
 const onServer = async (tx: Transaction, statement: string, parameters: unknown[]) =>
   tx.location === 'server' ? [...(await tx.dbTransaction.query(statement, parameters))] : []
@@ -50,3 +50,40 @@ export const enqueueJob = (
     `insert into jobs (workspace_id, id, type, payload, run_at, attempts, state) values ($1, $2, $3, $4::jsonb, now() + make_interval(secs => $5::double precision / 1000), 0, 'queued')`,
     [job.workspaceId, crypto.randomUUID(), job.type, JSON.stringify(job.payload), job.delayMilliseconds],
   )
+
+type ChatEvent = {
+  workspaceId: string
+  chatId: string
+  type: string
+  actor: string | null
+  payload: object
+  createdAt: Date
+  id?: string
+}
+
+export const appendChatEvent = async (tx: ServerTransaction, { workspaceId, chatId, ...event }: ChatEvent) => {
+  const query = async (statement: string, parameters: unknown[]) => [
+    ...(await tx.dbTransaction.query(statement, parameters)),
+  ]
+  const lockedChats = await query('select 1 from chats where workspace_id = $1 and id = $2 for update', [
+    workspaceId,
+    chatId,
+  ])
+  if (lockedChats.length === 0) throw new Error(`Chat ${chatId} was not found`)
+  const [appended] = await query(
+    `insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
+     select $1, $2, $3::text, coalesce(max(seq), 0) + 1, $4::text, $5::text, $6::jsonb, $7::timestamptz
+     from events where workspace_id = $1 and chat_id = $2
+     returning seq`,
+    [
+      workspaceId,
+      chatId,
+      event.id ?? crypto.randomUUID(),
+      event.type,
+      event.actor,
+      JSON.stringify(event.payload),
+      event.createdAt.toISOString(),
+    ],
+  )
+  return Number((appended as { seq: number }).seq)
+}

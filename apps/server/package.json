@@ -10,7 +10,6 @@
     "@hq/conversation": "workspace:*",
     "@hq/db": "workspace:*",
     "@hq/kernel": "workspace:*",
-    "@hq/panel": "workspace:*",
     "@hq/profile": "workspace:*",
     "@hq/workspace": "workspace:*",
     "@rocicorp/zero": "1.9.0",

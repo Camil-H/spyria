@@ -1,4 +1,4 @@
-import { ChatView, ConversationProvider, DraftIndicator, PromptAccessProvider, UnreadIndicator } from '@hq/conversation'
+import { ChatIndicators, ChatView, ConversationProvider } from '@hq/conversation'
 import { StoreProvider } from '@hq/db/react'
 import { chatId as toChatId, type WorkspaceId } from '@hq/kernel'
 import { PanelProvider, PanelToggle, SidePanel } from '@hq/panel'
@@ -22,9 +22,7 @@ const ChatRoute = () => {
   )
   return (
     <div className="flex h-full">
-      <PromptAccessProvider canPrompt={canPrompt} blockedNotice={blockedNotice}>
-        <ChatView headerActions={<PanelToggle />} />
-      </PromptAccessProvider>
+      <ChatView headerActions={<PanelToggle />} canPrompt={canPrompt} blockedNotice={blockedNotice} />
       <SidePanel workspaceId={workspaceId} chatId={chatId} />
     </div>
   )
@@ -41,16 +39,7 @@ export const App = ({ app }: { app: Application }) => (
                 <Routes>
                   <Route
                     path="/w/:workspaceId"
-                    element={
-                      <WorkspaceLayout
-                        chatAdornment={(chatId) => (
-                          <>
-                            <UnreadIndicator chatId={chatId} />
-                            <DraftIndicator chatId={chatId} />
-                          </>
-                        )}
-                      />
-                    }
+                    element={<WorkspaceLayout chatAdornment={(chatId) => <ChatIndicators chatId={chatId} />} />}
                   >
                     <Route index element={<p className="p-6 text-muted">Select a chat</p>} />
                     <Route path="chats/:chatId" element={<ChatRoute />} />

@@ -15,5 +15,3 @@ export const chatId = (value: string) => value as ChatId
 export const memberId = (value: string) => value as MemberId
 export const messageId = (value: string) => value as MessageId
 export const credentialId = (value: string) => value as CredentialId
-
-export type IdGenerator = { next(): string }

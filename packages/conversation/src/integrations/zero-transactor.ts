@@ -1,12 +1,13 @@
-import { appendChatEvent } from '@hq/db/events'
-import { enqueueJob } from '@hq/db/server-writes'
-import { type Message as MessageRow, zql } from '@hq/db/zero'
+import { appendChatEvent, enqueueJob } from '@hq/db/server-writes'
+import type { Message as MessageRow } from '@hq/db/zero'
+import { zql } from '@hq/db/zero-queries'
 import { type ChatId, chatId, type MessageId, memberId, messageId, type WorkspaceId, workspaceId } from '@hq/kernel'
 import type { Transaction } from '@rocicorp/zero'
 import type { ConversationTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import { ChatNotFound, ForeignWorkspace, MessageNotFound } from '../domain/errors.ts'
 import type { Message, MessageChange } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
+import type { ChangedPayload, PostedPayload } from '../domain/message-events.ts'
 import { scriptedAgentReply } from '../domain/scripted-agent.ts'
 
 const dateOrNull = (time: number | null) => (time === null ? null : new Date(time))
@@ -25,32 +26,32 @@ const toMessage = ({ seq, ...row }: MessageRow): Message => ({
   replyToId: row.replyToId === null ? null : messageId(row.replyToId),
 })
 
-const eventOf = ({ type, message }: MessageChange) => ({
-  createdAt: message.deletedAt ?? message.editedAt ?? message.createdAt,
-  ...(type === 'message.posted' || type === 'message.replied'
-    ? {
-        id: message.id,
-        payload: { kind: message.kind, body: message.body, detail: message.detail, replyToId: message.replyToId },
-      }
-    : {
-        payload: type === 'message.edited' ? { messageId: message.id, body: message.body } : { messageId: message.id },
-      }),
-})
+const isPosted = (type: MessageChange['type']) => type === 'message.posted' || type === 'message.replied'
+
+const payloadOf = ({
+  type,
+  message,
+}: MessageChange): PostedPayload | ChangedPayload | Pick<ChangedPayload, 'messageId'> =>
+  isPosted(type)
+    ? { kind: message.kind, body: message.body, detail: message.detail, replyToId: message.replyToId }
+    : type === 'message.edited'
+      ? { messageId: message.id, body: message.body }
+      : { messageId: message.id }
 
 export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: WorkspaceId): ConversationTransactor => {
-  const findMessage = (id: MessageId) =>
-    tx.run(zql.messages.where('workspaceId', contextWorkspaceId).where('id', id).one())
-  const messagesInChat = (id: ChatId) =>
-    zql.messages.where('workspaceId', contextWorkspaceId).where('chatId', id).orderBy('seq', 'asc')
+  const newestInChat = (id: ChatId) =>
+    tx.run(zql.messages.where('workspaceId', contextWorkspaceId).where('chatId', id).orderBy('seq', 'desc').one())
   const appendEvent = async (change: MessageChange) => {
-    const { chatId: id, workspaceId } = change.message
-    if (tx.location === 'client') return ((await tx.run(messagesInChat(id).orderBy('seq', 'desc').one()))?.seq ?? 0) + 1
+    const { message } = change
+    if (tx.location === 'client') return ((await newestInChat(message.chatId))?.seq ?? 0) + 1
     return appendChatEvent(tx, {
-      workspaceId,
-      chatId: id,
+      workspaceId: message.workspaceId,
+      chatId: message.chatId,
       type: change.type,
       actor: change.actorId,
-      ...eventOf(change),
+      payload: payloadOf(change),
+      createdAt: message.deletedAt ?? message.editedAt ?? message.createdAt,
+      ...(isPosted(change.type) && { id: message.id }),
     })
   }
   const inContextWorkspace = (message: Message) => {
@@ -60,31 +61,23 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
   const unitOfWork: UnitOfWork = {
     messages: {
       get: async (id) => {
-        const row = await findMessage(id)
+        const row = await tx.run(zql.messages.where('workspaceId', contextWorkspaceId).where('id', id).one())
         if (!row) throw new MessageNotFound(id)
         return toMessage(row)
       },
       record: async (change) => {
         const message = inContextWorkspace(change.message)
         const seq = await appendEvent(change)
-        if (change.type === 'message.posted' || change.type === 'message.replied')
-          await tx.mutate.messages.insert({
-            ...message,
-            seq,
-            createdAt: message.createdAt.getTime(),
-            editedAt: null,
-            deletedAt: null,
-          })
-        else
-          await tx.mutate.messages.update({
-            workspaceId: message.workspaceId,
-            id: message.id,
-            body: message.deletedAt === null ? message.body : '',
-            editedAt: timeOrNull(message.editedAt),
-            deletedAt: timeOrNull(message.deletedAt),
-          })
+        const row = {
+          ...message,
+          body: message.deletedAt === null ? message.body : '',
+          createdAt: message.createdAt.getTime(),
+          editedAt: timeOrNull(message.editedAt),
+          deletedAt: timeOrNull(message.deletedAt),
+        }
+        if (isPosted(change.type)) await tx.mutate.messages.insert({ ...row, seq })
+        else await tx.mutate.messages.update(row)
       },
-      idsInChat: async (id) => (await tx.run(messagesInChat(id))).map((row) => messageId(row.id)),
     },
     agentReplies: {
       request: async (message) => {
@@ -97,30 +90,17 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       },
     },
     readMarkers: {
-      get: async (id, readerId) => {
-        const marker = await tx.run(
+      markNewestRead: async (id, readerId) => {
+        const newest = await newestInChat(id)
+        const stored = await tx.run(
           zql.readMarkers.where('workspaceId', contextWorkspaceId).where('userId', readerId).where('chatId', id).one(),
         )
-        if (!marker) return null
-        const lastRead = await tx.run(messagesInChat(id).where('seq', marker.lastReadSeq).one())
-        return lastRead ? messageId(lastRead.id) : null
-      },
-      save: async (marker) => {
-        const lastRead = await findMessage(marker.lastReadMessageId)
-        if (!lastRead || lastRead.chatId !== marker.chatId) throw new MessageNotFound(marker.lastReadMessageId)
-        const stored = await tx.run(
-          zql.readMarkers
-            .where('workspaceId', contextWorkspaceId)
-            .where('userId', marker.memberId)
-            .where('chatId', marker.chatId)
-            .one(),
-        )
-        if (stored && stored.lastReadSeq >= lastRead.seq) return
+        if (!newest || (stored && stored.lastReadSeq >= newest.seq)) return
         await tx.mutate.readMarkers.upsert({
           workspaceId: contextWorkspaceId,
-          userId: marker.memberId,
-          chatId: marker.chatId,
-          lastReadSeq: lastRead.seq,
+          userId: readerId,
+          chatId: id,
+          lastReadSeq: newest.seq,
         })
       },
     },
@@ -128,7 +108,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       get: async (id) => {
         const row = await tx.run(zql.chats.where('workspaceId', contextWorkspaceId).where('id', id).one())
         if (!row) throw new ChatNotFound(id)
-        return { id: chatId(row.id), workspaceId: workspaceId(row.workspaceId), type: row.type }
+        return { workspaceId: workspaceId(row.workspaceId), type: row.type }
       },
     },
   }

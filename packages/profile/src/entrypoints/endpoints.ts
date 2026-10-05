@@ -9,8 +9,9 @@ const textOf = (value: unknown) => (typeof value === 'string' ? value : '')
 export const addLlmCredentialFromRequest = (tx: Transaction, context: ZeroContext, body: unknown) => {
   const { provider, secret } = (body ?? {}) as Record<string, unknown>
   return addLlmCredential(
-    { transactor: createZeroTransactor(tx, context), idGenerator: { next: () => crypto.randomUUID() } },
+    { transactor: createZeroTransactor(tx, context) },
     {
+      id: crypto.randomUUID(),
       workspaceId: context.workspaceId,
       memberId: context.userId,
       provider: textOf(provider),

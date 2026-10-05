@@ -26,8 +26,8 @@ export type ProjectedMessage = Readonly<{
   deletedAt: Date | null
 }>
 
-type PostedPayload = Pick<ProjectedMessage, 'kind' | 'body' | 'detail' | 'replyToId'>
-type ChangedPayload = { messageId: string; body: string }
+export type PostedPayload = Pick<ProjectedMessage, 'kind' | 'body' | 'detail' | 'replyToId'>
+export type ChangedPayload = { messageId: string; body: string }
 
 export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMessage[] => {
   const messageByKey = new Map<string, ProjectedMessage>()

@@ -1,5 +1,6 @@
-import { findChat, inChat, memberName, type Snapshot } from '@hq/db'
+import { inChat, type Snapshot } from '@hq/db'
 import type { ChatId, WorkspaceId } from '@hq/kernel'
+import { getMembers } from './get-members.ts'
 
 const sumBy = (rows: readonly { tokens: number; costCents: number }[]) => ({
   tokens: rows.reduce((sum, row) => sum + row.tokens, 0),
@@ -7,17 +8,16 @@ const sumBy = (rows: readonly { tokens: number; costCents: number }[]) => ({
 })
 
 export const getUsage = (workspaceId: WorkspaceId, chatId: ChatId) => (snapshot: Snapshot) => {
-  const chat = findChat(snapshot, workspaceId, chatId)
-  if (!chat) return { rows: [], total: sumBy([]) }
-  const isInChat = inChat(workspaceId, chatId)
-  const promptingMemberIds = [
-    chat.ownerId,
-    ...snapshot.chatMembers.filter((row) => isInChat(row) && row.role === 'Can prompt').map((row) => row.memberId),
-  ].filter((memberId, index, memberIds) => memberIds.indexOf(memberId) === index)
-  const rows = promptingMemberIds.map((memberId) => ({
-    memberId,
-    name: memberName(snapshot, workspaceId, memberId),
-    ...sumBy(snapshot.usageEntries.filter((entry) => isInChat(entry) && entry.memberId === memberId)),
-  }))
+  const entriesInChat = snapshot.usageEntries.filter(inChat(workspaceId, chatId))
+  const rows = getMembers(
+    workspaceId,
+    chatId,
+  )(snapshot)
+    .filter((member) => member.role === 'Owner' || member.role === 'Can prompt')
+    .map(({ memberId, name }) => ({
+      memberId,
+      name,
+      ...sumBy(entriesInChat.filter((entry) => entry.memberId === memberId)),
+    }))
   return { rows, total: sumBy(rows) }
 }

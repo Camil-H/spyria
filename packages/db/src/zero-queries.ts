@@ -1,8 +1,10 @@
 import type { MemberId, WorkspaceId } from '@hq/kernel'
-import { defineQueries, defineQuery } from '@rocicorp/zero'
-import { zql } from './zero.ts'
+import { createBuilder, defineQueries, defineQuery } from '@rocicorp/zero'
+import { schema } from './zero.ts'
 
 export type ZeroContext = { userId: MemberId; workspaceId: WorkspaceId; role: 'admin' | 'member' }
+
+export const zql = createBuilder(schema)
 
 declare module '@rocicorp/zero' {
   interface DefaultTypes {
