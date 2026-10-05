@@ -41,7 +41,6 @@ test.describe('1. menu content', () => {
       'Log out of Acme',
       'Globex',
       'Log out of Globex',
-      'Workspace settings',
     ])
   })
 

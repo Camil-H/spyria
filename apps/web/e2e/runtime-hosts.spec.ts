@@ -2,7 +2,7 @@ import { type ChildProcess, execFileSync, spawn } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { test as base, expect, mainOf, openMenu, type Page } from './fixtures'
+import { test as base, expect, mainOf, type Page, sidebarOf } from './fixtures'
 
 const hostProgram = new URL('../../host/src/main.ts', import.meta.url).pathname
 const gibibyte = 1024 ** 3
@@ -92,8 +92,7 @@ const commandOf = (page: Page, dialogName = 'Add runtime host') =>
 const urlOf = (command: string) => command.split(' ').at(-1) ?? ''
 
 const openSettings = async (page: Page) => {
-  await openMenu(page)
-  await page.getByRole('menuitem', { name: 'Workspace settings' }).click()
+  await sidebarOf(page).getByRole('link', { name: 'Workspace settings' }).click()
   await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Workspace settings' })).toBeVisible()
 }
 
@@ -123,7 +122,9 @@ test.beforeEach(async ({ page }) => {
 })
 
 test.describe('1. access', () => {
-  test('an admin opens Workspace settings from the menu and sees an empty Runtime hosts section', async ({ page }) => {
+  test('an admin opens Workspace settings from the sidebar and sees an empty Runtime hosts section', async ({
+    page,
+  }) => {
     await openSettings(page)
     await expect(settingsOf(page).getByRole('heading', { level: 2, name: 'Runtime hosts' })).toBeVisible()
     await expect(settingsOf(page).getByText('No runtime host yet')).toBeVisible()
@@ -132,10 +133,9 @@ test.describe('1. access', () => {
   test.describe('as a member', () => {
     test.use({ signedInAs: 'member-bob' })
 
-    test('a member has no settings menu item and the settings URL is refused', async ({ page }) => {
-      await openMenu(page)
-      await expect(page.getByRole('menuitem', { name: 'Workspace settings' })).toHaveCount(0)
-      await page.keyboard.press('Escape')
+    test('a member has no settings link and the settings URL is refused', async ({ page }) => {
+      await expect(sidebarOf(page).getByRole('link', { name: 'Profile' })).toBeVisible()
+      await expect(sidebarOf(page).getByRole('link', { name: 'Workspace settings' })).toHaveCount(0)
       await page.goto('/w/workspace-acme/settings')
       await expect(mainOf(page).getByText('Only workspace admins can see this page')).toBeVisible()
       await expect(settingsOf(page)).toHaveCount(0)
