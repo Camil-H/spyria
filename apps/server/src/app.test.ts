@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test'
 import { createDatabase } from '@hq/db/postgres'
+import { llmCredentialsPath } from '@hq/profile/server'
 import { createApp } from './app.ts'
 import { issueSessionToken } from './auth/session-tokens.ts'
 import { testAuthSettings } from './testing.ts'
@@ -20,10 +21,13 @@ test('the dev token endpoint is gone', async () => {
   expect((await app.request('/auth/dev-token', { method: 'POST', body: '{}' })).status).toBe(404)
 })
 
-test.each(['/api/query', '/api/mutate'])('%s refuses a request without a bearer token', async (path) => {
-  const response = await app.request(path, { method: 'POST', body: '[]' })
-  expect(response.status).toBe(401)
-})
+test.each(['/api/query', '/api/mutate', llmCredentialsPath])(
+  '%s refuses a request without a bearer token',
+  async (path) => {
+    const response = await app.request(path, { method: 'POST', body: '[]' })
+    expect(response.status).toBe(401)
+  },
+)
 
 test('refuses a token with a database claim without test hooks, without opening any database', async () => {
   const { token } = await issueSessionToken(

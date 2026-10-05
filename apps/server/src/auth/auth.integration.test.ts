@@ -3,7 +3,7 @@ import { createTestDatabase } from '@hq/db/testing'
 import type { AST } from '@rocicorp/zero'
 import { exportJWK, generateKeyPair, type JWTPayload, SignJWT } from 'jose'
 import { createApp } from '../app.ts'
-import { testAuthSettings } from '../testing.ts'
+import { acme, globex, testAuthSettings } from '../testing.ts'
 import { issueSessionToken } from './session-tokens.ts'
 import { openSessions } from './sessions.ts'
 
@@ -44,8 +44,6 @@ afterAll(async () => {
   await otherDatabase.drop()
 })
 
-const acme = 'workspace-acme'
-const globex = 'workspace-globex'
 const nowInSeconds = () => Math.floor(Date.now() / 1000)
 
 const signIdToken = (claims: JWTPayload) =>
@@ -310,10 +308,6 @@ test('without test hooks the app ignores the hq_test cookie, the test routes and
     expect((await app.request(`${path}?db=${otherDatabase.name}&user=member-alice`, { method: 'POST' })).status).toBe(
       404,
     )
-  const tokenForOther = await issueSessionToken(testAuthSettings.tokenSecret, aliceInOther, {
-    databaseName: otherDatabase.name,
-  })
-  expect((await queryWith(tokenForOther.token)).status).toBe(403)
 
   const testApp = createApp({ database, ...settingsWithIdp, testDatabaseByName: () => otherDatabase.database })
   const { sessions } = await sessionsOf(cookie, testApp)

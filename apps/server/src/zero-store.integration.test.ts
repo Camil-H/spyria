@@ -1,44 +1,20 @@
 import { afterAll, expect, test } from 'bun:test'
 import { conversationMutators } from '@hq/conversation/server'
 import { createMockSnapshot, type Snapshot } from '@hq/db'
-import { createTestDatabase, startZeroCache } from '@hq/db/testing'
 import { createZeroStore } from '@hq/db/zero-store'
-import { type MemberId, memberId, type WorkspaceId, workspaceId } from '@hq/kernel'
+import { type MemberId, type WorkspaceId, workspaceId } from '@hq/kernel'
 import { workspaceMutators } from '@hq/workspace/server'
-import { createApp } from './app.ts'
 import { issueSessionToken } from './auth/session-tokens.ts'
 import { openSessions } from './auth/sessions.ts'
-import { testAuthSettings } from './testing.ts'
+import { acme, alice, globex, openSharedTestApp, bob, testAuthSettings, waitFor } from './testing.ts'
 
-const testDatabase = await createTestDatabase()
-const app = createApp({ database: testDatabase.database, ...testAuthSettings })
-const server = Bun.serve({ port: 0, fetch: app.fetch })
-const zeroCache = await startZeroCache({
-  databaseName: testDatabase.name,
-  port: 4890,
-  appId: 'hqstoretest',
-  serverUrl: server.url.origin,
-}).catch(async (error) => {
-  await server.stop(true)
-  await testDatabase.drop()
-  throw error
-})
+const { database, zeroCacheUrl } = await openSharedTestApp()
 const openedStores: ReturnType<typeof createZeroStore>[] = []
-afterAll(async () => {
-  await Promise.all(openedStores.map((store) => store.close()))
-  await zeroCache.stop()
-  await server.stop(true)
-  await testDatabase.drop()
-})
-
-const acme = workspaceId('workspace-acme')
-const globex = workspaceId('workspace-globex')
-const alice = memberId('member-alice')
-const bob = memberId('member-bob')
+afterAll(() => Promise.all(openedStores.map((store) => store.close())))
 
 const sessionsOf = async (viewerId: MemberId, workspaceIds: readonly WorkspaceId[]) =>
   Promise.all(
-    (await openSessions(testDatabase.database, viewerId))
+    (await openSessions(database, viewerId))
       .filter((session) => workspaceIds.includes(workspaceId(session.workspaceId)))
       .map(async (session) => {
         const issued = await issueSessionToken(testAuthSettings.tokenSecret, session)
@@ -51,7 +27,7 @@ const openStore = async (viewerId: MemberId, workspaceIds: readonly WorkspaceId[
     memberId: viewerId,
     sessions: await sessionsOf(viewerId, workspaceIds),
     renew: async (workspace) => (await sessionsOf(viewerId, [workspace]))[0],
-    cacheURL: zeroCache.url,
+    cacheURL: zeroCacheUrl,
     kvStore: 'mem',
     mutators: { ...workspaceMutators, ...conversationMutators },
   })
@@ -111,12 +87,17 @@ const normalized = (snapshot: Snapshot) =>
     ]),
   )
 
+const expectedFor = (viewerId: MemberId, workspaceIds: readonly WorkspaceId[]) =>
+  normalized(visibleTo(createMockSnapshot(), viewerId, workspaceIds))
+const replicaWatcher = await openStore(alice, [acme, globex])
+await waitFor(() => Bun.deepEquals(normalized(replicaWatcher.read()), expectedFor(alice, [acme, globex])))
+
 test.each([
   { viewer: 'Alice', viewerId: alice, workspaceIds: [acme, globex] },
   { viewer: 'Bob', viewerId: bob, workspaceIds: [acme] },
 ])('$viewer reads through Zero exactly the mock snapshot visible to them', async ({ viewerId, workspaceIds }) => {
   const store = await openStore(viewerId, workspaceIds)
-  expect(normalized(store.read())).toEqual(normalized(visibleTo(createMockSnapshot(), viewerId, workspaceIds)))
+  expect(normalized(store.read())).toEqual(expectedFor(viewerId, workspaceIds))
 })
 
 test('signing out of a workspace removes its rows but keeps it listed, signing in brings them back', async () => {
@@ -151,7 +132,7 @@ test('a mutation through the store reaches the replica and, once the server conf
       .projects.filter((project) => project.workspaceId === acme)
       .map((project) => project.name),
   ).toEqual(['Onboarding', 'Billing', 'Stored'])
-  expect(await testDatabase.database.query.projects.findFirst({ where: { id: 'project-stored' } })).toMatchObject({
+  expect(await database.query.projects.findFirst({ where: { id: 'project-stored' } })).toMatchObject({
     workspaceId: acme,
     name: 'Stored',
   })

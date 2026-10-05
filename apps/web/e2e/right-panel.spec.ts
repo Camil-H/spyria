@@ -1,17 +1,9 @@
-import { expect, type Page, test } from './fixtures'
+import { composerOf, expect, mainOf, openChat, type Page, test } from './fixtures'
 
-const sidebarOf = (page: Page) => page.getByRole('navigation', { name: 'Sidebar' })
-const mainOf = (page: Page) => page.getByRole('main')
 const panelOf = (page: Page) => page.getByRole('region', { name: 'Side panel' })
 const tabListOf = (page: Page) => panelOf(page).getByRole('tablist', { name: 'Panel tabs' })
 const tabOf = (page: Page, tabName: string) => tabListOf(page).getByRole('tab', { name: tabName, exact: true })
 const tabPanelOf = (page: Page) => panelOf(page).getByRole('tabpanel')
-const composerOf = (page: Page) => page.getByRole('textbox', { name: 'Message' })
-
-const openChat = async (page: Page, chatName: string) => {
-  await sidebarOf(page).getByRole('link', { name: chatName }).click()
-  await expect(mainOf(page).getByRole('heading', { level: 1, name: chatName })).toBeVisible()
-}
 
 const openTab = async (page: Page, chatName: string, tabName: string) => {
   await openChat(page, chatName)
@@ -177,11 +169,6 @@ test.describe('3. files', () => {
     await billingFolder.click()
     await expect(tabPanelOf(page).getByText('tax.ts')).toBeHidden()
   })
-
-  test('shows an empty state without data', async ({ page }) => {
-    await openChat(page, 'Research')
-    await expect(tabPanelOf(page)).toContainText('No files')
-  })
 })
 
 test.describe('4. changes', () => {
@@ -209,11 +196,6 @@ test.describe('4. changes', () => {
       diffText.lastIndexOf('const total = applyTax(net)'),
     )
   })
-
-  test('shows an empty state without data', async ({ page }) => {
-    await openTab(page, 'Research', 'Changes')
-    await expect(tabPanelOf(page)).toContainText('No changes')
-  })
 })
 
 test.describe('5. terminal', () => {
@@ -223,11 +205,6 @@ test.describe('5. terminal', () => {
     await expect(tabPanelOf(page)).toContainText('3 pass')
     await expect(tabPanelOf(page)).toContainText('0 fail')
     await expect(panelOf(page).getByRole('textbox')).toHaveCount(0)
-  })
-
-  test('shows an empty state without data', async ({ page }) => {
-    await openTab(page, 'Research', 'Terminal')
-    await expect(tabPanelOf(page)).toContainText('No terminal output')
   })
 })
 
@@ -243,11 +220,6 @@ test.describe('6. plan', () => {
     await expect(steps.nth(2)).toContainText('Add a regression test')
     await expect(steps.nth(2)).toContainText('To do')
   })
-
-  test('shows an empty state without data', async ({ page }) => {
-    await openTab(page, 'Research', 'Plan')
-    await expect(tabPanelOf(page)).toContainText('No plan')
-  })
 })
 
 test.describe('7. commits', () => {
@@ -260,11 +232,21 @@ test.describe('7. commits', () => {
     await expect(commits.nth(0)).toContainText('Alice')
     await expect(commits.nth(0)).toContainText('11:20')
   })
+})
 
-  test('shows an empty state without data', async ({ page }) => {
-    await openTab(page, 'Research', 'Commits')
-    await expect(tabPanelOf(page)).toContainText('No commits')
-  })
+test('shows the empty state of each runtime tab without data', async ({ page }) => {
+  await openChat(page, 'Research')
+  await expect(tabPanelOf(page)).toContainText('No files')
+  for (const [tabName, emptyText] of [
+    ['Changes', 'No changes'],
+    ['Terminal', 'No terminal output'],
+    ['Plan', 'No plan'],
+    ['Commits', 'No commits'],
+  ] as const) {
+    await tabOf(page, tabName).click()
+    await expect(tabOf(page, tabName)).toHaveAttribute('aria-selected', 'true')
+    await expect(tabPanelOf(page)).toContainText(emptyText)
+  }
 })
 
 test.describe('8. usage', () => {

@@ -1,27 +1,21 @@
-import { expect, type Page, test } from './fixtures'
+import {
+  agentReplyText,
+  chatLinkOf,
+  composerOf,
+  draftIconOf,
+  expect,
+  messageItemsOf,
+  openChat,
+  type Page,
+  sendMessage,
+  sidebarOf,
+  test,
+} from './fixtures'
 
-const sidebarOf = (page: Page) => page.getByRole('navigation', { name: 'Sidebar' })
-const mainOf = (page: Page) => page.getByRole('main')
-const chatLinkOf = (page: Page, chatName: string) => sidebarOf(page).getByRole('link', { name: chatName })
 const unreadIconOf = (page: Page, chatName: string) =>
   chatLinkOf(page, chatName).getByRole('img', { name: 'Unread messages' })
-const draftIconOf = (page: Page, chatName: string) =>
-  chatLinkOf(page, chatName).getByRole('img', { name: 'Has unsent draft' })
 const menuButtonOf = (page: Page, chatName: string) =>
   page.getByRole('button', { name: `Chat actions for ${chatName}` })
-const composerOf = (page: Page) => page.getByRole('textbox', { name: 'Message' })
-const messageItemsOf = (page: Page) => page.getByRole('list', { name: 'Messages' }).getByRole('listitem')
-const agentReplyText = 'Understood, working on it.'
-
-const openChat = async (page: Page, chatName: string) => {
-  await chatLinkOf(page, chatName).click()
-  await expect(mainOf(page).getByRole('heading', { level: 1, name: chatName })).toBeVisible()
-}
-
-const sendMessage = async (page: Page, text: string) => {
-  await composerOf(page).fill(text)
-  await composerOf(page).press('ControlOrMeta+Enter')
-}
 
 const sendThenLeave = async (page: Page, chatName: string, leaveToChatName: string) => {
   await openChat(page, chatName)
@@ -93,13 +87,6 @@ test.describe('4. replies while away', () => {
     await expect(unreadIconOf(page, 'Research')).toHaveCount(0)
     await expect(messageItemsOf(page).filter({ hasText: agentReplyText })).toHaveCount(1)
   })
-
-  test('does not show the icon when the member stays in the chat', async ({ page }) => {
-    await openChat(page, 'Research')
-    await sendMessage(page, 'Question to the agent')
-    await expect(messageItemsOf(page).filter({ hasText: agentReplyText })).toHaveCount(1)
-    await expect(unreadIconOf(page, 'Research')).toHaveCount(0)
-  })
 })
 
 test.describe('5. open chat stays read', () => {
@@ -107,6 +94,7 @@ test.describe('5. open chat stays read', () => {
     await openChat(page, 'Setup helper')
     await sendMessage(page, 'Another question')
     await expect(messageItemsOf(page).filter({ hasText: agentReplyText })).toHaveCount(1)
+    await expect(unreadIconOf(page, 'Setup helper')).toHaveCount(0)
 
     await openChat(page, 'Welcome')
     await expect(unreadIconOf(page, 'Setup helper')).toHaveCount(0)

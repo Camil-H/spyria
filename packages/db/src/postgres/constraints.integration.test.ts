@@ -7,10 +7,10 @@ const seededDatabase = await createTestDatabase()
 const { database } = seededDatabase
 afterAll(() => seededDatabase.drop())
 
-const postgresErrorCode = (query: PromiseLike<unknown>) =>
+const refusalOf = (query: PromiseLike<unknown>) =>
   Promise.resolve(query).then(
     () => 'accepted',
-    (error) => error.cause?.code ?? error.code,
+    (error) => error.cause ?? error,
   )
 
 let nextSeq = 100
@@ -64,22 +64,26 @@ const crossTenantWrites = {
 }
 
 test('a same-tenant message is accepted', async () => {
-  expect(await postgresErrorCode(database.insert(messages).values(message({})))).toBe('accepted')
+  expect(await refusalOf(database.insert(messages).values(message({})))).toBe('accepted')
 })
 
 test.each(Object.entries(crossTenantWrites))('refuses %s', async (_, write) => {
-  expect(await postgresErrorCode(write())).toBe('23503')
+  expect(await refusalOf(write())).toMatchObject({ code: '23503' })
 })
 
 test('refuses a duplicate (chat_id, seq) on messages and on events', async () => {
-  expect(await postgresErrorCode(database.insert(messages).values(message({ seq: 1 })))).toBe('23505')
-  expect(await postgresErrorCode(database.insert(events).values(event({ seq: 1 })))).toBe('23505')
+  expect(await refusalOf(database.insert(messages).values(message({ seq: 1 })))).toMatchObject({ code: '23505' })
+  expect(await refusalOf(database.insert(events).values(event({ seq: 1 })))).toMatchObject({ code: '23505' })
 })
 
 test('rejects UPDATE and DELETE on events', async () => {
-  expect(await postgresErrorCode(database.update(events).set({ type: 'edited' }).where(eq(events.seq, 1)))).toBe(
-    'P0001',
-  )
-  expect(await postgresErrorCode(database.delete(events).where(eq(events.seq, 1)))).toBe('P0001')
+  expect(await refusalOf(database.update(events).set({ type: 'edited' }).where(eq(events.seq, 1)))).toMatchObject({
+    code: 'P0001',
+    message: 'events are append-only: UPDATE rejected',
+  })
+  expect(await refusalOf(database.delete(events).where(eq(events.seq, 1)))).toMatchObject({
+    code: 'P0001',
+    message: 'events are append-only: DELETE rejected',
+  })
   expect(await database.$count(events)).toBe(12)
 })

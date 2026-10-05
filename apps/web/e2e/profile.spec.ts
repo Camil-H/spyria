@@ -1,20 +1,21 @@
-import { expect, type Locator, type Page, test } from './fixtures'
+import {
+  composerOf,
+  expect,
+  type Locator,
+  mainOf,
+  messageItemsOf,
+  openChat,
+  type Page,
+  sendButtonOf,
+  sidebarOf,
+  test,
+} from './fixtures'
 
-const sidebarOf = (page: Page) => page.getByRole('navigation', { name: 'Sidebar' })
-const mainOf = (page: Page) => page.getByRole('main')
 const sectionOf = (page: Page, sectionName: string) => mainOf(page).getByRole('region', { name: sectionName })
-const composerOf = (page: Page) => page.getByRole('textbox', { name: 'Message' })
-const sendButtonOf = (page: Page) => page.getByRole('button', { name: 'Send' })
-const messageItemsOf = (page: Page) => page.getByRole('list', { name: 'Messages' }).getByRole('listitem')
 
 const openProfile = async (page: Page) => {
   await sidebarOf(page).getByRole('link', { name: 'Profile' }).click()
   await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Profile' })).toBeVisible()
-}
-
-const openChat = async (page: Page, chatName: string) => {
-  await sidebarOf(page).getByRole('link', { name: chatName }).click()
-  await expect(mainOf(page).getByRole('heading', { level: 1, name: chatName })).toBeVisible()
 }
 
 const addCredential = async (page: Page, credential: { provider: string; secret: string }) => {
@@ -383,16 +384,6 @@ test.describe('8. personal connections', () => {
 })
 
 test.describe('9. panel follows', () => {
-  test('shows the workspace and personal groups for the owner of the chat', async ({ page }) => {
-    await openChat(page, 'Invoice bug')
-    await page.getByRole('tab', { name: 'Connected tools' }).click()
-    const workspaceGroup = page.getByRole('tabpanel').getByRole('region', { name: 'Workspace' })
-    const personalGroup = page.getByRole('tabpanel').getByRole('region', { name: 'Personal' })
-    await expect(workspaceGroup.getByRole('listitem').filter({ hasText: 'Postgres' })).toContainText('2 of 5 tables')
-    await expect(workspaceGroup.getByRole('listitem').filter({ hasText: 'Onyx' })).toContainText('All sources')
-    await expect(personalGroup.getByRole('listitem').filter({ hasText: 'GitHub' })).toContainText('Connected')
-  })
-
   test('reflects a disconnection made in the profile', async ({ page }) => {
     await openProfile(page)
     await openMyConnections(page)
@@ -403,15 +394,6 @@ test.describe('9. panel follows', () => {
     const personalGroup = page.getByRole('tabpanel').getByRole('region', { name: 'Personal' })
     await expect(personalGroup.getByRole('listitem').filter({ hasText: 'GitHub' })).toHaveCount(0)
     await expect(personalGroup.getByRole('listitem').filter({ hasText: 'Slack' })).toBeVisible()
-  })
-
-  test('shows the empty message of a group when the owner has no personal connection', async ({ page }) => {
-    await openChat(page, 'Setup helper')
-    await page.getByRole('tab', { name: 'Connected tools' }).click()
-    const workspaceGroup = page.getByRole('tabpanel').getByRole('region', { name: 'Workspace' })
-    const personalGroup = page.getByRole('tabpanel').getByRole('region', { name: 'Personal' })
-    await expect(workspaceGroup.getByRole('listitem').filter({ hasText: 'Postgres' })).toContainText('1 of 5 tables')
-    await expect(personalGroup).toContainText('No personal connections')
   })
 })
 

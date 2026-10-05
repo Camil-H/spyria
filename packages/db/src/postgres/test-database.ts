@@ -40,7 +40,6 @@ export const createTestDatabase = async (
   template = templateDatabaseName,
   name = `hq_test_${crypto.randomUUID().replaceAll('-', '')}`,
 ) => {
-  await dropDatabase(name)
   await withAdmin(`create database "${name}" template "${template}"`)
   const database = createDatabase(databaseUrlOf(name))
   return {
@@ -122,5 +121,5 @@ export const startZeroCache = async ({
     }
     await sleep(50)
   }
-  return { url, pid: zeroCache.pid ?? 0, stop: () => stopProcessGroup(zeroCache) }
+  return { url, stop: () => stopProcessGroup(zeroCache) }
 }

@@ -1,24 +1,20 @@
-import { expect, type Page, test } from './fixtures'
+import {
+  composerOf,
+  expect,
+  logOutOf,
+  mainOf,
+  menuItemNamesOf,
+  messageItemsOf,
+  openMenu,
+  type Page,
+  sidebarOf,
+  switcherOf,
+  test,
+} from './fixtures'
 
-const sidebarOf = (page: Page) => page.getByRole('navigation', { name: 'Sidebar' })
-const mainOf = (page: Page) => page.getByRole('main')
-const switcherOf = (page: Page) => page.getByRole('button', { name: 'Switch workspace' })
 const logoutDialogOf = (page: Page, workspaceName: string) =>
   page.getByRole('dialog', { name: `Log out of ${workspaceName}` })
 const signedOutScreenOf = (page: Page) => page.getByText(/You are signed out of/)
-const composerOf = (page: Page) => page.getByRole('textbox', { name: 'Message' })
-const messageItemsOf = (page: Page) => page.getByRole('list', { name: 'Messages' }).getByRole('listitem')
-
-const openMenu = async (page: Page) => {
-  await switcherOf(page).click()
-  await expect(page.getByRole('menuitem', { name: 'New workspace' })).toBeVisible()
-}
-
-const logOutOf = async (page: Page, workspaceName: string) => {
-  await openMenu(page)
-  await page.getByRole('menuitem', { name: `Log out of ${workspaceName}` }).click()
-  await logoutDialogOf(page, workspaceName).getByRole('button', { name: 'Log out' }).click()
-}
 
 const createWorkspace = async (page: Page, workspaceName: string) => {
   await openMenu(page)
@@ -39,11 +35,13 @@ test.beforeEach(async ({ page }) => {
 
 test.describe('1. menu content', () => {
   test('lists New workspace first, then each workspace with its log-out icon', async ({ page }) => {
-    await openMenu(page)
-    const itemNames = await page
-      .getByRole('menuitem')
-      .evaluateAll((items) => items.map((item) => item.getAttribute('aria-label') ?? item.textContent?.trim()))
-    expect(itemNames).toEqual(['New workspace', 'Acme', 'Log out of Acme', 'Globex', 'Log out of Globex'])
+    expect(await menuItemNamesOf(page)).toEqual([
+      'New workspace',
+      'Acme',
+      'Log out of Acme',
+      'Globex',
+      'Log out of Globex',
+    ])
   })
 
   test('has no log-out icon while the menu is closed and closes with Escape', async ({ page }) => {
@@ -62,13 +60,6 @@ test.describe('1. menu content', () => {
     await expect(page.getByRole('menuitem', { name: /^Acme/ })).toBeFocused()
     await page.keyboard.press('ArrowDown')
     await expect(page.getByRole('menuitem', { name: 'Log out of Acme' })).toBeFocused()
-  })
-
-  test('keeps switching workspace by choosing its name', async ({ page }) => {
-    await openMenu(page)
-    await page.getByRole('menuitem', { name: /^Globex/ }).click()
-    await expect(switcherOf(page)).toContainText('Globex')
-    await expect(sidebarOf(page).getByRole('group', { name: 'Launch' })).toBeVisible()
   })
 })
 
@@ -108,11 +99,7 @@ test.describe('3. create a workspace', () => {
     await expect(sidebarOf(page).getByRole('group')).toHaveCount(1)
     await expect(mainOf(page)).toContainText('Select a chat')
 
-    await openMenu(page)
-    const itemNames = await page
-      .getByRole('menuitem')
-      .evaluateAll((items) => items.map((item) => item.getAttribute('aria-label') ?? item.textContent?.trim()))
-    expect(itemNames).toEqual([
+    expect(await menuItemNamesOf(page)).toEqual([
       'New workspace',
       'Acme',
       'Log out of Acme',

@@ -1,80 +1,21 @@
-import { afterAll, expect, test } from 'bun:test'
-import { setTimeout as sleep } from 'node:timers/promises'
+import { expect, test } from 'bun:test'
 import { rebuildMessages } from '@hq/conversation/server'
 import { events, jobs } from '@hq/db/postgres'
-import { createTestDatabase, startZeroCache } from '@hq/db/testing'
 import { schema } from '@hq/db/zero'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
-import { createApp } from './app.ts'
 import { startJobWorker } from './job-worker.ts'
-import { sessionTokenOf, testAuthSettings } from './testing.ts'
+import { acme, alice, aliceInAcme, openSharedTestApp, succeeded, waitFor } from './testing.ts'
 
-const testDatabase = await createTestDatabase()
-const { database } = testDatabase
-const app = createApp({ database, ...testAuthSettings })
-const server = Bun.serve({ port: 0, fetch: app.fetch })
-const appId = 'hqeventstoretest'
-const zeroCache = await startZeroCache({
-  databaseName: testDatabase.name,
-  port: 4892,
-  appId,
-  serverUrl: server.url.origin,
-}).catch(async (error) => {
-  await server.stop(true)
-  await testDatabase.drop()
-  throw error
-})
-afterAll(async () => {
-  await zeroCache.stop()
-  await server.stop(true)
-  await testDatabase.drop()
-})
-
-const acme = 'workspace-acme'
-const alice = 'member-alice'
-const succeeded = {}
-
-const resultOf = async (name: string, args: Record<string, unknown>) => {
-  const response = await app.request(`/api/mutate?schema=${appId}_0&appID=${appId}`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${await sessionTokenOf(database, acme, alice)}` },
-    body: JSON.stringify({
-      clientGroupID: crypto.randomUUID(),
-      mutations: [
-        {
-          type: 'custom',
-          id: 1,
-          clientID: crypto.randomUUID(),
-          name,
-          args: [{ workspaceId: acme, ...args }],
-          timestamp: Date.now(),
-        },
-      ],
-      pushVersion: 1,
-      timestamp: Date.now(),
-      requestID: crypto.randomUUID(),
-    }),
-  })
-  return ((await response.json()) as { mutations: { result: unknown }[] }).mutations[0]?.result
-}
+const sharedTestApp = await openSharedTestApp()
+const { database, eventsOf, changesOf } = sharedTestApp
+const resultOf = (name: string, args: Record<string, unknown>) =>
+  sharedTestApp.resultOf(aliceInAcme, name, { workspaceId: acme, ...args })
 const succeeds = async (name: string, args: Record<string, unknown>) =>
   expect(await resultOf(name, args)).toEqual(succeeded)
 
 const allMessages = () => database.query.messages.findMany({ orderBy: { workspaceId: 'asc', id: 'asc' } })
-const eventsOf = async (chatId: string) =>
-  (await database.select().from(events))
-    .filter((event) => event.chatId === chatId)
-    .toSorted((first, second) => first.seq - second.seq)
-const changesOf = async (chatId: string) =>
-  (await eventsOf(chatId)).map(({ seq, type, actor, payload }) => ({ seq, type, actor, payload }))
 const rebuild = (scope: { workspaceId?: string; chatId?: string } = {}) =>
   zeroDrizzle(schema, database).transaction((tx) => rebuildMessages(tx, scope))
-const waitFor = async (isDone: () => Promise<boolean>) => {
-  for (let attempt = 1; !(await isDone()); attempt++) {
-    if (attempt === 200) throw new Error('The condition was not met within 10 s')
-    await sleep(50)
-  }
-}
 const expectGapFreeSeqs = async () => {
   const seqsByChat = Map.groupBy(
     await database.select().from(events),
@@ -108,28 +49,6 @@ test('every chat change appends exactly one chat event at the next seq of the ch
     { seq: 3, type: 'chat.renamed', actor: alice, payload: { name: 'Renamed' } },
     { seq: 4, type: 'chat.moved', actor: alice, payload: { projectId: null } },
     { seq: 5, type: 'chat.archived', actor: alice, payload: {} },
-  ])
-})
-
-test('a runtime started from a message appends chat.created, then the seed message.posted', async () => {
-  await succeeds('conversation.startRuntimeFromMessage', {
-    id: 'message-started-seed',
-    chatId: 'chat-started',
-    messageId: 'message-welcome-1',
-  })
-  expect(await changesOf('chat-started')).toEqual([
-    {
-      seq: 1,
-      type: 'chat.created',
-      actor: alice,
-      payload: { name: 'Welcome to the team!', type: 'runtime', projectId: 'project-onboarding' },
-    },
-    {
-      seq: 2,
-      type: 'message.posted',
-      actor: alice,
-      payload: expect.objectContaining({ replyToId: 'message-welcome-1' }),
-    },
   ])
 })
 
@@ -225,20 +144,4 @@ test('concurrent message and chat changes get unique gap-free seqs per chat', as
   expect(await Promise.all(changes)).toEqual(Array(16).fill(succeeded))
   expect((await eventsOf('chat-research')).filter((event) => event.type === 'chat.renamed')).toHaveLength(8)
   await expectGapFreeSeqs()
-})
-
-test('events refuse updates and deletes', async () => {
-  const before = await eventsOf('chat-standup')
-  const refusalOf = (statement: string) =>
-    database.$client.unsafe(statement).then(
-      () => 'accepted',
-      (error: Error) => error.message,
-    )
-  expect(await refusalOf(`update events set type = 'message.posted' where chat_id = 'chat-standup'`)).toBe(
-    'events are append-only: UPDATE rejected',
-  )
-  expect(await refusalOf(`delete from events where chat_id = 'chat-standup'`)).toBe(
-    'events are append-only: DELETE rejected',
-  )
-  expect(await eventsOf('chat-standup')).toEqual(before)
 })

@@ -1,11 +1,18 @@
-import { serverUrl } from '../e2e-zero/stack-ports.ts'
-import { expect, type Page, test } from './fixtures'
+import {
+  composerOf,
+  expect,
+  logOutOf,
+  menuItemNamesOf,
+  messageItemsOf,
+  openMenu,
+  type Page,
+  serverUrl,
+  sidebarOf,
+  switcherOf,
+  test,
+} from './fixtures'
 
-const sidebarOf = (page: Page) => page.getByRole('navigation', { name: 'Sidebar' })
-const switcherOf = (page: Page) => page.getByRole('button', { name: 'Switch workspace' })
 const signInButtonOf = (page: Page) => page.getByRole('button', { name: 'Sign in' })
-const composerOf = (page: Page) => page.getByRole('textbox', { name: 'Message' })
-const messageItemsOf = (page: Page) => page.getByRole('list', { name: 'Messages' }).getByRole('listitem')
 
 const signInThroughDex = async (page: Page, email: string) => {
   const popupOpened = page.waitForEvent('popup')
@@ -16,29 +23,6 @@ const signInThroughDex = async (page: Page, email: string) => {
   await popup.locator('#password').fill('password')
   await popup.locator('#submit-login').click()
   await popupClosed
-}
-
-const openMenu = async (page: Page) => {
-  await switcherOf(page).click()
-  await expect(page.getByRole('menuitem', { name: 'New workspace' })).toBeVisible()
-}
-
-const menuItemNamesOf = async (page: Page) => {
-  await openMenu(page)
-  const itemNames = await page
-    .getByRole('menuitem')
-    .evaluateAll((items) => items.map((item) => item.getAttribute('aria-label') ?? item.textContent?.trim()))
-  await page.keyboard.press('Escape')
-  return itemNames
-}
-
-const logOutOf = async (page: Page, workspaceName: string) => {
-  await openMenu(page)
-  await page.getByRole('menuitem', { name: `Log out of ${workspaceName}` }).click()
-  await page
-    .getByRole('dialog', { name: `Log out of ${workspaceName}` })
-    .getByRole('button', { name: 'Log out' })
-    .click()
 }
 
 const alicesWorkspacesSignedIn = ['New workspace', 'Acme', 'Log out of Acme', 'Globex', 'Log out of Globex']
@@ -152,61 +136,79 @@ test('8. signing in again from the signed-out screen restores Acme with its rout
   expect(await menuItemNamesOf(page)).toEqual(alicesWorkspacesSignedIn)
 })
 
-test.describe('with short-lived tokens', () => {
-  test.use({ tokenSeconds: 3 })
+test.describe('signed in through the test hook', () => {
+  test.use({ signedInAs: 'member-alice' })
 
-  test('9. the app renews its token and keeps saving messages past expiry', async ({ page, workerStack }) => {
-    test.setTimeout(60_000)
-    await signInThroughDex(page, 'alice@example.com')
-    await sidebarOf(page).getByRole('link', { name: 'Welcome' }).click()
-    await page.waitForTimeout(10_000)
+  test.describe('with short-lived tokens', () => {
+    test.use({ tokenSeconds: 3 })
 
-    await composerOf(page).fill('Sent after the first token expired')
-    await composerOf(page).press('ControlOrMeta+Enter')
-    await expect(messageItemsOf(page).last()).toContainText('Sent after the first token expired')
-    await expect
-      .poll(async () =>
-        (await workerStack.database.query.messages.findMany({ where: { chatId: 'chat-welcome' } })).map(
-          (message) => message.body,
-        ),
-      )
-      .toContain('Sent after the first token expired')
+    test('9. the app renews its token and keeps saving messages past expiry', async ({ page, workerStack }) => {
+      let renewals = 0
+      page.on('response', (response) => {
+        if (response.url().endsWith('/auth/renew') && response.ok()) renewals++
+      })
+      await sidebarOf(page).getByRole('link', { name: 'Welcome' }).click()
+      const { sessions } = await (await page.request.get('/auth/sessions')).json()
+      const probeToken = sessions.find(
+        (session: { workspaceId: string }) => session.workspaceId === 'workspace-acme',
+      ).token
+      const queryStatusWith = async (token: string) =>
+        (
+          await fetch(`${serverUrl}/api/query`, {
+            method: 'POST',
+            headers: { authorization: `Bearer ${token}` },
+            body: JSON.stringify(['transform', []]),
+          })
+        ).status
+      expect(await queryStatusWith(probeToken)).toBe(200)
+      await expect.poll(() => queryStatusWith(probeToken), { timeout: 15_000 }).toBe(401)
+      expect(renewals).toBeGreaterThan(0)
+
+      await composerOf(page).fill('Sent after the first token expired')
+      await composerOf(page).press('ControlOrMeta+Enter')
+      await expect(messageItemsOf(page).last()).toContainText('Sent after the first token expired')
+      await expect
+        .poll(async () =>
+          (await workerStack.database.query.messages.findMany({ where: { chatId: 'chat-welcome' } })).map(
+            (message) => message.body,
+          ),
+        )
+        .toContain('Sent after the first token expired')
+    })
+
+    test('10. logging out in another tab signs the first tab out of Acme at its next renewal', async ({
+      page,
+      context,
+    }) => {
+      await expect(sidebarOf(page)).toBeVisible()
+
+      const secondTab = await context.newPage()
+      await secondTab.goto('/')
+      await expect(switcherOf(secondTab)).toContainText('Acme')
+      await logOutOf(secondTab, 'Acme')
+      await expect(secondTab.getByText('You are signed out of Acme')).toBeVisible()
+
+      await expect(page.getByText('You are signed out of Acme')).toBeVisible({ timeout: 10_000 })
+      await page.getByRole('link', { name: 'Go to Globex' }).click()
+      await expect(sidebarOf(page).getByRole('group', { name: 'Launch' })).toBeVisible()
+    })
   })
 
-  test('10. logging out in another tab signs the first tab out of Acme at its next renewal', async ({
-    page,
-    context,
-  }) => {
-    await signInThroughDex(page, 'alice@example.com')
+  test('11. a new workspace is signed in at once and stays signed in after a reload', async ({ page }) => {
+    await openMenu(page)
+    await page.getByRole('menuitem', { name: 'New workspace' }).click()
+    await page.getByRole('textbox', { name: 'Workspace name' }).fill('Initech')
+    const sessionOpened = page.waitForResponse(
+      (response) => response.url().endsWith('/auth/sessions') && response.request().method() === 'POST',
+    )
+    await page.getByRole('button', { name: 'Confirm' }).click()
+    await expect(switcherOf(page)).toContainText('Initech')
     await expect(sidebarOf(page)).toBeVisible()
+    expect((await sessionOpened).status()).toBe(200)
 
-    const secondTab = await context.newPage()
-    await secondTab.goto('/')
-    await expect(switcherOf(secondTab)).toContainText('Acme')
-    await logOutOf(secondTab, 'Acme')
-    await expect(secondTab.getByText('You are signed out of Acme')).toBeVisible()
-
-    await expect(page.getByText('You are signed out of Acme')).toBeVisible({ timeout: 10_000 })
-    await page.getByRole('link', { name: 'Go to Globex' }).click()
-    await expect(sidebarOf(page).getByRole('group', { name: 'Launch' })).toBeVisible()
+    await page.reload()
+    await expect(switcherOf(page)).toContainText('Initech')
+    await expect(sidebarOf(page).getByRole('group')).toHaveCount(1)
+    await expect(page.getByText(/You are signed out/)).toHaveCount(0)
   })
-})
-
-test('11. a new workspace is signed in at once and stays signed in after a reload', async ({ page }) => {
-  await signInThroughDex(page, 'alice@example.com')
-  await openMenu(page)
-  await page.getByRole('menuitem', { name: 'New workspace' }).click()
-  await page.getByRole('textbox', { name: 'Workspace name' }).fill('Initech')
-  const sessionOpened = page.waitForResponse(
-    (response) => response.url().endsWith('/auth/sessions') && response.request().method() === 'POST',
-  )
-  await page.getByRole('button', { name: 'Confirm' }).click()
-  await expect(switcherOf(page)).toContainText('Initech')
-  await expect(sidebarOf(page)).toBeVisible()
-  expect((await sessionOpened).status()).toBe(200)
-
-  await page.reload()
-  await expect(switcherOf(page)).toContainText('Initech')
-  await expect(sidebarOf(page).getByRole('group')).toHaveCount(1)
-  await expect(page.getByText(/You are signed out/)).toHaveCount(0)
 })

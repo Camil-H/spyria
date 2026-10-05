@@ -18,12 +18,12 @@ const serverOnlyModules = [
 ]
 const productionEntries = '^apps/(server/src/index\\.ts|web/src/main\\.tsx)$'
 const testOnlyModules = [
-  '^apps/server/src/(test-server|testing)\\.ts$',
-  '^packages/db/src/postgres/(test-database|build-test-template)\\.ts$',
-  '^apps/web/(e2e|e2e-zero)/',
+  '^apps/server/src/(test-server|testing|integration-setup)\\.ts$',
+  '^packages/db/src/postgres/test-database\\.ts$',
+  '^apps/web/e2e/',
   '\\.test\\.ts$',
 ]
-const zeroTestHarness = '^apps/web/(e2e/|e2e-zero/|playwright\\.config\\.ts$)'
+const zeroTestHarness = '^apps/web/(e2e/|playwright\\.config\\.ts$)'
 const zeroConfig = '^packages/db/drizzle-zero\\.config\\.ts$'
 const layerRule = (name, layer, allowedLayers) => ({
   name,

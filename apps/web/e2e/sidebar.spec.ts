@@ -1,11 +1,14 @@
-import { expect, type Page, test } from './fixtures'
-
-const sidebarOf = (page: Page) => page.getByRole('navigation', { name: 'Sidebar' })
-const projectGroupOf = (page: Page, projectName: string) => sidebarOf(page).getByRole('group', { name: projectName })
-const looseChatsOf = (page: Page) => sidebarOf(page).getByRole('group', { name: 'Loose chats' })
-const chatRowIn = (group: ReturnType<typeof projectGroupOf>, chatName: string) =>
-  group.getByRole('link', { name: chatName })
-const mainOf = (page: Page) => page.getByRole('main')
+import {
+  chatRowIn,
+  expect,
+  looseChatsOf,
+  mainOf,
+  type Page,
+  projectGroupOf,
+  sidebarOf,
+  switcherOf,
+  test,
+} from './fixtures'
 
 const moveChatTo = async (page: Page, chatName: string, destination: string) => {
   await page.getByRole('button', { name: `Chat actions for ${chatName}` }).click()
@@ -25,12 +28,13 @@ test.beforeEach(async ({ page }) => {
 
 test.describe('1. switch workspace', () => {
   test('lists both workspaces and shows only the selected workspace content', async ({ page }) => {
-    await page.getByRole('button', { name: 'Switch workspace' }).click()
+    await switcherOf(page).click()
     await expect(page.getByRole('menuitem', { name: 'Acme', exact: true })).toBeVisible()
     await expect(page.getByRole('menuitem', { name: 'Globex', exact: true })).toBeVisible()
 
     await page.getByRole('menuitem', { name: 'Globex', exact: true }).click()
 
+    await expect(switcherOf(page)).toContainText('Globex')
     await expect(chatRowIn(projectGroupOf(page, 'Launch'), 'Launch plan')).toBeVisible()
     await expect(chatRowIn(looseChatsOf(page), 'General')).toBeVisible()
     await expect(projectGroupOf(page, 'Onboarding')).toHaveCount(0)
@@ -79,20 +83,6 @@ test.describe('3. chat rows and selection', () => {
 
     await chatRowIn(projectGroupOf(page, 'Onboarding'), 'Welcome').getByRole('img', { name: 'Channel' }).hover()
     await expect(page.getByRole('tooltip', { name: 'Channel' })).toBeVisible()
-  })
-
-  test('opens a runtime chat in the runtime view', async ({ page }) => {
-    await chatRowIn(projectGroupOf(page, 'Billing'), 'Invoice bug').click()
-    await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Invoice bug' })).toBeVisible()
-    await expect(mainOf(page).getByRole('img', { name: 'Runtime chat' })).toBeVisible()
-    await expect(mainOf(page)).not.toContainText('Runtime view')
-  })
-
-  test('opens a channel in the channel view', async ({ page }) => {
-    await chatRowIn(projectGroupOf(page, 'Onboarding'), 'Welcome').click()
-    await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Welcome' })).toBeVisible()
-    await expect(mainOf(page).getByRole('img', { name: 'Channel' })).toBeVisible()
-    await expect(mainOf(page)).not.toContainText('Channel view')
   })
 })
 
@@ -217,14 +207,6 @@ test.describe('6. archive a project', () => {
     await page.getByRole('dialog', { name: 'Archive chat' }).getByRole('button', { name: 'Archive' }).click()
 
     await expect(mainOf(page)).toContainText('Select a chat')
-  })
-})
-
-test.describe('7. profile', () => {
-  test('opens the profile view with the member name in the display name field', async ({ page }) => {
-    await sidebarOf(page).getByRole('link', { name: 'Profile' }).click()
-    await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Profile' })).toBeVisible()
-    await expect(mainOf(page).getByRole('textbox', { name: 'Display name' })).toHaveValue('Alice')
   })
 })
 

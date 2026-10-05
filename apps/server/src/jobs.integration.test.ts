@@ -4,15 +4,12 @@ import { jobs, sessions } from '@hq/db/postgres'
 import { createTestDatabase } from '@hq/db/testing'
 import { enqueueSessionSweeps } from './auth/sessions.ts'
 import { listFailedJobs, maximumJobAttempts, retryFailedJobs, startJobWorker } from './job-worker.ts'
+import { acme, alice, globex, bob, waitFor } from './testing.ts'
 
 const testDatabase = await createTestDatabase()
 const { database } = testDatabase
 afterAll(() => testDatabase.drop())
 
-const acme = 'workspace-acme'
-const globex = 'workspace-globex'
-const alice = 'member-alice'
-const bob = 'member-bob'
 const missingMessageError = 'Message message-missing was not found'
 
 const jobRow = async (id: string) => (await database.select().from(jobs)).find((job) => job.id === id)
@@ -35,12 +32,6 @@ const addDeadJob = (id: string, answeredMessageId: string) =>
     state: 'failed',
     lastError: 'Earlier failure',
   })
-const waitFor = async (isDone: () => Promise<boolean>) => {
-  for (let attempt = 1; !(await isDone()); attempt++) {
-    if (attempt === 1000) throw new Error('The condition was not met within 10 s')
-    await sleep(10)
-  }
-}
 const repliesTo = async (messageId: string) =>
   (await database.query.messages.findMany()).filter((message) => message.replyToId === messageId)
 

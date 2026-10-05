@@ -1,10 +1,10 @@
-import { execSync } from 'node:child_process'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { type Database, memberships, resetDatabase, sessions, users, workspaces } from '@hq/db/postgres'
-import { createTestDatabase, startZeroCache } from '@hq/db/testing'
+import { createTestDatabase, dropDatabase, startZeroCache } from '@hq/db/testing'
 import { createZeroStore, type WorkspaceSession } from '@hq/db/zero-store'
 import { memberId, workspaceId } from '@hq/kernel'
 import { test as base } from '@playwright/test'
-import { serverUrl, templateDatabaseName, workerDatabaseNameOf, zeroCachePortOf } from './stack-ports.ts'
+import { serverUrl, templateDatabaseName, zeroCachePortOf } from './stack-ports.ts'
 
 export { expect } from '@playwright/test'
 
@@ -17,23 +17,7 @@ const barrierTimeoutMilliseconds = 15_000
 const maximumResetAttempts = 5
 const deadlockCode = '40P01'
 const barrierSessionMilliseconds = 24 * 60 * 60 * 1000
-
-const processTreeMemoryMegabytes = (rootProcessId: number) => {
-  const processes = execSync('ps -axo pid=,ppid=,rss=')
-    .toString()
-    .trim()
-    .split('\n')
-    .map((line) => line.trim().split(/\s+/).map(Number))
-  const treeProcessIds = new Set([rootProcessId])
-  for (let depth = 0; depth < 4; depth++)
-    for (const [processId = 0, parentProcessId = 0] of processes)
-      if (treeProcessIds.has(parentProcessId)) treeProcessIds.add(processId)
-  const residentKilobytes = processes.reduce(
-    (total, [processId = 0, , rss = 0]) => (treeProcessIds.has(processId) ? total + rss : total),
-    0,
-  )
-  return residentKilobytes / 1024
-}
+const workerDatabaseNameOf = (workerIndex: number) => `hq_e2e_w${workerIndex}`
 
 type TestOptions = { signedInAs: string | null; tokenSeconds: number | undefined; resetStack: undefined }
 
@@ -46,6 +30,7 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
       const releaseServerDatabase = () =>
         fetch(`${serverUrl}/test/release-database?db=${workerDatabaseNameOf(index)}`, { method: 'POST' })
       await releaseServerDatabase()
+      await dropDatabase(workerDatabaseNameOf(index))
       const testDatabase = await createTestDatabase(templateDatabaseName, workerDatabaseNameOf(index))
       let epochNumber = 0
       let barrierSessionId: string | undefined
@@ -111,22 +96,13 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
         cacheURL: zeroCache.url,
         kvStore: 'mem',
       })
-      const waitForEpoch = (epoch: string) =>
-        new Promise<void>((resolve, reject) => {
-          const isReplicated = () => barrier.read().workspaces.some((workspace) => workspace.name === epoch)
-          const timeout = setTimeout(() => {
-            unsubscribe()
-            reject(new Error(`zero-cache did not replicate ${epoch} within ${barrierTimeoutMilliseconds} ms`))
-          }, barrierTimeoutMilliseconds)
-          const settleIfReplicated = () => {
-            if (!isReplicated()) return
-            clearTimeout(timeout)
-            unsubscribe()
-            resolve()
-          }
-          const unsubscribe = barrier.subscribe(settleIfReplicated)
-          settleIfReplicated()
-        })
+      const waitForEpoch = async (epoch: string) => {
+        for (const deadline = Date.now() + barrierTimeoutMilliseconds; ; await sleep(10)) {
+          if (barrier.read().workspaces.some((workspace) => workspace.name === epoch)) return
+          if (Date.now() > deadline)
+            throw new Error(`zero-cache did not replicate ${epoch} within ${barrierTimeoutMilliseconds} ms`)
+        }
+      }
       await waitForEpoch(firstEpoch)
       await use({
         databaseName: testDatabase.name,
@@ -134,9 +110,6 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
         database: testDatabase.database,
         reset: async () => waitForEpoch(await writeReset()),
       })
-      console.log(
-        `worker ${index}: zero-cache resident memory ${processTreeMemoryMegabytes(zeroCache.pid).toFixed(0)} MB`,
-      )
       await barrier.close()
       await zeroCache.stop()
       await releaseServerDatabase()

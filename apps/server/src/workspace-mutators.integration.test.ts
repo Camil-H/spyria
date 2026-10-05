@@ -1,61 +1,18 @@
-import { afterAll, expect, test } from 'bun:test'
-import { createTestDatabase, startZeroCache } from '@hq/db/testing'
-import { createApp } from './app.ts'
-import { sessionTokenOf, testAuthSettings } from './testing.ts'
+import { expect, test } from 'bun:test'
+import {
+  acme,
+  alice,
+  aliceInAcme,
+  failedWith,
+  globex,
+  openSharedTestApp,
+  bob,
+  bobInAcme,
+  succeeded,
+} from './testing.ts'
 
-const testDatabase = await createTestDatabase()
-const { database } = testDatabase
-const app = createApp({ database, ...testAuthSettings })
-const server = Bun.serve({ port: 0, fetch: app.fetch })
-const appId = 'hqmutatortest'
-const zeroCache = await startZeroCache({
-  databaseName: testDatabase.name,
-  port: 4894,
-  appId,
-  serverUrl: server.url.origin,
-}).catch(async (error) => {
-  await server.stop(true)
-  await testDatabase.drop()
-  throw error
-})
-afterAll(async () => {
-  await zeroCache.stop()
-  await server.stop(true)
-  await testDatabase.drop()
-})
+const { database, resultOf } = await openSharedTestApp()
 
-const acme = 'workspace-acme'
-const globex = 'workspace-globex'
-const alice = 'member-alice'
-const bob = 'member-bob'
-
-const tokenOf = (workspaceId: string, userId: string) => sessionTokenOf(database, workspaceId, userId)
-
-const mutate = async (
-  { workspaceId, userId }: { workspaceId: string; userId: string },
-  name: string,
-  args: Record<string, unknown>,
-) => {
-  const response = await app.request(`/api/mutate?schema=${appId}_0&appID=${appId}`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${await tokenOf(workspaceId, userId)}` },
-    body: JSON.stringify({
-      clientGroupID: crypto.randomUUID(),
-      mutations: [{ type: 'custom', id: 1, clientID: crypto.randomUUID(), name, args: [args], timestamp: Date.now() }],
-      pushVersion: 1,
-      timestamp: Date.now(),
-      requestID: crypto.randomUUID(),
-    }),
-  })
-  return response.json()
-}
-
-const aliceInAcme = { workspaceId: acme, userId: alice }
-const bobInAcme = { workspaceId: acme, userId: bob }
-const succeeded = {}
-const failedWith = (message: string) => ({ error: 'app', message })
-const resultOf = async (...request: Parameters<typeof mutate>) =>
-  ((await mutate(...request)) as { mutations: { result: unknown }[] }).mutations[0]?.result
 const projectRow = (id: string) => database.query.projects.findFirst({ where: { id } })
 const chatRow = (id: string) => database.query.chats.findFirst({ where: { id } })
 

@@ -1,7 +1,9 @@
 import { afterAll, expect, test } from 'bun:test'
+import { llmCredentials } from '@hq/db/postgres'
 import { createTestDatabase } from '@hq/db/testing'
 import { schema } from '@hq/db/zero'
 import { queries } from '@hq/db/zero-queries'
+import { llmCredentialsPath } from '@hq/profile/server'
 import type { AST } from '@rocicorp/zero'
 import type { ServerSchema } from '@rocicorp/zero/server'
 import { executePostgresQuery } from '@rocicorp/zero/server'
@@ -9,16 +11,12 @@ import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { createApp } from './app.ts'
 import { issueSessionToken } from './auth/session-tokens.ts'
 import { openSessions } from './auth/sessions.ts'
-import { sessionTokenOf, testAuthSettings } from './testing.ts'
+import { acme, alice, globex, bob, sessionTokenOf, testAuthSettings } from './testing.ts'
 
 const testDatabase = await createTestDatabase()
 afterAll(() => testDatabase.drop())
 
 const app = createApp({ database: testDatabase.database, ...testAuthSettings })
-const acme = 'workspace-acme'
-const globex = 'workspace-globex'
-const alice = 'member-alice'
-const bob = 'member-bob'
 const memberPrivateTables = ['read_markers', 'llm_credentials']
 const chatOwnerConnectionTables = ['workspace_connections', 'tool_connections']
 type ReplicatedTable = {
@@ -179,6 +177,24 @@ test('workspaces lists every workspace of the member and users lists the members
   expect(idsOf('Alice in Globex', 'users', 'id')).toEqual([alice])
 })
 
+test('a Globex connection stays in Globex and an ownership change hides the connections of Bob from Alice', async () => {
+  await testDatabase.database.$client`
+    insert into workspace_connections (workspace_id, user_id, tool, access, position)
+    values (${globex}, ${alice}, 'Globex warehouse', 'All tables', 1)`
+  const accessOf = async (workspace: string, user: string) =>
+    ((await readAll(workspace, user)).get('workspace_connections') ?? []).map(
+      (row) => `${row.workspace_id} ${row.user_id} ${row.access}`,
+    )
+  expect(await accessOf(globex, alice)).toEqual([`${globex} ${alice} All tables`])
+  await testDatabase.database.$client`update chats set owner_user_id = ${alice} where owner_user_id = ${bob}`
+  expect(await accessOf(acme, alice)).toEqual([`${acme} ${alice} 2 of 5 tables`, `${acme} ${alice} All sources`])
+  expect(await accessOf(acme, bob)).toEqual([
+    `${acme} ${alice} 2 of 5 tables`,
+    `${acme} ${alice} All sources`,
+    `${acme} ${bob} 1 of 5 tables`,
+  ])
+})
+
 test('the connections keep their position order', () => {
   expect(
     rowsByReader
@@ -201,20 +217,25 @@ test('a sign-in opens no session in a workspace without membership', async () =>
   expect(await openSessions(testDatabase.database, bob, globex)).toHaveLength(0)
 })
 
-test.each(['/api/query', '/api/mutate'])('%s refuses with 403 a valid token without membership', async (path) => {
-  const { token } = await issueSessionToken(testAuthSettings.tokenSecret, {
-    userId: bob,
-    workspaceId: globex,
-    role: 'member',
-    sessionId: 'no-session',
-  })
-  const response = await app.request(path, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${token}` },
-    body: JSON.stringify(['transform', []]),
-  })
-  expect(response.status).toBe(403)
-})
+test.each(['/api/query', '/api/mutate', llmCredentialsPath])(
+  '%s refuses with 403 a valid token without membership and writes nothing',
+  async (path) => {
+    const { token } = await issueSessionToken(testAuthSettings.tokenSecret, {
+      userId: bob,
+      workspaceId: globex,
+      role: 'member',
+      sessionId: 'no-session',
+    })
+    const credentialCount = await testDatabase.database.$count(llmCredentials)
+    const response = await app.request(path, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}` },
+      body: JSON.stringify(['transform', []]),
+    })
+    expect(response.status).toBe(403)
+    expect(await testDatabase.database.$count(llmCredentials)).toBe(credentialCount)
+  },
+)
 
 test('with test hooks, the database claim of a token selects the database the server reads', async () => {
   const otherDatabase = await createTestDatabase()

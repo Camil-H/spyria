@@ -43,7 +43,7 @@ Every rule of the architecture standard (`.claude/skills/architecture`) and what
 | G3 | Config-derived ids from a map | review |
 | G4a | Credentials in a redacting type | `Secret` (V6); integration `profile-mutators` "adding a credential ... logging nothing" |
 | S2 | Queries carry a tenant scope | every synced query takes `ctx` (`packages/db/src/zero-queries.ts`); integration `api` "crafted query arguments cannot reach another workspace or member" |
-| S3 | Cross-tenant denial tests | integration `constraints` "refuses %s" (cross-tenant writes), `api` crafted queries, `auth` "Bob ... reads Acme only", `workspace-mutators` and `conversation-mutators` "refuses arguments naming another workspace", `profile-mutators` "never Globex rows" |
+| S3 | Cross-tenant denial tests | integration `constraints` "refuses %s" (cross-tenant writes), `api` crafted queries, `auth` "Bob ... reads Acme only", `workspace-mutators` and `conversation-mutators` "refuses arguments naming another workspace", `api` "a Globex connection stays in Globex" |
 | TX1a | Operation owns its boundary | typecheck: operations take the context's `Transactor` and run in `run(work)` |
 | TX1b | Repositories from the handle | review: `UnitOfWork` is the only source |
 | TX2 | Savepoints | `apps/server/src/job-worker.ts` savepoint per handler; integration `jobs` "a throwing job is retried ..." |
@@ -55,7 +55,7 @@ Every rule of the architecture standard (`.claude/skills/architecture`) and what
 | E1b | Error kinds are types | review |
 | E2 | Context on the original error | review |
 | E3 | Re-raise without re-wrapping | review |
-| E4 | Security failures propagate | unit `session-tokens.test.ts`; integration `auth` refusals, `profile-mutators` "endpoint refuses a missing, invalid or non-member token" |
+| E4 | Security failures propagate | unit `session-tokens.test.ts`; integration `auth` refusals, `app` "%s refuses a request without a bearer token" and `api` "%s refuses with 403 a valid token without membership" on every `/api/*` route |
 | E5 | Degradation by contract, by type | review |
 | E8 | Inputs validated once at entry | zod mutator schemas in `entrypoints/mutators.ts`; integration `workspace-mutators` "refuses invalid arguments", `profile-mutators` "refuses blank, missing or malformed fields" |
 | E9 | Exceptions are the error channel | review |
@@ -65,12 +65,12 @@ Every rule of the architecture standard (`.claude/skills/architecture`) and what
 | AS2 | No fire-and-forget | review |
 | AS4 | Sync or async, not both | review |
 | AS5 | Declared synchronization | review: shared state is in Postgres under row locks |
-| O6 | Outcome logged once | integration `conversation-mutators` "dead and logged once", `profile-mutators` "logs no secret" |
+| O6 | Outcome logged once | integration `jobs` "a throwing job is retried ..., then dead" (logged once), `profile-mutators` "logs no secret" |
 | T1a | Every collaborator tested | review |
 | T1b | Transport fakes only at the transport | review |
 | T2a | Units against stubs | review |
 | T2b | Substitution through contracts | review: no `mock.module` in the repository |
-| T3 | Real dependencies in containers | integration tests on the compose Postgres 18 from a template (`packages/db/src/postgres/test-database.ts`); e2e on real zero-cache and Dex |
+| T3 | Real dependencies in containers | integration tests on the compose Postgres 18 from a template (`packages/db/src/postgres/test-database.ts`) and one shared zero-cache (`apps/server/src/testing.ts`); e2e on real zero-cache and Dex |
 | T9a | Parametrized matrices | review (`test.each` in `constraints.integration.test.ts`) |
 | T9b | Composed requests asserted | review |
 | T10 | Critical journeys end to end | Playwright `apps/web/e2e/*.spec.ts` against the full stack per worker |
@@ -87,7 +87,7 @@ Every rule of the architecture standard (`.claude/skills/architecture`) and what
 | Main chunk at most 720 kB | `scripts/check-bundle.ts` on `apps/web/dist` |
 | No server-only SQL in client assets | `scripts/check-bundle.ts` fails on `into events`, `into sessions`, `skip locked`, `for update`, `into jobs`, `into llm_credentials` or `placeholder_secrets` in any client asset; server SQL that runs in shared mutator code lives in `@hq/db/server-writes`, whose `browser` condition points at stubs |
 | `workspace_id` on every table but `users` | integration `schema` "every table except users carries a non-null workspace_id" |
-| Append-only events | trigger plus integration `constraints` and `event-store` "refuse updates and deletes" |
+| Append-only events | trigger plus integration `constraints` "rejects UPDATE and DELETE on events" (code and message) |
 | Zero publication = Zero schema | integration `schema` "the zero publication replicates exactly ..." |
 | Server code never reaches client code | depcruise `server-and-published-entries-never-reach-client-code`, `postgres-drizzle-and-server-never-reach-client-code`, `zero-schema-queries-and-server-writes-never-reach-client-or-server-only-code`; unit `app.test.ts` "loads every context server entry without React or client code" |
 | Test code unreachable from production | depcruise `test-only-modules-unreachable-from-production-entries`; integration `auth` "without test hooks ..." |

@@ -1,11 +1,10 @@
 import { defineConfig } from '@playwright/test'
-import { viteUrl } from './e2e-zero/stack-ports.ts'
+import { viteUrl } from './e2e/stack-ports.ts'
 
 export default defineConfig({
-  testDir: '.',
-  testMatch: /^.*\/e2e(-zero)?\/.+\.spec\.ts$/,
+  testDir: 'e2e',
   fullyParallel: true,
   workers: Number(process.env.WORKERS ?? 2),
-  globalSetup: './e2e-zero/global-setup.ts',
+  globalSetup: './e2e/global-setup.ts',
   use: { baseURL: viteUrl, timezoneId: 'UTC', trace: 'retain-on-failure' },
 })

@@ -1,71 +1,23 @@
-import { afterAll, expect, spyOn, test } from 'bun:test'
-import { createTestDatabase, startZeroCache } from '@hq/db/testing'
-import { schema } from '@hq/db/zero'
-import { queries } from '@hq/db/zero-queries'
-import { memberId, workspaceId } from '@hq/kernel'
-import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
-import { createApp } from './app.ts'
-import { issueSessionToken } from './auth/session-tokens.ts'
-import { sessionTokenOf, testAuthSettings } from './testing.ts'
+import { expect, spyOn, test } from 'bun:test'
+import {
+  acme,
+  alice,
+  aliceInAcme,
+  failedWith,
+  globex,
+  openSharedTestApp,
+  bob,
+  bobInAcme,
+  sessionTokenOf,
+  succeeded,
+} from './testing.ts'
 
-const testDatabase = await createTestDatabase()
-const { database } = testDatabase
-const app = createApp({ database, ...testAuthSettings })
-const server = Bun.serve({ port: 0, fetch: app.fetch })
-const appId = 'hqprofiletest'
-const zeroCache = await startZeroCache({
-  databaseName: testDatabase.name,
-  port: 4898,
-  appId,
-  serverUrl: server.url.origin,
-}).catch(async (error) => {
-  await server.stop(true)
-  await testDatabase.drop()
-  throw error
-})
-afterAll(async () => {
-  await zeroCache.stop()
-  await server.stop(true)
-  await testDatabase.drop()
-})
-
-const acme = 'workspace-acme'
-const globex = 'workspace-globex'
-const alice = 'member-alice'
-const bob = 'member-bob'
-const aliceInAcme = { workspaceId: acme, userId: alice }
-const bobInAcme = { workspaceId: acme, userId: bob }
-const succeeded = {}
-const failedWith = (message: string) => ({ error: 'app', message })
+const { database, app, resultOf } = await openSharedTestApp()
+const tokenOf = (workspaceId: string, userId: string) => sessionTokenOf(database, workspaceId, userId)
 const secretValue = 'sk-integration-secret-4321'
 
-const tokenOf = (workspaceId: string, userId: string) => sessionTokenOf(database, workspaceId, userId)
-
-const resultOf = async (
-  { workspaceId, userId }: { workspaceId: string; userId: string },
-  name: string,
-  args: Record<string, unknown>,
-) => {
-  const response = await app.request(`/api/mutate?schema=${appId}_0&appID=${appId}`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${await tokenOf(workspaceId, userId)}` },
-    body: JSON.stringify({
-      clientGroupID: crypto.randomUUID(),
-      mutations: [{ type: 'custom', id: 1, clientID: crypto.randomUUID(), name, args: [args], timestamp: Date.now() }],
-      pushVersion: 1,
-      timestamp: Date.now(),
-      requestID: crypto.randomUUID(),
-    }),
-  })
-  return ((await response.json()) as { mutations: { result: unknown }[] }).mutations[0]?.result
-}
-
-const postCredential = async (authorization: string | undefined, body: string) => {
-  const response = await app.request('/api/llm-credentials', {
-    method: 'POST',
-    headers: authorization === undefined ? {} : { authorization },
-    body,
-  })
+const postCredential = async (authorization: string, body: string) => {
+  const response = await app.request('/api/llm-credentials', { method: 'POST', headers: { authorization }, body })
   return { status: response.status, text: await response.text() }
 }
 const postCredentialAs = async (member: typeof aliceInAcme, body: object) =>
@@ -81,31 +33,6 @@ const loggedText = (spies: ReturnType<typeof consoleSpies>) =>
 const restore = (spies: ReturnType<typeof consoleSpies>) => {
   for (const spy of spies) spy.mockRestore()
 }
-
-const zeroDatabase = zeroDrizzle(schema, database)
-const visibleWorkspaceConnections = (workspace: string, user: string) =>
-  zeroDatabase.transaction((tx) =>
-    tx.run(
-      queries.workspaceConnections.fn({
-        args: undefined,
-        ctx: { workspaceId: workspaceId(workspace), userId: memberId(user), role: 'member' },
-      }),
-    ),
-  )
-
-test('the credential endpoint refuses a missing, invalid or non-member token', async () => {
-  const body = JSON.stringify({ provider: 'OpenAI', secret: secretValue })
-  const { token: nonMemberToken } = await issueSessionToken(testAuthSettings.tokenSecret, {
-    userId: bob,
-    workspaceId: globex,
-    role: 'member',
-    sessionId: 'no-session',
-  })
-  expect((await postCredential(undefined, body)).status).toBe(401)
-  expect((await postCredential('Bearer not-a-token', body)).status).toBe(401)
-  expect((await postCredential(`Bearer ${nonMemberToken}`, body)).status).toBe(403)
-  expect(await credentialRows()).toHaveLength(1)
-})
 
 test('the credential endpoint refuses blank, missing or malformed fields and stores nothing', async () => {
   const token = `Bearer ${await tokenOf(acme, alice)}`
@@ -230,30 +157,4 @@ test('concurrent connects of a member get distinct positions and never touch ano
   for (const tool of ['GitHub', 'Slack', 'Notion', 'Linear'])
     await resultOf(bobInAcme, 'profile.disconnectTool', { workspaceId: acme, tool })
   expect(await connectionsOf(bob)).toEqual([])
-})
-
-test('Alice sees the connections of Bob only through a chat Bob owns in a workspace they share, never Globex rows', async () => {
-  await database.$client`
-    insert into workspace_connections (workspace_id, user_id, tool, access, position)
-    values (${globex}, ${alice}, 'Globex warehouse', 'All tables', 1)`
-  const accessOf = async (workspace: string, user: string) =>
-    (await visibleWorkspaceConnections(workspace, user)).map((row) => `${row.workspaceId} ${row.userId} ${row.access}`)
-  expect(await accessOf(acme, alice)).toEqual([
-    `${acme} ${alice} 2 of 5 tables`,
-    `${acme} ${alice} All sources`,
-    `${acme} ${bob} 1 of 5 tables`,
-  ])
-  expect(await accessOf(acme, bob)).toEqual([
-    `${acme} ${alice} 2 of 5 tables`,
-    `${acme} ${alice} All sources`,
-    `${acme} ${bob} 1 of 5 tables`,
-  ])
-  expect(await accessOf(globex, alice)).toEqual([`${globex} ${alice} All tables`])
-  await database.$client`update chats set owner_user_id = ${alice} where owner_user_id = ${bob}`
-  expect(await accessOf(acme, alice)).toEqual([`${acme} ${alice} 2 of 5 tables`, `${acme} ${alice} All sources`])
-  expect(await accessOf(acme, bob)).toEqual([
-    `${acme} ${alice} 2 of 5 tables`,
-    `${acme} ${alice} All sources`,
-    `${acme} ${bob} 1 of 5 tables`,
-  ])
 })

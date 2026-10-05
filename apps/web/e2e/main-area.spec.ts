@@ -1,29 +1,34 @@
-import { expect, type Locator, type Page, test } from './fixtures'
+import { jobs } from '@hq/db/postgres'
+import {
+  agentReplyText,
+  chatLinkOf,
+  composerOf,
+  draftIconOf,
+  expect,
+  type Locator,
+  mainOf,
+  messageItemsOf,
+  openChat,
+  type Page,
+  sendButtonOf,
+  sendMessage,
+  sidebarOf,
+  test,
+} from './fixtures'
 
-const sidebarOf = (page: Page) => page.getByRole('navigation', { name: 'Sidebar' })
-const mainOf = (page: Page) => page.getByRole('main')
 const messagesOf = (page: Page) => page.getByRole('list', { name: 'Messages' })
-const messageItemsOf = (page: Page) => messagesOf(page).getByRole('listitem')
 const messageContaining = (page: Page, text: string) => messageItemsOf(page).filter({ hasText: text })
-const composerOf = (page: Page) => page.getByRole('textbox', { name: 'Message' })
-const sendButtonOf = (page: Page) => page.getByRole('button', { name: 'Send' })
 const workingIndicatorOf = (page: Page) => page.getByRole('status', { name: 'Agent is working' })
-const sidebarChatLink = (page: Page, chatName: string) => sidebarOf(page).getByRole('link', { name: chatName })
-const agentReplyText = 'Understood, working on it.'
-
-const openChat = async (page: Page, chatName: string) => {
-  await sidebarChatLink(page, chatName).click()
-  await expect(mainOf(page).getByRole('heading', { level: 1, name: chatName })).toBeVisible()
-}
-
-const sendMessage = async (page: Page, text: string) => {
-  await composerOf(page).fill(text)
-  await composerOf(page).press('ControlOrMeta+Enter')
-}
 
 const openMessageMenu = async (message: Locator) => {
   await message.hover()
   await message.getByRole('button', { name: 'Message actions' }).click()
+}
+
+const startRuntimeFromThanks = async (page: Page) => {
+  await openChat(page, 'Welcome')
+  await openMessageMenu(messageContaining(page, 'Thanks, glad to be here.'))
+  await page.getByRole('menuitem', { name: 'Start runtime from this message' }).click()
 }
 
 test.beforeEach(async ({ page }) => {
@@ -118,17 +123,15 @@ test.describe('2b. runtime header row', () => {
       .evaluate((element) => Number(getComputedStyle(element).fontWeight))
     expect(ownerNameWeight).toBeGreaterThanOrEqual(600)
   })
-
-  test('shows no git branch for a runtime chat without a repository', async ({ page }) => {
-    await openChat(page, 'Research')
-    await expect(mainOf(page)).toContainText('Claude Sonnet 5.5 · Medium')
-    await expect(mainOf(page).getByRole('img', { name: 'Git branch' })).toHaveCount(0)
-  })
 })
 
 test.describe('3. empty chat', () => {
-  test('shows an empty state and keeps the composer available', async ({ page }) => {
+  test('shows an empty state, no git branch without a repository and keeps the composer available', async ({
+    page,
+  }) => {
     await openChat(page, 'Research')
+    await expect(mainOf(page)).toContainText('Claude Sonnet 5.5 · Medium')
+    await expect(mainOf(page).getByRole('img', { name: 'Git branch' })).toHaveCount(0)
     await expect(mainOf(page)).toContainText('No messages yet')
     await expect(messageItemsOf(page)).toHaveCount(0)
     await expect(composerOf(page)).toBeVisible()
@@ -198,13 +201,16 @@ test.describe('4. composer', () => {
 })
 
 test.describe('5. send in a channel', () => {
-  test('appends only the member message', async ({ page }) => {
+  test('appends only the member message', async ({ page, workerStack }) => {
     await openChat(page, 'Welcome')
     await sendMessage(page, 'Anyone around?')
 
     await expect(messageContaining(page, 'Anyone around?')).toBeVisible()
     await expect(workingIndicatorOf(page)).toHaveCount(0)
-    await page.waitForTimeout(1500)
+    await expect
+      .poll(() => workerStack.database.query.messages.findFirst({ where: { body: 'Anyone around?' } }))
+      .toBeDefined()
+    expect((await workerStack.database.select().from(jobs)).filter((job) => job.type === 'agent.reply')).toEqual([])
     await expect(messageContaining(page, agentReplyText)).toHaveCount(0)
     await expect(messageItemsOf(page)).toHaveCount(3)
   })
@@ -293,14 +299,13 @@ test.describe('8. message menu', () => {
 })
 
 test.describe('9. start a runtime from a message', () => {
-  test('creates a runtime chat in the same project, seeded and selected', async ({ page }) => {
-    await openChat(page, 'Welcome')
-    await openMessageMenu(messageContaining(page, 'Thanks, glad to be here.'))
-    await page.getByRole('menuitem', { name: 'Start runtime from this message' }).click()
+  test('creates a runtime chat in the same project, seeded, selected and focused', async ({ page }) => {
+    await startRuntimeFromThanks(page)
 
     const onboardingGroup = sidebarOf(page).getByRole('group', { name: 'Onboarding' })
     await expect(onboardingGroup.getByRole('link', { name: 'Thanks, glad to be here.' })).toBeVisible()
     await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Thanks, glad to be here.' })).toBeVisible()
+    await expect(composerOf(page)).toBeFocused()
     await expect(mainOf(page).getByRole('img', { name: 'Runtime chat' })).toBeVisible()
     await expect(mainOf(page)).not.toContainText('Runtime view')
     await expect(mainOf(page)).toContainText('Agent acts as Alice')
@@ -309,13 +314,14 @@ test.describe('9. start a runtime from a message', () => {
     await expect(messageItemsOf(page).nth(0)).toContainText('Thanks, glad to be here.')
   })
 
-  test('links back to the source channel and sends nothing to the agent', async ({ page }) => {
-    await openChat(page, 'Welcome')
-    await openMessageMenu(messageContaining(page, 'Thanks, glad to be here.'))
-    await page.getByRole('menuitem', { name: 'Start runtime from this message' }).click()
+  test('links back to the source channel and sends nothing to the agent', async ({ page, workerStack }) => {
+    await startRuntimeFromThanks(page)
 
     await expect(workingIndicatorOf(page)).toHaveCount(0)
-    await page.waitForTimeout(1500)
+    await expect
+      .poll(() => workerStack.database.query.messages.findFirst({ where: { replyToId: 'message-welcome-2' } }))
+      .toBeDefined()
+    expect((await workerStack.database.select().from(jobs)).filter((job) => job.type === 'agent.reply')).toEqual([])
     await expect(messageContaining(page, agentReplyText)).toHaveCount(0)
 
     await mainOf(page).getByRole('link', { name: 'Started from Welcome' }).click()
@@ -400,9 +406,6 @@ test.describe('11. delete a message', () => {
 })
 
 test.describe('12. drafts', () => {
-  const draftIconOf = (page: Page, chatName: string) =>
-    sidebarChatLink(page, chatName).getByRole('img', { name: 'Has unsent draft' })
-
   test('keeps a draft per chat when switching and shows a pencil in the sidebar', async ({ page }) => {
     await openChat(page, 'Welcome')
     await composerOf(page).fill('Work in progress')
@@ -436,7 +439,7 @@ test.describe('12. drafts', () => {
     await openChat(page, 'Welcome')
     await composerOf(page).fill('Draft')
 
-    const chatNameBox = await sidebarChatLink(page, 'Welcome').getByText('Welcome', { exact: true }).boundingBox()
+    const chatNameBox = await chatLinkOf(page, 'Welcome').getByText('Welcome', { exact: true }).boundingBox()
     const pencilBox = await draftIconOf(page, 'Welcome').boundingBox()
     const menuButtonBox = await page.getByRole('button', { name: 'Chat actions for Welcome' }).boundingBox()
     expect(pencilBox!.x).toBeGreaterThan(chatNameBox!.x + chatNameBox!.width)
@@ -446,17 +449,10 @@ test.describe('12. drafts', () => {
 
 test.describe('13. focus on open', () => {
   test('moves focus to the composer when a chat is opened from the sidebar', async ({ page }) => {
-    await sidebarChatLink(page, 'Welcome').click()
+    await chatLinkOf(page, 'Welcome').click()
     await expect(composerOf(page)).toBeFocused()
 
-    await sidebarChatLink(page, 'Invoice bug').click()
-    await expect(composerOf(page)).toBeFocused()
-  })
-
-  test('moves focus to the composer of a chat started from a message', async ({ page }) => {
-    await openChat(page, 'Welcome')
-    await openMessageMenu(messageContaining(page, 'Thanks, glad to be here.'))
-    await page.getByRole('menuitem', { name: 'Start runtime from this message' }).click()
+    await chatLinkOf(page, 'Invoice bug').click()
     await expect(composerOf(page)).toBeFocused()
   })
 })
@@ -481,9 +477,7 @@ test.describe('14. dialog colors in dark mode', () => {
 
 test.describe('16. renamed chats elsewhere', () => {
   test('shows the new name in the started-from link of a runtime chat', async ({ page }) => {
-    await openChat(page, 'Welcome')
-    await openMessageMenu(messageContaining(page, 'Thanks, glad to be here.'))
-    await page.getByRole('menuitem', { name: 'Start runtime from this message' }).click()
+    await startRuntimeFromThanks(page)
     await expect(mainOf(page).getByRole('link', { name: 'Started from Welcome' })).toBeVisible()
 
     await page.getByRole('button', { name: 'Chat actions for Welcome' }).click()

@@ -1,73 +1,28 @@
-import { afterAll, expect, spyOn, test } from 'bun:test'
+import { expect, test } from 'bun:test'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { events, jobs } from '@hq/db/postgres'
-import { createTestDatabase, startZeroCache } from '@hq/db/testing'
-import { createApp } from './app.ts'
-import { maximumJobAttempts, startJobWorker } from './job-worker.ts'
-import { sessionTokenOf, testAuthSettings } from './testing.ts'
+import { startJobWorker } from './job-worker.ts'
+import {
+  acme,
+  alice,
+  aliceInAcme,
+  failedWith,
+  globex,
+  openSharedTestApp,
+  bob,
+  bobInAcme,
+  succeeded,
+  waitFor,
+} from './testing.ts'
 
-const testDatabase = await createTestDatabase()
-const { database } = testDatabase
-const app = createApp({ database, ...testAuthSettings })
-const server = Bun.serve({ port: 0, fetch: app.fetch })
-const appId = 'hqconversationtest'
-const zeroCache = await startZeroCache({
-  databaseName: testDatabase.name,
-  port: 4896,
-  appId,
-  serverUrl: server.url.origin,
-}).catch(async (error) => {
-  await server.stop(true)
-  await testDatabase.drop()
-  throw error
-})
-afterAll(async () => {
-  await zeroCache.stop()
-  await server.stop(true)
-  await testDatabase.drop()
-})
-
-const acme = 'workspace-acme'
-const globex = 'workspace-globex'
-const alice = 'member-alice'
-const bob = 'member-bob'
-const aliceInAcme = { workspaceId: acme, userId: alice }
-const bobInAcme = { workspaceId: acme, userId: bob }
-const succeeded = {}
-const failedWith = (message: string) => ({ error: 'app', message })
+const { database, resultOf, eventsOf, changesOf } = await openSharedTestApp()
 const agentReplyText = 'Understood, working on it.'
-
-const tokenOf = (workspaceId: string, userId: string) => sessionTokenOf(database, workspaceId, userId)
-
-const resultOf = async (
-  { workspaceId, userId }: { workspaceId: string; userId: string },
-  name: string,
-  args: Record<string, unknown>,
-) => {
-  const response = await app.request(`/api/mutate?schema=${appId}_0&appID=${appId}`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${await tokenOf(workspaceId, userId)}` },
-    body: JSON.stringify({
-      clientGroupID: crypto.randomUUID(),
-      mutations: [{ type: 'custom', id: 1, clientID: crypto.randomUUID(), name, args: [args], timestamp: Date.now() }],
-      pushVersion: 1,
-      timestamp: Date.now(),
-      requestID: crypto.randomUUID(),
-    }),
-  })
-  return ((await response.json()) as { mutations: { result: unknown }[] }).mutations[0]?.result
-}
 
 const messageRow = (id: string) => database.query.messages.findFirst({ where: { id } })
 const chatRow = (id: string) => database.query.chats.findFirst({ where: { id } })
 const messagesOf = (chatId: string) => database.query.messages.findMany({ where: { chatId }, orderBy: { seq: 'asc' } })
-const eventsOf = async (chatId: string) =>
-  (await database.select().from(events))
-    .filter((event) => event.chatId === chatId)
-    .toSorted((first, second) => first.seq - second.seq)
 const jobsOf = async (messageId: string) =>
   (await database.select().from(jobs)).filter((job) => (job.payload as { messageId: string }).messageId === messageId)
-const jobRow = async (id: string) => (await database.select().from(jobs)).find((job) => job.id === id)
 const countOf = async () => ({
   messages: (await database.query.messages.findMany()).length,
   events: (await database.select().from(events)).length,
@@ -76,12 +31,6 @@ const countOf = async () => ({
 })
 const sendTo = (member: typeof aliceInAcme, chatId: string, id: string, text: string) =>
   resultOf(member, 'conversation.sendMessage', { workspaceId: member.workspaceId, id, chatId, text })
-const waitFor = async (isDone: () => Promise<boolean>) => {
-  for (let attempt = 1; !(await isDone()); attempt++) {
-    if (attempt === 200) throw new Error('The condition was not met within 10 s')
-    await sleep(50)
-  }
-}
 
 test('sendMessage in a channel appends a posted event and the projection at the next seq, without a job', async () => {
   const before = Date.now()
@@ -123,9 +72,7 @@ test('editMessage and deleteMessage append events, edit the projection and blank
   ).toEqual(succeeded)
   expect(await messageRow('message-to-change')).toMatchObject({ seq: 2, body: '' })
   expect((await messageRow('message-to-change'))?.deletedAt).not.toBeNull()
-  expect(
-    (await eventsOf('chat-standup')).map(({ seq, type, actor, payload }) => ({ seq, type, actor, payload })),
-  ).toEqual([
+  expect(await changesOf('chat-standup')).toEqual([
     { seq: 1, type: 'message.posted', actor: bob, payload: expect.anything() },
     { seq: 2, type: 'message.posted', actor: bob, payload: expect.objectContaining({ body: 'Draft plan' }) },
     { seq: 3, type: 'message.edited', actor: bob, payload: { messageId: 'message-to-change', body: 'Final plan' } },
@@ -166,10 +113,21 @@ test('startRuntimeFromMessage creates the runtime chat and its seed message in o
   expect(await messagesOf('chat-started')).toMatchObject([
     { id: 'message-seed', seq: 2, authorId: alice, body: 'Welcome to the team!', replyToId: 'message-welcome-1' },
   ])
-  expect(await eventsOf('chat-started')).toMatchObject([
-    { seq: 1, type: 'chat.created' },
-    { id: 'message-seed', seq: 2, type: 'message.posted' },
+  expect(await changesOf('chat-started')).toEqual([
+    {
+      seq: 1,
+      type: 'chat.created',
+      actor: alice,
+      payload: { name: 'Welcome to the team!', type: 'runtime', projectId: 'project-onboarding' },
+    },
+    {
+      seq: 2,
+      type: 'message.posted',
+      actor: alice,
+      payload: expect.objectContaining({ replyToId: 'message-welcome-1' }),
+    },
   ])
+  expect((await eventsOf('chat-started'))[1]?.id).toBe('message-seed')
   expect(await jobsOf('message-seed')).toEqual([])
 })
 
@@ -295,27 +253,4 @@ test('two workers never process the same job twice', async () => {
   expect(new Set((await eventsOf('chat-research')).map((event) => event.seq)).size).toBe(
     (await eventsOf('chat-research')).length,
   )
-})
-
-test('a failing job is retried up to its bound, then dead and logged once', async () => {
-  await database.insert(jobs).values({
-    workspaceId: acme,
-    id: 'job-broken',
-    type: 'agent.reply',
-    payload: { messageId: 'message-missing' },
-    runAt: new Date(),
-    attempts: 0,
-    state: 'queued',
-  })
-  const errorLog = spyOn(console, 'error').mockImplementation(() => {})
-  const worker = startJobWorker(database, { pollIntervalMilliseconds: 5, retryDelayMilliseconds: 0 })
-  await waitFor(async () => (await jobRow('job-broken'))?.state === 'failed')
-  await sleep(100)
-  await worker.stop()
-  expect(await jobRow('job-broken')).toMatchObject({
-    attempts: maximumJobAttempts,
-    state: 'failed',
-  })
-  expect(errorLog.mock.calls.filter(([message]) => String(message).includes('job-broken'))).toHaveLength(1)
-  errorLog.mockRestore()
 })
