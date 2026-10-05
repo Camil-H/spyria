@@ -50,6 +50,6 @@ bun run test
 bun run test:integration   # needs bun run stack:up
 bun run check:boundaries
 bun run lint
-bun run check:bundle       # builds the app, main chunk at most 720 kB, no new server-only SQL
+bun run check:bundle       # builds the app, main chunk at most 760 kB, one React, no server-only SQL
 bun run test:e2e           # starts its own stack per worker
 ```

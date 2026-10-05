@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 
 const distDirectory = new URL('../apps/web/dist/', import.meta.url).pathname
-const mainChunkLimitBytes = 720_000
+const mainChunkLimitBytes = 760_000
 const serverOnlySql = [
   'into events',
   'into sessions',

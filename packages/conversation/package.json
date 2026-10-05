@@ -20,7 +20,7 @@
     "@radix-ui/react-tooltip": "1.2.16",
     "@rocicorp/zero": "1.9.0",
     "lucide-react": "1.49.0",
-    "react": "19.2.8",
+    "react": "19.3.0",
     "react-router": "7.18.2",
     "zod": "4.6.5"
   },

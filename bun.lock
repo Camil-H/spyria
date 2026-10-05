@@ -37,8 +37,8 @@
         "@hq/session": "workspace:*",
         "@hq/workspace": "workspace:*",
         "@openhands/ui": "1.0.0-beta.9",
-        "react": "19.2.8",
-        "react-dom": "19.2.8",
+        "react": "19.3.0",
+        "react-dom": "19.3.0",
         "react-router": "7.18.2",
         "tailwind-merge": "^3.3.1",
         "tailwind-scrollbar": "^4.0.2",
@@ -49,7 +49,7 @@
         "@playwright/test": "^1.63.0",
         "@rolldown/plugin-babel": "^0.2.4",
         "@tailwindcss/vite": "^4",
-        "@types/react": "^19",
+        "@types/react": "19.3.0",
         "@types/react-dom": "^19",
         "@vitejs/plugin-react": "^6.1.1",
         "babel-plugin-react-compiler": "^1.0.0",
@@ -68,7 +68,7 @@
         "@radix-ui/react-tooltip": "1.2.16",
         "@rocicorp/zero": "1.9.0",
         "lucide-react": "1.49.0",
-        "react": "19.2.8",
+        "react": "19.3.0",
         "react-router": "7.18.2",
         "zod": "4.6.5",
       },
@@ -85,10 +85,10 @@
         "postgres": "3.4.9",
       },
       "devDependencies": {
-        "@types/react": "^19.3.0",
+        "@types/react": "19.3.0",
         "drizzle-kit": "1.0.0-rc.4",
         "drizzle-zero": "1.0.0-beta.1",
-        "react": "19.2.8",
+        "react": "19.3.0",
       },
       "peerDependencies": {
         "react": "^19",
@@ -106,7 +106,7 @@
         "@radix-ui/react-tabs": "1.1.21",
         "@radix-ui/react-tooltip": "1.2.16",
         "lucide-react": "1.49.0",
-        "react": "19.2.8",
+        "react": "19.3.0",
       },
       "devDependencies": {
         "@types/react": "19.3.0",
@@ -121,7 +121,7 @@
         "@hq/ui": "workspace:*",
         "@radix-ui/react-tabs": "1.1.21",
         "@rocicorp/zero": "1.9.0",
-        "react": "19.2.8",
+        "react": "19.3.0",
         "react-router": "7.18.2",
         "zod": "4.6.5",
       },
@@ -133,7 +133,7 @@
       "name": "@hq/session",
       "dependencies": {
         "@hq/kernel": "workspace:*",
-        "react": "19.2.8",
+        "react": "19.3.0",
       },
       "devDependencies": {
         "@types/react": "19.3.0",
@@ -142,8 +142,8 @@
     "packages/ui": {
       "name": "@hq/ui",
       "devDependencies": {
-        "@types/react": "^19.3.0",
-        "react": "19.2.8",
+        "@types/react": "19.3.0",
+        "react": "19.3.0",
       },
       "peerDependencies": {
         "react": "^19",
@@ -160,7 +160,7 @@
         "@radix-ui/react-tooltip": "1.2.16",
         "@rocicorp/zero": "1.9.0",
         "lucide-react": "1.49.0",
-        "react": "19.2.8",
+        "react": "19.3.0",
         "react-router": "7.18.2",
         "zod": "4.6.5",
       },
@@ -1418,11 +1418,11 @@
 
     "quick-format-unescaped": ["quick-format-unescaped@4.0.4", "", {}, "sha512-tYC1Q1hgyRuHgloV/YXs2w15unPVh8qfu/qCTfhTYamaw7fyhumKa2yGpdSo87vY32rIclj+4fWYQXUMs9EHvg=="],
 
-    "react": ["react@19.2.8", "", {}, "sha512-PWaYA1L/q9u2u7xYQi+Y3L3Yfnie7XyLeaJICV1MGD6LprsBxcAqGjYyr0eY3p+QdsA+x/Irkt4Qif8D63+Sbw=="],
+    "react": ["react@19.3.0", "", {}, "sha512-E8LUcbtBWt20bbl2YoHfx4ZDBdxVTfOKtCZn9cDSJ4l6/nuoApcpIBcj47t2wZoVX8g2ZHuMHbiShgCR1T5Sog=="],
 
     "react-bootstrap-icons": ["react-bootstrap-icons@1.11.6", "", { "dependencies": { "prop-types": "^15.7.2" }, "peerDependencies": { "react": ">=16.8.6" } }, "sha512-ycXiyeSyzbS1C4+MlPTYe0riB+UlZ7LV7YZQYqlERV2cxDiKtntI0huHmP/3VVvzPt4tGxqK0K+Y6g7We3U6tQ=="],
 
-    "react-dom": ["react-dom@19.2.8", "", { "dependencies": { "scheduler": "^0.27.0" }, "peerDependencies": { "react": "^19.2.8" } }, "sha512-rVprimfGBG3DR+Tq0IQG2DT5PxKth1WIGDmj5yPmlzr4YBe7uyE+Du4oVqTDXZSHGGGXRtTJEGSSePyQCMBglQ=="],
+    "react-dom": ["react-dom@19.3.0", "", { "dependencies": { "scheduler": "^0.28.0" }, "peerDependencies": { "react": "^19.3.0" } }, "sha512-JDk8dgif51OjFoDE70+OT9ICyYr+69HlmihNwp1+Nsfbna3t5sIiCa9ZJktDmQ4/1b/rn26hIAR2uYXDMr5r0Q=="],
 
     "react-is": ["react-is@16.13.1", "", {}, "sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ=="],
 
@@ -1482,7 +1482,7 @@
 
     "safe-stable-stringify": ["safe-stable-stringify@2.5.0", "", {}, "sha512-b3rppTKm9T+PsVCBEOUR46GWI7fdOs00VKZ1+9c1EWDaDMvjQc6tUwuFyIprgGgTcWoVHSKrU8H31ZHA2e0RHA=="],
 
-    "scheduler": ["scheduler@0.27.0", "", {}, "sha512-eNv+WrVbKu1f3vbYJT/xtiF5syA5HPIMtf9IgY/nKg0sWqzAUEvqY/xm7OcZc/qafLx/iO9FgOmeSAp4v5ti/Q=="],
+    "scheduler": ["scheduler@0.28.0", "", {}, "sha512-juorfCmIkIw8tT+p5BXSm6PJjQF/ycEYmKyzURCIt/RaZIhL+PulbQ9Yu2z1HdOJDdqDTlxA1+xKBmHXJsczAw=="],
 
     "secure-json-parse": ["secure-json-parse@4.1.0", "", {}, "sha512-l4KnYfEyqYJxDwlNVyRfO2E4NTHfMKAWdUuA8J0yve2Dz/E/PdBepY03RvyJpssIpRFwJoCD55wA+mEDs6ByWA=="],
 
