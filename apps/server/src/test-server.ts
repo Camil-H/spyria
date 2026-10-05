@@ -15,7 +15,10 @@ const databaseByName = (databaseName: string) => {
   const served = servedDatabaseByName.get(databaseName)
   if (served) return served.database
   const database = createDatabase(databaseUrlOf(databaseName))
-  servedDatabaseByName.set(databaseName, { database, jobWorker: startJobWorker(database) })
+  servedDatabaseByName.set(databaseName, {
+    database,
+    jobWorker: startJobWorker(database, { sandboxProvider: runtimeHosts.sandboxProvider }),
+  })
   return database
 }
 

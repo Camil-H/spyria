@@ -15,7 +15,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
 import { defineRelations } from 'drizzle-orm/relations'
-import type { DiffLine, RuntimeHostCapacity } from '../schema.ts'
+import type { DiffLine, RuntimeFailure, RuntimeHostCapacity, RuntimeState } from '../schema.ts'
 
 const table = snakeCase.table
 const instant = () => timestamp({ withTimezone: true, mode: 'date' })
@@ -279,9 +279,9 @@ export const jobs = table(
   (table) => [
     primaryKey({ columns: [table.workspaceId, table.id] }),
     index().on(table.state, table.runAt),
-    uniqueIndex('jobs_one_queued_session_sweep')
-      .on(table.workspaceId)
-      .where(sql`${table.type} = 'sessions.sweep' and ${table.state} = 'queued'`),
+    uniqueIndex('jobs_one_queued_sweep')
+      .on(table.workspaceId, table.type)
+      .where(sql`${table.type} like '%.sweep' and ${table.state} = 'queued'`),
   ],
 )
 
@@ -303,6 +303,28 @@ export const runtimeHosts = table(
     removedAt: instant(),
   },
   (table) => [primaryKey({ columns: [table.workspaceId, table.id] }), memberReference(table, table.createdBy)],
+)
+
+export const runtimes = table(
+  'runtimes',
+  {
+    ...chatScoped,
+    id: text().notNull(),
+    hostId: text(),
+    state: text().$type<RuntimeState>().notNull(),
+    failure: text().$type<RuntimeFailure>(),
+    image: text().notNull(),
+    apiKeyRef: text(),
+    lastActiveAt: instant().notNull(),
+    createdAt: instant().notNull(),
+    stateChangedAt: instant().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.id] }),
+    unique().on(table.workspaceId, table.chatId),
+    chatReference(table),
+    tenantReference([table.workspaceId, table.hostId], [runtimeHosts.workspaceId, runtimeHosts.id]),
+  ],
 )
 
 export const files = table(

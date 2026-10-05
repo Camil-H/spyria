@@ -1,11 +1,26 @@
-import { findRuntimeHostBySecretHash, lockRuntimeHost, setRuntimeHostSecretHash } from '@hq/db/server-writes'
-import type { RuntimeHost as RuntimeHostRow } from '@hq/db/zero'
+import {
+  discardPlaceholderSecret,
+  enqueueJob,
+  findRuntimeHostBySecretHash,
+  keepPlaceholderSecret,
+  lockRuntimeHost,
+  lockRuntimeHostLoads,
+  lockRuntimes,
+  placeholderSecretOf,
+  runtimeApiKeyRefOf,
+  setRuntimeApiKeyRef,
+  setRuntimeHostSecretHash,
+} from '@hq/db/server-writes'
+import type { RuntimeHost as RuntimeHostRow, Runtime as RuntimeRow } from '@hq/db/zero'
 import { zql } from '@hq/db/zero-queries'
-import { memberId, runtimeHostId, workspaceId } from '@hq/kernel'
+import { chatId, memberId, runtimeHostId, runtimeId, type WorkspaceId, workspaceId } from '@hq/kernel'
 import type { Transaction } from '@rocicorp/zero'
 import type { RuntimeTransactor, UnitOfWork } from '../contracts/transactor.ts'
-import { HostNotFound } from '../domain/errors.ts'
+import { HostNotFound, RuntimeNotFound } from '../domain/errors.ts'
+import type { Runtime } from '../domain/runtime.ts'
 import type { RuntimeHost } from '../domain/runtime-host.ts'
+
+export type Transact = <Result>(work: (tx: Transaction) => Promise<Result>) => Promise<Result>
 
 const hostOf = (row: RuntimeHostRow): RuntimeHost => ({
   ...row,
@@ -14,11 +29,24 @@ const hostOf = (row: RuntimeHostRow): RuntimeHost => ({
   createdBy: memberId(row.createdBy),
 })
 
+const runtimeOf = (row: RuntimeRow): Runtime => ({
+  ...row,
+  workspaceId: workspaceId(row.workspaceId),
+  id: runtimeId(row.id),
+  chatId: chatId(row.chatId),
+  hostId: row.hostId === null ? null : runtimeHostId(row.hostId),
+})
+
 export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
   const hostOrUndefined = async (workspaceId: string, id: string) => {
     const row = await tx.run(zql.runtimeHosts.where('workspaceId', workspaceId).where('id', id).one())
     return row && hostOf(row)
   }
+  const runtimesWithIds = async (workspaceId: WorkspaceId, ids: string[]) =>
+    ids.length === 0
+      ? []
+      : (await tx.run(zql.runtimes.where('workspaceId', workspaceId).where('id', 'IN', ids))).map(runtimeOf)
+  const apiKeyRefOf = (runtime: Runtime) => runtimeApiKeyRefOf(tx, runtime.workspaceId, runtime.id)
   const unitOfWork: UnitOfWork = {
     runtimeHosts: {
       add: (host) => tx.mutate.runtimeHosts.insert(host),
@@ -38,7 +66,53 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
         const host = await hostOrUndefined(located.workspaceId, located.id)
         return host && { host, claimed: located.claimed }
       },
+      lockLoads: async (workspaceId) =>
+        (await lockRuntimeHostLoads(tx, workspaceId)).map((load) => ({ ...load, hostId: runtimeHostId(load.hostId) })),
+    },
+    runtimes: {
+      lock: async (workspaceId, id) => {
+        const [runtime] = await runtimesWithIds(workspaceId, await lockRuntimes(tx, workspaceId, 'id', id))
+        if (!runtime) throw new RuntimeNotFound(id)
+        return runtime
+      },
+      lockByChat: async (workspaceId, chatId) =>
+        (await runtimesWithIds(workspaceId, await lockRuntimes(tx, workspaceId, 'chat', chatId)))[0],
+      lockOnHost: async (workspaceId, hostId) =>
+        runtimesWithIds(workspaceId, await lockRuntimes(tx, workspaceId, 'host', hostId)),
+      lockSweepable: async (workspaceId) =>
+        runtimesWithIds(workspaceId, await lockRuntimes(tx, workspaceId, 'sweepable')),
+      findByChat: async (workspaceId, chatId) => {
+        const row = await tx.run(zql.runtimes.where('workspaceId', workspaceId).where('chatId', chatId).one())
+        return row && runtimeOf(row)
+      },
+      add: (runtime) => tx.mutate.runtimes.insert(runtime),
+      save: (runtime) => tx.mutate.runtimes.update(runtime),
+      delete: (runtime) => tx.mutate.runtimes.delete(runtime),
+    },
+    apiKeys: {
+      keep: async (runtime, apiKey) => {
+        const ref = `placeholder:${crypto.randomUUID()}`
+        await keepPlaceholderSecret(tx, runtime.workspaceId, ref, apiKey)
+        await setRuntimeApiKeyRef(tx, runtime.workspaceId, runtime.id, ref)
+      },
+      keyOf: async (runtime) => {
+        const ref = await apiKeyRefOf(runtime)
+        return ref && placeholderSecretOf(tx, runtime.workspaceId, ref)
+      },
+      discard: async (runtime) => {
+        const ref = await apiKeyRefOf(runtime)
+        if (ref) await discardPlaceholderSecret(tx, runtime.workspaceId, ref)
+      },
+    },
+    jobs: {
+      enqueue: async (workspaceId, type, payload, delayMilliseconds = 0) => {
+        await enqueueJob(tx, { workspaceId, type, payload, delayMilliseconds })
+      },
     },
   }
   return { run: (work) => work(unitOfWork) }
 }
+
+export const createTransactingZeroTransactor = (transact: Transact): RuntimeTransactor => ({
+  run: (work) => transact((tx) => createZeroTransactor(tx).run(work)),
+})

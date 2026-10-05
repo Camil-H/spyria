@@ -1,8 +1,9 @@
 import { createDatabase } from '@hq/db/postgres'
 import { websocket } from 'hono/bun'
 import { createApp } from './app.ts'
-import { enqueueSessionSweeps } from './auth/sessions.ts'
+import { enqueueSweeps } from './auth/sessions.ts'
 import { startJobWorker } from './job-worker.ts'
+import { createRuntimeHostGateway } from './runtime-hosts/gateway.ts'
 
 const requiredEnvironment = (name: string) => {
   const value = process.env[name]
@@ -11,6 +12,7 @@ const requiredEnvironment = (name: string) => {
 }
 
 const database = createDatabase()
+const runtimeHosts = createRuntimeHostGateway({ databases: () => [database] })
 const app = createApp({
   database,
   tokenSecret: requiredEnvironment('HQ_TOKEN_SECRET'),
@@ -20,8 +22,9 @@ const app = createApp({
     redirectUri: requiredEnvironment('HQ_OIDC_REDIRECT_URI'),
   },
   appOrigin: requiredEnvironment('HQ_APP_ORIGIN'),
+  runtimeHosts,
 })
-startJobWorker(database)
-await enqueueSessionSweeps(database)
+startJobWorker(database, { sandboxProvider: runtimeHosts.sandboxProvider })
+await enqueueSweeps(database)
 
 export default { port: 3000, hostname: '0.0.0.0', fetch: app.fetch, websocket }

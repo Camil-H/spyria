@@ -1,4 +1,13 @@
-import type { ChatId, CredentialId, MemberId, MessageId, ProjectId, RuntimeHostId, WorkspaceId } from '@hq/kernel'
+import type {
+  ChatId,
+  CredentialId,
+  MemberId,
+  MessageId,
+  ProjectId,
+  RuntimeHostId,
+  RuntimeId,
+  WorkspaceId,
+} from '@hq/kernel'
 
 type WorkspaceRow = { id: WorkspaceId; name: string }
 type MembershipRow = { memberId: MemberId; workspaceId: WorkspaceId; displayName: string; role: 'admin' | 'member' }
@@ -20,6 +29,24 @@ export type RuntimeHostRow = {
   claimExpiresAt: number | null
   capacity: RuntimeHostCapacity | null
   runningRuntimes: number
+}
+export type RuntimeState =
+  | 'creating'
+  | 'running'
+  | 'stopping'
+  | 'stopped'
+  | 'starting'
+  | 'removing'
+  | 'removed'
+  | 'failed'
+export type RuntimeFailure = 'no_host' | 'no_capacity' | 'create_failed' | 'start_failed' | 'lost'
+type RuntimeRow = {
+  workspaceId: WorkspaceId
+  id: RuntimeId
+  chatId: ChatId
+  hostId: RuntimeHostId | null
+  state: RuntimeState
+  failure: RuntimeFailure | null
 }
 type ProjectRow = { id: ProjectId; workspaceId: WorkspaceId; name: string; archived: boolean }
 export type ChatRow = {
@@ -133,6 +160,7 @@ export type Snapshot = {
   llmCredentials: readonly LlmCredentialRow[]
   workspaceConnections: readonly WorkspaceConnectionRow[]
   runtimeHosts: readonly RuntimeHostRow[]
+  runtimes: readonly RuntimeRow[]
 }
 
 type ChatScoped = { workspaceId: WorkspaceId; chatId: ChatId }

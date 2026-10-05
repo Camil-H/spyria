@@ -12,5 +12,8 @@ export const archiveProject = ({ transactor }: Dependencies, { projectId, chatsP
     const archived = archivedProject(project, chats, chatsPolicy)
     await unitOfWork.projects.save(archived.project)
     const type = chatsPolicy === 'archive' ? 'chat.archived' : 'chat.moved'
-    for (const chat of archived.chats) await unitOfWork.chats.record({ type, chat, actorId })
+    for (const chat of archived.chats) {
+      await unitOfWork.chats.record({ type, chat, actorId })
+      if (chatsPolicy === 'archive') await unitOfWork.chatRuntimes.remove(chat.id)
+    }
   })

@@ -47,18 +47,18 @@ export const findMemberIn =
     return member
   }
 
-const enqueueSessionSweepStatement = `
+const enqueueSweepStatement = `
   insert into jobs (workspace_id, id, type, payload, run_at, attempts, state)
-  select workspace_id, gen_random_uuid()::text, 'sessions.sweep', '{}'::jsonb, now() + $2::interval, 0, 'queued'
-  from workspaces where workspace_id = coalesce($1::text, workspace_id)
+  select workspace_id, gen_random_uuid()::text, type, '{}'::jsonb, now() + $2::interval, 0, 'queued'
+  from workspaces cross join unnest($3::text[]) as type where workspace_id = coalesce($1::text, workspace_id)
   on conflict do nothing`
 
-export const enqueueSessionSweeps = (database: Database) =>
-  database.$client.unsafe(enqueueSessionSweepStatement, [null, '0 seconds'])
+export const enqueueSweeps = (database: Database) =>
+  database.$client.unsafe(enqueueSweepStatement, [null, '0 seconds', ['sessions.sweep', 'runtime.sweep']])
 
 export const sessionJobs = {
   'sessions.sweep': async (tx: ServerTransaction, workspaceId: WorkspaceId) => {
     await tx.dbTransaction.query('delete from sessions where workspace_id = $1 and expires_at < now()', [workspaceId])
-    await tx.dbTransaction.query(enqueueSessionSweepStatement, [workspaceId, '1 day'])
+    await tx.dbTransaction.query(enqueueSweepStatement, [workspaceId, '1 day', ['sessions.sweep']])
   },
 }

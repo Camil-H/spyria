@@ -12,6 +12,7 @@ const serverOnlySql = [
   'placeholder_secrets',
   'claim_code_hash',
   'token_hash',
+  'api_key_ref',
 ]
 
 const failures: string[] = []

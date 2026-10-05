@@ -22,3 +22,7 @@ export type WorkspaceRepository = {
 export type MembershipRepository = {
   add(membership: Membership): Promise<void>
 }
+
+export type ChatRuntimeRepository = {
+  remove(chatId: ChatId): Promise<void>
+}

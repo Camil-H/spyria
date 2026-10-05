@@ -2,6 +2,7 @@ import { appendChatEvent } from '@hq/db/server-writes'
 import type { Chat as ChatRow, Project as ProjectRow } from '@hq/db/zero'
 import { type ZeroContext, zql } from '@hq/db/zero-queries'
 import { chatId, memberId, projectId, workspaceId } from '@hq/kernel'
+import { createRuntimeTransactor, removeChatRuntime } from '@hq/runtime/published'
 import type { Transaction } from '@rocicorp/zero'
 import type { Transactor, UnitOfWork } from '../contracts/transactor.ts'
 import type { Chat, ChatChange } from '../domain/chat.ts'
@@ -103,6 +104,15 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Tra
       },
       listByProject: async (id) =>
         (await tx.run(zql.chats.where('workspaceId', context.workspaceId).where('projectId', id))).map(toChat),
+    },
+    chatRuntimes: {
+      remove: async (chatId) => {
+        if (tx.location === 'server')
+          await removeChatRuntime(
+            { transactor: createRuntimeTransactor(tx) },
+            { workspaceId: context.workspaceId, chatId, now: Date.now() },
+          )
+      },
     },
   }
   return { run: (work) => work(unitOfWork) }

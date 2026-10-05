@@ -12,6 +12,9 @@
         "typescript": "^7.0.2",
       },
     },
+    "apps/host": {
+      "name": "@hq/host",
+    },
     "apps/server": {
       "name": "@hq/server",
       "dependencies": {
@@ -170,6 +173,7 @@
       "dependencies": {
         "@hq/db": "workspace:*",
         "@hq/kernel": "workspace:*",
+        "@hq/runtime": "workspace:*",
         "@hq/session": "workspace:*",
         "@hq/ui": "workspace:*",
         "@radix-ui/react-dropdown-menu": "2.1.24",
@@ -363,6 +367,8 @@
     "@hq/conversation": ["@hq/conversation@workspace:packages/conversation"],
 
     "@hq/db": ["@hq/db@workspace:packages/db"],
+
+    "@hq/host": ["@hq/host@workspace:apps/host"],
 
     "@hq/kernel": ["@hq/kernel@workspace:packages/kernel"],
 

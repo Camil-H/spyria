@@ -40,3 +40,16 @@ export const CodeAlreadyUsed = errorKind('code_already_used', () => 'This code w
 export const CodeExpired = errorKind('code_expired', () => 'This code has expired', HostRefused)
 export const HostRemoved = errorKind('host_removed', () => 'This host was removed', HostRefused)
 export const HostNotRegistered = errorKind('host_not_registered', () => 'This host is not registered', HostRefused)
+export const RuntimeNotFound = errorKind(
+  'runtime_not_found',
+  (runtimeId: string) => `Runtime ${runtimeId} was not found`,
+)
+export const TransitionRefused = errorKind(
+  'transition_refused',
+  (from: string, to: string) => `A runtime cannot go from ${from} to ${to}`,
+)
+export const RuntimeNotReady = errorKind(
+  'runtime_not_ready',
+  (runtimeId: string) => `Runtime ${runtimeId} was not ready in time`,
+)
+export const ApiKeyMissing = errorKind('api_key_missing', (runtimeId: string) => `Runtime ${runtimeId} has no API key`)

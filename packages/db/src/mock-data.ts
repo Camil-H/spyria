@@ -245,4 +245,5 @@ export const createMockSnapshot = (): Snapshot => ({
     workspaceConnection(bob, 'Postgres', '1 of 5 tables'),
   ],
   runtimeHosts: [],
+  runtimes: [],
 })

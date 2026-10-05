@@ -4,9 +4,14 @@ export const insertLlmCredential = skippedOnClient
 export const secretRefOfLlmCredential = skippedOnClient
 export const keepPlaceholderSecret = skippedOnClient
 export const discardPlaceholderSecret = skippedOnClient
+export const placeholderSecretOf = skippedOnClient
 export const lockMembership = skippedOnClient
 export const enqueueJob = skippedOnClient
 export const setRuntimeHostSecretHash = skippedOnClient
 export const lockRuntimeHost = skippedOnClient
 export const findRuntimeHostBySecretHash = skippedOnClient
+export const lockRuntimes = async () => []
+export const lockRuntimeHostLoads = async () => []
+export const runtimeApiKeyRefOf = skippedOnClient
+export const setRuntimeApiKeyRef = skippedOnClient
 export const appendChatEvent = () => Promise.reject(new Error('Chat events are appended on the server only'))

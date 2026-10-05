@@ -2,11 +2,17 @@ import type { ZeroContext } from '@hq/db/zero-queries'
 import { type RuntimeHostId, runtimeHostId, type WorkspaceId } from '@hq/kernel'
 import type { Transaction } from '@rocicorp/zero'
 import { z } from 'zod/mini'
+import type { SandboxProvider } from '../contracts/sandbox-provider.ts'
 import type { HostSystem } from '../domain/runtime-host.ts'
-import { createZeroTransactor } from '../integrations/zero-transactor.ts'
+import {
+  createTransactingZeroTransactor,
+  createZeroTransactor,
+  type Transact,
+} from '../integrations/zero-transactor.ts'
 import { addRuntimeHost } from '../operations/add-runtime-host.ts'
 import { claimRuntimeHost } from '../operations/claim-runtime-host.ts'
 import { markHostOffline } from '../operations/mark-host-offline.ts'
+import { reconcileHostRuntimes } from '../operations/reconcile-host-runtimes.ts'
 import { recordHostHeartbeat } from '../operations/record-host-heartbeat.ts'
 import { recordHostHello } from '../operations/record-host-hello.ts'
 import { renewClaimCode } from '../operations/renew-claim-code.ts'
@@ -53,7 +59,6 @@ const hostSessionFrame = z.discriminatedUnion('type', [
 
 export type HostSessionFrame = z.infer<typeof hostSessionFrame>
 export type ConnectedHost = { workspaceId: WorkspaceId; hostId: RuntimeHostId }
-type Transact = <Result>(work: (tx: Transaction) => Promise<Result>) => Promise<Result>
 
 export const parseHostSessionFrame = (frame: unknown) => hostSessionFrame.safeParse(frame).data
 
@@ -68,4 +73,9 @@ export const createHostSessionHandlers = (transact: Transact) => ({
   heartbeat: (host: ConnectedHost, heartbeat: { memoryFreeBytes: number; running: number }) =>
     transact((tx) => recordHostHeartbeat(dependenciesOf(tx), { ...host, ...heartbeat, now: Date.now() })),
   offline: (host: ConnectedHost) => transact((tx) => markHostOffline(dependenciesOf(tx), host)),
+  reconcile: (host: ConnectedHost, provider: SandboxProvider) =>
+    reconcileHostRuntimes(
+      { transactor: createTransactingZeroTransactor(transact), provider },
+      { ...host, now: Date.now() },
+    ),
 })

@@ -14,7 +14,7 @@ export const newClaimCode = () => {
   return code
 }
 
-export const newHostToken = () =>
+export const newSecretToken = () =>
   crypto.getRandomValues(new Uint8Array(32)).toBase64({ alphabet: 'base64url', omitPadding: true })
 
 export const hashSecret = async (secret: string) =>

@@ -9,4 +9,5 @@ export const archiveChat = ({ transactor }: Dependencies, { chatId, actorId }: I
   transactor.run(async (unitOfWork) => {
     const chat = archivedChat(await unitOfWork.chats.get(chatId))
     await unitOfWork.chats.record({ type: 'chat.archived', chat, actorId })
+    await unitOfWork.chatRuntimes.remove(chat.id)
   })

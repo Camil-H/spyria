@@ -36,5 +36,17 @@ export default drizzleZeroConfig(tables, {
       createdAt: true,
       removedAt: true,
     },
+    runtimes: {
+      workspaceId: true,
+      chatId: true,
+      id: true,
+      hostId: true,
+      state: true,
+      failure: true,
+      image: true,
+      lastActiveAt: true,
+      createdAt: true,
+      stateChangedAt: true,
+    },
   },
 })

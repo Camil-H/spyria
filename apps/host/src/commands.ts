@@ -12,16 +12,21 @@ const apiKeyPattern = /^[A-Za-z0-9_-]{16,128}$/
 const agentServerPort = 8000
 const gibibyte = 1024 ** 3
 const volumeTargets = { ws: '/workspace', home: '/home/openhands', tmp: '/tmp' }
-const operations = ['create', 'start', 'stop', 'remove', 'status'] as const
+const operations = ['create', 'prepare', 'start', 'stop', 'remove', 'status'] as const
+const imageRefusal = 'image outside ghcr.io/openhands/agent-server@sha256'
 
 type Operation = (typeof operations)[number]
+type RuntimeOperation = Exclude<Operation, 'create' | 'prepare'>
 type ContainerInfo = {
   Config?: { Labels?: Record<string, string> }
   State?: { Running?: boolean }
   NetworkSettings?: { Networks?: Record<string, { IPAddress?: string }> }
 }
 type CreateRequest = { runtimeId: string; image: string; apiKey: string }
-export type Command = ({ op: 'create' } & CreateRequest) | { op: Exclude<Operation, 'create'>; runtimeId: string }
+export type Command =
+  | ({ op: 'create' } & CreateRequest)
+  | { op: 'prepare'; image: string }
+  | { op: RuntimeOperation; runtimeId: string }
 
 const fieldOf = (fields: Record<string, unknown>, name: string, pattern: RegExp, reason: string) => {
   const value = fields[name]
@@ -32,15 +37,16 @@ const fieldOf = (fields: Record<string, unknown>, name: string, pattern: RegExp,
 export const parseCommand = (op: unknown, args: unknown): Command => {
   if (!operations.includes(op as Operation)) throw new Refused(`unknown command ${String(op)}`)
   const fields = (typeof args === 'object' && args !== null ? args : {}) as Record<string, unknown>
-  const allowedFields = op === 'create' ? ['runtimeId', 'image', 'apiKey'] : ['runtimeId']
+  const allowedFields = { create: ['runtimeId', 'image', 'apiKey'], prepare: ['image'] }[op as string] ?? ['runtimeId']
   const extraFields = Object.keys(fields).filter((field) => !allowedFields.includes(field))
   if (extraFields.length > 0) throw new Refused(`unexpected fields ${extraFields.join(', ')}`)
+  if (op === 'prepare') return { op, image: fieldOf(fields, 'image', imagePattern, imageRefusal) }
   const runtimeId = fieldOf(fields, 'runtimeId', runtimeIdPattern, 'invalid runtime id')
-  if (op !== 'create') return { op: op as Exclude<Operation, 'create'>, runtimeId }
+  if (op !== 'create') return { op: op as RuntimeOperation, runtimeId }
   return {
     op,
     runtimeId,
-    image: fieldOf(fields, 'image', imagePattern, 'image outside ghcr.io/openhands/agent-server@sha256'),
+    image: fieldOf(fields, 'image', imagePattern, imageRefusal),
     apiKey: fieldOf(fields, 'apiKey', apiKeyPattern, 'invalid API key'),
   }
 }
@@ -119,22 +125,22 @@ export const createCommandRunner = ({
         if (!(error instanceof DockerError) || ![403, 409].includes(error.status)) throw error
       })
   }
-  const create = async ({ runtimeId, image, apiKey }: CreateRequest) => {
-    const createContainer = () =>
-      docker(
-        'POST',
-        `/containers/create?name=${containerNameOf(prefix, runtimeId)}`,
-        containerBodyOf({ prefix, runtimeId, image, apiKey }),
-      )
-    await ensureNetwork()
-    await createContainer().catch(async (error) => {
+  const prepare = (image: string) =>
+    docker('GET', `/images/${image}/json`).catch(async (error) => {
       ignoringMissing(error)
       const [repository, digest] = image.split('@')
       await docker('POST', `/images/create?fromImage=${repository}&tag=${digest}`)
-      await createContainer()
     })
+  const create = async ({ runtimeId, image, apiKey }: CreateRequest) => {
+    await Promise.all([ensureNetwork(), prepare(image)])
+    await docker(
+      'POST',
+      `/containers/create?name=${containerNameOf(prefix, runtimeId)}`,
+      containerBodyOf({ prefix, runtimeId, image, apiKey }),
+    )
   }
   const run = async (command: Command) => {
+    if (command.op === 'prepare') return void (await prepare(command.image))
     const name = containerNameOf(prefix, command.runtimeId)
     if (command.op === 'create') return create(command)
     if (command.op === 'status')

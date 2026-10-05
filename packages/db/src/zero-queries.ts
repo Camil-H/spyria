@@ -62,4 +62,5 @@ export const queries = defineQueries({
       .where('removedAt', 'IS', null)
       .orderBy('createdAt', 'asc'),
   ),
+  runtimes: defineQuery(({ ctx }) => zql.runtimes.where('workspaceId', ctx.workspaceId)),
 })

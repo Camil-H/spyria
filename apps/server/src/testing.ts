@@ -36,9 +36,9 @@ export const issueTestSession = async (
 export const sessionTokenOf = async (database: Database, workspaceId: string, userId: string) =>
   (await issueTestSession(database, workspaceId, userId)).token
 
-export const waitFor = async (isDone: () => boolean | Promise<boolean>) => {
-  for (const deadline = Date.now() + 10_000; !(await isDone()); await sleep(10))
-    if (Date.now() > deadline) throw new Error('The condition was not met within 10 s')
+export const waitFor = async (isDone: () => boolean | Promise<boolean>, timeoutMilliseconds = 10_000) => {
+  for (const deadline = Date.now() + timeoutMilliseconds; !(await isDone()); await sleep(10))
+    if (Date.now() > deadline) throw new Error(`The condition was not met within ${timeoutMilliseconds / 1000} s`)
 }
 
 const sharedAppId = 'hqtest'

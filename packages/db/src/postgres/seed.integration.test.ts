@@ -77,6 +77,7 @@ const readSnapshot = async () => {
     sources: await database.select().from(tables.sources),
     usageEntries: (await database.select().from(tables.usageEntries)).map(userAsMember),
     runtimeHosts: await database.select().from(tables.runtimeHosts),
+    runtimes: await database.select().from(tables.runtimes),
   }
 }
 

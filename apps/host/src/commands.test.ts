@@ -5,8 +5,9 @@ const image = `ghcr.io/openhands/agent-server@sha256:${'a'.repeat(64)}`
 const apiKey = 'k'.repeat(32)
 const create = { runtimeId: 'runtime-1', image, apiKey }
 
-test('accepts exactly create, start, stop, remove and status with their arguments', () => {
+test('accepts exactly create, prepare, start, stop, remove and status with their arguments', () => {
   expect(parseCommand('create', create)).toEqual({ op: 'create', ...create })
+  expect(parseCommand('prepare', { image })).toEqual({ op: 'prepare', image })
   for (const op of ['start', 'stop', 'remove', 'status'] as const)
     expect(parseCommand(op, { runtimeId: 'runtime-1' })).toEqual({ op, runtimeId: 'runtime-1' })
 })
@@ -28,6 +29,12 @@ test.each([
   `ghcr.io/openhands/agent-server@sha256:${'a'.repeat(64)} --privileged`,
 ])('refuses the image %p', (refusedImage) => {
   expect(() => parseCommand('create', { ...create, image: refusedImage })).toThrow('refused')
+  expect(() => parseCommand('prepare', { image: refusedImage })).toThrow('refused')
+})
+
+test('refuses a prepare request with any field besides the image', () => {
+  expect(() => parseCommand('prepare', { image, runtimeId: 'runtime-1' })).toThrow('refused')
+  expect(() => parseCommand('prepare', { image, Binds: ['/:/host'] })).toThrow('refused')
 })
 
 test.each([

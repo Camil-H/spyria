@@ -2,6 +2,7 @@ import type { Database } from '@hq/db/postgres'
 import { schema } from '@hq/db/zero'
 import type { RuntimeHostId, WorkspaceId } from '@hq/kernel'
 import {
+  agentServerImage,
   type ConnectedHost,
   createHostSessionHandlers,
   HostRefused,
@@ -33,6 +34,7 @@ const requestTimeoutMilliseconds = 180_000
 const identifyTimeoutMilliseconds = 10_000
 
 const errorNameOf = (error: unknown) => (error instanceof Error ? error.name : 'an unknown error')
+const errorMessageOf = (error: unknown) => (error instanceof Error ? error.message : 'an unknown error')
 const frameOf = (text: string): Frame => {
   try {
     return JSON.parse(text)
@@ -103,6 +105,12 @@ export const createRuntimeHostGateway = ({
     connection.identified = { host, token: frame.token, handlers }
     connectionByHost.set(keyOf(host), connection)
     replaced?.socket.close(replacedCloseCode, 'Replaced by a newer connection of this host')
+    prepare(host).catch((error) =>
+      console.error(`Preparing runtime host ${host.hostId} failed: ${errorMessageOf(error)}`),
+    )
+    handlers
+      .reconcile(host, sandboxProvider)
+      .catch((error) => console.error(`Reconciling runtime host ${host.hostId} failed: ${errorMessageOf(error)}`))
   }
 
   const settle = (connection: Connection, frame: Frame) => {
@@ -170,43 +178,47 @@ export const createRuntimeHostGateway = ({
     }
   })
 
-  const connectionOf = (sandbox: SandboxLocation) => {
-    const connection = connectionByHost.get(keyOf(sandbox))
-    if (!connection) throw new Error(`Runtime host ${sandbox.hostId} is not connected`)
+  const connectionOf = (host: ConnectedHost) => {
+    const connection = connectionByHost.get(keyOf(host))
+    if (!connection) throw new Error(`Runtime host ${host.hostId} is not connected`)
     return connection
   }
 
-  const request = (sandbox: SandboxLocation, frame: object) => {
-    const connection = connectionOf(sandbox)
+  const request = (target: ConnectedHost & { runtimeId?: string }, frame: object) => {
+    const connection = connectionOf(target)
     const id = nextRequestId++
     const response = Promise.withResolvers<Frame>()
     const timer = setTimeout(
-      () => response.reject(new Error(`Runtime host ${sandbox.hostId} did not answer in time`)),
+      () => response.reject(new Error(`Runtime host ${target.hostId} did not answer in time`)),
       requestTimeoutMilliseconds,
     )
     connection.pending.set(id, response)
-    sendTo(connection, { ...frame, id, sid: id, runtimeId: sandbox.runtimeId })
+    sendTo(connection, { ...frame, id, sid: id, runtimeId: target.runtimeId })
     return response.promise.finally(() => {
       clearTimeout(timer)
       connection.pending.delete(id)
     })
   }
 
-  const command = async (sandbox: SandboxLocation, op: string, args: object = {}) =>
-    (await request(sandbox, { type: 'cmd', op, args: { runtimeId: sandbox.runtimeId, ...args } })).data
+  const command = async (host: ConnectedHost, op: string, args: object) =>
+    (await request(host, { type: 'cmd', op, args })).data
+
+  const prepare = async (host: ConnectedHost, image = agentServerImage) => {
+    await command(host, 'prepare', { image })
+  }
 
   const commandWithoutResult = (op: string) => async (sandbox: SandboxLocation) => {
-    await command(sandbox, op)
+    await command(sandbox, op, { runtimeId: sandbox.runtimeId })
   }
 
   const sandboxProvider: SandboxProvider = {
     create: async ({ image, apiKey, ...sandbox }) => {
-      await command(sandbox, 'create', { image, apiKey })
+      await command(sandbox, 'create', { runtimeId: sandbox.runtimeId, image, apiKey })
     },
     start: commandWithoutResult('start'),
     stop: commandWithoutResult('stop'),
     remove: commandWithoutResult('remove'),
-    status: async (sandbox) => (await command(sandbox, 'status')) as SandboxStatus,
+    status: async (sandbox) => (await command(sandbox, 'status', { runtimeId: sandbox.runtimeId })) as SandboxStatus,
     connect: (sandbox) => ({
       fetch: async (sandboxRequest) => {
         const { status, headers, body } = await request(sandbox, { type: 'http', ...sandboxRequest })
@@ -230,6 +242,7 @@ export const createRuntimeHostGateway = ({
   return {
     upgrade,
     sandboxProvider,
+    prepare,
     disconnect: (workspaceId: WorkspaceId, hostId: RuntimeHostId) =>
       connectionByHost.get(keyOf({ workspaceId, hostId }))?.socket.close(1000, 'Removed'),
   }

@@ -1,11 +1,11 @@
 import type { RuntimeTransactor } from '../contracts/transactor.ts'
-import { claimRefusal, hashSecret, newHostToken } from '../domain/claim.ts'
+import { claimRefusal, hashSecret, newSecretToken } from '../domain/claim.ts'
 import { CodeExpired, CodeNotValid } from '../domain/errors.ts'
 
 type Dependencies = { transactor: RuntimeTransactor }
 
 export const claimRuntimeHost = async ({ transactor }: Dependencies, { code, now }: { code: string; now: number }) => {
-  const token = newHostToken()
+  const token = newSecretToken()
   const [claimCodeHash, tokenHash] = await Promise.all([hashSecret(code), hashSecret(token)])
   return transactor.run(async ({ runtimeHosts }) => {
     const found = await runtimeHosts.findBySecretHash('claimCode', claimCodeHash)

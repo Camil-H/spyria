@@ -2,13 +2,14 @@ import { conversationMutators } from '@hq/conversation/server'
 import type { Database } from '@hq/db/postgres'
 import { schema } from '@hq/db/zero'
 import { queries, type ZeroContext } from '@hq/db/zero-queries'
+import type { RuntimeHostId } from '@hq/kernel'
 import { addLlmCredentialFromRequest, llmCredentialsPath, ProfileError, profileMutators } from '@hq/profile/server'
 import {
   addRuntimeHostFromRequest,
-  createRuntimeMutators,
   RuntimeError,
   renewClaimCodeFromRequest,
   runtimeHostsPath,
+  runtimeMutators,
 } from '@hq/runtime/server'
 import { workspaceMutators } from '@hq/workspace/server'
 import { getMutator, mustGetMutator, mustGetQuery, type Transaction } from '@rocicorp/zero'
@@ -58,7 +59,6 @@ export const createApp = ({
   testDatabaseByName?: (databaseName: string) => Database
   runtimeHosts?: RuntimeHostGateway
 }) => {
-  const runtimeMutators = createRuntimeMutators(runtimeHosts.disconnect)
   const mutatorNamed = (name: string) =>
     getMutator(workspaceMutators, name) ??
     getMutator(profileMutators, name) ??
@@ -100,7 +100,12 @@ export const createApp = ({
       return context.json(
         await handleMutateRequest({
           dbProvider: context.get('zeroDatabase'),
-          handler: (transact) => transact((tx, name, args) => mutatorNamed(name).fn({ args, tx, ctx })),
+          handler: async (transact, mutation) => {
+            const response = await transact((tx, name, args) => mutatorNamed(name).fn({ args, tx, ctx }))
+            if (mutation.name === 'runtime.removeHost' && !('error' in response.result))
+              runtimeHosts.disconnect(ctx.workspaceId, (mutation.args[0] as { hostId: RuntimeHostId }).hostId)
+            return response
+          },
           request: context.req.raw,
           userID: ctx.userId,
         }),

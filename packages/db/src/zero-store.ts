@@ -103,6 +103,14 @@ const snapshotFromZeroRows = (
     llmCredentials: rowsOf('llmCredentials').map(withMemberId),
     workspaceConnections: rowsOf('workspaceConnections').map((connection) => withoutPosition(withMemberId(connection))),
     runtimeHosts: rowsOf('runtimeHosts').map(({ lastSeenAt, createdBy, createdAt, removedAt, ...host }) => host),
+    runtimes: rowsOf('runtimes').map(({ workspaceId, id, chatId, hostId, state, failure }) => ({
+      workspaceId,
+      id,
+      chatId,
+      hostId,
+      state,
+      failure,
+    })),
   }
   return snapshot as Snapshot
 }

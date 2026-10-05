@@ -38,6 +38,14 @@ export const keepPlaceholderSecret = (tx: Transaction, workspaceId: string, ref:
 export const discardPlaceholderSecret = (tx: Transaction, workspaceId: string, ref: string) =>
   onServer(tx, 'delete from placeholder_secrets where workspace_id = $1 and ref = $2', [workspaceId, ref])
 
+export const placeholderSecretOf = async (tx: Transaction, workspaceId: string, ref: string) =>
+  (
+    (await onServer(tx, 'select value from placeholder_secrets where workspace_id = $1 and ref = $2', [
+      workspaceId,
+      ref,
+    ])) as { value: string }[]
+  )[0]?.value
+
 export const lockMembership = (tx: Transaction, workspaceId: string, userId: string) =>
   onServer(tx, 'select 1 from memberships where workspace_id = $1 and user_id = $2 for update', [workspaceId, userId])
 
@@ -47,7 +55,7 @@ export const enqueueJob = (
 ) =>
   onServer(
     tx,
-    `insert into jobs (workspace_id, id, type, payload, run_at, attempts, state) values ($1, $2, $3, $4::jsonb, now() + make_interval(secs => $5::double precision / 1000), 0, 'queued')`,
+    `insert into jobs (workspace_id, id, type, payload, run_at, attempts, state) values ($1, $2, $3, $4::jsonb, now() + make_interval(secs => $5::double precision / 1000), 0, 'queued') on conflict do nothing`,
     [job.workspaceId, crypto.randomUUID(), job.type, JSON.stringify(job.payload), job.delayMilliseconds],
   )
 
@@ -78,6 +86,55 @@ export const findRuntimeHostBySecretHash = async (tx: Transaction, secret: Runti
       [hash],
     )
   )[0] as (RuntimeHostKey & { claimed: boolean }) | undefined
+
+const runtimeLocks = {
+  id: 'id = $2 for update',
+  chat: 'chat_id = $2 for update',
+  host: "host_id = $2 and state <> 'removed' for update",
+  sweepable: "state in ('running', 'stopped') for update skip locked",
+}
+
+export const lockRuntimes = async (
+  tx: Transaction,
+  workspaceId: string,
+  scope: keyof typeof runtimeLocks,
+  key?: string,
+) => {
+  if (scope === 'chat')
+    await onServer(tx, 'select 1 from chats where workspace_id = $1 and id = $2 for update', [workspaceId, key])
+  const rows = await onServer(
+    tx,
+    `select id from runtimes where workspace_id = $1 and ${runtimeLocks[scope]}`,
+    key === undefined ? [workspaceId] : [workspaceId, key],
+  )
+  return (rows as { id: string }[]).map((row) => row.id)
+}
+
+export const lockRuntimeHostLoads = async (tx: Transaction, workspaceId: string) =>
+  (await onServer(
+    tx,
+    `select id as "hostId", status = 'online' as online, coalesce((capacity->>'cap')::int, 0) as cap,
+       (select count(*)::int from runtimes where runtimes.workspace_id = runtime_hosts.workspace_id
+          and runtimes.host_id = runtime_hosts.id and runtimes.state in ('creating', 'starting', 'running', 'stopping')
+       ) as running
+     from runtime_hosts where workspace_id = $1 and removed_at is null for update`,
+    [workspaceId],
+  )) as { hostId: string; online: boolean; cap: number; running: number }[]
+
+export const runtimeApiKeyRefOf = async (tx: Transaction, workspaceId: string, runtimeId: string) =>
+  (
+    (await onServer(tx, 'select api_key_ref from runtimes where workspace_id = $1 and id = $2', [
+      workspaceId,
+      runtimeId,
+    ])) as { api_key_ref: string | null }[]
+  )[0]?.api_key_ref ?? undefined
+
+export const setRuntimeApiKeyRef = (tx: Transaction, workspaceId: string, runtimeId: string, ref: string) =>
+  onServer(tx, 'update runtimes set api_key_ref = $3 where workspace_id = $1 and id = $2', [
+    workspaceId,
+    runtimeId,
+    ref,
+  ])
 
 type ChatEvent = {
   workspaceId: string

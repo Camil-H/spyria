@@ -1,0 +1,1 @@
+ALTER PUBLICATION "hq_zero" ADD TABLE "runtimes" ("workspace_id", "chat_id", "id", "host_id", "state", "failure", "image", "last_active_at", "created_at", "state_changed_at");
