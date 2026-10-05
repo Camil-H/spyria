@@ -10,6 +10,8 @@ const serverOnlySql = [
   'into jobs',
   'into llm_credentials',
   'placeholder_secrets',
+  'claim_code_hash',
+  'token_hash',
 ]
 
 const failures: string[] = []

@@ -23,5 +23,18 @@ export default drizzleZeroConfig(tables, {
     browserPages: true,
     sources: true,
     usageEntries: true,
+    runtimeHosts: {
+      workspaceId: true,
+      id: true,
+      name: true,
+      claimExpiresAt: true,
+      status: true,
+      capacity: true,
+      runningRuntimes: true,
+      lastSeenAt: true,
+      createdBy: true,
+      createdAt: true,
+      removedAt: true,
+    },
   },
 })

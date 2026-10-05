@@ -43,6 +43,27 @@ export const waitFor = async (isDone: () => boolean | Promise<boolean>) => {
 
 const sharedAppId = 'hqtest'
 
+export const requestMutation = async (
+  app: { request: (path: string, init: RequestInit) => Response | Promise<Response> },
+  database: Database,
+  { workspaceId, userId }: { workspaceId: string; userId: string },
+  name: string,
+  args: Record<string, unknown>,
+) => {
+  const response = await app.request(`/api/mutate?schema=${sharedAppId}_0&appID=${sharedAppId}`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${await sessionTokenOf(database, workspaceId, userId)}` },
+    body: JSON.stringify({
+      clientGroupID: crypto.randomUUID(),
+      mutations: [{ type: 'custom', id: 1, clientID: crypto.randomUUID(), name, args: [args], timestamp: Date.now() }],
+      pushVersion: 1,
+      timestamp: Date.now(),
+      requestID: crypto.randomUUID(),
+    }),
+  })
+  return ((await response.json()) as { mutations: { result: unknown }[] }).mutations[0]?.result
+}
+
 const startSharedTestApp = async () => {
   const testDatabase = await createTestDatabase()
   const { database } = testDatabase
@@ -61,26 +82,8 @@ const startSharedTestApp = async () => {
     await stopServerAndDatabase()
     throw error
   })
-  const resultOf = async (
-    { workspaceId, userId }: { workspaceId: string; userId: string },
-    name: string,
-    args: Record<string, unknown>,
-  ) => {
-    const response = await app.request(`/api/mutate?schema=${sharedAppId}_0&appID=${sharedAppId}`, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${await sessionTokenOf(database, workspaceId, userId)}` },
-      body: JSON.stringify({
-        clientGroupID: crypto.randomUUID(),
-        mutations: [
-          { type: 'custom', id: 1, clientID: crypto.randomUUID(), name, args: [args], timestamp: Date.now() },
-        ],
-        pushVersion: 1,
-        timestamp: Date.now(),
-        requestID: crypto.randomUUID(),
-      }),
-    })
-    return ((await response.json()) as { mutations: { result: unknown }[] }).mutations[0]?.result
-  }
+  const resultOf = (member: { workspaceId: string; userId: string }, name: string, args: Record<string, unknown>) =>
+    requestMutation(app, database, member, name, args)
   const eventsOf = async (chatId: string) =>
     (await database.select().from(events))
       .filter((event) => event.chatId === chatId)

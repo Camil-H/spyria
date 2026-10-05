@@ -1,0 +1,24 @@
+{
+  "name": "@hq/runtime",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/client.ts",
+    "./server": "./src/server.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@hq/db": "workspace:*",
+    "@hq/kernel": "workspace:*",
+    "@hq/ui": "workspace:*",
+    "@rocicorp/zero": "1.9.0",
+    "react": "19.3.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0"
+  }
+}

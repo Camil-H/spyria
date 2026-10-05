@@ -29,6 +29,18 @@ The app signs in through Dex in a popup (allow popups for `localhost:5173`). The
 
 `bun run dev` sets dev values for `HQ_TOKEN_SECRET`, `HQ_OIDC_ISSUER`, `HQ_OIDC_CLIENT_ID`, `HQ_OIDC_REDIRECT_URI` and `HQ_APP_ORIGIN`; the server refuses to start without them.
 
+## Adding a runtime host for dev
+
+Runtimes (Agent Servers) run on runtime hosts: any machine with Docker running the `hq-host` container, which dials out to HQ.
+
+```sh
+docker build -t hq-host apps/host
+```
+
+Then, signed in as a workspace admin (Alice), open the workspace menu, **Workspace settings**, **Add runtime host**, give it a name and copy the command. On a Mac (OrbStack or Docker Desktop), switch **Rootless Docker** off, and in the copied command replace `localhost` with `host.docker.internal` (the container cannot reach the Mac's `localhost`) and `$(stat -c %g /var/run/docker.sock)` with `0`. The row turns Online within seconds. The first runtime pulls the Agent Server image (about 1.2 GB).
+
+Without Docker for `hq-host` itself, run it as a process against the local Docker: `HQ_HOST_STATE_DIR=.hq-host bun apps/host/src/main.ts http://localhost:5173/h/<code>`. Remove the host in the settings page when done, then `docker rm -f hq-host` and `docker volume rm hq-host`.
+
 ## Day to day
 
 ```sh

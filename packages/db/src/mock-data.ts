@@ -108,9 +108,9 @@ export const createMockSnapshot = (): Snapshot => ({
     { id: globex, name: 'Globex' },
   ],
   memberships: [
-    { memberId: alice, workspaceId: acme, displayName: 'Alice' },
-    { memberId: bob, workspaceId: acme, displayName: 'Bob' },
-    { memberId: alice, workspaceId: globex, displayName: 'Alice' },
+    { memberId: alice, workspaceId: acme, displayName: 'Alice', role: 'admin' },
+    { memberId: bob, workspaceId: acme, displayName: 'Bob', role: 'member' },
+    { memberId: alice, workspaceId: globex, displayName: 'Alice', role: 'admin' },
   ],
   projects: [
     { id: onboarding, workspaceId: acme, name: 'Onboarding', archived: false },
@@ -244,4 +244,5 @@ export const createMockSnapshot = (): Snapshot => ({
     workspaceConnection(alice, 'Onyx', 'All sources'),
     workspaceConnection(bob, 'Postgres', '1 of 5 tables'),
   ],
+  runtimeHosts: [],
 })

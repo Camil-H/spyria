@@ -51,6 +51,34 @@ export const enqueueJob = (
     [job.workspaceId, crypto.randomUUID(), job.type, JSON.stringify(job.payload), job.delayMilliseconds],
   )
 
+const secretHashColumns = { claimCode: 'claim_code_hash', token: 'token_hash' }
+type RuntimeHostSecret = keyof typeof secretHashColumns
+type RuntimeHostKey = { workspaceId: string; id: string }
+
+export const setRuntimeHostSecretHash = (
+  tx: Transaction,
+  host: RuntimeHostKey,
+  secret: RuntimeHostSecret,
+  hash: string,
+) =>
+  onServer(tx, `update runtime_hosts set ${secretHashColumns[secret]} = $3 where workspace_id = $1 and id = $2`, [
+    host.workspaceId,
+    host.id,
+    hash,
+  ])
+
+export const lockRuntimeHost = (tx: Transaction, workspaceId: string, id: string) =>
+  onServer(tx, 'select 1 from runtime_hosts where workspace_id = $1 and id = $2 for update', [workspaceId, id])
+
+export const findRuntimeHostBySecretHash = async (tx: Transaction, secret: RuntimeHostSecret, hash: string) =>
+  (
+    await onServer(
+      tx,
+      `select workspace_id as "workspaceId", id, token_hash is not null as claimed from runtime_hosts where ${secretHashColumns[secret]} = $1 for update`,
+      [hash],
+    )
+  )[0] as (RuntimeHostKey & { claimed: boolean }) | undefined
+
 type ChatEvent = {
   workspaceId: string
   chatId: string

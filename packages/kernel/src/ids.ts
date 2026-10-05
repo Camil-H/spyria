@@ -8,6 +8,7 @@ export type ChatId = Brand<'ChatId'>
 export type MemberId = Brand<'MemberId'>
 export type MessageId = Brand<'MessageId'>
 export type CredentialId = Brand<'CredentialId'>
+export type RuntimeHostId = Brand<'RuntimeHostId'>
 
 export const workspaceId = (value: string) => value as WorkspaceId
 export const projectId = (value: string) => value as ProjectId
@@ -15,3 +16,4 @@ export const chatId = (value: string) => value as ChatId
 export const memberId = (value: string) => value as MemberId
 export const messageId = (value: string) => value as MessageId
 export const credentialId = (value: string) => value as CredentialId
+export const runtimeHostId = (value: string) => value as RuntimeHostId

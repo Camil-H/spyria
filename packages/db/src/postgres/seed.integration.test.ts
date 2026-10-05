@@ -31,7 +31,7 @@ const readSnapshot = async () => {
       id: workspaceId,
       name,
     })),
-    memberships: memberships.map(({ role, ...membership }) => userAsMember(membership)),
+    memberships: memberships.map(userAsMember),
     projects: (await database.select().from(tables.projects).orderBy(tables.projects.createdAt)).map(
       ({ createdAt, ...project }) => project,
     ),
@@ -76,6 +76,7 @@ const readSnapshot = async () => {
     browserPages: await database.select().from(tables.browserPages),
     sources: await database.select().from(tables.sources),
     usageEntries: (await database.select().from(tables.usageEntries)).map(userAsMember),
+    runtimeHosts: await database.select().from(tables.runtimeHosts),
   }
 }
 

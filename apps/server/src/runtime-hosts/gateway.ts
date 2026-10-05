@@ -1,0 +1,238 @@
+import type { Database } from '@hq/db/postgres'
+import { schema } from '@hq/db/zero'
+import type { RuntimeHostId, WorkspaceId } from '@hq/kernel'
+import {
+  type ConnectedHost,
+  createHostSessionHandlers,
+  HostRefused,
+  type HostSessionFrame,
+  parseHostSessionFrame,
+  type SandboxLocation,
+  type SandboxProvider,
+  type SandboxResponse,
+  type SandboxSocketListener,
+  type SandboxStatus,
+} from '@hq/runtime/server'
+import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
+import { upgradeWebSocket } from 'hono/bun'
+import type { WSContext } from 'hono/ws'
+
+type Frame = { type?: unknown; id?: unknown; sid?: unknown; [field: string]: unknown }
+type HostSessionHandlers = ReturnType<typeof createHostSessionHandlers>
+type Connection = {
+  socket: WSContext
+  identified?: { host: ConnectedHost; token: string; handlers: HostSessionHandlers }
+  missedPings: number
+  pending: Map<number, PromiseWithResolvers<Frame>>
+  streams: Map<number, SandboxSocketListener>
+}
+
+const refusedCloseCode = 4001
+const replacedCloseCode = 4002
+const requestTimeoutMilliseconds = 180_000
+const identifyTimeoutMilliseconds = 10_000
+
+const errorNameOf = (error: unknown) => (error instanceof Error ? error.name : 'an unknown error')
+const frameOf = (text: string): Frame => {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return {}
+  }
+}
+
+export const createRuntimeHostGateway = ({
+  databases,
+  pingIntervalMilliseconds = 25_000,
+}: {
+  databases: () => Iterable<Database>
+  pingIntervalMilliseconds?: number
+}) => {
+  const connectionByHost = new Map<string, Connection>()
+  const operationChains = new Map<string, Promise<unknown>>()
+  const keyOf = ({ workspaceId, hostId }: ConnectedHost) => `${workspaceId}/${hostId}`
+  let nextRequestId = 1
+
+  const inOrder = <Result>(key: string, work: () => Promise<Result>) => {
+    const result = (operationChains.get(key) ?? Promise.resolve()).then(work, work)
+    const settled = result.catch(() => {})
+    operationChains.set(key, settled)
+    settled.then(() => operationChains.get(key) === settled && operationChains.delete(key))
+    return result
+  }
+
+  const firstAccepted = async <Result>(attempt: (handlers: HostSessionHandlers) => Promise<Result>) => {
+    let lastRefusal: unknown
+    for (const database of databases()) {
+      const handlers = createHostSessionHandlers((work) => zeroDrizzle(schema, database).transaction(work))
+      try {
+        return { handlers, result: await attempt(handlers) }
+      } catch (error) {
+        if (!(error instanceof HostRefused) || !['code_not_valid', 'host_not_registered'].includes(error.code))
+          throw error
+        lastRefusal = error
+      }
+    }
+    throw lastRefusal
+  }
+
+  const sendTo = (connection: Connection, frame: object) => connection.socket.send(JSON.stringify(frame))
+
+  const release = (connection: Connection) => {
+    const { pending, streams, identified } = connection
+    for (const { reject } of pending.values()) reject(new Error('The runtime host disconnected'))
+    for (const listener of streams.values()) listener.onClose()
+    streams.clear()
+    if (!identified || connectionByHost.get(keyOf(identified.host)) !== connection) return
+    connectionByHost.delete(keyOf(identified.host))
+    inOrder(identified.token, () => identified.handlers.offline(identified.host)).catch((error) =>
+      console.error(`Marking runtime host ${identified.host.hostId} offline failed with ${errorNameOf(error)}`),
+    )
+  }
+
+  const identify = async (connection: Connection, frame: HostSessionFrame) => {
+    if (frame.type === 'claim') {
+      const { result } = await firstAccepted((handlers) => handlers.claim(frame.code))
+      return sendTo(connection, { type: 'token', token: result.token })
+    }
+    if (frame.type !== 'hello') return connection.socket.close(refusedCloseCode, 'This host is not registered')
+    const { handlers, result: host } = await firstAccepted((handlers) =>
+      inOrder(frame.token, () => handlers.hello(frame)),
+    )
+    const replaced = connectionByHost.get(keyOf(host))
+    connection.identified = { host, token: frame.token, handlers }
+    connectionByHost.set(keyOf(host), connection)
+    replaced?.socket.close(replacedCloseCode, 'Replaced by a newer connection of this host')
+  }
+
+  const settle = (connection: Connection, frame: Frame) => {
+    const requestId = Number(frame.id ?? frame.sid)
+    if (frame.type === 'res' || frame.type === 'http_res') {
+      const pending = connection.pending.get(requestId)
+      return typeof frame.error === 'string' ? pending?.reject(new Error(frame.error)) : pending?.resolve(frame)
+    }
+    const listener = connection.streams.get(requestId)
+    if (frame.type === 'ws_open') listener?.onOpen()
+    if (frame.type === 'ws_msg') listener?.onMessage(String(frame.data))
+    if (frame.type === 'ws_close' && connection.streams.delete(requestId)) listener?.onClose()
+  }
+
+  const receive = async (connection: Connection, text: string) => {
+    const frame = frameOf(text)
+    if (frame.type === 'pong') {
+      connection.missedPings = 0
+      return
+    }
+    const sessionFrame = parseHostSessionFrame(frame)
+    const { identified } = connection
+    if (!identified)
+      return sessionFrame
+        ? identify(connection, sessionFrame)
+        : connection.socket.close(refusedCloseCode, 'This host is not registered')
+    if (sessionFrame?.type === 'heartbeat')
+      return inOrder(identified.token, () => identified.handlers.heartbeat(identified.host, sessionFrame))
+    settle(connection, frame)
+  }
+
+  const upgrade = upgradeWebSocket(() => {
+    const connection: Connection = {
+      socket: undefined as never,
+      missedPings: 0,
+      pending: new Map(),
+      streams: new Map(),
+    }
+    let pingTimer: ReturnType<typeof setInterval> | undefined
+    let identifyTimer: ReturnType<typeof setTimeout> | undefined
+    return {
+      onOpen: (_, socket) => {
+        connection.socket = socket
+        identifyTimer = setTimeout(
+          () => !connection.identified && socket.close(1008, 'No hello in time'),
+          identifyTimeoutMilliseconds,
+        )
+        pingTimer = setInterval(() => {
+          if (connection.missedPings >= 2) return socket.close(1001, 'Missed two pings')
+          connection.missedPings++
+          sendTo(connection, { type: 'ping' })
+        }, pingIntervalMilliseconds)
+      },
+      onMessage: (event, socket) =>
+        receive(connection, String(event.data)).catch((error) => {
+          if (error instanceof HostRefused) return socket.close(refusedCloseCode, error.message)
+          console.error(`A runtime host connection failed with ${errorNameOf(error)}`)
+          socket.close(1011, 'Internal error')
+        }),
+      onClose: () => {
+        clearInterval(pingTimer)
+        clearTimeout(identifyTimer)
+        release(connection)
+      },
+    }
+  })
+
+  const connectionOf = (sandbox: SandboxLocation) => {
+    const connection = connectionByHost.get(keyOf(sandbox))
+    if (!connection) throw new Error(`Runtime host ${sandbox.hostId} is not connected`)
+    return connection
+  }
+
+  const request = (sandbox: SandboxLocation, frame: object) => {
+    const connection = connectionOf(sandbox)
+    const id = nextRequestId++
+    const response = Promise.withResolvers<Frame>()
+    const timer = setTimeout(
+      () => response.reject(new Error(`Runtime host ${sandbox.hostId} did not answer in time`)),
+      requestTimeoutMilliseconds,
+    )
+    connection.pending.set(id, response)
+    sendTo(connection, { ...frame, id, sid: id, runtimeId: sandbox.runtimeId })
+    return response.promise.finally(() => {
+      clearTimeout(timer)
+      connection.pending.delete(id)
+    })
+  }
+
+  const command = async (sandbox: SandboxLocation, op: string, args: object = {}) =>
+    (await request(sandbox, { type: 'cmd', op, args: { runtimeId: sandbox.runtimeId, ...args } })).data
+
+  const commandWithoutResult = (op: string) => async (sandbox: SandboxLocation) => {
+    await command(sandbox, op)
+  }
+
+  const sandboxProvider: SandboxProvider = {
+    create: async ({ image, apiKey, ...sandbox }) => {
+      await command(sandbox, 'create', { image, apiKey })
+    },
+    start: commandWithoutResult('start'),
+    stop: commandWithoutResult('stop'),
+    remove: commandWithoutResult('remove'),
+    status: async (sandbox) => (await command(sandbox, 'status')) as SandboxStatus,
+    connect: (sandbox) => ({
+      fetch: async (sandboxRequest) => {
+        const { status, headers, body } = await request(sandbox, { type: 'http', ...sandboxRequest })
+        return { status, headers, body } as SandboxResponse
+      },
+      openSocket: (path, listener) => {
+        const connection = connectionOf(sandbox)
+        const sid = nextRequestId++
+        connection.streams.set(sid, listener)
+        sendTo(connection, { type: 'ws_connect', sid, runtimeId: sandbox.runtimeId, path })
+        return {
+          send: (data) => sendTo(connection, { type: 'ws_msg', sid, data }),
+          close: () => {
+            if (connection.streams.delete(sid)) sendTo(connection, { type: 'ws_close', sid })
+          },
+        }
+      },
+    }),
+  }
+
+  return {
+    upgrade,
+    sandboxProvider,
+    disconnect: (workspaceId: WorkspaceId, hostId: RuntimeHostId) =>
+      connectionByHost.get(keyOf({ workspaceId, hostId }))?.socket.close(1000, 'Removed'),
+  }
+}
+
+export type RuntimeHostGateway = ReturnType<typeof createRuntimeHostGateway>

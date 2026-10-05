@@ -55,4 +55,11 @@ export const queries = defineQueries({
   browserPages: defineQuery(({ ctx }) => zql.browserPages.where('workspaceId', ctx.workspaceId)),
   sources: defineQuery(({ ctx }) => zql.sources.where('workspaceId', ctx.workspaceId)),
   usageEntries: defineQuery(({ ctx }) => zql.usageEntries.where('workspaceId', ctx.workspaceId)),
+  runtimeHosts: defineQuery(({ ctx }) =>
+    zql.runtimeHosts
+      .where('workspaceId', ctx.workspaceId)
+      .where(({ cmpLit }) => cmpLit(ctx.role, '=', 'admin'))
+      .where('removedAt', 'IS', null)
+      .orderBy('createdAt', 'asc'),
+  ),
 })

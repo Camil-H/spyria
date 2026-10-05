@@ -1,0 +1,9 @@
+{
+  "name": "@hq/host",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "build": "bun build --compile --minify src/main.ts --outfile dist/hq-host"
+  }
+}

@@ -9,5 +9,9 @@ export default defineConfig({
   plugins: [tailwindcss(), react(), babel({ presets: [reactCompilerPreset()] })],
   cacheDir: process.env.HQ_VITE_CACHE_DIR,
   build: { chunkSizeWarningLimit: 800 },
-  server: { port: 5173, strictPort: true, proxy: { '/auth': serverUrl, '/api': serverUrl } },
+  server: {
+    port: 5173,
+    strictPort: true,
+    proxy: { '/auth': serverUrl, '/api': serverUrl, '^/host$': { target: serverUrl, ws: true } },
+  },
 })

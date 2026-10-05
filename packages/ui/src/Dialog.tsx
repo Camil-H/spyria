@@ -4,11 +4,13 @@ import { ghostButtonClass } from './classes.ts'
 export const Dialog = ({
   label,
   subject,
+  closeLabel = 'Cancel',
   onClose,
   children,
 }: {
   label: string
   subject?: string
+  closeLabel?: string
   onClose: () => void
   children: ReactNode
 }) => {
@@ -27,7 +29,7 @@ export const Dialog = ({
       {subject && <p className="-mt-2 truncate text-sm text-muted">{subject}</p>}
       {children}
       <button type="button" className={ghostButtonClass} onClick={onClose}>
-        Cancel
+        {closeLabel}
       </button>
     </dialog>
   )

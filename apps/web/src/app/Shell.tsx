@@ -3,8 +3,9 @@ import { StoreProvider } from '@hq/db/react'
 import { chatId as toChatId, type WorkspaceId } from '@hq/kernel'
 import { PanelProvider, PanelToggle, SidePanel } from '@hq/panel'
 import { ProfileProvider, ProfileView, useHasLlmCredential } from '@hq/profile'
+import { RuntimeHostsSection, RuntimeProvider } from '@hq/runtime'
 import { SessionProvider } from '@hq/session'
-import { WorkspaceLayout, WorkspaceProvider } from '@hq/workspace'
+import { useIsWorkspaceAdmin, WorkspaceLayout, WorkspaceProvider } from '@hq/workspace'
 import { BrowserRouter, Link, Navigate, Route, Routes, useOutletContext, useParams } from 'react-router'
 import type { Application } from './factory.ts'
 
@@ -28,34 +29,52 @@ const ChatRoute = () => {
   )
 }
 
+const SettingsRoute = () => {
+  const workspaceId = useOutletContext<WorkspaceId>()
+  const isAdmin = useIsWorkspaceAdmin(workspaceId)
+  return (
+    <div className="flex max-w-3xl flex-col gap-8 p-6">
+      <h1 className="text-2xl font-semibold">Workspace settings</h1>
+      {isAdmin ? (
+        <RuntimeHostsSection workspaceId={workspaceId} />
+      ) : (
+        <p className="text-muted">Only workspace admins can see this page</p>
+      )}
+    </div>
+  )
+}
+
 export const App = ({ app }: { app: Application }) => (
   <StoreProvider store={app.store}>
     <SessionProvider session={app.session}>
       <WorkspaceProvider commands={app.workspaceCommands}>
         <ConversationProvider commands={app.conversationCommands}>
           <ProfileProvider commands={app.profileCommands}>
-            <BrowserRouter>
-              <PanelProvider>
-                <Routes>
-                  <Route
-                    path="/w/:workspaceId"
-                    element={<WorkspaceLayout chatAdornment={(chatId) => <ChatIndicators chatId={chatId} />} />}
-                  >
-                    <Route index element={<p className="p-6 text-muted">Select a chat</p>} />
-                    <Route path="chats/:chatId" element={<ChatRoute />} />
+            <RuntimeProvider commands={app.runtimeCommands}>
+              <BrowserRouter>
+                <PanelProvider>
+                  <Routes>
                     <Route
-                      path="profile"
-                      element={
-                        <div className="p-6">
-                          <ProfileView />
-                        </div>
-                      }
-                    />
-                  </Route>
-                  <Route path="*" element={<Navigate to={`/w/${app.session.defaultWorkspaceId}`} replace />} />
-                </Routes>
-              </PanelProvider>
-            </BrowserRouter>
+                      path="/w/:workspaceId"
+                      element={<WorkspaceLayout chatAdornment={(chatId) => <ChatIndicators chatId={chatId} />} />}
+                    >
+                      <Route index element={<p className="p-6 text-muted">Select a chat</p>} />
+                      <Route path="chats/:chatId" element={<ChatRoute />} />
+                      <Route path="settings" element={<SettingsRoute />} />
+                      <Route
+                        path="profile"
+                        element={
+                          <div className="p-6">
+                            <ProfileView />
+                          </div>
+                        }
+                      />
+                    </Route>
+                    <Route path="*" element={<Navigate to={`/w/${app.session.defaultWorkspaceId}`} replace />} />
+                  </Routes>
+                </PanelProvider>
+              </BrowserRouter>
+            </RuntimeProvider>
           </ProfileProvider>
         </ConversationProvider>
       </WorkspaceProvider>

@@ -1,0 +1,1 @@
+ALTER PUBLICATION "hq_zero" ADD TABLE "runtime_hosts" ("workspace_id", "id", "name", "claim_expires_at", "status", "capacity", "running_runtimes", "last_seen_at", "created_by", "created_at", "removed_at");

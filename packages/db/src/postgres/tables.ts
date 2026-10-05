@@ -15,7 +15,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
 import { defineRelations } from 'drizzle-orm/relations'
-import type { DiffLine } from '../schema.ts'
+import type { DiffLine, RuntimeHostCapacity } from '../schema.ts'
 
 const table = snakeCase.table
 const instant = () => timestamp({ withTimezone: true, mode: 'date' })
@@ -283,6 +283,26 @@ export const jobs = table(
       .on(table.workspaceId)
       .where(sql`${table.type} = 'sessions.sweep' and ${table.state} = 'queued'`),
   ],
+)
+
+export const runtimeHosts = table(
+  'runtime_hosts',
+  {
+    ...tenant,
+    id: text().notNull(),
+    name: text().notNull(),
+    claimCodeHash: text().unique(),
+    claimExpiresAt: instant(),
+    tokenHash: text().unique(),
+    status: text().$type<'waiting' | 'online' | 'offline' | 'expired'>().notNull(),
+    capacity: jsonb().$type<RuntimeHostCapacity>(),
+    runningRuntimes: integer().notNull(),
+    lastSeenAt: instant(),
+    createdBy: text().notNull(),
+    createdAt: instant().notNull(),
+    removedAt: instant(),
+  },
+  (table) => [primaryKey({ columns: [table.workspaceId, table.id] }), memberReference(table, table.createdBy)],
 )
 
 export const files = table(

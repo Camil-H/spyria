@@ -7,6 +7,7 @@ import {
 import { createZeroStore, type Store, type WorkspaceSession } from '@hq/db/zero-store'
 import { type MemberId, type WorkspaceId, workspaceId } from '@hq/kernel'
 import { createHttpLlmCredentialAdder, type ProfileCommands, profileMutators } from '@hq/profile/server'
+import { createHttpRuntimeHostCommands, type RuntimeCommands, runtimeMutators } from '@hq/runtime/server'
 import type { Session } from '@hq/session'
 import { type WorkspaceCommands, workspaceMutators } from '@hq/workspace/server'
 import { logOut, openSession, renew, signInWithPopup } from './auth.ts'
@@ -25,6 +26,7 @@ export type Application = {
   workspaceCommands: WorkspaceCommands
   conversationCommands: ConversationCommands
   profileCommands: ProfileCommands
+  runtimeCommands: RuntimeCommands
 }
 
 export const createApp = async (
@@ -37,7 +39,7 @@ export const createApp = async (
     sessions,
     renew,
     cacheURL: testStack?.zeroCacheURL ?? zeroCacheURL,
-    mutators: { ...workspaceMutators, ...conversationMutators, ...profileMutators },
+    mutators: { ...workspaceMutators, ...conversationMutators, ...profileMutators, ...runtimeMutators },
     draftStorage: localStorage,
   })
   await store.whenLoaded(defaultWorkspaceId)
@@ -57,6 +59,12 @@ export const createApp = async (
       ...overrides,
     }) as Commands
   const drafts = createStoreDraftRepository(store)
+  const postAsMember = (workspaceId: WorkspaceId, path: string, body?: string) =>
+    fetch(path, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${store.tokenOf(workspaceId)}`, 'content-type': 'application/json' },
+      body,
+    })
   return {
     store,
     session: {
@@ -94,13 +102,8 @@ export const createApp = async (
       },
     }),
     profileCommands: commandsOf<ProfileCommands>(profileMutators.profile, {
-      addLlmCredential: createHttpLlmCredentialAdder((workspaceId, path, body) =>
-        fetch(path, {
-          method: 'POST',
-          headers: { authorization: `Bearer ${store.tokenOf(workspaceId)}`, 'content-type': 'application/json' },
-          body,
-        }),
-      ),
+      addLlmCredential: createHttpLlmCredentialAdder(postAsMember),
     }),
+    runtimeCommands: commandsOf<RuntimeCommands>(runtimeMutators.runtime, createHttpRuntimeHostCommands(postAsMember)),
   }
 }

@@ -59,9 +59,12 @@ const snapshotFromZeroRows = (
   const snapshot: Unbranded<Snapshot> = {
     workspaces: workspaces.map(({ workspaceId, name }) => ({ id: workspaceId, name })),
     memberships: uniqueBy(
-      [...workspaces.map(({ workspaceId }) => ({ workspaceId, userId: viewerId, displayName: '' })), ...memberships],
+      [
+        ...workspaces.map(({ workspaceId }) => ({ workspaceId, userId: viewerId, displayName: '', role: 'member' })),
+        ...memberships,
+      ],
       (membership) => `${membership.workspaceId}/${membership.userId}`,
-    ).map(({ workspaceId, userId, displayName }) => ({ workspaceId, memberId: userId, displayName })),
+    ).map(({ workspaceId, userId, displayName, role }) => ({ workspaceId, memberId: userId, displayName, role })),
     projects: rowsOf('projects').map(withoutCreatedAt),
     chats: rowsOf('chats').map(({ ownerKind, ownerUserId, ownerServiceIdentityId, mode, createdAt, ...chat }) => ({
       ...chat,
@@ -99,6 +102,7 @@ const snapshotFromZeroRows = (
     chatMembers: rowsOf('chatParticipants').map(withMemberId),
     llmCredentials: rowsOf('llmCredentials').map(withMemberId),
     workspaceConnections: rowsOf('workspaceConnections').map((connection) => withoutPosition(withMemberId(connection))),
+    runtimeHosts: rowsOf('runtimeHosts').map(({ lastSeenAt, createdBy, createdAt, removedAt, ...host }) => host),
   }
   return snapshot as Snapshot
 }

@@ -1,4 +1,5 @@
 import { createDatabase } from '@hq/db/postgres'
+import { websocket } from 'hono/bun'
 import { createApp } from './app.ts'
 import { enqueueSessionSweeps } from './auth/sessions.ts'
 import { startJobWorker } from './job-worker.ts'
@@ -23,4 +24,4 @@ const app = createApp({
 startJobWorker(database)
 await enqueueSessionSweeps(database)
 
-export default { port: 3000, hostname: '0.0.0.0', fetch: app.fetch }
+export default { port: 3000, hostname: '0.0.0.0', fetch: app.fetch, websocket }

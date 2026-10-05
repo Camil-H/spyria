@@ -1,0 +1,283 @@
+import { type ChildProcess, execFileSync, spawn } from 'node:child_process'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { test as base, expect, mainOf, openMenu, type Page } from './fixtures'
+
+const hostProgram = new URL('../../host/src/main.ts', import.meta.url).pathname
+const gibibyte = 1024 ** 3
+
+type HostSystem = { cpus: number; memoryBytes: number; rootless: boolean; limitsEnforced: boolean }
+type HostProcess = { output: () => string; exited: Promise<number | null>; stop: () => Promise<void> }
+type FakeHost = { closed: Promise<string> }
+type Hosts = {
+  start: (url: string, stateDirectory?: string) => HostProcess
+  newStateDirectory: () => string
+  fake: (url: string, system: Partial<HostSystem>) => FakeHost
+}
+
+const test = base.extend<{ hosts: Hosts }>({
+  hosts: async ({ browserName: _ }, use) => {
+    const processes: ChildProcess[] = []
+    const sockets: WebSocket[] = []
+    const stateDirectories: string[] = []
+    const newStateDirectory = () => {
+      const directory = mkdtempSync(join(tmpdir(), 'hq-test-host-'))
+      stateDirectories.push(directory)
+      return directory
+    }
+    await use({
+      newStateDirectory,
+      start: (url, stateDirectory = newStateDirectory()) => {
+        const child = spawn('bun', [hostProgram, url], {
+          env: { ...process.env, HQ_HOST_STATE_DIR: stateDirectory, HQ_HOST_PREFIX: 'hq-test-e2e-' },
+          stdio: ['ignore', 'pipe', 'pipe'],
+        })
+        processes.push(child)
+        let output = ''
+        const collect = (chunk: Buffer) => {
+          output += chunk.toString()
+        }
+        child.stdout?.on('data', collect)
+        child.stderr?.on('data', collect)
+        const exited = new Promise<number | null>((resolve) => child.on('exit', resolve))
+        return {
+          output: () => output,
+          exited,
+          stop: async () => {
+            if (child.exitCode !== null || child.signalCode !== null) return
+            child.kill('SIGTERM')
+            await exited
+          },
+        }
+      },
+      fake: (url, system) => {
+        const { origin, pathname } = new URL(url)
+        const socket = new WebSocket(`${origin.replace(/^http/, 'ws')}/host`)
+        sockets.push(socket)
+        const send = (frame: object) => socket.send(JSON.stringify(frame))
+        socket.onopen = () => send({ type: 'claim', code: pathname.split('/').at(-1) })
+        socket.onmessage = (message) => {
+          const frame = JSON.parse(String(message.data))
+          if (frame.type === 'ping') send({ type: 'pong' })
+          if (frame.type === 'token')
+            send({
+              type: 'hello',
+              token: frame.token,
+              system: {
+                cpus: 4,
+                memoryBytes: 8 * gibibyte,
+                dockerVersion: '29.0.0',
+                rootless: false,
+                cgroupDriver: 'systemd',
+                limitsEnforced: true,
+                ...system,
+              },
+            })
+        }
+        return { closed: new Promise((resolve) => socket.addEventListener('close', (event) => resolve(event.reason))) }
+      },
+    })
+    for (const socket of sockets) socket.close()
+    for (const child of processes) if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM')
+    for (const directory of stateDirectories) rmSync(directory, { recursive: true, force: true })
+  },
+})
+
+const settingsOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Runtime hosts' })
+const hostRowOf = (page: Page, hostName: string) => settingsOf(page).getByRole('listitem').filter({ hasText: hostName })
+const addDialogOf = (page: Page) => page.getByRole('dialog', { name: 'Add runtime host' })
+const commandOf = (page: Page, dialogName = 'Add runtime host') =>
+  page.getByRole('dialog', { name: dialogName }).getByRole('textbox', { name: 'Command' })
+const urlOf = (command: string) => command.split(' ').at(-1) ?? ''
+
+const openSettings = async (page: Page) => {
+  await openMenu(page)
+  await page.getByRole('menuitem', { name: 'Workspace settings' }).click()
+  await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Workspace settings' })).toBeVisible()
+}
+
+const addHost = async (page: Page, hostName: string) => {
+  await settingsOf(page).getByRole('button', { name: 'Add runtime host' }).click()
+  await addDialogOf(page).getByRole('textbox', { name: 'Host name' }).fill(hostName)
+  await addDialogOf(page).getByRole('button', { name: 'Add' }).click()
+  const command = await commandOf(page).inputValue()
+  await addDialogOf(page).getByRole('button', { name: 'Close' }).click()
+  return urlOf(command)
+}
+
+const dockerSystem = () => {
+  const info = JSON.parse(execFileSync('docker', ['info', '--format', '{{json .}}']).toString())
+  return {
+    cpus: info.NCPU as number,
+    memoryBytes: info.MemTotal as number,
+    rootless: ((info.SecurityOptions ?? []) as string[]).some((option) => option.includes('rootless')),
+  }
+}
+
+const expectOnline = async (page: Page, hostName: string) =>
+  expect(hostRowOf(page, hostName)).toContainText('Online', { timeout: 10_000 })
+
+test.beforeEach(async ({ page }) => {
+  await page.goto('/')
+})
+
+test.describe('1. access', () => {
+  test('an admin opens Workspace settings from the menu and sees an empty Runtime hosts section', async ({ page }) => {
+    await openSettings(page)
+    await expect(settingsOf(page).getByRole('heading', { level: 2, name: 'Runtime hosts' })).toBeVisible()
+    await expect(settingsOf(page).getByText('No runtime host yet')).toBeVisible()
+  })
+
+  test.describe('as a member', () => {
+    test.use({ signedInAs: 'member-bob' })
+
+    test('a member has no settings menu item and the settings URL is refused', async ({ page }) => {
+      await openMenu(page)
+      await expect(page.getByRole('menuitem', { name: 'Workspace settings' })).toHaveCount(0)
+      await page.keyboard.press('Escape')
+      await page.goto('/w/workspace-acme/settings')
+      await expect(mainOf(page).getByText('Only workspace admins can see this page')).toBeVisible()
+      await expect(settingsOf(page)).toHaveCount(0)
+    })
+  })
+})
+
+test('2. adding a host shows a copyable docker run command with a rootless switch', async ({
+  page,
+  context,
+  baseURL,
+}) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  await openSettings(page)
+  await settingsOf(page).getByRole('button', { name: 'Add runtime host' }).click()
+  await addDialogOf(page).getByRole('textbox', { name: 'Host name' }).fill('Home server')
+  await addDialogOf(page).getByRole('button', { name: 'Add' }).click()
+
+  const rootlessSwitch = addDialogOf(page).getByRole('switch', { name: 'Rootless Docker' })
+  await expect(rootlessSwitch).toBeChecked()
+  const rootlessCommand = await commandOf(page).inputValue()
+  expect(rootlessCommand).toContain('docker run')
+  expect(rootlessCommand).toContain('--restart unless-stopped')
+  expect(rootlessCommand).toContain('-v $XDG_RUNTIME_DIR/docker.sock:/var/run/docker.sock')
+  expect(urlOf(rootlessCommand)).toMatch(new RegExp(`^${baseURL}/h/[A-HJ-NP-Z2-9]{8}$`))
+
+  await rootlessSwitch.click()
+  await expect(rootlessSwitch).not.toBeChecked()
+  const rootedCommand = await commandOf(page).inputValue()
+  expect(rootedCommand).toContain('-v /var/run/docker.sock:/var/run/docker.sock')
+  expect(rootedCommand).not.toContain('XDG_RUNTIME_DIR')
+  expect(urlOf(rootedCommand)).toBe(urlOf(rootlessCommand))
+
+  await addDialogOf(page).getByRole('button', { name: 'Copy' }).click()
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(rootedCommand)
+  await addDialogOf(page).getByRole('button', { name: 'Close' }).click()
+  await expect(addDialogOf(page)).toHaveCount(0)
+  await expect(hostRowOf(page, 'Home server')).toContainText('Waiting for the host')
+})
+
+test('3. starting hq-host with the displayed URL turns the row Online with its capacity', async ({ page, hosts }) => {
+  await openSettings(page)
+  hosts.start(await addHost(page, 'Home server'))
+  await expectOnline(page, 'Home server')
+  const { cpus, memoryBytes, rootless } = dockerSystem()
+  const cap = Math.max(1, Math.floor((memoryBytes - 2 * gibibyte) / gibibyte))
+  const row = hostRowOf(page, 'Home server')
+  await expect(row).toContainText(`${cpus} CPUs`)
+  await expect(row).toContainText(`${(memoryBytes / gibibyte).toFixed(1)} GB`)
+  await expect(row).toContainText(`0 / ${cap}`)
+  await expect(row.getByText(rootless ? 'Rootless' : 'Rooted', { exact: true })).toBeVisible()
+})
+
+test('4. a code works once: a second hq-host with the same URL is refused and the first stays online', async ({
+  page,
+  hosts,
+}) => {
+  await openSettings(page)
+  const url = await addHost(page, 'Home server')
+  hosts.start(url)
+  await expectOnline(page, 'Home server')
+  const secondHost = hosts.start(url)
+  expect(await secondHost.exited).not.toBe(0)
+  expect(secondHost.output()).toContain('This code was already used')
+  await expect(hostRowOf(page, 'Home server')).toContainText('Online')
+})
+
+test('5. an expired code is refused, the row shows Code expired and New command pairs the same row', async ({
+  page,
+  hosts,
+  workerStack,
+}) => {
+  await openSettings(page)
+  const expiredUrl = await addHost(page, 'Home server')
+  await workerStack.database.$client`update runtime_hosts set claim_expires_at = now() - interval '1 second'`
+  await expect(hostRowOf(page, 'Home server')).toContainText('Code expired')
+  const refusedHost = hosts.start(expiredUrl)
+  expect(await refusedHost.exited).not.toBe(0)
+  expect(refusedHost.output()).toContain('This code has expired')
+
+  await hostRowOf(page, 'Home server').getByRole('button', { name: 'New command' }).click()
+  const freshUrl = urlOf(await commandOf(page, 'New command').inputValue())
+  expect(freshUrl).not.toBe(expiredUrl)
+  await page.getByRole('dialog', { name: 'New command' }).getByRole('button', { name: 'Close' }).click()
+  await expect(hostRowOf(page, 'Home server')).toContainText('Waiting for the host')
+  hosts.start(freshUrl)
+  await expectOnline(page, 'Home server')
+  await expect(settingsOf(page).getByRole('listitem')).toHaveCount(1)
+})
+
+test('6. a stopped host goes Offline and comes back Online with its stored token', async ({ page, hosts }) => {
+  await openSettings(page)
+  const url = await addHost(page, 'Home server')
+  const stateDirectory = hosts.newStateDirectory()
+  const firstRun = hosts.start(url, stateDirectory)
+  await expectOnline(page, 'Home server')
+  await firstRun.stop()
+  await expect(hostRowOf(page, 'Home server')).toContainText('Offline', { timeout: 60_000 })
+  hosts.start(url, stateDirectory)
+  await expectOnline(page, 'Home server')
+})
+
+test('7. removing an online host asks for confirmation, disconnects it and refuses it afterwards', async ({
+  page,
+  hosts,
+}) => {
+  await openSettings(page)
+  const host = hosts.start(await addHost(page, 'Home server'))
+  await expectOnline(page, 'Home server')
+  await hostRowOf(page, 'Home server').getByRole('button', { name: 'Remove' }).click()
+  const confirmation = page.getByRole('dialog', { name: 'Remove runtime host' })
+  await expect(confirmation).toContainText('Home server')
+  await confirmation.getByRole('button', { name: 'Remove' }).click()
+  await expect(hostRowOf(page, 'Home server')).toHaveCount(0)
+  await expect(settingsOf(page).getByText('No runtime host yet')).toBeVisible()
+  expect(await host.exited).not.toBe(0)
+  expect(host.output()).toContain('This host was removed')
+})
+
+test('8. a host paired in Acme never appears in the settings of Globex', async ({ page, hosts }) => {
+  await openSettings(page)
+  hosts.fake(await addHost(page, 'Acme box'), {})
+  await expectOnline(page, 'Acme box')
+  await page.goto('/w/workspace-globex/settings')
+  await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Workspace settings' })).toBeVisible()
+  await expect(settingsOf(page).getByText('No runtime host yet')).toBeVisible()
+  await expect(settingsOf(page).getByRole('listitem')).toHaveCount(0)
+})
+
+test('9. badges show rooted Docker and limits that are not enforced', async ({ page, hosts }) => {
+  await openSettings(page)
+  hosts.fake(await addHost(page, 'Rooted box'), { rootless: false, limitsEnforced: true })
+  hosts.fake(await addHost(page, 'Rootless box'), { rootless: true, limitsEnforced: false })
+  await expectOnline(page, 'Rooted box')
+  await expectOnline(page, 'Rootless box')
+  const rootedRow = hostRowOf(page, 'Rooted box')
+  const rootlessRow = hostRowOf(page, 'Rootless box')
+  await expect(rootedRow.getByText('Rooted', { exact: true })).toBeVisible()
+  await expect(rootedRow.getByText('Limits not enforced')).toHaveCount(0)
+  await expect(rootlessRow.getByText('Rootless', { exact: true })).toBeVisible()
+  await expect(rootlessRow.getByText('Limits not enforced')).toBeVisible()
+  await expect(rootedRow).toContainText('4 CPUs')
+  await expect(rootedRow).toContainText('8.0 GB')
+  await expect(rootedRow).toContainText('0 / 6')
+})

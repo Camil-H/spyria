@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test'
 import { createDatabase } from '@hq/db/postgres'
 import { llmCredentialsPath } from '@hq/profile/server'
+import { runtimeHostsPath } from '@hq/runtime/server'
 import { createApp } from './app.ts'
 import { issueSessionToken } from './auth/session-tokens.ts'
 import { testAuthSettings } from './testing.ts'
@@ -8,7 +9,12 @@ import { testAuthSettings } from './testing.ts'
 const unreachableDatabase = createDatabase('postgres://unused:unused@127.0.0.1:1/unused')
 const app = createApp({ database: unreachableDatabase, ...testAuthSettings })
 
-const contextServerEntries = ['@hq/workspace/server', '@hq/conversation/server', '@hq/profile/server']
+const contextServerEntries = [
+  '@hq/workspace/server',
+  '@hq/conversation/server',
+  '@hq/profile/server',
+  '@hq/runtime/server',
+]
 
 test('serves health', async () => {
   const server = Bun.serve({ port: 0, fetch: app.fetch })
@@ -21,7 +27,7 @@ test('the dev token endpoint is gone', async () => {
   expect((await app.request('/auth/dev-token', { method: 'POST', body: '{}' })).status).toBe(404)
 })
 
-test.each(['/api/query', '/api/mutate', llmCredentialsPath])(
+test.each(['/api/query', '/api/mutate', llmCredentialsPath, runtimeHostsPath, `${runtimeHostsPath}/host-1/code`])(
   '%s refuses a request without a bearer token',
   async (path) => {
     const response = await app.request(path, { method: 'POST', body: '[]' })

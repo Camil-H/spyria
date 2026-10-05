@@ -8,7 +8,7 @@
   "scripts": {
     "typecheck": "bun run --filter '*' typecheck",
     "lint": "biome check .",
-    "test": "bun test ./packages ./apps/server --path-ignore-patterns='**/*.integration.test.ts'",
+    "test": "bun test ./packages ./apps/server ./apps/host --path-ignore-patterns='**/*.integration.test.ts'",
     "test:integration": "bun test --preload ./apps/server/src/integration-setup.ts .integration.test.ts",
     "dev": "COMPOSE_PROFILES=zero bun run stack:up && bun run --filter '@hq/server' --filter '@hq/web' dev",
     "test:e2e": "bun run --cwd apps/web test:e2e",

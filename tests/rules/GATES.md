@@ -19,7 +19,7 @@ Every rule of the architecture standard (`.claude/skills/architecture`) and what
 | L9a | Read path bypasses operations | depcruise layer rules (only entrypoints may import `queries/`) |
 | L9b | Queries return frozen shapes | review |
 | L9c | Concrete read path | review |
-| L10a | Deciding reads through the unit of work | review: repositories come from each context's `UnitOfWork` |
+| L10a | Deciding reads through the unit of work | review: repositories come from each context's `UnitOfWork`; runtime host reads lock the row first (`lockRuntimeHost`, `for update` on the hash lookups), proven by integration `runtime-hosts` "removing a host ... refuses its token afterwards" (a lost update undid removals before the lock) |
 | L10b | Operations never import queries | depcruise `operations-import-contracts-and-domain` |
 | L11 | Bulk access is a declared shape | review |
 | B1 | One published surface | depcruise `context-reachable-only-through-its-entries` (entries `client`, `server`, `published`, see `decisions.md`) |
@@ -40,10 +40,11 @@ Every rule of the architecture standard (`.claude/skills/architecture`) and what
 | V4a | Immutable value objects | review |
 | V4b | Invariants on construction | unit `domain.test.ts` of workspace (`Name`), conversation (`MessageBody`), profile (`DisplayName`, `Secret`) |
 | V6 | Self-redacting values | unit `profile/src/domain/domain.test.ts` "Secret redacts itself in text, JSON and inspection" |
+| RS5 | Deadlines | review: a host request times out after 180 s on the server; a relayed HTTP call after the caller's `timeoutMilliseconds`, at most 120 s, on `hq-host`; an unidentified host socket is closed after 10 s |
 | G3 | Config-derived ids from a map | review |
-| G4a | Credentials in a redacting type | `Secret` (V6); integration `profile-mutators` "adding a credential ... logging nothing" |
-| S2 | Queries carry a tenant scope | every synced query takes `ctx` (`packages/db/src/zero-queries.ts`); integration `api` "crafted query arguments cannot reach another workspace or member" |
-| S3 | Cross-tenant denial tests | integration `constraints` "refuses %s" (cross-tenant writes), `api` crafted queries, `auth` "Bob ... reads Acme only", `workspace-mutators` and `conversation-mutators` "refuses arguments naming another workspace", `api` "a Globex connection stays in Globex" |
+| G4a | Credentials in a redacting type | `Secret` (V6); integration `profile-mutators` "adding a credential ... logging nothing"; runtime host claim codes and tokens are stored as sha256 only and never logged: integration `runtime-hosts` "... whose hash only is stored", "neither a claim code nor a host token is ever logged" (console spies on server paths) |
+| S2 | Queries carry a tenant scope | every synced query takes `ctx` (`packages/db/src/zero-queries.ts`); `runtimeHosts` also requires `ctx.role = 'admin'`; integration `api` "crafted query arguments cannot reach another workspace or member", `runtime-hosts` "only the admins of the workspace read its hosts through Zero, never a hash" |
+| S3 | Cross-tenant denial tests | integration `constraints` "refuses %s" (cross-tenant writes), `api` crafted queries, `auth` "Bob ... reads Acme only", `workspace-mutators` and `conversation-mutators` "refuses arguments naming another workspace", `api` "a Globex connection stays in Globex", `runtime-hosts` "a member cannot remove a host and the admin of another workspace cannot reach it", "renewing refuses a member and the admin of another workspace"; e2e `runtime-hosts` 1 and 8 |
 | TX1a | Operation owns its boundary | typecheck: operations take the context's `Transactor` and run in `run(work)` |
 | TX1b | Repositories from the handle | review: `UnitOfWork` is the only source |
 | TX2 | Savepoints | `apps/server/src/job-worker.ts` savepoint per handler; integration `jobs` "a throwing job is retried ..." |
@@ -70,7 +71,7 @@ Every rule of the architecture standard (`.claude/skills/architecture`) and what
 | T1b | Transport fakes only at the transport | review |
 | T2a | Units against stubs | review |
 | T2b | Substitution through contracts | review: no `mock.module` in the repository |
-| T3 | Real dependencies in containers | integration tests on the compose Postgres 18 from a template (`packages/db/src/postgres/test-database.ts`) and one shared zero-cache (`apps/server/src/testing.ts`); e2e on real zero-cache and Dex |
+| T3 | Real dependencies in containers | integration tests on the compose Postgres 18 from a template (`packages/db/src/postgres/test-database.ts`) and one shared zero-cache (`apps/server/src/testing.ts`); e2e on real zero-cache and Dex; integration `sandbox` drives the local Docker through a real `hq-host` (skipped with a message when Docker or the pinned image is missing) |
 | T9a | Parametrized matrices | review (`test.each` in `constraints.integration.test.ts`) |
 | T9b | Composed requests asserted | review |
 | T10 | Critical journeys end to end | Playwright `apps/web/e2e/*.spec.ts` against the full stack per worker |
@@ -91,6 +92,10 @@ Every rule of the architecture standard (`.claude/skills/architecture`) and what
 | Zero publication = Zero schema | integration `schema` "the zero publication replicates exactly ..." |
 | Server code never reaches client code | depcruise `server-and-published-entries-never-reach-client-code`, `postgres-drizzle-and-server-never-reach-client-code`, `zero-schema-queries-and-server-writes-never-reach-client-or-server-only-code`; unit `app.test.ts` "loads every context server entry without React or client code" |
 | Test code unreachable from production | depcruise `test-only-modules-unreachable-from-production-entries`; integration `auth` "without test hooks ..." |
+| `hq-host` is self-contained | depcruise `host-imports-nothing-from-hq` (also bare `@hq/` specifiers), `host-imported-by-nothing`; proven by probe imports |
+| `hq-host` command set | unit `apps/host/src/commands.test.ts`: only create, start, stop, remove and status, the image prefix, no extra request field (host paths, ports, privileges, capabilities, network, user, environment), runtime id and API key patterns, relay paths on the Agent Server origin only |
+| Agent Server hardening | unit `commands.test.ts` "creates the container with exactly the hardening flags"; integration `sandbox` inspects the created container's `HostConfig` (user 10001, `CapDrop ALL`, `no-new-privileges`, read-only root, 2 GiB, 2 CPUs, 512 PIDs, no port, no bind, named volumes only) |
+| Runtime host secrets never replicated | `claim_code_hash` and `token_hash` are left out of the Zero schema and the `hq_zero` column list (integration `schema` "the zero publication replicates exactly ...", `runtime-hosts` publication check); bundle gate fails on `claim_code_hash` or `token_hash` in client assets |
 
 ## Dormant
 
@@ -110,7 +115,6 @@ Every rule of the architecture standard (`.claude/skills/architecture`) and what
 | E6 | Unwrap aggregated errors | the first task group |
 | E7 | Cancellation propagates | the first cancellable work (Phase 2 streaming) |
 | RS4 | Retry budget | the first network dependency beyond Postgres (Phase 2 Gateway, Agent Server) |
-| RS5 | Deadlines | same as RS4 |
 | RS7 | Circuit breakers | same as RS4 |
 | AS3 | Async-local scoped state | the first implicitly propagated scope (trace context, Phase 2) |
 | T4 | Published fakes | a context consumes another's fake |

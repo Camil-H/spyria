@@ -1,10 +1,12 @@
 import { createDatabase, type Database } from '@hq/db/postgres'
 import { databaseUrlOf } from '@hq/db/testing'
+import { websocket } from 'hono/bun'
 import { setCookie } from 'hono/cookie'
 import { createApp } from './app.ts'
 import { sessionCookieOptions, setSessionCookie, testCookie } from './auth/routes.ts'
 import { openSessions } from './auth/sessions.ts'
 import { startJobWorker } from './job-worker.ts'
+import { createRuntimeHostGateway } from './runtime-hosts/gateway.ts'
 import { issueTestSession, testAuthSettings } from './testing.ts'
 
 type ServedDatabase = { database: Database; jobWorker: ReturnType<typeof startJobWorker> }
@@ -26,7 +28,16 @@ const releaseDatabase = async (databaseName: string) => {
 
 const { appOrigin } = testAuthSettings
 
-const app = createApp({ database: createDatabase(), ...testAuthSettings, testDatabaseByName: databaseByName })
+const runtimeHosts = createRuntimeHostGateway({
+  databases: () => [...servedDatabaseByName.values()].map((served) => served.database),
+})
+
+const app = createApp({
+  database: createDatabase(),
+  ...testAuthSettings,
+  testDatabaseByName: databaseByName,
+  runtimeHosts,
+})
   .post('/test/release-database', async (context) => {
     await releaseDatabase(context.req.query('db') ?? '')
     return context.body(null, 204)
@@ -44,4 +55,4 @@ const app = createApp({ database: createDatabase(), ...testAuthSettings, testDat
     return context.json(await issueTestSession(databaseByName(db), workspace, user, db))
   })
 
-export default { port: Number(process.env.PORT ?? 3100), hostname: '0.0.0.0', fetch: app.fetch }
+export default { port: Number(process.env.PORT ?? 3100), hostname: '0.0.0.0', fetch: app.fetch, websocket }

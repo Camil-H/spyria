@@ -1,4 +1,4 @@
-const contexts = '(workspace|conversation|profile|panel)'
+const contexts = '(workspace|conversation|profile|panel|runtime)'
 const contextLayers = ['domain', 'contracts', 'operations', 'queries', 'integrations', 'entrypoints']
 const contextEntry = (entry) => `^packages/${contexts}/src/${entry}\\.ts$`
 const clientEntry = contextEntry('client')
@@ -128,6 +128,18 @@ module.exports = {
       severity: 'error',
       from: { path: '^apps/server/' },
       to: { path: '^(apps|packages)/', pathNot: ['^apps/server/', serverEntry, '^packages/(kernel|db)/'] },
+    },
+    {
+      name: 'host-imports-nothing-from-hq',
+      severity: 'error',
+      from: { path: '^apps/host/' },
+      to: { path: ['^(apps|packages)/', '^@hq/'], pathNot: '^apps/host/' },
+    },
+    {
+      name: 'host-imported-by-nothing',
+      severity: 'error',
+      from: { pathNot: '^apps/host/' },
+      to: { path: '^apps/host/' },
     },
     {
       name: 'packages-never-import-apps',

@@ -68,17 +68,9 @@ const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
         ),
       ),
     )
-  await transaction.insert(tables.memberships).values(
-    snapshot.memberships.map((membership) => ({
-      workspaceId: membership.workspaceId,
-      userId: membership.memberId,
-      role:
-        creatorByWorkspace.get(membership.workspaceId) === membership.memberId
-          ? ('admin' as const)
-          : ('member' as const),
-      displayName: membership.displayName,
-    })),
-  )
+  await transaction
+    .insert(tables.memberships)
+    .values(snapshot.memberships.map(({ memberId, ...membership }) => ({ ...membership, userId: memberId })))
   await transaction.insert(tables.projects).values(snapshot.projects.map(createdInOrder))
   await transaction.insert(tables.chats).values(
     snapshot.chats.map(({ ownerId, ...chat }, index) => ({

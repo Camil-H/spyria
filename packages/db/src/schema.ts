@@ -1,7 +1,26 @@
-import type { ChatId, CredentialId, MemberId, MessageId, ProjectId, WorkspaceId } from '@hq/kernel'
+import type { ChatId, CredentialId, MemberId, MessageId, ProjectId, RuntimeHostId, WorkspaceId } from '@hq/kernel'
 
 type WorkspaceRow = { id: WorkspaceId; name: string }
-type MembershipRow = { memberId: MemberId; workspaceId: WorkspaceId; displayName: string }
+type MembershipRow = { memberId: MemberId; workspaceId: WorkspaceId; displayName: string; role: 'admin' | 'member' }
+export type RuntimeHostCapacity = {
+  cpus: number
+  memoryBytes: number
+  dockerVersion: string
+  rootless: boolean
+  cgroupDriver: string
+  limitsEnforced: boolean
+  cap: number
+  memoryFreeBytes?: number
+}
+export type RuntimeHostRow = {
+  workspaceId: WorkspaceId
+  id: RuntimeHostId
+  name: string
+  status: 'waiting' | 'online' | 'offline' | 'expired'
+  claimExpiresAt: number | null
+  capacity: RuntimeHostCapacity | null
+  runningRuntimes: number
+}
 type ProjectRow = { id: ProjectId; workspaceId: WorkspaceId; name: string; archived: boolean }
 export type ChatRow = {
   id: ChatId
@@ -113,6 +132,7 @@ export type Snapshot = {
   chatMembers: readonly ChatMemberRow[]
   llmCredentials: readonly LlmCredentialRow[]
   workspaceConnections: readonly WorkspaceConnectionRow[]
+  runtimeHosts: readonly RuntimeHostRow[]
 }
 
 type ChatScoped = { workspaceId: WorkspaceId; chatId: ChatId }

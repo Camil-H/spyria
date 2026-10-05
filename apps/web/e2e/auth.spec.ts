@@ -25,7 +25,14 @@ const signInThroughDex = async (page: Page, email: string) => {
   await popupClosed
 }
 
-const alicesWorkspacesSignedIn = ['New workspace', 'Acme', 'Log out of Acme', 'Globex', 'Log out of Globex']
+const alicesWorkspacesSignedIn = [
+  'New workspace',
+  'Acme',
+  'Log out of Acme',
+  'Globex',
+  'Log out of Globex',
+  'Workspace settings',
+]
 
 test.use({ signedInAs: null })
 

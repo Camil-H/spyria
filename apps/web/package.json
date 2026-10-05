@@ -14,6 +14,7 @@
     "@hq/kernel": "workspace:*",
     "@hq/panel": "workspace:*",
     "@hq/profile": "workspace:*",
+    "@hq/runtime": "workspace:*",
     "@hq/session": "workspace:*",
     "@hq/workspace": "workspace:*",
     "@openhands/ui": "1.0.0-beta.9",

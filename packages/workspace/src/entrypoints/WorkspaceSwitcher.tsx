@@ -3,13 +3,14 @@ import type { WorkspaceId } from '@hq/kernel'
 import { useSession } from '@hq/session'
 import { buttonClass, Dialog, focusRing, menuContentClass } from '@hq/ui'
 import { Content, Item, Root, Trigger } from '@radix-ui/react-dropdown-menu'
-import { LogOut, Plus } from 'lucide-react'
+import { LogOut, Plus, Settings } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { listWorkspaces } from '../queries/list-workspaces.ts'
 import { NameDialog } from './NameDialog.tsx'
 import { useWorkspaceCommands } from './providers.tsx'
 import { menuItemClass } from './ui.ts'
+import { useIsWorkspaceAdmin } from './useIsWorkspaceAdmin.ts'
 
 type OpenDialog = { kind: 'new' } | { kind: 'logOut'; workspaceId: WorkspaceId; workspaceName: string } | null
 
@@ -18,6 +19,7 @@ export const WorkspaceSwitcher = ({ workspaceId }: { workspaceId: WorkspaceId })
   const commands = useWorkspaceCommands()
   const { memberId, signedInWorkspaceIds, signOut } = useSession()
   const workspaces = useQuery(listWorkspaces(memberId))
+  const isAdmin = useIsWorkspaceAdmin(workspaceId)
   const [openDialog, setOpenDialog] = useState<OpenDialog>(null)
   const closeDialog = () => setOpenDialog(null)
   return (
@@ -58,6 +60,15 @@ export const WorkspaceSwitcher = ({ workspaceId }: { workspaceId: WorkspaceId })
               )}
             </div>
           ))}
+          {isAdmin && (
+            <Item
+              className={`${menuItemClass} justify-start gap-2`}
+              onSelect={() => navigate(`/w/${workspaceId}/settings`)}
+            >
+              <Settings aria-hidden className="size-4" />
+              Workspace settings
+            </Item>
+          )}
         </Content>
       </Root>
       {openDialog?.kind === 'new' && (
