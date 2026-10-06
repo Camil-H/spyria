@@ -58,22 +58,26 @@ test.describe('1. first prompt', () => {
   })
 })
 
-test('2. streams the reply into one agent message that grows, then becomes the stored message', async ({
-  page,
-  agentScript,
-}) => {
-  await agentScript(research, { wordDelayMilliseconds: 700 })
-  await openChat(page, 'Research')
-  await sendMessage(page, 'Stream it slowly')
+test.describe('real Agent Server', () => {
+  test.use({ agentServer: 'real' })
 
-  const reply = messageItemsOf(page).nth(1)
-  await expect(reply).toContainText('Understood,', agentReply)
-  expect(await reply.textContent()).not.toContain(agentReplyText)
-  await expect(reply).toContainText('Agent')
-  await expect(reply).toContainText(agentReplyText, agentReply)
-  await expect(workingIndicatorOf(page)).toHaveCount(0)
-  await expect(itemsWith(page, 'Understood,')).toHaveCount(1, agentReply)
-  await expect(messageItemsOf(page)).toHaveCount(2)
+  test('2. streams the reply into one agent message that grows, then becomes the stored message', async ({
+    page,
+    agentScript,
+  }) => {
+    await agentScript(research, { wordDelayMilliseconds: 700 })
+    await openChat(page, 'Research')
+    await sendMessage(page, 'Stream it slowly')
+
+    const reply = messageItemsOf(page).nth(1)
+    await expect(reply).toContainText('Understood,', agentReply)
+    expect(await reply.textContent()).not.toContain(agentReplyText)
+    await expect(reply).toContainText('Agent')
+    await expect(reply).toContainText(agentReplyText, agentReply)
+    await expect(workingIndicatorOf(page)).toHaveCount(0)
+    await expect(itemsWith(page, 'Understood,')).toHaveCount(1, agentReply)
+    await expect(messageItemsOf(page)).toHaveCount(2)
+  })
 })
 
 test('4. shows a terminal command as a tool call with its output, followed by the final message', async ({

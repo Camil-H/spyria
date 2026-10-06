@@ -64,7 +64,9 @@ bun run stack:down    # stop the containers, the gateway included (data is kept 
 ## Checks
 
 ```sh
+bun run check:related      # while iterating: lint, typecheck and boundaries, then only the affected tests (see below)
 bun run check:all          # everything below in order, failing fast; starts Postgres and Dex (not the gateway), leaves the stack running
+bun run check:all --verify # does the last check:all match the current tree, and did it pass?
 bun run typecheck
 bun run test
 bun run test:integration   # needs bun run stack:up; runs its own gateway (hq-test-gateway-integration on 4880)
@@ -73,3 +75,9 @@ bun run lint
 bun run check:bundle       # builds the app, main chunk at most 760 kB, one React, no server-only SQL
 bun run test:e2e           # starts its own stack per worker and one gateway (hq-test-gateway-e2e on 4881)
 ```
+
+`check:related [--base <ref>]` takes the uncommitted changes plus the commits since `<ref>` (default `HEAD`). It runs the unit and integration test files that changed or import a changed module, directly or not (dependency-cruiser's graph), and Playwright `--only-changed=<ref>` when a spec imports a changed module. It prints what it selected and why. It runs a whole suite when it cannot decide: a changed file outside the module graph (lock file, config, SQL, infra) runs every suite, `integration-setup.ts` runs every integration test, and an e2e harness file (`test-server.ts`, `testing.ts`, the fake LLM and Agent Server, `global-setup.ts`, `playwright.config.ts`) runs the whole e2e suite. App code that e2e reaches only through the servers is left to `check:all`.
+
+`check:all` writes its full output to `.check/last-check-all.log` and a summary to `.check/last-check-all.json`: the `git stash create` fingerprint (HEAD when the tree is clean), HEAD, the tree hash of the working tree including untracked files, the exit code, and each step's result and duration. `--verify` compares that tree hash with the current tree.
+
+e2e tests talk to a fake Agent Server by default (`agentServer: 'fake'`): the test server connects one fake runtime host per worker database, and its Agent Server runs the same fake LLM scripts through the real relay and gateway, running commands with `bash` and editing files in a temporary directory. Tests marked `test.use({ agentServer: 'real' })` pair a real `hq-host` with Docker Agent Servers on their worker the first time one runs there. That smoke set is runtime-ui 2 (cold start end to end), agent-bridge 2 (streamed reply), agent-steps 14 (real shell commands, exit 0 and exit 3), runtime-ui 6 (Stop), runtime-ui 3 (resume after the idle stop) and gateway 2 (one prompt per member key through the relay and Bifrost); run it alone with `bun run test:e2e --grep "real Agent Server"`.

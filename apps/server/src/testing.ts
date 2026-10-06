@@ -178,7 +178,16 @@ export type FakeAgentServer = {
     onMessage(data: string): void
     onClose(): void
   }
+  stopped?(container: FakeContainer): void
 }
+export type ModelCall = (request: {
+  path?: string
+  headers?: Record<string, string>
+  body?: string
+  onChunk?: (data: string) => void
+  signal?: AbortSignal
+  timeoutMilliseconds?: number
+}) => Promise<{ status: number | undefined; body: string; ended: string | undefined }>
 export type FakeHost = Awaited<ReturnType<ReturnType<typeof createFakeHosts>['fakeHost']>>
 const gibibyte = 1024 ** 3
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex')
@@ -201,7 +210,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
     const heldReplies = new Map<string, Promise<void>>()
     const failingOps = new Set<string>()
     const streams = new Map<number, ReturnType<FakeAgentServer['connect']>>()
-    const modelCalls = new Map<number, { frames: HostFrame[]; done: () => void }>()
+    const modelCalls = new Map<number, { frames: HostFrame[]; done: () => void; onChunk?: (data: string) => void }>()
     const receivedFrames: string[] = []
     let nextModelCallId = 1
     const run = (op: string, { runtimeId = '', apiKey = '' }: Record<string, string>) => {
@@ -209,7 +218,10 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
       const container = containers.get(runtimeId)
       if (op === 'create') containers.set(runtimeId, { running: false, apiKey })
       if (op === 'start' && container) container.running = true
-      if (op === 'stop' && container) container.running = false
+      if ((op === 'stop' || op === 'remove') && container) {
+        container.running = false
+        agentServer?.stopped?.(container)
+      }
       if (op === 'remove') containers.delete(runtimeId)
       if (op === 'status') return container ? (container.running ? 'running' : 'stopped') : 'missing'
       return null
@@ -227,21 +239,26 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
         return resolve
       },
       receivedFrames,
-      modelCall: async ({
+      modelCall: (async ({
         path = '/v1/chat/completions',
         headers = {},
         body = '',
-      }: {
-        path?: string
-        headers?: Record<string, string>
-        body?: string
+        onChunk,
+        signal,
+        timeoutMilliseconds = 20_000,
       }) => {
         const sid = nextModelCallId++
         const { promise, resolve } = Promise.withResolvers<void>()
         const frames: HostFrame[] = []
-        modelCalls.set(sid, { frames, done: resolve })
+        const cancel = () => {
+          socket?.send(JSON.stringify({ type: 'gw_cancel', sid }))
+          resolve()
+        }
+        signal?.addEventListener('abort', cancel)
+        modelCalls.set(sid, { frames, done: resolve, onChunk })
         socket?.send(JSON.stringify({ type: 'gw_req', sid, method: 'POST', path, headers, body }))
-        await Promise.race([promise, Bun.sleep(20_000)])
+        await Promise.race([promise, Bun.sleep(timeoutMilliseconds)])
+        signal?.removeEventListener('abort', cancel)
         modelCalls.delete(sid)
         const head = frames.find((frame) => frame.type === 'gw_head')
         return {
@@ -249,7 +266,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
           body: frames.map((frame) => frame.data ?? '').join(''),
           ended: frames.at(-1)?.type,
         }
-      },
+      }) satisfies ModelCall,
       lifecycleCommands: () =>
         commands.filter(({ op }) => ['create', 'start', 'stop', 'remove'].includes(op)).map(({ op }) => op),
       closed: () => closed,
@@ -264,6 +281,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
           const modelCall = modelCalls.get(frame.sid ?? 0)
           if (modelCall && frame.type.startsWith('gw_')) {
             modelCall.frames.push(frame)
+            if (frame.type === 'gw_chunk') modelCall.onChunk?.(frame.data ?? '')
             if (frame.type === 'gw_end' || frame.type === 'gw_error') modelCall.done()
             return
           }
@@ -339,6 +357,8 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
       },
       disconnect: async () => {
         connectedHosts.delete(host)
+        for (const stream of streams.values()) stream.onClose()
+        streams.clear()
         socket?.close()
         await waitFor(async () => (await hostStatus(id)) !== 'online')
       },

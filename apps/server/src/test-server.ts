@@ -8,6 +8,7 @@ import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { websocket } from 'hono/bun'
 import { setCookie } from 'hono/cookie'
 import { createAgentBridge } from './agent-bridge/bridge.ts'
+import { createFakeAgentServer } from './agent-bridge/fake-agent-server.ts'
 import { createApp, defaultLlm } from './app.ts'
 import { sessionCookieOptions, setSessionCookie, testCookie } from './auth/routes.ts'
 import { openSessions } from './auth/sessions.ts'
@@ -15,7 +16,7 @@ import { createFakeLlm, type FakeLlmScript } from './fake-llm.ts'
 import { startJobWorker } from './job-worker.ts'
 import { createModelCallRelay } from './llm-relay.ts'
 import { createRuntimeHostGateway } from './runtime-hosts/gateway.ts'
-import { issueTestSession, testAuthSettings } from './testing.ts'
+import { createFakeHosts, type FakeHost, issueTestSession, testAuthSettings } from './testing.ts'
 
 const port = Number(process.env.PORT ?? 3100)
 
@@ -23,6 +24,7 @@ type ServedDatabase = { database: Database; jobWorker: ReturnType<typeof startJo
 const servedDatabaseByName = new Map<string, ServedDatabase>()
 const databasesFailingCreation = new Set<string>()
 const databasesWithoutGateway = new Set<string>()
+const fakeHostByDatabase = new Map<string, { host: FakeHost; isOnline: boolean }>()
 const nameOf = (database: Database) =>
   [...servedDatabaseByName].find(([, served]) => served.database === database)?.[0] ?? ''
 const llmGateway = createLlmGateway({
@@ -49,6 +51,9 @@ const databaseByName = (databaseName: string) => {
 }
 
 const releaseDatabase = async (databaseName: string) => {
+  const fakeHost = fakeHostByDatabase.get(databaseName)
+  fakeHostByDatabase.delete(databaseName)
+  if (fakeHost?.isOnline) await fakeHost.host.disconnect().catch(() => {})
   const served = servedDatabaseByName.get(databaseName)
   servedDatabaseByName.delete(databaseName)
   await served?.jobWorker.stop()
@@ -111,6 +116,23 @@ const app = createApp({
     if (reachable === 'false') databasesWithoutGateway.add(db)
     else databasesWithoutGateway.delete(db)
     return context.body(null, 204)
+  })
+  .post('/test/fake-host', async (context) => {
+    const { db = '', online } = context.req.query()
+    let fakeHost = fakeHostByDatabase.get(db)
+    if (!fakeHost) {
+      const fake = createFakeAgentServer({ modelCall: () => created.modelCall })
+      const created = await createFakeHosts({ port, database: databaseByName(db) }).fakeHost('e2e fake host', {
+        memoryGibibytes: 16,
+        agentServer: fake.agentServer,
+      })
+      fakeHost = { host: created, isOnline: true }
+      fakeHostByDatabase.set(db, fakeHost)
+    }
+    if (online === 'false' && fakeHost.isOnline) await fakeHost.host.disconnect()
+    if (online === 'true' && !fakeHost.isOnline) await fakeHost.host.connect()
+    if (online) fakeHost.isOnline = online === 'true'
+    return context.json({ id: fakeHost.host.id })
   })
   .post('/test/runtime', async (context) => {
     const { db = '', chat = '' } = context.req.query()

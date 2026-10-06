@@ -52,15 +52,19 @@ test.describe('without a warm runtime', () => {
     await expect(runtimeStatusOf(page)).toHaveCount(0)
   })
 
-  test('2. the first prompt shows Starting…, then Ready, then the reply', async ({ page }) => {
-    test.setTimeout(90_000)
-    await openChat(page, 'Research')
-    await sendMessage(page, 'Start the runtime')
+  test.describe('real Agent Server', () => {
+    test.use({ agentServer: 'real' })
 
-    await expect(runtimeStatusOf(page)).toHaveText('Starting…')
-    await expect(runtimeStatusOf(page)).toHaveText('Ready', coldStart)
-    await expect(itemsWith(page, agentReplyText)).toHaveCount(1, agentReply)
-    await expect(workingIndicatorOf(page)).toHaveCount(0)
+    test('2. the first prompt shows Starting…, then Ready, then the reply', async ({ page }) => {
+      test.setTimeout(90_000)
+      await openChat(page, 'Research')
+      await sendMessage(page, 'Start the runtime')
+
+      await expect(runtimeStatusOf(page)).toHaveText('Starting…')
+      await expect(runtimeStatusOf(page)).toHaveText('Ready', coldStart)
+      await expect(itemsWith(page, agentReplyText)).toHaveCount(1, agentReply)
+      await expect(workingIndicatorOf(page)).toHaveCount(0)
+    })
   })
 
   test('5. a runtime that cannot start shows Could not start and a notice; Retry starts it and answers the prompt', async ({
@@ -117,25 +121,29 @@ test.describe('without a warm runtime', () => {
   })
 })
 
-test('3. after the idle stop the header shows Sleeping; a prompt wakes the runtime and keeps the history', async ({
-  page,
-  workerStack,
-}) => {
-  test.setTimeout(90_000)
-  await openChat(page, 'Research')
-  await expect(runtimeStatusOf(page)).toHaveText('Ready')
-  await sendMessage(page, 'Before the sleep')
-  await expect(itemsWith(page, agentReplyText)).toHaveCount(1, agentReply)
-  await triggerIdleStop(workerStack, research)
-  await expect(runtimeStatusOf(page)).toHaveText('Sleeping')
+test.describe('real Agent Server', () => {
+  test.use({ agentServer: 'real' })
 
-  await sendMessage(page, 'After the sleep')
-  await expect(runtimeStatusOf(page)).toHaveText('Starting…')
-  await expect(runtimeStatusOf(page)).toHaveText('Ready', coldStart)
-  await expect(itemsWith(page, agentReplyText)).toHaveCount(2, agentReply)
-  await expect(messageItemsOf(page)).toHaveCount(4)
-  await expect(messageItemsOf(page).nth(0)).toContainText('Before the sleep')
-  await expect(messageItemsOf(page).nth(2)).toContainText('After the sleep')
+  test('3. after the idle stop the header shows Sleeping; a prompt wakes the runtime and keeps the history', async ({
+    page,
+    workerStack,
+  }) => {
+    test.setTimeout(90_000)
+    await openChat(page, 'Research')
+    await expect(runtimeStatusOf(page)).toHaveText('Ready')
+    await sendMessage(page, 'Before the sleep')
+    await expect(itemsWith(page, agentReplyText)).toHaveCount(1, agentReply)
+    await triggerIdleStop(workerStack, research)
+    await expect(runtimeStatusOf(page)).toHaveText('Sleeping')
+
+    await sendMessage(page, 'After the sleep')
+    await expect(runtimeStatusOf(page)).toHaveText('Starting…')
+    await expect(runtimeStatusOf(page)).toHaveText('Ready', coldStart)
+    await expect(itemsWith(page, agentReplyText)).toHaveCount(2, agentReply)
+    await expect(messageItemsOf(page)).toHaveCount(4)
+    await expect(messageItemsOf(page).nth(0)).toContainText('Before the sleep')
+    await expect(messageItemsOf(page).nth(2)).toContainText('After the sleep')
+  })
 })
 
 test('4. with its host stopped the header shows Host offline and a prompt gets a notice; the host coming back answers it', async ({
@@ -157,25 +165,29 @@ test('4. with its host stopped the header shows Host offline and a prompt gets a
   await expect(runtimeStatusOf(page)).toHaveText('Ready')
 })
 
-test('6. Stop ends a slow turn within 2 seconds with a notice, and a following prompt is answered', async ({
-  page,
-  agentScript,
-}) => {
-  await agentScript(research, slowScript)
-  await openChat(page, 'Research')
-  await sendMessage(page, 'Take your time')
-  await expect(workingIndicatorOf(page)).toBeVisible()
-  await expect(stopButtonOf(page)).toBeVisible(agentReply)
-  await agentScript(research, {})
-  await stopButtonOf(page).click()
+test.describe('real Agent Server', () => {
+  test.use({ agentServer: 'real' })
 
-  await expect(workingIndicatorOf(page)).toHaveCount(0, twoSeconds)
-  await expect(stopButtonOf(page)).toHaveCount(0)
-  await expect(itemsWith(page, 'Stopped by Alice')).toHaveCount(1)
-  await sendMessage(page, 'Now answer quickly')
-  await expect(itemsWith(page, agentReplyText)).toHaveCount(1, agentReply)
-  await expect(workingIndicatorOf(page)).toHaveCount(0)
-  await expect(itemsWith(page, 'Stopped by Alice')).toHaveCount(1)
+  test('6. Stop ends a slow turn within 2 seconds with a notice, and a following prompt is answered', async ({
+    page,
+    agentScript,
+  }) => {
+    await agentScript(research, slowScript)
+    await openChat(page, 'Research')
+    await sendMessage(page, 'Take your time')
+    await expect(workingIndicatorOf(page)).toBeVisible()
+    await expect(stopButtonOf(page)).toBeVisible(agentReply)
+    await agentScript(research, {})
+    await stopButtonOf(page).click()
+
+    await expect(workingIndicatorOf(page)).toHaveCount(0, twoSeconds)
+    await expect(stopButtonOf(page)).toHaveCount(0)
+    await expect(itemsWith(page, 'Stopped by Alice')).toHaveCount(1)
+    await sendMessage(page, 'Now answer quickly')
+    await expect(itemsWith(page, agentReplyText)).toHaveCount(1, agentReply)
+    await expect(workingIndicatorOf(page)).toHaveCount(0)
+    await expect(itemsWith(page, 'Stopped by Alice')).toHaveCount(1)
+  })
 })
 
 test('7. a prompt queued behind a stopped turn is answered after the Stop notice', async ({ page, agentScript }) => {

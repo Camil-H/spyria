@@ -1,4 +1,7 @@
-import type { FakeAgentServer } from '../testing.ts'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
+import type { FakeAgentServer, FakeContainer, ModelCall } from '../testing.ts'
 
 export type Event = { id: string; kind: string; timestamp: string; [field: string]: unknown }
 export type Conversation = {
@@ -9,13 +12,106 @@ export type Conversation = {
   executionStatus: string
   listeners: Set<(event: Event) => void>
   closers: Set<() => void>
+  history: object[]
+  turnAbort?: AbortController
 }
 type Turn = (conversation: Conversation, text: string) => Promise<void>
 
 export const text = (value: string) => [{ type: 'text', text: value }]
+const textOf = (observation: { content: { text: string }[] }) => observation.content.map((part) => part.text).join('')
 export const replyText = 'Understood, working on it.'
 
-export const createFakeAgentServer = () => {
+type ToolCall = { id: string; function: { name: string; arguments: string } }
+type Completion = { status: number | undefined; body: string; text: string; reasoning: string; toolCall?: ToolCall }
+
+const workingDirectory = '/workspace/project/'
+const modelTimeoutMilliseconds = 300_000
+const toolNames = ['terminal', 'file_editor', 'task_tracker', 'think', 'finish']
+
+const completionOf = async (
+  modelCall: ModelCall,
+  conversation: Conversation,
+  onDelta: (delta: { content?: string; reasoning_content?: string }) => void,
+  signal: AbortSignal,
+): Promise<Completion> => {
+  const llm = (conversation.created.agent as { llm: { model: string; api_key: string } }).llm
+  let buffered = ''
+  const completion: Completion = { status: undefined, body: '', text: '', reasoning: '' }
+  const response = await modelCall({
+    headers: { authorization: `Bearer ${llm.api_key}`, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: llm.model.replace(/^openai\//, ''),
+      messages: conversation.history,
+      tools: toolNames.map((name) => ({ type: 'function', function: { name } })),
+      stream: true,
+    }),
+    signal,
+    timeoutMilliseconds: modelTimeoutMilliseconds,
+    onChunk: (data) => {
+      const lines = (buffered + data).split('\n')
+      buffered = lines.pop() ?? ''
+      for (const line of lines) {
+        if (!line.startsWith('data: {')) continue
+        const delta = JSON.parse(line.slice(6)).choices?.[0]?.delta ?? {}
+        if (delta.content) completion.text += delta.content
+        if (delta.reasoning_content) completion.reasoning += delta.reasoning_content
+        if (delta.tool_calls?.[0]) completion.toolCall = delta.tool_calls[0]
+        if (delta.content || delta.reasoning_content)
+          onDelta(
+            delta.content ? { content: delta.content } : { content: '', reasoning_content: delta.reasoning_content },
+          )
+      }
+    },
+  })
+  return { ...completion, status: response.status, body: response.body }
+}
+
+const runCommand = async (command: string, cwd: string) => {
+  const child = Bun.spawn(['bash', '-c', `${command} 2>&1`], { cwd, stdout: 'pipe' })
+  const output = await new Response(child.stdout).text()
+  return { output: output.replace(/\n$/, ''), exitCode: await child.exited }
+}
+
+const actionOf = (name: string, args: Record<string, unknown>) =>
+  name === 'terminal'
+    ? { kind: 'TerminalAction', command: args.command }
+    : name === 'file_editor'
+      ? { kind: 'FileEditorAction', ...args }
+      : name === 'task_tracker'
+        ? { kind: 'TaskTrackerAction', ...args }
+        : { kind: 'ThinkAction', thought: args.thought }
+
+const observe = async (name: string, args: Record<string, unknown>, directory: string) => {
+  if (name === 'terminal') {
+    const { output, exitCode } = await runCommand(String(args.command), directory)
+    return { kind: 'TerminalObservation', content: text(output), exit_code: exitCode }
+  }
+  if (name === 'file_editor') {
+    const path = join(directory, String(args.path).replace(workingDirectory, ''))
+    let oldContent = ''
+    try {
+      oldContent = readFileSync(path, 'utf8')
+    } catch {}
+    const newContent =
+      args.command === 'create'
+        ? String(args.file_text)
+        : oldContent.replace(String(args.old_str), String(args.new_str))
+    mkdirSync(dirname(path), { recursive: true })
+    writeFileSync(path, newContent)
+    return {
+      kind: 'FileEditorObservation',
+      command: args.command,
+      path: args.path,
+      old_content: oldContent,
+      new_content: newContent,
+      content: text(`The file ${args.path} has been edited.`),
+    }
+  }
+  if (name === 'task_tracker') return { kind: 'TaskTrackerObservation', content: text('Task list updated.') }
+  return { kind: 'ThinkObservation', content: text('Your thought has been logged.') }
+}
+
+export const createFakeAgentServer = ({ modelCall }: { modelCall?: () => ModelCall } = {}) => {
   const conversations = new Map<string, Conversation>()
   const prompts: { conversationId: string; text: string }[] = []
   const connections: { conversationId: string; query: string; auth: unknown }[] = []
@@ -57,13 +153,74 @@ export const createFakeAgentServer = () => {
     await beginTurn(conversation, prompt)
     finishTurn(conversation)
   }
+  const directoryByApiKey = new Map<string, string>()
+  const directoryOf = (apiKey: string) => {
+    const directory = directoryByApiKey.get(apiKey) ?? mkdtempSync(join(tmpdir(), 'hq-fake-agent-'))
+    directoryByApiKey.set(apiKey, directory)
+    return directory
+  }
+  const scriptedTurn: Turn = async (conversation, prompt) => {
+    const abort = new AbortController()
+    conversation.turnAbort?.abort()
+    conversation.turnAbort = abort
+    const { signal } = abort
+    const emitLive = (kind: string, fields: Record<string, unknown> = {}) =>
+      signal.aborted ? undefined : emit(conversation, kind, fields)
+    emitLive('MessageEvent', { source: 'user', llm_message: { role: 'user', content: text(prompt) } })
+    conversation.history.push({ role: 'user', content: prompt })
+    if (!signal.aborted) status(conversation, 'running')
+    while (!signal.aborted) {
+      const completion = await completionOf(
+        modelCall?.() as ModelCall,
+        conversation,
+        (delta) => emitLive('StreamingDeltaEvent', { source: 'agent', ...delta }),
+        signal,
+      )
+      if (signal.aborted) return
+      if (completion.status !== 200) {
+        status(conversation, 'error')
+        emit(conversation, 'ConversationErrorEvent', {
+          source: 'environment',
+          code: completion.status === 401 ? 'LLMAuthenticationError' : 'LLMServiceUnavailableError',
+          detail: completion.body,
+        })
+        return
+      }
+      const { toolCall } = completion
+      if (!toolCall) {
+        conversation.history.push({ role: 'assistant', content: completion.text })
+        emit(conversation, 'MessageEvent', {
+          source: 'agent',
+          llm_message: { role: 'assistant', content: text(completion.text) },
+        })
+        status(conversation, 'finished')
+        return
+      }
+      const name = toolCall.function.name
+      const args = JSON.parse(toolCall.function.arguments) as Record<string, unknown>
+      conversation.history.push({ role: 'assistant', content: completion.text, tool_calls: [toolCall] })
+      const action = emit(conversation, 'ActionEvent', {
+        source: 'agent',
+        thought: text(completion.text),
+        reasoning_content: completion.reasoning || null,
+        action: actionOf(name, args),
+        tool_name: name,
+        tool_call_id: toolCall.id,
+        tool_call: { id: toolCall.id, name, arguments: toolCall.function.arguments },
+      })
+      const observation = await observe(name, args, directoryOf(conversation.apiKey))
+      conversation.history.push({ role: 'tool', tool_call_id: toolCall.id, content: textOf(observation) })
+      emitLive('ObservationEvent', { source: 'environment', action_id: action.id, tool_name: name, observation })
+    }
+  }
   const fake = {
     conversations,
     prompts,
     connections,
     interrupts,
-    turn: defaultTurn,
+    turn: modelCall ? scriptedTurn : defaultTurn,
     onInterrupt: (conversation: Conversation) => {
+      conversation.turnAbort?.abort()
       status(conversation, 'paused')
     },
     emit,
@@ -83,6 +240,7 @@ export const createFakeAgentServer = () => {
             executionStatus: 'idle',
             listeners: new Set(),
             closers: new Set(),
+            history: [{ role: 'system', content: 'You are a fake agent.' }],
           })
           return { status: 201, body: JSON.stringify({ id, execution_status: 'idle' }) }
         }
@@ -104,6 +262,15 @@ export const createFakeAgentServer = () => {
         prompts.push({ conversationId: conversation.id, text: prompt })
         void fake.turn(conversation, prompt)
         return { status: 200, body: JSON.stringify({ success: true }) }
+      },
+      stopped: (container: FakeContainer) => {
+        if (!modelCall) return
+        for (const conversation of conversations.values())
+          if (conversation.apiKey === container.apiKey) {
+            conversation.turnAbort?.abort()
+            conversation.executionStatus = 'idle'
+            for (const close of [...conversation.closers]) close()
+          }
       },
       connect: ({ path, send, close }) => {
         const url = new URL(path, 'http://agent-server')

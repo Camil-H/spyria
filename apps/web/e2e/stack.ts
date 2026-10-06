@@ -27,7 +27,15 @@ import { gatewayUrl, serverUrl, templateDatabaseName, viteUrl, zeroCachePortOf }
 
 export { expect } from '@playwright/test'
 
-type ResetOptions = { runtimeHost: boolean; warmRuntimes: boolean }
+export type AgentServerMode = 'fake' | 'real'
+type ResetOptions = { runtimeHost: boolean; warmRuntimes: boolean; agentServer: AgentServerMode }
+type PairedHost = {
+  host: typeof runtimeHosts.$inferSelect
+  start: () => Promise<void>
+  stop: () => Promise<void>
+  release: () => void
+  warmRuntimes: Map<string, WarmRuntime>
+}
 export type WorkerStack = {
   databaseName: string
   zeroCacheURL: string
@@ -35,6 +43,7 @@ export type WorkerStack = {
   reset: (options: ResetOptions) => Promise<void>
   stopRuntimeHost: () => Promise<void>
   startRuntimeHost: () => Promise<void>
+  agentServer: () => AgentServerMode
   gateway: <Result>(path: string) => Promise<Result>
   setGatewayReachable: (isReachable: boolean) => Promise<void>
 }
@@ -146,10 +155,30 @@ const pairRuntimeHost = async (database: Database, databaseName: string, workerI
     host,
     start,
     stop,
+    warmRuntimes: new Map(),
     release: () => {
       hostProcess?.kill('SIGTERM')
       rmSync(stateDirectory, { recursive: true, force: true })
     },
+  }
+}
+
+const pairFakeHost = async (database: Database, databaseName: string): Promise<PairedHost> => {
+  const setOnline = (isOnline: boolean) =>
+    postToServer('/test/fake-host', { db: databaseName, online: String(isOnline) })
+  const { id } = await (await postToServer('/test/fake-host', { db: databaseName })).json()
+  const host = (await database.select().from(runtimeHosts)).find((row) => row.id === id)
+  if (!host) throw new Error('The e2e fake runtime host row is missing')
+  return {
+    host,
+    start: async () => {
+      await setOnline(true)
+    },
+    stop: async () => {
+      await setOnline(false)
+    },
+    release: () => {},
+    warmRuntimes: new Map(),
   }
 }
 
@@ -184,20 +213,24 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
       const testDatabase = await createTestDatabase(templateDatabaseName, workerDatabaseNameOf(index))
       let epochNumber = 0
       let barrierSessionId: string | undefined
-      let pairedHost: Awaited<ReturnType<typeof pairRuntimeHost>> | undefined
-      const warmRuntimes = new Map<string, WarmRuntime>()
+      const pairedHosts: Partial<Record<AgentServerMode, PairedHost>> = {}
+      let mode: AgentServerMode = 'fake'
       const keepWarmRuntimes = async () => {
+        const warmRuntimes = pairedHosts[mode]?.warmRuntimes
+        if (!warmRuntimes) return
         for (const runtime of await testDatabase.database.select().from(runtimes)) {
           const kept = warmRuntimes.get(runtime.chatId)
           const isWarm = runtime.state === 'running' || runtime.state === 'stopped'
           const isKept = kept?.runtime.id === runtime.id
-          if (kept && (isKept ? !isWarm : isWarm))
+          if (kept && (isKept ? !isWarm : isWarm) && mode === 'real')
             removeDockerObjects(`${workerHostPrefixOf(index)}rt-${kept.runtime.id}`)
           if (isKept && !isWarm) warmRuntimes.delete(runtime.chatId)
           if (isWarm) warmRuntimes.set(runtime.chatId, { runtime })
         }
       }
-      const writeReset = async (options: ResetOptions = { runtimeHost: false, warmRuntimes: false }) => {
+      const writeReset = async (
+        options: ResetOptions = { runtimeHost: false, warmRuntimes: false, agentServer: 'fake' },
+      ) => {
         const epoch = `epoch-${workerInfo.workerIndex}-${++epochNumber}`
         const writeSeededGatewayKeys = await prepareSeededGatewayKeys(testGateway)
         const reset = () =>
@@ -224,12 +257,15 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
                 createdAt: new Date(),
                 expiresAt: new Date(Date.now() + barrierSessionMilliseconds),
               })
-            if (!pairedHost) return
-            await transaction
-              .insert(runtimeHosts)
-              .values({ ...pairedHost.host, removedAt: options.runtimeHost ? null : new Date() })
-            if (!options.runtimeHost || !options.warmRuntimes) return
-            for (const { runtime } of warmRuntimes.values()) {
+            for (const [hostMode, pairedHost] of Object.entries(pairedHosts)) {
+              const isActive = options.runtimeHost && hostMode === options.agentServer
+              await transaction
+                .insert(runtimeHosts)
+                .values({ ...pairedHost.host, removedAt: isActive ? null : new Date() })
+            }
+            const pairedHost = pairedHosts[options.agentServer]
+            if (!pairedHost || !options.runtimeHost || !options.warmRuntimes) return
+            for (const { runtime } of pairedHost.warmRuntimes.values()) {
               await transaction
                 .insert(runtimes)
                 .values({ ...runtime, hostOnline: true, agentConversationId: null, lastActiveAt: new Date() })
@@ -280,28 +316,36 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
       }
       await waitForEpoch(firstEpoch)
       removeDockerObjects(workerHostPrefixOf(index))
-      pairedHost = await pairRuntimeHost(testDatabase.database, testDatabase.name, index)
-      await warmUp(testDatabase.database, testDatabase.name, warmChatIds)
+      const pairedHostOf = async (agentServer: AgentServerMode) => {
+        pairedHosts[agentServer] ??=
+          agentServer === 'real'
+            ? await pairRuntimeHost(testDatabase.database, testDatabase.name, index)
+            : await pairFakeHost(testDatabase.database, testDatabase.name)
+        return pairedHosts[agentServer]
+      }
       await use({
         databaseName: testDatabase.name,
         zeroCacheURL: zeroCache.url,
         database: testDatabase.database,
         reset: async (options) => {
-          await pairedHost?.start()
           await keepWarmRuntimes()
+          mode = options.agentServer
+          const pairedHost = await pairedHostOf(mode)
+          await pairedHost.start()
           await waitForEpoch(await writeReset(options))
-          const coldChatIds = warmChatIds.filter((chatId) => !warmRuntimes.has(chatId))
+          const coldChatIds = warmChatIds.filter((chatId) => !pairedHost.warmRuntimes.has(chatId))
           if (options.runtimeHost && options.warmRuntimes && coldChatIds.length > 0)
             await warmUp(testDatabase.database, testDatabase.name, coldChatIds)
         },
-        stopRuntimeHost: async () => pairedHost?.stop(),
-        startRuntimeHost: async () => pairedHost?.start(),
+        stopRuntimeHost: async () => pairedHosts[mode]?.stop(),
+        startRuntimeHost: async () => pairedHosts[mode]?.start(),
+        agentServer: () => mode,
         gateway: (path) => testGateway.call(path),
         setGatewayReachable: async (isReachable) => {
           await postToServer('/test/gateway', { db: testDatabase.name, reachable: String(isReachable) })
         },
       })
-      pairedHost.release()
+      pairedHosts.real?.release()
       removeDockerObjects(workerHostPrefixOf(index))
       await barrier.close()
       await zeroCache.stop()
@@ -312,12 +356,13 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
   ],
   runtimeHost: [true, { option: true }],
   warmRuntimes: [true, { option: true }],
+  agentServer: ['fake', { option: true }],
   resetStack: [
-    async ({ workerStack, context, signedInAs, tokenSeconds, runtimeHost, warmRuntimes }, use) => {
+    async ({ workerStack, context, signedInAs, tokenSeconds, runtimeHost, warmRuntimes, agentServer }, use) => {
       await postToServer('/test/fake-llm-script', { db: workerStack.databaseName })
       await postToServer('/test/runtime-creation', { db: workerStack.databaseName, failing: 'false' })
       await workerStack.setGatewayReachable(true)
-      await workerStack.reset({ runtimeHost, warmRuntimes })
+      await workerStack.reset({ runtimeHost, warmRuntimes, agentServer })
       await signIn(context, workerStack, signedInAs, tokenSeconds)
       await use(undefined)
     },
