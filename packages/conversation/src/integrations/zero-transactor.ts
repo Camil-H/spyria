@@ -1,22 +1,24 @@
 import {
+  activeAgentTurns,
   appendChatEvent,
   enqueueJob,
   isChatEventStored,
   lastAgentEventTimestamp,
   lockChatTurn,
-  nextPendingPrompt,
+  pendingPrompts,
 } from '@hq/db/server-writes'
 import type { Message as MessageRow } from '@hq/db/zero'
 import { zql } from '@hq/db/zero-queries'
 import { type ChatId, chatId, type MessageId, memberId, messageId, type WorkspaceId, workspaceId } from '@hq/kernel'
 import type { Transaction } from '@rocicorp/zero'
 import type { ConversationTransactor, UnitOfWork } from '../contracts/transactor.ts'
+import { agentSweepIntervalMilliseconds, waitingNotices } from '../domain/agent-events.ts'
 import { ChatNotFound, ForeignWorkspace, MessageNotFound } from '../domain/errors.ts'
 import type { Message, MessageChange } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
 import type { AgentEventPayload, ChangedPayload, PostedPayload } from '../domain/message-events.ts'
 
-export const agentPromptJobType = 'agent.prompt'
+export const agentJobTypes = { prompt: 'agent.prompt', interrupt: 'agent.interrupt', sweep: 'agent.sweep' } as const
 
 const dateOrNull = (time: number | null) => (time === null ? null : new Date(time))
 const timeOrNull = (date: Date | null) => date?.getTime() ?? null
@@ -67,6 +69,9 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
     return message
   }
   const messageRow = (id: string) => tx.run(zql.messages.where('workspaceId', contextWorkspaceId).where('id', id).one())
+  const enqueue = (type: string, payload: object, delayMilliseconds = 0) =>
+    enqueueJob(tx, { workspaceId: contextWorkspaceId, type, payload, delayMilliseconds }).then(() => undefined)
+  const waitingPromptIds = (id: ChatId) => pendingPrompts(tx, contextWorkspaceId, id, waitingNotices)
   const getMessage = async (id: MessageId) => {
     const row = await messageRow(id)
     if (!row) throw new MessageNotFound(id)
@@ -93,15 +98,15 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         if (await messageRow(id)) await tx.mutate.messages.update({ workspaceId: contextWorkspaceId, id, detail })
       },
     },
-    agentPrompts: {
-      request: async (message) => {
-        await enqueueJob(tx, {
-          workspaceId: message.workspaceId,
-          type: agentPromptJobType,
-          payload: { messageId: message.id },
-          delayMilliseconds: 0,
-        })
-      },
+    agentJobs: {
+      prompt: (message) => enqueue(agentJobTypes.prompt, { messageId: message.id }),
+      interrupt: (interrupt) => enqueue(agentJobTypes.interrupt, interrupt),
+      sweepLater: () => enqueue(agentJobTypes.sweep, {}, agentSweepIntervalMilliseconds),
+    },
+    members: {
+      displayNameOf: async (id) =>
+        (await tx.run(zql.memberships.where('workspaceId', contextWorkspaceId).where('userId', id).one()))
+          ?.displayName ?? 'a member',
     },
     agentTurns: {
       lock: async (id) => {
@@ -111,12 +116,34 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       set: (id, promptId) =>
         tx.mutate.chats.update({ workspaceId: contextWorkspaceId, id, agentTurnMessageId: promptId }),
       nextPrompt: async (id) => {
-        const promptId = await nextPendingPrompt(tx, contextWorkspaceId, id)
+        const [promptId] = await waitingPromptIds(id)
         return promptId === undefined ? undefined : getMessage(messageId(promptId))
       },
+      waitingPrompts: async (id) =>
+        Promise.all((await waitingPromptIds(id)).map((promptId) => getMessage(messageId(promptId)))),
       hasReply: async (promptId) =>
-        (await tx.run(zql.messages.where('workspaceId', contextWorkspaceId).where('replyToId', promptId).one())) !==
-        undefined,
+        (await tx.run(
+          zql.messages
+            .where('workspaceId', contextWorkspaceId)
+            .where('replyToId', promptId)
+            .where('kind', '!=', 'notice')
+            .one(),
+        )) !== undefined,
+      hasNotice: async (promptId, text) =>
+        (await tx.run(
+          zql.messages
+            .where('workspaceId', contextWorkspaceId)
+            .where('replyToId', promptId)
+            .where('kind', 'notice')
+            .where('body', text)
+            .one(),
+        )) !== undefined,
+      active: async () =>
+        (await activeAgentTurns(tx, contextWorkspaceId)).map((turn) => ({
+          chatId: chatId(turn.chatId),
+          promptId: messageId(turn.promptId),
+          lastEventAt: Number(turn.lastEventAt),
+        })),
     },
     agentEvents: {
       append: async (id, event, replyToId, at) => {

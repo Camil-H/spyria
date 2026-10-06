@@ -46,9 +46,11 @@ const frameOf = (text: string): Frame => {
 export const createRuntimeHostGateway = ({
   databases,
   pingIntervalMilliseconds = 25_000,
+  afterHello,
 }: {
   databases: () => Iterable<Database>
   pingIntervalMilliseconds?: number
+  afterHello?: (database: Database, host: ConnectedHost) => Promise<unknown>
 }) => {
   const connectionByHost = new Map<string, Connection>()
   const operationChains = new Map<string, Promise<unknown>>()
@@ -68,7 +70,7 @@ export const createRuntimeHostGateway = ({
     for (const database of databases()) {
       const handlers = createHostSessionHandlers((work) => zeroDrizzle(schema, database).transaction(work))
       try {
-        return { handlers, result: await attempt(handlers) }
+        return { database, handlers, result: await attempt(handlers) }
       } catch (error) {
         if (!(error instanceof HostRefused) || !['code_not_valid', 'host_not_registered'].includes(error.code))
           throw error
@@ -98,7 +100,11 @@ export const createRuntimeHostGateway = ({
       return sendTo(connection, { type: 'token', token: result.token })
     }
     if (frame.type !== 'hello') return connection.socket.close(refusedCloseCode, 'This host is not registered')
-    const { handlers, result: host } = await firstAccepted((handlers) =>
+    const {
+      database,
+      handlers,
+      result: host,
+    } = await firstAccepted((handlers) =>
       inOrder(frame.token, () =>
         handlers.hello(frame, (identifiedHost) => {
           const replaced = connectionByHost.get(keyOf(identifiedHost))
@@ -115,6 +121,8 @@ export const createRuntimeHostGateway = ({
     handlers
       .reconcile(host, sandboxProvider)
       .catch((error) => console.error(`Reconciling runtime host ${host.hostId} failed: ${errorMessageOf(error)}`))
+      .then(() => afterHello?.(database, host))
+      .catch((error) => console.error(`Resuming prompts on host ${host.hostId} failed: ${errorMessageOf(error)}`))
   }
 
   const settle = (connection: Connection, frame: Frame) => {

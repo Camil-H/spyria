@@ -54,7 +54,11 @@ const enqueueSweepStatement = `
   on conflict do nothing`
 
 export const enqueueSweeps = (database: Database) =>
-  database.$client.unsafe(enqueueSweepStatement, [null, '0 seconds', ['sessions.sweep', 'runtime.sweep']])
+  database.$client.unsafe(enqueueSweepStatement, [
+    null,
+    '0 seconds',
+    ['sessions.sweep', 'runtime.sweep', 'agent.sweep'],
+  ])
 
 export const sessionJobs = {
   'sessions.sweep': async (tx: ServerTransaction, workspaceId: WorkspaceId) => {

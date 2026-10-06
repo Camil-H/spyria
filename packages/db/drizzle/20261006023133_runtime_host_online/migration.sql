@@ -1,0 +1,1 @@
+ALTER TABLE "runtimes" ADD COLUMN "host_online" boolean DEFAULT false NOT NULL;

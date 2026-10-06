@@ -60,6 +60,7 @@ const chat = (
   reasoningEffort: runtime?.reasoningEffort ?? null,
   gitBranch: runtime?.gitBranch ?? null,
   originChatId: null,
+  agentTurnMessageId: null,
 })
 const bobCanPrompt = (chat: string) => ({
   workspaceId: acme,

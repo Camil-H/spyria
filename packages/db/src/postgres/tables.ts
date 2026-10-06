@@ -314,6 +314,7 @@ export const runtimes = table(
     hostId: text(),
     state: text().$type<RuntimeState>().notNull(),
     failure: text().$type<RuntimeFailure>(),
+    hostOnline: boolean().notNull().default(false),
     image: text().notNull(),
     apiKeyRef: text(),
     llmTokenRef: text(),

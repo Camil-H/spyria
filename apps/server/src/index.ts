@@ -14,7 +14,10 @@ const requiredEnvironment = (name: string) => {
 }
 
 const database = createDatabase()
-const runtimeHosts = createRuntimeHostGateway({ databases: () => [database] })
+const runtimeHosts = createRuntimeHostGateway({
+  databases: () => [database],
+  afterHello: (helloDatabase, host) => agentBridge.forDatabase(helloDatabase).promptWaiting(host),
+})
 const llmBaseUrl = process.env.HQ_LLM_BASE_URL
 const agentBridge = createAgentBridge({
   sandboxProvider: runtimeHosts.sandboxProvider,

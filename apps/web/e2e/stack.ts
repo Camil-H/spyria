@@ -28,6 +28,8 @@ export type WorkerStack = {
   zeroCacheURL: string
   database: Database
   reset: (options: ResetOptions) => Promise<void>
+  stopRuntimeHost: () => Promise<void>
+  startRuntimeHost: () => Promise<void>
 }
 type WarmRuntime = { runtime: typeof runtimes.$inferSelect; secrets: (typeof placeholderSecrets.$inferSelect)[] }
 type AgentScript = { text?: string; wordDelayMilliseconds?: number; command?: string }
@@ -109,19 +111,35 @@ const pairRuntimeHost = async (database: Database, databaseName: string, workerI
     )
   ).json()
   const stateDirectory = mkdtempSync(join(tmpdir(), 'hq-test-host-'))
-  const hostProcess: ChildProcess = spawn('bun', [hostProgram, `${serverUrl}/h/${code}`], {
-    env: { ...process.env, HQ_HOST_STATE_DIR: stateDirectory, HQ_HOST_PREFIX: workerHostPrefixOf(workerIndex) },
-    stdio: ['ignore', ...Array(2).fill(openSync(join(tmpdir(), `hq-e2e-host-w${workerIndex}.log`), 'w'))],
-  })
   const hostRow = async () => (await database.select().from(runtimeHosts)).find((host) => host.id === id)
-  for (const deadline = Date.now() + 30_000; (await hostRow())?.status !== 'online'; await sleep(100))
-    if (Date.now() > deadline) throw new Error('The e2e runtime host did not come online')
+  const waitForStatus = async (isExpected: (status: string | undefined) => boolean) => {
+    for (const deadline = Date.now() + 30_000; !isExpected((await hostRow())?.status); await sleep(100))
+      if (Date.now() > deadline) throw new Error('The e2e runtime host did not change its status in time')
+  }
+  const logFile = openSync(join(tmpdir(), `hq-e2e-host-w${workerIndex}.log`), 'w')
+  let hostProcess: ChildProcess | undefined
+  const start = async () => {
+    if (hostProcess) return
+    hostProcess = spawn('bun', [hostProgram, `${serverUrl}/h/${code}`], {
+      env: { ...process.env, HQ_HOST_STATE_DIR: stateDirectory, HQ_HOST_PREFIX: workerHostPrefixOf(workerIndex) },
+      stdio: ['ignore', logFile, logFile],
+    })
+    await waitForStatus((status) => status === 'online')
+  }
+  const stop = async () => {
+    hostProcess?.kill('SIGTERM')
+    hostProcess = undefined
+    await waitForStatus((status) => status !== 'online')
+  }
+  await start()
   const host = await hostRow()
   if (!host) throw new Error('The e2e runtime host row is missing')
   return {
     host,
-    stop: () => {
-      hostProcess.kill('SIGTERM')
+    start,
+    stop,
+    release: () => {
+      hostProcess?.kill('SIGTERM')
       rmSync(stateDirectory, { recursive: true, force: true })
     },
   }
@@ -142,6 +160,7 @@ type TestOptions = ResetOptions & {
   tokenSeconds: number | undefined
   resetStack: undefined
   agentScript: (chatId: string, script: AgentScript) => Promise<void>
+  failRuntimeCreation: (isFailing: boolean) => Promise<void>
 }
 
 export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
@@ -209,7 +228,7 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
               await transaction.insert(placeholderSecrets).values(secrets)
               await transaction
                 .insert(runtimes)
-                .values({ ...runtime, agentConversationId: null, lastActiveAt: new Date() })
+                .values({ ...runtime, hostOnline: true, agentConversationId: null, lastActiveAt: new Date() })
             }
           })
         for (let attempt = 1; ; attempt++)
@@ -264,14 +283,17 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
         zeroCacheURL: zeroCache.url,
         database: testDatabase.database,
         reset: async (options) => {
+          await pairedHost?.start()
           await keepWarmRuntimes()
           await waitForEpoch(await writeReset(options))
           const coldChatIds = warmChatIds.filter((chatId) => !warmRuntimes.has(chatId))
           if (options.runtimeHost && options.warmRuntimes && coldChatIds.length > 0)
             await warmUp(testDatabase.database, testDatabase.name, coldChatIds)
         },
+        stopRuntimeHost: async () => pairedHost?.stop(),
+        startRuntimeHost: async () => pairedHost?.start(),
       })
-      pairedHost.stop()
+      pairedHost.release()
       removeDockerObjects(workerHostPrefixOf(index))
       await barrier.close()
       await zeroCache.stop()
@@ -285,6 +307,7 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
   resetStack: [
     async ({ workerStack, context, signedInAs, tokenSeconds, runtimeHost, warmRuntimes }, use) => {
       await postToServer('/test/fake-llm-script', { db: workerStack.databaseName })
+      await postToServer('/test/runtime-creation', { db: workerStack.databaseName, failing: 'false' })
       await workerStack.reset({ runtimeHost, warmRuntimes })
       await signIn(context, workerStack, signedInAs, tokenSeconds)
       await use(undefined)
@@ -298,6 +321,11 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
         { db: workerStack.databaseName, chat: chatId },
         { body: JSON.stringify(script) },
       )
+    })
+  },
+  failRuntimeCreation: async ({ workerStack }, use) => {
+    await use(async (isFailing) => {
+      await postToServer('/test/runtime-creation', { db: workerStack.databaseName, failing: String(isFailing) })
     })
   },
 })

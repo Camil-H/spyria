@@ -53,3 +53,4 @@ export const RuntimeNotReady = errorKind(
   (runtimeId: string) => `Runtime ${runtimeId} was not ready in time`,
 )
 export const ApiKeyMissing = errorKind('api_key_missing', (runtimeId: string) => `Runtime ${runtimeId} has no API key`)
+export const RetryRefused = errorKind('retry_refused', () => 'Only a runtime that could not start can be retried')

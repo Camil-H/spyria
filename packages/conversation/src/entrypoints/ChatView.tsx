@@ -14,10 +14,12 @@ const bubbleClassName = 'rounded-full border border-line px-2 py-0.5 text-xs tex
 
 export const ChatView = ({
   headerActions,
+  runtimeStatus,
   canPrompt,
   blockedNotice,
 }: {
   headerActions: ReactNode
+  runtimeStatus: ReactNode
   canPrompt: boolean
   blockedNotice: ReactNode
 }) => {
@@ -51,6 +53,7 @@ export const ChatView = ({
                 <span className={bubbleClassName}>
                   {conversation.model} · {conversation.reasoningEffort}
                 </span>
+                {runtimeStatus}
                 {conversation.gitBranch !== null && (
                   <span className={`${bubbleClassName} inline-flex items-center gap-1`}>
                     <GitBranch aria-label="Git branch" role="img" size={12} />
@@ -73,6 +76,7 @@ export const ChatView = ({
       </header>
       <MessageList
         conversation={{ ...conversation, messages: withStreamedReply(conversation.messages, streamedReply) }}
+        onStop={() => commands.stopAgent({ workspaceId, chatId })}
       />
       <Composer
         workspaceId={workspaceId}

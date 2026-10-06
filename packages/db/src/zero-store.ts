@@ -67,12 +67,10 @@ const snapshotFromZeroRows = (
       (membership) => `${membership.workspaceId}/${membership.userId}`,
     ).map(({ workspaceId, userId, displayName, role }) => ({ workspaceId, memberId: userId, displayName, role })),
     projects: rowsOf('projects').map(withoutCreatedAt),
-    chats: rowsOf('chats').map(
-      ({ ownerKind, ownerUserId, ownerServiceIdentityId, mode, createdAt, agentTurnMessageId, ...chat }) => ({
-        ...chat,
-        ownerId: ownerUserId ?? '',
-      }),
-    ),
+    chats: rowsOf('chats').map(({ ownerKind, ownerUserId, ownerServiceIdentityId, mode, createdAt, ...chat }) => ({
+      ...chat,
+      ownerId: ownerUserId ?? '',
+    })),
     messages: messages
       .toSorted(
         (first, second) =>
@@ -106,13 +104,14 @@ const snapshotFromZeroRows = (
     llmCredentials: rowsOf('llmCredentials').map(withMemberId),
     workspaceConnections: rowsOf('workspaceConnections').map((connection) => withoutPosition(withMemberId(connection))),
     runtimeHosts: rowsOf('runtimeHosts').map(({ lastSeenAt, createdBy, createdAt, removedAt, ...host }) => host),
-    runtimes: rowsOf('runtimes').map(({ workspaceId, id, chatId, hostId, state, failure }) => ({
+    runtimes: rowsOf('runtimes').map(({ workspaceId, id, chatId, hostId, state, failure, hostOnline }) => ({
       workspaceId,
       id,
       chatId,
       hostId,
       state,
       failure,
+      hostOnline: hostOnline === true,
     })),
   }
   return snapshot as Snapshot

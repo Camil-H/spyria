@@ -47,6 +47,7 @@ type RuntimeRow = {
   hostId: RuntimeHostId | null
   state: RuntimeState
   failure: RuntimeFailure | null
+  hostOnline: boolean
 }
 type ProjectRow = { id: ProjectId; workspaceId: WorkspaceId; name: string; archived: boolean }
 export type ChatRow = {
@@ -61,6 +62,7 @@ export type ChatRow = {
   reasoningEffort: string | null
   gitBranch: string | null
   originChatId: ChatId | null
+  agentTurnMessageId: MessageId | null
 }
 export type MessageRow = {
   id: MessageId

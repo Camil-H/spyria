@@ -147,7 +147,7 @@ export const setServerOnlyRuntimeValue = (
   workspaceId: string,
   runtimeId: string,
   column: ServerOnlyRuntimeColumn,
-  value: string,
+  value: string | null,
 ) =>
   onServer(tx, `update runtimes set ${serverOnlyRuntimeColumns[column]} = $3 where workspace_id = $1 and id = $2`, [
     workspaceId,
@@ -179,18 +179,41 @@ export const lockChatTurn = async (tx: Transaction, workspaceId: string, chatId:
     )) as { turnMessageId: string | null }[]
   )[0]?.turnMessageId ?? null
 
-export const nextPendingPrompt = async (tx: Transaction, workspaceId: string, chatId: string) =>
+export const pendingPrompts = async (
+  tx: Transaction,
+  workspaceId: string,
+  chatId: string,
+  waitingNoticeBodies: readonly string[],
+) =>
   (
     (await onServer(
       tx,
       `select prompt.id from messages prompt join chats on chats.workspace_id = prompt.workspace_id and chats.id = prompt.chat_id
        where prompt.workspace_id = $1 and prompt.chat_id = $2 and prompt.kind = 'member' and prompt.reply_to_id is null
          and prompt.deleted_at is null and prompt.id is distinct from chats.agent_turn_message_id
-         and not exists (select 1 from messages reply where reply.workspace_id = prompt.workspace_id and reply.reply_to_id = prompt.id)
-       order by prompt.seq limit 1`,
-      [workspaceId, chatId],
+         and not exists (select 1 from messages reply where reply.workspace_id = prompt.workspace_id and reply.reply_to_id = prompt.id
+           and not (reply.kind = 'notice' and reply.body = any($3::text[])))
+       order by prompt.seq`,
+      [workspaceId, chatId, waitingNoticeBodies],
     )) as { id: string }[]
-  )[0]?.id
+  ).map((prompt) => prompt.id)
+
+export const activeAgentTurns = async (tx: Transaction, workspaceId: string) =>
+  (await onServer(
+    tx,
+    `select id as "chatId", agent_turn_message_id as "promptId",
+       (select extract(epoch from max(created_at)) * 1000 from events
+        where events.workspace_id = chats.workspace_id and events.chat_id = chats.id)::float8 as "lastEventAt"
+     from chats where workspace_id = $1 and agent_turn_message_id is not null`,
+    [workspaceId],
+  )) as { chatId: string; promptId: string; lastEventAt: number }[]
+
+export const setRuntimesHostOnline = (tx: Transaction, workspaceId: string, hostId: string, isOnline: boolean) =>
+  onServer(tx, 'update runtimes set host_online = $3 where workspace_id = $1 and host_id = $2 and host_online <> $3', [
+    workspaceId,
+    hostId,
+    isOnline,
+  ])
 
 export const isChatEventStored = async (tx: Transaction, workspaceId: string, eventId: string) =>
   (await onServer(tx, 'select 1 from events where workspace_id = $1 and id = $2', [workspaceId, eventId])).length > 0

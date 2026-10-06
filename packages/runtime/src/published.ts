@@ -1,6 +1,11 @@
 export type { SandboxLocation, SandboxProvider, SandboxTransport } from './contracts/sandbox-provider.ts'
 export { createZeroTransactor as createRuntimeTransactor } from './integrations/zero-transactor.ts'
-export { readAgentAccess, rememberAgentConversation } from './operations/agent-access.ts'
-export { ensureRuntimeRunning } from './operations/ensure-runtime-running.ts'
+export {
+  forgetAgentConversation,
+  listHostChats,
+  readAgentAccess,
+  rememberAgentConversation,
+} from './operations/agent-access.ts'
+export { ensureRuntimeRunning, retryRuntime } from './operations/ensure-runtime-running.ts'
 export { removeChatRuntime } from './operations/remove-chat-runtime.ts'
 export { touchRuntime } from './operations/touch-runtime.ts'

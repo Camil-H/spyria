@@ -1,4 +1,4 @@
-export type { AgentChat, AgentConversation } from './contracts/agent.ts'
+export type { AgentChat, AgentConversation, AgentHost } from './contracts/agent.ts'
 export { streamedTextOf } from './domain/agent-events.ts'
 export type { AgentStream, ConversationCommands } from './entrypoints/commands.ts'
 export { createAgentHandlers } from './entrypoints/jobs.ts'

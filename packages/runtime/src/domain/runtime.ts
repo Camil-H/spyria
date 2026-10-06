@@ -19,6 +19,7 @@ export type Runtime = Readonly<{
   hostId: RuntimeHostId | null
   state: RuntimeState
   failure: RuntimeFailure | null
+  hostOnline: boolean
   image: string
   lastActiveAt: number
   createdAt: number
@@ -101,6 +102,29 @@ export const reconciledStateOf = (runtime: Runtime, status: 'running' | 'stopped
     ? observed
     : undefined
 }
+
+export type RuntimeStatus = 'Not started' | 'Starting…' | 'Ready' | 'Sleeping' | 'Host offline' | 'Could not start'
+
+const statusByState: Record<RuntimeState, RuntimeStatus> = {
+  creating: 'Starting…',
+  starting: 'Starting…',
+  running: 'Ready',
+  stopping: 'Sleeping',
+  stopped: 'Sleeping',
+  failed: 'Could not start',
+  removing: 'Could not start',
+  removed: 'Could not start',
+}
+
+export const isAwaitingHost = (runtime: Pick<Runtime, 'state' | 'hostOnline'>) =>
+  !runtime.hostOnline && (runtime.state === 'running' || runtime.state === 'stopped')
+
+export const runtimeStatusOf = (runtime: Pick<Runtime, 'state' | 'hostOnline'> | undefined): RuntimeStatus => {
+  if (!runtime) return 'Not started'
+  return isAwaitingHost(runtime) ? 'Host offline' : statusByState[runtime.state]
+}
+
+export const isRetryable = (runtime: Runtime | undefined) => runtime?.state === 'failed' || runtime?.state === 'removed'
 
 export const locationOf = (runtime: Runtime) =>
   runtime.hostId === null

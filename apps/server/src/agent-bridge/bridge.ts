@@ -1,6 +1,7 @@
 import {
   type AgentChat,
   type AgentConversation,
+  type AgentHost,
   type AgentLlm,
   createAgentHandlers,
   streamedTextOf,
@@ -18,11 +19,20 @@ import type { Authentication } from '../auth/session-tokens.ts'
 type StreamFrame = { type?: unknown; token?: unknown; chatId?: unknown }
 
 const reopenDelayMilliseconds = 1000
+const catchUpMilliseconds = 1000
 const readyTimeoutMilliseconds = 5000
 const keyOf = (chat: AgentChat) => `${chat.workspaceId}/${chat.chatId}`
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : 'an unknown error')
 
-export const createAgentBridge = ({ sandboxProvider, llm }: { sandboxProvider: SandboxProvider; llm: AgentLlm }) => {
+export const createAgentBridge = ({
+  sandboxProvider,
+  llm,
+  now,
+}: {
+  sandboxProvider: SandboxProvider
+  llm: AgentLlm
+  now?: () => number
+}) => {
   const bridgeOf = (database: Database) => {
     const sockets = new Map<
       string,
@@ -35,13 +45,34 @@ export const createAgentBridge = ({ sandboxProvider, llm }: { sandboxProvider: S
       transact: (work) => zeroDrizzle(schema, database).transaction(work),
       sandboxProvider,
       llm,
-      eventSockets: { ensureOpen: (...target) => ensureOpen(...target) },
+      now,
+      eventSockets: {
+        ensureOpen: (...target) => ensureOpen(...target),
+        stopStreaming: (chat, promptId) => {
+          const socket = sockets.get(keyOf(chat))
+          if (socket?.promptId === promptId) Object.assign(socket, { promptId: null, streamedText: '' })
+        },
+      },
     })
     let isReleased = false
+    const logFailure = (chat: AgentChat) => (error: unknown) =>
+      console.error(`Reopening the agent turn of chat ${chat.chatId} failed: ${messageOf(error)}`)
+    const reopenLater = (chat: AgentChat) => setTimeout(() => void reopen(chat), reopenDelayMilliseconds)
     const reopen = async (chat: AgentChat) => {
       if (isReleased || sockets.has(keyOf(chat))) return
-      const target = await handlers.reopenTarget(chat).catch(() => undefined)
-      if (target) await ensureOpen(chat, target.conversation, target.promptId)
+      const target = await handlers.reopenTarget(chat).catch((error) => {
+        logFailure(chat)(error)
+        reopenLater(chat)
+        return undefined
+      })
+      if (!target) return
+      await ensureOpen(chat, target.conversation, target.promptId)
+      const { promptId, outcome } = target
+      if (outcome)
+        setTimeout(
+          () => void handlers.closeReopenedTurn(chat, promptId, outcome).catch(logFailure(chat)),
+          catchUpMilliseconds,
+        )
     }
     const ensureOpen = (chat: AgentChat, conversation: AgentConversation, promptId: MessageId) => {
       const current = sockets.get(keyOf(chat))
@@ -70,7 +101,7 @@ export const createAgentBridge = ({ sandboxProvider, llm }: { sandboxProvider: S
         ready.resolve()
         if (chatSocket.isClosed || sockets.get(keyOf(chat)) !== chatSocket) return
         sockets.delete(keyOf(chat))
-        if (chatSocket.promptId) setTimeout(() => void reopen(chat), reopenDelayMilliseconds)
+        if (chatSocket.promptId) reopenLater(chat)
       }
       sockets.set(keyOf(chat), chatSocket)
       const opened = handlers.openEvents(chat, conversation, {
@@ -104,6 +135,7 @@ export const createAgentBridge = ({ sandboxProvider, llm }: { sandboxProvider: S
     return {
       jobs: handlers.jobs,
       ensureOpen,
+      promptWaiting: (host: AgentHost) => handlers.promptWaiting(host),
       resumeActiveTurns: async () => {
         const chats = await database.$client<{ workspaceId: string; chatId: string }[]>`
           select workspace_id as "workspaceId", id as "chatId" from chats where agent_turn_message_id is not null`

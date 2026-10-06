@@ -5,14 +5,17 @@ export type AgentLlm = { baseUrl: string; model: string }
 
 const requestTimeoutMilliseconds = 30_000
 
-const call = async (endpoint: AgentEndpoint, method: string, path: string, body: object) => {
+const notFoundStatus = 404
+
+const call = async (endpoint: AgentEndpoint, method: string, path: string, body?: object) => {
   const response = await endpoint.transport.fetch({
     method,
     path,
     headers: { 'content-type': 'application/json', 'x-session-api-key': endpoint.apiKey },
-    body: JSON.stringify(body),
+    body: body && JSON.stringify(body),
     timeoutMilliseconds: requestTimeoutMilliseconds,
   })
+  if (response.status === notFoundStatus && method === 'GET') return undefined
   if (response.status >= 300) throw new Error(`The Agent Server answered ${method} ${path} with ${response.status}`)
   return JSON.parse(response.body || '{}') as Record<string, unknown>
 }
@@ -46,7 +49,7 @@ export const createSandboxAgentServer = (llm: AgentLlm): AgentServer => ({
       workspace: { kind: 'LocalWorkspace', working_dir: '/workspace/project' },
       autotitle: false,
     })
-    return String(created.id)
+    return String(created?.id)
   },
   sendMessage: async (conversation, text) => {
     await call(conversation, 'POST', `/api/conversations/${conversation.conversationId}/events`, {
@@ -54,6 +57,13 @@ export const createSandboxAgentServer = (llm: AgentLlm): AgentServer => ({
       content: [{ type: 'text', text }],
       run: true,
     })
+  },
+  statusOf: async (conversation) => {
+    const read = await call(conversation, 'GET', `/api/conversations/${conversation.conversationId}`)
+    return read && String(read.execution_status)
+  },
+  interrupt: async (conversation) => {
+    await call(conversation, 'POST', `/api/conversations/${conversation.conversationId}/interrupt`, {})
   },
   openEvents: (conversation: AgentConversation, afterTimestamp, listener) => {
     const resend = afterTimestamp

@@ -23,6 +23,7 @@ export type Conversation = Readonly<{
   ownerName: string
   origin: Readonly<{ chatId: ChatId; name: string }> | null
   isAgentWorking: boolean
+  hasActiveTurn: boolean
   messages: readonly ConversationMessage[]
 }>
 
@@ -39,6 +40,7 @@ export const getConversation =
     const memberName = (memberId: MemberId | null) => (memberId && memberNames.get(memberId)) || 'Agent'
     const origin = chat.originChatId ? findChat(snapshot, workspaceId, chat.originChatId) : undefined
     const chatMessages = snapshot.messages.filter((message) => message.chatId === chatId)
+    const hasActiveTurn = chat.agentTurnMessageId !== null
     return {
       title: chat.name,
       type: chat.type,
@@ -47,7 +49,8 @@ export const getConversation =
       gitBranch: chat.gitBranch,
       ownerName: memberName(chat.ownerId),
       origin: origin ? { chatId: origin.id, name: origin.name } : null,
-      isAgentWorking: chatMessages.some((message) => message.needsReply),
+      isAgentWorking: hasActiveTurn || chatMessages.some((message) => message.needsReply),
+      hasActiveTurn,
       messages: chatMessages.map((message) => ({
         id: message.id,
         kind: message.kind,

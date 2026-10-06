@@ -10,6 +10,7 @@ import {
   rememberAgentConversation,
   serverOnlyRuntimeValueOf,
   setRuntimeHostSecretHash,
+  setRuntimesHostOnline,
   setServerOnlyRuntimeValue,
 } from '@hq/db/server-writes'
 import type { RuntimeHost as RuntimeHostRow, Runtime as RuntimeRow } from '@hq/db/zero'
@@ -36,6 +37,7 @@ const runtimeOf = (row: RuntimeRow): Runtime => ({
   id: runtimeId(row.id),
   chatId: chatId(row.chatId),
   hostId: row.hostId === null ? null : runtimeHostId(row.hostId),
+  hostOnline: row.hostOnline === true,
 })
 
 export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
@@ -90,9 +92,15 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
       add: (runtime) => tx.mutate.runtimes.insert(runtime),
       save: (runtime) => tx.mutate.runtimes.update(runtime),
       delete: (runtime) => tx.mutate.runtimes.delete(runtime),
+      setHostOnline: async (workspaceId, hostId, isOnline) => {
+        await setRuntimesHostOnline(tx, workspaceId, hostId, isOnline)
+      },
       agentConversationOf: (runtime) => serverOnlyValueOf(runtime, 'agentConversation'),
       rememberAgentConversation: (runtime, conversationId) =>
         rememberAgentConversation(tx, runtime.workspaceId, runtime.id, conversationId),
+      forgetAgentConversation: async (runtime) => {
+        await setServerOnlyRuntimeValue(tx, runtime.workspaceId, runtime.id, 'agentConversation', null)
+      },
     },
     secrets: {
       keep: async (runtime, secret, value) => {

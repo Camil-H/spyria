@@ -22,8 +22,10 @@ export type RuntimeRepository = {
   add(runtime: Runtime): Promise<void>
   save(runtime: Runtime): Promise<void>
   delete(runtime: Runtime): Promise<void>
+  setHostOnline(workspaceId: WorkspaceId, hostId: RuntimeHostId, isOnline: boolean): Promise<void>
   agentConversationOf(runtime: Runtime): Promise<string | undefined>
   rememberAgentConversation(runtime: Runtime, conversationId: string): Promise<string>
+  forgetAgentConversation(runtime: Runtime): Promise<void>
 }
 
 export type RuntimeSecret = 'apiKey' | 'llmToken'

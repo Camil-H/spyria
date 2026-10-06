@@ -2,7 +2,7 @@ import { createDatabase, type Database } from '@hq/db/postgres'
 import { databaseUrlOf } from '@hq/db/testing'
 import { schema } from '@hq/db/zero'
 import { chatId, workspaceId } from '@hq/kernel'
-import { createRuntimeTransactor, ensureRuntimeRunning } from '@hq/runtime/server'
+import { createRuntimeTransactor, ensureRuntimeRunning, type SandboxProvider } from '@hq/runtime/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { websocket } from 'hono/bun'
 import { setCookie } from 'hono/cookie'
@@ -19,13 +19,21 @@ const port = Number(process.env.PORT ?? 3100)
 
 type ServedDatabase = { database: Database; jobWorker: ReturnType<typeof startJobWorker> }
 const servedDatabaseByName = new Map<string, ServedDatabase>()
+const databasesFailingCreation = new Set<string>()
+const sandboxProviderOf = (databaseName: string): SandboxProvider => ({
+  ...runtimeHosts.sandboxProvider,
+  create: async (sandbox) => {
+    if (databasesFailingCreation.has(databaseName)) throw new Error('Runtime creation fails in this test')
+    await runtimeHosts.sandboxProvider.create(sandbox)
+  },
+})
 const databaseByName = (databaseName: string) => {
   const served = servedDatabaseByName.get(databaseName)
   if (served) return served.database
   const database = createDatabase(databaseUrlOf(databaseName))
   servedDatabaseByName.set(databaseName, {
     database,
-    jobWorker: startJobWorker(database, { sandboxProvider: runtimeHosts.sandboxProvider, agentBridge }),
+    jobWorker: startJobWorker(database, { sandboxProvider: sandboxProviderOf(databaseName), agentBridge }),
   })
   return database
 }
@@ -42,6 +50,7 @@ const { appOrigin } = testAuthSettings
 
 const runtimeHosts = createRuntimeHostGateway({
   databases: () => [...servedDatabaseByName.values()].map((served) => served.database),
+  afterHello: (database, host) => agentBridge.forDatabase(database).promptWaiting(host),
 })
 
 const agentBridge = createAgentBridge({
@@ -84,6 +93,12 @@ const app = createApp({
     const { db = '', chat } = context.req.query()
     if (chat) scriptByChat.set(`${db}/${chat}`, await context.req.json())
     else for (const key of scriptByChat.keys()) if (key.startsWith(`${db}/`)) scriptByChat.delete(key)
+    return context.body(null, 204)
+  })
+  .post('/test/runtime-creation', (context) => {
+    const { db = '', failing } = context.req.query()
+    if (failing === 'true') databasesFailingCreation.add(db)
+    else databasesFailingCreation.delete(db)
     return context.body(null, 204)
   })
   .post('/test/runtime', async (context) => {

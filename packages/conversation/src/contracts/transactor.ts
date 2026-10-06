@@ -1,8 +1,9 @@
 import type {
   AgentEventRepository,
-  AgentPromptRequests,
+  AgentJobs,
   AgentTurnRepository,
   ChatRepository,
+  MemberDirectory,
   MessageRepository,
   ReadMarkerRepository,
 } from './repositories.ts'
@@ -11,7 +12,8 @@ export type UnitOfWork = {
   messages: MessageRepository
   readMarkers: ReadMarkerRepository
   chats: ChatRepository
-  agentPrompts: AgentPromptRequests
+  agentJobs: AgentJobs
+  members: MemberDirectory
   agentTurns: AgentTurnRepository
   agentEvents: AgentEventRepository
 }

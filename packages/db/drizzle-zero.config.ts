@@ -43,6 +43,7 @@ export default drizzleZeroConfig(tables, {
       hostId: true,
       state: true,
       failure: true,
+      hostOnline: true,
       image: true,
       lastActiveAt: true,
       createdAt: true,

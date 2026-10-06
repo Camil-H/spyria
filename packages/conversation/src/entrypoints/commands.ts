@@ -8,6 +8,8 @@ export type ConversationCommands = {
   editMessage: Command<{ messageId: MessageId; text: string }>
   deleteMessage: Command<{ messageId: MessageId }>
   markChatRead: Command<{ chatId: ChatId }>
+  stopAgent: Command<{ chatId: ChatId }>
+  retryAgent: Command<{ chatId: ChatId }>
   startRuntimeFromMessage: Command<{ messageId: MessageId }>
   saveDraft: Command<{ chatId: ChatId; text: string }, void>
 }

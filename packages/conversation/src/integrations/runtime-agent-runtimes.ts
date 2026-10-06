@@ -1,12 +1,16 @@
 import {
   createRuntimeTransactor,
   ensureRuntimeRunning,
+  forgetAgentConversation,
+  listHostChats,
   readAgentAccess,
   rememberAgentConversation,
+  retryRuntime,
   type SandboxProvider,
   touchRuntime,
 } from '@hq/runtime/published'
-import type { AgentChat, AgentEndpoint, AgentRuntimes } from '../contracts/agent.ts'
+import type { Transaction } from '@rocicorp/zero'
+import type { AgentChat, AgentEndpoint, AgentRuntimes, RuntimeRetrier } from '../contracts/agent.ts'
 import type { Transact } from './zero-transactor.ts'
 
 export type { SandboxProvider }
@@ -25,12 +29,24 @@ export const createRuntimeAgentRuntimes = (transact: Transact, provider: Sandbox
         ensureRuntimeRunning(dependencies, { ...chat, id: crypto.randomUUID(), now: Date.now() }),
       )
       if (['creating', 'starting', 'stopping'].includes(runtime.state)) return { state: 'starting' }
+      if (!runtime.hostOnline && ['running', 'stopped'].includes(runtime.state)) return { state: 'host_offline' }
       const endpoint = runtime.state === 'running' ? await endpointOf(chat) : undefined
       return endpoint ? { state: 'ready', endpoint } : { state: 'failed', failure: runtime.failure }
     },
     endpointOf,
     rememberConversation: (chat, conversationId) =>
       inTransaction((dependencies) => rememberAgentConversation(dependencies, { ...chat, conversationId })),
+    forgetConversation: (chat) => inTransaction((dependencies) => forgetAgentConversation(dependencies, chat)),
+    chatsOnHost: (host) => inTransaction((dependencies) => listHostChats(dependencies, host)),
     touch: (chat) => inTransaction((dependencies) => touchRuntime(dependencies, { ...chat, now: Date.now() })),
   }
 }
+
+export const createZeroRuntimeRetrier = (tx: Transaction): RuntimeRetrier => ({
+  retry: async (chat) => {
+    await retryRuntime(
+      { transactor: createRuntimeTransactor(tx) },
+      { ...chat, id: crypto.randomUUID(), now: Date.now() },
+    )
+  },
+})

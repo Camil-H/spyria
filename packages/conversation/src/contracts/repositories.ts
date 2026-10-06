@@ -1,6 +1,7 @@
 import type { ChatId, MemberId, MessageId, WorkspaceId } from '@hq/kernel'
 import type { AgentEvent } from '../domain/agent-events.ts'
 import type { ConversationChat, Message, MessageChange } from '../domain/message.ts'
+import type { AgentInterrupt } from './agent.ts'
 
 export type Draft = Readonly<{ workspaceId: WorkspaceId; chatId: ChatId; memberId: MemberId; text: string }>
 
@@ -11,14 +12,23 @@ export type MessageRepository = {
   setDetail(messageId: MessageId, detail: string): Promise<void>
 }
 
-export type AgentPromptRequests = { request(message: Message): Promise<void> }
+export type AgentJobs = {
+  prompt(message: Message): Promise<void>
+  interrupt(interrupt: AgentInterrupt): Promise<void>
+  sweepLater(): Promise<void>
+}
 
 export type AgentTurnRepository = {
   lock(chatId: ChatId): Promise<MessageId | null>
   set(chatId: ChatId, promptId: MessageId | null): Promise<void>
   nextPrompt(chatId: ChatId): Promise<Message | undefined>
+  waitingPrompts(chatId: ChatId): Promise<Message[]>
   hasReply(promptId: MessageId): Promise<boolean>
+  hasNotice(promptId: MessageId, text: string): Promise<boolean>
+  active(): Promise<{ chatId: ChatId; promptId: MessageId; lastEventAt: number }[]>
 }
+
+export type MemberDirectory = { displayNameOf(memberId: MemberId): Promise<string> }
 
 export type AgentEventRepository = {
   append(chatId: ChatId, event: AgentEvent, replyToId: MessageId | null, at: Date): Promise<number | undefined>

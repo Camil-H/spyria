@@ -3,13 +3,13 @@ import { StoreProvider } from '@hq/db/react'
 import { chatId as toChatId, type WorkspaceId } from '@hq/kernel'
 import { PanelProvider, PanelToggle, SidePanel } from '@hq/panel'
 import { ProfileProvider, ProfileView, useHasLlmCredential } from '@hq/profile'
-import { RuntimeHostsSection, RuntimeProvider } from '@hq/runtime'
+import { RuntimeHostsSection, RuntimeProvider, RuntimeStatus } from '@hq/runtime'
 import { SessionProvider } from '@hq/session'
 import { useIsWorkspaceAdmin, WorkspaceLayout, WorkspaceProvider } from '@hq/workspace'
 import { BrowserRouter, Link, Navigate, Route, Routes, useOutletContext, useParams } from 'react-router'
 import type { Application } from './factory.ts'
 
-const ChatRoute = () => {
+const ChatRoute = ({ commands }: { commands: Application['conversationCommands'] }) => {
   const workspaceId = useOutletContext<WorkspaceId>()
   const chatId = toChatId(useParams().chatId ?? '')
   const canPrompt = useHasLlmCredential(workspaceId)
@@ -23,7 +23,18 @@ const ChatRoute = () => {
   )
   return (
     <div className="flex h-full">
-      <ChatView headerActions={<PanelToggle />} canPrompt={canPrompt} blockedNotice={blockedNotice} />
+      <ChatView
+        headerActions={<PanelToggle />}
+        runtimeStatus={
+          <RuntimeStatus
+            workspaceId={workspaceId}
+            chatId={chatId}
+            onRetry={() => commands.retryAgent({ workspaceId, chatId })}
+          />
+        }
+        canPrompt={canPrompt}
+        blockedNotice={blockedNotice}
+      />
       <SidePanel workspaceId={workspaceId} chatId={chatId} />
     </div>
   )
@@ -59,7 +70,7 @@ export const App = ({ app }: { app: Application }) => (
                       element={<WorkspaceLayout chatAdornment={(chatId) => <ChatIndicators chatId={chatId} />} />}
                     >
                       <Route index element={<p className="p-6 text-muted">Select a chat</p>} />
-                      <Route path="chats/:chatId" element={<ChatRoute />} />
+                      <Route path="chats/:chatId" element={<ChatRoute commands={app.conversationCommands} />} />
                       <Route path="settings" element={<SettingsRoute />} />
                       <Route
                         path="profile"

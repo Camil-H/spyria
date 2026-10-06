@@ -13,7 +13,20 @@ export const agentNotices = {
   couldNotStart: 'The agent could not start',
   stoppedWithError: 'The agent stopped with an error',
   noReply: 'The agent finished without a reply',
+  hostOffline: 'The runtime host is offline',
+  stoppedEarly: 'The agent stopped before finishing',
+  noResponse: 'The agent did not respond',
+  newSession: 'The agent started a new session; it does not remember earlier messages',
 }
+export const waitingNotices = [
+  agentNotices.noHost,
+  agentNotices.couldNotStart,
+  agentNotices.hostOffline,
+  agentNotices.newSession,
+]
+export const stoppedByNoticeOf = (memberName: string) => `Stopped by ${memberName}`
+export const silentTurnMilliseconds = 10 * 60_000
+export const agentSweepIntervalMilliseconds = 60_000
 const turnOutcomes: readonly string[] = ['finished', 'error', 'stuck']
 
 const textOf = (content: unknown) =>
@@ -45,6 +58,11 @@ export const agentProjectionOf = (event: AgentEvent): AgentProjection => {
 
 export const turnEndNoticeOf = (outcome: TurnOutcome, hasReply: boolean) =>
   outcome !== 'finished' ? agentNotices.stoppedWithError : hasReply ? undefined : agentNotices.noReply
+
+export const reopenedTurnOutcomeOf = (executionStatus: string): TurnOutcome | undefined => {
+  if (executionStatus === 'running') return undefined
+  return executionStatus === 'error' || executionStatus === 'stuck' ? executionStatus : 'finished'
+}
 
 export const startFailureNoticeOf = (failure: string | null) =>
   failure === 'no_host' || failure === 'no_capacity' ? agentNotices.noHost : agentNotices.couldNotStart
