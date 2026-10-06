@@ -17,6 +17,7 @@ const unreadChatKeysOf = (snapshot: Snapshot, memberId: MemberId) => {
     if (
       message.seq > (lastReadSeqByChat.get(chatKey) ?? 0) &&
       message.kind !== 'step' &&
+      message.kind !== 'notice' &&
       message.deletedAt === null &&
       message.authorId !== memberId
     )

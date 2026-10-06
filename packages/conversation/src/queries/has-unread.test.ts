@@ -43,3 +43,9 @@ test('a reply listed before a newer message stays unread when the marker is past
 test('a message listed after a reply is read when the marker is past its seq', () => {
   expect(unreadFor([messageOf(1, bob), messageOf(3, null), messageOf(2, bob)], 3)).toBe(false)
 })
+
+test('agent steps and notices never make a chat unread; an agent answer does', () => {
+  const stepOrNotice = (seq: number, kind: MessageRow['kind']): MessageRow => ({ ...messageOf(seq, null), kind })
+  expect(unreadFor([messageOf(1, alice), stepOrNotice(2, 'step'), stepOrNotice(3, 'notice')], 1)).toBe(false)
+  expect(unreadFor([messageOf(1, alice), stepOrNotice(2, 'step'), messageOf(3, null)], 1)).toBe(true)
+})
