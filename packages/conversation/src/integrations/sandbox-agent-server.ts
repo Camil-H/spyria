@@ -4,7 +4,6 @@ import type { AgentEvent } from '../domain/agent-events.ts'
 export type AgentLlm = { model: string }
 
 const requestTimeoutMilliseconds = 30_000
-
 const notFoundStatus = 404
 
 const call = async (endpoint: AgentEndpoint, method: string, path: string, body?: object) => {

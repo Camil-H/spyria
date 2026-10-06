@@ -24,11 +24,7 @@ const llmGateway = createLlmGateway({
 const runtimeHosts = createRuntimeHostGateway({
   databases: () => [database],
   afterHello: (helloDatabase, host) => agentBridge.forDatabase(helloDatabase).promptWaiting(host),
-  relayModelCall: createModelCallRelay({
-    gatewayUrlOf: () => llmGateway.url,
-    llmGateway,
-    agentBridge: () => agentBridge,
-  }),
+  relayModelCall: createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),
 })
 const llmModel = process.env.HQ_LLM_MODEL
 const agentBridge = createAgentBridge({

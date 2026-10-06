@@ -33,12 +33,7 @@ export type AgentTurnRepository = {
   active(): Promise<{ chatId: ChatId; promptId: MessageId; lastEventAt: number }[]>
 }
 
-export type ModelCallTurn = {
-  promptId: MessageId
-  prompterId: MemberId
-  ownerId: MemberId | null
-  failure: string | null
-}
+export type ModelCallTurn = { promptId: MessageId; prompterId: MemberId; ownerId: MemberId | null }
 
 export type MemberDirectory = {
   displayNameOf(memberId: MemberId): Promise<string>

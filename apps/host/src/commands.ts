@@ -96,9 +96,12 @@ export const relayUrlOf = (origin: string, path: string) => {
   return url
 }
 
-const ignoringMissing = (error: unknown) => {
-  if (!(error instanceof DockerError) || error.status !== 404) throw error
-}
+const ignoring =
+  (...statuses: number[]) =>
+  (error: unknown) => {
+    if (!(error instanceof DockerError) || !statuses.includes(error.status)) throw error
+  }
+const ignoringMissing = ignoring(404)
 
 export const createCommandRunner = ({
   docker,
@@ -123,17 +126,13 @@ export const createCommandRunner = ({
         Name: network,
         Driver: 'bridge',
         Labels: { 'hq.managed': '1' },
-      }).catch((createError) => {
-        if (!(createError instanceof DockerError) || createError.status !== 409) throw createError
-      })
+      }).catch(ignoring(409))
     })
     if (selfContainerId)
       await docker('POST', `/networks/${network}/connect`, {
         Container: selfContainerId,
         EndpointConfig: { Aliases: [gatewayRelayAlias] },
-      }).catch((error) => {
-        if (!(error instanceof DockerError) || ![403, 409].includes(error.status)) throw error
-      })
+      }).catch(ignoring(403, 409))
   }
   const prepare = (image: string) =>
     docker('GET', `/images/${image}/json`).catch(async (error) => {

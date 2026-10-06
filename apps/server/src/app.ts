@@ -18,7 +18,7 @@ import {
   runtimeMutators,
 } from '@hq/runtime/server'
 import { workspaceMutators } from '@hq/workspace/server'
-import { getMutator, mustGetMutator, mustGetQuery, type Transaction } from '@rocicorp/zero'
+import { getMutator, mustGetMutator, mustGetQuery } from '@rocicorp/zero'
 import { handleMutateRequest, handleQueryRequest } from '@rocicorp/zero/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { Hono } from 'hono'
@@ -33,24 +33,21 @@ import { createRuntimeHostGateway, type RuntimeHostGateway } from './runtime-hos
 export const defaultLlm = { model: 'openai/fake/fake-model' }
 type LlmGateway = ReturnType<typeof createLlmGateway>
 
-const statusByRuntimeErrorCode: Record<string, number> = { not_admin: 403, host_not_found: 404 }
+const statusByErrorCode: Record<string, number> = { not_admin: 403, host_not_found: 404 }
 
 type ZeroDatabase = ReturnType<typeof zeroDrizzle<typeof schema, Database>>
 
-const runtimeHostResponse = async (
-  zeroDatabase: ZeroDatabase,
-  successStatus: number,
-  endpoint: (tx: Transaction) => Promise<object>,
-) => {
+const endpointResponse = async (request: string, successStatus: number, endpoint: () => Promise<unknown>) => {
   try {
-    return Response.json(await zeroDatabase.transaction(endpoint), { status: successStatus })
+    const result = await endpoint()
+    return result ? Response.json(result, { status: successStatus }) : new Response(null, { status: successStatus })
   } catch (error) {
-    if (error instanceof RuntimeError)
+    if (error instanceof RuntimeError || error instanceof ProfileError)
       return Response.json(
         { error: error.code, message: error.message },
-        { status: statusByRuntimeErrorCode[error.code] ?? 400 },
+        { status: statusByErrorCode[error.code] ?? 400 },
       )
-    console.error(`A runtime host request failed with ${error instanceof Error ? error.name : 'an unknown error'}`)
+    console.error(`${request} failed with ${error instanceof Error ? error.name : 'an unknown error'}`)
     return Response.json({ error: 'internal' }, { status: 500 })
   }
 }
@@ -64,9 +61,7 @@ export const createApp = ({
   llmGateway,
   runtimeHosts = createRuntimeHostGateway({
     databases: () => [database],
-    relayModelCall:
-      llmGateway &&
-      createModelCallRelay({ gatewayUrlOf: () => llmGateway.url, llmGateway, agentBridge: () => agentBridge }),
+    relayModelCall: llmGateway && createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),
   }),
   agentBridge = createAgentBridge({ sandboxProvider: runtimeHosts.sandboxProvider, llm: defaultLlm }),
   fakeLlm,
@@ -144,7 +139,7 @@ export const createApp = ({
     })
     .post(llmCredentialsPath, async (context) => {
       const body = await context.req.json().catch(() => null)
-      try {
+      return endpointResponse('Adding an LLM credential', 201, async () => {
         if (!llmGateway) throw new Error('No LLM gateway is configured')
         await addLlmCredentialFromRequest(
           (work) => context.get('zeroDatabase').transaction(work),
@@ -152,24 +147,21 @@ export const createApp = ({
           body,
           llmGateway,
         )
-      } catch (error) {
-        if (error instanceof ProfileError) return context.json({ error: error.code, message: error.message }, 400)
-        console.error(
-          `Adding an LLM credential failed with ${error instanceof Error ? error.name : 'an unknown error'}`,
-        )
-        return context.json({ error: 'internal' }, 500)
-      }
-      return context.body(null, 201)
+      })
     })
     .post(runtimeHostsPath, async (context) => {
       const body = await context.req.json().catch(() => null)
-      return runtimeHostResponse(context.get('zeroDatabase'), 201, (tx) =>
-        addRuntimeHostFromRequest(tx, context.get('zeroContext'), body),
+      return endpointResponse('A runtime host request', 201, () =>
+        context
+          .get('zeroDatabase')
+          .transaction((tx) => addRuntimeHostFromRequest(tx, context.get('zeroContext'), body)),
       )
     })
     .post(`${runtimeHostsPath}/:hostId/code`, (context) =>
-      runtimeHostResponse(context.get('zeroDatabase'), 200, (tx) =>
-        renewClaimCodeFromRequest(tx, context.get('zeroContext'), context.req.param('hostId')),
+      endpointResponse('A runtime host request', 200, () =>
+        context
+          .get('zeroDatabase')
+          .transaction((tx) => renewClaimCodeFromRequest(tx, context.get('zeroContext'), context.req.param('hostId'))),
       ),
     )
   if (fakeLlm) app.route('/fake-llm', fakeLlm)

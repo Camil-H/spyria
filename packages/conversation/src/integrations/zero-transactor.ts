@@ -73,6 +73,8 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
     if (message.workspaceId !== contextWorkspaceId) throw new ForeignWorkspace()
     return message
   }
+  const repliesTo = (promptId: MessageId) =>
+    zql.messages.where('workspaceId', contextWorkspaceId).where('replyToId', promptId)
   const messageRow = (id: string) => tx.run(zql.messages.where('workspaceId', contextWorkspaceId).where('id', id).one())
   const enqueue = (type: string, payload: object, delayMilliseconds = 0) =>
     enqueueJob(tx, { workspaceId: contextWorkspaceId, type, payload, delayMilliseconds }).then(() => undefined)
@@ -134,7 +136,6 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
               promptId: messageId(turn.promptId),
               prompterId: memberId(turn.prompterId),
               ownerId: turn.ownerId === null ? null : memberId(turn.ownerId),
-              failure: turn.failure,
             }
           : undefined
       },
@@ -149,22 +150,9 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       waitingPrompts: async (id) =>
         Promise.all((await waitingPromptIds(id)).map((promptId) => getMessage(messageId(promptId)))),
       hasReply: async (promptId) =>
-        (await tx.run(
-          zql.messages
-            .where('workspaceId', contextWorkspaceId)
-            .where('replyToId', promptId)
-            .where('kind', '!=', 'notice')
-            .one(),
-        )) !== undefined,
+        (await tx.run(repliesTo(promptId).where('kind', '!=', 'notice').one())) !== undefined,
       hasNotice: async (promptId, text) =>
-        (await tx.run(
-          zql.messages
-            .where('workspaceId', contextWorkspaceId)
-            .where('replyToId', promptId)
-            .where('kind', 'notice')
-            .where('body', text)
-            .one(),
-        )) !== undefined,
+        (await tx.run(repliesTo(promptId).where('kind', 'notice').where('body', text).one())) !== undefined,
       active: async () =>
         (await activeAgentTurns(tx, contextWorkspaceId)).map((turn) => ({
           chatId: chatId(turn.chatId),

@@ -71,17 +71,11 @@ export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMes
           observedStep(action.step, projection.observation, createdAt.getTime() - action.createdAt.getTime())
         if (action && observed) messageByKey.set(`${workspaceId}/${action.id}`, { ...action, step: observed })
       }
-      if (projection?.type === 'message')
-        project({ kind: 'agent', authorId: null, body: projection.body, detail: null, step: null, replyToId })
-      if (projection?.type === 'step')
-        project({
-          kind: 'step',
-          authorId: null,
-          body: projection.step.type,
-          detail: null,
-          step: projection.step,
-          replyToId,
-        })
+      if (projection?.type === 'message' || projection?.type === 'step') {
+        const step = projection.type === 'step' ? projection.step : null
+        const body = projection.type === 'step' ? projection.step.type : projection.body
+        project({ kind: step ? 'step' : 'agent', authorId: null, body, detail: null, step, replyToId })
+      }
     }
     if (type !== 'message.edited' && type !== 'message.deleted') continue
     const { messageId, body } = payload as ChangedPayload

@@ -47,8 +47,6 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
     ids.length === 0
       ? []
       : (await tx.run(zql.runtimes.where('workspaceId', workspaceId).where('id', 'IN', ids))).map(runtimeOf)
-  const serverOnlyValueOf = (runtime: Runtime, column: 'apiKey' | 'agentConversation') =>
-    serverOnlyRuntimeValueOf(tx, runtime.workspaceId, runtime.id, column)
   const unitOfWork: UnitOfWork = {
     runtimeHosts: {
       add: (host) => tx.mutate.runtimeHosts.insert(host),
@@ -93,7 +91,8 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
       setHostOnline: async (workspaceId, hostId, isOnline) => {
         await setRuntimesHostOnline(tx, workspaceId, hostId, isOnline)
       },
-      agentConversationOf: (runtime) => serverOnlyValueOf(runtime, 'agentConversation'),
+      agentConversationOf: (runtime) =>
+        serverOnlyRuntimeValueOf(tx, runtime.workspaceId, runtime.id, 'agentConversation'),
       rememberAgentConversation: (runtime, conversationId) =>
         rememberAgentConversation(tx, runtime.workspaceId, runtime.id, conversationId),
       forgetAgentConversation: async (runtime) => {

@@ -27,13 +27,13 @@ const jsonOf = (text: string): unknown => {
 const modelOf = (body: string) => (jsonOf(body) as { model?: unknown } | undefined)?.model?.toString()
 
 export const createModelCallRelay = ({
-  gatewayUrlOf,
   llmGateway,
+  gatewayUrlOf = () => llmGateway.url,
   agentBridge,
   providerHeadersOf,
 }: {
-  gatewayUrlOf: (database: Database) => string
   llmGateway: ReturnType<typeof createLlmGateway>
+  gatewayUrlOf?: (database: Database) => string
   agentBridge: () => AgentBridge
   providerHeadersOf?: (database: Database, chat: AgentChat) => Record<string, string>
 }) => {

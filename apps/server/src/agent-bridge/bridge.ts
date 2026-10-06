@@ -1,7 +1,6 @@
 import {
   type AgentChat,
   type AgentConversation,
-  type AgentHost,
   type AgentLlm,
   createAgentHandlers,
   streamedTextOf,
@@ -145,7 +144,7 @@ export const createAgentBridge = ({
     return {
       jobs: handlers.jobs,
       ensureOpen,
-      promptWaiting: (host: AgentHost) => handlers.promptWaiting(host),
+      promptWaiting: handlers.promptWaiting,
       modelCallTurn: handlers.modelCallTurn,
       recordModelCallFailure: handlers.recordModelCallFailure,
       resumeActiveTurns: async () => {

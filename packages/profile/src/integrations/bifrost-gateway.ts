@@ -60,15 +60,12 @@ export const createLlmGateway = ({
     },
     saveVirtualKey: async ({ id, keys }) => {
       if (id && (await request('PUT', `/api/governance/virtual-keys/${id}`, bindingOf(keys))).found) return id
-      const created = virtualKeyOf(
-        (
-          await request('POST', '/api/governance/virtual-keys', {
-            name: `vk_${crypto.randomUUID()}`,
-            is_active: true,
-            ...bindingOf(keys),
-          })
-        ).body,
-      )
+      const { body } = await request('POST', '/api/governance/virtual-keys', {
+        name: `vk_${crypto.randomUUID()}`,
+        is_active: true,
+        ...bindingOf(keys),
+      })
+      const created = virtualKeyOf(body)
       virtualKeyValues.set(created.id, created.value)
       return created.id
     },
@@ -81,8 +78,9 @@ export const createLlmGateway = ({
       if (cached) return cached
       const read = await request('GET', `/api/governance/virtual-keys/${id}`)
       if (!read.found) return undefined
-      virtualKeyValues.set(id, virtualKeyOf(read.body).value)
-      return virtualKeyOf(read.body).value
+      const { value } = virtualKeyOf(read.body)
+      virtualKeyValues.set(id, value)
+      return value
     },
   }
 }

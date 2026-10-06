@@ -4,6 +4,13 @@ import { type ModelCallFailure, modelCallNoticeOf, publicModelNameOf } from '../
 import type { AgentDependencies } from './agent-turn.ts'
 
 type Dependencies = Pick<AgentDependencies, 'transactor' | 'runtimes'>
+type FailedCall = {
+  chat: AgentChat
+  promptId: MessageId
+  prompterName: string
+  model: string | undefined
+  failure: ModelCallFailure
+}
 
 export const findModelCallTurn = async ({ transactor, runtimes }: Dependencies, host: AgentHost, token: string) => {
   const chatId = await runtimes.chatOfLlmToken(host, token)
@@ -22,19 +29,7 @@ export const findModelCallTurn = async ({ transactor, runtimes }: Dependencies, 
 
 export const recordModelCallFailure = (
   { transactor }: Dependencies,
-  {
-    chat,
-    promptId,
-    prompterName,
-    model,
-    failure,
-  }: {
-    chat: AgentChat
-    promptId: MessageId
-    prompterName: string
-    model: string | undefined
-    failure: ModelCallFailure
-  },
+  { chat, promptId, prompterName, model, failure }: FailedCall,
 ) => {
   const notice = modelCallNoticeOf(failure, { memberName: prompterName, model: publicModelNameOf(model) })
   return transactor.run(async ({ agentTurns }) => {

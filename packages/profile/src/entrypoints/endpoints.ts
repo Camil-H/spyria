@@ -10,6 +10,7 @@ import { addLlmCredential } from '../operations/add-llm-credential.ts'
 import { runGatewaySync, virtualKeyValueOf } from '../operations/sync-member-gateway-key.ts'
 
 type Transact = <Result>(work: (tx: Transaction) => Promise<Result>) => Promise<Result>
+type Job = { workspaceId: string; payload: unknown; transact: Transact }
 
 const textOf = (value: unknown) => (typeof value === 'string' ? value : '')
 const id = z.string().check(z.minLength(1))
@@ -47,15 +48,7 @@ export const addLlmCredentialFromRequest = (
 }
 
 export const createProfileJobs = (gateway: LlmGateway) => ({
-  [profileJobTypes.gatewaySync]: ({
-    workspaceId: workspace,
-    payload,
-    transact,
-  }: {
-    workspaceId: string
-    payload: unknown
-    transact: Transact
-  }) => {
+  [profileJobTypes.gatewaySync]: ({ workspaceId: workspace, payload, transact }: Job) => {
     const job = gatewaySyncPayload.parse(payload)
     const transactor = transactorAs(transact, memberContext(workspaceId(workspace), job.memberId))
     return runGatewaySync({ transactor, gateway }, { ...job, workspaceId: workspaceId(workspace) })
@@ -66,8 +59,5 @@ export const createMemberKeyReader =
   (transact: Transact, gateway: LlmGateway) => (workspace: WorkspaceId, member: MemberId) =>
     virtualKeyValueOf(
       { transactor: transactorAs(transact, memberContext(workspace, member)), gateway },
-      {
-        workspaceId: workspace,
-        memberId: member,
-      },
+      { workspaceId: workspace, memberId: member },
     )
