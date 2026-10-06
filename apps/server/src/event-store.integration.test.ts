@@ -2,7 +2,9 @@ import { expect, test } from 'bun:test'
 import { rebuildMessages } from '@hq/conversation/server'
 import { events, jobs } from '@hq/db/postgres'
 import { schema } from '@hq/db/zero'
+import type { SandboxProvider } from '@hq/runtime/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
+import { createAgentBridge } from './agent-bridge/bridge.ts'
 import { startJobWorker } from './job-worker.ts'
 import { acme, alice, aliceInAcme, openSharedTestApp, succeeded, waitFor } from './testing.ts'
 
@@ -90,7 +92,11 @@ test('rebuilding the messages from the events reproduces the live projection, an
   await succeeds('conversation.sendMessage', { id: 'message-history-2', chatId: 'chat-standup', text: 'Second' })
   await succeeds('conversation.deleteMessage', { messageId: 'message-history-2' })
   await succeeds('conversation.sendMessage', { id: 'message-history-3', chatId: 'chat-invoice-bug', text: 'News?' })
-  const worker = startJobWorker(database, { pollIntervalMilliseconds: 20 })
+  const agentBridge = createAgentBridge({
+    sandboxProvider: {} as SandboxProvider,
+    llm: { baseUrl: 'http://fake-llm.test/v1', model: 'openai/fake' },
+  })
+  const worker = startJobWorker(database, { pollIntervalMilliseconds: 20, agentBridge })
   await waitFor(async () => (await database.select().from(jobs)).every((job) => job.state === 'done'))
   await worker.stop()
   await succeeds('conversation.startRuntimeFromMessage', {
@@ -107,7 +113,7 @@ test('rebuilding the messages from the events reproduces the live projection, an
   await succeeds('workspace.archiveProject', { projectId: 'project-billing', chatsPolicy: 'release' })
   await succeeds('workspace.archiveProject', { projectId: 'project-onboarding', chatsPolicy: 'archive' })
   const live = await allMessages()
-  expect(live.find((message) => message.replyToId === 'message-history-3')).toMatchObject({ kind: 'agent' })
+  expect(live.find((message) => message.replyToId === 'message-history-3')).toMatchObject({ kind: 'notice' })
   expect(live.find((message) => message.id === 'message-history-2')).toMatchObject({ body: '' })
 
   await rebuild()

@@ -22,11 +22,14 @@ export type RuntimeRepository = {
   add(runtime: Runtime): Promise<void>
   save(runtime: Runtime): Promise<void>
   delete(runtime: Runtime): Promise<void>
+  agentConversationOf(runtime: Runtime): Promise<string | undefined>
+  rememberAgentConversation(runtime: Runtime, conversationId: string): Promise<string>
 }
 
-export type RuntimeApiKeys = {
-  keep(runtime: Runtime, apiKey: string): Promise<void>
-  keyOf(runtime: Runtime): Promise<string | undefined>
+export type RuntimeSecret = 'apiKey' | 'llmToken'
+export type RuntimeSecrets = {
+  keep(runtime: Runtime, secret: RuntimeSecret, value: string): Promise<void>
+  valueOf(runtime: Runtime, secret: RuntimeSecret): Promise<string | undefined>
   discard(runtime: Runtime): Promise<void>
 }
 

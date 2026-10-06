@@ -2,6 +2,8 @@ import { afterAll, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { conversationMutators } from '@hq/conversation/server'
+import { events } from '@hq/db/postgres'
 import { createTestDatabase } from '@hq/db/testing'
 import { schema } from '@hq/db/zero'
 import { chatId, runtimeHostId } from '@hq/kernel'
@@ -14,11 +16,14 @@ import {
 } from '@hq/runtime/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { websocket } from 'hono/bun'
+import { createAgentBridge } from '../agent-bridge/bridge.ts'
 import { createApp } from '../app.ts'
+import { createFakeLlm } from '../fake-llm.ts'
 import { startJobWorker } from '../job-worker.ts'
 import { acme, aliceInAcme, sessionTokenOf, testAuthSettings, waitFor } from '../testing.ts'
 import { createRuntimeHostGateway } from './gateway.ts'
 
+const zeroDatabase = (database: typeof testDatabase.database) => zeroDrizzle(schema, database)
 const docker = (...args: string[]) => Bun.spawnSync(['docker', ...args], { stderr: 'pipe' })
 const dockerText = (...args: string[]) =>
   docker(...args)
@@ -36,8 +41,17 @@ const hostProgram = new URL('../../../host/src/main.ts', import.meta.url).pathna
 const stateDirectory = mkdtempSync(join(tmpdir(), 'hq-test-host-'))
 const testDatabase = await createTestDatabase()
 const gateway = createRuntimeHostGateway({ databases: () => [testDatabase.database] })
-const app = createApp({ database: testDatabase.database, ...testAuthSettings, runtimeHosts: gateway })
+const llm = { baseUrl: '', model: 'openai/fake' }
+const agentBridge = createAgentBridge({ sandboxProvider: gateway.sandboxProvider, llm })
+const app = createApp({
+  database: testDatabase.database,
+  ...testAuthSettings,
+  runtimeHosts: gateway,
+  agentBridge,
+  fakeLlm: createFakeLlm(() => ({ command: 'echo hello' })),
+})
 const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
+llm.baseUrl = `http://host.docker.internal:${server.port}/fake-llm/v1`
 let hostProcess: ReturnType<typeof Bun.spawn> | undefined
 
 const removeDockerObjects = () => {
@@ -234,6 +248,64 @@ test.skipIf(!hasImage)(
       await worker.stop()
     }
     console.info(`Runtime lifecycle Docker test took ${Math.round(performance.now() - startedAt)} ms`)
+  },
+  120_000,
+)
+
+test.skipIf(!hasImage)(
+  'a prompt cold-starts a real Agent Server, which runs a terminal command through the fake LLM and finishes',
+  async () => {
+    const startedAt = performance.now()
+    await hostId()
+    const { database } = testDatabase
+    const worker = startJobWorker(database, {
+      pollIntervalMilliseconds: 20,
+      sandboxProvider: gateway.sandboxProvider,
+      agentBridge,
+    })
+    const chat = chatId('chat-research')
+    const repliesTo = async (messageId: string) =>
+      (await database.query.messages.findMany({ where: { replyToId: messageId }, orderBy: { seq: 'asc' } })).map(
+        ({ kind, body, detail }) => ({ kind, body, detail }),
+      )
+    try {
+      await zeroDatabase(database).transaction((tx) =>
+        conversationMutators.conversation.sendMessage.fn({
+          tx,
+          ctx: { ...aliceInAcme, role: 'admin' },
+          args: { workspaceId: acme, id: 'message-real-turn', chatId: chat, text: 'Say hello in the terminal' },
+        }),
+      )
+      await waitFor(async () => (await repliesTo('message-real-turn')).length >= 2, 60_000)
+      await waitFor(
+        async () =>
+          (await database.$client`select agent_turn_message_id from chats where id = ${chat}`)[0]
+            ?.agent_turn_message_id === null,
+      )
+      expect(await repliesTo('message-real-turn')).toEqual([
+        { kind: 'tool-call', body: 'echo hello', detail: 'hello' },
+        { kind: 'agent', body: 'Understood, working on it.', detail: null },
+      ])
+      const storedKinds = (await database.select().from(events))
+        .filter((event) => event.chatId === chat && event.type === 'agent.event')
+        .map((event) => (event.payload as { event: { kind: string } }).event.kind)
+      expect(storedKinds).toContain('SystemPromptEvent')
+      expect(storedKinds).not.toContain('StreamingDeltaEvent')
+      console.info(`Real agent turn took ${Math.round(performance.now() - startedAt)} ms`)
+      await zeroDatabase(database).transaction((tx) =>
+        removeChatRuntime(
+          { transactor: createRuntimeTransactor(tx) },
+          { workspaceId: acme, chatId: chat, now: Date.now() },
+        ),
+      )
+      await waitFor(
+        async () =>
+          (await database.$client`select state from runtimes where chat_id = ${chat}`)[0]?.state === 'removed',
+        30_000,
+      )
+    } finally {
+      await worker.stop()
+    }
   },
   120_000,
 )

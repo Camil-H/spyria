@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { type Database, events, resetDatabase } from '@hq/db/postgres'
 import { createTestDatabase, startZeroCache } from '@hq/db/testing'
@@ -114,3 +115,165 @@ export const openSharedTestApp = async () => {
 }
 
 export const stopSharedTestApp = async () => (await sharedTestApp)?.stop()
+
+type HostFrame = {
+  type: string
+  id?: number
+  sid?: number
+  op?: string
+  args?: Record<string, string>
+  runtimeId?: string
+  method?: string
+  path?: string
+  headers?: Record<string, string>
+  body?: string
+  data?: string
+}
+type HostCommand = { op: string; runtimeId?: string; image?: string; apiKey?: string }
+export type FakeContainer = { running: boolean; apiKey: string }
+export type FakeAgentServer = {
+  respond(request: Required<Pick<HostFrame, 'method' | 'path'>> & HostFrame, container: FakeContainer): unknown
+  connect(stream: { path: string; container: FakeContainer; send(data: string): void; close(): void }): {
+    onMessage(data: string): void
+    onClose(): void
+  }
+}
+export type FakeHost = Awaited<ReturnType<ReturnType<typeof createFakeHosts>['fakeHost']>>
+const gibibyte = 1024 ** 3
+const sha256 = (value: string) => createHash('sha256').update(value).digest('hex')
+
+export const createFakeHosts = ({ port, database }: { port: number; database: Database }) => {
+  const connectedHosts = new Set<FakeHost>()
+  const hostStatus = async (hostId: string) =>
+    (await database.$client`select status from runtime_hosts where id = ${hostId}`)[0]?.status
+  const fakeHost = async (
+    name: string,
+    { memoryGibibytes = 8, agentServer }: { memoryGibibytes?: number; agentServer?: FakeAgentServer } = {},
+  ) => {
+    const id = crypto.randomUUID()
+    const token = sha256(id)
+    await database.$client`
+      insert into runtime_hosts (workspace_id, id, name, token_hash, status, running_runtimes, created_by, created_at)
+      values (${acme}, ${id}, ${name}, ${sha256(token)}, 'offline', 0, ${alice}, now())`
+    const containers = new Map<string, FakeContainer>()
+    const commands: HostCommand[] = []
+    const heldReplies = new Map<string, Promise<void>>()
+    const failingOps = new Set<string>()
+    const streams = new Map<number, ReturnType<FakeAgentServer['connect']>>()
+    const run = (op: string, { runtimeId = '', apiKey = '' }: Record<string, string>) => {
+      if (failingOps.has(op)) throw new Error(`${op} failed`)
+      const container = containers.get(runtimeId)
+      if (op === 'create') containers.set(runtimeId, { running: false, apiKey })
+      if (op === 'start' && container) container.running = true
+      if (op === 'stop' && container) container.running = false
+      if (op === 'remove') containers.delete(runtimeId)
+      if (op === 'status') return container ? (container.running ? 'running' : 'stopped') : 'missing'
+      return null
+    }
+    let socket: WebSocket | undefined
+    let closed = Promise.resolve()
+    const host = {
+      id,
+      containers,
+      commands,
+      failing: (op: string) => failingOps.add(op),
+      hold: (op: string) => {
+        const { promise, resolve } = Promise.withResolvers<void>()
+        heldReplies.set(op, promise)
+        return resolve
+      },
+      lifecycleCommands: () =>
+        commands.filter(({ op }) => ['create', 'start', 'stop', 'remove'].includes(op)).map(({ op }) => op),
+      closed: () => closed,
+      connect: async () => {
+        const opened = new WebSocket(`ws://localhost:${port}/host`)
+        socket = opened
+        closed = new Promise((resolve) => opened.addEventListener('close', () => resolve()))
+        const send = (frame: object) => opened.send(JSON.stringify(frame))
+        opened.onmessage = (message) => {
+          const frame = JSON.parse(String(message.data)) as HostFrame
+          const container = containers.get(frame.runtimeId ?? '')
+          if (frame.type === 'ping') send({ type: 'pong' })
+          if (frame.type === 'cmd') {
+            const op = frame.op ?? ''
+            commands.push({ op, ...frame.args })
+            const held = heldReplies.get(op)
+            heldReplies.delete(op)
+            void (held ?? Promise.resolve()).then(() => {
+              try {
+                send({ type: 'res', id: frame.id, data: run(op, frame.args ?? {}) })
+              } catch (error) {
+                send({ type: 'res', id: frame.id, error: (error as Error).message })
+              }
+            })
+          }
+          if (frame.type === 'http') {
+            const isReady = frame.path === '/ready' && container?.running
+            const answered =
+              container?.running && !isReady
+                ? agentServer?.respond(frame as Parameters<FakeAgentServer['respond']>[0], container)
+                : undefined
+            void Promise.resolve(answered).then((response) =>
+              send({
+                type: 'http_res',
+                sid: frame.sid,
+                status: isReady ? 200 : 503,
+                headers: {},
+                body: '',
+                ...(response as object),
+              }),
+            )
+          }
+          const sid = frame.sid ?? 0
+          if (frame.type === 'ws_connect' && agentServer && container?.running) {
+            send({ type: 'ws_open', sid })
+            streams.set(
+              sid,
+              agentServer.connect({
+                path: frame.path ?? '',
+                container,
+                send: (data) => streams.has(sid) && send({ type: 'ws_msg', sid, data }),
+                close: () => {
+                  if (streams.delete(sid)) send({ type: 'ws_close', sid })
+                },
+              }),
+            )
+          } else if (frame.type === 'ws_connect') send({ type: 'ws_close', sid })
+          if (frame.type === 'ws_msg') streams.get(sid)?.onMessage(frame.data ?? '')
+          if (frame.type === 'ws_close') {
+            streams.get(sid)?.onClose()
+            streams.delete(sid)
+          }
+        }
+        await new Promise((resolve) => opened.addEventListener('open', resolve))
+        send({
+          type: 'hello',
+          token,
+          system: {
+            cpus: 4,
+            memoryBytes: memoryGibibytes * gibibyte,
+            dockerVersion: '29.0.0',
+            rootless: true,
+            cgroupDriver: 'systemd',
+            limitsEnforced: true,
+          },
+        })
+        await waitFor(async () => (await hostStatus(id)) === 'online')
+        connectedHosts.add(host)
+      },
+      disconnect: async () => {
+        connectedHosts.delete(host)
+        socket?.close()
+        await waitFor(async () => (await hostStatus(id)) !== 'online')
+      },
+    }
+    await host.connect()
+    return host
+  }
+  return {
+    fakeHost,
+    disconnectFakeHosts: async () => {
+      for (const host of connectedHosts) await host.disconnect()
+    },
+  }
+}

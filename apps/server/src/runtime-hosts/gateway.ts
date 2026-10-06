@@ -99,12 +99,16 @@ export const createRuntimeHostGateway = ({
     }
     if (frame.type !== 'hello') return connection.socket.close(refusedCloseCode, 'This host is not registered')
     const { handlers, result: host } = await firstAccepted((handlers) =>
-      inOrder(frame.token, () => handlers.hello(frame)),
+      inOrder(frame.token, () =>
+        handlers.hello(frame, (identifiedHost) => {
+          const replaced = connectionByHost.get(keyOf(identifiedHost))
+          connection.identified = { host: identifiedHost, token: frame.token, handlers }
+          connectionByHost.set(keyOf(identifiedHost), connection)
+          if (replaced !== connection)
+            replaced?.socket.close(replacedCloseCode, 'Replaced by a newer connection of this host')
+        }),
+      ),
     )
-    const replaced = connectionByHost.get(keyOf(host))
-    connection.identified = { host, token: frame.token, handlers }
-    connectionByHost.set(keyOf(host), connection)
-    replaced?.socket.close(replacedCloseCode, 'Replaced by a newer connection of this host')
     prepare(host).catch((error) =>
       console.error(`Preparing runtime host ${host.hostId} failed: ${errorMessageOf(error)}`),
     )

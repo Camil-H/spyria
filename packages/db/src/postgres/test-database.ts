@@ -1,6 +1,6 @@
 import { type ChildProcess, spawn } from 'node:child_process'
 import { once } from 'node:events'
-import { rmSync } from 'node:fs'
+import { openSync, rmSync, writeSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -46,7 +46,7 @@ export const createTestDatabase = async (
     name,
     database,
     drop: async () => {
-      await database.$client.end()
+      await database.$client.end({ timeout: 5 })
       await dropDatabase(name)
     },
   }
@@ -63,10 +63,14 @@ export const buildTemplateDatabase = async (name = templateDatabaseName) => {
 
 const zeroCacheCli = new URL('../../node_modules/@rocicorp/zero/out/zero/src/cli.js', import.meta.url).pathname
 
+const gracefulStopMilliseconds = 5000
+
 const stopProcessGroup = async (process: ChildProcess) => {
   if (process.exitCode !== null || process.signalCode !== null) return
-  const exited = once(process, 'exit')
+  const exited = once(process, 'exit').then(() => true)
   globalThis.process.kill(-(process.pid ?? 0), 'SIGTERM')
+  if (await Promise.race([exited, sleep(gracefulStopMilliseconds, false)])) return
+  globalThis.process.kill(process.pid ?? 0, 'SIGQUIT')
   await exited
 }
 
@@ -83,9 +87,10 @@ export const startZeroCache = async ({
 }) => {
   const replicaFile = join(tmpdir(), `hq-zero-${appId}.db`)
   for (const suffix of ['', '-wal', '-shm', '-wal2']) rmSync(`${replicaFile}${suffix}`, { force: true })
+  const logFile = openSync(join(tmpdir(), `hq-zero-${appId}.log`), 'w')
   const zeroCache = spawn('node', [zeroCacheCli], {
     detached: true,
-    stdio: ['ignore', 'ignore', 'pipe'],
+    stdio: ['ignore', logFile, 'pipe'],
     env: {
       ...process.env,
       ZERO_UPSTREAM_DB: databaseUrlOf(databaseName),
@@ -98,12 +103,13 @@ export const startZeroCache = async ({
       ZERO_APP_PUBLICATIONS: 'hq_zero',
       ZERO_ADMIN_PASSWORD: 'hq-test',
       ZERO_NUM_SYNC_WORKERS: '1',
-      ZERO_LOG_LEVEL: 'error',
+      ZERO_LOG_LEVEL: process.env.HQ_ZERO_LOG_LEVEL ?? 'error',
       ZERO_ENABLE_TELEMETRY: 'false',
     },
   })
   let errorOutput = ''
   zeroCache.stderr?.on('data', (chunk) => {
+    writeSync(logFile, chunk)
     errorOutput = `${errorOutput}${chunk}`.slice(-4000)
   })
   const url = `http://localhost:${port}`

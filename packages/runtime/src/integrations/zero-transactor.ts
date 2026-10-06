@@ -7,9 +7,10 @@ import {
   lockRuntimeHostLoads,
   lockRuntimes,
   placeholderSecretOf,
-  runtimeApiKeyRefOf,
-  setRuntimeApiKeyRef,
+  rememberAgentConversation,
+  serverOnlyRuntimeValueOf,
   setRuntimeHostSecretHash,
+  setServerOnlyRuntimeValue,
 } from '@hq/db/server-writes'
 import type { RuntimeHost as RuntimeHostRow, Runtime as RuntimeRow } from '@hq/db/zero'
 import { zql } from '@hq/db/zero-queries'
@@ -46,7 +47,8 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
     ids.length === 0
       ? []
       : (await tx.run(zql.runtimes.where('workspaceId', workspaceId).where('id', 'IN', ids))).map(runtimeOf)
-  const apiKeyRefOf = (runtime: Runtime) => runtimeApiKeyRefOf(tx, runtime.workspaceId, runtime.id)
+  const serverOnlyValueOf = (runtime: Runtime, column: 'apiKey' | 'llmToken' | 'agentConversation') =>
+    serverOnlyRuntimeValueOf(tx, runtime.workspaceId, runtime.id, column)
   const unitOfWork: UnitOfWork = {
     runtimeHosts: {
       add: (host) => tx.mutate.runtimeHosts.insert(host),
@@ -88,20 +90,25 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
       add: (runtime) => tx.mutate.runtimes.insert(runtime),
       save: (runtime) => tx.mutate.runtimes.update(runtime),
       delete: (runtime) => tx.mutate.runtimes.delete(runtime),
+      agentConversationOf: (runtime) => serverOnlyValueOf(runtime, 'agentConversation'),
+      rememberAgentConversation: (runtime, conversationId) =>
+        rememberAgentConversation(tx, runtime.workspaceId, runtime.id, conversationId),
     },
-    apiKeys: {
-      keep: async (runtime, apiKey) => {
+    secrets: {
+      keep: async (runtime, secret, value) => {
         const ref = `placeholder:${crypto.randomUUID()}`
-        await keepPlaceholderSecret(tx, runtime.workspaceId, ref, apiKey)
-        await setRuntimeApiKeyRef(tx, runtime.workspaceId, runtime.id, ref)
+        await keepPlaceholderSecret(tx, runtime.workspaceId, ref, value)
+        await setServerOnlyRuntimeValue(tx, runtime.workspaceId, runtime.id, secret, ref)
       },
-      keyOf: async (runtime) => {
-        const ref = await apiKeyRefOf(runtime)
+      valueOf: async (runtime, secret) => {
+        const ref = await serverOnlyValueOf(runtime, secret)
         return ref && placeholderSecretOf(tx, runtime.workspaceId, ref)
       },
       discard: async (runtime) => {
-        const ref = await apiKeyRefOf(runtime)
-        if (ref) await discardPlaceholderSecret(tx, runtime.workspaceId, ref)
+        for (const secret of ['apiKey', 'llmToken'] as const) {
+          const ref = await serverOnlyValueOf(runtime, secret)
+          if (ref) await discardPlaceholderSecret(tx, runtime.workspaceId, ref)
+        }
       },
     },
     jobs: {

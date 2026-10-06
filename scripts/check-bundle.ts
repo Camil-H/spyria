@@ -13,6 +13,8 @@ const serverOnlySql = [
   'claim_code_hash',
   'token_hash',
   'api_key_ref',
+  'llm_token_ref',
+  'agent_conversation_id',
 ]
 
 const failures: string[] = []

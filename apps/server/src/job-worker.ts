@@ -1,11 +1,11 @@
 import { setTimeout as sleep } from 'node:timers/promises'
-import { conversationJobs } from '@hq/conversation/server'
 import type { Database } from '@hq/db/postgres'
 import { schema } from '@hq/db/zero'
 import { type WorkspaceId, workspaceId } from '@hq/kernel'
 import { createRuntimeJobs, type SandboxProvider } from '@hq/runtime/server'
 import type { ServerTransaction } from '@rocicorp/zero'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
+import type { AgentBridge } from './agent-bridge/bridge.ts'
 import { sessionJobs } from './auth/sessions.ts'
 
 type Transact = <Result>(work: (tx: ServerTransaction) => Promise<Result>) => Promise<Result>
@@ -29,18 +29,20 @@ export const startJobWorker = (
     retryDelayMilliseconds = 1000,
     concurrency = 4,
     sandboxProvider,
+    agentBridge,
   }: {
     pollIntervalMilliseconds?: number
     retryDelayMilliseconds?: number
     concurrency?: number
     sandboxProvider?: SandboxProvider
+    agentBridge?: AgentBridge
   } = {},
 ) => {
-  const transactionalHandlers: Record<string, TransactionalJobHandler | undefined> = {
-    ...conversationJobs,
-    ...sessionJobs,
+  const transactionalHandlers: Record<string, TransactionalJobHandler | undefined> = sessionJobs
+  const jobHandlers: Record<string, JobHandler | undefined> = {
+    ...(sandboxProvider && createRuntimeJobs(sandboxProvider)),
+    ...agentBridge?.forDatabase(database).jobs,
   }
-  const jobHandlers: Record<string, JobHandler | undefined> = sandboxProvider ? createRuntimeJobs(sandboxProvider) : {}
   const zeroDatabase = zeroDrizzle(schema, database)
   const transact: Transact = (work) => zeroDatabase.transaction(work)
   const jobTypes = [...Object.keys(transactionalHandlers), ...Object.keys(jobHandlers)]
@@ -75,15 +77,18 @@ export const startJobWorker = (
           await transactional(tx, workspaceId(job.workspace_id), job.payload)
         })
       else {
-        await jobHandlers[job.type]?.({
+        const outcome = (await jobHandlers[job.type]?.({
           workspaceId: workspaceId(job.workspace_id),
           payload: job.payload,
           isLastAttempt,
           transact,
-        })
+        })) as { retryInMilliseconds?: number } | undefined
         await database.$client.unsafe(
-          `update jobs set state = 'done', attempts = attempts + 1 where ${claimedJob}`,
-          jobKey,
+          outcome?.retryInMilliseconds === undefined
+            ? `update jobs set state = 'done', attempts = attempts + 1 where ${claimedJob}`
+            : `update jobs set state = 'queued', run_at = now() + make_interval(secs => $4::double precision / 1000)
+               where ${claimedJob}`,
+          outcome?.retryInMilliseconds === undefined ? jobKey : [...jobKey, outcome.retryInMilliseconds],
         )
       }
     } catch (error) {

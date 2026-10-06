@@ -1,3 +1,4 @@
+import { type AgentEvent, agentProjectionOf } from './agent-events.ts'
 import type { Message } from './message.ts'
 
 export type StoredEvent = Readonly<{
@@ -28,6 +29,7 @@ export type ProjectedMessage = Readonly<{
 
 export type PostedPayload = Pick<ProjectedMessage, 'kind' | 'body' | 'detail' | 'replyToId'>
 export type ChangedPayload = { messageId: string; body: string }
+export type AgentEventPayload = { replyToId: string | null; event: AgentEvent }
 
 export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMessage[] => {
   const messageByKey = new Map<string, ProjectedMessage>()
@@ -48,6 +50,27 @@ export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMes
         editedAt: null,
         deletedAt: null,
       })
+    }
+    if (type === 'agent.event') {
+      const { replyToId, event } = payload as AgentEventPayload
+      const projection = agentProjectionOf(event)
+      const toolCall = projection?.type === 'detail' && messageByKey.get(`${workspaceId}/${projection.actionId}`)
+      if (toolCall) messageByKey.set(`${workspaceId}/${toolCall.id}`, { ...toolCall, detail: projection.detail })
+      if (projection?.type === 'message')
+        messageByKey.set(`${workspaceId}/${id}`, {
+          workspaceId,
+          chatId,
+          id,
+          seq,
+          kind: projection.kind,
+          authorId: null,
+          body: projection.body,
+          detail: null,
+          replyToId,
+          createdAt,
+          editedAt: null,
+          deletedAt: null,
+        })
     }
     if (type !== 'message.edited' && type !== 'message.deleted') continue
     const { messageId, body } = payload as ChangedPayload

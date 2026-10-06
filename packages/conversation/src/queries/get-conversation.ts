@@ -3,11 +3,12 @@ import type { ChatId, MemberId, MessageId, WorkspaceId } from '@hq/kernel'
 
 export type ConversationMessage = Readonly<{
   id: MessageId
-  kind: 'member' | 'agent' | 'tool-call'
+  kind: 'member' | 'agent' | 'tool-call' | 'notice'
   authorName: string
   createdAt: string
   body: string
   detail: string | null
+  replyToId: MessageId | null
   isOwn: boolean
   isDeleted: boolean
   isEdited: boolean
@@ -54,6 +55,7 @@ export const getConversation =
         createdAt: message.createdAt,
         body: message.body,
         detail: message.detail,
+        replyToId: message.replyToId,
         isOwn: message.authorId === viewerId,
         isDeleted: message.deletedAt !== null,
         isEdited: message.editedAt !== null,

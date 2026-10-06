@@ -135,6 +135,7 @@ const openStore = async (member: Member) => {
     renew: async () => undefined,
     cacheURL: zeroCacheUrl,
     kvStore: 'mem',
+    storageKeyPrefix: `${crypto.randomUUID()}:`,
   })
   openedStores.push(store)
   await store.whenLoaded(member.workspaceId as WorkspaceId)

@@ -5,11 +5,11 @@ import { type Runtime, removalStepOf, runtimeJobs, transitioned } from '../domai
 type Dependencies = { transactor: RuntimeTransactor }
 type Input = { workspaceId: WorkspaceId; chatId: ChatId; now: number }
 
-export const requestRemoval = async ({ runtimes, apiKeys, jobs }: UnitOfWork, runtime: Runtime, now: number) => {
+export const requestRemoval = async ({ runtimes, secrets, jobs }: UnitOfWork, runtime: Runtime, now: number) => {
   const step = removalStepOf(runtime)
   if (!step) return
   await runtimes.save(transitioned(runtime, step, now))
-  if (step === 'removed') await apiKeys.discard(runtime)
+  if (step === 'removed') await secrets.discard(runtime)
   else await jobs.enqueue(runtime.workspaceId, runtimeJobs.remove, { runtimeId: runtime.id })
 }
 

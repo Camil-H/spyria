@@ -48,7 +48,7 @@ export const App = ({ app }: { app: Application }) => (
   <StoreProvider store={app.store}>
     <SessionProvider session={app.session}>
       <WorkspaceProvider commands={app.workspaceCommands}>
-        <ConversationProvider commands={app.conversationCommands}>
+        <ConversationProvider commands={app.conversationCommands} agentStream={app.agentStream}>
           <ProfileProvider commands={app.profileCommands}>
             <RuntimeProvider commands={app.runtimeCommands}>
               <BrowserRouter>

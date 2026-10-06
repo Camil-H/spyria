@@ -68,8 +68,8 @@ export const createHostSessionHandlers = (transact: Transact) => ({
     if ('refusal' in outcome) throw outcome.refusal
     return outcome
   },
-  hello: (hello: { token: string; system: HostSystem }) =>
-    transact((tx) => recordHostHello(dependenciesOf(tx), { ...hello, now: Date.now() })),
+  hello: (hello: { token: string; system: HostSystem }, beforeOnline: (host: ConnectedHost) => void) =>
+    transact((tx) => recordHostHello(dependenciesOf(tx), { ...hello, now: Date.now(), beforeOnline })),
   heartbeat: (host: ConnectedHost, heartbeat: { memoryFreeBytes: number; running: number }) =>
     transact((tx) => recordHostHeartbeat(dependenciesOf(tx), { ...host, ...heartbeat, now: Date.now() })),
   offline: (host: ConnectedHost) => transact((tx) => markHostOffline(dependenciesOf(tx), host)),

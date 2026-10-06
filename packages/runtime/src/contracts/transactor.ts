@@ -1,9 +1,9 @@
-import type { JobQueue, RuntimeApiKeys, RuntimeHostRepository, RuntimeRepository } from './repositories.ts'
+import type { JobQueue, RuntimeHostRepository, RuntimeRepository, RuntimeSecrets } from './repositories.ts'
 
 export type UnitOfWork = {
   runtimeHosts: RuntimeHostRepository
   runtimes: RuntimeRepository
-  apiKeys: RuntimeApiKeys
+  secrets: RuntimeSecrets
   jobs: JobQueue
 }
 

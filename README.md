@@ -41,6 +41,8 @@ Then, signed in as a workspace admin (Alice), open the workspace menu, **Workspa
 
 Without Docker for `hq-host` itself, run it as a process against the local Docker: `HQ_HOST_STATE_DIR=.hq-host bun apps/host/src/main.ts http://localhost:5173/h/<code>`. Remove the host in the settings page when done, then `docker rm -f hq-host` and `docker volume rm hq-host`.
 
+With a host online, a prompt in a runtime chat starts that chat's Agent Server and the agent answers. Until the gateway exists, the model is a fake LLM served by the dev server itself at `/fake-llm/v1` (it answers "Understood, working on it."); Agent Servers reach it at `http://host.docker.internal:3000/fake-llm/v1`. Set `HQ_LLM_BASE_URL` (and `HQ_LLM_MODEL`, default `openai/fake`) to point them at another OpenAI-compatible endpoint; the fake LLM is then not mounted.
+
 ## Day to day
 
 ```sh

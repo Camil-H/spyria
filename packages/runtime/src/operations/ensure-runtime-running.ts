@@ -8,13 +8,14 @@ type Dependencies = { transactor: RuntimeTransactor }
 type Input = { workspaceId: WorkspaceId; chatId: ChatId; id: string; now: number }
 
 export const ensureRuntimeRunning = ({ transactor }: Dependencies, { workspaceId, chatId, id, now }: Input) =>
-  transactor.run(async ({ runtimes, runtimeHosts, apiKeys, jobs }): Promise<Runtime> => {
+  transactor.run(async ({ runtimes, runtimeHosts, secrets, jobs }): Promise<Runtime> => {
     const existing = await runtimes.lockByChat(workspaceId, chatId)
     const step = ensureStepOf(existing)
     if (existing && step === 'none') return existing
     if (existing && step !== 'place') {
       const ensured = step === 'start' ? transitioned(existing, 'starting', now) : { ...existing, lastActiveAt: now }
       await runtimes.save(ensured)
+      if (!(await secrets.valueOf(existing, 'llmToken'))) await secrets.keep(existing, 'llmToken', newSecretToken())
       if (step === 'start') await jobs.enqueue(workspaceId, runtimeJobs.start, { runtimeId: existing.id })
       return ensured
     }
@@ -34,7 +35,8 @@ export const ensureRuntimeRunning = ({ transactor }: Dependencies, { workspaceId
     }
     await runtimes.add(runtime)
     if (runtime.state === 'creating') {
-      await apiKeys.keep(runtime, newSecretToken())
+      await secrets.keep(runtime, 'apiKey', newSecretToken())
+      await secrets.keep(runtime, 'llmToken', newSecretToken())
       await jobs.enqueue(workspaceId, runtimeJobs.create, { runtimeId: runtime.id })
     }
     return runtime

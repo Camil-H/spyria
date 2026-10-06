@@ -2,6 +2,8 @@ import { afterAll, expect, spyOn, test } from 'bun:test'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { jobs, sessions } from '@hq/db/postgres'
 import { createTestDatabase } from '@hq/db/testing'
+import type { SandboxProvider } from '@hq/runtime/server'
+import { createAgentBridge } from './agent-bridge/bridge.ts'
 import { enqueueSweeps } from './auth/sessions.ts'
 import { listFailedJobs, maximumJobAttempts, retryFailedJobs, startJobWorker } from './job-worker.ts'
 import { acme, alice, globex, bob, waitFor } from './testing.ts'
@@ -11,23 +13,29 @@ const { database } = testDatabase
 afterAll(() => testDatabase.drop())
 
 const missingMessageError = 'Message message-missing was not found'
+const agentBridge = createAgentBridge({
+  sandboxProvider: {} as SandboxProvider,
+  llm: { baseUrl: 'http://fake-llm.test/v1', model: 'openai/fake' },
+})
+const startWorker = (options: Parameters<typeof startJobWorker>[1] = {}) =>
+  startJobWorker(database, { pollIntervalMilliseconds: 5, ...options, agentBridge })
 
 const jobRow = async (id: string) => (await database.select().from(jobs)).find((job) => job.id === id)
 const sweepsOf = async (workspaceId: string) =>
   (await database.select().from(jobs)).filter((job) => job.type === 'sessions.sweep' && job.workspaceId === workspaceId)
-const addAgentReplyJob = (id: string, answeredMessageId: string, fields: Partial<typeof jobs.$inferInsert> = {}) =>
+const addAgentPromptJob = (id: string, promptId: string, fields: Partial<typeof jobs.$inferInsert> = {}) =>
   database.insert(jobs).values({
     workspaceId: acme,
     id,
-    type: 'agent.reply',
-    payload: { messageId: answeredMessageId },
+    type: 'agent.prompt',
+    payload: { messageId: promptId },
     runAt: new Date(),
     attempts: 0,
     state: 'queued',
     ...fields,
   })
-const addDeadJob = (id: string, answeredMessageId: string) =>
-  addAgentReplyJob(id, answeredMessageId, {
+const addDeadJob = (id: string, promptId: string) =>
+  addAgentPromptJob(id, promptId, {
     attempts: maximumJobAttempts,
     state: 'failed',
     lastError: 'Earlier failure',
@@ -36,10 +44,10 @@ const repliesTo = async (messageId: string) =>
   (await database.query.messages.findMany()).filter((message) => message.replyToId === messageId)
 
 test('a throwing job is retried with a growing delay, then dead after 5 attempts with its last error', async () => {
-  await addAgentReplyJob('job-broken', 'message-missing')
+  await addAgentPromptJob('job-broken', 'message-missing')
   const errorLog = spyOn(console, 'error').mockImplementation(() => {})
   const startedAt = Date.now()
-  const worker = startJobWorker(database, { pollIntervalMilliseconds: 5, retryDelayMilliseconds: 60 })
+  const worker = startWorker({ retryDelayMilliseconds: 60 })
   await waitFor(async () => ((await jobRow('job-broken'))?.attempts ?? 0) >= 1)
   expect(await jobRow('job-broken')).toMatchObject({ state: 'queued', lastError: missingMessageError })
   expect((await jobRow('job-broken'))?.runAt.getTime()).toBeGreaterThan(startedAt)
@@ -60,9 +68,9 @@ test('jobs:failed lists the dead jobs and jobs:retry requeues one, which then su
   await addDeadJob('job-dead-2', 'message-welcome-2')
   expect((await listFailedJobs(database)).toSorted((first, second) => first.id.localeCompare(second.id))).toMatchObject(
     [
-      { workspaceId: acme, id: 'job-broken', type: 'agent.reply', attempts: 5, lastError: missingMessageError },
-      { workspaceId: acme, id: 'job-dead-1', type: 'agent.reply', attempts: 5, lastError: 'Earlier failure' },
-      { workspaceId: acme, id: 'job-dead-2', type: 'agent.reply', attempts: 5, lastError: 'Earlier failure' },
+      { workspaceId: acme, id: 'job-broken', type: 'agent.prompt', attempts: 5, lastError: missingMessageError },
+      { workspaceId: acme, id: 'job-dead-1', type: 'agent.prompt', attempts: 5, lastError: 'Earlier failure' },
+      { workspaceId: acme, id: 'job-dead-2', type: 'agent.prompt', attempts: 5, lastError: 'Earlier failure' },
     ],
   )
   expect((await listFailedJobs(database))[0]?.failedAt).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/)
@@ -70,10 +78,11 @@ test('jobs:failed lists the dead jobs and jobs:retry requeues one, which then su
   expect(await retryFailedJobs(database, 'job-dead-1')).toEqual(['job-dead-1'])
   expect(await jobRow('job-dead-1')).toMatchObject({ state: 'queued', attempts: 0 })
   expect(await jobRow('job-dead-2')).toMatchObject({ state: 'failed' })
-  const worker = startJobWorker(database, { pollIntervalMilliseconds: 5 })
+  const worker = startWorker()
   await waitFor(async () => (await jobRow('job-dead-1'))?.state === 'done')
   await worker.stop()
-  expect(await repliesTo('message-welcome-1')).toMatchObject([{ kind: 'agent', authorId: null }])
+  expect(await jobRow('job-dead-1')).toMatchObject({ state: 'done', attempts: 1 })
+  expect(await repliesTo('message-welcome-1')).toEqual([])
   expect((await listFailedJobs(database)).map((job) => job.id).toSorted()).toEqual(['job-broken', 'job-dead-2'])
 })
 
@@ -81,13 +90,13 @@ test('jobs:retry --all requeues every dead job', async () => {
   expect((await retryFailedJobs(database, 'all')).toSorted()).toEqual(['job-broken', 'job-dead-2'])
   expect(await jobRow('job-broken')).toMatchObject({ state: 'queued', attempts: 0 })
   const errorLog = spyOn(console, 'error').mockImplementation(() => {})
-  const worker = startJobWorker(database, { pollIntervalMilliseconds: 5, retryDelayMilliseconds: 0 })
+  const worker = startWorker({ retryDelayMilliseconds: 0 })
   await waitFor(
     async () => (await jobRow('job-dead-2'))?.state === 'done' && (await jobRow('job-broken'))?.state === 'failed',
   )
   await worker.stop()
   errorLog.mockRestore()
-  expect(await repliesTo('message-welcome-2')).toHaveLength(1)
+  expect(await jobRow('job-dead-2')).toMatchObject({ state: 'done', attempts: 1 })
   expect(await retryFailedJobs(database, 'job-unknown')).toEqual([])
 })
 

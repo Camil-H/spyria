@@ -1,10 +1,19 @@
-import type { AgentReplyRequests, ChatRepository, MessageRepository, ReadMarkerRepository } from './repositories.ts'
+import type {
+  AgentEventRepository,
+  AgentPromptRequests,
+  AgentTurnRepository,
+  ChatRepository,
+  MessageRepository,
+  ReadMarkerRepository,
+} from './repositories.ts'
 
 export type UnitOfWork = {
   messages: MessageRepository
   readMarkers: ReadMarkerRepository
   chats: ChatRepository
-  agentReplies: AgentReplyRequests
+  agentPrompts: AgentPromptRequests
+  agentTurns: AgentTurnRepository
+  agentEvents: AgentEventRepository
 }
 
 export type ConversationTransactor = {

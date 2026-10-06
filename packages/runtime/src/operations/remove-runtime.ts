@@ -12,8 +12,8 @@ export const removeRuntime = async ({ transactor, provider }: Dependencies, { wo
   const sandbox = locationOf(runtime)
   if (runtime.state !== 'removing' || !sandbox) return
   if ((await provider.status(sandbox)) !== 'missing') await provider.remove(sandbox)
-  await recordIfUnchanged(transactor, runtime, async ({ runtimes, apiKeys }, current) => {
-    await apiKeys.discard(current)
+  await recordIfUnchanged(transactor, runtime, async ({ runtimes, secrets }, current) => {
+    await secrets.discard(current)
     await runtimes.save(transitioned(current, 'removed', now))
   })
 }

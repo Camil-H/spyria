@@ -27,7 +27,9 @@ export const MessageItem = ({
   const close = () => setMode('view')
   return (
     <li ref={ref} className="group relative rounded-md px-3 py-2 hover:bg-hover">
-      {message.kind === 'tool-call' ? (
+      {message.kind === 'notice' ? (
+        <p className="text-sm text-muted">{message.body}</p>
+      ) : message.kind === 'tool-call' ? (
         <>
           <button
             type="button"

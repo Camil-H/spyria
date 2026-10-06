@@ -12,6 +12,10 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
-    proxy: { '/auth': serverUrl, '/api': serverUrl, '^/host$': { target: serverUrl, ws: true } },
+    proxy: {
+      '/auth': serverUrl,
+      '/api': { target: serverUrl, ws: true },
+      '^/host$': { target: serverUrl, ws: true },
+    },
   },
 })

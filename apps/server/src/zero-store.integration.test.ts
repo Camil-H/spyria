@@ -29,6 +29,7 @@ const openStore = async (viewerId: MemberId, workspaceIds: readonly WorkspaceId[
     renew: async (workspace) => (await sessionsOf(viewerId, [workspace]))[0],
     cacheURL: zeroCacheUrl,
     kvStore: 'mem',
+    storageKeyPrefix: `${crypto.randomUUID()}:`,
     mutators: { ...workspaceMutators, ...conversationMutators },
   })
   openedStores.push(store)

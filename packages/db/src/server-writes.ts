@@ -121,20 +121,89 @@ export const lockRuntimeHostLoads = async (tx: Transaction, workspaceId: string)
     [workspaceId],
   )) as { hostId: string; online: boolean; cap: number; running: number }[]
 
-export const runtimeApiKeyRefOf = async (tx: Transaction, workspaceId: string, runtimeId: string) =>
-  (
-    (await onServer(tx, 'select api_key_ref from runtimes where workspace_id = $1 and id = $2', [
-      workspaceId,
-      runtimeId,
-    ])) as { api_key_ref: string | null }[]
-  )[0]?.api_key_ref ?? undefined
+const serverOnlyRuntimeColumns = {
+  apiKey: 'api_key_ref',
+  llmToken: 'llm_token_ref',
+  agentConversation: 'agent_conversation_id',
+}
+export type ServerOnlyRuntimeColumn = keyof typeof serverOnlyRuntimeColumns
 
-export const setRuntimeApiKeyRef = (tx: Transaction, workspaceId: string, runtimeId: string, ref: string) =>
-  onServer(tx, 'update runtimes set api_key_ref = $3 where workspace_id = $1 and id = $2', [
+export const serverOnlyRuntimeValueOf = async (
+  tx: Transaction,
+  workspaceId: string,
+  runtimeId: string,
+  column: ServerOnlyRuntimeColumn,
+) =>
+  (
+    (await onServer(
+      tx,
+      `select ${serverOnlyRuntimeColumns[column]} as value from runtimes where workspace_id = $1 and id = $2`,
+      [workspaceId, runtimeId],
+    )) as { value: string | null }[]
+  )[0]?.value ?? undefined
+
+export const setServerOnlyRuntimeValue = (
+  tx: Transaction,
+  workspaceId: string,
+  runtimeId: string,
+  column: ServerOnlyRuntimeColumn,
+  value: string,
+) =>
+  onServer(tx, `update runtimes set ${serverOnlyRuntimeColumns[column]} = $3 where workspace_id = $1 and id = $2`, [
     workspaceId,
     runtimeId,
-    ref,
+    value,
   ])
+
+export const rememberAgentConversation = async (
+  tx: Transaction,
+  workspaceId: string,
+  runtimeId: string,
+  conversationId: string,
+) =>
+  (
+    (await onServer(
+      tx,
+      `update runtimes set agent_conversation_id = coalesce(agent_conversation_id, $3)
+       where workspace_id = $1 and id = $2 returning agent_conversation_id as id`,
+      [workspaceId, runtimeId, conversationId],
+    )) as { id: string | null }[]
+  )[0]?.id ?? conversationId
+
+export const lockChatTurn = async (tx: Transaction, workspaceId: string, chatId: string) =>
+  (
+    (await onServer(
+      tx,
+      `select agent_turn_message_id as "turnMessageId" from chats where workspace_id = $1 and id = $2 for update`,
+      [workspaceId, chatId],
+    )) as { turnMessageId: string | null }[]
+  )[0]?.turnMessageId ?? null
+
+export const nextPendingPrompt = async (tx: Transaction, workspaceId: string, chatId: string) =>
+  (
+    (await onServer(
+      tx,
+      `select prompt.id from messages prompt join chats on chats.workspace_id = prompt.workspace_id and chats.id = prompt.chat_id
+       where prompt.workspace_id = $1 and prompt.chat_id = $2 and prompt.kind = 'member' and prompt.reply_to_id is null
+         and prompt.deleted_at is null and prompt.id is distinct from chats.agent_turn_message_id
+         and not exists (select 1 from messages reply where reply.workspace_id = prompt.workspace_id and reply.reply_to_id = prompt.id)
+       order by prompt.seq limit 1`,
+      [workspaceId, chatId],
+    )) as { id: string }[]
+  )[0]?.id
+
+export const isChatEventStored = async (tx: Transaction, workspaceId: string, eventId: string) =>
+  (await onServer(tx, 'select 1 from events where workspace_id = $1 and id = $2', [workspaceId, eventId])).length > 0
+
+export const lastAgentEventTimestamp = async (tx: Transaction, workspaceId: string, chatId: string) =>
+  (
+    (await onServer(
+      tx,
+      `select payload->'event'->>'timestamp' as timestamp from events
+       where workspace_id = $1 and chat_id = $2 and type = 'agent.event' order by seq desc limit 1`,
+      [workspaceId, chatId],
+    )) as { timestamp: string | null }[]
+  )[0]?.timestamp ?? null
 
 type ChatEvent = {
   workspaceId: string

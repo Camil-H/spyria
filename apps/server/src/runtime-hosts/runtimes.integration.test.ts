@@ -1,5 +1,4 @@
 import { afterAll, afterEach, expect, spyOn, test } from 'bun:test'
-import { createHash } from 'node:crypto'
 import { schema } from '@hq/db/zero'
 import { createZeroStore } from '@hq/db/zero-store'
 import { type ChatId, chatId, type MemberId, type WorkspaceId } from '@hq/kernel'
@@ -18,6 +17,7 @@ import {
   acme,
   alice,
   aliceInAcme,
+  createFakeHosts,
   globex,
   issueTestSession,
   openSharedTestApp,
@@ -40,105 +40,14 @@ const worker = startJobWorker(database, {
 })
 const zeroDatabase = zeroDrizzle(schema, database)
 const runtimeJobs = createRuntimeJobs(gateway.sandboxProvider)
-const connectedHosts = new Set<FakeHost>()
+const { fakeHost, disconnectFakeHosts } = createFakeHosts({ port: Number(server.port), database })
 const openedStores: ReturnType<typeof createZeroStore>[] = []
-afterEach(async () => {
-  for (const host of connectedHosts) await host.disconnect()
-})
+afterEach(disconnectFakeHosts)
 afterAll(async () => {
   await worker.stop()
   await Promise.all(openedStores.map((store) => store.close()))
   void server.stop(true)
 })
-
-type Frame = { type: string; id?: number; sid?: number; op?: string; args?: Record<string, string>; path?: string }
-type Command = { op: string; runtimeId?: string; image?: string; apiKey?: string }
-type FakeHost = Awaited<ReturnType<typeof fakeHost>>
-const gibibyte = 1024 ** 3
-const sha256 = (value: string) => createHash('sha256').update(value).digest('hex')
-
-const hostStatus = async (hostId: string) =>
-  (await database.$client`select status from runtime_hosts where id = ${hostId}`)[0]?.status
-
-const fakeHost = async (name: string, { memoryGibibytes = 8 } = {}) => {
-  const id = crypto.randomUUID()
-  const token = sha256(id)
-  await database.$client`
-    insert into runtime_hosts (workspace_id, id, name, token_hash, status, running_runtimes, created_by, created_at)
-    values (${acme}, ${id}, ${name}, ${sha256(token)}, 'offline', 0, ${alice}, now())`
-  const containers = new Map<string, { running: boolean; apiKey: string }>()
-  const commands: Command[] = []
-  const heldReplies = new Map<string, Promise<void>>()
-  const run = (op: string, { runtimeId = '', apiKey = '' }: Record<string, string>) => {
-    const container = containers.get(runtimeId)
-    if (op === 'create') containers.set(runtimeId, { running: false, apiKey })
-    if (op === 'start' && container) container.running = true
-    if (op === 'stop' && container) container.running = false
-    if (op === 'remove') containers.delete(runtimeId)
-    if (op === 'status') return container ? (container.running ? 'running' : 'stopped') : 'missing'
-    return null
-  }
-  let socket: WebSocket | undefined
-  let closed = Promise.resolve()
-  const host = {
-    id,
-    containers,
-    commands,
-    hold: (op: string) => {
-      const { promise, resolve } = Promise.withResolvers<void>()
-      heldReplies.set(op, promise)
-      return resolve
-    },
-    lifecycleCommands: () =>
-      commands.filter(({ op }) => ['create', 'start', 'stop', 'remove'].includes(op)).map(({ op }) => op),
-    closed: () => closed,
-    connect: async () => {
-      const opened = new WebSocket(`ws://localhost:${server.port}/host`)
-      socket = opened
-      closed = new Promise((resolve) => opened.addEventListener('close', () => resolve()))
-      const send = (frame: object) => opened.send(JSON.stringify(frame))
-      opened.onmessage = (message) => {
-        const frame = JSON.parse(String(message.data)) as Frame & { runtimeId?: string }
-        if (frame.type === 'ping') send({ type: 'pong' })
-        if (frame.type === 'cmd') {
-          const op = frame.op ?? ''
-          commands.push({ op, ...frame.args })
-          const held = heldReplies.get(op)
-          heldReplies.delete(op)
-          void (held ?? Promise.resolve()).then(() =>
-            send({ type: 'res', id: frame.id, data: run(op, frame.args ?? {}) }),
-          )
-        }
-        if (frame.type === 'http') {
-          const isReady = frame.path === '/ready' && containers.get(frame.runtimeId ?? '')?.running
-          send({ type: 'http_res', sid: frame.sid, status: isReady ? 200 : 503, headers: {}, body: '' })
-        }
-      }
-      await new Promise((resolve) => opened.addEventListener('open', resolve))
-      send({
-        type: 'hello',
-        token,
-        system: {
-          cpus: 4,
-          memoryBytes: memoryGibibytes * gibibyte,
-          dockerVersion: '29.0.0',
-          rootless: true,
-          cgroupDriver: 'systemd',
-          limitsEnforced: true,
-        },
-      })
-      await waitFor(async () => (await hostStatus(id)) === 'online')
-      connectedHosts.add(host)
-    },
-    disconnect: async () => {
-      connectedHosts.delete(host)
-      socket?.close()
-      await waitFor(async () => (await hostStatus(id)) !== 'online')
-    },
-  }
-  await host.connect()
-  return host
-}
 
 const newRuntimeChat = async (name = 'Runtime chat') => {
   const id = `chat-${crypto.randomUUID()}`
@@ -370,7 +279,6 @@ test('removing a host marks its runtimes failed/lost', async () => {
     await requestMutation(app, database, aliceInAcme, 'runtime.removeHost', { workspaceId: acme, hostId: host.id }),
   ).toEqual(succeeded)
   await host.closed()
-  connectedHosts.delete(host)
   for (const chat of [runningChat, stoppedChat])
     expect(await runtimeOf(chat)).toMatchObject({ state: 'failed', failure: 'lost' })
   expect(await archive(runningChat)).toEqual(succeeded)
@@ -393,6 +301,7 @@ test('the API key and its ref never reach Zero rows or logs, and other workspace
         renew: async () => undefined,
         cacheURL: zeroCacheUrl,
         kvStore: 'mem',
+        storageKeyPrefix: `${crypto.randomUUID()}:`,
       })
       openedStores.push(store)
       await store.whenLoaded(member.workspaceId)
@@ -432,8 +341,8 @@ const transactionsLeftOpen = () =>
   database.$client`
     select pid, query from pg_stat_activity
     where datname = current_database() and state like 'idle in transaction%'`
-const repliesTo = async (messageId: string) =>
-  (await database.$client`select id from messages where reply_to_id = ${messageId}`).length
+const sweepsDone = async () =>
+  (await database.$client`select id from jobs where type = 'sessions.sweep' and state = 'done'`).length
 
 test('a slow start holds no transaction: ensureRuntimeRunning answers and other jobs complete meanwhile', async () => {
   const host = await fakeHost('Slow host')
@@ -446,11 +355,11 @@ test('a slow start holds no transaction: ensureRuntimeRunning answers and other 
     expect([...(await transactionsLeftOpen())]).toEqual([])
     expect(await promptly(ensure(slowChat))).toMatchObject({ id: slow.id, state: 'creating' })
 
-    const repliesBefore = await repliesTo('message-welcome-1')
+    const sweepsBefore = await sweepsDone()
     await database.$client`
       insert into jobs (workspace_id, id, type, payload, run_at, attempts, state)
-      values (${acme}, ${crypto.randomUUID()}, 'agent.reply', ${JSON.stringify({ messageId: 'message-welcome-1' })}::jsonb, now(), 0, 'queued')`
-    await waitFor(async () => (await repliesTo('message-welcome-1')) === repliesBefore + 1, 3000)
+      values (${acme}, ${crypto.randomUUID()}, 'sessions.sweep', '{}'::jsonb, now(), 0, 'queued')`
+    await waitFor(async () => (await sweepsDone()) === sweepsBefore + 1, 3000)
     await promptly(runningRuntime(otherChat))
     expect((await runtimeOf(slowChat)).state).toBe('creating')
   } finally {

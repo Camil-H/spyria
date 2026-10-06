@@ -1,7 +1,5 @@
 import { expect, test } from 'bun:test'
-import { setTimeout as sleep } from 'node:timers/promises'
 import { events, jobs } from '@hq/db/postgres'
-import { startJobWorker } from './job-worker.ts'
 import {
   acme,
   alice,
@@ -12,11 +10,9 @@ import {
   bob,
   bobInAcme,
   succeeded,
-  waitFor,
 } from './testing.ts'
 
 const { database, resultOf, eventsOf, changesOf } = await openSharedTestApp()
-const agentReplyText = 'Understood, working on it.'
 
 const messageRow = (id: string) => database.query.messages.findFirst({ where: { id } })
 const chatRow = (id: string) => database.query.chats.findFirst({ where: { id } })
@@ -48,11 +44,11 @@ test('sendMessage in a channel appends a posted event and the projection at the 
   expect(await jobsOf('message-sent')).toEqual([])
 })
 
-test('sendMessage in a runtime chat enqueues one agent reply job in the same transaction', async () => {
+test('sendMessage in a runtime chat enqueues one agent prompt job in the same transaction', async () => {
   expect(await sendTo(aliceInAcme, 'chat-invoice-bug', 'message-to-agent', 'Fix it')).toEqual(succeeded)
   expect(await messageRow('message-to-agent')).toMatchObject({ seq: 5, replyToId: null })
   expect(await jobsOf('message-to-agent')).toMatchObject([
-    { workspaceId: acme, type: 'agent.reply', attempts: 0, state: 'queued' },
+    { workspaceId: acme, type: 'agent.prompt', attempts: 0, state: 'queued' },
   ])
 })
 
@@ -218,39 +214,5 @@ test('two concurrent senders of 15 messages each get 30 distinct contiguous seqs
   expect(raced.map((message) => message.seq)).toEqual(Array.from({ length: 30 }, (_, index) => firstSeq + index))
   expect((await eventsOf('chat-welcome')).slice(-30).map((event) => event.seq)).toEqual(
     raced.map((message) => message.seq),
-  )
-})
-
-test('the job worker appends the agent reply exactly once and marks the job done', async () => {
-  await sendTo(aliceInAcme, 'chat-research', 'message-question', 'Find the pricing')
-  const worker = startJobWorker(database, { pollIntervalMilliseconds: 20 })
-  await waitFor(async () => (await jobsOf('message-question'))[0]?.state === 'done')
-  await sleep(200)
-  await worker.stop()
-  expect(await messagesOf('chat-research')).toMatchObject([
-    { id: 'message-question', seq: 1, kind: 'member' },
-    { seq: 2, kind: 'agent', authorId: null, body: agentReplyText, replyToId: 'message-question' },
-  ])
-  expect((await eventsOf('chat-research')).map(({ seq, type, actor }) => ({ seq, type, actor }))).toEqual([
-    { seq: 1, type: 'message.posted', actor: alice },
-    { seq: 2, type: 'message.replied', actor: null },
-  ])
-  expect(await jobsOf('message-question')).toMatchObject([{ state: 'done', attempts: 1 }])
-})
-
-test('two workers never process the same job twice', async () => {
-  const questionIds = Array.from({ length: 12 }, (_, index) => `message-burst-${index}`)
-  await Promise.all(questionIds.map((id) => sendTo(aliceInAcme, 'chat-research', id, id)))
-  const workers = [
-    startJobWorker(database, { pollIntervalMilliseconds: 5 }),
-    startJobWorker(database, { pollIntervalMilliseconds: 5 }),
-  ]
-  await waitFor(async () => (await Promise.all(questionIds.map(jobsOf))).every(([job]) => job?.state === 'done'))
-  await sleep(200)
-  await Promise.all(workers.map((worker) => worker.stop()))
-  const replies = (await messagesOf('chat-research')).filter((message) => questionIds.includes(message.replyToId ?? ''))
-  expect(replies.map((reply) => reply.replyToId).toSorted()).toEqual(questionIds.toSorted())
-  expect(new Set((await eventsOf('chat-research')).map((event) => event.seq)).size).toBe(
-    (await eventsOf('chat-research')).length,
   )
 })

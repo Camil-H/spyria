@@ -117,6 +117,8 @@ const dockerSystem = () => {
 const expectOnline = async (page: Page, hostName: string) =>
   expect(hostRowOf(page, hostName)).toContainText('Online', { timeout: 10_000 })
 
+test.use({ runtimeHost: false })
+
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
 })

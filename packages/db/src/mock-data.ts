@@ -2,6 +2,7 @@ import {
   chatId,
   credentialId,
   type MemberId,
+  type MessageId,
   memberId,
   messageId,
   type ProjectId,
@@ -85,6 +86,7 @@ const message = (
   authorId,
   body,
   detail,
+  replyToId: null,
   createdAt: `2026-09-30T${time}:00.000Z`,
   editedAt: null,
   deletedAt: null,
@@ -101,6 +103,17 @@ const agent = (
   time: string,
   detail: string | null = null,
 ) => message(id, chat, workspace, null, kind, body, time, detail)
+
+const withReplyTargets = (messages: readonly MessageRow[]) => {
+  const answeredMessageIdByChat = new Map<string, MessageId | null>()
+  return messages.map((message) => {
+    if (message.kind === 'member') answeredMessageIdByChat.set(message.chatId, message.needsReply ? null : message.id)
+    const answeredMessageId = answeredMessageIdByChat.get(message.chatId)
+    if (message.kind !== 'agent' || !answeredMessageId) return message
+    answeredMessageIdByChat.set(message.chatId, null)
+    return { ...message, replyToId: answeredMessageId }
+  })
+}
 
 export const createMockSnapshot = (): Snapshot => ({
   workspaces: [
@@ -142,7 +155,7 @@ export const createMockSnapshot = (): Snapshot => ({
     }),
     chat('chat-general', globex, null, 'General', alice),
   ],
-  messages: [
+  messages: withReplyTargets([
     member('welcome-1', 'chat-welcome', acme, bob, 'Welcome to the team!', '09:00'),
     member('welcome-2', 'chat-welcome', acme, alice, 'Thanks, glad to be here.', '09:02'),
     member('standup-1', 'chat-standup', acme, bob, 'Standup at 10.', '09:30'),
@@ -163,7 +176,7 @@ export const createMockSnapshot = (): Snapshot => ({
       'export const total = ...',
     ),
     agent('invoice-4', 'chat-invoice-bug', acme, 'agent', 'The tax is applied twice.', '11:03'),
-  ],
+  ]),
   drafts: [],
   readMarkers: [
     { workspaceId: acme, memberId: alice, chatId: welcomeChat, lastReadSeq: 2 },

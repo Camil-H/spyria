@@ -118,7 +118,13 @@ export const createCommandRunner = ({
   const ensureNetwork = async () => {
     await docker('GET', `/networks/${network}`).catch(async (error) => {
       ignoringMissing(error)
-      await docker('POST', '/networks/create', { Name: network, Driver: 'bridge', Labels: { 'hq.managed': '1' } })
+      await docker('POST', '/networks/create', {
+        Name: network,
+        Driver: 'bridge',
+        Labels: { 'hq.managed': '1' },
+      }).catch((createError) => {
+        if (!(createError instanceof DockerError) || createError.status !== 409) throw createError
+      })
     })
     if (selfContainerId)
       await docker('POST', `/networks/${network}/connect`, { Container: selfContainerId }).catch((error) => {

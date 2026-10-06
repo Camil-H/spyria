@@ -31,9 +31,9 @@ export const bringUpRuntime = async (
   { transactor, provider }: Dependencies,
   { workspaceId, runtimeId, now, isLastAttempt }: Input,
 ) => {
-  const { runtime, apiKey } = await transactor.run(async ({ runtimes, apiKeys }) => {
+  const { runtime, apiKey } = await transactor.run(async ({ runtimes, secrets }) => {
     const runtime = await runtimes.lock(workspaceId, runtimeId)
-    return { runtime, apiKey: await apiKeys.keyOf(runtime) }
+    return { runtime, apiKey: await secrets.valueOf(runtime, 'apiKey') }
   })
   const sandbox = locationOf(runtime)
   if ((runtime.state !== 'creating' && runtime.state !== 'starting') || !sandbox) return

@@ -1,13 +1,21 @@
 import { createDatabase, type Database } from '@hq/db/postgres'
 import { databaseUrlOf } from '@hq/db/testing'
+import { schema } from '@hq/db/zero'
+import { chatId, workspaceId } from '@hq/kernel'
+import { createRuntimeTransactor, ensureRuntimeRunning } from '@hq/runtime/server'
+import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { websocket } from 'hono/bun'
 import { setCookie } from 'hono/cookie'
+import { createAgentBridge } from './agent-bridge/bridge.ts'
 import { createApp } from './app.ts'
 import { sessionCookieOptions, setSessionCookie, testCookie } from './auth/routes.ts'
 import { openSessions } from './auth/sessions.ts'
+import { createFakeLlm, type FakeLlmScript } from './fake-llm.ts'
 import { startJobWorker } from './job-worker.ts'
 import { createRuntimeHostGateway } from './runtime-hosts/gateway.ts'
 import { issueTestSession, testAuthSettings } from './testing.ts'
+
+const port = Number(process.env.PORT ?? 3100)
 
 type ServedDatabase = { database: Database; jobWorker: ReturnType<typeof startJobWorker> }
 const servedDatabaseByName = new Map<string, ServedDatabase>()
@@ -17,7 +25,7 @@ const databaseByName = (databaseName: string) => {
   const database = createDatabase(databaseUrlOf(databaseName))
   servedDatabaseByName.set(databaseName, {
     database,
-    jobWorker: startJobWorker(database, { sandboxProvider: runtimeHosts.sandboxProvider }),
+    jobWorker: startJobWorker(database, { sandboxProvider: runtimeHosts.sandboxProvider, agentBridge }),
   })
   return database
 }
@@ -26,6 +34,7 @@ const releaseDatabase = async (databaseName: string) => {
   const served = servedDatabaseByName.get(databaseName)
   servedDatabaseByName.delete(databaseName)
   await served?.jobWorker.stop()
+  if (served) agentBridge.release(served.database)
   await served?.database.$client.end({ timeout: 5 })
 }
 
@@ -35,11 +44,29 @@ const runtimeHosts = createRuntimeHostGateway({
   databases: () => [...servedDatabaseByName.values()].map((served) => served.database),
 })
 
+const agentBridge = createAgentBridge({
+  sandboxProvider: runtimeHosts.sandboxProvider,
+  llm: { baseUrl: `http://host.docker.internal:${port}/fake-llm/v1`, model: 'openai/fake' },
+})
+
+const scriptByChat = new Map<string, FakeLlmScript>()
+const scriptOfToken = async (token: string) => {
+  for (const [databaseName, { database }] of servedDatabaseByName) {
+    const [runtime] = await database.$client`
+      select runtimes.chat_id from runtimes join placeholder_secrets on placeholder_secrets.workspace_id = runtimes.workspace_id
+        and placeholder_secrets.ref = runtimes.llm_token_ref
+      where placeholder_secrets.value = ${token}`
+    if (runtime) return scriptByChat.get(`${databaseName}/${runtime.chat_id}`)
+  }
+}
+
 const app = createApp({
   database: createDatabase(),
   ...testAuthSettings,
   testDatabaseByName: databaseByName,
   runtimeHosts,
+  agentBridge,
+  fakeLlm: createFakeLlm(scriptOfToken),
 })
   .post('/test/release-database', async (context) => {
     await releaseDatabase(context.req.query('db') ?? '')
@@ -53,9 +80,25 @@ const app = createApp({
       for (const session of await openSessions(databaseByName(db), user)) setSessionCookie(context, appOrigin, session)
     return context.body(null, 204)
   })
+  .post('/test/fake-llm-script', async (context) => {
+    const { db = '', chat } = context.req.query()
+    if (chat) scriptByChat.set(`${db}/${chat}`, await context.req.json())
+    else for (const key of scriptByChat.keys()) if (key.startsWith(`${db}/`)) scriptByChat.delete(key)
+    return context.body(null, 204)
+  })
+  .post('/test/runtime', async (context) => {
+    const { db = '', chat = '' } = context.req.query()
+    await zeroDrizzle(schema, databaseByName(db)).transaction((tx) =>
+      ensureRuntimeRunning(
+        { transactor: createRuntimeTransactor(tx) },
+        { workspaceId: workspaceId('workspace-acme'), chatId: chatId(chat), id: crypto.randomUUID(), now: Date.now() },
+      ),
+    )
+    return context.body(null, 204)
+  })
   .post('/test/token', async (context) => {
     const { db = '', user = '', workspace = '' } = context.req.query()
     return context.json(await issueTestSession(databaseByName(db), workspace, user, db))
   })
 
-export default { port: Number(process.env.PORT ?? 3100), hostname: '0.0.0.0', fetch: app.fetch, websocket }
+export default { port, hostname: '0.0.0.0', fetch: app.fetch, websocket }

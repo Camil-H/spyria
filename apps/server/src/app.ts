@@ -16,11 +16,14 @@ import { getMutator, mustGetMutator, mustGetQuery, type Transaction } from '@roc
 import { handleMutateRequest, handleQueryRequest } from '@rocicorp/zero/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { Hono } from 'hono'
+import { type AgentBridge, createAgentBridge } from './agent-bridge/bridge.ts'
 import { createOidc, type OidcSettings } from './auth/oidc.ts'
 import { createAuthRoutes } from './auth/routes.ts'
 import { createSessionAuthenticator, errorByStatus } from './auth/session-tokens.ts'
 import { findMemberIn } from './auth/sessions.ts'
 import { createRuntimeHostGateway, type RuntimeHostGateway } from './runtime-hosts/gateway.ts'
+
+export const defaultLlm = { baseUrl: 'http://host.docker.internal:3000/fake-llm/v1', model: 'openai/fake' }
 
 const statusByRuntimeErrorCode: Record<string, number> = { not_admin: 403, host_not_found: 404 }
 
@@ -51,6 +54,8 @@ export const createApp = ({
   appOrigin,
   testDatabaseByName,
   runtimeHosts = createRuntimeHostGateway({ databases: () => [database] }),
+  agentBridge = createAgentBridge({ sandboxProvider: runtimeHosts.sandboxProvider, llm: defaultLlm }),
+  fakeLlm,
 }: {
   database: Database
   tokenSecret: string
@@ -58,6 +63,8 @@ export const createApp = ({
   appOrigin: string
   testDatabaseByName?: (databaseName: string) => Database
   runtimeHosts?: RuntimeHostGateway
+  agentBridge?: AgentBridge
+  fakeLlm?: Hono
 }) => {
   const mutatorNamed = (name: string) =>
     getMutator(workspaceMutators, name) ??
@@ -67,11 +74,12 @@ export const createApp = ({
   const databaseOf = (databaseName: string | undefined) =>
     databaseName === undefined ? database : testDatabaseByName?.(databaseName)
   const authenticate = createSessionAuthenticator(tokenSecret, findMemberIn(databaseOf))
-  return new Hono<{
+  const app = new Hono<{
     Variables: { zeroContext: ZeroContext; zeroDatabase: ZeroDatabase }
   }>()
     .get('/health', (context) => context.json({ status: 'ok' }))
     .get('/host', runtimeHosts.upgrade)
+    .get('/api/stream', agentBridge.stream(authenticate, databaseOf))
     .route(
       '/auth',
       createAuthRoutes({ oidc: createOidc(oidc), tokenSecret, appOrigin, database, authenticate, testDatabaseByName }),
@@ -137,4 +145,6 @@ export const createApp = ({
         renewClaimCodeFromRequest(tx, context.get('zeroContext'), context.req.param('hostId')),
       ),
     )
+  if (fakeLlm) app.route('/fake-llm', fakeLlm)
+  return app
 }

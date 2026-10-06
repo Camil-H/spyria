@@ -13,6 +13,7 @@ type ZeroStoreOptions = {
   renew: (workspaceId: WorkspaceId) => Promise<WorkspaceSession | undefined>
   cacheURL: string
   kvStore?: 'mem' | 'idb'
+  storageKeyPrefix?: string
   mutators?: AnyMutatorRegistry
   draftStorage?: Storage
 }
@@ -66,10 +67,12 @@ const snapshotFromZeroRows = (
       (membership) => `${membership.workspaceId}/${membership.userId}`,
     ).map(({ workspaceId, userId, displayName, role }) => ({ workspaceId, memberId: userId, displayName, role })),
     projects: rowsOf('projects').map(withoutCreatedAt),
-    chats: rowsOf('chats').map(({ ownerKind, ownerUserId, ownerServiceIdentityId, mode, createdAt, ...chat }) => ({
-      ...chat,
-      ownerId: ownerUserId ?? '',
-    })),
+    chats: rowsOf('chats').map(
+      ({ ownerKind, ownerUserId, ownerServiceIdentityId, mode, createdAt, agentTurnMessageId, ...chat }) => ({
+        ...chat,
+        ownerId: ownerUserId ?? '',
+      }),
+    ),
     messages: messages
       .toSorted(
         (first, second) =>
@@ -77,7 +80,7 @@ const snapshotFromZeroRows = (
           threadSeqOf(first) - threadSeqOf(second) ||
           first.seq - second.seq,
       )
-      .map(({ replyToId, createdAt, editedAt, deletedAt, ...message }) => ({
+      .map(({ createdAt, editedAt, deletedAt, ...message }) => ({
         ...message,
         createdAt: isoOf(createdAt),
         editedAt: isoOrNull(editedAt),
@@ -85,7 +88,7 @@ const snapshotFromZeroRows = (
         needsReply:
           runtimeChatIds.has(message.chatId) &&
           message.kind === 'member' &&
-          replyToId === null &&
+          message.replyToId === null &&
           !answeredMessageIds.has(message.id),
       })),
     drafts,
@@ -126,6 +129,7 @@ export const createZeroStore = ({
   renew,
   cacheURL,
   kvStore,
+  storageKeyPrefix = '',
   mutators,
   draftStorage,
 }: ZeroStoreOptions) => {
@@ -183,7 +187,7 @@ export const createZeroStore = ({
       userID: memberId,
       auth: token,
       context: { userId: memberId, workspaceId, role },
-      storageKey: workspaceId,
+      storageKey: `${storageKeyPrefix}${workspaceId}`,
       kvStore,
       mutators,
     })

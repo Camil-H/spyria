@@ -35,10 +35,12 @@ const readSnapshot = async () => {
     projects: (await database.select().from(tables.projects).orderBy(tables.projects.createdAt)).map(
       ({ createdAt, ...project }) => project,
     ),
-    chats: chats.map(({ ownerUserId, ownerKind, ownerServiceIdentityId, mode, createdAt, ...chat }) => ({
-      ...chat,
-      ownerId: ownerUserId,
-    })),
+    chats: chats.map(
+      ({ ownerUserId, ownerKind, ownerServiceIdentityId, mode, createdAt, agentTurnMessageId, ...chat }) => ({
+        ...chat,
+        ownerId: ownerUserId,
+      }),
+    ),
     messages: messages.map(({ replyToId, createdAt, editedAt, deletedAt, ...message }) => ({
       ...message,
       createdAt: createdAt.toISOString(),
@@ -98,7 +100,7 @@ const expectSnapshotRoundTrip = async () => {
   expect(stored.toolConnections).toEqual([...toolConnections])
   expect(stored.projects).toEqual([...projects])
   expect(stored.chats).toEqual([...chats])
-  expect(stored.messages).toEqual(groupedByChat(messages))
+  expect(stored.messages).toEqual(groupedByChat(messages).map(({ replyToId, ...message }) => message))
   expect(stored.terminalLines).toEqual(groupedByChat(terminalLines))
   expect(stored.planSteps).toEqual(groupedByChat(planSteps))
   for (const [name, rows] of Object.entries(unorderedCollections))

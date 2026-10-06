@@ -20,5 +20,5 @@ export const sendMessage = ({ transactor }: Dependencies, { id, chatId, authorId
       replyToId: null,
     })
     await unitOfWork.messages.record({ type: 'message.posted', actorId: authorId, message })
-    if (chat.type === 'runtime') await unitOfWork.agentReplies.request(message)
+    if (chat.type === 'runtime') await unitOfWork.agentPrompts.request(message)
   })

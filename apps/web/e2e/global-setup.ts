@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { createDatabase } from '@hq/db/postgres'
 import { buildTemplateDatabase, databaseUrlOf, dropDatabase } from '@hq/db/testing'
+import { removeDockerObjects } from './stack.ts'
 import { maximumWorkerCount, serverUrl, templateDatabaseName, viteUrl, zeroCachePortOf } from './stack-ports.ts'
 
 const repositoryRoot = new URL('../../../', import.meta.url).pathname
@@ -34,6 +35,12 @@ const sweepLeftovers = async () => {
     select datname as name from pg_database where datname like 'hq\\_e2e\\_w%'`
   await admin.end()
   for (const { name } of leftoverDatabases) await dropDatabase(name)
+  removeWorkerHosts()
+}
+
+const removeWorkerHosts = () => {
+  execSync(`pkill -f '${repositoryRoot}apps/host/src/main.ts ${serverUrl}/h/' || true`)
+  removeDockerObjects('hq-test-e2e-w')
 }
 
 const startDetached = async (command: string[], cwd: string, env: Record<string, string>, readyUrl: string) => {
@@ -83,5 +90,6 @@ export default async function globalSetup() {
   return () => {
     stopVite()
     stopServer()
+    removeWorkerHosts()
   }
 }

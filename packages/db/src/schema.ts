@@ -67,10 +67,11 @@ export type MessageRow = {
   workspaceId: WorkspaceId
   chatId: ChatId
   seq: number
-  kind: 'member' | 'agent' | 'tool-call'
+  kind: 'member' | 'agent' | 'tool-call' | 'notice'
   authorId: MemberId | null
   body: string
   detail: string | null
+  replyToId: MessageId | null
   createdAt: string
   editedAt: string | null
   deletedAt: string | null

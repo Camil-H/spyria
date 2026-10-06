@@ -12,6 +12,11 @@ export const lockRuntimeHost = skippedOnClient
 export const findRuntimeHostBySecretHash = skippedOnClient
 export const lockRuntimes = async () => []
 export const lockRuntimeHostLoads = async () => []
-export const runtimeApiKeyRefOf = skippedOnClient
-export const setRuntimeApiKeyRef = skippedOnClient
+export const serverOnlyRuntimeValueOf = skippedOnClient
+export const setServerOnlyRuntimeValue = skippedOnClient
+export const rememberAgentConversation = skippedOnClient
+export const lockChatTurn = async () => null
+export const nextPendingPrompt = skippedOnClient
+export const isChatEventStored = async () => false
+export const lastAgentEventTimestamp = async () => null
 export const appendChatEvent = () => Promise.reject(new Error('Chat events are appended on the server only'))

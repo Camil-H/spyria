@@ -32,25 +32,10 @@ const withUserIdAndPosition = <Row extends { memberId: string }>(row: Row, index
   position: index + 1,
 })
 
-const replyTargets = (snapshot: Snapshot) => {
-  const replyToByMessageId = new Map<string, string>()
-  const answeredMessageIdByChat = new Map<string, string | null>()
-  for (const message of snapshot.messages) {
-    if (message.kind === 'member') answeredMessageIdByChat.set(message.chatId, message.needsReply ? null : message.id)
-    const answeredMessageId = answeredMessageIdByChat.get(message.chatId)
-    if (message.kind === 'agent' && answeredMessageId) {
-      replyToByMessageId.set(message.id, answeredMessageId)
-      answeredMessageIdByChat.set(message.chatId, null)
-    }
-  }
-  return replyToByMessageId
-}
-
 const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
   const creatorByWorkspace = new Map(
     snapshot.memberships.toReversed().map((membership) => [membership.workspaceId, membership.memberId]),
   )
-  const replyToByMessageId = replyTargets(snapshot)
   const emailByUserId = new Map(
     snapshot.memberships.map((membership) => [
       membership.memberId,
@@ -85,7 +70,6 @@ const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
   await transaction.insert(tables.messages).values(
     snapshot.messages.map(({ needsReply, createdAt, editedAt, deletedAt, ...message }) => ({
       ...message,
-      replyToId: replyToByMessageId.get(message.id) ?? null,
       createdAt: new Date(createdAt),
       editedAt: editedAt === null ? null : new Date(editedAt),
       deletedAt: deletedAt === null ? null : new Date(deletedAt),
@@ -103,7 +87,7 @@ const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
         kind: message.kind,
         body: message.body,
         detail: message.detail,
-        replyToId: replyToByMessageId.get(message.id) ?? null,
+        replyToId: message.replyToId,
       },
       createdAt: new Date(message.createdAt),
     })),

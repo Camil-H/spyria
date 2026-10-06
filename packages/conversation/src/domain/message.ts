@@ -6,7 +6,7 @@ export type Message = Readonly<{
   id: MessageId
   workspaceId: WorkspaceId
   chatId: ChatId
-  kind: 'member' | 'agent' | 'tool-call'
+  kind: 'member' | 'agent' | 'tool-call' | 'notice'
   authorId: MemberId | null
   body: MessageBody
   detail: string | null

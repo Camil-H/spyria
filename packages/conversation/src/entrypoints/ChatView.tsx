@@ -8,6 +8,7 @@ import { getConversation } from '../queries/get-conversation.ts'
 import { Composer } from './Composer.tsx'
 import { MessageList } from './MessageList.tsx'
 import { useConversationCommands } from './providers.tsx'
+import { useStreamedReply, withStreamedReply } from './useStreamedReply.ts'
 
 const bubbleClassName = 'rounded-full border border-line px-2 py-0.5 text-xs text-muted'
 
@@ -25,6 +26,7 @@ export const ChatView = ({
   const chatId = toChatId(useParams().chatId ?? '')
   const conversation = useQuery(getConversation(workspaceId, chatId, memberId))
   const commands = useConversationCommands()
+  const streamedReply = useStreamedReply(workspaceId, chatId, conversation?.messages ?? [])
   const newestMessageId = conversation?.messages.at(-1)?.id
   useEffect(() => {
     if (newestMessageId) commands.markChatRead({ workspaceId, chatId })
@@ -69,7 +71,9 @@ export const ChatView = ({
           </Link>
         )}
       </header>
-      <MessageList conversation={conversation} />
+      <MessageList
+        conversation={{ ...conversation, messages: withStreamedReply(conversation.messages, streamedReply) }}
+      />
       <Composer
         workspaceId={workspaceId}
         chatId={chatId}
