@@ -36,6 +36,7 @@ try {
   process.exit(1)
 }
 
+let isTokenRefused = false
 const storedToken = () => (existsSync(tokenPath) ? readFileSync(tokenPath, 'utf8').trim() : undefined)
 const isRefusal = (closeCode: number) => closeCode >= 4000 && closeCode < 4100
 
@@ -66,7 +67,7 @@ const connect = () => {
   }
   socket.onopen = () => {
     const token = storedToken()
-    if (token) return void hello(token).catch((error) => console.error(messageOf(error)))
+    if (token && !isTokenRefused) return void hello(token).catch((error) => console.error(messageOf(error)))
     if (claimCode) return send({ type: 'claim', code: claimCode })
     console.error('No stored token and no code in the URL')
     process.exit(1)
@@ -85,6 +86,11 @@ const connect = () => {
   socket.onclose = (event) => {
     clearInterval(heartbeatTimer)
     relay.closeAll()
+    if (isRefusal(event.code) && storedToken() && claimCode && !isTokenRefused) {
+      console.error(`${event.reason}; pairing again with the code in the URL`)
+      isTokenRefused = true
+      return connect()
+    }
     if (isRefusal(event.code)) {
       console.error(event.reason)
       process.exit(1)
