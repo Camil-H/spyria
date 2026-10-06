@@ -2,21 +2,24 @@ import { useStore } from '@hq/db/react'
 import { type ChatId, messageId, type WorkspaceId } from '@hq/kernel'
 import { useEffect, useState } from 'react'
 import { type StreamedReply, streamedReplyAfter, visibleStreamedReply } from '../domain/streamed-reply.ts'
-import type { ConversationMessage } from '../queries/get-conversation.ts'
+import type { ConversationItem, ConversationMessage } from '../queries/get-conversation.ts'
 import { useAgentStream } from './providers.tsx'
 
 const replyCountIn = (messages: readonly { replyToId: string | null }[]) => (promptId: string) =>
   messages.filter((message) => message.replyToId === promptId).length
 
 export const withStreamedReply = (
-  messages: readonly ConversationMessage[],
+  items: readonly ConversationItem[],
   streamedReply: ConversationMessage | null,
-) => {
-  if (!streamedReply) return messages
-  const threadEnd = messages.findLastIndex(
-    (message) => message.id === streamedReply.replyToId || message.replyToId === streamedReply.replyToId,
+): readonly ConversationItem[] => {
+  if (!streamedReply) return items
+  const threadEnd = items.findLastIndex(
+    (item) =>
+      item.type === 'message' &&
+      (item.message.id === streamedReply.replyToId || item.message.replyToId === streamedReply.replyToId),
   )
-  return threadEnd === -1 ? [...messages, streamedReply] : messages.toSpliced(threadEnd + 1, 0, streamedReply)
+  const streamed = { type: 'message', message: streamedReply } as const
+  return threadEnd === -1 ? [...items, streamed] : items.toSpliced(threadEnd + 1, 0, streamed)
 }
 
 export const useStreamedReply = (
@@ -43,14 +46,15 @@ export const useStreamedReply = (
   if (!visible) return null
   return {
     id: messageId(`streamed-${visible.promptId}`),
-    kind: 'agent',
+    kind: visible.isReasoning ? 'step' : 'agent',
     authorName: 'Agent',
     createdAt: messages.find((message) => message.id === visible.promptId)?.createdAt ?? new Date(0).toISOString(),
     body: visible.text,
-    detail: null,
+    step: visible.isReasoning ? { type: 'thought', text: visible.text, durationMilliseconds: null } : null,
     replyToId: messageId(visible.promptId),
     isOwn: false,
     isDeleted: false,
     isEdited: false,
+    isRunning: true,
   }
 }

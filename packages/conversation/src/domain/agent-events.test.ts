@@ -8,7 +8,6 @@ import {
   streamedTextOf,
   turnEndNoticeOf,
 } from './agent-events.ts'
-import { messagesFromEvents, type StoredEvent } from './message-events.ts'
 import { type StreamedReply, streamedReplyAfter, visibleStreamedReply } from './streamed-reply.ts'
 
 const agentEvent = (kind: string, fields: Record<string, unknown> = {}, id = `event-${kind}`): AgentEvent => ({
@@ -26,61 +25,29 @@ const userMessage = agentEvent('MessageEvent', {
   source: 'user',
   llm_message: { role: 'user', content: textContent('Find the latest pricing') },
 })
-const terminalAction = agentEvent(
-  'ActionEvent',
-  { source: 'agent', action: { kind: 'TerminalAction', command: 'echo hello' }, thought: textContent('Running it.') },
-  'action-echo',
-)
-const terminalObservation = agentEvent('ObservationEvent', {
-  source: 'environment',
-  action_id: 'action-echo',
-  observation: { kind: 'TerminalObservation', content: textContent('hello'), exit_code: 0 },
-})
 const statusUpdate = (value: string) =>
   agentEvent('ConversationStateUpdateEvent', { source: 'environment', key: 'execution_status', value })
 
 test('an agent message becomes an agent message and a user message is not projected', () => {
-  expect(agentProjectionOf(agentMessage)).toEqual({
-    type: 'message',
-    kind: 'agent',
-    body: 'Understood, working on it.',
-  })
-  expect(agentProjectionOf(userMessage)).toBeUndefined()
-})
-
-test('a terminal action becomes a tool call and its observation fills the detail', () => {
-  expect(agentProjectionOf(terminalAction)).toEqual({ type: 'message', kind: 'tool-call', body: 'echo hello' })
-  expect(agentProjectionOf(terminalObservation)).toEqual({ type: 'detail', actionId: 'action-echo', detail: 'hello' })
-})
-
-test('a finish action becomes an agent message with its final answer', () => {
-  const finish = agentEvent('ActionEvent', { source: 'agent', action: { kind: 'FinishAction', message: 'All done.' } })
-  expect(agentProjectionOf(finish)).toEqual({ type: 'message', kind: 'agent', body: 'All done.' })
+  expect(agentProjectionOf(agentMessage, null)).toEqual({ type: 'message', body: 'Understood, working on it.' })
+  expect(agentProjectionOf(userMessage, null)).toBeUndefined()
 })
 
 test('finished, error and stuck statuses end the turn; running does not', () => {
   for (const outcome of ['finished', 'error', 'stuck'] as const)
-    expect(agentProjectionOf(statusUpdate(outcome))).toEqual({ type: 'turn-end', outcome })
-  expect(agentProjectionOf(statusUpdate('running'))).toBeUndefined()
-})
-
-test('other kinds and blank messages stay in the event log only', () => {
-  const ignored = [
-    agentEvent('SystemPromptEvent', { source: 'agent', system_prompt: { text: 'You are OpenHands' } }),
-    agentEvent('ConversationStateUpdateEvent', { key: 'stats', value: {} }),
-    agentEvent('ActionEvent', { source: 'agent', action: { kind: 'FileEditorAction', path: '/workspace/a.txt' } }),
-    agentEvent('ConversationErrorEvent', { source: 'environment', code: 'LLMServiceUnavailableError' }),
-    agentEvent('MessageEvent', { source: 'agent', llm_message: { role: 'assistant', content: textContent('  ') } }),
-  ]
-  for (const event of ignored) expect(agentProjectionOf(event)).toBeUndefined()
+    expect(agentProjectionOf(statusUpdate(outcome), null)).toEqual({ type: 'turn-end', outcome })
+  expect(agentProjectionOf(statusUpdate('running'), null)).toBeUndefined()
 })
 
 test('streaming deltas and the per-connection full state are never stored; every other event is', () => {
   const delta = agentEvent('StreamingDeltaEvent', { source: 'agent', content: 'Understood, ' })
+  const reasoningDelta = agentEvent('StreamingDeltaEvent', { source: 'agent', content: '', reasoning_content: 'Hmm' })
   expect(isStoredAgentEvent(delta)).toBe(false)
-  expect(streamedTextOf(delta)).toBe('Understood, ')
+  expect(isStoredAgentEvent(reasoningDelta)).toBe(false)
+  expect(streamedTextOf(delta)).toEqual({ text: 'Understood, ', isReasoning: false })
+  expect(streamedTextOf(reasoningDelta)).toEqual({ text: 'Hmm', isReasoning: true })
   expect(isStoredAgentEvent(agentEvent('ConversationStateUpdateEvent', { key: 'full_state', value: {} }))).toBe(false)
-  for (const event of [agentMessage, userMessage, terminalAction, terminalObservation, statusUpdate('finished')]) {
+  for (const event of [agentMessage, userMessage, statusUpdate('finished')]) {
     expect(isStoredAgentEvent(event)).toBe(true)
     expect(streamedTextOf(event)).toBeUndefined()
   }
@@ -100,77 +67,6 @@ test('a runtime that cannot be placed reads as no host, any other failure as cou
   expect(startFailureNoticeOf('no_capacity')).toBe(agentNotices.noHost)
   for (const failure of ['create_failed', 'start_failed', 'lost'])
     expect(startFailureNoticeOf(failure)).toBe(agentNotices.couldNotStart)
-})
-
-const storedAgentEvent = (seq: number, event: AgentEvent, replyToId = 'prompt'): StoredEvent => ({
-  workspaceId: 'acme',
-  chatId: 'chat',
-  id: event.id,
-  seq,
-  type: 'agent.event',
-  actor: null,
-  payload: { replyToId, event },
-  createdAt: new Date(Date.UTC(2026, 9, 5, 20, seq)),
-})
-
-test('messagesFromEvents projects stored agent events like the live bridge, so a rebuild keeps them', () => {
-  const prompt: StoredEvent = {
-    workspaceId: 'acme',
-    chatId: 'chat',
-    id: 'prompt',
-    seq: 1,
-    type: 'message.posted',
-    actor: 'alice',
-    payload: { kind: 'member', body: 'Find the latest pricing', detail: null, replyToId: null },
-    createdAt: new Date(Date.UTC(2026, 9, 5, 20, 1)),
-  }
-  const projected = messagesFromEvents([
-    prompt,
-    storedAgentEvent(2, userMessage),
-    storedAgentEvent(3, terminalAction),
-    storedAgentEvent(4, terminalObservation),
-    storedAgentEvent(5, agentMessage),
-    storedAgentEvent(6, statusUpdate('finished')),
-  ])
-  expect(
-    projected.map(({ id, seq, kind, authorId, body, detail, replyToId }) => ({
-      id,
-      seq,
-      kind,
-      authorId,
-      body,
-      detail,
-      replyToId,
-    })),
-  ).toEqual([
-    {
-      id: 'prompt',
-      seq: 1,
-      kind: 'member',
-      authorId: 'alice',
-      body: 'Find the latest pricing',
-      detail: null,
-      replyToId: null,
-    },
-    {
-      id: 'action-echo',
-      seq: 3,
-      kind: 'tool-call',
-      authorId: null,
-      body: 'echo hello',
-      detail: 'hello',
-      replyToId: 'prompt',
-    },
-    {
-      id: agentMessage.id,
-      seq: 5,
-      kind: 'agent',
-      authorId: null,
-      body: 'Understood, working on it.',
-      detail: null,
-      replyToId: 'prompt',
-    },
-  ])
 })
 
 const repliesOf =
@@ -212,4 +108,19 @@ test('a snapshot frame replaces the streamed text, and an empty stream shows not
   expect(resumed.text).toBe('Understood, working ')
   expect(visibleStreamedReply(null, repliesOf({}))).toBeNull()
   expect(visibleStreamedReply({ promptId: 'first', text: '', repliesAtStart: 0 }, repliesOf({}))).toBeNull()
+})
+
+test('reasoning frames stream as reasoning, and the answer text after them starts afresh', () => {
+  const reasoning = streamedReplyAfter(null, { promptId: 'first', text: 'Weighing', isReasoning: true }, repliesOf({}))
+  expect(streamedReplyAfter(reasoning, { promptId: 'first', text: ' it', isReasoning: true }, repliesOf({}))).toEqual({
+    promptId: 'first',
+    text: 'Weighing it',
+    repliesAtStart: 0,
+    isReasoning: true,
+  })
+  expect(streamedReplyAfter(reasoning, { promptId: 'first', text: 'Answer' }, repliesOf({}))).toEqual({
+    promptId: 'first',
+    text: 'Answer',
+    repliesAtStart: 0,
+  })
 })

@@ -1,23 +1,64 @@
 import { focusRing } from '@hq/ui'
-import type { Conversation } from '../queries/get-conversation.ts'
+import { ChevronRight } from 'lucide-react'
+import { type Ref, useState } from 'react'
+import type { Conversation, ConversationItem } from '../queries/get-conversation.ts'
 import { MessageItem } from './MessageItem.tsx'
 
 const scrollIntoView = (element: HTMLElement | null) => element?.scrollIntoView({ block: 'end' })
 
-export const MessageList = ({ conversation, onStop }: { conversation: Conversation; onStop: () => void }) => (
+const FoldedSteps = ({
+  fold,
+  ref,
+}: {
+  fold: Extract<ConversationItem, { type: 'fold' }>
+  ref?: Ref<HTMLLIElement>
+}) => {
+  const [isExpanded, setIsExpanded] = useState(false)
+  return (
+    <>
+      <li ref={ref} className="rounded-md px-3 py-1 hover:bg-hover">
+        <button
+          type="button"
+          aria-expanded={isExpanded}
+          onClick={() => setIsExpanded(!isExpanded)}
+          className={`flex items-center gap-1.5 rounded-md text-sm text-muted hover:text-ink ${focusRing} aria-expanded:[&>svg]:rotate-90`}
+        >
+          <ChevronRight aria-hidden className="size-4 transition-transform" />
+          {fold.label}
+        </button>
+      </li>
+      {isExpanded && fold.steps.map((step) => <MessageItem key={step.id} message={step} hasMenu={false} />)}
+    </>
+  )
+}
+
+export const MessageList = ({
+  conversation,
+  items,
+  onStop,
+}: {
+  conversation: Conversation
+  items: readonly ConversationItem[]
+  onStop: () => void
+}) => (
   <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
-    {conversation.messages.length === 0 ? (
+    {items.length === 0 ? (
       <p className="px-3 py-2 text-sm text-muted">No messages yet</p>
     ) : (
       <ol aria-label="Messages" className="flex flex-col gap-1">
-        {conversation.messages.map((message, index) => (
-          <MessageItem
-            key={message.id}
-            message={message}
-            hasMenu={conversation.type === 'channel'}
-            ref={index === conversation.messages.length - 1 ? scrollIntoView : undefined}
-          />
-        ))}
+        {items.map((item, index) => {
+          const ref = index === items.length - 1 ? scrollIntoView : undefined
+          return item.type === 'fold' ? (
+            <FoldedSteps key={`fold-${item.promptId}`} fold={item} ref={ref} />
+          ) : (
+            <MessageItem
+              key={item.message.id}
+              message={item.message}
+              hasMenu={conversation.type === 'channel'}
+              ref={ref}
+            />
+          )
+        })}
       </ol>
     )}
     {conversation.isAgentWorking && (

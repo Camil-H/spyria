@@ -266,7 +266,7 @@ test.skipIf(!hasImage)(
     const chat = chatId('chat-research')
     const repliesTo = async (messageId: string) =>
       (await database.query.messages.findMany({ where: { replyToId: messageId }, orderBy: { seq: 'asc' } })).map(
-        ({ kind, body, detail }) => ({ kind, body, detail }),
+        ({ kind, body, step }) => ({ kind, body, step }),
       )
     try {
       await zeroDatabase(database).transaction((tx) =>
@@ -282,9 +282,13 @@ test.skipIf(!hasImage)(
           (await database.$client`select agent_turn_message_id from chats where id = ${chat}`)[0]
             ?.agent_turn_message_id === null,
       )
-      expect(await repliesTo('message-real-turn')).toEqual([
-        { kind: 'tool-call', body: 'echo hello', detail: 'hello' },
-        { kind: 'agent', body: 'Understood, working on it.', detail: null },
+      expect(await repliesTo('message-real-turn')).toMatchObject([
+        {
+          kind: 'step',
+          body: 'command',
+          step: { type: 'command', command: 'echo hello', exitCode: 0, output: 'hello', truncatedLines: 0 },
+        },
+        { kind: 'agent', body: 'Understood, working on it.', step: null },
       ])
       const storedKinds = (await database.select().from(events))
         .filter((event) => event.chatId === chat && event.type === 'agent.event')

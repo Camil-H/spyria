@@ -78,6 +78,7 @@ const message = (
   body: string,
   time: string,
   detail: string | null = null,
+  step: MessageRow['step'] = null,
 ): MessageRow => ({
   id: messageId(`message-${id}`),
   workspaceId: workspace,
@@ -87,6 +88,7 @@ const message = (
   authorId,
   body,
   detail,
+  step,
   replyToId: null,
   createdAt: `2026-09-30T${time}:00.000Z`,
   editedAt: null,
@@ -95,15 +97,17 @@ const message = (
 })
 const member = (id: string, chat: string, workspace: WorkspaceId, author: MemberId, body: string, time: string) =>
   message(id, chat, workspace, author, 'member', body, time)
-const agent = (
-  id: string,
-  chat: string,
-  workspace: WorkspaceId,
-  kind: 'agent' | 'tool-call',
-  body: string,
-  time: string,
-  detail: string | null = null,
-) => message(id, chat, workspace, null, kind, body, time, detail)
+const agent = (id: string, chat: string, workspace: WorkspaceId, body: string, time: string) =>
+  message(id, chat, workspace, null, 'agent', body, time)
+const command = (id: string, chat: string, workspace: WorkspaceId, body: string, time: string, output: string) =>
+  message(id, chat, workspace, null, 'step', body, time, null, {
+    type: 'command',
+    command: body,
+    exitCode: null,
+    durationMilliseconds: null,
+    output,
+    truncatedLines: 0,
+  })
 
 const withReplyTargets = (messages: readonly MessageRow[]) => {
   const answeredMessageIdByChat = new Map<string, MessageId | null>()
@@ -162,21 +166,13 @@ export const createMockSnapshot = (): Snapshot => ({
     member('standup-1', 'chat-standup', acme, bob, 'Standup at 10.', '09:30'),
     member('general-1', 'chat-general', globex, alice, 'Hello Globex.', '08:00'),
     member('setup-1', 'chat-setup-helper', acme, bob, 'Set up the dev environment.', '10:00'),
-    agent('setup-2', 'chat-setup-helper', acme, 'agent', "I'll install the dependencies first.", '10:01'),
-    agent('setup-3', 'chat-setup-helper', acme, 'tool-call', 'Ran: bun install', '10:02', 'Done in 35s'),
-    agent('setup-4', 'chat-setup-helper', acme, 'agent', 'Dependencies installed.', '10:03'),
+    agent('setup-2', 'chat-setup-helper', acme, "I'll install the dependencies first.", '10:01'),
+    command('setup-3', 'chat-setup-helper', acme, 'Ran: bun install', '10:02', 'Done in 35s'),
+    agent('setup-4', 'chat-setup-helper', acme, 'Dependencies installed.', '10:03'),
     member('invoice-1', 'chat-invoice-bug', acme, alice, 'Why do invoices show the wrong total?', '11:00'),
-    agent('invoice-2', 'chat-invoice-bug', acme, 'agent', 'Checking the invoice calculation.', '11:01'),
-    agent(
-      'invoice-3',
-      'chat-invoice-bug',
-      acme,
-      'tool-call',
-      'Read: billing/invoice.ts',
-      '11:02',
-      'export const total = ...',
-    ),
-    agent('invoice-4', 'chat-invoice-bug', acme, 'agent', 'The tax is applied twice.', '11:03'),
+    agent('invoice-2', 'chat-invoice-bug', acme, 'Checking the invoice calculation.', '11:01'),
+    command('invoice-3', 'chat-invoice-bug', acme, 'Read: billing/invoice.ts', '11:02', 'export const total = ...'),
+    agent('invoice-4', 'chat-invoice-bug', acme, 'The tax is applied twice.', '11:03'),
   ]),
   drafts: [],
   readMarkers: [

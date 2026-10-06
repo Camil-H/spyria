@@ -1,5 +1,5 @@
 import type { MessageId, WorkspaceId } from '@hq/kernel'
-import type { AgentChat, AgentEndpoint } from '../contracts/agent.ts'
+import type { AgentChat, AgentConversation, AgentEndpoint } from '../contracts/agent.ts'
 import { agentNotices, startFailureNoticeOf } from '../domain/agent-events.ts'
 import type { Message } from '../domain/message.ts'
 import {
@@ -48,14 +48,17 @@ export const promptAgent = async (dependencies: AgentDependencies, { workspaceId
   }
   const prompt = await transactor.run((unitOfWork) => beginAgentTurn(unitOfWork, chatId))
   if (!prompt) return undefined
+  let conversation: AgentConversation
   try {
-    const conversation = await conversationFor(dependencies, chat, readiness.endpoint, prompt)
+    conversation = await conversationFor(dependencies, chat, readiness.endpoint, prompt)
     await eventSockets.ensureOpen(chat, conversation, prompt.id)
     await agentServer.sendMessage(conversation, prompt.body)
   } catch (error) {
     await transactor.run((unitOfWork) => releaseAgentTurn(unitOfWork, chatId, prompt.id))
     throw error
   }
+  if ((await transactor.run(({ agentTurns }) => agentTurns.lock(chatId))) === null)
+    await agentServer.interrupt(conversation)
   await runtimes.touch(chat)
   return undefined
 }

@@ -16,6 +16,7 @@ const serverOnlySql = [
   'llm_token_ref',
   'agent_conversation_id',
 ]
+const lazyChunkMarkers = ['Load image from', 'registerLanguage']
 
 const failures: string[] = []
 const mainChunkPath = readFileSync(`${distDirectory}index.html`, 'utf8').match(/<script[^>]+src="\/([^"]+\.js)"/)?.[1]
@@ -24,6 +25,8 @@ const mainChunk = readFileSync(`${distDirectory}${mainChunkPath}`, 'utf8')
 const mainChunkBytes = Buffer.byteLength(mainChunk)
 if (mainChunkBytes > mainChunkLimitBytes)
   failures.push(`${mainChunkPath} is ${mainChunkBytes} bytes, over the ${mainChunkLimitBytes} byte limit`)
+for (const marker of lazyChunkMarkers)
+  if (mainChunk.includes(marker)) failures.push(`${mainChunkPath} contains "${marker}", which belongs in a lazy chunk`)
 const reactVersions = new Set(Array.from(mainChunk.matchAll(/version[=:]`(19\.\d+\.\d+)`/g), (match) => match[1]))
 if (reactVersions.size !== 1)
   failures.push(`${mainChunkPath} holds ${reactVersions.size} React versions: ${[...reactVersions].join(', ')}`)
@@ -41,5 +44,5 @@ if (failures.length > 0) {
   process.exit(1)
 }
 console.log(
-  `Bundle gates passed: main chunk ${mainChunkBytes} bytes, React ${[...reactVersions].join('')}, no server-only SQL`,
+  `Bundle gates passed: main chunk ${mainChunkBytes} bytes, React ${[...reactVersions].join('')}, no server-only SQL, Markdown and highlighting lazy`,
 )

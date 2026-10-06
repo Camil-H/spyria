@@ -44,7 +44,7 @@ export const createSandboxAgentServer = (llm: AgentLlm): AgentServer => ({
           stream: true,
           api_mode: 'chat',
         },
-        tools: [{ name: 'terminal' }, { name: 'file_editor' }],
+        tools: [{ name: 'terminal' }, { name: 'file_editor' }, { name: 'task_tracker' }],
       },
       workspace: { kind: 'LocalWorkspace', working_dir: '/workspace/project' },
       autotitle: false,

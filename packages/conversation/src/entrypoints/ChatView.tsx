@@ -75,7 +75,8 @@ export const ChatView = ({
         )}
       </header>
       <MessageList
-        conversation={{ ...conversation, messages: withStreamedReply(conversation.messages, streamedReply) }}
+        conversation={conversation}
+        items={withStreamedReply(conversation.items, streamedReply)}
         onStop={() => commands.stopAgent({ workspaceId, chatId })}
       />
       <Composer

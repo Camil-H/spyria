@@ -17,6 +17,7 @@ const messageOf = (seq: number, authorId: MessageRow['authorId']): MessageRow =>
   authorId,
   body: `Message ${seq}`,
   detail: null,
+  step: null,
   replyToId: null,
   createdAt: '2026-10-01T09:00:00.000Z',
   editedAt: null,

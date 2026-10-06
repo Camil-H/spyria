@@ -36,7 +36,14 @@ export const createAgentBridge = ({
   const bridgeOf = (database: Database) => {
     const sockets = new Map<
       string,
-      { conversationId: string; promptId: string | null; streamedText: string; isReady: Promise<void>; close(): void }
+      {
+        conversationId: string
+        promptId: string | null
+        streamedText: string
+        isReasoning: boolean
+        isReady: Promise<void>
+        close(): void
+      }
     >()
     const viewers = new Map<string, Set<WSContext>>()
     const send = (viewer: WSContext, chat: AgentChat, frame: object) =>
@@ -88,6 +95,7 @@ export const createAgentBridge = ({
         isReady: Promise.race([ready.promise, Bun.sleep(readyTimeoutMilliseconds)]),
         promptId: promptId as string | null,
         streamedText: '',
+        isReasoning: false,
         isClosed: false,
         close: () => {
           chatSocket.isClosed = true
@@ -108,13 +116,15 @@ export const createAgentBridge = ({
         onEvent: (event) => {
           ready.resolve()
           if (chatSocket.isClosed) return
-          const text = streamedTextOf(event)
-          if (text !== undefined && chatSocket.promptId) {
-            chatSocket.streamedText += text
+          const streamed = streamedTextOf(event)
+          if (streamed?.text && chatSocket.promptId) {
+            const { text, isReasoning } = streamed
+            chatSocket.streamedText = (chatSocket.isReasoning === isReasoning ? chatSocket.streamedText : '') + text
+            chatSocket.isReasoning = isReasoning
             for (const viewer of viewers.get(keyOf(chat)) ?? [])
-              send(viewer, chat, { promptId: chatSocket.promptId, text })
+              send(viewer, chat, { promptId: chatSocket.promptId, text, ...(isReasoning && { isReasoning }) })
           }
-          if (text !== undefined) return
+          if (streamed) return
           const promptAtEvent = chatSocket.promptId
           recording = recording
             .then(() => handlers.recordEvent(chat, event))
@@ -150,7 +160,12 @@ export const createAgentBridge = ({
         viewers.set(keyOf(chat), (viewers.get(keyOf(chat)) ?? new Set()).add(viewer))
         const streaming = sockets.get(keyOf(chat))
         if (streaming?.promptId && streaming.streamedText)
-          send(viewer, chat, { promptId: streaming.promptId, text: streaming.streamedText, isSnapshot: true })
+          send(viewer, chat, {
+            promptId: streaming.promptId,
+            text: streaming.streamedText,
+            isSnapshot: true,
+            ...(streaming.isReasoning && { isReasoning: true }),
+          })
       },
       unwatch: (viewer: WSContext, chat?: AgentChat) => {
         for (const watching of chat ? [viewers.get(keyOf(chat))] : viewers.values()) watching?.delete(viewer)

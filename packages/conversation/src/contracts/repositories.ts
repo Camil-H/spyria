@@ -1,5 +1,6 @@
 import type { ChatId, MemberId, MessageId, WorkspaceId } from '@hq/kernel'
 import type { AgentEvent } from '../domain/agent-events.ts'
+import type { AgentStep, StoredStep } from '../domain/agent-steps.ts'
 import type { ConversationChat, Message, MessageChange } from '../domain/message.ts'
 import type { AgentInterrupt } from './agent.ts'
 
@@ -9,7 +10,8 @@ export type MessageRepository = {
   get(messageId: MessageId): Promise<Message>
   record(change: MessageChange): Promise<void>
   project(message: Message, seq: number): Promise<void>
-  setDetail(messageId: MessageId, detail: string): Promise<void>
+  find(messageId: MessageId): Promise<Message | undefined>
+  setStep(messageId: MessageId, step: StoredStep): Promise<void>
 }
 
 export type AgentJobs = {
@@ -32,7 +34,11 @@ export type MemberDirectory = { displayNameOf(memberId: MemberId): Promise<strin
 
 export type AgentEventRepository = {
   append(chatId: ChatId, event: AgentEvent, replyToId: MessageId | null, at: Date): Promise<number | undefined>
-  lastTimestamp(chatId: ChatId): Promise<string | null>
+  last(chatId: ChatId): Promise<{ timestamp: string; replyToId: MessageId | null } | undefined>
+}
+
+export type PlanRepository = {
+  replace(chatId: ChatId, items: Extract<AgentStep, { type: 'plan' }>['items']): Promise<void>
 }
 
 export type DraftRepository = { replace(draft: Draft): Promise<void> }

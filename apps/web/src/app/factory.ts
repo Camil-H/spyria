@@ -1,6 +1,7 @@
 import {
   type AgentStream,
   type ConversationCommands,
+  commandOutputPathOf,
   conversationMutators,
   createStoreDraftRepository,
   saveDraft,
@@ -144,6 +145,12 @@ export const createApp = async (
     }),
     conversationCommands: commandsOf<ConversationCommands>(conversationMutators.conversation, {
       saveDraft: (input) => saveDraft({ drafts }, { ...input, memberId }),
+      commandOutput: async ({ workspaceId, chatId, stepId }) =>
+        (
+          await fetch(commandOutputPathOf(chatId, stepId), {
+            headers: { authorization: `Bearer ${store.tokenOf(workspaceId)}` },
+          })
+        ).text(),
       startRuntimeFromMessage: async (input) => {
         const newChatId = crypto.randomUUID()
         await mutate(conversationMutators.conversation.startRuntimeFromMessage, { ...input, chatId: newChatId })

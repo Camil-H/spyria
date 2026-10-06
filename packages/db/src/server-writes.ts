@@ -218,15 +218,25 @@ export const setRuntimesHostOnline = (tx: Transaction, workspaceId: string, host
 export const isChatEventStored = async (tx: Transaction, workspaceId: string, eventId: string) =>
   (await onServer(tx, 'select 1 from events where workspace_id = $1 and id = $2', [workspaceId, eventId])).length > 0
 
-export const lastAgentEventTimestamp = async (tx: Transaction, workspaceId: string, chatId: string) =>
+export const lastAgentEvent = async (tx: Transaction, workspaceId: string, chatId: string) =>
   (
     (await onServer(
       tx,
-      `select payload->'event'->>'timestamp' as timestamp from events
+      `select payload->'event'->>'timestamp' as timestamp, payload->>'replyToId' as "replyToId" from events
        where workspace_id = $1 and chat_id = $2 and type = 'agent.event' order by seq desc limit 1`,
       [workspaceId, chatId],
-    )) as { timestamp: string | null }[]
-  )[0]?.timestamp ?? null
+    )) as { timestamp: string; replyToId: string | null }[]
+  )[0]
+
+export const agentObservationOf = async (tx: Transaction, workspaceId: string, chatId: string, actionId: string) =>
+  (
+    (await onServer(
+      tx,
+      `select payload->'event'->'observation' as observation from events
+       where workspace_id = $1 and chat_id = $2 and type = 'agent.event' and payload->'event'->>'action_id' = $3`,
+      [workspaceId, chatId, actionId],
+    )) as { observation: Record<string, unknown> }[]
+  )[0]?.observation
 
 type ChatEvent = {
   workspaceId: string

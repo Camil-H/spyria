@@ -12,6 +12,7 @@ export type ConversationCommands = {
   retryAgent: Command<{ chatId: ChatId }>
   startRuntimeFromMessage: Command<{ messageId: MessageId }>
   saveDraft: Command<{ chatId: ChatId; text: string }, void>
+  commandOutput: Command<{ chatId: ChatId; stepId: string }>
 }
 
 export type AgentStream = {

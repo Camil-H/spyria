@@ -15,7 +15,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
 import { defineRelations } from 'drizzle-orm/relations'
-import type { DiffLine, RuntimeFailure, RuntimeHostCapacity, RuntimeState } from '../schema.ts'
+import type { DiffLine, MessageStep, RuntimeFailure, RuntimeHostCapacity, RuntimeState } from '../schema.ts'
 
 const table = snakeCase.table
 const instant = () => timestamp({ withTimezone: true, mode: 'date' })
@@ -179,10 +179,11 @@ export const messages = table(
     ...chatScoped,
     id: text().notNull(),
     seq: integer().notNull(),
-    kind: text().$type<'member' | 'agent' | 'tool-call' | 'notice'>().notNull(),
+    kind: text().$type<'member' | 'agent' | 'step' | 'notice'>().notNull(),
     authorId: text(),
     body: text().notNull(),
     detail: text(),
+    step: jsonb().$type<MessageStep>(),
     replyToId: text(),
     createdAt: instant().notNull(),
     editedAt: instant(),

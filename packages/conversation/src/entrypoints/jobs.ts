@@ -56,7 +56,8 @@ export const createAgentHandlers = ({
     openEvents: async (chat: AgentChat, conversation: AgentConversation, listener: AgentEventListener) =>
       agentServer.openEvents(
         conversation,
-        await transactorOf(chat.workspaceId).run(({ agentEvents }) => agentEvents.lastTimestamp(chat.chatId)),
+        (await transactorOf(chat.workspaceId).run(({ agentEvents }) => agentEvents.last(chat.chatId)))?.timestamp ??
+          null,
         listener,
       ),
     recordEvent: async (chat: AgentChat, event: AgentEvent) => {

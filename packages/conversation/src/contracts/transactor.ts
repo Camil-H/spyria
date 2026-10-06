@@ -5,6 +5,7 @@ import type {
   ChatRepository,
   MemberDirectory,
   MessageRepository,
+  PlanRepository,
   ReadMarkerRepository,
 } from './repositories.ts'
 
@@ -16,6 +17,7 @@ export type UnitOfWork = {
   members: MemberDirectory
   agentTurns: AgentTurnRepository
   agentEvents: AgentEventRepository
+  plans: PlanRepository
 }
 
 export type ConversationTransactor = {

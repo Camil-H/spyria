@@ -133,6 +133,27 @@ test('Stop interrupts the agent, ends the turn once with a notice naming the mem
   expect(fake.interrupts).toHaveLength(1)
 })
 
+test('a prompt whose turn was stopped while it was being sent is interrupted at once', async () => {
+  const fake = createFakeAgentServer()
+  await fakeHost('Agent host', {
+    agentServer: {
+      ...fake.agentServer,
+      respond: async (request, container) => {
+        if (request.method === 'POST' && request.path.endsWith('/events'))
+          await database.$client`update chats set agent_turn_message_id = null where agent_turn_message_id = ${firstPromptId}`
+        return fake.agentServer.respond(request, container)
+      },
+    },
+  })
+  holdTurnsOf(fake, 'Stopped before sent')
+  const chat = await newRuntimeChat()
+  const firstPromptId = await prompt(chat, 'Stopped before sent')
+  await delivered(fake, 1)
+
+  await waitFor(() => fake.interrupts.length === 1)
+  expect(fake.interrupts).toEqual([conversationOf(fake).id])
+})
+
 test('an interrupt racing the finished event ends the turn once', async () => {
   const { fake } = await agentHost()
   holdTurnsOf(fake, 'Almost done')

@@ -32,7 +32,7 @@ export type WorkerStack = {
   startRuntimeHost: () => Promise<void>
 }
 type WarmRuntime = { runtime: typeof runtimes.$inferSelect; secrets: (typeof placeholderSecrets.$inferSelect)[] }
-type AgentScript = { text?: string; wordDelayMilliseconds?: number; command?: string }
+type AgentScript = { text?: string; wordDelayMilliseconds?: number; command?: string; steps?: object[] }
 
 const aliceMemberId = 'member-alice'
 const barrierMemberId = memberId('member-e2e-barrier')

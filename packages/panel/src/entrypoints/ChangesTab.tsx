@@ -1,15 +1,9 @@
 import { useQuery } from '@hq/db/react'
-import { focusRing } from '@hq/ui'
+import { DiffView, focusRing } from '@hq/ui'
 import { useState } from 'react'
 import { getChanges } from '../queries/get-changes.ts'
 import type { TabProps } from './TabProps.ts'
 import { emptyClass } from './ui.ts'
-
-const lineStyles = {
-  added: { marker: '+', className: 'bg-added' },
-  removed: { marker: '-', className: 'bg-removed' },
-  context: { marker: ' ', className: '' },
-}
 
 export const ChangesTab = ({ workspaceId, chatId }: TabProps) => {
   const changes = useQuery(getChanges(workspaceId, chatId))
@@ -35,15 +29,7 @@ export const ChangesTab = ({ workspaceId, chatId }: TabProps) => {
           </li>
         ))}
       </ul>
-      {selectedChange && (
-        <section aria-label="Diff" className="overflow-x-auto rounded-md border border-line font-mono text-xs">
-          {[...selectedChange.diffLines.entries()].map(([lineNumber, line]) => (
-            <div key={lineNumber} className={`whitespace-pre px-2 py-0.5 ${lineStyles[line.kind].className}`}>
-              {lineStyles[line.kind].marker} {line.text}
-            </div>
-          ))}
-        </section>
-      )}
+      {selectedChange && <DiffView lines={selectedChange.diffLines} />}
     </div>
   )
 }

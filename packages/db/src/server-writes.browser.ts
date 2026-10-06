@@ -20,5 +20,6 @@ export const pendingPrompts = async () => []
 export const activeAgentTurns = async () => []
 export const setRuntimesHostOnline = skippedOnClient
 export const isChatEventStored = async () => false
-export const lastAgentEventTimestamp = async () => null
+export const lastAgentEvent = skippedOnClient
+export const agentObservationOf = skippedOnClient
 export const appendChatEvent = () => Promise.reject(new Error('Chat events are appended on the server only'))

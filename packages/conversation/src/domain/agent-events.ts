@@ -1,12 +1,13 @@
+import { type Fields, keptOutputOf, pathOf, type StoredStep, type ThoughtStep, textOf } from './agent-steps.ts'
+
 export type AgentEvent = Readonly<{ id: string; kind: string; timestamp: string; [field: string]: unknown }>
 export type TurnOutcome = 'finished' | 'error' | 'stuck'
 export type AgentProjection =
-  | { type: 'message'; kind: 'agent' | 'tool-call'; body: string }
-  | { type: 'detail'; actionId: string; detail: string }
+  | { type: 'message'; body: string }
+  | { type: 'step'; step: StoredStep }
+  | { type: 'observation'; actionId: string; observation: Fields }
   | { type: 'turn-end'; outcome: TurnOutcome }
   | undefined
-
-type Fields = Record<string, unknown> | undefined
 
 export const agentNotices = {
   noHost: 'No runtime host is available',
@@ -24,31 +25,95 @@ export const waitingNotices = [
   agentNotices.hostOffline,
   agentNotices.newSession,
 ]
-export const stoppedByNoticeOf = (memberName: string) => `Stopped by ${memberName}`
+export const stoppedByPrefix = 'Stopped by '
+export const stoppedByNoticeOf = (memberName: string) => `${stoppedByPrefix}${memberName}`
 export const silentTurnMilliseconds = 10 * 60_000
 export const agentSweepIntervalMilliseconds = 60_000
 const turnOutcomes: readonly string[] = ['finished', 'error', 'stuck']
 
-const textOf = (content: unknown) =>
-  Array.isArray(content) ? content.map((part) => String((part as Fields)?.text ?? '')).join('') : ''
-const messageOf = (kind: 'agent' | 'tool-call', body: unknown): AgentProjection =>
-  typeof body === 'string' && body.trim() !== '' ? { type: 'message', kind, body } : undefined
+const fileOperations: Record<string, 'read' | 'create'> = { view: 'read', create: 'create' }
+const nonBlank = (text: unknown) => (typeof text === 'string' && text.trim() !== '' ? text.trim() : undefined)
+const messageOf = (body: unknown): AgentProjection => {
+  const text = nonBlank(body)
+  return text === undefined ? undefined : { type: 'message', body: text }
+}
+const stepOf = (step: StoredStep): AgentProjection => ({ type: 'step', step })
+const thoughtOf = (texts: unknown[], durationMilliseconds: number | null): ThoughtStep | undefined => {
+  const text = [...new Set(texts.map(nonBlank).filter((part) => part !== undefined))].join('\n\n')
+  return text === '' ? undefined : { type: 'thought', text, durationMilliseconds }
+}
+
+const actionStepOf = (event: AgentEvent, action: Fields): StoredStep | undefined => {
+  if (action?.kind === 'TerminalAction')
+    return {
+      type: 'command',
+      command: String(action.command),
+      exitCode: null,
+      durationMilliseconds: null,
+      ...keptOutputOf(''),
+    }
+  if (action?.kind === 'FileEditorAction')
+    return {
+      type: 'file',
+      operation: fileOperations[String(action.command)] ?? 'edit',
+      path: pathOf(action.path),
+      added: 0,
+      removed: 0,
+      diff: [],
+    }
+  if (action?.kind === 'TaskTrackerAction')
+    return Array.isArray(action.task_list)
+      ? {
+          type: 'plan',
+          items: action.task_list.map((task: Fields) => ({
+            title: String(task?.title ?? ''),
+            status: String(task?.status ?? 'todo').replace('_', '-'),
+          })),
+        }
+      : undefined
+  const toolCall = event.tool_call as Fields
+  return action
+    ? {
+        type: 'tool',
+        name: String(event.tool_name ?? toolCall?.name ?? action.kind),
+        arguments: String(toolCall?.arguments ?? JSON.stringify(action)),
+        result: null,
+      }
+    : undefined
+}
 
 export const isStoredAgentEvent = (event: AgentEvent) =>
   event.kind !== 'StreamingDeltaEvent' && !(event.kind === 'ConversationStateUpdateEvent' && event.key === 'full_state')
 
-export const streamedTextOf = (event: AgentEvent) =>
-  event.kind === 'StreamingDeltaEvent' && typeof event.content === 'string' ? event.content : undefined
+export const streamedTextOf = (event: AgentEvent) => {
+  if (event.kind !== 'StreamingDeltaEvent') return undefined
+  const content = typeof event.content === 'string' ? event.content : ''
+  const reasoning = typeof event.reasoning_content === 'string' ? event.reasoning_content : ''
+  return content === '' && reasoning !== ''
+    ? { text: reasoning, isReasoning: true }
+    : { text: content, isReasoning: false }
+}
 
-export const agentProjectionOf = (event: AgentEvent): AgentProjection => {
+export const agentProjectionOf = (event: AgentEvent, previousTimestamp: string | null): AgentProjection => {
   const action = event.action as Fields
-  const observation = event.observation as Fields
+  const durationMilliseconds =
+    previousTimestamp === null ? null : Date.parse(event.timestamp) - Date.parse(previousTimestamp)
   if (event.kind === 'MessageEvent' && event.source === 'agent')
-    return messageOf('agent', textOf((event.llm_message as Fields)?.content))
-  if (event.kind === 'ActionEvent' && action?.kind === 'TerminalAction') return messageOf('tool-call', action.command)
-  if (event.kind === 'ActionEvent' && action?.kind === 'FinishAction') return messageOf('agent', action.message)
-  if (event.kind === 'ObservationEvent' && observation?.kind === 'TerminalObservation')
-    return { type: 'detail', actionId: String(event.action_id), detail: textOf(observation.content) }
+    return messageOf(textOf((event.llm_message as Fields)?.content))
+  if (event.kind === 'ActionEvent' && action?.kind === 'FinishAction') return messageOf(action.message)
+  if (event.kind === 'ActionEvent' && action?.kind === 'ThinkAction') {
+    const thought = thoughtOf([event.reasoning_content, textOf(event.thought), action.thought], durationMilliseconds)
+    return thought && stepOf(thought)
+  }
+  if (event.kind === 'ActionEvent') {
+    const step = actionStepOf(event, action)
+    const thought = thoughtOf([event.reasoning_content, textOf(event.thought)], durationMilliseconds)
+    return step && stepOf(thought ? { ...step, thought } : step)
+  }
+  if (event.kind === 'ObservationEvent')
+    return { type: 'observation', actionId: String(event.action_id), observation: event.observation as Fields }
+  if (event.kind === 'AgentErrorEvent' || event.kind === 'ConversationErrorEvent')
+    return stepOf({ type: 'error', message: String(event.error ?? event.detail ?? event.code ?? 'Unknown error') })
   if (event.kind === 'ConversationStateUpdateEvent' && event.key === 'execution_status')
     return turnOutcomes.includes(String(event.value))
       ? { type: 'turn-end', outcome: event.value as TurnOutcome }

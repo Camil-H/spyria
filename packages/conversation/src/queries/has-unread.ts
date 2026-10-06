@@ -16,7 +16,7 @@ const unreadChatKeysOf = (snapshot: Snapshot, memberId: MemberId) => {
     const chatKey = `${message.workspaceId}/${message.chatId}`
     if (
       message.seq > (lastReadSeqByChat.get(chatKey) ?? 0) &&
-      message.kind !== 'tool-call' &&
+      message.kind !== 'step' &&
       message.deletedAt === null &&
       message.authorId !== memberId
     )

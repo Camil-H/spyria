@@ -1,4 +1,4 @@
-import { conversationMutators } from '@hq/conversation/server'
+import { commandOutputPathOf, conversationMutators, readCommandOutput } from '@hq/conversation/server'
 import type { Database } from '@hq/db/postgres'
 import { schema } from '@hq/db/zero'
 import { queries, type ZeroContext } from '@hq/db/zero-queries'
@@ -117,6 +117,14 @@ export const createApp = ({
           request: context.req.raw,
           userID: ctx.userId,
         }),
+      )
+    })
+    .get(commandOutputPathOf(':chatId', ':stepId'), async (context) => {
+      const [chatId = '', stepId = ''] = [context.req.param('chatId'), context.req.param('stepId')]
+      return context.text(
+        await context
+          .get('zeroDatabase')
+          .transaction((tx) => readCommandOutput(tx, context.get('zeroContext'), chatId, stepId)),
       )
     })
     .post(llmCredentialsPath, async (context) => {

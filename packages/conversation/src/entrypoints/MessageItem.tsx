@@ -1,10 +1,12 @@
-import { focusRing } from '@hq/ui'
-import { ChevronRight } from 'lucide-react'
-import { type Ref, useState } from 'react'
+import { lazy, type Ref, Suspense, useState } from 'react'
 import type { ConversationMessage } from '../queries/get-conversation.ts'
+import { AgentStep } from './AgentStep.tsx'
 import { DeleteMessageDialog } from './DeleteMessageDialog.tsx'
 import { EditMessageForm } from './EditMessageForm.tsx'
 import { MessageMenu } from './MessageMenu.tsx'
+
+const Markdown = lazy(() => import('./Markdown.tsx'))
+const plainTextClassName = 'text-sm whitespace-pre-wrap'
 
 const timeFormat = new Intl.DateTimeFormat('en-GB', {
   hour: '2-digit',
@@ -23,29 +25,13 @@ export const MessageItem = ({
   ref?: Ref<HTMLLIElement>
 }) => {
   const [mode, setMode] = useState<'view' | 'edit' | 'delete'>('view')
-  const [isExpanded, setIsExpanded] = useState(false)
   const close = () => setMode('view')
   return (
     <li ref={ref} className="group relative rounded-md px-3 py-2 hover:bg-hover">
       {message.kind === 'notice' ? (
         <p className="text-sm text-muted">{message.body}</p>
-      ) : message.kind === 'tool-call' ? (
-        <>
-          <button
-            type="button"
-            aria-expanded={isExpanded}
-            onClick={() => setIsExpanded(!isExpanded)}
-            className={`flex items-center gap-1.5 rounded-md text-sm text-muted hover:text-ink ${focusRing} aria-expanded:[&>svg]:rotate-90`}
-          >
-            <ChevronRight aria-hidden className="size-4 transition-transform" />
-            {message.body}
-          </button>
-          {isExpanded && (
-            <pre className="mt-1 overflow-x-auto rounded-md border border-line bg-app p-2 text-xs">
-              {message.detail}
-            </pre>
-          )}
-        </>
+      ) : message.kind === 'step' ? (
+        <AgentStep message={message} />
       ) : (
         <>
           <div className="flex items-baseline gap-2">
@@ -59,8 +45,12 @@ export const MessageItem = ({
             <EditMessageForm messageId={message.id} initialText={message.body} onClose={close} />
           ) : message.isDeleted ? (
             <p className="text-sm text-muted italic">This message was deleted</p>
+          ) : message.kind === 'agent' ? (
+            <Suspense fallback={<p className={plainTextClassName}>{message.body}</p>}>
+              <Markdown text={message.body} />
+            </Suspense>
           ) : (
-            <p className="text-sm whitespace-pre-wrap">{message.body}</p>
+            <p className={plainTextClassName}>{message.body}</p>
           )}
           {hasMenu && !message.isDeleted && mode !== 'edit' && (
             <MessageMenu

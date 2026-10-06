@@ -86,6 +86,8 @@ Every rule of the architecture standard (`.claude/skills/architecture`) and what
 | Gate | Mechanism |
 |---|---|
 | Main chunk at most 760 kB | `scripts/check-bundle.ts` on `apps/web/dist` |
+| Markdown and highlighting stay lazy | `scripts/check-bundle.ts` fails when the main chunk contains `Load image from` (Markdown) or `registerLanguage` (highlight.js) |
+| Model output never renders raw HTML | unit `Markdown.test.tsx` (script and `onerror` tags as text, image placeholder, link attributes, no `javascript:`); e2e `agent-steps` 18 |
 | No server-only SQL in client assets | `scripts/check-bundle.ts` fails on `into events`, `into sessions`, `skip locked`, `for update`, `into jobs`, `into llm_credentials`, `placeholder_secrets`, `claim_code_hash`, `token_hash` or `api_key_ref` in any client asset; server SQL that runs in shared mutator code lives in `@hq/db/server-writes`, whose `browser` condition points at stubs |
 | `workspace_id` on every table but `users` | integration `schema` "every table except users carries a non-null workspace_id" |
 | Append-only events | trigger plus integration `constraints` "rejects UPDATE and DELETE on events" (code and message) |

@@ -3,7 +3,7 @@ import {
   appendChatEvent,
   enqueueJob,
   isChatEventStored,
-  lastAgentEventTimestamp,
+  lastAgentEvent,
   lockChatTurn,
   pendingPrompts,
 } from '@hq/db/server-writes'
@@ -13,6 +13,7 @@ import { type ChatId, chatId, type MessageId, memberId, messageId, type Workspac
 import type { Transaction } from '@rocicorp/zero'
 import type { ConversationTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import { agentSweepIntervalMilliseconds, waitingNotices } from '../domain/agent-events.ts'
+import type { StoredStep } from '../domain/agent-steps.ts'
 import { ChatNotFound, ForeignWorkspace, MessageNotFound } from '../domain/errors.ts'
 import type { Message, MessageChange } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
@@ -34,6 +35,7 @@ const toMessage = ({ seq, ...row }: MessageRow): Message => ({
   editedAt: dateOrNull(row.editedAt),
   deletedAt: dateOrNull(row.deletedAt),
   replyToId: row.replyToId === null ? null : messageId(row.replyToId),
+  step: row.step as StoredStep | null,
 })
 
 const isPosted = (type: MessageChange['type']) => type === 'message.posted' || type === 'message.replied'
@@ -94,9 +96,11 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         else await tx.mutate.messages.update(row)
       },
       project: (message, seq) => tx.mutate.messages.insert({ ...rowOf(message), seq }),
-      setDetail: async (id, detail) => {
-        if (await messageRow(id)) await tx.mutate.messages.update({ workspaceId: contextWorkspaceId, id, detail })
+      find: async (id) => {
+        const row = await messageRow(id)
+        return row && toMessage(row)
       },
+      setStep: (id, step) => tx.mutate.messages.update({ workspaceId: contextWorkspaceId, id, step }),
     },
     agentJobs: {
       prompt: (message) => enqueue(agentJobTypes.prompt, { messageId: message.id }),
@@ -159,7 +163,22 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
           createdAt: at,
         })
       },
-      lastTimestamp: (id) => lastAgentEventTimestamp(tx, contextWorkspaceId, id),
+      last: async (id) => {
+        const last = await lastAgentEvent(tx, contextWorkspaceId, id)
+        return (
+          last && { timestamp: last.timestamp, replyToId: last.replyToId === null ? null : messageId(last.replyToId) }
+        )
+      },
+    },
+    plans: {
+      replace: async (id, items) => {
+        for (const { position } of await tx.run(
+          zql.planSteps.where('workspaceId', contextWorkspaceId).where('chatId', id),
+        ))
+          await tx.mutate.planSteps.delete({ workspaceId: contextWorkspaceId, chatId: id, position })
+        for (const [position, item] of items.entries())
+          await tx.mutate.planSteps.insert({ workspaceId: contextWorkspaceId, chatId: id, position, ...item })
+      },
     },
     readMarkers: {
       markNewestRead: async (id, readerId) => {

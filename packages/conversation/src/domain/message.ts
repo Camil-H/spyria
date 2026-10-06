@@ -1,4 +1,5 @@
 import type { ChatId, MemberId, MessageId, WorkspaceId } from '@hq/kernel'
+import type { StoredStep } from './agent-steps.ts'
 import { MessageDeleted, NotMessageAuthor } from './errors.ts'
 import type { MessageBody } from './message-body.ts'
 
@@ -6,10 +7,11 @@ export type Message = Readonly<{
   id: MessageId
   workspaceId: WorkspaceId
   chatId: ChatId
-  kind: 'member' | 'agent' | 'tool-call' | 'notice'
+  kind: 'member' | 'agent' | 'step' | 'notice'
   authorId: MemberId | null
   body: MessageBody
   detail: string | null
+  step: StoredStep | null
   createdAt: Date
   editedAt: Date | null
   deletedAt: Date | null
@@ -40,5 +42,6 @@ export const deletedMessage = (message: Message, deleterId: MemberId, at: Date):
 }
 
 export const newMessage = (
-  fields: Pick<Message, 'id' | 'workspaceId' | 'chatId' | 'kind' | 'authorId' | 'body' | 'createdAt' | 'replyToId'>,
-): Message => ({ ...fields, detail: null, editedAt: null, deletedAt: null })
+  fields: Pick<Message, 'id' | 'workspaceId' | 'chatId' | 'kind' | 'authorId' | 'body' | 'createdAt' | 'replyToId'> &
+    Partial<Pick<Message, 'step'>>,
+): Message => ({ step: null, ...fields, detail: null, editedAt: null, deletedAt: null })

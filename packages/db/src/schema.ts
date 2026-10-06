@@ -69,10 +69,11 @@ export type MessageRow = {
   workspaceId: WorkspaceId
   chatId: ChatId
   seq: number
-  kind: 'member' | 'agent' | 'tool-call' | 'notice'
+  kind: 'member' | 'agent' | 'step' | 'notice'
   authorId: MemberId | null
   body: string
   detail: string | null
+  step: MessageStep | null
   replyToId: MessageId | null
   createdAt: string
   editedAt: string | null
@@ -82,6 +83,7 @@ export type MessageRow = {
 export type DraftRow = { workspaceId: WorkspaceId; chatId: ChatId; memberId: MemberId; text: string }
 type ReadMarkerRow = { workspaceId: WorkspaceId; memberId: MemberId; chatId: ChatId; lastReadSeq: number }
 export type FileRow = { workspaceId: WorkspaceId; chatId: ChatId; path: string; kind: 'file' | 'folder' }
+export type MessageStep = { readonly type: string; readonly [field: string]: unknown }
 export type DiffLine = { kind: 'added' | 'removed' | 'context'; text: string }
 export type ChangeRow = {
   workspaceId: WorkspaceId

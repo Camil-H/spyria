@@ -1,4 +1,5 @@
 import { type AgentEvent, agentProjectionOf } from './agent-events.ts'
+import { legacyToolCallStep, observedStep, type StoredStep } from './agent-steps.ts'
 import type { Message } from './message.ts'
 
 export type StoredEvent = Readonly<{
@@ -21,55 +22,65 @@ export type ProjectedMessage = Readonly<{
   authorId: string | null
   body: string
   detail: string | null
+  step: StoredStep | null
   replyToId: string | null
   createdAt: Date
   editedAt: Date | null
   deletedAt: Date | null
 }>
 
-export type PostedPayload = Pick<ProjectedMessage, 'kind' | 'body' | 'detail' | 'replyToId'>
+export type PostedPayload = Pick<ProjectedMessage, 'body' | 'detail' | 'replyToId'> & {
+  kind: ProjectedMessage['kind'] | 'tool-call'
+  step?: StoredStep | null
+}
 export type ChangedPayload = { messageId: string; body: string }
 export type AgentEventPayload = { replyToId: string | null; event: AgentEvent }
 
 export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMessage[] => {
   const messageByKey = new Map<string, ProjectedMessage>()
+  const previousTimestampByChat = new Map<string, string>()
   for (const { workspaceId, chatId, id, seq, type, actor, payload, createdAt } of events) {
-    if (type === 'message.posted' || type === 'message.replied') {
-      const { kind, body, detail, replyToId } = payload as PostedPayload
+    const project = (fields: Pick<ProjectedMessage, 'kind' | 'authorId' | 'body' | 'detail' | 'step' | 'replyToId'>) =>
       messageByKey.set(`${workspaceId}/${id}`, {
         workspaceId,
         chatId,
         id,
         seq,
-        kind,
-        authorId: actor,
-        body,
-        detail,
-        replyToId,
+        ...fields,
         createdAt,
         editedAt: null,
         deletedAt: null,
       })
+    if (type === 'message.posted' || type === 'message.replied') {
+      const { kind, body, detail, replyToId, step = null } = payload as PostedPayload
+      project(
+        kind === 'tool-call'
+          ? { kind: 'step', authorId: actor, body, detail, step: legacyToolCallStep(body, detail), replyToId }
+          : { kind, authorId: actor, body, detail, step, replyToId },
+      )
     }
     if (type === 'agent.event') {
       const { replyToId, event } = payload as AgentEventPayload
-      const projection = agentProjectionOf(event)
-      const toolCall = projection?.type === 'detail' && messageByKey.get(`${workspaceId}/${projection.actionId}`)
-      if (toolCall) messageByKey.set(`${workspaceId}/${toolCall.id}`, { ...toolCall, detail: projection.detail })
+      const chatKey = `${workspaceId}/${chatId}`
+      const projection = agentProjectionOf(event, previousTimestampByChat.get(chatKey) ?? null)
+      previousTimestampByChat.set(chatKey, event.timestamp)
+      if (projection?.type === 'observation') {
+        const action = messageByKey.get(`${workspaceId}/${projection.actionId}`)
+        const observed =
+          action?.step &&
+          observedStep(action.step, projection.observation, createdAt.getTime() - action.createdAt.getTime())
+        if (action && observed) messageByKey.set(`${workspaceId}/${action.id}`, { ...action, step: observed })
+      }
       if (projection?.type === 'message')
-        messageByKey.set(`${workspaceId}/${id}`, {
-          workspaceId,
-          chatId,
-          id,
-          seq,
-          kind: projection.kind,
+        project({ kind: 'agent', authorId: null, body: projection.body, detail: null, step: null, replyToId })
+      if (projection?.type === 'step')
+        project({
+          kind: 'step',
           authorId: null,
-          body: projection.body,
+          body: projection.step.type,
           detail: null,
+          step: projection.step,
           replyToId,
-          createdAt,
-          editedAt: null,
-          deletedAt: null,
         })
     }
     if (type !== 'message.edited' && type !== 'message.deleted') continue

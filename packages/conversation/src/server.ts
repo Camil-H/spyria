@@ -1,6 +1,7 @@
 export type { AgentChat, AgentConversation, AgentHost } from './contracts/agent.ts'
 export { streamedTextOf } from './domain/agent-events.ts'
 export type { AgentStream, ConversationCommands } from './entrypoints/commands.ts'
+export { commandOutputPathOf, readCommandOutput } from './entrypoints/endpoints.ts'
 export { createAgentHandlers } from './entrypoints/jobs.ts'
 export { conversationMutators } from './entrypoints/mutators.ts'
 export { rebuildMessages } from './integrations/message-projection.ts'
