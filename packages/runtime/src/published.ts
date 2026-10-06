@@ -1,7 +1,9 @@
 export type { SandboxLocation, SandboxProvider, SandboxTransport } from './contracts/sandbox-provider.ts'
 export { createZeroTransactor as createRuntimeTransactor } from './integrations/zero-transactor.ts'
 export {
+  findLlmTokenChat,
   forgetAgentConversation,
+  issueAgentLlmToken,
   listHostChats,
   readAgentAccess,
   rememberAgentConversation,

@@ -20,31 +20,40 @@ export const insertLlmCredential = (
     ],
   )
 
-export const secretRefOfLlmCredential = async (tx: Transaction, workspaceId: string, id: string) => {
-  const [stored] = await onServer(tx, 'select secret_ref from llm_credentials where workspace_id = $1 and id = $2', [
-    workspaceId,
-    id,
-  ])
-  return (stored as { secret_ref: string } | undefined)?.secret_ref
-}
-
-export const keepPlaceholderSecret = (tx: Transaction, workspaceId: string, ref: string, value: string) =>
-  onServer(tx, 'insert into placeholder_secrets (workspace_id, ref, value) values ($1, $2, $3)', [
-    workspaceId,
-    ref,
-    value,
-  ])
-
-export const discardPlaceholderSecret = (tx: Transaction, workspaceId: string, ref: string) =>
-  onServer(tx, 'delete from placeholder_secrets where workspace_id = $1 and ref = $2', [workspaceId, ref])
-
-export const placeholderSecretOf = async (tx: Transaction, workspaceId: string, ref: string) =>
+export const gatewayKeyRefsOf = async (tx: Transaction, workspaceId: string, userId: string) =>
   (
-    (await onServer(tx, 'select value from placeholder_secrets where workspace_id = $1 and ref = $2', [
+    (await onServer(tx, 'select secret_ref as ref from llm_credentials where workspace_id = $1 and user_id = $2', [
       workspaceId,
-      ref,
-    ])) as { value: string }[]
-  )[0]?.value
+      userId,
+    ])) as { ref: string }[]
+  ).map((row) => row.ref)
+
+export const gatewayKeyRefOf = async (tx: Transaction, workspaceId: string, id: string) =>
+  (
+    (await onServer(tx, 'select secret_ref as ref from llm_credentials where workspace_id = $1 and id = $2', [
+      workspaceId,
+      id,
+    ])) as { ref: string }[]
+  )[0]?.ref
+
+export const virtualKeyIdOf = async (tx: Transaction, workspaceId: string, userId: string) =>
+  (
+    (await onServer(
+      tx,
+      'select virtual_key_id as id from member_gateway_keys where workspace_id = $1 and user_id = $2',
+      [workspaceId, userId],
+    )) as { id: string }[]
+  )[0]?.id
+
+export const setVirtualKeyId = (tx: Transaction, workspaceId: string, userId: string, id: string | null) =>
+  id === null
+    ? onServer(tx, 'delete from member_gateway_keys where workspace_id = $1 and user_id = $2', [workspaceId, userId])
+    : onServer(
+        tx,
+        `insert into member_gateway_keys (workspace_id, user_id, virtual_key_id) values ($1, $2, $3)
+         on conflict (workspace_id, user_id) do update set virtual_key_id = excluded.virtual_key_id`,
+        [workspaceId, userId, id],
+      )
 
 export const lockMembership = (tx: Transaction, workspaceId: string, userId: string) =>
   onServer(tx, 'select 1 from memberships where workspace_id = $1 and user_id = $2 for update', [workspaceId, userId])
@@ -122,8 +131,8 @@ export const lockRuntimeHostLoads = async (tx: Transaction, workspaceId: string)
   )) as { hostId: string; online: boolean; cap: number; running: number }[]
 
 const serverOnlyRuntimeColumns = {
-  apiKey: 'api_key_ref',
-  llmToken: 'llm_token_ref',
+  apiKey: 'api_key',
+  llmTokenHash: 'llm_token_hash',
   agentConversation: 'agent_conversation_id',
 }
 export type ServerOnlyRuntimeColumn = keyof typeof serverOnlyRuntimeColumns
@@ -178,6 +187,47 @@ export const lockChatTurn = async (tx: Transaction, workspaceId: string, chatId:
       [workspaceId, chatId],
     )) as { turnMessageId: string | null }[]
   )[0]?.turnMessageId ?? null
+
+export const setChatTurnPrompter = (tx: Transaction, workspaceId: string, chatId: string, prompterId: string | null) =>
+  onServer(
+    tx,
+    `update chats set agent_turn_prompter_id = $3, agent_turn_failure = case when $3::text is null then agent_turn_failure end
+     where workspace_id = $1 and id = $2`,
+    [workspaceId, chatId, prompterId],
+  )
+
+export const chatTurnOf = async (tx: Transaction, workspaceId: string, chatId: string) =>
+  (
+    (await onServer(
+      tx,
+      `select agent_turn_message_id as "promptId", agent_turn_prompter_id as "prompterId", owner_user_id as "ownerId",
+         agent_turn_failure as failure
+       from chats where workspace_id = $1 and id = $2`,
+      [workspaceId, chatId],
+    )) as { promptId: string | null; prompterId: string | null; ownerId: string | null; failure: string | null }[]
+  )[0]
+
+export const setChatTurnFailure = (
+  tx: Transaction,
+  workspaceId: string,
+  chatId: string,
+  promptId: string,
+  failure: string,
+) =>
+  onServer(
+    tx,
+    'update chats set agent_turn_failure = $4 where workspace_id = $1 and id = $2 and agent_turn_message_id = $3',
+    [workspaceId, chatId, promptId, failure],
+  )
+
+export const runtimeChatOfLlmTokenHash = async (tx: Transaction, workspaceId: string, hostId: string, hash: string) =>
+  (
+    (await onServer(
+      tx,
+      'select chat_id as "chatId" from runtimes where workspace_id = $1 and host_id = $2 and llm_token_hash = $3',
+      [workspaceId, hostId, hash],
+    )) as { chatId: string }[]
+  )[0]?.chatId
 
 export const pendingPrompts = async (
   tx: Transaction,

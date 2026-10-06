@@ -35,10 +35,21 @@ const readSnapshot = async () => {
     projects: (await database.select().from(tables.projects).orderBy(tables.projects.createdAt)).map(
       ({ createdAt, ...project }) => project,
     ),
-    chats: chats.map(({ ownerUserId, ownerKind, ownerServiceIdentityId, mode, createdAt, ...chat }) => ({
-      ...chat,
-      ownerId: ownerUserId,
-    })),
+    chats: chats.map(
+      ({
+        ownerUserId,
+        ownerKind,
+        ownerServiceIdentityId,
+        mode,
+        createdAt,
+        agentTurnPrompterId,
+        agentTurnFailure,
+        ...chat
+      }) => ({
+        ...chat,
+        ownerId: ownerUserId,
+      }),
+    ),
     messages: messages.map(({ replyToId, createdAt, editedAt, deletedAt, ...message }) => ({
       ...message,
       createdAt: createdAt.toISOString(),

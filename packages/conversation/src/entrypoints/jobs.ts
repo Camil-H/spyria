@@ -8,10 +8,12 @@ import type {
   AgentHost,
 } from '../contracts/agent.ts'
 import { type AgentEvent, isStoredAgentEvent, type TurnOutcome } from '../domain/agent-events.ts'
+import type { ModelCallFailure } from '../domain/model-call-failures.ts'
 import { createRuntimeAgentRuntimes, type SandboxProvider } from '../integrations/runtime-agent-runtimes.ts'
 import { type AgentLlm, createSandboxAgentServer } from '../integrations/sandbox-agent-server.ts'
 import { agentJobTypes, createTransactingZeroTransactor, type Transact } from '../integrations/zero-transactor.ts'
 import { closeReopenedTurn, reopenAgentTurn, sweepAgentTurns } from '../operations/agent-turn-safety.ts'
+import { findModelCallTurn, recordModelCallFailure } from '../operations/model-calls.ts'
 import { promptAgent } from '../operations/prompt-agent.ts'
 import { recordAgentEvent } from '../operations/record-agent-event.ts'
 import { promptWaitingChats } from '../operations/retry-agent.ts'
@@ -70,5 +72,9 @@ export const createAgentHandlers = ({
     closeReopenedTurn: (chat: AgentChat, promptId: MessageId, outcome: TurnOutcome) =>
       closeReopenedTurn(dependenciesOf(chat.workspaceId), { chat, promptId, outcome }),
     promptWaiting: (host: AgentHost) => promptWaitingChats(dependenciesOf(host.workspaceId), host),
+    modelCallTurn: (host: AgentHost, token: string) => findModelCallTurn(dependenciesOf(host.workspaceId), host, token),
+    recordModelCallFailure: (
+      call: Omit<Parameters<typeof recordModelCallFailure>[1], 'failure'> & { failure: ModelCallFailure },
+    ) => recordModelCallFailure(dependenciesOf(call.chat.workspaceId), call),
   }
 }

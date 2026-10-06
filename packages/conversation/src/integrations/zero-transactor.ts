@@ -1,11 +1,14 @@
 import {
   activeAgentTurns,
   appendChatEvent,
+  chatTurnOf,
   enqueueJob,
   isChatEventStored,
   lastAgentEvent,
   lockChatTurn,
   pendingPrompts,
+  setChatTurnFailure,
+  setChatTurnPrompter,
 } from '@hq/db/server-writes'
 import type { Message as MessageRow } from '@hq/db/zero'
 import { zql } from '@hq/db/zero-queries'
@@ -111,14 +114,34 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       displayNameOf: async (id) =>
         (await tx.run(zql.memberships.where('workspaceId', contextWorkspaceId).where('userId', id).one()))
           ?.displayName ?? 'a member',
+      hasLlmCredential: async (id) =>
+        (await tx.run(zql.llmCredentials.where('workspaceId', contextWorkspaceId).where('userId', id).one())) !==
+        undefined,
     },
     agentTurns: {
       lock: async (id) => {
         const promptId = await lockChatTurn(tx, contextWorkspaceId, id)
         return promptId ? messageId(promptId) : null
       },
-      set: (id, promptId) =>
-        tx.mutate.chats.update({ workspaceId: contextWorkspaceId, id, agentTurnMessageId: promptId }),
+      set: async (id, prompt) => {
+        await tx.mutate.chats.update({ workspaceId: contextWorkspaceId, id, agentTurnMessageId: prompt?.id ?? null })
+        await setChatTurnPrompter(tx, contextWorkspaceId, id, prompt?.authorId ?? null)
+      },
+      modelCallTurn: async (id) => {
+        const turn = await chatTurnOf(tx, contextWorkspaceId, id)
+        return turn?.promptId && turn.prompterId
+          ? {
+              promptId: messageId(turn.promptId),
+              prompterId: memberId(turn.prompterId),
+              ownerId: turn.ownerId === null ? null : memberId(turn.ownerId),
+              failure: turn.failure,
+            }
+          : undefined
+      },
+      lastFailure: async (id) => (await chatTurnOf(tx, contextWorkspaceId, id))?.failure ?? null,
+      recordFailure: async (id, promptId, notice) => {
+        await setChatTurnFailure(tx, contextWorkspaceId, id, promptId, notice)
+      },
       nextPrompt: async (id) => {
         const [promptId] = await waitingPromptIds(id)
         return promptId === undefined ? undefined : getMessage(messageId(promptId))

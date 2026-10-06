@@ -1,13 +1,11 @@
 import {
-  discardPlaceholderSecret,
   enqueueJob,
   findRuntimeHostBySecretHash,
-  keepPlaceholderSecret,
   lockRuntimeHost,
   lockRuntimeHostLoads,
   lockRuntimes,
-  placeholderSecretOf,
   rememberAgentConversation,
+  runtimeChatOfLlmTokenHash,
   serverOnlyRuntimeValueOf,
   setRuntimeHostSecretHash,
   setRuntimesHostOnline,
@@ -49,7 +47,7 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
     ids.length === 0
       ? []
       : (await tx.run(zql.runtimes.where('workspaceId', workspaceId).where('id', 'IN', ids))).map(runtimeOf)
-  const serverOnlyValueOf = (runtime: Runtime, column: 'apiKey' | 'llmToken' | 'agentConversation') =>
+  const serverOnlyValueOf = (runtime: Runtime, column: 'apiKey' | 'agentConversation') =>
     serverOnlyRuntimeValueOf(tx, runtime.workspaceId, runtime.id, column)
   const unitOfWork: UnitOfWork = {
     runtimeHosts: {
@@ -101,22 +99,19 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
       forgetAgentConversation: async (runtime) => {
         await setServerOnlyRuntimeValue(tx, runtime.workspaceId, runtime.id, 'agentConversation', null)
       },
+      chatOfLlmTokenHash: async (workspaceId, hostId, hash) => {
+        const id = await runtimeChatOfLlmTokenHash(tx, workspaceId, hostId, hash)
+        return id === undefined ? undefined : chatId(id)
+      },
     },
     secrets: {
       keep: async (runtime, secret, value) => {
-        const ref = `placeholder:${crypto.randomUUID()}`
-        await keepPlaceholderSecret(tx, runtime.workspaceId, ref, value)
-        await setServerOnlyRuntimeValue(tx, runtime.workspaceId, runtime.id, secret, ref)
+        await setServerOnlyRuntimeValue(tx, runtime.workspaceId, runtime.id, secret, value)
       },
-      valueOf: async (runtime, secret) => {
-        const ref = await serverOnlyValueOf(runtime, secret)
-        return ref && placeholderSecretOf(tx, runtime.workspaceId, ref)
-      },
+      valueOf: (runtime, secret) => serverOnlyRuntimeValueOf(tx, runtime.workspaceId, runtime.id, secret),
       discard: async (runtime) => {
-        for (const secret of ['apiKey', 'llmToken'] as const) {
-          const ref = await serverOnlyValueOf(runtime, secret)
-          if (ref) await discardPlaceholderSecret(tx, runtime.workspaceId, ref)
-        }
+        for (const secret of ['apiKey', 'llmTokenHash'] as const)
+          await setServerOnlyRuntimeValue(tx, runtime.workspaceId, runtime.id, secret, null)
       },
     },
     jobs: {

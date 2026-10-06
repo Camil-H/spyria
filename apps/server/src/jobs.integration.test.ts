@@ -15,7 +15,7 @@ afterAll(() => testDatabase.drop())
 const missingMessageError = 'Message message-missing was not found'
 const agentBridge = createAgentBridge({
   sandboxProvider: {} as SandboxProvider,
-  llm: { baseUrl: 'http://fake-llm.test/v1', model: 'openai/fake' },
+  llm: { model: 'openai/fake' },
 })
 const startWorker = (options: Parameters<typeof startJobWorker>[1] = {}) =>
   startJobWorker(database, { pollIntervalMilliseconds: 5, ...options, agentBridge })

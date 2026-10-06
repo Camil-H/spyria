@@ -1,14 +1,16 @@
 import type {
+  GatewayJobs,
   LlmCredentialRepository,
+  MemberGatewayKeyRepository,
   MemberRepository,
   PersonalConnectionRepository,
-  SecretStore,
 } from './repositories.ts'
 
 export type UnitOfWork = {
   members: MemberRepository
   llmCredentials: LlmCredentialRepository
-  secrets: SecretStore
+  memberGatewayKeys: MemberGatewayKeyRepository
+  gatewayJobs: GatewayJobs
   personalConnections: PersonalConnectionRepository
 }
 

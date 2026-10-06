@@ -16,7 +16,13 @@ export const recordAgentEvent = ({ transactor }: Dependencies, { workspaceId, ch
     const promptId = activePromptId ?? previous?.replyToId ?? null
     const recordedAt = new Date()
     const seq = await unitOfWork.agentEvents.append(chatId, event, promptId, recordedAt)
-    const projection = seq === undefined ? undefined : agentProjectionOf(event, previous?.timestamp ?? null)
+    const failure = event.kind === 'ConversationErrorEvent' && (await unitOfWork.agentTurns.lastFailure(chatId))
+    const projection =
+      seq === undefined
+        ? undefined
+        : failure
+          ? ({ type: 'step', step: { type: 'error', message: failure } } as const)
+          : agentProjectionOf(event, previous?.timestamp ?? null)
     if ((projection?.type === 'message' || projection?.type === 'step') && seq !== undefined)
       await unitOfWork.messages.project(
         newMessage({

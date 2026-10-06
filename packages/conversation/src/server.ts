@@ -1,5 +1,6 @@
 export type { AgentChat, AgentConversation, AgentHost } from './contracts/agent.ts'
 export { streamedTextOf } from './domain/agent-events.ts'
+export { genericModelCallNoticeOf, type ModelCallFailure } from './domain/model-call-failures.ts'
 export type { AgentStream, ConversationCommands } from './entrypoints/commands.ts'
 export { commandOutputPathOf, readCommandOutput } from './entrypoints/endpoints.ts'
 export { createAgentHandlers } from './entrypoints/jobs.ts'

@@ -4,6 +4,7 @@ import type { ConversationTransactor, UnitOfWork } from '../contracts/transactor
 import { type TurnOutcome, turnEndNoticeOf } from '../domain/agent-events.ts'
 import { type Message, newMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
+import { noLlmKeyNoticeOf } from '../domain/model-call-failures.ts'
 
 type NoticeOf = (hasReply: boolean) => string | undefined
 export type AgentDependencies = {
@@ -40,10 +41,15 @@ export const requestNextPrompt = async ({ agentTurns, agentJobs }: UnitOfWork, c
   if (next) await agentJobs.prompt(next)
 }
 
-export const beginAgentTurn = async ({ agentTurns }: UnitOfWork, chatId: ChatId) => {
+export const beginAgentTurn = async (unitOfWork: UnitOfWork, chatId: ChatId): Promise<Message | undefined> => {
+  const { agentTurns, members } = unitOfWork
   if ((await agentTurns.lock(chatId)) !== null) return undefined
   const prompt = await agentTurns.nextPrompt(chatId)
-  if (prompt) await agentTurns.set(chatId, prompt.id)
+  if (prompt?.authorId && !(await members.hasLlmCredential(prompt.authorId))) {
+    await appendNotice(unitOfWork, prompt, noLlmKeyNoticeOf(await members.displayNameOf(prompt.authorId)))
+    return beginAgentTurn(unitOfWork, chatId)
+  }
+  if (prompt) await agentTurns.set(chatId, prompt)
   return prompt
 }
 

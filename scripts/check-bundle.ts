@@ -9,12 +9,12 @@ const serverOnlySql = [
   'for update',
   'into jobs',
   'into llm_credentials',
-  'placeholder_secrets',
+  'member_gateway_keys',
   'claim_code_hash',
   'token_hash',
-  'api_key_ref',
-  'llm_token_ref',
+  'agent_turn_failure',
   'agent_conversation_id',
+  'api/governance',
 ]
 const lazyChunkMarkers = ['Load image from', 'registerLanguage']
 

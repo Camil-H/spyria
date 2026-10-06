@@ -6,6 +6,7 @@ export type AgentHost = Readonly<{ workspaceId: WorkspaceId; hostId: RuntimeHost
 export type AgentInterrupt = Readonly<{ chatId: ChatId; promptId: MessageId; memberId: MemberId }>
 export type AgentSocket = { send(data: string): void; close(): void }
 export type AgentTransport = {
+  gatewayUrl: string
   fetch(request: {
     method: string
     path: string
@@ -18,7 +19,6 @@ export type AgentTransport = {
 export type AgentEndpoint = Readonly<{
   transport: AgentTransport
   apiKey: string
-  llmToken: string
   conversationId: string | null
 }>
 export type AgentConversation = AgentEndpoint & { conversationId: string }
@@ -33,6 +33,8 @@ export type AgentRuntimes = {
   endpointOf(chat: AgentChat): Promise<AgentEndpoint | undefined>
   rememberConversation(chat: AgentChat, conversationId: string): Promise<string>
   forgetConversation(chat: AgentChat): Promise<void>
+  issueLlmToken(chat: AgentChat): Promise<string>
+  chatOfLlmToken(host: AgentHost, token: string): Promise<ChatId | undefined>
   chatsOnHost(host: AgentHost): Promise<ChatId[]>
   touch(chat: AgentChat): Promise<void>
 }
@@ -41,7 +43,7 @@ export type RuntimeRetrier = { retry(chat: AgentChat): Promise<void> }
 
 export type AgentEventListener = { onEvent(event: AgentEvent): void; onClose(): void }
 export type AgentServer = {
-  createConversation(endpoint: AgentEndpoint): Promise<string>
+  createConversation(endpoint: AgentEndpoint, llmToken: string): Promise<string>
   sendMessage(conversation: AgentConversation, text: string): Promise<void>
   statusOf(conversation: AgentConversation): Promise<string | undefined>
   interrupt(conversation: AgentConversation): Promise<void>

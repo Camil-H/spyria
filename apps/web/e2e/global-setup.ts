@@ -4,9 +4,17 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { createDatabase } from '@hq/db/postgres'
-import { buildTemplateDatabase, databaseUrlOf, dropDatabase } from '@hq/db/testing'
+import { buildTemplateDatabase, databaseUrlOf, dropDatabase, startTestGateway, testGatewayAdmin } from '@hq/db/testing'
 import { removeDockerObjects } from './stack.ts'
-import { maximumWorkerCount, serverUrl, templateDatabaseName, viteUrl, zeroCachePortOf } from './stack-ports.ts'
+import {
+  gatewayPort,
+  gatewayUrl,
+  maximumWorkerCount,
+  serverUrl,
+  templateDatabaseName,
+  viteUrl,
+  zeroCachePortOf,
+} from './stack-ports.ts'
 
 const repositoryRoot = new URL('../../../', import.meta.url).pathname
 
@@ -72,12 +80,23 @@ export default async function globalSetup() {
     stdio: 'ignore',
   })
   await sweepLeftovers()
-  const [, stopServer, stopVite] = await Promise.all([
+  const [, gateway, stopServer, stopVite] = await Promise.all([
     buildTemplateDatabase(templateDatabaseName),
+    startTestGateway({
+      name: 'e2e',
+      port: gatewayPort,
+      fakeLlmUrl: `http://host.docker.internal:${new URL(serverUrl).port}/fake-llm`,
+    }),
     startDetached(
       ['bun', 'src/test-server.ts'],
       `${repositoryRoot}apps/server`,
-      { PORT: new URL(serverUrl).port, HQ_APP_ORIGIN: viteUrl },
+      {
+        PORT: new URL(serverUrl).port,
+        HQ_APP_ORIGIN: viteUrl,
+        HQ_GATEWAY_URL: gatewayUrl,
+        HQ_GATEWAY_ADMIN_USER: testGatewayAdmin.user,
+        HQ_GATEWAY_ADMIN_PASSWORD: testGatewayAdmin.password,
+      },
       `${serverUrl}/health`,
     ),
     startDetached(
@@ -87,9 +106,10 @@ export default async function globalSetup() {
       viteUrl,
     ),
   ])
-  return () => {
+  return async () => {
     stopVite()
     stopServer()
     removeWorkerHosts()
+    await gateway.stop()
   }
 }

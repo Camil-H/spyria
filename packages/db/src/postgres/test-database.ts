@@ -1,9 +1,10 @@
-import { type ChildProcess, spawn } from 'node:child_process'
+import { type ChildProcess, spawn, spawnSync } from 'node:child_process'
 import { once } from 'node:events'
-import { openSync, rmSync, writeSync } from 'node:fs'
+import { openSync, readFileSync, rmSync, writeFileSync, writeSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
+import { type SQL, sql } from 'drizzle-orm'
 import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import postgres from 'postgres'
 import { createDatabase, databaseUrl } from './client.ts'
@@ -128,4 +129,173 @@ export const startZeroCache = async ({
     await sleep(50)
   }
   return { url, stop: () => stopProcessGroup(zeroCache) }
+}
+
+const gatewayImage = 'maximhq/bifrost:v2.2.6@sha256:d0b4708ace1aa175766f94afa715fd9bba3a1b56c1dc2afff15a21edf3ae4e2a'
+export const testGatewayAdmin = { user: 'hq-test', password: 'hq-test-gateway-password' }
+const gatewayProviders = ['openai', 'anthropic', 'mistral']
+
+export const testGatewayAt = (url: string) => {
+  const request = (path: string, init: { method?: string; body?: object } = {}) =>
+    fetch(`${url}${path}`, {
+      method: init.method ?? 'GET',
+      headers: {
+        authorization: `Basic ${btoa(`${testGatewayAdmin.user}:${testGatewayAdmin.password}`)}`,
+        'content-type': 'application/json',
+      },
+      body: init.body && JSON.stringify(init.body),
+    })
+  const call = async <Result>(path: string, init: { method?: string; body?: object } = {}) => {
+    const response = await request(path, init)
+    if (!response.ok)
+      throw new Error(
+        `The test gateway answered ${init.method ?? 'GET'} ${path} with ${response.status}: ${(await response.text()).slice(0, 200)}`,
+      )
+    return (await response.json()) as Result
+  }
+  return { url, request, call }
+}
+export type TestGateway = ReturnType<typeof testGatewayAt>
+
+const docker = (...args: string[]) => spawnSync('docker', args, { stdio: ['ignore', 'pipe', 'pipe'] })
+
+export const startTestGateway = async ({
+  name,
+  port,
+  fakeLlmUrl,
+}: {
+  name: string
+  port: number
+  fakeLlmUrl: string
+}) => {
+  const containerName = `hq-test-gateway-${name}`
+  const databaseName = `hq_test_gateway_${name}`
+  const configFile = join(tmpdir(), `${containerName}.json`)
+  const postgresUrl = new URL(databaseUrl)
+  const store = {
+    enabled: true,
+    type: 'postgres',
+    config: {
+      host: 'host.docker.internal',
+      port: postgresUrl.port,
+      user: postgresUrl.username,
+      password: postgresUrl.password,
+      db_name: databaseName,
+      ssl_mode: 'disable',
+    },
+  }
+  docker('rm', '-fv', containerName)
+  await dropDatabase(databaseName)
+  await withAdmin(`create database "${databaseName}" template template0 encoding 'UTF8'`)
+  const gatewayConfig = JSON.parse(readFileSync(new URL('../../../../infra/bifrost.json', import.meta.url), 'utf8'))
+  writeFileSync(configFile, JSON.stringify({ ...gatewayConfig, config_store: store, logs_store: store }))
+  const stop = async () => {
+    docker('rm', '-fv', containerName)
+    rmSync(configFile, { force: true })
+    await dropDatabase(databaseName)
+  }
+  const started = docker(
+    'run',
+    '-d',
+    '--name',
+    containerName,
+    '--add-host',
+    'host.docker.internal:host-gateway',
+    '-p',
+    `127.0.0.1:${port}:8080`,
+    '-v',
+    `${configFile}:/app/data/config.json:ro`,
+    '-e',
+    'BIFROST_ENCRYPTION_KEY=hq-test-gateway-encryption-key',
+    '-e',
+    'BIFROST_SETUP_TOKEN=hq-test-gateway-setup-token',
+    '-e',
+    `BIFROST_ADMIN_USER=${testGatewayAdmin.user}`,
+    '-e',
+    `BIFROST_ADMIN_PASSWORD=${testGatewayAdmin.password}`,
+    gatewayImage,
+  )
+  if (started.status !== 0) {
+    await stop()
+    throw new Error(`The test gateway did not start: ${started.stderr.toString()}`)
+  }
+  const gateway = testGatewayAt(`http://127.0.0.1:${port}`)
+  try {
+    let lastAnswer = 'nothing'
+    const isReady = async () => {
+      const response = await gateway.request('/api/providers').catch((error: unknown) => String(error))
+      lastAnswer = typeof response === 'string' ? response : String(response.status)
+      return typeof response !== 'string' && response.ok
+    }
+    for (let attempt = 1; !(await isReady()); attempt++) {
+      if (attempt === 480) throw new Error(`The test gateway did not become ready (last answer: ${lastAnswer})`)
+      await sleep(250)
+    }
+    const networkConfig = { base_url: fakeLlmUrl, default_request_timeout_in_seconds: 60, max_retries: 0 }
+    await gateway.call('/api/providers', {
+      method: 'POST',
+      body: {
+        provider: 'fake',
+        keys: [],
+        network_config: networkConfig,
+        custom_provider_config: { base_provider_type: 'openai' },
+      },
+    })
+    for (const provider of gatewayProviders)
+      await gateway.call('/api/providers', {
+        method: 'POST',
+        body: { provider, keys: [], network_config: networkConfig },
+      })
+    await gateway.call('/api/governance/pricing-overrides', {
+      method: 'POST',
+      body: {
+        name: 'fake-model',
+        scope_kind: 'global',
+        match_type: 'exact',
+        pattern: 'fake-model',
+        request_types: ['chat_completion'],
+        patch: { input_cost_per_token: 0.000009, output_cost_per_token: 0.000009 },
+      },
+    })
+  } catch (error) {
+    await stop()
+    throw error
+  }
+  return { ...gateway, stop }
+}
+
+const aliceSeededCredential = {
+  workspaceId: 'workspace-acme',
+  id: 'credential-alice-anthropic',
+  userId: 'member-alice',
+}
+type SeedWriter = { execute: (query: SQL) => Promise<unknown> }
+
+export const prepareSeededGatewayKeys = async (gateway: TestGateway) => {
+  const { id: keyId } = await gateway.call<{ id: string }>('/api/providers/fake/keys', {
+    method: 'POST',
+    body: {
+      name: `cred_${crypto.randomUUID()}`,
+      value: `fake-key-seeded-${crypto.randomUUID()}`,
+      models: ['*'],
+      weight: 1,
+    },
+  })
+  const { virtual_key } = await gateway.call<{ virtual_key: { id: string } }>('/api/governance/virtual-keys', {
+    method: 'POST',
+    body: {
+      name: `vk_${crypto.randomUUID()}`,
+      is_active: true,
+      provider_configs: [{ provider: 'fake', weight: 1, allowed_models: ['*'], key_ids: [keyId] }],
+    },
+  })
+  const { workspaceId, id, userId } = aliceSeededCredential
+  return async (writer: SeedWriter) => {
+    await writer.execute(
+      sql`update llm_credentials set secret_ref = ${`gateway:fake/${keyId}`} where workspace_id = ${workspaceId} and id = ${id}`,
+    )
+    await writer.execute(
+      sql`insert into member_gateway_keys (workspace_id, user_id, virtual_key_id) values (${workspaceId}, ${userId}, ${virtual_key.id})`,
+    )
+  }
 }

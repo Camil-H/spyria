@@ -1,11 +1,21 @@
 import { createHash } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { type Database, events, resetDatabase } from '@hq/db/postgres'
-import { createTestDatabase, startZeroCache } from '@hq/db/testing'
+import {
+  createTestDatabase,
+  prepareSeededGatewayKeys,
+  startTestGateway,
+  startZeroCache,
+  testGatewayAdmin,
+} from '@hq/db/testing'
 import { memberId, workspaceId } from '@hq/kernel'
+import { createLlmGateway } from '@hq/profile/server'
+import { Hono } from 'hono'
+import { websocket } from 'hono/bun'
 import { createApp } from './app.ts'
 import { issueSessionToken } from './auth/session-tokens.ts'
 import { openSessions } from './auth/sessions.ts'
+import { createFakeLlm, type FakeLlmScript } from './fake-llm.ts'
 
 export const testAuthSettings = {
   tokenSecret: 'integration-test-secret',
@@ -65,24 +75,45 @@ export const requestMutation = async (
   return ((await response.json()) as { mutations: { result: unknown }[] }).mutations[0]?.result
 }
 
+const integrationGatewayPort = 4880
+export const llmGatewayAt = (url: string) =>
+  createLlmGateway({ url, adminUser: testGatewayAdmin.user, adminPassword: testGatewayAdmin.password })
+
 const startSharedTestApp = async () => {
   const testDatabase = await createTestDatabase()
   const { database } = testDatabase
-  const app = createApp({ database, ...testAuthSettings })
-  const server = Bun.serve({ port: 0, fetch: app.fetch })
+  const fakeLlmCalls: Record<string, string>[] = []
+  let fakeLlmScript: FakeLlmScript | undefined
+  const fakeLlm = new Hono()
+    .use(async (context, next) => {
+      fakeLlmCalls.push(Object.fromEntries(context.req.raw.headers))
+      await next()
+    })
+    .route(
+      '/',
+      createFakeLlm(() => fakeLlmScript),
+    )
+  const llmGateway = llmGatewayAt(`http://127.0.0.1:${integrationGatewayPort}`)
+  const app = createApp({ database, ...testAuthSettings, llmGateway, fakeLlm })
+  const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
   const stopServerAndDatabase = async () => {
-    await server.stop(true)
+    void server.stop(true)
     await testDatabase.drop()
   }
-  const zeroCache = await startZeroCache({
-    databaseName: testDatabase.name,
-    port: 4890,
-    appId: sharedAppId,
-    serverUrl: server.url.origin,
-  }).catch(async (error) => {
+  const [zeroCache, gateway] = await Promise.allSettled([
+    startZeroCache({ databaseName: testDatabase.name, port: 4890, appId: sharedAppId, serverUrl: server.url.origin }),
+    startTestGateway({
+      name: 'integration',
+      port: integrationGatewayPort,
+      fakeLlmUrl: `http://host.docker.internal:${server.port}/fake-llm`,
+    }),
+  ])
+  if (zeroCache.status === 'rejected' || gateway.status === 'rejected') {
+    if (zeroCache.status === 'fulfilled') await zeroCache.value.stop()
+    if (gateway.status === 'fulfilled') await gateway.value.stop()
     await stopServerAndDatabase()
-    throw error
-  })
+    throw zeroCache.status === 'rejected' ? zeroCache.reason : (gateway as PromiseRejectedResult).reason
+  }
   const resultOf = (member: { workspaceId: string; userId: string }, name: string, args: Record<string, unknown>) =>
     requestMutation(app, database, member, name, args)
   const eventsOf = async (chatId: string) =>
@@ -94,12 +125,20 @@ const startSharedTestApp = async () => {
   return {
     database,
     app,
-    zeroCacheUrl: zeroCache.url,
+    port: Number(server.port),
+    zeroCacheUrl: zeroCache.value.url,
+    gateway: gateway.value,
+    llmGateway,
+    seededGatewayKeys: () => prepareSeededGatewayKeys(gateway.value),
+    fakeLlmCalls,
+    setFakeLlmScript: (script: FakeLlmScript | undefined) => {
+      fakeLlmScript = script
+    },
     resultOf,
     eventsOf,
     changesOf,
     stop: async () => {
-      await zeroCache.stop()
+      await Promise.all([zeroCache.value.stop(), gateway.value.stop()])
       await stopServerAndDatabase()
     },
   }
@@ -110,7 +149,7 @@ let sharedTestApp: ReturnType<typeof startSharedTestApp> | undefined
 export const openSharedTestApp = async () => {
   sharedTestApp ??= startSharedTestApp()
   const testApp = await sharedTestApp
-  await resetDatabase(testApp.database)
+  await resetDatabase(testApp.database, await testApp.seededGatewayKeys())
   return testApp
 }
 
@@ -128,7 +167,9 @@ type HostFrame = {
   headers?: Record<string, string>
   body?: string
   data?: string
+  status?: number
 }
+export const fakeHostGatewayUrl = 'http://fake-gateway-relay.test:4000/v1'
 type HostCommand = { op: string; runtimeId?: string; image?: string; apiKey?: string }
 export type FakeContainer = { running: boolean; apiKey: string }
 export type FakeAgentServer = {
@@ -160,6 +201,9 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
     const heldReplies = new Map<string, Promise<void>>()
     const failingOps = new Set<string>()
     const streams = new Map<number, ReturnType<FakeAgentServer['connect']>>()
+    const modelCalls = new Map<number, { frames: HostFrame[]; done: () => void }>()
+    const receivedFrames: string[] = []
+    let nextModelCallId = 1
     const run = (op: string, { runtimeId = '', apiKey = '' }: Record<string, string>) => {
       if (failingOps.has(op)) throw new Error(`${op} failed`)
       const container = containers.get(runtimeId)
@@ -182,6 +226,30 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
         heldReplies.set(op, promise)
         return resolve
       },
+      receivedFrames,
+      modelCall: async ({
+        path = '/v1/chat/completions',
+        headers = {},
+        body = '',
+      }: {
+        path?: string
+        headers?: Record<string, string>
+        body?: string
+      }) => {
+        const sid = nextModelCallId++
+        const { promise, resolve } = Promise.withResolvers<void>()
+        const frames: HostFrame[] = []
+        modelCalls.set(sid, { frames, done: resolve })
+        socket?.send(JSON.stringify({ type: 'gw_req', sid, method: 'POST', path, headers, body }))
+        await Promise.race([promise, Bun.sleep(20_000)])
+        modelCalls.delete(sid)
+        const head = frames.find((frame) => frame.type === 'gw_head')
+        return {
+          status: head?.status,
+          body: frames.map((frame) => frame.data ?? '').join(''),
+          ended: frames.at(-1)?.type,
+        }
+      },
       lifecycleCommands: () =>
         commands.filter(({ op }) => ['create', 'start', 'stop', 'remove'].includes(op)).map(({ op }) => op),
       closed: () => closed,
@@ -191,7 +259,14 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
         closed = new Promise((resolve) => opened.addEventListener('close', () => resolve()))
         const send = (frame: object) => opened.send(JSON.stringify(frame))
         opened.onmessage = (message) => {
+          receivedFrames.push(String(message.data))
           const frame = JSON.parse(String(message.data)) as HostFrame
+          const modelCall = modelCalls.get(frame.sid ?? 0)
+          if (modelCall && frame.type.startsWith('gw_')) {
+            modelCall.frames.push(frame)
+            if (frame.type === 'gw_end' || frame.type === 'gw_error') modelCall.done()
+            return
+          }
           const container = containers.get(frame.runtimeId ?? '')
           if (frame.type === 'ping') send({ type: 'pong' })
           if (frame.type === 'cmd') {
@@ -249,6 +324,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
         send({
           type: 'hello',
           token,
+          gatewayUrl: fakeHostGatewayUrl,
           system: {
             cpus: 4,
             memoryBytes: memoryGibibytes * gibibyte,

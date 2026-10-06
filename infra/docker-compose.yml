@@ -59,9 +59,56 @@ services:
       interval: 1s
       retries: 60
 
+  gateway-database:
+    image: postgres:18
+    container_name: hq-gateway-database
+    profiles: [gateway]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGUSER: hq
+      PGPASSWORD: hq
+      PGDATABASE: postgres
+      GATEWAY_DB_PASSWORD: ${HQ_GATEWAY_DB_PASSWORD:-hq-dev-gateway-db}
+    entrypoint: [sh, -ec]
+    command:
+      - |
+        psql -tAc "select 1 from pg_roles where rolname = 'bifrost'" | grep -q 1 || psql -c "create role bifrost login password '$$GATEWAY_DB_PASSWORD'"
+        psql -tAc "select 1 from pg_database where datname = 'bifrost'" | grep -q 1 || psql -c "create database bifrost owner bifrost template template0 encoding 'UTF8'"
+    restart: 'no'
+
+  gateway:
+    image: maximhq/bifrost:v2.2.6@sha256:d0b4708ace1aa175766f94afa715fd9bba3a1b56c1dc2afff15a21edf3ae4e2a
+    container_name: hq-gateway
+    profiles: [gateway]
+    depends_on:
+      gateway-database:
+        condition: service_completed_successfully
+    environment:
+      BIFROST_ENCRYPTION_KEY: ${HQ_GATEWAY_ENCRYPTION_KEY:-hq-dev-gateway-encryption-key}
+      BIFROST_SETUP_TOKEN: ${HQ_GATEWAY_SETUP_TOKEN:-hq-dev-gateway-setup-token}
+      BIFROST_ADMIN_USER: ${HQ_GATEWAY_ADMIN_USER:-hq}
+      BIFROST_ADMIN_PASSWORD: ${HQ_GATEWAY_ADMIN_PASSWORD:-hq-dev-gateway}
+      BIFROST_DB_PASSWORD: ${HQ_GATEWAY_DB_PASSWORD:-hq-dev-gateway-db}
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    ports:
+      - 127.0.0.1:8180:8080
+    volumes:
+      - gateway-data:/app/data
+      - ./bifrost.json:/app/data/config.json:ro
+    healthcheck:
+      test: wget -q -O /dev/null http://127.0.0.1:8080/health
+      interval: 1s
+      retries: 60
+
 volumes:
   postgres-data:
     name: hq-postgres-data
+  gateway-data:
+    name: hq-gateway-data
 
 networks:
   default:

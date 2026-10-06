@@ -1,30 +1,58 @@
-import { expect, spyOn, test } from 'bun:test'
+import { afterAll, expect, spyOn, test } from 'bun:test'
+import { createApp } from './app.ts'
+import { startJobWorker } from './job-worker.ts'
 import {
   acme,
   alice,
   aliceInAcme,
   failedWith,
   globex,
+  llmGatewayAt,
   openSharedTestApp,
   bob,
   bobInAcme,
   sessionTokenOf,
   succeeded,
+  testAuthSettings,
+  waitFor,
 } from './testing.ts'
 
-const { database, app, resultOf } = await openSharedTestApp()
+const { database, app, gateway, llmGateway, resultOf } = await openSharedTestApp()
+const worker = startJobWorker(database, { pollIntervalMilliseconds: 5, retryDelayMilliseconds: 100, llmGateway })
+afterAll(() => worker.stop())
 const tokenOf = (workspaceId: string, userId: string) => sessionTokenOf(database, workspaceId, userId)
 const secretValue = 'sk-integration-secret-4321'
 
-const postCredential = async (authorization: string, body: string) => {
-  const response = await app.request('/api/llm-credentials', { method: 'POST', headers: { authorization }, body })
+const postCredential = async (authorization: string, body: string, through = app) => {
+  const response = await through.request('/api/llm-credentials', { method: 'POST', headers: { authorization }, body })
   return { status: response.status, text: await response.text() }
 }
-const postCredentialAs = async (member: typeof aliceInAcme, body: object) =>
-  postCredential(`Bearer ${await tokenOf(member.workspaceId, member.userId)}`, JSON.stringify(body))
+const postCredentialAs = async (member: typeof aliceInAcme, body: object, through = app) =>
+  postCredential(`Bearer ${await tokenOf(member.workspaceId, member.userId)}`, JSON.stringify(body), through)
 
 const credentialRows = () => database.$client`select * from llm_credentials order by id`
-const vaultRows = async () => [...(await database.$client`select * from placeholder_secrets`)]
+const gatewayKeyOf = (row: { secret_ref: string } | undefined) => {
+  const [, provider, id] = String(row?.secret_ref).match(/^gateway:([a-z]+)\/(.+)$/) ?? []
+  return { provider: provider ?? '', id: id ?? '' }
+}
+const gatewayKeysOf = async (provider: string) =>
+  (await gateway.call<{ keys: { id: string; name: string }[] }>(`/api/providers/${provider}/keys`)).keys
+const virtualKeyIdOf = async (userId: string) =>
+  (await database.$client`select virtual_key_id from member_gateway_keys where user_id = ${userId}`)[0]?.virtual_key_id
+const boundKeyIdsOf = async (virtualKeyId: string) =>
+  (
+    await gateway.call<{ virtual_key: { provider_configs: { keys: { key_id: string }[] }[] } }>(
+      `/api/governance/virtual-keys/${virtualKeyId}`,
+    )
+  ).virtual_key.provider_configs
+    .flatMap((config) => config.keys.map((key) => key.key_id))
+    .toSorted()
+const everyStoredText = async () => {
+  const tables = await database.$client<{ name: string }[]>`
+    select table_name as name from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE'`
+  const rows = await Promise.all(tables.map(({ name }) => database.$client.unsafe(`select * from "${name}"`)))
+  return JSON.stringify(rows)
+}
 const connectionsOf = (userId: string) =>
   database.query.toolConnections.findMany({ where: { workspaceId: acme, userId }, orderBy: { position: 'asc' } })
 const consoleSpies = () => (['log', 'info', 'warn', 'error', 'debug'] as const).map((method) => spyOn(console, method))
@@ -33,9 +61,24 @@ const loggedText = (spies: ReturnType<typeof consoleSpies>) =>
 const restore = (spies: ReturnType<typeof consoleSpies>) => {
   for (const spy of spies) spy.mockRestore()
 }
+const appWithGateway = (url: string) => createApp({ database, ...testAuthSettings, llmGateway: llmGatewayAt(url) })
+const failingVirtualKeysProxy = () =>
+  Bun.serve({
+    port: 0,
+    fetch: async (request) => {
+      const url = new URL(request.url)
+      if (url.pathname.startsWith('/api/governance/virtual-keys')) return new Response('down', { status: 503 })
+      return fetch(`${gateway.url}${url.pathname}${url.search}`, {
+        method: request.method,
+        headers: request.headers,
+        body: request.method === 'GET' || request.method === 'DELETE' ? undefined : await request.text(),
+      })
+    },
+  })
 
-test('the credential endpoint refuses blank, missing or malformed fields and stores nothing', async () => {
+test('the credential endpoint refuses blank, missing, malformed or unsupported fields and stores nothing', async () => {
   const token = `Bearer ${await tokenOf(acme, alice)}`
+  const keysBefore = await gatewayKeysOf('openai')
   for (const body of [
     { provider: '  ', secret: secretValue },
     { provider: 'OpenAI', secret: '  ' },
@@ -45,11 +88,15 @@ test('the credential endpoint refuses blank, missing or malformed fields and sto
   ])
     expect((await postCredential(token, JSON.stringify(body))).status).toBe(400)
   expect(await postCredential(token, 'not json')).toMatchObject({ status: 400 })
+  expect(await postCredential(token, JSON.stringify({ provider: 'Foo', secret: secretValue }))).toEqual({
+    status: 400,
+    text: JSON.stringify({ error: 'unsupported_provider', message: 'Foo is not a supported provider' }),
+  })
   expect(await credentialRows()).toHaveLength(1)
-  expect(await vaultRows()).toEqual([])
+  expect(await gatewayKeysOf('openai')).toEqual(keysBefore)
 })
 
-test('adding a credential stores the secret in the vault and the row with last4, returning no secret and logging nothing', async () => {
+test('adding a credential stores the secret in the gateway under an opaque name, binds it to the member virtual key, and HQ keeps no secret and logs nothing', async () => {
   const spies = consoleSpies()
   try {
     const response = await postCredentialAs(aliceInAcme, { provider: ' OpenAI ', secret: secretValue })
@@ -58,16 +105,35 @@ test('adding a credential stores the secret in the vault and the row with last4,
   } finally {
     restore(spies)
   }
-  const stored = (await credentialRows()).find((row) => row.provider === 'OpenAI')
+  const rows = await credentialRows()
+  const stored = rows.find((row) => row.provider === 'OpenAI')
+  const seeded = rows.find((row) => row.provider === 'Anthropic')
   expect(stored).toMatchObject({ workspace_id: acme, user_id: alice, last4: '4321' })
-  expect(await vaultRows()).toEqual([{ workspace_id: acme, ref: stored?.secret_ref, value: secretValue }])
+  const key = gatewayKeyOf(stored as { secret_ref: string })
+  expect(key.provider).toBe('openai')
+  const [gatewayKey] = (await gatewayKeysOf('openai')).filter(({ id }) => id === key.id)
+  expect(gatewayKey?.name).toMatch(/^cred_[0-9a-f-]{36}$/)
+  const virtualKeyId = await virtualKeyIdOf(alice)
+  expect(await boundKeyIdsOf(virtualKeyId)).toEqual(
+    [key.id, gatewayKeyOf(seeded as { secret_ref: string }).id].toSorted(),
+  )
+  const { virtual_key } = await gateway.call<{ virtual_key: { name: string; value: string } }>(
+    `/api/governance/virtual-keys/${virtualKeyId}`,
+  )
+  expect(virtual_key.name).not.toMatch(/alice/i)
+  const storedText = await everyStoredText()
+  expect(storedText).not.toContain(secretValue)
+  expect(storedText).not.toContain(virtual_key.value)
 })
 
 test('the secret never reaches a replicated table or column', async () => {
   const publishedTables = await database.$client<{ table: string; columns: string[] }[]>`
     select tablename as table, attnames as columns from pg_publication_tables where pubname = 'hq_zero'`
-  expect(publishedTables.map(({ table }) => table)).not.toContain('placeholder_secrets')
+  expect(publishedTables.map(({ table }) => table)).not.toContain('member_gateway_keys')
   expect(publishedTables.find(({ table }) => table === 'llm_credentials')?.columns).not.toContain('secret_ref')
+  expect(publishedTables.find(({ table }) => table === 'chats')?.columns).not.toContain('agent_turn_prompter_id')
+  expect(publishedTables.find(({ table }) => table === 'chats')?.columns).not.toContain('agent_turn_failure')
+  expect(publishedTables.find(({ table }) => table === 'runtimes')?.columns).not.toContain('llm_token_hash')
   for (const { table, columns } of publishedTables) {
     const rows = await database.$client.unsafe(
       `select ${columns.map((column) => `"${column}"`).join(', ')} from "${table}"`,
@@ -76,38 +142,92 @@ test('the secret never reaches a replicated table or column', async () => {
   }
 })
 
-test('a failed credential write rolls back the vault and logs no secret', async () => {
-  await database.$client`alter table llm_credentials add constraint refuse_provider check (provider <> 'Refused') not valid`
-  await database.$client`alter table placeholder_secrets add constraint refuse_value check (value <> 'sk-refused-value') not valid`
+test('an unreachable gateway leaves no row and logs no secret', async () => {
   const spies = consoleSpies()
   try {
-    expect(await postCredentialAs(aliceInAcme, { provider: 'Refused', secret: secretValue })).toMatchObject({
-      status: 500,
-    })
-    expect(await postCredentialAs(aliceInAcme, { provider: 'Mistral', secret: 'sk-refused-value' })).toMatchObject({
-      status: 500,
-    })
+    expect(
+      await postCredentialAs(
+        bobInAcme,
+        { provider: 'Mistral', secret: secretValue },
+        appWithGateway('http://127.0.0.1:9'),
+      ),
+    ).toMatchObject({ status: 500 })
     expect(loggedText(spies)).not.toContain(secretValue)
+  } finally {
+    restore(spies)
+  }
+  expect((await credentialRows()).filter((row) => row.user_id === bob)).toEqual([])
+  expect(await virtualKeyIdOf(bob)).toBeUndefined()
+})
+
+test('a failed HQ commit deletes the gateway key it just created and logs no secret', async () => {
+  const keysBefore = await gatewayKeysOf('mistral')
+  await database.$client`alter table llm_credentials add constraint refuse_provider check (provider <> 'Mistral') not valid`
+  const spies = consoleSpies()
+  try {
+    expect(await postCredentialAs(bobInAcme, { provider: 'Mistral', secret: 'sk-refused-value' })).toMatchObject({
+      status: 500,
+    })
     expect(loggedText(spies)).not.toContain('sk-refused-value')
   } finally {
     restore(spies)
     await database.$client`alter table llm_credentials drop constraint refuse_provider`
-    await database.$client`alter table placeholder_secrets drop constraint refuse_value`
   }
-  expect((await credentialRows()).map((row) => row.provider)).not.toContain('Refused')
-  expect(await vaultRows()).toHaveLength(1)
+  expect((await credentialRows()).map((row) => row.provider)).not.toContain('Mistral')
+  expect(await gatewayKeysOf('mistral')).toEqual(keysBefore)
+  expect(await virtualKeyIdOf(bob)).toBeUndefined()
 })
 
-test('a member cannot remove the credential of another member; the owner removes it and its secret', async () => {
-  const [stored] = (await credentialRows()).filter((row) => row.provider === 'OpenAI')
-  const removal = { workspaceId: acme, credentialId: stored?.id, memberId: alice }
+test('a failed virtual key write removes the new row and its gateway key, and keeps the member key as it was', async () => {
+  const keysBefore = await gatewayKeysOf('mistral')
+  const virtualKeyId = await virtualKeyIdOf(alice)
+  const boundBefore = await boundKeyIdsOf(virtualKeyId)
+  const proxy = failingVirtualKeysProxy()
+  try {
+    expect(
+      await postCredentialAs(
+        aliceInAcme,
+        { provider: 'Mistral', secret: secretValue },
+        appWithGateway(proxy.url.origin),
+      ),
+    ).toMatchObject({ status: 500 })
+  } finally {
+    void proxy.stop(true)
+  }
+  expect((await credentialRows()).map((row) => row.provider)).not.toContain('Mistral')
+  expect(await gatewayKeysOf('mistral')).toEqual(keysBefore)
+  expect(await virtualKeyIdOf(alice)).toBe(virtualKeyId)
+  expect(await boundKeyIdsOf(virtualKeyId)).toEqual(boundBefore)
+})
+
+test('a member cannot remove the credential of another member; removing one unbinds and deletes its gateway key, removing the last deletes the virtual key', async () => {
+  const rows = await credentialRows()
+  const [openAi] = rows.filter((row) => row.provider === 'OpenAI')
+  const [seeded] = rows.filter((row) => row.provider === 'Anthropic')
+  const removal = { workspaceId: acme, credentialId: openAi?.id, memberId: alice }
   expect(await resultOf(bobInAcme, 'profile.removeLlmCredential', removal)).toEqual(
-    failedWith(`LLM credential ${stored?.id} was not found`),
+    failedWith(`LLM credential ${openAi?.id} was not found`),
   )
   expect(await credentialRows()).toHaveLength(2)
+
+  const virtualKeyId = await virtualKeyIdOf(alice)
+  const openAiKey = gatewayKeyOf(openAi as { secret_ref: string })
+  const seededKey = gatewayKeyOf(seeded as { secret_ref: string })
   expect(await resultOf(aliceInAcme, 'profile.removeLlmCredential', removal)).toEqual(succeeded)
   expect((await credentialRows()).map((row) => row.provider)).toEqual(['Anthropic'])
-  expect(await vaultRows()).toEqual([])
+  await waitFor(async () => (await gateway.request(`/api/providers/openai/keys/${openAiKey.id}`)).status === 404)
+  expect(await boundKeyIdsOf(virtualKeyId)).toEqual([seededKey.id])
+
+  expect(
+    await resultOf(aliceInAcme, 'profile.removeLlmCredential', { workspaceId: acme, credentialId: seeded?.id }),
+  ).toEqual(succeeded)
+  await waitFor(async () => (await gateway.request(`/api/governance/virtual-keys/${virtualKeyId}`)).status === 404)
+  await waitFor(async () => (await gateway.request(`/api/providers/fake/keys/${seededKey.id}`)).status === 404)
+  expect(await virtualKeyIdOf(alice)).toBeUndefined()
+  expect([...(await database.$client`select state from jobs where type = 'profile.gateway-sync'`)]).toEqual([
+    { state: 'done' },
+    { state: 'done' },
+  ])
 })
 
 test('renameMember changes the display name of the member in the current workspace only', async () => {

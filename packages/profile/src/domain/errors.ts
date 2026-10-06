@@ -19,6 +19,12 @@ export class BlankProvider extends ProfileError {
   }
 }
 
+export class UnsupportedProvider extends ProfileError {
+  constructor(provider: string) {
+    super('unsupported_provider', `${provider} is not a supported provider`)
+  }
+}
+
 export class BlankSecret extends ProfileError {
   constructor() {
     super('blank_secret', 'A secret must contain at least one non-blank character')

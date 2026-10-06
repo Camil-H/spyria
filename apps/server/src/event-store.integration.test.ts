@@ -94,7 +94,7 @@ test('rebuilding the messages from the events reproduces the live projection, an
   await succeeds('conversation.sendMessage', { id: 'message-history-3', chatId: 'chat-invoice-bug', text: 'News?' })
   const agentBridge = createAgentBridge({
     sandboxProvider: {} as SandboxProvider,
-    llm: { baseUrl: 'http://fake-llm.test/v1', model: 'openai/fake' },
+    llm: { model: 'openai/fake' },
   })
   const worker = startJobWorker(database, { pollIntervalMilliseconds: 20, agentBridge })
   await waitFor(async () => (await database.select().from(jobs)).every((job) => job.state === 'done'))

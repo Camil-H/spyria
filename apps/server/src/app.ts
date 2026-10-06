@@ -3,7 +3,13 @@ import type { Database } from '@hq/db/postgres'
 import { schema } from '@hq/db/zero'
 import { queries, type ZeroContext } from '@hq/db/zero-queries'
 import type { RuntimeHostId } from '@hq/kernel'
-import { addLlmCredentialFromRequest, llmCredentialsPath, ProfileError, profileMutators } from '@hq/profile/server'
+import {
+  addLlmCredentialFromRequest,
+  type createLlmGateway,
+  llmCredentialsPath,
+  ProfileError,
+  profileMutators,
+} from '@hq/profile/server'
 import {
   addRuntimeHostFromRequest,
   RuntimeError,
@@ -21,9 +27,11 @@ import { createOidc, type OidcSettings } from './auth/oidc.ts'
 import { createAuthRoutes } from './auth/routes.ts'
 import { createSessionAuthenticator, errorByStatus } from './auth/session-tokens.ts'
 import { findMemberIn } from './auth/sessions.ts'
+import { createModelCallRelay } from './llm-relay.ts'
 import { createRuntimeHostGateway, type RuntimeHostGateway } from './runtime-hosts/gateway.ts'
 
-export const defaultLlm = { baseUrl: 'http://host.docker.internal:3000/fake-llm/v1', model: 'openai/fake' }
+export const defaultLlm = { model: 'openai/fake/fake-model' }
+type LlmGateway = ReturnType<typeof createLlmGateway>
 
 const statusByRuntimeErrorCode: Record<string, number> = { not_admin: 403, host_not_found: 404 }
 
@@ -53,7 +61,13 @@ export const createApp = ({
   oidc,
   appOrigin,
   testDatabaseByName,
-  runtimeHosts = createRuntimeHostGateway({ databases: () => [database] }),
+  llmGateway,
+  runtimeHosts = createRuntimeHostGateway({
+    databases: () => [database],
+    relayModelCall:
+      llmGateway &&
+      createModelCallRelay({ gatewayUrlOf: () => llmGateway.url, llmGateway, agentBridge: () => agentBridge }),
+  }),
   agentBridge = createAgentBridge({ sandboxProvider: runtimeHosts.sandboxProvider, llm: defaultLlm }),
   fakeLlm,
 }: {
@@ -62,6 +76,7 @@ export const createApp = ({
   oidc: OidcSettings
   appOrigin: string
   testDatabaseByName?: (databaseName: string) => Database
+  llmGateway?: LlmGateway
   runtimeHosts?: RuntimeHostGateway
   agentBridge?: AgentBridge
   fakeLlm?: Hono
@@ -130,9 +145,13 @@ export const createApp = ({
     .post(llmCredentialsPath, async (context) => {
       const body = await context.req.json().catch(() => null)
       try {
-        await context
-          .get('zeroDatabase')
-          .transaction((tx) => addLlmCredentialFromRequest(tx, context.get('zeroContext'), body))
+        if (!llmGateway) throw new Error('No LLM gateway is configured')
+        await addLlmCredentialFromRequest(
+          (work) => context.get('zeroDatabase').transaction(work),
+          context.get('zeroContext'),
+          body,
+          llmGateway,
+        )
       } catch (error) {
         if (error instanceof ProfileError) return context.json({ error: error.code, message: error.message }, 400)
         console.error(

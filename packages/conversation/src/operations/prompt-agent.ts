@@ -27,7 +27,11 @@ const conversationFor = async (
     await runtimes.forgetConversation(chat)
     await transactor.run((unitOfWork) => appendNotice(unitOfWork, prompt, agentNotices.newSession))
   }
-  const conversationId = await runtimes.rememberConversation(chat, await agentServer.createConversation(endpoint))
+  const llmToken = await runtimes.issueLlmToken(chat)
+  const conversationId = await runtimes.rememberConversation(
+    chat,
+    await agentServer.createConversation(endpoint, llmToken),
+  )
   return { ...endpoint, conversationId }
 }
 

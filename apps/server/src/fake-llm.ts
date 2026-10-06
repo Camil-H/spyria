@@ -61,19 +61,30 @@ const toolCallOf = (step: FakeLlmStep | undefined) => {
   )
 }
 
+const refusedKeyOf = (key: string) => ({
+  error: {
+    message: `Incorrect API key provided: ${key.slice(0, 3)}****${key.slice(-4)}.`,
+    type: 'invalid_request_error',
+    param: null,
+    code: 'invalid_api_key',
+  },
+})
+
 export const createFakeLlm = (
-  scriptOf: (token: string) => FakeLlmScript | undefined | Promise<FakeLlmScript | undefined>,
+  scriptOf: (request: Request) => FakeLlmScript | undefined | Promise<FakeLlmScript | undefined>,
 ) =>
   new Hono().post('/v1/chat/completions', async (context) => {
+    const key = context.req.header('authorization')?.replace(/^Bearer /, '') ?? ''
+    if (key.includes('refused')) return context.json(refusedKeyOf(key), 401)
     const request = await context.req.json<CompletionRequest>()
-    const script = (await scriptOf(context.req.header('authorization')?.replace(/^Bearer /, '') ?? '')) ?? {}
+    const script = (await scriptOf(context.req.raw)) ?? {}
     const steps = script.steps ?? (script.command ? [{ command: script.command }] : [])
     const turnMessages = request.messages?.slice(request.messages.findLastIndex((message) => message.role === 'user'))
     const step = request.tools?.length
       ? steps[turnMessages?.filter((message) => message.role === 'assistant').length ?? 0]
       : undefined
     if (step && 'fail' in step)
-      return context.json({ error: { message: step.fail, type: 'invalid_request_error' } }, 400)
+      return Response.json({ type: 'error', error: { type: 'overloaded_error', message: step.fail } }, { status: 529 })
     const toolCall = toolCallOf(step)
     const text = toolCall ? '' : (script.text ?? defaultText)
     const reasoning = step && 'think' in step ? step.think : ''

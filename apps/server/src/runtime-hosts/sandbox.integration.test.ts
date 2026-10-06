@@ -17,10 +17,10 @@ import {
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { websocket } from 'hono/bun'
 import { createAgentBridge } from '../agent-bridge/bridge.ts'
-import { createApp } from '../app.ts'
-import { createFakeLlm } from '../fake-llm.ts'
+import { createApp, defaultLlm } from '../app.ts'
 import { startJobWorker } from '../job-worker.ts'
-import { acme, aliceInAcme, sessionTokenOf, testAuthSettings, waitFor } from '../testing.ts'
+import { createModelCallRelay } from '../llm-relay.ts'
+import { acme, aliceInAcme, openSharedTestApp, sessionTokenOf, testAuthSettings, waitFor } from '../testing.ts'
 import { createRuntimeHostGateway } from './gateway.ts'
 
 const zeroDatabase = (database: typeof testDatabase.database) => zeroDrizzle(schema, database)
@@ -39,19 +39,28 @@ if (!hasImage) console.warn(`Skipping the runtime host Docker test: ${skipReason
 const prefix = `hq-test-${crypto.randomUUID().slice(0, 8)}-`
 const hostProgram = new URL('../../../host/src/main.ts', import.meta.url).pathname
 const stateDirectory = mkdtempSync(join(tmpdir(), 'hq-test-host-'))
+const shared = await openSharedTestApp()
 const testDatabase = await createTestDatabase()
-const gateway = createRuntimeHostGateway({ databases: () => [testDatabase.database] })
-const llm = { baseUrl: '', model: 'openai/fake' }
-const agentBridge = createAgentBridge({ sandboxProvider: gateway.sandboxProvider, llm })
+await testDatabase.database.transaction(await shared.seededGatewayKeys())
+shared.setFakeLlmScript({ command: 'echo hello' })
+const { llmGateway } = shared
+const gateway = createRuntimeHostGateway({
+  databases: () => [testDatabase.database],
+  relayModelCall: createModelCallRelay({
+    gatewayUrlOf: () => llmGateway.url,
+    llmGateway,
+    agentBridge: () => agentBridge,
+  }),
+})
+const agentBridge = createAgentBridge({ sandboxProvider: gateway.sandboxProvider, llm: defaultLlm })
 const app = createApp({
   database: testDatabase.database,
   ...testAuthSettings,
   runtimeHosts: gateway,
   agentBridge,
-  fakeLlm: createFakeLlm(() => ({ command: 'echo hello' })),
+  llmGateway,
 })
 const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
-llm.baseUrl = `http://host.docker.internal:${server.port}/fake-llm/v1`
 let hostProcess: ReturnType<typeof Bun.spawn> | undefined
 
 const removeDockerObjects = () => {
@@ -64,6 +73,7 @@ const removeDockerObjects = () => {
 }
 
 afterAll(async () => {
+  shared.setFakeLlmScript(undefined)
   hostProcess?.kill()
   await hostProcess?.exited
   if (hasDocker) removeDockerObjects()
@@ -208,9 +218,8 @@ test.skipIf(!hasImage)(
       await stateIs('running')
       const containerName = `${prefix}rt-${id}`
       const [stored] = await database.$client`
-        select value from placeholder_secrets join runtimes on runtimes.api_key_ref = placeholder_secrets.ref
-        where runtimes.id = ${id}`
-      const apiKey = String(stored?.value)
+        select api_key from runtimes where id = ${id}`
+      const apiKey = String(stored?.api_key)
       const transport = gateway.sandboxProvider.connect({ ...host, runtimeId: id })
       const authenticatedStatus = async () =>
         (

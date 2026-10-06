@@ -1,4 +1,5 @@
 import { afterAll, afterEach, expect, setDefaultTimeout, spyOn, test } from 'bun:test'
+import { createHash } from 'node:crypto'
 import { commandOutputPathOf, rebuildMessages } from '@hq/conversation/server'
 import { events } from '@hq/db/postgres'
 import { schema } from '@hq/db/zero'
@@ -13,9 +14,13 @@ import {
   alice,
   aliceInAcme,
   createFakeHosts,
+  failedWith,
+  fakeHostGatewayUrl,
   globex,
   openSharedTestApp,
   requestMutation,
+  bob,
+  bobInAcme,
   sessionTokenOf,
   succeeded,
   testAuthSettings,
@@ -25,7 +30,7 @@ import { createAgentBridge } from './bridge.ts'
 import { type Conversation, createFakeAgentServer, replyText, text } from './fake-agent-server.ts'
 
 setDefaultTimeout(30_000)
-const llm = { baseUrl: 'http://fake-llm.test/v1', model: 'openai/fake' }
+const llm = { model: 'openai/fake/fake-model' }
 const { database } = await openSharedTestApp()
 const gateway = createRuntimeHostGateway({ databases: () => [database] })
 const agentBridge = createAgentBridge({ sandboxProvider: gateway.sandboxProvider, llm })
@@ -87,13 +92,11 @@ const repliesTo = async (messageId: string) =>
   )
 const answered = (messageId: string, count = 1) =>
   waitFor(async () => (await repliesTo(messageId)).length >= count, 15_000)
+const llmTokenOf = (conversation: Conversation | undefined) =>
+  String((conversation?.created.agent as { llm: { api_key: string } } | undefined)?.llm.api_key)
 const runtimeOf = async (chat: ChatId) => {
   const [row] = await database.$client`
-    select runtimes.*, api_key.value as api_key, llm_token.value as llm_token
-    from runtimes
-    join placeholder_secrets api_key on api_key.workspace_id = runtimes.workspace_id and api_key.ref = runtimes.api_key_ref
-    join placeholder_secrets llm_token on llm_token.workspace_id = runtimes.workspace_id and llm_token.ref = runtimes.llm_token_ref
-    where chat_id = ${chat}`
+select * from runtimes where chat_id = ${chat}`
   if (!row) throw new Error(`No runtime for ${chat}`)
   return row
 }
@@ -106,15 +109,17 @@ test('a prompt starts the runtime, creates one conversation with the runtime LLM
 
   const runtime = await runtimeOf(chat)
   expect(runtime).toMatchObject({ state: 'running' })
-  expect(runtime.llm_token.length).toBeGreaterThanOrEqual(16)
-  expect(runtime.llm_token).not.toBe(runtime.api_key)
   const [conversation] = [...fake.conversations.values()]
+  const llmToken = llmTokenOf(conversation)
+  expect(llmToken.length).toBeGreaterThanOrEqual(16)
+  expect(llmToken).not.toBe(runtime.api_key)
+  expect(runtime.llm_token_hash).toBe(createHash('sha256').update(llmToken).digest('hex'))
   expect(fake.conversations.size).toBe(1)
   expect(runtime.agent_conversation_id).toBe(conversation?.id)
   expect(conversation?.created).toMatchObject({
     agent: {
       kind: 'Agent',
-      llm: { model: llm.model, base_url: llm.baseUrl, api_key: runtime.llm_token, stream: true },
+      llm: { model: llm.model, base_url: fakeHostGatewayUrl, stream: true, num_retries: 0 },
       tools: [{ name: 'terminal' }, { name: 'file_editor' }, { name: 'task_tracker' }],
     },
     autotitle: false,
@@ -410,9 +415,11 @@ test('stream frames reach browsers of the chat workspace only, and no secret rea
     await anonymous.closed
 
     const runtime = await runtimeOf(chat)
+    const [conversation] = [...fake.conversations.values()]
+    const llmToken = llmTokenOf(conversation)
     const everyFrame = [...acmeViewer.frames, ...globexViewer.frames].join('\n')
     const logged = spies.map((spy) => Bun.inspect(spy.mock.calls)).join('\n')
-    for (const secret of [runtime.api_key, runtime.llm_token, runtime.api_key_ref, runtime.llm_token_ref]) {
+    for (const secret of [runtime.api_key, llmToken, runtime.llm_token_hash]) {
       expect(everyFrame).not.toContain(secret)
       expect(logged).not.toContain(secret)
     }
@@ -463,4 +470,66 @@ test('a failed start and a turn error each end with one notice and no endless tu
   await answered(neverStarted)
   expect(await repliesTo(neverStarted)).toEqual([{ kind: 'notice', body: 'The agent could not start', detail: null }])
   expect(await turnOf(unstartable)).toBeNull()
+})
+
+test('a member without an LLM key cannot prompt a runtime chat, and still posts in a channel', async () => {
+  const chat = await newRuntimeChat()
+  const send = (chatId: string) =>
+    requestMutation(app, database, bobInAcme, 'conversation.sendMessage', {
+      workspaceId: acme,
+      id: `message-${crypto.randomUUID()}`,
+      chatId,
+      text: 'Bob prompts',
+    })
+  expect(await send(chat)).toEqual(failedWith('Bob has no LLM key in this workspace'))
+  expect(await messagesOf(chat)).toEqual([])
+  expect(await send('chat-welcome')).toEqual(succeeded)
+})
+
+test('a prompt whose author has no LLM key at turn time ends with HQ’s notice without reaching the agent', async () => {
+  const { fake } = await agentHost()
+  const chat = await newRuntimeChat()
+  const promptId = `message-${crypto.randomUUID()}`
+  await database.$client.begin(async (sql) => {
+    await sql`
+      insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
+      values (${acme}, ${chat}, ${promptId}, 1, 'member', ${bob}, 'Prompt after my key was removed', now())`
+    await sql`
+      insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
+      values (${acme}, ${chat}, ${promptId}, 1, 'message.posted', ${bob}, '{}'::jsonb, now())`
+    await sql`
+      insert into jobs (workspace_id, id, type, payload, run_at, attempts, state)
+      values (${acme}, ${crypto.randomUUID()}, 'agent.prompt', ${JSON.stringify({ messageId: promptId })}::jsonb, now(), 0, 'queued')`
+  })
+  await answered(promptId)
+  expect(await repliesTo(promptId)).toEqual([
+    { kind: 'notice', body: 'Bob has no LLM key in this workspace', detail: null },
+  ])
+  expect(fake.prompts).toEqual([])
+  expect(await turnOf(chat)).toBeNull()
+})
+
+test('a model error shows the notice recorded by the relay, never the agent’s text, even after the turn ended', async () => {
+  const { fake } = await agentHost()
+  const chat = await newRuntimeChat()
+  fake.turn = async (conversation, promptText) => {
+    await fake.beginTurn(conversation, promptText)
+    await database.$client`update chats set agent_turn_failure = 'The LLM key of Alice was refused' where id = ${chat}`
+    fake.status(conversation, 'error')
+    fake.emit(conversation, 'ConversationErrorEvent', {
+      source: 'environment',
+      code: 'LLMAuthenticationError',
+      detail: 'Incorrect API key provided: fak****f00d',
+    })
+  }
+  const question = await prompt(chat, 'Use my key')
+  await answered(question, 2)
+  const replies = await repliesTo(question)
+  expect(replies.map(({ body }) => body)).toContain('The agent stopped with an error')
+  expect(JSON.stringify(await messagesOf(chat))).not.toContain('Incorrect API key')
+  expect((await messagesOf(chat)).find((message) => message.kind === 'step')?.step).toEqual({
+    type: 'error',
+    message: 'The LLM key of Alice was refused',
+  })
+  expect(JSON.stringify(await storedAgentEventsOf(chat))).toContain('Incorrect API key')
 })

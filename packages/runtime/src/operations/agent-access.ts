@@ -1,5 +1,6 @@
 import type { ChatId, RuntimeHostId, WorkspaceId } from '@hq/kernel'
 import type { RuntimeTransactor } from '../contracts/transactor.ts'
+import { hashSecret, newSecretToken } from '../domain/claim.ts'
 import { RuntimeNotFound } from '../domain/errors.ts'
 import { locationOf } from '../domain/runtime.ts'
 
@@ -12,10 +13,26 @@ export const readAgentAccess = ({ transactor }: Dependencies, { workspaceId, cha
     const sandbox = runtime?.state === 'running' && runtime.hostOnline ? locationOf(runtime) : undefined
     if (!runtime || !sandbox) return undefined
     const apiKey = await secrets.valueOf(runtime, 'apiKey')
-    const llmToken = await secrets.valueOf(runtime, 'llmToken')
-    if (!apiKey || !llmToken) return undefined
-    return { sandbox, apiKey, llmToken, conversationId: (await runtimes.agentConversationOf(runtime)) ?? null }
+    if (!apiKey) return undefined
+    return { sandbox, apiKey, conversationId: (await runtimes.agentConversationOf(runtime)) ?? null }
   })
+
+export const issueAgentLlmToken = ({ transactor }: Dependencies, { workspaceId, chatId }: ChatRuntime) =>
+  transactor.run(async ({ runtimes, secrets }) => {
+    const runtime = await runtimes.findByChat(workspaceId, chatId)
+    if (!runtime) throw new RuntimeNotFound(chatId)
+    const token = newSecretToken()
+    await secrets.keep(runtime, 'llmTokenHash', await hashSecret(token))
+    return token
+  })
+
+export const findLlmTokenChat = async (
+  { transactor }: Dependencies,
+  { workspaceId, hostId, token }: { workspaceId: WorkspaceId; hostId: RuntimeHostId; token: string },
+) => {
+  const hash = await hashSecret(token)
+  return transactor.run(({ runtimes }) => runtimes.chatOfLlmTokenHash(workspaceId, hostId, hash))
+}
 
 export const rememberAgentConversation = (
   { transactor }: Dependencies,

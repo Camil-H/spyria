@@ -17,21 +17,30 @@ import {
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { upgradeWebSocket } from 'hono/bun'
 import type { WSContext } from 'hono/ws'
+import type { ModelCallRelay, RelayFrame } from '../llm-relay.ts'
 
 type Frame = { type?: unknown; id?: unknown; sid?: unknown; [field: string]: unknown }
 type HostSessionHandlers = ReturnType<typeof createHostSessionHandlers>
 type Connection = {
   socket: WSContext
-  identified?: { host: ConnectedHost; token: string; handlers: HostSessionHandlers }
+  identified?: {
+    host: ConnectedHost
+    token: string
+    handlers: HostSessionHandlers
+    database?: Database
+    gatewayUrl: string
+  }
   missedPings: number
   pending: Map<number, PromiseWithResolvers<Frame>>
   streams: Map<number, SandboxSocketListener>
+  modelCalls: Map<number, AbortController>
 }
 
 const refusedCloseCode = 4001
 const replacedCloseCode = 4002
 const requestTimeoutMilliseconds = 180_000
 const identifyTimeoutMilliseconds = 10_000
+export const defaultGatewayRelayUrl = 'http://hq-gateway-relay:4000/v1'
 
 const errorNameOf = (error: unknown) => (error instanceof Error ? error.name : 'an unknown error')
 const errorMessageOf = (error: unknown) => (error instanceof Error ? error.message : 'an unknown error')
@@ -47,10 +56,12 @@ export const createRuntimeHostGateway = ({
   databases,
   pingIntervalMilliseconds = 25_000,
   afterHello,
+  relayModelCall,
 }: {
   databases: () => Iterable<Database>
   pingIntervalMilliseconds?: number
   afterHello?: (database: Database, host: ConnectedHost) => Promise<unknown>
+  relayModelCall?: ModelCallRelay
 }) => {
   const connectionByHost = new Map<string, Connection>()
   const operationChains = new Map<string, Promise<unknown>>()
@@ -83,8 +94,9 @@ export const createRuntimeHostGateway = ({
   const sendTo = (connection: Connection, frame: object) => connection.socket.send(JSON.stringify(frame))
 
   const release = (connection: Connection) => {
-    const { pending, streams, identified } = connection
+    const { pending, streams, identified, modelCalls } = connection
     for (const { reject } of pending.values()) reject(new Error('The runtime host disconnected'))
+    for (const call of modelCalls.values()) call.abort()
     for (const listener of streams.values()) listener.onClose()
     streams.clear()
     if (!identified || connectionByHost.get(keyOf(identified.host)) !== connection) return
@@ -108,13 +120,19 @@ export const createRuntimeHostGateway = ({
       inOrder(frame.token, () =>
         handlers.hello(frame, (identifiedHost) => {
           const replaced = connectionByHost.get(keyOf(identifiedHost))
-          connection.identified = { host: identifiedHost, token: frame.token, handlers }
+          connection.identified = {
+            host: identifiedHost,
+            token: frame.token,
+            handlers,
+            gatewayUrl: frame.gatewayUrl ?? defaultGatewayRelayUrl,
+          }
           connectionByHost.set(keyOf(identifiedHost), connection)
           if (replaced !== connection)
             replaced?.socket.close(replacedCloseCode, 'Replaced by a newer connection of this host')
         }),
       ),
     )
+    if (connection.identified) connection.identified.database = database
     prepare(host).catch((error) =>
       console.error(`Preparing runtime host ${host.hostId} failed: ${errorMessageOf(error)}`),
     )
@@ -123,6 +141,27 @@ export const createRuntimeHostGateway = ({
       .catch((error) => console.error(`Reconciling runtime host ${host.hostId} failed: ${errorMessageOf(error)}`))
       .then(() => afterHello?.(database, host))
       .catch((error) => console.error(`Resuming prompts on host ${host.hostId} failed: ${errorMessageOf(error)}`))
+  }
+
+  const relayModelCallOf = (connection: Connection, frame: Frame) => {
+    const sid = Number(frame.sid)
+    const { identified, modelCalls } = connection
+    if (frame.type === 'gw_cancel') return modelCalls.get(sid)?.abort()
+    if (!identified?.database || !relayModelCall) return sendTo(connection, { type: 'gw_error', sid })
+    const call = new AbortController()
+    modelCalls.set(sid, call)
+    relayModelCall(
+      identified.database,
+      identified.host,
+      frame as RelayFrame,
+      (reply) => sendTo(connection, reply),
+      call.signal,
+    )
+      .catch((error) => {
+        console.error(`A model call through host ${identified.host.hostId} failed with ${errorNameOf(error)}`)
+        sendTo(connection, { type: 'gw_error', sid })
+      })
+      .finally(() => modelCalls.delete(sid))
   }
 
   const settle = (connection: Connection, frame: Frame) => {
@@ -143,6 +182,7 @@ export const createRuntimeHostGateway = ({
       connection.missedPings = 0
       return
     }
+    if (frame.type === 'gw_req' || frame.type === 'gw_cancel') return relayModelCallOf(connection, frame)
     const sessionFrame = parseHostSessionFrame(frame)
     const { identified } = connection
     if (!identified)
@@ -160,6 +200,7 @@ export const createRuntimeHostGateway = ({
       missedPings: 0,
       pending: new Map(),
       streams: new Map(),
+      modelCalls: new Map(),
     }
     let pingTimer: ReturnType<typeof setInterval> | undefined
     let identifyTimer: ReturnType<typeof setTimeout> | undefined
@@ -232,6 +273,7 @@ export const createRuntimeHostGateway = ({
     remove: commandWithoutResult('remove'),
     status: async (sandbox) => (await command(sandbox, 'status', { runtimeId: sandbox.runtimeId })) as SandboxStatus,
     connect: (sandbox) => ({
+      gatewayUrl: connectionByHost.get(keyOf(sandbox))?.identified?.gatewayUrl ?? defaultGatewayRelayUrl,
       fetch: async (sandboxRequest) => {
         const { status, headers, body } = await request(sandbox, { type: 'http', ...sandboxRequest })
         return { status, headers, body } as SandboxResponse

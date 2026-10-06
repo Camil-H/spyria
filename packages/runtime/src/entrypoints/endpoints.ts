@@ -45,6 +45,7 @@ const hostSessionFrame = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('hello'),
     token: boundedText(128),
+    gatewayUrl: z.optional(z.url({ protocol: /^https?$/ }).check(z.maxLength(256))),
     system: z.object({
       cpus: count,
       memoryBytes: count,

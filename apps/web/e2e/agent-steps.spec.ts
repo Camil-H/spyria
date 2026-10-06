@@ -154,7 +154,7 @@ test('17. an agent failure shows a red error notice and ends the turn', async ({
   await sendMessage(page, 'Try anyway')
 
   const error = messageItemsOf(page).getByRole('alert')
-  await expect(error).toContainText('The model is overloaded', agentReply)
+  await expect(error).toContainText('The provider is unavailable, try again shortly', agentReply)
   await expect(workingIndicatorOf(page)).toHaveCount(0)
 })
 

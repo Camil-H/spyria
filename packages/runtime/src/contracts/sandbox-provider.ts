@@ -18,6 +18,7 @@ export type SandboxSocketListener = {
 export type SandboxSocket = { send(data: string): void; close(): void }
 
 export type SandboxTransport = {
+  gatewayUrl: string
   fetch(request: SandboxRequest): Promise<SandboxResponse>
   openSocket(path: string, listener: SandboxSocketListener): SandboxSocket
 }

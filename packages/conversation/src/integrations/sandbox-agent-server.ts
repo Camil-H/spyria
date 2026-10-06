@@ -1,7 +1,7 @@
 import type { AgentConversation, AgentEndpoint, AgentServer } from '../contracts/agent.ts'
 import type { AgentEvent } from '../domain/agent-events.ts'
 
-export type AgentLlm = { baseUrl: string; model: string }
+export type AgentLlm = { model: string }
 
 const requestTimeoutMilliseconds = 30_000
 
@@ -32,17 +32,18 @@ const eventOf = (data: string): AgentEvent | undefined => {
 }
 
 export const createSandboxAgentServer = (llm: AgentLlm): AgentServer => ({
-  createConversation: async (endpoint) => {
+  createConversation: async (endpoint, llmToken) => {
     const created = await call(endpoint, 'POST', '/api/conversations', {
       agent: {
         kind: 'Agent',
         llm: {
           usage_id: 'agent',
           model: llm.model,
-          base_url: llm.baseUrl,
-          api_key: endpoint.llmToken,
+          base_url: endpoint.transport.gatewayUrl,
+          api_key: llmToken,
           stream: true,
           api_mode: 'chat',
+          num_retries: 0,
         },
         tools: [{ name: 'terminal' }, { name: 'file_editor' }, { name: 'task_tracker' }],
       },

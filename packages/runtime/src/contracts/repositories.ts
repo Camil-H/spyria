@@ -26,9 +26,10 @@ export type RuntimeRepository = {
   agentConversationOf(runtime: Runtime): Promise<string | undefined>
   rememberAgentConversation(runtime: Runtime, conversationId: string): Promise<string>
   forgetAgentConversation(runtime: Runtime): Promise<void>
+  chatOfLlmTokenHash(workspaceId: WorkspaceId, hostId: RuntimeHostId, hash: string): Promise<ChatId | undefined>
 }
 
-export type RuntimeSecret = 'apiKey' | 'llmToken'
+export type RuntimeSecret = 'apiKey' | 'llmTokenHash'
 export type RuntimeSecrets = {
   keep(runtime: Runtime, secret: RuntimeSecret, value: string): Promise<void>
   valueOf(runtime: Runtime, secret: RuntimeSecret): Promise<string | undefined>

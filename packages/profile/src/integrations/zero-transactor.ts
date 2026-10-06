@@ -1,10 +1,12 @@
 import { toolCatalog } from '@hq/db'
 import {
-  discardPlaceholderSecret,
+  enqueueJob,
+  gatewayKeyRefOf,
+  gatewayKeyRefsOf,
   insertLlmCredential,
-  keepPlaceholderSecret,
   lockMembership,
-  secretRefOfLlmCredential,
+  setVirtualKeyId,
+  virtualKeyIdOf,
 } from '@hq/db/server-writes'
 import { type ZeroContext, zql } from '@hq/db/zero-queries'
 import type { MemberId, WorkspaceId } from '@hq/kernel'
@@ -12,7 +14,9 @@ import type { Transaction } from '@rocicorp/zero'
 import type { ProfileTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import { DisplayName } from '../domain/display-name.ts'
 import { CredentialNotFound, MemberNotFound, NotOwnProfile } from '../domain/errors.ts'
-import { secretRef } from '../domain/llm-credential.ts'
+import { gatewayKeyOf, gatewayKeyRefOf as refOf } from '../domain/llm-credential.ts'
+
+export const profileJobTypes = { gatewaySync: 'profile.gateway-sync' } as const
 
 export const createZeroTransactor = (tx: Transaction, context: ZeroContext): ProfileTransactor => {
   const asContextMember = (workspaceId: WorkspaceId, memberId: MemberId) => {
@@ -31,9 +35,9 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
         tx.mutate.memberships.update({ ...asContextMember(member.workspaceId, member.id), displayName: member.name }),
     },
     llmCredentials: {
-      add: async ({ workspaceId, memberId, id, provider, last4 }, secretRef) => {
+      add: async ({ workspaceId, memberId, id, provider, last4 }, key) => {
         asContextMember(workspaceId, memberId)
-        await insertLlmCredential(tx, { workspaceId, id, userId: memberId, provider, last4, secretRef })
+        await insertLlmCredential(tx, { workspaceId, id, userId: memberId, provider, last4, secretRef: refOf(key) })
       },
       remove: async (workspaceId, memberId, id) => {
         asContextMember(workspaceId, memberId)
@@ -41,19 +45,30 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
           zql.llmCredentials.where('workspaceId', workspaceId).where('userId', memberId).where('id', id).one(),
         )
         if (!row) throw new CredentialNotFound(id)
-        const storedRef = await secretRefOfLlmCredential(tx, workspaceId, id)
+        const storedRef = await gatewayKeyRefOf(tx, workspaceId, id)
         await tx.mutate.llmCredentials.delete({ workspaceId, id })
-        return storedRef ? secretRef(storedRef) : null
+        return storedRef ? gatewayKeyOf(storedRef) : undefined
+      },
+      gatewayKeysOf: async (workspaceId, memberId) => {
+        asContextMember(workspaceId, memberId)
+        return (await gatewayKeyRefsOf(tx, workspaceId, memberId)).flatMap((ref) => gatewayKeyOf(ref) ?? [])
       },
     },
-    secrets: {
-      keep: async (workspaceId, secret) => {
-        const ref = secretRef(`placeholder:${crypto.randomUUID()}`)
-        await keepPlaceholderSecret(tx, workspaceId, ref, secret.reveal())
-        return ref
+    memberGatewayKeys: {
+      virtualKeyOf: (workspaceId, memberId) => virtualKeyIdOf(tx, workspaceId, memberId),
+      setVirtualKey: async (workspaceId, memberId, virtualKeyId) => {
+        asContextMember(workspaceId, memberId)
+        await setVirtualKeyId(tx, workspaceId, memberId, virtualKeyId)
       },
-      discard: async (workspaceId, ref) => {
-        await discardPlaceholderSecret(tx, workspaceId, ref)
+    },
+    gatewayJobs: {
+      syncLater: async (job) => {
+        await enqueueJob(tx, {
+          workspaceId: job.workspaceId,
+          type: profileJobTypes.gatewaySync,
+          payload: job,
+          delayMilliseconds: 0,
+        })
       },
     },
     personalConnections: {

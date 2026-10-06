@@ -123,6 +123,8 @@ export const chats = table(
     gitBranch: text(),
     originChatId: text(),
     agentTurnMessageId: text(),
+    agentTurnPrompterId: text(),
+    agentTurnFailure: text(),
     archived: boolean().notNull(),
     createdAt: instant().notNull(),
   },
@@ -221,16 +223,10 @@ export const llmCredentials = table(
   (table) => [primaryKey({ columns: [table.workspaceId, table.id] }), memberReference(table, table.userId)],
 )
 
-export const placeholderSecrets = table(
-  'placeholder_secrets',
-  {
-    workspaceId: text()
-      .notNull()
-      .references(() => workspaces.workspaceId),
-    ref: text().notNull(),
-    value: text().notNull(),
-  },
-  (table) => [primaryKey({ columns: [table.workspaceId, table.ref] })],
+export const memberGatewayKeys = table(
+  'member_gateway_keys',
+  { ...tenant, userId: text().notNull(), virtualKeyId: text().notNull() },
+  (table) => [primaryKey({ columns: [table.workspaceId, table.userId] }), memberReference(table, table.userId)],
 )
 
 export const workspaceConnections = table(
@@ -317,8 +313,8 @@ export const runtimes = table(
     failure: text().$type<RuntimeFailure>(),
     hostOnline: boolean().notNull().default(false),
     image: text().notNull(),
-    apiKeyRef: text(),
-    llmTokenRef: text(),
+    apiKey: text(),
+    llmTokenHash: text(),
     agentConversationId: text(),
     lastActiveAt: instant().notNull(),
     createdAt: instant().notNull(),

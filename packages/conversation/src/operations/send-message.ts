@@ -1,7 +1,9 @@
 import { type ChatId, type MemberId, messageId } from '@hq/kernel'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
+import { NoLlmKey } from '../domain/errors.ts'
 import { newMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
+import { noLlmKeyNoticeOf } from '../domain/model-call-failures.ts'
 
 type Dependencies = { transactor: ConversationTransactor }
 type Input = { id: string; chatId: ChatId; authorId: MemberId; text: string }
@@ -9,6 +11,9 @@ type Input = { id: string; chatId: ChatId; authorId: MemberId; text: string }
 export const sendMessage = ({ transactor }: Dependencies, { id, chatId, authorId, text }: Input) =>
   transactor.run(async (unitOfWork) => {
     const chat = await unitOfWork.chats.get(chatId)
+    const { members } = unitOfWork
+    if (chat.type === 'runtime' && !(await members.hasLlmCredential(authorId)))
+      throw new NoLlmKey(noLlmKeyNoticeOf(await members.displayNameOf(authorId)))
     const message = newMessage({
       id: messageId(id),
       workspaceId: chat.workspaceId,

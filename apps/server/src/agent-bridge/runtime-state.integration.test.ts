@@ -30,7 +30,7 @@ const gateway = createRuntimeHostGateway({
 })
 const agentBridge = createAgentBridge({
   sandboxProvider: gateway.sandboxProvider,
-  llm: { baseUrl: 'http://fake-llm.test/v1', model: 'openai/fake' },
+  llm: { model: 'openai/fake' },
   now: () => Date.now() + clockOffsetMilliseconds,
 })
 const app = createApp({ database, ...testAuthSettings, runtimeHosts: gateway, agentBridge })

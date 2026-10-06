@@ -1,8 +1,9 @@
 import { accessSync, constants, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { hostname } from 'node:os'
 import { join } from 'node:path'
-import { createCommandRunner, parseCommand } from './commands.ts'
+import { createCommandRunner, gatewayRelayAlias, parseCommand } from './commands.ts'
 import { createDocker } from './docker.ts'
+import { createModelRelay } from './model-relay.ts'
 import { createRelay, messageOf } from './relay.ts'
 import { freeMemoryBytes, systemOf } from './system.ts'
 
@@ -18,11 +19,21 @@ socketUrl.protocol = claimUrl.protocol === 'https:' ? 'wss:' : 'ws:'
 const stateDirectory = process.env.HQ_HOST_STATE_DIR ?? '/state'
 const tokenPath = join(stateDirectory, 'token')
 const docker = createDocker(process.env.DOCKER_SOCKET ?? '/var/run/docker.sock')
+const isInContainer = existsSync('/.dockerenv')
 const runner = createCommandRunner({
   docker,
   prefix: process.env.HQ_HOST_PREFIX ?? 'hq-',
-  selfContainerId: existsSync('/.dockerenv') ? hostname() : undefined,
+  selfContainerId: isInContainer ? hostname() : undefined,
 })
+let sendToHq = (_frame: object) => false
+const modelRelay = createModelRelay({ send: (frame) => sendToHq(frame) })
+const modelRelayServer = Bun.serve({
+  port: Number(process.env.HQ_HOST_GATEWAY_PORT ?? (isInContainer ? 4000 : 0)),
+  hostname: '0.0.0.0',
+  idleTimeout: 0,
+  fetch: modelRelay.fetch,
+})
+const gatewayUrl = `http://${isInContainer ? gatewayRelayAlias : 'host.docker.internal'}:${modelRelayServer.port}/v1`
 const heartbeatMilliseconds = 30_000
 const maximumBufferedBytes = 16 * 1024 * 1024
 const maximumReconnectDelayMilliseconds = 30_000
@@ -52,7 +63,8 @@ const connect = () => {
   const sendHeartbeat = async () =>
     send({ type: 'heartbeat', memoryFreeBytes: await freeMemoryBytes(), running: await runner.runningCount() })
   const hello = async (token: string) => {
-    send({ type: 'hello', token, system: await systemOf(docker) })
+    send({ type: 'hello', token, gatewayUrl, system: await systemOf(docker) })
+    sendToHq = (frame) => socket.readyState === WebSocket.OPEN && (send(frame), true)
     reconnectDelayMilliseconds = 1000
     heartbeatTimer = setInterval(() => sendHeartbeat().catch(() => {}), heartbeatMilliseconds)
     console.log(`Connected to ${socketUrl.origin}`)
@@ -81,11 +93,14 @@ const connect = () => {
     }
     if (frame.type === 'cmd') return void runCommand(frame)
     if (['http', 'ws_connect', 'ws_msg', 'ws_close'].includes(frame.type)) return void relay.handle(frame)
+    if (frame.type.startsWith('gw_')) return modelRelay.handle(frame)
     console.error(`Refused frame ${String(frame.type)}`)
   }
   socket.onclose = (event) => {
     clearInterval(heartbeatTimer)
     relay.closeAll()
+    sendToHq = () => false
+    modelRelay.closeAll()
     if (isRefusal(event.code) && storedToken() && claimCode && !isTokenRefused) {
       console.error(`${event.reason}; pairing again with the code in the URL`)
       isTokenRefused = true

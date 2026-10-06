@@ -1,7 +1,9 @@
 import {
   createRuntimeTransactor,
   ensureRuntimeRunning,
+  findLlmTokenChat,
   forgetAgentConversation,
+  issueAgentLlmToken,
   listHostChats,
   readAgentAccess,
   rememberAgentConversation,
@@ -37,6 +39,9 @@ export const createRuntimeAgentRuntimes = (transact: Transact, provider: Sandbox
     rememberConversation: (chat, conversationId) =>
       inTransaction((dependencies) => rememberAgentConversation(dependencies, { ...chat, conversationId })),
     forgetConversation: (chat) => inTransaction((dependencies) => forgetAgentConversation(dependencies, chat)),
+    issueLlmToken: (chat) => inTransaction((dependencies) => issueAgentLlmToken(dependencies, chat)),
+    chatOfLlmToken: (host, token) =>
+      inTransaction((dependencies) => findLlmTokenChat(dependencies, { ...host, token })),
     chatsOnHost: (host) => inTransaction((dependencies) => listHostChats(dependencies, host)),
     touch: (chat) => inTransaction((dependencies) => touchRuntime(dependencies, { ...chat, now: Date.now() })),
   }

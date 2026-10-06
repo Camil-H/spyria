@@ -2,8 +2,8 @@ import { expect, test } from 'bun:test'
 import { inspect } from 'node:util'
 import { memberId, workspaceId } from '@hq/kernel'
 import { DisplayName } from './display-name.ts'
-import { BlankDisplayName, BlankProvider, BlankSecret, ToolNotInCatalog } from './errors.ts'
-import { newLlmCredential } from './llm-credential.ts'
+import { BlankDisplayName, BlankProvider, BlankSecret, ToolNotInCatalog, UnsupportedProvider } from './errors.ts'
+import { gatewayKeyOf, gatewayKeyRefOf, newLlmCredential } from './llm-credential.ts'
 import { connectedTool } from './personal-connection.ts'
 import { Secret } from './secret.ts'
 
@@ -37,7 +37,7 @@ test('newLlmCredential trims, derives last4 and never carries the secret', () =>
     provider: '  OpenAI ',
     secret: new Secret('sk-test-1234567890'),
   })
-  expect(credential).toMatchObject({ provider: 'OpenAI', last4: '7890' })
+  expect(credential).toMatchObject({ provider: 'OpenAI', gatewayProvider: 'openai', last4: '7890' })
   expect(JSON.stringify(credential)).not.toContain('sk-test')
 })
 
@@ -50,6 +50,24 @@ test('newLlmCredential rejects a blank provider', () => {
       secret: new Secret('abcd'),
     }),
   ).toThrow(BlankProvider)
+})
+
+test('newLlmCredential maps the supported providers to the gateway and refuses the others', () => {
+  const credentialFor = (provider: string) =>
+    newLlmCredential({ ...owner, id: 'credential' as never, provider, secret: new Secret('abcd') })
+  expect(['Anthropic', 'mistral', 'Fake'].map((provider) => credentialFor(provider).gatewayProvider)).toEqual([
+    'anthropic',
+    'mistral',
+    'fake',
+  ])
+  expect(() => credentialFor('Foo')).toThrow(UnsupportedProvider)
+})
+
+test('a gateway key reference round-trips and refuses anything else', () => {
+  const key = { provider: 'openai', id: '8ec7907d-bef5-433b-92b8-df18842db1f2' }
+  expect(gatewayKeyOf(gatewayKeyRefOf(key))).toEqual(key)
+  expect(gatewayKeyOf('gateway:credential-alice-anthropic')).toBeUndefined()
+  expect(gatewayKeyOf('placeholder:abc')).toBeUndefined()
 })
 
 test('connectedTool connects a tool of the catalog and rejects others', () => {

@@ -22,7 +22,10 @@ export type AgentJobs = {
 
 export type AgentTurnRepository = {
   lock(chatId: ChatId): Promise<MessageId | null>
-  set(chatId: ChatId, promptId: MessageId | null): Promise<void>
+  set(chatId: ChatId, prompt: Pick<Message, 'id' | 'authorId'> | null): Promise<void>
+  modelCallTurn(chatId: ChatId): Promise<ModelCallTurn | undefined>
+  recordFailure(chatId: ChatId, promptId: MessageId, notice: string): Promise<void>
+  lastFailure(chatId: ChatId): Promise<string | null>
   nextPrompt(chatId: ChatId): Promise<Message | undefined>
   waitingPrompts(chatId: ChatId): Promise<Message[]>
   hasReply(promptId: MessageId): Promise<boolean>
@@ -30,7 +33,17 @@ export type AgentTurnRepository = {
   active(): Promise<{ chatId: ChatId; promptId: MessageId; lastEventAt: number }[]>
 }
 
-export type MemberDirectory = { displayNameOf(memberId: MemberId): Promise<string> }
+export type ModelCallTurn = {
+  promptId: MessageId
+  prompterId: MemberId
+  ownerId: MemberId | null
+  failure: string | null
+}
+
+export type MemberDirectory = {
+  displayNameOf(memberId: MemberId): Promise<string>
+  hasLlmCredential(memberId: MemberId): Promise<boolean>
+}
 
 export type AgentEventRepository = {
   append(chatId: ChatId, event: AgentEvent, replyToId: MessageId | null, at: Date): Promise<number | undefined>

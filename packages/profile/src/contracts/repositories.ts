@@ -1,5 +1,5 @@
 import type { CredentialId, MemberId, WorkspaceId } from '@hq/kernel'
-import type { LlmCredential, SecretRef } from '../domain/llm-credential.ts'
+import type { GatewayKey, LlmCredential } from '../domain/llm-credential.ts'
 import type { Member } from '../domain/member.ts'
 import type { PersonalConnection } from '../domain/personal-connection.ts'
 import type { Secret } from '../domain/secret.ts'
@@ -10,13 +10,25 @@ export type MemberRepository = {
 }
 
 export type LlmCredentialRepository = {
-  add(credential: LlmCredential, secretRef: SecretRef): Promise<void>
-  remove(workspaceId: WorkspaceId, memberId: MemberId, credentialId: CredentialId): Promise<SecretRef | null>
+  add(credential: LlmCredential, key: GatewayKey): Promise<void>
+  remove(workspaceId: WorkspaceId, memberId: MemberId, credentialId: CredentialId): Promise<GatewayKey | undefined>
+  gatewayKeysOf(workspaceId: WorkspaceId, memberId: MemberId): Promise<GatewayKey[]>
 }
 
-export type SecretStore = {
-  keep(workspaceId: WorkspaceId, secret: Secret): Promise<SecretRef>
-  discard(workspaceId: WorkspaceId, secretRef: SecretRef): Promise<void>
+export type MemberGatewayKeyRepository = {
+  virtualKeyOf(workspaceId: WorkspaceId, memberId: MemberId): Promise<string | undefined>
+  setVirtualKey(workspaceId: WorkspaceId, memberId: MemberId, virtualKeyId: string | null): Promise<void>
+}
+
+export type GatewaySyncJob = { workspaceId: WorkspaceId; memberId: MemberId; key: GatewayKey }
+export type GatewayJobs = { syncLater(job: GatewaySyncJob): Promise<void> }
+
+export type LlmGateway = {
+  addProviderKey(key: { provider: string; name: string; secret: Secret }): Promise<GatewayKey>
+  removeProviderKey(key: GatewayKey): Promise<void>
+  saveVirtualKey(virtualKey: { id: string | undefined; keys: GatewayKey[] }): Promise<string>
+  removeVirtualKey(id: string): Promise<void>
+  virtualKeyValue(id: string): Promise<string | undefined>
 }
 
 export type PersonalConnectionRepository = {

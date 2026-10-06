@@ -6,7 +6,7 @@ Org-agnostic, model-agnostic AI workspace: agent chats, dev sessions and knowled
 
 - Bun 1.3
 - Node 24 (zero-cache and Vite run on it)
-- Docker (Compose project `hq`: Postgres on 5434, Dex on 5556, zero-cache on 4848)
+- Docker (Compose project `hq`: Postgres on 5434, Dex on 5556, zero-cache on 4848, the model gateway on 127.0.0.1:8180)
 
 ## First run
 
@@ -14,7 +14,7 @@ Org-agnostic, model-agnostic AI workspace: agent chats, dev sessions and knowled
 bun install
 bun run db:migrate    # starts Postgres and Dex if needed
 bun run db:seed       # skips when the data is already there
-bun run dev           # adds zero-cache, then the server on 3000 and the app on http://localhost:5173
+bun run dev           # adds zero-cache and the model gateway, then the server on 3000 and the app on http://localhost:5173
 ```
 
 Migrate and seed before the first `bun run dev`: zero-cache needs the `hq_zero` publication the migrations create.
@@ -27,7 +27,7 @@ The app signs in through Dex in a popup (allow popups for `localhost:5173`). The
 - `bob@example.com`: member of Acme
 - `nina@example.com`: no membership (shows the "not invited" screen)
 
-`bun run dev` sets dev values for `HQ_TOKEN_SECRET`, `HQ_OIDC_ISSUER`, `HQ_OIDC_CLIENT_ID`, `HQ_OIDC_REDIRECT_URI` and `HQ_APP_ORIGIN`; the server refuses to start without them.
+`bun run dev` sets dev values for `HQ_TOKEN_SECRET`, `HQ_OIDC_ISSUER`, `HQ_OIDC_CLIENT_ID`, `HQ_OIDC_REDIRECT_URI`, `HQ_APP_ORIGIN`, `HQ_GATEWAY_URL`, `HQ_GATEWAY_ADMIN_USER` and `HQ_GATEWAY_ADMIN_PASSWORD`; the server refuses to start without them.
 
 ## Adding a runtime host for dev
 
@@ -41,7 +41,13 @@ Then, signed in as a workspace admin (Alice), open the workspace menu, **Workspa
 
 Without Docker for `hq-host` itself, run it as a process against the local Docker: `HQ_HOST_STATE_DIR=.hq-host bun apps/host/src/main.ts http://localhost:5173/h/<code>`. Remove the host in the settings page when done, then `docker rm -f hq-host` and `docker volume rm hq-host`.
 
-With a host online, a prompt in a runtime chat starts that chat's Agent Server and the agent answers. Until the gateway exists, the model is a fake LLM served by the dev server itself at `/fake-llm/v1` (it answers "Understood, working on it."); Agent Servers reach it at `http://host.docker.internal:3000/fake-llm/v1`. Set `HQ_LLM_BASE_URL` (and `HQ_LLM_MODEL`, default `openai/fake`) to point them at another OpenAI-compatible endpoint; the fake LLM is then not mounted.
+With a host online, a prompt in a runtime chat starts that chat's Agent Server and the agent answers. Agent Servers call the model through their host: `hq-host` relays `/v1/*` (at `http://hq-gateway-relay:4000/v1` on the runtime network) to HQ, which runs each call on the prompting member's key in the gateway. Rebuild the `hq-host` image after pulling this change (`docker build -t hq-host apps/host`, then recreate the container), or its runtimes cannot reach a model.
+
+## The model gateway
+
+`bun run dev` starts `hq-gateway` (Bifrost, pinned by digest, config in `infra/bifrost.json`) on `127.0.0.1:8180`. Its first start runs the one-shot `hq-gateway-database` container, which creates a `bifrost` role and database on `hq-postgres` (outside HQ's migrations); its own data lives in the `hq-gateway-data` volume. Members' API keys are stored in the gateway only: HQ keeps a reference and the last 4 characters. Dev secrets come from `HQ_GATEWAY_ENCRYPTION_KEY`, `HQ_GATEWAY_SETUP_TOKEN`, `HQ_GATEWAY_ADMIN_USER`, `HQ_GATEWAY_ADMIN_PASSWORD` and `HQ_GATEWAY_DB_PASSWORD` (dev defaults in `infra/docker-compose.yml`); the encryption key can never change without wiping the gateway's database.
+
+Keys added before the gateway existed, including Alice's seeded Anthropic key, are not in it: remove and re-add them in the profile, or prompts are refused. Supported providers are OpenAI, Anthropic, Mistral and Fake. Without real keys, add a key with provider `Fake` and any secret (a secret containing `refused` is refused, to try the error path): the dev server registers its fake LLM (`/fake-llm`) as the gateway's `fake` provider, and Agent Servers use `openai/fake/fake-model` unless `HQ_LLM_MODEL` is set (for example `openai/anthropic/claude-sonnet-4-5` with an Anthropic key); with `HQ_LLM_MODEL` set the fake LLM is not mounted.
 
 ## Day to day
 
@@ -52,18 +58,18 @@ bun run db:reset      # wipe the data and seed again
 bun run db:rebuild-messages [--chat <id>]   # rebuild the messages projection from the events
 bun run jobs:failed                         # list dead jobs with their last error
 bun run jobs:retry <id>|--all               # requeue dead jobs with their attempts reset
-bun run stack:down    # stop the containers (data is kept in the volume)
+bun run stack:down    # stop the containers, the gateway included (data is kept in the volumes)
 ```
 
 ## Checks
 
 ```sh
-bun run check:all          # everything below in order, failing fast; starts Postgres and Dex, leaves the stack running
+bun run check:all          # everything below in order, failing fast; starts Postgres and Dex (not the gateway), leaves the stack running
 bun run typecheck
 bun run test
-bun run test:integration   # needs bun run stack:up
+bun run test:integration   # needs bun run stack:up; runs its own gateway (hq-test-gateway-integration on 4880)
 bun run check:boundaries
 bun run lint
 bun run check:bundle       # builds the app, main chunk at most 760 kB, one React, no server-only SQL
-bun run test:e2e           # starts its own stack per worker
+bun run test:e2e           # starts its own stack per worker and one gateway (hq-test-gateway-e2e on 4881)
 ```

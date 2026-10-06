@@ -10,6 +10,7 @@ const imagePattern = /^ghcr\.io\/openhands\/agent-server@sha256:[a-f0-9]{64}$/
 const runtimeIdPattern = /^[a-z0-9][a-z0-9-]{0,62}$/
 const apiKeyPattern = /^[A-Za-z0-9_-]{16,128}$/
 const agentServerPort = 8000
+export const gatewayRelayAlias = 'hq-gateway-relay'
 const gibibyte = 1024 ** 3
 const volumeTargets = { ws: '/workspace', home: '/home/openhands', tmp: '/tmp' }
 const operations = ['create', 'prepare', 'start', 'stop', 'remove', 'status'] as const
@@ -127,7 +128,10 @@ export const createCommandRunner = ({
       })
     })
     if (selfContainerId)
-      await docker('POST', `/networks/${network}/connect`, { Container: selfContainerId }).catch((error) => {
+      await docker('POST', `/networks/${network}/connect`, {
+        Container: selfContainerId,
+        EndpointConfig: { Aliases: [gatewayRelayAlias] },
+      }).catch((error) => {
         if (!(error instanceof DockerError) || ![403, 409].includes(error.status)) throw error
       })
   }

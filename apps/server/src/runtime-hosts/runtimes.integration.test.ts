@@ -102,8 +102,8 @@ const jobsOf = async (type: string, runtimeId: string) =>
   [...(await database.$client`select * from jobs where type = ${type}`)].filter(
     (job) => job.payload.runtimeId === runtimeId,
   )
-const storedSecret = async (ref: string) =>
-  (await database.$client`select value from placeholder_secrets where ref = ${ref}`)[0]?.value
+const storedApiKey = async (runtimeId: string) =>
+  (await database.$client`select api_key from runtimes where id = ${runtimeId}`)[0]?.api_key
 
 test('ensureRuntimeRunning places a runtime on the least-loaded online host, creates, starts and waits for ready', async () => {
   const firstHost = await fakeHost('First host')
@@ -172,8 +172,7 @@ test('a stopped runtime resumes with start only; a missing container is recreate
   await runtimeIn(chat, 'running')
   expect(host.lifecycleCommands()).toEqual(['create', 'start'])
   expect(host.commands.find((command) => command.op === 'create')).toMatchObject({ runtimeId: runtime.id, apiKey })
-  expect(await runtimeOf(chat)).toMatchObject({ id: runtime.id, api_key_ref: runtime.api_key_ref })
-  expect(await storedSecret(runtime.api_key_ref)).toBe(apiKey)
+  expect(await runtimeOf(chat)).toMatchObject({ id: runtime.id, api_key: apiKey })
 })
 
 test('the sweep stops runtimes idle for more than an hour only, and touchRuntime postpones it', async () => {
@@ -212,7 +211,7 @@ test('the sweep removes runtimes stopped for 30 days with their container, volum
   })
   const history = await historyOf()
   expect(history.messages).toBeGreaterThan(0)
-  expect(await storedSecret(old.api_key_ref)).toBeDefined()
+  expect(await storedApiKey(old.id)).not.toBeNull()
 
   await idleFor(oldChat, '31 days')
   await idleFor(recentChat, '29 days')
@@ -223,7 +222,7 @@ test('the sweep removes runtimes stopped for 30 days with their container, volum
   expect(host.commands.filter((command) => command.op === 'remove').map((command) => command.runtimeId)).toEqual([
     old.id,
   ])
-  expect(await storedSecret(old.api_key_ref)).toBeUndefined()
+  expect(await storedApiKey(old.id)).toBeNull()
   expect(await historyOf()).toEqual(history)
 })
 
@@ -234,7 +233,7 @@ test('archiving a runtime chat removes its runtime', async () => {
   expect(await archive(chat)).toEqual(succeeded)
   await runtimeIn(chat, 'removed')
   expect(host.containers.has(runtime.id)).toBe(false)
-  expect(await storedSecret(runtime.api_key_ref)).toBeUndefined()
+  expect(await storedApiKey(runtime.id)).toBeNull()
 })
 
 test('commands to an offline host retry until it returns, rows stay untouched meanwhile, and hello reconciles drift', async () => {
@@ -285,7 +284,7 @@ test('removing a host marks its runtimes failed/lost', async () => {
   expect((await runtimeOf(runningChat)).state).toBe('removed')
 })
 
-test('the API key and its ref never reach Zero rows or logs, and other workspaces never see the runtime', async () => {
+test('the API key never reaches Zero rows or logs, and other workspaces never see the runtime', async () => {
   const spies = (['log', 'info', 'warn', 'error', 'debug'] as const).map((method) => spyOn(console, method))
   try {
     const host = await fakeHost('Secret host')
@@ -312,11 +311,11 @@ test('the API key and its ref never reach Zero rows or logs, and other workspace
     const alicesGlobex = await openStore({ workspaceId: globex, userId: alice })
     expect(alicesGlobex.read().runtimes).toEqual([])
     const replicated = JSON.stringify(bobsAcme.read().runtimes)
-    for (const secret of [apiKey, runtime.api_key_ref, 'apiKeyRef']) expect(replicated).not.toContain(secret)
+    for (const secret of [apiKey, 'apiKey']) expect(replicated).not.toContain(secret)
     const [published] = await database.$client<{ columns: string[] }[]>`
       select attnames as columns from pg_publication_tables where pubname = 'hq_zero' and tablename = 'runtimes'`
     expect(published?.columns).toContain('state')
-    expect(published?.columns).not.toContain('api_key_ref')
+    expect(published?.columns).not.toContain('api_key')
 
     await stoppedRuntime(chat)
     await ensure(chat)
@@ -324,7 +323,7 @@ test('the API key and its ref never reach Zero rows or logs, and other workspace
     expect(await archive(chat)).toEqual(succeeded)
     await runtimeIn(chat, 'removed')
     const logged = spies.map((spy) => Bun.inspect(spy.mock.calls)).join('\n')
-    for (const secret of [apiKey, runtime.api_key_ref]) expect(logged).not.toContain(secret)
+    expect(logged).not.toContain(apiKey)
   } finally {
     for (const spy of spies) spy.mockRestore()
   }
@@ -374,10 +373,9 @@ test('a runtime job whose worker died after claiming it is claimed again once it
   const id = crypto.randomUUID()
   const apiKey = 'an-api-key-generated-before-the-crash'
   await database.$client.begin(async (sql) => {
-    await sql`insert into placeholder_secrets (workspace_id, ref, value) values (${acme}, ${`placeholder:${id}`}, ${apiKey})`
     await sql`
-      insert into runtimes (workspace_id, id, chat_id, host_id, state, image, api_key_ref, last_active_at, created_at, state_changed_at)
-      values (${acme}, ${id}, ${chat}, ${host.id}, 'creating', ${agentServerImage}, ${`placeholder:${id}`}, now(), now(), now())`
+      insert into runtimes (workspace_id, id, chat_id, host_id, state, image, api_key, last_active_at, created_at, state_changed_at)
+      values (${acme}, ${id}, ${chat}, ${host.id}, 'creating', ${agentServerImage}, ${apiKey}, now(), now(), now())`
     await sql`
       insert into jobs (workspace_id, id, type, payload, run_at, attempts, state)
       values (${acme}, ${`job-${id}`}, 'runtime.create', ${JSON.stringify({ runtimeId: id })}::jsonb, now() + interval '1 second', 0, 'running')`

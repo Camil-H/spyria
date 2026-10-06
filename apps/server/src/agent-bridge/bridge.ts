@@ -146,6 +146,8 @@ export const createAgentBridge = ({
       jobs: handlers.jobs,
       ensureOpen,
       promptWaiting: (host: AgentHost) => handlers.promptWaiting(host),
+      modelCallTurn: handlers.modelCallTurn,
+      recordModelCallFailure: handlers.recordModelCallFailure,
       resumeActiveTurns: async () => {
         const chats = await database.$client<{ workspaceId: string; chatId: string }[]>`
           select workspace_id as "workspaceId", id as "chatId" from chats where agent_turn_message_id is not null`

@@ -6,7 +6,6 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import {
   type Database,
   memberships,
-  placeholderSecrets,
   resetDatabase,
   runtimeHosts,
   runtimes,
@@ -14,11 +13,17 @@ import {
   users,
   workspaces,
 } from '@hq/db/postgres'
-import { createTestDatabase, dropDatabase, startZeroCache } from '@hq/db/testing'
+import {
+  createTestDatabase,
+  dropDatabase,
+  prepareSeededGatewayKeys,
+  startZeroCache,
+  testGatewayAt,
+} from '@hq/db/testing'
 import { createZeroStore, type WorkspaceSession } from '@hq/db/zero-store'
 import { memberId, workspaceId } from '@hq/kernel'
 import { type Browser, type BrowserContext, test as base } from '@playwright/test'
-import { serverUrl, templateDatabaseName, viteUrl, zeroCachePortOf } from './stack-ports.ts'
+import { gatewayUrl, serverUrl, templateDatabaseName, viteUrl, zeroCachePortOf } from './stack-ports.ts'
 
 export { expect } from '@playwright/test'
 
@@ -30,8 +35,11 @@ export type WorkerStack = {
   reset: (options: ResetOptions) => Promise<void>
   stopRuntimeHost: () => Promise<void>
   startRuntimeHost: () => Promise<void>
+  gateway: <Result>(path: string) => Promise<Result>
+  setGatewayReachable: (isReachable: boolean) => Promise<void>
 }
-type WarmRuntime = { runtime: typeof runtimes.$inferSelect; secrets: (typeof placeholderSecrets.$inferSelect)[] }
+type WarmRuntime = { runtime: typeof runtimes.$inferSelect }
+const testGateway = testGatewayAt(gatewayUrl)
 type AgentScript = { text?: string; wordDelayMilliseconds?: number; command?: string; steps?: object[] }
 
 const aliceMemberId = 'member-alice'
@@ -179,7 +187,6 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
       let pairedHost: Awaited<ReturnType<typeof pairRuntimeHost>> | undefined
       const warmRuntimes = new Map<string, WarmRuntime>()
       const keepWarmRuntimes = async () => {
-        const secrets = await testDatabase.database.select().from(placeholderSecrets)
         for (const runtime of await testDatabase.database.select().from(runtimes)) {
           const kept = warmRuntimes.get(runtime.chatId)
           const isWarm = runtime.state === 'running' || runtime.state === 'stopped'
@@ -187,17 +194,15 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
           if (kept && (isKept ? !isWarm : isWarm))
             removeDockerObjects(`${workerHostPrefixOf(index)}rt-${kept.runtime.id}`)
           if (isKept && !isWarm) warmRuntimes.delete(runtime.chatId)
-          if (isWarm)
-            warmRuntimes.set(runtime.chatId, {
-              runtime,
-              secrets: secrets.filter((secret) => [runtime.apiKeyRef, runtime.llmTokenRef].includes(secret.ref)),
-            })
+          if (isWarm) warmRuntimes.set(runtime.chatId, { runtime })
         }
       }
       const writeReset = async (options: ResetOptions = { runtimeHost: false, warmRuntimes: false }) => {
         const epoch = `epoch-${workerInfo.workerIndex}-${++epochNumber}`
+        const writeSeededGatewayKeys = await prepareSeededGatewayKeys(testGateway)
         const reset = () =>
           resetDatabase(testDatabase.database, async (transaction) => {
+            await writeSeededGatewayKeys(transaction)
             await transaction.insert(users).values({ id: barrierMemberId, email: 'e2e-barrier@example.com' })
             await transaction.insert(workspaces).values({
               workspaceId: barrierWorkspaceId,
@@ -224,8 +229,7 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
               .insert(runtimeHosts)
               .values({ ...pairedHost.host, removedAt: options.runtimeHost ? null : new Date() })
             if (!options.runtimeHost || !options.warmRuntimes) return
-            for (const { runtime, secrets } of warmRuntimes.values()) {
-              await transaction.insert(placeholderSecrets).values(secrets)
+            for (const { runtime } of warmRuntimes.values()) {
               await transaction
                 .insert(runtimes)
                 .values({ ...runtime, hostOnline: true, agentConversationId: null, lastActiveAt: new Date() })
@@ -292,6 +296,10 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
         },
         stopRuntimeHost: async () => pairedHost?.stop(),
         startRuntimeHost: async () => pairedHost?.start(),
+        gateway: (path) => testGateway.call(path),
+        setGatewayReachable: async (isReachable) => {
+          await postToServer('/test/gateway', { db: testDatabase.name, reachable: String(isReachable) })
+        },
       })
       pairedHost.release()
       removeDockerObjects(workerHostPrefixOf(index))
@@ -308,6 +316,7 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
     async ({ workerStack, context, signedInAs, tokenSeconds, runtimeHost, warmRuntimes }, use) => {
       await postToServer('/test/fake-llm-script', { db: workerStack.databaseName })
       await postToServer('/test/runtime-creation', { db: workerStack.databaseName, failing: 'false' })
+      await workerStack.setGatewayReachable(true)
       await workerStack.reset({ runtimeHost, warmRuntimes })
       await signIn(context, workerStack, signedInAs, tokenSeconds)
       await use(undefined)

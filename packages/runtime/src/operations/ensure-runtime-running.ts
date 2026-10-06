@@ -42,7 +42,6 @@ const placeRuntime = async (
   await runtimes.add(runtime)
   if (runtime.state === 'creating') {
     await secrets.keep(runtime, 'apiKey', newSecretToken())
-    await secrets.keep(runtime, 'llmToken', newSecretToken())
     await jobs.enqueue(workspaceId, runtimeJobs.create, { runtimeId: runtime.id })
   }
   return runtime
@@ -50,7 +49,7 @@ const placeRuntime = async (
 
 export const ensureRuntimeRunning = ({ transactor }: Dependencies, input: Input) =>
   transactor.run(async (unitOfWork): Promise<Runtime> => {
-    const { runtimes, secrets, jobs } = unitOfWork
+    const { runtimes, jobs } = unitOfWork
     const { workspaceId, chatId, now } = input
     const existing = await runtimes.lockByChat(workspaceId, chatId)
     const step = ensureStepOf(existing)
@@ -58,7 +57,6 @@ export const ensureRuntimeRunning = ({ transactor }: Dependencies, input: Input)
     if (existing && step !== 'place') {
       const ensured = step === 'start' ? transitioned(existing, 'starting', now) : { ...existing, lastActiveAt: now }
       await runtimes.save(ensured)
-      if (!(await secrets.valueOf(existing, 'llmToken'))) await secrets.keep(existing, 'llmToken', newSecretToken())
       if (step === 'start') await jobs.enqueue(workspaceId, runtimeJobs.start, { runtimeId: existing.id })
       return ensured
     }

@@ -37,6 +37,12 @@ export class ChatNotFound extends ConversationError {
   }
 }
 
+export class NoLlmKey extends ConversationError {
+  constructor(notice: string) {
+    super('no_llm_key', notice)
+  }
+}
+
 export class ForeignWorkspace extends ConversationError {
   constructor() {
     super('foreign_workspace', 'The change targets a workspace other than the current one')

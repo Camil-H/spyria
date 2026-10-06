@@ -1,10 +1,10 @@
 const skippedOnClient = async () => undefined
 
 export const insertLlmCredential = skippedOnClient
-export const secretRefOfLlmCredential = skippedOnClient
-export const keepPlaceholderSecret = skippedOnClient
-export const discardPlaceholderSecret = skippedOnClient
-export const placeholderSecretOf = skippedOnClient
+export const gatewayKeyRefsOf = async () => []
+export const gatewayKeyRefOf = skippedOnClient
+export const virtualKeyIdOf = skippedOnClient
+export const setVirtualKeyId = skippedOnClient
 export const lockMembership = skippedOnClient
 export const enqueueJob = skippedOnClient
 export const setRuntimeHostSecretHash = skippedOnClient
@@ -16,6 +16,10 @@ export const serverOnlyRuntimeValueOf = skippedOnClient
 export const setServerOnlyRuntimeValue = skippedOnClient
 export const rememberAgentConversation = skippedOnClient
 export const lockChatTurn = async () => null
+export const setChatTurnPrompter = skippedOnClient
+export const chatTurnOf = skippedOnClient
+export const setChatTurnFailure = skippedOnClient
+export const runtimeChatOfLlmTokenHash = skippedOnClient
 export const pendingPrompts = async () => []
 export const activeAgentTurns = async () => []
 export const setRuntimesHostOnline = skippedOnClient
