@@ -24,6 +24,7 @@
         "@hq/kernel": "workspace:*",
         "@hq/profile": "workspace:*",
         "@hq/runtime": "workspace:*",
+        "@hq/usage": "workspace:*",
         "@hq/workspace": "workspace:*",
         "@rocicorp/zero": "1.9.0",
         "hono": "4.13.12",
@@ -41,6 +42,7 @@
         "@hq/profile": "workspace:*",
         "@hq/runtime": "workspace:*",
         "@hq/session": "workspace:*",
+        "@hq/usage": "workspace:*",
         "@hq/workspace": "workspace:*",
         "@openhands/ui": "1.0.0-beta.9",
         "react": "19.3.0",
@@ -113,6 +115,7 @@
         "@hq/db": "workspace:*",
         "@hq/kernel": "workspace:*",
         "@hq/ui": "workspace:*",
+        "@hq/usage": "workspace:*",
         "@radix-ui/react-tabs": "1.1.21",
         "@radix-ui/react-tooltip": "1.2.16",
         "lucide-react": "1.49.0",
@@ -171,6 +174,18 @@
       },
       "peerDependencies": {
         "react": "^19",
+      },
+    },
+    "packages/usage": {
+      "name": "@hq/usage",
+      "dependencies": {
+        "@hq/db": "workspace:*",
+        "@hq/kernel": "workspace:*",
+        "@hq/ui": "workspace:*",
+        "react": "19.3.0",
+      },
+      "devDependencies": {
+        "@types/react": "19.3.0",
       },
     },
     "packages/workspace": {
@@ -388,6 +403,8 @@
     "@hq/session": ["@hq/session@workspace:packages/session"],
 
     "@hq/ui": ["@hq/ui@workspace:packages/ui"],
+
+    "@hq/usage": ["@hq/usage@workspace:packages/usage"],
 
     "@hq/web": ["@hq/web@workspace:apps/web"],
 

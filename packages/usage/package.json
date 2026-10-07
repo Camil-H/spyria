@@ -1,0 +1,21 @@
+{
+  "name": "@hq/usage",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/client.ts",
+    "./server": "./src/server.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@hq/db": "workspace:*",
+    "@hq/kernel": "workspace:*",
+    "@hq/ui": "workspace:*",
+    "react": "19.3.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0"
+  }
+}
