@@ -115,7 +115,6 @@
         "@hq/db": "workspace:*",
         "@hq/kernel": "workspace:*",
         "@hq/ui": "workspace:*",
-        "@hq/usage": "workspace:*",
         "@radix-ui/react-tabs": "1.1.21",
         "@radix-ui/react-tooltip": "1.2.16",
         "lucide-react": "1.49.0",
@@ -182,6 +181,7 @@
         "@hq/db": "workspace:*",
         "@hq/kernel": "workspace:*",
         "@hq/ui": "workspace:*",
+        "@rocicorp/zero": "1.9.0",
         "react": "19.3.0",
       },
       "devDependencies": {

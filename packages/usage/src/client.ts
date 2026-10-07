@@ -1,3 +1,5 @@
 export type { ChatUsage, MemberUsage, ProjectUsage, UsageMonth, UsageTotals, WorkspaceUsage } from './domain/usage.ts'
+export { ChatUsageTable } from './entrypoints/ChatUsageTable.tsx'
+export { UsageSection } from './entrypoints/UsageSection.tsx'
 export { getChatUsage } from './queries/get-chat-usage.ts'
 export { getWorkspaceUsage } from './queries/get-workspace-usage.ts'

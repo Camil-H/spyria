@@ -4,6 +4,7 @@ import { schema } from '@hq/db/zero'
 import { type WorkspaceId, workspaceId } from '@hq/kernel'
 import { type createLlmGateway, createProfileJobs } from '@hq/profile/server'
 import { createRuntimeJobs, type SandboxProvider } from '@hq/runtime/server'
+import { createUsageJobs } from '@hq/usage/server'
 import type { ServerTransaction } from '@rocicorp/zero'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import type { AgentBridge } from './agent-bridge/bridge.ts'
@@ -32,6 +33,7 @@ export const startJobWorker = (
     sandboxProvider,
     agentBridge,
     llmGateway,
+    usageLogs,
   }: {
     pollIntervalMilliseconds?: number
     retryDelayMilliseconds?: number
@@ -39,6 +41,7 @@ export const startJobWorker = (
     sandboxProvider?: SandboxProvider
     agentBridge?: AgentBridge
     llmGateway?: ReturnType<typeof createLlmGateway>
+    usageLogs?: Parameters<typeof createUsageJobs>[0]
   } = {},
 ) => {
   const transactionalHandlers: Record<string, TransactionalJobHandler | undefined> = sessionJobs
@@ -46,6 +49,7 @@ export const startJobWorker = (
     ...(sandboxProvider && createRuntimeJobs(sandboxProvider)),
     ...agentBridge?.forDatabase(database).jobs,
     ...(llmGateway && createProfileJobs(llmGateway)),
+    ...(usageLogs && createUsageJobs(usageLogs)),
   }
   const zeroDatabase = zeroDrizzle(schema, database)
   const transact: Transact = (work) => zeroDatabase.transaction(work)

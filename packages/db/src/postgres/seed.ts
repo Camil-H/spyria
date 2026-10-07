@@ -112,6 +112,9 @@ const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
   await transaction.insert(tables.browserPages).values([...snapshot.browserPages])
   await transaction.insert(tables.sources).values([...snapshot.sources])
   await transaction.insert(tables.usageEntries).values(snapshot.usageEntries.map(withUserId))
+  await transaction
+    .insert(tables.usageSyncMarks)
+    .values(snapshot.workspaces.map((workspace) => ({ workspaceId: workspace.id, logsSince: new Date() })))
 }
 
 export const resetDatabase = (

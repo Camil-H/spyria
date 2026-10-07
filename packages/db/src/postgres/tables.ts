@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm'
 import {
+  bigint,
   boolean,
   check,
   foreignKey,
@@ -279,7 +280,7 @@ export const jobs = table(
     index().on(table.state, table.runAt),
     uniqueIndex('jobs_one_queued_sweep')
       .on(table.workspaceId, table.type)
-      .where(sql`${table.type} like '%.sweep' and ${table.state} = 'queued'`),
+      .where(sql`(${table.type} like '%.sweep' or ${table.type} = 'usage.sync') and ${table.state} = 'queued'`),
   ],
 )
 
@@ -388,13 +389,48 @@ export const sources = table(
 
 export const usageEntries = table(
   'usage_entries',
-  { ...chatScoped, userId: text().notNull(), tokens: integer().notNull(), costCents: integer().notNull() },
+  {
+    ...chatScoped,
+    month: text().notNull(),
+    userId: text().notNull(),
+    tokens: integer().notNull(),
+    costMicros: bigint({ mode: 'number' }).notNull(),
+    calls: integer().notNull(),
+  },
   (table) => [
-    primaryKey({ columns: [table.workspaceId, table.chatId, table.userId] }),
+    primaryKey({ columns: [table.workspaceId, table.month, table.chatId, table.userId] }),
     chatReference(table),
     memberReference(table, table.userId),
   ],
 )
+
+export const modelCalls = table(
+  'model_calls',
+  {
+    workspaceId: text()
+      .notNull()
+      .references(() => workspaces.workspaceId),
+    id: text().notNull(),
+    chatId: text().notNull(),
+    prompterId: text().notNull(),
+    ownerId: text(),
+    model: text().notNull(),
+    provider: text().notNull(),
+    inputTokens: integer().notNull(),
+    outputTokens: integer().notNull(),
+    costMicros: integer().notNull(),
+    status: text().$type<'success' | 'error'>().notNull(),
+    calledAt: instant().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.workspaceId, table.id] })],
+)
+
+export const usageSyncMarks = table('usage_sync_marks', {
+  workspaceId: text()
+    .primaryKey()
+    .references(() => workspaces.workspaceId),
+  logsSince: instant().notNull(),
+})
 
 export const relations = defineRelations(
   {

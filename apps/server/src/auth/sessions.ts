@@ -57,7 +57,7 @@ export const enqueueSweeps = (database: Database) =>
   database.$client.unsafe(enqueueSweepStatement, [
     null,
     '0 seconds',
-    ['sessions.sweep', 'runtime.sweep', 'agent.sweep'],
+    ['sessions.sweep', 'runtime.sweep', 'agent.sweep', 'usage.sync'],
   ])
 
 export const sessionJobs = {

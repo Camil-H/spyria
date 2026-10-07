@@ -1,5 +1,6 @@
 import { createDatabase } from '@hq/db/postgres'
 import { createLlmGateway } from '@hq/profile/server'
+import { createBifrostUsageLogs } from '@hq/usage/server'
 import { websocket } from 'hono/bun'
 import { createAgentBridge } from './agent-bridge/bridge.ts'
 import { createApp, defaultLlm } from './app.ts'
@@ -16,11 +17,12 @@ const requiredEnvironment = (name: string) => {
 }
 
 const database = createDatabase()
-const llmGateway = createLlmGateway({
+const gatewaySettings = {
   url: requiredEnvironment('HQ_GATEWAY_URL'),
   adminUser: requiredEnvironment('HQ_GATEWAY_ADMIN_USER'),
   adminPassword: requiredEnvironment('HQ_GATEWAY_ADMIN_PASSWORD'),
-})
+}
+const llmGateway = createLlmGateway(gatewaySettings)
 const runtimeHosts = createRuntimeHostGateway({
   databases: () => [database],
   afterHello: (helloDatabase, host) => agentBridge.forDatabase(helloDatabase).promptWaiting(host),
@@ -49,7 +51,12 @@ if (!llmModel)
   await llmGateway
     .registerFakeProvider('http://host.docker.internal:3000/fake-llm')
     .catch((error) => console.error(`Registering the fake LLM in the gateway failed: ${error.message}`))
-startJobWorker(database, { sandboxProvider: runtimeHosts.sandboxProvider, agentBridge, llmGateway })
+startJobWorker(database, {
+  sandboxProvider: runtimeHosts.sandboxProvider,
+  agentBridge,
+  llmGateway,
+  usageLogs: createBifrostUsageLogs(gatewaySettings),
+})
 await enqueueSweeps(database)
 await agentBridge.forDatabase(database).resumeActiveTurns()
 

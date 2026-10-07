@@ -5,6 +5,7 @@ import { PanelProvider, PanelToggle, SidePanel } from '@hq/panel'
 import { ProfileProvider, ProfileView, useHasLlmCredential } from '@hq/profile'
 import { RuntimeHostsSection, RuntimeProvider, RuntimeStatus } from '@hq/runtime'
 import { SessionProvider } from '@hq/session'
+import { ChatUsageTable, UsageSection } from '@hq/usage'
 import { useIsWorkspaceAdmin, WorkspaceLayout, WorkspaceProvider } from '@hq/workspace'
 import { BrowserRouter, Link, Navigate, Route, Routes, useOutletContext, useParams } from 'react-router'
 import type { Application } from './factory.ts'
@@ -35,7 +36,11 @@ const ChatRoute = ({ commands }: { commands: Application['conversationCommands']
         canPrompt={canPrompt}
         blockedNotice={blockedNotice}
       />
-      <SidePanel workspaceId={workspaceId} chatId={chatId} />
+      <SidePanel
+        workspaceId={workspaceId}
+        chatId={chatId}
+        usageTab={<ChatUsageTable workspaceId={workspaceId} chatId={chatId} />}
+      />
     </div>
   )
 }
@@ -47,7 +52,10 @@ const SettingsRoute = () => {
     <div className="flex max-w-3xl flex-col gap-8 p-6">
       <h1 className="text-2xl font-semibold">Workspace settings</h1>
       {isAdmin ? (
-        <RuntimeHostsSection workspaceId={workspaceId} />
+        <>
+          <RuntimeHostsSection workspaceId={workspaceId} />
+          <UsageSection workspaceId={workspaceId} />
+        </>
       ) : (
         <p className="text-muted">Only workspace admins can see this page</p>
       )}

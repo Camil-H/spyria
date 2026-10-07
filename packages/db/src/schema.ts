@@ -112,10 +112,12 @@ type BrowserPageRow = {
 }
 type UsageEntryRow = {
   workspaceId: WorkspaceId
+  month: string
   chatId: ChatId
   memberId: MemberId
   tokens: number
-  costCents: number
+  costMicros: number
+  calls: number
 }
 type SourceRow = { workspaceId: WorkspaceId; chatId: ChatId; name: string; origin: string }
 type ToolConnectionRow = {

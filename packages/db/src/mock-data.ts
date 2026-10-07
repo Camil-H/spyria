@@ -23,6 +23,7 @@ const launch = projectId('project-launch')
 const invoiceChat = chatId('chat-invoice-bug')
 const welcomeChat = chatId('chat-welcome')
 
+const currentMonth = () => new Date().toISOString().slice(0, 7)
 const invoiceBug = { workspaceId: acme, chatId: invoiceChat }
 const file = (path: string, kind: FileRow['kind'] = 'file'): FileRow => ({ ...invoiceBug, path, kind })
 const change = (path: string, additions: number, deletions: number, diffLines: ChangeRow['diffLines']): ChangeRow => ({
@@ -227,8 +228,8 @@ export const createMockSnapshot = (): Snapshot => ({
     },
   ],
   usageEntries: [
-    { ...invoiceBug, memberId: alice, tokens: 12400, costCents: 18 },
-    { ...invoiceBug, memberId: bob, tokens: 3100, costCents: 5 },
+    { ...invoiceBug, month: currentMonth(), memberId: alice, tokens: 12400, costMicros: 180_000, calls: 3 },
+    { ...invoiceBug, month: currentMonth(), memberId: bob, tokens: 3100, costMicros: 50_000, calls: 1 },
   ],
   sources: [
     { workspaceId: acme, chatId: welcomeChat, name: 'Employee handbook', origin: 'Onyx' },

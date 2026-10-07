@@ -170,7 +170,7 @@ export const startTestGateway = async ({
 }) => {
   const containerName = `hq-test-gateway-${name}`
   const databaseName = `hq_test_gateway_${name}`
-  const configFile = join(tmpdir(), `${containerName}.json`)
+  const configFile = join(tmpdir(), `${containerName}-${crypto.randomUUID()}.json`)
   const postgresUrl = new URL(databaseUrl)
   const store = {
     enabled: true,

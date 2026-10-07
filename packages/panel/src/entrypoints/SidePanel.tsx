@@ -21,7 +21,7 @@ import {
   Terminal,
   Users,
 } from 'lucide-react'
-import { Activity, type ComponentType, useState } from 'react'
+import { Activity, type ComponentType, type ReactNode, useState } from 'react'
 import { getPanelTabs, type PanelTabId } from '../queries/get-panel-tabs.ts'
 import { BrowserTab } from './BrowserTab.tsx'
 import { ChangesTab } from './ChangesTab.tsx'
@@ -35,10 +35,9 @@ import { ResizeHandle } from './ResizeHandle.tsx'
 import { SourcesTab } from './SourcesTab.tsx'
 import type { TabProps } from './TabProps.ts'
 import { TerminalTab } from './TerminalTab.tsx'
-import { UsageTab } from './UsageTab.tsx'
 import { tabClass } from './ui.ts'
 
-const tabs: Record<PanelTabId, { label: string; Icon: LucideIcon; Component: ComponentType<TabProps> }> = {
+const tabs: Record<PanelTabId, { label: string; Icon: LucideIcon; Component: ComponentType<TabProps> | null }> = {
   files: { label: 'Files', Icon: FolderTree, Component: FilesTab },
   changes: { label: 'Changes', Icon: FileDiff, Component: ChangesTab },
   terminal: { label: 'Terminal', Icon: Terminal, Component: TerminalTab },
@@ -46,7 +45,7 @@ const tabs: Record<PanelTabId, { label: string; Icon: LucideIcon; Component: Com
   commits: { label: 'Commits', Icon: GitCommitHorizontal, Component: CommitsTab },
   browser: { label: 'Browser', Icon: Globe, Component: BrowserTab },
   sources: { label: 'Sources', Icon: BookOpen, Component: SourcesTab },
-  usage: { label: 'Usage', Icon: ChartColumn, Component: UsageTab },
+  usage: { label: 'Usage', Icon: ChartColumn, Component: null },
   connections: { label: 'Connected tools', Icon: Plug, Component: ConnectionsTab },
   members: { label: 'Members', Icon: Users, Component: MembersTab },
 }
@@ -78,7 +77,7 @@ const TabTrigger = ({ tabId }: { tabId: PanelTabId }) => {
   )
 }
 
-export const SidePanel = ({ workspaceId, chatId }: TabProps) => {
+export const SidePanel = ({ workspaceId, chatId, usageTab }: TabProps & { usageTab: ReactNode }) => {
   const tabIds = useQuery(getPanelTabs(workspaceId, chatId))
   const { isOpen, width } = usePanel()
   if (!tabIds) return null
@@ -102,7 +101,7 @@ export const SidePanel = ({ workspaceId, chatId }: TabProps) => {
             const { Component } = tabs[tabId]
             return (
               <Content key={tabId} value={tabId} className="min-h-0 flex-1 overflow-y-auto p-4 text-ink">
-                <Component workspaceId={workspaceId} chatId={chatId} />
+                {Component ? <Component workspaceId={workspaceId} chatId={chatId} /> : usageTab}
               </Content>
             )
           })}

@@ -4,6 +4,7 @@ import { schema } from '@hq/db/zero'
 import { chatId, workspaceId } from '@hq/kernel'
 import { createLlmGateway } from '@hq/profile/server'
 import { createRuntimeTransactor, ensureRuntimeRunning, type SandboxProvider } from '@hq/runtime/server'
+import { createBifrostUsageLogs, syncUsageNow } from '@hq/usage/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { websocket } from 'hono/bun'
 import { setCookie } from 'hono/cookie'
@@ -20,18 +21,25 @@ import { createFakeHosts, type FakeHost, issueTestSession, testAuthSettings } fr
 
 const port = Number(process.env.PORT ?? 3100)
 
-type ServedDatabase = { database: Database; jobWorker: ReturnType<typeof startJobWorker> }
+type ServedDatabase = {
+  database: Database
+  jobWorker: ReturnType<typeof startJobWorker>
+  syncUsage: () => Promise<void>
+  usageTimer: ReturnType<typeof setInterval>
+}
 const servedDatabaseByName = new Map<string, ServedDatabase>()
 const databasesFailingCreation = new Set<string>()
 const databasesWithoutGateway = new Set<string>()
 const fakeHostByDatabase = new Map<string, { host: FakeHost; isOnline: boolean }>()
 const nameOf = (database: Database) =>
   [...servedDatabaseByName].find(([, served]) => served.database === database)?.[0] ?? ''
-const llmGateway = createLlmGateway({
+const gatewaySettings = {
   url: process.env.HQ_GATEWAY_URL ?? '',
   adminUser: process.env.HQ_GATEWAY_ADMIN_USER ?? '',
   adminPassword: process.env.HQ_GATEWAY_ADMIN_PASSWORD ?? '',
-})
+}
+const llmGateway = createLlmGateway(gatewaySettings)
+const usageSyncIntervalMilliseconds = 2_000
 const sandboxProviderOf = (databaseName: string): SandboxProvider => ({
   ...runtimeHosts.sandboxProvider,
   create: async (sandbox) => {
@@ -43,9 +51,18 @@ const databaseByName = (databaseName: string) => {
   const served = servedDatabaseByName.get(databaseName)
   if (served) return served.database
   const database = createDatabase(databaseUrlOf(databaseName))
+  const usageLogs = createBifrostUsageLogs({ ...gatewaySettings, labels: { database: databaseName } })
+  const zeroDatabase = zeroDrizzle(schema, database)
+  const syncUsage = () =>
+    syncUsageNow(usageLogs, {
+      workspaceId: workspaceId('workspace-acme'),
+      transact: (work) => zeroDatabase.transaction(work),
+    })
   servedDatabaseByName.set(databaseName, {
     database,
     jobWorker: startJobWorker(database, { sandboxProvider: sandboxProviderOf(databaseName), agentBridge, llmGateway }),
+    syncUsage,
+    usageTimer: setInterval(() => syncUsage().catch(() => {}), usageSyncIntervalMilliseconds),
   })
   return database
 }
@@ -56,6 +73,7 @@ const releaseDatabase = async (databaseName: string) => {
   if (fakeHost?.isOnline) await fakeHost.host.disconnect().catch(() => {})
   const served = servedDatabaseByName.get(databaseName)
   servedDatabaseByName.delete(databaseName)
+  clearInterval(served?.usageTimer)
   await served?.jobWorker.stop()
   if (served) agentBridge.release(served.database)
   await served?.database.$client.end({ timeout: 5 })
@@ -70,7 +88,10 @@ const runtimeHosts = createRuntimeHostGateway({
     gatewayUrlOf: (database) => (databasesWithoutGateway.has(nameOf(database)) ? 'http://127.0.0.1:9' : llmGateway.url),
     llmGateway,
     agentBridge: () => agentBridge,
-    providerHeadersOf: (database, chat) => ({ 'x-bf-eh-x-hq-chat': `${nameOf(database)}/${chat.chatId}` }),
+    providerHeadersOf: (database, chat) => ({
+      'x-bf-eh-x-hq-chat': `${nameOf(database)}/${chat.chatId}`,
+      'x-bf-dim-database': nameOf(database),
+    }),
   }),
 })
 
@@ -103,6 +124,12 @@ const app = createApp({
     const { db = '', chat } = context.req.query()
     if (chat) scriptByChat.set(`${db}/${chat}`, await context.req.json())
     else for (const key of scriptByChat.keys()) if (key.startsWith(`${db}/`)) scriptByChat.delete(key)
+    return context.body(null, 204)
+  })
+  .post('/test/usage-sync', async (context) => {
+    const { db = '' } = context.req.query()
+    databaseByName(db)
+    await servedDatabaseByName.get(db)?.syncUsage()
     return context.body(null, 204)
   })
   .post('/test/runtime-creation', (context) => {
