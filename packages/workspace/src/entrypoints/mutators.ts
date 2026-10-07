@@ -2,7 +2,6 @@ import type { ZeroContext } from '@hq/db/zero-queries'
 import { chatId, projectId, workspaceId } from '@hq/kernel'
 import { defineMutator, defineMutators, type Transaction } from '@rocicorp/zero'
 import { z } from 'zod/mini'
-import { runtimeChatDefaults } from '../domain/chat.ts'
 import { ForeignWorkspace } from '../domain/errors.ts'
 import { Name } from '../domain/name.ts'
 import { createZeroTransactor } from '../integrations/zero-transactor.ts'
@@ -24,7 +23,7 @@ const workspaceArguments = z.object({ workspaceId: z.pipe(id, z.transform(worksp
 
 const dependenciesOf = (tx: Transaction, context: ZeroContext, args: { workspaceId: string }) => {
   if (args.workspaceId !== context.workspaceId) throw new ForeignWorkspace()
-  return { transactor: createZeroTransactor(tx, context), ...runtimeChatDefaults }
+  return { transactor: createZeroTransactor(tx, context) }
 }
 
 export const workspaceMutators = defineMutators({

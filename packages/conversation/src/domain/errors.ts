@@ -48,3 +48,9 @@ export class ForeignWorkspace extends ConversationError {
     super('foreign_workspace', 'The change targets a workspace other than the current one')
   }
 }
+
+export class InvalidRouting extends ConversationError {
+  constructor(message: string) {
+    super('invalid_routing', message)
+  }
+}

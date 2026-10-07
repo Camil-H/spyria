@@ -7,6 +7,7 @@ import type {
   MessageRepository,
   PlanRepository,
   ReadMarkerRepository,
+  RoutingRepository,
 } from './repositories.ts'
 
 export type UnitOfWork = {
@@ -18,6 +19,7 @@ export type UnitOfWork = {
   agentTurns: AgentTurnRepository
   agentEvents: AgentEventRepository
   plans: PlanRepository
+  routing: RoutingRepository
 }
 
 export type ConversationTransactor = {

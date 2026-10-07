@@ -17,8 +17,9 @@ const gatewayProviders: Record<string, string> = {
   anthropic: 'anthropic',
   mistral: 'mistral',
   fake: 'fake',
+  'fake-small': 'fake-small',
 }
-const gatewayKeyRefPattern = /^gateway:([a-z]+)\/(.+)$/
+const gatewayKeyRefPattern = /^gateway:([a-z-]+)\/(.+)$/
 
 export const gatewayKeyRefOf = (key: GatewayKey) => `gateway:${key.provider}/${key.id}`
 

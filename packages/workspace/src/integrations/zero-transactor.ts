@@ -1,7 +1,15 @@
-import { appendChatEvent } from '@hq/db/server-writes'
+import { appendChatEvent, gatewayKeyRefsOf } from '@hq/db/server-writes'
 import type { Chat as ChatRow, Project as ProjectRow } from '@hq/db/zero'
 import { type ZeroContext, zql } from '@hq/db/zero-queries'
-import { chatId, memberId, projectId, workspaceId } from '@hq/kernel'
+import {
+  chatId,
+  defaultModelOf,
+  memberId,
+  projectId,
+  providersOfGatewayRefs,
+  reachableModelsOf,
+  workspaceId,
+} from '@hq/kernel'
 import { createRuntimeTransactor, removeChatRuntime } from '@hq/runtime/published'
 import type { Transaction } from '@rocicorp/zero'
 import type { Transactor, UnitOfWork } from '../contracts/transactor.ts'
@@ -89,6 +97,7 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Tra
             ownerKind: 'user',
             ownerUserId: chat.ownerId,
             ownerServiceIdentityId: null,
+            subagentPolicy: 'auto',
             createdAt: changedAt.getTime(),
           })
         else await tx.mutate.chats.update(chatFields(inContextWorkspace(chat)))
@@ -104,6 +113,11 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Tra
       },
       listByProject: async (id) =>
         (await tx.run(zql.chats.where('workspaceId', context.workspaceId).where('projectId', id))).map(toChat),
+    },
+    memberModels: {
+      defaultModelOf: async (id) =>
+        defaultModelOf(reachableModelsOf(providersOfGatewayRefs(await gatewayKeyRefsOf(tx, context.workspaceId, id))))
+          ?.id ?? null,
     },
     chatRuntimes: {
       remove: async (chatId) => {

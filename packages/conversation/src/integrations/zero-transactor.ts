@@ -1,18 +1,32 @@
 import {
   activeAgentTurns,
   appendChatEvent,
+  chatRoutingOf,
   chatTurnOf,
   enqueueJob,
+  gatewayKeyRefsOf,
+  insertRoutingDecision,
   isChatEventStored,
   lastAgentEvent,
   lockChatTurn,
   pendingPrompts,
+  setChatAgentModel,
   setChatTurnFailure,
   setChatTurnPrompter,
 } from '@hq/db/server-writes'
 import type { Message as MessageRow } from '@hq/db/zero'
 import { zql } from '@hq/db/zero-queries'
-import { type ChatId, chatId, type MessageId, memberId, messageId, type WorkspaceId, workspaceId } from '@hq/kernel'
+import {
+  type ChatId,
+  chatId,
+  type MessageId,
+  memberId,
+  messageId,
+  providersOfGatewayRefs,
+  reachableModelsOf,
+  type WorkspaceId,
+  workspaceId,
+} from '@hq/kernel'
 import type { Transaction } from '@rocicorp/zero'
 import type { ConversationTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import { agentSweepIntervalMilliseconds, waitingNotices } from '../domain/agent-events.ts'
@@ -196,6 +210,29 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
           await tx.mutate.planSteps.delete({ workspaceId: contextWorkspaceId, chatId: id, position })
         for (const [position, item] of items.entries())
           await tx.mutate.planSteps.insert({ workspaceId: contextWorkspaceId, chatId: id, position, ...item })
+      },
+    },
+    routing: {
+      chatRouting: async (id) => {
+        const row = await chatRoutingOf(tx, contextWorkspaceId, id)
+        if (!row) throw new ChatNotFound(id)
+        return { ...row, ownerId: row.ownerId === null ? null : memberId(row.ownerId) }
+      },
+      reachableModels: async (id) =>
+        tx.location === 'server'
+          ? reachableModelsOf(providersOfGatewayRefs(await gatewayKeyRefsOf(tx, contextWorkspaceId, id)))
+          : undefined,
+      update: (id, fields) =>
+        tx.mutate.chats.update({
+          workspaceId: contextWorkspaceId,
+          id,
+          ...(fields as Partial<{ subagentPolicy: 'auto' | 'same_as_main' }>),
+        }),
+      setAgentModel: async (id, model) => {
+        await setChatAgentModel(tx, contextWorkspaceId, id, model)
+      },
+      record: async (decision) => {
+        await insertRoutingDecision(tx, { workspaceId: contextWorkspaceId, ...decision })
       },
     },
     readMarkers: {

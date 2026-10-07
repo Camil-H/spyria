@@ -1,14 +1,6 @@
 import type { UsageMonth } from '../domain/usage.ts'
 
-const microsPerDollar = 1_000_000
-const microsPerCent = 10_000
-
-export const formatTokens = (tokens: number) => tokens.toLocaleString('en-US')
-
-export const formatCost = (costMicros: number) =>
-  costMicros > 0 && costMicros < microsPerCent
-    ? '< $0.01'
-    : `$${(costMicros / microsPerDollar).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+export { formatCost, formatTokens } from '@hq/ui'
 
 export const currentMonth = (now = new Date()): UsageMonth => now.toISOString().slice(0, 7)
 

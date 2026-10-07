@@ -44,6 +44,7 @@ const readSnapshot = async () => {
         createdAt,
         agentTurnPrompterId,
         agentTurnFailure,
+        agentModel,
         ...chat
       }) => ({
         ...chat,

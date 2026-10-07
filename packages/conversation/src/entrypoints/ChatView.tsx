@@ -8,6 +8,7 @@ import { getConversation } from '../queries/get-conversation.ts'
 import { Composer } from './Composer.tsx'
 import { MessageList } from './MessageList.tsx'
 import { useConversationCommands } from './providers.tsx'
+import { SessionChip } from './SessionChip.tsx'
 import { useStreamedReply, withStreamedReply } from './useStreamedReply.ts'
 
 const bubbleClassName = 'rounded-full border border-line px-2 py-0.5 text-xs text-muted'
@@ -50,9 +51,14 @@ export const ChatView = ({
                 <span className="text-sm text-muted">
                   Agent acts as <strong className="font-semibold text-ink">{conversation.ownerName}</strong>
                 </span>
-                <span className={bubbleClassName}>
-                  {conversation.model} · {conversation.reasoningEffort}
-                </span>
+                <SessionChip
+                  workspaceId={workspaceId}
+                  chatId={chatId}
+                  model={conversation.model}
+                  reasoningEffort={conversation.reasoningEffort}
+                  defaultModel={conversation.defaultModel}
+                  subagentPolicy={conversation.subagentPolicy}
+                />
                 {runtimeStatus}
                 {conversation.gitBranch !== null && (
                   <span className={`${bubbleClassName} inline-flex items-center gap-1`}>

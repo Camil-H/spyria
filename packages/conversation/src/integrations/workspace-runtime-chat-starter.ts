@@ -1,9 +1,8 @@
 import type { ZeroContext } from '@hq/db/zero-queries'
-import { createChatFromChat, createZeroTransactor, runtimeChatDefaults } from '@hq/workspace/published'
+import { createChatFromChat, createZeroTransactor } from '@hq/workspace/published'
 import type { Transaction } from '@rocicorp/zero'
 import type { RuntimeChatStarter } from '../contracts/runtime-chat-starter.ts'
 
 export const createZeroRuntimeChatStarter = (tx: Transaction, context: ZeroContext): RuntimeChatStarter => ({
-  start: (input) =>
-    createChatFromChat({ transactor: createZeroTransactor(tx, context), ...runtimeChatDefaults }, input),
+  start: (input) => createChatFromChat({ transactor: createZeroTransactor(tx, context) }, input),
 })

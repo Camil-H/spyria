@@ -15,6 +15,7 @@ export type Conversation = {
   history: object[]
   turnAbort?: AbortController
   mcpTools?: string[]
+  llmsByUsageId: Map<string, object>
 }
 type Turn = (conversation: Conversation, text: string) => Promise<void>
 
@@ -268,10 +269,13 @@ export const createFakeAgentServer = ({ modelCall }: { modelCall?: () => ModelCa
         if (headers?.['x-session-api-key'] !== container.apiKey) return { status: 401, body: '' }
         if (method === 'POST' && path === '/api/conversations') {
           const id = crypto.randomUUID()
+          const created = JSON.parse(body ?? '{}')
+          const llm = created.agent?.llm ?? {}
           conversations.set(id, {
             id,
             apiKey: container.apiKey,
-            created: JSON.parse(body ?? '{}'),
+            created,
+            llmsByUsageId: new Map([[llm.usage_id, llm]]),
             events: [],
             executionStatus: 'idle',
             listeners: new Set(),
@@ -291,6 +295,12 @@ export const createFakeAgentServer = ({ modelCall }: { modelCall?: () => ModelCa
         if (method === 'POST' && action === 'interrupt') {
           interrupts.push(conversation.id)
           fake.onInterrupt(conversation)
+          return { status: 200, body: JSON.stringify({ success: true }) }
+        }
+        if (method === 'POST' && action === 'switch_llm') {
+          const { llm } = JSON.parse(body ?? '{}')
+          if (!conversation.llmsByUsageId.has(llm.usage_id)) conversation.llmsByUsageId.set(llm.usage_id, llm)
+          ;(conversation.created.agent as { llm: object }).llm = conversation.llmsByUsageId.get(llm.usage_id) ?? llm
           return { status: 200, body: JSON.stringify({ success: true }) }
         }
         if (method !== 'POST' || action !== 'events') return { status: 404, body: '' }

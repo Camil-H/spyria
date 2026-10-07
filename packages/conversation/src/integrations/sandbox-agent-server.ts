@@ -1,4 +1,4 @@
-import type { AgentConversation, AgentEndpoint, AgentServer } from '../contracts/agent.ts'
+import type { AgentConversation, AgentEndpoint, AgentLlmChoice, AgentServer } from '../contracts/agent.ts'
 import type { AgentEvent } from '../domain/agent-events.ts'
 
 export type AgentLlm = { model: string }
@@ -30,20 +30,23 @@ const eventOf = (data: string): AgentEvent | undefined => {
   }
 }
 
-export const createSandboxAgentServer = (llm: AgentLlm): AgentServer => ({
-  createConversation: async (endpoint, llmToken) => {
+const llmConfigOf = (endpoint: AgentEndpoint, llmToken: string, { model, effort, usageId }: AgentLlmChoice) => ({
+  usage_id: usageId,
+  model,
+  base_url: endpoint.transport.gatewayUrl,
+  api_key: llmToken,
+  stream: true,
+  api_mode: 'chat',
+  num_retries: 0,
+  ...(effort && { reasoning_effort: effort }),
+})
+
+export const createSandboxAgentServer = (): AgentServer => ({
+  createConversation: async (endpoint, llmToken, llm) => {
     const created = await call(endpoint, 'POST', '/api/conversations', {
       agent: {
         kind: 'Agent',
-        llm: {
-          usage_id: 'agent',
-          model: llm.model,
-          base_url: endpoint.transport.gatewayUrl,
-          api_key: llmToken,
-          stream: true,
-          api_mode: 'chat',
-          num_retries: 0,
-        },
+        llm: llmConfigOf(endpoint, llmToken, llm),
         tools: [{ name: 'terminal' }, { name: 'file_editor' }, { name: 'task_tracker' }],
         mcp_config: {
           hq: {
@@ -57,6 +60,11 @@ export const createSandboxAgentServer = (llm: AgentLlm): AgentServer => ({
       autotitle: false,
     })
     return String(created?.id)
+  },
+  switchLlm: async (conversation, llmToken, llm) => {
+    await call(conversation, 'POST', `/api/conversations/${conversation.conversationId}/switch_llm`, {
+      llm: llmConfigOf(conversation, llmToken, llm),
+    })
   },
   sendMessage: async (conversation, text) => {
     await call(conversation, 'POST', `/api/conversations/${conversation.conversationId}/events`, {

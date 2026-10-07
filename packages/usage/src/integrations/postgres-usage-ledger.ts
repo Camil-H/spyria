@@ -9,19 +9,20 @@ const recordCalls = `
   with incoming as (
     select * from jsonb_to_recordset($2::jsonb) as call(
       id text, "chatId" text, "prompterId" text, "ownerId" text, model text, provider text,
-      "inputTokens" int, "outputTokens" int, "costMicros" int, status text, "calledAt" timestamptz)
+      "inputTokens" int, "outputTokens" int, "costMicros" int, status text, role text, "calledAt" timestamptz)
   ), inserted as (
     insert into model_calls (workspace_id, id, chat_id, prompter_id, owner_id, model, provider,
-      input_tokens, output_tokens, cost_micros, status, called_at)
+      input_tokens, output_tokens, cost_micros, status, role, called_at)
     select $1, id, "chatId", "prompterId", "ownerId", model, provider,
-      "inputTokens", "outputTokens", "costMicros", status, "calledAt" from incoming
+      "inputTokens", "outputTokens", "costMicros", status, role, "calledAt" from incoming
     on conflict do nothing
     returning *)
   insert into usage_entries (workspace_id, month, chat_id, user_id, tokens, cost_micros, calls)
   select workspace_id, to_char(called_at at time zone 'UTC', 'YYYY-MM'), chat_id, prompter_id,
     sum(input_tokens + output_tokens), sum(cost_micros), count(*)
   from inserted
-  where exists (select 1 from chats where chats.workspace_id = inserted.workspace_id and chats.id = inserted.chat_id)
+  where inserted.role is distinct from 'router'
+    and exists (select 1 from chats where chats.workspace_id = inserted.workspace_id and chats.id = inserted.chat_id)
     and exists (select 1 from memberships
       where memberships.workspace_id = inserted.workspace_id and memberships.user_id = inserted.prompter_id)
   group by 1, 2, 3, 4

@@ -127,6 +127,7 @@ export const lockRuntimeHostLoads = (tx: Transaction, workspaceId: string) =>
 const serverOnlyRuntimeColumns = {
   apiKey: 'api_key',
   llmTokenHash: 'llm_token_hash',
+  llmSwitchTokenHash: 'llm_switch_token_hash',
   agentConversation: 'agent_conversation_id',
 }
 type ServerOnlyRuntimeColumn = keyof typeof serverOnlyRuntimeColumns
@@ -216,7 +217,7 @@ export const runtimeChatOfLlmTokenHash = async (tx: Transaction, workspaceId: st
   (
     await firstOnServer<{ chatId: string }>(
       tx,
-      'select chat_id as "chatId" from runtimes where workspace_id = $1 and host_id = $2 and llm_token_hash = $3',
+      'select chat_id as "chatId" from runtimes where workspace_id = $1 and host_id = $2 and $3 in (llm_token_hash, llm_switch_token_hash)',
       [workspaceId, hostId, hash],
     )
   )?.chatId
@@ -314,3 +315,54 @@ export const appendChatEvent = async (tx: ServerTransaction, { workspaceId, chat
   )
   return Number((appended as { seq: number }).seq)
 }
+
+export const chatRoutingOf = (tx: Transaction, workspaceId: string, chatId: string) =>
+  firstOnServer<{
+    mode: string | null
+    ownerId: string | null
+    model: string | null
+    reasoningEffort: string | null
+    defaultModel: string | null
+    agentModel: string | null
+  }>(
+    tx,
+    `select mode, owner_user_id as "ownerId", model, reasoning_effort as "reasoningEffort",
+       default_model as "defaultModel", agent_model as "agentModel"
+     from chats where workspace_id = $1 and id = $2`,
+    [workspaceId, chatId],
+  )
+
+export const setChatAgentModel = (tx: Transaction, workspaceId: string, chatId: string, model: string) =>
+  onServer(tx, 'update chats set agent_model = $3 where workspace_id = $1 and id = $2', [workspaceId, chatId, model])
+
+export const insertRoutingDecision = (tx: Transaction, decision: Record<string, unknown>) =>
+  onServer(
+    tx,
+    'insert into routing_decisions select * from jsonb_populate_record(null::routing_decisions, $1::jsonb)',
+    [
+      JSON.stringify(
+        Object.fromEntries(
+          Object.entries({ ...decision, id: crypto.randomUUID(), createdAt: new Date() }).map(([name, value]) => [
+            name.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`),
+            value,
+          ]),
+        ),
+      ),
+    ],
+  )
+
+export const chatModelCalls = async (tx: Transaction, workspaceId: string, chatId: string) => ({
+  models: await onServer<{ model: string; calls: number; tokens: number; costMicros: number }>(
+    tx,
+    `select provider || '/' || model as model, count(*)::int as calls,
+       sum(input_tokens + output_tokens)::int as tokens, sum(cost_micros)::int as "costMicros"
+     from model_calls where workspace_id = $1 and chat_id = $2 group by 1 order by min(called_at)`,
+    [workspaceId, chatId],
+  ),
+  latest: await firstOnServer<{ tokens: number }>(
+    tx,
+    `select input_tokens + output_tokens as tokens from model_calls
+     where workspace_id = $1 and chat_id = $2 and role is distinct from 'router' order by called_at desc limit 1`,
+    [workspaceId, chatId],
+  ),
+})

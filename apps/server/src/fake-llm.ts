@@ -7,14 +7,24 @@ type FakeLlmStep =
   | { plan: { title: string; status: string }[] }
   | { fail: string }
   | { tool: string; arguments?: Record<string, unknown> }
-export type FakeLlmScript = { text?: string; wordDelayMilliseconds?: number; command?: string; steps?: FakeLlmStep[] }
+type FakeRoute = { tier: string; confidence: string; effort: string } | 'fail' | 'slow'
+export type FakeLlmScript = {
+  text?: string
+  wordDelayMilliseconds?: number
+  command?: string
+  steps?: FakeLlmStep[]
+  route?: FakeRoute
+}
 type CompletionRequest = {
   stream?: boolean
+  response_format?: object
   messages?: { role: string }[]
   tools?: { function: { name: string } }[]
 }
 
 const defaultText = 'Understood, working on it.'
+const unsureRoute = { tier: 'medium', confidence: 'low', effort: 'medium' }
+const slowRouteMilliseconds = 5_000
 const defaultWordDelayMilliseconds = 30
 const workingDirectory = '/workspace/project/'
 const usage = { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }
@@ -74,13 +84,23 @@ const refusedKeyOf = (key: string) => ({
 })
 
 export const createFakeLlm = (
-  scriptOf: (request: Request) => FakeLlmScript | undefined | Promise<FakeLlmScript | undefined>,
+  scriptOf: (request: Request, isClassifier: boolean) => FakeLlmScript | undefined | Promise<FakeLlmScript | undefined>,
 ) =>
   new Hono().post('/v1/chat/completions', async (context) => {
     const key = context.req.header('authorization')?.replace(/^Bearer /, '') ?? ''
     if (key.includes('refused')) return context.json(refusedKeyOf(key), 401)
     const request = await context.req.json<CompletionRequest>()
-    const script = (await scriptOf(context.req.raw)) ?? {}
+    const script = (await scriptOf(context.req.raw, Boolean(request.response_format))) ?? {}
+    if (request.response_format) {
+      const route = script.route ?? unsureRoute
+      if (route === 'fail') return context.json({ error: { message: 'Classifier down', type: 'server_error' } }, 500)
+      if (route === 'slow') await Bun.sleep(slowRouteMilliseconds)
+      const answer = JSON.stringify({ ...(route === 'slow' ? unsureRoute : route), reason: 'fake classification' })
+      return context.json({
+        ...completionOf({ message: { role: 'assistant', content: answer }, finish_reason: 'stop' }, { usage }),
+        object: 'chat.completion',
+      })
+    }
     const steps = script.steps ?? (script.command ? [{ command: script.command }] : [])
     const turnMessages = request.messages?.slice(request.messages.findLastIndex((message) => message.role === 'user'))
     const step = request.tools?.length

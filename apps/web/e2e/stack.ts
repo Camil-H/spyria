@@ -49,7 +49,13 @@ export type WorkerStack = {
 }
 type WarmRuntime = { runtime: typeof runtimes.$inferSelect }
 const testGateway = testGatewayAt(gatewayUrl)
-type AgentScript = { text?: string; wordDelayMilliseconds?: number; command?: string; steps?: object[] }
+type AgentScript = {
+  text?: string
+  wordDelayMilliseconds?: number
+  command?: string
+  steps?: object[]
+  route?: object | string
+}
 
 const aliceMemberId = 'member-alice'
 const barrierMemberId = memberId('member-e2e-barrier')
@@ -219,6 +225,7 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
         const warmRuntimes = pairedHosts[mode]?.warmRuntimes
         if (!warmRuntimes) return
         for (const runtime of await testDatabase.database.select().from(runtimes)) {
+          if (!warmChatIds.includes(runtime.chatId)) continue
           const kept = warmRuntimes.get(runtime.chatId)
           const isWarm = runtime.state === 'running' || runtime.state === 'stopped'
           const isKept = kept?.runtime.id === runtime.id

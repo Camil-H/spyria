@@ -121,6 +121,9 @@ export const chats = table(
     name: text().notNull(),
     model: text(),
     reasoningEffort: text(),
+    defaultModel: text(),
+    subagentPolicy: text().$type<'auto' | 'same_as_main'>().notNull().default('auto'),
+    agentModel: text(),
     gitBranch: text(),
     originChatId: text(),
     agentTurnMessageId: text(),
@@ -316,6 +319,7 @@ export const runtimes = table(
     image: text().notNull(),
     apiKey: text(),
     llmTokenHash: text(),
+    llmSwitchTokenHash: text(),
     agentConversationId: text(),
     lastActiveAt: instant().notNull(),
     createdAt: instant().notNull(),
@@ -420,9 +424,28 @@ export const modelCalls = table(
     outputTokens: integer().notNull(),
     costMicros: integer().notNull(),
     status: text().$type<'success' | 'error'>().notNull(),
+    role: text(),
     calledAt: instant().notNull(),
   },
   (table) => [primaryKey({ columns: [table.workspaceId, table.id] })],
+)
+
+export const routingDecisions = table(
+  'routing_decisions',
+  {
+    ...chatScoped,
+    id: text().notNull(),
+    conversationId: text(),
+    role: text().$type<'session' | 'manual'>().notNull(),
+    memberId: text().notNull(),
+    inputsDigest: text(),
+    classifierOutput: jsonb(),
+    model: text().notNull(),
+    reason: text().notNull(),
+    costMicros: integer().notNull(),
+    createdAt: instant().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.workspaceId, table.id] }), chatReference(table)],
 )
 
 export const usageSyncMarks = table('usage_sync_marks', {

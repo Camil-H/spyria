@@ -43,8 +43,9 @@ test('createChat inserts a runtime chat owned by the caller in the given project
     type: 'runtime',
     ownerKind: 'user',
     ownerUserId: bob,
-    model: 'Claude Sonnet 5.5',
-    reasoningEffort: 'Medium',
+    model: null,
+    reasoningEffort: null,
+    defaultModel: null,
     archived: false,
   })
 })

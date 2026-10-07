@@ -6,6 +6,7 @@ import type {
   AgentEventListener,
   AgentEventSockets,
   AgentHost,
+  SessionClassifier,
 } from '../contracts/agent.ts'
 import { type AgentEvent, isStoredAgentEvent, type TurnOutcome } from '../domain/agent-events.ts'
 import { createRuntimeAgentRuntimes, type SandboxProvider } from '../integrations/runtime-agent-runtimes.ts'
@@ -32,19 +33,28 @@ export const createAgentHandlers = ({
   transact,
   sandboxProvider,
   llm,
+  classifier,
   eventSockets,
   now = Date.now,
 }: {
   transact: Transact
   sandboxProvider: SandboxProvider
-  llm: AgentLlm
+  llm?: AgentLlm
+  classifier?: SessionClassifier
   eventSockets: AgentEventSockets
   now?: () => number
 }) => {
   const runtimes = createRuntimeAgentRuntimes(transact, sandboxProvider)
-  const agentServer = createSandboxAgentServer(llm)
+  const agentServer = createSandboxAgentServer()
   const transactorOf = (id: WorkspaceId) => createTransactingZeroTransactor(transact, id)
-  const dependenciesOf = (id: WorkspaceId) => ({ transactor: transactorOf(id), runtimes, agentServer, eventSockets })
+  const dependenciesOf = (id: WorkspaceId) => ({
+    transactor: transactorOf(id),
+    runtimes,
+    agentServer,
+    eventSockets,
+    classifier,
+    fixedLlm: llm,
+  })
   return {
     jobs: {
       [agentJobTypes.prompt]: ({ workspaceId, payload }: Job) =>

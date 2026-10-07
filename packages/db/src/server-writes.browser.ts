@@ -26,4 +26,8 @@ export const setRuntimesHostOnline = skippedOnClient
 export const isChatEventStored = async () => false
 export const lastAgentEvent = skippedOnClient
 export const agentObservationOf = skippedOnClient
+export const chatRoutingOf = skippedOnClient
+export const setChatAgentModel = skippedOnClient
+export const insertRoutingDecision = skippedOnClient
+export const chatModelCalls = skippedOnClient
 export const appendChatEvent = () => Promise.reject(new Error('Chat events are appended on the server only'))

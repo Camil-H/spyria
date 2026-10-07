@@ -17,12 +17,16 @@ export const readAgentAccess = ({ transactor }: Dependencies, { workspaceId, cha
     return { sandbox, apiKey, conversationId: (await runtimes.agentConversationOf(runtime)) ?? null }
   })
 
-export const issueAgentLlmToken = ({ transactor }: Dependencies, { workspaceId, chatId }: ChatRuntime) =>
+export const issueAgentLlmToken = (
+  { transactor }: Dependencies,
+  { workspaceId, chatId, isForSwitch = false }: ChatRuntime & { isForSwitch?: boolean },
+) =>
   transactor.run(async ({ runtimes, secrets }) => {
     const runtime = await runtimes.findByChat(workspaceId, chatId)
     if (!runtime) throw new RuntimeNotFound(chatId)
     const token = newSecretToken()
-    await secrets.keep(runtime, 'llmTokenHash', await hashSecret(token))
+    await secrets.keep(runtime, isForSwitch ? 'llmSwitchTokenHash' : 'llmTokenHash', await hashSecret(token))
+    if (!isForSwitch) await secrets.keep(runtime, 'llmSwitchTokenHash', null)
     return token
   })
 

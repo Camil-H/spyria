@@ -39,7 +39,8 @@ export const createRuntimeAgentRuntimes = (transact: Transact, provider: Sandbox
     rememberConversation: (chat, conversationId) =>
       inTransaction((dependencies) => rememberAgentConversation(dependencies, { ...chat, conversationId })),
     forgetConversation: (chat) => inTransaction((dependencies) => forgetAgentConversation(dependencies, chat)),
-    issueLlmToken: (chat) => inTransaction((dependencies) => issueAgentLlmToken(dependencies, chat)),
+    issueLlmToken: (chat, isForSwitch) =>
+      inTransaction((dependencies) => issueAgentLlmToken(dependencies, { ...chat, isForSwitch })),
     chatOfLlmToken: (host, token) =>
       inTransaction((dependencies) => findLlmTokenChat(dependencies, { ...host, token })),
     chatsOnHost: (host) => inTransaction((dependencies) => listHostChats(dependencies, host)),

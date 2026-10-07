@@ -69,6 +69,7 @@ export const createBifrostUsageLogs = ({
                   outputTokens: token_usage?.completion_tokens ?? 0,
                   costMicros: Math.round((cost ?? 0) * 1_000_000),
                   status,
+                  role: metadata.role ?? null,
                   calledAt: new Date(timestamp),
                 },
               ]

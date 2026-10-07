@@ -12,6 +12,7 @@ export type Chat = Readonly<{
   archived: boolean
   model: string | null
   reasoningEffort: string | null
+  defaultModel: string | null
   gitBranch: string | null
   originChatId: ChatId | null
 }>
@@ -33,7 +34,7 @@ export const renamedChat = (chat: Chat, name: Name): Chat => ({ ...chat, name })
 
 export const startRuntimeChat = (
   source: Chat,
-  fields: { id: ChatId; name: Name; ownerId: MemberId; model: string; reasoningEffort: string },
+  fields: { id: ChatId; name: Name; ownerId: MemberId; defaultModel: string | null },
 ): Chat => {
   if (source.archived) throw new SourceChatArchived()
   return {
@@ -41,10 +42,10 @@ export const startRuntimeChat = (
     workspaceId: source.workspaceId,
     projectId: source.projectId,
     type: 'runtime',
+    model: null,
+    reasoningEffort: null,
     gitBranch: null,
     originChatId: source.id,
     archived: false,
   }
 }
-
-export const runtimeChatDefaults = { defaultRuntimeModel: 'Claude Sonnet 5.5', defaultReasoningEffort: 'Medium' }

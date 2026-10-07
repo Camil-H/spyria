@@ -1,5 +1,5 @@
 import { type ChatId, type MessageId, messageId } from '@hq/kernel'
-import type { AgentEventSockets, AgentRuntimes, AgentServer } from '../contracts/agent.ts'
+import type { AgentEventSockets, AgentRuntimes, AgentServer, SessionClassifier } from '../contracts/agent.ts'
 import type { ConversationTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import { type TurnOutcome, turnEndNoticeOf } from '../domain/agent-events.ts'
 import { type Message, newMessage } from '../domain/message.ts'
@@ -12,6 +12,8 @@ export type AgentDependencies = {
   runtimes: AgentRuntimes
   agentServer: AgentServer
   eventSockets: AgentEventSockets
+  classifier?: SessionClassifier
+  fixedLlm?: { model: string }
 }
 
 export const appendNotice = ({ messages }: UnitOfWork, prompt: Message, text: string) =>

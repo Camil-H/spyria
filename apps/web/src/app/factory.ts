@@ -1,6 +1,7 @@
 import {
   type AgentStream,
   type ConversationCommands,
+  chatRoutingPathOf,
   commandOutputPathOf,
   conversationMutators,
   createStoreDraftRepository,
@@ -159,6 +160,10 @@ export const createApp = async (
             headers: { authorization: `Bearer ${store.tokenOf(workspaceId)}` },
           })
         ).text(),
+      chatRouting: async ({ workspaceId, chatId }) =>
+        (
+          await fetch(chatRoutingPathOf(chatId), { headers: { authorization: `Bearer ${store.tokenOf(workspaceId)}` } })
+        ).json(),
       connectTool: toolConnections.connectTool,
       startRuntimeFromMessage: async (input) => {
         const newChatId = crypto.randomUUID()

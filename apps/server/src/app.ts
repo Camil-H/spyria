@@ -1,4 +1,12 @@
-import { commandOutputPathOf, conversationMutators, readCommandOutput } from '@hq/conversation/server'
+import {
+  type AgentChat,
+  chatRoutingPathOf,
+  commandOutputPathOf,
+  conversationMutators,
+  createGatewaySessionClassifier,
+  readChatRouting,
+  readCommandOutput,
+} from '@hq/conversation/server'
 import type { Database } from '@hq/db/postgres'
 import { schema } from '@hq/db/zero'
 import { queries, type ZeroContext } from '@hq/db/zero-queries'
@@ -7,6 +15,7 @@ import {
   addLlmCredentialFromRequest,
   availableToolsFromRequest,
   type createLlmGateway,
+  createMemberKeyReader,
   llmCredentialsPath,
   ProfileError,
   profileMutators,
@@ -37,6 +46,24 @@ import { createRuntimeHostGateway, type RuntimeHostGateway } from './runtime-hos
 
 export const defaultLlm = { model: 'openai/fake/fake-model' }
 type LlmGateway = ReturnType<typeof createLlmGateway>
+
+export const sessionClassifierOf =
+  (
+    llmGateway: LlmGateway,
+    {
+      gatewayUrlOf = () => llmGateway.url,
+      headersOf,
+    }: {
+      gatewayUrlOf?: (database: Database) => string
+      headersOf?: (database: Database, chat: AgentChat) => Record<string, string>
+    } = {},
+  ) =>
+  (database: Database) =>
+    createGatewaySessionClassifier({
+      gatewayUrl: () => gatewayUrlOf(database),
+      virtualKeyOf: createMemberKeyReader((work) => zeroDrizzle(schema, database).transaction(work), llmGateway),
+      headersOf: headersOf && ((chat) => headersOf(database, chat)),
+    })
 
 const statusByErrorCode: Record<string, number> = { not_admin: 403, host_not_found: 404 }
 
@@ -149,6 +176,13 @@ export const createApp = ({
           .transaction((tx) => readCommandOutput(tx, context.get('zeroContext'), chatId, stepId)),
       )
     })
+    .get(chatRoutingPathOf(':chatId'), async (context) =>
+      context.json(
+        await context
+          .get('zeroDatabase')
+          .transaction((tx) => readChatRouting(tx, context.get('zeroContext'), context.req.param('chatId') ?? '')),
+      ),
+    )
     .post(llmCredentialsPath, async (context) => {
       const body = await context.req.json().catch(() => null)
       return endpointResponse('Adding an LLM credential', 201, async () => {

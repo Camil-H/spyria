@@ -3,6 +3,7 @@ import {
   type AgentConversation,
   type AgentLlm,
   createAgentHandlers,
+  type SessionClassifier,
   streamedTextOf,
 } from '@hq/conversation/server'
 import type { Database } from '@hq/db/postgres'
@@ -26,10 +27,12 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
 export const createAgentBridge = ({
   sandboxProvider,
   llm,
+  sessionClassifierOf,
   now,
 }: {
   sandboxProvider: SandboxProvider
-  llm: AgentLlm
+  llm?: AgentLlm
+  sessionClassifierOf?: (database: Database) => SessionClassifier
   now?: () => number
 }) => {
   const bridgeOf = (database: Database) => {
@@ -51,6 +54,7 @@ export const createAgentBridge = ({
       transact: (work) => zeroDrizzle(schema, database).transaction(work),
       sandboxProvider,
       llm,
+      classifier: sessionClassifierOf?.(database),
       now,
       eventSockets: {
         ensureOpen: (...target) => ensureOpen(...target),

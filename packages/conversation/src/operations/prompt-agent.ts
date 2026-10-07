@@ -1,38 +1,138 @@
-import type { MessageId, WorkspaceId } from '@hq/kernel'
+import { catalogModelOf, cheapestModelOf, type MemberId, type MessageId, type WorkspaceId } from '@hq/kernel'
 import type { AgentChat, AgentConversation, AgentEndpoint } from '../contracts/agent.ts'
 import { agentNotices, startFailureNoticeOf } from '../domain/agent-events.ts'
 import type { Message } from '../domain/message.ts'
+import { noLlmKeyNoticeOf } from '../domain/model-call-failures.ts'
+import {
+  classificationOf,
+  classifierRequestOf,
+  sessionChoiceOf,
+  unreachableSessionNoticeOf,
+} from '../domain/session-routing.ts'
 import {
   type AgentDependencies,
   appendNotice,
   beginAgentTurn,
+  closeAgentTurn,
   noticeWaitingPrompts,
   releaseAgentTurn,
 } from './agent-turn.ts'
 
 type Input = { workspaceId: WorkspaceId; messageId: MessageId }
+type Prepared = { conversation: AgentConversation } | { refusal: string }
 
 const runtimeStartPollMilliseconds = 500
+const agentLlmOf = (model: string, effort: string | null, usageId = 'agent') => ({
+  model: `openai/${model}`,
+  effort: effort ?? undefined,
+  usageId,
+})
+const digestOf = async (value: object) =>
+  [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(value))))]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('')
+
+const routeSession = async (
+  { transactor, classifier }: AgentDependencies,
+  chat: AgentChat,
+  prompterId: MemberId,
+  prompt: Message,
+) => {
+  const { routing, reachable } = await transactor.run(async ({ routing }) => ({
+    routing: await routing.chatRouting(chat.chatId),
+    reachable: (await routing.reachableModels(prompterId)) ?? [],
+  }))
+  const classifierModel = cheapestModelOf(reachable)
+  const request =
+    classifierModel && classifierRequestOf({ model: classifierModel.id, message: prompt.body, mode: routing.mode })
+  const answer = request && (await classifier?.classify({ chat, prompterId, ownerId: routing.ownerId, request }))
+  const classification = classificationOf(answer?.content)
+  const costMicros = Math.round(
+    (answer?.inputTokens ?? 0) * (classifierModel?.dollarsPerMillionInputTokens ?? 0) +
+      (answer?.outputTokens ?? 0) * (classifierModel?.dollarsPerMillionOutputTokens ?? 0),
+  )
+  return {
+    choice: sessionChoiceOf({ reachable, defaultModel: routing.defaultModel, classification }),
+    classification,
+    costMicros,
+    inputsDigest: request ? await digestOf(request) : null,
+  }
+}
+
+const keepSession = async (
+  { transactor, runtimes, agentServer }: AgentDependencies,
+  chat: AgentChat,
+  conversation: AgentConversation,
+  prompterId: MemberId,
+): Promise<Prepared> => {
+  const { routing, reachable } = await transactor.run(async ({ routing }) => ({
+    routing: await routing.chatRouting(chat.chatId),
+    reachable: await routing.reachableModels(prompterId),
+  }))
+  const { model, reasoningEffort, agentModel } = routing
+  if (!model || !catalogModelOf(model)) return { conversation }
+  if (!reachable?.some((candidate) => candidate.id === model)) return { refusal: unreachableSessionNoticeOf(model) }
+  if (agentModel !== model) {
+    const llmToken = await runtimes.issueLlmToken(chat, true)
+    await agentServer.switchLlm(
+      conversation,
+      llmToken,
+      agentLlmOf(model, reasoningEffort, `agent:${crypto.randomUUID()}`),
+    )
+    await transactor.run(({ routing }) => routing.setAgentModel(chat.chatId, model))
+  }
+  return { conversation }
+}
 
 const conversationFor = async (
-  { transactor, runtimes, agentServer }: AgentDependencies,
+  dependencies: AgentDependencies,
   chat: AgentChat,
   endpoint: AgentEndpoint,
   prompt: Message,
-) => {
+): Promise<Prepared> => {
+  const { transactor, runtimes, agentServer, fixedLlm } = dependencies
   const storedId = endpoint.conversationId
-  if (storedId !== null && (await agentServer.statusOf({ ...endpoint, conversationId: storedId })) !== undefined)
-    return { ...endpoint, conversationId: storedId }
+  const prompterId = prompt.authorId
+  if (storedId !== null && (await agentServer.statusOf({ ...endpoint, conversationId: storedId })) !== undefined) {
+    const conversation = { ...endpoint, conversationId: storedId }
+    return fixedLlm || !prompterId ? { conversation } : keepSession(dependencies, chat, conversation, prompterId)
+  }
   if (storedId !== null) {
     await runtimes.forgetConversation(chat)
     await transactor.run((unitOfWork) => appendNotice(unitOfWork, prompt, agentNotices.newSession))
   }
+  const routed = fixedLlm || !prompterId ? undefined : await routeSession(dependencies, chat, prompterId, prompt)
+  if (routed && !routed.choice)
+    return {
+      refusal: noLlmKeyNoticeOf(await transactor.run(({ members }) => members.displayNameOf(prompterId as MemberId))),
+    }
+  const llm = routed?.choice
+    ? agentLlmOf(routed.choice.model.id, routed.choice.effort)
+    : { model: fixedLlm?.model ?? '', usageId: 'agent' }
   const llmToken = await runtimes.issueLlmToken(chat)
   const conversationId = await runtimes.rememberConversation(
     chat,
-    await agentServer.createConversation(endpoint, llmToken),
+    await agentServer.createConversation(endpoint, llmToken, llm),
   )
-  return { ...endpoint, conversationId }
+  if (routed?.choice && prompterId) {
+    const { model, effort, reason } = routed.choice
+    await transactor.run(async ({ routing }) => {
+      await routing.update(chat.chatId, { model: model.id, reasoningEffort: effort })
+      await routing.setAgentModel(chat.chatId, model.id)
+      await routing.record({
+        chatId: chat.chatId,
+        conversationId,
+        role: 'session',
+        memberId: prompterId,
+        inputsDigest: routed.inputsDigest,
+        classifierOutput: routed.classification ?? null,
+        model: model.id,
+        reason,
+        costMicros: routed.costMicros,
+      })
+    })
+  }
+  return { conversation: { ...endpoint, conversationId } }
 }
 
 export const promptAgent = async (dependencies: AgentDependencies, { workspaceId, messageId }: Input) => {
@@ -54,7 +154,10 @@ export const promptAgent = async (dependencies: AgentDependencies, { workspaceId
   if (!prompt) return undefined
   let conversation: AgentConversation
   try {
-    conversation = await conversationFor(dependencies, chat, readiness.endpoint, prompt)
+    const prepared = await conversationFor(dependencies, chat, readiness.endpoint, prompt)
+    if ('refusal' in prepared)
+      return transactor.run((unitOfWork) => closeAgentTurn(unitOfWork, chatId, prompt.id, () => prepared.refusal))
+    conversation = prepared.conversation
     await eventSockets.ensureOpen(chat, conversation, prompt.id)
     await agentServer.sendMessage(conversation, prompt.body)
   } catch (error) {

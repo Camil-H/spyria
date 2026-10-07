@@ -27,6 +27,8 @@ export type Conversation = Readonly<{
   type: ChatRow['type']
   model: string | null
   reasoningEffort: ChatRow['reasoningEffort']
+  defaultModel: ChatRow['defaultModel']
+  subagentPolicy: ChatRow['subagentPolicy']
   gitBranch: string | null
   ownerName: string
   origin: Readonly<{ chatId: ChatId; name: string }> | null
@@ -120,6 +122,8 @@ export const getConversation =
       type: chat.type,
       model: chat.model,
       reasoningEffort: chat.reasoningEffort,
+      defaultModel: chat.defaultModel,
+      subagentPolicy: chat.subagentPolicy,
       gitBranch: chat.gitBranch,
       ownerName: memberName(chat.ownerId),
       origin: origin ? { chatId: origin.id, name: origin.name } : null,

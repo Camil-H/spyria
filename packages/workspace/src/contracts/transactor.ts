@@ -1,6 +1,7 @@
 import type {
   ChatRepository,
   ChatRuntimeRepository,
+  MemberModelDirectory,
   MembershipRepository,
   ProjectRepository,
   WorkspaceRepository,
@@ -12,6 +13,7 @@ export type UnitOfWork = {
   projects: ProjectRepository
   chats: ChatRepository
   chatRuntimes: ChatRuntimeRepository
+  memberModels: MemberModelDirectory
 }
 
 export type Transactor = {

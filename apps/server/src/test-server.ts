@@ -10,7 +10,7 @@ import { websocket } from 'hono/bun'
 import { setCookie } from 'hono/cookie'
 import { createAgentBridge } from './agent-bridge/bridge.ts'
 import { createFakeAgentServer } from './agent-bridge/fake-agent-server.ts'
-import { createApp, defaultLlm } from './app.ts'
+import { createApp, sessionClassifierOf } from './app.ts'
 import { sessionCookieOptions, setSessionCookie, testCookie } from './auth/routes.ts'
 import { openSessions } from './auth/sessions.ts'
 import { createFakeLlm, type FakeLlmScript } from './fake-llm.ts'
@@ -86,21 +86,27 @@ const releaseDatabase = async (databaseName: string) => {
 
 const { appOrigin } = testAuthSettings
 
+const gatewayUrlOf = (database: Database) =>
+  databasesWithoutGateway.has(nameOf(database)) ? 'http://127.0.0.1:9' : llmGateway.url
+const testHeadersOf = (database: Database, chat: { chatId: string }) => ({
+  'x-bf-eh-x-hq-chat': `${nameOf(database)}/${chat.chatId}`,
+  'x-bf-dim-database': nameOf(database),
+})
 const runtimeHosts = createRuntimeHostGateway({
   databases: () => [...servedDatabaseByName.values()].map((served) => served.database),
   afterHello: (database, host) => agentBridge.forDatabase(database).promptWaiting(host),
   relayModelCall: createModelCallRelay({
-    gatewayUrlOf: (database) => (databasesWithoutGateway.has(nameOf(database)) ? 'http://127.0.0.1:9' : llmGateway.url),
+    gatewayUrlOf,
     llmGateway,
     agentBridge: () => agentBridge,
-    providerHeadersOf: (database, chat) => ({
-      'x-bf-eh-x-hq-chat': `${nameOf(database)}/${chat.chatId}`,
-      'x-bf-dim-database': nameOf(database),
-    }),
+    providerHeadersOf: testHeadersOf,
   }),
 })
 
-const agentBridge = createAgentBridge({ sandboxProvider: runtimeHosts.sandboxProvider, llm: defaultLlm })
+const agentBridge = createAgentBridge({
+  sandboxProvider: runtimeHosts.sandboxProvider,
+  sessionClassifierOf: sessionClassifierOf(llmGateway, { gatewayUrlOf, headersOf: testHeadersOf }),
+})
 
 const scriptByChat = new Map<string, { script: FakeLlmScript; used: PromiseWithResolvers<boolean> }>()
 const scriptUseMilliseconds = 30_000
@@ -112,9 +118,9 @@ const app = createApp({
   llmGateway,
   runtimeHosts,
   agentBridge,
-  fakeLlm: createFakeLlm((request) => {
+  fakeLlm: createFakeLlm((request, isClassifier) => {
     const chatScript = scriptByChat.get(request.headers.get('x-hq-chat') ?? '')
-    chatScript?.used.resolve(true)
+    if (!isClassifier) chatScript?.used.resolve(true)
     return chatScript?.script
   }),
 })

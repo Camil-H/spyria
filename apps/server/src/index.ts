@@ -3,7 +3,7 @@ import { createLlmGateway } from '@hq/profile/server'
 import { createBifrostUsageLogs } from '@hq/usage/server'
 import { websocket } from 'hono/bun'
 import { createAgentBridge } from './agent-bridge/bridge.ts'
-import { createApp, defaultLlm } from './app.ts'
+import { createApp, sessionClassifierOf } from './app.ts'
 import { enqueueSweeps } from './auth/sessions.ts'
 import { createFakeLlm } from './fake-llm.ts'
 import { startJobWorker } from './job-worker.ts'
@@ -31,7 +31,8 @@ const runtimeHosts = createRuntimeHostGateway({
 const llmModel = process.env.HQ_LLM_MODEL
 const agentBridge = createAgentBridge({
   sandboxProvider: runtimeHosts.sandboxProvider,
-  llm: { model: llmModel ?? defaultLlm.model },
+  llm: llmModel ? { model: llmModel } : undefined,
+  sessionClassifierOf: sessionClassifierOf(llmGateway),
 })
 const app = createApp({
   database,
@@ -49,7 +50,7 @@ const app = createApp({
 })
 if (!llmModel)
   await llmGateway
-    .registerFakeProvider('http://host.docker.internal:3000/fake-llm')
+    .registerFakeProviders('http://host.docker.internal:3000/fake-llm')
     .catch((error) => console.error(`Registering the fake LLM in the gateway failed: ${error.message}`))
 startJobWorker(database, {
   sandboxProvider: runtimeHosts.sandboxProvider,

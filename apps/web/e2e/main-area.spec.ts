@@ -62,7 +62,7 @@ test.describe('2. runtime history', () => {
     await expect(mainOf(page).getByRole('img', { name: 'Runtime chat' })).toBeVisible()
     await expect(mainOf(page)).not.toContainText('Runtime view')
     await expect(mainOf(page)).toContainText('Agent acts as Alice')
-    await expect(mainOf(page)).toContainText('Claude Sonnet 5.5 · High')
+    await expect(mainOf(page)).toContainText('Sonnet 5.5 (high) · auto')
     await expect(mainOf(page)).toContainText('fix/invoice-tax')
     await expect(mainOf(page).getByRole('img', { name: 'Git branch' })).toBeVisible()
 
@@ -88,7 +88,7 @@ test.describe('2. runtime history', () => {
   test('shows the owner and the model of another runtime chat', async ({ page }) => {
     await openChat(page, 'Setup helper')
     await expect(mainOf(page)).toContainText('Agent acts as Bob')
-    await expect(mainOf(page)).toContainText('GPT-5 · Medium')
+    await expect(mainOf(page)).toContainText('GPT-5 (medium) · auto')
     await expect(mainOf(page)).toContainText('main')
     await expect(mainOf(page).getByRole('img', { name: 'Git branch' })).toBeVisible()
     await expect(messageContaining(page, 'Dependencies installed.')).toContainText('Agent')
@@ -102,7 +102,7 @@ test.describe('2b. runtime header row', () => {
     await openChat(page, 'Invoice bug')
     const titleBox = await mainOf(page).getByRole('heading', { level: 1, name: 'Invoice bug' }).boundingBox()
     const ownerBox = await mainOf(page).getByText('Agent acts as Alice').boundingBox()
-    const modelBox = await mainOf(page).getByText('Claude Sonnet 5.5 · High').boundingBox()
+    const modelBox = await mainOf(page).getByText('Sonnet 5.5 (high) · auto').boundingBox()
     const branchBox = await mainOf(page).getByText('fix/invoice-tax').boundingBox()
 
     for (const itemBox of [ownerBox, modelBox, branchBox]) {
@@ -130,7 +130,7 @@ test.describe('3. empty chat', () => {
     page,
   }) => {
     await openChat(page, 'Research')
-    await expect(mainOf(page)).toContainText('Claude Sonnet 5.5 · Medium')
+    await expect(mainOf(page)).toContainText('Model chosen at first prompt')
     await expect(mainOf(page).getByRole('img', { name: 'Git branch' })).toHaveCount(0)
     await expect(mainOf(page)).toContainText('No messages yet')
     await expect(messageItemsOf(page)).toHaveCount(0)
@@ -309,7 +309,7 @@ test.describe('9. start a runtime from a message', () => {
     await expect(mainOf(page).getByRole('img', { name: 'Runtime chat' })).toBeVisible()
     await expect(mainOf(page)).not.toContainText('Runtime view')
     await expect(mainOf(page)).toContainText('Agent acts as Alice')
-    await expect(mainOf(page)).toContainText('Claude Sonnet 5.5 · Medium')
+    await expect(mainOf(page)).toContainText('Model chosen at first prompt')
     await expect(mainOf(page).getByRole('img', { name: 'Git branch' })).toHaveCount(0)
     await expect(messageItemsOf(page).nth(0)).toContainText('Thanks, glad to be here.')
   })

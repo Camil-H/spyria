@@ -137,6 +137,12 @@ export const startZeroCache = async ({
 const gatewayImage = 'maximhq/bifrost:v2.2.6@sha256:d0b4708ace1aa175766f94afa715fd9bba3a1b56c1dc2afff15a21edf3ae4e2a'
 export const testGatewayAdmin = { user: 'hq-test', password: 'hq-test-gateway-password' }
 const gatewayProviders = ['openai', 'anthropic', 'mistral']
+const fakeModelPrices = {
+  'fake-model': 0.000009,
+  'fake-large': 0.00003,
+  'fake-medium': 0.000015,
+  'fake-small': 0.000006,
+}
 
 const gatewayAuthorization = `Basic ${btoa(`${testGatewayAdmin.user}:${testGatewayAdmin.password}`)}`
 
@@ -237,31 +243,33 @@ export const startTestGateway = async ({
       await sleep(250)
     }
     const networkConfig = { base_url: fakeLlmUrl, default_request_timeout_in_seconds: 60, max_retries: 0 }
-    await gateway.call('/api/providers', {
-      method: 'POST',
-      body: {
-        provider: 'fake',
-        keys: [],
-        network_config: networkConfig,
-        custom_provider_config: { base_provider_type: 'openai' },
-      },
-    })
+    for (const provider of ['fake', 'fake-small'])
+      await gateway.call('/api/providers', {
+        method: 'POST',
+        body: {
+          provider,
+          keys: [],
+          network_config: networkConfig,
+          custom_provider_config: { base_provider_type: 'openai' },
+        },
+      })
     for (const provider of gatewayProviders)
       await gateway.call('/api/providers', {
         method: 'POST',
         body: { provider, keys: [], network_config: networkConfig },
       })
-    await gateway.call('/api/governance/pricing-overrides', {
-      method: 'POST',
-      body: {
-        name: 'fake-model',
-        scope_kind: 'global',
-        match_type: 'exact',
-        pattern: 'fake-model',
-        request_types: ['chat_completion'],
-        patch: { input_cost_per_token: 0.000009, output_cost_per_token: 0.000009 },
-      },
-    })
+    for (const [model, dollarsPerToken] of Object.entries(fakeModelPrices))
+      await gateway.call('/api/governance/pricing-overrides', {
+        method: 'POST',
+        body: {
+          name: model,
+          scope_kind: 'global',
+          match_type: 'exact',
+          pattern: model,
+          request_types: ['chat_completion'],
+          patch: { input_cost_per_token: dollarsPerToken, output_cost_per_token: dollarsPerToken },
+        },
+      })
   } catch (error) {
     await stop()
     throw error

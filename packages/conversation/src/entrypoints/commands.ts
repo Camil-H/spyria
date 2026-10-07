@@ -1,5 +1,6 @@
 import type { ChatId, MessageId, WorkspaceId } from '@hq/kernel'
 import type { StoredFrame, StreamFrame } from '../domain/streamed-reply.ts'
+import type { ChatRoutingRead } from './endpoints.ts'
 
 type Command<Input, Result = string> = (input: Input & { workspaceId: WorkspaceId }) => Promise<Result>
 
@@ -14,6 +15,13 @@ export type ConversationCommands = {
   saveDraft: Command<{ chatId: ChatId; text: string }, void>
   commandOutput: Command<{ chatId: ChatId; stepId: string }>
   connectTool: Command<{ tool: string }, unknown>
+  updateChatRouting: Command<{
+    chatId: ChatId
+    sessionModel?: string
+    defaultModel?: string
+    subagentPolicy?: 'auto' | 'same_as_main'
+  }>
+  chatRouting: Command<{ chatId: ChatId }, ChatRoutingRead>
 }
 
 export type AgentStream = {

@@ -33,7 +33,7 @@ export type AgentRuntimes = {
   endpointOf(chat: AgentChat): Promise<AgentEndpoint | undefined>
   rememberConversation(chat: AgentChat, conversationId: string): Promise<string>
   forgetConversation(chat: AgentChat): Promise<void>
-  issueLlmToken(chat: AgentChat): Promise<string>
+  issueLlmToken(chat: AgentChat, isForSwitch?: boolean): Promise<string>
   chatOfLlmToken(host: AgentHost, token: string): Promise<ChatId | undefined>
   chatsOnHost(host: AgentHost): Promise<ChatId[]>
   touch(chat: AgentChat): Promise<void>
@@ -42,8 +42,10 @@ export type AgentRuntimes = {
 export type RuntimeRetrier = { retry(chat: AgentChat): Promise<void> }
 
 export type AgentEventListener = { onEvent(event: AgentEvent): void; onClose(): void }
+export type AgentLlmChoice = Readonly<{ model: string; effort?: string; usageId: string }>
 export type AgentServer = {
-  createConversation(endpoint: AgentEndpoint, llmToken: string): Promise<string>
+  createConversation(endpoint: AgentEndpoint, llmToken: string, llm: AgentLlmChoice): Promise<string>
+  switchLlm(conversation: AgentConversation, llmToken: string, llm: AgentLlmChoice): Promise<void>
   sendMessage(conversation: AgentConversation, text: string): Promise<void>
   statusOf(conversation: AgentConversation): Promise<string | undefined>
   interrupt(conversation: AgentConversation): Promise<void>
@@ -53,4 +55,14 @@ export type AgentServer = {
 export type AgentEventSockets = {
   ensureOpen(chat: AgentChat, conversation: AgentConversation, promptId: MessageId): Promise<void>
   stopStreaming(chat: AgentChat, promptId: MessageId): void
+}
+
+export type ClassifierCall = Readonly<{
+  chat: AgentChat
+  prompterId: MemberId
+  ownerId: MemberId | null
+  request: object
+}>
+export type SessionClassifier = {
+  classify(call: ClassifierCall): Promise<{ content: string; inputTokens: number; outputTokens: number } | undefined>
 }

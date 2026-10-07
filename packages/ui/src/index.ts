@@ -1,4 +1,5 @@
 export * from './classes.ts'
 export { Dialog } from './Dialog.tsx'
 export { DiffView } from './DiffView.tsx'
+export { formatCost, formatTokens } from './format.ts'
 export { LabelledSection } from './LabelledSection.tsx'

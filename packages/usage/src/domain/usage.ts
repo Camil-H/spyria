@@ -23,6 +23,7 @@ export type ModelCall = {
   outputTokens: number
   costMicros: number
   status: 'success' | 'error'
+  role: string | null
   calledAt: Date
 }
 

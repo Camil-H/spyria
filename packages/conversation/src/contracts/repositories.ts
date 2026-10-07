@@ -1,4 +1,4 @@
-import type { ChatId, MemberId, MessageId, WorkspaceId } from '@hq/kernel'
+import type { CatalogModel, ChatId, MemberId, MessageId, WorkspaceId } from '@hq/kernel'
 import type { AgentEvent } from '../domain/agent-events.ts'
 import type { AgentStep, StoredStep } from '../domain/agent-steps.ts'
 import type { ConversationChat, Message, MessageChange } from '../domain/message.ts'
@@ -55,3 +55,33 @@ export type DraftRepository = { replace(draft: Draft): Promise<void> }
 export type ReadMarkerRepository = { markNewestRead(chatId: ChatId, memberId: MemberId): Promise<void> }
 
 export type ChatRepository = { get(chatId: ChatId): Promise<ConversationChat> }
+
+export type ChatRouting = Readonly<{
+  mode: string | null
+  ownerId: MemberId | null
+  model: string | null
+  reasoningEffort: string | null
+  defaultModel: string | null
+  agentModel: string | null
+}>
+export type RoutingDecision = Readonly<{
+  chatId: ChatId
+  conversationId: string | null
+  role: 'session' | 'manual'
+  memberId: MemberId
+  inputsDigest: string | null
+  classifierOutput: object | null
+  model: string
+  reason: string
+  costMicros: number
+}>
+export type RoutingRepository = {
+  chatRouting(chatId: ChatId): Promise<ChatRouting>
+  reachableModels(memberId: MemberId): Promise<readonly CatalogModel[] | undefined>
+  update(
+    chatId: ChatId,
+    fields: Partial<{ model: string; reasoningEffort: string; defaultModel: string; subagentPolicy: string }>,
+  ): Promise<void>
+  setAgentModel(chatId: ChatId, model: string): Promise<void>
+  record(decision: RoutingDecision): Promise<void>
+}

@@ -13,6 +13,7 @@ import { retryAgent } from '../operations/retry-agent.ts'
 import { sendMessage } from '../operations/send-message.ts'
 import { startRuntimeFromMessage } from '../operations/start-runtime-from-message.ts'
 import { stopAgent } from '../operations/stop-agent.ts'
+import { updateChatRouting } from '../operations/update-chat-routing.ts'
 
 const id = z.string().check(z.minLength(1))
 const chatIdArgument = z.pipe(id, z.transform(chatId))
@@ -52,6 +53,14 @@ export const conversationMutators = defineMutators({
           { workspaceId: ctx.workspaceId, chatId: args.chatId },
         )
     }),
+    updateChatRouting: defineMutator(
+      z.extend(chatArguments, {
+        sessionModel: z.optional(z.string()),
+        defaultModel: z.optional(z.string()),
+        subagentPolicy: z.optional(z.enum(['auto', 'same_as_main'])),
+      }),
+      ({ tx, ctx, args }) => updateChatRouting(dependenciesOf(tx, ctx, args), { ...args, memberId: ctx.userId }),
+    ),
     startRuntimeFromMessage: defineMutator(
       z.extend(workspaceArguments, { id, chatId: chatIdArgument, messageId: messageIdArgument }),
       ({ tx, ctx, args }) =>
