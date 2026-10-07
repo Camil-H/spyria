@@ -1,5 +1,5 @@
 import type { ChatId, MessageId, WorkspaceId } from '@hq/kernel'
-import type { StreamFrame } from '../domain/streamed-reply.ts'
+import type { StoredFrame, StreamFrame } from '../domain/streamed-reply.ts'
 
 type Command<Input, Result = string> = (input: Input & { workspaceId: WorkspaceId }) => Promise<Result>
 
@@ -16,5 +16,5 @@ export type ConversationCommands = {
 }
 
 export type AgentStream = {
-  subscribe(workspaceId: WorkspaceId, chatId: ChatId, listener: (frame: StreamFrame) => void): () => void
+  subscribe(workspaceId: WorkspaceId, chatId: ChatId, listener: (frame: StreamFrame | StoredFrame) => void): () => void
 }

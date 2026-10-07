@@ -1,7 +1,12 @@
 import { useStore } from '@hq/db/react'
 import { type ChatId, messageId, type WorkspaceId } from '@hq/kernel'
 import { useEffect, useState } from 'react'
-import { type StreamedReply, streamedReplyAfter, visibleStreamedReply } from '../domain/streamed-reply.ts'
+import {
+  type StreamedReply,
+  storedStreamedReply,
+  streamedReplyAfter,
+  visibleStreamedReply,
+} from '../domain/streamed-reply.ts'
 import type { ConversationItem, ConversationMessage } from '../queries/get-conversation.ts'
 import { useAgentStream } from './providers.tsx'
 
@@ -35,14 +40,22 @@ export const useStreamedReply = (
     () =>
       agentStream.subscribe(workspaceId, chatId, (frame) => {
         const replyCountOf = replyCountIn(store.read().messages)
-        setStreamed((current) => ({
-          chatKey,
-          reply: streamedReplyAfter(current.chatKey === chatKey ? current.reply : null, frame, replyCountOf),
-        }))
+        setStreamed((current) => {
+          const reply = current.chatKey === chatKey ? current.reply : null
+          return {
+            chatKey,
+            reply:
+              'storedId' in frame ? storedStreamedReply(reply, frame) : streamedReplyAfter(reply, frame, replyCountOf),
+          }
+        })
       }),
     [agentStream, store, workspaceId, chatId, chatKey],
   )
-  const visible = visibleStreamedReply(streamed.chatKey === chatKey ? streamed.reply : null, replyCountIn(messages))
+  const visible = visibleStreamedReply(
+    streamed.chatKey === chatKey ? streamed.reply : null,
+    replyCountIn(messages),
+    (storedId) => messages.some((message) => message.id === storedId),
+  )
   if (!visible) return null
   return {
     id: messageId(`streamed-${visible.promptId}`),

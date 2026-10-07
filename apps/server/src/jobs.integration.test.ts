@@ -1,7 +1,7 @@
 import { afterAll, expect, spyOn, test } from 'bun:test'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { jobs, sessions } from '@hq/db/postgres'
-import { createTestDatabase } from '@hq/db/testing'
+import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@hq/db/testing'
 import type { SandboxProvider } from '@hq/runtime/server'
 import { createAgentBridge } from './agent-bridge/bridge.ts'
 import { enqueueSweeps } from './auth/sessions.ts'
@@ -10,7 +10,7 @@ import { acme, alice, globex, bob, waitFor } from './testing.ts'
 
 const testDatabase = await createTestDatabase()
 const { database } = testDatabase
-afterAll(() => testDatabase.drop())
+afterAll(() => testDatabase.drop(), databaseDropTimeoutMilliseconds)
 
 const missingMessageError = 'Message message-missing was not found'
 const agentBridge = createAgentBridge({

@@ -9,7 +9,7 @@ type Dependencies = { transactor: ProfileTransactor; gateway: LlmGateway }
 type Input = { id: string; workspaceId: WorkspaceId; memberId: MemberId; provider: string; secret: Secret }
 
 export const addLlmCredential = async (dependencies: Dependencies, { id, ...input }: Input) => {
-  const { transactor, gateway } = dependencies
+  const { gateway } = dependencies
   const credential = newLlmCredential({ ...input, id: credentialId(id) })
   const key = await gateway.addProviderKey({
     provider: credential.gatewayProvider,
@@ -17,17 +17,8 @@ export const addLlmCredential = async (dependencies: Dependencies, { id, ...inpu
     secret: input.secret,
   })
   try {
-    await transactor.run(({ llmCredentials }) => llmCredentials.add(credential, key))
+    await syncMemberGatewayKey(dependencies, input, { credential, key })
   } catch (error) {
-    await gateway.removeProviderKey(key)
-    throw error
-  }
-  try {
-    await syncMemberGatewayKey(dependencies, input)
-  } catch (error) {
-    await transactor.run(({ llmCredentials }) =>
-      llmCredentials.remove(input.workspaceId, input.memberId, credential.id),
-    )
     await gateway.removeProviderKey(key)
     throw error
   }

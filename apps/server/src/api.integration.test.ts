@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from 'bun:test'
 import { llmCredentials } from '@hq/db/postgres'
-import { createTestDatabase } from '@hq/db/testing'
+import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@hq/db/testing'
 import { schema } from '@hq/db/zero'
 import { queries } from '@hq/db/zero-queries'
 import { llmCredentialsPath } from '@hq/profile/server'
@@ -14,7 +14,11 @@ import { openSessions } from './auth/sessions.ts'
 import { acme, alice, globex, bob, sessionTokenOf, testAuthSettings } from './testing.ts'
 
 const testDatabase = await createTestDatabase()
-afterAll(() => testDatabase.drop())
+const otherDatabase = await createTestDatabase()
+afterAll(async () => {
+  await testDatabase.drop()
+  await otherDatabase.drop()
+}, databaseDropTimeoutMilliseconds)
 
 const app = createApp({ database: testDatabase.database, ...testAuthSettings })
 const memberPrivateTables = ['read_markers', 'llm_credentials']
@@ -238,33 +242,28 @@ test.each(['/api/query', '/api/mutate', llmCredentialsPath])(
 )
 
 test('with test hooks, the database claim of a token selects the database the server reads', async () => {
-  const otherDatabase = await createTestDatabase()
-  try {
-    await otherDatabase.database.$client`insert into users (id, email) values ('member-dana', 'dana@example.com')`
-    await otherDatabase.database.$client`
-      insert into memberships (workspace_id, user_id, role, display_name)
-      values (${acme}, 'member-dana', 'member', 'Dana')`
-    const multiDatabaseApp = createApp({
-      database: testDatabase.database,
-      ...testAuthSettings,
-      testDatabaseByName: () => otherDatabase.database,
+  await otherDatabase.database.$client`insert into users (id, email) values ('member-dana', 'dana@example.com')`
+  await otherDatabase.database.$client`
+    insert into memberships (workspace_id, user_id, role, display_name)
+    values (${acme}, 'member-dana', 'member', 'Dana')`
+  const multiDatabaseApp = createApp({
+    database: testDatabase.database,
+    ...testAuthSettings,
+    testDatabaseByName: () => otherDatabase.database,
+  })
+  expect(await openSessions(testDatabase.database, 'member-dana', acme)).toHaveLength(0)
+  const [danaSession] = await openSessions(otherDatabase.database, 'member-dana', acme)
+  if (!danaSession) throw new Error('Dana has no session')
+  expect(danaSession.role).toBe('member')
+  const issued = await issueSessionToken(testAuthSettings.tokenSecret, danaSession, {
+    databaseName: otherDatabase.name,
+  })
+  const queryWith = (server: typeof app) =>
+    server.request('/api/query', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${issued.token}` },
+      body: JSON.stringify(['transform', []]),
     })
-    expect(await openSessions(testDatabase.database, 'member-dana', acme)).toHaveLength(0)
-    const [danaSession] = await openSessions(otherDatabase.database, 'member-dana', acme)
-    if (!danaSession) throw new Error('Dana has no session')
-    expect(danaSession.role).toBe('member')
-    const issued = await issueSessionToken(testAuthSettings.tokenSecret, danaSession, {
-      databaseName: otherDatabase.name,
-    })
-    const queryWith = (server: typeof app) =>
-      server.request('/api/query', {
-        method: 'POST',
-        headers: { authorization: `Bearer ${issued.token}` },
-        body: JSON.stringify(['transform', []]),
-      })
-    expect((await queryWith(multiDatabaseApp)).status).toBe(200)
-    expect((await queryWith(app)).status).toBe(403)
-  } finally {
-    await otherDatabase.drop()
-  }
+  expect((await queryWith(multiDatabaseApp)).status).toBe(200)
+  expect((await queryWith(app)).status).toBe(403)
 })

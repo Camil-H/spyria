@@ -1,11 +1,11 @@
 import { afterAll, expect, test } from 'bun:test'
 import { eq } from 'drizzle-orm'
 import { chats, events, messages, readMarkers } from './tables.ts'
-import { createTestDatabase } from './test-database.ts'
+import { createTestDatabase, databaseDropTimeoutMilliseconds } from './test-database.ts'
 
 const seededDatabase = await createTestDatabase()
 const { database } = seededDatabase
-afterAll(() => seededDatabase.drop())
+afterAll(() => seededDatabase.drop(), databaseDropTimeoutMilliseconds)
 
 const refusalOf = (query: PromiseLike<unknown>) =>
   Promise.resolve(query).then(

@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from 'bun:test'
-import { createTestDatabase } from '@hq/db/testing'
+import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@hq/db/testing'
 import type { AST } from '@rocicorp/zero'
 import { exportJWK, generateKeyPair, type JWTPayload, SignJWT } from 'jose'
 import { createApp } from '../app.ts'
@@ -42,7 +42,7 @@ afterAll(async () => {
   await idp.stop(true)
   await testDatabase.drop()
   await otherDatabase.drop()
-})
+}, databaseDropTimeoutMilliseconds)
 
 const nowInSeconds = () => Math.floor(Date.now() / 1000)
 

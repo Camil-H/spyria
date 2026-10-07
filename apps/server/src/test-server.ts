@@ -40,6 +40,7 @@ const gatewaySettings = {
 }
 const llmGateway = createLlmGateway(gatewaySettings)
 const usageSyncIntervalMilliseconds = 2_000
+const fakeAgentServerBootMilliseconds = Number(process.env.HQ_FAKE_AGENT_SERVER_BOOT_MILLISECONDS ?? 1_500)
 const sandboxProviderOf = (databaseName: string): SandboxProvider => ({
   ...runtimeHosts.sandboxProvider,
   create: async (sandbox) => {
@@ -97,7 +98,8 @@ const runtimeHosts = createRuntimeHostGateway({
 
 const agentBridge = createAgentBridge({ sandboxProvider: runtimeHosts.sandboxProvider, llm: defaultLlm })
 
-const scriptByChat = new Map<string, FakeLlmScript>()
+const scriptByChat = new Map<string, { script: FakeLlmScript; used: PromiseWithResolvers<boolean> }>()
+const scriptUseMilliseconds = 30_000
 
 const app = createApp({
   database: createDatabase(),
@@ -106,7 +108,11 @@ const app = createApp({
   llmGateway,
   runtimeHosts,
   agentBridge,
-  fakeLlm: createFakeLlm((request) => scriptByChat.get(request.headers.get('x-hq-chat') ?? '')),
+  fakeLlm: createFakeLlm((request) => {
+    const chatScript = scriptByChat.get(request.headers.get('x-hq-chat') ?? '')
+    chatScript?.used.resolve(true)
+    return chatScript?.script
+  }),
 })
   .post('/test/release-database', async (context) => {
     await releaseDatabase(context.req.query('db') ?? '')
@@ -122,8 +128,17 @@ const app = createApp({
   })
   .post('/test/fake-llm-script', async (context) => {
     const { db = '', chat } = context.req.query()
-    if (chat) scriptByChat.set(`${db}/${chat}`, await context.req.json())
-    else for (const key of scriptByChat.keys()) if (key.startsWith(`${db}/`)) scriptByChat.delete(key)
+    if (!chat) {
+      for (const key of scriptByChat.keys()) if (key.startsWith(`${db}/`)) scriptByChat.delete(key)
+      return context.body(null, 204)
+    }
+    const previous = scriptByChat.get(`${db}/${chat}`)
+    const wasUsed = await Promise.race([
+      previous?.used.promise ?? true,
+      Bun.sleep(scriptUseMilliseconds).then(() => false),
+    ])
+    if (!wasUsed) return context.text(`No model call used the previous script of ${chat}`, 409)
+    scriptByChat.set(`${db}/${chat}`, { script: await context.req.json(), used: Promise.withResolvers() })
     return context.body(null, 204)
   })
   .post('/test/usage-sync', async (context) => {
@@ -152,6 +167,7 @@ const app = createApp({
       const created = await createFakeHosts({ port, database: databaseByName(db) }).fakeHost('e2e fake host', {
         memoryGibibytes: 16,
         agentServer: fake.agentServer,
+        bootMilliseconds: fakeAgentServerBootMilliseconds,
       })
       fakeHost = { host: created, isOnline: true }
       fakeHostByDatabase.set(db, fakeHost)

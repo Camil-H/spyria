@@ -2,10 +2,10 @@ import { afterAll, expect, test } from 'bun:test'
 import { getTableName } from 'drizzle-orm'
 import { schema } from '../zero.ts'
 import { allTables } from './seed.ts'
-import { createTestDatabase, migrateDatabase } from './test-database.ts'
+import { createTestDatabase, databaseDropTimeoutMilliseconds, migrateDatabase } from './test-database.ts'
 
 const emptyDatabase = await createTestDatabase('template0')
-afterAll(() => emptyDatabase.drop())
+afterAll(() => emptyDatabase.drop(), databaseDropTimeoutMilliseconds)
 
 const publicTableNames = async (condition: string) => {
   const rows = await emptyDatabase.database.$client.unsafe<{ table_name: string }[]>(

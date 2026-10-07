@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { conversationMutators } from '@hq/conversation/server'
 import { events } from '@hq/db/postgres'
-import { createTestDatabase } from '@hq/db/testing'
+import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@hq/db/testing'
 import { schema } from '@hq/db/zero'
 import { chatId, runtimeHostId } from '@hq/kernel'
 import {
@@ -80,7 +80,7 @@ afterAll(async () => {
   void server.stop(true)
   await testDatabase.drop()
   rmSync(stateDirectory, { recursive: true, force: true })
-})
+}, databaseDropTimeoutMilliseconds)
 
 const connectHost = async () => {
   const added = await app.request('/api/runtime-hosts', {

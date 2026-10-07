@@ -1,6 +1,7 @@
 import { type ChildProcess, spawn, spawnSync } from 'node:child_process'
 import { once } from 'node:events'
 import { openSync, readFileSync, rmSync, writeFileSync, writeSync } from 'node:fs'
+import { get } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -11,6 +12,7 @@ import { createDatabase, databaseUrl } from './client.ts'
 import { resetDatabase } from './seed.ts'
 
 const templateDatabaseName = 'hq_test_template'
+export const databaseDropTimeoutMilliseconds = 30_000
 
 export const databaseUrlOf = (databaseName: string) =>
   Object.assign(new URL(databaseUrl), { pathname: `/${databaseName}` }).href
@@ -61,6 +63,14 @@ export const buildTemplateDatabase = async (name = templateDatabaseName) => {
   await resetDatabase(database)
   await database.$client.end()
 }
+
+export const httpStatusOf = (url: string, headers: Record<string, string> = {}) =>
+  new Promise<number | string>((resolve) => {
+    get(url, { headers }, (response) => {
+      response.resume()
+      resolve(response.statusCode ?? 0)
+    }).on('error', (error) => resolve(String(error)))
+  })
 
 const zeroCacheCli = new URL('../../node_modules/@rocicorp/zero/out/zero/src/cli.js', import.meta.url).pathname
 
@@ -114,14 +124,7 @@ export const startZeroCache = async ({
     errorOutput = `${errorOutput}${chunk}`.slice(-4000)
   })
   const url = `http://localhost:${port}`
-  for (
-    let attempt = 1;
-    !(await fetch(`${url}/keepalive`).then(
-      (response) => response.ok,
-      () => false,
-    ));
-    attempt++
-  ) {
+  for (let attempt = 1; (await httpStatusOf(`${url}/keepalive`)) !== 200; attempt++) {
     if (zeroCache.exitCode !== null || attempt === 600) {
       await stopProcessGroup(zeroCache)
       throw new Error(`zero-cache on port ${port} did not start: ${errorOutput}`)
@@ -135,14 +138,13 @@ const gatewayImage = 'maximhq/bifrost:v2.2.6@sha256:d0b4708ace1aa175766f94afa715
 export const testGatewayAdmin = { user: 'hq-test', password: 'hq-test-gateway-password' }
 const gatewayProviders = ['openai', 'anthropic', 'mistral']
 
+const gatewayAuthorization = `Basic ${btoa(`${testGatewayAdmin.user}:${testGatewayAdmin.password}`)}`
+
 export const testGatewayAt = (url: string) => {
   const request = (path: string, init: { method?: string; body?: object } = {}) =>
     fetch(`${url}${path}`, {
       method: init.method ?? 'GET',
-      headers: {
-        authorization: `Basic ${btoa(`${testGatewayAdmin.user}:${testGatewayAdmin.password}`)}`,
-        'content-type': 'application/json',
-      },
+      headers: { authorization: gatewayAuthorization, 'content-type': 'application/json' },
       body: init.body && JSON.stringify(init.body),
     })
   const call = async <Result>(path: string, init: { method?: string; body?: object } = {}) => {
@@ -221,11 +223,10 @@ export const startTestGateway = async ({
   }
   const gateway = testGatewayAt(`http://127.0.0.1:${port}`)
   try {
-    let lastAnswer = 'nothing'
+    let lastAnswer: number | string = 'nothing'
     const isReady = async () => {
-      const response = await gateway.request('/api/providers').catch((error: unknown) => String(error))
-      lastAnswer = typeof response === 'string' ? response : String(response.status)
-      return typeof response !== 'string' && response.ok
+      lastAnswer = await httpStatusOf(`${gateway.url}/api/providers`, { authorization: gatewayAuthorization })
+      return lastAnswer === 200
     }
     for (let attempt = 1; !(await isReady()); attempt++) {
       if (attempt === 480) throw new Error(`The test gateway did not become ready (last answer: ${lastAnswer})`)

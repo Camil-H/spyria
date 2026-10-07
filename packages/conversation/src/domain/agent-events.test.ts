@@ -8,7 +8,7 @@ import {
   streamedTextOf,
   turnEndNoticeOf,
 } from './agent-events.ts'
-import { type StreamedReply, streamedReplyAfter, visibleStreamedReply } from './streamed-reply.ts'
+import { type StreamedReply, storedStreamedReply, streamedReplyAfter, visibleStreamedReply } from './streamed-reply.ts'
 
 const agentEvent = (kind: string, fields: Record<string, unknown> = {}, id = `event-${kind}`): AgentEvent => ({
   id,
@@ -97,6 +97,21 @@ test('a delta after a stored reply, or for another prompt, starts a new streamed
   expect(
     streamedReplyAfter(afterToolCall, { promptId: 'second', text: 'Understood, ' }, repliesOf({ first: 2 })),
   ).toEqual({ promptId: 'second', text: 'Understood, ', repliesAtStart: 0 })
+})
+
+test('a stored frame hides a delta that reached the browser after its stored reply, and the next delta starts afresh', () => {
+  const streamed = streamedReplyAfter(null, { promptId: 'first', text: 'Understood, working on ' }, repliesOf({}))
+  const late = streamedReplyAfter(streamed, { promptId: 'first', text: 'it.' }, repliesOf({ first: 1 }))
+  expect(visibleStreamedReply(late, repliesOf({ first: 1 }))?.text).toBe('it.')
+  const isAnswer = (messageId: string) => messageId === 'answer'
+  const lateStored = storedStreamedReply(late, { promptId: 'first', storedId: 'answer' })
+  expect(visibleStreamedReply(lateStored, repliesOf({ first: 1 }), isAnswer)).toBeNull()
+
+  const stored = storedStreamedReply(streamed, { promptId: 'first', storedId: 'answer' })
+  expect(visibleStreamedReply(stored, repliesOf({}), () => false)?.text).toBe('Understood, working on ')
+  expect(visibleStreamedReply(stored, repliesOf({ first: 1 }), isAnswer)).toBeNull()
+  expect(streamedReplyAfter(stored, { promptId: 'first', text: 'Next' }, repliesOf({})).text).toBe('Next')
+  expect(storedStreamedReply(stored, { promptId: 'second', storedId: 'other' })).toBe(stored)
 })
 
 test('a snapshot frame replaces the streamed text, and an empty stream shows nothing', () => {

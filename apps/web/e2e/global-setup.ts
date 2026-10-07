@@ -4,7 +4,14 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { createDatabase } from '@hq/db/postgres'
-import { buildTemplateDatabase, databaseUrlOf, dropDatabase, startTestGateway, testGatewayAdmin } from '@hq/db/testing'
+import {
+  buildTemplateDatabase,
+  databaseUrlOf,
+  dropDatabase,
+  httpStatusOf,
+  startTestGateway,
+  testGatewayAdmin,
+} from '@hq/db/testing'
 import { removeDockerObjects } from './stack.ts'
 import {
   gatewayPort,
@@ -60,14 +67,7 @@ const startDetached = async (command: string[], cwd: string, env: Record<string,
     detached: true,
     stdio: ['ignore', logFile, logFile],
   })
-  for (
-    let attempt = 1;
-    !(await fetch(readyUrl).then(
-      (response) => response.ok,
-      () => false,
-    ));
-    attempt++
-  ) {
+  for (let attempt = 1; (await httpStatusOf(readyUrl)) !== 200; attempt++) {
     if (attempt === 400) throw new Error(`${command.join(' ')} did not start`)
     await sleep(50)
   }
@@ -75,7 +75,7 @@ const startDetached = async (command: string[], cwd: string, env: Record<string,
 }
 
 export default async function globalSetup() {
-  execSync('docker compose -f infra/docker-compose.yml up -d --wait postgres dex', {
+  execSync('docker compose -f infra/docker-compose.yml up -d --wait --no-recreate postgres dex', {
     cwd: repositoryRoot,
     stdio: 'ignore',
   })

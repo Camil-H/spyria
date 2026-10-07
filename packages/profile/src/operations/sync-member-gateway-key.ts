@@ -1,6 +1,7 @@
 import type { MemberId, WorkspaceId } from '@hq/kernel'
 import type { GatewaySyncJob, LlmGateway } from '../contracts/repositories.ts'
 import type { ProfileTransactor } from '../contracts/transactor.ts'
+import type { GatewayKey, LlmCredential } from '../domain/llm-credential.ts'
 
 type Dependencies = { transactor: ProfileTransactor; gateway: LlmGateway }
 type Member = { workspaceId: WorkspaceId; memberId: MemberId }
@@ -16,24 +17,33 @@ const inMemberOrder = <Result>({ workspaceId, memberId }: Member, work: () => Pr
   return result
 }
 
-export const syncMemberGatewayKey = ({ transactor, gateway }: Dependencies, member: Member) =>
+export const syncMemberGatewayKey = (
+  { transactor, gateway }: Dependencies,
+  member: Member,
+  added?: { credential: LlmCredential; key: GatewayKey },
+) =>
   inMemberOrder(member, async () => {
     const { workspaceId, memberId } = member
     const { keys, virtualKeyId } = await transactor.run(async ({ llmCredentials, memberGatewayKeys }) => ({
       keys: await llmCredentials.gatewayKeysOf(workspaceId, memberId),
       virtualKeyId: await memberGatewayKeys.virtualKeyOf(workspaceId, memberId),
     }))
-    if (keys.length === 0) {
+    const syncedKeys = added ? [...keys, added.key] : keys
+    if (syncedKeys.length === 0) {
       if (virtualKeyId) await gateway.removeVirtualKey(virtualKeyId)
       await transactor.run(({ memberGatewayKeys }) => memberGatewayKeys.setVirtualKey(workspaceId, memberId, null))
       return
     }
-    const savedId = await gateway.saveVirtualKey({ id: virtualKeyId, keys })
-    if (savedId === virtualKeyId) return
+    const savedId = await gateway.saveVirtualKey({ id: virtualKeyId, keys: syncedKeys })
+    if (savedId === virtualKeyId && !added) return
     try {
-      await transactor.run(({ memberGatewayKeys }) => memberGatewayKeys.setVirtualKey(workspaceId, memberId, savedId))
+      await transactor.run(async ({ llmCredentials, memberGatewayKeys }) => {
+        if (added) await llmCredentials.add(added.credential, added.key)
+        if (savedId !== virtualKeyId) await memberGatewayKeys.setVirtualKey(workspaceId, memberId, savedId)
+      })
     } catch (error) {
-      await gateway.removeVirtualKey(savedId)
+      if (savedId !== virtualKeyId) await gateway.removeVirtualKey(savedId)
+      else await gateway.saveVirtualKey({ id: virtualKeyId, keys })
       throw error
     }
   })

@@ -171,7 +171,7 @@ type HostFrame = {
 }
 export const fakeHostGatewayUrl = 'http://fake-gateway-relay.test:4000/v1'
 type HostCommand = { op: string; runtimeId?: string; image?: string; apiKey?: string }
-export type FakeContainer = { running: boolean; apiKey: string }
+export type FakeContainer = { running: boolean; apiKey: string; readyAt?: number }
 export type FakeAgentServer = {
   respond(request: Required<Pick<HostFrame, 'method' | 'path'>> & HostFrame, container: FakeContainer): unknown
   connect(stream: { path: string; container: FakeContainer; send(data: string): void; close(): void }): {
@@ -198,7 +198,11 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
     (await database.$client`select status from runtime_hosts where id = ${hostId}`)[0]?.status
   const fakeHost = async (
     name: string,
-    { memoryGibibytes = 8, agentServer }: { memoryGibibytes?: number; agentServer?: FakeAgentServer } = {},
+    {
+      memoryGibibytes = 8,
+      agentServer,
+      bootMilliseconds = 0,
+    }: { memoryGibibytes?: number; agentServer?: FakeAgentServer; bootMilliseconds?: number } = {},
   ) => {
     const id = crypto.randomUUID()
     const token = sha256(id)
@@ -217,7 +221,8 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
       if (failingOps.has(op)) throw new Error(`${op} failed`)
       const container = containers.get(runtimeId)
       if (op === 'create') containers.set(runtimeId, { running: false, apiKey })
-      if (op === 'start' && container) container.running = true
+      if (op === 'start' && container)
+        Object.assign(container, { running: true, readyAt: Date.now() + bootMilliseconds })
       if ((op === 'stop' || op === 'remove') && container) {
         container.running = false
         agentServer?.stopped?.(container)
@@ -301,9 +306,10 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
             })
           }
           if (frame.type === 'http') {
-            const isReady = frame.path === '/ready' && container?.running
+            const isReadyProbe = frame.path === '/ready'
+            const isReady = isReadyProbe && container?.running && Date.now() >= (container.readyAt ?? 0)
             const answered =
-              container?.running && !isReady
+              container?.running && !isReadyProbe
                 ? agentServer?.respond(frame as Parameters<FakeAgentServer['respond']>[0], container)
                 : undefined
             void Promise.resolve(answered).then((response) =>

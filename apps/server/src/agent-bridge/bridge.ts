@@ -128,6 +128,9 @@ export const createAgentBridge = ({
           recording = recording
             .then(() => handlers.recordEvent(chat, event))
             .then((recorded) => {
+              if (recorded?.isReplyStored && promptAtEvent)
+                for (const viewer of viewers.get(keyOf(chat)) ?? [])
+                  send(viewer, chat, { promptId: promptAtEvent, storedId: event.id })
               if (!recorded || chatSocket.promptId !== promptAtEvent) return
               chatSocket.promptId = recorded.promptId
               if (recorded.isReplyStored || recorded.promptId === null) chatSocket.streamedText = ''
