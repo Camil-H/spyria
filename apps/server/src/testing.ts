@@ -16,6 +16,7 @@ import { createApp } from './app.ts'
 import { issueSessionToken } from './auth/session-tokens.ts'
 import { openSessions } from './auth/sessions.ts'
 import { createFakeLlm, type FakeLlmScript } from './fake-llm.ts'
+import { createFakeMcp } from './fake-mcp.ts'
 
 export const testAuthSettings = {
   tokenSecret: 'integration-test-secret',
@@ -96,8 +97,11 @@ const startSharedTestApp = async () => {
   const llmGateway = llmGatewayAt(`http://127.0.0.1:${integrationGatewayPort}`)
   const app = createApp({ database, ...testAuthSettings, llmGateway, fakeLlm })
   const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
+  const fakeMcp = createFakeMcp()
+  const fakeMcpServer = Bun.serve({ port: 0, fetch: fakeMcp.fetch })
   const stopServerAndDatabase = async () => {
     void server.stop(true)
+    void fakeMcpServer.stop(true)
     await testDatabase.drop()
   }
   const [zeroCache, gateway] = await Promise.allSettled([
@@ -106,6 +110,7 @@ const startSharedTestApp = async () => {
       name: 'integration',
       port: integrationGatewayPort,
       fakeLlmUrl: `http://host.docker.internal:${server.port}/fake-llm`,
+      oauthBase: `http://localhost:${server.port}/gateway-oauth`,
     }),
   ])
   if (zeroCache.status === 'rejected' || gateway.status === 'rejected') {
@@ -114,6 +119,7 @@ const startSharedTestApp = async () => {
     await stopServerAndDatabase()
     throw zeroCache.status === 'rejected' ? zeroCache.reason : (gateway as PromiseRejectedResult).reason
   }
+  await llmGateway.setUpToolServer({ name: 'fake', url: `http://host.docker.internal:${fakeMcpServer.port}/mcp` })
   const resultOf = (member: { workspaceId: string; userId: string }, name: string, args: Record<string, unknown>) =>
     requestMutation(app, database, member, name, args)
   const eventsOf = async (chatId: string) =>
@@ -129,6 +135,7 @@ const startSharedTestApp = async () => {
     zeroCacheUrl: zeroCache.value.url,
     gateway: gateway.value,
     llmGateway,
+    fakeMcp,
     seededGatewayKeys: () => prepareSeededGatewayKeys(gateway.value),
     fakeLlmCalls,
     setFakeLlmScript: (script: FakeLlmScript | undefined) => {

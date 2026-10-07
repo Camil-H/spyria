@@ -27,6 +27,22 @@ export const findModelCallTurn = async ({ transactor, runtimes }: Dependencies, 
   })
 }
 
+export const findToolCallTurn = async ({ transactor, runtimes }: Dependencies, host: AgentHost, token: string) => {
+  const chatId = await runtimes.chatOfLlmToken(host, token)
+  if (!chatId) return undefined
+  return transactor.run(async ({ agentTurns, members }) => {
+    const { ownerId, prompterId } = await agentTurns.toolCallTurn(chatId)
+    return (
+      ownerId && {
+        chat: { workspaceId: host.workspaceId, chatId },
+        ownerId,
+        prompterId,
+        ownerName: await members.displayNameOf(ownerId),
+      }
+    )
+  })
+}
+
 export const recordModelCallFailure = (
   { transactor }: Dependencies,
   { chat, promptId, prompterName, model, failure }: FailedCall,

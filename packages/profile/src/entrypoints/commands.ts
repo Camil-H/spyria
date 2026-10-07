@@ -9,5 +9,6 @@ export type ProfileCommands = {
   removeLlmCredential: Command<{ credentialId: CredentialId }>
   connectTool: Command<{ tool: string }>
   disconnectTool: Command<{ tool: string }>
+  availableTools: (input: { workspaceId: WorkspaceId }) => Promise<string[]>
   addLlmCredential: Command<{ provider: string; secret: Secret }>
 }

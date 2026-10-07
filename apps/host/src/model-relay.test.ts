@@ -76,3 +76,19 @@ test('tells HQ to cancel when the caller stops reading', async () => {
   expect(await nextOf('gw_cancel')).toEqual({ type: 'gw_cancel', sid })
   relay.handle({ type: 'gw_chunk', sid, data: 'late' })
 })
+
+test('relays the Agent Server’s MCP calls on /mcp with their session headers', async () => {
+  const { relay, nextOf } = relayCollecting()
+  void relay.fetch(
+    new Request('http://hq-gateway-relay:4000/mcp', {
+      method: 'POST',
+      headers: { authorization: 'Bearer runtime-token', 'mcp-session-id': 'session-1' },
+      body: '{"jsonrpc":"2.0","id":1,"method":"tools/list"}',
+    }),
+  )
+  expect(await nextOf('gw_req')).toMatchObject({
+    path: '/mcp',
+    headers: { authorization: 'Bearer runtime-token', 'mcp-session-id': 'session-1' },
+  })
+  expect((await relay.fetch(new Request('http://hq-gateway-relay:4000/mcp/other'))).status).toBe(404)
+})

@@ -14,12 +14,16 @@ import { createApp, defaultLlm } from './app.ts'
 import { sessionCookieOptions, setSessionCookie, testCookie } from './auth/routes.ts'
 import { openSessions } from './auth/sessions.ts'
 import { createFakeLlm, type FakeLlmScript } from './fake-llm.ts'
+import { createFakeMcp } from './fake-mcp.ts'
 import { startJobWorker } from './job-worker.ts'
 import { createModelCallRelay } from './llm-relay.ts'
 import { createRuntimeHostGateway } from './runtime-hosts/gateway.ts'
 import { createFakeHosts, type FakeHost, issueTestSession, testAuthSettings } from './testing.ts'
 
 const port = Number(process.env.PORT ?? 3100)
+const fakeMcpPort = Number(process.env.HQ_FAKE_MCP_PORT ?? 3101)
+const testToolServers = ['fake', 'GitHub', 'Slack', 'Notion', 'Linear']
+Bun.serve({ port: fakeMcpPort, fetch: createFakeMcp().fetch })
 
 type ServedDatabase = {
   database: Database
@@ -185,6 +189,11 @@ const app = createApp({
         { workspaceId: workspaceId('workspace-acme'), chatId: chatId(chat), id: crypto.randomUUID(), now: Date.now() },
       ),
     )
+    return context.body(null, 204)
+  })
+  .post('/test/tool-servers', async (context) => {
+    for (const name of testToolServers)
+      await llmGateway.setUpToolServer({ name, url: `http://host.docker.internal:${fakeMcpPort}/mcp` })
     return context.body(null, 204)
   })
   .post('/test/token', async (context) => {

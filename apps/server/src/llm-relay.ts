@@ -1,16 +1,27 @@
-import { type AgentChat, genericModelCallNoticeOf, type ModelCallFailure } from '@hq/conversation/server'
+import {
+  type AgentChat,
+  genericModelCallNoticeOf,
+  type ModelCallFailure,
+  type ToolCallFailure,
+  toolCallFailureOf,
+  toolCallNoticeOf,
+  toolGatewayUnreachable,
+  toolServerOf,
+} from '@hq/conversation/server'
 import type { Database } from '@hq/db/postgres'
 import { schema } from '@hq/db/zero'
-import { type createLlmGateway, createMemberKeyReader } from '@hq/profile/server'
+import { type createLlmGateway, createMemberKeyReader, createToolCallOwnerAccess } from '@hq/profile/server'
 import type { ConnectedHost } from '@hq/runtime/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import type { AgentBridge } from './agent-bridge/bridge.ts'
 
 export type RelayFrame = { sid?: unknown; method?: unknown; path?: unknown; headers?: unknown; body?: unknown }
 type Send = (frame: object) => void
+type ToolResult = { content?: { text?: string }[]; isError?: boolean }
 
 const forwardedHeaders = ['content-type', 'accept', 'user-agent']
-const answeredHeaders = ['content-type', 'x-request-id']
+const toolHeaders = [...forwardedHeaders, 'mcp-session-id', 'mcp-protocol-version', 'last-event-id']
+const answeredHeaders = ['content-type', 'x-request-id', 'mcp-session-id']
 const headTimeoutMilliseconds = 300_000
 const unreachable = { error: { message: 'The model gateway is unreachable', type: 'gateway_unavailable' } }
 const refusalOf = (message: string) => ({ error: { message, type: 'hq_refused' } })
@@ -37,13 +48,19 @@ export const createModelCallRelay = ({
   agentBridge: () => AgentBridge
   providerHeadersOf?: (database: Database, chat: AgentChat) => Record<string, string>
 }) => {
-  const keyReaders = new Map<Database, ReturnType<typeof createMemberKeyReader>>()
-  const keyReaderOf = (database: Database) => {
-    const reader =
-      keyReaders.get(database) ??
-      createMemberKeyReader((work) => zeroDrizzle(schema, database).transaction(work), llmGateway)
-    keyReaders.set(database, reader)
-    return reader
+  const accessByDatabase = new Map<Database, ReturnType<typeof accessOf>>()
+  const accessOf = (database: Database) => {
+    const transact: Parameters<typeof createMemberKeyReader>[0] = (work) =>
+      zeroDrizzle(schema, database).transaction(work)
+    return {
+      keyOf: createMemberKeyReader(transact, llmGateway),
+      tools: createToolCallOwnerAccess(transact, llmGateway),
+    }
+  }
+  const databaseAccess = (database: Database) => {
+    const access = accessByDatabase.get(database) ?? accessOf(database)
+    accessByDatabase.set(database, access)
+    return access
   }
   return async (database: Database, host: ConnectedHost, frame: RelayFrame, send: Send, signal: AbortSignal) => {
     const sid = frame.sid
@@ -52,17 +69,91 @@ export const createModelCallRelay = ({
       send({ type: 'gw_chunk', sid, data: JSON.stringify(body) })
       send({ type: 'gw_end', sid })
     }
+    const stream = async (response: Response, failedText?: (text: string) => Promise<unknown>) => {
+      send({ type: 'gw_head', sid, status: response.status, headers: picked(response.headers, answeredHeaders) })
+      try {
+        if (failedText) {
+          const text = await response.text()
+          await failedText(text)
+          send({ type: 'gw_chunk', sid, data: text })
+        } else {
+          const decoder = new TextDecoder()
+          for await (const chunk of response.body ?? [])
+            send({ type: 'gw_chunk', sid, data: decoder.decode(chunk, { stream: true }) })
+        }
+        send({ type: 'gw_end', sid })
+      } catch {
+        send({ type: 'gw_error', sid })
+      }
+    }
     const path = String(frame.path ?? '')
-    if (!path.startsWith('/v1/')) return answer(404, { error: { message: 'Not found', type: 'not_found' } })
+    const method = String(frame.method ?? 'POST')
+    const isToolPath = path === '/mcp' || path.startsWith('/mcp?')
+    if (!path.startsWith('/v1/') && !isToolPath)
+      return answer(404, { error: { message: 'Not found', type: 'not_found' } })
     const headers = Object.entries((frame.headers ?? {}) as Record<string, string>)
     const token = String(picked(headers, ['authorization']).authorization ?? '').replace(/^Bearer /i, '')
     const handlers = agentBridge().forDatabase(database)
+    const body = typeof frame.body === 'string' ? frame.body : ''
+    const { keyOf, tools } = databaseAccess(database)
+    const gatewayCall = (callHeaders: Record<string, string>, timeoutSignal: AbortSignal) =>
+      fetch(`${gatewayUrlOf(database)}${path}`, {
+        method,
+        headers: callHeaders,
+        body: method === 'GET' || method === 'DELETE' ? undefined : body,
+        signal: AbortSignal.any([signal, timeoutSignal]),
+      })
+
+    if (isToolPath) {
+      const turn = token ? await handlers.toolCallTurn(host, token) : undefined
+      if (!turn) return answer(401, refusalOf('This runtime has no chat owner'))
+      const rpc = jsonOf(body) as { id?: unknown; method?: string; params?: { name?: unknown } } | undefined
+      const isToolCall = rpc?.method === 'tools/call'
+      const server = toolServerOf(String(rpc?.params?.name ?? ''))
+      const toolError = (text: string) =>
+        answer(200, { jsonrpc: '2.0', id: rpc?.id, result: { content: [{ type: 'text', text }], isError: true } })
+      const noticeOf = (failure: ToolCallFailure, isReconnect = false) =>
+        toolCallNoticeOf(failure, { ownerName: turn.ownerName, server, isReconnect })
+      const virtualKey = await keyOf(host.workspaceId, turn.ownerId).catch(() => null)
+      if (!virtualKey && isToolCall)
+        return toolError(virtualKey === null ? toolGatewayUnreachable : noticeOf('needs_connection'))
+      if (!virtualKey) return answer(virtualKey === null ? 502 : 401, unreachable)
+      if (rpc?.method === 'initialize')
+        await tools.grantAvailableTools(host.workspaceId, turn.ownerId).catch(() => undefined)
+      let response: Response
+      try {
+        response = await gatewayCall(
+          {
+            ...picked(headers, toolHeaders),
+            authorization: `Bearer ${virtualKey}`,
+            'x-bf-dim-chat': turn.chat.chatId,
+            'x-bf-dim-prompter': turn.prompterId ?? '',
+            'x-bf-dim-owner': turn.ownerId,
+            'x-bf-dim-workspace': host.workspaceId,
+          },
+          AbortSignal.timeout(headTimeoutMilliseconds),
+        )
+      } catch {
+        if (signal.aborted) return
+        return isToolCall ? toolError(toolGatewayUnreachable) : answer(502, unreachable)
+      }
+      if (!isToolCall) return stream(response)
+      if (!response.ok) return toolError(toolGatewayUnreachable)
+      if (!response.headers.get('content-type')?.includes('application/json')) return stream(response)
+      const result = (jsonOf(await response.text()) as { result?: ToolResult })?.result
+      const text = result?.content?.map((part) => part.text ?? '').join('') ?? ''
+      const failure = result?.isError ? toolCallFailureOf(text) : undefined
+      if (!failure) return answer(200, { jsonrpc: '2.0', id: rpc?.id, result })
+      const isReconnect =
+        failure === 'needs_connection' && (await tools.flagToolConnection(host.workspaceId, turn.ownerId, server))
+      return toolError(noticeOf(failure, isReconnect))
+    }
+
     const turn = token ? await handlers.modelCallTurn(host, token) : undefined
     if (!turn) return answer(401, refusalOf('This runtime has no active turn'))
-    const body = typeof frame.body === 'string' ? frame.body : ''
     const record = (failure: ModelCallFailure) =>
       handlers.recordModelCallFailure({ ...turn, model: modelOf(body), failure })
-    const virtualKey = await keyReaderOf(database)(host.workspaceId, turn.prompterId).catch(() => null)
+    const virtualKey = await keyOf(host.workspaceId, turn.prompterId).catch(() => null)
     if (virtualKey === null) {
       await record({ reached: 'unreachable' })
       return answer(502, unreachable)
@@ -72,20 +163,19 @@ export const createModelCallRelay = ({
     const timer = setTimeout(() => headTimeout.abort(), headTimeoutMilliseconds)
     let response: Response
     try {
-      response = await fetch(`${gatewayUrlOf(database)}${path}`, {
-        method: String(frame.method ?? 'POST'),
-        headers: {
+      response = await gatewayCall(
+        {
           ...picked(headers, forwardedHeaders),
           authorization: `Bearer ${virtualKey}`,
           'x-bf-dim-chat': turn.chat.chatId,
           'x-bf-dim-prompter': turn.prompterId,
           'x-bf-dim-owner': turn.ownerId ?? '',
           'x-bf-dim-workspace': host.workspaceId,
+          'x-bf-mcp-include-clients': '',
           ...providerHeadersOf?.(database, turn.chat),
         },
-        body: frame.method === 'GET' ? undefined : body,
-        signal: AbortSignal.any([signal, headTimeout.signal]),
-      })
+        headTimeout.signal,
+      )
     } catch {
       if (signal.aborted) return
       await record({ reached: headTimeout.signal.aborted ? 'timeout' : 'unreachable' })
@@ -93,25 +183,18 @@ export const createModelCallRelay = ({
     } finally {
       clearTimeout(timer)
     }
-    send({ type: 'gw_head', sid, status: response.status, headers: picked(response.headers, answeredHeaders) })
-    try {
-      if (!response.ok) {
-        const text = await response.text()
-        const notice = await record({ reached: 'answered', status: response.status, body: jsonOf(text) })
-        if (notice === genericModelCallNoticeOf(response.status))
-          console.error(
-            `A model call failed with ${response.status} (gateway request ${response.headers.get('x-request-id')})`,
-          )
-        send({ type: 'gw_chunk', sid, data: text })
-      } else {
-        const decoder = new TextDecoder()
-        for await (const chunk of response.body ?? [])
-          send({ type: 'gw_chunk', sid, data: decoder.decode(chunk, { stream: true }) })
-      }
-      send({ type: 'gw_end', sid })
-    } catch {
-      send({ type: 'gw_error', sid })
-    }
+    return stream(
+      response,
+      response.ok
+        ? undefined
+        : async (text) => {
+            const notice = await record({ reached: 'answered', status: response.status, body: jsonOf(text) })
+            if (notice === genericModelCallNoticeOf(response.status))
+              console.error(
+                `A model call failed with ${response.status} (gateway request ${response.headers.get('x-request-id')})`,
+              )
+          },
+    )
   }
 }
 

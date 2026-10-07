@@ -12,7 +12,15 @@ export const connectedTool = (
   owner: Pick<PersonalConnection, 'workspaceId' | 'memberId'>,
   tool: string,
   catalog: readonly string[],
+  status = 'Connected',
 ): PersonalConnection => {
   if (!catalog.includes(tool)) throw new ToolNotInCatalog(tool)
-  return { ...owner, tool, status: 'Connected' }
+  return { ...owner, tool, status }
 }
+
+export const connectionStatusOf = (sessionStatuses: readonly string[]) =>
+  sessionStatuses.includes('active')
+    ? 'Connected'
+    : sessionStatuses.includes('needs_reauth')
+      ? 'Needs reconnection'
+      : undefined

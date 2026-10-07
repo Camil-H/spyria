@@ -139,6 +139,13 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
             }
           : undefined
       },
+      toolCallTurn: async (id) => {
+        const turn = await chatTurnOf(tx, contextWorkspaceId, id)
+        return {
+          ownerId: turn?.ownerId ? memberId(turn.ownerId) : null,
+          prompterId: turn?.promptId && turn.prompterId ? memberId(turn.prompterId) : null,
+        }
+      },
       lastFailure: async (id) => (await chatTurnOf(tx, contextWorkspaceId, id))?.failure ?? null,
       recordFailure: async (id, promptId, notice) => {
         await setChatTurnFailure(tx, contextWorkspaceId, id, promptId, notice)

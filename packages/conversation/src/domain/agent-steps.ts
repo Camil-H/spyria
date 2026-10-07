@@ -1,3 +1,5 @@
+import { toolConnectionOf, toolResultOf } from './tool-calls.ts'
+
 export type DiffLine = { kind: 'added' | 'removed' | 'context'; text: string }
 export type ThoughtStep = { type: 'thought'; text: string; durationMilliseconds: number | null }
 export type AgentStep =
@@ -18,7 +20,13 @@ export type AgentStep =
       removed: number
       diff: DiffLine[]
     }
-  | { type: 'tool'; name: string; arguments: string; result: string | null }
+  | {
+      type: 'tool'
+      name: string
+      arguments: string
+      result: string | null
+      connection?: { server: string; isReconnect: boolean }
+    }
   | { type: 'plan'; items: { title: string; status: string }[] }
   | { type: 'error'; message: string }
 export type StoredStep = AgentStep & { thought?: ThoughtStep }
@@ -90,6 +98,10 @@ export const observedStep = (
     const countOf = (kind: DiffLine['kind']) => diff.filter((line) => line.kind === kind).length
     return { ...step, added: countOf('added'), removed: countOf('removed'), diff }
   }
-  if (step.type === 'tool') return { ...step, result: textOf(observation?.content) }
+  if (step.type === 'tool') {
+    const result = toolResultOf(textOf(observation?.content))
+    const connection = toolConnectionOf(result)
+    return { ...step, result, ...(connection && { connection }) }
+  }
   return undefined
 }

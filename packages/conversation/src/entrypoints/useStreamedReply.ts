@@ -69,5 +69,6 @@ export const useStreamedReply = (
     isDeleted: false,
     isEdited: false,
     isRunning: true,
+    canConnectTools: false,
   }
 }

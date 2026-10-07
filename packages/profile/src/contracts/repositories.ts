@@ -34,5 +34,15 @@ export type LlmGateway = {
 export type PersonalConnectionRepository = {
   connect(connection: PersonalConnection): Promise<void>
   disconnect(workspaceId: WorkspaceId, memberId: MemberId, tool: string): Promise<void>
-  toolCatalog(): Promise<readonly string[]>
+  statusOf(workspaceId: WorkspaceId, memberId: MemberId, tool: string): Promise<string | undefined>
+}
+
+export type ToolServer = { id: string; name: string; tools: string[] }
+export type ToolGateway = {
+  toolServers(): Promise<ToolServer[]>
+  grantToolServers(virtualKeyId: string, servers: readonly ToolServer[]): Promise<void>
+  startToolConsent(virtualKeyId: string, server: ToolServer): Promise<string>
+  toolSessions(virtualKeyId: string, server: ToolServer): Promise<{ id: string; status: string }[]>
+  removeToolSession(sessionId: string): Promise<void>
+  finishToolConsent(callbackQuery: string): Promise<boolean>
 }

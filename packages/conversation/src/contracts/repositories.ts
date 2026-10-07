@@ -24,6 +24,7 @@ export type AgentTurnRepository = {
   lock(chatId: ChatId): Promise<MessageId | null>
   set(chatId: ChatId, prompt: Pick<Message, 'id' | 'authorId'> | null): Promise<void>
   modelCallTurn(chatId: ChatId): Promise<ModelCallTurn | undefined>
+  toolCallTurn(chatId: ChatId): Promise<{ ownerId: MemberId | null; prompterId: MemberId | null }>
   recordFailure(chatId: ChatId, promptId: MessageId, notice: string): Promise<void>
   lastFailure(chatId: ChatId): Promise<string | null>
   nextPrompt(chatId: ChatId): Promise<Message | undefined>

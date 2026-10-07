@@ -2,6 +2,7 @@ import { useQuery } from '@hq/db/react'
 import type { MemberId, WorkspaceId } from '@hq/kernel'
 import { ghostButtonClass, LabelledSection, tabTriggerClass } from '@hq/ui'
 import { Content, List, Root, Trigger } from '@radix-ui/react-tabs'
+import { useEffect, useState } from 'react'
 import { getPersonalConnections } from '../queries/get-personal-connections.ts'
 import { getSharedConnections } from '../queries/get-shared-connections.ts'
 import { ErrorMessage } from './ErrorMessage.tsx'
@@ -15,7 +16,12 @@ export const ConnectionsSection = ({ workspaceId, memberId }: { workspaceId: Wor
   const commands = useProfileCommands()
   const { errorMessage, run } = useGuardedAction()
   const shared = useQuery(getSharedConnections(workspaceId, memberId))
-  const { connected, available } = useQuery(getPersonalConnections(workspaceId, memberId))
+  const connected = useQuery(getPersonalConnections(workspaceId, memberId))
+  const [servers, setServers] = useState<string[]>([])
+  useEffect(() => {
+    commands.availableTools({ workspaceId }).then(setServers, () => setServers([]))
+  }, [commands, workspaceId])
+  const available = servers.filter((server) => !connected.some(({ tool }) => tool === server))
   const act = (command: 'connectTool' | 'disconnectTool', tool: string) => () =>
     run(() => commands[command]({ workspaceId, tool }))
   return (
@@ -63,15 +69,15 @@ export const ConnectionsSection = ({ workspaceId, memberId }: { workspaceId: Wor
               </li>
             ))}
           </ul>
-          {available.length > 0 && (
-            <div className="flex flex-wrap gap-2 text-sm">
-              {available.map((tool) => (
-                <button key={tool} type="button" className={ghostButtonClass} onClick={act('connectTool', tool)}>
-                  Connect {tool}
-                </button>
-              ))}
-            </div>
-          )}
+          {available.map((tool) => (
+            <fieldset key={tool} aria-label={tool} className={`${rowClass} text-sm`}>
+              <span className="font-medium">{tool}</span>
+              <span className="text-muted">Not connected</span>
+              <button type="button" className={`${ghostButtonClass} ml-auto`} onClick={act('connectTool', tool)}>
+                Connect {tool}
+              </button>
+            </fieldset>
+          ))}
           <ErrorMessage message={errorMessage} />
         </Content>
       </Root>

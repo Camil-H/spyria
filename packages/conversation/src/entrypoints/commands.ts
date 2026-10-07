@@ -13,6 +13,7 @@ export type ConversationCommands = {
   startRuntimeFromMessage: Command<{ messageId: MessageId }>
   saveDraft: Command<{ chatId: ChatId; text: string }, void>
   commandOutput: Command<{ chatId: ChatId; stepId: string }>
+  connectTool: Command<{ tool: string }, unknown>
 }
 
 export type AgentStream = {

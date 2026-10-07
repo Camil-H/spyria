@@ -1,18 +1,23 @@
-import type { LlmGateway } from '../contracts/repositories.ts'
+import type { LlmGateway, ToolGateway, ToolServer } from '../contracts/repositories.ts'
 import { UnsupportedProvider } from '../domain/errors.ts'
 import type { GatewayKey } from '../domain/llm-credential.ts'
 
 export type LlmGatewaySettings = { url: string; adminUser: string; adminPassword: string }
+export type ToolServerSetup = { name: string; url: string; oauthConfig?: Record<string, unknown> }
+type McpClient = { config: { client_id: string; name: string }; tools?: { name?: string }[] }
+type McpConfig = { id: number; mcp_client: { name: string }; tools_to_execute: string[] }
+type BifrostGateway = LlmGateway &
+  ToolGateway & {
+    url: string
+    registerFakeProvider(fakeLlmUrl: string): Promise<void>
+    setUpToolServer(server: ToolServerSetup, logIn?: (authorizeUrl: string) => Promise<void>): Promise<boolean>
+  }
 
 const notFound = 404
 const conflict = 409
 const providersCreatedOnDemand = ['openai', 'anthropic', 'mistral']
 
-export const createLlmGateway = ({
-  url,
-  adminUser,
-  adminPassword,
-}: LlmGatewaySettings): LlmGateway & { url: string; registerFakeProvider(fakeLlmUrl: string): Promise<void> } => {
+export const createLlmGateway = ({ url, adminUser, adminPassword }: LlmGatewaySettings): BifrostGateway => {
   const authorization = `Basic ${btoa(`${adminUser}:${adminPassword}`)}`
   const virtualKeyValues = new Map<string, string>()
   const request = async (method: string, path: string, body?: object, toleratedStatus = notFound) => {
@@ -23,7 +28,8 @@ export const createLlmGateway = ({
     })
     if (!response.ok && response.status !== toleratedStatus)
       throw new Error(`The gateway answered ${method} ${path.replace(/[0-9a-f-]{36}/g, ':id')} with ${response.status}`)
-    return { found: response.ok, body: response.ok ? ((await response.json()) as Record<string, unknown>) : {} }
+    const text = response.ok ? await response.text() : ''
+    return { found: response.ok, body: JSON.parse(text || '{}') as Record<string, unknown> }
   }
   const virtualKeyOf = (body: Record<string, unknown>) => body.virtual_key as { id: string; value: string }
   const bindingOf = (keys: GatewayKey[]) => ({
@@ -34,8 +40,78 @@ export const createLlmGateway = ({
       key_ids: keys.filter((key) => key.provider === provider).map((key) => key.id),
     })),
   })
-  return {
+  const toolServers = async () =>
+    ((await request('GET', '/api/mcp/clients')).body.clients as McpClient[]).map(
+      ({ config, tools }): ToolServer => ({
+        id: config.client_id,
+        name: config.name,
+        tools: (tools ?? []).flatMap((tool) => tool.name ?? []),
+      }),
+    )
+  const finishToolConsent = async (callbackQuery: string) => {
+    const response = await fetch(`${url}/api/oauth/callback${callbackQuery}`, { redirect: 'manual' })
+    return /auth-success|status=success/.test(response.headers.get('location') ?? '')
+  }
+  const logInAutomatically = async (authorizeUrl: string) => {
+    const authorized = await fetch(authorizeUrl, { redirect: 'manual' })
+    await finishToolConsent(new URL(authorized.headers.get('location') ?? '').search)
+  }
+  const gateway: BifrostGateway = {
     url,
+    toolServers,
+    finishToolConsent,
+    setUpToolServer: async ({ name, url: endpoint, oauthConfig = {} }, logIn = logInAutomatically) => {
+      if ((await toolServers()).some((server) => server.name === name)) return false
+      const { body } = await request('POST', '/api/mcp/client', {
+        name,
+        connection_type: 'http',
+        connection_string: endpoint,
+        auth_type: 'per_user_oauth',
+        oauth_config: oauthConfig,
+        tools_to_execute: ['*'],
+      })
+      await logIn(String(body.authorize_url))
+      await request('POST', `/api/mcp/client/${body.oauth_config_id}/complete-oauth`)
+      return true
+    },
+    grantToolServers: async (virtualKeyId, servers) => {
+      const { body } = await request('GET', `/api/governance/virtual-keys/${virtualKeyId}`)
+      const configs = ((body.virtual_key as { mcp_configs?: McpConfig[] }).mcp_configs ?? []).map((config) => ({
+        id: config.id,
+        mcp_client_name: config.mcp_client.name,
+        tools_to_execute: config.tools_to_execute,
+      }))
+      const missing = servers.filter((server) => !configs.some((config) => config.mcp_client_name === server.name))
+      if (missing.length > 0)
+        await request('PUT', `/api/governance/virtual-keys/${virtualKeyId}`, {
+          mcp_configs: [...configs, ...missing.map(({ name }) => ({ mcp_client_name: name, tools_to_execute: ['*'] }))],
+        })
+    },
+    startToolConsent: async (virtualKeyId, server) => {
+      const response = await fetch(`${url}/mcp`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${await gateway.virtualKeyValue(virtualKeyId)}`,
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/call',
+          params: { name: `${server.name}-${server.tools[0]}`, arguments: {} },
+        }),
+      })
+      const flowId = (await response.text()).match(/flow=([0-9a-f-]{36})/)?.[1]
+      if (!flowId) throw new Error(`The gateway started no consent for ${server.name}`)
+      return String((await request('GET', `/api/oauth/per-user/flows/${flowId}/start`)).body.authorize_url)
+    },
+    toolSessions: async (virtualKeyId, server) =>
+      (await request('GET', `/api/mcp/sessions?virtual_key_id=${virtualKeyId}&mcp_client_id=${server.id}`)).body
+        .sessions as { id: string; status: string }[],
+    removeToolSession: async (sessionId) => {
+      await request('DELETE', `/api/mcp/sessions/${sessionId}`)
+    },
     registerFakeProvider: async (fakeLlmUrl) => {
       const fake = {
         provider: 'fake',
@@ -83,4 +159,5 @@ export const createLlmGateway = ({
       return value
     },
   }
+  return gateway
 }

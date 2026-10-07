@@ -6,6 +6,7 @@ type FakeLlmStep =
   | { edit: { path: string; create?: string; oldText?: string; newText?: string } }
   | { plan: { title: string; status: string }[] }
   | { fail: string }
+  | { tool: string; arguments?: Record<string, unknown> }
 export type FakeLlmScript = { text?: string; wordDelayMilliseconds?: number; command?: string; steps?: FakeLlmStep[] }
 type CompletionRequest = {
   stream?: boolean
@@ -36,21 +37,23 @@ const toolCallOf = (step: FakeLlmStep | undefined) => {
         ? { name: 'think', arguments: { thought: step.think } }
         : 'command' in step
           ? { name: 'terminal', arguments: { command: step.command, security_risk: 'LOW', summary: step.command } }
-          : 'plan' in step
-            ? {
-                name: 'task_tracker',
-                arguments: { command: 'plan', task_list: step.plan.map((task) => ({ ...task, notes: '' })) },
-              }
-            : {
-                name: 'file_editor',
-                arguments: {
-                  path: `${workingDirectory}${step.edit.path}`,
-                  security_risk: 'LOW',
-                  ...(step.edit.create === undefined
-                    ? { command: 'str_replace', old_str: step.edit.oldText, new_str: step.edit.newText }
-                    : { command: 'create', file_text: step.edit.create }),
-                },
-              }
+          : 'tool' in step
+            ? { name: step.tool, arguments: step.arguments ?? {} }
+            : 'plan' in step
+              ? {
+                  name: 'task_tracker',
+                  arguments: { command: 'plan', task_list: step.plan.map((task) => ({ ...task, notes: '' })) },
+                }
+              : {
+                  name: 'file_editor',
+                  arguments: {
+                    path: `${workingDirectory}${step.edit.path}`,
+                    security_risk: 'LOW',
+                    ...(step.edit.create === undefined
+                      ? { command: 'str_replace', old_str: step.edit.oldText, new_str: step.edit.newText }
+                      : { command: 'create', file_text: step.edit.create }),
+                  },
+                }
   return (
     call && {
       index: 0,

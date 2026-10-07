@@ -123,19 +123,38 @@ const FileStep = ({ step }: { step: StepOf<'file'> }) =>
     </Disclosure>
   )
 
-const ToolStep = ({ step }: { step: StepOf<'tool'> }) => (
-  <Disclosure
-    label={
-      <>
-        <span className="shrink-0">Used {step.name}</span>
-        <code className="truncate font-mono text-xs">{step.arguments.slice(0, toolSummaryLength)}</code>
-      </>
-    }
-  >
-    <pre className={outputClassName}>{step.arguments}</pre>
-    {step.result !== null && <pre className={outputClassName}>{step.result}</pre>}
-  </Disclosure>
-)
+const ToolStep = ({ step, canConnect }: { step: StepOf<'tool'>; canConnect: boolean }) => {
+  const commands = useConversationCommands()
+  const workspaceId = useOutletContext<WorkspaceId>()
+  const { connection } = step
+  return (
+    <>
+      <Disclosure
+        label={
+          <>
+            <span className="shrink-0">Used {step.name}</span>
+            <code className="truncate font-mono text-xs">{step.arguments.slice(0, toolSummaryLength)}</code>
+          </>
+        }
+      >
+        <pre className={outputClassName}>{step.arguments}</pre>
+        {step.result !== null && <pre className={outputClassName}>{step.result}</pre>}
+      </Disclosure>
+      {connection &&
+        (canConnect ? (
+          <button
+            type="button"
+            onClick={() => commands.connectTool({ workspaceId, tool: connection.server }).catch(console.error)}
+            className={`mt-1 ml-5.5 rounded-full border border-line px-2 py-0.5 text-xs text-ink hover:bg-hover ${focusRing}`}
+          >
+            {connection.isReconnect ? 'Reconnect' : 'Connect'} {connection.server}
+          </button>
+        ) : (
+          <p className="pl-5.5 text-sm text-muted">{step.result}</p>
+        ))}
+    </>
+  )
+}
 
 const planStatusLabels: Record<string, string> = { 'in-progress': 'In progress', todo: 'To do' }
 
@@ -156,7 +175,7 @@ export const AgentStep = ({ message }: { message: ConversationMessage }) => {
   if (step?.type === 'thought') return <ThoughtStep step={step} />
   if (step?.type === 'command') return <CommandStep id={message.id} step={step} isRunning={message.isRunning} />
   if (step?.type === 'file') return <FileStep step={step} />
-  if (step?.type === 'tool') return <ToolStep step={step} />
+  if (step?.type === 'tool') return <ToolStep step={step} canConnect={message.canConnectTools} />
   if (step?.type === 'plan') return <PlanStep step={step} />
   if (step?.type === 'error')
     return (

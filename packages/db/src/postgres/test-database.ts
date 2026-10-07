@@ -165,10 +165,12 @@ export const startTestGateway = async ({
   name,
   port,
   fakeLlmUrl,
+  oauthBase,
 }: {
   name: string
   port: number
   fakeLlmUrl: string
+  oauthBase: string
 }) => {
   const containerName = `hq-test-gateway-${name}`
   const databaseName = `hq_test_gateway_${name}`
@@ -215,6 +217,8 @@ export const startTestGateway = async ({
     `BIFROST_ADMIN_USER=${testGatewayAdmin.user}`,
     '-e',
     `BIFROST_ADMIN_PASSWORD=${testGatewayAdmin.password}`,
+    '-e',
+    `HQ_GATEWAY_OAUTH_BASE=${oauthBase}`,
     gatewayImage,
   )
   if (started.status !== 0) {

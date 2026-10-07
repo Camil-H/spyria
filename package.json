@@ -24,7 +24,8 @@
     "db:generate-zero": "bun run --cwd packages/db generate-zero",
     "db:rebuild-messages": "bun apps/server/src/operator-cli.ts rebuild-messages",
     "jobs:failed": "bun apps/server/src/operator-cli.ts failed-jobs",
-    "jobs:retry": "bun apps/server/src/operator-cli.ts retry-jobs"
+    "jobs:retry": "bun apps/server/src/operator-cli.ts retry-jobs",
+    "tools:setup": "bun apps/server/src/operator-cli.ts tools-setup"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",

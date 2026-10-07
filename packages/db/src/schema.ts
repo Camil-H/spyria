@@ -190,5 +190,3 @@ export const memberNamesIn = (snapshot: Snapshot, workspaceId: WorkspaceId) => {
   )
   return (memberId: MemberId) => nameByMemberId.get(memberId) ?? 'Unknown'
 }
-
-export const toolCatalog = ['GitHub', 'Slack', 'Notion', 'Linear']

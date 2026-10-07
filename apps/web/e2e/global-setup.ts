@@ -14,6 +14,7 @@ import {
 } from '@hq/db/testing'
 import { removeDockerObjects } from './stack.ts'
 import {
+  fakeMcpUrl,
   gatewayPort,
   gatewayUrl,
   maximumWorkerCount,
@@ -28,6 +29,7 @@ const repositoryRoot = new URL('../../../', import.meta.url).pathname
 const sweptPorts = [
   new URL(serverUrl).port,
   new URL(viteUrl).port,
+  new URL(fakeMcpUrl).port,
   ...Array.from({ length: maximumWorkerCount }, (_, index) => [
     zeroCachePortOf(index),
     zeroCachePortOf(index) + 1,
@@ -86,6 +88,7 @@ export default async function globalSetup() {
       name: 'e2e',
       port: gatewayPort,
       fakeLlmUrl: `http://host.docker.internal:${new URL(serverUrl).port}/fake-llm`,
+      oauthBase: `${viteUrl}/gateway-oauth`,
     }),
     startDetached(
       ['bun', 'src/test-server.ts'],
@@ -96,6 +99,7 @@ export default async function globalSetup() {
         HQ_GATEWAY_URL: gatewayUrl,
         HQ_GATEWAY_ADMIN_USER: testGatewayAdmin.user,
         HQ_GATEWAY_ADMIN_PASSWORD: testGatewayAdmin.password,
+        HQ_FAKE_MCP_PORT: new URL(fakeMcpUrl).port,
       },
       `${serverUrl}/health`,
     ),
@@ -106,6 +110,8 @@ export default async function globalSetup() {
       viteUrl,
     ),
   ])
+  const toolServers = await fetch(`${serverUrl}/test/tool-servers`, { method: 'POST' })
+  if (!toolServers.ok) throw new Error(`Setting up the test tool servers failed with ${toolServers.status}`)
   return async () => {
     stopVite()
     stopServer()

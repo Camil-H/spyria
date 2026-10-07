@@ -149,6 +149,7 @@ export const createAgentBridge = ({
       ensureOpen,
       promptWaiting: handlers.promptWaiting,
       modelCallTurn: handlers.modelCallTurn,
+      toolCallTurn: handlers.toolCallTurn,
       recordModelCallFailure: handlers.recordModelCallFailure,
       resumeActiveTurns: async () => {
         const chats = await database.$client<{ workspaceId: string; chatId: string }[]>`

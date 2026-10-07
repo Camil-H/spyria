@@ -53,8 +53,6 @@ const everyStoredText = async () => {
   const rows = await Promise.all(tables.map(({ name }) => database.$client.unsafe(`select * from "${name}"`)))
   return JSON.stringify(rows)
 }
-const connectionsOf = (userId: string) =>
-  database.query.toolConnections.findMany({ where: { workspaceId: acme, userId }, orderBy: { position: 'asc' } })
 const consoleSpies = () => (['log', 'info', 'warn', 'error', 'debug'] as const).map((method) => spyOn(console, method))
 const loggedText = (spies: ReturnType<typeof consoleSpies>) =>
   spies.map((spy) => Bun.inspect(spy.mock.calls)).join('\n')
@@ -243,38 +241,4 @@ test('renameMember changes the display name of the member in the current workspa
   expect(await resultOf(aliceInAcme, 'profile.renameMember', { workspaceId: globex, name: 'Other' })).toEqual(
     failedWith('A member can only change their own profile in their current workspace'),
   )
-})
-
-test('connectTool appends at the next position, reconnects in place and disconnectTool removes', async () => {
-  const toolsOf = async (userId: string) =>
-    (await connectionsOf(userId)).map(({ tool, status, position }) => [tool, status, position])
-  expect(await resultOf(aliceInAcme, 'profile.connectTool', { workspaceId: acme, tool: 'Linear' })).toEqual(succeeded)
-  expect(await resultOf(aliceInAcme, 'profile.connectTool', { workspaceId: acme, tool: 'Notion' })).toEqual(succeeded)
-  expect(await resultOf(aliceInAcme, 'profile.disconnectTool', { workspaceId: acme, tool: 'GitHub' })).toEqual(
-    succeeded,
-  )
-  expect(await resultOf(aliceInAcme, 'profile.connectTool', { workspaceId: acme, tool: 'GitHub' })).toEqual(succeeded)
-  expect(await toolsOf(alice)).toEqual([
-    ['Slack', 'Connected', 2],
-    ['Notion', 'Connected', 3],
-    ['Linear', 'Connected', 4],
-    ['GitHub', 'Connected', 5],
-  ])
-  expect(await resultOf(aliceInAcme, 'profile.connectTool', { workspaceId: acme, tool: 'Jira' })).toEqual(
-    failedWith('Tool Jira is not in the catalog'),
-  )
-})
-
-test('concurrent connects of a member get distinct positions and never touch another member', async () => {
-  const results = await Promise.all(
-    ['GitHub', 'Slack', 'Notion', 'Linear'].map((tool) =>
-      resultOf(bobInAcme, 'profile.connectTool', { workspaceId: acme, tool, memberId: alice }),
-    ),
-  )
-  expect(results).toEqual([succeeded, succeeded, succeeded, succeeded])
-  expect((await connectionsOf(bob)).map(({ position }) => position)).toEqual([1, 2, 3, 4])
-  expect(await connectionsOf(alice)).toHaveLength(4)
-  for (const tool of ['GitHub', 'Slack', 'Notion', 'Linear'])
-    await resultOf(bobInAcme, 'profile.disconnectTool', { workspaceId: acme, tool })
-  expect(await connectionsOf(bob)).toEqual([])
 })

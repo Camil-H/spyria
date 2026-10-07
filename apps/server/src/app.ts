@@ -5,10 +5,15 @@ import { queries, type ZeroContext } from '@hq/db/zero-queries'
 import type { RuntimeHostId } from '@hq/kernel'
 import {
   addLlmCredentialFromRequest,
+  availableToolsFromRequest,
   type createLlmGateway,
   llmCredentialsPath,
   ProfileError,
   profileMutators,
+  toolConnectionFromRequest,
+  toolConnectionsPath,
+  toolConsentCallbackPath,
+  toolConsentPageFromRequest,
 } from '@hq/profile/server'
 import {
   addRuntimeHostFromRequest,
@@ -84,12 +89,19 @@ export const createApp = ({
   const databaseOf = (databaseName: string | undefined) =>
     databaseName === undefined ? database : testDatabaseByName?.(databaseName)
   const authenticate = createSessionAuthenticator(tokenSecret, findMemberIn(databaseOf))
+  const gatewayOf = () => {
+    if (!llmGateway) throw new Error('No LLM gateway is configured')
+    return llmGateway
+  }
   const app = new Hono<{
     Variables: { zeroContext: ZeroContext; zeroDatabase: ZeroDatabase }
   }>()
     .get('/health', (context) => context.json({ status: 'ok' }))
     .get('/host', runtimeHosts.upgrade)
     .get('/api/stream', agentBridge.stream(authenticate, databaseOf))
+    .get(toolConsentCallbackPath, async (context) =>
+      context.html(await toolConsentPageFromRequest(gatewayOf(), new URL(context.req.url).search)),
+    )
     .route(
       '/auth',
       createAuthRoutes({ oidc: createOidc(oidc), tokenSecret, appOrigin, database, authenticate, testDatabaseByName }),
@@ -140,14 +152,28 @@ export const createApp = ({
     .post(llmCredentialsPath, async (context) => {
       const body = await context.req.json().catch(() => null)
       return endpointResponse('Adding an LLM credential', 201, async () => {
-        if (!llmGateway) throw new Error('No LLM gateway is configured')
         await addLlmCredentialFromRequest(
           (work) => context.get('zeroDatabase').transaction(work),
           context.get('zeroContext'),
           body,
-          llmGateway,
+          gatewayOf(),
         )
       })
+    })
+    .get(toolConnectionsPath, () =>
+      endpointResponse('Listing tool servers', 200, () => availableToolsFromRequest(gatewayOf())),
+    )
+    .post(`${toolConnectionsPath}/:tool/:action{connect|refresh|disconnect}`, (context) => {
+      const action = context.req.param('action')
+      return endpointResponse('A tool connection request', action === 'disconnect' ? 204 : 200, () =>
+        toolConnectionFromRequest(
+          (work) => context.get('zeroDatabase').transaction(work),
+          context.get('zeroContext'),
+          gatewayOf(),
+          context.req.param('tool'),
+          action,
+        ),
+      )
     })
     .post(runtimeHostsPath, async (context) => {
       const body = await context.req.json().catch(() => null)

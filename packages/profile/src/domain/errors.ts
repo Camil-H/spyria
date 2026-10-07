@@ -54,3 +54,9 @@ export class ToolNotInCatalog extends ProfileError {
     super('tool_not_in_catalog', `Tool ${tool} is not in the catalog`)
   }
 }
+
+export class NoGatewayKey extends ProfileError {
+  constructor() {
+    super('no_gateway_key', 'Add an LLM key before connecting tools')
+  }
+}

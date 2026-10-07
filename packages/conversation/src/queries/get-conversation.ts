@@ -15,6 +15,7 @@ export type ConversationMessage = Readonly<{
   isDeleted: boolean
   isEdited: boolean
   isRunning: boolean
+  canConnectTools: boolean
 }>
 
 export type ConversationItem =
@@ -111,6 +112,7 @@ export const getConversation =
         isDeleted: message.deletedAt !== null,
         isEdited: message.editedAt !== null,
         isRunning: hasActiveTurn && message.replyToId === chat.agentTurnMessageId,
+        canConnectTools: chat.ownerId === viewerId,
       }),
     )
     return {

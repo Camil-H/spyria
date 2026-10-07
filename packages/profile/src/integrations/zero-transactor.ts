@@ -1,4 +1,3 @@
-import { toolCatalog } from '@hq/db'
 import {
   enqueueJob,
   gatewayKeyRefOf,
@@ -84,7 +83,16 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
       },
       disconnect: (workspaceId, memberId, tool) =>
         tx.mutate.toolConnections.delete({ ...asContextMember(workspaceId, memberId), tool }),
-      toolCatalog: async () => toolCatalog,
+      statusOf: async (workspaceId, memberId, tool) =>
+        (
+          await tx.run(
+            zql.toolConnections
+              .where('workspaceId', asContextMember(workspaceId, memberId).workspaceId)
+              .where('userId', memberId)
+              .where('tool', tool)
+              .one(),
+          )
+        )?.status,
     },
   }
   return { run: (work) => work(unitOfWork) }

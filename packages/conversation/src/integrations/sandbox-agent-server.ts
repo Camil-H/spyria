@@ -45,6 +45,13 @@ export const createSandboxAgentServer = (llm: AgentLlm): AgentServer => ({
           num_retries: 0,
         },
         tools: [{ name: 'terminal' }, { name: 'file_editor' }, { name: 'task_tracker' }],
+        mcp_config: {
+          hq: {
+            url: endpoint.transport.gatewayUrl.replace(/\/v1$/, '/mcp'),
+            transport: 'http',
+            headers: { Authorization: `Bearer ${llmToken}` },
+          },
+        },
       },
       workspace: { kind: 'LocalWorkspace', working_dir: '/workspace/project' },
       autotitle: false,

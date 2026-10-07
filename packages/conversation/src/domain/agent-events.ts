@@ -1,4 +1,5 @@
 import { type Fields, keptOutputOf, pathOf, type StoredStep, type ThoughtStep, textOf } from './agent-steps.ts'
+import { toolDisplayNameOf } from './tool-calls.ts'
 
 export type AgentEvent = Readonly<{ id: string; kind: string; timestamp: string; [field: string]: unknown }>
 export type TurnOutcome = 'finished' | 'error' | 'stuck'
@@ -72,10 +73,11 @@ const actionStepOf = (event: AgentEvent, action: Fields): StoredStep | undefined
         }
       : undefined
   const toolCall = event.tool_call as Fields
+  const name = String(event.tool_name ?? toolCall?.name ?? action?.kind)
   return action
     ? {
         type: 'tool',
-        name: String(event.tool_name ?? toolCall?.name ?? action.kind),
+        name: action.kind === 'MCPToolAction' ? toolDisplayNameOf(name) : name,
         arguments: String(toolCall?.arguments ?? JSON.stringify(action)),
         result: null,
       }

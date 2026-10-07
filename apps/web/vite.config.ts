@@ -14,6 +14,7 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/auth': serverUrl,
+      '/gateway-oauth': serverUrl,
       '/api': { target: serverUrl, ws: true },
       '^/host$': { target: serverUrl, ws: true },
     },

@@ -8,7 +8,12 @@ import {
 } from '@hq/conversation/server'
 import { createZeroStore, type Store, type WorkspaceSession } from '@hq/db/zero-store'
 import { type ChatId, type MemberId, type WorkspaceId, workspaceId } from '@hq/kernel'
-import { createHttpLlmCredentialAdder, type ProfileCommands, profileMutators } from '@hq/profile/server'
+import {
+  createHttpLlmCredentialAdder,
+  createHttpToolConnections,
+  type ProfileCommands,
+  profileMutators,
+} from '@hq/profile/server'
 import { createHttpRuntimeHostCommands, type RuntimeCommands, runtimeMutators } from '@hq/runtime/server'
 import type { Session } from '@hq/session'
 import { type WorkspaceCommands, workspaceMutators } from '@hq/workspace/server'
@@ -115,6 +120,9 @@ export const createApp = async (
       headers: { authorization: `Bearer ${store.tokenOf(workspaceId)}`, 'content-type': 'application/json' },
       body,
     })
+  const toolConnections = createHttpToolConnections((workspaceId, path, method) =>
+    fetch(path, { method, headers: { authorization: `Bearer ${store.tokenOf(workspaceId)}` } }),
+  )
   return {
     store,
     session: {
@@ -151,6 +159,7 @@ export const createApp = async (
             headers: { authorization: `Bearer ${store.tokenOf(workspaceId)}` },
           })
         ).text(),
+      connectTool: toolConnections.connectTool,
       startRuntimeFromMessage: async (input) => {
         const newChatId = crypto.randomUUID()
         await mutate(conversationMutators.conversation.startRuntimeFromMessage, { ...input, chatId: newChatId })
@@ -160,6 +169,7 @@ export const createApp = async (
     agentStream: createAgentStream(store),
     profileCommands: commandsOf<ProfileCommands>(profileMutators.profile, {
       addLlmCredential: createHttpLlmCredentialAdder(postAsMember),
+      ...toolConnections,
     }),
     runtimeCommands: commandsOf<RuntimeCommands>(runtimeMutators.runtime, createHttpRuntimeHostCommands(postAsMember)),
   }
