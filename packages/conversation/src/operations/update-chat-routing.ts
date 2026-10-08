@@ -1,4 +1,4 @@
-import { type ChatId, catalogModelOf, type MemberId } from '@hq/kernel'
+import { type ChatId, chatModelsOf, type MemberId } from '@hq/kernel'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { InvalidRouting } from '../domain/errors.ts'
 import { unreachableSessionNoticeOf } from '../domain/session-routing.ts'
@@ -17,12 +17,13 @@ export const updateChatRouting = (
 ) =>
   transactor.run(async ({ chats, routing }) => {
     if ((await chats.get(chatId)).type !== 'runtime') throw new InvalidRouting('Only runtime chats have a model')
-    for (const model of [sessionModel, defaultModel])
-      if (model !== undefined && !catalogModelOf(model)) throw new InvalidRouting(`Unknown model ${model}`)
+    const reachable =
+      sessionModel === undefined && defaultModel === undefined ? undefined : await routing.reachableModels(memberId)
+    const isReachable = (model: string) => !reachable || chatModelsOf(reachable).some(({ id }) => id === model)
+    if (defaultModel !== undefined && !isReachable(defaultModel))
+      throw new InvalidRouting(`Unknown model ${defaultModel}`)
     if (sessionModel !== undefined) {
-      const reachable = await routing.reachableModels(memberId)
-      if (reachable && !reachable.some((model) => model.id === sessionModel))
-        throw new InvalidRouting(unreachableSessionNoticeOf(sessionModel))
+      if (!isReachable(sessionModel)) throw new InvalidRouting(unreachableSessionNoticeOf(sessionModel))
       await routing.record({
         chatId,
         conversationId: null,

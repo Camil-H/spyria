@@ -1,12 +1,12 @@
-import { catalogModelOf, cheapestModelOf, type MemberId, type MessageId, type WorkspaceId } from '@hq/kernel'
+import { chatModelsOf, type MemberId, type MessageId, type WorkspaceId } from '@hq/kernel'
 import type { AgentChat, AgentConversation, AgentEndpoint } from '../contracts/agent.ts'
 import { agentNotices, startFailureNoticeOf } from '../domain/agent-events.ts'
 import type { Message } from '../domain/message.ts'
 import { noLlmKeyNoticeOf } from '../domain/model-call-failures.ts'
 import {
-  classificationOf,
-  classifierRequestOf,
   sessionChoiceOf,
+  sessionQuestions,
+  sessionStateOf,
   unreachableSessionNoticeOf,
 } from '../domain/session-routing.ts'
 import {
@@ -17,6 +17,7 @@ import {
   noticeWaitingPrompts,
   releaseAgentTurn,
 } from './agent-turn.ts'
+import { decide } from './decide.ts'
 
 type Input = { workspaceId: WorkspaceId; messageId: MessageId }
 type Prepared = { conversation: AgentConversation } | { refusal: string }
@@ -27,35 +28,31 @@ const agentLlmOf = (model: string, effort: string | null, usageId = 'agent') => 
   effort: effort ?? undefined,
   usageId,
 })
-const digestOf = async (value: object) =>
-  [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(value))))]
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('')
 
 const routeSession = async (
-  { transactor, classifier }: AgentDependencies,
+  dependencies: AgentDependencies,
   chat: AgentChat,
   prompterId: MemberId,
   prompt: Message,
 ) => {
-  const { routing, reachable } = await transactor.run(async ({ routing }) => ({
+  const { routing, reachable } = await dependencies.transactor.run(async ({ routing }) => ({
     routing: await routing.chatRouting(chat.chatId),
     reachable: (await routing.reachableModels(prompterId)) ?? [],
   }))
-  const classifierModel = cheapestModelOf(reachable)
-  const request =
-    classifierModel && classifierRequestOf({ model: classifierModel.id, message: prompt.body, mode: routing.mode })
-  const answer = request && (await classifier?.classify({ chat, prompterId, ownerId: routing.ownerId, request }))
-  const classification = classificationOf(answer?.content)
-  const costMicros = Math.round(
-    (answer?.inputTokens ?? 0) * (classifierModel?.dollarsPerMillionInputTokens ?? 0) +
-      (answer?.outputTokens ?? 0) * (classifierModel?.dollarsPerMillionOutputTokens ?? 0),
-  )
+  const decision = await decide(dependencies, {
+    models: reachable,
+    chat,
+    prompterId,
+    ownerId: routing.ownerId,
+    state: sessionStateOf(prompt.body, routing.mode),
+    questions: sessionQuestions,
+  })
+  const choice = sessionChoiceOf({ reachable, defaultModel: routing.defaultModel, answers: decision?.answers })
   return {
-    choice: sessionChoiceOf({ reachable, defaultModel: routing.defaultModel, classification }),
-    classification,
-    costMicros,
-    inputsDigest: request ? await digestOf(request) : null,
+    choice: choice && { ...choice, reason: decision ? choice.reason : 'routing unavailable' },
+    answers: decision?.answers,
+    costMicros: decision?.costMicros ?? 0,
+    inputsDigest: decision?.inputsDigest ?? null,
   }
 }
 
@@ -70,8 +67,9 @@ const keepSession = async (
     reachable: await routing.reachableModels(prompterId),
   }))
   const { model, reasoningEffort, agentModel } = routing
-  if (!model || !catalogModelOf(model)) return { conversation }
-  if (!reachable?.some((candidate) => candidate.id === model)) return { refusal: unreachableSessionNoticeOf(model) }
+  if (!model) return { conversation }
+  if (!chatModelsOf(reachable ?? []).some((candidate) => candidate.id === model))
+    return { refusal: unreachableSessionNoticeOf(model) }
   if (agentModel !== model) {
     const llmToken = await runtimes.issueLlmToken(chat, true)
     await agentServer.switchLlm(
@@ -125,7 +123,7 @@ const conversationFor = async (
         role: 'session',
         memberId: prompterId,
         inputsDigest: routed.inputsDigest,
-        classifierOutput: routed.classification ?? null,
+        classifierOutput: routed.answers ?? null,
         model: model.id,
         reason,
         costMicros: routed.costMicros,

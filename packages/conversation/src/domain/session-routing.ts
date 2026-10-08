@@ -1,83 +1,48 @@
-import { type CatalogModel, catalogModelOf, type ModelTier, modelNameOf, nearestModelOf } from '@hq/kernel'
+import { chatModelsOf, type Model, type ModelTier, modelNameOf, nearestModelOf, tierOf } from '@hq/kernel'
+import { type Answers, confidenceThreshold } from './decisions.ts'
 
 export type Effort = 'high' | 'medium' | 'low'
-export type Classification = Readonly<{ tier: ModelTier; confidence: 'high' | 'low'; effort: Effort; reason: string }>
-export type SessionChoice = Readonly<{ model: CatalogModel; effort: Effort; reason: string }>
+export type SessionChoice = Readonly<{ model: Model; effort: Effort; reason: string }>
 
-const allowed = {
-  tier: ['large', 'medium', 'small'],
-  confidence: ['high', 'low'],
-  effort: ['high', 'medium', 'low'],
-} as const
-const schema = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['tier', 'confidence', 'effort', 'reason'],
-  properties: {
-    tier: { type: 'string', enum: allowed.tier },
-    confidence: { type: 'string', enum: allowed.confidence },
-    effort: { type: 'string', enum: allowed.effort },
-    reason: { type: 'string' },
+export const sessionQuestions = {
+  tier: {
+    instructions: 'The model tier this coding agent session needs.',
+    criteria: {
+      large: 'hard, open-ended or architectural work',
+      medium: 'everything else',
+      small: 'trivial questions or edits',
+    },
   },
-}
-const instructions = `You route a coding agent session to a model tier. Answer with the JSON schema only.
-tier: large for hard, open-ended or architectural work, small for trivial questions or edits, medium otherwise.
-confidence: high only when the request clearly belongs to its tier. effort: the reasoning effort the task needs.`
+  effort: {
+    instructions: 'The reasoning effort the task needs.',
+    criteria: { high: 'deep reasoning', medium: 'some reasoning', low: 'little reasoning' },
+  },
+} as const
 
-export const classifierRequestOf = ({
-  model,
-  message,
-  mode,
-}: {
-  model: string
-  message: string
-  mode: string | null
-}) => ({
-  model,
-  max_tokens: 200,
-  temperature: 0,
-  messages: [
-    { role: 'system', content: instructions },
-    { role: 'user', content: `Chat mode: ${mode ?? 'non-dev'}\nFirst message:\n${message}` },
-  ],
-  response_format: { type: 'json_schema', json_schema: { name: 'session', strict: true, schema } },
-})
-
-export const classificationOf = (content: string | undefined): Classification | undefined => {
-  try {
-    const parsed = JSON.parse(content ?? '')
-    const isValid =
-      typeof parsed?.reason === 'string' &&
-      (Object.keys(allowed) as (keyof typeof allowed)[]).every((field) =>
-        (allowed[field] as readonly unknown[]).includes(parsed[field]),
-      )
-    return isValid
-      ? { tier: parsed.tier, confidence: parsed.confidence, effort: parsed.effort, reason: parsed.reason }
-      : undefined
-  } catch {
-    return undefined
-  }
-}
+export const sessionStateOf = (message: string, mode: string | null) =>
+  `Chat mode: ${mode ?? 'non-dev'}\nFirst message:\n${message}`
 
 export const sessionChoiceOf = ({
   reachable,
   defaultModel,
-  classification,
+  answers,
 }: {
-  reachable: readonly CatalogModel[]
+  reachable: readonly Model[]
   defaultModel: string | null
-  classification: Classification | undefined
+  answers: Answers | undefined
 }): SessionChoice | undefined => {
-  const effort = classification?.effort ?? 'medium'
+  const effort = (answers?.effort?.value ?? 'medium') as Effort
+  const tier = answers?.tier
   const confidentTier =
-    classification?.confidence === 'high' && classification.tier !== 'medium' ? classification.tier : undefined
+    tier && tier.confidence >= confidenceThreshold && tier.value !== 'medium' ? (tier.value as ModelTier) : undefined
+  const chatModels = chatModelsOf(reachable)
   if (confidentTier) {
-    const model = nearestModelOf(reachable, confidentTier)
+    const model = nearestModelOf(chatModels, confidentTier)
     return model && { model, effort, reason: `classified ${confidentTier}` }
   }
   const model =
-    reachable.find((candidate) => candidate.id === defaultModel) ??
-    nearestModelOf(reachable, catalogModelOf(defaultModel)?.tier ?? 'medium')
+    chatModels.find((candidate) => candidate.id === defaultModel) ??
+    nearestModelOf(chatModels, tierOf(defaultModel) ?? 'medium')
   return model && { model, effort, reason: 'default' }
 }
 

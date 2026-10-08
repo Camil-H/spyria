@@ -21,8 +21,7 @@ const recordCalls = `
   select workspace_id, to_char(called_at at time zone 'UTC', 'YYYY-MM'), chat_id, prompter_id,
     sum(input_tokens + output_tokens), sum(cost_micros), count(*)
   from inserted
-  where inserted.role is distinct from 'router'
-    and exists (select 1 from chats where chats.workspace_id = inserted.workspace_id and chats.id = inserted.chat_id)
+  where exists (select 1 from chats where chats.workspace_id = inserted.workspace_id and chats.id = inserted.chat_id)
     and exists (select 1 from memberships
       where memberships.workspace_id = inserted.workspace_id and memberships.user_id = inserted.prompter_id)
   group by 1, 2, 3, 4

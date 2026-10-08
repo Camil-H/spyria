@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { type Database, events, resetDatabase } from '@hq/db/postgres'
+import { setModelDirectory } from '@hq/db/server-writes'
 import {
   createTestDatabase,
   prepareSeededGatewayKeys,
@@ -8,14 +9,14 @@ import {
   startZeroCache,
   testGatewayAdmin,
 } from '@hq/db/testing'
-import { memberId, workspaceId } from '@hq/kernel'
+import { addRoutableModels, memberId, workspaceId } from '@hq/kernel'
 import { createLlmGateway } from '@hq/profile/server'
 import { Hono } from 'hono'
 import { websocket } from 'hono/bun'
 import { createApp } from './app.ts'
 import { issueSessionToken } from './auth/session-tokens.ts'
 import { openSessions } from './auth/sessions.ts'
-import { createFakeLlm, type FakeLlmScript } from './fake-llm.ts'
+import { createFakeLlm, type FakeLlmScript, fakeRoutableModels } from './fake-llm.ts'
 import { createFakeMcp } from './fake-mcp.ts'
 
 export const testAuthSettings = {
@@ -95,6 +96,8 @@ const startSharedTestApp = async () => {
       createFakeLlm(() => fakeLlmScript),
     )
   const llmGateway = llmGatewayAt(`http://127.0.0.1:${integrationGatewayPort}`)
+  setModelDirectory(llmGateway.modelsOf)
+  addRoutableModels(fakeRoutableModels)
   const app = createApp({ database, ...testAuthSettings, llmGateway, fakeLlm })
   const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
   const fakeMcp = createFakeMcp()

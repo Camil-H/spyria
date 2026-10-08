@@ -41,11 +41,11 @@ export const ChatView = ({
     <div key={chatId} className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-4 px-4 py-6">
       <header>
         <div className="flex items-center gap-x-3">
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 max-w-1/2 shrink-0 items-center gap-2">
             <ChatTypeIcon aria-label={chatTypeLabel} role="img" size={20} className="shrink-0 text-muted" />
             <h1 className="truncate text-2xl font-semibold">{conversation.title}</h1>
           </div>
-          <div className="ml-auto flex shrink-0 items-center gap-x-2">
+          <div className="ml-auto flex min-w-0 items-center gap-x-2 whitespace-nowrap">
             {conversation.type === 'runtime' && (
               <>
                 <span className="text-sm text-muted">

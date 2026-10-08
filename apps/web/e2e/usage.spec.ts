@@ -82,12 +82,14 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/')
 })
 
-test('1. a prompt is metered: the Usage tab shows the prompter with tokens, cost and 1 call', async ({ page }) => {
+test('1. a prompt is metered: the Usage tab shows the prompter with tokens, cost and 2 calls (router and agent)', async ({
+  page,
+}) => {
   await prompt(page, 'Meter this prompt', 1)
   await openUsageTab(page, 'Research')
   const usageTable = usageTabOf(page).getByRole('table')
-  await expectMeteredRow(rowOf(usageTable, 'Alice'), 1)
-  await expect(rowOf(usageTable, 'Total').getByRole('cell').nth(2)).toHaveText('1')
+  await expectMeteredRow(rowOf(usageTable, 'Alice'), 2)
+  await expect(rowOf(usageTable, 'Total').getByRole('cell').nth(2)).toHaveText('2')
 })
 
 test('2. two prompters each get a row and the total is their sum', async ({ page, browser, workerStack }) => {
@@ -98,13 +100,13 @@ test('2. two prompters each get a row and the total is their sum', async ({ page
 
   await openUsageTab(page, 'Research')
   const usageTable = usageTabOf(page).getByRole('table')
-  await expectMeteredRow(rowOf(usageTable, 'Alice'), 1)
+  await expectMeteredRow(rowOf(usageTable, 'Alice'), 2)
   await expectMeteredRow(rowOf(usageTable, 'Bob'), 1)
   const alice = await cellsOf(rowOf(usageTable, 'Alice'))
   const bob = await cellsOf(rowOf(usageTable, 'Bob'))
   const total = await cellsOf(rowOf(usageTable, 'Total'))
   expect(total.tokens).toBe(alice.tokens + bob.tokens)
-  expect(total.calls).toBe(2)
+  expect(total.calls).toBe(3)
   await bobPage.context().close()
 })
 
@@ -117,7 +119,8 @@ test('3. workspace settings show the total, each member and each project', async
 
   await openUsageTab(page, 'Research')
   const researchTable = usageTabOf(page).getByRole('table')
-  await expect(rowOf(researchTable, 'Total').getByRole('cell').nth(2)).toHaveText('2', metered)
+  await expect(rowOf(researchTable, 'Alice')).toBeVisible(metered)
+  await expect(rowOf(researchTable, 'Bob')).toBeVisible(metered)
   const research = await cellsOf(rowOf(researchTable, 'Total'))
   const aliceInResearch = await cellsOf(rowOf(researchTable, 'Alice'))
   const bobInResearch = await cellsOf(rowOf(researchTable, 'Bob'))
@@ -188,7 +191,7 @@ test('6. running the sync twice over the same window leaves the totals unchanged
   await prompt(page, 'Count me once', 1)
   await openUsageTab(page, 'Research')
   const usageTable = usageTabOf(page).getByRole('table')
-  await expectMeteredRow(rowOf(usageTable, 'Alice'), 1)
+  await expectMeteredRow(rowOf(usageTable, 'Alice'), 2)
   const before = await cellsOf(rowOf(usageTable, 'Total'))
   const totalsBefore = await researchTotalsInDatabase(workerStack)
 
@@ -200,6 +203,6 @@ test('6. running the sync twice over the same window leaves the totals unchanged
   expect(await researchTotalsInDatabase(workerStack)).toEqual(totalsBefore)
   await page.reload()
   await openUsageTab(page, 'Research')
-  await expect(rowOf(usageTable, 'Total').getByRole('cell').nth(2)).toHaveText('1')
+  await expect(rowOf(usageTable, 'Total').getByRole('cell').nth(2)).toHaveText('2')
   expect(await cellsOf(rowOf(usageTable, 'Total'))).toEqual(before)
 })

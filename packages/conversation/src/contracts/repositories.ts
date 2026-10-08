@@ -1,4 +1,4 @@
-import type { CatalogModel, ChatId, MemberId, MessageId, WorkspaceId } from '@hq/kernel'
+import type { ChatId, MemberId, MessageId, Model, WorkspaceId } from '@hq/kernel'
 import type { AgentEvent } from '../domain/agent-events.ts'
 import type { AgentStep, StoredStep } from '../domain/agent-steps.ts'
 import type { ConversationChat, Message, MessageChange } from '../domain/message.ts'
@@ -77,7 +77,7 @@ export type RoutingDecision = Readonly<{
 }>
 export type RoutingRepository = {
   chatRouting(chatId: ChatId): Promise<ChatRouting>
-  reachableModels(memberId: MemberId): Promise<readonly CatalogModel[] | undefined>
+  reachableModels(memberId: MemberId): Promise<readonly Model[] | undefined>
   update(
     chatId: ChatId,
     fields: Partial<{ model: string; reasoningEffort: string; defaultModel: string; subagentPolicy: string }>,

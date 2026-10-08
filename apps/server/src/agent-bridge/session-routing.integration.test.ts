@@ -1,5 +1,5 @@
 import { afterAll, afterEach, expect, setDefaultTimeout, test } from 'bun:test'
-import { type ChatId, chatId } from '@hq/kernel'
+import { type ChatId, chatId, reachableModelsOf, withPricesOf } from '@hq/kernel'
 import { websocket } from 'hono/bun'
 import { createApp, sessionClassifierOf } from '../app.ts'
 import { startJobWorker } from '../job-worker.ts'
@@ -51,7 +51,7 @@ afterAll(async () => {
   void server.stop(true)
 })
 
-type Route = { tier: string; confidence: string; effort: string } | 'fail' | 'slow'
+type Route = { tier: string; confidence: string | number; effort: string; prose?: boolean } | 'fail' | 'slow'
 const routeWith = (route: Route) => setFakeLlmScript({ route })
 const fakeAgent = async () => {
   const fake = createFakeAgentServer({ modelCall: () => host.modelCall })
@@ -115,14 +115,16 @@ const routing = (chat: ChatId, member: { workspaceId: string; userId: string }, 
     chatId: chat,
     ...fields,
   })
-const addFakeSmallKey = async (userId: string) => {
+const addKey = async (userId: string, provider: string) => {
   const response = await app.request('/api/llm-credentials', {
     method: 'POST',
     headers: { authorization: `Bearer ${await sessionTokenOf(database, acme, userId)}` },
-    body: JSON.stringify({ provider: 'Fake-small', secret: `fake-key-${crypto.randomUUID()}` }),
+    body: JSON.stringify({ provider, secret: `fake-key-${crypto.randomUUID()}` }),
   })
   expect(response.status).toBe(201)
 }
+const routerLogsOf = async (chat: ChatId) =>
+  (await gatewayLogsOf(chat, 2)).filter((log) => log.metadata.role === 'router').map((log) => log.model)
 
 test('the first prompt is classified once, on the prompter’s cheapest model with role router, and the session runs on the routed model', async () => {
   const fake = await fakeAgent()
@@ -147,7 +149,7 @@ test('the first prompt is classified once, on the prompter’s cheapest model wi
       reason: 'classified large',
       conversation_id: conversation?.id,
       member_id: alice,
-      classifier_output: { tier: 'large', confidence: 'high', effort: 'high', reason: 'fake classification' },
+      classifier_output: { tier: { value: 'large', confidence: 1 }, effort: { value: 'high', confidence: 1 } },
     },
   ])
 
@@ -239,6 +241,7 @@ test('the chat default model and subagent policy are stored per chat', async () 
     model: null,
   })
   expect(JSON.stringify(await routing(chat, aliceInAcme, { defaultModel: 'nowhere/unknown' }))).toContain('error')
+  expect(JSON.stringify(await routing(chat, aliceInAcme, { defaultModel: 'typesafe/jev-latest' }))).toContain('error')
   expect(
     await requestMutation(app, database, aliceInAcme, 'workspace.createChat', {
       workspaceId: acme,
@@ -256,9 +259,22 @@ test('the chat default model and subagent policy are stored per chat', async () 
   })
 })
 
+test('a member whose keys reach only a decision model gets the no-key notice and no decision model to choose', async () => {
+  await fakeAgent()
+  await addKey(bob, 'Typesafe')
+  const chat = await newRuntimeChat('fake/fake-medium', bob)
+  expect(await answered(await prompt(chat, 'Only Jev here', bobInAcme))).toEqual([
+    { kind: 'notice', body: 'Bob has no LLM key in this workspace' },
+  ])
+  const response = await app.request(`/api/chats/${chat}/routing`, {
+    headers: { authorization: `Bearer ${await sessionTokenOf(database, acme, bob)}` },
+  })
+  expect(((await response.json()) as { reachableModels: unknown[] }).reachableModels).toEqual([])
+})
+
 test('a prompter reaching only a small model routes to it, and is refused in a session on a model his keys cannot reach', async () => {
   const fake = await fakeAgent()
-  await addFakeSmallKey(bob)
+  await addKey(bob, 'Fake-small')
   const bobChat = await newRuntimeChat('fake/fake-medium', bob)
   routeWith({ tier: 'large', confidence: 'high', effort: 'high' })
   await answered(await prompt(bobChat, 'Big job', bobInAcme))
@@ -292,12 +308,61 @@ test('the routing read lists the member’s reachable models and the models used
   const response = await app.request(`/api/chats/${chat}/routing`, {
     headers: { authorization: `Bearer ${await sessionTokenOf(database, acme, alice)}` },
   })
-  expect(await response.json()).toEqual({
-    reachableModels: ['fake/fake-large', 'fake/fake-medium', 'fake/fake-small'],
+  expect(await response.json()).toMatchObject({
+    reachableModels: [
+      { id: 'fake/fake-large', dollarsPerMillionInputTokens: 30 },
+      { id: 'fake/fake-medium', dollarsPerMillionInputTokens: 15 },
+      { id: 'fake/fake-small', dollarsPerMillionInputTokens: 6 },
+    ],
     contextTokens: 450,
     modelsUsed: [
       { model: 'fake/fake-large', calls: 2, tokens: 450, costMicros: 13500 },
       { model: 'fake/fake-small', calls: 1, tokens: 450, costMicros: 2700 },
     ],
   })
+})
+
+test('a chat classifier answering JSON inside prose still routes as scripted', async () => {
+  await fakeAgent()
+  const chat = await newRuntimeChat()
+  routeWith({ tier: 'small', confidence: 'high', effort: 'low', prose: true })
+  await answered(await prompt(chat, 'Rename a variable'))
+  expect(await chatOf(chat)).toMatchObject({ model: 'fake/fake-small', reasoning_effort: 'low' })
+  expect(await routerLogsOf(chat)).toEqual(['fake-small'])
+})
+
+test('with a decision model reachable, routing asks it and moves only at a confidence of 0.8 or more', async () => {
+  await fakeAgent()
+  await addKey(alice, 'Typesafe')
+  for (const [confidence, model] of [
+    [0.9, 'fake/fake-large'],
+    [0.5, 'fake/fake-medium'],
+    ['slow', 'fake/fake-medium'],
+  ] as const) {
+    const chat = await newRuntimeChat()
+    routeWith(confidence === 'slow' ? 'slow' : { tier: 'large', confidence, effort: 'high' })
+    await answered(await prompt(chat, `Decide at ${confidence}`))
+    expect(await chatOf(chat)).toMatchObject({ model })
+    if (confidence !== 'slow') expect(await routerLogsOf(chat)).toEqual(['jev-latest'])
+  }
+})
+
+test('the real listing gives datasheet prices to the routable models a key reaches, and only those are offered', async () => {
+  await addKey(alice, 'OpenAI')
+  const keyIds = (
+    await database.$client`select secret_ref from llm_credentials where workspace_id = ${acme} and user_id = ${alice}`
+  ).map((row) => String(row.secret_ref).split('/').at(-1) ?? '')
+  const listing = await llmGateway.modelsOf(keyIds)
+  expect(listing.map((model) => model.id)).toContain('openai/fake-large')
+  expect(withPricesOf(reachableModelsOf(['openai']), listing)).toMatchObject([
+    {
+      id: 'openai/gpt-5',
+      name: 'GPT-5',
+      tier: 'large',
+      dollarsPerMillionInputTokens: 1.25,
+      dollarsPerMillionOutputTokens: 10,
+    },
+    { id: 'openai/gpt-5-mini', name: 'GPT-5 mini', tier: 'medium', dollarsPerMillionInputTokens: 0.25 },
+    { id: 'openai/gpt-5-nano', name: 'GPT-5 nano', tier: 'small', dollarsPerMillionInputTokens: 0.05 },
+  ])
 })

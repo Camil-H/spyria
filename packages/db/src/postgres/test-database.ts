@@ -136,7 +136,7 @@ export const startZeroCache = async ({
 
 const gatewayImage = 'maximhq/bifrost:v2.2.6@sha256:d0b4708ace1aa175766f94afa715fd9bba3a1b56c1dc2afff15a21edf3ae4e2a'
 export const testGatewayAdmin = { user: 'hq-test', password: 'hq-test-gateway-password' }
-const gatewayProviders = ['openai', 'anthropic', 'mistral']
+const gatewayProviders = ['openai', 'anthropic', 'mistral', 'typesafe']
 const fakeModelPrices = {
   'fake-model': 0.000009,
   'fake-large': 0.00003,

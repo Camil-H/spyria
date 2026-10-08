@@ -1,4 +1,4 @@
-import { type ChatId, modelCatalog, modelNameOf, rereadDollarsOf, type WorkspaceId } from '@hq/kernel'
+import { type ChatId, modelNameOf, rereadDollarsOf, type WorkspaceId } from '@hq/kernel'
 import { buttonClass, fieldClass, focusRing, formatCost, formatTokens, ghostButtonClass, labelClass } from '@hq/ui'
 import { useEffect, useState } from 'react'
 import type { ChatRoutingRead } from './endpoints.ts'
@@ -32,6 +32,9 @@ export const SessionChip = ({
   const [routing, setRouting] = useState<ChatRoutingRead>()
   const [pendingModel, setPendingModel] = useState<string | null>(null)
   useEffect(() => {
+    commands.chatRouting({ workspaceId, chatId }).then(setRouting, () => {})
+  }, [commands, workspaceId, chatId])
+  useEffect(() => {
     if (!isOpen) return
     const load = () => commands.chatRouting({ workspaceId, chatId }).then(setRouting, () => {})
     const closeOnEscape = (event: KeyboardEvent) => event.key === 'Escape' && setIsOpen(false)
@@ -43,26 +46,31 @@ export const SessionChip = ({
       document.removeEventListener('keydown', closeOnEscape)
     }
   }, [isOpen, commands, workspaceId, chatId])
+  const nameOf = (id: string) => routing?.modelNames[id] ?? modelNameOf(id)
   const update = (fields: Fields) => commands.updateChatRouting({ workspaceId, chatId, ...fields })
+  const reachableIds = routing?.reachableModels.map(({ id }) => id) ?? []
   const optionsWith = (current: string | null) =>
-    modelCatalog
-      .filter((option) => option.id === current || routing?.reachableModels.includes(option.id))
-      .map((option) => (
-        <option key={option.id} value={option.id}>
-          {option.name}
-        </option>
-      ))
-  const estimate = pendingModel ? rereadDollarsOf(pendingModel, routing?.contextTokens ?? null) : undefined
+    [...(current && !reachableIds.includes(current) ? [current] : []), ...reachableIds].map((id) => (
+      <option key={id} value={id}>
+        {nameOf(id)}
+      </option>
+    ))
+  const estimate = pendingModel
+    ? rereadDollarsOf(
+        routing?.reachableModels.find(({ id }) => id === pendingModel),
+        routing?.contextTokens ?? null,
+      )
+    : undefined
   return (
-    <div className="relative">
+    <div className="relative min-w-0">
       <button
         type="button"
         aria-expanded={isOpen}
         onClick={() => setIsOpen(!isOpen)}
-        className={`rounded-full border border-line px-2 py-0.5 text-xs text-muted hover:text-ink ${focusRing}`}
+        className={`max-w-full truncate rounded-full border border-line px-2 py-0.5 text-xs text-muted hover:text-ink ${focusRing}`}
       >
         {model
-          ? `${modelNameOf(model)}${reasoningEffort ? ` (${reasoningEffort})` : ''} · ${policyNames[subagentPolicy]}`
+          ? `${nameOf(model)}${reasoningEffort ? ` (${reasoningEffort})` : ''} · ${policyNames[subagentPolicy]}`
           : 'Model chosen at first prompt'}
       </button>
       {isOpen && (
@@ -86,7 +94,7 @@ export const SessionChip = ({
           {pendingModel && (
             <div className="flex flex-col gap-2">
               <p>
-                The next reply rereads the whole conversation with {modelNameOf(pendingModel)} (
+                The next reply rereads the whole conversation with {nameOf(pendingModel)} (
                 {estimate === undefined
                   ? 'cost unknown'
                   : `about ${formatCost(Math.max(1, estimate * microsPerDollar))}`}
@@ -142,7 +150,7 @@ export const SessionChip = ({
               {routing?.modelsUsed.map((used) => (
                 <tr key={used.model} className="border-t border-line">
                   <th scope="row" className="px-2 py-1 text-left font-normal">
-                    {modelNameOf(used.model)}
+                    {nameOf(used.model)}
                   </th>
                   <td className={cellClass}>{used.calls}</td>
                   <td className={cellClass}>{formatTokens(used.tokens)}</td>

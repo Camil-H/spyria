@@ -4,11 +4,11 @@ import {
   chatRoutingOf,
   chatTurnOf,
   enqueueJob,
-  gatewayKeyRefsOf,
   insertRoutingDecision,
   isChatEventStored,
   lastAgentEvent,
   lockChatTurn,
+  memberModelsOf,
   pendingPrompts,
   setChatAgentModel,
   setChatTurnFailure,
@@ -16,17 +16,7 @@ import {
 } from '@hq/db/server-writes'
 import type { Message as MessageRow } from '@hq/db/zero'
 import { zql } from '@hq/db/zero-queries'
-import {
-  type ChatId,
-  chatId,
-  type MessageId,
-  memberId,
-  messageId,
-  providersOfGatewayRefs,
-  reachableModelsOf,
-  type WorkspaceId,
-  workspaceId,
-} from '@hq/kernel'
+import { type ChatId, chatId, type MessageId, memberId, messageId, type WorkspaceId, workspaceId } from '@hq/kernel'
 import type { Transaction } from '@rocicorp/zero'
 import type { ConversationTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import { agentSweepIntervalMilliseconds, waitingNotices } from '../domain/agent-events.ts'
@@ -218,10 +208,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         if (!row) throw new ChatNotFound(id)
         return { ...row, ownerId: row.ownerId === null ? null : memberId(row.ownerId) }
       },
-      reachableModels: async (id) =>
-        tx.location === 'server'
-          ? reachableModelsOf(providersOfGatewayRefs(await gatewayKeyRefsOf(tx, contextWorkspaceId, id)))
-          : undefined,
+      reachableModels: (id) => memberModelsOf(tx, contextWorkspaceId, id),
       update: (id, fields) =>
         tx.mutate.chats.update({
           workspaceId: contextWorkspaceId,

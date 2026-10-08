@@ -1,7 +1,8 @@
 import { createDatabase, type Database } from '@hq/db/postgres'
+import { setModelDirectory } from '@hq/db/server-writes'
 import { databaseUrlOf } from '@hq/db/testing'
 import { schema } from '@hq/db/zero'
-import { chatId, workspaceId } from '@hq/kernel'
+import { addRoutableModels, chatId, workspaceId } from '@hq/kernel'
 import { createLlmGateway } from '@hq/profile/server'
 import { createRuntimeTransactor, ensureRuntimeRunning, type SandboxProvider } from '@hq/runtime/server'
 import { createBifrostUsageLogs, syncUsageNow } from '@hq/usage/server'
@@ -13,7 +14,7 @@ import { createFakeAgentServer } from './agent-bridge/fake-agent-server.ts'
 import { createApp, sessionClassifierOf } from './app.ts'
 import { sessionCookieOptions, setSessionCookie, testCookie } from './auth/routes.ts'
 import { openSessions } from './auth/sessions.ts'
-import { createFakeLlm, type FakeLlmScript } from './fake-llm.ts'
+import { createFakeLlm, type FakeLlmScript, fakeRoutableModels } from './fake-llm.ts'
 import { createFakeMcp } from './fake-mcp.ts'
 import { startJobWorker } from './job-worker.ts'
 import { createModelCallRelay } from './llm-relay.ts'
@@ -43,6 +44,8 @@ const gatewaySettings = {
   adminPassword: process.env.HQ_GATEWAY_ADMIN_PASSWORD ?? '',
 }
 const llmGateway = createLlmGateway(gatewaySettings)
+setModelDirectory(llmGateway.modelsOf)
+addRoutableModels(fakeRoutableModels)
 const usageSyncIntervalMilliseconds = 2_000
 const fakeAgentServerBootMilliseconds = Number(process.env.HQ_FAKE_AGENT_SERVER_BOOT_MILLISECONDS ?? 1_500)
 const sandboxProviderOf = (databaseName: string): SandboxProvider => ({
@@ -105,7 +108,11 @@ const runtimeHosts = createRuntimeHostGateway({
 
 const agentBridge = createAgentBridge({
   sandboxProvider: runtimeHosts.sandboxProvider,
-  sessionClassifierOf: sessionClassifierOf(llmGateway, { gatewayUrlOf, headersOf: testHeadersOf }),
+  sessionClassifierOf: sessionClassifierOf(llmGateway, {
+    gatewayUrlOf,
+    headersOf: testHeadersOf,
+    timeoutMilliseconds: 300,
+  }),
 })
 
 const scriptByChat = new Map<string, { script: FakeLlmScript; used: PromiseWithResolvers<boolean> }>()

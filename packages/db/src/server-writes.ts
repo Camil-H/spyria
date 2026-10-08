@@ -1,3 +1,4 @@
+import { keyIdsOfGatewayRefs, type ListedModel, providersOfGatewayRefs, reachableModelsOf } from '@hq/kernel'
 import type { ServerTransaction, Transaction } from '@rocicorp/zero'
 
 const onServer = async <Row = unknown>(tx: Transaction, statement: string, parameters: unknown[]) =>
@@ -40,6 +41,18 @@ export const virtualKeyIdOf = async (tx: Transaction, workspaceId: string, userI
       [workspaceId, userId],
     )
   )?.id
+
+let modelsOfKeys: (keyIds: readonly string[]) => Promise<readonly ListedModel[]> = async () => []
+export const setModelDirectory = (directory: typeof modelsOfKeys) => {
+  modelsOfKeys = directory
+}
+export const listedModelsOf = (keyIds: readonly string[]) => modelsOfKeys(keyIds).catch(() => [])
+export const memberModelsOf = async (tx: Transaction, workspaceId: string, userId: string) =>
+  tx.location === 'server'
+    ? reachableModelsOf(providersOfGatewayRefs(await gatewayKeyRefsOf(tx, workspaceId, userId)))
+    : undefined
+export const memberKeyIdsOf = async (tx: Transaction, workspaceId: string, userId: string) =>
+  keyIdsOfGatewayRefs(await gatewayKeyRefsOf(tx, workspaceId, userId))
 
 export const setVirtualKeyId = (tx: Transaction, workspaceId: string, userId: string, id: string | null) =>
   id === null

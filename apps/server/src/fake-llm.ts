@@ -1,3 +1,4 @@
+import type { RoutableModel } from '@hq/kernel'
 import { Hono } from 'hono'
 
 type FakeLlmStep =
@@ -7,7 +8,8 @@ type FakeLlmStep =
   | { plan: { title: string; status: string }[] }
   | { fail: string }
   | { tool: string; arguments?: Record<string, unknown> }
-type FakeRoute = { tier: string; confidence: string; effort: string } | 'fail' | 'slow'
+type FakeRouteAnswer = { tier: string; confidence: string | number; effort: string; prose?: boolean }
+type FakeRoute = FakeRouteAnswer | 'fail' | 'slow'
 export type FakeLlmScript = {
   text?: string
   wordDelayMilliseconds?: number
@@ -23,7 +25,9 @@ type CompletionRequest = {
 }
 
 const defaultText = 'Understood, working on it.'
-const unsureRoute = { tier: 'medium', confidence: 'low', effort: 'medium' }
+const unsureRoute: FakeRouteAnswer = { tier: 'medium', confidence: 'low', effort: 'medium' }
+const decisionConfidenceOf = (confidence: string | number) =>
+  typeof confidence === 'number' ? confidence : confidence === 'high' ? 0.95 : 0.5
 const slowRouteMilliseconds = 5_000
 const defaultWordDelayMilliseconds = 30
 const workingDirectory = '/workspace/project/'
@@ -74,6 +78,14 @@ const toolCallOf = (step: FakeLlmStep | undefined) => {
   )
 }
 
+const listedModelIds = ['fake-model', 'fake-large', 'fake-medium', 'fake-small', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano']
+export const fakeRoutableModels: RoutableModel[] = [
+  { id: 'fake/fake-large', name: 'Fake large', tier: 'large' },
+  { id: 'fake/fake-medium', name: 'Fake medium', tier: 'medium' },
+  { id: 'fake/fake-small', name: 'Fake small', tier: 'small' },
+  { id: 'fake-small/fake-small', name: 'Fake small', tier: 'small' },
+]
+
 const refusedKeyOf = (key: string) => ({
   error: {
     message: `Incorrect API key provided: ${key.slice(0, 3)}****${key.slice(-4)}.`,
@@ -83,63 +95,98 @@ const refusedKeyOf = (key: string) => ({
   },
 })
 
+const routeOf = async (route: FakeRoute = unsureRoute) => {
+  if (route === 'fail') return undefined
+  if (route === 'slow') await Bun.sleep(slowRouteMilliseconds)
+  return route === 'slow' ? unsureRoute : route
+}
+const classifierDownOf = { error: { message: 'Classifier down', type: 'server_error' } }
+
 export const createFakeLlm = (
   scriptOf: (request: Request, isClassifier: boolean) => FakeLlmScript | undefined | Promise<FakeLlmScript | undefined>,
 ) =>
-  new Hono().post('/v1/chat/completions', async (context) => {
-    const key = context.req.header('authorization')?.replace(/^Bearer /, '') ?? ''
-    if (key.includes('refused')) return context.json(refusedKeyOf(key), 401)
-    const request = await context.req.json<CompletionRequest>()
-    const script = (await scriptOf(context.req.raw, Boolean(request.response_format))) ?? {}
-    if (request.response_format) {
-      const route = script.route ?? unsureRoute
-      if (route === 'fail') return context.json({ error: { message: 'Classifier down', type: 'server_error' } }, 500)
-      if (route === 'slow') await Bun.sleep(slowRouteMilliseconds)
-      const answer = JSON.stringify({ ...(route === 'slow' ? unsureRoute : route), reason: 'fake classification' })
+  new Hono()
+    .get('/v1/models', (context) =>
+      context.json({
+        object: 'list',
+        data: listedModelIds.map((id) => ({
+          id,
+          object: 'model',
+          created: Math.floor(Date.now() / 1000),
+          owned_by: 'fake',
+        })),
+      }),
+    )
+    .post('/v1/systemone', async (context) => {
+      const route = await routeOf((await scriptOf(context.req.raw, true))?.route)
+      if (!route) return context.json(classifierDownOf, 500)
+      const confidence = decisionConfidenceOf(route.confidence)
       return context.json({
-        ...completionOf({ message: { role: 'assistant', content: answer }, finish_reason: 'stop' }, { usage }),
-        object: 'chat.completion',
+        answers: {
+          tier: { type: 'choice', choice: route.tier, confidence },
+          effort: { type: 'choice', choice: route.effort, confidence },
+        },
+        usage: { input_tokens: 40, output_tokens: 0 },
       })
-    }
-    const steps = script.steps ?? (script.command ? [{ command: script.command }] : [])
-    const turnMessages = request.messages?.slice(request.messages.findLastIndex((message) => message.role === 'user'))
-    const step = request.tools?.length
-      ? steps[turnMessages?.filter((message) => message.role === 'assistant').length ?? 0]
-      : undefined
-    if (step && 'fail' in step)
-      return Response.json({ type: 'error', error: { type: 'overloaded_error', message: step.fail } }, { status: 529 })
-    const toolCall = toolCallOf(step)
-    const text = toolCall ? '' : (script.text ?? defaultText)
-    const reasoning = step && 'think' in step ? step.think : ''
-    const finishReason = toolCall ? 'tool_calls' : 'stop'
-    if (!request.stream)
-      return context.json({
-        ...completionOf(
-          {
-            message: { role: 'assistant', content: text, ...(toolCall && { tool_calls: [toolCall] }) },
-            finish_reason: finishReason,
-          },
-          { usage },
-        ),
-        object: 'chat.completion',
-      })
-    const stream = new ReadableStream({
-      start: async (controller) => {
-        controller.enqueue(eventOf(completionOf({ delta: { role: 'assistant', content: '' }, finish_reason: null })))
-        for (const [field, words] of [
-          ['reasoning_content', wordsOf(reasoning)],
-          ['content', wordsOf(text)],
-        ] as const)
-          for (const word of words) {
-            await Bun.sleep(script.wordDelayMilliseconds ?? defaultWordDelayMilliseconds)
-            controller.enqueue(eventOf(completionOf({ delta: { [field]: word }, finish_reason: null })))
-          }
-        if (toolCall)
-          controller.enqueue(eventOf(completionOf({ delta: { tool_calls: [toolCall] }, finish_reason: null })))
-        controller.enqueue(eventOf(completionOf({ delta: {}, finish_reason: finishReason }, { usage })))
-        controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'))
-        controller.close()
-      },
     })
-    return new Response(stream, { headers: { 'content-type': 'text/event-stream' } })
-  })
+    .post('/v1/chat/completions', async (context) => {
+      const key = context.req.header('authorization')?.replace(/^Bearer /, '') ?? ''
+      if (key.includes('refused')) return context.json(refusedKeyOf(key), 401)
+      const request = await context.req.json<CompletionRequest>()
+      const script = (await scriptOf(context.req.raw, Boolean(request.response_format))) ?? {}
+      if (request.response_format) {
+        const route = await routeOf(script.route)
+        if (!route) return context.json(classifierDownOf, 500)
+        const { prose, ...fields } = route
+        const json = JSON.stringify({ ...fields, reason: 'fake classification' })
+        const answer = prose ? `Here is my routing decision: ${json} Let me know if you need more.` : json
+        return context.json({
+          ...completionOf({ message: { role: 'assistant', content: answer }, finish_reason: 'stop' }, { usage }),
+          object: 'chat.completion',
+        })
+      }
+      const steps = script.steps ?? (script.command ? [{ command: script.command }] : [])
+      const turnMessages = request.messages?.slice(request.messages.findLastIndex((message) => message.role === 'user'))
+      const step = request.tools?.length
+        ? steps[turnMessages?.filter((message) => message.role === 'assistant').length ?? 0]
+        : undefined
+      if (step && 'fail' in step)
+        return Response.json(
+          { type: 'error', error: { type: 'overloaded_error', message: step.fail } },
+          { status: 529 },
+        )
+      const toolCall = toolCallOf(step)
+      const text = toolCall ? '' : (script.text ?? defaultText)
+      const reasoning = step && 'think' in step ? step.think : ''
+      const finishReason = toolCall ? 'tool_calls' : 'stop'
+      if (!request.stream)
+        return context.json({
+          ...completionOf(
+            {
+              message: { role: 'assistant', content: text, ...(toolCall && { tool_calls: [toolCall] }) },
+              finish_reason: finishReason,
+            },
+            { usage },
+          ),
+          object: 'chat.completion',
+        })
+      const stream = new ReadableStream({
+        start: async (controller) => {
+          controller.enqueue(eventOf(completionOf({ delta: { role: 'assistant', content: '' }, finish_reason: null })))
+          for (const [field, words] of [
+            ['reasoning_content', wordsOf(reasoning)],
+            ['content', wordsOf(text)],
+          ] as const)
+            for (const word of words) {
+              await Bun.sleep(script.wordDelayMilliseconds ?? defaultWordDelayMilliseconds)
+              controller.enqueue(eventOf(completionOf({ delta: { [field]: word }, finish_reason: null })))
+            }
+          if (toolCall)
+            controller.enqueue(eventOf(completionOf({ delta: { tool_calls: [toolCall] }, finish_reason: null })))
+          controller.enqueue(eventOf(completionOf({ delta: {}, finish_reason: finishReason }, { usage })))
+          controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'))
+          controller.close()
+        },
+      })
+      return new Response(stream, { headers: { 'content-type': 'text/event-stream' } })
+    })

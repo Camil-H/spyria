@@ -16,6 +16,7 @@ const gatewayProviders: Record<string, string> = {
   openai: 'openai',
   anthropic: 'anthropic',
   mistral: 'mistral',
+  typesafe: 'typesafe',
   fake: 'fake',
   'fake-small': 'fake-small',
 }

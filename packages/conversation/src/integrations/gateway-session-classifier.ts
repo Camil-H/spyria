@@ -1,22 +1,25 @@
-import type { MemberId, WorkspaceId } from '@hq/kernel'
+import { isDecisionModel, type ListedModel, type MemberId, type WorkspaceId } from '@hq/kernel'
 import type { AgentChat, SessionClassifier } from '../contracts/agent.ts'
-
-const classifierTimeoutMilliseconds = 3000
 
 export const createGatewaySessionClassifier = ({
   gatewayUrl,
   virtualKeyOf,
   headersOf,
+  timeoutMilliseconds = 3000,
+  listedModelsOf,
 }: {
+  listedModelsOf(workspaceId: WorkspaceId, memberId: MemberId): Promise<readonly ListedModel[]>
   gatewayUrl: () => string
+  timeoutMilliseconds?: number
   virtualKeyOf(workspaceId: WorkspaceId, memberId: MemberId): Promise<string | null | undefined>
   headersOf?: (chat: AgentChat) => Record<string, string>
 }): SessionClassifier => ({
-  classify: async ({ chat, prompterId, ownerId, request }) => {
+  listedModels: (chat, memberId) => listedModelsOf(chat.workspaceId, memberId),
+  classify: async ({ chat, prompterId, ownerId, model, request }) => {
     try {
       const virtualKey = await virtualKeyOf(chat.workspaceId, prompterId)
       if (!virtualKey) return undefined
-      const response = await fetch(`${gatewayUrl()}/v1/chat/completions`, {
+      const response = await fetch(`${gatewayUrl()}/v1/${isDecisionModel(model) ? 'decisions' : 'chat/completions'}`, {
         method: 'POST',
         headers: {
           authorization: `Bearer ${virtualKey}`,
@@ -30,15 +33,12 @@ export const createGatewaySessionClassifier = ({
           ...headersOf?.(chat),
         },
         body: JSON.stringify(request),
-        signal: AbortSignal.timeout(classifierTimeoutMilliseconds),
+        signal: AbortSignal.timeout(timeoutMilliseconds),
       })
       if (!response.ok) return undefined
-      const body = (await response.json()) as {
-        choices?: { message?: { content?: string } }[]
-        usage?: { prompt_tokens?: number; completion_tokens?: number }
-      }
+      const body = (await response.json()) as { usage?: { prompt_tokens?: number; completion_tokens?: number } }
       return {
-        content: body.choices?.[0]?.message?.content ?? '',
+        body,
         inputTokens: body.usage?.prompt_tokens ?? 0,
         outputTokens: body.usage?.completion_tokens ?? 0,
       }

@@ -1,4 +1,4 @@
-import type { ChatId, MemberId, MessageId, RuntimeHostId, WorkspaceId } from '@hq/kernel'
+import type { ChatId, ListedModel, MemberId, MessageId, Model, RuntimeHostId, WorkspaceId } from '@hq/kernel'
 import type { AgentEvent } from '../domain/agent-events.ts'
 
 export type AgentChat = Readonly<{ workspaceId: WorkspaceId; chatId: ChatId }>
@@ -61,8 +61,10 @@ export type ClassifierCall = Readonly<{
   chat: AgentChat
   prompterId: MemberId
   ownerId: MemberId | null
+  model: Model
   request: object
 }>
 export type SessionClassifier = {
-  classify(call: ClassifierCall): Promise<{ content: string; inputTokens: number; outputTokens: number } | undefined>
+  listedModels(chat: AgentChat, memberId: MemberId): Promise<readonly ListedModel[]>
+  classify(call: ClassifierCall): Promise<{ body: unknown; inputTokens: number; outputTokens: number } | undefined>
 }

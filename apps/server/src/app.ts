@@ -8,6 +8,7 @@ import {
   readCommandOutput,
 } from '@hq/conversation/server'
 import type { Database } from '@hq/db/postgres'
+import { memberKeyIdsOf } from '@hq/db/server-writes'
 import { schema } from '@hq/db/zero'
 import { queries, type ZeroContext } from '@hq/db/zero-queries'
 import type { RuntimeHostId } from '@hq/kernel'
@@ -53,16 +54,23 @@ export const sessionClassifierOf =
     {
       gatewayUrlOf = () => llmGateway.url,
       headersOf,
+      timeoutMilliseconds,
     }: {
       gatewayUrlOf?: (database: Database) => string
       headersOf?: (database: Database, chat: AgentChat) => Record<string, string>
+      timeoutMilliseconds?: number
     } = {},
   ) =>
   (database: Database) =>
     createGatewaySessionClassifier({
       gatewayUrl: () => gatewayUrlOf(database),
       virtualKeyOf: createMemberKeyReader((work) => zeroDrizzle(schema, database).transaction(work), llmGateway),
+      listedModelsOf: async (workspaceId, memberId) =>
+        llmGateway.listedModelsNow(
+          await zeroDrizzle(schema, database).transaction((tx) => memberKeyIdsOf(tx, workspaceId, memberId)),
+        ),
       headersOf: headersOf && ((chat) => headersOf(database, chat)),
+      timeoutMilliseconds,
     })
 
 const statusByErrorCode: Record<string, number> = { not_admin: 403, host_not_found: 404 }
@@ -178,9 +186,11 @@ export const createApp = ({
     })
     .get(chatRoutingPathOf(':chatId'), async (context) =>
       context.json(
-        await context
-          .get('zeroDatabase')
-          .transaction((tx) => readChatRouting(tx, context.get('zeroContext'), context.req.param('chatId') ?? '')),
+        await readChatRouting(
+          (work) => context.get('zeroDatabase').transaction(work),
+          context.get('zeroContext'),
+          context.req.param('chatId') ?? '',
+        ),
       ),
     )
     .post(llmCredentialsPath, async (context) => {

@@ -1,11 +1,13 @@
 import { createDatabase } from '@hq/db/postgres'
+import { setModelDirectory } from '@hq/db/server-writes'
+import { addRoutableModels } from '@hq/kernel'
 import { createLlmGateway } from '@hq/profile/server'
 import { createBifrostUsageLogs } from '@hq/usage/server'
 import { websocket } from 'hono/bun'
 import { createAgentBridge } from './agent-bridge/bridge.ts'
 import { createApp, sessionClassifierOf } from './app.ts'
 import { enqueueSweeps } from './auth/sessions.ts'
-import { createFakeLlm } from './fake-llm.ts'
+import { createFakeLlm, fakeRoutableModels } from './fake-llm.ts'
 import { startJobWorker } from './job-worker.ts'
 import { createModelCallRelay } from './llm-relay.ts'
 import { createRuntimeHostGateway } from './runtime-hosts/gateway.ts'
@@ -48,10 +50,13 @@ const app = createApp({
   agentBridge,
   fakeLlm: llmModel ? undefined : createFakeLlm(() => undefined),
 })
-if (!llmModel)
+setModelDirectory(llmGateway.modelsOf)
+if (!llmModel) {
+  addRoutableModels(fakeRoutableModels)
   await llmGateway
     .registerFakeProviders('http://host.docker.internal:3000/fake-llm')
     .catch((error) => console.error(`Registering the fake LLM in the gateway failed: ${error.message}`))
+}
 startJobWorker(database, {
   sandboxProvider: runtimeHosts.sandboxProvider,
   agentBridge,

@@ -51,6 +51,18 @@ const agentModelsOf = async (workerStack: WorkerStack, chatId: string, count: nu
     .toBeGreaterThanOrEqual(count)
   return models
 }
+const routerModelsOf = async (workerStack: WorkerStack, chatId: string) => {
+  const query = `metadata_chat=${chatId}&metadata_database=${workerStack.databaseName}&metadata_role=router`
+  let models: string[] = []
+  await expect
+    .poll(async () => {
+      const { logs } = await workerStack.gateway<{ logs: GatewayLog[] | null }>(`/api/logs?${query}&limit=100`)
+      models = (logs ?? []).map((log) => log.model)
+      return models.length
+    }, agentReply)
+    .toBeGreaterThanOrEqual(1)
+  return models
+}
 const addKey = async (page: Page, provider: string) => {
   const llmSection = mainOf(page).getByRole('region', { name: 'LLM access' })
   await sidebarOf(page).getByRole('link', { name: 'Profile' }).click()
@@ -218,6 +230,51 @@ test('9. the subagent policy toggles and persists', async ({ page }) => {
   await page.reload()
   await openSession(page)
   await expect(sessionOf(page).getByLabel('Subagents')).toHaveValue('auto')
+})
+
+test('11. with a decision model reachable, routing asks it and moves only when it is confident', async ({
+  page,
+  workerStack,
+  agentScript,
+}) => {
+  await addKey(page, 'Typesafe')
+  for (const [confidence, chip] of [
+    [0.9, 'Fake large (high) · auto'],
+    [0.5, 'Fake medium (high) · auto'],
+  ] as const) {
+    const chatId = await newRuntimeChat(page, `Decided at ${confidence}`)
+    await agentScript(chatId, { route: { tier: 'large', confidence, effort: 'high' } })
+    await promptAndWait(page, `Decide at ${confidence}`, 1)
+    await expect(chipOf(page)).toHaveText(chip)
+    expect(await routerModelsOf(workerStack, chatId)).toEqual(['jev-latest'])
+  }
+})
+
+test('12. a member whose only key is a decision model is told to add an LLM key and cannot pick it', async ({
+  browser,
+  workerStack,
+}) => {
+  const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+  await addKey(bobPage, 'Typesafe')
+  await newRuntimeChat(bobPage, 'Bob decides')
+  await openSession(bobPage)
+  await expect(sessionOf(bobPage).getByLabel('Default model').getByRole('option', { name: 'Jev' })).toHaveCount(0)
+  await bobPage.keyboard.press('Escape')
+  await sendMessage(bobPage, 'Only a decision key')
+  await expect(mainOf(bobPage)).toContainText('Bob has no LLM key in this workspace', agentReply)
+  await bobPage.context().close()
+})
+
+test('13. a chat classifier answering JSON inside prose still routes as scripted', async ({
+  page,
+  workerStack,
+  agentScript,
+}) => {
+  const chatId = await newRuntimeChat(page, 'Prose')
+  await agentScript(chatId, { route: { tier: 'small', confidence: 'high', effort: 'low', prose: true } })
+  await promptAndWait(page, 'Rename a variable', 1)
+  await expect(chipOf(page)).toHaveText('Fake small (low) · auto')
+  expect(await routerModelsOf(workerStack, chatId)).toEqual(['fake-small'])
 })
 
 test.describe('real Agent Server', () => {

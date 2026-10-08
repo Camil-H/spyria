@@ -1,15 +1,7 @@
-import { appendChatEvent, gatewayKeyRefsOf } from '@hq/db/server-writes'
+import { appendChatEvent, memberModelsOf } from '@hq/db/server-writes'
 import type { Chat as ChatRow, Project as ProjectRow } from '@hq/db/zero'
 import { type ZeroContext, zql } from '@hq/db/zero-queries'
-import {
-  chatId,
-  defaultModelOf,
-  memberId,
-  projectId,
-  providersOfGatewayRefs,
-  reachableModelsOf,
-  workspaceId,
-} from '@hq/kernel'
+import { chatId, defaultModelOf, memberId, projectId, workspaceId } from '@hq/kernel'
 import { createRuntimeTransactor, removeChatRuntime } from '@hq/runtime/published'
 import type { Transaction } from '@rocicorp/zero'
 import type { Transactor, UnitOfWork } from '../contracts/transactor.ts'
@@ -116,8 +108,7 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Tra
     },
     memberModels: {
       defaultModelOf: async (id) =>
-        defaultModelOf(reachableModelsOf(providersOfGatewayRefs(await gatewayKeyRefsOf(tx, context.workspaceId, id))))
-          ?.id ?? null,
+        defaultModelOf((await memberModelsOf(tx, context.workspaceId, id)) ?? [])?.id ?? null,
     },
     chatRuntimes: {
       remove: async (chatId) => {

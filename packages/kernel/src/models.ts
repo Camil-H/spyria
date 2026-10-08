@@ -1,64 +1,63 @@
 export type ModelTier = 'large' | 'medium' | 'small'
-export type CatalogModel = Readonly<{
+export type RoutableModel = Readonly<{ id: string; name: string; tier?: ModelTier }>
+export type ListedModel = Readonly<{
   id: string
-  provider: string
-  name: string
-  tier: ModelTier
-  contextWindow: number
+  contextWindow?: number
   dollarsPerMillionInputTokens?: number
   dollarsPerMillionOutputTokens?: number
 }>
+export type Model = RoutableModel & Omit<ListedModel, 'id'>
 
-const entry = (
-  id: string,
-  name: string,
-  tier: ModelTier,
-  contextWindow: number,
-  prices: [input: number, output: number] | [] = [],
-): CatalogModel => ({
-  id,
-  provider: id.split('/')[0] ?? '',
-  name,
-  tier,
-  contextWindow,
-  dollarsPerMillionInputTokens: prices[0],
-  dollarsPerMillionOutputTokens: prices[1],
-})
-
-export const modelCatalog: readonly CatalogModel[] = [
-  entry('anthropic/claude-opus-5-5', 'Opus 5.5', 'large', 200_000),
-  entry('openai/gpt-5', 'GPT-5', 'large', 400_000),
-  entry('mistral/mistral-large-latest', 'Mistral Large', 'large', 128_000),
-  entry('fake/fake-large', 'Fake large', 'large', 200_000, [30, 30]),
-  entry('anthropic/claude-sonnet-5-5', 'Sonnet 5.5', 'medium', 200_000),
-  entry('openai/gpt-5-mini', 'GPT-5 mini', 'medium', 400_000),
-  entry('mistral/mistral-medium-latest', 'Mistral Medium', 'medium', 128_000),
-  entry('fake/fake-medium', 'Fake medium', 'medium', 200_000, [15, 15]),
-  entry('anthropic/claude-haiku-4-5', 'Haiku 4.5', 'small', 200_000, [1, 5]),
-  entry('openai/gpt-5-nano', 'GPT-5 nano', 'small', 400_000),
-  entry('mistral/mistral-small-latest', 'Mistral Small', 'small', 128_000),
-  entry('fake/fake-small', 'Fake small', 'small', 200_000, [6, 6]),
-  entry('fake-small/fake-small', 'Fake small', 'small', 200_000, [6, 6]),
+const routableModels: RoutableModel[] = [
+  { id: 'anthropic/claude-opus-5-5', name: 'Opus 5.5', tier: 'large' },
+  { id: 'openai/gpt-5', name: 'GPT-5', tier: 'large' },
+  { id: 'mistral/mistral-large-latest', name: 'Mistral Large', tier: 'large' },
+  { id: 'anthropic/claude-sonnet-5-5', name: 'Sonnet 5.5', tier: 'medium' },
+  { id: 'openai/gpt-5-mini', name: 'GPT-5 mini', tier: 'medium' },
+  { id: 'mistral/mistral-medium-latest', name: 'Mistral Medium', tier: 'medium' },
+  { id: 'anthropic/claude-haiku-4-5', name: 'Haiku 4.5', tier: 'small' },
+  { id: 'openai/gpt-5-nano', name: 'GPT-5 nano', tier: 'small' },
+  { id: 'mistral/mistral-small-latest', name: 'Mistral Small', tier: 'small' },
+  { id: 'typesafe/jev-latest', name: 'Jev' },
 ]
-
 const tiersFrom: Record<ModelTier, ModelTier[]> = {
   large: ['large', 'medium', 'small'],
   medium: ['medium', 'small', 'large'],
   small: ['small', 'medium', 'large'],
 }
 
-export const catalogModelOf = (id: string | null | undefined) => modelCatalog.find((model) => model.id === id)
-export const modelNameOf = (id: string) => catalogModelOf(id)?.name ?? id.split('/').at(-1) ?? id
+export const addRoutableModels = (models: readonly RoutableModel[]) => {
+  routableModels.push(...models.filter((model) => !routableModels.some(({ id }) => id === model.id)))
+}
+export const routableModelNames = () => Object.fromEntries(routableModels.map(({ id, name }) => [id, name]))
+export const modelNameOf = (id: string) => routableModels.find((model) => model.id === id)?.name ?? id
 export const providersOfGatewayRefs = (refs: readonly string[]) => [
   ...new Set(refs.flatMap((ref) => ref.match(/^gateway:([a-z-]+)\//)?.[1] ?? [])),
 ]
-export const reachableModelsOf = (providers: readonly string[]) =>
-  modelCatalog.filter((model) => providers.includes(model.provider))
-export const nearestModelOf = (reachable: readonly CatalogModel[], tier: ModelTier) =>
-  tiersFrom[tier].flatMap((candidate) => reachable.find((model) => model.tier === candidate) ?? [])[0]
-export const defaultModelOf = (reachable: readonly CatalogModel[]) => nearestModelOf(reachable, 'medium')
-export const cheapestModelOf = (reachable: readonly CatalogModel[]) => reachable.at(-1)
-export const rereadDollarsOf = (id: string, tokens: number | null) => {
-  const price = catalogModelOf(id)?.dollarsPerMillionInputTokens
+export const keyIdsOfGatewayRefs = (refs: readonly string[]) =>
+  refs.flatMap((ref) => ref.match(/^gateway:[a-z-]+\/(.+)$/)?.[1] ?? [])
+export const reachableModelsOf = (providers: readonly string[]): Model[] =>
+  routableModels.filter((model) => providers.includes(model.id.split('/')[0] ?? ''))
+export const withPricesOf = (models: readonly Model[], listed: readonly ListedModel[]): Model[] =>
+  models.map((model) => ({ ...listed.find((listing) => listing.id === model.id), ...model }))
+export const isDecisionModel = (model: Model) => model.tier === undefined
+export const chatModelsOf = (models: readonly Model[]) => models.filter((model) => !isDecisionModel(model))
+export const nearestModelOf = (models: readonly Model[], tier: ModelTier) =>
+  tiersFrom[tier].flatMap((candidate) => models.find((model) => model.tier === candidate) ?? [])[0]
+export const tierOf = (id: string | null) => routableModels.find((model) => model.id === id)?.tier
+export const defaultModelOf = (models: readonly Model[]) => nearestModelOf(models, 'medium')
+const smallFirst: (ModelTier | undefined)[] = ['small', 'medium', 'large']
+export const cheapestModelOf = (models: readonly Model[]) =>
+  models
+    .toSorted((first, second) => smallFirst.indexOf(first.tier) - smallFirst.indexOf(second.tier))
+    .toSorted(
+      (first, second) =>
+        (first.dollarsPerMillionInputTokens ?? Number.POSITIVE_INFINITY) -
+        (second.dollarsPerMillionInputTokens ?? Number.POSITIVE_INFINITY),
+    )[0]
+export const classifierModelOf = (models: readonly Model[]) =>
+  cheapestModelOf(models.filter(isDecisionModel)) ?? cheapestModelOf(chatModelsOf(models))
+export const rereadDollarsOf = (model: ListedModel | undefined, tokens: number | null) => {
+  const price = model?.dollarsPerMillionInputTokens
   return price === undefined || tokens === null ? undefined : (tokens * price) / 1_000_000
 }
