@@ -21,7 +21,7 @@ export type RelayFrame = { sid?: unknown; method?: unknown; path?: unknown; head
 type Send = (frame: object) => void
 type ToolResult = { content?: { text?: string }[]; isError?: boolean }
 
-const forwardedHeaders = ['content-type', 'accept', 'user-agent']
+const forwardedHeaders = ['content-type', 'accept', 'user-agent', 'anthropic-version', 'anthropic-beta']
 const toolHeaders = [...forwardedHeaders, 'mcp-session-id', 'mcp-protocol-version', 'last-event-id']
 const answeredHeaders = ['content-type', 'x-request-id', 'mcp-session-id']
 const headTimeoutMilliseconds = 300_000
@@ -45,6 +45,11 @@ const jsonOf = (text: string): unknown => {
   }
 }
 const modelOf = (body: string) => (jsonOf(body) as { model?: unknown } | undefined)?.model?.toString()
+const anthropicPathPrefix = '/v1/messages'
+const anthropicPinned = (body: string) => {
+  const model = modelOf(body) ?? ''
+  return model.includes('/') ? body : JSON.stringify({ ...(jsonOf(body) as object), model: `anthropic/${model}` })
+}
 
 export const createModelCallRelay = ({
   llmGateway,
@@ -103,7 +108,8 @@ export const createModelCallRelay = ({
     if (!path.startsWith('/v1/') && !isToolPath && path !== routerPath)
       return answer(404, { error: { message: 'Not found', type: 'not_found' } })
     const headers = Object.entries((frame.headers ?? {}) as Record<string, string>)
-    const token = String(picked(headers, ['authorization']).authorization ?? '').replace(/^Bearer /i, '')
+    const { authorization, 'x-api-key': apiKey } = picked(headers, ['authorization', 'x-api-key'])
+    const token = String(authorization ?? apiKey ?? '').replace(/^Bearer /i, '')
     const handlers = agentBridge().forDatabase(database)
     const body = typeof frame.body === 'string' ? frame.body : ''
 
@@ -139,8 +145,9 @@ export const createModelCallRelay = ({
       return reply({ content: [{ type: 'text', text }], isError })
     }
     const { keyOf, tools } = databaseAccess(database)
+    const isAnthropicCall = path.startsWith(anthropicPathPrefix)
     const gatewayCall = (callHeaders: Record<string, string>, timeoutSignal: AbortSignal, callBody = body) =>
-      fetch(`${gatewayUrlOf(database)}${path}`, {
+      fetch(`${gatewayUrlOf(database)}${isAnthropicCall ? '/anthropic' : ''}${path}`, {
         method,
         headers: callHeaders,
         body: method === 'GET' || method === 'DELETE' ? undefined : callBody,
@@ -206,7 +213,13 @@ export const createModelCallRelay = ({
     const condenserModel = isCondenser ? await handlers.condenserModel(turn.chat, turn.prompterId) : undefined
     const forwardedBody = condenserModel
       ? JSON.stringify({ ...(jsonOf(body) as object), model: condenserModel })
-      : maskedBody(body, condensationScale)
+      : isAnthropicCall
+        ? anthropicPinned(body)
+        : maskedBody(body, condensationScale)
+    if (isAnthropicCall && path.split('?')[0] === anthropicPathPrefix && !body.includes('cc_is_subagent=true'))
+      void handlers
+        .recordHarnessModel(turn.chat, modelOf(forwardedBody) ?? '')
+        .catch(() => console.error(`Recording the model of chat ${turn.chat.chatId} failed`))
     const headTimeout = new AbortController()
     const timer = setTimeout(() => headTimeout.abort(), headTimeoutMilliseconds)
     let response: Response

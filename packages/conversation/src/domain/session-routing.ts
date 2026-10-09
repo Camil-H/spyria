@@ -48,3 +48,10 @@ export const sessionChoiceOf = ({
 
 export const unreachableSessionNoticeOf = (model: string) =>
   `Your keys cannot reach ${modelNameOf(model)}; switch the model or add a key`
+
+export const claudeCode = { harness: 'claude-code', model: 'anthropic/claude-opus-5-5', name: 'Claude Code' } as const
+export const claudeCodeKeysNotice = 'This session runs Claude Code on Anthropic keys'
+const isAnthropic = (model: Model) => model.id.startsWith('anthropic/')
+export const reachesAnthropic = (reachable: readonly Model[]) => reachable.some(isAnthropic)
+export const reachesAnthropicOnly = (reachable: readonly Model[]) =>
+  reachable.length > 0 && reachable.every(isAnthropic)

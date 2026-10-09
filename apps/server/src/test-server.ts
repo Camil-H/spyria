@@ -121,6 +121,16 @@ const agentBridge = createAgentBridge({
 
 const scriptByChat = new Map<string, { script: FakeLlmScript; used: PromiseWithResolvers<boolean> }>()
 const scriptUseMilliseconds = 30_000
+const chatKeyOfPrompt = async (prompt = '') => {
+  for (const key of scriptByChat.keys()) {
+    const [databaseName = '', chat] = key.split('/')
+    const [prompted] = await databaseByName(databaseName).$client`
+      select 1 from chats join messages on messages.chat_id = chats.id and messages.id = chats.agent_turn_message_id
+      where chats.id = ${chat ?? ''} and strpos(${prompt}, messages.body) > 0`
+    if (prompted) return key
+  }
+  return ''
+}
 
 const app = createApp({
   database: createDatabase(),
@@ -129,8 +139,8 @@ const app = createApp({
   llmGateway,
   runtimeHosts,
   agentBridge,
-  fakeLlm: createFakeLlm((request, isClassifier) => {
-    const chatScript = scriptByChat.get(request.headers.get('x-hq-chat') ?? '')
+  fakeLlm: createFakeLlm(async (request, isClassifier, prompt) => {
+    const chatScript = scriptByChat.get(request.headers.get('x-hq-chat') ?? (await chatKeyOfPrompt(prompt)))
     if (!isClassifier) chatScript?.used.resolve(true)
     return chatScript?.script
   }),

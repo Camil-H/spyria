@@ -61,6 +61,7 @@ const chat = (
   reasoningEffort: runtime?.reasoningEffort ?? null,
   defaultModel: runtime ? 'anthropic/claude-sonnet-5-5' : null,
   subagentPolicy: 'auto',
+  harness: null,
   gitBranch: runtime?.gitBranch ?? null,
   originChatId: null,
   agentTurnMessageId: null,

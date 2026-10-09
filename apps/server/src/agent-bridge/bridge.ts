@@ -163,6 +163,7 @@ export const createAgentBridge = ({
       toolCallTurn: handlers.toolCallTurn,
       delegate: handlers.delegate,
       recordModelCallFailure: handlers.recordModelCallFailure,
+      recordHarnessModel: handlers.recordHarnessModel,
       resumeActiveTurns: async () => {
         const chats = await database.$client<{ workspaceId: string; chatId: string }[]>`
           select workspace_id as "workspaceId", id as "chatId" from chats where agent_turn_message_id is not null`

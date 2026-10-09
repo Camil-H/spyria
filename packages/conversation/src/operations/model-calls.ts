@@ -72,3 +72,9 @@ export const findCondenserModel = async ({ transactor, classifier }: Dependencie
   const reachable = (await transactor.run(({ routing }) => routing.reachableModels(prompterId))) ?? []
   return cheapestModelOf(chatModelsOf(withPricesOf(reachable, classifier?.listedModels() ?? [])))?.id
 }
+
+export const recordHarnessModel = ({ transactor }: Dependencies, chat: AgentChat, model: string) =>
+  transactor.run(async ({ routing }) => {
+    const { harness, model: shownModel } = await routing.chatRouting(chat.chatId)
+    if (harness && shownModel !== model) await routing.update(chat.chatId, { model })
+  })

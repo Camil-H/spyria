@@ -62,6 +62,7 @@ export type ChatRow = {
   reasoningEffort: string | null
   defaultModel: string | null
   subagentPolicy: 'auto' | 'same_as_main'
+  harness: 'claude-code' | null
   gitBranch: string | null
   originChatId: ChatId | null
   agentTurnMessageId: MessageId | null

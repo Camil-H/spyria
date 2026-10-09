@@ -12,8 +12,8 @@ import { toolDisplayNameOf } from './tool-calls.ts'
 export type AgentEvent = Readonly<{ id: string; kind: string; timestamp: string; [field: string]: unknown }>
 export type TurnOutcome = 'finished' | 'error' | 'stuck'
 export type AgentProjection =
-  | { type: 'message'; body: string; kind?: 'notice' }
-  | { type: 'step'; step: StoredStep }
+  | { type: 'message'; body: string; kind?: 'notice'; thought?: ThoughtStep }
+  | { type: 'step'; step: StoredStep; id?: string }
   | { type: 'observation'; actionId: string; observation: Fields }
   | { type: 'turn-end'; outcome: TurnOutcome }
   | undefined
@@ -93,6 +93,36 @@ const actionStepOf = (event: AgentEvent, action: Fields): StoredStep | undefined
     : undefined
 }
 
+const acpToolCallProjectionOf = (event: AgentEvent): AgentProjection => {
+  const id = String(event.tool_call_id)
+  const rawOutput = event.raw_output
+  if (event.status === 'completed' || event.status === 'failed')
+    return {
+      type: 'observation',
+      actionId: id,
+      observation: {
+        command: (event.raw_input as Fields)?.command,
+        content: [{ text: typeof rawOutput === 'string' ? rawOutput : textOf(rawOutput) }],
+        is_error: event.status === 'failed',
+      },
+    }
+  if (event.status !== 'pending') return undefined
+  const step: StoredStep =
+    event.tool_kind === 'execute'
+      ? {
+          type: 'command',
+          command: String(event.title),
+          exitCode: null,
+          durationMilliseconds: null,
+          ...keptOutputOf(''),
+        }
+      : { type: 'tool', name: String(event.title), arguments: JSON.stringify(event.raw_input ?? {}), result: null }
+  return { type: 'step', step, id }
+}
+
+export const isFinishEvent = (event: AgentEvent) =>
+  event.kind === 'ActionEvent' && (event.action as Fields)?.kind === 'FinishAction'
+
 export const isStoredAgentEvent = (event: AgentEvent) =>
   event.kind !== 'StreamingDeltaEvent' && !(event.kind === 'ConversationStateUpdateEvent' && event.key === 'full_state')
 
@@ -111,7 +141,12 @@ export const agentProjectionOf = (event: AgentEvent, previousTimestamp: string |
     previousTimestamp === null ? null : Date.parse(event.timestamp) - Date.parse(previousTimestamp)
   if (event.kind === 'MessageEvent' && event.source === 'agent')
     return messageOf(textOf((event.llm_message as Fields)?.content))
-  if (event.kind === 'ActionEvent' && action?.kind === 'FinishAction') return messageOf(action.message)
+  if (isFinishEvent(event)) {
+    const message = messageOf(action?.message)
+    const thought = thoughtOf([event.reasoning_content], durationMilliseconds)
+    return message?.type === 'message' && thought ? { ...message, thought } : message
+  }
+  if (event.kind === 'ACPToolCallEvent') return acpToolCallProjectionOf(event)
   if (event.kind === 'ActionEvent' && action?.kind === 'ThinkAction') {
     const thought = thoughtOf([event.reasoning_content, textOf(event.thought), action.thought], durationMilliseconds)
     return thought && stepOf(thought)

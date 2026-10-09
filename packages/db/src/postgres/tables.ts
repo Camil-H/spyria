@@ -124,6 +124,7 @@ export const chats = table(
     defaultModel: text(),
     subagentPolicy: text().$type<'auto' | 'same_as_main'>().notNull().default('auto'),
     agentModel: text(),
+    harness: text().$type<'claude-code'>(),
     gitBranch: text(),
     originChatId: text(),
     agentTurnMessageId: text(),

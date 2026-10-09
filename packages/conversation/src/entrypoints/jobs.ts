@@ -18,6 +18,7 @@ import {
   findCondenserModel,
   findModelCallTurn,
   findToolCallTurn,
+  recordHarnessModel,
   recordModelCallFailure,
 } from '../operations/model-calls.ts'
 import { promptAgent } from '../operations/prompt-agent.ts'
@@ -100,5 +101,7 @@ export const createAgentHandlers = ({
       delegateTask(dependenciesOf(input.chat.workspaceId), input),
     recordModelCallFailure: (call: Parameters<typeof recordModelCallFailure>[1]) =>
       recordModelCallFailure(dependenciesOf(call.chat.workspaceId), call),
+    recordHarnessModel: (chat: AgentChat, model: string) =>
+      recordHarnessModel(dependenciesOf(chat.workspaceId), chat, model),
   }
 }

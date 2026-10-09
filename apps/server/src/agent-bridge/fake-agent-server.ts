@@ -36,7 +36,11 @@ const completionOf = async (
   onDelta: (delta: { content?: string; reasoning_content?: string }) => void,
   signal: AbortSignal,
 ): Promise<Completion> => {
-  const llm = (conversation.created.agent as { llm: { model: string; api_key: string } }).llm
+  const { agent, secrets } = conversation.created as {
+    agent: { llm?: { model: string; api_key: string } }
+    secrets?: { ANTHROPIC_API_KEY?: { value: string } }
+  }
+  const llm = agent.llm ?? { model: 'anthropic/claude-opus-5-5', api_key: secrets?.ANTHROPIC_API_KEY?.value ?? '' }
   let buffered = ''
   const completion: Completion = { status: undefined, body: '', text: '', reasoning: '' }
   const response = await modelCall({

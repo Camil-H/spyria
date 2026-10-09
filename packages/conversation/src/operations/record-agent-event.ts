@@ -1,6 +1,6 @@
 import { type ChatId, messageId, type WorkspaceId } from '@hq/kernel'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
-import { type AgentEvent, agentProjectionOf, delegatedProjectionOf } from '../domain/agent-events.ts'
+import { type AgentEvent, agentProjectionOf, delegatedProjectionOf, isFinishEvent } from '../domain/agent-events.ts'
 import { observedStep, type StepDelegation } from '../domain/agent-steps.ts'
 import { newMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
@@ -26,7 +26,7 @@ export const recordAgentEvent = (
     const recordedAt = new Date()
     const seq = await unitOfWork.agentEvents.append(chatId, event, promptId, recordedAt, delegation)
     const failure =
-      event.kind === 'ConversationErrorEvent' &&
+      (event.kind === 'ConversationErrorEvent' || (isFinishEvent(event) && !delegation)) &&
       (delegation ? subagentFailure : await unitOfWork.agentTurns.lastFailure(chatId))
     const projection =
       seq === undefined
@@ -40,13 +40,13 @@ export const recordAgentEvent = (
     if ((projection?.type === 'message' || projection?.type === 'step') && seq !== undefined)
       await unitOfWork.messages.project(
         newMessage({
-          id: messageId(event.id),
+          id: messageId((projection.type === 'step' && projection.id) || event.id),
           workspaceId,
           chatId,
           kind: projection.type === 'step' ? 'step' : (projection.kind ?? 'agent'),
           authorId: null,
           body: MessageBody(projection.type === 'step' ? projection.step.type : projection.body),
-          step: projection.type === 'step' ? projection.step : null,
+          step: projection.type === 'step' ? projection.step : (projection.thought ?? null),
           createdAt: recordedAt,
           replyToId: promptId,
         }),

@@ -1,7 +1,7 @@
 import { type ChatId, chatModelsOf, type MemberId } from '@hq/kernel'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { InvalidRouting } from '../domain/errors.ts'
-import { unreachableSessionNoticeOf } from '../domain/session-routing.ts'
+import { claudeCode, unreachableSessionNoticeOf } from '../domain/session-routing.ts'
 
 type Input = {
   chatId: ChatId
@@ -16,7 +16,10 @@ export const updateChatRouting = (
   { chatId, memberId, sessionModel, defaultModel, subagentPolicy }: Input,
 ) =>
   transactor.run(async ({ chats, routing }) => {
-    if ((await chats.get(chatId)).type !== 'runtime') throw new InvalidRouting('Only runtime chats have a model')
+    const chat = await chats.get(chatId)
+    if (chat.type !== 'runtime') throw new InvalidRouting('Only runtime chats have a model')
+    if (sessionModel !== undefined && chat.harness)
+      throw new InvalidRouting(`This session runs ${claudeCode.name}; its model is chosen by ${claudeCode.name}`)
     const reachable =
       sessionModel === undefined && defaultModel === undefined ? undefined : await routing.reachableModels(memberId)
     const isReachable = (model: string) => !reachable || chatModelsOf(reachable).some(({ id }) => id === model)

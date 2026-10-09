@@ -258,7 +258,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       get: async (id) => {
         const row = await tx.run(zql.chats.where('workspaceId', contextWorkspaceId).where('id', id).one())
         if (!row) throw new ChatNotFound(id)
-        return { workspaceId: workspaceId(row.workspaceId), type: row.type }
+        return { workspaceId: workspaceId(row.workspaceId), type: row.type, harness: row.harness ?? null }
       },
     },
   }

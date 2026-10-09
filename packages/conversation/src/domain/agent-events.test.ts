@@ -8,6 +8,7 @@ import {
   streamedTextOf,
   turnEndNoticeOf,
 } from './agent-events.ts'
+import { messagesFromEvents } from './message-events.ts'
 import { type StreamedReply, storedStreamedReply, streamedReplyAfter, visibleStreamedReply } from './streamed-reply.ts'
 
 const agentEvent = (kind: string, fields: Record<string, unknown> = {}, id = `event-${kind}`): AgentEvent => ({
@@ -148,4 +149,53 @@ test('reasoning frames stream as reasoning, and the answer text after them start
     text: 'Answer',
     repliesAtStart: 0,
   })
+})
+
+test('a Claude Code tool call is one step updated by its tool call id, and the finish text is the answer with its thinking as a thought', () => {
+  const toolCall = (status: string, fields: Record<string, unknown> = {}) =>
+    agentEvent(
+      'ACPToolCallEvent',
+      { tool_call_id: 'toolu_1', title: 'Terminal', tool_kind: 'execute', status, raw_input: {}, ...fields },
+      `event-${status}`,
+    )
+  const finish = agentEvent('ActionEvent', {
+    reasoning_content: 'I will run a command.',
+    action: { kind: 'FinishAction', message: 'It printed hi.' },
+    tool_name: 'finish',
+  })
+  const stored = [
+    toolCall('pending'),
+    toolCall('completed', { raw_input: { command: 'echo hi' }, raw_output: 'hi\n' }),
+    finish,
+  ].map((event, index) => ({
+    workspaceId: 'workspace-acme',
+    chatId: 'chat-research',
+    id: event.id,
+    seq: index + 1,
+    type: 'agent.event',
+    actor: null,
+    payload: { replyToId: 'prompt-1', event },
+    createdAt: new Date(Date.parse('2026-10-09T10:00:00Z') + index * 1000),
+  }))
+  expect(messagesFromEvents(stored).map(({ id, kind, body, step }) => ({ id, kind, body, step }))).toEqual([
+    {
+      id: 'toolu_1',
+      kind: 'step',
+      body: 'command',
+      step: {
+        type: 'command',
+        command: 'echo hi',
+        exitCode: null,
+        durationMilliseconds: 1000,
+        output: 'hi\n',
+        truncatedLines: 0,
+      },
+    },
+    {
+      id: finish.id,
+      kind: 'agent',
+      body: 'It printed hi.',
+      step: { type: 'thought', text: 'I will run a command.', durationMilliseconds: 0 },
+    },
+  ])
 })

@@ -70,6 +70,7 @@ const snapshotFromZeroRows = (
     chats: rowsOf('chats').map(({ ownerKind, ownerUserId, ownerServiceIdentityId, mode, createdAt, ...chat }) => ({
       ...chat,
       subagentPolicy: chat.subagentPolicy ?? 'auto',
+      harness: chat.harness ?? null,
       ownerId: ownerUserId ?? '',
     })),
     messages: messages

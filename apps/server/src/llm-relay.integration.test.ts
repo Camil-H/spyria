@@ -17,7 +17,7 @@ import {
 } from './testing.ts'
 
 setDefaultTimeout(30_000)
-const { database, app, port, gateway, fakeLlmCalls } = await openSharedTestApp()
+const { database, app, port, gateway, fakeLlmCalls, fakeLlmBodies } = await openSharedTestApp()
 const { fakeHost, disconnectFakeHosts } = createFakeHosts({ port, database })
 afterEach(() => disconnectFakeHosts())
 
@@ -182,6 +182,47 @@ test('an unreachable gateway answers 502 and records HQ’s notice', async () =>
     await hosts.disconnectFakeHosts()
     void server.stop(true)
   }
+})
+
+test('a Claude Code call with x-api-key goes to the gateway’s Anthropic route pinned to the anthropic provider, with its protocol headers, and its model shows on a harness chat', async () => {
+  const host = await fakeHost('Claude Code host')
+  const anthropicSecret = `fake-key-anthropic-${crypto.randomUUID()}`
+  await addCredential(bob, 'Anthropic', anthropicSecret)
+  const { chatId, token } = await runtimeTurn(host, bob)
+  await database.$client`update chats set harness = 'claude-code' where id = ${chatId}`
+  const headers = {
+    'x-api-key': token,
+    'content-type': 'application/json',
+    'anthropic-version': '2023-06-01',
+    'anthropic-beta': 'claude-code-20250219',
+    'user-agent': 'claude-cli/2.1.220 (external, sdk-ts, agent-sdk/0.3.220)',
+  }
+  const message = { model: 'claude-opus-5-5', max_tokens: 64, messages: [{ role: 'user', content: 'hi' }] }
+  for (const attempt of [1, 2, 3]) {
+    const callsBefore = fakeLlmCalls.length
+    const answer = await host.modelCall({
+      path: '/v1/messages?beta=true',
+      headers,
+      body: JSON.stringify({ ...message, stream: true }),
+    })
+    expect({ attempt, status: answer.status }).toEqual({ attempt, status: 200 })
+    expect(answer.body).toContain('event: message_stop')
+    const providerCall = fakeLlmCalls[callsBefore]
+    expect(providerCall?.['x-api-key']).toBe(anthropicSecret)
+    expect(providerCall?.['anthropic-beta']).toContain('claude-code-20250219')
+    expect(JSON.parse(fakeLlmBodies[callsBefore] ?? '{}').model).toBe('claude-opus-5-5')
+  }
+  const counted = await host.modelCall({
+    path: '/v1/messages/count_tokens?beta=true',
+    headers,
+    body: JSON.stringify(message),
+  })
+  expect(counted).toMatchObject({ status: 200, body: JSON.stringify({ input_tokens: 1 }) })
+  await waitFor(
+    async () =>
+      (await database.$client`select model from chats where id = ${chatId}`)[0]?.model === 'anthropic/claude-opus-5-5',
+  )
+  expect(await failureOf(chatId)).toBeNull()
 })
 
 afterAll(() => disconnectFakeHosts())

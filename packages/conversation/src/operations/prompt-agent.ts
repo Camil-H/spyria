@@ -4,6 +4,10 @@ import { agentNotices, startFailureNoticeOf } from '../domain/agent-events.ts'
 import type { Message } from '../domain/message.ts'
 import { noLlmKeyNoticeOf } from '../domain/model-call-failures.ts'
 import {
+  claudeCode,
+  claudeCodeKeysNotice,
+  reachesAnthropic,
+  reachesAnthropicOnly,
   sessionChoiceOf,
   sessionQuestions,
   sessionStateOf,
@@ -39,6 +43,8 @@ const routeSession = async (
     routing: await routing.chatRouting(chat.chatId),
     reachable: (await routing.reachableModels(prompterId)) ?? [],
   }))
+  if (routing.harness || reachesAnthropicOnly(reachable))
+    return { harness: claudeCode.harness, canPrompt: reachesAnthropic(reachable) }
   const decision = await decide(dependencies, {
     models: reachable,
     chat,
@@ -66,7 +72,8 @@ const keepSession = async (
     routing: await routing.chatRouting(chat.chatId),
     reachable: await routing.reachableModels(prompterId),
   }))
-  const { model, reasoningEffort, agentModel } = routing
+  const { model, reasoningEffort, agentModel, harness } = routing
+  if (harness) return reachesAnthropic(reachable ?? []) ? { conversation } : { refusal: claudeCodeKeysNotice }
   if (!model) return { conversation }
   if (!chatModelsOf(reachable ?? []).some((candidate) => candidate.id === model))
     return { refusal: unreachableSessionNoticeOf(model) }
@@ -100,6 +107,22 @@ const conversationFor = async (
     await transactor.run((unitOfWork) => appendNotice(unitOfWork, prompt, agentNotices.newSession))
   }
   const routed = fixedLlm || !prompterId ? undefined : await routeSession(dependencies, chat, prompterId, prompt)
+  if (routed && 'harness' in routed) {
+    if (!routed.canPrompt) return { refusal: claudeCodeKeysNotice }
+    const llmToken = await runtimes.issueLlmToken(chat)
+    const conversationId = await runtimes.rememberConversation(
+      chat,
+      await agentServer.createConversation(endpoint, llmToken, {
+        model: claudeCode.model.replace('anthropic/', ''),
+        usageId: 'agent',
+        harness: claudeCode.harness,
+      }),
+    )
+    await transactor.run(({ routing }) =>
+      routing.update(chat.chatId, { harness: claudeCode.harness, model: claudeCode.model }),
+    )
+    return { conversation: { ...endpoint, conversationId } }
+  }
   if (routed && !routed.choice)
     return {
       refusal: noLlmKeyNoticeOf(await transactor.run(({ members }) => members.displayNameOf(prompterId as MemberId))),

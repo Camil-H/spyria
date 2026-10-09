@@ -85,7 +85,123 @@ const toolCallOf = (step: FakeLlmStep | undefined, offeredTools: readonly string
   )
 }
 
-const listedModelIds = ['fake-model', 'fake-large', 'fake-medium', 'fake-small', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano']
+type AnthropicBlock = { type: string; text?: string }
+type AnthropicRequest = {
+  stream?: boolean
+  messages?: { role: string; content: string | AnthropicBlock[] }[]
+  tools?: { name: string }[]
+}
+type AnthropicTurn = { thinking: string[]; step?: FakeLlmStep }
+const anthropicUsage = { input_tokens: 1, output_tokens: 1 }
+const anthropicEventOf = (data: { type: string; [field: string]: unknown }) =>
+  new TextEncoder().encode(`event: ${data.type}\ndata: ${JSON.stringify(data)}\n\n`)
+const promptTextOf = (content: string | AnthropicBlock[]) =>
+  (typeof content === 'string' ? content : content.map((block) => (block.type === 'text' ? block.text : '')).join(''))
+    .replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '')
+    .trim()
+const anthropicTurnsOf = (steps: readonly FakeLlmStep[]) => {
+  const turns: AnthropicTurn[] = [{ thinking: [] }]
+  for (const step of steps) {
+    const turn = turns.at(-1) as AnthropicTurn
+    if ('think' in step) turn.thinking.push(step.think)
+    else {
+      turn.step = step
+      turns.push({ thinking: [] })
+    }
+  }
+  return turns
+}
+const toolUseOf = (step: FakeLlmStep | undefined, offeredTools: readonly string[]) => {
+  const call =
+    step && 'command' in step
+      ? { name: 'Bash', input: { command: step.command, description: step.command } }
+      : step && 'tool' in step
+        ? {
+            name: offeredTools.find((name) => name.endsWith(`_${step.tool}`)) ?? step.tool,
+            input: step.arguments ?? {},
+          }
+        : undefined
+  return call && { type: 'tool_use', id: `toolu_${crypto.randomUUID().replaceAll('-', '')}`, ...call }
+}
+const anthropicReplyOf = async (request: AnthropicRequest, script: FakeLlmScript) => {
+  const messages = request.messages ?? []
+  const promptIndex = messages.findLastIndex((message) => message.role === 'user' && promptTextOf(message.content))
+  const answeredSteps = messages.slice(promptIndex).filter((message) => message.role === 'assistant').length
+  const steps = script.steps ?? (script.command ? [{ command: script.command }] : [])
+  const turn = (request.tools?.length && anthropicTurnsOf(steps)[answeredSteps]) || { thinking: [] }
+  if (turn.step && 'fail' in turn.step)
+    return Response.json(
+      { type: 'error', error: { type: 'overloaded_error', message: turn.step.fail } },
+      { status: 529 },
+    )
+  const toolUse = toolUseOf(
+    turn.step,
+    (request.tools ?? []).map((tool) => tool.name),
+  )
+  const thinking = turn.thinking.join(' ')
+  const text = script.text ?? defaultText
+  const blocks = [
+    ...(thinking
+      ? [
+          {
+            start: { type: 'thinking', thinking: '', signature: '' },
+            whole: { type: 'thinking', thinking, signature: 'fake' },
+            deltas: [
+              { type: 'thinking_delta', thinking },
+              { type: 'signature_delta', signature: 'fake' },
+            ],
+          },
+        ]
+      : []),
+    toolUse
+      ? {
+          start: { ...toolUse, input: {} },
+          whole: toolUse,
+          deltas: [{ type: 'input_json_delta', partial_json: JSON.stringify(toolUse.input) }],
+        }
+      : {
+          start: { type: 'text', text: '' },
+          whole: { type: 'text', text },
+          deltas: wordsOf(text).map((word) => ({ type: 'text_delta', text: word })),
+        },
+  ]
+  const stopReason = toolUse ? 'tool_use' : 'end_turn'
+  const message = { id: `msg_${crypto.randomUUID()}`, type: 'message', role: 'assistant', model: 'fake' }
+  const ending = { stop_reason: stopReason, stop_sequence: null }
+  if (!request.stream)
+    return Response.json({ ...message, content: blocks.map(({ whole }) => whole), ...ending, usage: anthropicUsage })
+  const stream = new ReadableStream({
+    start: async (controller) => {
+      const send = (data: Parameters<typeof anthropicEventOf>[0]) => controller.enqueue(anthropicEventOf(data))
+      send({ type: 'message_start', message: { ...message, content: [], usage: anthropicUsage } })
+      for (const [index, block] of blocks.entries()) {
+        send({ type: 'content_block_start', index, content_block: block.start })
+        for (const delta of block.deltas) {
+          await Bun.sleep(script.wordDelayMilliseconds ?? defaultWordDelayMilliseconds)
+          send({ type: 'content_block_delta', index, delta })
+        }
+        send({ type: 'content_block_stop', index })
+      }
+      send({ type: 'message_delta', delta: ending, usage: anthropicUsage })
+      send({ type: 'message_stop' })
+      controller.close()
+    },
+  })
+  return new Response(stream, { headers: { 'content-type': 'text/event-stream' } })
+}
+
+const listedModelIds = [
+  'fake-model',
+  'fake-large',
+  'fake-medium',
+  'fake-small',
+  'gpt-5',
+  'gpt-5-mini',
+  'gpt-5-nano',
+  'claude-opus-5-5',
+  'claude-sonnet-5-5',
+  'claude-haiku-4-5',
+]
 export const fakeRoutableModels: RoutableModel[] = [
   { id: 'fake/fake-large', name: 'Fake large', tier: 'large' },
   { id: 'fake/fake-medium', name: 'Fake medium', tier: 'medium' },
@@ -118,7 +234,11 @@ const isSubagentCall = (request: CompletionRequest, script: FakeLlmScript) => {
 }
 
 export const createFakeLlm = (
-  scriptOf: (request: Request, isClassifier: boolean) => FakeLlmScript | undefined | Promise<FakeLlmScript | undefined>,
+  scriptOf: (
+    request: Request,
+    isClassifier: boolean,
+    prompt?: string,
+  ) => FakeLlmScript | undefined | Promise<FakeLlmScript | undefined>,
 ) =>
   new Hono()
     .get('/v1/models', (context) =>
@@ -132,6 +252,15 @@ export const createFakeLlm = (
         })),
       }),
     )
+    .post('/v1/messages/count_tokens', (context) => context.json({ input_tokens: 1 }))
+    .post('/v1/messages', async (context) => {
+      const request = await context.req.json<AnthropicRequest>()
+      const prompt = request.messages?.findLast((message) => message.role === 'user' && promptTextOf(message.content))
+      return anthropicReplyOf(
+        request,
+        (await scriptOf(context.req.raw, false, prompt && promptTextOf(prompt.content))) ?? {},
+      )
+    })
     .post('/v1/systemone', async (context) => {
       const route = await routeOf(scriptedRouteOf(await scriptOf(context.req.raw, true), await context.req.json()))
       if (!route) return context.json(classifierDownOf, 500)

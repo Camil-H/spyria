@@ -1,6 +1,7 @@
 import { type ChatId, modelNameOf, rereadDollarsOf, type WorkspaceId } from '@hq/kernel'
 import { buttonClass, fieldClass, focusRing, formatCost, formatTokens, ghostButtonClass, labelClass } from '@hq/ui'
 import { useEffect, useState } from 'react'
+import { claudeCode } from '../domain/session-routing.ts'
 import type { ChatRoutingRead } from './endpoints.ts'
 import { useConversationCommands } from './providers.tsx'
 
@@ -19,6 +20,7 @@ export const SessionChip = ({
   reasoningEffort,
   defaultModel,
   subagentPolicy,
+  harness,
 }: {
   workspaceId: WorkspaceId
   chatId: ChatId
@@ -26,6 +28,7 @@ export const SessionChip = ({
   reasoningEffort: string | null
   defaultModel: string | null
   subagentPolicy: Policy
+  harness: 'claude-code' | null
 }) => {
   const commands = useConversationCommands()
   const [isOpen, setIsOpen] = useState(false)
@@ -69,9 +72,11 @@ export const SessionChip = ({
         onClick={() => setIsOpen(!isOpen)}
         className={`max-w-full truncate rounded-full border border-line px-2 py-0.5 text-xs text-muted hover:text-ink ${focusRing}`}
       >
-        {model
-          ? `${nameOf(model)}${reasoningEffort ? ` (${reasoningEffort})` : ''} · ${policyNames[subagentPolicy]}`
-          : 'Model chosen at first prompt'}
+        {harness && model
+          ? `${claudeCode.name} · ${nameOf(model)}`
+          : model
+            ? `${nameOf(model)}${reasoningEffort ? ` (${reasoningEffort})` : ''} · ${policyNames[subagentPolicy]}`
+            : 'Model chosen at first prompt'}
       </button>
       {isOpen && (
         <div
@@ -79,7 +84,7 @@ export const SessionChip = ({
           aria-label="Session"
           className="absolute top-full right-0 z-50 mt-1 flex w-80 flex-col gap-3 rounded-lg border border-line bg-raised p-3 text-sm shadow-lg"
         >
-          {model && (
+          {model && !harness && (
             <label className={labelClass}>
               Main model
               <select

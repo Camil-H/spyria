@@ -91,6 +91,7 @@ export const observedStep = (
   if (step.type === 'command')
     return {
       ...step,
+      command: typeof observation?.command === 'string' ? observation.command : step.command,
       exitCode: typeof observation?.exit_code === 'number' ? observation.exit_code : null,
       durationMilliseconds,
       ...keptOutputOf(textOf(observation?.content)),

@@ -58,6 +58,7 @@ export const ChatView = ({
                   reasoningEffort={conversation.reasoningEffort}
                   defaultModel={conversation.defaultModel}
                   subagentPolicy={conversation.subagentPolicy}
+                  harness={conversation.harness}
                 />
                 {runtimeStatus}
                 {conversation.gitBranch !== null && (

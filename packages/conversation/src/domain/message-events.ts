@@ -40,11 +40,14 @@ export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMes
   const messageByKey = new Map<string, ProjectedMessage>()
   const previousTimestampByChat = new Map<string, string>()
   for (const { workspaceId, chatId, id, seq, type, actor, payload, createdAt } of events) {
-    const project = (fields: Pick<ProjectedMessage, 'kind' | 'authorId' | 'body' | 'detail' | 'step' | 'replyToId'>) =>
-      messageByKey.set(`${workspaceId}/${id}`, {
+    const project = (
+      fields: Pick<ProjectedMessage, 'kind' | 'authorId' | 'body' | 'detail' | 'step' | 'replyToId'>,
+      projectedId = id,
+    ) =>
+      messageByKey.set(`${workspaceId}/${projectedId}`, {
         workspaceId,
         chatId,
-        id,
+        id: projectedId,
         seq,
         ...fields,
         createdAt,
@@ -75,10 +78,13 @@ export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMes
         if (action && observed) messageByKey.set(`${workspaceId}/${action.id}`, { ...action, step: observed })
       }
       if (projection?.type === 'message' || projection?.type === 'step') {
-        const step = projection.type === 'step' ? projection.step : null
+        const step = projection.type === 'step' ? projection.step : (projection.thought ?? null)
         const body = projection.type === 'step' ? projection.step.type : projection.body
         const kind = projection.type === 'step' ? 'step' : (projection.kind ?? 'agent')
-        project({ kind, authorId: null, body, detail: null, step, replyToId })
+        project(
+          { kind, authorId: null, body, detail: null, step, replyToId },
+          (projection.type === 'step' && projection.id) || id,
+        )
       }
     }
     if (type !== 'message.edited' && type !== 'message.deleted') continue

@@ -1,7 +1,7 @@
 import { type ChatRow, findChat, type Snapshot } from '@hq/db'
 import { type ChatId, type MemberId, type MessageId, messageId, type WorkspaceId } from '@hq/kernel'
 import { stoppedByPrefix } from '../domain/agent-events.ts'
-import type { AgentStep, StoredStep } from '../domain/agent-steps.ts'
+import type { AgentStep, StoredStep, ThoughtStep } from '../domain/agent-steps.ts'
 import { stillRunningOf } from '../domain/delegation.ts'
 
 export type ConversationMessage = Readonly<{
@@ -38,6 +38,7 @@ export type Conversation = Readonly<{
   reasoningEffort: ChatRow['reasoningEffort']
   defaultModel: ChatRow['defaultModel']
   subagentPolicy: ChatRow['subagentPolicy']
+  harness: ChatRow['harness']
   gitBranch: string | null
   ownerName: string
   origin: Readonly<{ chatId: ChatId; name: string }> | null
@@ -56,15 +57,18 @@ export const durationLabelOf = (milliseconds: number) => {
 
 const withThoughtsApart = (message: ConversationMessage): ConversationMessage[] => {
   const stored = message.step as StoredStep | null
-  if (!stored?.thought) return [message]
-  const { thought, ...step } = stored
+  const isAnswer = message.kind === 'agent'
+  const thought = isAnswer ? (stored as ThoughtStep | null) : stored?.thought
+  if (!stored || !thought) return [message]
+  const { thought: _, ...step } = stored
   return [
     {
       ...message,
+      kind: 'step',
       id: messageId(`${message.id}-thought`),
       step: { ...thought, ...(stored.delegation && { delegation: stored.delegation }) } as AgentStep,
     },
-    { ...message, step: step as AgentStep },
+    { ...message, step: isAnswer ? null : (step as AgentStep) },
   ]
 }
 
@@ -199,6 +203,7 @@ export const getConversation =
       reasoningEffort: chat.reasoningEffort,
       defaultModel: chat.defaultModel,
       subagentPolicy: chat.subagentPolicy,
+      harness: chat.harness,
       gitBranch: chat.gitBranch,
       ownerName: memberName(chat.ownerId),
       origin: origin ? { chatId: origin.id, name: origin.name } : null,

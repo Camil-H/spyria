@@ -1,4 +1,10 @@
-import type { AgentConversation, AgentEndpoint, AgentLlmChoice, AgentServer } from '../contracts/agent.ts'
+import type {
+  AgentConversation,
+  AgentEndpoint,
+  AgentLlmChoice,
+  AgentServer,
+  SubConversation,
+} from '../contracts/agent.ts'
 import type { AgentEvent } from '../domain/agent-events.ts'
 import { condensationLimitsOf } from '../domain/masked-body.ts'
 
@@ -48,27 +54,57 @@ const mcpServerOf = (endpoint: AgentEndpoint, path: string, token: string) => ({
   headers: { Authorization: `Bearer ${token}` },
 })
 
+const claudeCodeConversationOf = (endpoint: AgentEndpoint, llmToken: string, model: string) => ({
+  agent: {
+    kind: 'ACPAgent',
+    acp_server: 'claude-code',
+    acp_command: [
+      'env',
+      `ANTHROPIC_BASE_URL=${endpoint.transport.gatewayUrl.replace(/\/v1$/, '')}`,
+      'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1',
+      'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1',
+      'CLAUDE_CODE_MAX_RETRIES=0',
+      `ANTHROPIC_MODEL=${model}`,
+      'claude-agent-acp',
+    ],
+    mcp_config: { hq: mcpServerOf(endpoint, '/mcp', llmToken) },
+  },
+  secrets: { ANTHROPIC_API_KEY: { kind: 'StaticSecret', value: llmToken } },
+})
+
+const nativeConversationOf = (
+  endpoint: AgentEndpoint,
+  llmToken: string,
+  llm: AgentLlmChoice,
+  sub: SubConversation | undefined,
+  condensationScale: number,
+) => ({
+  agent: {
+    kind: 'Agent',
+    llm: llmConfigOf(endpoint, llmToken, llm),
+    condenser: {
+      kind: 'LLMSummarizingCondenser',
+      llm: {
+        ...llmConfigOf(endpoint, llmToken, { model: llm.model, usageId: 'condenser' }),
+        stream: false,
+        extra_headers: { 'x-hq-role': 'condenser' },
+      },
+      max_size: condensationLimitsOf(condensationScale).condenserEvents,
+      keep_first: 2,
+    },
+    tools: [{ name: 'terminal' }, { name: 'file_editor' }, { name: 'task_tracker' }],
+    mcp_config: sub
+      ? { hq: mcpServerOf(endpoint, '/mcp', sub.toolToken) }
+      : { hq: mcpServerOf(endpoint, '/mcp', llmToken), router: mcpServerOf(endpoint, '/mcp/router', llmToken) },
+  },
+})
+
 export const createSandboxAgentServer = (condensationScale = 1): AgentServer => ({
   createConversation: async (endpoint, llmToken, llm, sub) => {
     const created = await call(endpoint, 'POST', '/api/conversations', {
-      agent: {
-        kind: 'Agent',
-        llm: llmConfigOf(endpoint, llmToken, llm),
-        condenser: {
-          kind: 'LLMSummarizingCondenser',
-          llm: {
-            ...llmConfigOf(endpoint, llmToken, { model: llm.model, usageId: 'condenser' }),
-            stream: false,
-            extra_headers: { 'x-hq-role': 'condenser' },
-          },
-          max_size: condensationLimitsOf(condensationScale).condenserEvents,
-          keep_first: 2,
-        },
-        tools: [{ name: 'terminal' }, { name: 'file_editor' }, { name: 'task_tracker' }],
-        mcp_config: sub
-          ? { hq: mcpServerOf(endpoint, '/mcp', sub.toolToken) }
-          : { hq: mcpServerOf(endpoint, '/mcp', llmToken), router: mcpServerOf(endpoint, '/mcp/router', llmToken) },
-      },
+      ...(llm.harness
+        ? claudeCodeConversationOf(endpoint, llmToken, llm.model)
+        : nativeConversationOf(endpoint, llmToken, llm, sub, condensationScale)),
       workspace: { kind: 'LocalWorkspace', working_dir: '/workspace/project' },
       autotitle: false,
       ...(sub && { parent_conversation_id: sub.parentConversationId }),

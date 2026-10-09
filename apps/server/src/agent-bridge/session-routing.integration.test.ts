@@ -364,3 +364,46 @@ test('the real listing gives datasheet prices to the routable models a key reach
     { id: 'openai/gpt-5-nano', name: 'GPT-5 nano', tier: 'small', dollarsPerMillionInputTokens: 0.05 },
   ])
 })
+
+test('a prompter reaching only Anthropic locks the session on Claude Code without routing, and an invitee without an Anthropic key is refused', async () => {
+  const fake = await fakeAgent()
+  await database.$client`delete from llm_credentials where user_id = ${bob}`
+  await addKey(bob, 'Anthropic')
+  const chat = await newRuntimeChat()
+  await answered(await prompt(chat, 'Claude Code starts', bobInAcme))
+  const [conversation] = [...fake.conversations.values()]
+  expect(conversation?.created).toMatchObject({
+    agent: {
+      kind: 'ACPAgent',
+      acp_server: 'claude-code',
+      acp_command: [
+        'env',
+        'ANTHROPIC_BASE_URL=http://fake-gateway-relay.test:4000',
+        'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1',
+        'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1',
+        'CLAUDE_CODE_MAX_RETRIES=0',
+        'ANTHROPIC_MODEL=claude-opus-5-5',
+        'claude-agent-acp',
+      ],
+      mcp_config: { hq: { url: 'http://fake-gateway-relay.test:4000/mcp', transport: 'http' } },
+    },
+    secrets: { ANTHROPIC_API_KEY: { kind: 'StaticSecret' } },
+    autotitle: false,
+  })
+  expect(Object.keys((conversation?.created.agent as { mcp_config?: object } | undefined)?.mcp_config ?? {})).toEqual([
+    'hq',
+  ])
+  expect(await chatOf(chat)).toMatchObject({ model: 'anthropic/claude-opus-5-5' })
+  expect((await database.$client`select harness from chats where id = ${chat}`)[0]?.harness).toBe('claude-code')
+  expect(await decisionsOf(chat)).toHaveLength(0)
+
+  const alicePrompt = await prompt(chat, 'Alice joins the Claude Code session')
+  expect(await answered(alicePrompt)).toEqual([
+    { kind: 'notice', body: 'This session runs Claude Code on Anthropic keys' },
+  ])
+  expect(fake.prompts.map((sent) => sent.text)).not.toContain('Alice joins the Claude Code session')
+  expect(fake.conversations.size).toBe(1)
+  expect(JSON.stringify(await routing(chat, bobInAcme, { sessionModel: 'anthropic/claude-sonnet-5-5' }))).toContain(
+    'This session runs Claude Code',
+  )
+})

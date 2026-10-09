@@ -22,6 +22,7 @@ export default drizzleZeroConfig(tables, {
       reasoningEffort: true,
       defaultModel: true,
       subagentPolicy: true,
+      harness: true,
       gitBranch: true,
       originChatId: true,
       agentTurnMessageId: true,

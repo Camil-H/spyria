@@ -70,6 +70,7 @@ export type ChatRouting = Readonly<{
   defaultModel: string | null
   agentModel: string | null
   subagentPolicy: string
+  harness: 'claude-code' | null
 }>
 export type RoutingDecision = Readonly<{
   chatId: ChatId
@@ -106,7 +107,13 @@ export type RoutingRepository = {
   reachableModels(memberId: MemberId): Promise<readonly Model[] | undefined>
   update(
     chatId: ChatId,
-    fields: Partial<{ model: string; reasoningEffort: string; defaultModel: string; subagentPolicy: string }>,
+    fields: Partial<{
+      model: string
+      reasoningEffort: string
+      defaultModel: string
+      subagentPolicy: string
+      harness: 'claude-code'
+    }>,
   ): Promise<void>
   setAgentModel(chatId: ChatId, model: string): Promise<void>
   record(decision: RoutingDecision): Promise<void>
