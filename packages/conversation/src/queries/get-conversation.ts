@@ -65,32 +65,42 @@ const withThoughtsApart = (message: ConversationMessage): ConversationMessage[] 
 }
 
 const delegationOf = (message: ConversationMessage) => (message.step as StoredStep | null)?.delegation
-const isDelegateStep = (message: ConversationMessage) =>
-  message.step?.type === 'tool' && message.step.name === 'delegate' && delegationOf(message) !== undefined
+const delegateTaskOf = (message: ConversationMessage) => {
+  if (message.step?.type !== 'tool' || message.step.name !== 'delegate') return undefined
+  try {
+    return (JSON.parse(message.step.arguments) as { task?: unknown }).task
+  } catch {
+    return undefined
+  }
+}
 
 const withDelegationsGrouped = (replies: readonly ConversationMessage[]) => {
-  const delegateSteps = replies.filter(isDelegateStep)
-  const delegationIds = new Set(delegateSteps.map((step) => delegationOf(step)?.id))
-  const isDelegated = (reply: ConversationMessage) =>
-    !isDelegateStep(reply) && delegationIds.has(delegationOf(reply)?.id)
-  return replies
-    .filter((reply) => !isDelegated(reply))
-    .map((reply) => {
-      const delegation = isDelegateStep(reply) ? delegationOf(reply) : undefined
-      if (!delegation) return reply
-      const steps = replies.filter((step) => isDelegated(step) && delegationOf(step)?.id === delegation.id)
-      const lastStep = steps.at(-1)
-      const isDone = reply.step?.type === 'tool' && reply.step.result !== null
-      return {
-        ...reply,
-        delegation: {
-          modelName: delegation.modelName,
-          steps,
-          durationMilliseconds:
-            isDone && lastStep ? Date.parse(lastStep.createdAt) - Date.parse(reply.createdAt) : null,
-        },
-      }
+  const delegateActions = replies.filter((reply) => delegateTaskOf(reply) !== undefined)
+  const groupsByHostId = new Map<MessageId, ConversationMessage>()
+  for (const steps of Map.groupBy(replies, (reply) => delegationOf(reply)?.id).values()) {
+    const firstStep = steps[0]
+    const delegation = firstStep && delegationOf(firstStep)
+    if (!delegation) continue
+    const actionIndex = delegateActions.findIndex((action) => delegateTaskOf(action) === delegation.task)
+    const host: ConversationMessage = delegateActions.splice(actionIndex, actionIndex < 0 ? 0 : 1)[0] ?? {
+      ...firstStep,
+      step: { type: 'tool', name: 'delegate', arguments: '', result: firstStep.isRunning ? null : '' },
+    }
+    const times = [host, ...steps].map((message) => Date.parse(message.createdAt))
+    const isDone = host.step?.type === 'tool' && host.step.result !== null
+    groupsByHostId.set(host.id, {
+      ...host,
+      delegation: {
+        modelName: delegation.modelName,
+        steps,
+        durationMilliseconds: isDone ? Math.max(...times) - Math.min(...times) : null,
+      },
     })
+  }
+  return replies.flatMap((reply) => {
+    const group = groupsByHostId.get(reply.id)
+    return group ? [group] : delegationOf(reply) ? [] : [reply]
+  })
 }
 
 const turnItemsOf = (messages: readonly ConversationMessage[]): ConversationItem[] => {

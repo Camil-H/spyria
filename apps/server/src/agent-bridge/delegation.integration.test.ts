@@ -145,10 +145,8 @@ test('a delegated task runs in a sub-conversation on the classified model, its e
   expect(Object.keys(agentOf(main).mcp_config)).toEqual(['hq', 'router'])
 
   const [delegation] = await delegationsOf(chat)
-  const action = main?.events.find((event) => event.kind === 'ActionEvent' && event.tool_name === 'delegate')
   expect(delegation).toMatchObject({
     conversation_id: sub?.id,
-    action_event_id: action?.id,
     model: 'fake/fake-small',
     reason: 'classified small',
     policy: 'auto',
@@ -168,15 +166,15 @@ test('a delegated task runs in a sub-conversation on the classified model, its e
     id: delegation?.id,
     model: 'fake/fake-small',
     modelName: 'Fake small',
-    actionId: action?.id,
+    task: 'List the files',
   })
 
   const replies = await repliesTo(promptId)
-  const stepDelegation = { id: delegation?.id, model: 'fake/fake-small', modelName: 'Fake small' }
+  const stepDelegation = stored[0]?.payload.delegation
   expect(
     replies.map(({ kind, body, step }) => ({ kind, body, delegation: (step as { delegation?: object })?.delegation })),
   ).toEqual([
-    { kind: 'step', body: 'tool', delegation: stepDelegation },
+    { kind: 'step', body: 'tool', delegation: undefined },
     { kind: 'step', body: 'command', delegation: stepDelegation },
     { kind: 'agent', body: 'Main done.', delegation: undefined },
   ])

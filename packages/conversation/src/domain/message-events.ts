@@ -1,11 +1,5 @@
-import {
-  type AgentEvent,
-  agentProjectionOf,
-  delegatedProjectionOf,
-  type EventDelegation,
-  linkedDelegateStep,
-} from './agent-events.ts'
-import { legacyToolCallStep, observedStep, type StoredStep } from './agent-steps.ts'
+import { type AgentEvent, agentProjectionOf, delegatedProjectionOf } from './agent-events.ts'
+import { legacyToolCallStep, observedStep, type StepDelegation, type StoredStep } from './agent-steps.ts'
 import type { Message } from './message.ts'
 
 export type StoredEvent = Readonly<{
@@ -40,7 +34,7 @@ export type PostedPayload = Pick<ProjectedMessage, 'body' | 'detail' | 'replyToI
   step?: StoredStep | null
 }
 export type ChangedPayload = { messageId: string; body: string }
-export type AgentEventPayload = { replyToId: string | null; event: AgentEvent; delegation?: EventDelegation }
+export type AgentEventPayload = { replyToId: string | null; event: AgentEvent; delegation?: StepDelegation }
 
 export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMessage[] => {
   const messageByKey = new Map<string, ProjectedMessage>()
@@ -73,10 +67,6 @@ export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMes
         delegation,
       )
       previousTimestampByChat.set(chatKey, event.timestamp)
-      const delegateAction = delegation?.actionId && messageByKey.get(`${workspaceId}/${delegation.actionId}`)
-      const linkedStep = delegateAction && delegation && linkedDelegateStep(delegateAction.step, delegation)
-      if (delegateAction && linkedStep)
-        messageByKey.set(`${workspaceId}/${delegateAction.id}`, { ...delegateAction, step: linkedStep })
       if (projection?.type === 'observation') {
         const action = messageByKey.get(`${workspaceId}/${projection.actionId}`)
         const observed =

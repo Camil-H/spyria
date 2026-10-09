@@ -29,7 +29,7 @@ export type AgentStep =
     }
   | { type: 'plan'; items: { title: string; status: string }[] }
   | { type: 'error'; message: string }
-export type StepDelegation = { id: string; model: string; modelName: string }
+export type StepDelegation = { id: string; model: string; modelName: string; task: string }
 export type StoredStep = AgentStep & { thought?: ThoughtStep; delegation?: StepDelegation }
 export type Fields = Record<string, unknown> | undefined
 

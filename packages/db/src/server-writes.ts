@@ -389,19 +389,6 @@ export const runningDelegationOfTokenHash = (tx: Transaction, workspaceId: strin
     [workspaceId, hostId, hash],
   )
 
-export const unansweredDelegateAction = async (tx: Transaction, workspaceId: string, chatId: string) =>
-  (
-    await firstOnServer<{ id: string }>(
-      tx,
-      `select id from events action where workspace_id = $1 and chat_id = $2 and type = 'agent.event'
-         and payload->'event'->>'kind' = 'ActionEvent' and payload->'event'->>'tool_name' in ('delegate', 'router_delegate')
-         and not exists (select 1 from events observation where observation.workspace_id = $1
-           and observation.chat_id = $2 and observation.payload->'event'->>'action_id' = action.id)
-       order by seq desc limit 1`,
-      [workspaceId, chatId],
-    )
-  )?.id
-
 export const chatModelCalls = async (tx: Transaction, workspaceId: string, chatId: string) => ({
   models: await onServer<{ model: string; calls: number; tokens: number; costMicros: number }>(
     tx,

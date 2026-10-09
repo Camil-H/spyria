@@ -1,19 +1,13 @@
 import { type ChatId, messageId, type WorkspaceId } from '@hq/kernel'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
-import {
-  type AgentEvent,
-  agentProjectionOf,
-  delegatedProjectionOf,
-  type EventDelegation,
-  linkedDelegateStep,
-} from '../domain/agent-events.ts'
-import { observedStep } from '../domain/agent-steps.ts'
+import { type AgentEvent, agentProjectionOf, delegatedProjectionOf } from '../domain/agent-events.ts'
+import { observedStep, type StepDelegation } from '../domain/agent-steps.ts'
 import { newMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
 import { endAgentTurn } from './agent-turn.ts'
 
 type Dependencies = { transactor: ConversationTransactor }
-type Input = { workspaceId: WorkspaceId; chatId: ChatId; event: AgentEvent; delegation?: EventDelegation }
+type Input = { workspaceId: WorkspaceId; chatId: ChatId; event: AgentEvent; delegation?: StepDelegation }
 
 export const recordAgentEvent = ({ transactor }: Dependencies, { workspaceId, chatId, event, delegation }: Input) =>
   transactor.run(async (unitOfWork) => {
@@ -32,12 +26,6 @@ export const recordAgentEvent = ({ transactor }: Dependencies, { workspaceId, ch
               : agentProjectionOf(event, previous?.timestamp ?? null),
             delegation,
           )
-    const delegateAction =
-      seq !== undefined && delegation?.actionId
-        ? await unitOfWork.messages.find(messageId(delegation.actionId))
-        : undefined
-    const linkedStep = delegateAction && delegation && linkedDelegateStep(delegateAction.step, delegation)
-    if (delegateAction && linkedStep) await unitOfWork.messages.setStep(delegateAction.id, linkedStep)
     if ((projection?.type === 'message' || projection?.type === 'step') && seq !== undefined)
       await unitOfWork.messages.project(
         newMessage({

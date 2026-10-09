@@ -165,6 +165,90 @@ test('steps outside any turn, like migrated tool calls, are shown as they are', 
   expect(legacy?.type === 'message' && legacy.message.isRunning).toBe(false)
 })
 
+const delegateAction = (task: string, result: string | null) => ({
+  type: 'tool' as const,
+  name: 'delegate',
+  arguments: JSON.stringify({ task, effort: 'small' }),
+  result,
+})
+const delegatedEdit = (id: string, task = 'List the files') => ({
+  ...edit,
+  delegation: { id, model: 'fake/fake-small', modelName: 'Fake small', task },
+})
+const delegationGroupsOf = (conversation: ReturnType<typeof conversationWith>) =>
+  conversation?.items
+    .flatMap((item) => (item.type === 'fold' ? item.steps : [item.message]))
+    .flatMap(({ id, step, delegation }) =>
+      delegation
+        ? [
+            {
+              id: String(id),
+              result: step?.type === 'tool' ? step.result : undefined,
+              steps: delegation.steps.map((delegated) => String(delegated.id)),
+              durationMilliseconds: delegation.durationMilliseconds,
+            },
+          ]
+        : [],
+    )
+
+test('the steps of a delegation are grouped into the delegate action whose task they carry', () => {
+  const conversation = conversationWith([
+    replyRow(2, 'step', { step: delegateAction('List the files', 'Two files.'), at: 2 }),
+    replyRow(3, 'step', { step: delegatedEdit('delegation-1'), at: 5 }),
+    replyRow(4, 'step', { step: delegatedEdit('delegation-1'), at: 9 }),
+    replyRow(5, 'agent', { body: 'Listed.', at: 12 }),
+  ])
+  expect(itemSummaryOf(conversation)).toEqual(['member', 'step tool', 'agent'])
+  expect(delegationGroupsOf(conversation)).toEqual([
+    { id: 'message-2', result: 'Two files.', steps: ['message-3', 'message-4'], durationMilliseconds: 7000 },
+  ])
+})
+
+test('a delegate action stored after its delegation steps still gathers them, where the action sits', () => {
+  const conversation = conversationWith([
+    replyRow(2, 'step', { step: delegatedEdit('delegation-1'), at: 5 }),
+    replyRow(3, 'step', { step: delegatedEdit('delegation-1'), at: 9 }),
+    replyRow(4, 'step', { step: delegateAction('List the files', 'Two files.'), at: 10 }),
+    replyRow(5, 'agent', { body: 'Listed.', at: 12 }),
+  ])
+  expect(itemSummaryOf(conversation)).toEqual(['member', 'step tool', 'agent'])
+  expect(delegationGroupsOf(conversation)).toEqual([
+    { id: 'message-4', result: 'Two files.', steps: ['message-2', 'message-3'], durationMilliseconds: 5000 },
+  ])
+})
+
+test('a delegation without a matching delegate action is still one group, at its first step', () => {
+  const rows = [
+    replyRow(2, 'step', { step: delegateAction('Another task', null), at: 2 }),
+    replyRow(3, 'step', { step: delegatedEdit('delegation-1'), at: 5 }),
+    replyRow(4, 'step', { step: delegatedEdit('delegation-1'), at: 9 }),
+  ]
+  const running = conversationWith(rows, true)
+  expect(itemSummaryOf(running)).toEqual(['member', 'step tool', 'step tool'])
+  expect(delegationGroupsOf(running)).toEqual([
+    { id: 'message-3', result: null, steps: ['message-3', 'message-4'], durationMilliseconds: null },
+  ])
+  expect(delegationGroupsOf(conversationWith(rows))).toEqual([
+    { id: 'message-3', result: '', steps: ['message-3', 'message-4'], durationMilliseconds: 4000 },
+  ])
+})
+
+test('two delegations of the same task in one turn match the delegate actions in order', () => {
+  const conversation = conversationWith([
+    replyRow(2, 'step', { step: delegateAction('List the files', 'First.'), at: 2 }),
+    replyRow(3, 'step', { step: delegatedEdit('delegation-1'), at: 3 }),
+    replyRow(4, 'step', { step: delegatedEdit('delegation-1'), at: 4 }),
+    replyRow(5, 'step', { step: delegateAction('List the files', 'Second.'), at: 5 }),
+    replyRow(6, 'step', { step: delegatedEdit('delegation-2'), at: 6 }),
+    replyRow(7, 'agent', { body: 'Listed twice.', at: 8 }),
+  ])
+  expect(itemSummaryOf(conversation)).toEqual(['member', 'fold Worked for 6s · 2 steps: tool, tool', 'agent'])
+  expect(delegationGroupsOf(conversation)).toEqual([
+    { id: 'message-2', result: 'First.', steps: ['message-3', 'message-4'], durationMilliseconds: 2000 },
+    { id: 'message-5', result: 'Second.', steps: ['message-6'], durationMilliseconds: 1000 },
+  ])
+})
+
 test('durations read in seconds, tenths under ten seconds, and minutes', () => {
   expect(durationLabelOf(400)).toBe('0.4s')
   expect(durationLabelOf(4000)).toBe('4s')

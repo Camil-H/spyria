@@ -35,6 +35,5 @@ export const insertRoutingDecision = skippedOnClient
 export const insertDelegation = skippedOnClient
 export const setDelegationFields = skippedOnClient
 export const runningDelegationOfTokenHash = skippedOnClient
-export const unansweredDelegateAction = skippedOnClient
 export const chatModelCalls = skippedOnClient
 export const appendChatEvent = () => Promise.reject(new Error('Chat events are appended on the server only'))

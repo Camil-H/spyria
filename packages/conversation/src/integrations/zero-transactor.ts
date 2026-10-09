@@ -16,7 +16,6 @@ import {
   setChatTurnFailure,
   setChatTurnPrompter,
   setDelegationFields,
-  unansweredDelegateAction,
 } from '@hq/db/server-writes'
 import type { Message as MessageRow } from '@hq/db/zero'
 import { zql } from '@hq/db/zero-queries'
@@ -237,7 +236,6 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         const found = await runningDelegationOfTokenHash(tx, contextWorkspaceId, hostId, tokenHash)
         return found && { chatId: chatId(found.chatId), id: found.id }
       },
-      unansweredAction: (id) => unansweredDelegateAction(tx, contextWorkspaceId, id),
     },
     readMarkers: {
       markNewestRead: async (id, readerId) => {

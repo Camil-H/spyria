@@ -1,7 +1,8 @@
 import { modelNameOf, withPricesOf } from '@hq/kernel'
 import type { AgentChat, AgentConversation } from '../contracts/agent.ts'
 import type { ModelCallTurn } from '../contracts/repositories.ts'
-import { type EventDelegation, executionStatusOf, isStoredAgentEvent } from '../domain/agent-events.ts'
+import { executionStatusOf, isStoredAgentEvent } from '../domain/agent-events.ts'
+import type { StepDelegation } from '../domain/agent-steps.ts'
 import { delegationChoiceOf, delegationStateOf, effortHintOf, subagentFailureOf } from '../domain/delegation.ts'
 import { sessionQuestions } from '../domain/session-routing.ts'
 import type { AgentDependencies } from './agent-turn.ts'
@@ -12,8 +13,6 @@ import { recordAgentEvent } from './record-agent-event.ts'
 type Input = { chat: AgentChat; turn: ModelCallTurn; toolToken: string; task: string; effort: unknown }
 export type DelegationResult = { text: string; isError: boolean }
 
-const actionWaitMilliseconds = 2000
-const actionPollMilliseconds = 50
 const endStatuses = ['finished', 'error', 'stuck', 'paused', 'closed']
 const cannotStart = { text: 'The subagent could not start', isError: true }
 
@@ -40,20 +39,12 @@ const chooseSubagent = async (dependencies: AgentDependencies, { chat, turn, tas
   return { ...session, reason: 'default', ...classified, answers: decision?.answers }
 }
 
-const awaitDelegateAction = async ({ transactor }: AgentDependencies, chat: AgentChat) => {
-  for (const deadline = Date.now() + actionWaitMilliseconds; ; ) {
-    const actionId = await transactor.run(({ delegations }) => delegations.unansweredAction(chat.chatId))
-    if (actionId || Date.now() > deadline) return actionId ?? null
-    await new Promise((resolve) => setTimeout(resolve, actionPollMilliseconds))
-  }
-}
-
 const runSubConversation = (
   { transactor, runtimes, agentServer }: AgentDependencies,
   chat: AgentChat,
   conversation: AgentConversation,
   task: string,
-  delegation: EventDelegation,
+  delegation: StepDelegation,
 ) =>
   new Promise<string>((resolve, reject) => {
     let recording = Promise.resolve()
@@ -86,19 +77,13 @@ export const delegateTask = async (dependencies: AgentDependencies, input: Input
   if (!model || !endpoint?.conversationId) return cannotStart
   const id = crypto.randomUUID()
   const token = `dl_${crypto.randomUUID().replaceAll('-', '')}`
-  const delegation = {
-    id,
-    model,
-    modelName: modelNameOf(model),
-    actionId: await awaitDelegateAction(dependencies, chat),
-  }
+  const delegation = { id, model, modelName: modelNameOf(model), task }
   const tokenHash = await digestOf(token)
   await transactor.run(({ delegations }) =>
     delegations.start({
       chatId: chat.chatId,
       id,
       promptId: turn.promptId,
-      actionEventId: delegation.actionId,
       task,
       effortHint,
       policy: choice.policy,

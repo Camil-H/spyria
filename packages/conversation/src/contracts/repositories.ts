@@ -1,6 +1,6 @@
 import type { ChatId, MemberId, MessageId, Model, WorkspaceId } from '@hq/kernel'
-import type { AgentEvent, EventDelegation } from '../domain/agent-events.ts'
-import type { AgentStep, StoredStep } from '../domain/agent-steps.ts'
+import type { AgentEvent } from '../domain/agent-events.ts'
+import type { AgentStep, StepDelegation, StoredStep } from '../domain/agent-steps.ts'
 import type { ConversationChat, Message, MessageChange } from '../domain/message.ts'
 import type { AgentInterrupt } from './agent.ts'
 
@@ -47,7 +47,7 @@ export type AgentEventRepository = {
     event: AgentEvent,
     replyToId: MessageId | null,
     at: Date,
-    delegation?: EventDelegation,
+    delegation?: StepDelegation,
   ): Promise<number | undefined>
   last(chatId: ChatId): Promise<{ timestamp: string; replyToId: MessageId | null } | undefined>
 }
@@ -86,7 +86,6 @@ export type Delegation = Readonly<{
   chatId: ChatId
   id: string
   promptId: MessageId
-  actionEventId: string | null
   task: string
   effortHint: string
   policy: string
@@ -99,7 +98,6 @@ export type DelegationRepository = {
   start(delegation: Delegation): Promise<void>
   update(id: string, fields: { conversationId?: string; status?: 'finished' | 'failed' }): Promise<void>
   runningOfTokenHash(hostId: string, tokenHash: string): Promise<{ chatId: ChatId; id: string } | undefined>
-  unansweredAction(chatId: ChatId): Promise<string | undefined>
 }
 
 export type RoutingRepository = {
