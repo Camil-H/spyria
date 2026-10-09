@@ -85,10 +85,12 @@ const startSharedTestApp = async () => {
   const testDatabase = await createTestDatabase()
   const { database } = testDatabase
   const fakeLlmCalls: Record<string, string>[] = []
+  const fakeLlmBodies: string[] = []
   let fakeLlmScript: FakeLlmScript | undefined
   const fakeLlm = new Hono()
     .use(async (context, next) => {
       fakeLlmCalls.push(Object.fromEntries(context.req.raw.headers))
+      fakeLlmBodies.push(context.req.method === 'POST' ? await context.req.raw.clone().text() : '')
       await next()
     })
     .route(
@@ -141,6 +143,7 @@ const startSharedTestApp = async () => {
     fakeMcp,
     seededGatewayKeys: () => prepareSeededGatewayKeys(gateway.value),
     fakeLlmCalls,
+    fakeLlmBodies,
     setFakeLlmScript: (script: FakeLlmScript | undefined) => {
       fakeLlmScript = script
     },

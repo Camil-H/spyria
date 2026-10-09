@@ -3,6 +3,7 @@ import {
   delegateTool,
   genericModelCallNoticeOf,
   type ModelCallFailure,
+  maskedBody,
   type ToolCallFailure,
   toolCallFailureOf,
   toolCallNoticeOf,
@@ -50,11 +51,13 @@ export const createModelCallRelay = ({
   gatewayUrlOf = () => llmGateway.url,
   agentBridge,
   providerHeadersOf,
+  condensationScale,
 }: {
   llmGateway: ReturnType<typeof createLlmGateway>
   gatewayUrlOf?: (database: Database) => string
   agentBridge: () => AgentBridge
   providerHeadersOf?: (database: Database, chat: AgentChat) => Record<string, string>
+  condensationScale?: number
 }) => {
   const accessByDatabase = new Map<Database, ReturnType<typeof accessOf>>()
   const accessOf = (database: Database) => {
@@ -136,11 +139,11 @@ export const createModelCallRelay = ({
       return reply({ content: [{ type: 'text', text }], isError })
     }
     const { keyOf, tools } = databaseAccess(database)
-    const gatewayCall = (callHeaders: Record<string, string>, timeoutSignal: AbortSignal) =>
+    const gatewayCall = (callHeaders: Record<string, string>, timeoutSignal: AbortSignal, callBody = body) =>
       fetch(`${gatewayUrlOf(database)}${path}`, {
         method,
         headers: callHeaders,
-        body: method === 'GET' || method === 'DELETE' ? undefined : body,
+        body: method === 'GET' || method === 'DELETE' ? undefined : callBody,
         signal: AbortSignal.any([signal, timeoutSignal]),
       })
 
@@ -199,6 +202,11 @@ export const createModelCallRelay = ({
       return answer(502, unreachable)
     }
     if (!virtualKey) return answer(401, refusalOf(await record({ reached: 'refused' })))
+    const isCondenser = picked(headers, ['x-hq-role'])['x-hq-role'] === 'condenser'
+    const condenserModel = isCondenser ? await handlers.condenserModel(turn.chat, turn.prompterId) : undefined
+    const forwardedBody = condenserModel
+      ? JSON.stringify({ ...(jsonOf(body) as object), model: condenserModel })
+      : maskedBody(body, condensationScale)
     const headTimeout = new AbortController()
     const timer = setTimeout(() => headTimeout.abort(), headTimeoutMilliseconds)
     let response: Response
@@ -213,9 +221,11 @@ export const createModelCallRelay = ({
           'x-bf-dim-workspace': host.workspaceId,
           'x-bf-mcp-include-clients': '',
           ...(turn.delegationId && { 'x-bf-dim-role': 'delegate', 'x-bf-dim-delegation': turn.delegationId }),
+          ...(isCondenser && { 'x-bf-dim-role': 'condenser' }),
           ...providerHeadersOf?.(database, turn.chat),
         },
         headTimeout.signal,
+        forwardedBody,
       )
     } catch {
       if (signal.aborted) return

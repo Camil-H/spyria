@@ -12,7 +12,7 @@ import { toolDisplayNameOf } from './tool-calls.ts'
 export type AgentEvent = Readonly<{ id: string; kind: string; timestamp: string; [field: string]: unknown }>
 export type TurnOutcome = 'finished' | 'error' | 'stuck'
 export type AgentProjection =
-  | { type: 'message'; body: string }
+  | { type: 'message'; body: string; kind?: 'notice' }
   | { type: 'step'; step: StoredStep }
   | { type: 'observation'; actionId: string; observation: Fields }
   | { type: 'turn-end'; outcome: TurnOutcome }
@@ -27,6 +27,7 @@ export const agentNotices = {
   stoppedEarly: 'The agent stopped before finishing',
   noResponse: 'The agent did not respond',
   newSession: 'The agent started a new session; it does not remember earlier messages',
+  contextCondensed: 'Context condensed · earlier steps summarized',
 }
 export const waitingNotices = [
   agentNotices.noHost,
@@ -124,6 +125,7 @@ export const agentProjectionOf = (event: AgentEvent, previousTimestamp: string |
     return { type: 'observation', actionId: String(event.action_id), observation: event.observation as Fields }
   if (event.kind === 'AgentErrorEvent' || event.kind === 'ConversationErrorEvent')
     return stepOf({ type: 'error', message: String(event.error ?? event.detail ?? event.code ?? 'Unknown error') })
+  if (event.kind === 'Condensation') return { type: 'message', body: agentNotices.contextCondensed, kind: 'notice' }
   if (event.kind === 'ConversationStateUpdateEvent' && event.key === 'execution_status')
     return turnOutcomes.includes(String(event.value))
       ? { type: 'turn-end', outcome: event.value as TurnOutcome }

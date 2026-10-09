@@ -33,6 +33,16 @@ test('an agent message becomes an agent message and a user message is not projec
   expect(agentProjectionOf(userMessage, null)).toBeUndefined()
 })
 
+test('a condensation becomes the context condensed notice and a condensation request is not projected', () => {
+  const condensation = agentEvent('Condensation', { source: 'environment', summary: 'Earlier work', summary_offset: 2 })
+  expect(agentProjectionOf(condensation, null)).toEqual({
+    type: 'message',
+    body: 'Context condensed · earlier steps summarized',
+    kind: 'notice',
+  })
+  expect(agentProjectionOf(agentEvent('CondensationRequest', { source: 'environment' }), null)).toBeUndefined()
+})
+
 test('finished, error and stuck statuses end the turn; running does not', () => {
   for (const outcome of ['finished', 'error', 'stuck'] as const)
     expect(agentProjectionOf(statusUpdate(outcome), null)).toEqual({ type: 'turn-end', outcome })

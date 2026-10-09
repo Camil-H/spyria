@@ -77,7 +77,8 @@ export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMes
       if (projection?.type === 'message' || projection?.type === 'step') {
         const step = projection.type === 'step' ? projection.step : null
         const body = projection.type === 'step' ? projection.step.type : projection.body
-        project({ kind: step ? 'step' : 'agent', authorId: null, body, detail: null, step, replyToId })
+        const kind = projection.type === 'step' ? 'step' : (projection.kind ?? 'agent')
+        project({ kind, authorId: null, body, detail: null, step, replyToId })
       }
     }
     if (type !== 'message.edited' && type !== 'message.deleted') continue

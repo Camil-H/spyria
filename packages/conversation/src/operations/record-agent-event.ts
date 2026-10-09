@@ -43,7 +43,7 @@ export const recordAgentEvent = (
           id: messageId(event.id),
           workspaceId,
           chatId,
-          kind: projection.type === 'step' ? 'step' : 'agent',
+          kind: projection.type === 'step' ? 'step' : (projection.kind ?? 'agent'),
           authorId: null,
           body: MessageBody(projection.type === 'step' ? projection.step.type : projection.body),
           step: projection.type === 'step' ? projection.step : null,

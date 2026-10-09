@@ -18,6 +18,7 @@ export type FakeLlmScript = {
   route?: FakeRoute
   delegateRoute?: FakeRoute
   subagents?: Record<string, FakeLlmScript>
+  summary?: string
 }
 type CompletionRequest = {
   model?: string
@@ -165,9 +166,16 @@ export const createFakeLlm = (
       }
       const steps = script.steps ?? (script.command ? [{ command: script.command }] : [])
       const turnMessages = request.messages?.slice(request.messages.findLastIndex((message) => message.role === 'user'))
-      const step = request.tools?.length
-        ? steps[turnMessages?.filter((message) => message.role === 'assistant').length ?? 0]
-        : undefined
+      const { summary } = chatScript
+      const isCondensed =
+        summary !== undefined &&
+        request.messages?.some(
+          (message) => message.role === 'user' && JSON.stringify(message.content).includes(summary),
+        )
+      const step =
+        request.tools?.length && !isCondensed
+          ? steps[turnMessages?.filter((message) => message.role === 'assistant').length ?? 0]
+          : undefined
       if (step && 'fail' in step)
         return Response.json(
           { type: 'error', error: { type: 'overloaded_error', message: step.fail } },
@@ -181,7 +189,7 @@ export const createFakeLlm = (
         request.tools?.map((tool) => tool.function.name),
         resumeId,
       )
-      const text = toolCall ? '' : (script.text ?? defaultText)
+      const text = toolCall ? '' : (!request.tools?.length && summary) || (script.text ?? defaultText)
       const reasoning = step && 'think' in step ? step.think : ''
       const finishReason = toolCall ? 'tool_calls' : 'stop'
       if (!request.stream)

@@ -1,4 +1,4 @@
-import { chatId, type MessageId, memberId, messageId, type WorkspaceId } from '@hq/kernel'
+import { chatId, type MemberId, type MessageId, memberId, messageId, type WorkspaceId } from '@hq/kernel'
 import { z } from 'zod/mini'
 import type {
   AgentChat,
@@ -14,7 +14,12 @@ import { type AgentLlm, createSandboxAgentServer } from '../integrations/sandbox
 import { agentJobTypes, createTransactingZeroTransactor, type Transact } from '../integrations/zero-transactor.ts'
 import { closeReopenedTurn, reopenAgentTurn, sweepAgentTurns } from '../operations/agent-turn-safety.ts'
 import { delegateTask } from '../operations/delegate.ts'
-import { findModelCallTurn, findToolCallTurn, recordModelCallFailure } from '../operations/model-calls.ts'
+import {
+  findCondenserModel,
+  findModelCallTurn,
+  findToolCallTurn,
+  recordModelCallFailure,
+} from '../operations/model-calls.ts'
 import { promptAgent } from '../operations/prompt-agent.ts'
 import { recordAgentEvent } from '../operations/record-agent-event.ts'
 import { promptWaitingChats } from '../operations/retry-agent.ts'
@@ -38,6 +43,7 @@ export const createAgentHandlers = ({
   eventSockets,
   now = Date.now,
   resumeAfterMilliseconds,
+  condensationScale,
 }: {
   transact: Transact
   sandboxProvider: SandboxProvider
@@ -46,9 +52,10 @@ export const createAgentHandlers = ({
   eventSockets: AgentEventSockets
   now?: () => number
   resumeAfterMilliseconds?: number
+  condensationScale?: number
 }) => {
   const runtimes = createRuntimeAgentRuntimes(transact, sandboxProvider)
-  const agentServer = createSandboxAgentServer()
+  const agentServer = createSandboxAgentServer(condensationScale)
   const transactorOf = (id: WorkspaceId) => createTransactingZeroTransactor(transact, id)
   const dependenciesOf = (id: WorkspaceId) => ({
     transactor: transactorOf(id),
@@ -86,6 +93,8 @@ export const createAgentHandlers = ({
       closeReopenedTurn(dependenciesOf(chat.workspaceId), { chat, promptId, outcome }),
     promptWaiting: (host: AgentHost) => promptWaitingChats(dependenciesOf(host.workspaceId), host),
     modelCallTurn: (host: AgentHost, token: string) => findModelCallTurn(dependenciesOf(host.workspaceId), host, token),
+    condenserModel: (chat: AgentChat, prompterId: MemberId) =>
+      findCondenserModel(dependenciesOf(chat.workspaceId), prompterId),
     toolCallTurn: (host: AgentHost, token: string) => findToolCallTurn(dependenciesOf(host.workspaceId), host, token),
     delegate: (input: Parameters<typeof delegateTask>[1]) =>
       delegateTask(dependenciesOf(input.chat.workspaceId), input),

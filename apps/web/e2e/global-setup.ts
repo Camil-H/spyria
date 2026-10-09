@@ -100,6 +100,7 @@ export default async function globalSetup() {
         HQ_GATEWAY_ADMIN_USER: testGatewayAdmin.user,
         HQ_GATEWAY_ADMIN_PASSWORD: testGatewayAdmin.password,
         HQ_FAKE_MCP_PORT: new URL(fakeMcpUrl).port,
+        HQ_CONDENSATION_SCALE: '0.1',
       },
       `${serverUrl}/health`,
     ),

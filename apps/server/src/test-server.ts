@@ -23,6 +23,7 @@ import { createFakeHosts, type FakeHost, issueTestSession, testAuthSettings } fr
 
 const port = Number(process.env.PORT ?? 3100)
 const fakeMcpPort = Number(process.env.HQ_FAKE_MCP_PORT ?? 3101)
+const condensationScale = Number(process.env.HQ_CONDENSATION_SCALE ?? 1)
 const testToolServers = ['fake', 'GitHub', 'Slack', 'Notion', 'Linear']
 Bun.serve({ port: fakeMcpPort, fetch: createFakeMcp().fetch })
 
@@ -103,6 +104,7 @@ const runtimeHosts = createRuntimeHostGateway({
     llmGateway,
     agentBridge: () => agentBridge,
     providerHeadersOf: testHeadersOf,
+    condensationScale,
   }),
 })
 
@@ -114,6 +116,7 @@ const agentBridge = createAgentBridge({
     timeoutMilliseconds: 300,
   }),
   resumeAfterMilliseconds: 4_000,
+  condensationScale,
 })
 
 const scriptByChat = new Map<string, { script: FakeLlmScript; used: PromiseWithResolvers<boolean> }>()

@@ -1,11 +1,11 @@
-import type { MessageId } from '@hq/kernel'
+import { chatModelsOf, cheapestModelOf, type MemberId, type MessageId, withPricesOf } from '@hq/kernel'
 import type { AgentChat, AgentHost } from '../contracts/agent.ts'
 import { type ModelCallFailure, modelCallNoticeOf, publicModelNameOf } from '../domain/model-call-failures.ts'
 import type { AgentDependencies } from './agent-turn.ts'
 import { digestOf } from './decide.ts'
 import { noteSubagentFailure } from './delegate.ts'
 
-type Dependencies = Pick<AgentDependencies, 'transactor' | 'runtimes'>
+type Dependencies = Pick<AgentDependencies, 'transactor' | 'runtimes' | 'classifier'>
 type FailedCall = {
   chat: AgentChat
   promptId: MessageId
@@ -60,4 +60,9 @@ export const recordModelCallFailure = async (
     await agentTurns.recordFailure(chat.chatId, promptId, notice)
     return notice
   })
+}
+
+export const findCondenserModel = async ({ transactor, classifier }: Dependencies, prompterId: MemberId) => {
+  const reachable = (await transactor.run(({ routing }) => routing.reachableModels(prompterId))) ?? []
+  return cheapestModelOf(chatModelsOf(withPricesOf(reachable, classifier?.listedModels() ?? [])))?.id
 }

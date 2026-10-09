@@ -1,5 +1,6 @@
 import type { AgentConversation, AgentEndpoint, AgentLlmChoice, AgentServer } from '../contracts/agent.ts'
 import type { AgentEvent } from '../domain/agent-events.ts'
+import { condensationLimitsOf } from '../domain/masked-body.ts'
 
 export type AgentLlm = { model: string }
 
@@ -47,12 +48,22 @@ const mcpServerOf = (endpoint: AgentEndpoint, path: string, token: string) => ({
   headers: { Authorization: `Bearer ${token}` },
 })
 
-export const createSandboxAgentServer = (): AgentServer => ({
+export const createSandboxAgentServer = (condensationScale = 1): AgentServer => ({
   createConversation: async (endpoint, llmToken, llm, sub) => {
     const created = await call(endpoint, 'POST', '/api/conversations', {
       agent: {
         kind: 'Agent',
         llm: llmConfigOf(endpoint, llmToken, llm),
+        condenser: {
+          kind: 'LLMSummarizingCondenser',
+          llm: {
+            ...llmConfigOf(endpoint, llmToken, { model: llm.model, usageId: 'condenser' }),
+            stream: false,
+            extra_headers: { 'x-hq-role': 'condenser' },
+          },
+          max_size: condensationLimitsOf(condensationScale).condenserEvents,
+          keep_first: 2,
+        },
         tools: [{ name: 'terminal' }, { name: 'file_editor' }, { name: 'task_tracker' }],
         mcp_config: sub
           ? { hq: mcpServerOf(endpoint, '/mcp', sub.toolToken) }
