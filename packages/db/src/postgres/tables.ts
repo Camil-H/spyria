@@ -448,6 +448,34 @@ export const routingDecisions = table(
   (table) => [primaryKey({ columns: [table.workspaceId, table.id] }), chatReference(table)],
 )
 
+export const delegations = table(
+  'delegations',
+  {
+    ...chatScoped,
+    id: text().notNull(),
+    promptId: text().notNull(),
+    conversationId: text(),
+    actionEventId: text(),
+    task: text().notNull(),
+    effortHint: text().notNull(),
+    directive: text(),
+    policy: text().notNull(),
+    classifierOutput: jsonb(),
+    model: text().notNull(),
+    reason: text().notNull(),
+    status: text().$type<'running' | 'finished' | 'failed' | 'stopped'>().notNull(),
+    escalatedFrom: text(),
+    tokenHash: text().notNull(),
+    createdAt: instant().notNull(),
+    finishedAt: instant(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.id] }),
+    chatReference(table),
+    uniqueIndex().on(table.tokenHash),
+  ],
+)
+
 export const usageSyncMarks = table('usage_sync_marks', {
   workspaceId: text()
     .primaryKey()

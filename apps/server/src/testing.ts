@@ -96,7 +96,7 @@ const startSharedTestApp = async () => {
       createFakeLlm(() => fakeLlmScript),
     )
   const llmGateway = llmGatewayAt(`http://127.0.0.1:${integrationGatewayPort}`)
-  setModelDirectory(llmGateway.modelsOf)
+  setModelDirectory(llmGateway.listedModels)
   addRoutableModels(fakeRoutableModels)
   const app = createApp({ database, ...testAuthSettings, llmGateway, fakeLlm })
   const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
@@ -160,6 +160,7 @@ export const openSharedTestApp = async () => {
   sharedTestApp ??= startSharedTestApp()
   const testApp = await sharedTestApp
   await resetDatabase(testApp.database, await testApp.seededGatewayKeys())
+  if (testApp.llmGateway.listedModels().length === 0) await testApp.llmGateway.refreshListedModels()
   return testApp
 }
 

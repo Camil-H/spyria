@@ -34,8 +34,6 @@ export const modelNameOf = (id: string) => routableModels.find((model) => model.
 export const providersOfGatewayRefs = (refs: readonly string[]) => [
   ...new Set(refs.flatMap((ref) => ref.match(/^gateway:([a-z-]+)\//)?.[1] ?? [])),
 ]
-export const keyIdsOfGatewayRefs = (refs: readonly string[]) =>
-  refs.flatMap((ref) => ref.match(/^gateway:[a-z-]+\/(.+)$/)?.[1] ?? [])
 export const reachableModelsOf = (providers: readonly string[]): Model[] =>
   routableModels.filter((model) => providers.includes(model.id.split('/')[0] ?? ''))
 export const withPricesOf = (models: readonly Model[], listed: readonly ListedModel[]): Model[] =>

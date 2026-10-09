@@ -1,8 +1,17 @@
-import { type Fields, keptOutputOf, pathOf, type StoredStep, type ThoughtStep, textOf } from './agent-steps.ts'
+import {
+  type Fields,
+  keptOutputOf,
+  pathOf,
+  type StepDelegation,
+  type StoredStep,
+  type ThoughtStep,
+  textOf,
+} from './agent-steps.ts'
 import { toolDisplayNameOf } from './tool-calls.ts'
 
 export type AgentEvent = Readonly<{ id: string; kind: string; timestamp: string; [field: string]: unknown }>
 export type TurnOutcome = 'finished' | 'error' | 'stuck'
+export type EventDelegation = StepDelegation & { actionId: string | null }
 export type AgentProjection =
   | { type: 'message'; body: string }
   | { type: 'step'; step: StoredStep }
@@ -122,6 +131,22 @@ export const agentProjectionOf = (event: AgentEvent, previousTimestamp: string |
       : undefined
   return undefined
 }
+
+export const delegatedProjectionOf = (
+  projection: AgentProjection,
+  delegation: EventDelegation | undefined,
+): AgentProjection => {
+  if (!delegation) return projection
+  const { actionId: _, ...stepDelegation } = delegation
+  if (projection?.type === 'step') return stepOf({ ...projection.step, delegation: stepDelegation })
+  return projection?.type === 'observation' ? projection : undefined
+}
+
+export const linkedDelegateStep = (actionStep: StoredStep | null, { actionId: _, ...delegation }: EventDelegation) =>
+  actionStep && !actionStep.delegation ? { ...actionStep, delegation } : undefined
+
+export const executionStatusOf = (event: AgentEvent) =>
+  event.kind === 'ConversationStateUpdateEvent' && event.key === 'execution_status' ? String(event.value) : undefined
 
 export const turnEndNoticeOf = (outcome: TurnOutcome, hasReply: boolean) =>
   outcome !== 'finished' ? agentNotices.stoppedWithError : hasReply ? undefined : agentNotices.noReply

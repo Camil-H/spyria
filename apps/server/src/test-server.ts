@@ -44,7 +44,7 @@ const gatewaySettings = {
   adminPassword: process.env.HQ_GATEWAY_ADMIN_PASSWORD ?? '',
 }
 const llmGateway = createLlmGateway(gatewaySettings)
-setModelDirectory(llmGateway.modelsOf)
+setModelDirectory(llmGateway.listedModels)
 addRoutableModels(fakeRoutableModels)
 const usageSyncIntervalMilliseconds = 2_000
 const fakeAgentServerBootMilliseconds = Number(process.env.HQ_FAKE_AGENT_SERVER_BOOT_MILLISECONDS ?? 1_500)
@@ -146,6 +146,7 @@ const app = createApp({
   .post('/test/fake-llm-script', async (context) => {
     const { db = '', chat } = context.req.query()
     if (!chat) {
+      if (llmGateway.listedModels().length === 0) await llmGateway.refreshListedModels()
       for (const key of scriptByChat.keys()) if (key.startsWith(`${db}/`)) scriptByChat.delete(key)
       return context.body(null, 204)
     }

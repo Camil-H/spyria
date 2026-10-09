@@ -23,7 +23,7 @@ type Input = { workspaceId: WorkspaceId; messageId: MessageId }
 type Prepared = { conversation: AgentConversation } | { refusal: string }
 
 const runtimeStartPollMilliseconds = 500
-const agentLlmOf = (model: string, effort: string | null, usageId = 'agent') => ({
+export const agentLlmOf = (model: string, effort: string | null, usageId = 'agent') => ({
   model: `openai/${model}`,
   effort: effort ?? undefined,
   usageId,

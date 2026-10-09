@@ -1,4 +1,10 @@
-import { type AgentEvent, agentProjectionOf } from './agent-events.ts'
+import {
+  type AgentEvent,
+  agentProjectionOf,
+  delegatedProjectionOf,
+  type EventDelegation,
+  linkedDelegateStep,
+} from './agent-events.ts'
 import { legacyToolCallStep, observedStep, type StoredStep } from './agent-steps.ts'
 import type { Message } from './message.ts'
 
@@ -34,7 +40,7 @@ export type PostedPayload = Pick<ProjectedMessage, 'body' | 'detail' | 'replyToI
   step?: StoredStep | null
 }
 export type ChangedPayload = { messageId: string; body: string }
-export type AgentEventPayload = { replyToId: string | null; event: AgentEvent }
+export type AgentEventPayload = { replyToId: string | null; event: AgentEvent; delegation?: EventDelegation }
 
 export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMessage[] => {
   const messageByKey = new Map<string, ProjectedMessage>()
@@ -60,10 +66,17 @@ export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMes
       )
     }
     if (type === 'agent.event') {
-      const { replyToId, event } = payload as AgentEventPayload
+      const { replyToId, event, delegation } = payload as AgentEventPayload
       const chatKey = `${workspaceId}/${chatId}`
-      const projection = agentProjectionOf(event, previousTimestampByChat.get(chatKey) ?? null)
+      const projection = delegatedProjectionOf(
+        agentProjectionOf(event, previousTimestampByChat.get(chatKey) ?? null),
+        delegation,
+      )
       previousTimestampByChat.set(chatKey, event.timestamp)
+      const delegateAction = delegation?.actionId && messageByKey.get(`${workspaceId}/${delegation.actionId}`)
+      const linkedStep = delegateAction && delegation && linkedDelegateStep(delegateAction.step, delegation)
+      if (delegateAction && linkedStep)
+        messageByKey.set(`${workspaceId}/${delegateAction.id}`, { ...delegateAction, step: linkedStep })
       if (projection?.type === 'observation') {
         const action = messageByKey.get(`${workspaceId}/${projection.actionId}`)
         const observed =

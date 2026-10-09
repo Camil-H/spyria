@@ -41,26 +41,34 @@ const llmConfigOf = (endpoint: AgentEndpoint, llmToken: string, { model, effort,
   ...(effort && { reasoning_effort: effort }),
 })
 
+const mcpServerOf = (endpoint: AgentEndpoint, path: string, token: string) => ({
+  url: endpoint.transport.gatewayUrl.replace(/\/v1$/, path),
+  transport: 'http',
+  headers: { Authorization: `Bearer ${token}` },
+})
+
 export const createSandboxAgentServer = (): AgentServer => ({
-  createConversation: async (endpoint, llmToken, llm) => {
+  createConversation: async (endpoint, llmToken, llm, sub) => {
     const created = await call(endpoint, 'POST', '/api/conversations', {
       agent: {
         kind: 'Agent',
         llm: llmConfigOf(endpoint, llmToken, llm),
         tools: [{ name: 'terminal' }, { name: 'file_editor' }, { name: 'task_tracker' }],
-        mcp_config: {
-          hq: {
-            url: endpoint.transport.gatewayUrl.replace(/\/v1$/, '/mcp'),
-            transport: 'http',
-            headers: { Authorization: `Bearer ${llmToken}` },
-          },
-        },
+        mcp_config: sub
+          ? { hq: mcpServerOf(endpoint, '/mcp', sub.toolToken) }
+          : { hq: mcpServerOf(endpoint, '/mcp', llmToken), router: mcpServerOf(endpoint, '/mcp/router', llmToken) },
       },
       workspace: { kind: 'LocalWorkspace', working_dir: '/workspace/project' },
       autotitle: false,
+      ...(sub && { parent_conversation_id: sub.parentConversationId }),
     })
     return String(created?.id)
   },
+  finalResponse: async (conversation) =>
+    String(
+      (await call(conversation, 'GET', `/api/conversations/${conversation.conversationId}/agent_final_response`))
+        ?.response ?? '',
+    ),
   switchLlm: async (conversation, llmToken, llm) => {
     await call(conversation, 'POST', `/api/conversations/${conversation.conversationId}/switch_llm`, {
       llm: llmConfigOf(conversation, llmToken, llm),

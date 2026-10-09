@@ -8,7 +8,6 @@ import {
   readCommandOutput,
 } from '@hq/conversation/server'
 import type { Database } from '@hq/db/postgres'
-import { memberKeyIdsOf } from '@hq/db/server-writes'
 import { schema } from '@hq/db/zero'
 import { queries, type ZeroContext } from '@hq/db/zero-queries'
 import type { RuntimeHostId } from '@hq/kernel'
@@ -65,10 +64,7 @@ export const sessionClassifierOf =
     createGatewaySessionClassifier({
       gatewayUrl: () => gatewayUrlOf(database),
       virtualKeyOf: createMemberKeyReader((work) => zeroDrizzle(schema, database).transaction(work), llmGateway),
-      listedModelsOf: async (workspaceId, memberId) =>
-        llmGateway.listedModelsNow(
-          await zeroDrizzle(schema, database).transaction((tx) => memberKeyIdsOf(tx, workspaceId, memberId)),
-        ),
+      listedModels: llmGateway.listedModels,
       headersOf: headersOf && ((chat) => headersOf(database, chat)),
       timeoutMilliseconds,
     })

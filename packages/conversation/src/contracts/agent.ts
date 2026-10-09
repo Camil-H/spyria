@@ -43,8 +43,15 @@ export type RuntimeRetrier = { retry(chat: AgentChat): Promise<void> }
 
 export type AgentEventListener = { onEvent(event: AgentEvent): void; onClose(): void }
 export type AgentLlmChoice = Readonly<{ model: string; effort?: string; usageId: string }>
+export type SubConversation = Readonly<{ parentConversationId: string; toolToken: string }>
 export type AgentServer = {
-  createConversation(endpoint: AgentEndpoint, llmToken: string, llm: AgentLlmChoice): Promise<string>
+  createConversation(
+    endpoint: AgentEndpoint,
+    llmToken: string,
+    llm: AgentLlmChoice,
+    sub?: SubConversation,
+  ): Promise<string>
+  finalResponse(conversation: AgentConversation): Promise<string>
   switchLlm(conversation: AgentConversation, llmToken: string, llm: AgentLlmChoice): Promise<void>
   sendMessage(conversation: AgentConversation, text: string): Promise<void>
   statusOf(conversation: AgentConversation): Promise<string | undefined>
@@ -65,6 +72,6 @@ export type ClassifierCall = Readonly<{
   request: object
 }>
 export type SessionClassifier = {
-  listedModels(chat: AgentChat, memberId: MemberId): Promise<readonly ListedModel[]>
+  listedModels(): readonly ListedModel[]
   classify(call: ClassifierCall): Promise<{ body: unknown; inputTokens: number; outputTokens: number } | undefined>
 }

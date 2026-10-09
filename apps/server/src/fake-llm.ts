@@ -16,8 +16,11 @@ export type FakeLlmScript = {
   command?: string
   steps?: FakeLlmStep[]
   route?: FakeRoute
+  delegateRoute?: FakeRoute
+  subagents?: Record<string, FakeLlmScript>
 }
 type CompletionRequest = {
+  model?: string
   stream?: boolean
   response_format?: object
   messages?: { role: string }[]
@@ -43,7 +46,7 @@ const completionOf = (choice: object, extra: object = {}) => ({
 const eventOf = (data: object) => new TextEncoder().encode(`data: ${JSON.stringify(data)}\n\n`)
 const wordsOf = (text: string) => text.split(/(?<= )/).filter(Boolean)
 
-const toolCallOf = (step: FakeLlmStep | undefined) => {
+const toolCallOf = (step: FakeLlmStep | undefined, offeredTools: readonly string[] = []) => {
   const call =
     !step || 'fail' in step
       ? undefined
@@ -52,7 +55,10 @@ const toolCallOf = (step: FakeLlmStep | undefined) => {
         : 'command' in step
           ? { name: 'terminal', arguments: { command: step.command, security_risk: 'LOW', summary: step.command } }
           : 'tool' in step
-            ? { name: step.tool, arguments: step.arguments ?? {} }
+            ? {
+                name: offeredTools.find((name) => name.endsWith(`_${step.tool}`)) ?? step.tool,
+                arguments: step.arguments ?? {},
+              }
             : 'plan' in step
               ? {
                   name: 'task_tracker',
@@ -101,6 +107,14 @@ const routeOf = async (route: FakeRoute = unsureRoute) => {
   return route === 'slow' ? unsureRoute : route
 }
 const classifierDownOf = { error: { message: 'Classifier down', type: 'server_error' } }
+const scriptedRouteOf = (script: FakeLlmScript | undefined, request: object) =>
+  JSON.stringify(request).includes('Subagent task') ? script?.delegateRoute : script?.route
+const isSubagentCall = (request: CompletionRequest, script: FakeLlmScript) => {
+  const firstPrompt = JSON.stringify(request.messages?.find((message) => message.role === 'user') ?? '')
+  return (script.steps ?? []).some(
+    (step) => 'tool' in step && step.tool === 'delegate' && firstPrompt.includes(String(step.arguments?.task)),
+  )
+}
 
 export const createFakeLlm = (
   scriptOf: (request: Request, isClassifier: boolean) => FakeLlmScript | undefined | Promise<FakeLlmScript | undefined>,
@@ -118,7 +132,7 @@ export const createFakeLlm = (
       }),
     )
     .post('/v1/systemone', async (context) => {
-      const route = await routeOf((await scriptOf(context.req.raw, true))?.route)
+      const route = await routeOf(scriptedRouteOf(await scriptOf(context.req.raw, true), await context.req.json()))
       if (!route) return context.json(classifierDownOf, 500)
       const confidence = decisionConfidenceOf(route.confidence)
       return context.json({
@@ -133,9 +147,13 @@ export const createFakeLlm = (
       const key = context.req.header('authorization')?.replace(/^Bearer /, '') ?? ''
       if (key.includes('refused')) return context.json(refusedKeyOf(key), 401)
       const request = await context.req.json<CompletionRequest>()
-      const script = (await scriptOf(context.req.raw, Boolean(request.response_format))) ?? {}
+      const chatScript = (await scriptOf(context.req.raw, Boolean(request.response_format))) ?? {}
+      const script =
+        !request.response_format && isSubagentCall(request, chatScript)
+          ? (chatScript.subagents?.[request.model?.split('/').at(-1) ?? ''] ?? {})
+          : chatScript
       if (request.response_format) {
-        const route = await routeOf(script.route)
+        const route = await routeOf(scriptedRouteOf(script, request))
         if (!route) return context.json(classifierDownOf, 500)
         const { prose, ...fields } = route
         const json = JSON.stringify({ ...fields, reason: 'fake classification' })
@@ -155,7 +173,10 @@ export const createFakeLlm = (
           { type: 'error', error: { type: 'overloaded_error', message: step.fail } },
           { status: 529 },
         )
-      const toolCall = toolCallOf(step)
+      const toolCall = toolCallOf(
+        step,
+        request.tools?.map((tool) => tool.function.name),
+      )
       const text = toolCall ? '' : (script.text ?? defaultText)
       const reasoning = step && 'think' in step ? step.think : ''
       const finishReason = toolCall ? 'tool_calls' : 'stop'

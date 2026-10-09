@@ -4,7 +4,6 @@ import {
   chatModelsOf,
   classifierModelOf,
   defaultModelOf,
-  keyIdsOfGatewayRefs,
   type ListedModel,
   modelNameOf,
   nearestModelOf,
@@ -36,7 +35,6 @@ test('reachable models are the routable ones on the providers of the member keys
     'fake',
     'fake-small',
   ])
-  expect(keyIdsOfGatewayRefs(['gateway:fake/1', 'gateway:fake-small/2', 'legacy'])).toEqual(['1', '2'])
   expect(idsOf(fake)).toEqual(['fake/fake-large', 'fake/fake-medium', 'fake/fake-small'])
   expect(idsOf(smallOnly)).toEqual(['fake-small/fake-small'])
   expect(idsOf(jev)).toEqual(['typesafe/jev-latest'])

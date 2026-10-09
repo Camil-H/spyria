@@ -16,6 +16,11 @@ export type ConversationMessage = Readonly<{
   isEdited: boolean
   isRunning: boolean
   canConnectTools: boolean
+  delegation?: Readonly<{
+    modelName: string
+    steps: readonly ConversationMessage[]
+    durationMilliseconds: number | null
+  }>
 }>
 
 export type ConversationItem =
@@ -50,9 +55,42 @@ const withThoughtsApart = (message: ConversationMessage): ConversationMessage[] 
   if (!stored?.thought) return [message]
   const { thought, ...step } = stored
   return [
-    { ...message, id: messageId(`${message.id}-thought`), step: thought },
+    {
+      ...message,
+      id: messageId(`${message.id}-thought`),
+      step: { ...thought, ...(stored.delegation && { delegation: stored.delegation }) } as AgentStep,
+    },
     { ...message, step: step as AgentStep },
   ]
+}
+
+const delegationOf = (message: ConversationMessage) => (message.step as StoredStep | null)?.delegation
+const isDelegateStep = (message: ConversationMessage) =>
+  message.step?.type === 'tool' && message.step.name === 'delegate' && delegationOf(message) !== undefined
+
+const withDelegationsGrouped = (replies: readonly ConversationMessage[]) => {
+  const delegateSteps = replies.filter(isDelegateStep)
+  const delegationIds = new Set(delegateSteps.map((step) => delegationOf(step)?.id))
+  const isDelegated = (reply: ConversationMessage) =>
+    !isDelegateStep(reply) && delegationIds.has(delegationOf(reply)?.id)
+  return replies
+    .filter((reply) => !isDelegated(reply))
+    .map((reply) => {
+      const delegation = isDelegateStep(reply) ? delegationOf(reply) : undefined
+      if (!delegation) return reply
+      const steps = replies.filter((step) => isDelegated(step) && delegationOf(step)?.id === delegation.id)
+      const lastStep = steps.at(-1)
+      const isDone = reply.step?.type === 'tool' && reply.step.result !== null
+      return {
+        ...reply,
+        delegation: {
+          modelName: delegation.modelName,
+          steps,
+          durationMilliseconds:
+            isDone && lastStep ? Date.parse(lastStep.createdAt) - Date.parse(reply.createdAt) : null,
+        },
+      }
+    })
 }
 
 const turnItemsOf = (messages: readonly ConversationMessage[]): ConversationItem[] => {
@@ -61,7 +99,8 @@ const turnItemsOf = (messages: readonly ConversationMessage[]): ConversationItem
     (message) => message.replyToId as MessageId,
   )
   const itemsByStepId = new Map<MessageId, ConversationItem[]>()
-  for (const [promptId, replies] of repliesByPrompt) {
+  for (const [promptId, turnReplies] of repliesByPrompt) {
+    const replies = withDelegationsGrouped(turnReplies)
     const isStopped = replies.some((reply) => reply.kind === 'notice' && reply.body.startsWith(stoppedByPrefix))
     const steps = replies.filter((reply) => reply.kind === 'step' && !(isStopped && reply.step?.type === 'error'))
     const plans = steps.filter((step) => step.step?.type === 'plan')
@@ -70,7 +109,7 @@ const turnItemsOf = (messages: readonly ConversationMessage[]): ConversationItem
       .map((step) => (step === plans[0] ? { ...step, step: plans.at(-1)?.step ?? null } : step))
     const answer = replies.findLast((reply) => reply.kind === 'agent')
     const firstStep = visibleSteps[0]
-    for (const reply of replies) if (reply.kind === 'step') itemsByStepId.set(reply.id, [])
+    for (const reply of turnReplies) if (reply.kind === 'step') itemsByStepId.set(reply.id, [])
     if (
       answer &&
       firstStep &&

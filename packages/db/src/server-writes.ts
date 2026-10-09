@@ -1,4 +1,4 @@
-import { keyIdsOfGatewayRefs, type ListedModel, providersOfGatewayRefs, reachableModelsOf } from '@hq/kernel'
+import { type ListedModel, providersOfGatewayRefs, reachableModelsOf } from '@hq/kernel'
 import type { ServerTransaction, Transaction } from '@rocicorp/zero'
 
 const onServer = async <Row = unknown>(tx: Transaction, statement: string, parameters: unknown[]) =>
@@ -42,17 +42,15 @@ export const virtualKeyIdOf = async (tx: Transaction, workspaceId: string, userI
     )
   )?.id
 
-let modelsOfKeys: (keyIds: readonly string[]) => Promise<readonly ListedModel[]> = async () => []
-export const setModelDirectory = (directory: typeof modelsOfKeys) => {
-  modelsOfKeys = directory
+let listedModels: () => readonly ListedModel[] = () => []
+export const setModelDirectory = (directory: typeof listedModels) => {
+  listedModels = directory
 }
-export const listedModelsOf = (keyIds: readonly string[]) => modelsOfKeys(keyIds).catch(() => [])
+export const listedModelsOf = () => listedModels()
 export const memberModelsOf = async (tx: Transaction, workspaceId: string, userId: string) =>
   tx.location === 'server'
     ? reachableModelsOf(providersOfGatewayRefs(await gatewayKeyRefsOf(tx, workspaceId, userId)))
     : undefined
-export const memberKeyIdsOf = async (tx: Transaction, workspaceId: string, userId: string) =>
-  keyIdsOfGatewayRefs(await gatewayKeyRefsOf(tx, workspaceId, userId))
 
 export const setVirtualKeyId = (tx: Transaction, workspaceId: string, userId: string, id: string | null) =>
   id === null
@@ -337,10 +335,11 @@ export const chatRoutingOf = (tx: Transaction, workspaceId: string, chatId: stri
     reasoningEffort: string | null
     defaultModel: string | null
     agentModel: string | null
+    subagentPolicy: string
   }>(
     tx,
     `select mode, owner_user_id as "ownerId", model, reasoning_effort as "reasoningEffort",
-       default_model as "defaultModel", agent_model as "agentModel"
+       default_model as "defaultModel", agent_model as "agentModel", subagent_policy as "subagentPolicy"
      from chats where workspace_id = $1 and id = $2`,
     [workspaceId, chatId],
   )
@@ -348,21 +347,60 @@ export const chatRoutingOf = (tx: Transaction, workspaceId: string, chatId: stri
 export const setChatAgentModel = (tx: Transaction, workspaceId: string, chatId: string, model: string) =>
   onServer(tx, 'update chats set agent_model = $3 where workspace_id = $1 and id = $2', [workspaceId, chatId, model])
 
+const insertServerOnlyRow = (tx: Transaction, table: string, row: Record<string, unknown>) =>
+  onServer(tx, `insert into ${table} select * from jsonb_populate_record(null::${table}, $1::jsonb)`, [
+    JSON.stringify(
+      Object.fromEntries(
+        Object.entries({ id: crypto.randomUUID(), createdAt: new Date(), ...row }).map(([name, value]) => [
+          name.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`),
+          value,
+        ]),
+      ),
+    ),
+  ])
+
 export const insertRoutingDecision = (tx: Transaction, decision: Record<string, unknown>) =>
+  insertServerOnlyRow(tx, 'routing_decisions', decision)
+
+export const insertDelegation = (tx: Transaction, delegation: Record<string, unknown>) =>
+  insertServerOnlyRow(tx, 'delegations', delegation)
+
+export const setDelegationFields = (
+  tx: Transaction,
+  workspaceId: string,
+  id: string,
+  fields: { conversationId?: string; status?: string },
+) =>
   onServer(
     tx,
-    'insert into routing_decisions select * from jsonb_populate_record(null::routing_decisions, $1::jsonb)',
-    [
-      JSON.stringify(
-        Object.fromEntries(
-          Object.entries({ ...decision, id: crypto.randomUUID(), createdAt: new Date() }).map(([name, value]) => [
-            name.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`),
-            value,
-          ]),
-        ),
-      ),
-    ],
+    `update delegations set conversation_id = coalesce($3, conversation_id), status = coalesce($4, status),
+       finished_at = case when $4::text is null then finished_at else now() end
+     where workspace_id = $1 and id = $2 and status = 'running'`,
+    [workspaceId, id, fields.conversationId ?? null, fields.status ?? null],
   )
+
+export const runningDelegationOfTokenHash = (tx: Transaction, workspaceId: string, hostId: string, hash: string) =>
+  firstOnServer<{ chatId: string; id: string }>(
+    tx,
+    `select delegations.chat_id as "chatId", delegations.id from delegations join runtimes
+       on runtimes.workspace_id = delegations.workspace_id and runtimes.chat_id = delegations.chat_id
+     where delegations.workspace_id = $1 and runtimes.host_id = $2 and delegations.token_hash = $3
+       and delegations.status = 'running'`,
+    [workspaceId, hostId, hash],
+  )
+
+export const unansweredDelegateAction = async (tx: Transaction, workspaceId: string, chatId: string) =>
+  (
+    await firstOnServer<{ id: string }>(
+      tx,
+      `select id from events action where workspace_id = $1 and chat_id = $2 and type = 'agent.event'
+         and payload->'event'->>'kind' = 'ActionEvent' and payload->'event'->>'tool_name' in ('delegate', 'router_delegate')
+         and not exists (select 1 from events observation where observation.workspace_id = $1
+           and observation.chat_id = $2 and observation.payload->'event'->>'action_id' = action.id)
+       order by seq desc limit 1`,
+      [workspaceId, chatId],
+    )
+  )?.id
 
 export const chatModelCalls = async (tx: Transaction, workspaceId: string, chatId: string) => ({
   models: await onServer<{ model: string; calls: number; tokens: number; costMicros: number }>(
@@ -375,7 +413,7 @@ export const chatModelCalls = async (tx: Transaction, workspaceId: string, chatI
   latest: await firstOnServer<{ tokens: number }>(
     tx,
     `select input_tokens + output_tokens as tokens from model_calls
-     where workspace_id = $1 and chat_id = $2 and role is distinct from 'router' order by called_at desc limit 1`,
+     where workspace_id = $1 and chat_id = $2 and role is null order by called_at desc limit 1`,
     [workspaceId, chatId],
   ),
 })

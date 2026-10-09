@@ -156,6 +156,41 @@ const ToolStep = ({ step, canConnect }: { step: StepOf<'tool'>; canConnect: bool
   )
 }
 
+const DelegationStep = ({
+  step,
+  delegation,
+}: {
+  step: StepOf<'tool'>
+  delegation: NonNullable<ConversationMessage['delegation']>
+}) => {
+  const count = delegation.steps.length
+  const duration = delegation.durationMilliseconds
+  return (
+    <Disclosure
+      label={
+        step.result === null ? (
+          <>
+            <LoaderCircle aria-hidden className="size-4 shrink-0 animate-spin" />
+            Delegating to {delegation.modelName}…
+          </>
+        ) : (
+          `Delegated to ${delegation.modelName} · ${count} step${count === 1 ? '' : 's'}${duration === null ? '' : ` · ${durationLabelOf(duration)}`}`
+        )
+      }
+    >
+      <fieldset
+        aria-label={`Steps of ${delegation.modelName}`}
+        className="mt-1 flex flex-col gap-1 border-l-2 border-line pl-3"
+      >
+        {delegation.steps.map((delegated) => (
+          <AgentStep key={delegated.id} message={delegated} />
+        ))}
+      </fieldset>
+      {step.result !== null && <p className="mt-1 pl-3 text-sm whitespace-pre-wrap">{step.result}</p>}
+    </Disclosure>
+  )
+}
+
 const planStatusLabels: Record<string, string> = { 'in-progress': 'In progress', todo: 'To do' }
 
 const PlanStep = ({ step }: { step: StepOf<'plan'> }) => (
@@ -175,6 +210,7 @@ export const AgentStep = ({ message }: { message: ConversationMessage }) => {
   if (step?.type === 'thought') return <ThoughtStep step={step} />
   if (step?.type === 'command') return <CommandStep id={message.id} step={step} isRunning={message.isRunning} />
   if (step?.type === 'file') return <FileStep step={step} />
+  if (step?.type === 'tool' && message.delegation) return <DelegationStep step={step} delegation={message.delegation} />
   if (step?.type === 'tool') return <ToolStep step={step} canConnect={message.canConnectTools} />
   if (step?.type === 'plan') return <PlanStep step={step} />
   if (step?.type === 'error')

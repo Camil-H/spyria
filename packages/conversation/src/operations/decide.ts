@@ -3,7 +3,7 @@ import type { AgentChat } from '../contracts/agent.ts'
 import { answersOf, decisionRequestOf, type Questions } from '../domain/decisions.ts'
 import type { AgentDependencies } from './agent-turn.ts'
 
-const digestOf = async (value: object) =>
+export const digestOf = async (value: unknown) =>
   [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(value))))]
     .map((byte) => byte.toString(16).padStart(2, '0'))
     .join('')
@@ -23,7 +23,7 @@ export const decide = async (
   },
 ) => {
   if (!classifier) return undefined
-  const model = classifierModelOf(withPricesOf(models, await classifier.listedModels(call.chat, call.prompterId)))
+  const model = classifierModelOf(withPricesOf(models, classifier.listedModels()))
   if (!model) return undefined
   const request = decisionRequestOf(model, call.state, call.questions)
   const reply = await classifier.classify({ ...call, model, request })

@@ -12,8 +12,8 @@ type BifrostGateway = LlmGateway &
     url: string
     registerFakeProviders(fakeLlmUrl: string): Promise<void>
     setUpToolServer(server: ToolServerSetup, logIn?: (authorizeUrl: string) => Promise<void>): Promise<boolean>
-    modelsOf(keyIds: readonly string[]): Promise<readonly ListedModel[]>
-    listedModelsNow(keyIds: readonly string[]): readonly ListedModel[]
+    listedModels(): readonly ListedModel[]
+    refreshListedModels(): Promise<void>
   }
 
 const notFound = 404
@@ -27,7 +27,6 @@ type ModelDetails = Prices & {
   provider: string
   max_input_tokens?: number
   is_deprecated?: boolean
-  accessible_by_keys?: string[]
   overridden_pricing?: Prices
 }
 const dollarsPerMillionOf = (perToken: number | undefined) =>
@@ -36,16 +35,15 @@ const dollarsPerMillionOf = (perToken: number | undefined) =>
 export const createLlmGateway = ({ url, adminUser, adminPassword }: LlmGatewaySettings): BifrostGateway => {
   const authorization = `Basic ${btoa(`${adminUser}:${adminPassword}`)}`
   const virtualKeyValues = new Map<string, string>()
-  const modelLists = new Map<
-    string,
-    { models: Promise<readonly ListedModel[]>; expiresAt: number; listed?: readonly ListedModel[] }
-  >()
-  const listModels = async (keyIds: readonly string[]) => {
-    const query = new URLSearchParams({ keys: keyIds.join(','), limit: String(modelListSize) })
-    const { body } = await request('GET', `/api/models/details?${query}`)
+  let listing: { models: readonly ListedModel[]; loadedAt: number; loading?: Promise<void> } = {
+    models: [],
+    loadedAt: 0,
+  }
+  const listModels = async () => {
+    const { body } = await request('GET', `/api/models/details?limit=${modelListSize}`)
     return ((body.models ?? []) as ModelDetails[]).flatMap((model): ListedModel[] => {
       const prices = model.overridden_pricing ?? model
-      return model.is_deprecated || !model.accessible_by_keys?.some((keyId) => keyIds.includes(keyId))
+      return model.is_deprecated
         ? []
         : [
             {
@@ -95,27 +93,21 @@ export const createLlmGateway = ({ url, adminUser, adminPassword }: LlmGatewaySe
   }
   const gateway: BifrostGateway = {
     url,
-    modelsOf: (keyIds) => {
-      if (keyIds.length === 0) return Promise.resolve([])
-      const cacheKey = keyIds.toSorted().join(',')
-      const cached = modelLists.get(cacheKey)
-      if (cached && cached.expiresAt > Date.now()) return cached.models
-      const entry: { models: Promise<readonly ListedModel[]>; expiresAt: number; listed?: readonly ListedModel[] } = {
-        models: listModels(keyIds),
-        expiresAt: Date.now() + modelListMilliseconds,
-      }
-      entry.models.then(
-        (listed) => {
-          entry.listed = listed
+    refreshListedModels: () => {
+      listing.loading ??= listModels().then(
+        (models) => {
+          listing = { models, loadedAt: Date.now() }
         },
-        () => modelLists.delete(cacheKey),
+        () => {
+          listing.loading = undefined
+        },
       )
-      modelLists.set(cacheKey, entry)
-      return entry.models
+      return listing.loading
     },
-    listedModelsNow: (keyIds) => {
-      void gateway.modelsOf(keyIds).catch(() => {})
-      return modelLists.get(keyIds.toSorted().join(','))?.listed ?? []
+    listedModels: () => {
+      if (listing.models.length === 0 || Date.now() - listing.loadedAt > modelListMilliseconds)
+        void gateway.refreshListedModels()
+      return listing.models
     },
     toolServers,
     finishToolConsent,
@@ -193,6 +185,8 @@ export const createLlmGateway = ({ url, adminUser, adminPassword }: LlmGatewaySe
         added = await request('POST', `/api/providers/${provider}/keys`, keyBody)
       }
       if (!added.found) throw new UnsupportedProvider(provider)
+      listing = { models: listing.models, loadedAt: 0 }
+      void gateway.refreshListedModels()
       return { provider, id: String(added.body.id) }
     },
     removeProviderKey: async ({ provider, id }) => {

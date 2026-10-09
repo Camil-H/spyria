@@ -13,6 +13,7 @@ import { createRuntimeAgentRuntimes, type SandboxProvider } from '../integration
 import { type AgentLlm, createSandboxAgentServer } from '../integrations/sandbox-agent-server.ts'
 import { agentJobTypes, createTransactingZeroTransactor, type Transact } from '../integrations/zero-transactor.ts'
 import { closeReopenedTurn, reopenAgentTurn, sweepAgentTurns } from '../operations/agent-turn-safety.ts'
+import { delegateTask } from '../operations/delegate.ts'
 import { findModelCallTurn, findToolCallTurn, recordModelCallFailure } from '../operations/model-calls.ts'
 import { promptAgent } from '../operations/prompt-agent.ts'
 import { recordAgentEvent } from '../operations/record-agent-event.ts'
@@ -83,6 +84,8 @@ export const createAgentHandlers = ({
     promptWaiting: (host: AgentHost) => promptWaitingChats(dependenciesOf(host.workspaceId), host),
     modelCallTurn: (host: AgentHost, token: string) => findModelCallTurn(dependenciesOf(host.workspaceId), host, token),
     toolCallTurn: (host: AgentHost, token: string) => findToolCallTurn(dependenciesOf(host.workspaceId), host, token),
+    delegate: (input: Parameters<typeof delegateTask>[1]) =>
+      delegateTask(dependenciesOf(input.chat.workspaceId), input),
     recordModelCallFailure: (call: Parameters<typeof recordModelCallFailure>[1]) =>
       recordModelCallFailure(dependenciesOf(call.chat.workspaceId), call),
   }

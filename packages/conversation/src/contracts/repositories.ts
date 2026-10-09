@@ -1,5 +1,5 @@
 import type { ChatId, MemberId, MessageId, Model, WorkspaceId } from '@hq/kernel'
-import type { AgentEvent } from '../domain/agent-events.ts'
+import type { AgentEvent, EventDelegation } from '../domain/agent-events.ts'
 import type { AgentStep, StoredStep } from '../domain/agent-steps.ts'
 import type { ConversationChat, Message, MessageChange } from '../domain/message.ts'
 import type { AgentInterrupt } from './agent.ts'
@@ -42,7 +42,13 @@ export type MemberDirectory = {
 }
 
 export type AgentEventRepository = {
-  append(chatId: ChatId, event: AgentEvent, replyToId: MessageId | null, at: Date): Promise<number | undefined>
+  append(
+    chatId: ChatId,
+    event: AgentEvent,
+    replyToId: MessageId | null,
+    at: Date,
+    delegation?: EventDelegation,
+  ): Promise<number | undefined>
   last(chatId: ChatId): Promise<{ timestamp: string; replyToId: MessageId | null } | undefined>
 }
 
@@ -63,6 +69,7 @@ export type ChatRouting = Readonly<{
   reasoningEffort: string | null
   defaultModel: string | null
   agentModel: string | null
+  subagentPolicy: string
 }>
 export type RoutingDecision = Readonly<{
   chatId: ChatId
@@ -75,6 +82,26 @@ export type RoutingDecision = Readonly<{
   reason: string
   costMicros: number
 }>
+export type Delegation = Readonly<{
+  chatId: ChatId
+  id: string
+  promptId: MessageId
+  actionEventId: string | null
+  task: string
+  effortHint: string
+  policy: string
+  classifierOutput: object | null
+  model: string
+  reason: string
+  tokenHash: string
+}>
+export type DelegationRepository = {
+  start(delegation: Delegation): Promise<void>
+  update(id: string, fields: { conversationId?: string; status?: 'finished' | 'failed' }): Promise<void>
+  runningOfTokenHash(hostId: string, tokenHash: string): Promise<{ chatId: ChatId; id: string } | undefined>
+  unansweredAction(chatId: ChatId): Promise<string | undefined>
+}
+
 export type RoutingRepository = {
   chatRouting(chatId: ChatId): Promise<ChatRouting>
   reachableModels(memberId: MemberId): Promise<readonly Model[] | undefined>

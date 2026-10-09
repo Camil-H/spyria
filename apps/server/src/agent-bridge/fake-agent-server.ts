@@ -14,7 +14,7 @@ export type Conversation = {
   closers: Set<() => void>
   history: object[]
   turnAbort?: AbortController
-  mcpTools?: string[]
+  mcpServerOfTool?: Record<string, string>
   llmsByUsageId: Map<string, object>
 }
 type Turn = (conversation: Conversation, text: string) => Promise<void>
@@ -44,7 +44,10 @@ const completionOf = async (
     body: JSON.stringify({
       model: llm.model.replace(/^openai\//, ''),
       messages: conversation.history,
-      tools: [...toolNames, ...(conversation.mcpTools ?? [])].map((name) => ({ type: 'function', function: { name } })),
+      tools: [...toolNames, ...Object.keys(conversation.mcpServerOfTool ?? {})].map((name) => ({
+        type: 'function',
+        function: { name },
+      })),
       stream: true,
     }),
     signal,
@@ -161,13 +164,15 @@ export const createFakeAgentServer = ({ modelCall }: { modelCall?: () => ModelCa
     directoryByApiKey.set(apiKey, directory)
     return directory
   }
-  const mcpCall = async (conversation: Conversation, method: string, params: object = {}) => {
-    const mcp = (conversation.created.agent as { mcp_config?: { hq?: { headers: Record<string, string> } } }).mcp_config
-      ?.hq
+  const mcpConfigOf = (conversation: Conversation) =>
+    (conversation.created.agent as { mcp_config?: Record<string, { url: string; headers: Record<string, string> }> })
+      .mcp_config ?? {}
+  const mcpCall = async (conversation: Conversation, server: string, method: string, params: object = {}) => {
+    const mcp = mcpConfigOf(conversation)[server]
     const call = modelCall?.()
     if (!mcp || !call) return undefined
     const answer = await call({
-      path: '/mcp',
+      path: new URL(mcp.url).pathname,
       headers: {
         authorization: String(mcp.headers.Authorization),
         'content-type': 'application/json',
@@ -178,13 +183,18 @@ export const createFakeAgentServer = ({ modelCall }: { modelCall?: () => ModelCa
     return answer.status === 200 ? JSON.parse(answer.body || '{}').result : undefined
   }
   const startMcp = async (conversation: Conversation) => {
-    await mcpCall(conversation, 'initialize', { protocolVersion: '2025-06-18', capabilities: {} })
-    await mcpCall(conversation, 'notifications/initialized')
-    const listed = await mcpCall(conversation, 'tools/list')
-    return ((listed?.tools ?? []) as { name: string }[]).map((tool) => tool.name)
+    const serverOfTool: Record<string, string> = {}
+    for (const server of Object.keys(mcpConfigOf(conversation))) {
+      await mcpCall(conversation, server, 'initialize', { protocolVersion: '2025-06-18', capabilities: {} })
+      await mcpCall(conversation, server, 'notifications/initialized')
+      const listed = await mcpCall(conversation, server, 'tools/list')
+      for (const tool of (listed?.tools ?? []) as { name: string }[]) serverOfTool[tool.name] = server
+    }
+    return serverOfTool
   }
   const observeMcp = async (conversation: Conversation, name: string, args: Record<string, unknown>) => {
-    const result = await mcpCall(conversation, 'tools/call', { name, arguments: args })
+    const server = conversation.mcpServerOfTool?.[name] ?? ''
+    const result = await mcpCall(conversation, server, 'tools/call', { name, arguments: args })
     return {
       kind: 'MCPToolObservation',
       tool_name: name,
@@ -193,7 +203,7 @@ export const createFakeAgentServer = ({ modelCall }: { modelCall?: () => ModelCa
     }
   }
   const scriptedTurn: Turn = async (conversation, prompt) => {
-    conversation.mcpTools ??= await startMcp(conversation)
+    conversation.mcpServerOfTool ??= await startMcp(conversation)
     const abort = new AbortController()
     conversation.turnAbort?.abort()
     conversation.turnAbort = abort
@@ -233,7 +243,7 @@ export const createFakeAgentServer = ({ modelCall }: { modelCall?: () => ModelCa
       const name = toolCall.function.name
       const args = JSON.parse(toolCall.function.arguments) as Record<string, unknown>
       conversation.history.push({ role: 'assistant', content: completion.text, tool_calls: [toolCall] })
-      const isMcp = conversation.mcpTools?.includes(name)
+      const isMcp = conversation.mcpServerOfTool?.[name] !== undefined
       const action = emit(conversation, 'ActionEvent', {
         source: 'agent',
         thought: text(completion.text),
@@ -292,6 +302,13 @@ export const createFakeAgentServer = ({ modelCall }: { modelCall?: () => ModelCa
             status: 200,
             body: JSON.stringify({ id: conversation.id, execution_status: conversation.executionStatus }),
           }
+        if (method === 'GET' && action === 'agent_final_response') {
+          const answer = conversation.events.findLast(
+            (event) => event.kind === 'MessageEvent' && event.source === 'agent',
+          )
+          const response = textOf((answer?.llm_message ?? { content: [] }) as { content: { text: string }[] })
+          return { status: 200, body: JSON.stringify({ response }) }
+        }
         if (method === 'POST' && action === 'interrupt') {
           interrupts.push(conversation.id)
           fake.onInterrupt(conversation)

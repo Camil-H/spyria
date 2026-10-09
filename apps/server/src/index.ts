@@ -50,7 +50,8 @@ const app = createApp({
   agentBridge,
   fakeLlm: llmModel ? undefined : createFakeLlm(() => undefined),
 })
-setModelDirectory(llmGateway.modelsOf)
+setModelDirectory(llmGateway.listedModels)
+void llmGateway.refreshListedModels()
 if (!llmModel) {
   addRoutableModels(fakeRoutableModels)
   await llmGateway

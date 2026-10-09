@@ -6,15 +6,15 @@ export const createGatewaySessionClassifier = ({
   virtualKeyOf,
   headersOf,
   timeoutMilliseconds = 3000,
-  listedModelsOf,
+  listedModels,
 }: {
-  listedModelsOf(workspaceId: WorkspaceId, memberId: MemberId): Promise<readonly ListedModel[]>
+  listedModels(): readonly ListedModel[]
   gatewayUrl: () => string
   timeoutMilliseconds?: number
   virtualKeyOf(workspaceId: WorkspaceId, memberId: MemberId): Promise<string | null | undefined>
   headersOf?: (chat: AgentChat) => Record<string, string>
 }): SessionClassifier => ({
-  listedModels: (chat, memberId) => listedModelsOf(chat.workspaceId, memberId),
+  listedModels,
   classify: async ({ chat, prompterId, ownerId, model, request }) => {
     try {
       const virtualKey = await virtualKeyOf(chat.workspaceId, prompterId)

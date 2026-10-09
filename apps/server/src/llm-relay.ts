@@ -1,5 +1,6 @@
 import {
   type AgentChat,
+  delegateTool,
   genericModelCallNoticeOf,
   type ModelCallFailure,
   type ToolCallFailure,
@@ -25,6 +26,13 @@ const answeredHeaders = ['content-type', 'x-request-id', 'mcp-session-id']
 const headTimeoutMilliseconds = 300_000
 const unreachable = { error: { message: 'The model gateway is unreachable', type: 'gateway_unavailable' } }
 const refusalOf = (message: string) => ({ error: { message, type: 'hq_refused' } })
+const routerPath = '/mcp/router'
+const routerInfo = { capabilities: { tools: {} }, serverInfo: { name: 'hq-router', version: '1.0.0' } }
+type RouterCall = {
+  id?: unknown
+  method?: string
+  params?: { protocolVersion?: string; arguments?: Record<string, unknown> }
+}
 
 const picked = (headers: Iterable<[string, string]>, names: string[]) =>
   Object.fromEntries([...headers].filter(([name]) => names.includes(name.toLowerCase())))
@@ -64,9 +72,9 @@ export const createModelCallRelay = ({
   }
   return async (database: Database, host: ConnectedHost, frame: RelayFrame, send: Send, signal: AbortSignal) => {
     const sid = frame.sid
-    const answer = (status: number, body: unknown) => {
-      send({ type: 'gw_head', sid, status, headers: { 'content-type': 'application/json' } })
-      send({ type: 'gw_chunk', sid, data: JSON.stringify(body) })
+    const answer = (status: number, body: unknown, headers: Record<string, string> = {}) => {
+      send({ type: 'gw_head', sid, status, headers: { 'content-type': 'application/json', ...headers } })
+      if (body !== undefined) send({ type: 'gw_chunk', sid, data: JSON.stringify(body) })
       send({ type: 'gw_end', sid })
     }
     const stream = async (response: Response, failedText?: (text: string) => Promise<unknown>) => {
@@ -89,12 +97,41 @@ export const createModelCallRelay = ({
     const path = String(frame.path ?? '')
     const method = String(frame.method ?? 'POST')
     const isToolPath = path === '/mcp' || path.startsWith('/mcp?')
-    if (!path.startsWith('/v1/') && !isToolPath)
+    if (!path.startsWith('/v1/') && !isToolPath && path !== routerPath)
       return answer(404, { error: { message: 'Not found', type: 'not_found' } })
     const headers = Object.entries((frame.headers ?? {}) as Record<string, string>)
     const token = String(picked(headers, ['authorization']).authorization ?? '').replace(/^Bearer /i, '')
     const handlers = agentBridge().forDatabase(database)
     const body = typeof frame.body === 'string' ? frame.body : ''
+
+    if (path === routerPath) {
+      if (method !== 'POST') return answer(method === 'DELETE' ? 200 : 405, undefined)
+      const turn = token ? await handlers.modelCallTurn(host, token) : undefined
+      const isRuntime = turn ? !turn.delegationId : Boolean(token && (await handlers.toolCallTurn(host, token)))
+      if (!isRuntime) return answer(401, refusalOf('This runtime has no chat owner'))
+      const rpc = jsonOf(body) as RouterCall | undefined
+      if (rpc?.id === undefined) return answer(202, undefined)
+      const reply = (result: object, replyHeaders?: Record<string, string>) =>
+        answer(200, { jsonrpc: '2.0', id: rpc.id, result }, replyHeaders)
+      if (rpc.method === 'initialize')
+        return reply(
+          { protocolVersion: rpc.params?.protocolVersion ?? '2025-06-18', ...routerInfo },
+          { 'mcp-session-id': crypto.randomUUID() },
+        )
+      if (rpc.method === 'ping') return reply({})
+      if (rpc.method === 'tools/list') return reply({ tools: [delegateTool] })
+      if (rpc.method !== 'tools/call')
+        return answer(200, { jsonrpc: '2.0', id: rpc.id, error: { code: -32601, message: 'Method not found' } })
+      if (!turn) return reply({ content: [{ type: 'text', text: 'This runtime has no active turn' }], isError: true })
+      const { text, isError } = await handlers.delegate({
+        chat: turn.chat,
+        turn,
+        toolToken: token,
+        task: String(rpc.params?.arguments?.task ?? ''),
+        effort: rpc.params?.arguments?.effort,
+      })
+      return reply({ content: [{ type: 'text', text }], isError })
+    }
     const { keyOf, tools } = databaseAccess(database)
     const gatewayCall = (callHeaders: Record<string, string>, timeoutSignal: AbortSignal) =>
       fetch(`${gatewayUrlOf(database)}${path}`, {
@@ -172,6 +209,7 @@ export const createModelCallRelay = ({
           'x-bf-dim-owner': turn.ownerId ?? '',
           'x-bf-dim-workspace': host.workspaceId,
           'x-bf-mcp-include-clients': '',
+          ...(turn.delegationId && { 'x-bf-dim-role': 'delegate', 'x-bf-dim-delegation': turn.delegationId }),
           ...providerHeadersOf?.(database, turn.chat),
         },
         headTimeout.signal,

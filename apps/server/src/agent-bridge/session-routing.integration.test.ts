@@ -349,10 +349,8 @@ test('with a decision model reachable, routing asks it and moves only at a confi
 
 test('the real listing gives datasheet prices to the routable models a key reaches, and only those are offered', async () => {
   await addKey(alice, 'OpenAI')
-  const keyIds = (
-    await database.$client`select secret_ref from llm_credentials where workspace_id = ${acme} and user_id = ${alice}`
-  ).map((row) => String(row.secret_ref).split('/').at(-1) ?? '')
-  const listing = await llmGateway.modelsOf(keyIds)
+  await llmGateway.refreshListedModels()
+  const listing = llmGateway.listedModels()
   expect(listing.map((model) => model.id)).toContain('openai/fake-large')
   expect(withPricesOf(reachableModelsOf(['openai']), listing)).toMatchObject([
     {

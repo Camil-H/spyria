@@ -55,6 +55,8 @@ type AgentScript = {
   command?: string
   steps?: object[]
   route?: object | string
+  delegateRoute?: object | string
+  subagents?: Record<string, object>
 }
 
 const aliceMemberId = 'member-alice'

@@ -1,28 +1,43 @@
 import { type ChatId, messageId, type WorkspaceId } from '@hq/kernel'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
-import { type AgentEvent, agentProjectionOf } from '../domain/agent-events.ts'
+import {
+  type AgentEvent,
+  agentProjectionOf,
+  delegatedProjectionOf,
+  type EventDelegation,
+  linkedDelegateStep,
+} from '../domain/agent-events.ts'
 import { observedStep } from '../domain/agent-steps.ts'
 import { newMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
 import { endAgentTurn } from './agent-turn.ts'
 
 type Dependencies = { transactor: ConversationTransactor }
-type Input = { workspaceId: WorkspaceId; chatId: ChatId; event: AgentEvent }
+type Input = { workspaceId: WorkspaceId; chatId: ChatId; event: AgentEvent; delegation?: EventDelegation }
 
-export const recordAgentEvent = ({ transactor }: Dependencies, { workspaceId, chatId, event }: Input) =>
+export const recordAgentEvent = ({ transactor }: Dependencies, { workspaceId, chatId, event, delegation }: Input) =>
   transactor.run(async (unitOfWork) => {
     const activePromptId = await unitOfWork.agentTurns.lock(chatId)
     const previous = await unitOfWork.agentEvents.last(chatId)
     const promptId = activePromptId ?? previous?.replyToId ?? null
     const recordedAt = new Date()
-    const seq = await unitOfWork.agentEvents.append(chatId, event, promptId, recordedAt)
+    const seq = await unitOfWork.agentEvents.append(chatId, event, promptId, recordedAt, delegation)
     const failure = event.kind === 'ConversationErrorEvent' && (await unitOfWork.agentTurns.lastFailure(chatId))
     const projection =
       seq === undefined
         ? undefined
-        : failure
-          ? ({ type: 'step', step: { type: 'error', message: failure } } as const)
-          : agentProjectionOf(event, previous?.timestamp ?? null)
+        : delegatedProjectionOf(
+            failure
+              ? { type: 'step', step: { type: 'error', message: failure } }
+              : agentProjectionOf(event, previous?.timestamp ?? null),
+            delegation,
+          )
+    const delegateAction =
+      seq !== undefined && delegation?.actionId
+        ? await unitOfWork.messages.find(messageId(delegation.actionId))
+        : undefined
+    const linkedStep = delegateAction && delegation && linkedDelegateStep(delegateAction.step, delegation)
+    if (delegateAction && linkedStep) await unitOfWork.messages.setStep(delegateAction.id, linkedStep)
     if ((projection?.type === 'message' || projection?.type === 'step') && seq !== undefined)
       await unitOfWork.messages.project(
         newMessage({
@@ -38,7 +53,7 @@ export const recordAgentEvent = ({ transactor }: Dependencies, { workspaceId, ch
         }),
         seq,
       )
-    if (projection?.type === 'step' && projection.step.type === 'plan')
+    if (projection?.type === 'step' && projection.step.type === 'plan' && !delegation)
       await unitOfWork.plans.replace(chatId, projection.step.items)
     if (projection?.type === 'observation') {
       const action = await unitOfWork.messages.find(messageId(projection.actionId))

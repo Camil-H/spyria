@@ -2,6 +2,7 @@ import type { MessageId } from '@hq/kernel'
 import type { AgentChat, AgentHost } from '../contracts/agent.ts'
 import { type ModelCallFailure, modelCallNoticeOf, publicModelNameOf } from '../domain/model-call-failures.ts'
 import type { AgentDependencies } from './agent-turn.ts'
+import { digestOf } from './decide.ts'
 
 type Dependencies = Pick<AgentDependencies, 'transactor' | 'runtimes'>
 type FailedCall = {
@@ -13,15 +14,19 @@ type FailedCall = {
 }
 
 export const findModelCallTurn = async ({ transactor, runtimes }: Dependencies, host: AgentHost, token: string) => {
-  const chatId = await runtimes.chatOfLlmToken(host, token)
-  if (!chatId) return undefined
-  return transactor.run(async ({ agentTurns, members }) => {
-    const turn = await agentTurns.modelCallTurn(chatId)
+  const runtimeChatId = await runtimes.chatOfLlmToken(host, token)
+  const tokenHash = runtimeChatId ? '' : await digestOf(token)
+  return transactor.run(async ({ agentTurns, members, delegations }) => {
+    const delegation = runtimeChatId ? undefined : await delegations.runningOfTokenHash(host.hostId, tokenHash)
+    const chatId = runtimeChatId ?? delegation?.chatId
+    const turn = chatId && (await agentTurns.modelCallTurn(chatId))
     return (
+      chatId &&
       turn && {
         ...turn,
         chat: { workspaceId: host.workspaceId, chatId },
         prompterName: await members.displayNameOf(turn.prompterId),
+        delegationId: delegation?.id,
       }
     )
   })

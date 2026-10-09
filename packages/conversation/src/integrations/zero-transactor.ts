@@ -4,15 +4,19 @@ import {
   chatRoutingOf,
   chatTurnOf,
   enqueueJob,
+  insertDelegation,
   insertRoutingDecision,
   isChatEventStored,
   lastAgentEvent,
   lockChatTurn,
   memberModelsOf,
   pendingPrompts,
+  runningDelegationOfTokenHash,
   setChatAgentModel,
   setChatTurnFailure,
   setChatTurnPrompter,
+  setDelegationFields,
+  unansweredDelegateAction,
 } from '@hq/db/server-writes'
 import type { Message as MessageRow } from '@hq/db/zero'
 import { zql } from '@hq/db/zero-queries'
@@ -172,9 +176,9 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         })),
     },
     agentEvents: {
-      append: async (id, event, replyToId, at) => {
+      append: async (id, event, replyToId, at, delegation) => {
         if (tx.location !== 'server' || (await isChatEventStored(tx, contextWorkspaceId, event.id))) return undefined
-        const payload: AgentEventPayload = { replyToId, event }
+        const payload: AgentEventPayload = { replyToId, event, ...(delegation && { delegation }) }
         return appendChatEvent(tx, {
           workspaceId: contextWorkspaceId,
           chatId: id,
@@ -221,6 +225,19 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       record: async (decision) => {
         await insertRoutingDecision(tx, { workspaceId: contextWorkspaceId, ...decision })
       },
+    },
+    delegations: {
+      start: async (delegation) => {
+        await insertDelegation(tx, { workspaceId: contextWorkspaceId, ...delegation, status: 'running' })
+      },
+      update: async (id, fields) => {
+        await setDelegationFields(tx, contextWorkspaceId, id, fields)
+      },
+      runningOfTokenHash: async (hostId, tokenHash) => {
+        const found = await runningDelegationOfTokenHash(tx, contextWorkspaceId, hostId, tokenHash)
+        return found && { chatId: chatId(found.chatId), id: found.id }
+      },
+      unansweredAction: (id) => unansweredDelegateAction(tx, contextWorkspaceId, id),
     },
     readMarkers: {
       markNewestRead: async (id, readerId) => {

@@ -3,6 +3,7 @@ import type {
   AgentJobs,
   AgentTurnRepository,
   ChatRepository,
+  DelegationRepository,
   MemberDirectory,
   MessageRepository,
   PlanRepository,
@@ -20,6 +21,7 @@ export type UnitOfWork = {
   agentEvents: AgentEventRepository
   plans: PlanRepository
   routing: RoutingRepository
+  delegations: DelegationRepository
 }
 
 export type ConversationTransactor = {
