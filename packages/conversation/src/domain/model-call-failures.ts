@@ -26,6 +26,25 @@ const codesOf = (body: unknown) => {
     .map((code) => code.toLowerCase())
 }
 
+const contextWindowMessages = [
+  'prompt is too long',
+  'context length exceeded',
+  'maximum context length',
+  'exceeds the context window',
+  'please reduce the length of',
+  'exceed context limit',
+]
+
+export const isContextWindowFailure = (failure: ModelCallFailure) =>
+  failure.reached === 'answered' &&
+  failure.status === 400 &&
+  (codesOf(failure.body).includes('context_length_exceeded') ||
+    contextWindowMessages.some((text) =>
+      JSON.stringify(failure.body ?? '')
+        .toLowerCase()
+        .includes(text),
+    ))
+
 export const modelCallNoticeOf = (failure: ModelCallFailure, { memberName, model }: Names) => {
   if (failure.reached !== 'answered')
     return {

@@ -1,6 +1,11 @@
 import { chatModelsOf, cheapestModelOf, type MemberId, type MessageId, withPricesOf } from '@hq/kernel'
 import type { AgentChat, AgentHost } from '../contracts/agent.ts'
-import { type ModelCallFailure, modelCallNoticeOf, publicModelNameOf } from '../domain/model-call-failures.ts'
+import {
+  isContextWindowFailure,
+  type ModelCallFailure,
+  modelCallNoticeOf,
+  publicModelNameOf,
+} from '../domain/model-call-failures.ts'
 import type { AgentDependencies } from './agent-turn.ts'
 import { digestOf } from './decide.ts'
 import { noteSubagentFailure } from './delegate.ts'
@@ -55,6 +60,7 @@ export const recordModelCallFailure = async (
   { chat, promptId, prompterName, model, failure, delegationId }: FailedCall,
 ) => {
   const notice = modelCallNoticeOf(failure, { memberName: prompterName, model: publicModelNameOf(model) })
+  if (isContextWindowFailure(failure)) return notice
   if (delegationId) return noteSubagentFailure(delegationId, notice)
   return transactor.run(async ({ agentTurns }) => {
     await agentTurns.recordFailure(chat.chatId, promptId, notice)

@@ -155,6 +155,18 @@ test('a key the provider refuses is classified on the turn without provider text
   expect(await failureOf(chatId)).toBe('The LLM key of Alice was refused')
 })
 
+test('a context-window rejection reaches the agent unchanged and records no turn failure, so the condenser can recover', async () => {
+  const host = await fakeHost('Too long host')
+  const { chatId, token } = await runtimeTurn(host, bob)
+  const tooLong = await host.modelCall({
+    headers: { authorization: `Bearer ${token}` },
+    body: JSON.stringify({ ...JSON.parse(completion), messages: [{ role: 'user', content: '$too-long' }] }),
+  })
+  expect(tooLong.status).toBe(400)
+  expect(tooLong.body).toContain('prompt is too long')
+  expect(await failureOf(chatId)).toBeNull()
+})
+
 test('an unreachable gateway answers 502 and records HQ’s notice', async () => {
   const unreachableApp = createApp({ database, ...testAuthSettings, llmGateway: llmGatewayAt('http://127.0.0.1:9') })
   const server = Bun.serve({ port: 0, fetch: unreachableApp.fetch, websocket })

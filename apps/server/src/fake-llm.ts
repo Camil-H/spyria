@@ -148,6 +148,14 @@ export const createFakeLlm = (
       const key = context.req.header('authorization')?.replace(/^Bearer /, '') ?? ''
       if (key.includes('refused')) return context.json(refusedKeyOf(key), 401)
       const request = await context.req.json<CompletionRequest>()
+      if (JSON.stringify(request.messages).includes('$too-long'))
+        return context.json(
+          {
+            type: 'error',
+            error: { type: 'invalid_request_error', message: 'prompt is too long: 210000 tokens > 200000 maximum' },
+          },
+          400,
+        )
       const chatScript = (await scriptOf(context.req.raw, Boolean(request.response_format))) ?? {}
       const script =
         !request.response_format && isSubagentCall(request, chatScript)

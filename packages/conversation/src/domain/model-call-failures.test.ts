@@ -1,5 +1,10 @@
 import { expect, test } from 'bun:test'
-import { type ModelCallFailure, modelCallNoticeOf, publicModelNameOf } from './model-call-failures.ts'
+import {
+  isContextWindowFailure,
+  type ModelCallFailure,
+  modelCallNoticeOf,
+  publicModelNameOf,
+} from './model-call-failures.ts'
 
 const names = { memberName: 'Alice', model: 'fake-model' }
 const answered = (status: number, body: unknown): ModelCallFailure => ({ reached: 'answered', status, body })
@@ -164,4 +169,18 @@ test('the public model name drops the provider route', () => {
   expect(publicModelNameOf('openai/anthropic/claude-sonnet-4-5')).toBe('claude-sonnet-4-5')
   expect(publicModelNameOf('gpt-4o')).toBe('gpt-4o')
   expect(publicModelNameOf(undefined)).toBe('this model')
+})
+
+test('a context-window rejection is recognized so the condenser can recover without a failure notice', () => {
+  expect(isContextWindowFailure(answered(400, openAi.contextTooLong))).toBe(true)
+  expect(
+    isContextWindowFailure(
+      answered(400, {
+        type: 'error',
+        error: { type: 'invalid_request_error', message: 'prompt is too long: 210000 tokens > 200000 maximum' },
+      }),
+    ),
+  ).toBe(true)
+  expect(isContextWindowFailure(answered(400, openAi.badRequest))).toBe(false)
+  expect(isContextWindowFailure(answered(429, openAi.rateLimited))).toBe(false)
 })
