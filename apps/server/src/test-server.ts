@@ -113,6 +113,7 @@ const agentBridge = createAgentBridge({
     headersOf: testHeadersOf,
     timeoutMilliseconds: 300,
   }),
+  resumeAfterMilliseconds: 4_000,
 })
 
 const scriptByChat = new Map<string, { script: FakeLlmScript; used: PromiseWithResolvers<boolean> }>()

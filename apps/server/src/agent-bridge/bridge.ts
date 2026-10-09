@@ -29,11 +29,13 @@ export const createAgentBridge = ({
   llm,
   sessionClassifierOf,
   now,
+  resumeAfterMilliseconds,
 }: {
   sandboxProvider: SandboxProvider
   llm?: AgentLlm
   sessionClassifierOf?: (database: Database) => SessionClassifier
   now?: () => number
+  resumeAfterMilliseconds?: number
 }) => {
   const bridgeOf = (database: Database) => {
     const sockets = new Map<
@@ -56,6 +58,7 @@ export const createAgentBridge = ({
       llm,
       classifier: sessionClassifierOf?.(database),
       now,
+      resumeAfterMilliseconds,
       eventSockets: {
         ensureOpen: (...target) => ensureOpen(...target),
         stopStreaming: (chat, promptId) => {

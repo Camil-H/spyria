@@ -379,6 +379,17 @@ export const setDelegationFields = (
     [workspaceId, id, fields.conversationId ?? null, fields.status ?? null],
   )
 
+export const stopRunningDelegations = async (tx: Transaction, workspaceId: string, chatId: string, promptId: string) =>
+  (
+    await onServer<{ conversationId: string | null }>(
+      tx,
+      `update delegations set status = 'stopped', finished_at = now()
+       where workspace_id = $1 and chat_id = $2 and prompt_id = $3 and status = 'running'
+       returning conversation_id as "conversationId"`,
+      [workspaceId, chatId, promptId],
+    )
+  ).flatMap((row) => row.conversationId ?? [])
+
 export const runningDelegationOfTokenHash = (tx: Transaction, workspaceId: string, hostId: string, hash: string) =>
   firstOnServer<{ chatId: string; id: string }>(
     tx,

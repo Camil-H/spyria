@@ -14,6 +14,7 @@ export type AgentDependencies = {
   eventSockets: AgentEventSockets
   classifier?: SessionClassifier
   fixedLlm?: { model: string }
+  resumeAfterMilliseconds?: number
 }
 
 export const appendNotice = ({ messages }: UnitOfWork, prompt: Message, text: string) =>

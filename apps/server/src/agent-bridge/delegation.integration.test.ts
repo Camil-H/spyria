@@ -1,5 +1,6 @@
 import { afterAll, afterEach, expect, setDefaultTimeout, test } from 'bun:test'
-import { type ChatId, chatId } from '@hq/kernel'
+import { stillRunningOf, subagentFailureOf, unknownTaskOf } from '@hq/conversation/server'
+import { type ChatId, chatId, messageId } from '@hq/kernel'
 import { websocket } from 'hono/bun'
 import { createApp, sessionClassifierOf } from '../app.ts'
 import type { FakeLlmScript } from '../fake-llm.ts'
@@ -30,6 +31,7 @@ const runtimeHosts = createRuntimeHostGateway({
 const agentBridge = createAgentBridge({
   sandboxProvider: runtimeHosts.sandboxProvider,
   sessionClassifierOf: sessionClassifierOf(llmGateway),
+  resumeAfterMilliseconds: 4_000,
 })
 const app = createApp({ database, ...testAuthSettings, llmGateway, runtimeHosts, agentBridge })
 const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
@@ -71,7 +73,7 @@ const newRuntimeChat = async () => {
     values (${acme}, ${id}, 'runtime', 'user', ${alice}, 'Delegation chat', 'fake/fake-medium', false, now())`
   return chatId(id)
 }
-const promptAndAnswer = async (chat: ChatId, text: string) => {
+const prompt = async (chat: ChatId, text: string) => {
   const id = `message-${crypto.randomUUID()}`
   expect(
     await requestMutation(app, database, aliceInAcme, 'conversation.sendMessage', {
@@ -81,6 +83,10 @@ const promptAndAnswer = async (chat: ChatId, text: string) => {
       text,
     }),
   ).toEqual(succeeded)
+  return id
+}
+const promptAndAnswer = async (chat: ChatId, text: string) => {
+  const id = await prompt(chat, text)
   await waitFor(async () => (await repliesTo(id)).some((reply) => reply.kind === 'agent'), 20_000)
   await waitFor(
     async () =>
@@ -191,7 +197,7 @@ test('a delegated task runs in a sub-conversation on the classified model, its e
 test('the delegation token works only while its delegation runs and only from its runtime host, and the router refuses it and answers no active turn', async () => {
   const { fake, host } = await fakeAgent()
   const chat = await newRuntimeChat()
-  const slowSubagent = { text: 'one two three four five six seven eight', wordDelayMilliseconds: 500 }
+  const slowSubagent = { text: 'one two three four five six seven eight', wordDelayMilliseconds: 250 }
   setFakeLlmScript(delegatingScript({ subagents: { 'fake-small': slowSubagent } }))
   const answered = promptAndAnswer(chat, 'Delegate slowly')
   await waitFor(() => conversationsOf(fake).subs.length === 1)
@@ -239,4 +245,115 @@ test('the subagent runs on the session model when the policy is Same as main or 
     { model: 'fake/fake-medium', reason: 'default', policy: 'auto' },
     { model: 'fake/fake-medium', reason: 'same as main', policy: 'same_as_main' },
   ])
+})
+
+const turnFailureOf = async (chat: ChatId) =>
+  (await database.$client`select agent_turn_failure from chats where id = ${chat}`)[0]?.agent_turn_failure
+const stepsOf = async (promptId: string) =>
+  (await repliesTo(promptId)).map((reply) => reply.step as { name?: string; result?: string; isError?: boolean } | null)
+const slowWork = {
+  steps: [{ command: 'echo started' }],
+  text: 'one two three four five six',
+  wordDelayMilliseconds: 1_000,
+}
+
+test('a model asked by the agent comes before the policy and the classifier', async () => {
+  await fakeAgent()
+  const chat = await newRuntimeChat()
+  const onLarge = { 'fake-large': { steps: [{ command: 'echo large' }], text: 'Sub on large.' } }
+  const askingLarge = { ...delegatedTask, arguments: { ...delegatedTask.arguments, model: 'fake-large' } }
+  setFakeLlmScript(delegatingScript({ steps: [askingLarge], subagents: onLarge }))
+  await promptAndAnswer(chat, 'Delegate on fake-large')
+  expect(
+    await requestMutation(app, database, aliceInAcme, 'conversation.updateChatRouting', {
+      workspaceId: acme,
+      chatId: chat,
+      subagentPolicy: 'same_as_main',
+    }),
+  ).toEqual(succeeded)
+  setFakeLlmScript(
+    delegatingScript({
+      steps: [{ ...askingLarge, arguments: { task: 'List', effort: 'small', model: 'large' } }],
+      subagents: onLarge,
+    }),
+  )
+  await promptAndAnswer(chat, 'Delegate on a large model')
+
+  expect((await delegationsOf(chat)).map(({ model, reason, policy }) => ({ model, reason, policy }))).toEqual([
+    { model: 'fake/fake-large', reason: 'asked', policy: 'auto' },
+    { model: 'fake/fake-large', reason: 'asked', policy: 'same_as_main' },
+  ])
+})
+
+test('a long task answers still running, a resume call returns its result, and another chat or turn cannot resume it', async () => {
+  const { fake } = await fakeAgent()
+  const chat = await newRuntimeChat()
+  const resumeCall = { ...delegatedTask, arguments: { ...delegatedTask.arguments, resume: '$resume' } }
+  setFakeLlmScript(delegatingScript({ steps: [delegatedTask, resumeCall], subagents: { 'fake-small': slowWork } }))
+  const promptId = await prompt(chat, 'Delegate a long task')
+  await waitFor(async () => (await stepsOf(promptId))[0]?.result?.startsWith('Task ') === true, 15_000)
+  const [delegation] = await delegationsOf(chat)
+  const id = String(delegation?.id)
+  expect((await stepsOf(promptId))[0]?.result).toBe(stillRunningOf(id))
+  const otherTurn = { promptId: messageId('message-other'), prompterId: alice, ownerId: alice, prompterName: 'Alice' }
+  const resumeElsewhere = (otherChat: ChatId) =>
+    agentBridge.forDatabase(database).delegate({
+      chat: { workspaceId: acme, chatId: otherChat },
+      turn: otherTurn,
+      toolToken: '',
+      task: '',
+      effort: 'small',
+      resume: id,
+    })
+  expect(await resumeElsewhere(await newRuntimeChat())).toEqual({ text: unknownTaskOf(id), isError: true })
+  expect(await resumeElsewhere(chat)).toEqual({ text: unknownTaskOf(id), isError: true })
+  await waitFor(async () => (await repliesTo(promptId)).some((reply) => reply.kind === 'agent'), 20_000)
+
+  expect(conversationsOf(fake).subs).toHaveLength(1)
+  expect((await delegationsOf(chat)).map((row) => ({ id: row.id, status: row.status }))).toEqual([
+    { id, status: 'finished' },
+  ])
+  const delegateSteps = (await stepsOf(promptId)).filter((step) => step?.name === 'delegate')
+  expect(delegateSteps.map((step) => step?.result)).toEqual([stillRunningOf(id), 'one two three four five six'])
+})
+
+test('stopping the turn interrupts the running subagent, marks its delegation stopped, and the next prompt runs', async () => {
+  const { fake } = await fakeAgent()
+  const chat = await newRuntimeChat()
+  setFakeLlmScript(delegatingScript({ subagents: { 'fake-small': slowWork } }))
+  const promptId = await prompt(chat, 'Delegate then stop')
+  await waitFor(async () => (await repliesTo(promptId)).length >= 2, 15_000)
+  expect(
+    await requestMutation(app, database, aliceInAcme, 'conversation.stopAgent', { workspaceId: acme, chatId: chat }),
+  ).toEqual(succeeded)
+  await waitFor(async () => (await delegationsOf(chat))[0]?.status === 'stopped')
+  const [sub] = conversationsOf(fake).subs
+  await waitFor(() => fake.interrupts.includes(String(sub?.id)))
+  expect(sub?.executionStatus).toBe('paused')
+
+  setFakeLlmScript({ text: 'Back to normal.' })
+  const nextId = await promptAndAnswer(chat, 'Carry on')
+  expect((await repliesTo(nextId)).map(({ kind, body }) => ({ kind, body }))).toEqual([
+    { kind: 'agent', body: 'Back to normal.' },
+  ])
+})
+
+test('a failed subagent answers the tool call with an error in HQ wording and leaves the main turn untouched', async () => {
+  await fakeAgent()
+  const chat = await newRuntimeChat()
+  const failing = { steps: [{ command: 'echo sub' }, { fail: 'Overloaded' }] }
+  setFakeLlmScript(delegatingScript({ subagents: { 'fake-small': failing } }))
+  const promptId = await promptAndAnswer(chat, 'Delegate a failing task')
+
+  const [delegation] = await delegationsOf(chat)
+  expect(delegation?.status).toBe('failed')
+  const replies = await repliesTo(promptId)
+  const [delegateStep] = await stepsOf(promptId)
+  expect(delegateStep).toMatchObject({ name: 'delegate', isError: true })
+  expect(delegateStep?.result).toStartWith(subagentFailureOf('Fake small', ''))
+  const errorStep = replies.find((reply) => (reply.step as { type?: string } | null)?.type === 'error')
+  expect(errorStep?.step).toMatchObject({ delegation: { id: delegation?.id } })
+  expect(replies.at(-1)).toMatchObject({ kind: 'agent', body: 'Main done.' })
+  expect(replies.filter((reply) => reply.kind === 'notice')).toEqual([])
+  expect(await turnFailureOf(chat)).toBeNull()
 })

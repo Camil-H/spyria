@@ -16,6 +16,7 @@ import {
   setChatTurnFailure,
   setChatTurnPrompter,
   setDelegationFields,
+  stopRunningDelegations,
 } from '@hq/db/server-writes'
 import type { Message as MessageRow } from '@hq/db/zero'
 import { zql } from '@hq/db/zero-queries'
@@ -232,6 +233,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       update: async (id, fields) => {
         await setDelegationFields(tx, contextWorkspaceId, id, fields)
       },
+      stopRunning: (id, promptId) => stopRunningDelegations(tx, contextWorkspaceId, id, promptId),
       runningOfTokenHash: async (hostId, tokenHash) => {
         const found = await runningDelegationOfTokenHash(tx, contextWorkspaceId, hostId, tokenHash)
         return found && { chatId: chatId(found.chatId), id: found.id }

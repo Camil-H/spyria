@@ -123,12 +123,15 @@ export const createModelCallRelay = ({
       if (rpc.method !== 'tools/call')
         return answer(200, { jsonrpc: '2.0', id: rpc.id, error: { code: -32601, message: 'Method not found' } })
       if (!turn) return reply({ content: [{ type: 'text', text: 'This runtime has no active turn' }], isError: true })
+      const { task, effort, model, resume } = rpc.params?.arguments ?? {}
       const { text, isError } = await handlers.delegate({
         chat: turn.chat,
         turn,
         toolToken: token,
-        task: String(rpc.params?.arguments?.task ?? ''),
-        effort: rpc.params?.arguments?.effort,
+        task: String(task ?? ''),
+        effort,
+        model,
+        resume,
       })
       return reply({ content: [{ type: 'text', text }], isError })
     }

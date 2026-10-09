@@ -97,6 +97,7 @@ test('an MCP tool call becomes a "Used <tool> (<server>)" step whose result drop
     name: 'whoami (fake)',
     arguments: '{}',
     result: 'Alice needs to reconnect fake',
+    isError: true,
     connection: { server: 'fake', isReconnect: true },
   })
 })

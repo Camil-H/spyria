@@ -25,11 +25,12 @@ export type AgentStep =
       name: string
       arguments: string
       result: string | null
+      isError?: true
       connection?: { server: string; isReconnect: boolean }
     }
   | { type: 'plan'; items: { title: string; status: string }[] }
   | { type: 'error'; message: string }
-export type StepDelegation = { id: string; model: string; modelName: string; task: string }
+export type StepDelegation = { id: string; model: string; modelName: string; task: string; fallback?: string }
 export type StoredStep = AgentStep & { thought?: ThoughtStep; delegation?: StepDelegation }
 export type Fields = Record<string, unknown> | undefined
 
@@ -102,7 +103,12 @@ export const observedStep = (
   if (step.type === 'tool') {
     const result = toolResultOf(textOf(observation?.content))
     const connection = toolConnectionOf(result)
-    return { ...step, result, ...(connection && { connection }) }
+    return {
+      ...step,
+      result,
+      ...(observation?.is_error === true && { isError: true }),
+      ...(connection && { connection }),
+    }
   }
   return undefined
 }

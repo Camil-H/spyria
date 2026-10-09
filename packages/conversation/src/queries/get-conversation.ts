@@ -2,6 +2,7 @@ import { type ChatRow, findChat, type Snapshot } from '@hq/db'
 import { type ChatId, type MemberId, type MessageId, messageId, type WorkspaceId } from '@hq/kernel'
 import { stoppedByPrefix } from '../domain/agent-events.ts'
 import type { AgentStep, StoredStep } from '../domain/agent-steps.ts'
+import { stillRunningOf } from '../domain/delegation.ts'
 
 export type ConversationMessage = Readonly<{
   id: MessageId
@@ -20,6 +21,9 @@ export type ConversationMessage = Readonly<{
     modelName: string
     steps: readonly ConversationMessage[]
     durationMilliseconds: number | null
+    status: 'running' | 'finished' | 'failed' | 'stopped'
+    result: string | null
+    fallback?: string
   }>
 }>
 
@@ -65,41 +69,63 @@ const withThoughtsApart = (message: ConversationMessage): ConversationMessage[] 
 }
 
 const delegationOf = (message: ConversationMessage) => (message.step as StoredStep | null)?.delegation
-const delegateTaskOf = (message: ConversationMessage) => {
+const delegateArgumentsOf = (message: ConversationMessage) => {
   if (message.step?.type !== 'tool' || message.step.name !== 'delegate') return undefined
   try {
-    return (JSON.parse(message.step.arguments) as { task?: unknown }).task
+    return JSON.parse(message.step.arguments) as { task?: unknown; resume?: unknown }
   } catch {
     return undefined
   }
 }
 
-const withDelegationsGrouped = (replies: readonly ConversationMessage[]) => {
-  const delegateActions = replies.filter((reply) => delegateTaskOf(reply) !== undefined)
+const withDelegationsGrouped = (replies: readonly ConversationMessage[], isStopped: boolean) => {
+  const delegateActions = replies.filter((reply) => {
+    const delegateArguments = delegateArgumentsOf(reply)
+    return delegateArguments?.task !== undefined && !delegateArguments.resume
+  })
   const groupsByHostId = new Map<MessageId, ConversationMessage>()
+  const resumeIds = new Set<MessageId>()
   for (const steps of Map.groupBy(replies, (reply) => delegationOf(reply)?.id).values()) {
     const firstStep = steps[0]
     const delegation = firstStep && delegationOf(firstStep)
     if (!delegation) continue
-    const actionIndex = delegateActions.findIndex((action) => delegateTaskOf(action) === delegation.task)
+    const actionIndex = delegateActions.findIndex((action) => delegateArgumentsOf(action)?.task === delegation.task)
     const host: ConversationMessage = delegateActions.splice(actionIndex, actionIndex < 0 ? 0 : 1)[0] ?? {
       ...firstStep,
       step: { type: 'tool', name: 'delegate', arguments: '', result: firstStep.isRunning ? null : '' },
     }
-    const times = [host, ...steps].map((message) => Date.parse(message.createdAt))
-    const isDone = host.step?.type === 'tool' && host.step.result !== null
+    const resumes = replies.filter((reply) => delegateArgumentsOf(reply)?.resume === delegation.id)
+    for (const resume of resumes) resumeIds.add(resume.id)
+    const lastStep = [host, ...resumes].at(-1)?.step
+    const answered = lastStep?.type === 'tool' ? lastStep.result : null
+    const result = answered === stillRunningOf(delegation.id) ? null : answered
+    const isError = lastStep?.type === 'tool' && lastStep.isError === true
+    const status =
+      result === null
+        ? host.isRunning
+          ? 'running'
+          : 'stopped'
+        : isError
+          ? isStopped
+            ? 'stopped'
+            : 'failed'
+          : 'finished'
+    const times = [host, ...steps, ...resumes].map((message) => Date.parse(message.createdAt))
     groupsByHostId.set(host.id, {
       ...host,
       delegation: {
         modelName: delegation.modelName,
         steps,
-        durationMilliseconds: isDone ? Math.max(...times) - Math.min(...times) : null,
+        durationMilliseconds: result === null ? null : Math.max(...times) - Math.min(...times),
+        status,
+        result,
+        ...(delegation.fallback && { fallback: delegation.fallback }),
       },
     })
   }
   return replies.flatMap((reply) => {
     const group = groupsByHostId.get(reply.id)
-    return group ? [group] : delegationOf(reply) ? [] : [reply]
+    return group ? [group] : delegationOf(reply) || resumeIds.has(reply.id) ? [] : [reply]
   })
 }
 
@@ -110,8 +136,8 @@ const turnItemsOf = (messages: readonly ConversationMessage[]): ConversationItem
   )
   const itemsByStepId = new Map<MessageId, ConversationItem[]>()
   for (const [promptId, turnReplies] of repliesByPrompt) {
-    const replies = withDelegationsGrouped(turnReplies)
-    const isStopped = replies.some((reply) => reply.kind === 'notice' && reply.body.startsWith(stoppedByPrefix))
+    const isStopped = turnReplies.some((reply) => reply.kind === 'notice' && reply.body.startsWith(stoppedByPrefix))
+    const replies = withDelegationsGrouped(turnReplies, isStopped)
     const steps = replies.filter((reply) => reply.kind === 'step' && !(isStopped && reply.step?.type === 'error'))
     const plans = steps.filter((step) => step.step?.type === 'plan')
     const visibleSteps = steps

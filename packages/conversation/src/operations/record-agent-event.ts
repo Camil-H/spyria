@@ -7,16 +7,27 @@ import { MessageBody } from '../domain/message-body.ts'
 import { endAgentTurn } from './agent-turn.ts'
 
 type Dependencies = { transactor: ConversationTransactor }
-type Input = { workspaceId: WorkspaceId; chatId: ChatId; event: AgentEvent; delegation?: StepDelegation }
+type Input = {
+  workspaceId: WorkspaceId
+  chatId: ChatId
+  event: AgentEvent
+  delegation?: StepDelegation
+  subagentFailure?: string
+}
 
-export const recordAgentEvent = ({ transactor }: Dependencies, { workspaceId, chatId, event, delegation }: Input) =>
+export const recordAgentEvent = (
+  { transactor }: Dependencies,
+  { workspaceId, chatId, event, delegation, subagentFailure }: Input,
+) =>
   transactor.run(async (unitOfWork) => {
     const activePromptId = await unitOfWork.agentTurns.lock(chatId)
     const previous = await unitOfWork.agentEvents.last(chatId)
     const promptId = activePromptId ?? previous?.replyToId ?? null
     const recordedAt = new Date()
     const seq = await unitOfWork.agentEvents.append(chatId, event, promptId, recordedAt, delegation)
-    const failure = event.kind === 'ConversationErrorEvent' && (await unitOfWork.agentTurns.lastFailure(chatId))
+    const failure =
+      event.kind === 'ConversationErrorEvent' &&
+      (delegation ? subagentFailure : await unitOfWork.agentTurns.lastFailure(chatId))
     const projection =
       seq === undefined
         ? undefined

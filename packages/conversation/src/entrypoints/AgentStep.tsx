@@ -156,38 +156,33 @@ const ToolStep = ({ step, canConnect }: { step: StepOf<'tool'>; canConnect: bool
   )
 }
 
-const DelegationStep = ({
-  step,
-  delegation,
-}: {
-  step: StepOf<'tool'>
-  delegation: NonNullable<ConversationMessage['delegation']>
-}) => {
+const DelegationStep = ({ delegation }: { delegation: NonNullable<ConversationMessage['delegation']> }) => {
+  const { modelName, status, result, fallback } = delegation
   const count = delegation.steps.length
   const duration = delegation.durationMilliseconds
   return (
-    <Disclosure
-      label={
-        step.result === null ? (
-          <>
-            <LoaderCircle aria-hidden className="size-4 shrink-0 animate-spin" />
-            Delegating to {delegation.modelName}…
-          </>
-        ) : (
-          `Delegated to ${delegation.modelName} · ${count} step${count === 1 ? '' : 's'}${duration === null ? '' : ` · ${durationLabelOf(duration)}`}`
-        )
-      }
-    >
-      <fieldset
-        aria-label={`Steps of ${delegation.modelName}`}
-        className="mt-1 flex flex-col gap-1 border-l-2 border-line pl-3"
+    <>
+      <Disclosure
+        label={
+          status === 'running' ? (
+            <>
+              <LoaderCircle aria-hidden className="size-4 shrink-0 animate-spin" />
+              Delegating to {modelName}…
+            </>
+          ) : (
+            `Delegated to ${modelName}${status === 'finished' ? '' : ` · ${status}`} · ${count} step${count === 1 ? '' : 's'}${duration === null ? '' : ` · ${durationLabelOf(duration)}`}`
+          )
+        }
       >
-        {delegation.steps.map((delegated) => (
-          <AgentStep key={delegated.id} message={delegated} />
-        ))}
-      </fieldset>
-      {step.result !== null && <p className="mt-1 pl-3 text-sm whitespace-pre-wrap">{step.result}</p>}
-    </Disclosure>
+        <fieldset aria-label={`Steps of ${modelName}`} className="mt-1 flex flex-col gap-1 border-l-2 border-line pl-3">
+          {delegation.steps.map((delegated) => (
+            <AgentStep key={delegated.id} message={delegated} />
+          ))}
+        </fieldset>
+        {result !== null && <p className="mt-1 pl-3 text-sm whitespace-pre-wrap">{result}</p>}
+      </Disclosure>
+      {fallback && <p className="pl-5.5 text-xs text-muted">{fallback}</p>}
+    </>
   )
 }
 
@@ -210,7 +205,7 @@ export const AgentStep = ({ message }: { message: ConversationMessage }) => {
   if (step?.type === 'thought') return <ThoughtStep step={step} />
   if (step?.type === 'command') return <CommandStep id={message.id} step={step} isRunning={message.isRunning} />
   if (step?.type === 'file') return <FileStep step={step} />
-  if (step?.type === 'tool' && message.delegation) return <DelegationStep step={step} delegation={message.delegation} />
+  if (message.delegation) return <DelegationStep delegation={message.delegation} />
   if (step?.type === 'tool') return <ToolStep step={step} canConnect={message.canConnectTools} />
   if (step?.type === 'plan') return <PlanStep step={step} />
   if (step?.type === 'error')

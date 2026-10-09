@@ -23,7 +23,7 @@ type CompletionRequest = {
   model?: string
   stream?: boolean
   response_format?: object
-  messages?: { role: string }[]
+  messages?: { role: string; content?: unknown }[]
   tools?: { function: { name: string } }[]
 }
 
@@ -46,7 +46,7 @@ const completionOf = (choice: object, extra: object = {}) => ({
 const eventOf = (data: object) => new TextEncoder().encode(`data: ${JSON.stringify(data)}\n\n`)
 const wordsOf = (text: string) => text.split(/(?<= )/).filter(Boolean)
 
-const toolCallOf = (step: FakeLlmStep | undefined, offeredTools: readonly string[] = []) => {
+const toolCallOf = (step: FakeLlmStep | undefined, offeredTools: readonly string[] = [], resumeId = '') => {
   const call =
     !step || 'fail' in step
       ? undefined
@@ -79,7 +79,7 @@ const toolCallOf = (step: FakeLlmStep | undefined, offeredTools: readonly string
       index: 0,
       id: `call_${crypto.randomUUID()}`,
       type: 'function',
-      function: { name: call.name, arguments: JSON.stringify(call.arguments) },
+      function: { name: call.name, arguments: JSON.stringify(call.arguments).replace('$resume', resumeId) },
     }
   )
 }
@@ -173,9 +173,13 @@ export const createFakeLlm = (
           { type: 'error', error: { type: 'overloaded_error', message: step.fail } },
           { status: 529 },
         )
+      const resumeId = JSON.stringify(request.messages?.findLast((message) => message.role === 'tool') ?? '').match(
+        /resume=\\"([^"\\]+)/,
+      )?.[1]
       const toolCall = toolCallOf(
         step,
         request.tools?.map((tool) => tool.function.name),
+        resumeId,
       )
       const text = toolCall ? '' : (script.text ?? defaultText)
       const reasoning = step && 'think' in step ? step.think : ''

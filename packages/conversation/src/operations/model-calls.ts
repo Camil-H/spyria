@@ -3,6 +3,7 @@ import type { AgentChat, AgentHost } from '../contracts/agent.ts'
 import { type ModelCallFailure, modelCallNoticeOf, publicModelNameOf } from '../domain/model-call-failures.ts'
 import type { AgentDependencies } from './agent-turn.ts'
 import { digestOf } from './decide.ts'
+import { noteSubagentFailure } from './delegate.ts'
 
 type Dependencies = Pick<AgentDependencies, 'transactor' | 'runtimes'>
 type FailedCall = {
@@ -11,6 +12,7 @@ type FailedCall = {
   prompterName: string
   model: string | undefined
   failure: ModelCallFailure
+  delegationId?: string
 }
 
 export const findModelCallTurn = async ({ transactor, runtimes }: Dependencies, host: AgentHost, token: string) => {
@@ -48,11 +50,12 @@ export const findToolCallTurn = async ({ transactor, runtimes }: Dependencies, h
   })
 }
 
-export const recordModelCallFailure = (
+export const recordModelCallFailure = async (
   { transactor }: Dependencies,
-  { chat, promptId, prompterName, model, failure }: FailedCall,
+  { chat, promptId, prompterName, model, failure, delegationId }: FailedCall,
 ) => {
   const notice = modelCallNoticeOf(failure, { memberName: prompterName, model: publicModelNameOf(model) })
+  if (delegationId) return noteSubagentFailure(delegationId, notice)
   return transactor.run(async ({ agentTurns }) => {
     await agentTurns.recordFailure(chat.chatId, promptId, notice)
     return notice

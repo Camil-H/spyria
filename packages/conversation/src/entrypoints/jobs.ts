@@ -37,6 +37,7 @@ export const createAgentHandlers = ({
   classifier,
   eventSockets,
   now = Date.now,
+  resumeAfterMilliseconds,
 }: {
   transact: Transact
   sandboxProvider: SandboxProvider
@@ -44,6 +45,7 @@ export const createAgentHandlers = ({
   classifier?: SessionClassifier
   eventSockets: AgentEventSockets
   now?: () => number
+  resumeAfterMilliseconds?: number
 }) => {
   const runtimes = createRuntimeAgentRuntimes(transact, sandboxProvider)
   const agentServer = createSandboxAgentServer()
@@ -55,6 +57,7 @@ export const createAgentHandlers = ({
     eventSockets,
     classifier,
     fixedLlm: llm,
+    resumeAfterMilliseconds,
   })
   return {
     jobs: {

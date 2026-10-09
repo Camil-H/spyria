@@ -30,6 +30,12 @@ export const addRoutableModels = (models: readonly RoutableModel[]) => {
   routableModels.push(...models.filter((model) => !routableModels.some(({ id }) => id === model.id)))
 }
 export const routableModelNames = () => Object.fromEntries(routableModels.map(({ id, name }) => [id, name]))
+export const routableModelOf = (text: string) => {
+  const wanted = text.trim().toLowerCase()
+  return routableModels.find(
+    ({ id, name }) => id === wanted || id.endsWith(`/${wanted}`) || name.toLowerCase() === wanted,
+  )
+}
 export const modelNameOf = (id: string) => routableModels.find((model) => model.id === id)?.name ?? id
 export const providersOfGatewayRefs = (refs: readonly string[]) => [
   ...new Set(refs.flatMap((ref) => ref.match(/^gateway:([a-z-]+)\//)?.[1] ?? [])),
