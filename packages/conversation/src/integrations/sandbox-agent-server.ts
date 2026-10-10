@@ -54,7 +54,11 @@ const mcpServerOf = (endpoint: AgentEndpoint, path: string, token: string) => ({
   headers: { Authorization: `Bearer ${token}` },
 })
 
-const claudeCodeConversationOf = (endpoint: AgentEndpoint, llmToken: string, model: string) => ({
+const claudeCodeConversationOf = (
+  endpoint: AgentEndpoint,
+  llmToken: string,
+  { model, resumeSessionId }: AgentLlmChoice,
+) => ({
   agent: {
     kind: 'ACPAgent',
     acp_server: 'claude-code',
@@ -68,6 +72,7 @@ const claudeCodeConversationOf = (endpoint: AgentEndpoint, llmToken: string, mod
       'claude-agent-acp',
     ],
     mcp_config: { hq: mcpServerOf(endpoint, '/mcp', llmToken) },
+    ...(resumeSessionId && { acp_resume_session_id: resumeSessionId }),
   },
   secrets: { ANTHROPIC_API_KEY: { kind: 'StaticSecret', value: llmToken } },
 })
@@ -103,7 +108,7 @@ export const createSandboxAgentServer = (condensationScale = 1): AgentServer => 
   createConversation: async (endpoint, llmToken, llm, sub) => {
     const created = await call(endpoint, 'POST', '/api/conversations', {
       ...(llm.harness
-        ? claudeCodeConversationOf(endpoint, llmToken, llm.model)
+        ? claudeCodeConversationOf(endpoint, llmToken, llm)
         : nativeConversationOf(endpoint, llmToken, llm, sub, condensationScale)),
       workspace: { kind: 'LocalWorkspace', working_dir: '/workspace/project' },
       autotitle: false,
@@ -134,6 +139,9 @@ export const createSandboxAgentServer = (condensationScale = 1): AgentServer => 
   },
   interrupt: async (conversation) => {
     await call(conversation, 'POST', `/api/conversations/${conversation.conversationId}/interrupt`, {})
+  },
+  deleteConversation: async (conversation) => {
+    await call(conversation, 'DELETE', `/api/conversations/${conversation.conversationId}`)
   },
   openEvents: (conversation: AgentConversation, afterTimestamp, listener) => {
     const resend = afterTimestamp

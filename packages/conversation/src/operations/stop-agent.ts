@@ -23,6 +23,8 @@ export const interruptAgent = async (
   const subConversationIds = await transactor.run(({ delegations }) => delegations.stopRunning(chatId, promptId))
   const endpoint = await runtimes.endpointOf(chat)
   if (endpoint?.conversationId) await agentServer.interrupt({ ...endpoint, conversationId: endpoint.conversationId })
+  const isHarness = Boolean((await transactor.run(({ routing }) => routing.chatRouting(chatId))).harness)
+  if (isHarness) await runtimes.forgetConversation(chat)
   for (const conversationId of subConversationIds)
     if (endpoint) await agentServer.interrupt({ ...endpoint, conversationId }).catch(() => undefined)
   eventSockets.stopStreaming(chat, promptId)
@@ -30,4 +32,8 @@ export const interruptAgent = async (
     const notice = stoppedByNoticeOf(await unitOfWork.members.displayNameOf(memberId))
     await closeAgentTurn(unitOfWork, chatId, promptId, () => notice)
   })
+  if (isHarness && endpoint?.conversationId)
+    await agentServer
+      .deleteConversation({ ...endpoint, conversationId: endpoint.conversationId })
+      .catch((error) => console.error(`Deleting the agent conversation of chat ${chatId} failed: ${error}`))
 }

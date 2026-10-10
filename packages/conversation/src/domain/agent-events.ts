@@ -93,31 +93,54 @@ const actionStepOf = (event: AgentEvent, action: Fields): StoredStep | undefined
     : undefined
 }
 
+const acpDiffOf = (event: AgentEvent) => (event.content as Fields[] | undefined)?.find((part) => part?.type === 'diff')
+const acpStepOf = (event: AgentEvent): StoredStep => {
+  const title = String(event.title)
+  const rawInput = (event.raw_input ?? {}) as Fields
+  const path = pathOf(rawInput?.file_path ?? acpDiffOf(event)?.path)
+  if (event.tool_kind === 'execute')
+    return { type: 'command', command: title, exitCode: null, durationMilliseconds: null, ...keptOutputOf('') }
+  if (event.tool_kind === 'edit')
+    return {
+      type: 'file',
+      operation: title.startsWith('Write') ? 'create' : 'edit',
+      path,
+      added: 0,
+      removed: 0,
+      diff: [],
+    }
+  if (event.tool_kind === 'read') return { type: 'file', operation: 'read', path, added: 0, removed: 0, diff: [] }
+  return { type: 'tool', name: toolDisplayNameOf(title), arguments: JSON.stringify(rawInput), result: null }
+}
 const acpToolCallProjectionOf = (event: AgentEvent): AgentProjection => {
   const id = String(event.tool_call_id)
   const rawOutput = event.raw_output
+  const contentText = textOf((event.content as Fields[] | undefined)?.map((part) => part?.content))
+  const diff = acpDiffOf(event)
   if (event.status === 'completed' || event.status === 'failed')
     return {
       type: 'observation',
       actionId: id,
       observation: {
         command: (event.raw_input as Fields)?.command,
-        content: [{ text: typeof rawOutput === 'string' ? rawOutput : textOf(rawOutput) }],
+        content: [{ text: typeof rawOutput === 'string' ? rawOutput : contentText || textOf(rawOutput) }],
+        old_content: diff?.old_text,
+        new_content: diff?.new_text,
         is_error: event.status === 'failed',
       },
     }
-  if (event.status !== 'pending') return undefined
-  const step: StoredStep =
-    event.tool_kind === 'execute'
-      ? {
-          type: 'command',
-          command: String(event.title),
-          exitCode: null,
-          durationMilliseconds: null,
-          ...keptOutputOf(''),
-        }
-      : { type: 'tool', name: String(event.title), arguments: JSON.stringify(event.raw_input ?? {}), result: null }
-  return { type: 'step', step, id }
+  return event.status === 'pending' ? { type: 'step', step: acpStepOf(event), id } : undefined
+}
+
+export const subagentDelegationOf = (
+  event: AgentEvent,
+  replies: readonly { id: string; step: StoredStep | null }[],
+): StepDelegation | undefined => {
+  const host = replies.findLast(
+    ({ id, step }) =>
+      step?.type === 'tool' && step.name === 'Task' && step.result === null && id !== event.tool_call_id,
+  )
+  return host && { id: host.id, model: '', modelName: '', task: '' }
 }
 
 export const isFinishEvent = (event: AgentEvent) =>
@@ -173,7 +196,7 @@ export const delegatedProjectionOf = (
   delegation: StepDelegation | undefined,
 ): AgentProjection => {
   if (!delegation) return projection
-  if (projection?.type === 'step') return stepOf({ ...projection.step, delegation })
+  if (projection?.type === 'step') return { ...projection, step: { ...projection.step, delegation } }
   return projection?.type === 'observation' ? projection : undefined
 }
 

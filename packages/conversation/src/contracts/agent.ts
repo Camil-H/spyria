@@ -42,7 +42,13 @@ export type AgentRuntimes = {
 export type RuntimeRetrier = { retry(chat: AgentChat): Promise<void> }
 
 export type AgentEventListener = { onEvent(event: AgentEvent): void; onClose(): void }
-export type AgentLlmChoice = Readonly<{ model: string; effort?: string; usageId: string; harness?: 'claude-code' }>
+export type AgentLlmChoice = Readonly<{
+  model: string
+  effort?: string
+  usageId: string
+  harness?: 'claude-code'
+  resumeSessionId?: string
+}>
 export type SubConversation = Readonly<{ parentConversationId: string; toolToken: string }>
 export type AgentServer = {
   createConversation(
@@ -56,6 +62,7 @@ export type AgentServer = {
   sendMessage(conversation: AgentConversation, text: string): Promise<void>
   statusOf(conversation: AgentConversation): Promise<string | undefined>
   interrupt(conversation: AgentConversation): Promise<void>
+  deleteConversation(conversation: AgentConversation): Promise<void>
   openEvents(conversation: AgentConversation, afterTimestamp: string | null, listener: AgentEventListener): AgentSocket
 }
 

@@ -306,6 +306,11 @@ export const createFakeAgentServer = ({ modelCall }: { modelCall?: () => ModelCa
             status: 200,
             body: JSON.stringify({ id: conversation.id, execution_status: conversation.executionStatus }),
           }
+        if (method === 'DELETE' && action === '') {
+          for (const close of [...conversation.closers]) close()
+          conversations.delete(conversation.id)
+          return { status: 200, body: JSON.stringify({ success: true }) }
+        }
         if (method === 'GET' && action === 'agent_final_response') {
           const answer = conversation.events.findLast(
             (event) => event.kind === 'MessageEvent' && event.source === 'agent',

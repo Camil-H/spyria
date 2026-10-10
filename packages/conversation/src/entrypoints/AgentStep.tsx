@@ -167,14 +167,17 @@ const DelegationStep = ({ delegation }: { delegation: NonNullable<ConversationMe
           status === 'running' ? (
             <>
               <LoaderCircle aria-hidden className="size-4 shrink-0 animate-spin" />
-              Delegating to {modelName}…
+              {modelName ? `Delegating to ${modelName}…` : 'Running a subagent…'}
             </>
           ) : (
-            `Delegated to ${modelName}${status === 'finished' ? '' : ` · ${status}`} · ${count} step${count === 1 ? '' : 's'}${duration === null ? '' : ` · ${durationLabelOf(duration)}`}`
+            `${modelName ? `Delegated to ${modelName}` : 'Subagent'}${status === 'finished' ? '' : ` · ${status}`} · ${count} step${count === 1 ? '' : 's'}${duration === null ? '' : ` · ${durationLabelOf(duration)}`}`
           )
         }
       >
-        <fieldset aria-label={`Steps of ${modelName}`} className="mt-1 flex flex-col gap-1 border-l-2 border-line pl-3">
+        <fieldset
+          aria-label={`Steps of ${modelName || 'the subagent'}`}
+          className="mt-1 flex flex-col gap-1 border-l-2 border-line pl-3"
+        >
           {delegation.steps.map((delegated) => (
             <AgentStep key={delegated.id} message={delegated} />
           ))}

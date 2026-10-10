@@ -101,3 +101,7 @@ test('an MCP tool call becomes a "Used <tool> (<server>)" step whose result drop
     connection: { server: 'fake', isReconnect: true },
   })
 })
+
+test('Claude Code’s HQ tool names lose their MCP prefix like the native ones', () => {
+  expect(toolDisplayNameOf('mcp__hq__fake-whoami')).toBe('whoami (fake)')
+})

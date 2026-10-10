@@ -8,6 +8,7 @@ type FakeLlmStep =
   | { plan: { title: string; status: string }[] }
   | { fail: string }
   | { tool: string; arguments?: Record<string, unknown> }
+  | { task: string }
 type FakeRouteAnswer = { tier: string; confidence: string | number; effort: string; prose?: boolean }
 type FakeRoute = FakeRouteAnswer | 'fail' | 'slow'
 export type FakeLlmScript = {
@@ -49,7 +50,7 @@ const wordsOf = (text: string) => text.split(/(?<= )/).filter(Boolean)
 
 const toolCallOf = (step: FakeLlmStep | undefined, offeredTools: readonly string[] = [], resumeId = '') => {
   const call =
-    !step || 'fail' in step
+    !step || 'fail' in step || 'task' in step
       ? undefined
       : 'think' in step
         ? { name: 'think', arguments: { thought: step.think } }
@@ -88,6 +89,7 @@ const toolCallOf = (step: FakeLlmStep | undefined, offeredTools: readonly string
 type AnthropicBlock = { type: string; text?: string }
 type AnthropicRequest = {
   stream?: boolean
+  system?: unknown
   messages?: { role: string; content: string | AnthropicBlock[] }[]
   tools?: { name: string }[]
 }
@@ -111,7 +113,7 @@ const anthropicTurnsOf = (steps: readonly FakeLlmStep[]) => {
   }
   return turns
 }
-const toolUseOf = (step: FakeLlmStep | undefined, offeredTools: readonly string[]) => {
+const toolUseOf = (step: FakeLlmStep | undefined, offeredTools: readonly string[], prompt: string) => {
   const call =
     step && 'command' in step
       ? { name: 'Bash', input: { command: step.command, description: step.command } }
@@ -120,10 +122,22 @@ const toolUseOf = (step: FakeLlmStep | undefined, offeredTools: readonly string[
             name: offeredTools.find((name) => name.endsWith(`_${step.tool}`)) ?? step.tool,
             input: step.arguments ?? {},
           }
-        : undefined
+        : step && 'task' in step
+          ? {
+              name: offeredTools.find((name) => name === 'Agent' || name === 'Task') ?? 'Agent',
+              input: { description: step.task, prompt: `${step.task}\n\n${prompt}`, subagent_type: 'general-purpose' },
+            }
+          : step && 'edit' in step
+            ? {
+                name: 'Write',
+                input: { file_path: `${workingDirectory}${step.edit.path}`, content: step.edit.create ?? '' },
+              }
+            : undefined
   return call && { type: 'tool_use', id: `toolu_${crypto.randomUUID().replaceAll('-', '')}`, ...call }
 }
-const anthropicReplyOf = async (request: AnthropicRequest, script: FakeLlmScript) => {
+const anthropicReplyOf = async (request: AnthropicRequest, chatScript: FakeLlmScript) => {
+  const isSubagent = JSON.stringify(request.system ?? '').includes('cc_is_subagent=true')
+  const script = (isSubagent ? chatScript.subagents?.task : chatScript) ?? {}
   const messages = request.messages ?? []
   const promptIndex = messages.findLastIndex((message) => message.role === 'user' && promptTextOf(message.content))
   const answeredSteps = messages.slice(promptIndex).filter((message) => message.role === 'assistant').length
@@ -137,6 +151,7 @@ const anthropicReplyOf = async (request: AnthropicRequest, script: FakeLlmScript
   const toolUse = toolUseOf(
     turn.step,
     (request.tools ?? []).map((tool) => tool.name),
+    promptTextOf(messages[promptIndex]?.content ?? ''),
   )
   const thinking = turn.thinking.join(' ')
   const text = script.text ?? defaultText
@@ -252,7 +267,11 @@ export const createFakeLlm = (
         })),
       }),
     )
-    .post('/v1/messages/count_tokens', (context) => context.json({ input_tokens: 1 }))
+    .post('/v1/messages/count_tokens', async (context) =>
+      (await context.req.text()).includes('$count-fails')
+        ? context.json({ type: 'error', error: { type: 'api_error', message: 'Counting failed' } }, 500)
+        : context.json({ input_tokens: 1 }),
+    )
     .post('/v1/messages', async (context) => {
       const request = await context.req.json<AnthropicRequest>()
       const prompt = request.messages?.findLast((message) => message.role === 'user' && promptTextOf(message.content))

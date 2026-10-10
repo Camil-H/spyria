@@ -28,6 +28,7 @@ export const activeAgentTurns = async () => []
 export const setRuntimesHostOnline = skippedOnClient
 export const isChatEventStored = async () => false
 export const lastAgentEvent = skippedOnClient
+export const stoppedHarnessSessionId = skippedOnClient
 export const agentObservationOf = skippedOnClient
 export const chatRoutingOf = skippedOnClient
 export const setChatAgentModel = skippedOnClient

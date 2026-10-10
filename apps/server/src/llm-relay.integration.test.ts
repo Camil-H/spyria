@@ -225,4 +225,17 @@ test('a Claude Code call with x-api-key goes to the gateway’s Anthropic route 
   expect(await failureOf(chatId)).toBeNull()
 })
 
+test('a failing Claude Code token count reaches the agent unchanged and records no turn failure', async () => {
+  const host = await fakeHost('Token count host')
+  const { chatId, token } = await runtimeTurn(host, bob)
+  await database.$client`update chats set harness = 'claude-code' where id = ${chatId}`
+  const counted = await host.modelCall({
+    path: '/v1/messages/count_tokens?beta=true',
+    headers: { 'x-api-key': token, 'content-type': 'application/json', 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model: 'claude-opus-5-5', messages: [{ role: 'user', content: '$count-fails' }] }),
+  })
+  expect(counted.status).toBeGreaterThanOrEqual(400)
+  expect(await failureOf(chatId)).toBeNull()
+})
+
 afterAll(() => disconnectFakeHosts())

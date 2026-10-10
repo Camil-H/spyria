@@ -199,3 +199,63 @@ test('a Claude Code tool call is one step updated by its tool call id, and the f
     },
   ])
 })
+
+test('Claude Code edits, reads and HQ tools get their step types, and a subagent’s calls keep their ids inside its group', () => {
+  const subagent = { id: 'toolu_task', model: '', modelName: '', task: '' }
+  const diff = [{ type: 'diff', path: '/workspace/project/notes.md', old_text: null, new_text: 'one\ntwo\n' }]
+  const toolCall = (id: string, status: string, fields: Record<string, unknown>) =>
+    agentEvent('ACPToolCallEvent', { tool_call_id: id, status, raw_input: {}, ...fields }, `event-${id}-${status}`)
+  const stored = [
+    {
+      event: toolCall('toolu_write', 'pending', { title: 'Write notes.md', tool_kind: 'edit', content: diff }),
+      delegation: subagent,
+    },
+    {
+      event: toolCall('toolu_write', 'completed', { title: 'Write notes.md', tool_kind: 'edit', content: diff }),
+      delegation: subagent,
+    },
+    {
+      event: toolCall('toolu_read', 'pending', {
+        title: 'Read notes.md',
+        tool_kind: 'read',
+        raw_input: { file_path: '/workspace/project/notes.md' },
+      }),
+    },
+    { event: toolCall('toolu_mcp', 'pending', { title: 'mcp__hq__fake-whoami', tool_kind: 'other' }) },
+    {
+      event: toolCall('toolu_mcp', 'completed', {
+        title: 'mcp__hq__fake-whoami',
+        tool_kind: 'other',
+        raw_output: 'you are bob',
+      }),
+    },
+  ].map(({ event, delegation }, index) => ({
+    workspaceId: 'workspace-acme',
+    chatId: 'chat-research',
+    id: event.id,
+    seq: index + 1,
+    type: 'agent.event',
+    actor: null,
+    payload: { replyToId: 'prompt-1', event, ...(delegation && { delegation }) },
+    createdAt: new Date(Date.parse('2026-10-09T10:00:00Z') + index * 1000),
+  }))
+  expect(messagesFromEvents(stored).map(({ id, step }) => ({ id, step }))).toEqual([
+    {
+      id: 'toolu_write',
+      step: {
+        type: 'file',
+        operation: 'create',
+        path: 'notes.md',
+        added: 2,
+        removed: 0,
+        diff: [
+          { kind: 'added', text: 'one' },
+          { kind: 'added', text: 'two' },
+        ],
+        delegation: subagent,
+      },
+    },
+    { id: 'toolu_read', step: { type: 'file', operation: 'read', path: 'notes.md', added: 0, removed: 0, diff: [] } },
+    { id: 'toolu_mcp', step: { type: 'tool', name: 'whoami (fake)', arguments: '{}', result: 'you are bob' } },
+  ])
+})

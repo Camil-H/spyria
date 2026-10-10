@@ -126,7 +126,7 @@ const chatKeyOfPrompt = async (prompt = '') => {
     const [databaseName = '', chat] = key.split('/')
     const [prompted] = await databaseByName(databaseName).$client`
       select 1 from chats join messages on messages.chat_id = chats.id and messages.id = chats.agent_turn_message_id
-      where chats.id = ${chat ?? ''} and strpos(${prompt}, messages.body) > 0`
+      where chats.id = ${chat ?? ''} and strpos(${prompt}, messages.body) > 0`.catch(() => [])
     if (prompted) return key
   }
   return ''

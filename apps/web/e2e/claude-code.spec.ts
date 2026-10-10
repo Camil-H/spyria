@@ -10,6 +10,7 @@ import {
   test,
 } from './fixtures'
 import { openPageAs, type WorkerStack } from './stack'
+import { fakeMcpUrl } from './stack-ports'
 
 const agentReply = { timeout: 90_000 }
 const metered = { timeout: 30_000 }
@@ -123,6 +124,87 @@ test.describe('real Agent Server', () => {
     await bobPage.context().close()
   })
 
+  test('4. a scripted Task subagent shows as one step group with its inner steps', async ({
+    browser,
+    workerStack,
+    agentScript,
+  }) => {
+    const bobPage = await bobInResearch(browser, workerStack)
+    await agentScript(researchChatId, {
+      steps: [{ task: 'List the project' }],
+      text: answer,
+      subagents: {
+        task: {
+          steps: [{ command: 'echo inside the subagent' }, { edit: { path: 'notes.md', create: 'one\ntwo\n' } }],
+          text: 'The subagent listed it.',
+        },
+      },
+    })
+    await sendMessage(bobPage, 'Delegate the listing to a subagent')
+    await expect(messageItemsOf(bobPage).filter({ hasText: answer })).toBeVisible(agentReply)
+    await mainOf(bobPage)
+      .getByRole('button', { name: /^Subagent · 2 steps · / })
+      .click()
+    const subagentSteps = mainOf(bobPage).getByRole('group', { name: 'Steps of the subagent' })
+    await expect(subagentSteps).toContainText('echo inside the subagent')
+    await expect(subagentSteps).toContainText('Created notes.md +2 −0')
+    await expect(mainOf(bobPage)).toContainText('The subagent listed it.')
+    await bobPage.context().close()
+  })
+
+  test('5. a scripted personal tool call from Claude Code runs as the owner and shows as a step', async ({
+    page,
+    browser,
+    workerStack,
+    agentScript,
+  }) => {
+    const account = `alice-acme-${crypto.randomUUID().slice(0, 8)}`
+    const connections = mainOf(page).getByRole('region', { name: 'Connections' })
+    await page.context().addCookies([{ name: 'fake_mcp_user', value: account, url: fakeMcpUrl }])
+    await page.goto('/w/workspace-acme/profile')
+    await connections.getByRole('tab', { name: 'My connections' }).click()
+    const popup = page.waitForEvent('popup')
+    await connections.getByRole('button', { name: 'Connect fake', exact: true }).click()
+    await (await popup).waitForEvent('close')
+    await expect(connections.getByRole('listitem').filter({ hasText: 'fake' })).toContainText('Connected')
+    const bobPage = await bobInResearch(browser, workerStack)
+    await agentScript(researchChatId, { steps: [{ tool: 'fake-whoami' }], text: answer })
+    await sendMessage(bobPage, 'Who am I on fake')
+    await expect(messageItemsOf(bobPage).filter({ hasText: answer })).toBeVisible(agentReply)
+    const events = await workerStack.database
+      .$client`select payload from events where chat_id = ${researchChatId} and type = 'agent.event' order by seq`
+    await messageItemsOf(bobPage).getByRole('button', { name: 'Used whoami (fake)' }).click()
+    await expect(mainOf(bobPage)).toContainText(`you are ${account}`)
+    await bobPage.context().close()
+  })
+
+  test('6. stopping mid-command marks the turn stopped, and the next prompt is answered once', async ({
+    browser,
+    workerStack,
+    agentScript,
+  }) => {
+    const bobPage = await bobInResearch(browser, workerStack)
+    await agentScript(researchChatId, { steps: [{ command: 'sleep 60' }], text: 'Never shown.' })
+    await sendMessage(bobPage, 'Run the long command')
+    await expect(messageItemsOf(bobPage).getByRole('img', { name: 'Running' })).toBeVisible(agentReply)
+    await mainOf(bobPage).getByRole('button', { name: 'Stop' }).click()
+    await expect(messageItemsOf(bobPage).filter({ hasText: 'Stopped by Bob' })).toHaveCount(1, agentReply)
+    await agentScript(researchChatId, { text: 'Back after the stop.' })
+    await sendMessage(bobPage, 'Answer after the stop')
+    await expect(messageItemsOf(bobPage).filter({ hasText: 'Back after the stop.' })).toHaveCount(1, agentReply)
+    await expect(bobPage.getByRole('status', { name: 'Agent is working' })).toHaveCount(0, agentReply)
+    const events = await workerStack.database
+      .$client`select payload from events where chat_id = ${researchChatId} and type = 'agent.event' order by seq`
+    await expect(mainOf(bobPage)).not.toContainText('Never shown.')
+    await expect(messageItemsOf(bobPage).filter({ hasText: agentReplyText })).toHaveCount(0)
+    await expect(messageItemsOf(bobPage).filter({ hasText: 'Stopped by Bob' })).toHaveCount(1)
+    const sessionIds = await workerStack.database.$client`
+      select distinct payload->'event'->'value'->>'acp_session_id' as id from events
+      where chat_id = ${researchChatId} and payload->'event'->>'key' = 'agent_state'`
+    expect(sessionIds).toHaveLength(1)
+    await bobPage.context().close()
+  })
+
   test('7. a scripted 529 shows HQ’s notice on the turn', async ({ browser, workerStack, agentScript }) => {
     const bobPage = await bobInResearch(browser, workerStack)
     await agentScript(researchChatId, { steps: [{ fail: 'Overloaded' }] })
@@ -143,6 +225,39 @@ test.describe('real Agent Server', () => {
     await expect(messageItemsOf(bobPage).filter({ hasText: answer })).toBeVisible(agentReply)
     const [first] = await gatewayLogsOf(workerStack, startedAt)
     expect(`${first?.provider}/${first?.model}`).toBe('anthropic/claude-opus-5-5')
+    await bobPage.context().close()
+  })
+  test('9. a Claude Code chat whose conversation was lost without a Stop answers its next prompt promptly, without resuming', async ({
+    browser,
+    workerStack,
+    agentScript,
+  }) => {
+    const bobPage = await bobInResearch(browser, workerStack)
+    const lostSessionId = crypto.randomUUID()
+    const lostState = {
+      replyToId: null,
+      event: {
+        id: crypto.randomUUID(),
+        kind: 'ConversationStateUpdateEvent',
+        key: 'agent_state',
+        value: { acp_session_id: lostSessionId },
+        timestamp: '2026-01-01T00:00:00',
+      },
+    }
+    await workerStack.database.$client`
+      update chats set harness = 'claude-code', model = 'anthropic/claude-opus-5-5' where id = ${researchChatId}`
+    await workerStack.database.$client`
+      insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
+      select 'workspace-acme', ${researchChatId}, ${lostState.event.id}, coalesce(max(seq), 0) + 1, 'agent.event', null, ${JSON.stringify(lostState)}::jsonb, now()
+      from events where workspace_id = 'workspace-acme' and chat_id = ${researchChatId}`
+    await agentScript(researchChatId, { text: answer })
+    await sendMessage(bobPage, 'Answer in a fresh session')
+    await expect(messageItemsOf(bobPage).filter({ hasText: answer })).toHaveCount(1, { timeout: 30_000 })
+    const sessionIds = await workerStack.database.$client<{ id: string }[]>`
+      select distinct payload->'event'->'value'->>'acp_session_id' as id from events
+      where chat_id = ${researchChatId} and payload->'event'->>'key' = 'agent_state'`
+    expect(sessionIds.map(({ id }) => id)).toContain(lostSessionId)
+    expect(sessionIds).toHaveLength(2)
     await bobPage.context().close()
   })
 })

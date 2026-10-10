@@ -75,6 +75,15 @@ export const workerHostPrefixOf = (workerIndex: number) => `hq-test-e2e-w${worke
 
 const docker = (...args: string[]) =>
   spawnSync('docker', args, { stdio: ['ignore', 'pipe', 'ignore'] }).stdout.toString()
+const deleteAgentConversationsScript = `
+import json, sys, urllib.request
+base = 'http://localhost:8000/api/conversations'
+call = lambda method, url: urllib.request.urlopen(urllib.request.Request(url, method=method, headers={'X-Session-API-Key': sys.argv[1]}))
+for conversation in json.load(call('GET', base + '/search?limit=100'))['items']:
+    call('DELETE', base + '/' + conversation['id'])
+`
+const deleteAgentConversations = (containerName: string, apiKey: string) =>
+  docker('exec', containerName, 'python3', '-c', deleteAgentConversationsScript, apiKey)
 export const removeDockerObjects = (namePrefix: string) => {
   const listed = (...command: string[]) =>
     docker(...command, '--filter', `name=^${namePrefix}`)
@@ -242,6 +251,9 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
         options: ResetOptions = { runtimeHost: false, warmRuntimes: false, agentServer: 'fake' },
       ) => {
         const epoch = `epoch-${workerInfo.workerIndex}-${++epochNumber}`
+        if (options.agentServer === 'real')
+          for (const { runtime } of pairedHosts.real?.warmRuntimes.values() ?? [])
+            deleteAgentConversations(`${workerHostPrefixOf(index)}rt-${runtime.id}`, runtime.apiKey ?? '')
         const writeSeededGatewayKeys = await prepareSeededGatewayKeys(testGateway)
         const reset = () =>
           resetDatabase(testDatabase.database, async (transaction) => {

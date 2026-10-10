@@ -94,10 +94,11 @@ const withDelegationsGrouped = (replies: readonly ConversationMessage[], isStopp
     const delegation = firstStep && delegationOf(firstStep)
     if (!delegation) continue
     const actionIndex = delegateActions.findIndex((action) => delegateArgumentsOf(action)?.task === delegation.task)
-    const host: ConversationMessage = delegateActions.splice(actionIndex, actionIndex < 0 ? 0 : 1)[0] ?? {
-      ...firstStep,
-      step: { type: 'tool', name: 'delegate', arguments: '', result: firstStep.isRunning ? null : '' },
-    }
+    const host: ConversationMessage = replies.find((reply) => reply.id === delegation.id) ??
+      delegateActions.splice(actionIndex, actionIndex < 0 ? 0 : 1)[0] ?? {
+        ...firstStep,
+        step: { type: 'tool', name: 'delegate', arguments: '', result: firstStep.isRunning ? null : '' },
+      }
     const resumes = replies.filter((reply) => delegateArgumentsOf(reply)?.resume === delegation.id)
     for (const resume of resumes) resumeIds.add(resume.id)
     const lastStep = [host, ...resumes].at(-1)?.step

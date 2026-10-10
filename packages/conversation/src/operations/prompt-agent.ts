@@ -109,6 +109,10 @@ const conversationFor = async (
   const routed = fixedLlm || !prompterId ? undefined : await routeSession(dependencies, chat, prompterId, prompt)
   if (routed && 'harness' in routed) {
     if (!routed.canPrompt) return { refusal: claudeCodeKeysNotice }
+    const resumeSessionId =
+      storedId === null
+        ? await transactor.run(({ agentEvents }) => agentEvents.stoppedHarnessSessionId(chat.chatId))
+        : undefined
     const llmToken = await runtimes.issueLlmToken(chat)
     const conversationId = await runtimes.rememberConversation(
       chat,
@@ -116,6 +120,7 @@ const conversationFor = async (
         model: claudeCode.model.replace('anthropic/', ''),
         usageId: 'agent',
         harness: claudeCode.harness,
+        resumeSessionId,
       }),
     )
     await transactor.run(({ routing }) =>

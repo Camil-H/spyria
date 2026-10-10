@@ -7,7 +7,7 @@ const connectionNotice = / needs to (re)?connect (\S+)$/
 export const toolServerOf = (toolName: string) => toolName.split('-')[0] ?? toolName
 
 export const toolDisplayNameOf = (prefixedName: string) => {
-  const toolName = prefixedName.replace(/^(hq|router)_/, '')
+  const toolName = prefixedName.replace(/^(mcp__hq__|hq_|router_)/, '')
   const separator = toolName.indexOf('-')
   return separator === -1 ? toolName : `${toolName.slice(separator + 1)} (${toolName.slice(0, separator)})`
 }

@@ -255,3 +255,17 @@ test('durations read in seconds, tenths under ten seconds, and minutes', () => {
   expect(durationLabelOf(12_400)).toBe('12s')
   expect(durationLabelOf(72_000)).toBe('1m 12s')
 })
+
+test('a Claude Code subagent gathers the steps that carry its tool call id into its Task step', () => {
+  const subagentEdit = { ...edit, delegation: { id: 'message-2', model: '', modelName: '', task: '' } }
+  const conversation = conversationWith([
+    replyRow(2, 'step', { step: { type: 'tool', name: 'Task', arguments: '{}', result: 'Listed.' }, at: 2 }),
+    replyRow(3, 'step', { step: subagentEdit, at: 5 }),
+    replyRow(4, 'step', { step: subagentEdit, at: 6 }),
+    replyRow(5, 'agent', { body: 'Done.', at: 8 }),
+  ])
+  expect(itemSummaryOf(conversation)).toEqual(['member', 'step tool', 'agent'])
+  expect(delegationGroupsOf(conversation)).toEqual([
+    { id: 'message-2', result: 'Listed.', steps: ['message-3', 'message-4'], durationMilliseconds: 4000 },
+  ])
+})

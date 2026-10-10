@@ -146,6 +146,7 @@ export const createModelCallRelay = ({
     }
     const { keyOf, tools } = databaseAccess(database)
     const isAnthropicCall = path.startsWith(anthropicPathPrefix)
+    const isTokenCount = path.startsWith(`${anthropicPathPrefix}/count_tokens`)
     const gatewayCall = (callHeaders: Record<string, string>, timeoutSignal: AbortSignal, callBody = body) =>
       fetch(`${gatewayUrlOf(database)}${isAnthropicCall ? '/anthropic' : ''}${path}`, {
         method,
@@ -242,14 +243,14 @@ export const createModelCallRelay = ({
       )
     } catch {
       if (signal.aborted) return
-      await record({ reached: headTimeout.signal.aborted ? 'timeout' : 'unreachable' })
+      if (!isTokenCount) await record({ reached: headTimeout.signal.aborted ? 'timeout' : 'unreachable' })
       return answer(502, unreachable)
     } finally {
       clearTimeout(timer)
     }
     return stream(
       response,
-      response.ok
+      response.ok || isTokenCount
         ? undefined
         : async (text) => {
             const notice = await record({ reached: 'answered', status: response.status, body: jsonOf(text) })

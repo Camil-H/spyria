@@ -16,6 +16,7 @@ import {
   setChatTurnFailure,
   setChatTurnPrompter,
   setDelegationFields,
+  stoppedHarnessSessionId,
   stopRunningDelegations,
 } from '@hq/db/server-writes'
 import type { Message as MessageRow } from '@hq/db/zero'
@@ -114,6 +115,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         return row && toMessage(row)
       },
       setStep: (id, step) => tx.mutate.messages.update({ workspaceId: contextWorkspaceId, id, step }),
+      replies: async (promptId) => (await tx.run(repliesTo(promptId).orderBy('seq', 'asc'))).map(toMessage),
     },
     agentJobs: {
       prompt: (message) => enqueue(agentJobTypes.prompt, { messageId: message.id }),
@@ -195,6 +197,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
           last && { timestamp: last.timestamp, replyToId: last.replyToId === null ? null : messageId(last.replyToId) }
         )
       },
+      stoppedHarnessSessionId: (id) => stoppedHarnessSessionId(tx, contextWorkspaceId, id),
     },
     plans: {
       replace: async (id, items) => {

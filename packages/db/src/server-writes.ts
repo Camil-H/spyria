@@ -280,6 +280,20 @@ export const lastAgentEvent = (tx: Transaction, workspaceId: string, chatId: str
     [workspaceId, chatId],
   )
 
+export const stoppedHarnessSessionId = async (tx: Transaction, workspaceId: string, chatId: string) =>
+  (
+    await firstOnServer<{ sessionId: string | null }>(
+      tx,
+      `select payload->'event'->'value'->>'acp_session_id' as "sessionId" from events
+       where workspace_id = $1 and chat_id = $2 and type = 'agent.event' and payload->'event'->>'key' = 'agent_state'
+       and 'InterruptEvent' = (select payload->'event'->>'kind' from events
+         where workspace_id = $1 and chat_id = $2 and type = 'agent.event'
+         and payload->'event'->>'kind' in ('InterruptEvent', 'MessageEvent') order by seq desc limit 1)
+       order by seq desc limit 1`,
+      [workspaceId, chatId],
+    )
+  )?.sessionId ?? undefined
+
 export const agentObservationOf = async (tx: Transaction, workspaceId: string, chatId: string, actionId: string) =>
   (
     await firstOnServer<{ observation: Record<string, unknown> }>(

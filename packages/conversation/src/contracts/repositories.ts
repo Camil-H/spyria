@@ -12,6 +12,7 @@ export type MessageRepository = {
   project(message: Message, seq: number): Promise<void>
   find(messageId: MessageId): Promise<Message | undefined>
   setStep(messageId: MessageId, step: StoredStep): Promise<void>
+  replies(promptId: MessageId): Promise<Message[]>
 }
 
 export type AgentJobs = {
@@ -50,6 +51,7 @@ export type AgentEventRepository = {
     delegation?: StepDelegation,
   ): Promise<number | undefined>
   last(chatId: ChatId): Promise<{ timestamp: string; replyToId: MessageId | null } | undefined>
+  stoppedHarnessSessionId(chatId: ChatId): Promise<string | undefined>
 }
 
 export type PlanRepository = {

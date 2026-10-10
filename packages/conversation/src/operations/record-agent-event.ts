@@ -1,6 +1,12 @@
 import { type ChatId, messageId, type WorkspaceId } from '@hq/kernel'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
-import { type AgentEvent, agentProjectionOf, delegatedProjectionOf, isFinishEvent } from '../domain/agent-events.ts'
+import {
+  type AgentEvent,
+  agentProjectionOf,
+  delegatedProjectionOf,
+  isFinishEvent,
+  subagentDelegationOf,
+} from '../domain/agent-events.ts'
 import { observedStep, type StepDelegation } from '../domain/agent-steps.ts'
 import { newMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
@@ -17,12 +23,17 @@ type Input = {
 
 export const recordAgentEvent = (
   { transactor }: Dependencies,
-  { workspaceId, chatId, event, delegation, subagentFailure }: Input,
+  { workspaceId, chatId, event, subagentFailure, ...input }: Input,
 ) =>
   transactor.run(async (unitOfWork) => {
     const activePromptId = await unitOfWork.agentTurns.lock(chatId)
     const previous = await unitOfWork.agentEvents.last(chatId)
     const promptId = activePromptId ?? previous?.replyToId ?? null
+    const delegation =
+      input.delegation ??
+      (event.kind === 'ACPToolCallEvent' && promptId
+        ? subagentDelegationOf(event, await unitOfWork.messages.replies(promptId))
+        : undefined)
     const recordedAt = new Date()
     const seq = await unitOfWork.agentEvents.append(chatId, event, promptId, recordedAt, delegation)
     const failure =
