@@ -98,6 +98,13 @@ const acpStepOf = (event: AgentEvent): StoredStep => {
   const title = String(event.title)
   const rawInput = (event.raw_input ?? {}) as Fields
   const path = pathOf(rawInput?.file_path ?? acpDiffOf(event)?.path)
+  if (rawInput?.server && rawInput.tool)
+    return {
+      type: 'tool',
+      name: toolDisplayNameOf(String(rawInput.tool)),
+      arguments: JSON.stringify(rawInput.arguments ?? {}),
+      result: null,
+    }
   if (event.tool_kind === 'execute')
     return { type: 'command', command: title, exitCode: null, durationMilliseconds: null, ...keptOutputOf('') }
   if (event.tool_kind === 'edit')
@@ -115,6 +122,7 @@ const acpStepOf = (event: AgentEvent): StoredStep => {
 const acpToolCallProjectionOf = (event: AgentEvent): AgentProjection => {
   const id = String(event.tool_call_id)
   const rawOutput = event.raw_output
+  const output = (rawOutput ?? {}) as Record<string, unknown>
   const contentText = textOf((event.content as Fields[] | undefined)?.map((part) => part?.content))
   const diff = acpDiffOf(event)
   if (event.status === 'completed' || event.status === 'failed')
@@ -123,13 +131,26 @@ const acpToolCallProjectionOf = (event: AgentEvent): AgentProjection => {
       actionId: id,
       observation: {
         command: (event.raw_input as Fields)?.command,
-        content: [{ text: typeof rawOutput === 'string' ? rawOutput : contentText || textOf(rawOutput) }],
+        content: [
+          {
+            text:
+              typeof rawOutput === 'string'
+                ? rawOutput
+                : contentText ||
+                  textOf(rawOutput) ||
+                  String(output.formatted_output ?? '') ||
+                  textOf((output.result as Fields)?.content),
+          },
+        ],
+        exit_code: output.exit_code,
         old_content: diff?.old_text,
         new_content: diff?.new_text,
         is_error: event.status === 'failed',
       },
     }
-  return event.status === 'pending' ? { type: 'step', step: acpStepOf(event), id } : undefined
+  return event.status === 'pending' || event.status === 'in_progress'
+    ? { type: 'step', step: acpStepOf(event), id }
+    : undefined
 }
 
 export const subagentDelegationOf = (

@@ -407,3 +407,58 @@ test('a prompter reaching only Anthropic locks the session on Claude Code withou
     'This session runs Claude Code',
   )
 })
+
+test('a prompter reaching only OpenAI locks the session on Codex through the relay without an OpenAI key in its environment, and an invitee without an OpenAI key is refused', async () => {
+  const fake = await fakeAgent()
+  await database.$client`delete from llm_credentials where user_id = ${bob}`
+  await database.$client`delete from llm_credentials where user_id = ${alice} and secret_ref like 'gateway:openai/%'`
+  await addKey(bob, 'OpenAI')
+  const chat = await newRuntimeChat()
+  await answered(await prompt(chat, 'Codex starts', bobInAcme))
+  const [conversation] = [...fake.conversations.values()]
+  const agent = conversation?.created.agent as { acp_command: string[] }
+  expect(conversation?.created).toMatchObject({
+    agent: {
+      kind: 'ACPAgent',
+      acp_server: 'codex',
+      mcp_config: { hq: { url: 'http://fake-gateway-relay.test:4000/mcp', transport: 'http' } },
+    },
+    secrets: { OPENAI_API_KEY: { kind: 'StaticSecret' } },
+    autotitle: false,
+  })
+  expect(Object.keys(conversation?.created.secrets ?? {})).toEqual(['OPENAI_API_KEY'])
+  const [env, codexConfig, modelProvider, globalConfig, catalogScript, shell, shellFlag, launcher] = agent.acp_command
+  expect([env, modelProvider, shell, shellFlag]).toEqual(['env', 'MODEL_PROVIDER=hq', 'sh', '-c'])
+  expect(JSON.parse(codexConfig?.replace('CODEX_CONFIG=', '') ?? '{}')).toEqual({
+    model: 'gpt-6.1-sol',
+    model_providers: {
+      hq: {
+        name: 'HQ',
+        base_url: 'http://fake-gateway-relay.test:4000/v1',
+        env_key: 'OPENAI_API_KEY',
+        wire_api: 'responses',
+        supports_websockets: false,
+        request_max_retries: 0,
+        stream_max_retries: 0,
+      },
+    },
+  })
+  expect(globalConfig).toContain('model_provider = "off"')
+  expect(globalConfig).toContain('plugins = false')
+  expect(catalogScript).toContain("slug: 'gpt-6.1-sol'")
+  expect(launcher).toEndWith('exec codex-acp')
+  const secrets = conversation?.created.secrets as Record<string, { value: string }>
+  expect(JSON.stringify(agent.acp_command)).not.toContain(String(secrets.OPENAI_API_KEY?.value))
+  expect(await chatOf(chat)).toMatchObject({ model: 'openai/gpt-6.1-sol' })
+  expect((await database.$client`select harness from chats where id = ${chat}`)[0]?.harness).toBe('codex')
+  expect(await decisionsOf(chat)).toHaveLength(0)
+
+  expect(await answered(await prompt(chat, 'Alice joins the Codex session'))).toEqual([
+    { kind: 'notice', body: 'This session runs Codex on OpenAI keys' },
+  ])
+  expect(fake.prompts.map((sent) => sent.text)).not.toContain('Alice joins the Codex session')
+  expect(fake.conversations.size).toBe(1)
+  expect(JSON.stringify(await routing(chat, bobInAcme, { sessionModel: 'openai/gpt-5' }))).toContain(
+    'This session runs Codex',
+  )
+})

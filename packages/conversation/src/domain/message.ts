@@ -2,6 +2,7 @@ import type { ChatId, MemberId, MessageId, WorkspaceId } from '@hq/kernel'
 import type { StoredStep } from './agent-steps.ts'
 import { MessageDeleted, NotMessageAuthor } from './errors.ts'
 import type { MessageBody } from './message-body.ts'
+import type { Harness } from './session-routing.ts'
 
 export type Message = Readonly<{
   id: MessageId
@@ -27,7 +28,7 @@ export type MessageChange = Readonly<{
 export type ConversationChat = Readonly<{
   workspaceId: WorkspaceId
   type: 'channel' | 'runtime'
-  harness: 'claude-code' | null
+  harness: Harness | null
 }>
 
 const assertChangeable = (message: Message, memberId: MemberId) => {

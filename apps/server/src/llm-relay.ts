@@ -21,7 +21,16 @@ export type RelayFrame = { sid?: unknown; method?: unknown; path?: unknown; head
 type Send = (frame: object) => void
 type ToolResult = { content?: { text?: string }[]; isError?: boolean }
 
-const forwardedHeaders = ['content-type', 'accept', 'user-agent', 'anthropic-version', 'anthropic-beta']
+const forwardedHeaders = [
+  'content-type',
+  'accept',
+  'user-agent',
+  'anthropic-version',
+  'anthropic-beta',
+  'originator',
+  'x-codex-beta-features',
+  'x-codex-turn-metadata',
+]
 const toolHeaders = [...forwardedHeaders, 'mcp-session-id', 'mcp-protocol-version', 'last-event-id']
 const answeredHeaders = ['content-type', 'x-request-id', 'mcp-session-id']
 const headTimeoutMilliseconds = 300_000
@@ -46,9 +55,10 @@ const jsonOf = (text: string): unknown => {
 }
 const modelOf = (body: string) => (jsonOf(body) as { model?: unknown } | undefined)?.model?.toString()
 const anthropicPathPrefix = '/v1/messages'
-const anthropicPinned = (body: string) => {
+const harnessProviderByPath: Record<string, string> = { [anthropicPathPrefix]: 'anthropic', '/v1/responses': 'openai' }
+const pinnedTo = (provider: string, body: string) => {
   const model = modelOf(body) ?? ''
-  return model.includes('/') ? body : JSON.stringify({ ...(jsonOf(body) as object), model: `anthropic/${model}` })
+  return model.includes('/') ? body : JSON.stringify({ ...(jsonOf(body) as object), model: `${provider}/${model}` })
 }
 
 export const createModelCallRelay = ({
@@ -145,10 +155,11 @@ export const createModelCallRelay = ({
       return reply({ content: [{ type: 'text', text }], isError })
     }
     const { keyOf, tools } = databaseAccess(database)
-    const isAnthropicCall = path.startsWith(anthropicPathPrefix)
+    const harnessPath = Object.keys(harnessProviderByPath).find((prefix) => path.startsWith(prefix))
+    const harnessProvider = harnessPath && harnessProviderByPath[harnessPath]
     const isTokenCount = path.startsWith(`${anthropicPathPrefix}/count_tokens`)
     const gatewayCall = (callHeaders: Record<string, string>, timeoutSignal: AbortSignal, callBody = body) =>
-      fetch(`${gatewayUrlOf(database)}${isAnthropicCall ? '/anthropic' : ''}${path}`, {
+      fetch(`${gatewayUrlOf(database)}${harnessProvider ? `/${harnessProvider}` : ''}${path}`, {
         method,
         headers: callHeaders,
         body: method === 'GET' || method === 'DELETE' ? undefined : callBody,
@@ -214,10 +225,10 @@ export const createModelCallRelay = ({
     const condenserModel = isCondenser ? await handlers.condenserModel(turn.chat, turn.prompterId) : undefined
     const forwardedBody = condenserModel
       ? JSON.stringify({ ...(jsonOf(body) as object), model: condenserModel })
-      : isAnthropicCall
-        ? anthropicPinned(body)
+      : harnessProvider
+        ? pinnedTo(harnessProvider, body)
         : maskedBody(body, condensationScale)
-    if (isAnthropicCall && path.split('?')[0] === anthropicPathPrefix && !body.includes('cc_is_subagent=true'))
+    if (harnessProvider && path.split('?')[0] === harnessPath && !body.includes('cc_is_subagent=true'))
       void handlers
         .recordHarnessModel(turn.chat, modelOf(forwardedBody) ?? '')
         .catch(() => console.error(`Recording the model of chat ${turn.chat.chatId} failed`))

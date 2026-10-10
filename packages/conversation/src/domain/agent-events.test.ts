@@ -259,3 +259,49 @@ test('Claude Code edits, reads and HQ tools get their step types, and a subagent
     { id: 'toolu_mcp', step: { type: 'tool', name: 'whoami (fake)', arguments: '{}', result: 'you are bob' } },
   ])
 })
+
+test('a Codex command and an HQ tool call start in progress and finish with Codex’s output shapes', () => {
+  const toolCall = (id: string, status: string, fields: Record<string, unknown>) =>
+    agentEvent('ACPToolCallEvent', { tool_call_id: id, status, ...fields }, `event-${id}-${status}`)
+  const command = { title: 'echo hello', tool_kind: 'execute', raw_input: { command: 'echo hello' } }
+  const mcp = {
+    title: 'mcp.hq.fake-whoami',
+    tool_kind: 'execute',
+    raw_input: { server: 'hq', tool: 'fake-whoami', arguments: { verbose: true } },
+  }
+  const stored = [
+    toolCall('call_command', 'in_progress', command),
+    toolCall('call_command', 'completed', { ...command, raw_output: { formatted_output: 'hello\n', exit_code: 0 } }),
+    toolCall('call_mcp', 'in_progress', mcp),
+    toolCall('call_mcp', 'completed', {
+      ...mcp,
+      raw_output: { result: { content: [{ type: 'text', text: 'you are bob' }] }, error: null },
+    }),
+  ].map((event, index) => ({
+    workspaceId: 'workspace-acme',
+    chatId: 'chat-research',
+    id: event.id,
+    seq: index + 1,
+    type: 'agent.event',
+    actor: null,
+    payload: { replyToId: 'prompt-1', event },
+    createdAt: new Date(Date.parse('2026-10-10T10:00:00Z') + index * 1000),
+  }))
+  expect(messagesFromEvents(stored).map(({ id, step }) => ({ id, step }))).toEqual([
+    {
+      id: 'call_command',
+      step: {
+        type: 'command',
+        command: 'echo hello',
+        exitCode: 0,
+        durationMilliseconds: 1000,
+        output: 'hello\n',
+        truncatedLines: 0,
+      },
+    },
+    {
+      id: 'call_mcp',
+      step: { type: 'tool', name: 'whoami (fake)', arguments: '{"verbose":true}', result: 'you are bob' },
+    },
+  ])
+})

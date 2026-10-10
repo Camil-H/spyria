@@ -1,7 +1,7 @@
 import { type ChatId, modelNameOf, rereadDollarsOf, type WorkspaceId } from '@hq/kernel'
 import { buttonClass, fieldClass, focusRing, formatCost, formatTokens, ghostButtonClass, labelClass } from '@hq/ui'
 import { useEffect, useState } from 'react'
-import { claudeCode } from '../domain/session-routing.ts'
+import { type Harness, harnesses } from '../domain/session-routing.ts'
 import type { ChatRoutingRead } from './endpoints.ts'
 import { useConversationCommands } from './providers.tsx'
 
@@ -28,7 +28,7 @@ export const SessionChip = ({
   reasoningEffort: string | null
   defaultModel: string | null
   subagentPolicy: Policy
-  harness: 'claude-code' | null
+  harness: Harness | null
 }) => {
   const commands = useConversationCommands()
   const [isOpen, setIsOpen] = useState(false)
@@ -73,7 +73,7 @@ export const SessionChip = ({
         className={`max-w-full truncate rounded-full border border-line px-2 py-0.5 text-xs text-muted hover:text-ink ${focusRing}`}
       >
         {harness && model
-          ? `${claudeCode.name} · ${nameOf(model)}`
+          ? `${harnesses[harness].name} · ${nameOf(model).split('/').at(-1)}`
           : model
             ? `${nameOf(model)}${reasoningEffort ? ` (${reasoningEffort})` : ''} · ${policyNames[subagentPolicy]}`
             : 'Model chosen at first prompt'}

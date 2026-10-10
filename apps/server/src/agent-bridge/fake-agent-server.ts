@@ -37,10 +37,13 @@ const completionOf = async (
   signal: AbortSignal,
 ): Promise<Completion> => {
   const { agent, secrets } = conversation.created as {
-    agent: { llm?: { model: string; api_key: string } }
-    secrets?: { ANTHROPIC_API_KEY?: { value: string } }
+    agent: { llm?: { model: string; api_key: string }; acp_server?: string }
+    secrets?: Record<string, { value: string }>
   }
-  const llm = agent.llm ?? { model: 'anthropic/claude-opus-5-5', api_key: secrets?.ANTHROPIC_API_KEY?.value ?? '' }
+  const llm = agent.llm ?? {
+    model: agent.acp_server === 'codex' ? 'openai/gpt-6.1-sol' : 'anthropic/claude-opus-5-5',
+    api_key: Object.values(secrets ?? {})[0]?.value ?? '',
+  }
   let buffered = ''
   const completion: Completion = { status: undefined, body: '', text: '', reasoning: '' }
   const response = await modelCall({

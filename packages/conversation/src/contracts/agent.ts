@@ -1,5 +1,6 @@
 import type { ChatId, ListedModel, MemberId, MessageId, Model, RuntimeHostId, WorkspaceId } from '@hq/kernel'
 import type { AgentEvent } from '../domain/agent-events.ts'
+import type { Harness } from '../domain/session-routing.ts'
 
 export type AgentChat = Readonly<{ workspaceId: WorkspaceId; chatId: ChatId }>
 export type AgentHost = Readonly<{ workspaceId: WorkspaceId; hostId: RuntimeHostId }>
@@ -46,7 +47,7 @@ export type AgentLlmChoice = Readonly<{
   model: string
   effort?: string
   usageId: string
-  harness?: 'claude-code'
+  harness?: Harness
   resumeSessionId?: string
 }>
 export type SubConversation = Readonly<{ parentConversationId: string; toolToken: string }>

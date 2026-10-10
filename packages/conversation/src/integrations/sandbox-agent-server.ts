@@ -7,6 +7,8 @@ import type {
 } from '../contracts/agent.ts'
 import type { AgentEvent } from '../domain/agent-events.ts'
 import { condensationLimitsOf } from '../domain/masked-body.ts'
+import type { Harness } from '../domain/session-routing.ts'
+import { codexCommandOf } from './codex-launch.ts'
 
 export type AgentLlm = { model: string }
 
@@ -54,15 +56,10 @@ const mcpServerOf = (endpoint: AgentEndpoint, path: string, token: string) => ({
   headers: { Authorization: `Bearer ${token}` },
 })
 
-const claudeCodeConversationOf = (
-  endpoint: AgentEndpoint,
-  llmToken: string,
-  { model, resumeSessionId }: AgentLlmChoice,
-) => ({
-  agent: {
-    kind: 'ACPAgent',
-    acp_server: 'claude-code',
-    acp_command: [
+const harnessLaunchOf = (endpoint: AgentEndpoint, model: string) => ({
+  'claude-code': {
+    tokenName: 'ANTHROPIC_API_KEY',
+    command: [
       'env',
       `ANTHROPIC_BASE_URL=${endpoint.transport.gatewayUrl.replace(/\/v1$/, '')}`,
       'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1',
@@ -71,11 +68,28 @@ const claudeCodeConversationOf = (
       `ANTHROPIC_MODEL=${model}`,
       'claude-agent-acp',
     ],
-    mcp_config: { hq: mcpServerOf(endpoint, '/mcp', llmToken) },
-    ...(resumeSessionId && { acp_resume_session_id: resumeSessionId }),
   },
-  secrets: { ANTHROPIC_API_KEY: { kind: 'StaticSecret', value: llmToken } },
+  codex: { tokenName: 'OPENAI_API_KEY', command: codexCommandOf(endpoint.transport.gatewayUrl, model) },
 })
+
+const harnessConversationOf = (
+  endpoint: AgentEndpoint,
+  llmToken: string,
+  harness: Harness,
+  { model, resumeSessionId }: AgentLlmChoice,
+) => {
+  const { tokenName, command } = harnessLaunchOf(endpoint, model)[harness]
+  return {
+    agent: {
+      kind: 'ACPAgent',
+      acp_server: harness,
+      acp_command: command,
+      mcp_config: { hq: mcpServerOf(endpoint, '/mcp', llmToken) },
+      ...(resumeSessionId && { acp_resume_session_id: resumeSessionId }),
+    },
+    secrets: { [tokenName]: { kind: 'StaticSecret', value: llmToken } },
+  }
+}
 
 const nativeConversationOf = (
   endpoint: AgentEndpoint,
@@ -108,7 +122,7 @@ export const createSandboxAgentServer = (condensationScale = 1): AgentServer => 
   createConversation: async (endpoint, llmToken, llm, sub) => {
     const created = await call(endpoint, 'POST', '/api/conversations', {
       ...(llm.harness
-        ? claudeCodeConversationOf(endpoint, llmToken, llm)
+        ? harnessConversationOf(endpoint, llmToken, llm.harness, llm)
         : nativeConversationOf(endpoint, llmToken, llm, sub, condensationScale)),
       workspace: { kind: 'LocalWorkspace', working_dir: '/workspace/project' },
       autotitle: false,

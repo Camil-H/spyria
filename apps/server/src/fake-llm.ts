@@ -95,10 +95,13 @@ type AnthropicRequest = {
 }
 type AnthropicTurn = { thinking: string[]; step?: FakeLlmStep }
 const anthropicUsage = { input_tokens: 1, output_tokens: 1 }
-const anthropicEventOf = (data: { type: string; [field: string]: unknown }) =>
+const typedEventOf = (data: { type: string; [field: string]: unknown }) =>
   new TextEncoder().encode(`event: ${data.type}\ndata: ${JSON.stringify(data)}\n\n`)
 const promptTextOf = (content: string | AnthropicBlock[]) =>
-  (typeof content === 'string' ? content : content.map((block) => (block.type === 'text' ? block.text : '')).join(''))
+  (typeof content === 'string'
+    ? content
+    : content.map((block) => (block.type === 'text' || block.type === 'input_text' ? block.text : '')).join('')
+  )
     .replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '')
     .trim()
 const anthropicTurnsOf = (steps: readonly FakeLlmStep[]) => {
@@ -187,7 +190,7 @@ const anthropicReplyOf = async (request: AnthropicRequest, chatScript: FakeLlmSc
     return Response.json({ ...message, content: blocks.map(({ whole }) => whole), ...ending, usage: anthropicUsage })
   const stream = new ReadableStream({
     start: async (controller) => {
-      const send = (data: Parameters<typeof anthropicEventOf>[0]) => controller.enqueue(anthropicEventOf(data))
+      const send = (data: Parameters<typeof typedEventOf>[0]) => controller.enqueue(typedEventOf(data))
       send({ type: 'message_start', message: { ...message, content: [], usage: anthropicUsage } })
       for (const [index, block] of blocks.entries()) {
         send({ type: 'content_block_start', index, content_block: block.start })
@@ -205,6 +208,89 @@ const anthropicReplyOf = async (request: AnthropicRequest, chatScript: FakeLlmSc
   return new Response(stream, { headers: { 'content-type': 'text/event-stream' } })
 }
 
+type ResponsesRequest = {
+  stream?: boolean
+  input?: { type?: string; role?: string; content?: string | AnthropicBlock[] }[]
+}
+const responsesUsage = {
+  input_tokens: 1,
+  input_tokens_details: { cached_tokens: 0 },
+  output_tokens: 1,
+  output_tokens_details: { reasoning_tokens: 0 },
+  total_tokens: 2,
+}
+const execCodeOf = (step: FakeLlmStep | undefined) => {
+  const call =
+    step && 'command' in step
+      ? `exec_command(${JSON.stringify({ cmd: step.command })})`
+      : step && 'tool' in step
+        ? `mcp__hq__${step.tool.replace(/\W/g, '_')}(${JSON.stringify(step.arguments ?? {})})`
+        : undefined
+  return call && `text(JSON.stringify(await tools.${call}))`
+}
+const responsesReplyOf = async (request: ResponsesRequest, script: FakeLlmScript) => {
+  const input = request.input ?? []
+  const promptIndex = input.findLastIndex((item) => item.role === 'user')
+  const answeredSteps = input.slice(promptIndex).filter((item) => item.type === 'custom_tool_call').length
+  const steps = script.steps ?? (script.command ? [{ command: script.command }] : [])
+  const hasTools = input.some((item) => item.type === 'additional_tools')
+  const turn = (hasTools && anthropicTurnsOf(steps)[answeredSteps]) || { thinking: [] }
+  if (turn.step && 'fail' in turn.step)
+    return Response.json({ error: { type: 'overloaded_error', message: turn.step.fail } }, { status: 529 })
+  const code = execCodeOf(turn.step)
+  const id = crypto.randomUUID().replaceAll('-', '')
+  const text = script.text ?? defaultText
+  const thinking = turn.thinking.join(' ')
+  const output = [
+    ...(thinking ? [{ id: `rs_${id}`, type: 'reasoning', summary: [{ type: 'summary_text', text: thinking }] }] : []),
+    code
+      ? {
+          id: `ctc_${id}`,
+          type: 'custom_tool_call',
+          status: 'completed',
+          call_id: `call_${id}`,
+          name: 'exec',
+          input: code,
+        }
+      : {
+          id: `msg_${id}`,
+          type: 'message',
+          role: 'assistant',
+          status: 'completed',
+          content: [{ type: 'output_text', text, annotations: [] }],
+        },
+  ]
+  const response = { id: `resp_${id}`, object: 'response', status: 'completed', model: 'fake', output }
+  if (!request.stream) return Response.json({ ...response, usage: responsesUsage })
+  const stream = new ReadableStream({
+    start: async (controller) => {
+      const send = (data: Parameters<typeof typedEventOf>[0]) => controller.enqueue(typedEventOf(data))
+      send({ type: 'response.created', response: { ...response, status: 'in_progress', output: [] } })
+      for (const [index, item] of output.entries()) {
+        send({
+          type: 'response.output_item.added',
+          output_index: index,
+          item: item.type === 'message' ? { ...item, content: [] } : item,
+        })
+        for (const word of item.type === 'message' ? wordsOf(text) : []) {
+          await Bun.sleep(script.wordDelayMilliseconds ?? defaultWordDelayMilliseconds)
+          send({
+            type: 'response.output_text.delta',
+            item_id: item.id,
+            output_index: index,
+            content_index: 0,
+            delta: word,
+          })
+        }
+        send({ type: 'response.output_item.done', output_index: index, item })
+      }
+      send({ type: 'response.completed', response: { ...response, usage: responsesUsage } })
+      controller.close()
+    },
+  })
+  return new Response(stream, { headers: { 'content-type': 'text/event-stream' } })
+}
+
 const listedModelIds = [
   'fake-model',
   'fake-large',
@@ -213,6 +299,7 @@ const listedModelIds = [
   'gpt-5',
   'gpt-5-mini',
   'gpt-5-nano',
+  'gpt-6.1-sol',
   'claude-opus-5-5',
   'claude-sonnet-5-5',
   'claude-haiku-4-5',
@@ -279,6 +366,11 @@ export const createFakeLlm = (
         request,
         (await scriptOf(context.req.raw, false, prompt && promptTextOf(prompt.content))) ?? {},
       )
+    })
+    .post('/v1/responses', async (context) => {
+      const request = await context.req.json<ResponsesRequest>()
+      const prompt = request.input?.findLast((item) => item.role === 'user')?.content
+      return responsesReplyOf(request, (await scriptOf(context.req.raw, false, prompt && promptTextOf(prompt))) ?? {})
     })
     .post('/v1/systemone', async (context) => {
       const route = await routeOf(scriptedRouteOf(await scriptOf(context.req.raw, true), await context.req.json()))

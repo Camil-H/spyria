@@ -49,9 +49,19 @@ export const sessionChoiceOf = ({
 export const unreachableSessionNoticeOf = (model: string) =>
   `Your keys cannot reach ${modelNameOf(model)}; switch the model or add a key`
 
-export const claudeCode = { harness: 'claude-code', model: 'anthropic/claude-opus-5-5', name: 'Claude Code' } as const
-export const claudeCodeKeysNotice = 'This session runs Claude Code on Anthropic keys'
-const isAnthropic = (model: Model) => model.id.startsWith('anthropic/')
-export const reachesAnthropic = (reachable: readonly Model[]) => reachable.some(isAnthropic)
-export const reachesAnthropicOnly = (reachable: readonly Model[]) =>
-  reachable.length > 0 && reachable.every(isAnthropic)
+export const harnesses = {
+  'claude-code': {
+    name: 'Claude Code',
+    model: 'anthropic/claude-opus-5-5',
+    keysNotice: 'This session runs Claude Code on Anthropic keys',
+  },
+  codex: { name: 'Codex', model: 'openai/gpt-6.1-sol', keysNotice: 'This session runs Codex on OpenAI keys' },
+} as const
+export type Harness = keyof typeof harnesses
+const providerOf = (model: string) => model.split('/')[0]
+export const reachesHarness = (harness: Harness, reachable: readonly Model[]) =>
+  reachable.some((model) => providerOf(model.id) === providerOf(harnesses[harness].model))
+export const harnessOfKeys = (reachable: readonly Model[]): Harness | undefined =>
+  (Object.keys(harnesses) as Harness[]).find(
+    (harness) => reachable.length > 0 && reachable.every((model) => reachesHarness(harness, [model])),
+  )

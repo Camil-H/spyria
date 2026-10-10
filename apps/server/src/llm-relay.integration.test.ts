@@ -238,4 +238,36 @@ test('a failing Claude Code token count reaches the agent unchanged and records 
   expect(await failureOf(chatId)).toBeNull()
 })
 
+test('a Codex call goes to the gateway’s OpenAI Responses route pinned to the openai provider, and its model shows on a harness chat', async () => {
+  const host = await fakeHost('Codex host')
+  const openaiSecret = `fake-key-openai-${crypto.randomUUID()}`
+  await addCredential(bob, 'OpenAI', openaiSecret)
+  const { chatId, token } = await runtimeTurn(host, bob)
+  await database.$client`update chats set harness = 'codex' where id = ${chatId}`
+  const headers = {
+    authorization: `Bearer ${token}`,
+    'content-type': 'application/json',
+    originator: '@agentclientprotocol/codex-acp',
+    'x-codex-turn-metadata': '{"request_kind":"turn"}',
+  }
+  const request = {
+    model: 'gpt-6.1-sol',
+    stream: true,
+    input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hi' }] }],
+  }
+  for (const attempt of [1, 2, 3]) {
+    const callsBefore = fakeLlmCalls.length
+    const answer = await host.modelCall({ path: '/v1/responses', headers, body: JSON.stringify(request) })
+    expect({ attempt, status: answer.status }).toEqual({ attempt, status: 200 })
+    expect(answer.body).toContain('response.completed')
+    expect(fakeLlmCalls[callsBefore]?.authorization).toBe(`Bearer ${openaiSecret}`)
+    expect(JSON.parse(fakeLlmBodies[callsBefore] ?? '{}').model).toBe('gpt-6.1-sol')
+  }
+  await waitFor(
+    async () =>
+      (await database.$client`select model from chats where id = ${chatId}`)[0]?.model === 'openai/gpt-6.1-sol',
+  )
+  expect(await failureOf(chatId)).toBeNull()
+})
+
 afterAll(() => disconnectFakeHosts())
