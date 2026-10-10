@@ -332,7 +332,14 @@ export const createFakeAgentServer = ({ modelCall }: { modelCall?: () => ModelCa
         if (method !== 'POST' || action !== 'events') return { status: 404, body: '' }
         const prompt = (JSON.parse(body ?? '{}') as { content: { text: string }[] }).content[0]?.text ?? ''
         prompts.push({ conversationId: conversation.id, text: prompt })
-        void fake.turn(conversation, prompt)
+        void fake.turn(conversation, prompt).catch((error) => {
+          status(conversation, 'error')
+          emit(conversation, 'ConversationErrorEvent', {
+            source: 'environment',
+            code: 'AgentError',
+            detail: String(error),
+          })
+        })
         return { status: 200, body: JSON.stringify({ success: true }) }
       },
       stopped: (container: FakeContainer) => {

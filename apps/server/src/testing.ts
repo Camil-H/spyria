@@ -276,7 +276,12 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
         signal?.addEventListener('abort', cancel)
         modelCalls.set(sid, { frames, done: resolve, onChunk })
         socket?.send(JSON.stringify({ type: 'gw_req', sid, method: 'POST', path, headers, body }))
-        await Promise.race([promise, Bun.sleep(timeoutMilliseconds)])
+        const isAnswered = await Promise.race([
+          promise.then(() => true),
+          Bun.sleep(timeoutMilliseconds).then(() => false),
+        ])
+        if (!isAnswered)
+          console.error(`A fake host model call to ${path} got no answer within ${timeoutMilliseconds} ms`)
         signal?.removeEventListener('abort', cancel)
         modelCalls.delete(sid)
         const head = frames.find((frame) => frame.type === 'gw_head')
