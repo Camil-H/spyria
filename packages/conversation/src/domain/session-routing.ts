@@ -58,6 +58,12 @@ export const harnesses = {
   codex: { name: 'Codex', model: 'openai/gpt-6.1-sol', keysNotice: 'This session runs Codex on OpenAI keys' },
 } as const
 export type Harness = keyof typeof harnesses
+export type HarnessLaunch = Harness | 'claude-code-subscription'
+export const localSessionNotices = {
+  ownerOnly: 'Only the owner prompts a session on their machine',
+  signIn: 'Sign in to Claude Code on your machine: docker exec -it hq-host hq-host login claude',
+}
+export const isSignedInToClaudeCode = (signedIn: readonly string[]) => signedIn.includes('claude')
 const providerOf = (model: string) => model.split('/')[0]
 export const reachesHarness = (harness: Harness, reachable: readonly Model[]) =>
   reachable.some((model) => providerOf(model.id) === providerOf(harnesses[harness].model))

@@ -39,6 +39,7 @@ export type Conversation = Readonly<{
   defaultModel: ChatRow['defaultModel']
   subagentPolicy: ChatRow['subagentPolicy']
   harness: ChatRow['harness']
+  localSession: boolean
   gitBranch: string | null
   ownerName: string
   origin: Readonly<{ chatId: ChatId; name: string }> | null
@@ -205,6 +206,7 @@ export const getConversation =
       defaultModel: chat.defaultModel,
       subagentPolicy: chat.subagentPolicy,
       harness: chat.harness,
+      localSession: chat.localSession,
       gitBranch: chat.gitBranch,
       ownerName: memberName(chat.ownerId),
       origin: origin ? { chatId: origin.id, name: origin.name } : null,

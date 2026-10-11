@@ -21,9 +21,16 @@ export const createRuntimeAgentRuntimes = (transact: Transact, provider: Sandbox
   const inTransaction = <Result>(
     work: (dependencies: { transactor: ReturnType<typeof createRuntimeTransactor> }) => Promise<Result>,
   ) => transact((tx) => work({ transactor: createRuntimeTransactor(tx) }))
+  const accessOf = (chat: AgentChat) => inTransaction((dependencies) => readAgentAccess(dependencies, chat))
+  const endpointFrom = ({ sandbox, apiKey, conversationId }: NonNullable<Awaited<ReturnType<typeof accessOf>>>) => ({
+    sandbox,
+    apiKey,
+    conversationId,
+    transport: provider.connect(sandbox),
+  })
   const endpointOf = async (chat: AgentChat): Promise<AgentEndpoint | undefined> => {
-    const access = await inTransaction((dependencies) => readAgentAccess(dependencies, chat))
-    return access && { ...access, transport: provider.connect(access.sandbox) }
+    const access = await accessOf(chat)
+    return access && endpointFrom(access)
   }
   return {
     ensureRunning: async (chat) => {
@@ -32,8 +39,10 @@ export const createRuntimeAgentRuntimes = (transact: Transact, provider: Sandbox
       )
       if (['creating', 'starting', 'stopping'].includes(runtime.state)) return { state: 'starting' }
       if (!runtime.hostOnline && ['running', 'stopped'].includes(runtime.state)) return { state: 'host_offline' }
-      const endpoint = runtime.state === 'running' ? await endpointOf(chat) : undefined
-      return endpoint ? { state: 'ready', endpoint } : { state: 'failed', failure: runtime.failure }
+      const access = runtime.state === 'running' ? await accessOf(chat) : undefined
+      return access
+        ? { state: 'ready', endpoint: endpointFrom(access), signedIn: access.signedIn }
+        : { state: 'failed', failure: runtime.failure }
     },
     endpointOf,
     rememberConversation: (chat, conversationId) =>

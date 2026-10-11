@@ -23,3 +23,6 @@ export const getChatUsage =
     }))
     return { months: monthsNewestFirst(entries), rows, total: sumUsage(rows) }
   }
+
+export const isLocalSession = (workspaceId: WorkspaceId, chatId: ChatId) => (snapshot: Snapshot) =>
+  findChat(snapshot, workspaceId, chatId)?.localSession === true

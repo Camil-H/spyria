@@ -25,7 +25,7 @@ const placeRuntime = async (
     await secrets.discard(existing)
     await runtimes.delete(existing)
   }
-  const placement = placementOf(await runtimeHosts.lockLoads(workspaceId))
+  const placement = placementOf(await runtimeHosts.lockLoads(workspaceId, chatId))
   const runtime: Runtime = {
     workspaceId,
     id: runtimeId(id),

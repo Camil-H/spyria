@@ -141,7 +141,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       },
       modelCallTurn: async (id) => {
         const turn = await chatTurnOf(tx, contextWorkspaceId, id)
-        return turn?.promptId && turn.prompterId
+        return turn?.promptId && turn.prompterId && !turn.localSession
           ? {
               promptId: messageId(turn.promptId),
               prompterId: memberId(turn.prompterId),
@@ -261,7 +261,13 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       get: async (id) => {
         const row = await tx.run(zql.chats.where('workspaceId', contextWorkspaceId).where('id', id).one())
         if (!row) throw new ChatNotFound(id)
-        return { workspaceId: workspaceId(row.workspaceId), type: row.type, harness: row.harness ?? null }
+        return {
+          workspaceId: workspaceId(row.workspaceId),
+          type: row.type,
+          harness: row.harness ?? null,
+          ownerId: row.ownerUserId ? memberId(row.ownerUserId) : null,
+          localSession: row.localSession ?? false,
+        }
       },
     },
   }

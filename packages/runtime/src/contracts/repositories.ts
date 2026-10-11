@@ -7,10 +7,11 @@ export type HostSecret = 'claimCode' | 'token'
 export type RuntimeHostRepository = {
   add(host: RuntimeHost): Promise<void>
   get(workspaceId: WorkspaceId, hostId: RuntimeHostId): Promise<RuntimeHost>
+  find(workspaceId: WorkspaceId, hostId: RuntimeHostId): Promise<RuntimeHost | undefined>
   save(host: RuntimeHost): Promise<void>
   setSecretHash(host: RuntimeHost, secret: HostSecret, hash: string): Promise<void>
   findBySecretHash(secret: HostSecret, hash: string): Promise<{ host: RuntimeHost; claimed: boolean } | undefined>
-  lockLoads(workspaceId: WorkspaceId): Promise<HostLoad[]>
+  lockLoads(workspaceId: WorkspaceId, chatId: ChatId): Promise<HostLoad[]>
   listMachines(workspaceId: WorkspaceId): Promise<RuntimeHost[]>
 }
 
@@ -18,6 +19,7 @@ export type RuntimeRepository = {
   lock(workspaceId: WorkspaceId, runtimeId: RuntimeId): Promise<Runtime>
   lockByChat(workspaceId: WorkspaceId, chatId: ChatId): Promise<Runtime | undefined>
   lockOnHost(workspaceId: WorkspaceId, hostId: RuntimeHostId): Promise<Runtime[]>
+  lockWaitingOnHost(workspaceId: WorkspaceId, hostId: RuntimeHostId): Promise<Runtime[]>
   lockSweepable(workspaceId: WorkspaceId): Promise<Runtime[]>
   findByChat(workspaceId: WorkspaceId, chatId: ChatId): Promise<Runtime | undefined>
   add(runtime: Runtime): Promise<void>

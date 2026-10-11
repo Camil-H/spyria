@@ -4,6 +4,8 @@ import { NoLlmKey } from '../domain/errors.ts'
 import { newMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
 import { noLlmKeyNoticeOf } from '../domain/model-call-failures.ts'
+import { localSessionNotices } from '../domain/session-routing.ts'
+import { appendNotice } from './agent-turn.ts'
 
 type Dependencies = { transactor: ConversationTransactor }
 type Input = { id: string; chatId: ChatId; authorId: MemberId; text: string }
@@ -12,7 +14,7 @@ export const sendMessage = ({ transactor }: Dependencies, { id, chatId, authorId
   transactor.run(async (unitOfWork) => {
     const chat = await unitOfWork.chats.get(chatId)
     const { members } = unitOfWork
-    if (chat.type === 'runtime' && !(await members.hasLlmCredential(authorId)))
+    if (chat.type === 'runtime' && !chat.localSession && !(await members.hasLlmCredential(authorId)))
       throw new NoLlmKey(noLlmKeyNoticeOf(await members.displayNameOf(authorId)))
     const message = newMessage({
       id: messageId(id),
@@ -25,5 +27,7 @@ export const sendMessage = ({ transactor }: Dependencies, { id, chatId, authorId
       replyToId: null,
     })
     await unitOfWork.messages.record({ type: 'message.posted', actorId: authorId, message })
-    if (chat.type === 'runtime') await unitOfWork.agentJobs.prompt(message)
+    if (chat.localSession && authorId !== chat.ownerId)
+      await appendNotice(unitOfWork, message, localSessionNotices.ownerOnly)
+    else if (chat.type === 'runtime') await unitOfWork.agentJobs.prompt(message)
   })

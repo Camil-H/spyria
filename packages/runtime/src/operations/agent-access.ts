@@ -8,13 +8,18 @@ type Dependencies = { transactor: RuntimeTransactor }
 type ChatRuntime = { workspaceId: WorkspaceId; chatId: ChatId }
 
 export const readAgentAccess = ({ transactor }: Dependencies, { workspaceId, chatId }: ChatRuntime) =>
-  transactor.run(async ({ runtimes, secrets }) => {
+  transactor.run(async ({ runtimes, runtimeHosts, secrets }) => {
     const runtime = await runtimes.findByChat(workspaceId, chatId)
     const sandbox = runtime?.state === 'running' && runtime.hostOnline ? locationOf(runtime) : undefined
     if (!runtime || !sandbox) return undefined
     const apiKey = await secrets.valueOf(runtime, 'apiKey')
     if (!apiKey) return undefined
-    return { sandbox, apiKey, conversationId: (await runtimes.agentConversationOf(runtime)) ?? null }
+    return {
+      sandbox,
+      apiKey,
+      conversationId: (await runtimes.agentConversationOf(runtime)) ?? null,
+      signedIn: (await runtimeHosts.find(workspaceId, sandbox.hostId))?.capacity?.signedIn ?? [],
+    }
   })
 
 export const issueAgentLlmToken = (
@@ -59,5 +64,5 @@ export const listHostChats = (
   { workspaceId, hostId }: { workspaceId: WorkspaceId; hostId: RuntimeHostId },
 ) =>
   transactor.run(async ({ runtimes }) =>
-    (await runtimes.lockOnHost(workspaceId, hostId)).map((runtime) => runtime.chatId),
+    (await runtimes.lockWaitingOnHost(workspaceId, hostId)).map((runtime) => runtime.chatId),
   )

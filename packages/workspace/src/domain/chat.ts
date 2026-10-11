@@ -15,13 +15,21 @@ export type Chat = Readonly<{
   defaultModel: string | null
   gitBranch: string | null
   originChatId: ChatId | null
+  harness?: 'claude-code' | 'codex' | null
+  localSession?: boolean
 }>
+export type ChatKind = Chat['type'] | 'local_session'
 
 export type ChatChange = Readonly<{
   type: 'chat.created' | 'chat.renamed' | 'chat.moved' | 'chat.archived'
   chat: Chat
   actorId: MemberId
 }>
+
+export const sessionFieldsOf = (kind: ChatKind) =>
+  kind === 'local_session'
+    ? ({ type: 'runtime', harness: 'claude-code', localSession: true } as const)
+    : ({ type: kind, harness: null, localSession: false } as const)
 
 export const movedChat = (chat: Chat, project: { id: ProjectId; workspaceId: WorkspaceId } | null): Chat => {
   if (project && project.workspaceId !== chat.workspaceId) throw new CrossWorkspaceMove()

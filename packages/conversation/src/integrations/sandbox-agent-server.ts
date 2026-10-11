@@ -7,7 +7,7 @@ import type {
 } from '../contracts/agent.ts'
 import type { AgentEvent } from '../domain/agent-events.ts'
 import { condensationLimitsOf } from '../domain/masked-body.ts'
-import type { Harness } from '../domain/session-routing.ts'
+import type { HarnessLaunch } from '../domain/session-routing.ts'
 import { codexCommandOf } from './codex-launch.ts'
 
 export type AgentLlm = { model: string }
@@ -56,38 +56,49 @@ const mcpServerOf = (endpoint: AgentEndpoint, path: string, token: string) => ({
   headers: { Authorization: `Bearer ${token}` },
 })
 
-const harnessLaunchOf = (endpoint: AgentEndpoint, model: string) => ({
+const claudeCodeSettings = [
+  'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1',
+  'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1',
+  'CLAUDE_CODE_MAX_RETRIES=0',
+]
+
+type Launch = { acpServer: string; command: string[]; tokenName?: string }
+const harnessLaunchOf = (endpoint: AgentEndpoint, model: string): Record<HarnessLaunch, Launch> => ({
   'claude-code': {
+    acpServer: 'claude-code',
     tokenName: 'ANTHROPIC_API_KEY',
     command: [
       'env',
       `ANTHROPIC_BASE_URL=${endpoint.transport.gatewayUrl.replace(/\/v1$/, '')}`,
-      'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1',
-      'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1',
-      'CLAUDE_CODE_MAX_RETRIES=0',
+      ...claudeCodeSettings,
       `ANTHROPIC_MODEL=${model}`,
       'claude-agent-acp',
     ],
   },
-  codex: { tokenName: 'OPENAI_API_KEY', command: codexCommandOf(endpoint.transport.gatewayUrl, model) },
+  'claude-code-subscription': { acpServer: 'claude-code', command: ['env', ...claudeCodeSettings, 'claude-agent-acp'] },
+  codex: {
+    acpServer: 'codex',
+    tokenName: 'OPENAI_API_KEY',
+    command: codexCommandOf(endpoint.transport.gatewayUrl, model),
+  },
 })
 
 const harnessConversationOf = (
   endpoint: AgentEndpoint,
   llmToken: string,
-  harness: Harness,
+  harness: HarnessLaunch,
   { model, resumeSessionId }: AgentLlmChoice,
 ) => {
-  const { tokenName, command } = harnessLaunchOf(endpoint, model)[harness]
+  const { acpServer, tokenName, command } = harnessLaunchOf(endpoint, model)[harness]
   return {
     agent: {
       kind: 'ACPAgent',
-      acp_server: harness,
+      acp_server: acpServer,
       acp_command: command,
       mcp_config: { hq: mcpServerOf(endpoint, '/mcp', llmToken) },
       ...(resumeSessionId && { acp_resume_session_id: resumeSessionId }),
     },
-    secrets: { [tokenName]: { kind: 'StaticSecret', value: llmToken } },
+    secrets: tokenName ? { [tokenName]: { kind: 'StaticSecret', value: llmToken } } : {},
   }
 }
 

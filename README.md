@@ -37,11 +37,25 @@ Runtimes (Agent Servers) run on runtime hosts: any machine with Docker running t
 docker build -t hq-host apps/host
 ```
 
-Then, signed in as a workspace admin (Alice), open the workspace menu, **Workspace settings**, **Add runtime host**, give it a name and copy the command. On a Mac (OrbStack or Docker Desktop), switch **Rootless Docker** off, and in the copied command replace `localhost` with `host.docker.internal` (the container cannot reach the Mac's `localhost`) and `$(stat -c %g /var/run/docker.sock)` with `0`. The row turns Online within seconds. The first runtime pulls the Agent Server image (about 1.2 GB).
+Then, signed in as a workspace admin (Alice), open the workspace menu, **Workspace settings**, **Add runtime host**, give it a name and copy the command. On a Mac (OrbStack or Docker Desktop), switch **Rootless Docker** off, and in the copied command replace `localhost` with `host.docker.internal` (the container cannot reach the Mac's `localhost`); the rooted command adds group `0` on macOS by itself. The row turns Online within seconds. The first runtime pulls the Agent Server image (about 1.2 GB).
 
 Without Docker for `hq-host` itself, run it as a process against the local Docker: `HQ_HOST_STATE_DIR=.hq-host bun apps/host/src/main.ts http://localhost:5173/h/<code>`. Remove the host in the settings page when done, then `docker rm -f hq-host` and `docker volume rm hq-host`.
 
 With a host online, a prompt in a runtime chat starts that chat's Agent Server and the agent answers. Agent Servers call the model through their host: `hq-host` relays `/v1/*` (at `http://hq-gateway-relay:4000/v1` on the runtime network) to HQ, which runs each call on the prompting member's key in the gateway. Rebuild the `hq-host` image after pulling this change (`docker build -t hq-host apps/host`, then recreate the container), or its runtimes cannot reach a model.
+
+## Claude Code on your own machine
+
+A member can run Claude Code on their own Claude subscription, on their own machine:
+
+1. **Profile**, **My machine**, **Add my machine**: copy the command, which ends with `hq-host --personal <claim URL>` (on a Mac, switch **Rootless Docker** off and replace `localhost` with `host.docker.internal` as above), and run it on your machine. Never run it on a machine others use: the agent there can read your Claude sign-in.
+2. Sign in once: `docker exec -it hq-host hq-host login claude`, open the printed URL, sign in and paste the code. The sign-in stays in the `hq-cred-claude` volume, on your machine only; HQ never sees it. `docker exec -it hq-host hq-host logout claude` deletes it.
+3. **New chat**, **On my machine · Claude Code subscription**. Only you prompt it (other members read it); it runs Claude Code on your plan's default model, without HQ's routing, keys or metering.
+
+Manual checks, not covered by tests (they need a real subscription):
+
+- After `hq-host login claude`, a real turn in an "On my machine" chat answers on the subscription.
+- Ask the agent to print `~/.claude/.credentials.json`: the stored step shows `[redacted]`, and `grep sk-ant-` over the chat's events in Postgres finds nothing.
+- The session keeps working after the token expires and refreshes, and after its runtime is removed (the sign-in survives in `hq-cred-claude`); VS Code's **Dev Containers: Attach to Running Container** opens the runtime (its server and extensions downloaded on the Mac, since runtimes have no internet).
 
 ## The model gateway
 

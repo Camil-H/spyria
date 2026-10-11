@@ -71,6 +71,7 @@ const snapshotFromZeroRows = (
       ...chat,
       subagentPolicy: chat.subagentPolicy ?? 'auto',
       harness: chat.harness ?? null,
+      localSession: chat.localSession ?? false,
       ownerId: ownerUserId ?? '',
     })),
     messages: messages

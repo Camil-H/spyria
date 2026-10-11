@@ -4,9 +4,11 @@ import {
   agentNotices,
   agentProjectionOf,
   isStoredAgentEvent,
+  notReadyNoticeOf,
   startFailureNoticeOf,
   streamedTextOf,
   turnEndNoticeOf,
+  waitingNotices,
 } from './agent-events.ts'
 import { messagesFromEvents } from './message-events.ts'
 import { type StreamedReply, storedStreamedReply, streamedReplyAfter, visibleStreamedReply } from './streamed-reply.ts'
@@ -78,6 +80,15 @@ test('a runtime that cannot be placed reads as no host, any other failure as cou
   expect(startFailureNoticeOf('no_capacity')).toBe(agentNotices.noHost)
   for (const failure of ['create_failed', 'start_failed', 'lost'])
     expect(startFailureNoticeOf(failure)).toBe(agentNotices.couldNotStart)
+})
+
+test('a local session waiting on its unplaced or offline machine reads as your machine is offline, and waits', () => {
+  expect(notReadyNoticeOf({ state: 'host_offline' }, true)).toBe('Your machine is offline')
+  expect(notReadyNoticeOf({ state: 'failed', failure: 'no_host' }, true)).toBe('Your machine is offline')
+  expect(notReadyNoticeOf({ state: 'failed', failure: 'create_failed' }, true)).toBe(agentNotices.couldNotStart)
+  expect(notReadyNoticeOf({ state: 'host_offline' }, false)).toBe(agentNotices.hostOffline)
+  expect(notReadyNoticeOf({ state: 'failed', failure: 'no_host' }, false)).toBe(agentNotices.noHost)
+  expect(waitingNotices).toContain(agentNotices.machineOffline)
 })
 
 const repliesOf =

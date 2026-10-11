@@ -35,10 +35,11 @@ export const workspaceMutators = defineMutators({
       z.extend(workspaceArguments, {
         id,
         name,
-        type: z.enum(['channel', 'runtime']),
+        type: z.enum(['channel', 'runtime', 'local_session']),
         projectId: z.nullable(projectIdArgument),
       }),
-      ({ tx, ctx, args }) => createChat(dependenciesOf(tx, ctx, args), { ...args, ownerId: ctx.userId }),
+      ({ tx, ctx, args }) =>
+        createChat(dependenciesOf(tx, ctx, args), { ...args, kind: args.type, ownerId: ctx.userId }),
     ),
     moveChat: defineMutator(
       z.extend(workspaceArguments, { chatId: chatIdArgument, projectId: z.nullable(projectIdArgument) }),

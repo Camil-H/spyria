@@ -1,11 +1,14 @@
 import { chatModelsOf, type MemberId, type MessageId, type WorkspaceId } from '@hq/kernel'
-import type { AgentChat, AgentConversation, AgentEndpoint } from '../contracts/agent.ts'
-import { agentNotices, startFailureNoticeOf } from '../domain/agent-events.ts'
+import type { AgentChat, AgentConversation, AgentEndpoint, RuntimeReadiness } from '../contracts/agent.ts'
+import { agentNotices, notReadyNoticeOf } from '../domain/agent-events.ts'
 import type { Message } from '../domain/message.ts'
 import { noLlmKeyNoticeOf } from '../domain/model-call-failures.ts'
 import {
+  type HarnessLaunch,
   harnesses,
   harnessOfKeys,
+  isSignedInToClaudeCode,
+  localSessionNotices,
   reachesHarness,
   sessionChoiceOf,
   sessionQuestions,
@@ -89,44 +92,68 @@ const keepSession = async (
   return { conversation }
 }
 
+const harnessConversationFor = async (
+  { transactor, runtimes, agentServer }: AgentDependencies,
+  chat: AgentChat,
+  endpoint: AgentEndpoint,
+  { launch, model }: { launch: HarnessLaunch; model: string },
+): Promise<AgentConversation> => {
+  const resumeSessionId =
+    endpoint.conversationId === null
+      ? await transactor.run(({ agentEvents }) => agentEvents.stoppedHarnessSessionId(chat.chatId))
+      : undefined
+  const runtimeToken = await runtimes.issueLlmToken(chat)
+  const conversationId = await runtimes.rememberConversation(
+    chat,
+    await agentServer.createConversation(endpoint, runtimeToken, {
+      model,
+      usageId: 'agent',
+      harness: launch,
+      resumeSessionId,
+    }),
+  )
+  return { ...endpoint, conversationId }
+}
+
 const conversationFor = async (
   dependencies: AgentDependencies,
   chat: AgentChat,
-  endpoint: AgentEndpoint,
+  { endpoint, signedIn }: Extract<RuntimeReadiness, { state: 'ready' }>,
   prompt: Message,
+  isLocalSession: boolean,
 ): Promise<Prepared> => {
   const { transactor, runtimes, agentServer, fixedLlm } = dependencies
   const storedId = endpoint.conversationId
   const prompterId = prompt.authorId
+  if (isLocalSession && !isSignedInToClaudeCode(signedIn)) return { refusal: localSessionNotices.signIn }
   if (storedId !== null && (await agentServer.statusOf({ ...endpoint, conversationId: storedId })) !== undefined) {
     const conversation = { ...endpoint, conversationId: storedId }
-    return fixedLlm || !prompterId ? { conversation } : keepSession(dependencies, chat, conversation, prompterId)
+    return fixedLlm || !prompterId || isLocalSession
+      ? { conversation }
+      : keepSession(dependencies, chat, conversation, prompterId)
   }
   if (storedId !== null) {
     await runtimes.forgetConversation(chat)
     await transactor.run((unitOfWork) => appendNotice(unitOfWork, prompt, agentNotices.newSession))
   }
+  if (isLocalSession)
+    return {
+      conversation: await harnessConversationFor(dependencies, chat, endpoint, {
+        launch: 'claude-code-subscription',
+        model: '',
+      }),
+    }
   const routed = fixedLlm || !prompterId ? undefined : await routeSession(dependencies, chat, prompterId, prompt)
   const harness = routed?.harness
   if (routed && harness) {
     const { model, keysNotice } = harnesses[harness]
     if (!routed.canPrompt) return { refusal: keysNotice }
-    const resumeSessionId =
-      storedId === null
-        ? await transactor.run(({ agentEvents }) => agentEvents.stoppedHarnessSessionId(chat.chatId))
-        : undefined
-    const llmToken = await runtimes.issueLlmToken(chat)
-    const conversationId = await runtimes.rememberConversation(
-      chat,
-      await agentServer.createConversation(endpoint, llmToken, {
-        model: model.slice(model.indexOf('/') + 1),
-        usageId: 'agent',
-        harness,
-        resumeSessionId,
-      }),
-    )
+    const conversation = await harnessConversationFor(dependencies, chat, endpoint, {
+      launch: harness,
+      model: model.slice(model.indexOf('/') + 1),
+    })
     await transactor.run(({ routing }) => routing.update(chat.chatId, { harness, model }))
-    return { conversation: { ...endpoint, conversationId } }
+    return { conversation }
   }
   if (routed && !routed.choice)
     return {
@@ -163,24 +190,23 @@ const conversationFor = async (
 
 export const promptAgent = async (dependencies: AgentDependencies, { workspaceId, messageId }: Input) => {
   const { transactor, runtimes, agentServer, eventSockets } = dependencies
-  const { chatId, isRuntimeChat } = await transactor.run(async ({ messages, chats }) => {
+  const { chatId, type, localSession } = await transactor.run(async ({ messages, chats }) => {
     const message = await messages.get(messageId)
-    return { chatId: message.chatId, isRuntimeChat: (await chats.get(message.chatId)).type === 'runtime' }
+    return { chatId: message.chatId, ...(await chats.get(message.chatId)) }
   })
-  if (!isRuntimeChat) return undefined
+  if (type !== 'runtime') return undefined
   const chat = { workspaceId, chatId }
   const readiness = await runtimes.ensureRunning(chat)
   if (readiness.state === 'starting') return { retryInMilliseconds: runtimeStartPollMilliseconds }
-  if (readiness.state !== 'ready') {
-    const notice =
-      readiness.state === 'host_offline' ? agentNotices.hostOffline : startFailureNoticeOf(readiness.failure)
-    return transactor.run((unitOfWork) => noticeWaitingPrompts(unitOfWork, chatId, notice))
-  }
+  if (readiness.state !== 'ready')
+    return transactor.run((unitOfWork) =>
+      noticeWaitingPrompts(unitOfWork, chatId, notReadyNoticeOf(readiness, localSession)),
+    )
   const prompt = await transactor.run((unitOfWork) => beginAgentTurn(unitOfWork, chatId))
   if (!prompt) return undefined
   let conversation: AgentConversation
   try {
-    const prepared = await conversationFor(dependencies, chat, readiness.endpoint, prompt)
+    const prepared = await conversationFor(dependencies, chat, readiness, prompt, localSession)
     if ('refusal' in prepared)
       return transactor.run((unitOfWork) => closeAgentTurn(unitOfWork, chatId, prompt.id, () => prepared.refusal))
     conversation = prepared.conversation

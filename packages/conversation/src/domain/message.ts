@@ -29,6 +29,8 @@ export type ConversationChat = Readonly<{
   workspaceId: WorkspaceId
   type: 'channel' | 'runtime'
   harness: Harness | null
+  ownerId: MemberId | null
+  localSession: boolean
 }>
 
 const assertChangeable = (message: Message, memberId: MemberId) => {

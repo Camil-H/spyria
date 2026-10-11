@@ -24,6 +24,7 @@ export const agentNotices = {
   stoppedWithError: 'The agent stopped with an error',
   noReply: 'The agent finished without a reply',
   hostOffline: 'The runtime host is offline',
+  machineOffline: 'Your machine is offline',
   stoppedEarly: 'The agent stopped before finishing',
   noResponse: 'The agent did not respond',
   newSession: 'The agent started a new session; it does not remember earlier messages',
@@ -33,6 +34,7 @@ export const waitingNotices = [
   agentNotices.noHost,
   agentNotices.couldNotStart,
   agentNotices.hostOffline,
+  agentNotices.machineOffline,
   agentNotices.newSession,
 ]
 export const stoppedByPrefix = 'Stopped by '
@@ -234,3 +236,11 @@ export const reopenedTurnOutcomeOf = (executionStatus: string): TurnOutcome | un
 
 export const startFailureNoticeOf = (failure: string | null) =>
   failure === 'no_host' || failure === 'no_capacity' ? agentNotices.noHost : agentNotices.couldNotStart
+
+export const notReadyNoticeOf = (
+  { state, failure = null }: { state: string; failure?: string | null },
+  isLocalSession: boolean,
+) => {
+  if (isLocalSession && (state === 'host_offline' || failure === 'no_host')) return agentNotices.machineOffline
+  return state === 'host_offline' ? agentNotices.hostOffline : startFailureNoticeOf(failure)
+}

@@ -9,6 +9,7 @@ import {
   newClaimCode,
   newSecretToken,
 } from './claim.ts'
+import { hostCommandOf } from './host-command.ts'
 import { HostName } from './host-name.ts'
 import {
   canTransition,
@@ -194,4 +195,12 @@ test('reconciliation follows the container for running and stopped rows only', (
   expect(reconciledStateOf(runtime({ state: 'stopped' }), 'running')).toBe('running')
   expect(reconciledStateOf(runtime({ state: 'stopped' }), 'missing')).toBeUndefined()
   expect(reconciledStateOf(runtime({ state: 'creating' }), 'running')).toBeUndefined()
+})
+
+test('the rooted host command adds the root group on macOS, where stat has no -c, and the socket group elsewhere', () => {
+  const rootedCommand = hostCommandOf({ origin: 'https://hq.test', code: 'ABCDEFGH', rootless: false, personal: true })
+  expect(rootedCommand).toContain(
+    '--group-add $(test "$(uname)" = Darwin && echo 0 || stat -c %g /var/run/docker.sock)',
+  )
+  expect(rootedCommand).toEndWith(' hq-host --personal https://hq.test/h/ABCDEFGH')
 })

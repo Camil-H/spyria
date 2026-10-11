@@ -1,6 +1,6 @@
 import type { ChatId, ListedModel, MemberId, MessageId, Model, RuntimeHostId, WorkspaceId } from '@hq/kernel'
 import type { AgentEvent } from '../domain/agent-events.ts'
-import type { Harness } from '../domain/session-routing.ts'
+import type { HarnessLaunch } from '../domain/session-routing.ts'
 
 export type AgentChat = Readonly<{ workspaceId: WorkspaceId; chatId: ChatId }>
 export type AgentHost = Readonly<{ workspaceId: WorkspaceId; hostId: RuntimeHostId }>
@@ -24,7 +24,7 @@ export type AgentEndpoint = Readonly<{
 }>
 export type AgentConversation = AgentEndpoint & { conversationId: string }
 export type RuntimeReadiness =
-  | { state: 'ready'; endpoint: AgentEndpoint }
+  | { state: 'ready'; endpoint: AgentEndpoint; signedIn: readonly string[] }
   | { state: 'starting' }
   | { state: 'host_offline' }
   | { state: 'failed'; failure: string | null }
@@ -47,7 +47,7 @@ export type AgentLlmChoice = Readonly<{
   model: string
   effort?: string
   usageId: string
-  harness?: Harness
+  harness?: HarnessLaunch
   resumeSessionId?: string
 }>
 export type SubConversation = Readonly<{ parentConversationId: string; toolToken: string }>

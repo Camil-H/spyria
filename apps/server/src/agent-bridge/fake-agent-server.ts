@@ -123,7 +123,21 @@ const observe = async (name: string, args: Record<string, unknown>, directory: s
   return { kind: 'ThinkObservation', content: text('Your thought has been logged.') }
 }
 
-export const createFakeAgentServer = ({ modelCall }: { modelCall?: () => ModelCall } = {}) => {
+const callsAnthropicDirectly = (conversation: Conversation) => {
+  const agent = conversation.created.agent as { acp_server?: string; acp_command?: string[] }
+  return (
+    agent.acp_server === 'claude-code' &&
+    !agent.acp_command?.some((argument) => argument.startsWith('ANTHROPIC_BASE_URL='))
+  )
+}
+
+export const createFakeAgentServer = ({
+  modelCall,
+  subscriptionCall,
+}: {
+  modelCall?: () => ModelCall
+  subscriptionCall?: ModelCall
+} = {}) => {
   const conversations = new Map<string, Conversation>()
   const prompts: { conversationId: string; text: string }[] = []
   const connections: { conversationId: string; query: string; auth: unknown }[] = []
@@ -222,7 +236,7 @@ export const createFakeAgentServer = ({ modelCall }: { modelCall?: () => ModelCa
     if (!signal.aborted) status(conversation, 'running')
     while (!signal.aborted) {
       const completion = await completionOf(
-        modelCall?.() as ModelCall,
+        (callsAnthropicDirectly(conversation) ? subscriptionCall : modelCall?.()) as ModelCall,
         conversation,
         (delta) => emitLive('StreamingDeltaEvent', { source: 'agent', ...delta }),
         signal,

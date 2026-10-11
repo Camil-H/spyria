@@ -105,6 +105,10 @@ const runtimeLocks = {
   id: 'id = $2 for update',
   chat: 'chat_id = $2 for update',
   host: "host_id = $2 and state <> 'removed' for update",
+  waitingOnHost: `(host_id = $2 and state <> 'removed' or failure in ('no_host', 'no_capacity') and chat_id in (
+    select chats.id from chats join runtime_hosts on runtime_hosts.workspace_id = chats.workspace_id
+      and runtime_hosts.owner_id = chats.owner_user_id
+    where chats.workspace_id = $1 and chats.local_session and runtime_hosts.id = $2)) for update`,
   sweepable: "state in ('running', 'stopped') for update skip locked",
 }
 
@@ -124,15 +128,17 @@ export const lockRuntimes = async (
   return rows.map((row) => row.id)
 }
 
-export const lockRuntimeHostLoads = (tx: Transaction, workspaceId: string) =>
+export const lockRuntimeHostLoads = (tx: Transaction, workspaceId: string, chatId: string) =>
   onServer<{ hostId: string; online: boolean; cap: number; running: number }>(
     tx,
     `select id as "hostId", status = 'online' as online, coalesce((capacity->>'cap')::int, 0) as cap,
        (select count(*)::int from runtimes where runtimes.workspace_id = runtime_hosts.workspace_id
           and runtimes.host_id = runtime_hosts.id and runtimes.state in ('creating', 'starting', 'running', 'stopping')
        ) as running
-     from runtime_hosts where workspace_id = $1 and removed_at is null and owner_id is null for update`,
-    [workspaceId],
+     from runtime_hosts where workspace_id = $1 and removed_at is null and owner_id is not distinct from
+       (select case when local_session then owner_user_id end from chats where workspace_id = $1 and id = $2)
+     for update`,
+    [workspaceId, chatId],
   )
 
 const serverOnlyRuntimeColumns = {
@@ -203,10 +209,16 @@ export const setChatTurnPrompter = (tx: Transaction, workspaceId: string, chatId
   )
 
 export const chatTurnOf = (tx: Transaction, workspaceId: string, chatId: string) =>
-  firstOnServer<{ promptId: string | null; prompterId: string | null; ownerId: string | null; failure: string | null }>(
+  firstOnServer<{
+    promptId: string | null
+    prompterId: string | null
+    ownerId: string | null
+    failure: string | null
+    localSession: boolean
+  }>(
     tx,
     `select agent_turn_message_id as "promptId", agent_turn_prompter_id as "prompterId", owner_user_id as "ownerId",
-       agent_turn_failure as failure
+       agent_turn_failure as failure, local_session as "localSession"
      from chats where workspace_id = $1 and id = $2`,
     [workspaceId, chatId],
   )

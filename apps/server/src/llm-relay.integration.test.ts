@@ -136,6 +136,17 @@ test('calls outside /v1, without an active turn or with another host’s runtime
   expect(fakeLlmCalls.length).toBe(callsBefore)
 })
 
+test('a local session’s runtime token is refused for model calls before the gateway', async () => {
+  const host = await fakeHost('Local session host')
+  const { chatId, token } = await runtimeTurn(host, alice)
+  await database.$client`update chats set local_session = true, harness = 'claude-code' where id = ${chatId}`
+  const callsBefore = fakeLlmCalls.length
+  const headers = { 'x-api-key': token, 'content-type': 'application/json' }
+  expect(await host.modelCall({ path: '/v1/messages', headers, body: completion })).toMatchObject({ status: 401 })
+  expect(await host.modelCall({ headers, body: completion })).toMatchObject({ status: 401 })
+  expect(fakeLlmCalls.length).toBe(callsBefore)
+})
+
 test('a prompter without a gateway key is refused and HQ’s notice is recorded on the turn', async () => {
   const host = await fakeHost('No key host')
   const { chatId, token } = await runtimeTurn(host, alice)

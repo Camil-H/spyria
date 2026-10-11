@@ -48,7 +48,8 @@ export const beginAgentTurn = async (unitOfWork: UnitOfWork, chatId: ChatId): Pr
   const { agentTurns, members } = unitOfWork
   if ((await agentTurns.lock(chatId)) !== null) return undefined
   const prompt = await agentTurns.nextPrompt(chatId)
-  if (prompt?.authorId && !(await members.hasLlmCredential(prompt.authorId))) {
+  const needsLlmKey = !(await unitOfWork.chats.get(chatId)).localSession
+  if (prompt?.authorId && needsLlmKey && !(await members.hasLlmCredential(prompt.authorId))) {
     await appendNotice(unitOfWork, prompt, noLlmKeyNoticeOf(await members.displayNameOf(prompt.authorId)))
     return beginAgentTurn(unitOfWork, chatId)
   }

@@ -57,6 +57,7 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
         if (!host) throw new HostNotFound(hostId)
         return host
       },
+      find: hostOrUndefined,
       save: (host) => tx.mutate.runtimeHosts.update(host),
       setSecretHash: async (host, secret, hash) => {
         await setRuntimeHostSecretHash(tx, host, secret, hash)
@@ -67,8 +68,11 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
         const host = await hostOrUndefined(located.workspaceId, located.id)
         return host && { host, claimed: located.claimed }
       },
-      lockLoads: async (workspaceId) =>
-        (await lockRuntimeHostLoads(tx, workspaceId)).map((load) => ({ ...load, hostId: runtimeHostId(load.hostId) })),
+      lockLoads: async (workspaceId, chatId) =>
+        (await lockRuntimeHostLoads(tx, workspaceId, chatId)).map((load) => ({
+          ...load,
+          hostId: runtimeHostId(load.hostId),
+        })),
       listMachines: async (workspaceId) =>
         (
           await tx.run(
@@ -89,6 +93,8 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
         (await runtimesWithIds(workspaceId, await lockRuntimes(tx, workspaceId, 'chat', chatId)))[0],
       lockOnHost: async (workspaceId, hostId) =>
         runtimesWithIds(workspaceId, await lockRuntimes(tx, workspaceId, 'host', hostId)),
+      lockWaitingOnHost: async (workspaceId, hostId) =>
+        runtimesWithIds(workspaceId, await lockRuntimes(tx, workspaceId, 'waitingOnHost', hostId)),
       lockSweepable: async (workspaceId) =>
         runtimesWithIds(workspaceId, await lockRuntimes(tx, workspaceId, 'sweepable')),
       findByChat: async (workspaceId, chatId) => {

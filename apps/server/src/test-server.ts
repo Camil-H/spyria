@@ -10,7 +10,7 @@ import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { websocket } from 'hono/bun'
 import { setCookie } from 'hono/cookie'
 import { createAgentBridge } from './agent-bridge/bridge.ts'
-import { createFakeAgentServer } from './agent-bridge/fake-agent-server.ts'
+import { createFakeAgentServer, type FakeAgent } from './agent-bridge/fake-agent-server.ts'
 import { createApp, sessionClassifierOf } from './app.ts'
 import { sessionCookieOptions, setSessionCookie, testCookie } from './auth/routes.ts'
 import { openSessions } from './auth/sessions.ts'
@@ -19,7 +19,7 @@ import { createFakeMcp } from './fake-mcp.ts'
 import { startJobWorker } from './job-worker.ts'
 import { createModelCallRelay } from './llm-relay.ts'
 import { createRuntimeHostGateway } from './runtime-hosts/gateway.ts'
-import { createFakeHosts, type FakeHost, issueTestSession, testAuthSettings } from './testing.ts'
+import { createFakeHosts, type FakeHost, issueTestSession, type ModelCall, testAuthSettings } from './testing.ts'
 
 const port = Number(process.env.PORT ?? 3100)
 const fakeMcpPort = Number(process.env.HQ_FAKE_MCP_PORT ?? 3101)
@@ -37,6 +37,7 @@ const servedDatabaseByName = new Map<string, ServedDatabase>()
 const databasesFailingCreation = new Set<string>()
 const databasesWithoutGateway = new Set<string>()
 const fakeHostByDatabase = new Map<string, { host: FakeHost; isOnline: boolean }>()
+const fakeMachineByDatabase = new Map<string, { host: FakeHost; agent: FakeAgent }>()
 const nameOf = (database: Database) =>
   [...servedDatabaseByName].find(([, served]) => served.database === database)?.[0] ?? ''
 const gatewaySettings = {
@@ -80,6 +81,11 @@ const releaseDatabase = async (databaseName: string) => {
   const fakeHost = fakeHostByDatabase.get(databaseName)
   fakeHostByDatabase.delete(databaseName)
   if (fakeHost?.isOnline) await fakeHost.host.disconnect().catch(() => {})
+  await fakeMachineByDatabase
+    .get(databaseName)
+    ?.host.disconnect()
+    .catch(() => {})
+  fakeMachineByDatabase.delete(databaseName)
   const served = servedDatabaseByName.get(databaseName)
   servedDatabaseByName.delete(databaseName)
   clearInterval(served?.usageTimer)
@@ -130,6 +136,25 @@ const chatKeyOfPrompt = async (prompt = '') => {
     if (prompted) return key
   }
   return ''
+}
+
+const subscriptionCall: ModelCall = async ({ body = '', onChunk, signal }) => {
+  const messages = (JSON.parse(body).messages ?? []) as { role: string; content: unknown }[]
+  const prompt = String(messages.findLast((message) => message.role === 'user')?.content ?? '')
+  const response = await app.request('/fake-llm/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-hq-chat': await chatKeyOfPrompt(prompt) },
+    body,
+    signal,
+  })
+  const decoder = new TextDecoder()
+  let answered = ''
+  for await (const chunk of response.body ?? []) {
+    const data = decoder.decode(chunk, { stream: true })
+    answered += data
+    onChunk?.(data)
+  }
+  return { status: response.status, body: answered, ended: 'gw_end' }
 }
 
 const app = createApp({
@@ -208,6 +233,29 @@ const app = createApp({
     if (online === 'true' && !fakeHost.isOnline) await fakeHost.host.connect()
     if (online) fakeHost.isOnline = online === 'true'
     return context.json({ id: fakeHost.host.id })
+  })
+  .post('/test/fake-machine', async (context) => {
+    const { db = '', owner, signedIn = '', online } = context.req.query()
+    if (owner) {
+      await fakeMachineByDatabase.get(db)?.host.disconnect()
+      const agent = createFakeAgentServer({ modelCall: () => host.modelCall, subscriptionCall })
+      const host = await createFakeHosts({ port, database: databaseByName(db) }).fakeHost('My machine', {
+        memoryGibibytes: 16,
+        agentServer: agent.agentServer,
+        bootMilliseconds: fakeAgentServerBootMilliseconds,
+        ownerId: owner,
+        signedIn: signedIn.split(',').filter(Boolean),
+      })
+      fakeMachineByDatabase.set(db, { host, agent })
+    }
+    const machine = fakeMachineByDatabase.get(db)
+    if (online === 'false') await machine?.host.disconnect()
+    if (online === 'true') await machine?.host.connect()
+    return context.json({
+      id: machine?.host.id,
+      conversations: [...(machine?.agent.conversations.values() ?? [])].map((conversation) => conversation.created),
+      prompts: machine?.agent.prompts.map((prompt) => prompt.text) ?? [],
+    })
   })
   .post('/test/runtime', async (context) => {
     const { db = '', chat = '' } = context.req.query()

@@ -1,6 +1,6 @@
 import { chatId, type MemberId, type ProjectId, type WorkspaceId } from '@hq/kernel'
 import type { Transactor } from '../contracts/transactor.ts'
-import { type Chat, movedChat } from '../domain/chat.ts'
+import { type Chat, type ChatKind, movedChat, sessionFieldsOf } from '../domain/chat.ts'
 import type { Name } from '../domain/name.ts'
 
 type Dependencies = { transactor: Transactor }
@@ -8,24 +8,24 @@ type Input = {
   id: string
   workspaceId: WorkspaceId
   ownerId: MemberId
-  type: Chat['type']
+  kind: ChatKind
   name: Name
   projectId: ProjectId | null
 }
 
-export const createChat = ({ transactor }: Dependencies, { id, workspaceId, ownerId, type, name, projectId }: Input) =>
+export const createChat = ({ transactor }: Dependencies, { id, workspaceId, ownerId, kind, name, projectId }: Input) =>
   transactor.run(async (unitOfWork) => {
     const looseChat: Chat = {
       id: chatId(id),
       workspaceId,
       projectId: null,
-      type,
+      ...sessionFieldsOf(kind),
       name,
       ownerId,
       archived: false,
       model: null,
       reasoningEffort: null,
-      defaultModel: type === 'runtime' ? await unitOfWork.memberModels.defaultModelOf(ownerId) : null,
+      defaultModel: kind === 'runtime' ? await unitOfWork.memberModels.defaultModelOf(ownerId) : null,
       gitBranch: null,
       originChatId: null,
     }

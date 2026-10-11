@@ -59,6 +59,7 @@ export const ChatView = ({
                   defaultModel={conversation.defaultModel}
                   subagentPolicy={conversation.subagentPolicy}
                   harness={conversation.harness}
+                  localSession={conversation.localSession}
                 />
                 {runtimeStatus}
                 {conversation.gitBranch !== null && (
@@ -89,7 +90,7 @@ export const ChatView = ({
       <Composer
         workspaceId={workspaceId}
         chatId={chatId}
-        isBlocked={conversation.type === 'runtime' && !canPrompt}
+        isBlocked={conversation.type === 'runtime' && !conversation.localSession && !canPrompt}
         blockedNotice={blockedNotice}
       />
     </div>

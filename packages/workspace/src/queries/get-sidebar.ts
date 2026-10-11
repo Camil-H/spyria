@@ -1,5 +1,5 @@
 import type { ChatRow, Snapshot } from '@hq/db'
-import type { ChatId, ProjectId, WorkspaceId } from '@hq/kernel'
+import type { ChatId, MemberId, ProjectId, WorkspaceId } from '@hq/kernel'
 
 type ChatSummaryRow = Readonly<{ id: ChatId; name: string; type: ChatRow['type'] }>
 export type Sidebar = Readonly<{
@@ -24,3 +24,6 @@ export const getSidebar =
       looseChats: chatsByProjectId.get(null) ?? [],
     }
   }
+
+export const hasMachine = (workspaceId: WorkspaceId, memberId: MemberId) => (snapshot: Snapshot) =>
+  snapshot.runtimeHosts.some((host) => host.workspaceId === workspaceId && host.ownerId === memberId)

@@ -21,6 +21,7 @@ export const SessionChip = ({
   defaultModel,
   subagentPolicy,
   harness,
+  localSession,
 }: {
   workspaceId: WorkspaceId
   chatId: ChatId
@@ -29,6 +30,7 @@ export const SessionChip = ({
   defaultModel: string | null
   subagentPolicy: Policy
   harness: Harness | null
+  localSession: boolean
 }) => {
   const commands = useConversationCommands()
   const [isOpen, setIsOpen] = useState(false)
@@ -72,11 +74,13 @@ export const SessionChip = ({
         onClick={() => setIsOpen(!isOpen)}
         className={`max-w-full truncate rounded-full border border-line px-2 py-0.5 text-xs text-muted hover:text-ink ${focusRing}`}
       >
-        {harness && model
-          ? `${harnesses[harness].name} · ${nameOf(model).split('/').at(-1)}`
-          : model
-            ? `${nameOf(model)}${reasoningEffort ? ` (${reasoningEffort})` : ''} · ${policyNames[subagentPolicy]}`
-            : 'Model chosen at first prompt'}
+        {localSession
+          ? `${harnesses['claude-code'].name} · subscription`
+          : harness && model
+            ? `${harnesses[harness].name} · ${nameOf(model).split('/').at(-1)}`
+            : model
+              ? `${nameOf(model)}${reasoningEffort ? ` (${reasoningEffort})` : ''} · ${policyNames[subagentPolicy]}`
+              : 'Model chosen at first prompt'}
       </button>
       {isOpen && (
         <div

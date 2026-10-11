@@ -216,13 +216,21 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
       memoryGibibytes = 8,
       agentServer,
       bootMilliseconds = 0,
-    }: { memoryGibibytes?: number; agentServer?: FakeAgentServer; bootMilliseconds?: number } = {},
+      ownerId,
+      signedIn = [],
+    }: {
+      memoryGibibytes?: number
+      agentServer?: FakeAgentServer
+      bootMilliseconds?: number
+      ownerId?: string
+      signedIn?: string[]
+    } = {},
   ) => {
     const id = crypto.randomUUID()
     const token = sha256(id)
     await database.$client`
-      insert into runtime_hosts (workspace_id, id, name, token_hash, status, running_runtimes, created_by, created_at)
-      values (${acme}, ${id}, ${name}, ${sha256(token)}, 'offline', 0, ${alice}, now())`
+      insert into runtime_hosts (workspace_id, id, name, token_hash, status, running_runtimes, created_by, owner_id, created_at)
+      values (${acme}, ${id}, ${name}, ${sha256(token)}, 'offline', 0, ${ownerId ?? alice}, ${ownerId ?? null}, now())`
     const containers = new Map<string, FakeContainer>()
     const commands: HostCommand[] = []
     const heldReplies = new Map<string, Promise<void>>()
@@ -368,6 +376,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
           type: 'hello',
           token,
           gatewayUrl: fakeHostGatewayUrl,
+          ...(ownerId && { personal: true, signedIn }),
           system: {
             cpus: 4,
             memoryBytes: memoryGibibytes * gibibyte,
