@@ -20,8 +20,8 @@ export const HostCommandDialog = ({
       <p className="text-sm text-muted">Run this command on the host within 15 minutes. The code works once.</p>
       {personal && (
         <p className="text-sm text-muted">
-          The agent on this machine can read your Claude sign-in, as Claude Code can on your laptop. HQ removes tokens
-          from what it receives, but never run it on a machine others use.
+          The agent on this machine can read your Claude and Codex sign-ins, as Claude Code and Codex can on your
+          laptop. HQ removes tokens from what it receives, but never run it on a machine others use.
         </p>
       )}
       <label className="flex items-center justify-between gap-3 text-sm">

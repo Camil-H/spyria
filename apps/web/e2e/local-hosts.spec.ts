@@ -103,7 +103,7 @@ test.describe('as a member', () => {
     await openProfile(page)
     await machineSectionOf(page).getByRole('button', { name: 'Add my machine' }).click()
     const dialog = page.getByRole('dialog', { name: 'Add my machine' })
-    await expect(dialog).toContainText('The agent on this machine can read your Claude sign-in')
+    await expect(dialog).toContainText('The agent on this machine can read your Claude and Codex sign-ins')
     await expect(dialog).toContainText('never run it on a machine others use')
     const command = await dialog.getByRole('textbox', { name: 'Command' }).inputValue()
     expect(command).toContain('docker run')
@@ -113,6 +113,9 @@ test.describe('as a member', () => {
     pair(urlOf(command), { personal: true, signedIn: ['claude'] })
     await expect(machineSectionOf(page)).toContainText('Online', { timeout: 10_000 })
     await expect(machineSectionOf(page)).toContainText('Signed in to Claude Code')
+    await expect(machineSectionOf(page)).toContainText(
+      'Not signed in to Codex: docker exec -it hq-host hq-host login codex',
+    )
     await expect(machineSectionOf(page).getByRole('button', { name: 'Add my machine' })).toHaveCount(0)
 
     const adminPage = await openPageAs(browser, workerStack, 'member-alice')

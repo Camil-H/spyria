@@ -7,6 +7,11 @@ import { HostCommandDialog } from './HostCommandDialog.tsx'
 import { useRuntimeCommands } from './providers.tsx'
 import { statusLabelOf } from './RuntimeHostsSection.tsx'
 
+const signIns = [
+  { id: 'claude', name: 'Claude Code' },
+  { id: 'codex', name: 'Codex' },
+]
+
 export const MyMachineSection = ({ workspaceId, memberId }: { workspaceId: WorkspaceId; memberId: MemberId }) => {
   const commands = useRuntimeCommands()
   const machine = useQuery(getMachine(workspaceId, memberId))
@@ -18,13 +23,14 @@ export const MyMachineSection = ({ workspaceId, memberId }: { workspaceId: Works
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
           <span className="font-medium">{machine.name}</span>
           <span className="text-muted">{statusLabelOf(machine)}</span>
-          {machine.status === 'online' && (
-            <span>
-              {machine.capacity?.signedIn?.includes('claude')
-                ? 'Signed in to Claude Code'
-                : 'Not signed in: docker exec -it hq-host hq-host login claude'}
-            </span>
-          )}
+          {machine.status === 'online' &&
+            signIns.map(({ id, name }) => (
+              <span key={id}>
+                {machine.capacity?.signedIn?.includes(id)
+                  ? `Signed in to ${name}`
+                  : `Not signed in to ${name}: docker exec -it hq-host hq-host login ${id}`}
+              </span>
+            ))}
           <button type="button" className={`ml-auto ${ghostButtonClass}`} onClick={() => setIsRemoving(true)}>
             Remove
           </button>
