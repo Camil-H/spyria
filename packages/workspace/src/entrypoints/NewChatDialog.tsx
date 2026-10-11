@@ -13,6 +13,7 @@ const kindLabels: Record<ChatKind, string> = {
   channel: 'Channel',
   runtime: 'Runtime',
   local_session: 'On my machine · Claude Code subscription',
+  local_codex_session: 'On my machine · Codex (ChatGPT plan)',
 }
 
 export const NewChatDialog = ({
@@ -28,7 +29,7 @@ export const NewChatDialog = ({
   const navigate = useNavigate()
   const { memberId } = useSession()
   const kinds: ChatKind[] = useQuery(hasMachine(workspaceId, memberId))
-    ? ['channel', 'runtime', 'local_session']
+    ? ['channel', 'runtime', 'local_session', 'local_codex_session']
     : ['channel', 'runtime']
   const [type, setType] = useState<ChatKind>('channel')
   const [draftName, setDraftName] = useState('')

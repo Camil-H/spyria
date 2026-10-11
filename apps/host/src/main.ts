@@ -6,8 +6,9 @@ import { createDocker } from './docker.ts'
 import { createModelRelay } from './model-relay.ts'
 import {
   type Credentials,
-  loginCommand,
-  logoutCommand,
+  type CredentialsAction,
+  type CredentialsTool,
+  credentialsTools,
   readCredentials,
   redacted,
   runCredentialsCommand,
@@ -21,28 +22,28 @@ const [claimUrlArgument] = givenArguments.filter((argument) => argument !== '--p
 const dockerSocket = process.env.DOCKER_SOCKET ?? '/var/run/docker.sock'
 const prefix = process.env.HQ_HOST_PREFIX ?? 'hq-'
 const docker = createDocker(dockerSocket)
-const credentialsCommand = { login: loginCommand, logout: logoutCommand }[claimUrlArgument ?? '']
-if (credentialsCommand) {
-  if (givenArguments[1] !== 'claude') {
-    console.error(`Usage: hq-host ${claimUrlArgument} claude`)
+const toolNames: Record<CredentialsTool, string> = { claude: 'Claude Code', codex: 'Codex' }
+if (claimUrlArgument === 'login' || claimUrlArgument === 'logout') {
+  const action: CredentialsAction = claimUrlArgument
+  const tool = givenArguments[1] as CredentialsTool
+  if (!credentialsTools.includes(tool)) {
+    console.error(`Usage: hq-host ${action} ${credentialsTools.join('|')}`)
     process.exit(2)
   }
-  if (credentialsCommand === loginCommand && !process.stdin.isTTY) {
-    console.error('Run it in a terminal: docker exec -it hq-host hq-host login claude')
+  if (action === 'login' && !process.stdin.isTTY) {
+    console.error(`Run it in a terminal: docker exec -it hq-host hq-host login ${tool}`)
     process.exit(2)
   }
-  await runCredentialsCommand(docker, { socketPath: dockerSocket, prefix, command: credentialsCommand }).catch(
-    (error) => {
-      console.error(messageOf(error))
-      process.exit(1)
-    },
-  )
+  await runCredentialsCommand(docker, { socketPath: dockerSocket, prefix, tool, action }).catch((error) => {
+    console.error(messageOf(error))
+    process.exit(1)
+  })
   const { signedIn } = await readCredentials(docker, prefix)
-  console.log(signedIn.includes('claude') ? 'Signed in to Claude Code' : 'Not signed in to Claude Code')
+  console.log(`${signedIn.includes(tool) ? 'Signed in' : 'Not signed in'} to ${toolNames[tool]}`)
   process.exit(0)
 }
 if (!claimUrlArgument) {
-  console.error('Usage: hq-host [--personal] <https://hq.example.com/h/CODE>, or hq-host login|logout claude')
+  console.error('Usage: hq-host [--personal] <https://hq.example.com/h/CODE>, or hq-host login|logout claude|codex')
   process.exit(2)
 }
 const claimUrl = new URL(claimUrlArgument)
@@ -62,7 +63,7 @@ let credentials: Credentials = { signedIn: [], secrets: [] }
 const declaration = async () => {
   if (!isPersonal) return { personal: false }
   credentials = await readCredentials(docker, prefix).catch((error) => {
-    console.error(`Reading the Claude Code sign-in failed: ${messageOf(error)}`)
+    console.error(`Reading the sign-ins failed: ${messageOf(error)}`)
     return credentials
   })
   return { personal: true, signedIn: credentials.signedIn }

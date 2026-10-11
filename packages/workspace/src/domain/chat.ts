@@ -18,7 +18,8 @@ export type Chat = Readonly<{
   harness?: 'claude-code' | 'codex' | null
   localSession?: boolean
 }>
-export type ChatKind = Chat['type'] | 'local_session'
+const localSessionHarnesses = { local_session: 'claude-code', local_codex_session: 'codex' } as const
+export type ChatKind = Chat['type'] | keyof typeof localSessionHarnesses
 
 export type ChatChange = Readonly<{
   type: 'chat.created' | 'chat.renamed' | 'chat.moved' | 'chat.archived'
@@ -27,9 +28,9 @@ export type ChatChange = Readonly<{
 }>
 
 export const sessionFieldsOf = (kind: ChatKind) =>
-  kind === 'local_session'
-    ? ({ type: 'runtime', harness: 'claude-code', localSession: true } as const)
-    : ({ type: kind, harness: null, localSession: false } as const)
+  kind === 'channel' || kind === 'runtime'
+    ? ({ type: kind, harness: null, localSession: false } as const)
+    : ({ type: 'runtime', harness: localSessionHarnesses[kind], localSession: true } as const)
 
 export const movedChat = (chat: Chat, project: { id: ProjectId; workspaceId: WorkspaceId } | null): Chat => {
   if (project && project.workspaceId !== chat.workspaceId) throw new CrossWorkspaceMove()

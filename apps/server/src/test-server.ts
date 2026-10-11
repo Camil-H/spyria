@@ -49,6 +49,7 @@ const llmGateway = createLlmGateway(gatewaySettings)
 setModelDirectory(llmGateway.listedModels)
 addRoutableModels(fakeRoutableModels)
 const usageSyncIntervalMilliseconds = 2_000
+const fakeMachineDeleteMilliseconds = 1_000
 const fakeAgentServerBootMilliseconds = Number(process.env.HQ_FAKE_AGENT_SERVER_BOOT_MILLISECONDS ?? 1_500)
 const sandboxProviderOf = (databaseName: string): SandboxProvider => ({
   ...runtimeHosts.sandboxProvider,
@@ -238,7 +239,11 @@ const app = createApp({
     const { db = '', owner, signedIn = '', online } = context.req.query()
     if (owner) {
       await fakeMachineByDatabase.get(db)?.host.disconnect()
-      const agent = createFakeAgentServer({ modelCall: () => host.modelCall, subscriptionCall })
+      const agent = createFakeAgentServer({
+        modelCall: () => host.modelCall,
+        subscriptionCall,
+        deleteMilliseconds: fakeMachineDeleteMilliseconds,
+      })
       const host = await createFakeHosts({ port, database: databaseByName(db) }).fakeHost('My machine', {
         memoryGibibytes: 16,
         agentServer: agent.agentServer,

@@ -75,7 +75,7 @@ export const SessionChip = ({
         className={`max-w-full truncate rounded-full border border-line px-2 py-0.5 text-xs text-muted hover:text-ink ${focusRing}`}
       >
         {localSession
-          ? `${harnesses['claude-code'].name} · subscription`
+          ? `${harnesses[harness ?? 'claude-code'].name} · subscription`
           : harness && model
             ? `${harnesses[harness].name} · ${nameOf(model).split('/').at(-1)}`
             : model

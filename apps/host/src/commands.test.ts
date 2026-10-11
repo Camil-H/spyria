@@ -124,25 +124,31 @@ const recordingDocker = () => {
   return { docker, calls }
 }
 
-test('a personal create mounts the credentials volume at ~/.claude, a workspace create does not', () => {
+test('a personal create mounts both credentials volumes at ~/.claude and ~/.codex, a workspace create does not', () => {
   const personalMounts = containerBodyOf({ prefix: 'hq-', ...create, personal: true }).HostConfig.Mounts
-  expect(personalMounts.at(-1)).toEqual({ Type: 'volume', Source: 'hq-cred-claude', Target: '/home/openhands/.claude' })
-  expect(personalMounts.slice(0, -1)).toEqual(containerBodyOf({ prefix: 'hq-', ...create }).HostConfig.Mounts)
-  expect(JSON.stringify(containerBodyOf({ prefix: 'hq-', ...create }))).not.toContain('cred-claude')
+  expect(personalMounts.slice(-2)).toEqual([
+    { Type: 'volume', Source: 'hq-cred-claude', Target: '/home/openhands/.claude' },
+    { Type: 'volume', Source: 'hq-cred-codex', Target: '/home/openhands/.codex' },
+  ])
+  expect(personalMounts.slice(0, -2)).toEqual(containerBodyOf({ prefix: 'hq-', ...create }).HostConfig.Mounts)
+  expect(JSON.stringify(containerBodyOf({ prefix: 'hq-', ...create }))).not.toContain('cred-')
 })
 
-test('a personal host creates the runtime with the credentials volume after preparing its reader', async () => {
+test('a personal host creates the runtime with both credentials volumes after preparing their readers', async () => {
   const { docker, calls } = recordingDocker()
   await createCommandRunner({ docker, prefix: 'hq-', personal: true }).run({ op: 'create', ...create })
   const created = calls.filter((call) => call.path.startsWith('/containers/create'))
   expect(created.map((call) => call.path)).toEqual([
     '/containers/create?name=hq-cred-claude-reader',
+    '/containers/create?name=hq-cred-codex-reader',
     '/containers/create?name=hq-rt-runtime-1',
   ])
-  expect(JSON.stringify(created[1]?.body)).toContain('"Source":"hq-cred-claude","Target":"/home/openhands/.claude"')
+  expect(JSON.stringify(created[1]?.body)).toContain('"Source":"hq-cred-codex","Target":"/workspace/project"')
+  expect(JSON.stringify(created[2]?.body)).toContain('"Source":"hq-cred-claude","Target":"/home/openhands/.claude"')
+  expect(JSON.stringify(created[2]?.body)).toContain('"Source":"hq-cred-codex","Target":"/home/openhands/.codex"')
 })
 
-test('removing a runtime never deletes the credentials volume', async () => {
+test('removing a runtime never deletes the credentials volumes', async () => {
   const { docker, calls } = recordingDocker()
   await createCommandRunner({ docker, prefix: 'hq-', personal: true }).run({ op: 'remove', runtimeId: 'runtime-1' })
   const deleted = calls.filter((call) => call.method === 'DELETE').map((call) => call.path)

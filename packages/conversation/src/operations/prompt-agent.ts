@@ -7,8 +7,8 @@ import {
   type HarnessLaunch,
   harnesses,
   harnessOfKeys,
-  isSignedInToClaudeCode,
-  localSessionNotices,
+  type LocalSession,
+  localSessions,
   reachesHarness,
   sessionChoiceOf,
   sessionQuestions,
@@ -120,15 +120,15 @@ const conversationFor = async (
   chat: AgentChat,
   { endpoint, signedIn }: Extract<RuntimeReadiness, { state: 'ready' }>,
   prompt: Message,
-  isLocalSession: boolean,
+  localSession: LocalSession | undefined,
 ): Promise<Prepared> => {
   const { transactor, runtimes, agentServer, fixedLlm } = dependencies
   const storedId = endpoint.conversationId
   const prompterId = prompt.authorId
-  if (isLocalSession && !isSignedInToClaudeCode(signedIn)) return { refusal: localSessionNotices.signIn }
+  if (localSession && !signedIn.includes(localSession.signIn)) return { refusal: localSession.signInNotice }
   if (storedId !== null && (await agentServer.statusOf({ ...endpoint, conversationId: storedId })) !== undefined) {
     const conversation = { ...endpoint, conversationId: storedId }
-    return fixedLlm || !prompterId || isLocalSession
+    return fixedLlm || !prompterId || localSession
       ? { conversation }
       : keepSession(dependencies, chat, conversation, prompterId)
   }
@@ -136,10 +136,10 @@ const conversationFor = async (
     await runtimes.forgetConversation(chat)
     await transactor.run((unitOfWork) => appendNotice(unitOfWork, prompt, agentNotices.newSession))
   }
-  if (isLocalSession)
+  if (localSession)
     return {
       conversation: await harnessConversationFor(dependencies, chat, endpoint, {
-        launch: 'claude-code-subscription',
+        launch: localSession.launch,
         model: '',
       }),
     }
@@ -190,7 +190,7 @@ const conversationFor = async (
 
 export const promptAgent = async (dependencies: AgentDependencies, { workspaceId, messageId }: Input) => {
   const { transactor, runtimes, agentServer, eventSockets } = dependencies
-  const { chatId, type, localSession } = await transactor.run(async ({ messages, chats }) => {
+  const { chatId, type, localSession, harness } = await transactor.run(async ({ messages, chats }) => {
     const message = await messages.get(messageId)
     return { chatId: message.chatId, ...(await chats.get(message.chatId)) }
   })
@@ -206,7 +206,13 @@ export const promptAgent = async (dependencies: AgentDependencies, { workspaceId
   if (!prompt) return undefined
   let conversation: AgentConversation
   try {
-    const prepared = await conversationFor(dependencies, chat, readiness, prompt, localSession)
+    const prepared = await conversationFor(
+      dependencies,
+      chat,
+      readiness,
+      prompt,
+      localSession ? localSessions[harness ?? 'claude-code'] : undefined,
+    )
     if ('refusal' in prepared)
       return transactor.run((unitOfWork) => closeAgentTurn(unitOfWork, chatId, prompt.id, () => prepared.refusal))
     conversation = prepared.conversation

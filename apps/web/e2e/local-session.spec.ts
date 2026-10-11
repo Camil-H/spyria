@@ -2,7 +2,13 @@ import { test as base, expect, mainOf, messageItemsOf, openChat, type Page, send
 import { openPageAs } from './stack'
 
 type MachineConversation = {
-  agent: { kind: string; acp_server: string; acp_command: string[]; mcp_config: Record<string, { url: string }> }
+  agent: {
+    kind: string
+    acp_server: string
+    acp_command: string[]
+    mcp_config: Record<string, { url: string }>
+    acp_resume_session_id?: string
+  }
   secrets: Record<string, unknown>
 }
 type Machine = { id: string; conversations: MachineConversation[]; prompts: string[] }
@@ -29,14 +35,37 @@ const subscriptionCommand = [
   'claude-agent-acp',
 ]
 const signedInMachine = { owner: 'member-alice', signedIn: 'claude' }
+const codexOption = 'On my machine · Codex (ChatGPT plan)'
+const codexSubscriptionCommand = [
+  'env',
+  `HQ_CODEX_CONFIG=forced_login_method = "chatgpt"
+check_for_update_on_startup = false
+cli_auth_credentials_store = "file"
+
+[analytics]
+enabled = false
+
+[feedback]
+enabled = false
+
+[features]
+plugins = false
+remote_plugin = false
+apps = false
+`,
+  'sh',
+  '-c',
+  'set -e; printf %s "$HQ_CODEX_CONFIG" > "$HOME/.codex/config.toml.$$"; mv "$HOME/.codex/config.toml.$$" "$HOME/.codex/config.toml"; exec codex-acp',
+]
+const codexMachine = { owner: 'member-alice', signedIn: 'codex' }
 
 const openNewChat = async (page: Page) => {
   await page.getByRole('button', { name: 'New chat' }).click()
   return page.getByRole('dialog', { name: 'New chat' })
 }
-const newLocalSession = async (page: Page, name: string) => {
+const newLocalSession = async (page: Page, name: string, option = localOption) => {
   const dialog = await openNewChat(page)
-  await dialog.getByRole('radio', { name: localOption }).check()
+  await dialog.getByRole('radio', { name: option }).check()
   await dialog.getByRole('textbox', { name: 'Chat name' }).fill(name)
   await dialog.getByRole('button', { name: 'Confirm' }).click()
   await expect(mainOf(page).getByRole('heading', { level: 1, name })).toBeVisible()
@@ -178,4 +207,109 @@ test('9. the New chat dialog offers On my machine only to a member with a local 
   await machine(signedInMachine)
   await openNewChat(page)
   await expect(dialog.getByRole('radio', { name: localOption })).toBeVisible()
+})
+
+test.describe('Codex on a ChatGPT plan', () => {
+  test('1. the owner prompts an On my machine Codex session: the subscription launch, the answer, unmetered', async ({
+    page,
+    workerStack,
+    machine,
+    agentScript,
+  }) => {
+    await machine(codexMachine)
+    const chatId = await newLocalSession(page, 'Codex on my laptop', codexOption)
+    await agentScript(chatId, { text: 'Answered on the ChatGPT plan.' })
+    await sendMessage(page, 'Hello Codex on my laptop')
+    await expect(repliesWith(page, 'Answered on the ChatGPT plan.')).toBeVisible(agentReply)
+
+    const { conversations } = await machine()
+    expect(conversations).toHaveLength(1)
+    const [conversation] = conversations
+    expect(conversation?.agent).toMatchObject({
+      kind: 'ACPAgent',
+      acp_server: 'codex',
+      acp_command: codexSubscriptionCommand,
+    })
+    expect(JSON.stringify(conversation)).not.toMatch(
+      /OPENAI_API_KEY|CODEX_API_KEY|OPENAI_BASE_URL|"CODEX_CONFIG=|MODEL_PROVIDER|base_url|model_provider|"model"/,
+    )
+    expect(conversation?.secrets).toEqual({})
+    expect(Object.keys(conversation?.agent.mcp_config ?? {})).toEqual(['hq'])
+    expect(conversation?.agent.mcp_config.hq?.url).toMatch(/\/mcp$/)
+
+    await expect(mainOf(page).getByRole('button', { name: /^Codex · / })).toHaveText('Codex · subscription')
+    const sidePanel = page.getByRole('region', { name: 'Side panel' })
+    await sidePanel.getByRole('tab', { name: 'Usage', exact: true }).click()
+    await expect(sidePanel).toContainText('Subscription session on your machine, not metered by HQ')
+    await page.waitForTimeout(3_000)
+    const query = `metadata_chat=${chatId}&metadata_database=${workerStack.databaseName}&limit=10`
+    expect((await workerStack.gateway<{ logs: object[] | null }>(`/api/logs?${query}`)).logs ?? []).toHaveLength(0)
+  })
+
+  test('2. signed in to Claude only, a Codex session shows the Codex sign-in notice and a Claude Code session works', async ({
+    page,
+    machine,
+    agentScript,
+  }) => {
+    await machine(signedInMachine)
+    await newLocalSession(page, 'Codex without a sign-in', codexOption)
+    await sendMessage(page, 'Answer without a Codex sign-in')
+    await expect(
+      repliesWith(page, 'Sign in to Codex on your machine: docker exec -it hq-host hq-host login codex'),
+    ).toHaveCount(1, agentReply)
+    expect((await machine()).conversations).toHaveLength(0)
+
+    const claudeChatId = await newLocalSession(page, 'Claude on the same laptop')
+    await agentScript(claudeChatId, { text: 'Claude answered on the same machine.' })
+    await sendMessage(page, 'Hello Claude on the same laptop')
+    await expect(repliesWith(page, 'Claude answered on the same machine.')).toBeVisible(agentReply)
+    const { conversations, prompts } = await machine()
+    expect(conversations.map((conversation) => conversation.agent.acp_server)).toEqual(['claude-code'])
+    expect(prompts).toEqual(['Hello Claude on the same laptop'])
+  })
+
+  test('3. stopping mid-command deletes the conversation before the turn shows stopped, and the next prompt resumes the Codex session once', async ({
+    page,
+    workerStack,
+    machine,
+    agentScript,
+  }) => {
+    await machine(codexMachine)
+    const chatId = await newLocalSession(page, 'Stop Codex on my laptop', codexOption)
+    await agentScript(chatId, { steps: [{ command: 'sleep 30' }], text: 'Never shown.' })
+    await sendMessage(page, 'Run the long command')
+    await expect(messageItemsOf(page).getByRole('img', { name: 'Running' })).toBeVisible(agentReply)
+    await mainOf(page).getByRole('button', { name: 'Stop' }).click()
+    await expect(repliesWith(page, 'Stopped by Alice')).toHaveCount(1, agentReply)
+    expect((await machine()).conversations).toHaveLength(0)
+    const sessionIds = await workerStack.database.$client<{ id: string }[]>`
+      select distinct payload->'event'->'value'->>'acp_session_id' as id from events
+      where chat_id = ${chatId} and payload->'event'->>'key' = 'agent_state'`
+    expect(sessionIds).toHaveLength(1)
+
+    await agentScript(chatId, { text: 'Back after the stop.' })
+    await sendMessage(page, 'Answer after the stop')
+    await expect(repliesWith(page, 'Back after the stop.')).toHaveCount(1, agentReply)
+    await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0, agentReply)
+    await expect(mainOf(page)).not.toContainText('Never shown.')
+    await expect(mainOf(page)).not.toContainText('The agent started a new session')
+    const { conversations, prompts } = await machine()
+    expect(prompts).toEqual(['Run the long command', 'Answer after the stop'])
+    expect(conversations).toHaveLength(1)
+    expect(conversations[0]?.agent.acp_command).toEqual(codexSubscriptionCommand)
+    expect(conversations[0]?.agent.acp_resume_session_id).toBe(sessionIds[0]?.id)
+  })
+
+  test('4. the New chat dialog offers both On my machine options only to a member with a local host', async ({
+    page,
+    machine,
+  }) => {
+    const dialog = await openNewChat(page)
+    await expect(dialog.getByRole('radio', { name: /^On my machine/ })).toHaveCount(0)
+    await page.keyboard.press('Escape')
+    await machine({ owner: 'member-alice', signedIn: '' })
+    await openNewChat(page)
+    await expect(dialog.getByRole('radio', { name: localOption })).toBeVisible()
+    await expect(dialog.getByRole('radio', { name: codexOption })).toBeVisible()
+  })
 })

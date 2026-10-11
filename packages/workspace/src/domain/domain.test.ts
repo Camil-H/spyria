@@ -125,3 +125,7 @@ test('an On my machine chat is a runtime chat locked on Claude Code; other kinds
   expect(sessionFieldsOf('runtime')).toEqual({ type: 'runtime', harness: null, localSession: false })
   expect(sessionFieldsOf('channel')).toEqual({ type: 'channel', harness: null, localSession: false })
 })
+
+test('an On my machine Codex chat is a runtime chat locked on Codex', () => {
+  expect(sessionFieldsOf('local_codex_session')).toEqual({ type: 'runtime', harness: 'codex', localSession: true })
+})

@@ -1,13 +1,4 @@
-const globalConfig = `model_provider = "off"
-check_for_update_on_startup = false
-
-[model_providers.off]
-name = "Off"
-base_url = "http://127.0.0.1:9/v1"
-env_key = "HQ_CODEX_OFF"
-wire_api = "responses"
-
-[analytics]
+const backgroundFeaturesOff = `[analytics]
 enabled = false
 
 [feedback]
@@ -18,6 +9,23 @@ plugins = false
 remote_plugin = false
 apps = false
 `
+
+const globalConfig = `model_provider = "off"
+check_for_update_on_startup = false
+
+[model_providers.off]
+name = "Off"
+base_url = "http://127.0.0.1:9/v1"
+env_key = "HQ_CODEX_OFF"
+wire_api = "responses"
+
+${backgroundFeaturesOff}`
+
+const subscriptionConfig = `forced_login_method = "chatgpt"
+check_for_update_on_startup = false
+cli_auth_credentials_store = "file"
+
+${backgroundFeaturesOff}`
 
 const modelCatalogScript = `const catalog = JSON.parse(require('fs').readFileSync(0, 'utf8'))
 const preset = catalog.models.find((model) => model.slug === 'gpt-5.6-sol')
@@ -60,4 +68,12 @@ export const codexCommandOf = (relayUrl: string, model: string) => [
   'sh',
   '-c',
   launcher,
+]
+
+export const codexSubscriptionCommand = [
+  'env',
+  `HQ_CODEX_CONFIG=${subscriptionConfig}`,
+  'sh',
+  '-c',
+  'set -e; printf %s "$HQ_CODEX_CONFIG" > "$HOME/.codex/config.toml.$$"; mv "$HOME/.codex/config.toml.$$" "$HOME/.codex/config.toml"; exec codex-acp',
 ]

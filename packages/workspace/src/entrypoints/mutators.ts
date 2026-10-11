@@ -35,7 +35,7 @@ export const workspaceMutators = defineMutators({
       z.extend(workspaceArguments, {
         id,
         name,
-        type: z.enum(['channel', 'runtime', 'local_session']),
+        type: z.enum(['channel', 'runtime', 'local_session', 'local_codex_session']),
         projectId: z.nullable(projectIdArgument),
       }),
       ({ tx, ctx, args }) =>

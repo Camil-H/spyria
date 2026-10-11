@@ -58,12 +58,21 @@ export const harnesses = {
   codex: { name: 'Codex', model: 'openai/gpt-6.1-sol', keysNotice: 'This session runs Codex on OpenAI keys' },
 } as const
 export type Harness = keyof typeof harnesses
-export type HarnessLaunch = Harness | 'claude-code-subscription'
-export const localSessionNotices = {
-  ownerOnly: 'Only the owner prompts a session on their machine',
-  signIn: 'Sign in to Claude Code on your machine: docker exec -it hq-host hq-host login claude',
-}
-export const isSignedInToClaudeCode = (signedIn: readonly string[]) => signedIn.includes('claude')
+export type HarnessLaunch = Harness | 'claude-code-subscription' | 'codex-subscription'
+export const localSessionNotices = { ownerOnly: 'Only the owner prompts a session on their machine' }
+export const localSessions = {
+  'claude-code': {
+    launch: 'claude-code-subscription',
+    signIn: 'claude',
+    signInNotice: 'Sign in to Claude Code on your machine: docker exec -it hq-host hq-host login claude',
+  },
+  codex: {
+    launch: 'codex-subscription',
+    signIn: 'codex',
+    signInNotice: 'Sign in to Codex on your machine: docker exec -it hq-host hq-host login codex',
+  },
+} as const satisfies Record<Harness, { launch: HarnessLaunch; signIn: string; signInNotice: string }>
+export type LocalSession = (typeof localSessions)[Harness]
 const providerOf = (model: string) => model.split('/')[0]
 export const reachesHarness = (harness: Harness, reachable: readonly Model[]) =>
   reachable.some((model) => providerOf(model.id) === providerOf(harnesses[harness].model))

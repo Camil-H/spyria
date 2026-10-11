@@ -8,7 +8,7 @@ import type {
 import type { AgentEvent } from '../domain/agent-events.ts'
 import { condensationLimitsOf } from '../domain/masked-body.ts'
 import type { HarnessLaunch } from '../domain/session-routing.ts'
-import { codexCommandOf } from './codex-launch.ts'
+import { codexCommandOf, codexSubscriptionCommand } from './codex-launch.ts'
 
 export type AgentLlm = { model: string }
 
@@ -81,6 +81,7 @@ const harnessLaunchOf = (endpoint: AgentEndpoint, model: string): Record<Harness
     tokenName: 'OPENAI_API_KEY',
     command: codexCommandOf(endpoint.transport.gatewayUrl, model),
   },
+  'codex-subscription': { acpServer: 'codex', command: codexSubscriptionCommand },
 })
 
 const harnessConversationOf = (

@@ -43,19 +43,28 @@ Without Docker for `hq-host` itself, run it as a process against the local Docke
 
 With a host online, a prompt in a runtime chat starts that chat's Agent Server and the agent answers. Agent Servers call the model through their host: `hq-host` relays `/v1/*` (at `http://hq-gateway-relay:4000/v1` on the runtime network) to HQ, which runs each call on the prompting member's key in the gateway. Rebuild the `hq-host` image after pulling this change (`docker build -t hq-host apps/host`, then recreate the container), or its runtimes cannot reach a model.
 
-## Claude Code on your own machine
+## Claude Code and Codex on your own machine
 
-A member can run Claude Code on their own Claude subscription, on their own machine:
+A member can run Claude Code on their own Claude subscription, or Codex on their own ChatGPT plan, on their own machine:
 
-1. **Profile**, **My machine**, **Add my machine**: copy the command, which ends with `hq-host --personal <claim URL>` (on a Mac, switch **Rootless Docker** off and replace `localhost` with `host.docker.internal` as above), and run it on your machine. Never run it on a machine others use: the agent there can read your Claude sign-in.
-2. Sign in once: `docker exec -it hq-host hq-host login claude`, open the printed URL, sign in and paste the code. The sign-in stays in the `hq-cred-claude` volume, on your machine only; HQ never sees it. `docker exec -it hq-host hq-host logout claude` deletes it.
-3. **New chat**, **On my machine · Claude Code subscription**. Only you prompt it (other members read it); it runs Claude Code on your plan's default model, without HQ's routing, keys or metering.
+1. **Profile**, **My machine**, **Add my machine**: copy the command, which ends with `hq-host --personal <claim URL>` (on a Mac, switch **Rootless Docker** off and replace `localhost` with `host.docker.internal` as above), and run it on your machine. Never run it on a machine others use: the agent there can read your Claude and ChatGPT sign-ins.
+2. Sign in once:
+   - Claude Code: `docker exec -it hq-host hq-host login claude`, open the printed URL, sign in and paste the code. The sign-in stays in the `hq-cred-claude` volume. `docker exec -it hq-host hq-host logout claude` deletes it.
+   - Codex: `docker exec -it hq-host hq-host login codex`, open the printed URL and enter the one-time code. ChatGPT may ask you to enable device code sign-in first (ChatGPT settings, **Security**). The sign-in stays in the `hq-cred-codex` volume (Codex's whole home, shared by your Codex sessions). `docker exec -it hq-host hq-host logout codex` deletes it offline; to also revoke the session at OpenAI, log out of all devices in ChatGPT's **Security** settings.
+   - Both stay on your machine only; HQ never sees them.
+3. **New chat**, **On my machine · Claude Code subscription** or **On my machine · Codex (ChatGPT plan)**. Only you prompt it (other members read it); it runs on your plan's default model, without HQ's routing, keys or metering.
 
 Manual checks, not covered by tests (they need a real subscription):
 
 - After `hq-host login claude`, a real turn in an "On my machine" chat answers on the subscription.
 - Ask the agent to print `~/.claude/.credentials.json`: the stored step shows `[redacted]`, and `grep sk-ant-` over the chat's events in Postgres finds nothing.
 - The session keeps working after the token expires and refreshes, and after its runtime is removed (the sign-in survives in `hq-cred-claude`); VS Code's **Dev Containers: Attach to Running Container** opens the runtime (its server and extensions downloaded on the Mac, since runtimes have no internet).
+- `hq-host login codex` completes with the device code (note whether ChatGPT asked to enable device code sign-in); `auth.json` in `hq-cred-codex` is `0600` with `auth_mode: "chatgpt"`.
+- The refresh token's shape, without printing values: `jq '.tokens | map_values(.[0:6] + "…" + (length|tostring))' auth.json`. `id_token` and `access_token` start with `eyJ`; if `refresh_token` has a stable prefix, add it to the redaction formats in `apps/host/src/personal.ts`.
+- A real turn in an "On my machine · Codex" chat answers on the plan's default model (the model shows in the stored events).
+- Two Codex sessions started at the same moment both answer, and neither is signed out (the refresh token rotates at every session start).
+- Ask the agent to print `~/.codex/auth.json`: the stored step shows `[redacted]`, and `grep eyJ` (and the refresh token's prefix) over the chat's events in Postgres finds nothing.
+- Stop a Codex turn mid-command, then send a prompt that refers to the earlier one: the answer uses that context.
 
 ## The model gateway
 

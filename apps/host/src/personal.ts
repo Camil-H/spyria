@@ -10,16 +10,42 @@ const allowedRequests = [
   new RegExp(`^GET ${conversationPath}/agent_final_response$`),
   new RegExp(`^WS /sockets/events/${conversationId}\\?resend_mode=(all|since&after_timestamp=[\\w%.:+-]+)$`),
 ]
-const tokenFormat = /sk-ant-(?:oat|ort)[\w-]*/g
-const tokenValue = /"(?:accessToken|refreshToken)"\s*:\s*"([^"]{8,})"/g
-const credentialsTarget = '/home/openhands/.claude'
+const tokenFormat = /sk-ant-(?:oat|ort)[\w-]*|eyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]+/g
+const claudeTokenValue = /"(?:accessToken|refreshToken)"\s*:\s*"([^"]{8,})"/g
+const minimumSecretLength = 8
 const readerTarget = '/workspace/project'
-const readerNameOf = (prefix: string) => `${prefix}cred-claude-reader`
 const hardening = { CapDrop: ['ALL'], SecurityOpt: ['no-new-privileges'], ReadonlyRootfs: true }
 
+type SignIn = { signedIn: boolean; secrets: unknown[] }
+const credentialStores = {
+  claude: {
+    target: '/home/openhands/.claude',
+    file: '.credentials.json',
+    login: ['claude-agent-acp', '--cli', 'auth', 'login', '--claudeai'],
+    signInOf: (content: string): SignIn => ({
+      signedIn: true,
+      secrets: [...content.matchAll(claudeTokenValue)].map((match) => match[1]),
+    }),
+  },
+  codex: {
+    target: '/home/openhands/.codex',
+    file: 'auth.json',
+    login: ['codex-acp', 'cli', 'login', '--device-auth'],
+    signInOf: (content: string): SignIn => {
+      const { auth_mode, tokens, OPENAI_API_KEY } = JSON.parse(content)
+      return {
+        signedIn: auth_mode === 'chatgpt',
+        secrets: [tokens?.id_token, tokens?.access_token, tokens?.refresh_token, OPENAI_API_KEY],
+      }
+    },
+  },
+}
+
+export type CredentialsTool = keyof typeof credentialStores
+export type CredentialsAction = 'login' | 'logout'
 export type Credentials = { signedIn: string[]; secrets: string[] }
-export const loginCommand = ['claude-agent-acp', '--cli', 'auth', 'login', '--claudeai']
-export const logoutCommand = ['rm', '-f', `${credentialsTarget}/.credentials.json`]
+export const credentialsTools = Object.keys(credentialStores) as CredentialsTool[]
+const readerNameOf = (prefix: string, tool: CredentialsTool) => `${prefix}cred-${tool}-reader`
 
 export const isAllowedOnPersonalHost = (method: string, path: string) =>
   allowedRequests.some((pattern) => pattern.test(`${method} ${path}`))
@@ -27,26 +53,38 @@ export const isAllowedOnPersonalHost = (method: string, path: string) =>
 export const redacted = (text: string, secrets: readonly string[]) =>
   secrets.reduce((result, secret) => result.replaceAll(secret, '[redacted]'), text).replace(tokenFormat, '[redacted]')
 
-export const credentialsMountOf = (prefix: string, target = credentialsTarget) => ({
+export const credentialsMountOf = (prefix: string, tool: CredentialsTool, target = credentialStores[tool].target) => ({
   Type: 'volume',
-  Source: `${prefix}cred-claude`,
+  Source: `${prefix}cred-${tool}`,
   Target: target,
 })
 
-export const credentialsReaderBodyOf = (prefix: string, image: string) => ({
+export const credentialsMountsOf = (prefix: string) => credentialsTools.map((tool) => credentialsMountOf(prefix, tool))
+
+export const credentialsReaderBodyOf = (prefix: string, image: string, tool: CredentialsTool) => ({
   Image: image,
   User: '10001:10001',
   NetworkDisabled: true,
   Labels: { 'hq.managed': '1' },
-  HostConfig: { ...hardening, NetworkMode: 'none', Mounts: [credentialsMountOf(prefix, readerTarget)] },
+  HostConfig: { ...hardening, NetworkMode: 'none', Mounts: [credentialsMountOf(prefix, tool, readerTarget)] },
 })
 
-export const credentialsContainerBodyOf = (prefix: string, image: string, command: string[]) => {
-  const isLogin = command === loginCommand
+const credentialsCommandOf = (tool: CredentialsTool, action: CredentialsAction) => {
+  const { login, target, file } = credentialStores[tool]
+  return action === 'login' ? login : ['rm', '-f', `${target}/${file}`]
+}
+
+export const credentialsContainerBodyOf = (
+  prefix: string,
+  image: string,
+  tool: CredentialsTool,
+  action: CredentialsAction,
+) => {
+  const isLogin = action === 'login'
   return {
     Image: image,
     User: '10001:10001',
-    Entrypoint: command,
+    Entrypoint: credentialsCommandOf(tool, action),
     Tty: isLogin,
     OpenStdin: isLogin,
     StdinOnce: isLogin,
@@ -59,38 +97,50 @@ export const credentialsContainerBodyOf = (prefix: string, image: string, comman
       NetworkMode: isLogin ? 'bridge' : 'none',
       AutoRemove: isLogin,
       Tmpfs: { '/home/openhands': 'uid=10001,gid=10001,mode=0700', '/tmp': '' },
-      Mounts: [credentialsMountOf(prefix)],
+      Mounts: [credentialsMountOf(prefix, tool)],
     },
   }
 }
 
 const isMissing = (error: unknown) => error instanceof DockerError && error.status === 404
 
-export const ensureCredentialsReader = async (docker: Docker, prefix: string, image: string) => {
-  const reader = await docker<{ Config?: { Image?: string } }>('GET', `/containers/${readerNameOf(prefix)}/json`).catch(
-    (error) => {
-      if (!isMissing(error)) throw error
-    },
-  )
+const ensureCredentialsReader = async (docker: Docker, prefix: string, image: string, tool: CredentialsTool) => {
+  const name = readerNameOf(prefix, tool)
+  const reader = await docker<{ Config?: { Image?: string } }>('GET', `/containers/${name}/json`).catch((error) => {
+    if (!isMissing(error)) throw error
+  })
   if (reader?.Config?.Image === image) return
-  if (reader) await docker('DELETE', `/containers/${readerNameOf(prefix)}?force=true`)
-  await docker('POST', `/containers/create?name=${readerNameOf(prefix)}`, credentialsReaderBodyOf(prefix, image)).catch(
+  if (reader) await docker('DELETE', `/containers/${name}?force=true`)
+  await docker('POST', `/containers/create?name=${name}`, credentialsReaderBodyOf(prefix, image, tool)).catch(
     (error) => {
       if (!(error instanceof DockerError && error.status === 409)) throw error
     },
   )
 }
 
-export const readCredentials = async (docker: Docker, prefix: string): Promise<Credentials> => {
+export const ensureCredentialsReaders = async (docker: Docker, prefix: string, image: string) => {
+  for (const tool of credentialsTools) await ensureCredentialsReader(docker, prefix, image, tool)
+}
+
+const readSignIn = async (docker: Docker, prefix: string, tool: CredentialsTool) => {
+  const { file, signInOf } = credentialStores[tool]
   const archive = await docker<string>(
     'GET',
-    `/containers/${readerNameOf(prefix)}/archive?path=${readerTarget}/.credentials.json`,
+    `/containers/${readerNameOf(prefix, tool)}/archive?path=${readerTarget}/${file}`,
   ).catch((error) => {
     if (!isMissing(error)) throw error
   })
-  if (!archive) return { signedIn: [], secrets: [] }
-  const content = archive.slice(512, 512 + Number.parseInt(archive.slice(124, 136), 8))
-  return { signedIn: ['claude'], secrets: [...content.matchAll(tokenValue)].map((match) => match[1] ?? '') }
+  return archive ? signInOf(archive.slice(512, 512 + Number.parseInt(archive.slice(124, 136), 8))) : undefined
+}
+
+export const readCredentials = async (docker: Docker, prefix: string): Promise<Credentials> => {
+  const signIns = await Promise.all(credentialsTools.map((tool) => readSignIn(docker, prefix, tool)))
+  return {
+    signedIn: credentialsTools.filter((_, index) => signIns[index]?.signedIn),
+    secrets: signIns
+      .flatMap((signIn) => signIn?.secrets ?? [])
+      .filter((secret): secret is string => typeof secret === 'string' && secret.length >= minimumSecretLength),
+  }
 }
 
 const attachTerminal = (socketPath: string, container: string) => {
@@ -128,24 +178,30 @@ const attachTerminal = (socketPath: string, container: string) => {
 
 export const runCredentialsCommand = async (
   docker: Docker,
-  { socketPath, prefix, command }: { socketPath: string; prefix: string; command: string[] },
+  {
+    socketPath,
+    prefix,
+    tool,
+    action,
+  }: { socketPath: string; prefix: string; tool: CredentialsTool; action: CredentialsAction },
 ) => {
-  const reader = await docker<{ Config: { Image: string } }>('GET', `/containers/${readerNameOf(prefix)}/json`).catch(
-    (error) => {
-      if (!isMissing(error)) throw error
-      throw new Error('Start hq-host --personal and let it connect to HQ first: it learns the runtime image from HQ')
-    },
-  )
-  const name = `${prefix}cred-claude-${command === loginCommand ? 'login' : 'logout'}`
+  const reader = await docker<{ Config: { Image: string } }>(
+    'GET',
+    `/containers/${readerNameOf(prefix, tool)}/json`,
+  ).catch((error) => {
+    if (!isMissing(error)) throw error
+    throw new Error('Start hq-host --personal and let it connect to HQ first: it learns the runtime image from HQ')
+  })
+  const name = `${prefix}cred-${tool}-${action}`
   await docker('DELETE', `/containers/${name}?force=true`).catch((error) => {
     if (!isMissing(error)) throw error
   })
   await docker(
     'POST',
     `/containers/create?name=${name}`,
-    credentialsContainerBodyOf(prefix, reader.Config.Image, command),
+    credentialsContainerBodyOf(prefix, reader.Config.Image, tool, action),
   )
-  if (command !== loginCommand) {
+  if (action === 'logout') {
     await docker('POST', `/containers/${name}/start`)
     await docker('POST', `/containers/${name}/wait`)
     return void (await docker('DELETE', `/containers/${name}`))

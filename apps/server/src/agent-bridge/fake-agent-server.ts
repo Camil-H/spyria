@@ -123,20 +123,20 @@ const observe = async (name: string, args: Record<string, unknown>, directory: s
   return { kind: 'ThinkObservation', content: text('Your thought has been logged.') }
 }
 
-const callsAnthropicDirectly = (conversation: Conversation) => {
-  const agent = conversation.created.agent as { acp_server?: string; acp_command?: string[] }
-  return (
-    agent.acp_server === 'claude-code' &&
-    !agent.acp_command?.some((argument) => argument.startsWith('ANTHROPIC_BASE_URL='))
-  )
-}
+const acpAgentOf = (conversation: Conversation) =>
+  conversation.created.agent as { acp_server?: string; acp_resume_session_id?: string }
+const callsProviderDirectly = (conversation: Conversation) =>
+  acpAgentOf(conversation).acp_server !== undefined &&
+  Object.keys((conversation.created.secrets as object | undefined) ?? {}).length === 0
 
 export const createFakeAgentServer = ({
   modelCall,
   subscriptionCall,
+  deleteMilliseconds = 0,
 }: {
   modelCall?: () => ModelCall
   subscriptionCall?: ModelCall
+  deleteMilliseconds?: number
 } = {}) => {
   const conversations = new Map<string, Conversation>()
   const prompts: { conversationId: string; text: string }[] = []
@@ -232,11 +232,18 @@ export const createFakeAgentServer = ({
     const emitLive = (kind: string, fields: Record<string, unknown> = {}) =>
       signal.aborted ? undefined : emit(conversation, kind, fields)
     emitLive('MessageEvent', { source: 'user', llm_message: { role: 'user', content: text(prompt) } })
+    const { acp_server, acp_resume_session_id = conversation.id } = acpAgentOf(conversation)
+    if (acp_server)
+      emitLive('ConversationStateUpdateEvent', {
+        source: 'environment',
+        key: 'agent_state',
+        value: { acp_session_id: acp_resume_session_id },
+      })
     conversation.history.push({ role: 'user', content: prompt })
     if (!signal.aborted) status(conversation, 'running')
     while (!signal.aborted) {
       const completion = await completionOf(
-        (callsAnthropicDirectly(conversation) ? subscriptionCall : modelCall?.()) as ModelCall,
+        (callsProviderDirectly(conversation) ? subscriptionCall : modelCall?.()) as ModelCall,
         conversation,
         (delta) => emitLive('StreamingDeltaEvent', { source: 'agent', ...delta }),
         signal,
@@ -289,6 +296,7 @@ export const createFakeAgentServer = ({
     turn: modelCall ? scriptedTurn : defaultTurn,
     onInterrupt: (conversation: Conversation) => {
       conversation.turnAbort?.abort()
+      if (acpAgentOf(conversation).acp_server) emit(conversation, 'InterruptEvent', { source: 'user' })
       status(conversation, 'paused')
     },
     emit,
@@ -323,11 +331,12 @@ export const createFakeAgentServer = ({
             status: 200,
             body: JSON.stringify({ id: conversation.id, execution_status: conversation.executionStatus }),
           }
-        if (method === 'DELETE' && action === '') {
-          for (const close of [...conversation.closers]) close()
-          conversations.delete(conversation.id)
-          return { status: 200, body: JSON.stringify({ success: true }) }
-        }
+        if (method === 'DELETE' && action === '')
+          return Bun.sleep(deleteMilliseconds).then(() => {
+            for (const close of [...conversation.closers]) close()
+            conversations.delete(conversation.id)
+            return { status: 200, body: JSON.stringify({ success: true }) }
+          })
         if (method === 'GET' && action === 'agent_final_response') {
           const answer = conversation.events.findLast(
             (event) => event.kind === 'MessageEvent' && event.source === 'agent',

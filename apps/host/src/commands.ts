@@ -1,5 +1,5 @@
 import { type Docker, DockerError } from './docker.ts'
-import { credentialsMountOf, ensureCredentialsReader } from './personal.ts'
+import { credentialsMountsOf, ensureCredentialsReaders } from './personal.ts'
 
 export class Refused extends Error {
   constructor(reason: string) {
@@ -93,7 +93,7 @@ export const containerBodyOf = ({
           Source: `${name}-${suffix}`,
           Target: target,
         })),
-        ...(personal ? [credentialsMountOf(prefix)] : []),
+        ...(personal ? credentialsMountsOf(prefix) : []),
       ],
     },
   }
@@ -152,7 +152,7 @@ export const createCommandRunner = ({
       const [repository, digest] = image.split('@')
       await docker('POST', `/images/create?fromImage=${repository}&tag=${digest}`)
     })
-    if (personal) await ensureCredentialsReader(docker, prefix, image)
+    if (personal) await ensureCredentialsReaders(docker, prefix, image)
   }
   const create = async ({ runtimeId, image, apiKey }: CreateRequest) => {
     await Promise.all([ensureNetwork(), prepare(image)])
