@@ -8,7 +8,13 @@ const unreachable = () =>
     { status: 502 },
   )
 
-export const createModelRelay = ({ send }: { send: (frame: Frame) => boolean }) => {
+export const createModelRelay = ({
+  send,
+  redact = (text) => text,
+}: {
+  send: (frame: Frame) => boolean
+  redact?: (text: string) => string
+}) => {
   const pending = new Map<number, Pending>()
   let nextSid = 1
   const fail = (sid: number) => {
@@ -30,7 +36,7 @@ export const createModelRelay = ({ send }: { send: (frame: Frame) => boolean }) 
         method: request.method,
         path: `${url.pathname}${url.search}`,
         headers: Object.fromEntries(request.headers),
-        body: await request.text(),
+        body: redact(await request.text()),
       }
       if (!send(frame)) fail(sid)
       return head

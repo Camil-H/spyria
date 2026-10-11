@@ -16,7 +16,7 @@ export const runtimeMutators = defineMutators({
       if (args.workspaceId !== ctx.workspaceId) throw new NotCurrentWorkspace()
       await removeRuntimeHost(
         { transactor: createZeroTransactor(tx) },
-        { workspaceId: ctx.workspaceId, role: ctx.role, hostId: args.hostId, now: Date.now() },
+        { workspaceId: ctx.workspaceId, memberId: ctx.userId, role: ctx.role, hostId: args.hostId, now: Date.now() },
       )
     }),
   },

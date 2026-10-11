@@ -324,3 +324,77 @@ test('neither a claim code nor a host token is ever logged', async () => {
     for (const spy of spies) spy.mockRestore()
   }
 })
+
+const addMachine = (member: Member) => postAs(member, '/api/runtime-hosts', { personal: true })
+const pairedMachine = async (member: Member) => {
+  const { body } = await addMachine(member)
+  if (!body?.id || !body.code) throw new Error('Adding a machine failed')
+  const { host: claimingHost, token } = await claim(body.code)
+  claimingHost.socket.close()
+  const host = await connectFakeHost()
+  host.send({ type: 'hello', token, system: hostSystem, personal: true, signedIn: [] })
+  await waitFor(async () => (await hostRow(body.id as string)).status === 'online')
+  return { id: body.id, token, host }
+}
+const countMachines = async (member: Member) =>
+  (
+    await app.request('/api/runtime-hosts/machines', {
+      headers: { authorization: `Bearer ${await sessionTokenOf(database, member.workspaceId, member.userId)}` },
+    })
+  ).json()
+
+test('a member adds one machine of their own; a second one is refused until it is removed', async () => {
+  await database.$client`update runtime_hosts set removed_at = now() where owner_id is not null`
+  const { status, body } = await addMachine(bobInAcme)
+  expect(status).toBe(201)
+  expect(await hostRow(String(body?.id))).toMatchObject({ owner_id: bob, created_by: bob, name: 'My machine' })
+  expect(await addMachine(bobInAcme)).toMatchObject({ status: 400, body: { error: 'machine_already_added' } })
+  expect(await removeHost(bobInAcme, acme, String(body?.id))).toEqual(succeeded)
+  expect((await addMachine(bobInAcme)).status).toBe(201)
+})
+
+test('a hello must declare personal exactly when the host was paired as a machine, then it reports the sign-in', async () => {
+  await database.$client`update runtime_hosts set removed_at = now() where owner_id is not null`
+  const { body } = await addMachine(bobInAcme)
+  const { host: claimingHost, token } = await claim(String(body?.code))
+  claimingHost.socket.close()
+  const undeclared = await connectFakeHost()
+  undeclared.send({ type: 'hello', token, system: hostSystem })
+  expect((await undeclared.closed).reason).toBe('This host was paired as your machine: restart hq-host with --personal')
+
+  const workspaceHost = await addedHost('Workspace box')
+  const { host: workspaceClaim, token: workspaceToken } = await claim(workspaceHost.code)
+  workspaceClaim.socket.close()
+  const declared = await connectFakeHost()
+  declared.send({ type: 'hello', token: workspaceToken, system: hostSystem, personal: true })
+  expect((await declared.closed).reason).toBe(
+    'This host was paired as a workspace host: restart hq-host without --personal',
+  )
+
+  const machine = await connectFakeHost()
+  machine.send({ type: 'hello', token, system: hostSystem, personal: true, signedIn: [] })
+  await waitFor(async () => (await hostRow(String(body?.id))).status === 'online')
+  expect((await hostRow(String(body?.id))).capacity).toEqual({ ...hostSystem, cap: 6, personal: true, signedIn: [] })
+  machine.send({ type: 'heartbeat', memoryFreeBytes: gibibyte, running: 0, signedIn: ['claude'] })
+  await waitFor(
+    async () => ((await hostRow(String(body?.id))).capacity as { signedIn: string[] }).signedIn.length === 1,
+  )
+})
+
+test('a machine is read and removed by its owner only, and admins see only how many members use one', async () => {
+  await database.$client`update runtime_hosts set removed_at = now() where owner_id is not null`
+  const { id, host } = await pairedMachine(bobInAcme)
+  const bobsAcme = await openStore(bobInAcme)
+  await waitFor(() => bobsAcme.read().runtimeHosts.some((machine) => machine.id === id && machine.status === 'online'))
+  expect(bobsAcme.read().runtimeHosts.map((machine) => String(machine.id))).toEqual([id])
+  const alicesAcme = await openStore(aliceInAcme)
+  await Bun.sleep(200)
+  expect(alicesAcme.read().runtimeHosts.some((machine) => machine.id === id)).toBe(false)
+  expect(await countMachines(aliceInAcme)).toEqual({ count: 1 })
+  expect(await countMachines(bobInAcme)).toMatchObject({ error: 'not_admin' })
+  expect(await removeHost(aliceInAcme, acme, id)).toEqual({ error: 'app', message: `Runtime host ${id} was not found` })
+  expect(await renewCode(aliceInAcme, id)).toMatchObject({ status: 404, body: { error: 'host_not_found' } })
+  expect(await removeHost(bobInAcme, acme, id)).toEqual(succeeded)
+  await host.closed
+  expect(await countMachines(aliceInAcme)).toEqual({ count: 0 })
+})

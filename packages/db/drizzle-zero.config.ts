@@ -53,6 +53,7 @@ export default drizzleZeroConfig(tables, {
       runningRuntimes: true,
       lastSeenAt: true,
       createdBy: true,
+      ownerId: true,
       createdAt: true,
       removedAt: true,
     },

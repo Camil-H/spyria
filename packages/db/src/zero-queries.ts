@@ -58,7 +58,9 @@ export const queries = defineQueries({
   runtimeHosts: defineQuery(({ ctx }) =>
     zql.runtimeHosts
       .where('workspaceId', ctx.workspaceId)
-      .where(({ cmpLit }) => cmpLit(ctx.role, '=', 'admin'))
+      .where(({ or, and, cmp, cmpLit }) =>
+        or(cmp('ownerId', ctx.userId), and(cmpLit(ctx.role, '=', 'admin'), cmp('ownerId', 'IS', null))),
+      )
       .where('removedAt', 'IS', null)
       .orderBy('createdAt', 'asc'),
   ),

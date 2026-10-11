@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test'
-import { containerBodyOf, parseCommand, relayUrlOf } from './commands.ts'
+import { containerBodyOf, createCommandRunner, parseCommand, relayUrlOf } from './commands.ts'
+import type { Docker } from './docker.ts'
 
 const image = `ghcr.io/openhands/agent-server@sha256:${'a'.repeat(64)}`
 const apiKey = 'k'.repeat(32)
@@ -110,4 +111,45 @@ test('relays only to paths on the Agent Server port of the runtime', () => {
   )
   for (const path of ['//evil.example/x', '@169.254.169.254/', 'http://169.254.169.254/', 'api', '/\\evil.example'])
     expect(() => relayUrlOf('http://172.20.0.2:8000', path)).toThrow('refused')
+})
+
+const recordingDocker = () => {
+  const calls: { method: string; path: string; body?: unknown }[] = []
+  const docker = (async (method: string, path: string, body?: unknown) => {
+    calls.push({ method, path, body })
+    if (path.endsWith('/json') && path.startsWith('/containers/'))
+      return { Config: { Labels: { 'hq.managed': '1', 'hq.runtime': 'runtime-1' } } }
+    return {}
+  }) as Docker
+  return { docker, calls }
+}
+
+test('a personal create mounts the credentials volume at ~/.claude, a workspace create does not', () => {
+  const personalMounts = containerBodyOf({ prefix: 'hq-', ...create, personal: true }).HostConfig.Mounts
+  expect(personalMounts.at(-1)).toEqual({ Type: 'volume', Source: 'hq-cred-claude', Target: '/home/openhands/.claude' })
+  expect(personalMounts.slice(0, -1)).toEqual(containerBodyOf({ prefix: 'hq-', ...create }).HostConfig.Mounts)
+  expect(JSON.stringify(containerBodyOf({ prefix: 'hq-', ...create }))).not.toContain('cred-claude')
+})
+
+test('a personal host creates the runtime with the credentials volume after preparing its reader', async () => {
+  const { docker, calls } = recordingDocker()
+  await createCommandRunner({ docker, prefix: 'hq-', personal: true }).run({ op: 'create', ...create })
+  const created = calls.filter((call) => call.path.startsWith('/containers/create'))
+  expect(created.map((call) => call.path)).toEqual([
+    '/containers/create?name=hq-cred-claude-reader',
+    '/containers/create?name=hq-rt-runtime-1',
+  ])
+  expect(JSON.stringify(created[1]?.body)).toContain('"Source":"hq-cred-claude","Target":"/home/openhands/.claude"')
+})
+
+test('removing a runtime never deletes the credentials volume', async () => {
+  const { docker, calls } = recordingDocker()
+  await createCommandRunner({ docker, prefix: 'hq-', personal: true }).run({ op: 'remove', runtimeId: 'runtime-1' })
+  const deleted = calls.filter((call) => call.method === 'DELETE').map((call) => call.path)
+  expect(deleted).toEqual([
+    '/containers/hq-rt-runtime-1?force=true',
+    '/volumes/hq-rt-runtime-1-ws',
+    '/volumes/hq-rt-runtime-1-home',
+    '/volumes/hq-rt-runtime-1-tmp',
+  ])
 })

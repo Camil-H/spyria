@@ -3,7 +3,7 @@ import { type RuntimeHostId, runtimeHostId, type WorkspaceId } from '@hq/kernel'
 import type { Transaction } from '@rocicorp/zero'
 import { z } from 'zod/mini'
 import type { SandboxProvider } from '../contracts/sandbox-provider.ts'
-import type { HostSystem } from '../domain/runtime-host.ts'
+import { assertAdmin, type HostDeclaration, type HostSystem } from '../domain/runtime-host.ts'
 import {
   createTransactingZeroTransactor,
   createZeroTransactor,
@@ -27,12 +27,22 @@ export const addRuntimeHostFromRequest = (tx: Transaction, context: ZeroContext,
     memberId: context.userId,
     role: context.role,
     name: textOf((body as Record<string, unknown> | null)?.name),
+    personal: (body as Record<string, unknown> | null)?.personal === true,
     now: Date.now(),
   })
+
+export const countMachinesFromRequest = async (tx: Transaction, context: ZeroContext) => {
+  assertAdmin(context.role)
+  const machines = await createZeroTransactor(tx).run(({ runtimeHosts }) =>
+    runtimeHosts.listMachines(context.workspaceId),
+  )
+  return { count: machines.length }
+}
 
 export const renewClaimCodeFromRequest = (tx: Transaction, context: ZeroContext, hostId: string) =>
   renewClaimCode(dependenciesOf(tx), {
     workspaceId: context.workspaceId,
+    memberId: context.userId,
     role: context.role,
     hostId: runtimeHostId(hostId),
     now: Date.now(),
@@ -40,6 +50,7 @@ export const renewClaimCodeFromRequest = (tx: Transaction, context: ZeroContext,
 
 const boundedText = (maximumLength: number) => z.string().check(z.minLength(1), z.maxLength(maximumLength))
 const count = z.number().check(z.nonnegative())
+const signedIn = z.optional(z.array(boundedText(32)).check(z.maxLength(8)))
 const hostSessionFrame = z.discriminatedUnion('type', [
   z.object({ type: z.literal('claim'), code: boundedText(16) }),
   z.object({
@@ -54,8 +65,15 @@ const hostSessionFrame = z.discriminatedUnion('type', [
       cgroupDriver: boundedText(32),
       limitsEnforced: z.boolean(),
     }),
+    personal: z.optional(z.boolean()),
+    signedIn,
   }),
-  z.object({ type: z.literal('heartbeat'), memoryFreeBytes: count, running: z.int().check(z.nonnegative()) }),
+  z.object({
+    type: z.literal('heartbeat'),
+    memoryFreeBytes: count,
+    running: z.int().check(z.nonnegative()),
+    signedIn,
+  }),
 ])
 
 export type HostSessionFrame = z.infer<typeof hostSessionFrame>
@@ -69,9 +87,11 @@ export const createHostSessionHandlers = (transact: Transact) => ({
     if ('refusal' in outcome) throw outcome.refusal
     return outcome
   },
-  hello: (hello: { token: string; system: HostSystem }, beforeOnline: (host: ConnectedHost) => void) =>
-    transact((tx) => recordHostHello(dependenciesOf(tx), { ...hello, now: Date.now(), beforeOnline })),
-  heartbeat: (host: ConnectedHost, heartbeat: { memoryFreeBytes: number; running: number }) =>
+  hello: (
+    hello: Partial<HostDeclaration> & { token: string; system: HostSystem },
+    beforeOnline: (host: ConnectedHost) => void,
+  ) => transact((tx) => recordHostHello(dependenciesOf(tx), { ...hello, now: Date.now(), beforeOnline })),
+  heartbeat: (host: ConnectedHost, heartbeat: { memoryFreeBytes: number; running: number; signedIn?: string[] }) =>
     transact((tx) => recordHostHeartbeat(dependenciesOf(tx), { ...host, ...heartbeat, now: Date.now() })),
   offline: (host: ConnectedHost) => transact((tx) => markHostOffline(dependenciesOf(tx), host)),
   reconcile: (host: ConnectedHost, provider: SandboxProvider) =>

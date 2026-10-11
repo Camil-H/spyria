@@ -26,6 +26,8 @@ import {
 } from '@hq/profile/server'
 import {
   addRuntimeHostFromRequest,
+  countMachinesFromRequest,
+  machinesPath,
   RuntimeError,
   renewClaimCodeFromRequest,
   runtimeHostsPath,
@@ -223,6 +225,11 @@ export const createApp = ({
           .transaction((tx) => addRuntimeHostFromRequest(tx, context.get('zeroContext'), body)),
       )
     })
+    .get(machinesPath, (context) =>
+      endpointResponse('A runtime host request', 200, () =>
+        context.get('zeroDatabase').transaction((tx) => countMachinesFromRequest(tx, context.get('zeroContext'))),
+      ),
+    )
     .post(`${runtimeHostsPath}/:hostId/code`, (context) =>
       endpointResponse('A runtime host request', 200, () =>
         context

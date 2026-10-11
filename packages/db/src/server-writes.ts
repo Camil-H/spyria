@@ -131,7 +131,7 @@ export const lockRuntimeHostLoads = (tx: Transaction, workspaceId: string) =>
        (select count(*)::int from runtimes where runtimes.workspace_id = runtime_hosts.workspace_id
           and runtimes.host_id = runtime_hosts.id and runtimes.state in ('creating', 'starting', 'running', 'stopping')
        ) as running
-     from runtime_hosts where workspace_id = $1 and removed_at is null for update`,
+     from runtime_hosts where workspace_id = $1 and removed_at is null and owner_id is null for update`,
     [workspaceId],
   )
 

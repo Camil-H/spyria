@@ -1,4 +1,5 @@
-import { relayUrlOf } from './commands.ts'
+import { Refused, relayUrlOf } from './commands.ts'
+import { isAllowedOnPersonalHost, redacted } from './personal.ts'
 
 type Frame = { type: string; sid?: unknown; [field: string]: unknown }
 type Stream = { socket: WebSocket; queue: string[] | null }
@@ -16,11 +17,13 @@ export const createRelay = ({
   send,
   isBackedUp = () => false,
   maximumQueuedMessages = 256,
+  personal,
 }: {
   addressOf: (runtimeId: string) => Promise<string>
   send: (frame: Frame) => void
   isBackedUp?: () => boolean
   maximumQueuedMessages?: number
+  personal?: { secrets: () => readonly string[] }
 }) => {
   const streams = new Map<number, Stream>()
   const closeStream = (sid: number) => {
@@ -30,10 +33,15 @@ export const createRelay = ({
     stream.socket.close()
     send({ type: 'ws_close', sid })
   }
-  const urlOf = async (frame: Frame) => relayUrlOf(await addressOf(String(frame.runtimeId)), String(frame.path))
+  const urlOf = async (frame: Frame, method: string) => {
+    if (personal && !isAllowedOnPersonalHost(method, String(frame.path)))
+      throw new Refused('this path is not relayed by a personal host')
+    return relayUrlOf(await addressOf(String(frame.runtimeId)), String(frame.path))
+  }
+  const forwarded = (text: string) => (personal ? redacted(text, personal.secrets()) : text)
   const relayHttp = async (sid: number, frame: Frame) => {
     try {
-      const response = await fetch(await urlOf(frame), {
+      const response = await fetch(await urlOf(frame, String(frame.method)), {
         method: String(frame.method),
         headers: frame.headers as Record<string, string> | undefined,
         body: typeof frame.body === 'string' ? frame.body : undefined,
@@ -45,7 +53,7 @@ export const createRelay = ({
         sid,
         status: response.status,
         headers: Object.fromEntries(response.headers),
-        body: await response.text(),
+        body: forwarded(await response.text()),
       })
     } catch (error) {
       send({ type: 'http_res', sid, error: messageOf(error) })
@@ -53,7 +61,7 @@ export const createRelay = ({
   }
   const openStream = async (sid: number, frame: Frame) => {
     try {
-      const url = await urlOf(frame)
+      const url = await urlOf(frame, 'WS')
       url.protocol = 'ws:'
       const stream: Stream = { socket: new WebSocket(url), queue: [] }
       streams.set(sid, stream)
@@ -64,7 +72,7 @@ export const createRelay = ({
       }
       stream.socket.onmessage = (message) => {
         if (isBackedUp()) return closeStream(sid)
-        send({ type: 'ws_msg', sid, data: String(message.data) })
+        send({ type: 'ws_msg', sid, data: forwarded(String(message.data)) })
       }
       stream.socket.onclose = () => streams.get(sid) === stream && closeStream(sid)
     } catch (error) {

@@ -92,3 +92,16 @@ test('relays the Agent Server’s MCP calls on /mcp with their session headers',
   })
   expect((await relay.fetch(new Request('http://hq-gateway-relay:4000/mcp/other'))).status).toBe(404)
 })
+
+test('redacts the body of a call leaving a personal host', async () => {
+  const sent: Frame[] = []
+  const relay = createModelRelay({
+    send: (frame) => sent.push(frame) > 0,
+    redact: (text) => text.replaceAll('sk-ant-oat01-secret', '[redacted]'),
+  })
+  void relay.fetch(
+    new Request('http://hq-gateway-relay:4000/mcp', { method: 'POST', body: '{"arguments":"sk-ant-oat01-secret"}' }),
+  )
+  for (const deadline = Date.now() + 5000; sent.length === 0 && Date.now() < deadline; await Bun.sleep(5));
+  expect(sent[0]).toMatchObject({ body: '{"arguments":"[redacted]"}' })
+})

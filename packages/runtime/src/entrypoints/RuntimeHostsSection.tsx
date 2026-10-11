@@ -2,7 +2,7 @@ import type { RuntimeHostRow } from '@hq/db'
 import { useQuery } from '@hq/db/react'
 import type { WorkspaceId } from '@hq/kernel'
 import { buttonClass, Dialog, fieldClass, ghostButtonClass, LabelledSection, labelClass } from '@hq/ui'
-import { type SubmitEvent, useState } from 'react'
+import { type SubmitEvent, useEffect, useState } from 'react'
 import { isClaimExpired } from '../domain/claim.ts'
 import { RuntimeError } from '../domain/errors.ts'
 import { listRuntimeHosts } from '../queries/list-runtime-hosts.ts'
@@ -19,10 +19,12 @@ const gibibyte = 1024 ** 3
 const badgeClass = 'rounded-full border border-line px-2 py-0.5 text-xs text-muted'
 const statusLabels = { waiting: 'Waiting for the host', online: 'Online', offline: 'Offline', expired: 'Code expired' }
 
-const statusOf = (host: RuntimeHostRow) =>
+export const statusOf = (host: RuntimeHostRow) =>
   host.status === 'waiting' && host.claimExpiresAt !== null && isClaimExpired(host.claimExpiresAt, Date.now())
     ? 'expired'
     : host.status
+
+export const statusLabelOf = (host: RuntimeHostRow) => statusLabels[statusOf(host)]
 
 const AddHostDialog = ({ add, onClose }: { add: (name: string) => Promise<void>; onClose: () => void }) => {
   const [name, setName] = useState('')
@@ -58,6 +60,10 @@ export const RuntimeHostsSection = ({ workspaceId }: { workspaceId: WorkspaceId 
   const commands = useRuntimeCommands()
   const hosts = useQuery(listRuntimeHosts(workspaceId))
   const [openDialog, setOpenDialog] = useState<OpenDialog>(null)
+  const [machineCount, setMachineCount] = useState(0)
+  useEffect(() => {
+    commands.countMachines({ workspaceId }).then(setMachineCount)
+  }, [commands, workspaceId])
   const closeDialog = () => setOpenDialog(null)
   const showCommand = (label: string, code: string) => setOpenDialog({ kind: 'command', label, code })
   return (
@@ -110,6 +116,11 @@ export const RuntimeHostsSection = ({ workspaceId }: { workspaceId: WorkspaceId 
             )
           })}
         </ul>
+      )}
+      {machineCount > 0 && (
+        <p className="text-sm text-muted">
+          {machineCount === 1 ? '1 member uses their machine' : `${machineCount} members use their machine`}
+        </p>
       )}
       {openDialog?.kind === 'add' && (
         <AddHostDialog

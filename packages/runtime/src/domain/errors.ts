@@ -21,6 +21,10 @@ const errorKind = <Details extends unknown[]>(
   }
 
 export const NotWorkspaceAdmin = errorKind('not_admin', () => 'Only workspace admins can manage runtime hosts')
+export const MachineAlreadyAdded = errorKind(
+  'machine_already_added',
+  () => 'Your machine is already added: remove it first',
+)
 export const NotCurrentWorkspace = errorKind(
   'not_current_workspace',
   () => 'A runtime host can only be managed in the current workspace',
@@ -40,6 +44,16 @@ export const CodeAlreadyUsed = errorKind('code_already_used', () => 'This code w
 export const CodeExpired = errorKind('code_expired', () => 'This code has expired', HostRefused)
 export const HostRemoved = errorKind('host_removed', () => 'This host was removed', HostRefused)
 export const HostNotRegistered = errorKind('host_not_registered', () => 'This host is not registered', HostRefused)
+export const PairedAsMachine = errorKind(
+  'paired_as_machine',
+  () => 'This host was paired as your machine: restart hq-host with --personal',
+  HostRefused,
+)
+export const PairedAsWorkspaceHost = errorKind(
+  'paired_as_workspace_host',
+  () => 'This host was paired as a workspace host: restart hq-host without --personal',
+  HostRefused,
+)
 export const RuntimeNotFound = errorKind(
   'runtime_not_found',
   (runtimeId: string) => `Runtime ${runtimeId} was not found`,

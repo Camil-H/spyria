@@ -302,10 +302,18 @@ export const runtimeHosts = table(
     runningRuntimes: integer().notNull(),
     lastSeenAt: instant(),
     createdBy: text().notNull(),
+    ownerId: text(),
     createdAt: instant().notNull(),
     removedAt: instant(),
   },
-  (table) => [primaryKey({ columns: [table.workspaceId, table.id] }), memberReference(table, table.createdBy)],
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.id] }),
+    memberReference(table, table.createdBy),
+    memberReference(table, table.ownerId),
+    uniqueIndex('runtime_hosts_one_machine_per_member')
+      .on(table.workspaceId, table.ownerId)
+      .where(sql`${table.removedAt} is null`),
+  ],
 )
 
 export const runtimes = table(

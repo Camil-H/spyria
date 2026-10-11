@@ -11,6 +11,7 @@ export type RuntimeHostRepository = {
   setSecretHash(host: RuntimeHost, secret: HostSecret, hash: string): Promise<void>
   findBySecretHash(secret: HostSecret, hash: string): Promise<{ host: RuntimeHost; claimed: boolean } | undefined>
   lockLoads(workspaceId: WorkspaceId): Promise<HostLoad[]>
+  listMachines(workspaceId: WorkspaceId): Promise<RuntimeHost[]>
 }
 
 export type RuntimeRepository = {

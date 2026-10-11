@@ -20,6 +20,8 @@ export type RuntimeHostCapacity = {
   limitsEnforced: boolean
   cap: number
   memoryFreeBytes?: number
+  personal?: boolean
+  signedIn?: string[]
 }
 export type RuntimeHostRow = {
   workspaceId: WorkspaceId
@@ -29,6 +31,7 @@ export type RuntimeHostRow = {
   claimExpiresAt: number | null
   capacity: RuntimeHostCapacity | null
   runningRuntimes: number
+  ownerId: MemberId | null
 }
 export type RuntimeState =
   | 'creating'

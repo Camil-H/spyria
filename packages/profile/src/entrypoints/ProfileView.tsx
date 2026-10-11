@@ -1,13 +1,14 @@
 import { useQuery } from '@hq/db/react'
 import type { WorkspaceId } from '@hq/kernel'
 import { useSession } from '@hq/session'
+import type { ReactNode } from 'react'
 import { useOutletContext } from 'react-router'
 import { getProfile } from '../queries/get-profile.ts'
 import { ConnectionsSection } from './ConnectionsSection.tsx'
 import { DisplayNameForm } from './DisplayNameForm.tsx'
 import { LlmAccessSection } from './LlmAccessSection.tsx'
 
-export const ProfileView = () => {
+export const ProfileView = ({ children }: { children?: ReactNode }) => {
   const workspaceId = useOutletContext<WorkspaceId>()
   const { memberId } = useSession()
   const displayName = useQuery(getProfile(workspaceId, memberId))
@@ -18,6 +19,7 @@ export const ProfileView = () => {
       <DisplayNameForm workspaceId={workspaceId} currentName={displayName} />
       <LlmAccessSection workspaceId={workspaceId} memberId={memberId} />
       <ConnectionsSection workspaceId={workspaceId} memberId={memberId} />
+      {children}
     </div>
   )
 }

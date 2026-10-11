@@ -27,6 +27,7 @@ const hostOf = (row: RuntimeHostRow): RuntimeHost => ({
   workspaceId: workspaceId(row.workspaceId),
   id: runtimeHostId(row.id),
   createdBy: memberId(row.createdBy),
+  ownerId: row.ownerId ? memberId(row.ownerId) : null,
 })
 
 const runtimeOf = (row: RuntimeRow): Runtime => ({
@@ -68,6 +69,15 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
       },
       lockLoads: async (workspaceId) =>
         (await lockRuntimeHostLoads(tx, workspaceId)).map((load) => ({ ...load, hostId: runtimeHostId(load.hostId) })),
+      listMachines: async (workspaceId) =>
+        (
+          await tx.run(
+            zql.runtimeHosts
+              .where('workspaceId', workspaceId)
+              .where('ownerId', 'IS NOT', null)
+              .where('removedAt', 'IS', null),
+          )
+        ).map(hostOf),
     },
     runtimes: {
       lock: async (workspaceId, id) => {

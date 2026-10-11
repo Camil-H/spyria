@@ -121,9 +121,9 @@ export const createApp = async (
       headers: { authorization: `Bearer ${store.tokenOf(workspaceId)}`, 'content-type': 'application/json' },
       body,
     })
-  const toolConnections = createHttpToolConnections((workspaceId, path, method) =>
-    fetch(path, { method, headers: { authorization: `Bearer ${store.tokenOf(workspaceId)}` } }),
-  )
+  const fetchAsMember = (workspaceId: WorkspaceId, path: string, method = 'GET') =>
+    fetch(path, { method, headers: { authorization: `Bearer ${store.tokenOf(workspaceId)}` } })
+  const toolConnections = createHttpToolConnections(fetchAsMember)
   return {
     store,
     session: {
@@ -176,6 +176,9 @@ export const createApp = async (
       addLlmCredential: createHttpLlmCredentialAdder(postAsMember),
       ...toolConnections,
     }),
-    runtimeCommands: commandsOf<RuntimeCommands>(runtimeMutators.runtime, createHttpRuntimeHostCommands(postAsMember)),
+    runtimeCommands: commandsOf<RuntimeCommands>(
+      runtimeMutators.runtime,
+      createHttpRuntimeHostCommands(postAsMember, fetchAsMember),
+    ),
   }
 }

@@ -3,8 +3,8 @@ import { StoreProvider } from '@hq/db/react'
 import { chatId as toChatId, type WorkspaceId } from '@hq/kernel'
 import { PanelProvider, PanelToggle, SidePanel } from '@hq/panel'
 import { ProfileProvider, ProfileView, useHasLlmCredential } from '@hq/profile'
-import { RuntimeHostsSection, RuntimeProvider, RuntimeStatus } from '@hq/runtime'
-import { SessionProvider } from '@hq/session'
+import { MyMachineSection, RuntimeHostsSection, RuntimeProvider, RuntimeStatus } from '@hq/runtime'
+import { SessionProvider, useSession } from '@hq/session'
 import { ChatUsageTable, UsageSection } from '@hq/usage'
 import { useIsWorkspaceAdmin, WorkspaceLayout, WorkspaceProvider } from '@hq/workspace'
 import { BrowserRouter, Link, Navigate, Route, Routes, useOutletContext, useParams } from 'react-router'
@@ -63,6 +63,18 @@ const SettingsRoute = () => {
   )
 }
 
+const ProfileRoute = () => {
+  const workspaceId = useOutletContext<WorkspaceId>()
+  const { memberId } = useSession()
+  return (
+    <div className="p-6">
+      <ProfileView>
+        <MyMachineSection workspaceId={workspaceId} memberId={memberId} />
+      </ProfileView>
+    </div>
+  )
+}
+
 export const App = ({ app }: { app: Application }) => (
   <StoreProvider store={app.store}>
     <SessionProvider session={app.session}>
@@ -80,14 +92,7 @@ export const App = ({ app }: { app: Application }) => (
                       <Route index element={<p className="p-6 text-muted">Select a chat</p>} />
                       <Route path="chats/:chatId" element={<ChatRoute commands={app.conversationCommands} />} />
                       <Route path="settings" element={<SettingsRoute />} />
-                      <Route
-                        path="profile"
-                        element={
-                          <div className="p-6">
-                            <ProfileView />
-                          </div>
-                        }
-                      />
+                      <Route path="profile" element={<ProfileRoute />} />
                     </Route>
                     <Route path="*" element={<Navigate to={`/w/${app.session.defaultWorkspaceId}`} replace />} />
                   </Routes>

@@ -1,4 +1,5 @@
 import { type Docker, DockerError } from './docker.ts'
+import { credentialsMountOf, ensureCredentialsReader } from './personal.ts'
 
 export class Refused extends Error {
   constructor(reason: string) {
@@ -54,7 +55,13 @@ export const parseCommand = (op: unknown, args: unknown): Command => {
 
 const containerNameOf = (prefix: string, runtimeId: string) => `${prefix}rt-${runtimeId}`
 
-export const containerBodyOf = ({ prefix, runtimeId, image, apiKey }: CreateRequest & { prefix: string }) => {
+export const containerBodyOf = ({
+  prefix,
+  runtimeId,
+  image,
+  apiKey,
+  personal = false,
+}: CreateRequest & { prefix: string; personal?: boolean }) => {
   const name = containerNameOf(prefix, runtimeId)
   return {
     Image: image,
@@ -80,11 +87,14 @@ export const containerBodyOf = ({ prefix, runtimeId, image, apiKey }: CreateRequ
       NanoCpus: 2_000_000_000,
       PidsLimit: 512,
       RestartPolicy: { Name: 'no' },
-      Mounts: Object.entries(volumeTargets).map(([suffix, target]) => ({
-        Type: 'volume',
-        Source: `${name}-${suffix}`,
-        Target: target,
-      })),
+      Mounts: [
+        ...Object.entries(volumeTargets).map(([suffix, target]) => ({
+          Type: 'volume',
+          Source: `${name}-${suffix}`,
+          Target: target,
+        })),
+        ...(personal ? [credentialsMountOf(prefix)] : []),
+      ],
     },
   }
 }
@@ -107,10 +117,12 @@ export const createCommandRunner = ({
   docker,
   prefix,
   selfContainerId,
+  personal = false,
 }: {
   docker: Docker
   prefix: string
   selfContainerId?: string
+  personal?: boolean
 }) => {
   const network = `${prefix}runtimes`
   const managedContainer = async (runtimeId: string) => {
@@ -134,18 +146,20 @@ export const createCommandRunner = ({
         EndpointConfig: { Aliases: [gatewayRelayAlias] },
       }).catch(ignoring(403, 409))
   }
-  const prepare = (image: string) =>
-    docker('GET', `/images/${image}/json`).catch(async (error) => {
+  const prepare = async (image: string) => {
+    await docker('GET', `/images/${image}/json`).catch(async (error) => {
       ignoringMissing(error)
       const [repository, digest] = image.split('@')
       await docker('POST', `/images/create?fromImage=${repository}&tag=${digest}`)
     })
+    if (personal) await ensureCredentialsReader(docker, prefix, image)
+  }
   const create = async ({ runtimeId, image, apiKey }: CreateRequest) => {
     await Promise.all([ensureNetwork(), prepare(image)])
     await docker(
       'POST',
       `/containers/create?name=${containerNameOf(prefix, runtimeId)}`,
-      containerBodyOf({ prefix, runtimeId, image, apiKey }),
+      containerBodyOf({ prefix, runtimeId, image, apiKey, personal }),
     )
   }
   const run = async (command: Command) => {

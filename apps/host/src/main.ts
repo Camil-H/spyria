@@ -4,12 +4,45 @@ import { join } from 'node:path'
 import { createCommandRunner, gatewayRelayAlias, parseCommand } from './commands.ts'
 import { createDocker } from './docker.ts'
 import { createModelRelay } from './model-relay.ts'
+import {
+  type Credentials,
+  loginCommand,
+  logoutCommand,
+  readCredentials,
+  redacted,
+  runCredentialsCommand,
+} from './personal.ts'
 import { createRelay, messageOf } from './relay.ts'
 import { freeMemoryBytes, systemOf } from './system.ts'
 
-const [claimUrlArgument] = process.argv.slice(2)
+const givenArguments = process.argv.slice(2)
+const isPersonal = givenArguments.includes('--personal')
+const [claimUrlArgument] = givenArguments.filter((argument) => argument !== '--personal')
+const dockerSocket = process.env.DOCKER_SOCKET ?? '/var/run/docker.sock'
+const prefix = process.env.HQ_HOST_PREFIX ?? 'hq-'
+const docker = createDocker(dockerSocket)
+const credentialsCommand = { login: loginCommand, logout: logoutCommand }[claimUrlArgument ?? '']
+if (credentialsCommand) {
+  if (givenArguments[1] !== 'claude') {
+    console.error(`Usage: hq-host ${claimUrlArgument} claude`)
+    process.exit(2)
+  }
+  if (credentialsCommand === loginCommand && !process.stdin.isTTY) {
+    console.error('Run it in a terminal: docker exec -it hq-host hq-host login claude')
+    process.exit(2)
+  }
+  await runCredentialsCommand(docker, { socketPath: dockerSocket, prefix, command: credentialsCommand }).catch(
+    (error) => {
+      console.error(messageOf(error))
+      process.exit(1)
+    },
+  )
+  const { signedIn } = await readCredentials(docker, prefix)
+  console.log(signedIn.includes('claude') ? 'Signed in to Claude Code' : 'Not signed in to Claude Code')
+  process.exit(0)
+}
 if (!claimUrlArgument) {
-  console.error('Usage: hq-host <https://hq.example.com/h/CODE>')
+  console.error('Usage: hq-host [--personal] <https://hq.example.com/h/CODE>, or hq-host login|logout claude')
   process.exit(2)
 }
 const claimUrl = new URL(claimUrlArgument)
@@ -18,15 +51,27 @@ const socketUrl = new URL('/host', claimUrl)
 socketUrl.protocol = claimUrl.protocol === 'https:' ? 'wss:' : 'ws:'
 const stateDirectory = process.env.HQ_HOST_STATE_DIR ?? '/state'
 const tokenPath = join(stateDirectory, 'token')
-const docker = createDocker(process.env.DOCKER_SOCKET ?? '/var/run/docker.sock')
 const isInContainer = existsSync('/.dockerenv')
 const runner = createCommandRunner({
   docker,
-  prefix: process.env.HQ_HOST_PREFIX ?? 'hq-',
+  prefix,
   selfContainerId: isInContainer ? hostname() : undefined,
+  personal: isPersonal,
 })
+let credentials: Credentials = { signedIn: [], secrets: [] }
+const declaration = async () => {
+  if (!isPersonal) return { personal: false }
+  credentials = await readCredentials(docker, prefix).catch((error) => {
+    console.error(`Reading the Claude Code sign-in failed: ${messageOf(error)}`)
+    return credentials
+  })
+  return { personal: true, signedIn: credentials.signedIn }
+}
 let sendToHq = (_frame: object) => false
-const modelRelay = createModelRelay({ send: (frame) => sendToHq(frame) })
+const modelRelay = createModelRelay({
+  send: (frame) => sendToHq(frame),
+  redact: isPersonal ? (text) => redacted(text, credentials.secrets) : undefined,
+})
 const modelRelayServer = Bun.serve({
   port: Number(process.env.HQ_HOST_GATEWAY_PORT ?? (isInContainer ? 4000 : 0)),
   hostname: '0.0.0.0',
@@ -58,12 +103,18 @@ const connect = () => {
     addressOf: runner.originOf,
     send,
     isBackedUp: () => socket.bufferedAmount > maximumBufferedBytes,
+    personal: isPersonal ? { secrets: () => credentials.secrets } : undefined,
   })
   let heartbeatTimer: ReturnType<typeof setInterval> | undefined
   const sendHeartbeat = async () =>
-    send({ type: 'heartbeat', memoryFreeBytes: await freeMemoryBytes(), running: await runner.runningCount() })
+    send({
+      type: 'heartbeat',
+      memoryFreeBytes: await freeMemoryBytes(),
+      running: await runner.runningCount(),
+      signedIn: (await declaration()).signedIn,
+    })
   const hello = async (token: string) => {
-    send({ type: 'hello', token, gatewayUrl, system: await systemOf(docker) })
+    send({ type: 'hello', token, gatewayUrl, system: await systemOf(docker), ...(await declaration()) })
     sendToHq = (frame) => socket.readyState === WebSocket.OPEN && (send(frame), true)
     reconnectDelayMilliseconds = 1000
     heartbeatTimer = setInterval(() => sendHeartbeat().catch(() => {}), heartbeatMilliseconds)

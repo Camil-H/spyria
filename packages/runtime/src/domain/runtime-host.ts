@@ -1,5 +1,5 @@
 import type { MemberId, RuntimeHostId, WorkspaceId } from '@hq/kernel'
-import { HostNotFound, NotWorkspaceAdmin } from './errors.ts'
+import { HostNotFound, NotWorkspaceAdmin, PairedAsMachine, PairedAsWorkspaceHost } from './errors.ts'
 
 export type HostSystem = {
   cpus: number
@@ -10,7 +10,8 @@ export type HostSystem = {
   limitsEnforced: boolean
 }
 
-export type HostCapacity = HostSystem & { cap: number; memoryFreeBytes?: number }
+export type HostDeclaration = { personal: boolean; signedIn: string[] }
+export type HostCapacity = HostSystem & Partial<HostDeclaration> & { cap: number; memoryFreeBytes?: number }
 
 export type RuntimeHost = Readonly<{
   workspaceId: WorkspaceId
@@ -22,6 +23,7 @@ export type RuntimeHost = Readonly<{
   runningRuntimes: number
   lastSeenAt: number | null
   createdBy: MemberId
+  ownerId: MemberId | null
   createdAt: number
   removedAt: number | null
 }>
@@ -43,6 +45,18 @@ export const canRenewClaim = (host: RuntimeHost) => host.status === 'waiting' ||
 
 export const assertAdmin = (role: 'admin' | 'member') => {
   if (role !== 'admin') throw new NotWorkspaceAdmin()
+}
+
+export const assertCanManage = (host: RuntimeHost, memberId: MemberId, role: 'admin' | 'member') => {
+  if (host.ownerId === null) assertAdmin(role)
+  else if (host.ownerId !== memberId) throw new HostNotFound(host.id)
+  return host
+}
+
+export const declarationRefusalOf = (host: RuntimeHost, personal: boolean) => {
+  if (host.ownerId !== null && !personal) return new PairedAsMachine()
+  if (host.ownerId === null && personal) return new PairedAsWorkspaceHost()
+  return undefined
 }
 
 export const agentServerImage =
