@@ -29,5 +29,7 @@ export const sendMessage = ({ transactor }: Dependencies, { id, chatId, authorId
     await unitOfWork.messages.record({ type: 'message.posted', actorId: authorId, message })
     if (chat.localSession && authorId !== chat.ownerId)
       await appendNotice(unitOfWork, message, localSessionNotices.ownerOnly)
+    else if (chat.localSession && !(await unitOfWork.chats.localSessionsAllowed()))
+      await appendNotice(unitOfWork, message, localSessionNotices.turnedOff)
     else if (chat.type === 'runtime') await unitOfWork.agentJobs.prompt(message)
   })

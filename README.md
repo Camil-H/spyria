@@ -54,6 +54,8 @@ A member can run Claude Code on their own Claude subscription, or Codex on their
    - Both stay on your machine only; HQ never sees them.
 3. **New chat**, **On my machine · Claude Code subscription** or **On my machine · Codex (ChatGPT plan)**. Only you prompt it (other members read it); it runs on your plan's default model, without HQ's routing, keys or metering.
 
+Admins turn this off for the workspace with **Workspace settings**, **Runtime hosts**, **Members can run sessions on their own machine**: members can no longer add a machine or start such a chat, and prompts in existing ones get a notice.
+
 Manual checks, not covered by tests (they need a real subscription):
 
 - After `hq-host login claude`, a real turn in an "On my machine" chat answers on the subscription.

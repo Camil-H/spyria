@@ -269,6 +269,8 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
           localSession: row.localSession ?? false,
         }
       },
+      localSessionsAllowed: async () =>
+        (await tx.run(zql.workspaces.where('workspaceId', contextWorkspaceId).one()))?.localSessions ?? true,
     },
   }
   return { run: (work) => work(unitOfWork) }

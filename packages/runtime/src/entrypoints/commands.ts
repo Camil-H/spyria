@@ -8,4 +8,5 @@ export type RuntimeCommands = {
   countMachines: (input: { workspaceId: WorkspaceId }) => Promise<number>
   renewCode: (input: HostInput) => Promise<string>
   removeHost: (input: HostInput) => Promise<unknown>
+  setLocalSessions: (input: { workspaceId: WorkspaceId; isOn: boolean }) => Promise<unknown>
 }

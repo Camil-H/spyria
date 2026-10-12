@@ -46,11 +46,8 @@ const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
   await transaction
     .insert(tables.workspaces)
     .values(
-      snapshot.workspaces.map((workspace, index) =>
-        createdInOrder(
-          { workspaceId: workspace.id, name: workspace.name, createdBy: creatorByWorkspace.get(workspace.id) ?? '' },
-          index,
-        ),
+      snapshot.workspaces.map(({ id, ...workspace }, index) =>
+        createdInOrder({ ...workspace, workspaceId: id, createdBy: creatorByWorkspace.get(id) ?? '' }, index),
       ),
     )
   await transaction

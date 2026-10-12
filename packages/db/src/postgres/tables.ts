@@ -36,6 +36,7 @@ export const workspaces = table('workspaces', {
   createdBy: text()
     .notNull()
     .references(() => users.id),
+  localSessions: boolean().notNull().default(true),
   createdAt: instant().notNull(),
 })
 

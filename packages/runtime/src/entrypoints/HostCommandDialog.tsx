@@ -1,4 +1,4 @@
-import { Dialog, ghostButtonClass } from '@hq/ui'
+import { Dialog, ghostButtonClass, Switch } from '@hq/ui'
 import { useState } from 'react'
 import { hostCommandOf } from '../domain/host-command.ts'
 
@@ -24,19 +24,7 @@ export const HostCommandDialog = ({
           laptop. HQ removes tokens from what it receives, but never run it on a machine others use.
         </p>
       )}
-      <label className="flex items-center justify-between gap-3 text-sm">
-        Rootless Docker
-        <button
-          type="button"
-          role="switch"
-          aria-checked={isRootless}
-          aria-label="Rootless Docker"
-          onClick={() => setIsRootless(!isRootless)}
-          className={`h-5 w-9 rounded-full p-0.5 ${isRootless ? 'bg-accent' : 'bg-line'}`}
-        >
-          <span className={`block size-4 rounded-full bg-raised transition ${isRootless ? 'translate-x-4' : ''}`} />
-        </button>
-      </label>
+      <Switch label="Rootless Docker" isOn={isRootless} onToggle={() => setIsRootless(!isRootless)} />
       <textarea
         readOnly
         aria-label="Command"

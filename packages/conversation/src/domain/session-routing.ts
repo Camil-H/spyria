@@ -59,7 +59,10 @@ export const harnesses = {
 } as const
 export type Harness = keyof typeof harnesses
 export type HarnessLaunch = Harness | 'claude-code-subscription' | 'codex-subscription'
-export const localSessionNotices = { ownerOnly: 'Only the owner prompts a session on their machine' }
+export const localSessionNotices = {
+  ownerOnly: 'Only the owner prompts a session on their machine',
+  turnedOff: "Sessions on members' machines are turned off for this workspace",
+}
 export const localSessions = {
   'claude-code': {
     launch: 'claude-code-subscription',

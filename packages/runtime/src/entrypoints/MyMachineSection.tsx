@@ -2,7 +2,7 @@ import { useQuery } from '@hq/db/react'
 import type { MemberId, WorkspaceId } from '@hq/kernel'
 import { buttonClass, Dialog, ghostButtonClass, LabelledSection } from '@hq/ui'
 import { useState } from 'react'
-import { getMachine } from '../queries/list-runtime-hosts.ts'
+import { getMachine, localSessionsOf } from '../queries/list-runtime-hosts.ts'
 import { HostCommandDialog } from './HostCommandDialog.tsx'
 import { useRuntimeCommands } from './providers.tsx'
 import { statusLabelOf } from './RuntimeHostsSection.tsx'
@@ -15,6 +15,7 @@ const signIns = [
 export const MyMachineSection = ({ workspaceId, memberId }: { workspaceId: WorkspaceId; memberId: MemberId }) => {
   const commands = useRuntimeCommands()
   const machine = useQuery(getMachine(workspaceId, memberId))
+  const localSessions = useQuery(localSessionsOf(workspaceId))
   const [code, setCode] = useState<string | null>(null)
   const [isRemoving, setIsRemoving] = useState(false)
   return (
@@ -35,7 +36,7 @@ export const MyMachineSection = ({ workspaceId, memberId }: { workspaceId: Works
             Remove
           </button>
         </div>
-      ) : (
+      ) : localSessions ? (
         <button
           type="button"
           className={`self-start ${buttonClass}`}
@@ -43,6 +44,8 @@ export const MyMachineSection = ({ workspaceId, memberId }: { workspaceId: Works
         >
           Add my machine
         </button>
+      ) : (
+        <p className="text-sm text-muted">Your workspace turned off sessions on members' machines</p>
       )}
       {code && <HostCommandDialog label="Add my machine" code={code} personal onClose={() => setCode(null)} />}
       {isRemoving && machine && (

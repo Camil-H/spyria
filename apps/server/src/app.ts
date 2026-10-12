@@ -71,7 +71,11 @@ export const sessionClassifierOf =
       timeoutMilliseconds,
     })
 
-const statusByErrorCode: Record<string, number> = { not_admin: 403, host_not_found: 404 }
+const statusByErrorCode: Record<string, number> = {
+  not_admin: 403,
+  local_sessions_off: 403,
+  host_not_found: 404,
+}
 
 type ZeroDatabase = ReturnType<typeof zeroDrizzle<typeof schema, Database>>
 

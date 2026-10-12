@@ -1,11 +1,11 @@
 import type { RuntimeHostRow } from '@hq/db'
 import { useQuery } from '@hq/db/react'
 import type { WorkspaceId } from '@hq/kernel'
-import { buttonClass, Dialog, fieldClass, ghostButtonClass, LabelledSection, labelClass } from '@hq/ui'
+import { buttonClass, Dialog, fieldClass, ghostButtonClass, LabelledSection, labelClass, Switch } from '@hq/ui'
 import { type SubmitEvent, useEffect, useState } from 'react'
 import { isClaimExpired } from '../domain/claim.ts'
 import { RuntimeError } from '../domain/errors.ts'
-import { listRuntimeHosts } from '../queries/list-runtime-hosts.ts'
+import { listRuntimeHosts, localSessionsOf } from '../queries/list-runtime-hosts.ts'
 import { HostCommandDialog } from './HostCommandDialog.tsx'
 import { useRuntimeCommands } from './providers.tsx'
 
@@ -59,6 +59,7 @@ const AddHostDialog = ({ add, onClose }: { add: (name: string) => Promise<void>;
 export const RuntimeHostsSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
   const commands = useRuntimeCommands()
   const hosts = useQuery(listRuntimeHosts(workspaceId))
+  const localSessions = useQuery(localSessionsOf(workspaceId))
   const [openDialog, setOpenDialog] = useState<OpenDialog>(null)
   const [machineCount, setMachineCount] = useState(0)
   useEffect(() => {
@@ -122,6 +123,11 @@ export const RuntimeHostsSection = ({ workspaceId }: { workspaceId: WorkspaceId 
           {machineCount === 1 ? '1 member uses their machine' : `${machineCount} members use their machine`}
         </p>
       )}
+      <Switch
+        label="Members can run sessions on their own machine"
+        isOn={localSessions}
+        onToggle={() => commands.setLocalSessions({ workspaceId, isOn: !localSessions })}
+      />
       {openDialog?.kind === 'add' && (
         <AddHostDialog
           add={async (name) => showCommand('Add runtime host', (await commands.addHost({ workspaceId, name })).code)}

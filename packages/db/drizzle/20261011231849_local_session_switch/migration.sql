@@ -1,0 +1,1 @@
+ALTER TABLE "workspaces" ADD COLUMN "local_sessions" boolean DEFAULT true NOT NULL;

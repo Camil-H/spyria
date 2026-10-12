@@ -63,7 +63,10 @@ export type DraftRepository = { replace(draft: Draft): Promise<void> }
 
 export type ReadMarkerRepository = { markNewestRead(chatId: ChatId, memberId: MemberId): Promise<void> }
 
-export type ChatRepository = { get(chatId: ChatId): Promise<ConversationChat> }
+export type ChatRepository = {
+  get(chatId: ChatId): Promise<ConversationChat>
+  localSessionsAllowed(): Promise<boolean>
+}
 
 export type ChatRouting = Readonly<{
   mode: string | null

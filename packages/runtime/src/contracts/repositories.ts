@@ -15,6 +15,11 @@ export type RuntimeHostRepository = {
   listMachines(workspaceId: WorkspaceId): Promise<RuntimeHost[]>
 }
 
+export type WorkspaceSettings = {
+  localSessionsOf(workspaceId: WorkspaceId): Promise<boolean>
+  setLocalSessions(workspaceId: WorkspaceId, isOn: boolean): Promise<void>
+}
+
 export type RuntimeRepository = {
   lock(workspaceId: WorkspaceId, runtimeId: RuntimeId): Promise<Runtime>
   lockByChat(workspaceId: WorkspaceId, chatId: ChatId): Promise<Runtime | undefined>

@@ -1,7 +1,7 @@
 import { type MemberId, runtimeHostId, type WorkspaceId } from '@hq/kernel'
 import type { RuntimeTransactor } from '../contracts/transactor.ts'
 import { claimLifetimeMilliseconds, hashSecret, newClaimCode } from '../domain/claim.ts'
-import { MachineAlreadyAdded } from '../domain/errors.ts'
+import { LocalSessionsOff, MachineAlreadyAdded } from '../domain/errors.ts'
 import { HostName } from '../domain/host-name.ts'
 import { assertAdmin } from '../domain/runtime-host.ts'
 
@@ -39,7 +39,8 @@ export const addRuntimeHost = async (
   }
   const code = newClaimCode()
   const claimCodeHash = await hashSecret(code)
-  await transactor.run(async ({ runtimeHosts }) => {
+  await transactor.run(async ({ runtimeHosts, workspaces }) => {
+    if (personal && !(await workspaces.localSessionsOf(input.workspaceId))) throw new LocalSessionsOff()
     if (
       personal &&
       (await runtimeHosts.listMachines(input.workspaceId)).some((machine) => machine.ownerId === memberId)

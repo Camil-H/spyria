@@ -6,7 +6,7 @@ import { type SubmitEvent, useState } from 'react'
 import { useNavigate } from 'react-router'
 import type { ChatKind } from '../domain/chat.ts'
 import { Name } from '../domain/name.ts'
-import { hasMachine, type Sidebar } from '../queries/get-sidebar.ts'
+import { offersLocalSessions, type Sidebar } from '../queries/get-sidebar.ts'
 import { useWorkspaceCommands } from './providers.tsx'
 
 const kindLabels: Record<ChatKind, string> = {
@@ -28,7 +28,7 @@ export const NewChatDialog = ({
   const commands = useWorkspaceCommands()
   const navigate = useNavigate()
   const { memberId } = useSession()
-  const kinds: ChatKind[] = useQuery(hasMachine(workspaceId, memberId))
+  const kinds: ChatKind[] = useQuery(offersLocalSessions(workspaceId, memberId))
     ? ['channel', 'runtime', 'local_session', 'local_codex_session']
     : ['channel', 'runtime']
   const [type, setType] = useState<ChatKind>('channel')

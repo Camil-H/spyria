@@ -27,9 +27,10 @@ const readSnapshot = async () => {
   const chatType = new Map(chats.map((chat) => [chat.id, chat.type]))
   const answeredIds = new Set(messages.map((message) => message.replyToId))
   return {
-    workspaces: (await database.select().from(tables.workspaces)).map(({ workspaceId, name }) => ({
+    workspaces: (await database.select().from(tables.workspaces)).map(({ workspaceId, name, localSessions }) => ({
       id: workspaceId,
       name,
+      localSessions,
     })),
     memberships: memberships.map(userAsMember),
     projects: (await database.select().from(tables.projects).orderBy(tables.projects.createdAt)).map(

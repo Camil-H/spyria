@@ -58,7 +58,11 @@ const snapshotFromZeroRows = (
   const threadSeqOf = (message: ZeroRows['messages'][number]) =>
     seqByMessageId.get(`${message.chatId}/${message.replyToId}`) ?? message.seq
   const snapshot: Unbranded<Snapshot> = {
-    workspaces: workspaces.map(({ workspaceId, name }) => ({ id: workspaceId, name })),
+    workspaces: workspaces.map(({ workspaceId, name, localSessions }) => ({
+      id: workspaceId,
+      name,
+      localSessions: localSessions ?? true,
+    })),
     memberships: uniqueBy(
       [
         ...workspaces.map(({ workspaceId }) => ({ workspaceId, userId: viewerId, displayName: '', role: 'member' })),

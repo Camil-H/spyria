@@ -25,5 +25,6 @@ export const getSidebar =
     }
   }
 
-export const hasMachine = (workspaceId: WorkspaceId, memberId: MemberId) => (snapshot: Snapshot) =>
+export const offersLocalSessions = (workspaceId: WorkspaceId, memberId: MemberId) => (snapshot: Snapshot) =>
+  snapshot.workspaces.some((workspace) => workspace.id === workspaceId && workspace.localSessions) &&
   snapshot.runtimeHosts.some((host) => host.workspaceId === workspaceId && host.ownerId === memberId)

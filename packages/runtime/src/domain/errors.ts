@@ -25,6 +25,10 @@ export const MachineAlreadyAdded = errorKind(
   'machine_already_added',
   () => 'Your machine is already added: remove it first',
 )
+export const LocalSessionsOff = errorKind(
+  'local_sessions_off',
+  () => "Your workspace turned off sessions on members' machines",
+)
 export const NotCurrentWorkspace = errorKind(
   'not_current_workspace',
   () => 'A runtime host can only be managed in the current workspace',

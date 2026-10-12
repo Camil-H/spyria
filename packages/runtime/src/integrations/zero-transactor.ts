@@ -134,6 +134,11 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
         await enqueueJob(tx, { workspaceId, type, payload, delayMilliseconds })
       },
     },
+    workspaces: {
+      localSessionsOf: async (workspaceId) =>
+        (await tx.run(zql.workspaces.where('workspaceId', workspaceId).one()))?.localSessions ?? true,
+      setLocalSessions: (workspaceId, isOn) => tx.mutate.workspaces.update({ workspaceId, localSessions: isOn }),
+    },
   }
   return { run: (work) => work(unitOfWork) }
 }

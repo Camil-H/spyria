@@ -127,8 +127,8 @@ const withReplyTargets = (messages: readonly MessageRow[]) => {
 
 export const createMockSnapshot = (): Snapshot => ({
   workspaces: [
-    { id: acme, name: 'Acme' },
-    { id: globex, name: 'Globex' },
+    { id: acme, name: 'Acme', localSessions: true },
+    { id: globex, name: 'Globex', localSessions: true },
   ],
   memberships: [
     { memberId: alice, workspaceId: acme, displayName: 'Alice', role: 'admin' },
