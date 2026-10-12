@@ -3,7 +3,7 @@ import { StoreProvider } from '@hq/db/react'
 import { chatId as toChatId, type WorkspaceId } from '@hq/kernel'
 import { PanelProvider, PanelToggle, SidePanel } from '@hq/panel'
 import { ProfileProvider, ProfileView, useHasLlmCredential } from '@hq/profile'
-import { MyMachineSection, RuntimeHostsSection, RuntimeProvider, RuntimeStatus } from '@hq/runtime'
+import { MyMachineSection, RuntimeHostsSection, RuntimeProvider, RuntimeStatus, UseToolButtons } from '@hq/runtime'
 import { SessionProvider, useSession } from '@hq/session'
 import { ChatUsageTable, UsageSection } from '@hq/usage'
 import { useIsWorkspaceAdmin, WorkspaceLayout, WorkspaceProvider } from '@hq/workspace'
@@ -68,7 +68,7 @@ const ProfileRoute = () => {
   const { memberId } = useSession()
   return (
     <div className="p-6">
-      <ProfileView>
+      <ProfileView llmAccessActions={<UseToolButtons workspaceId={workspaceId} memberId={memberId} />}>
         <MyMachineSection workspaceId={workspaceId} memberId={memberId} />
       </ProfileView>
     </div>

@@ -1,13 +1,21 @@
 import { useQuery } from '@hq/db/react'
 import type { CredentialId, MemberId, WorkspaceId } from '@hq/kernel'
 import { ghostButtonClass, LabelledSection } from '@hq/ui'
-import { useState } from 'react'
+import { type ReactNode, useState } from 'react'
 import { getLlmCredentials } from '../queries/get-llm-credentials.ts'
 import { AddCredentialForm } from './AddCredentialForm.tsx'
 import { RemoveCredentialDialog } from './RemoveCredentialDialog.tsx'
 import { credentialGridClass } from './ui.ts'
 
-export const LlmAccessSection = ({ workspaceId, memberId }: { workspaceId: WorkspaceId; memberId: MemberId }) => {
+export const LlmAccessSection = ({
+  workspaceId,
+  memberId,
+  actions,
+}: {
+  workspaceId: WorkspaceId
+  memberId: MemberId
+  actions?: ReactNode
+}) => {
   const credentials = useQuery(getLlmCredentials(workspaceId, memberId))
   const [removing, setRemoving] = useState<{ id: CredentialId; provider: string } | null>(null)
   return (
@@ -33,6 +41,7 @@ export const LlmAccessSection = ({ workspaceId, memberId }: { workspaceId: Works
           ))}
         </ul>
       )}
+      {actions}
       {removing && (
         <RemoveCredentialDialog
           workspaceId={workspaceId}

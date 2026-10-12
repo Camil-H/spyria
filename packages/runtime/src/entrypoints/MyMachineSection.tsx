@@ -2,6 +2,7 @@ import { useQuery } from '@hq/db/react'
 import type { MemberId, WorkspaceId } from '@hq/kernel'
 import { buttonClass, Dialog, ghostButtonClass, LabelledSection } from '@hq/ui'
 import { useState } from 'react'
+import { signInCommandOf } from '../domain/host-command.ts'
 import { getMachine, localSessionsOf } from '../queries/list-runtime-hosts.ts'
 import { HostCommandDialog } from './HostCommandDialog.tsx'
 import { useRuntimeCommands } from './providers.tsx'
@@ -10,7 +11,7 @@ import { statusLabelOf } from './RuntimeHostsSection.tsx'
 const signIns = [
   { id: 'claude', name: 'Claude Code' },
   { id: 'codex', name: 'Codex' },
-]
+] as const
 
 export const MyMachineSection = ({ workspaceId, memberId }: { workspaceId: WorkspaceId; memberId: MemberId }) => {
   const commands = useRuntimeCommands()
@@ -29,7 +30,7 @@ export const MyMachineSection = ({ workspaceId, memberId }: { workspaceId: Works
               <span key={id}>
                 {machine.capacity?.signedIn?.includes(id)
                   ? `Signed in to ${name}`
-                  : `Not signed in to ${name}: docker exec -it hq-host hq-host login ${id}`}
+                  : `Not signed in to ${name}: ${signInCommandOf(id)}`}
               </span>
             ))}
           <button type="button" className={`ml-auto ${ghostButtonClass}`} onClick={() => setIsRemoving(true)}>

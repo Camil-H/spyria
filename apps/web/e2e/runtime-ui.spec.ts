@@ -11,7 +11,7 @@ const newSessionNotice = 'The agent started a new session; it does not remember 
 const runtimeStatusOf = (page: Page) => mainOf(page).getByRole('status', { name: 'Runtime' })
 const workingIndicatorOf = (page: Page) => page.getByRole('status', { name: 'Agent is working' })
 const stopButtonOf = (page: Page) => mainOf(page).getByRole('button', { name: 'Stop' })
-const retryButtonOf = (page: Page) => mainOf(page).getByRole('button', { name: 'Retry' })
+const retryButtonOf = (page: Page) => runtimeStatusOf(page).getByRole('button', { name: 'Could not start · Retry' })
 const itemsWith = (page: Page, text: string) => messageItemsOf(page).filter({ hasText: text })
 
 const turnOf = async (workerStack: WorkerStack, chatId: string) =>
@@ -67,7 +67,7 @@ test.describe('without a warm runtime', () => {
     })
   })
 
-  test('5. a runtime that cannot start shows Could not start and a notice; Retry starts it and answers the prompt', async ({
+  test('5. a runtime that cannot start shows one Could not start · Retry chip and a notice; clicking it starts the runtime and answers the prompt', async ({
     page,
     failRuntimeCreation,
   }) => {
@@ -76,7 +76,9 @@ test.describe('without a warm runtime', () => {
     await openChat(page, 'Research')
     await sendMessage(page, 'Start please')
 
-    await expect(runtimeStatusOf(page)).toHaveText('Could not start', coldStart)
+    await expect(runtimeStatusOf(page)).toHaveText('Could not start · Retry', coldStart)
+    await expect(retryButtonOf(page)).toBeVisible()
+    await expect(mainOf(page).getByRole('button', { name: /Retry/ })).toHaveCount(1)
     await expect(itemsWith(page, 'The agent could not start')).toHaveCount(1, agentReply)
     await expect(workingIndicatorOf(page)).toHaveCount(0)
     await failRuntimeCreation(false)

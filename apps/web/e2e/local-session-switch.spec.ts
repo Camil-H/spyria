@@ -32,6 +32,7 @@ const sessionNotice = "Sessions on members' machines are turned off for this wor
 
 const hostsSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Runtime hosts' })
 const machineSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'My machine' })
+const llmSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'LLM access' })
 const switchOf = (page: Page) => hostsSectionOf(page).getByRole('switch', { name: switchName })
 const repliesWith = (page: Page, text: string) => messageItemsOf(page).filter({ hasText: text })
 
@@ -176,4 +177,30 @@ test('3. a member does not see the switch and their crafted mutation is refused 
   })
   expect(JSON.stringify(await response.json())).toContain('Only workspace admins can manage runtime hosts')
   expect(await localSessionsOf(workerStack)).toBe(true)
+})
+
+test('4. with the switch off a member still sees Use Claude Code and Use Codex, and each dialog shows the turned-off notice and no command', async ({
+  page,
+  browser,
+  workerStack,
+}) => {
+  await setLocalSessions(page, false)
+  const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+  await openProfile(bobPage)
+  await expect(machineSectionOf(bobPage)).toContainText(turnedOffNotice)
+  for (const toolName of ['Claude Code', 'Codex']) {
+    await llmSectionOf(bobPage)
+      .getByRole('button', { name: `Use ${toolName}` })
+      .click()
+    const dialog = bobPage.getByRole('dialog', { name: `Use ${toolName}` })
+    await expect(dialog).toContainText(turnedOffNotice)
+    await expect(dialog.getByRole('textbox')).toHaveCount(0)
+    await expect(dialog).not.toContainText('docker')
+    await dialog.getByRole('button', { name: 'Close' }).click()
+  }
+  expect(
+    await workerStack.database
+      .$client`select 1 from runtime_hosts where owner_id = 'member-bob' and removed_at is null`,
+  ).toHaveLength(0)
+  await bobPage.context().close()
 })

@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test as base, expect, mainOf, type Page, sidebarOf } from './fixtures'
+import { viteUrl } from './stack-ports'
 
 const hostProgram = new URL('../../host/src/main.ts', import.meta.url).pathname
 const gibibyte = 1024 ** 3
@@ -89,7 +90,7 @@ const hostRowOf = (page: Page, hostName: string) => settingsOf(page).getByRole('
 const addDialogOf = (page: Page) => page.getByRole('dialog', { name: 'Add runtime host' })
 const commandOf = (page: Page, dialogName = 'Add runtime host') =>
   page.getByRole('dialog', { name: dialogName }).getByRole('textbox', { name: 'Command' })
-const urlOf = (command: string) => command.split(' ').at(-1) ?? ''
+const urlOf = (command: string) => `${viteUrl}/h/${command.match(/\/h\/([A-Z0-9]{8})\b/)?.[1]}`
 
 const openSettings = async (page: Page) => {
   await sidebarOf(page).getByRole('link', { name: 'Workspace settings' }).click()
@@ -145,10 +146,9 @@ test.describe('1. access', () => {
   })
 })
 
-test('2. adding a host shows a copyable docker run command with a rootless switch', async ({
+test('2. adding a host shows one copyable command that replaces hq-host and picks rootless or rooted Docker itself', async ({
   page,
   context,
-  baseURL,
 }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write'])
   await openSettings(page)
@@ -156,23 +156,25 @@ test('2. adding a host shows a copyable docker run command with a rootless switc
   await addDialogOf(page).getByRole('textbox', { name: 'Host name' }).fill('Home server')
   await addDialogOf(page).getByRole('button', { name: 'Add' }).click()
 
-  const rootlessSwitch = addDialogOf(page).getByRole('switch', { name: 'Rootless Docker' })
-  await expect(rootlessSwitch).toBeChecked()
-  const rootlessCommand = await commandOf(page).inputValue()
-  expect(rootlessCommand).toContain('docker run')
-  expect(rootlessCommand).toContain('--restart unless-stopped')
-  expect(rootlessCommand).toContain('-v $XDG_RUNTIME_DIR/docker.sock:/var/run/docker.sock')
-  expect(urlOf(rootlessCommand)).toMatch(new RegExp(`^${baseURL}/h/[A-HJ-NP-Z2-9]{8}$`))
-
-  await rootlessSwitch.click()
-  await expect(rootlessSwitch).not.toBeChecked()
-  const rootedCommand = await commandOf(page).inputValue()
-  expect(rootedCommand).toContain('-v /var/run/docker.sock:/var/run/docker.sock')
-  expect(rootedCommand).not.toContain('XDG_RUNTIME_DIR')
-  expect(urlOf(rootedCommand)).toBe(urlOf(rootlessCommand))
+  await expect(addDialogOf(page).getByRole('switch', { name: 'Rootless Docker' })).toHaveCount(0)
+  await expect(addDialogOf(page)).toContainText('within 15 minutes, from the HQ repo folder')
+  const command = await commandOf(page).inputValue()
+  expect(command).toMatch(
+    /^docker build -q -t hq-host apps\/host >\/dev\/null && docker rm -f hq-host .*; docker volume rm hq-host /,
+  )
+  expect(command).toContain('docker run')
+  expect(command).toContain('--restart unless-stopped')
+  expect(command).toContain('grep -q rootless')
+  expect(command).toContain('-v $XDG_RUNTIME_DIR/docker.sock:/var/run/docker.sock')
+  expect(command).toContain('-v /var/run/docker.sock:/var/run/docker.sock')
+  expect(command).toContain('--add-host host.docker.internal:host-gateway')
+  expect(command).not.toContain('--personal')
+  expect(command).not.toContain('login')
+  const dockerOrigin = viteUrl.replace('localhost', 'host.docker.internal')
+  expect(command).toMatch(new RegExp(` hq-host ${dockerOrigin}/h/[A-HJ-NP-Z2-9]{8}$`))
 
   await addDialogOf(page).getByRole('button', { name: 'Copy' }).click()
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(rootedCommand)
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(command)
   await addDialogOf(page).getByRole('button', { name: 'Close' }).click()
   await expect(addDialogOf(page)).toHaveCount(0)
   await expect(hostRowOf(page, 'Home server')).toContainText('Waiting for the host')

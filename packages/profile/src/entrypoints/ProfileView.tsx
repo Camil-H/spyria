@@ -8,7 +8,7 @@ import { ConnectionsSection } from './ConnectionsSection.tsx'
 import { DisplayNameForm } from './DisplayNameForm.tsx'
 import { LlmAccessSection } from './LlmAccessSection.tsx'
 
-export const ProfileView = ({ children }: { children?: ReactNode }) => {
+export const ProfileView = ({ llmAccessActions, children }: { llmAccessActions?: ReactNode; children?: ReactNode }) => {
   const workspaceId = useOutletContext<WorkspaceId>()
   const { memberId } = useSession()
   const displayName = useQuery(getProfile(workspaceId, memberId))
@@ -17,7 +17,7 @@ export const ProfileView = ({ children }: { children?: ReactNode }) => {
     <div className="flex max-w-3xl flex-col gap-8">
       <h1 className="text-2xl font-semibold">Profile</h1>
       <DisplayNameForm workspaceId={workspaceId} currentName={displayName} />
-      <LlmAccessSection workspaceId={workspaceId} memberId={memberId} />
+      <LlmAccessSection workspaceId={workspaceId} memberId={memberId} actions={llmAccessActions} />
       <ConnectionsSection workspaceId={workspaceId} memberId={memberId} />
       {children}
     </div>

@@ -51,17 +51,6 @@ export const ChatView = ({
                 <span className="text-sm text-muted">
                   Agent acts as <strong className="font-semibold text-ink">{conversation.ownerName}</strong>
                 </span>
-                <SessionChip
-                  workspaceId={workspaceId}
-                  chatId={chatId}
-                  model={conversation.model}
-                  reasoningEffort={conversation.reasoningEffort}
-                  defaultModel={conversation.defaultModel}
-                  subagentPolicy={conversation.subagentPolicy}
-                  harness={conversation.harness}
-                  localSession={conversation.localSession}
-                />
-                {runtimeStatus}
                 {conversation.gitBranch !== null && (
                   <span className={`${bubbleClassName} inline-flex items-center gap-1`}>
                     <GitBranch aria-label="Git branch" role="img" size={12} />
@@ -87,6 +76,21 @@ export const ChatView = ({
         items={withStreamedReply(conversation.items, streamedReply)}
         onStop={() => commands.stopAgent({ workspaceId, chatId })}
       />
+      {conversation.type === 'runtime' && (
+        <div className="-mb-2 flex items-center gap-2">
+          <SessionChip
+            workspaceId={workspaceId}
+            chatId={chatId}
+            model={conversation.model}
+            reasoningEffort={conversation.reasoningEffort}
+            defaultModel={conversation.defaultModel}
+            subagentPolicy={conversation.subagentPolicy}
+            harness={conversation.harness}
+            localSession={conversation.localSession}
+          />
+          {runtimeStatus}
+        </div>
+      )}
       <Composer
         workspaceId={workspaceId}
         chatId={chatId}

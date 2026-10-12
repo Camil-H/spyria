@@ -86,7 +86,7 @@ export const SessionChip = ({
         <div
           role="dialog"
           aria-label="Session"
-          className="absolute top-full right-0 z-50 mt-1 flex w-80 flex-col gap-3 rounded-lg border border-line bg-raised p-3 text-sm shadow-lg"
+          className="absolute bottom-full left-0 z-50 mb-1 flex w-80 flex-col gap-3 rounded-lg border border-line bg-raised p-3 text-sm shadow-lg"
         >
           {model && !harness && (
             <label className={labelClass}>

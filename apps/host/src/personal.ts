@@ -176,6 +176,25 @@ const attachTerminal = (socketPath: string, container: string) => {
   return attached.promise.then(() => ({ closed: closed.promise }))
 }
 
+const readerWaitMilliseconds = 15 * 60 * 1000
+const readerPollMilliseconds = 2000
+
+const readerOnceConnected = async (docker: Docker, readerName: string) => {
+  const deadline = Date.now() + readerWaitMilliseconds
+  for (let attempt = 0; ; attempt++) {
+    const reader = await docker<{ Config: { Image: string } }>('GET', `/containers/${readerName}/json`).catch(
+      (error) => {
+        if (!isMissing(error)) throw error
+      },
+    )
+    if (reader) return reader
+    if (Date.now() > deadline) throw new Error('hq-host did not connect to HQ: check its logs with docker logs hq-host')
+    if (attempt === 0)
+      console.log('Waiting for hq-host to connect to HQ and pull the runtime image (about 1.2 GB the first time)…')
+    await Bun.sleep(readerPollMilliseconds)
+  }
+}
+
 export const runCredentialsCommand = async (
   docker: Docker,
   {
@@ -185,13 +204,7 @@ export const runCredentialsCommand = async (
     action,
   }: { socketPath: string; prefix: string; tool: CredentialsTool; action: CredentialsAction },
 ) => {
-  const reader = await docker<{ Config: { Image: string } }>(
-    'GET',
-    `/containers/${readerNameOf(prefix, tool)}/json`,
-  ).catch((error) => {
-    if (!isMissing(error)) throw error
-    throw new Error('Start hq-host --personal and let it connect to HQ first: it learns the runtime image from HQ')
-  })
+  const reader = await readerOnceConnected(docker, readerNameOf(prefix, tool))
   const name = `${prefix}cred-${tool}-${action}`
   await docker('DELETE', `/containers/${name}?force=true`).catch((error) => {
     if (!isMissing(error)) throw error
