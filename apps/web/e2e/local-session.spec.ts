@@ -209,6 +209,33 @@ test('9. the New chat dialog offers On my machine only to a member with a local 
   await expect(dialog.getByRole('radio', { name: localOption })).toBeVisible()
 })
 
+test('10. text streamed around a command shows before the command and stays, the rest after it, and nothing is stored twice', async ({
+  page,
+  workerStack,
+  machine,
+  agentScript,
+}) => {
+  await machine(signedInMachine)
+  const chatId = await newLocalSession(page, 'Live text')
+  await agentScript(chatId, {
+    steps: [{ command: 'sleep 2 && echo checked', say: 'Looking.' }],
+    text: 'Done.',
+    wordDelayMilliseconds: 300,
+  })
+  await sendMessage(page, 'Check the repo')
+  await expect(messageItemsOf(page).getByRole('img', { name: 'Running' })).toBeVisible(agentReply)
+  await expect(messageItemsOf(page).nth(1)).toContainText('Looking.')
+  await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0, agentReply)
+  await expect(messageItemsOf(page)).toHaveCount(4)
+  await expect(messageItemsOf(page).nth(1)).toContainText('Looking.')
+  await expect(messageItemsOf(page).nth(2)).toContainText('$ sleep 2 && echo checked')
+  await expect(messageItemsOf(page).nth(3)).toContainText('Done.')
+  await expect(messageItemsOf(page).nth(3)).not.toContainText('Looking.')
+  const answers = await workerStack.database.$client<{ body: string }[]>`
+    select body from messages where chat_id = ${chatId} and kind = 'agent' order by seq`
+  expect(answers.map((answer) => answer.body)).toEqual(['Looking.', 'Done.'])
+})
+
 test.describe('Codex on a ChatGPT plan', () => {
   test('1. the owner prompts an On my machine Codex session: the subscription launch, the answer, unmetered', async ({
     page,
@@ -311,5 +338,27 @@ test.describe('Codex on a ChatGPT plan', () => {
     await openNewChat(page)
     await expect(dialog.getByRole('radio', { name: localOption })).toBeVisible()
     await expect(dialog.getByRole('radio', { name: codexOption })).toBeVisible()
+  })
+
+  test('5. a command pending with no input shows the real command and no spinner once completed, and a read shows its path', async ({
+    page,
+    machine,
+    agentScript,
+  }) => {
+    await machine(codexMachine)
+    const chatId = await newLocalSession(page, 'Real steps', codexOption)
+    await agentScript(chatId, {
+      steps: [{ command: 'echo listed' }, { read: 'notes.md' }],
+      text: 'Read the notes and listed the files.',
+      wordDelayMilliseconds: 400,
+    })
+    await sendMessage(page, 'List and read')
+    const command = repliesWith(page, '$ echo listed')
+    await expect(command.getByRole('img', { name: 'Succeeded' })).toBeVisible(agentReply)
+    await expect(repliesWith(page, 'Read notes.md')).toBeVisible(agentReply)
+    await expect(page.getByRole('status', { name: 'Agent is working' })).toBeVisible()
+    await expect(messageItemsOf(page).getByRole('img', { name: 'Running' })).toHaveCount(0)
+    await expect(mainOf(page)).not.toContainText('$ Terminal')
+    await expect(mainOf(page)).not.toContainText('Read File')
   })
 })

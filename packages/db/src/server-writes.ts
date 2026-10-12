@@ -292,6 +292,19 @@ export const lastAgentEvent = (tx: Transaction, workspaceId: string, chatId: str
     [workspaceId, chatId],
   )
 
+export const recordedStreamedText = async (tx: Transaction, workspaceId: string, chatId: string, promptId: string) =>
+  (
+    await firstOnServer<{ text: string }>(
+      tx,
+      `select coalesce(string_agg(payload->'event'->'llm_message'->'content'->0->>'text', '' order by seq), '') as text
+       from events where workspace_id = $1 and chat_id = $2 and type = 'agent.event' and payload->>'replyToId' = $3
+       and id like '%-text' and seq > coalesce((select max(seq) from events
+         where workspace_id = $1 and chat_id = $2 and type = 'agent.event' and payload->>'replyToId' = $3
+         and payload->'event'->'action'->>'kind' = 'FinishAction'), 0)`,
+      [workspaceId, chatId, promptId],
+    )
+  )?.text ?? ''
+
 export const stoppedHarnessSessionId = async (tx: Transaction, workspaceId: string, chatId: string) =>
   (
     await firstOnServer<{ sessionId: string | null }>(

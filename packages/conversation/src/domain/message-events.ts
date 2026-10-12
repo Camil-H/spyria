@@ -1,5 +1,5 @@
-import { type AgentEvent, agentProjectionOf, delegatedProjectionOf } from './agent-events.ts'
-import { legacyToolCallStep, observedStep, type StepDelegation, type StoredStep } from './agent-steps.ts'
+import { type AgentEvent, agentProjectionOf, delegatedProjectionOf, observedProjectionStep } from './agent-events.ts'
+import { legacyToolCallStep, type StepDelegation, type StoredStep } from './agent-steps.ts'
 import type { Message } from './message.ts'
 
 export type StoredEvent = Readonly<{
@@ -34,7 +34,12 @@ export type PostedPayload = Pick<ProjectedMessage, 'body' | 'detail' | 'replyToI
   step?: StoredStep | null
 }
 export type ChangedPayload = { messageId: string; body: string }
-export type AgentEventPayload = { replyToId: string | null; event: AgentEvent; delegation?: StepDelegation }
+export type AgentEventPayload = {
+  replyToId: string | null
+  event: AgentEvent
+  delegation?: StepDelegation
+  recordedLength?: number
+}
 
 export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMessage[] => {
   const messageByKey = new Map<string, ProjectedMessage>()
@@ -63,10 +68,10 @@ export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMes
       )
     }
     if (type === 'agent.event') {
-      const { replyToId, event, delegation } = payload as AgentEventPayload
+      const { replyToId, event, delegation, recordedLength } = payload as AgentEventPayload
       const chatKey = `${workspaceId}/${chatId}`
       const projection = delegatedProjectionOf(
-        agentProjectionOf(event, previousTimestampByChat.get(chatKey) ?? null),
+        agentProjectionOf(event, previousTimestampByChat.get(chatKey) ?? null, recordedLength),
         delegation,
       )
       previousTimestampByChat.set(chatKey, event.timestamp)
@@ -74,7 +79,7 @@ export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMes
         const action = messageByKey.get(`${workspaceId}/${projection.actionId}`)
         const observed =
           action?.step &&
-          observedStep(action.step, projection.observation, createdAt.getTime() - action.createdAt.getTime())
+          observedProjectionStep(action.step, projection, createdAt.getTime() - action.createdAt.getTime())
         if (action && observed) messageByKey.set(`${workspaceId}/${action.id}`, { ...action, step: observed })
       }
       if (projection?.type === 'message' || projection?.type === 'step') {

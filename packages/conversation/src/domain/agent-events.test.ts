@@ -5,11 +5,14 @@ import {
   agentProjectionOf,
   isStoredAgentEvent,
   notReadyNoticeOf,
+  recordedLengthOf,
   startFailureNoticeOf,
+  streamedTextEventOf,
   streamedTextOf,
   turnEndNoticeOf,
   waitingNotices,
 } from './agent-events.ts'
+import claudeCodeToolCalls from './claude-code-tool-calls.fixture.json'
 import { messagesFromEvents } from './message-events.ts'
 import { type StreamedReply, storedStreamedReply, streamedReplyAfter, visibleStreamedReply } from './streamed-reply.ts'
 
@@ -196,7 +199,7 @@ test('a Claude Code tool call is one step updated by its tool call id, and the f
       step: {
         type: 'command',
         command: 'echo hi',
-        exitCode: null,
+        exitCode: 0,
         durationMilliseconds: 1000,
         output: 'hi\n',
         truncatedLines: 0,
@@ -315,4 +318,91 @@ test('a Codex command and an HQ tool call start in progress and finish with Code
       step: { type: 'tool', name: 'whoami (fake)', arguments: '{"verbose":true}', result: 'you are bob' },
     },
   ])
+})
+
+const storedEventsOf = (entries: readonly { event: AgentEvent; recordedLength?: number }[]) =>
+  entries.map(({ event, recordedLength }, index) => ({
+    workspaceId: 'workspace-acme',
+    chatId: 'chat-research',
+    id: event.id,
+    seq: index + 1,
+    type: 'agent.event',
+    actor: null,
+    payload: { replyToId: 'prompt-1', event, ...(recordedLength && { recordedLength }) },
+    createdAt: new Date(Date.parse('2026-10-12T17:56:00Z') + index * 1000),
+  }))
+
+test('a real Claude Code sequence of pending then completed or failed calls ends with the final titles and inputs, every step done', () => {
+  const steps = messagesFromEvents(storedEventsOf(claudeCodeToolCalls.map((event) => ({ event })))).map(
+    ({ id, step }) => ({ id, step }),
+  )
+  expect(steps).toMatchObject([
+    {
+      id: 'toolu_01BawE7ZV28RVEVNShsEA3Uj',
+      step: {
+        type: 'command',
+        command: 'ls -la /workspace/project && git -C /workspace/project log --oneline -5 2>&1 | head -20',
+        exitCode: 0,
+        output: expect.stringContaining('total 0'),
+      },
+    },
+    {
+      id: 'toolu_01Uietr3ZHknr6fdX1vUGHgR',
+      step: {
+        type: 'command',
+        command: expect.stringMatching(/^cat \/workspace\/project\/CLAUDE\.md/),
+        exitCode: 1,
+        output: 'Exit code 1',
+      },
+    },
+    {
+      id: 'toolu_01V5JoN21hHzqnuw2hL9qAoH',
+      step: { type: 'command', command: expect.stringMatching(/^which python3 node npx/), exitCode: 0 },
+    },
+    {
+      id: 'toolu_01MNfMCpA947uCwubk6pYiyY',
+      step: { type: 'tool', name: 'Skill', arguments: '{"skill":"dataviz"}', result: 'Launching skill: dataviz' },
+    },
+    {
+      id: 'toolu_01NfP88BRpnXgBEEvbHgVRvJ',
+      step: {
+        type: 'file',
+        operation: 'read',
+        path: '/tmp/claude-10001/bundled-skills/2.1.220/4fd2f3caa0d4a7094ca0b32256511d63/dataviz/references/palette.md',
+      },
+    },
+  ])
+  expect(steps).toHaveLength(5)
+  for (const { step } of steps) expect(JSON.stringify(step)).not.toContain('"exitCode":null')
+})
+
+test('text streamed before a tool call is its own message, and the finish stores only the text not yet recorded', () => {
+  const pending = agentEvent(
+    'ACPToolCallEvent',
+    { tool_call_id: 'toolu_1', title: 'Terminal', tool_kind: 'execute', status: 'pending', raw_input: {} },
+    'event-pending',
+  )
+  const finish = agentEvent('ActionEvent', { action: { kind: 'FinishAction', message: 'Looking. Done.' } })
+  const messages = messagesFromEvents(
+    storedEventsOf([
+      { event: streamedTextEventOf(pending, 'Looking. ') },
+      { event: pending },
+      { event: finish, recordedLength: recordedLengthOf(finish, 'Looking. ') },
+    ]),
+  )
+  expect(messages.map(({ id, kind, body }) => ({ id, kind, body }))).toEqual([
+    { id: 'event-pending-text', kind: 'agent', body: 'Looking.' },
+    { id: 'toolu_1', kind: 'step', body: 'command' },
+    { id: finish.id, kind: 'agent', body: 'Done.' },
+  ])
+  expect(recordedLengthOf(finish, 'Lost a delta. ')).toBe(0)
+  expect(recordedLengthOf(finish, '')).toBe(0)
+  const fullyRecorded = agentEvent('ActionEvent', {
+    reasoning_content: 'Checked twice.',
+    action: { kind: 'FinishAction', message: 'Looking. ' },
+  })
+  expect(agentProjectionOf(fullyRecorded, null, 9)).toEqual({
+    type: 'step',
+    step: { type: 'thought', text: 'Checked twice.', durationMilliseconds: null },
+  })
 })

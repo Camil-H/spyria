@@ -123,6 +123,24 @@ const observe = async (name: string, args: Record<string, unknown>, directory: s
   return { kind: 'ThinkObservation', content: text('Your thought has been logged.') }
 }
 
+const acpToolCallOf = (name: string, args: Record<string, unknown>) => {
+  if (name === 'file_editor' && args.command === 'view')
+    return {
+      tool_kind: 'read',
+      title: 'Read File',
+      finalTitle: `Read ${args.path}`,
+      raw_input: { file_path: args.path },
+    }
+  return name === 'terminal'
+    ? {
+        tool_kind: 'execute',
+        title: 'Terminal',
+        finalTitle: String(args.command),
+        raw_input: { command: args.command },
+      }
+    : undefined
+}
+
 const acpAgentOf = (conversation: Conversation) =>
   conversation.created.agent as { acp_server?: string; acp_resume_session_id?: string }
 const callsProviderDirectly = (conversation: Conversation) =>
@@ -241,6 +259,7 @@ export const createFakeAgentServer = ({
       })
     conversation.history.push({ role: 'user', content: prompt })
     if (!signal.aborted) status(conversation, 'running')
+    let turnText = ''
     while (!signal.aborted) {
       const completion = await completionOf(
         (callsProviderDirectly(conversation) ? subscriptionCall : modelCall?.()) as ModelCall,
@@ -259,18 +278,45 @@ export const createFakeAgentServer = ({
         return
       }
       const { toolCall } = completion
+      turnText += completion.text
       if (!toolCall) {
         conversation.history.push({ role: 'assistant', content: completion.text })
-        emit(conversation, 'MessageEvent', {
-          source: 'agent',
-          llm_message: { role: 'assistant', content: text(completion.text) },
-        })
+        if (acp_server)
+          emit(conversation, 'ActionEvent', {
+            source: 'agent',
+            action: { kind: 'FinishAction', message: turnText },
+            tool_name: 'finish',
+          })
+        else
+          emit(conversation, 'MessageEvent', {
+            source: 'agent',
+            llm_message: { role: 'assistant', content: text(completion.text) },
+          })
         status(conversation, 'finished')
         return
       }
       const name = toolCall.function.name
       const args = JSON.parse(toolCall.function.arguments) as Record<string, unknown>
       conversation.history.push({ role: 'assistant', content: completion.text, tool_calls: [toolCall] })
+      const acpToolCall = acp_server ? acpToolCallOf(name, args) : undefined
+      if (acpToolCall) {
+        const { finalTitle, raw_input, ...pending } = acpToolCall
+        const toolCallEvent = { source: 'agent', tool_call_id: toolCall.id, ...pending }
+        emitLive('ACPToolCallEvent', { ...toolCallEvent, status: 'pending', raw_input: {} })
+        const { output, exitCode } =
+          name === 'terminal'
+            ? await runCommand(String(args.command), directoryOf(conversation.apiKey))
+            : { output: '', exitCode: 0 }
+        conversation.history.push({ role: 'tool', tool_call_id: toolCall.id, content: output })
+        emitLive('ACPToolCallEvent', {
+          ...toolCallEvent,
+          status: exitCode === 0 ? 'completed' : 'failed',
+          title: finalTitle,
+          raw_input,
+          raw_output: exitCode === 0 ? output : `Exit code ${exitCode}`,
+        })
+        continue
+      }
       const isMcp = conversation.mcpServerOfTool?.[name] !== undefined
       const action = emit(conversation, 'ActionEvent', {
         source: 'agent',

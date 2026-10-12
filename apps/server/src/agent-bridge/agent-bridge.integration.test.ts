@@ -198,6 +198,46 @@ test('a reconnect resumes from the last stored event with resend_mode=since, wit
   expect((await repliesTo(question)).map((reply) => reply.body)).toEqual(['Half way.', replyText])
 })
 
+test('text streamed before a tool call is stored once, and after a reconnect the finish stores only the rest', async () => {
+  const { fake } = await agentHost()
+  const chat = await newRuntimeChat()
+  fake.turn = async (conversation, promptText) => {
+    fake.emit(conversation, 'MessageEvent', {
+      source: 'user',
+      llm_message: { role: 'user', content: text(promptText) },
+    })
+    fake.status(conversation, 'running')
+    await waitFor(async () => (await storedAgentEventsOf(chat)).length >= 2)
+    fake.emit(conversation, 'StreamingDeltaEvent', { source: 'agent', content: 'Looking. ' })
+    const toolCall = { source: 'agent', tool_call_id: 'toolu_1', title: 'Terminal', tool_kind: 'execute' }
+    fake.emit(conversation, 'ACPToolCallEvent', { ...toolCall, status: 'pending', raw_input: {} })
+    await waitFor(async () => (await messagesOf(chat)).some((message) => message.body === 'Looking.'))
+    for (const close of conversation.closers) close()
+    await waitFor(() => fake.connections.length >= 2, 5000)
+    fake.emit(conversation, 'ACPToolCallEvent', {
+      ...toolCall,
+      status: 'completed',
+      title: 'ls',
+      raw_input: { command: 'ls' },
+      raw_output: 'notes.md',
+    })
+    fake.emit(conversation, 'StreamingDeltaEvent', { source: 'agent', content: 'Done.' })
+    fake.emit(conversation, 'ActionEvent', {
+      source: 'agent',
+      action: { kind: 'FinishAction', message: 'Looking. Done.' },
+      tool_name: 'finish',
+    })
+    fake.status(conversation, 'finished')
+  }
+  const question = await prompt(chat, 'Stream around a tool call')
+  await answered(question, 3)
+  await waitFor(async () => (await turnOf(chat)) === null)
+
+  expect((await repliesTo(question)).map((reply) => reply.body)).toEqual(['Looking.', 'command', 'Done.'])
+  const [command] = (await messagesOf(chat)).filter((message) => message.kind === 'step')
+  expect(command?.step).toMatchObject({ type: 'command', command: 'ls', exitCode: 0, output: 'notes.md' })
+})
+
 test('prompts to one chat are delivered one turn at a time, in order, each exactly once, even with two workers', async () => {
   const secondWorker = startJobWorker(database, {
     pollIntervalMilliseconds: 5,

@@ -11,6 +11,7 @@ import {
   lockChatTurn,
   memberModelsOf,
   pendingPrompts,
+  recordedStreamedText,
   runningDelegationOfTokenHash,
   setChatAgentModel,
   setChatTurnFailure,
@@ -178,9 +179,14 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         })),
     },
     agentEvents: {
-      append: async (id, event, replyToId, at, delegation) => {
+      append: async (id, event, replyToId, at, delegation, recordedLength) => {
         if (tx.location !== 'server' || (await isChatEventStored(tx, contextWorkspaceId, event.id))) return undefined
-        const payload: AgentEventPayload = { replyToId, event, ...(delegation && { delegation }) }
+        const payload: AgentEventPayload = {
+          replyToId,
+          event,
+          ...(delegation && { delegation }),
+          ...(recordedLength && { recordedLength }),
+        }
         return appendChatEvent(tx, {
           workspaceId: contextWorkspaceId,
           chatId: id,
@@ -198,6 +204,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         )
       },
       stoppedHarnessSessionId: (id) => stoppedHarnessSessionId(tx, contextWorkspaceId, id),
+      recordedStreamedText: (id, promptId) => recordedStreamedText(tx, contextWorkspaceId, id, promptId),
     },
     plans: {
       replace: async (id, items) => {

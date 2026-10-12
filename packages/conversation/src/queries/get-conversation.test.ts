@@ -109,6 +109,30 @@ test('an ended turn folds its steps into one line above the answer, with the tho
   expect(fold?.type === 'fold' && fold.steps[1]?.step).not.toHaveProperty('thought')
 })
 
+test('text the agent wrote between steps folds with them in order, and text before the first step stays above the fold', () => {
+  const conversation = conversationWith([
+    replyRow(2, 'agent', { body: 'Looking.' }),
+    replyRow(3, 'step', { step: { ...command(0), thought: undefined } }),
+    replyRow(4, 'agent', { body: 'Now the edit.' }),
+    replyRow(5, 'step', { step: edit }),
+    replyRow(6, 'agent', { body: 'Fixed.' }),
+  ])
+  expect(itemSummaryOf(conversation)).toEqual([
+    'member',
+    'agent',
+    'fold Worked for 3s · 2 steps: command, , file',
+    'agent',
+  ])
+  const fold = conversation?.items[2]
+  expect(fold?.type === 'fold' && fold.steps.map((step) => step.body)).toEqual(['step', 'Now the edit.', 'step'])
+  const endedOnStep = conversationWith([
+    replyRow(2, 'agent', { body: 'Looking.' }),
+    replyRow(3, 'step', { step: { ...command(0), thought: undefined } }),
+    replyRow(4, 'step', { step: edit }),
+  ])
+  expect(itemSummaryOf(endedOnStep)).toEqual(['member', 'agent', 'step command', 'step file'])
+})
+
 test('an active turn shows its steps live and unfolded, its pending command running', () => {
   const conversation = conversationWith([replyRow(2, 'step', { step: command(null) })], true)
   expect(itemSummaryOf(conversation)).toEqual(['member', 'step thought', 'step command'])

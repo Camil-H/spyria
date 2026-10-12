@@ -135,15 +135,18 @@ export const createAgentBridge = ({
           }
           if (streamed) return
           const promptAtEvent = chatSocket.promptId
+          const isToolCall = event.kind === 'ACPToolCallEvent'
+          const streamedText = promptAtEvent && isToolCall && !chatSocket.isReasoning ? chatSocket.streamedText : ''
+          if (streamedText) chatSocket.streamedText = ''
           recording = recording
-            .then(() => handlers.recordEvent(chat, event))
+            .then(() => handlers.recordEvent(chat, event, streamedText))
             .then((recorded) => {
               if (recorded?.isReplyStored && promptAtEvent)
                 for (const viewer of viewers.get(keyOf(chat)) ?? [])
                   send(viewer, chat, { promptId: promptAtEvent, storedId: event.id })
               if (!recorded || chatSocket.promptId !== promptAtEvent) return
               chatSocket.promptId = recorded.promptId
-              if (recorded.isReplyStored || recorded.promptId === null) chatSocket.streamedText = ''
+              if ((recorded.isReplyStored && !isToolCall) || recorded.promptId === null) chatSocket.streamedText = ''
             })
             .catch((error) =>
               console.error(`Recording an agent event of chat ${chat.chatId} failed: ${messageOf(error)}`),

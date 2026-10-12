@@ -1,6 +1,7 @@
 import {
   type Fields,
   keptOutputOf,
+  observedStep,
   pathOf,
   type StepDelegation,
   type StoredStep,
@@ -14,7 +15,7 @@ export type TurnOutcome = 'finished' | 'error' | 'stuck'
 export type AgentProjection =
   | { type: 'message'; body: string; kind?: 'notice'; thought?: ThoughtStep }
   | { type: 'step'; step: StoredStep; id?: string }
-  | { type: 'observation'; actionId: string; observation: Fields }
+  | { type: 'observation'; actionId: string; observation: Fields; step?: StoredStep }
   | { type: 'turn-end'; outcome: TurnOutcome }
   | undefined
 
@@ -131,6 +132,7 @@ const acpToolCallProjectionOf = (event: AgentEvent): AgentProjection => {
     return {
       type: 'observation',
       actionId: id,
+      step: acpStepOf(event),
       observation: {
         command: (event.raw_input as Fields)?.command,
         content: [
@@ -144,7 +146,7 @@ const acpToolCallProjectionOf = (event: AgentEvent): AgentProjection => {
                   textOf((output.result as Fields)?.content),
           },
         ],
-        exit_code: output.exit_code,
+        exit_code: output.exit_code ?? (event.status === 'failed' ? 1 : 0),
         old_content: diff?.old_text,
         new_content: diff?.new_text,
         is_error: event.status === 'failed',
@@ -181,16 +183,35 @@ export const streamedTextOf = (event: AgentEvent) => {
     : { text: content, isReasoning: false }
 }
 
-export const agentProjectionOf = (event: AgentEvent, previousTimestamp: string | null): AgentProjection => {
+export const recordedLengthOf = (event: AgentEvent, recordedText: string) => {
+  const message = (event.action as Fields)?.message
+  return recordedText !== '' && typeof message === 'string' && message.startsWith(recordedText)
+    ? recordedText.length
+    : 0
+}
+
+export const streamedTextEventOf = (event: AgentEvent, text: string): AgentEvent => ({
+  id: `${event.id}-text`,
+  kind: 'MessageEvent',
+  timestamp: event.timestamp,
+  source: 'agent',
+  llm_message: { role: 'assistant', content: [{ type: 'text', text }] },
+})
+
+export const agentProjectionOf = (
+  event: AgentEvent,
+  previousTimestamp: string | null,
+  recordedLength = 0,
+): AgentProjection => {
   const action = event.action as Fields
   const durationMilliseconds =
     previousTimestamp === null ? null : Date.parse(event.timestamp) - Date.parse(previousTimestamp)
   if (event.kind === 'MessageEvent' && event.source === 'agent')
     return messageOf(textOf((event.llm_message as Fields)?.content))
   if (isFinishEvent(event)) {
-    const message = messageOf(action?.message)
+    const message = messageOf(String(action?.message ?? '').slice(recordedLength))
     const thought = thoughtOf([event.reasoning_content], durationMilliseconds)
-    return message?.type === 'message' && thought ? { ...message, thought } : message
+    return message?.type === 'message' && thought ? { ...message, thought } : (message ?? (thought && stepOf(thought)))
   }
   if (event.kind === 'ACPToolCallEvent') return acpToolCallProjectionOf(event)
   if (event.kind === 'ActionEvent' && action?.kind === 'ThinkAction') {
@@ -212,6 +233,15 @@ export const agentProjectionOf = (event: AgentEvent, previousTimestamp: string |
       ? { type: 'turn-end', outcome: event.value as TurnOutcome }
       : undefined
   return undefined
+}
+
+export const observedProjectionStep = (
+  stored: StoredStep,
+  { step, observation }: Extract<AgentProjection, { type: 'observation' }>,
+  durationMilliseconds: number,
+) => {
+  const current = step ? { ...step, ...(stored.delegation && { delegation: stored.delegation }) } : stored
+  return observedStep(current, observation, durationMilliseconds) ?? (step && current)
 }
 
 export const delegatedProjectionOf = (

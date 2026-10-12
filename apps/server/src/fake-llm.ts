@@ -1,14 +1,16 @@
 import type { RoutableModel } from '@hq/kernel'
 import { Hono } from 'hono'
 
-type FakeLlmStep =
+type FakeLlmStep = (
   | { think: string }
   | { command: string }
+  | { read: string }
   | { edit: { path: string; create?: string; oldText?: string; newText?: string } }
   | { plan: { title: string; status: string }[] }
   | { fail: string }
   | { tool: string; arguments?: Record<string, unknown> }
   | { task: string }
+) & { say?: string }
 type FakeRouteAnswer = { tier: string; confidence: string | number; effort: string; prose?: boolean }
 type FakeRoute = FakeRouteAnswer | 'fail' | 'slow'
 export type FakeLlmScript = {
@@ -66,16 +68,18 @@ const toolCallOf = (step: FakeLlmStep | undefined, offeredTools: readonly string
                   name: 'task_tracker',
                   arguments: { command: 'plan', task_list: step.plan.map((task) => ({ ...task, notes: '' })) },
                 }
-              : {
-                  name: 'file_editor',
-                  arguments: {
-                    path: `${workingDirectory}${step.edit.path}`,
-                    security_risk: 'LOW',
-                    ...(step.edit.create === undefined
-                      ? { command: 'str_replace', old_str: step.edit.oldText, new_str: step.edit.newText }
-                      : { command: 'create', file_text: step.edit.create }),
-                  },
-                }
+              : 'read' in step
+                ? { name: 'file_editor', arguments: { command: 'view', path: `${workingDirectory}${step.read}` } }
+                : {
+                    name: 'file_editor',
+                    arguments: {
+                      path: `${workingDirectory}${step.edit.path}`,
+                      security_risk: 'LOW',
+                      ...(step.edit.create === undefined
+                        ? { command: 'str_replace', old_str: step.edit.oldText, new_str: step.edit.newText }
+                        : { command: 'create', file_text: step.edit.create }),
+                    },
+                  }
   return (
     call && {
       index: 0,
@@ -437,7 +441,7 @@ export const createFakeLlm = (
         request.tools?.map((tool) => tool.function.name),
         resumeId,
       )
-      const text = toolCall ? '' : (!request.tools?.length && summary) || (script.text ?? defaultText)
+      const text = toolCall ? (step?.say ?? '') : (!request.tools?.length && summary) || (script.text ?? defaultText)
       const reasoning = step && 'think' in step ? step.think : ''
       const finishReason = toolCall ? 'tool_calls' : 'stop'
       if (!request.stream)

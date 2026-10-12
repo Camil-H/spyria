@@ -151,10 +151,12 @@ const turnItemsOf = (messages: readonly ConversationMessage[]): ConversationItem
       .map((step) => (step === plans[0] ? { ...step, step: plans.at(-1)?.step ?? null } : step))
     const answer = replies.findLast((reply) => reply.kind === 'agent')
     const firstStep = visibleSteps[0]
+    const firstStepIndex = replies.findIndex((reply) => reply.id === firstStep?.id)
     for (const reply of turnReplies) if (reply.kind === 'step') itemsByStepId.set(reply.id, [])
     if (
       answer &&
       firstStep &&
+      replies.indexOf(answer) > firstStepIndex &&
       visibleSteps.length > 1 &&
       !firstStep.isRunning &&
       !isStopped &&
@@ -162,7 +164,14 @@ const turnItemsOf = (messages: readonly ConversationMessage[]): ConversationItem
     ) {
       const workedFor = durationLabelOf(Date.parse(answer.createdAt) - Date.parse(firstStep.createdAt))
       const label = `Worked for ${workedFor} · ${visibleSteps.length} steps`
-      itemsByStepId.set(firstStep.id, [{ type: 'fold', promptId, label, steps: visibleSteps }])
+      const narration = replies.filter(
+        (reply, index) => reply.kind === 'agent' && reply !== answer && index > firstStepIndex,
+      )
+      for (const reply of narration) itemsByStepId.set(reply.id, [])
+      const folded = replies.flatMap(
+        (reply) => visibleSteps.find((step) => step.id === reply.id) ?? (narration.includes(reply) ? [reply] : []),
+      )
+      itemsByStepId.set(firstStep.id, [{ type: 'fold', promptId, label, steps: folded }])
     } else for (const step of visibleSteps) itemsByStepId.set(step.id, [{ type: 'message', message: step }])
   }
   return messages.flatMap((message) => itemsByStepId.get(message.id) ?? [{ type: 'message', message }])
