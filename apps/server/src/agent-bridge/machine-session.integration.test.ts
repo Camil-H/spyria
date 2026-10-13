@@ -25,9 +25,10 @@ import { createHqAgentRelay } from './hq-agent-relay.ts'
 
 setDefaultTimeout(40_000)
 const { database } = await openSharedTestApp()
-const gateway = createRuntimeHostGateway({ databases: () => [database] })
-const agentBridge = createAgentBridge({ sandboxProvider: gateway.sandboxProvider, hqAgentForMachines: true })
-const app = createApp({ database, ...testAuthSettings, runtimeHosts: gateway, agentBridge })
+const hqAgentImage = `sha256:${'0'.repeat(64)}`
+const gateway = createRuntimeHostGateway({ databases: () => [database], hqAgentImage })
+const agentBridge = createAgentBridge({ sandboxProvider: gateway.sandboxProvider, hqAgentImage })
+const app = createApp({ database, ...testAuthSettings, runtimeHosts: gateway, agentBridge, hqAgentImage })
 const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
 const worker = startJobWorker(database, {
   pollIntervalMilliseconds: 5,

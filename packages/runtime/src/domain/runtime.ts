@@ -10,7 +10,7 @@ export type RuntimeState =
   | 'removing'
   | 'removed'
   | 'failed'
-export type RuntimeFailure = 'no_host' | 'no_capacity' | 'create_failed' | 'start_failed' | 'lost'
+export type RuntimeFailure = 'no_host' | 'no_capacity' | 'no_image' | 'create_failed' | 'start_failed' | 'lost'
 
 export type Runtime = Readonly<{
   workspaceId: WorkspaceId
@@ -64,7 +64,13 @@ export const transitioned = (
 }
 
 export const ensureStepOf = (runtime: Runtime | undefined) => {
-  if (!runtime || runtime.state === 'removed' || runtime.failure === 'no_host' || runtime.failure === 'no_capacity')
+  if (
+    !runtime ||
+    runtime.state === 'removed' ||
+    runtime.failure === 'no_host' ||
+    runtime.failure === 'no_capacity' ||
+    runtime.failure === 'no_image'
+  )
     return 'place'
   if (runtime.state === 'stopped') return 'start'
   if (runtime.state === 'running') return 'touch'

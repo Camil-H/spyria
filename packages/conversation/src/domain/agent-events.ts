@@ -22,6 +22,7 @@ export type AgentProjection =
 export const agentNotices = {
   noHost: 'No runtime host is available',
   couldNotStart: 'The agent could not start',
+  imageNotBuilt: "HQ's runtime image is not built: run bun run agent:build",
   stoppedWithError: 'The agent stopped with an error',
   noReply: 'The agent finished without a reply',
   hostOffline: 'The runtime host is offline',
@@ -34,6 +35,7 @@ export const agentNotices = {
 export const waitingNotices = [
   agentNotices.noHost,
   agentNotices.couldNotStart,
+  agentNotices.imageNotBuilt,
   agentNotices.hostOffline,
   agentNotices.machineOffline,
   agentNotices.newSession,
@@ -359,8 +361,10 @@ export const reopenedTurnOutcomeOf = (executionStatus: string): TurnOutcome | un
   return executionStatus === 'error' || executionStatus === 'stuck' ? executionStatus : 'finished'
 }
 
-export const startFailureNoticeOf = (failure: string | null) =>
-  failure === 'no_host' || failure === 'no_capacity' ? agentNotices.noHost : agentNotices.couldNotStart
+export const startFailureNoticeOf = (failure: string | null) => {
+  if (failure === 'no_image') return agentNotices.imageNotBuilt
+  return failure === 'no_host' || failure === 'no_capacity' ? agentNotices.noHost : agentNotices.couldNotStart
+}
 
 export const notReadyNoticeOf = (
   { state, failure = null }: { state: string; failure?: string | null },

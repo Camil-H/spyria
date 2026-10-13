@@ -34,7 +34,7 @@ export const createAgentBridge = ({
   now,
   resumeAfterMilliseconds,
   condensationScale,
-  hqAgentForMachines,
+  hqAgentImage,
 }: {
   sandboxProvider: SandboxProvider
   llm?: AgentLlm
@@ -42,7 +42,7 @@ export const createAgentBridge = ({
   now?: () => number
   resumeAfterMilliseconds?: number
   condensationScale?: number
-  hqAgentForMachines?: boolean
+  hqAgentImage?: string
 }) => {
   const bridgeOf = (database: Database) => {
     const sockets = new Map<
@@ -71,7 +71,7 @@ export const createAgentBridge = ({
       now,
       resumeAfterMilliseconds,
       condensationScale,
-      hqAgentForMachines,
+      hqAgentImage,
       eventSockets: {
         ensureOpen: (...target) => ensureOpen(...target),
         stopStreaming: (chat, promptId) => {

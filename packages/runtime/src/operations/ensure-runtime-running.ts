@@ -13,28 +13,32 @@ import {
 } from '../domain/runtime.ts'
 import { agentServerImage } from '../domain/runtime-host.ts'
 
-type Dependencies = { transactor: RuntimeTransactor }
+type Dependencies = { transactor: RuntimeTransactor; hqAgentImage?: string }
 type Input = { workspaceId: WorkspaceId; chatId: ChatId; id: string; now: number }
 
 const placeRuntime = async (
   { runtimes, runtimeHosts, secrets, jobs }: UnitOfWork,
   { workspaceId, chatId, id, now }: Input,
   existing: Runtime | undefined,
+  hqAgentImage: string | undefined,
 ) => {
   if (existing) {
     await secrets.discard(existing)
     await runtimes.delete(existing)
   }
   const placement = placementOf(await runtimeHosts.lockLoads(workspaceId, chatId))
+  const host = placement.hostId && (await runtimeHosts.find(workspaceId, placement.hostId))
+  const image = host && host.ownerId !== null ? hqAgentImage : agentServerImage
+  const failure = placement.failure ?? (image ? null : 'no_image')
   const runtime: Runtime = {
     workspaceId,
     id: runtimeId(id),
     chatId,
-    hostId: placement.hostId ?? null,
-    state: placement.hostId ? 'creating' : 'failed',
-    failure: placement.failure ?? null,
+    hostId: failure ? null : (placement.hostId ?? null),
+    state: failure ? 'failed' : 'creating',
+    failure,
     hostOnline: placement.hostId !== undefined,
-    image: agentServerImage,
+    image: image ?? '',
     lastActiveAt: now,
     createdAt: now,
     stateChangedAt: now,
@@ -47,7 +51,7 @@ const placeRuntime = async (
   return runtime
 }
 
-export const ensureRuntimeRunning = ({ transactor }: Dependencies, input: Input) =>
+export const ensureRuntimeRunning = ({ transactor, hqAgentImage }: Dependencies, input: Input) =>
   transactor.run(async (unitOfWork): Promise<Runtime> => {
     const { runtimes, jobs } = unitOfWork
     const { workspaceId, chatId, now } = input
@@ -60,12 +64,12 @@ export const ensureRuntimeRunning = ({ transactor }: Dependencies, input: Input)
       if (step === 'start') await jobs.enqueue(workspaceId, runtimeJobs.start, { runtimeId: existing.id })
       return ensured
     }
-    return placeRuntime(unitOfWork, input, existing)
+    return placeRuntime(unitOfWork, input, existing, hqAgentImage)
   })
 
-export const retryRuntime = ({ transactor }: Dependencies, input: Input) =>
+export const retryRuntime = ({ transactor, hqAgentImage }: Dependencies, input: Input) =>
   transactor.run(async (unitOfWork) => {
     const existing = await unitOfWork.runtimes.lockByChat(input.workspaceId, input.chatId)
     if (!isRetryable(existing)) throw new RetryRefused()
-    return placeRuntime(unitOfWork, input, existing)
+    return placeRuntime(unitOfWork, input, existing, hqAgentImage)
   })

@@ -6,3 +6,4 @@ test-results
 .hq-host
 .check
 *.bun-build
+apps/agent/image-id

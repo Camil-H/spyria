@@ -42,7 +42,7 @@ export type RuntimeState =
   | 'removing'
   | 'removed'
   | 'failed'
-export type RuntimeFailure = 'no_host' | 'no_capacity' | 'create_failed' | 'start_failed' | 'lost'
+export type RuntimeFailure = 'no_host' | 'no_capacity' | 'no_image' | 'create_failed' | 'start_failed' | 'lost'
 type RuntimeRow = {
   workspaceId: WorkspaceId
   id: RuntimeId

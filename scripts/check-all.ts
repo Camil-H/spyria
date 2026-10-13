@@ -9,6 +9,7 @@ const steps = [
   'test',
   'check:bundle',
   'stack:up',
+  'agent:build',
   'test:integration',
   'test:e2e',
 ]

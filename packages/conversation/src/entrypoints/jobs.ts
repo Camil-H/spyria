@@ -45,7 +45,7 @@ export const createAgentHandlers = ({
   now = Date.now,
   resumeAfterMilliseconds,
   condensationScale,
-  hqAgentForMachines,
+  hqAgentImage,
 }: {
   transact: Transact
   sandboxProvider: SandboxProvider
@@ -55,9 +55,9 @@ export const createAgentHandlers = ({
   now?: () => number
   resumeAfterMilliseconds?: number
   condensationScale?: number
-  hqAgentForMachines?: boolean
+  hqAgentImage?: string
 }) => {
-  const runtimes = createRuntimeAgentRuntimes(transact, sandboxProvider, hqAgentForMachines)
+  const runtimes = createRuntimeAgentRuntimes(transact, sandboxProvider, hqAgentImage)
   const agentServer = createSandboxAgentServer(condensationScale)
   const transactorOf = (id: WorkspaceId) => createTransactingZeroTransactor(transact, id)
   const dependenciesOf = (id: WorkspaceId) => ({

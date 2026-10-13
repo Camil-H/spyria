@@ -105,7 +105,9 @@ const testHeadersOf = (database: Database, chat: { chatId: string }) => ({
   'x-bf-eh-x-hq-chat': `${nameOf(database)}/${chat.chatId}`,
   'x-bf-dim-database': nameOf(database),
 })
+const hqAgentImage = `sha256:${'0'.repeat(64)}`
 const runtimeHosts = createRuntimeHostGateway({
+  hqAgentImage,
   databases: () => [...servedDatabaseByName.values()].map((served) => served.database),
   afterHello: (database, host) => agentBridge.forDatabase(database).promptWaiting(host),
   relayModelCall: createModelCallRelay({
@@ -126,7 +128,7 @@ const agentBridge = createAgentBridge({
   }),
   resumeAfterMilliseconds: 4_000,
   condensationScale,
-  hqAgentForMachines: true,
+  hqAgentImage,
 })
 
 const scriptByChat = new Map<string, { script: FakeLlmScript; used: PromiseWithResolvers<boolean> }>()
@@ -149,6 +151,7 @@ const app = createApp({
   llmGateway,
   runtimeHosts,
   agentBridge,
+  hqAgentImage,
   fakeLlm: createFakeLlm(async (request, isClassifier, prompt) => {
     const chatScript = scriptByChat.get(request.headers.get('x-hq-chat') ?? (await chatKeyOfPrompt(prompt)))
     if (!isClassifier) chatScript?.used.resolve(true)

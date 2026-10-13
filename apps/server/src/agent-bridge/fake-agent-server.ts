@@ -16,7 +16,6 @@ export type Conversation = {
   turnAbort?: AbortController
   mcpServerOfTool?: Record<string, string>
   llmsByUsageId: Map<string, object>
-  acpModelId?: string
 }
 type Turn = (conversation: Conversation, text: string) => Promise<void>
 
@@ -142,38 +141,20 @@ const acpToolCallOf = (name: string, args: Record<string, unknown>) => {
     : undefined
 }
 
-const adapterModels: Record<string, { model_id: string; name: string }[]> = {
-  'claude-code': [
-    { model_id: 'default', name: 'Default (recommended)' },
-    { model_id: 'opus[1m]', name: 'Opus (1M context)' },
-    { model_id: 'sonnet', name: 'Sonnet' },
-    { model_id: 'haiku', name: 'Haiku' },
-  ],
-  codex: [
-    { model_id: 'gpt-5.5[high]', name: 'GPT-5.5 (high)' },
-    { model_id: 'gpt-5.5[low]', name: 'GPT-5.5 (low)' },
-  ],
-}
 const acpAgentOf = (conversation: Conversation) =>
-  conversation.created.agent as { acp_server?: string; acp_resume_session_id?: string; acp_model?: string }
-const callsProviderDirectly = (conversation: Conversation) =>
-  acpAgentOf(conversation).acp_server !== undefined &&
-  Object.keys((conversation.created.secrets as object | undefined) ?? {}).length === 0
+  conversation.created.agent as { acp_server?: string; acp_resume_session_id?: string }
 
 export const createFakeAgentServer = ({
   modelCall,
-  subscriptionCall,
   deleteMilliseconds = 0,
 }: {
   modelCall?: () => ModelCall
-  subscriptionCall?: ModelCall
   deleteMilliseconds?: number
 } = {}) => {
   const conversations = new Map<string, Conversation>()
   const prompts: { conversationId: string; text: string }[] = []
   const connections: { conversationId: string; query: string; auth: unknown }[] = []
   const interrupts: string[] = []
-  const modelSwitches: string[] = []
   let clock = 0
   const emit = (conversation: Conversation, kind: string, fields: Record<string, unknown> = {}, repeat = 1) => {
     const event = {
@@ -264,24 +245,19 @@ export const createFakeAgentServer = ({
     const emitLive = (kind: string, fields: Record<string, unknown> = {}) =>
       signal.aborted ? undefined : emit(conversation, kind, fields)
     emitLive('MessageEvent', { source: 'user', llm_message: { role: 'user', content: text(prompt) } })
-    const { acp_server, acp_resume_session_id = conversation.id, acp_model } = acpAgentOf(conversation)
-    const availableModels = adapterModels[acp_server ?? ''] ?? []
+    const { acp_server, acp_resume_session_id = conversation.id } = acpAgentOf(conversation)
     if (acp_server)
       emitLive('ConversationStateUpdateEvent', {
         source: 'environment',
         key: 'agent_state',
-        value: {
-          acp_session_id: acp_resume_session_id,
-          acp_current_model_id: conversation.acpModelId ?? acp_model ?? availableModels[0]?.model_id,
-          acp_available_models: availableModels,
-        },
+        value: { acp_session_id: acp_resume_session_id },
       })
     conversation.history.push({ role: 'user', content: prompt })
     if (!signal.aborted) status(conversation, 'running')
     let turnText = ''
     while (!signal.aborted) {
       const completion = await completionOf(
-        (callsProviderDirectly(conversation) ? subscriptionCall : modelCall?.()) as ModelCall,
+        modelCall?.() as ModelCall,
         conversation,
         (delta) => emitLive('StreamingDeltaEvent', { source: 'agent', ...delta }),
         signal,
@@ -358,7 +334,6 @@ export const createFakeAgentServer = ({
     prompts,
     connections,
     interrupts,
-    modelSwitches,
     turn: modelCall ? scriptedTurn : defaultTurn,
     onInterrupt: (conversation: Conversation) => {
       conversation.turnAbort?.abort()
@@ -419,11 +394,6 @@ export const createFakeAgentServer = ({
           const { llm } = JSON.parse(body ?? '{}')
           if (!conversation.llmsByUsageId.has(llm.usage_id)) conversation.llmsByUsageId.set(llm.usage_id, llm)
           ;(conversation.created.agent as { llm: object }).llm = conversation.llmsByUsageId.get(llm.usage_id) ?? llm
-          return { status: 200, body: JSON.stringify({ success: true }) }
-        }
-        if (method === 'POST' && action === 'switch_acp_model') {
-          conversation.acpModelId = JSON.parse(body ?? '{}').model
-          modelSwitches.push(String(conversation.acpModelId))
           return { status: 200, body: JSON.stringify({ success: true }) }
         }
         if (method !== 'POST' || action !== 'events') return { status: 404, body: '' }

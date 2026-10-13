@@ -8,6 +8,7 @@ import { createAgentBridge } from './agent-bridge/bridge.ts'
 import { createApp, sessionClassifierOf } from './app.ts'
 import { enqueueSweeps } from './auth/sessions.ts'
 import { createFakeLlm, fakeRoutableModels } from './fake-llm.ts'
+import { readHqAgentImage } from './hq-agent-image.ts'
 import { startJobWorker } from './job-worker.ts'
 import { createModelCallRelay } from './llm-relay.ts'
 import { createRuntimeHostGateway } from './runtime-hosts/gateway.ts'
@@ -25,7 +26,9 @@ const gatewaySettings = {
   adminPassword: requiredEnvironment('HQ_GATEWAY_ADMIN_PASSWORD'),
 }
 const llmGateway = createLlmGateway(gatewaySettings)
+const hqAgentImage = await readHqAgentImage()
 const runtimeHosts = createRuntimeHostGateway({
+  hqAgentImage,
   databases: () => [database],
   afterHello: (helloDatabase, host) => agentBridge.forDatabase(helloDatabase).promptWaiting(host),
   relayModelCall: createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),
@@ -33,6 +36,7 @@ const runtimeHosts = createRuntimeHostGateway({
 const llmModel = process.env.HQ_LLM_MODEL
 const agentBridge = createAgentBridge({
   sandboxProvider: runtimeHosts.sandboxProvider,
+  hqAgentImage,
   llm: llmModel ? { model: llmModel } : undefined,
   sessionClassifierOf: sessionClassifierOf(llmGateway),
 })
@@ -48,6 +52,7 @@ const app = createApp({
   llmGateway,
   runtimeHosts,
   agentBridge,
+  hqAgentImage,
   fakeLlm: llmModel ? undefined : createFakeLlm(() => undefined),
 })
 setModelDirectory(llmGateway.listedModels)

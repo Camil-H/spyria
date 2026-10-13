@@ -1,0 +1,8 @@
+{
+  "claude-code": { "package": "@anthropic-ai/claude-code", "version": "2.1.296" },
+  "claude-agent-acp": { "package": "@agentclientprotocol/claude-agent-acp", "version": "0.90.0" },
+  "codex": { "package": "@openai/codex", "version": "0.162.1" },
+  "codex-acp": { "package": "@agentclientprotocol/codex-acp", "version": "2.2.2" },
+  "pi": { "package": "@mariozechner/pi-coding-agent", "version": "0.73.1" },
+  "pi-acp": { "package": "pi-acp", "version": "0.0.34" }
+}

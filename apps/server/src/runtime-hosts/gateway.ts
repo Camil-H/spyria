@@ -57,11 +57,13 @@ export const createRuntimeHostGateway = ({
   pingIntervalMilliseconds = 25_000,
   afterHello,
   relayModelCall,
+  hqAgentImage,
 }: {
   databases: () => Iterable<Database>
   pingIntervalMilliseconds?: number
   afterHello?: (database: Database, host: ConnectedHost) => Promise<unknown>
   relayModelCall?: ModelCallRelay
+  hqAgentImage?: string
 }) => {
   const connectionByHost = new Map<string, Connection>()
   const operationChains = new Map<string, Promise<unknown>>()
@@ -133,9 +135,11 @@ export const createRuntimeHostGateway = ({
       ),
     )
     if (connection.identified) connection.identified.database = database
-    prepare(host).catch((error) =>
-      console.error(`Preparing runtime host ${host.hostId} failed: ${errorMessageOf(error)}`),
-    )
+    const image = frame.personal ? hqAgentImage : agentServerImage
+    if (image)
+      prepare(host, image).catch((error) =>
+        console.error(`Preparing runtime host ${host.hostId} failed: ${errorMessageOf(error)}`),
+      )
     handlers
       .reconcile(host, sandboxProvider)
       .catch((error) => console.error(`Reconciling runtime host ${host.hostId} failed: ${errorMessageOf(error)}`))

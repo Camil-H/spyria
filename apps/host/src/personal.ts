@@ -6,11 +6,8 @@ const allowedRequests = [
   /^GET \/ready$/,
   /^POST \/api\/conversations$/,
   new RegExp(`^(GET|DELETE) ${conversationPath}$`),
-  new RegExp(`^POST ${conversationPath}/(events|interrupt|switch_llm|switch_acp_model)$`),
-  new RegExp(`^GET ${conversationPath}/agent_final_response$`),
-  new RegExp(
-    `^WS /sockets/events/${conversationId}(\\?resend_mode=(all|since&after_timestamp=[\\w%.:+-]+)|(\\?after=\\d+)?)$`,
-  ),
+  new RegExp(`^POST ${conversationPath}/(events|interrupt|switch_acp_model)$`),
+  new RegExp(`^WS /sockets/events/${conversationId}(\\?after=\\d+)?$`),
 ]
 const tokenFormat = /sk-ant-(?:oat|ort)[\w-]*|eyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]+/g
 const claudeTokenValue = /"(?:accessToken|refreshToken)"\s*:\s*"([^"]{8,})"/g
@@ -191,8 +188,7 @@ const readerOnceConnected = async (docker: Docker, readerName: string) => {
     )
     if (reader) return reader
     if (Date.now() > deadline) throw new Error('hq-host did not connect to HQ: check its logs with docker logs hq-host')
-    if (attempt === 0)
-      console.log('Waiting for hq-host to connect to HQ and pull the runtime image (about 1.2 GB the first time)…')
+    if (attempt === 0) console.log('Waiting for hq-host to connect to HQ…')
     await Bun.sleep(readerPollMilliseconds)
   }
 }

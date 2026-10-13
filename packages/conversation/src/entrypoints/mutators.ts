@@ -49,7 +49,7 @@ export const conversationMutators = defineMutators({
     retryAgent: defineMutator(chatArguments, async ({ tx, ctx, args }) => {
       if (tx.location === 'server')
         await retryAgent(
-          { ...dependenciesOf(tx, ctx, args), runtimeRetrier: createZeroRuntimeRetrier(tx) },
+          { ...dependenciesOf(tx, ctx, args), runtimeRetrier: createZeroRuntimeRetrier(tx, ctx.hqAgentImage) },
           { workspaceId: ctx.workspaceId, chatId: args.chatId },
         )
     }),

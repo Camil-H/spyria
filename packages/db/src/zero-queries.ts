@@ -2,7 +2,12 @@ import type { MemberId, WorkspaceId } from '@hq/kernel'
 import { createBuilder, defineQueries, defineQuery } from '@rocicorp/zero'
 import { schema } from './zero.ts'
 
-export type ZeroContext = { userId: MemberId; workspaceId: WorkspaceId; role: 'admin' | 'member' }
+export type ZeroContext = {
+  userId: MemberId
+  workspaceId: WorkspaceId
+  role: 'admin' | 'member'
+  hqAgentImage?: string
+}
 
 export const zql = createBuilder(schema)
 

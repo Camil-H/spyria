@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { containerBodyOf, createCommandRunner, parseCommand, relayUrlOf } from './commands.ts'
-import type { Docker } from './docker.ts'
+import { type Docker, DockerError } from './docker.ts'
 
 const image = `ghcr.io/openhands/agent-server@sha256:${'a'.repeat(64)}`
 const apiKey = 'k'.repeat(32)
@@ -31,6 +31,40 @@ test.each([
 ])('refuses the image %p', (refusedImage) => {
   expect(() => parseCommand('create', { ...create, image: refusedImage })).toThrow('refused')
   expect(() => parseCommand('prepare', { image: refusedImage })).toThrow('refused')
+})
+
+const contentId = `sha256:${'b'.repeat(64)}`
+
+test('a personal host accepts only a local content ID, a workspace host only the Agent Server image', () => {
+  expect(parseCommand('create', { ...create, image: contentId }, true)).toEqual({
+    op: 'create',
+    ...create,
+    image: contentId,
+  })
+  expect(parseCommand('prepare', { image: contentId }, true)).toEqual({ op: 'prepare', image: contentId })
+  expect(() => parseCommand('create', create, true)).toThrow('local content ID')
+  expect(() => parseCommand('prepare', { image }, true)).toThrow('refused')
+  expect(() => parseCommand('prepare', { image: `sha256:${'b'.repeat(63)}` }, true)).toThrow('refused')
+  expect(() => parseCommand('create', { ...create, image: contentId })).toThrow('ghcr.io/openhands')
+  expect(() => parseCommand('prepare', { image: contentId })).toThrow('refused')
+})
+
+test('a personal create sets only the session key in the environment', () => {
+  expect(containerBodyOf({ prefix: 'hq-', ...create, image: contentId, personal: true }).Env).toEqual([
+    `OH_SESSION_API_KEYS_0=${apiKey}`,
+  ])
+})
+
+test('preparing a content ID never pulls: a missing image is an error naming the build', async () => {
+  const calls: string[] = []
+  const docker = (async (method: string, path: string) => {
+    calls.push(`${method} ${path}`)
+    throw new DockerError(404, 'No such image')
+  }) as Docker
+  await expect(
+    createCommandRunner({ docker, prefix: 'hq-', personal: true }).run({ op: 'prepare', image: contentId }),
+  ).rejects.toThrow('run bun run agent:build')
+  expect(calls).toEqual([`GET /images/${contentId}/json`])
 })
 
 test('refuses a prepare request with any field besides the image', () => {

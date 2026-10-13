@@ -121,6 +121,8 @@ test.each([
   ['GET', '/api/conversations/search'],
   ['POST', `/api/conversations/${conversationId}/../../bash/execute_bash_command`],
   ['DELETE', '/api/conversations'],
+  ['POST', `/api/conversations/${conversationId}/switch_llm`],
+  ['GET', `/api/conversations/${conversationId}/agent_final_response`],
 ])('a personal host refuses %s %s', async (method, path) => {
   const { relay, nextOf } = personalRelay()
   await relay.handle({ type: 'http', sid: 1, runtimeId: 'runtime-1', method, path })
@@ -131,18 +133,20 @@ test.each([
   })
 })
 
-test.each(['/sockets/bash-events', `/sockets/events/${conversationId}?after=1&x=2`])(
-  'a personal host refuses the WebSocket %s',
-  async (path) => {
-    const { relay, nextOf } = personalRelay()
-    await relay.handle({ type: 'ws_connect', sid: 2, runtimeId: 'runtime-1', path })
-    expect(await nextOf('ws_close')).toMatchObject({
-      type: 'ws_close',
-      sid: 2,
-      error: expect.stringContaining('refused'),
-    })
-  },
-)
+test.each([
+  '/sockets/bash-events',
+  `/sockets/events/${conversationId}?after=1&x=2`,
+  `/sockets/events/${conversationId}?resend_mode=all`,
+  `/sockets/events/${conversationId}?resend_mode=since&after_timestamp=2026-10-10T10%3A00%3A00.000000`,
+])('a personal host refuses the WebSocket %s', async (path) => {
+  const { relay, nextOf } = personalRelay()
+  await relay.handle({ type: 'ws_connect', sid: 2, runtimeId: 'runtime-1', path })
+  expect(await nextOf('ws_close')).toMatchObject({
+    type: 'ws_close',
+    sid: 2,
+    error: expect.stringContaining('refused'),
+  })
+})
 
 test.each([
   ['GET', '/ready'],
@@ -151,9 +155,7 @@ test.each([
   ['DELETE', `/api/conversations/${conversationId}`],
   ['POST', `/api/conversations/${conversationId}/events`],
   ['POST', `/api/conversations/${conversationId}/interrupt`],
-  ['POST', `/api/conversations/${conversationId}/switch_llm`],
   ['POST', `/api/conversations/${conversationId}/switch_acp_model`],
-  ['GET', `/api/conversations/${conversationId}/agent_final_response`],
 ])('a personal host forwards %s %s', async (method, path) => {
   const { relay, nextOf } = personalRelay()
   await relay.handle({ type: 'http', sid: 3, runtimeId: 'runtime-1', method, path })
@@ -172,8 +174,6 @@ test('a personal host redacts token formats and the current token values in http
 test('a personal host streams the events WebSocket with the tokens redacted, keeping valid JSON', async () => {
   const { relay, nextOf } = personalRelay()
   for (const [sid, query] of [
-    [5, 'resend_mode=all'],
-    [6, 'resend_mode=since&after_timestamp=2026-10-10T10%3A00%3A00.000000'],
     [7, ''],
     [8, 'after=42'],
   ] as const) {

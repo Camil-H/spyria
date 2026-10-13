@@ -83,6 +83,7 @@ test('a runtime that cannot be placed reads as no host, any other failure as cou
   expect(agentNotices.couldNotStart).toBe('The agent could not start')
   expect(startFailureNoticeOf('no_host')).toBe(agentNotices.noHost)
   expect(startFailureNoticeOf('no_capacity')).toBe(agentNotices.noHost)
+  expect(startFailureNoticeOf('no_image')).toBe("HQ's runtime image is not built: run bun run agent:build")
   for (const failure of ['create_failed', 'start_failed', 'lost'])
     expect(startFailureNoticeOf(failure)).toBe(agentNotices.couldNotStart)
 })

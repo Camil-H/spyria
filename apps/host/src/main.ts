@@ -123,7 +123,11 @@ const connect = () => {
   }
   const runCommand = async (frame: { id?: unknown; op?: unknown; args?: unknown }) => {
     try {
-      send({ type: 'res', id: frame.id, data: (await runner.run(parseCommand(frame.op, frame.args))) ?? null })
+      send({
+        type: 'res',
+        id: frame.id,
+        data: (await runner.run(parseCommand(frame.op, frame.args, isPersonal))) ?? null,
+      })
     } catch (error) {
       console.error(`Command ${String(frame.op)} failed: ${messageOf(error)}`)
       send({ type: 'res', id: frame.id, error: messageOf(error) })

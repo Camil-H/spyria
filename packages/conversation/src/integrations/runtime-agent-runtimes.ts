@@ -20,7 +20,7 @@ export type { SandboxProvider }
 export const createRuntimeAgentRuntimes = (
   transact: Transact,
   provider: SandboxProvider,
-  hqAgentForMachines = false,
+  hqAgentImage?: string,
 ): AgentRuntimes => {
   const inTransaction = <Result>(
     work: (dependencies: { transactor: ReturnType<typeof createRuntimeTransactor> }) => Promise<Result>,
@@ -35,7 +35,7 @@ export const createRuntimeAgentRuntimes = (
     sandbox,
     apiKey,
     conversationId,
-    isHqAgent: hqAgentForMachines && isPersonal,
+    isHqAgent: isPersonal,
     transport: provider.connect(sandbox),
   })
   const endpointOf = async (chat: AgentChat): Promise<AgentEndpoint | undefined> => {
@@ -45,7 +45,7 @@ export const createRuntimeAgentRuntimes = (
   return {
     ensureRunning: async (chat) => {
       const runtime = await inTransaction((dependencies) =>
-        ensureRuntimeRunning(dependencies, { ...chat, id: crypto.randomUUID(), now: Date.now() }),
+        ensureRuntimeRunning({ ...dependencies, hqAgentImage }, { ...chat, id: crypto.randomUUID(), now: Date.now() }),
       )
       if (['creating', 'starting', 'stopping', 'removing'].includes(runtime.state)) return { state: 'starting' }
       if (!runtime.hostOnline && ['running', 'stopped'].includes(runtime.state)) return { state: 'host_offline' }
@@ -67,10 +67,10 @@ export const createRuntimeAgentRuntimes = (
   }
 }
 
-export const createZeroRuntimeRetrier = (tx: Transaction): RuntimeRetrier => ({
+export const createZeroRuntimeRetrier = (tx: Transaction, hqAgentImage?: string): RuntimeRetrier => ({
   retry: async (chat) => {
     await retryRuntime(
-      { transactor: createRuntimeTransactor(tx) },
+      { transactor: createRuntimeTransactor(tx), hqAgentImage },
       { ...chat, id: crypto.randomUUID(), now: Date.now() },
     )
   },

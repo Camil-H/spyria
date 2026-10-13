@@ -57,10 +57,10 @@ const newRuntimeChat = async (name = 'Runtime chat') => {
   return chatId(id)
 }
 
-const ensure = (chat: ChatId) =>
+const ensure = (chat: ChatId, hqAgentImage?: string) =>
   zeroDatabase.transaction((tx) =>
     ensureRuntimeRunning(
-      { transactor: createRuntimeTransactor(tx) },
+      { transactor: createRuntimeTransactor(tx), hqAgentImage },
       { workspaceId: acme, chatId: chat, id: crypto.randomUUID(), now: Date.now() },
     ),
   )
@@ -123,6 +123,26 @@ test('ensureRuntimeRunning places a runtime on the least-loaded online host, cre
   expect(created?.apiKey?.length).toBeGreaterThanOrEqual(16)
   expect(idleHost.commands.some((command) => command.op === 'prepare' && command.image === agentServerImage)).toBe(true)
   await runtimeIn(firstChat, 'running')
+})
+
+test("a machine runtime gets HQ's image, a workspace host's the Agent Server image, and no HQ image fails the placement with no_image", async () => {
+  const hqImage = `sha256:${'c'.repeat(64)}`
+  const workspaceHost = await fakeHost('Workspace host')
+  const machine = await fakeHost('Machine', { ownerId: alice })
+  const chat = chatId(`chat-${crypto.randomUUID()}`)
+  await database.$client`
+    insert into chats (workspace_id, id, type, owner_kind, owner_user_id, name, local_session, harness, archived, created_at)
+    values (${acme}, ${chat}, 'runtime', 'user', ${alice}, 'Machine chat', true, 'claude-code', false, now())`
+  expect(await ensure(chat)).toMatchObject({ state: 'failed', failure: 'no_image', hostId: null })
+  expect(await ensure(chat, hqImage)).toMatchObject({
+    state: 'creating',
+    failure: null,
+    hostId: machine.id,
+    image: hqImage,
+  })
+  await runtimeIn(chat, 'running')
+  expect(machine.commands.find((command) => command.op === 'create')).toMatchObject({ image: hqImage })
+  expect(workspaceHost.commands.some((command) => command.op === 'create')).toBe(false)
 })
 
 test('placement fails with no_host, then no_capacity, and a later call after a host comes online creates afresh', async () => {

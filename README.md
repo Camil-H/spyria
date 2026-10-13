@@ -43,6 +43,18 @@ Without Docker for `hq-host` itself, run it as a process against the local Docke
 
 With a host online, a prompt in a runtime chat starts that chat's Agent Server and the agent answers. Agent Servers call the model through their host: `hq-host` relays `/v1/*` (at `http://hq-gateway-relay:4000/v1` on the runtime network) to HQ, which runs each call on the prompting member's key in the gateway. Rebuild the `hq-host` image after pulling this change (`docker build -t hq-host apps/host`, then recreate the container), or its runtimes cannot reach a model.
 
+## HQ runtime image
+
+Personal machines (sessions on your own machine) run HQ's own image (`apps/agent`: hq-agent with Claude Code, Codex and Pi, each pinned separately from its ACP adapter in `apps/agent/versions.json`), not the Agent Server image. Build it locally before the first machine session; the server reads its content ID from `apps/agent/image-id` (or `HQ_AGENT_IMAGE`) at start, and your `hq-host --personal` never pulls it:
+
+```sh
+bun run agent:build          # compile hq-agent and docker build; cached by Docker
+bun run agent:versions       # pinned vs latest on npm, per tool
+bun run agent:bump <tool>    # pin the latest of claude-code | claude-agent-acp | codex | codex-acp | pi | pi-acp, then rebuild
+```
+
+After a rebuild, restart the server: a new content ID applies to new machine runtimes. Without a built image a machine session says `HQ's runtime image is not built: run bun run agent:build`. Workspace hosts still run the Agent Server image.
+
 ## Claude Code and Codex on your own machine
 
 A member can run Claude Code on their own Claude subscription, or Codex on their own ChatGPT plan, on their own machine:

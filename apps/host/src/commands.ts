@@ -8,6 +8,7 @@ export class Refused extends Error {
 }
 
 const imagePattern = /^ghcr\.io\/openhands\/agent-server@sha256:[a-f0-9]{64}$/
+const contentIdPattern = /^sha256:[a-f0-9]{64}$/
 const runtimeIdPattern = /^[a-z0-9][a-z0-9-]{0,62}$/
 const apiKeyPattern = /^[A-Za-z0-9_-]{16,128}$/
 const agentServerPort = 8000
@@ -15,7 +16,10 @@ export const gatewayRelayAlias = 'hq-gateway-relay'
 const gibibyte = 1024 ** 3
 const volumeTargets = { ws: '/workspace', home: '/home/openhands', tmp: '/tmp' }
 const operations = ['create', 'prepare', 'start', 'stop', 'remove', 'status'] as const
-const imageRefusal = 'image outside ghcr.io/openhands/agent-server@sha256'
+const imageRefusalOf = (personal: boolean) =>
+  personal
+    ? 'image other than a local content ID (sha256:<64 hex>)'
+    : 'image outside ghcr.io/openhands/agent-server@sha256'
 
 type Operation = (typeof operations)[number]
 type RuntimeOperation = Exclude<Operation, 'create' | 'prepare'>
@@ -36,19 +40,20 @@ const fieldOf = (fields: Record<string, unknown>, name: string, pattern: RegExp,
   return value
 }
 
-export const parseCommand = (op: unknown, args: unknown): Command => {
+export const parseCommand = (op: unknown, args: unknown, personal = false): Command => {
   if (!operations.includes(op as Operation)) throw new Refused(`unknown command ${String(op)}`)
   const fields = (typeof args === 'object' && args !== null ? args : {}) as Record<string, unknown>
   const allowedFields = { create: ['runtimeId', 'image', 'apiKey'], prepare: ['image'] }[op as string] ?? ['runtimeId']
   const extraFields = Object.keys(fields).filter((field) => !allowedFields.includes(field))
   if (extraFields.length > 0) throw new Refused(`unexpected fields ${extraFields.join(', ')}`)
-  if (op === 'prepare') return { op, image: fieldOf(fields, 'image', imagePattern, imageRefusal) }
+  const imageOf = () => fieldOf(fields, 'image', personal ? contentIdPattern : imagePattern, imageRefusalOf(personal))
+  if (op === 'prepare') return { op, image: imageOf() }
   const runtimeId = fieldOf(fields, 'runtimeId', runtimeIdPattern, 'invalid runtime id')
   if (op !== 'create') return { op: op as RuntimeOperation, runtimeId }
   return {
     op,
     runtimeId,
-    image: fieldOf(fields, 'image', imagePattern, imageRefusal),
+    image: imageOf(),
     apiKey: fieldOf(fields, 'apiKey', apiKeyPattern, 'invalid API key'),
   }
 }
@@ -69,10 +74,14 @@ export const containerBodyOf = ({
     User: '10001:10001',
     Env: [
       `OH_SESSION_API_KEYS_0=${apiKey}`,
-      'OH_ENABLE_VSCODE=false',
-      'OH_ENABLE_BROWSER=false',
-      'OH_PRELOAD_TOOLS=false',
-      'OPENHANDS_SUPPRESS_BANNER=1',
+      ...(personal
+        ? []
+        : [
+            'OH_ENABLE_VSCODE=false',
+            'OH_ENABLE_BROWSER=false',
+            'OH_PRELOAD_TOOLS=false',
+            'OPENHANDS_SUPPRESS_BANNER=1',
+          ]),
     ],
     Labels: { 'hq.managed': '1', 'hq.runtime': runtimeId },
     HostConfig: {
@@ -149,6 +158,7 @@ export const createCommandRunner = ({
   const prepare = async (image: string) => {
     await docker('GET', `/images/${image}/json`).catch(async (error) => {
       ignoringMissing(error)
+      if (personal) throw new Error("HQ's runtime image is missing on this machine: run bun run agent:build")
       const [repository, digest] = image.split('@')
       await docker('POST', `/images/create?fromImage=${repository}&tag=${digest}`)
     })

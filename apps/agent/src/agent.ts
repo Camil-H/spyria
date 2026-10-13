@@ -27,7 +27,7 @@ type Launch = {
   workspace?: { working_dir?: string }
 }
 
-const inheritedEnvironment = ['PATH', 'HOME', 'LANG', 'TMPDIR']
+const inheritedEnvironment = ['PATH', 'HOME', 'LANG', 'TMPDIR', 'CLAUDE_CODE_EXECUTABLE', 'CODEX_PATH']
 const defaultWorkingDirectory = '/workspace/project'
 const bypassMode = 'bypassPermissions'
 const terminalToolStatuses = ['completed', 'failed']
