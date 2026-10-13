@@ -39,6 +39,17 @@ const eventOf = (data: string): AgentEvent | undefined => {
   }
 }
 
+const hqAgentEventOf = (data: string): AgentEvent | undefined => {
+  try {
+    const { id, seq, timestamp, completed, update } = JSON.parse(data)
+    return typeof id === 'string' && typeof timestamp === 'string' && typeof update === 'object'
+      ? { id, kind: 'ACPUpdate', timestamp, seq, completed, update }
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
 const llmConfigOf = (endpoint: AgentEndpoint, llmToken: string, { model, effort, usageId }: AgentLlmChoice) => ({
   usage_id: usageId,
   model,
@@ -91,15 +102,14 @@ const harnessConversationOf = (
   { model, resumeSessionId, acpModel }: AgentLlmChoice,
 ) => {
   const { acpServer, tokenName, command } = harnessLaunchOf(endpoint, model)[harness]
+  const agent = {
+    acp_command: command,
+    mcp_config: { hq: mcpServerOf(endpoint, '/mcp', llmToken) },
+    ...(resumeSessionId && { acp_resume_session_id: resumeSessionId }),
+    ...(acpModel && { acp_model: acpModel }),
+  }
   return {
-    agent: {
-      kind: 'ACPAgent',
-      acp_server: acpServer,
-      acp_command: command,
-      mcp_config: { hq: mcpServerOf(endpoint, '/mcp', llmToken) },
-      ...(resumeSessionId && { acp_resume_session_id: resumeSessionId }),
-      ...(acpModel && { acp_model: acpModel }),
-    },
+    agent: endpoint.isHqAgent ? agent : { kind: 'ACPAgent', acp_server: acpServer, ...agent },
     secrets: tokenName ? { [tokenName]: { kind: 'StaticSecret', value: llmToken } } : {},
   }
 }
@@ -173,14 +183,17 @@ export const createSandboxAgentServer = (condensationScale = 1): AgentServer => 
   deleteConversation: async (conversation) => {
     await call(conversation, 'DELETE', `/api/conversations/${conversation.conversationId}`)
   },
-  openEvents: (conversation: AgentConversation, afterTimestamp, listener) => {
-    const resend = afterTimestamp
-      ? `resend_mode=since&after_timestamp=${encodeURIComponent(afterTimestamp)}`
-      : 'resend_mode=all'
-    const socket = conversation.transport.openSocket(`/sockets/events/${conversation.conversationId}?${resend}`, {
+  openEvents: (conversation: AgentConversation, last, listener) => {
+    const { conversationId, isHqAgent } = conversation
+    const resend = isHqAgent
+      ? `after=${last?.id.startsWith(`${conversationId}:`) ? (last.seq ?? 0) : 0}`
+      : last
+        ? `resend_mode=since&after_timestamp=${encodeURIComponent(last.timestamp)}`
+        : 'resend_mode=all'
+    const socket = conversation.transport.openSocket(`/sockets/events/${conversationId}?${resend}`, {
       onOpen: () => socket.send(JSON.stringify({ type: 'auth', session_api_key: conversation.apiKey })),
       onMessage: (data) => {
-        const event = eventOf(data)
+        const event = isHqAgent ? hqAgentEventOf(data) : eventOf(data)
         if (event) listener.onEvent(event)
       },
       onClose: listener.onClose,

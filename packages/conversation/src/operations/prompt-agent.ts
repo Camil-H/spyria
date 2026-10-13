@@ -111,8 +111,9 @@ const harnessConversationFor = async (
   endpoint: AgentEndpoint,
   { launch, model, acpModel }: { launch: HarnessLaunch; model: string; acpModel?: string },
 ): Promise<AgentConversation> => {
-  const resumeSessionId =
-    endpoint.conversationId === null
+  const resumeSessionId = endpoint.isHqAgent
+    ? await transactor.run(({ agentEvents }) => agentEvents.lastSessionId(chat.chatId))
+    : endpoint.conversationId === null
       ? await transactor.run(({ agentEvents }) => agentEvents.stoppedHarnessSessionId(chat.chatId))
       : undefined
   const runtimeToken = await runtimes.issueLlmToken(chat)
@@ -141,14 +142,22 @@ const conversationFor = async (
   const storedId = endpoint.conversationId
   const prompterId = prompt.authorId
   if (localSession && !signedIn.includes(localSession.signIn)) return { refusal: localSession.signInNotice }
-  if (storedId !== null && (await agentServer.statusOf({ ...endpoint, conversationId: storedId })) !== undefined) {
-    const conversation = { ...endpoint, conversationId: storedId }
-    if (localSession) return keepAcpModel(dependencies, chat, conversation)
-    return fixedLlm || !prompterId ? { conversation } : keepSession(dependencies, chat, conversation, prompterId)
+  const storedConversation = storedId === null ? undefined : { ...endpoint, conversationId: storedId }
+  let status = storedConversation && (await agentServer.statusOf(storedConversation))
+  if (storedConversation && status === 'error' && endpoint.isHqAgent) {
+    await agentServer.deleteConversation(storedConversation).catch(() => undefined)
+    status = undefined
+  }
+  if (storedConversation && status !== undefined) {
+    if (localSession) return keepAcpModel(dependencies, chat, storedConversation)
+    return fixedLlm || !prompterId
+      ? { conversation: storedConversation }
+      : keepSession(dependencies, chat, storedConversation, prompterId)
   }
   if (storedId !== null) {
     await runtimes.forgetConversation(chat)
-    await transactor.run((unitOfWork) => appendNotice(unitOfWork, prompt, agentNotices.newSession))
+    if (!endpoint.isHqAgent)
+      await transactor.run((unitOfWork) => appendNotice(unitOfWork, prompt, agentNotices.newSession))
   }
   if (localSession) {
     const { model } = await transactor.run(({ routing }) => routing.chatRouting(chat.chatId))

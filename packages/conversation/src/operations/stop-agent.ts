@@ -23,7 +23,8 @@ export const interruptAgent = async (
   const subConversationIds = await transactor.run(({ delegations }) => delegations.stopRunning(chatId, promptId))
   const endpoint = await runtimes.endpointOf(chat)
   if (endpoint?.conversationId) await agentServer.interrupt({ ...endpoint, conversationId: endpoint.conversationId })
-  const isHarness = Boolean((await transactor.run(({ routing }) => routing.chatRouting(chatId))).harness)
+  const isHarness =
+    Boolean((await transactor.run(({ routing }) => routing.chatRouting(chatId))).harness) && !endpoint?.isHqAgent
   for (const conversationId of subConversationIds)
     if (endpoint) await agentServer.interrupt({ ...endpoint, conversationId }).catch(() => undefined)
   eventSockets.stopStreaming(chat, promptId)

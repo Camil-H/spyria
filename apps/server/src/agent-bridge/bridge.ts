@@ -1,8 +1,10 @@
 import {
   type AgentChat,
   type AgentConversation,
+  type AgentEvent,
   type AgentLlm,
   createAgentHandlers,
+  isStoredAgentEvent,
   type SessionClassifier,
   streamedTextOf,
 } from '@hq/conversation/server'
@@ -16,6 +18,7 @@ import { upgradeWebSocket } from 'hono/bun'
 import type { WSContext } from 'hono/ws'
 import type { Authentication } from '../auth/session-tokens.ts'
 
+type Segment = { first: AgentEvent; last: AgentEvent; text: string; isReasoning: boolean }
 type StreamFrame = { type?: unknown; token?: unknown; chatId?: unknown }
 
 const reopenDelayMilliseconds = 1000
@@ -31,6 +34,7 @@ export const createAgentBridge = ({
   now,
   resumeAfterMilliseconds,
   condensationScale,
+  hqAgentForMachines,
 }: {
   sandboxProvider: SandboxProvider
   llm?: AgentLlm
@@ -38,6 +42,7 @@ export const createAgentBridge = ({
   now?: () => number
   resumeAfterMilliseconds?: number
   condensationScale?: number
+  hqAgentForMachines?: boolean
 }) => {
   const bridgeOf = (database: Database) => {
     const sockets = new Map<
@@ -46,11 +51,13 @@ export const createAgentBridge = ({
         conversationId: string
         promptId: string | null
         streamedText: string
+        segment?: Segment
         isReasoning: boolean
         isReady: Promise<void>
         close(): void
       }
     >()
+    const streamedSeqs = new Map<string, number>()
     const viewers = new Map<string, Set<WSContext>>()
     const send = (viewer: WSContext, chat: AgentChat, frame: object) =>
       viewer.send(JSON.stringify({ chatId: chat.chatId, ...frame }))
@@ -62,11 +69,13 @@ export const createAgentBridge = ({
       now,
       resumeAfterMilliseconds,
       condensationScale,
+      hqAgentForMachines,
       eventSockets: {
         ensureOpen: (...target) => ensureOpen(...target),
         stopStreaming: (chat, promptId) => {
           const socket = sockets.get(keyOf(chat))
-          if (socket?.promptId === promptId) Object.assign(socket, { promptId: null, streamedText: '' })
+          if (socket?.promptId === promptId)
+            Object.assign(socket, { promptId: null, streamedText: '', segment: undefined })
         },
       },
     })
@@ -93,7 +102,7 @@ export const createAgentBridge = ({
     const ensureOpen = (chat: AgentChat, conversation: AgentConversation, promptId: MessageId) => {
       const current = sockets.get(keyOf(chat))
       if (current?.conversationId === conversation.conversationId) {
-        if (current.promptId !== promptId) Object.assign(current, { promptId, streamedText: '' })
+        if (current.promptId !== promptId) Object.assign(current, { promptId, streamedText: '', segment: undefined })
         return current.isReady
       }
       current?.close()
@@ -104,6 +113,7 @@ export const createAgentBridge = ({
         isReady: Promise.race([ready.promise, Bun.sleep(readyTimeoutMilliseconds)]),
         promptId: promptId as string | null,
         streamedText: '',
+        segment: undefined as Segment | undefined,
         isReasoning: false,
         isClosed: false,
         close: () => {
@@ -121,36 +131,76 @@ export const createAgentBridge = ({
         if (chatSocket.promptId) reopenLater(chat)
       }
       sockets.set(keyOf(chat), chatSocket)
+      const record = (event: AgentEvent, streamedText = '') => {
+        const promptAtEvent = chatSocket.promptId
+        const isToolCall = event.kind === 'ACPToolCallEvent'
+        recording = recording
+          .then(() => handlers.recordEvent(chat, event, streamedText))
+          .then((recorded) => {
+            if (recorded?.isReplyStored && promptAtEvent)
+              for (const viewer of viewers.get(keyOf(chat)) ?? [])
+                send(viewer, chat, { promptId: promptAtEvent, storedId: event.id })
+            if (!recorded || chatSocket.promptId !== promptAtEvent) return
+            chatSocket.promptId = recorded.promptId
+            if ((recorded.isReplyStored && !isToolCall && event.kind !== 'ACPUpdate') || recorded.promptId === null)
+              chatSocket.streamedText = ''
+          })
+          .catch((error) =>
+            console.error(`Recording an agent event of chat ${chat.chatId} failed: ${messageOf(error)}`),
+          )
+      }
+      const flushSegment = (boundary: AgentEvent) => {
+        const { segment } = chatSocket
+        if (!segment) return
+        chatSocket.segment = undefined
+        chatSocket.streamedText = ''
+        const { first, last, text, isReasoning } = segment
+        record({
+          id: `${last.id}${isReasoning ? '-thought' : '-text'}`,
+          kind: 'ACPUpdate',
+          seq: last.seq,
+          timestamp: last.timestamp,
+          completed: true,
+          update: {
+            sessionUpdate: isReasoning ? 'agent_thought' : 'agent_message',
+            text,
+            durationMilliseconds: Date.parse(boundary.timestamp) - Date.parse(first.timestamp),
+          },
+        })
+      }
       const opened = handlers.openEvents(chat, conversation, {
         onEvent: (event) => {
           ready.resolve()
           if (chatSocket.isClosed) return
           const streamed = streamedTextOf(event)
+          const isAcp = event.kind === 'ACPUpdate'
           if (streamed?.text && chatSocket.promptId) {
             const { text, isReasoning } = streamed
+            if (isAcp && chatSocket.segment && chatSocket.segment.isReasoning !== isReasoning) flushSegment(event)
+            if (isAcp)
+              chatSocket.segment = {
+                first: chatSocket.segment?.first ?? event,
+                last: event,
+                text: (chatSocket.segment?.text ?? '') + text,
+                isReasoning,
+              }
             chatSocket.streamedText = (chatSocket.isReasoning === isReasoning ? chatSocket.streamedText : '') + text
             chatSocket.isReasoning = isReasoning
-            for (const viewer of viewers.get(keyOf(chat)) ?? [])
-              send(viewer, chat, { promptId: chatSocket.promptId, text, ...(isReasoning && { isReasoning }) })
+            const seq = Number(event.seq)
+            if (!isAcp || seq > (streamedSeqs.get(conversation.conversationId) ?? 0)) {
+              if (isAcp) streamedSeqs.set(conversation.conversationId, seq)
+              for (const viewer of viewers.get(keyOf(chat)) ?? [])
+                send(viewer, chat, { promptId: chatSocket.promptId, text, ...(isReasoning && { isReasoning }) })
+            }
           }
           if (streamed) return
-          const promptAtEvent = chatSocket.promptId
-          const isToolCall = event.kind === 'ACPToolCallEvent'
-          const streamedText = promptAtEvent && isToolCall && !chatSocket.isReasoning ? chatSocket.streamedText : ''
+          if (isAcp && isStoredAgentEvent(event)) flushSegment(event)
+          const streamedText =
+            chatSocket.promptId && event.kind === 'ACPToolCallEvent' && !chatSocket.isReasoning
+              ? chatSocket.streamedText
+              : ''
           if (streamedText) chatSocket.streamedText = ''
-          recording = recording
-            .then(() => handlers.recordEvent(chat, event, streamedText))
-            .then((recorded) => {
-              if (recorded?.isReplyStored && promptAtEvent)
-                for (const viewer of viewers.get(keyOf(chat)) ?? [])
-                  send(viewer, chat, { promptId: promptAtEvent, storedId: event.id })
-              if (!recorded || chatSocket.promptId !== promptAtEvent) return
-              chatSocket.promptId = recorded.promptId
-              if ((recorded.isReplyStored && !isToolCall) || recorded.promptId === null) chatSocket.streamedText = ''
-            })
-            .catch((error) =>
-              console.error(`Recording an agent event of chat ${chat.chatId} failed: ${messageOf(error)}`),
-            )
+          record(event, streamedText)
         },
         onClose: closed,
       })

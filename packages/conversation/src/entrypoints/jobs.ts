@@ -45,6 +45,7 @@ export const createAgentHandlers = ({
   now = Date.now,
   resumeAfterMilliseconds,
   condensationScale,
+  hqAgentForMachines,
 }: {
   transact: Transact
   sandboxProvider: SandboxProvider
@@ -54,8 +55,9 @@ export const createAgentHandlers = ({
   now?: () => number
   resumeAfterMilliseconds?: number
   condensationScale?: number
+  hqAgentForMachines?: boolean
 }) => {
-  const runtimes = createRuntimeAgentRuntimes(transact, sandboxProvider)
+  const runtimes = createRuntimeAgentRuntimes(transact, sandboxProvider, hqAgentForMachines)
   const agentServer = createSandboxAgentServer(condensationScale)
   const transactorOf = (id: WorkspaceId) => createTransactingZeroTransactor(transact, id)
   const dependenciesOf = (id: WorkspaceId) => ({
@@ -79,8 +81,7 @@ export const createAgentHandlers = ({
     openEvents: async (chat: AgentChat, conversation: AgentConversation, listener: AgentEventListener) =>
       agentServer.openEvents(
         conversation,
-        (await transactorOf(chat.workspaceId).run(({ agentEvents }) => agentEvents.last(chat.chatId)))?.timestamp ??
-          null,
+        (await transactorOf(chat.workspaceId).run(({ agentEvents }) => agentEvents.last(chat.chatId))) ?? null,
         listener,
       ),
     recordEvent: async (chat: AgentChat, event: AgentEvent, streamedText = '') => {

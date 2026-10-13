@@ -96,11 +96,37 @@ const actionStepOf = (event: AgentEvent, action: Fields): StoredStep | undefined
     : undefined
 }
 
-const acpDiffOf = (event: AgentEvent) => (event.content as Fields[] | undefined)?.find((part) => part?.type === 'diff')
-const acpStepOf = (event: AgentEvent): StoredStep => {
-  const title = String(event.title)
-  const rawInput = (event.raw_input ?? {}) as Fields
-  const path = pathOf(rawInput?.file_path ?? acpDiffOf(event)?.path)
+type AcpToolCall = {
+  id: string
+  title: string
+  kind: unknown
+  status: unknown
+  rawInput: Fields
+  rawOutput: unknown
+  content: Fields[] | undefined
+}
+const openHandsToolCallOf = (event: AgentEvent): AcpToolCall => ({
+  id: String(event.tool_call_id),
+  title: String(event.title),
+  kind: event.tool_kind,
+  status: event.status,
+  rawInput: (event.raw_input ?? {}) as Fields,
+  rawOutput: event.raw_output,
+  content: event.content as Fields[] | undefined,
+})
+const hqAgentToolCallOf = (event: AgentEvent, update: Fields): AcpToolCall => ({
+  id: `${event.id.split(':')[0]}:${update?.toolCallId}`,
+  title: String(update?.title),
+  kind: update?.kind,
+  status: update?.status,
+  rawInput: (update?.rawInput ?? {}) as Fields,
+  rawOutput: update?.rawOutput,
+  content: update?.content as Fields[] | undefined,
+})
+const acpDiffOf = (call: AcpToolCall) => call.content?.find((part) => part?.type === 'diff')
+const acpStepOf = (call: AcpToolCall): StoredStep => {
+  const { title, rawInput } = call
+  const path = pathOf(rawInput?.file_path ?? acpDiffOf(call)?.path)
   if (rawInput?.server && rawInput.tool)
     return {
       type: 'tool',
@@ -110,9 +136,9 @@ const acpStepOf = (event: AgentEvent): StoredStep => {
     }
   if (typeof rawInput?.skill === 'string')
     return { type: 'tool', name: `Skill ${rawInput.skill}`, arguments: String(rawInput.args ?? ''), result: null }
-  if (event.tool_kind === 'execute')
+  if (call.kind === 'execute')
     return { type: 'command', command: title, exitCode: null, durationMilliseconds: null, ...keptOutputOf('') }
-  if (event.tool_kind === 'edit')
+  if (call.kind === 'edit')
     return {
       type: 'file',
       operation: title.startsWith('Write') ? 'create' : 'edit',
@@ -121,22 +147,21 @@ const acpStepOf = (event: AgentEvent): StoredStep => {
       removed: 0,
       diff: [],
     }
-  if (event.tool_kind === 'read') return { type: 'file', operation: 'read', path, added: 0, removed: 0, diff: [] }
+  if (call.kind === 'read') return { type: 'file', operation: 'read', path, added: 0, removed: 0, diff: [] }
   return { type: 'tool', name: toolDisplayNameOf(title), arguments: JSON.stringify(rawInput), result: null }
 }
-const acpToolCallProjectionOf = (event: AgentEvent): AgentProjection => {
-  const id = String(event.tool_call_id)
-  const rawOutput = event.raw_output
+const acpToolCallProjectionOf = (call: AcpToolCall): AgentProjection => {
+  const { rawOutput } = call
   const output = (rawOutput ?? {}) as Record<string, unknown>
-  const contentText = textOf((event.content as Fields[] | undefined)?.map((part) => part?.content))
-  const diff = acpDiffOf(event)
-  if (event.status === 'completed' || event.status === 'failed')
+  const contentText = textOf(call.content?.map((part) => part?.content))
+  const diff = acpDiffOf(call)
+  if (call.status === 'completed' || call.status === 'failed')
     return {
       type: 'observation',
-      actionId: id,
-      step: acpStepOf(event),
+      actionId: call.id,
+      step: acpStepOf(call),
       observation: {
-        command: (event.raw_input as Fields)?.command,
+        command: call.rawInput?.command,
         content: [
           {
             text:
@@ -148,15 +173,38 @@ const acpToolCallProjectionOf = (event: AgentEvent): AgentProjection => {
                   textOf((output.result as Fields)?.content),
           },
         ],
-        exit_code: output.exit_code ?? (event.status === 'failed' ? 1 : 0),
-        old_content: diff?.old_text,
-        new_content: diff?.new_text,
-        is_error: event.status === 'failed',
+        exit_code: output.exit_code ?? (call.status === 'failed' ? 1 : 0),
+        old_content: diff?.oldText ?? diff?.old_text,
+        new_content: diff?.newText ?? diff?.new_text,
+        is_error: call.status === 'failed',
       },
     }
-  return event.status === 'pending' || event.status === 'in_progress'
-    ? { type: 'step', step: acpStepOf(event), id }
+  return call.status === 'pending' || call.status === 'in_progress'
+    ? { type: 'step', step: acpStepOf(call), id: call.id }
     : undefined
+}
+const acpUpdateProjectionOf = (event: AgentEvent): AgentProjection => {
+  const update = event.update as Fields
+  const kind = update?.sessionUpdate
+  if (kind === 'agent_message') return messageOf(update?.text)
+  if (kind === 'agent_thought') {
+    const thought = thoughtOf(
+      [update?.text],
+      typeof update?.durationMilliseconds === 'number' ? update.durationMilliseconds : null,
+    )
+    return thought && stepOf(thought)
+  }
+  if (kind === 'tool_call') {
+    const call = hqAgentToolCallOf(event, update)
+    return { type: 'step', step: acpStepOf(call), id: call.id }
+  }
+  if (kind === 'tool_call_update') return acpToolCallProjectionOf(hqAgentToolCallOf(event, update))
+  if (kind === 'error') return stepOf({ type: 'error', message: String(update?.message ?? 'Unknown error') })
+  if (kind === 'session_started' && update?.resumeFailed === true)
+    return { type: 'message', body: agentNotices.newSession, kind: 'notice' }
+  if (kind === 'turn_end' && update?.stopReason !== 'cancelled')
+    return { type: 'turn-end', outcome: update?.stopReason === 'error' ? 'error' : 'finished' }
+  return undefined
 }
 
 export const subagentDelegationOf = (
@@ -173,10 +221,32 @@ export const subagentDelegationOf = (
 export const isFinishEvent = (event: AgentEvent) =>
   event.kind === 'ActionEvent' && (event.action as Fields)?.kind === 'FinishAction'
 
+const storedAcpUpdates = [
+  'tool_call',
+  'tool_call_update',
+  'turn_end',
+  'error',
+  'session_started',
+  'config_option_update',
+  'agent_message',
+  'agent_thought',
+]
+
 export const isStoredAgentEvent = (event: AgentEvent) =>
-  event.kind !== 'StreamingDeltaEvent' && !(event.kind === 'ConversationStateUpdateEvent' && event.key === 'full_state')
+  event.kind === 'ACPUpdate'
+    ? storedAcpUpdates.includes(String((event.update as Fields)?.sessionUpdate)) &&
+      (event.completed === true || (event.update as Fields)?.sessionUpdate === 'tool_call')
+    : event.kind !== 'StreamingDeltaEvent' &&
+      !(event.kind === 'ConversationStateUpdateEvent' && event.key === 'full_state')
 
 export const streamedTextOf = (event: AgentEvent) => {
+  if (event.kind === 'ACPUpdate') {
+    const update = event.update as Fields
+    const isReasoning = update?.sessionUpdate === 'agent_thought_chunk'
+    return isReasoning || update?.sessionUpdate === 'agent_message_chunk'
+      ? { text: String((update?.content as Fields)?.text ?? ''), isReasoning }
+      : undefined
+  }
   if (event.kind !== 'StreamingDeltaEvent') return undefined
   const content = typeof event.content === 'string' ? event.content : ''
   const reasoning = typeof event.reasoning_content === 'string' ? event.reasoning_content : ''
@@ -215,7 +285,8 @@ export const agentProjectionOf = (
     const thought = thoughtOf([event.reasoning_content], durationMilliseconds)
     return message?.type === 'message' && thought ? { ...message, thought } : (message ?? (thought && stepOf(thought)))
   }
-  if (event.kind === 'ACPToolCallEvent') return acpToolCallProjectionOf(event)
+  if (event.kind === 'ACPToolCallEvent') return acpToolCallProjectionOf(openHandsToolCallOf(event))
+  if (event.kind === 'ACPUpdate') return acpUpdateProjectionOf(event)
   if (event.kind === 'ActionEvent' && action?.kind === 'ThinkAction') {
     const thought = thoughtOf([event.reasoning_content, textOf(event.thought), action.thought], durationMilliseconds)
     return thought && stepOf(thought)

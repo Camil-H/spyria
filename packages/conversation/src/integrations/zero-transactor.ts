@@ -8,6 +8,7 @@ import {
   insertRoutingDecision,
   isChatEventStored,
   lastAgentEvent,
+  lastSessionId,
   lockChatTurn,
   memberModelsOf,
   pendingPrompts,
@@ -200,11 +201,10 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       },
       last: async (id) => {
         const last = await lastAgentEvent(tx, contextWorkspaceId, id)
-        return (
-          last && { timestamp: last.timestamp, replyToId: last.replyToId === null ? null : messageId(last.replyToId) }
-        )
+        return last && { ...last, replyToId: last.replyToId === null ? null : messageId(last.replyToId) }
       },
       stoppedHarnessSessionId: (id) => stoppedHarnessSessionId(tx, contextWorkspaceId, id),
+      lastSessionId: (id) => lastSessionId(tx, contextWorkspaceId, id),
       recordedStreamedText: (id, promptId) => recordedStreamedText(tx, contextWorkspaceId, id, promptId),
     },
     plans: {

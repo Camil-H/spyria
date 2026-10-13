@@ -29,6 +29,7 @@ export const setRuntimesHostOnline = skippedOnClient
 export const isChatEventStored = async () => false
 export const lastAgentEvent = skippedOnClient
 export const stoppedHarnessSessionId = skippedOnClient
+export const lastSessionId = skippedOnClient
 export const recordedStreamedText = async () => ''
 export const agentObservationOf = skippedOnClient
 export const lastAdapterModelsOf = skippedOnClient

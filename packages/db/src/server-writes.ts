@@ -285,10 +285,11 @@ export const isChatEventStored = async (tx: Transaction, workspaceId: string, ev
   (await onServer(tx, 'select 1 from events where workspace_id = $1 and id = $2', [workspaceId, eventId])).length > 0
 
 export const lastAgentEvent = (tx: Transaction, workspaceId: string, chatId: string) =>
-  firstOnServer<{ timestamp: string; replyToId: string | null }>(
+  firstOnServer<{ id: string; seq: number | null; timestamp: string; replyToId: string | null }>(
     tx,
-    `select payload->'event'->>'timestamp' as timestamp, payload->>'replyToId' as "replyToId" from events
-     where workspace_id = $1 and chat_id = $2 and type = 'agent.event' order by seq desc limit 1`,
+    `select id, (payload->'event'->>'seq')::int as seq, payload->'event'->>'timestamp' as timestamp,
+       payload->>'replyToId' as "replyToId" from events
+     where workspace_id = $1 and chat_id = $2 and type = 'agent.event' order by events.seq desc limit 1`,
     [workspaceId, chatId],
   )
 
@@ -319,6 +320,17 @@ export const stoppedHarnessSessionId = async (tx: Transaction, workspaceId: stri
     )
   )?.sessionId ?? undefined
 
+export const lastSessionId = async (tx: Transaction, workspaceId: string, chatId: string) =>
+  (
+    await firstOnServer<{ sessionId: string | null }>(
+      tx,
+      `select payload->'event'->'update'->>'sessionId' as "sessionId" from events
+       where workspace_id = $1 and chat_id = $2 and type = 'agent.event'
+       and payload->'event'->'update'->>'sessionUpdate' = 'session_started' order by seq desc limit 1`,
+      [workspaceId, chatId],
+    )
+  )?.sessionId ?? undefined
+
 export const lastAdapterModelsOf = (tx: Transaction, workspaceId: string, chatId: string) =>
   firstOnServer<{
     isThisChat: boolean
@@ -326,15 +338,22 @@ export const lastAdapterModelsOf = (tx: Transaction, workspaceId: string, chatId
     availableModels: { model_id: string; name: string }[]
   }>(
     tx,
-    `select events.chat_id = $2 as "isThisChat", payload->'event'->'value'->>'acp_current_model_id' as "currentModelId",
-       payload->'event'->'value'->'acp_available_models' as "availableModels"
+    `select events.chat_id = $2 as "isThisChat",
+       coalesce(payload->'event'->'value'->>'acp_current_model_id', found.option->>'currentValue') as "currentModelId",
+       coalesce(payload->'event'->'value'->'acp_available_models',
+         (select jsonb_agg(jsonb_build_object('model_id', choice->>'value', 'name', choice->>'name'))
+          from jsonb_array_elements(found.option->'options') choice)) as "availableModels"
      from chats this join chats seen on seen.workspace_id = this.workspace_id and seen.owner_user_id = this.owner_user_id
        and seen.harness = this.harness and seen.local_session
      join events on events.workspace_id = seen.workspace_id and events.chat_id = seen.id
+     cross join lateral (select jsonb_path_query_first(payload->'event',
+       '$.update.configOptions[*] ? (@.category == "model")') as option) found
      where this.workspace_id = $1 and this.id = $2 and this.local_session and events.type = 'agent.event'
-       and payload->'event'->>'key' = 'agent_state'
-       and jsonb_typeof(payload->'event'->'value'->'acp_available_models') = 'array'
-     order by events.chat_id = $2 desc, events.created_at desc limit 1`,
+       and ((payload->'event'->>'key' = 'agent_state'
+           and jsonb_typeof(payload->'event'->'value'->'acp_available_models') = 'array')
+         or (payload->'event'->'update'->>'sessionUpdate' in ('session_started', 'config_option_update')
+           and jsonb_typeof(found.option->'options') = 'array'))
+     order by events.chat_id = $2 desc, events.created_at desc, events.seq desc limit 1`,
     [workspaceId, chatId],
   )
 

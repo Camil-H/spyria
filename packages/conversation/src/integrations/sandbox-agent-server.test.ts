@@ -4,16 +4,21 @@ import type { HarnessLaunch } from '../domain/session-routing.ts'
 import { createSandboxAgentServer } from './sandbox-agent-server.ts'
 
 const requests: { path: string; body?: string }[] = []
+const socketPaths: string[] = []
 const endpoint: AgentEndpoint = {
   apiKey: 'session-key',
   conversationId: null,
+  isHqAgent: false,
   transport: {
     gatewayUrl: 'http://hq-gateway-relay:4000/v1',
     fetch: async (request) => {
       requests.push(request)
       return { status: 201, body: JSON.stringify({ id: 'conversation-1' }) }
     },
-    openSocket: () => ({ send: () => {}, close: () => {} }),
+    openSocket: (path) => {
+      socketPaths.push(path)
+      return { send: () => {}, close: () => {} }
+    },
   },
 }
 const createdBodyOf = async (harness: HarnessLaunch, acpModel?: string) => {
@@ -98,4 +103,33 @@ apps = false
   expect(JSON.stringify(created)).not.toMatch(
     /OPENAI_API_KEY|CODEX_API_KEY|OPENAI_BASE_URL|"CODEX_CONFIG=|MODEL_PROVIDER|base_url|model/,
   )
+})
+
+test('an hq-agent session sends the bare ACP launch with its resume id, and resumes its socket after the last stored seq of that conversation only', async () => {
+  const hqAgent = { ...endpoint, isHqAgent: true }
+  const server = createSandboxAgentServer()
+  await server.createConversation(hqAgent, 'runtime-token', {
+    model: '',
+    usageId: 'agent',
+    harness: 'claude-code-subscription',
+    resumeSessionId: 'session-1',
+  })
+  const { agent, secrets } = JSON.parse(requests.at(-1)?.body ?? '{}')
+  expect(agent).toMatchObject({ acp_resume_session_id: 'session-1' })
+  expect(agent).not.toHaveProperty('kind')
+  expect(agent).not.toHaveProperty('acp_server')
+  expect(secrets).toEqual({})
+
+  const conversation = { ...hqAgent, conversationId: 'conversation-1' }
+  const listener = { onEvent: () => {}, onClose: () => {} }
+  const timestamp = '2026-10-12T17:56:00.000Z'
+  socketPaths.length = 0
+  server.openEvents(conversation, { id: 'conversation-1:7', seq: 7, timestamp }, listener)
+  server.openEvents(conversation, { id: 'conversation-0:9', seq: 9, timestamp }, listener)
+  server.openEvents(conversation, null, listener)
+  expect(socketPaths).toEqual([
+    '/sockets/events/conversation-1?after=7',
+    '/sockets/events/conversation-1?after=0',
+    '/sockets/events/conversation-1?after=0',
+  ])
 })

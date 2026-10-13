@@ -17,15 +17,25 @@ import type { Transact } from './zero-transactor.ts'
 
 export type { SandboxProvider }
 
-export const createRuntimeAgentRuntimes = (transact: Transact, provider: SandboxProvider): AgentRuntimes => {
+export const createRuntimeAgentRuntimes = (
+  transact: Transact,
+  provider: SandboxProvider,
+  hqAgentForMachines = false,
+): AgentRuntimes => {
   const inTransaction = <Result>(
     work: (dependencies: { transactor: ReturnType<typeof createRuntimeTransactor> }) => Promise<Result>,
   ) => transact((tx) => work({ transactor: createRuntimeTransactor(tx) }))
   const accessOf = (chat: AgentChat) => inTransaction((dependencies) => readAgentAccess(dependencies, chat))
-  const endpointFrom = ({ sandbox, apiKey, conversationId }: NonNullable<Awaited<ReturnType<typeof accessOf>>>) => ({
+  const endpointFrom = ({
     sandbox,
     apiKey,
     conversationId,
+    isPersonal,
+  }: NonNullable<Awaited<ReturnType<typeof accessOf>>>) => ({
+    sandbox,
+    apiKey,
+    conversationId,
+    isHqAgent: hqAgentForMachines && isPersonal,
     transport: provider.connect(sandbox),
   })
   const endpointOf = async (chat: AgentChat): Promise<AgentEndpoint | undefined> => {

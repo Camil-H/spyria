@@ -21,6 +21,7 @@ export type AgentEndpoint = Readonly<{
   transport: AgentTransport
   apiKey: string
   conversationId: string | null
+  isHqAgent: boolean
 }>
 export type AgentConversation = AgentEndpoint & { conversationId: string }
 export type RuntimeReadiness =
@@ -42,6 +43,7 @@ export type AgentRuntimes = {
 
 export type RuntimeRetrier = { retry(chat: AgentChat): Promise<void> }
 
+export type AgentLastEvent = Readonly<{ id: string; seq: number | null; timestamp: string }>
 export type AgentEventListener = { onEvent(event: AgentEvent): void; onClose(): void }
 export type AgentLlmChoice = Readonly<{
   model: string
@@ -66,7 +68,7 @@ export type AgentServer = {
   statusOf(conversation: AgentConversation): Promise<string | undefined>
   interrupt(conversation: AgentConversation): Promise<void>
   deleteConversation(conversation: AgentConversation): Promise<void>
-  openEvents(conversation: AgentConversation, afterTimestamp: string | null, listener: AgentEventListener): AgentSocket
+  openEvents(conversation: AgentConversation, last: AgentLastEvent | null, listener: AgentEventListener): AgentSocket
 }
 
 export type AgentEventSockets = {

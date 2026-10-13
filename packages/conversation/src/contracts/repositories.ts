@@ -52,8 +52,11 @@ export type AgentEventRepository = {
     delegation?: StepDelegation,
     recordedLength?: number,
   ): Promise<number | undefined>
-  last(chatId: ChatId): Promise<{ timestamp: string; replyToId: MessageId | null } | undefined>
+  last(
+    chatId: ChatId,
+  ): Promise<{ id: string; seq: number | null; timestamp: string; replyToId: MessageId | null } | undefined>
   stoppedHarnessSessionId(chatId: ChatId): Promise<string | undefined>
+  lastSessionId(chatId: ChatId): Promise<string | undefined>
   recordedStreamedText(chatId: ChatId, promptId: MessageId): Promise<string>
 }
 

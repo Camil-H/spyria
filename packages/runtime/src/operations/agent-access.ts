@@ -14,11 +14,13 @@ export const readAgentAccess = ({ transactor }: Dependencies, { workspaceId, cha
     if (!runtime || !sandbox) return undefined
     const apiKey = await secrets.valueOf(runtime, 'apiKey')
     if (!apiKey) return undefined
+    const capacity = (await runtimeHosts.find(workspaceId, sandbox.hostId))?.capacity
     return {
       sandbox,
       apiKey,
       conversationId: (await runtimes.agentConversationOf(runtime)) ?? null,
-      signedIn: (await runtimeHosts.find(workspaceId, sandbox.hostId))?.capacity?.signedIn ?? [],
+      signedIn: capacity?.signedIn ?? [],
+      isPersonal: capacity?.personal === true,
     }
   })
 

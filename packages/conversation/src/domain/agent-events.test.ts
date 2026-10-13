@@ -423,3 +423,81 @@ test('text streamed before a tool call is its own message, and the finish stores
     step: { type: 'thought', text: 'Checked twice.', durationMilliseconds: null },
   })
 })
+
+const acpUpdate = (seq: number, update: Record<string, unknown>, completed = true): AgentEvent => ({
+  id: `conversation-1:${seq}`,
+  kind: 'ACPUpdate',
+  timestamp: '2026-10-12T17:56:00.000Z',
+  seq,
+  completed,
+  update,
+})
+
+test('an hq-agent sequence projects text, a thought with its duration, steps merged by their final call, and a turn end', () => {
+  const diff = { type: 'diff', path: '/workspace/project/app.ts', oldText: 'one', newText: 'two' }
+  const edit = {
+    toolCallId: 'edit-1',
+    title: 'Edit app.ts',
+    kind: 'edit',
+    rawInput: { file_path: '/workspace/project/app.ts' },
+  }
+  const messages = messagesFromEvents(
+    storedEventsOf(
+      [
+        acpUpdate(1, { sessionUpdate: 'session_started', sessionId: 's1', resumeFailed: false }),
+        acpUpdate(2, { sessionUpdate: 'agent_thought', text: 'Plan it.', durationMilliseconds: 1500 }),
+        acpUpdate(3, { sessionUpdate: 'tool_call', ...edit, title: 'Edit', status: 'pending', rawInput: {} }, false),
+        acpUpdate(4, { sessionUpdate: 'tool_call_update', ...edit, status: 'completed', content: [diff] }),
+        acpUpdate(5, { sessionUpdate: 'agent_message', text: 'Done.' }),
+        acpUpdate(6, { sessionUpdate: 'turn_end', stopReason: 'end_turn' }),
+      ].map((event) => ({ event })),
+    ),
+  )
+  expect(messages.map(({ id, kind, body, step }) => ({ id, kind, body, step }))).toMatchObject([
+    { id: 'conversation-1:2', kind: 'step', step: { type: 'thought', text: 'Plan it.', durationMilliseconds: 1500 } },
+    {
+      id: 'conversation-1:edit-1',
+      kind: 'step',
+      step: { type: 'file', operation: 'edit', path: 'app.ts', added: 1, removed: 1 },
+    },
+    { id: 'conversation-1:5', kind: 'agent', body: 'Done.' },
+  ])
+})
+
+test('an hq-agent turn ends finished or in error, a cancelled turn end ends nothing, and a failed resume says so', () => {
+  const turnEnd = (stopReason: string) =>
+    agentProjectionOf(acpUpdate(9, { sessionUpdate: 'turn_end', stopReason }), null)
+  expect(turnEnd('end_turn')).toEqual({ type: 'turn-end', outcome: 'finished' })
+  expect(turnEnd('error')).toEqual({ type: 'turn-end', outcome: 'error' })
+  expect(turnEnd('cancelled')).toBeUndefined()
+  expect(agentProjectionOf(acpUpdate(1, { sessionUpdate: 'session_started', resumeFailed: true }), null)).toEqual({
+    type: 'message',
+    body: agentNotices.newSession,
+    kind: 'notice',
+  })
+  expect(
+    agentProjectionOf(acpUpdate(1, { sessionUpdate: 'session_started', resumeFailed: false }), null),
+  ).toBeUndefined()
+  expect(agentProjectionOf(acpUpdate(2, { sessionUpdate: 'error', message: 'Authentication required' }), null)).toEqual(
+    {
+      type: 'step',
+      step: { type: 'error', message: 'Authentication required' },
+    },
+  )
+})
+
+test('hq-agent chunks stream and are never stored, while completed items and tool calls are', () => {
+  const chunk = (sessionUpdate: string, text: string) =>
+    acpUpdate(3, { sessionUpdate, content: { type: 'text', text } }, false)
+  expect(streamedTextOf(chunk('agent_message_chunk', 'Hi'))).toEqual({ text: 'Hi', isReasoning: false })
+  expect(streamedTextOf(chunk('agent_thought_chunk', 'Hm'))).toEqual({ text: 'Hm', isReasoning: true })
+  expect(streamedTextOf(acpUpdate(4, { sessionUpdate: 'turn_end' }))).toBeUndefined()
+  const isStored = (update: Record<string, unknown>, completed: boolean) =>
+    isStoredAgentEvent(acpUpdate(5, update, completed))
+  expect(isStored({ sessionUpdate: 'agent_message_chunk' }, false)).toBe(false)
+  expect(isStored({ sessionUpdate: 'tool_call' }, false)).toBe(true)
+  expect(isStored({ sessionUpdate: 'tool_call_update' }, false)).toBe(false)
+  expect(isStored({ sessionUpdate: 'tool_call_update' }, true)).toBe(true)
+  expect(isStored({ sessionUpdate: 'turn_end' }, true)).toBe(true)
+  expect(isStored({ sessionUpdate: 'plan' }, true)).toBe(false)
+})
