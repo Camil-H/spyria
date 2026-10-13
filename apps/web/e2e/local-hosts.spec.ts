@@ -171,7 +171,7 @@ test.describe('Use Claude Code and Use Codex, as a member', () => {
     await expect(commandBox).toHaveValue('docker exec -it hq-host hq-host login claude')
     machine.heartbeat(['claude'])
     await expect(dialog).toContainText(
-      'Claude Code is ready: start a chat with New chat, On my machine · Claude Code subscription',
+      'Claude Code is ready: in a new Runtime chat, set Runs on to My machine · Claude Code',
     )
     await expect(commandBox).toHaveCount(0)
     await dialog.getByRole('button', { name: 'Close' }).click()

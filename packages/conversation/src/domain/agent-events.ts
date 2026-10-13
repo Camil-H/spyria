@@ -108,6 +108,8 @@ const acpStepOf = (event: AgentEvent): StoredStep => {
       arguments: JSON.stringify(rawInput.arguments ?? {}),
       result: null,
     }
+  if (typeof rawInput?.skill === 'string')
+    return { type: 'tool', name: `Skill ${rawInput.skill}`, arguments: String(rawInput.args ?? ''), result: null }
   if (event.tool_kind === 'execute')
     return { type: 'command', command: title, exitCode: null, durationMilliseconds: null, ...keptOutputOf('') }
   if (event.tool_kind === 'edit')

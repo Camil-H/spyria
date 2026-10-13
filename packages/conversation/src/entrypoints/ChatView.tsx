@@ -4,6 +4,7 @@ import { useSession } from '@hq/session'
 import { Bot, GitBranch, Hash } from 'lucide-react'
 import { type ReactNode, useEffect } from 'react'
 import { Link, Navigate, useOutletContext, useParams } from 'react-router'
+import { runsOnNames, runsOnWaitingNoticeOf } from '../domain/session-routing.ts'
 import { getConversation } from '../queries/get-conversation.ts'
 import { Composer } from './Composer.tsx'
 import { MessageList } from './MessageList.tsx'
@@ -35,6 +36,7 @@ export const ChatView = ({
     if (newestMessageId) commands.markChatRead({ workspaceId, chatId })
   }, [commands, workspaceId, chatId, newestMessageId])
   if (!conversation) return <Navigate to={`/w/${workspaceId}`} replace />
+  const isRunsOnOpen = conversation.type === 'runtime' && conversation.runsOn === null
   const ChatTypeIcon = conversation.type === 'runtime' ? Bot : Hash
   const chatTypeLabel = conversation.type === 'runtime' ? 'Runtime chat' : 'Channel'
   return (
@@ -87,15 +89,45 @@ export const ChatView = ({
             subagentPolicy={conversation.subagentPolicy}
             harness={conversation.harness}
             localSession={conversation.localSession}
+            runsOn={conversation.runsOn}
+            isOwner={conversation.isOwner}
+            runsOnChoices={conversation.runsOnChoices}
           />
           {runtimeStatus}
         </div>
       )}
+      {isRunsOnOpen && conversation.runsOnChoices && (
+        <fieldset aria-label="Runs on" className="flex flex-col gap-2 text-sm">
+          <div className="flex gap-1 rounded-lg border border-line bg-app p-1">
+            {conversation.runsOnChoices.map((choice) => (
+              <label
+                key={choice}
+                className="relative flex flex-1 cursor-pointer items-center justify-center rounded-md px-3 py-1 text-muted hover:bg-hover hover:text-ink has-focus-visible:outline-2 has-focus-visible:outline-focus"
+              >
+                <input
+                  type="radio"
+                  name="runs-on"
+                  className="absolute inset-0 cursor-pointer opacity-0"
+                  checked={false}
+                  onChange={() => commands.updateChatRouting({ workspaceId, chatId, runsOn: choice })}
+                />
+                {runsOnNames[choice]}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      )}
       <Composer
         workspaceId={workspaceId}
         chatId={chatId}
-        isBlocked={conversation.type === 'runtime' && !conversation.localSession && !canPrompt}
-        blockedNotice={blockedNotice}
+        isBlocked={isRunsOnOpen || (conversation.type === 'runtime' && !conversation.localSession && !canPrompt)}
+        blockedNotice={
+          isRunsOnOpen
+            ? conversation.isOwner
+              ? 'Choose where this chat runs to send'
+              : runsOnWaitingNoticeOf(conversation.ownerName)
+            : blockedNotice
+        }
       />
     </div>
   )

@@ -1,4 +1,15 @@
-import { test as base, expect, mainOf, messageItemsOf, openChat, type Page, sendMessage, serverUrl } from './fixtures'
+import {
+  test as base,
+  expect,
+  mainOf,
+  messageItemsOf,
+  newRuntimeChat,
+  openChat,
+  type Page,
+  runsOnChoiceOf,
+  sendMessage,
+  serverUrl,
+} from './fixtures'
 import { openPageAs } from './stack'
 
 type MachineConversation = {
@@ -26,7 +37,7 @@ const test = base.extend<{ machine: (query?: MachineQuery) => Promise<Machine> }
 })
 
 const agentReply = { timeout: 30_000 }
-const localOption = 'On my machine · Claude Code subscription'
+const localOption = 'My machine · Claude Code'
 const subscriptionCommand = [
   'env',
   'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1',
@@ -35,7 +46,7 @@ const subscriptionCommand = [
   'claude-agent-acp',
 ]
 const signedInMachine = { owner: 'member-alice', signedIn: 'claude' }
-const codexOption = 'On my machine · Codex (ChatGPT plan)'
+const codexOption = 'My machine · Codex'
 const codexSubscriptionCommand = [
   'env',
   `HQ_CODEX_CONFIG=forced_login_method = "chatgpt"
@@ -59,17 +70,16 @@ apps = false
 ]
 const codexMachine = { owner: 'member-alice', signedIn: 'codex' }
 
-const openNewChat = async (page: Page) => {
-  await page.getByRole('button', { name: 'New chat' }).click()
-  return page.getByRole('dialog', { name: 'New chat' })
-}
+const chipOf = (page: Page) =>
+  mainOf(page).getByRole('button', {
+    name: /^Model chosen at first prompt$|^Claude Code · |^Codex · |· (auto|same as main)$/,
+  })
+const sessionOf = (page: Page) => page.getByRole('dialog', { name: 'Session' })
+const runsOnOf = (page: Page) => sessionOf(page).getByRole('combobox', { name: 'Runs on' })
 const newLocalSession = async (page: Page, name: string, option = localOption) => {
-  const dialog = await openNewChat(page)
-  await dialog.getByRole('radio', { name: option }).check()
-  await dialog.getByRole('textbox', { name: 'Chat name' }).fill(name)
-  await dialog.getByRole('button', { name: 'Confirm' }).click()
-  await expect(mainOf(page).getByRole('heading', { level: 1, name })).toBeVisible()
-  return page.url().split('/').at(-1) ?? ''
+  const chatId = await newRuntimeChat(page, name, option)
+  await expect(chipOf(page)).toHaveText(`${option.replace('My machine · ', '')} · subscription`)
+  return chatId
 }
 const repliesWith = (page: Page, text: string) => messageItemsOf(page).filter({ hasText: text })
 
@@ -120,8 +130,9 @@ test('4. a prompt while the machine is not signed in shows the sign-in notice an
   page,
   machine,
 }) => {
-  await machine({ owner: 'member-alice', signedIn: '' })
+  await machine(signedInMachine)
   await newLocalSession(page, 'Not signed in')
+  await machine({ signedIn: '' })
   await sendMessage(page, 'Answer without a sign-in')
   await expect(
     repliesWith(page, 'Sign in to Claude Code on your machine: docker exec -it hq-host hq-host login claude'),
@@ -199,14 +210,13 @@ test('8. stopping mid-command marks the turn stopped, and the next prompt is ans
   expect(conversations.map((conversation) => conversation.agent.acp_command)).toEqual([subscriptionCommand])
 })
 
-test('9. the New chat dialog offers On my machine only to a member with a local host', async ({ page, machine }) => {
-  const dialog = await openNewChat(page)
-  await expect(dialog.getByRole('radio')).toHaveCount(2)
-  await expect(dialog.getByRole('radio', { name: localOption })).toHaveCount(0)
-  await page.keyboard.press('Escape')
+test('9. the chip offers My machine only to a member with a local host', async ({ page, machine }) => {
+  await newRuntimeChat(page, 'Where it runs')
+  await chipOf(page).click()
+  await expect(runsOnOf(page)).toHaveCount(0)
+  await expect(sessionOf(page)).toContainText('Runs on HQ runtime')
   await machine(signedInMachine)
-  await openNewChat(page)
-  await expect(dialog.getByRole('radio', { name: localOption })).toBeVisible()
+  await expect(runsOnOf(page).getByRole('option', { name: localOption })).toBeAttached()
 })
 
 test('10. text streamed around a command shows before the command and stays, the rest after it, and nothing is stored twice', async ({
@@ -273,13 +283,17 @@ test.describe('Codex on a ChatGPT plan', () => {
     expect((await workerStack.gateway<{ logs: object[] | null }>(`/api/logs?${query}`)).logs ?? []).toHaveLength(0)
   })
 
-  test('2. signed in to Claude only, a Codex session shows the Codex sign-in notice and a Claude Code session works', async ({
+  test('2. signed in to Claude only, Codex is not offered, a Codex session signed out after the choice shows the Codex sign-in notice, and a Claude Code session works', async ({
     page,
     machine,
     agentScript,
   }) => {
     await machine(signedInMachine)
+    await newRuntimeChat(page, 'Claude only', null)
+    await expect(runsOnChoiceOf(page).getByRole('radio', { name: codexOption })).toHaveCount(0)
+    await machine({ signedIn: 'claude,codex' })
     await newLocalSession(page, 'Codex without a sign-in', codexOption)
+    await machine({ signedIn: 'claude' })
     await sendMessage(page, 'Answer without a Codex sign-in')
     await expect(
       repliesWith(page, 'Sign in to Codex on your machine: docker exec -it hq-host hq-host login codex'),
@@ -327,17 +341,16 @@ test.describe('Codex on a ChatGPT plan', () => {
     expect(conversations[0]?.agent.acp_resume_session_id).toBe(sessionIds[0]?.id)
   })
 
-  test('4. the New chat dialog offers both On my machine options only to a member with a local host', async ({
+  test('4. the chip offers both My machine options only to a member with a local host signed in to both', async ({
     page,
     machine,
   }) => {
-    const dialog = await openNewChat(page)
-    await expect(dialog.getByRole('radio', { name: /^On my machine/ })).toHaveCount(0)
-    await page.keyboard.press('Escape')
-    await machine({ owner: 'member-alice', signedIn: '' })
-    await openNewChat(page)
-    await expect(dialog.getByRole('radio', { name: localOption })).toBeVisible()
-    await expect(dialog.getByRole('radio', { name: codexOption })).toBeVisible()
+    await newRuntimeChat(page, 'Where Codex runs')
+    await chipOf(page).click()
+    await expect(sessionOf(page).getByRole('option', { name: /^My machine/ })).toHaveCount(0)
+    await machine({ owner: 'member-alice', signedIn: 'claude,codex' })
+    await expect(runsOnOf(page).getByRole('option', { name: localOption })).toBeAttached()
+    await expect(runsOnOf(page).getByRole('option', { name: codexOption })).toBeAttached()
   })
 
   test('5. a command pending with no input shows the real command and no spinner once completed, and a read shows its path', async ({

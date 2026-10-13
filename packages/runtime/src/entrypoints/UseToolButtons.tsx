@@ -8,10 +8,7 @@ import { CommandBox, HostCommand, PersonalNotice } from './HostCommandDialog.tsx
 import { useRuntimeCommands } from './providers.tsx'
 import { statusLabelOf } from './RuntimeHostsSection.tsx'
 
-const tools: Record<SignInTool, { name: string; chatOption: string }> = {
-  claude: { name: 'Claude Code', chatOption: 'On my machine · Claude Code subscription' },
-  codex: { name: 'Codex', chatOption: 'On my machine · Codex (ChatGPT plan)' },
-}
+const tools: Record<SignInTool, { name: string }> = { claude: { name: 'Claude Code' }, codex: { name: 'Codex' } }
 
 export const UseToolButtons = ({ workspaceId, memberId }: { workspaceId: WorkspaceId; memberId: MemberId }) => {
   const commands = useRuntimeCommands()
@@ -40,7 +37,8 @@ export const UseToolButtons = ({ workspaceId, memberId }: { workspaceId: Workspa
               {machine?.status === 'online' ? (
                 machine.capacity?.signedIn?.includes(openTool) ? (
                   <p className="text-sm">
-                    {tools[openTool].name} is ready: start a chat with New chat, {tools[openTool].chatOption}
+                    {tools[openTool].name} is ready: in a new Runtime chat, set Runs on to My machine ·{' '}
+                    {tools[openTool].name}
                   </p>
                 ) : (
                   <>

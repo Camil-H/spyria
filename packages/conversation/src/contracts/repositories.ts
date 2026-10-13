@@ -68,6 +68,9 @@ export type ReadMarkerRepository = { markNewestRead(chatId: ChatId, memberId: Me
 export type ChatRepository = {
   get(chatId: ChatId): Promise<ConversationChat>
   localSessionsAllowed(): Promise<boolean>
+  hasAgentSession(chatId: ChatId): Promise<boolean>
+  dropRuntime(chatId: ChatId): Promise<void>
+  hasMachine(memberId: MemberId): Promise<boolean>
 }
 
 export type ChatRouting = Readonly<{
@@ -116,11 +119,12 @@ export type RoutingRepository = {
   update(
     chatId: ChatId,
     fields: Partial<{
-      model: string
+      model: string | null
       reasoningEffort: string
       defaultModel: string
       subagentPolicy: string
-      harness: Harness
+      harness: Harness | null
+      localSession: boolean
     }>,
   ): Promise<void>
   setAgentModel(chatId: ChatId, model: string): Promise<void>

@@ -76,6 +76,17 @@ export const localSessions = {
   },
 } as const satisfies Record<Harness, { launch: HarnessLaunch; signIn: string; signInNotice: string }>
 export type LocalSession = (typeof localSessions)[Harness]
+export type RunsOn = 'runtime' | Harness
+export const runsOnNames: Record<RunsOn, string> = {
+  runtime: 'HQ runtime',
+  'claude-code': 'My machine · Claude Code',
+  codex: 'My machine · Codex',
+}
+export const runsOnFieldsOf = (runsOn: RunsOn) =>
+  runsOn === 'runtime' ? { harness: null, localSession: false } : { harness: runsOn, localSession: true }
+export const runsOnOf = (chat: { localSession: boolean | null; harness: Harness | null }): RunsOn | null =>
+  chat.localSession === null ? null : chat.localSession ? (chat.harness ?? 'claude-code') : 'runtime'
+export const runsOnWaitingNoticeOf = (ownerName: string) => `Waiting for ${ownerName} to choose where this chat runs`
 const providerOf = (model: string) => model.split('/')[0]
 export const reachesHarness = (harness: Harness, reachable: readonly Model[]) =>
   reachable.some((model) => providerOf(model.id) === providerOf(harnesses[harness].model))

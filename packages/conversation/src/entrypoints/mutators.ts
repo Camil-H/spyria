@@ -58,6 +58,8 @@ export const conversationMutators = defineMutators({
         sessionModel: z.optional(z.string()),
         defaultModel: z.optional(z.string()),
         subagentPolicy: z.optional(z.enum(['auto', 'same_as_main'])),
+        runsOn: z.optional(z.enum(['runtime', 'claude-code', 'codex'])),
+        acpModel: z.optional(z.string()),
       }),
       ({ tx, ctx, args }) => updateChatRouting(dependenciesOf(tx, ctx, args), { ...args, memberId: ctx.userId }),
     ),

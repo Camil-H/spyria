@@ -23,6 +23,7 @@ import {
 import type { Message as MessageRow } from '@hq/db/zero'
 import { zql } from '@hq/db/zero-queries'
 import { type ChatId, chatId, type MessageId, memberId, messageId, type WorkspaceId, workspaceId } from '@hq/kernel'
+import { createRuntimeTransactor, removeChatRuntime } from '@hq/runtime/published'
 import type { Transaction } from '@rocicorp/zero'
 import type { ConversationTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import { agentSweepIntervalMilliseconds, waitingNotices } from '../domain/agent-events.ts'
@@ -227,7 +228,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         tx.mutate.chats.update({
           workspaceId: contextWorkspaceId,
           id,
-          ...(fields as Partial<{ subagentPolicy: 'auto' | 'same_as_main' }>),
+          ...(fields as Partial<{ subagentPolicy: 'auto' | 'same_as_main'; harness: 'claude-code' | 'codex' | null }>),
         }),
       setAgentModel: async (id, model) => {
         await setChatAgentModel(tx, contextWorkspaceId, id, model)
@@ -273,11 +274,37 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
           type: row.type,
           harness: row.harness ?? null,
           ownerId: row.ownerUserId ? memberId(row.ownerUserId) : null,
-          localSession: row.localSession ?? false,
+          localSession: row.localSession ?? null,
         }
       },
       localSessionsAllowed: async () =>
         (await tx.run(zql.workspaces.where('workspaceId', contextWorkspaceId).one()))?.localSessions ?? true,
+      hasAgentSession: async (id) =>
+        Boolean(
+          (await tx.run(zql.chats.where('workspaceId', contextWorkspaceId).where('id', id).one()))?.agentTurnMessageId,
+        ) ||
+        (await tx.run(
+          zql.messages
+            .where('workspaceId', contextWorkspaceId)
+            .where('chatId', id)
+            .where('kind', 'IN', ['agent', 'step'])
+            .one(),
+        )) !== undefined,
+      dropRuntime: async (id) => {
+        if (tx.location === 'server')
+          await removeChatRuntime(
+            { transactor: createRuntimeTransactor(tx) },
+            { workspaceId: contextWorkspaceId, chatId: id, now: Date.now() },
+          )
+      },
+      hasMachine: async (id) =>
+        (await tx.run(
+          zql.runtimeHosts
+            .where('workspaceId', contextWorkspaceId)
+            .where('ownerId', id)
+            .where('removedAt', 'IS', null)
+            .one(),
+        )) !== undefined,
     },
   }
   return { run: (work) => work(unitOfWork) }

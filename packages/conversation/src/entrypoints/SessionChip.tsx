@@ -1,17 +1,23 @@
 import { type ChatId, modelNameOf, rereadDollarsOf, type WorkspaceId } from '@hq/kernel'
-import { buttonClass, fieldClass, focusRing, formatCost, formatTokens, ghostButtonClass, labelClass } from '@hq/ui'
-import { useEffect, useState } from 'react'
-import { type Harness, harnesses } from '../domain/session-routing.ts'
+import { buttonClass, fieldClass, focusRing, formatCost, ghostButtonClass, labelClass } from '@hq/ui'
+import { useEffect, useRef, useState } from 'react'
+import { type Harness, harnesses, type RunsOn, runsOnNames } from '../domain/session-routing.ts'
+import type { Conversation } from '../queries/get-conversation.ts'
 import type { ChatRoutingRead } from './endpoints.ts'
 import { useConversationCommands } from './providers.tsx'
 
 type Policy = 'auto' | 'same_as_main'
-type Fields = { sessionModel?: string; defaultModel?: string; subagentPolicy?: Policy }
+type Fields = {
+  sessionModel?: string
+  defaultModel?: string
+  subagentPolicy?: Policy
+  runsOn?: RunsOn
+  acpModel?: string
+}
 
 const policyNames: Record<Policy, string> = { auto: 'auto', same_as_main: 'same as main' }
 const refreshMilliseconds = 2000
 const microsPerDollar = 1_000_000
-const cellClass = 'px-2 py-1 text-right'
 
 export const SessionChip = ({
   workspaceId,
@@ -22,6 +28,9 @@ export const SessionChip = ({
   subagentPolicy,
   harness,
   localSession,
+  runsOn,
+  isOwner,
+  runsOnChoices,
 }: {
   workspaceId: WorkspaceId
   chatId: ChatId
@@ -31,9 +40,13 @@ export const SessionChip = ({
   subagentPolicy: Policy
   harness: Harness | null
   localSession: boolean
+  runsOn: RunsOn | null
+  isOwner: boolean
+  runsOnChoices: Conversation['runsOnChoices']
 }) => {
   const commands = useConversationCommands()
   const [isOpen, setIsOpen] = useState(false)
+  const chipRef = useRef<HTMLDivElement>(null)
   const [routing, setRouting] = useState<ChatRoutingRead>()
   const [pendingModel, setPendingModel] = useState<string | null>(null)
   useEffect(() => {
@@ -43,12 +56,16 @@ export const SessionChip = ({
     if (!isOpen) return
     const load = () => commands.chatRouting({ workspaceId, chatId }).then(setRouting, () => {})
     const closeOnEscape = (event: KeyboardEvent) => event.key === 'Escape' && setIsOpen(false)
+    const closeOnOutsideClick = (event: PointerEvent) =>
+      chipRef.current?.contains(event.target as Node) || setIsOpen(false)
     void load()
     const timer = setInterval(load, refreshMilliseconds)
     document.addEventListener('keydown', closeOnEscape)
+    document.addEventListener('pointerdown', closeOnOutsideClick)
     return () => {
       clearInterval(timer)
       document.removeEventListener('keydown', closeOnEscape)
+      document.removeEventListener('pointerdown', closeOnOutsideClick)
     }
   }, [isOpen, commands, workspaceId, chatId])
   const nameOf = (id: string) => routing?.modelNames[id] ?? modelNameOf(id)
@@ -60,6 +77,11 @@ export const SessionChip = ({
         {nameOf(id)}
       </option>
     ))
+  const runsOnOptions = [...(runsOn && !runsOnChoices?.includes(runsOn) ? [runsOn] : []), ...(runsOnChoices ?? [])]
+  const adapterModels = routing?.adapterModels.available ?? []
+  const adapterModel = model ?? routing?.adapterModels.currentModelId ?? ''
+  const adapterNameOf = (id: string) =>
+    adapterModels.find((candidate) => candidate.id === id)?.name ?? (id || 'Default')
   const estimate = pendingModel
     ? rereadDollarsOf(
         routing?.reachableModels.find(({ id }) => id === pendingModel),
@@ -67,7 +89,7 @@ export const SessionChip = ({
       )
     : undefined
   return (
-    <div className="relative min-w-0">
+    <div ref={chipRef} className="relative min-w-0">
       <button
         type="button"
         aria-expanded={isOpen}
@@ -75,7 +97,7 @@ export const SessionChip = ({
         className={`max-w-full truncate rounded-full border border-line px-2 py-0.5 text-xs text-muted hover:text-ink ${focusRing}`}
       >
         {localSession
-          ? `${harnesses[harness ?? 'claude-code'].name} · subscription`
+          ? `${harnesses[harness ?? 'claude-code'].name} · ${model ? adapterNameOf(model) : 'subscription'}`
           : harness && model
             ? `${harnesses[harness].name} · ${nameOf(model).split('/').at(-1)}`
             : model
@@ -88,6 +110,43 @@ export const SessionChip = ({
           aria-label="Session"
           className="absolute bottom-full left-0 z-50 mb-1 flex w-80 flex-col gap-3 rounded-lg border border-line bg-raised p-3 text-sm shadow-lg"
         >
+          {runsOn === null ? null : runsOnOptions.length > 1 ? (
+            <label className={labelClass}>
+              Runs on
+              <select
+                className={fieldClass}
+                value={runsOn}
+                onChange={(event) => update({ runsOn: event.target.value as RunsOn })}
+              >
+                {runsOnOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {runsOnNames[option]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <p>Runs on {runsOnNames[runsOn]}</p>
+          )}
+          {localSession && isOwner && (
+            <label className={labelClass}>
+              Model
+              <select
+                className={fieldClass}
+                value={adapterModel}
+                onChange={(event) => update({ acpModel: event.target.value })}
+              >
+                {[
+                  ...(adapterModels.some((candidate) => candidate.id === adapterModel) ? [] : [adapterModel]),
+                  ...adapterModels.map((candidate) => candidate.id),
+                ].map((id) => (
+                  <option key={id} value={id}>
+                    {adapterNameOf(id)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {model && !harness && (
             <label className={labelClass}>
               Main model
@@ -123,51 +182,32 @@ export const SessionChip = ({
               </div>
             </div>
           )}
-          <label className={labelClass}>
-            Default model
-            <select
-              className={fieldClass}
-              value={defaultModel ?? ''}
-              onChange={(event) => update({ defaultModel: event.target.value })}
-            >
-              {defaultModel === null && <option value="">None</option>}
-              {optionsWith(defaultModel)}
-            </select>
-          </label>
-          <label className={labelClass}>
-            Subagents
-            <select
-              className={fieldClass}
-              value={subagentPolicy}
-              onChange={(event) => update({ subagentPolicy: event.target.value as Policy })}
-            >
-              <option value="auto">Auto</option>
-              <option value="same_as_main">Same as main</option>
-            </select>
-          </label>
-          <table aria-label="Models used in this chat" className="w-full text-xs">
-            <thead className="text-muted">
-              <tr>
-                {['Model', 'Calls', 'Tokens', 'Cost'].map((title, index) => (
-                  <th key={title} scope="col" className={index === 0 ? 'px-2 py-1 text-left' : cellClass}>
-                    {title}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {routing?.modelsUsed.map((used) => (
-                <tr key={used.model} className="border-t border-line">
-                  <th scope="row" className="px-2 py-1 text-left font-normal">
-                    {nameOf(used.model)}
-                  </th>
-                  <td className={cellClass}>{used.calls}</td>
-                  <td className={cellClass}>{formatTokens(used.tokens)}</td>
-                  <td className={cellClass}>{formatCost(used.costMicros)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {!localSession && (
+            <>
+              <label className={labelClass}>
+                Default model
+                <select
+                  className={fieldClass}
+                  value={defaultModel ?? ''}
+                  onChange={(event) => update({ defaultModel: event.target.value })}
+                >
+                  {defaultModel === null && <option value="">None</option>}
+                  {optionsWith(defaultModel)}
+                </select>
+              </label>
+              <label className={labelClass}>
+                Subagents
+                <select
+                  className={fieldClass}
+                  value={subagentPolicy}
+                  onChange={(event) => update({ subagentPolicy: event.target.value as Policy })}
+                >
+                  <option value="auto">Auto</option>
+                  <option value="same_as_main">Same as main</option>
+                </select>
+              </label>
+            </>
+          )}
         </div>
       )}
     </div>

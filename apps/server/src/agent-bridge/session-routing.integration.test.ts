@@ -298,7 +298,7 @@ test('a prompter reaching only a small model routes to it, and is refused in a s
   )
 })
 
-test('the routing read lists the member’s reachable models and the models used in the chat from model_calls', async () => {
+test('the routing read lists the member’s reachable models and the context tokens of the latest call from model_calls', async () => {
   const chat = await newRuntimeChat()
   await database.$client`
     insert into model_calls (workspace_id, id, chat_id, prompter_id, owner_id, model, provider, input_tokens, output_tokens, cost_micros, status, called_at)
@@ -315,10 +315,6 @@ test('the routing read lists the member’s reachable models and the models used
       { id: 'fake/fake-small', dollarsPerMillionInputTokens: 6 },
     ],
     contextTokens: 450,
-    modelsUsed: [
-      { model: 'fake/fake-large', calls: 2, tokens: 450, costMicros: 13500 },
-      { model: 'fake/fake-small', calls: 1, tokens: 450, costMicros: 2700 },
-    ],
   })
 })
 

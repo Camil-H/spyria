@@ -30,6 +30,22 @@ export const sendMessage = async (page: Page, text: string) => {
   await composerOf(page).press('ControlOrMeta+Enter')
 }
 
+export const runsOnChoiceOf = (page: Page) => mainOf(page).getByRole('group', { name: 'Runs on' })
+export const chooseRunsOn = async (page: Page, runsOn: string) => {
+  await runsOnChoiceOf(page).getByRole('radio', { name: runsOn }).click()
+  await expect(runsOnChoiceOf(page)).toHaveCount(0)
+}
+export const newRuntimeChat = async (page: Page, name: string, runsOn: string | null = 'HQ runtime') => {
+  await page.getByRole('button', { name: 'New chat' }).click()
+  const dialog = page.getByRole('dialog', { name: 'New chat' })
+  await dialog.getByRole('radio', { name: 'Runtime' }).check()
+  await dialog.getByRole('textbox', { name: 'Chat name' }).fill(name)
+  await dialog.getByRole('button', { name: 'Confirm' }).click()
+  await expect(mainOf(page).getByRole('heading', { level: 1, name })).toBeVisible()
+  if (runsOn) await chooseRunsOn(page, runsOn)
+  return page.url().split('/').at(-1) ?? ''
+}
+
 export const openMenu = async (page: Page) => {
   await switcherOf(page).click()
   await expect(page.getByRole('menuitem', { name: 'New workspace' })).toBeVisible()

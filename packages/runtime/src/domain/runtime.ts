@@ -64,7 +64,8 @@ export const transitioned = (
 }
 
 export const ensureStepOf = (runtime: Runtime | undefined) => {
-  if (!runtime || runtime.failure === 'no_host' || runtime.failure === 'no_capacity') return 'place'
+  if (!runtime || runtime.state === 'removed' || runtime.failure === 'no_host' || runtime.failure === 'no_capacity')
+    return 'place'
   if (runtime.state === 'stopped') return 'start'
   if (runtime.state === 'running') return 'touch'
   return 'none'

@@ -88,7 +88,7 @@ const harnessConversationOf = (
   endpoint: AgentEndpoint,
   llmToken: string,
   harness: HarnessLaunch,
-  { model, resumeSessionId }: AgentLlmChoice,
+  { model, resumeSessionId, acpModel }: AgentLlmChoice,
 ) => {
   const { acpServer, tokenName, command } = harnessLaunchOf(endpoint, model)[harness]
   return {
@@ -98,6 +98,7 @@ const harnessConversationOf = (
       acp_command: command,
       mcp_config: { hq: mcpServerOf(endpoint, '/mcp', llmToken) },
       ...(resumeSessionId && { acp_resume_session_id: resumeSessionId }),
+      ...(acpModel && { acp_model: acpModel }),
     },
     secrets: tokenName ? { [tokenName]: { kind: 'StaticSecret', value: llmToken } } : {},
   }
@@ -151,6 +152,9 @@ export const createSandboxAgentServer = (condensationScale = 1): AgentServer => 
     await call(conversation, 'POST', `/api/conversations/${conversation.conversationId}/switch_llm`, {
       llm: llmConfigOf(conversation, llmToken, llm),
     })
+  },
+  switchAcpModel: async (conversation, model) => {
+    await call(conversation, 'POST', `/api/conversations/${conversation.conversationId}/switch_acp_model`, { model })
   },
   sendMessage: async (conversation, text) => {
     await call(conversation, 'POST', `/api/conversations/${conversation.conversationId}/events`, {

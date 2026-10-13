@@ -3,6 +3,7 @@ import {
   expect,
   mainOf,
   messageItemsOf,
+  newRuntimeChat,
   openChat,
   type Page,
   sendMessage,
@@ -11,8 +12,8 @@ import {
 } from './fixtures'
 import { openPageAs, type WorkerStack } from './stack'
 
-const agentReply = { timeout: 60_000 }
 const metered = { timeout: 20_000 }
+const agentReply = { timeout: 60_000 }
 const unchosen = 'Model chosen at first prompt'
 const confident = (tier: string, effort = 'high') => ({ route: { tier, confidence: 'high', effort } })
 type GatewayLog = { model: string; metadata: Record<string, string> | null }
@@ -26,15 +27,6 @@ const openSession = async (page: Page) => {
 }
 const repliesOf = (page: Page) => messageItemsOf(page).filter({ hasText: agentReplyText })
 
-const newRuntimeChat = async (page: Page, name: string) => {
-  await page.getByRole('button', { name: 'New chat' }).click()
-  const dialog = page.getByRole('dialog', { name: 'New chat' })
-  await dialog.getByText('Runtime', { exact: true }).click()
-  await dialog.getByLabel('Chat name').fill(name)
-  await dialog.getByRole('button', { name: 'Confirm' }).click()
-  await expect(mainOf(page).getByRole('heading', { level: 1, name })).toBeVisible()
-  return page.url().split('/').at(-1) ?? ''
-}
 const promptAndWait = async (page: Page, text: string, replies: number) => {
   await sendMessage(page, text)
   await expect(repliesOf(page)).toHaveCount(replies, agentReply)
@@ -177,7 +169,7 @@ test('6. a later hard prompt keeps the session model', async ({ page, workerStac
   expect(await agentModelsOf(workerStack, chatId, 2)).toEqual(['fake-small', 'fake-small'])
 })
 
-test('7 and 8. the manual switch warns about the reread, keeps the history, updates every viewer, and models used lists both', async ({
+test('7 and 8. the manual switch warns about the reread, keeps the history and updates every viewer', async ({
   page,
   browser,
   workerStack,
@@ -190,11 +182,10 @@ test('7 and 8. the manual switch warns about the reread, keeps the history, upda
   await expect(chipOf(bobPage)).toHaveText('Fake medium (medium) · auto')
 
   await openSession(page)
-  const modelsUsed = sessionOf(page).getByRole('table', { name: 'Models used in this chat' })
-  await expect(modelsUsed.getByRole('row', { name: /^Fake medium/ })).toBeVisible(metered)
   await sessionOf(page).getByLabel('Main model').selectOption({ label: 'Fake large' })
   await expect(sessionOf(page)).toContainText(
     /The next reply rereads the whole conversation with Fake large \(about (\$\d+\.\d{2}|< \$0\.01)\)/,
+    metered,
   )
   await sessionOf(page).getByRole('button', { name: 'Switch' }).click()
   await expect(chipOf(page)).toHaveText('Fake large (medium) · auto')
@@ -206,16 +197,6 @@ test('7 and 8. the manual switch warns about the reread, keeps the history, upda
   await expect(messageItemsOf(page).filter({ hasText: 'Start on the default' })).toBeVisible()
   await expect(mainOf(page)).not.toContainText('new session')
   expect((await agentModelsOf(workerStack, chatId, 2)).toSorted()).toEqual(['fake-large', 'fake-medium'])
-
-  await openSession(page)
-  for (const name of ['Fake medium', 'Fake large']) {
-    const row = modelsUsed.getByRole('row', { name: new RegExp(`^${name}`) })
-    await expect(row).toBeVisible(metered)
-    const [calls = '', tokens = '', cost = ''] = await row.getByRole('cell').allTextContents()
-    expect(Number(calls)).toBeGreaterThan(0)
-    expect(Number(tokens.replaceAll(',', ''))).toBeGreaterThan(0)
-    expect(cost).toMatch(/^(\$\d+\.\d{2}|< \$0\.01)$/)
-  }
 })
 
 test('9. the subagent policy toggles and persists', async ({ page }) => {

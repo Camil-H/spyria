@@ -149,6 +149,7 @@ test.each([
   ['POST', `/api/conversations/${conversationId}/events`],
   ['POST', `/api/conversations/${conversationId}/interrupt`],
   ['POST', `/api/conversations/${conversationId}/switch_llm`],
+  ['POST', `/api/conversations/${conversationId}/switch_acp_model`],
   ['GET', `/api/conversations/${conversationId}/agent_final_response`],
 ])('a personal host forwards %s %s', async (method, path) => {
   const { relay, nextOf } = personalRelay()

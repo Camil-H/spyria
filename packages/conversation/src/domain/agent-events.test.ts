@@ -361,7 +361,7 @@ test('a real Claude Code sequence of pending then completed or failed calls ends
     },
     {
       id: 'toolu_01MNfMCpA947uCwubk6pYiyY',
-      step: { type: 'tool', name: 'Skill', arguments: '{"skill":"dataviz"}', result: 'Launching skill: dataviz' },
+      step: { type: 'tool', name: 'Skill dataviz', arguments: '', result: 'Launching skill: dataviz' },
     },
     {
       id: 'toolu_01NfP88BRpnXgBEEvbHgVRvJ',
@@ -374,6 +374,23 @@ test('a real Claude Code sequence of pending then completed or failed calls ends
   ])
   expect(steps).toHaveLength(5)
   for (const { step } of steps) expect(JSON.stringify(step)).not.toContain('"exitCode":null')
+})
+
+test('a Skill call is titled with its skill from the final event, with its args and no raw input', () => {
+  const skillCall = (status: string, rawInput: object) =>
+    agentEvent(
+      'ACPToolCallEvent',
+      { tool_call_id: 'toolu_skill', title: 'Skill', tool_kind: 'other', status, raw_input: rawInput },
+      `event-${status}`,
+    )
+  const [skillStep] = messagesFromEvents(
+    storedEventsOf([
+      { event: skillCall('pending', {}) },
+      { event: skillCall('completed', { skill: 'dataviz', args: 'a bar chart of sales' }) },
+    ]),
+  )
+  expect(skillStep?.step).toMatchObject({ type: 'tool', name: 'Skill dataviz', arguments: 'a bar chart of sales' })
+  expect(JSON.stringify(skillStep?.step)).not.toContain('"skill"')
 })
 
 test('text streamed before a tool call is its own message, and the finish stores only the text not yet recorded', () => {

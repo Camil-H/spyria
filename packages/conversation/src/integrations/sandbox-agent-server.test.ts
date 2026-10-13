@@ -3,24 +3,26 @@ import type { AgentEndpoint } from '../contracts/agent.ts'
 import type { HarnessLaunch } from '../domain/session-routing.ts'
 import { createSandboxAgentServer } from './sandbox-agent-server.ts'
 
-const createdBodyOf = async (harness: HarnessLaunch) => {
-  const requests: { path: string; body?: string }[] = []
-  const endpoint: AgentEndpoint = {
-    apiKey: 'session-key',
-    conversationId: null,
-    transport: {
-      gatewayUrl: 'http://hq-gateway-relay:4000/v1',
-      fetch: async (request) => {
-        requests.push(request)
-        return { status: 201, body: JSON.stringify({ id: 'conversation-1' }) }
-      },
-      openSocket: () => ({ send: () => {}, close: () => {} }),
+const requests: { path: string; body?: string }[] = []
+const endpoint: AgentEndpoint = {
+  apiKey: 'session-key',
+  conversationId: null,
+  transport: {
+    gatewayUrl: 'http://hq-gateway-relay:4000/v1',
+    fetch: async (request) => {
+      requests.push(request)
+      return { status: 201, body: JSON.stringify({ id: 'conversation-1' }) }
     },
-  }
+    openSocket: () => ({ send: () => {}, close: () => {} }),
+  },
+}
+const createdBodyOf = async (harness: HarnessLaunch, acpModel?: string) => {
+  requests.length = 0
   await createSandboxAgentServer().createConversation(endpoint, 'runtime-token', {
     model: 'claude-opus-5-5',
     usageId: 'agent',
     harness,
+    acpModel,
   })
   return JSON.parse(requests[0]?.body ?? '{}')
 }
@@ -44,6 +46,19 @@ test('a subscription session launches Claude Code without the relay, a model, or
     },
   })
   expect(JSON.stringify(created)).not.toMatch(/ANTHROPIC_BASE_URL|ANTHROPIC_MODEL|ANTHROPIC_API_KEY/)
+})
+
+test('a model picked for a subscription session is sent as acp_model, still without the relay or secrets, and switched in place', async () => {
+  const created = await createdBodyOf('claude-code-subscription', 'sonnet')
+  expect(created.agent.acp_model).toBe('sonnet')
+  expect(created.secrets).toEqual({})
+  expect(JSON.stringify(created)).not.toMatch(/ANTHROPIC_BASE_URL|ANTHROPIC_MODEL|ANTHROPIC_API_KEY|base_url/)
+  expect((await createdBodyOf('claude-code-subscription')).agent).not.toHaveProperty('acp_model')
+  requests.length = 0
+  await createSandboxAgentServer().switchAcpModel({ ...endpoint, conversationId: 'conversation-1' }, 'haiku')
+  expect(requests).toMatchObject([
+    { path: '/api/conversations/conversation-1/switch_acp_model', body: '{"model":"haiku"}' },
+  ])
 })
 
 test('the API-key Claude Code launch keeps the relay, the model and its token secret', async () => {

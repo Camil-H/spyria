@@ -228,6 +228,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
   ) => {
     const id = crypto.randomUUID()
     const token = sha256(id)
+    let currentSignIns = signedIn
     await database.$client`
       insert into runtime_hosts (workspace_id, id, name, token_hash, status, running_runtimes, created_by, owner_id, created_at)
       values (${acme}, ${id}, ${name}, ${sha256(token)}, 'offline', 0, ${ownerId ?? alice}, ${ownerId ?? null}, now())`
@@ -302,6 +303,9 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
       lifecycleCommands: () =>
         commands.filter(({ op }) => ['create', 'start', 'stop', 'remove'].includes(op)).map(({ op }) => op),
       closed: () => closed,
+      signIn: (tools: string[]) => {
+        currentSignIns = tools
+      },
       connect: async () => {
         const opened = new WebSocket(`ws://localhost:${port}/host`)
         socket = opened
@@ -376,7 +380,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
           type: 'hello',
           token,
           gatewayUrl: fakeHostGatewayUrl,
-          ...(ownerId && { personal: true, signedIn }),
+          ...(ownerId && { personal: true, signedIn: currentSignIns }),
           system: {
             cpus: 4,
             memoryBytes: memoryGibibytes * gibibyte,

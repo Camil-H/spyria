@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { chatId, memberId, projectId, workspaceId } from '@hq/kernel'
-import { archivedChat, type Chat, movedChat, renamedChat, sessionFieldsOf, startRuntimeChat } from './chat.ts'
+import { archivedChat, type Chat, movedChat, renamedChat, startRuntimeChat } from './chat.ts'
 import { BlankName, CrossWorkspaceMove, SourceChatArchived } from './errors.ts'
 import { Name } from './name.ts'
 import { archivedProject, type Project, renamedProject } from './project.ts'
@@ -118,14 +118,4 @@ test('archivedProject leaves already archived chats alone under both policies', 
   expect(archivedProject(projectIn(acme), [chatInAcme, archived], 'release').chats).toEqual([
     movedChat(chatInAcme, null),
   ])
-})
-
-test('an On my machine chat is a runtime chat locked on Claude Code; other kinds have no harness', () => {
-  expect(sessionFieldsOf('local_session')).toEqual({ type: 'runtime', harness: 'claude-code', localSession: true })
-  expect(sessionFieldsOf('runtime')).toEqual({ type: 'runtime', harness: null, localSession: false })
-  expect(sessionFieldsOf('channel')).toEqual({ type: 'channel', harness: null, localSession: false })
-})
-
-test('an On my machine Codex chat is a runtime chat locked on Codex', () => {
-  expect(sessionFieldsOf('local_codex_session')).toEqual({ type: 'runtime', harness: 'codex', localSession: true })
 })

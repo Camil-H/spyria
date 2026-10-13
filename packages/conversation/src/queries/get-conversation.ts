@@ -3,6 +3,7 @@ import { type ChatId, type MemberId, type MessageId, messageId, type WorkspaceId
 import { stoppedByPrefix } from '../domain/agent-events.ts'
 import type { AgentStep, StoredStep, ThoughtStep } from '../domain/agent-steps.ts'
 import { stillRunningOf } from '../domain/delegation.ts'
+import { type Harness, localSessions, type RunsOn, runsOnOf } from '../domain/session-routing.ts'
 
 export type ConversationMessage = Readonly<{
   id: MessageId
@@ -40,6 +41,9 @@ export type Conversation = Readonly<{
   subagentPolicy: ChatRow['subagentPolicy']
   harness: ChatRow['harness']
   localSession: boolean
+  runsOn: RunsOn | null
+  isOwner: boolean
+  runsOnChoices: readonly RunsOn[] | null
   gitBranch: string | null
   ownerName: string
   origin: Readonly<{ chatId: ChatId; name: string }> | null
@@ -191,6 +195,17 @@ export const getConversation =
     const origin = chat.originChatId ? findChat(snapshot, workspaceId, chat.originChatId) : undefined
     const chatMessages = snapshot.messages.filter((message) => message.chatId === chatId)
     const hasActiveTurn = chat.agentTurnMessageId !== null
+    const isOwner = chat.ownerId === viewerId
+    const machine = snapshot.workspaces.some((workspace) => workspace.id === workspaceId && workspace.localSessions)
+      ? snapshot.runtimeHosts.find((host) => host.workspaceId === workspaceId && host.ownerId === viewerId)
+      : undefined
+    const connectedHarnesses = (Object.keys(localSessions) as Harness[]).filter(
+      (harness) => machine?.status === 'online' && machine.capacity?.signedIn?.includes(localSessions[harness].signIn),
+    )
+    const runsOnChoices =
+      isOwner && !hasActiveTurn && !chatMessages.some((message) => message.kind === 'agent' || message.kind === 'step')
+        ? ['runtime' as const, ...connectedHarnesses]
+        : null
     const messages = chatMessages.map(
       (message): ConversationMessage => ({
         id: message.id,
@@ -215,7 +230,10 @@ export const getConversation =
       defaultModel: chat.defaultModel,
       subagentPolicy: chat.subagentPolicy,
       harness: chat.harness,
-      localSession: chat.localSession,
+      localSession: chat.localSession === true,
+      runsOn: runsOnOf(chat),
+      isOwner,
+      runsOnChoices,
       gitBranch: chat.gitBranch,
       ownerName: memberName(chat.ownerId),
       origin: origin ? { chatId: origin.id, name: origin.name } : null,

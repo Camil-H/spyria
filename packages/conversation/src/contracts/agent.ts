@@ -49,6 +49,7 @@ export type AgentLlmChoice = Readonly<{
   usageId: string
   harness?: HarnessLaunch
   resumeSessionId?: string
+  acpModel?: string
 }>
 export type SubConversation = Readonly<{ parentConversationId: string; toolToken: string }>
 export type AgentServer = {
@@ -60,6 +61,7 @@ export type AgentServer = {
   ): Promise<string>
   finalResponse(conversation: AgentConversation): Promise<string>
   switchLlm(conversation: AgentConversation, llmToken: string, llm: AgentLlmChoice): Promise<void>
+  switchAcpModel(conversation: AgentConversation, model: string): Promise<void>
   sendMessage(conversation: AgentConversation, text: string): Promise<void>
   statusOf(conversation: AgentConversation): Promise<string | undefined>
   interrupt(conversation: AgentConversation): Promise<void>

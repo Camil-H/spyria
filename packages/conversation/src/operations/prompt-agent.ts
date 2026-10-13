@@ -92,11 +92,24 @@ const keepSession = async (
   return { conversation }
 }
 
+const keepAcpModel = async (
+  { transactor, agentServer }: AgentDependencies,
+  chat: AgentChat,
+  conversation: AgentConversation,
+): Promise<Prepared> => {
+  const { model, agentModel } = await transactor.run(({ routing }) => routing.chatRouting(chat.chatId))
+  if (model && model !== agentModel) {
+    await agentServer.switchAcpModel(conversation, model)
+    await transactor.run(({ routing }) => routing.setAgentModel(chat.chatId, model))
+  }
+  return { conversation }
+}
+
 const harnessConversationFor = async (
   { transactor, runtimes, agentServer }: AgentDependencies,
   chat: AgentChat,
   endpoint: AgentEndpoint,
-  { launch, model }: { launch: HarnessLaunch; model: string },
+  { launch, model, acpModel }: { launch: HarnessLaunch; model: string; acpModel?: string },
 ): Promise<AgentConversation> => {
   const resumeSessionId =
     endpoint.conversationId === null
@@ -110,8 +123,10 @@ const harnessConversationFor = async (
       usageId: 'agent',
       harness: launch,
       resumeSessionId,
+      acpModel,
     }),
   )
+  if (acpModel) await transactor.run(({ routing }) => routing.setAgentModel(chat.chatId, acpModel))
   return { ...endpoint, conversationId }
 }
 
@@ -128,21 +143,23 @@ const conversationFor = async (
   if (localSession && !signedIn.includes(localSession.signIn)) return { refusal: localSession.signInNotice }
   if (storedId !== null && (await agentServer.statusOf({ ...endpoint, conversationId: storedId })) !== undefined) {
     const conversation = { ...endpoint, conversationId: storedId }
-    return fixedLlm || !prompterId || localSession
-      ? { conversation }
-      : keepSession(dependencies, chat, conversation, prompterId)
+    if (localSession) return keepAcpModel(dependencies, chat, conversation)
+    return fixedLlm || !prompterId ? { conversation } : keepSession(dependencies, chat, conversation, prompterId)
   }
   if (storedId !== null) {
     await runtimes.forgetConversation(chat)
     await transactor.run((unitOfWork) => appendNotice(unitOfWork, prompt, agentNotices.newSession))
   }
-  if (localSession)
+  if (localSession) {
+    const { model } = await transactor.run(({ routing }) => routing.chatRouting(chat.chatId))
     return {
       conversation: await harnessConversationFor(dependencies, chat, endpoint, {
         launch: localSession.launch,
         model: '',
+        acpModel: model ?? undefined,
       }),
     }
+  }
   const routed = fixedLlm || !prompterId ? undefined : await routeSession(dependencies, chat, prompterId, prompt)
   const harness = routed?.harness
   if (routed && harness) {
@@ -200,7 +217,7 @@ export const promptAgent = async (dependencies: AgentDependencies, { workspaceId
   if (readiness.state === 'starting') return { retryInMilliseconds: runtimeStartPollMilliseconds }
   if (readiness.state !== 'ready')
     return transactor.run((unitOfWork) =>
-      noticeWaitingPrompts(unitOfWork, chatId, notReadyNoticeOf(readiness, localSession)),
+      noticeWaitingPrompts(unitOfWork, chatId, notReadyNoticeOf(readiness, localSession === true)),
     )
   const prompt = await transactor.run((unitOfWork) => beginAgentTurn(unitOfWork, chatId))
   if (!prompt) return undefined

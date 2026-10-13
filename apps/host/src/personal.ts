@@ -6,7 +6,7 @@ const allowedRequests = [
   /^GET \/ready$/,
   /^POST \/api\/conversations$/,
   new RegExp(`^(GET|DELETE) ${conversationPath}$`),
-  new RegExp(`^POST ${conversationPath}/(events|interrupt|switch_llm)$`),
+  new RegExp(`^POST ${conversationPath}/(events|interrupt|switch_llm|switch_acp_model)$`),
   new RegExp(`^GET ${conversationPath}/agent_final_response$`),
   new RegExp(`^WS /sockets/events/${conversationId}\\?resend_mode=(all|since&after_timestamp=[\\w%.:+-]+)$`),
 ]

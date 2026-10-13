@@ -31,6 +31,7 @@ export const lastAgentEvent = skippedOnClient
 export const stoppedHarnessSessionId = skippedOnClient
 export const recordedStreamedText = async () => ''
 export const agentObservationOf = skippedOnClient
+export const lastAdapterModelsOf = skippedOnClient
 export const chatRoutingOf = skippedOnClient
 export const setChatAgentModel = skippedOnClient
 export const insertRoutingDecision = skippedOnClient
@@ -38,5 +39,5 @@ export const insertDelegation = skippedOnClient
 export const setDelegationFields = skippedOnClient
 export const runningDelegationOfTokenHash = skippedOnClient
 export const stopRunningDelegations = async () => []
-export const chatModelCalls = skippedOnClient
+export const chatContextTokens = skippedOnClient
 export const appendChatEvent = () => Promise.reject(new Error('Chat events are appended on the server only'))

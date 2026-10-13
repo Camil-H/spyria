@@ -1,8 +1,17 @@
-import { expect, mainOf, messageItemsOf, openChat, type Page, sendMessage, sidebarOf, test } from './fixtures'
+import {
+  expect,
+  mainOf,
+  messageItemsOf,
+  newRuntimeChat,
+  openChat,
+  type Page,
+  sendMessage,
+  sidebarOf,
+  test,
+} from './fixtures'
 import { openPageAs, type WorkerStack } from './stack'
 
 const agentReply = { timeout: 60_000 }
-const metered = { timeout: 20_000 }
 const researchChatId = 'chat-research'
 const confidentSmall = { tier: 'small', confidence: 'high', effort: 'low' }
 const subagentWork = { steps: [{ command: 'echo listing' }, { command: 'echo done' }], text: 'Two files.' }
@@ -45,7 +54,7 @@ test.beforeEach(async ({ page }) => {
   await openChat(page, 'Research')
 })
 
-test('5 and 13. a small task is delegated to the small model, shown as one collapsed group before the answer, and the chip lists both models', async ({
+test('5 and 13. a small task is delegated to the small model, shown as one collapsed group before the answer', async ({
   page,
   workerStack,
   agentScript,
@@ -67,27 +76,6 @@ test('5 and 13. a small task is delegated to the small model, shown as one colla
   await expect(steps).toContainText('$ echo done')
   await expect(messageItemsOf(page).filter({ has: steps })).toContainText('Two files.')
   expect(new Set(await gatewayModelsOf(workerStack, 'delegate', startedAt, 3))).toEqual(new Set(['fake-small']))
-
-  await openSession(page)
-  const modelsUsed = sessionOf(page).getByRole('table', { name: 'Models used in this chat' })
-  const callsOf = async (name: string) =>
-    Number(
-      (await modelsUsed
-        .getByRole('row', { name: new RegExp(`^${name}`) })
-        .getByRole('cell')
-        .first()
-        .textContent()) ?? 0,
-    )
-  await expect.poll(() => callsOf('Fake small'), metered).toBeGreaterThanOrEqual(5)
-  await expect.poll(() => callsOf('Fake medium'), metered).toBeGreaterThanOrEqual(2)
-  for (const name of ['Fake medium', 'Fake small']) {
-    const [, tokens = '', cost = ''] = await modelsUsed
-      .getByRole('row', { name: new RegExp(`^${name}`) })
-      .getByRole('cell')
-      .allTextContents()
-    expect(Number(tokens.replaceAll(',', ''))).toBeGreaterThan(0)
-    expect(cost).toMatch(/^(\$\d+\.\d{2}|< \$0\.01)$/)
-  }
 })
 
 test('6. with the policy on Same as main, the subagent runs on the session model without a routing call', async ({
@@ -143,15 +131,6 @@ const addKey = async (page: Page, provider: string) => {
   await llmSection.getByLabel('Secret').fill(`fake-key-${crypto.randomUUID()}`)
   await llmSection.getByRole('button', { name: 'Add' }).click()
   await expect(llmSection.getByRole('listitem').filter({ hasText: provider })).toBeVisible()
-}
-const newRuntimeChat = async (page: Page, name: string) => {
-  await page.getByRole('button', { name: 'New chat' }).click()
-  const dialog = page.getByRole('dialog', { name: 'New chat' })
-  await dialog.getByText('Runtime', { exact: true }).click()
-  await dialog.getByLabel('Chat name').fill(name)
-  await dialog.getByRole('button', { name: 'Confirm' }).click()
-  await expect(mainOf(page).getByRole('heading', { level: 1, name })).toBeVisible()
-  return page.url().split('/').at(-1) ?? ''
 }
 
 test('7. the main agent asks for fake-large and the subagent runs on it whatever the classifier says', async ({

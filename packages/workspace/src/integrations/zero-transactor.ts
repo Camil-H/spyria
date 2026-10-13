@@ -25,19 +25,12 @@ const toChat = ({ createdAt, mode, ownerKind, ownerUserId, ownerServiceIdentityI
   originChatId: row.originChatId === null ? null : chatId(row.originChatId),
   ownerId: memberId(ownerUserId ?? ''),
   name: Name(row.name),
-  harness: row.harness ?? null,
-  localSession: row.localSession ?? false,
 })
 
 const chatFields = ({ ownerId, ...chat }: Chat) => chat
 
 const eventPayloadOf: Record<ChatChange['type'], (chat: Chat) => object> = {
-  'chat.created': ({ name, type, projectId, localSession, harness }) => ({
-    name,
-    type,
-    projectId,
-    ...(localSession && { localSession, harness }),
-  }),
+  'chat.created': ({ name, type, projectId }) => ({ name, type, projectId }),
   'chat.renamed': ({ name }) => ({ name }),
   'chat.moved': ({ projectId }) => ({ projectId }),
   'chat.archived': () => ({}),
@@ -97,6 +90,7 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Tra
             ownerUserId: chat.ownerId,
             ownerServiceIdentityId: null,
             subagentPolicy: 'auto',
+            localSession: chat.type === 'runtime' ? null : false,
             createdAt: changedAt.getTime(),
           })
         else await tx.mutate.chats.update(chatFields(inContextWorkspace(chat)))

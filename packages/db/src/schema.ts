@@ -66,7 +66,7 @@ export type ChatRow = {
   defaultModel: string | null
   subagentPolicy: 'auto' | 'same_as_main'
   harness: 'claude-code' | 'codex' | null
-  localSession: boolean
+  localSession: boolean | null
   gitBranch: string | null
   originChatId: ChatId | null
   agentTurnMessageId: MessageId | null

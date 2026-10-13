@@ -1,4 +1,5 @@
 import type { ChatId, MessageId, WorkspaceId } from '@hq/kernel'
+import type { RunsOn } from '../domain/session-routing.ts'
 import type { StoredFrame, StreamFrame } from '../domain/streamed-reply.ts'
 import type { ChatRoutingRead } from './endpoints.ts'
 
@@ -20,6 +21,8 @@ export type ConversationCommands = {
     sessionModel?: string
     defaultModel?: string
     subagentPolicy?: 'auto' | 'same_as_main'
+    runsOn?: RunsOn
+    acpModel?: string
   }>
   chatRouting: Command<{ chatId: ChatId }, ChatRoutingRead>
 }

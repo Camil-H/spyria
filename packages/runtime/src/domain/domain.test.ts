@@ -135,13 +135,14 @@ test('a transition stamps its time and sets or clears the failure', () => {
 
 test('ensuring a runtime places a missing one or a retryable failure, starts a stopped one, touches a running one', () => {
   expect(ensureStepOf(undefined)).toBe('place')
+  expect(ensureStepOf(runtime({ state: 'removed' }))).toBe('place')
   expect(ensureStepOf(runtime({ state: 'failed', failure: 'no_host' }))).toBe('place')
   expect(ensureStepOf(runtime({ state: 'failed', failure: 'no_capacity' }))).toBe('place')
   for (const failure of ['create_failed', 'start_failed', 'lost'] as const)
     expect(ensureStepOf(runtime({ state: 'failed', failure }))).toBe('none')
   expect(ensureStepOf(runtime({ state: 'stopped' }))).toBe('start')
   expect(ensureStepOf(runtime({ state: 'running' }))).toBe('touch')
-  for (const state of ['creating', 'starting', 'stopping', 'removing', 'removed'] as const)
+  for (const state of ['creating', 'starting', 'stopping', 'removing'] as const)
     expect(ensureStepOf(runtime({ state }))).toBe('none')
 })
 

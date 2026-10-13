@@ -1,7 +1,13 @@
 import { type ChatId, chatModelsOf, type MemberId } from '@hq/kernel'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { InvalidRouting } from '../domain/errors.ts'
-import { harnesses, unreachableSessionNoticeOf } from '../domain/session-routing.ts'
+import {
+  harnesses,
+  type RunsOn,
+  runsOnFieldsOf,
+  runsOnOf,
+  unreachableSessionNoticeOf,
+} from '../domain/session-routing.ts'
 
 type Input = {
   chatId: ChatId
@@ -9,11 +15,13 @@ type Input = {
   sessionModel?: string
   defaultModel?: string
   subagentPolicy?: 'auto' | 'same_as_main'
+  runsOn?: RunsOn
+  acpModel?: string
 }
 
 export const updateChatRouting = (
   { transactor }: { transactor: ConversationTransactor },
-  { chatId, memberId, sessionModel, defaultModel, subagentPolicy }: Input,
+  { chatId, memberId, sessionModel, defaultModel, subagentPolicy, runsOn, acpModel }: Input,
 ) =>
   transactor.run(async ({ chats, routing }) => {
     const chat = await chats.get(chatId)
@@ -22,6 +30,18 @@ export const updateChatRouting = (
       throw new InvalidRouting(
         `This session runs ${harnesses[chat.harness].name}; its model is chosen by ${harnesses[chat.harness].name}`,
       )
+    if ((runsOn ?? acpModel) !== undefined && chat.ownerId !== memberId)
+      throw new InvalidRouting('Only the owner changes how this session runs')
+    if (runsOn !== undefined && (await chats.hasAgentSession(chatId)))
+      throw new InvalidRouting('This session has started; where it runs no longer changes')
+    if (
+      runsOn !== undefined &&
+      runsOn !== 'runtime' &&
+      !((await chats.localSessionsAllowed()) && (await chats.hasMachine(memberId)))
+    )
+      throw new InvalidRouting('Sessions on your machine need your machine and the workspace switch on')
+    if (acpModel !== undefined && !chat.localSession)
+      throw new InvalidRouting('Only sessions on your machine pick the model of their tool')
     const reachable =
       sessionModel === undefined && defaultModel === undefined ? undefined : await routing.reachableModels(memberId)
     const isReachable = (model: string) => !reachable || chatModelsOf(reachable).some(({ id }) => id === model)
@@ -45,5 +65,8 @@ export const updateChatRouting = (
       ...(sessionModel !== undefined && { model: sessionModel }),
       ...(defaultModel !== undefined && { defaultModel }),
       ...(subagentPolicy !== undefined && { subagentPolicy }),
+      ...(runsOn !== undefined && { ...runsOnFieldsOf(runsOn), model: null }),
+      ...(acpModel !== undefined && { model: acpModel || null }),
     })
+    if (runsOn !== undefined && runsOn !== runsOnOf(chat)) await chats.dropRuntime(chatId)
   })

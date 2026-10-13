@@ -319,6 +319,25 @@ export const stoppedHarnessSessionId = async (tx: Transaction, workspaceId: stri
     )
   )?.sessionId ?? undefined
 
+export const lastAdapterModelsOf = (tx: Transaction, workspaceId: string, chatId: string) =>
+  firstOnServer<{
+    isThisChat: boolean
+    currentModelId: string | null
+    availableModels: { model_id: string; name: string }[]
+  }>(
+    tx,
+    `select events.chat_id = $2 as "isThisChat", payload->'event'->'value'->>'acp_current_model_id' as "currentModelId",
+       payload->'event'->'value'->'acp_available_models' as "availableModels"
+     from chats this join chats seen on seen.workspace_id = this.workspace_id and seen.owner_user_id = this.owner_user_id
+       and seen.harness = this.harness and seen.local_session
+     join events on events.workspace_id = seen.workspace_id and events.chat_id = seen.id
+     where this.workspace_id = $1 and this.id = $2 and this.local_session and events.type = 'agent.event'
+       and payload->'event'->>'key' = 'agent_state'
+       and jsonb_typeof(payload->'event'->'value'->'acp_available_models') = 'array'
+     order by events.chat_id = $2 desc, events.created_at desc limit 1`,
+    [workspaceId, chatId],
+  )
+
 export const agentObservationOf = async (tx: Transaction, workspaceId: string, chatId: string, actionId: string) =>
   (
     await firstOnServer<{ observation: Record<string, unknown> }>(
@@ -440,18 +459,12 @@ export const runningDelegationOfTokenHash = (tx: Transaction, workspaceId: strin
     [workspaceId, hostId, hash],
   )
 
-export const chatModelCalls = async (tx: Transaction, workspaceId: string, chatId: string) => ({
-  models: await onServer<{ model: string; calls: number; tokens: number; costMicros: number }>(
-    tx,
-    `select provider || '/' || model as model, count(*)::int as calls,
-       sum(input_tokens + output_tokens)::int as tokens, sum(cost_micros)::int as "costMicros"
-     from model_calls where workspace_id = $1 and chat_id = $2 group by 1 order by min(called_at)`,
-    [workspaceId, chatId],
-  ),
-  latest: await firstOnServer<{ tokens: number }>(
-    tx,
-    `select input_tokens + output_tokens as tokens from model_calls
-     where workspace_id = $1 and chat_id = $2 and role is null order by called_at desc limit 1`,
-    [workspaceId, chatId],
-  ),
-})
+export const chatContextTokens = async (tx: Transaction, workspaceId: string, chatId: string) =>
+  (
+    await firstOnServer<{ tokens: number }>(
+      tx,
+      `select input_tokens + output_tokens as tokens from model_calls
+       where workspace_id = $1 and chat_id = $2 and role is null order by called_at desc limit 1`,
+      [workspaceId, chatId],
+    )
+  )?.tokens ?? null

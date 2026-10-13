@@ -54,3 +54,9 @@ export class InvalidRouting extends ConversationError {
     super('invalid_routing', message)
   }
 }
+
+export class RunsOnNotChosen extends ConversationError {
+  constructor(notice: string) {
+    super('runs_on_not_chosen', notice)
+  }
+}

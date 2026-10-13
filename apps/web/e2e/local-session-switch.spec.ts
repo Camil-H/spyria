@@ -3,8 +3,10 @@ import {
   expect,
   mainOf,
   messageItemsOf,
+  newRuntimeChat,
   openChat,
   type Page,
+  runsOnChoiceOf,
   sendMessage,
   serverUrl,
   sidebarOf,
@@ -72,7 +74,7 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/')
 })
 
-test('1. the admin turns sessions on members machines off: no Add my machine, a refused add, no On my machine option', async ({
+test('1. the admin turns sessions on members machines off: no Add my machine, a refused add, no My machine option in the chip', async ({
   page,
   browser,
   workerStack,
@@ -105,7 +107,13 @@ test('1. the admin turns sessions on members machines off: no Add my machine, a 
   await expect(machineSectionOf(bobPage).getByRole('button', { name: 'Remove' })).toBeVisible()
   const dialog = await openNewChat(bobPage)
   await expect(dialog.getByRole('radio')).toHaveCount(2)
-  await expect(dialog.getByRole('radio', { name: /^On my machine/ })).toHaveCount(0)
+  await dialog.getByRole('radio', { name: 'Runtime' }).check()
+  await dialog.getByRole('textbox', { name: 'Chat name' }).fill('Bob while off')
+  await dialog.getByRole('button', { name: 'Confirm' }).click()
+  await expect(mainOf(bobPage).getByRole('heading', { level: 1, name: 'Bob while off' })).toBeVisible()
+  await expect(runsOnChoiceOf(bobPage).getByRole('radio')).toHaveCount(1)
+  await expect(runsOnChoiceOf(bobPage).getByRole('radio', { name: 'HQ runtime' })).toBeAttached()
+  await expect(runsOnChoiceOf(bobPage).getByRole('radio', { name: /^My machine/ })).toHaveCount(0)
   await bobPage.context().close()
 })
 
@@ -115,13 +123,8 @@ test('2. an existing local session answers prompts with the notice while it is o
   agentScript,
 }) => {
   await machine({ owner: 'member-alice', signedIn: 'claude' })
-  await page.getByRole('button', { name: 'New chat' }).click()
-  const dialog = page.getByRole('dialog', { name: 'New chat' })
-  await dialog.getByRole('radio', { name: 'On my machine · Claude Code subscription' }).check()
-  await dialog.getByRole('textbox', { name: 'Chat name' }).fill('Laptop switch')
-  await dialog.getByRole('button', { name: 'Confirm' }).click()
-  await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Laptop switch' })).toBeVisible()
-  const chatId = page.url().split('/').at(-1) ?? ''
+  const chatId = await newRuntimeChat(page, 'Laptop switch', 'My machine · Claude Code')
+  await expect(mainOf(page).getByRole('button', { name: 'Claude Code · subscription' })).toBeVisible()
   await agentScript(chatId, { text: 'Answered before the switch.' })
   await sendMessage(page, 'Before the switch')
   await expect(repliesWith(page, 'Answered before the switch.')).toBeVisible(agentReply)

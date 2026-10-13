@@ -30,7 +30,7 @@ export type ConversationChat = Readonly<{
   type: 'channel' | 'runtime'
   harness: Harness | null
   ownerId: MemberId | null
-  localSession: boolean
+  localSession: boolean | null
 }>
 
 const assertChangeable = (message: Message, memberId: MemberId) => {

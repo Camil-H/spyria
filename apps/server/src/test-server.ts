@@ -236,7 +236,7 @@ const app = createApp({
     return context.json({ id: fakeHost.host.id })
   })
   .post('/test/fake-machine', async (context) => {
-    const { db = '', owner, signedIn = '', online } = context.req.query()
+    const { db = '', owner, signedIn, online } = context.req.query()
     if (owner) {
       await fakeMachineByDatabase.get(db)?.host.disconnect()
       const agent = createFakeAgentServer({
@@ -249,17 +249,23 @@ const app = createApp({
         agentServer: agent.agentServer,
         bootMilliseconds: fakeAgentServerBootMilliseconds,
         ownerId: owner,
-        signedIn: signedIn.split(',').filter(Boolean),
+        signedIn: (signedIn ?? '').split(',').filter(Boolean),
       })
       fakeMachineByDatabase.set(db, { host, agent })
     }
     const machine = fakeMachineByDatabase.get(db)
+    if (!owner && signedIn !== undefined && machine) {
+      machine.host.signIn(signedIn.split(',').filter(Boolean))
+      await machine.host.disconnect()
+      await machine.host.connect()
+    }
     if (online === 'false') await machine?.host.disconnect()
     if (online === 'true') await machine?.host.connect()
     return context.json({
       id: machine?.host.id,
       conversations: [...(machine?.agent.conversations.values() ?? [])].map((conversation) => conversation.created),
       prompts: machine?.agent.prompts.map((prompt) => prompt.text) ?? [],
+      modelSwitches: machine?.agent.modelSwitches ?? [],
     })
   })
   .post('/test/runtime', async (context) => {

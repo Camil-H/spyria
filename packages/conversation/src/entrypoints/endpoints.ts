@@ -1,4 +1,10 @@
-import { agentObservationOf, chatModelCalls, listedModelsOf, memberModelsOf } from '@hq/db/server-writes'
+import {
+  agentObservationOf,
+  chatContextTokens,
+  lastAdapterModelsOf,
+  listedModelsOf,
+  memberModelsOf,
+} from '@hq/db/server-writes'
 import type { ZeroContext } from '@hq/db/zero-queries'
 import { chatModelsOf, type Model, routableModelNames, withPricesOf } from '@hq/kernel'
 import type { Transaction } from '@rocicorp/zero'
@@ -14,7 +20,7 @@ export type ChatRoutingRead = {
   reachableModels: Model[]
   modelNames: Record<string, string>
   contextTokens: number | null
-  modelsUsed: { model: string; calls: number; tokens: number; costMicros: number }[]
+  adapterModels: { currentModelId: string | null; available: { id: string; name: string }[] }
 }
 
 export const readChatRouting = async (
@@ -22,14 +28,18 @@ export const readChatRouting = async (
   { workspaceId, userId }: ZeroContext,
   chatId: string,
 ): Promise<ChatRoutingRead> => {
-  const { calls, reachable } = await transact(async (tx) => ({
-    calls: await chatModelCalls(tx, workspaceId, chatId),
+  const { contextTokens, reachable, adapterModels } = await transact(async (tx) => ({
+    contextTokens: await chatContextTokens(tx, workspaceId, chatId),
     reachable: chatModelsOf((await memberModelsOf(tx, workspaceId, userId)) ?? []),
+    adapterModels: await lastAdapterModelsOf(tx, workspaceId, chatId),
   }))
   return {
     reachableModels: withPricesOf(reachable, listedModelsOf()),
     modelNames: routableModelNames(),
-    contextTokens: calls?.latest?.tokens ?? null,
-    modelsUsed: calls?.models ?? [],
+    contextTokens,
+    adapterModels: {
+      currentModelId: adapterModels?.isThisChat ? adapterModels.currentModelId : null,
+      available: adapterModels?.availableModels.map(({ model_id, name }) => ({ id: model_id, name })) ?? [],
+    },
   }
 }
