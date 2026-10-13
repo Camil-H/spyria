@@ -18,6 +18,7 @@
   --color-accent-ink: var(--color-primary-985);
   --color-added: light-dark(var(--color-green-100), var(--color-green-950));
   --color-removed: light-dark(var(--color-red-100), var(--color-red-950));
+  --color-link: light-dark(var(--color-primary-900), var(--color-primary-500));
   --color-focus: light-dark(var(--color-primary-800), var(--color-primary-500));
 }
 

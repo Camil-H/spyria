@@ -2,7 +2,6 @@ import { useQuery } from '@hq/db/react'
 import type { MemberId, WorkspaceId } from '@hq/kernel'
 import { buttonClass, Dialog, ghostButtonClass, LabelledSection } from '@hq/ui'
 import { useState } from 'react'
-import { signInCommandOf } from '../domain/host-command.ts'
 import { getMachine, localSessionsOf } from '../queries/list-runtime-hosts.ts'
 import { HostCommandDialog } from './HostCommandDialog.tsx'
 import { useRuntimeCommands } from './providers.tsx'
@@ -28,9 +27,7 @@ export const MyMachineSection = ({ workspaceId, memberId }: { workspaceId: Works
           {machine.status === 'online' &&
             signIns.map(({ id, name }) => (
               <span key={id}>
-                {machine.capacity?.signedIn?.includes(id)
-                  ? `Signed in to ${name}`
-                  : `Not signed in to ${name}: ${signInCommandOf(id)}`}
+                {machine.capacity?.signedIn?.includes(id) ? `Signed in to ${name}` : `Not signed in to ${name}`}
               </span>
             ))}
           <button type="button" className={`ml-auto ${ghostButtonClass}`} onClick={() => setIsRemoving(true)}>

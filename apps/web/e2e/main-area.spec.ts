@@ -487,6 +487,47 @@ test.describe('14. dialog colors in dark mode', () => {
   })
 })
 
+test.describe('23. link colour', () => {
+  test('a link in a message has a contrast of at least 4.5:1 against the message background in light mode', async ({
+    page,
+    workerStack,
+  }) => {
+    await page.emulateMedia({ colorScheme: 'light' })
+    await openChat(page, 'Welcome')
+    const chatId = page.url().split('/').at(-1) ?? ''
+    await workerStack.database.$client`
+      insert into messages (workspace_id, chat_id, id, seq, kind, body, created_at)
+      select workspace_id, id, 'link-message', (select coalesce(max(seq), 0) + 1 from messages where chat_id = ${chatId}), 'agent',
+        'See [the docs](https://example.com/docs) for more.', now()
+      from chats where id = ${chatId}`
+    const link = messageContaining(page, 'See the docs').getByRole('link', { name: 'the docs' })
+    await expect(link).toBeVisible()
+    const { foreground, background } = await link.evaluate((element) => {
+      const channelsOf = (color: string) => (color.match(/[\d.]+/g) ?? []).map(Number)
+      let node: Element | null = element
+      let background = [255, 255, 255, 1]
+      for (; node; node = node.parentElement) {
+        const channels = channelsOf(getComputedStyle(node).backgroundColor)
+        if ((channels[3] ?? 1) > 0) {
+          background = channels
+          break
+        }
+      }
+      return { foreground: channelsOf(getComputedStyle(element).color), background }
+    })
+    const luminanceOf = ([red = 0, green = 0, blue = 0]: number[]) => {
+      const [r = 0, g = 0, b = 0] = [red, green, blue].map((channel) => {
+        const value = channel / 255
+        return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+      })
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b
+    }
+    const [lighter = 0, darker = 0] = [luminanceOf(foreground), luminanceOf(background)].sort((x, y) => y - x)
+    const ratio = (lighter + 0.05) / (darker + 0.05)
+    expect(ratio).toBeGreaterThanOrEqual(4.5)
+  })
+})
+
 test.describe('16. renamed chats elsewhere', () => {
   test('shows the new name in the started-from link of a runtime chat', async ({ page }) => {
     await startRuntimeFromThanks(page)

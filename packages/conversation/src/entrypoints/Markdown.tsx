@@ -70,7 +70,7 @@ const CodeBlock = ({ code, language }: { code: string; language: string | undefi
 
 const components: Components = {
   a: ({ href, children }) => (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="text-accent underline">
+    <a href={href} target="_blank" rel="noopener noreferrer" className="text-link underline">
       {children} <span className="text-xs text-muted">({domainOf(href)})</span>
     </a>
   ),

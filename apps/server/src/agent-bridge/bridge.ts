@@ -24,6 +24,7 @@ type StreamFrame = { type?: unknown; token?: unknown; chatId?: unknown }
 const reopenDelayMilliseconds = 1000
 const catchUpMilliseconds = 1000
 const readyTimeoutMilliseconds = 5000
+const visibleRetryMilliseconds = 100
 const keyOf = (chat: AgentChat) => `${chat.workspaceId}/${chat.chatId}`
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : 'an unknown error')
 
@@ -106,10 +107,11 @@ export const createAgentBridge = ({
           catchUpMilliseconds,
         )
     }
-    const ensureOpen = (chat: AgentChat, conversation: AgentConversation, promptId: MessageId) => {
+    const ensureOpen = (chat: AgentChat, conversation: AgentConversation, promptId: MessageId | null) => {
       const current = sockets.get(keyOf(chat))
       if (current?.conversationId === conversation.conversationId) {
-        if (current.promptId !== promptId) Object.assign(current, { promptId, streamedText: '', segment: undefined })
+        if (promptId && current.promptId !== promptId)
+          Object.assign(current, { promptId, streamedText: '', segment: undefined })
         return current.isReady
       }
       current?.close()
@@ -238,10 +240,16 @@ export const createAgentBridge = ({
           await reopen({ workspaceId: workspaceId(chat.workspaceId), chatId: chatId(chat.chatId) })
       },
       watch: async (viewer: WSContext, context: ZeroContext, chat: AgentChat) => {
-        const [visible] = await database.$client`
-          select 1 from chats join memberships on memberships.workspace_id = chats.workspace_id and memberships.user_id = ${context.userId}
-          where chats.workspace_id = ${chat.workspaceId} and chats.id = ${chat.chatId}`
-        if (!visible) return
+        const isVisible = async () =>
+          (
+            await database.$client`
+              select 1 from chats join memberships on memberships.workspace_id = chats.workspace_id and memberships.user_id = ${context.userId}
+              where chats.workspace_id = ${chat.workspaceId} and chats.id = ${chat.chatId}`
+          ).length > 0
+        for (let waited = 0; !(await isVisible()); waited += visibleRetryMilliseconds) {
+          if (waited >= readyTimeoutMilliseconds) return
+          await Bun.sleep(visibleRetryMilliseconds)
+        }
         viewers.set(keyOf(chat), (viewers.get(keyOf(chat)) ?? new Set()).add(viewer))
         const streaming = sockets.get(keyOf(chat))
         if (streaming?.promptId && streaming.streamedText)

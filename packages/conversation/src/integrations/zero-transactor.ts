@@ -7,6 +7,7 @@ import {
   insertDelegation,
   insertRoutingDecision,
   isChatEventStored,
+  isSessionStartPending,
   lastAgentEvent,
   lastSessionId,
   lockChatTurn,
@@ -34,7 +35,12 @@ import type { Message, MessageChange } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
 import type { AgentEventPayload, ChangedPayload, PostedPayload } from '../domain/message-events.ts'
 
-export const agentJobTypes = { prompt: 'agent.prompt', interrupt: 'agent.interrupt', sweep: 'agent.sweep' } as const
+export const agentJobTypes = {
+  prompt: 'agent.prompt',
+  startSession: 'agent.start-session',
+  interrupt: 'agent.interrupt',
+  sweep: 'agent.sweep',
+} as const
 
 const dateOrNull = (time: number | null) => (time === null ? null : new Date(time))
 const timeOrNull = (date: Date | null) => date?.getTime() ?? null
@@ -122,6 +128,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
     },
     agentJobs: {
       prompt: (message) => enqueue(agentJobTypes.prompt, { messageId: message.id }),
+      startSession: (chatId) => enqueue(agentJobTypes.startSession, { chatId }),
       interrupt: (interrupt) => enqueue(agentJobTypes.interrupt, interrupt),
       sweepLater: () => enqueue(agentJobTypes.sweep, {}, agentSweepIntervalMilliseconds),
     },
@@ -289,7 +296,9 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
             .where('chatId', id)
             .where('kind', 'IN', ['agent', 'step'])
             .one(),
-        )) !== undefined,
+        )) !== undefined ||
+        (await lastAgentEvent(tx, contextWorkspaceId, id)) !== undefined,
+      isSessionStartPending: (id) => isSessionStartPending(tx, contextWorkspaceId, id),
       dropRuntime: async (id) => {
         if (tx.location === 'server')
           await removeChatRuntime(

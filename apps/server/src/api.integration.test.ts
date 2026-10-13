@@ -267,3 +267,27 @@ test('with test hooks, the database claim of a token selects the database the se
   expect((await queryWith(multiDatabaseApp)).status).toBe(200)
   expect((await queryWith(app)).status).toBe(403)
 })
+
+test('the routing read tells a member whether a workspace host of their workspace is online, without host details', async () => {
+  const hqRuntimeAvailableFor = async (user: string) =>
+    (
+      (await (
+        await app.request('/api/chats/chat-invoice-bug/routing', {
+          headers: { authorization: `Bearer ${await tokenOf(acme, user)}` },
+        })
+      ).json()) as { hqRuntimeAvailable: boolean }
+    ).hqRuntimeAvailable
+  const addHost = (workspace: string, id: string, status: string, ownerId: string | null) =>
+    testDatabase.database.$client`
+      insert into runtime_hosts (workspace_id, id, name, status, running_runtimes, created_by, owner_id, created_at)
+      values (${workspace}, ${id}, ${id}, ${status}, 0, ${alice}, ${ownerId}, now())`
+  await addHost(acme, 'host-acme-offline', 'offline', null)
+  await addHost(acme, 'host-bob-machine', 'online', bob)
+  await addHost(globex, 'host-globex-online', 'online', null)
+  expect(await hqRuntimeAvailableFor(bob)).toBe(false)
+  await testDatabase.database.$client`update runtime_hosts set status = 'online' where id = 'host-acme-offline'`
+  expect(await hqRuntimeAvailableFor(bob)).toBe(true)
+  expect(await hqRuntimeAvailableFor(alice)).toBe(true)
+  await testDatabase.database.$client`
+    delete from runtime_hosts where id in ('host-acme-offline', 'host-bob-machine', 'host-globex-online')`
+})

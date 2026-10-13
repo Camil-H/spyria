@@ -74,7 +74,7 @@ export type AgentServer = {
 }
 
 export type AgentEventSockets = {
-  ensureOpen(chat: AgentChat, conversation: AgentConversation, promptId: MessageId): Promise<void>
+  ensureOpen(chat: AgentChat, conversation: AgentConversation, promptId: MessageId | null): Promise<void>
   stopStreaming(chat: AgentChat, promptId: MessageId): void
 }
 

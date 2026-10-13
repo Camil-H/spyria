@@ -23,7 +23,7 @@ export const updateChatRouting = (
   { transactor }: { transactor: ConversationTransactor },
   { chatId, memberId, sessionModel, defaultModel, subagentPolicy, runsOn, acpModel }: Input,
 ) =>
-  transactor.run(async ({ chats, routing }) => {
+  transactor.run(async ({ chats, routing, agentJobs }) => {
     const chat = await chats.get(chatId)
     if (chat.type !== 'runtime') throw new InvalidRouting('Only runtime chats have a model')
     if (sessionModel !== undefined && chat.harness)
@@ -69,4 +69,5 @@ export const updateChatRouting = (
       ...(acpModel !== undefined && { model: acpModel || null }),
     })
     if (runsOn !== undefined && runsOn !== runsOnOf(chat)) await chats.dropRuntime(chatId)
+    if (runsOn !== undefined && runsOn !== 'runtime') await agentJobs.startSession(chatId)
   })

@@ -18,6 +18,7 @@ export type MessageRepository = {
 
 export type AgentJobs = {
   prompt(message: Message): Promise<void>
+  startSession(chatId: ChatId): Promise<void>
   interrupt(interrupt: AgentInterrupt): Promise<void>
   sweepLater(): Promise<void>
 }
@@ -72,6 +73,7 @@ export type ChatRepository = {
   get(chatId: ChatId): Promise<ConversationChat>
   localSessionsAllowed(): Promise<boolean>
   hasAgentSession(chatId: ChatId): Promise<boolean>
+  isSessionStartPending(chatId: ChatId): Promise<boolean>
   dropRuntime(chatId: ChatId): Promise<void>
   hasMachine(memberId: MemberId): Promise<boolean>
 }

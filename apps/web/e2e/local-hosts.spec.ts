@@ -120,9 +120,8 @@ test.describe('as a member', () => {
     pair(urlOf(command), { personal: true, signedIn: ['claude'] })
     await expect(machineSectionOf(page)).toContainText('Online', { timeout: 10_000 })
     await expect(machineSectionOf(page)).toContainText('Signed in to Claude Code')
-    await expect(machineSectionOf(page)).toContainText(
-      'Not signed in to Codex: docker exec -it hq-host hq-host login codex',
-    )
+    await expect(machineSectionOf(page)).toContainText('Not signed in to Codex')
+    await expect(machineSectionOf(page)).not.toContainText('docker exec')
     await expect(machineSectionOf(page).getByRole('button', { name: 'Add my machine' })).toHaveCount(0)
 
     const adminPage = await openPageAs(browser, workerStack, 'member-alice')
@@ -179,6 +178,8 @@ test.describe('Use Claude Code and Use Codex, as a member', () => {
     await expect(machineSectionOf(page)).toContainText('Online')
     await expect(machineSectionOf(page)).toContainText('Signed in to Claude Code')
     await expect(machineSectionOf(page).getByRole('button', { name: 'Remove' })).toBeVisible()
+    await expect(llmSectionOf(page).getByRole('button', { name: 'Claude Code connected' })).toBeVisible()
+    await expect(llmSectionOf(page).getByRole('button', { name: 'Use Claude Code' })).toHaveCount(0)
   })
 
   test('9. Use Codex on a machine signed in to Claude only shows only the Codex sign-in command', async ({
@@ -187,6 +188,11 @@ test.describe('Use Claude Code and Use Codex, as a member', () => {
   }) => {
     pair(urlOf(await addMachine(page)), { personal: true, signedIn: ['claude'] })
     await expect(machineSectionOf(page)).toContainText('Online', { timeout: 10_000 })
+    await expect(llmSectionOf(page).getByRole('button', { name: 'Claude Code connected' })).toBeVisible()
+    await expect(llmSectionOf(page).getByRole('button', { name: 'Use Claude Code' })).toHaveCount(0)
+    await expect(machineSectionOf(page)).toContainText('Signed in to Claude Code')
+    await expect(machineSectionOf(page)).toContainText('Not signed in to Codex')
+    await expect(machineSectionOf(page)).not.toContainText('docker exec')
     await llmSectionOf(page).getByRole('button', { name: 'Use Codex' }).click()
     const dialog = useToolDialogOf(page, 'Codex')
     await expect(dialog.getByRole('textbox', { name: 'Command' })).toHaveValue(

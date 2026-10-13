@@ -1,4 +1,4 @@
-import { chatModelsOf, type MemberId, type MessageId, type WorkspaceId } from '@hq/kernel'
+import { type ChatId, chatModelsOf, type MemberId, type MessageId, type WorkspaceId } from '@hq/kernel'
 import {
   type AgentChat,
   type AgentConversation,
@@ -137,6 +137,20 @@ const harnessConversationFor = async (
   return { ...endpoint, conversationId }
 }
 
+const machineConversationFor = async (
+  dependencies: AgentDependencies,
+  chat: AgentChat,
+  endpoint: AgentEndpoint,
+  localSession: LocalSession,
+) => {
+  const { model } = await dependencies.transactor.run(({ routing }) => routing.chatRouting(chat.chatId))
+  return harnessConversationFor(dependencies, chat, endpoint, {
+    launch: localSession.launch,
+    model: '',
+    acpModel: model ?? undefined,
+  })
+}
+
 const conversationFor = async (
   dependencies: AgentDependencies,
   chat: AgentChat,
@@ -165,16 +179,7 @@ const conversationFor = async (
     if (!endpoint.isHqAgent)
       await transactor.run((unitOfWork) => appendNotice(unitOfWork, prompt, agentNotices.newSession))
   }
-  if (localSession) {
-    const { model } = await transactor.run(({ routing }) => routing.chatRouting(chat.chatId))
-    return {
-      conversation: await harnessConversationFor(dependencies, chat, endpoint, {
-        launch: localSession.launch,
-        model: '',
-        acpModel: model ?? undefined,
-      }),
-    }
-  }
+  if (localSession) return { conversation: await machineConversationFor(dependencies, chat, endpoint, localSession) }
   const routed = fixedLlm || !prompterId ? undefined : await routeSession(dependencies, chat, prompterId, prompt)
   const harness = routed?.harness
   if (routed && harness) {
@@ -220,6 +225,27 @@ const conversationFor = async (
   return { conversation: { ...endpoint, conversationId } }
 }
 
+export const startAgentSession = async (
+  dependencies: AgentDependencies,
+  { workspaceId, chatId }: { workspaceId: WorkspaceId; chatId: ChatId },
+) => {
+  const { transactor, runtimes, eventSockets } = dependencies
+  const { type, localSession, harness } = await transactor.run(({ chats }) => chats.get(chatId))
+  if (type !== 'runtime' || !localSession) return undefined
+  const chat = { workspaceId, chatId }
+  const readiness = await runtimes.ensureRunning(chat)
+  if (readiness.state === 'starting') return { retryInMilliseconds: runtimeStartPollMilliseconds }
+  if (readiness.state !== 'ready' || readiness.endpoint.conversationId !== null) return undefined
+  const session = localSessions[harness ?? 'claude-code']
+  if (!readiness.signedIn.includes(session.signIn)) return undefined
+  await eventSockets.ensureOpen(
+    chat,
+    await machineConversationFor(dependencies, chat, readiness.endpoint, session),
+    null,
+  )
+  return undefined
+}
+
 export const promptAgent = async (dependencies: AgentDependencies, { workspaceId, messageId }: Input) => {
   const { transactor, runtimes, agentServer, eventSockets } = dependencies
   const { chatId, type, localSession, harness } = await transactor.run(async ({ messages, chats }) => {
@@ -228,6 +254,8 @@ export const promptAgent = async (dependencies: AgentDependencies, { workspaceId
   })
   if (type !== 'runtime') return undefined
   const chat = { workspaceId, chatId }
+  if (localSession && (await transactor.run(({ chats }) => chats.isSessionStartPending(chatId))))
+    return { retryInMilliseconds: runtimeStartPollMilliseconds }
   const readiness = await runtimes.ensureRunning(chat)
   if (readiness.state === 'starting') return { retryInMilliseconds: runtimeStartPollMilliseconds }
   if (readiness.state !== 'ready')

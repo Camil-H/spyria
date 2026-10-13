@@ -284,6 +284,16 @@ export const setRuntimesHostOnline = (tx: Transaction, workspaceId: string, host
 export const isChatEventStored = async (tx: Transaction, workspaceId: string, eventId: string) =>
   (await onServer(tx, 'select 1 from events where workspace_id = $1 and id = $2', [workspaceId, eventId])).length > 0
 
+export const isSessionStartPending = async (tx: Transaction, workspaceId: string, chatId: string) =>
+  (
+    await onServer(
+      tx,
+      `select 1 from jobs where workspace_id = $1 and type = 'agent.start-session' and payload->>'chatId' = $2
+       and state in ('queued', 'running') limit 1`,
+      [workspaceId, chatId],
+    )
+  ).length > 0
+
 export const lastAgentEvent = (tx: Transaction, workspaceId: string, chatId: string) =>
   firstOnServer<{ id: string; seq: number | null; timestamp: string; replyToId: string | null }>(
     tx,
@@ -356,6 +366,16 @@ export const lastAdapterModelsOf = (tx: Transaction, workspaceId: string, chatId
      order by events.chat_id = $2 desc, events.created_at desc, events.seq desc limit 1`,
     [workspaceId, chatId],
   )
+
+export const isWorkspaceHostOnline = async (tx: Transaction, workspaceId: string) =>
+  (
+    await firstOnServer<{ online: boolean }>(
+      tx,
+      `select exists (select from runtime_hosts where workspace_id = $1 and owner_id is null and removed_at is null
+         and status = 'online') as online`,
+      [workspaceId],
+    )
+  )?.online ?? false
 
 export const agentObservationOf = async (tx: Transaction, workspaceId: string, chatId: string, actionId: string) =>
   (

@@ -21,7 +21,7 @@ import {
   recordHarnessModel,
   recordModelCallFailure,
 } from '../operations/model-calls.ts'
-import { promptAgent } from '../operations/prompt-agent.ts'
+import { promptAgent, startAgentSession } from '../operations/prompt-agent.ts'
 import { recordAgentEvent } from '../operations/record-agent-event.ts'
 import { promptWaitingChats } from '../operations/retry-agent.ts'
 import { interruptAgent } from '../operations/stop-agent.ts'
@@ -30,6 +30,7 @@ type Job = { workspaceId: WorkspaceId; payload: unknown }
 
 const id = z.string().check(z.minLength(1))
 const promptPayload = z.object({ messageId: z.pipe(id, z.transform(messageId)) })
+const startSessionPayload = z.object({ chatId: z.pipe(id, z.transform(chatId)) })
 const interruptPayload = z.object({
   chatId: z.pipe(id, z.transform(chatId)),
   promptId: z.pipe(id, z.transform(messageId)),
@@ -73,6 +74,8 @@ export const createAgentHandlers = ({
     jobs: {
       [agentJobTypes.prompt]: ({ workspaceId, payload }: Job) =>
         promptAgent(dependenciesOf(workspaceId), { workspaceId, messageId: promptPayload.parse(payload).messageId }),
+      [agentJobTypes.startSession]: ({ workspaceId, payload }: Job) =>
+        startAgentSession(dependenciesOf(workspaceId), { workspaceId, ...startSessionPayload.parse(payload) }),
       [agentJobTypes.interrupt]: ({ workspaceId, payload }: Job) =>
         interruptAgent(dependenciesOf(workspaceId), { workspaceId, ...interruptPayload.parse(payload) }),
       [agentJobTypes.sweep]: ({ workspaceId }: Job) =>

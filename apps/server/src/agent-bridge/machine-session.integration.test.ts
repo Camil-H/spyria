@@ -15,6 +15,7 @@ import {
   createFakeHosts,
   openSharedTestApp,
   requestMutation,
+  bobInAcme,
   sessionTokenOf,
   succeeded,
   testAuthSettings,
@@ -310,4 +311,65 @@ test('a plan update shows as a plan step, and a Task call with its inner calls a
     output: 'a.ts',
     delegation: { id: expect.stringMatching(/:task-2$/) },
   })
+})
+
+const newRuntimeChat = async (isLocal = false, id = `chat-${crypto.randomUUID()}`) => {
+  await database.$client`
+    insert into chats (workspace_id, id, type, owner_kind, owner_user_id, name, local_session, harness, archived, created_at)
+    values (${acme}, ${id}, 'runtime', 'user', ${alice}, 'Runtime chat', ${isLocal}, ${isLocal ? 'claude-code' : null}, false, now())`
+  return chatId(id)
+}
+const chooseRunsOn = (chat: ChatId, runsOn: string, user = aliceInAcme) =>
+  requestMutation(app, database, user, 'conversation.updateChatRouting', { workspaceId: acme, chatId: chat, runsOn })
+const startJobsOf = async (chat: ChatId) =>
+  database.$client<{ state: string }[]>`
+    select state from jobs where type = 'agent.start-session' and payload->>'chatId' = ${chat}`
+const startedEventsOf = async (chat: ChatId) =>
+  (await storedAgentEventsOf(chat)).filter(
+    (event) =>
+      (event.payload as { event?: { update?: { sessionUpdate?: string } } }).event?.update?.sessionUpdate ===
+      'session_started',
+  )
+
+test('choosing a machine tool starts the session once with no prompt, and the first prompt joins it', async () => {
+  const relay = await machine()
+  const chat = await newRuntimeChat()
+  expect(await chooseRunsOn(chat, 'claude-code')).toEqual(succeeded)
+  await waitFor(async () => (await startedEventsOf(chat)).length === 1)
+  expect(relay.created).toHaveLength(1)
+  expect(relay.prompts).toHaveLength(0)
+  expect(await chooseRunsOn(chat, 'runtime')).not.toEqual(succeeded)
+
+  await finished(await prompt(chat, 'Hello'), chat)
+  expect(relay.created).toHaveLength(1)
+  expect(await startedEventsOf(chat)).toHaveLength(1)
+  await waitFor(async () => (await startJobsOf(chat)).every(({ state }) => state === 'done'))
+})
+
+test('nothing starts for a signed-out tool, a non-owner or a choice of the HQ runtime', async () => {
+  const relay = createHqAgentRelay()
+  relays.push(relay)
+  await fakeHost('Machine', { ownerId: alice, signedIn: [], agentServer: relay.agentServer })
+  const signedOut = await newRuntimeChat()
+  expect(await chooseRunsOn(signedOut, 'claude-code')).toEqual(succeeded)
+  await waitFor(async () => (await startJobsOf(signedOut)).every(({ state }) => state === 'done'))
+  expect(relay.created).toHaveLength(0)
+
+  const chat = await newRuntimeChat()
+  expect(await chooseRunsOn(chat, 'claude-code', bobInAcme)).not.toEqual(succeeded)
+  expect(await chooseRunsOn(chat, 'runtime')).toEqual(succeeded)
+  expect(await startJobsOf(chat)).toHaveLength(0)
+})
+
+test('a prompt sent at once after the choice joins the one session and streams live to a viewer subscribed before the chat was stored', async () => {
+  const relay = await machine(30)
+  const chat = chatId(`chat-${crypto.randomUUID()}`)
+  const frames = await openStream(chat)
+  await newRuntimeChat(false, chat)
+  expect(await chooseRunsOn(chat, 'claude-code')).toEqual(succeeded)
+  const replies = await finished(await prompt(chat, 'stub:think'), chat)
+  expect(replies.at(-1)?.kind).toBe('agent')
+  expect(streamedText(frames, true)).toBe('Thinking about the plan.')
+  expect(relay.created).toHaveLength(1)
+  expect(await startedEventsOf(chat)).toHaveLength(1)
 })

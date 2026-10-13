@@ -182,7 +182,7 @@ const turnItemsOf = (messages: readonly ConversationMessage[]): ConversationItem
 }
 
 export const getConversation =
-  (workspaceId: WorkspaceId, chatId: ChatId, viewerId: MemberId) =>
+  (workspaceId: WorkspaceId, chatId: ChatId, viewerId: MemberId, hqRuntimeAvailable?: boolean) =>
   (snapshot: Snapshot): Conversation | null => {
     const chat = findChat(snapshot, workspaceId, chatId)
     if (!chat) return null
@@ -202,9 +202,22 @@ export const getConversation =
     const connectedHarnesses = (Object.keys(localSessions) as Harness[]).filter(
       (harness) => machine?.status === 'online' && machine.capacity?.signedIn?.includes(localSessions[harness].signIn),
     )
+    const isAdmin = snapshot.memberships.some(
+      (member) => member.workspaceId === workspaceId && member.memberId === viewerId && member.role === 'admin',
+    )
+    const hasWorkspaceHost = isAdmin
+      ? snapshot.runtimeHosts.some(
+          (host) => host.workspaceId === workspaceId && host.ownerId === null && host.status === 'online',
+        )
+      : hqRuntimeAvailable
+    const hasMachineSession = snapshot.runtimes.some((runtime) => runtime.chatId === chatId && runtime.hostOnline)
     const runsOnChoices =
-      isOwner && !hasActiveTurn && !chatMessages.some((message) => message.kind === 'agent' || message.kind === 'step')
-        ? ['runtime' as const, ...connectedHarnesses]
+      isOwner &&
+      !hasActiveTurn &&
+      !hasMachineSession &&
+      (hasWorkspaceHost !== undefined || connectedHarnesses.length === 0) &&
+      !chatMessages.some((message) => message.kind === 'agent' || message.kind === 'step')
+        ? [...(hasWorkspaceHost || connectedHarnesses.length === 0 ? ['runtime' as const] : []), ...connectedHarnesses]
         : null
     const messages = chatMessages.map(
       (message): ConversationMessage => ({

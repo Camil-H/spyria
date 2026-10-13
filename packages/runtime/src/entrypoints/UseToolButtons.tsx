@@ -1,6 +1,6 @@
 import { useQuery } from '@hq/db/react'
 import type { MemberId, WorkspaceId } from '@hq/kernel'
-import { buttonClass, Dialog } from '@hq/ui'
+import { buttonClass, Dialog, ghostButtonClass } from '@hq/ui'
 import { useState } from 'react'
 import { type SignInTool, signInCommandOf } from '../domain/host-command.ts'
 import { getMachine, localSessionsOf } from '../queries/list-runtime-hosts.ts'
@@ -22,11 +22,23 @@ export const UseToolButtons = ({ workspaceId, memberId }: { workspaceId: Workspa
   }
   return (
     <div className="flex gap-2">
-      {(Object.keys(tools) as SignInTool[]).map((tool) => (
-        <button key={tool} type="button" className={buttonClass} onClick={() => open(tool)}>
-          Use {tools[tool].name}
-        </button>
-      ))}
+      {(Object.keys(tools) as SignInTool[]).map((tool) => {
+        const isConnected = machine?.status === 'online' && machine.capacity?.signedIn?.includes(tool)
+        return (
+          <button
+            key={tool}
+            type="button"
+            className={
+              isConnected
+                ? `${ghostButtonClass} border-(--c) text-(--c) [--c:light-dark(var(--color-green-900),var(--color-green-400))]`
+                : buttonClass
+            }
+            onClick={() => open(tool)}
+          >
+            {isConnected ? `✓ ${tools[tool].name} connected` : `Use ${tools[tool].name}`}
+          </button>
+        )
+      })}
       {openTool && (
         <Dialog label={`Use ${tools[openTool].name}`} closeLabel="Close" onClose={() => setOpenTool(null)}>
           {!localSessions ? (

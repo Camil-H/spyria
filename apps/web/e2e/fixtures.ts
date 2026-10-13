@@ -32,7 +32,12 @@ export const sendMessage = async (page: Page, text: string) => {
 
 export const runsOnChoiceOf = (page: Page) => mainOf(page).getByRole('group', { name: 'Runs on' })
 export const chooseRunsOn = async (page: Page, runsOn: string) => {
-  await runsOnChoiceOf(page).getByRole('radio', { name: runsOn }).click()
+  const radio = runsOnChoiceOf(page).getByRole('radio', { name: runsOn })
+  const notice = mainOf(page).getByText('Choose where this chat runs to send')
+  await expect
+    .poll(async () => ((await radio.isVisible()) ? 'choose' : (await notice.isVisible()) ? 'waiting' : 'chosen'))
+    .not.toBe('waiting')
+  if (await radio.isVisible()) await radio.click()
   await expect(runsOnChoiceOf(page)).toHaveCount(0)
 }
 export const newRuntimeChat = async (page: Page, name: string, runsOn: string | null = 'HQ runtime') => {

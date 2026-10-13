@@ -1,6 +1,7 @@
 import {
   agentObservationOf,
   chatContextTokens,
+  isWorkspaceHostOnline,
   lastAdapterModelsOf,
   listedModelsOf,
   memberModelsOf,
@@ -21,6 +22,7 @@ export type ChatRoutingRead = {
   modelNames: Record<string, string>
   contextTokens: number | null
   adapterModels: { currentModelId: string | null; available: { id: string; name: string }[] }
+  hqRuntimeAvailable: boolean
 }
 
 export const readChatRouting = async (
@@ -28,10 +30,11 @@ export const readChatRouting = async (
   { workspaceId, userId }: ZeroContext,
   chatId: string,
 ): Promise<ChatRoutingRead> => {
-  const { contextTokens, reachable, adapterModels } = await transact(async (tx) => ({
+  const { contextTokens, reachable, adapterModels, hqRuntimeAvailable } = await transact(async (tx) => ({
     contextTokens: await chatContextTokens(tx, workspaceId, chatId),
     reachable: chatModelsOf((await memberModelsOf(tx, workspaceId, userId)) ?? []),
     adapterModels: await lastAdapterModelsOf(tx, workspaceId, chatId),
+    hqRuntimeAvailable: await isWorkspaceHostOnline(tx, workspaceId),
   }))
   return {
     reachableModels: withPricesOf(reachable, listedModelsOf()),
@@ -41,5 +44,6 @@ export const readChatRouting = async (
       currentModelId: adapterModels?.isThisChat ? adapterModels.currentModelId : null,
       available: adapterModels?.availableModels.map(({ model_id, name }) => ({ id: model_id, name })) ?? [],
     },
+    hqRuntimeAvailable,
   }
 }

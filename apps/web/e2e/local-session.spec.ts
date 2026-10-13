@@ -264,21 +264,28 @@ test.describe('Codex on a ChatGPT plan', () => {
   }) => {
     await machine(signedInMachine)
     await newRuntimeChat(page, 'Claude only', null)
-    await expect(runsOnChoiceOf(page).getByRole('radio', { name: codexOption })).toHaveCount(0)
+    await expect(runsOnChoiceOf(page)).toHaveCount(0)
+    await expect(chipOf(page)).toHaveText('Claude Code · subscription')
+    await expect.poll(async () => (await machine()).conversations.length, agentReply).toBe(1)
     await machine({ signedIn: 'claude,codex' })
     await newLocalSession(page, 'Codex without a sign-in', codexOption)
+    await expect.poll(async () => (await machine()).conversations.length, agentReply).toBe(2)
     await machine({ signedIn: 'claude' })
     await sendMessage(page, 'Answer without a Codex sign-in')
     await expect(
       repliesWith(page, 'Sign in to Codex on your machine: docker exec -it hq-host hq-host login codex'),
     ).toHaveCount(1, agentReply)
-    expect((await machine()).conversations).toHaveLength(0)
+    expect((await machine()).conversations).toHaveLength(2)
 
     await newLocalSession(page, 'Claude on the same laptop')
     await sendMessage(page, 'Hello Claude on the same laptop')
     await expect(repliesWith(page, 'Hello from the stub')).toBeVisible(agentReply)
     const { conversations, prompts } = await machine()
-    expect(conversations.map((conversation) => conversation.agent.acp_command.at(-1))).toEqual(['claude-agent-acp'])
+    expect(conversations.map((conversation) => conversation.agent.acp_command.at(-1))).toEqual([
+      'claude-agent-acp',
+      expect.stringContaining('exec codex-acp'),
+      'claude-agent-acp',
+    ])
     expect(prompts).toEqual(['Hello Claude on the same laptop'])
   })
 

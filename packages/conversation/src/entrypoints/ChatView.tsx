@@ -1,8 +1,8 @@
 import { useQuery } from '@hq/db/react'
-import { chatId as toChatId, type WorkspaceId } from '@hq/kernel'
+import { type ChatId, chatId as toChatId, type WorkspaceId } from '@hq/kernel'
 import { useSession } from '@hq/session'
 import { Bot, GitBranch, Hash } from 'lucide-react'
-import { type ReactNode, useEffect } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 import { Link, Navigate, useOutletContext, useParams } from 'react-router'
 import { runsOnNames, runsOnWaitingNoticeOf } from '../domain/session-routing.ts'
 import { getConversation } from '../queries/get-conversation.ts'
@@ -28,13 +28,31 @@ export const ChatView = ({
   const workspaceId = useOutletContext<WorkspaceId>()
   const { memberId } = useSession()
   const chatId = toChatId(useParams().chatId ?? '')
-  const conversation = useQuery(getConversation(workspaceId, chatId, memberId))
+  const [hqRuntime, setHqRuntime] = useState<{ chatId: ChatId; isAvailable: boolean }>()
+  const conversation = useQuery(
+    getConversation(workspaceId, chatId, memberId, hqRuntime?.chatId === chatId ? hqRuntime.isAvailable : undefined),
+  )
   const commands = useConversationCommands()
+  const isChoosingRunsOn = conversation?.type === 'runtime' && conversation.isOwner && conversation.runsOn === null
+  useEffect(() => {
+    if (isChoosingRunsOn)
+      commands.chatRouting({ workspaceId, chatId }).then(
+        ({ hqRuntimeAvailable }) => setHqRuntime({ chatId, isAvailable: hqRuntimeAvailable }),
+        () => setHqRuntime({ chatId, isAvailable: true }),
+      )
+  }, [commands, workspaceId, chatId, isChoosingRunsOn])
   const streamedReply = useStreamedReply(workspaceId, chatId, conversation?.messages ?? [])
   const newestMessageId = conversation?.messages.at(-1)?.id
   useEffect(() => {
     if (newestMessageId) commands.markChatRead({ workspaceId, chatId })
   }, [commands, workspaceId, chatId, newestMessageId])
+  const soleChoice =
+    conversation?.isOwner && conversation.runsOn === null && conversation.runsOnChoices?.length === 1
+      ? conversation.runsOnChoices[0]
+      : null
+  useEffect(() => {
+    if (soleChoice) commands.updateChatRouting({ workspaceId, chatId, runsOn: soleChoice })
+  }, [commands, workspaceId, chatId, soleChoice])
   if (!conversation) return <Navigate to={`/w/${workspaceId}`} replace />
   const isRunsOnOpen = conversation.type === 'runtime' && conversation.runsOn === null
   const ChatTypeIcon = conversation.type === 'runtime' ? Bot : Hash
@@ -96,7 +114,7 @@ export const ChatView = ({
           {runtimeStatus}
         </div>
       )}
-      {isRunsOnOpen && conversation.runsOnChoices && (
+      {isRunsOnOpen && conversation.runsOnChoices && conversation.runsOnChoices.length > 1 && (
         <fieldset aria-label="Runs on" className="flex flex-col gap-2 text-sm">
           <div className="flex gap-1 rounded-lg border border-line bg-app p-1">
             {conversation.runsOnChoices.map((choice) => (
