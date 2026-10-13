@@ -2,6 +2,8 @@ import type { ChatId, ListedModel, MemberId, MessageId, Model, RuntimeHostId, Wo
 import type { AgentEvent } from '../domain/agent-events.ts'
 import type { HarnessLaunch } from '../domain/session-routing.ts'
 
+export class AgentStartFailure extends Error {}
+
 export type AgentChat = Readonly<{ workspaceId: WorkspaceId; chatId: ChatId }>
 export type AgentHost = Readonly<{ workspaceId: WorkspaceId; hostId: RuntimeHostId }>
 export type AgentInterrupt = Readonly<{ chatId: ChatId; promptId: MessageId; memberId: MemberId }>

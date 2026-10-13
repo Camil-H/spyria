@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { FakeAgentServer, FakeContainer } from '../testing.ts'
@@ -8,20 +8,33 @@ type Agent = { port: number; process: Bun.Subprocess<'ignore', 'pipe', 'inherit'
 const repositoryRoot = new URL('../../../../', import.meta.url).pathname
 const listening = /hq-agent listening on port (\d+)/
 
-export const createHqAgentRelay = ({ gapMilliseconds = 20 }: { gapMilliseconds?: number } = {}) => {
+export const createHqAgentRelay = ({
+  gapMilliseconds = 20,
+  startFails = false,
+}: {
+  gapMilliseconds?: number
+  startFails?: boolean
+} = {}) => {
   const directory = mkdtempSync(join(tmpdir(), 'hq-agent-relay-'))
   const shims = join(directory, 'bin')
   const workspace = join(directory, 'workspace')
   mkdirSync(shims)
   mkdirSync(workspace)
-  writeFileSync(
-    join(shims, 'claude-agent-acp'),
-    `#!/bin/sh\nexec env STUB_STATE=${directory}/sessions STUB_GAP_MS=${gapMilliseconds} node ${repositoryRoot}apps/agent/fixtures/stub-acp-agent.mjs "$@"\n`,
-  )
-  chmodSync(join(shims, 'claude-agent-acp'), 0o755)
+  mkdirSync(join(directory, '.codex'))
+  for (const { command, flavour } of [
+    { command: 'claude-agent-acp', flavour: 'claude' },
+    { command: 'codex-acp', flavour: 'codex' },
+  ])
+    writeFileSync(
+      join(shims, command),
+      `#!/bin/sh\nexec env ${startFails ? 'STUB_FAIL_START=1 ' : ''}STUB_FLAVOUR=${flavour} STUB_STATE=${directory}/sessions STUB_GAP_MS=${gapMilliseconds} node ${repositoryRoot}apps/agent/fixtures/stub-acp-agent.mjs "$@"\n`,
+      { mode: 0o755 },
+    )
   const agents = new Map<string, Promise<Agent>>()
   const upstreams = new Set<WebSocket>()
   const created: Record<string, unknown>[] = []
+  const prompts: string[] = []
+  const modelSwitches: string[] = []
   const socketPaths: string[] = []
 
   const startAgent = async (apiKey: string): Promise<Agent> => {
@@ -59,9 +72,11 @@ export const createHqAgentRelay = ({ gapMilliseconds = 20 }: { gapMilliseconds?:
   const agentServer = {
     respond: async ({ method, path, headers, body }, container) => {
       const { port } = await agentOf(container)
-      const isCreate = method === 'POST' && path === '/api/conversations'
-      const launch = isCreate ? JSON.parse(body ?? '{}') : undefined
+      const sent = method === 'POST' ? JSON.parse(body || '{}') : {}
+      const launch = method === 'POST' && path === '/api/conversations' ? sent : undefined
       if (launch) created.push(structuredClone(launch))
+      if (path.endsWith('/events')) prompts.push(sent.content?.[0]?.text)
+      if (path.endsWith('/switch_acp_model')) modelSwitches.push(sent.model)
       const response = await fetch(`http://localhost:${port}${path}`, {
         method,
         headers,
@@ -96,6 +111,8 @@ export const createHqAgentRelay = ({ gapMilliseconds = 20 }: { gapMilliseconds?:
   return {
     agentServer,
     created,
+    prompts,
+    modelSwitches,
     socketPaths,
     dropSockets: () => {
       for (const upstream of upstreams) upstream.close()

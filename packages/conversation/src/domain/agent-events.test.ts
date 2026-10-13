@@ -9,6 +9,8 @@ import {
   startFailureNoticeOf,
   streamedTextEventOf,
   streamedTextOf,
+  subagentDelegationOf,
+  toolCallIdOf,
   turnEndNoticeOf,
   waitingNotices,
 } from './agent-events.ts'
@@ -499,5 +501,50 @@ test('hq-agent chunks stream and are never stored, while completed items and too
   expect(isStored({ sessionUpdate: 'tool_call_update' }, false)).toBe(false)
   expect(isStored({ sessionUpdate: 'tool_call_update' }, true)).toBe(true)
   expect(isStored({ sessionUpdate: 'turn_end' }, true)).toBe(true)
-  expect(isStored({ sessionUpdate: 'plan' }, true)).toBe(false)
+  expect(isStored({ sessionUpdate: 'plan' }, true)).toBe(true)
+})
+
+test('an hq-agent plan update becomes a plan step with its entries mapped to HQ statuses', () => {
+  const entries = [
+    { content: 'Write tests', status: 'completed', priority: 'high' },
+    { content: 'Fix the bug', status: 'in_progress', priority: 'medium' },
+    { content: 'Ship', status: 'pending', priority: 'low' },
+  ]
+  expect(agentProjectionOf(acpUpdate(2, { sessionUpdate: 'plan', entries }), null)).toEqual({
+    type: 'step',
+    step: {
+      type: 'plan',
+      items: [
+        { title: 'Write tests', status: 'done' },
+        { title: 'Fix the bug', status: 'in-progress' },
+        { title: 'Ship', status: 'todo' },
+      ],
+    },
+  })
+})
+
+test('an hq-agent tool call made while a Task call is open belongs to its subagent, whatever the Task is titled', () => {
+  const task = acpUpdate(
+    3,
+    { sessionUpdate: 'tool_call', toolCallId: 'task-1', title: 'Explore the repo', kind: 'think', status: 'pending' },
+    false,
+  )
+  const taskStep = agentProjectionOf(
+    acpUpdate(4, {
+      sessionUpdate: 'tool_call_update',
+      toolCallId: 'task-1',
+      title: 'Explore the repo',
+      kind: 'think',
+      status: 'in_progress',
+      rawInput: { description: 'Explore the repo', subagent_type: 'Explore' },
+    }),
+    null,
+  )
+  expect(taskStep).toMatchObject({ type: 'step', step: { type: 'tool', name: 'Task', result: null } })
+  const open = [{ id: 'conversation-1:task-1', step: (taskStep && 'step' in taskStep ? taskStep.step : null) ?? null }]
+  const child = acpUpdate(5, { sessionUpdate: 'tool_call', toolCallId: 'child-1', title: 'ls', kind: 'execute' }, false)
+  expect(toolCallIdOf(child)).toBe('conversation-1:child-1')
+  expect(subagentDelegationOf(child, open)).toMatchObject({ id: 'conversation-1:task-1' })
+  expect(subagentDelegationOf(task, open)).toBeUndefined()
+  expect(subagentDelegationOf(acpUpdate(6, { sessionUpdate: 'agent_message', text: 'Hi' }), open)).toBeUndefined()
 })

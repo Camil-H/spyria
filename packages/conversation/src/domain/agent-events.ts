@@ -134,6 +134,8 @@ const acpStepOf = (call: AcpToolCall): StoredStep => {
       arguments: JSON.stringify(rawInput.arguments ?? {}),
       result: null,
     }
+  if (typeof rawInput?.subagent_type === 'string')
+    return { type: 'tool', name: 'Task', arguments: JSON.stringify(rawInput), result: null }
   if (typeof rawInput?.skill === 'string')
     return { type: 'tool', name: `Skill ${rawInput.skill}`, arguments: String(rawInput.args ?? ''), result: null }
   if (call.kind === 'execute')
@@ -183,6 +185,7 @@ const acpToolCallProjectionOf = (call: AcpToolCall): AgentProjection => {
     ? { type: 'step', step: acpStepOf(call), id: call.id }
     : undefined
 }
+const planStatuses: Record<string, string> = { in_progress: 'in-progress', completed: 'done' }
 const acpUpdateProjectionOf = (event: AgentEvent): AgentProjection => {
   const update = event.update as Fields
   const kind = update?.sessionUpdate
@@ -199,6 +202,14 @@ const acpUpdateProjectionOf = (event: AgentEvent): AgentProjection => {
     return { type: 'step', step: acpStepOf(call), id: call.id }
   }
   if (kind === 'tool_call_update') return acpToolCallProjectionOf(hqAgentToolCallOf(event, update))
+  if (kind === 'plan' && Array.isArray(update?.entries))
+    return stepOf({
+      type: 'plan',
+      items: update.entries.map((entry: Fields) => ({
+        title: String(entry?.content ?? ''),
+        status: planStatuses[String(entry?.status)] ?? 'todo',
+      })),
+    })
   if (kind === 'error') return stepOf({ type: 'error', message: String(update?.message ?? 'Unknown error') })
   if (kind === 'session_started' && update?.resumeFailed === true)
     return { type: 'message', body: agentNotices.newSession, kind: 'notice' }
@@ -207,15 +218,25 @@ const acpUpdateProjectionOf = (event: AgentEvent): AgentProjection => {
   return undefined
 }
 
+export const toolCallIdOf = (event: AgentEvent) => {
+  if (event.kind === 'ACPToolCallEvent') return String(event.tool_call_id)
+  const update = event.update as Fields
+  return event.kind === 'ACPUpdate' && String(update?.sessionUpdate).startsWith('tool_call')
+    ? hqAgentToolCallOf(event, update).id
+    : undefined
+}
+
 export const subagentDelegationOf = (
   event: AgentEvent,
   replies: readonly { id: string; step: StoredStep | null }[],
 ): StepDelegation | undefined => {
-  const host = replies.findLast(
-    ({ id, step }) =>
-      step?.type === 'tool' && step.name === 'Task' && step.result === null && id !== event.tool_call_id,
-  )
-  return host && { id: host.id, model: '', modelName: '', task: '' }
+  const callId = toolCallIdOf(event)
+  const host =
+    callId &&
+    replies.findLast(
+      ({ id, step }) => step?.type === 'tool' && step.name === 'Task' && step.result === null && id !== callId,
+    )
+  return host ? { id: host.id, model: '', modelName: '', task: '' } : undefined
 }
 
 export const isFinishEvent = (event: AgentEvent) =>
@@ -230,6 +251,7 @@ const storedAcpUpdates = [
   'config_option_update',
   'agent_message',
   'agent_thought',
+  'plan',
 ]
 
 export const isStoredAgentEvent = (event: AgentEvent) =>

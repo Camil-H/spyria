@@ -8,6 +8,7 @@ type Conversation = {
   id: string
   connection: AdapterConnection
   status: Status
+  failure?: string
   sessionId?: string
   configOptions: Json[]
   events: AgentEvent[]
@@ -80,8 +81,10 @@ export const startAgent = ({
 
   const fail = (conversation: Conversation, error: unknown) => {
     if (conversation.status === 'error') return
+    const update = errorUpdateOf(error)
     conversation.status = 'error'
-    emit(conversation, errorUpdateOf(error))
+    conversation.failure = update.message
+    emit(conversation, update)
   }
 
   const onUpdate = (conversation: Conversation, update: Json) => {
@@ -182,6 +185,7 @@ export const startAgent = ({
   const summaryOf = (conversation: Conversation) => ({
     execution_status: conversation.status,
     acp_session_id: conversation.sessionId,
+    error: conversation.failure,
   })
 
   const prompt = (conversation: Conversation, body: { content?: { type?: string; text?: string }[] }) => {

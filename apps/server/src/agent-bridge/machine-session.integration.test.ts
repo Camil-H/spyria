@@ -50,8 +50,8 @@ afterAll(async () => {
   void server.stop(true)
 })
 
-const machine = async (gapMilliseconds?: number) => {
-  const relay = createHqAgentRelay({ gapMilliseconds })
+const machine = async (gapMilliseconds?: number, startFails?: boolean) => {
+  const relay = createHqAgentRelay({ gapMilliseconds, startFails })
   relays.push(relay)
   await fakeHost('Machine', { ownerId: alice, signedIn: ['claude'], agentServer: relay.agentServer })
   return relay
@@ -255,4 +255,58 @@ test('the adapter’s models list in the routing read, and a pick is switched in
   expect(replies.at(-1)?.body).toContain('model stub-large')
   expect(relay.created).toHaveLength(1)
   await waitFor(async () => (await routingOf(chat)).currentModelId === 'stub-large')
+})
+
+test('a late chunk of a stopped turn does not land in the next turn', async () => {
+  await machine(250)
+  const chat = await newMachineChat()
+  const frames = await openStream(chat)
+  const stopped = await prompt(chat, 'stub:long stub:late')
+  await waitFor(async () => (await repliesTo(stopped)).some((reply) => reply.body === 'command'))
+  expect(
+    await requestMutation(app, database, aliceInAcme, 'conversation.stopAgent', { workspaceId: acme, chatId: chat }),
+  ).toEqual(succeeded)
+  const next = await prompt(chat, 'stub:tools')
+  const replies = await finished(next, chat)
+
+  expect(bodiesOf(replies)).toEqual(toolsReplies.map((body) => body.replace('[t1]', '[t2]')))
+  expect(streamedText(frames)).not.toContain('LATE')
+  expect((await messagesOf(chat)).some((message) => message.body.includes('LATE'))).toBe(false)
+})
+
+test('a start that fails closes the turn at once with the adapter message and does not retry', async () => {
+  const relay = await machine(undefined, true)
+  const chat = await newMachineChat()
+  const question = await prompt(chat, 'Hello')
+  await waitFor(async () => (await repliesTo(question)).length > 0)
+  await waitFor(async () => (await turnOf(chat)) === null)
+
+  expect(bodiesOf(await repliesTo(question))).toEqual(['notice:The agent could not start: Authentication required'])
+  await Bun.sleep(500)
+  expect(relay.created).toHaveLength(1)
+  expect(await repliesTo(question)).toHaveLength(1)
+})
+
+test('a plan update shows as a plan step, and a Task call with its inner calls as one subagent group', async () => {
+  await machine()
+  const chat = await newMachineChat()
+  const planned = await finished(await prompt(chat, 'stub:plan'), chat)
+  expect(planned[1]?.step).toEqual({
+    type: 'plan',
+    items: [
+      { title: 'Write tests', status: 'done' },
+      { title: 'Fix the bug', status: 'in-progress' },
+      { title: 'Ship', status: 'todo' },
+    ],
+  })
+
+  const replies = await finished(await prompt(chat, 'stub:subagent'), chat)
+  const [, host, child] = replies
+  expect(host?.step).toMatchObject({ type: 'tool', name: 'Task', result: 'Two files.' })
+  expect(child?.step).toMatchObject({
+    type: 'command',
+    command: 'ls',
+    output: 'a.ts',
+    delegation: { id: expect.stringMatching(/:task-2$/) },
+  })
 })

@@ -9,6 +9,7 @@ import {
   recordedLengthOf,
   streamedTextEventOf,
   subagentDelegationOf,
+  toolCallIdOf,
 } from '../domain/agent-events.ts'
 import type { StepDelegation } from '../domain/agent-steps.ts'
 import { newMessage } from '../domain/message.ts'
@@ -34,7 +35,7 @@ const recordIn = async (
   const promptId = activePromptId ?? previous?.replyToId ?? null
   const delegation =
     input.delegation ??
-    (event.kind === 'ACPToolCallEvent' && promptId
+    (toolCallIdOf(event) && promptId
       ? subagentDelegationOf(event, await unitOfWork.messages.replies(promptId))
       : undefined)
   const recordedAt = new Date()

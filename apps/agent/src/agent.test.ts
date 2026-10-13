@@ -171,6 +171,12 @@ test('the final tool call update carries the merged call; turn ends and adapter 
   expect((await call('GET', `/api/conversations/${id}`)).body).toMatchObject({ execution_status: 'error' })
   expect((await prompt(id, 'after the crash')).status).toBe(409)
 
+  const failing = await call('POST', '/api/conversations', {
+    ...launchOf(),
+    agent: { acp_command: ['env', 'STUB_FAIL_START=1', ...stubCommand.slice(1)] },
+  })
+  expect(failing.body).toMatchObject({ execution_status: 'error', error: 'Authentication required' })
+
   const missing = await create({ ...launchOf(), agent: { acp_command: ['hq-agent-no-such-adapter'] } })
   expect((await call('GET', `/api/conversations/${missing}`)).body).toMatchObject({ execution_status: 'error' })
   const failedStart = open(missing)

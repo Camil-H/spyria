@@ -53,6 +53,8 @@ export const createAgentBridge = ({
         streamedText: string
         segment?: Segment
         isReasoning: boolean
+        isDraining: boolean
+        endedPromptId: string | null
         isReady: Promise<void>
         close(): void
       }
@@ -75,7 +77,12 @@ export const createAgentBridge = ({
         stopStreaming: (chat, promptId) => {
           const socket = sockets.get(keyOf(chat))
           if (socket?.promptId === promptId)
-            Object.assign(socket, { promptId: null, streamedText: '', segment: undefined })
+            Object.assign(socket, {
+              promptId: null,
+              streamedText: '',
+              segment: undefined,
+              isDraining: socket.endedPromptId !== promptId,
+            })
         },
       },
     })
@@ -115,6 +122,8 @@ export const createAgentBridge = ({
         streamedText: '',
         segment: undefined as Segment | undefined,
         isReasoning: false,
+        isDraining: false,
+        endedPromptId: null as string | null,
         isClosed: false,
         close: () => {
           chatSocket.isClosed = true
@@ -174,6 +183,11 @@ export const createAgentBridge = ({
           if (chatSocket.isClosed) return
           const streamed = streamedTextOf(event)
           const isAcp = event.kind === 'ACPUpdate'
+          if (isAcp && (event.update as { sessionUpdate?: string })?.sessionUpdate === 'turn_end') {
+            if (chatSocket.isDraining) chatSocket.isDraining = false
+            else chatSocket.endedPromptId = chatSocket.promptId
+          }
+          if (isAcp && streamed && chatSocket.isDraining) return
           if (streamed?.text && chatSocket.promptId) {
             const { text, isReasoning } = streamed
             if (isAcp && chatSocket.segment && chatSocket.segment.isReasoning !== isReasoning) flushSegment(event)

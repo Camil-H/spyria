@@ -14,8 +14,6 @@ import { openPageAs } from './stack'
 
 type MachineConversation = {
   agent: {
-    kind: string
-    acp_server: string
     acp_command: string[]
     mcp_config: Record<string, { url: string }>
     acp_resume_session_id?: string
@@ -93,24 +91,18 @@ test('3. the owner prompts an On my machine session: it runs on their machine wi
   page,
   workerStack,
   machine,
-  agentScript,
 }) => {
   const { id: machineId } = await machine(signedInMachine)
   const chatId = await newLocalSession(page, 'On my laptop')
-  await agentScript(chatId, { text: 'Answered on the subscription.' })
   await sendMessage(page, 'Hello from my laptop')
-  await expect(repliesWith(page, 'Answered on the subscription.')).toBeVisible(agentReply)
+  await expect(repliesWith(page, 'Hello from the stub')).toBeVisible(agentReply)
 
   const [runtime] = await workerStack.database.$client`select host_id from runtimes where chat_id = ${chatId}`
   expect(runtime?.host_id).toBe(machineId)
   const { conversations } = await machine()
   expect(conversations).toHaveLength(1)
   const [conversation] = conversations
-  expect(conversation?.agent).toMatchObject({
-    kind: 'ACPAgent',
-    acp_server: 'claude-code',
-    acp_command: subscriptionCommand,
-  })
+  expect(conversation?.agent).toMatchObject({ acp_command: subscriptionCommand })
   expect(JSON.stringify(conversation)).not.toContain('ANTHROPIC_BASE_URL')
   expect(JSON.stringify(conversation)).not.toContain('ANTHROPIC_MODEL')
   expect(conversation?.secrets).toEqual({})
@@ -147,17 +139,15 @@ test('5. another member reads the session and the answer, and their prompt is re
   browser,
   workerStack,
   machine,
-  agentScript,
 }) => {
   await machine(signedInMachine)
-  const chatId = await newLocalSession(page, 'Shared laptop session')
-  await agentScript(chatId, { text: 'Alice got this answer.' })
+  await newLocalSession(page, 'Shared laptop session')
   await sendMessage(page, 'Alice prompts the laptop')
-  await expect(repliesWith(page, 'Alice got this answer.')).toBeVisible(agentReply)
+  await expect(repliesWith(page, 'Hello from the stub')).toBeVisible(agentReply)
 
   const bobPage = await openPageAs(browser, workerStack, 'member-bob')
   await openChat(bobPage, 'Shared laptop session')
-  await expect(repliesWith(bobPage, 'Alice got this answer.')).toBeVisible()
+  await expect(repliesWith(bobPage, 'Hello from the stub')).toBeVisible()
   await sendMessage(bobPage, 'Bob tries the laptop')
   await expect(repliesWith(bobPage, 'Only the owner prompts a session on their machine')).toHaveCount(1, agentReply)
   await expect(repliesWith(page, 'Only the owner prompts a session on their machine')).toHaveCount(1)
@@ -168,45 +158,39 @@ test('5. another member reads the session and the answer, and their prompt is re
 test('6. a prompt while the machine is offline waits with "Your machine is offline" and is answered once it is back', async ({
   page,
   machine,
-  agentScript,
 }) => {
   await machine(signedInMachine)
-  const chatId = await newLocalSession(page, 'Laptop goes away')
+  await newLocalSession(page, 'Laptop goes away')
   await machine({ online: 'false' })
-  await agentScript(chatId, { text: 'Answered once the laptop is back.' })
   await sendMessage(page, 'Wait for my laptop')
   await expect(repliesWith(page, 'Your machine is offline')).toHaveCount(1, agentReply)
   await machine({ online: 'true' })
-  await expect(repliesWith(page, 'Answered once the laptop is back.')).toBeVisible(agentReply)
+  await expect(repliesWith(page, '[t1] Hello from the stub')).toBeVisible(agentReply)
 
   await machine({ online: 'false' })
-  await agentScript(chatId, { text: 'Answered after the second outage.' })
   await sendMessage(page, 'Wait for my laptop again')
   await expect(repliesWith(page, 'Your machine is offline')).toHaveCount(2, agentReply)
   await machine({ online: 'true' })
-  await expect(repliesWith(page, 'Answered after the second outage.')).toBeVisible(agentReply)
+  await expect(repliesWith(page, '[t2] Hello from the stub')).toBeVisible(agentReply)
   expect((await machine()).prompts).toEqual(['Wait for my laptop', 'Wait for my laptop again'])
 })
 
-test('8. stopping mid-command marks the turn stopped, and the next prompt is answered once in a new subscription conversation', async ({
+test('8. stopping mid-command marks the turn stopped, and the next prompt is answered once in the same session', async ({
   page,
   machine,
-  agentScript,
 }) => {
   await machine(signedInMachine)
-  const chatId = await newLocalSession(page, 'Stop on my laptop')
-  await agentScript(chatId, { steps: [{ command: 'sleep 30' }], text: 'Never shown.' })
-  await sendMessage(page, 'Run the long command')
+  await newLocalSession(page, 'Stop on my laptop')
+  await sendMessage(page, 'stub:long')
   await expect(messageItemsOf(page).getByRole('img', { name: 'Running' })).toBeVisible(agentReply)
   await mainOf(page).getByRole('button', { name: 'Stop' }).click()
   await expect(repliesWith(page, 'Stopped by Alice')).toHaveCount(1, agentReply)
-  await agentScript(chatId, { text: 'Back after the stop.' })
   await sendMessage(page, 'Answer after the stop')
-  await expect(repliesWith(page, 'Back after the stop.')).toHaveCount(1, agentReply)
+  await expect(repliesWith(page, '[t2] Hello from the stub')).toHaveCount(1, agentReply)
   await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0, agentReply)
-  await expect(mainOf(page)).not.toContainText('Never shown.')
+  await expect(mainOf(page)).not.toContainText('[t1] Hello from the stub')
   const { conversations, prompts } = await machine()
-  expect(prompts).toEqual(['Run the long command', 'Answer after the stop'])
+  expect(prompts).toEqual(['stub:long', 'Answer after the stop'])
   expect(conversations.map((conversation) => conversation.agent.acp_command)).toEqual([subscriptionCommand])
 })
 
@@ -223,27 +207,24 @@ test('10. text streamed around a command shows before the command and stays, the
   page,
   workerStack,
   machine,
-  agentScript,
 }) => {
   await machine(signedInMachine)
   const chatId = await newLocalSession(page, 'Live text')
-  await agentScript(chatId, {
-    steps: [{ command: 'sleep 2 && echo checked', say: 'Looking.' }],
-    text: 'Done.',
-    wordDelayMilliseconds: 300,
-  })
-  await sendMessage(page, 'Check the repo')
+  await sendMessage(page, 'stub:command')
   await expect(messageItemsOf(page).getByRole('img', { name: 'Running' })).toBeVisible(agentReply)
-  await expect(messageItemsOf(page).nth(1)).toContainText('Looking.')
+  await expect(messageItemsOf(page).nth(1)).toContainText('[t1]')
   await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0, agentReply)
   await expect(messageItemsOf(page)).toHaveCount(4)
-  await expect(messageItemsOf(page).nth(1)).toContainText('Looking.')
+  await expect(messageItemsOf(page).nth(1)).toContainText('[t1]')
   await expect(messageItemsOf(page).nth(2)).toContainText('$ sleep 2 && echo checked')
-  await expect(messageItemsOf(page).nth(3)).toContainText('Done.')
-  await expect(messageItemsOf(page).nth(3)).not.toContainText('Looking.')
+  await expect(messageItemsOf(page).nth(3)).toContainText('Hello from the stub')
+  await expect(messageItemsOf(page).nth(3)).not.toContainText('[t1]')
   const answers = await workerStack.database.$client<{ body: string }[]>`
     select body from messages where chat_id = ${chatId} and kind = 'agent' order by seq`
-  expect(answers.map((answer) => answer.body)).toEqual(['Looking.', 'Done.'])
+  expect(answers.map((answer) => answer.body)).toEqual([
+    '[t1]',
+    'Hello from the stub (model stub-default, mode bypassPermissions).',
+  ])
 })
 
 test.describe('Codex on a ChatGPT plan', () => {
@@ -251,22 +232,16 @@ test.describe('Codex on a ChatGPT plan', () => {
     page,
     workerStack,
     machine,
-    agentScript,
   }) => {
     await machine(codexMachine)
     const chatId = await newLocalSession(page, 'Codex on my laptop', codexOption)
-    await agentScript(chatId, { text: 'Answered on the ChatGPT plan.' })
     await sendMessage(page, 'Hello Codex on my laptop')
-    await expect(repliesWith(page, 'Answered on the ChatGPT plan.')).toBeVisible(agentReply)
+    await expect(repliesWith(page, 'Hello from the stub')).toBeVisible(agentReply)
 
     const { conversations } = await machine()
     expect(conversations).toHaveLength(1)
     const [conversation] = conversations
-    expect(conversation?.agent).toMatchObject({
-      kind: 'ACPAgent',
-      acp_server: 'codex',
-      acp_command: codexSubscriptionCommand,
-    })
+    expect(conversation?.agent).toMatchObject({ acp_command: codexSubscriptionCommand })
     expect(JSON.stringify(conversation)).not.toMatch(
       /OPENAI_API_KEY|CODEX_API_KEY|OPENAI_BASE_URL|"CODEX_CONFIG=|MODEL_PROVIDER|base_url|model_provider|"model"/,
     )
@@ -286,7 +261,6 @@ test.describe('Codex on a ChatGPT plan', () => {
   test('2. signed in to Claude only, Codex is not offered, a Codex session signed out after the choice shows the Codex sign-in notice, and a Claude Code session works', async ({
     page,
     machine,
-    agentScript,
   }) => {
     await machine(signedInMachine)
     await newRuntimeChat(page, 'Claude only', null)
@@ -300,45 +274,41 @@ test.describe('Codex on a ChatGPT plan', () => {
     ).toHaveCount(1, agentReply)
     expect((await machine()).conversations).toHaveLength(0)
 
-    const claudeChatId = await newLocalSession(page, 'Claude on the same laptop')
-    await agentScript(claudeChatId, { text: 'Claude answered on the same machine.' })
+    await newLocalSession(page, 'Claude on the same laptop')
     await sendMessage(page, 'Hello Claude on the same laptop')
-    await expect(repliesWith(page, 'Claude answered on the same machine.')).toBeVisible(agentReply)
+    await expect(repliesWith(page, 'Hello from the stub')).toBeVisible(agentReply)
     const { conversations, prompts } = await machine()
-    expect(conversations.map((conversation) => conversation.agent.acp_server)).toEqual(['claude-code'])
+    expect(conversations.map((conversation) => conversation.agent.acp_command.at(-1))).toEqual(['claude-agent-acp'])
     expect(prompts).toEqual(['Hello Claude on the same laptop'])
   })
 
-  test('3. stopping mid-command deletes the conversation before the turn shows stopped, and the next prompt resumes the Codex session once', async ({
+  test('3. stopping mid-command keeps the conversation, and the next prompt continues the Codex session once', async ({
     page,
     workerStack,
     machine,
-    agentScript,
   }) => {
     await machine(codexMachine)
     const chatId = await newLocalSession(page, 'Stop Codex on my laptop', codexOption)
-    await agentScript(chatId, { steps: [{ command: 'sleep 30' }], text: 'Never shown.' })
-    await sendMessage(page, 'Run the long command')
+    await sendMessage(page, 'stub:long')
     await expect(messageItemsOf(page).getByRole('img', { name: 'Running' })).toBeVisible(agentReply)
     await mainOf(page).getByRole('button', { name: 'Stop' }).click()
     await expect(repliesWith(page, 'Stopped by Alice')).toHaveCount(1, agentReply)
-    expect((await machine()).conversations).toHaveLength(0)
-    const sessionIds = await workerStack.database.$client<{ id: string }[]>`
-      select distinct payload->'event'->'value'->>'acp_session_id' as id from events
-      where chat_id = ${chatId} and payload->'event'->>'key' = 'agent_state'`
-    expect(sessionIds).toHaveLength(1)
+    const sessionIdsOf = () =>
+      workerStack.database.$client<{ id: string }[]>`
+        select distinct payload->'event'->'update'->>'sessionId' as id from events
+        where chat_id = ${chatId} and payload->'event'->'update'->>'sessionUpdate' = 'session_started'`
+    expect(await sessionIdsOf()).toHaveLength(1)
 
-    await agentScript(chatId, { text: 'Back after the stop.' })
     await sendMessage(page, 'Answer after the stop')
-    await expect(repliesWith(page, 'Back after the stop.')).toHaveCount(1, agentReply)
+    await expect(repliesWith(page, '[t2] Hello from the stub')).toHaveCount(1, agentReply)
     await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0, agentReply)
-    await expect(mainOf(page)).not.toContainText('Never shown.')
+    await expect(mainOf(page)).not.toContainText('[t1] Hello from the stub')
     await expect(mainOf(page)).not.toContainText('The agent started a new session')
     const { conversations, prompts } = await machine()
-    expect(prompts).toEqual(['Run the long command', 'Answer after the stop'])
+    expect(prompts).toEqual(['stub:long', 'Answer after the stop'])
     expect(conversations).toHaveLength(1)
     expect(conversations[0]?.agent.acp_command).toEqual(codexSubscriptionCommand)
-    expect(conversations[0]?.agent.acp_resume_session_id).toBe(sessionIds[0]?.id)
+    expect(await sessionIdsOf()).toHaveLength(1)
   })
 
   test('4. the chip offers both My machine options only to a member with a local host signed in to both', async ({
@@ -356,20 +326,20 @@ test.describe('Codex on a ChatGPT plan', () => {
   test('5. a command pending with no input shows the real command and no spinner once completed, and a read shows its path', async ({
     page,
     machine,
-    agentScript,
   }) => {
     await machine(codexMachine)
-    const chatId = await newLocalSession(page, 'Real steps', codexOption)
-    await agentScript(chatId, {
-      steps: [{ command: 'echo listed' }, { read: 'notes.md' }],
-      text: 'Read the notes and listed the files.',
-      wordDelayMilliseconds: 400,
-    })
-    await sendMessage(page, 'List and read')
-    const command = repliesWith(page, '$ echo listed')
-    await expect(command.getByRole('img', { name: 'Succeeded' })).toBeVisible(agentReply)
+    await newLocalSession(page, 'Real steps', codexOption)
+    await sendMessage(page, 'stub:read stub:tools stub:linger')
+    await expect(repliesWith(page, '$ npm test').getByRole('img', { name: 'Failed' })).toBeVisible(agentReply)
     await expect(repliesWith(page, 'Read notes.md')).toBeVisible(agentReply)
     await expect(page.getByRole('status', { name: 'Agent is working' })).toBeVisible()
+    await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0, agentReply)
+    await messageItemsOf(page)
+      .getByRole('button', { name: /^Worked for .+ · 3 steps$/ })
+      .click()
+    await expect(repliesWith(page, 'Read notes.md')).toBeVisible()
+    const command = repliesWith(page, '$ npm test')
+    await expect(command.getByRole('img', { name: 'Failed' })).toBeVisible()
     await expect(messageItemsOf(page).getByRole('img', { name: 'Running' })).toHaveCount(0)
     await expect(mainOf(page)).not.toContainText('$ Terminal')
     await expect(mainOf(page)).not.toContainText('Read File')

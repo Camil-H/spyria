@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test'
-import type { AgentEndpoint } from '../contracts/agent.ts'
+import { type AgentEndpoint, AgentStartFailure } from '../contracts/agent.ts'
 import type { HarnessLaunch } from '../domain/session-routing.ts'
 import { createSandboxAgentServer } from './sandbox-agent-server.ts'
 
-const requests: { path: string; body?: string }[] = []
+const requests: { method: string; path: string; body?: string }[] = []
 const socketPaths: string[] = []
 const endpoint: AgentEndpoint = {
   apiKey: 'session-key',
@@ -131,5 +131,34 @@ test('an hq-agent session sends the bare ACP launch with its resume id, and resu
     '/sockets/events/conversation-1?after=7',
     '/sockets/events/conversation-1?after=0',
     '/sockets/events/conversation-1?after=0',
+  ])
+})
+
+test('an hq-agent conversation that failed to start is deleted and reported with the adapter message', async () => {
+  requests.length = 0
+  const failed: AgentEndpoint = {
+    ...endpoint,
+    isHqAgent: true,
+    transport: {
+      ...endpoint.transport,
+      fetch: async (request) => {
+        requests.push(request)
+        return {
+          status: 201,
+          body: JSON.stringify({ id: 'conversation-9', execution_status: 'error', error: 'Authentication required' }),
+        }
+      },
+    },
+  }
+  await expect(
+    createSandboxAgentServer().createConversation(failed, 'runtime-token', {
+      model: '',
+      usageId: 'agent',
+      harness: 'claude-code-subscription',
+    }),
+  ).rejects.toEqual(new AgentStartFailure('Authentication required'))
+  expect(requests.map(({ method, path }) => `${method} ${path}`)).toEqual([
+    'POST /api/conversations',
+    'DELETE /api/conversations/conversation-9',
   ])
 })

@@ -16,7 +16,7 @@ import {
 import { openPageAs, type WorkerStack } from './stack'
 
 type MachineConversation = {
-  agent: { acp_server: string; acp_command: string[]; acp_model?: string }
+  agent: { acp_command: string[]; acp_model?: string }
   secrets: Record<string, unknown>
 }
 type Machine = { id: string; conversations: MachineConversation[]; prompts: string[]; modelSwitches: string[] }
@@ -118,19 +118,17 @@ test('2. the owner picks My machine · Claude Code before prompting: the subscri
   page,
   workerStack,
   machine,
-  agentScript,
 }) => {
   const { id: machineId } = await machine(signedInMachine)
   const chatId = await newMachineChat(page, 'Picked my machine')
-  await agentScript(chatId, { text: 'Answered on my machine.' })
   await sendMessage(page, 'Hello from the chip')
-  await expect(repliesWith(page, 'Answered on my machine.')).toBeVisible(agentReply)
+  await expect(repliesWith(page, 'Hello from the stub')).toBeVisible(agentReply)
 
   const [runtime] = await workerStack.database.$client`select host_id from runtimes where chat_id = ${chatId}`
   expect(runtime?.host_id).toBe(machineId)
   const { conversations } = await machine()
   expect(conversations).toHaveLength(1)
-  expect(conversations[0]?.agent).toMatchObject({ acp_server: 'claude-code', acp_command: subscriptionCommand })
+  expect(conversations[0]?.agent).toMatchObject({ acp_command: subscriptionCommand })
   expect(conversations[0]?.secrets).toEqual({})
   expect(JSON.stringify(conversations[0])).not.toMatch(/ANTHROPIC_BASE_URL|ANTHROPIC_MODEL|base_url/)
   await openSession(page)
@@ -176,7 +174,6 @@ test('4. another member does not see the choice, and crafted writes by them or o
   browser,
   workerStack,
   machine,
-  agentScript,
 }) => {
   await machine(signedInMachine)
   const chatId = await newRuntimeChat(page, 'Only Alice chooses')
@@ -195,9 +192,8 @@ test('4. another member does not see the choice, and crafted writes by them or o
   await runsOnOf(page).selectOption({ label: claudeOnMachine })
   await expect(chipOf(page)).toHaveText('Claude Code · subscription')
   await page.keyboard.press('Escape')
-  await agentScript(chatId, { text: 'Locked on my machine.' })
   await sendMessage(page, 'Lock it')
-  await expect(repliesWith(page, 'Locked on my machine.')).toBeVisible(agentReply)
+  await expect(repliesWith(page, 'Hello from the stub')).toBeVisible(agentReply)
   expect(await craftedRoutingWrite(workerStack, 'member-alice', { chatId, runsOn: 'runtime' })).toContain(
     'This session has started; where it runs no longer changes',
   )
@@ -207,64 +203,47 @@ test('4. another member does not see the choice, and crafted writes by them or o
 test('5. the chip lists the adapter models, a pick is switched in place, and before a session the last list is offered and sent at create', async ({
   page,
   machine,
-  agentScript,
 }) => {
   await machine(signedInMachine)
-  const firstChatId = await newMachineChat(page, 'First on my machine')
-  await agentScript(firstChatId, { text: 'First answer.' })
+  await newMachineChat(page, 'First on my machine')
   await sendMessage(page, 'First prompt')
-  await expect(repliesWith(page, 'First answer.')).toBeVisible(agentReply)
+  await expect(repliesWith(page, '[t1] Hello from the stub')).toBeVisible(agentReply)
   await openSession(page)
   const modelOf = (target: Page) => sessionOf(target).getByRole('combobox', { name: 'Model' })
-  await expect(modelOf(page).getByRole('option')).toHaveText([
-    'Default (recommended)',
-    'Opus (1M context)',
-    'Sonnet',
-    'Haiku',
-  ])
-  await expect(modelOf(page)).toHaveValue('default')
-  await modelOf(page).selectOption({ label: 'Sonnet' })
-  await expect(chipOf(page)).toHaveText('Claude Code · Sonnet')
+  await expect(modelOf(page).getByRole('option')).toHaveText(['Default (stub)', 'Large (stub)'])
+  await expect(modelOf(page)).toHaveValue('stub-default')
+  await modelOf(page).selectOption({ label: 'Large (stub)' })
+  await expect(chipOf(page)).toHaveText('Claude Code · Large (stub)')
   await page.keyboard.press('Escape')
-  await agentScript(firstChatId, { text: 'Second answer.' })
   await sendMessage(page, 'Second prompt')
-  await expect(repliesWith(page, 'Second answer.')).toBeVisible(agentReply)
-  expect((await machine()).modelSwitches).toEqual(['sonnet'])
+  await expect(repliesWith(page, 'model stub-large')).toBeVisible(agentReply)
+  expect((await machine()).modelSwitches).toEqual(['stub-large'])
   await openSession(page)
-  await expect(modelOf(page)).toHaveValue('sonnet')
+  await expect(modelOf(page)).toHaveValue('stub-large')
   await page.keyboard.press('Escape')
 
-  const secondChatId = await newMachineChat(page, 'Second on my machine')
+  await newMachineChat(page, 'Second on my machine')
   await openSession(page)
-  await expect(modelOf(page).getByRole('option')).toHaveText([
-    'Default',
-    'Default (recommended)',
-    'Opus (1M context)',
-    'Sonnet',
-    'Haiku',
-  ])
+  await expect(modelOf(page).getByRole('option')).toHaveText(['Default', 'Default (stub)', 'Large (stub)'])
   await expect(modelOf(page)).toHaveValue('')
-  await modelOf(page).selectOption({ label: 'Haiku' })
-  await expect(chipOf(page)).toHaveText('Claude Code · Haiku')
+  await modelOf(page).selectOption({ label: 'Large (stub)' })
+  await expect(chipOf(page)).toHaveText('Claude Code · Large (stub)')
   await page.keyboard.press('Escape')
-  await agentScript(secondChatId, { text: 'Answered on Haiku.' })
-  await sendMessage(page, 'Prompt on Haiku')
-  await expect(repliesWith(page, 'Answered on Haiku.')).toBeVisible(agentReply)
+  await sendMessage(page, 'Prompt on Large')
+  await expect(repliesWith(page, 'model stub-large')).toHaveCount(1, agentReply)
   const { conversations, modelSwitches } = await machine()
-  expect(conversations.map((conversation) => conversation.agent.acp_model)).toEqual([undefined, 'haiku'])
-  expect(modelSwitches).toEqual(['sonnet'])
+  expect(conversations.map((conversation) => conversation.agent.acp_model)).toEqual([undefined, 'stub-large'])
+  expect(modelSwitches).toEqual(['stub-large'])
 })
 
 test('6. with the workspace switch off the machine options are hidden and an existing machine chat gets the turned-off notice', async ({
   page,
   machine,
-  agentScript,
 }) => {
   await machine(signedInMachine)
-  const chatId = await newMachineChat(page, 'Machine before the switch')
-  await agentScript(chatId, { text: 'Answered before the switch.' })
+  await newMachineChat(page, 'Machine before the switch')
   await sendMessage(page, 'Before the switch')
-  await expect(repliesWith(page, 'Answered before the switch.')).toBeVisible(agentReply)
+  await expect(repliesWith(page, 'Hello from the stub')).toBeVisible(agentReply)
   await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0, agentReply)
 
   await sidebarOf(page).getByRole('link', { name: 'Workspace settings' }).click()
@@ -377,7 +356,6 @@ test.describe('without a workspace host', () => {
     page,
     workerStack,
     machine,
-    agentScript,
   }) => {
     const { id: machineId } = await machine(signedInMachine)
     const chatId = await newRuntimeChat(page, 'No host first')
@@ -387,9 +365,8 @@ test.describe('without a workspace host', () => {
     await runsOnOf(page).selectOption({ label: claudeOnMachine })
     await expect(chipOf(page)).toHaveText('Claude Code · subscription')
     await page.keyboard.press('Escape')
-    await agentScript(chatId, { text: 'Answered on my machine after all.' })
     await sendMessage(page, 'Second try')
-    await expect(repliesWith(page, 'Answered on my machine after all.')).toHaveCount(2, agentReply)
+    await expect(repliesWith(page, 'Hello from the stub')).toHaveCount(2, agentReply)
     const [runtime] = await workerStack.database.$client`select host_id from runtimes where chat_id = ${chatId}`
     expect(runtime?.host_id).toBe(machineId)
     await expect.poll(async () => (await machine()).prompts, agentReply).toEqual(['First try', 'Second try'])

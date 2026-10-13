@@ -120,19 +120,17 @@ test('1. the admin turns sessions on members machines off: no Add my machine, a 
 test('2. an existing local session answers prompts with the notice while it is off, and again once it is back on', async ({
   page,
   machine,
-  agentScript,
 }) => {
   await machine({ owner: 'member-alice', signedIn: 'claude' })
-  const chatId = await newRuntimeChat(page, 'Laptop switch', 'My machine · Claude Code')
+  await newRuntimeChat(page, 'Laptop switch', 'My machine · Claude Code')
   await expect(mainOf(page).getByRole('button', { name: 'Claude Code · subscription' })).toBeVisible()
-  await agentScript(chatId, { text: 'Answered before the switch.' })
   await sendMessage(page, 'Before the switch')
-  await expect(repliesWith(page, 'Answered before the switch.')).toBeVisible(agentReply)
+  await expect(repliesWith(page, '[t1] Hello from the stub')).toBeVisible(agentReply)
   await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0, agentReply)
 
   await setLocalSessions(page, false)
   await openChat(page, 'Laptop switch')
-  await expect(repliesWith(page, 'Answered before the switch.')).toBeVisible()
+  await expect(repliesWith(page, '[t1] Hello from the stub')).toBeVisible()
   await sendMessage(page, 'While it is off')
   await expect(repliesWith(page, sessionNotice)).toHaveCount(1, agentReply)
   await page.waitForTimeout(2_000)
@@ -140,9 +138,8 @@ test('2. an existing local session answers prompts with the notice while it is o
 
   await setLocalSessions(page, true)
   await openChat(page, 'Laptop switch')
-  await agentScript(chatId, { text: 'Answered after the switch.' })
   await sendMessage(page, 'Back on')
-  await expect(repliesWith(page, 'Answered after the switch.')).toBeVisible(agentReply)
+  await expect(repliesWith(page, '[t2] Hello from the stub')).toBeVisible(agentReply)
   expect((await machine()).prompts).toEqual(['Before the switch', 'Back on'])
   await expect(repliesWith(page, sessionNotice)).toHaveCount(1)
 })

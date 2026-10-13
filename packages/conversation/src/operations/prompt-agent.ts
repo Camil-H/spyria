@@ -1,5 +1,11 @@
 import { chatModelsOf, type MemberId, type MessageId, type WorkspaceId } from '@hq/kernel'
-import type { AgentChat, AgentConversation, AgentEndpoint, RuntimeReadiness } from '../contracts/agent.ts'
+import {
+  type AgentChat,
+  type AgentConversation,
+  type AgentEndpoint,
+  AgentStartFailure,
+  type RuntimeReadiness,
+} from '../contracts/agent.ts'
 import { agentNotices, notReadyNoticeOf } from '../domain/agent-events.ts'
 import type { Message } from '../domain/message.ts'
 import { noLlmKeyNoticeOf } from '../domain/model-call-failures.ts'
@@ -245,6 +251,10 @@ export const promptAgent = async (dependencies: AgentDependencies, { workspaceId
     await eventSockets.ensureOpen(chat, conversation, prompt.id)
     await agentServer.sendMessage(conversation, prompt.body)
   } catch (error) {
+    if (error instanceof AgentStartFailure)
+      return transactor.run((unitOfWork) =>
+        closeAgentTurn(unitOfWork, chatId, prompt.id, () => `${agentNotices.couldNotStart}: ${error.message}`),
+      )
     await transactor.run((unitOfWork) => releaseAgentTurn(unitOfWork, chatId, prompt.id))
     throw error
   }

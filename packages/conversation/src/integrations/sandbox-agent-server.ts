@@ -1,9 +1,10 @@
-import type {
-  AgentConversation,
-  AgentEndpoint,
-  AgentLlmChoice,
-  AgentServer,
-  SubConversation,
+import {
+  type AgentConversation,
+  type AgentEndpoint,
+  type AgentLlmChoice,
+  type AgentServer,
+  AgentStartFailure,
+  type SubConversation,
 } from '../contracts/agent.ts'
 import type { AgentEvent } from '../domain/agent-events.ts'
 import { condensationLimitsOf } from '../domain/masked-body.ts'
@@ -151,7 +152,12 @@ export const createSandboxAgentServer = (condensationScale = 1): AgentServer => 
       autotitle: false,
       ...(sub && { parent_conversation_id: sub.parentConversationId }),
     })
-    return String(created?.id)
+    const conversationId = String(created?.id)
+    if (endpoint.isHqAgent && created?.execution_status === 'error') {
+      await call(endpoint, 'DELETE', `/api/conversations/${conversationId}`).catch(() => undefined)
+      throw new AgentStartFailure(String(created.error))
+    }
+    return conversationId
   },
   finalResponse: async (conversation) =>
     String(
