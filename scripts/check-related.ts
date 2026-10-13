@@ -54,7 +54,8 @@ const fastChecks = Promise.all([
 ])
 
 const isUnitTest = (file: string) =>
-  /^(packages|apps\/server|apps\/host)\/.+\.test\.tsx?$/.test(file) && !file.endsWith('.integration.test.ts')
+  /^(packages|apps\/server|apps\/host|apps\/agent)\/.+\.test\.tsx?$/.test(file) &&
+  !file.endsWith('.integration.test.ts')
 const isIntegrationTest = (file: string) => file.endsWith('.integration.test.ts')
 const isOutsideTests = (file: string) =>
   /\.md$|^\.claude\/|^scripts\/|^\.gitignore$|^biome\.json$|^\.dependency-cruiser\.cjs$/.test(file)

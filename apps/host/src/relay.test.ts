@@ -131,15 +131,18 @@ test.each([
   })
 })
 
-test('a personal host refuses a WebSocket outside the events stream', async () => {
-  const { relay, nextOf } = personalRelay()
-  await relay.handle({ type: 'ws_connect', sid: 2, runtimeId: 'runtime-1', path: '/sockets/bash-events' })
-  expect(await nextOf('ws_close')).toMatchObject({
-    type: 'ws_close',
-    sid: 2,
-    error: expect.stringContaining('refused'),
-  })
-})
+test.each(['/sockets/bash-events', `/sockets/events/${conversationId}?after=1&x=2`])(
+  'a personal host refuses the WebSocket %s',
+  async (path) => {
+    const { relay, nextOf } = personalRelay()
+    await relay.handle({ type: 'ws_connect', sid: 2, runtimeId: 'runtime-1', path })
+    expect(await nextOf('ws_close')).toMatchObject({
+      type: 'ws_close',
+      sid: 2,
+      error: expect.stringContaining('refused'),
+    })
+  },
+)
 
 test.each([
   ['GET', '/ready'],
@@ -171,12 +174,14 @@ test('a personal host streams the events WebSocket with the tokens redacted, kee
   for (const [sid, query] of [
     [5, 'resend_mode=all'],
     [6, 'resend_mode=since&after_timestamp=2026-10-10T10%3A00%3A00.000000'],
+    [7, ''],
+    [8, 'after=42'],
   ] as const) {
     await relay.handle({
       type: 'ws_connect',
       sid,
       runtimeId: 'runtime-1',
-      path: `/sockets/events/${conversationId}?${query}`,
+      path: `/sockets/events/${conversationId}${query && `?${query}`}`,
     })
     expect(await nextOf('ws_open')).toEqual({ type: 'ws_open', sid })
     expect(JSON.parse(String((await nextOf('ws_msg'))?.data))).toEqual({

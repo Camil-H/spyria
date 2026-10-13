@@ -130,16 +130,16 @@ module.exports = {
       to: { path: '^(apps|packages)/', pathNot: ['^apps/server/', serverEntry, '^packages/(kernel|db)/'] },
     },
     {
-      name: 'host-imports-nothing-from-hq',
+      name: 'host-and-agent-import-nothing-from-hq',
       severity: 'error',
-      from: { path: '^apps/host/' },
-      to: { path: ['^(apps|packages)/', '^@hq/'], pathNot: '^apps/host/' },
+      from: { path: '^apps/(host|agent)/' },
+      to: { path: ['^(apps|packages)/', '^@hq/'], pathNot: '^apps/$1/' },
     },
     {
-      name: 'host-imported-by-nothing',
+      name: 'host-and-agent-imported-by-nothing',
       severity: 'error',
-      from: { pathNot: '^apps/host/' },
-      to: { path: '^apps/host/' },
+      from: { path: '^(apps|packages)/([^/]+)/' },
+      to: { path: '^apps/(host|agent)/', pathNot: '^$1/$2/' },
     },
     {
       name: 'packages-never-import-apps',
