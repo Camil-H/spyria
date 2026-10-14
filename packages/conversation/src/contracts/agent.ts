@@ -54,7 +54,10 @@ export type AgentLlmChoice = Readonly<{
   harness?: HarnessLaunch
   resumeSessionId?: string
   acpModel?: string
+  pi?: PiLaunch
 }>
+export type PiModel = Readonly<Pick<Model, 'id' | 'name' | 'contextWindow'> & { reasoning: boolean }>
+export type PiLaunch = Readonly<{ models: readonly PiModel[]; compactionModel: string }>
 export type SubConversation = Readonly<{ parentConversationId: string; toolToken: string }>
 export type AgentServer = {
   createConversation(

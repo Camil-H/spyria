@@ -4,6 +4,8 @@ import {
   type AgentLlmChoice,
   type AgentServer,
   AgentStartFailure,
+  type PiLaunch,
+  type PiModel,
   type SubConversation,
 } from '../contracts/agent.ts'
 import type { AgentEvent } from '../domain/agent-events.ts'
@@ -115,6 +117,80 @@ const harnessConversationOf = (
   }
 }
 
+const piSettings = { quietStartup: true, enableInstallTelemetry: false, retry: { enabled: false } }
+const piProviderOf = (baseUrl: string, api: string, models: readonly PiModel[]) => ({
+  baseUrl,
+  api,
+  apiKey: `\${HQ_LLM_TOKEN}`,
+  models: models.map(({ id, name, reasoning, contextWindow }) => ({
+    id,
+    name,
+    reasoning,
+    ...(contextWindow !== undefined && { contextWindow }),
+    ...(api === 'openai-completions' && !id.startsWith('openai/') && { compat: { supportsDeveloperRole: false } }),
+  })),
+})
+const piMcpServerOf = (gatewayUrl: string, path: string) => ({
+  url: gatewayUrl.replace(/\/v1$/, path),
+  headers: { Authorization: `Bearer \${HQ_MCP_TOKEN}` },
+  exposure: 'direct',
+})
+const piLauncherOf = (directory: string) => `set -e
+export PI_CODING_AGENT_DIR="$HOME/.pi/${directory}"
+mkdir -p "$PI_CODING_AGENT_DIR"
+write() { printf %s "$2" > "$PI_CODING_AGENT_DIR/$1.tmp"; mv "$PI_CODING_AGENT_DIR/$1.tmp" "$PI_CODING_AGENT_DIR/$1"; }
+write models.json "$HQ_PI_MODELS"
+write settings.json "$HQ_PI_SETTINGS"
+write mcp.json "$HQ_PI_MCP"
+exec pi-acp`
+
+export const piCommandOf = (gatewayUrl: string, { models, compactionModel }: PiLaunch, { sub }: { sub: boolean }) => {
+  const anthropicModels = models.filter((model) => model.id.startsWith('anthropic/'))
+  const otherModels = models.filter((model) => !anthropicModels.includes(model))
+  const providers = {
+    ...(otherModels.length > 0 && { hq: piProviderOf(gatewayUrl, 'openai-completions', otherModels) }),
+    ...(anthropicModels.length > 0 && {
+      'hq-anthropic': piProviderOf(gatewayUrl.replace(/\/v1$/, ''), 'anthropic-messages', anthropicModels),
+    }),
+  }
+  const mcpServers = {
+    hq: piMcpServerOf(gatewayUrl, '/mcp'),
+    ...(!sub && { router: piMcpServerOf(gatewayUrl, '/mcp/router') }),
+  }
+  return [
+    'env',
+    'PI_OFFLINE=1',
+    'PI_SKIP_VERSION_CHECK=1',
+    'PI_TELEMETRY=0',
+    'npm_config_offline=true',
+    `HQ_COMPACTION_MODEL=${compactionModel}`,
+    `HQ_PI_MODELS=${JSON.stringify({ providers })}`,
+    `HQ_PI_SETTINGS=${JSON.stringify(piSettings)}`,
+    `HQ_PI_MCP=${JSON.stringify({ mcpServers })}`,
+    'sh',
+    '-c',
+    piLauncherOf(sub ? 'sub' : 'agent'),
+  ]
+}
+
+const piConversationOf = (
+  endpoint: AgentEndpoint,
+  llmToken: string,
+  pi: PiLaunch,
+  { resumeSessionId, acpModel }: AgentLlmChoice,
+  sub: SubConversation | undefined,
+) => ({
+  agent: {
+    acp_command: piCommandOf(endpoint.transport.gatewayUrl, pi, { sub: Boolean(sub) }),
+    ...(resumeSessionId && { acp_resume_session_id: resumeSessionId }),
+    ...(acpModel && { acp_model: acpModel }),
+  },
+  secrets: {
+    HQ_LLM_TOKEN: { kind: 'StaticSecret', value: llmToken },
+    HQ_MCP_TOKEN: { kind: 'StaticSecret', value: sub?.toolToken ?? llmToken },
+  },
+})
+
 const nativeConversationOf = (
   endpoint: AgentEndpoint,
   llmToken: string,
@@ -145,9 +221,11 @@ const nativeConversationOf = (
 export const createSandboxAgentServer = (condensationScale = 1): AgentServer => ({
   createConversation: async (endpoint, llmToken, llm, sub) => {
     const created = await call(endpoint, 'POST', '/api/conversations', {
-      ...(llm.harness
-        ? harnessConversationOf(endpoint, llmToken, llm.harness, llm)
-        : nativeConversationOf(endpoint, llmToken, llm, sub, condensationScale)),
+      ...(llm.pi
+        ? piConversationOf(endpoint, llmToken, llm.pi, llm, sub)
+        : llm.harness
+          ? harnessConversationOf(endpoint, llmToken, llm.harness, llm)
+          : nativeConversationOf(endpoint, llmToken, llm, sub, condensationScale)),
       workspace: { kind: 'LocalWorkspace', working_dir: '/workspace/project' },
       autotitle: false,
       ...(sub && { parent_conversation_id: sub.parentConversationId }),

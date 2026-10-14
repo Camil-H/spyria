@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { type AgentEndpoint, AgentStartFailure } from '../contracts/agent.ts'
 import type { HarnessLaunch } from '../domain/session-routing.ts'
-import { createSandboxAgentServer } from './sandbox-agent-server.ts'
+import { createSandboxAgentServer, piCommandOf } from './sandbox-agent-server.ts'
 
 const requests: { method: string; path: string; body?: string }[] = []
 const socketPaths: string[] = []
@@ -161,4 +161,106 @@ test('an hq-agent conversation that failed to start is deleted and reported with
     'POST /api/conversations',
     'DELETE /api/conversations/conversation-9',
   ])
+})
+
+const piLaunch = {
+  models: [
+    { id: 'anthropic/claude-sonnet-5-5', name: 'Sonnet 5.5', reasoning: true, contextWindow: 200000 },
+    { id: 'openai/gpt-6.1-sol', name: 'GPT-6.1-Sol', reasoning: true, contextWindow: 1050000 },
+    { id: 'mistral/mistral-small-latest', name: 'Mistral Small', reasoning: false },
+  ],
+  compactionModel: 'mistral/mistral-small-latest',
+}
+const createdPiOf = async (sub?: { parentConversationId: string; toolToken: string }) => {
+  requests.length = 0
+  await createSandboxAgentServer().createConversation(
+    { ...endpoint, isHqAgent: true },
+    'runtime-llm-token',
+    { model: '', usageId: 'agent', pi: piLaunch, acpModel: 'hq-anthropic/anthropic/claude-sonnet-5-5' },
+    sub,
+  )
+  const created = JSON.parse(requests[0]?.body ?? '{}')
+  const command: string[] = created.agent.acp_command
+  const envOf = (name: string) => command.find((part) => part.startsWith(`${name}=`))?.slice(name.length + 1)
+  const filesOf = (name: string) => JSON.parse(envOf(name) ?? '{}')
+  return { created, command, envOf, models: filesOf('HQ_PI_MODELS'), mcp: filesOf('HQ_PI_MCP') }
+}
+
+test('a Pi launch passes the tokens only as secrets, runs offline, writes its files atomically and execs pi-acp last', async () => {
+  const { created, command, envOf } = await createdPiOf()
+  expect(created.secrets).toEqual({
+    HQ_LLM_TOKEN: { kind: 'StaticSecret', value: 'runtime-llm-token' },
+    HQ_MCP_TOKEN: { kind: 'StaticSecret', value: 'runtime-llm-token' },
+  })
+  expect(created.agent.acp_model).toBe('hq-anthropic/anthropic/claude-sonnet-5-5')
+  expect(created.agent).not.toHaveProperty('mcp_config')
+  expect(JSON.stringify(command)).not.toContain('runtime-llm-token')
+  expect(command.slice(0, 5)).toEqual([
+    'env',
+    'PI_OFFLINE=1',
+    'PI_SKIP_VERSION_CHECK=1',
+    'PI_TELEMETRY=0',
+    'npm_config_offline=true',
+  ])
+  expect(envOf('HQ_COMPACTION_MODEL')).toBe('mistral/mistral-small-latest')
+  expect(JSON.parse(envOf('HQ_PI_SETTINGS') ?? '')).toEqual({
+    quietStartup: true,
+    enableInstallTelemetry: false,
+    retry: { enabled: false },
+  })
+  const script = command.at(-1) ?? ''
+  expect(command.slice(-3, -1)).toEqual(['sh', '-c'])
+  expect(script).toContain('export PI_CODING_AGENT_DIR="$HOME/.pi/agent"')
+  for (const file of ['models.json', 'settings.json', 'mcp.json']) expect(script).toContain(`write ${file} "$HQ_PI_`)
+  expect(script).toContain(
+    '> "$PI_CODING_AGENT_DIR/$1.tmp"; mv "$PI_CODING_AGENT_DIR/$1.tmp" "$PI_CODING_AGENT_DIR/$1"',
+  )
+  expect(script.split('\n').at(-1)).toBe('exec pi-acp')
+})
+
+test('Pi lists Anthropic models on the Anthropic route without /v1 and the others on the chat route, with names, reasoning and context windows', async () => {
+  const { models } = await createdPiOf()
+  expect(models).toEqual({
+    providers: {
+      hq: {
+        baseUrl: 'http://hq-gateway-relay:4000/v1',
+        api: 'openai-completions',
+        apiKey: `\${HQ_LLM_TOKEN}`,
+        models: [
+          { id: 'openai/gpt-6.1-sol', name: 'GPT-6.1-Sol', reasoning: true, contextWindow: 1050000 },
+          {
+            id: 'mistral/mistral-small-latest',
+            name: 'Mistral Small',
+            reasoning: false,
+            compat: { supportsDeveloperRole: false },
+          },
+        ],
+      },
+      'hq-anthropic': {
+        baseUrl: 'http://hq-gateway-relay:4000',
+        api: 'anthropic-messages',
+        apiKey: `\${HQ_LLM_TOKEN}`,
+        models: [{ id: 'anthropic/claude-sonnet-5-5', name: 'Sonnet 5.5', reasoning: true, contextWindow: 200000 }],
+      },
+    },
+  })
+})
+
+test('a parent Pi reaches HQ tools and the router with its LLM token; a sub reaches only HQ tools with its tool token from its own directory', async () => {
+  const parent = await createdPiOf()
+  const toolServer = (path: string) => ({
+    url: `http://hq-gateway-relay:4000${path}`,
+    headers: { Authorization: `Bearer \${HQ_MCP_TOKEN}` },
+    exposure: 'direct',
+  })
+  expect(parent.mcp).toEqual({ mcpServers: { hq: toolServer('/mcp'), router: toolServer('/mcp/router') } })
+  const sub = await createdPiOf({ parentConversationId: 'conversation-1', toolToken: 'sub-tool-token' })
+  expect(sub.mcp).toEqual({ mcpServers: { hq: toolServer('/mcp') } })
+  expect(sub.created.secrets).toEqual({
+    HQ_LLM_TOKEN: { kind: 'StaticSecret', value: 'runtime-llm-token' },
+    HQ_MCP_TOKEN: { kind: 'StaticSecret', value: 'sub-tool-token' },
+  })
+  expect(JSON.stringify(sub.command)).not.toMatch(/sub-tool-token|runtime-llm-token/)
+  expect(sub.command.at(-1)).toContain('export PI_CODING_AGENT_DIR="$HOME/.pi/sub"')
+  expect(piCommandOf('http://hq-gateway-relay:4000/v1', piLaunch, { sub: true })).toEqual(sub.command)
 })
