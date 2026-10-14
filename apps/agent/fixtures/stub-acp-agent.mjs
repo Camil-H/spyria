@@ -16,6 +16,8 @@ const models =
         { value: 'stub-default', name: 'Default (stub)' },
         { value: 'stub-large', name: 'Large (stub)' },
       ]
+const isPi = process.env.STUB_FLAVOUR === 'pi'
+const thoughtLevels = ['off', 'low', 'medium', 'high']
 const modes = ['default', 'plan', 'bypassPermissions']
 const sessions = new Map()
 const answers = new Map()
@@ -27,7 +29,7 @@ const save = (sessionId, session) => {
   mkdirSync(stateDirectory, { recursive: true })
   writeFileSync(sessionFile(sessionId), JSON.stringify({ prompts: session.prompts }))
 }
-const configOptionsOf = ({ model, mode }) => [
+const configOptionsOf = ({ model, mode, thought_level }) => [
   {
     id: 'mode',
     name: 'Mode',
@@ -37,6 +39,18 @@ const configOptionsOf = ({ model, mode }) => [
     options: modes.map((value) => ({ value, name: value })),
   },
   { id: 'model', name: 'Model', type: 'select', category: 'model', currentValue: model, options: models },
+  ...(isPi
+    ? [
+        {
+          id: 'thought_level',
+          name: 'Thinking',
+          type: 'select',
+          category: 'thought_level',
+          currentValue: thought_level,
+          options: thoughtLevels.map((value) => ({ value, name: value })),
+        },
+      ]
+    : []),
 ]
 const sessionResultOf = (session) => ({
   configOptions: configOptionsOf(session),
@@ -216,6 +230,37 @@ const turn = async (id, { sessionId, prompt }) => {
         content: [{ type: 'content', content: { type: 'text', text: 'notes' } }],
       })
     }
+    if (has('terminal')) {
+      const terminal = `terminal-${session.prompts}`
+      update({
+        sessionUpdate: 'tool_call',
+        toolCallId: terminal,
+        title: 'npm test',
+        kind: 'execute',
+        status: 'pending',
+        content: [{ type: 'terminal', terminalId: terminal }],
+        _meta: { terminal_info: { terminal_id: terminal, cwd: '/workspace/project' } },
+      })
+      for (const data of ['one\n', 'two\n']) {
+        await step()
+        const terminal_output = { terminal_id: terminal, data }
+        update({
+          sessionUpdate: 'tool_call_update',
+          toolCallId: terminal,
+          status: 'in_progress',
+          _meta: { terminal_output },
+        })
+      }
+      update({
+        sessionUpdate: 'tool_call_update',
+        toolCallId: terminal,
+        status: 'failed',
+        _meta: {
+          terminal_output: { terminal_id: terminal, data: 'failed' },
+          terminal_exit: { terminal_id: terminal, exit_code: 2, signal: null },
+        },
+      })
+    }
     if (has('long')) {
       const command = `long-${session.prompts}`
       update({
@@ -243,14 +288,29 @@ const turn = async (id, { sessionId, prompt }) => {
 }
 
 const opened = (sessionId, prompts) => {
-  const session = { prompts, model: models[0].value, mode: 'default', current: undefined }
+  const session = { prompts, model: models[0].value, mode: 'default', thought_level: 'medium', current: undefined }
   sessions.set(sessionId, session)
   return { ...sessionResultOf(session), sessionId }
+}
+const savedPromptsOf = (sessionId) => {
+  if (!sessions.has(sessionId) && !existsSync(sessionFile(sessionId)))
+    throw { code: -32002, message: 'Resource not found' }
+  return sessions.get(sessionId)?.prompts ?? JSON.parse(readFileSync(sessionFile(sessionId), 'utf8')).prompts
+}
+const replay = (sessionId, prompts) => {
+  const update = (body) => send({ method: 'session/update', params: { sessionId, update: body } })
+  for (let prompt = 1; prompt <= prompts; prompt += 1) {
+    update({ sessionUpdate: 'user_message_chunk', content: { type: 'text', text: `replayed prompt ${prompt}` } })
+    update({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: `replayed answer ${prompt}` } })
+    const toolCallId = `replayed-${prompt}`
+    update({ sessionUpdate: 'tool_call', toolCallId, title: 'ls', kind: 'execute', status: 'completed' })
+    update({ sessionUpdate: 'tool_call_update', toolCallId, status: 'completed', rawOutput: 'replayed' })
+  }
 }
 const handlers = {
   initialize: () => ({
     protocolVersion: 1,
-    agentCapabilities: { loadSession: false, sessionCapabilities: { resume: {} } },
+    agentCapabilities: { loadSession: isPi, sessionCapabilities: isPi ? {} : { resume: {} } },
     agentInfo: { name: 'stub-acp-agent', version: '0.0.2' },
     authMethods: [],
   }),
@@ -259,10 +319,15 @@ const handlers = {
     return opened(randomUUID(), 0)
   },
   'session/resume': ({ sessionId }) => {
-    if (!sessions.has(sessionId) && !existsSync(sessionFile(sessionId)))
-      throw { code: -32002, message: 'Resource not found' }
-    if (!sessions.has(sessionId)) opened(sessionId, JSON.parse(readFileSync(sessionFile(sessionId), 'utf8')).prompts)
+    if (isPi) throw { code: -32601, message: 'Method not found: session/resume' }
+    const prompts = savedPromptsOf(sessionId)
+    if (!sessions.has(sessionId)) opened(sessionId, prompts)
     return sessionResultOf(sessions.get(sessionId))
+  },
+  'session/load': ({ sessionId }) => {
+    const prompts = savedPromptsOf(sessionId)
+    replay(sessionId, prompts)
+    return opened(sessionId, prompts)
   },
   'session/set_mode': ({ sessionId, modeId }) => {
     sessions.get(sessionId).mode = modeId
@@ -271,6 +336,7 @@ const handlers = {
   'session/set_config_option': ({ sessionId, configId, value }) => {
     const session = sessions.get(sessionId)
     session[configId] = value
+    if (isPi && configId === 'model') session.thought_level = 'off'
     return { configOptions: configOptionsOf(session) }
   },
 }

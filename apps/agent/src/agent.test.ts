@@ -266,6 +266,87 @@ test('a new hq-agent resumes the session of an earlier one, and a missing sessio
   expect(start?.update.sessionId).not.toBe(sessionId)
 })
 
+const piStubCommand = ['env', 'STUB_FLAVOUR=pi', ...stubCommand.slice(1)]
+
+test('an adapter without session/resume loads the session, its replayed history is not emitted, and a missing session falls back to a new one', async () => {
+  const first = started()
+  const id = await first.create(launchOf({ acp_command: piStubCommand }))
+  const socket = first.open(id)
+  await first.prompt(id, 'hello')
+  await socket.until(kindOf('turn_end'))
+  const sessionId = String(socket.events.find(kindOf('session_started'))?.update.sessionId)
+  first.agent.stop()
+
+  const second = started()
+  const loadedId = await second.create(launchOf({ acp_command: piStubCommand, acp_resume_session_id: sessionId }))
+  expect((await second.call('GET', `/api/conversations/${loadedId}`)).body).toMatchObject({
+    acp_session_id: sessionId,
+    execution_status: 'idle',
+  })
+  const loaded = second.open(loadedId)
+  await second.prompt(loadedId, 'hello again')
+  await loaded.until(kindOf('turn_end'))
+  expect(loaded.events[0]?.update).toMatchObject({ sessionUpdate: 'session_started', sessionId, resumeFailed: false })
+  expect(loaded.events.filter(kindOf('user_message_chunk'))).toEqual([])
+  expect(JSON.stringify(loaded.events)).not.toContain('replayed')
+  expect(textOf(loaded.events)).toBe('[t2] Hello from the stub (model stub-default, mode bypassPermissions).')
+
+  const fallbackId = await second.create(
+    launchOf({ acp_command: piStubCommand, acp_resume_session_id: crypto.randomUUID() }),
+  )
+  const fallback = second.open(fallbackId)
+  await second.prompt(fallbackId, 'hello')
+  await fallback.until(kindOf('turn_end'))
+  expect(fallback.events[0]?.update).toMatchObject({ sessionUpdate: 'session_started', resumeFailed: true })
+  expect(fallback.events[0]?.update.sessionId).not.toBe(sessionId)
+  expect(textOf(fallback.events)).toStartWith('[t1]')
+})
+
+test('command output sent as terminal deltas lands in the final merged tool call with its exit code', async () => {
+  const { open, create, prompt } = started()
+  const id = await create(launchOf({ acp_command: piStubCommand }))
+  const socket = open(id)
+  await prompt(id, 'stub:terminal')
+  await socket.until(kindOf('turn_end'))
+  const final = socket.events.find((event) => kindOf('tool_call_update')(event) && event.completed)
+  expect(final?.update).toMatchObject({
+    toolCallId: 'terminal-1',
+    title: 'npm test',
+    kind: 'execute',
+    status: 'failed',
+    content: [{ type: 'terminal', terminalId: 'terminal-1' }],
+    rawOutput: { formatted_output: 'one\ntwo\nfailed', exit_code: 2 },
+  })
+})
+
+test('a model switch sets the thinking level after the adapter resets it, at launch and in place', async () => {
+  const { call, open, create } = started()
+  const valuesOf = (update: Record<string, unknown> | undefined) =>
+    ['model', 'thought_level'].map(
+      (optionId) =>
+        ((update?.configOptions ?? []) as { id: string; currentValue: string }[]).find(({ id }) => id === optionId)
+          ?.currentValue,
+    )
+  const id = await create(launchOf({ acp_command: piStubCommand, acp_model: 'stub-large', acp_thought_level: 'high' }))
+  const socket = open(id)
+  await socket.until(kindOf('config_option_update'))
+  expect(valuesOf(socket.events.find(kindOf('session_started'))?.update)).toEqual(['stub-default', 'medium'])
+  expect(valuesOf(socket.events.findLast(kindOf('config_option_update'))?.update)).toEqual(['stub-large', 'high'])
+
+  await call('POST', `/api/conversations/${id}/switch_acp_model`, { model: 'stub-default', thoughtLevel: 'low' })
+  await socket.until(kindOf('config_option_update'), 2)
+  expect(valuesOf(socket.events.findLast(kindOf('config_option_update'))?.update)).toEqual(['stub-default', 'low'])
+
+  await call('POST', `/api/conversations/${id}/switch_acp_model`, { model: 'stub-large', thoughtLevel: 'ultra' })
+  await call('POST', `/api/conversations/${id}/switch_acp_model`, { model: 'stub-default' })
+  await socket.until(kindOf('config_option_update'), 4)
+  const unlisted = socket.events.filter(kindOf('config_option_update')).slice(-2)
+  expect(unlisted.map(({ update }) => valuesOf(update))).toEqual([
+    ['stub-large', 'off'],
+    ['stub-default', 'off'],
+  ])
+})
+
 test('requests without the session key are refused, /ready is open', async () => {
   const { call } = started()
   expect((await call('GET', '/ready', undefined, '')).status).toBe(200)

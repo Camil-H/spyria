@@ -19,7 +19,7 @@ export class AcpError extends Error {
   }
 }
 
-const methodNotFound = -32601
+export const methodNotFound = -32601
 const permissionPreference = ['allow_always', 'allow_once']
 
 const permissionAnswerOf = (params: Json | undefined) => {

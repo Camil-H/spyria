@@ -57,7 +57,11 @@ export type AgentLlmChoice = Readonly<{
   pi?: PiLaunch
 }>
 export type PiModel = Readonly<Pick<Model, 'id' | 'name' | 'contextWindow'> & { reasoning: boolean }>
-export type PiLaunch = Readonly<{ models: readonly PiModel[]; compactionModel: string }>
+export type PiLaunch = Readonly<{
+  models: readonly PiModel[]
+  compactionModel: string
+  compaction?: Readonly<{ reserveTokens: number; keepRecentTokens: number }>
+}>
 export type SubConversation = Readonly<{ parentConversationId: string; toolToken: string }>
 export type AgentServer = {
   createConversation(
@@ -68,7 +72,7 @@ export type AgentServer = {
   ): Promise<string>
   finalResponse(conversation: AgentConversation): Promise<string>
   switchLlm(conversation: AgentConversation, llmToken: string, llm: AgentLlmChoice): Promise<void>
-  switchAcpModel(conversation: AgentConversation, model: string): Promise<void>
+  switchAcpModel(conversation: AgentConversation, model: string, thoughtLevel?: string): Promise<void>
   sendMessage(conversation: AgentConversation, text: string): Promise<void>
   statusOf(conversation: AgentConversation): Promise<string | undefined>
   interrupt(conversation: AgentConversation): Promise<void>

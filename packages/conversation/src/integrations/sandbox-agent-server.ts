@@ -117,7 +117,13 @@ const harnessConversationOf = (
   }
 }
 
-const piSettings = { quietStartup: true, enableInstallTelemetry: false, retry: { enabled: false } }
+const piSettings = {
+  quietStartup: true,
+  enableInstallTelemetry: false,
+  retry: { enabled: false },
+  extensions: ['/usr/local/lib/hq/pi/hq-compaction.ts'],
+}
+const piModelOf = (id: string) => `${id.startsWith('anthropic/') ? 'hq-anthropic' : 'hq'}/${id}`
 const piProviderOf = (baseUrl: string, api: string, models: readonly PiModel[]) => ({
   baseUrl,
   api,
@@ -144,7 +150,11 @@ write settings.json "$HQ_PI_SETTINGS"
 write mcp.json "$HQ_PI_MCP"
 exec pi-acp`
 
-export const piCommandOf = (gatewayUrl: string, { models, compactionModel }: PiLaunch, { sub }: { sub: boolean }) => {
+export const piCommandOf = (
+  gatewayUrl: string,
+  { models, compactionModel, compaction }: PiLaunch,
+  { sub }: { sub: boolean },
+) => {
   const anthropicModels = models.filter((model) => model.id.startsWith('anthropic/'))
   const otherModels = models.filter((model) => !anthropicModels.includes(model))
   const providers = {
@@ -163,9 +173,9 @@ export const piCommandOf = (gatewayUrl: string, { models, compactionModel }: PiL
     'PI_SKIP_VERSION_CHECK=1',
     'PI_TELEMETRY=0',
     'npm_config_offline=true',
-    `HQ_COMPACTION_MODEL=${compactionModel}`,
+    `HQ_COMPACTION_MODEL=${piModelOf(compactionModel)}`,
     `HQ_PI_MODELS=${JSON.stringify({ providers })}`,
-    `HQ_PI_SETTINGS=${JSON.stringify(piSettings)}`,
+    `HQ_PI_SETTINGS=${JSON.stringify({ ...piSettings, ...(compaction && { compaction }) })}`,
     `HQ_PI_MCP=${JSON.stringify({ mcpServers })}`,
     'sh',
     '-c',
@@ -177,13 +187,14 @@ const piConversationOf = (
   endpoint: AgentEndpoint,
   llmToken: string,
   pi: PiLaunch,
-  { resumeSessionId, acpModel }: AgentLlmChoice,
+  { resumeSessionId, acpModel, effort }: AgentLlmChoice,
   sub: SubConversation | undefined,
 ) => ({
   agent: {
     acp_command: piCommandOf(endpoint.transport.gatewayUrl, pi, { sub: Boolean(sub) }),
     ...(resumeSessionId && { acp_resume_session_id: resumeSessionId }),
     ...(acpModel && { acp_model: acpModel }),
+    ...(acpModel && effort && { acp_thought_level: effort }),
   },
   secrets: {
     HQ_LLM_TOKEN: { kind: 'StaticSecret', value: llmToken },
@@ -247,8 +258,11 @@ export const createSandboxAgentServer = (condensationScale = 1): AgentServer => 
       llm: llmConfigOf(conversation, llmToken, llm),
     })
   },
-  switchAcpModel: async (conversation, model) => {
-    await call(conversation, 'POST', `/api/conversations/${conversation.conversationId}/switch_acp_model`, { model })
+  switchAcpModel: async (conversation, model, thoughtLevel) => {
+    await call(conversation, 'POST', `/api/conversations/${conversation.conversationId}/switch_acp_model`, {
+      model,
+      ...(thoughtLevel && { thoughtLevel }),
+    })
   },
   sendMessage: async (conversation, text) => {
     await call(conversation, 'POST', `/api/conversations/${conversation.conversationId}/events`, {

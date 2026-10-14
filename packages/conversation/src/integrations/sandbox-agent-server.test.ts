@@ -53,6 +53,36 @@ test('a subscription session launches Claude Code without the relay, a model, or
   expect(JSON.stringify(created)).not.toMatch(/ANTHROPIC_BASE_URL|ANTHROPIC_MODEL|ANTHROPIC_API_KEY/)
 })
 
+test('Pi summarizes on its compaction model through its provider, starts at the routed thinking level and takes test compaction budgets', async () => {
+  const anthropicCompaction = { ...piLaunch, compactionModel: 'anthropic/claude-haiku-4-5' }
+  const command = piCommandOf('http://hq-gateway-relay:4000/v1', anthropicCompaction, { sub: false })
+  expect(command).toContain('HQ_COMPACTION_MODEL=hq-anthropic/anthropic/claude-haiku-4-5')
+  const { created, envOf } = await createdPiOf(undefined, { effort: 'high' })
+  expect(created.agent.acp_thought_level).toBe('high')
+  expect((await createdPiOf(undefined, { effort: 'high', acpModel: undefined })).created.agent).not.toHaveProperty(
+    'acp_thought_level',
+  )
+  expect(JSON.parse(envOf('HQ_PI_SETTINGS') ?? '')).not.toHaveProperty('compaction')
+  const budgets = { reserveTokens: 3999, keepRecentTokens: 1 }
+  const tested = piCommandOf('http://hq-gateway-relay:4000/v1', { ...piLaunch, compaction: budgets }, { sub: false })
+  const settings = tested.find((part) => part.startsWith('HQ_PI_SETTINGS='))?.slice('HQ_PI_SETTINGS='.length)
+  expect(JSON.parse(settings ?? '')).toMatchObject({
+    extensions: ['/usr/local/lib/hq/pi/hq-compaction.ts'],
+    compaction: budgets,
+  })
+})
+
+test('a model switch carries the thinking level only when one is given', async () => {
+  requests.length = 0
+  const conversation = { ...endpoint, conversationId: 'conversation-1' }
+  await createSandboxAgentServer().switchAcpModel(conversation, 'hq/openai/gpt-6.1-sol', 'high')
+  await createSandboxAgentServer().switchAcpModel(conversation, 'hq/mistral/mistral-small-latest')
+  expect(requests.map(({ body }) => body)).toEqual([
+    '{"model":"hq/openai/gpt-6.1-sol","thoughtLevel":"high"}',
+    '{"model":"hq/mistral/mistral-small-latest"}',
+  ])
+})
+
 test('a model picked for a subscription session is sent as acp_model, still without the relay or secrets, and switched in place', async () => {
   const created = await createdBodyOf('claude-code-subscription', 'sonnet')
   expect(created.agent.acp_model).toBe('sonnet')
@@ -171,12 +201,12 @@ const piLaunch = {
   ],
   compactionModel: 'mistral/mistral-small-latest',
 }
-const createdPiOf = async (sub?: { parentConversationId: string; toolToken: string }) => {
+const createdPiOf = async (sub?: { parentConversationId: string; toolToken: string }, llm = {}) => {
   requests.length = 0
   await createSandboxAgentServer().createConversation(
     { ...endpoint, isHqAgent: true },
     'runtime-llm-token',
-    { model: '', usageId: 'agent', pi: piLaunch, acpModel: 'hq-anthropic/anthropic/claude-sonnet-5-5' },
+    { model: '', usageId: 'agent', pi: piLaunch, acpModel: 'hq-anthropic/anthropic/claude-sonnet-5-5', ...llm },
     sub,
   )
   const created = JSON.parse(requests[0]?.body ?? '{}')
@@ -202,11 +232,12 @@ test('a Pi launch passes the tokens only as secrets, runs offline, writes its fi
     'PI_TELEMETRY=0',
     'npm_config_offline=true',
   ])
-  expect(envOf('HQ_COMPACTION_MODEL')).toBe('mistral/mistral-small-latest')
+  expect(envOf('HQ_COMPACTION_MODEL')).toBe('hq/mistral/mistral-small-latest')
   expect(JSON.parse(envOf('HQ_PI_SETTINGS') ?? '')).toEqual({
     quietStartup: true,
     enableInstallTelemetry: false,
     retry: { enabled: false },
+    extensions: ['/usr/local/lib/hq/pi/hq-compaction.ts'],
   })
   const script = command.at(-1) ?? ''
   expect(command.slice(-3, -1)).toEqual(['sh', '-c'])

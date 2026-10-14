@@ -1,5 +1,5 @@
 import type { ServerWebSocket } from 'bun'
-import { AcpError, type AdapterConnection, connectAdapter, type Json } from './acp.ts'
+import { AcpError, type AdapterConnection, connectAdapter, type Json, methodNotFound } from './acp.ts'
 
 type Status = 'starting' | 'idle' | 'running' | 'finished' | 'error'
 type AgentEvent = { id: string; seq: number; timestamp: string; completed: boolean; update: Json }
@@ -10,6 +10,7 @@ type Conversation = {
   status: Status
   failure?: string
   sessionId?: string
+  isLoading: boolean
   configOptions: Json[]
   events: AgentEvent[]
   lastSeq: number
@@ -22,6 +23,7 @@ type Launch = {
     mcp_config?: Record<string, { url: string; headers?: Record<string, string> }>
     acp_resume_session_id?: string
     acp_model?: string
+    acp_thought_level?: string
   }
   secrets?: Record<string, { value?: string }>
   workspace?: { working_dir?: string }
@@ -59,6 +61,21 @@ const isLive = (update: Json) =>
 const definedFieldsOf = (update: Json) =>
   Object.fromEntries(Object.entries(update).filter(([, value]) => value !== undefined && value !== null))
 
+const terminalOutputOf = (previous: Json | undefined, update: Json) => {
+  const meta = update._meta as
+    | { terminal_output?: { data?: string }; terminal_exit?: { exit_code?: number | null } }
+    | undefined
+  if (!meta?.terminal_output && !meta?.terminal_exit) return {}
+  const output = (previous?.rawOutput ?? {}) as Json
+  return {
+    rawOutput: {
+      ...output,
+      formatted_output: `${output.formatted_output ?? ''}${meta.terminal_output?.data ?? ''}`,
+      ...(meta.terminal_exit && { exit_code: meta.terminal_exit.exit_code }),
+    },
+  }
+}
+
 export const startAgent = ({
   apiKey,
   port,
@@ -88,11 +105,13 @@ export const startAgent = ({
   }
 
   const onUpdate = (conversation: Conversation, update: Json) => {
+    if (conversation.isLoading) return
     if (update.sessionUpdate === 'config_option_update' && Array.isArray(update.configOptions))
       conversation.configOptions = update.configOptions
     if (update.sessionUpdate === 'tool_call') conversation.toolCalls.set(String(update.toolCallId), update)
     if (update.sessionUpdate !== 'tool_call_update') return emit(conversation, update)
-    const merged = { ...conversation.toolCalls.get(String(update.toolCallId)), ...definedFieldsOf(update) }
+    const previous = conversation.toolCalls.get(String(update.toolCallId))
+    const merged = { ...previous, ...definedFieldsOf(update), ...terminalOutputOf(previous, update) }
     if (!terminalToolStatuses.includes(String(update.status))) {
       conversation.toolCalls.set(String(update.toolCallId), merged)
       return emit(conversation, update)
@@ -101,15 +120,24 @@ export const startAgent = ({
     emit(conversation, { ...merged, sessionUpdate: 'tool_call_update' }, true)
   }
 
-  const switchModel = async (conversation: Conversation, model: string) => {
-    const option = conversation.configOptions.find((candidate) => candidate.category === 'model')
-    if (!option || !conversation.sessionId) throw new AcpError('The adapter lists no models')
+  const setConfigOption = async (conversation: Conversation, category: string, value: string) => {
+    const option = conversation.configOptions.find((candidate) => candidate.category === category)
+    if (!option || !conversation.sessionId) return false
     const result = await conversation.connection.request('session/set_config_option', {
       sessionId: conversation.sessionId,
       configId: option.id,
-      value: model,
+      value,
     })
     if (Array.isArray(result.configOptions)) conversation.configOptions = result.configOptions
+    return true
+  }
+
+  const switchModel = async (conversation: Conversation, model: string, thoughtLevel?: string) => {
+    if (!(await setConfigOption(conversation, 'model', model))) throw new AcpError('The adapter lists no models')
+    const thoughtLevels = (conversation.configOptions.find((option) => option.category === 'thought_level')?.options ??
+      []) as { value?: string }[]
+    if (thoughtLevel && thoughtLevels.some((level) => level.value === thoughtLevel))
+      await setConfigOption(conversation, 'thought_level', thoughtLevel)
     emit(conversation, { sessionUpdate: 'config_option_update', configOptions: conversation.configOptions })
   }
 
@@ -119,12 +147,24 @@ export const startAgent = ({
       cwd: workspace?.working_dir ?? defaultWorkingDirectory,
       mcpServers: mcpServersOf(agent?.mcp_config),
     }
-    await connection.request('initialize', { protocolVersion: 1, clientCapabilities: {} })
+    const { agentCapabilities } = await connection.request('initialize', { protocolVersion: 1, clientCapabilities: {} })
+    const canLoad = Boolean((agentCapabilities as Json | undefined)?.loadSession)
+    const load = (params: Json) => {
+      conversation.isLoading = true
+      return connection.request('session/load', params).finally(() => {
+        conversation.isLoading = false
+      })
+    }
+    const reopen = (params: Json) =>
+      connection
+        .request('session/resume', params)
+        .catch((error) =>
+          canLoad && error instanceof AcpError && error.code === methodNotFound ? load(params) : Promise.reject(error),
+        )
     const resumeSessionId = agent?.acp_resume_session_id
     const resumed =
       resumeSessionId &&
-      (await connection
-        .request('session/resume', { sessionId: resumeSessionId, ...sessionParams })
+      (await reopen({ sessionId: resumeSessionId, ...sessionParams })
         .then((result): Json => ({ ...result, sessionId: resumeSessionId }))
         .catch(() => undefined))
     const session = resumed || (await connection.request('session/new', sessionParams))
@@ -142,7 +182,7 @@ export const startAgent = ({
       modes: session.modes,
       configOptions: conversation.configOptions,
     })
-    if (agent?.acp_model) await switchModel(conversation, agent.acp_model)
+    if (agent?.acp_model) await switchModel(conversation, agent.acp_model, agent.acp_thought_level)
     conversation.status = 'idle'
   }
 
@@ -154,6 +194,7 @@ export const startAgent = ({
     const conversation: Conversation = {
       id,
       status: 'starting',
+      isLoading: false,
       configOptions: [],
       events: [],
       lastSeq: 0,
@@ -237,7 +278,8 @@ export const startAgent = ({
       return Response.json({})
     }
     if (action === 'switch_acp_model') {
-      await switchModel(conversation, String(((await request.json()) as { model?: string }).model))
+      const { model, thoughtLevel } = (await request.json()) as { model?: string; thoughtLevel?: string }
+      await switchModel(conversation, String(model), thoughtLevel)
       return Response.json({})
     }
     return Response.json({ error: 'Not found' }, { status: 404 })

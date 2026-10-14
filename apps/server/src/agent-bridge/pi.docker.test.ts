@@ -34,7 +34,7 @@ const hqImage = await readHqAgentImage()
 if (!hqImage || docker('image', 'inspect', hqImage).exitCode !== 0)
   throw new Error('HQ image missing: run bun run agent:build')
 
-const { database, gateway, llmGateway } = await openSharedTestApp()
+const { database, gateway, llmGateway, fakeLlmBodies, setFakeLlmScript } = await openSharedTestApp()
 const runtimeHosts = createRuntimeHostGateway({
   databases: () => [database],
   hqAgentImage: hqImage,
@@ -53,6 +53,7 @@ const listed = (...command: string[]) =>
     .split('\n')
     .filter(Boolean)
 afterAll(async () => {
+  setFakeLlmScript(undefined)
   agentBridge.release(database)
   hostProcess?.kill()
   await hostProcess?.exited
@@ -86,14 +87,14 @@ const startHost = async () => {
   return id
 }
 
-test("Pi in HQ's image answers through the LLM relay on the chat and Anthropic routes, streams its text to the events socket, ends the turn and each call is attributed to the prompter and the owner", async () => {
-  await addLlmKey(bob, 'Fake')
-  await addLlmKey(bob, 'Anthropic')
+const apiKey = 'test-api-key-0123456789abcdef'
+type AgentTransport = ReturnType<typeof runtimeHosts.sandboxProvider.connect>
+let runtimeStarted: Promise<{ id: string; transport: AgentTransport }> | undefined
+const startRuntime = async () => {
   const id = await startHost()
   const host = { workspaceId: acme, hostId: runtimeHostId(id) }
   await runtimeHosts.prepare(host, hqImage)
   const runtime = { ...host, runtimeId: 'pi-smoke' }
-  const apiKey = 'test-api-key-0123456789abcdef'
   await runtimeHosts.sandboxProvider.create({ ...runtime, image: hqImage, apiKey })
   await runtimeHosts.sandboxProvider.start(runtime)
   const transport = runtimeHosts.sandboxProvider.connect(runtime)
@@ -103,11 +104,59 @@ test("Pi in HQ's image answers through the LLM relay on the chat and Anthropic r
       () => false,
     )
   await waitFor(isReady, 30_000)
+  return { id, transport }
+}
+const runtime = () => {
+  runtimeStarted ??= startRuntime()
+  return runtimeStarted
+}
 
-  const { chatId, token } = await runtimeTurn({ id }, bob)
-  const agentServer = createSandboxAgentServer()
+type Update = { sessionUpdate?: string; stopReason?: string; sessionId?: string; content?: { text?: string } }
+const agentServer = createSandboxAgentServer()
+type AgentLlmChoice = Parameters<typeof agentServer.createConversation>[2]
+const piConversationOf = async (transport: AgentTransport, token: string, llm: AgentLlmChoice) => {
   const endpoint = { transport, apiKey, conversationId: null, isHqAgent: true }
-  const conversationId = await agentServer.createConversation(endpoint, token, {
+  const conversationId = await agentServer.createConversation(endpoint, token, llm)
+  const conversation = { ...endpoint, conversationId }
+  const updates: Update[] = []
+  const socket = agentServer.openEvents(conversation, null, {
+    onEvent: (event) => updates.push((event as { update?: Update }).update ?? {}),
+    onClose: () => {},
+  })
+  const turnEnds = () => updates.filter((update) => update.sessionUpdate === 'turn_end')
+  const answerOf = async (text: string) => {
+    const start = updates.length
+    const turn = turnEnds().length + 1
+    await agentServer.sendMessage(conversation, text)
+    await waitFor(() => turnEnds().length >= turn, 120_000)
+    return updates
+      .slice(start)
+      .filter((update) => update.sessionUpdate === 'agent_message_chunk')
+      .map((update) => update.content?.text ?? '')
+      .join('')
+  }
+  return { conversation, updates, turnEnds, answerOf, close: () => socket.close() }
+}
+const modelCallsOf = async (chatId: string, minimum: number) => {
+  await gatewayLogsOf(gateway, `metadata_chat=${chatId}`, minimum)
+  const usageLogs = createBifrostUsageLogs({
+    url: gateway.url,
+    adminUser: testGatewayAdmin.user,
+    adminPassword: testGatewayAdmin.password,
+    labels: { chat: chatId },
+  })
+  const zeroDatabase = zeroDrizzle(schema, database)
+  await syncUsageNow(usageLogs, { workspaceId: acme, transact: (work) => zeroDatabase.transaction(work) })
+  return database.$client`
+    select prompter_id, owner_id, model, provider, status from model_calls where chat_id = ${chatId}`
+}
+
+test("Pi in HQ's image answers through the LLM relay on the chat and Anthropic routes, streams its text to the events socket, ends the turn and each call is attributed to the prompter and the owner", async () => {
+  await addLlmKey(bob, 'Fake')
+  await addLlmKey(bob, 'Anthropic')
+  const { id, transport } = await runtime()
+  const { chatId, token } = await runtimeTurn({ id }, bob)
+  const { conversation, turnEnds, answerOf, close } = await piConversationOf(transport, token, {
     model: '',
     usageId: 'agent',
     acpModel: 'hq/fake/fake-medium',
@@ -119,40 +168,13 @@ test("Pi in HQ's image answers through the LLM relay on the chat and Anthropic r
       compactionModel: 'fake/fake-small',
     },
   })
-  const conversation = { ...endpoint, conversationId }
-  const updates: { sessionUpdate?: string; stopReason?: string; content?: { text?: string } }[] = []
-  const socket = agentServer.openEvents(conversation, null, {
-    onEvent: (event) => updates.push((event as { update?: (typeof updates)[number] }).update ?? {}),
-    onClose: () => {},
-  })
-  const turnEnds = () => updates.filter((update) => update.sessionUpdate === 'turn_end')
-  const answerOf = async (text: string, turn: number) => {
-    const start = updates.length
-    await agentServer.sendMessage(conversation, text)
-    await waitFor(() => turnEnds().length >= turn, 120_000)
-    return updates
-      .slice(start)
-      .filter((update) => update.sessionUpdate === 'agent_message_chunk')
-      .map((update) => update.content?.text ?? '')
-      .join('')
-  }
-  expect(await answerOf('Hello Pi', 1)).toBe('Understood, working on it.')
+  expect(await answerOf('Hello Pi')).toBe('Understood, working on it.')
   await agentServer.switchAcpModel(conversation, 'hq-anthropic/anthropic/claude-haiku-4-5')
-  expect(await answerOf('Hello Pi on Anthropic', 2)).toContain('Understood')
+  expect(await answerOf('Hello Pi on Anthropic')).toContain('Understood')
   expect(turnEnds().map((update) => update.stopReason)).toEqual(['end_turn', 'end_turn'])
-  socket.close()
+  close()
 
-  await gatewayLogsOf(gateway, `metadata_chat=${chatId}`, 2)
-  const usageLogs = createBifrostUsageLogs({
-    url: gateway.url,
-    adminUser: testGatewayAdmin.user,
-    adminPassword: testGatewayAdmin.password,
-    labels: { chat: chatId },
-  })
-  const zeroDatabase = zeroDrizzle(schema, database)
-  await syncUsageNow(usageLogs, { workspaceId: acme, transact: (work) => zeroDatabase.transaction(work) })
-  const calls = await database.$client`
-    select prompter_id, owner_id, model, provider, status from model_calls where chat_id = ${chatId}`
+  const calls = await modelCallsOf(chatId, 2)
   expect(new Set(calls.map((call) => JSON.stringify(call)))).toEqual(
     new Set([
       JSON.stringify({ prompter_id: bob, owner_id: alice, model: 'fake-medium', provider: 'fake', status: 'success' }),
@@ -165,4 +187,62 @@ test("Pi in HQ's image answers through the LLM relay on the chat and Anthropic r
       }),
     ]),
   )
+})
+
+test('a long Pi conversation compacts on the compaction model, recorded with prompter and owner, and a new conversation loads the session without replaying it and keeps its context', async () => {
+  await addLlmKey(bob, 'Fake')
+  const summary = 'Summary of the earlier turns: the word to remember is PAPAYA.'
+  setFakeLlmScript({ summary })
+  const { id, transport } = await runtime()
+  const { chatId, token } = await runtimeTurn({ id }, bob)
+  const llm = {
+    model: '',
+    usageId: 'agent',
+    acpModel: 'hq/fake/fake-medium',
+    pi: {
+      models: [
+        { id: 'fake/fake-medium', name: 'Fake medium', reasoning: false, contextWindow: 4000 },
+        { id: 'fake/fake-small', name: 'Fake small', reasoning: false, contextWindow: 4000 },
+      ],
+      compactionModel: 'fake/fake-small',
+      compaction: { reserveTokens: 3999, keepRecentTokens: 1 },
+    },
+  }
+  const first = await piConversationOf(transport, token, llm)
+  for (const text of ['Remember the word PAPAYA', 'Second turn', 'Third turn']) await first.answerOf(text)
+  const sessionId = first.updates.find((update) => update.sessionUpdate === 'session_started')?.sessionId
+  first.close()
+  await agentServer.deleteConversation(first.conversation)
+
+  const summaryRequests = fakeLlmBodies.filter((body) => body.startsWith('{"model":"fake-small"'))
+  expect(summaryRequests.some((body) => body.includes('Remember the word PAPAYA'))).toBe(true)
+  const calls = await modelCallsOf(chatId, 4)
+  const attributed = { prompter_id: bob, owner_id: alice, provider: 'fake', status: 'success' }
+  expect(
+    new Set(
+      calls.map(({ prompter_id, owner_id, model, provider, status }) =>
+        JSON.stringify({ prompter_id, owner_id, provider, status, model }),
+      ),
+    ),
+  ).toEqual(
+    new Set([
+      JSON.stringify({ ...attributed, model: 'fake-medium' }),
+      JSON.stringify({ ...attributed, model: 'fake-small' }),
+    ]),
+  )
+
+  const loaded = await piConversationOf(transport, token, { ...llm, resumeSessionId: sessionId })
+  await waitFor(() => loaded.updates.some((update) => update.sessionUpdate === 'session_started'), 30_000)
+  expect(loaded.updates.find((update) => update.sessionUpdate === 'session_started')).toMatchObject({
+    sessionId,
+    resumeFailed: false,
+  })
+  const bodiesBefore = fakeLlmBodies.length
+  expect(await loaded.answerOf('After the restart')).toBe('Understood, working on it.')
+  loaded.close()
+  expect(loaded.updates.filter((update) => update.sessionUpdate === 'user_message_chunk')).toEqual([])
+  expect(JSON.stringify(loaded.updates)).not.toMatch(/PAPAYA|Second turn|Third turn/)
+  const request = fakeLlmBodies.slice(bodiesBefore).find((body) => body.includes('After the restart'))
+  expect(request).toContain(summary)
+  expect(request?.split('After the restart')).toHaveLength(2)
 })
