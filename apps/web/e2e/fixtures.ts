@@ -20,9 +20,45 @@ export const chatRowIn = (group: Locator, chatName: string) => group.getByRole('
 export const draftIconOf = (page: Page, chatName: string) =>
   chatLinkOf(page, chatName).getByRole('img', { name: 'Has unsent draft' })
 
+export const messageContaining = (page: Page, text: string) => messageItemsOf(page).filter({ hasText: text })
+export const workingIndicatorOf = (page: Page) => page.getByRole('status', { name: 'Agent is working' })
+export const signedOutScreenOf = (page: Page, workspaceName: string) =>
+  page.getByText(`You are signed out of ${workspaceName}`)
+
+export const chatAction = async (page: Page, chatName: string, itemName: string) => {
+  await page.getByRole('button', { name: `Chat actions for ${chatName}` }).click()
+  await page.getByRole('menuitem', { name: itemName }).click()
+}
+export const projectAction = async (page: Page, projectName: string, itemName: string) => {
+  await page.getByRole('button', { name: `Project actions for ${projectName}` }).click()
+  await page.getByRole('menuitem', { name: itemName }).click()
+}
+
+export const panelOf = (page: Page) => page.getByRole('region', { name: 'Side panel' })
+export const panelTabOf = (page: Page, tabName: string) =>
+  panelOf(page).getByRole('tablist', { name: 'Panel tabs' }).getByRole('tab', { name: tabName, exact: true })
+export const tabPanelOf = (page: Page) => panelOf(page).getByRole('tabpanel')
+
 export const openChat = async (page: Page, chatName: string) => {
   await chatLinkOf(page, chatName).click()
   await expect(mainOf(page).getByRole('heading', { level: 1, name: chatName })).toBeVisible()
+}
+
+export const openPanelTab = async (page: Page, chatName: string, tabName: string) => {
+  await openChat(page, chatName)
+  await panelTabOf(page, tabName).click()
+  await expect(panelTabOf(page, tabName)).toHaveAttribute('aria-selected', 'true')
+}
+
+export const openProfile = async (page: Page) => {
+  await sidebarOf(page).getByRole('link', { name: 'Profile' }).click()
+  await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Profile' })).toBeVisible()
+}
+export const llmSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'LLM access' })
+export const addCredential = async (page: Page, credential: { provider: string; secret: string }) => {
+  await llmSectionOf(page).getByLabel('Provider').fill(credential.provider)
+  await llmSectionOf(page).getByLabel('Secret').fill(credential.secret)
+  await llmSectionOf(page).getByRole('button', { name: 'Add' }).click()
 }
 
 export const sendMessage = async (page: Page, text: string) => {
@@ -54,6 +90,12 @@ export const newRuntimeChat = async (page: Page, name: string, runsOn: string | 
 export const openMenu = async (page: Page) => {
   await switcherOf(page).click()
   await expect(page.getByRole('menuitem', { name: 'New workspace' })).toBeVisible()
+}
+
+export const switchWorkspace = async (page: Page, workspaceName: string) => {
+  await switcherOf(page).click()
+  await page.getByRole('menuitem', { name: new RegExp(`^${workspaceName}`) }).click()
+  await expect(switcherOf(page)).toContainText(workspaceName)
 }
 
 export const menuItemNamesOf = async (page: Page) => {

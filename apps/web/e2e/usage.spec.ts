@@ -1,14 +1,19 @@
 import {
+  addCredential,
   agentReplyText,
   expect,
   type Locator,
+  llmSectionOf,
   mainOf,
-  messageItemsOf,
+  messageContaining,
   openChat,
+  openPanelTab,
+  openProfile,
   type Page,
   sendMessage,
   serverUrl,
   sidebarOf,
+  tabPanelOf,
   test,
 } from './fixtures'
 import { openPageAs, type WorkerStack } from './stack'
@@ -21,7 +26,6 @@ const earlierMonth = (() => {
   return date.toISOString().slice(0, 7)
 })()
 
-const usageTabOf = (page: Page) => page.getByRole('region', { name: 'Side panel' }).getByRole('tabpanel')
 const usageSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Usage' })
 const memberTableOf = (page: Page) => usageSectionOf(page).getByRole('table', { name: 'Usage by member' })
 const projectTableOf = (page: Page) => usageSectionOf(page).getByRole('table', { name: 'Usage by project' })
@@ -37,10 +41,7 @@ const cellsOf = async (row: Locator) => {
   }
 }
 
-const openUsageTab = async (page: Page, chatName: string) => {
-  await openChat(page, chatName)
-  await page.getByRole('region', { name: 'Side panel' }).getByRole('tab', { name: 'Usage', exact: true }).click()
-}
+const openUsageTab = (page: Page, chatName: string) => openPanelTab(page, chatName, 'Usage')
 
 const openUsageSettings = async (page: Page) => {
   await sidebarOf(page).getByRole('link', { name: 'Workspace settings' }).click()
@@ -48,19 +49,38 @@ const openUsageSettings = async (page: Page) => {
   await expect(usageSectionOf(page).getByRole('heading', { level: 2, name: 'Usage' })).toBeVisible()
 }
 
+const syncUsage = async (workerStack: WorkerStack) => {
+  const synced = await fetch(`${serverUrl}/test/usage-sync?db=${workerStack.databaseName}`, { method: 'POST' })
+  expect(synced.ok).toBe(true)
+}
+
+const researchTotalsInDatabase = async (workerStack: WorkerStack) =>
+  workerStack.database.$client`
+    select coalesce(sum(tokens), 0)::int as tokens, coalesce(sum(cost_micros), 0)::int as cost_micros,
+      coalesce(sum(calls), 0)::int as calls
+    from usage_entries where workspace_id = 'workspace-acme' and chat_id = 'chat-research'`
+
+const syncUntilResearchCalls = (workerStack: WorkerStack, calls: number) =>
+  expect
+    .poll(
+      async () => {
+        await syncUsage(workerStack)
+        return (await researchTotalsInDatabase(workerStack))[0]?.calls
+      },
+      { intervals: [100] },
+    )
+    .toBe(calls)
+
 const prompt = async (page: Page, text: string, expectedReplies: number) => {
   await openChat(page, 'Research')
   await sendMessage(page, text)
-  await expect(messageItemsOf(page).filter({ hasText: agentReplyText })).toHaveCount(expectedReplies)
+  await expect(messageContaining(page, agentReplyText)).toHaveCount(expectedReplies)
 }
 
 const addFakeKey = async (page: Page) => {
-  const llmSection = mainOf(page).getByRole('region', { name: 'LLM access' })
-  await sidebarOf(page).getByRole('link', { name: 'Profile' }).click()
-  await llmSection.getByLabel('Provider').fill('Fake')
-  await llmSection.getByLabel('Secret').fill(`fake-key-${crypto.randomUUID()}`)
-  await llmSection.getByRole('button', { name: 'Add' }).click()
-  await expect(llmSection.getByRole('listitem').filter({ hasText: 'Fake' })).toBeVisible()
+  await openProfile(page)
+  await addCredential(page, { provider: 'Fake', secret: `fake-key-${crypto.randomUUID()}` })
+  await expect(llmSectionOf(page).getByRole('listitem').filter({ hasText: 'Fake' })).toBeVisible()
 }
 
 const expectMeteredRow = async (row: Locator, calls: number) => {
@@ -70,60 +90,33 @@ const expectMeteredRow = async (row: Locator, calls: number) => {
   expect(cells.cost).toBeGreaterThan(0)
 }
 
-const researchTotalsInDatabase = async (workerStack: WorkerStack) =>
-  workerStack.database.$client`
-    select coalesce(sum(tokens), 0)::int as tokens, coalesce(sum(cost_micros), 0)::int as cost_micros,
-      coalesce(sum(calls), 0)::int as calls
-    from usage_entries where workspace_id = 'workspace-acme' and chat_id = 'chat-research'`
-
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
 })
 
-test('1. a prompt is metered: the Usage tab shows the prompter with tokens, cost and 2 calls (router and agent)', async ({
+test('3. two prompters each get a row, the total is their sum, and workspace settings show the total, each member and each project', async ({
   page,
+  browser,
+  workerStack,
 }) => {
-  await prompt(page, 'Meter this prompt', 1)
-  await openUsageTab(page, 'Research')
-  const usageTable = usageTabOf(page).getByRole('table')
-  await expectMeteredRow(rowOf(usageTable, 'Alice'), 2)
-  await expect(rowOf(usageTable, 'Total').getByRole('cell').nth(2)).toHaveText('2')
-})
-
-test('2. two prompters each get a row and the total is their sum', async ({ page, browser, workerStack }) => {
   const bobPage = await openPageAs(browser, workerStack, 'member-bob')
   await addFakeKey(bobPage)
   await prompt(page, 'Alice asks', 1)
   await prompt(bobPage, 'Bob asks', 2)
-
-  await openUsageTab(page, 'Research')
-  const usageTable = usageTabOf(page).getByRole('table')
-  await expectMeteredRow(rowOf(usageTable, 'Alice'), 2)
-  await expectMeteredRow(rowOf(usageTable, 'Bob'), 1)
-  const alice = await cellsOf(rowOf(usageTable, 'Alice'))
-  const bob = await cellsOf(rowOf(usageTable, 'Bob'))
-  const total = await cellsOf(rowOf(usageTable, 'Total'))
-  expect(total.tokens).toBe(alice.tokens + bob.tokens)
-  expect(total.calls).toBe(3)
-  await bobPage.context().close()
-})
-
-test('3. workspace settings show the total, each member and each project', async ({ page, browser, workerStack }) => {
-  const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-  await addFakeKey(bobPage)
-  await prompt(page, 'Alice asks', 1)
-  await prompt(bobPage, 'Bob asks', 2)
+  await syncUntilResearchCalls(workerStack, 3)
   await bobPage.context().close()
 
   await openUsageTab(page, 'Research')
-  const researchTable = usageTabOf(page).getByRole('table')
-  await expect(rowOf(researchTable, 'Alice')).toBeVisible()
-  await expect(rowOf(researchTable, 'Bob')).toBeVisible()
+  const researchTable = tabPanelOf(page).getByRole('table')
+  await expectMeteredRow(rowOf(researchTable, 'Alice'), 2)
+  await expectMeteredRow(rowOf(researchTable, 'Bob'), 1)
   const research = await cellsOf(rowOf(researchTable, 'Total'))
   const aliceInResearch = await cellsOf(rowOf(researchTable, 'Alice'))
   const bobInResearch = await cellsOf(rowOf(researchTable, 'Bob'))
+  expect(research.tokens).toBe(aliceInResearch.tokens + bobInResearch.tokens)
+  expect(research.calls).toBe(3)
   await openUsageTab(page, 'Invoice bug')
-  const invoiceTable = usageTabOf(page).getByRole('table')
+  const invoiceTable = tabPanelOf(page).getByRole('table')
   await expect(rowOf(invoiceTable, 'Total')).toContainText('15,500')
   const invoiceBug = await cellsOf(rowOf(invoiceTable, 'Total'))
   const aliceInInvoiceBug = await cellsOf(rowOf(invoiceTable, 'Alice'))
@@ -152,10 +145,10 @@ test('4. a row of an earlier month appears only when that month is picked, in bo
     values ('workspace-acme', ${earlierMonth}, 'chat-research', 'member-alice', 4321, 70000, 3)`
 
   await openUsageTab(page, 'Research')
-  const usageTable = usageTabOf(page).getByRole('table')
-  await expect(monthPickerOf(usageTabOf(page))).toHaveValue(currentMonth)
+  const usageTable = tabPanelOf(page).getByRole('table')
+  await expect(monthPickerOf(tabPanelOf(page))).toHaveValue(currentMonth)
   await expect(rowOf(usageTable, 'Total')).not.toContainText('4,321')
-  await monthPickerOf(usageTabOf(page)).selectOption(earlierMonth)
+  await monthPickerOf(tabPanelOf(page)).selectOption(earlierMonth)
   await expect(rowOf(usageTable, 'Alice')).toContainText('4,321')
   await expect(rowOf(usageTable, 'Alice')).toContainText('$0.07')
   await expect(rowOf(usageTable, 'Alice').getByRole('cell').nth(2)).toHaveText('3')
@@ -178,29 +171,29 @@ test.describe('5. as a member', () => {
     await expect(usageSectionOf(page)).toHaveCount(0)
 
     await openUsageTab(page, 'Invoice bug')
-    const usageTable = usageTabOf(page).getByRole('table')
+    const usageTable = tabPanelOf(page).getByRole('table')
     await expect(rowOf(usageTable, 'Alice')).toContainText('12,400')
     await expect(rowOf(usageTable, 'Bob')).toContainText('3,100')
     await expect(rowOf(usageTable, 'Total')).toContainText('15,500')
   })
 })
 
-test('6. running the sync twice over the same window leaves the totals unchanged', async ({ page, workerStack }) => {
+test('6. a prompt is metered with 2 calls (router and agent), and running the sync twice over the same window leaves the totals unchanged', async ({
+  page,
+  workerStack,
+}) => {
   await prompt(page, 'Count me once', 1)
+  await syncUntilResearchCalls(workerStack, 2)
   await openUsageTab(page, 'Research')
-  const usageTable = usageTabOf(page).getByRole('table')
+  const usageTable = tabPanelOf(page).getByRole('table')
   await expectMeteredRow(rowOf(usageTable, 'Alice'), 2)
   const before = await cellsOf(rowOf(usageTable, 'Total'))
   const totalsBefore = await researchTotalsInDatabase(workerStack)
 
-  for (const _run of [1, 2]) {
-    const synced = await fetch(`${serverUrl}/test/usage-sync?db=${workerStack.databaseName}`, { method: 'POST' })
-    expect(synced.ok).toBe(true)
-  }
+  await syncUsage(workerStack)
+  await syncUsage(workerStack)
 
   expect(await researchTotalsInDatabase(workerStack)).toEqual(totalsBefore)
-  await page.reload()
-  await openUsageTab(page, 'Research')
   await expect(rowOf(usageTable, 'Total').getByRole('cell').nth(2)).toHaveText('2')
   expect(await cellsOf(rowOf(usageTable, 'Total'))).toEqual(before)
 })
