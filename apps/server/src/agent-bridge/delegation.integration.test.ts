@@ -1,57 +1,24 @@
-import { afterAll, afterEach, expect, setDefaultTimeout, test } from 'bun:test'
+import { expect, setDefaultTimeout, test } from 'bun:test'
 import { stillRunningOf, subagentFailureOf, unknownTaskOf } from '@hq/conversation/server'
-import { type ChatId, chatId, messageId } from '@hq/kernel'
-import { websocket } from 'hono/bun'
-import { createApp, sessionClassifierOf } from '../app.ts'
+import { type ChatId, messageId } from '@hq/kernel'
 import type { FakeLlmScript } from '../fake-llm.ts'
-import { startJobWorker } from '../job-worker.ts'
-import { createModelCallRelay } from '../llm-relay.ts'
-import { createRuntimeHostGateway } from '../runtime-hosts/gateway.ts'
 import {
   acme,
   alice,
   aliceInAcme,
-  createFakeHosts,
   type FakeHost,
-  openSharedTestApp,
-  requestMutation,
+  gatewayLogsOf,
+  startAgentStack,
   succeeded,
-  testAuthSettings,
   waitFor,
 } from '../testing.ts'
-import { createAgentBridge } from './bridge.ts'
 import { type Conversation, createFakeAgentServer } from './fake-agent-server.ts'
 
 setDefaultTimeout(40_000)
-const { database, gateway, llmGateway, setFakeLlmScript } = await openSharedTestApp()
-const runtimeHosts = createRuntimeHostGateway({
-  databases: () => [database],
-  relayModelCall: createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),
-})
-const agentBridge = createAgentBridge({
-  sandboxProvider: runtimeHosts.sandboxProvider,
-  sessionClassifierOf: sessionClassifierOf(llmGateway, { timeoutMilliseconds: 300 }),
-  resumeAfterMilliseconds: 1_500,
-  reopenDelayMilliseconds: 50,
-})
-const app = createApp({ database, ...testAuthSettings, llmGateway, runtimeHosts, agentBridge })
-const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
-const worker = startJobWorker(database, {
-  pollIntervalMilliseconds: 5,
-  retryDelayMilliseconds: 100,
-  sandboxProvider: runtimeHosts.sandboxProvider,
-  agentBridge,
-})
-const { fakeHost, disconnectFakeHosts } = createFakeHosts({ port: Number(server.port), database })
-afterEach(async () => {
-  setFakeLlmScript(undefined)
-  await disconnectFakeHosts()
-})
-afterAll(async () => {
-  await worker.stop()
-  agentBridge.release(database)
-  void server.stop(true)
-})
+const { database, gateway, setFakeLlmScript, agentBridge, fakeHost, mutate, prompt, turnOf, ...stack } =
+  await startAgentStack({ routing: true, resumeAfterMilliseconds: 1_500 })
+const newRuntimeChat = () => stack.newRuntimeChat({ defaultModel: 'fake/fake-medium' })
+const repliesTo = (promptId: string) => stack.repliesTo(promptId, ['kind', 'body', 'step'])
 
 const delegatedTask = { tool: 'delegate', arguments: { task: 'List the files', effort: 'small' } }
 const confidentSmall = { tier: 'small', confidence: 'high', effort: 'low' }
@@ -67,37 +34,12 @@ const fakeAgent = async () => {
   const host = await fakeHost('Delegation host', { agentServer: fake.agentServer })
   return { fake, host }
 }
-const newRuntimeChat = async () => {
-  const id = `chat-${crypto.randomUUID()}`
-  await database.$client`
-    insert into chats (workspace_id, id, type, owner_kind, owner_user_id, name, default_model, archived, created_at)
-    values (${acme}, ${id}, 'runtime', 'user', ${alice}, 'Delegation chat', 'fake/fake-medium', false, now())`
-  return chatId(id)
-}
-const prompt = async (chat: ChatId, text: string) => {
-  const id = `message-${crypto.randomUUID()}`
-  expect(
-    await requestMutation(app, database, aliceInAcme, 'conversation.sendMessage', {
-      workspaceId: acme,
-      id,
-      chatId: chat,
-      text,
-    }),
-  ).toEqual(succeeded)
-  return id
-}
 const promptAndAnswer = async (chat: ChatId, text: string) => {
   const id = await prompt(chat, text)
   await waitFor(async () => (await repliesTo(id)).some((reply) => reply.kind === 'agent'), 20_000)
-  await waitFor(
-    async () =>
-      (await database.$client`select agent_turn_message_id from chats where id = ${chat}`)[0]?.agent_turn_message_id ===
-      null,
-  )
+  await waitFor(async () => (await turnOf(chat)) === null)
   return id
 }
-const repliesTo = (messageId: string) =>
-  database.query.messages.findMany({ where: { replyToId: messageId }, orderBy: { seq: 'asc' } })
 const delegationsOf = (chat: ChatId) =>
   database.$client`
     select id, conversation_id, action_event_id, model, reason, policy, status, token_hash, finished_at from delegations
@@ -123,19 +65,6 @@ const routerCallWith = (host: FakeHost, token: string) =>
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'delegate', arguments: {} } }),
   })
-type Log = { model: string; metadata: Record<string, string> }
-const delegateLogsOf = async (chat: ChatId) => {
-  let logs: Log[] = []
-  await waitFor(async () => {
-    logs = (
-      (await gateway.call<{ logs: Log[] | null }>(`/api/logs?metadata_chat=${chat}&metadata_role=delegate&limit=100`))
-        .logs ?? []
-    ).filter((log) => log.metadata.role === 'delegate')
-    return logs.length >= 2
-  }, 15_000)
-  return logs
-}
-
 test('a delegated task runs in a sub-conversation on the classified model, its events are stored once and in order, and the tool answers with the final response', async () => {
   const { fake, host } = await fakeAgent()
   const chat = await newRuntimeChat()
@@ -187,7 +116,7 @@ test('a delegated task runs in a sub-conversation on the classified model, its e
   ])
   expect(replies[0]?.step).toMatchObject({ name: 'delegate', result: 'Sub done.' })
 
-  for (const log of await delegateLogsOf(chat))
+  for (const log of await gatewayLogsOf(gateway, `metadata_chat=${chat}&metadata_role=delegate`, 2))
     expect(log).toMatchObject({
       model: 'fake-small',
       metadata: { role: 'delegate', delegation: delegation?.id, prompter: alice, owner: alice },
@@ -222,32 +151,6 @@ test('the delegation token works only while its delegation runs and only from it
   })
 })
 
-test('the subagent runs on the session model when the policy is Same as main or the classifier is unsure', async () => {
-  const { fake } = await fakeAgent()
-  const chat = await newRuntimeChat()
-  const onSessionModel = { 'fake-medium': { steps: [{ command: 'echo same' }], text: 'Sub on medium.' } }
-  setFakeLlmScript(delegatingScript({ delegateRoute: 'fail', subagents: onSessionModel }))
-  await promptAndAnswer(chat, 'Delegate while unsure')
-  expect(
-    await requestMutation(app, database, aliceInAcme, 'conversation.updateChatRouting', {
-      workspaceId: acme,
-      chatId: chat,
-      subagentPolicy: 'same_as_main',
-    }),
-  ).toEqual(succeeded)
-  setFakeLlmScript(delegatingScript({ subagents: onSessionModel }))
-  await promptAndAnswer(chat, 'Delegate on the same model')
-
-  expect(conversationsOf(fake).subs.map((sub) => agentOf(sub).llm.model)).toEqual([
-    'openai/fake/fake-medium',
-    'openai/fake/fake-medium',
-  ])
-  expect((await delegationsOf(chat)).map(({ model, reason, policy }) => ({ model, reason, policy }))).toEqual([
-    { model: 'fake/fake-medium', reason: 'default', policy: 'auto' },
-    { model: 'fake/fake-medium', reason: 'same as main', policy: 'same_as_main' },
-  ])
-})
-
 const turnFailureOf = async (chat: ChatId) =>
   (await database.$client`select agent_turn_failure from chats where id = ${chat}`)[0]?.agent_turn_failure
 const stepsOf = async (promptId: string) =>
@@ -258,33 +161,36 @@ const slowWork = {
   wordDelayMilliseconds: 375,
 }
 
-test('a model asked by the agent comes before the policy and the classifier', async () => {
-  await fakeAgent()
-  const chat = await newRuntimeChat()
-  const onLarge = { 'fake-large': { steps: [{ command: 'echo large' }], text: 'Sub on large.' } }
-  const askingLarge = { ...delegatedTask, arguments: { ...delegatedTask.arguments, model: 'fake-large' } }
-  setFakeLlmScript(delegatingScript({ steps: [askingLarge], subagents: onLarge }))
-  await promptAndAnswer(chat, 'Delegate on fake-large')
-  expect(
-    await requestMutation(app, database, aliceInAcme, 'conversation.updateChatRouting', {
-      workspaceId: acme,
-      chatId: chat,
-      subagentPolicy: 'same_as_main',
-    }),
-  ).toEqual(succeeded)
-  setFakeLlmScript(
-    delegatingScript({
-      steps: [{ ...askingLarge, arguments: { task: 'List', effort: 'small', model: 'large' } }],
-      subagents: onLarge,
-    }),
-  )
-  await promptAndAnswer(chat, 'Delegate on a large model')
-
-  expect((await delegationsOf(chat)).map(({ model, reason, policy }) => ({ model, reason, policy }))).toEqual([
-    { model: 'fake/fake-large', reason: 'asked', policy: 'auto' },
-    { model: 'fake/fake-large', reason: 'asked', policy: 'same_as_main' },
-  ])
-})
+test.each([
+  { policy: 'auto', route: 'fail', asked: undefined, model: 'fake/fake-medium', reason: 'default' },
+  {
+    policy: 'same_as_main',
+    route: confidentSmall,
+    asked: undefined,
+    model: 'fake/fake-medium',
+    reason: 'same as main',
+  },
+  { policy: 'auto', route: confidentSmall, asked: 'fake-large', model: 'fake/fake-large', reason: 'asked' },
+  { policy: 'same_as_main', route: confidentSmall, asked: 'large', model: 'fake/fake-large', reason: 'asked' },
+] as const)(
+  'a model asked by the agent comes before the policy, then the classifier: $policy, route $route, asked $asked',
+  async ({ policy, route, asked, model, reason }) => {
+    const { fake } = await fakeAgent()
+    const chat = await newRuntimeChat()
+    const routing = { workspaceId: acme, chatId: chat, subagentPolicy: policy }
+    expect(await mutate(aliceInAcme, 'conversation.updateChatRouting', routing)).toEqual(succeeded)
+    const step = { ...delegatedTask, arguments: { ...delegatedTask.arguments, model: asked } }
+    const subagent = { steps: [{ command: 'echo sub' }], text: `Sub on ${model}.` }
+    setFakeLlmScript(
+      delegatingScript({ steps: [step], delegateRoute: route, subagents: { [model.replace('fake/', '')]: subagent } }),
+    )
+    await promptAndAnswer(chat, `Delegate with ${policy}`)
+    expect(conversationsOf(fake).subs.map((sub) => agentOf(sub).llm.model)).toEqual([`openai/${model}`])
+    expect(
+      (await delegationsOf(chat)).map((row) => ({ model: row.model, reason: row.reason, policy: row.policy })),
+    ).toEqual([{ model, reason, policy }])
+  },
+)
 
 test('a long task answers still running, a resume call returns its result, and another chat or turn cannot resume it', async () => {
   const { fake } = await fakeAgent()
@@ -324,9 +230,7 @@ test('stopping the turn interrupts the running subagent, marks its delegation st
   setFakeLlmScript(delegatingScript({ subagents: { 'fake-small': slowWork } }))
   const promptId = await prompt(chat, 'Delegate then stop')
   await waitFor(async () => (await repliesTo(promptId)).length >= 2, 15_000)
-  expect(
-    await requestMutation(app, database, aliceInAcme, 'conversation.stopAgent', { workspaceId: acme, chatId: chat }),
-  ).toEqual(succeeded)
+  expect(await mutate(aliceInAcme, 'conversation.stopAgent', { workspaceId: acme, chatId: chat })).toEqual(succeeded)
   await waitFor(async () => (await delegationsOf(chat))[0]?.status === 'stopped')
   const [sub] = conversationsOf(fake).subs
   await waitFor(() => fake.interrupts.includes(String(sub?.id)))

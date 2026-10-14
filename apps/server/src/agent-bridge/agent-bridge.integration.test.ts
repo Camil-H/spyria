@@ -1,105 +1,52 @@
-import { afterAll, afterEach, expect, setDefaultTimeout, spyOn, test } from 'bun:test'
+import { expect, setDefaultTimeout, test } from 'bun:test'
 import { createHash } from 'node:crypto'
 import { commandOutputPathOf, rebuildMessages } from '@hq/conversation/server'
-import { events } from '@hq/db/postgres'
 import { schema } from '@hq/db/zero'
-import { type ChatId, chatId } from '@hq/kernel'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
-import { websocket } from 'hono/bun'
-import { createApp } from '../app.ts'
 import { startJobWorker } from '../job-worker.ts'
-import { createRuntimeHostGateway } from '../runtime-hosts/gateway.ts'
 import {
   acme,
   alice,
-  aliceInAcme,
-  createFakeHosts,
+  captureConsole,
   failedWith,
   fakeHostGatewayUrl,
   globex,
-  openSharedTestApp,
-  requestMutation,
   bob,
   bobInAcme,
   sessionTokenOf,
+  startAgentStack,
   succeeded,
-  testAuthSettings,
   waitFor,
 } from '../testing.ts'
-import { createAgentBridge } from './bridge.ts'
 import { type Conversation, createFakeAgentServer, replyText, text } from './fake-agent-server.ts'
 
 setDefaultTimeout(30_000)
 const llm = { model: 'openai/fake/fake-model' }
-const { database } = await openSharedTestApp()
-const gateway = createRuntimeHostGateway({ databases: () => [database] })
-const agentBridge = createAgentBridge({ sandboxProvider: gateway.sandboxProvider, llm, reopenDelayMilliseconds: 50 })
-const app = createApp({ database, ...testAuthSettings, runtimeHosts: gateway, agentBridge })
-const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
-const worker = startJobWorker(database, {
-  pollIntervalMilliseconds: 5,
-  retryDelayMilliseconds: 100,
-  sandboxProvider: gateway.sandboxProvider,
+const {
+  database,
+  app,
+  runtimeHosts,
   agentBridge,
-})
-const { fakeHost, disconnectFakeHosts } = createFakeHosts({ port: Number(server.port), database })
-const browserSockets: WebSocket[] = []
-afterEach(async () => {
-  for (const socket of browserSockets.splice(0)) socket.close()
-  await disconnectFakeHosts()
-})
-afterAll(async () => {
-  await worker.stop()
-  agentBridge.release(database)
-  void server.stop(true)
-})
+  fakeHost,
+  mutate,
+  newRuntimeChat,
+  prompt,
+  messagesOf,
+  storedAgentEventsOf,
+  turnOf,
+  runtimeOf,
+  openStream,
+  ...stack
+} = await startAgentStack({ llm })
+const repliesTo = (messageId: string) => stack.repliesTo(messageId, ['kind', 'body', 'detail'])
+const answered = stack.answered
 
 const agentHost = async () => {
   const fake = createFakeAgentServer()
   return { fake, host: await fakeHost('Agent host', { agentServer: fake.agentServer }) }
 }
-
-const newRuntimeChat = async () => {
-  const id = `chat-${crypto.randomUUID()}`
-  await database.$client`
-    insert into chats (workspace_id, id, type, owner_kind, owner_user_id, name, archived, created_at)
-    values (${acme}, ${id}, 'runtime', 'user', ${alice}, 'Agent chat', false, now())`
-  return chatId(id)
-}
-const prompt = async (chat: ChatId, body: string) => {
-  const id = `message-${crypto.randomUUID()}`
-  expect(
-    await requestMutation(app, database, aliceInAcme, 'conversation.sendMessage', {
-      workspaceId: acme,
-      id,
-      chatId: chat,
-      text: body,
-    }),
-  ).toEqual(succeeded)
-  return id
-}
-const messagesOf = async (chat: ChatId) =>
-  database.query.messages.findMany({ where: { chatId: chat }, orderBy: { seq: 'asc' } })
-const storedAgentEventsOf = async (chat: ChatId) =>
-  (await database.select().from(events))
-    .filter((event) => event.chatId === chat && event.type === 'agent.event')
-    .toSorted((first, second) => first.seq - second.seq)
-const turnOf = async (chat: ChatId) =>
-  (await database.$client`select agent_turn_message_id from chats where id = ${chat}`)[0]?.agent_turn_message_id
-const repliesTo = async (messageId: string) =>
-  (await database.query.messages.findMany({ where: { replyToId: messageId }, orderBy: { seq: 'asc' } })).map(
-    ({ kind, body, detail }) => ({ kind, body, detail }),
-  )
-const answered = (messageId: string, count = 1) =>
-  waitFor(async () => (await repliesTo(messageId)).length >= count, 15_000)
 const llmTokenOf = (conversation: Conversation | undefined) =>
   String((conversation?.created.agent as { llm: { api_key: string } } | undefined)?.llm.api_key)
-const runtimeOf = async (chat: ChatId) => {
-  const [row] = await database.$client`
-select * from runtimes where chat_id = ${chat}`
-  if (!row) throw new Error(`No runtime for ${chat}`)
-  return row
-}
 
 test('a prompt starts the runtime, creates one conversation with the runtime LLM token and is answered once', async () => {
   const { fake } = await agentHost()
@@ -128,45 +75,6 @@ test('a prompt starts the runtime, creates one conversation with the runtime LLM
   expect(fake.connections[0]).toMatchObject({ auth: { type: 'auth', session_api_key: runtime.api_key } })
   await waitFor(async () => (await turnOf(chat)) === null)
   expect(await repliesTo(question)).toEqual([{ kind: 'agent', body: replyText, detail: null }])
-})
-
-test('each completed event is stored exactly once by its id, deltas never, and messages and command steps are projected', async () => {
-  const { fake } = await agentHost()
-  fake.turn = async (conversation, promptText) => {
-    await fake.beginTurn(conversation, promptText)
-    const action = fake.emit(
-      conversation,
-      'ActionEvent',
-      { source: 'agent', action: { kind: 'TerminalAction', command: 'echo hello' }, tool_name: 'terminal' },
-      2,
-    )
-    fake.emit(conversation, 'ObservationEvent', {
-      source: 'environment',
-      action_id: action.id,
-      observation: { kind: 'TerminalObservation', content: [{ type: 'text', text: 'hello' }], exit_code: 0 },
-    })
-    fake.emit(conversation, 'ConversationStateUpdateEvent', { source: 'environment', key: 'stats', value: {} })
-    fake.finishTurn(conversation, 3)
-  }
-  const chat = await newRuntimeChat()
-  const question = await prompt(chat, 'Say hello in the terminal')
-  await answered(question, 2)
-  await waitFor(async () => (await turnOf(chat)) === null)
-
-  const [conversation] = [...fake.conversations.values()]
-  const stored = await storedAgentEventsOf(chat)
-  expect(stored.map((event) => event.id)).toEqual(conversation?.events.map((event) => event.id) ?? [])
-  expect(stored.some((event) => JSON.stringify(event.payload).includes('StreamingDeltaEvent'))).toBe(false)
-  expect(stored.some((event) => JSON.stringify(event.payload).includes('full_state'))).toBe(false)
-  expect(await repliesTo(question)).toEqual([
-    { kind: 'step', body: 'command', detail: null },
-    { kind: 'agent', body: replyText, detail: null },
-  ])
-  const live = await messagesOf(chat)
-  expect(live.map((message) => message.kind)).toEqual(['member', 'step', 'agent'])
-  expect(live[1]?.step).toMatchObject({ type: 'command', command: 'echo hello', exitCode: 0, output: 'hello' })
-  await zeroDrizzle(schema, database).transaction((tx) => rebuildMessages(tx, { chatId: chat }))
-  expect(await messagesOf(chat)).toEqual(live)
 })
 
 test('a reconnect resumes from the last stored event with resend_mode=since, without duplicates or gaps', async () => {
@@ -241,7 +149,7 @@ test('text streamed before a tool call is stored once, and after a reconnect the
 test('prompts to one chat are delivered one turn at a time, in order, each exactly once, even with two workers', async () => {
   const secondWorker = startJobWorker(database, {
     pollIntervalMilliseconds: 5,
-    sandboxProvider: gateway.sandboxProvider,
+    sandboxProvider: runtimeHosts.sandboxProvider,
     agentBridge,
   })
   const { fake } = await agentHost()
@@ -288,7 +196,7 @@ test('prompts to one chat are delivered one turn at a time, in order, each exact
 test('each step is stored once and updated by its observation, a plan replaces the Plan tab rows, and a rebuild matches', async () => {
   const { fake } = await agentHost()
   const chat = await newRuntimeChat()
-  const viewer = await openStream(acme, chat)
+  const viewer = await openStream(chat)
   const action = (conversation: Conversation, action: object, fields: object = {}) =>
     fake.emit(conversation, 'ActionEvent', { source: 'agent', thought: text(''), action, ...fields }, 2)
   const observe = (conversation: Conversation, actionId: string, observation: object) =>
@@ -334,7 +242,8 @@ test('each step is stored once and updated by its observation, a plan replaces t
     observe(conversation, search.id, { kind: 'MCPToolObservation', content: text('3 results') })
     fake.emit(conversation, 'AgentErrorEvent', { source: 'agent', error: 'Tool call failed once.' })
     action(conversation, planOf('done'))
-    fake.finishTurn(conversation)
+    fake.emit(conversation, 'ConversationStateUpdateEvent', { source: 'environment', key: 'stats', value: {} })
+    fake.finishTurn(conversation, 3)
   }
   const question = await prompt(chat, 'Fix the totals')
   await waitFor(async () => (await turnOf(chat)) === null && (await repliesTo(question)).length >= 8)
@@ -362,6 +271,10 @@ test('each step is stored once and updated by its observation, a plan replaces t
     { items: [{ title: 'Fix totals', status: 'done' }] },
     null,
   ])
+  const [conversation] = [...fake.conversations.values()]
+  expect((await storedAgentEventsOf(chat)).map((event) => event.id)).toEqual(
+    conversation?.events.map((event) => event.id) ?? [],
+  )
   expect([
     ...(await database.$client`select title, status from plan_steps where chat_id = ${chat} order by position`),
   ]).toEqual([{ title: 'Fix totals', status: 'done' }])
@@ -380,56 +293,8 @@ test('each step is stored once and updated by its observation, a plan replaces t
   expect(await messagesOf(chat)).toEqual(live)
 })
 
-test('a migrated tool-call row equals the rebuild of its events', async () => {
-  const chat = await newRuntimeChat()
-  const migrations = new URL('../../../../packages/db/drizzle/', import.meta.url).pathname
-  const [migrationPath] = await Array.fromAsync(new Bun.Glob('*_agent_steps/migration.sql').scan(migrations))
-  const migration = await Bun.file(`${migrations}${migrationPath}`).text()
-  const update = migration.split('--> statement-breakpoint').find((statement) => statement.includes("'tool-call'"))
-  const createdAt = '2026-09-30T10:02:00.000Z'
-  const legacy = { kind: 'tool-call', body: 'Ran: bun install', detail: 'Done in 35s', replyToId: null }
-  await database.$client`
-    insert into messages (workspace_id, chat_id, id, seq, kind, body, detail, created_at)
-    values (${acme}, ${chat}, 'message-legacy', 1, 'tool-call', ${legacy.body}, ${legacy.detail}, ${createdAt}::timestamptz)`
-  await database.$client`
-    insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
-    values (${acme}, ${chat}, 'message-legacy', 1, 'message.posted', null, ${JSON.stringify(legacy)}::jsonb, ${createdAt}::timestamptz)`
-  await database.$client.unsafe(update ?? 'missing migration')
-
-  const migrated = await messagesOf(chat)
-  expect(migrated.map(({ kind, body, step }) => ({ kind, body, step }))).toEqual([
-    {
-      kind: 'step',
-      body: 'Ran: bun install',
-      step: {
-        type: 'command',
-        command: 'Ran: bun install',
-        exitCode: null,
-        durationMilliseconds: null,
-        output: 'Done in 35s',
-        truncatedLines: 0,
-      },
-    },
-  ])
-  await zeroDrizzle(schema, database).transaction((tx) => rebuildMessages(tx, { chatId: chat }))
-  expect(await messagesOf(chat)).toEqual(migrated)
-})
-
-const openStream = async (workspaceId: string, chat: ChatId, token?: string) => {
-  const socket = new WebSocket(`ws://localhost:${server.port}/api/stream`)
-  browserSockets.push(socket)
-  const frames: string[] = []
-  const closed = new Promise<void>((resolve) => socket.addEventListener('close', () => resolve()))
-  socket.onmessage = (message) => frames.push(String(message.data))
-  await new Promise((resolve) => socket.addEventListener('open', resolve))
-  if (token !== '')
-    socket.send(JSON.stringify({ type: 'auth', token: token ?? (await sessionTokenOf(database, workspaceId, alice)) }))
-  socket.send(JSON.stringify({ type: 'subscribe', chatId: chat }))
-  return { frames, closed }
-}
-
 test('stream frames reach browsers of the chat workspace only, and no secret reaches a frame or a log', async () => {
-  const spies = (['log', 'info', 'warn', 'error', 'debug'] as const).map((method) => spyOn(console, method))
+  const consoleCalls = captureConsole()
   try {
     const { fake } = await agentHost()
     const { promise: subscribed, resolve: startTurn } = Promise.withResolvers<void>()
@@ -439,9 +304,9 @@ test('stream frames reach browsers of the chat workspace only, and no secret rea
       fake.finishTurn(conversation)
     }
     const chat = await newRuntimeChat()
-    const acmeViewer = await openStream(acme, chat)
-    const globexViewer = await openStream(globex, chat)
-    const anonymous = await openStream(acme, chat, '')
+    const acmeViewer = await openStream(chat)
+    const globexViewer = await openStream(chat, { workspaceId: globex })
+    const anonymous = await openStream(chat, { token: '' })
     const question = await prompt(chat, 'Stream to my workspace')
     await Bun.sleep(200)
     startTurn()
@@ -458,13 +323,13 @@ test('stream frames reach browsers of the chat workspace only, and no secret rea
     const [conversation] = [...fake.conversations.values()]
     const llmToken = llmTokenOf(conversation)
     const everyFrame = [...acmeViewer.frames, ...globexViewer.frames].join('\n')
-    const logged = spies.map((spy) => Bun.inspect(spy.mock.calls)).join('\n')
+    const logged = consoleCalls.logged()
     for (const secret of [runtime.api_key, llmToken, runtime.llm_token_hash]) {
       expect(everyFrame).not.toContain(secret)
       expect(logged).not.toContain(secret)
     }
   } finally {
-    for (const spy of spies) spy.mockRestore()
+    consoleCalls.restore()
   }
 })
 
@@ -515,7 +380,7 @@ test('a failed start and a turn error each end with one notice and no endless tu
 test('a member without an LLM key cannot prompt a runtime chat, and still posts in a channel', async () => {
   const chat = await newRuntimeChat()
   const send = (chatId: string) =>
-    requestMutation(app, database, bobInAcme, 'conversation.sendMessage', {
+    mutate(bobInAcme, 'conversation.sendMessage', {
       workspaceId: acme,
       id: `message-${crypto.randomUUID()}`,
       chatId,

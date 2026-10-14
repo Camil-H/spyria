@@ -1,5 +1,7 @@
+import { afterAll, afterEach, expect, spyOn } from 'bun:test'
 import { createHash } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
+import { conversationMutators } from '@hq/conversation/server'
 import { type Database, events, resetDatabase } from '@hq/db/postgres'
 import { setModelDirectory } from '@hq/db/server-writes'
 import {
@@ -9,15 +11,29 @@ import {
   startZeroCache,
   testGatewayAdmin,
 } from '@hq/db/testing'
-import { addRoutableModels, memberId, workspaceId } from '@hq/kernel'
+import {
+  addRoutableModels,
+  type ChatId,
+  chatId,
+  type MemberId,
+  memberId,
+  type WorkspaceId,
+  workspaceId,
+} from '@hq/kernel'
 import { createLlmGateway } from '@hq/profile/server'
+import { agentServerImage } from '@hq/runtime/server'
+import { workspaceMutators } from '@hq/workspace/server'
 import { Hono } from 'hono'
 import { websocket } from 'hono/bun'
-import { createApp } from './app.ts'
+import { createAgentBridge } from './agent-bridge/bridge.ts'
+import { createApp, sessionClassifierOf } from './app.ts'
 import { issueSessionToken } from './auth/session-tokens.ts'
 import { openSessions } from './auth/sessions.ts'
 import { createFakeLlm, type FakeLlmScript, fakeRoutableModels } from './fake-llm.ts'
 import { createFakeMcp } from './fake-mcp.ts'
+import { startJobWorker } from './job-worker.ts'
+import { createModelCallRelay } from './llm-relay.ts'
+import { createRuntimeHostGateway } from './runtime-hosts/gateway.ts'
 
 export const testAuthSettings = {
   tokenSecret: 'integration-test-secret',
@@ -159,16 +175,284 @@ const startSharedTestApp = async () => {
 }
 
 let sharedTestApp: ReturnType<typeof startSharedTestApp> | undefined
+const openedZeroStores: { close: () => Promise<unknown> }[] = []
+const closeZeroStores = () => Promise.all(openedZeroStores.splice(0).map((store) => store.close()))
 
 export const openSharedTestApp = async () => {
   sharedTestApp ??= startSharedTestApp()
   const testApp = await sharedTestApp
+  await closeZeroStores()
   await resetDatabase(testApp.database, await testApp.seededGatewayKeys())
   if (testApp.llmGateway.listedModels().length === 0) await testApp.llmGateway.refreshListedModels()
   return testApp
 }
 
-export const stopSharedTestApp = async () => (await sharedTestApp)?.stop()
+export const stopSharedTestApp = async () => {
+  await closeZeroStores()
+  await (await sharedTestApp)?.stop()
+}
+
+const openedTestApp = () => sharedTestApp ?? Promise.reject(new Error('Open the shared test app first'))
+
+export const zeroSessionsOf = async (viewerId: string, workspaceIds: readonly string[]) =>
+  Promise.all(
+    (await openSessions((await openedTestApp()).database, viewerId))
+      .filter((session) => workspaceIds.includes(session.workspaceId))
+      .map(async (session) => {
+        const issued = await issueSessionToken(testAuthSettings.tokenSecret, session)
+        return { ...issued, workspaceId: workspaceId(issued.workspaceId) }
+      }),
+  )
+
+const zeroStoreMutators = { ...workspaceMutators, ...conversationMutators }
+export const openZeroStore = async <Store extends { whenLoaded: (workspace: WorkspaceId) => Promise<unknown> }>(
+  createStore: (options: {
+    memberId: MemberId
+    sessions: Awaited<ReturnType<typeof zeroSessionsOf>>
+    renew: (workspace: WorkspaceId) => Promise<Awaited<ReturnType<typeof zeroSessionsOf>>[number] | undefined>
+    cacheURL: string
+    kvStore: 'mem'
+    storageKeyPrefix: string
+    mutators: typeof zeroStoreMutators
+  }) => Store & { close: () => Promise<unknown> },
+  viewerId: string,
+  workspaceIds: readonly string[],
+) => {
+  const store = createStore({
+    memberId: memberId(viewerId),
+    sessions: await zeroSessionsOf(viewerId, workspaceIds),
+    renew: async (workspace) => (await zeroSessionsOf(viewerId, [workspace]))[0],
+    cacheURL: (await openedTestApp()).zeroCacheUrl,
+    kvStore: 'mem',
+    storageKeyPrefix: `${crypto.randomUUID()}:`,
+    mutators: zeroStoreMutators,
+  })
+  openedZeroStores.push(store)
+  await Promise.all(workspaceIds.map((workspace) => store.whenLoaded(workspaceId(workspace))))
+  return store
+}
+
+export const captureConsole = () => {
+  const spies = (['log', 'info', 'warn', 'error', 'debug'] as const).map((method) => spyOn(console, method))
+  return {
+    logged: () => spies.map((spy) => Bun.inspect(spy.mock.calls)).join('\n'),
+    restore: () => {
+      for (const spy of spies) spy.mockRestore()
+    },
+  }
+}
+
+export const everyStoredText = async (database: Database) => {
+  const tables = await database.$client<{ name: string }[]>`
+    select table_name as name from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE'`
+  return JSON.stringify(await Promise.all(tables.map(({ name }) => database.$client.unsafe(`select * from "${name}"`))))
+}
+
+export type GatewayLog = { model: string; metadata: Record<string, string>; selected_key_id: string }
+export const gatewayLogsOf = async (
+  gateway: { call: <Result>(path: string) => Promise<Result> },
+  query: string,
+  minimum = 1,
+) => {
+  const metadataFilters = [...new URLSearchParams(query)].filter(([name]) => name.startsWith('metadata_'))
+  let logs: GatewayLog[] = []
+  await waitFor(async () => {
+    logs = ((await gateway.call<{ logs: GatewayLog[] | null }>(`/api/logs?${query}&limit=100`)).logs ?? []).filter(
+      (log) => metadataFilters.every(([name, value]) => log.metadata?.[name.replace('metadata_', '')] === value),
+    )
+    return logs.length >= minimum
+  }, 15_000)
+  return logs
+}
+
+export const addLlmKey = async (userId: string, provider: string, secret = `fake-key-${crypto.randomUUID()}`) => {
+  const { app, database } = await openedTestApp()
+  const response = await app.request('/api/llm-credentials', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${await sessionTokenOf(database, acme, userId)}` },
+    body: JSON.stringify({ provider, secret }),
+  })
+  if (response.status !== 201) throw new Error(`Adding the ${provider} key of ${userId} answered ${response.status}`)
+}
+
+export const virtualKeyOf = async (userId: string) => {
+  const { database, gateway } = await openedTestApp()
+  const [row] = await database.$client`select virtual_key_id from member_gateway_keys where user_id = ${userId}`
+  return (
+    await gateway.call<{
+      virtual_key: {
+        id: string
+        name: string
+        value: string
+        mcp_configs: { mcp_client: { name: string } }[]
+        provider_configs: { keys: { key_id: string }[] }[]
+      }
+    }>(`/api/governance/virtual-keys/${row?.virtual_key_id}`)
+  ).virtual_key
+}
+
+export const runtimeTurn = async (host: { id: string }, prompterId: string | null) => {
+  const { database } = await openedTestApp()
+  const chatId = `chat-${crypto.randomUUID()}`
+  const promptId = `message-${crypto.randomUUID()}`
+  const token = `runtime-token-${crypto.randomUUID()}`
+  await database.$client.begin(async (sql) => {
+    await sql`
+      insert into chats (workspace_id, id, type, owner_kind, owner_user_id, name, archived, created_at)
+      values (${acme}, ${chatId}, 'runtime', 'user', ${alice}, 'Turn chat', false, now())`
+    await sql`
+      insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
+      values (${acme}, ${chatId}, ${promptId}, 1, 'member', ${prompterId ?? alice}, 'Go', now())`
+    await sql`
+      insert into runtimes (workspace_id, id, chat_id, host_id, state, host_online, image, llm_token_hash, last_active_at, created_at, state_changed_at)
+      values (${acme}, ${crypto.randomUUID()}, ${chatId}, ${host.id}, 'running', true, ${agentServerImage}, ${sha256(token)}, now(), now(), now())`
+    if (prompterId)
+      await sql`
+        update chats set agent_turn_message_id = ${promptId}, agent_turn_prompter_id = ${prompterId} where id = ${chatId}`
+  })
+  return { chatId, token }
+}
+
+export const startAgentStack = async ({
+  routing = false,
+  llm,
+  now,
+  resumeAfterMilliseconds,
+  hqAgentImage,
+  promptsWaitingAfterHello = false,
+}: {
+  routing?: boolean
+  llm?: Parameters<typeof createAgentBridge>[0]['llm']
+  now?: () => number
+  resumeAfterMilliseconds?: number
+  hqAgentImage?: string
+  promptsWaitingAfterHello?: boolean
+} = {}) => {
+  const testApp = await openSharedTestApp()
+  const { database, llmGateway } = testApp
+  const runtimeHosts = createRuntimeHostGateway({
+    databases: () => [database],
+    hqAgentImage,
+    relayModelCall: routing ? createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }) : undefined,
+    afterHello: promptsWaitingAfterHello
+      ? (helloDatabase, host) => agentBridge.forDatabase(helloDatabase).promptWaiting(host)
+      : undefined,
+  })
+  const agentBridge = createAgentBridge({
+    sandboxProvider: runtimeHosts.sandboxProvider,
+    llm,
+    now,
+    resumeAfterMilliseconds,
+    hqAgentImage,
+    sessionClassifierOf: routing ? sessionClassifierOf(llmGateway, { timeoutMilliseconds: 300 }) : undefined,
+    reopenDelayMilliseconds: 50,
+  })
+  const app = createApp({
+    database,
+    ...testAuthSettings,
+    llmGateway: routing ? llmGateway : undefined,
+    runtimeHosts,
+    agentBridge,
+    hqAgentImage,
+  })
+  const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
+  const worker = startJobWorker(database, {
+    pollIntervalMilliseconds: 5,
+    retryDelayMilliseconds: 100,
+    sandboxProvider: runtimeHosts.sandboxProvider,
+    agentBridge,
+  })
+  const { fakeHost, disconnectFakeHosts } = createFakeHosts({ port: Number(server.port), database })
+  const browserSockets: WebSocket[] = []
+  afterEach(async () => {
+    for (const socket of browserSockets.splice(0)) socket.close()
+    testApp.setFakeLlmScript(undefined)
+    await disconnectFakeHosts()
+  })
+  afterAll(async () => {
+    await worker.stop()
+    agentBridge.release(database)
+    void server.stop(true)
+  })
+  type Message = Awaited<ReturnType<typeof database.query.messages.findMany>>[number]
+  const mutate = (member: { workspaceId: string; userId: string }, name: string, args: Record<string, unknown>) =>
+    requestMutation(app, database, member, name, args)
+  const turnOf = async (chat: ChatId) =>
+    (await database.$client`select agent_turn_message_id from chats where id = ${chat}`)[0]?.agent_turn_message_id
+  const repliesTo = async <Field extends keyof Message = 'kind' | 'body'>(
+    messageId: string,
+    fields = ['kind', 'body'] as Field[],
+  ) =>
+    (await database.query.messages.findMany({ where: { replyToId: messageId }, orderBy: { seq: 'asc' } })).map(
+      (reply) => Object.fromEntries(fields.map((field) => [field, reply[field]])) as Pick<Message, Field>,
+    )
+  return {
+    ...testApp,
+    app,
+    server,
+    runtimeHosts,
+    agentBridge,
+    worker,
+    fakeHost,
+    mutate,
+    newRuntimeChat: async ({
+      defaultModel = null,
+      ownerId = alice,
+      harness = null,
+      id = `chat-${crypto.randomUUID()}`,
+    }: {
+      defaultModel?: string | null
+      ownerId?: string
+      harness?: string | null
+      id?: string
+    } = {}) => {
+      await database.$client`
+        insert into chats (workspace_id, id, type, owner_kind, owner_user_id, name, default_model, local_session, harness, archived, created_at)
+        values (${acme}, ${id}, 'runtime', 'user', ${ownerId}, 'Runtime chat', ${defaultModel}, ${harness !== null}, ${harness}, false, now())`
+      return chatId(id)
+    },
+    prompt: async (chat: ChatId, text: string, member = aliceInAcme) => {
+      const id = `message-${crypto.randomUUID()}`
+      expect(await mutate(member, 'conversation.sendMessage', { workspaceId: acme, id, chatId: chat, text })).toEqual(
+        succeeded,
+      )
+      return id
+    },
+    turnOf,
+    turnIs: (chat: ChatId, promptId: string | null) => waitFor(async () => (await turnOf(chat)) === promptId, 15_000),
+    repliesTo,
+    answered: (messageId: string, count = 1) =>
+      waitFor(async () => (await repliesTo(messageId)).length >= count, 15_000),
+    messagesOf: (chat: ChatId) =>
+      database.query.messages.findMany({ where: { chatId: chat }, orderBy: { seq: 'asc' } }),
+    storedAgentEventsOf: async (chat: ChatId) =>
+      (await database.select().from(events))
+        .filter((event) => event.chatId === chat && event.type === 'agent.event')
+        .toSorted((first, second) => first.seq - second.seq),
+    runtimeOf: async (chat: ChatId) => {
+      const [row] = await database.$client`select * from runtimes where chat_id = ${chat}`
+      if (!row) throw new Error(`No runtime for ${chat}`)
+      return row
+    },
+    openStream: async (
+      chat: ChatId,
+      { workspaceId = acme as string, token }: { workspaceId?: string; token?: string } = {},
+    ) => {
+      const socket = new WebSocket(`ws://localhost:${server.port}/api/stream`)
+      browserSockets.push(socket)
+      const frames: string[] = []
+      const closed = new Promise<void>((resolve) => socket.addEventListener('close', () => resolve()))
+      socket.onmessage = (message) => frames.push(String(message.data))
+      await new Promise((resolve) => socket.addEventListener('open', resolve))
+      if (token !== '')
+        socket.send(
+          JSON.stringify({ type: 'auth', token: token ?? (await sessionTokenOf(database, workspaceId, alice)) }),
+        )
+      socket.send(JSON.stringify({ type: 'subscribe', chatId: chat }))
+      return { frames, closed }
+    },
+  }
+}
 
 type HostFrame = {
   type: string

@@ -1,4 +1,14 @@
-import { agentReplyText, expect, mainOf, messageItemsOf, openChat, type Page, sendMessage, test } from './fixtures'
+import {
+  agentReplyText,
+  expect,
+  mainOf,
+  messageItemsOf,
+  openChat,
+  type Page,
+  sendMessage,
+  test,
+  workingIndicatorOf,
+} from './fixtures'
 import { openPageAs, type WorkerStack } from './stack'
 
 const twoSeconds = { timeout: 2_000 }
@@ -7,7 +17,6 @@ const research = 'chat-research'
 const slowScript = { wordDelayMilliseconds: 4000 }
 const newSessionNotice = 'The agent started a new session; it does not remember earlier messages'
 const runtimeStatusOf = (page: Page) => mainOf(page).getByRole('status', { name: 'Runtime' })
-const workingIndicatorOf = (page: Page) => page.getByRole('status', { name: 'Agent is working' })
 const stopButtonOf = (page: Page) => mainOf(page).getByRole('button', { name: 'Stop' })
 const retryButtonOf = (page: Page) => runtimeStatusOf(page).getByRole('button', { name: 'Could not start · Retry' })
 const itemsWith = (page: Page, text: string) => messageItemsOf(page).filter({ hasText: text })

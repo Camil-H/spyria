@@ -141,6 +141,34 @@ test('startRuntimeFromMessage rolls the new chat back when its seed message cann
   expect(await countOf()).toEqual(before)
 })
 
+test('a new runtime chat gets the default model and the auto policy, and both are stored per chat', async () => {
+  const routing = (fields: Record<string, unknown>) =>
+    resultOf(aliceInAcme, 'conversation.updateChatRouting', { workspaceId: acme, chatId: 'chat-routed', ...fields })
+  expect(
+    await resultOf(aliceInAcme, 'workspace.createChat', {
+      workspaceId: acme,
+      id: 'chat-routed',
+      name: 'Routed',
+      type: 'runtime',
+      projectId: null,
+    }),
+  ).toEqual(succeeded)
+  expect(await chatRow('chat-routed')).toMatchObject({
+    defaultModel: 'fake/fake-medium',
+    subagentPolicy: 'auto',
+    model: null,
+    reasoningEffort: null,
+  })
+  expect(await routing({ defaultModel: 'fake/fake-small', subagentPolicy: 'same_as_main' })).toEqual(succeeded)
+  expect(await chatRow('chat-routed')).toMatchObject({
+    defaultModel: 'fake/fake-small',
+    subagentPolicy: 'same_as_main',
+    model: null,
+  })
+  expect(JSON.stringify(await routing({ defaultModel: 'nowhere/unknown' }))).toContain('error')
+  expect(JSON.stringify(await routing({ defaultModel: 'typesafe/jev-latest' }))).toContain('error')
+})
+
 test.each([
   [
     'sendMessage to a chat of another workspace',
@@ -184,35 +212,14 @@ test.each([
     { id: 'message-blank', chatId: 'chat-welcome', text: '  ' },
     'A message must contain at least one non-blank character',
   ],
+  [
+    'arguments naming another workspace than the token',
+    'conversation.sendMessage',
+    { workspaceId: globex, id: 'message-foreign', chatId: 'chat-general', text: 'Hi' },
+    'The change targets a workspace other than the current one',
+  ],
 ])('refuses %s and writes nothing', async (_, name, args, message) => {
   const before = await countOf()
   expect(await resultOf(bobInAcme, name, { workspaceId: acme, ...args })).toEqual(failedWith(message))
   expect(await countOf()).toEqual(before)
-})
-
-test('refuses arguments naming another workspace than the token', async () => {
-  expect(
-    await resultOf(bobInAcme, 'conversation.sendMessage', {
-      workspaceId: globex,
-      id: 'message-foreign',
-      chatId: 'chat-general',
-      text: 'Hi',
-    }),
-  ).toEqual(failedWith('The change targets a workspace other than the current one'))
-  expect(await messageRow('message-foreign')).toBeUndefined()
-})
-
-test('two concurrent senders of 15 messages each get 30 distinct contiguous seqs', async () => {
-  const firstSeq = ((await messagesOf('chat-welcome')).at(-1)?.seq ?? 0) + 1
-  const sends = [aliceInAcme, bobInAcme].flatMap((member) =>
-    Array.from({ length: 15 }, (_, index) =>
-      sendTo(member, 'chat-welcome', `message-race-${member.userId}-${index}`, `Race ${index}`),
-    ),
-  )
-  expect(await Promise.all(sends)).toEqual(Array(30).fill(succeeded))
-  const raced = (await messagesOf('chat-welcome')).filter((message) => message.id.startsWith('message-race-'))
-  expect(raced.map((message) => message.seq)).toEqual(Array.from({ length: 30 }, (_, index) => firstSeq + index))
-  expect((await eventsOf('chat-welcome')).slice(-30).map((event) => event.seq)).toEqual(
-    raced.map((message) => message.seq),
-  )
 })

@@ -1,5 +1,5 @@
 import type { BrowserContext } from '@playwright/test'
-import { expect, mainOf, messageItemsOf, openChat, type Page, sendMessage, test } from './fixtures'
+import { expect, mainOf, messageItemsOf, openChat, type Page, sendMessage, test, workingIndicatorOf } from './fixtures'
 import { openPageAs, type WorkerStack } from './stack'
 import { fakeMcpUrl, gatewayUrl } from './stack-ports'
 
@@ -27,7 +27,6 @@ const connectFake = async (page: Page, account: string, workspace = 'workspace-a
   await inPopup(page, () => connectionsOf(page).getByRole('button', { name: 'Connect fake', exact: true }).click())
   await expect(connectedRowOf(page)).toContainText('Connected')
 }
-const workingIndicatorOf = (page: Page) => page.getByRole('status', { name: 'Agent is working' })
 const promptTool = async (page: Page, agentScript: (chat: string, script: object) => Promise<void>, text: string) => {
   await agentScript(research, toolScript)
   await openChat(page, 'Research')

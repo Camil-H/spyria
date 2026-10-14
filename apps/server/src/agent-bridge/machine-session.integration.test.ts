@@ -1,92 +1,36 @@
-import { afterAll, afterEach, expect, setDefaultTimeout, test } from 'bun:test'
+import { afterEach, expect, setDefaultTimeout, test } from 'bun:test'
 import { rebuildMessages } from '@hq/conversation/server'
-import { events } from '@hq/db/postgres'
 import { schema } from '@hq/db/zero'
 import { type ChatId, chatId } from '@hq/kernel'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
-import { websocket } from 'hono/bun'
-import { createApp } from '../app.ts'
-import { startJobWorker } from '../job-worker.ts'
-import { createRuntimeHostGateway } from '../runtime-hosts/gateway.ts'
-import {
-  acme,
-  alice,
-  aliceInAcme,
-  createFakeHosts,
-  openSharedTestApp,
-  requestMutation,
-  bobInAcme,
-  sessionTokenOf,
-  succeeded,
-  testAuthSettings,
-  waitFor,
-} from '../testing.ts'
-import { createAgentBridge } from './bridge.ts'
+import { acme, alice, aliceInAcme, bobInAcme, sessionTokenOf, startAgentStack, succeeded, waitFor } from '../testing.ts'
 import { createHqAgentRelay } from './hq-agent-relay.ts'
 
 setDefaultTimeout(40_000)
-const { database } = await openSharedTestApp()
-const hqAgentImage = `sha256:${'0'.repeat(64)}`
-const gateway = createRuntimeHostGateway({ databases: () => [database], hqAgentImage })
-const agentBridge = createAgentBridge({
-  sandboxProvider: gateway.sandboxProvider,
-  hqAgentImage,
-  reopenDelayMilliseconds: 50,
-})
-const app = createApp({ database, ...testAuthSettings, runtimeHosts: gateway, agentBridge, hqAgentImage })
-const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
-const worker = startJobWorker(database, {
-  pollIntervalMilliseconds: 5,
-  retryDelayMilliseconds: 100,
-  sandboxProvider: gateway.sandboxProvider,
-  agentBridge,
-})
-const { fakeHost, disconnectFakeHosts } = createFakeHosts({ port: Number(server.port), database })
+const { database, app, fakeHost, mutate, newRuntimeChat, prompt, turnOf, messagesOf, storedAgentEventsOf, ...stack } =
+  await startAgentStack({ hqAgentImage: `sha256:${'0'.repeat(64)}` })
 const relays: ReturnType<typeof createHqAgentRelay>[] = []
-const browserSockets: WebSocket[] = []
 afterEach(async () => {
-  for (const socket of browserSockets.splice(0)) socket.close()
-  await disconnectFakeHosts()
   await database.$client`update runtime_hosts set removed_at = now() where owner_id = ${alice} and removed_at is null`
   await Promise.all(relays.splice(0).map((relay) => relay.stop()))
 })
-afterAll(async () => {
-  await worker.stop()
-  agentBridge.release(database)
-  void server.stop(true)
-})
 
-const machine = async (gapMilliseconds?: number, startFails?: boolean) => {
+const machine = async ({
+  gapMilliseconds,
+  startFails,
+  signedIn = ['claude'],
+}: {
+  gapMilliseconds?: number
+  startFails?: boolean
+  signedIn?: string[]
+} = {}) => {
   const relay = createHqAgentRelay({ gapMilliseconds, startFails })
   relays.push(relay)
-  await fakeHost('Machine', { ownerId: alice, signedIn: ['claude'], agentServer: relay.agentServer })
+  await fakeHost('Machine', { ownerId: alice, signedIn, agentServer: relay.agentServer })
   return relay
 }
-const newMachineChat = async () => {
-  const id = `chat-${crypto.randomUUID()}`
-  await database.$client`
-    insert into chats (workspace_id, id, type, owner_kind, owner_user_id, name, local_session, harness, archived, created_at)
-    values (${acme}, ${id}, 'runtime', 'user', ${alice}, 'Machine chat', true, 'claude-code', false, now())`
-  return chatId(id)
-}
-const prompt = async (chat: ChatId, body: string) => {
-  const id = `message-${crypto.randomUUID()}`
-  expect(
-    await requestMutation(app, database, aliceInAcme, 'conversation.sendMessage', {
-      workspaceId: acme,
-      id,
-      chatId: chat,
-      text: body,
-    }),
-  ).toEqual(succeeded)
-  return id
-}
-const turnOf = async (chat: ChatId) =>
-  (await database.$client`select agent_turn_message_id from chats where id = ${chat}`)[0]?.agent_turn_message_id
-const repliesTo = async (messageId: string) =>
-  (await database.query.messages.findMany({ where: { replyToId: messageId }, orderBy: { seq: 'asc' } })).map(
-    ({ kind, body, step }) => ({ kind, body, step }),
-  )
+const newMachineChat = () => newRuntimeChat({ harness: 'claude-code' })
+const repliesTo = (messageId: string) => stack.repliesTo(messageId, ['kind', 'body', 'step'])
 const finished = async (question: string, chat: ChatId) => {
   await waitFor(async () => (await repliesTo(question)).some((reply) => reply.body.includes('Hello from the stub')))
   await waitFor(async () => (await turnOf(chat)) === null)
@@ -94,25 +38,14 @@ const finished = async (question: string, chat: ChatId) => {
 }
 const bodiesOf = (replies: { kind: string; body: string }[]) =>
   replies.map(({ kind, body }) => (kind === 'step' ? body : `${kind}:${body}`))
-const storedAgentEventsOf = async (chat: ChatId) =>
-  (await database.select().from(events))
-    .filter((event) => event.chatId === chat && event.type === 'agent.event')
-    .toSorted((first, second) => first.seq - second.seq)
-const messagesOf = async (chat: ChatId) =>
-  database.query.messages.findMany({ where: { chatId: chat }, orderBy: { seq: 'asc' } })
 const openStream = async (chat: ChatId) => {
-  const socket = new WebSocket(`ws://localhost:${server.port}/api/stream`)
-  browserSockets.push(socket)
-  const frames: { text?: string; isReasoning?: boolean; storedId?: string }[] = []
-  socket.onmessage = (message) => frames.push(JSON.parse(String(message.data)))
-  await new Promise((resolve) => socket.addEventListener('open', resolve))
-  socket.send(JSON.stringify({ type: 'auth', token: await sessionTokenOf(database, acme, alice) }))
-  socket.send(JSON.stringify({ type: 'subscribe', chatId: chat }))
+  const { frames } = await stack.openStream(chat)
   await Bun.sleep(200)
   return frames
 }
-const streamedText = (frames: { text?: string; isReasoning?: boolean }[], isReasoning = false) =>
+const streamedText = (frames: string[], isReasoning = false) =>
   frames
+    .map((frame) => JSON.parse(frame) as { text?: string; isReasoning?: boolean })
     .filter((frame) => frame.text !== undefined && (frame.isReasoning ?? false) === isReasoning)
     .map((frame) => frame.text)
     .join('')
@@ -125,54 +58,61 @@ const routingOf = async (chat: ChatId) =>
     ).json()) as { adapterModels: { currentModelId: string | null; available: { id: string; name: string }[] } }
   ).adapterModels
 
-const toolsReplies = [
+const toolsRepliesOf = (model: string) => [
   'agent:[t1]',
   'file',
   'agent:permission:allow-always',
   'command',
-  'agent:Hello from the stub (model stub-default, mode bypassPermissions).',
+  `agent:Hello from the stub (model ${model}, mode bypassPermissions).`,
 ]
+const toolsReplies = toolsRepliesOf('stub-default')
 
-test('a Claude Code turn on the machine streams text, shows final steps with the diff, ends once and launches with no base URL and no key', async () => {
-  const relay = await machine()
-  const chat = await newMachineChat()
-  const frames = await openStream(chat)
-  const question = await prompt(chat, 'stub:tools')
-  const replies = await finished(question, chat)
+test.each([
+  { tool: 'claude', harness: 'claude-code', model: 'stub-default' },
+  { tool: 'codex', harness: 'codex', model: 'gpt-stub' },
+])(
+  'a $harness turn on the machine streams text, shows final steps with the diff, ends once and launches with no base URL and no key',
+  async ({ tool, harness, model }) => {
+    const relay = await machine({ signedIn: [tool] })
+    const chat = await newRuntimeChat({ harness })
+    const frames = await openStream(chat)
+    const question = await prompt(chat, 'stub:tools')
+    const replies = await finished(question, chat)
 
-  expect(bodiesOf(replies)).toEqual(toolsReplies)
-  expect(replies[1]?.step).toMatchObject({
-    type: 'file',
-    operation: 'edit',
-    path: 'app.ts',
-    added: 1,
-    removed: 1,
-    diff: [
-      { kind: 'removed', text: 'one' },
-      { kind: 'added', text: 'two' },
-    ],
-  })
-  expect(replies[3]?.step).toMatchObject({ type: 'command', command: 'npm test', exitCode: 1, output: 'exit code 1' })
-  expect(replies.filter((reply) => reply.body.includes('Hello from the stub'))).toHaveLength(1)
-  expect(streamedText(frames)).toBe(
-    '[t1] permission:allow-always Hello from the stub (model stub-default, mode bypassPermissions).',
-  )
+    expect(bodiesOf(replies)).toEqual(toolsRepliesOf(model))
+    expect(replies[1]?.step).toMatchObject({
+      type: 'file',
+      operation: 'edit',
+      path: 'app.ts',
+      added: 1,
+      removed: 1,
+      diff: [
+        { kind: 'removed', text: 'one' },
+        { kind: 'added', text: 'two' },
+      ],
+    })
+    expect(replies[3]?.step).toMatchObject({ type: 'command', command: 'npm test', exitCode: 1, output: 'exit code 1' })
+    expect(replies.filter((reply) => reply.body.includes('Hello from the stub'))).toHaveLength(1)
+    expect(streamedText(frames)).toBe(
+      `[t1] permission:allow-always Hello from the stub (model ${model}, mode bypassPermissions).`,
+    )
 
-  const [launch] = relay.created as { agent: Record<string, unknown>; secrets: object }[]
-  expect(relay.created).toHaveLength(1)
-  expect(launch?.agent).not.toHaveProperty('kind')
-  expect(JSON.stringify(launch?.agent.acp_command)).not.toMatch(/BASE_URL|API_KEY/)
-  expect(launch?.secrets).toEqual({})
+    const [launch] = relay.created as { agent: Record<string, unknown>; secrets: object }[]
+    expect(relay.created).toHaveLength(1)
+    expect(launch?.agent).not.toHaveProperty('kind')
+    expect(JSON.stringify(launch?.agent.acp_command)).not.toMatch(/BASE_URL|API_KEY/)
+    expect(launch?.secrets).toEqual({})
 
-  const environmentQuestion = await prompt(chat, 'stub:env')
-  const [, environment] = /env:(\[.*?\])/.exec((await finished(environmentQuestion, chat))[0]?.body ?? '') ?? []
-  expect(environment).toBeDefined()
-  expect(environment).not.toMatch(/BASE_URL|API_KEY|TOKEN|ANTHROPIC|OPENAI/)
+    const environmentQuestion = await prompt(chat, 'stub:env')
+    const [, environment] = /env:(\[.*?\])/.exec((await finished(environmentQuestion, chat))[0]?.body ?? '') ?? []
+    expect(environment).toBeDefined()
+    expect(environment).not.toMatch(/BASE_URL|API_KEY|TOKEN|ANTHROPIC|OPENAI/)
 
-  const live = await messagesOf(chat)
-  await zeroDrizzle(schema, database).transaction((tx) => rebuildMessages(tx, { chatId: chat }))
-  expect(await messagesOf(chat)).toEqual(live)
-})
+    const live = await messagesOf(chat)
+    await zeroDrizzle(schema, database).transaction((tx) => rebuildMessages(tx, { chatId: chat }))
+    expect(await messagesOf(chat)).toEqual(live)
+  },
+)
 
 test('thinking streams as reasoning, then is stored as one thought with its duration', async () => {
   await machine()
@@ -194,9 +134,7 @@ test('Stop closes the turn as stopped, and the next prompt continues the same AC
   const chat = await newMachineChat()
   const stopped = await prompt(chat, 'stub:long')
   await waitFor(async () => (await repliesTo(stopped)).some((reply) => reply.body === 'command'))
-  expect(
-    await requestMutation(app, database, aliceInAcme, 'conversation.stopAgent', { workspaceId: acme, chatId: chat }),
-  ).toEqual(succeeded)
+  expect(await mutate(aliceInAcme, 'conversation.stopAgent', { workspaceId: acme, chatId: chat })).toEqual(succeeded)
   await waitFor(async () => (await turnOf(chat)) === null)
   const stoppedReplies = await repliesTo(stopped)
   expect(stoppedReplies.find((reply) => reply.kind === 'step')?.step).toMatchObject({
@@ -220,7 +158,7 @@ test('Stop closes the turn as stopped, and the next prompt continues the same AC
 })
 
 test('a socket dropped mid-turn resumes after the last stored seq: no event lost, none stored or streamed twice', async () => {
-  const relay = await machine(250)
+  const relay = await machine({ gapMilliseconds: 250 })
   const chat = await newMachineChat()
   const frames = await openStream(chat)
   const question = await prompt(chat, 'stub:tools')
@@ -251,7 +189,7 @@ test('the adapter’s models list in the routing read, and a pick is switched in
   })
 
   expect(
-    await requestMutation(app, database, aliceInAcme, 'conversation.updateChatRouting', {
+    await mutate(aliceInAcme, 'conversation.updateChatRouting', {
       workspaceId: acme,
       chatId: chat,
       acpModel: 'stub-large',
@@ -264,14 +202,12 @@ test('the adapter’s models list in the routing read, and a pick is switched in
 })
 
 test('a late chunk of a stopped turn does not land in the next turn', async () => {
-  await machine(250)
+  await machine({ gapMilliseconds: 250 })
   const chat = await newMachineChat()
   const frames = await openStream(chat)
   const stopped = await prompt(chat, 'stub:long stub:late')
   await waitFor(async () => (await repliesTo(stopped)).some((reply) => reply.body === 'command'))
-  expect(
-    await requestMutation(app, database, aliceInAcme, 'conversation.stopAgent', { workspaceId: acme, chatId: chat }),
-  ).toEqual(succeeded)
+  expect(await mutate(aliceInAcme, 'conversation.stopAgent', { workspaceId: acme, chatId: chat })).toEqual(succeeded)
   const next = await prompt(chat, 'stub:tools')
   const replies = await finished(next, chat)
 
@@ -281,7 +217,7 @@ test('a late chunk of a stopped turn does not land in the next turn', async () =
 })
 
 test('a start that fails closes the turn at once with the adapter message and does not retry', async () => {
-  const relay = await machine(undefined, true)
+  const relay = await machine({ startFails: true })
   const chat = await newMachineChat()
   const question = await prompt(chat, 'Hello')
   await waitFor(async () => (await repliesTo(question)).length > 0)
@@ -317,14 +253,8 @@ test('a plan update shows as a plan step, and a Task call with its inner calls a
   })
 })
 
-const newRuntimeChat = async (isLocal = false, id = `chat-${crypto.randomUUID()}`) => {
-  await database.$client`
-    insert into chats (workspace_id, id, type, owner_kind, owner_user_id, name, local_session, harness, archived, created_at)
-    values (${acme}, ${id}, 'runtime', 'user', ${alice}, 'Runtime chat', ${isLocal}, ${isLocal ? 'claude-code' : null}, false, now())`
-  return chatId(id)
-}
 const chooseRunsOn = (chat: ChatId, runsOn: string, user = aliceInAcme) =>
-  requestMutation(app, database, user, 'conversation.updateChatRouting', { workspaceId: acme, chatId: chat, runsOn })
+  mutate(user, 'conversation.updateChatRouting', { workspaceId: acme, chatId: chat, runsOn })
 const startJobsOf = async (chat: ChatId) =>
   database.$client<{ state: string }[]>`
     select state from jobs where type = 'agent.start-session' and payload->>'chatId' = ${chat}`
@@ -335,20 +265,26 @@ const startedEventsOf = async (chat: ChatId) =>
       'session_started',
   )
 
-test('choosing a machine tool starts the session once with no prompt, and the first prompt joins it', async () => {
-  const relay = await machine()
-  const chat = await newRuntimeChat()
-  expect(await chooseRunsOn(chat, 'claude-code')).toEqual(succeeded)
-  await waitFor(async () => (await startedEventsOf(chat)).length === 1)
-  expect(relay.created).toHaveLength(1)
-  expect(relay.prompts).toHaveLength(0)
-  expect(await chooseRunsOn(chat, 'runtime')).not.toEqual(succeeded)
+test.each([
+  { tool: 'claude', harness: 'claude-code' },
+  { tool: 'codex', harness: 'codex' },
+])(
+  'choosing $harness on the machine starts the session once with no prompt, and the first prompt joins it',
+  async ({ tool, harness }) => {
+    const relay = await machine({ signedIn: [tool] })
+    const chat = await newRuntimeChat()
+    expect(await chooseRunsOn(chat, harness)).toEqual(succeeded)
+    await waitFor(async () => (await startedEventsOf(chat)).length === 1)
+    expect(relay.created).toHaveLength(1)
+    expect(relay.prompts).toHaveLength(0)
+    expect(await chooseRunsOn(chat, 'runtime')).not.toEqual(succeeded)
 
-  await finished(await prompt(chat, 'Hello'), chat)
-  expect(relay.created).toHaveLength(1)
-  expect(await startedEventsOf(chat)).toHaveLength(1)
-  await waitFor(async () => (await startJobsOf(chat)).every(({ state }) => state === 'done'))
-})
+    await finished(await prompt(chat, 'Hello'), chat)
+    expect(relay.created).toHaveLength(1)
+    expect(await startedEventsOf(chat)).toHaveLength(1)
+    await waitFor(async () => (await startJobsOf(chat)).every(({ state }) => state === 'done'))
+  },
+)
 
 test('nothing starts for a signed-out tool, a non-owner or a choice of the HQ runtime', async () => {
   const relay = createHqAgentRelay()
@@ -366,10 +302,10 @@ test('nothing starts for a signed-out tool, a non-owner or a choice of the HQ ru
 })
 
 test('a prompt sent at once after the choice joins the one session and streams live to a viewer subscribed before the chat was stored', async () => {
-  const relay = await machine(30)
+  const relay = await machine({ gapMilliseconds: 30 })
   const chat = chatId(`chat-${crypto.randomUUID()}`)
   const frames = await openStream(chat)
-  await newRuntimeChat(false, chat)
+  await newRuntimeChat({ id: chat })
   expect(await chooseRunsOn(chat, 'claude-code')).toEqual(succeeded)
   const replies = await finished(await prompt(chat, 'stub:think'), chat)
   expect(replies.at(-1)?.kind).toBe('agent')

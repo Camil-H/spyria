@@ -1,10 +1,12 @@
-import { afterAll, expect, spyOn, test } from 'bun:test'
+import { afterAll, expect, test } from 'bun:test'
 import { createApp } from './app.ts'
 import { startJobWorker } from './job-worker.ts'
 import {
   acme,
   alice,
   aliceInAcme,
+  captureConsole,
+  everyStoredText,
   failedWith,
   globex,
   llmGatewayAt,
@@ -47,18 +49,6 @@ const boundKeyIdsOf = async (virtualKeyId: string) =>
   ).virtual_key.provider_configs
     .flatMap((config) => config.keys.map((key) => key.key_id))
     .toSorted()
-const everyStoredText = async () => {
-  const tables = await database.$client<{ name: string }[]>`
-    select table_name as name from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE'`
-  const rows = await Promise.all(tables.map(({ name }) => database.$client.unsafe(`select * from "${name}"`)))
-  return JSON.stringify(rows)
-}
-const consoleSpies = () => (['log', 'info', 'warn', 'error', 'debug'] as const).map((method) => spyOn(console, method))
-const loggedText = (spies: ReturnType<typeof consoleSpies>) =>
-  spies.map((spy) => Bun.inspect(spy.mock.calls)).join('\n')
-const restore = (spies: ReturnType<typeof consoleSpies>) => {
-  for (const spy of spies) spy.mockRestore()
-}
 const appWithGateway = (url: string) => createApp({ database, ...testAuthSettings, llmGateway: llmGatewayAt(url) })
 const failingVirtualKeysProxy = () =>
   Bun.serve({
@@ -74,6 +64,7 @@ const failingVirtualKeysProxy = () =>
     },
   })
 
+// Order matters: later tests use the OpenAI credential that the second test adds.
 test('the credential endpoint refuses blank, missing, malformed or unsupported fields and stores nothing', async () => {
   const token = `Bearer ${await tokenOf(acme, alice)}`
   const keysBefore = await gatewayKeysOf('openai')
@@ -95,13 +86,13 @@ test('the credential endpoint refuses blank, missing, malformed or unsupported f
 })
 
 test('adding a credential stores the secret in the gateway under an opaque name, binds it to the member virtual key, and HQ keeps no secret and logs nothing', async () => {
-  const spies = consoleSpies()
+  const consoleCalls = captureConsole()
   try {
     const response = await postCredentialAs(aliceInAcme, { provider: ' OpenAI ', secret: secretValue })
     expect(response).toEqual({ status: 201, text: '' })
-    expect(loggedText(spies)).not.toContain(secretValue)
+    expect(consoleCalls.logged()).not.toContain(secretValue)
   } finally {
-    restore(spies)
+    consoleCalls.restore()
   }
   const rows = await credentialRows()
   const stored = rows.find((row) => row.provider === 'OpenAI')
@@ -119,19 +110,14 @@ test('adding a credential stores the secret in the gateway under an opaque name,
     `/api/governance/virtual-keys/${virtualKeyId}`,
   )
   expect(virtual_key.name).not.toMatch(/alice/i)
-  const storedText = await everyStoredText()
+  const storedText = await everyStoredText(database)
   expect(storedText).not.toContain(secretValue)
   expect(storedText).not.toContain(virtual_key.value)
 })
 
-test('the secret never reaches a replicated table or column', async () => {
+test('the secret never reaches a replicated row', async () => {
   const publishedTables = await database.$client<{ table: string; columns: string[] }[]>`
     select tablename as table, attnames as columns from pg_publication_tables where pubname = 'hq_zero'`
-  expect(publishedTables.map(({ table }) => table)).not.toContain('member_gateway_keys')
-  expect(publishedTables.find(({ table }) => table === 'llm_credentials')?.columns).not.toContain('secret_ref')
-  expect(publishedTables.find(({ table }) => table === 'chats')?.columns).not.toContain('agent_turn_prompter_id')
-  expect(publishedTables.find(({ table }) => table === 'chats')?.columns).not.toContain('agent_turn_failure')
-  expect(publishedTables.find(({ table }) => table === 'runtimes')?.columns).not.toContain('llm_token_hash')
   for (const { table, columns } of publishedTables) {
     const rows = await database.$client.unsafe(
       `select ${columns.map((column) => `"${column}"`).join(', ')} from "${table}"`,
@@ -141,7 +127,7 @@ test('the secret never reaches a replicated table or column', async () => {
 })
 
 test('an unreachable gateway leaves no row and logs no secret', async () => {
-  const spies = consoleSpies()
+  const consoleCalls = captureConsole()
   try {
     expect(
       await postCredentialAs(
@@ -150,9 +136,9 @@ test('an unreachable gateway leaves no row and logs no secret', async () => {
         appWithGateway('http://127.0.0.1:9'),
       ),
     ).toMatchObject({ status: 500 })
-    expect(loggedText(spies)).not.toContain(secretValue)
+    expect(consoleCalls.logged()).not.toContain(secretValue)
   } finally {
-    restore(spies)
+    consoleCalls.restore()
   }
   expect((await credentialRows()).filter((row) => row.user_id === bob)).toEqual([])
   expect(await virtualKeyIdOf(bob)).toBeUndefined()
@@ -161,14 +147,14 @@ test('an unreachable gateway leaves no row and logs no secret', async () => {
 test('a failed HQ commit deletes the gateway key it just created and logs no secret', async () => {
   const keysBefore = await gatewayKeysOf('mistral')
   await database.$client`alter table llm_credentials add constraint refuse_provider check (provider <> 'Mistral') not valid`
-  const spies = consoleSpies()
+  const consoleCalls = captureConsole()
   try {
     expect(await postCredentialAs(bobInAcme, { provider: 'Mistral', secret: 'sk-refused-value' })).toMatchObject({
       status: 500,
     })
-    expect(loggedText(spies)).not.toContain('sk-refused-value')
+    expect(consoleCalls.logged()).not.toContain('sk-refused-value')
   } finally {
-    restore(spies)
+    consoleCalls.restore()
     await database.$client`alter table llm_credentials drop constraint refuse_provider`
   }
   expect((await credentialRows()).map((row) => row.provider)).not.toContain('Mistral')

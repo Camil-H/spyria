@@ -1,15 +1,17 @@
 import {
   agentReplyText,
   expect,
+  llmSectionOf,
   mainOf,
   messageItemsOf,
   openChat,
+  openProfile,
   type Page,
   sendButtonOf,
   sendMessage,
   serverUrl,
-  sidebarOf,
   test,
+  workingIndicatorOf,
 } from './fixtures'
 import { openPageAs, type WorkerStack } from './stack'
 
@@ -17,11 +19,6 @@ const blockedNotice = 'Connect an LLM key in your profile to prompt'
 const research = 'chat-research'
 type GatewayLog = { virtual_key_id: string | null; selected_key_id: string; metadata: Record<string, string> | null }
 
-const llmSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'LLM access' })
-const openProfile = async (page: Page) => {
-  await sidebarOf(page).getByRole('link', { name: 'Profile' }).click()
-  await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Profile' })).toBeVisible()
-}
 const addKey = async (page: Page, provider: string, secret: string) => {
   await openProfile(page)
   await llmSectionOf(page).getByLabel('Provider').fill(provider)
@@ -42,7 +39,6 @@ const removeKey = async (page: Page, provider: string) => {
   await expect(llmSectionOf(page).getByRole('button', { name: `Remove ${provider}` })).toHaveCount(0)
 }
 const newSecret = (prefix = 'fake-key') => `${prefix}-${crypto.randomUUID()}`
-const workingIndicatorOf = (page: Page) => page.getByRole('status', { name: 'Agent is working' })
 const repliesWith = (page: Page, text: string) => messageItemsOf(page).filter({ hasText: text })
 const virtualKeyOf = async (workerStack: WorkerStack, memberId: string) =>
   (await workerStack.database.$client`select virtual_key_id from member_gateway_keys where user_id = ${memberId}`)[0]

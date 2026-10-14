@@ -1,4 +1,14 @@
-import { test as base, expect, mainOf, messageItemsOf, openChat, type Page, sendMessage, sidebarOf } from './fixtures'
+import {
+  test as base,
+  expect,
+  mainOf,
+  messageItemsOf,
+  openChat,
+  openProfile,
+  type Page,
+  sendMessage,
+  sidebarOf,
+} from './fixtures'
 import { openPageAs } from './stack'
 import { viteUrl } from './stack-ports'
 
@@ -55,10 +65,6 @@ const useToolDialogOf = (page: Page, toolName: string) => page.getByRole('dialog
 const hostsSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Runtime hosts' })
 const urlOf = (command: string) => `${viteUrl}/h/${command.match(/\/h\/([A-Z0-9]{8})\b/)?.[1]}`
 
-const openProfile = async (page: Page) => {
-  await sidebarOf(page).getByRole('link', { name: 'Profile' }).click()
-  await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Profile' })).toBeVisible()
-}
 const openSettings = async (page: Page) => {
   await sidebarOf(page).getByRole('link', { name: 'Workspace settings' }).click()
   await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Workspace settings' })).toBeVisible()

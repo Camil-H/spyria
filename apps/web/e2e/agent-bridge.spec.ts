@@ -8,11 +8,11 @@ import {
   type Page,
   sendMessage,
   test,
+  workingIndicatorOf,
 } from './fixtures'
 import { openPageAs, type WorkerStack } from './stack'
 
 const research = 'chat-research'
-const workingIndicatorOf = (page: Page) => page.getByRole('status', { name: 'Agent is working' })
 const itemsWith = (page: Page, text: string) => messageItemsOf(page).filter({ hasText: text })
 const unreadIconOf = (page: Page, chatName: string) =>
   chatLinkOf(page, chatName).getByRole('img', { name: 'Unread messages' })

@@ -50,23 +50,6 @@ test('createChat inserts a runtime chat owned by the caller in the given project
   })
 })
 
-test('moveChat, renameChat and archiveChat update the chat', async () => {
-  expect(
-    await resultOf(aliceInAcme, 'workspace.moveChat', {
-      workspaceId: acme,
-      chatId: 'chat-standup',
-      projectId: 'project-billing',
-    }),
-  ).toEqual(succeeded)
-  expect(
-    await resultOf(aliceInAcme, 'workspace.renameChat', { workspaceId: acme, chatId: 'chat-standup', name: 'Daily' }),
-  ).toEqual(succeeded)
-  expect(await resultOf(aliceInAcme, 'workspace.archiveChat', { workspaceId: acme, chatId: 'chat-standup' })).toEqual(
-    succeeded,
-  )
-  expect(await chatRow('chat-standup')).toMatchObject({ projectId: 'project-billing', name: 'Daily', archived: true })
-})
-
 test('renameProject and archiveProject with the release policy update the project and detach its chats', async () => {
   expect(
     await resultOf(aliceInAcme, 'workspace.renameProject', {
@@ -143,6 +126,12 @@ test.each([
     { id: globex, name: 'Hijack' },
     'The change targets a workspace other than the current one',
   ],
+  [
+    'arguments naming another workspace than the token',
+    'workspace.createProject',
+    { workspaceId: globex, id: 'project-foreign', name: 'Foreign' },
+    'The change targets a workspace other than the current one',
+  ],
 ])('refuses %s', async (_, name, args, message) => {
   const before = await Promise.all([
     database.query.projects.findMany({ orderBy: { id: 'asc' } }),
@@ -157,17 +146,6 @@ test.each([
       database.query.memberships.findMany({ orderBy: { userId: 'asc' } }),
     ]),
   ).toEqual(before)
-})
-
-test('refuses arguments naming another workspace than the token', async () => {
-  expect(
-    await resultOf(bobInAcme, 'workspace.createProject', {
-      workspaceId: globex,
-      id: 'project-foreign',
-      name: 'Foreign',
-    }),
-  ).toEqual(failedWith('The change targets a workspace other than the current one'))
-  expect(await projectRow('project-foreign')).toBeUndefined()
 })
 
 test('refuses invalid arguments', async () => {

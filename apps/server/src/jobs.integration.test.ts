@@ -43,6 +43,7 @@ const addDeadJob = (id: string, promptId: string) =>
 const repliesTo = async (messageId: string) =>
   (await database.query.messages.findMany()).filter((message) => message.replyToId === messageId)
 
+// Order matters: the jobs:failed and jobs:retry tests use the dead jobs left by the tests before them.
 test('a throwing job is retried with a growing delay, then dead after 5 attempts with its last error', async () => {
   await addAgentPromptJob('job-broken', 'message-missing')
   const errorLog = spyOn(console, 'error').mockImplementation(() => {})

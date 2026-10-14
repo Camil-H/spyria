@@ -4,7 +4,7 @@ import { schema } from '@hq/db/zero'
 import { type WorkspaceId, workspaceId } from '@hq/kernel'
 import { createBifrostUsageLogs, createUsageJobs, syncUsageNow } from '@hq/usage/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
-import { acme, alice, globex, openSharedTestApp, bob, waitFor } from './testing.ts'
+import { acme, alice, gatewayLogsOf, globex, openSharedTestApp, bob, virtualKeyOf } from './testing.ts'
 
 setDefaultTimeout(60_000)
 const { database, gateway } = await openSharedTestApp()
@@ -17,29 +17,21 @@ const run = crypto.randomUUID()
 const logs = createBifrostUsageLogs({ url: gateway.url, ...gatewayAdmin, labels: { run } })
 const sync = (workspace: WorkspaceId = acme) => syncUsageNow(logs, { workspaceId: workspace, transact })
 
-const [aliceKey] = await database.$client`select virtual_key_id from member_gateway_keys where user_id = ${alice}`
-const { virtual_key } = await gateway.call<{ virtual_key: { value: string } }>(
-  `/api/governance/virtual-keys/${aliceKey?.virtual_key_id}`,
-)
+const aliceKey = await virtualKeyOf(alice)
 let callsMade = 0
 const modelCall = async (labels: Record<string, string>, model = 'fake/fake-model') => {
   callsMade++
   await fetch(`${gateway.url}/v1/chat/completions`, {
     method: 'POST',
     headers: {
-      authorization: `Bearer ${virtual_key.value}`,
+      authorization: `Bearer ${aliceKey.value}`,
       'content-type': 'application/json',
       ...Object.fromEntries(Object.entries({ ...labels, run }).map(([name, value]) => [`x-bf-dim-${name}`, value])),
     },
     body: JSON.stringify({ model, messages: [{ role: 'user', content: 'hi' }] }),
   })
 }
-const landed = async () =>
-  waitFor(
-    async () =>
-      (await gateway.call<{ logs: unknown[] | null }>(`/api/logs?metadata_run=${run}&limit=100`)).logs?.length ===
-      callsMade,
-  )
+const landed = () => gatewayLogsOf(gateway, `metadata_run=${run}`, callsMade)
 const research = { workspace: acme, chat: 'chat-research', owner: alice }
 const usageRows = async () =>
   database.$client`

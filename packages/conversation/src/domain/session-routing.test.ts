@@ -12,7 +12,7 @@ import {
   rereadDollarsOf,
   withPricesOf,
 } from '@hq/kernel'
-import { sessionChoiceOf, unreachableSessionNoticeOf } from './session-routing.ts'
+import { chipLabelOf, sessionChoiceOf, unreachableSessionNoticeOf } from './session-routing.ts'
 
 addRoutableModels([
   { id: 'fake/fake-large', name: 'Fake large', tier: 'large' },
@@ -128,4 +128,33 @@ test('a prompter who cannot reach the session model gets the cannot-reach notice
   expect(unreachableSessionNoticeOf('fake/fake-large')).toBe(
     'Your keys cannot reach Fake large; switch the model or add a key',
   )
+})
+
+test.each([
+  [{ localSession: true, harness: null, model: null }, 'Claude Code · subscription'],
+  [{ localSession: true, harness: 'codex', model: 'gpt-large' }, 'Codex · Adapter gpt-large'],
+  [{ localSession: false, harness: 'claude-code', model: 'anthropic/claude-opus-5-5' }, 'Claude Code · Opus 5.5'],
+  [
+    { localSession: false, harness: null, model: 'fake/fake-large', reasoningEffort: 'high' },
+    'Named fake/fake-large (high) · same as main',
+  ],
+  [{ localSession: false, harness: null, model: 'fake/fake-small' }, 'Named fake/fake-small · same as main'],
+  [{ localSession: false, harness: 'codex', model: null }, 'Model chosen at first prompt'],
+] as const)('the session chip reads %o as %s', (fields, label) => {
+  expect(
+    chipLabelOf(
+      { reasoningEffort: null, subagentPolicy: 'same_as_main', ...fields },
+      (id) => (id.startsWith('anthropic/') ? 'Anthropic/Opus 5.5' : `Named ${id}`),
+      (id) => `Adapter ${id}`,
+    ),
+  ).toBe(label)
+})
+test('the session chip names the auto subagent policy', () => {
+  expect(
+    chipLabelOf(
+      { localSession: false, harness: null, model: 'fake/fake-medium', reasoningEffort: null, subagentPolicy: 'auto' },
+      () => 'Fake medium',
+      () => '',
+    ),
+  ).toBe('Fake medium · auto')
 })

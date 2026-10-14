@@ -1,6 +1,4 @@
-import { afterAll, afterEach, beforeEach, expect, setDefaultTimeout, spyOn, test } from 'bun:test'
-import { createHash } from 'node:crypto'
-import { agentServerImage } from '@hq/runtime/server'
+import { afterAll, afterEach, beforeEach, expect, setDefaultTimeout, test } from 'bun:test'
 import { websocket } from 'hono/bun'
 import { createAgentBridge } from './agent-bridge/bridge.ts'
 import { createApp, defaultLlm } from './app.ts'
@@ -9,12 +7,16 @@ import { createRuntimeHostGateway } from './runtime-hosts/gateway.ts'
 import {
   acme,
   alice,
+  captureConsole,
   createFakeHosts,
+  everyStoredText,
   type FakeHost,
   openSharedTestApp,
+  runtimeTurn,
   bob,
   sessionTokenOf,
   testAuthSettings,
+  virtualKeyOf,
   waitFor,
 } from './testing.ts'
 
@@ -24,7 +26,6 @@ const { fakeHost, disconnectFakeHosts } = createFakeHosts({ port, database })
 afterEach(() => disconnectFakeHosts())
 afterAll(() => disconnectFakeHosts())
 
-const sha256 = (value: string) => createHash('sha256').update(value).digest('hex')
 const aliceAccount = `alice-${crypto.randomUUID().slice(0, 8)}`
 const aliceCookie = `fake_mcp_user=${aliceAccount}`
 
@@ -53,19 +54,6 @@ const connectAlice = async () => {
     body: JSON.stringify({ status: 'Connected' }),
   })
 }
-const virtualKeyOf = async (userId: string) => {
-  const [row] = await database.$client`select virtual_key_id from member_gateway_keys where user_id = ${userId}`
-  return (
-    await gateway.call<{
-      virtual_key: {
-        id: string
-        value: string
-        mcp_configs: { mcp_client: { name: string } }[]
-        provider_configs: { keys: unknown[] }[]
-      }
-    }>(`/api/governance/virtual-keys/${row?.virtual_key_id}`)
-  ).virtual_key
-}
 const fakeClientId = async () =>
   (await gateway.call<{ clients: { config: { client_id: string; name: string } }[] }>('/api/mcp/clients')).clients.find(
     (client) => client.config.name === 'fake',
@@ -80,26 +68,6 @@ const connectionRows = async () => [
   ...(await database.$client`select user_id, tool, status from tool_connections where tool = 'fake'`),
 ]
 
-const runtimeChat = async (host: FakeHost, prompterId: string | null) => {
-  const chatId = `chat-${crypto.randomUUID()}`
-  const promptId = `message-${crypto.randomUUID()}`
-  const token = `runtime-token-${crypto.randomUUID()}`
-  await database.$client.begin(async (sql) => {
-    await sql`
-      insert into chats (workspace_id, id, type, owner_kind, owner_user_id, name, archived, created_at)
-      values (${acme}, ${chatId}, 'runtime', 'user', ${alice}, 'Tools chat', false, now())`
-    await sql`
-      insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
-      values (${acme}, ${chatId}, ${promptId}, 1, 'member', ${prompterId ?? alice}, 'Go', now())`
-    await sql`
-      insert into runtimes (workspace_id, id, chat_id, host_id, state, host_online, image, llm_token_hash, last_active_at, created_at, state_changed_at)
-      values (${acme}, ${crypto.randomUUID()}, ${chatId}, ${host.id}, 'running', true, ${agentServerImage}, ${sha256(token)}, now(), now(), now())`
-    if (prompterId)
-      await sql`
-        update chats set agent_turn_message_id = ${promptId}, agent_turn_prompter_id = ${prompterId} where id = ${chatId}`
-  })
-  return { chatId, token }
-}
 const rpcOf = (method: string, params: object = {}) => JSON.stringify({ jsonrpc: '2.0', id: 7, method, params })
 const mcpCall = async (host: FakeHost, token: string, body: string, headers: Record<string, string> = {}) => {
   const answer = await host.modelCall({
@@ -180,7 +148,7 @@ test('/mcp runs as the chat owner with and without a turn, with HQ’s attributi
   await connectAlice()
   const host = await fakeHost('Tools host')
   const otherHost = await fakeHost('Other tools host')
-  const { chatId, token } = await runtimeChat(host, bob)
+  const { chatId, token } = await runtimeTurn(host, bob)
   const callsBefore = fakeMcp.records.length
 
   const initialized = await mcpCall(
@@ -219,7 +187,7 @@ test('/mcp runs as the chat owner with and without a turn, with HQ’s attributi
 
 test('a server the owner has not connected, or whose token was revoked, answers HQ’s wording and flags the connection', async () => {
   const host = await fakeHost('Unconnected tools host')
-  const { token } = await runtimeChat(host, alice)
+  const { token } = await runtimeTurn(host, alice)
   await mcpCall(host, token, rpcOf('initialize', { protocolVersion: '2025-06-18', capabilities: {} }))
   const unconnected = await mcpCall(host, token, whoami)
   expect(unconnected).toMatchObject({ status: 200, result: { isError: true } })
@@ -264,7 +232,7 @@ test('session headers pass through, gateway failures become error results instea
   const hosts = createFakeHosts({ port: Number(server.port), database })
   try {
     const host = await hosts.fakeHost('Stubbed gateway host')
-    const { token } = await runtimeChat(host, alice)
+    const { token } = await runtimeTurn(host, alice)
     const ownerKey = await virtualKeyOf(alice)
     const listed = await mcpCall(host, token, rpcOf('tools/list'), {
       'mcp-session-id': 'agent-session',
@@ -309,23 +277,19 @@ test('session headers pass through, gateway failures become error results instea
 })
 
 test('no OAuth token, client secret or virtual key reaches HQ tables, logs or frames to hosts', async () => {
-  const spies = (['log', 'info', 'warn', 'error', 'debug'] as const).map((method) => spyOn(console, method))
+  const consoleCalls = captureConsole()
   let frames = ''
   try {
     await connectAlice()
     const host = await fakeHost('Secrets host')
-    const { token } = await runtimeChat(host, alice)
+    const { token } = await runtimeTurn(host, alice)
     expect(textOf((await mcpCall(host, token, whoami)).result)).toBe(`you are ${aliceAccount}`)
     frames = host.receivedFrames.join('\n')
   } finally {
-    for (const spy of spies) spy.mockRestore()
+    consoleCalls.restore()
   }
-  const tables = await database.$client<{ name: string }[]>`
-    select table_name as name from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE'`
-  const stored = JSON.stringify(
-    await Promise.all(tables.map(({ name }) => database.$client.unsafe(`select * from "${name}"`))),
-  )
-  const logged = spies.map((spy) => Bun.inspect(spy.mock.calls)).join('\n')
+  const stored = await everyStoredText(database)
+  const logged = consoleCalls.logged()
   const secrets = [...fakeMcp.secrets(), (await virtualKeyOf(alice)).value]
   expect(secrets.length).toBeGreaterThan(2)
   for (const secret of secrets) {

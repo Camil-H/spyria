@@ -1,7 +1,7 @@
 import { type ChatId, modelNameOf, rereadDollarsOf, type WorkspaceId } from '@hq/kernel'
 import { buttonClass, fieldClass, focusRing, formatCost, ghostButtonClass, labelClass } from '@hq/ui'
 import { useEffect, useRef, useState } from 'react'
-import { type Harness, harnesses, type RunsOn, runsOnNames } from '../domain/session-routing.ts'
+import { chipLabelOf, type Harness, type RunsOn, runsOnNames } from '../domain/session-routing.ts'
 import type { Conversation } from '../queries/get-conversation.ts'
 import type { ChatRoutingRead } from './endpoints.ts'
 import { useConversationCommands } from './providers.tsx'
@@ -15,23 +15,10 @@ type Fields = {
   acpModel?: string
 }
 
-const policyNames: Record<Policy, string> = { auto: 'auto', same_as_main: 'same as main' }
 const refreshMilliseconds = 2000
 const microsPerDollar = 1_000_000
 
-export const SessionChip = ({
-  workspaceId,
-  chatId,
-  model,
-  reasoningEffort,
-  defaultModel,
-  subagentPolicy,
-  harness,
-  localSession,
-  runsOn,
-  isOwner,
-  runsOnChoices,
-}: {
+export const SessionChip = (chip: {
   workspaceId: WorkspaceId
   chatId: ChatId
   model: string | null
@@ -44,6 +31,18 @@ export const SessionChip = ({
   isOwner: boolean
   runsOnChoices: Conversation['runsOnChoices']
 }) => {
+  const {
+    workspaceId,
+    chatId,
+    model,
+    defaultModel,
+    subagentPolicy,
+    harness,
+    localSession,
+    runsOn,
+    isOwner,
+    runsOnChoices,
+  } = chip
   const commands = useConversationCommands()
   const [isOpen, setIsOpen] = useState(false)
   const chipRef = useRef<HTMLDivElement>(null)
@@ -96,13 +95,7 @@ export const SessionChip = ({
         onClick={() => setIsOpen(!isOpen)}
         className={`max-w-full truncate rounded-full border border-line px-2 py-0.5 text-xs text-muted hover:text-ink ${focusRing}`}
       >
-        {localSession
-          ? `${harnesses[harness ?? 'claude-code'].name} · ${model ? adapterNameOf(model) : 'subscription'}`
-          : harness && model
-            ? `${harnesses[harness].name} · ${nameOf(model).split('/').at(-1)}`
-            : model
-              ? `${nameOf(model)}${reasoningEffort ? ` (${reasoningEffort})` : ''} · ${policyNames[subagentPolicy]}`
-              : 'Model chosen at first prompt'}
+        {chipLabelOf(chip, nameOf, adapterNameOf)}
       </button>
       {isOpen && (
         <div

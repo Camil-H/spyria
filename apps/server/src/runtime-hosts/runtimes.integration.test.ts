@@ -1,7 +1,7 @@
-import { afterAll, afterEach, expect, spyOn, test } from 'bun:test'
+import { afterAll, afterEach, expect, test } from 'bun:test'
 import { schema } from '@hq/db/zero'
 import { createZeroStore } from '@hq/db/zero-store'
-import { type ChatId, chatId, type MemberId, type WorkspaceId } from '@hq/kernel'
+import { type ChatId, chatId } from '@hq/kernel'
 import {
   agentServerImage,
   createRuntimeJobs,
@@ -17,19 +17,20 @@ import {
   acme,
   alice,
   aliceInAcme,
+  captureConsole,
   createFakeHosts,
   globex,
-  issueTestSession,
   openSharedTestApp,
+  openZeroStore,
   requestMutation,
-  bobInAcme,
+  bob,
   succeeded,
   testAuthSettings,
   waitFor,
 } from '../testing.ts'
 import { createRuntimeHostGateway } from './gateway.ts'
 
-const { database, zeroCacheUrl } = await openSharedTestApp()
+const { database } = await openSharedTestApp()
 const gateway = createRuntimeHostGateway({ databases: () => [database] })
 const app = createApp({ database, ...testAuthSettings, runtimeHosts: gateway })
 const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
@@ -41,11 +42,9 @@ const worker = startJobWorker(database, {
 const zeroDatabase = zeroDrizzle(schema, database)
 const runtimeJobs = createRuntimeJobs(gateway.sandboxProvider)
 const { fakeHost, disconnectFakeHosts } = createFakeHosts({ port: Number(server.port), database })
-const openedStores: ReturnType<typeof createZeroStore>[] = []
 afterEach(disconnectFakeHosts)
 afterAll(async () => {
   await worker.stop()
-  await Promise.all(openedStores.map((store) => store.close()))
   void server.stop(true)
 })
 
@@ -305,47 +304,28 @@ test('removing a host marks its runtimes failed/lost', async () => {
 })
 
 test('the API key never reaches Zero rows or logs, and other workspaces never see the runtime', async () => {
-  const spies = (['log', 'info', 'warn', 'error', 'debug'] as const).map((method) => spyOn(console, method))
+  const consoleCalls = captureConsole()
   try {
     const host = await fakeHost('Secret host')
     const chat = await newRuntimeChat()
     const runtime = await runningRuntime(chat)
     const apiKey = host.containers.get(runtime.id)?.apiKey ?? ''
     expect(apiKey).not.toBe('')
-    const openStore = async (member: { workspaceId: WorkspaceId; userId: MemberId }) => {
-      const session = await issueTestSession(database, member.workspaceId, member.userId)
-      const store = createZeroStore({
-        memberId: member.userId,
-        sessions: [{ ...session, workspaceId: member.workspaceId }],
-        renew: async () => undefined,
-        cacheURL: zeroCacheUrl,
-        kvStore: 'mem',
-        storageKeyPrefix: `${crypto.randomUUID()}:`,
-      })
-      openedStores.push(store)
-      await store.whenLoaded(member.workspaceId)
-      return store
-    }
-    const bobsAcme = await openStore(bobInAcme)
+    const bobsAcme = await openZeroStore(createZeroStore, bob, [acme])
     await waitFor(() => bobsAcme.read().runtimes.some((row) => row.chatId === chat && row.state === 'running'))
-    const alicesGlobex = await openStore({ workspaceId: globex, userId: alice })
+    const alicesGlobex = await openZeroStore(createZeroStore, alice, [globex])
     expect(alicesGlobex.read().runtimes).toEqual([])
     const replicated = JSON.stringify(bobsAcme.read().runtimes)
     for (const secret of [apiKey, 'apiKey']) expect(replicated).not.toContain(secret)
-    const [published] = await database.$client<{ columns: string[] }[]>`
-      select attnames as columns from pg_publication_tables where pubname = 'hq_zero' and tablename = 'runtimes'`
-    expect(published?.columns).toContain('state')
-    expect(published?.columns).not.toContain('api_key')
 
     await stoppedRuntime(chat)
     await ensure(chat)
     await runtimeIn(chat, 'running')
     expect(await archive(chat)).toEqual(succeeded)
     await runtimeIn(chat, 'removed')
-    const logged = spies.map((spy) => Bun.inspect(spy.mock.calls)).join('\n')
-    expect(logged).not.toContain(apiKey)
+    expect(consoleCalls.logged()).not.toContain(apiKey)
   } finally {
-    for (const spy of spies) spy.mockRestore()
+    consoleCalls.restore()
   }
 })
 

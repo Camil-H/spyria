@@ -1,83 +1,43 @@
-import { afterAll, afterEach, expect, setDefaultTimeout, spyOn, test } from 'bun:test'
-import { createHash } from 'node:crypto'
-import { agentServerImage } from '@hq/runtime/server'
+import { afterAll, afterEach, expect, setDefaultTimeout, test } from 'bun:test'
 import { websocket } from 'hono/bun'
 import { createApp } from './app.ts'
 import {
   acme,
+  addLlmKey,
   alice,
+  captureConsole,
   createFakeHosts,
   type FakeHost,
+  gatewayLogsOf,
   llmGatewayAt,
   openSharedTestApp,
+  runtimeTurn,
   bob,
-  sessionTokenOf,
   testAuthSettings,
+  virtualKeyOf,
   waitFor,
 } from './testing.ts'
 
 setDefaultTimeout(30_000)
-const { database, app, port, gateway, fakeLlmCalls, fakeLlmBodies } = await openSharedTestApp()
+const { database, port, gateway, fakeLlmCalls, fakeLlmBodies } = await openSharedTestApp()
 const { fakeHost, disconnectFakeHosts } = createFakeHosts({ port, database })
 afterEach(() => disconnectFakeHosts())
 
-const sha256 = (value: string) => createHash('sha256').update(value).digest('hex')
 const bobSecret = `fake-key-bob-${crypto.randomUUID()}`
 const completion = JSON.stringify({
   model: 'fake/fake-model',
   stream: true,
   messages: [{ role: 'user', content: 'hi' }],
 })
-const addCredential = async (userId: string, provider: string, secret: string) => {
-  const response = await app.request('/api/llm-credentials', {
-    method: 'POST',
-    headers: { authorization: `Bearer ${await sessionTokenOf(database, acme, userId)}` },
-    body: JSON.stringify({ provider, secret }),
-  })
-  expect(response.status).toBe(201)
-}
-const virtualKeyOf = async (userId: string) => {
-  const [row] = await database.$client`select virtual_key_id from member_gateway_keys where user_id = ${userId}`
-  const { virtual_key } = await gateway.call<{ virtual_key: { id: string; value: string } }>(
-    `/api/governance/virtual-keys/${row?.virtual_key_id}`,
-  )
-  return virtual_key
-}
-const runtimeTurn = async (host: FakeHost, prompterId: string) => {
-  const chatId = `chat-${crypto.randomUUID()}`
-  const promptId = `message-${crypto.randomUUID()}`
-  const token = `runtime-token-${crypto.randomUUID()}`
-  await database.$client.begin(async (sql) => {
-    await sql`
-      insert into chats (workspace_id, id, type, owner_kind, owner_user_id, name, archived, created_at)
-      values (${acme}, ${chatId}, 'runtime', 'user', ${alice}, 'Relay chat', false, now())`
-    await sql`
-      insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
-      values (${acme}, ${chatId}, ${promptId}, 1, 'member', ${prompterId}, 'Go', now())`
-    await sql`
-      insert into runtimes (workspace_id, id, chat_id, host_id, state, host_online, image, llm_token_hash, last_active_at, created_at, state_changed_at)
-      values (${acme}, ${crypto.randomUUID()}, ${chatId}, ${host.id}, 'running', true, ${agentServerImage}, ${sha256(token)}, now(), now(), now())`
-    await sql`
-      update chats set agent_turn_message_id = ${promptId}, agent_turn_prompter_id = ${prompterId} where id = ${chatId}`
-  })
-  return { chatId, token }
-}
 const failureOf = async (chatId: string) =>
   (await database.$client`select agent_turn_failure from chats where id = ${chatId}`)[0]?.agent_turn_failure
-const logsOf = async (virtualKeyId: string) =>
-  (
-    await gateway.call<{ logs: { metadata: Record<string, string> | null; selected_key_id: string }[] }>(
-      `/api/logs?virtual_key_ids=${virtualKeyId}&limit=50`,
-    )
-  ).logs
-
-await addCredential(bob, 'Fake', bobSecret)
+await addLlmKey(bob, 'Fake', bobSecret)
 
 test('a relayed call runs on the turn prompter’s virtual key with HQ’s attribution, streams back, and drops spoofed auth and x-bf headers', async () => {
   const host = await fakeHost('Relay host')
   const { chatId, token } = await runtimeTurn(host, bob)
   const bobKey = await virtualKeyOf(bob)
-  const spies = (['log', 'info', 'warn', 'error', 'debug'] as const).map((method) => spyOn(console, method))
+  const consoleCalls = captureConsole()
   const callsBefore = fakeLlmCalls.length
   let answer: Awaited<ReturnType<FakeHost['modelCall']>>
   try {
@@ -93,7 +53,7 @@ test('a relayed call runs on the turn prompter’s virtual key with HQ’s attri
       body: completion,
     })
   } finally {
-    for (const spy of spies) spy.mockRestore()
+    consoleCalls.restore()
   }
   expect(answer).toMatchObject({ status: 200, ended: 'gw_end' })
   expect(answer.body).toContain('Understood,')
@@ -101,15 +61,14 @@ test('a relayed call runs on the turn prompter’s virtual key with HQ’s attri
   const [providerCall] = fakeLlmCalls.slice(callsBefore)
   expect(providerCall?.authorization).toBe(`Bearer ${bobSecret}`)
   expect(Object.keys(providerCall ?? {}).filter((name) => /spoofed|x-bf|x-api-key/.test(name))).toEqual([])
-  await waitFor(async () => (await logsOf(bobKey.id)).length > 0, 10_000)
-  expect((await logsOf(bobKey.id))[0]?.metadata).toEqual({
+  expect((await gatewayLogsOf(gateway, `virtual_key_ids=${bobKey.id}`))[0]?.metadata).toEqual({
     chat: chatId,
     prompter: bob,
     owner: alice,
     workspace: acme,
   })
   const everyFrame = host.receivedFrames.join('\n')
-  const logged = spies.map((spy) => Bun.inspect(spy.mock.calls)).join('\n')
+  const logged = consoleCalls.logged()
   for (const secret of [bobSecret, bobKey.value]) {
     expect(everyFrame).not.toContain(secret)
     expect(logged).not.toContain(secret)
@@ -159,7 +118,7 @@ test('a prompter without a gateway key is refused and HQ’s notice is recorded 
 test('a key the provider refuses is classified on the turn without provider text', async () => {
   const host = await fakeHost('Refused key host')
   await database.$client`delete from llm_credentials where user_id = ${alice}`
-  await addCredential(alice, 'Fake', `fake-refused-${crypto.randomUUID()}`)
+  await addLlmKey(alice, 'Fake', `fake-refused-${crypto.randomUUID()}`)
   const { chatId, token } = await runtimeTurn(host, alice)
   const refused = await host.modelCall({ headers: { authorization: `Bearer ${token}` }, body: completion })
   expect(refused.status).toBe(401)
@@ -198,7 +157,7 @@ test('an unreachable gateway answers 502 and records HQ’s notice', async () =>
 test('a Claude Code call with x-api-key goes to the gateway’s Anthropic route pinned to the anthropic provider, with its protocol headers, and its model shows on a harness chat', async () => {
   const host = await fakeHost('Claude Code host')
   const anthropicSecret = `fake-key-anthropic-${crypto.randomUUID()}`
-  await addCredential(bob, 'Anthropic', anthropicSecret)
+  await addLlmKey(bob, 'Anthropic', anthropicSecret)
   const { chatId, token } = await runtimeTurn(host, bob)
   await database.$client`update chats set harness = 'claude-code' where id = ${chatId}`
   const headers = {
@@ -252,7 +211,7 @@ test('a failing Claude Code token count reaches the agent unchanged and records 
 test('a Codex call goes to the gateway’s OpenAI Responses route pinned to the openai provider, and its model shows on a harness chat', async () => {
   const host = await fakeHost('Codex host')
   const openaiSecret = `fake-key-openai-${crypto.randomUUID()}`
-  await addCredential(bob, 'OpenAI', openaiSecret)
+  await addLlmKey(bob, 'OpenAI', openaiSecret)
   const { chatId, token } = await runtimeTurn(host, bob)
   await database.$client`update chats set harness = 'codex' where id = ${chatId}`
   const headers = {

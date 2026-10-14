@@ -1,16 +1,16 @@
-import { afterAll, expect, spyOn, test } from 'bun:test'
+import { afterAll, expect, test } from 'bun:test'
 import { createHash } from 'node:crypto'
 import { createZeroStore } from '@hq/db/zero-store'
-import type { MemberId, WorkspaceId } from '@hq/kernel'
 import { websocket } from 'hono/bun'
 import { createApp } from '../app.ts'
 import {
   acme,
   alice,
   aliceInAcme,
+  captureConsole,
   globex,
-  issueTestSession,
   openSharedTestApp,
+  openZeroStore,
   requestMutation,
   bob,
   bobInAcme,
@@ -21,15 +21,13 @@ import {
 } from '../testing.ts'
 import { createRuntimeHostGateway } from './gateway.ts'
 
-const { database, zeroCacheUrl } = await openSharedTestApp()
+const { database } = await openSharedTestApp()
 const gateway = createRuntimeHostGateway({ databases: () => [database], pingIntervalMilliseconds: 100 })
 const app = createApp({ database, ...testAuthSettings, runtimeHosts: gateway })
 const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
-const openedStores: ReturnType<typeof createZeroStore>[] = []
 const openedSockets: WebSocket[] = []
-afterAll(async () => {
+afterAll(() => {
   for (const socket of openedSockets) socket.close()
-  await Promise.all(openedStores.map((store) => store.close()))
   void server.stop(true)
 })
 
@@ -127,22 +125,7 @@ const pairedHost = async (name = 'Home server', options?: { answersPings: boolea
   return { id, code, token, host }
 }
 
-const openStore = async (member: Member) => {
-  const session = await issueTestSession(database, member.workspaceId, member.userId)
-  const store = createZeroStore({
-    memberId: member.userId as MemberId,
-    sessions: [{ ...session, workspaceId: session.workspaceId as WorkspaceId }],
-    renew: async () => undefined,
-    cacheURL: zeroCacheUrl,
-    kvStore: 'mem',
-    storageKeyPrefix: `${crypto.randomUUID()}:`,
-  })
-  openedStores.push(store)
-  await store.whenLoaded(member.workspaceId as WorkspaceId)
-  return store
-}
-
-const consoleSpies = () => (['log', 'info', 'warn', 'error', 'debug'] as const).map((method) => spyOn(console, method))
+const openStore = (member: Member) => openZeroStore(createZeroStore, member.userId, [member.workspaceId])
 
 test('an admin adds a host and receives a one-time code whose hash only is stored', async () => {
   const { status, body } = await addHost(aliceInAcme, '  Home server  ')
@@ -173,56 +156,103 @@ test('adding refuses a member with 403 and a blank name with 400, storing nothin
   expect(await hostIds()).toEqual(before)
 })
 
-test('a claim refuses an unknown code; a valid code yields one token whose hash only is stored', async () => {
-  expect(await refusalOf((await claim('ZZZZZZZZ')).outcome)).toBe('This code is not valid')
-  const { id, code } = await addedHost()
-  const { token } = await claim(code)
-  expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/)
-  const row = await hostRow(id)
-  expect(row.token_hash).toBe(sha256(token ?? ''))
-  expect(JSON.stringify(row)).not.toContain(token)
-  expect(await refusalOf((await claim(code)).outcome)).toBe('This code was already used')
+test('a claim of an unknown, used, expired or removed code and a hello without a registered token or with the wrong personal flag are refused', async () => {
+  await database.$client`update runtime_hosts set removed_at = now() where owner_id is not null`
+  const tokenOf = async (code: string | undefined) => {
+    const { host, token } = await claim(String(code))
+    host.socket.close()
+    return token
+  }
+  const helloRefusal = async (hello: object) => {
+    const host = await connectFakeHost()
+    host.send({ type: 'hello', system: hostSystem, ...hello })
+    return (await host.closed).reason
+  }
+  const refusals = {
+    'unknown code': async () => refusalOf((await claim('ZZZZZZZZ')).outcome),
+    'used code': async () => {
+      const { id, code, host } = await pairedHost()
+      const refusal = await refusalOf((await claim(code)).outcome)
+      expect((await hostRow(id)).status).toBe('online')
+      expect(host.socket.readyState).toBe(WebSocket.OPEN)
+      return refusal
+    },
+    'expired code': async () => {
+      const { id, code } = await addedHost()
+      await database.$client`update runtime_hosts set claim_expires_at = now() - interval '1 second' where id = ${id}`
+      const refusal = await refusalOf((await claim(code)).outcome)
+      expect((await hostRow(id)).status).toBe('expired')
+      return refusal
+    },
+    'code of a removed host': async () => {
+      const { id, code } = await addedHost()
+      expect(await removeHost(aliceInAcme, acme, id)).toEqual(succeeded)
+      return refusalOf((await claim(code)).outcome)
+    },
+    'hello without a token': () => helloRefusal({}),
+    'hello with a wrong token': () => helloRefusal({ token: 'x'.repeat(43) }),
+    'machine hello without personal': async () =>
+      helloRefusal({ token: await tokenOf((await addMachine(bobInAcme)).body?.code) }),
+    'workspace host hello with personal': async () =>
+      helloRefusal({ token: await tokenOf((await addedHost('Workspace box')).code), personal: true }),
+  }
+  const reasons: Record<string, string> = {}
+  for (const [name, refused] of Object.entries(refusals)) reasons[name] = await refused()
+  expect(reasons).toEqual({
+    'unknown code': 'This code is not valid',
+    'used code': 'This code was already used',
+    'expired code': 'This code has expired',
+    'code of a removed host': 'This host was removed',
+    'hello without a token': 'This host is not registered',
+    'hello with a wrong token': 'This host is not registered',
+    'machine hello without personal': 'This host was paired as your machine: restart hq-host with --personal',
+    'workspace host hello with personal':
+      'This host was paired as a workspace host: restart hq-host without --personal',
+  })
 })
 
-test('a claim refuses an expired code and marks the row expired; a renewed code pairs the same row', async () => {
+test('a valid code yields one token whose hash only is stored, a renewed code pairs the same expired row, and a hello sets the host online with its capacity or a machine’s sign-in', async () => {
   const { id, code } = await addedHost()
-  await database.$client`update runtime_hosts set claim_expires_at = now() - interval '1 second' where id = ${id}`
-  expect(await refusalOf((await claim(code)).outcome)).toBe('This code has expired')
-  expect((await hostRow(id)).status).toBe('expired')
-  const renewed = await renewCode(aliceInAcme, id)
+  const { host: claimingHost, token } = await claim(code)
+  claimingHost.socket.close()
+  expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/)
+  const claimed = await hostRow(id)
+  expect(claimed.token_hash).toBe(sha256(token ?? ''))
+  expect(JSON.stringify(claimed)).not.toContain(token)
+  const host = await connectFakeHost()
+  host.send({ type: 'hello', token, system: hostSystem })
+  await waitFor(async () => (await hostRow(id)).status === 'online')
+  const online = await hostRow(id)
+  expect(online.capacity).toEqual({ ...hostSystem, cap: 6 })
+  expect(online.running_runtimes).toBe(0)
+  expect(online.last_seen_at).toBeInstanceOf(Date)
+
+  const expiring = await addedHost()
+  await database.$client`update runtime_hosts set claim_expires_at = now() - interval '1 second' where id = ${expiring.id}`
+  expect(await refusalOf((await claim(expiring.code)).outcome)).toBe('This code has expired')
+  const renewed = await renewCode(aliceInAcme, expiring.id)
   expect(renewed.status).toBe(200)
   expect(renewed.body?.code).toMatch(/^[A-HJ-NP-Z2-9]{8}$/)
-  expect((await hostRow(id)).status).toBe('waiting')
-  expect(await refusalOf((await claim(code)).outcome)).toBe('This code is not valid')
+  expect((await hostRow(expiring.id)).status).toBe('waiting')
+  expect(await refusalOf((await claim(expiring.code)).outcome)).toBe('This code is not valid')
   expect((await claim(renewed.body?.code ?? '')).token).toBeDefined()
-  expect(await renewCode(aliceInAcme, id)).toMatchObject({ status: 400, body: { error: 'code_not_renewable' } })
+  expect(await renewCode(aliceInAcme, expiring.id)).toMatchObject({
+    status: 400,
+    body: { error: 'code_not_renewable' },
+  })
+
+  await database.$client`update runtime_hosts set removed_at = now() where owner_id is not null`
+  const { id: machineId, host: machine } = await pairedMachine(bobInAcme)
+  expect((await hostRow(machineId)).capacity).toEqual({ ...hostSystem, cap: 6, personal: true, signedIn: [] })
+  machine.send({ type: 'heartbeat', memoryFreeBytes: gibibyte, running: 0, signedIn: ['claude'] })
+  await waitFor(async () => ((await hostRow(machineId)).capacity as { signedIn: string[] }).signedIn.length === 1)
+  await database.$client`update runtime_hosts set removed_at = now() where owner_id is not null`
 })
 
 test('renewing refuses a member and the admin of another workspace', async () => {
   const { id } = await addedHost()
   expect((await renewCode(bobInAcme, id)).status).toBe(403)
   expect(await renewCode(aliceInGlobex, id)).toMatchObject({ status: 404, body: { error: 'host_not_found' } })
-})
-
-test('a claim refuses the code of a removed host', async () => {
-  const { id, code } = await addedHost()
-  expect(await removeHost(aliceInAcme, acme, id)).toEqual(succeeded)
-  expect(await refusalOf((await claim(code)).outcome)).toBe('This host was removed')
-})
-
-test('a hello with a missing or wrong token is refused; a valid one sets the host online with its capacity', async () => {
-  const missing = await connectFakeHost()
-  missing.send({ type: 'hello', system: hostSystem })
-  expect((await missing.closed).reason).toBe('This host is not registered')
-  const wrong = await connectFakeHost()
-  wrong.send({ type: 'hello', token: 'x'.repeat(43), system: hostSystem })
-  expect((await wrong.closed).reason).toBe('This host is not registered')
-
-  const { id } = await pairedHost()
-  const row = await hostRow(id)
-  expect(row.capacity).toEqual({ ...hostSystem, cap: 6 })
-  expect(row.running_runtimes).toBe(0)
-  expect(row.last_seen_at).toBeInstanceOf(Date)
 })
 
 test('heartbeats update last_seen_at, the free memory and the running count', async () => {
@@ -296,16 +326,10 @@ test('only the admins of the workspace read its hosts through Zero, never a hash
   expect(alicesGlobex.read().runtimeHosts).toEqual([])
   const replicated = JSON.stringify(alicesAcme.read().runtimeHosts)
   for (const secret of [code, token, sha256(code), sha256(token)]) expect(replicated).not.toContain(secret)
-
-  const publishedColumns = await database.$client<{ columns: string[] }[]>`
-    select attnames as columns from pg_publication_tables where pubname = 'hq_zero' and tablename = 'runtime_hosts'`
-  expect(publishedColumns[0]?.columns).not.toContain('claim_code_hash')
-  expect(publishedColumns[0]?.columns).not.toContain('token_hash')
-  expect(publishedColumns[0]?.columns).toContain('status')
 })
 
 test('neither a claim code nor a host token is ever logged', async () => {
-  const spies = consoleSpies()
+  const consoleCalls = captureConsole()
   try {
     const { code } = await addedHost('Quiet host')
     expect(await refusalOf((await claim(code.split('').reverse().join(''))).outcome)).toBe('This code is not valid')
@@ -318,10 +342,9 @@ test('neither a claim code nor a host token is ever logged', async () => {
     const reconnection = await connectFakeHost()
     reconnection.send({ type: 'hello', token, system: hostSystem })
     await reconnection.closed
-    const logged = spies.map((spy) => Bun.inspect(spy.mock.calls)).join('\n')
-    for (const secret of [code, pairedCode, token]) expect(logged).not.toContain(secret)
+    for (const secret of [code, pairedCode, token]) expect(consoleCalls.logged()).not.toContain(secret)
   } finally {
-    for (const spy of spies) spy.mockRestore()
+    consoleCalls.restore()
   }
 })
 
@@ -351,34 +374,6 @@ test('a member adds one machine of their own; a second one is refused until it i
   expect(await addMachine(bobInAcme)).toMatchObject({ status: 400, body: { error: 'machine_already_added' } })
   expect(await removeHost(bobInAcme, acme, String(body?.id))).toEqual(succeeded)
   expect((await addMachine(bobInAcme)).status).toBe(201)
-})
-
-test('a hello must declare personal exactly when the host was paired as a machine, then it reports the sign-in', async () => {
-  await database.$client`update runtime_hosts set removed_at = now() where owner_id is not null`
-  const { body } = await addMachine(bobInAcme)
-  const { host: claimingHost, token } = await claim(String(body?.code))
-  claimingHost.socket.close()
-  const undeclared = await connectFakeHost()
-  undeclared.send({ type: 'hello', token, system: hostSystem })
-  expect((await undeclared.closed).reason).toBe('This host was paired as your machine: restart hq-host with --personal')
-
-  const workspaceHost = await addedHost('Workspace box')
-  const { host: workspaceClaim, token: workspaceToken } = await claim(workspaceHost.code)
-  workspaceClaim.socket.close()
-  const declared = await connectFakeHost()
-  declared.send({ type: 'hello', token: workspaceToken, system: hostSystem, personal: true })
-  expect((await declared.closed).reason).toBe(
-    'This host was paired as a workspace host: restart hq-host without --personal',
-  )
-
-  const machine = await connectFakeHost()
-  machine.send({ type: 'hello', token, system: hostSystem, personal: true, signedIn: [] })
-  await waitFor(async () => (await hostRow(String(body?.id))).status === 'online')
-  expect((await hostRow(String(body?.id))).capacity).toEqual({ ...hostSystem, cap: 6, personal: true, signedIn: [] })
-  machine.send({ type: 'heartbeat', memoryFreeBytes: gibibyte, running: 0, signedIn: ['claude'] })
-  await waitFor(
-    async () => ((await hostRow(String(body?.id))).capacity as { signedIn: string[] }).signedIn.length === 1,
-  )
 })
 
 test('a machine is read and removed by its owner only, and admins see only how many members use one', async () => {

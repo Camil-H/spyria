@@ -5,6 +5,7 @@ import {
   messageItemsOf,
   newRuntimeChat,
   openChat,
+  openProfile,
   type Page,
   runsOnChoiceOf,
   sendMessage,
@@ -40,10 +41,6 @@ const repliesWith = (page: Page, text: string) => messageItemsOf(page).filter({ 
 const openSettings = async (page: Page) => {
   await sidebarOf(page).getByRole('link', { name: 'Workspace settings' }).click()
   await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Workspace settings' })).toBeVisible()
-}
-const openProfile = async (page: Page) => {
-  await sidebarOf(page).getByRole('link', { name: 'Profile' }).click()
-  await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Profile' })).toBeVisible()
 }
 const setLocalSessions = async (page: Page, isOn: boolean) => {
   await openSettings(page)

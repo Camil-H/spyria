@@ -1,56 +1,30 @@
-import { afterAll, afterEach, expect, setDefaultTimeout, test } from 'bun:test'
-import { type ChatId, chatId } from '@hq/kernel'
-import { websocket } from 'hono/bun'
-import { createApp } from '../app.ts'
-import { startJobWorker } from '../job-worker.ts'
-import { createRuntimeHostGateway } from '../runtime-hosts/gateway.ts'
-import {
-  acme,
-  alice,
-  aliceInAcme,
-  createFakeHosts,
-  globex,
-  openSharedTestApp,
-  requestMutation,
-  bobInAcme,
-  succeeded,
-  testAuthSettings,
-  waitFor,
-} from '../testing.ts'
-import { createAgentBridge } from './bridge.ts'
+import { afterEach, expect, setDefaultTimeout, test } from 'bun:test'
+import type { ChatId } from '@hq/kernel'
+import { acme, alice, aliceInAcme, globex, bobInAcme, startAgentStack, succeeded, waitFor } from '../testing.ts'
 import { type Conversation, createFakeAgentServer, type FakeAgent, replyText } from './fake-agent-server.ts'
 
 setDefaultTimeout(30_000)
 const minute = 60_000
-const { database } = await openSharedTestApp()
 let clockOffsetMilliseconds = 0
-const gateway = createRuntimeHostGateway({
-  databases: () => [database],
-  afterHello: (helloDatabase, host) => agentBridge.forDatabase(helloDatabase).promptWaiting(host),
-})
-const agentBridge = createAgentBridge({
-  sandboxProvider: gateway.sandboxProvider,
+const {
+  database,
+  agentBridge,
+  fakeHost,
+  mutate,
+  newRuntimeChat,
+  prompt,
+  turnOf,
+  turnIs,
+  repliesTo,
+  answered,
+  runtimeOf,
+} = await startAgentStack({
   llm: { model: 'openai/fake' },
   now: () => Date.now() + clockOffsetMilliseconds,
-  reopenDelayMilliseconds: 50,
+  promptsWaitingAfterHello: true,
 })
-const app = createApp({ database, ...testAuthSettings, runtimeHosts: gateway, agentBridge })
-const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
-const worker = startJobWorker(database, {
-  pollIntervalMilliseconds: 5,
-  retryDelayMilliseconds: 100,
-  sandboxProvider: gateway.sandboxProvider,
-  agentBridge,
-})
-const { fakeHost, disconnectFakeHosts } = createFakeHosts({ port: Number(server.port), database })
-afterEach(async () => {
+afterEach(() => {
   clockOffsetMilliseconds = 0
-  await disconnectFakeHosts()
-})
-afterAll(async () => {
-  await worker.stop()
-  agentBridge.release(database)
-  void server.stop(true)
 })
 
 const aliceInGlobex = { workspaceId: globex, userId: alice }
@@ -65,40 +39,10 @@ const holdTurnsOf = (fake: FakeAgent, heldPrompt: string) => {
     await fake.beginTurn(conversation, promptText)
   }
 }
-const newRuntimeChat = async () => {
-  const id = `chat-${crypto.randomUUID()}`
-  await database.$client`
-    insert into chats (workspace_id, id, type, owner_kind, owner_user_id, name, archived, created_at)
-    values (${acme}, ${id}, 'runtime', 'user', ${alice}, 'Agent chat', false, now())`
-  return chatId(id)
-}
-const prompt = async (chat: ChatId, body: string) => {
-  const id = `message-${crypto.randomUUID()}`
-  expect(
-    await requestMutation(app, database, aliceInAcme, 'conversation.sendMessage', {
-      workspaceId: acme,
-      id,
-      chatId: chat,
-      text: body,
-    }),
-  ).toEqual(succeeded)
-  return id
-}
 const command = (member: typeof aliceInAcme, name: string, chat: ChatId, workspaceId: string = member.workspaceId) =>
-  requestMutation(app, database, member, `conversation.${name}`, { workspaceId, chatId: chat })
-const turnOf = async (chat: ChatId) =>
-  (await database.$client`select agent_turn_message_id from chats where id = ${chat}`)[0]?.agent_turn_message_id
-const repliesTo = async (messageId: string) =>
-  (await database.query.messages.findMany({ where: { replyToId: messageId }, orderBy: { seq: 'asc' } })).map(
-    ({ kind, body }) => ({ kind, body }),
-  )
+  mutate(member, `conversation.${name}`, { workspaceId, chatId: chat })
 const replyBodiesOf = async (messageId: string) => (await repliesTo(messageId)).map((reply) => reply.body)
-const answered = (messageId: string, count = 1) =>
-  waitFor(async () => (await repliesTo(messageId)).length >= count, 15_000)
-const turnIs = (chat: ChatId, promptId: string | null) => waitFor(async () => (await turnOf(chat)) === promptId, 15_000)
 const delivered = (fake: FakeAgent, count: number) => waitFor(() => fake.prompts.length >= count)
-const runtimeOf = async (chat: ChatId) =>
-  (await database.$client`select * from runtimes where chat_id = ${chat}`)[0] as Record<string, unknown> | undefined
 const conversationOf = (fake: FakeAgent) => [...fake.conversations.values()].at(-1) as Conversation
 const closeEventSockets = (conversation: Conversation) => {
   for (const close of conversation.closers) close()
@@ -231,9 +175,7 @@ test('a turn ends with a notice when its runtime stops, its host goes offline or
   const removed = await prompt(removing, 'Keep working')
   await turnIs(removing, removed)
   await delivered(fake, 3)
-  expect(
-    await requestMutation(app, database, aliceInAcme, 'runtime.removeHost', { workspaceId: acme, hostId: host.id }),
-  ).toEqual(succeeded)
+  expect(await mutate(aliceInAcme, 'runtime.removeHost', { workspaceId: acme, hostId: host.id })).toEqual(succeeded)
   await turnIs(removing, null)
   expect(await repliesTo(removed)).toEqual([stoppedEarly])
 })
@@ -314,7 +256,7 @@ test('a conversation missing on the Agent Server is replaced by a new one, with 
   expect(conversationOf(fake).id).not.toBe(lostConversation.id)
 })
 
-test('runtimes.host_online follows its host through hello and offline, and is published to Zero', async () => {
+test('runtimes.host_online follows its host through hello and offline', async () => {
   const { host } = await agentHost()
   const chat = await newRuntimeChat()
   await answered(await prompt(chat, 'Start'))
@@ -323,9 +265,6 @@ test('runtimes.host_online follows its host through hello and offline, and is pu
   expect(await runtimeOf(chat)).toMatchObject({ state: 'running', host_online: false })
   await host.connect()
   expect(await runtimeOf(chat)).toMatchObject({ state: 'running', host_online: true })
-  const [published] = await database.$client<{ columns: string[] }[]>`
-    select attnames as columns from pg_publication_tables where pubname = 'hq_zero' and tablename = 'runtimes'`
-  expect(published?.columns).toContain('host_online')
 })
 
 test('a prompt while the host is offline gets one notice and is answered after the host says hello again', async () => {

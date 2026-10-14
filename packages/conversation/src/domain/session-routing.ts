@@ -94,3 +94,28 @@ export const harnessOfKeys = (reachable: readonly Model[]): Harness | undefined 
   (Object.keys(harnesses) as Harness[]).find(
     (harness) => reachable.length > 0 && reachable.every((model) => reachesHarness(harness, [model])),
   )
+export const subagentPolicyNames = { auto: 'auto', same_as_main: 'same as main' } as const
+export const chipLabelOf = (
+  {
+    localSession,
+    harness,
+    model,
+    reasoningEffort,
+    subagentPolicy,
+  }: {
+    localSession: boolean
+    harness: Harness | null
+    model: string | null
+    reasoningEffort: string | null
+    subagentPolicy: keyof typeof subagentPolicyNames
+  },
+  nameOf: (id: string) => string,
+  adapterNameOf: (id: string) => string,
+) =>
+  localSession
+    ? `${harnesses[harness ?? 'claude-code'].name} · ${model ? adapterNameOf(model) : 'subscription'}`
+    : harness && model
+      ? `${harnesses[harness].name} · ${nameOf(model).split('/').at(-1)}`
+      : model
+        ? `${nameOf(model)}${reasoningEffort ? ` (${reasoningEffort})` : ''} · ${subagentPolicyNames[subagentPolicy]}`
+        : 'Model chosen at first prompt'

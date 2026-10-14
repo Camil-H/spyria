@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test'
 import { createMockSnapshot, type Snapshot } from '@hq/db'
-import { chatId, memberId, messageId, workspaceId } from '@hq/kernel'
+import { chatId, memberId, messageId, runtimeHostId, runtimeId, workspaceId } from '@hq/kernel'
+import type { RunsOn } from '../domain/session-routing.ts'
 import { durationLabelOf, getConversation } from './get-conversation.ts'
 
 const acme = workspaceId('workspace-acme')
@@ -292,4 +293,138 @@ test('a Claude Code subagent gathers the steps that carry its tool call id into 
   expect(delegationGroupsOf(conversation)).toEqual([
     { id: 'message-2', result: 'Listed.', steps: ['message-3', 'message-4'], durationMilliseconds: 4000 },
   ])
+})
+
+const bob = memberId('member-bob')
+type RunsOnSetup = {
+  viewer?: typeof alice
+  isOwner?: boolean
+  hqRuntimeAvailable?: boolean
+  isTurnActive?: boolean
+  machineSession?: 'online' | 'offline'
+  workspaceHost?: 'online' | 'offline'
+  machine?: 'online' | 'offline'
+  signedIn?: string[]
+  isSwitchOff?: boolean
+  reply?: 'agent' | 'step'
+}
+const runsOnChoicesOf = ({
+  viewer = alice,
+  isOwner = true,
+  hqRuntimeAvailable,
+  isTurnActive = false,
+  machineSession,
+  workspaceHost,
+  machine,
+  signedIn = [],
+  isSwitchOff = false,
+  reply,
+}: RunsOnSetup) => {
+  const snapshot = snapshotWith({ turn: isTurnActive, waiting: false })
+  const hostRow = (id: string, status: 'online' | 'offline', ownerId: typeof alice | null) => ({
+    workspaceId: acme,
+    id: runtimeHostId(id),
+    name: id,
+    status,
+    claimExpiresAt: null,
+    capacity: {
+      cpus: 4,
+      memoryBytes: 8,
+      dockerVersion: '29',
+      rootless: true,
+      cgroupDriver: 'systemd',
+      limitsEnforced: true,
+      cap: 2,
+      signedIn,
+    },
+    runningRuntimes: 0,
+    ownerId,
+  })
+  return getConversation(
+    acme,
+    research,
+    viewer,
+    hqRuntimeAvailable,
+  )({
+    ...snapshot,
+    workspaces: snapshot.workspaces.map((workspace) => ({ ...workspace, localSessions: !isSwitchOff })),
+    chats: snapshot.chats.map((chat) => (chat.id === research ? { ...chat, ownerId: isOwner ? viewer : bob } : chat)),
+    messages: [...snapshot.messages, ...(reply ? [replyRow(2, reply)] : [])],
+    runtimeHosts: [
+      ...(workspaceHost ? [hostRow('host-workspace', workspaceHost, null)] : []),
+      ...(machine ? [hostRow('host-machine', machine, viewer)] : []),
+    ],
+    runtimes: machineSession
+      ? [
+          {
+            workspaceId: acme,
+            id: runtimeId('runtime-machine'),
+            chatId: research,
+            hostId: runtimeHostId('host-machine'),
+            state: 'running',
+            failure: null,
+            hostOnline: machineSession === 'online',
+          },
+        ]
+      : [],
+  })?.runsOnChoices
+}
+
+test.each<[string, RunsOnSetup, readonly RunsOn[] | null]>([
+  ['admin owner, nothing connected', {}, ['runtime']],
+  [
+    'admin owner, workspace host and both tools',
+    { workspaceHost: 'online', machine: 'online', signedIn: ['claude', 'codex'] },
+    ['runtime', 'claude-code', 'codex'],
+  ],
+  [
+    'admin owner, offline workspace host, Claude signed in',
+    { workspaceHost: 'offline', machine: 'online', signedIn: ['claude'] },
+    ['claude-code'],
+  ],
+  [
+    'admin owner, workspace host, Codex signed in',
+    { workspaceHost: 'online', machine: 'online', signedIn: ['codex'] },
+    ['runtime', 'codex'],
+  ],
+  ['admin owner, machine online with no tool signed in', { machine: 'online' }, ['runtime']],
+  ['admin owner, machine offline with both tools', { machine: 'offline', signedIn: ['claude', 'codex'] }, ['runtime']],
+  ['not the owner', { isOwner: false }, null],
+  [
+    'member owner, availability unknown, Claude signed in',
+    { viewer: bob, machine: 'online', signedIn: ['claude'] },
+    null,
+  ],
+  ['member owner, availability unknown, nothing connected', { viewer: bob }, ['runtime']],
+  [
+    'member owner, HQ runtime available, Claude signed in',
+    { viewer: bob, hqRuntimeAvailable: true, machine: 'online', signedIn: ['claude'] },
+    ['runtime', 'claude-code'],
+  ],
+  [
+    'member owner, HQ runtime unavailable, Claude signed in',
+    { viewer: bob, hqRuntimeAvailable: false, machine: 'online', signedIn: ['claude'] },
+    ['claude-code'],
+  ],
+  [
+    'member owner ignores an online workspace host',
+    { viewer: bob, hqRuntimeAvailable: false, workspaceHost: 'online', machine: 'online', signedIn: ['codex'] },
+    ['codex'],
+  ],
+  ['an active turn', { isTurnActive: true, workspaceHost: 'online' }, null],
+  ['a machine session on an online host', { machineSession: 'online', machine: 'online', signedIn: ['claude'] }, null],
+  [
+    'a machine session whose host is offline',
+    { machineSession: 'offline', machine: 'online', signedIn: ['claude'] },
+    ['claude-code'],
+  ],
+  [
+    'the workspace switch off',
+    { isSwitchOff: true, workspaceHost: 'online', machine: 'online', signedIn: ['claude', 'codex'] },
+    ['runtime'],
+  ],
+  ['an agent message', { reply: 'agent' }, null],
+  ['a step message', { reply: 'step' }, null],
+])('Runs on choices: %s', (_, setup, expected) => {
+  expect(runsOnChoicesOf(setup)).toEqual(expected)
 })

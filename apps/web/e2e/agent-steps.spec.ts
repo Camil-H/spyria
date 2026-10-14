@@ -1,4 +1,14 @@
-import { expect, mainOf, messageItemsOf, openChat, type Page, sendMessage, test } from './fixtures'
+import {
+  expect,
+  mainOf,
+  messageItemsOf,
+  openChat,
+  type Page,
+  panelOf,
+  sendMessage,
+  test,
+  workingIndicatorOf,
+} from './fixtures'
 
 const research = 'chat-research'
 const thinking = 'I will check the toolchain, then fix the totals.'
@@ -16,11 +26,9 @@ const fixSteps = (commandPrefix = '') => [
   },
 ]
 const failingCommand = `bash -c 'echo step one; echo step two; exit 3'`
-const workingIndicatorOf = (page: Page) => page.getByRole('status', { name: 'Agent is working' })
 const itemsWith = (page: Page, text: string | RegExp) => messageItemsOf(page).filter({ hasText: text })
 const stepButtonOf = (page: Page, name: string | RegExp) => messageItemsOf(page).getByRole('button', { name })
 const foldOf = (page: Page) => stepButtonOf(page, /^Worked for .+ · 3 steps$/)
-const panelOf = (page: Page) => page.getByRole('region', { name: 'Side panel' })
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
