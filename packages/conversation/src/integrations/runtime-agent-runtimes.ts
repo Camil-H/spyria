@@ -5,6 +5,7 @@ import {
   forgetAgentConversation,
   issueAgentLlmToken,
   listHostChats,
+  type RuntimePlacement,
   readAgentAccess,
   rememberAgentConversation,
   retryRuntime,
@@ -20,7 +21,7 @@ export type { SandboxProvider }
 export const createRuntimeAgentRuntimes = (
   transact: Transact,
   provider: SandboxProvider,
-  hqAgentImage?: string,
+  placement: RuntimePlacement = {},
 ): AgentRuntimes => {
   const inTransaction = <Result>(
     work: (dependencies: { transactor: ReturnType<typeof createRuntimeTransactor> }) => Promise<Result>,
@@ -30,12 +31,12 @@ export const createRuntimeAgentRuntimes = (
     sandbox,
     apiKey,
     conversationId,
-    isPersonal,
+    isHqAgent,
   }: NonNullable<Awaited<ReturnType<typeof accessOf>>>) => ({
     sandbox,
     apiKey,
     conversationId,
-    isHqAgent: isPersonal,
+    isHqAgent,
     transport: provider.connect(sandbox),
   })
   const endpointOf = async (chat: AgentChat): Promise<AgentEndpoint | undefined> => {
@@ -45,7 +46,7 @@ export const createRuntimeAgentRuntimes = (
   return {
     ensureRunning: async (chat) => {
       const runtime = await inTransaction((dependencies) =>
-        ensureRuntimeRunning({ ...dependencies, hqAgentImage }, { ...chat, id: crypto.randomUUID(), now: Date.now() }),
+        ensureRuntimeRunning({ ...dependencies, ...placement }, { ...chat, id: crypto.randomUUID(), now: Date.now() }),
       )
       if (['creating', 'starting', 'stopping', 'removing'].includes(runtime.state)) return { state: 'starting' }
       if (!runtime.hostOnline && ['running', 'stopped'].includes(runtime.state)) return { state: 'host_offline' }
@@ -67,10 +68,10 @@ export const createRuntimeAgentRuntimes = (
   }
 }
 
-export const createZeroRuntimeRetrier = (tx: Transaction, hqAgentImage?: string): RuntimeRetrier => ({
+export const createZeroRuntimeRetrier = (tx: Transaction, placement: RuntimePlacement): RuntimeRetrier => ({
   retry: async (chat) => {
     await retryRuntime(
-      { transactor: createRuntimeTransactor(tx), hqAgentImage },
+      { transactor: createRuntimeTransactor(tx), ...placement },
       { ...chat, id: crypto.randomUUID(), now: Date.now() },
     )
   },

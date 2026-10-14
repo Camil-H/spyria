@@ -319,6 +319,7 @@ export const startAgentStack = async ({
   now,
   resumeAfterMilliseconds,
   hqAgentImage,
+  hqAgentForWorkspaceHosts,
   promptsWaitingAfterHello = false,
 }: {
   routing?: boolean
@@ -326,6 +327,7 @@ export const startAgentStack = async ({
   now?: () => number
   resumeAfterMilliseconds?: number
   hqAgentImage?: string
+  hqAgentForWorkspaceHosts?: boolean
   promptsWaitingAfterHello?: boolean
 } = {}) => {
   const testApp = await openSharedTestApp()
@@ -333,6 +335,7 @@ export const startAgentStack = async ({
   const runtimeHosts = createRuntimeHostGateway({
     databases: () => [database],
     hqAgentImage,
+    hqAgentForWorkspaceHosts,
     relayModelCall: routing ? createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }) : undefined,
     afterHello: promptsWaitingAfterHello
       ? (helloDatabase, host) => agentBridge.forDatabase(helloDatabase).promptWaiting(host)
@@ -344,6 +347,7 @@ export const startAgentStack = async ({
     now,
     resumeAfterMilliseconds,
     hqAgentImage,
+    hqAgentForWorkspaceHosts,
     sessionClassifierOf: routing ? sessionClassifierOf(llmGateway, { timeoutMilliseconds: 300 }) : undefined,
     reopenDelayMilliseconds: 50,
   })
@@ -354,6 +358,7 @@ export const startAgentStack = async ({
     runtimeHosts,
     agentBridge,
     hqAgentImage,
+    hqAgentForWorkspaceHosts,
   })
   const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
   const worker = startJobWorker(database, {

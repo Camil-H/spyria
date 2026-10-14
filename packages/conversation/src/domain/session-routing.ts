@@ -46,6 +46,11 @@ export const sessionChoiceOf = ({
   return model && { model, effort, reason: 'default' }
 }
 
+const piThoughtLevels = ['off', 'minimal', 'low', 'medium', 'high']
+export const piModelOf = (id: string) => `${id.startsWith('anthropic/') ? 'hq-anthropic' : 'hq'}/${id}`
+export const thoughtLevelOf = (effort: string | null) =>
+  effort && piThoughtLevels.includes(effort) ? effort : undefined
+
 export const unreachableSessionNoticeOf = (model: string) =>
   `Your keys cannot reach ${modelNameOf(model)}; switch the model or add a key`
 

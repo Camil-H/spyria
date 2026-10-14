@@ -34,6 +34,7 @@ export const createAgentBridge = ({
   resumeAfterMilliseconds,
   condensationScale,
   hqAgentImage,
+  hqAgentForWorkspaceHosts,
   reopenDelayMilliseconds = 1000,
 }: {
   sandboxProvider: SandboxProvider
@@ -43,6 +44,7 @@ export const createAgentBridge = ({
   resumeAfterMilliseconds?: number
   condensationScale?: number
   hqAgentImage?: string
+  hqAgentForWorkspaceHosts?: boolean
   reopenDelayMilliseconds?: number
 }) => {
   const bridgeOf = (database: Database) => {
@@ -73,6 +75,7 @@ export const createAgentBridge = ({
       resumeAfterMilliseconds,
       condensationScale,
       hqAgentImage,
+      hqAgentForWorkspaceHosts,
       eventSockets: {
         ensureOpen: (...target) => ensureOpen(...target),
         stopStreaming: (chat, promptId) => {

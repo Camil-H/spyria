@@ -35,7 +35,7 @@ test.each([
 
 const contentId = `sha256:${'b'.repeat(64)}`
 
-test('a personal host accepts only a local content ID, a workspace host only the Agent Server image', () => {
+test('a personal host accepts only a local content ID, a workspace host the Agent Server image or a local content ID', () => {
   expect(parseCommand('create', { ...create, image: contentId }, true)).toEqual({
     op: 'create',
     ...create,
@@ -45,8 +45,9 @@ test('a personal host accepts only a local content ID, a workspace host only the
   expect(() => parseCommand('create', create, true)).toThrow('local content ID')
   expect(() => parseCommand('prepare', { image }, true)).toThrow('refused')
   expect(() => parseCommand('prepare', { image: `sha256:${'b'.repeat(63)}` }, true)).toThrow('refused')
-  expect(() => parseCommand('create', { ...create, image: contentId })).toThrow('ghcr.io/openhands')
-  expect(() => parseCommand('prepare', { image: contentId })).toThrow('refused')
+  expect(parseCommand('create', { ...create, image: contentId })).toEqual({ op: 'create', ...create, image: contentId })
+  expect(parseCommand('prepare', { image: contentId })).toEqual({ op: 'prepare', image: contentId })
+  expect(() => parseCommand('prepare', { image: `sha256:${'b'.repeat(63)}` })).toThrow('refused')
 })
 
 test('a personal create sets only the session key in the environment', () => {
@@ -55,17 +56,20 @@ test('a personal create sets only the session key in the environment', () => {
   ])
 })
 
-test('preparing a content ID never pulls: a missing image is an error naming the build', async () => {
-  const calls: string[] = []
-  const docker = (async (method: string, path: string) => {
-    calls.push(`${method} ${path}`)
-    throw new DockerError(404, 'No such image')
-  }) as Docker
-  await expect(
-    createCommandRunner({ docker, prefix: 'hq-', personal: true }).run({ op: 'prepare', image: contentId }),
-  ).rejects.toThrow('run bun run agent:build')
-  expect(calls).toEqual([`GET /images/${contentId}/json`])
-})
+test.each([true, false])(
+  'preparing a content ID never pulls (personal %p): a missing image is an error naming the build',
+  async (personal) => {
+    const calls: string[] = []
+    const docker = (async (method: string, path: string) => {
+      calls.push(`${method} ${path}`)
+      throw new DockerError(404, 'No such image')
+    }) as Docker
+    await expect(
+      createCommandRunner({ docker, prefix: 'hq-', personal }).run({ op: 'prepare', image: contentId }),
+    ).rejects.toThrow('run bun run agent:build')
+    expect(calls).toEqual([`GET /images/${contentId}/json`])
+  },
+)
 
 test('refuses a prepare request with any field besides the image', () => {
   expect(() => parseCommand('prepare', { image, runtimeId: 'runtime-1' })).toThrow('refused')

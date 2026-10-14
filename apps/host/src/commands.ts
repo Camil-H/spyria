@@ -9,6 +9,7 @@ export class Refused extends Error {
 
 const imagePattern = /^ghcr\.io\/openhands\/agent-server@sha256:[a-f0-9]{64}$/
 const contentIdPattern = /^sha256:[a-f0-9]{64}$/
+const workspaceImagePattern = new RegExp(`${imagePattern.source}|${contentIdPattern.source}`)
 const runtimeIdPattern = /^[a-z0-9][a-z0-9-]{0,62}$/
 const apiKeyPattern = /^[A-Za-z0-9_-]{16,128}$/
 const agentServerPort = 8000
@@ -19,7 +20,7 @@ const operations = ['create', 'prepare', 'start', 'stop', 'remove', 'status'] as
 const imageRefusalOf = (personal: boolean) =>
   personal
     ? 'image other than a local content ID (sha256:<64 hex>)'
-    : 'image outside ghcr.io/openhands/agent-server@sha256'
+    : 'image other than ghcr.io/openhands/agent-server@sha256 or a local content ID'
 
 type Operation = (typeof operations)[number]
 type RuntimeOperation = Exclude<Operation, 'create' | 'prepare'>
@@ -46,7 +47,8 @@ export const parseCommand = (op: unknown, args: unknown, personal = false): Comm
   const allowedFields = { create: ['runtimeId', 'image', 'apiKey'], prepare: ['image'] }[op as string] ?? ['runtimeId']
   const extraFields = Object.keys(fields).filter((field) => !allowedFields.includes(field))
   if (extraFields.length > 0) throw new Refused(`unexpected fields ${extraFields.join(', ')}`)
-  const imageOf = () => fieldOf(fields, 'image', personal ? contentIdPattern : imagePattern, imageRefusalOf(personal))
+  const imageOf = () =>
+    fieldOf(fields, 'image', personal ? contentIdPattern : workspaceImagePattern, imageRefusalOf(personal))
   if (op === 'prepare') return { op, image: imageOf() }
   const runtimeId = fieldOf(fields, 'runtimeId', runtimeIdPattern, 'invalid runtime id')
   if (op !== 'create') return { op: op as RuntimeOperation, runtimeId }
@@ -158,7 +160,8 @@ export const createCommandRunner = ({
   const prepare = async (image: string) => {
     await docker('GET', `/images/${image}/json`).catch(async (error) => {
       ignoringMissing(error)
-      if (personal) throw new Error("HQ's runtime image is missing on this machine: run bun run agent:build")
+      if (contentIdPattern.test(image))
+        throw new Error("HQ's runtime image is missing on this machine: run bun run agent:build")
       const [repository, digest] = image.split('@')
       await docker('POST', `/images/create?fromImage=${repository}&tag=${digest}`)
     })

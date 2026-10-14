@@ -1,7 +1,7 @@
 import { type ChatId, type MessageId, modelNameOf, withPricesOf } from '@hq/kernel'
 import type { AgentChat, AgentConversation } from '../contracts/agent.ts'
 import type { ModelCallTurn } from '../contracts/repositories.ts'
-import { executionStatusOf, isStoredAgentEvent } from '../domain/agent-events.ts'
+import { executionStatusOf, isStoredAgentEvent, streamedTextOf } from '../domain/agent-events.ts'
 import type { StepDelegation } from '../domain/agent-steps.ts'
 import {
   askedChoiceOf,
@@ -17,7 +17,7 @@ import {
 import { sessionQuestions } from '../domain/session-routing.ts'
 import type { AgentDependencies } from './agent-turn.ts'
 import { decide, digestOf } from './decide.ts'
-import { agentLlmOf } from './prompt-agent.ts'
+import { agentLlmOf, piLlmOf } from './prompt-agent.ts'
 import { recordAgentEvent } from './record-agent-event.ts'
 
 type Input = {
@@ -74,15 +74,18 @@ const runSubConversation = (
   delegation: StepDelegation,
   running: RunningDelegation,
 ) =>
-  new Promise<string>((resolve, reject) => {
+  new Promise<{ status: string; answer: string }>((resolve, reject) => {
     let recording = Promise.resolve()
+    let answer = ''
     const finish = (status: string) =>
       void recording.then(() => {
         socket.close()
-        resolve(status)
+        resolve({ status, answer })
       })
     const socket = agentServer.openEvents(conversation, null, {
       onEvent: (event) => {
+        const streamed = streamedTextOf(event)
+        if (streamed && !streamed.isReasoning) answer += streamed.text
         if (isStoredAgentEvent(event))
           recording = recording
             .then(() =>
@@ -99,10 +102,11 @@ const runSubConversation = (
             .then(() => runtimes.touch(chat))
             .catch((error) => console.error(`Recording a subagent event of chat ${chat.chatId} failed: ${error}`))
         const status = executionStatusOf(event)
-        if (event.kind === 'ConversationErrorEvent') finish('error')
+        if (event.kind === 'ConversationErrorEvent' || (event.kind === 'ACPUpdate' && status === 'error'))
+          finish('error')
         else if (status && endStatuses.includes(status)) finish(status)
       },
-      onClose: () => void recording.then(() => resolve('closed')),
+      onClose: () => void recording.then(() => resolve({ status: 'closed', answer })),
     })
     agentServer.sendMessage(conversation, task).catch(reject)
   })
@@ -130,16 +134,25 @@ const runDelegation = async (
     const subConversationId = await agentServer.createConversation(
       endpoint,
       token,
-      agentLlmOf(delegation.model, choice.effort),
+      endpoint.isHqAgent
+        ? await piLlmOf(dependencies, input.turn.prompterId, delegation.model, choice.effort)
+        : agentLlmOf(delegation.model, choice.effort),
       { parentConversationId: endpoint.conversationId, toolToken: input.toolToken },
     )
     await transactor.run(({ delegations }) => delegations.update(delegation.id, { conversationId: subConversationId }))
     const conversation = { ...endpoint, conversationId: subConversationId }
-    const endStatus = await runSubConversation(dependencies, input.chat, conversation, input.task, delegation, running)
+    const { status: endStatus, answer } = await runSubConversation(
+      dependencies,
+      input.chat,
+      conversation,
+      input.task,
+      delegation,
+      running,
+    )
     if (endStatus === 'paused') return { text: subagentStopped, isError: true }
     if (endStatus !== 'finished')
       return { text: subagentFailureOf(delegation.modelName, running.failure), isError: true }
-    const text = await agentServer.finalResponse(conversation)
+    const text = conversation.isHqAgent ? answer.trim() : await agentServer.finalResponse(conversation)
     status = 'finished'
     return { text, isError: false }
   } catch {

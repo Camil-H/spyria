@@ -8,6 +8,6 @@ export {
   readAgentAccess,
   rememberAgentConversation,
 } from './operations/agent-access.ts'
-export { ensureRuntimeRunning, retryRuntime } from './operations/ensure-runtime-running.ts'
+export { ensureRuntimeRunning, type RuntimePlacement, retryRuntime } from './operations/ensure-runtime-running.ts'
 export { removeChatRuntime } from './operations/remove-chat-runtime.ts'
 export { touchRuntime } from './operations/touch-runtime.ts'

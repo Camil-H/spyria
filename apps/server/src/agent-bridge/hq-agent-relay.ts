@@ -24,6 +24,7 @@ export const createHqAgentRelay = ({
   for (const { command, flavour } of [
     { command: 'claude-agent-acp', flavour: 'claude' },
     { command: 'codex-acp', flavour: 'codex' },
+    { command: 'pi-acp', flavour: 'pi' },
   ])
     writeFileSync(
       join(shims, command),
@@ -35,6 +36,7 @@ export const createHqAgentRelay = ({
   const created: Record<string, unknown>[] = []
   const prompts: string[] = []
   const modelSwitches: string[] = []
+  const thoughtLevels: (string | undefined)[] = []
   const socketPaths: string[] = []
 
   const startAgent = async (apiKey: string): Promise<Agent> => {
@@ -76,7 +78,10 @@ export const createHqAgentRelay = ({
       const launch = method === 'POST' && path === '/api/conversations' ? sent : undefined
       if (launch) created.push(structuredClone(launch))
       if (path.endsWith('/events')) prompts.push(sent.content?.[0]?.text)
-      if (path.endsWith('/switch_acp_model')) modelSwitches.push(sent.model)
+      if (path.endsWith('/switch_acp_model')) {
+        modelSwitches.push(sent.model)
+        thoughtLevels.push(sent.thoughtLevel)
+      }
       const response = await fetch(`http://localhost:${port}${path}`, {
         method,
         headers,
@@ -107,19 +112,25 @@ export const createHqAgentRelay = ({
     },
     stopped: (container) => void stopContainer(container),
   } satisfies FakeAgentServer
+  const stopAgents = async () => {
+    for (const agent of await Promise.all(agents.values())) agent.process.kill()
+    agents.clear()
+  }
 
   return {
     agentServer,
     created,
     prompts,
     modelSwitches,
+    thoughtLevels,
     socketPaths,
+    agentCount: () => agents.size,
+    restart: stopAgents,
     dropSockets: () => {
       for (const upstream of upstreams) upstream.close()
     },
     stop: async () => {
-      for (const agent of await Promise.all(agents.values())) agent.process.kill()
-      agents.clear()
+      await stopAgents()
       rmSync(directory, { recursive: true, force: true })
     },
   }

@@ -108,6 +108,7 @@ export const createApp = ({
   agentBridge = createAgentBridge({ sandboxProvider: runtimeHosts.sandboxProvider, llm: defaultLlm }),
   fakeLlm,
   hqAgentImage,
+  hqAgentForWorkspaceHosts,
 }: {
   database: Database
   tokenSecret: string
@@ -119,6 +120,7 @@ export const createApp = ({
   agentBridge?: AgentBridge
   fakeLlm?: Hono
   hqAgentImage?: string
+  hqAgentForWorkspaceHosts?: boolean
 }) => {
   const mutatorNamed = (name: string) =>
     getMutator(workspaceMutators, name) ??
@@ -171,7 +173,7 @@ export const createApp = ({
           dbProvider: context.get('zeroDatabase'),
           handler: async (transact, mutation) => {
             const response = await transact((tx, name, args) =>
-              mutatorNamed(name).fn({ args, tx, ctx: { ...ctx, hqAgentImage } }),
+              mutatorNamed(name).fn({ args, tx, ctx: { ...ctx, hqAgentImage, hqAgentForWorkspaceHosts } }),
             )
             if (mutation.name === 'runtime.removeHost' && !('error' in response.result))
               runtimeHosts.disconnect(ctx.workspaceId, (mutation.args[0] as { hostId: RuntimeHostId }).hostId)

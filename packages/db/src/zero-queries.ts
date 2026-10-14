@@ -7,6 +7,7 @@ export type ZeroContext = {
   workspaceId: WorkspaceId
   role: 'admin' | 'member'
   hqAgentImage?: string
+  hqAgentForWorkspaceHosts?: boolean
 }
 
 export const zql = createBuilder(schema)

@@ -3,6 +3,7 @@ import type { RuntimeTransactor } from '../contracts/transactor.ts'
 import { hashSecret, newSecretToken } from '../domain/claim.ts'
 import { RuntimeNotFound } from '../domain/errors.ts'
 import { locationOf } from '../domain/runtime.ts'
+import { agentServerImage } from '../domain/runtime-host.ts'
 
 type Dependencies = { transactor: RuntimeTransactor }
 type ChatRuntime = { workspaceId: WorkspaceId; chatId: ChatId }
@@ -20,7 +21,7 @@ export const readAgentAccess = ({ transactor }: Dependencies, { workspaceId, cha
       apiKey,
       conversationId: (await runtimes.agentConversationOf(runtime)) ?? null,
       signedIn: capacity?.signedIn ?? [],
-      isPersonal: capacity?.personal === true,
+      isHqAgent: runtime.image !== agentServerImage,
     }
   })
 

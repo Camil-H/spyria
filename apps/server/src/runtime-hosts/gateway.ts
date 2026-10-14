@@ -58,12 +58,14 @@ export const createRuntimeHostGateway = ({
   afterHello,
   relayModelCall,
   hqAgentImage,
+  hqAgentForWorkspaceHosts,
 }: {
   databases: () => Iterable<Database>
   pingIntervalMilliseconds?: number
   afterHello?: (database: Database, host: ConnectedHost) => Promise<unknown>
   relayModelCall?: ModelCallRelay
   hqAgentImage?: string
+  hqAgentForWorkspaceHosts?: boolean
 }) => {
   const connectionByHost = new Map<string, Connection>()
   const operationChains = new Map<string, Promise<unknown>>()
@@ -135,7 +137,7 @@ export const createRuntimeHostGateway = ({
       ),
     )
     if (connection.identified) connection.identified.database = database
-    const image = frame.personal ? hqAgentImage : agentServerImage
+    const image = frame.personal || hqAgentForWorkspaceHosts ? hqAgentImage : agentServerImage
     if (image)
       prepare(host, image).catch((error) =>
         console.error(`Preparing runtime host ${host.hostId} failed: ${errorMessageOf(error)}`),

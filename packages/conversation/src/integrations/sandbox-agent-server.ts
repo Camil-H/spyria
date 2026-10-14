@@ -10,7 +10,7 @@ import {
 } from '../contracts/agent.ts'
 import type { AgentEvent } from '../domain/agent-events.ts'
 import { condensationLimitsOf } from '../domain/masked-body.ts'
-import type { HarnessLaunch } from '../domain/session-routing.ts'
+import { type HarnessLaunch, piModelOf } from '../domain/session-routing.ts'
 import { codexCommandOf, codexSubscriptionCommand } from './codex-launch.ts'
 
 export type AgentLlm = { model: string }
@@ -123,7 +123,6 @@ const piSettings = {
   retry: { enabled: false },
   extensions: ['/usr/local/lib/hq/pi/hq-compaction.ts'],
 }
-const piModelOf = (id: string) => `${id.startsWith('anthropic/') ? 'hq-anthropic' : 'hq'}/${id}`
 const piProviderOf = (baseUrl: string, api: string, models: readonly PiModel[]) => ({
   baseUrl,
   api,

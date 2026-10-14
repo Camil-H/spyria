@@ -350,8 +350,16 @@ export const delegatedProjectionOf = (
   return projection?.type === 'observation' ? projection : undefined
 }
 
-export const executionStatusOf = (event: AgentEvent) =>
-  event.kind === 'ConversationStateUpdateEvent' && event.key === 'execution_status' ? String(event.value) : undefined
+const acpEndStatuses: Record<string, string> = { cancelled: 'paused', error: 'error' }
+export const executionStatusOf = (event: AgentEvent) => {
+  const update = event.update as Fields
+  if (event.kind === 'ACPUpdate' && update?.sessionUpdate === 'error') return 'error'
+  if (event.kind === 'ACPUpdate' && update?.sessionUpdate === 'turn_end')
+    return acpEndStatuses[String(update.stopReason)] ?? 'finished'
+  return event.kind === 'ConversationStateUpdateEvent' && event.key === 'execution_status'
+    ? String(event.value)
+    : undefined
+}
 
 export const turnEndNoticeOf = (outcome: TurnOutcome, hasReply: boolean) =>
   outcome !== 'finished' ? agentNotices.stoppedWithError : hasReply ? undefined : agentNotices.noReply
