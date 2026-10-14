@@ -1,6 +1,5 @@
 export type * from './contracts/sandbox-provider.ts'
 export { HostRefused, RuntimeError } from './domain/errors.ts'
-export { agentServerImage } from './domain/runtime-host.ts'
 export type { RuntimeCommands } from './entrypoints/commands.ts'
 export {
   addRuntimeHostFromRequest,

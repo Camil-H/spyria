@@ -133,7 +133,6 @@ test('a prompter who cannot reach the session model gets the cannot-reach notice
 test.each([
   [{ localSession: true, harness: null, model: null }, 'Claude Code · subscription'],
   [{ localSession: true, harness: 'codex', model: 'gpt-large' }, 'Codex · Adapter gpt-large'],
-  [{ localSession: false, harness: 'claude-code', model: 'anthropic/claude-opus-5-5' }, 'Claude Code · Opus 5.5'],
   [
     { localSession: false, harness: null, model: 'fake/fake-large', reasoningEffort: 'high' },
     'Named fake/fake-large (high) · same as main',

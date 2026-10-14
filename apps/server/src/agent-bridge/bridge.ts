@@ -32,9 +32,7 @@ export const createAgentBridge = ({
   sessionClassifierOf,
   now,
   resumeAfterMilliseconds,
-  condensationScale,
   hqAgentImage,
-  hqAgentForWorkspaceHosts,
   reopenDelayMilliseconds = 1000,
 }: {
   sandboxProvider: SandboxProvider
@@ -42,9 +40,7 @@ export const createAgentBridge = ({
   sessionClassifierOf?: (database: Database) => SessionClassifier
   now?: () => number
   resumeAfterMilliseconds?: number
-  condensationScale?: number
   hqAgentImage?: string
-  hqAgentForWorkspaceHosts?: boolean
   reopenDelayMilliseconds?: number
 }) => {
   const bridgeOf = (database: Database) => {
@@ -73,9 +69,7 @@ export const createAgentBridge = ({
       classifier: sessionClassifierOf?.(database),
       now,
       resumeAfterMilliseconds,
-      condensationScale,
       hqAgentImage,
-      hqAgentForWorkspaceHosts,
       eventSockets: {
         ensureOpen: (...target) => ensureOpen(...target),
         stopStreaming: (chat, promptId) => {
@@ -145,19 +139,17 @@ export const createAgentBridge = ({
         if (chatSocket.promptId) reopenLater(chat)
       }
       sockets.set(keyOf(chat), chatSocket)
-      const record = (event: AgentEvent, streamedText = '') => {
+      const record = (event: AgentEvent) => {
         const promptAtEvent = chatSocket.promptId
-        const isToolCall = event.kind === 'ACPToolCallEvent'
         recording = recording
-          .then(() => handlers.recordEvent(chat, event, streamedText))
+          .then(() => handlers.recordEvent(chat, event))
           .then((recorded) => {
             if (recorded?.isReplyStored && promptAtEvent)
               for (const viewer of viewers.get(keyOf(chat)) ?? [])
                 send(viewer, chat, { promptId: promptAtEvent, storedId: event.id })
             if (!recorded || chatSocket.promptId !== promptAtEvent) return
             chatSocket.promptId = recorded.promptId
-            if ((recorded.isReplyStored && !isToolCall && event.kind !== 'ACPUpdate') || recorded.promptId === null)
-              chatSocket.streamedText = ''
+            if (recorded.promptId === null) chatSocket.streamedText = ''
           })
           .catch((error) =>
             console.error(`Recording an agent event of chat ${chat.chatId} failed: ${messageOf(error)}`),
@@ -187,39 +179,32 @@ export const createAgentBridge = ({
           ready.resolve()
           if (chatSocket.isClosed) return
           const streamed = streamedTextOf(event)
-          const isAcp = event.kind === 'ACPUpdate'
-          if (isAcp && (event.update as { sessionUpdate?: string })?.sessionUpdate === 'turn_end') {
+          if ((event.update as { sessionUpdate?: string })?.sessionUpdate === 'turn_end') {
             if (chatSocket.isDraining) chatSocket.isDraining = false
             else chatSocket.endedPromptId = chatSocket.promptId
           }
-          if (isAcp && streamed && chatSocket.isDraining) return
+          if (streamed && chatSocket.isDraining) return
           if (streamed?.text && chatSocket.promptId) {
             const { text, isReasoning } = streamed
-            if (isAcp && chatSocket.segment && chatSocket.segment.isReasoning !== isReasoning) flushSegment(event)
-            if (isAcp)
-              chatSocket.segment = {
-                first: chatSocket.segment?.first ?? event,
-                last: event,
-                text: (chatSocket.segment?.text ?? '') + text,
-                isReasoning,
-              }
+            if (chatSocket.segment && chatSocket.segment.isReasoning !== isReasoning) flushSegment(event)
+            chatSocket.segment = {
+              first: chatSocket.segment?.first ?? event,
+              last: event,
+              text: (chatSocket.segment?.text ?? '') + text,
+              isReasoning,
+            }
             chatSocket.streamedText = (chatSocket.isReasoning === isReasoning ? chatSocket.streamedText : '') + text
             chatSocket.isReasoning = isReasoning
             const seq = Number(event.seq)
-            if (!isAcp || seq > (streamedSeqs.get(conversation.conversationId) ?? 0)) {
-              if (isAcp) streamedSeqs.set(conversation.conversationId, seq)
+            if (seq > (streamedSeqs.get(conversation.conversationId) ?? 0)) {
+              streamedSeqs.set(conversation.conversationId, seq)
               for (const viewer of viewers.get(keyOf(chat)) ?? [])
                 send(viewer, chat, { promptId: chatSocket.promptId, text, ...(isReasoning && { isReasoning }) })
             }
           }
           if (streamed) return
-          if (isAcp && isStoredAgentEvent(event)) flushSegment(event)
-          const streamedText =
-            chatSocket.promptId && event.kind === 'ACPToolCallEvent' && !chatSocket.isReasoning
-              ? chatSocket.streamedText
-              : ''
-          if (streamedText) chatSocket.streamedText = ''
-          record(event, streamedText)
+          if (isStoredAgentEvent(event)) flushSegment(event)
+          record(event)
         },
         onClose: closed,
       })
@@ -231,11 +216,9 @@ export const createAgentBridge = ({
       ensureOpen,
       promptWaiting: handlers.promptWaiting,
       modelCallTurn: handlers.modelCallTurn,
-      condenserModel: handlers.condenserModel,
       toolCallTurn: handlers.toolCallTurn,
       delegate: handlers.delegate,
       recordModelCallFailure: handlers.recordModelCallFailure,
-      recordHarnessModel: handlers.recordHarnessModel,
       resumeActiveTurns: async () => {
         const chats = await database.$client<{ workspaceId: string; chatId: string }[]>`
           select workspace_id as "workspaceId", id as "chatId" from chats where agent_turn_message_id is not null`

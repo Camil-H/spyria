@@ -2,7 +2,6 @@ import type { Database } from '@hq/db/postgres'
 import { schema } from '@hq/db/zero'
 import type { RuntimeHostId, WorkspaceId } from '@hq/kernel'
 import {
-  agentServerImage,
   type ConnectedHost,
   createHostSessionHandlers,
   HostRefused,
@@ -58,14 +57,12 @@ export const createRuntimeHostGateway = ({
   afterHello,
   relayModelCall,
   hqAgentImage,
-  hqAgentForWorkspaceHosts,
 }: {
   databases: () => Iterable<Database>
   pingIntervalMilliseconds?: number
   afterHello?: (database: Database, host: ConnectedHost) => Promise<unknown>
   relayModelCall?: ModelCallRelay
   hqAgentImage?: string
-  hqAgentForWorkspaceHosts?: boolean
 }) => {
   const connectionByHost = new Map<string, Connection>()
   const operationChains = new Map<string, Promise<unknown>>()
@@ -137,9 +134,8 @@ export const createRuntimeHostGateway = ({
       ),
     )
     if (connection.identified) connection.identified.database = database
-    const image = frame.personal || hqAgentForWorkspaceHosts ? hqAgentImage : agentServerImage
-    if (image)
-      prepare(host, image).catch((error) =>
+    if (hqAgentImage)
+      prepare(host, hqAgentImage).catch((error) =>
         console.error(`Preparing runtime host ${host.hostId} failed: ${errorMessageOf(error)}`),
       )
     handlers
@@ -262,7 +258,7 @@ export const createRuntimeHostGateway = ({
   const command = async (host: ConnectedHost, op: string, args: object) =>
     (await request(host, { type: 'cmd', op, args })).data
 
-  const prepare = async (host: ConnectedHost, image = agentServerImage) => {
+  const prepare = async (host: ConnectedHost, image: string) => {
     await command(host, 'prepare', { image })
   }
 

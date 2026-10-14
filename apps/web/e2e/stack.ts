@@ -1,7 +1,3 @@
-import { type ChildProcess, spawn, spawnSync } from 'node:child_process'
-import { mkdtempSync, openSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import {
   type Database,
@@ -27,13 +23,11 @@ import { gatewayUrl, serverUrl, templateDatabaseName, viteUrl, zeroCachePortOf }
 
 export { expect } from '@playwright/test'
 
-export type AgentServerMode = 'fake' | 'real'
-type ResetOptions = { runtimeHost: boolean; warmRuntimes: boolean; agentServer: AgentServerMode }
+type ResetOptions = { runtimeHost: boolean; warmRuntimes: boolean }
 type PairedHost = {
   host: typeof runtimeHosts.$inferSelect
   start: () => Promise<void>
   stop: () => Promise<void>
-  release: () => void
   warmRuntimes: Map<string, WarmRuntime>
 }
 export type WorkerStack = {
@@ -43,7 +37,6 @@ export type WorkerStack = {
   reset: (options: ResetOptions) => Promise<void>
   stopRuntimeHost: () => Promise<void>
   startRuntimeHost: () => Promise<void>
-  agentServer: () => AgentServerMode
   gateway: <Result>(path: string) => Promise<Result>
   fakeHost: (query?: Record<string, string>) => Promise<{ id: string; conversations: FakeHostConversation[] }>
   setGatewayReachable: (isReachable: boolean) => Promise<void>
@@ -73,34 +66,8 @@ const maximumResetAttempts = 5
 const deadlockCode = '40P01'
 const barrierSessionMilliseconds = 24 * 60 * 60 * 1000
 const workerDatabaseNameOf = (workerIndex: number) => `hq_e2e_w${workerIndex}`
-const hostProgram = new URL('../../host/src/main.ts', import.meta.url).pathname
 const warmChatIds = ['chat-research', 'chat-setup-helper']
 const runtimeReadyMilliseconds = 90_000
-export const workerHostPrefixOf = (workerIndex: number) => `hq-test-e2e-w${workerIndex}-`
-
-const docker = (...args: string[]) =>
-  spawnSync('docker', args, { stdio: ['ignore', 'pipe', 'ignore'] }).stdout.toString()
-const deleteAgentConversationsScript = `
-import json, sys, urllib.request
-base = 'http://localhost:8000/api/conversations'
-call = lambda method, url: urllib.request.urlopen(urllib.request.Request(url, method=method, headers={'X-Session-API-Key': sys.argv[1]}))
-for conversation in json.load(call('GET', base + '/search?limit=100'))['items']:
-    call('DELETE', base + '/' + conversation['id'])
-`
-const deleteAgentConversations = (containerName: string, apiKey: string) =>
-  docker('exec', containerName, 'python3', '-c', deleteAgentConversationsScript, apiKey)
-export const removeDockerObjects = (namePrefix: string) => {
-  const listed = (...command: string[]) =>
-    docker(...command, '--filter', `name=^${namePrefix}`)
-      .split('\n')
-      .filter(Boolean)
-  const containers = listed('ps', '-aq')
-  if (containers.length > 0) docker('rm', '-f', ...containers)
-  const volumes = listed('volume', 'ls', '-q')
-  if (volumes.length > 0) docker('volume', 'rm', '-f', ...volumes)
-  const networks = listed('network', 'ls', '-q')
-  if (networks.length > 0) docker('network', 'rm', ...networks)
-}
 
 const postToServer = async (path: string, query: Record<string, string>, init: RequestInit = {}) => {
   const response = await fetch(`${serverUrl}${path}?${new URLSearchParams(query)}`, { method: 'POST', ...init })
@@ -136,56 +103,6 @@ export const openPageAs = async (browser: Browser, workerStack: WorkerStack, use
   return page
 }
 
-const pairRuntimeHost = async (database: Database, databaseName: string, workerIndex: number) => {
-  const session = await (
-    await postToServer('/test/token', { db: databaseName, user: aliceMemberId, workspace: 'workspace-acme' })
-  ).json()
-  const { id, code } = await (
-    await postToServer(
-      '/api/runtime-hosts',
-      {},
-      {
-        headers: { authorization: `Bearer ${session.token}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ name: `e2e host ${workerIndex}` }),
-      },
-    )
-  ).json()
-  const stateDirectory = mkdtempSync(join(tmpdir(), 'hq-test-host-'))
-  const hostRow = async () => (await database.select().from(runtimeHosts)).find((host) => host.id === id)
-  const waitForStatus = async (isExpected: (status: string | undefined) => boolean) => {
-    for (const deadline = Date.now() + 30_000; !isExpected((await hostRow())?.status); await sleep(100))
-      if (Date.now() > deadline) throw new Error('The e2e runtime host did not change its status in time')
-  }
-  const logFile = openSync(join(tmpdir(), `hq-e2e-host-w${workerIndex}.log`), 'w')
-  let hostProcess: ChildProcess | undefined
-  const start = async () => {
-    if (hostProcess) return
-    hostProcess = spawn('bun', [hostProgram, `${serverUrl}/h/${code}`], {
-      env: { ...process.env, HQ_HOST_STATE_DIR: stateDirectory, HQ_HOST_PREFIX: workerHostPrefixOf(workerIndex) },
-      stdio: ['ignore', logFile, logFile],
-    })
-    await waitForStatus((status) => status === 'online')
-  }
-  const stop = async () => {
-    hostProcess?.kill('SIGTERM')
-    hostProcess = undefined
-    await waitForStatus((status) => status !== 'online')
-  }
-  await start()
-  const host = await hostRow()
-  if (!host) throw new Error('The e2e runtime host row is missing')
-  return {
-    host,
-    start,
-    stop,
-    warmRuntimes: new Map(),
-    release: () => {
-      hostProcess?.kill('SIGTERM')
-      rmSync(stateDirectory, { recursive: true, force: true })
-    },
-  }
-}
-
 const pairFakeHost = async (database: Database, databaseName: string): Promise<PairedHost> => {
   const setOnline = (isOnline: boolean) =>
     postToServer('/test/fake-host', { db: databaseName, online: String(isOnline) })
@@ -200,7 +117,6 @@ const pairFakeHost = async (database: Database, databaseName: string): Promise<P
     stop: async () => {
       await setOnline(false)
     },
-    release: () => {},
     warmRuntimes: new Map(),
   }
 }
@@ -241,29 +157,21 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
       let epochNumber = 0
       let seededGatewayKeys: Awaited<ReturnType<typeof prepareSeededGatewayKeys>> | undefined
       let barrierSessionId: string | undefined
-      const pairedHosts: Partial<Record<AgentServerMode, PairedHost>> = {}
-      let mode: AgentServerMode = 'fake'
+      let pairedHost: PairedHost | undefined
       const keepWarmRuntimes = async () => {
-        const warmRuntimes = pairedHosts[mode]?.warmRuntimes
+        const warmRuntimes = pairedHost?.warmRuntimes
         if (!warmRuntimes) return
         for (const runtime of await testDatabase.database.select().from(runtimes)) {
           if (!warmChatIds.includes(runtime.chatId)) continue
           const kept = warmRuntimes.get(runtime.chatId)
           const isWarm = runtime.state === 'running' || runtime.state === 'stopped'
           const isKept = kept?.runtime.id === runtime.id
-          if (kept && (isKept ? !isWarm : isWarm) && mode === 'real')
-            removeDockerObjects(`${workerHostPrefixOf(index)}rt-${kept.runtime.id}`)
           if (isKept && !isWarm) warmRuntimes.delete(runtime.chatId)
           if (isWarm) warmRuntimes.set(runtime.chatId, { runtime })
         }
       }
-      const writeReset = async (
-        options: ResetOptions = { runtimeHost: false, warmRuntimes: false, agentServer: 'fake' },
-      ) => {
+      const writeReset = async (options: ResetOptions = { runtimeHost: false, warmRuntimes: false }) => {
         const epoch = `epoch-${workerInfo.workerIndex}-${++epochNumber}`
-        if (options.agentServer === 'real')
-          for (const { runtime } of pairedHosts.real?.warmRuntimes.values() ?? [])
-            deleteAgentConversations(`${workerHostPrefixOf(index)}rt-${runtime.id}`, runtime.apiKey ?? '')
         const writeSeededGatewayKeys = await prepareSeededGatewayKeys(testGateway, seededGatewayKeys)
         seededGatewayKeys = writeSeededGatewayKeys
         const reset = () =>
@@ -290,14 +198,11 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
                 createdAt: new Date(),
                 expiresAt: new Date(Date.now() + barrierSessionMilliseconds),
               })
-            for (const [hostMode, pairedHost] of Object.entries(pairedHosts)) {
-              const isActive = options.runtimeHost && hostMode === options.agentServer
-              await transaction
-                .insert(runtimeHosts)
-                .values({ ...pairedHost.host, removedAt: isActive ? null : new Date() })
-            }
-            const pairedHost = pairedHosts[options.agentServer]
-            if (!pairedHost || !options.runtimeHost || !options.warmRuntimes) return
+            if (!pairedHost) return
+            await transaction
+              .insert(runtimeHosts)
+              .values({ ...pairedHost.host, removedAt: options.runtimeHost ? null : new Date() })
+            if (!options.runtimeHost || !options.warmRuntimes) return
             for (const { runtime } of pairedHost.warmRuntimes.values()) {
               await transaction
                 .insert(runtimes)
@@ -348,31 +253,22 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
         }
       }
       await waitForEpoch(firstEpoch)
-      removeDockerObjects(workerHostPrefixOf(index))
-      const pairedHostOf = async (agentServer: AgentServerMode) => {
-        pairedHosts[agentServer] ??=
-          agentServer === 'real'
-            ? await pairRuntimeHost(testDatabase.database, testDatabase.name, index)
-            : await pairFakeHost(testDatabase.database, testDatabase.name)
-        return pairedHosts[agentServer]
-      }
       await use({
         databaseName: testDatabase.name,
         zeroCacheURL: zeroCache.url,
         database: testDatabase.database,
         reset: async (options) => {
           await keepWarmRuntimes()
-          mode = options.agentServer
-          const pairedHost = await pairedHostOf(mode)
+          pairedHost ??= await pairFakeHost(testDatabase.database, testDatabase.name)
           await pairedHost.start()
           await waitForEpoch(await writeReset(options))
-          const coldChatIds = warmChatIds.filter((chatId) => !pairedHost.warmRuntimes.has(chatId))
+          const { warmRuntimes } = pairedHost
+          const coldChatIds = warmChatIds.filter((chatId) => !warmRuntimes.has(chatId))
           if (options.runtimeHost && options.warmRuntimes && coldChatIds.length > 0)
             await warmUp(testDatabase.database, testDatabase.name, coldChatIds)
         },
-        stopRuntimeHost: async () => pairedHosts[mode]?.stop(),
-        startRuntimeHost: async () => pairedHosts[mode]?.start(),
-        agentServer: () => mode,
+        stopRuntimeHost: async () => pairedHost?.stop(),
+        startRuntimeHost: async () => pairedHost?.start(),
         gateway: (path) => testGateway.call(path),
         fakeHost: async (query = {}) =>
           (await postToServer('/test/fake-host', { db: testDatabase.name, ...query })).json(),
@@ -380,8 +276,6 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
           await postToServer('/test/gateway', { db: testDatabase.name, reachable: String(isReachable) })
         },
       })
-      pairedHosts.real?.release()
-      removeDockerObjects(workerHostPrefixOf(index))
       await barrier.close()
       await zeroCache.stop()
       await releaseServerDatabase()
@@ -391,10 +285,9 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
   ],
   runtimeHost: [true, { option: true }],
   warmRuntimes: [true, { option: true }],
-  agentServer: ['fake', { option: true }],
   resetStack: [
     async (
-      { workerStack, context, signedInAs, tokenSeconds, runtimeHost, warmRuntimes, agentServer, fakeBootMilliseconds },
+      { workerStack, context, signedInAs, tokenSeconds, runtimeHost, warmRuntimes, fakeBootMilliseconds },
       use,
     ) => {
       await postToServer('/test/fake-llm-script', { db: workerStack.databaseName })
@@ -404,7 +297,7 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
       })
       await postToServer('/test/runtime-creation', { db: workerStack.databaseName, failing: 'false' })
       await workerStack.setGatewayReachable(true)
-      await workerStack.reset({ runtimeHost, warmRuntimes, agentServer })
+      await workerStack.reset({ runtimeHost, warmRuntimes })
       await signIn(context, workerStack, signedInAs, tokenSeconds)
       await use(undefined)
     },

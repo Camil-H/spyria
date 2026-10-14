@@ -5,11 +5,9 @@ import { join } from 'node:path'
 const isDocker = process.argv.includes('--docker')
 const checkName = isDocker ? 'check:docker' : 'check:all'
 const steps = isDocker
-  ? ['stack:up', 'agent:build', 'test:docker:integration', 'test:e2e:docker']
+  ? ['stack:up', 'agent:build', 'test:docker:integration']
   : ['lint', 'typecheck', 'check:boundaries', 'test', 'check:bundle', 'stack:up', 'test:integration', 'test:e2e']
-const timingFiles = isDocker
-  ? ['integration-docker.xml', 'e2e-docker-results.json']
-  : ['integration.xml', 'e2e-results.json']
+const timingFiles = isDocker ? ['integration-docker.xml'] : ['integration.xml', 'e2e-results.json']
 const repositoryRoot = new URL('../', import.meta.url).pathname
 const checkDirectory = `${repositoryRoot}.check/`
 const logFile = `${checkDirectory}last-${checkName.replace(':', '-')}.log`

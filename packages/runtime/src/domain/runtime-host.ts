@@ -58,6 +58,3 @@ export const declarationRefusalOf = (host: RuntimeHost, personal: boolean) => {
   if (host.ownerId === null && personal) return new PairedAsWorkspaceHost()
   return undefined
 }
-
-export const agentServerImage =
-  'ghcr.io/openhands/agent-server@sha256:977a4791b90f46c0873f63d879180692802e47e7a0e760ab5add5d5a2505027d'

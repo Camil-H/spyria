@@ -303,33 +303,6 @@ export const lastAgentEvent = (tx: Transaction, workspaceId: string, chatId: str
     [workspaceId, chatId],
   )
 
-export const recordedStreamedText = async (tx: Transaction, workspaceId: string, chatId: string, promptId: string) =>
-  (
-    await firstOnServer<{ text: string }>(
-      tx,
-      `select coalesce(string_agg(payload->'event'->'llm_message'->'content'->0->>'text', '' order by seq), '') as text
-       from events where workspace_id = $1 and chat_id = $2 and type = 'agent.event' and payload->>'replyToId' = $3
-       and id like '%-text' and seq > coalesce((select max(seq) from events
-         where workspace_id = $1 and chat_id = $2 and type = 'agent.event' and payload->>'replyToId' = $3
-         and payload->'event'->'action'->>'kind' = 'FinishAction'), 0)`,
-      [workspaceId, chatId, promptId],
-    )
-  )?.text ?? ''
-
-export const stoppedHarnessSessionId = async (tx: Transaction, workspaceId: string, chatId: string) =>
-  (
-    await firstOnServer<{ sessionId: string | null }>(
-      tx,
-      `select payload->'event'->'value'->>'acp_session_id' as "sessionId" from events
-       where workspace_id = $1 and chat_id = $2 and type = 'agent.event' and payload->'event'->>'key' = 'agent_state'
-       and 'InterruptEvent' = (select payload->'event'->>'kind' from events
-         where workspace_id = $1 and chat_id = $2 and type = 'agent.event'
-         and payload->'event'->>'kind' in ('InterruptEvent', 'MessageEvent') order by seq desc limit 1)
-       order by seq desc limit 1`,
-      [workspaceId, chatId],
-    )
-  )?.sessionId ?? undefined
-
 export const lastSessionId = async (tx: Transaction, workspaceId: string, chatId: string) =>
   (
     await firstOnServer<{ sessionId: string | null }>(
@@ -377,15 +350,19 @@ export const isWorkspaceHostOnline = async (tx: Transaction, workspaceId: string
     )
   )?.online ?? false
 
-export const agentObservationOf = async (tx: Transaction, workspaceId: string, chatId: string, actionId: string) =>
+export const finishedToolCallEventOf = async (tx: Transaction, workspaceId: string, chatId: string, stepId: string) =>
   (
-    await firstOnServer<{ observation: Record<string, unknown> }>(
+    await firstOnServer<{ event: Record<string, unknown> }>(
       tx,
-      `select payload->'event'->'observation' as observation from events
-       where workspace_id = $1 and chat_id = $2 and type = 'agent.event' and payload->'event'->>'action_id' = $3`,
-      [workspaceId, chatId, actionId],
+      `select payload->'event' as event from events
+       where workspace_id = $1 and chat_id = $2 and type = 'agent.event'
+       and split_part(payload->'event'->>'id', ':', 1) = split_part($3, ':', 1)
+       and payload->'event'->'update'->>'toolCallId' = substr($3, strpos($3, ':') + 1)
+       and payload->'event'->'update'->>'status' in ('completed', 'failed')
+       order by seq desc limit 1`,
+      [workspaceId, chatId, stepId],
     )
-  )?.observation
+  )?.event
 
 type ChatEvent = {
   workspaceId: string

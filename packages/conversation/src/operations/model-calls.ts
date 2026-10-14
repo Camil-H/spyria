@@ -1,4 +1,4 @@
-import { cheapestModelOf, type MemberId, type MessageId } from '@hq/kernel'
+import type { MessageId } from '@hq/kernel'
 import type { AgentChat, AgentHost } from '../contracts/agent.ts'
 import {
   isContextWindowFailure,
@@ -9,7 +9,6 @@ import {
 import type { AgentDependencies } from './agent-turn.ts'
 import { digestOf } from './decide.ts'
 import { noteSubagentFailure } from './delegate.ts'
-import { reachableChatModelsOf } from './prompt-agent.ts'
 
 type Dependencies = Pick<AgentDependencies, 'transactor' | 'runtimes' | 'classifier'>
 type FailedCall = {
@@ -68,12 +67,3 @@ export const recordModelCallFailure = async (
     return notice
   })
 }
-
-export const findCondenserModel = async (dependencies: Dependencies, prompterId: MemberId) =>
-  cheapestModelOf(await reachableChatModelsOf(dependencies, prompterId))?.id
-
-export const recordHarnessModel = ({ transactor }: Dependencies, chat: AgentChat, model: string) =>
-  transactor.run(async ({ routing }) => {
-    const { harness, model: shownModel } = await routing.chatRouting(chat.chatId)
-    if (harness && shownModel !== model) await routing.update(chat.chatId, { model })
-  })

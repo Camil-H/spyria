@@ -5,12 +5,7 @@ import { createHqAgentRelay } from './hq-agent-relay.ts'
 
 setDefaultTimeout(40_000)
 const { database, fakeHost, mutate, newRuntimeChat, prompt, turnOf, messagesOf, storedAgentEventsOf, ...stack } =
-  await startAgentStack({
-    routing: true,
-    hqAgentImage: `sha256:${'0'.repeat(64)}`,
-    hqAgentForWorkspaceHosts: true,
-    resumeAfterMilliseconds: 15_000,
-  })
+  await startAgentStack({ routing: true, resumeAfterMilliseconds: 15_000 })
 const relays: ReturnType<typeof createHqAgentRelay>[] = []
 afterEach(async () => {
   stack.setFakeLlmScript(undefined)

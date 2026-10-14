@@ -17,7 +17,7 @@ import {
 import { sessionQuestions } from '../domain/session-routing.ts'
 import type { AgentDependencies } from './agent-turn.ts'
 import { decide, digestOf } from './decide.ts'
-import { agentLlmOf, fixedPiLlmOf, piLlmOf } from './prompt-agent.ts'
+import { fixedPiLlmOf, piLlmOf } from './prompt-agent.ts'
 import { recordAgentEvent } from './record-agent-event.ts'
 
 type Input = {
@@ -32,7 +32,6 @@ type Input = {
 export type DelegationResult = { text: string; isError: boolean }
 type RunningDelegation = { chatId: ChatId; promptId: MessageId; result: Promise<DelegationResult>; failure?: string }
 
-const endStatuses = ['finished', 'stuck', 'paused', 'closed']
 const cannotStart = { text: 'The subagent could not start', isError: true }
 const runningDelegations = new Map<string, RunningDelegation>()
 
@@ -89,23 +88,11 @@ const runSubConversation = (
         if (toolCallIdOf(event) !== undefined) answer = ''
         if (isStoredAgentEvent(event))
           recording = recording
-            .then(() =>
-              recordAgentEvent(
-                { transactor },
-                {
-                  ...chat,
-                  event,
-                  delegation,
-                  subagentFailure: running.failure ?? subagentFailureOf(delegation.modelName),
-                },
-              ),
-            )
+            .then(() => recordAgentEvent({ transactor }, { ...chat, event, delegation }))
             .then(() => runtimes.touch(chat))
             .catch((error) => console.error(`Recording a subagent event of chat ${chat.chatId} failed: ${error}`))
         const status = executionStatusOf(event)
-        if (event.kind === 'ConversationErrorEvent' || (event.kind === 'ACPUpdate' && status === 'error'))
-          finish('error')
-        else if (status && endStatuses.includes(status)) finish(status)
+        if (status) finish(status)
       },
       onClose: () => void recording.then(() => resolve({ status: 'closed', answer })),
     })
@@ -135,11 +122,9 @@ const runDelegation = async (
     const subConversationId = await agentServer.createConversation(
       endpoint,
       token,
-      endpoint.isHqAgent
-        ? dependencies.fixedLlm
-          ? fixedPiLlmOf(delegation.model)
-          : await piLlmOf(dependencies, input.turn.prompterId, delegation.model, choice.effort)
-        : agentLlmOf(delegation.model, choice.effort),
+      dependencies.fixedLlm
+        ? fixedPiLlmOf(delegation.model)
+        : await piLlmOf(dependencies, input.turn.prompterId, delegation.model, choice.effort),
       { parentConversationId: endpoint.conversationId, toolToken: input.toolToken },
     )
     await transactor.run(({ delegations }) => delegations.update(delegation.id, { conversationId: subConversationId }))
@@ -155,9 +140,8 @@ const runDelegation = async (
     if (endStatus === 'paused') return { text: subagentStopped, isError: true }
     if (endStatus !== 'finished' || running.failure)
       return { text: subagentFailureOf(delegation.modelName, running.failure), isError: true }
-    const text = conversation.isHqAgent ? answer.trim() : await agentServer.finalResponse(conversation)
     status = 'finished'
-    return { text, isError: false }
+    return { text: answer.trim(), isError: false }
   } catch {
     return cannotStart
   } finally {

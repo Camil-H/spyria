@@ -13,7 +13,6 @@
     "dev": "COMPOSE_PROFILES=zero,gateway bun run stack:up && bun run --filter '@hq/server' --filter '@hq/web' dev",
     "test:docker:integration": "bun test --preload ./apps/server/src/integration-setup.ts --reporter=junit --reporter-outfile=.check/integration-docker.xml .docker.test.ts",
     "test:e2e": "bun run --cwd apps/web test:e2e",
-    "test:e2e:docker": "bun run --cwd apps/web test:e2e:docker",
     "check:boundaries": "depcruise apps packages --config .dependency-cruiser.cjs",
     "check:bundle": "bun run --cwd apps/web build && bun scripts/check-bundle.ts",
     "check:all": "bun scripts/check-all.ts",

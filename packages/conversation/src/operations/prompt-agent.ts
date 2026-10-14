@@ -19,13 +19,9 @@ import { agentNotices, notReadyNoticeOf } from '../domain/agent-events.ts'
 import type { Message } from '../domain/message.ts'
 import { noLlmKeyNoticeOf } from '../domain/model-call-failures.ts'
 import {
-  type HarnessLaunch,
-  harnesses,
-  harnessOfKeys,
   type LocalSession,
   localSessions,
   piModelOf,
-  reachesHarness,
   sessionChoiceOf,
   sessionQuestions,
   sessionStateOf,
@@ -34,7 +30,6 @@ import {
 } from '../domain/session-routing.ts'
 import {
   type AgentDependencies,
-  appendNotice,
   beginAgentTurn,
   closeAgentTurn,
   noticeWaitingPrompts,
@@ -46,11 +41,6 @@ type Input = { workspaceId: WorkspaceId; messageId: MessageId }
 type Prepared = { conversation: AgentConversation } | { refusal: string }
 
 const runtimeStartPollMilliseconds = 500
-export const agentLlmOf = (model: string, effort: string | null, usageId = 'agent') => ({
-  model: `openai/${model}`,
-  effort: effort ?? undefined,
-  usageId,
-})
 
 export const reachableChatModelsOf = async (
   { transactor, classifier }: Pick<AgentDependencies, 'transactor' | 'classifier'>,
@@ -71,8 +61,6 @@ export const piLlmOf = async (
 ): Promise<AgentLlmChoice> => {
   const models = await reachableChatModelsOf(dependencies, prompterId)
   return {
-    model,
-    usageId: 'agent',
     acpModel: piModelOf(model),
     effort: thoughtLevelOf(effort),
     pi: {
@@ -85,7 +73,7 @@ export const piLlmOf = async (
 export const fixedPiLlmOf = (fixedModel: string): AgentLlmChoice => {
   const model = fixedModel.replace(/^openai\//, '')
   const pi = { models: [{ id: model, name: model, reasoning: true }], compactionModel: model }
-  return { model, usageId: 'agent', acpModel: piModelOf(model), pi }
+  return { acpModel: piModelOf(model), pi }
 }
 
 const routeSession = async (
@@ -93,14 +81,11 @@ const routeSession = async (
   chat: AgentChat,
   prompterId: MemberId,
   prompt: Message,
-  isPi: boolean,
 ) => {
   const { routing, reachable } = await dependencies.transactor.run(async ({ routing }) => ({
     routing: await routing.chatRouting(chat.chatId),
     reachable: (await routing.reachableModels(prompterId)) ?? [],
   }))
-  const harness = isPi ? undefined : (routing.harness ?? harnessOfKeys(reachable))
-  if (harness) return { harness, canPrompt: reachesHarness(harness, reachable) }
   const decision = await decide(dependencies, {
     models: reachable,
     chat,
@@ -119,7 +104,7 @@ const routeSession = async (
 }
 
 const keepSession = async (
-  { transactor, runtimes, agentServer }: AgentDependencies,
+  { transactor, agentServer }: AgentDependencies,
   chat: AgentChat,
   conversation: AgentConversation,
   prompterId: MemberId,
@@ -128,21 +113,12 @@ const keepSession = async (
     routing: await routing.chatRouting(chat.chatId),
     reachable: await routing.reachableModels(prompterId),
   }))
-  const { model, reasoningEffort, agentModel, harness } = routing
-  if (harness && !conversation.isHqAgent)
-    return reachesHarness(harness, reachable ?? []) ? { conversation } : { refusal: harnesses[harness].keysNotice }
+  const { model, reasoningEffort, agentModel } = routing
   if (!model) return { conversation }
   if (!chatModelsOf(reachable ?? []).some((candidate) => candidate.id === model))
     return { refusal: unreachableSessionNoticeOf(model) }
   if (agentModel !== model) {
-    if (conversation.isHqAgent)
-      await agentServer.switchAcpModel(conversation, piModelOf(model), thoughtLevelOf(reasoningEffort))
-    else
-      await agentServer.switchLlm(
-        conversation,
-        await runtimes.issueLlmToken(chat, true),
-        agentLlmOf(model, reasoningEffort, `agent:${crypto.randomUUID()}`),
-      )
+    await agentServer.switchAcpModel(conversation, piModelOf(model), thoughtLevelOf(reasoningEffort))
     await transactor.run(({ routing }) => routing.setAgentModel(chat.chatId, model))
   }
   return { conversation }
@@ -161,44 +137,24 @@ const keepAcpModel = async (
   return { conversation }
 }
 
-const harnessConversationFor = async (
+const machineConversationFor = async (
   { transactor, runtimes, agentServer }: AgentDependencies,
   chat: AgentChat,
   endpoint: AgentEndpoint,
-  { launch, model, acpModel }: { launch: HarnessLaunch; model: string; acpModel?: string },
+  localSession: LocalSession,
 ): Promise<AgentConversation> => {
-  const resumeSessionId = endpoint.isHqAgent
-    ? await transactor.run(({ agentEvents }) => agentEvents.lastSessionId(chat.chatId))
-    : endpoint.conversationId === null
-      ? await transactor.run(({ agentEvents }) => agentEvents.stoppedHarnessSessionId(chat.chatId))
-      : undefined
-  const runtimeToken = await runtimes.issueLlmToken(chat)
+  const { model } = await transactor.run(({ routing }) => routing.chatRouting(chat.chatId))
+  const resumeSessionId = await transactor.run(({ agentEvents }) => agentEvents.lastSessionId(chat.chatId))
   const conversationId = await runtimes.rememberConversation(
     chat,
-    await agentServer.createConversation(endpoint, runtimeToken, {
-      model,
-      usageId: 'agent',
-      harness: launch,
+    await agentServer.createConversation(endpoint, await runtimes.issueLlmToken(chat), {
+      harness: localSession.launch,
       resumeSessionId,
-      acpModel,
+      acpModel: model ?? undefined,
     }),
   )
-  if (acpModel) await transactor.run(({ routing }) => routing.setAgentModel(chat.chatId, acpModel))
+  if (model) await transactor.run(({ routing }) => routing.setAgentModel(chat.chatId, model))
   return { ...endpoint, conversationId }
-}
-
-const machineConversationFor = async (
-  dependencies: AgentDependencies,
-  chat: AgentChat,
-  endpoint: AgentEndpoint,
-  localSession: LocalSession,
-) => {
-  const { model } = await dependencies.transactor.run(({ routing }) => routing.chatRouting(chat.chatId))
-  return harnessConversationFor(dependencies, chat, endpoint, {
-    launch: localSession.launch,
-    model: '',
-    acpModel: model ?? undefined,
-  })
 }
 
 const conversationFor = async (
@@ -214,7 +170,7 @@ const conversationFor = async (
   if (localSession && !signedIn.includes(localSession.signIn)) return { refusal: localSession.signInNotice }
   const storedConversation = storedId === null ? undefined : { ...endpoint, conversationId: storedId }
   let status = storedConversation && (await agentServer.statusOf(storedConversation))
-  if (storedConversation && status === 'error' && endpoint.isHqAgent) {
+  if (storedConversation && status === 'error') {
     await agentServer.deleteConversation(storedConversation).catch(() => undefined)
     status = undefined
   }
@@ -224,40 +180,20 @@ const conversationFor = async (
       ? { conversation: storedConversation }
       : keepSession(dependencies, chat, storedConversation, prompterId)
   }
-  if (storedId !== null) {
-    await runtimes.forgetConversation(chat)
-    if (!endpoint.isHqAgent)
-      await transactor.run((unitOfWork) => appendNotice(unitOfWork, prompt, agentNotices.newSession))
-  }
+  if (storedId !== null) await runtimes.forgetConversation(chat)
   if (localSession) return { conversation: await machineConversationFor(dependencies, chat, endpoint, localSession) }
-  const isPi = endpoint.isHqAgent
-  const routed = fixedLlm || !prompterId ? undefined : await routeSession(dependencies, chat, prompterId, prompt, isPi)
-  const harness = routed?.harness
-  if (routed && harness) {
-    const { model, keysNotice } = harnesses[harness]
-    if (!routed.canPrompt) return { refusal: keysNotice }
-    const conversation = await harnessConversationFor(dependencies, chat, endpoint, {
-      launch: harness,
-      model: model.slice(model.indexOf('/') + 1),
-    })
-    await transactor.run(({ routing }) => routing.update(chat.chatId, { harness, model }))
-    return { conversation }
-  }
-  if (routed && !routed.choice)
-    return {
-      refusal: noLlmKeyNoticeOf(await transactor.run(({ members }) => members.displayNameOf(prompterId as MemberId))),
-    }
-  const llm =
-    routed?.choice && prompterId && isPi
+  const routed = fixedLlm || !prompterId ? undefined : await routeSession(dependencies, chat, prompterId, prompt)
+  const llm: AgentLlmChoice | undefined =
+    routed?.choice && prompterId
       ? {
           ...(await piLlmOf(dependencies, prompterId, routed.choice.model.id, routed.choice.effort)),
           resumeSessionId: await transactor.run(({ agentEvents }) => agentEvents.lastSessionId(chat.chatId)),
         }
-      : routed?.choice
-        ? agentLlmOf(routed.choice.model.id, routed.choice.effort)
-        : fixedLlm && isPi
-          ? fixedPiLlmOf(fixedLlm.model)
-          : { model: fixedLlm?.model ?? '', usageId: 'agent' }
+      : fixedLlm && fixedPiLlmOf(fixedLlm.model)
+  if (!llm)
+    return {
+      refusal: noLlmKeyNoticeOf(await transactor.run(({ members }) => members.displayNameOf(prompterId as MemberId))),
+    }
   const llmToken = await runtimes.issueLlmToken(chat)
   const conversationId = await runtimes.rememberConversation(
     chat,

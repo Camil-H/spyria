@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import { type Docker, DockerError } from './docker.ts'
 import { credentialsContainerBodyOf, credentialsReaderBodyOf, readCredentials, redacted } from './personal.ts'
 
-const image = `ghcr.io/openhands/agent-server@sha256:${'a'.repeat(64)}`
+const image = `sha256:${'a'.repeat(64)}`
 const accessToken = 'sk-ant-oat01-FAKEACCESS-dummy-file-000000000000'
 const refreshToken = 'sk-ant-ort01-FAKEREFRESH-dummy-file-0000000000'
 const credentialsFile = JSON.stringify({

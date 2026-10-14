@@ -1,4 +1,4 @@
-import { toolConnectionOf, toolResultOf } from './tool-calls.ts'
+import { toolConnectionOf } from './tool-calls.ts'
 
 export type DiffLine = { kind: 'added' | 'removed' | 'context'; text: string }
 export type ThoughtStep = { type: 'thought'; text: string; durationMilliseconds: number | null }
@@ -102,7 +102,7 @@ export const observedStep = (
     return { ...step, added: countOf('added'), removed: countOf('removed'), diff }
   }
   if (step.type === 'tool') {
-    const result = toolResultOf(textOf(observation?.content))
+    const result = textOf(observation?.content)
     const connection = toolConnectionOf(result)
     return {
       ...step,

@@ -115,7 +115,7 @@ type Update = { sessionUpdate?: string; stopReason?: string; sessionId?: string;
 const agentServer = createSandboxAgentServer()
 type AgentLlmChoice = Parameters<typeof agentServer.createConversation>[2]
 const piConversationOf = async (transport: AgentTransport, token: string, llm: AgentLlmChoice) => {
-  const endpoint = { transport, apiKey, conversationId: null, isHqAgent: true }
+  const endpoint = { transport, apiKey, conversationId: null }
   const conversationId = await agentServer.createConversation(endpoint, token, llm)
   const conversation = { ...endpoint, conversationId }
   const updates: Update[] = []
@@ -157,8 +157,6 @@ test("Pi in HQ's image answers through the LLM relay on the chat and Anthropic r
   const { id, transport } = await runtime()
   const { chatId, token } = await runtimeTurn({ id }, bob)
   const { conversation, turnEnds, answerOf, close } = await piConversationOf(transport, token, {
-    model: '',
-    usageId: 'agent',
     acpModel: 'hq/fake/fake-medium',
     pi: {
       models: [
@@ -196,8 +194,6 @@ test('a long Pi conversation compacts on the compaction model, recorded with pro
   const { id, transport } = await runtime()
   const { chatId, token } = await runtimeTurn({ id }, bob)
   const llm = {
-    model: '',
-    usageId: 'agent',
     acpModel: 'hq/fake/fake-medium',
     pi: {
       models: [

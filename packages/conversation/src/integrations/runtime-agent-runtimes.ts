@@ -27,16 +27,10 @@ export const createRuntimeAgentRuntimes = (
     work: (dependencies: { transactor: ReturnType<typeof createRuntimeTransactor> }) => Promise<Result>,
   ) => transact((tx) => work({ transactor: createRuntimeTransactor(tx) }))
   const accessOf = (chat: AgentChat) => inTransaction((dependencies) => readAgentAccess(dependencies, chat))
-  const endpointFrom = ({
+  const endpointFrom = ({ sandbox, apiKey, conversationId }: NonNullable<Awaited<ReturnType<typeof accessOf>>>) => ({
     sandbox,
     apiKey,
     conversationId,
-    isHqAgent,
-  }: NonNullable<Awaited<ReturnType<typeof accessOf>>>) => ({
-    sandbox,
-    apiKey,
-    conversationId,
-    isHqAgent,
     transport: provider.connect(sandbox),
   })
   const endpointOf = async (chat: AgentChat): Promise<AgentEndpoint | undefined> => {
@@ -59,8 +53,7 @@ export const createRuntimeAgentRuntimes = (
     rememberConversation: (chat, conversationId) =>
       inTransaction((dependencies) => rememberAgentConversation(dependencies, { ...chat, conversationId })),
     forgetConversation: (chat) => inTransaction((dependencies) => forgetAgentConversation(dependencies, chat)),
-    issueLlmToken: (chat, isForSwitch) =>
-      inTransaction((dependencies) => issueAgentLlmToken(dependencies, { ...chat, isForSwitch })),
+    issueLlmToken: (chat) => inTransaction((dependencies) => issueAgentLlmToken(dependencies, chat)),
     chatOfLlmToken: (host, token) =>
       inTransaction((dependencies) => findLlmTokenChat(dependencies, { ...host, token })),
     chatsOnHost: (host) => inTransaction((dependencies) => listHostChats(dependencies, host)),

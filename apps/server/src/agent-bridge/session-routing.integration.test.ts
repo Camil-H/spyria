@@ -1,4 +1,4 @@
-import { expect, setDefaultTimeout, test } from 'bun:test'
+import { afterEach, expect, setDefaultTimeout, test } from 'bun:test'
 import { type ChatId, reachableModelsOf, withPricesOf } from '@hq/kernel'
 import {
   acme,
@@ -13,7 +13,7 @@ import {
   succeeded,
   waitFor,
 } from '../testing.ts'
-import { createFakeAgentServer } from './fake-agent-server.ts'
+import { createHqAgentRelay } from './hq-agent-relay.ts'
 
 setDefaultTimeout(40_000)
 const { database, app, gateway, llmGateway, setFakeLlmScript, fakeHost, mutate, prompt, repliesTo, ...stack } =
@@ -21,16 +21,20 @@ const { database, app, gateway, llmGateway, setFakeLlmScript, fakeHost, mutate, 
 const newRuntimeChat = (defaultModel: string | null = 'fake/fake-medium', ownerId = alice) =>
   stack.newRuntimeChat({ defaultModel, ownerId })
 
+const relays: ReturnType<typeof createHqAgentRelay>[] = []
+afterEach(async () => {
+  await Promise.all(relays.splice(0).map((relay) => relay.stop()))
+})
+
 type Route = { tier: string; confidence: string | number; effort: string; prose?: boolean } | 'fail' | 'slow'
 const routeWith = (route: Route) => setFakeLlmScript({ route })
+type Launch = { agent: { acp_model?: string; acp_thought_level?: string } }
 const fakeAgent = async () => {
-  const fake = createFakeAgentServer({ modelCall: () => host.modelCall })
-  const host = await fakeHost('Routing host', { agentServer: fake.agentServer })
-  return fake
+  const relay = createHqAgentRelay({ modelCall: () => host.modelCall })
+  relays.push(relay)
+  const host = await fakeHost('Routing host', { agentServer: relay.agentServer })
+  return { relay, launches: () => relay.created as Launch[] }
 }
-type Llm = { model: string; usage_id: string; reasoning_effort?: string }
-const llmOf = (conversation: { created: Record<string, unknown> } | undefined) =>
-  (conversation?.created.agent as { llm?: Llm } | undefined)?.llm
 const answered = async (messageId: string) => {
   await waitFor(
     async () =>
@@ -55,16 +59,15 @@ const routerLogsOf = async (chat: ChatId) =>
   (await logsOf(chat, 2)).filter((log) => log.metadata.role === 'router').map((log) => log.model)
 
 test('the first prompt is classified once, on the prompter’s cheapest model with role router, and the session runs on the routed model', async () => {
-  const fake = await fakeAgent()
+  const { launches } = await fakeAgent()
   const chat = await newRuntimeChat()
   routeWith({ tier: 'large', confidence: 'high', effort: 'high' })
   expect(await answered(await prompt(chat, 'Refactor the whole billing architecture'))).toEqual([
     { kind: 'agent', body: 'Understood, working on it.' },
   ])
-  const [conversation] = [...fake.conversations.values()]
-  expect(conversation?.created.agent).toMatchObject({
-    llm: { model: 'openai/fake/fake-large', reasoning_effort: 'high', usage_id: 'agent' },
-  })
+  expect(launches()[0]?.agent).toMatchObject({ acp_model: 'hq/fake/fake-large', acp_thought_level: 'high' })
+  const conversationId = (await database.$client`select agent_conversation_id from runtimes where chat_id = ${chat}`)[0]
+    ?.agent_conversation_id
   expect(await chatOf(chat)).toMatchObject({
     model: 'fake/fake-large',
     reasoning_effort: 'high',
@@ -75,7 +78,7 @@ test('the first prompt is classified once, on the prompter’s cheapest model wi
       role: 'session',
       model: 'fake/fake-large',
       reason: 'classified large',
-      conversation_id: conversation?.id,
+      conversation_id: conversationId,
       member_id: alice,
       classifier_output: { tier: { value: 'large', confidence: 1 }, effort: { value: 'high', confidence: 1 } },
     },
@@ -83,7 +86,7 @@ test('the first prompt is classified once, on the prompter’s cheapest model wi
 
   routeWith({ tier: 'small', confidence: 'high', effort: 'low' })
   await answered(await prompt(chat, 'And a tiny follow-up'))
-  expect(fake.conversations.size).toBe(1)
+  expect(launches()).toHaveLength(1)
   expect(await decisionsOf(chat)).toHaveLength(1)
   const logs = await logsOf(chat, 3)
   const routerLogs = logs.filter((log) => log.metadata.role === 'router')
@@ -96,19 +99,33 @@ test('the first prompt is classified once, on the prompter’s cheapest model wi
 })
 
 test('a lost conversation is routed again for the new session', async () => {
-  const fake = await fakeAgent()
+  let lostConversationId = ''
+  const relay = createHqAgentRelay({ modelCall: () => host.modelCall })
+  relays.push(relay)
+  const host = await fakeHost('Routing host', {
+    agentServer: {
+      ...relay.agentServer,
+      respond: (request, container) =>
+        lostConversationId && request.path === `/api/conversations/${lostConversationId}`
+          ? { status: 404, body: '{}' }
+          : relay.agentServer.respond(request, container),
+    },
+  })
   const chat = await newRuntimeChat()
   routeWith({ tier: 'small', confidence: 'high', effort: 'low' })
   await answered(await prompt(chat, 'First session'))
-  fake.conversations.clear()
+  lostConversationId = String(
+    (await database.$client`select agent_conversation_id from runtimes where chat_id = ${chat}`)[0]
+      ?.agent_conversation_id,
+  )
   routeWith({ tier: 'large', confidence: 'high', effort: 'high' })
   await answered(await prompt(chat, 'After the runtime lost it'))
   expect((await decisionsOf(chat)).map((decision) => decision.model)).toEqual(['fake/fake-small', 'fake/fake-large'])
   expect(await chatOf(chat)).toMatchObject({ model: 'fake/fake-large', agent_model: 'fake/fake-large' })
 })
 
-test('the manual switch is refused for an unreachable model, recorded, and applied with a fresh usage_id at the next prompt', async () => {
-  const fake = await fakeAgent()
+test('the manual switch is refused for an unreachable model, recorded, and switched in the same session at the next prompt', async () => {
+  const { relay, launches } = await fakeAgent()
   const chat = await newRuntimeChat()
   routeWith({ tier: 'large', confidence: 'high', effort: 'high' })
   await answered(await prompt(chat, 'Start on large'))
@@ -124,18 +141,14 @@ test('the manual switch is refused for an unreachable model, recorded, and appli
   expect(await answered(await prompt(chat, 'Now on small'))).toEqual([
     { kind: 'agent', body: 'Understood, working on it.' },
   ])
-  const [conversation] = [...fake.conversations.values()]
-  const switched = llmOf(conversation)
-  expect(switched?.model).toBe('openai/fake/fake-small')
-  expect(switched?.usage_id).not.toBe('agent')
-  expect(fake.conversations.size).toBe(1)
+  expect(relay.modelSwitches).toEqual(['hq/fake/fake-small'])
+  expect(launches()).toHaveLength(1)
   expect(await chatOf(chat)).toMatchObject({ agent_model: 'fake/fake-small' })
 
   expect(await routing(chat, aliceInAcme, { sessionModel: 'fake/fake-large' })).toEqual(succeeded)
   await answered(await prompt(chat, 'Back to large'))
-  const switchedBack = llmOf(conversation)
-  expect(switchedBack?.model).toBe('openai/fake/fake-large')
-  expect([...new Set([switched?.usage_id, switchedBack?.usage_id, 'agent'])]).toHaveLength(3)
+  expect(relay.modelSwitches).toEqual(['hq/fake/fake-small', 'hq/fake/fake-large'])
+  expect(relay.thoughtLevels).toEqual(['high', 'high'])
   const agentModels = (await logsOf(chat, 4)).filter((log) => !log.metadata.role).map((log) => log.model)
   expect(agentModels.toSorted()).toEqual(['fake-large', 'fake-large', 'fake-small'])
 })
@@ -154,17 +167,13 @@ test('a member whose keys reach only a decision model gets the no-key notice and
 })
 
 test('a prompter reaching only a small model routes to it, and is refused in a session on a model his keys cannot reach', async () => {
-  const fake = await fakeAgent()
+  const { relay, launches } = await fakeAgent()
   await addLlmKey(bob, 'Fake-small')
   const bobChat = await newRuntimeChat('fake/fake-medium', bob)
   routeWith({ tier: 'large', confidence: 'high', effort: 'high' })
   await answered(await prompt(bobChat, 'Big job', bobInAcme))
   expect(await chatOf(bobChat)).toMatchObject({ model: 'fake-small/fake-small' })
-  expect(
-    [...fake.conversations.values()].map(
-      (conversation) => (conversation.created.agent as { llm: { model: string } }).llm.model,
-    ),
-  ).toEqual(['openai/fake-small/fake-small'])
+  expect(launches().map((launch) => launch.agent.acp_model)).toEqual(['hq/fake-small/fake-small'])
 
   const aliceChat = await newRuntimeChat()
   await answered(await prompt(aliceChat, 'Alice starts on large'))
@@ -173,7 +182,7 @@ test('a prompter reaching only a small model routes to it, and is refused in a s
   expect(await answered(bobPrompt)).toEqual([
     { kind: 'notice', body: 'Your keys cannot reach Fake large; switch the model or add a key' },
   ])
-  expect(fake.prompts.map((sent) => sent.text)).not.toContain('Bob joins')
+  expect(relay.prompts).not.toContain('Bob joins')
   expect(JSON.stringify(await routing(aliceChat, bobInAcme, { sessionModel: 'fake/fake-large' }))).toContain(
     'Your keys cannot reach Fake large',
   )
@@ -238,7 +247,7 @@ test.each<RoutingRow>([
   },
   { decisionModel: true, route: 'slow', model: 'fake/fake-medium' },
 ])('the first prompt routes to $model with a decision model $decisionModel and the route $route', async (row) => {
-  const fake = await fakeAgent()
+  const { launches } = await fakeAgent()
   if (row.decisionModel) {
     decisionModelKey ??= addLlmKey(alice, 'Typesafe')
     await decisionModelKey
@@ -252,7 +261,7 @@ test.each<RoutingRow>([
     model: row.model,
     ...(row.effort && { reasoning_effort: row.effort }),
   })
-  expect(llmOf([...fake.conversations.values()][0])?.model).toBe(`openai/${row.model}`)
+  expect(launches()[0]?.agent.acp_model).toBe(`hq/${row.model}`)
   if (row.reason)
     expect((await decisionsOf(chat))[0]).toMatchObject({ role: 'session', model: row.model, reason: row.reason })
   if (row.routerModel) expect(await routerLogsOf(chat)).toEqual([row.routerModel])
@@ -274,102 +283,4 @@ test('the real listing gives datasheet prices to the routable models a key reach
     { id: 'openai/gpt-5-mini', name: 'GPT-5 mini', tier: 'medium', dollarsPerMillionInputTokens: 0.25 },
     { id: 'openai/gpt-5-nano', name: 'GPT-5 nano', tier: 'small', dollarsPerMillionInputTokens: 0.05 },
   ])
-})
-
-test('a prompter reaching only Anthropic locks the session on Claude Code without routing, and an invitee without an Anthropic key is refused', async () => {
-  const fake = await fakeAgent()
-  await database.$client`delete from llm_credentials where user_id = ${bob}`
-  await addLlmKey(bob, 'Anthropic')
-  const chat = await newRuntimeChat()
-  await answered(await prompt(chat, 'Claude Code starts', bobInAcme))
-  const [conversation] = [...fake.conversations.values()]
-  expect(conversation?.created).toMatchObject({
-    agent: {
-      kind: 'ACPAgent',
-      acp_server: 'claude-code',
-      acp_command: [
-        'env',
-        'ANTHROPIC_BASE_URL=http://fake-gateway-relay.test:4000',
-        'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1',
-        'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1',
-        'CLAUDE_CODE_MAX_RETRIES=0',
-        'ANTHROPIC_MODEL=claude-opus-5-5',
-        'claude-agent-acp',
-      ],
-      mcp_config: { hq: { url: 'http://fake-gateway-relay.test:4000/mcp', transport: 'http' } },
-    },
-    secrets: { ANTHROPIC_API_KEY: { kind: 'StaticSecret' } },
-    autotitle: false,
-  })
-  expect(Object.keys((conversation?.created.agent as { mcp_config?: object } | undefined)?.mcp_config ?? {})).toEqual([
-    'hq',
-  ])
-  expect(await chatOf(chat)).toMatchObject({ model: 'anthropic/claude-opus-5-5' })
-  expect((await database.$client`select harness from chats where id = ${chat}`)[0]?.harness).toBe('claude-code')
-  expect(await decisionsOf(chat)).toHaveLength(0)
-
-  const alicePrompt = await prompt(chat, 'Alice joins the Claude Code session')
-  expect(await answered(alicePrompt)).toEqual([
-    { kind: 'notice', body: 'This session runs Claude Code on Anthropic keys' },
-  ])
-  expect(fake.prompts.map((sent) => sent.text)).not.toContain('Alice joins the Claude Code session')
-  expect(fake.conversations.size).toBe(1)
-  expect(JSON.stringify(await routing(chat, bobInAcme, { sessionModel: 'anthropic/claude-sonnet-5-5' }))).toContain(
-    'This session runs Claude Code',
-  )
-})
-
-test('a prompter reaching only OpenAI locks the session on Codex through the relay without an OpenAI key in its environment, and an invitee without an OpenAI key is refused', async () => {
-  const fake = await fakeAgent()
-  await database.$client`delete from llm_credentials where user_id = ${bob}`
-  await database.$client`delete from llm_credentials where user_id = ${alice} and secret_ref like 'gateway:openai/%'`
-  await addLlmKey(bob, 'OpenAI')
-  const chat = await newRuntimeChat()
-  await answered(await prompt(chat, 'Codex starts', bobInAcme))
-  const [conversation] = [...fake.conversations.values()]
-  const agent = conversation?.created.agent as { acp_command: string[] }
-  expect(conversation?.created).toMatchObject({
-    agent: {
-      kind: 'ACPAgent',
-      acp_server: 'codex',
-      mcp_config: { hq: { url: 'http://fake-gateway-relay.test:4000/mcp', transport: 'http' } },
-    },
-    secrets: { OPENAI_API_KEY: { kind: 'StaticSecret' } },
-    autotitle: false,
-  })
-  expect(Object.keys(conversation?.created.secrets ?? {})).toEqual(['OPENAI_API_KEY'])
-  const [env, codexConfig, modelProvider, globalConfig, catalogScript, shell, shellFlag, launcher] = agent.acp_command
-  expect([env, modelProvider, shell, shellFlag]).toEqual(['env', 'MODEL_PROVIDER=hq', 'sh', '-c'])
-  expect(JSON.parse(codexConfig?.replace('CODEX_CONFIG=', '') ?? '{}')).toEqual({
-    model: 'gpt-6.1-sol',
-    model_providers: {
-      hq: {
-        name: 'HQ',
-        base_url: 'http://fake-gateway-relay.test:4000/v1',
-        env_key: 'OPENAI_API_KEY',
-        wire_api: 'responses',
-        supports_websockets: false,
-        request_max_retries: 0,
-        stream_max_retries: 0,
-      },
-    },
-  })
-  expect(globalConfig).toContain('model_provider = "off"')
-  expect(globalConfig).toContain('plugins = false')
-  expect(catalogScript).toContain("slug: 'gpt-6.1-sol'")
-  expect(launcher).toEndWith('exec codex-acp')
-  const secrets = conversation?.created.secrets as Record<string, { value: string }>
-  expect(JSON.stringify(agent.acp_command)).not.toContain(String(secrets.OPENAI_API_KEY?.value))
-  expect(await chatOf(chat)).toMatchObject({ model: 'openai/gpt-6.1-sol' })
-  expect((await database.$client`select harness from chats where id = ${chat}`)[0]?.harness).toBe('codex')
-  expect(await decisionsOf(chat)).toHaveLength(0)
-
-  expect(await answered(await prompt(chat, 'Alice joins the Codex session'))).toEqual([
-    { kind: 'notice', body: 'This session runs Codex on OpenAI keys' },
-  ])
-  expect(fake.prompts.map((sent) => sent.text)).not.toContain('Alice joins the Codex session')
-  expect(fake.conversations.size).toBe(1)
-  expect(JSON.stringify(await routing(chat, bobInAcme, { sessionModel: 'openai/gpt-5' }))).toContain(
-    'This session runs Codex',
-  )
 })

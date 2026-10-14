@@ -11,9 +11,8 @@ import {
   runtimeJobs,
   transitioned,
 } from '../domain/runtime.ts'
-import { agentServerImage } from '../domain/runtime-host.ts'
 
-export type RuntimePlacement = { hqAgentImage?: string; hqAgentForWorkspaceHosts?: boolean }
+export type RuntimePlacement = { hqAgentImage?: string }
 type Dependencies = RuntimePlacement & { transactor: RuntimeTransactor }
 type Input = { workspaceId: WorkspaceId; chatId: ChatId; id: string; now: number }
 
@@ -21,16 +20,14 @@ const placeRuntime = async (
   { runtimes, runtimeHosts, secrets, jobs }: UnitOfWork,
   { workspaceId, chatId, id, now }: Input,
   existing: Runtime | undefined,
-  { hqAgentImage, hqAgentForWorkspaceHosts }: RuntimePlacement,
+  { hqAgentImage }: RuntimePlacement,
 ) => {
   if (existing) {
     await secrets.discard(existing)
     await runtimes.delete(existing)
   }
   const placement = placementOf(await runtimeHosts.lockLoads(workspaceId, chatId))
-  const host = placement.hostId && (await runtimeHosts.find(workspaceId, placement.hostId))
-  const image = host && (host.ownerId !== null || hqAgentForWorkspaceHosts) ? hqAgentImage : agentServerImage
-  const failure = placement.failure ?? (image ? null : 'no_image')
+  const failure = placement.failure ?? (hqAgentImage ? null : 'no_image')
   const runtime: Runtime = {
     workspaceId,
     id: runtimeId(id),
@@ -39,7 +36,7 @@ const placeRuntime = async (
     state: failure ? 'failed' : 'creating',
     failure,
     hostOnline: placement.hostId !== undefined,
-    image: image ?? '',
+    image: hqAgentImage ?? '',
     lastActiveAt: now,
     createdAt: now,
     stateChangedAt: now,

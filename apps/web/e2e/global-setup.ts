@@ -12,7 +12,6 @@ import {
   startTestGateway,
   testGatewayAdmin,
 } from '@hq/db/testing'
-import { removeDockerObjects } from './stack.ts'
 import {
   fakeMcpUrl,
   gatewayPort,
@@ -57,7 +56,6 @@ const sweepLeftovers = async () => {
 
 const removeWorkerHosts = () => {
   execSync(`pkill -f '${repositoryRoot}apps/host/src/main.ts ${serverUrl}/h/' || true`)
-  removeDockerObjects('hq-test-e2e-w')
 }
 
 const startDetached = async (command: string[], cwd: string, env: Record<string, string>, readyUrl: string) => {
@@ -100,7 +98,6 @@ export default async function globalSetup() {
         HQ_GATEWAY_ADMIN_USER: testGatewayAdmin.user,
         HQ_GATEWAY_ADMIN_PASSWORD: testGatewayAdmin.password,
         HQ_FAKE_MCP_PORT: new URL(fakeMcpUrl).port,
-        HQ_CONDENSATION_SCALE: '0.1',
       },
       `${serverUrl}/health`,
     ),

@@ -21,7 +21,6 @@ import {
   workspaceId,
 } from '@hq/kernel'
 import { createLlmGateway } from '@hq/profile/server'
-import { agentServerImage } from '@hq/runtime/server'
 import { workspaceMutators } from '@hq/workspace/server'
 import { Hono } from 'hono'
 import { websocket } from 'hono/bun'
@@ -291,6 +290,8 @@ export const virtualKeyOf = async (userId: string) => {
   ).virtual_key
 }
 
+export const testHqAgentImage = `sha256:${'0'.repeat(64)}`
+
 export const runtimeTurn = async (host: { id: string }, prompterId: string | null) => {
   const { database } = await openedTestApp()
   const chatId = `chat-${crypto.randomUUID()}`
@@ -305,7 +306,7 @@ export const runtimeTurn = async (host: { id: string }, prompterId: string | nul
       values (${acme}, ${chatId}, ${promptId}, 1, 'member', ${prompterId ?? alice}, 'Go', now())`
     await sql`
       insert into runtimes (workspace_id, id, chat_id, host_id, state, host_online, image, llm_token_hash, last_active_at, created_at, state_changed_at)
-      values (${acme}, ${crypto.randomUUID()}, ${chatId}, ${host.id}, 'running', true, ${agentServerImage}, ${sha256(token)}, now(), now(), now())`
+      values (${acme}, ${crypto.randomUUID()}, ${chatId}, ${host.id}, 'running', true, ${testHqAgentImage}, ${sha256(token)}, now(), now(), now())`
     if (prompterId)
       await sql`
         update chats set agent_turn_message_id = ${promptId}, agent_turn_prompter_id = ${prompterId} where id = ${chatId}`
@@ -318,8 +319,7 @@ export const startAgentStack = async ({
   llm,
   now,
   resumeAfterMilliseconds,
-  hqAgentImage,
-  hqAgentForWorkspaceHosts,
+  hqAgentImage = testHqAgentImage,
   promptsWaitingAfterHello = false,
 }: {
   routing?: boolean
@@ -327,7 +327,6 @@ export const startAgentStack = async ({
   now?: () => number
   resumeAfterMilliseconds?: number
   hqAgentImage?: string
-  hqAgentForWorkspaceHosts?: boolean
   promptsWaitingAfterHello?: boolean
 } = {}) => {
   const testApp = await openSharedTestApp()
@@ -335,7 +334,6 @@ export const startAgentStack = async ({
   const runtimeHosts = createRuntimeHostGateway({
     databases: () => [database],
     hqAgentImage,
-    hqAgentForWorkspaceHosts,
     relayModelCall: routing ? createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }) : undefined,
     afterHello: promptsWaitingAfterHello
       ? (helloDatabase, host) => agentBridge.forDatabase(helloDatabase).promptWaiting(host)
@@ -347,7 +345,6 @@ export const startAgentStack = async ({
     now,
     resumeAfterMilliseconds,
     hqAgentImage,
-    hqAgentForWorkspaceHosts,
     sessionClassifierOf: routing ? sessionClassifierOf(llmGateway, { timeoutMilliseconds: 300 }) : undefined,
     reopenDelayMilliseconds: 50,
   })
@@ -358,7 +355,6 @@ export const startAgentStack = async ({
     runtimeHosts,
     agentBridge,
     hqAgentImage,
-    hqAgentForWorkspaceHosts,
   })
   const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
   const worker = startJobWorker(database, {

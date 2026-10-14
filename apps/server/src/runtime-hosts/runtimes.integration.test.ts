@@ -2,13 +2,7 @@ import { afterAll, afterEach, expect, test } from 'bun:test'
 import { schema } from '@hq/db/zero'
 import { createZeroStore } from '@hq/db/zero-store'
 import { type ChatId, chatId } from '@hq/kernel'
-import {
-  agentServerImage,
-  createRuntimeJobs,
-  createRuntimeTransactor,
-  ensureRuntimeRunning,
-  touchRuntime,
-} from '@hq/runtime/server'
+import { createRuntimeJobs, createRuntimeTransactor, ensureRuntimeRunning, touchRuntime } from '@hq/runtime/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { websocket } from 'hono/bun'
 import { createApp } from '../app.ts'
@@ -26,12 +20,13 @@ import {
   bob,
   succeeded,
   testAuthSettings,
+  testHqAgentImage,
   waitFor,
 } from '../testing.ts'
 import { createRuntimeHostGateway } from './gateway.ts'
 
 const { database } = await openSharedTestApp()
-const gateway = createRuntimeHostGateway({ databases: () => [database] })
+const gateway = createRuntimeHostGateway({ databases: () => [database], hqAgentImage: testHqAgentImage })
 const app = createApp({ database, ...testAuthSettings, runtimeHosts: gateway })
 const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
 const worker = startJobWorker(database, {
@@ -56,7 +51,7 @@ const newRuntimeChat = async (name = 'Runtime chat') => {
   return chatId(id)
 }
 
-const ensure = (chat: ChatId, hqAgentImage?: string) =>
+const ensure = (chat: ChatId, hqAgentImage = testHqAgentImage) =>
   zeroDatabase.transaction((tx) =>
     ensureRuntimeRunning(
       { transactor: createRuntimeTransactor(tx), hqAgentImage },
@@ -115,33 +110,32 @@ test('ensureRuntimeRunning places a runtime on the least-loaded online host, cre
   const idleHost = loadedHost === firstHost ? secondHost : firstHost
 
   const runtime = await runningRuntime(secondChat)
-  expect(runtime).toMatchObject({ host_id: idleHost.id, image: agentServerImage, state: 'running', failure: null })
+  expect(runtime).toMatchObject({ host_id: idleHost.id, image: testHqAgentImage, state: 'running', failure: null })
   expect(idleHost.lifecycleCommands()).toEqual(['create', 'start'])
   const created = idleHost.commands.find((command) => command.op === 'create')
-  expect(created).toMatchObject({ runtimeId: runtime.id, image: agentServerImage })
+  expect(created).toMatchObject({ runtimeId: runtime.id, image: testHqAgentImage })
   expect(created?.apiKey?.length).toBeGreaterThanOrEqual(16)
-  expect(idleHost.commands.some((command) => command.op === 'prepare' && command.image === agentServerImage)).toBe(true)
   await runtimeIn(firstChat, 'running')
 })
 
-test("a machine runtime gets HQ's image, a workspace host's the Agent Server image, and no HQ image fails the placement with no_image", async () => {
-  const hqImage = `sha256:${'c'.repeat(64)}`
+test("a runtime on a workspace host or on a machine only ever gets HQ's content ID, and no HQ image fails the placement with no_image", async () => {
   const workspaceHost = await fakeHost('Workspace host')
   const machine = await fakeHost('Machine', { ownerId: alice })
-  const chat = chatId(`chat-${crypto.randomUUID()}`)
+  const machineChat = chatId(`chat-${crypto.randomUUID()}`)
   await database.$client`
     insert into chats (workspace_id, id, type, owner_kind, owner_user_id, name, local_session, harness, archived, created_at)
-    values (${acme}, ${chat}, 'runtime', 'user', ${alice}, 'Machine chat', true, 'claude-code', false, now())`
-  expect(await ensure(chat)).toMatchObject({ state: 'failed', failure: 'no_image', hostId: null })
-  expect(await ensure(chat, hqImage)).toMatchObject({
-    state: 'creating',
-    failure: null,
-    hostId: machine.id,
-    image: hqImage,
-  })
-  await runtimeIn(chat, 'running')
-  expect(machine.commands.find((command) => command.op === 'create')).toMatchObject({ image: hqImage })
-  expect(workspaceHost.commands.some((command) => command.op === 'create')).toBe(false)
+    values (${acme}, ${machineChat}, 'runtime', 'user', ${alice}, 'Machine chat', true, 'claude-code', false, now())`
+  const hostChat = await newRuntimeChat()
+  for (const chat of [machineChat, hostChat])
+    expect(await ensure(chat, '')).toMatchObject({ state: 'failed', failure: 'no_image', hostId: null })
+  expect(await ensure(machineChat)).toMatchObject({ state: 'creating', hostId: machine.id, image: testHqAgentImage })
+  expect(await ensure(hostChat)).toMatchObject({ state: 'creating', hostId: workspaceHost.id, image: testHqAgentImage })
+  await runtimeIn(machineChat, 'running')
+  await runtimeIn(hostChat, 'running')
+  for (const host of [workspaceHost, machine]) {
+    const images = host.commands.flatMap(({ op, image }) => (image ? [`${op} ${image}`] : []))
+    expect(images.toSorted()).toEqual([`create ${testHqAgentImage}`, `prepare ${testHqAgentImage}`])
+  }
 })
 
 test('placement fails with no_host, then no_capacity, and a later call after a host comes online creates afresh', async () => {
@@ -375,7 +369,7 @@ test('a runtime job whose worker died after claiming it is claimed again once it
   await database.$client.begin(async (sql) => {
     await sql`
       insert into runtimes (workspace_id, id, chat_id, host_id, state, image, api_key, last_active_at, created_at, state_changed_at)
-      values (${acme}, ${id}, ${chat}, ${host.id}, 'creating', ${agentServerImage}, ${apiKey}, now(), now(), now())`
+      values (${acme}, ${id}, ${chat}, ${host.id}, 'creating', ${testHqAgentImage}, ${apiKey}, now(), now(), now())`
     await sql`
       insert into jobs (workspace_id, id, type, payload, run_at, attempts, state)
       values (${acme}, ${`job-${id}`}, 'runtime.create', ${JSON.stringify({ runtimeId: id })}::jsonb, now() + interval '1 second', 0, 'running')`

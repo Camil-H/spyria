@@ -1,4 +1,4 @@
-import { expect, setDefaultTimeout, test } from 'bun:test'
+import { afterEach, expect, setDefaultTimeout, test } from 'bun:test'
 import { createHash } from 'node:crypto'
 import { commandOutputPathOf, rebuildMessages } from '@hq/conversation/server'
 import { schema } from '@hq/db/zero'
@@ -9,7 +9,6 @@ import {
   alice,
   captureConsole,
   failedWith,
-  fakeHostGatewayUrl,
   globex,
   bob,
   bobInAcme,
@@ -18,10 +17,9 @@ import {
   succeeded,
   waitFor,
 } from '../testing.ts'
-import { type Conversation, createFakeAgentServer, replyText, text } from './fake-agent-server.ts'
+import { createHqAgentRelay } from './hq-agent-relay.ts'
 
 setDefaultTimeout(30_000)
-const llm = { model: 'openai/fake/fake-model' }
 const {
   database,
   app,
@@ -37,113 +35,48 @@ const {
   runtimeOf,
   openStream,
   ...stack
-} = await startAgentStack({ llm })
+} = await startAgentStack({ llm: { model: 'openai/fake/fake-model' } })
 const repliesTo = (messageId: string) => stack.repliesTo(messageId, ['kind', 'body', 'detail'])
 const answered = stack.answered
+const relays: ReturnType<typeof createHqAgentRelay>[] = []
+afterEach(async () => {
+  await Promise.all(relays.splice(0).map((relay) => relay.stop()))
+})
 
+type Launch = { agent: { acp_command: string[]; acp_model?: string }; secrets: Record<string, { value: string }> }
 const agentHost = async () => {
-  const fake = createFakeAgentServer()
-  return { fake, host: await fakeHost('Agent host', { agentServer: fake.agentServer }) }
+  const relay = createHqAgentRelay()
+  relays.push(relay)
+  const host = await fakeHost('Agent host', { agentServer: relay.agentServer })
+  return { relay, host, launches: () => relay.created as Launch[] }
 }
-const llmTokenOf = (conversation: Conversation | undefined) =>
-  String((conversation?.created.agent as { llm: { api_key: string } } | undefined)?.llm.api_key)
+const replyOf = (turn: number) => ({
+  kind: 'agent' as const,
+  body: `[t${turn}] Hello from the stub (model hq/fake/fake-model, mode bypassPermissions).`,
+  detail: null,
+})
+const turnEnded = (chat: string) => waitFor(async () => (await turnOf(chat as never)) === null)
 
-test('a prompt starts the runtime, creates one conversation with the runtime LLM token and is answered once', async () => {
-  const { fake } = await agentHost()
+test('a prompt starts the runtime, creates one Pi conversation with the runtime LLM token and is answered once', async () => {
+  const { relay, launches } = await agentHost()
   const chat = await newRuntimeChat()
   const question = await prompt(chat, 'Find the latest pricing')
   await answered(question)
+  await turnEnded(chat)
 
   const runtime = await runtimeOf(chat)
   expect(runtime).toMatchObject({ state: 'running' })
-  const [conversation] = [...fake.conversations.values()]
-  const llmToken = llmTokenOf(conversation)
+  const [launch] = launches()
+  expect(launches()).toHaveLength(1)
+  const llmToken = String(launch?.secrets.HQ_LLM_TOKEN?.value)
   expect(llmToken.length).toBeGreaterThanOrEqual(16)
   expect(llmToken).not.toBe(runtime.api_key)
   expect(runtime.llm_token_hash).toBe(createHash('sha256').update(llmToken).digest('hex'))
-  expect(fake.conversations.size).toBe(1)
-  expect(runtime.agent_conversation_id).toBe(conversation?.id)
-  expect(conversation?.created).toMatchObject({
-    agent: {
-      kind: 'Agent',
-      llm: { model: llm.model, base_url: fakeHostGatewayUrl, stream: true, num_retries: 0 },
-      tools: [{ name: 'terminal' }, { name: 'file_editor' }, { name: 'task_tracker' }],
-    },
-    autotitle: false,
-  })
-  expect(fake.prompts).toEqual([{ conversationId: conversation?.id ?? '', text: 'Find the latest pricing' }])
-  expect(fake.connections[0]).toMatchObject({ auth: { type: 'auth', session_api_key: runtime.api_key } })
-  await waitFor(async () => (await turnOf(chat)) === null)
-  expect(await repliesTo(question)).toEqual([{ kind: 'agent', body: replyText, detail: null }])
-})
-
-test('a reconnect resumes from the last stored event with resend_mode=since, without duplicates or gaps', async () => {
-  const { fake } = await agentHost()
-  const chat = await newRuntimeChat()
-  fake.turn = async (conversation, promptText) => {
-    await fake.beginTurn(conversation, promptText)
-    await waitFor(async () => (await storedAgentEventsOf(chat)).length >= 2)
-    for (const close of conversation.closers) close()
-    fake.emit(conversation, 'ConversationStateUpdateEvent', { source: 'environment', key: 'stats', value: {} })
-    fake.emit(conversation, 'MessageEvent', {
-      source: 'agent',
-      llm_message: { role: 'assistant', content: text('Half way.') },
-    })
-    await waitFor(() => fake.connections.length >= 2, 5000)
-    fake.finishTurn(conversation)
-  }
-  const question = await prompt(chat, 'Survive a reconnect')
-  await answered(question, 2)
-  await waitFor(async () => (await turnOf(chat)) === null)
-
-  const [conversation] = [...fake.conversations.values()]
-  const stored = await storedAgentEventsOf(chat)
-  expect(stored.map((event) => event.id)).toEqual(conversation?.events.map((event) => event.id) ?? [])
-  const lastStoredBeforeClose = conversation?.events[1]?.timestamp ?? ''
-  const resumed = new URLSearchParams(fake.connections[1]?.query ?? '')
-  expect(resumed.get('resend_mode')).toBe('since')
-  expect(resumed.get('after_timestamp')).toBe(lastStoredBeforeClose)
-  expect((await repliesTo(question)).map((reply) => reply.body)).toEqual(['Half way.', replyText])
-})
-
-test('text streamed before a tool call is stored once, and after a reconnect the finish stores only the rest', async () => {
-  const { fake } = await agentHost()
-  const chat = await newRuntimeChat()
-  fake.turn = async (conversation, promptText) => {
-    fake.emit(conversation, 'MessageEvent', {
-      source: 'user',
-      llm_message: { role: 'user', content: text(promptText) },
-    })
-    fake.status(conversation, 'running')
-    await waitFor(async () => (await storedAgentEventsOf(chat)).length >= 2)
-    fake.emit(conversation, 'StreamingDeltaEvent', { source: 'agent', content: 'Looking. ' })
-    const toolCall = { source: 'agent', tool_call_id: 'toolu_1', title: 'Terminal', tool_kind: 'execute' }
-    fake.emit(conversation, 'ACPToolCallEvent', { ...toolCall, status: 'pending', raw_input: {} })
-    await waitFor(async () => (await messagesOf(chat)).some((message) => message.body === 'Looking.'))
-    for (const close of conversation.closers) close()
-    await waitFor(() => fake.connections.length >= 2, 5000)
-    fake.emit(conversation, 'ACPToolCallEvent', {
-      ...toolCall,
-      status: 'completed',
-      title: 'ls',
-      raw_input: { command: 'ls' },
-      raw_output: 'notes.md',
-    })
-    fake.emit(conversation, 'StreamingDeltaEvent', { source: 'agent', content: 'Done.' })
-    fake.emit(conversation, 'ActionEvent', {
-      source: 'agent',
-      action: { kind: 'FinishAction', message: 'Looking. Done.' },
-      tool_name: 'finish',
-    })
-    fake.status(conversation, 'finished')
-  }
-  const question = await prompt(chat, 'Stream around a tool call')
-  await answered(question, 3)
-  await waitFor(async () => (await turnOf(chat)) === null)
-
-  expect((await repliesTo(question)).map((reply) => reply.body)).toEqual(['Looking.', 'command', 'Done.'])
-  const [command] = (await messagesOf(chat)).filter((message) => message.kind === 'step')
-  expect(command?.step).toMatchObject({ type: 'command', command: 'ls', exitCode: 0, output: 'notes.md' })
+  expect(launch?.agent.acp_model).toBe('hq/fake/fake-model')
+  expect(launch?.agent.acp_command.at(-1)).toEndWith('exec pi-acp')
+  expect(relay.socketPaths).toEqual([`/sockets/events/${runtime.agent_conversation_id}?after=0`])
+  expect(relay.prompts).toEqual(['Find the latest pricing'])
+  expect(await repliesTo(question)).toEqual([replyOf(1)])
 })
 
 test('prompts to one chat are delivered one turn at a time, in order, each exactly once, even with two workers', async () => {
@@ -152,142 +85,70 @@ test('prompts to one chat are delivered one turn at a time, in order, each exact
     sandboxProvider: runtimeHosts.sandboxProvider,
     agentBridge,
   })
-  const { fake } = await agentHost()
-  const releases: (() => void)[] = []
-  fake.turn = async (conversation, promptText) => {
-    await fake.beginTurn(conversation, promptText)
-    const { promise, resolve } = Promise.withResolvers<void>()
-    releases.push(resolve)
-    await promise
-    fake.finishTurn(conversation)
-  }
-  const release = async (turn: number) => {
-    await waitFor(() => releases.length > turn)
-    releases[turn]?.()
-  }
+  const { relay, launches } = await agentHost()
   const chat = await newRuntimeChat()
-  const first = await prompt(chat, 'First question')
-  await waitFor(() => fake.prompts.length === 1)
+  const first = await prompt(chat, 'stub:linger First question')
+  await waitFor(() => relay.prompts.length === 1)
   const second = await prompt(chat, 'Second question')
   const third = await prompt(chat, 'Third question')
   await Bun.sleep(200)
-  expect(fake.prompts.map((delivered) => delivered.text)).toEqual(['First question'])
+  expect(relay.prompts).toEqual(['stub:linger First question'])
   expect(await turnOf(chat)).toBe(first)
 
-  await release(0)
-  await waitFor(() => fake.prompts.length === 2)
-  expect(await turnOf(chat)).toBe(second)
-  await release(1)
-  await waitFor(() => fake.prompts.length === 3)
-  await release(2)
   await answered(third)
-  await Bun.sleep(200)
-  expect(fake.prompts.map((delivered) => delivered.text)).toEqual([
-    'First question',
-    'Second question',
-    'Third question',
-  ])
-  for (const question of [first, second, third])
-    expect(await repliesTo(question)).toEqual([{ kind: 'agent', body: replyText, detail: null }])
-  expect(fake.conversations.size).toBe(1)
+  await turnEnded(chat)
+  expect(relay.prompts).toEqual(['stub:linger First question', 'Second question', 'Third question'])
+  for (const [index, question] of [first, second, third].entries())
+    expect(await repliesTo(question)).toEqual([replyOf(index + 1)])
+  expect(launches()).toHaveLength(1)
   await secondWorker.stop()
 })
 
-test('each step is stored once and updated by its observation, a plan replaces the Plan tab rows, and a rebuild matches', async () => {
-  const { fake } = await agentHost()
+test('each step is stored once and updated by its final call, a plan replaces the Plan tab rows, the full command output stays in its workspace, and a rebuild matches', async () => {
+  await agentHost()
   const chat = await newRuntimeChat()
   const viewer = await openStream(chat)
-  const action = (conversation: Conversation, action: object, fields: object = {}) =>
-    fake.emit(conversation, 'ActionEvent', { source: 'agent', thought: text(''), action, ...fields }, 2)
-  const observe = (conversation: Conversation, actionId: string, observation: object) =>
-    fake.emit(conversation, 'ObservationEvent', { source: 'environment', action_id: actionId, observation })
-  let failingId = ''
-  const planOf = (status: string) => ({
-    kind: 'TaskTrackerAction',
-    command: 'plan',
-    task_list: [{ title: 'Fix totals', notes: '', status }],
-  })
-  fake.turn = async (conversation, promptText) => {
-    fake.emit(conversation, 'MessageEvent', {
-      source: 'user',
-      llm_message: { role: 'user', content: text(promptText) },
-    })
-    fake.status(conversation, 'running')
-    fake.emit(conversation, 'StreamingDeltaEvent', { source: 'agent', content: '', reasoning_content: 'Weighing it.' })
-    action(conversation, { kind: 'ThinkAction', thought: 'Weighing it.' }, { reasoning_content: 'Weighing it.' })
-    action(conversation, planOf('todo'))
-    const failing = action(conversation, { kind: 'TerminalAction', command: 'bash -c "exit 3"' })
-    failingId = failing.id
-    observe(conversation, failing.id, {
-      kind: 'TerminalObservation',
-      content: text('step one\nstep two'),
-      exit_code: 3,
-    })
-    const edit = action(conversation, {
-      kind: 'FileEditorAction',
-      command: 'str_replace',
-      path: '/workspace/project/totals.ts',
-    })
-    observe(conversation, edit.id, {
-      kind: 'FileEditorObservation',
-      command: 'str_replace',
-      old_content: 'total = 1\n',
-      new_content: 'total = 2\ntax = 0.2\n',
-    })
-    const search = action(
-      conversation,
-      { kind: 'MCPToolAction', data: { query: 'pricing' } },
-      { tool_name: 'web_search', tool_call: { name: 'web_search', arguments: '{"query": "pricing"}' } },
-    )
-    observe(conversation, search.id, { kind: 'MCPToolObservation', content: text('3 results') })
-    fake.emit(conversation, 'AgentErrorEvent', { source: 'agent', error: 'Tool call failed once.' })
-    action(conversation, planOf('done'))
-    fake.emit(conversation, 'ConversationStateUpdateEvent', { source: 'environment', key: 'stats', value: {} })
-    fake.finishTurn(conversation, 3)
-  }
-  const question = await prompt(chat, 'Fix the totals')
-  await waitFor(async () => (await turnOf(chat)) === null && (await repliesTo(question)).length >= 8)
+  const question = await prompt(chat, 'stub:think stub:tools stub:plan stub:terminal')
+  await answered(question)
+  await turnEnded(chat)
 
   const live = await messagesOf(chat)
-  expect(live.map((message) => (message.kind === 'step' ? message.step?.type : message.kind))).toEqual([
-    'member',
-    'thought',
-    'plan',
-    'command',
-    'file',
-    'tool',
-    'error',
-    'plan',
-    'agent',
+  const steps = live.filter((message) => message.kind === 'step').map((message) => message.step)
+  expect(steps).toMatchObject([
+    { type: 'thought', text: 'Thinking about the plan.' },
+    { type: 'file', operation: 'edit', path: 'app.ts', added: 1, removed: 1 },
+    { type: 'command', command: 'npm test', exitCode: 1, output: 'exit code 1' },
+    {
+      type: 'plan',
+      items: [
+        { title: 'Write tests', status: 'done' },
+        { title: 'Fix the bug', status: 'in-progress' },
+        { title: 'Ship', status: 'todo' },
+      ],
+    },
+    { type: 'command', command: 'npm test', exitCode: 2, output: 'one\ntwo\nfailed' },
   ])
-  expect(live.map((message) => message.step)).toMatchObject([
-    null,
-    { type: 'thought', text: 'Weighing it.' },
-    { items: [{ title: 'Fix totals', status: 'todo' }] },
-    { command: 'bash -c "exit 3"', exitCode: 3, output: 'step one\nstep two' },
-    { operation: 'edit', path: 'totals.ts', added: 2, removed: 1 },
-    { name: 'web_search', arguments: '{"query": "pricing"}', result: '3 results' },
-    { message: 'Tool call failed once.' },
-    { items: [{ title: 'Fix totals', status: 'done' }] },
-    null,
-  ])
-  const [conversation] = [...fake.conversations.values()]
-  expect((await storedAgentEventsOf(chat)).map((event) => event.id)).toEqual(
-    conversation?.events.map((event) => event.id) ?? [],
-  )
+  expect(live.at(-1)).toMatchObject({ kind: 'agent', body: expect.stringContaining('Hello from the stub') })
+  const stored = await storedAgentEventsOf(chat)
+  expect(new Set(stored.map((event) => event.id)).size).toBe(stored.length)
   expect([
     ...(await database.$client`select title, status from plan_steps where chat_id = ${chat} order by position`),
-  ]).toEqual([{ title: 'Fix totals', status: 'done' }])
+  ]).toEqual([
+    { title: 'Write tests', status: 'done' },
+    { title: 'Fix the bug', status: 'in-progress' },
+    { title: 'Ship', status: 'todo' },
+  ])
   expect(viewer.frames.map((frame) => JSON.parse(frame))).toContainEqual(
-    expect.objectContaining({ promptId: question, text: 'Weighing it.', isReasoning: true }),
+    expect.objectContaining({ promptId: question, text: 'Thinking ', isReasoning: true }),
   )
+  const terminal = live.findLast((message) => message.kind === 'step' && message.step?.type === 'command')
   const fullOutputAs = async (workspaceId: string) =>
     (
-      await app.request(commandOutputPathOf(chat, failingId), {
+      await app.request(commandOutputPathOf(chat, String(terminal?.id)), {
         headers: { authorization: `Bearer ${await sessionTokenOf(database, workspaceId, alice)}` },
       })
     ).text()
-  expect(await fullOutputAs(acme)).toBe('step one\nstep two')
+  expect(await fullOutputAs(acme)).toBe('one\ntwo\nfailed')
   expect(await fullOutputAs(globex)).toBe('')
   await zeroDrizzle(schema, database).transaction((tx) => rebuildMessages(tx, { chatId: chat }))
   expect(await messagesOf(chat)).toEqual(live)
@@ -296,32 +157,24 @@ test('each step is stored once and updated by its observation, a plan replaces t
 test('stream frames reach browsers of the chat workspace only, and no secret reaches a frame or a log', async () => {
   const consoleCalls = captureConsole()
   try {
-    const { fake } = await agentHost()
-    const { promise: subscribed, resolve: startTurn } = Promise.withResolvers<void>()
-    fake.turn = async (conversation, promptText) => {
-      await subscribed
-      await fake.beginTurn(conversation, promptText)
-      fake.finishTurn(conversation)
-    }
+    const { launches } = await agentHost()
     const chat = await newRuntimeChat()
     const acmeViewer = await openStream(chat)
     const globexViewer = await openStream(chat, { workspaceId: globex })
     const anonymous = await openStream(chat, { token: '' })
-    const question = await prompt(chat, 'Stream to my workspace')
-    await Bun.sleep(200)
-    startTurn()
+    const question = await prompt(chat, 'stub:slow Stream to my workspace')
     await answered(question)
+    await turnEnded(chat)
 
-    const deltas = acmeViewer.frames.map((frame) => JSON.parse(frame))
+    const deltas = acmeViewer.frames.map((frame) => JSON.parse(frame)).filter((frame) => frame.text !== undefined)
     expect(deltas.every((frame) => frame.chatId === chat && frame.promptId === question)).toBe(true)
-    expect(deltas.map((frame) => frame.text).join('')).toBe(replyText)
+    expect(deltas.map((frame) => frame.text).join('')).toBe(replyOf(1).body)
     expect(globexViewer.frames).toEqual([])
     expect(anonymous.frames).toEqual([])
     await anonymous.closed
 
     const runtime = await runtimeOf(chat)
-    const [conversation] = [...fake.conversations.values()]
-    const llmToken = llmTokenOf(conversation)
+    const llmToken = String(launches()[0]?.secrets.HQ_LLM_TOKEN?.value)
     const everyFrame = [...acmeViewer.frames, ...globexViewer.frames].join('\n')
     const logged = consoleCalls.logged()
     for (const secret of [runtime.api_key, llmToken, runtime.llm_token_hash]) {
@@ -334,9 +187,10 @@ test('stream frames reach browsers of the chat workspace only, and no secret rea
 })
 
 test('touchRuntime is called on prompts and on agent events', async () => {
-  const { fake } = await agentHost()
+  await agentHost()
   const chat = await newRuntimeChat()
   await answered(await prompt(chat, 'Warm up'))
+  await turnEnded(chat)
   const idleSince = async () =>
     new Date((await database.$client`select last_active_at from runtimes where chat_id = ${chat}`)[0]?.last_active_at)
   const makeIdle = () =>
@@ -344,28 +198,23 @@ test('touchRuntime is called on prompts and on agent events', async () => {
   const isFresh = async () => Date.now() - (await idleSince()).getTime() < 60_000
 
   await makeIdle()
-  await answered(await prompt(chat, 'Touch on prompt'))
+  const touched = await prompt(chat, 'stub:command stub:linger Touch on prompt, then on events')
+  await waitFor(async () => (await repliesTo(touched)).some((reply) => reply.body === 'command'))
   expect(await isFresh()).toBe(true)
 
-  await waitFor(async () => (await turnOf(chat)) === null)
   await makeIdle()
-  const [conversation] = [...fake.conversations.values()]
-  if (conversation)
-    fake.emit(conversation, 'ConversationStateUpdateEvent', { source: 'environment', key: 'stats', value: {} })
   await waitFor(isFresh)
+  await turnEnded(chat)
 })
 
 test('a failed start and a turn error each end with one notice and no endless turn', async () => {
-  const { fake, host } = await agentHost()
-  fake.turn = async (conversation, promptText) => {
-    await fake.beginTurn(conversation, promptText)
-    fake.status(conversation, 'error')
-  }
+  const { host } = await agentHost()
   const erroring = await newRuntimeChat()
-  const failedTurn = await prompt(erroring, 'Break the turn')
-  await answered(failedTurn)
-  await waitFor(async () => (await turnOf(erroring)) === null)
+  const failedTurn = await prompt(erroring, 'stub:fail Break the turn')
+  await answered(failedTurn, 2)
+  await turnEnded(erroring)
   expect(await repliesTo(failedTurn)).toEqual([
+    { kind: 'step', body: 'error', detail: null },
     { kind: 'notice', body: 'The agent stopped with an error', detail: null },
   ])
 
@@ -392,7 +241,7 @@ test('a member without an LLM key cannot prompt a runtime chat, and still posts 
 })
 
 test('a prompt whose author has no LLM key at turn time ends with HQ’s notice without reaching the agent', async () => {
-  const { fake } = await agentHost()
+  const { relay } = await agentHost()
   const chat = await newRuntimeChat()
   const promptId = `message-${crypto.randomUUID()}`
   await database.$client.begin(async (sql) => {
@@ -410,31 +259,21 @@ test('a prompt whose author has no LLM key at turn time ends with HQ’s notice 
   expect(await repliesTo(promptId)).toEqual([
     { kind: 'notice', body: 'Bob has no LLM key in this workspace', detail: null },
   ])
-  expect(fake.prompts).toEqual([])
+  expect(relay.prompts).toEqual([])
   expect(await turnOf(chat)).toBeNull()
 })
 
-test('a model error shows the notice recorded by the relay, never the agent’s text, even after the turn ended', async () => {
-  const { fake } = await agentHost()
+test('a model failure recorded by the relay shows as the error at the turn end, after the agent’s text', async () => {
+  const { relay } = await agentHost()
   const chat = await newRuntimeChat()
-  fake.turn = async (conversation, promptText) => {
-    await fake.beginTurn(conversation, promptText)
-    await database.$client`update chats set agent_turn_failure = 'The LLM key of Alice was refused' where id = ${chat}`
-    fake.status(conversation, 'error')
-    fake.emit(conversation, 'ConversationErrorEvent', {
-      source: 'environment',
-      code: 'LLMAuthenticationError',
-      detail: 'Incorrect API key provided: fak****f00d',
-    })
-  }
-  const question = await prompt(chat, 'Use my key')
+  const question = await prompt(chat, 'stub:slow Use my key')
+  await waitFor(() => relay.prompts.length === 1)
+  await database.$client`update chats set agent_turn_failure = 'The LLM key of Alice was refused' where id = ${chat}`
   await answered(question, 2)
-  const replies = await repliesTo(question)
-  expect(replies.map(({ body }) => body)).toContain('The agent stopped with an error')
-  expect(JSON.stringify(await messagesOf(chat))).not.toContain('Incorrect API key')
+  await turnEnded(chat)
+  expect(await repliesTo(question)).toEqual([replyOf(1), { kind: 'step', body: 'error', detail: null }])
   expect((await messagesOf(chat)).find((message) => message.kind === 'step')?.step).toEqual({
     type: 'error',
     message: 'The LLM key of Alice was refused',
   })
-  expect(JSON.stringify(await storedAgentEventsOf(chat))).toContain('Incorrect API key')
 })

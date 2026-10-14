@@ -8,7 +8,6 @@ const socketPaths: string[] = []
 const endpoint: AgentEndpoint = {
   apiKey: 'session-key',
   conversationId: null,
-  isHqAgent: false,
   transport: {
     gatewayUrl: 'http://hq-gateway-relay:4000/v1',
     fetch: async (request) => {
@@ -23,18 +22,12 @@ const endpoint: AgentEndpoint = {
 }
 const createdBodyOf = async (harness: HarnessLaunch, acpModel?: string) => {
   requests.length = 0
-  await createSandboxAgentServer().createConversation(endpoint, 'runtime-token', {
-    model: 'claude-opus-5-5',
-    usageId: 'agent',
-    harness,
-    acpModel,
-  })
+  await createSandboxAgentServer().createConversation(endpoint, 'runtime-token', { harness, acpModel })
   return JSON.parse(requests[0]?.body ?? '{}')
 }
 
 test('a subscription session launches Claude Code without the relay, a model, or secrets, and keeps HQ tools', async () => {
   const created = await createdBodyOf('claude-code-subscription')
-  expect(created.agent.acp_server).toBe('claude-code')
   expect(created.agent.acp_command).toEqual([
     'env',
     'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1',
@@ -96,17 +89,9 @@ test('a model picked for a subscription session is sent as acp_model, still with
   ])
 })
 
-test('the API-key Claude Code launch keeps the relay, the model and its token secret', async () => {
-  const created = await createdBodyOf('claude-code')
-  expect(created.agent.acp_command).toContain('ANTHROPIC_BASE_URL=http://hq-gateway-relay:4000')
-  expect(created.agent.acp_command).toContain('ANTHROPIC_MODEL=claude-opus-5-5')
-  expect(Object.keys(created.secrets)).toEqual(['ANTHROPIC_API_KEY'])
-})
-
 test('a Codex subscription session writes its config atomically and launches without a relay, a provider, a model, or secrets', async () => {
   const created = await createdBodyOf('codex-subscription')
   const [env, config, ...launcher] = created.agent.acp_command
-  expect(created.agent.acp_server).toBe('codex')
   expect([env, ...launcher]).toEqual([
     'env',
     'sh',
@@ -136,11 +121,8 @@ apps = false
 })
 
 test('an hq-agent session sends the bare ACP launch with its resume id, and resumes its socket after the last stored seq of that conversation only', async () => {
-  const hqAgent = { ...endpoint, isHqAgent: true }
   const server = createSandboxAgentServer()
-  await server.createConversation(hqAgent, 'runtime-token', {
-    model: '',
-    usageId: 'agent',
+  await server.createConversation(endpoint, 'runtime-token', {
     harness: 'claude-code-subscription',
     resumeSessionId: 'session-1',
   })
@@ -150,7 +132,7 @@ test('an hq-agent session sends the bare ACP launch with its resume id, and resu
   expect(agent).not.toHaveProperty('acp_server')
   expect(secrets).toEqual({})
 
-  const conversation = { ...hqAgent, conversationId: 'conversation-1' }
+  const conversation = { ...endpoint, conversationId: 'conversation-1' }
   const listener = { onEvent: () => {}, onClose: () => {} }
   const timestamp = '2026-10-12T17:56:00.000Z'
   socketPaths.length = 0
@@ -168,7 +150,6 @@ test('an hq-agent conversation that failed to start is deleted and reported with
   requests.length = 0
   const failed: AgentEndpoint = {
     ...endpoint,
-    isHqAgent: true,
     transport: {
       ...endpoint.transport,
       fetch: async (request) => {
@@ -181,11 +162,7 @@ test('an hq-agent conversation that failed to start is deleted and reported with
     },
   }
   await expect(
-    createSandboxAgentServer().createConversation(failed, 'runtime-token', {
-      model: '',
-      usageId: 'agent',
-      harness: 'claude-code-subscription',
-    }),
+    createSandboxAgentServer().createConversation(failed, 'runtime-token', { harness: 'claude-code-subscription' }),
   ).rejects.toEqual(new AgentStartFailure('Authentication required'))
   expect(requests.map(({ method, path }) => `${method} ${path}`)).toEqual([
     'POST /api/conversations',
@@ -204,9 +181,9 @@ const piLaunch = {
 const createdPiOf = async (sub?: { parentConversationId: string; toolToken: string }, llm = {}) => {
   requests.length = 0
   await createSandboxAgentServer().createConversation(
-    { ...endpoint, isHqAgent: true },
+    endpoint,
     'runtime-llm-token',
-    { model: '', usageId: 'agent', pi: piLaunch, acpModel: 'hq-anthropic/anthropic/claude-sonnet-5-5', ...llm },
+    { pi: piLaunch, acpModel: 'hq-anthropic/anthropic/claude-sonnet-5-5', ...llm },
     sub,
   )
   const created = JSON.parse(requests[0]?.body ?? '{}')

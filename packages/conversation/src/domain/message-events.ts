@@ -38,12 +38,10 @@ export type AgentEventPayload = {
   replyToId: string | null
   event: AgentEvent
   delegation?: StepDelegation
-  recordedLength?: number
 }
 
 export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMessage[] => {
   const messageByKey = new Map<string, ProjectedMessage>()
-  const previousTimestampByChat = new Map<string, string>()
   for (const { workspaceId, chatId, id, seq, type, actor, payload, createdAt } of events) {
     const project = (
       fields: Pick<ProjectedMessage, 'kind' | 'authorId' | 'body' | 'detail' | 'step' | 'replyToId'>,
@@ -68,13 +66,8 @@ export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMes
       )
     }
     if (type === 'agent.event') {
-      const { replyToId, event, delegation, recordedLength } = payload as AgentEventPayload
-      const chatKey = `${workspaceId}/${chatId}`
-      const projection = delegatedProjectionOf(
-        agentProjectionOf(event, previousTimestampByChat.get(chatKey) ?? null, recordedLength),
-        delegation,
-      )
-      previousTimestampByChat.set(chatKey, event.timestamp)
+      const { replyToId, event, delegation } = payload as AgentEventPayload
+      const projection = delegatedProjectionOf(agentProjectionOf(event), delegation)
       if (projection?.type === 'observation') {
         const action = messageByKey.get(`${workspaceId}/${projection.actionId}`)
         const observed =

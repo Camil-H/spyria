@@ -126,7 +126,7 @@ const connect = () => {
       send({
         type: 'res',
         id: frame.id,
-        data: (await runner.run(parseCommand(frame.op, frame.args, isPersonal))) ?? null,
+        data: (await runner.run(parseCommand(frame.op, frame.args))) ?? null,
       })
     } catch (error) {
       console.error(`Command ${String(frame.op)} failed: ${messageOf(error)}`)

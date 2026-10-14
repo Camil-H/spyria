@@ -11,8 +11,6 @@ import {
 } from './fixtures'
 import { openPageAs, type WorkerStack } from './stack'
 
-const twoSeconds = { timeout: 2_000 }
-
 const research = 'chat-research'
 const slowScript = { wordDelayMilliseconds: 4000 }
 const newSessionNotice = 'The agent started a new session; it does not remember earlier messages'
@@ -57,20 +55,6 @@ test.describe('without a warm runtime', () => {
     await expect(runtimeStatusOf(page)).toHaveText('Not started')
     await openChat(page, 'Standup')
     await expect(runtimeStatusOf(page)).toHaveCount(0)
-  })
-
-  test.describe('real Agent Server', { tag: '@docker' }, () => {
-    test.use({ agentServer: 'real' })
-
-    test('2. the first prompt shows Starting…, then Ready, then the reply', async ({ page }) => {
-      await openChat(page, 'Research')
-      await sendMessage(page, 'Start the runtime')
-
-      await expect(runtimeStatusOf(page)).toHaveText('Starting…')
-      await expect(runtimeStatusOf(page)).toHaveText('Ready')
-      await expect(itemsWith(page, agentReplyText)).toHaveCount(1)
-      await expect(workingIndicatorOf(page)).toHaveCount(0)
-    })
   })
 
   test('5. a runtime that cannot start shows one Could not start · Retry chip and a notice; clicking it starts the runtime and answers the prompt', async ({
@@ -127,8 +111,8 @@ test.describe('without a warm runtime', () => {
   })
 })
 
-test.describe('real Agent Server', { tag: '@docker' }, () => {
-  test.use({ agentServer: 'real' })
+test.describe('a warm runtime with a slow boot', () => {
+  test.use({ fakeBootMilliseconds: 1_500 })
 
   test('3. after the idle stop the header shows Sleeping; a prompt wakes the runtime and keeps the history', async ({
     page,
@@ -167,31 +151,6 @@ test('4. with its host stopped the header shows Host offline and a prompt gets a
   await expect(itemsWith(page, agentReplyText)).toHaveCount(1)
   await expect(itemsWith(page, 'The runtime host is offline')).toHaveCount(1)
   await expect(runtimeStatusOf(page)).toHaveText('Ready')
-})
-
-test.describe('real Agent Server', { tag: '@docker' }, () => {
-  test.use({ agentServer: 'real' })
-
-  test('6. Stop ends a slow turn within 2 seconds with a notice, and a following prompt is answered', async ({
-    page,
-    agentScript,
-  }) => {
-    await agentScript(research, slowScript)
-    await openChat(page, 'Research')
-    await sendMessage(page, 'Take your time')
-    await expect(workingIndicatorOf(page)).toBeVisible()
-    await expect(stopButtonOf(page)).toBeVisible()
-    await agentScript(research, {})
-    await stopButtonOf(page).click()
-
-    await expect(workingIndicatorOf(page)).toHaveCount(0, twoSeconds)
-    await expect(stopButtonOf(page)).toHaveCount(0)
-    await expect(itemsWith(page, 'Stopped by Alice')).toHaveCount(1)
-    await sendMessage(page, 'Now answer quickly')
-    await expect(itemsWith(page, agentReplyText)).toHaveCount(1)
-    await expect(workingIndicatorOf(page)).toHaveCount(0)
-    await expect(itemsWith(page, 'Stopped by Alice')).toHaveCount(1)
-  })
 })
 
 test('7. a prompt queued behind a stopped turn is answered after the Stop notice', async ({ page, agentScript }) => {

@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import { containerBodyOf, createCommandRunner, parseCommand, relayUrlOf } from './commands.ts'
 import { type Docker, DockerError } from './docker.ts'
 
-const image = `ghcr.io/openhands/agent-server@sha256:${'a'.repeat(64)}`
+const image = `sha256:${'a'.repeat(64)}`
 const apiKey = 'k'.repeat(32)
 const create = { runtimeId: 'runtime-1', image, apiKey }
 
@@ -21,39 +21,23 @@ test.each(['exec', 'pull', 'inspect', 'run', 'logs', 'build', 'kill', '__proto__
 )
 
 test.each([
+  'ghcr.io/openhands/agent-server@sha256:977a4791b90f46c0873f63d879180692802e47e7a0e760ab5add5d5a2505027d',
   'docker.io/library/alpine:3',
   'ghcr.io/openhands/agent-server:1.51.0-python',
-  'ghcr.io/openhands/agent-server@sha256:abc',
-  `ghcr.io/openhands/agent-server@sha256:${'A'.repeat(64)}`,
   `ghcr.io/evil/agent-server@sha256:${'a'.repeat(64)}`,
-  `evil.io/ghcr.io/openhands/agent-server@sha256:${'a'.repeat(64)}`,
-  `ghcr.io/openhands/agent-server@sha256:${'a'.repeat(64)} --privileged`,
-])('refuses the image %p', (refusedImage) => {
-  expect(() => parseCommand('create', { ...create, image: refusedImage })).toThrow('refused')
-  expect(() => parseCommand('prepare', { image: refusedImage })).toThrow('refused')
+  `sha256:${'b'.repeat(63)}`,
+  `sha256:${'A'.repeat(64)}`,
+  `sha256:${'a'.repeat(64)} --privileged`,
+  `evil.io/sha256:${'a'.repeat(64)}`,
+])('both host kinds refuse the image %p and name the local content ID they accept', (refusedImage) => {
+  expect(() => parseCommand('create', { ...create, image: refusedImage })).toThrow('local content ID')
+  expect(() => parseCommand('prepare', { image: refusedImage })).toThrow('local content ID')
 })
 
 const contentId = `sha256:${'b'.repeat(64)}`
 
-test('a personal host accepts only a local content ID, a workspace host the Agent Server image or a local content ID', () => {
-  expect(parseCommand('create', { ...create, image: contentId }, true)).toEqual({
-    op: 'create',
-    ...create,
-    image: contentId,
-  })
-  expect(parseCommand('prepare', { image: contentId }, true)).toEqual({ op: 'prepare', image: contentId })
-  expect(() => parseCommand('create', create, true)).toThrow('local content ID')
-  expect(() => parseCommand('prepare', { image }, true)).toThrow('refused')
-  expect(() => parseCommand('prepare', { image: `sha256:${'b'.repeat(63)}` }, true)).toThrow('refused')
-  expect(parseCommand('create', { ...create, image: contentId })).toEqual({ op: 'create', ...create, image: contentId })
-  expect(parseCommand('prepare', { image: contentId })).toEqual({ op: 'prepare', image: contentId })
-  expect(() => parseCommand('prepare', { image: `sha256:${'b'.repeat(63)}` })).toThrow('refused')
-})
-
-test('a personal create sets only the session key in the environment', () => {
-  expect(containerBodyOf({ prefix: 'hq-', ...create, image: contentId, personal: true }).Env).toEqual([
-    `OH_SESSION_API_KEYS_0=${apiKey}`,
-  ])
+test.each([true, false])('a create sets only the session key in the environment (personal %p)', (personal) => {
+  expect(containerBodyOf({ prefix: 'hq-', ...create, personal }).Env).toEqual([`OH_SESSION_API_KEYS_0=${apiKey}`])
 })
 
 test.each([true, false])(
@@ -114,13 +98,7 @@ test('creates the container with exactly the hardening flags and three named vol
     Image: image,
     Hostname: 'hq-rt-runtime-1',
     User: '10001:10001',
-    Env: [
-      `OH_SESSION_API_KEYS_0=${apiKey}`,
-      'OH_ENABLE_VSCODE=false',
-      'OH_ENABLE_BROWSER=false',
-      'OH_PRELOAD_TOOLS=false',
-      'OPENHANDS_SUPPRESS_BANNER=1',
-    ],
+    Env: [`OH_SESSION_API_KEYS_0=${apiKey}`],
     Labels: { 'hq.managed': '1', 'hq.runtime': 'runtime-1' },
     HostConfig: {
       NetworkMode: 'hq-runtimes',

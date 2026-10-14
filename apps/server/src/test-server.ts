@@ -24,7 +24,6 @@ import { createFakeHosts, type FakeHost, issueTestSession, testAuthSettings } fr
 
 const port = Number(process.env.PORT ?? 3100)
 const fakeMcpPort = Number(process.env.HQ_FAKE_MCP_PORT ?? 3101)
-const condensationScale = Number(process.env.HQ_CONDENSATION_SCALE ?? 1)
 const testToolServers = ['fake', 'GitHub', 'Slack', 'Notion', 'Linear']
 Bun.serve({ port: fakeMcpPort, fetch: createFakeMcp().fetch })
 
@@ -55,9 +54,9 @@ setModelDirectory(llmGateway.listedModels)
 addRoutableModels(fakeRoutableModels)
 const usageSyncIntervalMilliseconds = 2_000
 const stubGapMilliseconds = Number(process.env.HQ_STUB_GAP_MS ?? 20)
-const fakeAgentServerBootMilliseconds = Number(process.env.HQ_FAKE_AGENT_SERVER_BOOT_MILLISECONDS ?? 200)
+const defaultBootMilliseconds = 200
 const bootMillisecondsOf = (databaseName: string) => () =>
-  bootMillisecondsByDatabase.get(databaseName) ?? fakeAgentServerBootMilliseconds
+  bootMillisecondsByDatabase.get(databaseName) ?? defaultBootMilliseconds
 const sandboxProviderOf = (databaseName: string): SandboxProvider => ({
   ...runtimeHosts.sandboxProvider,
   create: async (sandbox) => {
@@ -113,7 +112,7 @@ const testHeadersOf = (database: Database, chat: { chatId: string }) => ({
   'x-bf-dim-database': nameOf(database),
 })
 const hqAgentImage = (await readHqAgentImage()) ?? `sha256:${'0'.repeat(64)}`
-const placement = { hqAgentImage, hqAgentForWorkspaceHosts: true }
+const placement = { hqAgentImage }
 const runtimeHosts = createRuntimeHostGateway({
   ...placement,
   databases: () => [...servedDatabaseByName.values()].map((served) => served.database),
@@ -123,7 +122,6 @@ const runtimeHosts = createRuntimeHostGateway({
     llmGateway,
     agentBridge: () => agentBridge,
     providerHeadersOf: testHeadersOf,
-    condensationScale,
   }),
 })
 
@@ -134,9 +132,8 @@ const agentBridge = createAgentBridge({
     headersOf: testHeadersOf,
     timeoutMilliseconds: 300,
   }),
-  resumeAfterMilliseconds: Number(process.env.HQ_RESUME_AFTER_MILLISECONDS ?? 5_000),
+  resumeAfterMilliseconds: 5_000,
   reopenDelayMilliseconds: 50,
-  condensationScale,
   ...placement,
 })
 

@@ -17,7 +17,6 @@ import { openPageAs, type WorkerStack } from './stack'
 
 const blockedNotice = 'Connect an LLM key in your profile to prompt'
 const research = 'chat-research'
-type GatewayLog = { virtual_key_id: string | null; selected_key_id: string; metadata: Record<string, string> | null }
 
 const addKey = async (page: Page, provider: string, secret: string) => {
   await openProfile(page)
@@ -43,10 +42,6 @@ const repliesWith = (page: Page, text: string) => messageItemsOf(page).filter({ 
 const virtualKeyOf = async (workerStack: WorkerStack, memberId: string) =>
   (await workerStack.database.$client`select virtual_key_id from member_gateway_keys where user_id = ${memberId}`)[0]
     ?.virtual_key_id as string | undefined
-const gatewayKeyIdsOf = async (workerStack: WorkerStack, memberId: string) =>
-  (await workerStack.database.$client`select secret_ref from llm_credentials where user_id = ${memberId}`).map((row) =>
-    String(row.secret_ref).split('/').at(-1),
-  )
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
@@ -74,46 +69,6 @@ test('1. an added key is stored in the gateway: HQ keeps only its last 4 charact
     virtual_key: { provider_configs: { keys: { key_id: string }[] }[] }
   }>(`/api/governance/virtual-keys/${await virtualKeyOf(workerStack, 'member-alice')}`)
   expect(virtual_key.provider_configs.flatMap((config) => config.keys.map((key) => key.key_id))).toContain(keyId)
-})
-
-test.describe('real Agent Server', { tag: '@docker' }, () => {
-  test.use({ agentServer: 'real' })
-
-  test('2. two members prompt the same chat and each turn runs on the prompter’s own key', async ({
-    page,
-    browser,
-    workerStack,
-  }) => {
-    const startedAt = new Date()
-    await addKey(page, 'Fake', newSecret())
-    const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-    await addKey(bobPage, 'Fake', newSecret())
-
-    await openChat(page, 'Research')
-    await sendMessage(page, 'Alice asks')
-    await expect(repliesWith(page, agentReplyText)).toHaveCount(1)
-    await expect(workingIndicatorOf(page)).toHaveCount(0)
-    await openChat(bobPage, 'Research')
-    await sendMessage(bobPage, 'Bob asks')
-    await expect(repliesWith(bobPage, agentReplyText)).toHaveCount(2)
-
-    for (const prompter of ['member-alice', 'member-bob']) {
-      const virtualKeyId = await virtualKeyOf(workerStack, prompter)
-      const ownKeyIds = await gatewayKeyIdsOf(workerStack, prompter)
-      const callsOf = async () =>
-        (
-          await workerStack.gateway<{ logs: GatewayLog[] }>(
-            `/api/logs?virtual_key_ids=${virtualKeyId}&start_time=${startedAt.toISOString()}&limit=100`,
-          )
-        ).logs
-      await expect.poll(async () => (await callsOf()).length).toBeGreaterThan(0)
-      for (const call of await callsOf()) {
-        expect(ownKeyIds).toContain(call.selected_key_id)
-        expect(call.metadata).toMatchObject({ prompter, owner: 'member-alice', chat: research })
-      }
-    }
-    await bobPage.context().close()
-  })
 })
 
 test('3. a member without a key cannot prompt, and a crafted mutation is refused by the server', async ({

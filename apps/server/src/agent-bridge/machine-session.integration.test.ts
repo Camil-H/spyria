@@ -8,7 +8,7 @@ import { createHqAgentRelay } from './hq-agent-relay.ts'
 
 setDefaultTimeout(40_000)
 const { database, app, fakeHost, mutate, newRuntimeChat, prompt, turnOf, messagesOf, storedAgentEventsOf, ...stack } =
-  await startAgentStack({ hqAgentImage: `sha256:${'0'.repeat(64)}` })
+  await startAgentStack()
 const relays: ReturnType<typeof createHqAgentRelay>[] = []
 afterEach(async () => {
   await database.$client`update runtime_hosts set removed_at = now() where owner_id = ${alice} and removed_at is null`

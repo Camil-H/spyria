@@ -15,7 +15,6 @@ import {
   bob,
   testAuthSettings,
   virtualKeyOf,
-  waitFor,
 } from './testing.ts'
 
 setDefaultTimeout(30_000)
@@ -125,7 +124,7 @@ test('a key the provider refuses is classified on the turn without provider text
   expect(await failureOf(chatId)).toBe('The LLM key of Alice was refused')
 })
 
-test('a context-window rejection reaches the agent unchanged and records no turn failure, so the condenser can recover', async () => {
+test('a context-window rejection reaches the agent unchanged and records no turn failure, so the agent can compact', async () => {
   const host = await fakeHost('Too long host')
   const { chatId, token } = await runtimeTurn(host, bob)
   const tooLong = await host.modelCall({
@@ -154,20 +153,17 @@ test('an unreachable gateway answers 502 and records HQ’s notice', async () =>
   }
 })
 
-test('a Claude Code call with x-api-key goes to the gateway’s Anthropic route pinned to the anthropic provider, with its protocol headers, and its model shows on a harness chat', async () => {
-  const host = await fakeHost('Claude Code host')
+test('a Pi call with x-api-key on the Anthropic route goes to the gateway’s Anthropic route with its protocol headers', async () => {
+  const host = await fakeHost('Anthropic route host')
   const anthropicSecret = `fake-key-anthropic-${crypto.randomUUID()}`
   await addLlmKey(bob, 'Anthropic', anthropicSecret)
   const { chatId, token } = await runtimeTurn(host, bob)
-  await database.$client`update chats set harness = 'claude-code' where id = ${chatId}`
   const headers = {
     'x-api-key': token,
     'content-type': 'application/json',
     'anthropic-version': '2023-06-01',
-    'anthropic-beta': 'claude-code-20250219',
-    'user-agent': 'claude-cli/2.1.220 (external, sdk-ts, agent-sdk/0.3.220)',
   }
-  const message = { model: 'claude-opus-5-5', max_tokens: 64, messages: [{ role: 'user', content: 'hi' }] }
+  const message = { model: 'anthropic/claude-opus-5-5', max_tokens: 64, messages: [{ role: 'user', content: 'hi' }] }
   for (const attempt of [1, 2, 3]) {
     const callsBefore = fakeLlmCalls.length
     const answer = await host.modelCall({
@@ -179,7 +175,7 @@ test('a Claude Code call with x-api-key goes to the gateway’s Anthropic route 
     expect(answer.body).toContain('event: message_stop')
     const providerCall = fakeLlmCalls[callsBefore]
     expect(providerCall?.['x-api-key']).toBe(anthropicSecret)
-    expect(providerCall?.['anthropic-beta']).toContain('claude-code-20250219')
+    expect(providerCall?.['anthropic-version']).toBe('2023-06-01')
     expect(JSON.parse(fakeLlmBodies[callsBefore] ?? '{}').model).toBe('claude-opus-5-5')
   }
   const counted = await host.modelCall({
@@ -188,55 +184,18 @@ test('a Claude Code call with x-api-key goes to the gateway’s Anthropic route 
     body: JSON.stringify(message),
   })
   expect(counted).toMatchObject({ status: 200, body: JSON.stringify({ input_tokens: 1 }) })
-  await waitFor(
-    async () =>
-      (await database.$client`select model from chats where id = ${chatId}`)[0]?.model === 'anthropic/claude-opus-5-5',
-  )
   expect(await failureOf(chatId)).toBeNull()
 })
 
-test('a failing Claude Code token count reaches the agent unchanged and records no turn failure', async () => {
+test('a failing Anthropic token count reaches the agent unchanged and records no turn failure', async () => {
   const host = await fakeHost('Token count host')
   const { chatId, token } = await runtimeTurn(host, bob)
-  await database.$client`update chats set harness = 'claude-code' where id = ${chatId}`
   const counted = await host.modelCall({
     path: '/v1/messages/count_tokens?beta=true',
     headers: { 'x-api-key': token, 'content-type': 'application/json', 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: 'claude-opus-5-5', messages: [{ role: 'user', content: '$count-fails' }] }),
+    body: JSON.stringify({ model: 'anthropic/claude-opus-5-5', messages: [{ role: 'user', content: '$count-fails' }] }),
   })
   expect(counted.status).toBeGreaterThanOrEqual(400)
-  expect(await failureOf(chatId)).toBeNull()
-})
-
-test('a Codex call goes to the gateway’s OpenAI Responses route pinned to the openai provider, and its model shows on a harness chat', async () => {
-  const host = await fakeHost('Codex host')
-  const openaiSecret = `fake-key-openai-${crypto.randomUUID()}`
-  await addLlmKey(bob, 'OpenAI', openaiSecret)
-  const { chatId, token } = await runtimeTurn(host, bob)
-  await database.$client`update chats set harness = 'codex' where id = ${chatId}`
-  const headers = {
-    authorization: `Bearer ${token}`,
-    'content-type': 'application/json',
-    originator: '@agentclientprotocol/codex-acp',
-    'x-codex-turn-metadata': '{"request_kind":"turn"}',
-  }
-  const request = {
-    model: 'gpt-6.1-sol',
-    stream: true,
-    input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hi' }] }],
-  }
-  for (const attempt of [1, 2, 3]) {
-    const callsBefore = fakeLlmCalls.length
-    const answer = await host.modelCall({ path: '/v1/responses', headers, body: JSON.stringify(request) })
-    expect({ attempt, status: answer.status }).toEqual({ attempt, status: 200 })
-    expect(answer.body).toContain('response.completed')
-    expect(fakeLlmCalls[callsBefore]?.authorization).toBe(`Bearer ${openaiSecret}`)
-    expect(JSON.parse(fakeLlmBodies[callsBefore] ?? '{}').model).toBe('gpt-6.1-sol')
-  }
-  await waitFor(
-    async () =>
-      (await database.$client`select model from chats where id = ${chatId}`)[0]?.model === 'openai/gpt-6.1-sol',
-  )
   expect(await failureOf(chatId)).toBeNull()
 })
 

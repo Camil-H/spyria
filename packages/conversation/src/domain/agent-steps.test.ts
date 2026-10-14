@@ -3,131 +3,63 @@ import { type AgentEvent, agentProjectionOf } from './agent-events.ts'
 import { observedStep, type StoredStep } from './agent-steps.ts'
 import { messagesFromEvents, type StoredEvent } from './message-events.ts'
 
-const textContent = (text: string) => [{ cache_prompt: false, type: 'text', text }]
-const at = (second: number) => `2026-10-06T11:19:${String(second).padStart(2, '0')}.000000`
-const actionEvent = (
-  id: string,
-  second: number,
-  action: Record<string, unknown> | undefined,
-  fields = {},
-): AgentEvent => ({
-  id,
-  kind: 'ActionEvent',
-  timestamp: at(second),
-  source: 'agent',
-  thought: textContent(''),
-  ...(action && { action }),
-  ...fields,
+const at = (second: number) => `2026-10-06T11:19:${String(second).padStart(2, '0')}.000Z`
+const acpUpdate = (seq: number, update: Record<string, unknown>): AgentEvent => ({
+  id: `conversation-1:${seq}`,
+  kind: 'ACPUpdate',
+  timestamp: at(seq),
+  seq,
+  completed: true,
+  update,
 })
-const observationEvent = (actionId: string, second: number, observation: Record<string, unknown>): AgentEvent => ({
-  id: `observation-${actionId}`,
-  kind: 'ObservationEvent',
-  timestamp: at(second),
-  source: 'environment',
-  action_id: actionId,
-  observation,
-})
-const stepOf = (event: AgentEvent, previousTimestamp: string | null = at(10)) => {
-  const projection = agentProjectionOf(event, previousTimestamp)
+const toolCall = (seq: number, toolCallId: string, fields: Record<string, unknown>) =>
+  acpUpdate(seq, { sessionUpdate: 'tool_call', toolCallId, status: 'pending', ...fields })
+const finished = (seq: number, toolCallId: string, fields: Record<string, unknown>) =>
+  acpUpdate(seq, { sessionUpdate: 'tool_call_update', toolCallId, status: 'completed', ...fields })
+const stepOf = (event: AgentEvent) => {
+  const projection = agentProjectionOf(event)
   return projection?.type === 'step' ? projection.step : projection
 }
 const observed = (step: StoredStep | undefined, event: AgentEvent, durationMilliseconds = 1500) => {
-  const projection = agentProjectionOf(event, null)
+  const projection = agentProjectionOf(event)
   if (!step || projection?.type !== 'observation') throw new Error('Not an observation')
   return observedStep(step, projection.observation, durationMilliseconds)
 }
 
-const terminalAction = actionEvent(
-  'action-echo',
-  14,
-  { kind: 'TerminalAction', command: 'echo hello', is_input: false, reset: false },
-  { thought: textContent('Running it.'), reasoning_content: 'Check the shell first.', tool_name: 'terminal' },
-)
-const terminalObservation = observationEvent('action-echo', 15, {
-  kind: 'TerminalObservation',
-  content: textContent('hello'),
-  is_error: false,
-  command: 'echo hello',
-  exit_code: 0,
-})
-
-test('a terminal action becomes a running command step with the thought before it, and its observation fills it', () => {
-  const step = stepOf(terminalAction)
-  expect(step).toEqual({
-    type: 'command',
-    command: 'echo hello',
-    exitCode: null,
-    durationMilliseconds: null,
-    output: '',
-    truncatedLines: 0,
-    thought: { type: 'thought', text: 'Check the shell first.\n\nRunning it.', durationMilliseconds: 4000 },
-  })
-  expect(observed(step as StoredStep, terminalObservation)).toEqual({
-    ...(step as StoredStep),
-    exitCode: 0,
-    durationMilliseconds: 1500,
-    output: 'hello',
-  } as StoredStep)
-})
-
 test('a failed command keeps its exit code, and only the last 200 lines of a long output are kept', () => {
-  const step = stepOf(actionEvent('action-long', 12, { kind: 'TerminalAction', command: 'seq 250; exit 3' }))
+  const command = { title: 'seq 250; exit 3', kind: 'execute', rawInput: { command: 'seq 250; exit 3' } }
+  const step = stepOf(toolCall(1, 'long', command))
   const lines = Array.from({ length: 250 }, (_, index) => String(index + 1))
   expect(
     observed(
       step as StoredStep,
-      observationEvent('action-long', 13, {
-        kind: 'TerminalObservation',
-        content: textContent(lines.join('\n')),
-        exit_code: 3,
+      finished(2, 'long', {
+        ...command,
+        status: 'failed',
+        rawOutput: { formatted_output: lines.join('\n'), exit_code: 3 },
       }),
     ),
   ).toMatchObject({ exitCode: 3, output: lines.slice(50).join('\n'), truncatedLines: 50 })
 })
 
-test('a thought without text adds nothing, and a think action is one thought step', () => {
-  expect(stepOf(actionEvent('action-quiet', 11, { kind: 'TerminalAction', command: 'ls' }))).not.toHaveProperty(
-    'thought',
-  )
-  const think = actionEvent(
-    'action-think',
-    13,
-    { kind: 'ThinkAction', thought: 'Planning the change carefully.' },
-    { reasoning_content: 'Planning the change carefully.', tool_name: 'think' },
-  )
-  expect(stepOf(think)).toEqual({ type: 'thought', text: 'Planning the change carefully.', durationMilliseconds: 3000 })
-  expect(
-    observed(
-      stepOf(think) as StoredStep,
-      observationEvent('action-think', 14, {
-        kind: 'ThinkObservation',
-        content: textContent('Your thought has been logged.'),
-      }),
-    ),
-  ).toBeUndefined()
-})
-
-test('a file edit becomes a file step whose observation adds the diff and the line counts', () => {
-  const edit = stepOf(
-    actionEvent('action-edit', 12, {
-      kind: 'FileEditorAction',
-      command: 'str_replace',
-      path: '/workspace/project/src/totals.ts',
-      old_str: 'export const b = 2\n',
-      new_str: 'export const b = 20\nexport const bb = 21\n',
-    }),
-  )
+test('a file edit becomes a file step whose final update adds the diff with its context and the line counts', () => {
+  const path = '/workspace/project/src/totals.ts'
+  const edit = stepOf(toolCall(1, 'edit', { title: 'Edit src/totals.ts', kind: 'edit', rawInput: { file_path: path } }))
   expect(edit).toEqual({ type: 'file', operation: 'edit', path: 'src/totals.ts', added: 0, removed: 0, diff: [] })
+  const diff = {
+    type: 'diff',
+    path,
+    oldText: 'export const a = 1\nexport const b = 2\nexport const c = 3\n',
+    newText: 'export const a = 1\nexport const b = 20\nexport const bb = 21\nexport const c = 3\n',
+  }
   expect(
     observed(
       edit as StoredStep,
-      observationEvent('action-edit', 13, {
-        kind: 'FileEditorObservation',
-        command: 'str_replace',
-        path: '/workspace/project/src/totals.ts',
-        prev_exist: true,
-        old_content: 'export const a = 1\nexport const b = 2\nexport const c = 3\n',
-        new_content: 'export const a = 1\nexport const b = 20\nexport const bb = 21\nexport const c = 3\n',
+      finished(2, 'edit', {
+        title: 'Edit src/totals.ts',
+        kind: 'edit',
+        rawInput: { file_path: path },
+        content: [diff],
       }),
     ),
   ).toEqual({
@@ -146,120 +78,19 @@ test('a file edit becomes a file step whose observation adds the diff and the li
   })
 })
 
-test('a created file is all added lines, and a viewed file is a read with no diff', () => {
-  const create = stepOf(
-    actionEvent('action-create', 12, {
-      kind: 'FileEditorAction',
-      command: 'create',
-      path: '/workspace/project/notes.md',
-      file_text: 'one\ntwo\n',
-    }),
-  )
+test('a written file is all added lines, and a read file is a read with no diff', () => {
+  const path = '/workspace/project/notes.md'
+  const write = { title: 'Write notes.md', kind: 'edit', rawInput: { file_path: path } }
   expect(
     observed(
-      create as StoredStep,
-      observationEvent('action-create', 13, {
-        kind: 'FileEditorObservation',
-        command: 'create',
-        prev_exist: false,
-        new_content: 'one\ntwo\n',
-      }),
+      stepOf(toolCall(1, 'write', write)) as StoredStep,
+      finished(2, 'write', { ...write, content: [{ type: 'diff', path, oldText: null, newText: 'one\ntwo\n' }] }),
     ),
   ).toMatchObject({ operation: 'create', path: 'notes.md', added: 2, removed: 0 })
-  const view = stepOf(
-    actionEvent('action-view', 12, { kind: 'FileEditorAction', command: 'view', path: '/workspace/project/notes.md' }),
-  )
+  const read = { title: 'Read notes.md', kind: 'read', rawInput: { file_path: path } }
+  const view = stepOf(toolCall(3, 'read', read))
   expect(view).toEqual({ type: 'file', operation: 'read', path: 'notes.md', added: 0, removed: 0, diff: [] })
-  expect(
-    observed(
-      view as StoredStep,
-      observationEvent('action-view', 13, { kind: 'FileEditorObservation', command: 'view', prev_exist: true }),
-    ),
-  ).toBeUndefined()
-})
-
-test('a task tracker plan becomes a plan step in the panel vocabulary; viewing the plan adds nothing', () => {
-  expect(
-    stepOf(
-      actionEvent('action-plan', 12, {
-        kind: 'TaskTrackerAction',
-        command: 'plan',
-        task_list: [
-          { title: 'Read', notes: '', status: 'done' },
-          { title: 'Edit', notes: '', status: 'in_progress' },
-          { title: 'Test', notes: '', status: 'todo' },
-        ],
-      }),
-    ),
-  ).toEqual({
-    type: 'plan',
-    items: [
-      { title: 'Read', status: 'done' },
-      { title: 'Edit', status: 'in-progress' },
-      { title: 'Test', status: 'todo' },
-    ],
-  })
-  expect(stepOf(actionEvent('action-view-plan', 12, { kind: 'TaskTrackerAction', command: 'view' }))).toBeUndefined()
-})
-
-test('any other action becomes a tool step with its arguments, and its observation adds the result', () => {
-  const search = stepOf(
-    actionEvent(
-      'action-search',
-      12,
-      { kind: 'MCPToolAction', data: { query: 'pricing' } },
-      {
-        tool_name: 'web_search',
-        tool_call: { id: 'call_1', name: 'web_search', arguments: '{"query": "pricing"}', origin: 'completion' },
-      },
-    ),
-  )
-  expect(search).toEqual({ type: 'tool', name: 'web_search', arguments: '{"query": "pricing"}', result: null })
-  expect(
-    observed(
-      search as StoredStep,
-      observationEvent('action-search', 13, { kind: 'MCPToolObservation', content: textContent('3 results') }),
-    ),
-  ).toEqual({ type: 'tool', name: 'web_search', arguments: '{"query": "pricing"}', result: '3 results' })
-})
-
-test('agent and conversation errors become error steps; a malformed tool call is left to its error', () => {
-  const agentError: AgentEvent = {
-    id: 'agent-error',
-    kind: 'AgentErrorEvent',
-    timestamp: at(12),
-    source: 'agent',
-    tool_name: 'nonexistent_tool',
-    error: "Tool 'nonexistent_tool' not found.",
-  }
-  const conversationError: AgentEvent = {
-    id: 'conversation-error',
-    kind: 'ConversationErrorEvent',
-    timestamp: at(12),
-    source: 'environment',
-    code: 'LLMBadRequestError',
-    detail: 'litellm.BadRequestError: OpenAIException - boom',
-  }
-  expect(stepOf(agentError)).toEqual({ type: 'error', message: "Tool 'nonexistent_tool' not found." })
-  expect(stepOf(conversationError)).toEqual({
-    type: 'error',
-    message: 'litellm.BadRequestError: OpenAIException - boom',
-  })
-  expect(stepOf(actionEvent('action-malformed', 12, undefined, { tool_name: 'nonexistent_tool' }))).toBeUndefined()
-})
-
-test('a finish action is the final answer, and finish, stats and system prompt events add no step', () => {
-  expect(agentProjectionOf(actionEvent('finish', 12, { kind: 'FinishAction', message: 'All done.' }), null)).toEqual({
-    type: 'message',
-    body: 'All done.',
-  })
-  const ignored: AgentEvent[] = [
-    observationEvent('finish', 13, { kind: 'FinishObservation', content: textContent('All done.') }),
-    { id: 'stats', kind: 'ConversationStateUpdateEvent', timestamp: at(13), key: 'stats', value: {} },
-    { id: 'system', kind: 'SystemPromptEvent', timestamp: at(1), source: 'agent' },
-  ]
-  for (const event of ignored)
-    expect(agentProjectionOf(event, null)?.type ?? 'nothing').toBeOneOf(['nothing', 'observation'])
+  expect(observed(view as StoredStep, finished(4, 'read', read))).toBeUndefined()
 })
 
 const storedEvent = (seq: number, type: string, payload: unknown, id: string, second = seq): StoredEvent => ({
@@ -276,6 +107,7 @@ const agentStored = (seq: number, event: AgentEvent) =>
   storedEvent(seq, 'agent.event', { replyToId: 'prompt', event }, event.id, Number(event.timestamp.slice(17, 19)))
 
 test('messagesFromEvents projects stored agent events into steps like the live recorder and maps legacy tool calls', () => {
+  const command = { title: 'echo hello', kind: 'execute', rawInput: { command: 'echo hello' } }
   const projected = messagesFromEvents([
     storedEvent(
       1,
@@ -284,9 +116,9 @@ test('messagesFromEvents projects stored agent events into steps like the live r
       'prompt',
       10,
     ),
-    agentStored(2, terminalAction),
-    agentStored(3, terminalObservation),
-    agentStored(4, actionEvent('finish', 16, { kind: 'FinishAction', message: 'Done.' })),
+    agentStored(2, toolCall(14, 'echo', command)),
+    agentStored(3, finished(15, 'echo', { ...command, rawOutput: { formatted_output: 'hello', exit_code: 0 } })),
+    agentStored(4, acpUpdate(16, { sessionUpdate: 'agent_message', text: 'Done.' })),
     storedEvent(
       5,
       'message.posted',
@@ -297,7 +129,7 @@ test('messagesFromEvents projects stored agent events into steps like the live r
   expect(projected.map(({ id, kind, body, step, replyToId }) => ({ id, kind, body, step, replyToId }))).toEqual([
     { id: 'prompt', kind: 'member', body: 'Say hello', step: null, replyToId: null },
     {
-      id: 'action-echo',
+      id: 'conversation-1:echo',
       kind: 'step',
       body: 'command',
       step: {
@@ -307,11 +139,10 @@ test('messagesFromEvents projects stored agent events into steps like the live r
         durationMilliseconds: 1000,
         output: 'hello',
         truncatedLines: 0,
-        thought: { type: 'thought', text: 'Check the shell first.\n\nRunning it.', durationMilliseconds: null },
       },
       replyToId: 'prompt',
     },
-    { id: 'finish', kind: 'agent', body: 'Done.', step: null, replyToId: 'prompt' },
+    { id: 'conversation-1:16', kind: 'agent', body: 'Done.', step: null, replyToId: 'prompt' },
     {
       id: 'legacy',
       kind: 'step',

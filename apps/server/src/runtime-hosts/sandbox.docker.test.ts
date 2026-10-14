@@ -2,38 +2,27 @@ import { afterAll, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { conversationMutators } from '@hq/conversation/server'
-import { events } from '@hq/db/postgres'
 import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@hq/db/testing'
 import { schema } from '@hq/db/zero'
 import { chatId, runtimeHostId } from '@hq/kernel'
-import {
-  agentServerImage,
-  createRuntimeJobs,
-  createRuntimeTransactor,
-  ensureRuntimeRunning,
-  removeChatRuntime,
-} from '@hq/runtime/server'
+import { createRuntimeJobs, createRuntimeTransactor, ensureRuntimeRunning, removeChatRuntime } from '@hq/runtime/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { websocket } from 'hono/bun'
-import { createAgentBridge } from '../agent-bridge/bridge.ts'
-import { createApp, defaultLlm } from '../app.ts'
+import { createApp } from '../app.ts'
+import { readHqAgentImage } from '../hq-agent-image.ts'
 import { startJobWorker } from '../job-worker.ts'
-import { createModelCallRelay } from '../llm-relay.ts'
 import { acme, aliceInAcme, openSharedTestApp, sessionTokenOf, testAuthSettings, waitFor } from '../testing.ts'
 import { createRuntimeHostGateway } from './gateway.ts'
 
-const zeroDatabase = (database: typeof testDatabase.database) => zeroDrizzle(schema, database)
 const docker = (...args: string[]) => Bun.spawnSync(['docker', ...args], { stderr: 'pipe' })
 const dockerText = (...args: string[]) =>
   docker(...args)
     .stdout.toString()
     .trim()
 const hasDocker = docker('info').exitCode === 0
-const hasImage = hasDocker && docker('image', 'inspect', agentServerImage).exitCode === 0
-const skipReason = !hasDocker
-  ? 'Docker is unavailable'
-  : `the Agent Server image is not pulled (docker pull ${agentServerImage})`
+const hqImage = (await readHqAgentImage()) ?? ''
+const hasImage = hasDocker && hqImage !== '' && docker('image', 'inspect', hqImage).exitCode === 0
+const skipReason = !hasDocker ? 'Docker is unavailable' : "HQ's runtime image is not built (bun run agent:build)"
 if (!hasImage) console.warn(`Skipping the runtime host Docker test: ${skipReason}`)
 
 const prefix = `hq-test-${crypto.randomUUID().slice(0, 8)}-`
@@ -42,24 +31,8 @@ const stateDirectory = mkdtempSync(join(tmpdir(), 'hq-test-host-'))
 const shared = await openSharedTestApp()
 const testDatabase = await createTestDatabase()
 await testDatabase.database.transaction(await shared.seededGatewayKeys())
-shared.setFakeLlmScript({ command: 'echo hello' })
-const { llmGateway } = shared
-const gateway = createRuntimeHostGateway({
-  databases: () => [testDatabase.database],
-  relayModelCall: createModelCallRelay({
-    gatewayUrlOf: () => llmGateway.url,
-    llmGateway,
-    agentBridge: () => agentBridge,
-  }),
-})
-const agentBridge = createAgentBridge({ sandboxProvider: gateway.sandboxProvider, llm: defaultLlm })
-const app = createApp({
-  database: testDatabase.database,
-  ...testAuthSettings,
-  runtimeHosts: gateway,
-  agentBridge,
-  llmGateway,
-})
+const gateway = createRuntimeHostGateway({ databases: () => [testDatabase.database], hqAgentImage: hqImage })
+const app = createApp({ database: testDatabase.database, ...testAuthSettings, runtimeHosts: gateway })
 const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
 let hostProcess: ReturnType<typeof Bun.spawn> | undefined
 
@@ -73,7 +46,6 @@ const removeDockerObjects = () => {
 }
 
 afterAll(async () => {
-  shared.setFakeLlmScript(undefined)
   hostProcess?.kill()
   await hostProcess?.exited
   if (hasDocker) removeDockerObjects()
@@ -110,7 +82,7 @@ const hostId = () => {
 }
 
 test.skipIf(!hasImage)(
-  'hq-host creates a hardened Agent Server, relays HTTP to it, then stops and removes it with its volumes',
+  "hq-host creates a hardened runtime from HQ's image, relays HTTP to hq-agent, then stops and removes it with its volumes",
   async () => {
     const startedAt = performance.now()
     const id = await hostId()
@@ -121,7 +93,7 @@ test.skipIf(!hasImage)(
     await expect(provider.create({ ...runtime, image: 'docker.io/library/alpine:3', apiKey })).rejects.toThrow(
       'refused',
     )
-    await provider.create({ ...runtime, image: agentServerImage, apiKey })
+    await provider.create({ ...runtime, image: hqImage, apiKey })
     expect(await provider.status(runtime)).toBe('stopped')
 
     const [inspected] = JSON.parse(dockerText('inspect', containerName))
@@ -166,16 +138,15 @@ test.skipIf(!hasImage)(
         () => false,
       )
     for (const deadline = Date.now() + 30_000; !(await isReady()); await Bun.sleep(100))
-      if (Date.now() > deadline) throw new Error('The Agent Server was not ready within 30 s')
-    const unauthenticated = await transport.fetch({ method: 'GET', path: '/api/conversations/search' })
+      if (Date.now() > deadline) throw new Error('hq-agent was not ready within 30 s')
+    const unauthenticated = await transport.fetch({ method: 'GET', path: '/api/conversations/unknown' })
     expect(unauthenticated.status).toBe(401)
     const authenticated = await transport.fetch({
       method: 'GET',
-      path: '/api/conversations/search',
+      path: '/api/conversations/unknown',
       headers: { 'x-session-api-key': apiKey },
     })
-    expect(authenticated.status).toBe(200)
-    expect(JSON.parse(authenticated.body)).toHaveProperty('items')
+    expect(authenticated.status).toBe(404)
     await expect(transport.fetch({ method: 'GET', path: '@169.254.169.254/' })).rejects.toThrow('refused')
 
     await provider.stop(runtime)
@@ -189,12 +160,18 @@ test.skipIf(!hasImage)(
 )
 
 test.skipIf(!hasImage)(
-  'runtime jobs create, stop, resume with the same key and files, and remove a real Agent Server; prepare refuses another image',
+  "runtime jobs create, stop, resume with the same key and files, and remove a real runtime of HQ's image; prepare refuses another image",
   async () => {
     const startedAt = performance.now()
     const host = { workspaceId: acme, hostId: runtimeHostId(await hostId()) }
     await expect(gateway.prepare(host, 'docker.io/library/alpine:3')).rejects.toThrow('refused')
-    await gateway.prepare(host, agentServerImage)
+    await expect(
+      gateway.prepare(
+        host,
+        'ghcr.io/openhands/agent-server@sha256:977a4791b90f46c0873f63d879180692802e47e7a0e760ab5add5d5a2505027d',
+      ),
+    ).rejects.toThrow('refused')
+    await gateway.prepare(host, hqImage)
 
     const { database } = testDatabase
     const worker = startJobWorker(database, { pollIntervalMilliseconds: 20, sandboxProvider: gateway.sandboxProvider })
@@ -204,7 +181,7 @@ test.skipIf(!hasImage)(
     const ensure = () =>
       zeroDatabase.transaction((tx) =>
         ensureRuntimeRunning(
-          { transactor: createRuntimeTransactor(tx) },
+          { transactor: createRuntimeTransactor(tx), hqAgentImage: hqImage },
           { ...runtimeInput, id: crypto.randomUUID(), now: Date.now() },
         ),
       )
@@ -225,11 +202,11 @@ test.skipIf(!hasImage)(
         (
           await transport.fetch({
             method: 'GET',
-            path: '/api/conversations/search',
+            path: '/api/conversations/unknown',
             headers: { 'x-session-api-key': apiKey },
           })
         ).status
-      expect(await authenticatedStatus()).toBe(200)
+      expect(await authenticatedStatus()).toBe(404)
       expect(docker('exec', containerName, 'sh', '-c', 'echo kept > /workspace/kept.txt').exitCode).toBe(0)
 
       await database.$client`update runtimes set last_active_at = now() - interval '2 hours' where id = ${id}`
@@ -245,7 +222,7 @@ test.skipIf(!hasImage)(
       expect(await ensure()).toMatchObject({ id, state: 'starting' })
       await stateIs('running')
       expect(dockerText('exec', containerName, 'cat', '/workspace/kept.txt')).toBe('kept')
-      expect(await authenticatedStatus()).toBe(200)
+      expect(await authenticatedStatus()).toBe(404)
 
       await zeroDatabase.transaction((tx) =>
         removeChatRuntime({ transactor: createRuntimeTransactor(tx) }, { ...runtimeInput, now: Date.now() }),
@@ -257,68 +234,6 @@ test.skipIf(!hasImage)(
       await worker.stop()
     }
     console.info(`Runtime lifecycle Docker test took ${Math.round(performance.now() - startedAt)} ms`)
-  },
-  120_000,
-)
-
-test.skipIf(!hasImage)(
-  'a prompt cold-starts a real Agent Server, which runs a terminal command through the fake LLM and finishes',
-  async () => {
-    const startedAt = performance.now()
-    await hostId()
-    const { database } = testDatabase
-    const worker = startJobWorker(database, {
-      pollIntervalMilliseconds: 20,
-      sandboxProvider: gateway.sandboxProvider,
-      agentBridge,
-    })
-    const chat = chatId('chat-research')
-    const repliesTo = async (messageId: string) =>
-      (await database.query.messages.findMany({ where: { replyToId: messageId }, orderBy: { seq: 'asc' } })).map(
-        ({ kind, body, step }) => ({ kind, body, step }),
-      )
-    try {
-      await zeroDatabase(database).transaction((tx) =>
-        conversationMutators.conversation.sendMessage.fn({
-          tx,
-          ctx: { ...aliceInAcme, role: 'admin' },
-          args: { workspaceId: acme, id: 'message-real-turn', chatId: chat, text: 'Say hello in the terminal' },
-        }),
-      )
-      await waitFor(async () => (await repliesTo('message-real-turn')).length >= 2, 60_000)
-      await waitFor(
-        async () =>
-          (await database.$client`select agent_turn_message_id from chats where id = ${chat}`)[0]
-            ?.agent_turn_message_id === null,
-      )
-      expect(await repliesTo('message-real-turn')).toMatchObject([
-        {
-          kind: 'step',
-          body: 'command',
-          step: { type: 'command', command: 'echo hello', exitCode: 0, output: 'hello', truncatedLines: 0 },
-        },
-        { kind: 'agent', body: 'Understood, working on it.', step: null },
-      ])
-      const storedKinds = (await database.select().from(events))
-        .filter((event) => event.chatId === chat && event.type === 'agent.event')
-        .map((event) => (event.payload as { event: { kind: string } }).event.kind)
-      expect(storedKinds).toContain('SystemPromptEvent')
-      expect(storedKinds).not.toContain('StreamingDeltaEvent')
-      console.info(`Real agent turn took ${Math.round(performance.now() - startedAt)} ms`)
-      await zeroDatabase(database).transaction((tx) =>
-        removeChatRuntime(
-          { transactor: createRuntimeTransactor(tx) },
-          { workspaceId: acme, chatId: chat, now: Date.now() },
-        ),
-      )
-      await waitFor(
-        async () =>
-          (await database.$client`select state from runtimes where chat_id = ${chat}`)[0]?.state === 'removed',
-        30_000,
-      )
-    } finally {
-      await worker.stop()
-    }
   },
   120_000,
 )

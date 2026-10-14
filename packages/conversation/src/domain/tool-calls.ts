@@ -7,12 +7,10 @@ const connectionNotice = / needs to (re)?connect (\S+)$/
 export const toolServerOf = (toolName: string) => toolName.split('-')[0] ?? toolName
 
 export const toolDisplayNameOf = (prefixedName: string) => {
-  const toolName = prefixedName.replace(/^(mcp__(hq|router)__|hq_|router_)/, '')
+  const toolName = prefixedName.replace(/^mcp__(hq|router)__/, '')
   const separator = toolName.indexOf('-')
   return separator === -1 ? toolName : `${toolName.slice(separator + 1)} (${toolName.slice(0, separator)})`
 }
-
-export const toolResultOf = (text: string) => text.replace(/^\[Tool '[^']*' executed\.\]\s*/, '')
 
 export const toolCallFailureOf = (text: string): ToolCallFailure | undefined => {
   if (text.startsWith('Authentication required for ') || /request failed with status 401\b/.test(text))

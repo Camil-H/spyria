@@ -13,13 +13,11 @@ import {
   lockChatTurn,
   memberModelsOf,
   pendingPrompts,
-  recordedStreamedText,
   runningDelegationOfTokenHash,
   setChatAgentModel,
   setChatTurnFailure,
   setChatTurnPrompter,
   setDelegationFields,
-  stoppedHarnessSessionId,
   stopRunningDelegations,
 } from '@hq/db/server-writes'
 import type { Message as MessageRow } from '@hq/db/zero'
@@ -188,13 +186,12 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         })),
     },
     agentEvents: {
-      append: async (id, event, replyToId, at, delegation, recordedLength) => {
+      append: async (id, event, replyToId, at, delegation) => {
         if (tx.location !== 'server' || (await isChatEventStored(tx, contextWorkspaceId, event.id))) return undefined
         const payload: AgentEventPayload = {
           replyToId,
           event,
           ...(delegation && { delegation }),
-          ...(recordedLength && { recordedLength }),
         }
         return appendChatEvent(tx, {
           workspaceId: contextWorkspaceId,
@@ -210,9 +207,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         const last = await lastAgentEvent(tx, contextWorkspaceId, id)
         return last && { ...last, replyToId: last.replyToId === null ? null : messageId(last.replyToId) }
       },
-      stoppedHarnessSessionId: (id) => stoppedHarnessSessionId(tx, contextWorkspaceId, id),
       lastSessionId: (id) => lastSessionId(tx, contextWorkspaceId, id),
-      recordedStreamedText: (id, promptId) => recordedStreamedText(tx, contextWorkspaceId, id, promptId),
     },
     plans: {
       replace: async (id, items) => {

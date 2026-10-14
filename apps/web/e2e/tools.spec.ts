@@ -182,16 +182,3 @@ test('6. disconnecting brings back the Connect notice; an expired session shows 
   await expect(connectedRowOf(page)).not.toContainText('Needs reconnection')
   await expect(connectedRowOf(page)).toContainText('Connected')
 })
-
-test.describe('real Agent Server', { tag: '@docker' }, () => {
-  test.use({ agentServer: 'real' })
-
-  test('7. the real Agent Server calls the fake tool through the relay as the owner', async ({ page, agentScript }) => {
-    const account = accountOf('alice-acme')
-    await connectFake(page, account)
-    await promptTool(page, agentScript, 'Who am I, real agent?')
-    await expect(toolStepsOf(page)).toHaveCount(1)
-    await expect(await lastToolResultOf(page)).toContainText(`you are ${account}`)
-    expect(await fakeProviderCalls()).toContainEqual({ tool: 'whoami', user: account })
-  })
-})

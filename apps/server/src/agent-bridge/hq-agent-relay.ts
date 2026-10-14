@@ -75,6 +75,7 @@ export const createHqAgentRelay = ({
   const prompts: string[] = []
   const modelSwitches: string[] = []
   const thoughtLevels: (string | undefined)[] = []
+  const interrupts: string[] = []
   const socketPaths: string[] = []
 
   const startAgent = async (apiKey: string): Promise<Agent> => {
@@ -116,6 +117,7 @@ export const createHqAgentRelay = ({
       const launch = method === 'POST' && path === '/api/conversations' ? sent : undefined
       if (launch) created.push(structuredClone(launch))
       if (path.endsWith('/events')) prompts.push(sent.content?.[0]?.text)
+      if (path.endsWith('/interrupt')) interrupts.push(path.split('/')[3] ?? '')
       if (path.endsWith('/switch_acp_model')) {
         modelSwitches.push(sent.model)
         thoughtLevels.push(sent.thoughtLevel)
@@ -161,6 +163,7 @@ export const createHqAgentRelay = ({
     prompts,
     modelSwitches,
     thoughtLevels,
+    interrupts,
     socketPaths,
     agentCount: () => agents.size,
     restart: stopAgents,

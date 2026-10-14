@@ -251,28 +251,3 @@ test('13. a chat classifier answering JSON inside prose still routes as scripted
   await expect(chipOf(page)).toHaveText('Fake small (low) · auto')
   expect(await routerModelsOf(workerStack, chatId)).toEqual(['fake-small'])
 })
-
-test.describe('real Agent Server', { tag: '@docker' }, () => {
-  test.use({ agentServer: 'real' })
-
-  test('10. the manual switch reaches the real Agent Server through switch_llm and the relay', async ({
-    page,
-    workerStack,
-  }) => {
-    const startedAt = new Date()
-    await openChat(page, 'Research')
-    await promptAndWait(page, 'Start on the default', 1)
-    await expect(chipOf(page)).toHaveText('Fake medium (medium) · auto')
-    await openSession(page)
-    await sessionOf(page).getByLabel('Main model').selectOption({ label: 'Fake large' })
-    await sessionOf(page).getByRole('button', { name: 'Switch' }).click()
-    await expect(chipOf(page)).toHaveText('Fake large (medium) · auto')
-    await page.keyboard.press('Escape')
-    await promptAndWait(page, 'Continue on large', 2)
-    await expect(mainOf(page)).not.toContainText('new session')
-    expect((await agentModelsOf(workerStack, 'chat-research', 2, startedAt)).toSorted()).toEqual([
-      'fake-large',
-      'fake-medium',
-    ])
-  })
-})

@@ -54,16 +54,9 @@ export const thoughtLevelOf = (effort: string | null) =>
 export const unreachableSessionNoticeOf = (model: string) =>
   `Your keys cannot reach ${modelNameOf(model)}; switch the model or add a key`
 
-export const harnesses = {
-  'claude-code': {
-    name: 'Claude Code',
-    model: 'anthropic/claude-opus-5-5',
-    keysNotice: 'This session runs Claude Code on Anthropic keys',
-  },
-  codex: { name: 'Codex', model: 'openai/gpt-6.1-sol', keysNotice: 'This session runs Codex on OpenAI keys' },
-} as const
+export const harnesses = { 'claude-code': { name: 'Claude Code' }, codex: { name: 'Codex' } } as const
 export type Harness = keyof typeof harnesses
-export type HarnessLaunch = Harness | 'claude-code-subscription' | 'codex-subscription'
+export type HarnessLaunch = 'claude-code-subscription' | 'codex-subscription'
 export const localSessionNotices = {
   ownerOnly: 'Only the owner prompts a session on their machine',
   turnedOff: "Sessions on members' machines are turned off for this workspace",
@@ -92,13 +85,6 @@ export const runsOnFieldsOf = (runsOn: RunsOn) =>
 export const runsOnOf = (chat: { localSession: boolean | null; harness: Harness | null }): RunsOn | null =>
   chat.localSession === null ? null : chat.localSession ? (chat.harness ?? 'claude-code') : 'runtime'
 export const runsOnWaitingNoticeOf = (ownerName: string) => `Waiting for ${ownerName} to choose where this chat runs`
-const providerOf = (model: string) => model.split('/')[0]
-export const reachesHarness = (harness: Harness, reachable: readonly Model[]) =>
-  reachable.some((model) => providerOf(model.id) === providerOf(harnesses[harness].model))
-export const harnessOfKeys = (reachable: readonly Model[]): Harness | undefined =>
-  (Object.keys(harnesses) as Harness[]).find(
-    (harness) => reachable.length > 0 && reachable.every((model) => reachesHarness(harness, [model])),
-  )
 export const subagentPolicyNames = { auto: 'auto', same_as_main: 'same as main' } as const
 export const chipLabelOf = (
   {
@@ -119,8 +105,6 @@ export const chipLabelOf = (
 ) =>
   localSession
     ? `${harnesses[harness ?? 'claude-code'].name} · ${model ? adapterNameOf(model) : 'subscription'}`
-    : harness && model
-      ? `${harnesses[harness].name} · ${nameOf(model).split('/').at(-1)}`
-      : model
-        ? `${nameOf(model)}${reasoningEffort ? ` (${reasoningEffort})` : ''} · ${subagentPolicyNames[subagentPolicy]}`
-        : 'Model chosen at first prompt'
+    : model
+      ? `${nameOf(model)}${reasoningEffort ? ` (${reasoningEffort})` : ''} · ${subagentPolicyNames[subagentPolicy]}`
+      : 'Model chosen at first prompt'

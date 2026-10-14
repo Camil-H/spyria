@@ -1,6 +1,6 @@
 import {
-  agentObservationOf,
   chatContextTokens,
+  finishedToolCallEventOf,
   isWorkspaceHostOnline,
   lastAdapterModelsOf,
   listedModelsOf,
@@ -9,12 +9,16 @@ import {
 import type { ZeroContext } from '@hq/db/zero-queries'
 import { chatModelsOf, type Model, routableModelNames, withPricesOf } from '@hq/kernel'
 import type { Transaction } from '@rocicorp/zero'
+import { type AgentEvent, agentProjectionOf } from '../domain/agent-events.ts'
 import { textOf } from '../domain/agent-steps.ts'
 
 export const commandOutputPathOf = (chatId: string, stepId: string) => `/api/chats/${chatId}/steps/${stepId}/output`
 
-export const readCommandOutput = async (tx: Transaction, context: ZeroContext, chatId: string, stepId: string) =>
-  textOf((await agentObservationOf(tx, context.workspaceId, chatId, stepId))?.content)
+export const readCommandOutput = async (tx: Transaction, context: ZeroContext, chatId: string, stepId: string) => {
+  const event = await finishedToolCallEventOf(tx, context.workspaceId, chatId, stepId)
+  const projection = event && agentProjectionOf(event as AgentEvent)
+  return projection?.type === 'observation' ? textOf(projection.observation?.content) : ''
+}
 
 export const chatRoutingPathOf = (chatId: string) => `/api/chats/${chatId}/routing`
 export type ChatRoutingRead = {

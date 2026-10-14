@@ -4,10 +4,7 @@ import {
   type AgentEvent,
   agentProjectionOf,
   delegatedProjectionOf,
-  isFinishEvent,
   observedProjectionStep,
-  recordedLengthOf,
-  streamedTextEventOf,
   subagentDelegationOf,
   toolCallIdOf,
 } from '../domain/agent-events.ts'
@@ -22,14 +19,12 @@ type Input = {
   chatId: ChatId
   event: AgentEvent
   delegation?: StepDelegation
-  subagentFailure?: string
-  streamedText?: string
 }
 
 const recordIn = async (
   unitOfWork: UnitOfWork,
   activePromptId: MessageId | null,
-  { workspaceId, chatId, event, subagentFailure, ...input }: Omit<Input, 'streamedText'>,
+  { workspaceId, chatId, event, ...input }: Input,
 ) => {
   const previous = await unitOfWork.agentEvents.last(chatId)
   const promptId = activePromptId ?? previous?.replyToId ?? null
@@ -39,17 +34,10 @@ const recordIn = async (
       ? subagentDelegationOf(event, await unitOfWork.messages.replies(promptId))
       : undefined)
   const recordedAt = new Date()
-  const recordedLength =
-    isFinishEvent(event) && promptId && !delegation
-      ? recordedLengthOf(event, await unitOfWork.agentEvents.recordedStreamedText(chatId, promptId))
-      : 0
-  const seq = await unitOfWork.agentEvents.append(chatId, event, promptId, recordedAt, delegation, recordedLength)
-  const projected = agentProjectionOf(event, previous?.timestamp ?? null, recordedLength)
+  const seq = await unitOfWork.agentEvents.append(chatId, event, promptId, recordedAt, delegation)
+  const projected = agentProjectionOf(event)
   const turnEnd = seq !== undefined && !delegation && projected?.type === 'turn-end' ? projected : undefined
-  const failure =
-    (event.kind === 'ConversationErrorEvent' ||
-      ((isFinishEvent(event) || (turnEnd && event.kind === 'ACPUpdate')) && !delegation)) &&
-    (delegation ? subagentFailure : await unitOfWork.agentTurns.lastFailure(chatId))
+  const failure = turnEnd && (await unitOfWork.agentTurns.lastFailure(chatId))
   const projection =
     seq === undefined
       ? undefined
@@ -87,10 +75,5 @@ const recordIn = async (
   }
 }
 
-export const recordAgentEvent = ({ transactor }: Dependencies, { streamedText = '', ...input }: Input) =>
-  transactor.run(async (unitOfWork) => {
-    const activePromptId = await unitOfWork.agentTurns.lock(input.chatId)
-    if (streamedText.trim() !== '')
-      await recordIn(unitOfWork, activePromptId, { ...input, event: streamedTextEventOf(input.event, streamedText) })
-    return recordIn(unitOfWork, activePromptId, input)
-  })
+export const recordAgentEvent = ({ transactor }: Dependencies, input: Input) =>
+  transactor.run(async (unitOfWork) => recordIn(unitOfWork, await unitOfWork.agentTurns.lock(input.chatId), input))

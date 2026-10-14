@@ -1,4 +1,4 @@
-import { chatId, type MemberId, type MessageId, memberId, messageId, type WorkspaceId } from '@hq/kernel'
+import { chatId, type MessageId, memberId, messageId, type WorkspaceId } from '@hq/kernel'
 import { z } from 'zod/mini'
 import type {
   AgentChat,
@@ -14,13 +14,7 @@ import { type AgentLlm, createSandboxAgentServer } from '../integrations/sandbox
 import { agentJobTypes, createTransactingZeroTransactor, type Transact } from '../integrations/zero-transactor.ts'
 import { closeReopenedTurn, reopenAgentTurn, sweepAgentTurns } from '../operations/agent-turn-safety.ts'
 import { delegateTask } from '../operations/delegate.ts'
-import {
-  findCondenserModel,
-  findModelCallTurn,
-  findToolCallTurn,
-  recordHarnessModel,
-  recordModelCallFailure,
-} from '../operations/model-calls.ts'
+import { findModelCallTurn, findToolCallTurn, recordModelCallFailure } from '../operations/model-calls.ts'
 import { promptAgent, startAgentSession } from '../operations/prompt-agent.ts'
 import { recordAgentEvent } from '../operations/record-agent-event.ts'
 import { promptWaitingChats } from '../operations/retry-agent.ts'
@@ -45,9 +39,7 @@ export const createAgentHandlers = ({
   eventSockets,
   now = Date.now,
   resumeAfterMilliseconds,
-  condensationScale,
   hqAgentImage,
-  hqAgentForWorkspaceHosts,
 }: {
   transact: Transact
   sandboxProvider: SandboxProvider
@@ -56,12 +48,10 @@ export const createAgentHandlers = ({
   eventSockets: AgentEventSockets
   now?: () => number
   resumeAfterMilliseconds?: number
-  condensationScale?: number
   hqAgentImage?: string
-  hqAgentForWorkspaceHosts?: boolean
 }) => {
-  const runtimes = createRuntimeAgentRuntimes(transact, sandboxProvider, { hqAgentImage, hqAgentForWorkspaceHosts })
-  const agentServer = createSandboxAgentServer(condensationScale)
+  const runtimes = createRuntimeAgentRuntimes(transact, sandboxProvider, { hqAgentImage })
+  const agentServer = createSandboxAgentServer()
   const transactorOf = (id: WorkspaceId) => createTransactingZeroTransactor(transact, id)
   const dependenciesOf = (id: WorkspaceId) => ({
     transactor: transactorOf(id),
@@ -89,12 +79,9 @@ export const createAgentHandlers = ({
         (await transactorOf(chat.workspaceId).run(({ agentEvents }) => agentEvents.last(chat.chatId))) ?? null,
         listener,
       ),
-    recordEvent: async (chat: AgentChat, event: AgentEvent, streamedText = '') => {
+    recordEvent: async (chat: AgentChat, event: AgentEvent) => {
       if (!isStoredAgentEvent(event)) return undefined
-      const recorded = await recordAgentEvent(
-        { transactor: transactorOf(chat.workspaceId) },
-        { ...chat, event, streamedText },
-      )
+      const recorded = await recordAgentEvent({ transactor: transactorOf(chat.workspaceId) }, { ...chat, event })
       await runtimes.touch(chat)
       return recorded
     },
@@ -103,14 +90,10 @@ export const createAgentHandlers = ({
       closeReopenedTurn(dependenciesOf(chat.workspaceId), { chat, promptId, outcome }),
     promptWaiting: (host: AgentHost) => promptWaitingChats(dependenciesOf(host.workspaceId), host),
     modelCallTurn: (host: AgentHost, token: string) => findModelCallTurn(dependenciesOf(host.workspaceId), host, token),
-    condenserModel: (chat: AgentChat, prompterId: MemberId) =>
-      findCondenserModel(dependenciesOf(chat.workspaceId), prompterId),
     toolCallTurn: (host: AgentHost, token: string) => findToolCallTurn(dependenciesOf(host.workspaceId), host, token),
     delegate: (input: Parameters<typeof delegateTask>[1]) =>
       delegateTask(dependenciesOf(input.chat.workspaceId), input),
     recordModelCallFailure: (call: Parameters<typeof recordModelCallFailure>[1]) =>
       recordModelCallFailure(dependenciesOf(call.chat.workspaceId), call),
-    recordHarnessModel: (chat: AgentChat, model: string) =>
-      recordHarnessModel(dependenciesOf(chat.workspaceId), chat, model),
   }
 }

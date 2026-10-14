@@ -1,7 +1,6 @@
 export type { AgentChat, AgentConversation, AgentHost, SessionClassifier } from './contracts/agent.ts'
 export { type AgentEvent, isStoredAgentEvent, streamedTextOf } from './domain/agent-events.ts'
 export { delegateTool, stillRunningOf, subagentFailureOf, unknownTaskOf } from './domain/delegation.ts'
-export { maskedBody } from './domain/masked-body.ts'
 export { genericModelCallNoticeOf, type ModelCallFailure } from './domain/model-call-failures.ts'
 export {
   type ToolCallFailure,

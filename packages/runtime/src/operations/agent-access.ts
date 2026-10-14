@@ -3,7 +3,6 @@ import type { RuntimeTransactor } from '../contracts/transactor.ts'
 import { hashSecret, newSecretToken } from '../domain/claim.ts'
 import { RuntimeNotFound } from '../domain/errors.ts'
 import { locationOf } from '../domain/runtime.ts'
-import { agentServerImage } from '../domain/runtime-host.ts'
 
 type Dependencies = { transactor: RuntimeTransactor }
 type ChatRuntime = { workspaceId: WorkspaceId; chatId: ChatId }
@@ -21,20 +20,15 @@ export const readAgentAccess = ({ transactor }: Dependencies, { workspaceId, cha
       apiKey,
       conversationId: (await runtimes.agentConversationOf(runtime)) ?? null,
       signedIn: capacity?.signedIn ?? [],
-      isHqAgent: runtime.image !== agentServerImage,
     }
   })
 
-export const issueAgentLlmToken = (
-  { transactor }: Dependencies,
-  { workspaceId, chatId, isForSwitch = false }: ChatRuntime & { isForSwitch?: boolean },
-) =>
+export const issueAgentLlmToken = ({ transactor }: Dependencies, { workspaceId, chatId }: ChatRuntime) =>
   transactor.run(async ({ runtimes, secrets }) => {
     const runtime = await runtimes.findByChat(workspaceId, chatId)
     if (!runtime) throw new RuntimeNotFound(chatId)
     const token = newSecretToken()
-    await secrets.keep(runtime, isForSwitch ? 'llmSwitchTokenHash' : 'llmTokenHash', await hashSecret(token))
-    if (!isForSwitch) await secrets.keep(runtime, 'llmSwitchTokenHash', null)
+    await secrets.keep(runtime, 'llmTokenHash', await hashSecret(token))
     return token
   })
 

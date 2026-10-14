@@ -6,8 +6,7 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc -p .",
-    "test:e2e": "playwright test --project=stack",
-    "test:e2e:docker": "HQ_E2E_RESULTS=e2e-docker-results.json HQ_RESUME_AFTER_MILLISECONDS=4000 playwright test --project=docker"
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@hq/conversation": "workspace:*",

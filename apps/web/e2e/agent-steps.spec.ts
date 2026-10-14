@@ -91,29 +91,25 @@ test('13. a reasoning step expands to the reasoning text the agent produced', as
   await expect(mainOf(page).getByText(thinking)).toBeVisible()
 })
 
-test.describe('real Agent Server', { tag: '@docker' }, () => {
-  test.use({ agentServer: 'real' })
+test('14. a successful command shows its output on click; a failing one shows exit 3 and its last lines at once', async ({
+  page,
+  agentScript,
+}) => {
+  await agentScript(research, { steps: [{ command: 'echo all good' }] })
+  await sendMessage(page, 'Run the good command')
+  const good = stepButtonOf(page, 'echo all good')
+  await expect(good).toBeVisible()
+  await expect(workingIndicatorOf(page)).toHaveCount(0)
+  await expect(mainOf(page).getByText('all good', { exact: true })).toHaveCount(0)
+  await good.click()
+  await expect(mainOf(page).getByText('all good', { exact: true })).toBeVisible()
 
-  test('14. a successful command shows its output on click; a failing one shows exit 3 and its last lines at once', async ({
-    page,
-    agentScript,
-  }) => {
-    await agentScript(research, { steps: [{ command: 'echo all good' }] })
-    await sendMessage(page, 'Run the good command')
-    const good = stepButtonOf(page, 'echo all good')
-    await expect(good).toBeVisible()
-    await expect(workingIndicatorOf(page)).toHaveCount(0)
-    await expect(mainOf(page).getByText('all good', { exact: true })).toHaveCount(0)
-    await good.click()
-    await expect(mainOf(page).getByText('all good', { exact: true })).toBeVisible()
-
-    await agentScript(research, { steps: [{ command: failingCommand }] })
-    await sendMessage(page, 'Run the failing command')
-    const failing = itemsWith(page, failingCommand)
-    await expect(failing.getByRole('img', { name: 'Failed' })).toBeVisible()
-    await expect(failing).toContainText('exit 3')
-    await expect(failing).toContainText('step two')
-  })
+  await agentScript(research, { steps: [{ command: failingCommand }] })
+  await sendMessage(page, 'Run the failing command')
+  const failing = itemsWith(page, failingCommand)
+  await expect(failing.getByRole('img', { name: 'Failed' })).toBeVisible()
+  await expect(failing).toContainText('exit 3')
+  await expect(failing).toContainText('step two')
 })
 
 test('15. expanding a file edit shows its added and removed lines', async ({ page, agentScript }) => {

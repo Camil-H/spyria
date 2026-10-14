@@ -23,8 +23,6 @@ const crashed =
 test('an MCP tool name shows as the tool and its server', () => {
   expect(toolDisplayNameOf('fake-whoami')).toBe('whoami (fake)')
   expect(toolDisplayNameOf('GitHub-search_code')).toBe('search_code (GitHub)')
-  expect(toolDisplayNameOf('hq_fake-whoami')).toBe('whoami (fake)')
-  expect(toolDisplayNameOf('router_delegate')).toBe('delegate')
   expect(toolDisplayNameOf('mcp__router__delegate')).toBe('delegate')
   expect(toolDisplayNameOf('mcp__hq__fake-whoami')).toBe('whoami (fake)')
   expect(toolDisplayNameOf('Notion-notion-search')).toBe('notion-search (Notion)')
@@ -61,31 +59,29 @@ test('a connection notice in a tool result names the server and whether it is a 
   expect(toolConnectionOf('you are alice on oauth')).toBeUndefined()
 })
 
-const mcpAction: AgentEvent = {
-  id: 'action-1',
-  kind: 'ActionEvent',
-  timestamp: '2026-10-07T10:00:00.000000',
-  source: 'agent',
-  tool_name: 'fake-whoami',
-  tool_call: { id: 'call_1', name: 'fake-whoami', arguments: '{}', origin: 'completion' },
-  action: { kind: 'MCPToolAction', data: {} },
-  security_risk: 'UNKNOWN',
+const mcpCall: AgentEvent = {
+  id: 'conversation-1:1',
+  kind: 'ACPUpdate',
+  timestamp: '2026-10-07T10:00:00.000Z',
+  seq: 1,
+  completed: true,
+  update: {
+    sessionUpdate: 'tool_call',
+    toolCallId: 'call_1',
+    title: 'mcp__hq__fake-whoami',
+    kind: 'other',
+    status: 'pending',
+    rawInput: {},
+  },
 }
-const mcpObservation = (text: string, isError = false) => ({
-  kind: 'MCPToolObservation',
-  is_error: isError,
-  tool_name: 'fake-whoami',
-  content: [
-    { type: 'text', text: "[Tool 'fake-whoami' executed.]" },
-    { type: 'text', text },
-  ],
-})
+const mcpObservation = (text: string, isError = false) => ({ is_error: isError, content: [{ text }] })
 
-test('an MCP tool call becomes a "Used <tool> (<server>)" step whose result drops the executed prefix', () => {
-  const projection = agentProjectionOf(mcpAction, null)
+test('an MCP tool call becomes a "Used <tool> (<server>)" step with its result, and a connection notice', () => {
+  const projection = agentProjectionOf(mcpCall)
   expect(projection).toEqual({
     type: 'step',
     step: { type: 'tool', name: 'whoami (fake)', arguments: '{}', result: null },
+    id: 'conversation-1:call_1',
   })
   const step = (projection as { step: StoredStep }).step
   expect(observedStep(step, mcpObservation('you are alice-acme on oauth'), 12)).toEqual({

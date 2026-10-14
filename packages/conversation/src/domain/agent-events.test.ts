@@ -5,9 +5,7 @@ import {
   agentProjectionOf,
   isStoredAgentEvent,
   notReadyNoticeOf,
-  recordedLengthOf,
   startFailureNoticeOf,
-  streamedTextEventOf,
   streamedTextOf,
   subagentDelegationOf,
   toolCallIdOf,
@@ -18,64 +16,11 @@ import claudeCodeToolCalls from './claude-code-tool-calls.fixture.json'
 import { messagesFromEvents } from './message-events.ts'
 import { type StreamedReply, storedStreamedReply, streamedReplyAfter, visibleStreamedReply } from './streamed-reply.ts'
 
-const agentEvent = (kind: string, fields: Record<string, unknown> = {}, id = `event-${kind}`): AgentEvent => ({
-  id,
-  kind,
-  timestamp: '2026-10-05T20:21:15.560592',
-  ...fields,
-})
-const textContent = (text: string) => [{ type: 'text', text }]
-const agentMessage = agentEvent('MessageEvent', {
-  source: 'agent',
-  llm_message: { role: 'assistant', content: textContent('Understood, working on it.') },
-})
-const userMessage = agentEvent('MessageEvent', {
-  source: 'user',
-  llm_message: { role: 'user', content: textContent('Find the latest pricing') },
-})
-const statusUpdate = (value: string) =>
-  agentEvent('ConversationStateUpdateEvent', { source: 'environment', key: 'execution_status', value })
-
-test('an agent message becomes an agent message and a user message is not projected', () => {
-  expect(agentProjectionOf(agentMessage, null)).toEqual({ type: 'message', body: 'Understood, working on it.' })
-  expect(agentProjectionOf(userMessage, null)).toBeUndefined()
-})
-
-test('a condensation becomes the context condensed notice and a condensation request is not projected', () => {
-  const condensation = agentEvent('Condensation', { source: 'environment', summary: 'Earlier work', summary_offset: 2 })
-  expect(agentProjectionOf(condensation, null)).toEqual({
-    type: 'message',
-    body: 'Context condensed · earlier steps summarized',
-    kind: 'notice',
-  })
-  expect(agentProjectionOf(agentEvent('CondensationRequest', { source: 'environment' }), null)).toBeUndefined()
-})
-
-test('finished, error and stuck statuses end the turn; running does not', () => {
-  for (const outcome of ['finished', 'error', 'stuck'] as const)
-    expect(agentProjectionOf(statusUpdate(outcome), null)).toEqual({ type: 'turn-end', outcome })
-  expect(agentProjectionOf(statusUpdate('running'), null)).toBeUndefined()
-})
-
-test('streaming deltas and the per-connection full state are never stored; every other event is', () => {
-  const delta = agentEvent('StreamingDeltaEvent', { source: 'agent', content: 'Understood, ' })
-  const reasoningDelta = agentEvent('StreamingDeltaEvent', { source: 'agent', content: '', reasoning_content: 'Hmm' })
-  expect(isStoredAgentEvent(delta)).toBe(false)
-  expect(isStoredAgentEvent(reasoningDelta)).toBe(false)
-  expect(streamedTextOf(delta)).toEqual({ text: 'Understood, ', isReasoning: false })
-  expect(streamedTextOf(reasoningDelta)).toEqual({ text: 'Hmm', isReasoning: true })
-  expect(isStoredAgentEvent(agentEvent('ConversationStateUpdateEvent', { key: 'full_state', value: {} }))).toBe(false)
-  for (const event of [agentMessage, userMessage, statusUpdate('finished')]) {
-    expect(isStoredAgentEvent(event)).toBe(true)
-    expect(streamedTextOf(event)).toBeUndefined()
-  }
-})
-
-test('a turn ends with a notice on error or stuck, or when it finished without any reply', () => {
+test('a turn ends with a notice on error, or when it finished without any reply', () => {
   expect(turnEndNoticeOf('finished', true)).toBeUndefined()
   expect(turnEndNoticeOf('finished', false)).toBe(agentNotices.noReply)
   expect(turnEndNoticeOf('error', true)).toBe(agentNotices.stoppedWithError)
-  expect(turnEndNoticeOf('stuck', false)).toBe(agentNotices.stoppedWithError)
+  expect(turnEndNoticeOf('error', false)).toBe(agentNotices.stoppedWithError)
 })
 
 test('a runtime that cannot be placed reads as no host, any other failure as could not start', () => {
@@ -168,85 +113,17 @@ test('reasoning frames stream as reasoning, and the answer text after them start
   })
 })
 
-test('a Claude Code tool call is one step updated by its tool call id, and the finish text is the answer with its thinking as a thought', () => {
-  const toolCall = (status: string, fields: Record<string, unknown> = {}) =>
-    agentEvent(
-      'ACPToolCallEvent',
-      { tool_call_id: 'toolu_1', title: 'Terminal', tool_kind: 'execute', status, raw_input: {}, ...fields },
-      `event-${status}`,
-    )
-  const finish = agentEvent('ActionEvent', {
-    reasoning_content: 'I will run a command.',
-    action: { kind: 'FinishAction', message: 'It printed hi.' },
-    tool_name: 'finish',
-  })
-  const stored = [
-    toolCall('pending'),
-    toolCall('completed', { raw_input: { command: 'echo hi' }, raw_output: 'hi\n' }),
-    finish,
-  ].map((event, index) => ({
-    workspaceId: 'workspace-acme',
-    chatId: 'chat-research',
-    id: event.id,
-    seq: index + 1,
-    type: 'agent.event',
-    actor: null,
-    payload: { replyToId: 'prompt-1', event },
-    createdAt: new Date(Date.parse('2026-10-09T10:00:00Z') + index * 1000),
-  }))
-  expect(messagesFromEvents(stored).map(({ id, kind, body, step }) => ({ id, kind, body, step }))).toEqual([
-    {
-      id: 'toolu_1',
-      kind: 'step',
-      body: 'command',
-      step: {
-        type: 'command',
-        command: 'echo hi',
-        exitCode: 0,
-        durationMilliseconds: 1000,
-        output: 'hi\n',
-        truncatedLines: 0,
-      },
-    },
-    {
-      id: finish.id,
-      kind: 'agent',
-      body: 'It printed hi.',
-      step: { type: 'thought', text: 'I will run a command.', durationMilliseconds: 0 },
-    },
-  ])
+const acpUpdate = (seq: number, update: Record<string, unknown>, completed = true): AgentEvent => ({
+  id: `conversation-1:${seq}`,
+  kind: 'ACPUpdate',
+  timestamp: '2026-10-12T17:56:00.000Z',
+  seq,
+  completed,
+  update,
 })
 
-test('Claude Code edits, reads and HQ tools get their step types, and a subagent’s calls keep their ids inside its group', () => {
-  const subagent = { id: 'toolu_task', model: '', modelName: '', task: '' }
-  const diff = [{ type: 'diff', path: '/workspace/project/notes.md', old_text: null, new_text: 'one\ntwo\n' }]
-  const toolCall = (id: string, status: string, fields: Record<string, unknown>) =>
-    agentEvent('ACPToolCallEvent', { tool_call_id: id, status, raw_input: {}, ...fields }, `event-${id}-${status}`)
-  const stored = [
-    {
-      event: toolCall('toolu_write', 'pending', { title: 'Write notes.md', tool_kind: 'edit', content: diff }),
-      delegation: subagent,
-    },
-    {
-      event: toolCall('toolu_write', 'completed', { title: 'Write notes.md', tool_kind: 'edit', content: diff }),
-      delegation: subagent,
-    },
-    {
-      event: toolCall('toolu_read', 'pending', {
-        title: 'Read notes.md',
-        tool_kind: 'read',
-        raw_input: { file_path: '/workspace/project/notes.md' },
-      }),
-    },
-    { event: toolCall('toolu_mcp', 'pending', { title: 'mcp__hq__fake-whoami', tool_kind: 'other' }) },
-    {
-      event: toolCall('toolu_mcp', 'completed', {
-        title: 'mcp__hq__fake-whoami',
-        tool_kind: 'other',
-        raw_output: 'you are bob',
-      }),
-    },
-  ].map(({ event, delegation }, index) => ({
+const storedEventsOf = (entries: readonly { event: AgentEvent; delegation?: object }[]) =>
+  entries.map(({ event, delegation }, index) => ({
     workspaceId: 'workspace-acme',
     chatId: 'chat-research',
     id: event.id,
@@ -254,11 +131,38 @@ test('Claude Code edits, reads and HQ tools get their step types, and a subagent
     type: 'agent.event',
     actor: null,
     payload: { replyToId: 'prompt-1', event, ...(delegation && { delegation }) },
-    createdAt: new Date(Date.parse('2026-10-09T10:00:00Z') + index * 1000),
+    createdAt: new Date(Date.parse('2026-10-12T17:56:00Z') + index * 1000),
   }))
+const toolCallUpdate = (seq: number, toolCallId: string, status: string, fields: Record<string, unknown>) =>
+  acpUpdate(seq, {
+    sessionUpdate: status === 'pending' ? 'tool_call' : 'tool_call_update',
+    toolCallId,
+    status,
+    rawInput: {},
+    ...fields,
+  })
+
+test('Claude Code edits, reads and HQ tools get their step types, and a subagent’s calls keep their ids inside its group', () => {
+  const subagent = { id: 'conversation-1:toolu_task', model: '', modelName: '', task: '' }
+  const diff = [{ type: 'diff', path: '/workspace/project/notes.md', oldText: null, newText: 'one\ntwo\n' }]
+  const write = { title: 'Write notes.md', kind: 'edit', content: diff }
+  const mcp = { title: 'mcp__hq__fake-whoami', kind: 'other' }
+  const stored = storedEventsOf([
+    { event: toolCallUpdate(1, 'toolu_write', 'pending', write), delegation: subagent },
+    { event: toolCallUpdate(2, 'toolu_write', 'completed', write), delegation: subagent },
+    {
+      event: toolCallUpdate(3, 'toolu_read', 'pending', {
+        title: 'Read notes.md',
+        kind: 'read',
+        rawInput: { file_path: '/workspace/project/notes.md' },
+      }),
+    },
+    { event: toolCallUpdate(4, 'toolu_mcp', 'pending', mcp) },
+    { event: toolCallUpdate(5, 'toolu_mcp', 'completed', { ...mcp, rawOutput: 'you are bob' }) },
+  ])
   expect(messagesFromEvents(stored).map(({ id, step }) => ({ id, step }))).toEqual([
     {
-      id: 'toolu_write',
+      id: 'conversation-1:toolu_write',
       step: {
         type: 'file',
         operation: 'create',
@@ -272,41 +176,43 @@ test('Claude Code edits, reads and HQ tools get their step types, and a subagent
         delegation: subagent,
       },
     },
-    { id: 'toolu_read', step: { type: 'file', operation: 'read', path: 'notes.md', added: 0, removed: 0, diff: [] } },
-    { id: 'toolu_mcp', step: { type: 'tool', name: 'whoami (fake)', arguments: '{}', result: 'you are bob' } },
+    {
+      id: 'conversation-1:toolu_read',
+      step: { type: 'file', operation: 'read', path: 'notes.md', added: 0, removed: 0, diff: [] },
+    },
+    {
+      id: 'conversation-1:toolu_mcp',
+      step: { type: 'tool', name: 'whoami (fake)', arguments: '{}', result: 'you are bob' },
+    },
   ])
 })
 
 test('a Codex command and an HQ tool call start in progress and finish with Codex’s output shapes', () => {
-  const toolCall = (id: string, status: string, fields: Record<string, unknown>) =>
-    agentEvent('ACPToolCallEvent', { tool_call_id: id, status, ...fields }, `event-${id}-${status}`)
-  const command = { title: 'echo hello', tool_kind: 'execute', raw_input: { command: 'echo hello' } }
+  const command = { title: 'echo hello', kind: 'execute', rawInput: { command: 'echo hello' } }
   const mcp = {
     title: 'mcp.hq.fake-whoami',
-    tool_kind: 'execute',
-    raw_input: { server: 'hq', tool: 'fake-whoami', arguments: { verbose: true } },
+    kind: 'execute',
+    rawInput: { server: 'hq', tool: 'fake-whoami', arguments: { verbose: true } },
   }
-  const stored = [
-    toolCall('call_command', 'in_progress', command),
-    toolCall('call_command', 'completed', { ...command, raw_output: { formatted_output: 'hello\n', exit_code: 0 } }),
-    toolCall('call_mcp', 'in_progress', mcp),
-    toolCall('call_mcp', 'completed', {
-      ...mcp,
-      raw_output: { result: { content: [{ type: 'text', text: 'you are bob' }] }, error: null },
-    }),
-  ].map((event, index) => ({
-    workspaceId: 'workspace-acme',
-    chatId: 'chat-research',
-    id: event.id,
-    seq: index + 1,
-    type: 'agent.event',
-    actor: null,
-    payload: { replyToId: 'prompt-1', event },
-    createdAt: new Date(Date.parse('2026-10-10T10:00:00Z') + index * 1000),
-  }))
+  const stored = storedEventsOf([
+    { event: toolCallUpdate(1, 'call_command', 'in_progress', command) },
+    {
+      event: toolCallUpdate(2, 'call_command', 'completed', {
+        ...command,
+        rawOutput: { formatted_output: 'hello\n', exit_code: 0 },
+      }),
+    },
+    { event: toolCallUpdate(3, 'call_mcp', 'in_progress', mcp) },
+    {
+      event: toolCallUpdate(4, 'call_mcp', 'completed', {
+        ...mcp,
+        rawOutput: { result: { content: [{ type: 'text', text: 'you are bob' }] }, error: null },
+      }),
+    },
+  ])
   expect(messagesFromEvents(stored).map(({ id, step }) => ({ id, step }))).toEqual([
     {
-      id: 'call_command',
+      id: 'conversation-1:call_command',
       step: {
         type: 'command',
         command: 'echo hello',
@@ -317,23 +223,11 @@ test('a Codex command and an HQ tool call start in progress and finish with Code
       },
     },
     {
-      id: 'call_mcp',
+      id: 'conversation-1:call_mcp',
       step: { type: 'tool', name: 'whoami (fake)', arguments: '{"verbose":true}', result: 'you are bob' },
     },
   ])
 })
-
-const storedEventsOf = (entries: readonly { event: AgentEvent; recordedLength?: number }[]) =>
-  entries.map(({ event, recordedLength }, index) => ({
-    workspaceId: 'workspace-acme',
-    chatId: 'chat-research',
-    id: event.id,
-    seq: index + 1,
-    type: 'agent.event',
-    actor: null,
-    payload: { replyToId: 'prompt-1', event, ...(recordedLength && { recordedLength }) },
-    createdAt: new Date(Date.parse('2026-10-12T17:56:00Z') + index * 1000),
-  }))
 
 test('a real Claude Code sequence of pending then completed or failed calls ends with the final titles and inputs, every step done', () => {
   const steps = messagesFromEvents(storedEventsOf(claudeCodeToolCalls.map((event) => ({ event })))).map(
@@ -341,7 +235,7 @@ test('a real Claude Code sequence of pending then completed or failed calls ends
   )
   expect(steps).toMatchObject([
     {
-      id: 'toolu_01BawE7ZV28RVEVNShsEA3Uj',
+      id: 'conversation-1:toolu_01BawE7ZV28RVEVNShsEA3Uj',
       step: {
         type: 'command',
         command: 'ls -la /workspace/project && git -C /workspace/project log --oneline -5 2>&1 | head -20',
@@ -350,7 +244,7 @@ test('a real Claude Code sequence of pending then completed or failed calls ends
       },
     },
     {
-      id: 'toolu_01Uietr3ZHknr6fdX1vUGHgR',
+      id: 'conversation-1:toolu_01Uietr3ZHknr6fdX1vUGHgR',
       step: {
         type: 'command',
         command: expect.stringMatching(/^cat \/workspace\/project\/CLAUDE\.md/),
@@ -359,15 +253,15 @@ test('a real Claude Code sequence of pending then completed or failed calls ends
       },
     },
     {
-      id: 'toolu_01V5JoN21hHzqnuw2hL9qAoH',
+      id: 'conversation-1:toolu_01V5JoN21hHzqnuw2hL9qAoH',
       step: { type: 'command', command: expect.stringMatching(/^which python3 node npx/), exitCode: 0 },
     },
     {
-      id: 'toolu_01MNfMCpA947uCwubk6pYiyY',
+      id: 'conversation-1:toolu_01MNfMCpA947uCwubk6pYiyY',
       step: { type: 'tool', name: 'Skill dataviz', arguments: '', result: 'Launching skill: dataviz' },
     },
     {
-      id: 'toolu_01NfP88BRpnXgBEEvbHgVRvJ',
+      id: 'conversation-1:toolu_01NfP88BRpnXgBEEvbHgVRvJ',
       step: {
         type: 'file',
         operation: 'read',
@@ -380,60 +274,16 @@ test('a real Claude Code sequence of pending then completed or failed calls ends
 })
 
 test('a Skill call is titled with its skill from the final event, with its args and no raw input', () => {
-  const skillCall = (status: string, rawInput: object) =>
-    agentEvent(
-      'ACPToolCallEvent',
-      { tool_call_id: 'toolu_skill', title: 'Skill', tool_kind: 'other', status, raw_input: rawInput },
-      `event-${status}`,
-    )
+  const skillCall = (seq: number, status: string, rawInput: object) =>
+    toolCallUpdate(seq, 'toolu_skill', status, { title: 'Skill', kind: 'other', rawInput })
   const [skillStep] = messagesFromEvents(
     storedEventsOf([
-      { event: skillCall('pending', {}) },
-      { event: skillCall('completed', { skill: 'dataviz', args: 'a bar chart of sales' }) },
+      { event: skillCall(1, 'pending', {}) },
+      { event: skillCall(2, 'completed', { skill: 'dataviz', args: 'a bar chart of sales' }) },
     ]),
   )
   expect(skillStep?.step).toMatchObject({ type: 'tool', name: 'Skill dataviz', arguments: 'a bar chart of sales' })
   expect(JSON.stringify(skillStep?.step)).not.toContain('"skill"')
-})
-
-test('text streamed before a tool call is its own message, and the finish stores only the text not yet recorded', () => {
-  const pending = agentEvent(
-    'ACPToolCallEvent',
-    { tool_call_id: 'toolu_1', title: 'Terminal', tool_kind: 'execute', status: 'pending', raw_input: {} },
-    'event-pending',
-  )
-  const finish = agentEvent('ActionEvent', { action: { kind: 'FinishAction', message: 'Looking. Done.' } })
-  const messages = messagesFromEvents(
-    storedEventsOf([
-      { event: streamedTextEventOf(pending, 'Looking. ') },
-      { event: pending },
-      { event: finish, recordedLength: recordedLengthOf(finish, 'Looking. ') },
-    ]),
-  )
-  expect(messages.map(({ id, kind, body }) => ({ id, kind, body }))).toEqual([
-    { id: 'event-pending-text', kind: 'agent', body: 'Looking.' },
-    { id: 'toolu_1', kind: 'step', body: 'command' },
-    { id: finish.id, kind: 'agent', body: 'Done.' },
-  ])
-  expect(recordedLengthOf(finish, 'Lost a delta. ')).toBe(0)
-  expect(recordedLengthOf(finish, '')).toBe(0)
-  const fullyRecorded = agentEvent('ActionEvent', {
-    reasoning_content: 'Checked twice.',
-    action: { kind: 'FinishAction', message: 'Looking. ' },
-  })
-  expect(agentProjectionOf(fullyRecorded, null, 9)).toEqual({
-    type: 'step',
-    step: { type: 'thought', text: 'Checked twice.', durationMilliseconds: null },
-  })
-})
-
-const acpUpdate = (seq: number, update: Record<string, unknown>, completed = true): AgentEvent => ({
-  id: `conversation-1:${seq}`,
-  kind: 'ACPUpdate',
-  timestamp: '2026-10-12T17:56:00.000Z',
-  seq,
-  completed,
-  update,
 })
 
 test('an hq-agent sequence projects text, a thought with its duration, steps merged by their final call, and a turn end', () => {
@@ -469,7 +319,7 @@ test('an hq-agent sequence projects text, a thought with its duration, steps mer
 
 test('Pi’s read, write and edit calls carry their path in rawInput.path, and a write creates the file', () => {
   const stepOf = (title: string, kind: string, rawInput: Record<string, unknown>) =>
-    agentProjectionOf(acpUpdate(3, { sessionUpdate: 'tool_call', toolCallId: 't', title, kind, rawInput }), null)
+    agentProjectionOf(acpUpdate(3, { sessionUpdate: 'tool_call', toolCallId: 't', title, kind, rawInput }))
   const path = '/workspace/project/notes.md'
   expect(stepOf('read', 'read', { path })).toMatchObject({
     step: { type: 'file', operation: 'read', path: 'notes.md' },
@@ -483,25 +333,20 @@ test('Pi’s read, write and edit calls carry their path in rawInput.path, and a
 })
 
 test('an hq-agent turn ends finished or in error, a cancelled turn end ends nothing, and a failed resume says so', () => {
-  const turnEnd = (stopReason: string) =>
-    agentProjectionOf(acpUpdate(9, { sessionUpdate: 'turn_end', stopReason }), null)
+  const turnEnd = (stopReason: string) => agentProjectionOf(acpUpdate(9, { sessionUpdate: 'turn_end', stopReason }))
   expect(turnEnd('end_turn')).toEqual({ type: 'turn-end', outcome: 'finished' })
   expect(turnEnd('error')).toEqual({ type: 'turn-end', outcome: 'error' })
   expect(turnEnd('cancelled')).toBeUndefined()
-  expect(agentProjectionOf(acpUpdate(1, { sessionUpdate: 'session_started', resumeFailed: true }), null)).toEqual({
+  expect(agentProjectionOf(acpUpdate(1, { sessionUpdate: 'session_started', resumeFailed: true }))).toEqual({
     type: 'message',
     body: agentNotices.newSession,
     kind: 'notice',
   })
-  expect(
-    agentProjectionOf(acpUpdate(1, { sessionUpdate: 'session_started', resumeFailed: false }), null),
-  ).toBeUndefined()
-  expect(agentProjectionOf(acpUpdate(2, { sessionUpdate: 'error', message: 'Authentication required' }), null)).toEqual(
-    {
-      type: 'step',
-      step: { type: 'error', message: 'Authentication required' },
-    },
-  )
+  expect(agentProjectionOf(acpUpdate(1, { sessionUpdate: 'session_started', resumeFailed: false }))).toBeUndefined()
+  expect(agentProjectionOf(acpUpdate(2, { sessionUpdate: 'error', message: 'Authentication required' }))).toEqual({
+    type: 'step',
+    step: { type: 'error', message: 'Authentication required' },
+  })
 })
 
 test('hq-agent chunks stream and are never stored, while completed items and tool calls are', () => {
@@ -526,7 +371,7 @@ test('an hq-agent plan update becomes a plan step with its entries mapped to HQ 
     { content: 'Fix the bug', status: 'in_progress', priority: 'medium' },
     { content: 'Ship', status: 'pending', priority: 'low' },
   ]
-  expect(agentProjectionOf(acpUpdate(2, { sessionUpdate: 'plan', entries }), null)).toEqual({
+  expect(agentProjectionOf(acpUpdate(2, { sessionUpdate: 'plan', entries }))).toEqual({
     type: 'step',
     step: {
       type: 'plan',
@@ -554,7 +399,6 @@ test('an hq-agent tool call made while a Task call is open belongs to its subage
       status: 'in_progress',
       rawInput: { description: 'Explore the repo', subagent_type: 'Explore' },
     }),
-    null,
   )
   expect(taskStep).toMatchObject({ type: 'step', step: { type: 'tool', name: 'Task', result: null } })
   const open = [{ id: 'conversation-1:task-1', step: (taskStep && 'step' in taskStep ? taskStep.step : null) ?? null }]

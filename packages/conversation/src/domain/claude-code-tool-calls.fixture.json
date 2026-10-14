@@ -1,200 +1,230 @@
 [
   {
-    "id": "edfa1181-253c-418a-9851-f4ad4e0f9486",
-    "kind": "ACPToolCallEvent",
-    "title": "Terminal",
-    "source": "agent",
-    "status": "pending",
-    "is_error": false,
-    "raw_input": {},
+    "id": "conversation-1:1",
+    "kind": "ACPUpdate",
     "timestamp": "2026-10-12T17:55:58.939740",
-    "tool_kind": "execute",
-    "tool_call_id": "toolu_01BawE7ZV28RVEVNShsEA3Uj"
+    "seq": 1,
+    "completed": true,
+    "update": {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "toolu_01BawE7ZV28RVEVNShsEA3Uj",
+      "title": "Terminal",
+      "kind": "execute",
+      "status": "pending",
+      "rawInput": {}
+    }
   },
   {
-    "id": "aadb161b-e348-43f5-ab14-a6e6c31c534f",
-    "kind": "ACPToolCallEvent",
-    "title": "Terminal",
-    "source": "agent",
-    "status": "pending",
-    "is_error": false,
-    "raw_input": {},
+    "id": "conversation-1:2",
+    "kind": "ACPUpdate",
     "timestamp": "2026-10-12T17:56:00.159593",
-    "tool_kind": "execute",
-    "tool_call_id": "toolu_01Uietr3ZHknr6fdX1vUGHgR"
+    "seq": 2,
+    "completed": true,
+    "update": {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "toolu_01Uietr3ZHknr6fdX1vUGHgR",
+      "title": "Terminal",
+      "kind": "execute",
+      "status": "pending",
+      "rawInput": {}
+    }
   },
   {
-    "id": "012d66f2-48dc-4da2-a98e-ef3431a14396",
-    "kind": "ACPToolCallEvent",
-    "title": "ls -la /workspace/project && git -C /workspace/project log --oneline -5 2>&1 | head -20",
-    "source": "agent",
-    "status": "completed",
-    "content": [
-      {
-        "type": "content",
-        "content": {
-          "text": "```console\ntotal 0\ndrwxr-xr-x 1 openhands openhands  8 Oct 12 17:55 .\n```",
-          "type": "text",
-          "field_meta": null,
-          "annotations": null
-        },
-        "field_meta": null
-      }
-    ],
-    "is_error": false,
-    "raw_input": {
-      "command": "ls -la /workspace/project && git -C /workspace/project log --oneline -5 2>&1 | head -20",
-      "description": "List project directory and recent commits"
-    },
+    "id": "conversation-1:3",
+    "kind": "ACPUpdate",
     "timestamp": "2026-10-12T17:56:00.350873",
-    "tool_kind": "execute",
-    "raw_output": "total 0\ndrwxr-xr-x 1 openhands openhands  8 Oct 12 17:55 .\ndrwxr-xr-x 1 openhands openhands 40 Oct 12 17:55 ..",
-    "tool_call_id": "toolu_01BawE7ZV28RVEVNShsEA3Uj"
+    "seq": 3,
+    "completed": true,
+    "update": {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "toolu_01BawE7ZV28RVEVNShsEA3Uj",
+      "title": "ls -la /workspace/project && git -C /workspace/project log --oneline -5 2>&1 | head -20",
+      "kind": "execute",
+      "status": "completed",
+      "rawInput": {
+        "command": "ls -la /workspace/project && git -C /workspace/project log --oneline -5 2>&1 | head -20",
+        "description": "List project directory and recent commits"
+      },
+      "rawOutput": "total 0\ndrwxr-xr-x 1 openhands openhands  8 Oct 12 17:55 .\ndrwxr-xr-x 1 openhands openhands 40 Oct 12 17:55 ..",
+      "content": [
+        {
+          "type": "content",
+          "content": {
+            "text": "```console\ntotal 0\ndrwxr-xr-x 1 openhands openhands  8 Oct 12 17:55 .\n```",
+            "type": "text",
+            "field_meta": null,
+            "annotations": null
+          },
+          "field_meta": null
+        }
+      ]
+    }
   },
   {
-    "id": "9b7077a9-ccb9-48d5-a7b8-239fa4f62937",
-    "kind": "ACPToolCallEvent",
-    "title": "cat /workspace/project/CLAUDE.md 2>/dev/null; cat /workspace/project/README.md 2>/dev/null | head -40; cat /workspace/project/package.json 2>/dev/null",
-    "source": "agent",
-    "status": "failed",
-    "content": [
-      {
-        "type": "content",
-        "content": {
-          "text": "```\nExit code 1\n```",
-          "type": "text",
-          "field_meta": null,
-          "annotations": null
-        },
-        "field_meta": null
-      }
-    ],
-    "is_error": true,
-    "raw_input": {
-      "command": "cat /workspace/project/CLAUDE.md 2>/dev/null; cat /workspace/project/README.md 2>/dev/null | head -40; cat /workspace/project/package.json 2>/dev/null",
-      "description": "Check for project config files"
-    },
+    "id": "conversation-1:4",
+    "kind": "ACPUpdate",
     "timestamp": "2026-10-12T17:56:01.293899",
-    "tool_kind": "execute",
-    "raw_output": "Exit code 1",
-    "tool_call_id": "toolu_01Uietr3ZHknr6fdX1vUGHgR"
+    "seq": 4,
+    "completed": true,
+    "update": {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "toolu_01Uietr3ZHknr6fdX1vUGHgR",
+      "title": "cat /workspace/project/CLAUDE.md 2>/dev/null; cat /workspace/project/README.md 2>/dev/null | head -40; cat /workspace/project/package.json 2>/dev/null",
+      "kind": "execute",
+      "status": "failed",
+      "rawInput": {
+        "command": "cat /workspace/project/CLAUDE.md 2>/dev/null; cat /workspace/project/README.md 2>/dev/null | head -40; cat /workspace/project/package.json 2>/dev/null",
+        "description": "Check for project config files"
+      },
+      "rawOutput": "Exit code 1",
+      "content": [
+        {
+          "type": "content",
+          "content": {
+            "text": "```\nExit code 1\n```",
+            "type": "text",
+            "field_meta": null,
+            "annotations": null
+          },
+          "field_meta": null
+        }
+      ]
+    }
   },
   {
-    "id": "76fa63b5-5576-4510-b073-81f04ddbc5c5",
-    "kind": "ACPToolCallEvent",
-    "title": "Terminal",
-    "source": "agent",
-    "status": "pending",
-    "is_error": false,
-    "raw_input": {},
+    "id": "conversation-1:5",
+    "kind": "ACPUpdate",
     "timestamp": "2026-10-12T17:56:05.848403",
-    "tool_kind": "execute",
-    "tool_call_id": "toolu_01V5JoN21hHzqnuw2hL9qAoH"
+    "seq": 5,
+    "completed": true,
+    "update": {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "toolu_01V5JoN21hHzqnuw2hL9qAoH",
+      "title": "Terminal",
+      "kind": "execute",
+      "status": "pending",
+      "rawInput": {}
+    }
   },
   {
-    "id": "d5ede321-ef82-4815-a1c2-ce4f209fd62f",
-    "kind": "ACPToolCallEvent",
-    "title": "which python3 node npx 2>/dev/null; python3 --version 2>/dev/null; node --version 2>/dev/null",
-    "source": "agent",
-    "status": "completed",
-    "content": [
-      {
-        "type": "content",
-        "content": {
-          "text": "```console\n/usr/local/bin/python3\n/acp-node/bin/node\n```",
-          "type": "text",
-          "field_meta": null,
-          "annotations": null
-        },
-        "field_meta": null
-      }
-    ],
-    "is_error": false,
-    "raw_input": {
-      "command": "which python3 node npx 2>/dev/null; python3 --version 2>/dev/null; node --version 2>/dev/null",
-      "description": "Check available runtimes"
-    },
+    "id": "conversation-1:6",
+    "kind": "ACPUpdate",
     "timestamp": "2026-10-12T17:56:06.797590",
-    "tool_kind": "execute",
-    "raw_output": "/usr/local/bin/python3\n/acp-node/bin/node\n/acp-node/bin/npx",
-    "tool_call_id": "toolu_01V5JoN21hHzqnuw2hL9qAoH"
+    "seq": 6,
+    "completed": true,
+    "update": {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "toolu_01V5JoN21hHzqnuw2hL9qAoH",
+      "title": "which python3 node npx 2>/dev/null; python3 --version 2>/dev/null; node --version 2>/dev/null",
+      "kind": "execute",
+      "status": "completed",
+      "rawInput": {
+        "command": "which python3 node npx 2>/dev/null; python3 --version 2>/dev/null; node --version 2>/dev/null",
+        "description": "Check available runtimes"
+      },
+      "rawOutput": "/usr/local/bin/python3\n/acp-node/bin/node\n/acp-node/bin/npx",
+      "content": [
+        {
+          "type": "content",
+          "content": {
+            "text": "```console\n/usr/local/bin/python3\n/acp-node/bin/node\n```",
+            "type": "text",
+            "field_meta": null,
+            "annotations": null
+          },
+          "field_meta": null
+        }
+      ]
+    }
   },
   {
-    "id": "5bc88648-6aa9-48a2-9d5f-9437261233f3",
-    "kind": "ACPToolCallEvent",
-    "title": "Skill",
-    "source": "agent",
-    "status": "pending",
-    "is_error": false,
-    "raw_input": {},
+    "id": "conversation-1:7",
+    "kind": "ACPUpdate",
     "timestamp": "2026-10-12T17:56:33.870599",
-    "tool_kind": "other",
-    "tool_call_id": "toolu_01MNfMCpA947uCwubk6pYiyY"
+    "seq": 7,
+    "completed": true,
+    "update": {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "toolu_01MNfMCpA947uCwubk6pYiyY",
+      "title": "Skill",
+      "kind": "other",
+      "status": "pending",
+      "rawInput": {}
+    }
   },
   {
-    "id": "ab26c336-30c9-4e61-b6c0-a0bc906e4903",
-    "kind": "ACPToolCallEvent",
-    "title": "Skill",
-    "source": "agent",
-    "status": "completed",
-    "content": [
-      {
-        "type": "content",
-        "content": {
-          "text": "Launching skill: dataviz",
-          "type": "text",
-          "field_meta": null,
-          "annotations": null
-        },
-        "field_meta": null
-      }
-    ],
-    "is_error": false,
-    "raw_input": {
-      "skill": "dataviz"
-    },
+    "id": "conversation-1:8",
+    "kind": "ACPUpdate",
     "timestamp": "2026-10-12T17:56:34.329533",
-    "tool_kind": "other",
-    "raw_output": "Launching skill: dataviz",
-    "tool_call_id": "toolu_01MNfMCpA947uCwubk6pYiyY"
+    "seq": 8,
+    "completed": true,
+    "update": {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "toolu_01MNfMCpA947uCwubk6pYiyY",
+      "title": "Skill",
+      "kind": "other",
+      "status": "completed",
+      "rawInput": {
+        "skill": "dataviz"
+      },
+      "rawOutput": "Launching skill: dataviz",
+      "content": [
+        {
+          "type": "content",
+          "content": {
+            "text": "Launching skill: dataviz",
+            "type": "text",
+            "field_meta": null,
+            "annotations": null
+          },
+          "field_meta": null
+        }
+      ]
+    }
   },
   {
-    "id": "bd059e55-88a4-4469-af16-78777f4c3dfd",
-    "kind": "ACPToolCallEvent",
-    "title": "Read File",
-    "source": "agent",
-    "status": "pending",
-    "is_error": false,
-    "raw_input": {},
+    "id": "conversation-1:9",
+    "kind": "ACPUpdate",
     "timestamp": "2026-10-12T17:56:37.486756",
-    "tool_kind": "read",
-    "tool_call_id": "toolu_01NfP88BRpnXgBEEvbHgVRvJ"
+    "seq": 9,
+    "completed": true,
+    "update": {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "toolu_01NfP88BRpnXgBEEvbHgVRvJ",
+      "title": "Read File",
+      "kind": "read",
+      "status": "pending",
+      "rawInput": {}
+    }
   },
   {
-    "id": "e40c2a4c-a3c8-4f17-8b6c-e9efe4e4ee42",
-    "kind": "ACPToolCallEvent",
-    "title": "Read /tmp/claude-10001/bundled-skills/2.1.220/4fd2f3caa0d4a7094ca0b32256511d63/dataviz/references/palette.md",
-    "source": "agent",
-    "status": "completed",
-    "content": [
-      {
-        "type": "content",
-        "content": {
-          "text": "```\n1\t# Reference palette\n2\t\n```",
-          "type": "text",
-          "field_meta": null,
-          "annotations": null
-        },
-        "field_meta": null
-      }
-    ],
-    "is_error": false,
-    "raw_input": {
-      "file_path": "/tmp/claude-10001/bundled-skills/2.1.220/4fd2f3caa0d4a7094ca0b32256511d63/dataviz/references/palette.md"
-    },
+    "id": "conversation-1:10",
+    "kind": "ACPUpdate",
     "timestamp": "2026-10-12T17:56:38.116984",
-    "tool_kind": "read",
-    "raw_output": "1\t# Reference palette\n2\t\n3\tThis is the **reference instance** of the data-viz method: every parameter the",
-    "tool_call_id": "toolu_01NfP88BRpnXgBEEvbHgVRvJ"
+    "seq": 10,
+    "completed": true,
+    "update": {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "toolu_01NfP88BRpnXgBEEvbHgVRvJ",
+      "title": "Read /tmp/claude-10001/bundled-skills/2.1.220/4fd2f3caa0d4a7094ca0b32256511d63/dataviz/references/palette.md",
+      "kind": "read",
+      "status": "completed",
+      "rawInput": {
+        "file_path": "/tmp/claude-10001/bundled-skills/2.1.220/4fd2f3caa0d4a7094ca0b32256511d63/dataviz/references/palette.md"
+      },
+      "rawOutput": "1\t# Reference palette\n2\t\n3\tThis is the **reference instance** of the data-viz method: every parameter the",
+      "content": [
+        {
+          "type": "content",
+          "content": {
+            "text": "```\n1\t# Reference palette\n2\t\n```",
+            "type": "text",
+            "field_meta": null,
+            "annotations": null
+          },
+          "field_meta": null
+        }
+      ]
+    }
   }
 ]

@@ -23,7 +23,6 @@ export type AgentEndpoint = Readonly<{
   transport: AgentTransport
   apiKey: string
   conversationId: string | null
-  isHqAgent: boolean
 }>
 export type AgentConversation = AgentEndpoint & { conversationId: string }
 export type RuntimeReadiness =
@@ -37,7 +36,7 @@ export type AgentRuntimes = {
   endpointOf(chat: AgentChat): Promise<AgentEndpoint | undefined>
   rememberConversation(chat: AgentChat, conversationId: string): Promise<string>
   forgetConversation(chat: AgentChat): Promise<void>
-  issueLlmToken(chat: AgentChat, isForSwitch?: boolean): Promise<string>
+  issueLlmToken(chat: AgentChat): Promise<string>
   chatOfLlmToken(host: AgentHost, token: string): Promise<ChatId | undefined>
   chatsOnHost(host: AgentHost): Promise<ChatId[]>
   touch(chat: AgentChat): Promise<void>
@@ -47,15 +46,9 @@ export type RuntimeRetrier = { retry(chat: AgentChat): Promise<void> }
 
 export type AgentLastEvent = Readonly<{ id: string; seq: number | null; timestamp: string }>
 export type AgentEventListener = { onEvent(event: AgentEvent): void; onClose(): void }
-export type AgentLlmChoice = Readonly<{
-  model: string
-  effort?: string
-  usageId: string
-  harness?: HarnessLaunch
-  resumeSessionId?: string
-  acpModel?: string
-  pi?: PiLaunch
-}>
+export type AgentLlmChoice = Readonly<
+  { effort?: string; resumeSessionId?: string; acpModel?: string } & ({ harness: HarnessLaunch } | { pi: PiLaunch })
+>
 export type PiModel = Readonly<Pick<Model, 'id' | 'name' | 'contextWindow'> & { reasoning: boolean }>
 export type PiLaunch = Readonly<{
   models: readonly PiModel[]
@@ -70,8 +63,6 @@ export type AgentServer = {
     llm: AgentLlmChoice,
     sub?: SubConversation,
   ): Promise<string>
-  finalResponse(conversation: AgentConversation): Promise<string>
-  switchLlm(conversation: AgentConversation, llmToken: string, llm: AgentLlmChoice): Promise<void>
   switchAcpModel(conversation: AgentConversation, model: string, thoughtLevel?: string): Promise<void>
   sendMessage(conversation: AgentConversation, text: string): Promise<void>
   statusOf(conversation: AgentConversation): Promise<string | undefined>

@@ -31,21 +31,21 @@ The app signs in through Dex in a popup (allow popups for `localhost:5173`). The
 
 ## Adding a runtime host for dev
 
-Runtimes (Agent Servers) run on runtime hosts: any machine with Docker running the `hq-host` container, which dials out to HQ.
+Runtimes (HQ's runtime image with hq-agent) run on runtime hosts: any machine with Docker running the `hq-host` container, which dials out to HQ.
 
 ```sh
 docker build -t hq-host apps/host
 ```
 
-Then, signed in as a workspace admin (Alice), open the workspace menu, **Workspace settings**, **Add runtime host**, give it a name and copy the command. On a Mac (OrbStack or Docker Desktop), switch **Rootless Docker** off, and in the copied command replace `localhost` with `host.docker.internal` (the container cannot reach the Mac's `localhost`); the rooted command adds group `0` on macOS by itself. The row turns Online within seconds. The first runtime pulls the Agent Server image (about 1.2 GB).
+Then, signed in as a workspace admin (Alice), open the workspace menu, **Workspace settings**, **Add runtime host**, give it a name and copy the command. On a Mac (OrbStack or Docker Desktop), switch **Rootless Docker** off, and in the copied command replace `localhost` with `host.docker.internal` (the container cannot reach the Mac's `localhost`); the rooted command adds group `0` on macOS by itself. The row turns Online within seconds. Hosts never pull: build HQ's runtime image first (below).
 
 Without Docker for `hq-host` itself, run it as a process against the local Docker: `HQ_HOST_STATE_DIR=.hq-host bun apps/host/src/main.ts http://localhost:5173/h/<code>`. Remove the host in the settings page when done, then `docker rm -f hq-host` and `docker volume rm hq-host`.
 
-With a host online, a prompt in a runtime chat starts that chat's Agent Server and the agent answers. Agent Servers call the model through their host: `hq-host` relays `/v1/*` (at `http://hq-gateway-relay:4000/v1` on the runtime network) to HQ, which runs each call on the prompting member's key in the gateway. Rebuild the `hq-host` image after pulling this change (`docker build -t hq-host apps/host`, then recreate the container), or its runtimes cannot reach a model.
+With a host online, a prompt in a runtime chat starts that chat's runtime and Pi answers. Runtimes call the model through their host: `hq-host` relays `/v1/*` (at `http://hq-gateway-relay:4000/v1` on the runtime network) to HQ, which runs each call on the prompting member's key in the gateway. Rebuild the `hq-host` image after pulling this change (`docker build -t hq-host apps/host`, then recreate the container), or its runtimes cannot reach a model.
 
 ## HQ runtime image
 
-Personal machines (sessions on your own machine) run HQ's own image (`apps/agent`: hq-agent with Claude Code, Codex and Pi, each pinned separately from its ACP adapter in `apps/agent/versions.json`), not the Agent Server image. Build it locally before the first machine session; the server reads its content ID from `apps/agent/image-id` (or `HQ_AGENT_IMAGE`) at start, and your `hq-host --personal` never pulls it:
+Workspace hosts and personal machines run HQ's own image (`apps/agent`: hq-agent with Claude Code, Codex and Pi, each pinned separately from its ACP adapter in `apps/agent/versions.json`). Build it locally before the first runtime; the server reads its content ID from `apps/agent/image-id` (or `HQ_AGENT_IMAGE`) at start, and no `hq-host` ever pulls it:
 
 ```sh
 bun run agent:build          # compile hq-agent and docker build; cached by Docker
@@ -53,7 +53,7 @@ bun run agent:versions       # pinned vs latest on npm, per tool
 bun run agent:bump <tool>    # pin the latest of claude-code | claude-agent-acp | codex | codex-acp | pi | pi-acp, then rebuild
 ```
 
-After a rebuild, restart the server: a new content ID applies to new machine runtimes. Without a built image a machine session says `HQ's runtime image is not built: run bun run agent:build`. Workspace hosts still run the Agent Server image.
+After a rebuild, restart the server: a new content ID applies to new runtimes. Without a built image a prompt says `HQ's runtime image is not built: run bun run agent:build`.
 
 ## Claude Code and Codex on your own machine
 
@@ -131,10 +131,10 @@ bun run check:bundle       # builds the app, main chunk at most 760 kB, one Reac
 bun run test:e2e           # starts its own stack per worker and one gateway (hq-test-gateway-e2e on 4881)
 ```
 
-`check:related [--base <ref>]` takes the uncommitted changes plus the commits since `<ref>` (default `HEAD`). It runs the unit and integration test files that changed or import a changed module, directly or not (dependency-cruiser's graph), and Playwright `--only-changed=<ref>` when a spec imports a changed module. It prints what it selected and why. It runs a whole suite when it cannot decide: a changed file outside the module graph (lock file, config, SQL, infra) runs every suite, `integration-setup.ts` runs every integration test, and an e2e harness file (`test-server.ts`, `testing.ts`, the fake LLM and Agent Server, `global-setup.ts`, `playwright.config.ts`) runs the whole e2e suite. App code that e2e reaches only through the servers is left to `check:all`.
+`check:related [--base <ref>]` takes the uncommitted changes plus the commits since `<ref>` (default `HEAD`). It runs the unit and integration test files that changed or import a changed module, directly or not (dependency-cruiser's graph), and Playwright `--only-changed=<ref>` when a spec imports a changed module. It prints what it selected and why. It runs a whole suite when it cannot decide: a changed file outside the module graph (lock file, config, SQL, infra) runs every suite, `integration-setup.ts` runs every integration test, and an e2e harness file (`test-server.ts`, `testing.ts`, the fake LLM, `global-setup.ts`, `playwright.config.ts`) runs the whole e2e suite. App code that e2e reaches only through the servers is left to `check:all`.
 
 `check:all` writes its full output to `.check/last-check-all.log` and a summary to `.check/last-check-all.json`: the `git stash create` fingerprint (HEAD when the tree is clean), HEAD, the tree hash of the working tree including untracked files, the exit code, and each step's result and duration. `--verify` compares that tree hash with the current tree.
 
-e2e tests talk to a fake Agent Server by default (`agentServer: 'fake'`): the test server connects one fake runtime host per worker database, and its Agent Server runs the same fake LLM scripts through the real relay and gateway, running commands with `bash` and editing files in a temporary directory. A fake runtime answers `/ready` 1.5 s after its start, like a booting Agent Server, so the Starting… state stays visible (`HQ_FAKE_AGENT_SERVER_BOOT_MILLISECONDS` changes the delay). `agentScript` replaces a chat's fake LLM script only once a model call has used the previous one (the test server refuses with 409 after 30 s), so a test can switch to a fast script while a slow turn is starting. Failed tests keep a screenshot and `error-context.md` in `apps/web/test-results`; traces are off because recording one per test made the suite about 25% slower, so add `--trace retain-on-failure` when chasing a failure. Tests marked `test.use({ agentServer: 'real' })` pair a real `hq-host` with Docker Agent Servers on their worker the first time one runs there. That smoke set is runtime-ui 2 (cold start end to end), agent-bridge 2 (streamed reply), agent-steps 14 (real shell commands, exit 0 and exit 3), runtime-ui 6 (Stop), runtime-ui 3 (resume after the idle stop) gateway 2 (one prompt per member key through the relay and Bifrost) and tools 7 (an MCP tool call through `hq-host`'s `/mcp` relay and the gateway), routing 10 (a manual model switch through `switch_llm`); run it alone with `bun run test:e2e --grep "real Agent Server"`.
+e2e tests run on one fake runtime host per worker database: the test server relays its runtimes to a real hq-agent process driving `stub-acp-agent.mjs` (Pi flavour), which runs each chat's fake LLM script through the real relay and gateway, running commands with `bash` and editing files in a temporary directory. A fake runtime answers `/ready` 200 ms after its start (`fakeBootMilliseconds` changes it per test, 1.5 s keeps Starting… visible). `agentScript` replaces a chat's fake LLM script only once a model call has used the previous one (the test server refuses with 409 after 30 s), so a test can switch to a fast script while a slow turn is starting. Failed tests keep a screenshot and `error-context.md` in `apps/web/test-results`; traces are off because recording one per test made the suite about 25% slower, so add `--trace retain-on-failure` when chasing a failure. Real containers run only in `bun run check:docker` (integration: `sandbox`, `personal-host`, `pi`).
 
 Tools in tests: the test server runs the fake OAuth-protected MCP server on 3101 (3101 must be free) and registers it in the test gateway as `fake`, `GitHub`, `Slack`, `Notion` and `Linear`, completing each admin login automatically; a test picks the account the fake provider approves with the `fake_mcp_user` cookie, and `POST /_admin/expire?user=` revokes that account's tokens. The integration harness does the same with `fake` on a random port.
