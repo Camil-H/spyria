@@ -7,7 +7,7 @@ import { runtimeHostId } from '@hq/kernel'
 import { websocket } from 'hono/bun'
 import { createApp } from '../app.ts'
 import { readHqAgentImage } from '../hq-agent-image.ts'
-import { acme, aliceInAcme, openSharedTestApp, sessionTokenOf, testAuthSettings, waitFor } from '../testing.ts'
+import { acme, aliceInAcme, sessionTokenOf, testAuthSettings, waitFor } from '../testing.ts'
 import { createRuntimeHostGateway } from './gateway.ts'
 
 const docker = (...args: string[]) => Bun.spawnSync(['docker', ...args], { stderr: 'pipe' })
@@ -22,7 +22,6 @@ if (!hqImage || docker('image', 'inspect', hqImage).exitCode !== 0)
 const prefix = `hq-test-${crypto.randomUUID().slice(0, 8)}-`
 const hostProgram = new URL('../../../host/src/main.ts', import.meta.url).pathname
 const stateDirectory = mkdtempSync(join(tmpdir(), 'hq-test-host-'))
-await openSharedTestApp()
 const testDatabase = await createTestDatabase()
 const gateway = createRuntimeHostGateway({ databases: () => [testDatabase.database], hqAgentImage: hqImage })
 const app = createApp({ database: testDatabase.database, ...testAuthSettings, runtimeHosts: gateway })
@@ -55,16 +54,11 @@ const hostRow = async (id: string) =>
   (await testDatabase.database.$client`select status, capacity from runtime_hosts where id = ${id}`)[0]
 const startPersonalHost = async (id: string, url: string) => {
   hostProcess = Bun.spawn(['bun', hostProgram, '--personal', url], {
-    env: { ...process.env, HQ_HOST_STATE_DIR: stateDirectory, HQ_HOST_PREFIX: prefix },
+    env: { ...process.env, HQ_HOST_STATE_DIR: stateDirectory, HQ_HOST_PREFIX: prefix, HQ_HOST_HEARTBEAT_MS: '200' },
     stdout: 'inherit',
     stderr: 'inherit',
   })
   await waitFor(async () => (await hostRow(id))?.status === 'online', 30_000)
-}
-const stopHost = async (id: string) => {
-  hostProcess?.kill()
-  await hostProcess?.exited
-  await waitFor(async () => (await hostRow(id))?.status !== 'online', 30_000)
 }
 
 test("a real hq-host --personal runs HQ's image with the credentials volume, relays only hq-agent's routes, lists the real adapter models without a login and reports the sign-in", async () => {
@@ -174,7 +168,9 @@ test("a real hq-host --personal runs HQ's image with the credentials volume, rel
   await gateway.sandboxProvider.remove(runtime)
   expect(dockerText('volume', 'ls', '-q', '--filter', `name=^${prefix}cred-claude$`)).toBe(`${prefix}cred-claude`)
 
-  await stopHost(id)
-  await startPersonalHost(id, claimUrl)
+  await waitFor(
+    async () =>
+      ((await hostRow(id))?.capacity as { signedIn?: string[] } | undefined)?.signedIn?.includes('claude') === true,
+  )
   expect((await hostRow(id))?.capacity).toMatchObject({ personal: true, signedIn: ['claude'] })
 }, 180_000)

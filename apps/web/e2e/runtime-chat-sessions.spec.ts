@@ -33,7 +33,6 @@ const test = base.extend<{ machine: (query?: MachineQuery) => Promise<Machine> }
   },
 })
 
-const agentReply = { timeout: 30_000 }
 const claudeOnMachine = 'My machine · Claude Code'
 const signedInMachine = { owner: 'member-alice', signedIn: 'claude' }
 const subscriptionCommand = [
@@ -127,7 +126,7 @@ test('2. the owner picks My machine · Claude Code before prompting: the subscri
   const { id: machineId } = await machine(signedInMachine)
   const chatId = await newMachineChat(page, 'Picked my machine')
   await sendMessage(page, 'Hello from the chip')
-  await expect(repliesWith(page, 'Hello from the stub')).toBeVisible(agentReply)
+  await expect(repliesWith(page, 'Hello from the stub')).toBeVisible()
 
   const [runtime] = await workerStack.database.$client`select host_id from runtimes where chat_id = ${chatId}`
   expect(runtime?.host_id).toBe(machineId)
@@ -154,7 +153,7 @@ test('3. a new runtime chat left on HQ runtime runs on a workspace host with the
   await page.keyboard.press('Escape')
   await agentScript(chatId, { text: 'Answered on an HQ runtime.' })
   await sendMessage(page, 'Hello HQ runtime')
-  await expect(repliesWith(page, 'Answered on an HQ runtime.')).toBeVisible(agentReply)
+  await expect(repliesWith(page, 'Answered on an HQ runtime.')).toBeVisible()
   await expect(chipOf(page)).toHaveText(/· auto$/)
 
   const [runtime] = await workerStack.database.$client`
@@ -198,7 +197,7 @@ test('4. another member does not see the choice, and crafted writes by them or o
   await expect(chipOf(page)).toHaveText('Claude Code · subscription')
   await page.keyboard.press('Escape')
   await sendMessage(page, 'Lock it')
-  await expect(repliesWith(page, 'Hello from the stub')).toBeVisible(agentReply)
+  await expect(repliesWith(page, 'Hello from the stub')).toBeVisible()
   expect(await craftedRoutingWrite(workerStack, 'member-alice', { chatId, runsOn: 'runtime' })).toContain(
     'This session has started; where it runs no longer changes',
   )
@@ -212,7 +211,7 @@ test('5. the chip lists the adapter models, a pick is switched in place, and a p
   await machine(signedInMachine)
   await newMachineChat(page, 'First on my machine')
   await sendMessage(page, 'First prompt')
-  await expect(repliesWith(page, '[t1] Hello from the stub')).toBeVisible(agentReply)
+  await expect(repliesWith(page, '[t1] Hello from the stub')).toBeVisible()
   await openSession(page)
   const modelOf = (target: Page) => sessionOf(target).getByRole('combobox', { name: 'Model' })
   await expect(modelOf(page).getByRole('option')).toHaveText(['Default (stub)', 'Large (stub)'])
@@ -221,7 +220,7 @@ test('5. the chip lists the adapter models, a pick is switched in place, and a p
   await expect(chipOf(page)).toHaveText('Claude Code · Large (stub)')
   await page.keyboard.press('Escape')
   await sendMessage(page, 'Second prompt')
-  await expect(repliesWith(page, 'model stub-large')).toBeVisible(agentReply)
+  await expect(repliesWith(page, 'model stub-large')).toBeVisible()
   expect((await machine()).modelSwitches).toEqual(['stub-large'])
   await openSession(page)
   await expect(modelOf(page)).toHaveValue('stub-large')
@@ -235,7 +234,7 @@ test('5. the chip lists the adapter models, a pick is switched in place, and a p
   await expect(chipOf(page)).toHaveText('Claude Code · Large (stub)')
   await page.keyboard.press('Escape')
   await sendMessage(page, 'Prompt on Large')
-  await expect(repliesWith(page, 'model stub-large')).toHaveCount(1, agentReply)
+  await expect(repliesWith(page, 'model stub-large')).toHaveCount(1)
   const { conversations, modelSwitches } = await machine()
   expect(conversations.map((conversation) => conversation.agent.acp_model)).toEqual([undefined, undefined])
   expect(modelSwitches).toEqual(['stub-large', 'stub-large'])
@@ -248,8 +247,8 @@ test('6. with the workspace switch off the machine options are hidden and an exi
   await machine(signedInMachine)
   await newMachineChat(page, 'Machine before the switch')
   await sendMessage(page, 'Before the switch')
-  await expect(repliesWith(page, 'Hello from the stub')).toBeVisible(agentReply)
-  await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0, agentReply)
+  await expect(repliesWith(page, 'Hello from the stub')).toBeVisible()
+  await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0)
 
   await sidebarOf(page).getByRole('link', { name: 'Workspace settings' }).click()
   const localSessionsSwitch = mainOf(page)
@@ -263,10 +262,7 @@ test('6. with the workspace switch off the machine options are hidden and an exi
   await page.keyboard.press('Escape')
   await openChat(page, 'Machine before the switch')
   await sendMessage(page, 'While it is off')
-  await expect(repliesWith(page, "Sessions on members' machines are turned off for this workspace")).toHaveCount(
-    1,
-    agentReply,
-  )
+  await expect(repliesWith(page, "Sessions on members' machines are turned off for this workspace")).toHaveCount(1)
   expect((await machine()).prompts).toEqual(['Before the switch'])
 })
 
@@ -371,16 +367,16 @@ test.describe('without a workspace host', () => {
     await machine({ online: 'false' })
     const chatId = await newRuntimeChat(page, 'No host first')
     await sendMessage(page, 'First try')
-    await expect(repliesWith(page, 'No runtime host is available')).toHaveCount(1, agentReply)
+    await expect(repliesWith(page, 'No runtime host is available')).toHaveCount(1)
     await machine({ online: 'true' })
     await openSession(page)
     await runsOnOf(page).selectOption({ label: claudeOnMachine })
     await expect(chipOf(page)).toHaveText('Claude Code · subscription')
     await page.keyboard.press('Escape')
     await sendMessage(page, 'Second try')
-    await expect(repliesWith(page, 'Hello from the stub')).toHaveCount(2, agentReply)
+    await expect(repliesWith(page, 'Hello from the stub')).toHaveCount(2)
     const [runtime] = await workerStack.database.$client`select host_id from runtimes where chat_id = ${chatId}`
     expect(runtime?.host_id).toBe(machineId)
-    await expect.poll(async () => (await machine()).prompts, agentReply).toEqual(['First try', 'Second try'])
+    await expect.poll(async () => (await machine()).prompts).toEqual(['First try', 'Second try'])
   })
 })

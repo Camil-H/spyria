@@ -27,7 +27,6 @@ const test = base.extend<{ machine: (query?: MachineQuery) => Promise<Machine> }
   },
 })
 
-const agentReply = { timeout: 30_000 }
 const switchName = 'Members can run sessions on their own machine'
 const turnedOffNotice = "Your workspace turned off sessions on members' machines"
 const sessionNotice = "Sessions on members' machines are turned off for this workspace"
@@ -127,21 +126,20 @@ test('2. an existing local session answers prompts with the notice while it is o
   await newRuntimeChat(page, 'Laptop switch', 'My machine · Claude Code')
   await expect(mainOf(page).getByRole('button', { name: 'Claude Code · subscription' })).toBeVisible()
   await sendMessage(page, 'Before the switch')
-  await expect(repliesWith(page, '[t1] Hello from the stub')).toBeVisible(agentReply)
-  await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0, agentReply)
+  await expect(repliesWith(page, '[t1] Hello from the stub')).toBeVisible()
+  await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0)
 
   await setLocalSessions(page, false)
   await openChat(page, 'Laptop switch')
   await expect(repliesWith(page, '[t1] Hello from the stub')).toBeVisible()
   await sendMessage(page, 'While it is off')
-  await expect(repliesWith(page, sessionNotice)).toHaveCount(1, agentReply)
-  await page.waitForTimeout(2_000)
+  await expect(repliesWith(page, sessionNotice)).toHaveCount(1)
   expect((await machine()).prompts).toEqual(['Before the switch'])
 
   await setLocalSessions(page, true)
   await openChat(page, 'Laptop switch')
   await sendMessage(page, 'Back on')
-  await expect(repliesWith(page, '[t2] Hello from the stub')).toBeVisible(agentReply)
+  await expect(repliesWith(page, '[t2] Hello from the stub')).toBeVisible()
   expect((await machine()).prompts).toEqual(['Before the switch', 'Back on'])
   await expect(repliesWith(page, sessionNotice)).toHaveCount(1)
 })

@@ -13,7 +13,6 @@ import {
 } from './fixtures'
 import { openPageAs, type WorkerStack } from './stack'
 
-const agentReply = { timeout: 30_000 }
 const blockedNotice = 'Connect an LLM key in your profile to prompt'
 const research = 'chat-research'
 type GatewayLog = { virtual_key_id: string | null; selected_key_id: string; metadata: Record<string, string> | null }
@@ -81,7 +80,7 @@ test('1. an added key is stored in the gateway: HQ keeps only its last 4 charact
   expect(virtual_key.provider_configs.flatMap((config) => config.keys.map((key) => key.key_id))).toContain(keyId)
 })
 
-test.describe('real Agent Server', () => {
+test.describe('real Agent Server', { tag: '@docker' }, () => {
   test.use({ agentServer: 'real' })
 
   test('2. two members prompt the same chat and each turn runs on the prompter’s own key', async ({
@@ -89,24 +88,29 @@ test.describe('real Agent Server', () => {
     browser,
     workerStack,
   }) => {
+    const startedAt = new Date()
     await addKey(page, 'Fake', newSecret())
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
     await addKey(bobPage, 'Fake', newSecret())
 
     await openChat(page, 'Research')
     await sendMessage(page, 'Alice asks')
-    await expect(repliesWith(page, agentReplyText)).toHaveCount(1, agentReply)
-    await expect(workingIndicatorOf(page)).toHaveCount(0, agentReply)
+    await expect(repliesWith(page, agentReplyText)).toHaveCount(1)
+    await expect(workingIndicatorOf(page)).toHaveCount(0)
     await openChat(bobPage, 'Research')
     await sendMessage(bobPage, 'Bob asks')
-    await expect(repliesWith(bobPage, agentReplyText)).toHaveCount(2, agentReply)
+    await expect(repliesWith(bobPage, agentReplyText)).toHaveCount(2)
 
     for (const prompter of ['member-alice', 'member-bob']) {
       const virtualKeyId = await virtualKeyOf(workerStack, prompter)
       const ownKeyIds = await gatewayKeyIdsOf(workerStack, prompter)
       const callsOf = async () =>
-        (await workerStack.gateway<{ logs: GatewayLog[] }>(`/api/logs?virtual_key_ids=${virtualKeyId}&limit=100`)).logs
-      await expect.poll(async () => (await callsOf()).length, agentReply).toBeGreaterThan(0)
+        (
+          await workerStack.gateway<{ logs: GatewayLog[] }>(
+            `/api/logs?virtual_key_ids=${virtualKeyId}&start_time=${startedAt.toISOString()}&limit=100`,
+          )
+        ).logs
+      await expect.poll(async () => (await callsOf()).length).toBeGreaterThan(0)
       for (const call of await callsOf()) {
         expect(ownKeyIds).toContain(call.selected_key_id)
         expect(call.metadata).toMatchObject({ prompter, owner: 'member-alice', chat: research })
@@ -165,7 +169,7 @@ test('4. a member who removes their key can no longer prompt, while another memb
   await addKey(bobPage, 'Fake', newSecret())
   await openChat(page, 'Research')
   await sendMessage(page, 'Before removing my key')
-  await expect(repliesWith(page, agentReplyText)).toHaveCount(1, agentReply)
+  await expect(repliesWith(page, agentReplyText)).toHaveCount(1)
 
   await removeKey(page, 'Anthropic')
   await openChat(page, 'Research')
@@ -174,7 +178,7 @@ test('4. a member who removes their key can no longer prompt, while another memb
 
   await openChat(bobPage, 'Research')
   await sendMessage(bobPage, 'Bob still prompts')
-  await expect(repliesWith(bobPage, agentReplyText)).toHaveCount(2, agentReply)
+  await expect(repliesWith(bobPage, agentReplyText)).toHaveCount(2)
   await bobPage.context().close()
 })
 
@@ -185,8 +189,8 @@ test('5. a key the provider refuses ends the turn with HQ’s notice and no prov
   await sendMessage(page, 'Use my refused key')
 
   const error = messageItemsOf(page).getByRole('alert')
-  await expect(error).toContainText('The LLM key of Alice was refused', agentReply)
-  await expect(workingIndicatorOf(page)).toHaveCount(0, agentReply)
+  await expect(error).toContainText('The LLM key of Alice was refused')
+  await expect(workingIndicatorOf(page)).toHaveCount(0)
   await expect(mainOf(page)).not.toContainText('Incorrect API key')
   await expect(mainOf(page)).not.toContainText('fake-refused')
 })
@@ -198,10 +202,10 @@ test('6. with the gateway down a prompt gets HQ’s notice; once it is back the 
   await openChat(page, 'Research')
   await workerStack.setGatewayReachable(false)
   await sendMessage(page, 'While the gateway is down')
-  await expect(messageItemsOf(page).getByRole('alert')).toContainText('The model gateway is unreachable', agentReply)
-  await expect(workingIndicatorOf(page)).toHaveCount(0, agentReply)
+  await expect(messageItemsOf(page).getByRole('alert')).toContainText('The model gateway is unreachable')
+  await expect(workingIndicatorOf(page)).toHaveCount(0)
 
   await workerStack.setGatewayReachable(true)
   await sendMessage(page, 'Now that it is back')
-  await expect(repliesWith(page, agentReplyText)).toHaveCount(1, agentReply)
+  await expect(repliesWith(page, agentReplyText)).toHaveCount(1)
 })

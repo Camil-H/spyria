@@ -2,21 +2,18 @@ import { appendFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-const steps = [
-  'lint',
-  'typecheck',
-  'check:boundaries',
-  'test',
-  'check:bundle',
-  'stack:up',
-  'agent:build',
-  'test:integration',
-  'test:e2e',
-]
+const isDocker = process.argv.includes('--docker')
+const checkName = isDocker ? 'check:docker' : 'check:all'
+const steps = isDocker
+  ? ['stack:up', 'agent:build', 'test:docker:integration', 'test:e2e:docker']
+  : ['lint', 'typecheck', 'check:boundaries', 'test', 'check:bundle', 'stack:up', 'test:integration', 'test:e2e']
+const timingFiles = isDocker
+  ? ['integration-docker.xml', 'e2e-docker-results.json']
+  : ['integration.xml', 'e2e-results.json']
 const repositoryRoot = new URL('../', import.meta.url).pathname
 const checkDirectory = `${repositoryRoot}.check/`
-const logFile = `${checkDirectory}last-check-all.log`
-const summaryFile = `${checkDirectory}last-check-all.json`
+const logFile = `${checkDirectory}last-${checkName.replace(':', '-')}.log`
+const summaryFile = `${checkDirectory}last-${checkName.replace(':', '-')}.json`
 
 const git = (args: string[], env: Record<string, string> = {}) =>
   Bun.spawnSync(['git', ...args], { cwd: repositoryRoot, env: { ...process.env, ...env } })
@@ -43,6 +40,7 @@ if (process.argv.includes('--verify')) {
 
 mkdirSync(checkDirectory, { recursive: true })
 writeFileSync(logFile, '')
+for (const file of timingFiles) rmSync(`${checkDirectory}${file}`, { force: true })
 const head = git(['rev-parse', 'HEAD'])
 const fingerprint = git(['stash', 'create']) || head
 const tree = workingTreeOf()
@@ -52,7 +50,7 @@ const log = (text: string) => {
   process.stdout.write(text)
   appendFileSync(logFile, text)
 }
-log(`check:all on ${fingerprint} (HEAD ${head}, tree ${tree}) at ${startedAt.toISOString()}\n`)
+log(`${checkName} on ${fingerprint} (HEAD ${head}, tree ${tree}) at ${startedAt.toISOString()}\n`)
 for (const step of steps) {
   log(`\n▶ bun run ${step}\n`)
   const started = performance.now()
@@ -71,6 +69,7 @@ for (const step of steps) {
   if (exitCode !== 0) break
 }
 const exitCode = results.at(-1)?.exitCode ?? 1
+log(Bun.spawnSync(['bun', 'scripts/test-timings.ts', ...timingFiles], { cwd: repositoryRoot }).stdout.toString())
 const summary = {
   fingerprint,
   head,
@@ -82,7 +81,7 @@ const summary = {
   steps: results,
 }
 writeFileSync(summaryFile, `${JSON.stringify(summary, null, 2)}\n`)
-log(`\ncheck:all ${exitCode === 0 ? 'passed' : 'failed'}\n`)
+log(`\n${checkName} ${exitCode === 0 ? 'passed' : 'failed'}\n`)
 for (const result of results) log(`  ${result.exitCode === 0 ? '✓' : '✗'} ${result.step} (${result.seconds} s)\n`)
 log(`Summary in ${summaryFile}\n`)
 process.exit(exitCode)

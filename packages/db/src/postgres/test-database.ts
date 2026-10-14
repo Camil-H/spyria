@@ -1,4 +1,5 @@
 import { type ChildProcess, spawn, spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { once } from 'node:events'
 import { openSync, readFileSync, rmSync, writeFileSync, writeSync } from 'node:fs'
 import { get } from 'node:http'
@@ -180,7 +181,28 @@ export const startTestGateway = async ({
 }) => {
   const containerName = `hq-test-gateway-${name}`
   const databaseName = `hq_test_gateway_${name}`
-  const configFile = join(tmpdir(), `${containerName}-${crypto.randomUUID()}.json`)
+  const configFile = join(tmpdir(), `${containerName}.json`)
+  const gatewayConfig = JSON.parse(readFileSync(new URL('../../../../infra/bifrost.json', import.meta.url), 'utf8'))
+  const setup = { gatewayImage, port, fakeLlmUrl, oauthBase, gatewayConfig, gatewayProviders, fakeModelPrices }
+  const setupHash = createHash('sha256').update(JSON.stringify(setup)).digest('hex').slice(0, 16)
+  const gateway = testGatewayAt(`http://127.0.0.1:${port}`)
+  let lastAnswer: number | string = 'nothing'
+  const isReady = async () => {
+    lastAnswer = await httpStatusOf(`${gateway.url}/api/providers`, { authorization: gatewayAuthorization })
+    return lastAnswer === 200
+  }
+  const isSetUp = async () => {
+    const overrides = await gateway.request('/api/governance/pricing-overrides')
+    const names = JSON.stringify(overrides.ok ? await overrides.json() : {})
+    return Object.keys(fakeModelPrices).every((model) => names.includes(`"${model}"`))
+  }
+  const running = docker('inspect', '-f', '{{.State.Running}} {{index .Config.Labels "hq.setup"}}', containerName)
+  if (running.stdout.toString().trim() === `true ${setupHash}` && (await isReady()) && (await isSetUp())) {
+    const { clients } = await gateway.call<{ clients: { config: { client_id: string } }[] | null }>('/api/mcp/clients')
+    for (const { config } of clients ?? [])
+      await gateway.call(`/api/mcp/client/${config.client_id}`, { method: 'DELETE' })
+    return gateway
+  }
   const postgresUrl = new URL(databaseUrl)
   const store = {
     enabled: true,
@@ -197,9 +219,8 @@ export const startTestGateway = async ({
   docker('rm', '-fv', containerName)
   await dropDatabase(databaseName)
   await withAdmin(`create database "${databaseName}" template template0 encoding 'UTF8'`)
-  const gatewayConfig = JSON.parse(readFileSync(new URL('../../../../infra/bifrost.json', import.meta.url), 'utf8'))
   writeFileSync(configFile, JSON.stringify({ ...gatewayConfig, config_store: store, logs_store: store }))
-  const stop = async () => {
+  const remove = async () => {
     docker('rm', '-fv', containerName)
     rmSync(configFile, { force: true })
     await dropDatabase(databaseName)
@@ -209,6 +230,8 @@ export const startTestGateway = async ({
     '-d',
     '--name',
     containerName,
+    '--label',
+    `hq.setup=${setupHash}`,
     '--add-host',
     'host.docker.internal:host-gateway',
     '-p',
@@ -228,16 +251,10 @@ export const startTestGateway = async ({
     gatewayImage,
   )
   if (started.status !== 0) {
-    await stop()
+    await remove()
     throw new Error(`The test gateway did not start: ${started.stderr.toString()}`)
   }
-  const gateway = testGatewayAt(`http://127.0.0.1:${port}`)
   try {
-    let lastAnswer: number | string = 'nothing'
-    const isReady = async () => {
-      lastAnswer = await httpStatusOf(`${gateway.url}/api/providers`, { authorization: gatewayAuthorization })
-      return lastAnswer === 200
-    }
     for (let attempt = 1; !(await isReady()); attempt++) {
       if (attempt === 480) throw new Error(`The test gateway did not become ready (last answer: ${lastAnswer})`)
       await sleep(250)
@@ -271,10 +288,10 @@ export const startTestGateway = async ({
         },
       })
   } catch (error) {
-    await stop()
+    await remove()
     throw error
   }
-  return { ...gateway, stop }
+  return gateway
 }
 
 const aliceSeededCredential = {
@@ -284,7 +301,24 @@ const aliceSeededCredential = {
 }
 type SeedWriter = { execute: (query: SQL) => Promise<unknown> }
 
-export const prepareSeededGatewayKeys = async (gateway: TestGateway) => {
+type SeededGatewayKeys = ((writer: SeedWriter) => Promise<void>) & { keyId: string; virtualKeyId: string }
+const isUntouched = async (gateway: TestGateway, { keyId, virtualKeyId }: SeededGatewayKeys) => {
+  const read = await gateway.request(`/api/governance/virtual-keys/${virtualKeyId}`)
+  if (!read.ok) return false
+  const { virtual_key } = (await read.json()) as {
+    virtual_key: { is_active: boolean; provider_configs: { keys: { key_id: string }[] }[]; mcp_configs?: unknown[] }
+  }
+  const keyIds = virtual_key.provider_configs.flatMap((config) => config.keys.map((key) => key.key_id))
+  return (
+    virtual_key.is_active && keyIds.length === 1 && keyIds[0] === keyId && (virtual_key.mcp_configs ?? []).length === 0
+  )
+}
+
+export const prepareSeededGatewayKeys = async (
+  gateway: TestGateway,
+  previous?: SeededGatewayKeys,
+): Promise<SeededGatewayKeys> => {
+  if (previous && (await isUntouched(gateway, previous))) return previous
   const { id: keyId } = await gateway.call<{ id: string }>('/api/providers/fake/keys', {
     method: 'POST',
     body: {
@@ -303,7 +337,7 @@ export const prepareSeededGatewayKeys = async (gateway: TestGateway) => {
     },
   })
   const { workspaceId, id, userId } = aliceSeededCredential
-  return async (writer: SeedWriter) => {
+  const write = async (writer: SeedWriter) => {
     await writer.execute(
       sql`update llm_credentials set secret_ref = ${`gateway:fake/${keyId}`} where workspace_id = ${workspaceId} and id = ${id}`,
     )
@@ -311,4 +345,5 @@ export const prepareSeededGatewayKeys = async (gateway: TestGateway) => {
       sql`insert into member_gateway_keys (workspace_id, user_id, virtual_key_id) values (${workspaceId}, ${userId}, ${virtual_key.id})`,
     )
   }
+  return Object.assign(write, { keyId, virtualKeyId: virtual_key.id })
 }

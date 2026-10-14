@@ -1,7 +1,5 @@
 import { expect, mainOf, messageItemsOf, openChat, type Page, sendMessage, test } from './fixtures'
 
-const agentReply = { timeout: 30_000 }
-
 const research = 'chat-research'
 const thinking = 'I will check the toolchain, then fix the totals.'
 const fixedText = 'Fixed the totals and added the tax line.'
@@ -36,15 +34,15 @@ test('11. steps show live while the agent works: thinking, the running command, 
   await agentScript(research, { wordDelayMilliseconds: 300, steps: fixSteps('sleep 2 && '), text: fixedText })
   await sendMessage(page, 'Fix the totals')
 
-  await expect(itemsWith(page, 'Thinking…')).toHaveCount(1, agentReply)
+  await expect(itemsWith(page, 'Thinking…')).toHaveCount(1)
   const command = itemsWith(page, 'python3 --version')
-  await expect(command.getByRole('img', { name: 'Running' })).toBeVisible(agentReply)
-  await expect(command.getByRole('img', { name: 'Succeeded' })).toBeVisible(agentReply)
+  await expect(command.getByRole('img', { name: 'Running' })).toBeVisible()
+  await expect(command.getByRole('img', { name: 'Succeeded' })).toBeVisible()
   await expect(command).toContainText('exit 0')
-  await expect(itemsWith(page, 'Edited totals.ts +2 −1')).toHaveCount(1, agentReply)
+  await expect(itemsWith(page, 'Edited totals.ts +2 −1')).toHaveCount(1)
   await expect(workingIndicatorOf(page)).toBeVisible()
   await expect(itemsWith(page, fixedText)).toHaveCount(0)
-  await expect(itemsWith(page, fixedText)).toHaveCount(1, agentReply)
+  await expect(itemsWith(page, fixedText)).toHaveCount(1)
 })
 
 test('12. after the answer the steps fold into one line above it, expand in order, and stay folded after a reload', async ({
@@ -54,7 +52,7 @@ test('12. after the answer the steps fold into one line above it, expand in orde
   await agentScript(research, { steps: fixSteps(), text: fixedText })
   await sendMessage(page, 'Fix the totals')
 
-  await expect(foldOf(page)).toBeVisible(agentReply)
+  await expect(foldOf(page)).toBeVisible()
   await expect(workingIndicatorOf(page)).toHaveCount(0)
   await expect(messageItemsOf(page)).toHaveCount(3)
   await expect(messageItemsOf(page).nth(1)).toContainText(/^Worked for .+ · 3 steps$/)
@@ -78,14 +76,14 @@ test('13. a reasoning step expands to the reasoning text the agent produced', as
   await sendMessage(page, 'Think first')
 
   const reasoning = stepButtonOf(page, /Thought for .+s/)
-  await expect(reasoning).toBeVisible(agentReply)
-  await expect(workingIndicatorOf(page)).toHaveCount(0, agentReply)
+  await expect(reasoning).toBeVisible()
+  await expect(workingIndicatorOf(page)).toHaveCount(0)
   await expect(mainOf(page).getByText(thinking)).toHaveCount(0)
   await reasoning.click()
   await expect(mainOf(page).getByText(thinking)).toBeVisible()
 })
 
-test.describe('real Agent Server', () => {
+test.describe('real Agent Server', { tag: '@docker' }, () => {
   test.use({ agentServer: 'real' })
 
   test('14. a successful command shows its output on click; a failing one shows exit 3 and its last lines at once', async ({
@@ -95,8 +93,8 @@ test.describe('real Agent Server', () => {
     await agentScript(research, { steps: [{ command: 'echo all good' }] })
     await sendMessage(page, 'Run the good command')
     const good = stepButtonOf(page, 'echo all good')
-    await expect(good).toBeVisible(agentReply)
-    await expect(workingIndicatorOf(page)).toHaveCount(0, agentReply)
+    await expect(good).toBeVisible()
+    await expect(workingIndicatorOf(page)).toHaveCount(0)
     await expect(mainOf(page).getByText('all good', { exact: true })).toHaveCount(0)
     await good.click()
     await expect(mainOf(page).getByText('all good', { exact: true })).toBeVisible()
@@ -104,7 +102,7 @@ test.describe('real Agent Server', () => {
     await agentScript(research, { steps: [{ command: failingCommand }] })
     await sendMessage(page, 'Run the failing command')
     const failing = itemsWith(page, failingCommand)
-    await expect(failing.getByRole('img', { name: 'Failed' })).toBeVisible(agentReply)
+    await expect(failing.getByRole('img', { name: 'Failed' })).toBeVisible()
     await expect(failing).toContainText('exit 3')
     await expect(failing).toContainText('step two')
   })
@@ -142,7 +140,7 @@ test('16. a plan shows as one checklist in its latest state and feeds the Plan t
   })
   await sendMessage(page, 'Plan the fix')
 
-  await expect(workingIndicatorOf(page)).toHaveCount(0, agentReply)
+  await expect(workingIndicatorOf(page)).toHaveCount(0)
   const checklist = mainOf(page).getByRole('group', { name: 'Plan' })
   await expect(checklist).toHaveCount(1)
   await expect(checklist.getByRole('checkbox', { name: 'Fix the totals' })).toBeChecked()
@@ -158,7 +156,7 @@ test('17. an agent failure shows a red error notice and ends the turn', async ({
   await sendMessage(page, 'Try anyway')
 
   const error = messageItemsOf(page).getByRole('alert')
-  await expect(error).toContainText('The provider is unavailable, try again shortly', agentReply)
+  await expect(error).toContainText('The provider is unavailable, try again shortly')
   await expect(workingIndicatorOf(page)).toHaveCount(0)
 })
 
@@ -187,7 +185,7 @@ test('18. Markdown answers render tables, highlighted code with copy, links with
   await sendMessage(page, 'Show the pricing')
 
   const reply = itemsWith(page, 'See the pricing')
-  await expect(reply.getByRole('table')).toBeVisible(agentReply)
+  await expect(reply.getByRole('table')).toBeVisible()
   await expect(reply.getByRole('cell', { name: 'Team' })).toBeVisible()
   await expect(reply.locator('code .hljs-keyword').first()).toHaveText('const')
   await expect(reply.getByRole('button', { name: 'Copy code' })).toBeVisible()

@@ -241,7 +241,7 @@ test('a second connection of a host replaces the first, which is closed, and the
   const secondConnection = await connectFakeHost()
   secondConnection.send({ type: 'hello', token, system: hostSystem })
   expect((await firstConnection.closed).reason).toBe('Replaced by a newer connection of this host')
-  await Bun.sleep(300)
+  await Bun.sleep(200)
   expect(secondConnection.socket.readyState).toBe(WebSocket.OPEN)
   expect((await hostRow(id)).status).toBe('online')
 })

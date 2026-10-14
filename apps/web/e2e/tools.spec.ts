@@ -3,7 +3,6 @@ import { expect, mainOf, messageItemsOf, openChat, type Page, sendMessage, test 
 import { openPageAs, type WorkerStack } from './stack'
 import { fakeMcpUrl, gatewayUrl } from './stack-ports'
 
-const agentReply = { timeout: 30_000 }
 const research = 'chat-research'
 const toolStep = 'Used whoami (fake)'
 const toolScript = { steps: [{ tool: 'fake-whoami' }], text: 'Checked who I am.' }
@@ -33,7 +32,7 @@ const promptTool = async (page: Page, agentScript: (chat: string, script: object
   await agentScript(research, toolScript)
   await openChat(page, 'Research')
   await sendMessage(page, text)
-  await expect(workingIndicatorOf(page)).toHaveCount(0, agentReply)
+  await expect(workingIndicatorOf(page)).toHaveCount(0)
 }
 const toolStepsOf = (page: Page) => messageItemsOf(page).getByRole('button', { name: toolStep })
 const lastToolResultOf = async (page: Page) => {
@@ -185,7 +184,7 @@ test('6. disconnecting brings back the Connect notice; an expired session shows 
   await expect(connectedRowOf(page)).toContainText('Connected')
 })
 
-test.describe('real Agent Server', () => {
+test.describe('real Agent Server', { tag: '@docker' }, () => {
   test.use({ agentServer: 'real' })
 
   test('7. the real Agent Server calls the fake tool through the relay as the owner', async ({ page, agentScript }) => {

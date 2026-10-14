@@ -35,7 +35,7 @@ const defaultText = 'Understood, working on it.'
 const unsureRoute: FakeRouteAnswer = { tier: 'medium', confidence: 'low', effort: 'medium' }
 const decisionConfidenceOf = (confidence: string | number) =>
   typeof confidence === 'number' ? confidence : confidence === 'high' ? 0.95 : 0.5
-const slowRouteMilliseconds = 5_000
+const slowRouteMilliseconds = 1_000
 const defaultWordDelayMilliseconds = 30
 const workingDirectory = '/workspace/project/'
 const usage = { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }

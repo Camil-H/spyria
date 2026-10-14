@@ -33,7 +33,7 @@ setDefaultTimeout(30_000)
 const llm = { model: 'openai/fake/fake-model' }
 const { database } = await openSharedTestApp()
 const gateway = createRuntimeHostGateway({ databases: () => [database] })
-const agentBridge = createAgentBridge({ sandboxProvider: gateway.sandboxProvider, llm })
+const agentBridge = createAgentBridge({ sandboxProvider: gateway.sandboxProvider, llm, reopenDelayMilliseconds: 50 })
 const app = createApp({ database, ...testAuthSettings, runtimeHosts: gateway, agentBridge })
 const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
 const worker = startJobWorker(database, {
@@ -262,7 +262,7 @@ test('prompts to one chat are delivered one turn at a time, in order, each exact
   await waitFor(() => fake.prompts.length === 1)
   const second = await prompt(chat, 'Second question')
   const third = await prompt(chat, 'Third question')
-  await Bun.sleep(300)
+  await Bun.sleep(200)
   expect(fake.prompts.map((delivered) => delivered.text)).toEqual(['First question'])
   expect(await turnOf(chat)).toBe(first)
 
@@ -273,7 +273,7 @@ test('prompts to one chat are delivered one turn at a time, in order, each exact
   await waitFor(() => fake.prompts.length === 3)
   await release(2)
   await answered(third)
-  await Bun.sleep(300)
+  await Bun.sleep(200)
   expect(fake.prompts.map((delivered) => delivered.text)).toEqual([
     'First question',
     'Second question',

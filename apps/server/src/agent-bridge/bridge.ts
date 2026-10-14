@@ -21,8 +21,6 @@ import type { Authentication } from '../auth/session-tokens.ts'
 type Segment = { first: AgentEvent; last: AgentEvent; text: string; isReasoning: boolean }
 type StreamFrame = { type?: unknown; token?: unknown; chatId?: unknown }
 
-const reopenDelayMilliseconds = 1000
-const catchUpMilliseconds = 1000
 const readyTimeoutMilliseconds = 5000
 const visibleRetryMilliseconds = 100
 const keyOf = (chat: AgentChat) => `${chat.workspaceId}/${chat.chatId}`
@@ -36,6 +34,7 @@ export const createAgentBridge = ({
   resumeAfterMilliseconds,
   condensationScale,
   hqAgentImage,
+  reopenDelayMilliseconds = 1000,
 }: {
   sandboxProvider: SandboxProvider
   llm?: AgentLlm
@@ -44,6 +43,7 @@ export const createAgentBridge = ({
   resumeAfterMilliseconds?: number
   condensationScale?: number
   hqAgentImage?: string
+  reopenDelayMilliseconds?: number
 }) => {
   const bridgeOf = (database: Database) => {
     const sockets = new Map<
@@ -104,7 +104,7 @@ export const createAgentBridge = ({
       if (outcome)
         setTimeout(
           () => void handlers.closeReopenedTurn(chat, promptId, outcome).catch(logFailure(chat)),
-          catchUpMilliseconds,
+          reopenDelayMilliseconds,
         )
     }
     const ensureOpen = (chat: AgentChat, conversation: AgentConversation, promptId: MessageId | null) => {

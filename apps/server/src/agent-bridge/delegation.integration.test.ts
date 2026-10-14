@@ -30,8 +30,9 @@ const runtimeHosts = createRuntimeHostGateway({
 })
 const agentBridge = createAgentBridge({
   sandboxProvider: runtimeHosts.sandboxProvider,
-  sessionClassifierOf: sessionClassifierOf(llmGateway),
-  resumeAfterMilliseconds: 4_000,
+  sessionClassifierOf: sessionClassifierOf(llmGateway, { timeoutMilliseconds: 300 }),
+  resumeAfterMilliseconds: 1_500,
+  reopenDelayMilliseconds: 50,
 })
 const app = createApp({ database, ...testAuthSettings, llmGateway, runtimeHosts, agentBridge })
 const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
@@ -254,7 +255,7 @@ const stepsOf = async (promptId: string) =>
 const slowWork = {
   steps: [{ command: 'echo started' }],
   text: 'one two three four five six',
-  wordDelayMilliseconds: 1_000,
+  wordDelayMilliseconds: 375,
 }
 
 test('a model asked by the agent comes before the policy and the classifier', async () => {

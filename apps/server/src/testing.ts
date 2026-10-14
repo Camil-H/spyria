@@ -78,6 +78,8 @@ export const requestMutation = async (
 }
 
 const integrationGatewayPort = 4880
+const integrationAppPort = 4882
+const integrationFakeMcpPort = 4883
 export const llmGatewayAt = (url: string) =>
   createLlmGateway({ url, adminUser: testGatewayAdmin.user, adminPassword: testGatewayAdmin.password })
 
@@ -101,9 +103,9 @@ const startSharedTestApp = async () => {
   setModelDirectory(llmGateway.listedModels)
   addRoutableModels(fakeRoutableModels)
   const app = createApp({ database, ...testAuthSettings, llmGateway, fakeLlm })
-  const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
+  const server = Bun.serve({ port: integrationAppPort, fetch: app.fetch, websocket })
   const fakeMcp = createFakeMcp()
-  const fakeMcpServer = Bun.serve({ port: 0, fetch: fakeMcp.fetch })
+  const fakeMcpServer = Bun.serve({ port: integrationFakeMcpPort, fetch: fakeMcp.fetch })
   const stopServerAndDatabase = async () => {
     void server.stop(true)
     void fakeMcpServer.stop(true)
@@ -120,7 +122,6 @@ const startSharedTestApp = async () => {
   ])
   if (zeroCache.status === 'rejected' || gateway.status === 'rejected') {
     if (zeroCache.status === 'fulfilled') await zeroCache.value.stop()
-    if (gateway.status === 'fulfilled') await gateway.value.stop()
     await stopServerAndDatabase()
     throw zeroCache.status === 'rejected' ? zeroCache.reason : (gateway as PromiseRejectedResult).reason
   }
@@ -151,7 +152,7 @@ const startSharedTestApp = async () => {
     eventsOf,
     changesOf,
     stop: async () => {
-      await Promise.all([zeroCache.value.stop(), gateway.value.stop()])
+      await zeroCache.value.stop()
       await stopServerAndDatabase()
     },
   }
@@ -215,13 +216,13 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
     {
       memoryGibibytes = 8,
       agentServer,
-      bootMilliseconds = 0,
+      bootMilliseconds = () => 0,
       ownerId,
       signedIn = [],
     }: {
       memoryGibibytes?: number
       agentServer?: FakeAgentServer
-      bootMilliseconds?: number
+      bootMilliseconds?: () => number
       ownerId?: string
       signedIn?: string[]
     } = {},
@@ -245,7 +246,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
       const container = containers.get(runtimeId)
       if (op === 'create') containers.set(runtimeId, { running: false, apiKey })
       if (op === 'start' && container)
-        Object.assign(container, { running: true, readyAt: Date.now() + bootMilliseconds })
+        Object.assign(container, { running: true, readyAt: Date.now() + bootMilliseconds() })
       if ((op === 'stop' || op === 'remove') && container) {
         container.running = false
         agentServer?.stopped?.(container)

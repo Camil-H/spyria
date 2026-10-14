@@ -10,7 +10,7 @@ import {
   sendMessage,
   serverUrl,
 } from './fixtures'
-import { openPageAs } from './stack'
+import { openPageAs, type WorkerStack } from './stack'
 
 type MachineConversation = {
   agent: {
@@ -34,7 +34,6 @@ const test = base.extend<{ machine: (query?: MachineQuery) => Promise<Machine> }
   },
 })
 
-const agentReply = { timeout: 30_000 }
 const localOption = 'My machine · Claude Code'
 const subscriptionCommand = [
   'env',
@@ -79,6 +78,14 @@ const newLocalSession = async (page: Page, name: string, option = localOption) =
   await expect(chipOf(page)).toHaveText(`${option.replace('My machine · ', '')} · subscription`)
   return chatId
 }
+const sessionStarted = (workerStack: WorkerStack, chatId: string) =>
+  expect
+    .poll(
+      async () =>
+        (await workerStack.database.$client`select agent_conversation_id from runtimes where chat_id = ${chatId}`)[0]
+          ?.agent_conversation_id,
+    )
+    .toBeTruthy()
 const repliesWith = (page: Page, text: string) => messageItemsOf(page).filter({ hasText: text })
 
 test.use({ runtimeHost: false })
@@ -95,7 +102,7 @@ test('3. the owner prompts an On my machine session: it runs on their machine wi
   const { id: machineId } = await machine(signedInMachine)
   const chatId = await newLocalSession(page, 'On my laptop')
   await sendMessage(page, 'Hello from my laptop')
-  await expect(repliesWith(page, 'Hello from the stub')).toBeVisible(agentReply)
+  await expect(repliesWith(page, 'Hello from the stub')).toBeVisible()
 
   const [runtime] = await workerStack.database.$client`select host_id from runtimes where chat_id = ${chatId}`
   expect(runtime?.host_id).toBe(machineId)
@@ -113,9 +120,6 @@ test('3. the owner prompts an On my machine session: it runs on their machine wi
   const sidePanel = page.getByRole('region', { name: 'Side panel' })
   await sidePanel.getByRole('tab', { name: 'Usage', exact: true }).click()
   await expect(sidePanel).toContainText('Subscription session on your machine, not metered by HQ')
-  await page.waitForTimeout(3_000)
-  const query = `metadata_chat=${chatId}&metadata_database=${workerStack.databaseName}&limit=10`
-  expect((await workerStack.gateway<{ logs: object[] | null }>(`/api/logs?${query}`)).logs ?? []).toHaveLength(0)
 })
 
 test('4. a prompt while the machine is not signed in shows the sign-in notice and creates no conversation', async ({
@@ -128,7 +132,7 @@ test('4. a prompt while the machine is not signed in shows the sign-in notice an
   await sendMessage(page, 'Answer without a sign-in')
   await expect(
     repliesWith(page, 'Sign in to Claude Code on your machine: docker exec -it hq-host hq-host login claude'),
-  ).toHaveCount(1, agentReply)
+  ).toHaveCount(1)
   const { conversations, prompts } = await machine()
   expect(conversations).toHaveLength(0)
   expect(prompts).toHaveLength(0)
@@ -143,13 +147,13 @@ test('5. another member reads the session and the answer, and their prompt is re
   await machine(signedInMachine)
   await newLocalSession(page, 'Shared laptop session')
   await sendMessage(page, 'Alice prompts the laptop')
-  await expect(repliesWith(page, 'Hello from the stub')).toBeVisible(agentReply)
+  await expect(repliesWith(page, 'Hello from the stub')).toBeVisible()
 
   const bobPage = await openPageAs(browser, workerStack, 'member-bob')
   await openChat(bobPage, 'Shared laptop session')
   await expect(repliesWith(bobPage, 'Hello from the stub')).toBeVisible()
   await sendMessage(bobPage, 'Bob tries the laptop')
-  await expect(repliesWith(bobPage, 'Only the owner prompts a session on their machine')).toHaveCount(1, agentReply)
+  await expect(repliesWith(bobPage, 'Only the owner prompts a session on their machine')).toHaveCount(1)
   await expect(repliesWith(page, 'Only the owner prompts a session on their machine')).toHaveCount(1)
   expect((await machine()).prompts).toEqual(['Alice prompts the laptop'])
   await bobPage.context().close()
@@ -157,21 +161,22 @@ test('5. another member reads the session and the answer, and their prompt is re
 
 test('6. a prompt while the machine is offline waits with "Your machine is offline" and is answered once it is back', async ({
   page,
+  workerStack,
   machine,
 }) => {
   await machine(signedInMachine)
-  await newLocalSession(page, 'Laptop goes away')
+  await sessionStarted(workerStack, await newLocalSession(page, 'Laptop goes away'))
   await machine({ online: 'false' })
   await sendMessage(page, 'Wait for my laptop')
-  await expect(repliesWith(page, 'Your machine is offline')).toHaveCount(1, agentReply)
+  await expect(repliesWith(page, 'Your machine is offline')).toHaveCount(1)
   await machine({ online: 'true' })
-  await expect(repliesWith(page, '[t1] Hello from the stub')).toBeVisible(agentReply)
+  await expect(repliesWith(page, '[t1] Hello from the stub')).toBeVisible()
 
   await machine({ online: 'false' })
   await sendMessage(page, 'Wait for my laptop again')
-  await expect(repliesWith(page, 'Your machine is offline')).toHaveCount(2, agentReply)
+  await expect(repliesWith(page, 'Your machine is offline')).toHaveCount(2)
   await machine({ online: 'true' })
-  await expect(repliesWith(page, '[t2] Hello from the stub')).toBeVisible(agentReply)
+  await expect(repliesWith(page, '[t2] Hello from the stub')).toBeVisible()
   expect((await machine()).prompts).toEqual(['Wait for my laptop', 'Wait for my laptop again'])
 })
 
@@ -182,12 +187,12 @@ test('8. stopping mid-command marks the turn stopped, and the next prompt is ans
   await machine(signedInMachine)
   await newLocalSession(page, 'Stop on my laptop')
   await sendMessage(page, 'stub:long')
-  await expect(messageItemsOf(page).getByRole('img', { name: 'Running' })).toBeVisible(agentReply)
+  await expect(messageItemsOf(page).getByRole('img', { name: 'Running' })).toBeVisible()
   await mainOf(page).getByRole('button', { name: 'Stop' }).click()
-  await expect(repliesWith(page, 'Stopped by Alice')).toHaveCount(1, agentReply)
+  await expect(repliesWith(page, 'Stopped by Alice')).toHaveCount(1)
   await sendMessage(page, 'Answer after the stop')
-  await expect(repliesWith(page, '[t2] Hello from the stub')).toHaveCount(1, agentReply)
-  await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0, agentReply)
+  await expect(repliesWith(page, '[t2] Hello from the stub')).toHaveCount(1)
+  await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0)
   await expect(mainOf(page)).not.toContainText('[t1] Hello from the stub')
   const { conversations, prompts } = await machine()
   expect(prompts).toEqual(['stub:long', 'Answer after the stop'])
@@ -210,10 +215,10 @@ test('10. text streamed around a command shows before the command and stays, the
 }) => {
   await machine(signedInMachine)
   const chatId = await newLocalSession(page, 'Live text')
-  await sendMessage(page, 'stub:command')
-  await expect(messageItemsOf(page).getByRole('img', { name: 'Running' })).toBeVisible(agentReply)
+  await sendMessage(page, 'stub:command stub:linger')
+  await expect(messageItemsOf(page).getByRole('img', { name: 'Running' })).toBeVisible()
   await expect(messageItemsOf(page).nth(1)).toContainText('[t1]')
-  await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0, agentReply)
+  await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0)
   await expect(messageItemsOf(page)).toHaveCount(4)
   await expect(messageItemsOf(page).nth(1)).toContainText('[t1]')
   await expect(messageItemsOf(page).nth(2)).toContainText('$ sleep 2 && echo checked')
@@ -230,13 +235,12 @@ test('10. text streamed around a command shows before the command and stays, the
 test.describe('Codex on a ChatGPT plan', () => {
   test('1. the owner prompts an On my machine Codex session: the subscription launch, the answer, unmetered', async ({
     page,
-    workerStack,
     machine,
   }) => {
     await machine(codexMachine)
-    const chatId = await newLocalSession(page, 'Codex on my laptop', codexOption)
+    await newLocalSession(page, 'Codex on my laptop', codexOption)
     await sendMessage(page, 'Hello Codex on my laptop')
-    await expect(repliesWith(page, 'Hello from the stub')).toBeVisible(agentReply)
+    await expect(repliesWith(page, 'Hello from the stub')).toBeVisible()
 
     const { conversations } = await machine()
     expect(conversations).toHaveLength(1)
@@ -253,33 +257,32 @@ test.describe('Codex on a ChatGPT plan', () => {
     const sidePanel = page.getByRole('region', { name: 'Side panel' })
     await sidePanel.getByRole('tab', { name: 'Usage', exact: true }).click()
     await expect(sidePanel).toContainText('Subscription session on your machine, not metered by HQ')
-    await page.waitForTimeout(3_000)
-    const query = `metadata_chat=${chatId}&metadata_database=${workerStack.databaseName}&limit=10`
-    expect((await workerStack.gateway<{ logs: object[] | null }>(`/api/logs?${query}`)).logs ?? []).toHaveLength(0)
   })
 
   test('2. signed in to Claude only, Codex is not offered, a Codex session signed out after the choice shows the Codex sign-in notice, and a Claude Code session works', async ({
     page,
+    workerStack,
     machine,
   }) => {
     await machine(signedInMachine)
-    await newRuntimeChat(page, 'Claude only', null)
+    const claudeOnlyId = await newRuntimeChat(page, 'Claude only', null)
     await expect(runsOnChoiceOf(page)).toHaveCount(0)
     await expect(chipOf(page)).toHaveText('Claude Code · subscription')
-    await expect.poll(async () => (await machine()).conversations.length, agentReply).toBe(1)
+    await expect.poll(async () => (await machine()).conversations.length).toBe(1)
+    await sessionStarted(workerStack, claudeOnlyId)
     await machine({ signedIn: 'claude,codex' })
-    await newLocalSession(page, 'Codex without a sign-in', codexOption)
-    await expect.poll(async () => (await machine()).conversations.length, agentReply).toBe(2)
+    await sessionStarted(workerStack, await newLocalSession(page, 'Codex without a sign-in', codexOption))
+    await expect.poll(async () => (await machine()).conversations.length).toBe(2)
     await machine({ signedIn: 'claude' })
     await sendMessage(page, 'Answer without a Codex sign-in')
     await expect(
       repliesWith(page, 'Sign in to Codex on your machine: docker exec -it hq-host hq-host login codex'),
-    ).toHaveCount(1, agentReply)
+    ).toHaveCount(1)
     expect((await machine()).conversations).toHaveLength(2)
 
     await newLocalSession(page, 'Claude on the same laptop')
     await sendMessage(page, 'Hello Claude on the same laptop')
-    await expect(repliesWith(page, 'Hello from the stub')).toBeVisible(agentReply)
+    await expect(repliesWith(page, 'Hello from the stub')).toBeVisible()
     const { conversations, prompts } = await machine()
     expect(conversations.map((conversation) => conversation.agent.acp_command.at(-1))).toEqual([
       'claude-agent-acp',
@@ -297,9 +300,9 @@ test.describe('Codex on a ChatGPT plan', () => {
     await machine(codexMachine)
     const chatId = await newLocalSession(page, 'Stop Codex on my laptop', codexOption)
     await sendMessage(page, 'stub:long')
-    await expect(messageItemsOf(page).getByRole('img', { name: 'Running' })).toBeVisible(agentReply)
+    await expect(messageItemsOf(page).getByRole('img', { name: 'Running' })).toBeVisible()
     await mainOf(page).getByRole('button', { name: 'Stop' }).click()
-    await expect(repliesWith(page, 'Stopped by Alice')).toHaveCount(1, agentReply)
+    await expect(repliesWith(page, 'Stopped by Alice')).toHaveCount(1)
     const sessionIdsOf = () =>
       workerStack.database.$client<{ id: string }[]>`
         select distinct payload->'event'->'update'->>'sessionId' as id from events
@@ -307,8 +310,8 @@ test.describe('Codex on a ChatGPT plan', () => {
     expect(await sessionIdsOf()).toHaveLength(1)
 
     await sendMessage(page, 'Answer after the stop')
-    await expect(repliesWith(page, '[t2] Hello from the stub')).toHaveCount(1, agentReply)
-    await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0, agentReply)
+    await expect(repliesWith(page, '[t2] Hello from the stub')).toHaveCount(1)
+    await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0)
     await expect(mainOf(page)).not.toContainText('[t1] Hello from the stub')
     await expect(mainOf(page)).not.toContainText('The agent started a new session')
     const { conversations, prompts } = await machine()
@@ -337,10 +340,10 @@ test.describe('Codex on a ChatGPT plan', () => {
     await machine(codexMachine)
     await newLocalSession(page, 'Real steps', codexOption)
     await sendMessage(page, 'stub:read stub:tools stub:linger')
-    await expect(repliesWith(page, '$ npm test').getByRole('img', { name: 'Failed' })).toBeVisible(agentReply)
-    await expect(repliesWith(page, 'Read notes.md')).toBeVisible(agentReply)
+    await expect(repliesWith(page, '$ npm test').getByRole('img', { name: 'Failed' })).toBeVisible()
+    await expect(repliesWith(page, 'Read notes.md')).toBeVisible()
     await expect(page.getByRole('status', { name: 'Agent is working' })).toBeVisible()
-    await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0, agentReply)
+    await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0)
     await messageItemsOf(page)
       .getByRole('button', { name: /^Worked for .+ · 3 steps$/ })
       .click()

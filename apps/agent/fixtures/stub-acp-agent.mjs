@@ -187,6 +187,7 @@ const turn = async (id, { sessionId, prompt }) => {
         rawInput,
       })
       await step()
+      if (has('linger')) await sleep(1500)
       await step()
       update({
         sessionUpdate: 'tool_call_update',

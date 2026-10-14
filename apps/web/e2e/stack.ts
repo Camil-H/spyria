@@ -216,11 +216,13 @@ type TestOptions = ResetOptions & {
   resetStack: undefined
   agentScript: (chatId: string, script: AgentScript) => Promise<void>
   failRuntimeCreation: (isFailing: boolean) => Promise<void>
+  fakeBootMilliseconds: number | undefined
 }
 
 export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
   signedInAs: [aliceMemberId, { option: true }],
   tokenSeconds: [undefined, { option: true }],
+  fakeBootMilliseconds: [undefined, { option: true }],
   workerStack: [
     async ({ browserName: _ }, use, workerInfo) => {
       const index = workerInfo.parallelIndex
@@ -230,6 +232,7 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
       await dropDatabase(workerDatabaseNameOf(index))
       const testDatabase = await createTestDatabase(templateDatabaseName, workerDatabaseNameOf(index))
       let epochNumber = 0
+      let seededGatewayKeys: Awaited<ReturnType<typeof prepareSeededGatewayKeys>> | undefined
       let barrierSessionId: string | undefined
       const pairedHosts: Partial<Record<AgentServerMode, PairedHost>> = {}
       let mode: AgentServerMode = 'fake'
@@ -254,7 +257,8 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
         if (options.agentServer === 'real')
           for (const { runtime } of pairedHosts.real?.warmRuntimes.values() ?? [])
             deleteAgentConversations(`${workerHostPrefixOf(index)}rt-${runtime.id}`, runtime.apiKey ?? '')
-        const writeSeededGatewayKeys = await prepareSeededGatewayKeys(testGateway)
+        const writeSeededGatewayKeys = await prepareSeededGatewayKeys(testGateway, seededGatewayKeys)
+        seededGatewayKeys = writeSeededGatewayKeys
         const reset = () =>
           resetDatabase(testDatabase.database, async (transaction) => {
             await writeSeededGatewayKeys(transaction)
@@ -380,8 +384,15 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
   warmRuntimes: [true, { option: true }],
   agentServer: ['fake', { option: true }],
   resetStack: [
-    async ({ workerStack, context, signedInAs, tokenSeconds, runtimeHost, warmRuntimes, agentServer }, use) => {
+    async (
+      { workerStack, context, signedInAs, tokenSeconds, runtimeHost, warmRuntimes, agentServer, fakeBootMilliseconds },
+      use,
+    ) => {
       await postToServer('/test/fake-llm-script', { db: workerStack.databaseName })
+      await postToServer('/test/fake-boot', {
+        db: workerStack.databaseName,
+        milliseconds: String(fakeBootMilliseconds ?? ''),
+      })
       await postToServer('/test/runtime-creation', { db: workerStack.databaseName, failing: 'false' })
       await workerStack.setGatewayReachable(true)
       await workerStack.reset({ runtimeHost, warmRuntimes, agentServer })

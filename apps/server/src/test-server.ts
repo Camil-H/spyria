@@ -37,6 +37,7 @@ type ServedDatabase = {
 const servedDatabaseByName = new Map<string, ServedDatabase>()
 const databasesFailingCreation = new Set<string>()
 const databasesWithoutGateway = new Set<string>()
+const bootMillisecondsByDatabase = new Map<string, number>()
 const fakeHostByDatabase = new Map<string, { host: FakeHost; isOnline: boolean }>()
 const fakeMachineByDatabase = new Map<string, { host: FakeHost; relay: ReturnType<typeof createHqAgentRelay> }>()
 const nameOf = (database: Database) =>
@@ -50,8 +51,10 @@ const llmGateway = createLlmGateway(gatewaySettings)
 setModelDirectory(llmGateway.listedModels)
 addRoutableModels(fakeRoutableModels)
 const usageSyncIntervalMilliseconds = 2_000
-const stubGapMilliseconds = Number(process.env.HQ_STUB_GAP_MS ?? 300)
-const fakeAgentServerBootMilliseconds = Number(process.env.HQ_FAKE_AGENT_SERVER_BOOT_MILLISECONDS ?? 1_500)
+const stubGapMilliseconds = Number(process.env.HQ_STUB_GAP_MS ?? 20)
+const fakeAgentServerBootMilliseconds = Number(process.env.HQ_FAKE_AGENT_SERVER_BOOT_MILLISECONDS ?? 200)
+const bootMillisecondsOf = (databaseName: string) => () =>
+  bootMillisecondsByDatabase.get(databaseName) ?? fakeAgentServerBootMilliseconds
 const sandboxProviderOf = (databaseName: string): SandboxProvider => ({
   ...runtimeHosts.sandboxProvider,
   create: async (sandbox) => {
@@ -126,7 +129,8 @@ const agentBridge = createAgentBridge({
     headersOf: testHeadersOf,
     timeoutMilliseconds: 300,
   }),
-  resumeAfterMilliseconds: 4_000,
+  resumeAfterMilliseconds: Number(process.env.HQ_RESUME_AFTER_MILLISECONDS ?? 1_500),
+  reopenDelayMilliseconds: 50,
   condensationScale,
   hqAgentImage,
 })
@@ -198,6 +202,12 @@ const app = createApp({
     else databasesFailingCreation.delete(db)
     return context.body(null, 204)
   })
+  .post('/test/fake-boot', (context) => {
+    const { db = '', milliseconds } = context.req.query()
+    if (milliseconds) bootMillisecondsByDatabase.set(db, Number(milliseconds))
+    else bootMillisecondsByDatabase.delete(db)
+    return context.body(null, 204)
+  })
   .post('/test/gateway', (context) => {
     const { db = '', reachable } = context.req.query()
     if (reachable === 'false') databasesWithoutGateway.add(db)
@@ -212,7 +222,7 @@ const app = createApp({
       const created = await createFakeHosts({ port, database: databaseByName(db) }).fakeHost('e2e fake host', {
         memoryGibibytes: 16,
         agentServer: fake.agentServer,
-        bootMilliseconds: fakeAgentServerBootMilliseconds,
+        bootMilliseconds: bootMillisecondsOf(db),
       })
       fakeHost = { host: created, isOnline: true }
       fakeHostByDatabase.set(db, fakeHost)
@@ -231,7 +241,7 @@ const app = createApp({
       const host = await createFakeHosts({ port, database: databaseByName(db) }).fakeHost('My machine', {
         memoryGibibytes: 16,
         agentServer: relay.agentServer,
-        bootMilliseconds: fakeAgentServerBootMilliseconds,
+        bootMilliseconds: bootMillisecondsOf(db),
         ownerId: owner,
         signedIn: (signedIn ?? '').split(',').filter(Boolean),
       })

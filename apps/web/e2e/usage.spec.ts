@@ -13,8 +13,6 @@ import {
 } from './fixtures'
 import { openPageAs, type WorkerStack } from './stack'
 
-const metered = { timeout: 15_000 }
-const agentReply = { timeout: 30_000 }
 const currentMonth = new Date().toISOString().slice(0, 7)
 const earlierMonth = (() => {
   const date = new Date()
@@ -53,7 +51,7 @@ const openUsageSettings = async (page: Page) => {
 const prompt = async (page: Page, text: string, expectedReplies: number) => {
   await openChat(page, 'Research')
   await sendMessage(page, text)
-  await expect(messageItemsOf(page).filter({ hasText: agentReplyText })).toHaveCount(expectedReplies, agentReply)
+  await expect(messageItemsOf(page).filter({ hasText: agentReplyText })).toHaveCount(expectedReplies)
 }
 
 const addFakeKey = async (page: Page) => {
@@ -66,7 +64,7 @@ const addFakeKey = async (page: Page) => {
 }
 
 const expectMeteredRow = async (row: Locator, calls: number) => {
-  await expect(row.getByRole('cell').nth(2)).toHaveText(String(calls), metered)
+  await expect(row.getByRole('cell').nth(2)).toHaveText(String(calls))
   const cells = await cellsOf(row)
   expect(cells.tokens).toBeGreaterThan(0)
   expect(cells.cost).toBeGreaterThan(0)
@@ -119,8 +117,8 @@ test('3. workspace settings show the total, each member and each project', async
 
   await openUsageTab(page, 'Research')
   const researchTable = usageTabOf(page).getByRole('table')
-  await expect(rowOf(researchTable, 'Alice')).toBeVisible(metered)
-  await expect(rowOf(researchTable, 'Bob')).toBeVisible(metered)
+  await expect(rowOf(researchTable, 'Alice')).toBeVisible()
+  await expect(rowOf(researchTable, 'Bob')).toBeVisible()
   const research = await cellsOf(rowOf(researchTable, 'Total'))
   const aliceInResearch = await cellsOf(rowOf(researchTable, 'Alice'))
   const bobInResearch = await cellsOf(rowOf(researchTable, 'Bob'))

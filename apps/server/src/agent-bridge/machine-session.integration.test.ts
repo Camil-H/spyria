@@ -28,7 +28,11 @@ setDefaultTimeout(40_000)
 const { database } = await openSharedTestApp()
 const hqAgentImage = `sha256:${'0'.repeat(64)}`
 const gateway = createRuntimeHostGateway({ databases: () => [database], hqAgentImage })
-const agentBridge = createAgentBridge({ sandboxProvider: gateway.sandboxProvider, hqAgentImage })
+const agentBridge = createAgentBridge({
+  sandboxProvider: gateway.sandboxProvider,
+  hqAgentImage,
+  reopenDelayMilliseconds: 50,
+})
 const app = createApp({ database, ...testAuthSettings, runtimeHosts: gateway, agentBridge, hqAgentImage })
 const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
 const worker = startJobWorker(database, {
@@ -284,7 +288,7 @@ test('a start that fails closes the turn at once with the adapter message and do
   await waitFor(async () => (await turnOf(chat)) === null)
 
   expect(bodiesOf(await repliesTo(question))).toEqual(['notice:The agent could not start: Authentication required'])
-  await Bun.sleep(500)
+  await Bun.sleep(200)
   expect(relay.created).toHaveLength(1)
   expect(await repliesTo(question)).toHaveLength(1)
 })

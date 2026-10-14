@@ -11,7 +11,6 @@ import {
 } from './fixtures'
 import { openPageAs, type WorkerStack } from './stack'
 
-const agentReply = { timeout: 60_000 }
 const researchChatId = 'chat-research'
 const confidentSmall = { tier: 'small', confidence: 'high', effort: 'low' }
 const subagentWork = { steps: [{ command: 'echo listing' }, { command: 'echo done' }], text: 'Two files.' }
@@ -33,7 +32,7 @@ const openSession = async (page: Page) => {
 }
 const promptAndWait = async (page: Page, text: string, answer: string) => {
   await sendMessage(page, text)
-  await expect(messageItemsOf(page).filter({ hasText: answer })).toBeVisible(agentReply)
+  await expect(messageItemsOf(page).filter({ hasText: answer })).toBeVisible()
 }
 const gatewayModelsOf = async (workerStack: WorkerStack, role: string, since: Date, count: number) => {
   const query = `metadata_chat=${researchChatId}&metadata_database=${workerStack.databaseName}&metadata_role=${role}&start_time=${since.toISOString()}`
@@ -44,7 +43,7 @@ const gatewayModelsOf = async (workerStack: WorkerStack, role: string, since: Da
         (await workerStack.gateway<{ logs: GatewayLog[] | null }>(`/api/logs?${query}&limit=100`)).logs ?? []
       ).map((log) => log.model)
       return models.length
-    }, agentReply)
+    })
     .toBeGreaterThanOrEqual(count)
   return models
 }
@@ -191,7 +190,7 @@ test('11. a long subagent task returns still running, then its result on resume,
   agentScript,
 }) => {
   const answer = 'The long listing is done.'
-  const slowWork = { ...subagentWork, text: 'The slow listing found two files today.', wordDelayMilliseconds: 1_000 }
+  const slowWork = { ...subagentWork, text: 'The slow listing found two files today.', wordDelayMilliseconds: 300 }
   await agentScript(
     researchChatId,
     resuming(answer, { delegateRoute: confidentSmall, subagents: { 'fake-small': slowWork } }),
@@ -220,18 +219,16 @@ test('12. stopping during a delegation stops the subagent, the group shows stopp
     resuming('Never shown.', { delegateRoute: confidentSmall, subagents: { 'fake-small': longWork } }),
   )
   await sendMessage(page, 'Delegate a very long listing')
-  await expect(mainOf(page).getByRole('button', { name: /^Delegating to Fake small/ })).toBeVisible(agentReply)
+  await expect(mainOf(page).getByRole('button', { name: /^Delegating to Fake small/ })).toBeVisible()
   await mainOf(page).getByRole('button', { name: 'Stop' }).click()
-  await expect(mainOf(page).getByRole('button', { name: /^Delegated to Fake small · stopped · 1 step/ })).toBeVisible(
-    agentReply,
-  )
+  await expect(mainOf(page).getByRole('button', { name: /^Delegated to Fake small · stopped · 1 step/ })).toBeVisible()
   await expect(messageItemsOf(page).filter({ hasText: 'Stopped by Alice' })).toHaveCount(1)
   await agentScript(researchChatId, { text: 'Back to work.' })
   await promptAndWait(page, 'Carry on', 'Back to work.')
   await expect(mainOf(page)).not.toContainText('Never shown.')
 })
 
-test.describe('real Agent Server', () => {
+test.describe('real Agent Server', { tag: '@docker' }, () => {
   test.use({ agentServer: 'real' })
   test.describe.configure({ mode: 'default' })
 
@@ -278,7 +275,7 @@ test.describe('real Agent Server', () => {
       delegating('Never shown.', { delegateRoute: confidentSmall, subagents: { 'fake-small': longWork } }),
     )
     await sendMessage(page, 'Delegate a very long listing for real')
-    await expect(mainOf(page).getByRole('button', { name: /^Delegating to Fake small/ })).toBeVisible(agentReply)
+    await expect(mainOf(page).getByRole('button', { name: /^Delegating to Fake small/ })).toBeVisible()
     await expect
       .poll(
         async () =>
@@ -287,13 +284,12 @@ test.describe('real Agent Server', () => {
               select 1 from events where chat_id = ${researchChatId}
               and payload->'delegation' is not null and payload->'event'->'observation'->>'kind' = 'TerminalObservation'`
           ).length,
-        agentReply,
       )
       .toBe(1)
     await mainOf(page).getByRole('button', { name: 'Stop' }).click()
-    await expect(mainOf(page).getByRole('button', { name: /^Delegated to Fake small · stopped · 1 step/ })).toBeVisible(
-      agentReply,
-    )
+    await expect(
+      mainOf(page).getByRole('button', { name: /^Delegated to Fake small · stopped · 1 step/ }),
+    ).toBeVisible()
     await expect(messageItemsOf(page).filter({ hasText: 'Stopped by Alice' })).toHaveCount(1)
     await agentScript(researchChatId, { text: 'Back to real work.' })
     await promptAndWait(page, 'Carry on for real', 'Back to real work.')

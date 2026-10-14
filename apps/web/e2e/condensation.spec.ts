@@ -1,7 +1,5 @@
 import { expect, mainOf, messageItemsOf, openChat, type Page, sendMessage, test } from './fixtures'
 
-const agentReply = { timeout: 90_000 }
-const metered = { timeout: 30_000 }
 const researchChatId = 'chat-research'
 const summary = 'Summary of the earlier listings.'
 const condensedNotice = 'Context condensed · earlier steps summarized'
@@ -13,10 +11,10 @@ type GatewayLog = { metadata: Record<string, string> }
 
 const promptAndWait = async (page: Page, text: string, answer: string) => {
   await sendMessage(page, text)
-  await expect(messageItemsOf(page).filter({ hasText: answer })).toBeVisible(agentReply)
+  await expect(messageItemsOf(page).filter({ hasText: answer })).toBeVisible()
 }
 
-test.describe('real Agent Server', () => {
+test.describe('real Agent Server', { tag: '@docker' }, () => {
   test.use({ agentServer: 'real' })
   test.describe.configure({ mode: 'default' })
 
@@ -46,7 +44,7 @@ test.describe('real Agent Server', () => {
           )
         ).logs ?? []
       ).filter((log) => !role || log.metadata.role === role)
-    await expect.poll(async () => (await logsOf('condenser')).length, metered).toBeGreaterThanOrEqual(1)
+    await expect.poll(async () => (await logsOf('condenser')).length).toBeGreaterThanOrEqual(1)
     for (const log of await logsOf('condenser')) expect(log.metadata.prompter).toBe('member-alice')
     const allCalls = (await logsOf()).length
     await page.getByRole('region', { name: 'Side panel' }).getByRole('tab', { name: 'Usage', exact: true }).click()
@@ -55,7 +53,7 @@ test.describe('real Agent Server', () => {
       .getByRole('tabpanel')
       .getByRole('table')
       .getByRole('row', { name: /^Alice\b/ })
-    await expect(aliceRow.getByRole('cell').nth(2)).toHaveText(String(allCalls), metered)
+    await expect(aliceRow.getByRole('cell').nth(2)).toHaveText(String(allCalls))
     await expect(mainOf(page)).toContainText('Third answer after condensing.')
   })
 })

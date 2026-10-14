@@ -82,7 +82,7 @@ export default async function globalSetup() {
     stdio: 'ignore',
   })
   await sweepLeftovers()
-  const [, gateway, stopServer, stopVite] = await Promise.all([
+  const [, , stopServer, stopVite] = await Promise.all([
     buildTemplateDatabase(templateDatabaseName),
     startTestGateway({
       name: 'e2e',
@@ -117,6 +117,5 @@ export default async function globalSetup() {
     stopVite()
     stopServer()
     removeWorkerHosts()
-    await gateway.stop()
   }
 }

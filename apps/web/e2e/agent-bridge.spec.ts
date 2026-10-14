@@ -11,9 +11,6 @@ import {
 } from './fixtures'
 import { openPageAs, type WorkerStack } from './stack'
 
-const agentReply = { timeout: 30_000 }
-const coldStart = { timeout: 60_000 }
-
 const research = 'chat-research'
 const workingIndicatorOf = (page: Page) => page.getByRole('status', { name: 'Agent is working' })
 const itemsWith = (page: Page, text: string) => messageItemsOf(page).filter({ hasText: text })
@@ -33,7 +30,7 @@ const triggerIdleStop = async (workerStack: WorkerStack, chatId: string) => {
   await workerStack.database.$client`
     insert into jobs (workspace_id, id, type, payload, run_at, attempts, state)
     values ('workspace-acme', ${crypto.randomUUID()}, 'runtime.sweep', '{}'::jsonb, now(), 0, 'queued')`
-  await expect.poll(() => runtimeStateOf(workerStack, chatId), agentReply).toBe('stopped')
+  await expect.poll(() => runtimeStateOf(workerStack, chatId)).toBe('stopped')
 }
 
 test.beforeEach(async ({ page }) => {
@@ -44,13 +41,12 @@ test.describe('1. first prompt', () => {
   test.use({ warmRuntimes: false })
 
   test('starts the agent and shows the working indicator until its reply arrives', async ({ page, workerStack }) => {
-    test.setTimeout(60_000)
     expect(await runtimeStateOf(workerStack, research)).toBeUndefined()
     await openChat(page, 'Research')
     await sendMessage(page, 'Find the latest pricing')
 
     await expect(workingIndicatorOf(page)).toBeVisible()
-    await expect(itemsWith(page, agentReplyText)).toHaveCount(1, coldStart)
+    await expect(itemsWith(page, agentReplyText)).toHaveCount(1)
     await expect(workingIndicatorOf(page)).toHaveCount(0)
     await expect(messageItemsOf(page).nth(0)).toContainText('Find the latest pricing')
     await expect(messageItemsOf(page).nth(1)).toContainText('Agent')
@@ -58,7 +54,7 @@ test.describe('1. first prompt', () => {
   })
 })
 
-test.describe('real Agent Server', () => {
+test.describe('real Agent Server', { tag: '@docker' }, () => {
   test.use({ agentServer: 'real' })
 
   test('2. streams the reply into one agent message that grows, then becomes the stored message', async ({
@@ -70,12 +66,12 @@ test.describe('real Agent Server', () => {
     await sendMessage(page, 'Stream it slowly')
 
     const reply = messageItemsOf(page).nth(1)
-    await expect(reply).toContainText('Understood,', agentReply)
+    await expect(reply).toContainText('Understood,')
     expect(await reply.textContent()).not.toContain(agentReplyText)
     await expect(reply).toContainText('Agent')
-    await expect(reply).toContainText(agentReplyText, agentReply)
+    await expect(reply).toContainText(agentReplyText)
     await expect(workingIndicatorOf(page)).toHaveCount(0)
-    await expect(itemsWith(page, 'Understood,')).toHaveCount(1, agentReply)
+    await expect(itemsWith(page, 'Understood,')).toHaveCount(1)
     await expect(messageItemsOf(page)).toHaveCount(2)
   })
 })
@@ -89,8 +85,8 @@ test('4. shows a terminal command as a tool call with its output, followed by th
   await sendMessage(page, 'Say hello in the terminal')
 
   const toolCallToggle = messageItemsOf(page).nth(1).getByRole('button', { name: 'echo hello' })
-  await expect(toolCallToggle).toBeVisible(agentReply)
-  await expect(messageItemsOf(page).nth(2)).toContainText(agentReplyText, agentReply)
+  await expect(toolCallToggle).toBeVisible()
+  await expect(messageItemsOf(page).nth(2)).toContainText(agentReplyText)
   await expect(workingIndicatorOf(page)).toHaveCount(0)
   await expect(messageItemsOf(page)).toHaveCount(3)
   await toolCallToggle.click()
@@ -102,7 +98,7 @@ test('5. keeps the prompt and the reply after a reload, and the chat is not unre
 }) => {
   await openChat(page, 'Research')
   await sendMessage(page, 'Remember this')
-  await expect(itemsWith(page, agentReplyText)).toHaveCount(1, agentReply)
+  await expect(itemsWith(page, agentReplyText)).toHaveCount(1)
   await expect(workingIndicatorOf(page)).toHaveCount(0)
 
   await page.reload()
@@ -120,11 +116,11 @@ test('6. a reload during a turn shows the prompt, then the reply once it complet
   await agentScript(research, { wordDelayMilliseconds: 700 })
   await openChat(page, 'Research')
   await sendMessage(page, 'Stream through a reload')
-  await expect(itemsWith(page, 'Understood,')).toHaveCount(1, agentReply)
+  await expect(itemsWith(page, 'Understood,')).toHaveCount(1)
 
   await page.reload()
   await expect(itemsWith(page, 'Stream through a reload')).toHaveCount(1)
-  await expect(itemsWith(page, agentReplyText)).toHaveCount(1, agentReply)
+  await expect(itemsWith(page, agentReplyText)).toHaveCount(1)
   await expect(workingIndicatorOf(page)).toHaveCount(0)
   await expect(messageItemsOf(page)).toHaveCount(2)
 })
@@ -143,9 +139,9 @@ test('7. another member viewing the chat sees the reply stream in, then the stor
 
   await expect(itemsWith(bobPage, 'Watch this')).toHaveCount(1)
   const bobReply = messageItemsOf(bobPage).nth(1)
-  await expect(bobReply).toContainText('Understood,', agentReply)
+  await expect(bobReply).toContainText('Understood,')
   expect(await bobReply.textContent()).not.toContain(agentReplyText)
-  await expect(bobReply).toContainText(agentReplyText, agentReply)
+  await expect(bobReply).toContainText(agentReplyText)
   await expect(workingIndicatorOf(bobPage)).toHaveCount(0)
   await expect(itemsWith(bobPage, agentReplyText)).toHaveCount(1)
   await expect(unreadIconOf(bobPage, 'Research')).toHaveCount(0)
@@ -156,14 +152,13 @@ test('8. after an idle stop, a new prompt resumes the runtime, is answered, and 
   page,
   workerStack,
 }) => {
-  test.setTimeout(60_000)
   await openChat(page, 'Research')
   await sendMessage(page, 'Before the stop')
-  await expect(itemsWith(page, agentReplyText)).toHaveCount(1, agentReply)
+  await expect(itemsWith(page, agentReplyText)).toHaveCount(1)
   await triggerIdleStop(workerStack, research)
 
   await sendMessage(page, 'After the stop')
-  await expect(itemsWith(page, agentReplyText)).toHaveCount(2, coldStart)
+  await expect(itemsWith(page, agentReplyText)).toHaveCount(2)
   await expect(workingIndicatorOf(page)).toHaveCount(0)
   await expect(messageItemsOf(page)).toHaveCount(4)
   await expect(messageItemsOf(page).nth(0)).toContainText('Before the stop')

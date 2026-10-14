@@ -12,8 +12,6 @@ import {
 } from './fixtures'
 import { openPageAs, type WorkerStack } from './stack'
 
-const metered = { timeout: 20_000 }
-const agentReply = { timeout: 60_000 }
 const unchosen = 'Model chosen at first prompt'
 const confident = (tier: string, effort = 'high') => ({ route: { tier, confidence: 'high', effort } })
 type GatewayLog = { model: string; metadata: Record<string, string> | null }
@@ -29,7 +27,7 @@ const repliesOf = (page: Page) => messageItemsOf(page).filter({ hasText: agentRe
 
 const promptAndWait = async (page: Page, text: string, replies: number) => {
   await sendMessage(page, text)
-  await expect(repliesOf(page)).toHaveCount(replies, agentReply)
+  await expect(repliesOf(page)).toHaveCount(replies)
 }
 const agentModelsOf = async (workerStack: WorkerStack, chatId: string, count: number, since = new Date(0)) => {
   let models: string[] = []
@@ -39,7 +37,7 @@ const agentModelsOf = async (workerStack: WorkerStack, chatId: string, count: nu
       const { logs } = await workerStack.gateway<{ logs: GatewayLog[] | null }>(`/api/logs?${query}&limit=100`)
       models = (logs ?? []).filter((log) => !log.metadata?.role).map((log) => log.model)
       return models.length
-    }, agentReply)
+    })
     .toBeGreaterThanOrEqual(count)
   return models
 }
@@ -51,7 +49,7 @@ const routerModelsOf = async (workerStack: WorkerStack, chatId: string) => {
       const { logs } = await workerStack.gateway<{ logs: GatewayLog[] | null }>(`/api/logs?${query}&limit=100`)
       models = (logs ?? []).map((log) => log.model)
       return models.length
-    }, agentReply)
+    })
     .toBeGreaterThanOrEqual(1)
   return models
 }
@@ -151,10 +149,7 @@ test('5. a member reaching only a small model gets it, and is refused in a sessi
   await openChat(bobPage, 'Alice large')
   await sendMessage(bobPage, 'Bob joins the large session')
   await expect(messageItemsOf(bobPage).filter({ hasText: 'Bob joins the large session' })).toBeVisible()
-  await expect(mainOf(bobPage)).toContainText(
-    'Your keys cannot reach Fake large; switch the model or add a key',
-    agentReply,
-  )
+  await expect(mainOf(bobPage)).toContainText('Your keys cannot reach Fake large; switch the model or add a key')
   expect(await agentModelsOf(workerStack, aliceChatId, 1)).toEqual(['fake-large'])
   await bobPage.context().close()
 })
@@ -185,7 +180,6 @@ test('7 and 8. the manual switch warns about the reread, keeps the history and u
   await sessionOf(page).getByLabel('Main model').selectOption({ label: 'Fake large' })
   await expect(sessionOf(page)).toContainText(
     /The next reply rereads the whole conversation with Fake large \(about (\$\d+\.\d{2}|< \$0\.01)\)/,
-    metered,
   )
   await sessionOf(page).getByRole('button', { name: 'Switch' }).click()
   await expect(chipOf(page)).toHaveText('Fake large (medium) · auto')
@@ -242,7 +236,7 @@ test('12. a member whose only key is a decision model is told to add an LLM key 
   await expect(sessionOf(bobPage).getByLabel('Default model').getByRole('option', { name: 'Jev' })).toHaveCount(0)
   await bobPage.keyboard.press('Escape')
   await sendMessage(bobPage, 'Only a decision key')
-  await expect(mainOf(bobPage)).toContainText('Bob has no LLM key in this workspace', agentReply)
+  await expect(mainOf(bobPage)).toContainText('Bob has no LLM key in this workspace')
   await bobPage.context().close()
 })
 
@@ -258,7 +252,7 @@ test('13. a chat classifier answering JSON inside prose still routes as scripted
   expect(await routerModelsOf(workerStack, chatId)).toEqual(['fake-small'])
 })
 
-test.describe('real Agent Server', () => {
+test.describe('real Agent Server', { tag: '@docker' }, () => {
   test.use({ agentServer: 'real' })
 
   test('10. the manual switch reaches the real Agent Server through switch_llm and the relay', async ({

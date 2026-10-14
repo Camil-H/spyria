@@ -30,7 +30,8 @@ const runtimeHosts = createRuntimeHostGateway({
 })
 const agentBridge = createAgentBridge({
   sandboxProvider: runtimeHosts.sandboxProvider,
-  sessionClassifierOf: sessionClassifierOf(llmGateway),
+  sessionClassifierOf: sessionClassifierOf(llmGateway, { timeoutMilliseconds: 300 }),
+  reopenDelayMilliseconds: 50,
 })
 const app = createApp({ database, ...testAuthSettings, llmGateway, runtimeHosts, agentBridge })
 const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })

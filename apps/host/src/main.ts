@@ -80,7 +80,7 @@ const modelRelayServer = Bun.serve({
   fetch: modelRelay.fetch,
 })
 const gatewayUrl = `http://${isInContainer ? gatewayRelayAlias : 'host.docker.internal'}:${modelRelayServer.port}/v1`
-const heartbeatMilliseconds = 30_000
+const heartbeatMilliseconds = Number(process.env.HQ_HOST_HEARTBEAT_MS ?? 30_000)
 const maximumBufferedBytes = 16 * 1024 * 1024
 const maximumReconnectDelayMilliseconds = 30_000
 let reconnectDelayMilliseconds = 1000

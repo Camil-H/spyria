@@ -32,6 +32,7 @@ const agentBridge = createAgentBridge({
   sandboxProvider: gateway.sandboxProvider,
   llm: { model: 'openai/fake' },
   now: () => Date.now() + clockOffsetMilliseconds,
+  reopenDelayMilliseconds: 50,
 })
 const app = createApp({ database, ...testAuthSettings, runtimeHosts: gateway, agentBridge })
 const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
@@ -166,7 +167,7 @@ test('an interrupt racing the finished event ends the turn once', async () => {
   expect(await command(aliceInAcme, 'stopAgent', chat)).toEqual(succeeded)
   await answered(second)
   await turnIs(chat, null)
-  await Bun.sleep(300)
+  await Bun.sleep(200)
   const firstReplies = await replyBodiesOf(first)
   expect(firstReplies.length).toBeGreaterThan(0)
   expect(firstReplies.filter((body) => body === 'Stopped by Alice').length).toBeLessThanOrEqual(1)
@@ -336,7 +337,7 @@ test('a prompt while the host is offline gets one notice and is answered after t
 
   const waiting = await prompt(chat, 'Are you there?')
   await answered(waiting)
-  await Bun.sleep(500)
+  await Bun.sleep(200)
   expect(await repliesTo(waiting)).toEqual([notice('The runtime host is offline')])
   expect(await turnOf(chat)).toBeNull()
 
