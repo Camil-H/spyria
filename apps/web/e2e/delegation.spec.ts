@@ -190,7 +190,7 @@ test('11. a long subagent task returns still running, then its result on resume,
   agentScript,
 }) => {
   const answer = 'The long listing is done.'
-  const slowWork = { ...subagentWork, text: 'The slow listing found two files today.', wordDelayMilliseconds: 300 }
+  const slowWork = { ...subagentWork, text: 'The slow listing found two files today.', wordDelayMilliseconds: 1_000 }
   await agentScript(
     researchChatId,
     resuming(answer, { delegateRoute: confidentSmall, subagents: { 'fake-small': slowWork } }),

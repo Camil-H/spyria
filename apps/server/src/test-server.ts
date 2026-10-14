@@ -10,13 +10,13 @@ import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { websocket } from 'hono/bun'
 import { setCookie } from 'hono/cookie'
 import { createAgentBridge } from './agent-bridge/bridge.ts'
-import { createFakeAgentServer } from './agent-bridge/fake-agent-server.ts'
 import { createHqAgentRelay } from './agent-bridge/hq-agent-relay.ts'
 import { createApp, sessionClassifierOf } from './app.ts'
 import { sessionCookieOptions, setSessionCookie, testCookie } from './auth/routes.ts'
 import { openSessions } from './auth/sessions.ts'
 import { createFakeLlm, type FakeLlmScript, fakeRoutableModels } from './fake-llm.ts'
 import { createFakeMcp } from './fake-mcp.ts'
+import { readHqAgentImage } from './hq-agent-image.ts'
 import { startJobWorker } from './job-worker.ts'
 import { createModelCallRelay } from './llm-relay.ts'
 import { createRuntimeHostGateway } from './runtime-hosts/gateway.ts'
@@ -38,7 +38,10 @@ const servedDatabaseByName = new Map<string, ServedDatabase>()
 const databasesFailingCreation = new Set<string>()
 const databasesWithoutGateway = new Set<string>()
 const bootMillisecondsByDatabase = new Map<string, number>()
-const fakeHostByDatabase = new Map<string, { host: FakeHost; isOnline: boolean }>()
+const fakeHostByDatabase = new Map<
+  string,
+  { host: FakeHost; relay: ReturnType<typeof createHqAgentRelay>; isOnline: boolean }
+>()
 const fakeMachineByDatabase = new Map<string, { host: FakeHost; relay: ReturnType<typeof createHqAgentRelay> }>()
 const nameOf = (database: Database) =>
   [...servedDatabaseByName].find(([, served]) => served.database === database)?.[0] ?? ''
@@ -86,6 +89,7 @@ const releaseDatabase = async (databaseName: string) => {
   const fakeHost = fakeHostByDatabase.get(databaseName)
   fakeHostByDatabase.delete(databaseName)
   if (fakeHost?.isOnline) await fakeHost.host.disconnect().catch(() => {})
+  await fakeHost?.relay.stop()
   await fakeMachineByDatabase
     .get(databaseName)
     ?.host.disconnect()
@@ -108,9 +112,10 @@ const testHeadersOf = (database: Database, chat: { chatId: string }) => ({
   'x-bf-eh-x-hq-chat': `${nameOf(database)}/${chat.chatId}`,
   'x-bf-dim-database': nameOf(database),
 })
-const hqAgentImage = `sha256:${'0'.repeat(64)}`
+const hqAgentImage = (await readHqAgentImage()) ?? `sha256:${'0'.repeat(64)}`
+const placement = { hqAgentImage, hqAgentForWorkspaceHosts: true }
 const runtimeHosts = createRuntimeHostGateway({
-  hqAgentImage,
+  ...placement,
   databases: () => [...servedDatabaseByName.values()].map((served) => served.database),
   afterHello: (database, host) => agentBridge.forDatabase(database).promptWaiting(host),
   relayModelCall: createModelCallRelay({
@@ -129,10 +134,10 @@ const agentBridge = createAgentBridge({
     headersOf: testHeadersOf,
     timeoutMilliseconds: 300,
   }),
-  resumeAfterMilliseconds: Number(process.env.HQ_RESUME_AFTER_MILLISECONDS ?? 1_500),
+  resumeAfterMilliseconds: Number(process.env.HQ_RESUME_AFTER_MILLISECONDS ?? 5_000),
   reopenDelayMilliseconds: 50,
   condensationScale,
-  hqAgentImage,
+  ...placement,
 })
 
 const scriptByChat = new Map<string, { script: FakeLlmScript; used: PromiseWithResolvers<boolean> }>()
@@ -155,7 +160,7 @@ const app = createApp({
   llmGateway,
   runtimeHosts,
   agentBridge,
-  hqAgentImage,
+  ...placement,
   fakeLlm: createFakeLlm(async (request, isClassifier, prompt) => {
     const chatScript = scriptByChat.get(request.headers.get('x-hq-chat') ?? (await chatKeyOfPrompt(prompt)))
     if (!isClassifier) chatScript?.used.resolve(true)
@@ -215,22 +220,23 @@ const app = createApp({
     return context.body(null, 204)
   })
   .post('/test/fake-host', async (context) => {
-    const { db = '', online } = context.req.query()
+    const { db = '', online, forgetSessions } = context.req.query()
     let fakeHost = fakeHostByDatabase.get(db)
     if (!fakeHost) {
-      const fake = createFakeAgentServer({ modelCall: () => created.modelCall })
+      const relay = createHqAgentRelay({ gapMilliseconds: stubGapMilliseconds, modelCall: () => created.modelCall })
       const created = await createFakeHosts({ port, database: databaseByName(db) }).fakeHost('e2e fake host', {
         memoryGibibytes: 16,
-        agentServer: fake.agentServer,
+        agentServer: relay.agentServer,
         bootMilliseconds: bootMillisecondsOf(db),
       })
-      fakeHost = { host: created, isOnline: true }
+      fakeHost = { host: created, relay, isOnline: true }
       fakeHostByDatabase.set(db, fakeHost)
     }
+    if (forgetSessions === 'true') fakeHost.relay.forgetSessions()
     if (online === 'false' && fakeHost.isOnline) await fakeHost.host.disconnect()
     if (online === 'true' && !fakeHost.isOnline) await fakeHost.host.connect()
     if (online) fakeHost.isOnline = online === 'true'
-    return context.json({ id: fakeHost.host.id })
+    return context.json({ id: fakeHost.host.id, conversations: fakeHost.relay.created })
   })
   .post('/test/fake-machine', async (context) => {
     const { db = '', owner, signedIn, online, drop } = context.req.query()
@@ -268,7 +274,7 @@ const app = createApp({
     const { db = '', chat = '' } = context.req.query()
     await zeroDrizzle(schema, databaseByName(db)).transaction((tx) =>
       ensureRuntimeRunning(
-        { transactor: createRuntimeTransactor(tx) },
+        { transactor: createRuntimeTransactor(tx), ...placement },
         { workspaceId: workspaceId('workspace-acme'), chatId: chatId(chat), id: crypto.randomUUID(), now: Date.now() },
       ),
     )

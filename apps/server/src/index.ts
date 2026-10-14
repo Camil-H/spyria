@@ -29,6 +29,7 @@ const llmGateway = createLlmGateway(gatewaySettings)
 const hqAgentImage = await readHqAgentImage()
 const runtimeHosts = createRuntimeHostGateway({
   hqAgentImage,
+  hqAgentForWorkspaceHosts: true,
   databases: () => [database],
   afterHello: (helloDatabase, host) => agentBridge.forDatabase(helloDatabase).promptWaiting(host),
   relayModelCall: createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),
@@ -37,6 +38,7 @@ const llmModel = process.env.HQ_LLM_MODEL
 const agentBridge = createAgentBridge({
   sandboxProvider: runtimeHosts.sandboxProvider,
   hqAgentImage,
+  hqAgentForWorkspaceHosts: true,
   llm: llmModel ? { model: llmModel } : undefined,
   sessionClassifierOf: sessionClassifierOf(llmGateway),
 })
@@ -53,6 +55,7 @@ const app = createApp({
   runtimeHosts,
   agentBridge,
   hqAgentImage,
+  hqAgentForWorkspaceHosts: true,
   fakeLlm: llmModel ? undefined : createFakeLlm(() => undefined),
 })
 setModelDirectory(llmGateway.listedModels)

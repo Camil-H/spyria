@@ -25,6 +25,8 @@ test('an MCP tool name shows as the tool and its server', () => {
   expect(toolDisplayNameOf('GitHub-search_code')).toBe('search_code (GitHub)')
   expect(toolDisplayNameOf('hq_fake-whoami')).toBe('whoami (fake)')
   expect(toolDisplayNameOf('router_delegate')).toBe('delegate')
+  expect(toolDisplayNameOf('mcp__router__delegate')).toBe('delegate')
+  expect(toolDisplayNameOf('mcp__hq__fake-whoami')).toBe('whoami (fake)')
   expect(toolDisplayNameOf('Notion-notion-search')).toBe('notion-search (Notion)')
   expect(toolDisplayNameOf('terminal')).toBe('terminal')
   expect(toolServerOf('Notion-notion-search')).toBe('Notion')

@@ -467,6 +467,21 @@ test('an hq-agent sequence projects text, a thought with its duration, steps mer
   ])
 })
 
+test('Pi’s read, write and edit calls carry their path in rawInput.path, and a write creates the file', () => {
+  const stepOf = (title: string, kind: string, rawInput: Record<string, unknown>) =>
+    agentProjectionOf(acpUpdate(3, { sessionUpdate: 'tool_call', toolCallId: 't', title, kind, rawInput }), null)
+  const path = '/workspace/project/notes.md'
+  expect(stepOf('read', 'read', { path })).toMatchObject({
+    step: { type: 'file', operation: 'read', path: 'notes.md' },
+  })
+  expect(stepOf('write', 'edit', { path, content: 'one' })).toMatchObject({
+    step: { type: 'file', operation: 'create', path: 'notes.md' },
+  })
+  expect(stepOf('edit', 'edit', { path, oldText: 'one', newText: 'two' })).toMatchObject({
+    step: { type: 'file', operation: 'edit', path: 'notes.md' },
+  })
+})
+
 test('an hq-agent turn ends finished or in error, a cancelled turn end ends nothing, and a failed resume says so', () => {
   const turnEnd = (stopReason: string) =>
     agentProjectionOf(acpUpdate(9, { sessionUpdate: 'turn_end', stopReason }), null)

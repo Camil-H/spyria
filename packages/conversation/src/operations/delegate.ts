@@ -1,7 +1,7 @@
 import { type ChatId, type MessageId, modelNameOf, withPricesOf } from '@hq/kernel'
 import type { AgentChat, AgentConversation } from '../contracts/agent.ts'
 import type { ModelCallTurn } from '../contracts/repositories.ts'
-import { executionStatusOf, isStoredAgentEvent, streamedTextOf } from '../domain/agent-events.ts'
+import { executionStatusOf, isStoredAgentEvent, streamedTextOf, toolCallIdOf } from '../domain/agent-events.ts'
 import type { StepDelegation } from '../domain/agent-steps.ts'
 import {
   askedChoiceOf,
@@ -17,7 +17,7 @@ import {
 import { sessionQuestions } from '../domain/session-routing.ts'
 import type { AgentDependencies } from './agent-turn.ts'
 import { decide, digestOf } from './decide.ts'
-import { agentLlmOf, piLlmOf } from './prompt-agent.ts'
+import { agentLlmOf, fixedPiLlmOf, piLlmOf } from './prompt-agent.ts'
 import { recordAgentEvent } from './record-agent-event.ts'
 
 type Input = {
@@ -86,6 +86,7 @@ const runSubConversation = (
       onEvent: (event) => {
         const streamed = streamedTextOf(event)
         if (streamed && !streamed.isReasoning) answer += streamed.text
+        if (toolCallIdOf(event) !== undefined) answer = ''
         if (isStoredAgentEvent(event))
           recording = recording
             .then(() =>
@@ -135,7 +136,9 @@ const runDelegation = async (
       endpoint,
       token,
       endpoint.isHqAgent
-        ? await piLlmOf(dependencies, input.turn.prompterId, delegation.model, choice.effort)
+        ? dependencies.fixedLlm
+          ? fixedPiLlmOf(delegation.model)
+          : await piLlmOf(dependencies, input.turn.prompterId, delegation.model, choice.effort)
         : agentLlmOf(delegation.model, choice.effort),
       { parentConversationId: endpoint.conversationId, toolToken: input.toolToken },
     )
@@ -150,7 +153,7 @@ const runDelegation = async (
       running,
     )
     if (endStatus === 'paused') return { text: subagentStopped, isError: true }
-    if (endStatus !== 'finished')
+    if (endStatus !== 'finished' || running.failure)
       return { text: subagentFailureOf(delegation.modelName, running.failure), isError: true }
     const text = conversation.isHqAgent ? answer.trim() : await agentServer.finalResponse(conversation)
     status = 'finished'

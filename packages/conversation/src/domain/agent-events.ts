@@ -128,7 +128,7 @@ const hqAgentToolCallOf = (event: AgentEvent, update: Fields): AcpToolCall => ({
 const acpDiffOf = (call: AcpToolCall) => call.content?.find((part) => part?.type === 'diff')
 const acpStepOf = (call: AcpToolCall): StoredStep => {
   const { title, rawInput } = call
-  const path = pathOf(rawInput?.file_path ?? acpDiffOf(call)?.path)
+  const path = pathOf(rawInput?.file_path ?? rawInput?.path ?? acpDiffOf(call)?.path)
   if (rawInput?.server && rawInput.tool)
     return {
       type: 'tool',
@@ -145,7 +145,7 @@ const acpStepOf = (call: AcpToolCall): StoredStep => {
   if (call.kind === 'edit')
     return {
       type: 'file',
-      operation: title.startsWith('Write') ? 'create' : 'edit',
+      operation: /^write/i.test(title) ? 'create' : 'edit',
       path,
       added: 0,
       removed: 0,

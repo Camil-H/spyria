@@ -1,5 +1,7 @@
+import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 
 const stateDirectory = process.env.STUB_STATE ?? '/tmp/stub-acp-state'
@@ -65,10 +67,201 @@ const ask = (method, params) => {
 }
 
 class Cancelled extends Error {}
+const gatewayUrl = process.env.STUB_GATEWAY
+const piConfigOf = (name) => JSON.parse(process.env[name] || '{}')
+const mcpServers = piConfigOf('HQ_PI_MCP').mcpServers ?? {}
+const piTools = ['bash', 'read', 'edit', 'write']
+const withEnvironment = (value) => String(value).replace(/\$\{(\w+)\}/g, (_, name) => process.env[name] ?? '')
+const gatewayCall = (url, authorization, body, signal) =>
+  fetch(`${gatewayUrl}${new URL(url).pathname}`, {
+    method: 'POST',
+    headers: { authorization, 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+    body: JSON.stringify(body),
+    signal,
+  })
+const mcpCall = async (server, method, params = {}, signal = undefined) => {
+  const { url, headers } = mcpServers[server]
+  const rpc = { jsonrpc: '2.0', method, params, ...(!method.startsWith('notifications/') && { id: 1 }) }
+  const response = await gatewayCall(url, withEnvironment(headers.Authorization), rpc, signal)
+  return response.status === 200 ? JSON.parse((await response.text()) || '{}').result : undefined
+}
+const mcpToolsOf = async () => {
+  const tools = {}
+  for (const server of Object.keys(mcpServers)) {
+    await mcpCall(server, 'initialize', { protocolVersion: '2025-06-18', capabilities: {} })
+    await mcpCall(server, 'notifications/initialized')
+    for (const { name } of (await mcpCall(server, 'tools/list'))?.tools ?? [])
+      tools[`mcp__${server}__${name}`] = { server, name }
+  }
+  return tools
+}
+const completionOf = async (session, signal, update) => {
+  const [provider = ''] = session.model.split('/')
+  const { baseUrl, apiKey } = piConfigOf('HQ_PI_MODELS').providers[provider]
+  const response = await gatewayCall(
+    `${baseUrl.replace(/\/v1$/, '')}/v1/chat/completions`,
+    `Bearer ${withEnvironment(apiKey)}`,
+    {
+      model: session.model.slice(provider.length + 1),
+      messages: session.history,
+      tools: [...piTools, ...Object.keys(session.tools)].map((name) => ({ type: 'function', function: { name } })),
+      stream: true,
+    },
+    signal,
+  )
+  const completion = { status: response.status, text: '', toolCall: undefined }
+  if (response.status !== 200) return { ...completion, body: await response.text() }
+  const decoder = new TextDecoder()
+  let buffered = ''
+  for await (const chunk of response.body) {
+    const lines = (buffered + decoder.decode(chunk, { stream: true })).split('\n')
+    buffered = lines.pop() ?? ''
+    for (const line of lines.filter((candidate) => candidate.startsWith('data: {'))) {
+      const delta = JSON.parse(line.slice(6)).choices?.[0]?.delta ?? {}
+      if (delta.reasoning_content)
+        update({ sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: delta.reasoning_content } })
+      if (delta.content)
+        update({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: delta.content } })
+      completion.text += delta.content ?? ''
+      const part = delta.tool_calls?.[0]
+      if (part)
+        completion.toolCall = {
+          id: completion.toolCall?.id ?? part.id,
+          type: 'function',
+          function: {
+            name: completion.toolCall?.function.name ?? part.function?.name,
+            arguments: `${completion.toolCall?.function.arguments ?? ''}${part.function?.arguments ?? ''}`,
+          },
+        }
+    }
+  }
+  return completion
+}
+const runCommand = (toolCallId, command, state, update) =>
+  new Promise((done) => {
+    const terminal = { terminal_id: toolCallId }
+    const progress = { sessionUpdate: 'tool_call_update', toolCallId, status: 'in_progress' }
+    update({
+      sessionUpdate: 'tool_call',
+      toolCallId,
+      title: command,
+      kind: 'execute',
+      status: 'pending',
+      content: [{ type: 'terminal', terminalId: toolCallId }],
+      _meta: { terminal_info: { ...terminal, cwd: process.cwd() } },
+    })
+    update(progress)
+    const child = spawn('bash', ['-c', `${command} 2>&1`], { stdio: ['ignore', 'pipe', 'inherit'], detached: true })
+    let output = ''
+    child.stdout.on('data', (data) => {
+      output += data
+      update({ ...progress, _meta: { terminal_output: { ...terminal, data: String(data) } } })
+    })
+    const abort = () => {
+      if (child.exitCode === null) process.kill(-child.pid, 'SIGKILL')
+    }
+    state.abort.signal.addEventListener('abort', abort)
+    child.on('close', (code) => {
+      state.abort.signal.removeEventListener('abort', abort)
+      const exitCode = state.cancelled ? 1 : (code ?? 1)
+      update({
+        ...progress,
+        status: exitCode === 0 ? 'completed' : 'failed',
+        _meta: {
+          ...(state.cancelled && { terminal_output: { ...terminal, data: '\n\nCommand aborted' } }),
+          terminal_exit: { ...terminal, exit_code: exitCode, signal: null },
+        },
+      })
+      done(output.replace(/\n$/, ''))
+    })
+  })
+const editFile = (toolCallId, { command, path, file_text, old_str, new_str, content }, update) => {
+  const absolute = resolve(process.cwd(), String(path).replace('/workspace/project/', ''))
+  const oldText = existsSync(absolute) ? readFileSync(absolute, 'utf8') : null
+  const tool = command === 'view' ? 'read' : command === 'create' || content !== undefined ? 'write' : 'edit'
+  const rawInput =
+    tool === 'edit' ? { path, oldText: old_str, newText: new_str } : { path, content: file_text ?? content }
+  update({
+    sessionUpdate: 'tool_call',
+    toolCallId,
+    title: tool,
+    kind: tool === 'read' ? 'read' : 'edit',
+    status: 'in_progress',
+    locations: [{ path }],
+    rawInput: tool === 'read' ? { path } : rawInput,
+  })
+  if (tool === 'read') {
+    const text = oldText ?? `File not found: ${path}`
+    update({
+      sessionUpdate: 'tool_call_update',
+      toolCallId,
+      status: oldText === null ? 'failed' : 'completed',
+      content: [{ type: 'content', content: { type: 'text', text } }],
+    })
+    return text
+  }
+  const newText =
+    tool === 'edit' ? String(oldText ?? '').replace(String(old_str), String(new_str)) : String(rawInput.content)
+  mkdirSync(dirname(absolute), { recursive: true })
+  writeFileSync(absolute, newText)
+  update({
+    sessionUpdate: 'tool_call_update',
+    toolCallId,
+    status: 'completed',
+    content: [{ type: 'diff', path, oldText, newText }],
+  })
+  return `The file ${path} has been edited.`
+}
+const callMcpTool = async (toolCallId, name, rawInput, session, state, update) => {
+  update({ sessionUpdate: 'tool_call', toolCallId, title: name, kind: 'other', status: 'in_progress', rawInput })
+  const tool = session.tools[name]
+  const result = tool
+    ? await mcpCall(tool.server, 'tools/call', { name: tool.name, arguments: rawInput }, state.abort.signal)
+    : undefined
+  const text = (result?.content ?? [{ text: `Tool ${name} not found` }]).map((part) => part.text ?? '').join('')
+  const status = result && !result.isError ? 'completed' : 'failed'
+  update({
+    sessionUpdate: 'tool_call_update',
+    toolCallId,
+    status,
+    content: [{ type: 'content', content: { type: 'text', text } }],
+    rawOutput: result,
+  })
+  return text
+}
+const planStatuses = { done: 'completed', in_progress: 'in_progress' }
+const runTool = async ({ id, function: { name, arguments: json } }, session, state, update) => {
+  const input = JSON.parse(json || '{}')
+  if (['terminal', 'bash', 'Bash'].includes(name)) return runCommand(id, String(input.command), state, update)
+  if (['file_editor', 'Write'].includes(name))
+    return editFile(id, { ...input, path: input.path ?? input.file_path }, update)
+  if (name === 'think') return 'Your thought has been logged.'
+  if (name !== 'task_tracker') return callMcpTool(id, name, input, session, state, update)
+  const entries = input.task_list.map(({ title, status }) => ({
+    content: title,
+    status: planStatuses[status] ?? 'pending',
+    priority: 'medium',
+  }))
+  update({ sessionUpdate: 'plan', entries })
+  return 'Task list updated.'
+}
+const gatewayTurn = async (session, text, state, update) => {
+  session.tools ??= await mcpToolsOf()
+  session.history.push({ role: 'user', content: text })
+  for (;;) {
+    const { status, text: answer, toolCall } = await completionOf(session, state.abort.signal, update)
+    if (status !== 200) return
+    session.history.push({ role: 'assistant', content: answer, ...(toolCall && { tool_calls: [toolCall] }) })
+    if (!toolCall) return
+    const output = await runTool(toolCall, session, state, update)
+    if (state.cancelled) throw new Cancelled()
+    session.history.push({ role: 'tool', tool_call_id: toolCall.id, content: output })
+  }
+}
 const turn = async (id, { sessionId, prompt }) => {
   const session = sessions.get(sessionId)
   session.prompts += 1
-  const state = { cancelled: false }
+  const state = { cancelled: false, abort: new AbortController() }
   session.current = state
   save(sessionId, session)
   const text = prompt.map((block) => block.text ?? '').join('\n')
@@ -83,6 +276,12 @@ const turn = async (id, { sessionId, prompt }) => {
     update({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: chunk } })
   }
   try {
+    if (gatewayUrl && isPi && !text.includes('stub:')) {
+      await gatewayTurn(session, text, state, update).catch((error) => {
+        throw state.cancelled ? new Cancelled() : error
+      })
+      return send({ id, result: { stopReason: 'end_turn' } })
+    }
     if (has('crash')) process.exit(3)
     if (has('fail')) return send({ id, error: { code: -32000, message: 'Authentication required' } })
     if (has('think')) {
@@ -288,7 +487,15 @@ const turn = async (id, { sessionId, prompt }) => {
 }
 
 const opened = (sessionId, prompts) => {
-  const session = { prompts, model: models[0].value, mode: 'default', thought_level: 'medium', current: undefined }
+  const session = {
+    prompts,
+    model: models[0].value,
+    mode: 'default',
+    thought_level: 'medium',
+    current: undefined,
+    history: [],
+    tools: undefined,
+  }
   sessions.set(sessionId, session)
   return { ...sessionResultOf(session), sessionId }
 }
@@ -356,6 +563,7 @@ createInterface({ input: process.stdin })
     if (frame.method === 'session/cancel') {
       const session = sessions.get(frame.params.sessionId)
       if (session?.current) session.current.cancelled = true
+      session?.current?.abort.abort()
       return
     }
     if (frame.id === undefined) return

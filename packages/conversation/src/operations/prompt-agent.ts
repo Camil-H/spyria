@@ -82,6 +82,12 @@ export const piLlmOf = async (
   }
 }
 
+export const fixedPiLlmOf = (fixedModel: string): AgentLlmChoice => {
+  const model = fixedModel.replace(/^openai\//, '')
+  const pi = { models: [{ id: model, name: model, reasoning: true }], compactionModel: model }
+  return { model, usageId: 'agent', acpModel: piModelOf(model), pi }
+}
+
 const routeSession = async (
   dependencies: AgentDependencies,
   chat: AgentChat,
@@ -249,7 +255,9 @@ const conversationFor = async (
         }
       : routed?.choice
         ? agentLlmOf(routed.choice.model.id, routed.choice.effort)
-        : { model: fixedLlm?.model ?? '', usageId: 'agent' }
+        : fixedLlm && isPi
+          ? fixedPiLlmOf(fixedLlm.model)
+          : { model: fixedLlm?.model ?? '', usageId: 'agent' }
   const llmToken = await runtimes.issueLlmToken(chat)
   const conversationId = await runtimes.rememberConversation(
     chat,

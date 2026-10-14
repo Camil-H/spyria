@@ -307,6 +307,9 @@ const listedModelIds = [
   'claude-opus-5-5',
   'claude-sonnet-5-5',
   'claude-haiku-4-5',
+  'mistral-large-latest',
+  'mistral-medium-latest',
+  'mistral-small-latest',
 ]
 export const fakeRoutableModels: RoutableModel[] = [
   { id: 'fake/fake-large', name: 'Fake large', tier: 'large' },

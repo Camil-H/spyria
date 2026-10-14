@@ -45,7 +45,12 @@ export type WorkerStack = {
   startRuntimeHost: () => Promise<void>
   agentServer: () => AgentServerMode
   gateway: <Result>(path: string) => Promise<Result>
+  fakeHost: (query?: Record<string, string>) => Promise<{ id: string; conversations: FakeHostConversation[] }>
   setGatewayReachable: (isReachable: boolean) => Promise<void>
+}
+export type FakeHostConversation = {
+  agent: { acp_command: string[]; acp_model?: string; acp_thought_level?: string; acp_resume_session_id?: string }
+  parent_conversation_id?: string
 }
 type WarmRuntime = { runtime: typeof runtimes.$inferSelect }
 const testGateway = testGatewayAt(gatewayUrl)
@@ -204,6 +209,8 @@ const warmUp = async (database: Database, databaseName: string, chatIds: readonl
   for (const chatId of chatIds) await postToServer('/test/runtime', { db: databaseName, chat: chatId })
   const areRunning = async () => {
     const rows = (await database.select().from(runtimes)).filter((runtime) => chatIds.includes(runtime.chatId))
+    const failed = rows.find((runtime) => runtime.state === 'failed')
+    if (failed) throw new Error(`The warm e2e runtime of ${failed.chatId} failed: ${failed.failure}`)
     return rows.every((runtime) => runtime.state === 'running') && rows.length === chatIds.length
   }
   for (const deadline = Date.now() + runtimeReadyMilliseconds; !(await areRunning()); await sleep(100))
@@ -367,6 +374,8 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
         startRuntimeHost: async () => pairedHosts[mode]?.start(),
         agentServer: () => mode,
         gateway: (path) => testGateway.call(path),
+        fakeHost: async (query = {}) =>
+          (await postToServer('/test/fake-host', { db: testDatabase.name, ...query })).json(),
         setGatewayReachable: async (isReachable) => {
           await postToServer('/test/gateway', { db: testDatabase.name, reachable: String(isReachable) })
         },

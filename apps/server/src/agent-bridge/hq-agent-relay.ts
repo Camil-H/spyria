@@ -1,25 +1,56 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { FakeAgentServer, FakeContainer } from '../testing.ts'
+import type { FakeAgentServer, FakeContainer, ModelCall } from '../testing.ts'
 
 type Agent = { port: number; process: Bun.Subprocess<'ignore', 'pipe', 'inherit'> }
 
 const repositoryRoot = new URL('../../../../', import.meta.url).pathname
 const listening = /hq-agent listening on port (\d+)/
+const modelCallMilliseconds = 300_000
+
+const serveGateway = (modelCall: () => ModelCall) =>
+  Bun.serve({
+    port: 0,
+    idleTimeout: 0,
+    fetch: (request) => {
+      const { pathname, search } = new URL(request.url)
+      const encoder = new TextEncoder()
+      const head = Promise.withResolvers<number | undefined>()
+      const stream = new ReadableStream<Uint8Array>({
+        start: (controller) =>
+          void request.text().then((body) =>
+            modelCall()({
+              path: `${pathname}${search}`,
+              headers: Object.fromEntries(request.headers),
+              body,
+              signal: request.signal,
+              timeoutMilliseconds: modelCallMilliseconds,
+              onHead: head.resolve,
+              onChunk: (data) => request.signal.aborted || controller.enqueue(encoder.encode(data)),
+            }).then(({ status }) => {
+              head.resolve(status)
+              if (!request.signal.aborted) controller.close()
+            }),
+          ),
+      })
+      return head.promise.then((status) => new Response(stream, { status: status ?? 502 }))
+    },
+  })
 
 export const createHqAgentRelay = ({
   gapMilliseconds = 20,
   startFails = false,
+  modelCall,
 }: {
   gapMilliseconds?: number
   startFails?: boolean
+  modelCall?: () => ModelCall
 } = {}) => {
   const directory = mkdtempSync(join(tmpdir(), 'hq-agent-relay-'))
   const shims = join(directory, 'bin')
-  const workspace = join(directory, 'workspace')
+  const gateway = modelCall && serveGateway(modelCall)
   mkdirSync(shims)
-  mkdirSync(workspace)
   mkdirSync(join(directory, '.codex'))
   for (const { command, flavour } of [
     { command: 'claude-agent-acp', flavour: 'claude' },
@@ -28,10 +59,17 @@ export const createHqAgentRelay = ({
   ])
     writeFileSync(
       join(shims, command),
-      `#!/bin/sh\nexec env ${startFails ? 'STUB_FAIL_START=1 ' : ''}STUB_FLAVOUR=${flavour} STUB_STATE=${directory}/sessions STUB_GAP_MS=${gapMilliseconds} node ${repositoryRoot}apps/agent/fixtures/stub-acp-agent.mjs "$@"\n`,
+      `#!/bin/sh\nexec env ${startFails ? 'STUB_FAIL_START=1 ' : ''}${gateway ? `STUB_GATEWAY=http://localhost:${gateway.port} ` : ''}STUB_FLAVOUR=${flavour} STUB_STATE=${directory}/sessions STUB_GAP_MS=${gapMilliseconds} node ${repositoryRoot}apps/agent/fixtures/stub-acp-agent.mjs "$@"\n`,
       { mode: 0o755 },
     )
   const agents = new Map<string, Promise<Agent>>()
+  const workspaces = new Map<string, string>()
+  const workspaceOf = ({ apiKey }: FakeContainer) => {
+    const workspace = workspaces.get(apiKey) ?? join(directory, `workspace-${workspaces.size + 1}`)
+    mkdirSync(workspace, { recursive: true })
+    workspaces.set(apiKey, workspace)
+    return workspace
+  }
   const upstreams = new Set<WebSocket>()
   const created: Record<string, unknown>[] = []
   const prompts: string[] = []
@@ -85,7 +123,7 @@ export const createHqAgentRelay = ({
       const response = await fetch(`http://localhost:${port}${path}`, {
         method,
         headers,
-        body: launch ? JSON.stringify({ ...launch, workspace: { working_dir: workspace } }) : body,
+        body: launch ? JSON.stringify({ ...launch, workspace: { working_dir: workspaceOf(container) } }) : body,
       })
       return { status: response.status, body: await response.text() }
     },
@@ -126,11 +164,13 @@ export const createHqAgentRelay = ({
     socketPaths,
     agentCount: () => agents.size,
     restart: stopAgents,
+    forgetSessions: () => rmSync(join(directory, 'sessions'), { recursive: true, force: true }),
     dropSockets: () => {
       for (const upstream of upstreams) upstream.close()
     },
     stop: async () => {
       await stopAgents()
+      await gateway?.stop(true)
       rmSync(directory, { recursive: true, force: true })
     },
   }

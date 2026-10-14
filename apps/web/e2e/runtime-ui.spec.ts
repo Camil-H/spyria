@@ -232,7 +232,7 @@ test('8. a runtime stopped mid-turn ends the turn with a notice, and the next pr
   await expect(runtimeStatusOf(page)).toHaveText('Ready')
 })
 
-test('9. a lost Agent Server conversation is replaced, the prompt is answered and the new session notice shows once', async ({
+test('9. a lost agent conversation and session are replaced, the prompt is answered and the new session notice shows once', async ({
   page,
   workerStack,
 }) => {
@@ -242,6 +242,7 @@ test('9. a lost Agent Server conversation is replaced, the prompt is answered an
   await expect.poll(() => turnOf(workerStack, research)).toBeNull()
   await workerStack.database.$client`
     update runtimes set agent_conversation_id = ${crypto.randomUUID()} where chat_id = ${research}`
+  await workerStack.fakeHost({ forgetSessions: 'true' })
 
   await sendMessage(page, 'What was the number?')
   await expect(itemsWith(page, agentReplyText)).toHaveCount(2)

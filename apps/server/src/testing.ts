@@ -489,6 +489,7 @@ export type ModelCall = (request: {
   headers?: Record<string, string>
   body?: string
   onChunk?: (data: string) => void
+  onHead?: (status: number | undefined) => void
   signal?: AbortSignal
   timeoutMilliseconds?: number
 }) => Promise<{ status: number | undefined; body: string; ended: string | undefined }>
@@ -527,7 +528,10 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
     const heldReplies = new Map<string, Promise<void>>()
     const failingOps = new Set<string>()
     const streams = new Map<number, ReturnType<FakeAgentServer['connect']>>()
-    const modelCalls = new Map<number, { frames: HostFrame[]; done: () => void; onChunk?: (data: string) => void }>()
+    const modelCalls = new Map<
+      number,
+      { frames: HostFrame[]; done: () => void; onChunk?: (data: string) => void; onHead?: (status?: number) => void }
+    >()
     const receivedFrames: string[] = []
     let nextModelCallId = 1
     const run = (op: string, { runtimeId = '', apiKey = '' }: Record<string, string>) => {
@@ -562,6 +566,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
         headers = {},
         body = '',
         onChunk,
+        onHead,
         signal,
         timeoutMilliseconds = 20_000,
       }) => {
@@ -573,7 +578,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
           resolve()
         }
         signal?.addEventListener('abort', cancel)
-        modelCalls.set(sid, { frames, done: resolve, onChunk })
+        modelCalls.set(sid, { frames, done: resolve, onChunk, onHead })
         socket?.send(JSON.stringify({ type: 'gw_req', sid, method: 'POST', path, headers, body }))
         const isAnswered = await Promise.race([
           promise.then(() => true),
@@ -607,6 +612,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
           const modelCall = modelCalls.get(frame.sid ?? 0)
           if (modelCall && frame.type.startsWith('gw_')) {
             modelCall.frames.push(frame)
+            if (frame.type === 'gw_head') modelCall.onHead?.(frame.status)
             if (frame.type === 'gw_chunk') modelCall.onChunk?.(frame.data ?? '')
             if (frame.type === 'gw_end' || frame.type === 'gw_error') modelCall.done()
             return

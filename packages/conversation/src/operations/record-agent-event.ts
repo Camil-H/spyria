@@ -44,16 +44,17 @@ const recordIn = async (
       ? recordedLengthOf(event, await unitOfWork.agentEvents.recordedStreamedText(chatId, promptId))
       : 0
   const seq = await unitOfWork.agentEvents.append(chatId, event, promptId, recordedAt, delegation, recordedLength)
+  const projected = agentProjectionOf(event, previous?.timestamp ?? null, recordedLength)
+  const turnEnd = seq !== undefined && !delegation && projected?.type === 'turn-end' ? projected : undefined
   const failure =
-    (event.kind === 'ConversationErrorEvent' || (isFinishEvent(event) && !delegation)) &&
+    (event.kind === 'ConversationErrorEvent' ||
+      ((isFinishEvent(event) || (turnEnd && event.kind === 'ACPUpdate')) && !delegation)) &&
     (delegation ? subagentFailure : await unitOfWork.agentTurns.lastFailure(chatId))
   const projection =
     seq === undefined
       ? undefined
       : delegatedProjectionOf(
-          failure
-            ? { type: 'step', step: { type: 'error', message: failure } }
-            : agentProjectionOf(event, previous?.timestamp ?? null, recordedLength),
+          failure ? { type: 'step', step: { type: 'error', message: failure } } : projected,
           delegation,
         )
   if ((projection?.type === 'message' || projection?.type === 'step') && seq !== undefined)
@@ -79,9 +80,9 @@ const recordIn = async (
       action?.step && observedProjectionStep(action.step, projection, recordedAt.getTime() - action.createdAt.getTime())
     if (action && step) await unitOfWork.messages.setStep(action.id, step)
   }
-  if (projection?.type === 'turn-end') await endAgentTurn(unitOfWork, chatId, projection.outcome)
+  if (turnEnd) await endAgentTurn(unitOfWork, chatId, turnEnd.outcome)
   return {
-    promptId: projection?.type === 'turn-end' ? null : activePromptId,
+    promptId: turnEnd ? null : activePromptId,
     isReplyStored: projection?.type === 'message' || projection?.type === 'step',
   }
 }
