@@ -111,9 +111,10 @@ test('events are numbered per conversation, resent after a sequence number, from
   expect(events.filter(kindOf('agent_thought_chunk')).map(({ completed }) => completed)).toEqual([false, false])
 
   const lastSeq = events.length
+  const workspaceSeq = Number(events.find(kindOf('workspace'))?.seq)
   const resent = open(id, lastSeq - 2)
   await resent.until(kindOf('turn_end'))
-  expect(resent.events.map(({ seq }) => seq)).toEqual([lastSeq - 1, lastSeq])
+  expect(resent.events.map(({ seq }) => seq)).toEqual([workspaceSeq, lastSeq - 1, lastSeq])
   const everything = open(id)
   await everything.until(kindOf('turn_end'))
   expect(everything.events.map(({ seq }) => seq)).toEqual([lastSeq - 3, lastSeq - 2, lastSeq - 1, lastSeq])
@@ -182,6 +183,46 @@ test('the final tool call update carries the merged call; turn ends and adapter 
   const failedStart = open(missing)
   await failedStart.until(kindOf('error'))
   expect(failedStart.events.map(({ update }) => update.sessionUpdate)).toEqual(['error'])
+})
+
+test('the workspace is reported at session start and after a turn only when it changed: no branch without git, then the branch; resent on reconnect', async () => {
+  const { open, create, prompt } = started()
+  const workingDirectory = mkdtempSync(join(tmpdir(), 'hq-agent-workspace-'))
+  const id = await create({ ...launchOf(), workspace: { working_dir: workingDirectory } })
+  const socket = open(id)
+  const turns = [
+    { text: 'hello', workspaces: 1 },
+    { text: 'stub:branch feature/plan', workspaces: 2 },
+    { text: 'again', workspaces: 2 },
+    { text: 'stub:branch fix/totals', workspaces: 3 },
+  ]
+  for (const [index, { text, workspaces }] of turns.entries()) {
+    await prompt(id, text)
+    await socket.until(kindOf('turn_end'), index + 1)
+    await socket.until(kindOf('workspace'), workspaces)
+  }
+  const workspaceOf = (branch?: string) => ({
+    sessionUpdate: 'workspace',
+    cwd: workingDirectory,
+    ...(branch && { branch }),
+  })
+  expect(
+    socket.events
+      .filter((event) => kindOf('workspace')(event) || kindOf('turn_end')(event))
+      .map(({ update, completed }) => (update.sessionUpdate === 'turn_end' ? 'turn_end' : { update, completed })),
+  ).toEqual([
+    { update: workspaceOf(), completed: false },
+    'turn_end',
+    'turn_end',
+    { update: workspaceOf('feature/plan'), completed: false },
+    'turn_end',
+    'turn_end',
+    { update: workspaceOf('fix/totals'), completed: false },
+  ])
+  const reopened = open(id, socket.events.at(-1)?.seq)
+  await reopened.until(kindOf('workspace'))
+  expect(reopened.events.map(({ update }) => update)).toEqual([workspaceOf('fix/totals')])
+  rmSync(workingDirectory, { recursive: true, force: true })
 })
 
 test('a subscription launch gets no gateway URL and no key, and hq-agent never logs environment values', async () => {
@@ -312,6 +353,38 @@ test('a Pi turn over RPC streams thought and text, a command with its output and
   ])
   expect(textOf(socket.events)).toBe(`[t1] permission:allow-always ${piHello(1).slice(5)}`)
   expect(socket.events.at(-1)?.update).toEqual({ sessionUpdate: 'turn_end', stopReason: 'end_turn' })
+})
+
+test('a Pi update_plan call is an ACP plan, not a step; a provider error ends the turn with an error update', async () => {
+  const { open, create, prompt } = started()
+  const id = await create(piLaunchOf())
+  const socket = open(id)
+  await prompt(id, 'stub:plan')
+  await socket.until(kindOf('turn_end'))
+  expect(socket.events.filter(kindOf('plan')).map(({ update, completed }) => ({ update, completed }))).toEqual([
+    {
+      update: {
+        sessionUpdate: 'plan',
+        entries: [
+          { content: 'Write tests', status: 'completed', priority: 'medium' },
+          { content: 'Fix the bug', status: 'in_progress', priority: 'medium' },
+          { content: 'Ship', status: 'pending', priority: 'medium' },
+        ],
+      },
+      completed: true,
+    },
+  ])
+  expect(socket.events.filter((event) => String(event.update.sessionUpdate).startsWith('tool_call'))).toEqual([])
+
+  await prompt(id, 'stub:provider-error')
+  await socket.until(kindOf('turn_end'), 2)
+  expect(socket.events.slice(-2).map(({ update }) => update)).toEqual([
+    { sessionUpdate: 'error', message: '529 overloaded' },
+    { sessionUpdate: 'turn_end', stopReason: 'end_turn' },
+  ])
+  await prompt(id, 'hello')
+  await socket.until(kindOf('turn_end'), 3)
+  expect(socket.events.filter(kindOf('error'))).toHaveLength(1)
 })
 
 test('Stop aborts a Pi turn as cancelled and the next prompt continues the session', async () => {

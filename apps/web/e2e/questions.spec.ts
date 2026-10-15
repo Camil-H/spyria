@@ -21,7 +21,8 @@ const assumption = 'No member is available; decide yourself and state your assum
 const chipOf = (page: Page) => mainOf(page).getByRole('button', { name: /^Claude Code · |^Codex · / })
 const questionOf = (page: Page) => mainOf(page).getByRole('form', { name: 'Question' })
 const planCardOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Plan approval' })
-const planSwitchOf = (page: Page) => page.getByRole('dialog', { name: 'Session' }).getByRole('switch', { name: 'Plan' })
+const modeOf = (page: Page, name: 'Plan' | 'Auto') =>
+  mainOf(page).getByRole('group', { name: 'Mode' }).getByRole('radio', { name })
 const repliesWith = (page: Page, text: string | RegExp) => messageItemsOf(page).filter({ hasText: text })
 const turnEnded = async (page: Page) => {
   await expect(repliesWith(page, 'Hello from the stub')).toHaveCount(1)
@@ -53,10 +54,9 @@ const sessionStarted = (workerStack: WorkerStack, chatId: string) =>
     )
     .toBe(1)
 const togglePlan = async (page: Page, isOn: boolean) => {
-  await chipOf(page).click()
-  await planSwitchOf(page).click()
-  await expect(planSwitchOf(page)).toHaveAttribute('aria-checked', String(isOn))
-  await page.keyboard.press('Escape')
+  await modeOf(page, isOn ? 'Plan' : 'Auto').click()
+  await expect(modeOf(page, isOn ? 'Plan' : 'Auto')).toBeChecked()
+  await expect(modeOf(page, isOn ? 'Auto' : 'Plan')).not.toBeChecked()
 }
 const holdAnswers = async (page: Page) => {
   const held = Promise.withResolvers<void>()
@@ -150,7 +150,7 @@ test('14c. a Codex form of three questions shows on the same card, without its N
 
 test.describe('Pi on an HQ runtime chat', () => {
   test.use({ runtimeHost: true })
-  const piChipOf = (page: Page) => mainOf(page).getByRole('button', { name: /· auto( · Plan)?$/ })
+  const piChipOf = (page: Page) => mainOf(page).getByRole('button', { name: /· auto$/ })
 
   test('14c. a Pi select shows on the same card without its Other choice; a free answer reaches Pi through its input', async ({
     page,
@@ -169,21 +169,15 @@ test.describe('Pi on an HQ runtime chat', () => {
     await expect(question).toContainText('Answered by Alice')
   })
 
-  test('16a. the Plan toggle sets Pi’s plan mode on an HQ runtime chat and the chip follows', async ({ page }) => {
+  test('16a. the Plan toggle sets Pi’s plan mode on an HQ runtime chat and the toggle follows', async ({ page }) => {
     await newRuntimeChat(page, 'Pi plan mode')
     await sendMessage(page, 'stub:hello')
     await turnEnded(page)
-    await piChipOf(page).click()
-    await planSwitchOf(page).click()
-    await expect(planSwitchOf(page)).toHaveAttribute('aria-checked', 'true')
-    await page.keyboard.press('Escape')
-    await expect(piChipOf(page)).toHaveText(/· auto · Plan$/)
+    await togglePlan(page, true)
+    await expect(piChipOf(page)).toHaveText(/· auto$/)
     await sendMessage(page, 'stub:hello')
     await expect(repliesWith(page, '[t2] Hello from the stub (model hq/fake/fake-medium, mode plan).')).toHaveCount(1)
-    await piChipOf(page).click()
-    await planSwitchOf(page).click()
-    await expect(planSwitchOf(page)).toHaveAttribute('aria-checked', 'false')
-    await page.keyboard.press('Escape')
+    await togglePlan(page, false)
     await expect(piChipOf(page)).toHaveText(/· auto$/)
     await sendMessage(page, 'stub:hello')
     await expect(repliesWith(page, '[t3] Hello from the stub (model hq/fake/fake-medium, mode default).')).toHaveCount(
@@ -213,7 +207,7 @@ test('15. Stop while a question waits ends the turn Stopped, the card shows it, 
   await expect(repliesWith(page, '[t2] Hello from the stub')).toHaveCount(1)
 })
 
-test('16a and 16b. the Plan toggle puts Claude Code in plan mode: the chip says Plan, a write is refused and a read runs; off again it builds', async ({
+test('16a and 16b. the Plan toggle puts Claude Code in plan mode: the toggle shows Plan, a write is refused and a read runs; off again it builds', async ({
   page,
   machine,
   workerStack,
@@ -221,20 +215,19 @@ test('16a and 16b. the Plan toggle puts Claude Code in plan mode: the chip says 
   await machine(claude)
   await sessionStarted(workerStack, await newSession(page, 'Claude Code', workerStack))
   await togglePlan(page, true)
-  await expect(chipOf(page)).toHaveText('Claude Code · subscription · Plan')
+  await expect(chipOf(page)).toHaveText('Claude Code · subscription')
   await sendMessage(page, 'stub:write stub:read')
   await expect(repliesWith(page, 'write:reject')).toHaveCount(1)
   await expect(repliesWith(page, 'Read notes.md')).toHaveCount(1)
   await expect(repliesWith(page, 'mode plan).')).toHaveCount(1)
   await togglePlan(page, false)
-  await expect(chipOf(page)).toHaveText('Claude Code · subscription')
   await sendMessage(page, 'Build')
   await expect(repliesWith(page, '[t2] Hello from the stub (model stub-default, mode bypassPermissions).')).toHaveCount(
     1,
   )
 })
 
-test('16a. the Plan toggle sets Codex’s collaboration mode and the chip follows', async ({
+test('16a. the Plan toggle sets Codex’s collaboration mode and the toggle follows', async ({
   page,
   machine,
   workerStack,
@@ -242,12 +235,11 @@ test('16a. the Plan toggle sets Codex’s collaboration mode and the chip follow
   await machine(codex)
   await sessionStarted(workerStack, await newSession(page, 'Codex', workerStack))
   await togglePlan(page, true)
-  await expect(chipOf(page)).toHaveText('Codex · subscription · Plan')
-  await togglePlan(page, false)
   await expect(chipOf(page)).toHaveText('Codex · subscription')
+  await togglePlan(page, false)
 })
 
-test('16c and 17a. the agent enters plan mode itself and the chip follows; the plan card shows the plan; Approve continues the turn and leaves plan mode', async ({
+test('16c and 17a. the agent enters plan mode itself and the toggle follows; the plan card shows the plan; Approve continues the turn and leaves plan mode', async ({
   page,
   machine,
   workerStack,
@@ -257,14 +249,14 @@ test('16c and 17a. the agent enters plan mode itself and the chip follows; the p
   await sendMessage(page, 'stub:exit-plan')
   const plan = planCardOf(page)
   await expect(plan.getByRole('listitem')).toHaveText(['Create x.txt', 'Done'])
-  await expect(chipOf(page)).toHaveText('Claude Code · subscription · Plan')
+  await expect(modeOf(page, 'Plan')).toBeChecked()
   await expect(mainOf(page)).not.toContainText('Approve Plan')
   await plan.getByRole('button', { name: 'Approve the plan' }).click()
   await expect(repliesWith(page, 'plan:exit-plan-bypass')).toHaveCount(1)
   await turnEnded(page)
   await expect(plan).toContainText('Approved by Alice')
   await expect(plan.getByRole('button')).toHaveCount(0)
-  await expect(chipOf(page)).toHaveText('Claude Code · subscription')
+  await expect(modeOf(page, 'Auto')).toBeChecked()
   await expect(mainOf(page)).not.toContainText('Approve Plan')
 })
 
@@ -281,7 +273,7 @@ test('17b. Keep planning keeps Plan; the turn closes without Stopped and the nex
   await expect(workingIndicatorOf(page)).toHaveCount(0)
   await expect(planCardOf(page)).toContainText('Kept planning by Alice')
   await expect(mainOf(page)).not.toContainText('Stopped')
-  await expect(chipOf(page)).toHaveText('Claude Code · subscription · Plan')
+  await expect(modeOf(page, 'Plan')).toBeChecked()
   await sendMessage(page, 'Next')
   await expect(repliesWith(page, '[t2] Hello from the stub (model stub-default, mode plan).')).toHaveCount(1)
 })
@@ -314,6 +306,8 @@ test.describe('on an HQ runtime chat', () => {
     const bobQuestion = questionOf(bobPage)
     await expect(bobQuestion.getByRole('radio', { name: 'SQLite', exact: true })).toBeDisabled()
     await expect(bobQuestion.getByRole('button')).toHaveCount(0)
+    await expect(modeOf(bobPage, 'Plan')).toBeDisabled()
+    await expect(modeOf(page, 'Plan')).toBeEnabled()
 
     await questionOf(page).getByRole('radio', { name: 'SQLite', exact: true }).check()
     const releaseAliceAnswer = await holdAnswers(page)
@@ -335,15 +329,22 @@ test.describe('on an HQ runtime chat', () => {
   test('28. a question in a delegated sub-conversation is declined with the assumption, shown in the delegation group', async ({
     page,
     agentScript,
+    release,
   }) => {
     await openChat(page, 'Research')
     const answer = 'The subagent decided on its own.'
+    const task = { task: 'stub:ask stub:linger', effort: 'small' }
     await agentScript('chat-research', {
-      steps: [{ tool: 'delegate', arguments: { task: 'stub:ask', effort: 'small' } }],
+      steps: [
+        { tool: 'delegate', arguments: task },
+        { tool: 'delegate', arguments: { ...task, resume: '$resume' }, hold: 'resume' },
+      ],
       text: answer,
       delegateRoute: { tier: 'small', confidence: 'high', effort: 'low' },
     })
     await sendMessage(page, 'Delegate a question')
+    await release('resume')
+    await release('linger')
     await expect(repliesWith(page, answer)).toHaveCount(1)
     await mainOf(page)
       .getByRole('button', { name: /^Delegated to Fake small · / })

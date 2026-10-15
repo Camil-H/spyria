@@ -1,3 +1,4 @@
+import { StringEnum } from '@earendil-works/pi-ai'
 import type { ExtensionAPI, ExtensionUIContext } from '@earendil-works/pi-coding-agent'
 import { Type } from 'typebox'
 
@@ -36,6 +37,21 @@ export default (pi: ExtensionAPI) => {
       setPlanning(context.ui, false)
       return resultOf('The member approved the plan. Plan mode is off: carry it out.')
     },
+  })
+  pi.registerTool({
+    name: 'update_plan',
+    label: 'Plan',
+    description:
+      'Keep a plan for multi-step work: send the whole list of steps with their status, and update it as each step starts and ends.',
+    parameters: Type.Object({
+      entries: Type.Array(
+        Type.Object({
+          content: Type.String(),
+          status: StringEnum(['pending', 'in_progress', 'completed'] as const),
+        }),
+      ),
+    }),
+    execute: async () => resultOf('Plan updated.'),
   })
   pi.on('tool_call', async ({ toolName, input }) => {
     if (

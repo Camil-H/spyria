@@ -122,6 +122,8 @@ type Update = {
   status?: string
   rawOutput?: unknown
   currentModeId?: string
+  cwd?: string
+  entries?: unknown
 }
 const agentServer = createSandboxAgentServer()
 type AgentLlmChoice = Parameters<typeof agentServer.createConversation>[2]
@@ -258,7 +260,7 @@ test('a long Pi conversation compacts on the compaction model, recorded with pro
   expect(request?.split('After the restart')).toHaveLength(2)
 })
 
-test("Pi in HQ's image runs a command with its output, asks through HQ's extension and gets a free answer, and in plan mode is refused a write and proposes a plan that is approved", async () => {
+test("Pi in HQ's image runs a command with its output, asks through HQ's extension and gets a free answer, in plan mode is refused a write and proposes a plan that is approved, keeps a plan with update_plan, and reports a provider error", async () => {
   await addLlmKey(bob, 'Fake')
   const { id, transport } = await runtime()
   const { token } = await runtimeTurn({ id }, bob)
@@ -328,5 +330,19 @@ test("Pi in HQ's image runs a command with its output, asks through HQ's extensi
     pi.updates.filter((update) => update.sessionUpdate === 'current_mode_update').map((update) => update.currentModeId),
   ).toEqual(['plan', 'default'])
   expect(fakeLlmBodies.some((body) => body.includes('The member approved the plan'))).toBe(true)
+  expect(pi.updates.find((update) => update.sessionUpdate === 'workspace')).toMatchObject({ cwd: '/workspace/project' })
+
+  setFakeLlmScript({ steps: [{ plan: [{ content: 'Create notes.txt', status: 'in_progress' }] }], text: 'Tracked.' })
+  expect(await pi.answerOf('Track it')).toBe('Tracked.')
+  expect(pi.updates.filter((update) => update.sessionUpdate === 'plan')).toEqual([
+    { sessionUpdate: 'plan', entries: [{ content: 'Create notes.txt', status: 'in_progress', priority: 'medium' }] },
+  ])
+  expect(pi.updates.some((update) => update.title === 'update_plan')).toBe(false)
+  setFakeLlmScript({ steps: [{ fail: 'Overloaded' }] })
+  await pi.answerOf('Fail it')
+  expect(pi.updates.slice(-2)).toMatchObject([
+    { sessionUpdate: 'error' },
+    { sessionUpdate: 'turn_end', stopReason: 'end_turn' },
+  ])
   pi.close()
 })

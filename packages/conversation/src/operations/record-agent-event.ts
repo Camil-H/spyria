@@ -38,7 +38,9 @@ const recordIn = async (
   const seq = await unitOfWork.agentEvents.append(chatId, event, promptId, recordedAt, delegation)
   const projected = agentProjectionOf(event)
   const turnEnd = seq !== undefined && !delegation && projected?.type === 'turn-end' ? projected : undefined
-  const failure = turnEnd && (await unitOfWork.agentTurns.lastFailure(chatId))
+  const isError = seq !== undefined && !delegation && projected?.type === 'step' && projected.step.type === 'error'
+  const failure =
+    (isError || (turnEnd && previous?.sessionUpdate !== 'error')) && (await unitOfWork.agentTurns.lastFailure(chatId))
   const projection =
     seq === undefined
       ? undefined

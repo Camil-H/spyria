@@ -208,10 +208,11 @@ test('a member cannot remove the credential of another member; removing one unbi
   await waitFor(async () => (await gateway.request(`/api/governance/virtual-keys/${virtualKeyId}`)).status === 404)
   await waitFor(async () => (await gateway.request(`/api/providers/fake/keys/${seededKey.id}`)).status === 404)
   expect(await virtualKeyIdOf(alice)).toBeUndefined()
-  expect([...(await database.$client`select state from jobs where type = 'profile.gateway-sync'`)]).toEqual([
-    { state: 'done' },
-    { state: 'done' },
-  ])
+  const gatewaySyncStates = async () => [
+    ...(await database.$client`select state from jobs where type = 'profile.gateway-sync'`),
+  ]
+  await waitFor(async () => (await gatewaySyncStates()).every(({ state }) => !['queued', 'running'].includes(state)))
+  expect(await gatewaySyncStates()).toEqual([{ state: 'done' }, { state: 'done' }])
 })
 
 test('renameMember changes the display name of the member in the current workspace only', async () => {

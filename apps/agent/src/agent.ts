@@ -32,6 +32,8 @@ type Conversation = {
   failure?: string
   sessionId?: string
   isSub: boolean
+  cwd: string
+  workspace?: AgentEvent
   modeId?: string
   modeIds: string[]
   modeAfterPlan?: string
@@ -92,6 +94,16 @@ const errorUpdateOf = (error: unknown) => ({
   message: error instanceof AcpError ? error.message : 'hq-agent failed',
   ...(error instanceof AcpError && error.code !== undefined && { code: error.code }),
 })
+
+const branchOf = async (cwd: string) => {
+  try {
+    const git = Bun.spawn(['git', '-C', cwd, 'branch', '--show-current'], { stdout: 'pipe', stderr: 'ignore' })
+    const branch = (await new Response(git.stdout).text()).trim()
+    return (await git.exited) === 0 && branch ? branch : undefined
+  } catch {
+    return undefined
+  }
+}
 
 const isLive = (update: Json) =>
   String(update.sessionUpdate).endsWith('_chunk') || String(update.sessionUpdate).startsWith('tool_call')
@@ -164,9 +176,17 @@ export const startAgent = ({
     const seq = ++conversation.lastSeq
     const event = { id: `${conversation.id}:${seq}`, seq, timestamp: new Date().toISOString(), completed, update }
     conversation.events.push(event)
+    if (update.sessionUpdate === 'workspace') conversation.workspace = event
     if (conversation.events.length > bufferSize) conversation.events.shift()
     const frame = JSON.stringify(event)
     for (const socket of conversation.sockets) socket.send(frame)
+  }
+
+  const reportWorkspace = async (conversation: Conversation) => {
+    if (conversation.isSub) return
+    const { cwd } = conversation
+    const update = definedFieldsOf({ sessionUpdate: 'workspace', cwd, branch: await branchOf(cwd) })
+    if (JSON.stringify(update) !== JSON.stringify(conversation.workspace?.update)) emit(conversation, update, false)
   }
 
   const fail = (conversation: Conversation, error: unknown) => {
@@ -316,10 +336,10 @@ export const startAgent = ({
     return true
   }
 
-  const start = async (conversation: Conversation, { agent, workspace }: Launch) => {
+  const start = async (conversation: Conversation, { agent }: Launch) => {
     const { connection } = conversation
     const sessionParams = {
-      cwd: workspace?.working_dir ?? defaultWorkingDirectory,
+      cwd: conversation.cwd,
       mcpServers: mcpServersOf(agent?.mcp_config),
     }
     await connection.request('initialize', { protocolVersion: 1, clientCapabilities: { elicitation: { form: {} } } })
@@ -349,6 +369,7 @@ export const startAgent = ({
       configOptions: conversation.configOptions,
     })
     if (agent?.acp_model) await switchModel(conversation, agent.acp_model, agent.acp_thought_level)
+    await reportWorkspace(conversation)
     conversation.status = 'idle'
   }
 
@@ -357,10 +378,12 @@ export const startAgent = ({
     if (!Array.isArray(command) || command.length === 0 || !command.every((part) => typeof part === 'string'))
       return Response.json({ error: 'agent.acp_command must be a list of strings' }, { status: 400 })
     const id = crypto.randomUUID()
+    const cwd = launch.workspace?.working_dir ?? defaultWorkingDirectory
     const conversation: Conversation = {
       id,
       status: 'starting',
       isSub: Boolean(launch.parent_conversation_id),
+      cwd,
       modeIds: [],
       keptPlanning: false,
       questions: new Map(),
@@ -373,7 +396,7 @@ export const startAgent = ({
         {
           command,
           env: adapterEnvironmentOf(launch.secrets),
-          cwd: launch.workspace?.working_dir ?? defaultWorkingDirectory,
+          cwd,
         },
         {
           onUpdate: (params) => onUpdate(conversation, (params.update ?? {}) as Json),
@@ -421,6 +444,7 @@ export const startAgent = ({
             stopReason: result.stopReason,
             ...(result.stopReason === 'cancelled' && conversation.keptPlanning && { keptPlanning: true }),
           })
+          void reportWorkspace(conversation)
         },
         (error) => {
           if (conversation.status !== 'error') {
@@ -429,6 +453,7 @@ export const startAgent = ({
           }
           closeQuestions(conversation, 'turn_end')
           emit(conversation, { sessionUpdate: 'turn_end', stopReason: 'error' })
+          void reportWorkspace(conversation)
         },
       )
     return Response.json({})
@@ -518,6 +543,8 @@ export const startAgent = ({
         if (!conversation || auth?.type !== 'auth' || auth.session_api_key !== apiKey)
           return void socket.close(1008, 'Unauthorized')
         socket.data.isAuthenticated = true
+        const { workspace } = conversation
+        if (workspace && workspace.seq <= socket.data.after) socket.send(JSON.stringify(workspace))
         for (const event of conversation.events) if (event.seq > socket.data.after) socket.send(JSON.stringify(event))
         conversation.sockets.add(socket)
       },

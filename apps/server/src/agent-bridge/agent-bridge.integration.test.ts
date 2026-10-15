@@ -171,6 +171,33 @@ test('stream frames reach browsers of the chat workspace only, and no secret rea
   }
 })
 
+test('the agent’s workspace reaches viewers live when it changes, is resent to a new viewer and is never stored', async () => {
+  await agentHost()
+  const chat = await newRuntimeChat()
+  const viewer = await openStream(chat)
+  for (const text of ['Hello', 'stub:branch feature/bridge']) {
+    await answered(await prompt(chat, text))
+    await turnEnded(chat)
+  }
+  const workspacesIn = (frames: string[]) =>
+    frames.map((frame) => JSON.parse(frame)).filter((frame) => frame.workspace !== undefined)
+  await waitFor(() => workspacesIn(viewer.frames).length === 2)
+  const cwd = workspacesIn(viewer.frames)[0]?.workspace.cwd
+  const branched = { sessionUpdate: 'workspace', cwd, branch: 'feature/bridge' }
+  expect(workspacesIn(viewer.frames)).toEqual([
+    { chatId: chat, workspace: { sessionUpdate: 'workspace', cwd } },
+    { chatId: chat, workspace: branched },
+  ])
+  const newViewer = await openStream(chat)
+  await waitFor(() => workspacesIn(newViewer.frames).length === 1)
+  expect(workspacesIn(newViewer.frames)).toEqual([{ chatId: chat, workspace: branched, isSnapshot: true }])
+  const storedUpdates = (await storedAgentEventsOf(chat)).map(
+    (event) => (event.payload as { event: { update: { sessionUpdate: string } } }).event.update.sessionUpdate,
+  )
+  expect(storedUpdates).toContain('turn_end')
+  expect(storedUpdates).not.toContain('workspace')
+})
+
 test('touchRuntime is called on prompts and on agent events', async () => {
   await agentHost()
   const chat = await newRuntimeChat()

@@ -112,6 +112,10 @@ export const startZeroCache = async ({
   appId: string
   serverUrl: string
 }) => {
+  const url = `http://localhost:${port}`
+  for (const busyPort of [port, port + 1])
+    if (typeof (await httpStatusOf(`http://localhost:${busyPort}/`)) === 'number')
+      throw new Error(`zero-cache cannot start: port ${busyPort} is in use (a leftover zero-cache? free it first)`)
   const replicaFile = join(tmpdir(), `hq-zero-${appId}.db`)
   for (const suffix of ['', '-wal', '-shm', '-wal2']) rmSync(`${replicaFile}${suffix}`, { force: true })
   const logFile = openSync(join(tmpdir(), `hq-zero-${appId}.log`), 'w')
@@ -141,7 +145,7 @@ export const startZeroCache = async ({
     writeSync(logFile, chunk)
     errorOutput = `${errorOutput}${chunk}`.slice(-4000)
   })
-  const url = `http://localhost:${port}`
+  const exited = once(zeroCache, 'exit').then(() => `zero-cache on port ${port} exited: ${errorOutput}`)
   for (let attempt = 1; (await httpStatusOf(`${url}/keepalive`)) !== 200; attempt++) {
     if (zeroCache.exitCode !== null || attempt === 600) {
       await stopProcessGroup(zeroCache)
@@ -149,7 +153,7 @@ export const startZeroCache = async ({
     }
     await sleep(50)
   }
-  return { url, stop: () => stopProcessGroup(zeroCache) }
+  return { url, exited, stop: () => stopProcessGroup(zeroCache) }
 }
 
 const gatewayImage = 'maximhq/bifrost:v2.2.6@sha256:d0b4708ace1aa175766f94afa715fd9bba3a1b56c1dc2afff15a21edf3ae4e2a'

@@ -8,6 +8,7 @@ const otherChoice = 'Other…'
 const planModeCommand = '/hq-plan'
 const dialogMethods = ['select', 'confirm', 'input', 'editor']
 const askingTools = ['ask_member', 'propose_plan']
+const planTool = 'update_plan'
 const toolKinds: Record<string, string> = { bash: 'execute', read: 'read', edit: 'edit', write: 'edit' }
 const modeIds = ['default', 'plan']
 const approvePlan = 'implement_plan'
@@ -53,6 +54,7 @@ export const connectPi = (launch: AdapterLaunch, { onUpdate, onExit, onRequest }
   let isAborting = false
   let askingToolCallId: unknown
   let freeAnswer: string | undefined
+  let providerError: string | undefined
   const update = (fields: Json) => onUpdate({ update: fields })
   const send = (type: string, fields: Json = {}) => {
     if (pi.hasExited) return Promise.reject(new AcpError('The adapter exited'))
@@ -140,8 +142,23 @@ export const connectPi = (launch: AdapterLaunch, { onUpdate, onExit, onRequest }
         sessionUpdate: event.type === 'text_delta' ? 'agent_message_chunk' : 'agent_thought_chunk',
         content: { type: 'text', text: event.delta },
       })
+    const message = (record.message ?? {}) as Json
+    if (type === 'message_end' && message.role === 'assistant')
+      providerError =
+        message.stopReason === 'error' ? String(message.errorMessage ?? 'The model call failed') : undefined
     const toolCallId = String(record.toolCallId)
     const toolName = String(record.toolName)
+    if (toolName === planTool)
+      return type === 'tool_execution_start'
+        ? update({
+            sessionUpdate: 'plan',
+            entries: (((record.args as Json | undefined)?.entries ?? []) as Json[]).map(({ content, status }) => ({
+              content,
+              status,
+              priority: 'medium',
+            })),
+          })
+        : undefined
     if (type === 'tool_execution_start') {
       const input = (record.args ?? {}) as Json
       toolInputs.set(toolCallId, input)
@@ -165,7 +182,11 @@ export const connectPi = (launch: AdapterLaunch, { onUpdate, onExit, onRequest }
         ...toolOutputOf(toolName, (record.result ?? {}) as Json, Boolean(record.isError), input),
       })
     }
-    if (type === 'agent_settled') turn?.resolve({ stopReason: record.aborted || isAborting ? 'cancelled' : 'end_turn' })
+    if (type !== 'agent_settled') return
+    const isCancelled = record.aborted || isAborting
+    if (providerError && !isCancelled) update({ sessionUpdate: 'error', message: providerError })
+    providerError = undefined
+    turn?.resolve({ stopReason: isCancelled ? 'cancelled' : 'end_turn' })
   }
 
   const pi = spawnJsonLines(launch, onRecord, (code) => {

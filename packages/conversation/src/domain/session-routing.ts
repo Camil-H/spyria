@@ -93,10 +93,8 @@ export const chipLabelOf = (
     model,
     reasoningEffort,
     subagentPolicy,
-    isPlanning,
   }: {
     localSession: boolean
-    isPlanning: boolean
     harness: Harness | null
     model: string | null
     reasoningEffort: string | null
@@ -105,10 +103,8 @@ export const chipLabelOf = (
   nameOf: (id: string) => string,
   adapterNameOf: (id: string) => string,
 ) =>
-  `${
-    localSession
-      ? `${harnesses[harness ?? 'claude-code'].name} · ${model ? adapterNameOf(model) : 'subscription'}`
-      : model
-        ? `${nameOf(model)}${reasoningEffort ? ` (${reasoningEffort})` : ''} · ${subagentPolicyNames[subagentPolicy]}`
-        : 'Model chosen at first prompt'
-  }${isPlanning ? ' · Plan' : ''}`
+  localSession
+    ? `${harnesses[harness ?? 'claude-code'].name} · ${model ? adapterNameOf(model) : 'subscription'}`
+    : model
+      ? `${nameOf(model)}${reasoningEffort ? ` (${reasoningEffort})` : ''} · ${subagentPolicyNames[subagentPolicy]}`
+      : 'Model chosen at first prompt'

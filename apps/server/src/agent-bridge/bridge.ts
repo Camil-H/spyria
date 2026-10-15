@@ -56,6 +56,7 @@ export const createAgentBridge = ({
         endedPromptId: string | null
         isReady: Promise<void>
         questions: Map<string, object>
+        workspace?: object
         close(): void
       }
     >()
@@ -126,6 +127,7 @@ export const createAgentBridge = ({
         endedPromptId: null as string | null,
         isClosed: false,
         questions: new Map<string, object>(),
+        workspace: undefined as object | undefined,
         close: () => {
           chatSocket.isClosed = true
           opened.then(
@@ -186,6 +188,11 @@ export const createAgentBridge = ({
             chatSocket.questions.set(String(update.questionId), update)
             for (const viewer of viewers.get(keyOf(chat)) ?? [])
               send(viewer, chat, { promptId: chatSocket.promptId, question: update })
+            return
+          }
+          if (update?.sessionUpdate === 'workspace') {
+            chatSocket.workspace = update
+            for (const viewer of viewers.get(keyOf(chat)) ?? []) send(viewer, chat, { workspace: update })
             return
           }
           if (update?.sessionUpdate === 'question_answered' || update?.sessionUpdate === 'question_closed')
@@ -260,6 +267,7 @@ export const createAgentBridge = ({
           })
         for (const question of streaming?.questions.values() ?? [])
           send(viewer, chat, { promptId: streaming?.promptId, question, isSnapshot: true })
+        if (streaming?.workspace) send(viewer, chat, { workspace: streaming.workspace, isSnapshot: true })
       },
       unwatch: (viewer: WSContext, chat?: AgentChat) => {
         for (const watching of chat ? [viewers.get(keyOf(chat))] : viewers.values()) watching?.delete(viewer)

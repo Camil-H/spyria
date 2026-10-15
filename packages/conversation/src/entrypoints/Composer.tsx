@@ -15,11 +15,15 @@ export const Composer = ({
   chatId,
   isBlocked,
   blockedNotice,
+  aboveBox,
+  bottomBar,
 }: {
   workspaceId: WorkspaceId
   chatId: ChatId
   isBlocked: boolean
   blockedNotice: ReactNode
+  aboveBox?: ReactNode
+  bottomBar?: ReactNode
 }) => {
   const commands = useConversationCommands()
   const { memberId } = useSession()
@@ -57,32 +61,38 @@ export const Composer = ({
   return (
     <Provider>
       {isBlocked && <div className="text-sm text-muted">{blockedNotice}</div>}
-      <div className="flex items-end gap-2 rounded-xl border border-line bg-raised p-2">
-        <textarea
-          ref={textareaRef}
-          aria-label="Message"
-          rows={1}
-          className={`max-h-40 min-w-0 flex-1 resize-none rounded-md bg-transparent px-2 py-1.5 text-sm field-sizing-content ${focusRing}`}
-          value={text}
-          onChange={(event) => change(event.target.value)}
-          onKeyDown={sendOnShortcut}
-        />
-        <Root>
-          <Trigger
-            type="button"
-            aria-label="Send"
-            disabled={isUnsendable}
-            onClick={send}
-            className={`rounded-full bg-accent p-2 text-accent-ink hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent ${focusRing}`}
-          >
-            <ArrowUp aria-hidden size={18} />
-          </Trigger>
-          <Portal>
-            <Content sideOffset={6} className={tooltipClass}>
-              Send (⌘↵)
-            </Content>
-          </Portal>
-        </Root>
+      {aboveBox}
+      <div className="rounded-xl border border-line bg-raised">
+        <div className="flex items-end gap-2 p-2">
+          <textarea
+            ref={textareaRef}
+            aria-label="Message"
+            rows={1}
+            className={`max-h-40 min-w-0 flex-1 resize-none rounded-md bg-transparent px-2 py-1.5 text-sm field-sizing-content ${focusRing}`}
+            value={text}
+            onChange={(event) => change(event.target.value)}
+            onKeyDown={sendOnShortcut}
+          />
+          <Root>
+            <Trigger
+              type="button"
+              aria-label="Send"
+              disabled={isUnsendable}
+              onClick={send}
+              className={`rounded-full bg-accent p-2 text-accent-ink hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent ${focusRing}`}
+            >
+              <ArrowUp aria-hidden size={18} />
+            </Trigger>
+            <Portal>
+              <Content sideOffset={6} className={tooltipClass}>
+                Send (⌘↵)
+              </Content>
+            </Portal>
+          </Root>
+        </div>
+        {bottomBar && (
+          <div className="flex min-w-0 items-center gap-1 border-t border-line px-1.5 py-1">{bottomBar}</div>
+        )}
       </div>
     </Provider>
   )

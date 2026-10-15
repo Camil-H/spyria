@@ -218,29 +218,28 @@ test('shows the runtime chats, their header and history', async ({ page }) => {
     await expect(page.getByRole('button', { name: 'Message actions' })).toHaveCount(0)
   })
 
-  await test.step('puts the owner and the git branch on the title row, aligned right, and the model and runtime chips above the composer, aligned left', async () => {
+  await test.step('puts the owner on the title row, aligned right, the git branch above the text box, aligned left, and the model and runtime chips in the bar under it, the runtime at the right end', async () => {
     const titleBox = (await mainOf(page).getByRole('heading', { level: 1, name: 'Invoice bug' }).boundingBox())!
     const ownerBox = (await mainOf(page).getByText('Agent acts as Alice').boundingBox())!
     const branchBox = (await mainOf(page).getByText('fix/invoice-tax').boundingBox())!
     const modelBox = (await mainOf(page).getByRole('button', { name: 'Sonnet 5.5 (high) · auto' }).boundingBox())!
     const runtimeBox = (await mainOf(page).getByRole('status', { name: 'Runtime' }).boundingBox())!
     const composerBox = (await composerOf(page).boundingBox())!
-    for (const itemBox of [ownerBox, branchBox]) {
-      expect(Math.abs(itemBox.y + itemBox.height / 2 - (titleBox.y + titleBox.height / 2))).toBeLessThan(16)
-    }
-    expect(composerBox.x + composerBox.width - (branchBox.x + branchBox.width)).toBeLessThan(96)
+    expect(Math.abs(ownerBox.y + ownerBox.height / 2 - (titleBox.y + titleBox.height / 2))).toBeLessThan(16)
     expect(ownerBox.x).toBeGreaterThan(titleBox.x + titleBox.width)
-    expect(branchBox.x).toBeGreaterThan(ownerBox.x + ownerBox.width)
     const header = mainOf(page).locator('header')
+    await expect(header).not.toContainText('fix/invoice-tax')
     await expect(header).not.toContainText('Sonnet 5.5 (high) · auto')
     await expect(header.getByRole('status', { name: 'Runtime' })).toHaveCount(0)
+    expect(branchBox.y + branchBox.height).toBeLessThanOrEqual(composerBox.y)
+    expect(composerBox.y - (branchBox.y + branchBox.height)).toBeLessThan(48)
+    expect(Math.abs(branchBox.x - composerBox.x)).toBeLessThan(48)
     for (const chipBox of [modelBox, runtimeBox]) {
-      expect(chipBox.y).toBeGreaterThan(titleBox.y + titleBox.height)
-      expect(chipBox.y + chipBox.height).toBeLessThanOrEqual(composerBox.y)
-      expect(composerBox.y - (chipBox.y + chipBox.height)).toBeLessThan(48)
+      expect(chipBox.y).toBeGreaterThanOrEqual(composerBox.y + composerBox.height)
+      expect(chipBox.y - (composerBox.y + composerBox.height)).toBeLessThan(48)
     }
-    expect(Math.abs(modelBox.x - composerBox.x)).toBeLessThan(24)
     expect(runtimeBox.x).toBeGreaterThan(modelBox.x + modelBox.width)
+    expect(composerBox.x + composerBox.width - (runtimeBox.x + runtimeBox.width)).toBeLessThan(96)
     expect(Math.abs(runtimeBox.y + runtimeBox.height / 2 - (modelBox.y + modelBox.height / 2))).toBeLessThan(4)
   })
 

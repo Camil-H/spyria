@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, dirname, resolve } from 'node:path'
@@ -256,7 +256,7 @@ const completionOf = async (session, signal, update) => {
     {
       model: session.model.slice(provider.length + 1),
       messages: session.history,
-      tools: [...piTools, 'ask_member', 'propose_plan', ...Object.keys(session.tools)].map((name) => ({
+      tools: [...piTools, 'ask_member', 'propose_plan', 'update_plan', ...Object.keys(session.tools)].map((name) => ({
         type: 'function',
         function: { name },
       })),
@@ -330,14 +330,10 @@ const runCommand = (toolCallId, command, state, update) =>
       done(output.replace(/\n$/, ''))
     })
   })
-const editFile = (toolCallId, { command, path, file_text, old_str, new_str, content }, update) => {
+const editFile = (toolCallId, tool, rawInput, update) => {
+  const { path, content, edits = [] } = rawInput
   const absolute = resolve(process.cwd(), String(path).replace('/workspace/project/', ''))
   const oldText = existsSync(absolute) ? readFileSync(absolute, 'utf8') : null
-  const tool = command === 'view' ? 'read' : command === 'create' || content !== undefined ? 'write' : 'edit'
-  const rawInput =
-    tool === 'edit'
-      ? { path, edits: [{ oldText: old_str, newText: new_str }] }
-      : { path, content: file_text ?? content }
   update({
     sessionUpdate: 'tool_call',
     toolCallId,
@@ -345,7 +341,7 @@ const editFile = (toolCallId, { command, path, file_text, old_str, new_str, cont
     kind: tool === 'read' ? 'read' : 'edit',
     status: 'in_progress',
     locations: [{ path }],
-    rawInput: tool === 'read' ? { path } : rawInput,
+    rawInput,
   })
   if (tool === 'read') {
     const text = oldText ?? `File not found: ${path}`
@@ -358,7 +354,9 @@ const editFile = (toolCallId, { command, path, file_text, old_str, new_str, cont
     return text
   }
   const newText =
-    tool === 'edit' ? String(oldText ?? '').replace(String(old_str), String(new_str)) : String(rawInput.content)
+    tool === 'edit'
+      ? edits.reduce((text, edit) => text.replace(String(edit.oldText), String(edit.newText)), String(oldText ?? ''))
+      : String(content)
   mkdirSync(dirname(absolute), { recursive: true })
   writeFileSync(absolute, newText)
   update({
@@ -386,30 +384,26 @@ const callMcpTool = async (toolCallId, name, rawInput, session, state, update) =
   })
   return text
 }
-const planStatuses = { done: 'completed', in_progress: 'in_progress' }
 const runTool = async ({ id, function: { name, arguments: json } }, session, state, update) => {
   const input = JSON.parse(json || '{}')
-  if (['terminal', 'bash', 'Bash'].includes(name)) return runCommand(id, String(input.command), state, update)
-  if (['file_editor', 'Write'].includes(name))
-    return editFile(id, { ...input, path: input.path ?? input.file_path }, update)
+  if (name === 'bash') return runCommand(id, String(input.command), state, update)
+  if (['read', 'edit', 'write'].includes(name)) return editFile(id, name, input, update)
   if (name === 'think') return 'Your thought has been logged.'
   if (name === 'ask_member') return askMember(id, input, update)
   if (name === 'propose_plan') return proposePlan(id, input, session, update)
-  if (name !== 'task_tracker') return callMcpTool(id, name, input, session, state, update)
-  const entries = input.task_list.map(({ title, status }) => ({
-    content: title,
-    status: planStatuses[status] ?? 'pending',
-    priority: 'medium',
-  }))
-  update({ sessionUpdate: 'plan', entries })
-  return 'Task list updated.'
+  if (name === 'update_plan') return piTool(id, name, input, update, async () => 'Plan updated.')
+  return callMcpTool(id, name, input, session, state, update)
 }
 const gatewayTurn = async (session, text, state, update) => {
   session.tools ??= await mcpToolsOf()
   session.history.push({ role: 'user', content: text })
   for (;;) {
-    const { status, text: answer, toolCall } = await completionOf(session, state.abort.signal, update)
-    if (status !== 200) return
+    const { status, text: answer, toolCall, body } = await completionOf(session, state.abort.signal, update)
+    if (status !== 200)
+      return piSend({
+        type: 'message_end',
+        message: { role: 'assistant', content: [], stopReason: 'error', errorMessage: `${status} ${body}` },
+      })
     session.history.push({ role: 'assistant', content: answer, ...(toolCall && { tool_calls: [toolCall] }) })
     if (!toolCall) return
     const output = await runTool(toolCall, session, state, update)
@@ -450,7 +444,21 @@ const turn = async (id, { sessionId, prompt }) => {
       return finish('end_turn')
     }
     if (has('crash')) process.exit(3)
+    const branch = text.match(/stub:branch (\S+)/)?.[1]
+    if (branch)
+      for (const git of [
+        ['init', '-q'],
+        ['checkout', '-q', '-b', branch],
+      ])
+        spawnSync('git', ['-c', 'init.defaultBranch=main', ...git], { stdio: 'ignore' })
     if (has('fail')) return refuse('Authentication required')
+    if (isPi && has('provider-error')) {
+      piSend({
+        type: 'message_end',
+        message: { role: 'assistant', stopReason: 'error', errorMessage: '529 overloaded' },
+      })
+      return finish('end_turn')
+    }
     if (has('think')) {
       for (const chunk of ['Thinking ', 'about the plan.']) {
         await step()
@@ -589,7 +597,8 @@ const turn = async (id, { sessionId, prompt }) => {
         { content: 'Fix the bug', status: 'in_progress', priority: 'medium' },
         { content: 'Ship', status: 'pending', priority: 'low' },
       ]
-      update({ sessionUpdate: 'plan', entries })
+      if (isPi) await piTool(`plan-${session.prompts}`, 'update_plan', { entries }, update, async () => 'Plan updated.')
+      else update({ sessionUpdate: 'plan', entries })
     }
     if (has('plan-progress'))
       for (const status of ['in_progress', 'completed']) {

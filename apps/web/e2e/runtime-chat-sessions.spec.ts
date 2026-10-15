@@ -42,7 +42,11 @@ const chipOf = (page: Page) =>
     name: /^Model chosen at first prompt$|^Claude Code · |^Codex · |· (auto|same as main)$/,
   })
 const sessionOf = (page: Page) => page.getByRole('dialog', { name: 'Session' })
-const runsOnOf = (page: Page) => sessionOf(page).getByRole('combobox', { name: 'Runs on' })
+const runsOnOf = (page: Page) => mainOf(page).getByRole('combobox', { name: 'Runs on' })
+const expectRunsOnLocked = async (page: Page) => {
+  await expect(runsOnOf(page)).toBeDisabled()
+  await expect(runsOnOf(page)).toHaveValue('runtime')
+}
 const expectRunsOnChoices = async (page: Page, names: string[]) => {
   await expect(runsOnChoiceOf(page).getByRole('radio')).toHaveCount(names.length)
   for (const name of names) await expect(runsOnChoiceOf(page).getByRole('radio', { name })).not.toBeChecked()
@@ -137,8 +141,7 @@ test('4. another member does not see the choice, and crafted writes by them or o
   const bobPage = await openPageAs(browser, workerStack, 'member-bob')
   await openChat(bobPage, 'Only Alice chooses')
   await openSession(bobPage)
-  await expect(runsOnOf(bobPage)).toHaveCount(0)
-  await expect(sessionOf(bobPage)).toContainText('Runs on HQ runtime')
+  await expectRunsOnLocked(bobPage)
   expect(await craftedRoutingWrite(workerStack, 'member-bob', { chatId, runsOn: 'claude-code' })).toContain(
     'Only the owner changes how this session runs',
   )
@@ -235,9 +238,9 @@ test('11. Runs on follows the machine: its sign-ins, going offline and back, and
     await test.step(`a machine ${step} offers ${options.join(' and ') || 'HQ runtime only'}`, async () => {
       await machine(query)
       await openSession(page)
-      if (options.length) await expect(runsOnOf(page).getByRole('option')).toHaveText(['HQ runtime', ...options])
-      else await expect(sessionOf(page).getByText('Runs on HQ runtime')).toBeVisible()
-      await expect(runsOnOf(page)).toHaveCount(options.length ? 1 : 0)
+      await expect(runsOnOf(page).getByRole('option')).toHaveText(['HQ runtime', ...options])
+      if (options.length) await expect(runsOnOf(page)).toBeEnabled()
+      else await expectRunsOnLocked(page)
       await expect(sessionOf(page)).not.toContainText('Sign in')
     })
   await page.keyboard.press('Escape')
@@ -249,8 +252,7 @@ test('11. Runs on follows the machine: its sign-ins, going offline and back, and
     await expect(machineSection.getByRole('button', { name: 'Add my machine' })).toBeVisible()
     await openChat(page, 'Follows the machine')
     await openSession(page)
-    await expect(runsOnOf(page)).toHaveCount(0)
-    await expect(sessionOf(page).getByText('Runs on HQ runtime')).toBeVisible()
+    await expectRunsOnLocked(page)
   })
 })
 

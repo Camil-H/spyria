@@ -1,7 +1,7 @@
 import { useQuery } from '@hq/db/react'
 import { type ChatId, chatId as toChatId, type WorkspaceId } from '@hq/kernel'
 import { useSession } from '@hq/session'
-import { Bot, GitBranch, Hash } from 'lucide-react'
+import { Bot, Folder, GitBranch, Hash } from 'lucide-react'
 import { type ReactNode, useEffect, useState } from 'react'
 import { Link, Navigate, useOutletContext, useParams } from 'react-router'
 import { runsOnNames, runsOnWaitingNoticeOf } from '../domain/session-routing.ts'
@@ -9,10 +9,11 @@ import { getConversation } from '../queries/get-conversation.ts'
 import { Composer } from './Composer.tsx'
 import { MessageList } from './MessageList.tsx'
 import { AnswerQuestionContext, useConversationCommands } from './providers.tsx'
-import { SessionChip } from './SessionChip.tsx'
+import { PlanModeToggle, RunsOnChip, SessionChip } from './SessionChip.tsx'
 import { useLiveMessages, withLiveMessages } from './useLiveMessages.ts'
 
-const bubbleClassName = 'rounded-full border border-line px-2 py-0.5 text-xs text-muted'
+const workspaceChipClass =
+  'flex min-w-0 items-center gap-1.5 rounded-md border border-line bg-raised px-2 py-1 text-xs text-muted'
 
 export const ChatView = ({
   headerActions,
@@ -41,7 +42,7 @@ export const ChatView = ({
         () => setHqRuntime({ chatId, isAvailable: true }),
       )
   }, [commands, workspaceId, chatId, isChoosingRunsOn])
-  const liveMessages = useLiveMessages(workspaceId, chatId, conversation?.messages ?? [])
+  const live = useLiveMessages(workspaceId, chatId, conversation?.messages ?? [])
   const newestMessageId = conversation?.messages.at(-1)?.id
   useEffect(() => {
     if (newestMessageId) commands.markChatRead({ workspaceId, chatId })
@@ -59,6 +60,7 @@ export const ChatView = ({
     conversation.type === 'runtime' &&
     conversation.runsOn !== null &&
     (conversation.localSession ? conversation.isOwner : canPrompt)
+  const branch = live.workspace?.branch ?? conversation.gitBranch
   const ChatTypeIcon = conversation.type === 'runtime' ? Bot : Hash
   const chatTypeLabel = conversation.type === 'runtime' ? 'Runtime chat' : 'Channel'
   return (
@@ -71,17 +73,9 @@ export const ChatView = ({
           </div>
           <div className="ml-auto flex min-w-0 items-center gap-x-2 whitespace-nowrap">
             {conversation.type === 'runtime' && (
-              <>
-                <span className="text-sm text-muted">
-                  Agent acts as <strong className="font-semibold text-ink">{conversation.ownerName}</strong>
-                </span>
-                {conversation.gitBranch !== null && (
-                  <span className={`${bubbleClassName} inline-flex items-center gap-1`}>
-                    <GitBranch aria-label="Git branch" role="img" size={12} />
-                    {conversation.gitBranch}
-                  </span>
-                )}
-              </>
+              <span className="text-sm text-muted">
+                Agent acts as <strong className="font-semibold text-ink">{conversation.ownerName}</strong>
+              </span>
             )}
             {headerActions}
           </div>
@@ -104,30 +98,10 @@ export const ChatView = ({
       >
         <MessageList
           conversation={conversation}
-          items={withLiveMessages(conversation.items, liveMessages)}
+          items={withLiveMessages(conversation.items, live.messages)}
           onStop={() => commands.stopAgent({ workspaceId, chatId })}
         />
       </AnswerQuestionContext>
-      {conversation.type === 'runtime' && (
-        <div className="-mb-2 flex items-center gap-2">
-          <SessionChip
-            workspaceId={workspaceId}
-            chatId={chatId}
-            model={conversation.model}
-            reasoningEffort={conversation.reasoningEffort}
-            defaultModel={conversation.defaultModel}
-            subagentPolicy={conversation.subagentPolicy}
-            harness={conversation.harness}
-            localSession={conversation.localSession}
-            isPlanning={conversation.isPlanning}
-            mayPrompt={mayPrompt}
-            runsOn={conversation.runsOn}
-            isOwner={conversation.isOwner}
-            runsOnChoices={conversation.runsOnChoices}
-          />
-          {runtimeStatus}
-        </div>
-      )}
       {isRunsOnOpen && conversation.runsOnChoices && conversation.runsOnChoices.length > 1 && (
         <fieldset aria-label="Runs on" className="flex flex-col gap-2 text-sm">
           <div className="flex gap-1 rounded-lg border border-line bg-app p-1">
@@ -159,6 +133,59 @@ export const ChatView = ({
               ? 'Choose where this chat runs to send'
               : runsOnWaitingNoticeOf(conversation.ownerName)
             : blockedNotice
+        }
+        aboveBox={
+          (live.workspace || branch !== null) && (
+            <div className="flex min-w-0 gap-2">
+              {live.workspace && (
+                <span title={live.workspace.cwd} className={workspaceChipClass}>
+                  <Folder aria-label="Working directory" role="img" size={12} className="shrink-0" />
+                  <span className="truncate">{live.workspace.cwd.split('/').filter(Boolean).at(-1) ?? '/'}</span>
+                </span>
+              )}
+              {branch !== null && (
+                <span className={workspaceChipClass}>
+                  <GitBranch aria-label="Git branch" role="img" size={12} className="shrink-0" />
+                  <span className="truncate">{branch}</span>
+                </span>
+              )}
+            </div>
+          )
+        }
+        bottomBar={
+          conversation.type === 'runtime' && (
+            <>
+              {conversation.runsOn !== null && (
+                <RunsOnChip
+                  workspaceId={workspaceId}
+                  chatId={chatId}
+                  runsOn={conversation.runsOn}
+                  runsOnChoices={conversation.runsOnChoices}
+                />
+              )}
+              <SessionChip
+                workspaceId={workspaceId}
+                chatId={chatId}
+                model={conversation.model}
+                reasoningEffort={conversation.reasoningEffort}
+                defaultModel={conversation.defaultModel}
+                subagentPolicy={conversation.subagentPolicy}
+                harness={conversation.harness}
+                localSession={conversation.localSession}
+                isOwner={conversation.isOwner}
+              />
+              {conversation.runsOn !== null && (
+                <PlanModeToggle
+                  workspaceId={workspaceId}
+                  chatId={chatId}
+                  isPlanning={conversation.isPlanning}
+                  hasSession={live.workspace !== undefined}
+                  mayPrompt={mayPrompt}
+                />
+              )}
+              <div className="ml-auto shrink-0">{runtimeStatus}</div>
+            </>
+          )
         }
       />
     </div>

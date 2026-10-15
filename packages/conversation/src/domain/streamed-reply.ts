@@ -7,6 +7,11 @@ export type QuestionFrame = Readonly<{
   question: Omit<Extract<AgentStep, { type: 'question' }>, 'type'> & { sessionUpdate: 'question' }
   isSnapshot?: boolean
 }>
+export type AgentWorkspace = Readonly<{ cwd: string; branch?: string }>
+export type WorkspaceFrame = Readonly<{
+  workspace: AgentWorkspace & { sessionUpdate: 'workspace' }
+  isSnapshot?: boolean
+}>
 export type StreamedReply = Readonly<{
   promptId: string
   text: string

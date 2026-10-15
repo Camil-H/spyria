@@ -139,12 +139,10 @@ test.each([
   ],
   [{ localSession: false, harness: null, model: 'fake/fake-small' }, 'Named fake/fake-small · same as main'],
   [{ localSession: false, harness: 'codex', model: null }, 'Model chosen at first prompt'],
-  [{ localSession: true, harness: 'codex', model: 'gpt-large', isPlanning: true }, 'Codex · Adapter gpt-large · Plan'],
-  [{ localSession: true, harness: null, model: null, isPlanning: true }, 'Claude Code · subscription · Plan'],
 ] as const)('the session chip reads %o as %s', (fields, label) => {
   expect(
     chipLabelOf(
-      { reasoningEffort: null, subagentPolicy: 'same_as_main', isPlanning: false, ...fields },
+      { reasoningEffort: null, subagentPolicy: 'same_as_main', ...fields },
       (id) => (id.startsWith('anthropic/') ? 'Anthropic/Opus 5.5' : `Named ${id}`),
       (id) => `Adapter ${id}`,
     ),
@@ -159,7 +157,6 @@ test('the session chip names the auto subagent policy', () => {
         model: 'fake/fake-medium',
         reasoningEffort: null,
         subagentPolicy: 'auto',
-        isPlanning: false,
       },
       () => 'Fake medium',
       () => '',

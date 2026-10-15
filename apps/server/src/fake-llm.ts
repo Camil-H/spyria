@@ -6,7 +6,7 @@ type FakeLlmStep = (
   | { command: string }
   | { read: string }
   | { edit: { path: string; create?: string; oldText?: string; newText?: string } }
-  | { plan: { title: string; status: string }[] }
+  | { plan: { content: string; status: 'pending' | 'in_progress' | 'completed' }[] }
   | { fail: string }
   | { tool: string; arguments?: Record<string, unknown> }
   | { task: string }
@@ -52,36 +52,37 @@ const completionOf = (choice: object, extra: object = {}) => ({
 const eventOf = (data: object) => new TextEncoder().encode(`data: ${JSON.stringify(data)}\n\n`)
 const wordsOf = (text: string) => text.split(/(?<= )/).filter(Boolean)
 
+const piToolCallOf = (step: FakeLlmStep) =>
+  'command' in step
+    ? { name: 'bash', arguments: { command: step.command } }
+    : 'plan' in step
+      ? { name: 'update_plan', arguments: { entries: step.plan } }
+      : 'read' in step
+        ? { name: 'read', arguments: { path: `${workingDirectory}${step.read}` } }
+        : 'edit' in step
+          ? step.edit.create === undefined
+            ? {
+                name: 'edit',
+                arguments: {
+                  path: `${workingDirectory}${step.edit.path}`,
+                  edits: [{ oldText: step.edit.oldText, newText: step.edit.newText }],
+                },
+              }
+            : { name: 'write', arguments: { path: `${workingDirectory}${step.edit.path}`, content: step.edit.create } }
+          : undefined
+
 const toolCallOf = (step: FakeLlmStep | undefined, offeredTools: readonly string[] = [], resumeId = '') => {
   const call =
     !step || 'fail' in step || 'task' in step
       ? undefined
       : 'think' in step
         ? { name: 'think', arguments: { thought: step.think } }
-        : 'command' in step
-          ? { name: 'bash', arguments: { command: step.command } }
-          : 'tool' in step
-            ? {
-                name: offeredTools.find((name) => name.endsWith(`_${step.tool}`)) ?? step.tool,
-                arguments: step.arguments ?? {},
-              }
-            : 'plan' in step
-              ? {
-                  name: 'task_tracker',
-                  arguments: { command: 'plan', task_list: step.plan.map((task) => ({ ...task, notes: '' })) },
-                }
-              : 'read' in step
-                ? { name: 'file_editor', arguments: { command: 'view', path: `${workingDirectory}${step.read}` } }
-                : {
-                    name: 'file_editor',
-                    arguments: {
-                      path: `${workingDirectory}${step.edit.path}`,
-                      security_risk: 'LOW',
-                      ...(step.edit.create === undefined
-                        ? { command: 'str_replace', old_str: step.edit.oldText, new_str: step.edit.newText }
-                        : { command: 'create', file_text: step.edit.create }),
-                    },
-                  }
+        : 'tool' in step
+          ? {
+              name: offeredTools.find((name) => name.endsWith(`_${step.tool}`)) ?? step.tool,
+              arguments: step.arguments ?? {},
+            }
+          : piToolCallOf(step)
   return (
     call && {
       index: 0,
@@ -123,25 +124,20 @@ const anthropicTurnsOf = (steps: readonly FakeLlmStep[]) => {
   return turns
 }
 const toolUseOf = (step: FakeLlmStep | undefined, offeredTools: readonly string[], prompt: string) => {
-  const call =
-    step && 'command' in step
-      ? { name: 'Bash', input: { command: step.command, description: step.command } }
-      : step && 'tool' in step
+  const piCall = step && piToolCallOf(step)
+  const call = piCall
+    ? { name: piCall.name, input: piCall.arguments }
+    : step && 'tool' in step
+      ? {
+          name: offeredTools.find((name) => name.endsWith(`_${step.tool}`)) ?? step.tool,
+          input: step.arguments ?? {},
+        }
+      : step && 'task' in step
         ? {
-            name: offeredTools.find((name) => name.endsWith(`_${step.tool}`)) ?? step.tool,
-            input: step.arguments ?? {},
+            name: offeredTools.find((name) => name === 'Agent' || name === 'Task') ?? 'Agent',
+            input: { description: step.task, prompt: `${step.task}\n\n${prompt}`, subagent_type: 'general-purpose' },
           }
-        : step && 'task' in step
-          ? {
-              name: offeredTools.find((name) => name === 'Agent' || name === 'Task') ?? 'Agent',
-              input: { description: step.task, prompt: `${step.task}\n\n${prompt}`, subagent_type: 'general-purpose' },
-            }
-          : step && 'edit' in step
-            ? {
-                name: 'Write',
-                input: { file_path: `${workingDirectory}${step.edit.path}`, content: step.edit.create ?? '' },
-              }
-            : undefined
+        : undefined
   return call && { type: 'tool_use', id: `toolu_${crypto.randomUUID().replaceAll('-', '')}`, ...call }
 }
 const anthropicReplyOf = async (request: AnthropicRequest, script: FakeLlmScript) => {

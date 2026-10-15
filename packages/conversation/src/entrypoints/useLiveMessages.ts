@@ -2,6 +2,7 @@ import { useStore } from '@hq/db/react'
 import { type ChatId, messageId, type WorkspaceId } from '@hq/kernel'
 import { useEffect, useState } from 'react'
 import {
+  type AgentWorkspace,
   type QuestionFrame,
   type StreamedReply,
   storedStreamedReply,
@@ -51,7 +52,12 @@ const liveMessageOf = (
   canConnectTools: false,
 })
 
-type LiveState = { chatKey: string; reply: StreamedReply; questions: readonly QuestionFrame[] }
+type LiveState = {
+  chatKey: string
+  reply: StreamedReply
+  questions: readonly QuestionFrame[]
+  workspace?: AgentWorkspace
+}
 type Frame = Parameters<Parameters<AgentStream['subscribe']>[2]>[0]
 
 const liveAfter = (
@@ -60,16 +66,22 @@ const liveAfter = (
   frame: Frame,
   replyCountOf: (promptId: string) => number,
 ): LiveState => {
-  const { reply, questions } = current.chatKey === chatKey ? current : { reply: null, questions: [] }
+  const { reply, questions, workspace } = current.chatKey === chatKey ? current : { reply: null, questions: [] }
+  if ('workspace' in frame) {
+    const { sessionUpdate: _, ...nextWorkspace } = frame.workspace
+    return { chatKey, reply, questions, workspace: nextWorkspace }
+  }
   if ('question' in frame)
     return {
       chatKey,
       reply,
+      workspace,
       questions: [...questions.filter(({ question }) => question.questionId !== frame.question.questionId), frame],
     }
   return {
     chatKey,
     questions,
+    workspace,
     reply: 'storedId' in frame ? storedStreamedReply(reply, frame) : streamedReplyAfter(reply, frame, replyCountOf),
   }
 }
@@ -111,7 +123,7 @@ export const useLiveMessages = (
   workspaceId: WorkspaceId,
   chatId: ChatId,
   messages: readonly ConversationMessage[],
-): readonly ConversationMessage[] => {
+): { messages: readonly ConversationMessage[]; workspace?: AgentWorkspace } => {
   const agentStream = useAgentStream()
   const store = useStore()
   const chatKey = `${workspaceId}/${chatId}`
@@ -124,5 +136,6 @@ export const useLiveMessages = (
       }),
     [agentStream, store, workspaceId, chatId, chatKey],
   )
-  return liveMessagesOf(live.chatKey === chatKey ? live : { chatKey, reply: null, questions: [] }, messages)
+  const current = live.chatKey === chatKey ? live : { chatKey, reply: null, questions: [] }
+  return { messages: liveMessagesOf(current, messages), workspace: current.workspace }
 }

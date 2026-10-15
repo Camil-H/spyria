@@ -295,10 +295,16 @@ export const isSessionStartPending = async (tx: Transaction, workspaceId: string
   ).length > 0
 
 export const lastAgentEvent = (tx: Transaction, workspaceId: string, chatId: string) =>
-  firstOnServer<{ id: string; seq: number | null; timestamp: string; replyToId: string | null }>(
+  firstOnServer<{
+    id: string
+    seq: number | null
+    timestamp: string
+    replyToId: string | null
+    sessionUpdate: string | null
+  }>(
     tx,
     `select id, (payload->'event'->>'seq')::int as seq, payload->'event'->>'timestamp' as timestamp,
-       payload->>'replyToId' as "replyToId" from events
+       payload->>'replyToId' as "replyToId", payload->'event'->'update'->>'sessionUpdate' as "sessionUpdate" from events
      where workspace_id = $1 and chat_id = $2 and type = 'agent.event' order by events.seq desc limit 1`,
     [workspaceId, chatId],
   )

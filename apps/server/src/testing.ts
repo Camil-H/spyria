@@ -70,6 +70,7 @@ export const waitFor = async (isDone: () => boolean | Promise<boolean>, timeoutM
 }
 
 const sharedAppId = 'hqtest'
+const zeroConnectMilliseconds = 30_000
 
 export const requestMutation = async (
   app: { request: (path: string, init: RequestInit) => Response | Promise<Response> },
@@ -154,6 +155,7 @@ const startSharedTestApp = async () => {
     app,
     port: Number(server.port),
     zeroCacheUrl: zeroCache.value.url,
+    zeroCacheExited: zeroCache.value.exited,
     gateway: gateway.value,
     llmGateway,
     fakeMcp,
@@ -227,7 +229,16 @@ export const openZeroStore = async <Store extends { whenLoaded: (workspace: Work
     mutators: zeroStoreMutators,
   })
   openedZeroStores.push(store)
-  await Promise.all(workspaceIds.map((workspace) => store.whenLoaded(workspaceId(workspace))))
+  const timeout = Promise.withResolvers<never>()
+  const timer = setTimeout(
+    () => timeout.reject(new Error(`The Zero client did not connect within ${zeroConnectMilliseconds / 1000} s`)),
+    zeroConnectMilliseconds,
+  )
+  await Promise.race([
+    Promise.all(workspaceIds.map((workspace) => store.whenLoaded(workspaceId(workspace)))),
+    (await openedTestApp()).zeroCacheExited.then((reason) => Promise.reject(new Error(reason))),
+    timeout.promise,
+  ]).finally(() => clearTimeout(timer))
   return store
 }
 
