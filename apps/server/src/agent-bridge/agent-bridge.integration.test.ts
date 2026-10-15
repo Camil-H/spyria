@@ -52,7 +52,7 @@ const agentHost = async () => {
 }
 const replyOf = (turn: number) => ({
   kind: 'agent' as const,
-  body: `[t${turn}] Hello from the stub (model hq/fake/fake-model, mode bypassPermissions).`,
+  body: `[t${turn}] Hello from the stub (model hq/fake/fake-model, mode default).`,
   detail: null,
 })
 const turnEnded = (chat: string) => waitFor(async () => (await turnOf(chat as never)) === null)
@@ -73,7 +73,7 @@ test('a prompt starts the runtime, creates one Pi conversation with the runtime 
   expect(llmToken).not.toBe(runtime.api_key)
   expect(runtime.llm_token_hash).toBe(createHash('sha256').update(llmToken).digest('hex'))
   expect(launch?.agent.acp_model).toBe('hq/fake/fake-model')
-  expect(launch?.agent.acp_command.at(-1)).toEndWith('exec pi-acp')
+  expect(launch?.agent.acp_command.at(-1)).toEndWith('exec pi --mode rpc --no-themes')
   expect(relay.socketPaths).toEqual([`/sockets/events/${runtime.agent_conversation_id}?after=0`])
   expect(relay.prompts).toEqual(['Find the latest pricing'])
   expect(await repliesTo(question)).toEqual([replyOf(1)])
@@ -104,11 +104,11 @@ test('prompts to one chat are delivered one turn at a time, in order, each exact
   await secondWorker.stop()
 })
 
-test('each step is stored once and updated by its final call, a plan replaces the Plan tab rows, the full command output stays in its workspace, and a rebuild matches', async () => {
+test('each step is stored once and updated by its final call, the full command output stays in its workspace, and a rebuild matches', async () => {
   await agentHost()
   const chat = await newRuntimeChat()
   const viewer = await openStream(chat)
-  const question = await prompt(chat, 'stub:think stub:tools stub:plan stub:terminal')
+  const question = await prompt(chat, 'stub:think stub:tools stub:terminal')
   await answered(question)
   await turnEnded(chat)
 
@@ -118,26 +118,11 @@ test('each step is stored once and updated by its final call, a plan replaces th
     { type: 'thought', text: 'Thinking about the plan.' },
     { type: 'file', operation: 'edit', path: 'app.ts', added: 1, removed: 1 },
     { type: 'command', command: 'npm test', exitCode: 1, output: 'exit code 1' },
-    {
-      type: 'plan',
-      items: [
-        { title: 'Write tests', status: 'done' },
-        { title: 'Fix the bug', status: 'in-progress' },
-        { title: 'Ship', status: 'todo' },
-      ],
-    },
     { type: 'command', command: 'npm test', exitCode: 2, output: 'one\ntwo\nfailed' },
   ])
   expect(live.at(-1)).toMatchObject({ kind: 'agent', body: expect.stringContaining('Hello from the stub') })
   const stored = await storedAgentEventsOf(chat)
   expect(new Set(stored.map((event) => event.id)).size).toBe(stored.length)
-  expect([
-    ...(await database.$client`select title, status from plan_steps where chat_id = ${chat} order by position`),
-  ]).toEqual([
-    { title: 'Write tests', status: 'done' },
-    { title: 'Fix the bug', status: 'in-progress' },
-    { title: 'Ship', status: 'todo' },
-  ])
   expect(viewer.frames.map((frame) => JSON.parse(frame))).toContainEqual(
     expect.objectContaining({ promptId: question, text: 'Thinking ', isReasoning: true }),
   )

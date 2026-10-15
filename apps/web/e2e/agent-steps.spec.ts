@@ -131,36 +131,6 @@ test('15. expanding a file edit shows its added and removed lines', async ({ pag
   await expect(diff).toContainText('+ export const tax = 0.2')
 })
 
-test('16. a plan shows as one checklist in its latest state and feeds the Plan tab', async ({ page, agentScript }) => {
-  await agentScript(research, {
-    steps: [
-      {
-        plan: [
-          { title: 'Reproduce the bug', status: 'done' },
-          { title: 'Fix the totals', status: 'in_progress' },
-        ],
-      },
-      {
-        plan: [
-          { title: 'Reproduce the bug', status: 'done' },
-          { title: 'Fix the totals', status: 'done' },
-        ],
-      },
-    ],
-  })
-  await sendMessage(page, 'Plan the fix')
-
-  await expect(workingIndicatorOf(page)).toHaveCount(0)
-  const checklist = mainOf(page).getByRole('group', { name: 'Plan' })
-  await expect(checklist).toHaveCount(1)
-  await expect(checklist.getByRole('checkbox', { name: 'Fix the totals' })).toBeChecked()
-  await expect(checklist.getByRole('checkbox', { name: 'Reproduce the bug' })).toBeChecked()
-  await panelOf(page).getByRole('tab', { name: 'Plan', exact: true }).click()
-  await expect(panelOf(page).getByRole('tabpanel').getByRole('listitem')).toHaveCount(2)
-  await expect(panelOf(page).getByRole('tabpanel')).toContainText('Fix the totals')
-  await expect(panelOf(page).getByRole('tabpanel')).not.toContainText('In progress')
-})
-
 test('17. an agent failure shows a red error notice and ends the turn', async ({ page, agentScript }) => {
   await agentScript(research, { steps: [{ fail: 'The model is overloaded' }] })
   await sendMessage(page, 'Try anyway')

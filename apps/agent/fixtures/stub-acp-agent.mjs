@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { basename, dirname, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 
 const stateDirectory = process.env.STUB_STATE ?? '/tmp/stub-acp-state'
@@ -10,6 +10,8 @@ const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, mil
 const holdUrl = process.env.STUB_HOLD_URL
 const lingerAs = (name) => (holdUrl ? fetch(`${holdUrl}&name=${name}`, { method: 'POST' }) : sleep(1500))
 const send = (frame) => process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', ...frame })}\n`)
+const piSend = (record) => process.stdout.write(`${JSON.stringify(record)}\n`)
+const isPi = process.env.STUB_FLAVOUR === 'pi'
 const models =
   process.env.STUB_FLAVOUR === 'codex'
     ? [
@@ -17,10 +19,9 @@ const models =
         { value: 'gpt-stub-mini', name: 'GPT stub mini' },
       ]
     : [
-        { value: 'stub-default', name: 'Default (stub)' },
-        { value: 'stub-large', name: 'Large (stub)' },
+        { value: `${isPi ? 'stub/' : ''}stub-default`, name: 'Default (stub)' },
+        { value: `${isPi ? 'stub/' : ''}stub-large`, name: 'Large (stub)' },
       ]
-const isPi = process.env.STUB_FLAVOUR === 'pi'
 const isCodex = process.env.STUB_FLAVOUR === 'codex'
 const thoughtLevels = ['off', 'low', 'medium', 'high']
 const modes = process.env.STUB_MODES?.split(',') ?? ['default', 'plan', 'bypassPermissions']
@@ -35,7 +36,7 @@ const save = (sessionId, session) => {
   mkdirSync(stateDirectory, { recursive: true })
   writeFileSync(sessionFile(sessionId), JSON.stringify({ prompts: session.prompts }))
 }
-const configOptionsOf = ({ model, mode, thought_level, collaboration_mode }) => [
+const configOptionsOf = ({ model, mode, collaboration_mode }) => [
   {
     id: 'mode',
     name: 'Mode',
@@ -45,18 +46,6 @@ const configOptionsOf = ({ model, mode, thought_level, collaboration_mode }) => 
     options: modes.map((value) => ({ value, name: value })),
   },
   { id: 'model', name: 'Model', type: 'select', category: 'model', currentValue: model, options: models },
-  ...(isPi
-    ? [
-        {
-          id: 'thought_level',
-          name: 'Thinking',
-          type: 'select',
-          category: 'thought_level',
-          currentValue: thought_level,
-          options: thoughtLevels.map((value) => ({ value, name: value })),
-        },
-      ]
-    : []),
   ...(isCodex
     ? [
         {
@@ -74,6 +63,8 @@ const sessionResultOf = (session) => ({
   modes: { currentModeId: session.mode, availableModes: modes.map((id) => ({ id, name: id })) },
 })
 const ask = (method, params) => {
+  if (isPi)
+    return Promise.resolve({ result: { outcome: { outcome: 'selected', optionId: params.options.at(-1).optionId } } })
   const id = `stub-${nextRequestId++}`
   const answer = Promise.withResolvers()
   answers.set(id, answer.resolve)
@@ -129,6 +120,105 @@ const codexPlanOptions = [
 ]
 
 class Cancelled extends Error {}
+const piToolCalls = new Map()
+const piToolNameOf = ({ kind, title }) =>
+  ({ execute: 'bash', read: 'read', edit: /^write/i.test(title) ? 'write' : 'edit' })[kind] ?? title
+const piArgumentsOf = (toolName, { title, rawInput = {} }) =>
+  toolName === 'bash'
+    ? { command: rawInput.command ?? title }
+    : toolName === 'edit' && !rawInput.edits
+      ? {
+          path: rawInput.path ?? rawInput.file_path,
+          edits: [
+            { oldText: rawInput.old_string ?? rawInput.oldText, newText: rawInput.new_string ?? rawInput.newText },
+          ],
+        }
+      : rawInput
+const piUpdate = (update) => {
+  const { sessionUpdate: kind, toolCallId } = update
+  if (kind === 'agent_message_chunk' || kind === 'agent_thought_chunk')
+    return piSend({
+      type: 'message_update',
+      assistantMessageEvent: {
+        type: kind === 'agent_message_chunk' ? 'text_delta' : 'thinking_delta',
+        contentIndex: 0,
+        delta: update.content.text,
+      },
+    })
+  if (!String(kind).startsWith('tool_call')) return
+  const previous = piToolCalls.get(toolCallId)
+  const call = {
+    ...previous,
+    ...update,
+    output: `${previous?.output ?? ''}${update._meta?.terminal_output?.data ?? ''}`,
+  }
+  piToolCalls.set(toolCallId, call)
+  const toolName = piToolNameOf(call)
+  const isDone = ['completed', 'failed'].includes(call.status)
+  if (!previous?.isStarted && (call.status === 'in_progress' || isDone)) {
+    call.isStarted = true
+    piSend({ type: 'tool_execution_start', toolCallId, toolName, args: piArgumentsOf(toolName, call) })
+  }
+  if (!isDone) return
+  piToolCalls.delete(toolCallId)
+  const exitCode = update._meta?.terminal_exit?.exit_code
+  const text =
+    call.output || (typeof call.rawOutput === 'string' ? call.rawOutput : (call.content?.[0]?.content?.text ?? ''))
+  piSend({
+    type: 'tool_execution_end',
+    toolCallId,
+    toolName,
+    result: {
+      content: [{ type: 'text', text }],
+      details: {},
+      ...(exitCode !== undefined && { structuredContent: { output: call.output, exit_code: exitCode } }),
+    },
+    isError: call.status === 'failed',
+  })
+}
+const dialogs = new Map()
+const piDialog = (method, fields) => {
+  const id = randomUUID()
+  const answer = Promise.withResolvers()
+  dialogs.set(id, answer.resolve)
+  piSend({ type: 'extension_ui_request', id, method, ...fields })
+  return answer.promise
+}
+const setPiMode = (session, mode) => {
+  session.mode = mode
+  piSend({
+    type: 'extension_ui_request',
+    id: randomUUID(),
+    method: 'setStatus',
+    statusKey: 'hq-plan',
+    statusText: mode,
+  })
+}
+const otherChoice = 'Other…'
+const piTool = async (toolCallId, name, rawInput, update, run) => {
+  update({ sessionUpdate: 'tool_call', toolCallId, title: name, kind: 'other', status: 'in_progress', rawInput })
+  const text = await run()
+  update({
+    sessionUpdate: 'tool_call_update',
+    toolCallId,
+    status: 'completed',
+    content: [{ type: 'content', content: { type: 'text', text } }],
+  })
+  return text
+}
+const askMember = (toolCallId, { question, options }, update) =>
+  piTool(toolCallId, 'ask_member', { question, options }, update, async () => {
+    const { value: choice } = await piDialog('select', { title: question, options: [...options, otherChoice] })
+    const answer = choice === otherChoice ? (await piDialog('input', { title: question })).value : choice
+    return answer ? `The member answered: ${answer}` : 'The member did not answer.'
+  })
+const proposePlan = (toolCallId, { plan }, session, update) =>
+  piTool(toolCallId, 'propose_plan', { plan }, update, async () => {
+    if (!(await piDialog('confirm', { title: 'Approve the plan?', message: plan })).confirmed)
+      return 'The member wants to keep planning.'
+    setPiMode(session, 'default')
+    return 'The member approved the plan. Plan mode is off: carry it out.'
+  })
 const gatewayUrl = process.env.STUB_GATEWAY
 const piConfigOf = (name) => JSON.parse(process.env[name] || '{}')
 const mcpServers = piConfigOf('HQ_PI_MCP').mcpServers ?? {}
@@ -166,7 +256,10 @@ const completionOf = async (session, signal, update) => {
     {
       model: session.model.slice(provider.length + 1),
       messages: session.history,
-      tools: [...piTools, ...Object.keys(session.tools)].map((name) => ({ type: 'function', function: { name } })),
+      tools: [...piTools, 'ask_member', 'propose_plan', ...Object.keys(session.tools)].map((name) => ({
+        type: 'function',
+        function: { name },
+      })),
       stream: true,
     },
     signal,
@@ -242,7 +335,9 @@ const editFile = (toolCallId, { command, path, file_text, old_str, new_str, cont
   const oldText = existsSync(absolute) ? readFileSync(absolute, 'utf8') : null
   const tool = command === 'view' ? 'read' : command === 'create' || content !== undefined ? 'write' : 'edit'
   const rawInput =
-    tool === 'edit' ? { path, oldText: old_str, newText: new_str } : { path, content: file_text ?? content }
+    tool === 'edit'
+      ? { path, edits: [{ oldText: old_str, newText: new_str }] }
+      : { path, content: file_text ?? content }
   update({
     sessionUpdate: 'tool_call',
     toolCallId,
@@ -298,6 +393,8 @@ const runTool = async ({ id, function: { name, arguments: json } }, session, sta
   if (['file_editor', 'Write'].includes(name))
     return editFile(id, { ...input, path: input.path ?? input.file_path }, update)
   if (name === 'think') return 'Your thought has been logged.'
+  if (name === 'ask_member') return askMember(id, input, update)
+  if (name === 'propose_plan') return proposePlan(id, input, session, update)
   if (name !== 'task_tracker') return callMcpTool(id, name, input, session, state, update)
   const entries = input.task_list.map(({ title, status }) => ({
     content: title,
@@ -328,7 +425,15 @@ const turn = async (id, { sessionId, prompt }) => {
   save(sessionId, session)
   const text = prompt.map((block) => block.text ?? '').join('\n')
   const has = (part) => new RegExp(`stub:${part}(?![\\w-])`).test(text)
-  const update = (body) => send({ method: 'session/update', params: { sessionId, update: body } })
+  const update = isPi ? piUpdate : (body) => send({ method: 'session/update', params: { sessionId, update: body } })
+  const finish = (stopReason) =>
+    isPi ? piSend({ type: 'agent_settled', aborted: stopReason === 'cancelled' }) : send({ id, result: { stopReason } })
+  const refuse = (message) =>
+    isPi
+      ? piSend({ id, type: 'response', command: 'prompt', success: false, error: message })
+      : send({ id, error: { code: -32000, message } })
+  if (isPi && !has('fail'))
+    piSend({ id, type: 'response', command: 'prompt', success: true, data: { disposition: 'started' } })
   const step = async () => {
     await sleep(gapMilliseconds)
     if (state.cancelled) throw new Cancelled()
@@ -342,10 +447,10 @@ const turn = async (id, { sessionId, prompt }) => {
       await gatewayTurn(session, text, state, update).catch((error) => {
         throw state.cancelled ? new Cancelled() : error
       })
-      return send({ id, result: { stopReason: 'end_turn' } })
+      return finish('end_turn')
     }
     if (has('crash')) process.exit(3)
-    if (has('fail')) return send({ id, error: { code: -32000, message: 'Authentication required' } })
+    if (has('fail')) return refuse('Authentication required')
     if (has('think')) {
       for (const chunk of ['Thinking ', 'about the plan.']) {
         await step()
@@ -417,9 +522,13 @@ const turn = async (id, { sessionId, prompt }) => {
         content: [{ type: 'content', content: { type: 'text', text: 'Tests failed' } }],
       })
     }
-    if (has('ask') || has('ask-codex')) {
+    if (isPi && has('ask')) {
+      const question = { question: 'Which database should we use?', options: ['Postgres', 'SQLite'] }
+      await say(`answer:${await askMember(`ask-${session.prompts}`, question, update)} `)
+      await step()
+    } else if (has('ask') || has('ask-codex')) {
       const isCodex = has('ask-codex')
-      if (!canElicit) return send({ id, error: { code: -32000, message: 'stub: the client has no form elicitation' } })
+      if (!canElicit) return refuse('stub: the client has no form elicitation')
       const request = ask('elicitation/create', {
         mode: 'form',
         sessionId,
@@ -430,7 +539,13 @@ const turn = async (id, { sessionId, prompt }) => {
       if (has('withdraw')) send({ method: '$/cancel_request', params: { requestId: `stub-${nextRequestId - 1}` } })
       await say(`answer:${JSON.stringify((await request).result)} `)
     }
-    if (has('exit-plan') || has('plan-codex')) {
+    if (isPi && has('exit-plan')) {
+      if (session.mode !== 'plan') setPiMode(session, 'plan')
+      await say(
+        `plan:${await proposePlan(`exit-plan-${session.prompts}`, { plan: '1. Create x.txt\n2. Done' }, session, update)} `,
+      )
+      await step()
+    } else if (has('exit-plan') || has('plan-codex')) {
       const isCodex = has('plan-codex')
       const toolCallId = `${isCodex ? 'plan-review' : 'exit-plan'}-${session.prompts}`
       const plan = '1. Create x.txt\n2. Done'
@@ -450,7 +565,7 @@ const turn = async (id, { sessionId, prompt }) => {
       })
       const optionId = permission.result?.outcome?.optionId
       await say(`plan:${optionId ?? 'cancelled'} `)
-      if (optionId === 'reject') return send({ id, result: { stopReason: 'cancelled' } })
+      if (optionId === 'reject') return finish('cancelled')
       if (optionId?.startsWith('exit-plan')) {
         session.mode = optionId === 'exit-plan-default' ? 'default' : 'bypassPermissions'
         update({ sessionUpdate: 'current_mode_update', currentModeId: session.mode })
@@ -476,6 +591,17 @@ const turn = async (id, { sessionId, prompt }) => {
       ]
       update({ sessionUpdate: 'plan', entries })
     }
+    if (has('plan-progress'))
+      for (const status of ['in_progress', 'completed']) {
+        await step()
+        update({
+          sessionUpdate: 'plan',
+          entries: [
+            { content: 'Reproduce the bug', status: 'completed', priority: 'high' },
+            { content: 'Fix the totals', status, priority: 'medium' },
+          ],
+        })
+      }
     if (has('subagent')) {
       const task = `task-${session.prompts}`
       const child = `child-${session.prompts}`
@@ -588,14 +714,14 @@ const turn = async (id, { sessionId, prompt }) => {
     }
     if (has('linger')) await lingerAs('linger')
     await say(`Hello from the stub (model ${session.model}, mode ${session.mode}).`)
-    send({ id, result: { stopReason: 'end_turn' } })
+    finish('end_turn')
   } catch (error) {
     if (!(error instanceof Cancelled)) throw error
     if (has('late')) {
       await sleep(400)
       update({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'LATE ' } })
     }
-    send({ id, result: { stopReason: 'cancelled' } })
+    finish('cancelled')
   }
 }
 
@@ -618,22 +744,12 @@ const savedPromptsOf = (sessionId) => {
     throw { code: -32002, message: 'Resource not found' }
   return sessions.get(sessionId)?.prompts ?? JSON.parse(readFileSync(sessionFile(sessionId), 'utf8')).prompts
 }
-const replay = (sessionId, prompts) => {
-  const update = (body) => send({ method: 'session/update', params: { sessionId, update: body } })
-  for (let prompt = 1; prompt <= prompts; prompt += 1) {
-    update({ sessionUpdate: 'user_message_chunk', content: { type: 'text', text: `replayed prompt ${prompt}` } })
-    update({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: `replayed answer ${prompt}` } })
-    const toolCallId = `replayed-${prompt}`
-    update({ sessionUpdate: 'tool_call', toolCallId, title: 'ls', kind: 'execute', status: 'completed' })
-    update({ sessionUpdate: 'tool_call_update', toolCallId, status: 'completed', rawOutput: 'replayed' })
-  }
-}
 const handlers = {
   initialize: ({ clientCapabilities }) => {
     canElicit = Boolean(clientCapabilities?.elicitation?.form)
     return {
       protocolVersion: 1,
-      agentCapabilities: { loadSession: isPi, sessionCapabilities: isPi ? {} : { resume: {} } },
+      agentCapabilities: { sessionCapabilities: { resume: {} } },
       agentInfo: { name: 'stub-acp-agent', version: '0.0.2' },
       authMethods: [],
     }
@@ -643,15 +759,9 @@ const handlers = {
     return opened(randomUUID(), 0)
   },
   'session/resume': ({ sessionId }) => {
-    if (isPi) throw { code: -32601, message: 'Method not found: session/resume' }
     const prompts = savedPromptsOf(sessionId)
     if (!sessions.has(sessionId)) opened(sessionId, prompts)
     return sessionResultOf(sessions.get(sessionId))
-  },
-  'session/load': ({ sessionId }) => {
-    const prompts = savedPromptsOf(sessionId)
-    replay(sessionId, prompts)
-    return opened(sessionId, prompts)
   },
   'session/set_mode': ({ sessionId, modeId }) => {
     sessions.get(sessionId).mode = modeId
@@ -660,29 +770,64 @@ const handlers = {
   'session/set_config_option': ({ sessionId, configId, value }) => {
     const session = sessions.get(sessionId)
     session[configId] = value
-    if (isPi && configId === 'model') session.thought_level = 'off'
     return { configOptions: configOptionsOf(session) }
   },
+}
+const queue = (sessionId, run) => queues.set(sessionId, (queues.get(sessionId) ?? Promise.resolve()).then(run))
+const cancel = (session) => {
+  if (session?.current) session.current.cancelled = true
+  session?.current?.abort.abort()
+}
+let piSessionId = randomUUID()
+if (isPi) opened(piSessionId, 0)
+const piSession = () => sessions.get(piSessionId)
+const piModelOf = (model) => {
+  const [provider, ...id] = model.split('/')
+  return { provider, id: id.join('/') }
+}
+const piCommands = {
+  get_state: () => ({
+    sessionFile: sessionFile(piSessionId),
+    sessionId: piSessionId,
+    model: piModelOf(piSession().model),
+    thinkingLevel: piSession().thought_level,
+  }),
+  get_available_models: () => ({ models: models.map(({ value, name }) => ({ ...piModelOf(value), name })) }),
+  get_available_thinking_levels: () => ({ levels: thoughtLevels }),
+  set_model: ({ provider, modelId }) =>
+    Object.assign(piSession(), { model: `${provider}/${modelId}`, thought_level: 'off' }) && {},
+  set_thinking_level: ({ level }) => Object.assign(piSession(), { thought_level: level }) && {},
+  switch_session: ({ sessionPath }) => {
+    piSessionId = basename(sessionPath, '.json')
+    opened(piSessionId, existsSync(sessionPath) ? JSON.parse(readFileSync(sessionPath, 'utf8')).prompts : 0)
+    return { cancelled: false }
+  },
+  abort: async () => {
+    cancel(piSession())
+    await queues.get(piSessionId)
+    return {}
+  },
+}
+const onPiCommand = async ({ id, type, ...fields }) => {
+  if (type === 'extension_ui_response') return dialogs.get(id)?.(fields)
+  const respond = (data) => piSend({ id, type: 'response', command: type, success: true, data })
+  if (type === 'prompt' && fields.message.startsWith('/hq-plan ')) {
+    setPiMode(piSession(), fields.message.endsWith(' on') ? 'plan' : 'default')
+    return respond({ disposition: 'handled' })
+  }
+  if (type === 'prompt')
+    return queue(piSessionId, () => turn(id, { sessionId: piSessionId, prompt: [{ text: fields.message }] }))
+  if (!piCommands[type]) return piSend({ id, type: 'response', command: type, success: false, error: `stub: ${type}` })
+  respond(await piCommands[type](fields))
 }
 createInterface({ input: process.stdin })
   .on('line', (line) => {
     if (!line.trim()) return
     const frame = JSON.parse(line)
+    if (isPi) return void onPiCommand(frame)
     if (frame.method === undefined) return answers.get(frame.id)?.(frame)
-    if (frame.method === 'session/prompt') {
-      const { sessionId } = frame.params
-      queues.set(
-        sessionId,
-        (queues.get(sessionId) ?? Promise.resolve()).then(() => turn(frame.id, frame.params)),
-      )
-      return
-    }
-    if (frame.method === 'session/cancel') {
-      const session = sessions.get(frame.params.sessionId)
-      if (session?.current) session.current.cancelled = true
-      session?.current?.abort.abort()
-      return
-    }
+    if (frame.method === 'session/prompt') return queue(frame.params.sessionId, () => turn(frame.id, frame.params))
+    if (frame.method === 'session/cancel') return cancel(sessions.get(frame.params.sessionId))
     if (frame.id === undefined) return
     const handler = handlers[frame.method]
     if (!handler) return send({ id: frame.id, error: { code: -32601, message: `stub: ${frame.method}` } })

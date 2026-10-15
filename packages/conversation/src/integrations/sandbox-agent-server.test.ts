@@ -60,7 +60,7 @@ test('Pi summarizes on its compaction model through its provider, starts at the 
   const tested = piCommandOf('http://hq-gateway-relay:4000/v1', { ...piLaunch, compaction: budgets }, { sub: false })
   const settings = tested.find((part) => part.startsWith('HQ_PI_SETTINGS='))?.slice('HQ_PI_SETTINGS='.length)
   expect(JSON.parse(settings ?? '')).toMatchObject({
-    extensions: ['/usr/local/lib/hq/pi/hq-compaction.ts'],
+    extensions: ['/usr/local/lib/hq/pi/hq-compaction.ts', '/usr/local/lib/hq/pi/hq-plan.ts'],
     compaction: budgets,
   })
 })
@@ -193,28 +193,23 @@ const createdPiOf = async (sub?: { parentConversationId: string; toolToken: stri
   return { created, command, envOf, models: filesOf('HQ_PI_MODELS'), mcp: filesOf('HQ_PI_MCP') }
 }
 
-test('a Pi launch passes the tokens only as secrets, runs offline, writes its files atomically and execs pi-acp last', async () => {
+test("a Pi launch passes the tokens only as secrets, runs offline, writes its files atomically and execs Pi's RPC mode last", async () => {
   const { created, command, envOf } = await createdPiOf()
   expect(created.secrets).toEqual({
     HQ_LLM_TOKEN: { kind: 'StaticSecret', value: 'runtime-llm-token' },
     HQ_MCP_TOKEN: { kind: 'StaticSecret', value: 'runtime-llm-token' },
   })
   expect(created.agent.acp_model).toBe('hq-anthropic/anthropic/claude-sonnet-5-5')
+  expect(created.agent.adapter).toBe('pi-rpc')
   expect(created.agent).not.toHaveProperty('mcp_config')
   expect(JSON.stringify(command)).not.toContain('runtime-llm-token')
-  expect(command.slice(0, 5)).toEqual([
-    'env',
-    'PI_OFFLINE=1',
-    'PI_SKIP_VERSION_CHECK=1',
-    'PI_TELEMETRY=0',
-    'npm_config_offline=true',
-  ])
+  expect(command.slice(0, 4)).toEqual(['env', 'PI_OFFLINE=1', 'PI_SKIP_VERSION_CHECK=1', 'PI_TELEMETRY=0'])
   expect(envOf('HQ_COMPACTION_MODEL')).toBe('hq/mistral/mistral-small-latest')
   expect(JSON.parse(envOf('HQ_PI_SETTINGS') ?? '')).toEqual({
     quietStartup: true,
     enableInstallTelemetry: false,
     retry: { enabled: false },
-    extensions: ['/usr/local/lib/hq/pi/hq-compaction.ts'],
+    extensions: ['/usr/local/lib/hq/pi/hq-compaction.ts', '/usr/local/lib/hq/pi/hq-plan.ts'],
   })
   const script = command.at(-1) ?? ''
   expect(command.slice(-3, -1)).toEqual(['sh', '-c'])
@@ -223,7 +218,7 @@ test('a Pi launch passes the tokens only as secrets, runs offline, writes its fi
   expect(script).toContain(
     '> "$PI_CODING_AGENT_DIR/$1.tmp"; mv "$PI_CODING_AGENT_DIR/$1.tmp" "$PI_CODING_AGENT_DIR/$1"',
   )
-  expect(script.split('\n').at(-1)).toBe('exec pi-acp')
+  expect(script.split('\n').at(-1)).toBe('exec pi --mode rpc --no-themes')
 })
 
 test('Pi lists Anthropic models on the Anthropic route without /v1 and the others on the chat route, with names, reasoning and context windows', async () => {

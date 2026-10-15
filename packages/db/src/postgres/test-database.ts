@@ -56,7 +56,22 @@ export const createTestDatabase = async (
   }
 }
 
+const dropStaleTestObjects = async () => {
+  const admin = postgres(databaseUrlOf('postgres'), { onnotice: () => {} })
+  try {
+    await admin`select pg_drop_replication_slot(slot_name) from pg_replication_slots
+      where not active and slot_name ~ '^(hqtest|hqe2e)'`
+    const stale = await admin<{ datname: string }[]>`select datname from pg_database
+      where datname ~ '^(hq_test_[0-9a-f]{32}|hq_e2e_w[0-9]+)$'
+        and datname not in (select datname from pg_stat_activity where datname is not null)`
+    for (const { datname } of stale) await admin.unsafe(`drop database if exists "${datname}"`)
+  } finally {
+    await admin.end()
+  }
+}
+
 export const buildTemplateDatabase = async (name = templateDatabaseName) => {
+  await dropStaleTestObjects()
   await dropDatabase(name)
   await withAdmin(`create database "${name}"`)
   const database = createDatabase(databaseUrlOf(name))

@@ -145,29 +145,29 @@ test('on an HQ runtime chat another member who may prompt answers, a member with
   await database.$client`delete from llm_credentials where user_id = ${bob}`
   const chat = await newRuntimeChat({ defaultModel: 'fake/fake-medium' })
   const frames = await openStream(chat)
-  const asked = await prompt(chat, 'stub:ask-codex')
+  const asked = await prompt(chat, 'stub:ask')
   const questionId = await askedIn(frames)
   expect(questionsIn(frames)[0]?.question).toMatchObject({
     kind: 'question',
-    questions: [{ id: 'db', header: 'Database', text: 'Which database should I use?' }, { id: 'lang' }, { id: 'ci' }],
+    toolCallId: 'ask-1',
+    questions: [{ id: 'answer', text: 'Which database should we use?', free: true }],
   })
 
-  expect(await answer(chat, questionId, { answers: { db: 'SQLite' } }, bob)).toBe(403)
+  expect(await answer(chat, questionId, { answers: { answer: 'SQLite' } }, bob)).toBe(403)
   await addLlmKey(bob, 'OpenAI')
-  expect(
-    await answer(chat, questionId, { answers: { db: 'SQLite', lang: 'Go' }, free: { ci: 'Buildkite' } }, bob),
-  ).toBe(200)
-  expect(await answer(chat, questionId, { answers: { db: 'Postgres' } })).toBe(409)
+  expect(await answer(chat, questionId, { answers: {}, free: { answer: 'Buildkite' } }, bob)).toBe(200)
+  expect(await answer(chat, questionId, { answers: { answer: 'Postgres' } })).toBe(409)
   const replies = await finished(asked, chat)
   expect(replies.map(({ body }) => body)).toEqual([
     '[t1]',
+    'tool',
     'question',
-    'answer:{"action":"accept","content":{"db":"SQLite","lang":"Go","ci":"None of the above","ci_note":"Buildkite"}} Hello from the stub (model hq/fake/fake-medium, mode bypassPermissions).',
+    'answer:The member answered: Buildkite Hello from the stub (model hq/fake/fake-medium, mode default).',
   ])
-  expect(replies[1]?.step).toMatchObject({
+  expect(replies[2]?.step).toMatchObject({
     type: 'question',
-    answers: { db: 'SQLite', lang: 'Go' },
-    free: { ci: 'Buildkite' },
+    answers: {},
+    free: { answer: 'Buildkite' },
     answeredBy: bob,
   })
 })
@@ -272,13 +272,11 @@ test('a question in a delegated sub-conversation is answered with the assumption
     }),
   })
   const assumption = 'No member is available; decide yourself and state your assumption.'
-  expect(JSON.parse(delegated.body).result.content[0].text).toContain(
-    `answer:${JSON.stringify({ action: 'accept', content: { question_0_custom: assumption } })}`,
-  )
+  expect(JSON.parse(delegated.body).result.content[0].text).toContain(`answer:The member answered: ${assumption} `)
   await waitFor(async () => (await questionItemsOf(chat)).length === 1)
   expect((await questionItemsOf(chat))[0]?.step).toMatchObject({
     type: 'question',
-    free: { question_0: assumption },
+    free: { answer: assumption },
     delegation: { model: 'fake/fake-small' },
   })
   expect(await mutate(aliceInAcme, 'conversation.stopAgent', { workspaceId: acme, chatId: chat })).toEqual(succeeded)

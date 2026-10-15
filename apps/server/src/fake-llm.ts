@@ -59,7 +59,7 @@ const toolCallOf = (step: FakeLlmStep | undefined, offeredTools: readonly string
       : 'think' in step
         ? { name: 'think', arguments: { thought: step.think } }
         : 'command' in step
-          ? { name: 'terminal', arguments: { command: step.command, security_risk: 'LOW', summary: step.command } }
+          ? { name: 'bash', arguments: { command: step.command } }
           : 'tool' in step
             ? {
                 name: offeredTools.find((name) => name.endsWith(`_${step.tool}`)) ?? step.tool,

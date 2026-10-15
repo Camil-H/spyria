@@ -85,7 +85,7 @@ export const SessionChip = (chip: {
   const adapterModel = model ?? routing?.adapterModels.currentModelId ?? ''
   const adapterNameOf = (id: string) =>
     adapterModels.find((candidate) => candidate.id === id)?.name ?? (id || 'Default')
-  const hasPlanMode = localSession && runsOn !== null
+  const hasPlanMode = runsOn !== null
   const estimate = pendingModel
     ? rereadDollarsOf(
         routing?.reachableModels.find(({ id }) => id === pendingModel),

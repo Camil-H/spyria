@@ -111,7 +111,18 @@ const runtime = () => {
   return runtimeStarted
 }
 
-type Update = { sessionUpdate?: string; stopReason?: string; sessionId?: string; content?: { text?: string } }
+type Update = {
+  sessionUpdate?: string
+  stopReason?: string
+  sessionId?: string
+  content?: { text?: string }
+  questionId?: string
+  kind?: string
+  title?: string
+  status?: string
+  rawOutput?: unknown
+  currentModeId?: string
+}
 const agentServer = createSandboxAgentServer()
 type AgentLlmChoice = Parameters<typeof agentServer.createConversation>[2]
 const piConversationOf = async (transport: AgentTransport, token: string, llm: AgentLlmChoice) => {
@@ -135,7 +146,11 @@ const piConversationOf = async (transport: AgentTransport, token: string, llm: A
       .map((update) => update.content?.text ?? '')
       .join('')
   }
-  return { conversation, updates, turnEnds, answerOf, close: () => socket.close() }
+  const questionOf = async (kind: string) => {
+    await waitFor(() => updates.some((update) => update.sessionUpdate === 'question' && update.kind === kind), 120_000)
+    return updates.findLast((update) => update.sessionUpdate === 'question') ?? {}
+  }
+  return { conversation, updates, turnEnds, answerOf, questionOf, close: () => socket.close() }
 }
 const modelCallsOf = async (chatId: string, minimum: number) => {
   await gatewayLogsOf(gateway, `metadata_chat=${chatId}`, minimum)
@@ -241,4 +256,77 @@ test('a long Pi conversation compacts on the compaction model, recorded with pro
   const request = fakeLlmBodies.slice(bodiesBefore).find((body) => body.includes('After the restart'))
   expect(request).toContain(summary)
   expect(request?.split('After the restart')).toHaveLength(2)
+})
+
+test("Pi in HQ's image runs a command with its output, asks through HQ's extension and gets a free answer, and in plan mode is refused a write and proposes a plan that is approved", async () => {
+  await addLlmKey(bob, 'Fake')
+  const { id, transport } = await runtime()
+  const { token } = await runtimeTurn({ id }, bob)
+  const pi = await piConversationOf(transport, token, {
+    acpModel: 'hq/fake/fake-medium',
+    pi: {
+      models: [{ id: 'fake/fake-medium', name: 'Fake medium', reasoning: false }],
+      compactionModel: 'fake/fake-medium',
+    },
+  })
+  const finalOf = (title: string) =>
+    pi.updates.findLast((update) => update.sessionUpdate === 'tool_call_update' && update.title === title)
+  setFakeLlmScript({
+    steps: [
+      { command: 'echo one; echo two; exit 3' },
+      { tool: 'ask_member', arguments: { question: 'Which database?', options: ['Postgres', 'SQLite'] } },
+    ],
+    text: 'Asked.',
+  })
+  const asked = pi.answerOf('Run it, then ask me')
+  const question = await pi.questionOf('question')
+  expect(question).toMatchObject({
+    questions: [
+      {
+        id: 'answer',
+        text: 'Which database?',
+        options: [
+          { value: 'Postgres', label: 'Postgres' },
+          { value: 'SQLite', label: 'SQLite' },
+        ],
+        free: true,
+      },
+    ],
+  })
+  expect(
+    await agentServer.answerQuestion(pi.conversation, String(question.questionId), {
+      answers: {},
+      free: { answer: 'MySQL' },
+    }),
+  ).toBe(200)
+  expect(await asked).toBe('Asked.')
+  expect(finalOf('echo one; echo two; exit 3')).toMatchObject({
+    kind: 'execute',
+    status: 'failed',
+    rawOutput: { formatted_output: 'one\ntwo\n', exit_code: 3 },
+  })
+  expect(pi.updates.find((update) => update.sessionUpdate === 'question_answered')).toMatchObject({
+    free: { answer: 'MySQL' },
+  })
+  expect(fakeLlmBodies.some((body) => body.includes('The member answered: MySQL'))).toBe(true)
+
+  expect(await agentServer.setPlanMode(pi.conversation, true)).toBe(200)
+  setFakeLlmScript({
+    steps: [{ command: 'touch blocked.txt' }, { tool: 'propose_plan', arguments: { plan: '1. Create notes.txt' } }],
+    text: 'Planned.',
+  })
+  const planned = pi.answerOf('Plan it')
+  const plan = await pi.questionOf('plan')
+  expect(plan).toMatchObject({ plan: '1. Create notes.txt' })
+  expect(await agentServer.answerQuestion(pi.conversation, String(plan.questionId), { approve: true })).toBe(200)
+  expect(await planned).toBe('Planned.')
+  expect(finalOf('touch blocked.txt')).toMatchObject({
+    status: 'failed',
+    rawOutput: { formatted_output: expect.stringContaining('Plan mode: read only') },
+  })
+  expect(
+    pi.updates.filter((update) => update.sessionUpdate === 'current_mode_update').map((update) => update.currentModeId),
+  ).toEqual(['plan', 'default'])
+  expect(fakeLlmBodies.some((body) => body.includes('The member approved the plan'))).toBe(true)
+  pi.close()
 })

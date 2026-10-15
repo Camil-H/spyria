@@ -61,7 +61,7 @@ export const createHqAgentRelay = ({
   for (const { command, flavour } of [
     { command: 'claude-agent-acp', flavour: 'claude' },
     { command: 'codex-acp', flavour: 'codex' },
-    { command: 'pi-acp', flavour: 'pi' },
+    { command: 'pi', flavour: 'pi' },
   ])
     writeFileSync(
       join(shims, command),

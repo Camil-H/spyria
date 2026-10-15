@@ -1,12 +1,6 @@
 import type { ServerWebSocket } from 'bun'
-import {
-  AcpError,
-  type AdapterConnection,
-  type AdapterRequest,
-  connectAdapter,
-  type Json,
-  methodNotFound,
-} from './acp.ts'
+import { AcpError, type AdapterConnection, type AdapterRequest, connectAdapter, type Json } from './acp.ts'
+import { connectPi } from './pi.ts'
 
 type Status = 'starting' | 'idle' | 'running' | 'finished' | 'error'
 type AgentEvent = { id: string; seq: number; timestamp: string; completed: boolean; update: Json }
@@ -37,7 +31,6 @@ type Conversation = {
   status: Status
   failure?: string
   sessionId?: string
-  isLoading: boolean
   isSub: boolean
   modeId?: string
   modeIds: string[]
@@ -53,6 +46,7 @@ type Conversation = {
 type Launch = {
   agent?: {
     acp_command?: unknown
+    adapter?: string
     mcp_config?: Record<string, { url: string; headers?: Record<string, string> }>
     acp_resume_session_id?: string
     acp_model?: string
@@ -104,21 +98,6 @@ const isLive = (update: Json) =>
 
 const definedFieldsOf = (update: Json) =>
   Object.fromEntries(Object.entries(update).filter(([, value]) => value !== undefined && value !== null))
-
-const terminalOutputOf = (previous: Json | undefined, update: Json) => {
-  const meta = update._meta as
-    | { terminal_output?: { data?: string }; terminal_exit?: { exit_code?: number | null } }
-    | undefined
-  if (!meta?.terminal_output && !meta?.terminal_exit) return {}
-  const output = (previous?.rawOutput ?? {}) as Json
-  return {
-    rawOutput: {
-      ...output,
-      formatted_output: `${output.formatted_output ?? ''}${meta.terminal_output?.data ?? ''}`,
-      ...(meta.terminal_exit && { exit_code: meta.terminal_exit.exit_code }),
-    },
-  }
-}
 
 const modeOf = (configOptions: Json[]) =>
   configOptions.find((option) => option.category === 'mode')?.currentValue as string | undefined
@@ -285,7 +264,6 @@ export const startAgent = ({
   }
 
   const onUpdate = (conversation: Conversation, update: Json) => {
-    if (conversation.isLoading) return
     if (update.sessionUpdate === 'current_mode_update') conversation.modeId = String(update.currentModeId)
     if (update.sessionUpdate === 'config_option_update' && Array.isArray(update.configOptions)) {
       conversation.configOptions = update.configOptions
@@ -294,7 +272,7 @@ export const startAgent = ({
     if (update.sessionUpdate === 'tool_call') conversation.toolCalls.set(String(update.toolCallId), update)
     if (update.sessionUpdate !== 'tool_call_update') return emit(conversation, update)
     const previous = conversation.toolCalls.get(String(update.toolCallId))
-    const merged = { ...previous, ...definedFieldsOf(update), ...terminalOutputOf(previous, update) }
+    const merged = { ...previous, ...definedFieldsOf(update) }
     if (!terminalToolStatuses.includes(String(update.status))) {
       conversation.toolCalls.set(String(update.toolCallId), merged)
       return emit(conversation, update)
@@ -344,27 +322,12 @@ export const startAgent = ({
       cwd: workspace?.working_dir ?? defaultWorkingDirectory,
       mcpServers: mcpServersOf(agent?.mcp_config),
     }
-    const { agentCapabilities } = await connection.request('initialize', {
-      protocolVersion: 1,
-      clientCapabilities: { elicitation: { form: {} } },
-    })
-    const canLoad = Boolean((agentCapabilities as Json | undefined)?.loadSession)
-    const load = (params: Json) => {
-      conversation.isLoading = true
-      return connection.request('session/load', params).finally(() => {
-        conversation.isLoading = false
-      })
-    }
-    const reopen = (params: Json) =>
-      connection
-        .request('session/resume', params)
-        .catch((error) =>
-          canLoad && error instanceof AcpError && error.code === methodNotFound ? load(params) : Promise.reject(error),
-        )
+    await connection.request('initialize', { protocolVersion: 1, clientCapabilities: { elicitation: { form: {} } } })
     const resumeSessionId = agent?.acp_resume_session_id
     const resumed =
       resumeSessionId &&
-      (await reopen({ sessionId: resumeSessionId, ...sessionParams })
+      (await connection
+        .request('session/resume', { sessionId: resumeSessionId, ...sessionParams })
         .then((result): Json => ({ ...result, sessionId: resumeSessionId }))
         .catch(() => undefined))
     const session = resumed || (await connection.request('session/new', sessionParams))
@@ -397,7 +360,6 @@ export const startAgent = ({
     const conversation: Conversation = {
       id,
       status: 'starting',
-      isLoading: false,
       isSub: Boolean(launch.parent_conversation_id),
       modeIds: [],
       keptPlanning: false,
@@ -407,7 +369,7 @@ export const startAgent = ({
       lastSeq: 0,
       toolCalls: new Map(),
       sockets: new Set(),
-      connection: connectAdapter(
+      connection: (launch.agent?.adapter === 'pi-rpc' ? connectPi : connectAdapter)(
         {
           command,
           env: adapterEnvironmentOf(launch.secrets),

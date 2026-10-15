@@ -50,7 +50,7 @@ Workspace hosts and personal machines run HQ's own image (`apps/agent`: hq-agent
 ```sh
 bun run agent:build          # compile hq-agent and docker build; cached by Docker
 bun run agent:versions       # pinned vs latest on npm, per tool
-bun run agent:bump <tool>    # pin the latest of claude-code | claude-agent-acp | codex | codex-acp | pi | pi-acp, then rebuild
+bun run agent:bump <tool>    # pin the latest of claude-code | claude-agent-acp | codex | codex-acp | pi, then rebuild
 ```
 
 After a rebuild, restart the server: a new content ID applies to new runtimes. Without a built image a prompt says `HQ's runtime image is not built: run bun run agent:build`.

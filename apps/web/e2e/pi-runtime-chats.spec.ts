@@ -76,7 +76,7 @@ for (const { provider, model, name } of [
     const launch = (await workerStack.fakeHost()).conversations.find(
       ({ agent }) => agent.acp_model === `${model.startsWith('anthropic/') ? 'hq-anthropic' : 'hq'}/${model}`,
     )
-    expect(launch?.agent.acp_command.at(-1)).toMatch(/exec pi-acp$/)
+    expect(launch?.agent.acp_command.at(-1)).toMatch(/exec pi --mode rpc --no-themes$/)
     expect(await routingRecordsOf(workerStack, chatId)).toEqual([{ role: 'session', model, member_id: 'member-bob' }])
     await bobPage.context().close()
   })

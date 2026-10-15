@@ -59,7 +59,7 @@ const conversationIdOf = async (chat: ChatId) => String((await runtimeOf(chat)).
 const sweepAgentTurns = () => agentBridge.forDatabase(database).jobs['agent.sweep']({ workspaceId: acme, payload: {} })
 const agentReply = (turn: number) => ({
   kind: 'agent' as const,
-  body: `[t${turn}] Hello from the stub (model hq/fake, mode bypassPermissions).`,
+  body: `[t${turn}] Hello from the stub (model hq/fake, mode default).`,
 })
 const notice = (body: string) => ({ kind: 'notice' as const, body })
 const stoppedEarly = notice('The agent stopped before finishing')

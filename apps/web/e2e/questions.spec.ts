@@ -148,6 +148,50 @@ test('14c. a Codex form of three questions shows on the same card, without its N
   await turnEnded(page)
 })
 
+test.describe('Pi on an HQ runtime chat', () => {
+  test.use({ runtimeHost: true })
+  const piChipOf = (page: Page) => mainOf(page).getByRole('button', { name: /· auto( · Plan)?$/ })
+
+  test('14c. a Pi select shows on the same card without its Other choice; a free answer reaches Pi through its input', async ({
+    page,
+  }) => {
+    await newRuntimeChat(page, 'Pi questions')
+    await sendMessage(page, 'stub:ask')
+    const question = questionOf(page)
+    await expect(question.getByRole('group', { name: 'Which database should we use?' })).toBeVisible()
+    await expect(question.getByRole('radio')).toHaveCount(2)
+    await expect(question.getByRole('radio', { name: /Other/ })).toHaveCount(0)
+    await question.getByRole('textbox', { name: 'Other answer to Which database should we use?' }).fill('MySQL')
+    await question.getByRole('button', { name: 'Submit' }).click()
+    await expect(repliesWith(page, 'answer:The member answered: MySQL')).toHaveCount(1)
+    await turnEnded(page)
+    await expect(question).toContainText('MySQL')
+    await expect(question).toContainText('Answered by Alice')
+  })
+
+  test('16a. the Plan toggle sets Pi’s plan mode on an HQ runtime chat and the chip follows', async ({ page }) => {
+    await newRuntimeChat(page, 'Pi plan mode')
+    await sendMessage(page, 'stub:hello')
+    await turnEnded(page)
+    await piChipOf(page).click()
+    await planSwitchOf(page).click()
+    await expect(planSwitchOf(page)).toHaveAttribute('aria-checked', 'true')
+    await page.keyboard.press('Escape')
+    await expect(piChipOf(page)).toHaveText(/· auto · Plan$/)
+    await sendMessage(page, 'stub:hello')
+    await expect(repliesWith(page, '[t2] Hello from the stub (model hq/fake/fake-medium, mode plan).')).toHaveCount(1)
+    await piChipOf(page).click()
+    await planSwitchOf(page).click()
+    await expect(planSwitchOf(page)).toHaveAttribute('aria-checked', 'false')
+    await page.keyboard.press('Escape')
+    await expect(piChipOf(page)).toHaveText(/· auto$/)
+    await sendMessage(page, 'stub:hello')
+    await expect(repliesWith(page, '[t3] Hello from the stub (model hq/fake/fake-medium, mode default).')).toHaveCount(
+      1,
+    )
+  })
+})
+
 test('15. Stop while a question waits ends the turn Stopped, the card shows it, a late answer is refused, the next prompt works', async ({
   page,
   machine,
@@ -268,10 +312,10 @@ test.describe('on an HQ runtime chat', () => {
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
     await openChat(bobPage, 'Research')
     const bobQuestion = questionOf(bobPage)
-    await expect(bobQuestion.getByRole('radio', { name: 'SQLite Embedded' })).toBeDisabled()
+    await expect(bobQuestion.getByRole('radio', { name: 'SQLite', exact: true })).toBeDisabled()
     await expect(bobQuestion.getByRole('button')).toHaveCount(0)
 
-    await questionOf(page).getByRole('radio', { name: 'SQLite Embedded' }).check()
+    await questionOf(page).getByRole('radio', { name: 'SQLite', exact: true }).check()
     const releaseAliceAnswer = await holdAnswers(page)
     await questionOf(page).getByRole('button', { name: 'Submit' }).click()
 
@@ -279,9 +323,9 @@ test.describe('on an HQ runtime chat', () => {
     await addCredential(bobPage, { provider: 'OpenAI', secret: `fake-key-${crypto.randomUUID()}` })
     await expect(llmSectionOf(bobPage).getByRole('listitem').filter({ hasText: 'OpenAI' })).toBeVisible()
     await openChat(bobPage, 'Research')
-    await bobQuestion.getByRole('radio', { name: 'Postgres Relational' }).check()
+    await bobQuestion.getByRole('radio', { name: 'Postgres', exact: true }).check()
     await bobQuestion.getByRole('button', { name: 'Submit' }).click()
-    await expect(repliesWith(page, '"question_0":"Postgres"')).toHaveCount(1)
+    await expect(repliesWith(page, 'answer:The member answered: Postgres')).toHaveCount(1)
     await expect(questionOf(page)).toContainText('Answered by Bob')
     await expect(questionOf(page).getByRole('button')).toHaveCount(0)
     expect(await releaseAliceAnswer()).toBe(409)
@@ -307,6 +351,6 @@ test.describe('on an HQ runtime chat', () => {
     const steps = page.getByRole('group', { name: 'Steps of Fake small' })
     await expect(steps.getByRole('form', { name: 'Question' })).toContainText(assumption)
     await expect(steps.getByRole('form', { name: 'Question' }).getByRole('button')).toHaveCount(0)
-    await expect(messageItemsOf(page).filter({ has: steps })).toContainText(`"question_0_custom":"${assumption}"`)
+    await expect(messageItemsOf(page).filter({ has: steps })).toContainText(`answer:The member answered: ${assumption}`)
   })
 })

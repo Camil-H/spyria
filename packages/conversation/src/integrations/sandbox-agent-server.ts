@@ -79,7 +79,7 @@ const piSettings = {
   quietStartup: true,
   enableInstallTelemetry: false,
   retry: { enabled: false },
-  extensions: ['/usr/local/lib/hq/pi/hq-compaction.ts'],
+  extensions: ['/usr/local/lib/hq/pi/hq-compaction.ts', '/usr/local/lib/hq/pi/hq-plan.ts'],
 }
 const piProviderOf = (baseUrl: string, api: string, models: readonly PiModel[]) => ({
   baseUrl,
@@ -105,7 +105,7 @@ write() { printf %s "$2" > "$PI_CODING_AGENT_DIR/$1.tmp"; mv "$PI_CODING_AGENT_D
 write models.json "$HQ_PI_MODELS"
 write settings.json "$HQ_PI_SETTINGS"
 write mcp.json "$HQ_PI_MCP"
-exec pi-acp`
+exec pi --mode rpc --no-themes`
 
 export const piCommandOf = (
   gatewayUrl: string,
@@ -129,7 +129,6 @@ export const piCommandOf = (
     'PI_OFFLINE=1',
     'PI_SKIP_VERSION_CHECK=1',
     'PI_TELEMETRY=0',
-    'npm_config_offline=true',
     `HQ_COMPACTION_MODEL=${piModelOf(compactionModel)}`,
     `HQ_PI_MODELS=${JSON.stringify({ providers })}`,
     `HQ_PI_SETTINGS=${JSON.stringify({ ...piSettings, ...(compaction && { compaction }) })}`,
@@ -149,6 +148,7 @@ const piConversationOf = (
 ) => ({
   agent: {
     acp_command: piCommandOf(endpoint.transport.gatewayUrl, pi, { sub: Boolean(sub) }),
+    adapter: 'pi-rpc',
     ...(resumeSessionId && { acp_resume_session_id: resumeSessionId }),
     ...(acpModel && { acp_model: acpModel }),
     ...(acpModel && effort && { acp_thought_level: effort }),

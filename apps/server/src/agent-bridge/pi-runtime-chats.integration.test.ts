@@ -90,12 +90,12 @@ test.each([
     const replies = await finished(await prompt(chat, 'stub:tools', bobInAcme), chat)
 
     const acpModel = `${piProvider}/${model}`
-    expect(replies.at(-1)?.body).toBe(`Hello from the stub (model ${acpModel}, mode bypassPermissions).`)
+    expect(replies.at(-1)?.body).toBe(`Hello from the stub (model ${acpModel}, mode default).`)
     expect(replies.filter((reply) => reply.body.includes('Hello from the stub'))).toHaveLength(1)
     expect(frames.join('')).toContain(`Hello from the stub (model ${acpModel}`)
     const [launch] = launches()
     expect(launches()).toHaveLength(1)
-    expect(launch?.agent.acp_command.at(-1)).toEndWith('exec pi-acp')
+    expect(launch?.agent.acp_command.at(-1)).toEndWith('exec pi --mode rpc --no-themes')
     expect(launch?.agent).toMatchObject({ acp_model: acpModel, acp_thought_level: 'medium' })
     const files = piFilesOf(launch as Launch)
     const { providers } = JSON.parse(files.HQ_PI_MODELS ?? '{}')
@@ -125,7 +125,7 @@ test('a routing change mid-session switches the same Pi session to the other pro
   stack.setFakeLlmScript({ route: { tier: 'large', confidence: 'high', effort: 'high' } })
   const first = await finished(await prompt(chat, 'Start large', bobInAcme), chat)
   expect(first.at(-1)?.body).toBe(
-    '[t1] Hello from the stub (model hq-anthropic/anthropic/claude-opus-5-5, mode bypassPermissions).',
+    '[t1] Hello from the stub (model hq-anthropic/anthropic/claude-opus-5-5, mode default).',
   )
   expect(launches()[0]?.agent).toMatchObject({ acp_thought_level: 'high' })
 
@@ -138,7 +138,7 @@ test('a routing change mid-session switches the same Pi session to the other pro
   ).toEqual(succeeded)
   const second = await finished(await prompt(chat, 'Now on OpenAI', bobInAcme), chat)
   expect(second.map((reply) => reply.body)).toEqual([
-    '[t2] Hello from the stub (model hq/openai/gpt-5-mini, mode bypassPermissions).',
+    '[t2] Hello from the stub (model hq/openai/gpt-5-mini, mode default).',
   ])
   expect(relay.modelSwitches).toEqual(['hq/openai/gpt-5-mini'])
   expect(relay.thoughtLevels).toEqual(['high'])
@@ -179,7 +179,7 @@ test('delegation runs a Pi sub-conversation in the same runtime and answers with
     }),
   })
   expect(JSON.parse(answer.body).result).toEqual({
-    content: [{ type: 'text', text: '[t1] Hello from the stub (model hq/fake/fake-small, mode bypassPermissions).' }],
+    content: [{ type: 'text', text: '[t1] Hello from the stub (model hq/fake/fake-small, mode default).' }],
     isError: false,
   })
 
@@ -218,8 +218,8 @@ test('after a runtime restart the next prompt loads the Pi session and no earlie
   ])
   expect((await messagesOf(chat)).map(({ kind, body }) => `${kind}:${body}`)).toEqual([
     'member:Before the restart',
-    'agent:[t1] Hello from the stub (model hq/fake/fake-medium, mode bypassPermissions).',
+    'agent:[t1] Hello from the stub (model hq/fake/fake-medium, mode default).',
     'member:After the restart',
-    'agent:[t2] Hello from the stub (model hq/fake/fake-medium, mode bypassPermissions).',
+    'agent:[t2] Hello from the stub (model hq/fake/fake-medium, mode default).',
   ])
 })

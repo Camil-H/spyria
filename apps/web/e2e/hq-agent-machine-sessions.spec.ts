@@ -4,6 +4,7 @@ import {
   messageItemsOf,
   newRuntimeChat,
   type Page,
+  panelOf,
   runsOnChoiceOf,
   sendMessage,
   machineTest as test,
@@ -157,6 +158,25 @@ test.describe('Claude Code', () => {
     await expect(mainOf(page)).not.toContainText('The agent started a new session')
     expect(await sessionIdsOf(workerStack.database, chatId)).toEqual([session])
     expect((await machine()).conversations).toHaveLength(1)
+  })
+
+  test('Claude Code agent-steps 16. a plan shows as one checklist in its latest state and feeds the Plan tab', async ({
+    page,
+    machine,
+  }) => {
+    await machine(machineOf)
+    await newSession(page, 'Claude Code')
+    await sendMessage(page, 'stub:plan-progress')
+
+    await expect(workingOf(page)).toHaveCount(0)
+    const checklist = mainOf(page).getByRole('group', { name: 'Plan' })
+    await expect(checklist).toHaveCount(1)
+    await expect(checklist.getByRole('checkbox', { name: 'Fix the totals' })).toBeChecked()
+    await expect(checklist.getByRole('checkbox', { name: 'Reproduce the bug' })).toBeChecked()
+    await panelOf(page).getByRole('tab', { name: 'Plan', exact: true }).click()
+    await expect(panelOf(page).getByRole('tabpanel').getByRole('listitem')).toHaveCount(2)
+    await expect(panelOf(page).getByRole('tabpanel')).toContainText('Fix the totals')
+    await expect(panelOf(page).getByRole('tabpanel')).not.toContainText('In progress')
   })
 
   test('Claude Code 2. thinking streams live as Thinking… and folds to Thought for Ns', async ({
