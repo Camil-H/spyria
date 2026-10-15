@@ -119,7 +119,7 @@ test('an unreachable or missing default falls back to the nearest reachable mode
     sessionChoiceOf({ reachable: smallOnly, defaultModel: 'fake/fake-medium', answers: classified('large') })?.model.id,
   ).toBe('fake-small/fake-small')
   expect(
-    sessionChoiceOf({ reachable: fake, defaultModel: 'anthropic/claude-haiku-4-5', answers: undefined })?.model.id,
+    sessionChoiceOf({ reachable: fake, defaultModel: 'anthropic/claude-haiku-5-5', answers: undefined })?.model.id,
   ).toBe('fake/fake-small')
   expect(sessionChoiceOf({ reachable: [], defaultModel: 'fake/fake-medium', answers: undefined })).toBeUndefined()
 })

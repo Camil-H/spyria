@@ -161,13 +161,13 @@ test("Pi in HQ's image answers through the LLM relay on the chat and Anthropic r
     pi: {
       models: [
         { id: 'fake/fake-medium', name: 'Fake medium', reasoning: false },
-        { id: 'anthropic/claude-haiku-4-5', name: 'Haiku 4.5', reasoning: false, contextWindow: 200000 },
+        { id: 'anthropic/claude-haiku-5-5', name: 'Haiku 5.5', reasoning: false, contextWindow: 200000 },
       ],
       compactionModel: 'fake/fake-small',
     },
   })
   expect(await answerOf('Hello Pi')).toBe('Understood, working on it.')
-  await agentServer.switchAcpModel(conversation, 'hq-anthropic/anthropic/claude-haiku-4-5')
+  await agentServer.switchAcpModel(conversation, 'hq-anthropic/anthropic/claude-haiku-5-5')
   expect(await answerOf('Hello Pi on Anthropic')).toContain('Understood')
   expect(turnEnds().map((update) => update.stopReason)).toEqual(['end_turn', 'end_turn'])
   close()
@@ -179,7 +179,7 @@ test("Pi in HQ's image answers through the LLM relay on the chat and Anthropic r
       JSON.stringify({
         prompter_id: bob,
         owner_id: alice,
-        model: 'claude-haiku-4-5',
+        model: 'claude-haiku-5-5',
         provider: 'anthropic',
         status: 'success',
       }),

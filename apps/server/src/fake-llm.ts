@@ -223,7 +223,7 @@ const listedModelIds = [
   'gpt-6.1-sol',
   'claude-opus-5-5',
   'claude-sonnet-5-5',
-  'claude-haiku-4-5',
+  'claude-haiku-5-5',
   'mistral-large-latest',
   'mistral-medium-latest',
   'mistral-small-latest',

@@ -15,7 +15,7 @@ const routableModels: RoutableModel[] = [
   { id: 'anthropic/claude-sonnet-5-5', name: 'Sonnet 5.5', tier: 'medium' },
   { id: 'openai/gpt-5-mini', name: 'GPT-5 mini', tier: 'medium' },
   { id: 'mistral/mistral-medium-latest', name: 'Mistral Medium', tier: 'medium' },
-  { id: 'anthropic/claude-haiku-4-5', name: 'Haiku 4.5', tier: 'small' },
+  { id: 'anthropic/claude-haiku-5-5', name: 'Haiku 5.5', tier: 'small' },
   { id: 'openai/gpt-5-nano', name: 'GPT-5 nano', tier: 'small' },
   { id: 'mistral/mistral-small-latest', name: 'Mistral Small', tier: 'small' },
   { id: 'typesafe/jev-latest', name: 'Jev' },

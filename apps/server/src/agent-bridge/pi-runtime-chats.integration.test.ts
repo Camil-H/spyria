@@ -60,7 +60,7 @@ test.each([
     piProvider: 'hq-anthropic',
     baseUrl: 'http://fake-gateway-relay.test:4000',
     api: 'anthropic-messages',
-    models: ['anthropic/claude-opus-5-5', 'anthropic/claude-sonnet-5-5', 'anthropic/claude-haiku-4-5'],
+    models: ['anthropic/claude-opus-5-5', 'anthropic/claude-sonnet-5-5', 'anthropic/claude-haiku-5-5'],
     model: 'anthropic/claude-sonnet-5-5',
   },
   {

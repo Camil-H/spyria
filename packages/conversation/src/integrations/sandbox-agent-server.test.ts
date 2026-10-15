@@ -47,9 +47,9 @@ test('a subscription session launches Claude Code without the relay, a model, or
 })
 
 test('Pi summarizes on its compaction model through its provider, starts at the routed thinking level and takes test compaction budgets', async () => {
-  const anthropicCompaction = { ...piLaunch, compactionModel: 'anthropic/claude-haiku-4-5' }
+  const anthropicCompaction = { ...piLaunch, compactionModel: 'anthropic/claude-haiku-5-5' }
   const command = piCommandOf('http://hq-gateway-relay:4000/v1', anthropicCompaction, { sub: false })
-  expect(command).toContain('HQ_COMPACTION_MODEL=hq-anthropic/anthropic/claude-haiku-4-5')
+  expect(command).toContain('HQ_COMPACTION_MODEL=hq-anthropic/anthropic/claude-haiku-5-5')
   const { created, envOf } = await createdPiOf(undefined, { effort: 'high' })
   expect(created.agent.acp_thought_level).toBe('high')
   expect((await createdPiOf(undefined, { effort: 'high', acpModel: undefined })).created.agent).not.toHaveProperty(

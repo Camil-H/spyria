@@ -140,11 +140,17 @@ export const startZeroCache = async ({
 const gatewayImage = 'maximhq/bifrost:v2.2.6@sha256:d0b4708ace1aa175766f94afa715fd9bba3a1b56c1dc2afff15a21edf3ae4e2a'
 export const testGatewayAdmin = { user: 'hq-test', password: 'hq-test-gateway-password' }
 const gatewayProviders = ['openai', 'anthropic', 'mistral', 'typesafe']
-const fakeModelPrices = {
+const testModelPrices = {
   'fake-model': 0.000009,
   'fake-large': 0.00003,
   'fake-medium': 0.000015,
   'fake-small': 0.000006,
+  'claude-opus-5-5': 0.000005,
+  'claude-sonnet-5-5': 0.000003,
+  'claude-haiku-5-5': 0.000001,
+  'mistral-large-latest': 0.000004,
+  'mistral-medium-latest': 0.000002,
+  'mistral-small-latest': 0.0000005,
 }
 
 const gatewayAuthorization = `Basic ${btoa(`${testGatewayAdmin.user}:${testGatewayAdmin.password}`)}`
@@ -185,7 +191,7 @@ export const startTestGateway = async ({
   const databaseName = `hq_test_gateway_${name}`
   const configFile = join(tmpdir(), `${containerName}.json`)
   const gatewayConfig = JSON.parse(readFileSync(new URL('../../../../infra/bifrost.json', import.meta.url), 'utf8'))
-  const setup = { gatewayImage, port, fakeLlmUrl, oauthBase, gatewayConfig, gatewayProviders, fakeModelPrices }
+  const setup = { gatewayImage, port, fakeLlmUrl, oauthBase, gatewayConfig, gatewayProviders, testModelPrices }
   const setupHash = createHash('sha256').update(JSON.stringify(setup)).digest('hex').slice(0, 16)
   const gateway = testGatewayAt(`http://127.0.0.1:${port}`)
   let lastAnswer: number | string = 'nothing'
@@ -196,7 +202,7 @@ export const startTestGateway = async ({
   const isSetUp = async () => {
     const overrides = await gateway.request('/api/governance/pricing-overrides')
     const names = JSON.stringify(overrides.ok ? await overrides.json() : {})
-    return Object.keys(fakeModelPrices).every((model) => names.includes(`"${model}"`))
+    return Object.keys(testModelPrices).every((model) => names.includes(`"${model}"`))
   }
   const running = docker('inspect', '-f', '{{.State.Running}} {{index .Config.Labels "hq.setup"}}', containerName)
   if (running.stdout.toString().trim() === `true ${setupHash}` && (await isReady()) && (await isSetUp())) {
@@ -277,7 +283,7 @@ export const startTestGateway = async ({
         method: 'POST',
         body: { provider, keys: [], network_config: networkConfig },
       })
-    for (const [model, dollarsPerToken] of Object.entries(fakeModelPrices))
+    for (const [model, dollarsPerToken] of Object.entries(testModelPrices))
       await gateway.call('/api/governance/pricing-overrides', {
         method: 'POST',
         body: {
