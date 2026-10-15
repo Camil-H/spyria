@@ -110,7 +110,7 @@ test('1 and 4. the admin turns sessions on members machines off: no Add my machi
   ).toHaveLength(0)
 
   await machine({ owner: 'member-bob', signedIn: 'claude' })
-  await expect(machineSectionOf(bobPage)).toContainText('Online', { timeout: 10_000 })
+  await expect(machineSectionOf(bobPage)).toContainText('Online')
   await expect(machineSectionOf(bobPage).getByRole('button', { name: 'Remove' })).toBeVisible()
   const dialog = await openNewChat(bobPage)
   await expect(dialog.getByRole('radio')).toHaveCount(2)

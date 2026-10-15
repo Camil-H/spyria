@@ -117,12 +117,14 @@ test.describe('Claude Code', () => {
     page,
     workerStack,
     machine,
+    release,
   }) => {
     await machine(machineOf)
     const chatId = await newSession(page, tool.name)
     await sendMessage(page, 'stub:tools stub:linger')
     await expect(repliesWith(page, '[t1]')).toBeVisible()
     await expect(workingOf(page)).toBeVisible()
+    await release('linger')
     await expect(foldOf(page)).toBeVisible()
     await expect(workingOf(page)).toHaveCount(0)
     await foldOf(page).click()
@@ -176,11 +178,16 @@ test.describe('Claude Code', () => {
     expect((await machine()).conversations).toHaveLength(1)
   })
 
-  test('Claude Code 2. thinking streams live as Thinking… and folds to Thought for Ns', async ({ page, machine }) => {
+  test('Claude Code 2. thinking streams live as Thinking… and folds to Thought for Ns', async ({
+    page,
+    machine,
+    release,
+  }) => {
     await machine(machineOf)
     await newSession(page, 'Claude Code')
     await sendMessage(page, 'stub:think stub:slow')
     await expect(repliesWith(page, 'Thinking…')).toHaveCount(1)
+    await release('slow')
     await expect(repliesWith(page, 'Hello from the stub')).toHaveCount(1)
     await expect(workingOf(page)).toHaveCount(0)
     await expect(repliesWith(page, 'Thinking…')).toHaveCount(0)

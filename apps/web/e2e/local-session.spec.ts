@@ -181,12 +181,14 @@ test('10. text streamed around a command shows before the command and stays, the
   page,
   workerStack,
   machine,
+  release,
 }) => {
   await machine(signedInMachine)
   const chatId = await newLocalSession(page, 'Live text')
   await sendMessage(page, 'stub:command stub:linger')
   await expect(messageItemsOf(page).getByRole('img', { name: 'Running' })).toBeVisible()
   await expect(messageItemsOf(page).nth(1)).toContainText('[t1]')
+  await release('linger')
   await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0)
   await expect(messageItemsOf(page)).toHaveCount(4)
   await expect(messageItemsOf(page).nth(1)).toContainText('[t1]')
@@ -264,6 +266,7 @@ test.describe('Codex on a ChatGPT plan', () => {
   test('5. a command pending with no input shows the real command and no spinner once completed, and a read shows its path', async ({
     page,
     machine,
+    release,
   }) => {
     await machine(codexMachine)
     await newLocalSession(page, 'Real steps', codexOption)
@@ -271,6 +274,7 @@ test.describe('Codex on a ChatGPT plan', () => {
     await expect(repliesWith(page, '$ npm test').getByRole('img', { name: 'Failed' })).toBeVisible()
     await expect(repliesWith(page, 'Read notes.md')).toBeVisible()
     await expect(page.getByRole('status', { name: 'Agent is working' })).toBeVisible()
+    await release('linger')
     await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0)
     await messageItemsOf(page)
       .getByRole('button', { name: /^Worked for .+ · 3 steps$/ })

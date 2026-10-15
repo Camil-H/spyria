@@ -1,8 +1,9 @@
-import { execSync, spawn } from 'node:child_process'
+import { execFile, execSync, spawn } from 'node:child_process'
 import { openSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
+import { promisify } from 'node:util'
 import { createDatabase } from '@hq/db/postgres'
 import {
   buildTemplateDatabase,
@@ -24,6 +25,7 @@ import {
 } from './stack-ports.ts'
 
 const repositoryRoot = new URL('../../../', import.meta.url).pathname
+const e2eBuild = ['--mode', 'e2e', '--outDir', 'node_modules/.e2e-dist']
 
 const sweptPorts = [
   new URL(serverUrl).port,
@@ -101,11 +103,13 @@ export default async function globalSetup() {
       },
       `${serverUrl}/health`,
     ),
-    startDetached(
-      ['bun', 'run', 'dev', '--port', new URL(viteUrl).port],
-      `${repositoryRoot}apps/web`,
-      { HQ_SERVER_URL: serverUrl, HQ_VITE_CACHE_DIR: 'node_modules/.vite-e2e' },
-      viteUrl,
+    promisify(execFile)('bun', ['run', 'build', ...e2eBuild], { cwd: `${repositoryRoot}apps/web` }).then(() =>
+      startDetached(
+        ['bunx', 'vite', 'preview', ...e2eBuild, '--port', new URL(viteUrl).port],
+        `${repositoryRoot}apps/web`,
+        { HQ_SERVER_URL: serverUrl },
+        viteUrl,
+      ),
     ),
   ])
   const toolServers = await fetch(`${serverUrl}/test/tool-servers`, { method: 'POST' })

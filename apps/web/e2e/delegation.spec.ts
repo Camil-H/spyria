@@ -122,10 +122,14 @@ const delegatingTo = (model: string, answer: string, script: object) => ({
   text: answer,
   ...script,
 })
-const resuming = (answer: string, script: object) => ({
+const resuming = (answer: string, script: object, resumeHold?: string) => ({
   steps: [
     { tool: 'delegate', arguments: { task: 'List the project files', effort: 'small' } },
-    { tool: 'delegate', arguments: { task: 'List the project files', effort: 'small', resume: '$resume' } },
+    {
+      tool: 'delegate',
+      arguments: { task: 'List the project files', effort: 'small', resume: '$resume' },
+      hold: resumeHold,
+    },
   ],
   text: answer,
   ...script,
@@ -179,14 +183,18 @@ test('10. a subagent failure answers with HQ’s error, the group shows failed, 
 test('11. a long subagent task returns still running, then its result on resume, in one group with one answer', async ({
   page,
   agentScript,
+  release,
 }) => {
   const answer = 'The long listing is done.'
-  const slowWork = { ...subagentWork, text: 'The slow listing found two files today.', wordDelayMilliseconds: 1_000 }
+  const heldWork = { ...subagentWork, text: 'The slow listing found two files today.', hold: 'subagent' }
   await agentScript(
     researchChatId,
-    resuming(answer, { delegateRoute: confidentSmall, subagents: { 'fake-small': slowWork } }),
+    resuming(answer, { delegateRoute: confidentSmall, subagents: { 'fake-small': heldWork } }, 'resume'),
   )
-  await promptAndWait(page, 'Delegate a long listing', answer)
+  await sendMessage(page, 'Delegate a long listing')
+  await release('resume')
+  await release('subagent')
+  await expect(messageItemsOf(page).filter({ hasText: answer })).toBeVisible()
   await expect(groupOf(page, 'Fake small')).toHaveCount(1)
   await expect(mainOf(page).getByRole('button', { name: /^Used delegate/ })).toHaveCount(0)
   await groupOf(page, 'Fake small').click()
@@ -203,7 +211,7 @@ test('12. stopping during a delegation stops the subagent, the group shows stopp
   const longWork = {
     steps: [{ command: 'echo listing' }],
     text: 'one two three four five six seven eight nine ten',
-    wordDelayMilliseconds: 2_000,
+    hold: 'subagent',
   }
   await agentScript(
     researchChatId,

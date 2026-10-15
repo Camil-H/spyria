@@ -7,6 +7,8 @@ import { createInterface } from 'node:readline'
 const stateDirectory = process.env.STUB_STATE ?? '/tmp/stub-acp-state'
 const gapMilliseconds = Number(process.env.STUB_GAP_MS ?? 20)
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))
+const holdUrl = process.env.STUB_HOLD_URL
+const lingerAs = (name) => (holdUrl ? fetch(`${holdUrl}&name=${name}`, { method: 'POST' }) : sleep(1500))
 const send = (frame) => process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', ...frame })}\n`)
 const models =
   process.env.STUB_FLAVOUR === 'codex'
@@ -290,7 +292,7 @@ const turn = async (id, { sessionId, prompt }) => {
         update({ sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: chunk } })
       }
     }
-    if (has('slow')) await sleep(1500)
+    if (has('slow')) await lingerAs('slow')
     await say(`[t${session.prompts}] `)
     if (has('env')) await say(`env:${JSON.stringify(Object.keys(process.env).sort())} `)
     if (has('tools')) {
@@ -400,7 +402,7 @@ const turn = async (id, { sessionId, prompt }) => {
         rawInput,
       })
       await step()
-      if (has('linger')) await sleep(1500)
+      if (has('linger')) await lingerAs('linger')
       await step()
       update({
         sessionUpdate: 'tool_call_update',
@@ -473,7 +475,7 @@ const turn = async (id, { sessionId, prompt }) => {
       update({ sessionUpdate: 'tool_call_update', toolCallId: command, status: 'in_progress' })
       for (;;) await step()
     }
-    if (has('linger')) await sleep(1500)
+    if (has('linger')) await lingerAs('linger')
     await say(`Hello from the stub (model ${session.model}, mode ${session.mode}).`)
     send({ id, result: { stopReason: 'end_turn' } })
   } catch (error) {

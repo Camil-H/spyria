@@ -52,24 +52,24 @@ for (const { provider, model, name } of [
     browser,
     workerStack,
     agentScript,
+    release,
+    heldCommand,
   }) => {
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
     await addKey(bobPage, provider)
     const chatId = await newRuntimeChat(bobPage, `Bob on ${provider}`)
-    await agentScript(chatId, {
-      steps: [{ command: 'echo one; sleep 1; echo two' }],
-      text: `Answered on ${name}.`,
-      wordDelayMilliseconds: 300,
-    })
+    const commandText = `echo one; ${heldCommand('command')}; echo two`
+    await agentScript(chatId, { steps: [{ command: commandText }], text: `Answered on ${name}.` })
     await sendMessage(bobPage, 'Run it on Pi')
 
-    const command = itemsWith(bobPage, 'echo one; sleep 1; echo two')
+    const command = itemsWith(bobPage, commandText)
     await expect(command.getByRole('img', { name: 'Running' })).toBeVisible()
+    await release('command')
     await expect(command.getByRole('img', { name: 'Succeeded' })).toBeVisible()
     await expect(itemsWith(bobPage, `Answered on ${name}.`)).toHaveCount(1)
     await expect(workingIndicatorOf(bobPage)).toHaveCount(0)
     await expect(chipOf(bobPage)).toHaveText(`${name} (medium) · auto`)
-    await command.getByRole('button', { name: 'echo one; sleep 1; echo two' }).click()
+    await command.getByRole('button', { name: commandText }).click()
     await expect(command).toContainText('one')
     await expect(command).toContainText('two')
 

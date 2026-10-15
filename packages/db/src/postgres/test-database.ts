@@ -115,6 +115,8 @@ export const startZeroCache = async ({
       ZERO_APP_PUBLICATIONS: 'hq_zero',
       ZERO_ADMIN_PASSWORD: 'hq-test',
       ZERO_NUM_SYNC_WORKERS: '1',
+      ZERO_UPSTREAM_MAX_CONNS: '4',
+      ZERO_CVR_MAX_CONNS: '4',
       ZERO_LOG_LEVEL: process.env.HQ_ZERO_LOG_LEVEL ?? 'error',
       ZERO_ENABLE_TELEMETRY: 'false',
     },

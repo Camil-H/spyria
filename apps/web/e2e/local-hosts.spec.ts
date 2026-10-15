@@ -124,7 +124,7 @@ test.describe('as a member', () => {
     await dialog.getByRole('button', { name: 'Close' }).click()
 
     pair(urlOf(command), { personal: true, signedIn: ['claude'] })
-    await expect(machineSectionOf(page)).toContainText('Online', { timeout: 10_000 })
+    await expect(machineSectionOf(page)).toContainText('Online')
     await expect(machineSectionOf(page)).toContainText('Signed in to Claude Code')
     await expect(machineSectionOf(page)).toContainText('Not signed in to Codex')
     await expect(machineSectionOf(page)).not.toContainText('docker exec')
@@ -166,7 +166,7 @@ test.describe('Use Claude Code and Use Codex, as a member', () => {
     await expect(dialog).toContainText('Your machine: Waiting for the host')
 
     const machine = pair(urlOf(command), { personal: true, signedIn: [] })
-    await expect(dialog).toContainText('Your machine: Online', { timeout: 10_000 })
+    await expect(dialog).toContainText('Your machine: Online')
     await expect(commandBox).toHaveValue('docker exec -it hq-host hq-host login claude')
     machine.heartbeat(['claude'])
     await expect(dialog).toContainText(
@@ -187,7 +187,7 @@ test.describe('Use Claude Code and Use Codex, as a member', () => {
     pair,
   }) => {
     pair(urlOf(await addMachine(page)), { personal: true, signedIn: ['claude'] })
-    await expect(machineSectionOf(page)).toContainText('Online', { timeout: 10_000 })
+    await expect(machineSectionOf(page)).toContainText('Online')
     await expect(llmSectionOf(page).getByRole('button', { name: 'Claude Code connected' })).toBeVisible()
     await expect(llmSectionOf(page).getByRole('button', { name: 'Use Claude Code' })).toHaveCount(0)
     await expect(machineSectionOf(page)).toContainText('Signed in to Claude Code')
@@ -231,7 +231,7 @@ test('7. with only a local host online, ordinary runtime chats of its owner and 
   pair,
 }) => {
   const machine = pair(urlOf(await addMachine(page)), { personal: true, signedIn: ['claude'] })
-  await expect(machineSectionOf(page)).toContainText('Online', { timeout: 10_000 })
+  await expect(machineSectionOf(page)).toContainText('Online')
 
   await openChat(page, 'Research')
   await sendMessage(page, 'Run this on any host')

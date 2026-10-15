@@ -77,14 +77,16 @@ test('5. keeps the prompt and the reply after a reload, and the chat is not unre
 test('6. a reload during a turn shows the prompt, then the reply once it completes, without a duplicate', async ({
   page,
   agentScript,
+  release,
 }) => {
-  await agentScript(research, { wordDelayMilliseconds: 700 })
+  await agentScript(research, { hold: 'answer' })
   await openChat(page, 'Research')
   await sendMessage(page, 'Stream through a reload')
   await expect(itemsWith(page, 'Understood,')).toHaveCount(1)
 
   await page.reload()
   await expect(itemsWith(page, 'Stream through a reload')).toHaveCount(1)
+  await release('answer')
   await expect(itemsWith(page, agentReplyText)).toHaveCount(1)
   await expect(workingIndicatorOf(page)).toHaveCount(0)
   await expect(messageItemsOf(page)).toHaveCount(2)
@@ -95,8 +97,9 @@ test('7. another member viewing the chat sees the reply stream in, then the stor
   browser,
   workerStack,
   agentScript,
+  release,
 }) => {
-  await agentScript(research, { wordDelayMilliseconds: 500 })
+  await agentScript(research, { hold: 'answer' })
   const bobPage = await openPageAs(browser, workerStack, 'member-bob')
   await openChat(bobPage, 'Research')
   await openChat(page, 'Research')
@@ -106,6 +109,7 @@ test('7. another member viewing the chat sees the reply stream in, then the stor
   const bobReply = messageItemsOf(bobPage).nth(1)
   await expect(bobReply).toContainText('Understood,')
   expect(await bobReply.textContent()).not.toContain(agentReplyText)
+  await release('answer')
   await expect(bobReply).toContainText(agentReplyText)
   await expect(workingIndicatorOf(bobPage)).toHaveCount(0)
   await expect(itemsWith(bobPage, agentReplyText)).toHaveCount(1)

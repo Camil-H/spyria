@@ -471,7 +471,7 @@ type HostFrame = {
 }
 export const fakeHostGatewayUrl = 'http://fake-gateway-relay.test:4000/v1'
 type HostCommand = { op: string; runtimeId?: string; image?: string; apiKey?: string }
-export type FakeContainer = { running: boolean; apiKey: string; readyAt?: number }
+export type FakeContainer = { running: boolean; apiKey: string; isBooted?: boolean }
 export type ContainerAgent = {
   respond(request: Required<Pick<HostFrame, 'method' | 'path'>> & HostFrame, container: FakeContainer): unknown
   connect(stream: { path: string; container: FakeContainer; send(data: string): void; close(): void }): {
@@ -502,13 +502,13 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
     {
       memoryGibibytes = 8,
       agentServer,
-      bootMilliseconds = () => 0,
+      boot = async () => {},
       ownerId,
       signedIn = [],
     }: {
       memoryGibibytes?: number
       agentServer?: ContainerAgent
-      bootMilliseconds?: () => number
+      boot?: () => Promise<unknown>
       ownerId?: string
       signedIn?: string[]
     } = {},
@@ -534,8 +534,12 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
       if (failingOps.has(op)) throw new Error(`${op} failed`)
       const container = containers.get(runtimeId)
       if (op === 'create') containers.set(runtimeId, { running: false, apiKey })
-      if (op === 'start' && container)
-        Object.assign(container, { running: true, readyAt: Date.now() + bootMilliseconds() })
+      if (op === 'start' && container) {
+        Object.assign(container, { running: true, isBooted: false })
+        void boot().then(() => {
+          container.isBooted = true
+        })
+      }
       if ((op === 'stop' || op === 'remove') && container) {
         container.running = false
         agentServer?.stopped?.(container)
@@ -630,7 +634,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
           }
           if (frame.type === 'http') {
             const isReadyProbe = frame.path === '/ready'
-            const isReady = isReadyProbe && container?.running && Date.now() >= (container.readyAt ?? 0)
+            const isReady = isReadyProbe && container?.running && container.isBooted !== false
             const answered =
               container?.running && !isReadyProbe
                 ? agentServer?.respond(frame as Parameters<ContainerAgent['respond']>[0], container)

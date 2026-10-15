@@ -10,7 +10,7 @@ type FakeLlmStep = (
   | { fail: string }
   | { tool: string; arguments?: Record<string, unknown> }
   | { task: string }
-) & { say?: string }
+) & { say?: string; hold?: string }
 type FakeRouteAnswer = { tier: string; confidence: string | number; effort: string; prose?: boolean }
 type FakeRoute = FakeRouteAnswer | 'fail' | 'slow'
 export type FakeLlmScript = {
@@ -22,6 +22,8 @@ export type FakeLlmScript = {
   delegateRoute?: FakeRoute
   subagents?: Record<string, FakeLlmScript>
   summary?: string
+  hold?: string
+  held?: (name: string) => Promise<unknown>
 }
 type CompletionRequest = {
   model?: string
@@ -316,7 +318,7 @@ export const createFakeLlm = (
       const chatScript = (await scriptOf(context.req.raw, Boolean(request.response_format))) ?? {}
       const script =
         !request.response_format && isSubagentCall(request, chatScript)
-          ? (chatScript.subagents?.[request.model?.split('/').at(-1) ?? ''] ?? {})
+          ? { ...chatScript.subagents?.[request.model?.split('/').at(-1) ?? ''], held: chatScript.held }
           : chatScript
       if (request.response_format) {
         const route = await routeOf(scriptedRouteOf(script, request))
@@ -357,6 +359,12 @@ export const createFakeLlm = (
       const text = toolCall ? (step?.say ?? '') : (!request.tools?.length && summary) || (script.text ?? defaultText)
       const reasoning = step && 'think' in step ? step.think : ''
       const finishReason = toolCall ? 'tool_calls' : 'stop'
+      const holdName = step?.hold ?? (toolCall ? undefined : script.hold)
+      let isHeld = holdName !== undefined
+      const holdOnce = async () => {
+        if (isHeld) await script.held?.(holdName ?? '')
+        isHeld = false
+      }
       if (!request.stream)
         return context.json({
           ...completionOf(
@@ -378,7 +386,9 @@ export const createFakeLlm = (
             for (const word of words) {
               await Bun.sleep(script.wordDelayMilliseconds ?? defaultWordDelayMilliseconds)
               controller.enqueue(eventOf(completionOf({ delta: { [field]: word }, finish_reason: null })))
+              await holdOnce()
             }
+          await holdOnce()
           if (toolCall)
             controller.enqueue(eventOf(completionOf({ delta: { tool_calls: [toolCall] }, finish_reason: null })))
           controller.enqueue(eventOf(completionOf({ delta: {}, finish_reason: finishReason }, { usage })))

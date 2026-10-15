@@ -36,7 +36,19 @@ type ServedDatabase = {
 const servedDatabaseByName = new Map<string, ServedDatabase>()
 const databasesFailingCreation = new Set<string>()
 const databasesWithoutGateway = new Set<string>()
-const bootMillisecondsByDatabase = new Map<string, number>()
+const bootHoldByDatabase = new Map<string, string>()
+const holdByKey = new Map<string, { reached: PromiseWithResolvers<void>; released: PromiseWithResolvers<void> }>()
+const holdOf = (databaseName: string, name: string) => {
+  const key = `${databaseName}/${name}`
+  const hold = holdByKey.get(key) ?? { reached: Promise.withResolvers(), released: Promise.withResolvers() }
+  holdByKey.set(key, hold)
+  return hold
+}
+const waitForRelease = (databaseName: string, name: string) => {
+  const hold = holdOf(databaseName, name)
+  hold.reached.resolve()
+  return hold.released.promise
+}
 const fakeHostByDatabase = new Map<
   string,
   { host: FakeHost; relay: ReturnType<typeof createHqAgentRelay>; isOnline: boolean }
@@ -55,8 +67,11 @@ addRoutableModels(fakeRoutableModels)
 const usageSyncIntervalMilliseconds = 2_000
 const stubGapMilliseconds = Number(process.env.HQ_STUB_GAP_MS ?? 20)
 const defaultBootMilliseconds = 200
-const bootMillisecondsOf = (databaseName: string) => () =>
-  bootMillisecondsByDatabase.get(databaseName) ?? defaultBootMilliseconds
+const holdUrlOf = (databaseName: string) => `http://localhost:${port}/test/hold?db=${databaseName}`
+const bootOf = (databaseName: string) => () => {
+  const bootHold = bootHoldByDatabase.get(databaseName)
+  return bootHold ? waitForRelease(databaseName, bootHold) : Bun.sleep(defaultBootMilliseconds)
+}
 const sandboxProviderOf = (databaseName: string): SandboxProvider => ({
   ...runtimeHosts.sandboxProvider,
   create: async (sandbox) => {
@@ -77,7 +92,12 @@ const databaseByName = (databaseName: string) => {
     })
   servedDatabaseByName.set(databaseName, {
     database,
-    jobWorker: startJobWorker(database, { sandboxProvider: sandboxProviderOf(databaseName), agentBridge, llmGateway }),
+    jobWorker: startJobWorker(database, {
+      sandboxProvider: sandboxProviderOf(databaseName),
+      agentBridge,
+      llmGateway,
+      retryDelayMilliseconds: 100,
+    }),
     syncUsage,
     usageTimer: setInterval(() => syncUsage().catch(() => {}), usageSyncIntervalMilliseconds),
   })
@@ -159,9 +179,11 @@ const app = createApp({
   agentBridge,
   ...placement,
   fakeLlm: createFakeLlm(async (request, isClassifier, prompt) => {
-    const chatScript = scriptByChat.get(request.headers.get('x-hq-chat') ?? (await chatKeyOfPrompt(prompt)))
+    const chatKey = request.headers.get('x-hq-chat') ?? (await chatKeyOfPrompt(prompt))
+    const chatScript = scriptByChat.get(chatKey)
     if (!isClassifier) chatScript?.used.resolve(true)
-    return chatScript?.script
+    const [databaseName = ''] = chatKey.split('/')
+    return chatScript && { ...chatScript.script, held: (name: string) => waitForRelease(databaseName, name) }
   }),
 })
   .post('/test/release-database', async (context) => {
@@ -181,6 +203,11 @@ const app = createApp({
     if (!chat) {
       if (llmGateway.listedModels().length === 0) await llmGateway.refreshListedModels()
       for (const key of scriptByChat.keys()) if (key.startsWith(`${db}/`)) scriptByChat.delete(key)
+      for (const [key, hold] of holdByKey)
+        if (key.startsWith(`${db}/`)) {
+          hold.released.resolve()
+          holdByKey.delete(key)
+        }
       return context.body(null, 204)
     }
     const previous = scriptByChat.get(`${db}/${chat}`)
@@ -205,9 +232,21 @@ const app = createApp({
     return context.body(null, 204)
   })
   .post('/test/fake-boot', (context) => {
-    const { db = '', milliseconds } = context.req.query()
-    if (milliseconds) bootMillisecondsByDatabase.set(db, Number(milliseconds))
-    else bootMillisecondsByDatabase.delete(db)
+    const { db = '', hold } = context.req.query()
+    if (hold) bootHoldByDatabase.set(db, hold)
+    else bootHoldByDatabase.delete(db)
+    return context.body(null, 204)
+  })
+  .post('/test/hold', async (context) => {
+    const { db = '', name = '' } = context.req.query()
+    await waitForRelease(db, name)
+    return context.body(null, 204)
+  })
+  .post('/test/release', async (context) => {
+    const { db = '', name = '' } = context.req.query()
+    const hold = holdOf(db, name)
+    await hold.reached.promise
+    hold.released.resolve()
     return context.body(null, 204)
   })
   .post('/test/gateway', (context) => {
@@ -220,11 +259,15 @@ const app = createApp({
     const { db = '', online, forgetSessions, keepAgentsOf } = context.req.query()
     let fakeHost = fakeHostByDatabase.get(db)
     if (!fakeHost) {
-      const relay = createHqAgentRelay({ gapMilliseconds: stubGapMilliseconds, modelCall: () => created.modelCall })
+      const relay = createHqAgentRelay({
+        gapMilliseconds: stubGapMilliseconds,
+        holdUrl: holdUrlOf(db),
+        modelCall: () => created.modelCall,
+      })
       const created = await createFakeHosts({ port, database: databaseByName(db) }).fakeHost('e2e fake host', {
         memoryGibibytes: 16,
         agentServer: relay.agentServer,
-        bootMilliseconds: bootMillisecondsOf(db),
+        boot: bootOf(db),
       })
       fakeHost = { host: created, relay, isOnline: true }
       fakeHostByDatabase.set(db, fakeHost)
@@ -241,11 +284,11 @@ const app = createApp({
     if (owner) {
       await fakeMachineByDatabase.get(db)?.host.disconnect()
       await fakeMachineByDatabase.get(db)?.relay.stop()
-      const relay = createHqAgentRelay({ gapMilliseconds: stubGapMilliseconds })
+      const relay = createHqAgentRelay({ gapMilliseconds: stubGapMilliseconds, holdUrl: holdUrlOf(db) })
       const host = await createFakeHosts({ port, database: databaseByName(db) }).fakeHost('My machine', {
         memoryGibibytes: 16,
         agentServer: relay.agentServer,
-        bootMilliseconds: bootMillisecondsOf(db),
+        boot: bootOf(db),
         ownerId: owner,
         signedIn: (signedIn ?? '').split(',').filter(Boolean),
       })
@@ -288,4 +331,4 @@ const app = createApp({
     return context.json(await issueTestSession(databaseByName(db), workspace, user, db))
   })
 
-export default { port, hostname: '0.0.0.0', fetch: app.fetch, websocket }
+export default { port, hostname: '0.0.0.0', idleTimeout: 0, fetch: app.fetch, websocket }

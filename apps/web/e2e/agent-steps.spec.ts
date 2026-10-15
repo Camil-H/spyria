@@ -14,8 +14,8 @@ const research = 'chat-research'
 const thinking = 'I will check the toolchain, then fix the totals.'
 const fixedText = 'Fixed the totals and added the tax line.'
 const createTotals = `python3 --version && printf 'export const total = 1\\n' > totals.ts`
-const fixSteps = (commandPrefix = '') => [
-  { think: thinking },
+const fixSteps = (commandPrefix = '', thinkingHold?: string) => [
+  { think: thinking, hold: thinkingHold },
   { command: `${commandPrefix}${createTotals}` },
   {
     edit: {
@@ -38,18 +38,24 @@ test.beforeEach(async ({ page }) => {
 test('11. steps show live while the agent works: thinking, the running command, its exit code, then the edit', async ({
   page,
   agentScript,
+  release,
+  heldCommand,
 }) => {
-  await agentScript(research, { wordDelayMilliseconds: 300, steps: fixSteps('sleep 2 && '), text: fixedText })
+  const steps = fixSteps(`${heldCommand('command')} && `, 'thinking')
+  await agentScript(research, { steps, text: fixedText, hold: 'answer' })
   await sendMessage(page, 'Fix the totals')
 
   await expect(itemsWith(page, 'Thinking…')).toHaveCount(1)
+  await release('thinking')
   const command = itemsWith(page, 'python3 --version')
   await expect(command.getByRole('img', { name: 'Running' })).toBeVisible()
+  await release('command')
   await expect(command.getByRole('img', { name: 'Succeeded' })).toBeVisible()
   await expect(command).toContainText('exit 0')
   await expect(itemsWith(page, 'Edited totals.ts +2 −1')).toHaveCount(1)
   await expect(workingIndicatorOf(page)).toBeVisible()
   await expect(itemsWith(page, fixedText)).toHaveCount(0)
+  await release('answer')
   await expect(itemsWith(page, fixedText)).toHaveCount(1)
 })
 

@@ -12,7 +12,7 @@ import {
 import { openPageAs, type WorkerStack } from './stack'
 
 const research = 'chat-research'
-const slowScript = { wordDelayMilliseconds: 4000 }
+const heldScript = { hold: 'answer' }
 const newSessionNotice = 'The agent started a new session; it does not remember earlier messages'
 const runtimeStatusOf = (page: Page) => mainOf(page).getByRole('status', { name: 'Runtime' })
 const stopButtonOf = (page: Page) => mainOf(page).getByRole('button', { name: 'Stop' })
@@ -48,7 +48,7 @@ test.beforeEach(async ({ page }) => {
 })
 
 test.describe('without a warm runtime', () => {
-  test.use({ warmRuntimes: false, fakeBootMilliseconds: 1_500 })
+  test.use({ warmRuntimes: false, fakeBootHold: 'boot' })
 
   test('1. a runtime chat without a runtime shows Not started; a channel shows no runtime status', async ({ page }) => {
     await openChat(page, 'Research')
@@ -60,6 +60,7 @@ test.describe('without a warm runtime', () => {
   test('5. a runtime that cannot start shows one Could not start · Retry chip and a notice; clicking it starts the runtime and answers the prompt', async ({
     page,
     failRuntimeCreation,
+    release,
   }) => {
     await failRuntimeCreation(true)
     await openChat(page, 'Research')
@@ -75,6 +76,7 @@ test.describe('without a warm runtime', () => {
 
     await expect(runtimeStatusOf(page)).toHaveText('Starting…')
     await expect(retryButtonOf(page)).toHaveCount(0)
+    await release('boot')
     await expect(runtimeStatusOf(page)).toHaveText('Ready')
     await expect(itemsWith(page, agentReplyText)).toHaveCount(1)
     await expect(messageItemsOf(page)).toHaveCount(3)
@@ -88,8 +90,9 @@ test.describe('without a warm runtime', () => {
     browser,
     workerStack,
     agentScript,
+    release,
   }) => {
-    await agentScript(research, slowScript)
+    await agentScript(research, heldScript)
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
     await openChat(bobPage, 'Research')
     await expect(runtimeStatusOf(bobPage)).toHaveText('Not started')
@@ -97,6 +100,7 @@ test.describe('without a warm runtime', () => {
     await sendMessage(page, 'Work while Bob watches')
 
     await expect(runtimeStatusOf(bobPage)).toHaveText('Starting…')
+    await release('boot')
     await expect(runtimeStatusOf(bobPage)).toHaveText('Ready')
     await expect(workingIndicatorOf(bobPage)).toBeVisible()
     await expect(stopButtonOf(bobPage)).toBeVisible()
@@ -111,12 +115,13 @@ test.describe('without a warm runtime', () => {
   })
 })
 
-test.describe('a warm runtime with a slow boot', () => {
-  test.use({ fakeBootMilliseconds: 1_500 })
+test.describe('a warm runtime with a held boot', () => {
+  test.use({ fakeBootHold: 'boot' })
 
   test('3. after the idle stop the header shows Sleeping; a prompt wakes the runtime and keeps the history', async ({
     page,
     workerStack,
+    release,
   }) => {
     await openChat(page, 'Research')
     await expect(runtimeStatusOf(page)).toHaveText('Ready')
@@ -127,6 +132,7 @@ test.describe('a warm runtime with a slow boot', () => {
 
     await sendMessage(page, 'After the sleep')
     await expect(runtimeStatusOf(page)).toHaveText('Starting…')
+    await release('boot')
     await expect(runtimeStatusOf(page)).toHaveText('Ready')
     await expect(itemsWith(page, agentReplyText)).toHaveCount(2)
     await expect(messageItemsOf(page)).toHaveCount(4)
@@ -158,7 +164,7 @@ test('8. a runtime stopped mid-turn ends the turn with a notice, and the next pr
   workerStack,
   agentScript,
 }) => {
-  await agentScript(research, slowScript)
+  await agentScript(research, heldScript)
   await openChat(page, 'Research')
   await sendMessage(page, 'Work until stopped')
   await expect(stopButtonOf(page)).toBeVisible()

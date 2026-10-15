@@ -45,10 +45,12 @@ const serveGateway = (modelCall: () => ModelCall) =>
 export const createHqAgentRelay = ({
   gapMilliseconds = 20,
   startFails = false,
+  holdUrl,
   modelCall,
 }: {
   gapMilliseconds?: number
   startFails?: boolean
+  holdUrl?: string
   modelCall?: () => ModelCall
 } = {}) => {
   const directory = mkdtempSync(join(tmpdir(), 'hq-agent-relay-'))
@@ -63,7 +65,7 @@ export const createHqAgentRelay = ({
   ])
     writeFileSync(
       join(shims, command),
-      `#!/bin/sh\nexec env ${startFails ? 'STUB_FAIL_START=1 ' : ''}${gateway ? `STUB_GATEWAY=http://localhost:${gateway.port} ` : ''}STUB_FLAVOUR=${flavour} STUB_STATE=${directory}/sessions STUB_GAP_MS=${gapMilliseconds} node ${repositoryRoot}apps/agent/fixtures/stub-acp-agent.mjs "$@"\n`,
+      `#!/bin/sh\nexec env ${startFails ? 'STUB_FAIL_START=1 ' : ''}${gateway ? `STUB_GATEWAY=http://localhost:${gateway.port} ` : ''}${holdUrl ? `STUB_HOLD_URL='${holdUrl}' ` : ''}STUB_FLAVOUR=${flavour} STUB_STATE=${directory}/sessions STUB_GAP_MS=${gapMilliseconds} node ${repositoryRoot}apps/agent/fixtures/stub-acp-agent.mjs "$@"\n`,
       { mode: 0o755 },
     )
   const agents = new Map<string, Promise<Agent>>()

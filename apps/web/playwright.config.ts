@@ -4,7 +4,7 @@ import { viteUrl } from './e2e/stack-ports.ts'
 export default defineConfig({
   testDir: 'e2e',
   fullyParallel: true,
-  workers: Number(process.env.WORKERS ?? 2),
+  workers: Number(process.env.WORKERS ?? 3),
   globalSetup: './e2e/global-setup.ts',
   timeout: 60_000,
   expect: { timeout: 15_000 },

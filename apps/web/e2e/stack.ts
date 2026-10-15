@@ -50,6 +50,7 @@ const testGateway = testGatewayAt(gatewayUrl)
 type AgentScript = {
   text?: string
   wordDelayMilliseconds?: number
+  hold?: string
   command?: string
   steps?: object[]
   route?: object | string
@@ -139,13 +140,15 @@ type TestOptions = ResetOptions & {
   resetStack: undefined
   agentScript: (chatId: string, script: AgentScript) => Promise<void>
   failRuntimeCreation: (isFailing: boolean) => Promise<void>
-  fakeBootMilliseconds: number | undefined
+  fakeBootHold: string | undefined
+  release: (name: string) => Promise<void>
+  heldCommand: (name: string) => string
 }
 
 export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
   signedInAs: [aliceMemberId, { option: true }],
   tokenSeconds: [undefined, { option: true }],
-  fakeBootMilliseconds: [undefined, { option: true }],
+  fakeBootHold: [undefined, { option: true }],
   workerStack: [
     async ({ browserName: _ }, use, workerInfo) => {
       const index = workerInfo.parallelIndex
@@ -288,18 +291,13 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
   runtimeHost: [true, { option: true }],
   warmRuntimes: [true, { option: true }],
   resetStack: [
-    async (
-      { workerStack, context, signedInAs, tokenSeconds, runtimeHost, warmRuntimes, fakeBootMilliseconds },
-      use,
-    ) => {
+    async ({ workerStack, context, signedInAs, tokenSeconds, runtimeHost, warmRuntimes, fakeBootHold }, use) => {
       await postToServer('/test/fake-llm-script', { db: workerStack.databaseName })
-      await postToServer('/test/fake-boot', {
-        db: workerStack.databaseName,
-        milliseconds: String(fakeBootMilliseconds ?? ''),
-      })
+      await postToServer('/test/fake-boot', { db: workerStack.databaseName })
       await postToServer('/test/runtime-creation', { db: workerStack.databaseName, failing: 'false' })
       await workerStack.setGatewayReachable(true)
       await workerStack.reset({ runtimeHost, warmRuntimes })
+      if (fakeBootHold) await postToServer('/test/fake-boot', { db: workerStack.databaseName, hold: fakeBootHold })
       await signIn(context, workerStack, signedInAs, tokenSeconds)
       await use(undefined)
     },
@@ -313,6 +311,17 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
         { body: JSON.stringify(script) },
       )
     })
+  },
+  release: async ({ workerStack }, use) => {
+    await use(async (name) => {
+      await postToServer('/test/release', { db: workerStack.databaseName, name })
+    })
+  },
+  heldCommand: async ({ workerStack }, use) => {
+    await use(
+      (name) =>
+        `curl -sf -X POST '${serverUrl}/test/hold?${new URLSearchParams({ db: workerStack.databaseName, name })}'`,
+    )
   },
   failRuntimeCreation: async ({ workerStack }, use) => {
     await use(async (isFailing) => {

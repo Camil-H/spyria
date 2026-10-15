@@ -38,11 +38,12 @@ const clientCode = readdirSync(`${distDirectory}assets`)
   .toLowerCase()
 for (const statement of serverOnlySql)
   if (clientCode.includes(statement)) failures.push(`client assets contain server-only SQL "${statement}"`)
+if (clientCode.includes('hqteststack')) failures.push('client assets contain the e2e test hook hqTestStack')
 
 if (failures.length > 0) {
   console.error(failures.join('\n'))
   process.exit(1)
 }
 console.log(
-  `Bundle gates passed: main chunk ${mainChunkBytes} bytes, React ${[...reactVersions].join('')}, no server-only SQL, Markdown and highlighting lazy`,
+  `Bundle gates passed: main chunk ${mainChunkBytes} bytes, React ${[...reactVersions].join('')}, no server-only SQL, no test hook, Markdown and highlighting lazy`,
 )

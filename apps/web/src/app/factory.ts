@@ -21,9 +21,10 @@ import { type WorkspaceCommands, workspaceMutators } from '@hq/workspace/server'
 import { logOut, openSession, renew, signInWithPopup } from './auth.ts'
 
 const zeroCacheURL = import.meta.env.VITE_ZERO_URL ?? 'http://localhost:4848'
-const testStack = import.meta.env.DEV
-  ? (window as Window & { hqTestStack?: { zeroCacheURL: string } }).hqTestStack
-  : undefined
+const testStack =
+  import.meta.env.MODE === 'e2e'
+    ? (window as Window & { hqTestStack?: { zeroCacheURL: string } }).hqTestStack
+    : undefined
 
 type CommandInput = { workspaceId: WorkspaceId; [argument: string]: unknown }
 type Mutator = (args: never) => Parameters<Store['mutate']>[1]
