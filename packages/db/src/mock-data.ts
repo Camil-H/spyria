@@ -63,6 +63,7 @@ const chat = (
   subagentPolicy: 'auto',
   harness: null,
   localSession: false,
+  isPlanning: false,
   gitBranch: runtime?.gitBranch ?? null,
   originChatId: null,
   agentTurnMessageId: null,

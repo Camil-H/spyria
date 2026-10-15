@@ -6,7 +6,7 @@ const allowedRequests = [
   /^GET \/ready$/,
   /^POST \/api\/conversations$/,
   new RegExp(`^(GET|DELETE) ${conversationPath}$`),
-  new RegExp(`^POST ${conversationPath}/(events|interrupt|switch_acp_model)$`),
+  new RegExp(`^POST ${conversationPath}/(events|interrupt|switch_acp_model|plan_mode|questions/${conversationId})$`),
   new RegExp(`^WS /sockets/events/${conversationId}(\\?after=\\d+)?$`),
 ]
 const tokenFormat = /sk-ant-(?:oat|ort)[\w-]*|eyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]+/g

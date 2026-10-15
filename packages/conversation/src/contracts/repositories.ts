@@ -73,6 +73,7 @@ export type ChatRepository = {
   isSessionStartPending(chatId: ChatId): Promise<boolean>
   dropRuntime(chatId: ChatId): Promise<void>
   hasMachine(memberId: MemberId): Promise<boolean>
+  setPlanning(chatId: ChatId, isPlanning: boolean): Promise<void>
 }
 
 export type ChatRouting = Readonly<{

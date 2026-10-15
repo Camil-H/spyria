@@ -41,6 +41,7 @@ export type Conversation = Readonly<{
   subagentPolicy: ChatRow['subagentPolicy']
   harness: ChatRow['harness']
   localSession: boolean
+  isPlanning: boolean
   runsOn: RunsOn | null
   isOwner: boolean
   runsOnChoices: readonly RunsOn[] | null
@@ -244,6 +245,7 @@ export const getConversation =
       subagentPolicy: chat.subagentPolicy,
       harness: chat.harness,
       localSession: chat.localSession === true,
+      isPlanning: chat.isPlanning,
       runsOn: runsOnOf(chat),
       isOwner,
       runsOnChoices,

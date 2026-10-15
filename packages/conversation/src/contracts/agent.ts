@@ -65,6 +65,8 @@ export type AgentServer = {
   ): Promise<string>
   switchAcpModel(conversation: AgentConversation, model: string, thoughtLevel?: string): Promise<void>
   sendMessage(conversation: AgentConversation, text: string): Promise<void>
+  answerQuestion(conversation: AgentConversation, questionId: string, answer: object): Promise<number>
+  setPlanMode(conversation: AgentConversation, enabled: boolean): Promise<number>
   statusOf(conversation: AgentConversation): Promise<string | undefined>
   interrupt(conversation: AgentConversation): Promise<void>
   deleteConversation(conversation: AgentConversation): Promise<void>

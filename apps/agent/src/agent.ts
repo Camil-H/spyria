@@ -11,7 +11,12 @@ import {
 type Status = 'starting' | 'idle' | 'running' | 'finished' | 'error'
 type AgentEvent = { id: string; seq: number; timestamp: string; completed: boolean; update: Json }
 type SocketData = { conversationId: string; after: number; isAuthenticated: boolean }
-type Answer = { answers?: Record<string, string | string[]>; free?: Record<string, string>; approve?: boolean }
+type Answer = {
+  answers?: Record<string, string | string[]>
+  free?: Record<string, string>
+  approve?: boolean
+  answeredBy?: string
+}
 type PendingQuestion = PromiseWithResolvers<Json> & {
   requestId: number | string
   update: Json
@@ -35,6 +40,8 @@ type Conversation = {
   isLoading: boolean
   isSub: boolean
   modeId?: string
+  modeIds: string[]
+  modeAfterPlan?: string
   keptPlanning: boolean
   questions: Map<string, PendingQuestion>
   configOptions: Json[]
@@ -60,6 +67,7 @@ const inheritedEnvironment = ['PATH', 'HOME', 'LANG', 'TMPDIR', 'CLAUDE_CODE_EXE
 const defaultWorkingDirectory = '/workspace/project'
 const permissiveModes = ['bypassPermissions', 'agent-full-access']
 const planMode = 'plan'
+const collaborationMode = 'collaboration_mode'
 const planOptionIds = { approve: ['exit-plan-bypass', 'implement_plan'], keepPlanning: ['reject', 'revise_plan'] }
 const formShapes: Record<'claudeCode' | 'codex', FormShape> = {
   claudeCode: { free: '_custom', header: 'title', text: 'description' },
@@ -69,7 +77,7 @@ const subAnswerText = 'No member is available; decide yourself and state your as
 const cancelledPermission = { outcome: { outcome: 'cancelled' } }
 const terminalToolStatuses = ['completed', 'failed']
 const conversationRoute =
-  /^\/api\/conversations\/([\w-]+)(?:\/(events|interrupt|switch_acp_model)|\/questions\/([\w-]+))?$/
+  /^\/api\/conversations\/([\w-]+)(?:\/(events|interrupt|switch_acp_model|plan_mode)|\/questions\/([\w-]+))?$/
 const socketRoute = /^\/sockets\/events\/([\w-]+)$/
 
 const adapterEnvironmentOf = (secrets: Launch['secrets']) => ({
@@ -201,6 +209,7 @@ export const startAgent = ({
       sessionUpdate: 'question_answered',
       ...pending.update,
       ...(isPlan ? { approved: body.approve } : { answers: body.answers ?? {}, ...(body.free && { free: body.free }) }),
+      ...(typeof body.answeredBy === 'string' && { answeredBy: body.answeredBy }),
     })
     return true
   }
@@ -294,8 +303,8 @@ export const startAgent = ({
     emit(conversation, { ...merged, sessionUpdate: 'tool_call_update' }, true)
   }
 
-  const setConfigOption = async (conversation: Conversation, category: string, value: string) => {
-    const option = conversation.configOptions.find((candidate) => candidate.category === category)
+  const setConfigOption = async (conversation: Conversation, key: string, value: string) => {
+    const option = conversation.configOptions.find((candidate) => candidate.category === key || candidate.id === key)
     if (!option || !conversation.sessionId) return false
     const result = await conversation.connection.request('session/set_config_option', {
       sessionId: conversation.sessionId,
@@ -313,6 +322,20 @@ export const startAgent = ({
     if (thoughtLevel && thoughtLevels.some((level) => level.value === thoughtLevel))
       await setConfigOption(conversation, 'thought_level', thoughtLevel)
     emit(conversation, { sessionUpdate: 'config_option_update', configOptions: conversation.configOptions })
+  }
+
+  const setPlanMode = async (conversation: Conversation, enabled: boolean) => {
+    if (await setConfigOption(conversation, collaborationMode, enabled ? planMode : 'default')) {
+      emit(conversation, { sessionUpdate: 'config_option_update', configOptions: conversation.configOptions })
+      return true
+    }
+    if (!conversation.sessionId || !conversation.modeIds.includes(planMode)) return false
+    if (enabled && conversation.modeId !== planMode) conversation.modeAfterPlan = conversation.modeId
+    const modeId = enabled ? planMode : (conversation.modeAfterPlan ?? 'default')
+    await conversation.connection.request('session/set_mode', { sessionId: conversation.sessionId, modeId })
+    conversation.modeId = modeId
+    emit(conversation, { sessionUpdate: 'current_mode_update', currentModeId: modeId })
+    return true
   }
 
   const start = async (conversation: Conversation, { agent, workspace }: Launch) => {
@@ -352,6 +375,8 @@ export const startAgent = ({
     conversation.sessionId = sessionId
     conversation.configOptions = Array.isArray(session.configOptions) ? session.configOptions : []
     conversation.modeId = permissiveMode ?? modes?.currentModeId ?? modeOf(conversation.configOptions)
+    conversation.modeIds = modes?.availableModes?.map((mode) => mode.id) ?? []
+    conversation.modeAfterPlan = conversation.modeId
     emit(conversation, {
       sessionUpdate: 'session_started',
       sessionId,
@@ -374,6 +399,7 @@ export const startAgent = ({
       status: 'starting',
       isLoading: false,
       isSub: Boolean(launch.parent_conversation_id),
+      modeIds: [],
       keptPlanning: false,
       questions: new Map(),
       configOptions: [],
@@ -480,6 +506,13 @@ export const startAgent = ({
       const { model, thoughtLevel } = (await request.json()) as { model?: string; thoughtLevel?: string }
       await switchModel(conversation, String(model), thoughtLevel)
       return Response.json({})
+    }
+    if (action === 'plan_mode') {
+      const { enabled } = (await request.json()) as { enabled?: unknown }
+      if (typeof enabled !== 'boolean') return Response.json({ error: 'enabled must be a boolean' }, { status: 400 })
+      return (await setPlanMode(conversation, enabled))
+        ? Response.json({})
+        : Response.json({ error: 'The agent has no plan mode' }, { status: 409 })
     }
     return Response.json({ error: 'Not found' }, { status: 404 })
   }

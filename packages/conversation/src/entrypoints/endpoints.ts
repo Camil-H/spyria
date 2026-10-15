@@ -9,6 +9,7 @@ import {
 import type { ZeroContext } from '@hq/db/zero-queries'
 import { chatModelsOf, type Model, routableModelNames, withPricesOf } from '@hq/kernel'
 import type { Transaction } from '@rocicorp/zero'
+import { z } from 'zod/mini'
 import { type AgentEvent, agentProjectionOf } from '../domain/agent-events.ts'
 import { textOf } from '../domain/agent-steps.ts'
 
@@ -51,3 +52,18 @@ export const readChatRouting = async (
     hqRuntimeAvailable,
   }
 }
+
+export const chatQuestionPathOf = (chatId: string, questionId: string) => `/api/chats/${chatId}/questions/${questionId}`
+export const chatPlanModePathOf = (chatId: string) => `/api/chats/${chatId}/plan-mode`
+
+const questionAnswer = z.union([
+  z.object({ approve: z.boolean() }),
+  z.object({
+    answers: z.record(z.string(), z.union([z.string(), z.array(z.string())])),
+    free: z.optional(z.record(z.string(), z.string())),
+  }),
+])
+const planMode = z.object({ enabled: z.boolean() })
+
+export const questionAnswerOf = (body: unknown) => questionAnswer.safeParse(body).data
+export const planModeOf = (body: unknown) => planMode.safeParse(body).data

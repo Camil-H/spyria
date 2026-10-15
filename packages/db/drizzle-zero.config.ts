@@ -24,6 +24,7 @@ export default drizzleZeroConfig(tables, {
       subagentPolicy: true,
       harness: true,
       localSession: true,
+      isPlanning: true,
       gitBranch: true,
       originChatId: true,
       agentTurnMessageId: true,

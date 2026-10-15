@@ -30,6 +30,27 @@ export type AgentStep =
     }
   | { type: 'plan'; items: { title: string; status: string }[] }
   | { type: 'error'; message: string }
+  | {
+      type: 'question'
+      questionId: string
+      toolCallId?: string
+      kind: 'question' | 'plan'
+      questions?: AgentQuestion[]
+      plan?: string
+      answers?: Record<string, string | string[]>
+      free?: Record<string, string>
+      approved?: boolean
+      answeredBy?: string
+      closed?: 'stopped' | 'cancelled' | 'turn_end'
+    }
+export type AgentQuestion = {
+  id: string
+  header?: string
+  text: string
+  options: { value: string; label: string; description?: string }[]
+  multi: boolean
+  free: boolean
+}
 export type StepDelegation = { id: string; model: string; modelName: string; task: string; fallback?: string }
 export type StoredStep = AgentStep & { thought?: ThoughtStep; delegation?: StepDelegation }
 export type Fields = Record<string, unknown> | undefined

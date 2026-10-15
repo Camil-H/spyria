@@ -21,6 +21,7 @@ const models =
         { value: 'stub-large', name: 'Large (stub)' },
       ]
 const isPi = process.env.STUB_FLAVOUR === 'pi'
+const isCodex = process.env.STUB_FLAVOUR === 'codex'
 const thoughtLevels = ['off', 'low', 'medium', 'high']
 const modes = process.env.STUB_MODES?.split(',') ?? ['default', 'plan', 'bypassPermissions']
 const sessions = new Map()
@@ -34,7 +35,7 @@ const save = (sessionId, session) => {
   mkdirSync(stateDirectory, { recursive: true })
   writeFileSync(sessionFile(sessionId), JSON.stringify({ prompts: session.prompts }))
 }
-const configOptionsOf = ({ model, mode, thought_level }) => [
+const configOptionsOf = ({ model, mode, thought_level, collaboration_mode }) => [
   {
     id: 'mode',
     name: 'Mode',
@@ -53,6 +54,17 @@ const configOptionsOf = ({ model, mode, thought_level }) => [
           category: 'thought_level',
           currentValue: thought_level,
           options: thoughtLevels.map((value) => ({ value, name: value })),
+        },
+      ]
+    : []),
+  ...(isCodex
+    ? [
+        {
+          id: 'collaboration_mode',
+          name: 'Collaboration mode',
+          type: 'select',
+          currentValue: collaboration_mode,
+          options: ['default', 'plan'].map((value) => ({ value, name: value })),
         },
       ]
     : []),
@@ -593,6 +605,7 @@ const opened = (sessionId, prompts) => {
     model: models[0].value,
     mode: 'default',
     thought_level: 'medium',
+    collaboration_mode: 'default',
     current: undefined,
     history: [],
     tools: undefined,

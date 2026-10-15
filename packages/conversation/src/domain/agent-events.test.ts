@@ -3,6 +3,7 @@ import {
   type AgentEvent,
   agentNotices,
   agentProjectionOf,
+  isPlanningOf,
   isStoredAgentEvent,
   notReadyNoticeOf,
   startFailureNoticeOf,
@@ -363,6 +364,48 @@ test('hq-agent chunks stream and are never stored, while completed items and too
   expect(isStored({ sessionUpdate: 'tool_call_update' }, true)).toBe(true)
   expect(isStored({ sessionUpdate: 'turn_end' }, true)).toBe(true)
   expect(isStored({ sessionUpdate: 'plan' }, true)).toBe(true)
+})
+
+test('answered and closed questions are stored as one question step each, live questions are not, and a kept plan ends the turn', () => {
+  const question = {
+    questionId: 'q1',
+    toolCallId: 'ask-1',
+    kind: 'question' as const,
+    questions: [{ id: 'question_0', text: 'Which?', options: [], multi: false, free: true }],
+  }
+  expect(isStoredAgentEvent(acpUpdate(1, { sessionUpdate: 'question', ...question }, false))).toBe(false)
+  const answered = acpUpdate(2, { sessionUpdate: 'question_answered', ...question, answers: {}, answeredBy: 'm1' })
+  const closed = acpUpdate(3, { sessionUpdate: 'question_closed', kind: 'plan', questionId: 'q2', reason: 'stopped' })
+  expect([answered, closed].every(isStoredAgentEvent)).toBe(true)
+  expect(agentProjectionOf(answered)).toEqual({
+    type: 'step',
+    step: { type: 'question', ...question, answers: {}, answeredBy: 'm1' },
+  })
+  expect(agentProjectionOf(closed)).toEqual({
+    type: 'step',
+    step: { type: 'question', kind: 'plan', questionId: 'q2', closed: 'stopped' },
+  })
+  expect(
+    agentProjectionOf(acpUpdate(4, { sessionUpdate: 'turn_end', stopReason: 'cancelled', keptPlanning: true })),
+  ).toEqual({ type: 'turn-end', outcome: 'finished' })
+})
+
+test('plan mode follows the mode update, the mode or collaboration mode option, and a new session', () => {
+  const planningOf = (update: Record<string, unknown>) => isPlanningOf(acpUpdate(1, update))
+  const options = (mode: string, collaboration?: string) => [
+    { id: 'mode', category: 'mode', currentValue: mode },
+    { id: 'model', category: 'model', currentValue: 'm' },
+    ...(collaboration ? [{ id: 'collaboration_mode', currentValue: collaboration }] : []),
+  ]
+  expect(planningOf({ sessionUpdate: 'current_mode_update', currentModeId: 'plan' })).toBe(true)
+  expect(planningOf({ sessionUpdate: 'current_mode_update', currentModeId: 'bypassPermissions' })).toBe(false)
+  expect(planningOf({ sessionUpdate: 'config_option_update', configOptions: options('plan') })).toBe(true)
+  expect(planningOf({ sessionUpdate: 'config_option_update', configOptions: options('agent', 'plan') })).toBe(true)
+  expect(planningOf({ sessionUpdate: 'config_option_update', configOptions: options('agent', 'default') })).toBe(false)
+  expect(planningOf({ sessionUpdate: 'config_option_update', configOptions: [{ category: 'model' }] })).toBeUndefined()
+  expect(planningOf({ sessionUpdate: 'session_started', configOptions: [] })).toBe(false)
+  expect(planningOf({ sessionUpdate: 'turn_end' })).toBeUndefined()
+  expect(isStoredAgentEvent(acpUpdate(1, { sessionUpdate: 'current_mode_update' }))).toBe(true)
 })
 
 test('an hq-agent plan update becomes a plan step with its entries mapped to HQ statuses', () => {

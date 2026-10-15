@@ -10,7 +10,16 @@ export {
   toolServerOf,
 } from './domain/tool-calls.ts'
 export type { AgentStream, ConversationCommands } from './entrypoints/commands.ts'
-export { chatRoutingPathOf, commandOutputPathOf, readChatRouting, readCommandOutput } from './entrypoints/endpoints.ts'
+export {
+  chatPlanModePathOf,
+  chatQuestionPathOf,
+  chatRoutingPathOf,
+  commandOutputPathOf,
+  planModeOf,
+  questionAnswerOf,
+  readChatRouting,
+  readCommandOutput,
+} from './entrypoints/endpoints.ts'
 export { createAgentHandlers } from './entrypoints/jobs.ts'
 export { conversationMutators } from './entrypoints/mutators.ts'
 export { createGatewaySessionClassifier } from './integrations/gateway-session-classifier.ts'

@@ -390,12 +390,17 @@ test('a Claude Code question waits for an answer: a pick, a free answer and a sk
     update: { sessionUpdate: 'question', ...question },
   })
   expect((await answerTo(questionId, { approve: true })).status).toBe(400)
-  expect((await answerTo(questionId, { answers: { question_0: 'SQLite' } })).status).toBe(200)
+  expect((await answerTo(questionId, { answers: { question_0: 'SQLite' }, answeredBy: 'member-1' })).status).toBe(200)
   await socket.until(kindOf('turn_end'))
   expect(answerOf(socket.events)).toEqual({ action: 'accept', content: { question_0: 'SQLite' } })
   expect(socket.events.find(kindOf('question_answered'))).toMatchObject({
     completed: true,
-    update: { sessionUpdate: 'question_answered', ...question, answers: { question_0: 'SQLite' } },
+    update: {
+      sessionUpdate: 'question_answered',
+      ...question,
+      answers: { question_0: 'SQLite' },
+      answeredBy: 'member-1',
+    },
   })
   expect((await answerTo(questionId, { answers: { question_0: 'Postgres' } })).status).toBe(409)
 
@@ -545,6 +550,46 @@ test('plan approval: approve and keep planning map to the Claude Code and Codex 
   const revised = await decide('stub:plan-codex', false, 6)
   expect(textOf(revised)).toStartWith('plan:revise_plan ')
   expect(revised.find(kindOf('turn_end'))?.update).toEqual({ sessionUpdate: 'turn_end', stopReason: 'end_turn' })
+})
+
+test("the plan mode route sets Claude Code's mode and back, Codex's collaboration mode, and refuses an agent without either", async () => {
+  const { call, open, create, prompt } = started()
+  const planMode = (id: string, enabled: unknown) => call('POST', `/api/conversations/${id}/plan_mode`, { enabled })
+  const claude = await create(launchOf())
+  const socket = open(claude)
+  expect((await planMode(claude, 'yes')).status).toBe(400)
+  expect((await planMode(claude, true)).status).toBe(200)
+  await prompt(claude, 'stub:write')
+  await socket.until(kindOf('turn_end'))
+  expect(socket.events.find(kindOf('current_mode_update'))).toMatchObject({
+    completed: true,
+    update: { currentModeId: 'plan' },
+  })
+  expect(textOf(socket.events)).toBe('[t1] write:reject Hello from the stub (model stub-default, mode plan).')
+  expect((await planMode(claude, false)).status).toBe(200)
+  await prompt(claude, 'stub:write')
+  await socket.until(kindOf('turn_end'), 2)
+  expect(socket.events.filter(kindOf('current_mode_update')).at(-1)?.update.currentModeId).toBe('bypassPermissions')
+  expect(textOf(socket.events.slice(-5))).toContain(
+    'write:allow-once Hello from the stub (model stub-default, mode bypassPermissions).',
+  )
+
+  const codex = await create(launchOf({ acp_command: ['env', 'STUB_FLAVOUR=codex', ...stubCommand.slice(1)] }))
+  const codexSocket = open(codex)
+  expect((await planMode(codex, true)).status).toBe(200)
+  const collaborationOf = (events: AgentEvent[]) =>
+    (
+      events.findLast(kindOf('config_option_update'))?.update.configOptions as
+        | { id: string; currentValue: string }[]
+        | undefined
+    )?.find((option) => option.id === 'collaboration_mode')?.currentValue
+  expect(collaborationOf(await codexSocket.until(kindOf('config_option_update')))).toBe('plan')
+  expect((await planMode(codex, false)).status).toBe(200)
+  expect(collaborationOf(await codexSocket.until(kindOf('config_option_update'), 2))).toBe('default')
+
+  const modes = 'STUB_MODES=read-only,agent-full-access'
+  const neither = await create(launchOf({ acp_command: ['env', modes, ...stubCommand.slice(1)] }))
+  expect((await planMode(neither, true)).status).toBe(409)
 })
 
 test('a Codex session selects full access among its listed modes', async () => {

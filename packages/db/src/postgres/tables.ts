@@ -127,6 +127,7 @@ export const chats = table(
     agentModel: text(),
     harness: text().$type<'claude-code' | 'codex'>(),
     localSession: boolean().default(false),
+    isPlanning: boolean().notNull().default(false),
     gitBranch: text(),
     originChatId: text(),
     agentTurnMessageId: text(),

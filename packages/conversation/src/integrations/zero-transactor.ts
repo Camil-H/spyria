@@ -294,6 +294,11 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         )) !== undefined ||
         (await lastAgentEvent(tx, contextWorkspaceId, id)) !== undefined,
       isSessionStartPending: (id) => isSessionStartPending(tx, contextWorkspaceId, id),
+      setPlanning: async (id, isPlanning) => {
+        const row = await tx.run(zql.chats.where('workspaceId', contextWorkspaceId).where('id', id).one())
+        if (row && (row.isPlanning ?? false) !== isPlanning)
+          await tx.mutate.chats.update({ workspaceId: contextWorkspaceId, id, isPlanning })
+      },
       dropRuntime: async (id) => {
         if (tx.location === 'server')
           await removeChatRuntime(

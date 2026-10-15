@@ -123,6 +123,8 @@ test.each([
   ['DELETE', '/api/conversations'],
   ['POST', `/api/conversations/${conversationId}/switch_llm`],
   ['GET', `/api/conversations/${conversationId}/agent_final_response`],
+  ['GET', `/api/conversations/${conversationId}/questions/${conversationId}`],
+  ['POST', `/api/conversations/${conversationId}/questions/../../interrupt`],
 ])('a personal host refuses %s %s', async (method, path) => {
   const { relay, nextOf } = personalRelay()
   await relay.handle({ type: 'http', sid: 1, runtimeId: 'runtime-1', method, path })
@@ -156,6 +158,8 @@ test.each([
   ['POST', `/api/conversations/${conversationId}/events`],
   ['POST', `/api/conversations/${conversationId}/interrupt`],
   ['POST', `/api/conversations/${conversationId}/switch_acp_model`],
+  ['POST', `/api/conversations/${conversationId}/plan_mode`],
+  ['POST', `/api/conversations/${conversationId}/questions/${conversationId}`],
 ])('a personal host forwards %s %s', async (method, path) => {
   const { relay, nextOf } = personalRelay()
   await relay.handle({ type: 'http', sid: 3, runtimeId: 'runtime-1', method, path })

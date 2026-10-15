@@ -1,16 +1,20 @@
 import {
   type AgentChat,
+  chatPlanModePathOf,
+  chatQuestionPathOf,
   chatRoutingPathOf,
   commandOutputPathOf,
   conversationMutators,
   createGatewaySessionClassifier,
+  planModeOf,
+  questionAnswerOf,
   readChatRouting,
   readCommandOutput,
 } from '@hq/conversation/server'
 import type { Database } from '@hq/db/postgres'
 import { schema } from '@hq/db/zero'
 import { queries, type ZeroContext } from '@hq/db/zero-queries'
-import type { RuntimeHostId } from '@hq/kernel'
+import { chatId, type RuntimeHostId } from '@hq/kernel'
 import {
   addLlmCredentialFromRequest,
   availableToolsFromRequest,
@@ -133,7 +137,7 @@ export const createApp = ({
     return llmGateway
   }
   const app = new Hono<{
-    Variables: { zeroContext: ZeroContext; zeroDatabase: ZeroDatabase }
+    Variables: { zeroContext: ZeroContext; zeroDatabase: ZeroDatabase; database: Database }
   }>()
     .get('/health', (context) => context.json({ status: 'ok' }))
     .get('/host', runtimeHosts.upgrade)
@@ -149,8 +153,10 @@ export const createApp = ({
       const authentication = await authenticate(context.req.header('authorization'))
       if (authentication.status !== 200)
         return context.json({ error: errorByStatus[authentication.status] }, authentication.status)
+      const requestDatabase = databaseOf(authentication.databaseName) ?? database
       context.set('zeroContext', authentication.context)
-      context.set('zeroDatabase', zeroDrizzle(schema, databaseOf(authentication.databaseName) ?? database))
+      context.set('database', requestDatabase)
+      context.set('zeroDatabase', zeroDrizzle(schema, requestDatabase))
       await next()
     })
     .post('/api/query', async (context) => {
@@ -199,6 +205,29 @@ export const createApp = ({
         ),
       ),
     )
+    .post(chatQuestionPathOf(':chatId', ':questionId'), async (context) => {
+      const answer = questionAnswerOf(await context.req.json().catch(() => null))
+      if (!answer) return context.json({ error: 'invalid_answer' }, 400)
+      const { workspaceId, userId } = context.get('zeroContext')
+      const status = await agentBridge
+        .forDatabase(context.get('database'))
+        .answerQuestion(
+          { workspaceId, chatId: chatId(context.req.param('chatId') ?? '') },
+          userId,
+          context.req.param('questionId') ?? '',
+          answer,
+        )
+      return new Response(null, { status })
+    })
+    .post(chatPlanModePathOf(':chatId'), async (context) => {
+      const planMode = planModeOf(await context.req.json().catch(() => null))
+      if (!planMode) return context.json({ error: 'invalid_plan_mode' }, 400)
+      const { workspaceId, userId } = context.get('zeroContext')
+      const status = await agentBridge
+        .forDatabase(context.get('database'))
+        .setPlanMode({ workspaceId, chatId: chatId(context.req.param('chatId') ?? '') }, userId, planMode.enabled)
+      return new Response(null, { status })
+    })
     .post(llmCredentialsPath, async (context) => {
       const body = await context.req.json().catch(() => null)
       return endpointResponse('Adding an LLM credential', 201, async () => {

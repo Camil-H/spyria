@@ -1,4 +1,4 @@
-import { chatId, type MessageId, memberId, messageId, type WorkspaceId } from '@hq/kernel'
+import { chatId, type MemberId, type MessageId, memberId, messageId, type WorkspaceId } from '@hq/kernel'
 import { z } from 'zod/mini'
 import type {
   AgentChat,
@@ -12,6 +12,7 @@ import { type AgentEvent, isStoredAgentEvent, type TurnOutcome } from '../domain
 import { createRuntimeAgentRuntimes, type SandboxProvider } from '../integrations/runtime-agent-runtimes.ts'
 import { type AgentLlm, createSandboxAgentServer } from '../integrations/sandbox-agent-server.ts'
 import { agentJobTypes, createTransactingZeroTransactor, type Transact } from '../integrations/zero-transactor.ts'
+import { forwardToAgent } from '../operations/agent-questions.ts'
 import { closeReopenedTurn, reopenAgentTurn, sweepAgentTurns } from '../operations/agent-turn-safety.ts'
 import { delegateTask } from '../operations/delegate.ts'
 import { findModelCallTurn, findToolCallTurn, recordModelCallFailure } from '../operations/model-calls.ts'
@@ -85,6 +86,14 @@ export const createAgentHandlers = ({
       await runtimes.touch(chat)
       return recorded
     },
+    answerQuestion: (chat: AgentChat, member: MemberId, questionId: string, answer: object) =>
+      forwardToAgent(dependenciesOf(chat.workspaceId), { chat, memberId: member }, (conversation) =>
+        agentServer.answerQuestion(conversation, questionId, { ...answer, answeredBy: member }),
+      ),
+    setPlanMode: (chat: AgentChat, member: MemberId, enabled: boolean) =>
+      forwardToAgent(dependenciesOf(chat.workspaceId), { chat, memberId: member }, (conversation) =>
+        agentServer.setPlanMode(conversation, enabled),
+      ),
     reopenTarget: (chat: AgentChat) => reopenAgentTurn(dependenciesOf(chat.workspaceId), chat),
     closeReopenedTurn: (chat: AgentChat, promptId: MessageId, outcome: TurnOutcome) =>
       closeReopenedTurn(dependenciesOf(chat.workspaceId), { chat, promptId, outcome }),

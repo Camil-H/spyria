@@ -161,9 +161,17 @@ const acpUpdateProjectionOf = (event: AgentEvent): AgentProjection => {
       })),
     })
   if (kind === 'error') return stepOf({ type: 'error', message: String(update?.message ?? 'Unknown error') })
+  if (kind === 'question_answered' || kind === 'question_closed') {
+    const { sessionUpdate: _, reason, ...question } = update as Record<string, unknown>
+    return stepOf({
+      type: 'question',
+      ...question,
+      ...(typeof reason === 'string' && { closed: reason }),
+    } as StoredStep)
+  }
   if (kind === 'session_started' && update?.resumeFailed === true)
     return { type: 'message', body: agentNotices.newSession, kind: 'notice' }
-  if (kind === 'turn_end' && update?.stopReason !== 'cancelled')
+  if (kind === 'turn_end' && (update?.stopReason !== 'cancelled' || update?.keptPlanning === true))
     return { type: 'turn-end', outcome: update?.stopReason === 'error' ? 'error' : 'finished' }
   return undefined
 }
@@ -198,12 +206,31 @@ const storedAcpUpdates = [
   'agent_message',
   'agent_thought',
   'plan',
+  'current_mode_update',
+  'question_answered',
+  'question_closed',
 ]
 
 export const isStoredAgentEvent = (event: AgentEvent) =>
   event.kind === 'ACPUpdate' &&
   storedAcpUpdates.includes(String((event.update as Fields)?.sessionUpdate)) &&
   (event.completed === true || (event.update as Fields)?.sessionUpdate === 'tool_call')
+
+const planModeId = 'plan'
+const planModeOptionOf = (option: Fields) => option?.id === 'collaboration_mode' || option?.category === 'mode'
+export const isPlanningOf = (event: AgentEvent) => {
+  const update = event.update as Fields
+  if (update?.sessionUpdate === 'current_mode_update') return update.currentModeId === planModeId
+  const modeOptions = Array.isArray(update?.configOptions)
+    ? (update.configOptions as Fields[]).filter(planModeOptionOf)
+    : []
+  if (
+    update?.sessionUpdate === 'session_started' ||
+    (update?.sessionUpdate === 'config_option_update' && modeOptions.length > 0)
+  )
+    return modeOptions.some((option) => option?.currentValue === planModeId)
+  return undefined
+}
 
 export const streamedTextOf = (event: AgentEvent) => {
   const update = event.update as Fields

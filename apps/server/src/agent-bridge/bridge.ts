@@ -55,6 +55,7 @@ export const createAgentBridge = ({
         isDraining: boolean
         endedPromptId: string | null
         isReady: Promise<void>
+        questions: Map<string, object>
         close(): void
       }
     >()
@@ -124,6 +125,7 @@ export const createAgentBridge = ({
         isDraining: false,
         endedPromptId: null as string | null,
         isClosed: false,
+        questions: new Map<string, object>(),
         close: () => {
           chatSocket.isClosed = true
           opened.then(
@@ -179,7 +181,16 @@ export const createAgentBridge = ({
           ready.resolve()
           if (chatSocket.isClosed) return
           const streamed = streamedTextOf(event)
-          if ((event.update as { sessionUpdate?: string })?.sessionUpdate === 'turn_end') {
+          const update = event.update as { sessionUpdate?: string; questionId?: string } | undefined
+          if (update?.sessionUpdate === 'question') {
+            chatSocket.questions.set(String(update.questionId), update)
+            for (const viewer of viewers.get(keyOf(chat)) ?? [])
+              send(viewer, chat, { promptId: chatSocket.promptId, question: update })
+            return
+          }
+          if (update?.sessionUpdate === 'question_answered' || update?.sessionUpdate === 'question_closed')
+            chatSocket.questions.delete(String(update.questionId))
+          if (update?.sessionUpdate === 'turn_end') {
             if (chatSocket.isDraining) chatSocket.isDraining = false
             else chatSocket.endedPromptId = chatSocket.promptId
           }
@@ -218,6 +229,8 @@ export const createAgentBridge = ({
       modelCallTurn: handlers.modelCallTurn,
       toolCallTurn: handlers.toolCallTurn,
       delegate: handlers.delegate,
+      answerQuestion: handlers.answerQuestion,
+      setPlanMode: handlers.setPlanMode,
       recordModelCallFailure: handlers.recordModelCallFailure,
       resumeActiveTurns: async () => {
         const chats = await database.$client<{ workspaceId: string; chatId: string }[]>`
@@ -245,6 +258,8 @@ export const createAgentBridge = ({
             isSnapshot: true,
             ...(streaming.isReasoning && { isReasoning: true }),
           })
+        for (const question of streaming?.questions.values() ?? [])
+          send(viewer, chat, { promptId: streaming?.promptId, question, isSnapshot: true })
       },
       unwatch: (viewer: WSContext, chat?: AgentChat) => {
         for (const watching of chat ? [viewers.get(keyOf(chat))] : viewers.values()) watching?.delete(viewer)

@@ -4,6 +4,7 @@ import {
   type AgentEvent,
   agentProjectionOf,
   delegatedProjectionOf,
+  isPlanningOf,
   observedProjectionStep,
   subagentDelegationOf,
   toolCallIdOf,
@@ -68,6 +69,8 @@ const recordIn = async (
       action?.step && observedProjectionStep(action.step, projection, recordedAt.getTime() - action.createdAt.getTime())
     if (action && step) await unitOfWork.messages.setStep(action.id, step)
   }
+  const isPlanning = seq !== undefined && !delegation ? isPlanningOf(event) : undefined
+  if (isPlanning !== undefined) await unitOfWork.chats.setPlanning(chatId, isPlanning)
   if (turnEnd) await endAgentTurn(unitOfWork, chatId, turnEnd.outcome)
   return {
     promptId: turnEnd ? null : activePromptId,
