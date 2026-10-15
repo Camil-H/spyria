@@ -174,11 +174,13 @@ export const startAgent = ({
   port,
   bufferSize = 10_000,
   authTimeoutMilliseconds = 5_000,
+  requestTimeoutMilliseconds = 60_000,
 }: {
   apiKey: string
   port: number
   bufferSize?: number
   authTimeoutMilliseconds?: number
+  requestTimeoutMilliseconds?: number
 }) => {
   const conversations = new Map<string, Conversation>()
   const apiKeyBytes = Buffer.from(apiKey)
@@ -210,6 +212,19 @@ export const startAgent = ({
     conversation.status = 'error'
     conversation.failure = update.message
     emit(conversation, update)
+  }
+
+  const requestWithin = (conversation: Conversation, method: string, params: Json) => {
+    const expired = Promise.withResolvers<never>()
+    const timer = setTimeout(() => {
+      const error = new AcpError(`The adapter did not answer ${method} within ${requestTimeoutMilliseconds} ms`)
+      fail(conversation, error)
+      conversation.connection.close()
+      expired.reject(error)
+    }, requestTimeoutMilliseconds)
+    return Promise.race([conversation.connection.request(method, params), expired.promise]).finally(() =>
+      clearTimeout(timer),
+    )
   }
 
   const answer = (conversation: Conversation, pending: PendingQuestion, body: Answer) => {
@@ -319,7 +334,7 @@ export const startAgent = ({
   const setConfigOption = async (conversation: Conversation, key: string, value: string) => {
     const option = conversation.configOptions.find((candidate) => candidate.category === key || candidate.id === key)
     if (!option || !conversation.sessionId) return false
-    const result = await conversation.connection.request('session/set_config_option', {
+    const result = await requestWithin(conversation, 'session/set_config_option', {
       sessionId: conversation.sessionId,
       configId: option.id,
       value,
@@ -345,31 +360,30 @@ export const startAgent = ({
     if (!conversation.sessionId || !conversation.modeIds.includes(planMode)) return false
     if (enabled && conversation.modeId !== planMode) conversation.modeAfterPlan = conversation.modeId
     const modeId = enabled ? planMode : (conversation.modeAfterPlan ?? 'default')
-    await conversation.connection.request('session/set_mode', { sessionId: conversation.sessionId, modeId })
+    await requestWithin(conversation, 'session/set_mode', { sessionId: conversation.sessionId, modeId })
     conversation.modeId = modeId
     emit(conversation, { sessionUpdate: 'current_mode_update', currentModeId: modeId })
     return true
   }
 
   const start = async (conversation: Conversation, { agent }: Launch) => {
-    const { connection } = conversation
+    const request = (method: string, params: Json) => requestWithin(conversation, method, params)
     const sessionParams = {
       cwd: conversation.cwd,
       mcpServers: mcpServersOf(agent?.mcp_config),
     }
-    await connection.request('initialize', { protocolVersion: 1, clientCapabilities: { elicitation: { form: {} } } })
+    await request('initialize', { protocolVersion: 1, clientCapabilities: { elicitation: { form: {} } } })
     const resumeSessionId = agent?.acp_resume_session_id
     const resumed =
       resumeSessionId &&
-      (await connection
-        .request('session/resume', { sessionId: resumeSessionId, ...sessionParams })
+      (await request('session/resume', { sessionId: resumeSessionId, ...sessionParams })
         .then((result): Json => ({ ...result, sessionId: resumeSessionId }))
         .catch(() => undefined))
-    const session = resumed || (await connection.request('session/new', sessionParams))
+    const session = resumed || (await request('session/new', sessionParams))
     const sessionId = String(session.sessionId)
     const modes = session.modes as { currentModeId?: string; availableModes?: { id: string }[] } | undefined
     const permissiveMode = permissiveModes.find((modeId) => modes?.availableModes?.some((mode) => mode.id === modeId))
-    if (permissiveMode) await connection.request('session/set_mode', { sessionId, modeId: permissiveMode })
+    if (permissiveMode) await request('session/set_mode', { sessionId, modeId: permissiveMode })
     conversation.sessionId = sessionId
     conversation.configOptions = Array.isArray(session.configOptions) ? session.configOptions : []
     conversation.modeId = permissiveMode ?? modes?.currentModeId ?? modeOf(conversation.configOptions)

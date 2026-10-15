@@ -3,7 +3,7 @@ import type { LlmGateway, ToolGateway, ToolServer } from '../contracts/repositor
 import { UnsupportedProvider } from '../domain/errors.ts'
 import type { GatewayKey } from '../domain/llm-credential.ts'
 
-export type LlmGatewaySettings = { url: string; adminUser: string; adminPassword: string }
+export type LlmGatewaySettings = { url: string; adminUser: string; adminPassword: string; timeoutMilliseconds?: number }
 export type ToolServerSetup = { name: string; url: string; oauthConfig?: Record<string, unknown> }
 type McpClient = { config: { client_id: string; name: string }; tools?: { name?: string }[] }
 type McpConfig = { id: number; mcp_client: { name: string }; tools_to_execute: string[] }
@@ -32,7 +32,12 @@ type ModelDetails = Prices & {
 const dollarsPerMillionOf = (perToken: number | undefined) =>
   perToken === undefined ? undefined : Number((perToken * 1_000_000).toPrecision(12))
 
-export const createLlmGateway = ({ url, adminUser, adminPassword }: LlmGatewaySettings): BifrostGateway => {
+export const createLlmGateway = ({
+  url,
+  adminUser,
+  adminPassword,
+  timeoutMilliseconds = 10_000,
+}: LlmGatewaySettings): BifrostGateway => {
   const authorization = `Basic ${btoa(`${adminUser}:${adminPassword}`)}`
   const virtualKeyValues = new Map<string, string>()
   let listing: { models: readonly ListedModel[]; loadedAt: number; loading?: Promise<void> } = {
@@ -60,6 +65,7 @@ export const createLlmGateway = ({ url, adminUser, adminPassword }: LlmGatewaySe
       method,
       headers: { authorization, 'content-type': 'application/json' },
       body: body && JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMilliseconds),
     })
     if (!response.ok && response.status !== toleratedStatus)
       throw new Error(`The gateway answered ${method} ${path.replace(/[0-9a-f-]{36}/g, ':id')} with ${response.status}`)
@@ -84,11 +90,17 @@ export const createLlmGateway = ({ url, adminUser, adminPassword }: LlmGatewaySe
       }),
     )
   const finishToolConsent = async (callbackQuery: string) => {
-    const response = await fetch(`${url}/api/oauth/callback${callbackQuery}`, { redirect: 'manual' })
+    const response = await fetch(`${url}/api/oauth/callback${callbackQuery}`, {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(timeoutMilliseconds),
+    })
     return /auth-success|status=success/.test(response.headers.get('location') ?? '')
   }
   const logInAutomatically = async (authorizeUrl: string) => {
-    const authorized = await fetch(authorizeUrl, { redirect: 'manual' })
+    const authorized = await fetch(authorizeUrl, {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(timeoutMilliseconds),
+    })
     await finishToolConsent(new URL(authorized.headers.get('location') ?? '').search)
   }
   const gateway: BifrostGateway = {
@@ -152,6 +164,7 @@ export const createLlmGateway = ({ url, adminUser, adminPassword }: LlmGatewaySe
           method: 'tools/call',
           params: { name: `${server.name}-${server.tools[0]}`, arguments: {} },
         }),
+        signal: AbortSignal.timeout(timeoutMilliseconds),
       })
       const flowId = (await response.text()).match(/flow=([0-9a-f-]{36})/)?.[1]
       if (!flowId) throw new Error(`The gateway started no consent for ${server.name}`)

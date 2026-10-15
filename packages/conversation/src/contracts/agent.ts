@@ -88,5 +88,7 @@ export type ClassifierCall = Readonly<{
 }>
 export type SessionClassifier = {
   listedModels(): readonly ListedModel[]
-  classify(call: ClassifierCall): Promise<{ body: unknown; inputTokens: number; outputTokens: number } | undefined>
+  classify(
+    call: ClassifierCall,
+  ): Promise<{ body: unknown; inputTokens: number; outputTokens: number } | { failure: string }>
 }

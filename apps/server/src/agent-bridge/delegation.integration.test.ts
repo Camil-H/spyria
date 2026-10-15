@@ -174,7 +174,13 @@ const slowWork = {
 }
 
 test.each([
-  { policy: 'auto', route: 'fail', asked: undefined, model: 'fake/fake-medium', reason: 'default' },
+  {
+    policy: 'auto',
+    route: 'fail',
+    asked: undefined,
+    model: 'fake/fake-medium',
+    reason: 'routing unavailable: HTTP 500',
+  },
   {
     policy: 'same_as_main',
     route: confidentSmall,

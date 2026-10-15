@@ -35,9 +35,9 @@ import {
   noticeWaitingPrompts,
   releaseAgentTurn,
 } from './agent-turn.ts'
-import { decide } from './decide.ts'
+import { decide, routingUnavailableOf } from './decide.ts'
 
-type Input = { workspaceId: WorkspaceId; messageId: MessageId }
+type Input = { workspaceId: WorkspaceId; messageId: MessageId; isLastAttempt: boolean }
 type Prepared = { conversation: AgentConversation } | { refusal: string }
 
 const runtimeStartPollMilliseconds = 500
@@ -96,7 +96,10 @@ const routeSession = async (
   })
   const choice = sessionChoiceOf({ reachable, defaultModel: routing.defaultModel, answers: decision?.answers })
   return {
-    choice: choice && { ...choice, reason: decision ? choice.reason : 'routing unavailable' },
+    choice: choice && {
+      ...choice,
+      reason: decision && !decision.failure ? choice.reason : routingUnavailableOf(decision?.failure),
+    },
     answers: decision?.answers,
     costMicros: decision?.costMicros ?? 0,
     inputsDigest: decision?.inputsDigest ?? null,
@@ -256,7 +259,10 @@ export const startAgentSession = async (
   return undefined
 }
 
-export const promptAgent = async (dependencies: AgentDependencies, { workspaceId, messageId }: Input) => {
+export const promptAgent = async (
+  dependencies: AgentDependencies,
+  { workspaceId, messageId, isLastAttempt }: Input,
+) => {
   const { transactor, runtimes, agentServer, eventSockets } = dependencies
   const { chatId, type, localSession, harness } = await transactor.run(async ({ messages, chats }) => {
     const message = await messages.get(messageId)
@@ -289,12 +295,15 @@ export const promptAgent = async (dependencies: AgentDependencies, { workspaceId
     await eventSockets.ensureOpen(chat, conversation, prompt.id)
     await agentServer.sendMessage(conversation, prompt.body)
   } catch (error) {
-    if (error instanceof AgentStartFailure)
-      return transactor.run((unitOfWork) =>
-        closeAgentTurn(unitOfWork, chatId, prompt.id, () => `${agentNotices.couldNotStart}: ${error.message}`),
-      )
-    await transactor.run((unitOfWork) => releaseAgentTurn(unitOfWork, chatId, prompt.id))
-    throw error
+    if (!(error instanceof AgentStartFailure) && !isLastAttempt) {
+      await transactor.run((unitOfWork) => releaseAgentTurn(unitOfWork, chatId, prompt.id))
+      throw error
+    }
+    const notice =
+      error instanceof AgentStartFailure || !(await runtimes.isWaitingOnHost(chat))
+        ? `${agentNotices.couldNotStart}: ${error instanceof Error ? error.message : 'unknown error'}`
+        : notReadyNoticeOf({ state: 'host_offline' }, localSession === true)
+    return transactor.run((unitOfWork) => closeAgentTurn(unitOfWork, chatId, prompt.id, () => notice))
   }
   if ((await transactor.run(({ agentTurns }) => agentTurns.lock(chatId))) === null)
     await agentServer.interrupt(conversation)

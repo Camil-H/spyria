@@ -16,7 +16,7 @@ import {
 } from '../domain/delegation.ts'
 import { sessionQuestions } from '../domain/session-routing.ts'
 import type { AgentDependencies } from './agent-turn.ts'
-import { decide, digestOf } from './decide.ts'
+import { decide, digestOf, routingUnavailableOf } from './decide.ts'
 import { fixedPiLlmOf, piLlmOf } from './prompt-agent.ts'
 import { recordAgentEvent } from './record-agent-event.ts'
 import { type DelegationResult, type RunningDelegation, runningDelegations } from './running-delegations.ts'
@@ -58,7 +58,8 @@ const chooseSubagent = async (dependencies: AgentDependencies, input: Input, eff
     questions: sessionQuestions,
   })
   const classified = delegationChoiceOf(priced, decision?.answers)
-  return { ...session, reason: 'default', ...classified, answers: decision?.answers }
+  const reason = decision?.failure ? routingUnavailableOf(decision.failure) : 'default'
+  return { ...session, reason, ...classified, answers: decision?.answers }
 }
 
 const runSubConversation = (

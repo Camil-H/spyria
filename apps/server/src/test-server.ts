@@ -147,11 +147,7 @@ const runtimeHosts = createRuntimeHostGateway({
 
 const agentBridge = createAgentBridge({
   sandboxProvider: runtimeHosts.sandboxProvider,
-  sessionClassifierOf: sessionClassifierOf(llmGateway, {
-    gatewayUrlOf,
-    headersOf: testHeadersOf,
-    timeoutMilliseconds: 300,
-  }),
+  sessionClassifierOf: sessionClassifierOf(llmGateway, { gatewayUrlOf, headersOf: testHeadersOf }),
   resumeAfterMilliseconds: 5_000,
   reopenDelayMilliseconds: 50,
   ...placement,

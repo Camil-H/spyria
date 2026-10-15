@@ -59,8 +59,8 @@ const clientOf = (port: number) => {
   return { call, open, create, prompt }
 }
 
-const started = (bufferSize?: number) => {
-  const agent = startAgent({ apiKey, port: 0, bufferSize })
+const started = (options: Partial<Parameters<typeof startAgent>[0]> = {}) => {
+  const agent = startAgent({ apiKey, port: 0, ...options })
   running.push(agent)
   return { agent, ...clientOf(agent.port) }
 }
@@ -101,7 +101,7 @@ test('a prompt streams chunks and ends its turn; Stop cancels the next turn and 
 })
 
 test('events are numbered per conversation, resent after a sequence number, from a bounded buffer', async () => {
-  const { open, create, prompt } = started(4)
+  const { open, create, prompt } = started({ bufferSize: 4 })
   const id = await create(launchOf())
   const live = open(id)
   await prompt(id, 'stub:think')
@@ -347,6 +347,60 @@ const piLaunchOf = (extra: Record<string, unknown> = {}) =>
   launchOf({ acp_command: ['env', 'STUB_FLAVOUR=pi', ...stubCommand.slice(1)], adapter: 'pi-rpc', ...extra })
 const piHello = (turn: number, mode = 'default') =>
   `[t${turn}] Hello from the stub (model stub/stub-default, mode ${mode}).`
+
+const isAlive = (pid: number) => {
+  try {
+    return process.kill(pid, 0)
+  } catch {
+    return false
+  }
+}
+
+test.each([
+  ['an ACP adapter', 'session/new', () => launchOf()],
+  ['Pi', 'get_state', () => piLaunchOf()],
+])(
+  '%s that never answers %s is stopped after the request timeout and its conversation fails',
+  async (_, method, launch) => {
+    const { call } = started({ requestTimeoutMilliseconds: 300 })
+    const silentLaunch = launch()
+    silentLaunch.agent.acp_command = ['env', `STUB_SILENT=${method}`, ...(silentLaunch.agent.acp_command as string[])]
+    const { status, body } = await call('POST', '/api/conversations', silentLaunch)
+    expect(status).toBe(201)
+    const timedOut = method === 'get_state' ? 'session/new' : method
+    expect(body).toMatchObject({
+      execution_status: 'error',
+      error: `The adapter did not answer ${timedOut} within 300 ms`,
+    })
+    const pid = Number(readFileSync(join(stateDirectory, 'silent.pid'), 'utf8'))
+    for (const deadline = Date.now() + 5_000; isAlive(pid) && Date.now() < deadline; ) await Bun.sleep(10)
+    expect(isAlive(pid)).toBe(false)
+  },
+)
+
+test.each([
+  [
+    'an ACP adapter',
+    () => launchOf(),
+    (turn: number) => `[t${turn}] Hello from the stub (model stub-default, mode bypassPermissions).`,
+  ],
+  ['Pi', () => piLaunchOf(), (turn: number) => piHello(turn)],
+])('with %s, a prompt sent while a turn runs waits for it and gets its own turn end', async (_, launch, hello) => {
+  const { call, open, create, prompt } = started()
+  const id = await create(launch())
+  const socket = open(id)
+  await prompt(id, 'stub:linger first')
+  expect((await call('GET', `/api/conversations/${id}`)).body).toMatchObject({ execution_status: 'running' })
+  await prompt(id, 'second')
+  await socket.until(kindOf('turn_end'), 2)
+  const firstTurnEnd = socket.events.findIndex(kindOf('turn_end'))
+  expect(textOf(socket.events.slice(0, firstTurnEnd))).toBe(hello(1))
+  expect(textOf(socket.events.slice(firstTurnEnd))).toBe(hello(2))
+  expect(socket.events.filter(kindOf('turn_end')).map(({ update }) => update.stopReason)).toEqual([
+    'end_turn',
+    'end_turn',
+  ])
+})
 
 test('a Pi turn over RPC streams thought and text, a command with its output and exit code and an edit diff, and ends the turn', async () => {
   const { open, create, prompt } = started()

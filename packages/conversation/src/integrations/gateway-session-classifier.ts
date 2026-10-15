@@ -1,6 +1,8 @@
 import { isDecisionModel, type ListedModel, type MemberId, type WorkspaceId } from '@hq/kernel'
 import type { AgentChat, SessionClassifier } from '../contracts/agent.ts'
 
+const failureByErrorName: Record<string, string> = { TimeoutError: 'timeout', SyntaxError: 'unparseable reply' }
+
 export const createGatewaySessionClassifier = ({
   gatewayUrl,
   virtualKeyOf,
@@ -18,7 +20,7 @@ export const createGatewaySessionClassifier = ({
   classify: async ({ chat, prompterId, ownerId, model, request }) => {
     try {
       const virtualKey = await virtualKeyOf(chat.workspaceId, prompterId)
-      if (!virtualKey) return undefined
+      if (!virtualKey) return { failure: 'no gateway key' }
       const response = await fetch(`${gatewayUrl()}/v1/${isDecisionModel(model) ? 'decisions' : 'chat/completions'}`, {
         method: 'POST',
         headers: {
@@ -35,15 +37,16 @@ export const createGatewaySessionClassifier = ({
         body: JSON.stringify(request),
         signal: AbortSignal.timeout(timeoutMilliseconds),
       })
-      if (!response.ok) return undefined
+      if (!response.ok) return { failure: `HTTP ${response.status}` }
       const body = (await response.json()) as { usage?: { prompt_tokens?: number; completion_tokens?: number } }
       return {
         body,
         inputTokens: body.usage?.prompt_tokens ?? 0,
         outputTokens: body.usage?.completion_tokens ?? 0,
       }
-    } catch {
-      return undefined
+    } catch (error) {
+      const name = error instanceof Error ? error.name : ''
+      return { failure: failureByErrorName[name] ?? 'unreachable' }
     }
   },
 })

@@ -157,6 +157,30 @@ test('a Stop whose interrupt arrives after the turn already finished ends the tu
   expect(relay.prompts).toEqual(['stub:linger Almost done', 'Next one'])
 })
 
+test('a prompt whose conversation create keeps failing ends with "could not start" after its last attempt, and the next prompt runs', async () => {
+  let isCreateFailing = true
+  await agentHost('Agent host', (relay) => ({
+    ...relay.agentServer,
+    respond: async (request, container) =>
+      isCreateFailing && request.method === 'POST' && request.path === '/api/conversations'
+        ? { status: 500, body: '{}' }
+        : relay.agentServer.respond(request, container),
+  }))
+  const chat = await newRuntimeChat()
+  const failed = await prompt(chat, 'Start please')
+  await waitFor(async () => (await noticesOf(failed)).length > 0, firstTurnMilliseconds)
+  expect(await repliesTo(failed)).toEqual([
+    notice('The agent could not start: The Agent Server answered POST /api/conversations with 500'),
+  ])
+  await turnIs(chat, null)
+
+  isCreateFailing = false
+  const next = await prompt(chat, 'Then this')
+  await answered(next)
+  expect(await repliesTo(next)).toEqual([agentReply(1)])
+  expect(await repliesTo(failed)).toHaveLength(1)
+})
+
 test('Retry replaces a failed runtime and answers the waiting prompts in order; refused unless failed or from another workspace', async () => {
   const { host: failingHost } = await agentHost('Failing host')
   failingHost.failing('create')

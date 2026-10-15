@@ -20,11 +20,13 @@ export const createBifrostUsageLogs = ({
   adminUser,
   adminPassword,
   labels = {},
+  timeoutMilliseconds = 10_000,
 }: {
   url: string
   adminUser: string
   adminPassword: string
   labels?: Record<string, string>
+  timeoutMilliseconds?: number
 }): GatewayUsageLogs => {
   const authorization = `Basic ${btoa(`${adminUser}:${adminPassword}`)}`
   const page = async (workspaceId: WorkspaceId, since: Date, offset: number) => {
@@ -38,7 +40,10 @@ export const createBifrostUsageLogs = ({
         Object.entries({ ...labels, workspace: workspaceId }).map(([name, value]) => [`metadata_${name}`, value]),
       ),
     })
-    const response = await fetch(`${url}/api/logs?${query}`, { headers: { authorization } })
+    const response = await fetch(`${url}/api/logs?${query}`, {
+      headers: { authorization },
+      signal: AbortSignal.timeout(timeoutMilliseconds),
+    })
     if (!response.ok) throw new Error(`The gateway answered GET /api/logs with ${response.status}`)
     return ((await response.json()) as { logs: LogRow[] | null }).logs ?? []
   }

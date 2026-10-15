@@ -119,6 +119,7 @@ export const connectPi = (launch: AdapterLaunch, { onUpdate, onExit, onRequest }
   }
 
   let turn: PromiseWithResolvers<Json> | undefined
+  let turnsEnded: Promise<unknown> = Promise.resolve()
   const onRecord = (record: Json) => {
     const { type } = record
     if (type === 'response') {
@@ -237,13 +238,17 @@ export const connectPi = (launch: AdapterLaunch, { onUpdate, onExit, onRequest }
       await send('switch_session', { sessionPath: sessionId })
       return sessionOf()
     },
-    'session/prompt': async ({ prompt }) => {
-      isAborting = false
-      turn = Promise.withResolvers()
-      const { disposition } = await send('prompt', {
-        message: (prompt as Json[]).map((block) => block.text).join('\n'),
+    'session/prompt': ({ prompt }) => {
+      const ended = turnsEnded.then(async () => {
+        isAborting = false
+        turn = Promise.withResolvers()
+        const { disposition } = await send('prompt', {
+          message: (prompt as Json[]).map((block) => block.text).join('\n'),
+        })
+        return disposition === 'handled' ? { stopReason: 'end_turn' } : turn.promise
       })
-      return disposition === 'handled' ? { stopReason: 'end_turn' } : turn.promise
+      turnsEnded = ended.catch(() => {})
+      return ended
     },
     'session/set_config_option': async ({ configId, value }) => {
       const [provider, ...modelId] = String(value).split('/')

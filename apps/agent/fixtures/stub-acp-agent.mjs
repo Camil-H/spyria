@@ -12,6 +12,11 @@ const lingerAs = (name) => (holdUrl ? fetch(`${holdUrl}&name=${name}`, { method:
 const send = (frame) => process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', ...frame })}\n`)
 const piSend = (record) => process.stdout.write(`${JSON.stringify(record)}\n`)
 const isPi = process.env.STUB_FLAVOUR === 'pi'
+const isSilentOn = (method) => {
+  if (method !== process.env.STUB_SILENT) return false
+  writeFileSync(`${stateDirectory}/silent.pid`, String(process.pid))
+  return true
+}
 const models =
   process.env.STUB_FLAVOUR === 'codex'
     ? [
@@ -819,6 +824,7 @@ const piCommands = {
 }
 const onPiCommand = async ({ id, type, ...fields }) => {
   if (type === 'extension_ui_response') return dialogs.get(id)?.(fields)
+  if (isSilentOn(type)) return
   const respond = (data) => piSend({ id, type: 'response', command: type, success: true, data })
   if (type === 'prompt' && fields.message.startsWith('/hq-plan ')) {
     setPiMode(piSession(), fields.message.endsWith(' on') ? 'plan' : 'default')
@@ -837,7 +843,7 @@ createInterface({ input: process.stdin })
     if (frame.method === undefined) return answers.get(frame.id)?.(frame)
     if (frame.method === 'session/prompt') return queue(frame.params.sessionId, () => turn(frame.id, frame.params))
     if (frame.method === 'session/cancel') return cancel(sessions.get(frame.params.sessionId))
-    if (frame.id === undefined) return
+    if (frame.id === undefined || isSilentOn(frame.method)) return
     const handler = handlers[frame.method]
     if (!handler) return send({ id: frame.id, error: { code: -32601, message: `stub: ${frame.method}` } })
     try {

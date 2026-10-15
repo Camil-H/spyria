@@ -232,14 +232,14 @@ test.each<RoutingRow>([
     route: 'fail',
     defaultModel: 'fake/fake-small',
     model: 'fake/fake-small',
-    reason: 'default',
+    reason: 'routing unavailable: HTTP 500',
   },
   {
     title: 'a timed-out classification',
     route: 'slow',
     defaultModel: 'fake/fake-small',
     model: 'fake/fake-small',
-    reason: 'default',
+    reason: 'routing unavailable: timeout',
   },
   {
     title: 'a chat classifier answering JSON inside prose',

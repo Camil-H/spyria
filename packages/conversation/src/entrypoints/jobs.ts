@@ -21,7 +21,7 @@ import { recordAgentEvent } from '../operations/record-agent-event.ts'
 import { promptWaitingChats } from '../operations/retry-agent.ts'
 import { interruptAgent } from '../operations/stop-agent.ts'
 
-type Job = { workspaceId: WorkspaceId; payload: unknown }
+type Job = { workspaceId: WorkspaceId; payload: unknown; isLastAttempt?: boolean }
 
 const id = z.string().check(z.minLength(1))
 const promptPayload = z.object({ messageId: z.pipe(id, z.transform(messageId)) })
@@ -65,8 +65,12 @@ export const createAgentHandlers = ({
   })
   return {
     jobs: {
-      [agentJobTypes.prompt]: ({ workspaceId, payload }: Job) =>
-        promptAgent(dependenciesOf(workspaceId), { workspaceId, messageId: promptPayload.parse(payload).messageId }),
+      [agentJobTypes.prompt]: ({ workspaceId, payload, isLastAttempt = false }: Job) =>
+        promptAgent(dependenciesOf(workspaceId), {
+          workspaceId,
+          messageId: promptPayload.parse(payload).messageId,
+          isLastAttempt,
+        }),
       [agentJobTypes.startSession]: ({ workspaceId, payload }: Job) =>
         startAgentSession(dependenciesOf(workspaceId), { workspaceId, ...startSessionPayload.parse(payload) }),
       [agentJobTypes.interrupt]: ({ workspaceId, payload }: Job) =>
