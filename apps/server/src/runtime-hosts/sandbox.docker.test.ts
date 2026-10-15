@@ -100,7 +100,7 @@ test.skipIf(!hasImage)(
     expect(inspected.Config.User).toBe('10001:10001')
     expect(inspected.Config.Labels).toMatchObject({ 'hq.managed': '1', 'hq.runtime': 'docker-test' })
     expect(inspected.HostConfig).toMatchObject({
-      NetworkMode: `${prefix}runtimes`,
+      NetworkMode: `${containerName}-net`,
       CapDrop: ['ALL'],
       SecurityOpt: ['no-new-privileges'],
       ReadonlyRootfs: true,
@@ -154,9 +154,53 @@ test.skipIf(!hasImage)(
     await provider.remove(runtime)
     expect(await provider.status(runtime)).toBe('missing')
     expect(dockerText('volume', 'ls', '-q', '--filter', `name=^${containerName}`)).toBe('')
+    expect(dockerText('network', 'ls', '-q', '--filter', `name=^${containerName}-net`)).toBe('')
     console.info(`Runtime host Docker test took ${Math.round(performance.now() - startedAt)} ms`)
   },
   60_000,
+)
+
+test.skipIf(!hasImage)(
+  'two runtimes on one host cannot reach each other, while hq-host relays to both',
+  async () => {
+    const host = { workspaceId: acme, hostId: runtimeHostId(await hostId()) }
+    const provider = gateway.sandboxProvider
+    const apiKey = 'test-api-key-0123456789abcdef'
+    const runtimes = ['isolated-a', 'isolated-b'].map((runtimeId) => ({ ...host, runtimeId }))
+    for (const runtime of runtimes) {
+      await provider.create({ ...runtime, image: hqImage, apiKey })
+      await provider.start(runtime)
+    }
+    const isReady = (runtime: (typeof runtimes)[number]) =>
+      provider
+        .connect(runtime)
+        .fetch({ method: 'GET', path: '/ready', timeoutMilliseconds: 1000 })
+        .then(
+          (response) => response.status === 200,
+          () => false,
+        )
+    for (const runtime of runtimes)
+      for (const deadline = Date.now() + 30_000; !(await isReady(runtime)); await Bun.sleep(100))
+        if (Date.now() > deadline) throw new Error(`${runtime.runtimeId} was not ready within 30 s`)
+    const [first, second] = runtimes.map(({ runtimeId }) => `${prefix}rt-${runtimeId}`)
+    const addressOf = (name = '') =>
+      dockerText('inspect', '-f', '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}', name)
+    const reaches = (from = '', url: string) =>
+      dockerText(
+        'exec',
+        from,
+        'node',
+        '-e',
+        `fetch(${JSON.stringify(url)}, { signal: AbortSignal.timeout(3000) }).then(() => console.log('reached'), () => console.log('blocked'))`,
+      )
+    expect(docker('exec', String(first), 'getent', 'hosts', String(second)).exitCode).not.toBe(0)
+    expect(reaches(first, `http://${addressOf(first)}:8000/ready`)).toBe('reached')
+    if (dockerText('info', '-f', '{{.OperatingSystem}}') === 'OrbStack')
+      console.warn('OrbStack accepts traffic between Docker networks: the address check between runtimes is skipped')
+    else expect(reaches(first, `http://${addressOf(second)}:8000/ready`)).toBe('blocked')
+    for (const runtime of runtimes) await provider.remove(runtime)
+  },
+  90_000,
 )
 
 test.skipIf(!hasImage)(

@@ -180,7 +180,7 @@ const piLaunch = {
   ],
   compactionModel: 'mistral/mistral-small-latest',
 }
-const createdPiOf = async (sub?: { parentConversationId: string; toolToken: string }, llm = {}) => {
+const createdPiOf = async (sub?: { parentConversationId: string }, llm = {}) => {
   requests.length = 0
   await createSandboxAgentServer().createConversation(
     endpoint,
@@ -251,7 +251,7 @@ test('Pi lists Anthropic models on the Anthropic route without /v1 and the other
   })
 })
 
-test('a parent Pi reaches HQ tools and the router with its LLM token; a sub reaches only HQ tools with its tool token from its own directory', async () => {
+test('a parent Pi reaches HQ tools and the router with its LLM token; a sub reaches only HQ tools with its own token from its own directory', async () => {
   const parent = await createdPiOf()
   const toolServer = (path: string) => ({
     url: `http://hq-gateway-relay:4000${path}`,
@@ -259,13 +259,13 @@ test('a parent Pi reaches HQ tools and the router with its LLM token; a sub reac
     exposure: 'direct',
   })
   expect(parent.mcp).toEqual({ mcpServers: { hq: toolServer('/mcp'), router: toolServer('/mcp/router') } })
-  const sub = await createdPiOf({ parentConversationId: 'conversation-1', toolToken: 'sub-tool-token' })
+  const sub = await createdPiOf({ parentConversationId: 'conversation-1' })
   expect(sub.mcp).toEqual({ mcpServers: { hq: toolServer('/mcp') } })
   expect(sub.created.secrets).toEqual({
     HQ_LLM_TOKEN: { kind: 'StaticSecret', value: 'runtime-llm-token' },
-    HQ_MCP_TOKEN: { kind: 'StaticSecret', value: 'sub-tool-token' },
+    HQ_MCP_TOKEN: { kind: 'StaticSecret', value: 'runtime-llm-token' },
   })
-  expect(JSON.stringify(sub.command)).not.toMatch(/sub-tool-token|runtime-llm-token/)
+  expect(JSON.stringify(sub.command)).not.toMatch(/runtime-llm-token/)
   expect(sub.command.at(-1)).toContain('export PI_CODING_AGENT_DIR="$HOME/.pi/sub"')
   expect(piCommandOf('http://hq-gateway-relay:4000/v1', piLaunch, { sub: true })).toEqual(sub.command)
 })

@@ -55,6 +55,7 @@ export const parseCommand = (op: unknown, args: unknown): Command => {
 }
 
 const containerNameOf = (prefix: string, runtimeId: string) => `${prefix}rt-${runtimeId}`
+const networkNameOf = (prefix: string, runtimeId: string) => `${containerNameOf(prefix, runtimeId)}-net`
 
 export const containerBodyOf = ({
   prefix,
@@ -71,7 +72,7 @@ export const containerBodyOf = ({
     Env: [`OH_SESSION_API_KEYS_0=${apiKey}`],
     Labels: { 'hq.managed': '1', 'hq.runtime': runtimeId },
     HostConfig: {
-      NetworkMode: `${prefix}runtimes`,
+      NetworkMode: networkNameOf(prefix, runtimeId),
       CapDrop: ['ALL'],
       SecurityOpt: ['no-new-privileges'],
       ReadonlyRootfs: true,
@@ -119,27 +120,31 @@ export const createCommandRunner = ({
   selfContainerId?: string
   personal?: boolean
 }) => {
-  const network = `${prefix}runtimes`
   const managedContainer = async (runtimeId: string) => {
     const container = await docker<ContainerInfo>('GET', `/containers/${containerNameOf(prefix, runtimeId)}/json`)
     const labels = container.Config?.Labels ?? {}
     if (labels['hq.managed'] !== '1' || labels['hq.runtime'] !== runtimeId) throw new Refused('not a managed runtime')
     return container
   }
-  const ensureNetwork = async () => {
-    await docker('GET', `/networks/${network}`).catch(async (error) => {
-      ignoringMissing(error)
-      await docker('POST', '/networks/create', {
-        Name: network,
-        Driver: 'bridge',
-        Labels: { 'hq.managed': '1' },
-      }).catch(ignoring(409))
-    })
+  const joinNetwork = async (network: string) => {
     if (selfContainerId)
       await docker('POST', `/networks/${network}/connect`, {
         Container: selfContainerId,
         EndpointConfig: { Aliases: [gatewayRelayAlias] },
       }).catch(ignoring(403, 409))
+  }
+  const createNetwork = async (network: string) => {
+    await docker('POST', '/networks/create', { Name: network, Driver: 'bridge', Labels: { 'hq.managed': '1' } }).catch(
+      ignoring(409),
+    )
+    await joinNetwork(network)
+  }
+  const removeNetwork = async (network: string) => {
+    if (selfContainerId)
+      await docker('POST', `/networks/${network}/disconnect`, { Container: selfContainerId, Force: true }).catch(
+        ignoring(403, 404),
+      )
+    await docker('DELETE', `/networks/${network}`).catch(ignoringMissing)
   }
   const prepare = async (image: string) => {
     await docker('GET', `/images/${image}/json`).catch((error) => {
@@ -149,7 +154,7 @@ export const createCommandRunner = ({
     if (personal) await ensureCredentialsReaders(docker, prefix, image)
   }
   const create = async ({ runtimeId, image, apiKey }: CreateRequest) => {
-    await Promise.all([ensureNetwork(), prepare(image)])
+    await Promise.all([createNetwork(networkNameOf(prefix, runtimeId)), prepare(image)])
     await docker(
       'POST',
       `/containers/create?name=${containerNameOf(prefix, runtimeId)}`,
@@ -168,17 +173,22 @@ export const createCommandRunner = ({
           return 'missing'
         },
       )
-    await managedContainer(command.runtimeId)
-    if (command.op === 'start') return docker('POST', `/containers/${name}/start`)
+    const container = await managedContainer(command.runtimeId)
+    if (command.op === 'start') {
+      for (const network of Object.keys(container.NetworkSettings?.Networks ?? {})) await joinNetwork(network)
+      return docker('POST', `/containers/${name}/start`)
+    }
     if (command.op === 'stop') return docker('POST', `/containers/${name}/stop?t=10`)
     await docker('DELETE', `/containers/${name}?force=true`)
     for (const suffix of Object.keys(volumeTargets))
       await docker('DELETE', `/volumes/${name}-${suffix}`).catch(ignoringMissing)
+    await removeNetwork(networkNameOf(prefix, command.runtimeId))
   }
   return {
     run,
     originOf: async (runtimeId: string) => {
-      const address = (await managedContainer(runtimeId)).NetworkSettings?.Networks?.[network]?.IPAddress
+      const networks = Object.values((await managedContainer(runtimeId)).NetworkSettings?.Networks ?? {})
+      const address = networks.find((network) => network.IPAddress)?.IPAddress
       if (!address) throw new Refused('runtime is not running')
       return `http://${address}:${agentServerPort}`
     },

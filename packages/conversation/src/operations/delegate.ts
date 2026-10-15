@@ -1,4 +1,4 @@
-import { type ChatId, type MessageId, modelNameOf, withPricesOf } from '@hq/kernel'
+import { modelNameOf, withPricesOf } from '@hq/kernel'
 import type { AgentChat, AgentConversation } from '../contracts/agent.ts'
 import type { ModelCallTurn } from '../contracts/repositories.ts'
 import { executionStatusOf, isStoredAgentEvent, streamedTextOf, toolCallIdOf } from '../domain/agent-events.ts'
@@ -19,21 +19,17 @@ import type { AgentDependencies } from './agent-turn.ts'
 import { decide, digestOf } from './decide.ts'
 import { fixedPiLlmOf, piLlmOf } from './prompt-agent.ts'
 import { recordAgentEvent } from './record-agent-event.ts'
+import { type DelegationResult, type RunningDelegation, runningDelegations } from './running-delegations.ts'
 
 type Input = {
   chat: AgentChat
   turn: ModelCallTurn & { prompterName: string }
-  toolToken: string
   task: string
   effort: unknown
   model?: unknown
   resume?: unknown
 }
-export type DelegationResult = { text: string; isError: boolean }
-type RunningDelegation = { chatId: ChatId; promptId: MessageId; result: Promise<DelegationResult>; failure?: string }
-
 const cannotStart = { text: 'The subagent could not start', isError: true }
-const runningDelegations = new Map<string, RunningDelegation>()
 
 export const noteSubagentFailure = (delegationId: string, notice: string) => {
   const running = runningDelegations.get(delegationId)
@@ -126,7 +122,7 @@ const runDelegation = async (
       dependencies.fixedLlm
         ? fixedPiLlmOf(delegation.model)
         : await piLlmOf(dependencies, input.turn.prompterId, delegation.model, choice.effort),
-      { parentConversationId: endpoint.conversationId, toolToken: input.toolToken },
+      { parentConversationId: endpoint.conversationId },
     )
     await transactor.run(({ delegations }) =>
       delegations.update(delegation.id, { conversationId: conversation.conversationId }),

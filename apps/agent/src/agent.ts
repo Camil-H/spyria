@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto'
 import type { ServerWebSocket } from 'bun'
 import { AcpError, type AdapterConnection, type AdapterRequest, connectAdapter, type Json } from './acp.ts'
 import { connectPi } from './pi.ts'
@@ -100,7 +101,11 @@ const errorUpdateOf = (error: unknown) => ({
 
 const branchOf = async (cwd: string) => {
   try {
-    const git = Bun.spawn(['git', '-C', cwd, 'branch', '--show-current'], { stdout: 'pipe', stderr: 'ignore' })
+    const git = Bun.spawn(['git', '-C', cwd, 'branch', '--show-current'], {
+      env: adapterEnvironmentOf({}),
+      stdout: 'pipe',
+      stderr: 'ignore',
+    })
     const branch = (await new Response(git.stdout).text()).trim()
     return (await git.exited) === 0 && branch ? branch : undefined
   } catch {
@@ -168,12 +173,19 @@ export const startAgent = ({
   apiKey,
   port,
   bufferSize = 10_000,
+  authTimeoutMilliseconds = 5_000,
 }: {
   apiKey: string
   port: number
   bufferSize?: number
+  authTimeoutMilliseconds?: number
 }) => {
   const conversations = new Map<string, Conversation>()
+  const apiKeyBytes = Buffer.from(apiKey)
+  const isApiKey = (given: unknown) => {
+    const givenBytes = Buffer.from(String(given ?? ''))
+    return givenBytes.length === apiKeyBytes.length && timingSafeEqual(givenBytes, apiKeyBytes)
+  }
 
   const emit = (conversation: Conversation, update: Json, completed = !isLive(update)) => {
     const seq = ++conversation.lastSeq
@@ -535,7 +547,7 @@ export const startAgent = ({
           ? undefined
           : Response.json({ error: 'Upgrade failed' }, { status: 400 })
       }
-      if (request.headers.get('x-session-api-key') !== apiKey)
+      if (!isApiKey(request.headers.get('x-session-api-key')))
         return Response.json({ error: 'Unauthorized' }, { status: 401 })
       return route(request.method, pathname, request).catch((error) =>
         Response.json({ error: errorUpdateOf(error).message }, { status: 502 }),
@@ -543,6 +555,10 @@ export const startAgent = ({
     },
     websocket: {
       data: {} as SocketData,
+      open: (socket) =>
+        void setTimeout(() => {
+          if (!socket.data.isAuthenticated) socket.close(1008, 'Unauthorized')
+        }, authTimeoutMilliseconds),
       message: (socket, message) => {
         if (socket.data.isAuthenticated) return
         const conversation = conversations.get(socket.data.conversationId)
@@ -553,7 +569,7 @@ export const startAgent = ({
             return undefined
           }
         })()
-        if (!conversation || auth?.type !== 'auth' || auth.session_api_key !== apiKey)
+        if (!conversation || auth?.type !== 'auth' || !isApiKey(auth.session_api_key))
           return void socket.close(1008, 'Unauthorized')
         socket.data.isAuthenticated = true
         const { workspace } = conversation

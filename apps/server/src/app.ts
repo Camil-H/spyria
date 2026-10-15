@@ -51,6 +51,7 @@ import { createModelCallRelay } from './llm-relay.ts'
 import { createRuntimeHostGateway, type RuntimeHostGateway } from './runtime-hosts/gateway.ts'
 
 export const defaultLlm = { model: 'openai/fake/fake-model' }
+const questionIdPattern = /^[\w-]{1,64}$/
 type LlmGateway = ReturnType<typeof createLlmGateway>
 
 export const sessionClassifierOf =
@@ -208,15 +209,12 @@ export const createApp = ({
     .post(chatQuestionPathOf(':chatId', ':questionId'), async (context) => {
       const answer = questionAnswerOf(await context.req.json().catch(() => null))
       if (!answer) return context.json({ error: 'invalid_answer' }, 400)
+      const questionId = context.req.param('questionId') ?? ''
+      if (!questionIdPattern.test(questionId)) return context.json({ error: 'invalid_question' }, 400)
       const { workspaceId, userId } = context.get('zeroContext')
       const status = await agentBridge
         .forDatabase(context.get('database'))
-        .answerQuestion(
-          { workspaceId, chatId: chatId(context.req.param('chatId') ?? '') },
-          userId,
-          context.req.param('questionId') ?? '',
-          answer,
-        )
+        .answerQuestion({ workspaceId, chatId: chatId(context.req.param('chatId') ?? '') }, userId, questionId, answer)
       return new Response(null, { status })
     })
     .post(chatPlanModePathOf(':chatId'), async (context) => {

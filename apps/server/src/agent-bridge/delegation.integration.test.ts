@@ -72,6 +72,16 @@ const routerCallWith = (host: FakeHost, token: string) =>
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'delegate', arguments: {} } }),
   })
+const toolListWith = (host: FakeHost, token: string) =>
+  host.modelCall({
+    path: '/mcp',
+    headers: {
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
+  })
 test('a delegated task runs in a Pi sub-conversation on the classified model, its events are stored once and in order, and the tool answers with the sub’s final message', async () => {
   const { host, main, subs } = await fakeAgent()
   const chat = await newRuntimeChat()
@@ -137,13 +147,16 @@ test('the delegation token works only while its delegation runs and only from it
   const answered = promptAndAnswer(chat, 'Delegate slowly')
   await waitFor(() => subs().length === 1)
   const subToken = tokenOf(subs()[0])
+  expect(tokenOf(subs()[0], 'HQ_MCP_TOKEN')).toBe(subToken)
   const otherHost = await fakeHost('Other host')
   expect((await completionWith(otherHost, subToken)).status).toBe(401)
   expect((await completionWith(host, subToken)).status).toBe(200)
+  expect((await toolListWith(host, subToken)).status).toBe(200)
   expect((await routerCallWith(host, subToken)).status).toBe(401)
   await answered
 
   expect((await completionWith(host, subToken)).status).toBe(401)
+  expect((await toolListWith(host, subToken)).status).toBe(401)
   const withoutTurn = await routerCallWith(host, tokenOf(main(), 'HQ_MCP_TOKEN'))
   expect(withoutTurn.status).toBe(200)
   expect(JSON.parse(withoutTurn.body).result).toEqual({
@@ -206,7 +219,6 @@ test('a long task answers still running, a resume call returns its result, and a
     agentBridge.forDatabase(database).delegate({
       chat: { workspaceId: acme, chatId: otherChat },
       turn: otherTurn,
-      toolToken: '',
       task: '',
       effort: 'small',
       resume: id,
@@ -221,6 +233,25 @@ test('a long task answers still running, a resume call returns its result, and a
   ])
   const delegateSteps = (await stepsOf(promptId)).filter((step) => step?.name === 'delegate')
   expect(delegateSteps.map((step) => step?.result)).toEqual([stillRunningOf(id), 'one two three four five six'])
+})
+
+test('a long task the turn never resumed is forgotten when the turn ends', async () => {
+  await fakeAgent()
+  const chat = await newRuntimeChat()
+  setFakeLlmScript(delegatingScript({ subagents: { 'fake-small': slowWork } }))
+  const promptId = await promptAndAnswer(chat, 'Delegate and move on')
+  const [delegation] = await delegationsOf(chat)
+  const id = String(delegation?.id)
+  expect((await stepsOf(promptId))[0]?.result).toBe(stillRunningOf(id))
+  const resumed = await agentBridge.forDatabase(database).delegate({
+    chat: { workspaceId: acme, chatId: chat },
+    turn: { promptId: messageId(promptId), prompterId: alice, ownerId: alice, prompterName: 'Alice' },
+    task: '',
+    effort: 'small',
+    resume: id,
+  })
+  expect(resumed).toEqual({ text: unknownTaskOf(id), isError: true })
+  await waitFor(async () => (await delegationsOf(chat))[0]?.status === 'finished', 20_000)
 })
 
 test('stopping the turn interrupts the running subagent, marks its delegation stopped, and the next prompt runs', async () => {

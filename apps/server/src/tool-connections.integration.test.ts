@@ -144,7 +144,7 @@ test('a member acts only on their own key: unknown servers and members without a
   expect((await asMember(bob, 'POST', connectionPath('connect'))).status).toBe(400)
 })
 
-test('/mcp runs as the chat owner with and without a turn, with HQ’s attribution, and refuses another host’s token', async () => {
+test('/mcp runs as the chat owner with HQ’s attribution, lists tools outside a turn but calls them only during one, and refuses another host’s token', async () => {
   await connectAlice()
   const host = await fakeHost('Tools host')
   const otherHost = await fakeHost('Other tools host')
@@ -163,9 +163,11 @@ test('/mcp runs as the chat owner with and without a turn, with HQ’s attributi
   expect(textOf(duringTurn.result)).toBe(`you are ${aliceAccount}`)
 
   await database.$client`update chats set agent_turn_message_id = null, agent_turn_prompter_id = null where id = ${chatId}`
-  expect(textOf((await mcpCall(host, token, whoami)).result)).toBe(`you are ${aliceAccount}`)
+  expect((await mcpCall(host, token, rpcOf('tools/list'))).result.tools.length).toBeGreaterThan(0)
+  const outsideTurn = await mcpCall(host, token, whoami)
+  expect(outsideTurn).toMatchObject({ status: 200, result: { isError: true } })
+  expect(textOf(outsideTurn.result)).toBe('This runtime has no active turn')
   expect(fakeMcp.records.slice(callsBefore).filter((record) => record.tool === 'whoami')).toEqual([
-    { tool: 'whoami', user: aliceAccount },
     { tool: 'whoami', user: aliceAccount },
   ])
   expect((await mcpCall(otherHost, token, whoami)).status).toBe(401)
@@ -177,7 +179,7 @@ test('/mcp runs as the chat owner with and without a turn, with HQ’s attributi
         '/api/mcp-logs?limit=100',
       )
     ).logs.filter((log) => log.metadata?.chat === chatId)
-  await waitFor(async () => (await mcpLogs()).length >= 2)
+  await waitFor(async () => (await mcpLogs()).length >= 1)
   for (const log of await mcpLogs()) {
     expect(log.virtual_key_id).toBe(ownerKey.id)
     expect(log.metadata).toMatchObject({ chat: chatId, owner: alice, workspace: acme })

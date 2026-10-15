@@ -262,6 +262,7 @@ export const createAgentBridge = ({
           if (waited >= readyTimeoutMilliseconds) return
           await Bun.sleep(visibleRetryMilliseconds)
         }
+        if (viewer.readyState !== 1) return
         viewers.set(keyOf(chat), (viewers.get(keyOf(chat)) ?? new Set()).add(viewer))
         const streaming = sockets.get(keyOf(chat))
         if (streaming?.promptId && streaming.streamedText)

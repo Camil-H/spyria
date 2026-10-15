@@ -41,7 +41,9 @@ Then, signed in as a workspace admin (Alice), open the workspace menu, **Workspa
 
 Without Docker for `hq-host` itself, run it as a process against the local Docker: `HQ_HOST_STATE_DIR=.hq-host bun apps/host/src/main.ts http://localhost:5173/h/<code>`. Remove the host in the settings page when done, then `docker rm -f hq-host` and `docker volume rm hq-host`.
 
-With a host online, a prompt in a runtime chat starts that chat's runtime and Pi answers. Runtimes call the model through their host: `hq-host` relays `/v1/*` (at `http://hq-gateway-relay:4000/v1` on the runtime network) to HQ, which runs each call on the prompting member's key in the gateway. Rebuild the `hq-host` image after pulling this change (`docker build -t hq-host apps/host`, then recreate the container), or its runtimes cannot reach a model.
+With a host online, a prompt in a runtime chat starts that chat's runtime and Pi answers. Runtimes call the model through their host: `hq-host` relays `/v1/*` (at `http://hq-gateway-relay:4000/v1` on the runtime's network) to HQ, which runs each call on the prompting member's key in the gateway. Rebuild the `hq-host` image after pulling this change (`docker build -t hq-host apps/host`, then recreate the container), or its runtimes cannot reach a model.
+
+Each runtime gets its own Docker network (`hq-rt-<id>-net`), which `hq-host` joins, so runtimes on one host cannot reach each other where Docker's isolation rules apply (Docker Engine on Linux; OrbStack accepts traffic between Docker networks). Egress on cloud hosts: HQ does not filter runtimes' outbound traffic yet; block the metadata endpoint (`169.254.169.254`) and private ranges in the cloud provider's firewall.
 
 ## HQ runtime image
 

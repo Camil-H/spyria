@@ -193,7 +193,7 @@ test('delegation runs a Pi sub-conversation in the same runtime and answers with
   expect(Object.keys(JSON.parse(piFilesOf(sub as Launch).HQ_PI_MCP ?? '{}').mcpServers)).toEqual(['hq'])
   expect(Object.keys(JSON.parse(piFilesOf(main as Launch).HQ_PI_MCP ?? '{}').mcpServers)).toEqual(['hq', 'router'])
   expect(sub?.secrets.HQ_LLM_TOKEN?.value).toStartWith('dl_')
-  expect(sub?.secrets.HQ_MCP_TOKEN?.value).toBe(parentToken)
+  expect(sub?.secrets.HQ_MCP_TOKEN?.value).toBe(sub?.secrets.HQ_LLM_TOKEN?.value)
   expect(relay.prompts).toEqual(['stub:long', 'List the files'])
   expect([
     ...(await database.$client`select model, status, conversation_id from delegations where chat_id = ${chat}`),

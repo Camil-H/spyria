@@ -120,6 +120,8 @@ test('a machine question reaches viewers live and again after a reconnect; the o
 
   expect(await answer(chat, questionId, { answers: { question_0: 'SQLite' } }, bob)).toBe(403)
   expect(await answer(chat, questionId, { answers: 'SQLite' })).toBe(400)
+  for (const refusedId of ['not.an.id', 'a%20b', 'q'.repeat(65)])
+    expect(await answer(chat, refusedId, { answers: { question_0: 'SQLite' } })).toBe(400)
   expect(await answer(chat, questionId, { answers: { question_0: 'SQLite' }, answeredBy: bob })).toBe(200)
   const replies = await finished(asked, chat)
   expect(replies.map(({ body }) => body)).toEqual([

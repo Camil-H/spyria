@@ -52,6 +52,12 @@ const jsonOf = (text: string): unknown => {
     return text
   }
 }
+const relayOrigin = 'http://relay.invalid'
+const relayPathOf = (path: string) => {
+  const url = URL.parse(path, relayOrigin)
+  const isNormalized = url?.origin === relayOrigin && `${url.pathname}${url.search}` === path
+  return isNormalized && !/%2e|%2f|%5c/i.test(url.pathname) ? path : ''
+}
 const modelOf = (body: string) => (jsonOf(body) as { model?: unknown } | undefined)?.model?.toString()
 const anthropicPathPrefix = '/v1/messages'
 
@@ -104,7 +110,7 @@ export const createModelCallRelay = ({
         send({ type: 'gw_error', sid })
       }
     }
-    const path = String(frame.path ?? '')
+    const path = relayPathOf(String(frame.path ?? ''))
     const method = String(frame.method ?? 'POST')
     const isToolPath = path === '/mcp' || path.startsWith('/mcp?')
     if (!path.startsWith('/v1/') && !isToolPath && path !== routerPath)
@@ -118,8 +124,8 @@ export const createModelCallRelay = ({
     if (path === routerPath) {
       if (method !== 'POST') return answer(method === 'DELETE' ? 200 : 405, undefined)
       const turn = token ? await handlers.modelCallTurn(host, token) : undefined
-      const isRuntime = turn ? !turn.delegationId : Boolean(token && (await handlers.toolCallTurn(host, token)))
-      if (!isRuntime) return answer(401, refusalOf('This runtime has no chat owner'))
+      const runtime = turn ?? (token ? await handlers.toolCallTurn(host, token) : undefined)
+      if (!runtime || runtime.delegationId) return answer(401, refusalOf('This runtime has no chat owner'))
       const rpc = jsonOf(body) as RouterCall | undefined
       if (rpc?.id === undefined) return answer(202, undefined)
       const reply = (result: object, replyHeaders?: Record<string, string>) =>
@@ -138,7 +144,6 @@ export const createModelCallRelay = ({
       const { text, isError } = await handlers.delegate({
         chat: turn.chat,
         turn,
-        toolToken: token,
         task: String(task ?? ''),
         effort,
         model,
@@ -167,6 +172,7 @@ export const createModelCallRelay = ({
         answer(200, { jsonrpc: '2.0', id: rpc?.id, result: { content: [{ type: 'text', text }], isError: true } })
       const noticeOf = (failure: ToolCallFailure, isReconnect = false) =>
         toolCallNoticeOf(failure, { ownerName: turn.ownerName, server, isReconnect })
+      if (isToolCall && !turn.prompterId) return toolError('This runtime has no active turn')
       const virtualKey = await keyOf(host.workspaceId, turn.ownerId).catch(() => null)
       if (!virtualKey && isToolCall)
         return toolError(virtualKey === null ? toolGatewayUnreachable : noticeOf('needs_connection'))

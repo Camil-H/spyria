@@ -1,5 +1,5 @@
 import { afterAll, afterEach, expect, test } from 'bun:test'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { startAgent } from './agent.ts'
@@ -253,11 +253,14 @@ test('the workspace is reported at session start and after a turn only when it c
   rmSync(workingDirectory, { recursive: true, force: true })
 })
 
-test('a subscription launch gets no gateway URL and no key, and hq-agent never logs environment values', async () => {
+test('a subscription launch gets no gateway URL and no key, hq-agent never logs environment values, and its own children never see its session key', async () => {
   const secretValues = ['inherited-anthropic-key-0001', 'http://gateway.invalid/v1', 'sk-hq-llm-token-0002', apiKey]
+  const fakeGitDirectory = mkdtempSync(join(tmpdir(), 'hq-agent-git-'))
+  const gitEnvironmentPath = join(fakeGitDirectory, 'environment')
+  writeFileSync(join(fakeGitDirectory, 'git'), `#!/bin/sh\nenv > ${gitEnvironmentPath}\nexit 1\n`, { mode: 0o755 })
   const child = Bun.spawn(['bun', new URL('./main.ts', import.meta.url).pathname], {
     env: {
-      PATH: String(process.env.PATH),
+      PATH: `${fakeGitDirectory}:${process.env.PATH}`,
       HOME: String(process.env.HOME),
       PORT: '0',
       OH_SESSION_API_KEYS_0: apiKey,
@@ -306,6 +309,11 @@ test('a subscription launch gets no gateway URL and no key, and hq-agent never l
   const logs = output + (await new Response(child.stderr).text())
   expect(logs).toContain('hq-agent listening')
   for (const value of secretValues) expect(logs).not.toContain(value)
+  const gitEnvironment = readFileSync(gitEnvironmentPath, 'utf8')
+  rmSync(fakeGitDirectory, { recursive: true, force: true })
+  expect(gitEnvironment).toContain('PATH=')
+  expect(gitEnvironment).not.toContain('OH_SESSION_API_KEYS_0')
+  expect(gitEnvironment).not.toContain(apiKey)
 })
 
 test('a new hq-agent resumes the session of an earlier one, and a missing session falls back to a new one', async () => {
@@ -627,10 +635,16 @@ test('Stop while a Pi question waits closes it as stopped and cancels the dialog
   expect(subSocket.events.filter(kindOf('question'))).toEqual([])
 })
 
-test('requests without the session key are refused, /ready is open', async () => {
-  const { call } = started()
+test('requests without the session key are refused, /ready is open, a socket that never authenticates is closed', async () => {
+  const agent = startAgent({ apiKey, port: 0, authTimeoutMilliseconds: 100 })
+  running.push(agent)
+  const { call, create } = clientOf(agent.port)
   expect((await call('GET', '/ready', undefined, '')).status).toBe(200)
   expect((await call('POST', '/api/conversations', launchOf(), 'wrong')).status).toBe(401)
+  expect((await call('POST', '/api/conversations', launchOf(), apiKey.replace(/.$/, 'x'))).status).toBe(401)
+  const silent = new WebSocket(`ws://localhost:${agent.port}/sockets/events/${await create(launchOf())}`)
+  const closed = new Promise((resolve) => silent.addEventListener('close', (event) => resolve(event.code)))
+  expect(await Promise.race([closed, Bun.sleep(2_000).then(() => 'still open')])).toBe(1008)
   expect((await call('POST', '/api/conversations', { agent: { acp_command: 'node' } })).status).toBe(400)
 })
 

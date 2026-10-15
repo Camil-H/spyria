@@ -1,6 +1,7 @@
 import {
   enqueueJob,
   findRuntimeHostBySecretHash,
+  lockMembership,
   lockRuntimeHost,
   lockRuntimeHostLoads,
   lockRuntimes,
@@ -135,6 +136,9 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
       },
     },
     workspaces: {
+      lockMember: async (workspaceId, memberId) => {
+        await lockMembership(tx, workspaceId, memberId)
+      },
       localSessionsOf: async (workspaceId) =>
         (await tx.run(zql.workspaces.where('workspaceId', workspaceId).one()))?.localSessions ?? true,
       setLocalSessions: (workspaceId, isOn) => tx.mutate.workspaces.update({ workspaceId, localSessions: isOn }),

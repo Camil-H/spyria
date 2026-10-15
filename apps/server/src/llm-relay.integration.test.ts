@@ -96,6 +96,18 @@ test('calls outside /v1, without an active turn or with another host’s runtime
   const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' }
 
   expect(await host.modelCall({ path: '/api/providers', headers })).toMatchObject({ status: 404 })
+  for (const path of [
+    '/v1/../api/providers',
+    '/v1/%2e%2e/api/providers',
+    '/v1/%2E%2E/api/providers',
+    '/v1/..%2fapi/providers',
+    '/v1\\..\\api/providers',
+    '/mcp/../api/providers',
+  ])
+    expect(await host.modelCall({ path, headers, body: completion })).toMatchObject({
+      status: 404,
+      body: expect.stringContaining('"type":"not_found"'),
+    })
   expect(await otherHost.modelCall({ headers, body: completion })).toMatchObject({ status: 401 })
   expect(await host.modelCall({ headers: { authorization: 'Bearer unknown' }, body: completion })).toMatchObject({
     status: 401,

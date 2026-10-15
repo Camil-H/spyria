@@ -101,7 +101,7 @@ test('creates the container with exactly the hardening flags and three named vol
     Env: [`OH_SESSION_API_KEYS_0=${apiKey}`],
     Labels: { 'hq.managed': '1', 'hq.runtime': 'runtime-1' },
     HostConfig: {
-      NetworkMode: 'hq-runtimes',
+      NetworkMode: 'hq-rt-runtime-1-net',
       CapDrop: ['ALL'],
       SecurityOpt: ['no-new-privileges'],
       ReadonlyRootfs: true,
@@ -134,7 +134,10 @@ const recordingDocker = () => {
   const docker = (async (method: string, path: string, body?: unknown) => {
     calls.push({ method, path, body })
     if (path.endsWith('/json') && path.startsWith('/containers/'))
-      return { Config: { Labels: { 'hq.managed': '1', 'hq.runtime': 'runtime-1' } } }
+      return {
+        Config: { Labels: { 'hq.managed': '1', 'hq.runtime': 'runtime-1' } },
+        NetworkSettings: { Networks: { 'hq-rt-runtime-1-net': {} } },
+      }
     return {}
   }) as Docker
   return { docker, calls }
@@ -173,5 +176,34 @@ test('removing a runtime never deletes the credentials volumes', async () => {
     '/volumes/hq-rt-runtime-1-ws',
     '/volumes/hq-rt-runtime-1-home',
     '/volumes/hq-rt-runtime-1-tmp',
+    '/networks/hq-rt-runtime-1-net',
+  ])
+})
+
+test('each runtime gets its own network, which a containerized hq-host joins on create and start and leaves on remove', async () => {
+  const { docker, calls } = recordingDocker()
+  const runner = createCommandRunner({ docker, prefix: 'hq-', selfContainerId: 'self-1' })
+  const joined = { Container: 'self-1', EndpointConfig: { Aliases: ['hq-gateway-relay'] } }
+  await runner.run({ op: 'create', ...create })
+  expect(calls.filter((call) => call.path.startsWith('/networks/'))).toEqual([
+    {
+      method: 'POST',
+      path: '/networks/create',
+      body: { Name: 'hq-rt-runtime-1-net', Driver: 'bridge', Labels: { 'hq.managed': '1' } },
+    },
+    { method: 'POST', path: '/networks/hq-rt-runtime-1-net/connect', body: joined },
+  ])
+  calls.splice(0)
+  await runner.run({ op: 'start', runtimeId: 'runtime-1' })
+  expect(calls.map(({ method, path }) => `${method} ${path}`)).toEqual([
+    'GET /containers/hq-rt-runtime-1/json',
+    'POST /networks/hq-rt-runtime-1-net/connect',
+    'POST /containers/hq-rt-runtime-1/start',
+  ])
+  calls.splice(0)
+  await runner.run({ op: 'remove', runtimeId: 'runtime-1' })
+  expect(calls.filter((call) => call.path.startsWith('/networks/'))).toEqual([
+    { method: 'POST', path: '/networks/hq-rt-runtime-1-net/disconnect', body: { Container: 'self-1', Force: true } },
+    { method: 'DELETE', path: '/networks/hq-rt-runtime-1-net', body: undefined },
   ])
 })

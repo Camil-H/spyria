@@ -56,7 +56,7 @@ export type PiLaunch = Readonly<{
   compactionModel: string
   compaction?: Readonly<{ reserveTokens: number; keepRecentTokens: number }>
 }>
-export type SubConversation = Readonly<{ parentConversationId: string; toolToken: string }>
+export type SubConversation = Readonly<{ parentConversationId: string }>
 export type AgentServer = {
   createConversation(
     conversation: AgentConversation,

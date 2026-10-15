@@ -41,6 +41,7 @@ export const addRuntimeHost = async (
   const claimCodeHash = await hashSecret(code)
   await transactor.run(async ({ runtimeHosts, workspaces }) => {
     if (personal && !(await workspaces.localSessionsOf(input.workspaceId))) throw new LocalSessionsOff()
+    if (personal) await workspaces.lockMember(input.workspaceId, memberId)
     if (
       personal &&
       (await runtimeHosts.listMachines(input.workspaceId)).some((machine) => machine.ownerId === memberId)

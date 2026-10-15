@@ -155,7 +155,7 @@ const piConversationOf = (
   },
   secrets: {
     HQ_LLM_TOKEN: { kind: 'StaticSecret', value: llmToken },
-    HQ_MCP_TOKEN: { kind: 'StaticSecret', value: sub?.toolToken ?? llmToken },
+    HQ_MCP_TOKEN: { kind: 'StaticSecret', value: llmToken },
   },
 })
 

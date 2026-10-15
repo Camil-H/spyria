@@ -1,6 +1,7 @@
 import { startAgent } from './agent.ts'
 
 const apiKey = process.env.OH_SESSION_API_KEYS_0
+delete process.env.OH_SESSION_API_KEYS_0
 if (!apiKey) {
   console.error('hq-agent needs OH_SESSION_API_KEYS_0')
   process.exit(2)

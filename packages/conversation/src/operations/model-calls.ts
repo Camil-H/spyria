@@ -20,36 +20,42 @@ type FailedCall = {
   delegationId?: string
 }
 
-export const findModelCallTurn = async ({ transactor, runtimes }: Dependencies, host: AgentHost, token: string) => {
+const tokenChatOf = async ({ transactor, runtimes }: Dependencies, host: AgentHost, token: string) => {
   const runtimeChatId = await runtimes.chatOfLlmToken(host, token)
-  const tokenHash = runtimeChatId ? '' : await digestOf(token)
-  return transactor.run(async ({ agentTurns, members, delegations }) => {
-    const delegation = runtimeChatId ? undefined : await delegations.runningOfTokenHash(host.hostId, tokenHash)
-    const chatId = runtimeChatId ?? delegation?.chatId
-    const turn = chatId && (await agentTurns.modelCallTurn(chatId))
+  if (runtimeChatId) return { chatId: runtimeChatId, delegationId: undefined }
+  const tokenHash = await digestOf(token)
+  const delegation = await transactor.run(({ delegations }) => delegations.runningOfTokenHash(host.hostId, tokenHash))
+  return delegation && { chatId: delegation.chatId, delegationId: delegation.id }
+}
+
+export const findModelCallTurn = async (dependencies: Dependencies, host: AgentHost, token: string) => {
+  const tokenChat = await tokenChatOf(dependencies, host, token)
+  if (!tokenChat) return undefined
+  return dependencies.transactor.run(async ({ agentTurns, members }) => {
+    const turn = await agentTurns.modelCallTurn(tokenChat.chatId)
     return (
-      chatId &&
       turn && {
         ...turn,
-        chat: { workspaceId: host.workspaceId, chatId },
+        chat: { workspaceId: host.workspaceId, chatId: tokenChat.chatId },
         prompterName: await members.displayNameOf(turn.prompterId),
-        delegationId: delegation?.id,
+        delegationId: tokenChat.delegationId,
       }
     )
   })
 }
 
-export const findToolCallTurn = async ({ transactor, runtimes }: Dependencies, host: AgentHost, token: string) => {
-  const chatId = await runtimes.chatOfLlmToken(host, token)
-  if (!chatId) return undefined
-  return transactor.run(async ({ agentTurns, members }) => {
-    const { ownerId, prompterId } = await agentTurns.toolCallTurn(chatId)
+export const findToolCallTurn = async (dependencies: Dependencies, host: AgentHost, token: string) => {
+  const tokenChat = await tokenChatOf(dependencies, host, token)
+  if (!tokenChat) return undefined
+  return dependencies.transactor.run(async ({ agentTurns, members }) => {
+    const { ownerId, prompterId } = await agentTurns.toolCallTurn(tokenChat.chatId)
     return (
       ownerId && {
-        chat: { workspaceId: host.workspaceId, chatId },
+        chat: { workspaceId: host.workspaceId, chatId: tokenChat.chatId },
         ownerId,
         prompterId,
         ownerName: await members.displayNameOf(ownerId),
+        delegationId: tokenChat.delegationId,
       }
     )
   })

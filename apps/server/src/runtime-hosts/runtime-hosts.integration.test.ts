@@ -366,7 +366,7 @@ const countMachines = async (member: Member) =>
     })
   ).json()
 
-test('a member adds one machine of their own; a second one is refused until it is removed', async () => {
+test('a member adds one machine of their own under a lock on their membership; a second one is refused until it is removed', async () => {
   await database.$client`update runtime_hosts set removed_at = now() where owner_id is not null`
   const { status, body } = await addMachine(bobInAcme)
   expect(status).toBe(201)
@@ -374,6 +374,21 @@ test('a member adds one machine of their own; a second one is refused until it i
   expect(await addMachine(bobInAcme)).toMatchObject({ status: 400, body: { error: 'machine_already_added' } })
   expect(await removeHost(bobInAcme, acme, String(body?.id))).toEqual(succeeded)
   expect((await addMachine(bobInAcme)).status).toBe(201)
+
+  await database.$client`update runtime_hosts set removed_at = now() where owner_id is not null`
+  const memberLocked = Promise.withResolvers<void>()
+  const releaseMember = Promise.withResolvers<void>()
+  const locking = database.$client.begin(async (sql) => {
+    await sql`select 1 from memberships where workspace_id = ${acme} and user_id = ${bob} for no key update`
+    memberLocked.resolve()
+    await releaseMember.promise
+  })
+  await memberLocked.promise
+  const adding = addMachine(bobInAcme)
+  expect(await Promise.race([adding.then(() => 'added'), Bun.sleep(500).then(() => 'waiting')])).toBe('waiting')
+  releaseMember.resolve()
+  await locking
+  expect((await adding).status).toBe(201)
 })
 
 test('a machine is read and removed by its owner only, and admins see only how many members use one', async () => {

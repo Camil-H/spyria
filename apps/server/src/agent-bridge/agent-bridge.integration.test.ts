@@ -171,7 +171,7 @@ test('stream frames reach browsers of the chat workspace only, and no secret rea
   }
 })
 
-test('the agent’s workspace reaches viewers live when it changes, is resent to a new viewer and is never stored', async () => {
+test('the agent’s workspace reaches viewers live when it changes, is resent to a new viewer but not to a closed one, and is never stored', async () => {
   await agentHost()
   const chat = await newRuntimeChat()
   const viewer = await openStream(chat)
@@ -191,6 +191,13 @@ test('the agent’s workspace reaches viewers live when it changes, is resent to
   const newViewer = await openStream(chat)
   await waitFor(() => workspacesIn(newViewer.frames).length === 1)
   expect(workspacesIn(newViewer.frames)).toEqual([{ chatId: chat, workspace: branched, isSnapshot: true }])
+  const closedViewerFrames: unknown[] = []
+  const closedViewer = { readyState: 3, send: (frame: unknown) => closedViewerFrames.push(frame) }
+  await agentBridge.forDatabase(database).watch(closedViewer as never, { userId: alice, workspaceId: acme } as never, {
+    workspaceId: acme,
+    chatId: chat,
+  })
+  expect(closedViewerFrames).toEqual([])
   const storedUpdates = (await storedAgentEventsOf(chat)).map(
     (event) => (event.payload as { event: { update: { sessionUpdate: string } } }).event.update.sessionUpdate,
   )
