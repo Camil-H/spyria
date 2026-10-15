@@ -1,4 +1,4 @@
-import { afterEach, expect, setDefaultTimeout, test } from 'bun:test'
+import { afterAll, afterEach, expect, setDefaultTimeout, test } from 'bun:test'
 import type { ChatId } from '@hq/kernel'
 import {
   acme,
@@ -28,24 +28,40 @@ const {
   repliesTo,
   answered,
   runtimeOf,
+  storedAgentEventsOf,
 } = await startAgentStack({
   llm: { model: 'openai/fake' },
   now: () => Date.now() + clockOffsetMilliseconds,
   promptsWaitingAfterHello: true,
 })
 const relays: ReturnType<typeof createHqAgentRelay>[] = []
+const newLinger = () => ({ reached: Promise.withResolvers<void>(), released: Promise.withResolvers<void>() })
+let linger = newLinger()
+const lingerServer = Bun.serve({
+  port: 0,
+  fetch: async () => {
+    linger.reached.resolve()
+    await linger.released.promise
+    return new Response()
+  },
+})
+const holdUrl = `http://localhost:${lingerServer.port}/hold?`
 afterEach(async () => {
   clockOffsetMilliseconds = 0
+  linger.released.resolve()
+  linger = newLinger()
   await Promise.all(relays.splice(0).map((relay) => relay.stop()))
 })
+afterAll(() => lingerServer.stop(true))
 
 const aliceInGlobex = { workspaceId: globex, userId: alice }
 type Relay = ReturnType<typeof createHqAgentRelay>
 const agentHost = async (
   name = 'Agent host',
   agentServerOf: (relay: Relay) => ContainerAgent = (relay) => relay.agentServer,
+  relayOptions: Parameters<typeof createHqAgentRelay>[0] = {},
 ) => {
-  const relay = createHqAgentRelay()
+  const relay = createHqAgentRelay(relayOptions)
   relays.push(relay)
   return { relay, host: await fakeHost(name, { agentServer: agentServerOf(relay) }) }
 }
@@ -56,6 +72,7 @@ const delivered = (relay: Relay, count: number) => waitFor(() => relay.prompts.l
 const commandShown = (messageId: string) =>
   waitFor(async () => (await repliesTo(messageId)).some((reply) => reply.body === 'command'), firstTurnMilliseconds)
 const conversationIdOf = async (chat: ChatId) => String((await runtimeOf(chat)).agent_conversation_id)
+const conversationPath = /^\/api\/conversations\/[^/]+$/
 const sweepAgentTurns = () => agentBridge.forDatabase(database).jobs['agent.sweep']({ workspaceId: acme, payload: {} })
 const agentReply = (turn: number) => ({
   kind: 'agent' as const,
@@ -170,7 +187,7 @@ test('Retry replaces a failed runtime and answers the waiting prompts in order; 
   expect((await runtimeOf(chat))?.state).toBe('running')
 })
 
-test('a turn ends with a notice when its runtime stops, its host goes offline or its host is removed', async () => {
+test('a turn ends with a notice when its runtime stops, its host stays offline past the silence bound or its host is removed', async () => {
   const { relay, host } = await agentHost()
   const stopping = await newRuntimeChat()
   const stopped = await prompt(stopping, 'stub:long Keep working')
@@ -184,8 +201,13 @@ test('a turn ends with a notice when its runtime stops, its host goes offline or
   const lost = await prompt(losing, 'stub:long Keep working')
   await commandShown(lost)
   await host.disconnect()
-  await turnIs(losing, null)
+  await Bun.sleep(200)
+  expect(await turnOf(losing)).toBe(lost)
+  clockOffsetMilliseconds = 11 * minute
+  await sweepAgentTurns()
   await endsWith(lost, stoppedEarly.body)
+  expect(await turnOf(losing)).toBeNull()
+  clockOffsetMilliseconds = 0
 
   await host.connect()
   const removing = await newRuntimeChat()
@@ -196,11 +218,17 @@ test('a turn ends with a notice when its runtime stops, its host goes offline or
   await endsWith(removed, stoppedEarly.body)
 })
 
-test('the sweep ends turns silent for 10 minutes and turns whose runtime is not running, and reschedules itself', async () => {
+test('the sweep keeps a silent turn hq-agent still runs and touches its runtime, ends a silent turn hq-agent finished and turns whose runtime is not running, and reschedules itself', async () => {
   await agentHost()
   const silent = await newRuntimeChat()
   const silentPrompt = await prompt(silent, 'stub:long Stay silent')
   await commandShown(silentPrompt)
+  await database.$client`update runtimes set last_active_at = now() - interval '2 hours' where chat_id = ${silent}`
+  const finishing = await newRuntimeChat()
+  const finished = await prompt(finishing, 'Finish without a turn end')
+  await answered(finished)
+  await turnIs(finishing, null)
+  await database.$client`update chats set agent_turn_message_id = ${finished} where id = ${finishing}`
   const notRunning = await newRuntimeChat()
   const notRunningPrompt = await prompt(notRunning, 'stub:long Stay silent')
   await commandShown(notRunningPrompt)
@@ -209,22 +237,83 @@ test('the sweep ends turns silent for 10 minutes and turns whose runtime is not 
   clockOffsetMilliseconds = 9 * minute
   await sweepAgentTurns()
   expect(await turnOf(silent)).toBe(silentPrompt)
+  expect(await turnOf(finishing)).toBe(finished)
   await endsWith(notRunningPrompt, stoppedEarly.body)
   expect(await turnOf(notRunning)).toBeNull()
 
   clockOffsetMilliseconds = 11 * minute
   await sweepAgentTurns()
-  await endsWith(silentPrompt, 'The agent did not respond')
-  expect(await turnOf(silent)).toBeNull()
+  expect(await turnOf(silent)).toBe(silentPrompt)
+  expect(Date.now() - new Date((await runtimeOf(silent)).last_active_at).getTime()).toBeLessThan(minute)
+  await endsWith(finished, 'The agent did not respond')
+  expect(await turnOf(finishing)).toBeNull()
   const sweeps = await database.$client`
     select extract(epoch from run_at - now()) as delay_seconds from jobs where type = 'agent.sweep' and state = 'queued'`
   expect(sweeps).toHaveLength(1)
   expect(Number(sweeps[0]?.delay_seconds)).toBeGreaterThan(50)
 })
 
+test('a host blip during a turn keeps the turn, which ends with its reply once the host is back', async () => {
+  const { host } = await agentHost('Agent host', undefined, { holdUrl })
+  const chat = await newRuntimeChat()
+  const held = await prompt(chat, 'stub:linger Through the blip')
+  await linger.reached.promise
+  await host.disconnect()
+  await Bun.sleep(200)
+  expect(await turnOf(chat)).toBe(held)
+
+  await host.connect()
+  linger.released.resolve()
+  await turnIs(chat, null)
+  expect(await repliesTo(held)).toEqual([agentReply(1)])
+})
+
+test("a turn end arriving after its turn was closed does not end the next prompt's turn", async () => {
+  let isStatusHidden = false
+  let isFirstEnded = Promise.resolve()
+  const turnEndsOf = async (chat: ChatId) =>
+    (await storedAgentEventsOf(chat)).filter(
+      (event) =>
+        (event.payload as { event: { update: { sessionUpdate?: string } } }).event.update.sessionUpdate === 'turn_end',
+    ).length
+  const { relay } = await agentHost(
+    'Agent host',
+    (relay) => ({
+      ...relay.agentServer,
+      respond: async (request, container) => {
+        if (isStatusHidden && request.method === 'GET' && conversationPath.test(request.path))
+          return { status: 503, body: '' }
+        if (request.path.endsWith('/events') && relay.prompts.length === 1) await isFirstEnded
+        return relay.agentServer.respond(request, container)
+      },
+    }),
+    { holdUrl },
+  )
+  const chat = await newRuntimeChat()
+  const first = await prompt(chat, 'stub:linger Slow first')
+  await linger.reached.promise
+  isStatusHidden = true
+  clockOffsetMilliseconds = 11 * minute
+  await sweepAgentTurns()
+  clockOffsetMilliseconds = 0
+  isStatusHidden = false
+  await endsWith(first, 'The agent did not respond')
+
+  isFirstEnded = waitFor(async () => (await turnEndsOf(chat)) === 1).then(() => {})
+  const second = await prompt(chat, 'Then this')
+  await turnIs(chat, second)
+  linger.released.resolve()
+  await isFirstEnded
+  expect(await turnOf(chat)).toBe(second)
+  await answered(second)
+  await turnIs(chat, null)
+  expect(await repliesTo(second)).toEqual([agentReply(2)])
+  expect(await repliesTo(first)).toEqual([notice('The agent did not respond')])
+  expect(relay.prompts).toEqual(['stub:linger Slow first', 'Then this'])
+})
+
 test('on reconnect, a turn hq-agent finished while away is closed from the resent events, and a turn whose conversation is gone ends with a notice', async () => {
   let isHoldingStatus = false
-  const conversationPath = /^\/api\/conversations\/[^/]+$/
   const { relay } = await agentHost('Agent host', (relay) => ({
     ...relay.agentServer,
     respond: async (request, container) => {

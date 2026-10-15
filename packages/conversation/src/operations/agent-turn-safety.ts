@@ -14,14 +14,22 @@ const closeWithNotice = (transactor: ConversationTransactor, chat: AgentChat, pr
   transactor.run((unitOfWork) => closeAgentTurn(unitOfWork, chat.chatId, promptId, () => notice))
 
 export const sweepAgentTurns = async (
-  { transactor, runtimes }: AgentDependencies,
+  { transactor, runtimes, agentServer, eventSockets }: AgentDependencies,
   { workspaceId, now }: { workspaceId: WorkspaceId; now: number },
 ) => {
   for (const { chatId, promptId, lastEventAt } of await transactor.run(({ agentTurns }) => agentTurns.active())) {
     const chat = { workspaceId, chatId }
-    if (!(await runtimes.endpointOf(chat))) await closeWithNotice(transactor, chat, promptId, agentNotices.stoppedEarly)
-    else if (now - lastEventAt >= silentTurnMilliseconds)
-      await closeWithNotice(transactor, chat, promptId, agentNotices.noResponse)
+    const endpoint = await runtimes.endpointOf(chat)
+    const isSilent = now - lastEventAt >= silentTurnMilliseconds
+    const executionStatus =
+      isSilent && endpoint?.conversationId
+        ? await agentServer.statusOf({ ...endpoint, conversationId: endpoint.conversationId }).catch(() => undefined)
+        : undefined
+    if (executionStatus === 'running') await runtimes.touch(chat)
+    else if (endpoint ? isSilent : isSilent || !(await runtimes.isWaitingOnHost(chat))) {
+      eventSockets.stopStreaming(chat, promptId)
+      await closeWithNotice(transactor, chat, promptId, endpoint ? agentNotices.noResponse : agentNotices.stoppedEarly)
+    }
   }
   await transactor.run(({ agentJobs }) => agentJobs.sweepLater())
 }
@@ -30,6 +38,7 @@ export const reopenAgentTurn = async ({ transactor, runtimes, agentServer }: Age
   const promptId = await transactor.run(({ agentTurns }) => agentTurns.lock(chat.chatId))
   if (promptId === null) return undefined
   const endpoint = await runtimes.endpointOf(chat)
+  if (!endpoint && (await runtimes.isWaitingOnHost(chat))) return undefined
   const conversation = endpoint?.conversationId ? { ...endpoint, conversationId: endpoint.conversationId } : undefined
   const executionStatus = conversation && (await agentServer.statusOf(conversation))
   if (conversation && executionStatus !== undefined)

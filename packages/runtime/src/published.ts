@@ -3,6 +3,7 @@ export { createZeroTransactor as createRuntimeTransactor } from './integrations/
 export {
   findLlmTokenChat,
   forgetAgentConversation,
+  isRuntimeWaitingOnHost,
   issueAgentLlmToken,
   listHostChats,
   readAgentAccess,

@@ -34,6 +34,7 @@ export type RuntimeReadiness =
 export type AgentRuntimes = {
   ensureRunning(chat: AgentChat): Promise<RuntimeReadiness>
   endpointOf(chat: AgentChat): Promise<AgentEndpoint | undefined>
+  isWaitingOnHost(chat: AgentChat): Promise<boolean>
   rememberConversation(chat: AgentChat, conversationId: string): Promise<string>
   forgetConversation(chat: AgentChat): Promise<void>
   issueLlmToken(chat: AgentChat): Promise<string>

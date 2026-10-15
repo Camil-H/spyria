@@ -1,7 +1,6 @@
 import { type ChatId, type MessageId, messageId } from '@hq/kernel'
 import type { AgentEventSockets, AgentRuntimes, AgentServer, SessionClassifier } from '../contracts/agent.ts'
 import type { ConversationTransactor, UnitOfWork } from '../contracts/transactor.ts'
-import { type TurnOutcome, turnEndNoticeOf } from '../domain/agent-events.ts'
 import { type Message, newMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
 import { noLlmKeyNoticeOf } from '../domain/model-call-failures.ts'
@@ -66,12 +65,6 @@ const finishAgentTurn = async (unitOfWork: UnitOfWork, chatId: ChatId, promptId:
   const notice = noticeOf(await unitOfWork.agentTurns.hasReply(promptId))
   if (notice) await appendNotice(unitOfWork, await unitOfWork.messages.get(promptId), notice)
   await requestNextPrompt(unitOfWork, chatId)
-}
-
-export const endAgentTurn = async (unitOfWork: UnitOfWork, chatId: ChatId, outcome: TurnOutcome) => {
-  const promptId = await unitOfWork.agentTurns.lock(chatId)
-  if (promptId !== null)
-    await finishAgentTurn(unitOfWork, chatId, promptId, (hasReply) => turnEndNoticeOf(outcome, hasReply))
 }
 
 export const closeAgentTurn = async (

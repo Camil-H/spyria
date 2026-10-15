@@ -80,9 +80,12 @@ export const createAgentHandlers = ({
         (await transactorOf(chat.workspaceId).run(({ agentEvents }) => agentEvents.last(chat.chatId))) ?? null,
         listener,
       ),
-    recordEvent: async (chat: AgentChat, event: AgentEvent) => {
+    recordEvent: async (chat: AgentChat, event: AgentEvent, turnPromptId?: MessageId) => {
       if (!isStoredAgentEvent(event)) return undefined
-      const recorded = await recordAgentEvent({ transactor: transactorOf(chat.workspaceId) }, { ...chat, event })
+      const recorded = await recordAgentEvent(
+        { transactor: transactorOf(chat.workspaceId) },
+        { ...chat, event, turnPromptId },
+      )
       await runtimes.touch(chat)
       return recorded
     },

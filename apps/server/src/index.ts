@@ -30,7 +30,7 @@ const hqAgentImage = await readHqAgentImage()
 const runtimeHosts = createRuntimeHostGateway({
   hqAgentImage,
   databases: () => [database],
-  afterHello: (helloDatabase, host) => agentBridge.forDatabase(helloDatabase).promptWaiting(host),
+  afterHello: (helloDatabase, host) => agentBridge.forDatabase(helloDatabase).resumeHost(host),
   relayModelCall: createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),
 })
 const llmModel = process.env.HQ_LLM_MODEL

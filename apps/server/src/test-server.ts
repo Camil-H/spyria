@@ -136,7 +136,7 @@ const placement = { hqAgentImage }
 const runtimeHosts = createRuntimeHostGateway({
   ...placement,
   databases: () => [...servedDatabaseByName.values()].map((served) => served.database),
-  afterHello: (database, host) => agentBridge.forDatabase(database).promptWaiting(host),
+  afterHello: (database, host) => agentBridge.forDatabase(database).resumeHost(host),
   relayModelCall: createModelCallRelay({
     gatewayUrlOf,
     llmGateway,

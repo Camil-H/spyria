@@ -347,7 +347,7 @@ export const startAgentStack = async ({
     hqAgentImage,
     relayModelCall: routing ? createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }) : undefined,
     afterHello: promptsWaitingAfterHello
-      ? (helloDatabase, host) => agentBridge.forDatabase(helloDatabase).promptWaiting(host)
+      ? (helloDatabase, host) => agentBridge.forDatabase(helloDatabase).resumeHost(host)
       : undefined,
   })
   const agentBridge = createAgentBridge({

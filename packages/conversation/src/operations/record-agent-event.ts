@@ -8,11 +8,12 @@ import {
   observedProjectionStep,
   subagentDelegationOf,
   toolCallIdOf,
+  turnEndNoticeOf,
 } from '../domain/agent-events.ts'
 import type { StepDelegation } from '../domain/agent-steps.ts'
 import { newMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
-import { endAgentTurn } from './agent-turn.ts'
+import { closeAgentTurn } from './agent-turn.ts'
 
 type Dependencies = { transactor: ConversationTransactor }
 type Input = {
@@ -20,6 +21,7 @@ type Input = {
   chatId: ChatId
   event: AgentEvent
   delegation?: StepDelegation
+  turnPromptId?: MessageId
 }
 
 const recordIn = async (
@@ -28,7 +30,7 @@ const recordIn = async (
   { workspaceId, chatId, event, ...input }: Input,
 ) => {
   const previous = await unitOfWork.agentEvents.last(chatId)
-  const promptId = activePromptId ?? previous?.replyToId ?? null
+  const promptId = input.turnPromptId ?? activePromptId ?? previous?.replyToId ?? null
   const delegation =
     input.delegation ??
     (toolCallIdOf(event) && promptId
@@ -37,7 +39,9 @@ const recordIn = async (
   const recordedAt = new Date()
   const seq = await unitOfWork.agentEvents.append(chatId, event, promptId, recordedAt, delegation)
   const projected = agentProjectionOf(event)
-  const turnEnd = seq !== undefined && !delegation && projected?.type === 'turn-end' ? projected : undefined
+  const isOwnTurn = (input.turnPromptId ?? activePromptId) === activePromptId
+  const turnEnd =
+    seq !== undefined && !delegation && isOwnTurn && projected?.type === 'turn-end' ? projected : undefined
   const isError = seq !== undefined && !delegation && projected?.type === 'step' && projected.step.type === 'error'
   const failure =
     (isError || (turnEnd && previous?.sessionUpdate !== 'error')) && (await unitOfWork.agentTurns.lastFailure(chatId))
@@ -73,7 +77,8 @@ const recordIn = async (
   }
   const isPlanning = seq !== undefined && !delegation ? isPlanningOf(event) : undefined
   if (isPlanning !== undefined) await unitOfWork.chats.setPlanning(chatId, isPlanning)
-  if (turnEnd) await endAgentTurn(unitOfWork, chatId, turnEnd.outcome)
+  if (turnEnd && activePromptId)
+    await closeAgentTurn(unitOfWork, chatId, activePromptId, (hasReply) => turnEndNoticeOf(turnEnd.outcome, hasReply))
   return {
     promptId: turnEnd ? null : activePromptId,
     isReplyStored: projection?.type === 'message' || projection?.type === 'step',

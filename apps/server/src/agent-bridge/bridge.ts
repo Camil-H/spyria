@@ -2,6 +2,7 @@ import {
   type AgentChat,
   type AgentConversation,
   type AgentEvent,
+  type AgentHost,
   type AgentLlm,
   createAgentHandlers,
   isStoredAgentEvent,
@@ -52,7 +53,7 @@ export const createAgentBridge = ({
         streamedText: string
         segment?: Segment
         isReasoning: boolean
-        isDraining: boolean
+        drainingPromptId: MessageId | null
         endedPromptId: string | null
         isReady: Promise<void>
         questions: Map<string, object>
@@ -81,7 +82,7 @@ export const createAgentBridge = ({
               promptId: null,
               streamedText: '',
               segment: undefined,
-              isDraining: socket.endedPromptId !== promptId,
+              drainingPromptId: socket.endedPromptId !== promptId ? promptId : null,
             })
         },
       },
@@ -123,7 +124,7 @@ export const createAgentBridge = ({
         streamedText: '',
         segment: undefined as Segment | undefined,
         isReasoning: false,
-        isDraining: false,
+        drainingPromptId: null as MessageId | null,
         endedPromptId: null as string | null,
         isClosed: false,
         questions: new Map<string, object>(),
@@ -143,14 +144,14 @@ export const createAgentBridge = ({
         if (chatSocket.promptId) reopenLater(chat)
       }
       sockets.set(keyOf(chat), chatSocket)
-      const record = (event: AgentEvent) => {
+      const record = (event: AgentEvent, turnPromptId?: MessageId) => {
         const promptAtEvent = chatSocket.promptId
         recording = recording
-          .then(() => handlers.recordEvent(chat, event))
+          .then(() => handlers.recordEvent(chat, event, turnPromptId))
           .then((recorded) => {
-            if (recorded?.isReplyStored && promptAtEvent)
+            if (recorded?.isReplyStored && (turnPromptId ?? promptAtEvent))
               for (const viewer of viewers.get(keyOf(chat)) ?? [])
-                send(viewer, chat, { promptId: promptAtEvent, storedId: event.id })
+                send(viewer, chat, { promptId: turnPromptId ?? promptAtEvent, storedId: event.id })
             if (!recorded || chatSocket.promptId !== promptAtEvent) return
             chatSocket.promptId = recorded.promptId
             if (recorded.promptId === null) chatSocket.streamedText = ''
@@ -197,11 +198,12 @@ export const createAgentBridge = ({
           }
           if (update?.sessionUpdate === 'question_answered' || update?.sessionUpdate === 'question_closed')
             chatSocket.questions.delete(String(update.questionId))
+          const drainedPromptId = chatSocket.drainingPromptId ?? undefined
           if (update?.sessionUpdate === 'turn_end') {
-            if (chatSocket.isDraining) chatSocket.isDraining = false
+            if (drainedPromptId) chatSocket.drainingPromptId = null
             else chatSocket.endedPromptId = chatSocket.promptId
           }
-          if (streamed && chatSocket.isDraining) return
+          if (streamed && drainedPromptId) return
           if (streamed?.text && chatSocket.promptId) {
             const { text, isReasoning } = streamed
             if (chatSocket.segment && chatSocket.segment.isReasoning !== isReasoning) flushSegment(event)
@@ -222,29 +224,33 @@ export const createAgentBridge = ({
           }
           if (streamed) return
           if (isStoredAgentEvent(event)) flushSegment(event)
-          record(event)
+          record(event, drainedPromptId)
         },
         onClose: closed,
       })
       opened.catch(closed)
       return chatSocket.isReady
     }
+    const resumeActiveTurns = async () => {
+      const chats = await database.$client<{ workspaceId: string; chatId: string }[]>`
+        select workspace_id as "workspaceId", id as "chatId" from chats where agent_turn_message_id is not null`
+      for (const chat of chats)
+        await reopen({ workspaceId: workspaceId(chat.workspaceId), chatId: chatId(chat.chatId) })
+    }
     return {
       jobs: handlers.jobs,
       ensureOpen,
-      promptWaiting: handlers.promptWaiting,
       modelCallTurn: handlers.modelCallTurn,
       toolCallTurn: handlers.toolCallTurn,
       delegate: handlers.delegate,
       answerQuestion: handlers.answerQuestion,
       setPlanMode: handlers.setPlanMode,
       recordModelCallFailure: handlers.recordModelCallFailure,
-      resumeActiveTurns: async () => {
-        const chats = await database.$client<{ workspaceId: string; chatId: string }[]>`
-          select workspace_id as "workspaceId", id as "chatId" from chats where agent_turn_message_id is not null`
-        for (const chat of chats)
-          await reopen({ workspaceId: workspaceId(chat.workspaceId), chatId: chatId(chat.chatId) })
+      resumeHost: async (host: AgentHost) => {
+        await resumeActiveTurns()
+        return handlers.promptWaiting(host)
       },
+      resumeActiveTurns,
       watch: async (viewer: WSContext, context: ZeroContext, chat: AgentChat) => {
         const isVisible = async () =>
           (

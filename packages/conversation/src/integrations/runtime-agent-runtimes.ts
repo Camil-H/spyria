@@ -3,6 +3,7 @@ import {
   ensureRuntimeRunning,
   findLlmTokenChat,
   forgetAgentConversation,
+  isRuntimeWaitingOnHost,
   issueAgentLlmToken,
   listHostChats,
   type RuntimePlacement,
@@ -50,6 +51,7 @@ export const createRuntimeAgentRuntimes = (
         : { state: 'failed', failure: runtime.failure }
     },
     endpointOf,
+    isWaitingOnHost: (chat) => inTransaction((dependencies) => isRuntimeWaitingOnHost(dependencies, chat)),
     rememberConversation: (chat, conversationId) =>
       inTransaction((dependencies) => rememberAgentConversation(dependencies, { ...chat, conversationId })),
     forgetConversation: (chat) => inTransaction((dependencies) => forgetAgentConversation(dependencies, chat)),

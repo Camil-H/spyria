@@ -23,6 +23,12 @@ export const readAgentAccess = ({ transactor }: Dependencies, { workspaceId, cha
     }
   })
 
+export const isRuntimeWaitingOnHost = ({ transactor }: Dependencies, { workspaceId, chatId }: ChatRuntime) =>
+  transactor.run(async ({ runtimes }) => {
+    const runtime = await runtimes.findByChat(workspaceId, chatId)
+    return runtime?.state === 'running' && !runtime.hostOnline
+  })
+
 export const issueAgentLlmToken = ({ transactor }: Dependencies, { workspaceId, chatId }: ChatRuntime) =>
   transactor.run(async ({ runtimes, secrets }) => {
     const runtime = await runtimes.findByChat(workspaceId, chatId)
