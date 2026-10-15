@@ -127,7 +127,7 @@ test('10. a model switch to another provider mid-session runs the next reply on 
   await bobPage.context().close()
 })
 
-test('11. Stop during a command closes the turn as stopped, and the next prompt continues the same Pi session', async ({
+test('11. Stop during a command closes the turn as stopped, and a prompt queued behind it is answered next in the same Pi session', async ({
   page,
   workerStack,
   agentScript,
@@ -137,52 +137,25 @@ test('11. Stop during a command closes the turn as stopped, and the next prompt 
   await sendMessage(page, 'Sleep for a while')
   await expect(itemsWith(page, 'sleep 30').getByRole('img', { name: 'Running' })).toBeVisible()
   const conversationId = await conversationIdOf(workerStack, research)
+  await sendMessage(page, 'Carry on')
+  await expect(itemsWith(page, 'Carry on')).toHaveCount(1)
+  await agentScript(research, { text: 'Carried on.' })
   await mainOf(page).getByRole('button', { name: 'Stop' }).click()
   await expect(itemsWith(page, 'Stopped by Alice')).toHaveCount(1)
-  await expect(workingIndicatorOf(page)).toHaveCount(0)
 
-  await agentScript(research, { text: 'Carried on.' })
-  await sendMessage(page, 'Carry on')
   await expect(itemsWith(page, 'Carried on.')).toHaveCount(1)
+  await expect(workingIndicatorOf(page)).toHaveCount(0)
+  await expect(messageItemsOf(page).nth(0)).toContainText('Sleep for a while')
+  await expect(messageItemsOf(page).nth(-3)).toContainText('Stopped by Alice')
+  await expect(messageItemsOf(page).nth(-2)).toContainText('Carry on')
+  await expect(messageItemsOf(page).nth(-1)).toContainText('Carried on.')
   await expect(mainOf(page)).not.toContainText('Never shown.')
   await expect(mainOf(page)).not.toContainText(newSessionNotice)
   expect(await conversationIdOf(workerStack, research)).toBe(conversationId)
   expect(await sessionsStartedOf(workerStack, research)).toHaveLength(1)
 })
 
-test('12. a delegation runs a Pi sub-conversation in the same runtime and answers with the sub’s final message', async ({
-  page,
-  workerStack,
-  agentScript,
-}) => {
-  await openChat(page, 'Research')
-  await agentScript(research, {
-    steps: [{ tool: 'delegate', arguments: { task: 'List the project files', effort: 'small' } }],
-    text: 'The subagent listed the files.',
-    delegateRoute: { tier: 'small', confidence: 'high', effort: 'low' },
-    subagents: {
-      'fake-small': { steps: [{ command: 'echo listing', say: 'Let me list them.' }], text: 'Two files.' },
-    },
-  })
-  await sendMessage(page, 'Delegate the listing')
-  await expect(itemsWith(page, 'The subagent listed the files.')).toHaveCount(1)
-  await expect(mainOf(page).getByRole('button', { name: /^Delegated to Fake small · 1 step · / })).toBeVisible()
-
-  const conversationId = await conversationIdOf(workerStack, research)
-  const [delegation] = await workerStack.database.$client`
-    select conversation_id, status from delegations where chat_id = ${research}`
-  const sub = (await workerStack.fakeHost()).conversations.find(
-    ({ parent_conversation_id }) => parent_conversation_id === conversationId,
-  )
-  expect(delegation).toMatchObject({ status: 'finished' })
-  expect(sub?.agent).toMatchObject({ acp_model: 'hq/fake/fake-small', acp_thought_level: 'low' })
-  const [delegateStep] = await workerStack.database.$client`
-    select step->>'result' as result from messages
-    where chat_id = ${research} and step->>'type' = 'tool' and step->>'name' = 'delegate'`
-  expect(delegateStep?.result).toBe('Two files.')
-})
-
-test('26. after a runtime restart the next prompt loads the Pi session and no earlier message is duplicated', async ({
+test('26. after an idle stop the next prompt restarts the runtime, loads the Pi session and no earlier message is duplicated', async ({
   page,
   workerStack,
   agentScript,
@@ -209,4 +182,7 @@ test('26. after a runtime restart the next prompt loads the Pi session and no ea
     await expect(messageItemsOf(page).nth(index)).toContainText(text)
   await expect(mainOf(page)).not.toContainText(newSessionNotice)
   expect(await sessionsStartedOf(workerStack, research)).toEqual([firstSession, firstSession])
+  expect((await workerStack.database.$client`select state from runtimes where chat_id = ${research}`)[0]?.state).toBe(
+    'running',
+  )
 })

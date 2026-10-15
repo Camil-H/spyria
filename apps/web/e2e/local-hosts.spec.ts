@@ -140,12 +140,6 @@ test.describe('as a member', () => {
     await expect(machineSectionOf(adminPage)).not.toContainText('Online')
     await adminPage.context().close()
   })
-
-  test('2a. a machine paired without --personal is refused with the restart notice', async ({ page, pair }) => {
-    const machine = pair(urlOf(await addMachine(page)), {})
-    expect(await machine.closed).toBe('This host was paired as your machine: restart hq-host with --personal')
-    await expect(machineSectionOf(page)).toContainText('Offline')
-  })
 })
 
 test.describe('Use Claude Code and Use Codex, as a member', () => {
@@ -210,12 +204,24 @@ test.describe('Use Claude Code and Use Codex, as a member', () => {
   })
 })
 
-test('2b. a workspace host paired with --personal is refused with the restart notice', async ({ page, pair }) => {
-  const command = await addWorkspaceHost(page)
-  expect(command).not.toContain('--personal')
-  const host = pair(urlOf(command), { personal: true, signedIn: [] })
-  expect(await host.closed).toBe('This host was paired as a workspace host: restart hq-host without --personal')
-  await expect(hostsSectionOf(page).getByRole('listitem').filter({ hasText: 'Workspace box' })).toContainText('Offline')
+test('2. a machine paired without --personal and a workspace host paired with --personal are refused with the restart notice', async ({
+  page,
+  pair,
+}) => {
+  await test.step('a machine paired without --personal', async () => {
+    const machine = pair(urlOf(await addMachine(page)), {})
+    expect(await machine.closed).toBe('This host was paired as your machine: restart hq-host with --personal')
+    await expect(machineSectionOf(page)).toContainText('Offline')
+  })
+  await test.step('a workspace host paired with --personal', async () => {
+    const command = await addWorkspaceHost(page)
+    expect(command).not.toContain('--personal')
+    const host = pair(urlOf(command), { personal: true, signedIn: [] })
+    expect(await host.closed).toBe('This host was paired as a workspace host: restart hq-host without --personal')
+    await expect(hostsSectionOf(page).getByRole('listitem').filter({ hasText: 'Workspace box' })).toContainText(
+      'Offline',
+    )
+  })
 })
 
 test('7. with only a local host online, ordinary runtime chats of its owner and of another member wait with the no-host notice', async ({

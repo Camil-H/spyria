@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { reachableModelsOf } from '@hq/kernel'
-import { askedChoiceOf } from './delegation.ts'
+import { askedChoiceOf, delegationChoiceOf } from './delegation.ts'
 
 const anthropicModels = reachableModelsOf(['anthropic'])
 const smallOnly = anthropicModels.filter((model) => model.tier === 'small')
@@ -36,4 +36,15 @@ test('an unreachable asked model or tier falls back to the nearest reachable one
 test('no asked model, or an unknown one, leaves the choice to the policy and the classifier', () => {
   expect(askedChoiceOf(anthropicModels, undefined, 'Bob')).toBeUndefined()
   expect(askedChoiceOf(anthropicModels, 'a model nobody lists', 'Bob')).toBeUndefined()
+})
+
+test('only a confident classification picks the subagent model; a low-confidence or failed one picks none', () => {
+  const small = { tier: { value: 'small', confidence: 1 }, effort: { value: 'low', confidence: 1 } }
+  expect(delegationChoiceOf(anthropicModels, small)).toEqual({
+    model: 'anthropic/claude-haiku-4-5',
+    effort: 'low',
+    reason: 'classified small',
+  })
+  expect(delegationChoiceOf(anthropicModels, { ...small, tier: { value: 'small', confidence: 0 } })).toBeUndefined()
+  expect(delegationChoiceOf(anthropicModels, undefined)).toBeUndefined()
 })

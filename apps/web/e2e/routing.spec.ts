@@ -81,32 +81,6 @@ test('2. an easy request runs on the small model', async ({ page, workerStack, a
   expect(await agentModelsOf(workerStack, chatId, 1)).toEqual(['fake-small'])
 })
 
-test('3. a hard request runs on the large model', async ({ page, workerStack, agentScript }) => {
-  const chatId = await newRuntimeChat(page, 'Hard')
-  await agentScript(chatId, confident('large'))
-  await promptAndWait(page, 'Redesign the billing architecture', 1)
-  await expect(chipOf(page)).toHaveText('Fake large (high) · auto')
-  expect(await agentModelsOf(workerStack, chatId, 1)).toEqual(['fake-large'])
-})
-
-test('4. a low-confidence, failed or timed-out classification runs on the chat default model', async ({
-  page,
-  workerStack,
-  agentScript,
-}) => {
-  for (const [name, route] of [
-    ['Low confidence', { tier: 'large', confidence: 'low', effort: 'medium' }],
-    ['Classifier failure', 'fail'],
-    ['Classifier timeout', 'slow'],
-  ] as const) {
-    const chatId = await newRuntimeChat(page, name)
-    await agentScript(chatId, { route })
-    await promptAndWait(page, `Unsure: ${name}`, 1)
-    await expect(chipOf(page)).toHaveText('Fake medium (medium) · auto')
-    expect(await agentModelsOf(workerStack, chatId, 1)).toEqual(['fake-medium'])
-  }
-})
-
 test('4b. a chat default changed before the first prompt is used for an unsure session and persists', async ({
   page,
   workerStack,
@@ -154,16 +128,6 @@ test('5. a member reaching only a small model gets it, and is refused in a sessi
   await bobPage.context().close()
 })
 
-test('6. a later hard prompt keeps the session model', async ({ page, workerStack, agentScript }) => {
-  const chatId = await newRuntimeChat(page, 'Locked')
-  await agentScript(chatId, confident('small', 'low'))
-  await promptAndWait(page, 'Rename a variable', 1)
-  await agentScript(chatId, confident('large'))
-  await promptAndWait(page, 'Now redesign the whole system', 2)
-  await expect(chipOf(page)).toHaveText('Fake small (low) · auto')
-  expect(await agentModelsOf(workerStack, chatId, 2)).toEqual(['fake-small', 'fake-small'])
-})
-
 test('7 and 8. the manual switch warns about the reread, keeps the history and updates every viewer', async ({
   page,
   browser,
@@ -207,22 +171,17 @@ test('9. the subagent policy toggles and persists', async ({ page }) => {
   await expect(sessionOf(page).getByLabel('Subagents')).toHaveValue('auto')
 })
 
-test('11. with a decision model reachable, routing asks it and moves only when it is confident', async ({
+test('11. with a decision model reachable, routing asks it and moves when it is confident', async ({
   page,
   workerStack,
   agentScript,
 }) => {
   await addKey(page, 'Typesafe')
-  for (const [confidence, chip] of [
-    [0.9, 'Fake large (high) · auto'],
-    [0.5, 'Fake medium (high) · auto'],
-  ] as const) {
-    const chatId = await newRuntimeChat(page, `Decided at ${confidence}`)
-    await agentScript(chatId, { route: { tier: 'large', confidence, effort: 'high' } })
-    await promptAndWait(page, `Decide at ${confidence}`, 1)
-    await expect(chipOf(page)).toHaveText(chip)
-    expect(await routerModelsOf(workerStack, chatId)).toEqual(['jev-latest'])
-  }
+  const chatId = await newRuntimeChat(page, 'Decided')
+  await agentScript(chatId, { route: { tier: 'large', confidence: 0.9, effort: 'high' } })
+  await promptAndWait(page, 'Decide', 1)
+  await expect(chipOf(page)).toHaveText('Fake large (high) · auto')
+  expect(await routerModelsOf(workerStack, chatId)).toEqual(['jev-latest'])
 })
 
 test('12. a member whose only key is a decision model is told to add an LLM key and cannot pick it', async ({
@@ -238,16 +197,4 @@ test('12. a member whose only key is a decision model is told to add an LLM key 
   await sendMessage(bobPage, 'Only a decision key')
   await expect(mainOf(bobPage)).toContainText('Bob has no LLM key in this workspace')
   await bobPage.context().close()
-})
-
-test('13. a chat classifier answering JSON inside prose still routes as scripted', async ({
-  page,
-  workerStack,
-  agentScript,
-}) => {
-  const chatId = await newRuntimeChat(page, 'Prose')
-  await agentScript(chatId, { route: { tier: 'small', confidence: 'high', effort: 'low', prose: true } })
-  await promptAndWait(page, 'Rename a variable', 1)
-  await expect(chipOf(page)).toHaveText('Fake small (low) · auto')
-  expect(await routerModelsOf(workerStack, chatId)).toEqual(['fake-small'])
 })

@@ -2,9 +2,9 @@ import { afterEach, expect, setDefaultTimeout, test } from 'bun:test'
 import type { ChatId } from '@hq/kernel'
 import {
   acme,
+  type ContainerAgent,
   alice,
   aliceInAcme,
-  type FakeAgentServer,
   globex,
   bobInAcme,
   startAgentStack,
@@ -43,7 +43,7 @@ const aliceInGlobex = { workspaceId: globex, userId: alice }
 type Relay = ReturnType<typeof createHqAgentRelay>
 const agentHost = async (
   name = 'Agent host',
-  agentServerOf: (relay: Relay) => FakeAgentServer = (relay) => relay.agentServer,
+  agentServerOf: (relay: Relay) => ContainerAgent = (relay) => relay.agentServer,
 ) => {
   const relay = createHqAgentRelay()
   relays.push(relay)
@@ -51,9 +51,10 @@ const agentHost = async (
 }
 const command = (member: typeof aliceInAcme, name: string, chat: ChatId, workspaceId: string = member.workspaceId) =>
   mutate(member, `conversation.${name}`, { workspaceId, chatId: chat })
-const delivered = (relay: Relay, count: number) => waitFor(() => relay.prompts.length >= count)
+const firstTurnMilliseconds = 20_000
+const delivered = (relay: Relay, count: number) => waitFor(() => relay.prompts.length >= count, firstTurnMilliseconds)
 const commandShown = (messageId: string) =>
-  waitFor(async () => (await repliesTo(messageId)).some((reply) => reply.body === 'command'))
+  waitFor(async () => (await repliesTo(messageId)).some((reply) => reply.body === 'command'), firstTurnMilliseconds)
 const conversationIdOf = async (chat: ChatId) => String((await runtimeOf(chat)).agent_conversation_id)
 const sweepAgentTurns = () => agentBridge.forDatabase(database).jobs['agent.sweep']({ workspaceId: acme, payload: {} })
 const agentReply = (turn: number) => ({

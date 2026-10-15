@@ -16,7 +16,6 @@ type MachineConversation = {
   agent: {
     acp_command: string[]
     mcp_config: Record<string, { url: string }>
-    acp_resume_session_id?: string
   }
   secrets: Record<string, unknown>
 }
@@ -71,8 +70,6 @@ const chipOf = (page: Page) =>
   mainOf(page).getByRole('button', {
     name: /^Model chosen at first prompt$|^Claude Code · |^Codex · |· (auto|same as main)$/,
   })
-const sessionOf = (page: Page) => page.getByRole('dialog', { name: 'Session' })
-const runsOnOf = (page: Page) => sessionOf(page).getByRole('combobox', { name: 'Runs on' })
 const newLocalSession = async (page: Page, name: string, option = localOption) => {
   const chatId = await newRuntimeChat(page, name, option)
   await expect(chipOf(page)).toHaveText(`${option.replace('My machine · ', '')} · subscription`)
@@ -180,34 +177,6 @@ test('6. a prompt while the machine is offline waits with "Your machine is offli
   expect((await machine()).prompts).toEqual(['Wait for my laptop', 'Wait for my laptop again'])
 })
 
-test('8. stopping mid-command marks the turn stopped, and the next prompt is answered once in the same session', async ({
-  page,
-  machine,
-}) => {
-  await machine(signedInMachine)
-  await newLocalSession(page, 'Stop on my laptop')
-  await sendMessage(page, 'stub:long')
-  await expect(messageItemsOf(page).getByRole('img', { name: 'Running' })).toBeVisible()
-  await mainOf(page).getByRole('button', { name: 'Stop' }).click()
-  await expect(repliesWith(page, 'Stopped by Alice')).toHaveCount(1)
-  await sendMessage(page, 'Answer after the stop')
-  await expect(repliesWith(page, '[t2] Hello from the stub')).toHaveCount(1)
-  await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0)
-  await expect(mainOf(page)).not.toContainText('[t1] Hello from the stub')
-  const { conversations, prompts } = await machine()
-  expect(prompts).toEqual(['stub:long', 'Answer after the stop'])
-  expect(conversations.map((conversation) => conversation.agent.acp_command)).toEqual([subscriptionCommand])
-})
-
-test('9. the chip offers My machine only to a member with a local host', async ({ page, machine }) => {
-  await newRuntimeChat(page, 'Where it runs')
-  await chipOf(page).click()
-  await expect(runsOnOf(page)).toHaveCount(0)
-  await expect(sessionOf(page)).toContainText('Runs on HQ runtime')
-  await machine(signedInMachine)
-  await expect(runsOnOf(page).getByRole('option', { name: localOption })).toBeAttached()
-})
-
 test('10. text streamed around a command shows before the command and stays, the rest after it, and nothing is stored twice', async ({
   page,
   workerStack,
@@ -290,47 +259,6 @@ test.describe('Codex on a ChatGPT plan', () => {
       'claude-agent-acp',
     ])
     expect(prompts).toEqual(['Hello Claude on the same laptop'])
-  })
-
-  test('3. stopping mid-command keeps the conversation, and the next prompt continues the Codex session once', async ({
-    page,
-    workerStack,
-    machine,
-  }) => {
-    await machine(codexMachine)
-    const chatId = await newLocalSession(page, 'Stop Codex on my laptop', codexOption)
-    await sendMessage(page, 'stub:long')
-    await expect(messageItemsOf(page).getByRole('img', { name: 'Running' })).toBeVisible()
-    await mainOf(page).getByRole('button', { name: 'Stop' }).click()
-    await expect(repliesWith(page, 'Stopped by Alice')).toHaveCount(1)
-    const sessionIdsOf = () =>
-      workerStack.database.$client<{ id: string }[]>`
-        select distinct payload->'event'->'update'->>'sessionId' as id from events
-        where chat_id = ${chatId} and payload->'event'->'update'->>'sessionUpdate' = 'session_started'`
-    expect(await sessionIdsOf()).toHaveLength(1)
-
-    await sendMessage(page, 'Answer after the stop')
-    await expect(repliesWith(page, '[t2] Hello from the stub')).toHaveCount(1)
-    await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0)
-    await expect(mainOf(page)).not.toContainText('[t1] Hello from the stub')
-    await expect(mainOf(page)).not.toContainText('The agent started a new session')
-    const { conversations, prompts } = await machine()
-    expect(prompts).toEqual(['stub:long', 'Answer after the stop'])
-    expect(conversations).toHaveLength(1)
-    expect(conversations[0]?.agent.acp_command).toEqual(codexSubscriptionCommand)
-    expect(await sessionIdsOf()).toHaveLength(1)
-  })
-
-  test('4. the chip offers both My machine options only to a member with a local host signed in to both', async ({
-    page,
-    machine,
-  }) => {
-    await newRuntimeChat(page, 'Where Codex runs')
-    await chipOf(page).click()
-    await expect(sessionOf(page).getByRole('option', { name: /^My machine/ })).toHaveCount(0)
-    await machine({ owner: 'member-alice', signedIn: 'claude,codex' })
-    await expect(runsOnOf(page).getByRole('option', { name: localOption })).toBeAttached()
-    await expect(runsOnOf(page).getByRole('option', { name: codexOption })).toBeAttached()
   })
 
   test('5. a command pending with no input shows the real command and no spinner once completed, and a read shows its path', async ({

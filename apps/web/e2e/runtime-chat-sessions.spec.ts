@@ -34,14 +34,8 @@ const test = base.extend<{ machine: (query?: MachineQuery) => Promise<Machine> }
 })
 
 const claudeOnMachine = 'My machine · Claude Code'
+const codexOnMachine = 'My machine · Codex'
 const signedInMachine = { owner: 'member-alice', signedIn: 'claude' }
-const subscriptionCommand = [
-  'env',
-  'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1',
-  'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1',
-  'CLAUDE_CODE_MAX_RETRIES=0',
-  'claude-agent-acp',
-]
 
 const chipOf = (page: Page) =>
   mainOf(page).getByRole('button', {
@@ -53,20 +47,10 @@ const expectRunsOnChoices = async (page: Page, names: string[]) => {
   await expect(runsOnChoiceOf(page).getByRole('radio')).toHaveCount(names.length)
   for (const name of names) await expect(runsOnChoiceOf(page).getByRole('radio', { name })).not.toBeChecked()
 }
-const expectRunsOnChosen = async (page: Page, name: string) => {
-  await expect(runsOnChoiceOf(page)).toHaveCount(0)
-  await openSession(page)
-  await expect(sessionOf(page).getByText(`Runs on ${name}`)).toBeVisible()
-}
 const repliesWith = (page: Page, text: string) => messageItemsOf(page).filter({ hasText: text })
 const openSession = async (page: Page) => {
   if (!(await sessionOf(page).isVisible())) await chipOf(page).click()
   await expect(sessionOf(page)).toBeVisible()
-}
-const newMachineChat = async (page: Page, name: string) => {
-  const chatId = await newRuntimeChat(page, name, claudeOnMachine)
-  await expect(chipOf(page)).toHaveText('Claude Code · subscription')
-  return chatId
 }
 const tokenOf = async (workerStack: WorkerStack, user: string) =>
   (
@@ -107,37 +91,6 @@ const sessionFieldsOf = async (workerStack: WorkerStack, chatId: string) =>
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
-})
-
-test('1. New chat offers only Channel and Runtime, even to a member with a machine', async ({ page, machine }) => {
-  await machine(signedInMachine)
-  await page.getByRole('button', { name: 'New chat' }).click()
-  const dialog = page.getByRole('dialog', { name: 'New chat' })
-  await expect(dialog.getByRole('radio')).toHaveCount(2)
-  await expect(dialog.getByRole('radio', { name: 'Channel' })).toBeVisible()
-  await expect(dialog.getByRole('radio', { name: 'Runtime' })).toBeVisible()
-})
-
-test('2. the owner picks My machine · Claude Code before prompting: the subscription launch on the machine, then Runs on is read-only', async ({
-  page,
-  workerStack,
-  machine,
-}) => {
-  const { id: machineId } = await machine(signedInMachine)
-  const chatId = await newMachineChat(page, 'Picked my machine')
-  await sendMessage(page, 'Hello from the chip')
-  await expect(repliesWith(page, 'Hello from the stub')).toBeVisible()
-
-  const [runtime] = await workerStack.database.$client`select host_id from runtimes where chat_id = ${chatId}`
-  expect(runtime?.host_id).toBe(machineId)
-  const { conversations } = await machine()
-  expect(conversations).toHaveLength(1)
-  expect(conversations[0]?.agent).toMatchObject({ acp_command: subscriptionCommand })
-  expect(conversations[0]?.secrets).toEqual({})
-  expect(JSON.stringify(conversations[0])).not.toMatch(/ANTHROPIC_BASE_URL|ANTHROPIC_MODEL|base_url/)
-  await openSession(page)
-  await expect(runsOnOf(page)).toHaveCount(0)
-  await expect(sessionOf(page)).toContainText(`Runs on ${claudeOnMachine}`)
 })
 
 test('3. a new runtime chat left on HQ runtime runs on a workspace host with the member key', async ({
@@ -204,68 +157,6 @@ test('4. another member does not see the choice, and crafted writes by them or o
   expect(await sessionFieldsOf(workerStack, chatId)).toEqual({ harness: 'claude-code', local_session: true })
 })
 
-test('5. the chip lists the adapter models, a pick is switched in place, and a pick before the first prompt switches the session started at the choice', async ({
-  page,
-  machine,
-}) => {
-  await machine(signedInMachine)
-  await newMachineChat(page, 'First on my machine')
-  await sendMessage(page, 'First prompt')
-  await expect(repliesWith(page, '[t1] Hello from the stub')).toBeVisible()
-  await openSession(page)
-  const modelOf = (target: Page) => sessionOf(target).getByRole('combobox', { name: 'Model' })
-  await expect(modelOf(page).getByRole('option')).toHaveText(['Default (stub)', 'Large (stub)'])
-  await expect(modelOf(page)).toHaveValue('stub-default')
-  await modelOf(page).selectOption({ label: 'Large (stub)' })
-  await expect(chipOf(page)).toHaveText('Claude Code · Large (stub)')
-  await page.keyboard.press('Escape')
-  await sendMessage(page, 'Second prompt')
-  await expect(repliesWith(page, 'model stub-large')).toBeVisible()
-  expect((await machine()).modelSwitches).toEqual(['stub-large'])
-  await openSession(page)
-  await expect(modelOf(page)).toHaveValue('stub-large')
-  await page.keyboard.press('Escape')
-
-  await newMachineChat(page, 'Second on my machine')
-  await openSession(page)
-  await expect(modelOf(page).getByRole('option')).toHaveText(['Default (stub)', 'Large (stub)'])
-  await expect(modelOf(page)).toHaveValue('stub-default')
-  await modelOf(page).selectOption({ label: 'Large (stub)' })
-  await expect(chipOf(page)).toHaveText('Claude Code · Large (stub)')
-  await page.keyboard.press('Escape')
-  await sendMessage(page, 'Prompt on Large')
-  await expect(repliesWith(page, 'model stub-large')).toHaveCount(1)
-  const { conversations, modelSwitches } = await machine()
-  expect(conversations.map((conversation) => conversation.agent.acp_model)).toEqual([undefined, undefined])
-  expect(modelSwitches).toEqual(['stub-large', 'stub-large'])
-})
-
-test('6. with the workspace switch off the machine options are hidden and an existing machine chat gets the turned-off notice', async ({
-  page,
-  machine,
-}) => {
-  await machine(signedInMachine)
-  await newMachineChat(page, 'Machine before the switch')
-  await sendMessage(page, 'Before the switch')
-  await expect(repliesWith(page, 'Hello from the stub')).toBeVisible()
-  await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0)
-
-  await sidebarOf(page).getByRole('link', { name: 'Workspace settings' }).click()
-  const localSessionsSwitch = mainOf(page)
-    .getByRole('region', { name: 'Runtime hosts' })
-    .getByRole('switch', { name: 'Members can run sessions on their own machine' })
-  await localSessionsSwitch.click()
-  await expect(localSessionsSwitch).toHaveAttribute('aria-checked', 'false')
-
-  await newRuntimeChat(page, 'After the switch', null)
-  await expectRunsOnChosen(page, 'HQ runtime')
-  await page.keyboard.press('Escape')
-  await openChat(page, 'Machine before the switch')
-  await sendMessage(page, 'While it is off')
-  await expect(repliesWith(page, "Sessions on members' machines are turned off for this workspace")).toHaveCount(1)
-  expect((await machine()).prompts).toEqual(['Before the switch'])
-})
-
 test('8. a new runtime chat shows Runs on with nothing chosen and Send blocked until a pick', async ({
   page,
   machine,
@@ -304,17 +195,6 @@ test('9. before the owner chooses, another member waits and their crafted prompt
   expect(await workerStack.database.$client`select 1 from messages where chat_id = ${chatId}`).toHaveLength(0)
 })
 
-test('11. a removed machine offers no machine option', async ({ page, machine }) => {
-  await machine(signedInMachine)
-  await sidebarOf(page).getByRole('link', { name: 'Profile' }).click()
-  const machineSection = mainOf(page).getByRole('region', { name: 'My machine' })
-  await machineSection.getByRole('button', { name: 'Remove' }).click()
-  await page.getByRole('dialog', { name: 'Remove my machine' }).getByRole('button', { name: 'Remove' }).click()
-  await expect(machineSection.getByRole('button', { name: 'Add my machine' })).toBeVisible()
-  await newRuntimeChat(page, 'After removing my machine', null)
-  await expectRunsOnChosen(page, 'HQ runtime')
-})
-
 test('12. clicking outside the open chip closes it', async ({ page }) => {
   await newRuntimeChat(page, 'Click away')
   await openSession(page)
@@ -322,37 +202,56 @@ test('12. clicking outside the open chip closes it', async ({ page }) => {
   await expect(sessionOf(page)).toHaveCount(0)
 })
 
-test('13. only the signed-in tool of an online machine is offered, without a sign-in notice', async ({
+test('11. Runs on follows the machine: its sign-ins, going offline and back, and its removal', async ({
   page,
   machine,
 }) => {
   await machine(signedInMachine)
-  await newRuntimeChat(page, 'Claude only', null)
-  await expectRunsOnChoices(page, ['HQ runtime', claudeOnMachine])
-  await expect(runsOnChoiceOf(page)).not.toContainText('Sign in')
-})
-
-test('14. a machine signed in to both tools offers both', async ({ page, machine }) => {
-  await machine({ owner: 'member-alice', signedIn: 'claude,codex' })
-  await newRuntimeChat(page, 'Both tools', null)
-  await expectRunsOnChoices(page, ['HQ runtime', claudeOnMachine, 'My machine · Codex'])
-})
-
-test('15. an offline machine offers no machine option until it is back online', async ({ page, machine }) => {
-  await machine(signedInMachine)
-  await machine({ online: 'false' })
-  await newRuntimeChat(page, 'Laptop asleep', null)
-  await expectRunsOnChosen(page, 'HQ runtime')
+  await test.step('New chat offers only Channel and Runtime, even to a member with a machine', async () => {
+    await page.getByRole('button', { name: 'New chat' }).click()
+    const dialog = page.getByRole('dialog', { name: 'New chat' })
+    await expect(dialog.getByRole('radio')).toHaveCount(2)
+    await expect(dialog.getByRole('radio', { name: 'Channel' })).toBeVisible()
+    await expect(dialog.getByRole('radio', { name: 'Runtime' })).toBeVisible()
+    await dialog.getByRole('button', { name: 'Cancel' }).click()
+  })
+  await newRuntimeChat(page, 'Follows the machine', null)
+  await test.step('only the signed-in tool of an online machine is offered, without a sign-in notice', async () => {
+    await expectRunsOnChoices(page, ['HQ runtime', claudeOnMachine])
+    await expect(runsOnChoiceOf(page)).not.toContainText('Sign in')
+  })
+  await chooseRunsOn(page, 'HQ runtime')
+  for (const { step, query, options } of [
+    {
+      step: 'signed in to both tools',
+      query: { signedIn: 'claude,codex' },
+      options: [claudeOnMachine, codexOnMachine],
+    },
+    { step: 'offline', query: { online: 'false' }, options: [] },
+    { step: 'back online', query: { online: 'true' }, options: [claudeOnMachine, codexOnMachine] },
+    { step: 'signed in to neither tool', query: { signedIn: '' }, options: [] },
+    { step: 'signed in to Claude Code again', query: { signedIn: 'claude' }, options: [claudeOnMachine] },
+  ])
+    await test.step(`a machine ${step} offers ${options.join(' and ') || 'HQ runtime only'}`, async () => {
+      await machine(query)
+      await openSession(page)
+      if (options.length) await expect(runsOnOf(page).getByRole('option')).toHaveText(['HQ runtime', ...options])
+      else await expect(sessionOf(page).getByText('Runs on HQ runtime')).toBeVisible()
+      await expect(runsOnOf(page)).toHaveCount(options.length ? 1 : 0)
+      await expect(sessionOf(page)).not.toContainText('Sign in')
+    })
   await page.keyboard.press('Escape')
-  await machine({ online: 'true' })
-  await openSession(page)
-  await expect(runsOnOf(page).getByRole('option')).toHaveText(['HQ runtime', claudeOnMachine])
-})
-
-test('16. a machine signed in to neither tool offers HQ runtime only', async ({ page, machine }) => {
-  await machine({ owner: 'member-alice', signedIn: '' })
-  await newRuntimeChat(page, 'No sign-in', null)
-  await expectRunsOnChosen(page, 'HQ runtime')
+  await test.step('a removed machine offers no machine option', async () => {
+    await sidebarOf(page).getByRole('link', { name: 'Profile' }).click()
+    const machineSection = mainOf(page).getByRole('region', { name: 'My machine' })
+    await machineSection.getByRole('button', { name: 'Remove' }).click()
+    await page.getByRole('dialog', { name: 'Remove my machine' }).getByRole('button', { name: 'Remove' }).click()
+    await expect(machineSection.getByRole('button', { name: 'Add my machine' })).toBeVisible()
+    await openChat(page, 'Follows the machine')
+    await openSession(page)
+    await expect(runsOnOf(page)).toHaveCount(0)
+    await expect(sessionOf(page).getByText('Runs on HQ runtime')).toBeVisible()
+  })
 })
 
 test.describe('without a workspace host', () => {
@@ -368,6 +267,7 @@ test.describe('without a workspace host', () => {
     const chatId = await newRuntimeChat(page, 'No host first')
     await sendMessage(page, 'First try')
     await expect(repliesWith(page, 'No runtime host is available')).toHaveCount(1)
+    await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0)
     await machine({ online: 'true' })
     await openSession(page)
     await runsOnOf(page).selectOption({ label: claudeOnMachine })

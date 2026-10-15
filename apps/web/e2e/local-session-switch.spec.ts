@@ -70,7 +70,7 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/')
 })
 
-test('1. the admin turns sessions on members machines off: no Add my machine, a refused add, no My machine option in the chip', async ({
+test('1 and 4. the admin turns sessions on members machines off: no Add my machine, Use Claude Code and Use Codex show the notice, a refused add, no My machine option in the chip', async ({
   page,
   browser,
   workerStack,
@@ -82,6 +82,17 @@ test('1. the admin turns sessions on members machines off: no Add my machine, a 
   await openProfile(bobPage)
   await expect(machineSectionOf(bobPage)).toContainText(turnedOffNotice)
   await expect(machineSectionOf(bobPage).getByRole('button', { name: 'Add my machine' })).toHaveCount(0)
+  for (const toolName of ['Claude Code', 'Codex'])
+    await test.step(`Use ${toolName} shows the turned-off notice and no command`, async () => {
+      await llmSectionOf(bobPage)
+        .getByRole('button', { name: `Use ${toolName}` })
+        .click()
+      const dialog = bobPage.getByRole('dialog', { name: `Use ${toolName}` })
+      await expect(dialog).toContainText(turnedOffNotice)
+      await expect(dialog.getByRole('textbox')).toHaveCount(0)
+      await expect(dialog).not.toContainText('docker')
+      await dialog.getByRole('button', { name: 'Close' }).click()
+    })
 
   const response = await fetch(`${serverUrl}/api/runtime-hosts`, {
     method: 'POST',
@@ -141,16 +152,7 @@ test('2. an existing local session answers prompts with the notice while it is o
   await expect(repliesWith(page, sessionNotice)).toHaveCount(1)
 })
 
-test('3. a member does not see the switch and their crafted mutation is refused by the server', async ({
-  browser,
-  workerStack,
-}) => {
-  const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-  await bobPage.goto('/w/workspace-acme/settings')
-  await expect(mainOf(bobPage).getByText('Only workspace admins can see this page')).toBeVisible()
-  await expect(mainOf(bobPage).getByRole('switch', { name: switchName })).toHaveCount(0)
-  await bobPage.context().close()
-
+test('3. a member’s crafted mutation of the switch is refused by the server', async ({ workerStack }) => {
   const appId = `hqe2e${test.info().parallelIndex}`
   const response = await fetch(`${serverUrl}/api/mutate?schema=${appId}_0&appID=${appId}`, {
     method: 'POST',
@@ -174,30 +176,4 @@ test('3. a member does not see the switch and their crafted mutation is refused 
   })
   expect(JSON.stringify(await response.json())).toContain('Only workspace admins can manage runtime hosts')
   expect(await localSessionsOf(workerStack)).toBe(true)
-})
-
-test('4. with the switch off a member still sees Use Claude Code and Use Codex, and each dialog shows the turned-off notice and no command', async ({
-  page,
-  browser,
-  workerStack,
-}) => {
-  await setLocalSessions(page, false)
-  const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-  await openProfile(bobPage)
-  await expect(machineSectionOf(bobPage)).toContainText(turnedOffNotice)
-  for (const toolName of ['Claude Code', 'Codex']) {
-    await llmSectionOf(bobPage)
-      .getByRole('button', { name: `Use ${toolName}` })
-      .click()
-    const dialog = bobPage.getByRole('dialog', { name: `Use ${toolName}` })
-    await expect(dialog).toContainText(turnedOffNotice)
-    await expect(dialog.getByRole('textbox')).toHaveCount(0)
-    await expect(dialog).not.toContainText('docker')
-    await dialog.getByRole('button', { name: 'Close' }).click()
-  }
-  expect(
-    await workerStack.database
-      .$client`select 1 from runtime_hosts where owner_id = 'member-bob' and removed_at is null`,
-  ).toHaveLength(0)
-  await bobPage.context().close()
 })

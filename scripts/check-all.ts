@@ -57,12 +57,18 @@ for (const step of steps) {
     stdout: 'pipe',
     stderr: 'pipe',
   })
-  const pipe = async (stream: ReadableStream<Uint8Array>) => {
+  const readers = [child.stdout.getReader(), child.stderr.getReader()]
+  const pipe = async (reader: ReadableStreamDefaultReader<Uint8Array>) => {
     const decoder = new TextDecoder()
-    for await (const chunk of stream) log(decoder.decode(chunk, { stream: true }))
+    for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read())
+      log(decoder.decode(chunk.value, { stream: true }))
   }
-  await Promise.all([pipe(child.stdout), pipe(child.stderr)])
+  const piped = Promise.all(readers.map(pipe)).then(() => true)
   const exitCode = await child.exited
+  if (!(await Promise.race([piped, Bun.sleep(1_000).then(() => false)]))) {
+    log(`\n${step} exited but a process it started still holds its output; not waiting for it\n`)
+    for (const reader of readers) void reader.cancel()
+  }
   results.push({ step, exitCode, seconds: Math.round((performance.now() - started) / 100) / 10 })
   if (exitCode !== 0) break
 }

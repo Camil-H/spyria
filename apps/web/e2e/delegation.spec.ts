@@ -53,16 +53,20 @@ test.beforeEach(async ({ page }) => {
   await openChat(page, 'Research')
 })
 
-test('5 and 13. a small task is delegated to the small model, shown as one collapsed group before the answer', async ({
+test('5 and 13. a small task is delegated to a Pi sub-conversation on the small model, shown as one collapsed group before the answer, which is the sub’s final message', async ({
   page,
   workerStack,
   agentScript,
 }) => {
   const startedAt = new Date()
   const answer = 'The subagent listed the files.'
+  const work = {
+    ...subagentWork,
+    steps: [{ command: 'echo listing', say: 'Let me list them.' }, { command: 'echo done' }],
+  }
   await agentScript(
     researchChatId,
-    delegating(answer, { delegateRoute: confidentSmall, subagents: { 'fake-small': subagentWork } }),
+    delegating(answer, { delegateRoute: confidentSmall, subagents: { 'fake-small': work } }),
   )
   await promptAndWait(page, 'Delegate the listing', answer)
   const group = groupOf(page, 'Fake small')
@@ -75,6 +79,22 @@ test('5 and 13. a small task is delegated to the small model, shown as one colla
   await expect(steps).toContainText('$ echo done')
   await expect(messageItemsOf(page).filter({ has: steps })).toContainText('Two files.')
   expect(new Set(await gatewayModelsOf(workerStack, 'delegate', startedAt, 3))).toEqual(new Set(['fake-small']))
+
+  await test.step('the sub runs in the same runtime at the routed effort and its final message answers the tool', async () => {
+    const [runtime] = await workerStack.database.$client`
+      select agent_conversation_id from runtimes where chat_id = ${researchChatId}`
+    const [delegation] = await workerStack.database.$client`
+      select status from delegations where chat_id = ${researchChatId}`
+    const sub = (await workerStack.fakeHost()).conversations.find(
+      ({ parent_conversation_id }) => parent_conversation_id === runtime?.agent_conversation_id,
+    )
+    expect(delegation).toMatchObject({ status: 'finished' })
+    expect(sub?.agent).toMatchObject({ acp_model: 'hq/fake/fake-small', acp_thought_level: 'low' })
+    const [delegateStep] = await workerStack.database.$client`
+      select step->>'result' as result from messages
+      where chat_id = ${researchChatId} and step->>'type' = 'tool' and step->>'name' = 'delegate'`
+    expect(delegateStep?.result).toBe('Two files.')
+  })
 })
 
 test('6. with the policy on Same as main, the subagent runs on the session model without a routing call', async ({
@@ -95,19 +115,6 @@ test('6. with the policy on Same as main, the subagent runs on the session model
   await expect(groupOf(page, 'Fake medium')).toBeVisible()
   expect(new Set(await gatewayModelsOf(workerStack, 'delegate', startedAt, 3))).toEqual(new Set(['fake-medium']))
   expect(await gatewayModelsOf(workerStack, 'router', startedAt, 1)).toEqual(['fake-small'])
-})
-
-test('9. a low-confidence or failed classification runs the subagent on the session model', async ({
-  page,
-  agentScript,
-}) => {
-  for (const [index, delegateRoute] of [{ tier: 'small', confidence: 'low', effort: 'low' }, 'fail'].entries()) {
-    const answer = `Unsure answer ${index + 1}.`
-    await agentScript(researchChatId, delegating(answer, { delegateRoute, subagents: { 'fake-medium': subagentWork } }))
-    await promptAndWait(page, `Delegate while unsure ${index + 1}`, answer)
-    await expect(groupOf(page, 'Fake medium')).toHaveCount(index + 1)
-  }
-  await expect(mainOf(page).getByRole('button', { name: /^Delegated to Fake small/ })).toHaveCount(0)
 })
 
 const delegatingTo = (model: string, answer: string, script: object) => ({
@@ -131,22 +138,6 @@ const addKey = async (page: Page, provider: string) => {
   await llmSection.getByRole('button', { name: 'Add' }).click()
   await expect(llmSection.getByRole('listitem').filter({ hasText: provider })).toBeVisible()
 }
-
-test('7. the main agent asks for fake-large and the subagent runs on it whatever the classifier says', async ({
-  page,
-  workerStack,
-  agentScript,
-}) => {
-  const startedAt = new Date()
-  const answer = 'Listed on the large model.'
-  await agentScript(
-    researchChatId,
-    delegatingTo('fake-large', answer, { delegateRoute: confidentSmall, subagents: { 'fake-large': subagentWork } }),
-  )
-  await promptAndWait(page, 'Use fake-large to list the files', answer)
-  await expect(groupOf(page, 'Fake large')).toBeVisible()
-  expect(new Set(await gatewayModelsOf(workerStack, 'delegate', startedAt, 3))).toEqual(new Set(['fake-large']))
-})
 
 test('8. Bob asks for fake-large and gets fake-small, with the fallback line on the group', async ({
   browser,

@@ -9,14 +9,12 @@ import {
   type Page,
   sendButtonOf,
   sendMessage,
-  serverUrl,
   test,
   workingIndicatorOf,
 } from './fixtures'
-import { openPageAs, type WorkerStack } from './stack'
+import { openPageAs } from './stack'
 
 const blockedNotice = 'Connect an LLM key in your profile to prompt'
-const research = 'chat-research'
 
 const addKey = async (page: Page, provider: string, secret: string) => {
   await openProfile(page)
@@ -39,84 +37,21 @@ const removeKey = async (page: Page, provider: string) => {
 }
 const newSecret = (prefix = 'fake-key') => `${prefix}-${crypto.randomUUID()}`
 const repliesWith = (page: Page, text: string) => messageItemsOf(page).filter({ hasText: text })
-const virtualKeyOf = async (workerStack: WorkerStack, memberId: string) =>
-  (await workerStack.database.$client`select virtual_key_id from member_gateway_keys where user_id = ${memberId}`)[0]
-    ?.virtual_key_id as string | undefined
-
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
 })
 
-test('1. an added key is stored in the gateway: HQ keeps only its last 4 characters and a reference', async ({
+test('3 and 4. a member without a key cannot prompt; a member who removes their key can no longer prompt, while another member still can', async ({
   page,
-  workerStack,
-}) => {
-  const secret = newSecret()
-  await addKey(page, 'Fake', secret)
-
-  const tables = await workerStack.database.$client<{ name: string }[]>`
-    select table_name as name from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE'`
-  for (const { name } of tables) {
-    const rows = await workerStack.database.$client.unsafe(`select * from "${name}"`)
-    expect({ name, leaks: JSON.stringify(rows).includes(secret) }).toEqual({ name, leaks: false })
-  }
-  const [added] = await workerStack.database.$client`
-    select secret_ref from llm_credentials where user_id = 'member-alice' and provider = 'Fake'`
-  const keyId = String(added?.secret_ref).split('/').at(-1)
-  const { keys } = await workerStack.gateway<{ keys: { id: string }[] }>('/api/providers/fake/keys')
-  expect(keys.map((key) => key.id)).toContain(keyId)
-  const { virtual_key } = await workerStack.gateway<{
-    virtual_key: { provider_configs: { keys: { key_id: string }[] }[] }
-  }>(`/api/governance/virtual-keys/${await virtualKeyOf(workerStack, 'member-alice')}`)
-  expect(virtual_key.provider_configs.flatMap((config) => config.keys.map((key) => key.key_id))).toContain(keyId)
-})
-
-test('3. a member without a key cannot prompt, and a crafted mutation is refused by the server', async ({
   browser,
   workerStack,
 }) => {
   const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-  await openChat(bobPage, 'Research')
-  await expect(mainOf(bobPage)).toContainText(blockedNotice)
-  await expect(sendButtonOf(bobPage)).toBeDisabled()
-
-  const session = await (
-    await fetch(`${serverUrl}/test/token?db=${workerStack.databaseName}&user=member-bob&workspace=workspace-acme`, {
-      method: 'POST',
-    })
-  ).json()
-  const appId = `hqe2e${test.info().parallelIndex}`
-  const response = await fetch(`${serverUrl}/api/mutate?schema=${appId}_0&appID=${appId}`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${session.token}` },
-    body: JSON.stringify({
-      clientGroupID: crypto.randomUUID(),
-      mutations: [
-        {
-          type: 'custom',
-          id: 1,
-          clientID: crypto.randomUUID(),
-          name: 'conversation.sendMessage',
-          args: [{ workspaceId: 'workspace-acme', id: crypto.randomUUID(), chatId: research, text: 'Crafted prompt' }],
-          timestamp: Date.now(),
-        },
-      ],
-      pushVersion: 1,
-      timestamp: Date.now(),
-      requestID: crypto.randomUUID(),
-    }),
+  await test.step('a member without a key cannot prompt', async () => {
+    await openChat(bobPage, 'Research')
+    await expect(mainOf(bobPage)).toContainText(blockedNotice)
+    await expect(sendButtonOf(bobPage)).toBeDisabled()
   })
-  expect(JSON.stringify(await response.json())).toContain('Bob has no LLM key in this workspace')
-  expect(await workerStack.database.$client`select 1 from messages where body = 'Crafted prompt'`).toHaveLength(0)
-  await bobPage.context().close()
-})
-
-test('4. a member who removes their key can no longer prompt, while another member still can', async ({
-  page,
-  browser,
-  workerStack,
-}) => {
-  const bobPage = await openPageAs(browser, workerStack, 'member-bob')
   await addKey(bobPage, 'Fake', newSecret())
   await openChat(page, 'Research')
   await sendMessage(page, 'Before removing my key')

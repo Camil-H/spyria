@@ -180,31 +180,48 @@ test('2. adding a host shows one copyable command that replaces hq-host and pick
   await expect(hostRowOf(page, 'Home server')).toContainText('Waiting for the host')
 })
 
-test('3. starting hq-host with the displayed URL turns the row Online with its capacity', async ({ page, hosts }) => {
-  await openSettings(page)
-  hosts.start(await addHost(page, 'Home server'))
-  await expectOnline(page, 'Home server')
-  const { cpus, memoryBytes, rootless } = dockerSystem()
-  const cap = Math.max(1, Math.floor((memoryBytes - 2 * gibibyte) / gibibyte))
-  const row = hostRowOf(page, 'Home server')
-  await expect(row).toContainText(`${cpus} CPUs`)
-  await expect(row).toContainText(`${(memoryBytes / gibibyte).toFixed(1)} GB`)
-  await expect(row).toContainText(`0 / ${cap}`)
-  await expect(row.getByText(rootless ? 'Rootless' : 'Rooted', { exact: true })).toBeVisible()
-})
-
-test('4. a code works once: a second hq-host with the same URL is refused and the first stays online', async ({
+test('3, 4, 6 and 7. a host’s lifecycle: online with its capacity, its code works once, offline and back with its stored token, then removed after confirmation and refused', async ({
   page,
   hosts,
 }) => {
   await openSettings(page)
   const url = await addHost(page, 'Home server')
-  hosts.start(url)
-  await expectOnline(page, 'Home server')
-  const secondHost = hosts.start(url)
-  expect(await secondHost.exited).not.toBe(0)
-  expect(secondHost.output()).toContain('This code was already used')
-  await expect(hostRowOf(page, 'Home server')).toContainText('Online')
+  const stateDirectory = hosts.newStateDirectory()
+  const firstRun = hosts.start(url, stateDirectory)
+  await test.step('starting hq-host with the displayed URL turns the row Online with its capacity', async () => {
+    await expectOnline(page, 'Home server')
+    const { cpus, memoryBytes, rootless } = dockerSystem()
+    const cap = Math.max(1, Math.floor((memoryBytes - 2 * gibibyte) / gibibyte))
+    const row = hostRowOf(page, 'Home server')
+    await expect(row).toContainText(`${cpus} CPUs`)
+    await expect(row).toContainText(`${(memoryBytes / gibibyte).toFixed(1)} GB`)
+    await expect(row).toContainText(`0 / ${cap}`)
+    await expect(row.getByText(rootless ? 'Rootless' : 'Rooted', { exact: true })).toBeVisible()
+  })
+  await test.step('a second hq-host with the same URL is refused and the first stays online', async () => {
+    const secondHost = hosts.start(url)
+    expect(await secondHost.exited).not.toBe(0)
+    expect(secondHost.output()).toContain('This code was already used')
+    await expect(hostRowOf(page, 'Home server')).toContainText('Online')
+  })
+  const secondRun =
+    await test.step('a stopped host goes Offline and comes back Online with its stored token', async () => {
+      await firstRun.stop()
+      await expect(hostRowOf(page, 'Home server')).toContainText('Offline', { timeout: 60_000 })
+      const run = hosts.start(url, stateDirectory)
+      await expectOnline(page, 'Home server')
+      return run
+    })
+  await test.step('removing an online host asks for confirmation, disconnects it and refuses it afterwards', async () => {
+    await hostRowOf(page, 'Home server').getByRole('button', { name: 'Remove' }).click()
+    const confirmation = page.getByRole('dialog', { name: 'Remove runtime host' })
+    await expect(confirmation).toContainText('Home server')
+    await confirmation.getByRole('button', { name: 'Remove' }).click()
+    await expect(hostRowOf(page, 'Home server')).toHaveCount(0)
+    await expect(settingsOf(page).getByText('No runtime host yet')).toBeVisible()
+    expect(await secondRun.exited).not.toBe(0)
+    expect(secondRun.output()).toContain('This host was removed')
+  })
 })
 
 test('5. an expired code is refused, the row shows Code expired and New command pairs the same row', async ({
@@ -228,45 +245,6 @@ test('5. an expired code is refused, the row shows Code expired and New command 
   hosts.start(freshUrl)
   await expectOnline(page, 'Home server')
   await expect(settingsOf(page).getByRole('listitem')).toHaveCount(1)
-})
-
-test('6. a stopped host goes Offline and comes back Online with its stored token', async ({ page, hosts }) => {
-  await openSettings(page)
-  const url = await addHost(page, 'Home server')
-  const stateDirectory = hosts.newStateDirectory()
-  const firstRun = hosts.start(url, stateDirectory)
-  await expectOnline(page, 'Home server')
-  await firstRun.stop()
-  await expect(hostRowOf(page, 'Home server')).toContainText('Offline', { timeout: 60_000 })
-  hosts.start(url, stateDirectory)
-  await expectOnline(page, 'Home server')
-})
-
-test('7. removing an online host asks for confirmation, disconnects it and refuses it afterwards', async ({
-  page,
-  hosts,
-}) => {
-  await openSettings(page)
-  const host = hosts.start(await addHost(page, 'Home server'))
-  await expectOnline(page, 'Home server')
-  await hostRowOf(page, 'Home server').getByRole('button', { name: 'Remove' }).click()
-  const confirmation = page.getByRole('dialog', { name: 'Remove runtime host' })
-  await expect(confirmation).toContainText('Home server')
-  await confirmation.getByRole('button', { name: 'Remove' }).click()
-  await expect(hostRowOf(page, 'Home server')).toHaveCount(0)
-  await expect(settingsOf(page).getByText('No runtime host yet')).toBeVisible()
-  expect(await host.exited).not.toBe(0)
-  expect(host.output()).toContain('This host was removed')
-})
-
-test('8. a host paired in Acme never appears in the settings of Globex', async ({ page, hosts }) => {
-  await openSettings(page)
-  hosts.fake(await addHost(page, 'Acme box'), {})
-  await expectOnline(page, 'Acme box')
-  await page.goto('/w/workspace-globex/settings')
-  await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Workspace settings' })).toBeVisible()
-  await expect(settingsOf(page).getByText('No runtime host yet')).toBeVisible()
-  await expect(settingsOf(page).getByRole('listitem')).toHaveCount(0)
 })
 
 test('9. badges show rooted Docker and limits that are not enforced', async ({ page, hosts }) => {

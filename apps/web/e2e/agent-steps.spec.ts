@@ -201,6 +201,7 @@ test('18. Markdown answers render tables, highlighted code with copy, links with
   await expect(reply).toContainText('<img src="x" onerror="window.hqInjected = true">')
   expect(await page.evaluate(() => (window as Window & { hqInjected?: boolean }).hqInjected)).toBeUndefined()
   await expect(reply.locator('img')).toHaveCount(0)
+  await expect(workingIndicatorOf(page)).toHaveCount(0)
   await reply.getByRole('button', { name: 'Load image from images.example.com' }).click()
   await expect(reply.locator('img')).toHaveAttribute('src', 'https://images.example.com/chart.png')
 })

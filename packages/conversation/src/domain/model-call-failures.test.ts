@@ -171,7 +171,7 @@ test('the public model name drops the provider route', () => {
   expect(publicModelNameOf(undefined)).toBe('this model')
 })
 
-test('a context-window rejection is recognized so the condenser can recover without a failure notice', () => {
+test('a context-window rejection is recognized so the agent can compact without a failure notice', () => {
   expect(isContextWindowFailure(answered(400, openAi.contextTooLong))).toBe(true)
   expect(
     isContextWindowFailure(

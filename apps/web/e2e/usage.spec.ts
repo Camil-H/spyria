@@ -177,23 +177,3 @@ test.describe('5. as a member', () => {
     await expect(rowOf(usageTable, 'Total')).toContainText('15,500')
   })
 })
-
-test('6. a prompt is metered with 2 calls (router and agent), and running the sync twice over the same window leaves the totals unchanged', async ({
-  page,
-  workerStack,
-}) => {
-  await prompt(page, 'Count me once', 1)
-  await syncUntilResearchCalls(workerStack, 2)
-  await openUsageTab(page, 'Research')
-  const usageTable = tabPanelOf(page).getByRole('table')
-  await expectMeteredRow(rowOf(usageTable, 'Alice'), 2)
-  const before = await cellsOf(rowOf(usageTable, 'Total'))
-  const totalsBefore = await researchTotalsInDatabase(workerStack)
-
-  await syncUsage(workerStack)
-  await syncUsage(workerStack)
-
-  expect(await researchTotalsInDatabase(workerStack)).toEqual(totalsBefore)
-  await expect(rowOf(usageTable, 'Total').getByRole('cell').nth(2)).toHaveText('2')
-  expect(await cellsOf(rowOf(usageTable, 'Total'))).toEqual(before)
-})

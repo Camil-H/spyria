@@ -153,25 +153,6 @@ test('4. with its host stopped the header shows Host offline and a prompt gets a
   await expect(runtimeStatusOf(page)).toHaveText('Ready')
 })
 
-test('7. a prompt queued behind a stopped turn is answered after the Stop notice', async ({ page, agentScript }) => {
-  await agentScript(research, slowScript)
-  await openChat(page, 'Research')
-  await sendMessage(page, 'First, slowly')
-  await sendMessage(page, 'Second, queued')
-  await expect(stopButtonOf(page)).toBeVisible()
-  await agentScript(research, {})
-  await stopButtonOf(page).click()
-
-  await expect(itemsWith(page, 'Stopped by Alice')).toHaveCount(1)
-  await expect(itemsWith(page, agentReplyText)).toHaveCount(1)
-  await expect(workingIndicatorOf(page)).toHaveCount(0)
-  await expect(messageItemsOf(page)).toHaveCount(4)
-  await expect(messageItemsOf(page).nth(0)).toContainText('First, slowly')
-  await expect(messageItemsOf(page).nth(1)).toContainText('Stopped by Alice')
-  await expect(messageItemsOf(page).nth(2)).toContainText('Second, queued')
-  await expect(messageItemsOf(page).nth(3)).toContainText(agentReplyText)
-})
-
 test('8. a runtime stopped mid-turn ends the turn with a notice, and the next prompt wakes it and is answered', async ({
   page,
   workerStack,

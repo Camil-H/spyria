@@ -210,6 +210,7 @@ test('the routing read lists the member’s reachable models and the context tok
 
 let decisionModelKey: Promise<void> | undefined
 type RoutingRow = {
+  title: string
   decisionModel?: boolean
   route: Route
   defaultModel?: string
@@ -220,33 +221,49 @@ type RoutingRow = {
 }
 test.each<RoutingRow>([
   {
+    title: 'a low-confidence classification',
     route: { tier: 'large', confidence: 'low', effort: 'medium' },
     defaultModel: 'fake/fake-small',
     model: 'fake/fake-small',
     reason: 'default',
   },
-  { route: 'fail', defaultModel: 'fake/fake-small', model: 'fake/fake-small', reason: 'default' },
-  { route: 'slow', defaultModel: 'fake/fake-small', model: 'fake/fake-small', reason: 'default' },
   {
+    title: 'a failed classification',
+    route: 'fail',
+    defaultModel: 'fake/fake-small',
+    model: 'fake/fake-small',
+    reason: 'default',
+  },
+  {
+    title: 'a timed-out classification',
+    route: 'slow',
+    defaultModel: 'fake/fake-small',
+    model: 'fake/fake-small',
+    reason: 'default',
+  },
+  {
+    title: 'a chat classifier answering JSON inside prose',
     route: { tier: 'small', confidence: 'high', effort: 'low', prose: true },
     model: 'fake/fake-small',
     effort: 'low',
     routerModel: 'fake-small',
   },
   {
+    title: 'a decision model confident at 0.9',
     decisionModel: true,
     route: { tier: 'large', confidence: 0.9, effort: 'high' },
     model: 'fake/fake-large',
     routerModel: 'jev-latest',
   },
   {
+    title: 'a decision model unsure at 0.5',
     decisionModel: true,
     route: { tier: 'large', confidence: 0.5, effort: 'high' },
     model: 'fake/fake-medium',
     routerModel: 'jev-latest',
   },
-  { decisionModel: true, route: 'slow', model: 'fake/fake-medium' },
-])('the first prompt routes to $model with a decision model $decisionModel and the route $route', async (row) => {
+  { title: 'a timed-out decision model', decisionModel: true, route: 'slow', model: 'fake/fake-medium' },
+])('after $title the first prompt routes to $model', async (row) => {
   const { launches } = await fakeAgent()
   if (row.decisionModel) {
     decisionModelKey ??= addLlmKey(alice, 'Typesafe')

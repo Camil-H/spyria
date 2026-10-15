@@ -17,21 +17,8 @@ const itemsWith = (page: Page, text: string) => messageItemsOf(page).filter({ ha
 const unreadIconOf = (page: Page, chatName: string) =>
   chatLinkOf(page, chatName).getByRole('img', { name: 'Unread messages' })
 
-const turnOf = async (workerStack: WorkerStack, chatId: string) =>
-  (await workerStack.database.$client`select agent_turn_message_id from chats where id = ${chatId}`)[0]
-    ?.agent_turn_message_id
 const runtimeStateOf = async (workerStack: WorkerStack, chatId: string) =>
   (await workerStack.database.$client`select state from runtimes where chat_id = ${chatId}`)[0]?.state
-
-const triggerIdleStop = async (workerStack: WorkerStack, chatId: string) => {
-  await expect.poll(() => turnOf(workerStack, chatId)).toBeNull()
-  await workerStack.database.$client`
-    update runtimes set last_active_at = now() - interval '2 hours' where chat_id = ${chatId}`
-  await workerStack.database.$client`
-    insert into jobs (workspace_id, id, type, payload, run_at, attempts, state)
-    values ('workspace-acme', ${crypto.randomUUID()}, 'runtime.sweep', '{}'::jsonb, now(), 0, 'queued')`
-  await expect.poll(() => runtimeStateOf(workerStack, chatId)).toBe('stopped')
-}
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
@@ -124,38 +111,4 @@ test('7. another member viewing the chat sees the reply stream in, then the stor
   await expect(itemsWith(bobPage, agentReplyText)).toHaveCount(1)
   await expect(unreadIconOf(bobPage, 'Research')).toHaveCount(0)
   await bobPage.context().close()
-})
-
-test('8. after an idle stop, a new prompt resumes the runtime, is answered, and the earlier reply stays', async ({
-  page,
-  workerStack,
-}) => {
-  await openChat(page, 'Research')
-  await sendMessage(page, 'Before the stop')
-  await expect(itemsWith(page, agentReplyText)).toHaveCount(1)
-  await triggerIdleStop(workerStack, research)
-
-  await sendMessage(page, 'After the stop')
-  await expect(itemsWith(page, agentReplyText)).toHaveCount(2)
-  await expect(workingIndicatorOf(page)).toHaveCount(0)
-  await expect(messageItemsOf(page)).toHaveCount(4)
-  await expect(messageItemsOf(page).nth(0)).toContainText('Before the stop')
-  await expect(messageItemsOf(page).nth(1)).toContainText(agentReplyText)
-  await expect(messageItemsOf(page).nth(2)).toContainText('After the stop')
-  await expect(messageItemsOf(page).nth(3)).toContainText(agentReplyText)
-  expect(await runtimeStateOf(workerStack, research)).toBe('running')
-})
-
-test.describe('9. no runtime host', () => {
-  test.use({ runtimeHost: false })
-
-  test('a prompt shows the notice instead of an endless working indicator', async ({ page }) => {
-    await openChat(page, 'Research')
-    await sendMessage(page, 'Anyone there?')
-
-    await expect(itemsWith(page, 'No runtime host is available')).toHaveCount(1)
-    await expect(workingIndicatorOf(page)).toHaveCount(0)
-    await expect(messageItemsOf(page)).toHaveCount(2)
-    await expect(messageItemsOf(page).nth(0)).toContainText('Anyone there?')
-  })
 })

@@ -217,7 +217,7 @@ const app = createApp({
     return context.body(null, 204)
   })
   .post('/test/fake-host', async (context) => {
-    const { db = '', online, forgetSessions } = context.req.query()
+    const { db = '', online, forgetSessions, keepAgentsOf } = context.req.query()
     let fakeHost = fakeHostByDatabase.get(db)
     if (!fakeHost) {
       const relay = createHqAgentRelay({ gapMilliseconds: stubGapMilliseconds, modelCall: () => created.modelCall })
@@ -230,6 +230,7 @@ const app = createApp({
       fakeHostByDatabase.set(db, fakeHost)
     }
     if (forgetSessions === 'true') fakeHost.relay.forgetSessions()
+    if (keepAgentsOf !== undefined) await fakeHost.relay.stopAgentsExcept(keepAgentsOf.split(','))
     if (online === 'false' && fakeHost.isOnline) await fakeHost.host.disconnect()
     if (online === 'true' && !fakeHost.isOnline) await fakeHost.host.connect()
     if (online) fakeHost.isOnline = online === 'true'

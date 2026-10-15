@@ -332,13 +332,13 @@ export const createFakeLlm = (
       const steps = script.steps ?? (script.command ? [{ command: script.command }] : [])
       const turnMessages = request.messages?.slice(request.messages.findLastIndex((message) => message.role === 'user'))
       const { summary } = chatScript
-      const isCondensed =
+      const isCompacted =
         summary !== undefined &&
         request.messages?.some(
           (message) => message.role === 'user' && JSON.stringify(message.content).includes(summary),
         )
       const step =
-        request.tools?.length && !isCondensed
+        request.tools?.length && !isCompacted
           ? steps[turnMessages?.filter((message) => message.role === 'assistant').length ?? 0]
           : undefined
       if (step && 'fail' in step)

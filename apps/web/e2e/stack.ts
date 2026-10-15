@@ -260,6 +260,8 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
         reset: async (options) => {
           await keepWarmRuntimes()
           pairedHost ??= await pairFakeHost(testDatabase.database, testDatabase.name)
+          const warmApiKeys = [...pairedHost.warmRuntimes.values()].map(({ runtime }) => runtime.apiKey)
+          await postToServer('/test/fake-host', { db: testDatabase.name, keepAgentsOf: warmApiKeys.join(',') })
           await pairedHost.start()
           await waitForEpoch(await writeReset(options))
           const { warmRuntimes } = pairedHost

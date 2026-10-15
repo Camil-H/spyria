@@ -472,7 +472,7 @@ type HostFrame = {
 export const fakeHostGatewayUrl = 'http://fake-gateway-relay.test:4000/v1'
 type HostCommand = { op: string; runtimeId?: string; image?: string; apiKey?: string }
 export type FakeContainer = { running: boolean; apiKey: string; readyAt?: number }
-export type FakeAgentServer = {
+export type ContainerAgent = {
   respond(request: Required<Pick<HostFrame, 'method' | 'path'>> & HostFrame, container: FakeContainer): unknown
   connect(stream: { path: string; container: FakeContainer; send(data: string): void; close(): void }): {
     onMessage(data: string): void
@@ -507,7 +507,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
       signedIn = [],
     }: {
       memoryGibibytes?: number
-      agentServer?: FakeAgentServer
+      agentServer?: ContainerAgent
       bootMilliseconds?: () => number
       ownerId?: string
       signedIn?: string[]
@@ -523,7 +523,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
     const commands: HostCommand[] = []
     const heldReplies = new Map<string, Promise<void>>()
     const failingOps = new Set<string>()
-    const streams = new Map<number, ReturnType<FakeAgentServer['connect']>>()
+    const streams = new Map<number, ReturnType<ContainerAgent['connect']>>()
     const modelCalls = new Map<
       number,
       { frames: HostFrame[]; done: () => void; onChunk?: (data: string) => void; onHead?: (status?: number) => void }
@@ -633,7 +633,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
             const isReady = isReadyProbe && container?.running && Date.now() >= (container.readyAt ?? 0)
             const answered =
               container?.running && !isReadyProbe
-                ? agentServer?.respond(frame as Parameters<FakeAgentServer['respond']>[0], container)
+                ? agentServer?.respond(frame as Parameters<ContainerAgent['respond']>[0], container)
                 : undefined
             void Promise.resolve(answered).then((response) =>
               send({

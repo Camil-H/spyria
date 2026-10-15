@@ -1,13 +1,17 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { FakeAgentServer, FakeContainer, ModelCall } from '../testing.ts'
+import type { ContainerAgent, FakeContainer, ModelCall } from '../testing.ts'
 
 type Agent = { port: number; process: Bun.Subprocess<'ignore', 'pipe', 'inherit'> }
 
 const repositoryRoot = new URL('../../../../', import.meta.url).pathname
 const listening = /hq-agent listening on port (\d+)/
 const modelCallMilliseconds = 300_000
+const runningAgents = new Set<Bun.Subprocess>()
+export const stopAllHqAgents = () => {
+  for (const agent of runningAgents) agent.kill()
+}
 
 const serveGateway = (modelCall: () => ModelCall) =>
   Bun.serve({
@@ -78,7 +82,9 @@ export const createHqAgentRelay = ({
   const interrupts: string[] = []
   const socketPaths: string[] = []
 
+  let isStopped = false
   const startAgent = async (apiKey: string): Promise<Agent> => {
+    if (isStopped) throw new Error('The hq-agent relay was stopped')
     const child = Bun.spawn([process.execPath, `${repositoryRoot}apps/agent/src/main.ts`], {
       env: {
         PATH: `${shims}:${process.env.PATH}`,
@@ -89,6 +95,8 @@ export const createHqAgentRelay = ({
       stdout: 'pipe',
       stderr: 'inherit',
     })
+    runningAgents.add(child)
+    void child.exited.then(() => runningAgents.delete(child))
     const decoder = new TextDecoder()
     const reader = child.stdout.getReader()
     let output = ''
@@ -151,11 +159,14 @@ export const createHqAgentRelay = ({
       }
     },
     stopped: (container) => void stopContainer(container),
-  } satisfies FakeAgentServer
-  const stopAgents = async () => {
-    for (const agent of await Promise.all(agents.values())) agent.process.kill()
-    agents.clear()
+  } satisfies ContainerAgent
+  const stopAgentsExcept = async (apiKeys: readonly string[]) => {
+    const stopping = [...agents.entries()].filter(([apiKey]) => !apiKeys.includes(apiKey))
+    for (const [apiKey] of stopping) agents.delete(apiKey)
+    for (const agent of await Promise.allSettled(stopping.map(([, agent]) => agent)))
+      if (agent.status === 'fulfilled') agent.value.process.kill()
   }
+  const stopAgents = () => stopAgentsExcept([])
 
   return {
     agentServer,
@@ -167,11 +178,13 @@ export const createHqAgentRelay = ({
     socketPaths,
     agentCount: () => agents.size,
     restart: stopAgents,
+    stopAgentsExcept,
     forgetSessions: () => rmSync(join(directory, 'sessions'), { recursive: true, force: true }),
     dropSockets: () => {
       for (const upstream of upstreams) upstream.close()
     },
     stop: async () => {
+      isStopped = true
       await stopAgents()
       await gateway?.stop(true)
       rmSync(directory, { recursive: true, force: true })
