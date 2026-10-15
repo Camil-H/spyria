@@ -1,5 +1,4 @@
 import {
-  test as base,
   expect,
   mainOf,
   messageItemsOf,
@@ -7,27 +6,9 @@ import {
   type Page,
   runsOnChoiceOf,
   sendMessage,
-  serverUrl,
+  machineTest as test,
 } from './fixtures'
 import type { WorkerStack } from './stack'
-
-type Machine = {
-  conversations: { agent: Record<string, unknown>; secrets: object }[]
-  prompts: string[]
-  modelSwitches: string[]
-}
-type MachineQuery = { owner?: string; signedIn?: string; online?: string }
-
-const test = base.extend<{ machine: (query?: MachineQuery) => Promise<Machine> }>({
-  machine: async ({ workerStack }, use) => {
-    const machine = async (query: MachineQuery = {}) => {
-      const search = new URLSearchParams({ db: workerStack.databaseName, ...query })
-      return (await (await fetch(`${serverUrl}/test/fake-machine?${search}`, { method: 'POST' })).json()) as Machine
-    }
-    await use(machine)
-    await machine({ online: 'false' })
-  },
-})
 
 const claudeCode = {
   name: 'Claude Code',

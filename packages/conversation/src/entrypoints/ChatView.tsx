@@ -8,9 +8,9 @@ import { runsOnNames, runsOnWaitingNoticeOf } from '../domain/session-routing.ts
 import { getConversation } from '../queries/get-conversation.ts'
 import { Composer } from './Composer.tsx'
 import { MessageList } from './MessageList.tsx'
-import { useConversationCommands } from './providers.tsx'
+import { AnswerQuestionContext, useConversationCommands } from './providers.tsx'
 import { SessionChip } from './SessionChip.tsx'
-import { useStreamedReply, withStreamedReply } from './useStreamedReply.ts'
+import { useLiveMessages, withLiveMessages } from './useLiveMessages.ts'
 
 const bubbleClassName = 'rounded-full border border-line px-2 py-0.5 text-xs text-muted'
 
@@ -41,7 +41,7 @@ export const ChatView = ({
         () => setHqRuntime({ chatId, isAvailable: true }),
       )
   }, [commands, workspaceId, chatId, isChoosingRunsOn])
-  const streamedReply = useStreamedReply(workspaceId, chatId, conversation?.messages ?? [])
+  const liveMessages = useLiveMessages(workspaceId, chatId, conversation?.messages ?? [])
   const newestMessageId = conversation?.messages.at(-1)?.id
   useEffect(() => {
     if (newestMessageId) commands.markChatRead({ workspaceId, chatId })
@@ -55,6 +55,10 @@ export const ChatView = ({
   }, [commands, workspaceId, chatId, soleChoice])
   if (!conversation) return <Navigate to={`/w/${workspaceId}`} replace />
   const isRunsOnOpen = conversation.type === 'runtime' && conversation.runsOn === null
+  const mayPrompt =
+    conversation.type === 'runtime' &&
+    conversation.runsOn !== null &&
+    (conversation.localSession ? conversation.isOwner : canPrompt)
   const ChatTypeIcon = conversation.type === 'runtime' ? Bot : Hash
   const chatTypeLabel = conversation.type === 'runtime' ? 'Runtime chat' : 'Channel'
   return (
@@ -91,11 +95,19 @@ export const ChatView = ({
           </Link>
         )}
       </header>
-      <MessageList
-        conversation={conversation}
-        items={withStreamedReply(conversation.items, streamedReply)}
-        onStop={() => commands.stopAgent({ workspaceId, chatId })}
-      />
+      <AnswerQuestionContext
+        value={
+          mayPrompt
+            ? (questionId, answer) => commands.answerQuestion({ workspaceId, chatId, questionId, answer })
+            : undefined
+        }
+      >
+        <MessageList
+          conversation={conversation}
+          items={withLiveMessages(conversation.items, liveMessages)}
+          onStop={() => commands.stopAgent({ workspaceId, chatId })}
+        />
+      </AnswerQuestionContext>
       {conversation.type === 'runtime' && (
         <div className="-mb-2 flex items-center gap-2">
           <SessionChip
@@ -107,6 +119,8 @@ export const ChatView = ({
             subagentPolicy={conversation.subagentPolicy}
             harness={conversation.harness}
             localSession={conversation.localSession}
+            isPlanning={conversation.isPlanning}
+            mayPrompt={mayPrompt}
             runsOn={conversation.runsOn}
             isOwner={conversation.isOwner}
             runsOnChoices={conversation.runsOnChoices}

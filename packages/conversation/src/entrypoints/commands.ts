@@ -1,7 +1,7 @@
 import type { ChatId, MessageId, WorkspaceId } from '@hq/kernel'
 import type { RunsOn } from '../domain/session-routing.ts'
-import type { StoredFrame, StreamFrame } from '../domain/streamed-reply.ts'
-import type { ChatRoutingRead } from './endpoints.ts'
+import type { QuestionFrame, StoredFrame, StreamFrame } from '../domain/streamed-reply.ts'
+import type { ChatRoutingRead, QuestionAnswer } from './endpoints.ts'
 
 type Command<Input, Result = string> = (input: Input & { workspaceId: WorkspaceId }) => Promise<Result>
 
@@ -25,8 +25,14 @@ export type ConversationCommands = {
     acpModel?: string
   }>
   chatRouting: Command<{ chatId: ChatId }, ChatRoutingRead>
+  answerQuestion: Command<{ chatId: ChatId; questionId: string; answer: QuestionAnswer }, number>
+  setPlanMode: Command<{ chatId: ChatId; enabled: boolean }, number>
 }
 
 export type AgentStream = {
-  subscribe(workspaceId: WorkspaceId, chatId: ChatId, listener: (frame: StreamFrame | StoredFrame) => void): () => void
+  subscribe(
+    workspaceId: WorkspaceId,
+    chatId: ChatId,
+    listener: (frame: StreamFrame | StoredFrame | QuestionFrame) => void,
+  ): () => void
 }

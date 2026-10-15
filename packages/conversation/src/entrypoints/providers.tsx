@@ -1,5 +1,6 @@
 import { createContext, type ReactNode, use } from 'react'
 import type { AgentStream, ConversationCommands } from './commands.ts'
+import type { QuestionAnswer } from './endpoints.ts'
 
 const ConversationCommandsContext = createContext<ConversationCommands | null>(null)
 const AgentStreamContext = createContext<AgentStream | null>(null)
@@ -29,3 +30,7 @@ export const useConversationCommands = () => {
   if (!commands) throw new Error('ConversationProvider is missing')
   return commands
 }
+
+export const AnswerQuestionContext = createContext<
+  ((questionId: string, answer: QuestionAnswer) => Promise<number>) | undefined
+>(undefined)

@@ -1,5 +1,12 @@
+import type { AgentStep } from './agent-steps.ts'
+
 export type StreamFrame = Readonly<{ promptId: string; text: string; isSnapshot?: boolean; isReasoning?: boolean }>
 export type StoredFrame = Readonly<{ promptId: string; storedId: string }>
+export type QuestionFrame = Readonly<{
+  promptId: string
+  question: Omit<Extract<AgentStep, { type: 'question' }>, 'type'> & { sessionUpdate: 'question' }
+  isSnapshot?: boolean
+}>
 export type StreamedReply = Readonly<{
   promptId: string
   text: string

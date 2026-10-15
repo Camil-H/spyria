@@ -1,6 +1,8 @@
 import {
   type AgentStream,
   type ConversationCommands,
+  chatPlanModePathOf,
+  chatQuestionPathOf,
   chatRoutingPathOf,
   commandOutputPathOf,
   conversationMutators,
@@ -165,6 +167,10 @@ export const createApp = async (
         (
           await fetch(chatRoutingPathOf(chatId), { headers: { authorization: `Bearer ${store.tokenOf(workspaceId)}` } })
         ).json(),
+      answerQuestion: async ({ workspaceId, chatId, questionId, answer }) =>
+        (await postAsMember(workspaceId, chatQuestionPathOf(chatId, questionId), JSON.stringify(answer))).status,
+      setPlanMode: async ({ workspaceId, chatId, enabled }) =>
+        (await postAsMember(workspaceId, chatPlanModePathOf(chatId), JSON.stringify({ enabled }))).status,
       connectTool: toolConnections.connectTool,
       startRuntimeFromMessage: async (input) => {
         const newChatId = crypto.randomUUID()

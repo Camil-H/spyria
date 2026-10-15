@@ -180,6 +180,31 @@ test('a turn shows only its latest plan, where the plan first appeared', () => {
   expect(shownPlan?.type === 'message' && shownPlan.message.step).toEqual(plan('done'))
 })
 
+test('a question stays out of the fold where it was asked, its plan exit tool is hidden, and its answerer is named', () => {
+  const question = { type: 'question', questionId: 'q1', kind: 'question', answers: {}, answeredBy: alice } as const
+  const planQuestion = { ...question, questionId: 'q2', kind: 'plan', toolCallId: 'exit-plan-1', plan: '1. Go' }
+  const conversation = conversationWith([
+    replyRow(2, 'step', { step: command(0) }),
+    replyRow(3, 'step', { step: question }),
+    replyRow(4, 'step', { step: edit }),
+    {
+      ...replyRow(5, 'step', { step: { type: 'tool', name: 'Approve Plan', arguments: '{}', result: null } }),
+      id: messageId('event-5:exit-plan-1'),
+    },
+    replyRow(6, 'step', { step: planQuestion }),
+    replyRow(7, 'agent', { body: 'Done.' }),
+  ])
+  expect(itemSummaryOf(conversation)).toEqual([
+    'member',
+    'fold Worked for 5s · 3 steps: thought, command, file',
+    'step question',
+    'step question',
+    'agent',
+  ])
+  const answered = conversation?.items[2]
+  expect(answered?.type === 'message' && answered.message.answeredByName).toBe('Alice')
+})
+
 test('steps outside any turn, like migrated tool calls, are shown as they are', () => {
   const conversation = conversationWith([
     replyRow(2, 'step', { step: { ...command(null), thought: undefined }, replyToId: null }),

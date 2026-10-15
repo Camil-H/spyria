@@ -18,6 +18,7 @@ export type ConversationMessage = Readonly<{
   isEdited: boolean
   isRunning: boolean
   canConnectTools: boolean
+  answeredByName?: string
   delegation?: Readonly<{
     modelName: string
     steps: readonly ConversationMessage[]
@@ -140,6 +141,16 @@ const withDelegationsGrouped = (replies: readonly ConversationMessage[], isStopp
   })
 }
 
+export const isPlanSwitchIn = (messages: readonly ConversationMessage[]) => {
+  const planToolCallSuffixes = messages.flatMap((message) =>
+    message.step?.type === 'question' && message.step.kind === 'plan' && message.step.toolCallId
+      ? [`:${message.step.toolCallId}`]
+      : [],
+  )
+  return (message: ConversationMessage) =>
+    message.step?.type === 'tool' && planToolCallSuffixes.some((suffix) => message.id.endsWith(suffix))
+}
+
 const turnItemsOf = (messages: readonly ConversationMessage[]): ConversationItem[] => {
   const repliesByPrompt = Map.groupBy(
     messages.filter((message) => message.replyToId !== null),
@@ -148,8 +159,15 @@ const turnItemsOf = (messages: readonly ConversationMessage[]): ConversationItem
   const itemsByStepId = new Map<MessageId, ConversationItem[]>()
   for (const [promptId, turnReplies] of repliesByPrompt) {
     const isStopped = turnReplies.some((reply) => reply.kind === 'notice' && reply.body.startsWith(stoppedByPrefix))
-    const replies = withDelegationsGrouped(turnReplies, isStopped)
-    const steps = replies.filter((reply) => reply.kind === 'step' && !(isStopped && reply.step?.type === 'error'))
+    const isPlanSwitch = isPlanSwitchIn(turnReplies)
+    const replies = withDelegationsGrouped(
+      turnReplies.filter((reply) => !isPlanSwitch(reply)),
+      isStopped,
+    )
+    const steps = replies.filter(
+      (reply) =>
+        reply.kind === 'step' && reply.step?.type !== 'question' && !(isStopped && reply.step?.type === 'error'),
+    )
     const plans = steps.filter((step) => step.step?.type === 'plan')
     const visibleSteps = steps
       .filter((step) => step.step?.type !== 'plan' || step === plans[0])
@@ -158,6 +176,8 @@ const turnItemsOf = (messages: readonly ConversationMessage[]): ConversationItem
     const firstStep = visibleSteps[0]
     const firstStepIndex = replies.findIndex((reply) => reply.id === firstStep?.id)
     for (const reply of turnReplies) if (reply.kind === 'step') itemsByStepId.set(reply.id, [])
+    for (const reply of replies)
+      if (reply.step?.type === 'question') itemsByStepId.set(reply.id, [{ type: 'message', message: reply }])
     if (
       answer &&
       firstStep &&
@@ -220,22 +240,25 @@ export const getConversation =
       !chatMessages.some((message) => message.kind === 'agent' || message.kind === 'step')
         ? [...(hasWorkspaceHost || connectedHarnesses.length === 0 ? ['runtime' as const] : []), ...connectedHarnesses]
         : null
-    const messages = chatMessages.map(
-      (message): ConversationMessage => ({
+    const messages = chatMessages.map((message): ConversationMessage => {
+      const step = message.step as StoredStep | null
+      return {
         id: message.id,
         kind: message.kind,
         authorName: memberName(message.authorId),
         createdAt: message.createdAt,
         body: message.body,
-        step: message.step as StoredStep | null,
+        step,
         replyToId: message.replyToId,
         isOwn: message.authorId === viewerId,
         isDeleted: message.deletedAt !== null,
         isEdited: message.editedAt !== null,
         isRunning: hasActiveTurn && message.replyToId === chat.agentTurnMessageId,
         canConnectTools: chat.ownerId === viewerId,
-      }),
-    )
+        ...(step?.type === 'question' &&
+          step.answeredBy && { answeredByName: memberName(step.answeredBy as MemberId) }),
+      }
+    })
     return {
       title: chat.name,
       type: chat.type,

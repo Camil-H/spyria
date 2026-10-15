@@ -1,8 +1,28 @@
 import { expect, type Locator, type Page } from '@playwright/test'
+import { test } from './stack.ts'
+import { serverUrl } from './stack-ports.ts'
 
 export * from '@playwright/test'
 export { test } from './stack.ts'
 export { serverUrl } from './stack-ports.ts'
+
+type Machine = {
+  conversations: { agent: Record<string, unknown>; secrets: object }[]
+  prompts: string[]
+  modelSwitches: string[]
+}
+type MachineQuery = { owner?: string; signedIn?: string; online?: string }
+
+export const machineTest = test.extend<{ machine: (query?: MachineQuery) => Promise<Machine> }>({
+  machine: async ({ workerStack }, use) => {
+    const machine = async (query: MachineQuery = {}) => {
+      const search = new URLSearchParams({ db: workerStack.databaseName, ...query })
+      return (await (await fetch(`${serverUrl}/test/fake-machine?${search}`, { method: 'POST' })).json()) as Machine
+    }
+    await use(machine)
+    await machine({ online: 'false' })
+  },
+})
 
 export const agentReplyText = 'Understood, working on it.'
 

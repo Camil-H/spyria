@@ -1,11 +1,13 @@
 import { chatId, type WorkspaceId } from '@hq/kernel'
 import { DiffView, focusRing } from '@hq/ui'
 import { Check, ChevronRight, LoaderCircle, X } from 'lucide-react'
-import { type ReactNode, useState } from 'react'
+import { lazy, type ReactNode, Suspense, use, useState } from 'react'
 import { useOutletContext, useParams } from 'react-router'
 import type { AgentStep as Step } from '../domain/agent-steps.ts'
 import { type ConversationMessage, durationLabelOf } from '../queries/get-conversation.ts'
-import { useConversationCommands } from './providers.tsx'
+import { AnswerQuestionContext, useConversationCommands } from './providers.tsx'
+
+const QuestionCard = lazy(() => import('./QuestionCard.tsx'))
 
 type StepOf<Type extends Step['type']> = Extract<Step, { type: Type }>
 
@@ -211,6 +213,12 @@ export const AgentStep = ({ message }: { message: ConversationMessage }) => {
   if (message.delegation) return <DelegationStep delegation={message.delegation} />
   if (step?.type === 'tool') return <ToolStep step={step} canConnect={message.canConnectTools} />
   if (step?.type === 'plan') return <PlanStep step={step} />
+  if (step?.type === 'question')
+    return (
+      <Suspense>
+        <QuestionCard message={message} answerQuestion={use(AnswerQuestionContext)} />
+      </Suspense>
+    )
   if (step?.type === 'error')
     return (
       <p role="alert" className="rounded-md bg-removed px-2 py-1 text-sm">

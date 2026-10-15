@@ -63,6 +63,7 @@ const questionAnswer = z.union([
     free: z.optional(z.record(z.string(), z.string())),
   }),
 ])
+export type QuestionAnswer = z.infer<typeof questionAnswer>
 const planMode = z.object({ enabled: z.boolean() })
 
 export const questionAnswerOf = (body: unknown) => questionAnswer.safeParse(body).data

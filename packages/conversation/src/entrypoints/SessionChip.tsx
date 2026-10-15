@@ -1,5 +1,5 @@
 import { type ChatId, modelNameOf, rereadDollarsOf, type WorkspaceId } from '@hq/kernel'
-import { buttonClass, fieldClass, focusRing, formatCost, ghostButtonClass, labelClass } from '@hq/ui'
+import { buttonClass, fieldClass, focusRing, formatCost, ghostButtonClass, labelClass, Switch } from '@hq/ui'
 import { useEffect, useRef, useState } from 'react'
 import { chipLabelOf, type Harness, type RunsOn, runsOnNames } from '../domain/session-routing.ts'
 import type { Conversation } from '../queries/get-conversation.ts'
@@ -27,6 +27,8 @@ export const SessionChip = (chip: {
   subagentPolicy: Policy
   harness: Harness | null
   localSession: boolean
+  isPlanning: boolean
+  mayPrompt: boolean
   runsOn: RunsOn | null
   isOwner: boolean
   runsOnChoices: Conversation['runsOnChoices']
@@ -39,6 +41,8 @@ export const SessionChip = (chip: {
     subagentPolicy,
     harness,
     localSession,
+    isPlanning,
+    mayPrompt,
     runsOn,
     isOwner,
     runsOnChoices,
@@ -81,6 +85,7 @@ export const SessionChip = (chip: {
   const adapterModel = model ?? routing?.adapterModels.currentModelId ?? ''
   const adapterNameOf = (id: string) =>
     adapterModels.find((candidate) => candidate.id === id)?.name ?? (id || 'Default')
+  const hasPlanMode = localSession && runsOn !== null
   const estimate = pendingModel
     ? rereadDollarsOf(
         routing?.reachableModels.find(({ id }) => id === pendingModel),
@@ -120,6 +125,15 @@ export const SessionChip = (chip: {
             </label>
           ) : (
             <p>Runs on {runsOnNames[runsOn]}</p>
+          )}
+          {hasPlanMode && (
+            <fieldset disabled={!mayPrompt} className="disabled:opacity-40">
+              <Switch
+                label="Plan"
+                isOn={isPlanning}
+                onToggle={() => commands.setPlanMode({ workspaceId, chatId, enabled: !isPlanning })}
+              />
+            </fieldset>
           )}
           {localSession && isOwner && (
             <label className={labelClass}>
