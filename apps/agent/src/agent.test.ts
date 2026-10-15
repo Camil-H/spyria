@@ -353,3 +353,241 @@ test('requests without the session key are refused, /ready is open', async () =>
   expect((await call('POST', '/api/conversations', launchOf(), 'wrong')).status).toBe(401)
   expect((await call('POST', '/api/conversations', { agent: { acp_command: 'node' } })).status).toBe(400)
 })
+
+const answerOf = (events: AgentEvent[]) => JSON.parse(/answer:(\{.*?\}) /.exec(textOf(events))?.[1] ?? 'null')
+const questionAt = async (socket: ReturnType<ReturnType<typeof clientOf>['open']>, count: number) =>
+  String((await socket.until(kindOf('question'), count)).filter(kindOf('question'))[count - 1]?.update.questionId)
+
+test('a Claude Code question waits for an answer: a pick, a free answer and a skip reach the adapter in its field names', async () => {
+  const { call, open, create, prompt } = started()
+  const id = await create(launchOf())
+  const socket = open(id)
+  const answerTo = (questionId: string, body: object) =>
+    call('POST', `/api/conversations/${id}/questions/${questionId}`, body)
+
+  await prompt(id, 'stub:ask')
+  const questionId = await questionAt(socket, 1)
+  const question = {
+    questionId,
+    toolCallId: 'ask-1',
+    kind: 'question',
+    questions: [
+      {
+        id: 'question_0',
+        header: 'Database',
+        text: 'Which database should we use?',
+        options: [
+          { value: 'Postgres', label: 'Postgres', description: 'Relational' },
+          { value: 'SQLite', label: 'SQLite', description: 'Embedded' },
+        ],
+        multi: false,
+        free: true,
+      },
+    ],
+  }
+  expect(socket.events.find(kindOf('question'))).toMatchObject({
+    completed: false,
+    update: { sessionUpdate: 'question', ...question },
+  })
+  expect((await answerTo(questionId, { approve: true })).status).toBe(400)
+  expect((await answerTo(questionId, { answers: { question_0: 'SQLite' } })).status).toBe(200)
+  await socket.until(kindOf('turn_end'))
+  expect(answerOf(socket.events)).toEqual({ action: 'accept', content: { question_0: 'SQLite' } })
+  expect(socket.events.find(kindOf('question_answered'))).toMatchObject({
+    completed: true,
+    update: { sessionUpdate: 'question_answered', ...question, answers: { question_0: 'SQLite' } },
+  })
+  expect((await answerTo(questionId, { answers: { question_0: 'Postgres' } })).status).toBe(409)
+
+  await prompt(id, 'stub:ask')
+  expect((await answerTo(await questionAt(socket, 2), { answers: {}, free: { question_0: 'MySQL' } })).status).toBe(200)
+  await socket.until(kindOf('turn_end'), 2)
+  expect(answerOf(socket.events.slice(-4))).toEqual({ action: 'accept', content: { question_0_custom: 'MySQL' } })
+  expect(socket.events.filter(kindOf('question_answered')).at(-1)?.update).toMatchObject({
+    answers: {},
+    free: { question_0: 'MySQL' },
+  })
+
+  await prompt(id, 'stub:ask')
+  await answerTo(await questionAt(socket, 3), { answers: {} })
+  await socket.until(kindOf('turn_end'), 3)
+  expect(answerOf(socket.events.slice(-4))).toEqual({ action: 'decline' })
+})
+
+test('a Codex form of three questions is normalized and a free answer picks "None of the above" with its note', async () => {
+  const { call, open, create, prompt } = started()
+  const id = await create(launchOf())
+  const socket = open(id)
+  await prompt(id, 'stub:ask-codex')
+  const questionId = await questionAt(socket, 1)
+  expect(socket.events.find(kindOf('question'))?.update.questions).toEqual([
+    {
+      id: 'db',
+      header: 'Database',
+      text: 'Which database should I use?',
+      options: [
+        { value: 'Postgres', label: 'Postgres', description: 'Relational' },
+        { value: 'SQLite', label: 'SQLite', description: 'File' },
+      ],
+      multi: false,
+      free: true,
+    },
+    {
+      id: 'lang',
+      header: 'Language',
+      text: 'Which language?',
+      options: [
+        { value: 'TypeScript', label: 'TypeScript' },
+        { value: 'Go', label: 'Go' },
+      ],
+      multi: false,
+      free: true,
+    },
+    {
+      id: 'ci',
+      header: 'CI',
+      text: 'Which CI?',
+      options: [
+        { value: 'GitHub Actions', label: 'GitHub Actions' },
+        { value: 'None', label: 'None' },
+      ],
+      multi: false,
+      free: true,
+    },
+  ])
+  await call('POST', `/api/conversations/${id}/questions/${questionId}`, {
+    answers: { db: 'SQLite', lang: 'Go' },
+    free: { lang: 'Go 1.26', ci: 'CircleCI' },
+  })
+  await socket.until(kindOf('turn_end'))
+  expect(answerOf(socket.events)).toEqual({
+    action: 'accept',
+    content: { db: 'SQLite', lang: 'Go', lang_note: 'Go 1.26', ci: 'None of the above', ci_note: 'CircleCI' },
+  })
+})
+
+test('Stop, the adapter withdrawing the request and the turn end close a waiting question; late answers are refused', async () => {
+  const { call, open, create, prompt } = started()
+  const id = await create(launchOf())
+  const socket = open(id)
+  await prompt(id, 'stub:ask')
+  const questionId = await questionAt(socket, 1)
+  expect((await call('POST', `/api/conversations/${id}/interrupt`, {})).status).toBe(200)
+  await socket.until(kindOf('turn_end'))
+  expect(socket.events.find(kindOf('question_closed'))).toMatchObject({
+    completed: true,
+    update: { sessionUpdate: 'question_closed', questionId, kind: 'question', reason: 'stopped' },
+  })
+  expect(socket.events.findLast(kindOf('turn_end'))?.update).toEqual({
+    sessionUpdate: 'turn_end',
+    stopReason: 'cancelled',
+  })
+  const late = await call('POST', `/api/conversations/${id}/questions/${questionId}`, {
+    answers: { question_0: 'SQLite' },
+  })
+  expect(late.status).toBe(409)
+
+  await prompt(id, 'stub:ask stub:withdraw')
+  const withdrawn = await questionAt(socket, 2)
+  await socket.until(kindOf('turn_end'), 2)
+  expect(socket.events.filter(kindOf('question_closed')).at(-1)?.update).toMatchObject({
+    questionId: withdrawn,
+    reason: 'cancelled',
+  })
+  expect(answerOf(socket.events.slice(-4))).toEqual({ action: 'cancel' })
+  expect(socket.events.findLast(kindOf('turn_end'))?.update.stopReason).toBe('end_turn')
+
+  await prompt(id, 'hello')
+  await socket.until(kindOf('turn_end'), 3)
+  expect(textOf(socket.events)).toEndWith('[t3] Hello from the stub (model stub-default, mode bypassPermissions).')
+})
+
+test('plan approval: approve and keep planning map to the Claude Code and Codex options; plan mode refuses writes', async () => {
+  const { call, open, create, prompt } = started()
+  const id = await create(launchOf())
+  const socket = open(id)
+  const decide = async (text: string, approve: boolean, turns: number) => {
+    const asked = socket.events.filter(kindOf('question')).length + 1
+    await prompt(id, text)
+    const questionId = await questionAt(socket, asked)
+    expect((await call('POST', `/api/conversations/${id}/questions/${questionId}`, { approve })).status).toBe(200)
+    await socket.until(kindOf('turn_end'), turns)
+    return socket.events.slice(socket.events.findLastIndex(kindOf('question')))
+  }
+
+  const kept = await decide('stub:exit-plan', false, 1)
+  expect(kept[0]?.update).toMatchObject({ kind: 'plan', toolCallId: 'exit-plan-1', plan: '1. Create x.txt\n2. Done' })
+  expect(kept.find(kindOf('question_answered'))?.update).toMatchObject({ kind: 'plan', approved: false })
+  expect(textOf(kept)).toBe('plan:reject ')
+  expect(kept.find(kindOf('turn_end'))?.update).toEqual({
+    sessionUpdate: 'turn_end',
+    stopReason: 'cancelled',
+    keptPlanning: true,
+  })
+
+  await prompt(id, 'stub:write stub:read')
+  await socket.until(kindOf('turn_end'), 2)
+  expect(textOf(socket.events.slice(-6))).toContain('write:reject ')
+  expect(socket.events.findLast((event) => event.update.toolCallId === 'read-2')?.update.status).toBe('completed')
+
+  const approved = await decide('stub:exit-plan', true, 3)
+  expect(textOf(approved)).toBe(
+    'plan:exit-plan-bypass Hello from the stub (model stub-default, mode bypassPermissions).',
+  )
+  expect(approved.find(kindOf('turn_end'))?.update).toEqual({ sessionUpdate: 'turn_end', stopReason: 'end_turn' })
+  await prompt(id, 'stub:write')
+  await socket.until(kindOf('turn_end'), 4)
+  expect(textOf(socket.events.slice(-4))).toContain('write:allow-once ')
+
+  const codexApproved = await decide('stub:plan-codex', true, 5)
+  expect(codexApproved[0]?.update).toMatchObject({ kind: 'plan', plan: '1. Create x.txt\n2. Done' })
+  expect(textOf(codexApproved)).toStartWith('plan:implement_plan ')
+  const revised = await decide('stub:plan-codex', false, 6)
+  expect(textOf(revised)).toStartWith('plan:revise_plan ')
+  expect(revised.find(kindOf('turn_end'))?.update).toEqual({ sessionUpdate: 'turn_end', stopReason: 'end_turn' })
+})
+
+test('a Codex session selects full access among its listed modes', async () => {
+  const { open, create, prompt } = started()
+  const modes = 'STUB_MODES=read-only,workspace-write,agent,agent-full-access'
+  const id = await create(launchOf({ acp_command: ['env', modes, ...stubCommand.slice(1)] }))
+  const socket = open(id)
+  await prompt(id, 'hello')
+  await socket.until(kindOf('turn_end'))
+  expect(textOf(socket.events)).toBe('[t1] Hello from the stub (model stub-default, mode agent-full-access).')
+})
+
+test('a sub-conversation answers its own questions: a free assumption where the form has one, plan approvals approved', async () => {
+  const { open, create, prompt } = started()
+  const id = await create({ ...launchOf(), parent_conversation_id: crypto.randomUUID() })
+  const socket = open(id)
+  const assumption = 'No member is available; decide yourself and state your assumption.'
+  await prompt(id, 'stub:ask')
+  await socket.until(kindOf('turn_end'))
+  expect(answerOf(socket.events)).toEqual({ action: 'accept', content: { question_0_custom: assumption } })
+  expect(socket.events.find(kindOf('question_answered'))?.update).toMatchObject({
+    kind: 'question',
+    answers: {},
+    free: { question_0: assumption },
+  })
+
+  await prompt(id, 'stub:ask-codex')
+  await socket.until(kindOf('turn_end'), 2)
+  expect(answerOf(socket.events.slice(-4)).content).toEqual({
+    db: 'None of the above',
+    db_note: assumption,
+    lang: 'None of the above',
+    lang_note: assumption,
+    ci: 'None of the above',
+    ci_note: assumption,
+  })
+
+  await prompt(id, 'stub:exit-plan')
+  await socket.until(kindOf('turn_end'), 3)
+  expect(textOf(socket.events.slice(-6))).toStartWith('plan:exit-plan-bypass ')
+  expect(socket.events.filter(kindOf('question_answered')).at(-1)?.update).toMatchObject({
+    kind: 'plan',
+    approved: true,
+  })
+  expect(socket.events.filter(kindOf('question'))).toEqual([])
+})

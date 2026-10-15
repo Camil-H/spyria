@@ -3,6 +3,7 @@ import { createInterface } from 'node:readline'
 
 export type Json = Record<string, unknown>
 export type AdapterLaunch = { command: string[]; env: Record<string, string>; cwd: string }
+export type AdapterRequest = { id: number | string; method: string; params: Json }
 type Frame = {
   id?: number | string
   method?: string
@@ -31,7 +32,17 @@ const permissionAnswerOf = (params: Json | undefined) => {
 
 export const connectAdapter = (
   { command, env, cwd }: AdapterLaunch,
-  { onUpdate, onExit }: { onUpdate: (params: Json) => void; onExit: (code: number | null) => void },
+  {
+    onUpdate,
+    onExit,
+    onRequest,
+    onCancelRequest,
+  }: {
+    onUpdate: (params: Json) => void
+    onExit: (code: number | null) => void
+    onRequest: (request: AdapterRequest) => Promise<Json> | undefined
+    onCancelRequest: (requestId: number | string) => void
+  },
 ) => {
   const [program = '', ...programArguments] = command
   const child = spawn(program, programArguments, { cwd, env, stdio: ['pipe', 'pipe', 'ignore'] })
@@ -63,12 +74,19 @@ export const connectAdapter = (
       pending.delete(Number(frame.id))
       if (frame.error) request?.reject(new AcpError(frame.error.message ?? 'The adapter failed', frame.error.code))
       else request?.resolve(frame.result ?? {})
-    } else if (frame.id !== undefined)
-      write(
-        frame.method === 'session/request_permission'
-          ? { id: frame.id, result: permissionAnswerOf(frame.params) }
-          : { id: frame.id, error: { code: methodNotFound, message: `${frame.method} is not supported` } },
-      )
+    } else if (frame.id !== undefined) {
+      const { id, method } = frame
+      const answer =
+        onRequest({ id, method, params: frame.params ?? {} }) ??
+        (method === 'session/request_permission' ? Promise.resolve(permissionAnswerOf(frame.params)) : undefined)
+      if (!answer) write({ id, error: { code: methodNotFound, message: `${method} is not supported` } })
+      else
+        answer.then(
+          (result) => write({ id, result }),
+          (error) => write({ id, error: { code: -32603, message: String(error?.message ?? error) } }),
+        )
+    } else if (frame.method === '$/cancel_request' && frame.params?.requestId !== undefined)
+      onCancelRequest(frame.params.requestId as number | string)
     else if (frame.method === 'session/update' && frame.params) onUpdate(frame.params)
   })
   return {

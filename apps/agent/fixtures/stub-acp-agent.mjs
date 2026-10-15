@@ -22,11 +22,12 @@ const models =
       ]
 const isPi = process.env.STUB_FLAVOUR === 'pi'
 const thoughtLevels = ['off', 'low', 'medium', 'high']
-const modes = ['default', 'plan', 'bypassPermissions']
+const modes = process.env.STUB_MODES?.split(',') ?? ['default', 'plan', 'bypassPermissions']
 const sessions = new Map()
 const answers = new Map()
 const queues = new Map()
 let nextRequestId = 0
+let canElicit = false
 
 const sessionFile = (sessionId) => `${stateDirectory}/${sessionId}.json`
 const save = (sessionId, session) => {
@@ -67,6 +68,53 @@ const ask = (method, params) => {
   send({ id, method, params })
   return answer.promise
 }
+const choicesOf = (labels) => labels.map(([label, description]) => ({ const: label, title: label, description }))
+const codexQuestionOf = (id, text, header, labels) => ({
+  [id]: {
+    type: 'string',
+    title: text,
+    description: header,
+    _meta: { codex: { isOther: true, isSecret: false } },
+    oneOf: choicesOf([...labels, ['None of the above', 'Provide a different answer in the note field.']]),
+  },
+  [`${id}_note`]: { type: 'string', title: 'Additional answer or note' },
+})
+const claudeAskSchema = {
+  type: 'object',
+  properties: {
+    question_0: {
+      type: 'string',
+      title: 'Database',
+      oneOf: choicesOf([
+        ['Postgres', 'Relational'],
+        ['SQLite', 'Embedded'],
+      ]),
+    },
+    question_0_custom: { type: 'string', title: 'Other', description: 'Type your own answer (optional).' },
+  },
+}
+const codexAskSchema = {
+  type: 'object',
+  properties: {
+    ...codexQuestionOf('db', 'Which database should I use?', 'Database', [
+      ['Postgres', 'Relational'],
+      ['SQLite', 'File'],
+    ]),
+    ...codexQuestionOf('lang', 'Which language?', 'Language', [['TypeScript'], ['Go']]),
+    ...codexQuestionOf('ci', 'Which CI?', 'CI', [['GitHub Actions'], ['None']]),
+  },
+  required: ['db', 'lang', 'ci'],
+}
+const claudePlanOptions = [
+  { optionId: 'exit-plan-default', name: 'Yes, manually approve edits', kind: 'allow_once' },
+  { optionId: 'exit-plan-bypass', name: 'Yes, and bypass permissions', kind: 'allow_always' },
+  { optionId: 'exit-plan-clear-context', name: 'Yes, clear context and bypass permissions', kind: 'allow_always' },
+  { optionId: 'reject', name: 'No, keep planning', kind: 'reject_once' },
+]
+const codexPlanOptions = [
+  { optionId: 'implement_plan', name: 'Yes, implement this plan', kind: 'allow_once' },
+  { optionId: 'revise_plan', name: 'No, and tell Codex what to do differently', kind: 'reject_once' },
+]
 
 class Cancelled extends Error {}
 const gatewayUrl = process.env.STUB_GATEWAY
@@ -267,7 +315,7 @@ const turn = async (id, { sessionId, prompt }) => {
   session.current = state
   save(sessionId, session)
   const text = prompt.map((block) => block.text ?? '').join('\n')
-  const has = (part) => text.includes(`stub:${part}`)
+  const has = (part) => new RegExp(`stub:${part}(?![\\w-])`).test(text)
   const update = (body) => send({ method: 'session/update', params: { sessionId, update: body } })
   const step = async () => {
     await sleep(gapMilliseconds)
@@ -356,6 +404,57 @@ const turn = async (id, { sessionId, prompt }) => {
         rawOutput: 'exit code 1',
         content: [{ type: 'content', content: { type: 'text', text: 'Tests failed' } }],
       })
+    }
+    if (has('ask') || has('ask-codex')) {
+      const isCodex = has('ask-codex')
+      if (!canElicit) return send({ id, error: { code: -32000, message: 'stub: the client has no form elicitation' } })
+      const request = ask('elicitation/create', {
+        mode: 'form',
+        sessionId,
+        toolCallId: `ask-${session.prompts}`,
+        message: isCodex ? 'Codex needs your input to continue.' : 'Which database should we use?',
+        requestedSchema: isCodex ? codexAskSchema : claudeAskSchema,
+      })
+      if (has('withdraw')) send({ method: '$/cancel_request', params: { requestId: `stub-${nextRequestId - 1}` } })
+      await say(`answer:${JSON.stringify((await request).result)} `)
+    }
+    if (has('exit-plan') || has('plan-codex')) {
+      const isCodex = has('plan-codex')
+      const toolCallId = `${isCodex ? 'plan-review' : 'exit-plan'}-${session.prompts}`
+      const plan = '1. Create x.txt\n2. Done'
+      if (!isCodex && session.mode !== 'plan') {
+        session.mode = 'plan'
+        update({ sessionUpdate: 'current_mode_update', currentModeId: 'plan' })
+      }
+      const toolCall = { toolCallId, title: 'Approve Plan', kind: 'switch_mode', status: 'pending', rawInput: {} }
+      if (!isCodex) {
+        update({ sessionUpdate: 'tool_call', ...toolCall })
+        update({ sessionUpdate: 'tool_call_update', toolCallId, rawInput: { plan } })
+      }
+      const permission = await ask('session/request_permission', {
+        sessionId,
+        toolCall: isCodex ? { ...toolCall, title: 'Implement this plan?', rawInput: { plan } } : toolCall,
+        options: isCodex ? codexPlanOptions : claudePlanOptions,
+      })
+      const optionId = permission.result?.outcome?.optionId
+      await say(`plan:${optionId ?? 'cancelled'} `)
+      if (optionId === 'reject') return send({ id, result: { stopReason: 'cancelled' } })
+      if (optionId?.startsWith('exit-plan')) {
+        session.mode = optionId === 'exit-plan-default' ? 'default' : 'bypassPermissions'
+        update({ sessionUpdate: 'current_mode_update', currentModeId: session.mode })
+        update({ sessionUpdate: 'tool_call_update', toolCallId, status: 'completed' })
+      }
+    }
+    if (has('write')) {
+      const permission = await ask('session/request_permission', {
+        sessionId,
+        toolCall: { toolCallId: `write-${session.prompts}`, title: 'Write x.txt', kind: 'edit', status: 'pending' },
+        options: [
+          { optionId: 'allow-once', name: 'Yes', kind: 'allow_once' },
+          { optionId: 'reject', name: 'No', kind: 'reject_once' },
+        ],
+      })
+      await say(`write:${permission.result?.outcome?.optionId} `)
     }
     if (has('plan')) {
       const entries = [
@@ -517,12 +616,15 @@ const replay = (sessionId, prompts) => {
   }
 }
 const handlers = {
-  initialize: () => ({
-    protocolVersion: 1,
-    agentCapabilities: { loadSession: isPi, sessionCapabilities: isPi ? {} : { resume: {} } },
-    agentInfo: { name: 'stub-acp-agent', version: '0.0.2' },
-    authMethods: [],
-  }),
+  initialize: ({ clientCapabilities }) => {
+    canElicit = Boolean(clientCapabilities?.elicitation?.form)
+    return {
+      protocolVersion: 1,
+      agentCapabilities: { loadSession: isPi, sessionCapabilities: isPi ? {} : { resume: {} } },
+      agentInfo: { name: 'stub-acp-agent', version: '0.0.2' },
+      authMethods: [],
+    }
+  },
   'session/new': () => {
     if (process.env.STUB_FAIL_START) throw { code: -32000, message: 'Authentication required' }
     return opened(randomUUID(), 0)
