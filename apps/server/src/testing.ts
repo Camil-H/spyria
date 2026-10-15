@@ -612,7 +612,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
       signIn: (tools: string[]) => {
         currentSignIns = tools
       },
-      connect: async () => {
+      connect: async ({ afterHello }: { afterHello?: () => void } = {}) => {
         const opened = new WebSocket(`ws://localhost:${port}/host`)
         socket = opened
         closed = new Promise((resolve) => opened.addEventListener('close', () => resolve()))
@@ -697,6 +697,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
             limitsEnforced: true,
           },
         })
+        afterHello?.()
         await waitFor(async () => (await hostStatus(id)) === 'online')
         connectedHosts.add(host)
       },

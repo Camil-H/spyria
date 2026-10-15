@@ -75,6 +75,19 @@ test('a relayed call runs on the turn prompter’s virtual key with HQ’s attri
   expect(await failureOf(chatId)).toBeNull()
 })
 
+test('a model call sent right after the host’s hello is relayed once the hello is recorded', async () => {
+  const host = await fakeHost('Reconnecting host')
+  const { token } = await runtimeTurn(host, bob)
+  await host.disconnect()
+  let answer: ReturnType<FakeHost['modelCall']> | undefined
+  await host.connect({
+    afterHello: () => {
+      answer = host.modelCall({ headers: { authorization: `Bearer ${token}` }, body: completion })
+    },
+  })
+  expect(await answer).toMatchObject({ status: 200, ended: 'gw_end' })
+})
+
 test('calls outside /v1, without an active turn or with another host’s runtime token are refused before the gateway', async () => {
   const host = await fakeHost('Turn host')
   const otherHost = await fakeHost('Other host')

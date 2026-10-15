@@ -30,6 +30,7 @@ type Connection = {
     gatewayUrl: string
   }
   missedPings: number
+  identifying: PromiseWithResolvers<void>
   pending: Map<number, PromiseWithResolvers<Frame>>
   streams: Map<number, SandboxSocketListener>
   modelCalls: Map<number, AbortController>
@@ -96,6 +97,7 @@ export const createRuntimeHostGateway = ({
 
   const release = (connection: Connection) => {
     const { pending, streams, identified, modelCalls } = connection
+    connection.identifying.resolve()
     for (const { reject } of pending.values()) reject(new Error('The runtime host disconnected'))
     for (const call of modelCalls.values()) call.abort()
     for (const listener of streams.values()) listener.onClose()
@@ -134,6 +136,7 @@ export const createRuntimeHostGateway = ({
       ),
     )
     if (connection.identified) connection.identified.database = database
+    connection.identifying.resolve()
     if (hqAgentImage)
       prepare(host, hqAgentImage).catch((error) =>
         console.error(`Preparing runtime host ${host.hostId} failed: ${errorMessageOf(error)}`),
@@ -184,7 +187,10 @@ export const createRuntimeHostGateway = ({
       connection.missedPings = 0
       return
     }
-    if (frame.type === 'gw_req' || frame.type === 'gw_cancel') return relayModelCallOf(connection, frame)
+    if (frame.type === 'gw_req' || frame.type === 'gw_cancel') {
+      await connection.identifying.promise
+      return relayModelCallOf(connection, frame)
+    }
     const sessionFrame = parseHostSessionFrame(frame)
     const { identified } = connection
     if (!identified)
@@ -200,6 +206,7 @@ export const createRuntimeHostGateway = ({
     const connection: Connection = {
       socket: undefined as never,
       missedPings: 0,
+      identifying: Promise.withResolvers(),
       pending: new Map(),
       streams: new Map(),
       modelCalls: new Map(),

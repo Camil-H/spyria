@@ -1,13 +1,13 @@
 import { expect, test } from 'bun:test'
-import { type AgentEndpoint, AgentStartFailure } from '../contracts/agent.ts'
+import { type AgentConversation, AgentStartFailure } from '../contracts/agent.ts'
 import type { HarnessLaunch } from '../domain/session-routing.ts'
 import { createSandboxAgentServer, piCommandOf } from './sandbox-agent-server.ts'
 
 const requests: { method: string; path: string; body?: string }[] = []
 const socketPaths: string[] = []
-const endpoint: AgentEndpoint = {
+const endpoint: AgentConversation = {
   apiKey: 'session-key',
-  conversationId: null,
+  conversationId: 'conversation-1',
   transport: {
     gatewayUrl: 'http://hq-gateway-relay:4000/v1',
     fetch: async (request) => {
@@ -126,7 +126,8 @@ test('an hq-agent session sends the bare ACP launch with its resume id, and resu
     harness: 'claude-code-subscription',
     resumeSessionId: 'session-1',
   })
-  const { agent, secrets } = JSON.parse(requests.at(-1)?.body ?? '{}')
+  const { id, agent, secrets } = JSON.parse(requests.at(-1)?.body ?? '{}')
+  expect(id).toBe('conversation-1')
   expect(agent).toMatchObject({ acp_resume_session_id: 'session-1' })
   expect(agent).not.toHaveProperty('kind')
   expect(agent).not.toHaveProperty('acp_server')
@@ -148,8 +149,9 @@ test('an hq-agent session sends the bare ACP launch with its resume id, and resu
 
 test('an hq-agent conversation that failed to start is deleted and reported with the adapter message', async () => {
   requests.length = 0
-  const failed: AgentEndpoint = {
+  const failed: AgentConversation = {
     ...endpoint,
+    conversationId: 'conversation-9',
     transport: {
       ...endpoint.transport,
       fetch: async (request) => {

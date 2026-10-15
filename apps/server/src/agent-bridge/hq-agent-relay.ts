@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ContainerAgent, FakeContainer, ModelCall } from '../testing.ts'
@@ -55,6 +55,7 @@ export const createHqAgentRelay = ({
 } = {}) => {
   const directory = mkdtempSync(join(tmpdir(), 'hq-agent-relay-'))
   const shims = join(directory, 'bin')
+  const launches = join(directory, 'launches')
   const gateway = modelCall && serveGateway(modelCall)
   mkdirSync(shims)
   mkdirSync(join(directory, '.codex'))
@@ -65,7 +66,7 @@ export const createHqAgentRelay = ({
   ])
     writeFileSync(
       join(shims, command),
-      `#!/bin/sh\nexec env ${startFails ? 'STUB_FAIL_START=1 ' : ''}${gateway ? `STUB_GATEWAY=http://localhost:${gateway.port} ` : ''}${holdUrl ? `STUB_HOLD_URL='${holdUrl}' ` : ''}STUB_FLAVOUR=${flavour} STUB_STATE=${directory}/sessions STUB_GAP_MS=${gapMilliseconds} node ${repositoryRoot}apps/agent/fixtures/stub-acp-agent.mjs "$@"\n`,
+      `#!/bin/sh\necho ${flavour} >> ${launches}\nexec env ${startFails ? 'STUB_FAIL_START=1 ' : ''}${gateway ? `STUB_GATEWAY=http://localhost:${gateway.port} ` : ''}${holdUrl ? `STUB_HOLD_URL='${holdUrl}' ` : ''}STUB_FLAVOUR=${flavour} STUB_STATE=${directory}/sessions STUB_GAP_MS=${gapMilliseconds} node ${repositoryRoot}apps/agent/fixtures/stub-acp-agent.mjs "$@"\n`,
       { mode: 0o755 },
     )
   const agents = new Map<string, Promise<Agent>>()
@@ -179,6 +180,7 @@ export const createHqAgentRelay = ({
     interrupts,
     socketPaths,
     agentCount: () => agents.size,
+    adapterLaunches: () => (existsSync(launches) ? readFileSync(launches, 'utf8').trim().split('\n') : []),
     restart: stopAgents,
     stopAgentsExcept,
     forgetSessions: () => rmSync(join(directory, 'sessions'), { recursive: true, force: true }),

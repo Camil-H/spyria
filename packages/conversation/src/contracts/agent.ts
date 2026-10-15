@@ -59,11 +59,11 @@ export type PiLaunch = Readonly<{
 export type SubConversation = Readonly<{ parentConversationId: string; toolToken: string }>
 export type AgentServer = {
   createConversation(
-    endpoint: AgentEndpoint,
+    conversation: AgentConversation,
     llmToken: string,
     llm: AgentLlmChoice,
     sub?: SubConversation,
-  ): Promise<string>
+  ): Promise<void>
   switchAcpModel(conversation: AgentConversation, model: string, thoughtLevel?: string): Promise<void>
   sendMessage(conversation: AgentConversation, text: string): Promise<void>
   answerQuestion(conversation: AgentConversation, questionId: string, answer: object): Promise<number>

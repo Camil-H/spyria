@@ -1,7 +1,7 @@
 import { afterEach, expect, setDefaultTimeout, test } from 'bun:test'
 import { rebuildMessages } from '@hq/conversation/server'
 import { schema } from '@hq/db/zero'
-import { type ChatId, chatId } from '@hq/kernel'
+import { type ChatId, chatId, runtimeHostId } from '@hq/kernel'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { acme, alice, aliceInAcme, bobInAcme, sessionTokenOf, startAgentStack, succeeded, waitFor } from '../testing.ts'
 import { createHqAgentRelay } from './hq-agent-relay.ts'
@@ -319,4 +319,61 @@ test('a prompt sent at once after the choice joins the one session and streams l
   expect(streamedText(frames, true)).toBe('Thinking about the plan.')
   expect(relay.created).toHaveLength(1)
   expect(await startedEventsOf(chat)).toHaveLength(1)
+})
+
+const machineLosingFirstCreate = async () => {
+  const relay = createHqAgentRelay()
+  relays.push(relay)
+  const createReached = Promise.withResolvers<void>()
+  const host = await fakeHost('Machine', {
+    ownerId: alice,
+    signedIn: ['claude'],
+    agentServer: {
+      ...relay.agentServer,
+      respond: async (request, container) => {
+        const response = await relay.agentServer.respond(request, container)
+        if (request.method !== 'POST' || request.path !== '/api/conversations' || relay.created.length > 1)
+          return response
+        createReached.resolve()
+        return new Promise(() => {})
+      },
+    },
+  })
+  return { relay, host, createReached: createReached.promise }
+}
+
+test('a session start whose answer is lost to a host reconnect keeps its one conversation, and the first prompt joins it', async () => {
+  const { relay, host, createReached } = await machineLosingFirstCreate()
+  const chat = await newRuntimeChat()
+  expect(await chooseRunsOn(chat, 'claude-code')).toEqual(succeeded)
+  await createReached
+  await host.disconnect()
+  await host.connect()
+  const replies = await finished(await prompt(chat, 'Hello'), chat)
+
+  expect(replies.at(-1)?.body).toContain('[t1] ')
+  expect(relay.adapterLaunches()).toEqual(['claude'])
+  expect(await startedEventsOf(chat)).toHaveLength(1)
+  await waitFor(async () => (await startJobsOf(chat)).every(({ state }) => state === 'done'))
+})
+
+test('the machine going offline while its runtime starts shows "Your machine is offline", not a start failure', async () => {
+  const relay = createHqAgentRelay()
+  relays.push(relay)
+  const host = await fakeHost('Machine', { ownerId: alice, signedIn: ['claude'], agentServer: relay.agentServer })
+  host.hold('start')
+  const chat = await newRuntimeChat()
+  expect(await chooseRunsOn(chat, 'claude-code')).toEqual(succeeded)
+  const question = await prompt(chat, 'Hello')
+  await waitFor(async () => host.commands.some(({ op }) => op === 'start'))
+  await host.disconnect()
+  await waitFor(async () => (await repliesTo(question)).length > 0)
+
+  expect(bodiesOf(await repliesTo(question))).toEqual(['notice:Your machine is offline'])
+  expect(relay.adapterLaunches()).toEqual([])
+
+  await host.connect()
+  await stack.agentBridge.forDatabase(database).resumeHost({ workspaceId: acme, hostId: runtimeHostId(host.id) })
+  expect((await finished(question, chat)).at(-1)?.body).toContain('[t1] ')
+  expect(relay.adapterLaunches()).toEqual(['claude'])
 })

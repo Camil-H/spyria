@@ -119,16 +119,18 @@ const runDelegation = async (
   const { transactor, agentServer } = dependencies
   let status: 'finished' | 'failed' = 'failed'
   try {
-    const subConversationId = await agentServer.createConversation(
-      endpoint,
+    const conversation = { ...endpoint, conversationId: crypto.randomUUID() }
+    await agentServer.createConversation(
+      conversation,
       token,
       dependencies.fixedLlm
         ? fixedPiLlmOf(delegation.model)
         : await piLlmOf(dependencies, input.turn.prompterId, delegation.model, choice.effort),
       { parentConversationId: endpoint.conversationId, toolToken: input.toolToken },
     )
-    await transactor.run(({ delegations }) => delegations.update(delegation.id, { conversationId: subConversationId }))
-    const conversation = { ...endpoint, conversationId: subConversationId }
+    await transactor.run(({ delegations }) =>
+      delegations.update(delegation.id, { conversationId: conversation.conversationId }),
+    )
     const { status: endStatus, answer } = await runSubConversation(
       dependencies,
       input.chat,

@@ -137,24 +137,49 @@ const keepAcpModel = async (
   return { conversation }
 }
 
+const storedConversationOf = async (
+  { runtimes, agentServer }: AgentDependencies,
+  chat: AgentChat,
+  { conversationId, ...endpoint }: AgentEndpoint,
+) => {
+  if (conversationId === null) return undefined
+  const stored = { ...endpoint, conversationId }
+  const status = await agentServer.statusOf(stored)
+  if (status !== undefined && status !== 'error') return stored
+  if (status === 'error') await agentServer.deleteConversation(stored).catch(() => undefined)
+  await runtimes.forgetConversation(chat)
+  return undefined
+}
+
+const createdConversationOf = async (
+  { runtimes, agentServer }: AgentDependencies,
+  chat: AgentChat,
+  endpoint: AgentEndpoint,
+  llm: AgentLlmChoice,
+): Promise<AgentConversation> => {
+  const newId = crypto.randomUUID()
+  const conversation = { ...endpoint, conversationId: await runtimes.rememberConversation(chat, newId) }
+  if (conversation.conversationId === newId)
+    await agentServer.createConversation(conversation, await runtimes.issueLlmToken(chat), llm)
+  return conversation
+}
+
 const machineConversationFor = async (
-  { transactor, runtimes, agentServer }: AgentDependencies,
+  dependencies: AgentDependencies,
   chat: AgentChat,
   endpoint: AgentEndpoint,
   localSession: LocalSession,
-): Promise<AgentConversation> => {
+) => {
+  const { transactor } = dependencies
   const { model } = await transactor.run(({ routing }) => routing.chatRouting(chat.chatId))
   const resumeSessionId = await transactor.run(({ agentEvents }) => agentEvents.lastSessionId(chat.chatId))
-  const conversationId = await runtimes.rememberConversation(
-    chat,
-    await agentServer.createConversation(endpoint, await runtimes.issueLlmToken(chat), {
-      harness: localSession.launch,
-      resumeSessionId,
-      acpModel: model ?? undefined,
-    }),
-  )
+  const conversation = await createdConversationOf(dependencies, chat, endpoint, {
+    harness: localSession.launch,
+    resumeSessionId,
+    acpModel: model ?? undefined,
+  })
   if (model) await transactor.run(({ routing }) => routing.setAgentModel(chat.chatId, model))
-  return { ...endpoint, conversationId }
+  return conversation
 }
 
 const conversationFor = async (
@@ -164,23 +189,16 @@ const conversationFor = async (
   prompt: Message,
   localSession: LocalSession | undefined,
 ): Promise<Prepared> => {
-  const { transactor, runtimes, agentServer, fixedLlm } = dependencies
-  const storedId = endpoint.conversationId
+  const { transactor, fixedLlm } = dependencies
   const prompterId = prompt.authorId
   if (localSession && !signedIn.includes(localSession.signIn)) return { refusal: localSession.signInNotice }
-  const storedConversation = storedId === null ? undefined : { ...endpoint, conversationId: storedId }
-  let status = storedConversation && (await agentServer.statusOf(storedConversation))
-  if (storedConversation && status === 'error') {
-    await agentServer.deleteConversation(storedConversation).catch(() => undefined)
-    status = undefined
-  }
-  if (storedConversation && status !== undefined) {
+  const storedConversation = await storedConversationOf(dependencies, chat, endpoint)
+  if (storedConversation) {
     if (localSession) return keepAcpModel(dependencies, chat, storedConversation)
     return fixedLlm || !prompterId
       ? { conversation: storedConversation }
       : keepSession(dependencies, chat, storedConversation, prompterId)
   }
-  if (storedId !== null) await runtimes.forgetConversation(chat)
   if (localSession) return { conversation: await machineConversationFor(dependencies, chat, endpoint, localSession) }
   const routed = fixedLlm || !prompterId ? undefined : await routeSession(dependencies, chat, prompterId, prompt)
   const llm: AgentLlmChoice | undefined =
@@ -194,11 +212,7 @@ const conversationFor = async (
     return {
       refusal: noLlmKeyNoticeOf(await transactor.run(({ members }) => members.displayNameOf(prompterId as MemberId))),
     }
-  const llmToken = await runtimes.issueLlmToken(chat)
-  const conversationId = await runtimes.rememberConversation(
-    chat,
-    await agentServer.createConversation(endpoint, llmToken, llm),
-  )
+  const conversation = await createdConversationOf(dependencies, chat, endpoint, llm)
   if (routed?.choice && prompterId) {
     const { model, effort, reason } = routed.choice
     await transactor.run(async ({ routing }) => {
@@ -206,7 +220,7 @@ const conversationFor = async (
       await routing.setAgentModel(chat.chatId, model.id)
       await routing.record({
         chatId: chat.chatId,
-        conversationId,
+        conversationId: conversation.conversationId,
         role: 'session',
         memberId: prompterId,
         inputsDigest: routed.inputsDigest,
@@ -217,7 +231,7 @@ const conversationFor = async (
       })
     })
   }
-  return { conversation: { ...endpoint, conversationId } }
+  return { conversation }
 }
 
 export const startAgentSession = async (
@@ -230,12 +244,13 @@ export const startAgentSession = async (
   const chat = { workspaceId, chatId }
   const readiness = await runtimes.ensureRunning(chat)
   if (readiness.state === 'starting') return { retryInMilliseconds: runtimeStartPollMilliseconds }
-  if (readiness.state !== 'ready' || readiness.endpoint.conversationId !== null) return undefined
+  if (readiness.state !== 'ready') return undefined
   const session = localSessions[harness ?? 'claude-code']
   if (!readiness.signedIn.includes(session.signIn)) return undefined
   await eventSockets.ensureOpen(
     chat,
-    await machineConversationFor(dependencies, chat, readiness.endpoint, session),
+    (await storedConversationOf(dependencies, chat, readiness.endpoint)) ??
+      (await machineConversationFor(dependencies, chat, readiness.endpoint, session)),
     null,
   )
   return undefined

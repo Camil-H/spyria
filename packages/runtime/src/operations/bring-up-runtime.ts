@@ -52,7 +52,7 @@ export const bringUpRuntime = async (
     if (!isLastAttempt) throw error
     const failure = runtime.state === 'creating' ? 'create_failed' : 'start_failed'
     await recordIfUnchanged(transactor, runtime, ({ runtimes }, current) =>
-      runtimes.save(transitioned(current, 'failed', now, failure)),
+      runtimes.save(transitioned(current, 'failed', now, current.hostOnline ? failure : 'no_host')),
     )
     console.error(`Runtime ${runtimeId} ${failure}: ${error instanceof Error ? error.message : 'unknown error'}`)
   }

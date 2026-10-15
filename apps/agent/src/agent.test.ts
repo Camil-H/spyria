@@ -185,6 +185,34 @@ test('the final tool call update carries the merged call; turn ends and adapter 
   expect(failedStart.events.map(({ update }) => update.sessionUpdate)).toEqual(['error'])
 })
 
+test('a create with a known id returns that conversation without a second adapter, a new id starts its own, a malformed id is refused', async () => {
+  const { call, open, prompt } = started()
+  const launches = join(stateDirectory, `launches-${crypto.randomUUID()}`)
+  const launch = launchOf({
+    acp_command: ['sh', '-c', `echo launched >> ${launches}; exec "$@"`, 'sh', ...stubCommand],
+  })
+  const launchCount = async () => (await Bun.file(launches).text()).trim().split('\n').length
+  const id = crypto.randomUUID()
+  const [first, retried] = await Promise.all([
+    call('POST', '/api/conversations', { ...launch, id }),
+    Bun.sleep(5).then(() => call('POST', '/api/conversations', { ...launch, id })),
+  ])
+  expect(first).toMatchObject({ status: 201, body: { id, execution_status: 'idle' } })
+  expect(retried).toMatchObject({ status: 200, body: { id, execution_status: 'idle' } })
+  expect((await call('POST', '/api/conversations', { ...launch, id })).body).toEqual(first.body)
+  expect(await launchCount()).toBe(1)
+  const socket = open(id)
+  await prompt(id, 'hello')
+  await socket.until(kindOf('turn_end'))
+  expect(socket.events.filter(kindOf('session_started'))).toHaveLength(1)
+
+  const other = await call('POST', '/api/conversations', { ...launch, id: crypto.randomUUID() })
+  expect(other.status).toBe(201)
+  expect(other.body.id).not.toBe(id)
+  expect(await launchCount()).toBe(2)
+  expect((await call('POST', '/api/conversations', { ...launch, id: '../x' })).status).toBe(400)
+})
+
 test('the workspace is reported at session start and after a turn only when it changed: no branch without git, then the branch; resent on reconnect', async () => {
   const { open, create, prompt } = started()
   const workingDirectory = mkdtempSync(join(tmpdir(), 'hq-agent-workspace-'))

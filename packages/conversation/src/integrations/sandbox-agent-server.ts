@@ -160,21 +160,20 @@ const piConversationOf = (
 })
 
 export const createSandboxAgentServer = (): AgentServer => ({
-  createConversation: async (endpoint, llmToken, llm, sub) => {
-    const created = await call(endpoint, 'POST', '/api/conversations', {
+  createConversation: async (conversation, llmToken, llm, sub) => {
+    const created = await call(conversation, 'POST', '/api/conversations', {
+      id: conversation.conversationId,
       ...('harness' in llm
-        ? harnessConversationOf(endpoint, llmToken, llm.harness, llm)
-        : piConversationOf(endpoint, llmToken, llm.pi, llm, sub)),
+        ? harnessConversationOf(conversation, llmToken, llm.harness, llm)
+        : piConversationOf(conversation, llmToken, llm.pi, llm, sub)),
       workspace: { kind: 'LocalWorkspace', working_dir: '/workspace/project' },
       autotitle: false,
       ...(sub && { parent_conversation_id: sub.parentConversationId }),
     })
-    const conversationId = String(created?.id)
     if (created?.execution_status === 'error') {
-      await call(endpoint, 'DELETE', `/api/conversations/${conversationId}`).catch(() => undefined)
+      await call(conversation, 'DELETE', `/api/conversations/${conversation.conversationId}`).catch(() => undefined)
       throw new AgentStartFailure(String(created.error))
     }
-    return conversationId
   },
   switchAcpModel: async (conversation, model, thoughtLevel) => {
     await call(conversation, 'POST', `/api/conversations/${conversation.conversationId}/switch_acp_model`, {

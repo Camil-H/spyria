@@ -128,9 +128,8 @@ type Update = {
 const agentServer = createSandboxAgentServer()
 type AgentLlmChoice = Parameters<typeof agentServer.createConversation>[2]
 const piConversationOf = async (transport: AgentTransport, token: string, llm: AgentLlmChoice) => {
-  const endpoint = { transport, apiKey, conversationId: null }
-  const conversationId = await agentServer.createConversation(endpoint, token, llm)
-  const conversation = { ...endpoint, conversationId }
+  const conversation = { transport, apiKey, conversationId: crypto.randomUUID() }
+  await agentServer.createConversation(conversation, token, llm)
   const updates: Update[] = []
   const socket = agentServer.openEvents(conversation, null, {
     onEvent: (event) => updates.push((event as { update?: Update }).update ?? {}),

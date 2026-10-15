@@ -44,8 +44,10 @@ type Conversation = {
   lastSeq: number
   toolCalls: Map<string, Json>
   sockets: Set<ServerWebSocket<SocketData>>
+  started: Promise<void>
 }
 type Launch = {
+  id?: string
   agent?: {
     acp_command?: unknown
     adapter?: string
@@ -75,6 +77,7 @@ const terminalToolStatuses = ['completed', 'failed']
 const conversationRoute =
   /^\/api\/conversations\/([\w-]+)(?:\/(events|interrupt|switch_acp_model|plan_mode)|\/questions\/([\w-]+))?$/
 const socketRoute = /^\/sockets\/events\/([\w-]+)$/
+const conversationIdPattern = /^[\w-]{1,64}$/
 
 const adapterEnvironmentOf = (secrets: Launch['secrets']) => ({
   ...Object.fromEntries(inheritedEnvironment.flatMap((name) => (process.env[name] ? [[name, process.env[name]]] : []))),
@@ -377,7 +380,14 @@ export const startAgent = ({
     const command = launch.agent?.acp_command
     if (!Array.isArray(command) || command.length === 0 || !command.every((part) => typeof part === 'string'))
       return Response.json({ error: 'agent.acp_command must be a list of strings' }, { status: 400 })
-    const id = crypto.randomUUID()
+    if (launch.id !== undefined && !conversationIdPattern.test(String(launch.id)))
+      return Response.json({ error: 'id must be letters, digits, - or _' }, { status: 400 })
+    const known = launch.id === undefined ? undefined : conversations.get(launch.id)
+    if (known) {
+      await known.started
+      return Response.json({ id: known.id, ...summaryOf(known) })
+    }
+    const id = launch.id ?? crypto.randomUUID()
     const cwd = launch.workspace?.working_dir ?? defaultWorkingDirectory
     const conversation: Conversation = {
       id,
@@ -392,6 +402,7 @@ export const startAgent = ({
       lastSeq: 0,
       toolCalls: new Map(),
       sockets: new Set(),
+      started: Promise.resolve(),
       connection: (launch.agent?.adapter === 'pi-rpc' ? connectPi : connectAdapter)(
         {
           command,
@@ -410,10 +421,11 @@ export const startAgent = ({
       ),
     }
     conversations.set(id, conversation)
-    await start(conversation, launch).catch((error) => {
+    conversation.started = start(conversation, launch).catch((error) => {
       fail(conversation, error)
       conversation.connection.close()
     })
+    await conversation.started
     return Response.json({ id, ...summaryOf(conversation) }, { status: 201 })
   }
 
@@ -482,6 +494,7 @@ export const startAgent = ({
     if (method === 'GET' && !action) return Response.json({ id: conversation.id, ...summaryOf(conversation) })
     if (method === 'DELETE' && !action) return remove(conversation)
     if (method !== 'POST') return Response.json({ error: 'Not found' }, { status: 404 })
+    await conversation.started
     if (action === 'events') return prompt(conversation, await request.json())
     if (action === 'interrupt') {
       if (conversation.sessionId)
