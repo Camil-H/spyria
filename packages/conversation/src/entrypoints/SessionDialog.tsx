@@ -1,7 +1,7 @@
 import { type ChatId, rereadDollarsOf, type WorkspaceId } from '@hq/kernel'
 import { buttonClass, fieldClass, formatCost, ghostButtonClass, labelClass } from '@hq/ui'
 import { useId, useState } from 'react'
-import type { Harness } from '../domain/session-routing.ts'
+import { type Harness, piThoughtLevels } from '../domain/session-routing.ts'
 import type { ChatRoutingRead } from '../queries/get-chat-routing.ts'
 import { useConversationCommands } from './providers.tsx'
 
@@ -10,13 +10,14 @@ type Fields = {
   sessionModel?: string
   subagentPolicy?: Policy
   adapterModel?: string
+  reasoningEffort?: string
 }
 
 const microsPerDollar = 1_000_000
 const searchedModelsShown = 50
 
 const SessionDialog = ({
-  chip: { workspaceId, chatId, model, subagentPolicy, harness, localSession, isOwner },
+  chip: { workspaceId, chatId, model, reasoningEffort, subagentPolicy, harness, localSession, isOwner },
   routing,
   nameOf,
   adapterNameOf,
@@ -25,6 +26,7 @@ const SessionDialog = ({
     workspaceId: WorkspaceId
     chatId: ChatId
     model: string | null
+    reasoningEffort: string | null
     subagentPolicy: Policy
     harness: Harness | null
     localSession: boolean
@@ -125,6 +127,22 @@ const SessionDialog = ({
             </button>
           </div>
         </div>
+      )}
+      {model && !harness && (
+        <label className={labelClass}>
+          Effort
+          <select
+            className={fieldClass}
+            value={reasoningEffort ?? 'medium'}
+            onChange={(event) => update({ reasoningEffort: event.target.value })}
+          >
+            {[...new Set([reasoningEffort ?? 'medium', ...piThoughtLevels])].map((level) => (
+              <option key={level} value={level}>
+                {level === 'xhigh' ? 'Extra high' : level[0]?.toUpperCase() + level.slice(1)}
+              </option>
+            ))}
+          </select>
+        </label>
       )}
       {!localSession && (
         <label className={labelClass}>

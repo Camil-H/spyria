@@ -132,6 +132,6 @@ export type RoutingRepository = {
       localSession: boolean
     }>,
   ): Promise<void>
-  setAgentModel(chatId: ChatId, model: string): Promise<void>
+  setAgentModel(chatId: ChatId, model: string | null): Promise<void>
   record(decision: RoutingDecision): Promise<void>
 }

@@ -156,6 +156,23 @@ test('a routing change mid-session switches the same Pi session to the other pro
   expect(relay.prompts).toEqual(['Start large', 'Now on OpenAI'])
 })
 
+test('an effort change keeps the model and session and sets Pi’s thinking level on the next turn; a malformed effort is refused', async () => {
+  const { relay, launches } = await workspaceHost()
+  await keysOnly('Anthropic')
+  const chat = await newRuntimeChat()
+  await finished(await prompt(chat, 'Start', bobInAcme), chat)
+  const setEffort = (reasoningEffort: string) =>
+    mutate(bobInAcme, 'conversation.updateChatRouting', { workspaceId: acme, chatId: chat, reasoningEffort })
+  expect(await setEffort('Max!')).not.toEqual(succeeded)
+  expect(await setEffort('high')).toEqual(succeeded)
+  const second = await finished(await prompt(chat, 'Think harder', bobInAcme), chat)
+  expect(second.map((reply) => reply.body)).toEqual([
+    '[t2] Hello from the stub (model hq-anthropic/anthropic/claude-sonnet-5-5, mode default).',
+  ])
+  expect(relay.thoughtLevels).toEqual(['high'])
+  expect(launches()).toHaveLength(1)
+})
+
 test('a manual pick from the full listing relaunches Pi with that model on the same session; an unlisted model is refused', async () => {
   const { launches } = await workspaceHost()
   await keysOnly('OpenRouter')

@@ -16,16 +16,17 @@ type Input = {
   subagentPolicy?: 'auto' | 'same_as_main'
   runsOn?: RunsOn
   adapterModel?: string
+  reasoningEffort?: string
 }
 
 export const updateChatRouting = (
   { transactor }: { transactor: ConversationTransactor },
-  { chatId, memberId, sessionModel, subagentPolicy, runsOn, adapterModel }: Input,
+  { chatId, memberId, sessionModel, subagentPolicy, runsOn, adapterModel, reasoningEffort }: Input,
 ) =>
   transactor.run(async ({ chats, routing, agentJobs }) => {
     const chat = await chats.get(chatId)
     if (chat.type !== 'runtime') throw new InvalidRouting('Only runtime chats have a model')
-    if (sessionModel !== undefined && chat.harness)
+    if ((sessionModel ?? reasoningEffort) !== undefined && chat.harness)
       throw new InvalidRouting(
         `This session runs ${harnesses[chat.harness].name}; its model is chosen by ${harnesses[chat.harness].name}`,
       )
@@ -62,7 +63,9 @@ export const updateChatRouting = (
       ...(subagentPolicy !== undefined && { subagentPolicy }),
       ...(runsOn !== undefined && { ...runsOnFieldsOf(runsOn), model: null }),
       ...(adapterModel !== undefined && { model: adapterModel || null }),
+      ...(reasoningEffort !== undefined && { reasoningEffort }),
     })
+    if (reasoningEffort !== undefined) await routing.setAgentModel(chatId, null)
     if (runsOn !== undefined && runsOn !== runsOnOf(chat)) await chats.dropRuntime(chatId)
     if (runsOn !== undefined && runsOn !== 'runtime') await agentJobs.startSession(chatId)
   })

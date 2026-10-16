@@ -192,6 +192,28 @@ test('7 and 8. the manual switch warns about the reread, keeps the history and u
   await expect(mainOf(page)).not.toContainText('new session')
 })
 
+test('h-1. the effort sits between the main model and the subagents, and a change runs the next turn on the same model at that effort with the context kept', async ({
+  page,
+  agentScript,
+}) => {
+  const chatId = await newRuntimeChat(page, 'Effort')
+  await promptAndWait(page, 'Start at medium', 1)
+  await agentScript(chatId, { text: 'Effort $reasoningEffort with $userMessages prompts.' })
+  await openSession(page)
+  const labels = sessionOf(page).locator('label')
+  await expect(labels.filter({ hasText: /^(Main model|Effort|Subagents)/ })).toHaveText([
+    /^Main model/,
+    /^Effort/,
+    /^Subagents/,
+  ])
+  await expect(sessionOf(page).getByLabel('Effort')).toHaveValue('medium')
+  await sessionOf(page).getByLabel('Effort').selectOption({ label: 'High' })
+  await expect(chipOf(page, 'routed')).toHaveText('Fake medium (high)')
+  await page.keyboard.press('Escape')
+  await sendMessage(page, 'Think harder')
+  await expect(messageItemsOf(page).filter({ hasText: 'Effort high with 2 prompts.' })).toHaveCount(1)
+})
+
 test('9. the subagent policy toggles and persists', async ({ page }) => {
   await newRuntimeChat(page, 'Policy')
   await openSession(page)

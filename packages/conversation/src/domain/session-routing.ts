@@ -42,7 +42,7 @@ export const sessionChoiceOf = ({
   return model && { model, effort, reason: 'default' }
 }
 
-const piThoughtLevels = ['off', 'minimal', 'low', 'medium', 'high']
+export const piThoughtLevels = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh']
 export const piModelOf = (id: string) => `${id.startsWith('anthropic/') ? 'hq-anthropic' : 'hq'}/${id}`
 export const thoughtLevelOf = (effort: string | null) =>
   effort && piThoughtLevels.includes(effort) ? effort : undefined

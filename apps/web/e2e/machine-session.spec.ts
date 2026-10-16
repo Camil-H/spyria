@@ -80,6 +80,7 @@ for (const tool of tools) {
       await test.step('the pick stays chosen in the Model list', async () => {
         await chipOf(page, 'harness').click()
         await expect(modelOf(page)).toHaveValue(tool.large.id)
+        await expect(sessionOf(page).getByLabel('Effort')).toHaveCount(0)
       })
     })
 

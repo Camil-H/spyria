@@ -82,6 +82,7 @@ test('the classifier reads the chat mode, non-dev by default; Pi gets only its t
   expect(sessionStateOf('Fix it', 'dev')).toBe('Chat mode: dev\nFirst message:\nFix it')
   expect(thoughtLevelOf('high')).toBe('high')
   expect(thoughtLevelOf('minimal')).toBe('minimal')
+  expect(thoughtLevelOf('xhigh')).toBe('xhigh')
   expect(thoughtLevelOf('extreme')).toBeUndefined()
   expect(thoughtLevelOf(null)).toBeUndefined()
 })

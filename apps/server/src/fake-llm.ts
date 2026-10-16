@@ -30,6 +30,7 @@ type CompletionRequest = {
   stream?: boolean
   response_format?: object
   messages?: { role: string; content?: unknown }[]
+  reasoning_effort?: string
   tools?: { function: { name: string } }[]
 }
 
@@ -368,7 +369,10 @@ export const createFakeLlm = (
       const userMessages = String(request.messages?.filter((message) => message.role === 'user').length ?? 0)
       const text = toolCall
         ? (step?.say ?? '')
-        : (!request.tools?.length && summary) || (script.text ?? defaultText).replace('$userMessages', userMessages)
+        : (!request.tools?.length && summary) ||
+          (script.text ?? defaultText)
+            .replace('$userMessages', userMessages)
+            .replace('$reasoningEffort', request.reasoning_effort ?? 'none')
       const reasoning = step && 'think' in step ? step.think : ''
       const finishReason = toolCall ? 'tool_calls' : 'stop'
       const holdName = step?.hold ?? (toolCall ? undefined : script.hold)

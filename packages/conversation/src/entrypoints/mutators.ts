@@ -59,6 +59,7 @@ export const conversationMutators = defineMutators({
         subagentPolicy: z.optional(z.enum(['auto', 'same_as_main'])),
         runsOn: z.optional(z.enum(['runtime', 'claude-code', 'codex'])),
         adapterModel: z.optional(z.string()),
+        reasoningEffort: z.optional(z.string().check(z.regex(/^[a-z]{1,16}$/))),
       }),
       ({ tx, ctx, args }) => updateChatRouting(dependenciesOf(tx, ctx, args), { ...args, memberId: ctx.userId }),
     ),

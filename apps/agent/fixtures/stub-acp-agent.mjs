@@ -293,6 +293,7 @@ const completionOf = async (session, signal, update) => {
         function: { name },
       })),
       stream: true,
+      ...(session.thought_level !== 'off' && { reasoning_effort: session.thought_level }),
     },
     signal,
   )

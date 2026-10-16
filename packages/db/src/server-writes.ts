@@ -425,7 +425,7 @@ export const chatRoutingOf = (tx: Transaction, workspaceId: string, chatId: stri
     [workspaceId, chatId],
   )
 
-export const setChatAgentModel = (tx: Transaction, workspaceId: string, chatId: string, model: string) =>
+export const setChatAgentModel = (tx: Transaction, workspaceId: string, chatId: string, model: string | null) =>
   onServer(tx, 'update chats set agent_model = $3 where workspace_id = $1 and id = $2', [workspaceId, chatId, model])
 
 const insertServerOnlyRow = (tx: Transaction, table: string, row: Record<string, unknown>) =>
