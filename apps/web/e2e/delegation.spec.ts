@@ -1,4 +1,5 @@
 import {
+  delegationsFinished,
   expect,
   mainOf,
   messageItemsOf,
@@ -146,6 +147,8 @@ test('11. a long subagent task returns still running, then its result on resume,
   page,
   agentScript,
   release,
+  reached,
+  workerStack,
 }) => {
   const answer = 'The long listing is done.'
   const heldWork = { ...subagentWork, text: 'The slow listing found two files today.', hold: 'subagent' }
@@ -154,8 +157,10 @@ test('11. a long subagent task returns still running, then its result on resume,
     resuming(answer, { delegateRoute: confidentSmall, subagents: { 'fake-small': heldWork } }, 'resume'),
   )
   await sendMessage(page, 'Delegate a long listing')
-  await release('resume')
+  await reached('resume')
   await release('subagent')
+  await delegationsFinished(workerStack, researchChatId)
+  await release('resume')
   await expect(messageItemsOf(page).filter({ hasText: answer })).toBeVisible()
   await expect(groupOf(page, 'Fake small')).toHaveCount(1)
   await expect(mainOf(page).getByRole('button', { name: /^Used delegate/ })).toHaveCount(0)

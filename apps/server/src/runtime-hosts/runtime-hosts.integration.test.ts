@@ -257,8 +257,8 @@ test('renewing refuses a member and the admin of another workspace', async () =>
 
 test('heartbeats update last_seen_at, the free memory and the running count', async () => {
   const { id, host } = await pairedHost()
+  await database.$client`update runtime_hosts set last_seen_at = last_seen_at - interval '1 minute' where id = ${id}`
   const seenAtHello = (await hostRow(id)).last_seen_at as Date
-  await Bun.sleep(5)
   host.send({ type: 'heartbeat', memoryFreeBytes: 3 * gibibyte, running: 2 })
   await waitFor(async () => (await hostRow(id)).running_runtimes === 2)
   const row = await hostRow(id)
@@ -390,8 +390,19 @@ test('a member adds one machine of their own under a lock on their membership; a
     await releaseMember.promise
   })
   await memberLocked.promise
-  const adding = addMachine(bobInAcme)
-  expect(await Promise.race([adding.then(() => 'added'), Bun.sleep(500).then(() => 'waiting')])).toBe('waiting')
+  let isAdded = false
+  const adding = addMachine(bobInAcme).finally(() => {
+    isAdded = true
+  })
+  await waitFor(
+    async () =>
+      (
+        await database.$client`
+          select 1 from pg_stat_activity
+          where datname = current_database() and wait_event_type = 'Lock' and query ilike '%memberships%'`
+      ).length > 0,
+  )
+  expect(isAdded).toBe(false)
   releaseMember.resolve()
   await locking
   expect((await adding).status).toBe(201)
@@ -404,7 +415,6 @@ test('a machine is read and removed by its owner only, and admins see only how m
   await waitFor(() => bobsAcme.read().runtimeHosts.some((machine) => machine.id === id && machine.status === 'online'))
   expect(bobsAcme.read().runtimeHosts.map((machine) => String(machine.id))).toEqual([id])
   const alicesAcme = await openStore(aliceInAcme)
-  await Bun.sleep(200)
   expect(alicesAcme.read().runtimeHosts.some((machine) => machine.id === id)).toBe(false)
   expect(await countMachines(aliceInAcme)).toEqual({ count: 1 })
   expect(await countMachines(bobInAcme)).toMatchObject({ error: 'not_admin' })

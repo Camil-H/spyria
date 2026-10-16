@@ -167,7 +167,10 @@ export const createHqAgentRelay = ({
     const stopping = [...agents.entries()].filter(([apiKey]) => !apiKeys.includes(apiKey))
     for (const [apiKey] of stopping) agents.delete(apiKey)
     for (const agent of await Promise.allSettled(stopping.map(([, agent]) => agent)))
-      if (agent.status === 'fulfilled') agent.value.process.kill()
+      if (agent.status === 'fulfilled') {
+        agent.value.process.kill()
+        await agent.value.process.exited
+      }
   }
   const stopAgents = () => stopAgentsExcept([])
 

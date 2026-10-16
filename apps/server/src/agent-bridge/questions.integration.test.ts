@@ -43,8 +43,8 @@ const workspaceHost = async () => {
 }
 const repliesTo = (messageId: string) => stack.repliesTo(messageId, ['kind', 'body', 'step'])
 const openStream = async (chat: ChatId) => {
-  const { frames } = await stack.openStream(chat)
-  await Bun.sleep(200)
+  const { frames, subscribed } = await stack.openStream(chat)
+  await subscribed
   return frames
 }
 const questionsIn = (frames: string[]) =>

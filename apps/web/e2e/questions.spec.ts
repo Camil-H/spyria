@@ -1,5 +1,6 @@
 import {
   addCredential,
+  delegationsFinished,
   expect,
   llmSectionOf,
   mainOf,
@@ -330,6 +331,8 @@ test.describe('on an HQ runtime chat', () => {
     page,
     agentScript,
     release,
+    reached,
+    workerStack,
   }) => {
     await openChat(page, 'Research')
     const answer = 'The subagent decided on its own.'
@@ -343,8 +346,10 @@ test.describe('on an HQ runtime chat', () => {
       delegateRoute: { tier: 'small', confidence: 'high', effort: 'low' },
     })
     await sendMessage(page, 'Delegate a question')
-    await release('resume')
+    await reached('resume')
     await release('linger')
+    await delegationsFinished(workerStack, 'chat-research')
+    await release('resume')
     await expect(repliesWith(page, answer)).toHaveCount(1)
     await mainOf(page)
       .getByRole('button', { name: /^Delegated to Fake small · / })

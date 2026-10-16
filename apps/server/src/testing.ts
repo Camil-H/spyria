@@ -69,6 +69,35 @@ export const waitFor = async (isDone: () => boolean | Promise<boolean>, timeoutM
     if (Date.now() > deadline) throw new Error(`The condition was not met within ${timeoutMilliseconds / 1000} s`)
 }
 
+export const createHolds = () => {
+  const holdByName = new Map<string, { reached: PromiseWithResolvers<void>; released: PromiseWithResolvers<void> }>()
+  const holdOf = (name: string) => {
+    const hold = holdByName.get(name) ?? { reached: Promise.withResolvers(), released: Promise.withResolvers() }
+    holdByName.set(name, hold)
+    return hold
+  }
+  return {
+    wait: (name: string) => {
+      const hold = holdOf(name)
+      hold.reached.resolve()
+      return hold.released.promise
+    },
+    reached: (name: string) => holdOf(name).reached.promise,
+    release: async (name: string) => {
+      const hold = holdOf(name)
+      await hold.reached.promise
+      hold.released.resolve()
+    },
+    releaseAll: (prefix = '') => {
+      for (const [name, hold] of holdByName)
+        if (name.startsWith(prefix)) {
+          hold.released.resolve()
+          holdByName.delete(name)
+        }
+    },
+  }
+}
+
 const sharedAppId = 'hqtest'
 const zeroConnectMilliseconds = 30_000
 
@@ -105,6 +134,15 @@ const startSharedTestApp = async () => {
   const fakeLlmCalls: Record<string, string>[] = []
   const fakeLlmBodies: string[] = []
   let fakeLlmScript: FakeLlmScript | undefined
+  const holds = createHolds()
+  const holdServer = Bun.serve({
+    port: 0,
+    idleTimeout: 0,
+    fetch: async (request) => {
+      await holds.wait(new URL(request.url).searchParams.get('name') ?? '')
+      return new Response(null, { status: 204 })
+    },
+  })
   const fakeLlm = new Hono()
     .use(async (context, next) => {
       fakeLlmCalls.push(Object.fromEntries(context.req.raw.headers))
@@ -113,7 +151,7 @@ const startSharedTestApp = async () => {
     })
     .route(
       '/',
-      createFakeLlm(() => fakeLlmScript),
+      createFakeLlm(() => fakeLlmScript && { ...fakeLlmScript, held: holds.wait }),
     )
   const llmGateway = llmGatewayAt(`http://127.0.0.1:${integrationGatewayPort}`)
   setModelDirectory(llmGateway.listedModels)
@@ -125,6 +163,7 @@ const startSharedTestApp = async () => {
   const stopServerAndDatabase = async () => {
     void server.stop(true)
     void fakeMcpServer.stop(true)
+    void holdServer.stop(true)
     await testDatabase.drop()
   }
   const [zeroCache, gateway] = await Promise.allSettled([
@@ -162,6 +201,8 @@ const startSharedTestApp = async () => {
     seededGatewayKeys: () => prepareSeededGatewayKeys(gateway.value),
     fakeLlmCalls,
     fakeLlmBodies,
+    holds,
+    holdUrl: `http://localhost:${holdServer.port}/hold?`,
     setFakeLlmScript: (script: FakeLlmScript | undefined) => {
       fakeLlmScript = script
     },
@@ -183,6 +224,7 @@ export const openSharedTestApp = async () => {
   sharedTestApp ??= startSharedTestApp()
   const testApp = await sharedTestApp
   await closeZeroStores()
+  testApp.holds.releaseAll()
   await resetDatabase(testApp.database, await testApp.seededGatewayKeys())
   if (testApp.llmGateway.listedModels().length === 0) await testApp.llmGateway.refreshListedModels()
   return testApp
@@ -379,6 +421,7 @@ export const startAgentStack = async ({
   afterEach(async () => {
     for (const socket of browserSockets.splice(0)) socket.close()
     testApp.setFakeLlmScript(undefined)
+    testApp.holds.releaseAll()
     await disconnectFakeHosts()
   })
   afterAll(async () => {
@@ -398,6 +441,11 @@ export const startAgentStack = async ({
     (await database.query.messages.findMany({ where: { replyToId: messageId }, orderBy: { seq: 'asc' } })).map(
       (reply) => Object.fromEntries(fields.map((field) => [field, reply[field]])) as Pick<Message, Field>,
     )
+  const jobStatesOf = async (type: string, payload: object) =>
+    (
+      await database.$client<{ state: string }[]>`
+        select state from jobs where type = ${type} and payload @> ${JSON.stringify(payload)}::jsonb`
+    ).map(({ state }) => state)
   return {
     ...testApp,
     app,
@@ -435,6 +483,12 @@ export const startAgentStack = async ({
     repliesTo,
     answered: (messageId: string, count = 1) =>
       waitFor(async () => (await repliesTo(messageId)).length >= count, 15_000),
+    jobStatesOf,
+    jobDone: (type: string, payload: object) =>
+      waitFor(async () => {
+        const states = await jobStatesOf(type, payload)
+        return states.length > 0 && states.every((state) => state === 'done')
+      }, 15_000),
     messagesOf: (chat: ChatId) =>
       database.query.messages.findMany({ where: { chatId: chat }, orderBy: { seq: 'asc' } }),
     storedAgentEventsOf: async (chat: ChatId) =>
@@ -453,15 +507,19 @@ export const startAgentStack = async ({
       const socket = new WebSocket(`ws://localhost:${server.port}/api/stream`)
       browserSockets.push(socket)
       const frames: string[] = []
+      const subscribed = Promise.withResolvers<void>()
       const closed = new Promise<void>((resolve) => socket.addEventListener('close', () => resolve()))
-      socket.onmessage = (message) => frames.push(String(message.data))
+      socket.onmessage = (message) => {
+        if (JSON.parse(String(message.data)).subscribed) subscribed.resolve()
+        else frames.push(String(message.data))
+      }
       await new Promise((resolve) => socket.addEventListener('open', resolve))
       if (token !== '')
         socket.send(
           JSON.stringify({ type: 'auth', token: token ?? (await sessionTokenOf(database, workspaceId, alice)) }),
         )
       socket.send(JSON.stringify({ type: 'subscribe', chatId: chat }))
-      return { frames, closed }
+      return { frames, closed, subscribed: subscribed.promise }
     },
   }
 }

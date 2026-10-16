@@ -15,7 +15,7 @@ import {
 import { createHqAgentRelay } from './hq-agent-relay.ts'
 
 setDefaultTimeout(40_000)
-const { database, gateway, setFakeLlmScript, agentBridge, fakeHost, mutate, prompt, turnOf, ...stack } =
+const { database, gateway, setFakeLlmScript, agentBridge, fakeHost, mutate, prompt, turnOf, holds, ...stack } =
   await startAgentStack({ routing: true, resumeAfterMilliseconds: 5_000 })
 const newRuntimeChat = () => stack.newRuntimeChat({ defaultModel: 'fake/fake-medium' })
 const repliesTo = (promptId: string) => stack.repliesTo(promptId, ['kind', 'body', 'step'])
@@ -26,6 +26,7 @@ afterEach(async () => {
 
 const delegatedTask = { tool: 'delegate', arguments: { task: 'List the files', effort: 'small' } }
 const confidentSmall = { tier: 'small', confidence: 'high', effort: 'low' }
+const heldWork = { steps: [{ command: 'echo started' }], text: 'one two three four five six', hold: 'sub' }
 const delegatingScript = (script: FakeLlmScript = {}): FakeLlmScript => ({
   steps: [delegatedTask],
   text: 'Main done.',
@@ -147,8 +148,7 @@ test('a delegated task runs in a Pi sub-conversation on the classified model, it
 test('the delegation token works only while its delegation runs and only from its runtime host, and the router refuses it and answers no active turn', async () => {
   const { host, main, subs } = await fakeAgent()
   const chat = await newRuntimeChat()
-  const slowSubagent = { text: 'one two three four five six seven eight', wordDelayMilliseconds: 250 }
-  setFakeLlmScript(delegatingScript({ subagents: { 'fake-small': slowSubagent } }))
+  setFakeLlmScript(delegatingScript({ subagents: { 'fake-small': heldWork } }))
   const answered = promptAndAnswer(chat, 'Delegate slowly')
   await waitFor(() => subs().length === 1)
   const subToken = tokenOf(subs()[0])
@@ -158,6 +158,7 @@ test('the delegation token works only while its delegation runs and only from it
   expect((await completionWith(host, subToken)).status).toBe(200)
   expect((await toolListWith(host, subToken)).status).toBe(200)
   expect((await routerCallWith(host, subToken)).status).toBe(401)
+  await holds.release('sub')
   await answered
 
   expect((await completionWith(host, subToken)).status).toBe(401)
@@ -172,11 +173,6 @@ test('the delegation token works only while its delegation runs and only from it
 
 const stepsOf = async (promptId: string) =>
   (await repliesTo(promptId)).map((reply) => reply.step as { name?: string; result?: string; isError?: boolean } | null)
-const slowWork = {
-  steps: [{ command: 'echo started' }],
-  text: 'one two three four five six',
-  wordDelayMilliseconds: 1_000,
-}
 
 test.each([
   {
@@ -223,10 +219,15 @@ test.each([
 test('a long task answers still running, a resume call returns its result, and another chat or turn cannot resume it', async () => {
   const { subs } = await fakeAgent()
   const chat = await newRuntimeChat()
-  const resumeCall = { ...delegatedTask, arguments: { ...delegatedTask.arguments, resume: '$resume' } }
-  setFakeLlmScript(delegatingScript({ steps: [delegatedTask, resumeCall], subagents: { 'fake-small': slowWork } }))
+  const resumeCall = {
+    ...delegatedTask,
+    arguments: { ...delegatedTask.arguments, resume: '$resume' },
+    hold: 'resume',
+  }
+  setFakeLlmScript(delegatingScript({ steps: [delegatedTask, resumeCall], subagents: { 'fake-small': heldWork } }))
   const promptId = await prompt(chat, 'Delegate a long task')
-  await waitFor(async () => (await stepsOf(promptId))[0]?.result?.startsWith('Task ') === true, 20_000)
+  await holds.reached('resume')
+  await waitFor(async () => (await stepsOf(promptId))[0]?.result?.startsWith('Task ') === true)
   const [delegation] = await delegationsOf(chat)
   const id = String(delegation?.id)
   expect((await stepsOf(promptId))[0]?.result).toBe(stillRunningOf(id))
@@ -241,7 +242,10 @@ test('a long task answers still running, a resume call returns its result, and a
     })
   expect(await resumeElsewhere(await newRuntimeChat())).toEqual({ text: unknownTaskOf(id), isError: true })
   expect(await resumeElsewhere(chat)).toEqual({ text: unknownTaskOf(id), isError: true })
-  await waitFor(async () => (await repliesTo(promptId)).some((reply) => reply.kind === 'agent'), 30_000)
+  await holds.release('sub')
+  await waitFor(async () => (await delegationsOf(chat))[0]?.status === 'finished')
+  await holds.release('resume')
+  await waitFor(async () => (await repliesTo(promptId)).some((reply) => reply.kind === 'agent'))
 
   expect(subs()).toHaveLength(1)
   expect((await delegationsOf(chat)).map((row) => ({ id: row.id, status: row.status }))).toEqual([
@@ -254,7 +258,7 @@ test('a long task answers still running, a resume call returns its result, and a
 test('a long task the turn never resumed is forgotten when the turn ends', async () => {
   await fakeAgent()
   const chat = await newRuntimeChat()
-  setFakeLlmScript(delegatingScript({ subagents: { 'fake-small': slowWork } }))
+  setFakeLlmScript(delegatingScript({ subagents: { 'fake-small': heldWork } }))
   const promptId = await promptAndAnswer(chat, 'Delegate and move on')
   const [delegation] = await delegationsOf(chat)
   const id = String(delegation?.id)
@@ -267,13 +271,14 @@ test('a long task the turn never resumed is forgotten when the turn ends', async
     resume: id,
   })
   expect(resumed).toEqual({ text: unknownTaskOf(id), isError: true })
-  await waitFor(async () => (await delegationsOf(chat))[0]?.status === 'finished', 20_000)
+  await holds.release('sub')
+  await waitFor(async () => (await delegationsOf(chat))[0]?.status === 'finished')
 })
 
 test('stopping the turn interrupts the running subagent, marks its delegation stopped, and the next prompt runs', async () => {
   const { relay } = await fakeAgent()
   const chat = await newRuntimeChat()
-  setFakeLlmScript(delegatingScript({ subagents: { 'fake-small': slowWork } }))
+  setFakeLlmScript(delegatingScript({ subagents: { 'fake-small': heldWork } }))
   const promptId = await prompt(chat, 'Delegate then stop')
   await waitFor(async () => (await repliesTo(promptId)).length >= 2, 20_000)
   expect(await mutate(aliceInAcme, 'conversation.stopAgent', { workspaceId: acme, chatId: chat })).toEqual(succeeded)

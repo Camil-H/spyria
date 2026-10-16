@@ -34,6 +34,9 @@ const {
   turnOf,
   runtimeOf,
   openStream,
+  holds,
+  holdUrl,
+  jobDone,
   ...stack
 } = await startAgentStack({ llm: { model: 'openai/fake/fake-model' } })
 const repliesTo = (messageId: string) => stack.repliesTo(messageId, ['kind', 'body', 'detail'])
@@ -45,7 +48,7 @@ afterEach(async () => {
 
 type Launch = { agent: { acp_command: string[]; acp_model?: string }; secrets: Record<string, { value: string }> }
 const agentHost = async () => {
-  const relay = createHqAgentRelay()
+  const relay = createHqAgentRelay({ holdUrl })
   relays.push(relay)
   const host = await fakeHost('Agent host', { agentServer: relay.agentServer })
   return { relay, host, launches: () => relay.created as Launch[] }
@@ -91,10 +94,11 @@ test('prompts to one chat are delivered one turn at a time, in order, each exact
   await waitFor(() => relay.prompts.length === 1)
   const second = await prompt(chat, 'Second question')
   const third = await prompt(chat, 'Third question')
-  await Bun.sleep(200)
+  for (const waiting of [second, third]) await jobDone('agent.prompt', { messageId: waiting })
   expect(relay.prompts).toEqual(['stub:linger First question'])
   expect(await turnOf(chat)).toBe(first)
 
+  await holds.release('linger')
   await answered(third)
   await turnEnded(chat)
   expect(relay.prompts).toEqual(['stub:linger First question', 'Second question', 'Third question'])
@@ -108,6 +112,7 @@ test('each step is stored once and updated by its final call, the full command o
   await agentHost()
   const chat = await newRuntimeChat()
   const viewer = await openStream(chat)
+  await viewer.subscribed
   const question = await prompt(chat, 'stub:think stub:tools stub:terminal')
   await answered(question)
   await turnEnded(chat)
@@ -147,7 +152,8 @@ test('stream frames reach browsers of the chat workspace only, and no secret rea
     const acmeViewer = await openStream(chat)
     const globexViewer = await openStream(chat, { workspaceId: globex })
     const anonymous = await openStream(chat, { token: '' })
-    const question = await prompt(chat, 'stub:slow Stream to my workspace')
+    await acmeViewer.subscribed
+    const question = await prompt(chat, 'Stream to my workspace')
     await answered(question)
     await turnEnded(chat)
 
@@ -175,6 +181,7 @@ test('the agent’s workspace reaches viewers live when it changes, is resent to
   await agentHost()
   const chat = await newRuntimeChat()
   const viewer = await openStream(chat)
+  await viewer.subscribed
   for (const text of ['Hello', 'stub:branch feature/bridge']) {
     await answered(await prompt(chat, text))
     await turnEnded(chat)
@@ -222,6 +229,7 @@ test('touchRuntime is called on prompts and on agent events', async () => {
   expect(await isFresh()).toBe(true)
 
   await makeIdle()
+  await holds.release('linger')
   await waitFor(isFresh)
   await turnEnded(chat)
 })
@@ -288,6 +296,7 @@ test('a model failure recorded by the relay shows as the error at the turn end, 
   const question = await prompt(chat, 'stub:slow Use my key')
   await waitFor(() => relay.prompts.length === 1)
   await database.$client`update chats set agent_turn_failure = 'The LLM key of Alice was refused' where id = ${chat}`
+  await holds.release('slow')
   await answered(question, 2)
   await turnEnded(chat)
   expect(await repliesTo(question)).toEqual([replyOf(1), { kind: 'step', body: 'error', detail: null }])

@@ -267,8 +267,9 @@ test('commands to an offline host retry until it returns, rows stay untouched me
 
   await idleFor(stoppingChat, '2 hours')
   await sweep()
-  await waitFor(async () => (await jobsOf('runtime.stop', stopping.id)).some((job) => job.last_error !== null))
-  await Bun.sleep(200)
+  await waitFor(async () =>
+    (await jobsOf('runtime.stop', stopping.id)).some((job) => job.last_error !== null && job.attempts >= 2),
+  )
   expect((await runtimeOf(stoppingChat)).state).toBe('stopping')
   expect([await runtimeOf(vanishedChat), await runtimeOf(revivedChat)]).toEqual(before)
 
@@ -347,7 +348,6 @@ test('a slow start holds no transaction: ensureRuntimeRunning answers and other 
   try {
     const slow = await ensure(slowChat)
     await waitFor(() => host.commands.some((command) => command.op === 'start' && command.runtimeId === slow.id))
-    await Bun.sleep(100)
     expect([...(await transactionsLeftOpen())]).toEqual([])
     expect(await promptly(ensure(slowChat))).toMatchObject({ id: slow.id, state: 'creating' })
 

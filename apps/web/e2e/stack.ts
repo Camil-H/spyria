@@ -142,6 +142,7 @@ type TestOptions = ResetOptions & {
   failRuntimeCreation: (isFailing: boolean) => Promise<void>
   fakeBootHold: string | undefined
   release: (name: string) => Promise<void>
+  reached: (name: string) => Promise<void>
   heldCommand: (name: string) => string
 }
 
@@ -315,6 +316,11 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
   release: async ({ workerStack }, use) => {
     await use(async (name) => {
       await postToServer('/test/release', { db: workerStack.databaseName, name })
+    })
+  },
+  reached: async ({ workerStack }, use) => {
+    await use(async (name) => {
+      await postToServer('/test/reached', { db: workerStack.databaseName, name })
     })
   },
   heldCommand: async ({ workerStack }, use) => {

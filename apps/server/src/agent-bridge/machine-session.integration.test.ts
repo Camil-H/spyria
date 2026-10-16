@@ -49,10 +49,11 @@ const finished = async (question: string, chat: ChatId) => {
 const bodiesOf = (replies: { kind: string; body: string }[]) =>
   replies.map(({ kind, body }) => (kind === 'step' ? body : `${kind}:${body}`))
 const openStream = async (chat: ChatId) => {
-  const { frames } = await stack.openStream(chat)
-  await Bun.sleep(200)
+  const { frames, subscribed } = await stack.openStream(chat)
+  await subscribed
   return frames
 }
+const subscribeBeforeStoredMilliseconds = 200
 const streamedText = (frames: string[], isReasoning = false) =>
   frames
     .map((frame) => JSON.parse(frame) as { text?: string; isReasoning?: boolean })
@@ -234,7 +235,7 @@ test('a start that fails closes the turn at once with the adapter message and do
   await waitFor(async () => (await turnOf(chat)) === null)
 
   expect(bodiesOf(await repliesTo(question))).toEqual(['notice:The agent could not start: Authentication required'])
-  await Bun.sleep(200)
+  await stack.jobDone('agent.prompt', { messageId: question })
   expect(relay.created).toHaveLength(1)
   expect(await repliesTo(question)).toHaveLength(1)
 })
@@ -330,8 +331,10 @@ test('nothing starts for a signed-out tool, a non-owner or a choice of the HQ ru
 test('a prompt sent at once after the choice joins the one session and streams live to a viewer subscribed before the chat was stored', async () => {
   const relay = await machine({ gapMilliseconds: 30 })
   const chat = chatId(`chat-${crypto.randomUUID()}`)
-  const frames = await openStream(chat)
+  const { frames, subscribed } = await stack.openStream(chat)
+  await Bun.sleep(subscribeBeforeStoredMilliseconds)
   await newRuntimeChat({ id: chat })
+  await subscribed
   expect(await chooseRunsOn(chat, 'claude-code')).toEqual(succeeded)
   const replies = await finished(await prompt(chat, 'stub:think'), chat)
   expect(replies.at(-1)?.kind).toBe('agent')

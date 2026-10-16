@@ -20,7 +20,7 @@ import { readHqAgentImage } from './hq-agent-image.ts'
 import { startJobWorker } from './job-worker.ts'
 import { createModelCallRelay } from './llm-relay.ts'
 import { createRuntimeHostGateway } from './runtime-hosts/gateway.ts'
-import { createFakeHosts, type FakeHost, issueTestSession, testAuthSettings } from './testing.ts'
+import { createFakeHosts, createHolds, type FakeHost, issueTestSession, testAuthSettings } from './testing.ts'
 
 const port = Number(process.env.PORT ?? 3100)
 const fakeMcpPort = Number(process.env.HQ_FAKE_MCP_PORT ?? 3101)
@@ -37,18 +37,8 @@ const servedDatabaseByName = new Map<string, ServedDatabase>()
 const databasesFailingCreation = new Set<string>()
 const databasesWithoutGateway = new Set<string>()
 const bootHoldByDatabase = new Map<string, string>()
-const holdByKey = new Map<string, { reached: PromiseWithResolvers<void>; released: PromiseWithResolvers<void> }>()
-const holdOf = (databaseName: string, name: string) => {
-  const key = `${databaseName}/${name}`
-  const hold = holdByKey.get(key) ?? { reached: Promise.withResolvers(), released: Promise.withResolvers() }
-  holdByKey.set(key, hold)
-  return hold
-}
-const waitForRelease = (databaseName: string, name: string) => {
-  const hold = holdOf(databaseName, name)
-  hold.reached.resolve()
-  return hold.released.promise
-}
+const holds = createHolds()
+const waitForRelease = (databaseName: string, name: string) => holds.wait(`${databaseName}/${name}`)
 const fakeHostByDatabase = new Map<
   string,
   { host: FakeHost; relay: ReturnType<typeof createHqAgentRelay>; isOnline: boolean }
@@ -199,11 +189,7 @@ const app = createApp({
     if (!chat) {
       if (llmGateway.listedModels().length === 0) await llmGateway.refreshListedModels()
       for (const key of scriptByChat.keys()) if (key.startsWith(`${db}/`)) scriptByChat.delete(key)
-      for (const [key, hold] of holdByKey)
-        if (key.startsWith(`${db}/`)) {
-          hold.released.resolve()
-          holdByKey.delete(key)
-        }
+      holds.releaseAll(`${db}/`)
       return context.body(null, 204)
     }
     const previous = scriptByChat.get(`${db}/${chat}`)
@@ -238,11 +224,14 @@ const app = createApp({
     await waitForRelease(db, name)
     return context.body(null, 204)
   })
+  .post('/test/reached', async (context) => {
+    const { db = '', name = '' } = context.req.query()
+    await holds.reached(`${db}/${name}`)
+    return context.body(null, 204)
+  })
   .post('/test/release', async (context) => {
     const { db = '', name = '' } = context.req.query()
-    const hold = holdOf(db, name)
-    await hold.reached.promise
-    hold.released.resolve()
+    await holds.release(`${db}/${name}`)
     return context.body(null, 204)
   })
   .post('/test/gateway', (context) => {

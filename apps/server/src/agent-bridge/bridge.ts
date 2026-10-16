@@ -275,6 +275,7 @@ export const createAgentBridge = ({
         for (const question of streaming?.questions.values() ?? [])
           send(viewer, chat, { promptId: streaming?.promptId, question, isSnapshot: true })
         if (streaming?.workspace) send(viewer, chat, { workspace: streaming.workspace, isSnapshot: true })
+        send(viewer, chat, { subscribed: true })
       },
       unwatch: (viewer: WSContext, chat?: AgentChat) => {
         for (const watching of chat ? [viewers.get(keyOf(chat))] : viewers.values()) watching?.delete(viewer)

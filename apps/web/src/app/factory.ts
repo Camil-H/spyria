@@ -61,6 +61,7 @@ const createAgentStream = (store: Store): AgentStream => {
     }
     socket.onmessage = (message) => {
       const frame = JSON.parse(String(message.data))
+      if (frame.subscribed) return
       for (const listener of listenersByWorkspace.get(workspaceId)?.get(frame.chatId) ?? []) listener(frame)
     }
     socket.onclose = () => {

@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test'
-import { test } from './stack.ts'
+import { test, type WorkerStack } from './stack.ts'
 import { serverUrl } from './stack-ports.ts'
 
 export * from '@playwright/test'
@@ -25,6 +25,15 @@ export const machineTest = test.extend<{ machine: (query?: MachineQuery) => Prom
 })
 
 export const agentReplyText = 'Understood, working on it.'
+
+export const delegationsFinished = (workerStack: WorkerStack, chatId: string) =>
+  expect
+    .poll(async () =>
+      (await workerStack.database.$client`select status from delegations where chat_id = ${chatId}`).map(
+        ({ status }) => status,
+      ),
+    )
+    .toEqual(['finished'])
 
 export const sidebarOf = (page: Page) => page.getByRole('navigation', { name: 'Sidebar' })
 export const mainOf = (page: Page) => page.getByRole('main')

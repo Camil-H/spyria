@@ -5,7 +5,7 @@ import { createHqAgentRelay } from './hq-agent-relay.ts'
 
 setDefaultTimeout(40_000)
 const { database, fakeHost, mutate, newRuntimeChat, prompt, turnOf, messagesOf, storedAgentEventsOf, ...stack } =
-  await startAgentStack({ routing: true, resumeAfterMilliseconds: 15_000 })
+  await startAgentStack({ routing: true })
 const relays: ReturnType<typeof createHqAgentRelay>[] = []
 afterEach(async () => {
   stack.setFakeLlmScript(undefined)
@@ -29,8 +29,11 @@ const keysOnly = async (...providers: string[]) => {
 }
 const repliesTo = (messageId: string) => stack.repliesTo(messageId, ['kind', 'body', 'step'])
 const finished = async (question: string, chat: ChatId) => {
-  await waitFor(async () => (await repliesTo(question)).some((reply) => reply.body.includes('Hello from the stub')))
-  await waitFor(async () => (await turnOf(chat)) === null)
+  await waitFor(
+    async () => (await repliesTo(question)).some((reply) => reply.body.includes('Hello from the stub')),
+    15_000,
+  )
+  await waitFor(async () => (await turnOf(chat)) === null, 15_000)
   return repliesTo(question)
 }
 const commandShown = (question: string) =>
@@ -85,8 +88,8 @@ test.each([
     const { launches } = await workspaceHost()
     await keysOnly(provider)
     const chat = await newRuntimeChat()
-    const { frames } = await stack.openStream(chat)
-    await Bun.sleep(200)
+    const { frames, subscribed } = await stack.openStream(chat)
+    await subscribed
     const replies = await finished(await prompt(chat, 'stub:tools', bobInAcme), chat)
 
     const acpModel = `${piProvider}/${model}`

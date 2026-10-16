@@ -1,4 +1,4 @@
-import { afterAll, afterEach, expect, setDefaultTimeout, test } from 'bun:test'
+import { afterEach, expect, setDefaultTimeout, test } from 'bun:test'
 import type { ChatId } from '@hq/kernel'
 import {
   acme,
@@ -29,39 +29,28 @@ const {
   answered,
   runtimeOf,
   storedAgentEventsOf,
+  holds,
+  holdUrl,
+  jobStatesOf,
+  jobDone,
 } = await startAgentStack({
   llm: { model: 'openai/fake' },
   now: () => Date.now() + clockOffsetMilliseconds,
   promptsWaitingAfterHello: true,
 })
 const relays: ReturnType<typeof createHqAgentRelay>[] = []
-const newLinger = () => ({ reached: Promise.withResolvers<void>(), released: Promise.withResolvers<void>() })
-let linger = newLinger()
-const lingerServer = Bun.serve({
-  port: 0,
-  fetch: async () => {
-    linger.reached.resolve()
-    await linger.released.promise
-    return new Response()
-  },
-})
-const holdUrl = `http://localhost:${lingerServer.port}/hold?`
 afterEach(async () => {
   clockOffsetMilliseconds = 0
-  linger.released.resolve()
-  linger = newLinger()
   await Promise.all(relays.splice(0).map((relay) => relay.stop()))
 })
-afterAll(() => lingerServer.stop(true))
 
 const aliceInGlobex = { workspaceId: globex, userId: alice }
 type Relay = ReturnType<typeof createHqAgentRelay>
 const agentHost = async (
   name = 'Agent host',
   agentServerOf: (relay: Relay) => ContainerAgent = (relay) => relay.agentServer,
-  relayOptions: Parameters<typeof createHqAgentRelay>[0] = {},
 ) => {
-  const relay = createHqAgentRelay(relayOptions)
+  const relay = createHqAgentRelay({ holdUrl })
   relays.push(relay)
   return { relay, host: await fakeHost(name, { agentServer: agentServerOf(relay) }) }
 }
@@ -73,6 +62,8 @@ const commandShown = (messageId: string) =>
   waitFor(async () => (await repliesTo(messageId)).some((reply) => reply.body === 'command'), firstTurnMilliseconds)
 const conversationIdOf = async (chat: ChatId) => String((await runtimeOf(chat)).agent_conversation_id)
 const conversationPath = /^\/api\/conversations\/[^/]+$/
+const interruptJobsOf = (chat: ChatId) => jobStatesOf('agent.interrupt', { chatId: chat })
+const offlineReopenMilliseconds = 200
 const sweepAgentTurns = () => agentBridge.forDatabase(database).jobs['agent.sweep']({ workspaceId: acme, payload: {} })
 const agentReply = (turn: number) => ({
   kind: 'agent' as const,
@@ -95,19 +86,20 @@ test('Stop interrupts the agent, ends the turn once with a notice naming the mem
 
   expect(await command(aliceInGlobex, 'stopAgent', chat)).toEqual(succeeded)
   expect(await command(aliceInGlobex, 'stopAgent', chat, acme)).not.toEqual(succeeded)
-  await Bun.sleep(200)
+  expect(await interruptJobsOf(chat)).toEqual([])
   expect(relay.interrupts).toEqual([])
   expect(await turnOf(chat)).toBe(first)
 
   expect(await command(bobInAcme, 'stopAgent', chat)).toEqual(succeeded)
   await answered(second)
+  await jobDone('agent.interrupt', { chatId: chat })
   expect(relay.interrupts).toEqual([await conversationIdOf(chat)])
   await endsWith(first, 'Stopped by Bob')
   expect(await repliesTo(second)).toEqual([agentReply(2)])
   expect(relay.prompts).toEqual(['stub:long Take your time', 'Then this'])
   await turnIs(chat, null)
   expect(await command(bobInAcme, 'stopAgent', chat)).toEqual(succeeded)
-  await Bun.sleep(200)
+  expect(await interruptJobsOf(chat)).toEqual(['done'])
   expect(relay.interrupts).toHaveLength(1)
 })
 
@@ -131,10 +123,12 @@ test('a prompt whose turn was stopped while it was being sent is interrupted at 
 
 test('a Stop whose interrupt arrives after the turn already finished ends the turn once', async () => {
   let first = ''
+  const interruptSent = Promise.withResolvers<void>()
   const { relay } = await agentHost('Agent host', (relay) => ({
     ...relay.agentServer,
     respond: async (request, container) => {
       if (!request.path.endsWith('/interrupt')) return relay.agentServer.respond(request, container)
+      interruptSent.resolve()
       await waitFor(async () => (await turnOf(chat)) !== first)
       return { status: 200, body: '{}' }
     },
@@ -146,9 +140,11 @@ test('a Stop whose interrupt arrives after the turn already finished ends the tu
   const second = await prompt(chat, 'Next one')
 
   expect(await command(aliceInAcme, 'stopAgent', chat)).toEqual(succeeded)
+  await interruptSent.promise
+  await holds.release('linger')
   await answered(second)
   await turnIs(chat, null)
-  await Bun.sleep(200)
+  await jobDone('agent.interrupt', { chatId: chat })
   const firstReplies = (await repliesTo(first)).map((reply) => reply.body)
   expect(firstReplies.length).toBeGreaterThan(0)
   expect(firstReplies.filter((body) => body === 'Stopped by Alice').length).toBeLessThanOrEqual(1)
@@ -225,7 +221,7 @@ test('a turn ends with a notice when its runtime stops, its host stays offline p
   const lost = await prompt(losing, 'stub:long Keep working')
   await commandShown(lost)
   await host.disconnect()
-  await Bun.sleep(200)
+  await Bun.sleep(offlineReopenMilliseconds)
   expect(await turnOf(losing)).toBe(lost)
   clockOffsetMilliseconds = 11 * minute
   await sweepAgentTurns()
@@ -278,16 +274,16 @@ test('the sweep keeps a silent turn hq-agent still runs and touches its runtime,
 })
 
 test('a host blip during a turn keeps the turn, which ends with its reply once the host is back', async () => {
-  const { host } = await agentHost('Agent host', undefined, { holdUrl })
+  const { host } = await agentHost()
   const chat = await newRuntimeChat()
   const held = await prompt(chat, 'stub:linger Through the blip')
-  await linger.reached.promise
+  await holds.reached('linger')
   await host.disconnect()
-  await Bun.sleep(200)
+  await Bun.sleep(offlineReopenMilliseconds)
   expect(await turnOf(chat)).toBe(held)
 
   await host.connect()
-  linger.released.resolve()
+  await holds.release('linger')
   await turnIs(chat, null)
   expect(await repliesTo(held)).toEqual([agentReply(1)])
 })
@@ -300,22 +296,18 @@ test("a turn end arriving after its turn was closed does not end the next prompt
       (event) =>
         (event.payload as { event: { update: { sessionUpdate?: string } } }).event.update.sessionUpdate === 'turn_end',
     ).length
-  const { relay } = await agentHost(
-    'Agent host',
-    (relay) => ({
-      ...relay.agentServer,
-      respond: async (request, container) => {
-        if (isStatusHidden && request.method === 'GET' && conversationPath.test(request.path))
-          return { status: 503, body: '' }
-        if (request.path.endsWith('/events') && relay.prompts.length === 1) await isFirstEnded
-        return relay.agentServer.respond(request, container)
-      },
-    }),
-    { holdUrl },
-  )
+  const { relay } = await agentHost('Agent host', (relay) => ({
+    ...relay.agentServer,
+    respond: async (request, container) => {
+      if (isStatusHidden && request.method === 'GET' && conversationPath.test(request.path))
+        return { status: 503, body: '' }
+      if (request.path.endsWith('/events') && relay.prompts.length === 1) await isFirstEnded
+      return relay.agentServer.respond(request, container)
+    },
+  }))
   const chat = await newRuntimeChat()
   const first = await prompt(chat, 'stub:linger Slow first')
-  await linger.reached.promise
+  await holds.reached('linger')
   isStatusHidden = true
   clockOffsetMilliseconds = 11 * minute
   await sweepAgentTurns()
@@ -326,7 +318,7 @@ test("a turn end arriving after its turn was closed does not end the next prompt
   isFirstEnded = waitFor(async () => (await turnEndsOf(chat)) === 1).then(() => {})
   const second = await prompt(chat, 'Then this')
   await turnIs(chat, second)
-  linger.released.resolve()
+  await holds.release('linger')
   await isFirstEnded
   expect(await turnOf(chat)).toBe(second)
   await answered(second)
@@ -357,6 +349,7 @@ test('on reconnect, a turn hq-agent finished while away is closed from the resen
   await delivered(relay, 1)
   isHoldingStatus = true
   relay.dropSockets()
+  await holds.release('linger')
   await turnIs(finishing, null)
   isHoldingStatus = false
   expect(await repliesTo(finished)).toEqual([agentReply(1)])
@@ -389,7 +382,7 @@ test('a prompt while the host is offline gets one notice and is answered after t
 
   const waiting = await prompt(chat, 'Are you there?')
   await answered(waiting)
-  await Bun.sleep(200)
+  await jobDone('agent.prompt', { messageId: waiting })
   expect(await repliesTo(waiting)).toEqual([notice('The runtime host is offline')])
   expect(await turnOf(chat)).toBeNull()
 
