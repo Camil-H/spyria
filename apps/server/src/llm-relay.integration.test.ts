@@ -75,6 +75,34 @@ test('a relayed call runs on the turn prompter’s virtual key with HQ’s attri
   expect(await failureOf(chatId)).toBeNull()
 })
 
+test.each([
+  ['OpenRouter', 'openrouter/anthropic/claude-sonnet-5.5', 'anthropic/claude-sonnet-5.5'],
+  ['xAI', 'xai/grok-4.3', 'grok-4.3'],
+  ['DeepSeek', 'deepseek/deepseek-v4-flash', 'deepseek-v4-flash'],
+  ['Z.ai', 'zai/glm-4.7', 'glm-4.7'],
+])(
+  'a %s key relays %s to its provider with the provider’s model id, recorded with prompter and owner',
+  async (provider, model, providerModel) => {
+    const secret = `fake-key-${provider}-${crypto.randomUUID()}`
+    await addLlmKey(bob, provider, secret)
+    const host = await fakeHost('Relay host')
+    const { chatId, token } = await runtimeTurn(host, bob)
+    const callsBefore = fakeLlmCalls.length
+    const answer = await host.modelCall({
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ model, stream: true, messages: [{ role: 'user', content: 'hi' }] }),
+    })
+    expect(answer).toMatchObject({ status: 200, ended: 'gw_end' })
+    expect(answer.body).toContain('data: [DONE]')
+    const posted = fakeLlmBodies.flatMap((body, index) => (index >= callsBefore && body ? [index] : []))
+    expect(posted.map((index) => fakeLlmCalls[index]?.authorization)).toEqual([`Bearer ${secret}`])
+    expect(posted.map((index) => JSON.parse(fakeLlmBodies[index] ?? '{}').model)).toEqual([providerModel])
+    const [log] = await gatewayLogsOf(gateway, `metadata_chat=${chatId}`)
+    expect(log?.model).toBe(providerModel)
+    expect(log?.metadata).toMatchObject({ chat: chatId, prompter: bob, owner: alice })
+  },
+)
+
 test('a model call sent right after the host’s hello is relayed once the hello is recorded', async () => {
   const host = await fakeHost('Reconnecting host')
   const { token } = await runtimeTurn(host, bob)

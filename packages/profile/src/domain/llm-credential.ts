@@ -19,6 +19,13 @@ const gatewayProviders: Record<string, string> = {
   anthropic: 'anthropic',
   mistral: 'mistral',
   typesafe: 'typesafe',
+  openrouter: 'openrouter',
+  google: 'gemini',
+  gemini: 'gemini',
+  xai: 'xai',
+  deepseek: 'deepseek',
+  zai: 'zai',
+  'z.ai': 'zai',
   fake: 'fake',
   'fake-small': 'fake-small',
 }

@@ -30,6 +30,12 @@ test.each([
   ['Anthropic', 'anthropic'],
   ['mistral', 'mistral'],
   ['Fake', 'fake'],
+  ['OpenRouter', 'openrouter'],
+  ['Google', 'gemini'],
+  ['Gemini', 'gemini'],
+  ['xAI', 'xai'],
+  ['DeepSeek', 'deepseek'],
+  ['Z.ai', 'zai'],
   [' ', expect.any(BlankProvider)],
   ['Foo', expect.any(UnsupportedProvider)],
 ])('newLlmCredential maps the provider %p to the gateway, or refuses it', (provider, expected) => {

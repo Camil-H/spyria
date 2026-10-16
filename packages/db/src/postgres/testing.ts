@@ -158,7 +158,12 @@ export const startZeroCache = async ({
 
 const gatewayImage = 'maximhq/bifrost:v2.2.6@sha256:d0b4708ace1aa175766f94afa715fd9bba3a1b56c1dc2afff15a21edf3ae4e2a'
 export const testGatewayAdmin = { user: 'hq-test', password: 'hq-test-gateway-password' }
-const gatewayProviders = ['openai', 'anthropic', 'mistral', 'typesafe']
+const gatewayProviders = ['openai', 'anthropic', 'mistral', 'typesafe', 'openrouter', 'gemini', 'xai']
+const zaiPaths = {
+  chat_completion: '/chat/completions',
+  chat_completion_stream: '/chat/completions',
+  list_models: '/models',
+}
 const testModelPrices = {
   'fake-model': 0.000009,
   'fake-large': 0.00003,
@@ -170,6 +175,21 @@ const testModelPrices = {
   'mistral-large-latest': 0.000004,
   'mistral-medium-latest': 0.000002,
   'mistral-small-latest': 0.0000005,
+  'gemini-pro-latest': 0.000004,
+  'gemini-flash-latest': 0.000002,
+  'gemini-flash-lite-latest': 0.0000005,
+  'grok-4.7': 0.000004,
+  'grok-4.3': 0.000002,
+  'grok-code-fast-1': 0.0000005,
+  'deepseek-v4-pro': 0.000004,
+  'deepseek-v4-flash': 0.000002,
+  'deepseek-v3.2': 0.0000005,
+  'glm-5.3': 0.000004,
+  'glm-4.7': 0.000002,
+  'glm-5.3-flash': 0.0000005,
+  'anthropic/claude-opus-5.5': 0.000004,
+  'anthropic/claude-sonnet-5.5': 0.000002,
+  'anthropic/claude-haiku-5.5': 0.0000005,
 }
 
 const gatewayAuthorization = `Basic ${btoa(`${testGatewayAdmin.user}:${testGatewayAdmin.password}`)}`
@@ -210,7 +230,16 @@ export const startTestGateway = async ({
   const databaseName = `hq_test_gateway_${name}`
   const configFile = join(tmpdir(), `${containerName}.json`)
   const gatewayConfig = JSON.parse(readFileSync(new URL('../../../../infra/bifrost.json', import.meta.url), 'utf8'))
-  const setup = { gatewayImage, port, fakeLlmUrl, oauthBase, gatewayConfig, gatewayProviders, testModelPrices }
+  const setup = {
+    gatewayImage,
+    port,
+    fakeLlmUrl,
+    oauthBase,
+    gatewayConfig,
+    gatewayProviders,
+    zaiPaths,
+    testModelPrices,
+  }
   const setupHash = createHash('sha256').update(JSON.stringify(setup)).digest('hex').slice(0, 16)
   const gateway = testGatewayAt(`http://127.0.0.1:${port}`)
   let lastAnswer: number | string = 'nothing'
@@ -302,6 +331,19 @@ export const startTestGateway = async ({
         method: 'POST',
         body: { provider, keys: [], network_config: networkConfig },
       })
+    await gateway.call('/api/providers', {
+      method: 'POST',
+      body: { provider: 'deepseek', keys: [], network_config: { ...networkConfig, base_url: `${fakeLlmUrl}/v1` } },
+    })
+    await gateway.call('/api/providers', {
+      method: 'POST',
+      body: {
+        provider: 'zai',
+        keys: [],
+        network_config: { ...networkConfig, base_url: `${fakeLlmUrl}/v1` },
+        custom_provider_config: { base_provider_type: 'openai', request_path_overrides: zaiPaths },
+      },
+    })
     for (const [model, dollarsPerToken] of Object.entries(testModelPrices))
       await gateway.call('/api/governance/pricing-overrides', {
         method: 'POST',

@@ -103,10 +103,7 @@ export const openProfile = async (page: Page) => {
 export const llmSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'LLM access' })
 export const machineSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'My machine' })
 export const machineToolOf = (page: Page, toolName: string) =>
-  machineSectionOf(page)
-    .getByRole('list', { name: 'Coding agents' })
-    .getByRole('listitem')
-    .filter({ hasText: toolName })
+  machineSectionOf(page).getByRole('button', { name: new RegExp(`^(Use ${toolName}|✓ ${toolName} connected)$`) })
 export const addCredential = async (page: Page, credential: { provider: string; secret: string }) => {
   await llmSectionOf(page).getByLabel('Provider').fill(credential.provider)
   await llmSectionOf(page).getByLabel('Secret').fill(credential.secret)

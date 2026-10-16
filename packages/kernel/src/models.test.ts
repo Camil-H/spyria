@@ -3,7 +3,9 @@ import {
   addRoutableModels,
   chatModelsOf,
   classifierModelOf,
+  isPickableModel,
   type ListedModel,
+  listedChatModelIdsOf,
   modelNameOf,
   nearestModelOf,
   providersOfGatewayRefs,
@@ -39,6 +41,42 @@ test('reachable models are the routable ones on the providers of the member keys
   expect(reachableModelsOf([])).toEqual([])
   expect(idsOf(chatModelsOf([...fake, ...jev]))).toEqual(idsOf(fake))
   expect(chatModelsOf(jev)).toEqual([])
+})
+
+test.each([
+  ['gemini', ['gemini/gemini-pro-latest', 'gemini/gemini-flash-latest', 'gemini/gemini-flash-lite-latest']],
+  ['xai', ['xai/grok-4.7', 'xai/grok-4.3', 'xai/grok-code-fast-1']],
+  ['deepseek', ['deepseek/deepseek-v4-pro', 'deepseek/deepseek-v4-flash', 'deepseek/deepseek-v3.2']],
+  ['zai', ['zai/glm-5.3', 'zai/glm-4.7', 'zai/glm-5.3-flash']],
+  [
+    'openrouter',
+    [
+      'openrouter/anthropic/claude-opus-5.5',
+      'openrouter/anthropic/claude-sonnet-5.5',
+      'openrouter/anthropic/claude-haiku-5.5',
+    ],
+  ],
+])('the %s key reaches one curated model per tier, large to small', (provider, ids) => {
+  const reachable = reachableModelsOf([provider])
+  expect(idsOf(reachable)).toEqual(ids)
+  expect(reachable.map((model) => model.tier)).toEqual(['large', 'medium', 'small'])
+  expect(nearestModelOf(reachable, 'medium')?.id).toBe(ids[1])
+  expect(providersOfGatewayRefs([`gateway:${provider}/key-id`])).toEqual([provider])
+})
+
+test('a manual pick is a curated model or a listed model of a reachable chat provider', () => {
+  const openRouter = reachableModelsOf(['openrouter'])
+  const listed = [
+    { id: 'openrouter/moonshotai/kimi-k3' },
+    { id: 'openai/gpt-6.1-sol' },
+    { id: 'typesafe/jev-2' },
+    { id: 'openrouter/moonshotai/kimi-k3' },
+  ]
+  expect(listedChatModelIdsOf([...openRouter, ...jev], listed)).toEqual(['openrouter/moonshotai/kimi-k3'])
+  expect(isPickableModel('openrouter/moonshotai/kimi-k3', openRouter, listed)).toBe(true)
+  expect(isPickableModel('openrouter/anthropic/claude-sonnet-5.5', openRouter, [])).toBe(true)
+  expect(isPickableModel('openai/gpt-6.1-sol', openRouter, listed)).toBe(false)
+  expect(isPickableModel('typesafe/jev-2', jev, listed)).toBe(false)
 })
 
 test('listing prices are added to reachable models; unlisted ones stay without a price', () => {

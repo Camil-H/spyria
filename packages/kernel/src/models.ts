@@ -18,6 +18,21 @@ const routableModels: RoutableModel[] = [
   { id: 'anthropic/claude-haiku-5-5', name: 'Haiku 5.5', tier: 'small' },
   { id: 'openai/gpt-5-nano', name: 'GPT-5 nano', tier: 'small' },
   { id: 'mistral/mistral-small-latest', name: 'Mistral Small', tier: 'small' },
+  { id: 'gemini/gemini-pro-latest', name: 'Gemini Pro', tier: 'large' },
+  { id: 'gemini/gemini-flash-latest', name: 'Gemini Flash', tier: 'medium' },
+  { id: 'gemini/gemini-flash-lite-latest', name: 'Gemini Flash-Lite', tier: 'small' },
+  { id: 'xai/grok-4.7', name: 'Grok 4.7', tier: 'large' },
+  { id: 'xai/grok-4.3', name: 'Grok 4.3', tier: 'medium' },
+  { id: 'xai/grok-code-fast-1', name: 'Grok Code Fast', tier: 'small' },
+  { id: 'deepseek/deepseek-v4-pro', name: 'DeepSeek V4 Pro', tier: 'large' },
+  { id: 'deepseek/deepseek-v4-flash', name: 'DeepSeek V4 Flash', tier: 'medium' },
+  { id: 'deepseek/deepseek-v3.2', name: 'DeepSeek V3.2', tier: 'small' },
+  { id: 'zai/glm-5.3', name: 'GLM-5.3', tier: 'large' },
+  { id: 'zai/glm-4.7', name: 'GLM-4.7', tier: 'medium' },
+  { id: 'zai/glm-5.3-flash', name: 'GLM-5.3 Flash', tier: 'small' },
+  { id: 'openrouter/anthropic/claude-opus-5.5', name: 'OpenRouter Opus 5.5', tier: 'large' },
+  { id: 'openrouter/anthropic/claude-sonnet-5.5', name: 'OpenRouter Sonnet 5.5', tier: 'medium' },
+  { id: 'openrouter/anthropic/claude-haiku-5.5', name: 'OpenRouter Haiku 5.5', tier: 'small' },
   { id: 'typesafe/jev-latest', name: 'Jev' },
 ]
 const tiersFrom: Record<ModelTier, ModelTier[]> = {
@@ -40,12 +55,19 @@ export const modelNameOf = (id: string) => routableModels.find((model) => model.
 export const providersOfGatewayRefs = (refs: readonly string[]) => [
   ...new Set(refs.flatMap((ref) => ref.match(/^gateway:([a-z-]+)\//)?.[1] ?? [])),
 ]
+const providerOf = (id: string) => id.split('/')[0] ?? ''
 export const reachableModelsOf = (providers: readonly string[]): Model[] =>
-  routableModels.filter((model) => providers.includes(model.id.split('/')[0] ?? ''))
+  routableModels.filter((model) => providers.includes(providerOf(model.id)))
 export const withPricesOf = (models: readonly Model[], listed: readonly ListedModel[]): Model[] =>
   models.map((model) => ({ ...listed.find((listing) => listing.id === model.id), ...model }))
 export const isDecisionModel = (model: Model) => model.tier === undefined
 export const chatModelsOf = (models: readonly Model[]) => models.filter((model) => !isDecisionModel(model))
+export const listedChatModelIdsOf = (reachable: readonly Model[], listed: readonly ListedModel[]) => {
+  const providers = new Set(chatModelsOf(reachable).map(({ id }) => providerOf(id)))
+  return [...new Set(listed.flatMap(({ id }) => (providers.has(providerOf(id)) ? id : [])))]
+}
+export const isPickableModel = (id: string, reachable: readonly Model[], listed: readonly ListedModel[]) =>
+  chatModelsOf(reachable).some((model) => model.id === id) || listedChatModelIdsOf(reachable, listed).includes(id)
 export const nearestModelOf = (models: readonly Model[], tier: ModelTier) =>
   tiersFrom[tier].flatMap((candidate) => models.find((model) => model.tier === candidate) ?? [])[0]
 const smallFirst: (ModelTier | undefined)[] = ['small', 'medium', 'large']

@@ -209,45 +209,51 @@ test('a late chunk of a stopped turn does not land in the next turn', async () =
   expect((await messagesOf(chat)).some((message) => message.body.includes('LATE'))).toBe(false)
 })
 
-test('an expired login ends the turn with one sign-in error and no agent message, and the tool stays signed out until its credentials change', async () => {
-  const { host } = await stack.agentHost('Machine', { ownerId: alice, signedIn: ['claude'] })
-  const chat = await newMachineChat()
-  const frames = await stack.subscribedFrames(chat)
-  const expired = await prompt(chat, 'stub:auth-expired')
-  await waitFor(async () => (await repliesTo(expired)).length > 0)
-  await waitFor(async () => (await turnOf(chat)) === null)
-  const signedIn = async () =>
-    (await database.$client`select capacity->'signedIn' as "signedIn" from runtime_hosts where id = ${host.id}`)[0]
-      ?.signedIn
-  const reconnect = async () => {
-    await host.disconnect()
-    await host.connect()
-  }
+test.each([
+  { tool: 'claude', harness: 'claude-code', name: 'Claude Code' },
+  { tool: 'codex', harness: 'codex', name: 'Codex' },
+])(
+  'an expired $name login ends the turn with one sign-in error and no agent message, and the tool stays signed out until its credentials change',
+  async ({ tool, harness, name }) => {
+    const { host } = await stack.agentHost('Machine', { ownerId: alice, signedIn: [tool] })
+    const chat = await newRuntimeChat({ harness })
+    const frames = await stack.subscribedFrames(chat)
+    const expired = await prompt(chat, 'stub:auth-expired')
+    await waitFor(async () => (await repliesTo(expired)).length > 0)
+    await waitFor(async () => (await turnOf(chat)) === null)
+    const signedIn = async () =>
+      (await database.$client`select capacity->'signedIn' as "signedIn" from runtime_hosts where id = ${host.id}`)[0]
+        ?.signedIn
+    const reconnect = async () => {
+      await host.disconnect()
+      await host.connect()
+    }
 
-  expect(streamedText(frames)).toBe('OAuth session expired and could not be refreshed.')
-  expect(await repliesTo(expired)).toEqual([
-    {
-      kind: 'step',
-      body: 'error',
-      step: { type: 'error', message: 'Authentication required — sign in to Claude Code again', signIn: 'claude' },
-    },
-  ])
-  expect(await signedIn()).toEqual([])
-  await reconnect()
-  expect(await signedIn()).toEqual([])
-  const refused = await prompt(chat, 'Hello')
-  await waitFor(async () => (await repliesTo(refused)).length > 0)
-  expect(bodiesOf(await repliesTo(refused))).toEqual([
-    'notice:Sign in to Claude Code on your machine: docker exec -it hq-host hq-host login claude',
-  ])
+    expect(streamedText(frames)).toBe('OAuth session expired and could not be refreshed.')
+    expect(await repliesTo(expired)).toEqual([
+      {
+        kind: 'step',
+        body: 'error',
+        step: { type: 'error', message: `Authentication required — sign in to ${name} again`, signIn: tool },
+      },
+    ])
+    expect(await signedIn()).toEqual([])
+    await reconnect()
+    expect(await signedIn()).toEqual([])
+    const refused = await prompt(chat, 'Hello')
+    await waitFor(async () => (await repliesTo(refused)).length > 0)
+    expect(bodiesOf(await repliesTo(refused))).toEqual([
+      `notice:Sign in to ${name} on your machine: docker exec -it hq-host hq-host login ${tool}`,
+    ])
 
-  host.signIn(['claude'])
-  await reconnect()
-  expect(await signedIn()).toEqual(['claude'])
-  expect(bodiesOf(await finished(await prompt(chat, 'Hello'), chat))).toEqual([
-    expect.stringContaining('agent:[t2] Hello from the stub'),
-  ])
-})
+    host.signIn([tool])
+    await reconnect()
+    expect(await signedIn()).toEqual([tool])
+    expect(bodiesOf(await finished(await prompt(chat, 'Hello'), chat))).toEqual([
+      expect.stringContaining('agent:[t2] Hello from the stub'),
+    ])
+  },
+)
 
 test('a start that fails closes the turn at once with the adapter message and does not retry', async () => {
   const relay = await machine({ startFails: true })

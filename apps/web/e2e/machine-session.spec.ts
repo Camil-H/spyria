@@ -3,7 +3,6 @@ import {
   expect,
   foldOf,
   machineSectionOf,
-  machineToolOf,
   mainOf,
   messageContaining,
   messageItemsOf,
@@ -82,6 +81,29 @@ for (const tool of tools) {
         await chipOf(page, 'harness').click()
         await expect(modelOf(page)).toHaveValue(tool.large.id)
       })
+    })
+
+    test(`${tool.name} f-2. an expired login shows one sign-in error with a link to the Profile, no agent message, and ${tool.name} signed out`, async ({
+      page,
+      machine,
+    }) => {
+      await machine(machineOf)
+      await newSession(page, tool.name)
+      await sendMessage(page, 'stub:auth-expired')
+      const banner = mainOf(page).getByRole('alert')
+      await expect(banner).toHaveText(`Authentication required — sign in to ${tool.name} again Open profile`)
+      await expect(workingIndicatorOf(page)).toHaveCount(0)
+      await expect(banner).toHaveCount(1)
+      await expect(mainOf(page)).not.toContainText('OAuth session expired')
+      await expect(mainOf(page)).not.toContainText('The agent stopped with an error')
+      await page.reload()
+      await expect(mainOf(page).getByRole('alert')).toHaveCount(1)
+      await expect(mainOf(page)).not.toContainText('OAuth session expired')
+      await banner.getByRole('link', { name: 'Open profile' }).click()
+      await expect(page).toHaveURL(/\/profile#my-machine$/)
+      await expect(machineSectionOf(page)).toBeInViewport()
+      await expect(machineSectionOf(page).getByRole('button', { name: `Use ${tool.name}` })).toBeVisible()
+      await expect(machineSectionOf(page).getByRole('button', { name: `${tool.name} connected` })).toHaveCount(0)
     })
   })
 }
@@ -175,28 +197,6 @@ test.describe('Claude Code', () => {
     await expect(messageContaining(page, '[t1] Hello from the stub')).toBeVisible({ timeout: 45_000 })
     expect((await machine()).conversations).toHaveLength(1)
     await expect.poll(() => startedCountOf(workerStack.database, chatId)).toBe('1')
-  })
-
-  test('f-2. an expired login shows one sign-in error with a link to the Profile, no agent message, and Claude Code signed out', async ({
-    page,
-    machine,
-  }) => {
-    await machine(machineOf)
-    await newSession(page, tool.name)
-    await sendMessage(page, 'stub:auth-expired')
-    const banner = mainOf(page).getByRole('alert')
-    await expect(banner).toHaveText('Authentication required — sign in to Claude Code again Open profile')
-    await expect(workingIndicatorOf(page)).toHaveCount(0)
-    await expect(banner).toHaveCount(1)
-    await expect(mainOf(page)).not.toContainText('OAuth session expired')
-    await expect(mainOf(page)).not.toContainText('The agent stopped with an error')
-    await page.reload()
-    await expect(mainOf(page).getByRole('alert')).toHaveCount(1)
-    await expect(mainOf(page)).not.toContainText('OAuth session expired')
-    await banner.getByRole('link', { name: 'Open profile' }).click()
-    await expect(page).toHaveURL(/\/profile#my-machine$/)
-    await expect(machineSectionOf(page)).toBeInViewport()
-    await expect(machineToolOf(page, 'Claude Code')).toContainText('Not connected')
   })
 
   test('24. with no workspace host online and one machine tool signed in, Runs on is chosen for the owner: no fieldset, session started', async ({

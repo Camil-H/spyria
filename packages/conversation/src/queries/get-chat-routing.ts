@@ -6,11 +6,12 @@ import {
   memberModelsOf,
 } from '@hq/db/server-writes'
 import type { ZeroContext } from '@hq/db/zero-queries'
-import { chatModelsOf, type Model, routableModelNames, withPricesOf } from '@hq/kernel'
+import { chatModelsOf, listedChatModelIdsOf, type Model, routableModelNames, withPricesOf } from '@hq/kernel'
 import type { Transaction } from '@rocicorp/zero'
 
 export type ChatRoutingRead = {
   reachableModels: Model[]
+  listedModelIds: string[]
   modelNames: Record<string, string>
   contextTokens: number | null
   adapterModels: { currentModelId: string | null; available: { id: string; name: string }[] }
@@ -30,6 +31,9 @@ export const getChatRouting = async (
   }))
   return {
     reachableModels: withPricesOf(reachable, listedModelsOf()),
+    listedModelIds: listedChatModelIdsOf(reachable, listedModelsOf()).filter(
+      (id) => !reachable.some((model) => model.id === id),
+    ),
     modelNames: routableModelNames(),
     contextTokens,
     adapterModels: {

@@ -54,6 +54,43 @@ test('f-4. a member with only an OpenAI key gets an OpenAI model at the first pr
   await bobPage.context().close()
 })
 
+test('f-10. a member with an OpenRouter key gets a routed OpenRouter model that answers, the picker searches the full listing, and keys for Google, xAI, DeepSeek and Z.ai add their curated models', async ({
+  browser,
+  workerStack,
+  agentScript,
+}) => {
+  const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+  await addLlmKey(bobPage, 'OpenRouter')
+  const chatId = await newRuntimeChat(bobPage, 'Bob on OpenRouter')
+  await agentScript(chatId, { route: { tier: 'large', confidence: 'low', effort: 'medium' } })
+  await promptAndWait(bobPage, 'Route me through OpenRouter', 1)
+  await expect(chipOf(bobPage, 'routed')).toHaveText('OpenRouter Sonnet 5.5 (medium) · auto')
+
+  await openSession(bobPage)
+  const mainModel = sessionOf(bobPage).getByLabel('Main model')
+  await expect(mainModel).toHaveValue('openrouter/anthropic/claude-sonnet-5.5')
+  await expect(mainModel.getByRole('option')).toHaveText([
+    'OpenRouter Opus 5.5',
+    'OpenRouter Sonnet 5.5',
+    'OpenRouter Haiku 5.5',
+  ])
+  await sessionOf(bobPage).getByLabel('Search all models').fill('kimi')
+  await expect(mainModel.getByRole('option', { name: 'openrouter/moonshotai/kimi-k3', exact: true })).toHaveCount(1)
+  await expect(mainModel.getByRole('option', { name: /fake|gpt|mistral/ })).toHaveCount(0)
+  await mainModel.selectOption('openrouter/moonshotai/kimi-k3')
+  await sessionOf(bobPage).getByRole('button', { name: 'Switch' }).click()
+  await expect(chipOf(bobPage, 'routed')).toHaveText('openrouter/moonshotai/kimi-k3 (medium) · auto')
+  await bobPage.keyboard.press('Escape')
+  await promptAndWait(bobPage, 'Carry on with Kimi', 2)
+
+  for (const provider of ['Google', 'xAI', 'DeepSeek', 'Z.ai']) await addLlmKey(bobPage, provider)
+  await openChat(bobPage, 'Bob on OpenRouter')
+  await openSession(bobPage)
+  for (const name of ['Gemini Flash', 'Grok 4.3', 'DeepSeek V4 Flash', 'GLM-4.7'])
+    await expect(sessionOf(bobPage).getByLabel('Main model').getByRole('option', { name, exact: true })).toHaveCount(1)
+  await bobPage.context().close()
+})
+
 test('f-5. the session has no separate default model: before the first prompt nothing to pick, then the chip shows the main model', async ({
   page,
 }) => {

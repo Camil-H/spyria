@@ -229,3 +229,25 @@ test('renameMember changes the display name of the member in the current workspa
     failedWith('A member can only change their own profile in their current workspace'),
   )
 })
+
+test.each([
+  ['OpenRouter', 'openrouter'],
+  ['Google', 'gemini'],
+  ['xAI', 'xai'],
+  ['DeepSeek', 'deepseek'],
+  ['Z.ai', 'zai'],
+])(
+  'adding a %s key stores it on the gateway’s %s provider and binds it to the member virtual key',
+  async (provider, gatewayProvider) => {
+    expect(await postCredentialAs(bobInAcme, { provider, secret: `${secretValue}-${provider}` })).toEqual({
+      status: 201,
+      text: '',
+    })
+    const key = gatewayKeyOf(
+      (await credentialRows()).find((row) => row.provider === provider) as { secret_ref: string },
+    )
+    expect(key.provider).toBe(gatewayProvider)
+    expect((await gatewayKeysOf(gatewayProvider)).map(({ id }) => id)).toContain(key.id)
+    expect(await boundKeyIdsOf(await virtualKeyIdOf(bob))).toContain(key.id)
+  },
+)

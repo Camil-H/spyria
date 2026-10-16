@@ -45,25 +45,25 @@ export const MyMachineSection = ({ workspaceId, memberId }: { workspaceId: Works
         )
       )}
       {localSessions ? (
-        <ul aria-label="Coding agents" className="flex flex-col gap-2 text-sm">
-          {(Object.keys(toolNames) as SignInTool[]).map((tool) => (
-            <li key={tool} className={rowClass}>
-              <span className="font-medium">{toolNames[tool]}</span>
-              {isOnline && machine.capacity?.signedIn?.includes(tool) ? (
-                <span className="text-(--c) [--c:light-dark(var(--color-green-900),var(--color-green-400))]">
-                  Connected
-                </span>
-              ) : (
-                <>
-                  <span className="text-muted">Not connected</span>
-                  <button type="button" className={`ml-auto ${ghostButtonClass}`} onClick={() => open(tool)}>
-                    Connect
-                  </button>
-                </>
-              )}
-            </li>
-          ))}
-        </ul>
+        <div className="flex flex-wrap gap-2">
+          {(Object.keys(toolNames) as SignInTool[]).map((tool) => {
+            const isConnected = isOnline && machine.capacity?.signedIn?.includes(tool)
+            return (
+              <button
+                key={tool}
+                type="button"
+                className={
+                  isConnected
+                    ? `${ghostButtonClass} border-(--c) text-(--c)! [--c:light-dark(var(--color-green-900),var(--color-green-400))]`
+                    : buttonClass
+                }
+                onClick={() => open(tool)}
+              >
+                {isConnected ? `✓ ${toolNames[tool]} connected` : `Use ${toolNames[tool]}`}
+              </button>
+            )
+          })}
+        </div>
       ) : (
         <p className="text-sm text-muted">Your workspace turned off sessions on members' machines</p>
       )}
@@ -71,7 +71,7 @@ export const MyMachineSection = ({ workspaceId, memberId }: { workspaceId: Works
         <HostCommandDialog label="Add my machine" code={code} personal onClose={() => setOpenDialog(null)} />
       )}
       {connectingTool && (
-        <Dialog label={`Connect ${toolNames[connectingTool]}`} closeLabel="Close" onClose={() => setOpenDialog(null)}>
+        <Dialog label={`Use ${toolNames[connectingTool]}`} closeLabel="Close" onClose={() => setOpenDialog(null)}>
           {machine && <p className="text-sm">Your machine: {statusLabelOf(machine)}</p>}
           {isOnline ? (
             machine.capacity?.signedIn?.includes(connectingTool) ? (

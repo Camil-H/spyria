@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { type AgentConversation, AgentStartFailure } from '../contracts/agent.ts'
 import { defaultResumeAfterMilliseconds, delegateTimeoutSeconds } from '../domain/delegation.ts'
-import type { HarnessLaunch } from '../domain/session-routing.ts'
+import { type HarnessLaunch, piModelOf } from '../domain/session-routing.ts'
 import { createHqAgentClient, piCommandOf } from './hq-agent-client.ts'
 
 const requests: { method: string; path: string; body?: string }[] = []
@@ -237,6 +237,29 @@ test('Pi lists Anthropic models on the Anthropic route without /v1 and the other
       },
     },
   })
+})
+
+test.each([
+  'openrouter/anthropic/claude-sonnet-5.5',
+  'gemini/gemini-flash-latest',
+  'xai/grok-4.3',
+  'deepseek/deepseek-v4-flash',
+  'zai/glm-4.7',
+])('Pi reaches %s on the chat route with its full gateway id', (id) => {
+  expect(piModelOf(id)).toBe(`hq/${id}`)
+  const command = piCommandOf(
+    'http://hq-gateway-relay:4000/v1',
+    { models: [{ id, name: id, reasoning: true }], compactionModel: id },
+    { sub: false },
+  )
+  const models = JSON.parse(command.find((part) => part.startsWith('HQ_PI_MODELS='))?.slice(13) ?? '{}')
+  expect(models.providers).toEqual({
+    hq: expect.objectContaining({
+      api: 'openai-completions',
+      models: [{ id, name: id, reasoning: true, compat: { supportsDeveloperRole: false } }],
+    }),
+  })
+  expect(command).toContain(`HQ_COMPACTION_MODEL=hq/${id}`)
 })
 
 test('a parent Pi reaches HQ tools and the router with its LLM token; a sub reaches only HQ tools with its own token from its own directory', async () => {

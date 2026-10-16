@@ -1,4 +1,4 @@
-import type { ChatId, MemberId, MessageId, Model, WorkspaceId } from '@hq/kernel'
+import type { ChatId, ListedModel, MemberId, MessageId, Model, WorkspaceId } from '@hq/kernel'
 import type { AgentEvent } from '../domain/agent-events.ts'
 import type { AgentStep, StepDelegation, StoredStep } from '../domain/agent-steps.ts'
 import type { ConversationChat, Message, MessageChange } from '../domain/message.ts'
@@ -121,6 +121,7 @@ export type DelegationRepository = {
 export type RoutingRepository = {
   chatRouting(chatId: ChatId): Promise<ChatRouting>
   reachableModels(memberId: MemberId): Promise<readonly Model[] | undefined>
+  listedModels(): readonly ListedModel[]
   update(
     chatId: ChatId,
     fields: Partial<{

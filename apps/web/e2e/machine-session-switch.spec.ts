@@ -48,7 +48,7 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/')
 })
 
-test('1 and 4. the admin turns sessions on members machines off: My machine shows the notice with no Add my machine and no Connect, a refused add, no My machine option in the chip', async ({
+test('1 and 4. the admin turns sessions on members machines off: My machine shows the notice with no Add my machine and no Use Claude Code or Use Codex, a refused add, no My machine option in the chip', async ({
   page,
   browser,
   workerStack,
@@ -60,7 +60,7 @@ test('1 and 4. the admin turns sessions on members machines off: My machine show
   await openProfile(bobPage)
   await expect(machineSectionOf(bobPage)).toContainText(turnedOffNotice)
   await expect(machineSectionOf(bobPage).getByRole('button', { name: 'Add my machine' })).toHaveCount(0)
-  await expect(machineSectionOf(bobPage).getByRole('button', { name: 'Connect' })).toHaveCount(0)
+  await expect(machineSectionOf(bobPage).getByRole('button', { name: /Use Claude Code|Use Codex/ })).toHaveCount(0)
   await expect(machineSectionOf(bobPage)).not.toContainText('docker')
   await expect(llmSectionOf(bobPage).getByRole('button', { name: /Claude Code|Codex/ })).toHaveCount(0)
 

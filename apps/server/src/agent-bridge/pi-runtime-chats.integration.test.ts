@@ -63,6 +63,33 @@ test.each([
     models: ['mistral/mistral-large-latest', 'mistral/mistral-medium-latest', 'mistral/mistral-small-latest'],
     model: 'mistral/mistral-medium-latest',
   },
+  ...[
+    {
+      provider: 'OpenRouter',
+      models: [
+        'openrouter/anthropic/claude-opus-5.5',
+        'openrouter/anthropic/claude-sonnet-5.5',
+        'openrouter/anthropic/claude-haiku-5.5',
+      ],
+    },
+    {
+      provider: 'Google',
+      models: ['gemini/gemini-pro-latest', 'gemini/gemini-flash-latest', 'gemini/gemini-flash-lite-latest'],
+    },
+    { provider: 'xAI', models: ['xai/grok-4.7', 'xai/grok-4.3', 'xai/grok-code-fast-1'] },
+    {
+      provider: 'DeepSeek',
+      models: ['deepseek/deepseek-v4-pro', 'deepseek/deepseek-v4-flash', 'deepseek/deepseek-v3.2'],
+    },
+    { provider: 'Z.ai', models: ['zai/glm-5.3', 'zai/glm-4.7', 'zai/glm-5.3-flash'] },
+  ].map(({ provider, models }) => ({
+    provider,
+    piProvider: 'hq',
+    baseUrl: 'http://fake-gateway-relay.test:4000/v1',
+    api: 'openai-completions',
+    models,
+    model: models[1] as string,
+  })),
 ])(
   'a prompter with only an $provider key runs Pi on a workspace host with only the reachable models, and the turn streams and is stored once',
   async ({ provider, piProvider, baseUrl, api, models, model }) => {
@@ -127,6 +154,40 @@ test('a routing change mid-session switches the same Pi session to the other pro
   expect(relay.thoughtLevels).toEqual(['high'])
   expect(launches()).toHaveLength(1)
   expect(relay.prompts).toEqual(['Start large', 'Now on OpenAI'])
+})
+
+test('a manual pick from the full listing relaunches Pi with that model on the same session; an unlisted model is refused', async () => {
+  const { launches } = await workspaceHost()
+  await keysOnly('OpenRouter')
+  const chat = await newRuntimeChat()
+  const first = await finished(await prompt(chat, 'Start on OpenRouter', bobInAcme), chat)
+  expect(first.at(-1)?.body).toBe(
+    '[t1] Hello from the stub (model hq/openrouter/anthropic/claude-sonnet-5.5, mode default).',
+  )
+  const [firstSession] = await sessionsStartedOf(chat)
+  const pick = (sessionModel: string) =>
+    mutate(bobInAcme, 'conversation.updateChatRouting', { workspaceId: acme, chatId: chat, sessionModel })
+  expect(await pick('openrouter/vendor/not-listed')).not.toEqual(succeeded)
+  expect(await pick('openrouter/moonshotai/kimi-k3')).toEqual(succeeded)
+
+  const second = await finished(await prompt(chat, 'Now on Kimi', bobInAcme), chat)
+  expect(second.map((reply) => reply.body)).toEqual([
+    '[t2] Hello from the stub (model hq/openrouter/moonshotai/kimi-k3, mode default).',
+  ])
+  expect(launches()).toHaveLength(2)
+  const relaunch = launches()[1] as Launch
+  expect(relaunch.agent).toMatchObject({
+    acp_model: 'hq/openrouter/moonshotai/kimi-k3',
+    acp_resume_session_id: String(firstSession?.sessionId),
+  })
+  const { providers } = JSON.parse(piFilesOf(relaunch).HQ_PI_MODELS ?? '{}')
+  expect(providers.hq.models.map(({ id }: { id: string }) => id)).toEqual([
+    'openrouter/anthropic/claude-opus-5.5',
+    'openrouter/anthropic/claude-sonnet-5.5',
+    'openrouter/anthropic/claude-haiku-5.5',
+    'openrouter/moonshotai/kimi-k3',
+  ])
+  expect(piFilesOf(relaunch).HQ_COMPACTION_MODEL).toBe('hq/openrouter/anthropic/claude-haiku-5.5')
 })
 
 test('Stop mid-command cancels the turn without deleting the conversation, and the next prompt continues the Pi session', async () => {

@@ -243,7 +243,14 @@ test('a valid code yields one token whose hash only is stored, a renewed code pa
 
   await database.$client`update runtime_hosts set removed_at = now() where owner_id is not null`
   const { id: machineId, host: machine } = await pairedMachine(bobInAcme)
-  expect((await hostRow(machineId)).capacity).toEqual({ ...hostSystem, cap: 6, personal: true, signedIn: [] })
+  expect((await hostRow(machineId)).capacity).toEqual({
+    ...hostSystem,
+    cap: 6,
+    personal: true,
+    signedIn: [],
+    credentialsChangedAt: {},
+    expiredSignIns: {},
+  })
   machine.send({ type: 'heartbeat', memoryFreeBytes: gibibyte, running: 0, signedIn: ['claude'] })
   await waitFor(async () => ((await hostRow(machineId)).capacity as { signedIn: string[] }).signedIn.length === 1)
   await database.$client`update runtime_hosts set removed_at = now() where owner_id is not null`

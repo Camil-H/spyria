@@ -18,9 +18,30 @@ type BifrostGateway = LlmGateway &
 
 const notFound = 404
 const conflict = 409
-const providersCreatedOnDemand = ['openai', 'anthropic', 'mistral', 'typesafe']
+const zaiProviderSetup = {
+  network_config: { base_url: 'https://api.z.ai/api/paas/v4' },
+  custom_provider_config: {
+    base_provider_type: 'openai',
+    request_path_overrides: {
+      chat_completion: '/chat/completions',
+      chat_completion_stream: '/chat/completions',
+      list_models: '/models',
+    },
+  },
+}
+const providersCreatedOnDemand: Record<string, object> = {
+  openai: {},
+  anthropic: {},
+  mistral: {},
+  typesafe: {},
+  openrouter: {},
+  gemini: {},
+  xai: {},
+  deepseek: {},
+  zai: zaiProviderSetup,
+}
 const modelListMilliseconds = 60 * 60 * 1000
-const modelListSize = 1000
+const modelListSize = 5000
 type Prices = { input_cost_per_token?: number; output_cost_per_token?: number }
 type ModelDetails = Prices & {
   name: string
@@ -193,8 +214,9 @@ export const createLlmGateway = ({
     addProviderKey: async ({ provider, name, secret }) => {
       const keyBody = { name, value: secret.reveal(), models: ['*'], weight: 1 }
       let added = await request('POST', `/api/providers/${provider}/keys`, keyBody)
-      if (!added.found && providersCreatedOnDemand.includes(provider)) {
-        await request('POST', '/api/providers', { provider, keys: [] })
+      const setup = providersCreatedOnDemand[provider]
+      if (!added.found && setup) {
+        await request('POST', '/api/providers', { provider, keys: [], ...setup })
         added = await request('POST', `/api/providers/${provider}/keys`, keyBody)
       }
       if (!added.found) throw new UnsupportedProvider(provider)

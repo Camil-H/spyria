@@ -1,6 +1,6 @@
 import { type ChatId, rereadDollarsOf, type WorkspaceId } from '@hq/kernel'
 import { buttonClass, fieldClass, formatCost, ghostButtonClass, labelClass } from '@hq/ui'
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import type { Harness } from '../domain/session-routing.ts'
 import type { ChatRoutingRead } from '../queries/get-chat-routing.ts'
 import { useConversationCommands } from './providers.tsx'
@@ -13,6 +13,7 @@ type Fields = {
 }
 
 const microsPerDollar = 1_000_000
+const searchedModelsShown = 50
 
 const SessionDialog = ({
   chip: { workspaceId, chatId, model, subagentPolicy, harness, localSession, isOwner },
@@ -35,10 +36,22 @@ const SessionDialog = ({
 }) => {
   const commands = useConversationCommands()
   const [pendingModel, setPendingModel] = useState<string | null>(null)
+  const [modelSearch, setModelSearch] = useState('')
+  const mainModelId = useId()
   const update = (fields: Fields) => commands.updateChatRouting({ workspaceId, chatId, ...fields })
   const reachableIds = routing?.reachableModels.map(({ id }) => id) ?? []
-  const optionsWith = (current: string | null) =>
-    [...(current && !reachableIds.includes(current) ? [current] : []), ...reachableIds].map((id) => (
+  const wanted = modelSearch.trim().toLowerCase()
+  const searchedIds = wanted
+    ? (routing?.listedModelIds ?? []).filter((id) => id.toLowerCase().includes(wanted)).slice(0, searchedModelsShown)
+    : []
+  const optionsWith = (...current: (string | null)[]) =>
+    [
+      ...new Set([
+        ...current.flatMap((id) => (id && !reachableIds.includes(id) ? id : [])),
+        ...reachableIds,
+        ...searchedIds,
+      ]),
+    ].map((id) => (
       <option key={id} value={id}>
         {nameOf(id)}
       </option>
@@ -73,16 +86,25 @@ const SessionDialog = ({
         </label>
       )}
       {model && !harness && (
-        <label className={labelClass}>
-          Main model
+        <div className={labelClass}>
+          <label htmlFor={mainModelId}>Main model</label>
+          <input
+            type="search"
+            aria-label="Search all models"
+            placeholder="Search all models"
+            className={fieldClass}
+            value={modelSearch}
+            onChange={(event) => setModelSearch(event.target.value)}
+          />
           <select
+            id={mainModelId}
             className={fieldClass}
             value={pendingModel ?? model}
             onChange={(event) => setPendingModel(event.target.value === model ? null : event.target.value)}
           >
-            {optionsWith(model)}
+            {optionsWith(model, pendingModel)}
           </select>
-        </label>
+        </div>
       )}
       {pendingModel && (
         <div className="flex flex-col gap-2">

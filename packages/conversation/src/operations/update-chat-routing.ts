@@ -1,4 +1,4 @@
-import { type ChatId, chatModelsOf, type MemberId } from '@hq/kernel'
+import { type ChatId, isPickableModel, type MemberId } from '@hq/kernel'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { InvalidRouting } from '../domain/errors.ts'
 import {
@@ -43,7 +43,7 @@ export const updateChatRouting = (
       throw new InvalidRouting('Only sessions on your machine pick the model of their tool')
     if (sessionModel !== undefined) {
       const reachable = await routing.reachableModels(memberId)
-      if (reachable && !chatModelsOf(reachable).some(({ id }) => id === sessionModel))
+      if (reachable && !isPickableModel(sessionModel, reachable, routing.listedModels()))
         throw new InvalidRouting(unreachableSessionNoticeOf(sessionModel))
       await routing.record({
         chatId,

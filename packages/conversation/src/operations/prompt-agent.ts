@@ -2,6 +2,7 @@ import {
   type ChatId,
   chatModelsOf,
   cheapestModelOf,
+  isPickableModel,
   type MemberId,
   type MessageId,
   type WorkspaceId,
@@ -60,11 +61,15 @@ export const piLlmOf = async (
   effort: string | null,
 ): Promise<AgentLlmChoice> => {
   const models = await reachableChatModelsOf(dependencies, prompterId)
+  const listing = dependencies.classifier?.listedModels() ?? []
+  const launched = models.some(({ id }) => id === model)
+    ? models
+    : [...models, { name: model, ...listing.find(({ id }) => id === model), id: model }]
   return {
     adapterModel: piModelOf(model),
     effort: thoughtLevelOf(effort),
     pi: {
-      models: models.map(({ id, name, contextWindow }) => ({ id, name, contextWindow, reasoning: true })),
+      models: launched.map(({ id, name, contextWindow }) => ({ id, name, contextWindow, reasoning: true })),
       compactionModel: cheapestModelOf(models)?.id ?? model,
     },
   }
@@ -106,25 +111,47 @@ const routeSession = async (
   }
 }
 
+const relaunchedConversationOf = async (
+  dependencies: AgentDependencies,
+  chat: AgentChat,
+  conversation: AgentConversation,
+  llm: AgentLlmChoice,
+) => {
+  const { agentClient, runtimes, transactor } = dependencies
+  await agentClient.deleteConversation(conversation).catch(() => undefined)
+  await runtimes.forgetConversation(chat)
+  const resumeSessionId = await transactor.run(({ agentEvents }) => agentEvents.lastSessionId(chat.chatId))
+  return createdConversationOf(dependencies, chat, conversation, { ...llm, resumeSessionId })
+}
+
 const keepSession = async (
-  { transactor, agentClient }: AgentDependencies,
+  dependencies: AgentDependencies,
   chat: AgentChat,
   conversation: AgentConversation,
   prompterId: MemberId,
 ): Promise<Prepared> => {
+  const { transactor, agentClient, classifier } = dependencies
   const { routing, reachable } = await transactor.run(async ({ routing }) => ({
     routing: await routing.chatRouting(chat.chatId),
-    reachable: await routing.reachableModels(prompterId),
+    reachable: (await routing.reachableModels(prompterId)) ?? [],
   }))
   const { model, reasoningEffort, agentModel } = routing
   if (!model) return { conversation }
-  if (!chatModelsOf(reachable ?? []).some((candidate) => candidate.id === model))
+  if (!isPickableModel(model, reachable, classifier?.listedModels() ?? []))
     return { refusal: unreachableSessionNoticeOf(model) }
-  if (agentModel !== model) {
-    await agentClient.switchModel(conversation, piModelOf(model), thoughtLevelOf(reasoningEffort))
-    await transactor.run(({ routing }) => routing.setAgentModel(chat.chatId, model))
-  }
-  return { conversation }
+  if (agentModel === model) return { conversation }
+  const isLaunched = chatModelsOf(reachable).some((candidate) => candidate.id === model)
+  if (isLaunched) await agentClient.switchModel(conversation, piModelOf(model), thoughtLevelOf(reasoningEffort))
+  const kept = isLaunched
+    ? conversation
+    : await relaunchedConversationOf(
+        dependencies,
+        chat,
+        conversation,
+        await piLlmOf(dependencies, prompterId, model, reasoningEffort),
+      )
+  await transactor.run(({ routing }) => routing.setAgentModel(chat.chatId, model))
+  return { conversation: kept }
 }
 
 const keepAdapterModel = async (

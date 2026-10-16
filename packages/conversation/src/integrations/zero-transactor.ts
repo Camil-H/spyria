@@ -10,6 +10,7 @@ import {
   isSessionStartPending,
   lastAgentEvent,
   lastSessionId,
+  listedModelsOf,
   lockChatTurn,
   memberModelsOf,
   pendingPrompts,
@@ -219,6 +220,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         return { ...row, ownerId: row.ownerId === null ? null : memberId(row.ownerId) }
       },
       reachableModels: (id) => memberModelsOf(tx, contextWorkspaceId, id),
+      listedModels: listedModelsOf,
       update: (id, fields) =>
         tx.mutate.chats.update({
           workspaceId: contextWorkspaceId,
