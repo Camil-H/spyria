@@ -12,10 +12,10 @@ import {
 } from '@hq/kernel'
 import type { ChangeRow, ChatRow, FileRow, MessageRow, Snapshot } from './schema.ts'
 
-const acme = workspaceId('workspace-acme')
-const globex = workspaceId('workspace-globex')
-const alice = memberId('member-alice')
-const bob = memberId('member-bob')
+export const acme = workspaceId('workspace-acme')
+export const globex = workspaceId('workspace-globex')
+export const alice = memberId('member-alice')
+export const bob = memberId('member-bob')
 const onboarding = projectId('project-onboarding')
 const billing = projectId('project-billing')
 const launch = projectId('project-launch')

@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test'
-import { chatId, memberId, workspaceId } from '@hq/kernel'
+import { chatId, workspaceId } from '@hq/kernel'
+import { alice } from './mock-data.ts'
 import { createZeroStore } from './zero-store.ts'
 
 const storageOf = (items: Map<string, string>): Storage => ({
@@ -12,7 +13,6 @@ const storageOf = (items: Map<string, string>): Storage => ({
   removeItem: (key) => void items.delete(key),
   clear: () => items.clear(),
 })
-const alice = memberId('member-alice')
 const storeOn = (items: Map<string, string>) =>
   createZeroStore({
     memberId: alice,

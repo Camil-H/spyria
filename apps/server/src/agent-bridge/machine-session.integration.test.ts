@@ -14,15 +14,12 @@ import {
   succeeded,
   waitFor,
 } from '../testing.ts'
-import { createHqAgentRelay } from './hq-agent-relay.ts'
 
 setDefaultTimeout(40_000)
-const { database, app, fakeHost, mutate, newRuntimeChat, prompt, turnOf, messagesOf, storedAgentEventsOf, ...stack } =
+const { database, app, mutate, newRuntimeChat, prompt, turnOf, messagesOf, storedAgentEventsOf, finished, ...stack } =
   await startAgentStack()
-const relays: ReturnType<typeof createHqAgentRelay>[] = []
 afterEach(async () => {
   await database.$client`update runtime_hosts set removed_at = now() where owner_id = ${alice} and removed_at is null`
-  await Promise.all(relays.splice(0).map((relay) => relay.stop()))
 })
 
 const machine = async ({
@@ -33,26 +30,11 @@ const machine = async ({
   gapMilliseconds?: number
   startFails?: boolean
   signedIn?: string[]
-} = {}) => {
-  const relay = createHqAgentRelay({ gapMilliseconds, startFails })
-  relays.push(relay)
-  await fakeHost('Machine', { ownerId: alice, signedIn, agentServer: relay.agentServer })
-  return relay
-}
+} = {}) => (await stack.agentHost('Machine', { ownerId: alice, signedIn, gapMilliseconds, startFails })).relay
 const newMachineChat = () => newRuntimeChat({ harness: 'claude-code' })
 const repliesTo = (messageId: string) => stack.repliesTo(messageId, ['kind', 'body', 'step'])
-const finished = async (question: string, chat: ChatId) => {
-  await waitFor(async () => (await repliesTo(question)).some((reply) => reply.body.includes('Hello from the stub')))
-  await waitFor(async () => (await turnOf(chat)) === null)
-  return repliesTo(question)
-}
 const bodiesOf = (replies: { kind: string; body: string }[]) =>
   replies.map(({ kind, body }) => (kind === 'step' ? body : `${kind}:${body}`))
-const openStream = async (chat: ChatId) => {
-  const { frames, subscribed } = await stack.openStream(chat)
-  await subscribed
-  return frames
-}
 const subscribeBeforeStoredMilliseconds = 200
 const streamedText = (frames: string[], isReasoning = false) =>
   frames
@@ -86,7 +68,7 @@ test.each([
   async ({ tool, harness, model }) => {
     const relay = await machine({ signedIn: [tool] })
     const chat = await newRuntimeChat({ harness })
-    const frames = await openStream(chat)
+    const frames = await stack.subscribedFrames(chat)
     const question = await prompt(chat, 'stub:tools')
     const replies = await finished(question, chat)
 
@@ -128,7 +110,7 @@ test.each([
 test('thinking streams as reasoning, then is stored as one thought with its duration', async () => {
   await machine()
   const chat = await newMachineChat()
-  const frames = await openStream(chat)
+  const frames = await stack.subscribedFrames(chat)
   const replies = await finished(await prompt(chat, 'stub:think'), chat)
 
   expect(streamedText(frames, true)).toBe('Thinking about the plan.')
@@ -144,7 +126,7 @@ test('Stop closes the turn as stopped, and the next prompt continues the same AC
   const relay = await machine()
   const chat = await newMachineChat()
   const stopped = await prompt(chat, 'stub:long')
-  await waitFor(async () => (await repliesTo(stopped)).some((reply) => reply.body === 'command'))
+  await stack.commandShown(stopped)
   expect(await mutate(aliceInAcme, 'conversation.stopAgent', { workspaceId: acme, chatId: chat })).toEqual(succeeded)
   await waitFor(async () => (await turnOf(chat)) === null)
   const stoppedReplies = await repliesTo(stopped)
@@ -171,7 +153,7 @@ test('Stop closes the turn as stopped, and the next prompt continues the same AC
 test('a socket dropped mid-turn resumes after the last stored seq: no event lost, none stored or streamed twice', async () => {
   const relay = await machine({ gapMilliseconds: 250 })
   const chat = await newMachineChat()
-  const frames = await openStream(chat)
+  const frames = await stack.subscribedFrames(chat)
   const question = await prompt(chat, 'stub:tools')
   await waitFor(async () => (await repliesTo(question)).some((reply) => reply.body === 'file'))
   relay.dropSockets()
@@ -215,9 +197,9 @@ test('the adapter’s models list in the routing read, and a pick is switched in
 test('a late chunk of a stopped turn does not land in the next turn', async () => {
   await machine({ gapMilliseconds: 250 })
   const chat = await newMachineChat()
-  const frames = await openStream(chat)
+  const frames = await stack.subscribedFrames(chat)
   const stopped = await prompt(chat, 'stub:long stub:late')
-  await waitFor(async () => (await repliesTo(stopped)).some((reply) => reply.body === 'command'))
+  await stack.commandShown(stopped)
   expect(await mutate(aliceInAcme, 'conversation.stopAgent', { workspaceId: acme, chatId: chat })).toEqual(succeeded)
   const next = await prompt(chat, 'stub:tools')
   const replies = await finished(next, chat)
@@ -311,9 +293,7 @@ test.each([
 )
 
 test('nothing starts for a signed-out tool, a non-owner or a choice of the HQ runtime', async () => {
-  const relay = createHqAgentRelay()
-  relays.push(relay)
-  await fakeHost('Machine', { ownerId: alice, signedIn: [], agentServer: relay.agentServer })
+  const relay = await machine({ signedIn: [] })
   const signedOut = await newRuntimeChat()
   expect(await chooseRunsOn(signedOut, 'claude-code')).toEqual(succeeded)
   await waitFor(async () => (await startJobsOf(signedOut)).every(({ state }) => state === 'done'))
@@ -362,13 +342,11 @@ test('before the owner chooses, a member’s prompt is refused with the waiting 
 })
 
 const machineLosingFirstCreate = async () => {
-  const relay = createHqAgentRelay()
-  relays.push(relay)
   const createReached = Promise.withResolvers<void>()
-  const host = await fakeHost('Machine', {
+  const { relay, host } = await stack.agentHost('Machine', {
     ownerId: alice,
     signedIn: ['claude'],
-    agentServer: {
+    agentServerOf: (relay) => ({
       ...relay.agentServer,
       respond: async (request, container) => {
         const response = await relay.agentServer.respond(request, container)
@@ -377,7 +355,7 @@ const machineLosingFirstCreate = async () => {
         createReached.resolve()
         return new Promise(() => {})
       },
-    },
+    }),
   })
   return { relay, host, createReached: createReached.promise }
 }
@@ -398,9 +376,7 @@ test('a session start whose answer is lost to a host reconnect keeps its one con
 })
 
 test('the machine going offline while its runtime starts shows "Your machine is offline", not a start failure', async () => {
-  const relay = createHqAgentRelay()
-  relays.push(relay)
-  const host = await fakeHost('Machine', { ownerId: alice, signedIn: ['claude'], agentServer: relay.agentServer })
+  const { relay, host } = await stack.agentHost('Machine', { ownerId: alice, signedIn: ['claude'] })
   host.hold('start')
   const chat = await newRuntimeChat()
   expect(await chooseRunsOn(chat, 'claude-code')).toEqual(succeeded)

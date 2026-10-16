@@ -1,43 +1,27 @@
-import { afterEach, expect, setDefaultTimeout, test } from 'bun:test'
+import { expect, setDefaultTimeout, test } from 'bun:test'
 import type { ChatId } from '@hq/kernel'
-import { acme, addLlmKey, aliceInAcme, bob, bobInAcme, startAgentStack, succeeded, waitFor } from '../testing.ts'
-import { createHqAgentRelay } from './hq-agent-relay.ts'
+import {
+  acme,
+  addLlmKey,
+  aliceInAcme,
+  type Launch,
+  bob,
+  bobInAcme,
+  startAgentStack,
+  succeeded,
+  waitFor,
+} from '../testing.ts'
 
 setDefaultTimeout(40_000)
-const { database, fakeHost, mutate, newRuntimeChat, prompt, turnOf, messagesOf, storedAgentEventsOf, ...stack } =
+const { database, mutate, newRuntimeChat, prompt, turnOf, messagesOf, storedAgentEventsOf, ...stack } =
   await startAgentStack({ routing: true })
-const relays: ReturnType<typeof createHqAgentRelay>[] = []
-afterEach(async () => {
-  stack.setFakeLlmScript(undefined)
-  await Promise.all(relays.splice(0).map((relay) => relay.stop()))
-})
-
-type Launch = {
-  agent: { acp_command: string[]; acp_model?: string; acp_thought_level?: string; acp_resume_session_id?: string }
-  secrets: Record<string, { value: string }>
-  parent_conversation_id?: string
-}
-const workspaceHost = async () => {
-  const relay = createHqAgentRelay()
-  relays.push(relay)
-  const host = await fakeHost('Workspace host', { agentServer: relay.agentServer })
-  return { relay, host, launches: () => relay.created as Launch[] }
-}
+const workspaceHost = () => stack.agentHost('Workspace host')
 const keysOnly = async (...providers: string[]) => {
   await database.$client`delete from llm_credentials where user_id = ${bob}`
   for (const provider of providers) await addLlmKey(bob, provider)
 }
 const repliesTo = (messageId: string) => stack.repliesTo(messageId, ['kind', 'body', 'step'])
-const finished = async (question: string, chat: ChatId) => {
-  await waitFor(
-    async () => (await repliesTo(question)).some((reply) => reply.body.includes('Hello from the stub')),
-    15_000,
-  )
-  await waitFor(async () => (await turnOf(chat)) === null, 15_000)
-  return repliesTo(question)
-}
-const commandShown = (question: string) =>
-  waitFor(async () => (await repliesTo(question)).some((reply) => reply.body === 'command'))
+const finished = (question: string, chat: ChatId) => stack.finished(question, chat, 15_000)
 const stop = async (chat: ChatId) => {
   expect(await mutate(aliceInAcme, 'conversation.stopAgent', { workspaceId: acme, chatId: chat })).toEqual(succeeded)
   await waitFor(async () => (await turnOf(chat)) === null)
@@ -48,10 +32,7 @@ const piFilesOf = ({ agent }: Launch) =>
       .filter((part) => /^(HQ_PI_\w+|HQ_COMPACTION_MODEL)=/.test(part))
       .map((part) => [part.slice(0, part.indexOf('=')), part.slice(part.indexOf('=') + 1)]),
   )
-const decisionsOf = (chat: ChatId) =>
-  database.$client`
-    select role, model, member_id, conversation_id from routing_decisions
-    where workspace_id = ${acme} and chat_id = ${chat} order by created_at`
+const decisionsOf = (chat: ChatId) => stack.decisionsOf(chat, ['role', 'model', 'member_id', 'conversation_id'])
 const sessionsStartedOf = async (chat: ChatId) =>
   (await storedAgentEventsOf(chat))
     .map((event) => (event.payload as { event: { update: Record<string, unknown> } }).event.update)
@@ -88,8 +69,7 @@ test.each([
     const { launches } = await workspaceHost()
     await keysOnly(provider)
     const chat = await newRuntimeChat()
-    const { frames, subscribed } = await stack.openStream(chat)
-    await subscribed
+    const frames = await stack.subscribedFrames(chat)
     const replies = await finished(await prompt(chat, 'stub:tools', bobInAcme), chat)
 
     const acpModel = `${piProvider}/${model}`
@@ -153,7 +133,7 @@ test('Stop mid-command cancels the turn without deleting the conversation, and t
   const { launches } = await workspaceHost()
   const chat = await newRuntimeChat({ defaultModel: 'fake/fake-medium' })
   const stopped = await prompt(chat, 'stub:long')
-  await commandShown(stopped)
+  await stack.commandShown(stopped)
   await stop(chat)
   expect((await repliesTo(stopped)).at(-1)).toMatchObject({ kind: 'notice', body: 'Stopped by Alice' })
 

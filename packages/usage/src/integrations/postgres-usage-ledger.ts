@@ -1,7 +1,7 @@
 import type { Transact } from '@hq/db/zero-queries'
 import type { WorkspaceId } from '@hq/kernel'
 import type { UsageLedger } from '../contracts/usage-sync.ts'
-import { usageSync } from '../domain/usage.ts'
+import { usageJobTypes } from '../domain/usage.ts'
 
 const recordCalls = `
   with incoming as (
@@ -55,7 +55,7 @@ export const createPostgresUsageLedger = (transact: Transact): UsageLedger => ({
          values ($1, gen_random_uuid()::text, $2, '{}'::jsonb,
            now() + make_interval(secs => $3::double precision / 1000), 0, 'queued')
          on conflict do nothing`,
-        [workspaceId, usageSync.jobType, delayMilliseconds],
+        [workspaceId, usageJobTypes.sync, delayMilliseconds],
       )
     }),
 })

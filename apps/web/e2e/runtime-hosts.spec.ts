@@ -2,7 +2,7 @@ import { type ChildProcess, execFileSync, spawn } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { test as base, expect, mainOf, type Page, sidebarOf } from './fixtures'
+import { test as base, expect, hostsSectionOf, mainOf, openSettings, type Page, sidebarOf, urlOf } from './fixtures'
 import { viteUrl } from './stack-ports'
 
 const hostProgram = new URL('../../host/src/main.ts', import.meta.url).pathname
@@ -85,20 +85,14 @@ const test = base.extend<{ hosts: Hosts }>({
   },
 })
 
-const settingsOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Runtime hosts' })
-const hostRowOf = (page: Page, hostName: string) => settingsOf(page).getByRole('listitem').filter({ hasText: hostName })
+const hostRowOf = (page: Page, hostName: string) =>
+  hostsSectionOf(page).getByRole('listitem').filter({ hasText: hostName })
 const addDialogOf = (page: Page) => page.getByRole('dialog', { name: 'Add runtime host' })
 const commandOf = (page: Page, dialogName = 'Add runtime host') =>
   page.getByRole('dialog', { name: dialogName }).getByRole('textbox', { name: 'Command' })
-const urlOf = (command: string) => `${viteUrl}/h/${command.match(/\/h\/([A-Z0-9]{8})\b/)?.[1]}`
-
-const openSettings = async (page: Page) => {
-  await sidebarOf(page).getByRole('link', { name: 'Workspace settings' }).click()
-  await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Workspace settings' })).toBeVisible()
-}
 
 const addHost = async (page: Page, hostName: string) => {
-  await settingsOf(page).getByRole('button', { name: 'Add runtime host' }).click()
+  await hostsSectionOf(page).getByRole('button', { name: 'Add runtime host' }).click()
   await addDialogOf(page).getByRole('textbox', { name: 'Host name' }).fill(hostName)
   await addDialogOf(page).getByRole('button', { name: 'Add' }).click()
   const command = await commandOf(page).inputValue()
@@ -130,8 +124,8 @@ test.describe('1. access', () => {
     page,
   }) => {
     await openSettings(page)
-    await expect(settingsOf(page).getByRole('heading', { level: 2, name: 'Runtime hosts' })).toBeVisible()
-    await expect(settingsOf(page).getByText('No runtime host yet')).toBeVisible()
+    await expect(hostsSectionOf(page).getByRole('heading', { level: 2, name: 'Runtime hosts' })).toBeVisible()
+    await expect(hostsSectionOf(page).getByText('No runtime host yet')).toBeVisible()
   })
 
   test.describe('as a member', () => {
@@ -142,7 +136,7 @@ test.describe('1. access', () => {
       await expect(sidebarOf(page).getByRole('link', { name: 'Workspace settings' })).toHaveCount(0)
       await page.goto('/w/workspace-acme/settings')
       await expect(mainOf(page).getByText('Only workspace admins can see this page')).toBeVisible()
-      await expect(settingsOf(page)).toHaveCount(0)
+      await expect(hostsSectionOf(page)).toHaveCount(0)
     })
   })
 })
@@ -153,7 +147,7 @@ test('2. adding a host shows one copyable command that replaces hq-host and pick
 }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write'])
   await openSettings(page)
-  await settingsOf(page).getByRole('button', { name: 'Add runtime host' }).click()
+  await hostsSectionOf(page).getByRole('button', { name: 'Add runtime host' }).click()
   await addDialogOf(page).getByRole('textbox', { name: 'Host name' }).fill('Home server')
   await addDialogOf(page).getByRole('button', { name: 'Add' }).click()
 
@@ -219,7 +213,7 @@ test('3, 4, 6 and 7. a host’s lifecycle: online with its capacity, its code wo
     await expect(confirmation).toContainText('Home server')
     await confirmation.getByRole('button', { name: 'Remove' }).click()
     await expect(hostRowOf(page, 'Home server')).toHaveCount(0)
-    await expect(settingsOf(page).getByText('No runtime host yet')).toBeVisible()
+    await expect(hostsSectionOf(page).getByText('No runtime host yet')).toBeVisible()
     expect(await secondRun.exited).not.toBe(0)
     expect(secondRun.output()).toContain('This host was removed')
   })
@@ -245,7 +239,7 @@ test('5. an expired code is refused, the row shows Code expired and New command 
   await expect(hostRowOf(page, 'Home server')).toContainText('Waiting for the host')
   hosts.start(freshUrl)
   await expectOnline(page, 'Home server')
-  await expect(settingsOf(page).getByRole('listitem')).toHaveCount(1)
+  await expect(hostsSectionOf(page).getByRole('listitem')).toHaveCount(1)
 })
 
 test('9. badges show rooted Docker and limits that are not enforced', async ({ page, hosts }) => {

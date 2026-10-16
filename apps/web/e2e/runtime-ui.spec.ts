@@ -2,28 +2,26 @@ import {
   agentReplyText,
   expect,
   mainOf,
+  messageContaining,
   messageItemsOf,
+  newSessionNotice,
   openChat,
   type Page,
+  research,
   sendMessage,
   test,
   workingIndicatorOf,
 } from './fixtures'
-import { openPageAs, type WorkerStack } from './stack'
+import { openPageAs, runtimeStateOf, type WorkerStack } from './stack'
 
-const research = 'chat-research'
 const heldScript = { hold: 'answer' }
-const newSessionNotice = 'The agent started a new session; it does not remember earlier messages'
 const runtimeStatusOf = (page: Page) => mainOf(page).getByRole('status', { name: 'Runtime' })
 const stopButtonOf = (page: Page) => mainOf(page).getByRole('button', { name: 'Stop' })
 const retryButtonOf = (page: Page) => runtimeStatusOf(page).getByRole('button', { name: 'Could not start · Retry' })
-const itemsWith = (page: Page, text: string) => messageItemsOf(page).filter({ hasText: text })
 
 const turnOf = async (workerStack: WorkerStack, chatId: string) =>
   (await workerStack.database.$client`select agent_turn_message_id from chats where id = ${chatId}`)[0]
     ?.agent_turn_message_id
-const runtimeStateOf = async (workerStack: WorkerStack, chatId: string) =>
-  (await workerStack.database.$client`select state from runtimes where chat_id = ${chatId}`)[0]?.state
 const enqueueJob = (workerStack: WorkerStack, type: string, payload: object) =>
   workerStack.database.$client`
     insert into jobs (workspace_id, id, type, payload, run_at, attempts, state)
@@ -69,7 +67,7 @@ test.describe('without a warm runtime', () => {
     await expect(runtimeStatusOf(page)).toHaveText('Could not start · Retry')
     await expect(retryButtonOf(page)).toBeVisible()
     await expect(mainOf(page).getByRole('button', { name: /Retry/ })).toHaveCount(1)
-    await expect(itemsWith(page, 'The agent could not start')).toHaveCount(1)
+    await expect(messageContaining(page, 'The agent could not start')).toHaveCount(1)
     await expect(workingIndicatorOf(page)).toHaveCount(0)
     await failRuntimeCreation(false)
     await retryButtonOf(page).click()
@@ -78,7 +76,7 @@ test.describe('without a warm runtime', () => {
     await expect(retryButtonOf(page)).toHaveCount(0)
     await release('boot')
     await expect(runtimeStatusOf(page)).toHaveText('Ready')
-    await expect(itemsWith(page, agentReplyText)).toHaveCount(1)
+    await expect(messageContaining(page, agentReplyText)).toHaveCount(1)
     await expect(messageItemsOf(page)).toHaveCount(3)
     await expect(messageItemsOf(page).nth(0)).toContainText('Start please')
     await expect(messageItemsOf(page).nth(1)).toContainText('The agent could not start')
@@ -106,8 +104,8 @@ test.describe('without a warm runtime', () => {
     await expect(stopButtonOf(bobPage)).toBeVisible()
     await stopButtonOf(bobPage).click()
 
-    await expect(itemsWith(bobPage, 'Stopped by Bob')).toHaveCount(1)
-    await expect(itemsWith(page, 'Stopped by Bob')).toHaveCount(1)
+    await expect(messageContaining(bobPage, 'Stopped by Bob')).toHaveCount(1)
+    await expect(messageContaining(page, 'Stopped by Bob')).toHaveCount(1)
     await expect(workingIndicatorOf(bobPage)).toHaveCount(0)
     await expect(workingIndicatorOf(page)).toHaveCount(0)
     await expect(stopButtonOf(page)).toHaveCount(0)
@@ -126,7 +124,7 @@ test.describe('a warm runtime with a held boot', () => {
     await openChat(page, 'Research')
     await expect(runtimeStatusOf(page)).toHaveText('Ready')
     await sendMessage(page, 'Before the sleep')
-    await expect(itemsWith(page, agentReplyText)).toHaveCount(1)
+    await expect(messageContaining(page, agentReplyText)).toHaveCount(1)
     await triggerIdleStop(workerStack, research)
     await expect(runtimeStatusOf(page)).toHaveText('Sleeping')
 
@@ -134,7 +132,7 @@ test.describe('a warm runtime with a held boot', () => {
     await expect(runtimeStatusOf(page)).toHaveText('Starting…')
     await release('boot')
     await expect(runtimeStatusOf(page)).toHaveText('Ready')
-    await expect(itemsWith(page, agentReplyText)).toHaveCount(2)
+    await expect(messageContaining(page, agentReplyText)).toHaveCount(2)
     await expect(messageItemsOf(page)).toHaveCount(4)
     await expect(messageItemsOf(page).nth(0)).toContainText('Before the sleep')
     await expect(messageItemsOf(page).nth(2)).toContainText('After the sleep')
@@ -152,11 +150,11 @@ test('4. with its host stopped the header shows Host offline and a prompt gets a
   await expect(runtimeStatusOf(page)).toHaveText('Host offline')
 
   await sendMessage(page, 'Are you there?')
-  await expect(itemsWith(page, 'The runtime host is offline')).toHaveCount(1)
+  await expect(messageContaining(page, 'The runtime host is offline')).toHaveCount(1)
   await workerStack.startRuntimeHost()
   await expect(runtimeStatusOf(page)).toHaveText(/^(Ready|Sleeping)$/)
-  await expect(itemsWith(page, agentReplyText)).toHaveCount(1)
-  await expect(itemsWith(page, 'The runtime host is offline')).toHaveCount(1)
+  await expect(messageContaining(page, agentReplyText)).toHaveCount(1)
+  await expect(messageContaining(page, 'The runtime host is offline')).toHaveCount(1)
   await expect(runtimeStatusOf(page)).toHaveText('Ready')
 })
 
@@ -172,10 +170,10 @@ test('8. a runtime stopped mid-turn ends the turn with a notice, and the next pr
   await agentScript(research, {})
   await stopRuntime(workerStack, research)
 
-  await expect(itemsWith(page, 'The agent stopped before finishing')).toHaveCount(1)
+  await expect(messageContaining(page, 'The agent stopped before finishing')).toHaveCount(1)
   await expect(workingIndicatorOf(page)).toHaveCount(0)
   await sendMessage(page, 'Wake up')
-  await expect(itemsWith(page, agentReplyText)).toHaveCount(1)
+  await expect(messageContaining(page, agentReplyText)).toHaveCount(1)
   await expect(runtimeStatusOf(page)).toHaveText('Ready')
 })
 
@@ -185,16 +183,16 @@ test('9. a lost agent conversation and session are replaced, the prompt is answe
 }) => {
   await openChat(page, 'Research')
   await sendMessage(page, 'Remember the number 42')
-  await expect(itemsWith(page, agentReplyText)).toHaveCount(1)
+  await expect(messageContaining(page, agentReplyText)).toHaveCount(1)
   await expect.poll(() => turnOf(workerStack, research)).toBeNull()
   await workerStack.database.$client`
     update runtimes set agent_conversation_id = ${crypto.randomUUID()} where chat_id = ${research}`
   await workerStack.fakeHost({ forgetSessions: 'true' })
 
   await sendMessage(page, 'What was the number?')
-  await expect(itemsWith(page, agentReplyText)).toHaveCount(2)
-  await expect(itemsWith(page, newSessionNotice)).toHaveCount(1)
+  await expect(messageContaining(page, agentReplyText)).toHaveCount(2)
+  await expect(messageContaining(page, newSessionNotice)).toHaveCount(1)
   await sendMessage(page, 'And now?')
-  await expect(itemsWith(page, agentReplyText)).toHaveCount(3)
-  await expect(itemsWith(page, newSessionNotice)).toHaveCount(1)
+  await expect(messageContaining(page, agentReplyText)).toHaveCount(3)
+  await expect(messageContaining(page, newSessionNotice)).toHaveCount(1)
 })

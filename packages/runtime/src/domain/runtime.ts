@@ -28,7 +28,7 @@ export type Runtime = Readonly<{
 
 export type HostLoad = { hostId: RuntimeHostId; online: boolean; cap: number; running: number }
 
-export const runtimeJobs = {
+export const runtimeJobTypes = {
   create: 'runtime.create',
   start: 'runtime.start',
   stop: 'runtime.stop',

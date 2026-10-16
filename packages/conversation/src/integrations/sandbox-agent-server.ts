@@ -10,7 +10,6 @@ import {
 } from '../contracts/agent.ts'
 import type { AgentEvent } from '../domain/agent-events.ts'
 import { type HarnessLaunch, piModelOf } from '../domain/session-routing.ts'
-import { codexSubscriptionCommand } from './codex-launch.ts'
 
 export type AgentLlm = { model: string }
 
@@ -53,6 +52,32 @@ const claudeCodeSettings = [
   'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1',
   'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1',
   'CLAUDE_CODE_MAX_RETRIES=0',
+]
+
+const backgroundFeaturesOff = `[analytics]
+enabled = false
+
+[feedback]
+enabled = false
+
+[features]
+plugins = false
+remote_plugin = false
+apps = false
+`
+
+const subscriptionConfig = `forced_login_method = "chatgpt"
+check_for_update_on_startup = false
+cli_auth_credentials_store = "file"
+
+${backgroundFeaturesOff}`
+
+const codexSubscriptionCommand = [
+  'env',
+  `HQ_CODEX_CONFIG=${subscriptionConfig}`,
+  'sh',
+  '-c',
+  'set -e; printf %s "$HQ_CODEX_CONFIG" > "$HOME/.codex/config.toml.$$"; mv "$HOME/.codex/config.toml.$$" "$HOME/.codex/config.toml"; exec codex-acp',
 ]
 
 const harnessLaunches: Record<HarnessLaunch, string[]> = {

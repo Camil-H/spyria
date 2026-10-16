@@ -1,23 +1,21 @@
 import {
   addCredential,
+  chipOf,
   expect,
   llmSectionOf,
   mainOf,
+  messageContaining,
   messageItemsOf,
   newRuntimeChat,
+  newSessionNotice,
   openChat,
   openProfile,
-  type Page,
+  research,
   sendMessage,
   test,
   workingIndicatorOf,
 } from './fixtures'
 import { openPageAs } from './stack'
-
-const research = 'chat-research'
-const newSessionNotice = 'The agent started a new session; it does not remember earlier messages'
-const itemsWith = (page: Page, text: string) => messageItemsOf(page).filter({ hasText: text })
-const chipOf = (page: Page) => mainOf(page).getByRole('button', { name: /· (auto|same as main)$/ })
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
@@ -39,13 +37,13 @@ test('8 and 9. a prompter with only an Anthropic key gets Pi: the command step s
   await agentScript(chatId, { steps: [{ command: commandText }], text: 'Answered on Sonnet 5.5.' })
   await sendMessage(bobPage, 'Run it on Pi')
 
-  const command = itemsWith(bobPage, commandText)
+  const command = messageContaining(bobPage, commandText)
   await expect(command.getByRole('img', { name: 'Running' })).toBeVisible()
   await release('command')
   await expect(command.getByRole('img', { name: 'Succeeded' })).toBeVisible()
-  await expect(itemsWith(bobPage, 'Answered on Sonnet 5.5.')).toHaveCount(1)
+  await expect(messageContaining(bobPage, 'Answered on Sonnet 5.5.')).toHaveCount(1)
   await expect(workingIndicatorOf(bobPage)).toHaveCount(0)
-  await expect(chipOf(bobPage)).toHaveText('Sonnet 5.5 (medium) · auto')
+  await expect(chipOf(bobPage, 'hq')).toHaveText('Sonnet 5.5 (medium) · auto')
   await command.getByRole('button', { name: commandText }).click()
   await expect(command).toContainText('one')
   await expect(command).toContainText('two')
@@ -59,14 +57,14 @@ test('11. Stop during a command closes the turn as stopped, and a prompt queued 
   await openChat(page, 'Research')
   await agentScript(research, { steps: [{ command: 'sleep 30' }], text: 'Never shown.' })
   await sendMessage(page, 'Sleep for a while')
-  await expect(itemsWith(page, 'sleep 30').getByRole('img', { name: 'Running' })).toBeVisible()
+  await expect(messageContaining(page, 'sleep 30').getByRole('img', { name: 'Running' })).toBeVisible()
   await sendMessage(page, 'Carry on')
-  await expect(itemsWith(page, 'Carry on')).toHaveCount(1)
+  await expect(messageContaining(page, 'Carry on')).toHaveCount(1)
   await agentScript(research, { text: 'Carried on.' })
   await mainOf(page).getByRole('button', { name: 'Stop' }).click()
-  await expect(itemsWith(page, 'Stopped by Alice')).toHaveCount(1)
+  await expect(messageContaining(page, 'Stopped by Alice')).toHaveCount(1)
 
-  await expect(itemsWith(page, 'Carried on.')).toHaveCount(1)
+  await expect(messageContaining(page, 'Carried on.')).toHaveCount(1)
   await expect(workingIndicatorOf(page)).toHaveCount(0)
   await expect(messageItemsOf(page).nth(0)).toContainText('Sleep for a while')
   await expect(messageItemsOf(page).nth(-3)).toContainText('Stopped by Alice')

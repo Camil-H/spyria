@@ -1,11 +1,15 @@
 import {
   addCredential,
+  chipOf,
   delegationsFinished,
   expect,
   llmSectionOf,
   mainOf,
+  messageContaining,
   messageItemsOf,
+  modeRadioOf,
   newRuntimeChat,
+  newSession,
   openChat,
   openProfile,
   type Page,
@@ -19,17 +23,13 @@ const claude = { owner: 'member-alice', signedIn: 'claude' }
 const codex = { owner: 'member-alice', signedIn: 'codex' }
 const assumption = 'No member is available; decide yourself and state your assumption.'
 
-const chipOf = (page: Page) => mainOf(page).getByRole('button', { name: /^Claude Code · |^Codex · / })
 const questionOf = (page: Page) => mainOf(page).getByRole('form', { name: 'Question' })
 const planCardOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Plan approval' })
-const modeOf = (page: Page, name: 'Plan' | 'Auto') =>
-  mainOf(page).getByRole('group', { name: 'Mode' }).getByRole('radio', { name })
-const repliesWith = (page: Page, text: string | RegExp) => messageItemsOf(page).filter({ hasText: text })
 const turnEnded = async (page: Page) => {
-  await expect(repliesWith(page, 'Hello from the stub')).toHaveCount(1)
+  await expect(messageContaining(page, 'Hello from the stub')).toHaveCount(1)
   await expect(workingIndicatorOf(page)).toHaveCount(0)
 }
-const newSession = async (page: Page, tool: 'Claude Code' | 'Codex', workerStack: WorkerStack) => {
+const newOnlineSession = async (page: Page, tool: 'Claude Code' | 'Codex', workerStack: WorkerStack) => {
   await expect
     .poll(
       async () =>
@@ -40,9 +40,7 @@ const newSession = async (page: Page, tool: 'Claude Code' | 'Codex', workerStack
         ).length,
     )
     .toBe(1)
-  const chatId = await newRuntimeChat(page, `${tool} questions`, null)
-  await expect(chipOf(page)).toHaveText(`${tool} · subscription`)
-  return chatId
+  return newSession(page, tool, `${tool} questions`)
 }
 const sessionStarted = (workerStack: WorkerStack, chatId: string) =>
   expect
@@ -55,9 +53,9 @@ const sessionStarted = (workerStack: WorkerStack, chatId: string) =>
     )
     .toBe(1)
 const togglePlan = async (page: Page, isOn: boolean) => {
-  await modeOf(page, isOn ? 'Plan' : 'Auto').click()
-  await expect(modeOf(page, isOn ? 'Plan' : 'Auto')).toBeChecked()
-  await expect(modeOf(page, isOn ? 'Auto' : 'Plan')).not.toBeChecked()
+  await modeRadioOf(page, isOn ? 'Plan' : 'Auto').click()
+  await expect(modeRadioOf(page, isOn ? 'Plan' : 'Auto')).toBeChecked()
+  await expect(modeRadioOf(page, isOn ? 'Auto' : 'Plan')).not.toBeChecked()
 }
 const holdAnswers = async (page: Page) => {
   const held = Promise.withResolvers<void>()
@@ -84,7 +82,7 @@ test('14a. a Claude Code question shows its header, options with descriptions an
   workerStack,
 }) => {
   await machine(claude)
-  await newSession(page, 'Claude Code', workerStack)
+  await newOnlineSession(page, 'Claude Code', workerStack)
   await sendMessage(page, 'stub:ask')
   const question = questionOf(page)
   await expect(question.getByRole('group', { name: 'Database Which database should we use?' })).toBeVisible()
@@ -93,7 +91,7 @@ test('14a. a Claude Code question shows its header, options with descriptions an
   await expect(question.getByRole('textbox', { name: 'Other answer to Which database should we use?' })).toBeVisible()
   await question.getByRole('radio', { name: 'SQLite Embedded' }).check()
   await question.getByRole('button', { name: 'Submit' }).click()
-  await expect(repliesWith(page, 'answer:{"action":"accept","content":{"question_0":"SQLite"}}')).toHaveCount(1)
+  await expect(messageContaining(page, 'answer:{"action":"accept","content":{"question_0":"SQLite"}}')).toHaveCount(1)
   await turnEnded(page)
   await expect(question).toContainText('SQLite')
   await expect(question).toContainText('Answered by Alice')
@@ -111,7 +109,7 @@ test('14e and 14b. a reload while the question waits shows the card again, and a
   workerStack,
 }) => {
   await machine(claude)
-  await newSession(page, 'Claude Code', workerStack)
+  await newOnlineSession(page, 'Claude Code', workerStack)
   await sendMessage(page, 'stub:ask')
   await expect(questionOf(page).getByRole('radio')).toHaveCount(2)
   await page.reload()
@@ -119,7 +117,7 @@ test('14e and 14b. a reload while the question waits shows the card again, and a
   await expect(question.getByRole('radio')).toHaveCount(2)
   await question.getByRole('textbox', { name: 'Other answer to Which database should we use?' }).fill('MySQL')
   await question.getByRole('button', { name: 'Submit' }).click()
-  await expect(repliesWith(page, '"question_0_custom":"MySQL"')).toHaveCount(1)
+  await expect(messageContaining(page, '"question_0_custom":"MySQL"')).toHaveCount(1)
   await turnEnded(page)
   await expect(question).toContainText('MySQL')
 })
@@ -130,7 +128,7 @@ test('14c. a Codex form of three questions shows on the same card, without its N
   workerStack,
 }) => {
   await machine(codex)
-  await newSession(page, 'Codex', workerStack)
+  await newOnlineSession(page, 'Codex', workerStack)
   await sendMessage(page, 'stub:ask-codex')
   const question = questionOf(page)
   await expect(question.getByRole('group')).toHaveCount(3)
@@ -141,7 +139,7 @@ test('14c. a Codex form of three questions shows on the same card, without its N
   await question.getByRole('textbox', { name: 'Other answer to Which CI?' }).fill('Buildkite')
   await question.getByRole('button', { name: 'Submit' }).click()
   await expect(
-    repliesWith(
+    messageContaining(
       page,
       'answer:{"action":"accept","content":{"db":"Postgres","lang":"Go","ci":"None of the above","ci_note":"Buildkite"}}',
     ),
@@ -164,7 +162,7 @@ test.describe('Pi on an HQ runtime chat', () => {
     await expect(question.getByRole('radio', { name: /Other/ })).toHaveCount(0)
     await question.getByRole('textbox', { name: 'Other answer to Which database should we use?' }).fill('MySQL')
     await question.getByRole('button', { name: 'Submit' }).click()
-    await expect(repliesWith(page, 'answer:The member answered: MySQL')).toHaveCount(1)
+    await expect(messageContaining(page, 'answer:The member answered: MySQL')).toHaveCount(1)
     await turnEnded(page)
     await expect(question).toContainText('MySQL')
     await expect(question).toContainText('Answered by Alice')
@@ -177,13 +175,15 @@ test.describe('Pi on an HQ runtime chat', () => {
     await togglePlan(page, true)
     await expect(piChipOf(page)).toHaveText(/· auto$/)
     await sendMessage(page, 'stub:hello')
-    await expect(repliesWith(page, '[t2] Hello from the stub (model hq/fake/fake-medium, mode plan).')).toHaveCount(1)
+    await expect(
+      messageContaining(page, '[t2] Hello from the stub (model hq/fake/fake-medium, mode plan).'),
+    ).toHaveCount(1)
     await togglePlan(page, false)
     await expect(piChipOf(page)).toHaveText(/· auto$/)
     await sendMessage(page, 'stub:hello')
-    await expect(repliesWith(page, '[t3] Hello from the stub (model hq/fake/fake-medium, mode default).')).toHaveCount(
-      1,
-    )
+    await expect(
+      messageContaining(page, '[t3] Hello from the stub (model hq/fake/fake-medium, mode default).'),
+    ).toHaveCount(1)
   })
 })
 
@@ -193,19 +193,19 @@ test('15. Stop while a question waits ends the turn Stopped, the card shows it, 
   workerStack,
 }) => {
   await machine(claude)
-  await newSession(page, 'Claude Code', workerStack)
+  await newOnlineSession(page, 'Claude Code', workerStack)
   await sendMessage(page, 'stub:ask')
   const question = questionOf(page)
   await question.getByRole('radio', { name: 'SQLite Embedded' }).check()
   const releaseAnswer = await holdAnswers(page)
   await question.getByRole('button', { name: 'Submit' }).click()
   await mainOf(page).getByRole('button', { name: 'Stop' }).click()
-  await expect(repliesWith(page, 'Stopped by Alice')).toHaveCount(1)
+  await expect(messageContaining(page, 'Stopped by Alice')).toHaveCount(1)
   await expect(question).toContainText('Stopped')
   await expect(question.getByRole('button')).toHaveCount(0)
   expect(await releaseAnswer()).toBe(409)
   await sendMessage(page, 'Carry on')
-  await expect(repliesWith(page, '[t2] Hello from the stub')).toHaveCount(1)
+  await expect(messageContaining(page, '[t2] Hello from the stub')).toHaveCount(1)
 })
 
 test('16a and 16b. the Plan toggle puts Claude Code in plan mode: the toggle shows Plan, a write is refused and a read runs; off again it builds', async ({
@@ -214,18 +214,18 @@ test('16a and 16b. the Plan toggle puts Claude Code in plan mode: the toggle sho
   workerStack,
 }) => {
   await machine(claude)
-  await sessionStarted(workerStack, await newSession(page, 'Claude Code', workerStack))
+  await sessionStarted(workerStack, await newOnlineSession(page, 'Claude Code', workerStack))
   await togglePlan(page, true)
-  await expect(chipOf(page)).toHaveText('Claude Code · subscription')
+  await expect(chipOf(page, 'harness')).toHaveText('Claude Code · subscription')
   await sendMessage(page, 'stub:write stub:read')
-  await expect(repliesWith(page, 'write:reject')).toHaveCount(1)
-  await expect(repliesWith(page, 'Read notes.md')).toHaveCount(1)
-  await expect(repliesWith(page, 'mode plan).')).toHaveCount(1)
+  await expect(messageContaining(page, 'write:reject')).toHaveCount(1)
+  await expect(messageContaining(page, 'Read notes.md')).toHaveCount(1)
+  await expect(messageContaining(page, 'mode plan).')).toHaveCount(1)
   await togglePlan(page, false)
   await sendMessage(page, 'Build')
-  await expect(repliesWith(page, '[t2] Hello from the stub (model stub-default, mode bypassPermissions).')).toHaveCount(
-    1,
-  )
+  await expect(
+    messageContaining(page, '[t2] Hello from the stub (model stub-default, mode bypassPermissions).'),
+  ).toHaveCount(1)
 })
 
 test('16a. the Plan toggle sets Codex’s collaboration mode and the toggle follows', async ({
@@ -234,9 +234,9 @@ test('16a. the Plan toggle sets Codex’s collaboration mode and the toggle foll
   workerStack,
 }) => {
   await machine(codex)
-  await sessionStarted(workerStack, await newSession(page, 'Codex', workerStack))
+  await sessionStarted(workerStack, await newOnlineSession(page, 'Codex', workerStack))
   await togglePlan(page, true)
-  await expect(chipOf(page)).toHaveText('Codex · subscription')
+  await expect(chipOf(page, 'harness')).toHaveText('Codex · subscription')
   await togglePlan(page, false)
 })
 
@@ -246,18 +246,18 @@ test('16c and 17a. the agent enters plan mode itself and the toggle follows; the
   workerStack,
 }) => {
   await machine(claude)
-  await newSession(page, 'Claude Code', workerStack)
+  await newOnlineSession(page, 'Claude Code', workerStack)
   await sendMessage(page, 'stub:exit-plan')
   const plan = planCardOf(page)
   await expect(plan.getByRole('listitem')).toHaveText(['Create x.txt', 'Done'])
-  await expect(modeOf(page, 'Plan')).toBeChecked()
+  await expect(modeRadioOf(page, 'Plan')).toBeChecked()
   await expect(mainOf(page)).not.toContainText('Approve Plan')
   await plan.getByRole('button', { name: 'Approve the plan' }).click()
-  await expect(repliesWith(page, 'plan:exit-plan-bypass')).toHaveCount(1)
+  await expect(messageContaining(page, 'plan:exit-plan-bypass')).toHaveCount(1)
   await turnEnded(page)
   await expect(plan).toContainText('Approved by Alice')
   await expect(plan.getByRole('button')).toHaveCount(0)
-  await expect(modeOf(page, 'Auto')).toBeChecked()
+  await expect(modeRadioOf(page, 'Auto')).toBeChecked()
   await expect(mainOf(page)).not.toContainText('Approve Plan')
 })
 
@@ -267,25 +267,25 @@ test('17b. Keep planning keeps Plan; the turn closes without Stopped and the nex
   workerStack,
 }) => {
   await machine(claude)
-  await newSession(page, 'Claude Code', workerStack)
+  await newOnlineSession(page, 'Claude Code', workerStack)
   await sendMessage(page, 'stub:exit-plan')
   await planCardOf(page).getByRole('button', { name: 'Keep planning' }).click()
-  await expect(repliesWith(page, 'plan:reject')).toHaveCount(1)
+  await expect(messageContaining(page, 'plan:reject')).toHaveCount(1)
   await expect(workingIndicatorOf(page)).toHaveCount(0)
   await expect(planCardOf(page)).toContainText('Kept planning by Alice')
   await expect(mainOf(page)).not.toContainText('Stopped')
-  await expect(modeOf(page, 'Plan')).toBeChecked()
+  await expect(modeRadioOf(page, 'Plan')).toBeChecked()
   await sendMessage(page, 'Next')
-  await expect(repliesWith(page, '[t2] Hello from the stub (model stub-default, mode plan).')).toHaveCount(1)
+  await expect(messageContaining(page, '[t2] Hello from the stub (model stub-default, mode plan).')).toHaveCount(1)
 })
 
 test('17c. Stop while the plan waits for approval closes the card', async ({ page, machine, workerStack }) => {
   await machine(claude)
-  await newSession(page, 'Claude Code', workerStack)
+  await newOnlineSession(page, 'Claude Code', workerStack)
   await sendMessage(page, 'stub:exit-plan')
   await expect(planCardOf(page).getByRole('button', { name: 'Approve the plan' })).toBeVisible()
   await mainOf(page).getByRole('button', { name: 'Stop' }).click()
-  await expect(repliesWith(page, 'Stopped by Alice')).toHaveCount(1)
+  await expect(messageContaining(page, 'Stopped by Alice')).toHaveCount(1)
   await expect(planCardOf(page)).toContainText('Stopped')
   await expect(planCardOf(page).getByRole('button')).toHaveCount(0)
 })
@@ -307,8 +307,8 @@ test.describe('on an HQ runtime chat', () => {
     const bobQuestion = questionOf(bobPage)
     await expect(bobQuestion.getByRole('radio', { name: 'SQLite', exact: true })).toBeDisabled()
     await expect(bobQuestion.getByRole('button')).toHaveCount(0)
-    await expect(modeOf(bobPage, 'Plan')).toBeDisabled()
-    await expect(modeOf(page, 'Plan')).toBeEnabled()
+    await expect(modeRadioOf(bobPage, 'Plan')).toBeDisabled()
+    await expect(modeRadioOf(page, 'Plan')).toBeEnabled()
 
     await questionOf(page).getByRole('radio', { name: 'SQLite', exact: true }).check()
     const releaseAliceAnswer = await holdAnswers(page)
@@ -320,7 +320,7 @@ test.describe('on an HQ runtime chat', () => {
     await openChat(bobPage, 'Research')
     await bobQuestion.getByRole('radio', { name: 'Postgres', exact: true }).check()
     await bobQuestion.getByRole('button', { name: 'Submit' }).click()
-    await expect(repliesWith(page, 'answer:The member answered: Postgres')).toHaveCount(1)
+    await expect(messageContaining(page, 'answer:The member answered: Postgres')).toHaveCount(1)
     await expect(questionOf(page)).toContainText('Answered by Bob')
     await expect(questionOf(page).getByRole('button')).toHaveCount(0)
     expect(await releaseAliceAnswer()).toBe(409)
@@ -350,7 +350,7 @@ test.describe('on an HQ runtime chat', () => {
     await release('linger')
     await delegationsFinished(workerStack, 'chat-research')
     await release('resume')
-    await expect(repliesWith(page, answer)).toHaveCount(1)
+    await expect(messageContaining(page, answer)).toHaveCount(1)
     await mainOf(page)
       .getByRole('button', { name: /^Delegated to Fake small · / })
       .click()

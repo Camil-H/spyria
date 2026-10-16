@@ -1,6 +1,17 @@
-import { expect, mainOf, messageItemsOf, openChat, type Page, sendMessage, test, workingIndicatorOf } from './fixtures'
+import {
+  expect,
+  foldOf,
+  mainOf,
+  messageContaining,
+  messageItemsOf,
+  openChat,
+  type Page,
+  research,
+  sendMessage,
+  test,
+  workingIndicatorOf,
+} from './fixtures'
 
-const research = 'chat-research'
 const thinking = 'I will check the toolchain, then fix the totals.'
 const fixedText = 'Fixed the totals and added the tax line.'
 const createTotals = `python3 --version && printf 'export const total = 1\\n' > totals.ts`
@@ -16,9 +27,7 @@ const fixSteps = (commandPrefix = '', thinkingHold?: string) => [
   },
 ]
 const failingCommand = `bash -c 'echo step one; echo step two; exit 3'`
-const itemsWith = (page: Page, text: string | RegExp) => messageItemsOf(page).filter({ hasText: text })
 const stepButtonOf = (page: Page, name: string | RegExp) => messageItemsOf(page).getByRole('button', { name })
-const foldOf = (page: Page) => stepButtonOf(page, /^Worked for .+ · 3 steps$/)
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
@@ -35,18 +44,18 @@ test('11. steps show live while the agent works: thinking, the running command, 
   await agentScript(research, { steps, text: fixedText, hold: 'answer' })
   await sendMessage(page, 'Fix the totals')
 
-  await expect(itemsWith(page, 'Thinking…')).toHaveCount(1)
+  await expect(messageContaining(page, 'Thinking…')).toHaveCount(1)
   await release('thinking')
-  const command = itemsWith(page, 'python3 --version')
+  const command = messageContaining(page, 'python3 --version')
   await expect(command.getByRole('img', { name: 'Running' })).toBeVisible()
   await release('command')
   await expect(command.getByRole('img', { name: 'Succeeded' })).toBeVisible()
   await expect(command).toContainText('exit 0')
-  await expect(itemsWith(page, 'Edited totals.ts +2 −1')).toHaveCount(1)
+  await expect(messageContaining(page, 'Edited totals.ts +2 −1')).toHaveCount(1)
   await expect(workingIndicatorOf(page)).toBeVisible()
-  await expect(itemsWith(page, fixedText)).toHaveCount(0)
+  await expect(messageContaining(page, fixedText)).toHaveCount(0)
   await release('answer')
-  await expect(itemsWith(page, fixedText)).toHaveCount(1)
+  await expect(messageContaining(page, fixedText)).toHaveCount(1)
 })
 
 test('12. after the answer the steps fold into one line above it, expand in order, and stay folded after a reload', async ({
@@ -56,13 +65,13 @@ test('12. after the answer the steps fold into one line above it, expand in orde
   await agentScript(research, { steps: fixSteps(), text: fixedText })
   await sendMessage(page, 'Fix the totals')
 
-  await expect(foldOf(page)).toBeVisible()
+  await expect(foldOf(page, 3)).toBeVisible()
   await expect(workingIndicatorOf(page)).toHaveCount(0)
   await expect(messageItemsOf(page)).toHaveCount(3)
   await expect(messageItemsOf(page).nth(1)).toContainText(/^Worked for .+ · 3 steps$/)
   await expect(messageItemsOf(page).nth(2)).toContainText(fixedText)
-  await foldOf(page).click()
-  await expect(foldOf(page)).toHaveAttribute('aria-expanded', 'true')
+  await foldOf(page, 3).click()
+  await expect(foldOf(page, 3)).toHaveAttribute('aria-expanded', 'true')
   await expect(messageItemsOf(page)).toHaveCount(6)
   await expect(messageItemsOf(page).nth(2)).toContainText(/Thought for .+s/)
   await expect(messageItemsOf(page).nth(3)).toContainText('python3 --version')
@@ -70,8 +79,8 @@ test('12. after the answer the steps fold into one line above it, expand in orde
   await expect(messageItemsOf(page).nth(5)).toContainText(fixedText)
 
   await page.reload()
-  await expect(foldOf(page)).toBeVisible()
-  await expect(foldOf(page)).toHaveAttribute('aria-expanded', 'false')
+  await expect(foldOf(page, 3)).toBeVisible()
+  await expect(foldOf(page, 3)).toHaveAttribute('aria-expanded', 'false')
   await expect(messageItemsOf(page)).toHaveCount(3)
 })
 
@@ -102,7 +111,7 @@ test('14. a successful command shows its output on click; a failing one shows ex
 
   await agentScript(research, { steps: [{ command: failingCommand }] })
   await sendMessage(page, 'Run the failing command')
-  const failing = itemsWith(page, failingCommand)
+  const failing = messageContaining(page, failingCommand)
   await expect(failing.getByRole('img', { name: 'Failed' })).toBeVisible()
   await expect(failing).toContainText('exit 3')
   await expect(failing).toContainText('step two')
@@ -111,7 +120,7 @@ test('14. a successful command shows its output on click; a failing one shows ex
 test('15. expanding a file edit shows its added and removed lines', async ({ page, agentScript }) => {
   await agentScript(research, { steps: fixSteps(), text: fixedText })
   await sendMessage(page, 'Fix the totals')
-  await foldOf(page).click({ timeout: 30_000 })
+  await foldOf(page, 3).click({ timeout: 30_000 })
   const edit = stepButtonOf(page, 'Edited totals.ts +2 −1')
   await edit.click()
 
@@ -145,7 +154,7 @@ test('18. Markdown answers render tables, highlighted code with copy, links with
   await agentScript(research, { text: answer })
   await sendMessage(page, 'Show the pricing')
 
-  const reply = itemsWith(page, 'See the pricing')
+  const reply = messageContaining(page, 'See the pricing')
   await expect(reply.getByRole('table')).toBeVisible()
   await expect(reply.getByRole('cell', { name: 'Team' })).toBeVisible()
   await expect(reply.locator('code .hljs-keyword').first()).toHaveText('const')

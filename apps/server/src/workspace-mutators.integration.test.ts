@@ -11,10 +11,9 @@ import {
   succeeded,
 } from './testing.ts'
 
-const { database, resultOf } = await openSharedTestApp()
+const { database, resultOf, chatRow } = await openSharedTestApp()
 
 const projectRow = (id: string) => database.query.projects.findFirst({ where: { id } })
-const chatRow = (id: string) => database.query.chats.findFirst({ where: { id } })
 
 test('createProject inserts the project in the token workspace with a server creation time', async () => {
   const before = Date.now()

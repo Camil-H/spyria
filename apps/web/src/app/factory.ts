@@ -1,11 +1,8 @@
 import {
   type AgentStream,
   type ConversationCommands,
-  chatPlanModePathOf,
-  chatQuestionPathOf,
-  chatRoutingPathOf,
-  commandOutputPathOf,
   conversationMutators,
+  createHttpChatCommands,
   createStoreDraftRepository,
   saveDraft,
 } from '@hq/conversation/server'
@@ -158,20 +155,7 @@ export const createApp = async (
     }),
     conversationCommands: commandsOf<ConversationCommands>(conversationMutators.conversation, {
       saveDraft: (input) => saveDraft({ drafts }, { ...input, memberId }),
-      commandOutput: async ({ workspaceId, chatId, stepId }) =>
-        (
-          await fetch(commandOutputPathOf(chatId, stepId), {
-            headers: { authorization: `Bearer ${store.tokenOf(workspaceId)}` },
-          })
-        ).text(),
-      chatRouting: async ({ workspaceId, chatId }) =>
-        (
-          await fetch(chatRoutingPathOf(chatId), { headers: { authorization: `Bearer ${store.tokenOf(workspaceId)}` } })
-        ).json(),
-      answerQuestion: async ({ workspaceId, chatId, questionId, answer }) =>
-        (await postAsMember(workspaceId, chatQuestionPathOf(chatId, questionId), JSON.stringify(answer))).status,
-      setPlanMode: async ({ workspaceId, chatId, enabled }) =>
-        (await postAsMember(workspaceId, chatPlanModePathOf(chatId), JSON.stringify({ enabled }))).status,
+      ...createHttpChatCommands(postAsMember, fetchAsMember),
       connectTool: toolConnections.connectTool,
       startRuntimeFromMessage: async (input) => {
         const newChatId = crypto.randomUUID()

@@ -1,7 +1,8 @@
 import type { ChatId, MessageId, WorkspaceId } from '@hq/kernel'
 import type { RunsOn } from '../domain/session-routing.ts'
 import type { QuestionFrame, StoredFrame, StreamFrame, WorkspaceFrame } from '../domain/streamed-reply.ts'
-import type { ChatRoutingRead, QuestionAnswer } from './endpoints.ts'
+import type { ChatRoutingRead } from '../queries/get-chat-routing.ts'
+import type { QuestionAnswer } from './endpoints.ts'
 
 type Command<Input, Result = string> = (input: Input & { workspaceId: WorkspaceId }) => Promise<Result>
 

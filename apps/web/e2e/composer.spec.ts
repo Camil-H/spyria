@@ -3,7 +3,10 @@ import {
   expect,
   type Locator,
   mainOf,
+  messageContaining,
   messageItemsOf,
+  modeOf,
+  modeRadioOf,
   newRuntimeChat,
   type Page,
   panelOf,
@@ -12,14 +15,11 @@ import {
   workingIndicatorOf,
 } from './fixtures'
 
-const repliesWith = (page: Page, text: string) => messageItemsOf(page).filter({ hasText: text })
 const workingDirectoryOf = (page: Page) =>
   mainOf(page).getByRole('img', { name: 'Working directory' }).locator('xpath=..')
 const branchOf = (page: Page) => mainOf(page).getByRole('img', { name: 'Git branch' }).locator('xpath=..')
-const modeOf = (page: Page) => mainOf(page).getByRole('group', { name: 'Mode' })
-const radioOf = (page: Page, name: 'Plan' | 'Auto') => modeOf(page).getByRole('radio', { name })
 const turnsEnded = async (page: Page, count: number) => {
-  await expect(repliesWith(page, 'Hello from the stub')).toHaveCount(count)
+  await expect(messageContaining(page, 'Hello from the stub')).toHaveCount(count)
   await expect(workingIndicatorOf(page)).toHaveCount(0)
 }
 const boxOf = async (locator: Locator) => {
@@ -36,15 +36,15 @@ test('e1 and e4. the working directory sits above the text box; Runs on, the mod
   page,
 }) => {
   await newRuntimeChat(page, 'Composer layout')
-  await expect(radioOf(page, 'Plan')).toBeDisabled()
-  await expect(radioOf(page, 'Auto')).toBeDisabled()
+  await expect(modeRadioOf(page, 'Plan')).toBeDisabled()
+  await expect(modeRadioOf(page, 'Auto')).toBeDisabled()
   await expect(modeOf(page)).toContainText('Starting…')
   await expect(workingDirectoryOf(page)).toHaveCount(0)
 
   await sendMessage(page, 'stub:hello')
   await turnsEnded(page, 1)
-  await expect(radioOf(page, 'Plan')).toBeEnabled()
-  await expect(radioOf(page, 'Auto')).toBeChecked()
+  await expect(modeRadioOf(page, 'Plan')).toBeEnabled()
+  await expect(modeRadioOf(page, 'Auto')).toBeChecked()
   await expect(modeOf(page)).not.toContainText('Starting…')
   await expect(workingDirectoryOf(page)).toHaveText(/^workspace-\d+$/)
   await expect(workingDirectoryOf(page)).toHaveAttribute('title', /\/workspace-\d+$/)
@@ -76,7 +76,7 @@ test('e2. without git there is no branch chip; once the agent switches to a bran
   await page.reload()
   await expect(branchOf(page)).toHaveText('feature/composer')
   await expect(workingDirectoryOf(page)).toHaveText(/^workspace-\d+$/)
-  await expect(radioOf(page, 'Plan')).toBeEnabled()
+  await expect(modeRadioOf(page, 'Plan')).toBeEnabled()
 })
 
 test('e5. a Pi chat whose agent calls update_plan shows the checklist in the chat and the Plan panel, with no tool step', async ({
@@ -91,7 +91,7 @@ test('e5. a Pi chat whose agent calls update_plan shows the checklist in the cha
   ]
   await agentScript(chatId, { steps: [{ plan }], text: 'Planned the fix.' })
   await sendMessage(page, 'Plan the fix')
-  await expect(repliesWith(page, 'Planned the fix.')).toHaveCount(1)
+  await expect(messageContaining(page, 'Planned the fix.')).toHaveCount(1)
   await expect(workingIndicatorOf(page)).toHaveCount(0)
   const checklist = mainOf(page).getByRole('group', { name: 'Plan' })
   await expect(checklist).toHaveCount(1)

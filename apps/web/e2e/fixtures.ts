@@ -1,12 +1,13 @@
 import { expect, type Locator, type Page } from '@playwright/test'
 import { test, type WorkerStack } from './stack.ts'
-import { serverUrl } from './stack-ports.ts'
+import { serverUrl, viteUrl } from './stack-ports.ts'
 
 export * from '@playwright/test'
 export { test } from './stack.ts'
 export { serverUrl } from './stack-ports.ts'
 
 type Machine = {
+  id: string
   conversations: { agent: Record<string, unknown>; secrets: object }[]
   prompts: string[]
   modelSwitches: string[]
@@ -25,6 +26,10 @@ export const machineTest = test.extend<{ machine: (query?: MachineQuery) => Prom
 })
 
 export const agentReplyText = 'Understood, working on it.'
+export const research = 'chat-research'
+export const blockedNotice = 'Connect an LLM key in your profile to prompt'
+export const newSessionNotice = 'The agent started a new session; it does not remember earlier messages'
+export const signedInMachine = { owner: 'member-alice', signedIn: 'claude' }
 
 export const delegationsFinished = (workerStack: WorkerStack, chatId: string) =>
   expect
@@ -48,9 +53,13 @@ export const looseChatsOf = (page: Page) => sidebarOf(page).getByRole('group', {
 export const chatRowIn = (group: Locator, chatName: string) => group.getByRole('link', { name: chatName })
 export const draftIconOf = (page: Page, chatName: string) =>
   chatLinkOf(page, chatName).getByRole('img', { name: 'Has unsent draft' })
+export const unreadIconOf = (page: Page, chatName: string) =>
+  chatLinkOf(page, chatName).getByRole('img', { name: 'Unread messages' })
 
-export const messageContaining = (page: Page, text: string) => messageItemsOf(page).filter({ hasText: text })
+export const messageContaining = (page: Page, text: string | RegExp) => messageItemsOf(page).filter({ hasText: text })
 export const workingIndicatorOf = (page: Page) => page.getByRole('status', { name: 'Agent is working' })
+export const foldOf = (page: Page, steps: number) =>
+  messageItemsOf(page).getByRole('button', { name: new RegExp(`^Worked for .+ · ${steps} steps$`) })
 export const signedOutScreenOf = (page: Page, workspaceName: string) =>
   page.getByText(`You are signed out of ${workspaceName}`)
 
@@ -84,11 +93,29 @@ export const openProfile = async (page: Page) => {
   await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Profile' })).toBeVisible()
 }
 export const llmSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'LLM access' })
+export const machineSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'My machine' })
 export const addCredential = async (page: Page, credential: { provider: string; secret: string }) => {
   await llmSectionOf(page).getByLabel('Provider').fill(credential.provider)
   await llmSectionOf(page).getByLabel('Secret').fill(credential.secret)
   await llmSectionOf(page).getByRole('button', { name: 'Add' }).click()
 }
+export const addLlmKey = async (page: Page, provider: string, secret = `fake-key-${crypto.randomUUID()}`) => {
+  await openProfile(page)
+  await addCredential(page, { provider, secret })
+  await expect(
+    llmSectionOf(page)
+      .getByRole('listitem')
+      .filter({ hasText: provider })
+      .filter({ hasText: `••••${secret.slice(-4)}` }),
+  ).toBeVisible()
+}
+
+export const openSettings = async (page: Page) => {
+  await sidebarOf(page).getByRole('link', { name: 'Workspace settings' }).click()
+  await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Workspace settings' })).toBeVisible()
+}
+export const hostsSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Runtime hosts' })
+export const urlOf = (command: string) => `${viteUrl}/h/${command.match(/\/h\/([A-Z0-9]{8})\b/)?.[1]}`
 
 export const sendMessage = async (page: Page, text: string) => {
   await composerOf(page).fill(text)
@@ -96,6 +123,7 @@ export const sendMessage = async (page: Page, text: string) => {
 }
 
 export const runsOnChoiceOf = (page: Page) => mainOf(page).getByRole('group', { name: 'Runs on' })
+export const runsOnOf = (page: Page) => mainOf(page).getByRole('combobox', { name: 'Runs on' })
 export const chooseRunsOn = async (page: Page, runsOn: string) => {
   const radio = runsOnChoiceOf(page).getByRole('radio', { name: runsOn })
   const notice = mainOf(page).getByText('Choose where this chat runs to send')
@@ -115,6 +143,27 @@ export const newRuntimeChat = async (page: Page, name: string, runsOn: string | 
   if (runsOn) await chooseRunsOn(page, runsOn)
   return page.url().split('/').at(-1) ?? ''
 }
+
+const chipNames = {
+  harness: /^Claude Code · |^Codex · /,
+  hq: /· (auto|same as main)$/,
+  routed: /Model chosen at first prompt|· (auto|same as main)$/,
+  any: /^Model chosen at first prompt$|^Claude Code · |^Codex · |· (auto|same as main)$/,
+}
+export const chipOf = (page: Page, kind: keyof typeof chipNames) =>
+  mainOf(page).getByRole('button', { name: chipNames[kind] })
+export const sessionOf = (page: Page) => page.getByRole('dialog', { name: 'Session' })
+export const openSession = async (page: Page) => {
+  await chipOf(page, 'routed').click()
+  await expect(sessionOf(page)).toBeVisible()
+}
+export const newSession = async (page: Page, tool: string, name = `${tool} on my machine`) => {
+  const chatId = await newRuntimeChat(page, name, null)
+  await expect(chipOf(page, 'harness')).toHaveText(`${tool} · subscription`)
+  return chatId
+}
+export const modeOf = (page: Page) => mainOf(page).getByRole('group', { name: 'Mode' })
+export const modeRadioOf = (page: Page, name: 'Plan' | 'Auto') => modeOf(page).getByRole('radio', { name })
 
 export const openMenu = async (page: Page) => {
   await switcherOf(page).click()

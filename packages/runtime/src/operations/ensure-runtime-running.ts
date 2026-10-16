@@ -8,7 +8,7 @@ import {
   isRetryable,
   placementOf,
   type Runtime,
-  runtimeJobs,
+  runtimeJobTypes,
   transitioned,
 } from '../domain/runtime.ts'
 
@@ -44,7 +44,7 @@ const placeRuntime = async (
   await runtimes.add(runtime)
   if (runtime.state === 'creating') {
     await secrets.keep(runtime, 'apiKey', newSecretToken())
-    await jobs.enqueue(workspaceId, runtimeJobs.create, { runtimeId: runtime.id })
+    await jobs.enqueue(workspaceId, runtimeJobTypes.create, { runtimeId: runtime.id })
   }
   return runtime
 }
@@ -59,7 +59,7 @@ export const ensureRuntimeRunning = ({ transactor, ...placement }: Dependencies,
     if (existing && step !== 'place') {
       const ensured = step === 'start' ? transitioned(existing, 'starting', now) : { ...existing, lastActiveAt: now }
       await runtimes.save(ensured)
-      if (step === 'start') await jobs.enqueue(workspaceId, runtimeJobs.start, { runtimeId: existing.id })
+      if (step === 'start') await jobs.enqueue(workspaceId, runtimeJobTypes.start, { runtimeId: existing.id })
       return ensured
     }
     return placeRuntime(unitOfWork, input, existing, placement)

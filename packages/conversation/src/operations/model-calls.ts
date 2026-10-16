@@ -8,7 +8,7 @@ import {
 } from '../domain/model-call-failures.ts'
 import type { AgentDependencies } from './agent-turn.ts'
 import { digestOf } from './decide.ts'
-import { noteSubagentFailure } from './delegate.ts'
+import { noteSubagentFailure } from './delegate-task.ts'
 
 type Dependencies = Pick<AgentDependencies, 'transactor' | 'runtimes' | 'classifier'>
 type FailedCall = {

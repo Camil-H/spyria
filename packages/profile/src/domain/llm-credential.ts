@@ -2,6 +2,8 @@ import type { CredentialId, MemberId, WorkspaceId } from '@hq/kernel'
 import { BlankProvider, UnsupportedProvider } from './errors.ts'
 import type { Secret } from './secret.ts'
 
+export const profileJobTypes = { gatewaySync: 'profile.gateway-sync' } as const
+
 export type LlmCredential = Readonly<{
   id: CredentialId
   workspaceId: WorkspaceId

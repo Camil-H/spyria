@@ -9,13 +9,13 @@ import type {
   AgentHost,
   SessionClassifier,
 } from '../contracts/agent.ts'
-import { type AgentEvent, isStoredAgentEvent, type TurnOutcome } from '../domain/agent-events.ts'
+import { type AgentEvent, agentJobTypes, isStoredAgentEvent, type TurnOutcome } from '../domain/agent-events.ts'
 import { createRuntimeAgentRuntimes, type SandboxProvider } from '../integrations/runtime-agent-runtimes.ts'
 import { type AgentLlm, createSandboxAgentServer } from '../integrations/sandbox-agent-server.ts'
-import { agentJobTypes, createTransactingZeroTransactor } from '../integrations/zero-transactor.ts'
+import { createTransactingZeroTransactor } from '../integrations/zero-transactor.ts'
 import { forwardToAgent } from '../operations/agent-questions.ts'
 import { closeReopenedTurn, reopenAgentTurn, sweepAgentTurns } from '../operations/agent-turn-safety.ts'
-import { delegateTask } from '../operations/delegate.ts'
+import { delegateTask } from '../operations/delegate-task.ts'
 import { findModelCallTurn, findToolCallTurn, recordModelCallFailure } from '../operations/model-calls.ts'
 import { promptAgent, startAgentSession } from '../operations/prompt-agent.ts'
 import { recordAgentEvent } from '../operations/record-agent-event.ts'

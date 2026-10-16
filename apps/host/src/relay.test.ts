@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from 'bun:test'
 import { createRelay } from './relay.ts'
+import { nextFrameOf, waitFor } from './testing.ts'
 
 const agentServer = Bun.serve({
   port: 0,
@@ -27,13 +28,7 @@ const relayCollecting = () => {
     send: (frame) => sent.push(frame),
     maximumQueuedMessages: 2,
   })
-  const nextOf = async (type: string) => {
-    for (const deadline = Date.now() + 5000; Date.now() < deadline; await Bun.sleep(5)) {
-      const index = sent.findIndex((frame) => frame.type === type)
-      if (index >= 0) return sent.splice(index, 1)[0]
-    }
-    throw new Error(`No ${type} frame`)
-  }
+  const nextOf = (type: string) => nextFrameOf(sent, type)
   return { relay, nextOf }
 }
 
@@ -104,13 +99,7 @@ const personalRelay = () => {
     send: (frame) => sent.push(frame),
     personal: { secrets: () => [refreshToken] },
   })
-  const nextOf = async (type: string) => {
-    for (const deadline = Date.now() + 5000; Date.now() < deadline; await Bun.sleep(5)) {
-      const index = sent.findIndex((frame) => frame.type === type)
-      if (index >= 0) return sent.splice(index, 1)[0]
-    }
-    throw new Error(`No ${type} frame`)
-  }
+  const nextOf = (type: string) => nextFrameOf(sent, type)
   return { relay, nextOf }
 }
 
@@ -203,6 +192,6 @@ test('a workspace host forwards any path and leaves bodies untouched', async () 
     send: (frame) => sent.push(frame),
   })
   await relay.handle({ type: 'http', sid: 7, runtimeId: 'runtime-1', method: 'GET', path: '/api/file/download?path=x' })
-  for (const deadline = Date.now() + 5000; sent.length === 0 && Date.now() < deadline; ) await Bun.sleep(5)
+  await waitFor(() => sent.length > 0)
   expect(String(sent[0]?.body)).toContain(accessToken)
 })

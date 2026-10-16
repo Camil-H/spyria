@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test'
-import { type AgentEvent, agentProjectionOf } from './agent-events.ts'
+import { agentProjectionOf } from './agent-events.ts'
 import { observedStep, type StoredStep } from './agent-steps.ts'
+import { acpUpdate } from './testing.ts'
 import { toolCallFailureOf, toolCallNoticeOf, toolConnectionOf, toolDisplayNameOf, toolServerOf } from './tool-calls.ts'
 
 const authenticationRequired =
@@ -51,13 +52,9 @@ test('a connection notice in a tool result names the server and whether it is a 
   expect(toolConnectionOf('you are alice on oauth')).toBeUndefined()
 })
 
-const mcpCall: AgentEvent = {
-  id: 'conversation-1:1',
-  kind: 'ACPUpdate',
-  timestamp: '2026-10-07T10:00:00.000Z',
-  seq: 1,
-  completed: true,
-  update: {
+const mcpCall = acpUpdate(
+  1,
+  {
     sessionUpdate: 'tool_call',
     toolCallId: 'call_1',
     title: 'mcp__hq__fake-whoami',
@@ -65,7 +62,9 @@ const mcpCall: AgentEvent = {
     status: 'pending',
     rawInput: {},
   },
-}
+  true,
+  '2026-10-07T10:00:00.000Z',
+)
 const mcpObservation = (text: string, isError = false) => ({ is_error: isError, content: [{ text }] })
 
 test('an MCP tool call becomes a "Used <tool> (<server>)" step with its result, and a connection notice', () => {

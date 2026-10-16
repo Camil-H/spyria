@@ -27,8 +27,9 @@ export type ModelCall = {
   calledAt: Date
 }
 
+export const usageJobTypes = { sync: 'usage.sync' } as const
+
 export const usageSync = {
-  jobType: 'usage.sync',
   intervalMilliseconds: 10_000,
   overlapMilliseconds: 60_000,
   retentionMilliseconds: 30 * 24 * 3_600_000,

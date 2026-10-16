@@ -12,10 +12,9 @@ import {
   sidebarOf,
   switchWorkspace,
   test,
+  unreadIconOf,
 } from './fixtures'
 
-const unreadIconOf = (page: Page, chatName: string) =>
-  chatLinkOf(page, chatName).getByRole('img', { name: 'Unread messages' })
 const menuButtonOf = (page: Page, chatName: string) =>
   page.getByRole('button', { name: `Chat actions for ${chatName}` })
 

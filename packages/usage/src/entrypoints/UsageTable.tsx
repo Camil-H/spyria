@@ -1,5 +1,5 @@
+import { formatCost, formatTokens } from '@hq/ui'
 import type { UsageTotals } from '../domain/usage.ts'
-import { formatCost, formatTokens } from './format.ts'
 
 type UsageRow = UsageTotals & { key: string; name: string }
 

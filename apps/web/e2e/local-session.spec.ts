@@ -1,32 +1,19 @@
 import {
-  test as base,
+  chipOf,
   expect,
   mainOf,
+  messageContaining,
   messageItemsOf,
   newRuntimeChat,
   openChat,
   type Page,
   sendMessage,
-  serverUrl,
+  signedInMachine,
+  machineTest as test,
 } from './fixtures'
 import { openPageAs, type WorkerStack } from './stack'
 
-type Machine = { id: string; conversations: object[]; prompts: string[] }
-type MachineQuery = { owner?: string; signedIn?: string; online?: string }
-
-const test = base.extend<{ machine: (query?: MachineQuery) => Promise<Machine> }>({
-  machine: async ({ workerStack }, use) => {
-    const machine = async (query: MachineQuery = {}) => {
-      const search = new URLSearchParams({ db: workerStack.databaseName, ...query })
-      return (await (await fetch(`${serverUrl}/test/fake-machine?${search}`, { method: 'POST' })).json()) as Machine
-    }
-    await use(machine)
-    await machine({ online: 'false' })
-  },
-})
-
 const localOption = 'My machine · Claude Code'
-const signedInMachine = { owner: 'member-alice', signedIn: 'claude' }
 const codexOption = 'My machine · Codex'
 const codexMachine = { owner: 'member-alice', signedIn: 'codex' }
 const tools = [
@@ -34,13 +21,9 @@ const tools = [
   { name: 'Codex', login: 'codex' },
 ]
 
-const chipOf = (page: Page) =>
-  mainOf(page).getByRole('button', {
-    name: /^Model chosen at first prompt$|^Claude Code · |^Codex · |· (auto|same as main)$/,
-  })
 const newLocalSession = async (page: Page, name: string, option = localOption) => {
   const chatId = await newRuntimeChat(page, name, option)
-  await expect(chipOf(page)).toHaveText(`${option.replace('My machine · ', '')} · subscription`)
+  await expect(chipOf(page, 'any')).toHaveText(`${option.replace('My machine · ', '')} · subscription`)
   return chatId
 }
 const sessionStarted = (workerStack: WorkerStack, chatId: string) =>
@@ -51,7 +34,6 @@ const sessionStarted = (workerStack: WorkerStack, chatId: string) =>
           ?.agent_conversation_id,
     )
     .toBeTruthy()
-const repliesWith = (page: Page, text: string) => messageItemsOf(page).filter({ hasText: text })
 
 test.use({ runtimeHost: false })
 
@@ -67,7 +49,7 @@ for (const tool of tools) {
     await machine({ owner: 'member-alice', signedIn: tool.login })
     await newLocalSession(page, `${tool.name} on my laptop`, `My machine · ${tool.name}`)
     await sendMessage(page, 'Hello from my laptop')
-    await expect(repliesWith(page, 'Hello from the stub')).toBeVisible()
+    await expect(messageContaining(page, 'Hello from the stub')).toBeVisible()
     const sidePanel = page.getByRole('region', { name: 'Side panel' })
     await sidePanel.getByRole('tab', { name: 'Usage', exact: true }).click()
     await expect(sidePanel).toContainText('Subscription session on your machine, not metered by HQ')
@@ -86,7 +68,10 @@ for (const tool of tools) {
     await machine({ signedIn: '' })
     await sendMessage(page, 'Answer without a sign-in')
     await expect(
-      repliesWith(page, `Sign in to ${tool.name} on your machine: docker exec -it hq-host hq-host login ${tool.login}`),
+      messageContaining(
+        page,
+        `Sign in to ${tool.name} on your machine: docker exec -it hq-host hq-host login ${tool.login}`,
+      ),
     ).toHaveCount(1)
     expect((await machine()).prompts).toEqual([])
   })
@@ -101,14 +86,14 @@ test('5. another member reads the session and the answer, and their prompt gets 
   await machine(signedInMachine)
   await newLocalSession(page, 'Shared laptop session')
   await sendMessage(page, 'Alice prompts the laptop')
-  await expect(repliesWith(page, 'Hello from the stub')).toBeVisible()
+  await expect(messageContaining(page, 'Hello from the stub')).toBeVisible()
 
   const bobPage = await openPageAs(browser, workerStack, 'member-bob')
   await openChat(bobPage, 'Shared laptop session')
-  await expect(repliesWith(bobPage, 'Hello from the stub')).toBeVisible()
+  await expect(messageContaining(bobPage, 'Hello from the stub')).toBeVisible()
   await sendMessage(bobPage, 'Bob tries the laptop')
-  await expect(repliesWith(bobPage, 'Only the owner prompts a session on their machine')).toHaveCount(1)
-  await expect(repliesWith(page, 'Only the owner prompts a session on their machine')).toHaveCount(1)
+  await expect(messageContaining(bobPage, 'Only the owner prompts a session on their machine')).toHaveCount(1)
+  await expect(messageContaining(page, 'Only the owner prompts a session on their machine')).toHaveCount(1)
   await bobPage.context().close()
 })
 
@@ -121,15 +106,15 @@ test('6. a prompt while the machine is offline waits with "Your machine is offli
   await sessionStarted(workerStack, await newLocalSession(page, 'Laptop goes away'))
   await machine({ online: 'false' })
   await sendMessage(page, 'Wait for my laptop')
-  await expect(repliesWith(page, 'Your machine is offline')).toHaveCount(1)
+  await expect(messageContaining(page, 'Your machine is offline')).toHaveCount(1)
   await machine({ online: 'true' })
-  await expect(repliesWith(page, '[t1] Hello from the stub')).toBeVisible()
+  await expect(messageContaining(page, '[t1] Hello from the stub')).toBeVisible()
 
   await machine({ online: 'false' })
   await sendMessage(page, 'Wait for my laptop again')
-  await expect(repliesWith(page, 'Your machine is offline')).toHaveCount(2)
+  await expect(messageContaining(page, 'Your machine is offline')).toHaveCount(2)
   await machine({ online: 'true' })
-  await expect(repliesWith(page, '[t2] Hello from the stub')).toBeVisible()
+  await expect(messageContaining(page, '[t2] Hello from the stub')).toBeVisible()
   expect((await machine()).prompts).toEqual(['Wait for my laptop', 'Wait for my laptop again'])
 })
 
@@ -142,16 +127,16 @@ test.describe('Codex on a ChatGPT plan', () => {
     await machine(codexMachine)
     await newLocalSession(page, 'Real steps', codexOption)
     await sendMessage(page, 'stub:read stub:tools stub:linger')
-    await expect(repliesWith(page, '$ npm test').getByRole('img', { name: 'Failed' })).toBeVisible()
-    await expect(repliesWith(page, 'Read notes.md')).toBeVisible()
+    await expect(messageContaining(page, '$ npm test').getByRole('img', { name: 'Failed' })).toBeVisible()
+    await expect(messageContaining(page, 'Read notes.md')).toBeVisible()
     await expect(page.getByRole('status', { name: 'Agent is working' })).toBeVisible()
     await release('linger')
     await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0)
     await messageItemsOf(page)
       .getByRole('button', { name: /^Worked for .+ · 3 steps$/ })
       .click()
-    await expect(repliesWith(page, 'Read notes.md')).toBeVisible()
-    const command = repliesWith(page, '$ npm test')
+    await expect(messageContaining(page, 'Read notes.md')).toBeVisible()
+    const command = messageContaining(page, '$ npm test')
     await expect(command.getByRole('img', { name: 'Failed' })).toBeVisible()
     await expect(messageItemsOf(page).getByRole('img', { name: 'Running' })).toHaveCount(0)
     await expect(mainOf(page)).not.toContainText('$ Terminal')

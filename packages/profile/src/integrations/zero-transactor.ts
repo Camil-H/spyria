@@ -7,15 +7,13 @@ import {
   setVirtualKeyId,
   virtualKeyIdOf,
 } from '@hq/db/server-writes'
-import { type ZeroContext, zql } from '@hq/db/zero-queries'
+import { type Transact, type ZeroContext, zql } from '@hq/db/zero-queries'
 import type { MemberId, WorkspaceId } from '@hq/kernel'
 import type { Transaction } from '@rocicorp/zero'
 import type { ProfileTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import { DisplayName } from '../domain/display-name.ts'
 import { CredentialNotFound, MemberNotFound, NotOwnProfile } from '../domain/errors.ts'
-import { gatewayKeyOf, gatewayKeyRefOf as refOf } from '../domain/llm-credential.ts'
-
-export const profileJobTypes = { gatewaySync: 'profile.gateway-sync' } as const
+import { gatewayKeyOf, profileJobTypes, gatewayKeyRefOf as refOf } from '../domain/llm-credential.ts'
 
 export const createZeroTransactor = (tx: Transaction, context: ZeroContext): ProfileTransactor => {
   const asContextMember = (workspaceId: WorkspaceId, memberId: MemberId) => {
@@ -97,3 +95,13 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
   }
   return { run: (work) => work(unitOfWork) }
 }
+
+export const memberContext = (workspace: WorkspaceId, member: MemberId): ZeroContext => ({
+  workspaceId: workspace,
+  userId: member,
+  role: 'member',
+})
+
+export const createTransactingZeroTransactor = (transact: Transact, context: ZeroContext): ProfileTransactor => ({
+  run: (work) => transact((tx) => createZeroTransactor(tx, context).run(work)),
+})

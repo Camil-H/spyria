@@ -1,34 +1,10 @@
 import { expect, test } from 'bun:test'
-import { inspect } from 'node:util'
 import { memberId, workspaceId } from '@hq/kernel'
-import { DisplayName } from './display-name.ts'
-import { BlankDisplayName, BlankProvider, BlankSecret, ToolNotInCatalog, UnsupportedProvider } from './errors.ts'
+import { BlankProvider, UnsupportedProvider } from './errors.ts'
 import { gatewayKeyOf, gatewayKeyRefOf, newLlmCredential } from './llm-credential.ts'
-import { connectedTool } from './personal-connection.ts'
 import { Secret } from './secret.ts'
 
 const owner = { workspaceId: workspaceId('acme'), memberId: memberId('alice') }
-const catalog = ['GitHub', 'Slack', 'Linear']
-
-test('DisplayName trims and rejects blank values', () => {
-  expect(String(DisplayName('  Alice D.  '))).toBe('Alice D.')
-  expect(() => DisplayName('  ')).toThrow(BlankDisplayName)
-})
-
-test('Secret redacts itself in text, JSON and inspection', () => {
-  const secret = new Secret('sk-test-1234567890')
-  expect(String(secret)).not.toContain('1234')
-  expect(`${secret}`).not.toContain('1234')
-  expect(JSON.stringify({ secret })).not.toContain('1234')
-  expect(inspect(secret)).not.toContain('1234')
-  expect(inspect({ nested: [secret] })).not.toContain('1234')
-})
-
-test('last4 derives the last four characters and Secret rejects blank values', () => {
-  expect(new Secret('sk-test-1234567890').last4()).toBe('7890')
-  expect(new Secret('sk-test-1234567890').reveal()).toBe('sk-test-1234567890')
-  expect(() => new Secret('   ')).toThrow(BlankSecret)
-})
 
 test('newLlmCredential trims, derives last4 and never carries the secret', () => {
   const credential = newLlmCredential({
@@ -65,9 +41,4 @@ test('a gateway key reference round-trips and refuses anything else', () => {
   expect(gatewayKeyOf(gatewayKeyRefOf(key))).toEqual(key)
   expect(gatewayKeyOf('gateway:credential-alice-anthropic')).toBeUndefined()
   expect(gatewayKeyOf('placeholder:abc')).toBeUndefined()
-})
-
-test('connectedTool connects a tool of the catalog and rejects others', () => {
-  expect(connectedTool(owner, 'Linear', catalog)).toEqual({ ...owner, tool: 'Linear', status: 'Connected' })
-  expect(() => connectedTool(owner, 'Jira', catalog)).toThrow(ToolNotInCatalog)
 })

@@ -43,6 +43,12 @@ export const stoppedByPrefix = 'Stopped by '
 export const stoppedByNoticeOf = (memberName: string) => `${stoppedByPrefix}${memberName}`
 export const silentTurnMilliseconds = 10 * 60_000
 export const agentSweepIntervalMilliseconds = 60_000
+export const agentJobTypes = {
+  prompt: 'agent.prompt',
+  startSession: 'agent.start-session',
+  interrupt: 'agent.interrupt',
+  sweep: 'agent.sweep',
+} as const
 
 const nonBlank = (text: unknown) => (typeof text === 'string' && text.trim() !== '' ? text.trim() : undefined)
 const messageOf = (body: unknown): AgentProjection => {

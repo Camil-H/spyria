@@ -2,20 +2,13 @@ import { expect, test } from 'bun:test'
 import { type AgentEvent, agentProjectionOf } from './agent-events.ts'
 import { observedStep, type StoredStep } from './agent-steps.ts'
 import { messagesFromEvents, type StoredEvent } from './message-events.ts'
+import { acpUpdate } from './testing.ts'
 
 const at = (second: number) => `2026-10-06T11:19:${String(second).padStart(2, '0')}.000Z`
-const acpUpdate = (seq: number, update: Record<string, unknown>): AgentEvent => ({
-  id: `conversation-1:${seq}`,
-  kind: 'ACPUpdate',
-  timestamp: at(seq),
-  seq,
-  completed: true,
-  update,
-})
 const toolCall = (seq: number, toolCallId: string, fields: Record<string, unknown>) =>
-  acpUpdate(seq, { sessionUpdate: 'tool_call', toolCallId, status: 'pending', ...fields })
+  acpUpdate(seq, { sessionUpdate: 'tool_call', toolCallId, status: 'pending', ...fields }, true, at(seq))
 const finished = (seq: number, toolCallId: string, fields: Record<string, unknown>) =>
-  acpUpdate(seq, { sessionUpdate: 'tool_call_update', toolCallId, status: 'completed', ...fields })
+  acpUpdate(seq, { sessionUpdate: 'tool_call_update', toolCallId, status: 'completed', ...fields }, true, at(seq))
 const stepOf = (event: AgentEvent) => {
   const projection = agentProjectionOf(event)
   return projection?.type === 'step' ? projection.step : projection

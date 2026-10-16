@@ -1,7 +1,44 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { ContainerAgent, FakeContainer, ModelCall } from '../testing.ts'
+
+export type HostFrame = {
+  type: string
+  id?: number
+  sid?: number
+  op?: string
+  args?: Record<string, string>
+  runtimeId?: string
+  method?: string
+  path?: string
+  headers?: Record<string, string>
+  body?: string
+  data?: string
+  status?: number
+}
+export type Launch = {
+  agent: { acp_command: string[]; acp_model?: string; acp_thought_level?: string; acp_resume_session_id?: string }
+  secrets: Record<string, { value: string }>
+  parent_conversation_id?: string
+}
+export type FakeContainer = { running: boolean; apiKey: string; isBooted?: boolean }
+export type ContainerAgent = {
+  respond(request: Required<Pick<HostFrame, 'method' | 'path'>> & HostFrame, container: FakeContainer): unknown
+  connect(stream: { path: string; container: FakeContainer; send(data: string): void; close(): void }): {
+    onMessage(data: string): void
+    onClose(): void
+  }
+  stopped?(container: FakeContainer): void
+}
+export type ModelCall = (request: {
+  path?: string
+  headers?: Record<string, string>
+  body?: string
+  onChunk?: (data: string) => void
+  onHead?: (status: number | undefined) => void
+  signal?: AbortSignal
+  timeoutMilliseconds?: number
+}) => Promise<{ status: number | undefined; body: string; ended: string | undefined }>
 
 type Agent = { port: number; process: Bun.Subprocess<'ignore', 'pipe', 'inherit'> }
 

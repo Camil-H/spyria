@@ -1,5 +1,6 @@
 import {
   addCredential,
+  blockedNotice,
   composerOf,
   expect,
   type Locator,
@@ -27,8 +28,6 @@ const openMyConnections = async (page: Page) => {
   await connectionsTabOf(page, 'My connections').click()
   await expect(connectionsTabOf(page, 'My connections')).toHaveAttribute('aria-selected', 'true')
 }
-
-const blockedNotice = 'Connect an LLM key in your profile to prompt'
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/')

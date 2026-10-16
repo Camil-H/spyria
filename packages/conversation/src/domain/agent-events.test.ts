@@ -18,6 +18,7 @@ import {
 import claudeCodeToolCalls from './claude-code-tool-calls.fixture.json'
 import { messagesFromEvents } from './message-events.ts'
 import { type StreamedReply, storedStreamedReply, streamedReplyAfter, visibleStreamedReply } from './streamed-reply.ts'
+import { acpUpdate } from './testing.ts'
 
 test('a turn ends with a notice on error, or when it finished without any reply', () => {
   expect(turnEndNoticeOf('finished', true)).toBeUndefined()
@@ -113,15 +114,6 @@ test('reasoning frames stream as reasoning, and the answer text after them start
     text: 'Answer',
     repliesAtStart: 0,
   })
-})
-
-const acpUpdate = (seq: number, update: Record<string, unknown>, completed = true): AgentEvent => ({
-  id: `conversation-1:${seq}`,
-  kind: 'ACPUpdate',
-  timestamp: '2026-10-12T17:56:00.000Z',
-  seq,
-  completed,
-  update,
 })
 
 const storedEventsOf = (entries: readonly { event: AgentEvent; delegation?: object }[]) =>

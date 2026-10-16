@@ -14,39 +14,18 @@ import {
   succeeded,
   waitFor,
 } from '../testing.ts'
-import { createHqAgentRelay } from './hq-agent-relay.ts'
 
 setDefaultTimeout(40_000)
-const { database, app, fakeHost, mutate, newRuntimeChat, prompt, turnOf, messagesOf, ...stack } = await startAgentStack(
-  { routing: true },
-)
-const relays: ReturnType<typeof createHqAgentRelay>[] = []
+const { database, app, agentHost, mutate, newRuntimeChat, prompt, turnOf, messagesOf, finished, ...stack } =
+  await startAgentStack({ routing: true })
 afterEach(async () => {
-  stack.setFakeLlmScript(undefined)
   await database.$client`update runtime_hosts set removed_at = now() where owner_id = ${alice} and removed_at is null`
-  await Promise.all(relays.splice(0).map((relay) => relay.stop()))
 })
 
 type QuestionFrame = { chatId: string; promptId?: string; isSnapshot?: boolean; question: Record<string, unknown> }
-const relayOf = (relay: ReturnType<typeof createHqAgentRelay>) => {
-  relays.push(relay)
-  return relay
-}
-const machine = async (signedIn = ['claude']) => {
-  const relay = relayOf(createHqAgentRelay())
-  await fakeHost('Machine', { ownerId: alice, signedIn, agentServer: relay.agentServer })
-  return relay
-}
-const workspaceHost = async () => {
-  const relay = relayOf(createHqAgentRelay())
-  return { relay, host: await fakeHost('Workspace host', { agentServer: relay.agentServer }) }
-}
+const machine = async (signedIn = ['claude']) => (await agentHost('Machine', { ownerId: alice, signedIn })).relay
+const workspaceHost = () => agentHost('Workspace host')
 const repliesTo = (messageId: string) => stack.repliesTo(messageId, ['kind', 'body', 'step'])
-const openStream = async (chat: ChatId) => {
-  const { frames, subscribed } = await stack.openStream(chat)
-  await subscribed
-  return frames
-}
 const questionsIn = (frames: string[]) =>
   frames.map((frame) => JSON.parse(frame) as QuestionFrame).filter((frame) => frame.question !== undefined)
 const askedIn = async (frames: string[], count = 1) => {
@@ -72,11 +51,6 @@ const isPlanning = async (chat: ChatId) =>
   (await database.$client`select is_planning from chats where id = ${chat}`)[0]?.is_planning
 const questionItemsOf = async (chat: ChatId) =>
   (await messagesOf(chat)).filter((message) => (message.step as { type?: string } | null)?.type === 'question')
-const finished = async (promptId: string, chat: ChatId) => {
-  await waitFor(async () => (await repliesTo(promptId)).some((reply) => reply.body.includes('Hello from the stub')))
-  await waitFor(async () => (await turnOf(chat)) === null)
-  return repliesTo(promptId)
-}
 const ended = async (promptId: string, chat: ChatId) => {
   await waitFor(async () => (await turnOf(chat)) === null)
   return repliesTo(promptId)
@@ -105,7 +79,7 @@ const claudeQuestion = {
 test('a machine question reaches viewers live and again after a reconnect; the owner’s answer continues the turn and is stored once', async () => {
   const relay = await machine()
   const chat = await newRuntimeChat({ harness: 'claude-code' })
-  const frames = await openStream(chat)
+  const frames = await stack.subscribedFrames(chat)
   const asked = await prompt(chat, 'stub:ask')
   const questionId = await askedIn(frames)
   expect(questionsIn(frames)[0]).toEqual({ chatId: chat, promptId: asked, question: claudeQuestion })
@@ -113,7 +87,7 @@ test('a machine question reaches viewers live and again after a reconnect; the o
   relay.dropSockets()
   await waitFor(() => relay.socketPaths.length === 2)
   await askedIn(frames, 2)
-  const reconnected = await openStream(chat)
+  const reconnected = await stack.subscribedFrames(chat)
   expect(questionsIn(reconnected)).toEqual([
     { chatId: chat, promptId: asked, question: { ...claudeQuestion, questionId }, isSnapshot: true },
   ])
@@ -146,7 +120,7 @@ test('on an HQ runtime chat another member who may prompt answers, a member with
   await workspaceHost()
   await database.$client`delete from llm_credentials where user_id = ${bob}`
   const chat = await newRuntimeChat({ defaultModel: 'fake/fake-medium' })
-  const frames = await openStream(chat)
+  const frames = await stack.subscribedFrames(chat)
   const asked = await prompt(chat, 'stub:ask')
   const questionId = await askedIn(frames)
   expect(questionsIn(frames)[0]?.question).toMatchObject({
@@ -177,7 +151,7 @@ test('on an HQ runtime chat another member who may prompt answers, a member with
 test('Stop while a question waits stores it closed as stopped, a late answer is refused, the next prompt works', async () => {
   await machine()
   const chat = await newRuntimeChat({ harness: 'claude-code' })
-  const frames = await openStream(chat)
+  const frames = await stack.subscribedFrames(chat)
   const asked = await prompt(chat, 'stub:ask')
   const questionId = await askedIn(frames)
   expect(await mutate(aliceInAcme, 'conversation.stopAgent', { workspaceId: acme, chatId: chat })).toEqual(succeeded)
@@ -197,7 +171,7 @@ test('Stop while a question waits stores it closed as stopped, a late answer is 
 test('plan approval continues the turn and leaves plan mode; keep planning ends the turn without a Stopped notice and stays in plan mode', async () => {
   await machine()
   const chat = await newRuntimeChat({ harness: 'claude-code' })
-  const frames = await openStream(chat)
+  const frames = await stack.subscribedFrames(chat)
   const approved = await prompt(chat, 'stub:exit-plan')
   const approvedId = await askedIn(frames)
   expect(questionsIn(frames)[0]?.question).toMatchObject({ kind: 'plan', plan: '1. Create x.txt\n2. Done' })
@@ -261,7 +235,7 @@ test('a question in a delegated sub-conversation is answered with the assumption
   const chat = await newRuntimeChat({ defaultModel: 'fake/fake-medium' })
   stack.setFakeLlmScript({ delegateRoute: { tier: 'small', confidence: 'high', effort: 'low' } })
   const parent = await prompt(chat, 'stub:long')
-  await waitFor(async () => (await repliesTo(parent)).some((reply) => reply.body === 'command'))
+  await stack.commandShown(parent)
   const token = (relay.created[0] as { secrets: { HQ_LLM_TOKEN: { value: string } } }).secrets.HQ_LLM_TOKEN.value
   const delegated = await host.modelCall({
     path: '/mcp/router',

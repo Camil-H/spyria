@@ -12,11 +12,9 @@ import {
   succeeded,
 } from './testing.ts'
 
-const { database, resultOf, eventsOf, changesOf } = await openSharedTestApp()
+const { database, resultOf, eventsOf, changesOf, chatRow, messagesOf } = await openSharedTestApp()
 
 const messageRow = (id: string) => database.query.messages.findFirst({ where: { id } })
-const chatRow = (id: string) => database.query.chats.findFirst({ where: { id } })
-const messagesOf = (chatId: string) => database.query.messages.findMany({ where: { chatId }, orderBy: { seq: 'asc' } })
 const jobsOf = async (messageId: string) =>
   (await database.select().from(jobs)).filter((job) => (job.payload as { messageId: string }).messageId === messageId)
 const countOf = async () => ({

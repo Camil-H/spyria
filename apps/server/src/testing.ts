@@ -2,6 +2,7 @@ import { afterAll, afterEach, expect, spyOn } from 'bun:test'
 import { createHash } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { conversationMutators } from '@hq/conversation/server'
+import { acme, alice, bob } from '@hq/db'
 import { type Database, events, resetDatabase } from '@hq/db/postgres'
 import { setModelDirectory } from '@hq/db/server-writes'
 import {
@@ -25,6 +26,14 @@ import { workspaceMutators } from '@hq/workspace/server'
 import { Hono } from 'hono'
 import { websocket } from 'hono/bun'
 import { createAgentBridge } from './agent-bridge/bridge.ts'
+import {
+  type ContainerAgent,
+  createHqAgentRelay,
+  type FakeContainer,
+  type HostFrame,
+  type Launch,
+  type ModelCall,
+} from './agent-bridge/hq-agent-relay.ts'
 import { createApp, sessionClassifierOf } from './app.ts'
 import { issueSessionToken } from './auth/session-tokens.ts'
 import { openSessions } from './auth/sessions.ts'
@@ -40,10 +49,7 @@ export const testAuthSettings = {
   oidc: { issuer: 'http://localhost:5556/dex', clientId: 'hq', redirectUri: 'http://localhost:3100/auth/callback' },
 }
 
-export const acme = workspaceId('workspace-acme')
-export const globex = workspaceId('workspace-globex')
-export const alice = memberId('member-alice')
-export const bob = memberId('member-bob')
+export { acme, alice, globex, bob } from '@hq/db'
 export const aliceInAcme = { workspaceId: acme, userId: alice }
 export const bobInAcme = { workspaceId: acme, userId: bob }
 export const succeeded = {}
@@ -209,6 +215,8 @@ const startSharedTestApp = async () => {
     resultOf,
     eventsOf,
     changesOf,
+    chatRow: (id: string) => database.query.chats.findFirst({ where: { id } }),
+    messagesOf: (chatId: string) => database.query.messages.findMany({ where: { chatId }, orderBy: { seq: 'asc' } }),
     stop: async () => {
       await zeroCache.value.stop()
       await stopServerAndDatabase()
@@ -418,11 +426,13 @@ export const startAgentStack = async ({
   })
   const { fakeHost, disconnectFakeHosts } = createFakeHosts({ port: Number(server.port), database })
   const browserSockets: WebSocket[] = []
+  const relays: ReturnType<typeof createHqAgentRelay>[] = []
   afterEach(async () => {
     for (const socket of browserSockets.splice(0)) socket.close()
     testApp.setFakeLlmScript(undefined)
     testApp.holds.releaseAll()
     await disconnectFakeHosts()
+    await Promise.all(relays.splice(0).map((relay) => relay.stop()))
   })
   afterAll(async () => {
     await worker.stop()
@@ -446,6 +456,27 @@ export const startAgentStack = async ({
       await database.$client<{ state: string }[]>`
         select state from jobs where type = ${type} and payload @> ${JSON.stringify(payload)}::jsonb`
     ).map(({ state }) => state)
+  const openStream = async (
+    chat: ChatId,
+    { workspaceId = acme as string, token }: { workspaceId?: string; token?: string } = {},
+  ) => {
+    const socket = new WebSocket(`ws://localhost:${server.port}/api/stream`)
+    browserSockets.push(socket)
+    const frames: string[] = []
+    const subscribed = Promise.withResolvers<void>()
+    const closed = new Promise<void>((resolve) => socket.addEventListener('close', () => resolve()))
+    socket.onmessage = (message) => {
+      if (JSON.parse(String(message.data)).subscribed) subscribed.resolve()
+      else frames.push(String(message.data))
+    }
+    await new Promise((resolve) => socket.addEventListener('open', resolve))
+    if (token !== '')
+      socket.send(
+        JSON.stringify({ type: 'auth', token: token ?? (await sessionTokenOf(database, workspaceId, alice)) }),
+      )
+    socket.send(JSON.stringify({ type: 'subscribe', chatId: chat }))
+    return { frames, closed, subscribed: subscribed.promise }
+  }
   return {
     ...testApp,
     app,
@@ -454,6 +485,29 @@ export const startAgentStack = async ({
     agentBridge,
     worker,
     fakeHost,
+    agentHost: async (
+      name: string,
+      {
+        ownerId,
+        signedIn,
+        routesModelCalls = false,
+        agentServerOf = (relay) => relay.agentServer,
+        ...relayOptions
+      }: Omit<NonNullable<Parameters<typeof createHqAgentRelay>[0]>, 'modelCall'> & {
+        ownerId?: string
+        signedIn?: string[]
+        routesModelCalls?: boolean
+        agentServerOf?: (relay: ReturnType<typeof createHqAgentRelay>) => ContainerAgent
+      } = {},
+    ) => {
+      const relay = createHqAgentRelay({
+        ...relayOptions,
+        modelCall: routesModelCalls ? () => host.modelCall : undefined,
+      })
+      relays.push(relay)
+      const host = await fakeHost(name, { agentServer: agentServerOf(relay), ownerId, signedIn })
+      return { relay, host, launches: () => relay.created as Launch[] }
+    },
     mutate,
     newRuntimeChat: async ({
       defaultModel = null,
@@ -481,6 +535,21 @@ export const startAgentStack = async ({
     turnOf,
     turnIs: (chat: ChatId, promptId: string | null) => waitFor(async () => (await turnOf(chat)) === promptId, 15_000),
     repliesTo,
+    finished: async (promptId: string, chat: ChatId, timeoutMilliseconds?: number) => {
+      const replies = () => repliesTo(promptId, ['kind', 'body', 'step'])
+      await waitFor(
+        async () => (await replies()).some((reply) => reply.body.includes('Hello from the stub')),
+        timeoutMilliseconds,
+      )
+      await waitFor(async () => (await turnOf(chat)) === null, timeoutMilliseconds)
+      return replies()
+    },
+    commandShown: (promptId: string, timeoutMilliseconds?: number) =>
+      waitFor(async () => (await repliesTo(promptId)).some((reply) => reply.body === 'command'), timeoutMilliseconds),
+    decisionsOf: (chat: ChatId, columns: string[]) =>
+      database.$client`
+        select ${database.$client(columns)} from routing_decisions
+        where workspace_id = ${acme} and chat_id = ${chat} order by created_at`,
     answered: (messageId: string, count = 1) =>
       waitFor(async () => (await repliesTo(messageId)).length >= count, 15_000),
     jobStatesOf,
@@ -489,8 +558,6 @@ export const startAgentStack = async ({
         const states = await jobStatesOf(type, payload)
         return states.length > 0 && states.every((state) => state === 'done')
       }, 15_000),
-    messagesOf: (chat: ChatId) =>
-      database.query.messages.findMany({ where: { chatId: chat }, orderBy: { seq: 'asc' } }),
     storedAgentEventsOf: async (chat: ChatId) =>
       (await database.select().from(events))
         .filter((event) => event.chatId === chat && event.type === 'agent.event')
@@ -500,64 +567,18 @@ export const startAgentStack = async ({
       if (!row) throw new Error(`No runtime for ${chat}`)
       return row
     },
-    openStream: async (
-      chat: ChatId,
-      { workspaceId = acme as string, token }: { workspaceId?: string; token?: string } = {},
-    ) => {
-      const socket = new WebSocket(`ws://localhost:${server.port}/api/stream`)
-      browserSockets.push(socket)
-      const frames: string[] = []
-      const subscribed = Promise.withResolvers<void>()
-      const closed = new Promise<void>((resolve) => socket.addEventListener('close', () => resolve()))
-      socket.onmessage = (message) => {
-        if (JSON.parse(String(message.data)).subscribed) subscribed.resolve()
-        else frames.push(String(message.data))
-      }
-      await new Promise((resolve) => socket.addEventListener('open', resolve))
-      if (token !== '')
-        socket.send(
-          JSON.stringify({ type: 'auth', token: token ?? (await sessionTokenOf(database, workspaceId, alice)) }),
-        )
-      socket.send(JSON.stringify({ type: 'subscribe', chatId: chat }))
-      return { frames, closed, subscribed: subscribed.promise }
+    subscribedFrames: async (chat: ChatId) => {
+      const { frames, subscribed } = await openStream(chat)
+      await subscribed
+      return frames
     },
+    openStream,
   }
 }
 
-type HostFrame = {
-  type: string
-  id?: number
-  sid?: number
-  op?: string
-  args?: Record<string, string>
-  runtimeId?: string
-  method?: string
-  path?: string
-  headers?: Record<string, string>
-  body?: string
-  data?: string
-  status?: number
-}
+export type { ContainerAgent, FakeContainer, Launch, ModelCall }
 export const fakeHostGatewayUrl = 'http://fake-gateway-relay.test:4000/v1'
 type HostCommand = { op: string; runtimeId?: string; image?: string; apiKey?: string }
-export type FakeContainer = { running: boolean; apiKey: string; isBooted?: boolean }
-export type ContainerAgent = {
-  respond(request: Required<Pick<HostFrame, 'method' | 'path'>> & HostFrame, container: FakeContainer): unknown
-  connect(stream: { path: string; container: FakeContainer; send(data: string): void; close(): void }): {
-    onMessage(data: string): void
-    onClose(): void
-  }
-  stopped?(container: FakeContainer): void
-}
-export type ModelCall = (request: {
-  path?: string
-  headers?: Record<string, string>
-  body?: string
-  onChunk?: (data: string) => void
-  onHead?: (status: number | undefined) => void
-  signal?: AbortSignal
-  timeoutMilliseconds?: number
-}) => Promise<{ status: number | undefined; body: string; ended: string | undefined }>
 export type FakeHost = Awaited<ReturnType<ReturnType<typeof createFakeHosts>['fakeHost']>>
 const gibibyte = 1024 ** 3
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex')

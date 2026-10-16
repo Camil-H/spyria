@@ -1,9 +1,19 @@
 import type { BrowserContext } from '@playwright/test'
-import { expect, mainOf, messageItemsOf, openChat, type Page, sendMessage, test, workingIndicatorOf } from './fixtures'
+import {
+  addLlmKey,
+  expect,
+  mainOf,
+  messageItemsOf,
+  openChat,
+  type Page,
+  research,
+  sendMessage,
+  test,
+  workingIndicatorOf,
+} from './fixtures'
 import { openPageAs, type WorkerStack } from './stack'
 import { fakeMcpUrl, gatewayUrl } from './stack-ports'
 
-const research = 'chat-research'
 const toolStep = 'Used whoami (fake)'
 const toolScript = { steps: [{ tool: 'fake-whoami' }], text: 'Checked who I am.' }
 
@@ -39,15 +49,6 @@ const lastToolResultOf = async (page: Page) => {
   return messageItemsOf(page)
     .filter({ has: page.getByRole('button', { name: toolStep, expanded: true }) })
     .last()
-}
-const addLlmKey = async (page: Page, workspace = 'workspace-acme') => {
-  await page.goto(`/w/${workspace}/profile`)
-  const llmSection = mainOf(page).getByRole('region', { name: 'LLM access' })
-  const secret = `fake-key-${crypto.randomUUID()}`
-  await llmSection.getByLabel('Provider').fill('Fake')
-  await llmSection.getByLabel('Secret').fill(secret)
-  await llmSection.getByRole('button', { name: 'Add' }).click()
-  await expect(llmSection.getByRole('listitem').filter({ hasText: `••••${secret.slice(-4)}` })).toBeVisible()
 }
 const whoamiThroughGateway = async (workerStack: WorkerStack, workspace: string) => {
   const [row] = await workerStack.database.$client`
@@ -100,7 +101,7 @@ test('4. another prompter triggers the tool as the owner and sees that the owner
   agentScript,
 }) => {
   const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-  await addLlmKey(bobPage)
+  await addLlmKey(bobPage, 'Fake')
   await promptTool(bobPage, agentScript, 'Bob asks who the agent is')
   await expect(messageItemsOf(bobPage).filter({ hasText: 'Alice needs to connect fake' })).toHaveCount(1)
   await expect(messageItemsOf(bobPage).getByRole('button', { name: 'Connect fake' })).toHaveCount(0)
@@ -120,7 +121,8 @@ test('5. Alice connects a different account per workspace and each workspace’s
   const acmeAccount = accountOf('alice-acme')
   const globexAccount = accountOf('alice-globex')
   await connectFake(page, acmeAccount)
-  await addLlmKey(page, 'workspace-globex')
+  await page.goto('/w/workspace-globex')
+  await addLlmKey(page, 'Fake')
   await connectFake(page, globexAccount, 'workspace-globex')
 
   await page.goto('/w/workspace-acme')

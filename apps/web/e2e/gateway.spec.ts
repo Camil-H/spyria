@@ -1,8 +1,11 @@
 import {
+  addLlmKey,
   agentReplyText,
+  blockedNotice,
   expect,
   llmSectionOf,
   mainOf,
+  messageContaining,
   messageItemsOf,
   openChat,
   openProfile,
@@ -14,19 +17,6 @@ import {
 } from './fixtures'
 import { openPageAs } from './stack'
 
-const blockedNotice = 'Connect an LLM key in your profile to prompt'
-
-const addKey = async (page: Page, provider: string, secret: string) => {
-  await openProfile(page)
-  await llmSectionOf(page).getByLabel('Provider').fill(provider)
-  await llmSectionOf(page).getByLabel('Secret').fill(secret)
-  await llmSectionOf(page).getByRole('button', { name: 'Add' }).click()
-  await expect(
-    llmSectionOf(page)
-      .getByRole('listitem')
-      .filter({ hasText: `••••${secret.slice(-4)}` }),
-  ).toBeVisible()
-}
 const removeKey = async (page: Page, provider: string) => {
   await openProfile(page)
   await llmSectionOf(page)
@@ -36,7 +26,6 @@ const removeKey = async (page: Page, provider: string) => {
   await expect(llmSectionOf(page).getByRole('button', { name: `Remove ${provider}` })).toHaveCount(0)
 }
 const newSecret = (prefix = 'fake-key') => `${prefix}-${crypto.randomUUID()}`
-const repliesWith = (page: Page, text: string) => messageItemsOf(page).filter({ hasText: text })
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
 })
@@ -52,10 +41,10 @@ test('3 and 4. a member without a key cannot prompt; a member who removes their 
     await expect(mainOf(bobPage)).toContainText(blockedNotice)
     await expect(sendButtonOf(bobPage)).toBeDisabled()
   })
-  await addKey(bobPage, 'Fake', newSecret())
+  await addLlmKey(bobPage, 'Fake', newSecret())
   await openChat(page, 'Research')
   await sendMessage(page, 'Before removing my key')
-  await expect(repliesWith(page, agentReplyText)).toHaveCount(1)
+  await expect(messageContaining(page, agentReplyText)).toHaveCount(1)
 
   await removeKey(page, 'Anthropic')
   await openChat(page, 'Research')
@@ -64,13 +53,13 @@ test('3 and 4. a member without a key cannot prompt; a member who removes their 
 
   await openChat(bobPage, 'Research')
   await sendMessage(bobPage, 'Bob still prompts')
-  await expect(repliesWith(bobPage, agentReplyText)).toHaveCount(2)
+  await expect(messageContaining(bobPage, agentReplyText)).toHaveCount(2)
   await bobPage.context().close()
 })
 
 test('5. a key the provider refuses ends the turn with HQ’s notice and no provider text', async ({ page }) => {
   await removeKey(page, 'Anthropic')
-  await addKey(page, 'Fake', newSecret('fake-refused'))
+  await addLlmKey(page, 'Fake', newSecret('fake-refused'))
   await openChat(page, 'Research')
   await sendMessage(page, 'Use my refused key')
 
@@ -93,5 +82,5 @@ test('6. with the gateway down a prompt gets HQ’s notice; once it is back the 
 
   await workerStack.setGatewayReachable(true)
   await sendMessage(page, 'Now that it is back')
-  await expect(repliesWith(page, agentReplyText)).toHaveCount(1)
+  await expect(messageContaining(page, agentReplyText)).toHaveCount(1)
 })

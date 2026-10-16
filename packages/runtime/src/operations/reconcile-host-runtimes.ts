@@ -1,15 +1,15 @@
 import type { RuntimeHostId, WorkspaceId } from '@hq/kernel'
 import type { SandboxProvider } from '../contracts/sandbox-provider.ts'
 import type { RuntimeTransactor } from '../contracts/transactor.ts'
-import { locationOf, type RuntimeState, reconciledStateOf, runtimeJobs, transitioned } from '../domain/runtime.ts'
+import { locationOf, type RuntimeState, reconciledStateOf, runtimeJobTypes, transitioned } from '../domain/runtime.ts'
 import { recordIfUnchanged } from './record-if-unchanged.ts'
 
 type Dependencies = { transactor: RuntimeTransactor; provider: SandboxProvider }
 type Input = { workspaceId: WorkspaceId; hostId: RuntimeHostId; now: number }
 
 const unfinishedJobs: Partial<Record<RuntimeState, string>> = {
-  stopping: runtimeJobs.stop,
-  removing: runtimeJobs.remove,
+  stopping: runtimeJobTypes.stop,
+  removing: runtimeJobTypes.remove,
 }
 
 export const reconcileHostRuntimes = async (

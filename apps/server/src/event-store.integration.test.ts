@@ -9,7 +9,7 @@ import { startJobWorker } from './job-worker.ts'
 import { acme, alice, aliceInAcme, openSharedTestApp, bobInAcme, succeeded, waitFor } from './testing.ts'
 
 const sharedTestApp = await openSharedTestApp()
-const { database, eventsOf, changesOf } = sharedTestApp
+const { database, eventsOf, changesOf, messagesOf } = sharedTestApp
 const resultOf = (name: string, args: Record<string, unknown>) =>
   sharedTestApp.resultOf(aliceInAcme, name, { workspaceId: acme, ...args })
 const succeeds = async (name: string, args: Record<string, unknown>) =>
@@ -150,8 +150,6 @@ test('rebuilding repairs a drifted projection, only in the given scope', async (
 })
 
 test('concurrent senders, and concurrent messages and chat changes, get unique gap-free seqs per chat', async () => {
-  const messagesOf = (chatId: string) =>
-    database.query.messages.findMany({ where: { chatId }, orderBy: { seq: 'asc' } })
   const firstSeq = ((await eventsOf('chat-standup')).at(-1)?.seq ?? 0) + 1
   const races = [aliceInAcme, bobInAcme].flatMap((member) =>
     Array.from({ length: 15 }, (_, index) =>

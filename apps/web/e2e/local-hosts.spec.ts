@@ -1,16 +1,19 @@
 import {
+  addLlmKey,
   test as base,
   expect,
-  mainOf,
+  hostsSectionOf,
+  llmSectionOf,
+  machineSectionOf,
   messageItemsOf,
   openChat,
   openProfile,
+  openSettings,
   type Page,
   sendMessage,
-  sidebarOf,
+  urlOf,
 } from './fixtures'
 import { openPageAs } from './stack'
-import { viteUrl } from './stack-ports'
 
 type FakeMachine = { closed: Promise<string>; heartbeat: (signedIn: string[]) => void }
 type PairingOptions = { personal?: boolean; signedIn?: string[] }
@@ -54,16 +57,8 @@ const test = base.extend<{ pair: (url: string, options: PairingOptions) => FakeM
   },
 })
 
-const machineSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'My machine' })
-const llmSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'LLM access' })
 const useToolDialogOf = (page: Page, toolName: string) => page.getByRole('dialog', { name: `Use ${toolName}` })
-const hostsSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Runtime hosts' })
-const urlOf = (command: string) => `${viteUrl}/h/${command.match(/\/h\/([A-Z0-9]{8})\b/)?.[1]}`
 
-const openSettings = async (page: Page) => {
-  await sidebarOf(page).getByRole('link', { name: 'Workspace settings' }).click()
-  await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Workspace settings' })).toBeVisible()
-}
 const addMachine = async (page: Page) => {
   await openProfile(page)
   await machineSectionOf(page).getByRole('button', { name: 'Add my machine' }).click()
@@ -71,14 +66,6 @@ const addMachine = async (page: Page) => {
   const command = await dialog.getByRole('textbox', { name: 'Command' }).inputValue()
   await dialog.getByRole('button', { name: 'Close' }).click()
   return command
-}
-const addLlmKey = async (page: Page) => {
-  await openProfile(page)
-  const llmSection = mainOf(page).getByRole('region', { name: 'LLM access' })
-  await llmSection.getByLabel('Provider').fill('Anthropic')
-  await llmSection.getByLabel('Secret').fill(`fake-key-${crypto.randomUUID()}`)
-  await llmSection.getByRole('button', { name: 'Add' }).click()
-  await expect(llmSection.getByRole('listitem').filter({ hasText: 'Anthropic' })).toBeVisible()
 }
 const addWorkspaceHost = async (page: Page) => {
   await openSettings(page)
@@ -233,7 +220,7 @@ test('7. with only a local host online, ordinary runtime chats of its owner and 
   await expect(messageItemsOf(page).filter({ hasText: 'No runtime host is available' })).toHaveCount(1)
 
   const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-  await addLlmKey(bobPage)
+  await addLlmKey(bobPage, 'Anthropic')
   await openChat(bobPage, 'Research')
   await sendMessage(bobPage, 'Bob tries too')
   await expect(messageItemsOf(bobPage).filter({ hasText: 'No runtime host is available' })).toHaveCount(2)

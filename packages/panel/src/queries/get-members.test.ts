@@ -1,9 +1,7 @@
 import { expect, test } from 'bun:test'
-import { createMockSnapshot } from '@hq/db'
-import { chatId, workspaceId } from '@hq/kernel'
+import { acme, createMockSnapshot } from '@hq/db'
+import { chatId } from '@hq/kernel'
 import { getMembers } from './get-members.ts'
-
-const acme = workspaceId('workspace-acme')
 
 test('members lists the owner first, alone when no explicit members', () => {
   const snapshot = createMockSnapshot()

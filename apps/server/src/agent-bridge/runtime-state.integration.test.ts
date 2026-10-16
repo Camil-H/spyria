@@ -11,7 +11,7 @@ import {
   succeeded,
   waitFor,
 } from '../testing.ts'
-import { createHqAgentRelay } from './hq-agent-relay.ts'
+import type { createHqAgentRelay } from './hq-agent-relay.ts'
 
 setDefaultTimeout(30_000)
 const minute = 60_000
@@ -19,7 +19,6 @@ let clockOffsetMilliseconds = 0
 const {
   database,
   agentBridge,
-  fakeHost,
   mutate,
   newRuntimeChat,
   prompt,
@@ -33,33 +32,25 @@ const {
   holdUrl,
   jobStatesOf,
   jobDone,
+  ...stack
 } = await startAgentStack({
   llm: { model: 'openai/fake' },
   now: () => Date.now() + clockOffsetMilliseconds,
   promptsWaitingAfterHello: true,
 })
-const relays: ReturnType<typeof createHqAgentRelay>[] = []
-afterEach(async () => {
+afterEach(() => {
   clockOffsetMilliseconds = 0
-  await Promise.all(relays.splice(0).map((relay) => relay.stop()))
 })
 
 const aliceInGlobex = { workspaceId: globex, userId: alice }
 type Relay = ReturnType<typeof createHqAgentRelay>
-const agentHost = async (
-  name = 'Agent host',
-  agentServerOf: (relay: Relay) => ContainerAgent = (relay) => relay.agentServer,
-) => {
-  const relay = createHqAgentRelay({ holdUrl })
-  relays.push(relay)
-  return { relay, host: await fakeHost(name, { agentServer: agentServerOf(relay) }) }
-}
+const agentHost = (name = 'Agent host', agentServerOf?: (relay: Relay) => ContainerAgent) =>
+  stack.agentHost(name, { holdUrl, agentServerOf })
 const command = (member: typeof aliceInAcme, name: string, chat: ChatId, workspaceId: string = member.workspaceId) =>
   mutate(member, `conversation.${name}`, { workspaceId, chatId: chat })
 const firstTurnMilliseconds = 20_000
 const delivered = (relay: Relay, count: number) => waitFor(() => relay.prompts.length >= count, firstTurnMilliseconds)
-const commandShown = (messageId: string) =>
-  waitFor(async () => (await repliesTo(messageId)).some((reply) => reply.body === 'command'), firstTurnMilliseconds)
+const commandShown = (messageId: string) => stack.commandShown(messageId, firstTurnMilliseconds)
 const conversationIdOf = async (chat: ChatId) => String((await runtimeOf(chat)).agent_conversation_id)
 const conversationPath = /^\/api\/conversations\/[^/]+$/
 const interruptJobsOf = (chat: ChatId) => jobStatesOf('agent.interrupt', { chatId: chat })

@@ -1,6 +1,6 @@
 import type { Job } from '@hq/db/zero-queries'
 import type { GatewayUsageLogs } from '../contracts/usage-sync.ts'
-import { usageSync } from '../domain/usage.ts'
+import { usageJobTypes, usageSync } from '../domain/usage.ts'
 import { createPostgresUsageLedger } from '../integrations/postgres-usage-ledger.ts'
 import { syncUsage } from '../operations/sync-usage.ts'
 
@@ -18,7 +18,7 @@ export const syncUsageNow = async (logs: GatewayUsageLogs, { workspaceId, transa
 }
 
 export const createUsageJobs = (logs: GatewayUsageLogs) => ({
-  [usageSync.jobType]: async (job: UsageJob) => {
+  [usageJobTypes.sync]: async (job: UsageJob) => {
     try {
       await syncUsageNow(logs, job)
     } catch (error) {

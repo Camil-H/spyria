@@ -1,47 +1,28 @@
 import {
-  test as base,
   expect,
+  hostsSectionOf,
+  llmSectionOf,
+  machineSectionOf,
   mainOf,
-  messageItemsOf,
+  messageContaining,
   newRuntimeChat,
   openChat,
   openProfile,
+  openSettings,
   type Page,
   runsOnChoiceOf,
   sendMessage,
   serverUrl,
-  sidebarOf,
+  machineTest as test,
 } from './fixtures'
 import { openPageAs, type WorkerStack } from './stack'
-
-type Machine = { id: string; conversations: object[]; prompts: string[] }
-type MachineQuery = { owner?: string; signedIn?: string; online?: string }
-
-const test = base.extend<{ machine: (query?: MachineQuery) => Promise<Machine> }>({
-  machine: async ({ workerStack }, use) => {
-    const machine = async (query: MachineQuery = {}) => {
-      const search = new URLSearchParams({ db: workerStack.databaseName, ...query })
-      return (await (await fetch(`${serverUrl}/test/fake-machine?${search}`, { method: 'POST' })).json()) as Machine
-    }
-    await use(machine)
-    await machine({ online: 'false' })
-  },
-})
 
 const switchName = 'Members can run sessions on their own machine'
 const turnedOffNotice = "Your workspace turned off sessions on members' machines"
 const sessionNotice = "Sessions on members' machines are turned off for this workspace"
 
-const hostsSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Runtime hosts' })
-const machineSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'My machine' })
-const llmSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'LLM access' })
 const switchOf = (page: Page) => hostsSectionOf(page).getByRole('switch', { name: switchName })
-const repliesWith = (page: Page, text: string) => messageItemsOf(page).filter({ hasText: text })
 
-const openSettings = async (page: Page) => {
-  await sidebarOf(page).getByRole('link', { name: 'Workspace settings' }).click()
-  await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Workspace settings' })).toBeVisible()
-}
 const setLocalSessions = async (page: Page, isOn: boolean) => {
   await openSettings(page)
   await expect(switchOf(page)).toHaveAttribute('aria-checked', String(!isOn))
@@ -131,20 +112,20 @@ test('2. an existing local session answers prompts with the notice while it is o
   await newRuntimeChat(page, 'Laptop switch', 'My machine · Claude Code')
   await expect(mainOf(page).getByRole('button', { name: 'Claude Code · subscription' })).toBeVisible()
   await sendMessage(page, 'Before the switch')
-  await expect(repliesWith(page, '[t1] Hello from the stub')).toBeVisible()
+  await expect(messageContaining(page, '[t1] Hello from the stub')).toBeVisible()
   await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0)
 
   await setLocalSessions(page, false)
   await openChat(page, 'Laptop switch')
-  await expect(repliesWith(page, '[t1] Hello from the stub')).toBeVisible()
+  await expect(messageContaining(page, '[t1] Hello from the stub')).toBeVisible()
   await sendMessage(page, 'While it is off')
-  await expect(repliesWith(page, sessionNotice)).toHaveCount(1)
+  await expect(messageContaining(page, sessionNotice)).toHaveCount(1)
   expect((await machine()).prompts).toEqual(['Before the switch'])
 
   await setLocalSessions(page, true)
   await openChat(page, 'Laptop switch')
   await sendMessage(page, 'Back on')
-  await expect(repliesWith(page, '[t2] Hello from the stub')).toBeVisible()
+  await expect(messageContaining(page, '[t2] Hello from the stub')).toBeVisible()
   expect((await machine()).prompts).toEqual(['Before the switch', 'Back on'])
-  await expect(repliesWith(page, sessionNotice)).toHaveCount(1)
+  await expect(messageContaining(page, sessionNotice)).toHaveCount(1)
 })

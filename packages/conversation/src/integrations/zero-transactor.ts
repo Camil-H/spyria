@@ -26,19 +26,12 @@ import { type ChatId, chatId, type MessageId, memberId, messageId, type Workspac
 import { createRuntimeTransactor, removeChatRuntime } from '@hq/runtime/published'
 import type { Transaction } from '@rocicorp/zero'
 import type { ConversationTransactor, UnitOfWork } from '../contracts/transactor.ts'
-import { agentSweepIntervalMilliseconds, waitingNotices } from '../domain/agent-events.ts'
+import { agentJobTypes, agentSweepIntervalMilliseconds, waitingNotices } from '../domain/agent-events.ts'
 import type { StoredStep } from '../domain/agent-steps.ts'
 import { ChatNotFound, ForeignWorkspace, MessageNotFound } from '../domain/errors.ts'
 import type { Message, MessageChange } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
 import type { AgentEventPayload, ChangedPayload, PostedPayload } from '../domain/message-events.ts'
-
-export const agentJobTypes = {
-  prompt: 'agent.prompt',
-  startSession: 'agent.start-session',
-  interrupt: 'agent.interrupt',
-  sweep: 'agent.sweep',
-} as const
 
 const dateOrNull = (time: number | null) => (time === null ? null : new Date(time))
 const timeOrNull = (date: Date | null) => date?.getTime() ?? null

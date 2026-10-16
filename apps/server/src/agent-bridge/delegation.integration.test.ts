@@ -1,4 +1,4 @@
-import { afterEach, expect, setDefaultTimeout, test } from 'bun:test'
+import { expect, setDefaultTimeout, test } from 'bun:test'
 import { stillRunningOf, subagentFailureOf, unknownTaskOf } from '@hq/conversation/server'
 import { type ChatId, messageId } from '@hq/kernel'
 import type { FakeLlmScript } from '../fake-llm.ts'
@@ -8,21 +8,17 @@ import {
   aliceInAcme,
   type FakeHost,
   gatewayLogsOf,
+  type Launch,
   startAgentStack,
   succeeded,
   waitFor,
 } from '../testing.ts'
-import { createHqAgentRelay } from './hq-agent-relay.ts'
 
 setDefaultTimeout(40_000)
 const { database, gateway, setFakeLlmScript, agentBridge, fakeHost, mutate, prompt, turnOf, holds, ...stack } =
   await startAgentStack({ routing: true, resumeAfterMilliseconds: 5_000 })
 const newRuntimeChat = () => stack.newRuntimeChat({ defaultModel: 'fake/fake-medium' })
 const repliesTo = (promptId: string) => stack.repliesTo(promptId, ['kind', 'body', 'step'])
-const relays: ReturnType<typeof createHqAgentRelay>[] = []
-afterEach(async () => {
-  await Promise.all(relays.splice(0).map((relay) => relay.stop()))
-})
 
 const delegatedTask = { tool: 'delegate', arguments: { task: 'List the files', effort: 'small' } }
 const confidentSmall = { tier: 'small', confidence: 'high', effort: 'low' }
@@ -34,16 +30,8 @@ const delegatingScript = (script: FakeLlmScript = {}): FakeLlmScript => ({
   subagents: { 'fake-small': { steps: [{ command: 'echo sub' }], text: 'Sub done.' } },
   ...script,
 })
-type Launch = {
-  agent: { acp_command: string[]; acp_model?: string; acp_thought_level?: string }
-  secrets: Record<string, { value: string }>
-  parent_conversation_id?: string
-}
 const fakeAgent = async () => {
-  const relay = createHqAgentRelay({ modelCall: () => host.modelCall })
-  relays.push(relay)
-  const host = await fakeHost('Delegation host', { agentServer: relay.agentServer })
-  const launches = () => relay.created as Launch[]
+  const { relay, host, launches } = await stack.agentHost('Delegation host', { routesModelCalls: true })
   return {
     relay,
     host,

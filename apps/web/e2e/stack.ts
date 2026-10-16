@@ -104,6 +104,9 @@ export const openPageAs = async (browser: Browser, workerStack: WorkerStack, use
   return page
 }
 
+export const runtimeStateOf = async (workerStack: WorkerStack, chatId: string) =>
+  (await workerStack.database.$client`select state from runtimes where chat_id = ${chatId}`)[0]?.state
+
 const pairFakeHost = async (database: Database, databaseName: string): Promise<PairedHost> => {
   const setOnline = (isOnline: boolean) =>
     postToServer('/test/fake-host', { db: databaseName, online: String(isOnline) })

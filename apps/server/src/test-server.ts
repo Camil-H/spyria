@@ -1,8 +1,9 @@
+import { acme } from '@hq/db'
 import { createDatabase, type Database } from '@hq/db/postgres'
 import { setModelDirectory } from '@hq/db/server-writes'
 import { databaseUrlOf } from '@hq/db/testing'
 import { schema } from '@hq/db/zero'
-import { addRoutableModels, chatId, workspaceId } from '@hq/kernel'
+import { addRoutableModels, chatId } from '@hq/kernel'
 import { createLlmGateway } from '@hq/profile/server'
 import { createRuntimeTransactor, ensureRuntimeRunning, type SandboxProvider } from '@hq/runtime/server'
 import { createBifrostUsageLogs, syncUsageNow } from '@hq/usage/server'
@@ -77,7 +78,7 @@ const databaseByName = (databaseName: string) => {
   const zeroDatabase = zeroDrizzle(schema, database)
   const syncUsage = () =>
     syncUsageNow(usageLogs, {
-      workspaceId: workspaceId('workspace-acme'),
+      workspaceId: acme,
       transact: (work) => zeroDatabase.transaction(work),
     })
   servedDatabaseByName.set(databaseName, {
@@ -301,7 +302,7 @@ const app = createApp({
     await zeroDrizzle(schema, databaseByName(db)).transaction((tx) =>
       ensureRuntimeRunning(
         { transactor: createRuntimeTransactor(tx), ...placement },
-        { workspaceId: workspaceId('workspace-acme'), chatId: chatId(chat), id: crypto.randomUUID(), now: Date.now() },
+        { workspaceId: acme, chatId: chatId(chat), id: crypto.randomUUID(), now: Date.now() },
       ),
     )
     return context.body(null, 204)

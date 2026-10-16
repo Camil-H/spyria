@@ -1,18 +1,13 @@
 import { expect, test } from 'bun:test'
 import { createModelRelay } from './model-relay.ts'
+import { nextFrameOf, waitFor } from './testing.ts'
 
 type Frame = Record<string, unknown>
 
 const relayCollecting = (isConnected = true) => {
   const sent: Frame[] = []
   const relay = createModelRelay({ send: (frame) => isConnected && sent.push(frame) > 0 })
-  const nextOf = async (type: string) => {
-    for (const deadline = Date.now() + 5000; Date.now() < deadline; await Bun.sleep(5)) {
-      const index = sent.findIndex((frame) => frame.type === type)
-      if (index >= 0) return sent.splice(index, 1)[0] as Frame
-    }
-    throw new Error(`No ${type} frame`)
-  }
+  const nextOf = (type: string) => nextFrameOf(sent, type)
   return { relay, sent, nextOf }
 }
 const completionRequest = () =>
@@ -102,6 +97,6 @@ test('redacts the body of a call leaving a personal host', async () => {
   void relay.fetch(
     new Request('http://hq-gateway-relay:4000/mcp', { method: 'POST', body: '{"arguments":"sk-ant-oat01-secret"}' }),
   )
-  for (const deadline = Date.now() + 5000; sent.length === 0 && Date.now() < deadline; await Bun.sleep(5));
+  await waitFor(() => sent.length > 0)
   expect(sent[0]).toMatchObject({ body: '{"arguments":"[redacted]"}' })
 })

@@ -1,16 +1,6 @@
 import { expect, test } from 'bun:test'
 import { runtimeHostId } from '@hq/kernel'
 import {
-  claimCodeAlphabet,
-  claimLifetimeMilliseconds,
-  claimRefusal,
-  isClaimExpired,
-  newClaimCode,
-  newSecretToken,
-} from './claim.ts'
-import { hostCommandOf } from './host-command.ts'
-import { HostName } from './host-name.ts'
-import {
   canTransition,
   ensureStepOf,
   idleStepOf,
@@ -18,70 +8,12 @@ import {
   placementOf,
   type Runtime,
   type RuntimeState,
+  type RuntimeStatus,
   reconciledStateOf,
   removalStepOf,
+  runtimeStatusOf,
   transitioned,
 } from './runtime.ts'
-import { capacityOf } from './runtime-host.ts'
-
-const gibibyte = 1024 ** 3
-const system = {
-  cpus: 8,
-  memoryBytes: 8 * gibibyte,
-  dockerVersion: '29.0.0',
-  rootless: true,
-  cgroupDriver: 'systemd',
-  limitsEnforced: true,
-}
-
-test('a claim code has 8 characters from an alphabet without look-alikes', () => {
-  expect(claimCodeAlphabet).not.toMatch(/[01ILO]/)
-  const codes = Array.from({ length: 2000 }, newClaimCode)
-  for (const code of codes) expect(code).toMatch(/^[A-HJ-NP-Z2-9]{8}$/)
-  expect(new Set(codes).size).toBe(codes.length)
-  expect(new Set(codes.join(''))).toEqual(new Set(claimCodeAlphabet))
-})
-
-test('a claim code lives 15 minutes', () => {
-  const createdAt = Date.parse('2026-10-05T10:00:00Z')
-  const expiresAt = createdAt + claimLifetimeMilliseconds
-  expect(isClaimExpired(expiresAt, expiresAt - 1)).toBe(false)
-  expect(isClaimExpired(expiresAt, expiresAt)).toBe(true)
-})
-
-test('a claim is refused for a removed host first, then a used code, then an expired one', () => {
-  const now = Date.parse('2026-10-05T10:00:00Z')
-  const fresh = { removedAt: null, claimed: false, claimExpiresAt: now + 1 }
-  expect(claimRefusal(fresh, now)).toBeUndefined()
-  expect(claimRefusal({ ...fresh, claimExpiresAt: now }, now)?.message).toBe('This code has expired')
-  expect(claimRefusal({ ...fresh, claimed: true, claimExpiresAt: now }, now)?.message).toBe(
-    'This code was already used',
-  )
-  expect(claimRefusal({ removedAt: now, claimed: true, claimExpiresAt: now }, now)?.message).toBe(
-    'This host was removed',
-  )
-})
-
-test('a host token or runtime API key carries 256 random bits in base64url', () => {
-  const tokens = Array.from({ length: 100 }, newSecretToken)
-  for (const token of tokens) expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/)
-  expect(new Set(tokens).size).toBe(100)
-})
-
-test('the default cap is one runtime per GB after a 2 GB reserve, at least one', () => {
-  expect(capacityOf(system).cap).toBe(6)
-  expect(capacityOf({ ...system, memoryBytes: 16 * gibibyte }).cap).toBe(14)
-  expect(capacityOf({ ...system, memoryBytes: 2.5 * gibibyte }).cap).toBe(1)
-  expect(capacityOf({ ...system, memoryBytes: gibibyte }).cap).toBe(1)
-  expect(capacityOf(system)).toEqual({ ...system, cap: 6 })
-})
-
-test('a host name is trimmed, never blank and at most 60 characters', () => {
-  expect<string>(HostName('  Home server ')).toBe('Home server')
-  expect(() => HostName('   ')).toThrow('A host name must contain at least one non-blank character')
-  expect(HostName('x'.repeat(60))).toHaveLength(60)
-  expect(() => HostName('x'.repeat(61))).toThrow('A host name has at most 60 characters')
-})
 
 const minute = 60_000
 const now = Date.parse('2026-10-05T10:00:00Z')
@@ -191,27 +123,20 @@ test('reconciliation follows the container for running and stopped rows only', (
   expect(reconciledStateOf(runtime({ state: 'creating' }), 'running')).toBeUndefined()
 })
 
-test('the host command replaces hq-host and its state, picks rootless or rooted Docker itself and rewrites localhost', () => {
-  const workspaceCommand = hostCommandOf({ origin: 'https://hq.test', code: 'ABCDEFGH' })
-  expect(workspaceCommand).toStartWith(
-    'docker rm -f hq-host >/dev/null 2>&1; docker volume rm hq-host >/dev/null 2>&1; docker run -d --name hq-host ',
-  )
-  expect(workspaceCommand).toContain("docker info -f '{{.SecurityOptions}}' | grep -q rootless")
-  expect(workspaceCommand).toContain('--user 0 -v $XDG_RUNTIME_DIR/docker.sock:/var/run/docker.sock')
-  expect(workspaceCommand).toContain('--group-add $(')
-  expect(workspaceCommand).toContain('-v /var/run/docker.sock:/var/run/docker.sock')
-  expect(workspaceCommand).not.toContain('--add-host')
-  expect(workspaceCommand).toEndWith(' hq-host https://hq.test/h/ABCDEFGH')
-
-  const localCommand = hostCommandOf({ origin: 'http://localhost:5173', code: 'ABCDEFGH', personal: true })
-  expect(localCommand).toStartWith('docker build -q -t hq-host apps/host >/dev/null && docker rm -f hq-host ')
-  expect(localCommand).toContain(' --add-host host.docker.internal:host-gateway ')
-  expect(localCommand).toEndWith(' hq-host --personal http://host.docker.internal:5173/h/ABCDEFGH')
-})
-
-test('the personal host command signs in to the chosen tool once the host runs', () => {
-  for (const tool of ['claude', 'codex'] as const)
-    expect(hostCommandOf({ origin: 'https://hq.test', code: 'ABCDEFGH', personal: true, signIn: tool })).toEndWith(
-      ` hq-host --personal https://hq.test/h/ABCDEFGH && docker exec -it hq-host hq-host login ${tool}`,
-    )
+test.each<[RuntimeState | undefined, boolean, RuntimeStatus]>([
+  [undefined, true, 'Not started'],
+  ['creating', true, 'Starting…'],
+  ['starting', true, 'Starting…'],
+  ['running', true, 'Ready'],
+  ['stopping', true, 'Sleeping'],
+  ['stopped', true, 'Sleeping'],
+  ['failed', true, 'Could not start'],
+  ['removing', true, 'Could not start'],
+  ['removed', true, 'Could not start'],
+  ['running', false, 'Host offline'],
+  ['stopped', false, 'Host offline'],
+  ['starting', false, 'Starting…'],
+  ['failed', false, 'Could not start'],
+])('a %s runtime with its host online %p reads %s', (state, hostOnline, status) => {
+  expect(runtimeStatusOf(state && { state, hostOnline })).toBe(status)
 })

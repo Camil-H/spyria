@@ -18,10 +18,11 @@ const serverOnlyModules = [
 ]
 const productionEntries = '^apps/(server/src/index\\.ts|web/src/main\\.tsx)$'
 const testOnlyModules = [
-  '^apps/server/src/(test-server|testing|integration-setup)\\.ts$',
+  '(^|/)testing\\.ts$',
+  '\\.test\\.tsx?$',
+  '^apps/server/src/(test-server|integration-setup|fake-mcp|agent-bridge/hq-agent-relay)\\.ts$',
   '^packages/db/src/postgres/test-database\\.ts$',
   '^apps/web/e2e/',
-  '\\.test\\.ts$',
 ]
 const zeroTestHarness = '^apps/web/(e2e/|playwright\\.config\\.ts$)'
 const zeroConfig = '^packages/db/drizzle-zero\\.config\\.ts$'

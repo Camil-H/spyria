@@ -1,12 +1,9 @@
 import { expect, test } from 'bun:test'
-import { createMockSnapshot, type MessageRow } from '@hq/db'
-import { chatId, memberId, messageId, workspaceId } from '@hq/kernel'
+import { acme, alice, createMockSnapshot, type MessageRow, bob } from '@hq/db'
+import { chatId, messageId } from '@hq/kernel'
 import { hasUnread } from './has-unread.ts'
 
-const acme = workspaceId('workspace-acme')
 const research = chatId('chat-research')
-const alice = memberId('member-alice')
-const bob = memberId('member-bob')
 
 const messageOf = (seq: number, authorId: MessageRow['authorId']): MessageRow => ({
   id: messageId(`message-${seq}`),

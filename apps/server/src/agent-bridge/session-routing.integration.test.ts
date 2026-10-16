@@ -1,4 +1,4 @@
-import { afterEach, expect, setDefaultTimeout, test } from 'bun:test'
+import { expect, setDefaultTimeout, test } from 'bun:test'
 import { type ChatId, reachableModelsOf, withPricesOf } from '@hq/kernel'
 import {
   acme,
@@ -13,28 +13,16 @@ import {
   succeeded,
   waitFor,
 } from '../testing.ts'
-import { createHqAgentRelay } from './hq-agent-relay.ts'
 
 setDefaultTimeout(40_000)
-const { database, app, gateway, llmGateway, setFakeLlmScript, fakeHost, mutate, prompt, repliesTo, ...stack } =
+const { database, app, gateway, llmGateway, setFakeLlmScript, mutate, prompt, repliesTo, ...stack } =
   await startAgentStack({ routing: true })
 const newRuntimeChat = (defaultModel: string | null = 'fake/fake-medium', ownerId = alice) =>
   stack.newRuntimeChat({ defaultModel, ownerId })
 
-const relays: ReturnType<typeof createHqAgentRelay>[] = []
-afterEach(async () => {
-  await Promise.all(relays.splice(0).map((relay) => relay.stop()))
-})
-
 type Route = { tier: string; confidence: string | number; effort: string; prose?: boolean } | 'fail' | 'slow'
 const routeWith = (route: Route) => setFakeLlmScript({ route })
-type Launch = { agent: { acp_model?: string; acp_thought_level?: string } }
-const fakeAgent = async () => {
-  const relay = createHqAgentRelay({ modelCall: () => host.modelCall })
-  relays.push(relay)
-  const host = await fakeHost('Routing host', { agentServer: relay.agentServer })
-  return { relay, launches: () => relay.created as Launch[] }
-}
+const fakeAgent = () => stack.agentHost('Routing host', { routesModelCalls: true })
 const answered = async (messageId: string) => {
   await waitFor(
     async () =>
@@ -48,10 +36,8 @@ const chatOf = async (chat: ChatId) =>
     await database.$client`
       select model, reasoning_effort, default_model, subagent_policy, agent_model from chats where id = ${chat}`
   )[0]
-const decisionsOf = async (chat: ChatId) =>
-  database.$client`
-    select role, model, reason, conversation_id, member_id, classifier_output from routing_decisions
-    where workspace_id = ${acme} and chat_id = ${chat} order by created_at`
+const decisionsOf = (chat: ChatId) =>
+  stack.decisionsOf(chat, ['role', 'model', 'reason', 'conversation_id', 'member_id', 'classifier_output'])
 const logsOf = (chat: ChatId, minimum: number) => gatewayLogsOf(gateway, `metadata_chat=${chat}`, minimum)
 const routing = (chat: ChatId, member: { workspaceId: string; userId: string }, fields: Record<string, unknown>) =>
   mutate(member, 'conversation.updateChatRouting', { workspaceId: acme, chatId: chat, ...fields })
@@ -100,16 +86,15 @@ test('the first prompt is classified once, on the prompter’s cheapest model wi
 
 test('a lost conversation is routed again for the new session', async () => {
   let lostConversationId = ''
-  const relay = createHqAgentRelay({ modelCall: () => host.modelCall })
-  relays.push(relay)
-  const host = await fakeHost('Routing host', {
-    agentServer: {
+  await stack.agentHost('Routing host', {
+    routesModelCalls: true,
+    agentServerOf: (relay) => ({
       ...relay.agentServer,
       respond: (request, container) =>
         lostConversationId && request.path === `/api/conversations/${lostConversationId}`
           ? { status: 404, body: '{}' }
           : relay.agentServer.respond(request, container),
-    },
+    }),
   })
   const chat = await newRuntimeChat()
   routeWith({ tier: 'small', confidence: 'high', effort: 'low' })

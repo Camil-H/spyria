@@ -2,7 +2,7 @@ import type { Job } from '@hq/db/zero-queries'
 import { runtimeId } from '@hq/kernel'
 import { z } from 'zod/mini'
 import type { SandboxProvider } from '../contracts/sandbox-provider.ts'
-import { runtimeJobs } from '../domain/runtime.ts'
+import { runtimeJobTypes } from '../domain/runtime.ts'
 import { createTransactingZeroTransactor } from '../integrations/zero-transactor.ts'
 import { bringUpRuntime } from '../operations/bring-up-runtime.ts'
 import { removeRuntime } from '../operations/remove-runtime.ts'
@@ -20,11 +20,11 @@ export const createRuntimeJobs = (provider: SandboxProvider) => {
         { workspaceId, ...runtimePayload.parse(payload), now: Date.now(), isLastAttempt },
       )
   return {
-    [runtimeJobs.create]: forRuntime(bringUpRuntime),
-    [runtimeJobs.start]: forRuntime(bringUpRuntime),
-    [runtimeJobs.stop]: forRuntime(stopRuntime),
-    [runtimeJobs.remove]: forRuntime(removeRuntime),
-    [runtimeJobs.sweep]: ({ workspaceId, transact }: Job) =>
+    [runtimeJobTypes.create]: forRuntime(bringUpRuntime),
+    [runtimeJobTypes.start]: forRuntime(bringUpRuntime),
+    [runtimeJobTypes.stop]: forRuntime(stopRuntime),
+    [runtimeJobTypes.remove]: forRuntime(removeRuntime),
+    [runtimeJobTypes.sweep]: ({ workspaceId, transact }: Job) =>
       sweepRuntimes({ transactor: createTransactingZeroTransactor(transact) }, { workspaceId, now: Date.now() }),
   }
 }

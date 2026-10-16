@@ -1,4 +1,4 @@
-import { afterEach, expect, setDefaultTimeout, test } from 'bun:test'
+import { expect, setDefaultTimeout, test } from 'bun:test'
 import { createHash } from 'node:crypto'
 import { commandOutputPathOf, rebuildMessages } from '@hq/conversation/server'
 import { schema } from '@hq/db/zero'
@@ -17,7 +17,6 @@ import {
   succeeded,
   waitFor,
 } from '../testing.ts'
-import { createHqAgentRelay } from './hq-agent-relay.ts'
 
 setDefaultTimeout(30_000)
 const {
@@ -25,7 +24,6 @@ const {
   app,
   runtimeHosts,
   agentBridge,
-  fakeHost,
   mutate,
   newRuntimeChat,
   prompt,
@@ -41,18 +39,7 @@ const {
 } = await startAgentStack({ llm: { model: 'openai/fake/fake-model' } })
 const repliesTo = (messageId: string) => stack.repliesTo(messageId, ['kind', 'body', 'detail'])
 const answered = stack.answered
-const relays: ReturnType<typeof createHqAgentRelay>[] = []
-afterEach(async () => {
-  await Promise.all(relays.splice(0).map((relay) => relay.stop()))
-})
-
-type Launch = { agent: { acp_command: string[]; acp_model?: string }; secrets: Record<string, { value: string }> }
-const agentHost = async () => {
-  const relay = createHqAgentRelay({ holdUrl })
-  relays.push(relay)
-  const host = await fakeHost('Agent host', { agentServer: relay.agentServer })
-  return { relay, host, launches: () => relay.created as Launch[] }
-}
+const agentHost = () => stack.agentHost('Agent host', { holdUrl })
 const replyOf = (turn: number) => ({
   kind: 'agent' as const,
   body: `[t${turn}] Hello from the stub (model hq/fake/fake-model, mode default).`,

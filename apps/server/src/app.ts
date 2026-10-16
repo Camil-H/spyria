@@ -6,10 +6,10 @@ import {
   commandOutputPathOf,
   conversationMutators,
   createGatewaySessionClassifier,
+  getChatRouting,
+  getCommandOutput,
   planModeOf,
   questionAnswerOf,
-  readChatRouting,
-  readCommandOutput,
 } from '@hq/conversation/server'
 import type { Database } from '@hq/db/postgres'
 import { schema } from '@hq/db/zero'
@@ -194,12 +194,12 @@ export const createApp = ({
       return context.text(
         await context
           .get('zeroDatabase')
-          .transaction((tx) => readCommandOutput(tx, context.get('zeroContext'), chatId, stepId)),
+          .transaction((tx) => getCommandOutput(tx, context.get('zeroContext'), chatId, stepId)),
       )
     })
     .get(chatRoutingPathOf(':chatId'), async (context) =>
       context.json(
-        await readChatRouting(
+        await getChatRouting(
           (work) => context.get('zeroDatabase').transaction(work),
           context.get('zeroContext'),
           context.req.param('chatId') ?? '',

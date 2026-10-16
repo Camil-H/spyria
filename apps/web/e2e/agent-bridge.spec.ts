@@ -1,24 +1,17 @@
 import {
   agentReplyText,
-  chatLinkOf,
   expect,
   mainOf,
+  messageContaining,
   messageItemsOf,
   openChat,
-  type Page,
+  research,
   sendMessage,
   test,
+  unreadIconOf,
   workingIndicatorOf,
 } from './fixtures'
-import { openPageAs, type WorkerStack } from './stack'
-
-const research = 'chat-research'
-const itemsWith = (page: Page, text: string) => messageItemsOf(page).filter({ hasText: text })
-const unreadIconOf = (page: Page, chatName: string) =>
-  chatLinkOf(page, chatName).getByRole('img', { name: 'Unread messages' })
-
-const runtimeStateOf = async (workerStack: WorkerStack, chatId: string) =>
-  (await workerStack.database.$client`select state from runtimes where chat_id = ${chatId}`)[0]?.state
+import { openPageAs, runtimeStateOf } from './stack'
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
@@ -33,7 +26,7 @@ test.describe('1. first prompt', () => {
     await sendMessage(page, 'Find the latest pricing')
 
     await expect(workingIndicatorOf(page)).toBeVisible()
-    await expect(itemsWith(page, agentReplyText)).toHaveCount(1)
+    await expect(messageContaining(page, agentReplyText)).toHaveCount(1)
     await expect(workingIndicatorOf(page)).toHaveCount(0)
     await expect(messageItemsOf(page).nth(0)).toContainText('Find the latest pricing')
     await expect(messageItemsOf(page).nth(1)).toContainText('Agent')
@@ -46,7 +39,7 @@ test('5. keeps the prompt and the reply after a reload, and the chat is not unre
 }) => {
   await openChat(page, 'Research')
   await sendMessage(page, 'Remember this')
-  await expect(itemsWith(page, agentReplyText)).toHaveCount(1)
+  await expect(messageContaining(page, agentReplyText)).toHaveCount(1)
   await expect(workingIndicatorOf(page)).toHaveCount(0)
 
   await page.reload()
@@ -65,12 +58,12 @@ test('6. a reload during a turn shows the prompt, then the reply once it complet
   await agentScript(research, { hold: 'answer' })
   await openChat(page, 'Research')
   await sendMessage(page, 'Stream through a reload')
-  await expect(itemsWith(page, 'Understood,')).toHaveCount(1)
+  await expect(messageContaining(page, 'Understood,')).toHaveCount(1)
 
   await page.reload()
-  await expect(itemsWith(page, 'Stream through a reload')).toHaveCount(1)
+  await expect(messageContaining(page, 'Stream through a reload')).toHaveCount(1)
   await release('answer')
-  await expect(itemsWith(page, agentReplyText)).toHaveCount(1)
+  await expect(messageContaining(page, agentReplyText)).toHaveCount(1)
   await expect(workingIndicatorOf(page)).toHaveCount(0)
   await expect(messageItemsOf(page)).toHaveCount(2)
 })
@@ -88,14 +81,14 @@ test('7. another member viewing the chat sees the reply stream in, then the stor
   await openChat(page, 'Research')
   await sendMessage(page, 'Watch this')
 
-  await expect(itemsWith(bobPage, 'Watch this')).toHaveCount(1)
+  await expect(messageContaining(bobPage, 'Watch this')).toHaveCount(1)
   const bobReply = messageItemsOf(bobPage).nth(1)
   await expect(bobReply).toContainText('Understood,')
   expect(await bobReply.textContent()).not.toContain(agentReplyText)
   await release('answer')
   await expect(bobReply).toContainText(agentReplyText)
   await expect(workingIndicatorOf(bobPage)).toHaveCount(0)
-  await expect(itemsWith(bobPage, agentReplyText)).toHaveCount(1)
+  await expect(messageContaining(bobPage, agentReplyText)).toHaveCount(1)
   await expect(unreadIconOf(bobPage, 'Research')).toHaveCount(0)
   await bobPage.context().close()
 })

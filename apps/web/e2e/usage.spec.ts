@@ -1,18 +1,16 @@
 import {
-  addCredential,
+  addLlmKey,
   agentReplyText,
   expect,
   type Locator,
-  llmSectionOf,
   mainOf,
   messageContaining,
   openChat,
   openPanelTab,
-  openProfile,
+  openSettings,
   type Page,
   sendMessage,
   serverUrl,
-  sidebarOf,
   tabPanelOf,
   test,
 } from './fixtures'
@@ -44,8 +42,7 @@ const cellsOf = async (row: Locator) => {
 const openUsageTab = (page: Page, chatName: string) => openPanelTab(page, chatName, 'Usage')
 
 const openUsageSettings = async (page: Page) => {
-  await sidebarOf(page).getByRole('link', { name: 'Workspace settings' }).click()
-  await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Workspace settings' })).toBeVisible()
+  await openSettings(page)
   await expect(usageSectionOf(page).getByRole('heading', { level: 2, name: 'Usage' })).toBeVisible()
 }
 
@@ -77,12 +74,6 @@ const prompt = async (page: Page, text: string, expectedReplies: number) => {
   await expect(messageContaining(page, agentReplyText)).toHaveCount(expectedReplies)
 }
 
-const addFakeKey = async (page: Page) => {
-  await openProfile(page)
-  await addCredential(page, { provider: 'Fake', secret: `fake-key-${crypto.randomUUID()}` })
-  await expect(llmSectionOf(page).getByRole('listitem').filter({ hasText: 'Fake' })).toBeVisible()
-}
-
 const expectMeteredRow = async (row: Locator, calls: number) => {
   await expect(row.getByRole('cell').nth(2)).toHaveText(String(calls))
   const cells = await cellsOf(row)
@@ -100,7 +91,7 @@ test('3. two prompters each get a row, the total is their sum, and workspace set
   workerStack,
 }) => {
   const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-  await addFakeKey(bobPage)
+  await addLlmKey(bobPage, 'Fake')
   await prompt(page, 'Alice asks', 1)
   await prompt(bobPage, 'Bob asks', 2)
   await syncUntilResearchCalls(workerStack, 3)

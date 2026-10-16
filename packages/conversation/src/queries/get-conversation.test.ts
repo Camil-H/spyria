@@ -1,13 +1,11 @@
 import { expect, test } from 'bun:test'
-import { createMockSnapshot, type Snapshot } from '@hq/db'
-import { chatId, memberId, messageId, runtimeHostId, runtimeId, workspaceId } from '@hq/kernel'
+import { acme, alice, createMockSnapshot, type Snapshot, bob } from '@hq/db'
+import { chatId, messageId, runtimeHostId, runtimeId } from '@hq/kernel'
 import { stillRunningOf } from '../domain/delegation.ts'
 import type { RunsOn } from '../domain/session-routing.ts'
 import { durationLabelOf, getConversation } from './get-conversation.ts'
 
-const acme = workspaceId('workspace-acme')
 const research = chatId('chat-research')
-const alice = memberId('member-alice')
 const prompt = messageId('message-prompt')
 
 const snapshotWith = ({ turn, waiting }: { turn: boolean; waiting: boolean }): Snapshot => {
@@ -333,7 +331,6 @@ test('a Claude Code subagent gathers the steps that carry its tool call id into 
   ])
 })
 
-const bob = memberId('member-bob')
 const delegationStatesOf = (conversation: ReturnType<typeof conversationWith>) =>
   conversation?.items.flatMap((item) =>
     item.type === 'message' && item.message.delegation

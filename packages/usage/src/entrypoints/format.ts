@@ -1,7 +1,5 @@
 import type { UsageMonth } from '../domain/usage.ts'
 
-export { formatCost, formatTokens } from '@hq/ui'
-
 export const currentMonth = (now = new Date()): UsageMonth => now.toISOString().slice(0, 7)
 
 export const formatMonth = (month: UsageMonth) =>

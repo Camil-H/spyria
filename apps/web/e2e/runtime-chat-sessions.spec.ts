@@ -1,48 +1,26 @@
 import {
-  test as base,
+  chipOf,
   chooseRunsOn,
   expect,
   mainOf,
-  messageItemsOf,
+  messageContaining,
   newRuntimeChat,
   openChat,
   type Page,
   runsOnChoiceOf,
+  runsOnOf,
   sendButtonOf,
   sendMessage,
-  serverUrl,
+  sessionOf,
   sidebarOf,
+  signedInMachine,
+  machineTest as test,
 } from './fixtures'
 import { openPageAs } from './stack'
 
-type MachineConversation = {
-  agent: { acp_command: string[]; acp_model?: string }
-  secrets: Record<string, unknown>
-}
-type Machine = { id: string; conversations: MachineConversation[]; prompts: string[]; modelSwitches: string[] }
-type MachineQuery = { owner?: string; signedIn?: string; online?: string }
-
-const test = base.extend<{ machine: (query?: MachineQuery) => Promise<Machine> }>({
-  machine: async ({ workerStack }, use) => {
-    const machine = async (query: MachineQuery = {}) => {
-      const search = new URLSearchParams({ db: workerStack.databaseName, ...query })
-      return (await (await fetch(`${serverUrl}/test/fake-machine?${search}`, { method: 'POST' })).json()) as Machine
-    }
-    await use(machine)
-    await machine({ online: 'false' })
-  },
-})
-
 const claudeOnMachine = 'My machine · Claude Code'
 const codexOnMachine = 'My machine · Codex'
-const signedInMachine = { owner: 'member-alice', signedIn: 'claude' }
 
-const chipOf = (page: Page) =>
-  mainOf(page).getByRole('button', {
-    name: /^Model chosen at first prompt$|^Claude Code · |^Codex · |· (auto|same as main)$/,
-  })
-const sessionOf = (page: Page) => page.getByRole('dialog', { name: 'Session' })
-const runsOnOf = (page: Page) => mainOf(page).getByRole('combobox', { name: 'Runs on' })
 const expectRunsOnLocked = async (page: Page) => {
   await expect(runsOnOf(page)).toBeDisabled()
   await expect(runsOnOf(page)).toHaveValue('runtime')
@@ -51,9 +29,8 @@ const expectRunsOnChoices = async (page: Page, names: string[]) => {
   await expect(runsOnChoiceOf(page).getByRole('radio')).toHaveCount(names.length)
   for (const name of names) await expect(runsOnChoiceOf(page).getByRole('radio', { name })).not.toBeChecked()
 }
-const repliesWith = (page: Page, text: string) => messageItemsOf(page).filter({ hasText: text })
 const openSession = async (page: Page) => {
-  if (!(await sessionOf(page).isVisible())) await chipOf(page).click()
+  if (!(await sessionOf(page).isVisible())) await chipOf(page, 'any').click()
   await expect(sessionOf(page)).toBeVisible()
 }
 test.beforeEach(async ({ page }) => {
@@ -72,8 +49,8 @@ test('3. a new runtime chat left on HQ runtime runs on a workspace host with the
   await page.keyboard.press('Escape')
   await agentScript(chatId, { text: 'Answered on an HQ runtime.' })
   await sendMessage(page, 'Hello HQ runtime')
-  await expect(repliesWith(page, 'Answered on an HQ runtime.')).toBeVisible()
-  await expect(chipOf(page)).toHaveText(/· auto$/)
+  await expect(messageContaining(page, 'Answered on an HQ runtime.')).toBeVisible()
+  await expect(chipOf(page, 'any')).toHaveText(/· auto$/)
 })
 
 test('4. another member does not see the choice, and Runs on locks once a conversation exists', async ({
@@ -92,10 +69,10 @@ test('4. another member does not see the choice, and Runs on locks once a conver
 
   await openSession(page)
   await runsOnOf(page).selectOption({ label: claudeOnMachine })
-  await expect(chipOf(page)).toHaveText('Claude Code · subscription')
+  await expect(chipOf(page, 'any')).toHaveText('Claude Code · subscription')
   await page.keyboard.press('Escape')
   await sendMessage(page, 'Lock it')
-  await expect(repliesWith(page, 'Hello from the stub')).toBeVisible()
+  await expect(messageContaining(page, 'Hello from the stub')).toBeVisible()
   await openSession(page)
   await expect(runsOnOf(page)).toBeDisabled()
   await expect(runsOnOf(page)).toHaveValue('claude-code')
@@ -201,15 +178,15 @@ test.describe('without a workspace host', () => {
     await machine({ online: 'false' })
     const chatId = await newRuntimeChat(page, 'No host first')
     await sendMessage(page, 'First try')
-    await expect(repliesWith(page, 'No runtime host is available')).toHaveCount(1)
+    await expect(messageContaining(page, 'No runtime host is available')).toHaveCount(1)
     await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0)
     await machine({ online: 'true' })
     await openSession(page)
     await runsOnOf(page).selectOption({ label: claudeOnMachine })
-    await expect(chipOf(page)).toHaveText('Claude Code · subscription')
+    await expect(chipOf(page, 'any')).toHaveText('Claude Code · subscription')
     await page.keyboard.press('Escape')
     await sendMessage(page, 'Second try')
-    await expect(repliesWith(page, 'Hello from the stub')).toHaveCount(2)
+    await expect(messageContaining(page, 'Hello from the stub')).toHaveCount(2)
     const [runtime] = await workerStack.database.$client`select host_id from runtimes where chat_id = ${chatId}`
     expect(runtime?.host_id).toBe(machineId)
     await expect.poll(async () => (await machine()).prompts).toEqual(['First try', 'Second try'])

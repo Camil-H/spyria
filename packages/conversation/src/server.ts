@@ -10,20 +10,20 @@ export {
   toolServerOf,
 } from './domain/tool-calls.ts'
 export type { AgentStream, ConversationCommands } from './entrypoints/commands.ts'
+export { planModeOf, questionAnswerOf } from './entrypoints/endpoints.ts'
+export { createAgentHandlers } from './entrypoints/jobs.ts'
+export { conversationMutators } from './entrypoints/mutators.ts'
+export { createGatewaySessionClassifier } from './integrations/gateway-session-classifier.ts'
 export {
   chatPlanModePathOf,
   chatQuestionPathOf,
   chatRoutingPathOf,
   commandOutputPathOf,
-  planModeOf,
-  questionAnswerOf,
-  readChatRouting,
-  readCommandOutput,
-} from './entrypoints/endpoints.ts'
-export { createAgentHandlers } from './entrypoints/jobs.ts'
-export { conversationMutators } from './entrypoints/mutators.ts'
-export { createGatewaySessionClassifier } from './integrations/gateway-session-classifier.ts'
-export { rebuildMessages } from './integrations/message-projection.ts'
+  createHttpChatCommands,
+} from './integrations/http-chats.ts'
+export { rebuildMessages } from './integrations/postgres-message-projection.ts'
 export { type AgentLlm, createSandboxAgentServer } from './integrations/sandbox-agent-server.ts'
 export { createStoreDraftRepository } from './integrations/store-draft-repository.ts'
 export { saveDraft } from './operations/save-draft.ts'
+export { getChatRouting } from './queries/get-chat-routing.ts'
+export { getCommandOutput } from './queries/get-command-output.ts'
