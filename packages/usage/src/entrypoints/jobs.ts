@@ -1,12 +1,12 @@
-import type { WorkspaceId } from '@hq/kernel'
+import type { Job } from '@hq/db/zero-queries'
 import type { GatewayUsageLogs } from '../contracts/usage-sync.ts'
 import { usageSync } from '../domain/usage.ts'
-import { createPostgresUsageLedger, type Transact } from '../integrations/postgres-usage-ledger.ts'
+import { createPostgresUsageLedger } from '../integrations/postgres-usage-ledger.ts'
 import { syncUsage } from '../operations/sync-usage.ts'
 
-type Job = { workspaceId: WorkspaceId; transact: Transact }
+type UsageJob = Pick<Job, 'workspaceId' | 'transact'>
 
-export const syncUsageNow = async (logs: GatewayUsageLogs, { workspaceId, transact }: Job) => {
+export const syncUsageNow = async (logs: GatewayUsageLogs, { workspaceId, transact }: UsageJob) => {
   const { behindMilliseconds } = await syncUsage(
     { logs, ledger: createPostgresUsageLedger(transact) },
     { workspaceId, now: new Date() },
@@ -18,7 +18,7 @@ export const syncUsageNow = async (logs: GatewayUsageLogs, { workspaceId, transa
 }
 
 export const createUsageJobs = (logs: GatewayUsageLogs) => ({
-  [usageSync.jobType]: async (job: Job) => {
+  [usageSync.jobType]: async (job: UsageJob) => {
     try {
       await syncUsageNow(logs, job)
     } catch (error) {

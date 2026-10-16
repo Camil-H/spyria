@@ -1,3 +1,4 @@
+import type { Transactor } from '@hq/kernel'
 import type {
   ChatRepository,
   ChatRuntimeRepository,
@@ -16,6 +17,4 @@ export type UnitOfWork = {
   memberModels: MemberModelDirectory
 }
 
-export type Transactor = {
-  run<Result>(work: (unitOfWork: UnitOfWork) => Promise<Result>): Promise<Result>
-}
+export type WorkspaceTransactor = Transactor<UnitOfWork>

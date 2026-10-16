@@ -1,8 +1,8 @@
 import { type MemberId, workspaceId } from '@hq/kernel'
-import type { Transactor } from '../contracts/transactor.ts'
+import type { WorkspaceTransactor } from '../contracts/transactor.ts'
 import type { Name } from '../domain/name.ts'
 
-type Dependencies = { transactor: Transactor }
+type Dependencies = { transactor: WorkspaceTransactor }
 type Input = { id: string; ownerId: MemberId; name: Name }
 
 export const createWorkspace = ({ transactor }: Dependencies, { id, ownerId, name }: Input) =>

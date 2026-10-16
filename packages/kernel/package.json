@@ -2,7 +2,7 @@
   "name": "@hq/kernel",
   "private": true,
   "type": "module",
-  "exports": "./src/ids.ts",
+  "exports": "./src/index.ts",
   "scripts": {
     "typecheck": "tsc -p ."
   }

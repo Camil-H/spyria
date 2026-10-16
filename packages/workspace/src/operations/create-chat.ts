@@ -1,9 +1,9 @@
 import { chatId, type MemberId, type ProjectId, type WorkspaceId } from '@hq/kernel'
-import type { Transactor } from '../contracts/transactor.ts'
+import type { WorkspaceTransactor } from '../contracts/transactor.ts'
 import { type Chat, movedChat } from '../domain/chat.ts'
 import type { Name } from '../domain/name.ts'
 
-type Dependencies = { transactor: Transactor }
+type Dependencies = { transactor: WorkspaceTransactor }
 type Input = {
   id: string
   workspaceId: WorkspaceId

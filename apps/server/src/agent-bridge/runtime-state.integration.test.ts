@@ -64,7 +64,8 @@ const conversationIdOf = async (chat: ChatId) => String((await runtimeOf(chat)).
 const conversationPath = /^\/api\/conversations\/[^/]+$/
 const interruptJobsOf = (chat: ChatId) => jobStatesOf('agent.interrupt', { chatId: chat })
 const offlineReopenMilliseconds = 200
-const sweepAgentTurns = () => agentBridge.forDatabase(database).jobs['agent.sweep']({ workspaceId: acme, payload: {} })
+const sweepAgentTurns = () =>
+  agentBridge.forDatabase(database).jobs['agent.sweep']({ workspaceId: acme, payload: {}, isLastAttempt: false })
 const agentReply = (turn: number) => ({
   kind: 'agent' as const,
   body: `[t${turn}] Hello from the stub (model hq/fake, mode default).`,

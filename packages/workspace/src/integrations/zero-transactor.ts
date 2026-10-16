@@ -4,7 +4,7 @@ import { type ZeroContext, zql } from '@hq/db/zero-queries'
 import { chatId, defaultModelOf, memberId, projectId, workspaceId } from '@hq/kernel'
 import { createRuntimeTransactor, removeChatRuntime } from '@hq/runtime/published'
 import type { Transaction } from '@rocicorp/zero'
-import type { Transactor, UnitOfWork } from '../contracts/transactor.ts'
+import type { UnitOfWork, WorkspaceTransactor } from '../contracts/transactor.ts'
 import type { Chat, ChatChange } from '../domain/chat.ts'
 import { ChatNotFound, ForeignWorkspace, ProjectNotFound } from '../domain/errors.ts'
 import { Name } from '../domain/name.ts'
@@ -36,7 +36,7 @@ const eventPayloadOf: Record<ChatChange['type'], (chat: Chat) => object> = {
   'chat.archived': () => ({}),
 }
 
-export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Transactor => {
+export const createZeroTransactor = (tx: Transaction, context: ZeroContext): WorkspaceTransactor => {
   const createdWorkspaceIds = new Set<string>()
   const inContextWorkspace = <Row extends { workspaceId: string }>(row: Row) => {
     if (row.workspaceId !== context.workspaceId) throw new ForeignWorkspace()

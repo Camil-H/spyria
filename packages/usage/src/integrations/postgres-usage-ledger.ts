@@ -1,9 +1,7 @@
+import type { Transact } from '@hq/db/zero-queries'
 import type { WorkspaceId } from '@hq/kernel'
-import type { ServerTransaction } from '@rocicorp/zero'
 import type { UsageLedger } from '../contracts/usage-sync.ts'
 import { usageSync } from '../domain/usage.ts'
-
-export type Transact = <Result>(work: (tx: ServerTransaction) => Promise<Result>) => Promise<Result>
 
 const recordCalls = `
   with incoming as (

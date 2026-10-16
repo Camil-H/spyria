@@ -1,44 +1,34 @@
-export class WorkspaceError extends Error {
-  readonly code: string
+import { DomainError, errorKind } from '@hq/kernel'
 
-  constructor(code: string, message: string) {
-    super(message)
-    this.code = code
-  }
-}
+export class WorkspaceError extends DomainError {}
 
-export class BlankName extends WorkspaceError {
-  constructor() {
-    super('blank_name', 'A name must contain at least one non-blank character')
-  }
-}
-
-export class ProjectNotFound extends WorkspaceError {
-  constructor(projectId: string) {
-    super('project_not_found', `Project ${projectId} was not found`)
-  }
-}
-
-export class ChatNotFound extends WorkspaceError {
-  constructor(chatId: string) {
-    super('chat_not_found', `Chat ${chatId} was not found`)
-  }
-}
-
-export class CrossWorkspaceMove extends WorkspaceError {
-  constructor() {
-    super('cross_workspace_move', 'A chat can only move to a project of its own workspace')
-  }
-}
-
-export class SourceChatArchived extends WorkspaceError {
-  constructor() {
-    super('source_chat_archived', 'A runtime chat cannot start from an archived chat')
-  }
-}
-
-export class ForeignWorkspace extends WorkspaceError {
-  constructor() {
-    super('foreign_workspace', 'The change targets a workspace other than the current one')
-  }
-}
+export const BlankName = errorKind(
+  'blank_name',
+  () => 'A name must contain at least one non-blank character',
+  WorkspaceError,
+)
+export const ProjectNotFound = errorKind(
+  'project_not_found',
+  (projectId: string) => `Project ${projectId} was not found`,
+  WorkspaceError,
+)
+export const ChatNotFound = errorKind(
+  'chat_not_found',
+  (chatId: string) => `Chat ${chatId} was not found`,
+  WorkspaceError,
+)
+export const CrossWorkspaceMove = errorKind(
+  'cross_workspace_move',
+  () => 'A chat can only move to a project of its own workspace',
+  WorkspaceError,
+)
+export const SourceChatArchived = errorKind(
+  'source_chat_archived',
+  () => 'A runtime chat cannot start from an archived chat',
+  WorkspaceError,
+)
+export const ForeignWorkspace = errorKind(
+  'foreign_workspace',
+  () => 'The change targets a workspace other than the current one',
+  WorkspaceError,
+)

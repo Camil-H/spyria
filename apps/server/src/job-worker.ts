@@ -1,6 +1,7 @@
 import { setTimeout as sleep } from 'node:timers/promises'
 import type { Database } from '@hq/db/postgres'
 import { schema } from '@hq/db/zero'
+import type { Job, Transact } from '@hq/db/zero-queries'
 import { type WorkspaceId, workspaceId } from '@hq/kernel'
 import { type createLlmGateway, createProfileJobs } from '@hq/profile/server'
 import { createRuntimeJobs, type SandboxProvider } from '@hq/runtime/server'
@@ -10,14 +11,8 @@ import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import type { AgentBridge } from './agent-bridge/bridge.ts'
 import { sessionJobs } from './auth/sessions.ts'
 
-type Transact = <Result>(work: (tx: ServerTransaction) => Promise<Result>) => Promise<Result>
 type TransactionalJobHandler = (tx: ServerTransaction, workspaceId: WorkspaceId, payload: unknown) => Promise<unknown>
-type JobHandler = (job: {
-  workspaceId: WorkspaceId
-  payload: unknown
-  isLastAttempt: boolean
-  transact: Transact
-}) => Promise<unknown>
+type JobHandler = (job: Job) => Promise<unknown>
 type ClaimedJob = { workspace_id: string; id: string; type: string; payload: unknown; attempt: number; lease: string }
 
 export const maximumJobAttempts = 5

@@ -1,6 +1,5 @@
-import type { ZeroContext } from '@hq/db/zero-queries'
+import type { Job, Transact, ZeroContext } from '@hq/db/zero-queries'
 import { type MemberId, memberId, type WorkspaceId, workspaceId } from '@hq/kernel'
-import type { Transaction } from '@rocicorp/zero'
 import { z } from 'zod/mini'
 import type { LlmGateway, ToolGateway } from '../contracts/repositories.ts'
 import type { ProfileTransactor } from '../contracts/transactor.ts'
@@ -17,9 +16,6 @@ import {
   refreshToolConnection,
   startToolConnection,
 } from '../operations/tool-connections.ts'
-
-type Transact = <Result>(work: (tx: Transaction) => Promise<Result>) => Promise<Result>
-type Job = { workspaceId: string; payload: unknown; transact: Transact }
 
 const textOf = (value: unknown) => (typeof value === 'string' ? value : '')
 const id = z.string().check(z.minLength(1))

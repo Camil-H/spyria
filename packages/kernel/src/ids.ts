@@ -19,4 +19,3 @@ export const messageId = (value: string) => value as MessageId
 export const credentialId = (value: string) => value as CredentialId
 export const runtimeHostId = (value: string) => value as RuntimeHostId
 export const runtimeId = (value: string) => value as RuntimeId
-export * from './models.ts'

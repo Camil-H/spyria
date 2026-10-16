@@ -1,3 +1,4 @@
+import type { Transactor } from '@hq/kernel'
 import type {
   JobQueue,
   RuntimeHostRepository,
@@ -14,6 +15,4 @@ export type UnitOfWork = {
   workspaces: WorkspaceSettings
 }
 
-export type RuntimeTransactor = {
-  run<Result>(work: (unitOfWork: UnitOfWork) => Promise<Result>): Promise<Result>
-}
+export type RuntimeTransactor = Transactor<UnitOfWork>

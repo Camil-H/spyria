@@ -1,14 +1,10 @@
-import type { ZeroContext } from '@hq/db/zero-queries'
+import type { Transact, ZeroContext } from '@hq/db/zero-queries'
 import { type RuntimeHostId, runtimeHostId, type WorkspaceId } from '@hq/kernel'
 import type { Transaction } from '@rocicorp/zero'
 import { z } from 'zod/mini'
 import type { SandboxProvider } from '../contracts/sandbox-provider.ts'
 import { assertAdmin, type HostDeclaration, type HostSystem } from '../domain/runtime-host.ts'
-import {
-  createTransactingZeroTransactor,
-  createZeroTransactor,
-  type Transact,
-} from '../integrations/zero-transactor.ts'
+import { createTransactingZeroTransactor, createZeroTransactor } from '../integrations/zero-transactor.ts'
 import { addRuntimeHost } from '../operations/add-runtime-host.ts'
 import { claimRuntimeHost } from '../operations/claim-runtime-host.ts'
 import { markHostOffline } from '../operations/mark-host-offline.ts'

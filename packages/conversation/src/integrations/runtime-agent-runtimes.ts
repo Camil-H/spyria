@@ -1,3 +1,4 @@
+import type { Transact } from '@hq/db/zero-queries'
 import {
   createRuntimeTransactor,
   ensureRuntimeRunning,
@@ -15,7 +16,6 @@ import {
 } from '@hq/runtime/published'
 import type { Transaction } from '@rocicorp/zero'
 import type { AgentChat, AgentEndpoint, AgentRuntimes, RuntimeRetrier } from '../contracts/agent.ts'
-import type { Transact } from './zero-transactor.ts'
 
 export type { SandboxProvider }
 

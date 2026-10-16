@@ -1,3 +1,4 @@
+import type { Transactor } from '@hq/kernel'
 import type {
   AgentEventRepository,
   AgentJobs,
@@ -24,6 +25,4 @@ export type UnitOfWork = {
   delegations: DelegationRepository
 }
 
-export type ConversationTransactor = {
-  run<Result>(work: (unitOfWork: UnitOfWork) => Promise<Result>): Promise<Result>
-}
+export type ConversationTransactor = Transactor<UnitOfWork>

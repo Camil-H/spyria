@@ -1,3 +1,4 @@
+import type { Job, Transact } from '@hq/db/zero-queries'
 import { chatId, type MemberId, type MessageId, memberId, messageId, type WorkspaceId } from '@hq/kernel'
 import { z } from 'zod/mini'
 import type {
@@ -11,7 +12,7 @@ import type {
 import { type AgentEvent, isStoredAgentEvent, type TurnOutcome } from '../domain/agent-events.ts'
 import { createRuntimeAgentRuntimes, type SandboxProvider } from '../integrations/runtime-agent-runtimes.ts'
 import { type AgentLlm, createSandboxAgentServer } from '../integrations/sandbox-agent-server.ts'
-import { agentJobTypes, createTransactingZeroTransactor, type Transact } from '../integrations/zero-transactor.ts'
+import { agentJobTypes, createTransactingZeroTransactor } from '../integrations/zero-transactor.ts'
 import { forwardToAgent } from '../operations/agent-questions.ts'
 import { closeReopenedTurn, reopenAgentTurn, sweepAgentTurns } from '../operations/agent-turn-safety.ts'
 import { delegateTask } from '../operations/delegate.ts'
@@ -21,7 +22,7 @@ import { recordAgentEvent } from '../operations/record-agent-event.ts'
 import { promptWaitingChats } from '../operations/retry-agent.ts'
 import { interruptAgent } from '../operations/stop-agent.ts'
 
-type Job = { workspaceId: WorkspaceId; payload: unknown; isLastAttempt?: boolean }
+type AgentJob = Omit<Job, 'transact'>
 
 const id = z.string().check(z.minLength(1))
 const promptPayload = z.object({ messageId: z.pipe(id, z.transform(messageId)) })
@@ -65,17 +66,17 @@ export const createAgentHandlers = ({
   })
   return {
     jobs: {
-      [agentJobTypes.prompt]: ({ workspaceId, payload, isLastAttempt = false }: Job) =>
+      [agentJobTypes.prompt]: ({ workspaceId, payload, isLastAttempt }: AgentJob) =>
         promptAgent(dependenciesOf(workspaceId), {
           workspaceId,
           messageId: promptPayload.parse(payload).messageId,
           isLastAttempt,
         }),
-      [agentJobTypes.startSession]: ({ workspaceId, payload }: Job) =>
+      [agentJobTypes.startSession]: ({ workspaceId, payload }: AgentJob) =>
         startAgentSession(dependenciesOf(workspaceId), { workspaceId, ...startSessionPayload.parse(payload) }),
-      [agentJobTypes.interrupt]: ({ workspaceId, payload }: Job) =>
+      [agentJobTypes.interrupt]: ({ workspaceId, payload }: AgentJob) =>
         interruptAgent(dependenciesOf(workspaceId), { workspaceId, ...interruptPayload.parse(payload) }),
-      [agentJobTypes.sweep]: ({ workspaceId }: Job) =>
+      [agentJobTypes.sweep]: ({ workspaceId }: AgentJob) =>
         sweepAgentTurns(dependenciesOf(workspaceId), { workspaceId, now: now() }),
     },
     openEvents: async (chat: AgentChat, conversation: AgentConversation, listener: AgentEventListener) =>

@@ -1,5 +1,5 @@
 import type { MemberId, WorkspaceId } from '@hq/kernel'
-import { createBuilder, defineQueries, defineQuery } from '@rocicorp/zero'
+import { createBuilder, defineQueries, defineQuery, type ServerTransaction } from '@rocicorp/zero'
 import { schema } from './zero.ts'
 
 export type ZeroContext = {
@@ -8,6 +8,9 @@ export type ZeroContext = {
   role: 'admin' | 'member'
   hqAgentImage?: string
 }
+
+export type Transact = <Result>(work: (tx: ServerTransaction) => Promise<Result>) => Promise<Result>
+export type Job = { workspaceId: WorkspaceId; payload: unknown; isLastAttempt: boolean; transact: Transact }
 
 export const zql = createBuilder(schema)
 

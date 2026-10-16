@@ -21,7 +21,7 @@ import {
   stopRunningDelegations,
 } from '@hq/db/server-writes'
 import type { Message as MessageRow } from '@hq/db/zero'
-import { zql } from '@hq/db/zero-queries'
+import { type Transact, zql } from '@hq/db/zero-queries'
 import { type ChatId, chatId, type MessageId, memberId, messageId, type WorkspaceId, workspaceId } from '@hq/kernel'
 import { createRuntimeTransactor, removeChatRuntime } from '@hq/runtime/published'
 import type { Transaction } from '@rocicorp/zero'
@@ -318,8 +318,6 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
   }
   return { run: (work) => work(unitOfWork) }
 }
-
-export type Transact = <Result>(work: (tx: Transaction) => Promise<Result>) => Promise<Result>
 
 export const createTransactingZeroTransactor = (
   transact: Transact,

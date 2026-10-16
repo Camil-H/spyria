@@ -1,8 +1,8 @@
 import type { MemberId, ProjectId } from '@hq/kernel'
-import type { Transactor } from '../contracts/transactor.ts'
+import type { WorkspaceTransactor } from '../contracts/transactor.ts'
 import { archivedProject, type ChatsPolicy } from '../domain/project.ts'
 
-type Dependencies = { transactor: Transactor }
+type Dependencies = { transactor: WorkspaceTransactor }
 type Input = { projectId: ProjectId; chatsPolicy: ChatsPolicy; actorId: MemberId }
 
 export const archiveProject = ({ transactor }: Dependencies, { projectId, chatsPolicy, actorId }: Input) =>

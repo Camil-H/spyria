@@ -1,3 +1,4 @@
+import type { Transactor } from '@hq/kernel'
 import type {
   GatewayJobs,
   LlmCredentialRepository,
@@ -14,6 +15,4 @@ export type UnitOfWork = {
   personalConnections: PersonalConnectionRepository
 }
 
-export type ProfileTransactor = {
-  run<Result>(work: (unitOfWork: UnitOfWork) => Promise<Result>): Promise<Result>
-}
+export type ProfileTransactor = Transactor<UnitOfWork>
