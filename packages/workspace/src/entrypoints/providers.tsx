@@ -1,14 +1,4 @@
-import { createContext, type ReactNode, use } from 'react'
+import { createCommandsContext } from '@hq/ui'
 import type { WorkspaceCommands } from './commands.ts'
 
-const WorkspaceCommandsContext = createContext<WorkspaceCommands | null>(null)
-
-export const WorkspaceProvider = ({ commands, children }: { commands: WorkspaceCommands; children: ReactNode }) => (
-  <WorkspaceCommandsContext value={commands}>{children}</WorkspaceCommandsContext>
-)
-
-export const useWorkspaceCommands = () => {
-  const commands = use(WorkspaceCommandsContext)
-  if (!commands) throw new Error('WorkspaceProvider is missing')
-  return commands
-}
+export const [WorkspaceProvider, useWorkspaceCommands] = createCommandsContext<WorkspaceCommands>('WorkspaceProvider')

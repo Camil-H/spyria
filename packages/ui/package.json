@@ -6,6 +6,9 @@
   "scripts": {
     "typecheck": "tsc -p ."
   },
+  "dependencies": {
+    "@hq/kernel": "workspace:*"
+  },
   "peerDependencies": {
     "react": "^19"
   },

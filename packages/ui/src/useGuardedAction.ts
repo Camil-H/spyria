@@ -1,5 +1,5 @@
+import { DomainError } from '@hq/kernel'
 import { useState } from 'react'
-import { ProfileError } from '../domain/errors.ts'
 
 export const useGuardedAction = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -9,7 +9,7 @@ export const useGuardedAction = () => {
       setErrorMessage(null)
       return true
     } catch (error) {
-      if (!(error instanceof ProfileError)) throw error
+      if (!(error instanceof DomainError)) throw error
       setErrorMessage(error.message)
       return false
     }

@@ -25,7 +25,15 @@ import { createLlmGateway } from '@hq/profile/server'
 import { workspaceMutators } from '@hq/workspace/server'
 import { Hono } from 'hono'
 import { websocket } from 'hono/bun'
-import { createAgentBridge } from './agent-bridge/bridge.ts'
+import { createAgentBridge } from '../agent-bridge/bridge.ts'
+import { createApp, sessionClassifierOf } from '../app.ts'
+import { issueSessionToken } from '../auth/session-tokens.ts'
+import { openSessions } from '../auth/sessions.ts'
+import { createFakeLlm, type FakeLlmScript, fakeRoutableModels } from '../fake-llm.ts'
+import { startJobWorker } from '../job-worker.ts'
+import { createModelCallRelay } from '../llm-relay.ts'
+import { createRuntimeHostGateway } from '../runtime-hosts/gateway.ts'
+import { createFakeMcp } from './fake-mcp.ts'
 import {
   type ContainerAgent,
   createHqAgentRelay,
@@ -33,15 +41,7 @@ import {
   type HostFrame,
   type Launch,
   type ModelCall,
-} from './agent-bridge/hq-agent-relay.ts'
-import { createApp, sessionClassifierOf } from './app.ts'
-import { issueSessionToken } from './auth/session-tokens.ts'
-import { openSessions } from './auth/sessions.ts'
-import { createFakeLlm, type FakeLlmScript, fakeRoutableModels } from './fake-llm.ts'
-import { createFakeMcp } from './fake-mcp.ts'
-import { startJobWorker } from './job-worker.ts'
-import { createModelCallRelay } from './llm-relay.ts'
-import { createRuntimeHostGateway } from './runtime-hosts/gateway.ts'
+} from './hq-agent-relay.ts'
 
 export const testAuthSettings = {
   tokenSecret: 'integration-test-secret',

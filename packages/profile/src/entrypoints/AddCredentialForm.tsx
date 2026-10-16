@@ -1,11 +1,9 @@
 import type { WorkspaceId } from '@hq/kernel'
-import { buttonClass, fieldClass, labelClass } from '@hq/ui'
+import { buttonClass, ErrorMessage, fieldClass, labelClass, useGuardedAction } from '@hq/ui'
 import { type SubmitEvent, useState } from 'react'
 import { Secret } from '../domain/secret.ts'
-import { ErrorMessage } from './ErrorMessage.tsx'
 import { useProfileCommands } from './providers.tsx'
 import { credentialGridClass } from './ui.ts'
-import { useGuardedAction } from './useGuardedAction.ts'
 
 const emptyForm = { provider: '', secret: '' }
 

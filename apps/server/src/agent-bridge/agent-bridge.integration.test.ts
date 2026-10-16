@@ -16,7 +16,7 @@ import {
   startAgentStack,
   succeeded,
   waitFor,
-} from '../testing.ts'
+} from '../testing/testing.ts'
 
 setDefaultTimeout(30_000)
 const {

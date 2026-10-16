@@ -25,7 +25,7 @@ import {
   sessionTokenOf,
   testAuthSettings,
   waitFor,
-} from '../testing.ts'
+} from '../testing/testing.ts'
 import { createAgentBridge } from './bridge.ts'
 
 setDefaultTimeout(180_000)

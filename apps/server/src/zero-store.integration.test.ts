@@ -4,7 +4,16 @@ import { createMockSnapshot, type Snapshot } from '@hq/db'
 import { createZeroStore } from '@hq/db/zero-store'
 import type { MemberId, WorkspaceId } from '@hq/kernel'
 import { workspaceMutators } from '@hq/workspace/server'
-import { acme, alice, globex, openSharedTestApp, openZeroStore, bob, waitFor, zeroSessionsOf } from './testing.ts'
+import {
+  acme,
+  alice,
+  globex,
+  openSharedTestApp,
+  openZeroStore,
+  bob,
+  waitFor,
+  zeroSessionsOf,
+} from './testing/testing.ts'
 
 const { database } = await openSharedTestApp()
 

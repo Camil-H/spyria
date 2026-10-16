@@ -60,11 +60,11 @@ const isIntegrationTest = (file: string) => file.endsWith('.integration.test.ts'
 const isOutsideTests = (file: string) =>
   /\.md$|^\.claude\/|^scripts\/|^\.gitignore$|^biome\.json$|^\.dependency-cruiser\.cjs$/.test(file)
 const isE2eHarness = (file: string) =>
-  /^apps\/server\/src\/(test-server|testing|fake-llm)\.ts$|^packages\/db\/src\/postgres\/test-database\.ts$|^apps\/web\/(playwright\.config|e2e\/global-setup|e2e\/stack-ports)\.ts$/.test(
+  /^apps\/server\/src\/(testing\/(test-server|testing)|fake-llm)\.ts$|^packages\/db\/src\/postgres\/test-database\.ts$|^apps\/web\/(playwright\.config|e2e\/global-setup|e2e\/stack-ports)\.ts$/.test(
     file,
   )
 const isWebAsset = (file: string) => /^apps\/web\/(index\.html|(src|public)\/.+\.(css|html|svg|png|ico))$/.test(file)
-const integrationPreload = 'apps/server/src/integration-setup.ts'
+const integrationPreload = 'apps/server/src/testing/integration-setup.ts'
 
 const [lint, typecheck, boundaries, cruise] = await fastChecks
 const fastResults = [lint, typecheck, boundaries]

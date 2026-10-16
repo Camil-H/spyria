@@ -1,13 +1,11 @@
 import { useQuery } from '@hq/db/react'
 import type { MemberId, WorkspaceId } from '@hq/kernel'
-import { ghostButtonClass, LabelledSection, tabTriggerClass } from '@hq/ui'
+import { ErrorMessage, ghostButtonClass, LabelledSection, tabTriggerClass, useGuardedAction } from '@hq/ui'
 import { Content, List, Root, Trigger } from '@radix-ui/react-tabs'
 import { useEffect, useState } from 'react'
 import { getPersonalConnections } from '../queries/get-personal-connections.ts'
 import { getSharedConnections } from '../queries/get-shared-connections.ts'
-import { ErrorMessage } from './ErrorMessage.tsx'
 import { useProfileCommands } from './providers.tsx'
-import { useGuardedAction } from './useGuardedAction.ts'
 
 const rowClass = 'flex flex-wrap items-center gap-x-3 gap-y-1'
 const tabClass = `${tabTriggerClass} px-3 text-sm`

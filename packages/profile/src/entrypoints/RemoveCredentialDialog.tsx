@@ -1,8 +1,6 @@
 import type { CredentialId, WorkspaceId } from '@hq/kernel'
-import { buttonClass, Dialog } from '@hq/ui'
-import { ErrorMessage } from './ErrorMessage.tsx'
+import { buttonClass, Dialog, ErrorMessage, useGuardedAction } from '@hq/ui'
 import { useProfileCommands } from './providers.tsx'
-import { useGuardedAction } from './useGuardedAction.ts'
 
 export const RemoveCredentialDialog = ({
   workspaceId,

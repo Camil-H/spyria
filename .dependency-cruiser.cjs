@@ -20,7 +20,7 @@ const productionEntries = '^apps/(server/src/index\\.ts|web/src/main\\.tsx)$'
 const testOnlyModules = [
   '(^|/)testing\\.ts$',
   '\\.test\\.tsx?$',
-  '^apps/server/src/(test-server|integration-setup|fake-mcp|agent-bridge/hq-agent-relay)\\.ts$',
+  '^apps/server/src/testing/',
   '^packages/db/src/postgres/test-database\\.ts$',
   '^apps/web/e2e/',
 ]

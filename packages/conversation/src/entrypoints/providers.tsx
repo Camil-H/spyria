@@ -1,9 +1,12 @@
-import { createContext, type ReactNode, use } from 'react'
+import { createCommandsContext } from '@hq/ui'
+import { createContext, type ReactNode } from 'react'
 import type { AgentStream, ConversationCommands } from './commands.ts'
 import type { QuestionAnswer } from './endpoints.ts'
 
-const ConversationCommandsContext = createContext<ConversationCommands | null>(null)
-const AgentStreamContext = createContext<AgentStream | null>(null)
+const [CommandsProvider, useConversationCommands] = createCommandsContext<ConversationCommands>('ConversationProvider')
+const [AgentStreamProvider, useAgentStream] = createCommandsContext<AgentStream>('ConversationProvider')
+
+export { useAgentStream, useConversationCommands }
 
 export const ConversationProvider = ({
   commands,
@@ -14,22 +17,10 @@ export const ConversationProvider = ({
   agentStream: AgentStream
   children: ReactNode
 }) => (
-  <ConversationCommandsContext value={commands}>
-    <AgentStreamContext value={agentStream}>{children}</AgentStreamContext>
-  </ConversationCommandsContext>
+  <CommandsProvider commands={commands}>
+    <AgentStreamProvider commands={agentStream}>{children}</AgentStreamProvider>
+  </CommandsProvider>
 )
-
-export const useAgentStream = () => {
-  const agentStream = use(AgentStreamContext)
-  if (!agentStream) throw new Error('ConversationProvider is missing')
-  return agentStream
-}
-
-export const useConversationCommands = () => {
-  const commands = use(ConversationCommandsContext)
-  if (!commands) throw new Error('ConversationProvider is missing')
-  return commands
-}
 
 export const AnswerQuestionContext = createContext<
   ((questionId: string, answer: QuestionAnswer) => Promise<number>) | undefined

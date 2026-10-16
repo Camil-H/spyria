@@ -11,7 +11,7 @@ import { websocket } from 'hono/bun'
 import { createApp } from '../app.ts'
 import { readHqAgentImage } from '../hq-agent-image.ts'
 import { startJobWorker } from '../job-worker.ts'
-import { acme, aliceInAcme, openSharedTestApp, sessionTokenOf, testAuthSettings, waitFor } from '../testing.ts'
+import { acme, aliceInAcme, openSharedTestApp, sessionTokenOf, testAuthSettings, waitFor } from '../testing/testing.ts'
 import { createRuntimeHostGateway } from './gateway.ts'
 
 const docker = (...args: string[]) => Bun.spawnSync(['docker', ...args], { stderr: 'pipe' })

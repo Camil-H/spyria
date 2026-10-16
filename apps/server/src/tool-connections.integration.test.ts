@@ -18,7 +18,7 @@ import {
   testAuthSettings,
   virtualKeyOf,
   waitFor,
-} from './testing.ts'
+} from './testing/testing.ts'
 
 setDefaultTimeout(30_000)
 const { database, app, port, gateway, llmGateway, fakeMcp } = await openSharedTestApp()

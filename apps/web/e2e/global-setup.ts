@@ -91,7 +91,7 @@ export default async function globalSetup() {
       oauthBase: `${viteUrl}/gateway-oauth`,
     }),
     startDetached(
-      ['bun', 'src/test-server.ts'],
+      ['bun', 'src/testing/test-server.ts'],
       `${repositoryRoot}apps/server`,
       {
         PORT: new URL(serverUrl).port,

@@ -23,7 +23,7 @@ import {
 import type { Message as MessageRow } from '@hq/db/zero'
 import { type Transact, zql } from '@hq/db/zero-queries'
 import { type ChatId, chatId, type MessageId, memberId, messageId, type WorkspaceId, workspaceId } from '@hq/kernel'
-import { createRuntimeTransactor, removeChatRuntime } from '@hq/runtime/published'
+import { removeChatRuntimeOnServer } from '@hq/runtime/published'
 import type { Transaction } from '@rocicorp/zero'
 import type { ConversationTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import { agentJobTypes, agentSweepIntervalMilliseconds, waitingNotices } from '../domain/agent-events.ts'
@@ -292,13 +292,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         if (row && (row.isPlanning ?? false) !== isPlanning)
           await tx.mutate.chats.update({ workspaceId: contextWorkspaceId, id, isPlanning })
       },
-      dropRuntime: async (id) => {
-        if (tx.location === 'server')
-          await removeChatRuntime(
-            { transactor: createRuntimeTransactor(tx) },
-            { workspaceId: contextWorkspaceId, chatId: id, now: Date.now() },
-          )
-      },
+      dropRuntime: (id) => removeChatRuntimeOnServer(tx, contextWorkspaceId, id),
       hasMachine: async (id) =>
         (await tx.run(
           zql.runtimeHosts

@@ -4,7 +4,7 @@ import { llmCredentialsPath } from '@hq/profile/server'
 import { runtimeHostsPath } from '@hq/runtime/server'
 import { createApp } from './app.ts'
 import { issueSessionToken } from './auth/session-tokens.ts'
-import { testAuthSettings } from './testing.ts'
+import { testAuthSettings } from './testing/testing.ts'
 
 const unreachableDatabase = createDatabase('postgres://unused:unused@127.0.0.1:1/unused')
 const app = createApp({ database: unreachableDatabase, ...testAuthSettings })

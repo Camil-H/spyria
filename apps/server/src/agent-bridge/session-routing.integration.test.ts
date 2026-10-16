@@ -12,7 +12,7 @@ import {
   startAgentStack,
   succeeded,
   waitFor,
-} from '../testing.ts'
+} from '../testing/testing.ts'
 
 setDefaultTimeout(40_000)
 const { database, app, gateway, llmGateway, setFakeLlmScript, mutate, prompt, repliesTo, ...stack } =

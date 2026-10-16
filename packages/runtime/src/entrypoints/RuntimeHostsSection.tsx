@@ -1,10 +1,19 @@
 import type { RuntimeHostRow } from '@hq/db'
 import { useQuery } from '@hq/db/react'
 import type { WorkspaceId } from '@hq/kernel'
-import { buttonClass, Dialog, fieldClass, ghostButtonClass, LabelledSection, labelClass, Switch } from '@hq/ui'
+import {
+  buttonClass,
+  Dialog,
+  ErrorMessage,
+  fieldClass,
+  ghostButtonClass,
+  LabelledSection,
+  labelClass,
+  Switch,
+  useGuardedAction,
+} from '@hq/ui'
 import { type SubmitEvent, useEffect, useState } from 'react'
 import { isClaimExpired } from '../domain/claim.ts'
-import { RuntimeError } from '../domain/errors.ts'
 import { listRuntimeHosts, localSessionsOf } from '../queries/list-runtime-hosts.ts'
 import { HostCommandDialog } from './HostCommandDialog.tsx'
 import { useRuntimeCommands } from './providers.tsx'
@@ -28,13 +37,10 @@ export const statusLabelOf = (host: RuntimeHostRow) => statusLabels[statusOf(hos
 
 const AddHostDialog = ({ add, onClose }: { add: (name: string) => Promise<void>; onClose: () => void }) => {
   const [name, setName] = useState('')
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const { errorMessage, run } = useGuardedAction()
   const submit = async (event: SubmitEvent) => {
     event.preventDefault()
-    await add(name).catch((error) => {
-      if (!(error instanceof RuntimeError)) throw error
-      setErrorMessage(error.message)
-    })
+    await run(() => add(name))
   }
   return (
     <Dialog label="Add runtime host" onClose={onClose}>
@@ -43,11 +49,7 @@ const AddHostDialog = ({ add, onClose }: { add: (name: string) => Promise<void>;
           Host name
           <input className={fieldClass} value={name} onChange={(event) => setName(event.target.value)} />
         </label>
-        {errorMessage && (
-          <p role="alert" className="text-sm text-muted">
-            {errorMessage}
-          </p>
-        )}
+        <ErrorMessage message={errorMessage} />
         <button type="submit" className={buttonClass} disabled={name.trim() === ''}>
           Add
         </button>

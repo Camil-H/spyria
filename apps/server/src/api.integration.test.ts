@@ -11,7 +11,7 @@ import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { createApp } from './app.ts'
 import { issueSessionToken } from './auth/session-tokens.ts'
 import { openSessions } from './auth/sessions.ts'
-import { acme, alice, globex, bob, sessionTokenOf, testAuthSettings } from './testing.ts'
+import { acme, alice, globex, bob, sessionTokenOf, testAuthSettings } from './testing/testing.ts'
 
 const testDatabase = await createTestDatabase()
 const otherDatabase = await createTestDatabase()

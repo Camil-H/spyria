@@ -10,7 +10,7 @@ import {
   bob,
   bobInAcme,
   succeeded,
-} from './testing.ts'
+} from './testing/testing.ts'
 
 const { database, resultOf, eventsOf, changesOf, chatRow, messagesOf } = await openSharedTestApp()
 

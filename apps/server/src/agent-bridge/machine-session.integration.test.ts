@@ -13,7 +13,7 @@ import {
   startAgentStack,
   succeeded,
   waitFor,
-} from '../testing.ts'
+} from '../testing/testing.ts'
 
 setDefaultTimeout(40_000)
 const { database, app, mutate, newRuntimeChat, prompt, turnOf, messagesOf, storedAgentEventsOf, finished, ...stack } =

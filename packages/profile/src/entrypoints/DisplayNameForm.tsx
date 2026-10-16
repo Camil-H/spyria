@@ -1,10 +1,8 @@
 import type { WorkspaceId } from '@hq/kernel'
-import { buttonClass, fieldClass, labelClass } from '@hq/ui'
+import { buttonClass, ErrorMessage, fieldClass, labelClass, useGuardedAction } from '@hq/ui'
 import { type SubmitEvent, useState } from 'react'
 import { DisplayName } from '../domain/display-name.ts'
-import { ErrorMessage } from './ErrorMessage.tsx'
 import { useProfileCommands } from './providers.tsx'
-import { useGuardedAction } from './useGuardedAction.ts'
 
 export const DisplayNameForm = ({ workspaceId, currentName }: { workspaceId: WorkspaceId; currentName: string }) => {
   const commands = useProfileCommands()

@@ -18,7 +18,7 @@ import {
   succeeded,
   testAuthSettings,
   waitFor,
-} from '../testing.ts'
+} from '../testing/testing.ts'
 import { createRuntimeHostGateway } from './gateway.ts'
 
 const { database } = await openSharedTestApp()

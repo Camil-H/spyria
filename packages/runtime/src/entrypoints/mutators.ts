@@ -1,8 +1,9 @@
-import { runtimeHostId } from '@hq/kernel'
-import { defineMutator, defineMutators } from '@rocicorp/zero'
+import { type ChatId, runtimeHostId, type WorkspaceId } from '@hq/kernel'
+import { defineMutator, defineMutators, type Transaction } from '@rocicorp/zero'
 import { z } from 'zod/mini'
 import { NotCurrentWorkspace } from '../domain/errors.ts'
 import { createZeroTransactor } from '../integrations/zero-transactor.ts'
+import { removeChatRuntime } from '../operations/remove-chat-runtime.ts'
 import { removeRuntimeHost } from '../operations/remove-runtime-host.ts'
 import { setLocalSessions } from '../operations/set-local-sessions.ts'
 
@@ -29,3 +30,8 @@ export const runtimeMutators = defineMutators({
     }),
   },
 })
+
+export const removeChatRuntimeOnServer = async (tx: Transaction, workspaceId: WorkspaceId, chatId: ChatId) => {
+  if (tx.location === 'server')
+    await removeChatRuntime({ transactor: createZeroTransactor(tx) }, { workspaceId, chatId, now: Date.now() })
+}

@@ -1,5 +1,5 @@
 import type { WorkspaceId } from '@hq/kernel'
-import { ProfileError } from '../domain/errors.ts'
+import { throwOnRefusal } from './http-refusal.ts'
 
 export const toolConnectionsPath = '/api/tool-connections'
 export const toolConsentChannel = 'hq-tool-consent'
@@ -10,11 +10,7 @@ type ToolInput = { workspaceId: WorkspaceId; tool: string }
 export const createHttpToolConnections = (requestAsMember: RequestAsMember) => {
   const call = async (workspaceId: WorkspaceId, path: string, method = 'POST') => {
     const response = await requestAsMember(workspaceId, `${toolConnectionsPath}${path}`, method)
-    if (response.status === 400) {
-      const { error, message } = (await response.json()) as { error: string; message: string }
-      throw new ProfileError(error, message)
-    }
-    if (!response.ok) throw new Error(`The tool connection request was refused with ${response.status}`)
+    await throwOnRefusal(response, 'The tool connection request')
     return response.status === 204 ? undefined : response.json()
   }
   return {

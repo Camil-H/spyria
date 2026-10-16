@@ -6,7 +6,7 @@ import type { SandboxProvider } from '@hq/runtime/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { createAgentBridge } from './agent-bridge/bridge.ts'
 import { startJobWorker } from './job-worker.ts'
-import { acme, alice, aliceInAcme, openSharedTestApp, bobInAcme, succeeded, waitFor } from './testing.ts'
+import { acme, alice, aliceInAcme, openSharedTestApp, bobInAcme, succeeded, waitFor } from './testing/testing.ts'
 
 const sharedTestApp = await openSharedTestApp()
 const { database, eventsOf, changesOf, messagesOf } = sharedTestApp

@@ -1,5 +1,6 @@
 import { afterEach, expect, setDefaultTimeout, test } from 'bun:test'
 import type { ChatId } from '@hq/kernel'
+import type { createHqAgentRelay } from '../testing/hq-agent-relay.ts'
 import {
   acme,
   type ContainerAgent,
@@ -10,8 +11,7 @@ import {
   startAgentStack,
   succeeded,
   waitFor,
-} from '../testing.ts'
-import type { createHqAgentRelay } from './hq-agent-relay.ts'
+} from '../testing/testing.ts'
 
 setDefaultTimeout(30_000)
 const minute = 60_000

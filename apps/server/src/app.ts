@@ -13,7 +13,7 @@ import {
 } from '@hq/conversation/server'
 import type { Database } from '@hq/db/postgres'
 import { schema } from '@hq/db/zero'
-import { queries, type ZeroContext } from '@hq/db/zero-queries'
+import { queries, type Transact, type ZeroContext } from '@hq/db/zero-queries'
 import { chatId, type RuntimeHostId } from '@hq/kernel'
 import {
   addLlmCredentialFromRequest,
@@ -82,8 +82,6 @@ const statusByErrorCode: Record<string, number> = {
   host_not_found: 404,
 }
 
-type ZeroDatabase = ReturnType<typeof zeroDrizzle<typeof schema, Database>>
-
 const endpointResponse = async (request: string, successStatus: number, endpoint: () => Promise<unknown>) => {
   try {
     const result = await endpoint()
@@ -138,7 +136,7 @@ export const createApp = ({
     return llmGateway
   }
   const app = new Hono<{
-    Variables: { zeroContext: ZeroContext; zeroDatabase: ZeroDatabase; database: Database }
+    Variables: { zeroContext: ZeroContext; transact: Transact; database: Database }
   }>()
     .get('/health', (context) => context.json({ status: 'ok' }))
     .get('/host', runtimeHosts.upgrade)
@@ -157,7 +155,8 @@ export const createApp = ({
       const requestDatabase = databaseOf(authentication.databaseName) ?? database
       context.set('zeroContext', authentication.context)
       context.set('database', requestDatabase)
-      context.set('zeroDatabase', zeroDrizzle(schema, requestDatabase))
+      const zeroDatabase = zeroDrizzle(schema, requestDatabase)
+      context.set('transact', (work) => zeroDatabase.transaction(work))
       await next()
     })
     .post('/api/query', async (context) => {
@@ -175,7 +174,7 @@ export const createApp = ({
       const ctx = context.get('zeroContext')
       return context.json(
         await handleMutateRequest({
-          dbProvider: context.get('zeroDatabase'),
+          dbProvider: zeroDrizzle(schema, context.get('database')),
           handler: async (transact, mutation) => {
             const response = await transact((tx, name, args) =>
               mutatorNamed(name).fn({ args, tx, ctx: { ...ctx, hqAgentImage } }),
@@ -192,18 +191,12 @@ export const createApp = ({
     .get(commandOutputPathOf(':chatId', ':stepId'), async (context) => {
       const [chatId = '', stepId = ''] = [context.req.param('chatId'), context.req.param('stepId')]
       return context.text(
-        await context
-          .get('zeroDatabase')
-          .transaction((tx) => getCommandOutput(tx, context.get('zeroContext'), chatId, stepId)),
+        await context.get('transact')((tx) => getCommandOutput(tx, context.get('zeroContext'), chatId, stepId)),
       )
     })
     .get(chatRoutingPathOf(':chatId'), async (context) =>
       context.json(
-        await getChatRouting(
-          (work) => context.get('zeroDatabase').transaction(work),
-          context.get('zeroContext'),
-          context.req.param('chatId') ?? '',
-        ),
+        await getChatRouting(context.get('transact'), context.get('zeroContext'), context.req.param('chatId') ?? ''),
       ),
     )
     .post(chatQuestionPathOf(':chatId', ':questionId'), async (context) => {
@@ -229,12 +222,7 @@ export const createApp = ({
     .post(llmCredentialsPath, async (context) => {
       const body = await context.req.json().catch(() => null)
       return endpointResponse('Adding an LLM credential', 201, async () => {
-        await addLlmCredentialFromRequest(
-          (work) => context.get('zeroDatabase').transaction(work),
-          context.get('zeroContext'),
-          body,
-          gatewayOf(),
-        )
+        await addLlmCredentialFromRequest(context.get('transact'), context.get('zeroContext'), body, gatewayOf())
       })
     })
     .get(toolConnectionsPath, () =>
@@ -244,7 +232,7 @@ export const createApp = ({
       const action = context.req.param('action')
       return endpointResponse('A tool connection request', action === 'disconnect' ? 204 : 200, () =>
         toolConnectionFromRequest(
-          (work) => context.get('zeroDatabase').transaction(work),
+          context.get('transact'),
           context.get('zeroContext'),
           gatewayOf(),
           context.req.param('tool'),
@@ -255,21 +243,19 @@ export const createApp = ({
     .post(runtimeHostsPath, async (context) => {
       const body = await context.req.json().catch(() => null)
       return endpointResponse('A runtime host request', 201, () =>
-        context
-          .get('zeroDatabase')
-          .transaction((tx) => addRuntimeHostFromRequest(tx, context.get('zeroContext'), body)),
+        context.get('transact')((tx) => addRuntimeHostFromRequest(tx, context.get('zeroContext'), body)),
       )
     })
     .get(machinesPath, (context) =>
       endpointResponse('A runtime host request', 200, () =>
-        context.get('zeroDatabase').transaction((tx) => countMachinesFromRequest(tx, context.get('zeroContext'))),
+        context.get('transact')((tx) => countMachinesFromRequest(tx, context.get('zeroContext'))),
       ),
     )
     .post(`${runtimeHostsPath}/:hostId/code`, (context) =>
       endpointResponse('A runtime host request', 200, () =>
-        context
-          .get('zeroDatabase')
-          .transaction((tx) => renewClaimCodeFromRequest(tx, context.get('zeroContext'), context.req.param('hostId'))),
+        context.get('transact')((tx) =>
+          renewClaimCodeFromRequest(tx, context.get('zeroContext'), context.req.param('hostId')),
+        ),
       ),
     )
   if (fakeLlm) app.route('/fake-llm', fakeLlm)

@@ -17,7 +17,7 @@ import {
   succeeded,
   testAuthSettings,
   waitFor,
-} from './testing.ts'
+} from './testing/testing.ts'
 
 const { database, app, gateway, llmGateway, resultOf } = await openSharedTestApp()
 const worker = startJobWorker(database, { pollIntervalMilliseconds: 5, retryDelayMilliseconds: 100, llmGateway })
