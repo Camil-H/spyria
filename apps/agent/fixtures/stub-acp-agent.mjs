@@ -841,8 +841,12 @@ const piCommands = {
   }),
   get_available_models: () => ({ models: models.map(({ value, name }) => ({ ...piModelOf(value), name })) }),
   get_available_thinking_levels: () => ({ levels: thoughtLevels }),
-  set_model: ({ provider, modelId }) =>
-    Object.assign(piSession(), { model: `${provider}/${modelId}`, thought_level: 'off' }) && {},
+  set_model: ({ provider, modelId }) => {
+    const { providers } = piConfigOf('HQ_PI_MODELS')
+    if (providers && !providers[provider]?.models.some(({ id }) => id === modelId))
+      throw new Error(`Model not found: ${provider}/${modelId}`)
+    return Object.assign(piSession(), { model: `${provider}/${modelId}`, thought_level: 'off' }) && {}
+  },
   set_thinking_level: ({ level }) => Object.assign(piSession(), { thought_level: level }) && {},
   switch_session: ({ sessionPath }) => {
     piSessionId = basename(sessionPath, '.json')
@@ -866,7 +870,11 @@ const onPiCommand = async ({ id, type, ...fields }) => {
   if (type === 'prompt')
     return queue(piSessionId, () => turn(id, { sessionId: piSessionId, prompt: [{ text: fields.message }] }))
   if (!piCommands[type]) return piSend({ id, type: 'response', command: type, success: false, error: `stub: ${type}` })
-  respond(await piCommands[type](fields))
+  try {
+    respond(await piCommands[type](fields))
+  } catch (error) {
+    piSend({ id, type: 'response', command: type, success: false, error: error.message })
+  }
 }
 createInterface({ input: process.stdin })
   .on('line', (line) => {

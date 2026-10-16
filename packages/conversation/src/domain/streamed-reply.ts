@@ -1,6 +1,13 @@
 import type { AgentStep } from './agent-steps.ts'
 
 export type StreamFrame = Readonly<{ promptId: string; text: string; isSnapshot?: boolean; isReasoning?: boolean }>
+export type DelegatedFrame = Readonly<{
+  promptId: string
+  delegationId: string
+  text: string
+  isReasoning?: boolean
+  isSnapshot?: boolean
+}>
 export type StoredFrame = Readonly<{ promptId: string; storedId: string }>
 export type QuestionFrame = Readonly<{
   promptId: string

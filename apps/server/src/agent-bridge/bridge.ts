@@ -5,6 +5,7 @@ import {
   type AgentHost,
   type AgentLlm,
   createAgentHandlers,
+  type DelegatedFrame,
   isAuthRequiredError,
   isStoredAgentEvent,
   type SessionClassifier,
@@ -64,6 +65,7 @@ export const createAgentBridge = ({
     >()
     const streamedSeqs = new Map<string, number>()
     const viewers = new Map<string, Set<WSContext>>()
+    const delegatedTexts = new Map<string, Map<string, DelegatedFrame>>()
     const send = (viewer: WSContext, chat: AgentChat, frame: object) =>
       viewer.send(JSON.stringify({ chatId: chat.chatId, ...frame }))
     const handlers = createAgentHandlers({
@@ -76,7 +78,17 @@ export const createAgentBridge = ({
       hqAgentImage,
       eventSockets: {
         ensureOpen: (...target) => ensureOpen(...target),
+        streamDelegated: (chat, frame) => {
+          const texts = delegatedTexts.get(keyOf(chat)) ?? new Map<string, DelegatedFrame>()
+          const previous = texts.get(frame.delegationId)
+          const continues = previous && Boolean(previous.isReasoning) === Boolean(frame.isReasoning)
+          if (frame.text === '') texts.delete(frame.delegationId)
+          else texts.set(frame.delegationId, { ...frame, text: (continues ? previous.text : '') + frame.text })
+          delegatedTexts.set(keyOf(chat), texts)
+          for (const viewer of viewers.get(keyOf(chat)) ?? []) send(viewer, chat, frame)
+        },
         stopStreaming: (chat, promptId) => {
+          delegatedTexts.delete(keyOf(chat))
           const socket = sockets.get(keyOf(chat))
           if (socket?.promptId === promptId)
             Object.assign(socket, {
@@ -155,7 +167,9 @@ export const createAgentBridge = ({
                 send(viewer, chat, { promptId: turnPromptId ?? promptAtEvent, storedId: event.id })
             if (!recorded || chatSocket.promptId !== promptAtEvent) return
             chatSocket.promptId = recorded.promptId
-            if (recorded.promptId === null) chatSocket.streamedText = ''
+            if (recorded.promptId !== null) return
+            chatSocket.streamedText = ''
+            delegatedTexts.delete(keyOf(chat))
           })
           .catch((error) =>
             console.error(`Recording an agent event of chat ${chat.chatId} failed: ${messageOf(error)}`),
@@ -278,6 +292,8 @@ export const createAgentBridge = ({
         for (const question of streaming?.questions.values() ?? [])
           send(viewer, chat, { promptId: streaming?.promptId, question, isSnapshot: true })
         if (streaming?.workspace) send(viewer, chat, { workspace: streaming.workspace, isSnapshot: true })
+        for (const frame of delegatedTexts.get(keyOf(chat))?.values() ?? [])
+          send(viewer, chat, { ...frame, isSnapshot: true })
         send(viewer, chat, { subscribed: true })
       },
       unwatch: (viewer: WSContext, chat?: AgentChat) => {

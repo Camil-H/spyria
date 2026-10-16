@@ -62,7 +62,7 @@ const chooseSubagent = async (dependencies: AgentDependencies, input: Input, eff
 }
 
 const runSubConversation = (
-  { transactor, runtimes, agentClient }: AgentDependencies,
+  { transactor, runtimes, agentClient, eventSockets }: AgentDependencies,
   chat: AgentChat,
   conversation: AgentConversation,
   task: string,
@@ -72,6 +72,14 @@ const runSubConversation = (
   new Promise<{ status: string; answer: string }>((resolve, reject) => {
     let recording = Promise.resolve()
     let answer = ''
+    let isStreaming = false
+    const stream = (text: string, isReasoning?: boolean) =>
+      eventSockets.streamDelegated(chat, {
+        promptId: running.promptId,
+        delegationId: delegation.id,
+        text,
+        ...(isReasoning && { isReasoning }),
+      })
     const finish = (status: string) =>
       void recording.then(() => {
         socket.close()
@@ -81,7 +89,15 @@ const runSubConversation = (
       onEvent: (event) => {
         const streamed = streamedTextOf(event)
         if (streamed && !streamed.isReasoning) answer += streamed.text
-        if (toolCallIdOf(event) !== undefined) answer = ''
+        if (streamed?.text) {
+          stream(streamed.text, streamed.isReasoning)
+          isStreaming = true
+        }
+        if (toolCallIdOf(event) !== undefined) {
+          answer = ''
+          if (isStreaming) stream('')
+          isStreaming = false
+        }
         if (isStoredAgentEvent(event))
           recording = recording
             .then(() => recordAgentEvent({ transactor }, { ...chat, event, delegation }))

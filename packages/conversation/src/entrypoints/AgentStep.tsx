@@ -1,13 +1,15 @@
 import { chatId, type WorkspaceId } from '@hq/kernel'
 import { DiffView, focusRing } from '@hq/ui'
-import { Check, ChevronRight, LoaderCircle, X } from 'lucide-react'
-import { lazy, type ReactNode, Suspense, use, useState } from 'react'
+import { Check, LoaderCircle, X } from 'lucide-react'
+import { lazy, Suspense, use, useState } from 'react'
 import { Link, useOutletContext, useParams } from 'react-router'
 import type { AgentStep as Step } from '../domain/agent-steps.ts'
 import { type ConversationMessage, durationLabelOf } from '../queries/get-conversation.ts'
+import { Disclosure, ThoughtStep } from './Disclosure.tsx'
 import { AnswerQuestionContext, useConversationCommands } from './providers.tsx'
 
 const QuestionCard = lazy(() => import('./QuestionCard.tsx'))
+const DelegationStep = lazy(() => import('./DelegationStep.tsx'))
 
 type StepOf<Type extends Step['type']> = Extract<Step, { type: Type }>
 
@@ -15,45 +17,6 @@ const failedPreviewLines = 5
 const toolSummaryLength = 80
 const outputClassName =
   'mt-1 max-h-96 overflow-auto rounded-md border border-line bg-app p-2 font-mono text-xs whitespace-pre-wrap'
-
-const Disclosure = ({
-  label,
-  isInitiallyOpen = false,
-  preview,
-  children,
-}: {
-  label: ReactNode
-  isInitiallyOpen?: boolean
-  preview?: ReactNode
-  children: ReactNode
-}) => {
-  const [isOpen, setIsOpen] = useState(isInitiallyOpen)
-  return (
-    <>
-      <button
-        type="button"
-        aria-expanded={isOpen}
-        onClick={() => setIsOpen(!isOpen)}
-        className={`flex max-w-full items-center gap-1.5 rounded-md text-left text-sm text-muted hover:text-ink ${focusRing} aria-expanded:[&>svg:first-child]:rotate-90`}
-      >
-        <ChevronRight aria-hidden className="size-4 shrink-0 transition-transform" />
-        {label}
-      </button>
-      {isOpen ? children : preview}
-    </>
-  )
-}
-
-const ThoughtStep = ({ step }: { step: StepOf<'thought'> }) => (
-  <Disclosure
-    label={
-      step.durationMilliseconds === null ? 'Thinking…' : `Thought for ${durationLabelOf(step.durationMilliseconds)}`
-    }
-    isInitiallyOpen={step.durationMilliseconds === null}
-  >
-    <p className="mt-1 border-l-2 border-line pl-3 text-sm whitespace-pre-wrap text-muted">{step.text}</p>
-  </Disclosure>
-)
 
 const CommandStep = ({ id, step, isRunning }: { id: string; step: StepOf<'command'>; isRunning: boolean }) => {
   const commands = useConversationCommands()
@@ -175,39 +138,6 @@ const ErrorStep = ({ step }: { step: StepOf<'error'> }) => {
   )
 }
 
-const DelegationStep = ({ delegation }: { delegation: NonNullable<ConversationMessage['delegation']> }) => {
-  const { modelName, status, result, fallback } = delegation
-  const count = delegation.steps.length
-  const duration = delegation.durationMilliseconds
-  return (
-    <>
-      <Disclosure
-        label={
-          status === 'running' ? (
-            <>
-              <LoaderCircle aria-hidden className="size-4 shrink-0 animate-spin" />
-              {modelName ? `Delegating to ${modelName}…` : 'Running a subagent…'}
-            </>
-          ) : (
-            `${modelName ? `Delegated to ${modelName}` : 'Subagent'}${status === 'finished' ? '' : ` · ${status}`} · ${count} step${count === 1 ? '' : 's'}${duration === null ? '' : ` · ${durationLabelOf(duration)}`}`
-          )
-        }
-      >
-        <fieldset
-          aria-label={`Steps of ${modelName || 'the subagent'}`}
-          className="mt-1 flex flex-col gap-1 border-l-2 border-line pl-3"
-        >
-          {delegation.steps.map((delegated) => (
-            <AgentStep key={delegated.id} message={delegated} />
-          ))}
-        </fieldset>
-        {result !== null && <p className="mt-1 pl-3 text-sm whitespace-pre-wrap">{result}</p>}
-      </Disclosure>
-      {fallback && <p className="pl-5.5 text-xs text-muted">{fallback}</p>}
-    </>
-  )
-}
-
 const planStatusLabels: Record<string, string> = { 'in-progress': 'In progress', todo: 'To do' }
 
 const PlanStep = ({ step }: { step: StepOf<'plan'> }) => (
@@ -227,7 +157,16 @@ export const AgentStep = ({ message }: { message: ConversationMessage }) => {
   if (step?.type === 'thought') return <ThoughtStep step={step} />
   if (step?.type === 'command') return <CommandStep id={message.id} step={step} isRunning={message.isRunning} />
   if (step?.type === 'file') return <FileStep step={step} />
-  if (message.delegation) return <DelegationStep delegation={message.delegation} />
+  if (message.delegation)
+    return (
+      <Suspense>
+        <DelegationStep delegation={message.delegation}>
+          {message.delegation.steps.map((delegated) => (
+            <AgentStep key={delegated.id} message={delegated} />
+          ))}
+        </DelegationStep>
+      </Suspense>
+    )
   if (step?.type === 'tool') return <ToolStep step={step} canConnect={message.canConnectTools} />
   if (step?.type === 'plan') return <PlanStep step={step} />
   if (step?.type === 'question')

@@ -25,14 +25,27 @@ const withLiveMessage = (items: readonly ConversationItem[], live: ConversationM
   return threadEnd === -1 ? [...items, liveItem] : items.toSpliced(threadEnd + 1, 0, liveItem)
 }
 
+const withLiveDelegation =
+  (delegated: LiveState['delegated']) =>
+  (item: ConversationItem): ConversationItem => {
+    const delegation = item.type === 'message' ? item.message.delegation : undefined
+    const live = delegation?.status === 'running' && delegated[delegation.id]
+    if (item.type !== 'message' || !delegation || !live) return item
+    const { text, isReasoning = false } = live
+    return { ...item, message: { ...item.message, delegation: { ...delegation, live: { text, isReasoning } } } }
+  }
+
 export const withLiveMessages = (
   items: readonly ConversationItem[],
-  liveMessages: readonly ConversationMessage[],
+  {
+    messages: liveMessages,
+    delegated,
+  }: { messages: readonly ConversationMessage[]; delegated: LiveState['delegated'] },
 ): readonly ConversationItem[] => {
   const isPlanSwitch = isPlanSwitchIn(liveMessages)
   return liveMessages.reduce(
     withLiveMessage,
-    items.filter((item) => item.type === 'fold' || !isPlanSwitch(item.message)),
+    items.filter((item) => item.type === 'fold' || !isPlanSwitch(item.message)).map(withLiveDelegation(delegated)),
   )
 }
 
@@ -57,7 +70,9 @@ type LiveState = {
   reply: StreamedReply
   questions: readonly QuestionFrame[]
   workspace?: AgentWorkspace
+  delegated: Readonly<Record<string, StreamedReply>>
 }
+const emptyLiveOf = (chatKey: string): LiveState => ({ chatKey, reply: null, questions: [], delegated: {} })
 type Frame = Parameters<Parameters<AgentStream['subscribe']>[2]>[0]
 
 const liveAfter = (
@@ -66,22 +81,25 @@ const liveAfter = (
   frame: Frame,
   replyCountOf: (promptId: string) => number,
 ): LiveState => {
-  const { reply, questions, workspace } = current.chatKey === chatKey ? current : { reply: null, questions: [] }
+  const live = current.chatKey === chatKey ? current : emptyLiveOf(chatKey)
+  const { reply, questions, delegated } = live
   if ('workspace' in frame) {
-    const { sessionUpdate: _, ...nextWorkspace } = frame.workspace
-    return { chatKey, reply, questions, workspace: nextWorkspace }
+    const { sessionUpdate: _, ...workspace } = frame.workspace
+    return { ...live, workspace }
   }
   if ('question' in frame)
     return {
-      chatKey,
-      reply,
-      workspace,
+      ...live,
       questions: [...questions.filter(({ question }) => question.questionId !== frame.question.questionId), frame],
     }
+  if ('delegationId' in frame) {
+    const { delegationId, text } = frame
+    const next =
+      text && streamedReplyAfter(delegated[delegationId] ?? null, { ...frame, promptId: delegationId }, () => 0)
+    return { ...live, delegated: { ...delegated, [delegationId]: next || null } }
+  }
   return {
-    chatKey,
-    questions,
-    workspace,
+    ...live,
     reply: 'storedId' in frame ? storedStreamedReply(reply, frame) : streamedReplyAfter(reply, frame, replyCountOf),
   }
 }
@@ -123,11 +141,11 @@ export const useLiveMessages = (
   workspaceId: WorkspaceId,
   chatId: ChatId,
   messages: readonly ConversationMessage[],
-): { messages: readonly ConversationMessage[]; workspace?: AgentWorkspace } => {
+): { messages: readonly ConversationMessage[]; workspace?: AgentWorkspace; delegated: LiveState['delegated'] } => {
   const agentStream = useAgentStream()
   const store = useStore()
   const chatKey = `${workspaceId}/${chatId}`
-  const [live, setLive] = useState<LiveState>({ chatKey, reply: null, questions: [] })
+  const [live, setLive] = useState<LiveState>(emptyLiveOf(chatKey))
   useEffect(
     () =>
       agentStream.subscribe(workspaceId, chatId, (frame) => {
@@ -136,6 +154,6 @@ export const useLiveMessages = (
       }),
     [agentStream, store, workspaceId, chatId, chatKey],
   )
-  const current = live.chatKey === chatKey ? live : { chatKey, reply: null, questions: [] }
-  return { messages: liveMessagesOf(current, messages), workspace: current.workspace }
+  const current = live.chatKey === chatKey ? live : emptyLiveOf(chatKey)
+  return { messages: liveMessagesOf(current, messages), workspace: current.workspace, delegated: current.delegated }
 }

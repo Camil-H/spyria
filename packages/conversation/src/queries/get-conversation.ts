@@ -20,12 +20,14 @@ export type ConversationMessage = Readonly<{
   canConnectTools: boolean
   answeredByName?: string
   delegation?: Readonly<{
+    id: string
     modelName: string
     steps: readonly ConversationMessage[]
     durationMilliseconds: number | null
     status: 'running' | 'finished' | 'failed' | 'stopped'
     result: string | null
     fallback?: string
+    live?: Readonly<{ text: string; isReasoning: boolean }>
   }>
 }>
 
@@ -124,6 +126,7 @@ const withDelegationsGrouped = (replies: readonly ConversationMessage[], isStopp
     groupsByHostId.set(host.id, {
       ...host,
       delegation: {
+        id: delegation.id,
         modelName: delegation.modelName,
         steps,
         durationMilliseconds: result === null ? null : Math.max(...times) - Math.min(...times),

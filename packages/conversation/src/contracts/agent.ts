@@ -1,6 +1,7 @@
 import type { ChatId, ListedModel, MemberId, MessageId, Model, RuntimeHostId, WorkspaceId } from '@hq/kernel'
 import type { AgentEvent } from '../domain/agent-events.ts'
 import type { HarnessLaunch } from '../domain/session-routing.ts'
+import type { DelegatedFrame } from '../domain/streamed-reply.ts'
 
 export class AgentStartFailure extends Error {}
 
@@ -78,6 +79,7 @@ export type AgentClient = {
 export type AgentEventSockets = {
   ensureOpen(chat: AgentChat, conversation: AgentConversation, promptId: MessageId | null): Promise<void>
   stopStreaming(chat: AgentChat, promptId: MessageId): void
+  streamDelegated(chat: AgentChat, frame: DelegatedFrame): void
 }
 
 export type ClassifierCall = Readonly<{

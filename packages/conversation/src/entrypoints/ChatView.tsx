@@ -98,7 +98,7 @@ export const ChatView = ({
       >
         <MessageList
           conversation={conversation}
-          items={withLiveMessages(conversation.items, live.messages)}
+          items={withLiveMessages(conversation.items, live)}
           onStop={() => commands.stopAgent({ workspaceId, chatId })}
         />
       </AnswerQuestionContext>

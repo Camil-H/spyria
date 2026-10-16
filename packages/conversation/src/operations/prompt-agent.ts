@@ -140,9 +140,13 @@ const keepSession = async (
   if (!isPickableModel(model, reachable, classifier?.listedModels() ?? []))
     return { refusal: unreachableSessionNoticeOf(model) }
   if (agentModel === model) return { conversation }
-  const isLaunched = chatModelsOf(reachable).some((candidate) => candidate.id === model)
-  if (isLaunched) await agentClient.switchModel(conversation, piModelOf(model), thoughtLevelOf(reasoningEffort))
-  const kept = isLaunched
+  const isSwitched =
+    chatModelsOf(reachable).some((candidate) => candidate.id === model) &&
+    (await agentClient.switchModel(conversation, piModelOf(model), thoughtLevelOf(reasoningEffort)).then(
+      () => true,
+      () => false,
+    ))
+  const kept = isSwitched
     ? conversation
     : await relaunchedConversationOf(
         dependencies,

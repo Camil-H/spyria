@@ -1,6 +1,12 @@
 import type { ChatId, MessageId, WorkspaceId } from '@hq/kernel'
 import type { RunsOn } from '../domain/session-routing.ts'
-import type { QuestionFrame, StoredFrame, StreamFrame, WorkspaceFrame } from '../domain/streamed-reply.ts'
+import type {
+  DelegatedFrame,
+  QuestionFrame,
+  StoredFrame,
+  StreamFrame,
+  WorkspaceFrame,
+} from '../domain/streamed-reply.ts'
 import type { ChatRoutingRead } from '../queries/get-chat-routing.ts'
 import type { QuestionAnswer } from './endpoints.ts'
 
@@ -33,6 +39,6 @@ export type AgentStream = {
   subscribe(
     workspaceId: WorkspaceId,
     chatId: ChatId,
-    listener: (frame: StreamFrame | StoredFrame | QuestionFrame | WorkspaceFrame) => void,
+    listener: (frame: StreamFrame | StoredFrame | QuestionFrame | WorkspaceFrame | DelegatedFrame) => void,
   ): () => void
 }

@@ -140,7 +140,7 @@ test('11, f-3 and g-4. a long subagent task returns still running and reads as s
   )
   await sendMessage(page, 'Delegate a long listing')
   await reached('resume')
-  await expect(mainOf(page).getByRole('button', { name: /^Delegating to Fake small/ })).toBeVisible()
+  await expect(mainOf(page).getByRole('button', { name: /^Subagent · Fake small · working…/ })).toBeVisible()
   await expect(mainOf(page)).not.toContainText(/timed out|failed/)
   await release('subagent')
   await delegationsFinished(workerStack, researchChatId)
@@ -170,11 +170,47 @@ test('12. stopping during a delegation stops the subagent, the group shows stopp
     resuming('Never shown.', { delegateRoute: confidentSmall, subagents: { 'fake-small': longWork } }),
   )
   await sendMessage(page, 'Delegate a very long listing')
-  await expect(mainOf(page).getByRole('button', { name: /^Delegating to Fake small/ })).toBeVisible()
+  await expect(mainOf(page).getByRole('button', { name: /^Subagent · Fake small · working…/ })).toBeVisible()
   await mainOf(page).getByRole('button', { name: 'Stop' }).click()
   await expect(mainOf(page).getByRole('button', { name: /^Delegated to Fake small · stopped · 1 step/ })).toBeVisible()
   await expect(messageItemsOf(page).filter({ hasText: 'Stopped by Alice' })).toHaveCount(1)
   await agentScript(researchChatId, { text: 'Back to work.' })
   await promptAndWait(page, 'Carry on', 'Back to work.')
   await expect(mainOf(page)).not.toContainText('Never shown.')
+})
+
+test('g-6. a running delegation shows the subagent’s first step and text live, labelled as the subagent’s, then the stored version without duplicates', async ({
+  page,
+  agentScript,
+  release,
+  reached,
+  workerStack,
+}) => {
+  const answer = 'The live listing is done.'
+  const liveWork = { steps: [{ command: 'echo listing' }], text: 'Counting the files now.', hold: 'subagent' }
+  await agentScript(
+    researchChatId,
+    resuming(answer, { delegateRoute: confidentSmall, subagents: { 'fake-small': liveWork } }, 'resume'),
+  )
+  await sendMessage(page, 'Delegate a live listing')
+  const running = mainOf(page).getByRole('button', { name: /^Subagent · Fake small · working…/ })
+  await expect(running).toBeVisible()
+  await expect(mainOf(page)).not.toContainText('$ echo listing')
+  await running.click()
+  const steps = page.getByRole('group', { name: 'Steps of Fake small' })
+  await expect(steps).toContainText('$ echo listing')
+  await expect(steps).toContainText('Counting')
+  await reached('resume')
+  await expect(running).toBeVisible()
+  await expect(steps).toContainText('Counting')
+  await release('subagent')
+  await delegationsFinished(workerStack, researchChatId)
+  await release('resume')
+  await expect(messageItemsOf(page).filter({ hasText: answer })).toBeVisible()
+  const finished = mainOf(page).getByRole('button', { name: /^Delegated to Fake small · 1 step · / })
+  await expect(finished).toHaveAttribute('aria-expanded', 'true')
+  await expect(steps).toContainText('$ echo listing')
+  await expect(steps).not.toContainText('Counting')
+  await expect(messageItemsOf(page).filter({ has: steps })).toContainText('Counting the files now.')
+  await expect(mainOf(page).getByText('Counting the files now.')).toHaveCount(1)
 })

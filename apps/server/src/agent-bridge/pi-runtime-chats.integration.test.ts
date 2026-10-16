@@ -190,6 +190,38 @@ test('a manual pick from the full listing relaunches Pi with that model on the s
   expect(piFilesOf(relaunch).HQ_COMPACTION_MODEL).toBe('hq/openrouter/anthropic/claude-haiku-5.5')
 })
 
+test('g2. a curated pick on a provider whose key was added after Pi launched relaunches Pi on the same session with that model, and the next turn answers on it with the context kept', async () => {
+  const { relay, launches } = await workspaceHost()
+  await keysOnly('Anthropic')
+  const chat = await newRuntimeChat()
+  const first = await finished(await prompt(chat, 'Start on Anthropic', bobInAcme), chat)
+  expect(first.at(-1)?.body).toStartWith('[t1] Hello from the stub (model hq-anthropic/anthropic/')
+  const [firstSession] = await sessionsStartedOf(chat)
+  await addLlmKey(bob, 'OpenAI')
+  expect(
+    await mutate(bobInAcme, 'conversation.updateChatRouting', {
+      workspaceId: acme,
+      chatId: chat,
+      sessionModel: 'openai/gpt-5-mini',
+    }),
+  ).toEqual(succeeded)
+
+  const second = await finished(await prompt(chat, 'Now on OpenAI', bobInAcme), chat)
+  expect(second.map((reply) => reply.body)).toEqual([
+    '[t2] Hello from the stub (model hq/openai/gpt-5-mini, mode default).',
+  ])
+  expect(relay.modelSwitches).toEqual(['hq/openai/gpt-5-mini'])
+  expect(launches()).toHaveLength(2)
+  const relaunch = launches()[1] as Launch
+  expect(relaunch.agent).toMatchObject({
+    acp_model: 'hq/openai/gpt-5-mini',
+    acp_resume_session_id: String(firstSession?.sessionId),
+  })
+  const { providers } = JSON.parse(piFilesOf(relaunch).HQ_PI_MODELS ?? '{}')
+  expect(providers.hq.models.map(({ id }: { id: string }) => id)).toContain('openai/gpt-5-mini')
+  expect(relay.prompts).toEqual(['Start on Anthropic', 'Now on OpenAI'])
+})
+
 test('Stop mid-command cancels the turn without deleting the conversation, and the next prompt continues the Pi session', async () => {
   const { launches } = await workspaceHost()
   const chat = await newRuntimeChat()

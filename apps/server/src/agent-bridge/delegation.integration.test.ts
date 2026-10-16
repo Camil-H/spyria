@@ -133,6 +133,41 @@ test('a delegated task runs in a Pi sub-conversation on the classified model, it
   expect((await completionWith(host, tokenOf(sub))).status).toBe(401)
 })
 
+test('g-6. while the subagent runs, a viewer receives its text live tagged with the delegation, each segment restarting after a step; a new viewer gets the current text as a snapshot; nothing of it is stored', async () => {
+  await fakeAgent()
+  const chat = await newRuntimeChat()
+  const work = { ...heldWork, steps: [{ command: 'echo started', say: 'Let me look.' }] }
+  setFakeLlmScript(delegatingScript({ subagents: { 'fake-small': work } }))
+  const viewer = await stack.openStream(chat)
+  await viewer.subscribed
+  const promptId = await prompt(chat, 'Delegate slowly')
+  const framesOf = (frames: string[]) => frames.map((frame) => JSON.parse(frame))
+  const delegatedOf = (frames: string[]) => framesOf(frames).filter((frame) => frame.delegationId !== undefined)
+  await waitFor(() => delegatedOf(viewer.frames).some((frame) => frame.text === 'one '))
+
+  const [delegation] = await delegationsOf(chat)
+  const delegated = delegatedOf(viewer.frames)
+  for (const frame of delegated) expect(frame).toMatchObject({ chatId: chat, promptId, delegationId: delegation?.id })
+  const texts = delegated.map((frame) => frame.text)
+  const reset = texts.indexOf('')
+  expect(texts.slice(0, reset).join('')).toBe('Let me look.')
+  expect(texts.slice(reset + 1).join('')).toBe('one ')
+  const mainTexts = framesOf(viewer.frames).filter((frame) => frame.text !== undefined && !frame.delegationId)
+  expect(mainTexts.map((frame) => frame.text).join('')).not.toContain('Let')
+  const newViewer = await stack.openStream(chat)
+  await newViewer.subscribed
+  expect(delegatedOf(newViewer.frames)).toEqual([
+    { chatId: chat, promptId, delegationId: delegation?.id, text: 'one ', isSnapshot: true },
+  ])
+  expect((await repliesTo(promptId)).map(({ body }) => body).join(' ')).not.toMatch(/Let me look|one/)
+
+  await holds.release('sub')
+  await waitFor(async () => (await turnOf(chat)) === null, 20_000)
+  const finalViewer = await stack.openStream(chat)
+  await finalViewer.subscribed
+  expect(delegatedOf(finalViewer.frames)).toEqual([])
+})
+
 test('the delegation token works only while its delegation runs and only from its runtime host, and the router refuses it and answers no active turn', async () => {
   const { host, main, subs } = await fakeAgent()
   const chat = await newRuntimeChat()
