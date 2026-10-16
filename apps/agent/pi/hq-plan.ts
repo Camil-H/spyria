@@ -42,7 +42,8 @@ export default (pi: ExtensionAPI) => {
     name: 'update_plan',
     label: 'Plan',
     description:
-      'Keep a plan for multi-step work: send the whole list of steps with their status, and update it as each step starts and ends.',
+      "Keep the plan of multi-step work in the member's Plan panel: send the whole list of steps with their status, and update it as each step starts and ends. Use it instead of plan or TODO files.",
+    promptGuidelines: ['For multi-step work, keep the plan with update_plan; do not write plan files.'],
     parameters: Type.Object({
       entries: Type.Array(
         Type.Object({

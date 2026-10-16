@@ -10,6 +10,7 @@ import {
   newSessionNotice,
   openChat,
   openProfile,
+  panelOf,
   research,
   sendMessage,
   test,
@@ -43,7 +44,7 @@ test('8 and 9. a prompter with only an Anthropic key gets Pi: the command step s
   await expect(command.getByRole('img', { name: 'Succeeded' })).toBeVisible()
   await expect(messageContaining(bobPage, 'Answered on Sonnet 5.5.')).toHaveCount(1)
   await expect(workingIndicatorOf(bobPage)).toHaveCount(0)
-  await expect(chipOf(bobPage, 'hq')).toHaveText('Sonnet 5.5 (medium) · auto')
+  await expect(chipOf(bobPage, 'hq')).toHaveText('Sonnet 5.5 (medium)')
   await command.getByRole('button', { name: commandText }).click()
   await expect(command).toContainText('one')
   await expect(command).toContainText('two')
@@ -95,4 +96,36 @@ test('11. Stop during a command closes the turn as stopped, and a prompt queued 
   await expect(messageItemsOf(page).nth(-1)).toContainText('Carried on.')
   await expect(mainOf(page)).not.toContainText('Never shown.')
   await expect(mainOf(page)).not.toContainText(newSessionNotice)
+})
+
+test('g-5. a multi-step Pi turn keeps its plan with update_plan: the latest checklist shows in the Plan tab', async ({
+  page,
+  agentScript,
+}) => {
+  const chatId = await newRuntimeChat(page, 'Pi keeps a plan')
+  await agentScript(chatId, {
+    steps: [
+      {
+        plan: [
+          { content: 'Read the totals', status: 'in_progress' },
+          { content: 'Fix the tax', status: 'pending' },
+        ],
+      },
+      {
+        plan: [
+          { content: 'Read the totals', status: 'completed' },
+          { content: 'Fix the tax', status: 'in_progress' },
+        ],
+      },
+    ],
+    text: 'Tracked in the plan.',
+  })
+  await sendMessage(page, 'Fix the invoice totals step by step')
+  await expect(messageContaining(page, 'Tracked in the plan.')).toHaveCount(1)
+  await expect(workingIndicatorOf(page)).toHaveCount(0)
+  await panelOf(page).getByRole('tab', { name: 'Plan', exact: true }).click()
+  const planItems = panelOf(page).getByRole('tabpanel').getByRole('listitem')
+  await expect(planItems).toHaveCount(2)
+  await expect(planItems.nth(0)).toContainText('Read the totals')
+  await expect(planItems.nth(1)).toContainText('Fix the tax')
 })

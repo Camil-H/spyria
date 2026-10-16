@@ -71,7 +71,7 @@ const piToolCallOf = (step: FakeLlmStep) =>
             : { name: 'write', arguments: { path: `${workingDirectory}${step.edit.path}`, content: step.edit.create } }
           : undefined
 
-const toolCallOf = (step: FakeLlmStep | undefined, offeredTools: readonly string[] = [], resumeId = '') => {
+const toolCallOf = (step: FakeLlmStep | undefined, offeredTools: readonly string[] = [], taskId = '') => {
   const call =
     !step || 'fail' in step || 'task' in step
       ? undefined
@@ -88,7 +88,7 @@ const toolCallOf = (step: FakeLlmStep | undefined, offeredTools: readonly string
       index: 0,
       id: `call_${crypto.randomUUID()}`,
       type: 'function',
-      function: { name: call.name, arguments: JSON.stringify(call.arguments).replace('$resume', resumeId) },
+      function: { name: call.name, arguments: JSON.stringify(call.arguments).replace('$taskId', taskId) },
     }
   )
 }
@@ -357,15 +357,18 @@ export const createFakeLlm = (
           { type: 'error', error: { type: 'overloaded_error', message: step.fail } },
           { status: 529 },
         )
-      const resumeId = JSON.stringify(request.messages?.findLast((message) => message.role === 'tool') ?? '').match(
-        /resume=\\"([^"\\]+)/,
+      const taskId = JSON.stringify(request.messages?.findLast((message) => message.role === 'tool') ?? '').match(
+        /taskId=\\"([^"\\]+)/,
       )?.[1]
       const toolCall = toolCallOf(
         step,
         request.tools?.map((tool) => tool.function.name),
-        resumeId,
+        taskId,
       )
-      const text = toolCall ? (step?.say ?? '') : (!request.tools?.length && summary) || (script.text ?? defaultText)
+      const userMessages = String(request.messages?.filter((message) => message.role === 'user').length ?? 0)
+      const text = toolCall
+        ? (step?.say ?? '')
+        : (!request.tools?.length && summary) || (script.text ?? defaultText).replace('$userMessages', userMessages)
       const reasoning = step && 'think' in step ? step.think : ''
       const finishReason = toolCall ? 'tool_calls' : 'stop'
       const holdName = step?.hold ?? (toolCall ? undefined : script.hold)

@@ -130,10 +130,12 @@ test('15. expanding a file edit shows its added and removed lines', async ({ pag
   await expect(diff).toContainText('+ export const tax = 0.2')
 })
 
-test('18. Markdown answers render tables, highlighted code with copy, links with their domain, raw HTML as text and images on click', async ({
+test('18 and g-8. Markdown answers render tables, highlighted code with copy (✓ Copied for a moment, the code in the clipboard), links with their domain, raw HTML as text and images on click', async ({
   page,
+  context,
   agentScript,
 }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
   const answer = [
     '| Plan | Price |',
     '| --- | --- |',
@@ -158,7 +160,12 @@ test('18. Markdown answers render tables, highlighted code with copy, links with
   await expect(reply.getByRole('table')).toBeVisible()
   await expect(reply.getByRole('cell', { name: 'Team' })).toBeVisible()
   await expect(reply.locator('code .hljs-keyword').first()).toHaveText('const')
-  await expect(reply.getByRole('button', { name: 'Copy code' })).toBeVisible()
+  const copyCode = reply.getByRole('button', { name: 'Copy code' })
+  await expect(copyCode).toHaveText('Copy')
+  await copyCode.click()
+  await expect(copyCode).toHaveText('✓ Copied')
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('const total = 1')
+  await expect(copyCode).toHaveText('Copy', { timeout: 4000 })
   const link = reply.getByRole('link', { name: /the pricing/ })
   await expect(link).toContainText('docs.example.com')
   await expect(link).toHaveAttribute('rel', 'noopener noreferrer')

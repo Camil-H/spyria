@@ -17,10 +17,16 @@ export const delegateTool = {
         description:
           'A model name or a tier (large, medium, small), only when the user explicitly asked for a model or a tier',
       },
-      resume: { type: 'string', description: 'The id of a task that is still running' },
     },
   },
 }
+export const awaitTaskTool = {
+  name: 'await_task',
+  description:
+    'Wait for a delegated task that is still running; returns its final answer, or that it is still running.',
+  inputSchema: { type: 'object', required: ['taskId'], properties: { taskId: { type: 'string' } } },
+}
+export const routerTools = [delegateTool, awaitTaskTool]
 
 export const effortHintOf = (effort: unknown) => (efforts.includes(String(effort)) ? String(effort) : 'medium')
 
@@ -59,7 +65,7 @@ export const askedChoiceOf = (reachable: readonly Model[], asked: unknown, promp
 export const subagentFailureOf = (modelName: string, notice?: string) =>
   `The subagent on ${modelName} stopped with an error${notice ? `: ${notice}` : ''}`
 export const subagentStopped = 'The subagent was stopped'
-export const stillRunningOf = (id: string) => `Task ${id} is still running; call delegate again with resume="${id}"`
+export const stillRunningOf = (id: string) => `Task ${id} is still running; call await_task with taskId="${id}"`
 export const unknownTaskOf = (id: string) => `There is no task ${id} running in this turn`
 export const defaultResumeAfterMilliseconds = 45_000
 export const delegateTimeoutSeconds = 120

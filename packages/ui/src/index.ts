@@ -1,3 +1,4 @@
+export { CopyButton } from './CopyButton.tsx'
 export * from './classes.ts'
 export { createCommandsContext } from './commands-context.tsx'
 export { Dialog } from './Dialog.tsx'

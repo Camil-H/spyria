@@ -245,6 +245,7 @@ export const createAgentBridge = ({
       modelCallTurn: handlers.modelCallTurn,
       toolCallTurn: handlers.toolCallTurn,
       delegate: handlers.delegate,
+      awaitTask: handlers.awaitTask,
       answerQuestion: handlers.answerQuestion,
       setPlanMode: handlers.setPlanMode,
       recordModelCallFailure: handlers.recordModelCallFailure,

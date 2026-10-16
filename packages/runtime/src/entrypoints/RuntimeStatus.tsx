@@ -1,6 +1,7 @@
 import { useQuery } from '@hq/db/react'
 import type { ChatId, WorkspaceId } from '@hq/kernel'
 import { focusRing } from '@hq/ui'
+import { useState } from 'react'
 import type { RuntimeStatus as Status } from '../domain/runtime.ts'
 import { getRuntimeStatus } from '../queries/get-runtime-status.ts'
 
@@ -20,19 +21,39 @@ export const RuntimeStatus = ({
 }: {
   workspaceId: WorkspaceId
   chatId: ChatId
-  onRetry: () => void
+  onRetry: () => Promise<unknown>
 }) => {
   const status = useQuery(getRuntimeStatus(workspaceId, chatId))
+  const [retriedStatus, setRetriedStatus] = useState<Status | null>(null)
+  const [retryError, setRetryError] = useState<string | null>(null)
+  if (retriedStatus !== null && retriedStatus !== status) setRetriedStatus(null)
+  const retry = () => {
+    setRetriedStatus(status)
+    setRetryError(null)
+    onRetry().catch((error: unknown) => {
+      setRetriedStatus(null)
+      setRetryError(error instanceof Error ? error.message : 'Could not retry')
+    })
+  }
   return (
     <span role="status" aria-label="Runtime" className="inline-flex items-center gap-1.5 text-xs text-muted">
       <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${dotClasses[status]}`} />
-      {status === 'Could not start' ? (
-        <button type="button" onClick={onRetry} className={`rounded-md text-ink hover:underline ${focusRing}`}>
+      {retriedStatus !== null ? (
+        <>
+          <span
+            aria-hidden
+            className="size-3 shrink-0 animate-spin rounded-full border border-current border-t-transparent"
+          />
+          Retrying…
+        </>
+      ) : status === 'Could not start' ? (
+        <button type="button" onClick={retry} className={`rounded-md text-ink hover:underline ${focusRing}`}>
           Could not start · Retry
         </button>
       ) : (
         status
       )}
+      {retryError && <span className="text-ink">{retryError}</span>}
     </span>
   )
 }

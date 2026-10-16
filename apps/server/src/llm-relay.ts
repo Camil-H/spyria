@@ -1,8 +1,9 @@
 import {
   type AgentChat,
-  delegateTool,
+  awaitTaskTool,
   genericModelCallNoticeOf,
   type ModelCallFailure,
+  routerTools,
   type ToolCallFailure,
   toolCallFailureOf,
   toolCallNoticeOf,
@@ -40,7 +41,7 @@ const routerInfo = { capabilities: { tools: {} }, serverInfo: { name: 'hq-router
 type RouterCall = {
   id?: unknown
   method?: string
-  params?: { protocolVersion?: string; arguments?: Record<string, unknown> }
+  params?: { protocolVersion?: string; name?: string; arguments?: Record<string, unknown> }
 }
 
 const picked = (headers: Iterable<[string, string]>, names: string[]) =>
@@ -136,19 +137,15 @@ export const createModelCallRelay = ({
           { 'mcp-session-id': crypto.randomUUID() },
         )
       if (rpc.method === 'ping') return reply({})
-      if (rpc.method === 'tools/list') return reply({ tools: [delegateTool] })
+      if (rpc.method === 'tools/list') return reply({ tools: routerTools })
       if (rpc.method !== 'tools/call')
         return answer(200, { jsonrpc: '2.0', id: rpc.id, error: { code: -32601, message: 'Method not found' } })
       if (!turn) return reply({ content: [{ type: 'text', text: 'This runtime has no active turn' }], isError: true })
-      const { task, effort, model, resume } = rpc.params?.arguments ?? {}
-      const { text, isError } = await handlers.delegate({
-        chat: turn.chat,
-        turn,
-        task: String(task ?? ''),
-        effort,
-        model,
-        resume,
-      })
+      const { task, effort, model, taskId } = rpc.params?.arguments ?? {}
+      const { text, isError } =
+        rpc.params?.name === awaitTaskTool.name
+          ? await handlers.awaitTask({ chat: turn.chat, turn, taskId })
+          : await handlers.delegate({ chat: turn.chat, turn, task: String(task ?? ''), effort, model })
       return reply({ content: [{ type: 'text', text }], isError })
     }
     const { keyOf, tools } = databaseAccess(database)

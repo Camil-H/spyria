@@ -344,16 +344,18 @@ const delegationStatesOf = (conversation: ReturnType<typeof conversationWith>) =
         ]
       : [],
   )
-const resumeAction = (task: string, id: string, result: string | null) => ({
-  ...delegateAction(task, result),
-  arguments: JSON.stringify({ task, effort: 'small', resume: id }),
+const awaitAction = (id: string, result: string | null) => ({
+  type: 'tool' as const,
+  name: 'await_task',
+  arguments: JSON.stringify({ taskId: id }),
+  result,
 })
 
-test('a resumed delegation stays one group with the resume’s answer, and the next delegation of that task gets its own', () => {
+test('an awaited delegation stays one group with await_task’s answer, and the next delegation of that task gets its own', () => {
   const conversation = conversationWith([
     replyRow(2, 'step', { step: delegateAction('List the files', stillRunningOf('delegation-1')) }),
     replyRow(3, 'step', { step: delegatedEdit('delegation-1') }),
-    replyRow(4, 'step', { step: resumeAction('List the files', 'delegation-1', 'First.') }),
+    replyRow(4, 'step', { step: awaitAction('delegation-1', 'First.') }),
     replyRow(5, 'step', { step: delegateAction('List the files', 'Second.') }),
     replyRow(6, 'step', { step: delegatedEdit('delegation-2') }),
   ])

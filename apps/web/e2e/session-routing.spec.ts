@@ -47,7 +47,7 @@ test('f-4. a member with only an OpenAI key gets an OpenAI model at the first pr
   await expect(chipOf(bobPage, 'routed')).toHaveText(unchosen)
   await agentScript(chatId, { route: { tier: 'large', confidence: 'low', effort: 'medium' } })
   await promptAndWait(bobPage, 'Not sure how hard this is', 1)
-  await expect(chipOf(bobPage, 'routed')).toHaveText('GPT-5 mini (medium) · auto')
+  await expect(chipOf(bobPage, 'routed')).toHaveText('GPT-5 mini (medium)')
   await openSession(bobPage)
   await expect(sessionOf(bobPage).getByLabel('Main model')).toHaveValue('openai/gpt-5-mini')
   await expect(sessionOf(bobPage).getByRole('option', { name: /Opus|Sonnet|Haiku/ })).toHaveCount(0)
@@ -64,7 +64,7 @@ test('f-10. a member with an OpenRouter key gets a routed OpenRouter model that 
   const chatId = await newRuntimeChat(bobPage, 'Bob on OpenRouter')
   await agentScript(chatId, { route: { tier: 'large', confidence: 'low', effort: 'medium' } })
   await promptAndWait(bobPage, 'Route me through OpenRouter', 1)
-  await expect(chipOf(bobPage, 'routed')).toHaveText('OpenRouter Sonnet 5.5 (medium) · auto')
+  await expect(chipOf(bobPage, 'routed')).toHaveText('OpenRouter Sonnet 5.5 (medium)')
 
   await openSession(bobPage)
   const mainModel = sessionOf(bobPage).getByLabel('Main model')
@@ -79,7 +79,7 @@ test('f-10. a member with an OpenRouter key gets a routed OpenRouter model that 
   await expect(mainModel.getByRole('option', { name: /fake|gpt|mistral/ })).toHaveCount(0)
   await mainModel.selectOption('openrouter/moonshotai/kimi-k3')
   await sessionOf(bobPage).getByRole('button', { name: 'Switch' }).click()
-  await expect(chipOf(bobPage, 'routed')).toHaveText('openrouter/moonshotai/kimi-k3 (medium) · auto')
+  await expect(chipOf(bobPage, 'routed')).toHaveText('openrouter/moonshotai/kimi-k3 (medium)')
   await bobPage.keyboard.press('Escape')
   await promptAndWait(bobPage, 'Carry on with Kimi', 2)
 
@@ -89,6 +89,39 @@ test('f-10. a member with an OpenRouter key gets a routed OpenRouter model that 
   for (const name of ['Gemini Flash', 'Grok 4.3', 'DeepSeek V4 Flash', 'GLM-4.7'])
     await expect(sessionOf(bobPage).getByLabel('Main model').getByRole('option', { name, exact: true })).toHaveCount(1)
   await bobPage.context().close()
+})
+
+test('g-3. after a delegation, a curated switch and a searched switch each run the next turn on the new model with the earlier messages in its context, and the chip shows it', async ({
+  page,
+  agentScript,
+}) => {
+  const chatId = await newRuntimeChat(page, 'Switch keeps context')
+  await agentScript(chatId, {
+    steps: [{ tool: 'delegate', arguments: { task: 'List the project files', effort: 'small' } }],
+    text: 'Main done.',
+    delegateRoute: { tier: 'small', confidence: 'high', effort: 'low' },
+    subagents: { 'fake-small': { text: 'Two files.' } },
+  })
+  await sendMessage(page, 'The code word is PAPAYA, delegate the listing')
+  await expect(messageItemsOf(page).filter({ hasText: 'Main done.' })).toHaveCount(1)
+  await agentScript(chatId, { text: 'Context holds $userMessages prompts.' })
+
+  await openSession(page)
+  await sessionOf(page).getByLabel('Main model').selectOption('fake/fake-large')
+  await sessionOf(page).getByRole('button', { name: 'Switch' }).click()
+  await expect(chipOf(page, 'routed')).toHaveText(/^Fake large( \(\w+\))?$/)
+  await page.keyboard.press('Escape')
+  await sendMessage(page, 'Curated switch')
+  await expect(messageItemsOf(page).filter({ hasText: 'Context holds 2 prompts.' })).toHaveCount(1)
+
+  await openSession(page)
+  await sessionOf(page).getByLabel('Search all models').fill('fake-model')
+  await sessionOf(page).getByLabel('Main model').selectOption('fake/fake-model')
+  await sessionOf(page).getByRole('button', { name: 'Switch' }).click()
+  await expect(chipOf(page, 'routed')).toHaveText(/^fake\/fake-model( \(\w+\))?$/)
+  await page.keyboard.press('Escape')
+  await sendMessage(page, 'Searched switch')
+  await expect(messageItemsOf(page).filter({ hasText: 'Context holds 3 prompts.' })).toHaveCount(1)
 })
 
 test('f-5. the session has no separate default model: before the first prompt nothing to pick, then the chip shows the main model', async ({
@@ -101,7 +134,7 @@ test('f-5. the session has no separate default model: before the first prompt no
   await expect(sessionOf(page).getByLabel('Main model')).toHaveCount(0)
   await page.keyboard.press('Escape')
   await promptAndWait(page, 'Start on the main model', 1)
-  await expect(chipOf(page, 'routed')).toHaveText('Fake medium (medium) · auto')
+  await expect(chipOf(page, 'routed')).toHaveText('Fake medium (medium)')
   await openSession(page)
   await expect(sessionOf(page).getByLabel('Main model')).toHaveValue('fake/fake-medium')
   await expect(sessionOf(page).getByLabel('Default model')).toHaveCount(0)
@@ -118,12 +151,12 @@ test('5. a member reaching only a small model gets it, and is refused in a sessi
   const bobChatId = await newRuntimeChat(bobPage, 'Bob small')
   await agentScript(bobChatId, confident('large'))
   await promptAndWait(bobPage, 'A big refactor please', 1)
-  await expect(chipOf(bobPage, 'routed')).toHaveText('Fake small (high) · auto')
+  await expect(chipOf(bobPage, 'routed')).toHaveText('Fake small (high)')
 
   const aliceChatId = await newRuntimeChat(page, 'Alice large')
   await agentScript(aliceChatId, confident('large'))
   await promptAndWait(page, 'Redesign everything', 1)
-  await expect(chipOf(page, 'routed')).toHaveText('Fake large (high) · auto')
+  await expect(chipOf(page, 'routed')).toHaveText('Fake large (high)')
   await openChat(bobPage, 'Alice large')
   await sendMessage(bobPage, 'Bob joins the large session')
   await expect(messageItemsOf(bobPage).filter({ hasText: 'Bob joins the large session' })).toBeVisible()
@@ -138,10 +171,10 @@ test('7 and 8. the manual switch warns about the reread, keeps the history and u
 }) => {
   await newRuntimeChat(page, 'Switched')
   await promptAndWait(page, 'Start on the default', 1)
-  await expect(chipOf(page, 'routed')).toHaveText('Fake medium (medium) · auto')
+  await expect(chipOf(page, 'routed')).toHaveText('Fake medium (medium)')
   const bobPage = await openPageAs(browser, workerStack, 'member-bob')
   await openChat(bobPage, 'Switched')
-  await expect(chipOf(bobPage, 'routed')).toHaveText('Fake medium (medium) · auto')
+  await expect(chipOf(bobPage, 'routed')).toHaveText('Fake medium (medium)')
 
   await openSession(page)
   await sessionOf(page).getByLabel('Main model').selectOption({ label: 'Fake large' })
@@ -149,8 +182,8 @@ test('7 and 8. the manual switch warns about the reread, keeps the history and u
     /The next reply rereads the whole conversation with Fake large \(about (\$\d+\.\d{2}|< \$0\.01)\)/,
   )
   await sessionOf(page).getByRole('button', { name: 'Switch' }).click()
-  await expect(chipOf(page, 'routed')).toHaveText('Fake large (medium) · auto')
-  await expect(chipOf(bobPage, 'routed')).toHaveText('Fake large (medium) · auto')
+  await expect(chipOf(page, 'routed')).toHaveText('Fake large (medium)')
+  await expect(chipOf(bobPage, 'routed')).toHaveText('Fake large (medium)')
   await bobPage.context().close()
 
   await page.keyboard.press('Escape')
@@ -181,7 +214,7 @@ test('11. with a decision model reachable, routing asks it and moves when it is 
   const chatId = await newRuntimeChat(page, 'Decided')
   await agentScript(chatId, { route: { tier: 'large', confidence: 0.9, effort: 'high' } })
   await promptAndWait(page, 'Decide', 1)
-  await expect(chipOf(page, 'routed')).toHaveText('Fake large (high) · auto')
+  await expect(chipOf(page, 'routed')).toHaveText('Fake large (high)')
 })
 
 test('12. a member whose only key is a decision model is told to add an LLM key and cannot pick it', async ({

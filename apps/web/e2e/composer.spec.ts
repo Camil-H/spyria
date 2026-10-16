@@ -1,4 +1,5 @@
 import {
+  chipOf,
   composerOf,
   expect,
   type Locator,
@@ -11,6 +12,7 @@ import {
   type Page,
   panelOf,
   sendMessage,
+  sessionOf,
   sessionStarted,
   test,
   workingIndicatorOf,
@@ -33,26 +35,32 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/')
 })
 
-test('e1 and e4. the working directory sits above the text box; Runs on, the model and Plan/Auto sit in the bar under it; Plan/Auto waits for the session with Starting…', async ({
+test('e1, e4, g-1 and g-2. the working directory sits above the text box; Runs on, the model and Plan/Auto sit in the bar under it; Plan/Auto waits for the session with its reason in the tooltip and no Starting… text; the model chip shows model and effort only, the subagent policy stays in the session dialog', async ({
   page,
 }) => {
   await newRuntimeChat(page, 'Composer layout')
   await expect(modeRadioOf(page, 'Plan')).toBeDisabled()
   await expect(modeRadioOf(page, 'Auto')).toBeDisabled()
-  await expect(modeOf(page)).toContainText('Starting…')
+  await expect(modeOf(page)).toHaveAttribute('title', 'Plan and Auto are available once the agent session has started')
+  await expect(modeOf(page)).toHaveText('PlanAuto')
   await expect(workingDirectoryOf(page)).toHaveCount(0)
 
   await sendMessage(page, 'stub:hello')
   await turnsEnded(page, 1)
   await expect(modeRadioOf(page, 'Plan')).toBeEnabled()
   await expect(modeRadioOf(page, 'Auto')).toBeChecked()
-  await expect(modeOf(page)).not.toContainText('Starting…')
+  await expect(modeOf(page)).not.toHaveAttribute('title')
+  await expect(modeOf(page)).toHaveText('PlanAuto')
+  await expect(chipOf(page, 'hq')).toHaveText(/^Fake medium( \((low|medium|high)\))?$/)
+  await chipOf(page, 'hq').click()
+  await expect(sessionOf(page).getByLabel('Subagents')).toHaveValue('auto')
+  await page.keyboard.press('Escape')
   await expect(workingDirectoryOf(page)).toHaveText(/^workspace-\d+$/)
   await expect(workingDirectoryOf(page)).toHaveAttribute('title', /\/workspace-\d+$/)
 
   const textBox = await boxOf(composerOf(page))
   const runsOn = await boxOf(mainOf(page).getByRole('combobox', { name: 'Runs on' }))
-  const model = await boxOf(mainOf(page).getByRole('button', { name: /· auto$/ }))
+  const model = await boxOf(chipOf(page, 'hq'))
   const mode = await boxOf(modeOf(page))
   expect((await boxOf(workingDirectoryOf(page))).bottom).toBeLessThanOrEqual(textBox.top)
   for (const control of [runsOn, model, mode]) {

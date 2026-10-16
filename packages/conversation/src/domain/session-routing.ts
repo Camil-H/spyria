@@ -86,20 +86,17 @@ export const runsOnFieldsOf = (runsOn: RunsOn) =>
 export const runsOnOf = (chat: { localSession: boolean | null; harness: Harness | null }): RunsOn | null =>
   chat.localSession === null ? null : chat.localSession ? (chat.harness ?? 'claude-code') : 'runtime'
 export const runsOnWaitingNoticeOf = (ownerName: string) => `Waiting for ${ownerName} to choose where this chat runs`
-export const subagentPolicyNames = { auto: 'auto', same_as_main: 'same as main' } as const
 export const chipLabelOf = (
   {
     localSession,
     harness,
     model,
     reasoningEffort,
-    subagentPolicy,
   }: {
     localSession: boolean
     harness: Harness | null
     model: string | null
     reasoningEffort: string | null
-    subagentPolicy: keyof typeof subagentPolicyNames
   },
   nameOf: (id: string) => string,
   adapterNameOf: (id: string) => string,
@@ -107,5 +104,5 @@ export const chipLabelOf = (
   localSession
     ? `${harnesses[harness ?? 'claude-code'].name} · ${model ? adapterNameOf(model) : 'subscription'}`
     : model
-      ? `${nameOf(model)}${reasoningEffort ? ` (${reasoningEffort})` : ''} · ${subagentPolicyNames[subagentPolicy]}`
+      ? `${nameOf(model)}${reasoningEffort ? ` (${reasoningEffort})` : ''}`
       : 'Model chosen at first prompt'

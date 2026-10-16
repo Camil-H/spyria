@@ -79,33 +79,32 @@ const withThoughtsApart = (message: ConversationMessage): ConversationMessage[] 
 }
 
 const delegationOf = (message: ConversationMessage) => (message.step as StoredStep | null)?.delegation
-const delegateArgumentsOf = (message: ConversationMessage) => {
-  if (message.step?.type !== 'tool' || message.step.name !== 'delegate') return undefined
+const routerArgumentsOf = (message: ConversationMessage, name: 'delegate' | 'await_task') => {
+  if (message.step?.type !== 'tool' || message.step.name !== name) return undefined
   try {
-    return JSON.parse(message.step.arguments) as { task?: unknown; resume?: unknown }
+    return JSON.parse(message.step.arguments) as { task?: unknown; taskId?: unknown }
   } catch {
     return undefined
   }
 }
 
 const withDelegationsGrouped = (replies: readonly ConversationMessage[], isStopped: boolean) => {
-  const delegateActions = replies.filter((reply) => {
-    const delegateArguments = delegateArgumentsOf(reply)
-    return delegateArguments?.task !== undefined && !delegateArguments.resume
-  })
+  const delegateActions = replies.filter((reply) => routerArgumentsOf(reply, 'delegate')?.task !== undefined)
   const groupsByHostId = new Map<MessageId, ConversationMessage>()
   const resumeIds = new Set<MessageId>()
   for (const steps of Map.groupBy(replies, (reply) => delegationOf(reply)?.id).values()) {
     const firstStep = steps[0]
     const delegation = firstStep && delegationOf(firstStep)
     if (!delegation) continue
-    const actionIndex = delegateActions.findIndex((action) => delegateArgumentsOf(action)?.task === delegation.task)
+    const actionIndex = delegateActions.findIndex(
+      (action) => routerArgumentsOf(action, 'delegate')?.task === delegation.task,
+    )
     const host: ConversationMessage = replies.find((reply) => reply.id === delegation.id) ??
       delegateActions.splice(actionIndex, actionIndex < 0 ? 0 : 1)[0] ?? {
         ...firstStep,
         step: { type: 'tool', name: 'delegate', arguments: '', result: firstStep.isRunning ? null : '' },
       }
-    const resumes = replies.filter((reply) => delegateArgumentsOf(reply)?.resume === delegation.id)
+    const resumes = replies.filter((reply) => routerArgumentsOf(reply, 'await_task')?.taskId === delegation.id)
     for (const resume of resumes) resumeIds.add(resume.id)
     const lastStep = [host, ...resumes].at(-1)?.step
     const answered = lastStep?.type === 'tool' ? lastStep.result : null

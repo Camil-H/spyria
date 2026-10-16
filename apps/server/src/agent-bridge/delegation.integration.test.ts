@@ -204,15 +204,11 @@ test.each([
   },
 )
 
-test('a long task answers still running before Pi’s timeout for the router, a resume call returns its result, and another chat or turn cannot resume it', async () => {
+test('g-4. a long task answers still running before Pi’s timeout for the router, await_task returns its result without a validation error, and another chat or turn cannot await it', async () => {
   const { subs, main } = await fakeAgent()
   const chat = await newRuntimeChat()
-  const resumeCall = {
-    ...delegatedTask,
-    arguments: { ...delegatedTask.arguments, resume: '$resume' },
-    hold: 'resume',
-  }
-  setFakeLlmScript(delegatingScript({ steps: [delegatedTask, resumeCall], subagents: { 'fake-small': heldWork } }))
+  const awaitCall = { tool: 'await_task', arguments: { taskId: '$taskId' }, hold: 'resume' }
+  setFakeLlmScript(delegatingScript({ steps: [delegatedTask, awaitCall], subagents: { 'fake-small': heldWork } }))
   const startedAt = Date.now()
   const promptId = await prompt(chat, 'Delegate a long task')
   await holds.reached('resume')
@@ -225,16 +221,14 @@ test('a long task answers still running before Pi’s timeout for the router, a 
   const id = String(delegation?.id)
   expect((await stepsOf(promptId))[0]?.result).toBe(stillRunningOf(id))
   const otherTurn = { promptId: messageId('message-other'), prompterId: alice, ownerId: alice, prompterName: 'Alice' }
-  const resumeElsewhere = (otherChat: ChatId) =>
-    agentBridge.forDatabase(database).delegate({
+  const awaitElsewhere = (otherChat: ChatId) =>
+    agentBridge.forDatabase(database).awaitTask({
       chat: { workspaceId: acme, chatId: otherChat },
       turn: otherTurn,
-      task: '',
-      effort: 'small',
-      resume: id,
+      taskId: id,
     })
-  expect(await resumeElsewhere(await newRuntimeChat())).toEqual({ text: unknownTaskOf(id), isError: true })
-  expect(await resumeElsewhere(chat)).toEqual({ text: unknownTaskOf(id), isError: true })
+  expect(await awaitElsewhere(await newRuntimeChat())).toEqual({ text: unknownTaskOf(id), isError: true })
+  expect(await awaitElsewhere(chat)).toEqual({ text: unknownTaskOf(id), isError: true })
   await holds.release('sub')
   await waitFor(async () => (await delegationsOf(chat))[0]?.status === 'finished')
   await holds.release('resume')
@@ -244,8 +238,13 @@ test('a long task answers still running before Pi’s timeout for the router, a 
   expect((await delegationsOf(chat)).map((row) => ({ id: row.id, status: row.status }))).toEqual([
     { id, status: 'finished' },
   ])
-  const delegateSteps = (await stepsOf(promptId)).filter((step) => step?.name === 'delegate')
-  expect(delegateSteps.map((step) => step?.result)).toEqual([stillRunningOf(id), 'one two three four five six'])
+  const routerSteps = (await stepsOf(promptId)).filter(
+    (step) => step?.name === 'delegate' || step?.name === 'await_task',
+  )
+  expect(routerSteps.map((step) => [step?.name, step?.result, step?.isError ?? false])).toEqual([
+    ['delegate', stillRunningOf(id), false],
+    ['await_task', 'one two three four five six', false],
+  ])
 })
 
 test('a long task the turn never resumed is forgotten when the turn ends', async () => {
@@ -256,14 +255,12 @@ test('a long task the turn never resumed is forgotten when the turn ends', async
   const [delegation] = await delegationsOf(chat)
   const id = String(delegation?.id)
   expect((await stepsOf(promptId))[0]?.result).toBe(stillRunningOf(id))
-  const resumed = await agentBridge.forDatabase(database).delegate({
+  const awaited = await agentBridge.forDatabase(database).awaitTask({
     chat: { workspaceId: acme, chatId: chat },
-    turn: { promptId: messageId(promptId), prompterId: alice, ownerId: alice, prompterName: 'Alice' },
-    task: '',
-    effort: 'small',
-    resume: id,
+    turn: { promptId: messageId(promptId), prompterId: alice, ownerId: alice },
+    taskId: id,
   })
-  expect(resumed).toEqual({ text: unknownTaskOf(id), isError: true })
+  expect(awaited).toEqual({ text: unknownTaskOf(id), isError: true })
   await holds.release('sub')
   await waitFor(async () => (await delegationsOf(chat))[0]?.status === 'finished')
 })
@@ -304,4 +301,33 @@ test('a failed subagent answers the tool call with an error in HQ wording and le
   expect(
     (await database.$client`select agent_turn_failure from chats where id = ${chat}`)[0]?.agent_turn_failure,
   ).toBeNull()
+})
+
+test('g-3. after a delegation, a model picked from the listing relaunches Pi on the main session, not the subagent’s, and the next request carries the earlier turns', async () => {
+  const { relay } = await fakeAgent()
+  const chat = await newRuntimeChat()
+  setFakeLlmScript(delegatingScript())
+  await promptAndAnswer(chat, 'The code word is PAPAYA, delegate the listing')
+  const sessionsStarted = (await stack.storedAgentEventsOf(chat))
+    .map((event) => event.payload as { event: { update: Record<string, unknown> }; delegation?: object })
+    .filter((payload) => payload.event.update.sessionUpdate === 'session_started')
+  expect(sessionsStarted.map((payload) => Boolean(payload.delegation))).toEqual([false, true])
+  const pick = { workspaceId: acme, chatId: chat, sessionModel: 'fake/fake-model' }
+  expect(await mutate(aliceInAcme, 'conversation.updateChatRouting', pick)).toEqual(succeeded)
+  setFakeLlmScript({ text: 'Picked.' })
+  await promptAndAnswer(chat, 'What is the code word?')
+
+  const mains = (relay.created as Launch[]).filter((launch) => !launch.parent_conversation_id)
+  expect(mains).toHaveLength(2)
+  expect(mains[1]?.agent).toMatchObject({
+    acp_model: 'hq/fake/fake-model',
+    acp_resume_session_id: String(sessionsStarted[0]?.event.update.sessionId),
+  })
+  const request = stack.fakeLlmBodies.findLast((body) => body.includes('What is the code word?')) ?? ''
+  expect(request).toContain('"model":"fake-model"')
+  const userMessages = (JSON.parse(request).messages as { role: string; content: string }[])
+    .filter((message) => message.role === 'user')
+    .map((message) => message.content)
+  expect(userMessages).toEqual(['The code word is PAPAYA, delegate the listing', 'What is the code word?'])
+  expect(request).toContain('Main done.')
 })

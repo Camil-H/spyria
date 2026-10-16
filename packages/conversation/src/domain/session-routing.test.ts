@@ -60,23 +60,22 @@ test.each([
   [{ localSession: true, harness: 'codex', model: 'gpt-large' }, 'Codex · Adapter gpt-large'],
   [
     { localSession: false, harness: null, model: 'fake/fake-large', reasoningEffort: 'high' },
-    'Named fake/fake-large (high) · same as main',
+    'Named fake/fake-large (high)',
   ],
-  [{ localSession: false, harness: null, model: 'fake/fake-small' }, 'Named fake/fake-small · same as main'],
+  [{ localSession: false, harness: null, model: 'fake/fake-small' }, 'Named fake/fake-small'],
   [{ localSession: false, harness: 'codex', model: null }, 'Model chosen at first prompt'],
-  [
-    { localSession: false, harness: null, model: 'fake/fake-medium', subagentPolicy: 'auto' },
-    'Named fake/fake-medium · auto',
-  ],
-] as const)('the session chip reads %o as %s', (fields, label) => {
-  expect(
-    chipLabelOf(
-      { reasoningEffort: null, subagentPolicy: 'same_as_main', ...fields },
-      (id) => (id.startsWith('anthropic/') ? 'Anthropic/Opus 5.5' : `Named ${id}`),
-      (id) => `Adapter ${id}`,
-    ),
-  ).toBe(label)
-})
+] as const)(
+  'the session chip reads %o as %s: model and effort only, the subagent policy stays in the dialog',
+  (fields, label) => {
+    expect(
+      chipLabelOf(
+        { reasoningEffort: null, ...fields },
+        (id) => (id.startsWith('anthropic/') ? 'Anthropic/Opus 5.5' : `Named ${id}`),
+        (id) => `Adapter ${id}`,
+      ),
+    ).toBe(label)
+  },
+)
 
 test('the classifier reads the chat mode, non-dev by default; Pi gets only its thought levels', () => {
   expect(sessionStateOf('Fix it', null)).toBe('Chat mode: non-dev\nFirst message:\nFix it')

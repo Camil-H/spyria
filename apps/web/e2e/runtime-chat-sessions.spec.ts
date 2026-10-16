@@ -50,7 +50,7 @@ test('3. a new runtime chat left on HQ runtime runs on a workspace host with the
   await agentScript(chatId, { text: 'Answered on an HQ runtime.' })
   await sendMessage(page, 'Hello HQ runtime')
   await expect(messageContaining(page, 'Answered on an HQ runtime.')).toBeVisible()
-  await expect(chipOf(page, 'any')).toHaveText(/· auto$/)
+  await expect(chipOf(page, 'hq')).toBeVisible()
 })
 
 test('4. another member does not see the choice, and Runs on locks once a conversation exists', async ({

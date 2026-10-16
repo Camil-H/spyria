@@ -72,7 +72,12 @@ export const PlanModeToggle = ({
 }) => {
   const commands = useConversationCommands()
   return (
-    <fieldset aria-label="Mode" disabled={!hasSession || !mayPrompt} className="flex items-center gap-2 text-xs">
+    <fieldset
+      aria-label="Mode"
+      title={hasSession ? undefined : 'Plan and Auto are available once the agent session has started'}
+      disabled={!hasSession || !mayPrompt}
+      className="flex items-center text-xs"
+    >
       <div className="flex rounded-md border border-line p-0.5 in-disabled:opacity-40">
         {[
           { label: 'Plan', enabled: true },
@@ -93,7 +98,6 @@ export const PlanModeToggle = ({
           </label>
         ))}
       </div>
-      {!hasSession && <span className="text-muted">Starting…</span>}
     </fieldset>
   )
 }
@@ -136,10 +140,17 @@ export const SessionChip = (chip: {
   const adapterModels = routing?.adapterModels.available ?? []
   const adapterNameOf = (id: string) =>
     adapterModels.find((candidate) => candidate.id === id)?.name ?? (id || 'Default')
+  const label = chipLabelOf(chip, nameOf, adapterNameOf)
   return (
     <div ref={chipRef} className="relative min-w-0">
-      <button type="button" aria-expanded={isOpen} onClick={() => setIsOpen(!isOpen)} className={barChipClass}>
-        <span className="truncate">{chipLabelOf(chip, nameOf, adapterNameOf)}</span>
+      <button
+        type="button"
+        aria-label={`Model: ${label}`}
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen(!isOpen)}
+        className={barChipClass}
+      >
+        <span className="truncate">{label}</span>
         <ChevronDown aria-hidden size={12} className="shrink-0" />
       </button>
       {isOpen && (

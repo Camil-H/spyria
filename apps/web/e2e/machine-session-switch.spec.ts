@@ -1,4 +1,5 @@
 import {
+  chipOf,
   expect,
   hostsSectionOf,
   llmSectionOf,
@@ -89,7 +90,7 @@ test('1 and 4. the admin turns sessions on members machines off: My machine show
   await dialog.getByRole('button', { name: 'Confirm' }).click()
   await expect(mainOf(bobPage).getByRole('heading', { level: 1, name: 'Bob while off' })).toBeVisible()
   await expect(runsOnChoiceOf(bobPage)).toHaveCount(0)
-  await expect(mainOf(bobPage).getByRole('button', { name: 'Model chosen at first prompt' })).toBeVisible()
+  await expect(chipOf(bobPage, 'routed')).toHaveText('Model chosen at first prompt')
   const runsOn = mainOf(bobPage).getByRole('combobox', { name: 'Runs on' })
   await expect(runsOn).toBeDisabled()
   await expect(runsOn).toHaveValue('runtime')

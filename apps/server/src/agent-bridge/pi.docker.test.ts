@@ -203,6 +203,45 @@ test("Pi in HQ's image answers through the LLM relay on the chat and Anthropic r
   )
 })
 
+test('a model switch keeps the conversation: the next request on a curated model of another provider, and after a relaunch on the same session with a picked model, carries the earlier turns', async () => {
+  await addLlmKey(bob, 'Fake')
+  await addLlmKey(bob, 'Anthropic')
+  const { id, transport } = await runtime()
+  const { token } = await runtimeTurn({ id }, bob)
+  const models = [
+    { id: 'fake/fake-medium', name: 'Fake medium', reasoning: false },
+    { id: 'anthropic/claude-haiku-5-5', name: 'Haiku 5.5', reasoning: false, contextWindow: 200000 },
+  ]
+  const llm = { adapterModel: 'hq/fake/fake-medium', pi: { models, compactionModel: 'fake/fake-medium' } }
+  const bodiesBefore = fakeLlmBodies.length
+  const requestOf = (text: string) => fakeLlmBodies.slice(bodiesBefore).find((body) => body.includes(text)) ?? ''
+  const first = await piConversationOf(transport, token, llm)
+  await first.answerOf('The code word is PAPAYA')
+  await agentClient.switchModel(first.conversation, 'hq-anthropic/anthropic/claude-haiku-5-5')
+  await first.answerOf('Curated switch: what is the code word?')
+  const sessionId = first.updates.find((update) => update.sessionUpdate === 'session_started')?.sessionId
+  first.close()
+  await agentClient.deleteConversation(first.conversation)
+
+  const picked = { id: 'fake/fake-small', name: 'Fake small', reasoning: false }
+  const relaunched = await piConversationOf(transport, token, {
+    adapterModel: 'hq/fake/fake-small',
+    pi: { models: [...models, picked], compactionModel: 'fake/fake-medium' },
+    resumeSessionId: sessionId,
+  })
+  await relaunched.answerOf('Picked switch: what is the code word?')
+  relaunched.close()
+  expect(relaunched.updates.find((update) => update.sessionUpdate === 'session_started')).toMatchObject({
+    sessionId,
+    resumeFailed: false,
+  })
+  expect(requestOf('Curated switch')).toContain('"model":"claude-haiku-5-5"')
+  expect(requestOf('Curated switch')).toContain('The code word is PAPAYA')
+  expect(requestOf('Picked switch')).toContain('"model":"fake-small"')
+  expect(requestOf('Picked switch')).toContain('The code word is PAPAYA')
+  expect(requestOf('Picked switch')).toContain('Curated switch: what is the code word?')
+})
+
 test('a long Pi conversation compacts on the compaction model, recorded with prompter and owner, and a new conversation loads the session without replaying it and keeps its context', async () => {
   await addLlmKey(bob, 'Fake')
   const summary = 'Summary of the earlier turns: the word to remember is PAPAYA.'
@@ -259,7 +298,7 @@ test('a long Pi conversation compacts on the compaction model, recorded with pro
   expect(request?.split('After the restart')).toHaveLength(2)
 })
 
-test("Pi in HQ's image runs a command with its output, asks through HQ's extension and gets a free answer, in plan mode is refused a write and proposes a plan that is approved, keeps a plan with update_plan, streams text around a command once, and reports a provider error", async () => {
+test("Pi in HQ's image runs a command with its output, asks through HQ's extension and gets a free answer, in plan mode is refused a write and proposes a plan that is approved, keeps a plan with update_plan as its system prompt asks, streams text around a command once, and reports a provider error", async () => {
   await addLlmKey(bob, 'Fake')
   const { id, transport } = await runtime()
   const { token } = await runtimeTurn({ id }, bob)
@@ -333,6 +372,15 @@ test("Pi in HQ's image runs a command with its output, asks through HQ's extensi
 
   setFakeLlmScript({ steps: [{ plan: [{ content: 'Create notes.txt', status: 'in_progress' }] }], text: 'Tracked.' })
   expect(await pi.answerOf('Track it')).toBe('Tracked.')
+  const tracked = JSON.parse(fakeLlmBodies.findLast((body) => body.includes('Track it')) ?? '{}')
+  expect(tracked.messages[0]).toMatchObject({
+    role: 'system',
+    content: expect.stringContaining('For multi-step work, keep the plan with update_plan; do not write plan files.'),
+  })
+  expect(
+    tracked.tools.find((tool: { function: { name: string } }) => tool.function.name === 'update_plan').function
+      .description,
+  ).toContain('instead of plan or TODO files')
   expect(pi.updates.filter((update) => update.sessionUpdate === 'plan')).toEqual([
     { sessionUpdate: 'plan', entries: [{ content: 'Create notes.txt', status: 'in_progress', priority: 'medium' }] },
   ])

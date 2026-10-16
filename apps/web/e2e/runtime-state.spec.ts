@@ -94,7 +94,7 @@ test.describe('without a warm runtime', () => {
     expect(await dotColourOf()).toBe(await colourOf('--color-green-500'))
   })
 
-  test('5. a runtime that cannot start shows one Could not start · Retry chip and a notice; clicking it starts the runtime and answers the prompt', async ({
+  test('5 and g-8. a runtime that cannot start shows one Could not start · Retry chip and a notice; clicking it shows Retrying… with a spinner, then starts the runtime and answers the prompt', async ({
     page,
     failRuntimeCreation,
     release,
@@ -109,9 +109,19 @@ test.describe('without a warm runtime', () => {
     await expect(messageContaining(page, 'The agent could not start')).toHaveCount(1)
     await expect(workingIndicatorOf(page)).toHaveCount(0)
     await failRuntimeCreation(false)
+    await runtimeStatusOf(page).evaluate((status) => {
+      const seen = new Set<string>()
+      new MutationObserver(() =>
+        seen.add(`${status.textContent}${status.querySelector('.animate-spin') ? ' +spinner' : ''}`),
+      ).observe(status, { subtree: true, childList: true, characterData: true })
+      Object.assign(window, { seenRuntimeStatuses: seen })
+    })
     await retryButtonOf(page).click()
 
     await expect(runtimeStatusOf(page)).toHaveText('Starting…')
+    expect(
+      await page.evaluate(() => [...(window as unknown as { seenRuntimeStatuses: Set<string> }).seenRuntimeStatuses]),
+    ).toEqual(['Retrying… +spinner', 'Starting…'])
     await expect(retryButtonOf(page)).toHaveCount(0)
     await release('boot')
     await expect(runtimeStatusOf(page)).toHaveText('Ready')

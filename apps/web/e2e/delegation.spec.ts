@@ -83,11 +83,7 @@ const delegatingTo = (model: string, answer: string, script: object) => ({
 const resuming = (answer: string, script: object, resumeHold?: string) => ({
   steps: [
     { tool: 'delegate', arguments: { task: 'List the project files', effort: 'small' } },
-    {
-      tool: 'delegate',
-      arguments: { task: 'List the project files', effort: 'small', resume: '$resume' },
-      hold: resumeHold,
-    },
+    { tool: 'await_task', arguments: { taskId: '$taskId' }, hold: resumeHold },
   ],
   text: answer,
   ...script,
@@ -129,7 +125,7 @@ test('10. a subagent failure answers with HQ’s error, the group shows failed, 
   )
 })
 
-test('11 and f-3. a long subagent task returns still running and reads as still delegating, then its result on resume, in one group with one answer', async ({
+test('11, f-3 and g-4. a long subagent task returns still running and reads as still delegating, then its result from await_task, in one group with one answer', async ({
   page,
   agentScript,
   release,
@@ -151,7 +147,8 @@ test('11 and f-3. a long subagent task returns still running and reads as still 
   await release('resume')
   await expect(messageItemsOf(page).filter({ hasText: answer })).toBeVisible()
   await expect(groupOf(page, 'Fake small')).toHaveCount(1)
-  await expect(mainOf(page).getByRole('button', { name: /^Used delegate/ })).toHaveCount(0)
+  await expect(mainOf(page).getByRole('button', { name: /^Used (delegate|await_task)/ })).toHaveCount(0)
+  await expect(mainOf(page)).not.toContainText(/validation|There is no task/)
   await groupOf(page, 'Fake small').click()
   const group = messageItemsOf(page).filter({ has: page.getByRole('group', { name: 'Steps of Fake small' }) })
   await expect(group).toContainText('The slow listing found two files today.')

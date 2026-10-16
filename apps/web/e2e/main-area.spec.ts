@@ -3,6 +3,7 @@ import {
   agentReplyText,
   chatAction,
   chatLinkOf,
+  chipOf,
   composerOf,
   draftIconOf,
   expect,
@@ -206,7 +207,7 @@ test('shows the runtime chats, their header and history', async ({ page }) => {
     await expect(mainOf(page).getByRole('img', { name: 'Runtime chat' })).toBeVisible()
     await expect(mainOf(page)).not.toContainText('Runtime view')
     await expect(mainOf(page)).toContainText('Agent acts as Alice')
-    await expect(mainOf(page)).toContainText('Sonnet 5.5 (high) · auto')
+    await expect(chipOf(page, 'hq')).toHaveText('Sonnet 5.5 (high)')
     await expect(mainOf(page)).toContainText('fix/invoice-tax')
     await expect(mainOf(page).getByRole('img', { name: 'Git branch' })).toBeVisible()
     await expect(messageContaining(page, 'Why do invoices show the wrong total?')).toContainText('Alice')
@@ -222,14 +223,14 @@ test('shows the runtime chats, their header and history', async ({ page }) => {
     const titleBox = (await mainOf(page).getByRole('heading', { level: 1, name: 'Invoice bug' }).boundingBox())!
     const ownerBox = (await mainOf(page).getByText('Agent acts as Alice').boundingBox())!
     const branchBox = (await mainOf(page).getByText('fix/invoice-tax').boundingBox())!
-    const modelBox = (await mainOf(page).getByRole('button', { name: 'Sonnet 5.5 (high) · auto' }).boundingBox())!
+    const modelBox = (await chipOf(page, 'hq').boundingBox())!
     const runtimeBox = (await mainOf(page).getByRole('status', { name: 'Runtime' }).boundingBox())!
     const composerBox = (await composerOf(page).boundingBox())!
     expect(Math.abs(ownerBox.y + ownerBox.height / 2 - (titleBox.y + titleBox.height / 2))).toBeLessThan(16)
     expect(ownerBox.x).toBeGreaterThan(titleBox.x + titleBox.width)
     const header = mainOf(page).locator('header')
     await expect(header).not.toContainText('fix/invoice-tax')
-    await expect(header).not.toContainText('Sonnet 5.5 (high) · auto')
+    await expect(header).not.toContainText('Sonnet 5.5 (high)')
     await expect(header.getByRole('status', { name: 'Runtime' })).toHaveCount(0)
     expect(branchBox.y + branchBox.height).toBeLessThanOrEqual(composerBox.y)
     expect(composerBox.y - (branchBox.y + branchBox.height)).toBeLessThan(48)
@@ -269,7 +270,7 @@ test('shows the runtime chats, their header and history', async ({ page }) => {
   await test.step('shows the owner and the model of another runtime chat', async () => {
     await openChat(page, 'Setup helper')
     await expect(mainOf(page)).toContainText('Agent acts as Bob')
-    await expect(mainOf(page)).toContainText('GPT-5 (medium) · auto')
+    await expect(chipOf(page, 'hq')).toHaveText('GPT-5 (medium)')
     await expect(mainOf(page)).toContainText('main')
     await expect(mainOf(page).getByRole('img', { name: 'Git branch' })).toBeVisible()
     await expect(messageContaining(page, 'Dependencies installed.')).toContainText('Agent')

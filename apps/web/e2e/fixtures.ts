@@ -156,10 +156,10 @@ export const newRuntimeChat = async (page: Page, name: string, runsOn: string | 
 }
 
 const chipNames = {
-  harness: /^Claude Code · |^Codex · /,
-  hq: /· (auto|same as main)$/,
-  routed: /Model chosen at first prompt|· (auto|same as main)$/,
-  any: /^Model chosen at first prompt$|^Claude Code · |^Codex · |· (auto|same as main)$/,
+  harness: /^Model: (Claude Code|Codex) · /,
+  hq: /^Model: (?!Claude Code · |Codex · |Model chosen at first prompt$)/,
+  routed: /^Model: (?!Claude Code · |Codex · )/,
+  any: /^Model: /,
 }
 export const chipOf = (page: Page, kind: keyof typeof chipNames) =>
   mainOf(page).getByRole('button', { name: chipNames[kind] })

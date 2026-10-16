@@ -162,6 +162,11 @@ export const createApp = async (
         await mutate(conversationMutators.conversation.startRuntimeFromMessage, { ...input, chatId: newChatId })
         return newChatId
       },
+      retryAgent: async (input) => {
+        const { id, confirmation } = await mutate(conversationMutators.conversation.retryAgent, input)
+        await confirmation
+        return id
+      },
     }),
     agentStream: createAgentStream(store),
     profileCommands: commandsOf<ProfileCommands>(profileMutators.profile, {

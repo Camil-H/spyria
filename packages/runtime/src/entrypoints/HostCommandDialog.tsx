@@ -1,4 +1,4 @@
-import { Dialog, ghostButtonClass } from '@hq/ui'
+import { CopyButton, Dialog, ghostButtonClass } from '@hq/ui'
 import { hostCommandOf, type SignInTool } from '../domain/host-command.ts'
 
 export const PersonalNotice = ({ toolName }: { toolName?: string }) => (
@@ -19,9 +19,7 @@ export const CommandBox = ({ command }: { command: string }) => (
       value={command}
       className="resize-none overflow-auto rounded-md border border-line bg-app p-2 font-mono text-xs text-ink"
     />
-    <button type="button" className={ghostButtonClass} onClick={() => navigator.clipboard.writeText(command)}>
-      Copy
-    </button>
+    <CopyButton text={command} className={ghostButtonClass} />
   </>
 )
 

@@ -141,7 +141,6 @@ test('14c. a Codex form of three questions shows on the same card, without its N
 
 test.describe('Pi on an HQ runtime chat', () => {
   test.use({ runtimeHost: true })
-  const piChipOf = (page: Page) => mainOf(page).getByRole('button', { name: /· auto$/ })
 
   test('14c. a Pi select shows on the same card without its Other choice; a free answer reaches Pi through its input', async ({
     page,
@@ -165,13 +164,13 @@ test.describe('Pi on an HQ runtime chat', () => {
     await sendMessage(page, 'stub:hello')
     await turnEnded(page)
     await togglePlan(page, true)
-    await expect(piChipOf(page)).toHaveText(/· auto$/)
+    await expect(chipOf(page, 'hq')).toBeVisible()
     await sendMessage(page, 'stub:hello')
     await expect(
       messageContaining(page, '[t2] Hello from the stub (model hq/fake/fake-medium, mode plan).'),
     ).toHaveCount(1)
     await togglePlan(page, false)
-    await expect(piChipOf(page)).toHaveText(/· auto$/)
+    await expect(chipOf(page, 'hq')).toBeVisible()
     await sendMessage(page, 'stub:hello')
     await expect(
       messageContaining(page, '[t3] Hello from the stub (model hq/fake/fake-medium, mode default).'),
@@ -361,7 +360,7 @@ test.describe('on an HQ runtime chat', () => {
     await agentScript('chat-research', {
       steps: [
         { tool: 'delegate', arguments: task },
-        { tool: 'delegate', arguments: { ...task, resume: '$resume' }, hold: 'resume' },
+        { tool: 'await_task', arguments: { taskId: '$taskId' }, hold: 'resume' },
       ],
       text: answer,
       delegateRoute: { tier: 'small', confidence: 'high', effort: 'low' },

@@ -39,7 +39,7 @@ let canElicit = false
 const sessionFile = (sessionId) => `${stateDirectory}/${sessionId}.json`
 const save = (sessionId, session) => {
   mkdirSync(stateDirectory, { recursive: true })
-  writeFileSync(sessionFile(sessionId), JSON.stringify({ prompts: session.prompts }))
+  writeFileSync(sessionFile(sessionId), JSON.stringify({ prompts: session.prompts, history: session.history }))
 }
 const configOptionsOf = ({ model, mode, collaboration_mode }) => [
   {
@@ -476,6 +476,7 @@ const turn = async (id, { sessionId, prompt }) => {
       await gatewayTurn(session, text, state, update).catch((error) => {
         throw state.cancelled ? new Cancelled() : error
       })
+      save(sessionId, session)
       return finish('end_turn')
     }
     if (has('crash')) process.exit(3)
@@ -773,7 +774,7 @@ const turn = async (id, { sessionId, prompt }) => {
   }
 }
 
-const opened = (sessionId, prompts) => {
+const opened = (sessionId, { prompts, history }) => {
   const session = {
     prompts,
     model: models[0].value,
@@ -781,17 +782,14 @@ const opened = (sessionId, prompts) => {
     thought_level: 'medium',
     collaboration_mode: 'default',
     current: undefined,
-    history: [],
+    history,
     tools: undefined,
   }
   sessions.set(sessionId, session)
   return { ...sessionResultOf(session), sessionId }
 }
-const savedPromptsOf = (sessionId) => {
-  if (!sessions.has(sessionId) && !existsSync(sessionFile(sessionId)))
-    throw { code: -32002, message: 'Resource not found' }
-  return sessions.get(sessionId)?.prompts ?? JSON.parse(readFileSync(sessionFile(sessionId), 'utf8')).prompts
-}
+const fresh = () => ({ prompts: 0, history: [] })
+const savedOf = (path) => ({ ...fresh(), ...JSON.parse(readFileSync(path, 'utf8')) })
 const handlers = {
   initialize: ({ clientCapabilities }) => {
     canElicit = Boolean(clientCapabilities?.elicitation?.form)
@@ -804,11 +802,12 @@ const handlers = {
   },
   'session/new': () => {
     if (process.env.STUB_FAIL_START) throw { code: -32000, message: 'Authentication required' }
-    return opened(randomUUID(), 0)
+    return opened(randomUUID(), fresh())
   },
   'session/resume': ({ sessionId }) => {
-    const prompts = savedPromptsOf(sessionId)
-    if (!sessions.has(sessionId)) opened(sessionId, prompts)
+    if (!sessions.has(sessionId) && !existsSync(sessionFile(sessionId)))
+      throw { code: -32002, message: 'Resource not found' }
+    if (!sessions.has(sessionId)) opened(sessionId, savedOf(sessionFile(sessionId)))
     return sessionResultOf(sessions.get(sessionId))
   },
   'session/set_mode': ({ sessionId, modeId }) => {
@@ -827,7 +826,7 @@ const cancel = (session) => {
   session?.current?.abort.abort()
 }
 let piSessionId = randomUUID()
-if (isPi) opened(piSessionId, 0)
+if (isPi) opened(piSessionId, fresh())
 const piSession = () => sessions.get(piSessionId)
 const piModelOf = (model) => {
   const [provider, ...id] = model.split('/')
@@ -847,7 +846,7 @@ const piCommands = {
   set_thinking_level: ({ level }) => Object.assign(piSession(), { thought_level: level }) && {},
   switch_session: ({ sessionPath }) => {
     piSessionId = basename(sessionPath, '.json')
-    opened(piSessionId, existsSync(sessionPath) ? JSON.parse(readFileSync(sessionPath, 'utf8')).prompts : 0)
+    opened(piSessionId, existsSync(sessionPath) ? savedOf(sessionPath) : fresh())
     return { cancelled: false }
   },
   abort: async () => {

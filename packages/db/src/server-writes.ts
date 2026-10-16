@@ -315,7 +315,8 @@ export const lastSessionId = async (tx: Transaction, workspaceId: string, chatId
       tx,
       `select payload->'event'->'update'->>'sessionId' as "sessionId" from events
        where workspace_id = $1 and chat_id = $2 and type = 'agent.event'
-       and payload->'event'->'update'->>'sessionUpdate' = 'session_started' order by seq desc limit 1`,
+       and payload->'event'->'update'->>'sessionUpdate' = 'session_started' and payload->'delegation' is null
+       order by seq desc limit 1`,
       [workspaceId, chatId],
     )
   )?.sessionId ?? undefined

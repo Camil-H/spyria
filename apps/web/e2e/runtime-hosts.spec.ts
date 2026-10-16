@@ -141,7 +141,7 @@ test.describe('1. access', () => {
   })
 })
 
-test('2. adding a host shows one copyable command that replaces hq-host and picks rootless or rooted Docker itself', async ({
+test('2 and g-8. adding a host shows one copyable command that replaces hq-host and picks rootless or rooted Docker itself; Copy reads ✓ Copied', async ({
   page,
   context,
 }) => {
@@ -169,6 +169,7 @@ test('2. adding a host shows one copyable command that replaces hq-host and pick
   expect(command).toMatch(new RegExp(` hq-host ${dockerOrigin}/h/[A-HJ-NP-Z2-9]{8}$`))
 
   await addDialogOf(page).getByRole('button', { name: 'Copy' }).click()
+  await expect(addDialogOf(page).getByRole('button', { name: '✓ Copied' })).toBeVisible()
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(command)
   await addDialogOf(page).getByRole('button', { name: 'Close' }).click()
   await expect(addDialogOf(page)).toHaveCount(0)

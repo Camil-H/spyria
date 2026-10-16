@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { reachableModelsOf } from '@hq/kernel'
-import { askedChoiceOf, delegationChoiceOf } from './delegation.ts'
+import { askedChoiceOf, delegationChoiceOf, routerTools, stillRunningOf } from './delegation.ts'
 
 const anthropicModels = reachableModelsOf(['anthropic'])
 const smallOnly = anthropicModels.filter((model) => model.tier === 'small')
@@ -47,4 +47,14 @@ test('only a confident classification picks the subagent model; a low-confidence
   })
   expect(delegationChoiceOf(anthropicModels, { ...small, tier: { value: 'small', confidence: 0 } })).toBeUndefined()
   expect(delegationChoiceOf(anthropicModels, undefined)).toBeUndefined()
+})
+
+test('the router offers delegate({ task, effort }) and await_task({ taskId }), and a still-running answer names await_task', () => {
+  expect(
+    routerTools.map(({ name, inputSchema }) => [name, inputSchema.required, Object.keys(inputSchema.properties)]),
+  ).toEqual([
+    ['delegate', ['task', 'effort'], ['task', 'effort', 'model']],
+    ['await_task', ['taskId'], ['taskId']],
+  ])
+  expect(stillRunningOf('t-1')).toBe('Task t-1 is still running; call await_task with taskId="t-1"')
 })

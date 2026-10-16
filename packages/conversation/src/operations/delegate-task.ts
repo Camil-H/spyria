@@ -27,7 +27,6 @@ type Input = {
   task: string
   effort: unknown
   model?: unknown
-  resume?: unknown
 }
 const cannotStart = { text: 'The subagent could not start', isError: true }
 
@@ -148,16 +147,20 @@ const runDelegation = async (
   }
 }
 
+export const awaitTask = async (
+  dependencies: AgentDependencies,
+  { chat, turn, taskId }: { chat: AgentChat; turn: ModelCallTurn; taskId: unknown },
+): Promise<DelegationResult> => {
+  const id = String(taskId ?? '')
+  const running = runningDelegations.get(id)
+  if (running?.chatId !== chat.chatId || running.promptId !== turn.promptId)
+    return { text: unknownTaskOf(id), isError: true }
+  return answerWithin(dependencies, id, running)
+}
+
 export const delegateTask = async (dependencies: AgentDependencies, input: Input): Promise<DelegationResult> => {
   const { transactor, runtimes, fixedLlm } = dependencies
   const { chat, turn, task } = input
-  if (input.resume) {
-    const id = String(input.resume)
-    const running = runningDelegations.get(id)
-    if (running?.chatId !== chat.chatId || running.promptId !== turn.promptId)
-      return { text: unknownTaskOf(id), isError: true }
-    return answerWithin(dependencies, id, running)
-  }
   const effortHint = effortHintOf(input.effort)
   const choice = await chooseSubagent(dependencies, input, effortHint)
   const endpoint = await runtimes.endpointOf(chat)

@@ -1,4 +1,4 @@
-import { focusRing } from '@hq/ui'
+import { CopyButton, focusRing } from '@hq/ui'
 import { Children, type ReactElement, type ReactNode, useEffect, useState } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -41,7 +41,6 @@ const RemoteImage = ({ src, alt }: { src?: string; alt?: string }) => {
 
 const CodeBlock = ({ code, language }: { code: string; language: string | undefined }) => {
   const [highlighted, setHighlighted] = useState<ReactNode>()
-  const [isCopied, setIsCopied] = useState(false)
   useEffect(() => {
     let isCurrent = true
     void import('./highlight.tsx').then(({ highlightedCode }) => {
@@ -53,14 +52,11 @@ const CodeBlock = ({ code, language }: { code: string; language: string | undefi
   }, [code, language])
   return (
     <div className="relative">
-      <button
-        type="button"
-        aria-label="Copy code"
-        onClick={() => void navigator.clipboard.writeText(code).then(() => setIsCopied(true))}
+      <CopyButton
+        text={code}
+        label="Copy code"
         className={`absolute top-1 right-1 rounded-md px-2 py-0.5 text-xs text-muted hover:bg-hover ${focusRing}`}
-      >
-        {isCopied ? 'Copied' : 'Copy'}
-      </button>
+      />
       <pre className="overflow-x-auto rounded-md border border-line bg-app p-2 text-xs">
         <code className={tokenColors}>{highlighted ?? code}</code>
       </pre>
