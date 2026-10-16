@@ -90,13 +90,14 @@ const harnessConversationOf = (
   endpoint: AgentEndpoint,
   llmToken: string,
   harness: HarnessLaunch,
-  { resumeSessionId, adapterModel }: AgentLlmChoice,
+  { resumeSessionId, adapterModel, effort }: AgentLlmChoice,
 ) => ({
   agent: {
     acp_command: harnessLaunches[harness],
     mcp_config: { hq: mcpServerOf(endpoint, '/mcp', llmToken) },
     ...(resumeSessionId && { acp_resume_session_id: resumeSessionId }),
     ...(adapterModel && { acp_model: adapterModel }),
+    ...(effort && { acp_thought_level: effort }),
   },
   secrets: {},
 })
@@ -203,7 +204,7 @@ export const createHqAgentClient = (): AgentClient => ({
   },
   switchModel: async (conversation, model, thoughtLevel) => {
     await call(conversation, 'POST', `/api/conversations/${conversation.conversationId}/switch_acp_model`, {
-      model,
+      ...(model && { model }),
       ...(thoughtLevel && { thoughtLevel }),
     })
   },

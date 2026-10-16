@@ -343,8 +343,9 @@ export const startAgent = ({
     return true
   }
 
-  const switchModel = async (conversation: Conversation, model: string, thoughtLevel?: string) => {
-    if (!(await setConfigOption(conversation, 'model', model))) throw new AcpError('The adapter lists no models')
+  const switchModel = async (conversation: Conversation, model?: string, thoughtLevel?: string) => {
+    if (model && !(await setConfigOption(conversation, 'model', model)))
+      throw new AcpError('The adapter lists no models')
     const thoughtLevels = (conversation.configOptions.find((option) => option.category === 'thought_level')?.options ??
       []) as { value?: string }[]
     if (thoughtLevel && thoughtLevels.some((level) => level.value === thoughtLevel))
@@ -397,7 +398,8 @@ export const startAgent = ({
       modes: session.modes,
       configOptions: conversation.configOptions,
     })
-    if (agent?.acp_model) await switchModel(conversation, agent.acp_model, agent.acp_thought_level)
+    if (agent?.acp_model || agent?.acp_thought_level)
+      await switchModel(conversation, agent.acp_model, agent.acp_thought_level)
     await reportWorkspace(conversation)
     conversation.status = 'idle'
   }
@@ -530,7 +532,7 @@ export const startAgent = ({
     }
     if (action === 'switch_acp_model') {
       const { model, thoughtLevel } = (await request.json()) as { model?: string; thoughtLevel?: string }
-      await switchModel(conversation, String(model), thoughtLevel)
+      await switchModel(conversation, model, thoughtLevel)
       return Response.json({})
     }
     if (action === 'plan_mode') {

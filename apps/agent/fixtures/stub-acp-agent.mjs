@@ -29,6 +29,9 @@ const models =
       ]
 const isCodex = process.env.STUB_FLAVOUR === 'codex'
 const thoughtLevels = ['off', 'low', 'medium', 'high']
+const effortOption = isCodex
+  ? { id: 'reasoning_effort', name: 'Reasoning effort', levels: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'] }
+  : { id: 'effort', name: 'Effort', levels: ['default', 'low', 'medium', 'high', 'xhigh', 'max'] }
 const modes = process.env.STUB_MODES?.split(',') ?? ['default', 'plan', 'bypassPermissions']
 const sessions = new Map()
 const answers = new Map()
@@ -41,23 +44,31 @@ const save = (sessionId, session) => {
   mkdirSync(stateDirectory, { recursive: true })
   writeFileSync(sessionFile(sessionId), JSON.stringify({ prompts: session.prompts, history: session.history }))
 }
-const configOptionsOf = ({ model, mode, collaboration_mode }) => [
+const configOptionsOf = (session) => [
   {
     id: 'mode',
     name: 'Mode',
     type: 'select',
     category: 'mode',
-    currentValue: mode,
+    currentValue: session.mode,
     options: modes.map((value) => ({ value, name: value })),
   },
-  { id: 'model', name: 'Model', type: 'select', category: 'model', currentValue: model, options: models },
+  { id: 'model', name: 'Model', type: 'select', category: 'model', currentValue: session.model, options: models },
+  {
+    id: effortOption.id,
+    name: effortOption.name,
+    type: 'select',
+    category: 'thought_level',
+    currentValue: session[effortOption.id],
+    options: effortOption.levels.map((value) => ({ value, name: value })),
+  },
   ...(isCodex
     ? [
         {
           id: 'collaboration_mode',
           name: 'Collaboration mode',
           type: 'select',
-          currentValue: collaboration_mode,
+          currentValue: session.collaboration_mode,
           options: ['default', 'plan'].map((value) => ({ value, name: value })),
         },
       ]
@@ -690,6 +701,7 @@ const turn = async (id, { sessionId, prompt }) => {
       })
       await step()
       if (has('linger')) await lingerAs('linger')
+      if (has('effort')) await say(`Effort ${session[effortOption.id]}. `)
       await step()
       update({
         sessionUpdate: 'tool_call_update',
@@ -763,6 +775,7 @@ const turn = async (id, { sessionId, prompt }) => {
       for (;;) await step()
     }
     if (has('linger')) await lingerAs('linger')
+    if (has('effort')) await say(`Effort ${session[effortOption.id]}. `)
     await say(`Hello from the stub (model ${session.model}, mode ${session.mode}).`)
     finish('end_turn')
   } catch (error) {
@@ -781,6 +794,7 @@ const opened = (sessionId, { prompts, history }) => {
     model: models[0].value,
     mode: 'default',
     thought_level: 'medium',
+    [effortOption.id]: effortOption.levels[0],
     collaboration_mode: 'default',
     current: undefined,
     history,

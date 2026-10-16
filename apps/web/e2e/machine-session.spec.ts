@@ -25,6 +25,8 @@ const claudeCode = {
   signedIn: 'claude',
   models: ['Default (stub)', 'Large (stub)'],
   large: { label: 'Large (stub)', id: 'stub-large' },
+  efforts: ['default', 'low', 'medium', 'high', 'xhigh', 'max'],
+  pickedEffort: 'max',
 }
 const tools = [
   claudeCode,
@@ -33,6 +35,8 @@ const tools = [
     signedIn: 'codex',
     models: ['GPT stub', 'GPT stub mini'],
     large: { label: 'GPT stub mini', id: 'gpt-stub-mini' },
+    efforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+    pickedEffort: 'high',
   },
 ]
 
@@ -80,8 +84,28 @@ for (const tool of tools) {
       await test.step('the pick stays chosen in the Model list', async () => {
         await chipOf(page, 'harness').click()
         await expect(modelOf(page)).toHaveValue(tool.large.id)
-        await expect(sessionOf(page).getByLabel('Effort')).toHaveCount(0)
+        await expect(sessionOf(page).getByLabel('Effort')).toHaveValue(tool.efforts[0] ?? '')
       })
+    })
+
+    test(`${tool.name} h2. Effort lists the tool's levels, a pick shows in the chip and the next prompt runs at it on the same session`, async ({
+      page,
+      machine,
+    }) => {
+      await machine(machineOf)
+      await newSession(page, tool.name)
+      await chipOf(page, 'harness').click()
+      const effort = sessionOf(page).getByLabel('Effort')
+      await expect(effort.getByRole('option')).toHaveText(tool.efforts)
+      await effort.selectOption({ label: tool.pickedEffort })
+      await expect(chipOf(page, 'harness')).toHaveText(`${tool.name} · subscription (${tool.pickedEffort})`)
+      await page.keyboard.press('Escape')
+      await sendMessage(page, 'stub:effort')
+      await expect(messageContaining(page, `[t1] Effort ${tool.pickedEffort}.`)).toBeVisible()
+      await expect(mainOf(page)).not.toContainText('The agent started a new session')
+      expect((await machine()).conversations).toHaveLength(1)
+      await chipOf(page, 'harness').click()
+      await expect(effort).toHaveValue(tool.pickedEffort)
     })
 
     test(`${tool.name} f-2. an expired login shows one sign-in error with a link to the Profile, no agent message, and ${tool.name} signed out`, async ({

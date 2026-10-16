@@ -227,8 +227,8 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
           id,
           ...(fields as Partial<{ subagentPolicy: 'auto' | 'same_as_main'; harness: 'claude-code' | 'codex' | null }>),
         }),
-      setAgentModel: async (id, model) => {
-        await setChatAgentModel(tx, contextWorkspaceId, id, model)
+      setAgentModel: async (id, model, reasoningEffort) => {
+        await setChatAgentModel(tx, contextWorkspaceId, id, model, reasoningEffort)
       },
       record: async (decision) => {
         await insertRoutingDecision(tx, { workspaceId: contextWorkspaceId, ...decision })

@@ -1,0 +1,1 @@
+ALTER TABLE "chats" ADD COLUMN "agent_reasoning_effort" text;

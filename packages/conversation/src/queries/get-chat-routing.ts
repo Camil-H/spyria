@@ -15,6 +15,7 @@ export type ChatRoutingRead = {
   modelNames: Record<string, string>
   contextTokens: number | null
   adapterModels: { currentModelId: string | null; available: { id: string; name: string }[] }
+  adapterEfforts: { current: string | null; available: { id: string; name: string }[] }
   hqRuntimeAvailable: boolean
 }
 
@@ -39,6 +40,10 @@ export const getChatRouting = async (
     adapterModels: {
       currentModelId: adapterModels?.isThisChat ? adapterModels.currentModelId : null,
       available: adapterModels?.availableModels.map(({ model_id, name }) => ({ id: model_id, name })) ?? [],
+    },
+    adapterEfforts: {
+      current: adapterModels?.isThisChat ? adapterModels.currentEffort : null,
+      available: adapterModels?.availableEfforts ?? [],
     },
     hqRuntimeAvailable,
   }

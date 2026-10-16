@@ -60,6 +60,8 @@ const SessionDialog = ({
     ))
   const adapterModels = routing?.adapterModels.available ?? []
   const adapterModel = model ?? routing?.adapterModels.currentModelId ?? ''
+  const adapterEfforts = routing?.adapterEfforts.available ?? []
+  const adapterEffort = reasoningEffort ?? routing?.adapterEfforts.current ?? ''
   const estimate = pendingModel
     ? rereadDollarsOf(
         routing?.reachableModels.find(({ id }) => id === pendingModel),
@@ -82,6 +84,27 @@ const SessionDialog = ({
             ].map((id) => (
               <option key={id} value={id}>
                 {adapterNameOf(id)}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {localSession && isOwner && adapterEfforts.length > 0 && (
+        <label className={labelClass}>
+          Effort
+          <select
+            className={fieldClass}
+            value={adapterEffort}
+            onChange={(event) => update({ reasoningEffort: event.target.value })}
+          >
+            {[
+              ...(adapterEfforts.some((level) => level.id === adapterEffort)
+                ? []
+                : [{ id: adapterEffort, name: adapterEffort }]),
+              ...adapterEfforts,
+            ].map(({ id, name }) => (
+              <option key={id} value={id}>
+                {name}
               </option>
             ))}
           </select>

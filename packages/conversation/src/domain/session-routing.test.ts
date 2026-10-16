@@ -58,6 +58,11 @@ test('the fallback is the best reachable model of the prompter: medium tier firs
 test.each([
   [{ localSession: true, harness: null, model: null }, 'Claude Code · subscription'],
   [{ localSession: true, harness: 'codex', model: 'gpt-large' }, 'Codex · Adapter gpt-large'],
+  [{ localSession: true, harness: null, model: null, reasoningEffort: 'max' }, 'Claude Code · subscription (max)'],
+  [
+    { localSession: true, harness: 'codex', model: 'gpt-large', reasoningEffort: 'high' },
+    'Codex · Adapter gpt-large (high)',
+  ],
   [
     { localSession: false, harness: null, model: 'fake/fake-large', reasoningEffort: 'high' },
     'Named fake/fake-large (high)',

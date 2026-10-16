@@ -591,6 +591,38 @@ test("the plan mode route sets Claude Code's mode and back, Codex's collaboratio
   expect((await planMode(neither, true)).status).toBe(409)
 })
 
+test.each([
+  ['Claude Code', [], 'max', 'low'],
+  ['Codex', ['STUB_FLAVOUR=codex'], 'high', 'xhigh'],
+])(
+  '%s effort: a launch with only a thought level sets it, a switch with only a thought level changes it on the same session, an unlisted level is ignored',
+  async (_tool, flavour, launched, switched) => {
+    const { call, open, create, prompt } = started()
+    const id = await create(
+      launchOf({ acp_command: ['env', ...flavour, ...stubCommand.slice(1)], acp_thought_level: launched }),
+    )
+    const socket = open(id)
+    await prompt(id, 'stub:effort')
+    await socket.until(kindOf('turn_end'))
+    expect(textOf(socket.events)).toStartWith(`[t1] Effort ${launched}. `)
+    const switchEffort = (thoughtLevel: string) =>
+      call('POST', `/api/conversations/${id}/switch_acp_model`, { thoughtLevel })
+    expect((await switchEffort(switched)).status).toBe(200)
+    expect((await switchEffort('extreme')).status).toBe(200)
+    const effortOf = (event: AgentEvent | undefined) =>
+      (event?.update.configOptions as { category?: string; currentValue: string }[] | undefined)?.find(
+        (option) => option.category === 'thought_level',
+      )?.currentValue
+    expect(
+      effortOf((await socket.until(kindOf('config_option_update'), 3)).findLast(kindOf('config_option_update'))),
+    ).toBe(switched)
+    await prompt(id, 'stub:effort')
+    await socket.until(kindOf('turn_end'), 2)
+    expect(textOf(socket.events.slice(-4))).toContain(`[t2] Effort ${switched}. `)
+    expect(socket.events.filter(kindOf('session_started'))).toHaveLength(1)
+  },
+)
+
 test('a Codex session selects full access among its listed modes', async () => {
   const { open, create, prompt } = started()
   const modes = 'STUB_MODES=read-only,workspace-write,agent,agent-full-access'

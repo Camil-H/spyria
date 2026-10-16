@@ -85,6 +85,7 @@ export type ChatRouting = Readonly<{
   model: string | null
   reasoningEffort: string | null
   agentModel: string | null
+  agentReasoningEffort: string | null
   subagentPolicy: string
   harness: Harness | null
 }>
@@ -132,6 +133,6 @@ export type RoutingRepository = {
       localSession: boolean
     }>,
   ): Promise<void>
-  setAgentModel(chatId: ChatId, model: string | null): Promise<void>
+  setAgentModel(chatId: ChatId, model: string | null, reasoningEffort: string | null): Promise<void>
   record(decision: RoutingDecision): Promise<void>
 }

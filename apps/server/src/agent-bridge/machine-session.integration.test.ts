@@ -42,14 +42,16 @@ const streamedText = (frames: string[], isReasoning = false) =>
     .filter((frame) => frame.text !== undefined && (frame.isReasoning ?? false) === isReasoning)
     .map((frame) => frame.text)
     .join('')
-const routingOf = async (chat: ChatId) =>
-  (
-    (await (
-      await app.request(`/api/chats/${chat}/routing`, {
-        headers: { authorization: `Bearer ${await sessionTokenOf(database, acme, alice)}` },
-      })
-    ).json()) as { adapterModels: { currentModelId: string | null; available: { id: string; name: string }[] } }
-  ).adapterModels
+type AdapterChoices<Current extends string> = { [key in Current]: string | null } & {
+  available: { id: string; name: string }[]
+}
+const routingReadOf = async (chat: ChatId) =>
+  (await (
+    await app.request(`/api/chats/${chat}/routing`, {
+      headers: { authorization: `Bearer ${await sessionTokenOf(database, acme, alice)}` },
+    })
+  ).json()) as { adapterModels: AdapterChoices<'currentModelId'>; adapterEfforts: AdapterChoices<'current'> }
+const routingOf = async (chat: ChatId) => (await routingReadOf(chat)).adapterModels
 
 const toolsRepliesOf = (model: string) => [
   'agent:[t1]',
@@ -193,6 +195,45 @@ test('the adapter’s models list in the routing read, and a pick is switched in
   expect(relay.created).toHaveLength(1)
   await waitFor(async () => (await routingOf(chat)).currentModelId === 'stub-large')
 })
+
+test.each([
+  {
+    tool: 'claude',
+    harness: 'claude-code',
+    launched: 'default',
+    levels: ['default', 'low', 'medium', 'high', 'xhigh', 'max'],
+    picked: 'max',
+  },
+  {
+    tool: 'codex',
+    harness: 'codex',
+    launched: 'low',
+    levels: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+    picked: 'high',
+  },
+])(
+  'a $harness effort: the routing read lists the tool’s levels, only the owner picks one, and it is set on the same session at the next prompt only',
+  async ({ tool, harness, launched, levels, picked }) => {
+    const relay = await machine({ signedIn: [tool] })
+    const chat = await newRuntimeChat({ harness })
+    await finished(await prompt(chat, 'Hello'), chat)
+    expect((await routingReadOf(chat)).adapterEfforts).toEqual({
+      current: launched,
+      available: levels.map((id) => ({ id, name: id })),
+    })
+    const setEffort = (member: typeof aliceInAcme, reasoningEffort: string) =>
+      mutate(member, 'conversation.updateChatRouting', { workspaceId: acme, chatId: chat, reasoningEffort })
+    expect(await setEffort(bobInAcme, picked)).toEqual(failedWith('Only the owner changes how this session runs'))
+    expect(await setEffort(aliceInAcme, picked)).toEqual(succeeded)
+    const replies = await finished(await prompt(chat, 'stub:effort'), chat)
+    expect(replies.at(-1)?.body).toStartWith(`[t2] Effort ${picked}. `)
+    await finished(await prompt(chat, 'Again'), chat)
+    expect(relay.modelSwitches).toEqual([undefined])
+    expect(relay.thoughtLevels).toEqual([picked])
+    expect(relay.created).toHaveLength(1)
+    await waitFor(async () => (await routingReadOf(chat)).adapterEfforts.current === picked)
+  },
+)
 
 test('a late chunk of a stopped turn does not land in the next turn', async () => {
   await machine({ gapMilliseconds: 250 })

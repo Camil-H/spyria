@@ -326,18 +326,25 @@ export const lastAdapterModelsOf = (tx: Transaction, workspaceId: string, chatId
     isThisChat: boolean
     currentModelId: string | null
     availableModels: { model_id: string; name: string }[]
+    currentEffort: string | null
+    availableEfforts: { id: string; name: string }[] | null
   }>(
     tx,
     `select events.chat_id = $2 as "isThisChat",
        coalesce(payload->'event'->'value'->>'acp_current_model_id', found.option->>'currentValue') as "currentModelId",
        coalesce(payload->'event'->'value'->'acp_available_models',
          (select jsonb_agg(jsonb_build_object('model_id', choice->>'value', 'name', choice->>'name'))
-          from jsonb_array_elements(found.option->'options') choice)) as "availableModels"
+          from jsonb_array_elements(found.option->'options') choice)) as "availableModels",
+       effort.option->>'currentValue' as "currentEffort",
+       (select jsonb_agg(jsonb_build_object('id', choice->>'value', 'name', choice->>'name'))
+        from jsonb_array_elements(effort.option->'options') choice) as "availableEfforts"
      from chats this join chats seen on seen.workspace_id = this.workspace_id and seen.owner_user_id = this.owner_user_id
        and seen.harness = this.harness and seen.local_session
      join events on events.workspace_id = seen.workspace_id and events.chat_id = seen.id
      cross join lateral (select jsonb_path_query_first(payload->'event',
        '$.update.configOptions[*] ? (@.category == "model")') as option) found
+     cross join lateral (select jsonb_path_query_first(payload->'event',
+       '$.update.configOptions[*] ? (@.category == "thought_level")') as option) effort
      where this.workspace_id = $1 and this.id = $2 and this.local_session and events.type = 'agent.event'
        and ((payload->'event'->>'key' = 'agent_state'
            and jsonb_typeof(payload->'event'->'value'->'acp_available_models') = 'array')
@@ -415,18 +422,30 @@ export const chatRoutingOf = (tx: Transaction, workspaceId: string, chatId: stri
     model: string | null
     reasoningEffort: string | null
     agentModel: string | null
+    agentReasoningEffort: string | null
     subagentPolicy: string
     harness: 'claude-code' | 'codex' | null
   }>(
     tx,
     `select mode, owner_user_id as "ownerId", model, reasoning_effort as "reasoningEffort",
-       agent_model as "agentModel", subagent_policy as "subagentPolicy", harness
+       agent_model as "agentModel", agent_reasoning_effort as "agentReasoningEffort", subagent_policy as "subagentPolicy", harness
      from chats where workspace_id = $1 and id = $2`,
     [workspaceId, chatId],
   )
 
-export const setChatAgentModel = (tx: Transaction, workspaceId: string, chatId: string, model: string | null) =>
-  onServer(tx, 'update chats set agent_model = $3 where workspace_id = $1 and id = $2', [workspaceId, chatId, model])
+export const setChatAgentModel = (
+  tx: Transaction,
+  workspaceId: string,
+  chatId: string,
+  model: string | null,
+  reasoningEffort: string | null,
+) =>
+  onServer(tx, 'update chats set agent_model = $3, agent_reasoning_effort = $4 where workspace_id = $1 and id = $2', [
+    workspaceId,
+    chatId,
+    model,
+    reasoningEffort,
+  ])
 
 const insertServerOnlyRow = (tx: Transaction, table: string, row: Record<string, unknown>) =>
   onServer(tx, `insert into ${table} select * from jsonb_populate_record(null::${table}, $1::jsonb)`, [

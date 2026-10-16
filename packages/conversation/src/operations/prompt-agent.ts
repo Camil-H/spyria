@@ -135,11 +135,11 @@ const keepSession = async (
     routing: await routing.chatRouting(chat.chatId),
     reachable: (await routing.reachableModels(prompterId)) ?? [],
   }))
-  const { model, reasoningEffort, agentModel } = routing
+  const { model, reasoningEffort, agentModel, agentReasoningEffort } = routing
   if (!model) return { conversation }
   if (!isPickableModel(model, reachable, classifier?.listedModels() ?? []))
     return { refusal: unreachableSessionNoticeOf(model) }
-  if (agentModel === model) return { conversation }
+  if (agentModel === model && agentReasoningEffort === reasoningEffort) return { conversation }
   const isSwitched =
     chatModelsOf(reachable).some((candidate) => candidate.id === model) &&
     (await agentClient.switchModel(conversation, piModelOf(model), thoughtLevelOf(reasoningEffort)).then(
@@ -154,7 +154,7 @@ const keepSession = async (
         conversation,
         await piLlmOf(dependencies, prompterId, model, reasoningEffort),
       )
-  await transactor.run(({ routing }) => routing.setAgentModel(chat.chatId, model))
+  await transactor.run(({ routing }) => routing.setAgentModel(chat.chatId, model, reasoningEffort))
   return { conversation: kept }
 }
 
@@ -163,10 +163,17 @@ const keepAdapterModel = async (
   chat: AgentChat,
   conversation: AgentConversation,
 ): Promise<Prepared> => {
-  const { model, agentModel } = await transactor.run(({ routing }) => routing.chatRouting(chat.chatId))
-  if (model && model !== agentModel) {
-    await agentClient.switchModel(conversation, model)
-    await transactor.run(({ routing }) => routing.setAgentModel(chat.chatId, model))
+  const { model, reasoningEffort, agentModel, agentReasoningEffort } = await transactor.run(({ routing }) =>
+    routing.chatRouting(chat.chatId),
+  )
+  const isModelChanged = Boolean(model) && model !== agentModel
+  if (isModelChanged || (reasoningEffort && reasoningEffort !== agentReasoningEffort)) {
+    await agentClient.switchModel(
+      conversation,
+      isModelChanged ? (model ?? undefined) : undefined,
+      reasoningEffort ?? undefined,
+    )
+    await transactor.run(({ routing }) => routing.setAgentModel(chat.chatId, model, reasoningEffort))
   }
   return { conversation }
 }
@@ -205,14 +212,15 @@ const machineConversationFor = async (
   localSession: LocalSession,
 ) => {
   const { transactor } = dependencies
-  const { model } = await transactor.run(({ routing }) => routing.chatRouting(chat.chatId))
+  const { model, reasoningEffort } = await transactor.run(({ routing }) => routing.chatRouting(chat.chatId))
   const resumeSessionId = await transactor.run(({ agentEvents }) => agentEvents.lastSessionId(chat.chatId))
   const conversation = await createdConversationOf(dependencies, chat, endpoint, {
     harness: localSession.launch,
     resumeSessionId,
     adapterModel: model ?? undefined,
+    effort: reasoningEffort ?? undefined,
   })
-  if (model) await transactor.run(({ routing }) => routing.setAgentModel(chat.chatId, model))
+  await transactor.run(({ routing }) => routing.setAgentModel(chat.chatId, model, reasoningEffort))
   return conversation
 }
 
@@ -251,7 +259,7 @@ const conversationFor = async (
     const { model, effort, reason } = routed.choice
     await transactor.run(async ({ routing }) => {
       await routing.update(chat.chatId, { model: model.id, reasoningEffort: effort })
-      await routing.setAgentModel(chat.chatId, model.id)
+      await routing.setAgentModel(chat.chatId, model.id, effort)
       await routing.record({
         chatId: chat.chatId,
         conversationId: conversation.conversationId,

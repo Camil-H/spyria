@@ -26,11 +26,14 @@ export const updateChatRouting = (
   transactor.run(async ({ chats, routing, agentJobs }) => {
     const chat = await chats.get(chatId)
     if (chat.type !== 'runtime') throw new InvalidRouting('Only runtime chats have a model')
-    if ((sessionModel ?? reasoningEffort) !== undefined && chat.harness)
+    if ((sessionModel ?? (chat.localSession ? undefined : reasoningEffort)) !== undefined && chat.harness)
       throw new InvalidRouting(
         `This session runs ${harnesses[chat.harness].name}; its model is chosen by ${harnesses[chat.harness].name}`,
       )
-    if ((runsOn ?? adapterModel) !== undefined && chat.ownerId !== memberId)
+    if (
+      (runsOn ?? adapterModel ?? (chat.localSession ? reasoningEffort : undefined)) !== undefined &&
+      chat.ownerId !== memberId
+    )
       throw new InvalidRouting('Only the owner changes how this session runs')
     if (runsOn !== undefined && (await chats.hasAgentSession(chatId)))
       throw new InvalidRouting('This session has started; where it runs no longer changes')
@@ -65,7 +68,6 @@ export const updateChatRouting = (
       ...(adapterModel !== undefined && { model: adapterModel || null }),
       ...(reasoningEffort !== undefined && { reasoningEffort }),
     })
-    if (reasoningEffort !== undefined) await routing.setAgentModel(chatId, null)
     if (runsOn !== undefined && runsOn !== runsOnOf(chat)) await chats.dropRuntime(chatId)
     if (runsOn !== undefined && runsOn !== 'runtime') await agentJobs.startSession(chatId)
   })

@@ -66,7 +66,7 @@ export type AgentClient = {
     llm: AgentLlmChoice,
     sub?: SubConversation,
   ): Promise<void>
-  switchModel(conversation: AgentConversation, model: string, thoughtLevel?: string): Promise<void>
+  switchModel(conversation: AgentConversation, model: string | undefined, thoughtLevel?: string): Promise<void>
   sendMessage(conversation: AgentConversation, text: string): Promise<void>
   answerQuestion(conversation: AgentConversation, questionId: string, answer: object): Promise<number>
   setPlanMode(conversation: AgentConversation, enabled: boolean): Promise<number>
