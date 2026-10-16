@@ -76,7 +76,7 @@ export const MyMachineSection = ({ workspaceId, memberId }: { workspaceId: Works
           {isOnline ? (
             machine.capacity?.signedIn?.includes(connectingTool) ? (
               <p className="text-sm">
-                {toolNames[connectingTool]} is ready: in a new Runtime chat, set Runs on to My machine ·{' '}
+                {toolNames[connectingTool]} is ready: in a new Runtime chat, set Runs on to Local ·{' '}
                 {toolNames[connectingTool]}
               </p>
             ) : (

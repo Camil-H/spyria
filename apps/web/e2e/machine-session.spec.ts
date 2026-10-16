@@ -37,9 +37,9 @@ const tools = [
 ]
 
 const modelOf = (page: Page) => sessionOf(page).getByRole('combobox', { name: 'Model' })
-const expectRunsOnLocked = async (page: Page, name: string) => {
+const expectRunsOnLocked = async (page: Page) => {
   await expect(runsOnOf(page)).toBeDisabled()
-  await expect(runsOnOf(page)).toHaveText(`My machine · ${name}`)
+  await expect(runsOnOf(page)).toHaveText('Local')
 }
 const startedCountOf = async (database: WorkerStack['database'], chatId: string) =>
   (
@@ -65,15 +65,15 @@ for (const tool of tools) {
       await newSession(page, tool.name)
       await chipOf(page, 'harness').click()
       await expect(modelOf(page).getByRole('option')).toHaveText(tool.models)
-      await expectRunsOnLocked(page, tool.name)
+      await expectRunsOnLocked(page)
       await modelOf(page).selectOption({ label: tool.large.label })
       await expect(chipOf(page, 'harness')).toHaveText(`${tool.name} · ${tool.large.label}`)
       await page.keyboard.press('Escape')
       await sendMessage(page, 'Hello')
       await expect(messageContaining(page, `[t1] Hello from the stub (model ${tool.large.id}`)).toBeVisible()
       await expect(mainOf(page)).not.toContainText('The agent started a new session')
-      await test.step('f-6. the Runs on chip reads My machine · tool · Ready', async () => {
-        await expect(runsOnChipOf(page)).toContainText(`My machine · ${tool.name}`)
+      await test.step('f-6. the Runs on chip reads Local · Ready', async () => {
+        await expect(runsOnOf(page)).toHaveText('Local')
         await expect(runsOnChipOf(page).getByRole('status', { name: 'Runtime' })).toHaveText('Ready')
         await expect(mainOf(page).getByRole('status', { name: 'Runtime' })).toHaveCount(1)
       })
@@ -209,7 +209,7 @@ test.describe('Claude Code', () => {
     await expect(chipOf(page, 'harness')).toHaveText('Codex · subscription')
     await expect(page.getByRole('group', { name: 'Runs on' })).toHaveCount(0)
     await expect.poll(async () => (await machine()).conversations.length).toBe(1)
-    await expectRunsOnLocked(page, 'Codex')
+    await expectRunsOnLocked(page)
     await sendMessage(page, 'Hello')
     await expect(messageContaining(page, '[t1] Hello from the stub')).toBeVisible()
     expect((await machine()).conversations).toHaveLength(1)
@@ -229,7 +229,7 @@ test.describe('a member', () => {
     await expect(chipOf(page, 'harness')).toHaveText('Claude Code · subscription')
     await expect(page.getByRole('group', { name: 'Runs on' })).toHaveCount(0)
     await expect.poll(async () => (await machine()).conversations.length).toBe(1)
-    await expectRunsOnLocked(page, 'Claude Code')
+    await expectRunsOnLocked(page)
     await sendMessage(page, 'Hello')
     await expect(messageContaining(page, '[t1] Hello from the stub')).toBeVisible()
     expect((await machine()).conversations).toHaveLength(1)
@@ -246,7 +246,7 @@ test.describe('a member', () => {
       await newRuntimeChat(page, 'Bob chooses', null)
       await expect(runsOnChoiceOf(page).getByRole('radio')).toHaveCount(2)
       await expect(runsOnChoiceOf(page).getByRole('radio', { name: 'HQ runtime' })).toBeVisible()
-      await expect(runsOnChoiceOf(page).getByRole('radio', { name: 'My machine · Claude Code' })).toBeVisible()
+      await expect(runsOnChoiceOf(page).getByRole('radio', { name: 'Local · Claude Code' })).toBeVisible()
       await expect(mainOf(page).getByText('Choose where this chat runs to send')).toBeVisible()
       expect((await machine()).conversations).toHaveLength(0)
     })

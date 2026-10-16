@@ -14,8 +14,8 @@ import {
 } from './fixtures'
 import { openPageAs } from './stack'
 
-const machineOption = 'My machine · Claude Code'
-const codexOption = 'My machine · Codex'
+const machineOption = 'Local · Claude Code'
+const codexOption = 'Local · Codex'
 const codexMachine = { owner: 'member-alice', signedIn: 'codex' }
 const tools = [
   { name: 'Claude Code', login: 'claude' },
@@ -24,7 +24,7 @@ const tools = [
 
 const newMachineSession = async (page: Page, name: string, option = machineOption) => {
   const chatId = await newRuntimeChat(page, name, option)
-  await expect(chipOf(page, 'any')).toHaveText(`${option.replace('My machine · ', '')} · subscription`)
+  await expect(chipOf(page, 'any')).toHaveText(`${option.replace('Local · ', '')} · subscription`)
   return chatId
 }
 test.use({ runtimeHost: false })
@@ -39,7 +39,7 @@ for (const tool of tools) {
     machine,
   }) => {
     await machine({ owner: 'member-alice', signedIn: tool.login })
-    await newMachineSession(page, `${tool.name} on my laptop`, `My machine · ${tool.name}`)
+    await newMachineSession(page, `${tool.name} on my laptop`, `Local · ${tool.name}`)
     await sendMessage(page, 'Hello from my laptop')
     await expect(messageContaining(page, 'Hello from the stub')).toBeVisible()
     const sidePanel = page.getByRole('region', { name: 'Side panel' })
@@ -53,10 +53,7 @@ for (const tool of tools) {
     machine,
   }) => {
     await machine({ owner: 'member-alice', signedIn: tool.login })
-    await sessionStarted(
-      workerStack,
-      await newMachineSession(page, `${tool.name} signed out`, `My machine · ${tool.name}`),
-    )
+    await sessionStarted(workerStack, await newMachineSession(page, `${tool.name} signed out`, `Local · ${tool.name}`))
     await machine({ signedIn: '' })
     await sendMessage(page, 'Answer without a sign-in')
     await expect(

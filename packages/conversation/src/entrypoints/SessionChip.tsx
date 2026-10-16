@@ -39,15 +39,14 @@ export const RunsOnChip = ({
           onChange={(event) =>
             commands.updateChatRouting({ workspaceId, chatId, runsOn: event.target.value as RunsOn })
           }
-          className={`${barChipClass} appearance-none bg-transparent ${isLocked ? '' : 'pr-6'}`}
+          className={`${barChipClass} bg-transparent ${isLocked ? 'bg-none' : 'pr-7'}`}
         >
           {options.map((option) => (
             <option key={option} value={option}>
-              {runsOnNames[option]}
+              {isLocked && option !== 'runtime' ? 'Local' : runsOnNames[option]}
             </option>
           ))}
         </select>
-        {!isLocked && <ChevronDown aria-hidden size={12} className="pointer-events-none absolute right-2 text-muted" />}
       </div>
       <span aria-hidden className="text-xs text-muted">
         ·

@@ -102,7 +102,7 @@ test('2. an existing machine session answers prompts with the notice while it is
   machine,
 }) => {
   await machine({ owner: 'member-alice', signedIn: 'claude' })
-  await newRuntimeChat(page, 'Laptop switch', 'My machine · Claude Code')
+  await newRuntimeChat(page, 'Laptop switch', 'Local · Claude Code')
   await expect(mainOf(page).getByRole('button', { name: 'Claude Code · subscription' })).toBeVisible()
   await sendMessage(page, 'Before the switch')
   await expect(messageContaining(page, '[t1] Hello from the stub')).toBeVisible()

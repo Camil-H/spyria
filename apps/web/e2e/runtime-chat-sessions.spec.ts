@@ -18,8 +18,8 @@ import {
 } from './fixtures'
 import { openPageAs } from './stack'
 
-const claudeOnMachine = 'My machine · Claude Code'
-const codexOnMachine = 'My machine · Codex'
+const claudeOnMachine = 'Local · Claude Code'
+const codexOnMachine = 'Local · Codex'
 
 const expectRunsOnLocked = async (page: Page) => {
   await expect(runsOnOf(page)).toBeDisabled()

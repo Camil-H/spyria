@@ -78,14 +78,15 @@ export type LocalSession = (typeof localSessions)[Harness]
 export type RunsOn = 'runtime' | Harness
 export const runsOnNames: Record<RunsOn, string> = {
   runtime: 'HQ runtime',
-  'claude-code': 'My machine · Claude Code',
-  codex: 'My machine · Codex',
+  'claude-code': 'Local · Claude Code',
+  codex: 'Local · Codex',
 }
 export const runsOnFieldsOf = (runsOn: RunsOn) =>
   runsOn === 'runtime' ? { harness: null, localSession: false } : { harness: runsOn, localSession: true }
 export const runsOnOf = (chat: { localSession: boolean | null; harness: Harness | null }): RunsOn | null =>
   chat.localSession === null ? null : chat.localSession ? (chat.harness ?? 'claude-code') : 'runtime'
 export const runsOnWaitingNoticeOf = (ownerName: string) => `Waiting for ${ownerName} to choose where this chat runs`
+const effortSuffixOf = (reasoningEffort: string | null) => (reasoningEffort ? ` (${reasoningEffort})` : '')
 export const chipLabelOf = (
   {
     localSession,
@@ -102,7 +103,7 @@ export const chipLabelOf = (
   adapterNameOf: (id: string) => string,
 ) =>
   localSession
-    ? `${harnesses[harness ?? 'claude-code'].name} · ${model ? adapterNameOf(model) : 'subscription'}`
+    ? `${harnesses[harness ?? 'claude-code'].name} · ${model ? adapterNameOf(model) : 'subscription'}${effortSuffixOf(reasoningEffort)}`
     : model
-      ? `${nameOf(model)}${reasoningEffort ? ` (${reasoningEffort})` : ''}`
+      ? `${nameOf(model)}${effortSuffixOf(reasoningEffort)}`
       : 'Model chosen at first prompt'
