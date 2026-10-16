@@ -161,46 +161,6 @@ test('Stop mid-command cancels the turn without deleting the conversation, and t
   expect(await sessionsStartedOf(chat)).toHaveLength(1)
 })
 
-test('delegation runs a Pi sub-conversation in the same runtime and answers with the sub’s text from its events', async () => {
-  const { relay, host, launches } = await workspaceHost()
-  const chat = await newRuntimeChat({ defaultModel: 'fake/fake-medium' })
-  stack.setFakeLlmScript({ delegateRoute: { tier: 'small', confidence: 'high', effort: 'low' } })
-  const parent = await prompt(chat, 'stub:long')
-  await commandShown(parent)
-  const parentToken = launches()[0]?.secrets.HQ_LLM_TOKEN?.value ?? ''
-  const answer = await host.modelCall({
-    path: '/mcp/router',
-    headers: { authorization: `Bearer ${parentToken}`, 'content-type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'tools/call',
-      params: { name: 'delegate', arguments: { task: 'List the files', effort: 'small' } },
-    }),
-  })
-  expect(JSON.parse(answer.body).result).toEqual({
-    content: [{ type: 'text', text: '[t1] Hello from the stub (model hq/fake/fake-small, mode default).' }],
-    isError: false,
-  })
-
-  const [main, sub] = launches()
-  expect(launches()).toHaveLength(2)
-  expect(relay.agentCount()).toBe(1)
-  expect(sub?.parent_conversation_id).toBe((await stack.runtimeOf(chat)).agent_conversation_id)
-  expect(sub?.agent).toMatchObject({ acp_model: 'hq/fake/fake-small', acp_thought_level: 'low' })
-  expect(sub?.agent.acp_command.at(-1)).toContain('.pi/sub')
-  expect(main?.agent.acp_command.at(-1)).toContain('.pi/agent')
-  expect(Object.keys(JSON.parse(piFilesOf(sub as Launch).HQ_PI_MCP ?? '{}').mcpServers)).toEqual(['hq'])
-  expect(Object.keys(JSON.parse(piFilesOf(main as Launch).HQ_PI_MCP ?? '{}').mcpServers)).toEqual(['hq', 'router'])
-  expect(sub?.secrets.HQ_LLM_TOKEN?.value).toStartWith('dl_')
-  expect(sub?.secrets.HQ_MCP_TOKEN?.value).toBe(sub?.secrets.HQ_LLM_TOKEN?.value)
-  expect(relay.prompts).toEqual(['stub:long', 'List the files'])
-  expect([
-    ...(await database.$client`select model, status, conversation_id from delegations where chat_id = ${chat}`),
-  ]).toEqual([{ model: 'fake/fake-small', status: 'finished', conversation_id: expect.any(String) }])
-  await stop(chat)
-})
-
 test('after a runtime restart the next prompt loads the Pi session and no earlier message is duplicated', async () => {
   const { relay, launches } = await workspaceHost()
   const chat = await newRuntimeChat({ defaultModel: 'fake/fake-medium' })

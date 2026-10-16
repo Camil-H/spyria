@@ -138,7 +138,9 @@ test("a runtime on a workspace host or on a machine only ever gets HQ's content 
   }
 })
 
-test('placement fails with no_host, then no_capacity, and a later call after a host comes online creates afresh', async () => {
+test('placement fails with no_host, then no_capacity, and a later call after a host comes online creates afresh; a machine is never used', async () => {
+  await database.$client`update runtime_hosts set removed_at = now() where owner_id = ${alice} and removed_at is null`
+  const machine = await fakeHost('Machine', { ownerId: alice })
   const homelessChat = await newRuntimeChat()
   const failed = await ensure(homelessChat)
   expect(failed).toMatchObject({ state: 'failed', failure: 'no_host', hostId: null })
@@ -154,6 +156,7 @@ test('placement fails with no_host, then no_capacity, and a later call after a h
   expect(retried.id).not.toBe(failed.id)
   await runtimeIn(homelessChat, 'running')
   expect(smallHost.lifecycleCommands()).toEqual(['create', 'start'])
+  expect(machine.lifecycleCommands()).toEqual([])
 })
 
 test('ten concurrent ensureRuntimeRunning calls for one chat create one runtime and one create command', async () => {

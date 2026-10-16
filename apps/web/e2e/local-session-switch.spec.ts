@@ -60,9 +60,6 @@ const tokenOf = async (workerStack: WorkerStack, user: string) =>
       })
     ).json()
   ).token as string
-const localSessionsOf = async (workerStack: WorkerStack) =>
-  (await workerStack.database.$client`select local_sessions from workspaces where workspace_id = 'workspace-acme'`)[0]
-    ?.local_sessions
 
 test.use({ runtimeHost: false })
 
@@ -150,30 +147,4 @@ test('2. an existing local session answers prompts with the notice while it is o
   await expect(repliesWith(page, '[t2] Hello from the stub')).toBeVisible()
   expect((await machine()).prompts).toEqual(['Before the switch', 'Back on'])
   await expect(repliesWith(page, sessionNotice)).toHaveCount(1)
-})
-
-test('3. a member’s crafted mutation of the switch is refused by the server', async ({ workerStack }) => {
-  const appId = `hqe2e${test.info().parallelIndex}`
-  const response = await fetch(`${serverUrl}/api/mutate?schema=${appId}_0&appID=${appId}`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${await tokenOf(workerStack, 'member-bob')}` },
-    body: JSON.stringify({
-      clientGroupID: crypto.randomUUID(),
-      mutations: [
-        {
-          type: 'custom',
-          id: 1,
-          clientID: crypto.randomUUID(),
-          name: 'runtime.setLocalSessions',
-          args: [{ workspaceId: 'workspace-acme', isOn: false }],
-          timestamp: Date.now(),
-        },
-      ],
-      pushVersion: 1,
-      timestamp: Date.now(),
-      requestID: crypto.randomUUID(),
-    }),
-  })
-  expect(JSON.stringify(await response.json())).toContain('Only workspace admins can manage runtime hosts')
-  expect(await localSessionsOf(workerStack)).toBe(true)
 })

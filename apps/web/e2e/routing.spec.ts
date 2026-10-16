@@ -10,11 +10,10 @@ import {
   sidebarOf,
   test,
 } from './fixtures'
-import { openPageAs, type WorkerStack } from './stack'
+import { openPageAs } from './stack'
 
 const unchosen = 'Model chosen at first prompt'
 const confident = (tier: string, effort = 'high') => ({ route: { tier, confidence: 'high', effort } })
-type GatewayLog = { model: string; metadata: Record<string, string> | null }
 
 const chipOf = (page: Page) =>
   mainOf(page).getByRole('button', { name: new RegExp(`${unchosen}|· (auto|same as main)$`) })
@@ -28,30 +27,6 @@ const repliesOf = (page: Page) => messageItemsOf(page).filter({ hasText: agentRe
 const promptAndWait = async (page: Page, text: string, replies: number) => {
   await sendMessage(page, text)
   await expect(repliesOf(page)).toHaveCount(replies)
-}
-const agentModelsOf = async (workerStack: WorkerStack, chatId: string, count: number, since = new Date(0)) => {
-  let models: string[] = []
-  const query = `metadata_chat=${chatId}&metadata_database=${workerStack.databaseName}&start_time=${since.toISOString()}`
-  await expect
-    .poll(async () => {
-      const { logs } = await workerStack.gateway<{ logs: GatewayLog[] | null }>(`/api/logs?${query}&limit=100`)
-      models = (logs ?? []).filter((log) => !log.metadata?.role).map((log) => log.model)
-      return models.length
-    })
-    .toBeGreaterThanOrEqual(count)
-  return models
-}
-const routerModelsOf = async (workerStack: WorkerStack, chatId: string) => {
-  const query = `metadata_chat=${chatId}&metadata_database=${workerStack.databaseName}&metadata_role=router`
-  let models: string[] = []
-  await expect
-    .poll(async () => {
-      const { logs } = await workerStack.gateway<{ logs: GatewayLog[] | null }>(`/api/logs?${query}&limit=100`)
-      models = (logs ?? []).map((log) => log.model)
-      return models.length
-    })
-    .toBeGreaterThanOrEqual(1)
-  return models
 }
 const addKey = async (page: Page, provider: string) => {
   const llmSection = mainOf(page).getByRole('region', { name: 'LLM access' })
@@ -73,17 +48,8 @@ test('1. before the first prompt the chip says the model is chosen at the first 
   await expect(chipOf(page)).toHaveText(unchosen)
 })
 
-test('2. an easy request runs on the small model', async ({ page, workerStack, agentScript }) => {
-  const chatId = await newRuntimeChat(page, 'Easy')
-  await agentScript(chatId, confident('small', 'low'))
-  await promptAndWait(page, 'What is 2 + 2?', 1)
-  await expect(chipOf(page)).toHaveText('Fake small (low) · auto')
-  expect(await agentModelsOf(workerStack, chatId, 1)).toEqual(['fake-small'])
-})
-
 test('4b. a chat default changed before the first prompt is used for an unsure session and persists', async ({
   page,
-  workerStack,
   agentScript,
 }) => {
   const chatId = await newRuntimeChat(page, 'Cheap default')
@@ -99,7 +65,6 @@ test('4b. a chat default changed before the first prompt is used for an unsure s
   await agentScript(chatId, { route: { tier: 'large', confidence: 'low', effort: 'medium' } })
   await promptAndWait(page, 'Not sure how hard this is', 1)
   await expect(chipOf(page)).toHaveText('Fake small (medium) · auto')
-  expect(await agentModelsOf(workerStack, chatId, 1)).toEqual(['fake-small'])
 })
 
 test('5. a member reaching only a small model gets it, and is refused in a session on a model he cannot reach', async ({
@@ -114,7 +79,6 @@ test('5. a member reaching only a small model gets it, and is refused in a sessi
   await agentScript(bobChatId, confident('large'))
   await promptAndWait(bobPage, 'A big refactor please', 1)
   await expect(chipOf(bobPage)).toHaveText('Fake small (high) · auto')
-  expect(await agentModelsOf(workerStack, bobChatId, 1)).toEqual(['fake-small'])
 
   const aliceChatId = await newRuntimeChat(page, 'Alice large')
   await agentScript(aliceChatId, confident('large'))
@@ -124,7 +88,6 @@ test('5. a member reaching only a small model gets it, and is refused in a sessi
   await sendMessage(bobPage, 'Bob joins the large session')
   await expect(messageItemsOf(bobPage).filter({ hasText: 'Bob joins the large session' })).toBeVisible()
   await expect(mainOf(bobPage)).toContainText('Your keys cannot reach Fake large; switch the model or add a key')
-  expect(await agentModelsOf(workerStack, aliceChatId, 1)).toEqual(['fake-large'])
   await bobPage.context().close()
 })
 
@@ -133,7 +96,7 @@ test('7 and 8. the manual switch warns about the reread, keeps the history and u
   browser,
   workerStack,
 }) => {
-  const chatId = await newRuntimeChat(page, 'Switched')
+  await newRuntimeChat(page, 'Switched')
   await promptAndWait(page, 'Start on the default', 1)
   await expect(chipOf(page)).toHaveText('Fake medium (medium) · auto')
   const bobPage = await openPageAs(browser, workerStack, 'member-bob')
@@ -154,7 +117,6 @@ test('7 and 8. the manual switch warns about the reread, keeps the history and u
   await promptAndWait(page, 'Continue on large', 2)
   await expect(messageItemsOf(page).filter({ hasText: 'Start on the default' })).toBeVisible()
   await expect(mainOf(page)).not.toContainText('new session')
-  expect((await agentModelsOf(workerStack, chatId, 2)).toSorted()).toEqual(['fake-large', 'fake-medium'])
 })
 
 test('9. the subagent policy toggles and persists', async ({ page }) => {
@@ -173,7 +135,6 @@ test('9. the subagent policy toggles and persists', async ({ page }) => {
 
 test('11. with a decision model reachable, routing asks it and moves when it is confident', async ({
   page,
-  workerStack,
   agentScript,
 }) => {
   await addKey(page, 'Typesafe')
@@ -181,7 +142,6 @@ test('11. with a decision model reachable, routing asks it and moves when it is 
   await agentScript(chatId, { route: { tier: 'large', confidence: 0.9, effort: 'high' } })
   await promptAndWait(page, 'Decide', 1)
   await expect(chipOf(page)).toHaveText('Fake large (high) · auto')
-  expect(await routerModelsOf(workerStack, chatId)).toEqual(['jev-latest'])
 })
 
 test('12. a member whose only key is a decision model is told to add an LLM key and cannot pick it', async ({

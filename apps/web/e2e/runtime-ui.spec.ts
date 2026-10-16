@@ -138,6 +138,7 @@ test.describe('a warm runtime with a held boot', () => {
     await expect(messageItemsOf(page)).toHaveCount(4)
     await expect(messageItemsOf(page).nth(0)).toContainText('Before the sleep')
     await expect(messageItemsOf(page).nth(2)).toContainText('After the sleep')
+    await expect(mainOf(page)).not.toContainText(newSessionNotice)
   })
 })
 

@@ -12,7 +12,7 @@ import {
 import { openPageAs } from './stack'
 import { viteUrl } from './stack-ports'
 
-type FakeMachine = { closed: Promise<string>; commands: string[]; heartbeat: (signedIn: string[]) => void }
+type FakeMachine = { closed: Promise<string>; heartbeat: (signedIn: string[]) => void }
 type PairingOptions = { personal?: boolean; signedIn?: string[] }
 
 const test = base.extend<{ pair: (url: string, options: PairingOptions) => FakeMachine }>({
@@ -22,16 +22,12 @@ const test = base.extend<{ pair: (url: string, options: PairingOptions) => FakeM
       const { origin, pathname } = new URL(url)
       const socket = new WebSocket(`${origin.replace(/^http/, 'ws')}/host`)
       sockets.push(socket)
-      const commands: string[] = []
       const send = (frame: object) => socket.send(JSON.stringify(frame))
       socket.onopen = () => send({ type: 'claim', code: pathname.split('/').at(-1) })
       socket.onmessage = (message) => {
         const frame = JSON.parse(String(message.data))
         if (frame.type === 'ping') send({ type: 'pong' })
-        if (frame.type === 'cmd') {
-          commands.push(frame.op)
-          send({ type: 'res', id: frame.id, data: frame.op === 'status' ? 'missing' : null })
-        }
+        if (frame.type === 'cmd') send({ type: 'res', id: frame.id, data: frame.op === 'status' ? 'missing' : null })
         if (frame.type === 'token')
           send({
             type: 'hello',
@@ -49,7 +45,6 @@ const test = base.extend<{ pair: (url: string, options: PairingOptions) => FakeM
           })
       }
       return {
-        commands,
         heartbeat: (heartbeatSignedIn) =>
           send({ type: 'heartbeat', memoryFreeBytes: 8 * 1024 ** 3, running: 0, signedIn: heartbeatSignedIn }),
         closed: new Promise((resolve) => socket.addEventListener('close', (event) => resolve(event.reason))),
@@ -230,7 +225,7 @@ test('7. with only a local host online, ordinary runtime chats of its owner and 
   workerStack,
   pair,
 }) => {
-  const machine = pair(urlOf(await addMachine(page)), { personal: true, signedIn: ['claude'] })
+  pair(urlOf(await addMachine(page)), { personal: true, signedIn: ['claude'] })
   await expect(machineSectionOf(page)).toContainText('Online')
 
   await openChat(page, 'Research')
@@ -243,13 +238,4 @@ test('7. with only a local host online, ordinary runtime chats of its owner and 
   await sendMessage(bobPage, 'Bob tries too')
   await expect(messageItemsOf(bobPage).filter({ hasText: 'No runtime host is available' })).toHaveCount(2)
   await bobPage.context().close()
-
-  expect(machine.commands).not.toContain('create')
-  expect(
-    (
-      await workerStack.database.$client`
-      select count(*)::int as placed from runtimes join runtime_hosts on runtime_hosts.id = runtimes.host_id
-      where runtime_hosts.owner_id is not null`
-    )[0]?.placed,
-  ).toBe(0)
 })

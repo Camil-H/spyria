@@ -34,7 +34,7 @@ const delegatingScript = (script: FakeLlmScript = {}): FakeLlmScript => ({
   ...script,
 })
 type Launch = {
-  agent: { acp_command: string[]; acp_model?: string }
+  agent: { acp_command: string[]; acp_model?: string; acp_thought_level?: string }
   secrets: Record<string, { value: string }>
   parent_conversation_id?: string
 }
@@ -59,7 +59,8 @@ const promptAndAnswer = async (chat: ChatId, text: string) => {
 }
 const delegationsOf = (chat: ChatId) =>
   database.$client`
-    select id, conversation_id, action_event_id, model, reason, policy, status, token_hash, finished_at from delegations
+    select id, conversation_id, action_event_id, model, reason, policy, status, token_hash, finished_at, classifier_output
+    from delegations
     where workspace_id = ${acme} and chat_id = ${chat} order by created_at`
 const completionWith = (host: FakeHost, token: string) =>
   host.modelCall({
@@ -83,15 +84,18 @@ const toolListWith = (host: FakeHost, token: string) =>
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
   })
 test('a delegated task runs in a Pi sub-conversation on the classified model, its events are stored once and in order, and the tool answers with the sub’s final message', async () => {
-  const { host, main, subs } = await fakeAgent()
+  const { relay, host, main, subs } = await fakeAgent()
   const chat = await newRuntimeChat()
-  setFakeLlmScript(delegatingScript())
+  const subagent = { steps: [{ command: 'echo sub', say: 'Let me look.' }], text: 'Sub done.' }
+  setFakeLlmScript(delegatingScript({ subagents: { 'fake-small': subagent } }))
   const promptId = await promptAndAnswer(chat, 'Delegate the listing')
 
   const [sub] = subs()
   expect(subs()).toHaveLength(1)
+  expect(relay.agentCount()).toBe(1)
+  expect(relay.prompts).toEqual(['Delegate the listing', 'List the files'])
   expect(sub?.parent_conversation_id).toBe((await stack.runtimeOf(chat)).agent_conversation_id)
-  expect(sub?.agent.acp_model).toBe('hq/fake/fake-small')
+  expect(sub?.agent).toMatchObject({ acp_model: 'hq/fake/fake-small', acp_thought_level: 'low' })
   expect(tokenOf(sub)).toStartWith('dl_')
   expect(main()?.agent.acp_model).toBe('hq/fake/fake-medium')
 
@@ -104,6 +108,7 @@ test('a delegated task runs in a Pi sub-conversation on the classified model, it
   })
   expect(delegation?.token_hash).not.toContain(tokenOf(sub))
   expect(delegation?.finished_at).not.toBeNull()
+  expect(delegation?.classifier_output).not.toBeNull()
 
   const stored = await database.$client`
     select id, payload from events where workspace_id = ${acme} and chat_id = ${chat}
@@ -205,8 +210,13 @@ test.each([
     await promptAndAnswer(chat, `Delegate with ${policy}`)
     expect(subs().map((sub) => sub.agent.acp_model)).toEqual([`hq/${model}`])
     expect(
-      (await delegationsOf(chat)).map((row) => ({ model: row.model, reason: row.reason, policy: row.policy })),
-    ).toEqual([{ model, reason, policy }])
+      (await delegationsOf(chat)).map(({ model, reason, policy, classifier_output }) => ({
+        model,
+        reason,
+        policy,
+        classifier_output,
+      })),
+    ).toEqual([{ model, reason, policy, classifier_output: null }])
   },
 )
 

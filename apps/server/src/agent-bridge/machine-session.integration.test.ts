@@ -3,7 +3,17 @@ import { rebuildMessages } from '@hq/conversation/server'
 import { schema } from '@hq/db/zero'
 import { type ChatId, chatId, runtimeHostId } from '@hq/kernel'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
-import { acme, alice, aliceInAcme, bobInAcme, sessionTokenOf, startAgentStack, succeeded, waitFor } from '../testing.ts'
+import {
+  acme,
+  alice,
+  aliceInAcme,
+  failedWith,
+  bobInAcme,
+  sessionTokenOf,
+  startAgentStack,
+  succeeded,
+  waitFor,
+} from '../testing.ts'
 import { createHqAgentRelay } from './hq-agent-relay.ts'
 
 setDefaultTimeout(40_000)
@@ -100,7 +110,7 @@ test.each([
     const [launch] = relay.created as { agent: Record<string, unknown>; secrets: object }[]
     expect(relay.created).toHaveLength(1)
     expect(launch?.agent).not.toHaveProperty('kind')
-    expect(JSON.stringify(launch?.agent.acp_command)).not.toMatch(/BASE_URL|API_KEY/)
+    expect(JSON.stringify(launch)).not.toMatch(/BASE_URL|API_KEY|ANTHROPIC_MODEL|base_url/)
     expect(launch?.secrets).toEqual({})
 
     const environmentQuestion = await prompt(chat, 'stub:env')
@@ -262,6 +272,8 @@ test('a plan update shows as a plan step and replaces the Plan tab rows, and a T
 
 const chooseRunsOn = (chat: ChatId, runsOn: string, user = aliceInAcme) =>
   mutate(user, 'conversation.updateChatRouting', { workspaceId: acme, chatId: chat, runsOn })
+const sessionFieldsOf = async (chat: ChatId) =>
+  (await database.$client`select harness, local_session from chats where id = ${chat}`)[0]
 const startJobsOf = async (chat: ChatId) =>
   database.$client<{ state: string }[]>`
     select state from jobs where type = 'agent.start-session' and payload->>'chatId' = ${chat}`
@@ -283,8 +295,12 @@ test.each([
     expect(await chooseRunsOn(chat, harness)).toEqual(succeeded)
     await waitFor(async () => (await startedEventsOf(chat)).length === 1)
     expect(relay.created).toHaveLength(1)
+    expect((relay.created[0] as { agent: object }).agent).not.toHaveProperty('acp_model')
     expect(relay.prompts).toHaveLength(0)
-    expect(await chooseRunsOn(chat, 'runtime')).not.toEqual(succeeded)
+    expect(await chooseRunsOn(chat, 'runtime')).toEqual(
+      failedWith('This session has started; where it runs no longer changes'),
+    )
+    expect(await sessionFieldsOf(chat)).toEqual({ harness, local_session: true })
 
     await finished(await prompt(chat, 'Hello'), chat)
     expect(relay.created).toHaveLength(1)
@@ -303,7 +319,10 @@ test('nothing starts for a signed-out tool, a non-owner or a choice of the HQ ru
   expect(relay.created).toHaveLength(0)
 
   const chat = await newRuntimeChat()
-  expect(await chooseRunsOn(chat, 'claude-code', bobInAcme)).not.toEqual(succeeded)
+  expect(await chooseRunsOn(chat, 'claude-code', bobInAcme)).toEqual(
+    failedWith('Only the owner changes how this session runs'),
+  )
+  expect(await sessionFieldsOf(chat)).toEqual({ harness: null, local_session: false })
   expect(await chooseRunsOn(chat, 'runtime')).toEqual(succeeded)
   expect(await startJobsOf(chat)).toHaveLength(0)
 })
@@ -319,6 +338,24 @@ test('a prompt sent at once after the choice joins the one session and streams l
   expect(streamedText(frames, true)).toBe('Thinking about the plan.')
   expect(relay.created).toHaveLength(1)
   expect(await startedEventsOf(chat)).toHaveLength(1)
+})
+
+test('before the owner chooses, a member’s prompt is refused with the waiting notice; on the machine, it gets the owner-only notice and never reaches the agent', async () => {
+  const relay = await machine()
+  const chat = await newRuntimeChat()
+  await database.$client`update chats set local_session = null where id = ${chat}`
+  const sneaking = { workspaceId: acme, id: `message-${crypto.randomUUID()}`, chatId: chat, text: 'Sneaking in' }
+  expect(await mutate(bobInAcme, 'conversation.sendMessage', sneaking)).toEqual(
+    failedWith('Waiting for Alice to choose where this chat runs'),
+  )
+  expect(await messagesOf(chat)).toEqual([])
+
+  expect(await chooseRunsOn(chat, 'claude-code')).toEqual(succeeded)
+  await finished(await prompt(chat, 'Alice prompts'), chat)
+  expect(bodiesOf(await repliesTo(await prompt(chat, 'Bob tries', bobInAcme)))).toEqual([
+    'notice:Only the owner prompts a session on their machine',
+  ])
+  expect(relay.prompts).toEqual(['Alice prompts'])
 })
 
 const machineLosingFirstCreate = async () => {

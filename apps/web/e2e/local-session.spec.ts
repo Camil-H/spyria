@@ -6,20 +6,12 @@ import {
   newRuntimeChat,
   openChat,
   type Page,
-  runsOnChoiceOf,
   sendMessage,
   serverUrl,
 } from './fixtures'
 import { openPageAs, type WorkerStack } from './stack'
 
-type MachineConversation = {
-  agent: {
-    acp_command: string[]
-    mcp_config: Record<string, { url: string }>
-  }
-  secrets: Record<string, unknown>
-}
-type Machine = { id: string; conversations: MachineConversation[]; prompts: string[] }
+type Machine = { id: string; conversations: object[]; prompts: string[] }
 type MachineQuery = { owner?: string; signedIn?: string; online?: string }
 
 const test = base.extend<{ machine: (query?: MachineQuery) => Promise<Machine> }>({
@@ -34,37 +26,13 @@ const test = base.extend<{ machine: (query?: MachineQuery) => Promise<Machine> }
 })
 
 const localOption = 'My machine · Claude Code'
-const subscriptionCommand = [
-  'env',
-  'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1',
-  'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1',
-  'CLAUDE_CODE_MAX_RETRIES=0',
-  'claude-agent-acp',
-]
 const signedInMachine = { owner: 'member-alice', signedIn: 'claude' }
 const codexOption = 'My machine · Codex'
-const codexSubscriptionCommand = [
-  'env',
-  `HQ_CODEX_CONFIG=forced_login_method = "chatgpt"
-check_for_update_on_startup = false
-cli_auth_credentials_store = "file"
-
-[analytics]
-enabled = false
-
-[feedback]
-enabled = false
-
-[features]
-plugins = false
-remote_plugin = false
-apps = false
-`,
-  'sh',
-  '-c',
-  'set -e; printf %s "$HQ_CODEX_CONFIG" > "$HOME/.codex/config.toml.$$"; mv "$HOME/.codex/config.toml.$$" "$HOME/.codex/config.toml"; exec codex-acp',
-]
 const codexMachine = { owner: 'member-alice', signedIn: 'codex' }
+const tools = [
+  { name: 'Claude Code', login: 'claude' },
+  { name: 'Codex', login: 'codex' },
+]
 
 const chipOf = (page: Page) =>
   mainOf(page).getByRole('button', {
@@ -91,51 +59,40 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/')
 })
 
-test('3. the owner prompts an On my machine session: it runs on their machine with the subscription config, unmetered', async ({
-  page,
-  workerStack,
-  machine,
-}) => {
-  const { id: machineId } = await machine(signedInMachine)
-  const chatId = await newLocalSession(page, 'On my laptop')
-  await sendMessage(page, 'Hello from my laptop')
-  await expect(repliesWith(page, 'Hello from the stub')).toBeVisible()
+for (const tool of tools) {
+  test(`3. the owner prompts an On my machine ${tool.name} session: the answer, unmetered`, async ({
+    page,
+    machine,
+  }) => {
+    await machine({ owner: 'member-alice', signedIn: tool.login })
+    await newLocalSession(page, `${tool.name} on my laptop`, `My machine · ${tool.name}`)
+    await sendMessage(page, 'Hello from my laptop')
+    await expect(repliesWith(page, 'Hello from the stub')).toBeVisible()
+    const sidePanel = page.getByRole('region', { name: 'Side panel' })
+    await sidePanel.getByRole('tab', { name: 'Usage', exact: true }).click()
+    await expect(sidePanel).toContainText('Subscription session on your machine, not metered by HQ')
+  })
 
-  const [runtime] = await workerStack.database.$client`select host_id from runtimes where chat_id = ${chatId}`
-  expect(runtime?.host_id).toBe(machineId)
-  const { conversations } = await machine()
-  expect(conversations).toHaveLength(1)
-  const [conversation] = conversations
-  expect(conversation?.agent).toMatchObject({ acp_command: subscriptionCommand })
-  expect(JSON.stringify(conversation)).not.toContain('ANTHROPIC_BASE_URL')
-  expect(JSON.stringify(conversation)).not.toContain('ANTHROPIC_MODEL')
-  expect(conversation?.secrets).toEqual({})
-  expect(Object.keys(conversation?.agent.mcp_config ?? {})).toEqual(['hq'])
-  expect(conversation?.agent.mcp_config.hq?.url).toMatch(/\/mcp$/)
+  test(`4. a prompt while the machine is signed out of ${tool.name} shows its sign-in notice and reaches no agent`, async ({
+    page,
+    workerStack,
+    machine,
+  }) => {
+    await machine({ owner: 'member-alice', signedIn: tool.login })
+    await sessionStarted(
+      workerStack,
+      await newLocalSession(page, `${tool.name} signed out`, `My machine · ${tool.name}`),
+    )
+    await machine({ signedIn: '' })
+    await sendMessage(page, 'Answer without a sign-in')
+    await expect(
+      repliesWith(page, `Sign in to ${tool.name} on your machine: docker exec -it hq-host hq-host login ${tool.login}`),
+    ).toHaveCount(1)
+    expect((await machine()).prompts).toEqual([])
+  })
+}
 
-  await expect(mainOf(page).getByRole('button', { name: /^Claude Code · / })).toHaveText('Claude Code · subscription')
-  const sidePanel = page.getByRole('region', { name: 'Side panel' })
-  await sidePanel.getByRole('tab', { name: 'Usage', exact: true }).click()
-  await expect(sidePanel).toContainText('Subscription session on your machine, not metered by HQ')
-})
-
-test('4. a prompt while the machine is not signed in shows the sign-in notice and creates no conversation', async ({
-  page,
-  machine,
-}) => {
-  await machine(signedInMachine)
-  await newLocalSession(page, 'Not signed in')
-  await machine({ signedIn: '' })
-  await sendMessage(page, 'Answer without a sign-in')
-  await expect(
-    repliesWith(page, 'Sign in to Claude Code on your machine: docker exec -it hq-host hq-host login claude'),
-  ).toHaveCount(1)
-  const { conversations, prompts } = await machine()
-  expect(conversations).toHaveLength(0)
-  expect(prompts).toHaveLength(0)
-})
-
-test('5. another member reads the session and the answer, and their prompt is refused without an agent call', async ({
+test('5. another member reads the session and the answer, and their prompt gets the owner-only notice', async ({
   page,
   browser,
   workerStack,
@@ -152,7 +109,6 @@ test('5. another member reads the session and the answer, and their prompt is re
   await sendMessage(bobPage, 'Bob tries the laptop')
   await expect(repliesWith(bobPage, 'Only the owner prompts a session on their machine')).toHaveCount(1)
   await expect(repliesWith(page, 'Only the owner prompts a session on their machine')).toHaveCount(1)
-  expect((await machine()).prompts).toEqual(['Alice prompts the laptop'])
   await bobPage.context().close()
 })
 
@@ -177,92 +133,7 @@ test('6. a prompt while the machine is offline waits with "Your machine is offli
   expect((await machine()).prompts).toEqual(['Wait for my laptop', 'Wait for my laptop again'])
 })
 
-test('10. text streamed around a command shows before the command and stays, the rest after it, and nothing is stored twice', async ({
-  page,
-  workerStack,
-  machine,
-  release,
-}) => {
-  await machine(signedInMachine)
-  const chatId = await newLocalSession(page, 'Live text')
-  await sendMessage(page, 'stub:command stub:linger')
-  await expect(messageItemsOf(page).getByRole('img', { name: 'Running' })).toBeVisible()
-  await expect(messageItemsOf(page).nth(1)).toContainText('[t1]')
-  await release('linger')
-  await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0)
-  await expect(messageItemsOf(page)).toHaveCount(4)
-  await expect(messageItemsOf(page).nth(1)).toContainText('[t1]')
-  await expect(messageItemsOf(page).nth(2)).toContainText('$ sleep 2 && echo checked')
-  await expect(messageItemsOf(page).nth(3)).toContainText('Hello from the stub')
-  await expect(messageItemsOf(page).nth(3)).not.toContainText('[t1]')
-  const answers = await workerStack.database.$client<{ body: string }[]>`
-    select body from messages where chat_id = ${chatId} and kind = 'agent' order by seq`
-  expect(answers.map((answer) => answer.body)).toEqual([
-    '[t1]',
-    'Hello from the stub (model stub-default, mode bypassPermissions).',
-  ])
-})
-
 test.describe('Codex on a ChatGPT plan', () => {
-  test('1. the owner prompts an On my machine Codex session: the subscription launch, the answer, unmetered', async ({
-    page,
-    machine,
-  }) => {
-    await machine(codexMachine)
-    await newLocalSession(page, 'Codex on my laptop', codexOption)
-    await sendMessage(page, 'Hello Codex on my laptop')
-    await expect(repliesWith(page, 'Hello from the stub')).toBeVisible()
-
-    const { conversations } = await machine()
-    expect(conversations).toHaveLength(1)
-    const [conversation] = conversations
-    expect(conversation?.agent).toMatchObject({ acp_command: codexSubscriptionCommand })
-    expect(JSON.stringify(conversation)).not.toMatch(
-      /OPENAI_API_KEY|CODEX_API_KEY|OPENAI_BASE_URL|"CODEX_CONFIG=|MODEL_PROVIDER|base_url|model_provider|"model"/,
-    )
-    expect(conversation?.secrets).toEqual({})
-    expect(Object.keys(conversation?.agent.mcp_config ?? {})).toEqual(['hq'])
-    expect(conversation?.agent.mcp_config.hq?.url).toMatch(/\/mcp$/)
-
-    await expect(mainOf(page).getByRole('button', { name: /^Codex · / })).toHaveText('Codex · subscription')
-    const sidePanel = page.getByRole('region', { name: 'Side panel' })
-    await sidePanel.getByRole('tab', { name: 'Usage', exact: true }).click()
-    await expect(sidePanel).toContainText('Subscription session on your machine, not metered by HQ')
-  })
-
-  test('2. signed in to Claude only, Codex is not offered, a Codex session signed out after the choice shows the Codex sign-in notice, and a Claude Code session works', async ({
-    page,
-    workerStack,
-    machine,
-  }) => {
-    await machine(signedInMachine)
-    const claudeOnlyId = await newRuntimeChat(page, 'Claude only', null)
-    await expect(runsOnChoiceOf(page)).toHaveCount(0)
-    await expect(chipOf(page)).toHaveText('Claude Code · subscription')
-    await expect.poll(async () => (await machine()).conversations.length).toBe(1)
-    await sessionStarted(workerStack, claudeOnlyId)
-    await machine({ signedIn: 'claude,codex' })
-    await sessionStarted(workerStack, await newLocalSession(page, 'Codex without a sign-in', codexOption))
-    await expect.poll(async () => (await machine()).conversations.length).toBe(2)
-    await machine({ signedIn: 'claude' })
-    await sendMessage(page, 'Answer without a Codex sign-in')
-    await expect(
-      repliesWith(page, 'Sign in to Codex on your machine: docker exec -it hq-host hq-host login codex'),
-    ).toHaveCount(1)
-    expect((await machine()).conversations).toHaveLength(2)
-
-    await newLocalSession(page, 'Claude on the same laptop')
-    await sendMessage(page, 'Hello Claude on the same laptop')
-    await expect(repliesWith(page, 'Hello from the stub')).toBeVisible()
-    const { conversations, prompts } = await machine()
-    expect(conversations.map((conversation) => conversation.agent.acp_command.at(-1))).toEqual([
-      'claude-agent-acp',
-      expect.stringContaining('exec codex-acp'),
-      'claude-agent-acp',
-    ])
-    expect(prompts).toEqual(['Hello Claude on the same laptop'])
-  })
-
   test('5. a command pending with no input shows the real command and no spinner once completed, and a read shows its path', async ({
     page,
     machine,

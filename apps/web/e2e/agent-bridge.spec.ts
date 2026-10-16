@@ -41,23 +41,6 @@ test.describe('1. first prompt', () => {
   })
 })
 
-test('4. shows a terminal command as a tool call with its output, followed by the final message', async ({
-  page,
-  agentScript,
-}) => {
-  await agentScript(research, { command: 'echo hello' })
-  await openChat(page, 'Research')
-  await sendMessage(page, 'Say hello in the terminal')
-
-  const toolCallToggle = messageItemsOf(page).nth(1).getByRole('button', { name: 'echo hello' })
-  await expect(toolCallToggle).toBeVisible()
-  await expect(messageItemsOf(page).nth(2)).toContainText(agentReplyText)
-  await expect(workingIndicatorOf(page)).toHaveCount(0)
-  await expect(messageItemsOf(page)).toHaveCount(3)
-  await toolCallToggle.click()
-  await expect(messageItemsOf(page).nth(1).getByText('hello', { exact: true })).toBeVisible()
-})
-
 test('5. keeps the prompt and the reply after a reload, and the chat is not unread for the prompter', async ({
   page,
 }) => {

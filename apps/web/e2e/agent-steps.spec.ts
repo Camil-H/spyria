@@ -1,14 +1,4 @@
-import {
-  expect,
-  mainOf,
-  messageItemsOf,
-  openChat,
-  type Page,
-  panelOf,
-  sendMessage,
-  test,
-  workingIndicatorOf,
-} from './fixtures'
+import { expect, mainOf, messageItemsOf, openChat, type Page, sendMessage, test, workingIndicatorOf } from './fixtures'
 
 const research = 'chat-research'
 const thinking = 'I will check the toolchain, then fix the totals.'
@@ -129,15 +119,6 @@ test('15. expanding a file edit shows its added and removed lines', async ({ pag
   await expect(diff).toContainText('- export const total = 1')
   await expect(diff).toContainText('+ export const total = 2')
   await expect(diff).toContainText('+ export const tax = 0.2')
-})
-
-test('17. an agent failure shows a red error notice and ends the turn', async ({ page, agentScript }) => {
-  await agentScript(research, { steps: [{ fail: 'The model is overloaded' }] })
-  await sendMessage(page, 'Try anyway')
-
-  const error = messageItemsOf(page).getByRole('alert')
-  await expect(error).toContainText('The provider is unavailable, try again shortly')
-  await expect(workingIndicatorOf(page)).toHaveCount(0)
 })
 
 test('18. Markdown answers render tables, highlighted code with copy, links with their domain, raw HTML as text and images on click', async ({

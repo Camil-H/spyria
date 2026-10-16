@@ -13,7 +13,7 @@ import {
   serverUrl,
   sidebarOf,
 } from './fixtures'
-import { openPageAs, type WorkerStack } from './stack'
+import { openPageAs } from './stack'
 
 type MachineConversation = {
   agent: { acp_command: string[]; acp_model?: string }
@@ -56,54 +56,16 @@ const openSession = async (page: Page) => {
   if (!(await sessionOf(page).isVisible())) await chipOf(page).click()
   await expect(sessionOf(page)).toBeVisible()
 }
-const tokenOf = async (workerStack: WorkerStack, user: string) =>
-  (
-    await (
-      await fetch(`${serverUrl}/test/token?db=${workerStack.databaseName}&user=${user}&workspace=workspace-acme`, {
-        method: 'POST',
-      })
-    ).json()
-  ).token as string
-const craftedMutation = async (workerStack: WorkerStack, user: string, name: string, args: object) => {
-  const appId = `hqe2e${test.info().parallelIndex}`
-  const response = await fetch(`${serverUrl}/api/mutate?schema=${appId}_0&appID=${appId}`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${await tokenOf(workerStack, user)}` },
-    body: JSON.stringify({
-      clientGroupID: crypto.randomUUID(),
-      mutations: [
-        {
-          type: 'custom',
-          id: 1,
-          clientID: crypto.randomUUID(),
-          name,
-          args: [{ workspaceId: 'workspace-acme', ...args }],
-          timestamp: Date.now(),
-        },
-      ],
-      pushVersion: 1,
-      timestamp: Date.now(),
-      requestID: crypto.randomUUID(),
-    }),
-  })
-  return JSON.stringify(await response.json())
-}
-const craftedRoutingWrite = (workerStack: WorkerStack, user: string, args: object) =>
-  craftedMutation(workerStack, user, 'conversation.updateChatRouting', args)
-const sessionFieldsOf = async (workerStack: WorkerStack, chatId: string) =>
-  (await workerStack.database.$client`select harness, local_session from chats where id = ${chatId}`)[0]
-
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
 })
 
 test('3. a new runtime chat left on HQ runtime runs on a workspace host with the member key', async ({
   page,
-  workerStack,
   machine,
   agentScript,
 }) => {
-  const { id: machineId } = await machine(signedInMachine)
+  await machine(signedInMachine)
   const chatId = await newRuntimeChat(page, 'Left on HQ runtime')
   await openSession(page)
   await expect(runsOnOf(page)).toHaveValue('runtime')
@@ -112,40 +74,20 @@ test('3. a new runtime chat left on HQ runtime runs on a workspace host with the
   await sendMessage(page, 'Hello HQ runtime')
   await expect(repliesWith(page, 'Answered on an HQ runtime.')).toBeVisible()
   await expect(chipOf(page)).toHaveText(/· auto$/)
-
-  const [runtime] = await workerStack.database.$client`
-    select runtime_hosts.id, runtime_hosts.owner_id from runtimes join runtime_hosts on runtime_hosts.id = runtimes.host_id
-    where runtimes.chat_id = ${chatId}`
-  expect(runtime?.id).not.toBe(machineId)
-  expect(runtime?.owner_id).toBeNull()
-  expect((await machine()).conversations).toHaveLength(0)
-  const query = `metadata_chat=${chatId}&metadata_database=${workerStack.databaseName}&limit=10`
-  await expect
-    .poll(
-      async () => ((await workerStack.gateway<{ logs: object[] | null }>(`/api/logs?${query}`)).logs ?? []).length,
-      {
-        timeout: 20_000,
-      },
-    )
-    .toBeGreaterThanOrEqual(1)
 })
 
-test('4. another member does not see the choice, and crafted writes by them or once a conversation exists are refused', async ({
+test('4. another member does not see the choice, and Runs on locks once a conversation exists', async ({
   page,
   browser,
   workerStack,
   machine,
 }) => {
   await machine(signedInMachine)
-  const chatId = await newRuntimeChat(page, 'Only Alice chooses')
+  await newRuntimeChat(page, 'Only Alice chooses')
   const bobPage = await openPageAs(browser, workerStack, 'member-bob')
   await openChat(bobPage, 'Only Alice chooses')
   await openSession(bobPage)
   await expectRunsOnLocked(bobPage)
-  expect(await craftedRoutingWrite(workerStack, 'member-bob', { chatId, runsOn: 'claude-code' })).toContain(
-    'Only the owner changes how this session runs',
-  )
-  expect(await sessionFieldsOf(workerStack, chatId)).toEqual({ harness: null, local_session: false })
   await bobPage.context().close()
 
   await openSession(page)
@@ -154,10 +96,9 @@ test('4. another member does not see the choice, and crafted writes by them or o
   await page.keyboard.press('Escape')
   await sendMessage(page, 'Lock it')
   await expect(repliesWith(page, 'Hello from the stub')).toBeVisible()
-  expect(await craftedRoutingWrite(workerStack, 'member-alice', { chatId, runsOn: 'runtime' })).toContain(
-    'This session has started; where it runs no longer changes',
-  )
-  expect(await sessionFieldsOf(workerStack, chatId)).toEqual({ harness: 'claude-code', local_session: true })
+  await openSession(page)
+  await expect(runsOnOf(page)).toBeDisabled()
+  await expect(runsOnOf(page)).toHaveValue('claude-code')
 })
 
 test('8. a new runtime chat shows Runs on with nothing chosen and Send blocked until a pick', async ({
@@ -174,28 +115,20 @@ test('8. a new runtime chat shows Runs on with nothing chosen and Send blocked u
   await expect(sendButtonOf(page)).toBeEnabled()
 })
 
-test('9. before the owner chooses, another member waits and their crafted prompt is refused', async ({
+test('9. before the owner chooses, another member waits and cannot send', async ({
   page,
   browser,
   workerStack,
   machine,
 }) => {
   await machine(signedInMachine)
-  const chatId = await newRuntimeChat(page, 'Alice has not chosen', null)
+  await newRuntimeChat(page, 'Alice has not chosen', null)
   const bobPage = await openPageAs(browser, workerStack, 'member-bob')
   await openChat(bobPage, 'Alice has not chosen')
   await expect(runsOnChoiceOf(bobPage)).toHaveCount(0)
   await expect(mainOf(bobPage)).toContainText('Waiting for Alice to choose where this chat runs')
   await expect(sendButtonOf(bobPage)).toBeDisabled()
   await bobPage.context().close()
-  expect(
-    await craftedMutation(workerStack, 'member-bob', 'conversation.sendMessage', {
-      id: crypto.randomUUID(),
-      chatId,
-      text: 'Sneaking in',
-    }),
-  ).toContain('Waiting for Alice to choose where this chat runs')
-  expect(await workerStack.database.$client`select 1 from messages where chat_id = ${chatId}`).toHaveLength(0)
 })
 
 test('12. clicking outside the open chip closes it', async ({ page }) => {

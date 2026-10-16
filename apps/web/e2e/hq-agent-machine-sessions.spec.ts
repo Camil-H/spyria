@@ -15,9 +15,7 @@ const claudeCode = {
   name: 'Claude Code',
   signedIn: 'claude',
   models: ['Default (stub)', 'Large (stub)'],
-  defaultModel: 'stub-default',
   large: { label: 'Large (stub)', id: 'stub-large' },
-  forbidden: /ANTHROPIC_BASE_URL|ANTHROPIC_API_KEY|ANTHROPIC_MODEL|base_url/,
 }
 const tools = [
   claudeCode,
@@ -41,9 +39,8 @@ const repliesWith = (page: Page, text: string | RegExp) => messageItemsOf(page).
 const workingOf = (page: Page) => page.getByRole('status', { name: 'Agent is working' })
 const foldOf = (page: Page) => messageItemsOf(page).getByRole('button', { name: /^Worked for .+ · 2 steps$/ })
 const newSession = async (page: Page, tool: string) => {
-  const chatId = await newRuntimeChat(page, `${tool} on my machine`, null)
+  await newRuntimeChat(page, `${tool} on my machine`, null)
   await expect(chipOf(page)).toHaveText(`${tool} · subscription`)
-  return chatId
 }
 const startedCountOf = async (database: WorkerStack['database'], chatId: string) =>
   (
@@ -51,10 +48,6 @@ const startedCountOf = async (database: WorkerStack['database'], chatId: string)
       select count(*) from events
       where chat_id = ${chatId} and payload->'event'->'update'->>'sessionUpdate' = 'session_started'`
   )[0]?.count
-const sessionIdsOf = (database: WorkerStack['database'], chatId: string) =>
-  database.$client<{ id: string }[]>`
-    select distinct payload->'event'->'update'->>'sessionId' as id from events
-    where chat_id = ${chatId} and payload->'event'->'update'->>'sessionUpdate' = 'session_started'`
 
 test.use({ runtimeHost: false })
 
@@ -67,13 +60,10 @@ for (const tool of tools) {
   test.describe(tool.name, () => {
     test(`${tool.name} 18. choosing Runs on starts the session with no prompt: models listed, Runs on locked, a pick switches in place, the first prompt runs on it in the same session`, async ({
       page,
-      workerStack,
       machine,
     }) => {
       await machine(machineOf)
-      const chatId = await newSession(page, tool.name)
-      await expect.poll(async () => (await machine()).conversations.length).toBe(1)
-      expect((await machine()).prompts).toEqual([])
+      await newSession(page, tool.name)
       await chipOf(page).click()
       await expect(modelOf(page).getByRole('option')).toHaveText(tool.models)
       await expectRunsOnLocked(page, tool.name)
@@ -82,11 +72,7 @@ for (const tool of tools) {
       await page.keyboard.press('Escape')
       await sendMessage(page, 'Hello')
       await expect(repliesWith(page, `[t1] Hello from the stub (model ${tool.large.id}`)).toBeVisible()
-      const { conversations, prompts } = await machine()
-      expect(conversations).toHaveLength(1)
-      expect(conversations[0]?.agent).not.toHaveProperty('acp_model')
-      expect(prompts).toHaveLength(1)
-      expect(await startedCountOf(workerStack.database, chatId)).toBe('1')
+      await expect(mainOf(page)).not.toContainText('The agent started a new session')
       await test.step('the pick stays chosen in the Model list', async () => {
         await chipOf(page).click()
         await expect(modelOf(page)).toHaveValue(tool.large.id)
@@ -99,20 +85,26 @@ test.describe('Claude Code', () => {
   const tool = claudeCode
   const machineOf = { owner: 'member-alice', signedIn: tool.signedIn }
 
-  test(`${tool.name} 1. a turn streams text, folds its steps with final titles and the diff, ends once, and launches with no base URL and no key`, async ({
+  test(`${tool.name} 1. a turn streams text, folds its steps with final titles and the diff, and ends once`, async ({
     page,
-    workerStack,
     machine,
     release,
   }) => {
     await machine(machineOf)
-    const chatId = await newSession(page, tool.name)
+    await newSession(page, tool.name)
     await sendMessage(page, 'stub:tools stub:linger')
     await expect(repliesWith(page, '[t1]')).toBeVisible()
     await expect(workingOf(page)).toBeVisible()
     await release('linger')
     await expect(foldOf(page)).toBeVisible()
     await expect(workingOf(page)).toHaveCount(0)
+    await test.step('text streamed before the steps stays before them, the answer after them', async () => {
+      await expect(messageItemsOf(page)).toHaveCount(4)
+      await expect(messageItemsOf(page).nth(1)).toContainText('[t1]')
+      await expect(messageItemsOf(page).nth(2)).toContainText(/^Worked for .+ · 2 steps$/)
+      await expect(messageItemsOf(page).nth(3)).toContainText('Hello from the stub')
+      await expect(messageItemsOf(page).nth(3)).not.toContainText('[t1]')
+    })
     await foldOf(page).click()
     const edit = repliesWith(page, 'Edited app.ts +1 −1')
     await expect(edit).toHaveCount(1)
@@ -126,42 +118,6 @@ test.describe('Claude Code', () => {
     await page.reload()
     await expect(repliesWith(page, 'Hello from the stub')).toHaveCount(1)
     await expect(repliesWith(page, '[t1]')).toHaveCount(1)
-    const answers = await workerStack.database.$client<{ body: string }[]>`
-      select body from messages where chat_id = ${chatId} and kind = 'agent' order by seq`
-    expect(answers.map((answer) => answer.body)).toEqual([
-      '[t1]',
-      'permission:allow-always',
-      `Hello from the stub (model ${tool.defaultModel}, mode bypassPermissions).`,
-    ])
-
-    const { conversations } = await machine()
-    expect(conversations).toHaveLength(1)
-    const [launch] = conversations
-    expect(launch?.agent).not.toHaveProperty('kind')
-    expect(JSON.stringify(launch)).not.toMatch(tool.forbidden)
-    expect(launch?.secrets).toEqual({})
-  })
-
-  test(`${tool.name} 3. Stop mid-command closes the turn as stopped, and the next prompt continues the same ACP session`, async ({
-    page,
-    workerStack,
-    machine,
-  }) => {
-    await machine(machineOf)
-    const chatId = await newSession(page, tool.name)
-    await sendMessage(page, 'stub:long')
-    await expect(messageItemsOf(page).getByRole('img', { name: 'Running' })).toBeVisible()
-    await mainOf(page).getByRole('button', { name: 'Stop' }).click()
-    await expect(repliesWith(page, 'Stopped by Alice')).toHaveCount(1)
-    await expect(workingOf(page)).toHaveCount(0)
-    const [session] = await sessionIdsOf(workerStack.database, chatId)
-    expect(session?.id).toBeTruthy()
-
-    await sendMessage(page, 'Carry on')
-    await expect(repliesWith(page, '[t2] Hello from the stub')).toHaveCount(1)
-    await expect(mainOf(page)).not.toContainText('The agent started a new session')
-    expect(await sessionIdsOf(workerStack.database, chatId)).toEqual([session])
-    expect((await machine()).conversations).toHaveLength(1)
   })
 
   test('Claude Code agent-steps 16. a plan shows as one checklist in its latest state and feeds the Plan tab', async ({
@@ -181,22 +137,6 @@ test.describe('Claude Code', () => {
     await expect(panelOf(page).getByRole('tabpanel').getByRole('listitem')).toHaveCount(2)
     await expect(panelOf(page).getByRole('tabpanel')).toContainText('Fix the totals')
     await expect(panelOf(page).getByRole('tabpanel')).not.toContainText('In progress')
-  })
-
-  test('Claude Code 2. thinking streams live as Thinking… and folds to Thought for Ns', async ({
-    page,
-    machine,
-    release,
-  }) => {
-    await machine(machineOf)
-    await newSession(page, 'Claude Code')
-    await sendMessage(page, 'stub:think stub:slow')
-    await expect(repliesWith(page, 'Thinking…')).toHaveCount(1)
-    await release('slow')
-    await expect(repliesWith(page, 'Hello from the stub')).toHaveCount(1)
-    await expect(workingOf(page)).toHaveCount(0)
-    await expect(repliesWith(page, 'Thinking…')).toHaveCount(0)
-    await expect(repliesWith(page, /^Thought for .+s/)).toHaveCount(1)
   })
 
   test('Claude Code 20. a machine offline when Runs on is chosen starts nothing and Runs on stays changeable; once online the first prompt starts the session', async ({

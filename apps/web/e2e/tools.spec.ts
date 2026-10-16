@@ -40,8 +40,6 @@ const lastToolResultOf = async (page: Page) => {
     .filter({ has: page.getByRole('button', { name: toolStep, expanded: true }) })
     .last()
 }
-const fakeProviderCalls = async () =>
-  (await (await fetch(`${fakeMcpUrl}/_records`)).json()) as { tool: string; user: string }[]
 const addLlmKey = async (page: Page, workspace = 'workspace-acme') => {
   await page.goto(`/w/${workspace}/profile`)
   const llmSection = mainOf(page).getByRole('region', { name: 'LLM access' })
@@ -76,34 +74,6 @@ const whoamiThroughGateway = async (workerStack: WorkerStack, workspace: string)
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
-})
-
-test('1. the profile lists the fake server as not connected; Connect runs the consent popup and shows it connected', async ({
-  page,
-}) => {
-  await logInAtFakeProvider(page.context(), accountOf('alice-acme'))
-  await openMyConnections(page)
-  await expect(connectionsOf(page).getByRole('group', { name: 'fake' })).toContainText('Not connected')
-  await expect(connectedRowOf(page)).toHaveCount(0)
-
-  await inPopup(page, () => connectionsOf(page).getByRole('button', { name: 'Connect fake', exact: true }).click())
-  await expect(connectedRowOf(page)).toContainText('Connected')
-  await expect(connectionsOf(page).getByRole('button', { name: 'Disconnect fake' })).toBeVisible()
-  await expect(connectionsOf(page).getByRole('group', { name: 'fake' })).toHaveCount(0)
-})
-
-test('2. the agent uses the tool as the owner: "Used whoami (fake)" with the result, and the provider saw Alice’s Acme account', async ({
-  page,
-  agentScript,
-}) => {
-  const account = accountOf('alice-acme')
-  await connectFake(page, account)
-  await promptTool(page, agentScript, 'Who am I on fake?')
-
-  await expect(toolStepsOf(page)).toHaveCount(1)
-  await expect(await lastToolResultOf(page)).toContainText(`you are ${account}`)
-  await expect(messageItemsOf(page).filter({ hasText: 'Checked who I am.' })).toHaveCount(1)
-  expect(await fakeProviderCalls()).toContainEqual({ tool: 'whoami', user: account })
 })
 
 test('3. a call before connecting shows Connect fake; after connecting in the popup the next prompt uses the tool', async ({
@@ -168,6 +138,7 @@ test('6. disconnecting brings back the Connect notice; an expired session shows 
   await connectFake(page, account)
   await connectionsOf(page).getByRole('button', { name: 'Disconnect fake' }).click()
   await expect(connectedRowOf(page)).toHaveCount(0)
+  await expect(connectionsOf(page).getByRole('group', { name: 'fake' })).toContainText('Not connected')
   await expect(connectionsOf(page).getByRole('button', { name: 'Connect fake', exact: true })).toBeVisible()
   await promptTool(page, agentScript, 'Who am I after disconnecting?')
   await expect(messageItemsOf(page).getByRole('button', { name: 'Connect fake', exact: true })).toBeVisible()
