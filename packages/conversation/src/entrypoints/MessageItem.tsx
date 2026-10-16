@@ -5,7 +5,7 @@ import { DeleteMessageDialog } from './DeleteMessageDialog.tsx'
 import { EditMessageForm } from './EditMessageForm.tsx'
 import { MessageMenu } from './MessageMenu.tsx'
 
-const Markdown = lazy(() => import('./Markdown.tsx'))
+export const Markdown = lazy(() => import('./Markdown.tsx'))
 const plainTextClassName = 'text-sm whitespace-pre-wrap'
 
 const timeFormat = new Intl.DateTimeFormat('en-GB', {

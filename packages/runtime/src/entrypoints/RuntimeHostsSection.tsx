@@ -91,7 +91,16 @@ export const RuntimeHostsSection = ({ workspaceId }: { workspaceId: WorkspaceId 
                     <span>
                       {host.runningRuntimes} / {host.capacity.cap} runtimes
                     </span>
-                    <span className={badgeClass}>{host.capacity.rootless ? 'Rootless' : 'Rooted'}</span>
+                    <span
+                      className={badgeClass}
+                      title={
+                        host.capacity.rootless
+                          ? 'Docker runs without root on this host'
+                          : 'Docker on this host runs as root: containers are isolated but the daemon has root on the host'
+                      }
+                    >
+                      {host.capacity.rootless ? 'Docker: rootless' : 'Docker: root'}
+                    </span>
                     {!host.capacity.limitsEnforced && <span className={badgeClass}>Limits not enforced</span>}
                   </>
                 )}

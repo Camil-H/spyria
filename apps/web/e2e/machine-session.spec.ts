@@ -3,6 +3,7 @@ import {
   expect,
   foldOf,
   machineSectionOf,
+  machineToolOf,
   mainOf,
   messageContaining,
   messageItemsOf,
@@ -10,6 +11,7 @@ import {
   newSession,
   type Page,
   panelOf,
+  runsOnChipOf,
   runsOnChoiceOf,
   runsOnOf,
   sendMessage,
@@ -71,6 +73,11 @@ for (const tool of tools) {
       await sendMessage(page, 'Hello')
       await expect(messageContaining(page, `[t1] Hello from the stub (model ${tool.large.id}`)).toBeVisible()
       await expect(mainOf(page)).not.toContainText('The agent started a new session')
+      await test.step('f-6. the Runs on chip reads My machine · tool · Ready', async () => {
+        await expect(runsOnChipOf(page)).toContainText(`My machine · ${tool.name}`)
+        await expect(runsOnChipOf(page).getByRole('status', { name: 'Runtime' })).toHaveText('Ready')
+        await expect(mainOf(page).getByRole('status', { name: 'Runtime' })).toHaveCount(1)
+      })
       await test.step('the pick stays chosen in the Model list', async () => {
         await chipOf(page, 'harness').click()
         await expect(modelOf(page)).toHaveValue(tool.large.id)
@@ -187,7 +194,9 @@ test.describe('Claude Code', () => {
     await expect(mainOf(page).getByRole('alert')).toHaveCount(1)
     await expect(mainOf(page)).not.toContainText('OAuth session expired')
     await banner.getByRole('link', { name: 'Open profile' }).click()
-    await expect(machineSectionOf(page)).toContainText('Not signed in to Claude Code')
+    await expect(page).toHaveURL(/\/profile#my-machine$/)
+    await expect(machineSectionOf(page)).toBeInViewport()
+    await expect(machineToolOf(page, 'Claude Code')).toContainText('Not connected')
   })
 
   test('24. with no workspace host online and one machine tool signed in, Runs on is chosen for the owner: no fieldset, session started', async ({

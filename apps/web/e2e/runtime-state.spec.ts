@@ -8,6 +8,8 @@ import {
   openChat,
   type Page,
   research,
+  runsOnChipOf,
+  runsOnOf,
   sendMessage,
   test,
   workingIndicatorOf,
@@ -53,6 +55,43 @@ test.describe('without a warm runtime', () => {
     await expect(runtimeStatusOf(page)).toHaveText('Not started')
     await openChat(page, 'Standup')
     await expect(runtimeStatusOf(page)).toHaveCount(0)
+  })
+
+  test('f-6. the Runs on chip shows the runtime status with a dot coloured by state: Not started, Starting…, Ready', async ({
+    page,
+    release,
+  }) => {
+    const dotColourOf = () =>
+      runtimeStatusOf(page)
+        .locator('span')
+        .first()
+        .evaluate((dot) => getComputedStyle(dot).backgroundColor)
+    const colourOf = (variable: string) =>
+      page.evaluate((name) => {
+        const probe = document.body.appendChild(document.createElement('span'))
+        probe.style.backgroundColor = `var(${name})`
+        const colour = getComputedStyle(probe).backgroundColor
+        probe.remove()
+        return colour
+      }, variable)
+    await openChat(page, 'Research')
+    await expect(runsOnOf(page)).toHaveValue('runtime')
+    await expect(runsOnChipOf(page).getByRole('status', { name: 'Runtime' })).toHaveText('Not started')
+    await expect(mainOf(page).getByRole('status', { name: 'Runtime' })).toHaveCount(1)
+    expect(await dotColourOf()).toBe(await colourOf('--color-grey-500'))
+    const [runsOnRight, statusLeft] = await Promise.all([
+      runsOnOf(page).evaluate((select) => select.getBoundingClientRect().right),
+      runtimeStatusOf(page).evaluate((status) => status.getBoundingClientRect().left),
+    ])
+    expect(statusLeft).toBeGreaterThan(runsOnRight)
+    expect(statusLeft - runsOnRight).toBeLessThan(24)
+
+    await sendMessage(page, 'Start please')
+    await expect(runtimeStatusOf(page)).toHaveText('Starting…')
+    expect(await dotColourOf()).toBe(await colourOf('--color-primary-500'))
+    await release('boot')
+    await expect(runtimeStatusOf(page)).toHaveText('Ready')
+    expect(await dotColourOf()).toBe(await colourOf('--color-green-500'))
   })
 
   test('5. a runtime that cannot start shows one Could not start · Retry chip and a notice; clicking it starts the runtime and answers the prompt', async ({

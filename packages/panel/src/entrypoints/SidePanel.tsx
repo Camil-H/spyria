@@ -77,7 +77,7 @@ const TabTrigger = ({ tabId }: { tabId: PanelTabId }) => {
   )
 }
 
-export const SidePanel = ({ workspaceId, chatId, usageTab }: TabProps & { usageTab: ReactNode }) => {
+export const SidePanel = ({ workspaceId, chatId, Markdown, usageTab }: TabProps & { usageTab: ReactNode }) => {
   const tabIds = useQuery(getPanelTabs(workspaceId, chatId))
   const { isOpen, width } = usePanel()
   if (!tabIds) return null
@@ -101,7 +101,7 @@ export const SidePanel = ({ workspaceId, chatId, usageTab }: TabProps & { usageT
             const { Component } = tabs[tabId]
             return (
               <Content key={tabId} value={tabId} className="min-h-0 flex-1 overflow-y-auto p-4 text-ink">
-                {Component ? <Component workspaceId={workspaceId} chatId={chatId} /> : usageTab}
+                {Component ? <Component workspaceId={workspaceId} chatId={chatId} Markdown={Markdown} /> : usageTab}
               </Content>
             )
           })}

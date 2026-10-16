@@ -1,7 +1,7 @@
 import { type ChatId, modelNameOf, type WorkspaceId } from '@hq/kernel'
 import { focusRing } from '@hq/ui'
 import { ChevronDown } from 'lucide-react'
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { lazy, type ReactNode, Suspense, useEffect, useRef, useState } from 'react'
 import { chipLabelOf, type Harness, type RunsOn, runsOnNames } from '../domain/session-routing.ts'
 import type { ChatRoutingRead } from '../queries/get-chat-routing.ts'
 import type { Conversation } from '../queries/get-conversation.ts'
@@ -18,31 +18,41 @@ export const RunsOnChip = ({
   chatId,
   runsOn,
   runsOnChoices,
+  status,
 }: {
   workspaceId: WorkspaceId
   chatId: ChatId
   runsOn: RunsOn
   runsOnChoices: Conversation['runsOnChoices']
+  status: ReactNode
 }) => {
   const commands = useConversationCommands()
   const options = [...(runsOnChoices?.includes(runsOn) ? [] : [runsOn]), ...(runsOnChoices ?? [])]
   const isLocked = options.length < 2
   return (
-    <div className="relative flex min-w-0 items-center">
-      <select
-        aria-label="Runs on"
-        disabled={isLocked}
-        value={runsOn}
-        onChange={(event) => commands.updateChatRouting({ workspaceId, chatId, runsOn: event.target.value as RunsOn })}
-        className={`${barChipClass} appearance-none bg-transparent ${isLocked ? '' : 'pr-6'}`}
-      >
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {runsOnNames[option]}
-          </option>
-        ))}
-      </select>
-      {!isLocked && <ChevronDown aria-hidden size={12} className="pointer-events-none absolute right-2 text-muted" />}
+    <div className="flex min-w-0 items-center gap-1.5 pr-2">
+      <div className="relative flex min-w-0 items-center">
+        <select
+          aria-label="Runs on"
+          disabled={isLocked}
+          value={runsOn}
+          onChange={(event) =>
+            commands.updateChatRouting({ workspaceId, chatId, runsOn: event.target.value as RunsOn })
+          }
+          className={`${barChipClass} appearance-none bg-transparent ${isLocked ? '' : 'pr-6'}`}
+        >
+          {options.map((option) => (
+            <option key={option} value={option}>
+              {runsOnNames[option]}
+            </option>
+          ))}
+        </select>
+        {!isLocked && <ChevronDown aria-hidden size={12} className="pointer-events-none absolute right-2 text-muted" />}
+      </div>
+      <span aria-hidden className="text-xs text-muted">
+        ·
+      </span>
+      {status}
     </div>
   )
 }

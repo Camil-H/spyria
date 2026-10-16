@@ -218,7 +218,7 @@ test('shows the runtime chats, their header and history', async ({ page }) => {
     await expect(page.getByRole('button', { name: 'Message actions' })).toHaveCount(0)
   })
 
-  await test.step('puts the owner on the title row, aligned right, the git branch above the text box, aligned left, and the model and runtime chips in the bar under it, the runtime at the right end', async () => {
+  await test.step('puts the owner on the title row, aligned right, the git branch above the text box, aligned left, and the Runs on chip with the runtime status and the model chip in the bar under it, the status inside the Runs on chip', async () => {
     const titleBox = (await mainOf(page).getByRole('heading', { level: 1, name: 'Invoice bug' }).boundingBox())!
     const ownerBox = (await mainOf(page).getByText('Agent acts as Alice').boundingBox())!
     const branchBox = (await mainOf(page).getByText('fix/invoice-tax').boundingBox())!
@@ -238,8 +238,12 @@ test('shows the runtime chats, their header and history', async ({ page }) => {
       expect(chipBox.y).toBeGreaterThanOrEqual(composerBox.y + composerBox.height)
       expect(chipBox.y - (composerBox.y + composerBox.height)).toBeLessThan(48)
     }
-    expect(runtimeBox.x).toBeGreaterThan(modelBox.x + modelBox.width)
-    expect(composerBox.x + composerBox.width - (runtimeBox.x + runtimeBox.width)).toBeLessThan(96)
+    const runsOnRight = await mainOf(page)
+      .getByRole('combobox', { name: 'Runs on' })
+      .evaluate((select) => select.getBoundingClientRect().right)
+    expect(runtimeBox.x).toBeGreaterThan(runsOnRight)
+    expect(runtimeBox.x - runsOnRight).toBeLessThan(24)
+    expect(runtimeBox.x + runtimeBox.width).toBeLessThan(modelBox.x)
     expect(Math.abs(runtimeBox.y + runtimeBox.height / 2 - (modelBox.y + modelBox.height / 2))).toBeLessThan(4)
   })
 

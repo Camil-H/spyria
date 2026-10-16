@@ -155,13 +155,16 @@ export const ChatView = ({
         bottomBar={
           conversation.type === 'runtime' && (
             <>
-              {conversation.runsOn !== null && (
+              {conversation.runsOn !== null ? (
                 <RunsOnChip
                   workspaceId={workspaceId}
                   chatId={chatId}
                   runsOn={conversation.runsOn}
                   runsOnChoices={conversation.runsOnChoices}
+                  status={runtimeStatus}
                 />
+              ) : (
+                runtimeStatus
               )}
               <SessionChip
                 workspaceId={workspaceId}
@@ -182,7 +185,6 @@ export const ChatView = ({
                   mayPrompt={mayPrompt}
                 />
               )}
-              <div className="ml-auto shrink-0">{runtimeStatus}</div>
             </>
           )
         }

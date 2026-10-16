@@ -48,7 +48,7 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/')
 })
 
-test('1 and 4. the admin turns sessions on members machines off: no Add my machine, Use Claude Code and Use Codex show the notice, a refused add, no My machine option in the chip', async ({
+test('1 and 4. the admin turns sessions on members machines off: My machine shows the notice with no Add my machine and no Connect, a refused add, no My machine option in the chip', async ({
   page,
   browser,
   workerStack,
@@ -60,17 +60,9 @@ test('1 and 4. the admin turns sessions on members machines off: no Add my machi
   await openProfile(bobPage)
   await expect(machineSectionOf(bobPage)).toContainText(turnedOffNotice)
   await expect(machineSectionOf(bobPage).getByRole('button', { name: 'Add my machine' })).toHaveCount(0)
-  for (const toolName of ['Claude Code', 'Codex'])
-    await test.step(`Use ${toolName} shows the turned-off notice and no command`, async () => {
-      await llmSectionOf(bobPage)
-        .getByRole('button', { name: `Use ${toolName}` })
-        .click()
-      const dialog = bobPage.getByRole('dialog', { name: `Use ${toolName}` })
-      await expect(dialog).toContainText(turnedOffNotice)
-      await expect(dialog.getByRole('textbox')).toHaveCount(0)
-      await expect(dialog).not.toContainText('docker')
-      await dialog.getByRole('button', { name: 'Close' }).click()
-    })
+  await expect(machineSectionOf(bobPage).getByRole('button', { name: 'Connect' })).toHaveCount(0)
+  await expect(machineSectionOf(bobPage)).not.toContainText('docker')
+  await expect(llmSectionOf(bobPage).getByRole('button', { name: /Claude Code|Codex/ })).toHaveCount(0)
 
   const response = await fetch(`${serverUrl}/api/runtime-hosts`, {
     method: 'POST',

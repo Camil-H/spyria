@@ -191,7 +191,7 @@ test('3, 4, 6 and 7. a host’s lifecycle: online with its capacity, its code wo
     await expect(row).toContainText(`${cpus} CPUs`)
     await expect(row).toContainText(`${(memoryBytes / gibibyte).toFixed(1)} GB`)
     await expect(row).toContainText(`0 / ${cap}`)
-    await expect(row.getByText(rootless ? 'Rootless' : 'Rooted', { exact: true })).toBeVisible()
+    await expect(row.getByText(rootless ? 'Docker: rootless' : 'Docker: root', { exact: true })).toBeVisible()
   })
   await test.step('a second hq-host with the same URL is refused and the first stays online', async () => {
     const secondHost = hosts.start(url)
@@ -242,7 +242,10 @@ test('5. an expired code is refused, the row shows Code expired and New command 
   await expect(hostsSectionOf(page).getByRole('listitem')).toHaveCount(1)
 })
 
-test('9. badges show rooted Docker and limits that are not enforced', async ({ page, hosts }) => {
+test('9. (f-7) badges show Docker: root or Docker: rootless with a tooltip, and limits that are not enforced', async ({
+  page,
+  hosts,
+}) => {
   await openSettings(page)
   hosts.fake(await addHost(page, 'Rooted box'), { rootless: false, limitsEnforced: true })
   hosts.fake(await addHost(page, 'Rootless box'), { rootless: true, limitsEnforced: false })
@@ -250,9 +253,15 @@ test('9. badges show rooted Docker and limits that are not enforced', async ({ p
   await expectOnline(page, 'Rootless box')
   const rootedRow = hostRowOf(page, 'Rooted box')
   const rootlessRow = hostRowOf(page, 'Rootless box')
-  await expect(rootedRow.getByText('Rooted', { exact: true })).toBeVisible()
+  await expect(rootedRow.getByText('Docker: root', { exact: true })).toHaveAttribute(
+    'title',
+    'Docker on this host runs as root: containers are isolated but the daemon has root on the host',
+  )
   await expect(rootedRow.getByText('Limits not enforced')).toHaveCount(0)
-  await expect(rootlessRow.getByText('Rootless', { exact: true })).toBeVisible()
+  await expect(rootlessRow.getByText('Docker: rootless', { exact: true })).toHaveAttribute(
+    'title',
+    'Docker runs without root on this host',
+  )
   await expect(rootlessRow.getByText('Limits not enforced')).toBeVisible()
   await expect(rootedRow).toContainText('4 CPUs')
   await expect(rootedRow).toContainText('8.0 GB')

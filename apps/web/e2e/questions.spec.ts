@@ -13,6 +13,7 @@ import {
   openChat,
   openProfile,
   type Page,
+  panelOf,
   sendMessage,
   sessionStarted,
   machineTest as test,
@@ -250,6 +251,35 @@ test('16c and 17a. the agent enters plan mode itself and the toggle follows; the
   await expect(plan.getByRole('button')).toHaveCount(0)
   await expect(modeRadioOf(page, 'Auto')).toBeChecked()
   await expect(mainOf(page)).not.toContainText('Approve Plan')
+})
+
+test('f-9. an approved plan shows as Markdown in the Plan tab until a newer checklist replaces it', async ({
+  page,
+  machine,
+  workerStack,
+}) => {
+  const openPlanTab = () => panelOf(page).getByRole('tab', { name: 'Plan', exact: true }).click()
+  const planTab = panelOf(page).getByRole('tabpanel')
+  const approvedPlan = planTab.getByRole('region', { name: 'Approved plan' })
+  await machine(claude)
+  await newOnlineSession(page, 'Claude Code', workerStack)
+  await sendMessage(page, 'stub:exit-plan')
+  await expect(planCardOf(page).getByRole('button', { name: 'Approve the plan' })).toBeVisible()
+  await openPlanTab()
+  await expect(planTab).toHaveText('No plan')
+  await planCardOf(page).getByRole('button', { name: 'Approve the plan' }).click()
+  await turnEnded(page)
+  await expect(approvedPlan.getByRole('listitem')).toHaveText(['Create x.txt', 'Done'])
+  await page.reload()
+  await openPlanTab()
+  await expect(approvedPlan.getByRole('listitem')).toHaveText(['Create x.txt', 'Done'])
+
+  await sendMessage(page, 'stub:plan-progress')
+  await expect(mainOf(page).getByRole('group', { name: 'Plan' })).toHaveCount(1)
+  await expect(workingIndicatorOf(page)).toHaveCount(0)
+  await expect(approvedPlan).toHaveCount(0)
+  await expect(planTab.getByRole('listitem')).toHaveCount(2)
+  await expect(planTab).toContainText('Fix the totals')
 })
 
 test('17b. Keep planning keeps Plan; the turn closes without Stopped and the next prompt is still in plan mode', async ({
