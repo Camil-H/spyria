@@ -1,4 +1,5 @@
 import {
+  addParticipant,
   chipOf,
   expect,
   mainOf,
@@ -73,7 +74,7 @@ test('5. another member reads the session and the answer, and their prompt gets 
   machine,
 }) => {
   await machine(signedInMachine)
-  await newMachineSession(page, 'Shared laptop session')
+  await addParticipant(workerStack, await newMachineSession(page, 'Shared laptop session'), 'member-bob', 'prompter')
   await sendMessage(page, 'Alice prompts the laptop')
   await expect(messageContaining(page, 'Hello from the stub')).toBeVisible()
 

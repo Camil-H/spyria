@@ -4,7 +4,7 @@ import { chatId } from '@hq/kernel'
 import { getChatUsage } from './get-chat-usage.ts'
 import { earlier, month, snapshot } from './testing.ts'
 
-test('chat usage lists the owner and members who can prompt, with zeros, plus any other prompter of the month', () => {
+test('chat usage lists the owner and participants who can post, with zeros, plus any other prompter of the month', () => {
   expect(getChatUsage(acme, chatId('chat-welcome'), month)(snapshot).rows).toEqual([
     { memberId: alice, name: 'Alice', tokens: 10, costMicros: 0, calls: 1 },
     { memberId: bob, name: 'Bob', tokens: 0, costMicros: 0, calls: 0 },

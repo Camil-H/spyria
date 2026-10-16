@@ -22,7 +22,7 @@ import {
   stopRunningDelegations,
 } from '@hq/db/server-writes'
 import type { Message as MessageRow } from '@hq/db/zero'
-import { type Transact, zql } from '@hq/db/zero-queries'
+import { memberChatPermissions, type Transact, zql } from '@hq/db/zero-queries'
 import { type ChatId, chatId, type MessageId, memberId, messageId, type WorkspaceId, workspaceId } from '@hq/kernel'
 import { removeChatRuntimeOnServer } from '@hq/runtime/published'
 import type { Transaction } from '@rocicorp/zero'
@@ -274,6 +274,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
           localSession: row.localSession ?? null,
         }
       },
+      permissions: (id, member) => memberChatPermissions(tx, contextWorkspaceId, id, member),
       localSessionsAllowed: async () =>
         (await tx.run(zql.workspaces.where('workspaceId', contextWorkspaceId).one()))?.localSessions ?? true,
       hasAgentSession: async (id) =>

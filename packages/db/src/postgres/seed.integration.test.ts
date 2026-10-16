@@ -72,6 +72,7 @@ const readSnapshot = async () => {
       await database.select().from(tables.toolConnections).orderBy(tables.toolConnections.position)
     ).map(({ position, ...connection }) => userAsMember(connection)),
     chatMembers: (await database.select().from(tables.chatParticipants)).map(userAsMember),
+    chatRoles: await database.select().from(tables.chatRoles),
     files: await database.select().from(tables.files),
     changes: await database.select().from(tables.changes),
     terminalLines: (

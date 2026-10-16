@@ -1,10 +1,15 @@
 import { expect, test } from 'bun:test'
+import { schema } from '@hq/db/zero'
+import { memberChatPermissions } from '@hq/db/zero-queries'
+import { builtInChatRoles, chatId, memberId } from '@hq/kernel'
+import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import {
   acme,
   alice,
   aliceInAcme,
   failedWith,
   globex,
+  lee,
   openSharedTestApp,
   bob,
   bobInAcme,
@@ -14,6 +19,10 @@ import {
 const { database, resultOf, chatRow } = await openSharedTestApp()
 
 const projectRow = (id: string) => database.query.projects.findFirst({ where: { id } })
+const participantsOf = (chatId: string) =>
+  database.$client`select user_id as "userId", role_id as "roleId" from chat_participants where chat_id = ${chatId}`.then(
+    (rows) => [...rows],
+  )
 
 test('createProject inserts the project in the token workspace with a server creation time', async () => {
   const before = Date.now()
@@ -42,10 +51,41 @@ test('createChat inserts a runtime chat owned by the caller in the given project
     type: 'runtime',
     ownerKind: 'user',
     ownerUserId: bob,
+    visibility: 'private',
     model: null,
     reasoningEffort: null,
     archived: false,
   })
+  expect(await participantsOf('chat-new')).toEqual([{ userId: bob, roleId: 'owner' }])
+})
+
+test('createChat makes a channel public with its creator as Owner', async () => {
+  expect(
+    await resultOf(bobInAcme, 'workspace.createChat', {
+      workspaceId: acme,
+      id: 'chat-new-channel',
+      name: 'Lounge',
+      type: 'channel',
+      projectId: null,
+    }),
+  ).toEqual(succeeded)
+  expect(await chatRow('chat-new-channel')).toMatchObject({ type: 'channel', visibility: 'public' })
+  expect(await participantsOf('chat-new-channel')).toEqual([{ userId: bob, roleId: 'owner' }])
+})
+
+test.each([
+  ['the owner', 'chat-research', alice, builtInChatRoles[0]?.permissions],
+  ['a prompter', 'chat-invoice-bug', bob, ['chat.read', 'chat.post']],
+  ['a reader', 'chat-invoice-bug', lee, ['chat.read']],
+  ['a non-participant of a private chat', 'chat-research', bob, []],
+  ['a non-participant of a public channel', 'chat-standup', lee, ['chat.read', 'chat.post']],
+  ['a member of a chat of another workspace', 'chat-general', bob, []],
+])('the permissions read gives %s their effective permissions', async (_, chat, member, permissions) => {
+  expect(
+    await zeroDrizzle(schema, database).transaction((tx) =>
+      memberChatPermissions(tx, acme, chatId(chat), memberId(member)),
+    ),
+  ).toEqual(permissions as never)
 })
 
 test('renameProject and archiveProject with the release policy update the project and detach its chats', async () => {
@@ -67,7 +107,7 @@ test('renameProject and archiveProject with the release policy update the projec
   expect(await chatRow('chat-welcome')).toMatchObject({ projectId: null, archived: false })
 })
 
-test('createWorkspace creates the workspace and the caller admin membership with their display name', async () => {
+test('createWorkspace creates the workspace, the caller admin membership with their display name and the built-in chat roles', async () => {
   expect(
     await resultOf(bobInAcme, 'workspace.createWorkspace', { workspaceId: acme, id: 'workspace-new', name: 'Initech' }),
   ).toEqual(succeeded)
@@ -79,6 +119,11 @@ test('createWorkspace creates the workspace and the caller admin membership with
   expect(await database.query.memberships.findMany({ where: { workspaceId: 'workspace-new' } })).toEqual([
     { workspaceId: 'workspace-new', userId: bob, role: 'admin', displayName: 'Bob' },
   ])
+  expect(
+    (await database.query.chatRoles.findMany({ where: { workspaceId: 'workspace-new' } })).map(
+      ({ id, name, permissions, builtIn }) => ({ id, name, permissions, builtIn }),
+    ),
+  ).toEqual(builtInChatRoles.map((role) => ({ ...role, permissions: [...role.permissions], builtIn: true })))
 })
 
 test.each([

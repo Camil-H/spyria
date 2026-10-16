@@ -103,7 +103,11 @@ test('startRuntimeFromMessage creates the runtime chat and its seed message in o
     originChatId: 'chat-welcome',
     projectId: 'project-onboarding',
     ownerUserId: alice,
+    visibility: 'private',
   })
+  expect(await database.$client`select user_id, role_id from chat_participants where chat_id = 'chat-started'`).toEqual(
+    [{ user_id: alice, role_id: 'owner' }] as never,
+  )
   expect(await messagesOf('chat-started')).toMatchObject([
     { id: 'message-seed', seq: 2, authorId: alice, body: 'Welcome to the team!', replyToId: 'message-welcome-1' },
   ])

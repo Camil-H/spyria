@@ -1,3 +1,4 @@
+export * from './chat-access.ts'
 export * from './errors.ts'
 export * from './ids.ts'
 export * from './models.ts'

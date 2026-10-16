@@ -2,12 +2,13 @@ import { expect, test } from 'bun:test'
 import { conversationMutators } from '@hq/conversation/server'
 import { createMockSnapshot, type Snapshot } from '@hq/db'
 import { createZeroStore } from '@hq/db/zero-store'
-import type { MemberId, WorkspaceId } from '@hq/kernel'
+import type { ChatId, MemberId, WorkspaceId } from '@hq/kernel'
 import { workspaceMutators } from '@hq/workspace/server'
 import {
   acme,
   alice,
   globex,
+  lee,
   openSharedTestApp,
   openZeroStore,
   bob,
@@ -24,33 +25,44 @@ const visibleTo = (snapshot: Snapshot, viewerId: MemberId, workspaceIds: readonl
     rows.filter((row) => workspaceIds.includes(row.workspaceId))
   const ownedByViewer = <Row extends { workspaceId: WorkspaceId; memberId: MemberId }>(rows: readonly Row[]) =>
     inWorkspaces(rows).filter((row) => row.memberId === viewerId)
-  const chatOwners = new Set(inWorkspaces(snapshot.chats).map((chat) => `${chat.workspaceId}/${chat.ownerId}`))
-  const ownedByViewerOrChatOwner = <Row extends { workspaceId: WorkspaceId; memberId: MemberId }>(
+  const keyOf = (workspaceId: WorkspaceId, chatId: ChatId) => `${workspaceId}/${chatId}`
+  const participations = new Set(
+    snapshot.chatMembers.filter((row) => row.memberId === viewerId).map((row) => keyOf(row.workspaceId, row.chatId)),
+  )
+  const readableChats = inWorkspaces(snapshot.chats).filter(
+    (chat) => chat.visibility === 'public' || participations.has(keyOf(chat.workspaceId, chat.id)),
+  )
+  const readableChatKeys = new Set(readableChats.map((chat) => keyOf(chat.workspaceId, chat.id)))
+  const inReadableChats = <Row extends { workspaceId: WorkspaceId; chatId: ChatId }>(rows: readonly Row[]) =>
+    rows.filter((row) => readableChatKeys.has(keyOf(row.workspaceId, row.chatId)))
+  const readableChatOwners = new Set(readableChats.map((chat) => `${chat.workspaceId}/${chat.ownerId}`))
+  const ownedByViewerOrReadableChatOwner = <Row extends { workspaceId: WorkspaceId; memberId: MemberId }>(
     rows: readonly Row[],
   ) =>
     inWorkspaces(rows).filter(
-      (row) => row.memberId === viewerId || chatOwners.has(`${row.workspaceId}/${row.memberId}`),
+      (row) => row.memberId === viewerId || readableChatOwners.has(`${row.workspaceId}/${row.memberId}`),
     )
   return {
     ...snapshot,
     workspaces: snapshot.workspaces.filter((workspace) => workspaceIds.includes(workspace.id)),
     memberships: inWorkspaces(snapshot.memberships),
     projects: inWorkspaces(snapshot.projects),
-    chats: inWorkspaces(snapshot.chats),
-    messages: inWorkspaces(snapshot.messages),
-    files: inWorkspaces(snapshot.files),
-    changes: inWorkspaces(snapshot.changes),
-    terminalLines: inWorkspaces(snapshot.terminalLines),
-    planSteps: inWorkspaces(snapshot.planSteps),
-    commits: inWorkspaces(snapshot.commits),
-    browserPages: inWorkspaces(snapshot.browserPages),
-    usageEntries: inWorkspaces(snapshot.usageEntries),
-    sources: inWorkspaces(snapshot.sources),
-    chatMembers: inWorkspaces(snapshot.chatMembers),
-    readMarkers: ownedByViewer(snapshot.readMarkers),
+    chats: readableChats,
+    chatRoles: inWorkspaces(snapshot.chatRoles),
+    messages: inReadableChats(snapshot.messages),
+    files: inReadableChats(snapshot.files),
+    changes: inReadableChats(snapshot.changes),
+    terminalLines: inReadableChats(snapshot.terminalLines),
+    planSteps: inReadableChats(snapshot.planSteps),
+    commits: inReadableChats(snapshot.commits),
+    browserPages: inReadableChats(snapshot.browserPages),
+    usageEntries: inReadableChats(snapshot.usageEntries),
+    sources: inReadableChats(snapshot.sources),
+    chatMembers: inReadableChats(snapshot.chatMembers),
+    readMarkers: inReadableChats(ownedByViewer(snapshot.readMarkers)),
     llmCredentials: ownedByViewer(snapshot.llmCredentials),
-    workspaceConnections: ownedByViewerOrChatOwner(snapshot.workspaceConnections),
-    toolConnections: ownedByViewerOrChatOwner(snapshot.toolConnections),
+    workspaceConnections: ownedByViewerOrReadableChatOwner(snapshot.workspaceConnections),
+    toolConnections: ownedByViewerOrReadableChatOwner(snapshot.toolConnections),
   }
 }
 
@@ -76,9 +88,49 @@ await waitFor(() => Bun.deepEquals(normalized(replicaWatcher.read()), expectedFo
 test.each([
   { viewer: 'Alice', viewerId: alice, workspaceIds: [acme, globex] },
   { viewer: 'Bob', viewerId: bob, workspaceIds: [acme] },
+  { viewer: 'Lee', viewerId: lee, workspaceIds: [acme] },
 ])('$viewer reads through Zero exactly the mock snapshot visible to them', async ({ viewerId, workspaceIds }) => {
   const store = await openZeroStore(createZeroStore, viewerId, workspaceIds)
   expect(normalized(store.read())).toEqual(expectedFor(viewerId, workspaceIds))
+})
+
+test.each([
+  {
+    viewer: 'Alice, prompter on Setup helper',
+    viewerId: alice,
+    chats: ['Welcome', 'Setup helper', 'Invoice bug', 'Standup', 'Research'],
+  },
+  {
+    viewer: 'Bob, prompter on Invoice bug',
+    viewerId: bob,
+    chats: ['Welcome', 'Setup helper', 'Invoice bug', 'Standup'],
+  },
+  { viewer: 'Lee, reader on Invoice bug', viewerId: lee, chats: ['Welcome', 'Invoice bug', 'Standup'] },
+])(
+  '$viewer reads the public channels and the private chats they take part in, nothing of the others',
+  async ({ viewerId, chats }) => {
+    const store = await openZeroStore(createZeroStore, viewerId, [acme])
+    const read = store.read()
+    expect(read.chats.map((chat) => chat.name)).toEqual([...chats])
+    const readableChatIds = new Set<string>(read.chats.map((chat) => chat.id))
+    const chatIdsOf = (rows: readonly { chatId: string }[]) => rows.map((row) => row.chatId)
+    for (const rows of [read.messages, read.chatMembers, read.files, read.usageEntries, read.browserPages])
+      expect(chatIdsOf(rows).filter((id) => !readableChatIds.has(id))).toEqual([])
+    expect(read.chatRoles.map((role) => role.id)).toEqual(['editor', 'owner', 'prompter', 'reader'])
+  },
+)
+
+test('a participant row added to a private chat syncs it with its rows, and removing it takes them away', async () => {
+  const store = await openZeroStore(createZeroStore, bob, [acme])
+  const researchOf = () => store.read().chats.filter((chat) => chat.id === 'chat-research')
+  expect(researchOf()).toEqual([])
+  await database.$client`
+    insert into chat_participants (workspace_id, chat_id, user_id, role_id) values (${acme}, 'chat-research', ${bob}, 'reader')`
+  await waitFor(() => researchOf().length === 1)
+  await database.$client`delete from chat_participants where chat_id = 'chat-research' and user_id = ${bob}`
+  await waitFor(
+    () => researchOf().length === 0 && store.read().chatMembers.every((row) => row.chatId !== 'chat-research'),
+  )
 })
 
 test('signing out of a workspace removes its rows but keeps it listed, signing in brings them back', async () => {

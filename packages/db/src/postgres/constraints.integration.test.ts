@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from 'bun:test'
 import { eq } from 'drizzle-orm'
-import { chats, events, messages, readMarkers } from './tables.ts'
+import { chatParticipants, chatRoles, chats, events, messages, readMarkers } from './tables.ts'
 import { createTestDatabase, databaseDropTimeoutMilliseconds } from './testing.ts'
 
 const seededDatabase = await createTestDatabase()
@@ -51,6 +51,7 @@ const crossTenantWrites = {
       id: 'chat-cross-tenant',
       projectId: 'project-launch',
       type: 'channel',
+      visibility: 'public',
       ownerKind: 'user',
       ownerUserId: 'member-alice',
       name: 'Cross tenant',
@@ -61,7 +62,25 @@ const crossTenantWrites = {
     database
       .insert(readMarkers)
       .values({ workspaceId: 'workspace-globex', userId: 'member-alice', chatId: 'chat-welcome', lastReadSeq: 1 }),
+  'a participant whose role is not in its workspace': () =>
+    database
+      .insert(chatParticipants)
+      .values({ workspaceId: 'workspace-acme', chatId: 'chat-research', userId: 'member-bob', roleId: 'missing' }),
 }
+
+test('refuses a chat role without chat.read', async () => {
+  expect(
+    await refusalOf(
+      database.insert(chatRoles).values({
+        workspaceId: 'workspace-acme',
+        id: 'poster',
+        name: 'Poster',
+        permissions: ['chat.post'],
+        builtIn: false,
+      }),
+    ),
+  ).toMatchObject({ code: '23514' })
+})
 
 test('a same-tenant message is accepted', async () => {
   expect(await refusalOf(database.insert(messages).values(message({})))).toBe('accepted')

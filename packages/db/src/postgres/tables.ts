@@ -1,3 +1,4 @@
+import type { ChatPermission, ChatVisibility } from '@hq/kernel'
 import { sql } from 'drizzle-orm'
 import {
   bigint,
@@ -115,6 +116,7 @@ export const chats = table(
     id: text().notNull(),
     projectId: text(),
     type: text().$type<'channel' | 'runtime'>().notNull(),
+    visibility: text().$type<ChatVisibility>().notNull(),
     mode: text().$type<'dev' | 'non-dev'>(),
     ownerKind: text().$type<'user' | 'service_identity'>().notNull(),
     ownerUserId: text(),
@@ -155,13 +157,31 @@ export const chats = table(
 const chatReference = (table: { workspaceId: PgColumn; chatId: PgColumn }) =>
   tenantReference([table.workspaceId, table.chatId], [chats.workspaceId, chats.id])
 
+export const chatRoles = table(
+  'chat_roles',
+  {
+    workspaceId: text()
+      .notNull()
+      .references(() => workspaces.workspaceId),
+    id: text().notNull(),
+    name: text().notNull(),
+    permissions: text().$type<ChatPermission>().array().notNull(),
+    builtIn: boolean().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.id] }),
+    check('chat_roles_permissions_read', sql`'chat.read' = any(${table.permissions})`),
+  ],
+)
+
 export const chatParticipants = table(
   'chat_participants',
-  { ...chatScoped, userId: text().notNull(), role: text().notNull() },
+  { ...chatScoped, userId: text().notNull(), roleId: text().notNull() },
   (table) => [
     primaryKey({ columns: [table.workspaceId, table.chatId, table.userId] }),
     chatReference(table),
     memberReference(table, table.userId),
+    tenantReference([table.workspaceId, table.roleId], [chatRoles.workspaceId, chatRoles.id]),
   ],
 )
 
@@ -502,30 +522,68 @@ export const relations = defineRelations(
     memberships,
     projects,
     chats,
+    chatRoles,
     chatParticipants,
     messages,
     readMarkers,
     workspaceConnections,
     toolConnections,
+    files,
+    changes,
+    terminalLines,
+    planSteps,
+    commits,
+    browserPages,
+    sources,
+    usageEntries,
+    runtimes,
   },
-  (r) => ({
-    users: {
-      memberships: r.many.memberships({ from: r.users.id, to: r.memberships.userId }),
-    },
-    workspaces: {
-      memberships: r.many.memberships({ from: r.workspaces.workspaceId, to: r.memberships.workspaceId }),
-    },
-    workspaceConnections: {
-      ownedChats: r.many.chats({
-        from: [r.workspaceConnections.workspaceId, r.workspaceConnections.userId],
-        to: [r.chats.workspaceId, r.chats.ownerUserId],
-      }),
-    },
-    toolConnections: {
-      ownedChats: r.many.chats({
-        from: [r.toolConnections.workspaceId, r.toolConnections.userId],
-        to: [r.chats.workspaceId, r.chats.ownerUserId],
-      }),
-    },
-  }),
+  (r) => {
+    const chatOf = (scoped: { workspaceId: unknown; chatId: unknown }) =>
+      r.one.chats({ from: [scoped.workspaceId, scoped.chatId] as never, to: [r.chats.workspaceId, r.chats.id] })
+    return {
+      users: {
+        memberships: r.many.memberships({ from: r.users.id, to: r.memberships.userId }),
+      },
+      workspaces: {
+        memberships: r.many.memberships({ from: r.workspaces.workspaceId, to: r.memberships.workspaceId }),
+      },
+      workspaceConnections: {
+        ownedChats: r.many.chats({
+          from: [r.workspaceConnections.workspaceId, r.workspaceConnections.userId],
+          to: [r.chats.workspaceId, r.chats.ownerUserId],
+        }),
+      },
+      toolConnections: {
+        ownedChats: r.many.chats({
+          from: [r.toolConnections.workspaceId, r.toolConnections.userId],
+          to: [r.chats.workspaceId, r.chats.ownerUserId],
+        }),
+      },
+      chats: {
+        participants: r.many.chatParticipants({
+          from: [r.chats.workspaceId, r.chats.id],
+          to: [r.chatParticipants.workspaceId, r.chatParticipants.chatId],
+        }),
+      },
+      chatParticipants: {
+        chat: chatOf(r.chatParticipants),
+        role: r.one.chatRoles({
+          from: [r.chatParticipants.workspaceId, r.chatParticipants.roleId],
+          to: [r.chatRoles.workspaceId, r.chatRoles.id],
+        }),
+      },
+      messages: { chat: chatOf(r.messages) },
+      readMarkers: { chat: chatOf(r.readMarkers) },
+      files: { chat: chatOf(r.files) },
+      changes: { chat: chatOf(r.changes) },
+      terminalLines: { chat: chatOf(r.terminalLines) },
+      planSteps: { chat: chatOf(r.planSteps) },
+      commits: { chat: chatOf(r.commits) },
+      browserPages: { chat: chatOf(r.browserPages) },
+      sources: { chat: chatOf(r.sources) },
+      usageEntries: { chat: chatOf(r.usageEntries) },
+      runtimes: { chat: chatOf(r.runtimes) },
+    }
+  },
 )

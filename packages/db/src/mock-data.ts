@@ -1,4 +1,5 @@
 import {
+  builtInChatRoles,
   chatId,
   credentialId,
   type MemberId,
@@ -7,6 +8,7 @@ import {
   messageId,
   type ProjectId,
   projectId,
+  visibilityOf,
   type WorkspaceId,
   workspaceId,
 } from '@hq/kernel'
@@ -16,6 +18,7 @@ export const acme = workspaceId('workspace-acme')
 export const globex = workspaceId('workspace-globex')
 export const alice = memberId('member-alice')
 export const bob = memberId('member-bob')
+export const lee = memberId('member-lee')
 const onboarding = projectId('project-onboarding')
 const billing = projectId('project-billing')
 const launch = projectId('project-launch')
@@ -54,6 +57,7 @@ const chat = (
   workspaceId: workspace,
   projectId: project,
   type: runtime ? 'runtime' : 'channel',
+  visibility: visibilityOf(runtime ? 'runtime' : 'channel'),
   name,
   ownerId,
   archived: false,
@@ -67,11 +71,11 @@ const chat = (
   originChatId: null,
   agentTurnMessageId: null,
 })
-const bobCanPrompt = (chat: string) => ({
+const participant = (chat: string, memberId: MemberId, roleId: string) => ({
   workspaceId: acme,
   chatId: chatId(chat),
-  memberId: bob,
-  role: 'Can prompt',
+  memberId,
+  roleId,
 })
 
 const message = (
@@ -125,140 +129,160 @@ const withReplyTargets = (messages: readonly MessageRow[]) => {
   })
 }
 
-export const createMockSnapshot = (): Snapshot => ({
-  workspaces: [
-    { id: acme, name: 'Acme', localSessions: true },
-    { id: globex, name: 'Globex', localSessions: true },
-  ],
-  memberships: [
-    { memberId: alice, workspaceId: acme, displayName: 'Alice', role: 'admin' },
-    { memberId: bob, workspaceId: acme, displayName: 'Bob', role: 'member' },
-    { memberId: alice, workspaceId: globex, displayName: 'Alice', role: 'admin' },
-  ],
-  projects: [
-    { id: onboarding, workspaceId: acme, name: 'Onboarding', archived: false },
-    { id: billing, workspaceId: acme, name: 'Billing', archived: false },
-    { id: launch, workspaceId: globex, name: 'Launch', archived: false },
-  ],
-  chats: [
-    chat('chat-welcome', acme, onboarding, 'Welcome', alice),
-    chat('chat-setup-helper', acme, onboarding, 'Setup helper', bob, {
-      model: 'openai/gpt-5',
-      reasoningEffort: 'medium',
-      gitBranch: 'main',
-    }),
-    chat('chat-invoice-bug', acme, billing, 'Invoice bug', alice, {
-      model: 'anthropic/claude-sonnet-5-5',
-      reasoningEffort: 'high',
-      gitBranch: 'fix/invoice-tax',
-    }),
-    chat('chat-standup', acme, null, 'Standup', bob),
-    chat('chat-research', acme, null, 'Research', alice, {
-      model: null,
-      reasoningEffort: null,
-      gitBranch: null,
-    }),
-    chat('chat-launch-plan', globex, launch, 'Launch plan', alice, {
-      model: null,
-      reasoningEffort: null,
-      gitBranch: null,
-    }),
-    chat('chat-general', globex, null, 'General', alice),
-  ],
-  messages: withReplyTargets([
-    member('welcome-1', 'chat-welcome', acme, bob, 'Welcome to the team!', '09:00'),
-    member('welcome-2', 'chat-welcome', acme, alice, 'Thanks, glad to be here.', '09:02'),
-    member('standup-1', 'chat-standup', acme, bob, 'Standup at 10.', '09:30'),
-    member('general-1', 'chat-general', globex, alice, 'Hello Globex.', '08:00'),
-    member('setup-1', 'chat-setup-helper', acme, bob, 'Set up the dev environment.', '10:00'),
-    agent('setup-2', 'chat-setup-helper', acme, "I'll install the dependencies first.", '10:01'),
-    command('setup-3', 'chat-setup-helper', acme, 'Ran: bun install', '10:02', 'Done in 35s'),
-    agent('setup-4', 'chat-setup-helper', acme, 'Dependencies installed.', '10:03'),
-    member('invoice-1', 'chat-invoice-bug', acme, alice, 'Why do invoices show the wrong total?', '11:00'),
-    agent('invoice-2', 'chat-invoice-bug', acme, 'Checking the invoice calculation.', '11:01'),
-    command('invoice-3', 'chat-invoice-bug', acme, 'Read: billing/invoice.ts', '11:02', 'export const total = ...'),
-    agent('invoice-4', 'chat-invoice-bug', acme, 'The tax is applied twice.', '11:03'),
-  ]),
-  drafts: [],
-  readMarkers: [
-    { workspaceId: acme, memberId: alice, chatId: welcomeChat, lastReadSeq: 2 },
-    { workspaceId: acme, memberId: alice, chatId: invoiceChat, lastReadSeq: 4 },
-  ],
-  files: [
-    file('billing', 'folder'),
-    file('billing/invoice.ts'),
-    file('billing/tax.ts'),
-    file('tests', 'folder'),
-    file('tests/invoice.test.ts'),
-    file('package.json'),
-  ],
-  changes: [
-    change('billing/tax.ts', 3, 5, [
-      { kind: 'context', text: 'export const invoiceTotal = (net: number) => {' },
-      { kind: 'removed', text: 'const total = applyTax(applyTax(net))' },
-      { kind: 'added', text: 'const total = applyTax(net)' },
-      { kind: 'context', text: 'return total' },
+const createChats = () => [
+  chat('chat-welcome', acme, onboarding, 'Welcome', alice),
+  chat('chat-setup-helper', acme, onboarding, 'Setup helper', bob, {
+    model: 'openai/gpt-5',
+    reasoningEffort: 'medium',
+    gitBranch: 'main',
+  }),
+  chat('chat-invoice-bug', acme, billing, 'Invoice bug', alice, {
+    model: 'anthropic/claude-sonnet-5-5',
+    reasoningEffort: 'high',
+    gitBranch: 'fix/invoice-tax',
+  }),
+  chat('chat-standup', acme, null, 'Standup', bob),
+  chat('chat-research', acme, null, 'Research', alice, {
+    model: null,
+    reasoningEffort: null,
+    gitBranch: null,
+  }),
+  chat('chat-launch-plan', globex, launch, 'Launch plan', alice, {
+    model: null,
+    reasoningEffort: null,
+    gitBranch: null,
+  }),
+  chat('chat-general', globex, null, 'General', alice),
+]
+
+export const createMockSnapshot = (): Snapshot => {
+  const chats = createChats()
+  return {
+    workspaces: [
+      { id: acme, name: 'Acme', localSessions: true },
+      { id: globex, name: 'Globex', localSessions: true },
+    ],
+    memberships: [
+      { memberId: alice, workspaceId: acme, displayName: 'Alice', role: 'admin' },
+      { memberId: bob, workspaceId: acme, displayName: 'Bob', role: 'member' },
+      { memberId: lee, workspaceId: acme, displayName: 'Lee', role: 'member' },
+      { memberId: alice, workspaceId: globex, displayName: 'Alice', role: 'admin' },
+    ],
+    projects: [
+      { id: onboarding, workspaceId: acme, name: 'Onboarding', archived: false },
+      { id: billing, workspaceId: acme, name: 'Billing', archived: false },
+      { id: launch, workspaceId: globex, name: 'Launch', archived: false },
+    ],
+    chats,
+    messages: withReplyTargets([
+      member('welcome-1', 'chat-welcome', acme, bob, 'Welcome to the team!', '09:00'),
+      member('welcome-2', 'chat-welcome', acme, alice, 'Thanks, glad to be here.', '09:02'),
+      member('standup-1', 'chat-standup', acme, bob, 'Standup at 10.', '09:30'),
+      member('general-1', 'chat-general', globex, alice, 'Hello Globex.', '08:00'),
+      member('setup-1', 'chat-setup-helper', acme, bob, 'Set up the dev environment.', '10:00'),
+      agent('setup-2', 'chat-setup-helper', acme, "I'll install the dependencies first.", '10:01'),
+      command('setup-3', 'chat-setup-helper', acme, 'Ran: bun install', '10:02', 'Done in 35s'),
+      agent('setup-4', 'chat-setup-helper', acme, 'Dependencies installed.', '10:03'),
+      member('invoice-1', 'chat-invoice-bug', acme, alice, 'Why do invoices show the wrong total?', '11:00'),
+      agent('invoice-2', 'chat-invoice-bug', acme, 'Checking the invoice calculation.', '11:01'),
+      command('invoice-3', 'chat-invoice-bug', acme, 'Read: billing/invoice.ts', '11:02', 'export const total = ...'),
+      agent('invoice-4', 'chat-invoice-bug', acme, 'The tax is applied twice.', '11:03'),
     ]),
-    change('tests/invoice.test.ts', 12, 0, [{ kind: 'added', text: "test('applies tax once', () => {})" }]),
-  ],
-  terminalLines: [terminalLine('$ bun test'), terminalLine('3 pass'), terminalLine('0 fail')],
-  planSteps: [
-    planStep('Reproduce the bug', 'done'),
-    planStep('Fix the tax calculation', 'in-progress'),
-    planStep('Add a regression test', 'todo'),
-  ],
-  commits: [
-    {
-      ...invoiceBug,
-      sha: 'a1b2c3d',
-      message: 'Fix tax applied twice',
-      authorId: alice,
-      committedAt: '2026-09-30T11:20:00.000Z',
-    },
-  ],
-  browserPages: [
-    {
-      ...invoiceBug,
-      url: 'http://localhost:3000/invoices',
-      title: 'Invoices',
-      bodyText: 'Invoice total: 120.00',
-    },
-    {
-      workspaceId: acme,
-      chatId: welcomeChat,
-      url: 'https://example.com/onboarding',
-      title: 'Onboarding guide',
-      bodyText: 'Welcome to the team.',
-    },
-  ],
-  usageEntries: [
-    { ...invoiceBug, month: currentMonth(), memberId: alice, tokens: 12400, costMicros: 180_000, calls: 3 },
-    { ...invoiceBug, month: currentMonth(), memberId: bob, tokens: 3100, costMicros: 50_000, calls: 1 },
-  ],
-  sources: [
-    { workspaceId: acme, chatId: welcomeChat, name: 'Employee handbook', origin: 'Onyx' },
-    { workspaceId: acme, chatId: welcomeChat, name: 'Onboarding wiki page', origin: 'Wiki' },
-  ],
-  toolConnections: [
-    toolConnection('GitHub', 'Connected'),
-    toolConnection('Slack', 'Connected'),
-    toolConnection('Notion', 'Needs reconnection'),
-  ],
-  chatMembers: [bobCanPrompt('chat-invoice-bug'), bobCanPrompt('chat-welcome')],
-  llmCredentials: [
-    {
-      id: credentialId('credential-alice-anthropic'),
-      workspaceId: acme,
-      memberId: alice,
-      provider: 'Anthropic',
-      last4: 'a1b2',
-    },
-  ],
-  workspaceConnections: [
-    workspaceConnection(alice, 'Postgres', '2 of 5 tables'),
-    workspaceConnection(alice, 'Onyx', 'All sources'),
-    workspaceConnection(bob, 'Postgres', '1 of 5 tables'),
-  ],
-  runtimeHosts: [],
-  runtimes: [],
-})
+    drafts: [],
+    readMarkers: [
+      { workspaceId: acme, memberId: alice, chatId: welcomeChat, lastReadSeq: 2 },
+      { workspaceId: acme, memberId: alice, chatId: invoiceChat, lastReadSeq: 4 },
+    ],
+    files: [
+      file('billing', 'folder'),
+      file('billing/invoice.ts'),
+      file('billing/tax.ts'),
+      file('tests', 'folder'),
+      file('tests/invoice.test.ts'),
+      file('package.json'),
+    ],
+    changes: [
+      change('billing/tax.ts', 3, 5, [
+        { kind: 'context', text: 'export const invoiceTotal = (net: number) => {' },
+        { kind: 'removed', text: 'const total = applyTax(applyTax(net))' },
+        { kind: 'added', text: 'const total = applyTax(net)' },
+        { kind: 'context', text: 'return total' },
+      ]),
+      change('tests/invoice.test.ts', 12, 0, [{ kind: 'added', text: "test('applies tax once', () => {})" }]),
+    ],
+    terminalLines: [terminalLine('$ bun test'), terminalLine('3 pass'), terminalLine('0 fail')],
+    planSteps: [
+      planStep('Reproduce the bug', 'done'),
+      planStep('Fix the tax calculation', 'in-progress'),
+      planStep('Add a regression test', 'todo'),
+    ],
+    commits: [
+      {
+        ...invoiceBug,
+        sha: 'a1b2c3d',
+        message: 'Fix tax applied twice',
+        authorId: alice,
+        committedAt: '2026-09-30T11:20:00.000Z',
+      },
+    ],
+    browserPages: [
+      {
+        ...invoiceBug,
+        url: 'http://localhost:3000/invoices',
+        title: 'Invoices',
+        bodyText: 'Invoice total: 120.00',
+      },
+      {
+        workspaceId: acme,
+        chatId: welcomeChat,
+        url: 'https://example.com/onboarding',
+        title: 'Onboarding guide',
+        bodyText: 'Welcome to the team.',
+      },
+    ],
+    usageEntries: [
+      { ...invoiceBug, month: currentMonth(), memberId: alice, tokens: 12400, costMicros: 180_000, calls: 3 },
+      { ...invoiceBug, month: currentMonth(), memberId: bob, tokens: 3100, costMicros: 50_000, calls: 1 },
+    ],
+    sources: [
+      { workspaceId: acme, chatId: welcomeChat, name: 'Employee handbook', origin: 'Onyx' },
+      { workspaceId: acme, chatId: welcomeChat, name: 'Onboarding wiki page', origin: 'Wiki' },
+    ],
+    toolConnections: [
+      toolConnection('GitHub', 'Connected'),
+      toolConnection('Slack', 'Connected'),
+      toolConnection('Notion', 'Needs reconnection'),
+    ],
+    chatMembers: [
+      ...chats.map((chat) => ({
+        workspaceId: chat.workspaceId,
+        chatId: chat.id,
+        memberId: chat.ownerId,
+        roleId: 'owner',
+      })),
+      participant('chat-invoice-bug', bob, 'prompter'),
+      participant('chat-welcome', bob, 'prompter'),
+      participant('chat-setup-helper', alice, 'prompter'),
+      participant('chat-invoice-bug', lee, 'reader'),
+    ],
+    chatRoles: [acme, globex].flatMap((workspaceId) =>
+      builtInChatRoles.map((role) => ({ ...role, workspaceId, builtIn: true })),
+    ),
+    llmCredentials: [
+      {
+        id: credentialId('credential-alice-anthropic'),
+        workspaceId: acme,
+        memberId: alice,
+        provider: 'Anthropic',
+        last4: 'a1b2',
+      },
+    ],
+    workspaceConnections: [
+      workspaceConnection(alice, 'Postgres', '2 of 5 tables'),
+      workspaceConnection(alice, 'Onyx', 'All sources'),
+      workspaceConnection(bob, 'Postgres', '1 of 5 tables'),
+    ],
+    runtimeHosts: [],
+    runtimes: [],
+  }
+}

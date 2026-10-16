@@ -177,8 +177,8 @@ test('concurrent senders, and concurrent messages and chat changes, get unique g
 
 test('a migrated tool-call row equals the rebuild of its events', async () => {
   await database.$client`
-    insert into chats (workspace_id, id, type, owner_kind, owner_user_id, name, archived, created_at)
-    values (${acme}, 'chat-legacy', 'runtime', 'user', ${alice}, 'Legacy chat', false, now())`
+    insert into chats (workspace_id, id, type, visibility, owner_kind, owner_user_id, name, archived, created_at)
+    values (${acme}, 'chat-legacy', 'runtime', 'private', 'user', ${alice}, 'Legacy chat', false, now())`
   const migrations = new URL('../../../packages/db/drizzle/', import.meta.url).pathname
   const [migrationPath] = await Array.fromAsync(new Bun.Glob('*_agent_steps/migration.sql').scan(migrations))
   const migration = await Bun.file(`${migrations}${migrationPath}`).text()

@@ -1,5 +1,6 @@
 import {
   addLlmKey,
+  addParticipant,
   agentReplyText,
   expect,
   type Locator,
@@ -90,6 +91,7 @@ test('3. two prompters each get a row, the total is their sum, and workspace set
   browser,
   workerStack,
 }) => {
+  await addParticipant(workerStack, 'chat-research', 'member-bob', 'prompter')
   const bobPage = await openPageAs(browser, workerStack, 'member-bob')
   await addLlmKey(bobPage, 'Fake')
   await prompt(page, 'Alice asks', 1)

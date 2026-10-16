@@ -17,7 +17,8 @@ import {
 setDefaultTimeout(40_000)
 const { database, app, gateway, llmGateway, setFakeLlmScript, mutate, prompt, repliesTo, ...stack } =
   await startAgentStack({ routing: true })
-const newRuntimeChat = (ownerId = alice) => stack.newRuntimeChat({ ownerId })
+const newRuntimeChat = (ownerId = alice, participants: { memberId: string; roleId: string }[] = []) =>
+  stack.newRuntimeChat({ ownerId, participants })
 
 type Route = { tier: string; confidence: string | number; effort: string; prose?: boolean } | 'fail' | 'slow'
 const routeWith = (route: Route) => setFakeLlmScript({ route })
@@ -159,7 +160,7 @@ test('a prompter reaching only a small model routes to it, and is refused in a s
   expect(await chatOf(bobChat)).toMatchObject({ model: 'fake-small/fake-small' })
   expect(launches().map((launch) => launch.agent.acp_model)).toEqual(['hq/fake-small/fake-small'])
 
-  const aliceChat = await newRuntimeChat()
+  const aliceChat = await newRuntimeChat(alice, [{ memberId: bob, roleId: 'editor' }])
   await answered(await prompt(aliceChat, 'Alice starts on large'))
   await routing(aliceChat, aliceInAcme, { sessionModel: 'fake/fake-large' })
   const bobPrompt = await prompt(aliceChat, 'Bob joins', bobInAcme)

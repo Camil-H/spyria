@@ -119,7 +119,7 @@ test('a machine question reaches viewers live and again after a reconnect; the o
 test('on an HQ runtime chat another member who may prompt answers, a member without a key cannot', async () => {
   await workspaceHost()
   await database.$client`delete from llm_credentials where user_id = ${bob}`
-  const chat = await newRuntimeChat()
+  const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'prompter' }] })
   const frames = await stack.subscribedFrames(chat)
   const asked = await prompt(chat, 'stub:ask')
   const questionId = await askedIn(frames)

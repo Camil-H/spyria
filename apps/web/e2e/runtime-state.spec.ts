@@ -1,4 +1,5 @@
 import {
+  addParticipant,
   agentReplyText,
   expect,
   mainOf,
@@ -140,6 +141,7 @@ test.describe('without a warm runtime', () => {
     release,
   }) => {
     await agentScript(research, heldScript)
+    await addParticipant(workerStack, research, 'member-bob', 'editor')
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
     await openChat(bobPage, 'Research')
     await expect(runtimeStatusOf(bobPage)).toHaveText('Not started')

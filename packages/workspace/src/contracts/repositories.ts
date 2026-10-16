@@ -1,4 +1,4 @@
-import type { ChatId, ProjectId } from '@hq/kernel'
+import type { ChatId, ChatPermission, MemberId, ProjectId } from '@hq/kernel'
 import type { Chat, ChatChange } from '../domain/chat.ts'
 import type { Project } from '../domain/project.ts'
 import type { Membership, Workspace } from '../domain/workspace.ts'
@@ -13,6 +13,7 @@ export type ChatRepository = {
   get(chatId: ChatId): Promise<Chat>
   record(change: ChatChange): Promise<void>
   listByProject(projectId: ProjectId): Promise<Chat[]>
+  permissions(chatId: ChatId, memberId: MemberId): Promise<readonly ChatPermission[]>
 }
 
 export type WorkspaceRepository = {

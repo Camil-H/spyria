@@ -1,7 +1,7 @@
 import { appendChatEvent } from '@hq/db/server-writes'
 import type { Chat as ChatRow, Project as ProjectRow } from '@hq/db/zero'
-import { type ZeroContext, zql } from '@hq/db/zero-queries'
-import { chatId, memberId, projectId, workspaceId } from '@hq/kernel'
+import { memberChatPermissions, type ZeroContext, zql } from '@hq/db/zero-queries'
+import { builtInChatRoles, chatId, memberId, projectId, visibilityOf, workspaceId } from '@hq/kernel'
 import { removeChatRuntimeOnServer } from '@hq/runtime/published'
 import type { Transaction } from '@rocicorp/zero'
 import type { UnitOfWork, WorkspaceTransactor } from '../contracts/transactor.ts'
@@ -17,7 +17,15 @@ const toProject = ({ createdAt, ...row }: ProjectRow): Project => ({
   name: Name(row.name),
 })
 
-const toChat = ({ createdAt, mode, ownerKind, ownerUserId, ownerServiceIdentityId, ...row }: ChatRow): Chat => ({
+const toChat = ({
+  createdAt,
+  visibility,
+  mode,
+  ownerKind,
+  ownerUserId,
+  ownerServiceIdentityId,
+  ...row
+}: ChatRow): Chat => ({
   ...row,
   id: chatId(row.id),
   workspaceId: workspaceId(row.workspaceId),
@@ -48,6 +56,13 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
         if (await tx.run(zql.workspaces.where('workspaceId', id).one())) throw new ForeignWorkspace()
         createdWorkspaceIds.add(id)
         await tx.mutate.workspaces.insert({ workspaceId: id, name, createdBy: context.userId, createdAt: Date.now() })
+        for (const role of builtInChatRoles)
+          await tx.mutate.chatRoles.insert({
+            ...role,
+            workspaceId: id,
+            permissions: [...role.permissions],
+            builtIn: true,
+          })
       },
     },
     memberships: {
@@ -82,9 +97,10 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
       },
       record: async ({ type, chat, actorId }) => {
         const changedAt = new Date()
-        if (type === 'chat.created')
+        if (type === 'chat.created') {
           await tx.mutate.chats.insert({
             ...chatFields(inContextWorkspace(chat)),
+            visibility: visibilityOf(chat.type),
             mode: null,
             ownerKind: 'user',
             ownerUserId: chat.ownerId,
@@ -93,7 +109,13 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
             localSession: chat.type === 'runtime' ? null : false,
             createdAt: changedAt.getTime(),
           })
-        else await tx.mutate.chats.update(chatFields(inContextWorkspace(chat)))
+          await tx.mutate.chatParticipants.insert({
+            workspaceId: chat.workspaceId,
+            chatId: chat.id,
+            userId: chat.ownerId,
+            roleId: 'owner',
+          })
+        } else await tx.mutate.chats.update(chatFields(inContextWorkspace(chat)))
         if (tx.location === 'server')
           await appendChatEvent(tx, {
             workspaceId: chat.workspaceId,
@@ -106,6 +128,7 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
       },
       listByProject: async (id) =>
         (await tx.run(zql.chats.where('workspaceId', context.workspaceId).where('projectId', id))).map(toChat),
+      permissions: (id, memberId) => memberChatPermissions(tx, context.workspaceId, id, memberId),
     },
     chatRuntimes: {
       remove: (chatId) => removeChatRuntimeOnServer(tx, context.workspaceId, chatId),

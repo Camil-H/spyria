@@ -1,5 +1,7 @@
 import type {
   ChatId,
+  ChatPermission,
+  ChatVisibility,
   CredentialId,
   MemberId,
   MessageId,
@@ -58,6 +60,7 @@ export type ChatRow = {
   workspaceId: WorkspaceId
   projectId: ProjectId | null
   type: 'channel' | 'runtime'
+  visibility: ChatVisibility
   name: string
   ownerId: MemberId
   archived: boolean
@@ -150,7 +153,14 @@ type ChatMemberRow = {
   workspaceId: WorkspaceId
   chatId: ChatId
   memberId: MemberId
-  role: string
+  roleId: string
+}
+type ChatRoleRow = {
+  workspaceId: WorkspaceId
+  id: string
+  name: string
+  permissions: readonly ChatPermission[]
+  builtIn: boolean
 }
 
 export type Snapshot = {
@@ -171,6 +181,7 @@ export type Snapshot = {
   sources: readonly SourceRow[]
   toolConnections: readonly ToolConnectionRow[]
   chatMembers: readonly ChatMemberRow[]
+  chatRoles: readonly ChatRoleRow[]
   llmCredentials: readonly LlmCredentialRow[]
   workspaceConnections: readonly WorkspaceConnectionRow[]
   runtimeHosts: readonly RuntimeHostRow[]

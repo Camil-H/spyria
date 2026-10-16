@@ -8,6 +8,7 @@ import {
   alice,
   aliceInAcme,
   failedWith,
+  bob,
   bobInAcme,
   sessionTokenOf,
   startAgentStack,
@@ -215,7 +216,7 @@ test.each([
   'a $harness effort: the routing read lists the tool’s levels, only the owner picks one, and it is set on the same session at the next prompt only',
   async ({ tool, harness, launched, levels, picked }) => {
     const relay = await machine({ signedIn: [tool] })
-    const chat = await newRuntimeChat({ harness })
+    const chat = await newRuntimeChat({ harness, participants: [{ memberId: bob, roleId: 'editor' }] })
     await finished(await prompt(chat, 'Hello'), chat)
     expect((await routingReadOf(chat)).adapterEfforts).toEqual({
       current: launched,
@@ -386,7 +387,7 @@ test('nothing starts for a signed-out tool, a non-owner or a choice of the HQ ru
   await waitFor(async () => (await startJobsOf(signedOut)).every(({ state }) => state === 'done'))
   expect(relay.created).toHaveLength(0)
 
-  const chat = await newRuntimeChat()
+  const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'editor' }] })
   expect(await chooseRunsOn(chat, 'claude-code', bobInAcme)).toEqual(
     failedWith('Only the owner changes how this session runs'),
   )
@@ -412,7 +413,7 @@ test('a prompt sent at once after the choice joins the one session and streams l
 
 test('before the owner chooses, a member’s prompt is refused with the waiting notice; on the machine, it gets the owner-only notice and never reaches the agent', async () => {
   const relay = await machine()
-  const chat = await newRuntimeChat()
+  const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'prompter' }] })
   await database.$client`update chats set local_session = null where id = ${chat}`
   const sneaking = { workspaceId: acme, id: `message-${crypto.randomUUID()}`, chatId: chat, text: 'Sneaking in' }
   expect(await mutate(bobInAcme, 'conversation.sendMessage', sneaking)).toEqual(

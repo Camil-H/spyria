@@ -1,4 +1,5 @@
 import {
+  addParticipant,
   agentReplyText,
   expect,
   mainOf,
@@ -76,6 +77,7 @@ test('7. another member viewing the chat sees the reply stream in, then the stor
   release,
 }) => {
   await agentScript(research, { hold: 'answer' })
+  await addParticipant(workerStack, research, 'member-bob', 'reader')
   const bobPage = await openPageAs(browser, workerStack, 'member-bob')
   await openChat(bobPage, 'Research')
   await openChat(page, 'Research')

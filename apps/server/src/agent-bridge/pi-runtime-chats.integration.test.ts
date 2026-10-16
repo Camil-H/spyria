@@ -95,7 +95,7 @@ test.each([
   async ({ provider, piProvider, baseUrl, api, models, model }) => {
     const { launches } = await workspaceHost()
     await keysOnly(provider)
-    const chat = await newRuntimeChat()
+    const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'prompter' }] })
     const frames = await stack.subscribedFrames(chat)
     const replies = await finished(await prompt(chat, 'stub:tools', bobInAcme), chat)
 
@@ -131,7 +131,7 @@ test.each([
 test('a routing change mid-session switches the same Pi session to the other provider’s model with the routed thinking level', async () => {
   const { relay, launches } = await workspaceHost()
   await keysOnly('Anthropic', 'OpenAI')
-  const chat = await newRuntimeChat()
+  const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'editor' }] })
   stack.setFakeLlmScript({ route: { tier: 'large', confidence: 'high', effort: 'high' } })
   const first = await finished(await prompt(chat, 'Start large', bobInAcme), chat)
   expect(first.at(-1)?.body).toBe(
@@ -159,7 +159,7 @@ test('a routing change mid-session switches the same Pi session to the other pro
 test('an effort change keeps the model and session and sets Pi’s thinking level once, on the next turn only; a malformed effort is refused', async () => {
   const { relay, launches } = await workspaceHost()
   await keysOnly('Anthropic')
-  const chat = await newRuntimeChat()
+  const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'editor' }] })
   await finished(await prompt(chat, 'Start', bobInAcme), chat)
   const setEffort = (reasoningEffort: string) =>
     mutate(bobInAcme, 'conversation.updateChatRouting', { workspaceId: acme, chatId: chat, reasoningEffort })
@@ -177,7 +177,7 @@ test('an effort change keeps the model and session and sets Pi’s thinking leve
 test('a manual pick from the full listing relaunches Pi with that model on the same session; an unlisted model is refused', async () => {
   const { launches } = await workspaceHost()
   await keysOnly('OpenRouter')
-  const chat = await newRuntimeChat()
+  const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'editor' }] })
   const first = await finished(await prompt(chat, 'Start on OpenRouter', bobInAcme), chat)
   expect(first.at(-1)?.body).toBe(
     '[t1] Hello from the stub (model hq/openrouter/anthropic/claude-sonnet-5.5, mode default).',
@@ -211,7 +211,7 @@ test('a manual pick from the full listing relaunches Pi with that model on the s
 test('g2. a curated pick on a provider whose key was added after Pi launched relaunches Pi on the same session with that model, and the next turn answers on it with the context kept', async () => {
   const { relay, launches } = await workspaceHost()
   await keysOnly('Anthropic')
-  const chat = await newRuntimeChat()
+  const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'editor' }] })
   const first = await finished(await prompt(chat, 'Start on Anthropic', bobInAcme), chat)
   expect(first.at(-1)?.body).toStartWith('[t1] Hello from the stub (model hq-anthropic/anthropic/')
   const [firstSession] = await sessionsStartedOf(chat)

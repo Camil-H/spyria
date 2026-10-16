@@ -48,6 +48,15 @@ export const sessionStarted = (workerStack: WorkerStack, chatId: string) =>
     )
     .toBeTruthy()
 
+export const addParticipant = async (workerStack: WorkerStack, chatId: string, memberId: string, roleId: string) => {
+  await expect
+    .poll(async () => (await workerStack.database.$client`select 1 from chats where id = ${chatId}`).length)
+    .toBe(1)
+  await workerStack.database.$client`
+    insert into chat_participants (workspace_id, chat_id, user_id, role_id)
+    values ('workspace-acme', ${chatId}, ${memberId}, ${roleId})`
+}
+
 export const sidebarOf = (page: Page) => page.getByRole('navigation', { name: 'Sidebar' })
 export const mainOf = (page: Page) => page.getByRole('main')
 export const switcherOf = (page: Page) => page.getByRole('button', { name: 'Switch workspace' })

@@ -535,3 +535,18 @@ test.each<[string, RunsOnSetup, readonly RunsOn[] | null]>([
 ])('Runs on choices: %s', (_, setup, expected) => {
   expect(runsOnChoicesOf(setup)).toEqual(expected)
 })
+
+test('a chat started from a chat the viewer cannot read shows no origin link', () => {
+  const snapshot = createMockSnapshot()
+  const startedFrom = (sourceId: string) =>
+    getConversation(
+      acme,
+      research,
+      alice,
+    )({
+      ...snapshot,
+      chats: snapshot.chats.map((chat) => (chat.id === research ? { ...chat, originChatId: chatId(sourceId) } : chat)),
+    })?.origin
+  expect(startedFrom('chat-welcome')).toEqual({ chatId: chatId('chat-welcome'), name: 'Welcome' })
+  expect(startedFrom('chat-not-synced')).toBeNull()
+})

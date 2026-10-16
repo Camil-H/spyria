@@ -1,4 +1,4 @@
-import type { ChatId, ListedModel, MemberId, MessageId, Model, WorkspaceId } from '@hq/kernel'
+import type { ChatId, ChatPermission, ListedModel, MemberId, MessageId, Model, WorkspaceId } from '@hq/kernel'
 import type { AgentEvent } from '../domain/agent-events.ts'
 import type { AgentStep, StepDelegation, StoredStep } from '../domain/agent-steps.ts'
 import type { ConversationChat, Message, MessageChange } from '../domain/message.ts'
@@ -71,6 +71,7 @@ export type ReadMarkerRepository = { markNewestRead(chatId: ChatId, memberId: Me
 
 export type ChatRepository = {
   get(chatId: ChatId): Promise<ConversationChat>
+  permissions(chatId: ChatId, memberId: MemberId): Promise<readonly ChatPermission[]>
   localSessionsAllowed(): Promise<boolean>
   hasAgentSession(chatId: ChatId): Promise<boolean>
   isSessionStartPending(chatId: ChatId): Promise<boolean>

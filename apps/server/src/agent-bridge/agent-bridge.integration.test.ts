@@ -256,7 +256,7 @@ test('a failed start and a turn error each end with one notice and no endless tu
 })
 
 test('a member without an LLM key cannot prompt a runtime chat, and still posts in a channel', async () => {
-  const chat = await newRuntimeChat()
+  const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'prompter' }] })
   const send = (chatId: string) =>
     mutate(bobInAcme, 'conversation.sendMessage', {
       workspaceId: acme,

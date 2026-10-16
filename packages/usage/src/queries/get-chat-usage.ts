@@ -1,5 +1,5 @@
 import { findChat, inChat, memberNamesIn, type Snapshot } from '@hq/db'
-import type { ChatId, MemberId, WorkspaceId } from '@hq/kernel'
+import { type ChatId, can, type MemberId, type WorkspaceId } from '@hq/kernel'
 import { type ChatUsage, monthsNewestFirst, sumUsage, type UsageMonth } from '../domain/usage.ts'
 
 export const getChatUsage =
@@ -9,10 +9,15 @@ export const getChatUsage =
     const entries = snapshot.usageEntries.filter(inChat(workspaceId, chatId))
     const entriesOfMonth = entries.filter((entry) => entry.month === month)
     const nameOf = memberNamesIn(snapshot, workspaceId)
+    const postingRoleIds = new Set(
+      snapshot.chatRoles
+        .filter((role) => role.workspaceId === workspaceId && can(role.permissions, 'chat.post'))
+        .map((role) => role.id),
+    )
     const memberIds = new Set<MemberId>([
       ...(chat ? [chat.ownerId] : []),
       ...snapshot.chatMembers
-        .filter((member) => inChat(workspaceId, chatId)(member) && member.role === 'Can prompt')
+        .filter((member) => inChat(workspaceId, chatId)(member) && postingRoleIds.has(member.roleId))
         .map((member) => member.memberId),
       ...entriesOfMonth.map((entry) => entry.memberId),
     ])

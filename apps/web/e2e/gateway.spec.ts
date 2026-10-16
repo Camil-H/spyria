@@ -1,5 +1,6 @@
 import {
   addLlmKey,
+  addParticipant,
   agentReplyText,
   blockedNotice,
   expect,
@@ -35,6 +36,7 @@ test('3 and 4. a member without a key cannot prompt; a member who removes their 
   browser,
   workerStack,
 }) => {
+  await addParticipant(workerStack, 'chat-research', 'member-bob', 'prompter')
   const bobPage = await openPageAs(browser, workerStack, 'member-bob')
   await test.step('a member without a key cannot prompt', async () => {
     await openChat(bobPage, 'Research')

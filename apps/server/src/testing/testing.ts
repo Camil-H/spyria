@@ -49,7 +49,7 @@ export const testAuthSettings = {
   oidc: { issuer: 'http://localhost:5556/dex', clientId: 'hq', redirectUri: 'http://localhost:3100/auth/callback' },
 }
 
-export { acme, alice, globex, bob } from '@hq/db'
+export { acme, alice, globex, lee, bob } from '@hq/db'
 export const aliceInAcme = { workspaceId: acme, userId: alice }
 export const bobInAcme = { workspaceId: acme, userId: bob }
 export const succeeded = {}
@@ -360,8 +360,15 @@ export const runtimeTurn = async (host: { id: string }, prompterId: string | nul
   const token = `runtime-token-${crypto.randomUUID()}`
   await database.$client.begin(async (sql) => {
     await sql`
-      insert into chats (workspace_id, id, type, owner_kind, owner_user_id, name, archived, created_at)
-      values (${acme}, ${chatId}, 'runtime', 'user', ${alice}, 'Turn chat', false, now())`
+      insert into chats (workspace_id, id, type, visibility, owner_kind, owner_user_id, name, archived, created_at)
+      values (${acme}, ${chatId}, 'runtime', 'private', 'user', ${alice}, 'Turn chat', false, now())`
+    await sql`
+      insert into chat_participants (workspace_id, chat_id, user_id, role_id)
+      values (${acme}, ${chatId}, ${alice}, 'owner')`
+    if (prompterId && prompterId !== alice)
+      await sql`
+        insert into chat_participants (workspace_id, chat_id, user_id, role_id)
+        values (${acme}, ${chatId}, ${prompterId}, 'prompter')`
     await sql`
       insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
       values (${acme}, ${chatId}, ${promptId}, 1, 'member', ${prompterId ?? alice}, 'Go', now())`
@@ -521,14 +528,22 @@ export const startAgentStack = async ({
       ownerId = alice,
       harness = null,
       id = `chat-${crypto.randomUUID()}`,
+      participants = [],
     }: {
       ownerId?: string
       harness?: string | null
       id?: string
+      participants?: { memberId: string; roleId: string }[]
     } = {}) => {
-      await database.$client`
-        insert into chats (workspace_id, id, type, owner_kind, owner_user_id, name, local_session, harness, archived, created_at)
-        values (${acme}, ${id}, 'runtime', 'user', ${ownerId}, 'Runtime chat', ${harness !== null}, ${harness}, false, now())`
+      await database.$client.begin(async (sql) => {
+        await sql`
+          insert into chats (workspace_id, id, type, visibility, owner_kind, owner_user_id, name, local_session, harness, archived, created_at)
+          values (${acme}, ${id}, 'runtime', 'private', 'user', ${ownerId}, 'Runtime chat', ${harness !== null}, ${harness}, false, now())`
+        for (const { memberId, roleId } of [{ memberId: ownerId, roleId: 'owner' }, ...participants])
+          await sql`
+            insert into chat_participants (workspace_id, chat_id, user_id, role_id)
+            values (${acme}, ${id}, ${memberId}, ${roleId})`
+      })
       return chatId(id)
     },
     prompt: async (chat: ChatId, text: string, member = aliceInAcme) => {

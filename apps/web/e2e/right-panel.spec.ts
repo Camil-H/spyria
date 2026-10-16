@@ -56,11 +56,13 @@ const expectOwnerConnections = async (page: Page) => {
   await expect(personalGroup.getByRole('listitem').filter({ hasText: 'Notion' })).toContainText('Needs reconnection')
 }
 
-const expectAliceOwnerBobPrompter = async (page: Page) => {
+const expectMembers = async (page: Page, rolesByName: [string, string][]) => {
   const members = tabPanelOf(page).getByRole('listitem')
-  await expect(members).toHaveCount(2)
-  await expect(members.filter({ hasText: 'Alice' })).toContainText('Owner')
-  await expect(members.filter({ hasText: 'Bob' })).toContainText('Can prompt')
+  await expect(members).toHaveCount(rolesByName.length)
+  for (const [index, [name, role]] of rolesByName.entries()) {
+    await expect(members.nth(index)).toContainText(name)
+    await expect(members.nth(index)).toContainText(role)
+  }
 }
 
 test.beforeEach(async ({ page }) => {
@@ -205,7 +207,11 @@ test('shows every tab of the Invoice bug runtime panel', async ({ page }) => {
 
   await test.step('lists the members with their role on Invoice bug', async () => {
     await openPanelTab(page, 'Invoice bug', 'Members')
-    await expectAliceOwnerBobPrompter(page)
+    await expectMembers(page, [
+      ['Alice', 'Owner'],
+      ['Lee', 'Reader'],
+      ['Bob', 'Prompter'],
+    ])
   })
 })
 
@@ -247,7 +253,10 @@ test('shows every tab of the Welcome channel panel', async ({ page }) => {
 
   await test.step('lists the members with their role on Welcome', async () => {
     await openPanelTab(page, 'Welcome', 'Members')
-    await expectAliceOwnerBobPrompter(page)
+    await expectMembers(page, [
+      ['Alice', 'Owner'],
+      ['Bob', 'Prompter'],
+    ])
   })
 })
 

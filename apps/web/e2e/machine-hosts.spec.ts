@@ -1,5 +1,6 @@
 import {
   addLlmKey,
+  addParticipant,
   test as base,
   expect,
   hostsSectionOf,
@@ -255,6 +256,7 @@ test('7. with only a machine online, ordinary runtime chats of its owner and of 
   await sendMessage(page, 'Run this on any host')
   await expect(messageItemsOf(page).filter({ hasText: 'No runtime host is available' })).toHaveCount(1)
 
+  await addParticipant(workerStack, 'chat-research', 'member-bob', 'prompter')
   const bobPage = await openPageAs(browser, workerStack, 'member-bob')
   await addLlmKey(bobPage, 'Anthropic')
   await openChat(bobPage, 'Research')

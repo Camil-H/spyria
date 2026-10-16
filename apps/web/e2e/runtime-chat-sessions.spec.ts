@@ -1,4 +1,5 @@
 import {
+  addParticipant,
   chipOf,
   chooseRunsOn,
   expect,
@@ -60,7 +61,7 @@ test('4. another member does not see the choice, and Runs on locks once a conver
   machine,
 }) => {
   await machine(signedInMachine)
-  await newRuntimeChat(page, 'Only Alice chooses')
+  await addParticipant(workerStack, await newRuntimeChat(page, 'Only Alice chooses'), 'member-bob', 'prompter')
   const bobPage = await openPageAs(browser, workerStack, 'member-bob')
   await openChat(bobPage, 'Only Alice chooses')
   await openSession(bobPage)
@@ -99,7 +100,7 @@ test('9. before the owner chooses, another member waits and cannot send', async 
   machine,
 }) => {
   await machine(signedInMachine)
-  await newRuntimeChat(page, 'Alice has not chosen', null)
+  await addParticipant(workerStack, await newRuntimeChat(page, 'Alice has not chosen', null), 'member-bob', 'prompter')
   const bobPage = await openPageAs(browser, workerStack, 'member-bob')
   await openChat(bobPage, 'Alice has not chosen')
   await expect(runsOnChoiceOf(bobPage)).toHaveCount(0)

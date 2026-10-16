@@ -1,5 +1,6 @@
 import {
   addCredential,
+  addParticipant,
   chipOf,
   delegationsFinished,
   expect,
@@ -322,6 +323,7 @@ test.describe('on an HQ runtime chat', () => {
     await sendMessage(page, 'stub:ask')
     await expect(questionOf(page).getByRole('button', { name: 'Submit' })).toBeVisible()
 
+    await addParticipant(workerStack, 'chat-research', 'member-bob', 'prompter')
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
     await openChat(bobPage, 'Research')
     const bobQuestion = questionOf(bobPage)

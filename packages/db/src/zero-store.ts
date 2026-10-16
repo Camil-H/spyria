@@ -109,6 +109,7 @@ const snapshotFromZeroRows = (
     sources: rowsOf('sources'),
     toolConnections: rowsOf('toolConnections').map((connection) => withoutPosition(withMemberId(connection))),
     chatMembers: rowsOf('chatParticipants').map(withMemberId),
+    chatRoles: rowsOf('chatRoles'),
     llmCredentials: rowsOf('llmCredentials').map(withMemberId),
     workspaceConnections: rowsOf('workspaceConnections').map((connection) => withoutPosition(withMemberId(connection))),
     runtimeHosts: rowsOf('runtimeHosts').map(({ lastSeenAt, createdBy, createdAt, removedAt, ...host }) => host),

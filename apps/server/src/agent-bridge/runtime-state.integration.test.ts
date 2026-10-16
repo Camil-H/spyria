@@ -7,6 +7,7 @@ import {
   alice,
   aliceInAcme,
   globex,
+  bob,
   bobInAcme,
   startAgentStack,
   succeeded,
@@ -71,7 +72,7 @@ const endsWith = async (messageId: string, body: string) => {
 
 test('Stop interrupts the agent, ends the turn once with a notice naming the member, then the next prompt runs', async () => {
   const { relay } = await agentHost()
-  const chat = await newRuntimeChat()
+  const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'editor' }] })
   const first = await prompt(chat, 'stub:long Take your time')
   await commandShown(first)
   const second = await prompt(chat, 'Then this')
@@ -172,7 +173,7 @@ test('a prompt whose conversation create keeps failing ends with "could not star
 test('Retry replaces a failed runtime and answers the waiting prompts in order; refused unless failed or from another workspace', async () => {
   const { host: failingHost } = await agentHost('Failing host')
   failingHost.failing('create')
-  const chat = await newRuntimeChat()
+  const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'prompter' }] })
   const first = await prompt(chat, 'First waiting')
   await answered(first)
   const second = await prompt(chat, 'Second waiting')

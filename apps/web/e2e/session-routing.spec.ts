@@ -1,5 +1,6 @@
 import {
   addLlmKey,
+  addParticipant,
   agentReplyText,
   chipOf,
   expect,
@@ -154,6 +155,7 @@ test('5. a member reaching only a small model gets it, and is refused in a sessi
   await expect(chipOf(bobPage, 'routed')).toHaveText('Fake small (high)')
 
   const aliceChatId = await newRuntimeChat(page, 'Alice large')
+  await addParticipant(workerStack, aliceChatId, 'member-bob', 'prompter')
   await agentScript(aliceChatId, confident('large'))
   await promptAndWait(page, 'Redesign everything', 1)
   await expect(chipOf(page, 'routed')).toHaveText('Fake large (high)')
@@ -169,7 +171,7 @@ test('7 and 8. the manual switch warns about the reread, keeps the history and u
   browser,
   workerStack,
 }) => {
-  await newRuntimeChat(page, 'Switched')
+  await addParticipant(workerStack, await newRuntimeChat(page, 'Switched'), 'member-bob', 'reader')
   await promptAndWait(page, 'Start on the default', 1)
   await expect(chipOf(page, 'routed')).toHaveText('Fake medium (medium)')
   const bobPage = await openPageAs(browser, workerStack, 'member-bob')

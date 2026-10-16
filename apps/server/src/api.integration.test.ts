@@ -11,7 +11,7 @@ import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { createApp } from './app.ts'
 import { issueSessionToken } from './auth/session-tokens.ts'
 import { openSessions } from './auth/sessions.ts'
-import { acme, alice, globex, bob, sessionTokenOf, testAuthSettings } from './testing/testing.ts'
+import { acme, alice, globex, lee, bob, sessionTokenOf, testAuthSettings } from './testing/testing.ts'
 
 const testDatabase = await createTestDatabase()
 const otherDatabase = await createTestDatabase()
@@ -97,13 +97,19 @@ const readAll = async (workspace: string, user: string) => {
 }
 
 const expectedCount = async (table: string, workspace: string, user: string) => {
-  const userCondition = memberPrivateTables.includes(table)
-    ? `and user_id = '${user}'`
-    : chatOwnerConnectionTables.includes(table)
-      ? `and (user_id = '${user}' or user_id in (select owner_user_id from chats where workspace_id = '${workspace}'))`
-      : ''
+  const readableChats = `select id from chats where workspace_id = '${workspace}' and (visibility = 'public'
+    or id in (select chat_id from chat_participants where workspace_id = '${workspace}' and user_id = '${user}'))`
+  const userCondition = memberPrivateTables.includes(table) ? `and user_id = '${user}'` : ''
+  const chatCondition =
+    table === 'chats'
+      ? `and id in (${readableChats})`
+      : serverSchema[table]?.chat_id
+        ? `and chat_id in (${readableChats})`
+        : chatOwnerConnectionTables.includes(table)
+          ? `and (user_id = '${user}' or user_id in (select owner_user_id from chats where id in (${readableChats})))`
+          : ''
   const [{ count }] = await testDatabase.database.$client.unsafe<[{ count: number }]>(
-    `select count(*)::int as count from "${table}" where workspace_id = '${workspace}' ${userCondition}`,
+    `select count(*)::int as count from "${table}" where workspace_id = '${workspace}' ${userCondition} ${chatCondition}`,
   )
   return count
 }
@@ -112,6 +118,7 @@ const readers = [
   { name: 'Alice in Acme', workspace: acme, user: alice },
   { name: 'Alice in Globex', workspace: globex, user: alice },
   { name: 'Bob in Acme', workspace: acme, user: bob },
+  { name: 'Lee in Acme', workspace: acme, user: lee },
 ]
 const rowsByReader = new Map(
   await Promise.all(
@@ -131,13 +138,30 @@ test('there is one synced query per replicated table', () => {
 })
 
 test.each(readers.flatMap((reader) => tenantTables.map((table) => [reader.name, table, reader] as const)))(
-  '%s reads only its own workspace rows of %s',
+  '%s reads only the rows of %s it may read in its own workspace',
   async (_, table, reader) => {
     const rows = rowsByReader.get(reader.name)?.get(table) ?? []
     expect(rows.filter((row) => row.workspace_id !== reader.workspace)).toEqual([])
     expect(rows.length).toBe(await expectedCount(table, reader.workspace, reader.user))
   },
 )
+
+test('a member reads the public channels and the private chats they take part in', () => {
+  const chatIdsOf = (reader: string) =>
+    rowsByReader
+      .get(reader)
+      ?.get('chats')
+      ?.map((row) => row.id)
+  expect(chatIdsOf('Alice in Acme')).toEqual([
+    'chat-welcome',
+    'chat-setup-helper',
+    'chat-invoice-bug',
+    'chat-standup',
+    'chat-research',
+  ])
+  expect(chatIdsOf('Bob in Acme')).toEqual(['chat-welcome', 'chat-setup-helper', 'chat-invoice-bug', 'chat-standup'])
+  expect(chatIdsOf('Lee in Acme')).toEqual(['chat-welcome', 'chat-invoice-bug', 'chat-standup'])
+})
 
 test('the member-private rows of Bob are not visible to Alice', () => {
   for (const table of memberPrivateTables) {
@@ -177,7 +201,7 @@ test('workspaces lists every workspace of the member and users lists the members
   expect(idsOf('Alice in Acme', 'workspaces', 'workspace_id')).toEqual([acme, globex])
   expect(idsOf('Alice in Globex', 'workspaces', 'workspace_id')).toEqual([acme, globex])
   expect(idsOf('Bob in Acme', 'workspaces', 'workspace_id')).toEqual([acme])
-  expect(idsOf('Alice in Acme', 'users', 'id')).toEqual([alice, bob])
+  expect(idsOf('Alice in Acme', 'users', 'id')).toEqual([alice, lee, bob])
   expect(idsOf('Alice in Globex', 'users', 'id')).toEqual([alice])
 })
 

@@ -1,6 +1,7 @@
 import type { BrowserContext } from '@playwright/test'
 import {
   addLlmKey,
+  addParticipant,
   expect,
   mainOf,
   messageItemsOf,
@@ -100,6 +101,7 @@ test('4. another prompter triggers the tool as the owner and sees that the owner
   workerStack,
   agentScript,
 }) => {
+  await addParticipant(workerStack, research, 'member-bob', 'prompter')
   const bobPage = await openPageAs(browser, workerStack, 'member-bob')
   await addLlmKey(bobPage, 'Fake')
   await promptTool(bobPage, agentScript, 'Bob asks who the agent is')

@@ -43,11 +43,14 @@ afterAll(async () => {
   void server.stop(true)
 })
 
-const newRuntimeChat = async (name = 'Runtime chat') => {
+const newRuntimeChat = async (name = 'Runtime chat', readerId?: string) => {
   const id = `chat-${crypto.randomUUID()}`
   await database.$client`
-    insert into chats (workspace_id, id, type, owner_kind, owner_user_id, name, archived, created_at)
-    values (${acme}, ${id}, 'runtime', 'user', ${alice}, ${name}, false, now())`
+    insert into chats (workspace_id, id, type, visibility, owner_kind, owner_user_id, name, archived, created_at)
+    values (${acme}, ${id}, 'runtime', 'private', 'user', ${alice}, ${name}, false, now())`
+  for (const [memberId, roleId] of [[alice, 'owner'], ...(readerId ? [[readerId, 'reader']] : [])] as const)
+    await database.$client`
+      insert into chat_participants (workspace_id, chat_id, user_id, role_id) values (${acme}, ${id}, ${memberId}, ${roleId})`
   return chatId(id)
 }
 
@@ -123,8 +126,8 @@ test("a runtime on a workspace host or on a machine only ever gets HQ's content 
   const machine = await fakeHost('Machine', { ownerId: alice })
   const machineChat = chatId(`chat-${crypto.randomUUID()}`)
   await database.$client`
-    insert into chats (workspace_id, id, type, owner_kind, owner_user_id, name, local_session, harness, archived, created_at)
-    values (${acme}, ${machineChat}, 'runtime', 'user', ${alice}, 'Machine chat', true, 'claude-code', false, now())`
+    insert into chats (workspace_id, id, type, visibility, owner_kind, owner_user_id, name, local_session, harness, archived, created_at)
+    values (${acme}, ${machineChat}, 'runtime', 'private', 'user', ${alice}, 'Machine chat', true, 'claude-code', false, now())`
   const hostChat = await newRuntimeChat()
   for (const chat of [machineChat, hostChat])
     expect(await ensure(chat, '')).toMatchObject({ state: 'failed', failure: 'no_image', hostId: null })
@@ -305,7 +308,7 @@ test('the API key never reaches Zero rows or logs, and other workspaces never se
   const consoleCalls = captureConsole()
   try {
     const host = await fakeHost('Secret host')
-    const chat = await newRuntimeChat()
+    const chat = await newRuntimeChat('Runtime chat', bob)
     const runtime = await runningRuntime(chat)
     const apiKey = host.containers.get(runtime.id)?.apiKey ?? ''
     expect(apiKey).not.toBe('')
