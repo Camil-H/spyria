@@ -139,18 +139,35 @@ const piArgumentsOf = (toolName, { title, rawInput = {} }) =>
           ],
         }
       : rawInput
+let piBlock
+const piBlockEvent = (type, fields = {}) =>
+  piSend({
+    type: 'message_update',
+    assistantMessageEvent: { type: `${piBlock.type}_${type}`, contentIndex: 0, ...fields },
+  })
+const closePiBlock = () => {
+  if (!piBlock) return
+  piBlockEvent('end', { content: piBlock.text })
+  piSend({
+    type: 'message_end',
+    message: { role: 'assistant', content: [{ type: piBlock.type, [piBlock.type]: piBlock.text }], stopReason: 'stop' },
+  })
+  piBlock = undefined
+}
 const piUpdate = (update) => {
   const { sessionUpdate: kind, toolCallId } = update
-  if (kind === 'agent_message_chunk' || kind === 'agent_thought_chunk')
-    return piSend({
-      type: 'message_update',
-      assistantMessageEvent: {
-        type: kind === 'agent_message_chunk' ? 'text_delta' : 'thinking_delta',
-        contentIndex: 0,
-        delta: update.content.text,
-      },
-    })
+  if (kind === 'agent_message_chunk' || kind === 'agent_thought_chunk') {
+    const type = kind === 'agent_message_chunk' ? 'text' : 'thinking'
+    if (piBlock?.type !== type) {
+      closePiBlock()
+      piBlock = { type, text: '' }
+      piBlockEvent('start')
+    }
+    piBlock.text += update.content.text
+    return piBlockEvent('delta', { delta: update.content.text })
+  }
   if (!String(kind).startsWith('tool_call')) return
+  closePiBlock()
   const previous = piToolCalls.get(toolCallId)
   const call = {
     ...previous,
@@ -236,10 +253,20 @@ const gatewayCall = (url, authorization, body, signal) =>
     body: JSON.stringify(body),
     signal,
   })
+const piMcpTimeoutSeconds = 60
 const mcpCall = async (server, method, params = {}, signal = undefined) => {
-  const { url, headers } = mcpServers[server]
+  const { url, headers, timeout = piMcpTimeoutSeconds } = mcpServers[server]
+  const timedOut = AbortSignal.timeout(timeout * 1000)
   const rpc = { jsonrpc: '2.0', method, params, ...(!method.startsWith('notifications/') && { id: 1 }) }
-  const response = await gatewayCall(url, withEnvironment(headers.Authorization), rpc, signal)
+  const response = await gatewayCall(
+    url,
+    withEnvironment(headers.Authorization),
+    rpc,
+    signal ? AbortSignal.any([signal, timedOut]) : timedOut,
+  ).catch((error) => {
+    if (signal?.aborted || !timedOut.aborted) throw error
+  })
+  if (!response) return { isError: true, content: [{ text: `MCP request timed out after ${timeout * 1000}ms` }] }
   return response.status === 200 ? JSON.parse((await response.text()) || '{}').result : undefined
 }
 const mcpToolsOf = async () => {
@@ -425,8 +452,11 @@ const turn = async (id, { sessionId, prompt }) => {
   const text = prompt.map((block) => block.text ?? '').join('\n')
   const has = (part) => new RegExp(`stub:${part}(?![\\w-])`).test(text)
   const update = isPi ? piUpdate : (body) => send({ method: 'session/update', params: { sessionId, update: body } })
-  const finish = (stopReason) =>
-    isPi ? piSend({ type: 'agent_settled', aborted: stopReason === 'cancelled' }) : send({ id, result: { stopReason } })
+  const finish = (stopReason) => {
+    if (!isPi) return send({ id, result: { stopReason } })
+    closePiBlock()
+    piSend({ type: 'agent_settled', aborted: stopReason === 'cancelled' })
+  }
   const refuse = (message) =>
     isPi
       ? piSend({ id, type: 'response', command: 'prompt', success: false, error: message })
@@ -457,6 +487,10 @@ const turn = async (id, { sessionId, prompt }) => {
       ])
         spawnSync('git', ['-c', 'init.defaultBranch=main', ...git], { stdio: 'ignore' })
     if (has('fail')) return refuse('Authentication required')
+    if (has('auth-expired')) {
+      await say('OAuth session expired and could not be refreshed.')
+      return refuse('Authentication required')
+    }
     if (isPi && has('provider-error')) {
       piSend({
         type: 'message_end',

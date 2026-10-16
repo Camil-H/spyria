@@ -59,14 +59,14 @@ const runner = createCommandRunner({
   selfContainerId: isInContainer ? hostname() : undefined,
   personal: isPersonal,
 })
-let credentials: Credentials = { signedIn: [], secrets: [] }
+let credentials: Credentials = { signedIn: [], secrets: [], credentialsChangedAt: {} }
 const declaration = async () => {
   if (!isPersonal) return { personal: false }
   credentials = await readCredentials(docker, prefix).catch((error) => {
     console.error(`Reading the sign-ins failed: ${messageOf(error)}`)
     return credentials
   })
-  return { personal: true, signedIn: credentials.signedIn }
+  return { personal: true, signedIn: credentials.signedIn, credentialsChangedAt: credentials.credentialsChangedAt }
 }
 let sendToHq = (_frame: object) => false
 const modelRelay = createModelRelay({
@@ -107,13 +107,16 @@ const connect = () => {
     personal: isPersonal ? { secrets: () => credentials.secrets } : undefined,
   })
   let heartbeatTimer: ReturnType<typeof setInterval> | undefined
-  const sendHeartbeat = async () =>
+  const sendHeartbeat = async () => {
+    const { signedIn, credentialsChangedAt } = await declaration()
     send({
       type: 'heartbeat',
       memoryFreeBytes: await freeMemoryBytes(),
       running: await runner.runningCount(),
-      signedIn: (await declaration()).signedIn,
+      signedIn,
+      credentialsChangedAt,
     })
+  }
   const hello = async (token: string) => {
     send({ type: 'hello', token, gatewayUrl, system: await systemOf(docker), ...(await declaration()) })
     sendToHq = (frame) => socket.readyState === WebSocket.OPEN && (send(frame), true)

@@ -238,6 +238,12 @@ export const isPlanningOf = (event: AgentEvent) => {
   return undefined
 }
 
+const authRequiredCode = -32000
+export const isAuthRequiredError = (event: AgentEvent) => {
+  const update = event.update as Fields
+  return update?.sessionUpdate === 'error' && update.code === authRequiredCode
+}
+
 export const streamedTextOf = (event: AgentEvent) => {
   const update = event.update as Fields
   const isReasoning = update?.sessionUpdate === 'agent_thought_chunk'

@@ -41,6 +41,7 @@ export type AgentRuntimes = {
   chatOfLlmToken(host: AgentHost, token: string): Promise<ChatId | undefined>
   chatsOnHost(host: AgentHost): Promise<ChatId[]>
   touch(chat: AgentChat): Promise<void>
+  expireSignIn(chat: AgentChat, tool: string): Promise<void>
 }
 
 export type RuntimeRetrier = { retry(chat: AgentChat): Promise<void> }

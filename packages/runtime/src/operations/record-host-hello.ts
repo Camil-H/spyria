@@ -2,7 +2,13 @@ import type { RuntimeHostId, WorkspaceId } from '@hq/kernel'
 import type { RuntimeTransactor } from '../contracts/transactor.ts'
 import { hashSecret } from '../domain/claim.ts'
 import { HostNotRegistered, HostRemoved } from '../domain/errors.ts'
-import { capacityOf, declarationRefusalOf, type HostDeclaration, type HostSystem } from '../domain/runtime-host.ts'
+import {
+  capacityOf,
+  declarationRefusalOf,
+  type HostDeclaration,
+  type HostSystem,
+  signInsOf,
+} from '../domain/runtime-host.ts'
 
 type Dependencies = { transactor: RuntimeTransactor }
 type ConnectedHost = { workspaceId: WorkspaceId; hostId: RuntimeHostId }
@@ -15,7 +21,7 @@ type Input = Partial<HostDeclaration> & {
 
 export const recordHostHello = async (
   { transactor }: Dependencies,
-  { token, system, personal = false, signedIn = [], now, beforeOnline }: Input,
+  { token, system, personal = false, signedIn, credentialsChangedAt, now, beforeOnline }: Input,
 ) => {
   const tokenHash = await hashSecret(token)
   return transactor.run(async ({ runtimeHosts, runtimes }) => {
@@ -29,7 +35,10 @@ export const recordHostHello = async (
     await runtimeHosts.save({
       ...host,
       status: 'online',
-      capacity: { ...capacityOf(system), ...(personal && { personal, signedIn }) },
+      capacity: {
+        ...capacityOf(system),
+        ...(personal && { personal, ...signInsOf({ signedIn, credentialsChangedAt }, host.capacity?.expiredSignIns) }),
+      },
       lastSeenAt: now,
     })
     await runtimes.setHostOnline(host.workspaceId, host.id, true)

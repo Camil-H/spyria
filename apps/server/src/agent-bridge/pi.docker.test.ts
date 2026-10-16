@@ -259,7 +259,7 @@ test('a long Pi conversation compacts on the compaction model, recorded with pro
   expect(request?.split('After the restart')).toHaveLength(2)
 })
 
-test("Pi in HQ's image runs a command with its output, asks through HQ's extension and gets a free answer, in plan mode is refused a write and proposes a plan that is approved, keeps a plan with update_plan, and reports a provider error", async () => {
+test("Pi in HQ's image runs a command with its output, asks through HQ's extension and gets a free answer, in plan mode is refused a write and proposes a plan that is approved, keeps a plan with update_plan, streams text around a command once, and reports a provider error", async () => {
   await addLlmKey(bob, 'Fake')
   const { id, transport } = await runtime()
   const { token } = await runtimeTurn({ id }, bob)
@@ -337,6 +337,13 @@ test("Pi in HQ's image runs a command with its output, asks through HQ's extensi
     { sessionUpdate: 'plan', entries: [{ content: 'Create notes.txt', status: 'in_progress', priority: 'medium' }] },
   ])
   expect(pi.updates.some((update) => update.title === 'update_plan')).toBe(false)
+  setFakeLlmScript({
+    steps: [{ command: 'echo checked', say: 'Let me check that first. ' }],
+    text: 'The check passed, so every word streams once.',
+  })
+  expect(await pi.answerOf('Stream around a command')).toBe(
+    'Let me check that first. The check passed, so every word streams once.',
+  )
   setFakeLlmScript({ steps: [{ fail: 'Overloaded' }] })
   await pi.answerOf('Fail it')
   expect(pi.updates.slice(-2)).toMatchObject([

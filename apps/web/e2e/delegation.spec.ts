@@ -129,7 +129,7 @@ test('10. a subagent failure answers with HQ’s error, the group shows failed, 
   )
 })
 
-test('11. a long subagent task returns still running, then its result on resume, in one group with one answer', async ({
+test('11 and f-3. a long subagent task returns still running and reads as still delegating, then its result on resume, in one group with one answer', async ({
   page,
   agentScript,
   release,
@@ -144,6 +144,8 @@ test('11. a long subagent task returns still running, then its result on resume,
   )
   await sendMessage(page, 'Delegate a long listing')
   await reached('resume')
+  await expect(mainOf(page).getByRole('button', { name: /^Delegating to Fake small/ })).toBeVisible()
+  await expect(mainOf(page)).not.toContainText(/timed out|failed/)
   await release('subagent')
   await delegationsFinished(workerStack, researchChatId)
   await release('resume')

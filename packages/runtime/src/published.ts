@@ -2,6 +2,7 @@ export type { SandboxLocation, SandboxProvider, SandboxTransport } from './contr
 export { removeChatRuntimeOnServer } from './entrypoints/mutators.ts'
 export { createZeroTransactor as createRuntimeTransactor } from './integrations/zero-transactor.ts'
 export {
+  expireSignIn,
   findLlmTokenChat,
   forgetAgentConversation,
   isRuntimeWaitingOnHost,

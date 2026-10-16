@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test'
 import { type AgentConversation, AgentStartFailure } from '../contracts/agent.ts'
+import { defaultResumeAfterMilliseconds, delegateTimeoutSeconds } from '../domain/delegation.ts'
 import type { HarnessLaunch } from '../domain/session-routing.ts'
 import { createHqAgentClient, piCommandOf } from './hq-agent-client.ts'
 
@@ -245,7 +246,9 @@ test('a parent Pi reaches HQ tools and the router with its LLM token; a sub reac
     headers: { Authorization: `Bearer \${HQ_MCP_TOKEN}` },
     exposure: 'direct',
   })
-  expect(parent.mcp).toEqual({ mcpServers: { hq: toolServer('/mcp'), router: toolServer('/mcp/router') } })
+  expect(parent.mcp).toEqual({
+    mcpServers: { hq: toolServer('/mcp'), router: { ...toolServer('/mcp/router'), timeout: delegateTimeoutSeconds } },
+  })
   const sub = await createdPiOf({ parentConversationId: 'conversation-1' })
   expect(sub.mcp).toEqual({ mcpServers: { hq: toolServer('/mcp') } })
   expect(sub.created.secrets).toEqual({
@@ -255,4 +258,10 @@ test('a parent Pi reaches HQ tools and the router with its LLM token; a sub reac
   expect(JSON.stringify(sub.command)).not.toMatch(/runtime-llm-token/)
   expect(sub.command.at(-1)).toContain('export PI_CODING_AGENT_DIR="$HOME/.pi/sub"')
   expect(piCommandOf('http://hq-gateway-relay:4000/v1', piLaunch, { sub: true })).toEqual(sub.command)
+})
+
+test('the router answers a running delegation well before Pi gives up on the delegate call', () => {
+  const piDefaultMcpTimeoutMilliseconds = 60_000
+  expect(delegateTimeoutSeconds * 1000).toBeGreaterThan(piDefaultMcpTimeoutMilliseconds)
+  expect(defaultResumeAfterMilliseconds).toBeLessThan(piDefaultMcpTimeoutMilliseconds)
 })

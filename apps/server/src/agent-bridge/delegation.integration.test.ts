@@ -204,8 +204,8 @@ test.each([
   },
 )
 
-test('a long task answers still running, a resume call returns its result, and another chat or turn cannot resume it', async () => {
-  const { subs } = await fakeAgent()
+test('a long task answers still running before Pi’s timeout for the router, a resume call returns its result, and another chat or turn cannot resume it', async () => {
+  const { subs, main } = await fakeAgent()
   const chat = await newRuntimeChat()
   const resumeCall = {
     ...delegatedTask,
@@ -213,8 +213,13 @@ test('a long task answers still running, a resume call returns its result, and a
     hold: 'resume',
   }
   setFakeLlmScript(delegatingScript({ steps: [delegatedTask, resumeCall], subagents: { 'fake-small': heldWork } }))
+  const startedAt = Date.now()
   const promptId = await prompt(chat, 'Delegate a long task')
   await holds.reached('resume')
+  const mcp = main()
+    ?.agent.acp_command.find((part) => part.startsWith('HQ_PI_MCP='))
+    ?.slice('HQ_PI_MCP='.length)
+  expect(Date.now() - startedAt).toBeLessThan(JSON.parse(String(mcp)).mcpServers.router.timeout * 1000)
   await waitFor(async () => (await stepsOf(promptId))[0]?.result?.startsWith('Task ') === true)
   const [delegation] = await delegationsOf(chat)
   const id = String(delegation?.id)

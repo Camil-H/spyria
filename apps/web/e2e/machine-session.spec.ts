@@ -2,6 +2,7 @@ import {
   chipOf,
   expect,
   foldOf,
+  machineSectionOf,
   mainOf,
   messageContaining,
   messageItemsOf,
@@ -167,6 +168,26 @@ test.describe('Claude Code', () => {
     await expect(messageContaining(page, '[t1] Hello from the stub')).toBeVisible({ timeout: 45_000 })
     expect((await machine()).conversations).toHaveLength(1)
     await expect.poll(() => startedCountOf(workerStack.database, chatId)).toBe('1')
+  })
+
+  test('f-2. an expired login shows one sign-in error with a link to the Profile, no agent message, and Claude Code signed out', async ({
+    page,
+    machine,
+  }) => {
+    await machine(machineOf)
+    await newSession(page, tool.name)
+    await sendMessage(page, 'stub:auth-expired')
+    const banner = mainOf(page).getByRole('alert')
+    await expect(banner).toHaveText('Authentication required — sign in to Claude Code again Open profile')
+    await expect(workingIndicatorOf(page)).toHaveCount(0)
+    await expect(banner).toHaveCount(1)
+    await expect(mainOf(page)).not.toContainText('OAuth session expired')
+    await expect(mainOf(page)).not.toContainText('The agent stopped with an error')
+    await page.reload()
+    await expect(mainOf(page).getByRole('alert')).toHaveCount(1)
+    await expect(mainOf(page)).not.toContainText('OAuth session expired')
+    await banner.getByRole('link', { name: 'Open profile' }).click()
+    await expect(machineSectionOf(page)).toContainText('Not signed in to Claude Code')
   })
 
   test('24. with no workspace host online and one machine tool signed in, Runs on is chosen for the owner: no fieldset, session started', async ({

@@ -29,7 +29,7 @@ export type AgentStep =
       connection?: { server: string; isReconnect: boolean }
     }
   | { type: 'plan'; items: { title: string; status: string }[] }
-  | { type: 'error'; message: string }
+  | { type: 'error'; message: string; signIn?: string }
   | {
       type: 'question'
       questionId: string

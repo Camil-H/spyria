@@ -21,10 +21,12 @@ const codexAuthFile = JSON.stringify({ OPENAI_API_KEY: null, auth_mode: 'chatgpt
 const codexApiKey = 'sk-proj-FAKEKEY-dummy-file-000000000000'
 const codexApiKeyFile = JSON.stringify({ OPENAI_API_KEY: codexApiKey, auth_mode: 'apikey' })
 
-const tarOf = (content: string) => {
+const changedAt = 1_760_000_000
+const tarOf = (content: string, modifiedAt = changedAt) => {
   const header = new Array(512).fill('\0')
   header.splice(0, 17, ...'.credentials.json')
   header.splice(124, 12, ...`${content.length.toString(8).padStart(11, '0')}\0`)
+  header.splice(136, 12, ...`${modifiedAt.toString(8).padStart(11, '0')}\0`)
   return `${header.join('')}${content}${'\0'.repeat(1024)}`
 }
 const dockerWithArchive =
@@ -41,12 +43,20 @@ const dockerWithArchive =
     return found as never
   }
 
-test('signedIn follows the presence of the credentials file and its token values are kept for redaction', async () => {
+test('signedIn follows the presence of the credentials file, its change time is reported and its token values are kept for redaction', async () => {
   expect(await readCredentials(dockerWithArchive(tarOf(credentialsFile)), 'hq-')).toEqual({
     signedIn: ['claude'],
     secrets: [accessToken, refreshToken],
+    credentialsChangedAt: { claude: changedAt },
   })
-  expect(await readCredentials(dockerWithArchive(undefined), 'hq-')).toEqual({ signedIn: [], secrets: [] })
+  expect(
+    (await readCredentials(dockerWithArchive(tarOf(credentialsFile, changedAt + 60)), 'hq-')).credentialsChangedAt,
+  ).toEqual({ claude: changedAt + 60 })
+  expect(await readCredentials(dockerWithArchive(undefined), 'hq-')).toEqual({
+    signedIn: [],
+    secrets: [],
+    credentialsChangedAt: {},
+  })
 })
 
 test('the token formats and the exact current token values are redacted, the rest of the frame stays valid JSON', async () => {
@@ -115,10 +125,12 @@ test('signedIn includes codex only for a ChatGPT auth.json, and its token values
   expect(await readCredentials(dockerWithArchive(undefined, tarOf(codexAuthFile)), 'hq-')).toEqual({
     signedIn: ['codex'],
     secrets: [codexTokens.id_token, codexTokens.access_token, codexTokens.refresh_token],
+    credentialsChangedAt: { codex: changedAt },
   })
   expect(await readCredentials(dockerWithArchive(tarOf(credentialsFile), tarOf(codexApiKeyFile)), 'hq-')).toEqual({
     signedIn: ['claude'],
     secrets: [accessToken, refreshToken, codexApiKey],
+    credentialsChangedAt: { claude: changedAt, codex: changedAt },
   })
 })
 

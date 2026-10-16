@@ -2,6 +2,7 @@ import type { Transact } from '@hq/db/zero-queries'
 import {
   createRuntimeTransactor,
   ensureRuntimeRunning,
+  expireSignIn,
   findLlmTokenChat,
   forgetAgentConversation,
   isRuntimeWaitingOnHost,
@@ -60,6 +61,7 @@ export const createRuntimeAgentRuntimes = (
       inTransaction((dependencies) => findLlmTokenChat(dependencies, { ...host, token })),
     chatsOnHost: (host) => inTransaction((dependencies) => listHostChats(dependencies, host)),
     touch: (chat) => inTransaction((dependencies) => touchRuntime(dependencies, { ...chat, now: Date.now() })),
+    expireSignIn: (chat, tool) => inTransaction((dependencies) => expireSignIn(dependencies, { ...chat, tool })),
   }
 }
 

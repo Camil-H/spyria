@@ -4,6 +4,7 @@ import {
   type AgentEvent,
   agentProjectionOf,
   delegatedProjectionOf,
+  isAuthRequiredError,
   isPlanningOf,
   observedProjectionStep,
   subagentDelegationOf,
@@ -13,6 +14,7 @@ import {
 import type { StepDelegation } from '../domain/agent-steps.ts'
 import { newMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
+import { localSessions } from '../domain/session-routing.ts'
 import { closeAgentTurn } from './agent-turn.ts'
 
 type Dependencies = { transactor: ConversationTransactor }
@@ -45,11 +47,17 @@ const recordIn = async (
   const isError = seq !== undefined && !delegation && projected?.type === 'step' && projected.step.type === 'error'
   const failure =
     (isError || (turnEnd && previous?.sessionUpdate !== 'error')) && (await unitOfWork.agentTurns.lastFailure(chatId))
+  const chat = isError && isAuthRequiredError(event) ? await unitOfWork.chats.get(chatId) : undefined
+  const expired = chat?.localSession ? localSessions[chat.harness ?? 'claude-code'] : undefined
   const projection =
     seq === undefined
       ? undefined
       : delegatedProjectionOf(
-          failure ? { type: 'step', step: { type: 'error', message: failure } } : projected,
+          failure
+            ? { type: 'step', step: { type: 'error', message: failure } }
+            : expired
+              ? { type: 'step', step: { type: 'error', message: expired.expiredNotice, signIn: expired.signIn } }
+              : projected,
           delegation,
         )
   if ((projection?.type === 'message' || projection?.type === 'step') && seq !== undefined)
@@ -77,11 +85,19 @@ const recordIn = async (
   }
   const isPlanning = seq !== undefined && !delegation ? isPlanningOf(event) : undefined
   if (isPlanning !== undefined) await unitOfWork.chats.setPlanning(chatId, isPlanning)
+  const endsSignedOut =
+    turnEnd &&
+    previous?.sessionUpdate === 'error' &&
+    promptId &&
+    (await unitOfWork.messages.replies(promptId)).some((reply) => reply.step?.type === 'error' && reply.step.signIn)
   if (turnEnd && activePromptId)
-    await closeAgentTurn(unitOfWork, chatId, activePromptId, (hasReply) => turnEndNoticeOf(turnEnd.outcome, hasReply))
+    await closeAgentTurn(unitOfWork, chatId, activePromptId, (hasReply) =>
+      endsSignedOut ? undefined : turnEndNoticeOf(turnEnd.outcome, hasReply),
+    )
   return {
     promptId: turnEnd ? null : activePromptId,
     isReplyStored: projection?.type === 'message' || projection?.type === 'step',
+    expiredSignIn: expired?.signIn,
   }
 }
 

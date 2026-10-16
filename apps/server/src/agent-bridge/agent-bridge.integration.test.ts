@@ -164,6 +164,21 @@ test('stream frames reach browsers of the chat workspace only, and no secret rea
   }
 })
 
+test('a browser that leaves and reopens a chat on the same socket gets each streamed word once', async () => {
+  await agentHost()
+  const chat = await newRuntimeChat()
+  const viewer = await openStream(chat)
+  await viewer.subscribed
+  await viewer.resubscribe()
+  await viewer.resubscribe()
+  const question = await prompt(chat, 'Stream once')
+  await answered(question)
+  await turnEnded(chat)
+
+  const texts = viewer.frames.map((frame) => JSON.parse(frame)).flatMap((frame) => frame.text ?? [])
+  expect(texts.join('')).toBe(replyOf(1).body)
+})
+
 test('the agent’s workspace reaches viewers live when it changes, is resent to a new viewer but not to a closed one, and is never stored', async () => {
   await agentHost()
   const chat = await newRuntimeChat()

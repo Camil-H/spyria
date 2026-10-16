@@ -5,6 +5,7 @@ import {
   type AgentHost,
   type AgentLlm,
   createAgentHandlers,
+  isAuthRequiredError,
   isStoredAgentEvent,
   type SessionClassifier,
   streamedTextOf,
@@ -223,6 +224,7 @@ export const createAgentBridge = ({
             }
           }
           if (streamed) return
+          if (isAuthRequiredError(event)) Object.assign(chatSocket, { segment: undefined, streamedText: '' })
           if (isStoredAgentEvent(event)) flushSegment(event)
           record(event, drainedPromptId)
         },
@@ -322,16 +324,21 @@ export const createAgentBridge = ({
           if (frame.type === 'subscribe') await viewing.bridge.watch(socket, viewing.context, chat)
           if (frame.type === 'unsubscribe') viewing.bridge.unwatch(socket, chat)
         }
+        let connection: WSContext | undefined
         return {
           onMessage: (event, socket) => {
+            connection ??= socket
+            const viewer = connection
             receiving = receiving
-              .then(() => receive(JSON.parse(String(event.data)), socket))
+              .then(() => receive(JSON.parse(String(event.data)), viewer))
               .catch((error) => {
                 console.error(`An agent stream failed: ${messageOf(error)}`)
-                socket.close(1011, 'Internal error')
+                viewer.close(1011, 'Internal error')
               })
           },
-          onClose: (_, socket) => viewing?.bridge.unwatch(socket),
+          onClose: () => {
+            receiving = receiving.then(() => connection && viewing?.bridge.unwatch(connection))
+          },
         }
       }),
   }

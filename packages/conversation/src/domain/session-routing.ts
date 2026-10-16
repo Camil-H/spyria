@@ -66,13 +66,18 @@ export const localSessions = {
     launch: 'claude-code-subscription',
     signIn: 'claude',
     signInNotice: 'Sign in to Claude Code on your machine: docker exec -it hq-host hq-host login claude',
+    expiredNotice: 'Authentication required — sign in to Claude Code again',
   },
   codex: {
     launch: 'codex-subscription',
     signIn: 'codex',
     signInNotice: 'Sign in to Codex on your machine: docker exec -it hq-host hq-host login codex',
+    expiredNotice: 'Authentication required — sign in to Codex again',
   },
-} as const satisfies Record<Harness, { launch: HarnessLaunch; signIn: string; signInNotice: string }>
+} as const satisfies Record<
+  Harness,
+  { launch: HarnessLaunch; signIn: string; signInNotice: string; expiredNotice: string }
+>
 export type LocalSession = (typeof localSessions)[Harness]
 export type RunsOn = 'runtime' | Harness
 export const runsOnNames: Record<RunsOn, string> = {

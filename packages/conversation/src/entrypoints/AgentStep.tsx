@@ -2,7 +2,7 @@ import { chatId, type WorkspaceId } from '@hq/kernel'
 import { DiffView, focusRing } from '@hq/ui'
 import { Check, ChevronRight, LoaderCircle, X } from 'lucide-react'
 import { lazy, type ReactNode, Suspense, use, useState } from 'react'
-import { useOutletContext, useParams } from 'react-router'
+import { Link, useOutletContext, useParams } from 'react-router'
 import type { AgentStep as Step } from '../domain/agent-steps.ts'
 import { type ConversationMessage, durationLabelOf } from '../queries/get-conversation.ts'
 import { AnswerQuestionContext, useConversationCommands } from './providers.tsx'
@@ -158,6 +158,23 @@ const ToolStep = ({ step, canConnect }: { step: StepOf<'tool'>; canConnect: bool
   )
 }
 
+const ErrorStep = ({ step }: { step: StepOf<'error'> }) => {
+  const workspaceId = useOutletContext<WorkspaceId>()
+  return (
+    <p role="alert" className="rounded-md bg-removed px-2 py-1 text-sm">
+      {step.message}
+      {step.signIn && (
+        <>
+          {' '}
+          <Link to={`/w/${workspaceId}/profile`} className={`underline ${focusRing}`}>
+            Open profile
+          </Link>
+        </>
+      )}
+    </p>
+  )
+}
+
 const DelegationStep = ({ delegation }: { delegation: NonNullable<ConversationMessage['delegation']> }) => {
   const { modelName, status, result, fallback } = delegation
   const count = delegation.steps.length
@@ -219,11 +236,6 @@ export const AgentStep = ({ message }: { message: ConversationMessage }) => {
         <QuestionCard message={message} answerQuestion={use(AnswerQuestionContext)} />
       </Suspense>
     )
-  if (step?.type === 'error')
-    return (
-      <p role="alert" className="rounded-md bg-removed px-2 py-1 text-sm">
-        {step.message}
-      </p>
-    )
+  if (step?.type === 'error') return <ErrorStep step={step} />
   return null
 }

@@ -91,6 +91,7 @@ export const createAgentHandlers = ({
         { transactor: transactorOf(chat.workspaceId) },
         { ...chat, event, turnPromptId },
       )
+      if (recorded.expiredSignIn) await runtimes.expireSignIn(chat, recorded.expiredSignIn)
       await runtimes.touch(chat)
       return recorded
     },

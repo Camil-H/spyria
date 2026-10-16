@@ -10,8 +10,9 @@ export type HostSystem = {
   limitsEnforced: boolean
 }
 
-export type HostDeclaration = { personal: boolean; signedIn: string[] }
-export type HostCapacity = HostSystem & Partial<HostDeclaration> & { cap: number; memoryFreeBytes?: number }
+export type HostDeclaration = { personal: boolean; signedIn: string[]; credentialsChangedAt?: Record<string, number> }
+export type HostCapacity = HostSystem &
+  Partial<HostDeclaration> & { cap: number; memoryFreeBytes?: number; expiredSignIns?: Record<string, number> }
 
 export type RuntimeHost = Readonly<{
   workspaceId: WorkspaceId
@@ -58,3 +59,19 @@ export const declarationRefusalOf = (host: RuntimeHost, personal: boolean) => {
   if (host.ownerId === null && personal) return new PairedAsWorkspaceHost()
   return undefined
 }
+
+export const signInsOf = (
+  { signedIn = [], credentialsChangedAt = {} }: Partial<HostDeclaration>,
+  expired: Record<string, number> = {},
+) => {
+  const expiredSignIns = Object.fromEntries(
+    Object.entries(expired).filter(([tool, changedAt]) => credentialsChangedAt[tool] === changedAt),
+  )
+  return { signedIn: signedIn.filter((tool) => !(tool in expiredSignIns)), credentialsChangedAt, expiredSignIns }
+}
+
+export const withExpiredSignIn = (capacity: HostCapacity, tool: string): HostCapacity => ({
+  ...capacity,
+  signedIn: capacity.signedIn?.filter((signedInTool) => signedInTool !== tool),
+  expiredSignIns: { ...capacity.expiredSignIns, [tool]: capacity.credentialsChangedAt?.[tool] ?? 0 },
+})

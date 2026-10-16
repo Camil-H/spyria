@@ -47,6 +47,9 @@ export const renewClaimCodeFromRequest = (tx: Transaction, context: ZeroContext,
 const boundedText = (maximumLength: number) => z.string().check(z.minLength(1), z.maxLength(maximumLength))
 const count = z.number().check(z.nonnegative())
 const signedIn = z.optional(z.array(boundedText(32)).check(z.maxLength(8)))
+const credentialsChangedAt = z.optional(
+  z.record(boundedText(32), count).check(z.refine((changes) => Object.keys(changes).length <= 8)),
+)
 const hostSessionFrame = z.discriminatedUnion('type', [
   z.object({ type: z.literal('claim'), code: boundedText(16) }),
   z.object({
@@ -63,12 +66,14 @@ const hostSessionFrame = z.discriminatedUnion('type', [
     }),
     personal: z.optional(z.boolean()),
     signedIn,
+    credentialsChangedAt,
   }),
   z.object({
     type: z.literal('heartbeat'),
     memoryFreeBytes: count,
     running: z.int().check(z.nonnegative()),
     signedIn,
+    credentialsChangedAt,
   }),
 ])
 
@@ -87,8 +92,10 @@ export const createHostSessionHandlers = (transact: Transact) => ({
     hello: Partial<HostDeclaration> & { token: string; system: HostSystem },
     beforeOnline: (host: ConnectedHost) => void,
   ) => transact((tx) => recordHostHello(dependenciesOf(tx), { ...hello, now: Date.now(), beforeOnline })),
-  heartbeat: (host: ConnectedHost, heartbeat: { memoryFreeBytes: number; running: number; signedIn?: string[] }) =>
-    transact((tx) => recordHostHeartbeat(dependenciesOf(tx), { ...host, ...heartbeat, now: Date.now() })),
+  heartbeat: (
+    host: ConnectedHost,
+    heartbeat: { memoryFreeBytes: number; running: number } & Partial<Omit<HostDeclaration, 'personal'>>,
+  ) => transact((tx) => recordHostHeartbeat(dependenciesOf(tx), { ...host, ...heartbeat, now: Date.now() })),
   offline: (host: ConnectedHost) => transact((tx) => markHostOffline(dependenciesOf(tx), host)),
   reconcile: (host: ConnectedHost, provider: SandboxProvider) =>
     reconcileHostRuntimes(

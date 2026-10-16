@@ -464,10 +464,12 @@ export const startAgentStack = async ({
     browserSockets.push(socket)
     const frames: string[] = []
     const subscribed = Promise.withResolvers<void>()
+    let subscriptions = 0
     const closed = new Promise<void>((resolve) => socket.addEventListener('close', () => resolve()))
     socket.onmessage = (message) => {
-      if (JSON.parse(String(message.data)).subscribed) subscribed.resolve()
-      else frames.push(String(message.data))
+      if (!JSON.parse(String(message.data)).subscribed) return frames.push(String(message.data))
+      subscriptions += 1
+      subscribed.resolve()
     }
     await new Promise((resolve) => socket.addEventListener('open', resolve))
     if (token !== '')
@@ -475,7 +477,13 @@ export const startAgentStack = async ({
         JSON.stringify({ type: 'auth', token: token ?? (await sessionTokenOf(database, workspaceId, alice)) }),
       )
     socket.send(JSON.stringify({ type: 'subscribe', chatId: chat }))
-    return { frames, closed, subscribed: subscribed.promise }
+    const resubscribe = async () => {
+      const before = subscriptions
+      socket.send(JSON.stringify({ type: 'unsubscribe', chatId: chat }))
+      socket.send(JSON.stringify({ type: 'subscribe', chatId: chat }))
+      await waitFor(() => subscriptions > before)
+    }
+    return { frames, closed, subscribed: subscribed.promise, resubscribe }
   }
   return {
     ...testApp,
@@ -606,6 +614,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
     const id = crypto.randomUUID()
     const token = sha256(id)
     let currentSignIns = signedIn
+    const credentialsChangedAt = Object.fromEntries(signedIn.map((tool) => [tool, 1]))
     await database.$client`
       insert into runtime_hosts (workspace_id, id, name, token_hash, status, running_runtimes, created_by, owner_id, created_at)
       values (${acme}, ${id}, ${name}, ${sha256(token)}, 'offline', 0, ${ownerId ?? alice}, ${ownerId ?? null}, now())`
@@ -690,6 +699,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
       closed: () => closed,
       signIn: (tools: string[]) => {
         currentSignIns = tools
+        for (const tool of tools) credentialsChangedAt[tool] = (credentialsChangedAt[tool] ?? 0) + 1
       },
       connect: async ({ afterHello }: { afterHello?: () => void } = {}) => {
         const opened = new WebSocket(`ws://localhost:${port}/host`)
@@ -766,7 +776,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
           type: 'hello',
           token,
           gatewayUrl: fakeHostGatewayUrl,
-          ...(ownerId && { personal: true, signedIn: currentSignIns }),
+          ...(ownerId && { personal: true, signedIn: currentSignIns, credentialsChangedAt }),
           system: {
             cpus: 4,
             memoryBytes: memoryGibibytes * gibibyte,

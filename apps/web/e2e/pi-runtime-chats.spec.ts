@@ -50,6 +50,29 @@ test('8 and 9. a prompter with only an Anthropic key gets Pi: the command step s
   await bobPage.context().close()
 })
 
+test('f-1. after leaving and reopening the chat, a Pi turn streams each word once and the stored answer matches it', async ({
+  page,
+  agentScript,
+  reached,
+  release,
+}) => {
+  await openChat(page, 'Research')
+  for (const _ of [1, 2]) {
+    await openChat(page, 'Welcome')
+    await openChat(page, 'Research')
+  }
+  await agentScript(research, { text: 'Alpha beta gamma delta.', hold: 'stream' })
+  await sendMessage(page, 'Stream it')
+  await reached('stream')
+  const answer = messageContaining(page, 'Alpha')
+  await expect(answer).toBeVisible()
+  await expect(answer).not.toContainText(/Alpha\s*Alpha/)
+  await release('stream')
+  await expect(workingIndicatorOf(page)).toHaveCount(0)
+  await expect(answer).toHaveCount(1)
+  await expect(answer).toContainText('Alpha beta gamma delta.')
+})
+
 test('11. Stop during a command closes the turn as stopped, and a prompt queued behind it is answered next in the same Pi session', async ({
   page,
   agentScript,

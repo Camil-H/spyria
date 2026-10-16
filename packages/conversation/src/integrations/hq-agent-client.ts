@@ -9,6 +9,7 @@ import {
   type SubConversation,
 } from '../contracts/agent.ts'
 import type { AgentEvent } from '../domain/agent-events.ts'
+import { delegateTimeoutSeconds } from '../domain/delegation.ts'
 import { type HarnessLaunch, piModelOf } from '../domain/session-routing.ts'
 
 export type AgentLlm = { model: string }
@@ -147,7 +148,7 @@ export const piCommandOf = (
   }
   const mcpServers = {
     hq: piMcpServerOf(gatewayUrl, '/mcp'),
-    ...(!sub && { router: piMcpServerOf(gatewayUrl, '/mcp/router') }),
+    ...(!sub && { router: { ...piMcpServerOf(gatewayUrl, '/mcp/router'), timeout: delegateTimeoutSeconds } }),
   }
   return [
     'env',

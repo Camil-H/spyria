@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { capacityOf } from './runtime-host.ts'
+import { capacityOf, signInsOf, withExpiredSignIn } from './runtime-host.ts'
 
 const gibibyte = 1024 ** 3
 const system = {
@@ -17,4 +17,27 @@ test('the default cap is one runtime per GB after a 2 GB reserve, at least one',
   expect(capacityOf({ ...system, memoryBytes: 2.5 * gibibyte }).cap).toBe(1)
   expect(capacityOf({ ...system, memoryBytes: gibibyte }).cap).toBe(1)
   expect(capacityOf(system)).toEqual({ ...system, cap: 6 })
+})
+
+test('an expired sign-in drops the tool until its credentials file changes or goes', () => {
+  const declared = { signedIn: ['claude', 'codex'], credentialsChangedAt: { claude: 100, codex: 200 } }
+  const expired = withExpiredSignIn({ ...capacityOf(system), ...declared }, 'claude')
+  expect(expired).toMatchObject({ signedIn: ['codex'], expiredSignIns: { claude: 100 } })
+  expect(signInsOf(declared, expired.expiredSignIns)).toEqual({
+    ...declared,
+    signedIn: ['codex'],
+    expiredSignIns: { claude: 100 },
+  })
+  expect(signInsOf({ ...declared, credentialsChangedAt: { claude: 101, codex: 200 } }, expired.expiredSignIns)).toEqual(
+    {
+      signedIn: ['claude', 'codex'],
+      credentialsChangedAt: { claude: 101, codex: 200 },
+      expiredSignIns: {},
+    },
+  )
+  expect(
+    signInsOf({ signedIn: ['codex'], credentialsChangedAt: { codex: 200 } }, expired.expiredSignIns),
+  ).toMatchObject({
+    expiredSignIns: {},
+  })
 })

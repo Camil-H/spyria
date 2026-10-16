@@ -42,7 +42,7 @@ const credentialStores = {
 
 export type CredentialsTool = keyof typeof credentialStores
 export type CredentialsAction = 'login' | 'logout'
-export type Credentials = { signedIn: string[]; secrets: string[] }
+export type Credentials = { signedIn: string[]; secrets: string[]; credentialsChangedAt: Record<string, number> }
 export const credentialsTools = Object.keys(credentialStores) as CredentialsTool[]
 const readerNameOf = (prefix: string, tool: CredentialsTool) => `${prefix}cred-${tool}-reader`
 
@@ -129,13 +129,24 @@ const readSignIn = async (docker: Docker, prefix: string, tool: CredentialsTool)
   ).catch((error) => {
     if (!isMissing(error)) throw error
   })
-  return archive ? signInOf(archive.slice(512, 512 + Number.parseInt(archive.slice(124, 136), 8))) : undefined
+  return archive
+    ? {
+        ...signInOf(archive.slice(512, 512 + Number.parseInt(archive.slice(124, 136), 8))),
+        changedAt: Number.parseInt(archive.slice(136, 148), 8),
+      }
+    : undefined
 }
 
 export const readCredentials = async (docker: Docker, prefix: string): Promise<Credentials> => {
   const signIns = await Promise.all(credentialsTools.map((tool) => readSignIn(docker, prefix, tool)))
   return {
     signedIn: credentialsTools.filter((_, index) => signIns[index]?.signedIn),
+    credentialsChangedAt: Object.fromEntries(
+      credentialsTools.flatMap((tool, index) => {
+        const changedAt = signIns[index]?.changedAt
+        return changedAt === undefined ? [] : [[tool, changedAt]]
+      }),
+    ),
     secrets: signIns
       .flatMap((signIn) => signIn?.secrets ?? [])
       .filter((secret): secret is string => typeof secret === 'string' && secret.length >= minimumSecretLength),

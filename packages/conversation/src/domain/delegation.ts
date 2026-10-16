@@ -61,4 +61,5 @@ export const subagentFailureOf = (modelName: string, notice?: string) =>
 export const subagentStopped = 'The subagent was stopped'
 export const stillRunningOf = (id: string) => `Task ${id} is still running; call delegate again with resume="${id}"`
 export const unknownTaskOf = (id: string) => `There is no task ${id} running in this turn`
-export const defaultResumeAfterMilliseconds = 240_000
+export const defaultResumeAfterMilliseconds = 45_000
+export const delegateTimeoutSeconds = 120
