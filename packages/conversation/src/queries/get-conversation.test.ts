@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test'
 import { createMockSnapshot, type Snapshot } from '@hq/db'
 import { chatId, memberId, messageId, runtimeHostId, runtimeId, workspaceId } from '@hq/kernel'
+import { stillRunningOf } from '../domain/delegation.ts'
 import type { RunsOn } from '../domain/session-routing.ts'
 import { durationLabelOf, getConversation } from './get-conversation.ts'
 
@@ -139,6 +140,11 @@ test('an active turn shows its steps live and unfolded, its pending command runn
   expect(itemSummaryOf(conversation)).toEqual(['member', 'step thought', 'step command'])
   const running = conversation?.items[2]
   expect(running?.type === 'message' && running.message.isRunning).toBe(true)
+  const narrating = conversationWith(
+    [replyRow(2, 'step', { step: command(0) }), replyRow(3, 'step', { step: edit }), replyRow(4, 'agent')],
+    true,
+  )
+  expect(itemSummaryOf(narrating)).toEqual(['member', 'step thought', 'step command', 'step file', 'agent'])
 })
 
 test('a turn with a single step, without an answer, stopped or failed stays unfolded', () => {
@@ -155,6 +161,13 @@ test('a turn with a single step, without an answer, stopped or failed stays unfo
   expect(itemSummaryOf(failed)).toEqual(['member', 'step thought', 'step command', 'step error', 'notice'])
   const finishedRunning = failed?.items[2]
   expect(finishedRunning?.type === 'message' && finishedRunning.message.isRunning).toBe(false)
+  const stopped = conversationWith([
+    replyRow(2, 'step', { step: command(0) }),
+    replyRow(3, 'step', { step: edit }),
+    replyRow(4, 'agent', { body: 'Partly done.' }),
+    replyRow(5, 'notice', { body: 'Stopped by Alice' }),
+  ])
+  expect(itemSummaryOf(stopped)).toEqual(['member', 'step thought', 'step command', 'step file', 'agent', 'notice'])
 })
 
 test('the error the interrupt causes is hidden in a stopped turn', () => {
@@ -321,6 +334,73 @@ test('a Claude Code subagent gathers the steps that carry its tool call id into 
 })
 
 const bob = memberId('member-bob')
+const delegationStatesOf = (conversation: ReturnType<typeof conversationWith>) =>
+  conversation?.items.flatMap((item) =>
+    item.type === 'message' && item.message.delegation
+      ? [
+          {
+            id: String(item.message.id),
+            status: item.message.delegation.status,
+            result: item.message.delegation.result,
+            steps: item.message.delegation.steps.length,
+          },
+        ]
+      : [],
+  )
+const resumeAction = (task: string, id: string, result: string | null) => ({
+  ...delegateAction(task, result),
+  arguments: JSON.stringify({ task, effort: 'small', resume: id }),
+})
+
+test('a resumed delegation stays one group with the resume’s answer, and the next delegation of that task gets its own', () => {
+  const conversation = conversationWith([
+    replyRow(2, 'step', { step: delegateAction('List the files', stillRunningOf('delegation-1')) }),
+    replyRow(3, 'step', { step: delegatedEdit('delegation-1') }),
+    replyRow(4, 'step', { step: resumeAction('List the files', 'delegation-1', 'First.') }),
+    replyRow(5, 'step', { step: delegateAction('List the files', 'Second.') }),
+    replyRow(6, 'step', { step: delegatedEdit('delegation-2') }),
+  ])
+  expect(delegationStatesOf(conversation)).toEqual([
+    { id: 'message-2', status: 'finished', result: 'First.', steps: 1 },
+    { id: 'message-5', status: 'finished', result: 'Second.', steps: 1 },
+  ])
+})
+
+test('a delegation still running reads running, without its still-running answer as a result; an error reads failed, stopped once the turn is', () => {
+  const stillRunning = conversationWith(
+    [
+      replyRow(2, 'step', { step: delegateAction('List the files', stillRunningOf('delegation-1')) }),
+      replyRow(3, 'step', { step: delegatedEdit('delegation-1') }),
+    ],
+    true,
+  )
+  expect(delegationStatesOf(stillRunning)).toEqual([{ id: 'message-2', status: 'running', result: null, steps: 1 }])
+  const interrupted = (isStopped: boolean) =>
+    delegationStatesOf(
+      conversationWith([
+        replyRow(2, 'step', { step: { ...delegateAction('List the files', 'Interrupted.'), isError: true } }),
+        replyRow(3, 'step', { step: delegatedEdit('delegation-1') }),
+        ...(isStopped ? [replyRow(4, 'notice', { body: 'Stopped by Alice' })] : []),
+      ]),
+    )?.map(({ status }) => status)
+  expect(interrupted(true)).toEqual(['stopped'])
+  expect(interrupted(false)).toEqual(['failed'])
+})
+
+test('messages carry their edited flag, the agent as their author, and tool connections only for the chat owner', () => {
+  const edited = { ...replyRow(2, 'agent'), editedAt: '2026-10-01T09:01:00.000Z' }
+  const snapshot = snapshotWith({ turn: false, waiting: false })
+  const messageOf = (viewer: typeof alice) =>
+    getConversation(
+      acme,
+      research,
+      viewer,
+    )({ ...snapshot, messages: [...snapshot.messages, edited] })?.messages.find((message) => message.id === edited.id)
+  expect(messageOf(alice)).toMatchObject({ isEdited: true, authorName: 'Agent', canConnectTools: true })
+  expect(messageOf(bob)).toMatchObject({ canConnectTools: false })
+  expect(conversationWith([replyRow(2, 'agent')])?.messages.at(-1)?.isEdited).toBe(false)
+})
+
 type RunsOnSetup = {
   viewer?: typeof alice
   isOwner?: boolean
@@ -372,7 +452,10 @@ const runsOnChoicesOf = ({
     hqRuntimeAvailable,
   )({
     ...snapshot,
-    workspaces: snapshot.workspaces.map((workspace) => ({ ...workspace, localSessions: !isSwitchOff })),
+    workspaces: snapshot.workspaces.map((workspace) => ({
+      ...workspace,
+      localSessions: workspace.id !== acme || !isSwitchOff,
+    })),
     chats: snapshot.chats.map((chat) => (chat.id === research ? { ...chat, ownerId: isOwner ? viewer : bob } : chat)),
     messages: [...snapshot.messages, ...(reply ? [replyRow(2, reply)] : [])],
     runtimeHosts: [

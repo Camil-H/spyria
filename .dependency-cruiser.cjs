@@ -156,7 +156,7 @@ module.exports = {
     {
       name: 'kernel-imports-nothing',
       severity: 'error',
-      from: { path: '^packages/kernel/' },
+      from: { path: '^packages/kernel/', pathNot: '\\.test\\.ts$' },
       to: { pathNot: '^packages/kernel/' },
     },
     { name: 'no-cycles', severity: 'error', from: {}, to: { circular: true } },

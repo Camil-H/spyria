@@ -41,26 +41,23 @@ test('newLlmCredential trims, derives last4 and never carries the secret', () =>
   expect(JSON.stringify(credential)).not.toContain('sk-test')
 })
 
-test('newLlmCredential rejects a blank provider', () => {
-  expect(() =>
-    newLlmCredential({
-      ...owner,
-      id: 'credential' as never,
-      provider: ' ',
-      secret: new Secret('abcd'),
-    }),
-  ).toThrow(BlankProvider)
-})
+const gatewayProviderOrErrorOf = (provider: string) => {
+  try {
+    return newLlmCredential({ ...owner, id: 'credential' as never, provider, secret: new Secret('abcd') })
+      .gatewayProvider
+  } catch (error) {
+    return error
+  }
+}
 
-test('newLlmCredential maps the supported providers to the gateway and refuses the others', () => {
-  const credentialFor = (provider: string) =>
-    newLlmCredential({ ...owner, id: 'credential' as never, provider, secret: new Secret('abcd') })
-  expect(['Anthropic', 'mistral', 'Fake'].map((provider) => credentialFor(provider).gatewayProvider)).toEqual([
-    'anthropic',
-    'mistral',
-    'fake',
-  ])
-  expect(() => credentialFor('Foo')).toThrow(UnsupportedProvider)
+test.each([
+  ['Anthropic', 'anthropic'],
+  ['mistral', 'mistral'],
+  ['Fake', 'fake'],
+  [' ', expect.any(BlankProvider)],
+  ['Foo', expect.any(UnsupportedProvider)],
+])('newLlmCredential maps the provider %p to the gateway, or refuses it', (provider, expected) => {
+  expect(gatewayProviderOrErrorOf(provider)).toEqual(expected)
 })
 
 test('a gateway key reference round-trips and refuses anything else', () => {

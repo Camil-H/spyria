@@ -31,8 +31,8 @@ const openMessageAction = async (page: Page, messageText: string, actionName: st
   await page.getByRole('menuitem', { name: actionName }).click()
 }
 const deleteDialogOf = (page: Page) => page.getByRole('dialog', { name: 'Delete message' })
-const agentReplyJobs = async (workerStack: WorkerStack) =>
-  (await workerStack.database.select().from(jobs)).filter((job) => job.type === 'agent.reply')
+const agentPromptJobs = async (workerStack: WorkerStack) =>
+  (await workerStack.database.select().from(jobs)).filter((job) => job.type === 'agent.prompt')
 
 test.beforeEach(async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-10-01T12:34:00Z'))
@@ -303,7 +303,7 @@ test('sends in a channel, keeps chats and drafts apart and scrolls to the newest
     await expect
       .poll(() => workerStack.database.query.messages.findFirst({ where: { body: 'Hello team' } }))
       .toBeDefined()
-    expect(await agentReplyJobs(workerStack)).toEqual([])
+    expect(await agentPromptJobs(workerStack)).toEqual([])
     await expect(messageContaining(page, agentReplyText)).toHaveCount(0)
     await expect(messageItemsOf(page)).toHaveCount(3)
   })
@@ -403,7 +403,7 @@ test('starts runtime chats from channel messages', async ({ page, workerStack })
     await expect
       .poll(() => workerStack.database.query.messages.findFirst({ where: { replyToId: 'message-welcome-2' } }))
       .toBeDefined()
-    expect(await agentReplyJobs(workerStack)).toEqual([])
+    expect(await agentPromptJobs(workerStack)).toEqual([])
     await expect(messageContaining(page, agentReplyText)).toHaveCount(0)
     await mainOf(page).getByRole('link', { name: 'Started from Welcome' }).click()
     await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Welcome' })).toBeVisible()

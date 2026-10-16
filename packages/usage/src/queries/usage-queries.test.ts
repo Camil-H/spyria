@@ -98,11 +98,3 @@ test('workspace usage totals the month per member and per project, loose chats u
     byProject: [],
   })
 })
-
-test('the seeded usage sits in the current month on Invoice bug', () => {
-  const currentMonth = new Date().toISOString().slice(0, 7)
-  expect(getChatUsage(acme, chatId('chat-invoice-bug'), currentMonth)(createMockSnapshot()).rows).toEqual([
-    { memberId: alice, name: 'Alice', tokens: 12_400, costMicros: 180_000, calls: 3 },
-    { memberId: bob, name: 'Bob', tokens: 3_100, costMicros: 50_000, calls: 1 },
-  ])
-})

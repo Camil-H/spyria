@@ -1,22 +1,21 @@
 import { expect, test } from 'bun:test'
-import type { RuntimeState } from './runtime.ts'
+import type { RuntimeState, RuntimeStatus } from './runtime.ts'
 import { runtimeStatusOf } from './runtime.ts'
 
-const statusOf = (state: RuntimeState, hostOnline = true) => runtimeStatusOf({ state, hostOnline })
-
-test('the runtime status follows the runtime state and its host', () => {
-  expect(runtimeStatusOf(undefined)).toBe('Not started')
-  expect(statusOf('creating')).toBe('Starting…')
-  expect(statusOf('starting')).toBe('Starting…')
-  expect(statusOf('running')).toBe('Ready')
-  expect(statusOf('stopping')).toBe('Sleeping')
-  expect(statusOf('stopped')).toBe('Sleeping')
-  for (const state of ['failed', 'removing', 'removed'] as const) expect(statusOf(state)).toBe('Could not start')
-})
-
-test('a running or sleeping runtime whose host is offline shows Host offline; other states keep their status', () => {
-  expect(statusOf('running', false)).toBe('Host offline')
-  expect(statusOf('stopped', false)).toBe('Host offline')
-  expect(statusOf('starting', false)).toBe('Starting…')
-  expect(statusOf('failed', false)).toBe('Could not start')
+test.each<[RuntimeState | undefined, boolean, RuntimeStatus]>([
+  [undefined, true, 'Not started'],
+  ['creating', true, 'Starting…'],
+  ['starting', true, 'Starting…'],
+  ['running', true, 'Ready'],
+  ['stopping', true, 'Sleeping'],
+  ['stopped', true, 'Sleeping'],
+  ['failed', true, 'Could not start'],
+  ['removing', true, 'Could not start'],
+  ['removed', true, 'Could not start'],
+  ['running', false, 'Host offline'],
+  ['stopped', false, 'Host offline'],
+  ['starting', false, 'Starting…'],
+  ['failed', false, 'Could not start'],
+])('a %s runtime with its host online %p reads %s', (state, hostOnline, status) => {
+  expect(runtimeStatusOf(state && { state, hostOnline })).toBe(status)
 })

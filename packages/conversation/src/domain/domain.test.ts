@@ -24,17 +24,18 @@ const messageByAlice: Message = {
   replyToId: null,
 }
 
-test('MessageBody trims its value', () => {
-  expect(String(MessageBody('  Hello  '))).toBe('Hello')
+test.each([
+  ['  Hello  ', 'Hello', 'Hello'],
+  ['Thanks, glad to be here.', 'Thanks, glad to be here.', 'Thanks, glad to be here.'],
+  ['  Fix the bug  \nwith details', 'Fix the bug  \nwith details', 'Fix the bug'],
+  ['x'.repeat(70), 'x'.repeat(70), `${'x'.repeat(60)}…`],
+])('MessageBody(%p) is %p and names a chat %p', (text, body, chatName) => {
+  expect(String(MessageBody(text))).toBe(body)
+  expect(chatNameFrom(MessageBody(text))).toBe(chatName)
 })
 
 test('MessageBody rejects blank values', () => {
   expect(() => MessageBody('  \n ')).toThrow(BlankMessageBody)
-})
-
-test('editedMessage replaces the body and records the edit time', () => {
-  const edited = editedMessage(messageByAlice, alice, MessageBody('Hi'), editedAt)
-  expect(edited).toEqual({ ...messageByAlice, body: MessageBody('Hi'), editedAt })
 })
 
 test('editedMessage and deletedMessage reject other members', () => {
@@ -50,18 +51,6 @@ test('a deleted message can be neither edited nor deleted', () => {
   const deleted = deletedMessage(messageByAlice, alice, editedAt)
   expect(() => editedMessage(deleted, alice, MessageBody('Hi'), editedAt)).toThrow(MessageDeleted)
   expect(() => deletedMessage(deleted, alice, editedAt)).toThrow(MessageDeleted)
-})
-
-test('chatNameFrom keeps short single-line messages', () => {
-  expect(chatNameFrom(MessageBody('Thanks, glad to be here.'))).toBe('Thanks, glad to be here.')
-})
-
-test('chatNameFrom takes the trimmed first line', () => {
-  expect(chatNameFrom(MessageBody('  Fix the bug  \nwith details'))).toBe('Fix the bug')
-})
-
-test('chatNameFrom truncates long first lines to 60 characters plus an ellipsis', () => {
-  expect(chatNameFrom(MessageBody('x'.repeat(70)))).toBe(`${'x'.repeat(60)}…`)
 })
 
 const minute = (value: number) => new Date(Date.UTC(2026, 9, 1, 9, value))

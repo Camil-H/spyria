@@ -36,16 +36,28 @@ const unreadFor = (threadOrderedMessages: MessageRow[], lastReadSeq: number) =>
     readMarkers: [{ workspaceId: acme, memberId: alice, chatId: research, lastReadSeq }],
   })
 
-test('a reply listed before a newer message stays unread when the marker is past that message', () => {
-  expect(unreadFor([messageOf(1, alice), messageOf(3, null), messageOf(2, alice)], 2)).toBe(true)
-})
+const stepOrNotice = (seq: number, kind: MessageRow['kind']): MessageRow => ({ ...messageOf(seq, null), kind })
 
-test('a message listed after a reply is read when the marker is past its seq', () => {
-  expect(unreadFor([messageOf(1, bob), messageOf(3, null), messageOf(2, bob)], 3)).toBe(false)
-})
-
-test('agent steps and notices never make a chat unread; an agent answer does', () => {
-  const stepOrNotice = (seq: number, kind: MessageRow['kind']): MessageRow => ({ ...messageOf(seq, null), kind })
-  expect(unreadFor([messageOf(1, alice), stepOrNotice(2, 'step'), stepOrNotice(3, 'notice')], 1)).toBe(false)
-  expect(unreadFor([messageOf(1, alice), stepOrNotice(2, 'step'), messageOf(3, null)], 1)).toBe(true)
+test.each([
+  [
+    'a reply listed before a newer message stays unread when the marker is past that message',
+    [messageOf(1, alice), messageOf(3, null), messageOf(2, alice)],
+    2,
+    true,
+  ],
+  [
+    'a message listed after a reply is read when the marker is past its seq',
+    [messageOf(1, bob), messageOf(3, null), messageOf(2, bob)],
+    3,
+    false,
+  ],
+  [
+    'agent steps and notices never make a chat unread',
+    [messageOf(1, alice), stepOrNotice(2, 'step'), stepOrNotice(3, 'notice')],
+    1,
+    false,
+  ],
+  ['an agent answer makes a chat unread', [messageOf(1, alice), stepOrNotice(2, 'step'), messageOf(3, null)], 1, true],
+])('%s', (_, threadOrderedMessages, lastReadSeq, isUnread) => {
+  expect(unreadFor(threadOrderedMessages, lastReadSeq)).toBe(isUnread)
 })

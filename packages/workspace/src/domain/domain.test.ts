@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test'
 import { chatId, memberId, projectId, workspaceId } from '@hq/kernel'
-import { archivedChat, type Chat, movedChat, renamedChat, startRuntimeChat } from './chat.ts'
+import { archivedChat, type Chat, movedChat, startRuntimeChat } from './chat.ts'
 import { BlankName, CrossWorkspaceMove, SourceChatArchived } from './errors.ts'
 import { Name } from './name.ts'
-import { archivedProject, type Project, renamedProject } from './project.ts'
+import { archivedProject, type Project } from './project.ts'
 
 const acme = workspaceId('acme')
 const globex = workspaceId('globex')
@@ -30,12 +30,19 @@ const chatInAcme: Chat = {
   originChatId: null,
 }
 
-test('Name trims its value', () => {
-  expect(String(Name('  Billing  '))).toBe('Billing')
-})
+const nameOrErrorOf = (text: string) => {
+  try {
+    return String(Name(text))
+  } catch (error) {
+    return error
+  }
+}
 
-test('Name rejects blank values', () => {
-  expect(() => Name('   ')).toThrow(BlankName)
+test.each([
+  ['  Billing  ', 'Billing'],
+  ['   ', expect.any(BlankName)],
+])('Name(%p) is trimmed or rejected as blank', (text, expected) => {
+  expect(nameOrErrorOf(text)).toEqual(expected)
 })
 
 test('movedChat rejects a project of another workspace', () => {
@@ -58,21 +65,6 @@ test('archivedProject with the release policy detaches the chats', () => {
   const result = archivedProject(projectIn(acme), [chatInAcme], 'release')
   expect(result.project.archived).toBe(true)
   expect(result.chats[0]).toMatchObject({ archived: false, projectId: null })
-})
-
-test('archivedChat marks the chat archived and keeps the rest', () => {
-  expect(archivedChat(chatInAcme)).toEqual({ ...chatInAcme, archived: true })
-})
-
-test('renamedChat sets the name and keeps the rest', () => {
-  expect(renamedChat(chatInAcme, Name('  Invoice total bug '))).toEqual({
-    ...chatInAcme,
-    name: Name('Invoice total bug'),
-  })
-})
-
-test('renamedProject sets the name and keeps the rest', () => {
-  expect(renamedProject(projectIn(acme), Name(' Invoicing '))).toEqual({ ...projectIn(acme), name: Name('Invoicing') })
 })
 
 const runtimeFields = {

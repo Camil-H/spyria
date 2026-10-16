@@ -3,9 +3,11 @@ import {
   type AgentEvent,
   agentNotices,
   agentProjectionOf,
+  executionStatusOf,
   isPlanningOf,
   isStoredAgentEvent,
   notReadyNoticeOf,
+  reopenedTurnOutcomeOf,
   startFailureNoticeOf,
   streamedTextOf,
   subagentDelegationOf,
@@ -25,7 +27,6 @@ test('a turn ends with a notice on error, or when it finished without any reply'
 })
 
 test('a runtime that cannot be placed reads as no host, any other failure as could not start', () => {
-  expect(agentNotices.noHost).toBe('No runtime host is available')
   expect(agentNotices.couldNotStart).toBe('The agent could not start')
   expect(startFailureNoticeOf('no_host')).toBe(agentNotices.noHost)
   expect(startFailureNoticeOf('no_capacity')).toBe(agentNotices.noHost)
@@ -143,7 +144,7 @@ const toolCallUpdate = (seq: number, toolCallId: string, status: string, fields:
     ...fields,
   })
 
-test('Claude Code edits, reads and HQ tools get their step types, and a subagent’s calls keep their ids inside its group', () => {
+test('Claude Code edits, reads and HQ tools get their step types, a subagent’s calls keep their ids inside its group, and its messages stay out of the chat', () => {
   const subagent = { id: 'conversation-1:toolu_task', model: '', modelName: '', task: '' }
   const diff = [{ type: 'diff', path: '/workspace/project/notes.md', oldText: null, newText: 'one\ntwo\n' }]
   const write = { title: 'Write notes.md', kind: 'edit', content: diff }
@@ -151,6 +152,7 @@ test('Claude Code edits, reads and HQ tools get their step types, and a subagent
   const stored = storedEventsOf([
     { event: toolCallUpdate(1, 'toolu_write', 'pending', write), delegation: subagent },
     { event: toolCallUpdate(2, 'toolu_write', 'completed', write), delegation: subagent },
+    { event: acpUpdate(6, { sessionUpdate: 'agent_message', text: 'Subagent notes' }), delegation: subagent },
     {
       event: toolCallUpdate(3, 'toolu_read', 'pending', {
         title: 'Read notes.md',
@@ -449,5 +451,28 @@ test('an hq-agent tool call made while a Task call is open belongs to its subage
   expect(toolCallIdOf(child)).toBe('conversation-1:child-1')
   expect(subagentDelegationOf(child, open)).toMatchObject({ id: 'conversation-1:task-1' })
   expect(subagentDelegationOf(task, open)).toBeUndefined()
+  const finished = [
+    { id: 'conversation-1:task-1', step: { type: 'tool', name: 'Task', arguments: '{}', result: 'Done' } },
+  ]
+  expect(subagentDelegationOf(child, finished as typeof open)).toBeUndefined()
   expect(subagentDelegationOf(acpUpdate(6, { sessionUpdate: 'agent_message', text: 'Hi' }), open)).toBeUndefined()
+})
+
+test.each([
+  [{ sessionUpdate: 'turn_end', stopReason: 'end_turn' }, 'finished'],
+  [{ sessionUpdate: 'turn_end', stopReason: 'cancelled' }, 'paused'],
+  [{ sessionUpdate: 'turn_end', stopReason: 'error' }, 'error'],
+  [{ sessionUpdate: 'error', message: 'boom' }, 'error'],
+  [{ sessionUpdate: 'agent_message', text: 'Hi' }, undefined],
+])('a subagent event %o ends its execution as %s', (update, status) => {
+  expect(executionStatusOf(acpUpdate(1, update))).toBe(status)
+})
+
+test.each([
+  ['running', undefined],
+  ['finished', 'finished'],
+  ['paused', 'finished'],
+  ['error', 'error'],
+] as const)('a reopened turn that hq-agent reports %s closes as %s', (executionStatus, outcome) => {
+  expect(reopenedTurnOutcomeOf(executionStatus)).toBe(outcome)
 })

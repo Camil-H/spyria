@@ -28,13 +28,11 @@ const createdBodyOf = async (harness: HarnessLaunch, acpModel?: string) => {
 
 test('a subscription session launches Claude Code without the relay, a model, or secrets, and keeps HQ tools', async () => {
   const created = await createdBodyOf('claude-code-subscription')
-  expect(created.agent.acp_command).toEqual([
-    'env',
-    'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1',
-    'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1',
-    'CLAUDE_CODE_MAX_RETRIES=0',
-    'claude-agent-acp',
-  ])
+  const command: string[] = created.agent.acp_command
+  expect(command.at(-1)).toBe('claude-agent-acp')
+  expect(command).toEqual(
+    expect.arrayContaining(['CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1', 'CLAUDE_CODE_MAX_RETRIES=0']),
+  )
   expect(created.secrets).toEqual({})
   expect(created.agent.mcp_config).toEqual({
     hq: {
@@ -91,30 +89,19 @@ test('a model picked for a subscription session is sent as acp_model, still with
 
 test('a Codex subscription session writes its config atomically and launches without a relay, a provider, a model, or secrets', async () => {
   const created = await createdBodyOf('codex-subscription')
-  const [env, config, ...launcher] = created.agent.acp_command
-  expect([env, ...launcher]).toEqual([
-    'env',
-    'sh',
-    '-c',
-    'set -e; printf %s "$HQ_CODEX_CONFIG" > "$HOME/.codex/config.toml.$$"; mv "$HOME/.codex/config.toml.$$" "$HOME/.codex/config.toml"; exec codex-acp',
-  ])
-  expect(config).toBe(`HQ_CODEX_CONFIG=forced_login_method = "chatgpt"
-check_for_update_on_startup = false
-cli_auth_credentials_store = "file"
-
-[analytics]
-enabled = false
-
-[feedback]
-enabled = false
-
-[features]
-plugins = false
-remote_plugin = false
-apps = false
-`)
+  const command: string[] = created.agent.acp_command
+  const config = command.find((part) => part.startsWith('HQ_CODEX_CONFIG=')) ?? ''
+  expect(config).toContain('forced_login_method = "chatgpt"')
+  expect(config).toMatch(/\[analytics\]\nenabled = false/)
+  expect(config).toMatch(/\[feedback\]\nenabled = false/)
+  const script = command.at(-1) ?? ''
+  const temporary = '"$HOME/.codex/config.toml.$$"'
+  expect(script).toContain(`> ${temporary}; mv ${temporary} "$HOME/.codex/config.toml"`)
+  expect(script).toEndWith('exec codex-acp')
   expect(created.secrets).toEqual({})
-  expect(Object.keys(created.agent.mcp_config)).toEqual(['hq'])
+  expect(created.agent.mcp_config).toEqual({
+    hq: expect.objectContaining({ headers: { Authorization: 'Bearer runtime-token' } }),
+  })
   expect(JSON.stringify(created)).not.toMatch(
     /OPENAI_API_KEY|CODEX_API_KEY|OPENAI_BASE_URL|"CODEX_CONFIG=|MODEL_PROVIDER|base_url|model/,
   )

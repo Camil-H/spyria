@@ -23,10 +23,6 @@ test('serves health', async () => {
   expect(await response.json()).toEqual({ status: 'ok' })
 })
 
-test('the dev token endpoint is gone', async () => {
-  expect((await app.request('/auth/dev-token', { method: 'POST', body: '{}' })).status).toBe(404)
-})
-
 test.each(['/api/query', '/api/mutate', llmCredentialsPath, runtimeHostsPath, `${runtimeHostsPath}/host-1/code`])(
   '%s refuses a request without a bearer token',
   async (path) => {

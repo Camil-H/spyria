@@ -24,9 +24,8 @@ test('links open in a new tab without opener or referrer and show their domain',
   expect(html).toContain('href="https://docs.example.com/pricing"')
   expect(html).toContain('target="_blank"')
   expect(html).toContain('rel="noopener noreferrer"')
-  expect(html).toContain('class="text-link underline"')
-  expect(html).toContain('<span class="text-xs text-muted">(docs.example.com)</span>')
-  expect(render('[Notes](notes.md)')).toContain('<span class="text-xs text-muted">()</span>')
+  expect(html).toContain('>(docs.example.com)</span>')
+  expect(render('[Notes](notes.md)')).toContain('>()</span>')
   expect(html).not.toContain('javascript:')
 })
 

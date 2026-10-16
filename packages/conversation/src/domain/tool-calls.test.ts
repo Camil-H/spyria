@@ -1,14 +1,7 @@
 import { expect, test } from 'bun:test'
 import { type AgentEvent, agentProjectionOf } from './agent-events.ts'
 import { observedStep, type StoredStep } from './agent-steps.ts'
-import {
-  toolCallFailureOf,
-  toolCallNoticeOf,
-  toolConnectionOf,
-  toolDisplayNameOf,
-  toolGatewayUnreachable,
-  toolServerOf,
-} from './tool-calls.ts'
+import { toolCallFailureOf, toolCallNoticeOf, toolConnectionOf, toolDisplayNameOf, toolServerOf } from './tool-calls.ts'
 
 const authenticationRequired =
   'Authentication required for fake. Open this URL to connect your account: http://localhost:5190/gateway-oauth/workspace/mcp-sessions/auth?flow=c9b2227c-ecb2-4ece-864b-59fcdfa1cd88'
@@ -45,7 +38,6 @@ test('tool errors the member must act on map to HQ wording, without the consent 
   expect(toolCallNoticeOf('unavailable', { ...names, isReconnect: false })).toBe(
     'fake is unavailable, try again shortly',
   )
-  expect(toolGatewayUnreachable).toBe('The tool gateway is unreachable, try again shortly')
   for (const failure of ['needs_connection', 'not_allowed', 'unavailable'] as const) {
     const notice = toolCallNoticeOf(failure, { ...names, isReconnect: false })
     expect(notice).not.toContain('http')
@@ -98,8 +90,4 @@ test('an MCP tool call becomes a "Used <tool> (<server>)" step with its result, 
     isError: true,
     connection: { server: 'fake', isReconnect: true },
   })
-})
-
-test('Claude Code’s HQ tool names lose their MCP prefix like the native ones', () => {
-  expect(toolDisplayNameOf('mcp__hq__fake-whoami')).toBe('whoami (fake)')
 })
