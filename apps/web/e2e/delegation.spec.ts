@@ -1,13 +1,15 @@
 import {
+  addLlmKey,
   delegationsFinished,
   expect,
   mainOf,
   messageItemsOf,
   newRuntimeChat,
   openChat,
+  openSession,
   type Page,
   sendMessage,
-  sidebarOf,
+  sessionOf,
   test,
 } from './fixtures'
 import { openPageAs } from './stack'
@@ -23,13 +25,6 @@ const delegating = (answer: string, script: object) => ({
 
 const groupOf = (page: Page, modelName: string) =>
   mainOf(page).getByRole('button', { name: new RegExp(`^Delegated to ${modelName} · 2 steps · `) })
-const sessionOf = (page: Page) => page.getByRole('dialog', { name: 'Session' })
-const openSession = async (page: Page) => {
-  await mainOf(page)
-    .getByRole('button', { name: /Model chosen at first prompt|· (auto|same as main)$/ })
-    .click()
-  await expect(sessionOf(page)).toBeVisible()
-}
 const promptAndWait = async (page: Page, text: string, answer: string) => {
   await sendMessage(page, text)
   await expect(messageItemsOf(page).filter({ hasText: answer })).toBeVisible()
@@ -97,22 +92,13 @@ const resuming = (answer: string, script: object, resumeHold?: string) => ({
   text: answer,
   ...script,
 })
-const addKey = async (page: Page, provider: string) => {
-  const llmSection = mainOf(page).getByRole('region', { name: 'LLM access' })
-  await sidebarOf(page).getByRole('link', { name: 'Profile' }).click()
-  await llmSection.getByLabel('Provider').fill(provider)
-  await llmSection.getByLabel('Secret').fill(`fake-key-${crypto.randomUUID()}`)
-  await llmSection.getByRole('button', { name: 'Add' }).click()
-  await expect(llmSection.getByRole('listitem').filter({ hasText: provider })).toBeVisible()
-}
-
 test('8. Bob asks for fake-large and gets fake-small, with the fallback line on the group', async ({
   browser,
   workerStack,
   agentScript,
 }) => {
   const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-  await addKey(bobPage, 'Fake-small')
+  await addLlmKey(bobPage, 'Fake-small')
   const bobChatId = await newRuntimeChat(bobPage, 'Bob delegates')
   const answer = 'Listed on what Bob can reach.'
   await agentScript(bobChatId, delegatingTo('fake-large', answer, { subagents: { 'fake-small': subagentWork } }))

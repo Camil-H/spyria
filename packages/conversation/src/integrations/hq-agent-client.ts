@@ -1,8 +1,8 @@
 import {
+  type AgentClient,
   type AgentConversation,
   type AgentEndpoint,
   type AgentLlmChoice,
-  type AgentServer,
   AgentStartFailure,
   type PiLaunch,
   type PiModel,
@@ -27,7 +27,7 @@ const send = (endpoint: AgentEndpoint, method: string, path: string, body?: obje
 const call = async (endpoint: AgentEndpoint, method: string, path: string, body?: object) => {
   const response = await send(endpoint, method, path, body)
   if (response.status === notFoundStatus && method === 'GET') return undefined
-  if (response.status >= 300) throw new Error(`The Agent Server answered ${method} ${path} with ${response.status}`)
+  if (response.status >= 300) throw new Error(`hq-agent answered ${method} ${path} with ${response.status}`)
   return JSON.parse(response.body || '{}') as Record<string, unknown>
 }
 
@@ -89,13 +89,13 @@ const harnessConversationOf = (
   endpoint: AgentEndpoint,
   llmToken: string,
   harness: HarnessLaunch,
-  { resumeSessionId, acpModel }: AgentLlmChoice,
+  { resumeSessionId, adapterModel }: AgentLlmChoice,
 ) => ({
   agent: {
     acp_command: harnessLaunches[harness],
     mcp_config: { hq: mcpServerOf(endpoint, '/mcp', llmToken) },
     ...(resumeSessionId && { acp_resume_session_id: resumeSessionId }),
-    ...(acpModel && { acp_model: acpModel }),
+    ...(adapterModel && { acp_model: adapterModel }),
   },
   secrets: {},
 })
@@ -168,15 +168,15 @@ const piConversationOf = (
   endpoint: AgentEndpoint,
   llmToken: string,
   pi: PiLaunch,
-  { resumeSessionId, acpModel, effort }: AgentLlmChoice,
+  { resumeSessionId, adapterModel, effort }: AgentLlmChoice,
   sub: SubConversation | undefined,
 ) => ({
   agent: {
     acp_command: piCommandOf(endpoint.transport.gatewayUrl, pi, { sub: Boolean(sub) }),
     adapter: 'pi-rpc',
     ...(resumeSessionId && { acp_resume_session_id: resumeSessionId }),
-    ...(acpModel && { acp_model: acpModel }),
-    ...(acpModel && effort && { acp_thought_level: effort }),
+    ...(adapterModel && { acp_model: adapterModel }),
+    ...(adapterModel && effort && { acp_thought_level: effort }),
   },
   secrets: {
     HQ_LLM_TOKEN: { kind: 'StaticSecret', value: llmToken },
@@ -184,7 +184,7 @@ const piConversationOf = (
   },
 })
 
-export const createSandboxAgentServer = (): AgentServer => ({
+export const createHqAgentClient = (): AgentClient => ({
   createConversation: async (conversation, llmToken, llm, sub) => {
     const created = await call(conversation, 'POST', '/api/conversations', {
       id: conversation.conversationId,
@@ -200,7 +200,7 @@ export const createSandboxAgentServer = (): AgentServer => ({
       throw new AgentStartFailure(String(created.error))
     }
   },
-  switchAcpModel: async (conversation, model, thoughtLevel) => {
+  switchModel: async (conversation, model, thoughtLevel) => {
     await call(conversation, 'POST', `/api/conversations/${conversation.conversationId}/switch_acp_model`, {
       model,
       ...(thoughtLevel && { thoughtLevel }),

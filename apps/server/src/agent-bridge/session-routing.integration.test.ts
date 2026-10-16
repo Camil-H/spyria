@@ -88,12 +88,12 @@ test('a lost conversation is routed again for the new session', async () => {
   let lostConversationId = ''
   await stack.agentHost('Routing host', {
     routesModelCalls: true,
-    agentServerOf: (relay) => ({
-      ...relay.agentServer,
+    containerAgentOf: (relay) => ({
+      ...relay.containerAgent,
       respond: (request, container) =>
         lostConversationId && request.path === `/api/conversations/${lostConversationId}`
           ? { status: 404, body: '{}' }
-          : relay.agentServer.respond(request, container),
+          : relay.containerAgent.respond(request, container),
     }),
   })
   const chat = await newRuntimeChat()

@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test'
 import { getTableName } from 'drizzle-orm'
 import { schema } from '../zero.ts'
 import { allTables } from './seed.ts'
-import { createTestDatabase, databaseDropTimeoutMilliseconds, migrateDatabase } from './test-database.ts'
+import { createTestDatabase, databaseDropTimeoutMilliseconds, migrateDatabase } from './testing.ts'
 
 const emptyDatabase = await createTestDatabase('template0')
 afterAll(() => emptyDatabase.drop(), databaseDropTimeoutMilliseconds)

@@ -158,7 +158,7 @@ export const createHqAgentRelay = ({
     agent?.process.kill()
   }
 
-  const agentServer = {
+  const containerAgent = {
     respond: async ({ method, path, headers, body }, container) => {
       const { port } = await agentOf(container)
       const sent = method === 'POST' ? JSON.parse(body || '{}') : {}
@@ -212,7 +212,7 @@ export const createHqAgentRelay = ({
   const stopAgents = () => stopAgentsExcept([])
 
   return {
-    agentServer,
+    containerAgent,
     created,
     prompts,
     modelSwitches,

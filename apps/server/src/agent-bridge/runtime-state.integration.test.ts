@@ -44,8 +44,8 @@ afterEach(() => {
 
 const aliceInGlobex = { workspaceId: globex, userId: alice }
 type Relay = ReturnType<typeof createHqAgentRelay>
-const agentHost = (name = 'Agent host', agentServerOf?: (relay: Relay) => ContainerAgent) =>
-  stack.agentHost(name, { holdUrl, agentServerOf })
+const agentHost = (name = 'Agent host', containerAgentOf?: (relay: Relay) => ContainerAgent) =>
+  stack.agentHost(name, { holdUrl, containerAgentOf })
 const command = (member: typeof aliceInAcme, name: string, chat: ChatId, workspaceId: string = member.workspaceId) =>
   mutate(member, `conversation.${name}`, { workspaceId, chatId: chat })
 const firstTurnMilliseconds = 20_000
@@ -98,11 +98,11 @@ test('Stop interrupts the agent, ends the turn once with a notice naming the mem
 test('a prompt whose turn was stopped while it was being sent is interrupted at once', async () => {
   let firstPromptId = ''
   const { relay } = await agentHost('Agent host', (relay) => ({
-    ...relay.agentServer,
+    ...relay.containerAgent,
     respond: async (request, container) => {
       if (request.method === 'POST' && request.path.endsWith('/events'))
         await database.$client`update chats set agent_turn_message_id = null where agent_turn_message_id = ${firstPromptId}`
-      return relay.agentServer.respond(request, container)
+      return relay.containerAgent.respond(request, container)
     },
   }))
   const chat = await newRuntimeChat()
@@ -117,9 +117,9 @@ test('a Stop whose interrupt arrives after the turn already finished ends the tu
   let first = ''
   const interruptSent = Promise.withResolvers<void>()
   const { relay } = await agentHost('Agent host', (relay) => ({
-    ...relay.agentServer,
+    ...relay.containerAgent,
     respond: async (request, container) => {
-      if (!request.path.endsWith('/interrupt')) return relay.agentServer.respond(request, container)
+      if (!request.path.endsWith('/interrupt')) return relay.containerAgent.respond(request, container)
       interruptSent.resolve()
       await waitFor(async () => (await turnOf(chat)) !== first)
       return { status: 200, body: '{}' }
@@ -148,17 +148,17 @@ test('a Stop whose interrupt arrives after the turn already finished ends the tu
 test('a prompt whose conversation create keeps failing ends with "could not start" after its last attempt, and the next prompt runs', async () => {
   let isCreateFailing = true
   await agentHost('Agent host', (relay) => ({
-    ...relay.agentServer,
+    ...relay.containerAgent,
     respond: async (request, container) =>
       isCreateFailing && request.method === 'POST' && request.path === '/api/conversations'
         ? { status: 500, body: '{}' }
-        : relay.agentServer.respond(request, container),
+        : relay.containerAgent.respond(request, container),
   }))
   const chat = await newRuntimeChat()
   const failed = await prompt(chat, 'Start please')
   await waitFor(async () => (await noticesOf(failed)).length > 0, firstTurnMilliseconds)
   expect(await repliesTo(failed)).toEqual([
-    notice('The agent could not start: The Agent Server answered POST /api/conversations with 500'),
+    notice('The agent could not start: hq-agent answered POST /api/conversations with 500'),
   ])
   await turnIs(chat, null)
 
@@ -289,12 +289,12 @@ test("a turn end arriving after its turn was closed does not end the next prompt
         (event.payload as { event: { update: { sessionUpdate?: string } } }).event.update.sessionUpdate === 'turn_end',
     ).length
   const { relay } = await agentHost('Agent host', (relay) => ({
-    ...relay.agentServer,
+    ...relay.containerAgent,
     respond: async (request, container) => {
       if (isStatusHidden && request.method === 'GET' && conversationPath.test(request.path))
         return { status: 503, body: '' }
       if (request.path.endsWith('/events') && relay.prompts.length === 1) await isFirstEnded
-      return relay.agentServer.respond(request, container)
+      return relay.containerAgent.respond(request, container)
     },
   }))
   const chat = await newRuntimeChat()
@@ -323,16 +323,16 @@ test("a turn end arriving after its turn was closed does not end the next prompt
 test('on reconnect, a turn hq-agent finished while away is closed from the resent events, and a turn whose conversation is gone ends with a notice', async () => {
   let isHoldingStatus = false
   const { relay } = await agentHost('Agent host', (relay) => ({
-    ...relay.agentServer,
+    ...relay.containerAgent,
     respond: async (request, container) => {
       const isStatus = request.method === 'GET' && conversationPath.test(request.path)
       if (isHoldingStatus && isStatus)
         await waitFor(
           async () =>
-            JSON.parse(String(((await relay.agentServer.respond(request, container)) as { body: string }).body))
+            JSON.parse(String(((await relay.containerAgent.respond(request, container)) as { body: string }).body))
               .execution_status === 'finished',
         )
-      return relay.agentServer.respond(request, container)
+      return relay.containerAgent.respond(request, container)
     },
   }))
   const finishing = await newRuntimeChat()

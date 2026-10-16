@@ -63,7 +63,7 @@ const chooseSubagent = async (dependencies: AgentDependencies, input: Input, eff
 }
 
 const runSubConversation = (
-  { transactor, runtimes, agentServer }: AgentDependencies,
+  { transactor, runtimes, agentClient }: AgentDependencies,
   chat: AgentChat,
   conversation: AgentConversation,
   task: string,
@@ -78,7 +78,7 @@ const runSubConversation = (
         socket.close()
         resolve({ status, answer })
       })
-    const socket = agentServer.openEvents(conversation, null, {
+    const socket = agentClient.openEvents(conversation, null, {
       onEvent: (event) => {
         const streamed = streamedTextOf(event)
         if (streamed && !streamed.isReasoning) answer += streamed.text
@@ -93,7 +93,7 @@ const runSubConversation = (
       },
       onClose: () => void recording.then(() => resolve({ status: 'closed', answer })),
     })
-    agentServer.sendMessage(conversation, task).catch(reject)
+    agentClient.sendMessage(conversation, task).catch(reject)
   })
 
 const answerWithin = async (dependencies: AgentDependencies, id: string, running: RunningDelegation) => {
@@ -113,11 +113,11 @@ const runDelegation = async (
   choice: { effort: string | null },
   { token, delegation, running }: { token: string; delegation: StepDelegation; running: RunningDelegation },
 ): Promise<DelegationResult> => {
-  const { transactor, agentServer } = dependencies
+  const { transactor, agentClient } = dependencies
   let status: 'finished' | 'failed' = 'failed'
   try {
     const conversation = { ...endpoint, conversationId: crypto.randomUUID() }
-    await agentServer.createConversation(
+    await agentClient.createConversation(
       conversation,
       token,
       dependencies.fixedLlm

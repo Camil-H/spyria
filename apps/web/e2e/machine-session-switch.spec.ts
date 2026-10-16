@@ -104,7 +104,7 @@ test('1 and 4. the admin turns sessions on members machines off: no Add my machi
   await bobPage.context().close()
 })
 
-test('2. an existing local session answers prompts with the notice while it is off, and again once it is back on', async ({
+test('2. an existing machine session answers prompts with the notice while it is off, and again once it is back on', async ({
   page,
   machine,
 }) => {

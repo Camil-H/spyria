@@ -72,7 +72,7 @@ test('tells HQ to cancel when the caller stops reading', async () => {
   relay.handle({ type: 'gw_chunk', sid, data: 'late' })
 })
 
-test('relays the Agent Server’s MCP calls on /mcp with their session headers', async () => {
+test('relays hq-agent’s MCP calls on /mcp with their session headers', async () => {
   const { relay, nextOf } = relayCollecting()
   void relay.fetch(
     new Request('http://hq-gateway-relay:4000/mcp', {

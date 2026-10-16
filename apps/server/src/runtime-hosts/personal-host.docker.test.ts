@@ -93,7 +93,7 @@ test("a real hq-host --personal runs HQ's image with the credentials volume, rel
       () => false,
     )
   for (const deadline = Date.now() + 30_000; !(await isReady()); await Bun.sleep(100))
-    if (Date.now() > deadline) throw new Error('The Agent Server was not ready within 30 s')
+    if (Date.now() > deadline) throw new Error('hq-agent was not ready within 30 s')
   const headers = { 'x-session-api-key': apiKey, 'content-type': 'application/json' }
   const startSession = async (command: string[]) => {
     const created = await transport.fetch({

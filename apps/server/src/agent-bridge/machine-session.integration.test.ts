@@ -185,7 +185,7 @@ test('the adapter’s models list in the routing read, and a pick is switched in
     await mutate(aliceInAcme, 'conversation.updateChatRouting', {
       workspaceId: acme,
       chatId: chat,
-      acpModel: 'stub-large',
+      adapterModel: 'stub-large',
     }),
   ).toEqual(succeeded)
   const replies = await finished(await prompt(chat, 'Again'), chat)
@@ -346,10 +346,10 @@ const machineLosingFirstCreate = async () => {
   const { relay, host } = await stack.agentHost('Machine', {
     ownerId: alice,
     signedIn: ['claude'],
-    agentServerOf: (relay) => ({
-      ...relay.agentServer,
+    containerAgentOf: (relay) => ({
+      ...relay.containerAgent,
       respond: async (request, container) => {
-        const response = await relay.agentServer.respond(request, container)
+        const response = await relay.containerAgent.respond(request, container)
         if (request.method !== 'POST' || request.path !== '/api/conversations' || relay.created.length > 1)
           return response
         createReached.resolve()

@@ -119,7 +119,7 @@ test('calls outside /v1, without an active turn or with another host’s runtime
   expect(fakeLlmCalls.length).toBe(callsBefore)
 })
 
-test('a local session’s runtime token is refused for model calls before the gateway', async () => {
+test('a machine session’s runtime token is refused for model calls before the gateway', async () => {
   const host = await fakeHost('Local session host')
   const { chatId, token } = await runtimeTurn(host, alice)
   await database.$client`update chats set local_session = true, harness = 'claude-code' where id = ${chatId}`

@@ -2,7 +2,7 @@ import { afterAll, expect, setDefaultTimeout, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createSandboxAgentServer } from '@hq/conversation/server'
+import { createHqAgentClient } from '@hq/conversation/server'
 import { testGatewayAdmin } from '@hq/db/testing'
 import { schema } from '@hq/db/zero'
 import { runtimeHostId } from '@hq/kernel'
@@ -125,13 +125,13 @@ type Update = {
   cwd?: string
   entries?: unknown
 }
-const agentServer = createSandboxAgentServer()
-type AgentLlmChoice = Parameters<typeof agentServer.createConversation>[2]
+const agentClient = createHqAgentClient()
+type AgentLlmChoice = Parameters<typeof agentClient.createConversation>[2]
 const piConversationOf = async (transport: AgentTransport, token: string, llm: AgentLlmChoice) => {
   const conversation = { transport, apiKey, conversationId: crypto.randomUUID() }
-  await agentServer.createConversation(conversation, token, llm)
+  await agentClient.createConversation(conversation, token, llm)
   const updates: Update[] = []
-  const socket = agentServer.openEvents(conversation, null, {
+  const socket = agentClient.openEvents(conversation, null, {
     onEvent: (event) => updates.push((event as { update?: Update }).update ?? {}),
     onClose: () => {},
   })
@@ -139,7 +139,7 @@ const piConversationOf = async (transport: AgentTransport, token: string, llm: A
   const answerOf = async (text: string) => {
     const start = updates.length
     const turn = turnEnds().length + 1
-    await agentServer.sendMessage(conversation, text)
+    await agentClient.sendMessage(conversation, text)
     await waitFor(() => turnEnds().length >= turn, 120_000)
     return updates
       .slice(start)
@@ -173,7 +173,7 @@ test("Pi in HQ's image answers through the LLM relay on the chat and Anthropic r
   const { id, transport } = await runtime()
   const { chatId, token } = await runtimeTurn({ id }, bob)
   const { conversation, turnEnds, answerOf, close } = await piConversationOf(transport, token, {
-    acpModel: 'hq/fake/fake-medium',
+    adapterModel: 'hq/fake/fake-medium',
     pi: {
       models: [
         { id: 'fake/fake-medium', name: 'Fake medium', reasoning: false },
@@ -183,7 +183,7 @@ test("Pi in HQ's image answers through the LLM relay on the chat and Anthropic r
     },
   })
   expect(await answerOf('Hello Pi')).toBe('Understood, working on it.')
-  await agentServer.switchAcpModel(conversation, 'hq-anthropic/anthropic/claude-haiku-5-5')
+  await agentClient.switchModel(conversation, 'hq-anthropic/anthropic/claude-haiku-5-5')
   expect(await answerOf('Hello Pi on Anthropic')).toContain('Understood')
   expect(turnEnds().map((update) => update.stopReason)).toEqual(['end_turn', 'end_turn'])
   close()
@@ -210,7 +210,7 @@ test('a long Pi conversation compacts on the compaction model, recorded with pro
   const { id, transport } = await runtime()
   const { chatId, token } = await runtimeTurn({ id }, bob)
   const llm = {
-    acpModel: 'hq/fake/fake-medium',
+    adapterModel: 'hq/fake/fake-medium',
     pi: {
       models: [
         { id: 'fake/fake-medium', name: 'Fake medium', reasoning: false, contextWindow: 4000 },
@@ -224,7 +224,7 @@ test('a long Pi conversation compacts on the compaction model, recorded with pro
   for (const text of ['Remember the word PAPAYA', 'Second turn', 'Third turn']) await first.answerOf(text)
   const sessionId = first.updates.find((update) => update.sessionUpdate === 'session_started')?.sessionId
   first.close()
-  await agentServer.deleteConversation(first.conversation)
+  await agentClient.deleteConversation(first.conversation)
 
   const summaryRequests = fakeLlmBodies.filter((body) => body.startsWith('{"model":"fake-small"'))
   expect(summaryRequests.some((body) => body.includes('Remember the word PAPAYA'))).toBe(true)
@@ -264,7 +264,7 @@ test("Pi in HQ's image runs a command with its output, asks through HQ's extensi
   const { id, transport } = await runtime()
   const { token } = await runtimeTurn({ id }, bob)
   const pi = await piConversationOf(transport, token, {
-    acpModel: 'hq/fake/fake-medium',
+    adapterModel: 'hq/fake/fake-medium',
     pi: {
       models: [{ id: 'fake/fake-medium', name: 'Fake medium', reasoning: false }],
       compactionModel: 'fake/fake-medium',
@@ -295,7 +295,7 @@ test("Pi in HQ's image runs a command with its output, asks through HQ's extensi
     ],
   })
   expect(
-    await agentServer.answerQuestion(pi.conversation, String(question.questionId), {
+    await agentClient.answerQuestion(pi.conversation, String(question.questionId), {
       answers: {},
       free: { answer: 'MySQL' },
     }),
@@ -311,7 +311,7 @@ test("Pi in HQ's image runs a command with its output, asks through HQ's extensi
   })
   expect(fakeLlmBodies.some((body) => body.includes('The member answered: MySQL'))).toBe(true)
 
-  expect(await agentServer.setPlanMode(pi.conversation, true)).toBe(200)
+  expect(await agentClient.setPlanMode(pi.conversation, true)).toBe(200)
   setFakeLlmScript({
     steps: [{ command: 'touch blocked.txt' }, { tool: 'propose_plan', arguments: { plan: '1. Create notes.txt' } }],
     text: 'Planned.',
@@ -319,7 +319,7 @@ test("Pi in HQ's image runs a command with its output, asks through HQ's extensi
   const planned = pi.answerOf('Plan it')
   const plan = await pi.questionOf('plan')
   expect(plan).toMatchObject({ plan: '1. Create notes.txt' })
-  expect(await agentServer.answerQuestion(pi.conversation, String(plan.questionId), { approve: true })).toBe(200)
+  expect(await agentClient.answerQuestion(pi.conversation, String(plan.questionId), { approve: true })).toBe(200)
   expect(await planned).toBe('Planned.')
   expect(finalOf('touch blocked.txt')).toMatchObject({
     status: 'failed',

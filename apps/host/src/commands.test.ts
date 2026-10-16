@@ -121,7 +121,7 @@ test('creates the container with exactly the hardening flags and three named vol
   })
 })
 
-test('relays only to paths on the Agent Server port of the runtime', () => {
+test('relays only to paths on the hq-agent port of the runtime', () => {
   expect(relayUrlOf('http://172.20.0.2:8000', '/api/conversations?limit=5').href).toBe(
     'http://172.20.0.2:8000/api/conversations?limit=5',
   )

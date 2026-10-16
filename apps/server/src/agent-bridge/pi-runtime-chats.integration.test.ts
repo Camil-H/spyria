@@ -72,14 +72,14 @@ test.each([
     const frames = await stack.subscribedFrames(chat)
     const replies = await finished(await prompt(chat, 'stub:tools', bobInAcme), chat)
 
-    const acpModel = `${piProvider}/${model}`
-    expect(replies.at(-1)?.body).toBe(`Hello from the stub (model ${acpModel}, mode default).`)
+    const adapterModel = `${piProvider}/${model}`
+    expect(replies.at(-1)?.body).toBe(`Hello from the stub (model ${adapterModel}, mode default).`)
     expect(replies.filter((reply) => reply.body.includes('Hello from the stub'))).toHaveLength(1)
-    expect(frames.join('')).toContain(`Hello from the stub (model ${acpModel}`)
+    expect(frames.join('')).toContain(`Hello from the stub (model ${adapterModel}`)
     const [launch] = launches()
     expect(launches()).toHaveLength(1)
     expect(launch?.agent.acp_command.at(-1)).toEndWith('exec pi --mode rpc --no-themes')
-    expect(launch?.agent).toMatchObject({ acp_model: acpModel, acp_thought_level: 'medium' })
+    expect(launch?.agent).toMatchObject({ acp_model: adapterModel, acp_thought_level: 'medium' })
     const files = piFilesOf(launch as Launch)
     const { providers } = JSON.parse(files.HQ_PI_MODELS ?? '{}')
     expect(Object.keys(providers)).toEqual([piProvider])

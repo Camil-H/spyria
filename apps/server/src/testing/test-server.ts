@@ -252,7 +252,7 @@ const app = createApp({
       })
       const created = await createFakeHosts({ port, database: databaseByName(db) }).fakeHost('e2e fake host', {
         memoryGibibytes: 16,
-        agentServer: relay.agentServer,
+        containerAgent: relay.containerAgent,
         boot: bootOf(db),
       })
       fakeHost = { host: created, relay, isOnline: true }
@@ -273,7 +273,7 @@ const app = createApp({
       const relay = createHqAgentRelay({ gapMilliseconds: stubGapMilliseconds, holdUrl: holdUrlOf(db) })
       const host = await createFakeHosts({ port, database: databaseByName(db) }).fakeHost('My machine', {
         memoryGibibytes: 16,
-        agentServer: relay.agentServer,
+        containerAgent: relay.containerAgent,
         boot: bootOf(db),
         ownerId: owner,
         signedIn: (signedIn ?? '').split(',').filter(Boolean),

@@ -11,6 +11,7 @@ import {
   type Page,
   panelOf,
   sendMessage,
+  sessionStarted,
   test,
   workingIndicatorOf,
 } from './fixtures'
@@ -81,6 +82,7 @@ test('e2. without git there is no branch chip; once the agent switches to a bran
 
 test('e5. a Pi chat whose agent calls update_plan shows the checklist in the chat and the Plan panel, with no tool step', async ({
   page,
+  workerStack,
   agentScript,
 }) => {
   const chatId = await newRuntimeChat(page, 'Pi plan')
@@ -91,9 +93,11 @@ test('e5. a Pi chat whose agent calls update_plan shows the checklist in the cha
   ]
   await agentScript(chatId, { steps: [{ plan }], text: 'Planned the fix.' })
   await sendMessage(page, 'Plan the fix')
+  await sessionStarted(workerStack, chatId)
+  const checklist = mainOf(page).getByRole('group', { name: 'Plan' })
+  await expect(checklist).toBeVisible()
   await expect(messageContaining(page, 'Planned the fix.')).toHaveCount(1)
   await expect(workingIndicatorOf(page)).toHaveCount(0)
-  const checklist = mainOf(page).getByRole('group', { name: 'Plan' })
   await expect(checklist).toHaveCount(1)
   await expect(checklist.getByRole('checkbox', { name: 'Reproduce the bug' })).toBeChecked()
   await expect(checklist.getByRole('checkbox', { name: 'Ship' })).not.toBeChecked()

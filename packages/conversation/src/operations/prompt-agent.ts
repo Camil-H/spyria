@@ -61,7 +61,7 @@ export const piLlmOf = async (
 ): Promise<AgentLlmChoice> => {
   const models = await reachableChatModelsOf(dependencies, prompterId)
   return {
-    acpModel: piModelOf(model),
+    adapterModel: piModelOf(model),
     effort: thoughtLevelOf(effort),
     pi: {
       models: models.map(({ id, name, contextWindow }) => ({ id, name, contextWindow, reasoning: true })),
@@ -73,7 +73,7 @@ export const piLlmOf = async (
 export const fixedPiLlmOf = (fixedModel: string): AgentLlmChoice => {
   const model = fixedModel.replace(/^openai\//, '')
   const pi = { models: [{ id: model, name: model, reasoning: true }], compactionModel: model }
-  return { acpModel: piModelOf(model), pi }
+  return { adapterModel: piModelOf(model), pi }
 }
 
 const routeSession = async (
@@ -107,7 +107,7 @@ const routeSession = async (
 }
 
 const keepSession = async (
-  { transactor, agentServer }: AgentDependencies,
+  { transactor, agentClient }: AgentDependencies,
   chat: AgentChat,
   conversation: AgentConversation,
   prompterId: MemberId,
@@ -121,41 +121,41 @@ const keepSession = async (
   if (!chatModelsOf(reachable ?? []).some((candidate) => candidate.id === model))
     return { refusal: unreachableSessionNoticeOf(model) }
   if (agentModel !== model) {
-    await agentServer.switchAcpModel(conversation, piModelOf(model), thoughtLevelOf(reasoningEffort))
+    await agentClient.switchModel(conversation, piModelOf(model), thoughtLevelOf(reasoningEffort))
     await transactor.run(({ routing }) => routing.setAgentModel(chat.chatId, model))
   }
   return { conversation }
 }
 
-const keepAcpModel = async (
-  { transactor, agentServer }: AgentDependencies,
+const keepAdapterModel = async (
+  { transactor, agentClient }: AgentDependencies,
   chat: AgentChat,
   conversation: AgentConversation,
 ): Promise<Prepared> => {
   const { model, agentModel } = await transactor.run(({ routing }) => routing.chatRouting(chat.chatId))
   if (model && model !== agentModel) {
-    await agentServer.switchAcpModel(conversation, model)
+    await agentClient.switchModel(conversation, model)
     await transactor.run(({ routing }) => routing.setAgentModel(chat.chatId, model))
   }
   return { conversation }
 }
 
 const storedConversationOf = async (
-  { runtimes, agentServer }: AgentDependencies,
+  { runtimes, agentClient }: AgentDependencies,
   chat: AgentChat,
   { conversationId, ...endpoint }: AgentEndpoint,
 ) => {
   if (conversationId === null) return undefined
   const stored = { ...endpoint, conversationId }
-  const status = await agentServer.statusOf(stored)
+  const status = await agentClient.statusOf(stored)
   if (status !== undefined && status !== 'error') return stored
-  if (status === 'error') await agentServer.deleteConversation(stored).catch(() => undefined)
+  if (status === 'error') await agentClient.deleteConversation(stored).catch(() => undefined)
   await runtimes.forgetConversation(chat)
   return undefined
 }
 
 const createdConversationOf = async (
-  { runtimes, agentServer }: AgentDependencies,
+  { runtimes, agentClient }: AgentDependencies,
   chat: AgentChat,
   endpoint: AgentEndpoint,
   llm: AgentLlmChoice,
@@ -163,7 +163,7 @@ const createdConversationOf = async (
   const newId = crypto.randomUUID()
   const conversation = { ...endpoint, conversationId: await runtimes.rememberConversation(chat, newId) }
   if (conversation.conversationId === newId)
-    await agentServer.createConversation(conversation, await runtimes.issueLlmToken(chat), llm)
+    await agentClient.createConversation(conversation, await runtimes.issueLlmToken(chat), llm)
   return conversation
 }
 
@@ -179,7 +179,7 @@ const machineConversationFor = async (
   const conversation = await createdConversationOf(dependencies, chat, endpoint, {
     harness: localSession.launch,
     resumeSessionId,
-    acpModel: model ?? undefined,
+    adapterModel: model ?? undefined,
   })
   if (model) await transactor.run(({ routing }) => routing.setAgentModel(chat.chatId, model))
   return conversation
@@ -197,7 +197,7 @@ const conversationFor = async (
   if (localSession && !signedIn.includes(localSession.signIn)) return { refusal: localSession.signInNotice }
   const storedConversation = await storedConversationOf(dependencies, chat, endpoint)
   if (storedConversation) {
-    if (localSession) return keepAcpModel(dependencies, chat, storedConversation)
+    if (localSession) return keepAdapterModel(dependencies, chat, storedConversation)
     return fixedLlm || !prompterId
       ? { conversation: storedConversation }
       : keepSession(dependencies, chat, storedConversation, prompterId)
@@ -263,7 +263,7 @@ export const promptAgent = async (
   dependencies: AgentDependencies,
   { workspaceId, messageId, isLastAttempt }: Input,
 ) => {
-  const { transactor, runtimes, agentServer, eventSockets } = dependencies
+  const { transactor, runtimes, agentClient, eventSockets } = dependencies
   const { chatId, type, localSession, harness } = await transactor.run(async ({ messages, chats }) => {
     const message = await messages.get(messageId)
     return { chatId: message.chatId, ...(await chats.get(message.chatId)) }
@@ -293,7 +293,7 @@ export const promptAgent = async (
       return transactor.run((unitOfWork) => closeAgentTurn(unitOfWork, chatId, prompt.id, () => prepared.refusal))
     conversation = prepared.conversation
     await eventSockets.ensureOpen(chat, conversation, prompt.id)
-    await agentServer.sendMessage(conversation, prompt.body)
+    await agentClient.sendMessage(conversation, prompt.body)
   } catch (error) {
     if (!(error instanceof AgentStartFailure) && !isLastAttempt) {
       await transactor.run((unitOfWork) => releaseAgentTurn(unitOfWork, chatId, prompt.id))
@@ -306,7 +306,7 @@ export const promptAgent = async (
     return transactor.run((unitOfWork) => closeAgentTurn(unitOfWork, chatId, prompt.id, () => notice))
   }
   if ((await transactor.run(({ agentTurns }) => agentTurns.lock(chatId))) === null)
-    await agentServer.interrupt(conversation)
+    await agentClient.interrupt(conversation)
   await runtimes.touch(chat)
   return undefined
 }

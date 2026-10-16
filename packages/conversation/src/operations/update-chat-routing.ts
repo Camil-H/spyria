@@ -16,12 +16,12 @@ type Input = {
   defaultModel?: string
   subagentPolicy?: 'auto' | 'same_as_main'
   runsOn?: RunsOn
-  acpModel?: string
+  adapterModel?: string
 }
 
 export const updateChatRouting = (
   { transactor }: { transactor: ConversationTransactor },
-  { chatId, memberId, sessionModel, defaultModel, subagentPolicy, runsOn, acpModel }: Input,
+  { chatId, memberId, sessionModel, defaultModel, subagentPolicy, runsOn, adapterModel }: Input,
 ) =>
   transactor.run(async ({ chats, routing, agentJobs }) => {
     const chat = await chats.get(chatId)
@@ -30,7 +30,7 @@ export const updateChatRouting = (
       throw new InvalidRouting(
         `This session runs ${harnesses[chat.harness].name}; its model is chosen by ${harnesses[chat.harness].name}`,
       )
-    if ((runsOn ?? acpModel) !== undefined && chat.ownerId !== memberId)
+    if ((runsOn ?? adapterModel) !== undefined && chat.ownerId !== memberId)
       throw new InvalidRouting('Only the owner changes how this session runs')
     if (runsOn !== undefined && (await chats.hasAgentSession(chatId)))
       throw new InvalidRouting('This session has started; where it runs no longer changes')
@@ -40,7 +40,7 @@ export const updateChatRouting = (
       !((await chats.localSessionsAllowed()) && (await chats.hasMachine(memberId)))
     )
       throw new InvalidRouting('Sessions on your machine need your machine and the workspace switch on')
-    if (acpModel !== undefined && !chat.localSession)
+    if (adapterModel !== undefined && !chat.localSession)
       throw new InvalidRouting('Only sessions on your machine pick the model of their tool')
     const reachable =
       sessionModel === undefined && defaultModel === undefined ? undefined : await routing.reachableModels(memberId)
@@ -66,7 +66,7 @@ export const updateChatRouting = (
       ...(defaultModel !== undefined && { defaultModel }),
       ...(subagentPolicy !== undefined && { subagentPolicy }),
       ...(runsOn !== undefined && { ...runsOnFieldsOf(runsOn), model: null }),
-      ...(acpModel !== undefined && { model: acpModel || null }),
+      ...(adapterModel !== undefined && { model: adapterModel || null }),
     })
     if (runsOn !== undefined && runsOn !== runsOnOf(chat)) await chats.dropRuntime(chatId)
     if (runsOn !== undefined && runsOn !== 'runtime') await agentJobs.startSession(chatId)

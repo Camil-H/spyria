@@ -39,6 +39,14 @@ export const delegationsFinished = (workerStack: WorkerStack, chatId: string) =>
       ),
     )
     .toEqual(['finished'])
+export const sessionStarted = (workerStack: WorkerStack, chatId: string) =>
+  expect
+    .poll(
+      async () =>
+        (await workerStack.database.$client`select agent_conversation_id from runtimes where chat_id = ${chatId}`)[0]
+          ?.agent_conversation_id,
+    )
+    .toBeTruthy()
 
 export const sidebarOf = (page: Page) => page.getByRole('navigation', { name: 'Sidebar' })
 export const mainOf = (page: Page) => page.getByRole('main')

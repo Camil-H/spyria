@@ -14,6 +14,7 @@ import {
   openProfile,
   type Page,
   sendMessage,
+  sessionStarted,
   machineTest as test,
   workingIndicatorOf,
 } from './fixtures'
@@ -42,16 +43,6 @@ const newOnlineSession = async (page: Page, tool: 'Claude Code' | 'Codex', worke
     .toBe(1)
   return newSession(page, tool, `${tool} questions`)
 }
-const sessionStarted = (workerStack: WorkerStack, chatId: string) =>
-  expect
-    .poll(
-      async () =>
-        (
-          await workerStack.database.$client`
-            select 1 from runtimes where chat_id = ${chatId} and agent_conversation_id is not null`
-        ).length,
-    )
-    .toBe(1)
 const togglePlan = async (page: Page, isOn: boolean) => {
   await modeRadioOf(page, isOn ? 'Plan' : 'Auto').click()
   await expect(modeRadioOf(page, isOn ? 'Plan' : 'Auto')).toBeChecked()

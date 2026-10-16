@@ -1,5 +1,5 @@
 import { type ChatId, type MessageId, messageId } from '@hq/kernel'
-import type { AgentEventSockets, AgentRuntimes, AgentServer, SessionClassifier } from '../contracts/agent.ts'
+import type { AgentClient, AgentEventSockets, AgentRuntimes, SessionClassifier } from '../contracts/agent.ts'
 import type { ConversationTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import { type Message, newMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
@@ -10,7 +10,7 @@ type NoticeOf = (hasReply: boolean) => string | undefined
 export type AgentDependencies = {
   transactor: ConversationTransactor
   runtimes: AgentRuntimes
-  agentServer: AgentServer
+  agentClient: AgentClient
   eventSockets: AgentEventSockets
   classifier?: SessionClassifier
   fixedLlm?: { model: string }

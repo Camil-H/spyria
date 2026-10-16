@@ -14,7 +14,7 @@ const closeWithNotice = (transactor: ConversationTransactor, chat: AgentChat, pr
   transactor.run((unitOfWork) => closeAgentTurn(unitOfWork, chat.chatId, promptId, () => notice))
 
 export const sweepAgentTurns = async (
-  { transactor, runtimes, agentServer, eventSockets }: AgentDependencies,
+  { transactor, runtimes, agentClient, eventSockets }: AgentDependencies,
   { workspaceId, now }: { workspaceId: WorkspaceId; now: number },
 ) => {
   for (const { chatId, promptId, lastEventAt } of await transactor.run(({ agentTurns }) => agentTurns.active())) {
@@ -23,7 +23,7 @@ export const sweepAgentTurns = async (
     const isSilent = now - lastEventAt >= silentTurnMilliseconds
     const executionStatus =
       isSilent && endpoint?.conversationId
-        ? await agentServer.statusOf({ ...endpoint, conversationId: endpoint.conversationId }).catch(() => undefined)
+        ? await agentClient.statusOf({ ...endpoint, conversationId: endpoint.conversationId }).catch(() => undefined)
         : undefined
     if (executionStatus === 'running') await runtimes.touch(chat)
     else if (endpoint ? isSilent : isSilent || !(await runtimes.isWaitingOnHost(chat))) {
@@ -34,13 +34,13 @@ export const sweepAgentTurns = async (
   await transactor.run(({ agentJobs }) => agentJobs.sweepLater())
 }
 
-export const reopenAgentTurn = async ({ transactor, runtimes, agentServer }: AgentDependencies, chat: AgentChat) => {
+export const reopenAgentTurn = async ({ transactor, runtimes, agentClient }: AgentDependencies, chat: AgentChat) => {
   const promptId = await transactor.run(({ agentTurns }) => agentTurns.lock(chat.chatId))
   if (promptId === null) return undefined
   const endpoint = await runtimes.endpointOf(chat)
   if (!endpoint && (await runtimes.isWaitingOnHost(chat))) return undefined
   const conversation = endpoint?.conversationId ? { ...endpoint, conversationId: endpoint.conversationId } : undefined
-  const executionStatus = conversation && (await agentServer.statusOf(conversation))
+  const executionStatus = conversation && (await agentClient.statusOf(conversation))
   if (conversation && executionStatus !== undefined)
     return { conversation, promptId, outcome: reopenedTurnOutcomeOf(executionStatus) }
   await closeWithNotice(transactor, chat, promptId, agentNotices.stoppedEarly)

@@ -8,12 +8,13 @@ import {
   openChat,
   type Page,
   sendMessage,
+  sessionStarted,
   signedInMachine,
   machineTest as test,
 } from './fixtures'
-import { openPageAs, type WorkerStack } from './stack'
+import { openPageAs } from './stack'
 
-const localOption = 'My machine · Claude Code'
+const machineOption = 'My machine · Claude Code'
 const codexOption = 'My machine · Codex'
 const codexMachine = { owner: 'member-alice', signedIn: 'codex' }
 const tools = [
@@ -21,20 +22,11 @@ const tools = [
   { name: 'Codex', login: 'codex' },
 ]
 
-const newLocalSession = async (page: Page, name: string, option = localOption) => {
+const newMachineSession = async (page: Page, name: string, option = machineOption) => {
   const chatId = await newRuntimeChat(page, name, option)
   await expect(chipOf(page, 'any')).toHaveText(`${option.replace('My machine · ', '')} · subscription`)
   return chatId
 }
-const sessionStarted = (workerStack: WorkerStack, chatId: string) =>
-  expect
-    .poll(
-      async () =>
-        (await workerStack.database.$client`select agent_conversation_id from runtimes where chat_id = ${chatId}`)[0]
-          ?.agent_conversation_id,
-    )
-    .toBeTruthy()
-
 test.use({ runtimeHost: false })
 
 test.beforeEach(async ({ page }) => {
@@ -47,7 +39,7 @@ for (const tool of tools) {
     machine,
   }) => {
     await machine({ owner: 'member-alice', signedIn: tool.login })
-    await newLocalSession(page, `${tool.name} on my laptop`, `My machine · ${tool.name}`)
+    await newMachineSession(page, `${tool.name} on my laptop`, `My machine · ${tool.name}`)
     await sendMessage(page, 'Hello from my laptop')
     await expect(messageContaining(page, 'Hello from the stub')).toBeVisible()
     const sidePanel = page.getByRole('region', { name: 'Side panel' })
@@ -63,7 +55,7 @@ for (const tool of tools) {
     await machine({ owner: 'member-alice', signedIn: tool.login })
     await sessionStarted(
       workerStack,
-      await newLocalSession(page, `${tool.name} signed out`, `My machine · ${tool.name}`),
+      await newMachineSession(page, `${tool.name} signed out`, `My machine · ${tool.name}`),
     )
     await machine({ signedIn: '' })
     await sendMessage(page, 'Answer without a sign-in')
@@ -84,7 +76,7 @@ test('5. another member reads the session and the answer, and their prompt gets 
   machine,
 }) => {
   await machine(signedInMachine)
-  await newLocalSession(page, 'Shared laptop session')
+  await newMachineSession(page, 'Shared laptop session')
   await sendMessage(page, 'Alice prompts the laptop')
   await expect(messageContaining(page, 'Hello from the stub')).toBeVisible()
 
@@ -103,7 +95,7 @@ test('6. a prompt while the machine is offline waits with "Your machine is offli
   machine,
 }) => {
   await machine(signedInMachine)
-  await sessionStarted(workerStack, await newLocalSession(page, 'Laptop goes away'))
+  await sessionStarted(workerStack, await newMachineSession(page, 'Laptop goes away'))
   await machine({ online: 'false' })
   await sendMessage(page, 'Wait for my laptop')
   await expect(messageContaining(page, 'Your machine is offline')).toHaveCount(1)
@@ -125,7 +117,7 @@ test.describe('Codex on a ChatGPT plan', () => {
     release,
   }) => {
     await machine(codexMachine)
-    await newLocalSession(page, 'Real steps', codexOption)
+    await newMachineSession(page, 'Real steps', codexOption)
     await sendMessage(page, 'stub:read stub:tools stub:linger')
     await expect(messageContaining(page, '$ npm test').getByRole('img', { name: 'Failed' })).toBeVisible()
     await expect(messageContaining(page, 'Read notes.md')).toBeVisible()

@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { type AgentConversation, AgentStartFailure } from '../contracts/agent.ts'
 import type { HarnessLaunch } from '../domain/session-routing.ts'
-import { createSandboxAgentServer, piCommandOf } from './sandbox-agent-server.ts'
+import { createHqAgentClient, piCommandOf } from './hq-agent-client.ts'
 
 const requests: { method: string; path: string; body?: string }[] = []
 const socketPaths: string[] = []
@@ -20,9 +20,9 @@ const endpoint: AgentConversation = {
     },
   },
 }
-const createdBodyOf = async (harness: HarnessLaunch, acpModel?: string) => {
+const createdBodyOf = async (harness: HarnessLaunch, adapterModel?: string) => {
   requests.length = 0
-  await createSandboxAgentServer().createConversation(endpoint, 'runtime-token', { harness, acpModel })
+  await createHqAgentClient().createConversation(endpoint, 'runtime-token', { harness, adapterModel })
   return JSON.parse(requests[0]?.body ?? '{}')
 }
 
@@ -50,7 +50,7 @@ test('Pi summarizes on its compaction model through its provider, starts at the 
   expect(command).toContain('HQ_COMPACTION_MODEL=hq-anthropic/anthropic/claude-haiku-5-5')
   const { created, envOf } = await createdPiOf(undefined, { effort: 'high' })
   expect(created.agent.acp_thought_level).toBe('high')
-  expect((await createdPiOf(undefined, { effort: 'high', acpModel: undefined })).created.agent).not.toHaveProperty(
+  expect((await createdPiOf(undefined, { effort: 'high', adapterModel: undefined })).created.agent).not.toHaveProperty(
     'acp_thought_level',
   )
   expect(JSON.parse(envOf('HQ_PI_SETTINGS') ?? '')).not.toHaveProperty('compaction')
@@ -66,8 +66,8 @@ test('Pi summarizes on its compaction model through its provider, starts at the 
 test('a model switch carries the thinking level only when one is given', async () => {
   requests.length = 0
   const conversation = { ...endpoint, conversationId: 'conversation-1' }
-  await createSandboxAgentServer().switchAcpModel(conversation, 'hq/openai/gpt-6.1-sol', 'high')
-  await createSandboxAgentServer().switchAcpModel(conversation, 'hq/mistral/mistral-small-latest')
+  await createHqAgentClient().switchModel(conversation, 'hq/openai/gpt-6.1-sol', 'high')
+  await createHqAgentClient().switchModel(conversation, 'hq/mistral/mistral-small-latest')
   expect(requests.map(({ body }) => body)).toEqual([
     '{"model":"hq/openai/gpt-6.1-sol","thoughtLevel":"high"}',
     '{"model":"hq/mistral/mistral-small-latest"}',
@@ -81,7 +81,7 @@ test('a model picked for a subscription session is sent as acp_model, still with
   expect(JSON.stringify(created)).not.toMatch(/ANTHROPIC_BASE_URL|ANTHROPIC_MODEL|ANTHROPIC_API_KEY|base_url/)
   expect((await createdBodyOf('claude-code-subscription')).agent).not.toHaveProperty('acp_model')
   requests.length = 0
-  await createSandboxAgentServer().switchAcpModel({ ...endpoint, conversationId: 'conversation-1' }, 'haiku')
+  await createHqAgentClient().switchModel({ ...endpoint, conversationId: 'conversation-1' }, 'haiku')
   expect(requests).toMatchObject([
     { path: '/api/conversations/conversation-1/switch_acp_model', body: '{"model":"haiku"}' },
   ])
@@ -108,7 +108,7 @@ test('a Codex subscription session writes its config atomically and launches wit
 })
 
 test('an hq-agent session sends the bare ACP launch with its resume id, and resumes its socket after the last stored seq of that conversation only', async () => {
-  const server = createSandboxAgentServer()
+  const server = createHqAgentClient()
   await server.createConversation(endpoint, 'runtime-token', {
     harness: 'claude-code-subscription',
     resumeSessionId: 'session-1',
@@ -151,7 +151,7 @@ test('an hq-agent conversation that failed to start is deleted and reported with
     },
   }
   await expect(
-    createSandboxAgentServer().createConversation(failed, 'runtime-token', { harness: 'claude-code-subscription' }),
+    createHqAgentClient().createConversation(failed, 'runtime-token', { harness: 'claude-code-subscription' }),
   ).rejects.toEqual(new AgentStartFailure('Authentication required'))
   expect(requests.map(({ method, path }) => `${method} ${path}`)).toEqual([
     'POST /api/conversations',
@@ -169,10 +169,10 @@ const piLaunch = {
 }
 const createdPiOf = async (sub?: { parentConversationId: string }, llm = {}) => {
   requests.length = 0
-  await createSandboxAgentServer().createConversation(
+  await createHqAgentClient().createConversation(
     endpoint,
     'runtime-llm-token',
-    { pi: piLaunch, acpModel: 'hq-anthropic/anthropic/claude-sonnet-5-5', ...llm },
+    { pi: piLaunch, adapterModel: 'hq-anthropic/anthropic/claude-sonnet-5-5', ...llm },
     sub,
   )
   const created = JSON.parse(requests[0]?.body ?? '{}')

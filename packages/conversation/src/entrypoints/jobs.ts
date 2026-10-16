@@ -10,8 +10,8 @@ import type {
   SessionClassifier,
 } from '../contracts/agent.ts'
 import { type AgentEvent, agentJobTypes, isStoredAgentEvent, type TurnOutcome } from '../domain/agent-events.ts'
+import { type AgentLlm, createHqAgentClient } from '../integrations/hq-agent-client.ts'
 import { createRuntimeAgentRuntimes, type SandboxProvider } from '../integrations/runtime-agent-runtimes.ts'
-import { type AgentLlm, createSandboxAgentServer } from '../integrations/sandbox-agent-server.ts'
 import { createTransactingZeroTransactor } from '../integrations/zero-transactor.ts'
 import { forwardToAgent } from '../operations/agent-questions.ts'
 import { closeReopenedTurn, reopenAgentTurn, sweepAgentTurns } from '../operations/agent-turn-safety.ts'
@@ -53,12 +53,12 @@ export const createAgentHandlers = ({
   hqAgentImage?: string
 }) => {
   const runtimes = createRuntimeAgentRuntimes(transact, sandboxProvider, { hqAgentImage })
-  const agentServer = createSandboxAgentServer()
+  const agentClient = createHqAgentClient()
   const transactorOf = (id: WorkspaceId) => createTransactingZeroTransactor(transact, id)
   const dependenciesOf = (id: WorkspaceId) => ({
     transactor: transactorOf(id),
     runtimes,
-    agentServer,
+    agentClient,
     eventSockets,
     classifier,
     fixedLlm: llm,
@@ -80,7 +80,7 @@ export const createAgentHandlers = ({
         sweepAgentTurns(dependenciesOf(workspaceId), { workspaceId, now: now() }),
     },
     openEvents: async (chat: AgentChat, conversation: AgentConversation, listener: AgentEventListener) =>
-      agentServer.openEvents(
+      agentClient.openEvents(
         conversation,
         (await transactorOf(chat.workspaceId).run(({ agentEvents }) => agentEvents.last(chat.chatId))) ?? null,
         listener,
@@ -96,11 +96,11 @@ export const createAgentHandlers = ({
     },
     answerQuestion: (chat: AgentChat, member: MemberId, questionId: string, answer: object) =>
       forwardToAgent(dependenciesOf(chat.workspaceId), { chat, memberId: member }, (conversation) =>
-        agentServer.answerQuestion(conversation, questionId, { ...answer, answeredBy: member }),
+        agentClient.answerQuestion(conversation, questionId, { ...answer, answeredBy: member }),
       ),
     setPlanMode: (chat: AgentChat, member: MemberId, enabled: boolean) =>
       forwardToAgent(dependenciesOf(chat.workspaceId), { chat, memberId: member }, (conversation) =>
-        agentServer.setPlanMode(conversation, enabled),
+        agentClient.setPlanMode(conversation, enabled),
       ),
     reopenTarget: (chat: AgentChat) => reopenAgentTurn(dependenciesOf(chat.workspaceId), chat),
     closeReopenedTurn: (chat: AgentChat, promptId: MessageId, outcome: TurnOutcome) =>

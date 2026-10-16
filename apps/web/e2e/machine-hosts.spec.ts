@@ -206,7 +206,7 @@ test('2. a machine paired without --personal and a workspace host paired with --
   })
 })
 
-test('7. with only a local host online, ordinary runtime chats of its owner and of another member wait with the no-host notice', async ({
+test('7. with only a machine online, ordinary runtime chats of its owner and of another member wait with the no-host notice', async ({
   page,
   browser,
   workerStack,

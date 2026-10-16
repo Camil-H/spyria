@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test'
 import { createMockSnapshot } from '../mock-data.ts'
 import { resetDatabase } from './seed.ts'
 import * as tables from './tables.ts'
-import { createTestDatabase, databaseDropTimeoutMilliseconds } from './test-database.ts'
+import { createTestDatabase, databaseDropTimeoutMilliseconds } from './testing.ts'
 
 const seededDatabase = await createTestDatabase()
 const { database } = seededDatabase

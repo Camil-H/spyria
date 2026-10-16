@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test'
 import { createRelay } from './relay.ts'
 import { nextFrameOf, waitFor } from './testing.ts'
 
-const agentServer = Bun.serve({
+const hqAgent = Bun.serve({
   port: 0,
   fetch: (request, server) =>
     server.upgrade(request)
@@ -16,14 +16,14 @@ const agentServer = Bun.serve({
     },
   },
 })
-afterAll(() => agentServer.stop(true))
+afterAll(() => hqAgent.stop(true))
 
 const relayCollecting = () => {
   const sent: Record<string, unknown>[] = []
   const relay = createRelay({
     addressOf: async (runtimeId) => {
       if (runtimeId !== 'runtime-1') throw new Error('refused: not a managed runtime')
-      return `http://localhost:${agentServer.port}`
+      return `http://localhost:${hqAgent.port}`
     },
     send: (frame) => sent.push(frame),
     maximumQueuedMessages: 2,

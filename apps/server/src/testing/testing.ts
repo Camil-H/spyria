@@ -491,13 +491,13 @@ export const startAgentStack = async ({
         ownerId,
         signedIn,
         routesModelCalls = false,
-        agentServerOf = (relay) => relay.agentServer,
+        containerAgentOf = (relay) => relay.containerAgent,
         ...relayOptions
       }: Omit<NonNullable<Parameters<typeof createHqAgentRelay>[0]>, 'modelCall'> & {
         ownerId?: string
         signedIn?: string[]
         routesModelCalls?: boolean
-        agentServerOf?: (relay: ReturnType<typeof createHqAgentRelay>) => ContainerAgent
+        containerAgentOf?: (relay: ReturnType<typeof createHqAgentRelay>) => ContainerAgent
       } = {},
     ) => {
       const relay = createHqAgentRelay({
@@ -505,7 +505,7 @@ export const startAgentStack = async ({
         modelCall: routesModelCalls ? () => host.modelCall : undefined,
       })
       relays.push(relay)
-      const host = await fakeHost(name, { agentServer: agentServerOf(relay), ownerId, signedIn })
+      const host = await fakeHost(name, { containerAgent: containerAgentOf(relay), ownerId, signedIn })
       return { relay, host, launches: () => relay.created as Launch[] }
     },
     mutate,
@@ -591,13 +591,13 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
     name: string,
     {
       memoryGibibytes = 8,
-      agentServer,
+      containerAgent,
       boot = async () => {},
       ownerId,
       signedIn = [],
     }: {
       memoryGibibytes?: number
-      agentServer?: ContainerAgent
+      containerAgent?: ContainerAgent
       boot?: () => Promise<unknown>
       ownerId?: string
       signedIn?: string[]
@@ -632,7 +632,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
       }
       if ((op === 'stop' || op === 'remove') && container) {
         container.running = false
-        agentServer?.stopped?.(container)
+        containerAgent?.stopped?.(container)
       }
       if (op === 'remove') containers.delete(runtimeId)
       if (op === 'status') return container ? (container.running ? 'running' : 'stopped') : 'missing'
@@ -727,7 +727,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
             const isReady = isReadyProbe && container?.running && container.isBooted !== false
             const answered =
               container?.running && !isReadyProbe
-                ? agentServer?.respond(frame as Parameters<ContainerAgent['respond']>[0], container)
+                ? containerAgent?.respond(frame as Parameters<ContainerAgent['respond']>[0], container)
                 : undefined
             void Promise.resolve(answered).then((response) =>
               send({
@@ -741,11 +741,11 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
             )
           }
           const sid = frame.sid ?? 0
-          if (frame.type === 'ws_connect' && agentServer && container?.running) {
+          if (frame.type === 'ws_connect' && containerAgent && container?.running) {
             send({ type: 'ws_open', sid })
             streams.set(
               sid,
-              agentServer.connect({
+              containerAgent.connect({
                 path: frame.path ?? '',
                 container,
                 send: (data) => streams.has(sid) && send({ type: 'ws_msg', sid, data }),

@@ -23,7 +23,7 @@ export type ConversationCommands = {
     defaultModel?: string
     subagentPolicy?: 'auto' | 'same_as_main'
     runsOn?: RunsOn
-    acpModel?: string
+    adapterModel?: string
   }>
   chatRouting: Command<{ chatId: ChatId }, ChatRoutingRead>
   answerQuestion: Command<{ chatId: ChatId; questionId: string; answer: QuestionAnswer }, number>

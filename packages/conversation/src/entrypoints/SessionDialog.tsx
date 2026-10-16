@@ -10,7 +10,7 @@ type Fields = {
   sessionModel?: string
   defaultModel?: string
   subagentPolicy?: Policy
-  acpModel?: string
+  adapterModel?: string
 }
 
 const microsPerDollar = 1_000_000
@@ -61,7 +61,7 @@ const SessionDialog = ({
           <select
             className={fieldClass}
             value={adapterModel}
-            onChange={(event) => update({ acpModel: event.target.value })}
+            onChange={(event) => update({ adapterModel: event.target.value })}
           >
             {[
               ...(adapterModels.some((candidate) => candidate.id === adapterModel) ? [] : [adapterModel]),
