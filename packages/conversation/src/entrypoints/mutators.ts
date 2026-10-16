@@ -56,7 +56,6 @@ export const conversationMutators = defineMutators({
     updateChatRouting: defineMutator(
       z.extend(chatArguments, {
         sessionModel: z.optional(z.string()),
-        defaultModel: z.optional(z.string()),
         subagentPolicy: z.optional(z.enum(['auto', 'same_as_main'])),
         runsOn: z.optional(z.enum(['runtime', 'claude-code', 'codex'])),
         adapterModel: z.optional(z.string()),

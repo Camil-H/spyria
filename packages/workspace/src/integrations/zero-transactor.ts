@@ -1,7 +1,7 @@
-import { appendChatEvent, memberModelsOf } from '@hq/db/server-writes'
+import { appendChatEvent } from '@hq/db/server-writes'
 import type { Chat as ChatRow, Project as ProjectRow } from '@hq/db/zero'
 import { type ZeroContext, zql } from '@hq/db/zero-queries'
-import { chatId, defaultModelOf, memberId, projectId, workspaceId } from '@hq/kernel'
+import { chatId, memberId, projectId, workspaceId } from '@hq/kernel'
 import { removeChatRuntimeOnServer } from '@hq/runtime/published'
 import type { Transaction } from '@rocicorp/zero'
 import type { UnitOfWork, WorkspaceTransactor } from '../contracts/transactor.ts'
@@ -106,10 +106,6 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
       },
       listByProject: async (id) =>
         (await tx.run(zql.chats.where('workspaceId', context.workspaceId).where('projectId', id))).map(toChat),
-    },
-    memberModels: {
-      defaultModelOf: async (id) =>
-        defaultModelOf((await memberModelsOf(tx, context.workspaceId, id)) ?? [])?.id ?? null,
     },
     chatRuntimes: {
       remove: (chatId) => removeChatRuntimeOnServer(tx, context.workspaceId, chatId),

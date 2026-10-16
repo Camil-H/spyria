@@ -36,23 +36,38 @@ test('1. before the first prompt the chip says the model is chosen at the first 
   await expect(chipOf(page, 'routed')).toHaveText(unchosen)
 })
 
-test('4b. a chat default changed before the first prompt is used for an unsure session and persists', async ({
-  page,
+test('f-4. a member with only an OpenAI key gets an OpenAI model at the first prompt, never an Anthropic one', async ({
+  browser,
+  workerStack,
   agentScript,
 }) => {
-  const chatId = await newRuntimeChat(page, 'Cheap default')
-  await openSession(page)
-  await expect(sessionOf(page).getByLabel('Default model')).toHaveValue('fake/fake-medium')
-  await sessionOf(page).getByLabel('Default model').selectOption({ label: 'Fake small' })
-  await page.reload()
-  await openSession(page)
-  await expect(sessionOf(page).getByLabel('Default model')).toHaveValue('fake/fake-small')
-  await page.keyboard.press('Escape')
-  await expect(sessionOf(page)).toBeHidden()
-
+  const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+  await addLlmKey(bobPage, 'OpenAI')
+  const chatId = await newRuntimeChat(bobPage, 'Bob on OpenAI')
+  await expect(chipOf(bobPage, 'routed')).toHaveText(unchosen)
   await agentScript(chatId, { route: { tier: 'large', confidence: 'low', effort: 'medium' } })
-  await promptAndWait(page, 'Not sure how hard this is', 1)
-  await expect(chipOf(page, 'routed')).toHaveText('Fake small (medium) · auto')
+  await promptAndWait(bobPage, 'Not sure how hard this is', 1)
+  await expect(chipOf(bobPage, 'routed')).toHaveText('GPT-5 mini (medium) · auto')
+  await openSession(bobPage)
+  await expect(sessionOf(bobPage).getByLabel('Main model')).toHaveValue('openai/gpt-5-mini')
+  await expect(sessionOf(bobPage).getByRole('option', { name: /Opus|Sonnet|Haiku/ })).toHaveCount(0)
+  await bobPage.context().close()
+})
+
+test('f-5. the session has no separate default model: before the first prompt nothing to pick, then the chip shows the main model', async ({
+  page,
+}) => {
+  await newRuntimeChat(page, 'One model')
+  await openSession(page)
+  await expect(sessionOf(page).getByLabel('Subagents')).toBeVisible()
+  await expect(sessionOf(page).getByLabel('Default model')).toHaveCount(0)
+  await expect(sessionOf(page).getByLabel('Main model')).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await promptAndWait(page, 'Start on the main model', 1)
+  await expect(chipOf(page, 'routed')).toHaveText('Fake medium (medium) · auto')
+  await openSession(page)
+  await expect(sessionOf(page).getByLabel('Main model')).toHaveValue('fake/fake-medium')
+  await expect(sessionOf(page).getByLabel('Default model')).toHaveCount(0)
 })
 
 test('5. a member reaching only a small model gets it, and is refused in a session on a model he cannot reach', async ({
@@ -140,7 +155,7 @@ test('12. a member whose only key is a decision model is told to add an LLM key 
   await addLlmKey(bobPage, 'Typesafe')
   await newRuntimeChat(bobPage, 'Bob decides')
   await openSession(bobPage)
-  await expect(sessionOf(bobPage).getByLabel('Default model').getByRole('option', { name: 'Jev' })).toHaveCount(0)
+  await expect(sessionOf(bobPage).getByRole('option', { name: 'Jev' })).toHaveCount(0)
   await bobPage.keyboard.press('Escape')
   await sendMessage(bobPage, 'Only a decision key')
   await expect(mainOf(bobPage)).toContainText('Bob has no LLM key in this workspace')

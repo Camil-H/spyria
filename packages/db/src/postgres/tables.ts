@@ -122,7 +122,6 @@ export const chats = table(
     name: text().notNull(),
     model: text(),
     reasoningEffort: text(),
-    defaultModel: text(),
     subagentPolicy: text().$type<'auto' | 'same_as_main'>().notNull().default('auto'),
     agentModel: text(),
     harness: text().$type<'claude-code' | 'codex'>(),

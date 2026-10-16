@@ -93,7 +93,6 @@ export const SessionChip = (chip: {
   chatId: ChatId
   model: string | null
   reasoningEffort: string | null
-  defaultModel: string | null
   subagentPolicy: Policy
   harness: Harness | null
   localSession: boolean

@@ -24,9 +24,8 @@ const classified = (tier: 'large' | 'medium' | 'small', confidence = 0.9) => ({
   effort: { value: 'low', confidence },
 })
 
-test('only a confident large or small classification moves away from the chat default', () => {
-  const route = (answers: ReturnType<typeof classified> | undefined, defaultModel = 'fake/fake-medium') =>
-    sessionChoiceOf({ reachable: fake, defaultModel, answers })
+test('only a confident large or small classification moves away from the medium tier', () => {
+  const route = (answers: ReturnType<typeof classified> | undefined) => sessionChoiceOf({ reachable: fake, answers })
   expect(route(classified('large'))).toMatchObject({
     model: { id: 'fake/fake-large' },
     effort: 'low',
@@ -35,37 +34,25 @@ test('only a confident large or small classification moves away from the chat de
   expect(route(classified('small'))).toMatchObject({ model: { id: 'fake/fake-small' } })
   expect(route(classified('large', 0.8))).toMatchObject({ model: { id: 'fake/fake-large' } })
   expect(route(classified('large', 0.79))).toMatchObject({ model: { id: 'fake/fake-medium' }, effort: 'low' })
-  expect(route(classified('medium'))?.model.id).toBe('fake/fake-medium')
-  expect(route(classified('medium'), 'fake/fake-small')).toMatchObject({
-    model: { id: 'fake/fake-small' },
-    reason: 'default',
-  })
+  expect(route(classified('medium'))).toMatchObject({ model: { id: 'fake/fake-medium' }, reason: 'default' })
   expect(route(undefined)).toMatchObject({ model: { id: 'fake/fake-medium' }, effort: 'medium' })
-  expect(route(undefined, 'fake/fake-small')?.model.id).toBe('fake/fake-small')
 })
 
-test('an unreachable or missing default falls back to the nearest reachable model of its tier', () => {
-  expect(
-    sessionChoiceOf({ reachable: fake, defaultModel: 'anthropic/claude-sonnet-5-5', answers: undefined }),
-  ).toMatchObject({ model: { id: 'fake/fake-medium' } })
-  expect(sessionChoiceOf({ reachable: fake, defaultModel: null, answers: undefined })?.model.id).toBe(
-    'fake/fake-medium',
+test('the fallback is the best reachable model of the prompter: medium tier first, ties in catalog order', () => {
+  const openAiOnly = reachableModelsOf(['openai'])
+  expect(sessionChoiceOf({ reachable: openAiOnly, answers: undefined })?.model.id).toBe('openai/gpt-5-mini')
+  expect(sessionChoiceOf({ reachable: openAiOnly, answers: classified('large') })?.model.id).toBe('openai/gpt-5')
+  expect(sessionChoiceOf({ reachable: openAiOnly, answers: classified('small') })?.model.id).toBe('openai/gpt-5-nano')
+  expect(sessionChoiceOf({ reachable: reachableModelsOf(['mistral', 'openai']), answers: undefined })?.model.id).toBe(
+    'openai/gpt-5-mini',
   )
-  expect(
-    sessionChoiceOf({ reachable: smallOnly, defaultModel: 'fake/fake-medium', answers: classified('large') })?.model.id,
-  ).toBe('fake-small/fake-small')
-  expect(
-    sessionChoiceOf({ reachable: fake, defaultModel: 'anthropic/claude-haiku-5-5', answers: undefined })?.model.id,
-  ).toBe('fake/fake-small')
-  expect(sessionChoiceOf({ reachable: [], defaultModel: 'fake/fake-medium', answers: undefined })).toBeUndefined()
-  expect(
-    sessionChoiceOf({ reachable: [...fake, ...smallOnly], defaultModel: 'fake-small/fake-small', answers: undefined })
-      ?.model.id,
-  ).toBe('fake-small/fake-small')
-  expect(
-    sessionChoiceOf({ reachable: [...jev, ...fake], defaultModel: 'typesafe/jev-latest', answers: undefined })?.model
-      .id,
-  ).toBe('fake/fake-medium')
+  expect(sessionChoiceOf({ reachable: smallOnly, answers: classified('large') })?.model.id).toBe(
+    'fake-small/fake-small',
+  )
+  expect(sessionChoiceOf({ reachable: smallOnly, answers: undefined })?.model.id).toBe('fake-small/fake-small')
+  expect(sessionChoiceOf({ reachable: [], answers: undefined })).toBeUndefined()
+  expect(sessionChoiceOf({ reachable: jev, answers: undefined })).toBeUndefined()
+  expect(sessionChoiceOf({ reachable: [...jev, ...fake], answers: undefined })?.model.id).toBe('fake/fake-medium')
 })
 
 test.each([

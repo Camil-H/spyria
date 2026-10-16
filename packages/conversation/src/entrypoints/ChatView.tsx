@@ -168,7 +168,6 @@ export const ChatView = ({
                 chatId={chatId}
                 model={conversation.model}
                 reasoningEffort={conversation.reasoningEffort}
-                defaultModel={conversation.defaultModel}
                 subagentPolicy={conversation.subagentPolicy}
                 harness={conversation.harness}
                 localSession={conversation.localSession}

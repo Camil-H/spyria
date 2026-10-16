@@ -2,7 +2,6 @@ import type { Transactor } from '@hq/kernel'
 import type {
   ChatRepository,
   ChatRuntimeRepository,
-  MemberModelDirectory,
   MembershipRepository,
   ProjectRepository,
   WorkspaceRepository,
@@ -14,7 +13,6 @@ export type UnitOfWork = {
   projects: ProjectRepository
   chats: ChatRepository
   chatRuntimes: ChatRuntimeRepository
-  memberModels: MemberModelDirectory
 }
 
 export type WorkspaceTransactor = Transactor<UnitOfWork>

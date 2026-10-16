@@ -518,19 +518,17 @@ export const startAgentStack = async ({
     },
     mutate,
     newRuntimeChat: async ({
-      defaultModel = null,
       ownerId = alice,
       harness = null,
       id = `chat-${crypto.randomUUID()}`,
     }: {
-      defaultModel?: string | null
       ownerId?: string
       harness?: string | null
       id?: string
     } = {}) => {
       await database.$client`
-        insert into chats (workspace_id, id, type, owner_kind, owner_user_id, name, default_model, local_session, harness, archived, created_at)
-        values (${acme}, ${id}, 'runtime', 'user', ${ownerId}, 'Runtime chat', ${defaultModel}, ${harness !== null}, ${harness}, false, now())`
+        insert into chats (workspace_id, id, type, owner_kind, owner_user_id, name, local_session, harness, archived, created_at)
+        values (${acme}, ${id}, 'runtime', 'user', ${ownerId}, 'Runtime chat', ${harness !== null}, ${harness}, false, now())`
       return chatId(id)
     },
     prompt: async (chat: ChatId, text: string, member = aliceInAcme) => {

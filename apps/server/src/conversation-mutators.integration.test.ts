@@ -139,7 +139,7 @@ test('startRuntimeFromMessage rolls the new chat back when its seed message cann
   expect(await countOf()).toEqual(before)
 })
 
-test('a new runtime chat gets the default model and the auto policy, and both are stored per chat', async () => {
+test('a new runtime chat has no model before its first prompt and the auto policy, stored per chat, with no default model', async () => {
   const routing = (fields: Record<string, unknown>) =>
     resultOf(aliceInAcme, 'conversation.updateChatRouting', { workspaceId: acme, chatId: 'chat-routed', ...fields })
   expect(
@@ -151,20 +151,10 @@ test('a new runtime chat gets the default model and the auto policy, and both ar
       projectId: null,
     }),
   ).toEqual(succeeded)
-  expect(await chatRow('chat-routed')).toMatchObject({
-    defaultModel: 'fake/fake-medium',
-    subagentPolicy: 'auto',
-    model: null,
-    reasoningEffort: null,
-  })
+  expect(await chatRow('chat-routed')).toMatchObject({ subagentPolicy: 'auto', model: null, reasoningEffort: null })
   expect(await routing({ defaultModel: 'fake/fake-small', subagentPolicy: 'same_as_main' })).toEqual(succeeded)
-  expect(await chatRow('chat-routed')).toMatchObject({
-    defaultModel: 'fake/fake-small',
-    subagentPolicy: 'same_as_main',
-    model: null,
-  })
-  expect(JSON.stringify(await routing({ defaultModel: 'nowhere/unknown' }))).toContain('error')
-  expect(JSON.stringify(await routing({ defaultModel: 'typesafe/jev-latest' }))).toContain('error')
+  expect(await chatRow('chat-routed')).toMatchObject({ subagentPolicy: 'same_as_main', model: null })
+  expect(await chatRow('chat-routed')).not.toHaveProperty('defaultModel')
 })
 
 test.each([

@@ -13,7 +13,6 @@ type Input = {
   chatId: ChatId
   memberId: MemberId
   sessionModel?: string
-  defaultModel?: string
   subagentPolicy?: 'auto' | 'same_as_main'
   runsOn?: RunsOn
   adapterModel?: string
@@ -21,7 +20,7 @@ type Input = {
 
 export const updateChatRouting = (
   { transactor }: { transactor: ConversationTransactor },
-  { chatId, memberId, sessionModel, defaultModel, subagentPolicy, runsOn, adapterModel }: Input,
+  { chatId, memberId, sessionModel, subagentPolicy, runsOn, adapterModel }: Input,
 ) =>
   transactor.run(async ({ chats, routing, agentJobs }) => {
     const chat = await chats.get(chatId)
@@ -42,13 +41,10 @@ export const updateChatRouting = (
       throw new InvalidRouting('Sessions on your machine need your machine and the workspace switch on')
     if (adapterModel !== undefined && !chat.localSession)
       throw new InvalidRouting('Only sessions on your machine pick the model of their tool')
-    const reachable =
-      sessionModel === undefined && defaultModel === undefined ? undefined : await routing.reachableModels(memberId)
-    const isReachable = (model: string) => !reachable || chatModelsOf(reachable).some(({ id }) => id === model)
-    if (defaultModel !== undefined && !isReachable(defaultModel))
-      throw new InvalidRouting(`Unknown model ${defaultModel}`)
     if (sessionModel !== undefined) {
-      if (!isReachable(sessionModel)) throw new InvalidRouting(unreachableSessionNoticeOf(sessionModel))
+      const reachable = await routing.reachableModels(memberId)
+      if (reachable && !chatModelsOf(reachable).some(({ id }) => id === sessionModel))
+        throw new InvalidRouting(unreachableSessionNoticeOf(sessionModel))
       await routing.record({
         chatId,
         conversationId: null,
@@ -63,7 +59,6 @@ export const updateChatRouting = (
     }
     await routing.update(chatId, {
       ...(sessionModel !== undefined && { model: sessionModel }),
-      ...(defaultModel !== undefined && { defaultModel }),
       ...(subagentPolicy !== undefined && { subagentPolicy }),
       ...(runsOn !== undefined && { ...runsOnFieldsOf(runsOn), model: null }),
       ...(adapterModel !== undefined && { model: adapterModel || null }),

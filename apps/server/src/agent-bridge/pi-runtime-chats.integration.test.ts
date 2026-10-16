@@ -131,7 +131,7 @@ test('a routing change mid-session switches the same Pi session to the other pro
 
 test('Stop mid-command cancels the turn without deleting the conversation, and the next prompt continues the Pi session', async () => {
   const { launches } = await workspaceHost()
-  const chat = await newRuntimeChat({ defaultModel: 'fake/fake-medium' })
+  const chat = await newRuntimeChat()
   const stopped = await prompt(chat, 'stub:long')
   await stack.commandShown(stopped)
   await stop(chat)
@@ -146,7 +146,7 @@ test('Stop mid-command cancels the turn without deleting the conversation, and t
 
 test('after a runtime restart the next prompt loads the Pi session and no earlier message is duplicated', async () => {
   const { relay, launches } = await workspaceHost()
-  const chat = await newRuntimeChat({ defaultModel: 'fake/fake-medium' })
+  const chat = await newRuntimeChat()
   await finished(await prompt(chat, 'Before the restart'), chat)
   const [firstSession] = await sessionsStartedOf(chat)
 

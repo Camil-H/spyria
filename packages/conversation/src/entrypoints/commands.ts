@@ -20,7 +20,6 @@ export type ConversationCommands = {
   updateChatRouting: Command<{
     chatId: ChatId
     sessionModel?: string
-    defaultModel?: string
     subagentPolicy?: 'auto' | 'same_as_main'
     runsOn?: RunsOn
     adapterModel?: string

@@ -1,4 +1,4 @@
-import { chatModelsOf, type Model, type ModelTier, modelNameOf, nearestModelOf, tierOf } from '@hq/kernel'
+import { chatModelsOf, type Model, type ModelTier, modelNameOf, nearestModelOf } from '@hq/kernel'
 import { type Answers, confidenceThreshold } from './decisions.ts'
 
 export type Effort = 'high' | 'medium' | 'low'
@@ -24,11 +24,9 @@ export const sessionStateOf = (message: string, mode: string | null) =>
 
 export const sessionChoiceOf = ({
   reachable,
-  defaultModel,
   answers,
 }: {
   reachable: readonly Model[]
-  defaultModel: string | null
   answers: Answers | undefined
 }): SessionChoice | undefined => {
   const effort = (answers?.effort?.value ?? 'medium') as Effort
@@ -40,9 +38,7 @@ export const sessionChoiceOf = ({
     const model = nearestModelOf(chatModels, confidentTier)
     return model && { model, effort, reason: `classified ${confidentTier}` }
   }
-  const model =
-    chatModels.find((candidate) => candidate.id === defaultModel) ??
-    nearestModelOf(chatModels, tierOf(defaultModel) ?? 'medium')
+  const model = nearestModelOf(chatModels, 'medium')
   return model && { model, effort, reason: 'default' }
 }
 

@@ -63,7 +63,6 @@ export type ChatRow = {
   archived: boolean
   model: string | null
   reasoningEffort: string | null
-  defaultModel: string | null
   subagentPolicy: 'auto' | 'same_as_main'
   harness: 'claude-code' | 'codex' | null
   localSession: boolean | null

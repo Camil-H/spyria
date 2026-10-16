@@ -44,7 +44,6 @@ test('createChat inserts a runtime chat owned by the caller in the given project
     ownerUserId: bob,
     model: null,
     reasoningEffort: null,
-    defaultModel: null,
     archived: false,
   })
 })

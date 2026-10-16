@@ -25,7 +25,6 @@ export const createChat = ({ transactor }: Dependencies, { id, workspaceId, owne
       archived: false,
       model: null,
       reasoningEffort: null,
-      defaultModel: type === 'runtime' ? await unitOfWork.memberModels.defaultModelOf(ownerId) : null,
       gitBranch: null,
       originChatId: null,
     }

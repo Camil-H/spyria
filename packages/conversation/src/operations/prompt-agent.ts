@@ -94,7 +94,7 @@ const routeSession = async (
     state: sessionStateOf(prompt.body, routing.mode),
     questions: sessionQuestions,
   })
-  const choice = sessionChoiceOf({ reachable, defaultModel: routing.defaultModel, answers: decision?.answers })
+  const choice = sessionChoiceOf({ reachable, answers: decision?.answers })
   return {
     choice: choice && {
       ...choice,

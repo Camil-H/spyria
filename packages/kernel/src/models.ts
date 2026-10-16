@@ -48,8 +48,6 @@ export const isDecisionModel = (model: Model) => model.tier === undefined
 export const chatModelsOf = (models: readonly Model[]) => models.filter((model) => !isDecisionModel(model))
 export const nearestModelOf = (models: readonly Model[], tier: ModelTier) =>
   tiersFrom[tier].flatMap((candidate) => models.find((model) => model.tier === candidate) ?? [])[0]
-export const tierOf = (id: string | null) => routableModels.find((model) => model.id === id)?.tier
-export const defaultModelOf = (models: readonly Model[]) => nearestModelOf(models, 'medium')
 const smallFirst: (ModelTier | undefined)[] = ['small', 'medium', 'large']
 export const cheapestModelOf = (models: readonly Model[]) =>
   models

@@ -19,7 +19,6 @@ const runtimeFields = {
   id: chatId('new'),
   name: Name('From message'),
   ownerId: memberId('bob'),
-  defaultModel: 'fake/fake-medium',
 }
 
 test('startRuntimeChat creates a runtime chat in the source workspace and project, linked to the source', () => {
@@ -28,7 +27,6 @@ test('startRuntimeChat creates a runtime chat in the source workspace and projec
     type: 'channel',
     model: null,
     reasoningEffort: null,
-    defaultModel: null,
     gitBranch: null,
   }
   expect(startRuntimeChat(channel, runtimeFields)).toEqual({

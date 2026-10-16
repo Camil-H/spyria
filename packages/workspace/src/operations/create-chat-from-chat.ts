@@ -12,7 +12,6 @@ export const createChatFromChat = ({ transactor }: Dependencies, { id, sourceCha
       id: chatId(id),
       name: Name(name),
       ownerId,
-      defaultModel: await unitOfWork.memberModels.defaultModelOf(ownerId),
     })
     await unitOfWork.chats.record({ type: 'chat.created', chat, actorId: ownerId })
   })

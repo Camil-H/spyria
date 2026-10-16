@@ -3,7 +3,6 @@ import {
   addRoutableModels,
   chatModelsOf,
   classifierModelOf,
-  defaultModelOf,
   type ListedModel,
   modelNameOf,
   nearestModelOf,
@@ -65,8 +64,8 @@ test('the nearest model keeps the tier, then goes below, then above', () => {
       'medium',
     )?.id,
   ).toBe('fake/fake-large')
-  expect(defaultModelOf(fake)?.id).toBe('fake/fake-medium')
-  expect(defaultModelOf(jev)).toBeUndefined()
+  expect(nearestModelOf(fake, 'medium')?.id).toBe('fake/fake-medium')
+  expect(nearestModelOf(jev, 'medium')).toBeUndefined()
 })
 
 test('the classifier is the cheapest reachable decision model, else the cheapest chat model, else the smallest tier', () => {

@@ -1,4 +1,4 @@
-import type { ChatId, MemberId, ProjectId } from '@hq/kernel'
+import type { ChatId, ProjectId } from '@hq/kernel'
 import type { Chat, ChatChange } from '../domain/chat.ts'
 import type { Project } from '../domain/project.ts'
 import type { Membership, Workspace } from '../domain/workspace.ts'
@@ -21,10 +21,6 @@ export type WorkspaceRepository = {
 
 export type MembershipRepository = {
   add(membership: Membership): Promise<void>
-}
-
-export type MemberModelDirectory = {
-  defaultModelOf(memberId: MemberId): Promise<string | null>
 }
 
 export type ChatRuntimeRepository = {

@@ -20,7 +20,6 @@ export default drizzleZeroConfig(tables, {
       name: true,
       model: true,
       reasoningEffort: true,
-      defaultModel: true,
       subagentPolicy: true,
       harness: true,
       localSession: true,

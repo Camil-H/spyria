@@ -8,7 +8,6 @@ import { useConversationCommands } from './providers.tsx'
 type Policy = 'auto' | 'same_as_main'
 type Fields = {
   sessionModel?: string
-  defaultModel?: string
   subagentPolicy?: Policy
   adapterModel?: string
 }
@@ -16,7 +15,7 @@ type Fields = {
 const microsPerDollar = 1_000_000
 
 const SessionDialog = ({
-  chip: { workspaceId, chatId, model, defaultModel, subagentPolicy, harness, localSession, isOwner },
+  chip: { workspaceId, chatId, model, subagentPolicy, harness, localSession, isOwner },
   routing,
   nameOf,
   adapterNameOf,
@@ -25,7 +24,6 @@ const SessionDialog = ({
     workspaceId: WorkspaceId
     chatId: ChatId
     model: string | null
-    defaultModel: string | null
     subagentPolicy: Policy
     harness: Harness | null
     localSession: boolean
@@ -107,30 +105,17 @@ const SessionDialog = ({
         </div>
       )}
       {!localSession && (
-        <>
-          <label className={labelClass}>
-            Default model
-            <select
-              className={fieldClass}
-              value={defaultModel ?? ''}
-              onChange={(event) => update({ defaultModel: event.target.value })}
-            >
-              {defaultModel === null && <option value="">None</option>}
-              {optionsWith(defaultModel)}
-            </select>
-          </label>
-          <label className={labelClass}>
-            Subagents
-            <select
-              className={fieldClass}
-              value={subagentPolicy}
-              onChange={(event) => update({ subagentPolicy: event.target.value as Policy })}
-            >
-              <option value="auto">Auto</option>
-              <option value="same_as_main">Same as main</option>
-            </select>
-          </label>
-        </>
+        <label className={labelClass}>
+          Subagents
+          <select
+            className={fieldClass}
+            value={subagentPolicy}
+            onChange={(event) => update({ subagentPolicy: event.target.value as Policy })}
+          >
+            <option value="auto">Auto</option>
+            <option value="same_as_main">Same as main</option>
+          </select>
+        </label>
       )}
     </>
   )

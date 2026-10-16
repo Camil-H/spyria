@@ -84,7 +84,6 @@ export type ChatRouting = Readonly<{
   ownerId: MemberId | null
   model: string | null
   reasoningEffort: string | null
-  defaultModel: string | null
   agentModel: string | null
   subagentPolicy: string
   harness: Harness | null
@@ -127,7 +126,6 @@ export type RoutingRepository = {
     fields: Partial<{
       model: string | null
       reasoningEffort: string
-      defaultModel: string
       subagentPolicy: string
       harness: Harness | null
       localSession: boolean

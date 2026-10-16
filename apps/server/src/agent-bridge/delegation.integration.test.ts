@@ -17,7 +17,7 @@ import {
 setDefaultTimeout(40_000)
 const { database, gateway, setFakeLlmScript, agentBridge, fakeHost, mutate, prompt, turnOf, holds, ...stack } =
   await startAgentStack({ routing: true, resumeAfterMilliseconds: 5_000 })
-const newRuntimeChat = () => stack.newRuntimeChat({ defaultModel: 'fake/fake-medium' })
+const newRuntimeChat = () => stack.newRuntimeChat()
 const repliesTo = (promptId: string) => stack.repliesTo(promptId, ['kind', 'body', 'step'])
 
 const delegatedTask = { tool: 'delegate', arguments: { task: 'List the files', effort: 'small' } }

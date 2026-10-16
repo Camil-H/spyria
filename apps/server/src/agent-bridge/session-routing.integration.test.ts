@@ -17,8 +17,7 @@ import {
 setDefaultTimeout(40_000)
 const { database, app, gateway, llmGateway, setFakeLlmScript, mutate, prompt, repliesTo, ...stack } =
   await startAgentStack({ routing: true })
-const newRuntimeChat = (defaultModel: string | null = 'fake/fake-medium', ownerId = alice) =>
-  stack.newRuntimeChat({ defaultModel, ownerId })
+const newRuntimeChat = (ownerId = alice) => stack.newRuntimeChat({ ownerId })
 
 type Route = { tier: string; confidence: string | number; effort: string; prose?: boolean } | 'fail' | 'slow'
 const routeWith = (route: Route) => setFakeLlmScript({ route })
@@ -34,7 +33,7 @@ const answered = async (messageId: string) => {
 const chatOf = async (chat: ChatId) =>
   (
     await database.$client`
-      select model, reasoning_effort, default_model, subagent_policy, agent_model from chats where id = ${chat}`
+      select model, reasoning_effort, subagent_policy, agent_model from chats where id = ${chat}`
   )[0]
 const decisionsOf = (chat: ChatId) =>
   stack.decisionsOf(chat, ['role', 'model', 'reason', 'conversation_id', 'member_id', 'classifier_output'])
@@ -141,7 +140,7 @@ test('the manual switch is refused for an unreachable model, recorded, and switc
 test('a member whose keys reach only a decision model gets the no-key notice and no decision model to choose', async () => {
   await fakeAgent()
   await addLlmKey(bob, 'Typesafe')
-  const chat = await newRuntimeChat('fake/fake-medium', bob)
+  const chat = await newRuntimeChat(bob)
   expect(await answered(await prompt(chat, 'Only Jev here', bobInAcme))).toEqual([
     { kind: 'notice', body: 'Bob has no LLM key in this workspace' },
   ])
@@ -154,7 +153,7 @@ test('a member whose keys reach only a decision model gets the no-key notice and
 test('a prompter reaching only a small model routes to it, and is refused in a session on a model his keys cannot reach', async () => {
   const { relay, launches } = await fakeAgent()
   await addLlmKey(bob, 'Fake-small')
-  const bobChat = await newRuntimeChat('fake/fake-medium', bob)
+  const bobChat = await newRuntimeChat(bob)
   routeWith({ tier: 'large', confidence: 'high', effort: 'high' })
   await answered(await prompt(bobChat, 'Big job', bobInAcme))
   expect(await chatOf(bobChat)).toMatchObject({ model: 'fake-small/fake-small' })
@@ -198,7 +197,6 @@ type RoutingRow = {
   title: string
   decisionModel?: boolean
   route: Route
-  defaultModel?: string
   model: string
   effort?: string
   reason?: string
@@ -208,22 +206,19 @@ test.each<RoutingRow>([
   {
     title: 'a low-confidence classification',
     route: { tier: 'large', confidence: 'low', effort: 'medium' },
-    defaultModel: 'fake/fake-small',
-    model: 'fake/fake-small',
+    model: 'fake/fake-medium',
     reason: 'default',
   },
   {
     title: 'a failed classification',
     route: 'fail',
-    defaultModel: 'fake/fake-small',
-    model: 'fake/fake-small',
+    model: 'fake/fake-medium',
     reason: 'routing unavailable: HTTP 500',
   },
   {
     title: 'a timed-out classification',
     route: 'slow',
-    defaultModel: 'fake/fake-small',
-    model: 'fake/fake-small',
+    model: 'fake/fake-medium',
     reason: 'routing unavailable: timeout',
   },
   {
@@ -254,7 +249,7 @@ test.each<RoutingRow>([
     decisionModelKey ??= addLlmKey(alice, 'Typesafe')
     await decisionModelKey
   }
-  const chat = await newRuntimeChat(row.defaultModel)
+  const chat = await newRuntimeChat()
   routeWith(row.route)
   const startedAt = Date.now()
   await answered(await prompt(chat, `Route ${JSON.stringify(row.route)}`))
@@ -267,6 +262,28 @@ test.each<RoutingRow>([
   if (row.reason)
     expect((await decisionsOf(chat))[0]).toMatchObject({ role: 'session', model: row.model, reason: row.reason })
   if (row.routerModel) expect(await routerLogsOf(chat)).toEqual([row.routerModel])
+})
+
+test('a prompter with only an OpenAI key is routed to an OpenAI model, recorded with its reason, and never to an Anthropic one', async () => {
+  const { launches } = await fakeAgent()
+  await database.$client`delete from llm_credentials where user_id = ${bob}`
+  await addLlmKey(bob, 'OpenAI')
+  const unsureChat = await newRuntimeChat(bob)
+  routeWith({ tier: 'large', confidence: 'low', effort: 'medium' })
+  await answered(await prompt(unsureChat, 'Unsure on OpenAI', bobInAcme))
+  expect(await chatOf(unsureChat)).toMatchObject({ model: 'openai/gpt-5-mini', agent_model: 'openai/gpt-5-mini' })
+  expect(await decisionsOf(unsureChat)).toMatchObject([
+    { role: 'session', model: 'openai/gpt-5-mini', reason: 'default', member_id: bob },
+  ])
+  expect(await routerLogsOf(unsureChat)).toEqual(['gpt-5-nano'])
+
+  const largeChat = await newRuntimeChat(bob)
+  routeWith({ tier: 'large', confidence: 'high', effort: 'high' })
+  await answered(await prompt(largeChat, 'Large on OpenAI', bobInAcme))
+  expect(await decisionsOf(largeChat)).toMatchObject([
+    { role: 'session', model: 'openai/gpt-5', reason: 'classified large', member_id: bob },
+  ])
+  expect(launches().map((launch) => launch.agent.acp_model)).toEqual(['hq/openai/gpt-5-mini', 'hq/openai/gpt-5'])
 })
 
 test('the real listing gives datasheet prices to the routable models a key reaches, and only those are offered', async () => {

@@ -413,14 +413,13 @@ export const chatRoutingOf = (tx: Transaction, workspaceId: string, chatId: stri
     ownerId: string | null
     model: string | null
     reasoningEffort: string | null
-    defaultModel: string | null
     agentModel: string | null
     subagentPolicy: string
     harness: 'claude-code' | 'codex' | null
   }>(
     tx,
     `select mode, owner_user_id as "ownerId", model, reasoning_effort as "reasoningEffort",
-       default_model as "defaultModel", agent_model as "agentModel", subagent_policy as "subagentPolicy", harness
+       agent_model as "agentModel", subagent_policy as "subagentPolicy", harness
      from chats where workspace_id = $1 and id = $2`,
     [workspaceId, chatId],
   )

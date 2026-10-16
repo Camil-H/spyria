@@ -59,7 +59,6 @@ const chat = (
   archived: false,
   model: runtime?.model ?? null,
   reasoningEffort: runtime?.reasoningEffort ?? null,
-  defaultModel: runtime ? 'anthropic/claude-sonnet-5-5' : null,
   subagentPolicy: 'auto',
   harness: null,
   localSession: false,

@@ -38,7 +38,6 @@ export type Conversation = Readonly<{
   type: ChatRow['type']
   model: string | null
   reasoningEffort: ChatRow['reasoningEffort']
-  defaultModel: ChatRow['defaultModel']
   subagentPolicy: ChatRow['subagentPolicy']
   harness: ChatRow['harness']
   localSession: boolean
@@ -264,7 +263,6 @@ export const getConversation =
       type: chat.type,
       model: chat.model,
       reasoningEffort: chat.reasoningEffort,
-      defaultModel: chat.defaultModel,
       subagentPolicy: chat.subagentPolicy,
       harness: chat.harness,
       localSession: chat.localSession === true,
