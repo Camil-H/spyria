@@ -154,6 +154,7 @@ export const createLlmGateway = ({
     toolServers,
     finishToolConsent,
     setUpToolServer: async ({ name, url: endpoint, oauthConfig = {}, isShared }, logIn = logInAutomatically) => {
+      if (name.includes('-')) throw new Error(`A tool server name cannot contain "-": ${name}`)
       if ((await toolServers()).some((server) => server.name === name)) return false
       const { body } = await request('POST', '/api/mcp/client', {
         name,

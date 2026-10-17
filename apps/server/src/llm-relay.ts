@@ -54,7 +54,7 @@ const guestMethods = ['initialize', 'ping', 'tools/list', 'tools/call']
 const isGuestMethod = (rpc: unknown) => {
   const { id, method } = (rpc ?? {}) as { id?: unknown; method?: unknown }
   const isNotification = id === undefined && String(method).startsWith('notifications/')
-  return typeof rpc === 'object' && !Array.isArray(rpc) && (guestMethods.includes(String(method)) || isNotification)
+  return typeof rpc === 'object' && (guestMethods.includes(String(method)) || isNotification)
 }
 const picked = (headers: Iterable<[string, string]>, names: string[]) =>
   Object.fromEntries([...headers].filter(([name]) => names.includes(name.toLowerCase())))
@@ -206,7 +206,7 @@ export const createModelCallRelay = ({
         toolCallNoticeOf(failure, { ownerName, server, isReconnect })
       if (isToolCall && !prompterId) return toolError('This runtime has no active turn')
       const isGuestTurn = prompterId !== null && prompterId !== ownerId
-      if (isGuestTurn && method === 'POST' && !isGuestMethod(rpc))
+      if (method === 'POST' && (Array.isArray(rpc) || (isGuestTurn && !isGuestMethod(rpc))))
         return answer(200, {
           jsonrpc: '2.0',
           id: rpc?.id ?? null,
@@ -243,6 +243,7 @@ export const createModelCallRelay = ({
               chat: turn.chat,
               promptId: turn.promptId,
               ownerId,
+              signal,
               approval: {
                 server,
                 tool: toolName.slice(server.length + 1),

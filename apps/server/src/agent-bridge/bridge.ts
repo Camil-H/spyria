@@ -6,6 +6,7 @@ import {
   type AgentLlm,
   createAgentHandlers,
   type DelegatedFrame,
+  isApprovalQuestion,
   isAuthRequiredError,
   isStoredAgentEvent,
   type QuestionFrame,
@@ -212,7 +213,7 @@ export const createAgentBridge = ({
       const opened = handlers.openEvents(chat, conversation, {
         onEvent: (event) => {
           ready.resolve()
-          if (chatSocket.isClosed) return
+          if (chatSocket.isClosed || isApprovalQuestion(event)) return
           const streamed = streamedTextOf(event)
           const update = event.update as { sessionUpdate?: string; questionId?: string } | undefined
           if (update?.sessionUpdate === 'question') {

@@ -1,6 +1,12 @@
 export type { AgentChat, AgentConversation, AgentHost, SessionClassifier } from './contracts/agent.ts'
 export type { ToolCallDecision } from './contracts/repositories.ts'
-export { type AgentEvent, isAuthRequiredError, isStoredAgentEvent, streamedTextOf } from './domain/agent-events.ts'
+export {
+  type AgentEvent,
+  isApprovalQuestion,
+  isAuthRequiredError,
+  isStoredAgentEvent,
+  streamedTextOf,
+} from './domain/agent-events.ts'
 export { awaitTaskTool, routerTools, stillRunningOf, subagentFailureOf, unknownTaskOf } from './domain/delegation.ts'
 export { genericModelCallNoticeOf, type ModelCallFailure } from './domain/model-call-failures.ts'
 export type { DelegatedFrame, QuestionFrame } from './domain/streamed-reply.ts'

@@ -282,8 +282,8 @@ test('g-4. a long task answers still running before Pi’s timeout for the route
   ])
 })
 
-test('a long task the turn never resumed is forgotten when the turn ends', async () => {
-  await fakeAgent()
+test('a long task the turn never resumed is forgotten and stopped when the turn ends, and its token is refused from then on', async () => {
+  const { host, subs } = await fakeAgent()
   const chat = await newRuntimeChat()
   setFakeLlmScript(delegatingScript({ subagents: { 'fake-small': heldWork } }))
   const promptId = await promptAndAnswer(chat, 'Delegate and move on')
@@ -296,8 +296,17 @@ test('a long task the turn never resumed is forgotten when the turn ends', async
     taskId: id,
   })
   expect(awaited).toEqual({ text: unknownTaskOf(id), isError: true })
+  expect((await delegationsOf(chat))[0]?.status).toBe('stopped')
+  expect((await completionWith(host, tokenOf(subs()[0]))).status).toBe(401)
+  expect((await toolListWith(host, tokenOf(subs()[0]))).status).toBe(401)
   await holds.release('sub')
-  await waitFor(async () => (await delegationsOf(chat))[0]?.status === 'finished')
+  await waitFor(async () =>
+    (await stack.storedAgentEventsOf(chat)).some((event) => {
+      const payload = event.payload as { event: { update: { sessionUpdate?: string } }; delegation?: { id: string } }
+      return payload.delegation?.id === id && payload.event.update.sessionUpdate === 'turn_end'
+    }),
+  )
+  expect((await delegationsOf(chat))[0]?.status).toBe('stopped')
 })
 
 test('stopping the turn interrupts the running subagent, marks its delegation stopped, and the next prompt runs', async () => {

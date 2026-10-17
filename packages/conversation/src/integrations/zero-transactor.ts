@@ -314,7 +314,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       stopRunning: (id, promptId) => stopRunningDelegations(tx, contextWorkspaceId, id, promptId),
       runningOfTokenHash: async (hostId, tokenHash) => {
         const found = await runningDelegationOfTokenHash(tx, contextWorkspaceId, hostId, tokenHash)
-        return found && { chatId: chatId(found.chatId), id: found.id }
+        return found && { chatId: chatId(found.chatId), id: found.id, promptId: messageId(found.promptId) }
       },
     },
     readMarkers: {

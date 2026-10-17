@@ -217,10 +217,16 @@ const storedAcpUpdates = [
   'question_closed',
 ]
 
+export const isApprovalQuestion = (event: AgentEvent) => {
+  const update = event.update as Fields
+  return update?.kind === 'approval' && String(update.sessionUpdate).startsWith('question')
+}
+
 export const isStoredAgentEvent = (event: AgentEvent) =>
   event.kind === 'ACPUpdate' &&
   storedAcpUpdates.includes(String((event.update as Fields)?.sessionUpdate)) &&
-  (event.completed === true || (event.update as Fields)?.sessionUpdate === 'tool_call')
+  (event.completed === true || (event.update as Fields)?.sessionUpdate === 'tool_call') &&
+  !isApprovalQuestion(event)
 
 const planModeId = 'plan'
 const planModeOptionOf = (option: Fields) => option?.id === 'collaboration_mode' || option?.category === 'mode'

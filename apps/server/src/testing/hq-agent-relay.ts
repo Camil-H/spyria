@@ -115,6 +115,7 @@ export const createHqAgentRelay = ({
     return workspace
   }
   const upstreams = new Set<WebSocket>()
+  const bridgeSends = new Set<(data: string) => void>()
   const created: Record<string, unknown>[] = []
   const prompts: string[] = []
   const modelSwitches: (string | undefined)[] = []
@@ -180,6 +181,7 @@ export const createHqAgentRelay = ({
     connect: ({ path, container, send, close }) => {
       const pending: string[] = []
       let upstream: WebSocket | undefined
+      bridgeSends.add(send)
       void agentOf(container).then(({ port }) => {
         socketPaths.push(path)
         upstream = new WebSocket(`ws://localhost:${port}${path}`)
@@ -189,6 +191,7 @@ export const createHqAgentRelay = ({
         }
         upstream.onmessage = (message) => send(String(message.data))
         upstream.onclose = () => {
+          bridgeSends.delete(send)
           if (upstream) upstreams.delete(upstream)
           close()
         }
@@ -224,6 +227,10 @@ export const createHqAgentRelay = ({
     restart: stopAgents,
     stopAgentsExcept,
     forgetSessions: () => rmSync(join(directory, 'sessions'), { recursive: true, force: true }),
+    forgeUpdate: (update: object) => {
+      const event = { id: crypto.randomUUID(), seq: 0, timestamp: new Date().toISOString(), completed: true, update }
+      for (const send of bridgeSends) send(JSON.stringify(event))
+    },
     dropSockets: () => {
       for (const upstream of upstreams) upstream.close()
     },

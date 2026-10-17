@@ -4,6 +4,7 @@ import type { ConversationTransactor, UnitOfWork } from '../contracts/transactor
 import { type Message, newMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
 import { noLlmKeyNoticeOf, noLongerPromptsNoticeOf } from '../domain/model-call-failures.ts'
+import { cancelToolApprovalsOf } from './pending-approvals.ts'
 import { forgetDelegationsOf } from './running-delegations.ts'
 
 type NoticeOf = (hasReply: boolean) => string | undefined
@@ -68,7 +69,9 @@ export const releaseAgentTurn = async ({ agentTurns }: UnitOfWork, chatId: ChatI
 
 const finishAgentTurn = async (unitOfWork: UnitOfWork, chatId: ChatId, promptId: MessageId, noticeOf: NoticeOf) => {
   await unitOfWork.agentTurns.set(chatId, null)
+  await unitOfWork.delegations.stopRunning(chatId, promptId)
   forgetDelegationsOf(promptId)
+  cancelToolApprovalsOf(promptId)
   const notice = noticeOf(await unitOfWork.agentTurns.hasReply(promptId))
   if (notice) await appendNotice(unitOfWork, await unitOfWork.messages.get(promptId), notice)
   await requestNextPrompt(unitOfWork, chatId)

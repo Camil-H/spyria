@@ -494,9 +494,9 @@ export const stopRunningDelegations = async (tx: Transaction, workspaceId: strin
   ).flatMap((row) => row.conversationId ?? [])
 
 export const runningDelegationOfTokenHash = (tx: Transaction, workspaceId: string, hostId: string, hash: string) =>
-  firstOnServer<{ chatId: string; id: string }>(
+  firstOnServer<{ chatId: string; id: string; promptId: string }>(
     tx,
-    `select delegations.chat_id as "chatId", delegations.id from delegations join runtimes
+    `select delegations.chat_id as "chatId", delegations.id, delegations.prompt_id as "promptId" from delegations join runtimes
        on runtimes.workspace_id = delegations.workspace_id and runtimes.chat_id = delegations.chat_id
      where delegations.workspace_id = $1 and runtimes.host_id = $2 and delegations.token_hash = $3
        and delegations.status = 'running'`,

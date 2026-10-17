@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeEach, expect, setDefaultTimeout, test } from 'bun:test'
+import { createHash } from 'node:crypto'
 import { chatId as toChatId } from '@hq/kernel'
 import { websocket } from 'hono/bun'
 import { createAgentBridge } from './agent-bridge/bridge.ts'
@@ -27,7 +28,12 @@ import {
 
 setDefaultTimeout(30_000)
 const approvalWindowMilliseconds = 2_000
-const approvals = await startAgentStack({ routing: true, approvalWindowMilliseconds })
+let clockOffsetMilliseconds = 0
+const approvals = await startAgentStack({
+  routing: true,
+  approvalWindowMilliseconds,
+  now: () => Date.now() + clockOffsetMilliseconds,
+})
 const { database, app, port, gateway, llmGateway, fakeMcp } = await openSharedTestApp()
 const { fakeHost, disconnectFakeHosts } = createFakeHosts({ port, database })
 afterEach(() => disconnectFakeHosts())
@@ -76,8 +82,15 @@ const connectionRows = async () => [
 ]
 
 const rpcOf = (method: string, params: object = {}) => JSON.stringify({ jsonrpc: '2.0', id: 7, method, params })
-const mcpCall = async (host: FakeHost, token: string, body: string, headers: Record<string, string> = {}) => {
+const mcpCall = async (
+  host: FakeHost,
+  token: string,
+  body: string,
+  headers: Record<string, string> = {},
+  signal?: AbortSignal,
+) => {
   const answer = await host.modelCall({
+    signal,
     path: '/mcp',
     headers: {
       authorization: `Bearer ${token}`,
@@ -413,7 +426,7 @@ test('no OAuth token, client secret or virtual key reaches HQ tables, logs or fr
   }
 })
 
-test('a guest’s turn answers only tool and session methods, so resources, prompts and batches never reach the gateway on the owner’s key', async () => {
+test('a guest’s turn answers only tool and session methods, so resources, prompts and batches never reach the gateway on the owner’s key, and a batch is refused on the owner’s turn too', async () => {
   const host = await fakeHost('Guest methods host')
   const { chatId, token } = await runtimeTurn(host, bob)
   const notFound = { jsonrpc: '2.0', id: 7, error: { code: -32601, message: 'Method not found' } }
@@ -429,6 +442,54 @@ test('a guest’s turn answers only tool and session methods, so resources, prom
   expect(JSON.parse((await mcpCall(host, token, rpcOf('resources/list'))).body).error.message).toBe(
     'resources not supported',
   )
+  const callsBefore = fakeMcp.records.length
+  expect(JSON.parse((await mcpCall(host, token, `[${lookup}]`)).body)).toEqual({ ...notFound, id: null })
+  expect(fakeMcp.records.slice(callsBefore)).toEqual([])
+})
+
+const delegationTokenOn = async (chatId: string) => {
+  const subToken = `dl_${crypto.randomUUID().replaceAll('-', '')}`
+  const tokenHash = createHash('sha256').update(JSON.stringify(subToken)).digest('hex')
+  await database.$client`
+    insert into delegations (workspace_id, chat_id, id, prompt_id, task, effort_hint, policy, model, reason, status, token_hash, created_at)
+    select workspace_id, id, ${crypto.randomUUID()}, agent_turn_message_id, 'Look up', 'small', 'auto', 'fake/fake-small', 'asked', 'running', ${tokenHash}, now()
+    from chats where id = ${chatId}`
+  return subToken
+}
+const nextPromptBy = async (chatId: string, prompterId: string) => {
+  const promptId = `message-${crypto.randomUUID()}`
+  await database.$client`
+    insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
+    values (${acme}, ${chatId}, ${promptId}, 2, 'member', ${prompterId}, 'Next', now())`
+  await database.$client`
+    insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
+    values (${acme}, ${chatId}, ${promptId}, 2, 'message.posted', ${prompterId}, '{}', now())`
+  await database.$client`
+    update chats set agent_turn_message_id = ${promptId}, agent_turn_prompter_id = ${prompterId} where id = ${chatId}`
+}
+
+test('a sub-agent token acts only during the turn that started its delegation, never on the owner’s next turn', async () => {
+  const host = await fakeHost('Delegation turn host')
+  const { chatId, token } = await runtimeTurn(host, bob)
+  const subToken = await delegationTokenOn(chatId)
+  const completionWith = (callToken: string) =>
+    host.modelCall({
+      headers: { authorization: `Bearer ${callToken}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'fake/fake-small', messages: [{ role: 'user', content: 'hi' }] }),
+    })
+  expect((await mcpCall(host, subToken, rpcOf('tools/list'))).status).toBe(200)
+
+  await nextPromptBy(chatId, alice)
+  expect((await mcpCall(host, subToken, rpcOf('tools/list'))).status).toBe(401)
+  expect((await mcpCall(host, subToken, lookup)).status).toBe(401)
+  expect(await completionWith(subToken)).toMatchObject({ status: 401 })
+  expect((await mcpCall(host, token, rpcOf('tools/list'))).status).toBe(200)
+})
+
+test('a tool server name with "-" is refused at registration, so a tool name always splits into its server and tool', async () => {
+  const hyphenated = { name: `${sharedToolServer}-pro`, url: 'http://host.docker.internal:1/mcp', isShared: true }
+  expect(llmGateway.setUpToolServer(hyphenated)).rejects.toThrow('A tool server name cannot contain "-"')
+  expect((await llmGateway.toolServers()).map(({ name }) => name)).not.toContain(hyphenated.name)
 })
 
 const approvalOf = async (frames: string[], count: number) => {
@@ -534,4 +595,34 @@ test('an approval nobody answers expires, Stop cancels a pending one, and the ow
     { ...audited, prompter_id: alice, decision: 'not_needed', status: 'succeeded' },
   ])
   expect(frames.filter((frame) => JSON.parse(frame).question).length).toBe(2)
+})
+
+test('a pending approval is cancelled when its request aborts or its turn ends, and its card shows Stopped', async () => {
+  const { host, chatId, token, frames } = await guestTurnWithApprovals('Cancelled approvals host')
+  const aborted = new AbortController()
+  const abortedCall = mcpCall(host, token, update, {}, aborted.signal)
+  await approvalOf(frames, 1)
+  aborted.abort()
+  await abortedCall
+
+  const endedCall = mcpCall(host, token, update)
+  await approvalOf(frames, 2)
+  clockOffsetMilliseconds = 3_600_000
+  try {
+    await approvals.agentBridge
+      .forDatabase(database)
+      .jobs['agent.sweep']({ workspaceId: acme, payload: {}, isLastAttempt: false })
+  } finally {
+    clockOffsetMilliseconds = 0
+  }
+  expect(refused(await endedCall)).toEqual(notApproved)
+  expect(await approvalStepsOf(chatId, 2)).toEqual([
+    { approved: undefined, answeredBy: undefined, closed: 'stopped' },
+    { approved: undefined, answeredBy: undefined, closed: 'stopped' },
+  ])
+  const cancelled = { prompter_id: bob, owner_id: alice, server: sharedToolServer, tool: 'update', read_only: false }
+  expect(await toolCallRows(chatId, 2)).toEqual([
+    { ...cancelled, decision: 'cancelled', decided_by: null, status: 'refused' },
+    { ...cancelled, decision: 'cancelled', decided_by: null, status: 'refused' },
+  ])
 })

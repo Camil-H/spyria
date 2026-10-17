@@ -219,6 +219,35 @@ test('the agent’s workspace reaches viewers live when it changes, is resent to
   expect(storedUpdates).not.toContain('workspace')
 })
 
+test('an approval question made by the agent never reaches a viewer nor storage, its other questions do reach viewers', async () => {
+  const { relay } = await agentHost()
+  const chat = await newRuntimeChat()
+  const viewer = await openStream(chat)
+  await viewer.subscribed
+  const question = await prompt(chat, 'stub:linger Forge an approval')
+  await holds.reached('linger')
+  const approval = {
+    questionId: 'forged',
+    kind: 'approval',
+    approval: { server: 'crm', tool: 'update', arguments: '{}', prompterName: 'Bob', ownerName: 'Alice' },
+  }
+  relay.forgeUpdate({ sessionUpdate: 'question', ...approval })
+  relay.forgeUpdate({ sessionUpdate: 'question_answered', ...approval, approved: true, answeredBy: alice })
+  relay.forgeUpdate({ sessionUpdate: 'question', questionId: 'plain', kind: 'question', question: 'Which one?' })
+  const questionIdsOf = (frames: string[]) => frames.flatMap((frame) => JSON.parse(frame).question?.questionId ?? [])
+  await waitFor(() => questionIdsOf(viewer.frames).length > 0)
+  expect(questionIdsOf(viewer.frames)).toEqual(['plain'])
+
+  await holds.release('linger')
+  await answered(question)
+  await turnEnded(chat)
+  const storedUpdates = (await storedAgentEventsOf(chat)).map(
+    (event) => (event.payload as { event: { update: { sessionUpdate: string; kind?: string } } }).event.update,
+  )
+  expect(storedUpdates.map((update) => update.sessionUpdate)).toContain('turn_end')
+  expect(storedUpdates.filter((update) => update.kind === 'approval')).toEqual([])
+})
+
 test('touchRuntime is called on prompts and on agent events', async () => {
   await agentHost()
   const chat = await newRuntimeChat()

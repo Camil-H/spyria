@@ -23,11 +23,15 @@ type FailedCall = {
 
 const tokenChatOf = async ({ transactor, runtimes }: Dependencies, host: AgentHost, token: string) => {
   const runtimeChatId = await runtimes.chatOfLlmToken(host, token)
-  if (runtimeChatId) return { chatId: runtimeChatId, delegationId: undefined }
+  if (runtimeChatId) return { chatId: runtimeChatId, delegationId: undefined, delegationPromptId: undefined }
   const tokenHash = await digestOf(token)
   const delegation = await transactor.run(({ delegations }) => delegations.runningOfTokenHash(host.hostId, tokenHash))
-  return delegation && { chatId: delegation.chatId, delegationId: delegation.id }
+  return (
+    delegation && { chatId: delegation.chatId, delegationId: delegation.id, delegationPromptId: delegation.promptId }
+  )
 }
+const isTokenTurn = (tokenChat: { delegationPromptId: MessageId | undefined }, promptId: MessageId | null) =>
+  tokenChat.delegationPromptId === undefined || tokenChat.delegationPromptId === promptId
 
 export const findModelCallTurn = async (dependencies: Dependencies, host: AgentHost, token: string) => {
   const tokenChat = await tokenChatOf(dependencies, host, token)
@@ -35,7 +39,8 @@ export const findModelCallTurn = async (dependencies: Dependencies, host: AgentH
   return dependencies.transactor.run(async ({ agentTurns, members }) => {
     const turn = await agentTurns.modelCallTurn(tokenChat.chatId)
     return (
-      turn && {
+      turn &&
+      isTokenTurn(tokenChat, turn.promptId) && {
         ...turn,
         chat: { workspaceId: host.workspaceId, chatId: tokenChat.chatId },
         prompterName: await members.displayNameOf(turn.prompterId),
@@ -51,7 +56,8 @@ export const findToolCallTurn = async (dependencies: Dependencies, host: AgentHo
   return dependencies.transactor.run(async ({ agentTurns, members }) => {
     const { ownerId, prompterId, promptId } = await agentTurns.toolCallTurn(tokenChat.chatId)
     return (
-      ownerId && {
+      ownerId &&
+      isTokenTurn(tokenChat, promptId) && {
         chat: { workspaceId: host.workspaceId, chatId: tokenChat.chatId },
         ownerId,
         prompterId,

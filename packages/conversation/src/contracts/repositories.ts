@@ -161,7 +161,10 @@ export type DelegationRepository = {
   start(delegation: Delegation): Promise<void>
   update(id: string, fields: { conversationId?: string; status?: 'finished' | 'failed' }): Promise<void>
   stopRunning(chatId: ChatId, promptId: MessageId): Promise<string[]>
-  runningOfTokenHash(hostId: string, tokenHash: string): Promise<{ chatId: ChatId; id: string } | undefined>
+  runningOfTokenHash(
+    hostId: string,
+    tokenHash: string,
+  ): Promise<{ chatId: ChatId; id: string; promptId: MessageId } | undefined>
 }
 
 export type RoutingRepository = {

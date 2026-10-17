@@ -1,22 +1,25 @@
 import type { MemberId, MessageId } from '@hq/kernel'
 import type { AgentChat } from '../contracts/agent.ts'
-import type { ToolCallDecision } from '../contracts/repositories.ts'
 import type { ToolApproval } from '../domain/agent-steps.ts'
 import { toolApprovalWindowMilliseconds } from '../domain/tool-calls.ts'
 import type { AgentDependencies } from './agent-turn.ts'
+import { type Decided, pendingApprovals } from './pending-approvals.ts'
 import { recordAgentEvent } from './record-agent-event.ts'
 
-type Decided = { decision: Exclude<ToolCallDecision, 'not_needed'>; decidedBy: MemberId | null }
-type PendingApproval = { chat: AgentChat; ownerId: MemberId; decide: (decided: Decided) => void }
-type Input = { chat: AgentChat; promptId: MessageId | null; ownerId: MemberId; approval: ToolApproval }
+type Input = {
+  chat: AgentChat
+  promptId: MessageId | null
+  ownerId: MemberId
+  approval: ToolApproval
+  signal?: AbortSignal
+}
 
 const forbiddenStatus = 403
 const invalidStatus = 400
-const pendingApprovals = new Map<string, PendingApproval>()
 
 export const requestToolApproval = async (
   { transactor, eventSockets, approvalWindowMilliseconds = toolApprovalWindowMilliseconds }: AgentDependencies,
-  { chat, promptId, ownerId, approval }: Input,
+  { chat, promptId, ownerId, approval, signal }: Input,
 ): Promise<Decided> => {
   const question = { questionId: crypto.randomUUID(), kind: 'approval' as const, approval }
   const decided = Promise.withResolvers<Decided>()
@@ -24,11 +27,15 @@ export const requestToolApproval = async (
     pendingApprovals.delete(question.questionId)
     decided.resolve(outcome)
   }
-  pendingApprovals.set(question.questionId, { chat, ownerId, decide })
+  const cancel = () => decide({ decision: 'cancelled', decidedBy: null })
+  pendingApprovals.set(question.questionId, { chat, promptId, ownerId, decide })
   eventSockets.showQuestion(chat, { promptId: promptId ?? '', question: { sessionUpdate: 'question', ...question } })
   const timer = setTimeout(() => decide({ decision: 'expired', decidedBy: null }), approvalWindowMilliseconds)
+  signal?.addEventListener('abort', cancel)
+  if (signal?.aborted) cancel()
   const outcome = await decided.promise
   clearTimeout(timer)
+  signal?.removeEventListener('abort', cancel)
   const isAnswered = outcome.decision === 'approved' || outcome.decision === 'denied'
   const update = isAnswered
     ? {
@@ -60,10 +67,4 @@ export const answerToolApproval = (chat: AgentChat, memberId: MemberId, question
   if (typeof approve !== 'boolean') return invalidStatus
   pending.decide({ decision: approve ? 'approved' : 'denied', decidedBy: memberId })
   return 200
-}
-
-export const cancelToolApprovals = (chat: AgentChat) => {
-  for (const pending of pendingApprovals.values())
-    if (pending.chat.chatId === chat.chatId && pending.chat.workspaceId === chat.workspaceId)
-      pending.decide({ decision: 'cancelled', decidedBy: null })
 }
