@@ -13,9 +13,9 @@ import { type AgentEvent, agentJobTypes, isStoredAgentEvent, type TurnOutcome } 
 import { type AgentLlm, createHqAgentClient } from '../integrations/hq-agent-client.ts'
 import { createRuntimeAgentRuntimes, type SandboxProvider } from '../integrations/runtime-agent-runtimes.ts'
 import { createTransactingZeroTransactor } from '../integrations/zero-transactor.ts'
-import { forwardToAgent } from '../operations/agent-questions.ts'
 import { closeReopenedTurn, reopenAgentTurn, sweepAgentTurns } from '../operations/agent-turn-safety.ts'
 import { awaitTask, delegateTask } from '../operations/delegate-task.ts'
+import { forwardToAgent } from '../operations/forward-to-agent.ts'
 import {
   findModelCallTurn,
   findToolCallTurn,
@@ -24,9 +24,9 @@ import {
 } from '../operations/model-calls.ts'
 import { promptAgent, startAgentSession } from '../operations/prompt-agent.ts'
 import { recordAgentEvent } from '../operations/record-agent-event.ts'
+import { answerToolApproval, requestToolApproval } from '../operations/request-tool-approval.ts'
 import { promptWaitingChats } from '../operations/retry-agent.ts'
 import { interruptAgent } from '../operations/stop-agent.ts'
-import { answerToolApproval, requestToolApproval } from '../operations/tool-approvals.ts'
 
 type AgentJob = Omit<Job, 'transact'>
 

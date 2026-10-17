@@ -1,28 +1,10 @@
-import {
-  type ChatId,
-  can,
-  type MemberId,
-  type MessageId,
-  requireChatPermission,
-  messageId as toMessageId,
-} from '@hq/kernel'
-import type { MemberDirectory } from '../contracts/repositories.ts'
+import { type ChatId, can, type MemberId, type MessageId, requireChatPermission } from '@hq/kernel'
 import type { RuntimeChatStarter } from '../contracts/runtime-chat-starter.ts'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { MessageDeleted, RuntimeOnlyFromChannel } from '../domain/errors.ts'
-import { type Message, newMessage } from '../domain/message.ts'
 import { chatNameFrom } from '../domain/message-body.ts'
-import { channelThreadHeaderOf, threadWrapperOf } from '../domain/thread-wrapper.ts'
-
-export const quotedMessagesOf = async (members: MemberDirectory, messages: readonly Message[]) => {
-  const authorNameOf = await members.displayNamesOf([
-    ...new Set(messages.flatMap(({ authorId }) => (authorId ? [authorId] : []))),
-  ])
-  return messages.map((message) => ({
-    ...message,
-    authorName: message.authorId ? authorNameOf(message.authorId) : 'Agent',
-  }))
-}
+import { channelThreadHeaderOf } from '../domain/seed-message.ts'
+import { seedRuntimeChat } from './seed-runtime-chat.ts'
 
 type Dependencies = { transactor: ConversationTransactor; runtimeChatStarter: RuntimeChatStarter }
 type Input = { id: string; chatId: ChatId; messageId: MessageId; memberId: MemberId }
@@ -31,7 +13,8 @@ export const startRuntimeFromMessage = (
   { transactor, runtimeChatStarter }: Dependencies,
   { id, chatId, messageId, memberId }: Input,
 ) =>
-  transactor.run(async ({ messages, chats, members }) => {
+  transactor.run(async (unitOfWork) => {
+    const { messages, chats } = unitOfWork
     const source = await messages.get(messageId)
     await requireChatPermission(chats, source.chatId, memberId, 'chat.read')
     if (source.deletedAt) throw new MessageDeleted()
@@ -39,32 +22,21 @@ export const startRuntimeFromMessage = (
     if (sourceChat.type !== 'channel') throw new RuntimeOnlyFromChannel()
     const rootId = source.threadRootId ?? source.id
     const thread = await messages.thread(source.chatId, rootId)
-    await runtimeChatStarter.start({
-      id: chatId,
+    await seedRuntimeChat(unitOfWork, runtimeChatStarter, {
+      id,
+      workspaceId: source.workspaceId,
+      chatId,
       sourceChatId: source.chatId,
       name: chatNameFrom(source.body),
-      ownerId: memberId,
+      memberId,
+      header: channelThreadHeaderOf(sourceChat.name),
+      quoted: thread,
     })
     await chats.recordRuntimeOrigin({
       runtimeChatId: chatId,
       chatId: source.chatId,
       messageId: rootId,
       startedBy: memberId,
-    })
-    const seedId = toMessageId(id)
-    await messages.record({
-      type: 'message.posted',
-      actorId: memberId,
-      message: newMessage({
-        id: seedId,
-        workspaceId: source.workspaceId,
-        chatId,
-        kind: 'member',
-        authorId: memberId,
-        body: threadWrapperOf(channelThreadHeaderOf(sourceChat.name), await quotedMessagesOf(members, thread)),
-        createdAt: new Date(),
-        replyToId: seedId,
-      }),
     })
     const otherAuthorIds = new Set(
       thread.flatMap(({ authorId, deletedAt }) => (authorId && authorId !== memberId && !deletedAt ? [authorId] : [])),

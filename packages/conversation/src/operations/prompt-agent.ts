@@ -19,6 +19,7 @@ import {
 import { agentNotices, notReadyNoticeOf } from '../domain/agent-events.ts'
 import type { Message } from '../domain/message.ts'
 import { noLlmKeyNoticeOf } from '../domain/model-call-failures.ts'
+import { agentPromptTextOf } from '../domain/seed-message.ts'
 import {
   type LocalSession,
   localSessions,
@@ -29,7 +30,6 @@ import {
   thoughtLevelOf,
   unreachableSessionNoticeOf,
 } from '../domain/session-routing.ts'
-import { agentPromptTextOf } from '../domain/thread-wrapper.ts'
 import {
   type AgentDependencies,
   beginAgentTurn,
@@ -333,8 +333,8 @@ export const promptAgent = async (
       return transactor.run((unitOfWork) => closeAgentTurn(unitOfWork, chatId, prompt.id, () => prepared.refusal))
     conversation = prepared.conversation
     await eventSockets.ensureOpen(chat, conversation, prompt.id)
-    const wrapper = await transactor.run(({ messages }) => messages.wrapperFor(prompt))
-    await agentClient.sendMessage(conversation, agentPromptTextOf(prompt, wrapper))
+    const seed = await transactor.run(({ messages }) => messages.seedFor(prompt))
+    await agentClient.sendMessage(conversation, agentPromptTextOf(prompt, seed))
   } catch (error) {
     if (!(error instanceof AgentStartFailure) && !isLastAttempt) {
       await transactor.run((unitOfWork) => releaseAgentTurn(unitOfWork, chatId, prompt.id))

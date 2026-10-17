@@ -7,7 +7,7 @@ import type { AgentDependencies } from './agent-turn.ts'
 const forbiddenStatus = 403
 const conflictStatus = 409
 
-export const mayPrompt = async ({ chats, members }: UnitOfWork, chatId: ChatId, memberId: MemberId) => {
+const mayPrompt = async ({ chats, members }: UnitOfWork, chatId: ChatId, memberId: MemberId) => {
   const chat = await chats.get(chatId)
   if (chat.type !== 'runtime' || chat.localSession === null) return false
   return chat.localSession ? chat.ownerId === memberId : members.hasLlmCredential(memberId)

@@ -5,8 +5,8 @@ import {
   channelThreadHeaderOf,
   type QuotedMessage,
   runtimeChatHeaderOf,
-  threadWrapperOf,
-} from './thread-wrapper.ts'
+  seedMessageBodyOf,
+} from './seed-message.ts'
 
 const quoted = (
   authorName: string,
@@ -22,10 +22,10 @@ const quoted = (
   ...fields,
 })
 
-test('the wrapper quotes each message with its author, kind and UTC time, a blank line between', () => {
+test('the seed message quotes each message with its author, kind and UTC time, a blank line between', () => {
   expect(
     String(
-      threadWrapperOf(channelThreadHeaderOf('Welcome'), [
+      seedMessageBodyOf(channelThreadHeaderOf('Welcome'), [
         quoted('Alice', 'Can we ship the invoice fix?', '09:05'),
         quoted('Agent', 'The tests pass.\nReady.', '09:07', { kind: 'agent' }),
         quoted('Bob', 'Yes, after review.', '14:30'),
@@ -48,10 +48,10 @@ test('the wrapper quotes each message with its author, kind and UTC time, a blan
   )
 })
 
-test('the wrapper leaves deleted messages out', () => {
+test('the seed message leaves deleted messages out', () => {
   expect(
     String(
-      threadWrapperOf(channelThreadHeaderOf('Welcome'), [
+      seedMessageBodyOf(channelThreadHeaderOf('Welcome'), [
         quoted('Alice', 'Root', '09:05'),
         quoted('Bob', 'Gone', '09:06', { deletedAt: new Date('2026-10-17T09:08:00.000Z') }),
       ]),
@@ -61,7 +61,7 @@ test('the wrapper leaves deleted messages out', () => {
   )
 })
 
-test('the prompt sent to the agent is the wrapper, a blank line, then the prompt, only when a wrapper is given', () => {
+test('the prompt sent to the agent is the seed message, a blank line, then the prompt, only when a seed message is given', () => {
   const prompt = { body: MessageBody('Summarise it.') }
   expect(agentPromptTextOf(prompt, { body: MessageBody('Conversation so far…') })).toBe(
     'Conversation so far…\n\nSummarise it.',
@@ -72,7 +72,7 @@ test('the prompt sent to the agent is the wrapper, a blank line, then the prompt
 test('a forked runtime chat quotes its member and agent messages under the runtime chat header, without deleted messages', () => {
   expect(
     String(
-      threadWrapperOf(runtimeChatHeaderOf('Invoice bug'), [
+      seedMessageBodyOf(runtimeChatHeaderOf('Invoice bug'), [
         quoted('Alice', 'Find the bug.', '09:05'),
         quoted('Agent', 'Found it.', '09:07', { kind: 'agent' }),
         quoted('Alice', 'Gone', '09:09', { deletedAt: new Date('2026-10-17T09:10:00.000Z') }),

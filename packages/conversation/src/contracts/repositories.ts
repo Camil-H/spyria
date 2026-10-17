@@ -16,7 +16,7 @@ export type MessageRepository = {
   replies(promptId: MessageId): Promise<Message[]>
   thread(chatId: ChatId, rootId: MessageId): Promise<Message[]>
   history(chatId: ChatId): Promise<Message[]>
-  wrapperFor(prompt: Message): Promise<Message | undefined>
+  seedFor(prompt: Message): Promise<Message | undefined>
 }
 
 export type AgentJobs = {

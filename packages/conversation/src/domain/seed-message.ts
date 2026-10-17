@@ -9,7 +9,7 @@ export const channelThreadHeaderOf = (channelName: string) =>
   `Conversation so far, from the channel thread in #${channelName}:`
 export const runtimeChatHeaderOf = (chatName: string) => `Conversation so far, from the runtime chat ${chatName}:`
 
-export const threadWrapperOf = (header: string, messages: readonly QuotedMessage[]) =>
+export const seedMessageBodyOf = (header: string, messages: readonly QuotedMessage[]) =>
   MessageBody(
     [
       header,
@@ -22,5 +22,5 @@ export const threadWrapperOf = (header: string, messages: readonly QuotedMessage
     ].join('\n\n'),
   )
 
-export const agentPromptTextOf = (prompt: Pick<Message, 'body'>, wrapper: Pick<Message, 'body'> | undefined) =>
-  wrapper ? `${wrapper.body}\n\n${prompt.body}` : prompt.body
+export const agentPromptTextOf = (prompt: Pick<Message, 'body'>, seed: Pick<Message, 'body'> | undefined) =>
+  seed ? `${seed.body}\n\n${prompt.body}` : prompt.body

@@ -64,6 +64,14 @@ const toMessage = ({ seq, ...row }: MessageRow): Message => ({
   step: row.step as StoredStep | null,
 })
 
+const advanceReadMarker = async (
+  newest: { seq: number } | undefined,
+  stored: { lastReadSeq: number } | undefined,
+  write: (lastReadSeq: number) => Promise<void>,
+) => {
+  if (newest && !(stored && stored.lastReadSeq >= newest.seq)) await write(newest.seq)
+}
+
 const isPosted = (type: MessageChange['type']) => type === 'message.posted' || type === 'message.replied'
 
 const payloadOf = ({
@@ -184,13 +192,13 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
               .orderBy('seq', 'asc'),
           )
         ).map(toMessage),
-      wrapperFor: async (prompt) => {
+      seedFor: async (prompt) => {
         const memberMessages = zql.messages
           .where('workspaceId', contextWorkspaceId)
           .where('chatId', prompt.chatId)
           .where('kind', 'member')
           .orderBy('seq', 'asc')
-        const [wrapper, firstLivePrompt, earlierTurnReply] = await Promise.all([
+        const [seed, firstLivePrompt, earlierTurnReply] = await Promise.all([
           tx.run(memberMessages.where('replyToId', 'IS NOT', null).where('deletedAt', 'IS', null).one()),
           tx.run(memberMessages.where('replyToId', 'IS', null).where('deletedAt', 'IS', null).one()),
           tx.run(
@@ -202,7 +210,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
               .one(),
           ),
         ])
-        return wrapper && firstLivePrompt?.id === prompt.id && !earlierTurnReply ? toMessage(wrapper) : undefined
+        return seed && firstLivePrompt?.id === prompt.id && !earlierTurnReply ? toMessage(seed) : undefined
       },
     },
     agentJobs: {
@@ -344,19 +352,15 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
     },
     readMarkers: {
       markNewestRead: async (id, readerId) => {
-        const newest = await newestInChat(id)
         const stored = await tx.run(
           zql.readMarkers.where('workspaceId', contextWorkspaceId).where('userId', readerId).where('chatId', id).one(),
         )
-        if (!newest || (stored && stored.lastReadSeq >= newest.seq)) return
-        await tx.mutate.readMarkers.upsert({
-          workspaceId: contextWorkspaceId,
-          userId: readerId,
-          chatId: id,
-          lastReadSeq: newest.seq,
-        })
+        await advanceReadMarker(await newestInChat(id), stored, (lastReadSeq) =>
+          tx.mutate.readMarkers.upsert({ workspaceId: contextWorkspaceId, userId: readerId, chatId: id, lastReadSeq }),
+        )
       },
       markThreadRead: async (id, threadRootId, readerId) => {
+        const thread = { workspaceId: contextWorkspaceId, chatId: id, threadRootId }
         const newestReply = await tx.run(
           zql.messages
             .where('workspaceId', contextWorkspaceId)
@@ -372,14 +376,9 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
             .where('threadRootId', threadRootId)
             .one(),
         )
-        if (!newestReply || (stored && stored.lastReadSeq >= newestReply.seq)) return
-        await tx.mutate.threadReadMarkers.upsert({
-          workspaceId: contextWorkspaceId,
-          userId: readerId,
-          chatId: id,
-          threadRootId,
-          lastReadSeq: newestReply.seq,
-        })
+        await advanceReadMarker(newestReply, stored, (lastReadSeq) =>
+          tx.mutate.threadReadMarkers.upsert({ ...thread, userId: readerId, lastReadSeq }),
+        )
       },
     },
     chats: {
