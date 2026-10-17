@@ -263,6 +263,7 @@ export const createMockSnapshot = (): Snapshot => {
       participant('chat-invoice-bug', bob, 'prompter'),
       participant('chat-welcome', bob, 'prompter'),
       participant('chat-setup-helper', alice, 'prompter'),
+      participant('chat-standup', alice, 'prompter'),
       participant('chat-invoice-bug', lee, 'reader'),
     ],
     chatRoles: [acme, globex].flatMap((workspaceId) =>

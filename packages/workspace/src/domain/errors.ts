@@ -32,3 +32,8 @@ export const ForeignWorkspace = errorKind(
   () => 'The change targets a workspace other than the current one',
   WorkspaceError,
 )
+export const RuntimeChatPrivate = errorKind(
+  'runtime_chat_private',
+  () => 'A runtime chat is always private',
+  WorkspaceError,
+)

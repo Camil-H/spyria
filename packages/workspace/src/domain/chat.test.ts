@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { chatId, memberId, projectId } from '@hq/kernel'
-import { archivedChat, type Chat, movedChat, startRuntimeChat } from './chat.ts'
-import { CrossWorkspaceMove, SourceChatArchived } from './errors.ts'
+import { archivedChat, type Chat, movedChat, startRuntimeChat, visibleChat } from './chat.ts'
+import { CrossWorkspaceMove, RuntimeChatPrivate, SourceChatArchived } from './errors.ts'
 import { Name } from './name.ts'
 import { acme, chatInAcme, globex, projectIn } from './testing.ts'
 
@@ -25,6 +25,7 @@ test('startRuntimeChat creates a runtime chat in the source workspace and projec
   const channel: Chat = {
     ...chatInAcme,
     type: 'channel',
+    visibility: 'public',
     model: null,
     reasoningEffort: null,
     gitBranch: null,
@@ -36,6 +37,7 @@ test('startRuntimeChat creates a runtime chat in the source workspace and projec
     workspaceId: acme,
     projectId: channel.projectId,
     type: 'runtime',
+    visibility: 'private',
     gitBranch: null,
     originChatId: channel.id,
     archived: false,
@@ -48,4 +50,12 @@ test('startRuntimeChat keeps a loose source loose', () => {
 
 test('startRuntimeChat rejects an archived source', () => {
   expect(() => startRuntimeChat(archivedChat(chatInAcme), runtimeFields)).toThrow(SourceChatArchived)
+})
+
+test('visibleChat changes a channel’s visibility and keeps a runtime chat private', () => {
+  const channel: Chat = { ...chatInAcme, type: 'channel', visibility: 'public' }
+  expect(visibleChat(channel, 'private').visibility).toBe('private')
+  expect(visibleChat({ ...channel, visibility: 'private' }, 'public').visibility).toBe('public')
+  expect(() => visibleChat(chatInAcme, 'public')).toThrow(RuntimeChatPrivate)
+  expect(() => visibleChat(chatInAcme, 'private')).toThrow(RuntimeChatPrivate)
 })

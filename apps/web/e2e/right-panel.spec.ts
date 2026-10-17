@@ -9,6 +9,7 @@ import {
   type Page,
   panelOf,
   sendMessage,
+  sidebarOf,
   panelTabOf as tabOf,
   tabPanelOf,
   test,
@@ -454,17 +455,25 @@ test('themes the panel in light and dark mode', async ({ page }) => {
   })
 })
 
-test('28-4. a member who is not a participant reads the public Welcome channel, and posting there joins it as Prompter', async ({
+test('28-4. a member who is not a participant reads the public Welcome channel, and joining it makes him a Prompter who posts', async ({
   browser,
   workerStack,
 }) => {
   const leePage = await openPageAs(browser, workerStack, 'member-lee')
-  await openPanelTab(leePage, 'Welcome', 'Members')
+  await sidebarOf(leePage)
+    .getByRole('button', { name: /^Browse channels/ })
+    .click()
+  await leePage
+    .getByRole('dialog', { name: 'Browse channels' })
+    .getByRole('link', { name: /Welcome/ })
+    .click()
+  await tabOf(leePage, 'Members').click()
   await expect(messageContaining(leePage, 'Welcome to the team!')).toHaveCount(1)
   await expectMembers(leePage, [
     ['Alice', 'Owner'],
     ['Bob', 'Prompter'],
   ])
+  await mainOf(leePage).getByRole('button', { name: 'Join channel' }).click()
   await sendMessage(leePage, 'Lee says hello')
   await expect(messageContaining(leePage, 'Lee says hello')).toHaveCount(1)
   await expectMembers(leePage, [

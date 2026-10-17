@@ -1,5 +1,5 @@
-import type { ChatId, MemberId, ProjectId, WorkspaceId } from '@hq/kernel'
-import { CrossWorkspaceMove, SourceChatArchived } from './errors.ts'
+import type { ChatId, ChatVisibility, MemberId, ProjectId, WorkspaceId } from '@hq/kernel'
+import { CrossWorkspaceMove, RuntimeChatPrivate, SourceChatArchived } from './errors.ts'
 import type { Name } from './name.ts'
 
 export type Chat = Readonly<{
@@ -7,6 +7,7 @@ export type Chat = Readonly<{
   workspaceId: WorkspaceId
   projectId: ProjectId | null
   type: 'channel' | 'runtime'
+  visibility: ChatVisibility
   name: Name
   ownerId: MemberId
   archived: boolean
@@ -17,7 +18,7 @@ export type Chat = Readonly<{
 }>
 
 export type ChatChange = Readonly<{
-  type: 'chat.created' | 'chat.renamed' | 'chat.moved' | 'chat.archived'
+  type: 'chat.created' | 'chat.renamed' | 'chat.moved' | 'chat.archived' | 'chat.visibility_changed'
   chat: Chat
   actorId: MemberId
 }>
@@ -31,6 +32,11 @@ export const archivedChat = (chat: Chat): Chat => ({ ...chat, archived: true })
 
 export const renamedChat = (chat: Chat, name: Name): Chat => ({ ...chat, name })
 
+export const visibleChat = (chat: Chat, visibility: ChatVisibility): Chat => {
+  if (chat.type === 'runtime') throw new RuntimeChatPrivate()
+  return { ...chat, visibility }
+}
+
 export const startRuntimeChat = (source: Chat, fields: { id: ChatId; name: Name; ownerId: MemberId }): Chat => {
   if (source.archived) throw new SourceChatArchived()
   return {
@@ -38,6 +44,7 @@ export const startRuntimeChat = (source: Chat, fields: { id: ChatId; name: Name;
     workspaceId: source.workspaceId,
     projectId: source.projectId,
     type: 'runtime',
+    visibility: 'private',
     model: null,
     reasoningEffort: null,
     gitBranch: null,

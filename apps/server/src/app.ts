@@ -53,7 +53,11 @@ import { createRuntimeHostGateway, type RuntimeHostGateway } from './runtime-hos
 
 export const defaultLlm = { model: 'openai/fake/fake-model' }
 const questionIdPattern = /^[\w-]{1,64}$/
-const readRevokingMutations = new Set(['conversation.removeMember', 'conversation.leaveChat'])
+const readRevokingMutations = new Set([
+  'conversation.removeMember',
+  'conversation.leaveChat',
+  'workspace.changeVisibility',
+])
 type LlmGateway = ReturnType<typeof createLlmGateway>
 
 export const sessionClassifierOf =

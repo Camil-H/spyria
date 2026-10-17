@@ -84,7 +84,7 @@ test('1 and 4. the admin turns sessions on members machines off: My machine show
   await expect(machineSectionOf(bobPage)).toContainText('Online')
   await expect(machineSectionOf(bobPage).getByRole('button', { name: 'Remove' })).toBeVisible()
   const dialog = await openNewChat(bobPage)
-  await expect(dialog.getByRole('radio')).toHaveCount(2)
+  await expect(dialog.getByRole('radiogroup', { name: 'Chat type' }).getByRole('radio')).toHaveCount(2)
   await dialog.getByRole('radio', { name: 'Runtime' }).check()
   await dialog.getByRole('textbox', { name: 'Chat name' }).fill('Bob while off')
   await dialog.getByRole('button', { name: 'Confirm' }).click()

@@ -7,6 +7,7 @@ import { Name } from '../domain/name.ts'
 import { createZeroTransactor } from '../integrations/zero-transactor.ts'
 import { archiveChat } from '../operations/archive-chat.ts'
 import { archiveProject } from '../operations/archive-project.ts'
+import { changeVisibility } from '../operations/change-visibility.ts'
 import { createChat } from '../operations/create-chat.ts'
 import { createProject } from '../operations/create-project.ts'
 import { createWorkspace } from '../operations/create-workspace.ts'
@@ -18,6 +19,8 @@ const id = z.string().check(z.minLength(1))
 const name = z.pipe(z.string(), z.transform(Name))
 const chatIdArgument = z.pipe(id, z.transform(chatId))
 const projectIdArgument = z.pipe(id, z.transform(projectId))
+
+const visibilityArgument = z.enum(['public', 'private'])
 
 const workspaceArguments = z.object({ workspaceId: z.pipe(id, z.transform(workspaceId)) })
 
@@ -36,6 +39,7 @@ export const workspaceMutators = defineMutators({
         id,
         name,
         type: z.enum(['channel', 'runtime']),
+        visibility: z.optional(visibilityArgument),
         projectId: z.nullable(projectIdArgument),
       }),
       ({ tx, ctx, args }) => createChat(dependenciesOf(tx, ctx, args), { ...args, ownerId: ctx.userId }),
@@ -53,6 +57,10 @@ export const workspaceMutators = defineMutators({
     ),
     renameChat: defineMutator(z.extend(workspaceArguments, { chatId: chatIdArgument, name }), ({ tx, ctx, args }) =>
       renameChat(dependenciesOf(tx, ctx, args), { ...args, actorId: ctx.userId }),
+    ),
+    changeVisibility: defineMutator(
+      z.extend(workspaceArguments, { chatId: chatIdArgument, visibility: visibilityArgument }),
+      ({ tx, ctx, args }) => changeVisibility(dependenciesOf(tx, ctx, args), { ...args, actorId: ctx.userId }),
     ),
     renameProject: defineMutator(
       z.extend(workspaceArguments, { projectId: projectIdArgument, name }),

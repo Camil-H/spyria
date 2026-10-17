@@ -210,11 +210,12 @@ export const memberNamesIn = (snapshot: Snapshot, workspaceId: WorkspaceId) => {
   return (memberId: MemberId) => nameByMemberId.get(memberId) ?? 'Unknown'
 }
 
+export const participantIn = (snapshot: Snapshot, workspaceId: WorkspaceId, memberId: MemberId) => (chat: ChatRow) =>
+  snapshot.chatMembers.find((row) => inChat(workspaceId, chat.id)(row) && row.memberId === memberId)
+
 export const chatPermissionsIn =
   (snapshot: Snapshot, workspaceId: WorkspaceId, memberId: MemberId) => (chat: ChatRow) => {
-    const participant = snapshot.chatMembers.find(
-      (row) => inChat(workspaceId, chat.id)(row) && row.memberId === memberId,
-    )
+    const participant = participantIn(snapshot, workspaceId, memberId)(chat)
     return permissionsOf(
       chat,
       snapshot.chatRoles.find((role) => role.workspaceId === workspaceId && role.id === participant?.roleId),

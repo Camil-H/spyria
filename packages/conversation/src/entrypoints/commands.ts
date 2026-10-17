@@ -23,6 +23,7 @@ export type ConversationCommands = {
   inviteMember: Command<{ chatId: ChatId; memberId: MemberId; roleId: string }>
   changeMemberRole: Command<{ chatId: ChatId; memberId: MemberId; roleId: string }>
   removeMember: Command<{ chatId: ChatId; memberId: MemberId }>
+  joinChannel: Command<{ chatId: ChatId }>
   leaveChat: Command<{ chatId: ChatId }>
   saveDraft: Command<{ chatId: ChatId; text: string }, void>
   commandOutput: Command<{ chatId: ChatId; stepId: string }>

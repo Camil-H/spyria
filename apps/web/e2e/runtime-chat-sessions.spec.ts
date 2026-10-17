@@ -124,7 +124,7 @@ test('11. Runs on follows the machine: its sign-ins, going offline and back, and
   await test.step('New chat offers only Channel and Runtime, even to a member with a machine', async () => {
     await page.getByRole('button', { name: 'New chat' }).click()
     const dialog = page.getByRole('dialog', { name: 'New chat' })
-    await expect(dialog.getByRole('radio')).toHaveCount(2)
+    await expect(dialog.getByRole('radiogroup', { name: 'Chat type' }).getByRole('radio')).toHaveCount(2)
     await expect(dialog.getByRole('radio', { name: 'Channel' })).toBeVisible()
     await expect(dialog.getByRole('radio', { name: 'Runtime' })).toBeVisible()
     await dialog.getByRole('button', { name: 'Cancel' }).click()

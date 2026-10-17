@@ -1,7 +1,7 @@
 import { appendChatEvent } from '@hq/db/server-writes'
 import type { Chat as ChatRow, Project as ProjectRow } from '@hq/db/zero'
 import { memberChatPermissions, type ZeroContext, zql } from '@hq/db/zero-queries'
-import { builtInChatRoles, chatId, memberId, projectId, visibilityOf, workspaceId } from '@hq/kernel'
+import { builtInChatRoles, chatId, memberId, projectId, workspaceId } from '@hq/kernel'
 import { removeChatRuntimeOnServer } from '@hq/runtime/published'
 import type { Transaction } from '@rocicorp/zero'
 import type { UnitOfWork, WorkspaceTransactor } from '../contracts/transactor.ts'
@@ -17,15 +17,7 @@ const toProject = ({ createdAt, ...row }: ProjectRow): Project => ({
   name: Name(row.name),
 })
 
-const toChat = ({
-  createdAt,
-  visibility,
-  mode,
-  ownerKind,
-  ownerUserId,
-  ownerServiceIdentityId,
-  ...row
-}: ChatRow): Chat => ({
+const toChat = ({ createdAt, mode, ownerKind, ownerUserId, ownerServiceIdentityId, ...row }: ChatRow): Chat => ({
   ...row,
   id: chatId(row.id),
   workspaceId: workspaceId(row.workspaceId),
@@ -42,6 +34,7 @@ const eventPayloadOf: Record<ChatChange['type'], (chat: Chat) => object> = {
   'chat.renamed': ({ name }) => ({ name }),
   'chat.moved': ({ projectId }) => ({ projectId }),
   'chat.archived': () => ({}),
+  'chat.visibility_changed': ({ visibility }) => ({ visibility }),
 }
 
 export const createZeroTransactor = (tx: Transaction, context: ZeroContext): WorkspaceTransactor => {
@@ -100,7 +93,6 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
         if (type === 'chat.created') {
           await tx.mutate.chats.insert({
             ...chatFields(inContextWorkspace(chat)),
-            visibility: visibilityOf(chat.type),
             mode: null,
             ownerKind: 'user',
             ownerUserId: chat.ownerId,

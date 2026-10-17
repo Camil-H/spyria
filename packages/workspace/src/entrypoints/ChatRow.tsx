@@ -53,7 +53,7 @@ export const ChatRow = ({
         <span className="min-w-0 flex-1 truncate">{chat.name}</span>
         {chatAdornment?.(chat.id)}
       </NavLink>
-      {chat.canAdmin && (
+      {(chat.canAdmin || chat.canLeave) && (
         <Root>
           <Trigger aria-label={`Chat actions for ${chat.name}`} className={menuTriggerClass}>
             <Ellipsis aria-hidden className="size-4" />
@@ -63,26 +63,49 @@ export const ChatRow = ({
             className={menuContentClass}
             onCloseAutoFocus={(event) => openDialog === 'rename' && event.preventDefault()}
           >
-            <Item className={menuItemClass} onSelect={() => setOpenDialog('rename')}>
-              Rename chat
-            </Item>
-            <Sub>
-              <SubTrigger className={menuItemClass}>Move to</SubTrigger>
-              <SubContent sideOffset={4} className={menuContentClass}>
-                {[...projects, { id: null, name: 'No project' }].map((project) => (
+            {chat.canAdmin && (
+              <>
+                <Item className={menuItemClass} onSelect={() => setOpenDialog('rename')}>
+                  Rename chat
+                </Item>
+                <Sub>
+                  <SubTrigger className={menuItemClass}>Move to</SubTrigger>
+                  <SubContent sideOffset={4} className={menuContentClass}>
+                    {[...projects, { id: null, name: 'No project' }].map((project) => (
+                      <Item
+                        className={menuItemClass}
+                        key={project.id ?? ''}
+                        onSelect={() => commands.moveChat({ workspaceId, chatId: chat.id, projectId: project.id })}
+                      >
+                        {project.name}
+                      </Item>
+                    ))}
+                  </SubContent>
+                </Sub>
+                {chat.type === 'channel' && (
                   <Item
                     className={menuItemClass}
-                    key={project.id ?? ''}
-                    onSelect={() => commands.moveChat({ workspaceId, chatId: chat.id, projectId: project.id })}
+                    onSelect={() =>
+                      commands.changeVisibility({
+                        workspaceId,
+                        chatId: chat.id,
+                        visibility: chat.visibility === 'public' ? 'private' : 'public',
+                      })
+                    }
                   >
-                    {project.name}
+                    {chat.visibility === 'public' ? 'Make private' : 'Make public'}
                   </Item>
-                ))}
-              </SubContent>
-            </Sub>
-            <Item className={menuItemClass} onSelect={() => setOpenDialog('archive')}>
-              Archive chat
-            </Item>
+                )}
+                <Item className={menuItemClass} onSelect={() => setOpenDialog('archive')}>
+                  Archive chat
+                </Item>
+              </>
+            )}
+            {chat.canLeave && (
+              <Item className={menuItemClass} onSelect={() => commands.leaveChat({ workspaceId, chatId: chat.id })}>
+                Leave channel
+              </Item>
+            )}
           </Content>
         </Root>
       )}

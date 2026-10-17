@@ -71,7 +71,7 @@ export type DraftRepository = { replace(draft: Draft): Promise<void> }
 export type ReadMarkerRepository = { markNewestRead(chatId: ChatId, memberId: MemberId): Promise<void> }
 
 export type ParticipantChange = Readonly<{
-  type: 'member.invited' | 'member.role_changed' | 'member.removed' | 'member.left'
+  type: 'member.invited' | 'member.joined' | 'member.role_changed' | 'member.removed' | 'member.left'
   chatId: ChatId
   memberId: MemberId
   roleId: string | null

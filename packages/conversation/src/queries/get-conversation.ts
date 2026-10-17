@@ -1,4 +1,4 @@
-import { type ChatRow, chatPermissionsIn, findChat, type Snapshot } from '@hq/db'
+import { type ChatRow, chatPermissionsIn, findChat, participantIn, type Snapshot } from '@hq/db'
 import { type ChatId, can, type MemberId, type MessageId, messageId, type WorkspaceId } from '@hq/kernel'
 import { stoppedByPrefix } from '../domain/agent-events.ts'
 import type { AgentStep, StoredStep, ThoughtStep } from '../domain/agent-steps.ts'
@@ -47,6 +47,7 @@ export type Conversation = Readonly<{
   runsOn: RunsOn | null
   isOwner: boolean
   canPost: boolean
+  canJoin: boolean
   canConfigure: boolean
   runsOnChoices: readonly RunsOn[] | null
   gitBranch: string | null
@@ -276,6 +277,7 @@ export const getConversation =
       runsOn: runsOnOf(chat),
       isOwner,
       canPost,
+      canJoin: chat.type === 'channel' && !participantIn(snapshot, workspaceId, viewerId)(chat),
       canConfigure: can(permissions, 'session.configure'),
       runsOnChoices,
       gitBranch: chat.gitBranch,

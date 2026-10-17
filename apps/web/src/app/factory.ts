@@ -152,6 +152,8 @@ export const createApp = async (
         )
         return id
       },
+      joinChannel: async (input) => (await mutate(conversationMutators.conversation.joinChannel, input)).id,
+      leaveChat: async (input) => (await mutate(conversationMutators.conversation.leaveChat, input)).id,
     }),
     conversationCommands: commandsOf<ConversationCommands>(conversationMutators.conversation, {
       saveDraft: (input) => saveDraft({ drafts }, { ...input, memberId }),

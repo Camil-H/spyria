@@ -10,6 +10,7 @@ import { changeMemberRole } from '../operations/change-member-role.ts'
 import { deleteMessage } from '../operations/delete-message.ts'
 import { editMessage } from '../operations/edit-message.ts'
 import { inviteMember } from '../operations/invite-member.ts'
+import { joinChannel } from '../operations/join-channel.ts'
 import { leaveChat } from '../operations/leave-chat.ts'
 import { markChatRead } from '../operations/mark-chat-read.ts'
 import { removeMember } from '../operations/remove-member.ts'
@@ -78,6 +79,9 @@ export const conversationMutators = defineMutators({
     ),
     removeMember: defineMutator(memberArguments, ({ tx, ctx, args }) =>
       removeMember(dependenciesOf(tx, ctx, args), { ...args, actorId: ctx.userId }),
+    ),
+    joinChannel: defineMutator(chatArguments, ({ tx, ctx, args }) =>
+      joinChannel(dependenciesOf(tx, ctx, args), { ...args, memberId: ctx.userId }),
     ),
     leaveChat: defineMutator(chatArguments, ({ tx, ctx, args }) =>
       leaveChat(dependenciesOf(tx, ctx, args), { ...args, memberId: ctx.userId }),

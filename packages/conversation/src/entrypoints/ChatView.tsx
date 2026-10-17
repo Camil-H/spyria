@@ -1,6 +1,7 @@
 import { useQuery } from '@hq/db/react'
 import { type ChatId, chatId as toChatId, type WorkspaceId } from '@hq/kernel'
 import { useSession } from '@hq/session'
+import { buttonClass } from '@hq/ui'
 import { Bot, Folder, GitBranch, Hash } from 'lucide-react'
 import { type ReactNode, useEffect, useState } from 'react'
 import { Link, Navigate, useOutletContext, useParams } from 'react-router'
@@ -124,79 +125,89 @@ export const ChatView = ({
           </div>
         </fieldset>
       )}
-      <Composer
-        workspaceId={workspaceId}
-        chatId={chatId}
-        isBlocked={
-          isRunsOnOpen ||
-          !conversation.canPost ||
-          (conversation.type === 'runtime' && !conversation.localSession && !hasLlmKey)
-        }
-        blockedNotice={
-          isRunsOnOpen
-            ? conversation.isOwner
-              ? 'Choose where this chat runs to send'
-              : runsOnWaitingNoticeOf(conversation.ownerName)
-            : conversation.canPost
-              ? blockedNotice
-              : 'You can read this chat'
-        }
-        aboveBox={
-          (live.workspace || branch !== null) && (
-            <div className="flex min-w-0 gap-2">
-              {live.workspace && (
-                <span title={live.workspace.cwd} className={workspaceChipClass}>
-                  <Folder aria-label="Working directory" role="img" size={12} className="shrink-0" />
-                  <span className="truncate">{live.workspace.cwd.split('/').filter(Boolean).at(-1) ?? '/'}</span>
-                </span>
-              )}
-              {branch !== null && (
-                <span className={workspaceChipClass}>
-                  <GitBranch aria-label="Git branch" role="img" size={12} className="shrink-0" />
-                  <span className="truncate">{branch}</span>
-                </span>
-              )}
-            </div>
-          )
-        }
-        bottomBar={
-          conversation.type === 'runtime' && (
-            <>
-              {conversation.runsOn !== null ? (
-                <RunsOnChip
+      {conversation.canJoin ? (
+        <button
+          type="button"
+          className={`${buttonClass} self-center`}
+          onClick={() => commands.joinChannel({ workspaceId, chatId })}
+        >
+          Join channel
+        </button>
+      ) : (
+        <Composer
+          workspaceId={workspaceId}
+          chatId={chatId}
+          isBlocked={
+            isRunsOnOpen ||
+            !conversation.canPost ||
+            (conversation.type === 'runtime' && !conversation.localSession && !hasLlmKey)
+          }
+          blockedNotice={
+            isRunsOnOpen
+              ? conversation.isOwner
+                ? 'Choose where this chat runs to send'
+                : runsOnWaitingNoticeOf(conversation.ownerName)
+              : conversation.canPost
+                ? blockedNotice
+                : 'You can read this chat'
+          }
+          aboveBox={
+            (live.workspace || branch !== null) && (
+              <div className="flex min-w-0 gap-2">
+                {live.workspace && (
+                  <span title={live.workspace.cwd} className={workspaceChipClass}>
+                    <Folder aria-label="Working directory" role="img" size={12} className="shrink-0" />
+                    <span className="truncate">{live.workspace.cwd.split('/').filter(Boolean).at(-1) ?? '/'}</span>
+                  </span>
+                )}
+                {branch !== null && (
+                  <span className={workspaceChipClass}>
+                    <GitBranch aria-label="Git branch" role="img" size={12} className="shrink-0" />
+                    <span className="truncate">{branch}</span>
+                  </span>
+                )}
+              </div>
+            )
+          }
+          bottomBar={
+            conversation.type === 'runtime' && (
+              <>
+                {conversation.runsOn !== null ? (
+                  <RunsOnChip
+                    workspaceId={workspaceId}
+                    chatId={chatId}
+                    runsOn={conversation.runsOn}
+                    runsOnChoices={conversation.runsOnChoices}
+                    status={status}
+                  />
+                ) : (
+                  status
+                )}
+                <SessionChip
                   workspaceId={workspaceId}
                   chatId={chatId}
-                  runsOn={conversation.runsOn}
-                  runsOnChoices={conversation.runsOnChoices}
-                  status={status}
+                  model={conversation.model}
+                  reasoningEffort={conversation.reasoningEffort}
+                  subagentPolicy={conversation.subagentPolicy}
+                  harness={conversation.harness}
+                  localSession={conversation.localSession}
+                  isOwner={conversation.isOwner}
+                  canConfigure={conversation.canConfigure}
                 />
-              ) : (
-                status
-              )}
-              <SessionChip
-                workspaceId={workspaceId}
-                chatId={chatId}
-                model={conversation.model}
-                reasoningEffort={conversation.reasoningEffort}
-                subagentPolicy={conversation.subagentPolicy}
-                harness={conversation.harness}
-                localSession={conversation.localSession}
-                isOwner={conversation.isOwner}
-                canConfigure={conversation.canConfigure}
-              />
-              {conversation.runsOn !== null && (
-                <PlanModeToggle
-                  workspaceId={workspaceId}
-                  chatId={chatId}
-                  isPlanning={conversation.isPlanning}
-                  hasSession={live.workspace !== undefined}
-                  mayChange={mayPrompt && conversation.canConfigure}
-                />
-              )}
-            </>
-          )
-        }
-      />
+                {conversation.runsOn !== null && (
+                  <PlanModeToggle
+                    workspaceId={workspaceId}
+                    chatId={chatId}
+                    isPlanning={conversation.isPlanning}
+                    hasSession={live.workspace !== undefined}
+                    mayChange={mayPrompt && conversation.canConfigure}
+                  />
+                )}
+              </>
+            )
+          }
+        />
+      )}
     </div>
   )
 }

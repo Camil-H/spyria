@@ -20,7 +20,7 @@ import {
   succeeded,
 } from './testing/testing.ts'
 
-const { database, resultOf, chatRow } = await openSharedTestApp()
+const { database, resultOf, chatRow, changesOf } = await openSharedTestApp()
 
 const projectRow = (id: string) => database.query.projects.findFirst({ where: { id } })
 const participantsOf = (chatId: string) =>
@@ -75,6 +75,26 @@ test('createChat makes a channel public with its creator as Owner', async () => 
   ).toEqual(succeeded)
   expect(await chatRow('chat-new-channel')).toMatchObject({ type: 'channel', visibility: 'public' })
   expect(await participantsOf('chat-new-channel')).toEqual([{ userId: bob, roleId: 'owner' }])
+})
+
+test('createChat makes a channel private on request and refuses a visibility for a runtime chat', async () => {
+  const create = (id: string, type: 'channel' | 'runtime', visibility: 'public' | 'private') =>
+    resultOf(aliceInAcme, 'workspace.createChat', {
+      workspaceId: acme,
+      id,
+      name: 'Chat',
+      type,
+      visibility,
+      projectId: null,
+    })
+  expect(await create('chat-private-channel', 'channel', 'private')).toEqual(succeeded)
+  expect(await chatRow('chat-private-channel')).toMatchObject({ type: 'channel', visibility: 'private' })
+  for (const visibility of ['public', 'private'] as const) {
+    expect(await create(`chat-${visibility}-runtime`, 'runtime', visibility)).toEqual(
+      failedWith('A runtime chat is always private'),
+    )
+    expect(await chatRow(`chat-${visibility}-runtime`)).toBeUndefined()
+  }
 })
 
 test.each([
@@ -251,4 +271,34 @@ test('archiving a project with its chats needs chat.admin on each of them, even 
   const ownChat = await inProject('project-own', bob)
   expect(await archive('project-own', 'archive')).toEqual(succeeded)
   expect(await chatRow(ownChat)).toMatchObject({ archived: true })
+})
+
+test.each(chatAccessRows(['owner']))(
+  'changeVisibility needs chat.admin on the channel and records the change: $name',
+  async ({ member, isAllowed, ...role }) => {
+    const chat = await chatAs(role, 'channel')
+    const before = role.isPublic ? 'public' : 'private'
+    const after = before === 'public' ? 'private' : 'public'
+    expect(
+      await resultOf(member, 'workspace.changeVisibility', { workspaceId: acme, chatId: chat, visibility: after }),
+    ).toEqual(isAllowed ? succeeded : missingPermission('chat.admin'))
+    expect(await chatRow(chat)).toMatchObject({ visibility: isAllowed ? after : before })
+    expect(await changesOf(chat)).toEqual(
+      isAllowed
+        ? [{ seq: 1, type: 'chat.visibility_changed', actor: member.userId, payload: { visibility: after } }]
+        : [],
+    )
+  },
+)
+
+test('changeVisibility refuses a runtime chat, even for its owner', async () => {
+  const chat = await newChat()
+  expect(
+    await resultOf(aliceInAcme, 'workspace.changeVisibility', {
+      workspaceId: acme,
+      chatId: chat,
+      visibility: 'public',
+    }),
+  ).toEqual(failedWith('A runtime chat is always private'))
+  expect(await chatRow(chat)).toMatchObject({ visibility: 'private' })
 })

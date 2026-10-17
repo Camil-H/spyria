@@ -266,3 +266,44 @@ test('a member invited through the client gets the chat in his replica, and lose
   await (await aliceStore.mutate(acme, conversationMutators.conversation.removeMember(memberChange))).confirmation
   await waitFor(() => !bobSees() && bobStore.read().chatMembers.every((row) => row.chatId !== chat))
 })
+
+test('a private channel reaches only its participants; one made private through the client leaves the replicas of those who did not join', async () => {
+  const aliceStore = await openZeroStore(createZeroStore, alice, [acme])
+  const bobStore = await openZeroStore(createZeroStore, bob, [acme])
+  const leeStore = await openZeroStore(createZeroStore, lee, [acme])
+  const sees = (store: typeof aliceStore, chat: string) => () => store.read().chats.some((row) => row.id === chat)
+  const createChannel = async (id: string, visibility: 'public' | 'private') =>
+    (
+      await aliceStore.mutate(
+        acme,
+        workspaceMutators.workspace.createChat({
+          workspaceId: acme,
+          id,
+          name: id,
+          type: 'channel',
+          visibility,
+          projectId: null,
+        }),
+      )
+    ).confirmation
+  const backroom = `chat-${crypto.randomUUID()}`
+  const lounge = `chat-${crypto.randomUUID()}`
+  await createChannel(backroom, 'private')
+  await createChannel(lounge, 'public')
+  await waitFor(() => sees(leeStore, lounge)() && sees(bobStore, lounge)())
+  expect(sees(leeStore, backroom)()).toBe(false)
+  expect(sees(bobStore, backroom)()).toBe(false)
+  await (
+    await bobStore.mutate(acme, conversationMutators.conversation.joinChannel({ workspaceId: acme, chatId: lounge }))
+  ).confirmation
+  const changeVisibility = (visibility: 'public' | 'private') =>
+    aliceStore.mutate(
+      acme,
+      workspaceMutators.workspace.changeVisibility({ workspaceId: acme, chatId: lounge, visibility }),
+    )
+  await (await changeVisibility('private')).confirmation
+  await waitFor(() => !sees(leeStore, lounge)())
+  expect(sees(bobStore, lounge)()).toBe(true)
+  await (await changeVisibility('public')).confirmation
+  await waitFor(sees(leeStore, lounge))
+})

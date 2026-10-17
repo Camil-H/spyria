@@ -18,6 +18,7 @@ export const chatInAcme: Chat = {
   workspaceId: acme,
   projectId: projectId('project-acme'),
   type: 'runtime',
+  visibility: 'private',
   name: Name('Invoice bug'),
   ownerId: memberId('alice'),
   archived: false,

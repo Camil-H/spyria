@@ -342,6 +342,9 @@ test('posting in a public channel makes a non-participant a Prompter and leaves 
     succeeded,
   )
   expect(await roleOf(lee)).toBe('prompter')
+  expect((await changesOf('chat-standup')).filter(({ type }) => type === 'member.joined')).toEqual([
+    { seq: expect.any(Number), type: 'member.joined', actor: lee, payload: { memberId: lee, roleId: 'prompter' } },
+  ])
   expect(await sendTo(bobInAcme, 'chat-standup', 'message-owner-posts', 'Hi')).toEqual(succeeded)
   expect(await roleOf(bob)).toBe('owner')
 })
@@ -497,4 +500,39 @@ test.each([
   expect(await memberChange(member, name, chat, args)).toEqual(failedWith(message))
   expect(await participantsOf(chat)).toEqual(participantsBefore)
   expect(await changesOf(chat)).toEqual([])
+})
+
+test.each(
+  chatAccessRows(['public']).map((row) => ({
+    ...row,
+    refusal:
+      row.role === 'outsider' ? missingPermission('chat.read') : failedWith('This member is already in the chat'),
+  })),
+)('joinChannel joins a public channel once, as Prompter: $name', async ({ member, isAllowed, refusal, ...role }) => {
+  const chat = await chatAs(role, 'channel')
+  const participantsBefore = await participantsOf(chat)
+  expect(await memberChange(member, 'joinChannel', chat)).toEqual(isAllowed ? succeeded : refusal)
+  expect(await participantsOf(chat)).toEqual(
+    isAllowed ? { ...participantsBefore, [member.userId]: 'prompter' } : participantsBefore,
+  )
+  expect(await changesOf(chat)).toEqual(
+    isAllowed
+      ? [
+          {
+            seq: 1,
+            type: 'member.joined',
+            actor: member.userId,
+            payload: { memberId: member.userId, roleId: 'prompter' },
+          },
+        ]
+      : [],
+  )
+  if (isAllowed)
+    expect(await memberChange(member, 'joinChannel', chat)).toEqual(failedWith('This member is already in the chat'))
+})
+
+test('joinChannel refuses a runtime chat to a non-participant', async () => {
+  const chat = await newChat()
+  expect(await memberChange(bobInAcme, 'joinChannel', chat)).toEqual(missingPermission('chat.read'))
+  expect(await participantsOf(chat)).toEqual({ [alice]: 'owner' })
 })
