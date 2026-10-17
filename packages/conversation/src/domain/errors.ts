@@ -1,6 +1,6 @@
 import { DomainError, errorKind } from '@hq/kernel'
 
-export class ConversationError extends DomainError {}
+class ConversationError extends DomainError {}
 
 export const BlankMessageBody = errorKind(
   'blank_message_body',

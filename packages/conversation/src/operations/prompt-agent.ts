@@ -44,7 +44,7 @@ type Prepared = { conversation: AgentConversation } | { refusal: string }
 
 const runtimeStartPollMilliseconds = 500
 
-export const reachableChatModelsOf = async (
+const reachableChatModelsOf = async (
   { transactor, classifier }: Pick<AgentDependencies, 'transactor' | 'classifier'>,
   prompterId: MemberId,
 ) =>

@@ -2,7 +2,7 @@ import type { RuntimeHostId, WorkspaceId } from '@hq/kernel'
 
 export type SandboxLocation = { workspaceId: WorkspaceId; hostId: RuntimeHostId; runtimeId: string }
 export type SandboxStatus = 'running' | 'stopped' | 'missing'
-export type SandboxRequest = {
+type SandboxRequest = {
   method: string
   path: string
   headers?: Record<string, string>
@@ -15,7 +15,7 @@ export type SandboxSocketListener = {
   onMessage(data: string): void
   onClose(): void
 }
-export type SandboxSocket = { send(data: string): void; close(): void }
+type SandboxSocket = { send(data: string): void; close(): void }
 
 export type SandboxTransport = {
   gatewayUrl: string

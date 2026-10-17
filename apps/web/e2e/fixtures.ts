@@ -1,6 +1,6 @@
-import { expect, type Locator, type Page } from '@playwright/test'
+import { type BrowserContext, expect, type Locator, type Page } from '@playwright/test'
 import { test, type WorkerStack } from './stack.ts'
-import { serverUrl, viteUrl } from './stack-ports.ts'
+import { fakeMcpUrl, serverUrl, viteUrl } from './stack-ports.ts'
 
 export * from '@playwright/test'
 export { test } from './stack.ts'
@@ -248,4 +248,70 @@ export const logOutOf = async (page: Page, workspaceName: string) => {
     .getByRole('dialog', { name: `Log out of ${workspaceName}` })
     .getByRole('button', { name: 'Log out' })
     .click()
+}
+
+export const alicesWelcomeMessage = 'Thanks, glad to be here.'
+export const quotedTime = '\\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d UTC'
+export const threadToggleName = /^\d+ repl(y|ies)/
+export const threadToggleOf = (page: Page) => mainOf(page).getByRole('button', { name: threadToggleName })
+export const repliesOf = (page: Page) =>
+  mainOf(page).getByRole('list', { name: 'Thread replies' }).getByRole('listitem')
+export const replyBoxOf = (page: Page) => mainOf(page).getByRole('textbox', { name: 'Reply' })
+export const openMessageMenu = async (message: Locator) => {
+  await message.hover()
+  await message.getByRole('button', { name: 'Message actions' }).click()
+}
+export const replyInThread = async (page: Page, text: string) => {
+  await openMessageMenu(messageContaining(page, alicesWelcomeMessage).first())
+  await page.getByRole('menuitem', { name: 'Reply in thread' }).click()
+  await expect(replyBoxOf(page)).toBeFocused()
+  await replyBoxOf(page).fill(text)
+  await replyBoxOf(page).press('ControlOrMeta+Enter')
+  await expect(repliesOf(page).filter({ hasText: text })).toHaveCount(1)
+}
+export const openWelcome = async (page: Page) => {
+  await openChat(page, 'Welcome')
+  await expect(messageContaining(page, alicesWelcomeMessage)).toBeVisible()
+}
+
+const toolStep = 'Used whoami (fake)'
+export const toolScript = { steps: [{ tool: 'fake-whoami' }], text: 'Checked who I am.' }
+
+export const accountOf = (label: string) => `${label}-${crypto.randomUUID().slice(0, 8)}`
+export const logInAtFakeProvider = (context: BrowserContext, account: string) =>
+  context.addCookies([{ name: 'fake_mcp_user', value: account, url: fakeMcpUrl }])
+export const connectionsOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Connections' })
+export const openMyConnections = async (page: Page, workspace = 'workspace-acme') => {
+  await page.goto(`/w/${workspace}/profile`)
+  await connectionsOf(page).getByRole('tab', { name: 'My connections' }).click()
+}
+export const connectedRowOf = (page: Page) => connectionsOf(page).getByRole('listitem').filter({ hasText: 'fake' })
+export const inPopup = async (page: Page, open: () => Promise<void>) => {
+  const popup = page.waitForEvent('popup')
+  await open()
+  await (await popup).waitForEvent('close')
+}
+export const connectFake = async (page: Page, account: string, workspace = 'workspace-acme') => {
+  await logInAtFakeProvider(page.context(), account)
+  await openMyConnections(page, workspace)
+  await inPopup(page, () => connectionsOf(page).getByRole('button', { name: 'Connect fake', exact: true }).click())
+  await expect(connectedRowOf(page)).toContainText('Connected')
+}
+export const promptTool = async (
+  page: Page,
+  agentScript: (chat: string, script: object) => Promise<void>,
+  text: string,
+  script: object = toolScript,
+) => {
+  await agentScript(research, script)
+  await openChat(page, 'Research')
+  await sendMessage(page, text)
+  await expect(workingIndicatorOf(page)).toHaveCount(0)
+}
+export const toolStepsOf = (page: Page) => messageItemsOf(page).getByRole('button', { name: toolStep })
+export const lastToolResultOf = async (page: Page) => {
+  await toolStepsOf(page).last().click()
+  return messageItemsOf(page)
+    .filter({ has: page.getByRole('button', { name: toolStep, expanded: true }) })
+    .last()
 }

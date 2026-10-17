@@ -8,7 +8,7 @@ export class AgentStartFailure extends Error {}
 export type AgentChat = Readonly<{ workspaceId: WorkspaceId; chatId: ChatId }>
 export type AgentHost = Readonly<{ workspaceId: WorkspaceId; hostId: RuntimeHostId }>
 export type AgentInterrupt = Readonly<{ chatId: ChatId; promptId: MessageId; memberId: MemberId }>
-export type AgentSocket = { send(data: string): void; close(): void }
+type AgentSocket = { send(data: string): void; close(): void }
 export type AgentTransport = {
   gatewayUrl: string
   fetch(request: {
@@ -47,7 +47,7 @@ export type AgentRuntimes = {
 
 export type RuntimeRetrier = { retry(chat: AgentChat): Promise<void> }
 
-export type AgentLastEvent = Readonly<{ id: string; seq: number | null; timestamp: string }>
+type AgentLastEvent = Readonly<{ id: string; seq: number | null; timestamp: string }>
 export type AgentEventListener = { onEvent(event: AgentEvent): void; onClose(): void }
 export type AgentLlmChoice = Readonly<
   { effort?: string; resumeSessionId?: string; adapterModel?: string } & ({ harness: HarnessLaunch } | { pi: PiLaunch })
@@ -84,7 +84,7 @@ export type AgentEventSockets = {
   hideQuestion(chat: AgentChat, questionId: string): void
 }
 
-export type ClassifierCall = Readonly<{
+type ClassifierCall = Readonly<{
   chat: AgentChat
   prompterId: MemberId
   ownerId: MemberId | null

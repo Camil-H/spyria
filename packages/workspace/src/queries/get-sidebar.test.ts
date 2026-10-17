@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test'
 import { acme, alice, createMockSnapshot, lee, bob } from '@hq/db'
 import type { MemberId } from '@hq/kernel'
+import { withChannel } from '../domain/testing.ts'
 import { getSidebar } from './get-sidebar.ts'
-import { withChannel } from './testing.ts'
 
 const sidebarChatsOf = (viewerId: MemberId, snapshot = createMockSnapshot()) => {
   const sidebar = getSidebar(acme, viewerId)(snapshot)

@@ -11,7 +11,7 @@ export type HostSystem = {
 }
 
 export type HostDeclaration = { personal: boolean; signedIn: string[]; credentialsChangedAt?: Record<string, number> }
-export type HostCapacity = HostSystem &
+type HostCapacity = HostSystem &
   Partial<HostDeclaration> & { cap: number; memoryFreeBytes?: number; expiredSignIns?: Record<string, number> }
 
 export type RuntimeHost = Readonly<{

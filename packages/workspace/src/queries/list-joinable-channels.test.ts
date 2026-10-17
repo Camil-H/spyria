@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { acme, alice, createMockSnapshot, globex, lee, bob } from '@hq/db'
+import { withChannel } from '../domain/testing.ts'
 import { listJoinableChannels } from './list-joinable-channels.ts'
-import { withChannel } from './testing.ts'
 
 const snapshot = withChannel(
   withChannel(withChannel(createMockSnapshot(), { name: 'Lounge', visibility: 'public', participantIds: [alice] }), {

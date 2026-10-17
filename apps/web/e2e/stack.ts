@@ -41,7 +41,7 @@ export type WorkerStack = {
   fakeHost: (query?: Record<string, string>) => Promise<{ id: string; conversations: FakeHostConversation[] }>
   setGatewayReachable: (isReachable: boolean) => Promise<void>
 }
-export type FakeHostConversation = {
+type FakeHostConversation = {
   agent: { acp_command: string[]; acp_model?: string; acp_thought_level?: string; acp_resume_session_id?: string }
   parent_conversation_id?: string
 }

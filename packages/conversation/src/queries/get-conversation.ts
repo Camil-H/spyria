@@ -42,7 +42,7 @@ export type ConversationMessage = Readonly<{
   }>
 }>
 
-export type RuntimeLink = Readonly<{ chatId: ChatId; startedByName: string; name: string | null }>
+type RuntimeLink = Readonly<{ chatId: ChatId; startedByName: string; name: string | null }>
 
 export type ConversationItem =
   | Readonly<{ type: 'message'; message: ConversationMessage }>

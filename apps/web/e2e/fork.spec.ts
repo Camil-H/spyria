@@ -11,6 +11,7 @@ import {
   newRuntimeChat,
   openChat,
   type Page,
+  quotedTime,
   research,
   sendMessage,
   test,
@@ -19,7 +20,6 @@ import {
 import { type AgentScript, openPageAs, type WorkerStack } from './stack'
 
 const forkName = 'Research (fork)'
-const quotedTime = '\\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d UTC'
 const forkButtonOf = (page: Page) => mainOf(page).getByRole('button', { name: 'Fork into my session' })
 
 const researchWithHistory = async (

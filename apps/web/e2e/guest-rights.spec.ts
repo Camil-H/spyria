@@ -1,13 +1,18 @@
 import {
+  accountOf,
   addLlmKey,
   addParticipant,
+  connectFake,
   expect,
+  lastToolResultOf,
   messageItemsOf,
   openChat,
   type Page,
+  promptTool,
   research,
   sendMessage,
   test,
+  toolScript,
   workingIndicatorOf,
 } from './fixtures'
 import { openPageAs, type WorkerStack } from './stack'
@@ -32,7 +37,33 @@ test.beforeEach(async ({ page }) => {
   await openChat(page, 'Research')
 })
 
-test('2. a guest’s write call waits for the owner’s approval; once approved it runs and the reply continues', async ({
+test('33-1. another prompter cannot use the owner’s personal connection: the agent gets a refusal, while the owner’s own prompt uses it', async ({
+  page,
+  browser,
+  workerStack,
+  agentScript,
+}) => {
+  const account = accountOf('alice-acme')
+  await connectFake(page, account)
+  await addParticipant(workerStack, research, 'member-bob', 'prompter')
+  const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+  await addLlmKey(bobPage, 'Fake')
+  await promptTool(bobPage, agentScript, 'Bob asks who the agent is', {
+    ...toolScript,
+    text: 'I cannot use Alice’s personal connections.',
+  })
+  await expect(await lastToolResultOf(bobPage)).toContainText(
+    "fake is Alice's personal connection, used only on Alice's own prompts",
+  )
+  await expect(messageItemsOf(bobPage).filter({ hasText: 'I cannot use Alice’s personal connections.' })).toHaveCount(1)
+  await expect(messageItemsOf(bobPage).getByRole('button', { name: 'Connect fake' })).toHaveCount(0)
+
+  await promptTool(page, agentScript, 'Alice asks who the agent is')
+  await expect(await lastToolResultOf(page)).toContainText(`you are ${account}`)
+  await bobPage.context().close()
+})
+
+test('33-2. a guest’s write call waits for the owner’s approval; once approved it runs and the reply continues', async ({
   page,
   browser,
   workerStack,
@@ -57,7 +88,7 @@ test('2. a guest’s write call waits for the owner’s approval; once approved 
   await bobPage.context().close()
 })
 
-test('3. when the owner denies, the agent gets the refusal and says so; the card reads Denied by Alice', async ({
+test('33-3. when the owner denies, the agent gets the refusal and says so; the card reads Denied by Alice', async ({
   page,
   browser,
   workerStack,
@@ -75,7 +106,7 @@ test('3. when the owner denies, the agent gets the refusal and says so; the card
   await bobPage.context().close()
 })
 
-test('4. a guest’s read-only call runs without approval', async ({ page, browser, workerStack, agentScript }) => {
+test('33-4. a guest’s read-only call runs without approval', async ({ page, browser, workerStack, agentScript }) => {
   const bobPage = await openAsBob(browser, workerStack)
   await agentScript(research, { steps: [{ tool: 'crm-lookup' }], text: 'Looked the record up.' })
   await sendMessage(bobPage, 'Bob asks to look the record up')
@@ -87,7 +118,7 @@ test('4. a guest’s read-only call runs without approval', async ({ page, brows
   await bobPage.context().close()
 })
 
-test('5. the owner’s own write call runs without any approval card', async ({ page, agentScript }) => {
+test('33-5. the owner’s own write call runs without any approval card', async ({ page, agentScript }) => {
   await agentScript(research, updateScript('Updated the record.'))
   await sendMessage(page, 'Alice updates the record')
   await expect(workingIndicatorOf(page)).toHaveCount(0)

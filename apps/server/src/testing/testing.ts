@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { conversationMutators } from '@hq/conversation/server'
 import { acme, alice, lee, bob } from '@hq/db'
-import { type Database, events, resetDatabase } from '@hq/db/postgres'
+import { type Database, events, jobs, resetDatabase } from '@hq/db/postgres'
 import { setModelDirectory } from '@hq/db/server-writes'
 import {
   createTestDatabase,
@@ -314,7 +314,7 @@ export const everyStoredText = async (database: Database) => {
   return JSON.stringify(await Promise.all(tables.map(({ name }) => database.$client.unsafe(`select * from "${name}"`))))
 }
 
-export type GatewayLog = { model: string; metadata: Record<string, string>; selected_key_id: string }
+type GatewayLog = { model: string; metadata: Record<string, string>; selected_key_id: string }
 export const gatewayLogsOf = async (
   gateway: { call: <Result>(path: string) => Promise<Result> },
   query: string,
@@ -385,7 +385,7 @@ export const newChat = async ({
   return chatId(id)
 }
 
-export const chatAccessRoles = [
+const chatAccessRoles = [
   { role: 'outsider', name: 'a non-participant of a private chat', userId: bob, roleId: null, isPublic: false },
   { role: 'reader', name: 'a reader', userId: lee, roleId: 'reader', isPublic: false },
   { role: 'prompter', name: 'a prompter', userId: bob, roleId: 'prompter', isPublic: false },
@@ -393,7 +393,7 @@ export const chatAccessRoles = [
   { role: 'owner', name: 'the owner', userId: alice, roleId: 'owner', isPublic: false },
   { role: 'public', name: 'a non-participant of a public channel', userId: lee, roleId: null, isPublic: true },
 ] as const
-export type ChatAccessRole = (typeof chatAccessRoles)[number]
+type ChatAccessRole = (typeof chatAccessRoles)[number]
 export const chatAccessRows = (allowedRoles: readonly ChatAccessRole['role'][]) =>
   chatAccessRoles.map((role) => ({
     ...role,
@@ -411,39 +411,83 @@ export const chatAs = (
   })
 export const missingPermission = (permission: ChatPermission) =>
   failedWith(`You need the ${permission} permission on this chat`)
+export const posters = ['prompter', 'editor', 'owner', 'public'] as const
+export const readers = ['reader', 'prompter', 'editor', 'owner', 'public'] as const
+export const addParticipant = async (chatId: string, memberId: string, roleId: string) =>
+  (await openedTestApp()).database.$client`
+    insert into chat_participants (workspace_id, chat_id, user_id, role_id) values (${acme}, ${chatId}, ${memberId}, ${roleId})`
+export const messageRow = async (id: string) =>
+  (await openedTestApp()).database.query.messages.findFirst({ where: { id } })
+export const jobsOf = async (messageId: string) =>
+  (await (await openedTestApp()).database.select().from(jobs)).filter(
+    (job) => (job.payload as { messageId: string }).messageId === messageId,
+  )
+export const countOf = async () => {
+  const { database } = await openedTestApp()
+  return {
+    messages: (await database.query.messages.findMany()).length,
+    events: (await database.select().from(events)).length,
+    jobs: (await database.select().from(jobs)).length,
+    chats: (await database.query.chats.findMany()).length,
+  }
+}
+export const sendTo = async (member: typeof aliceInAcme, chatId: string, id: string, text: string) =>
+  (await openedTestApp()).resultOf(member, 'conversation.sendMessage', {
+    workspaceId: member.workspaceId,
+    id,
+    chatId,
+    text,
+  })
+export const writtenMessage = async (chatId: string, authorId: string) => {
+  const id = `message-${crypto.randomUUID()}`
+  await (await openedTestApp()).database.$client`
+    insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
+    values (${acme}, ${chatId}, ${id}, 1, 'member', ${authorId}, 'Written before', now())`
+  return id
+}
+export const replyTo = async (
+  member: typeof aliceInAcme,
+  chatId: string,
+  threadRootId: string,
+  id = `message-${crypto.randomUUID()}`,
+) =>
+  (await openedTestApp()).resultOf(member, 'conversation.sendMessage', {
+    workspaceId: acme,
+    id,
+    chatId,
+    text: 'In the thread',
+    threadRootId,
+  })
+export const rootIn = async (chatId: string) => {
+  const root = `message-${crypto.randomUUID()}`
+  await sendTo(aliceInAcme, chatId, root, 'Root')
+  return root
+}
 
 export const testHqAgentImage = `sha256:${'0'.repeat(64)}`
 
 export const runtimeTurn = async (host: { id: string }, prompterId: string | null) => {
   const { database } = await openedTestApp()
-  const chatId = `chat-${crypto.randomUUID()}`
   const promptId = `message-${crypto.randomUUID()}`
   const token = `runtime-token-${crypto.randomUUID()}`
+  const turnChatId = await newChat({
+    participants: prompterId && prompterId !== alice ? [{ memberId: prompterId, roleId: 'prompter' }] : [],
+  })
   await database.$client.begin(async (sql) => {
     await sql`
-      insert into chats (workspace_id, id, type, visibility, owner_kind, owner_user_id, name, archived, created_at)
-      values (${acme}, ${chatId}, 'runtime', 'private', 'user', ${alice}, 'Turn chat', false, now())`
-    await sql`
-      insert into chat_participants (workspace_id, chat_id, user_id, role_id)
-      values (${acme}, ${chatId}, ${alice}, 'owner')`
-    if (prompterId && prompterId !== alice)
-      await sql`
-        insert into chat_participants (workspace_id, chat_id, user_id, role_id)
-        values (${acme}, ${chatId}, ${prompterId}, 'prompter')`
-    await sql`
       insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
-      values (${acme}, ${chatId}, ${promptId}, 1, 'member', ${prompterId ?? alice}, 'Go', now())`
+      values (${acme}, ${turnChatId}, ${promptId}, 1, 'member', ${prompterId ?? alice}, 'Go', now())`
     await sql`
       insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
-      values (${acme}, ${chatId}, ${promptId}, 1, 'message.posted', ${prompterId ?? alice}, '{}', now())`
+      values (${acme}, ${turnChatId}, ${promptId}, 1, 'message.posted', ${prompterId ?? alice}, '{}', now())`
     await sql`
       insert into runtimes (workspace_id, id, chat_id, host_id, state, host_online, image, llm_token_hash, last_active_at, created_at, state_changed_at)
-      values (${acme}, ${crypto.randomUUID()}, ${chatId}, ${host.id}, 'running', true, ${testHqAgentImage}, ${sha256(token)}, now(), now(), now())`
+      values (${acme}, ${crypto.randomUUID()}, ${turnChatId}, ${host.id}, 'running', true, ${testHqAgentImage}, ${sha256(token)}, now(), now(), now())`
     if (prompterId)
       await sql`
-        update chats set agent_turn_message_id = ${promptId}, agent_turn_prompter_id = ${prompterId} where id = ${chatId}`
+        update chats set agent_turn_message_id = ${promptId}, agent_turn_prompter_id = ${prompterId} where id = ${turnChatId}`
   })
-  return { chatId, token }
+  return { chatId: turnChatId, token }
 }
 
 export const startAgentStack = async ({
@@ -644,9 +688,70 @@ export const startAgentStack = async ({
 }
 
 export type { ContainerAgent, FakeContainer, Launch, ModelCall }
-export const fakeHostGatewayUrl = 'http://fake-gateway-relay.test:4000/v1'
+
+const fakeHostGatewayUrl = 'http://fake-gateway-relay.test:4000/v1'
 type HostCommand = { op: string; runtimeId?: string; image?: string; apiKey?: string }
 export type FakeHost = Awaited<ReturnType<ReturnType<typeof createFakeHosts>['fakeHost']>>
+
+export const asMember = async (userId: string, method: string, path: string) => {
+  const { app, database } = await openedTestApp()
+  const response = await app.request(path, {
+    method,
+    headers: { authorization: `Bearer ${await sessionTokenOf(database, acme, userId)}` },
+  })
+  return { status: response.status, body: await response.text() }
+}
+export const connectionPath = (action: string) => `/api/tool-connections/fake/${action}`
+export const consentThroughHq = async (authorizeUrl: string, cookie: string) => {
+  const { app } = await openedTestApp()
+  const authorized = await fetch(authorizeUrl, { redirect: 'manual', headers: { cookie } })
+  const callback = new URL(authorized.headers.get('location') ?? '')
+  const page = await app.request(`${callback.pathname}${callback.search}`)
+  return { callbackPath: callback.pathname, status: page.status, page: await page.text() }
+}
+export const connectAlice = async (cookie: string) => {
+  const started = await asMember(alice, 'POST', connectionPath('connect'))
+  expect(started.status).toBe(200)
+  const consent = await consentThroughHq(JSON.parse(started.body).authorizeUrl, cookie)
+  expect(consent.page).toContain('"connected":true')
+  expect(await asMember(alice, 'POST', connectionPath('refresh'))).toEqual({
+    status: 200,
+    body: JSON.stringify({ status: 'Connected' }),
+  })
+}
+export const connectionRows = async () => [
+  ...(await (
+    await openedTestApp()
+  ).database.$client`
+    select user_id, tool, status from tool_connections where tool = 'fake'`),
+]
+export const rpcOf = (method: string, params: object = {}) => JSON.stringify({ jsonrpc: '2.0', id: 7, method, params })
+export const mcpCall = async (
+  host: FakeHost,
+  token: string,
+  body: string,
+  headers: Record<string, string> = {},
+  signal?: AbortSignal,
+) => {
+  const answer = await host.modelCall({
+    signal,
+    path: '/mcp',
+    headers: {
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+      ...headers,
+    },
+    body,
+  })
+  return { status: answer.status, body: answer.body, result: JSON.parse(answer.body || '{}').result }
+}
+export const whoami = rpcOf('tools/call', { name: 'fake-whoami', arguments: {} })
+export const lookup = rpcOf('tools/call', { name: `${sharedToolServer}-lookup`, arguments: {} })
+export const textOf = (result: { content?: { text: string }[] }) =>
+  result?.content?.map((part) => part.text).join('') ?? ''
+export const promptedBy = async (chatId: string, prompterId: string) =>
+  (await openedTestApp()).database.$client`update chats set agent_turn_prompter_id = ${prompterId} where id = ${chatId}`
 const gibibyte = 1024 ** 3
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex')
 

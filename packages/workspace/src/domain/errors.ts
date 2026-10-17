@@ -1,6 +1,6 @@
 import { DomainError, errorKind } from '@hq/kernel'
 
-export class WorkspaceError extends DomainError {}
+class WorkspaceError extends DomainError {}
 
 export const BlankName = errorKind(
   'blank_name',

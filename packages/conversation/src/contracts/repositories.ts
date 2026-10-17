@@ -125,7 +125,7 @@ export type ChatRepository = {
   setPlanning(chatId: ChatId, isPlanning: boolean): Promise<void>
 }
 
-export type ChatRouting = Readonly<{
+type ChatRouting = Readonly<{
   mode: string | null
   ownerId: MemberId | null
   model: string | null
@@ -135,7 +135,7 @@ export type ChatRouting = Readonly<{
   subagentPolicy: string
   harness: Harness | null
 }>
-export type RoutingDecision = Readonly<{
+type RoutingDecision = Readonly<{
   chatId: ChatId
   conversationId: string | null
   role: 'session' | 'manual'

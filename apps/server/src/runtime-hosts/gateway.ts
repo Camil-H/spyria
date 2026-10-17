@@ -40,7 +40,7 @@ const refusedCloseCode = 4001
 const replacedCloseCode = 4002
 const requestTimeoutMilliseconds = 180_000
 const identifyTimeoutMilliseconds = 10_000
-export const defaultGatewayRelayUrl = 'http://hq-gateway-relay:4000/v1'
+const defaultGatewayRelayUrl = 'http://hq-gateway-relay:4000/v1'
 
 const errorNameOf = (error: unknown) => (error instanceof Error ? error.name : 'an unknown error')
 const errorMessageOf = (error: unknown) => (error instanceof Error ? error.message : 'an unknown error')

@@ -145,7 +145,7 @@ module.exports = {
     {
       name: 'domain-imports-no-third-party-package',
       severity: 'error',
-      from: { path: `^packages/${contexts}/src/domain/`, pathNot: '\\.test\\.ts$' },
+      from: { path: `^packages/${contexts}/src/domain/`, pathNot: ['\\.test\\.ts$', '(^|/)testing\\.ts$'] },
       to: { dependencyTypesNot: ['local'], pathNot: '^packages/kernel/' },
     },
     {

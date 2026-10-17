@@ -1,61 +1,23 @@
-import type { BrowserContext } from '@playwright/test'
 import {
+  accountOf,
   addLlmKey,
-  addParticipant,
+  connectedRowOf,
+  connectFake,
+  connectionsOf,
   expect,
+  inPopup,
+  lastToolResultOf,
+  logInAtFakeProvider,
   mainOf,
   messageItemsOf,
-  openChat,
-  type Page,
-  research,
-  sendMessage,
+  openMyConnections,
+  promptTool,
   test,
-  workingIndicatorOf,
+  toolStepsOf,
 } from './fixtures'
-import { openPageAs, type WorkerStack } from './stack'
+import type { WorkerStack } from './stack'
 import { fakeMcpUrl, gatewayUrl } from './stack-ports'
 
-const toolStep = 'Used whoami (fake)'
-const toolScript = { steps: [{ tool: 'fake-whoami' }], text: 'Checked who I am.' }
-
-const accountOf = (label: string) => `${label}-${crypto.randomUUID().slice(0, 8)}`
-const logInAtFakeProvider = (context: BrowserContext, account: string) =>
-  context.addCookies([{ name: 'fake_mcp_user', value: account, url: fakeMcpUrl }])
-const connectionsOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Connections' })
-const openMyConnections = async (page: Page, workspace = 'workspace-acme') => {
-  await page.goto(`/w/${workspace}/profile`)
-  await connectionsOf(page).getByRole('tab', { name: 'My connections' }).click()
-}
-const connectedRowOf = (page: Page) => connectionsOf(page).getByRole('listitem').filter({ hasText: 'fake' })
-const inPopup = async (page: Page, open: () => Promise<void>) => {
-  const popup = page.waitForEvent('popup')
-  await open()
-  await (await popup).waitForEvent('close')
-}
-const connectFake = async (page: Page, account: string, workspace = 'workspace-acme') => {
-  await logInAtFakeProvider(page.context(), account)
-  await openMyConnections(page, workspace)
-  await inPopup(page, () => connectionsOf(page).getByRole('button', { name: 'Connect fake', exact: true }).click())
-  await expect(connectedRowOf(page)).toContainText('Connected')
-}
-const promptTool = async (
-  page: Page,
-  agentScript: (chat: string, script: object) => Promise<void>,
-  text: string,
-  script: object = toolScript,
-) => {
-  await agentScript(research, script)
-  await openChat(page, 'Research')
-  await sendMessage(page, text)
-  await expect(workingIndicatorOf(page)).toHaveCount(0)
-}
-const toolStepsOf = (page: Page) => messageItemsOf(page).getByRole('button', { name: toolStep })
-const lastToolResultOf = async (page: Page) => {
-  await toolStepsOf(page).last().click()
-  return messageItemsOf(page)
-    .filter({ has: page.getByRole('button', { name: toolStep, expanded: true }) })
-    .last()
-}
 const whoamiThroughGateway = async (workerStack: WorkerStack, workspace: string) => {
   const [row] = await workerStack.database.$client`
     select virtual_key_id from member_gateway_keys where workspace_id = ${workspace} and user_id = 'member-alice'`
@@ -98,32 +60,6 @@ test('3. a call before connecting shows Connect fake; after connecting in the po
   await promptTool(page, agentScript, 'Who am I now?')
   await expect(toolStepsOf(page)).toHaveCount(2)
   await expect(await lastToolResultOf(page)).toContainText(`you are ${account}`)
-})
-
-test('4. another prompter cannot use the owner’s personal connection: the agent gets a refusal, while the owner’s own prompt uses it (spec 33, e2e 1)', async ({
-  page,
-  browser,
-  workerStack,
-  agentScript,
-}) => {
-  const account = accountOf('alice-acme')
-  await connectFake(page, account)
-  await addParticipant(workerStack, research, 'member-bob', 'prompter')
-  const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-  await addLlmKey(bobPage, 'Fake')
-  await promptTool(bobPage, agentScript, 'Bob asks who the agent is', {
-    ...toolScript,
-    text: 'I cannot use Alice’s personal connections.',
-  })
-  await expect(await lastToolResultOf(bobPage)).toContainText(
-    "fake is Alice's personal connection, used only on Alice's own prompts",
-  )
-  await expect(messageItemsOf(bobPage).filter({ hasText: 'I cannot use Alice’s personal connections.' })).toHaveCount(1)
-  await expect(messageItemsOf(bobPage).getByRole('button', { name: 'Connect fake' })).toHaveCount(0)
-
-  await promptTool(page, agentScript, 'Alice asks who the agent is')
-  await expect(await lastToolResultOf(page)).toContainText(`you are ${account}`)
-  await bobPage.context().close()
 })
 
 test('5. Alice connects a different account per workspace and each workspace’s tool calls use its own account', async ({

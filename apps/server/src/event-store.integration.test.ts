@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import { rebuildMessages } from '@hq/conversation/server'
 import { events, jobs } from '@hq/db/postgres'
 import { schema } from '@hq/db/zero'
@@ -29,7 +29,6 @@ const expectGapFreeSeqs = async () => {
     )
 }
 
-// Order matters: the drift repair test rebuilds the messages written by the rebuild test before it.
 test('every chat change appends exactly one chat event at the next seq of the chat', async () => {
   await succeeds('workspace.createChat', {
     id: 'chat-events',
@@ -92,77 +91,79 @@ test('chat events leave the messages projection unchanged', async () => {
   expect(await allMessages()).toEqual(before)
 })
 
-test('rebuilding the messages from the events reproduces the live projection, and twice changes nothing', async () => {
-  await succeeds('conversation.sendMessage', { id: 'message-history-1', chatId: 'chat-standup', text: 'First' })
-  await succeeds('conversation.editMessage', { messageId: 'message-history-1', text: 'First, edited' })
-  await succeeds('conversation.sendMessage', {
-    id: 'message-history-reply',
-    chatId: 'chat-standup',
-    text: 'In the thread',
-    threadRootId: 'message-history-1',
-  })
-  await succeeds('conversation.sendMessage', { id: 'message-history-2', chatId: 'chat-standup', text: 'Second' })
-  await succeeds('conversation.deleteMessage', { messageId: 'message-history-2' })
-  await succeeds('conversation.sendMessage', { id: 'message-history-3', chatId: 'chat-invoice-bug', text: 'News?' })
-  const agentBridge = createAgentBridge({
-    sandboxProvider: {} as SandboxProvider,
-    llm: { model: 'openai/fake' },
-  })
-  const worker = startJobWorker(database, { pollIntervalMilliseconds: 20, agentBridge })
-  await waitFor(async () => (await database.select().from(jobs)).every((job) => job.state === 'done'))
-  await worker.stop()
-  await succeeds('conversation.startRuntimeFromMessage', {
-    id: 'message-history-seed',
-    chatId: 'chat-history-runtime',
-    messageId: 'message-history-1',
-  })
-  await succeeds('conversation.updateChatRouting', { chatId: 'chat-history-runtime', runsOn: 'runtime' })
-  await succeeds('conversation.sendMessage', { id: 'message-history-4', chatId: 'chat-history-runtime', text: 'Go' })
-  await succeeds('conversation.forkChat', {
-    id: 'message-history-fork',
-    chatId: 'chat-history-fork',
-    sourceChatId: 'chat-history-runtime',
-  })
-  await succeeds('workspace.createChat', { id: 'chat-history', name: 'History', type: 'channel', projectId: null })
-  await succeeds('conversation.sendMessage', { id: 'message-history-5', chatId: 'chat-history', text: 'Hi' })
-  await succeeds('workspace.renameChat', { chatId: 'chat-history', name: 'History, renamed' })
-  await succeeds('workspace.moveChat', { chatId: 'chat-history', projectId: 'project-billing' })
-  await succeeds('workspace.archiveChat', { chatId: 'chat-history' })
-  await succeeds('workspace.archiveProject', { projectId: 'project-billing', chatsPolicy: 'release' })
-  await succeeds('workspace.createProject', { id: 'project-history', name: 'History' })
-  await succeeds('workspace.moveChat', { chatId: 'chat-history-runtime', projectId: 'project-history' })
-  await succeeds('workspace.archiveProject', { projectId: 'project-history', chatsPolicy: 'archive' })
-  const live = await allMessages()
-  expect(live.find((message) => message.replyToId === 'message-history-3')).toMatchObject({ kind: 'notice' })
-  expect(live.find((message) => message.id === 'message-history-2')).toMatchObject({ body: '' })
-  expect(live.find((message) => message.id === 'message-history-reply')).toMatchObject({
-    threadRootId: 'message-history-1',
+describe('the history written by the rebuild test, then drifted', () => {
+  test('rebuilding the messages from the events reproduces the live projection, and twice changes nothing', async () => {
+    await succeeds('conversation.sendMessage', { id: 'message-history-1', chatId: 'chat-standup', text: 'First' })
+    await succeeds('conversation.editMessage', { messageId: 'message-history-1', text: 'First, edited' })
+    await succeeds('conversation.sendMessage', {
+      id: 'message-history-reply',
+      chatId: 'chat-standup',
+      text: 'In the thread',
+      threadRootId: 'message-history-1',
+    })
+    await succeeds('conversation.sendMessage', { id: 'message-history-2', chatId: 'chat-standup', text: 'Second' })
+    await succeeds('conversation.deleteMessage', { messageId: 'message-history-2' })
+    await succeeds('conversation.sendMessage', { id: 'message-history-3', chatId: 'chat-invoice-bug', text: 'News?' })
+    const agentBridge = createAgentBridge({
+      sandboxProvider: {} as SandboxProvider,
+      llm: { model: 'openai/fake' },
+    })
+    const worker = startJobWorker(database, { pollIntervalMilliseconds: 20, agentBridge })
+    await waitFor(async () => (await database.select().from(jobs)).every((job) => job.state === 'done'))
+    await worker.stop()
+    await succeeds('conversation.startRuntimeFromMessage', {
+      id: 'message-history-seed',
+      chatId: 'chat-history-runtime',
+      messageId: 'message-history-1',
+    })
+    await succeeds('conversation.updateChatRouting', { chatId: 'chat-history-runtime', runsOn: 'runtime' })
+    await succeeds('conversation.sendMessage', { id: 'message-history-4', chatId: 'chat-history-runtime', text: 'Go' })
+    await succeeds('conversation.forkChat', {
+      id: 'message-history-fork',
+      chatId: 'chat-history-fork',
+      sourceChatId: 'chat-history-runtime',
+    })
+    await succeeds('workspace.createChat', { id: 'chat-history', name: 'History', type: 'channel', projectId: null })
+    await succeeds('conversation.sendMessage', { id: 'message-history-5', chatId: 'chat-history', text: 'Hi' })
+    await succeeds('workspace.renameChat', { chatId: 'chat-history', name: 'History, renamed' })
+    await succeeds('workspace.moveChat', { chatId: 'chat-history', projectId: 'project-billing' })
+    await succeeds('workspace.archiveChat', { chatId: 'chat-history' })
+    await succeeds('workspace.archiveProject', { projectId: 'project-billing', chatsPolicy: 'release' })
+    await succeeds('workspace.createProject', { id: 'project-history', name: 'History' })
+    await succeeds('workspace.moveChat', { chatId: 'chat-history-runtime', projectId: 'project-history' })
+    await succeeds('workspace.archiveProject', { projectId: 'project-history', chatsPolicy: 'archive' })
+    const live = await allMessages()
+    expect(live.find((message) => message.replyToId === 'message-history-3')).toMatchObject({ kind: 'notice' })
+    expect(live.find((message) => message.id === 'message-history-2')).toMatchObject({ body: '' })
+    expect(live.find((message) => message.id === 'message-history-reply')).toMatchObject({
+      threadRootId: 'message-history-1',
+    })
+
+    await rebuild()
+    expect(await allMessages()).toEqual(live)
+    await rebuild()
+    expect(await allMessages()).toEqual(live)
+    await rebuild({ chatId: 'chat-standup' })
+    await rebuild({ workspaceId: acme })
+    expect(await allMessages()).toEqual(live)
+    await expectGapFreeSeqs()
   })
 
-  await rebuild()
-  expect(await allMessages()).toEqual(live)
-  await rebuild()
-  expect(await allMessages()).toEqual(live)
-  await rebuild({ chatId: 'chat-standup' })
-  await rebuild({ workspaceId: acme })
-  expect(await allMessages()).toEqual(live)
-  await expectGapFreeSeqs()
-})
-
-test('rebuilding repairs a drifted projection, only in the given scope', async () => {
-  const live = await allMessages()
-  await database.$client`update messages set body = 'drifted' where id in ('message-history-1', 'message-general-1')`
-  await database.$client`delete from messages where id = 'message-history-4'`
-  await database.$client`insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
+  test('rebuilding repairs a drifted projection, only in the given scope', async () => {
+    const live = await allMessages()
+    await database.$client`update messages set body = 'drifted' where id in ('message-history-1', 'message-general-1')`
+    await database.$client`delete from messages where id = 'message-history-4'`
+    await database.$client`insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
     values (${acme}, 'chat-standup', 'message-without-event', 999, 'member', ${alice}, 'Ghost', now())`
-  await rebuild({ workspaceId: acme, chatId: 'chat-standup' })
-  const afterChatRebuild = await allMessages()
-  expect(afterChatRebuild.find((message) => message.id === 'message-history-1')?.body).toBe('First, edited')
-  expect(afterChatRebuild.find((message) => message.id === 'message-without-event')).toBeUndefined()
-  expect(afterChatRebuild.find((message) => message.id === 'message-history-4')).toBeUndefined()
-  expect(afterChatRebuild.find((message) => message.id === 'message-general-1')?.body).toBe('drifted')
-  await rebuild()
-  expect(await allMessages()).toEqual(live)
+    await rebuild({ workspaceId: acme, chatId: 'chat-standup' })
+    const afterChatRebuild = await allMessages()
+    expect(afterChatRebuild.find((message) => message.id === 'message-history-1')?.body).toBe('First, edited')
+    expect(afterChatRebuild.find((message) => message.id === 'message-without-event')).toBeUndefined()
+    expect(afterChatRebuild.find((message) => message.id === 'message-history-4')).toBeUndefined()
+    expect(afterChatRebuild.find((message) => message.id === 'message-general-1')?.body).toBe('drifted')
+    await rebuild()
+    expect(await allMessages()).toEqual(live)
+  })
 })
 
 test('concurrent senders, and concurrent messages and chat changes, get unique gap-free seqs per chat', async () => {

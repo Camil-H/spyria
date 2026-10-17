@@ -2,7 +2,7 @@ import { chatModelsOf, type Model, type ModelTier, modelNameOf, nearestModelOf }
 import { type Answers, confidenceThreshold } from './decisions.ts'
 
 export type Effort = 'high' | 'medium' | 'low'
-export type SessionChoice = Readonly<{ model: Model; effort: Effort; reason: string }>
+type SessionChoice = Readonly<{ model: Model; effort: Effort; reason: string }>
 
 export const sessionQuestions = {
   tier: {

@@ -2,8 +2,8 @@ import type { ChatId, MemberId, ProjectId } from '@hq/kernel'
 
 export type UsageMonth = string
 export type UsageTotals = { tokens: number; costMicros: number; calls: number }
-export type MemberUsage = UsageTotals & { memberId: MemberId; name: string }
-export type ProjectUsage = UsageTotals & { projectId: ProjectId | null; name: string }
+type MemberUsage = UsageTotals & { memberId: MemberId; name: string }
+type ProjectUsage = UsageTotals & { projectId: ProjectId | null; name: string }
 export type ChatUsage = { months: readonly UsageMonth[]; rows: readonly MemberUsage[]; total: UsageTotals }
 export type WorkspaceUsage = {
   months: readonly UsageMonth[]
@@ -36,7 +36,7 @@ export const usageSync = {
   alertBehindMilliseconds: 3_600_000,
 }
 
-export const noUsage: UsageTotals = { tokens: 0, costMicros: 0, calls: 0 }
+const noUsage: UsageTotals = { tokens: 0, costMicros: 0, calls: 0 }
 
 export const sumUsage = (rows: readonly UsageTotals[]): UsageTotals =>
   rows.reduce(

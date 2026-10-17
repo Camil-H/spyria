@@ -10,7 +10,7 @@ export type ChatPermission =
   | 'members.manage'
   | 'chat.admin'
 export type ChatVisibility = 'public' | 'private'
-export type ChatRoleId = 'owner' | 'editor' | 'prompter' | 'reader'
+type ChatRoleId = 'owner' | 'editor' | 'prompter' | 'reader'
 export type ChatRole = Readonly<{ id: string; name: string; permissions: readonly ChatPermission[] }>
 
 export const builtInChatRoles: readonly (ChatRole & { id: ChatRoleId })[] = [

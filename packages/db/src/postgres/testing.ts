@@ -211,7 +211,7 @@ export const testGatewayAt = (url: string) => {
   }
   return { url, request, call }
 }
-export type TestGateway = ReturnType<typeof testGatewayAt>
+type TestGateway = ReturnType<typeof testGatewayAt>
 
 const docker = (...args: string[]) => spawnSync('docker', args, { stdio: ['ignore', 'pipe', 'pipe'] })
 

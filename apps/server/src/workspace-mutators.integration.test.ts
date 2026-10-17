@@ -144,10 +144,14 @@ test('createWorkspace creates the workspace, the caller admin membership with th
     { workspaceId: 'workspace-new', userId: bob, role: 'admin', displayName: 'Bob' },
   ])
   expect(
-    (await database.query.chatRoles.findMany({ where: { workspaceId: 'workspace-new' } })).map(
+    (await database.query.chatRoles.findMany({ where: { workspaceId: 'workspace-new' }, orderBy: { id: 'asc' } })).map(
       ({ id, name, permissions, builtIn }) => ({ id, name, permissions, builtIn }),
     ),
-  ).toEqual(builtInChatRoles.map((role) => ({ ...role, permissions: [...role.permissions], builtIn: true })))
+  ).toEqual(
+    builtInChatRoles
+      .toSorted((first, second) => first.id.localeCompare(second.id))
+      .map((role) => ({ ...role, permissions: [...role.permissions], builtIn: true })),
+  )
 })
 
 test.each([

@@ -52,7 +52,7 @@ export const isAllowedOnPersonalHost = (method: string, path: string) =>
 export const redacted = (text: string, secrets: readonly string[]) =>
   secrets.reduce((result, secret) => result.replaceAll(secret, '[redacted]'), text).replace(tokenFormat, '[redacted]')
 
-export const credentialsMountOf = (prefix: string, tool: CredentialsTool, target = credentialStores[tool].target) => ({
+const credentialsMountOf = (prefix: string, tool: CredentialsTool, target = credentialStores[tool].target) => ({
   Type: 'volume',
   Source: `${prefix}cred-${tool}`,
   Target: target,

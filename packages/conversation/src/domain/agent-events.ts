@@ -12,7 +12,7 @@ import { toolDisplayNameOf } from './tool-calls.ts'
 
 export type AgentEvent = Readonly<{ id: string; kind: string; timestamp: string; [field: string]: unknown }>
 export type TurnOutcome = 'finished' | 'error'
-export type AgentProjection =
+type AgentProjection =
   | { type: 'message'; body: string; kind?: 'notice'; thought?: ThoughtStep }
   | { type: 'step'; step: StoredStep; id?: string }
   | { type: 'observation'; actionId: string; observation: Fields; step?: StoredStep }

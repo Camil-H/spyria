@@ -2,6 +2,7 @@ import { jobs } from '@hq/db/postgres'
 import {
   addParticipant,
   agentReplyText,
+  alicesWelcomeMessage,
   chatLinkOf,
   chooseRunsOn,
   expect,
@@ -10,38 +11,24 @@ import {
   mainOf,
   messageContaining,
   messageItemsOf,
-  openChat,
+  openMessageMenu,
   openPanelTab,
+  openWelcome,
   type Page,
+  quotedTime,
+  repliesOf,
+  replyBoxOf,
+  replyInThread,
   sendButtonOf,
   sendMessage,
   test,
+  threadToggleOf,
 } from './fixtures'
 import { openPageAs, type WorkerStack } from './stack'
 
-const alicesMessage = 'Thanks, glad to be here.'
 const bobsReply = 'Count me in for lunch'
 const alicesReply = 'See you at noon'
 const runtimeName = bobsReply
-const quotedTime = '\\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d UTC'
-const threadToggleOf = (page: Page) => mainOf(page).getByRole('button', { name: /^\d+ repl(y|ies)/ })
-const repliesOf = (page: Page) => mainOf(page).getByRole('list', { name: 'Thread replies' }).getByRole('listitem')
-const replyBoxOf = (page: Page) => mainOf(page).getByRole('textbox', { name: 'Reply' })
-const openMessageMenu = async (message: Locator) => {
-  await message.hover()
-  await message.getByRole('button', { name: 'Message actions' }).click()
-}
-const replyInThread = async (page: Page, text: string) => {
-  await openMessageMenu(messageContaining(page, alicesMessage).first())
-  await page.getByRole('menuitem', { name: 'Reply in thread' }).click()
-  await replyBoxOf(page).fill(text)
-  await replyBoxOf(page).press('ControlOrMeta+Enter')
-  await expect(repliesOf(page).filter({ hasText: text })).toHaveCount(1)
-}
-const openWelcome = async (page: Page) => {
-  await openChat(page, 'Welcome')
-  await expect(messageContaining(page, alicesMessage)).toBeVisible()
-}
 const startRuntime = async (page: Page, message: Locator) => {
   await openMessageMenu(message)
   await page.getByRole('menuitem', { name: 'Start runtime from this message' }).click()
@@ -49,7 +36,7 @@ const startRuntime = async (page: Page, message: Locator) => {
 const agentPromptJobs = async (workerStack: WorkerStack) =>
   (await workerStack.database.select().from(jobs)).filter((job) => job.type === 'agent.prompt')
 const runtimeLinkOf = (page: Page) =>
-  messageContaining(page, alicesMessage)
+  messageContaining(page, alicesWelcomeMessage)
     .first()
     .getByRole('link', { name: /^Runtime: / })
 
@@ -81,7 +68,7 @@ test('32-1. a runtime started from a thread reply opens with the whole thread in
     new RegExp(
       [
         'Conversation so far, from the channel thread in #Welcome:',
-        `Alice \\(member, human\\) · 2026-09-30 09:02 UTC\\n${alicesMessage.replace('.', '\\.')}`,
+        `Alice \\(member, human\\) · 2026-09-30 09:02 UTC\\n${alicesWelcomeMessage.replace('.', '\\.')}`,
         `Bob \\(member, human\\) · ${quotedTime}\\n${bobsReply}`,
         `Alice \\(member, human\\) · ${quotedTime}\\n${alicesReply}`,
       ].join('\\n\\n'),
@@ -117,7 +104,7 @@ test('32-3. the thread root links to the runtime for Alice and Bob; Lee, who can
   await openWelcome(leePage)
   await openWelcome(page)
   await expect(runtimeLinkOf(bobPage)).toHaveText(`Runtime: ${runtimeName}`)
-  await expect(messageContaining(leePage, alicesMessage).first()).toContainText('Alice started a runtime')
+  await expect(messageContaining(leePage, alicesWelcomeMessage).first()).toContainText('Alice started a runtime')
   await expect(runtimeLinkOf(leePage)).toHaveCount(0)
   await runtimeLinkOf(page).click()
   await expect(mainOf(page).getByRole('heading', { level: 1, name: runtimeName })).toBeVisible()

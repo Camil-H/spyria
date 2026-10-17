@@ -2,7 +2,7 @@ import type { ChatId, MemberId, RuntimeHostId, RuntimeId, WorkspaceId } from '@h
 import type { HostLoad, Runtime } from '../domain/runtime.ts'
 import type { RuntimeHost } from '../domain/runtime-host.ts'
 
-export type HostSecret = 'claimCode' | 'token'
+type HostSecret = 'claimCode' | 'token'
 
 export type RuntimeHostRepository = {
   add(host: RuntimeHost): Promise<void>
@@ -38,7 +38,7 @@ export type RuntimeRepository = {
   chatOfLlmTokenHash(workspaceId: WorkspaceId, hostId: RuntimeHostId, hash: string): Promise<ChatId | undefined>
 }
 
-export type RuntimeSecret = 'apiKey' | 'llmTokenHash' | 'llmSwitchTokenHash'
+type RuntimeSecret = 'apiKey' | 'llmTokenHash' | 'llmSwitchTokenHash'
 export type RuntimeSecrets = {
   keep(runtime: Runtime, secret: RuntimeSecret, value: string | null): Promise<void>
   valueOf(runtime: Runtime, secret: RuntimeSecret): Promise<string | undefined>

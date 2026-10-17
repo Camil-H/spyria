@@ -350,7 +350,7 @@ test('a runtime chat started from a thread sends nothing until the first prompt,
   ).toEqual(succeeded)
   expect(await routing(chat, aliceInAcme, { runsOn: 'runtime' })).toEqual(succeeded)
   expect(relay.prompts).toEqual([])
-  const wrapper = (await database.query.messages.findFirst({ where: { chatId: chat } }))?.body
+  const wrapper = (await database.query.messages.findFirst({ where: { chatId: chat }, orderBy: { seq: 'asc' } }))?.body
   expect(wrapper).toStartWith('Conversation so far, from the channel thread in #Welcome:')
   routeWith({ tier: 'small', confidence: 'high', effort: 'low' })
   await answered(await prompt(chat, 'Summarise the thread.'))
@@ -376,7 +376,7 @@ test('a first prompt deleted before it was sent leaves the seed to the next prom
     await mutate(aliceInAcme, 'conversation.deleteMessage', { workspaceId: acme, messageId: deletedPrompt }),
   ).toEqual(succeeded)
   const { relay } = await fakeAgent()
-  const wrapper = (await database.query.messages.findFirst({ where: { chatId: chat } }))?.body
+  const wrapper = (await database.query.messages.findFirst({ where: { chatId: chat }, orderBy: { seq: 'asc' } }))?.body
   routeWith({ tier: 'small', confidence: 'high', effort: 'low' })
   await answered(await prompt(chat, 'Summarise the thread.'))
   expect(relay.prompts).toEqual([`${wrapper}\n\nSummarise the thread.`])
