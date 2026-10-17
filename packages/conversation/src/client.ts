@@ -1,4 +1,4 @@
 export { ChatIndicators } from './entrypoints/ChatIndicators.tsx'
 export { ChatView } from './entrypoints/ChatView.tsx'
-export { Markdown } from './entrypoints/MessageItem.tsx'
+export { LazyMarkdown as Markdown } from './entrypoints/LazyMarkdown.tsx'
 export { ConversationProvider } from './entrypoints/providers.tsx'

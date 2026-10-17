@@ -173,6 +173,7 @@
       "name": "@hq/ui",
       "dependencies": {
         "@hq/kernel": "workspace:*",
+        "lucide-react": "1.49.0",
       },
       "devDependencies": {
         "@types/react": "19.3.0",

@@ -6,12 +6,7 @@ import { Link, useOutletContext, useParams } from 'react-router'
 import type { AgentStep as Step } from '../domain/agent-steps.ts'
 import { type ConversationMessage, durationLabelOf } from '../queries/get-conversation.ts'
 import { Disclosure, ThoughtStep } from './Disclosure.tsx'
-import {
-  AnswerQuestionContext,
-  OwnerAnswerContext,
-  ToolsAwaitingApprovalContext,
-  useConversationCommands,
-} from './providers.tsx'
+import { QuestionAnswererContext, ToolsAwaitingApprovalContext, useConversationCommands } from './providers.tsx'
 
 const QuestionCard = lazy(() => import('./QuestionCard.tsx'))
 const DelegationStep = lazy(() => import('./DelegationStep.tsx'))
@@ -93,7 +88,7 @@ const FileStep = ({ step }: { step: StepOf<'file'> }) =>
     </Disclosure>
   )
 
-const ToolStep = ({ step, canConnect }: { step: StepOf<'tool'>; canConnect: boolean }) => {
+const ToolStep = ({ step }: { step: StepOf<'tool'> }) => {
   const commands = useConversationCommands()
   const workspaceId = useOutletContext<WorkspaceId>()
   const { connection } = step
@@ -114,7 +109,7 @@ const ToolStep = ({ step, canConnect }: { step: StepOf<'tool'>; canConnect: bool
         {step.result !== null && <pre className={outputClassName}>{step.result}</pre>}
       </Disclosure>
       {connection &&
-        (canConnect ? (
+        (use(QuestionAnswererContext).isOwner ? (
           <button
             type="button"
             onClick={() => commands.connectTool({ workspaceId, tool: connection.server }).catch(console.error)}
@@ -175,16 +170,12 @@ export const AgentStep = ({ message }: { message: ConversationMessage }) => {
         </DelegationStep>
       </Suspense>
     )
-  if (step?.type === 'tool') return <ToolStep step={step} canConnect={message.canConnectTools} />
+  if (step?.type === 'tool') return <ToolStep step={step} />
   if (step?.type === 'plan') return <PlanStep step={step} />
   if (step?.type === 'question')
     return (
       <Suspense>
-        <QuestionCard
-          message={message}
-          answerQuestion={use(AnswerQuestionContext)}
-          answerAsOwner={use(OwnerAnswerContext)}
-        />
+        <QuestionCard message={message} />
       </Suspense>
     )
   if (step?.type === 'error') return <ErrorStep step={step} />

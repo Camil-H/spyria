@@ -1,9 +1,10 @@
 import { buttonClass, fieldClass, ghostButtonClass, Spinner } from '@hq/ui'
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, use, useState } from 'react'
 import type { AgentQuestion, AgentStep } from '../domain/agent-steps.ts'
 import type { ConversationMessage } from '../queries/get-conversation.ts'
 import type { QuestionAnswer } from './endpoints.ts'
 import Markdown from './Markdown.tsx'
+import { QuestionAnswererContext } from './providers.tsx'
 
 type QuestionStep = Extract<AgentStep, { type: 'question' }>
 
@@ -33,27 +34,19 @@ const answerTextOf = (question: AgentQuestion, step: QuestionStep) =>
     .filter(Boolean)
     .join(', ')
 
-const QuestionCard = ({
-  message,
-  answerQuestion: answerAsPrompter,
-  answerAsOwner,
-}: {
-  message: ConversationMessage
-  answerQuestion?: (questionId: string, answer: QuestionAnswer) => Promise<number>
-  answerAsOwner?: (questionId: string, answer: QuestionAnswer) => Promise<number>
-}) => {
+const QuestionCard = ({ message }: { message: ConversationMessage }) => {
   const step = message.step as QuestionStep
   const [chosen, setChosen] = useState<Record<string, string[]>>({})
   const [free, setFree] = useState<Record<string, string>>({})
   const [notice, setNotice] = useState<string>()
   const [sentAnswer, setSentAnswer] = useState<QuestionAnswer>()
   const isPending = step.closed === undefined && step.answers === undefined && step.approved === undefined
-  const answerQuestion = step.kind === 'approval' ? answerAsOwner : answerAsPrompter
-  const canAnswer = isPending && answerQuestion !== undefined
+  const answerer = use(QuestionAnswererContext)
+  const canAnswer = isPending && (step.kind === 'approval' ? answerer.isOwner : answerer.mayAnswerAsPrompter)
   const isSending = sentAnswer !== undefined
   const send = async (answer: QuestionAnswer) => {
     setSentAnswer(answer)
-    const status = (await answerQuestion?.(step.questionId, answer).catch(() => 0)) ?? 0
+    const status = await answerer.answer(step.questionId, answer).catch(() => 0)
     if (status !== 200) setSentAnswer(undefined)
     setNotice(status === 200 ? undefined : (refusalNotices[status] ?? 'The answer could not be sent'))
   }

@@ -7,7 +7,8 @@
     "typecheck": "tsc -p ."
   },
   "dependencies": {
-    "@hq/kernel": "workspace:*"
+    "@hq/kernel": "workspace:*",
+    "lucide-react": "1.49.0"
   },
   "peerDependencies": {
     "react": "^19"

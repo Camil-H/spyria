@@ -1,5 +1,13 @@
 import type { ChatId, WorkspaceId } from '@hq/kernel'
-import { buttonClass, Dialog, menuContentClass, tooltipClass, type useGuardedAction } from '@hq/ui'
+import {
+  buttonClass,
+  chatTypeIconOf,
+  Dialog,
+  menuContentClass,
+  menuItemClass,
+  tooltipClass,
+  type useGuardedAction,
+} from '@hq/ui'
 import { Content, Item, Root, Sub, SubContent, SubTrigger, Trigger } from '@radix-ui/react-dropdown-menu'
 import {
   Content as TooltipContent,
@@ -7,13 +15,13 @@ import {
   Root as TooltipRoot,
   Trigger as TooltipTrigger,
 } from '@radix-ui/react-tooltip'
-import { Bot, Ellipsis, Hash } from 'lucide-react'
+import { Ellipsis } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { NavLink } from 'react-router'
 import type { Sidebar } from '../queries/get-sidebar.ts'
 import { NameDialog } from './NameDialog.tsx'
 import { useWorkspaceCommands } from './providers.tsx'
-import { menuItemClass, menuTriggerClass, navLinkClass } from './ui.ts'
+import { menuTriggerClass, navLinkClass } from './ui.ts'
 
 type SidebarChat = Sidebar['looseChats'][number]
 export type ChatAdornment = (chatId: ChatId) => ReactNode
@@ -35,8 +43,7 @@ export const ChatRow = ({
   const commands = useWorkspaceCommands()
   const [openDialog, setOpenDialog] = useState<'rename' | 'archive' | null>(null)
   const closeDialog = () => setOpenDialog(null)
-  const ChatTypeIcon = chat.type === 'channel' ? Hash : Bot
-  const chatTypeLabel = chat.type === 'channel' ? 'Channel' : 'Runtime chat'
+  const { Icon: ChatTypeIcon, label: chatTypeLabel } = chatTypeIconOf(chat.type)
   return (
     <li className="flex items-center">
       <NavLink

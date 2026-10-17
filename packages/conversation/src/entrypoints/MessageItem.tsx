@@ -1,7 +1,5 @@
 import { chatId as toChatId, type WorkspaceId } from '@hq/kernel'
-import { ErrorMessage, focusRing, Spinner, useGuardedAction } from '@hq/ui'
-import { GitFork } from 'lucide-react'
-import { lazy, type Ref, Suspense, useEffect, useState } from 'react'
+import { type Ref, Suspense, useEffect, useState } from 'react'
 import { Link, useOutletContext, useParams } from 'react-router'
 import { isUnreachableSessionNotice } from '../domain/session-routing.ts'
 import type { ConversationMessage } from '../queries/get-conversation.ts'
@@ -10,10 +8,11 @@ import { Composer } from './Composer.tsx'
 import { DeleteMessageDialog } from './DeleteMessageDialog.tsx'
 import { Disclosure } from './Disclosure.tsx'
 import { EditMessageForm } from './EditMessageForm.tsx'
+import { ForkButton } from './ForkButton.tsx'
+import { LazyMarkdown } from './LazyMarkdown.tsx'
 import { MessageMenu } from './MessageMenu.tsx'
 import { useConversationCommands } from './providers.tsx'
 
-export const Markdown = lazy(() => import('./Markdown.tsx'))
 const plainTextClassName = 'text-sm whitespace-pre-wrap'
 
 const timeFormat = new Intl.DateTimeFormat('en-GB', {
@@ -22,24 +21,6 @@ const timeFormat = new Intl.DateTimeFormat('en-GB', {
   hourCycle: 'h23',
   timeZone: 'UTC',
 })
-
-export const ForkButton = ({ onFork }: { onFork: () => Promise<unknown> }) => {
-  const { errorMessage, isPending, run } = useGuardedAction()
-  return (
-    <div className="flex items-center gap-2">
-      <button
-        type="button"
-        disabled={isPending}
-        onClick={() => run(onFork)}
-        className={`flex w-fit items-center gap-1 rounded-full border border-line px-2 py-0.5 text-xs text-ink hover:bg-hover disabled:cursor-not-allowed disabled:opacity-60 ${focusRing}`}
-      >
-        {isPending ? <Spinner /> : <GitFork aria-hidden size={12} />}
-        {isPending ? 'Forking…' : 'Fork into my session'}
-      </button>
-      <ErrorMessage message={errorMessage} />
-    </div>
-  )
-}
 
 type ThreadRoot = ConversationMessage & { thread: NonNullable<ConversationMessage['thread']> }
 
@@ -142,7 +123,7 @@ export const MessageItem = ({
               <p className="text-sm text-muted italic">This message was deleted</p>
             ) : message.kind === 'agent' ? (
               <Suspense fallback={<p className={plainTextClassName}>{message.body}</p>}>
-                <Markdown text={message.body} />
+                <LazyMarkdown text={message.body} />
               </Suspense>
             ) : (
               <p className={plainTextClassName}>{message.body}</p>

@@ -411,17 +411,15 @@ test.each([
   },
 )
 
-test('messages carry their edited flag, the agent as their author, and tool connections only for the chat owner', () => {
+test('messages carry their edited flag and the agent as their author', () => {
   const edited = { ...replyRow(2, 'agent'), editedAt: '2026-10-01T09:01:00.000Z' }
   const snapshot = snapshotWith({ turn: false, waiting: false })
-  const messageOf = (viewer: typeof alice) =>
-    getConversation(
-      acme,
-      research,
-      viewer,
-    )({ ...snapshot, messages: [...snapshot.messages, edited] })?.messages.find((message) => message.id === edited.id)
-  expect(messageOf(alice)).toMatchObject({ isEdited: true, authorName: 'Agent', canConnectTools: true })
-  expect(messageOf(bob)).toMatchObject({ canConnectTools: false })
+  const message = getConversation(
+    acme,
+    research,
+    alice,
+  )({ ...snapshot, messages: [...snapshot.messages, edited] })?.messages.find(({ id }) => id === edited.id)
+  expect(message).toMatchObject({ isEdited: true, authorName: 'Agent' })
   expect(conversationWith([replyRow(2, 'agent')])?.messages.at(-1)?.isEdited).toBe(false)
 })
 

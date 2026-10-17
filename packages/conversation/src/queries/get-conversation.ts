@@ -3,6 +3,7 @@ import {
   chatPermissionsIn,
   findChat,
   inChat,
+  memberNamesIn,
   participantIn,
   type RuntimeOriginRow,
   type Snapshot,
@@ -25,7 +26,6 @@ export type ConversationMessage = Readonly<{
   isDeleted: boolean
   isEdited: boolean
   isRunning: boolean
-  canConnectTools: boolean
   canReply: boolean
   thread: Readonly<{ replies: readonly ConversationMessage[]; newCount: number }> | null
   runtimes: readonly RuntimeLink[]
@@ -224,12 +224,8 @@ export const getConversation =
   (snapshot: Snapshot): Conversation | null => {
     const chat = findChat(snapshot, workspaceId, chatId)
     if (!chat) return null
-    const memberNames = new Map(
-      snapshot.memberships
-        .filter((membership) => membership.workspaceId === workspaceId)
-        .map((membership) => [membership.memberId, membership.displayName]),
-    )
-    const memberName = (memberId: MemberId | null) => (memberId && memberNames.get(memberId)) || 'Agent'
+    const memberNameOf = memberNamesIn(snapshot, workspaceId)
+    const memberName = (memberId: MemberId | null) => (memberId ? memberNameOf(memberId) : 'Agent')
     const origin = chat.originChatId ? findChat(snapshot, workspaceId, chat.originChatId) : undefined
     const chatMessages = snapshot.messages.filter((message) => message.chatId === chatId)
     const hasActiveTurn = chat.agentTurnMessageId !== null
@@ -294,7 +290,6 @@ export const getConversation =
         isDeleted: message.deletedAt !== null,
         isEdited: message.editedAt !== null,
         isRunning: hasActiveTurn && message.replyToId === chat.agentTurnMessageId,
-        canConnectTools: chat.ownerId === viewerId,
         canReply: isThreadRoot && canPost && message.deletedAt === null,
         thread: isThreadRoot
           ? {

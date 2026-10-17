@@ -1,13 +1,10 @@
 import type { MessageId, WorkspaceId } from '@hq/kernel'
-import { ErrorMessage, focusRing, menuContentClass, useGuardedAction } from '@hq/ui'
+import { ErrorMessage, focusRing, menuContentClass, menuItemClass, useGuardedAction } from '@hq/ui'
 import { Content, Item, Root, Trigger } from '@radix-ui/react-dropdown-menu'
 import { Ellipsis } from 'lucide-react'
 import { useRef } from 'react'
 import { useNavigate, useOutletContext } from 'react-router'
 import { useConversationCommands } from './providers.tsx'
-
-const menuItemClass =
-  'flex cursor-pointer items-center rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-hover data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40'
 
 export const MessageMenu = ({
   messageId,

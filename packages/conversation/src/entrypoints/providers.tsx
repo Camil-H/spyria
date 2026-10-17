@@ -22,12 +22,10 @@ export const ConversationProvider = ({
   </CommandsProvider>
 )
 
-export const AnswerQuestionContext = createContext<
-  ((questionId: string, answer: QuestionAnswer) => Promise<number>) | undefined
->(undefined)
-
-export const OwnerAnswerContext = createContext<
-  ((questionId: string, answer: QuestionAnswer) => Promise<number>) | undefined
->(undefined)
+export const QuestionAnswererContext = createContext<{
+  answer: (questionId: string, answer: QuestionAnswer) => Promise<number>
+  mayAnswerAsPrompter: boolean
+  isOwner: boolean
+}>({ answer: async () => 0, mayAnswerAsPrompter: false, isOwner: false })
 
 export const ToolsAwaitingApprovalContext = createContext<ReadonlySet<string>>(new Set())

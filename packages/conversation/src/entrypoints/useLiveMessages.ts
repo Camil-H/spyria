@@ -62,7 +62,6 @@ const liveMessageOf = (
   isDeleted: false,
   isEdited: false,
   isRunning: true,
-  canConnectTools: false,
   canReply: false,
   runtimes: [],
   thread: null,

@@ -1,5 +1,5 @@
 import type { WorkspaceId } from '@hq/kernel'
-import { buttonClass, Dialog, focusRing, menuContentClass } from '@hq/ui'
+import { buttonClass, Dialog, focusRing, menuContentClass, menuItemClass } from '@hq/ui'
 import { Content, Item, Root, Trigger } from '@radix-ui/react-dropdown-menu'
 import { Ellipsis } from 'lucide-react'
 import { useState } from 'react'
@@ -8,7 +8,7 @@ import type { Sidebar } from '../queries/get-sidebar.ts'
 import { type ChatAction, type ChatAdornment, ChatRow } from './ChatRow.tsx'
 import { NameDialog } from './NameDialog.tsx'
 import { useWorkspaceCommands } from './providers.tsx'
-import { menuItemClass, menuTriggerClass } from './ui.ts'
+import { menuTriggerClass } from './ui.ts'
 
 export const ProjectGroup = ({
   workspaceId,

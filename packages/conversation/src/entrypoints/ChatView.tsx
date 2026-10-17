@@ -1,22 +1,17 @@
 import { useQuery } from '@hq/db/react'
 import { type ChatId, chatId as toChatId, type WorkspaceId } from '@hq/kernel'
 import { useSession } from '@hq/session'
-import { buttonClass, ErrorMessage, useGuardedAction } from '@hq/ui'
-import { Bot, Folder, GitBranch, Hash } from 'lucide-react'
+import { buttonClass, chatTypeIconOf, ErrorMessage, SegmentedChoice, useGuardedAction } from '@hq/ui'
+import { Folder, GitBranch } from 'lucide-react'
 import { type ReactNode, useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate, useOutletContext, useParams } from 'react-router'
 import { runsOnNames, runsOnWaitingNoticeOf } from '../domain/session-routing.ts'
 import { getConversation } from '../queries/get-conversation.ts'
 import { Composer } from './Composer.tsx'
 import type { QuestionAnswer } from './endpoints.ts'
-import { ForkButton } from './MessageItem.tsx'
+import { ForkButton } from './ForkButton.tsx'
 import { MessageList } from './MessageList.tsx'
-import {
-  AnswerQuestionContext,
-  OwnerAnswerContext,
-  ToolsAwaitingApprovalContext,
-  useConversationCommands,
-} from './providers.tsx'
+import { QuestionAnswererContext, ToolsAwaitingApprovalContext, useConversationCommands } from './providers.tsx'
 import { PlanModeToggle, RunsOnChip, SessionChip } from './SessionChip.tsx'
 import { useLiveMessages, withLiveMessages } from './useLiveMessages.ts'
 
@@ -81,8 +76,7 @@ export const ChatView = ({
   )
   const status = runtimeStatus(conversation.canPost)
   const branch = live.workspace?.branch ?? conversation.gitBranch
-  const ChatTypeIcon = conversation.type === 'runtime' ? Bot : Hash
-  const chatTypeLabel = conversation.type === 'runtime' ? 'Runtime chat' : 'Channel'
+  const { Icon: ChatTypeIcon, label: chatTypeLabel } = chatTypeIconOf(conversation.type)
   return (
     <div key={chatId} className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-4 px-4 py-6">
       <header>
@@ -112,37 +106,27 @@ export const ChatView = ({
           </Link>
         )}
       </header>
-      <AnswerQuestionContext value={mayPrompt ? answerQuestion : undefined}>
-        <OwnerAnswerContext value={conversation.isOwner ? answerQuestion : undefined}>
-          <ToolsAwaitingApprovalContext value={toolsAwaitingApproval}>
-            <MessageList
-              conversation={conversation}
-              items={withLiveMessages(conversation.items, live)}
-              onStop={conversation.canConfigure ? () => commands.stopAgent({ workspaceId, chatId }) : undefined}
-              onFork={conversation.isOwner ? undefined : fork}
-            />
-          </ToolsAwaitingApprovalContext>
-        </OwnerAnswerContext>
-      </AnswerQuestionContext>
+      <QuestionAnswererContext
+        value={{ answer: answerQuestion, mayAnswerAsPrompter: mayPrompt, isOwner: conversation.isOwner }}
+      >
+        <ToolsAwaitingApprovalContext value={toolsAwaitingApproval}>
+          <MessageList
+            conversation={conversation}
+            items={withLiveMessages(conversation.items, live)}
+            onStop={conversation.canConfigure ? () => commands.stopAgent({ workspaceId, chatId }) : undefined}
+            onFork={conversation.isOwner ? undefined : fork}
+          />
+        </ToolsAwaitingApprovalContext>
+      </QuestionAnswererContext>
       {isRunsOnOpen && conversation.runsOnChoices && conversation.runsOnChoices.length > 1 && (
-        <fieldset aria-label="Runs on" className="flex flex-col gap-2 text-sm">
-          <div className="flex gap-1 rounded-lg border border-line bg-app p-1">
-            {conversation.runsOnChoices.map((choice) => (
-              <label
-                key={choice}
-                className="relative flex flex-1 cursor-pointer items-center justify-center rounded-md px-3 py-1 text-muted hover:bg-hover hover:text-ink has-focus-visible:outline-2 has-focus-visible:outline-focus"
-              >
-                <input
-                  type="radio"
-                  name="runs-on"
-                  className="absolute inset-0 cursor-pointer opacity-0"
-                  checked={false}
-                  onChange={() => commands.updateChatRouting({ workspaceId, chatId, runsOn: choice })}
-                />
-                {runsOnNames[choice]}
-              </label>
-            ))}
-          </div>
+        <fieldset aria-label="Runs on">
+          <SegmentedChoice
+            name="runs-on"
+            options={conversation.runsOnChoices}
+            labels={runsOnNames}
+            value={null}
+            onChange={(choice) => commands.updateChatRouting({ workspaceId, chatId, runsOn: choice })}
+          />
         </fieldset>
       )}
       {conversation.canJoin ? (

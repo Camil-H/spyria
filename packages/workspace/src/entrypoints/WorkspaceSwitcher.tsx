@@ -1,7 +1,7 @@
 import { useQuery } from '@hq/db/react'
 import type { WorkspaceId } from '@hq/kernel'
 import { useSession } from '@hq/session'
-import { buttonClass, Dialog, focusRing, menuContentClass } from '@hq/ui'
+import { buttonClass, Dialog, focusRing, menuContentClass, menuItemClass } from '@hq/ui'
 import { Content, Item, Root, Trigger } from '@radix-ui/react-dropdown-menu'
 import { LogOut, Plus } from 'lucide-react'
 import { useState } from 'react'
@@ -9,7 +9,6 @@ import { useNavigate } from 'react-router'
 import { listWorkspaces } from '../queries/list-workspaces.ts'
 import { NameDialog } from './NameDialog.tsx'
 import { useWorkspaceCommands } from './providers.tsx'
-import { menuItemClass } from './ui.ts'
 
 type OpenDialog = { kind: 'new' } | { kind: 'logOut'; workspaceId: WorkspaceId; workspaceName: string } | null
 
