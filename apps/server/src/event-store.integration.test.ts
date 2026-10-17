@@ -95,6 +95,12 @@ test('chat events leave the messages projection unchanged', async () => {
 test('rebuilding the messages from the events reproduces the live projection, and twice changes nothing', async () => {
   await succeeds('conversation.sendMessage', { id: 'message-history-1', chatId: 'chat-standup', text: 'First' })
   await succeeds('conversation.editMessage', { messageId: 'message-history-1', text: 'First, edited' })
+  await succeeds('conversation.sendMessage', {
+    id: 'message-history-reply',
+    chatId: 'chat-standup',
+    text: 'In the thread',
+    threadRootId: 'message-history-1',
+  })
   await succeeds('conversation.sendMessage', { id: 'message-history-2', chatId: 'chat-standup', text: 'Second' })
   await succeeds('conversation.deleteMessage', { messageId: 'message-history-2' })
   await succeeds('conversation.sendMessage', { id: 'message-history-3', chatId: 'chat-invoice-bug', text: 'News?' })
@@ -124,6 +130,9 @@ test('rebuilding the messages from the events reproduces the live projection, an
   const live = await allMessages()
   expect(live.find((message) => message.replyToId === 'message-history-3')).toMatchObject({ kind: 'notice' })
   expect(live.find((message) => message.id === 'message-history-2')).toMatchObject({ body: '' })
+  expect(live.find((message) => message.id === 'message-history-reply')).toMatchObject({
+    threadRootId: 'message-history-1',
+  })
 
   await rebuild()
   expect(await allMessages()).toEqual(live)

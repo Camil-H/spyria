@@ -13,10 +13,11 @@ import type { QuestionAnswer } from './endpoints.ts'
 type Command<Input, Result = string> = (input: Input & { workspaceId: WorkspaceId }) => Promise<Result>
 
 export type ConversationCommands = {
-  sendMessage: Command<{ chatId: ChatId; text: string }>
+  sendMessage: Command<{ chatId: ChatId; text: string; threadRootId?: MessageId | undefined }>
   editMessage: Command<{ messageId: MessageId; text: string }>
   deleteMessage: Command<{ messageId: MessageId }>
   markChatRead: Command<{ chatId: ChatId }>
+  markThreadRead: Command<{ chatId: ChatId; threadRootId: MessageId }>
   stopAgent: Command<{ chatId: ChatId }>
   retryAgent: Command<{ chatId: ChatId }>
   startRuntimeFromMessage: Command<{ messageId: MessageId }>

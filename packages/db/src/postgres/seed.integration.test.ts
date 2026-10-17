@@ -62,6 +62,7 @@ const readSnapshot = async () => {
         chatType.get(message.chatId) === 'runtime' && message.kind === 'member' && !answeredIds.has(message.id),
     })),
     readMarkers: readMarkers.map(userAsMember),
+    threadReadMarkers: (await database.select().from(tables.threadReadMarkers)).map(userAsMember),
     llmCredentials: (await database.select().from(tables.llmCredentials)).map(({ secretRef, ...credential }) =>
       userAsMember(credential),
     ),

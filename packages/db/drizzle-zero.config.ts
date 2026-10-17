@@ -35,6 +35,7 @@ export default drizzleZeroConfig(tables, {
     chatParticipants: true,
     messages: true,
     readMarkers: true,
+    threadReadMarkers: true,
     llmCredentials: { workspaceId: true, id: true, userId: true, provider: true, last4: true },
     workspaceConnections: true,
     toolConnections: true,

@@ -19,6 +19,7 @@ const unreadChatKeysOf = (snapshot: Snapshot, memberId: MemberId) => {
       message.kind !== 'step' &&
       message.kind !== 'notice' &&
       message.deletedAt === null &&
+      message.threadRootId === null &&
       message.authorId !== memberId
     )
       chatKeys.add(chatKey)

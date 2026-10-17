@@ -13,6 +13,7 @@ import { inviteMember } from '../operations/invite-member.ts'
 import { joinChannel } from '../operations/join-channel.ts'
 import { leaveChat } from '../operations/leave-chat.ts'
 import { markChatRead } from '../operations/mark-chat-read.ts'
+import { markThreadRead } from '../operations/mark-thread-read.ts'
 import { removeMember } from '../operations/remove-member.ts'
 import { retryAgent } from '../operations/retry-agent.ts'
 import { sendMessage } from '../operations/send-message.ts'
@@ -38,7 +39,12 @@ const dependenciesOf = (tx: Transaction, context: ZeroContext, args: { workspace
 export const conversationMutators = defineMutators({
   conversation: {
     sendMessage: defineMutator(
-      z.extend(workspaceArguments, { id, chatId: chatIdArgument, text: z.string() }),
+      z.extend(workspaceArguments, {
+        id,
+        chatId: chatIdArgument,
+        text: z.string(),
+        threadRootId: z.optional(messageIdArgument),
+      }),
       ({ tx, ctx, args }) => sendMessage(dependenciesOf(tx, ctx, args), { ...args, authorId: ctx.userId }),
     ),
     editMessage: defineMutator(
@@ -50,6 +56,9 @@ export const conversationMutators = defineMutators({
     ),
     markChatRead: defineMutator(chatArguments, ({ tx, ctx, args }) =>
       markChatRead(dependenciesOf(tx, ctx, args), { ...args, memberId: ctx.userId }),
+    ),
+    markThreadRead: defineMutator(z.extend(chatArguments, { threadRootId: messageIdArgument }), ({ tx, ctx, args }) =>
+      markThreadRead(dependenciesOf(tx, ctx, args), { ...args, memberId: ctx.userId }),
     ),
     stopAgent: defineMutator(chatArguments, async ({ tx, ctx, args }) => {
       if (tx.location === 'server') await stopAgent(dependenciesOf(tx, ctx, args), { ...args, memberId: ctx.userId })

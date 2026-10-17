@@ -18,6 +18,8 @@ export type ConversationMessage = Readonly<{
   isEdited: boolean
   isRunning: boolean
   canConnectTools: boolean
+  canReply: boolean
+  thread: Readonly<{ replies: readonly ConversationMessage[]; newCount: number }> | null
   answeredByName?: string
   delegation?: Readonly<{
     id: string
@@ -246,8 +248,20 @@ export const getConversation =
       !chatMessages.some((message) => message.kind === 'agent' || message.kind === 'step')
         ? [...(hasWorkspaceHost || connectedHarnesses.length === 0 ? ['runtime' as const] : []), ...connectedHarnesses]
         : null
-    const messages = chatMessages.map((message): ConversationMessage => {
+    const isChannel = chat.type === 'channel'
+    const threadLastReadSeqOf = new Map(
+      snapshot.threadReadMarkers
+        .filter((marker) => marker.workspaceId === workspaceId && marker.memberId === viewerId)
+        .map((marker) => [marker.threadRootId, marker.lastReadSeq]),
+    )
+    const repliesByRootId = Map.groupBy(
+      chatMessages.filter((message) => message.threadRootId !== null),
+      (message) => message.threadRootId,
+    )
+    const conversationMessageOf = (message: (typeof chatMessages)[number]): ConversationMessage => {
       const step = message.step as StoredStep | null
+      const replies = repliesByRootId.get(message.id) ?? []
+      const isThreadRoot = isChannel && message.threadRootId === null
       return {
         id: message.id,
         kind: message.kind,
@@ -261,10 +275,23 @@ export const getConversation =
         isEdited: message.editedAt !== null,
         isRunning: hasActiveTurn && message.replyToId === chat.agentTurnMessageId,
         canConnectTools: chat.ownerId === viewerId,
+        canReply: isThreadRoot && canPost && message.deletedAt === null,
+        thread: isThreadRoot
+          ? {
+              replies: replies.map(conversationMessageOf),
+              newCount: replies.filter(
+                (reply) =>
+                  reply.seq > (threadLastReadSeqOf.get(message.id) ?? 0) &&
+                  reply.authorId !== viewerId &&
+                  reply.deletedAt === null,
+              ).length,
+            }
+          : null,
         ...(step?.type === 'question' &&
           step.answeredBy && { answeredByName: memberName(step.answeredBy as MemberId) }),
       }
-    })
+    }
+    const messages = chatMessages.filter((message) => message.threadRootId === null).map(conversationMessageOf)
     return {
       title: chat.name,
       type: chat.type,

@@ -58,6 +58,7 @@ const toMessage = ({ seq, ...row }: MessageRow): Message => ({
   editedAt: dateOrNull(row.editedAt),
   deletedAt: dateOrNull(row.deletedAt),
   replyToId: row.replyToId === null ? null : messageId(row.replyToId),
+  threadRootId: row.threadRootId === null ? null : messageId(row.threadRootId),
   step: row.step as StoredStep | null,
 })
 
@@ -68,7 +69,13 @@ const payloadOf = ({
   message,
 }: MessageChange): PostedPayload | ChangedPayload | Pick<ChangedPayload, 'messageId'> =>
   isPosted(type)
-    ? { kind: message.kind, body: message.body, detail: message.detail, replyToId: message.replyToId }
+    ? {
+        kind: message.kind,
+        body: message.body,
+        detail: message.detail,
+        replyToId: message.replyToId,
+        ...(message.threadRootId && { threadRootId: message.threadRootId }),
+      }
     : type === 'message.edited'
       ? { messageId: message.id, body: message.body }
       : { messageId: message.id }
@@ -145,6 +152,15 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       },
       setStep: (id, step) => tx.mutate.messages.update({ workspaceId: contextWorkspaceId, id, step }),
       replies: async (promptId) => (await tx.run(repliesTo(promptId).orderBy('seq', 'asc'))).map(toMessage),
+      thread: async (rootId) =>
+        (
+          await tx.run(
+            zql.messages
+              .where('workspaceId', contextWorkspaceId)
+              .where(({ or, cmp }) => or(cmp('id', rootId), cmp('threadRootId', rootId)))
+              .orderBy('seq', 'asc'),
+          )
+        ).map(toMessage),
     },
     agentJobs: {
       prompt: (message) => enqueue(agentJobTypes.prompt, { messageId: message.id }),
@@ -290,6 +306,31 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
           userId: readerId,
           chatId: id,
           lastReadSeq: newest.seq,
+        })
+      },
+      markThreadRead: async (id, threadRootId, readerId) => {
+        const newestReply = await tx.run(
+          zql.messages
+            .where('workspaceId', contextWorkspaceId)
+            .where('chatId', id)
+            .where('threadRootId', threadRootId)
+            .orderBy('seq', 'desc')
+            .one(),
+        )
+        const stored = await tx.run(
+          zql.threadReadMarkers
+            .where('workspaceId', contextWorkspaceId)
+            .where('userId', readerId)
+            .where('threadRootId', threadRootId)
+            .one(),
+        )
+        if (!newestReply || (stored && stored.lastReadSeq >= newestReply.seq)) return
+        await tx.mutate.threadReadMarkers.upsert({
+          workspaceId: contextWorkspaceId,
+          userId: readerId,
+          chatId: id,
+          threadRootId,
+          lastReadSeq: newestReply.seq,
         })
       },
     },

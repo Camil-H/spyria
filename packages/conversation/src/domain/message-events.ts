@@ -24,6 +24,7 @@ export type ProjectedMessage = Readonly<{
   detail: string | null
   step: StoredStep | null
   replyToId: string | null
+  threadRootId: string | null
   createdAt: Date
   editedAt: Date | null
   deletedAt: Date | null
@@ -32,6 +33,7 @@ export type ProjectedMessage = Readonly<{
 export type PostedPayload = Pick<ProjectedMessage, 'body' | 'detail' | 'replyToId'> & {
   kind: ProjectedMessage['kind'] | 'tool-call'
   step?: StoredStep | null
+  threadRootId?: string
 }
 export type ChangedPayload = { messageId: string; body: string }
 export type AgentEventPayload = {
@@ -44,7 +46,8 @@ export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMes
   const messageByKey = new Map<string, ProjectedMessage>()
   for (const { workspaceId, chatId, id, seq, type, actor, payload, createdAt } of events) {
     const project = (
-      fields: Pick<ProjectedMessage, 'kind' | 'authorId' | 'body' | 'detail' | 'step' | 'replyToId'>,
+      fields: Pick<ProjectedMessage, 'kind' | 'authorId' | 'body' | 'detail' | 'step' | 'replyToId'> &
+        Partial<Pick<ProjectedMessage, 'threadRootId'>>,
       projectedId = id,
     ) =>
       messageByKey.set(`${workspaceId}/${projectedId}`, {
@@ -52,17 +55,18 @@ export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMes
         chatId,
         id: projectedId,
         seq,
+        threadRootId: null,
         ...fields,
         createdAt,
         editedAt: null,
         deletedAt: null,
       })
     if (type === 'message.posted' || type === 'message.replied') {
-      const { kind, body, detail, replyToId, step = null } = payload as PostedPayload
+      const { kind, body, detail, replyToId, step = null, threadRootId = null } = payload as PostedPayload
       project(
         kind === 'tool-call'
           ? { kind: 'step', authorId: actor, body, detail, step: legacyToolCallStep(body, detail), replyToId }
-          : { kind, authorId: actor, body, detail, step, replyToId },
+          : { kind, authorId: actor, body, detail, step, replyToId, threadRootId },
       )
     }
     if (type === 'agent.event') {

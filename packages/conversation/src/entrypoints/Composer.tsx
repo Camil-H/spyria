@@ -1,5 +1,5 @@
 import { useStore } from '@hq/db/react'
-import type { ChatId, WorkspaceId } from '@hq/kernel'
+import type { ChatId, MessageId, WorkspaceId } from '@hq/kernel'
 import { useSession } from '@hq/session'
 import { focusRing, tooltipClass } from '@hq/ui'
 import { Content, Portal, Provider, Root, Trigger } from '@radix-ui/react-tooltip'
@@ -13,6 +13,7 @@ const isBlank = (text: string) => text.trim() === ''
 export const Composer = ({
   workspaceId,
   chatId,
+  threadRootId,
   isBlocked,
   blockedNotice,
   aboveBox,
@@ -20,6 +21,7 @@ export const Composer = ({
 }: {
   workspaceId: WorkspaceId
   chatId: ChatId
+  threadRootId?: MessageId
   isBlocked: boolean
   blockedNotice: ReactNode
   aboveBox?: ReactNode
@@ -28,21 +30,23 @@ export const Composer = ({
   const commands = useConversationCommands()
   const { memberId } = useSession()
   const store = useStore()
-  const [text, setText] = useState(() => getDraft(workspaceId, chatId, memberId)(store.read()))
+  const [text, setText] = useState(() => (threadRootId ? '' : getDraft(workspaceId, chatId, memberId)(store.read())))
   const latestText = useRef(text)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   useEffect(() => {
     textareaRef.current?.focus()
+    if (threadRootId) return
     const saveLatestText = () => commands.saveDraft({ workspaceId, chatId, text: latestText.current })
     window.addEventListener('pagehide', saveLatestText)
     return () => {
       window.removeEventListener('pagehide', saveLatestText)
       saveLatestText()
     }
-  }, [commands, workspaceId, chatId])
+  }, [commands, workspaceId, chatId, threadRootId])
   const isUnsendable = isBlank(text) || isBlocked
   const change = (nextText: string) => {
-    if (isBlank(nextText) !== isBlank(latestText.current)) commands.saveDraft({ workspaceId, chatId, text: nextText })
+    if (!threadRootId && isBlank(nextText) !== isBlank(latestText.current))
+      commands.saveDraft({ workspaceId, chatId, text: nextText })
     latestText.current = nextText
     setText(nextText)
   }
@@ -50,7 +54,7 @@ export const Composer = ({
     if (isUnsendable) return
     change('')
     textareaRef.current?.focus()
-    await commands.sendMessage({ workspaceId, chatId, text })
+    await commands.sendMessage({ workspaceId, chatId, text, threadRootId })
   }
   const sendOnShortcut = (event: KeyboardEvent) => {
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
@@ -66,7 +70,7 @@ export const Composer = ({
         <div className="flex items-end gap-2 p-2">
           <textarea
             ref={textareaRef}
-            aria-label="Message"
+            aria-label={threadRootId ? 'Reply' : 'Message'}
             rows={1}
             className={`max-h-40 min-w-0 flex-1 resize-none rounded-md bg-transparent px-2 py-1.5 text-sm field-sizing-content ${focusRing}`}
             value={text}

@@ -215,6 +215,7 @@ export const messages = table(
     detail: text(),
     step: jsonb().$type<MessageStep>(),
     replyToId: text(),
+    threadRootId: text(),
     createdAt: instant().notNull(),
     editedAt: instant(),
     deletedAt: instant(),
@@ -225,6 +226,7 @@ export const messages = table(
     chatReference(table),
     memberReference(table, table.authorId),
     tenantReference([table.workspaceId, table.replyToId], [table.workspaceId, table.id]),
+    tenantReference([table.workspaceId, table.threadRootId], [table.workspaceId, table.id]),
   ],
 )
 
@@ -235,6 +237,17 @@ export const readMarkers = table(
     primaryKey({ columns: [table.workspaceId, table.userId, table.chatId] }),
     chatReference(table),
     memberReference(table, table.userId),
+  ],
+)
+
+export const threadReadMarkers = table(
+  'thread_read_markers',
+  { ...chatScoped, userId: text().notNull(), threadRootId: text().notNull(), lastReadSeq: integer().notNull() },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.userId, table.threadRootId] }),
+    chatReference(table),
+    memberReference(table, table.userId),
+    tenantReference([table.workspaceId, table.threadRootId], [messages.workspaceId, messages.id]),
   ],
 )
 
@@ -526,6 +539,7 @@ export const relations = defineRelations(
     chatParticipants,
     messages,
     readMarkers,
+    threadReadMarkers,
     workspaceConnections,
     toolConnections,
     files,
@@ -575,6 +589,7 @@ export const relations = defineRelations(
       },
       messages: { chat: chatOf(r.messages) },
       readMarkers: { chat: chatOf(r.readMarkers) },
+      threadReadMarkers: { chat: chatOf(r.threadReadMarkers) },
       files: { chat: chatOf(r.files) },
       changes: { chat: chatOf(r.changes) },
       terminalLines: { chat: chatOf(r.terminalLines) },

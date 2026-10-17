@@ -2,6 +2,7 @@ import type { MessageId, WorkspaceId } from '@hq/kernel'
 import { focusRing, menuContentClass } from '@hq/ui'
 import { Content, Item, Root, Trigger } from '@radix-ui/react-dropdown-menu'
 import { Ellipsis } from 'lucide-react'
+import { useRef } from 'react'
 import { useNavigate, useOutletContext } from 'react-router'
 import { useConversationCommands } from './providers.tsx'
 
@@ -11,17 +12,22 @@ const menuItemClass =
 export const MessageMenu = ({
   messageId,
   canEdit,
+  canReply,
+  onReplyInThread,
   onEdit,
   onDelete,
 }: {
   messageId: MessageId
   canEdit: boolean
+  canReply: boolean
+  onReplyInThread: (() => void) | undefined
   onEdit: () => void
   onDelete: () => void
 }) => {
   const commands = useConversationCommands()
   const workspaceId = useOutletContext<WorkspaceId>()
   const navigate = useNavigate()
+  const isOpeningThread = useRef(false)
   const startRuntime = async () => {
     const newChatId = await commands.startRuntimeFromMessage({ workspaceId, messageId })
     navigate(`../${newChatId}`, { relative: 'path' })
@@ -34,7 +40,27 @@ export const MessageMenu = ({
       >
         <Ellipsis aria-hidden className="size-4" />
       </Trigger>
-      <Content align="end" className={menuContentClass}>
+      <Content
+        align="end"
+        className={menuContentClass}
+        onCloseAutoFocus={(event) => {
+          if (!isOpeningThread.current) return
+          isOpeningThread.current = false
+          event.preventDefault()
+          onReplyInThread?.()
+        }}
+      >
+        {onReplyInThread && (
+          <Item
+            className={menuItemClass}
+            disabled={!canReply}
+            onSelect={() => {
+              isOpeningThread.current = true
+            }}
+          >
+            Reply in thread
+          </Item>
+        )}
         <Item className={menuItemClass} onSelect={startRuntime}>
           Start runtime from this message
         </Item>

@@ -1,6 +1,6 @@
 import type { ChatId, MemberId, MessageId, WorkspaceId } from '@hq/kernel'
 import type { StoredStep } from './agent-steps.ts'
-import { MessageDeleted, NotMessageAuthor } from './errors.ts'
+import { InvalidThreadRoot, MessageDeleted, NoThreadsInRuntimeChat, NotMessageAuthor } from './errors.ts'
 import type { MessageBody } from './message-body.ts'
 import type { Harness } from './session-routing.ts'
 
@@ -17,6 +17,7 @@ export type Message = Readonly<{
   editedAt: Date | null
   deletedAt: Date | null
   replyToId: MessageId | null
+  threadRootId: MessageId | null
 }>
 
 export type MessageChange = Readonly<{
@@ -48,7 +49,13 @@ export const deletedMessage = (message: Message, deleterId: MemberId, at: Date):
   return { ...message, deletedAt: at }
 }
 
+export const threadRootOf = (chat: ConversationChat, chatId: ChatId, root: Message | undefined) => {
+  if (chat.type !== 'channel') throw new NoThreadsInRuntimeChat()
+  if (!root || root.chatId !== chatId || root.threadRootId !== null || root.deletedAt) throw new InvalidThreadRoot()
+  return root.id
+}
+
 export const newMessage = (
   fields: Pick<Message, 'id' | 'workspaceId' | 'chatId' | 'kind' | 'authorId' | 'body' | 'createdAt' | 'replyToId'> &
-    Partial<Pick<Message, 'step'>>,
-): Message => ({ step: null, ...fields, detail: null, editedAt: null, deletedAt: null })
+    Partial<Pick<Message, 'step' | 'threadRootId'>>,
+): Message => ({ step: null, threadRootId: null, ...fields, detail: null, editedAt: null, deletedAt: null })

@@ -21,7 +21,7 @@ afterAll(async () => {
 }, databaseDropTimeoutMilliseconds)
 
 const app = createApp({ database: testDatabase.database, ...testAuthSettings })
-const memberPrivateTables = ['read_markers', 'llm_credentials']
+const memberPrivateTables = ['read_markers', 'thread_read_markers', 'llm_credentials']
 const chatOwnerConnectionTables = ['workspace_connections', 'tool_connections']
 type ReplicatedTable = {
   name: string
@@ -120,6 +120,11 @@ const readers = [
   { name: 'Bob in Acme', workspace: acme, user: bob },
   { name: 'Lee in Acme', workspace: acme, user: lee },
 ]
+await testDatabase.database.$client`
+  insert into thread_read_markers (workspace_id, user_id, chat_id, thread_root_id, last_read_seq)
+  select ${acme}, reader.user_id, message.chat_id, message.id, 1
+  from messages message cross join (values (${alice}), (${bob}), (${lee})) as reader (user_id)
+  where message.workspace_id = ${acme} and message.id in ('message-welcome-1', 'message-invoice-1')`
 const rowsByReader = new Map(
   await Promise.all(
     readers.map(async (reader) => [reader.name, await readAll(reader.workspace, reader.user)] as const),

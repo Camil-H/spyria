@@ -17,6 +17,16 @@ export const MessageDeleted = errorKind(
   () => 'A deleted message cannot be changed',
   ConversationError,
 )
+export const NoThreadsInRuntimeChat = errorKind(
+  'no_threads_in_runtime_chat',
+  () => 'A runtime chat has no threads',
+  ConversationError,
+)
+export const InvalidThreadRoot = errorKind(
+  'invalid_thread_root',
+  () => 'A thread starts on a message of this chat that is not a reply and not deleted',
+  ConversationError,
+)
 export const MessageNotFound = errorKind(
   'message_not_found',
   (messageId: string) => `Message ${messageId} was not found`,

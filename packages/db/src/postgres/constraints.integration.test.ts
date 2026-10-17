@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from 'bun:test'
 import { eq } from 'drizzle-orm'
-import { chatParticipants, chatRoles, chats, events, messages, readMarkers } from './tables.ts'
+import { chatParticipants, chatRoles, chats, events, messages, readMarkers, threadReadMarkers } from './tables.ts'
 import { createTestDatabase, databaseDropTimeoutMilliseconds } from './testing.ts'
 
 const seededDatabase = await createTestDatabase()
@@ -45,6 +45,16 @@ const crossTenantWrites = {
     database.insert(messages).values(message({ authorId: 'member-bob' })),
   'a reply to a message of another workspace': () =>
     database.insert(messages).values(message({ replyToId: 'message-welcome-1' })),
+  'a thread reply to a message of another workspace': () =>
+    database.insert(messages).values(message({ threadRootId: 'message-welcome-1' })),
+  'a thread read marker on a message of another workspace': () =>
+    database.insert(threadReadMarkers).values({
+      workspaceId: 'workspace-globex',
+      userId: 'member-alice',
+      chatId: 'chat-general',
+      threadRootId: 'message-welcome-1',
+      lastReadSeq: 1,
+    }),
   'a chat in a project of another workspace': () =>
     database.insert(chats).values({
       workspaceId: 'workspace-acme',
@@ -82,8 +92,11 @@ test('refuses a chat role without chat.read', async () => {
   ).toMatchObject({ code: '23514' })
 })
 
-test('a same-tenant message is accepted', async () => {
+test('a same-tenant message and thread reply are accepted', async () => {
   expect(await refusalOf(database.insert(messages).values(message({})))).toBe('accepted')
+  expect(await refusalOf(database.insert(messages).values(message({ threadRootId: 'message-general-1' })))).toBe(
+    'accepted',
+  )
 })
 
 test.each(Object.entries(crossTenantWrites))('refuses %s', async (_, write) => {

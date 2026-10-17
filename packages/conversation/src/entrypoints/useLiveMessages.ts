@@ -63,6 +63,8 @@ const liveMessageOf = (
   isEdited: false,
   isRunning: true,
   canConnectTools: false,
+  canReply: false,
+  thread: null,
 })
 
 type LiveState = {

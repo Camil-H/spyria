@@ -14,6 +14,7 @@ export type MessageRepository = {
   find(messageId: MessageId): Promise<Message | undefined>
   setStep(messageId: MessageId, step: StoredStep): Promise<void>
   replies(promptId: MessageId): Promise<Message[]>
+  thread(rootId: MessageId): Promise<Message[]>
 }
 
 export type AgentJobs = {
@@ -68,7 +69,10 @@ export type PlanRepository = {
 
 export type DraftRepository = { replace(draft: Draft): Promise<void> }
 
-export type ReadMarkerRepository = { markNewestRead(chatId: ChatId, memberId: MemberId): Promise<void> }
+export type ReadMarkerRepository = {
+  markNewestRead(chatId: ChatId, memberId: MemberId): Promise<void>
+  markThreadRead(chatId: ChatId, threadRootId: MessageId, memberId: MemberId): Promise<void>
+}
 
 export type ParticipantChange = Readonly<{
   type: 'member.invited' | 'member.joined' | 'member.role_changed' | 'member.removed' | 'member.left'

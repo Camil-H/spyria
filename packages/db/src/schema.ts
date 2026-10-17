@@ -86,6 +86,7 @@ export type MessageRow = {
   detail: string | null
   step: MessageStep | null
   replyToId: MessageId | null
+  threadRootId: MessageId | null
   createdAt: string
   editedAt: string | null
   deletedAt: string | null
@@ -93,6 +94,7 @@ export type MessageRow = {
 }
 export type DraftRow = { workspaceId: WorkspaceId; chatId: ChatId; memberId: MemberId; text: string }
 type ReadMarkerRow = { workspaceId: WorkspaceId; memberId: MemberId; chatId: ChatId; lastReadSeq: number }
+type ThreadReadMarkerRow = ReadMarkerRow & { threadRootId: MessageId }
 export type FileRow = { workspaceId: WorkspaceId; chatId: ChatId; path: string; kind: 'file' | 'folder' }
 export type MessageStep = { readonly type: string; readonly [field: string]: unknown }
 export type DiffLine = { kind: 'added' | 'removed' | 'context'; text: string }
@@ -172,6 +174,7 @@ export type Snapshot = {
   messages: readonly MessageRow[]
   drafts: readonly DraftRow[]
   readMarkers: readonly ReadMarkerRow[]
+  threadReadMarkers: readonly ThreadReadMarkerRow[]
   files: readonly FileRow[]
   changes: readonly ChangeRow[]
   terminalLines: readonly TerminalLineRow[]

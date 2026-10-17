@@ -28,6 +28,7 @@ const snapshotWith = ({ turn, waiting }: { turn: boolean; waiting: boolean }): S
         detail: null,
         step: null,
         replyToId: null,
+        threadRootId: null,
         createdAt: '2026-10-01T09:00:00.000Z',
         editedAt: null,
         deletedAt: null,
@@ -65,6 +66,7 @@ const replyRow = (
   detail: null,
   step: fields.step ?? null,
   replyToId: fields.replyToId === undefined ? prompt : fields.replyToId === null ? null : messageId(fields.replyToId),
+  threadRootId: null,
   createdAt: new Date(turnStart + (fields.at ?? seq) * 1000).toISOString(),
   editedAt: null,
   deletedAt: null,
@@ -572,4 +574,92 @@ test('a chat started from a chat the viewer cannot read shows no origin link', (
     })?.origin
   expect(startedFrom('chat-welcome')).toEqual({ chatId: chatId('chat-welcome'), name: 'Welcome' })
   expect(startedFrom('chat-not-synced')).toBeNull()
+})
+
+const welcome = chatId('chat-welcome')
+const welcomeRoot = messageId('message-welcome-2')
+const threadReply = (seq: number, authorId: typeof alice, fields: Partial<Snapshot['messages'][number]> = {}) => ({
+  ...replyRow(seq, 'agent'),
+  chatId: welcome,
+  id: messageId(`reply-${seq}`),
+  kind: 'member' as const,
+  authorId,
+  replyToId: null,
+  threadRootId: welcomeRoot,
+  ...fields,
+})
+const welcomeFor = (
+  viewer: typeof alice,
+  rows: readonly Snapshot['messages'][number][],
+  fields: Partial<Snapshot> = {},
+) => {
+  const snapshot = createMockSnapshot()
+  return getConversation(acme, welcome, viewer)({ ...snapshot, messages: [...snapshot.messages, ...rows], ...fields })
+}
+
+test('thread replies stay out of the channel flow and gather in order under their root, with the viewer’s new ones counted', () => {
+  const conversation = welcomeFor(
+    alice,
+    [
+      threadReply(3, bob),
+      threadReply(4, alice),
+      threadReply(5, bob),
+      threadReply(6, bob, { deletedAt: '2026-10-01T09:10:00.000Z' }),
+    ],
+    {
+      threadReadMarkers: [
+        { workspaceId: acme, memberId: alice, chatId: welcome, threadRootId: welcomeRoot, lastReadSeq: 3 },
+      ],
+    },
+  )
+  expect(conversation?.messages.map((message) => String(message.id))).toEqual([
+    'message-welcome-1',
+    'message-welcome-2',
+  ])
+  expect(conversation?.items.map((item) => item.type === 'message' && String(item.message.id))).toEqual([
+    'message-welcome-1',
+    'message-welcome-2',
+  ])
+  expect(conversation?.messages[0]?.thread).toEqual({ replies: [], newCount: 0 })
+  const thread = conversation?.messages[1]?.thread
+  expect(thread?.replies.map((reply) => String(reply.id))).toEqual(['reply-3', 'reply-4', 'reply-5', 'reply-6'])
+  expect(thread?.newCount).toBe(1)
+  expect(thread?.replies[0]).toMatchObject({ authorName: 'Bob', canReply: false, thread: null })
+  expect(welcomeFor(alice, [threadReply(3, bob), threadReply(4, bob)])?.messages[1]?.thread?.newCount).toBe(2)
+})
+
+test.each([
+  ['a top-level channel message for a poster', alice, [], 'message-welcome-2', { canReply: true, hasThread: true }],
+  [
+    'a deleted root, which keeps its thread',
+    alice,
+    [{ deletedAt: '2026-10-01T09:10:00.000Z' }],
+    'message-welcome-2',
+    { canReply: false, hasThread: true },
+  ],
+  ['a top-level channel message for a reader', lee, [], 'message-welcome-2', { canReply: false, hasThread: true }],
+] as const)('reply in thread on %s', (_, viewer, [rootFields], id, { canReply, hasThread }) => {
+  const snapshot = createMockSnapshot()
+  const conversation = getConversation(
+    acme,
+    welcome,
+    viewer,
+  )({
+    ...snapshot,
+    messages: snapshot.messages.map((message) =>
+      message.id === welcomeRoot ? { ...message, ...rootFields } : message,
+    ),
+    chatMembers: [...snapshot.chatMembers, { workspaceId: acme, chatId: welcome, memberId: lee, roleId: 'reader' }],
+  })
+  const message = conversation?.messages.find((candidate) => candidate.id === id)
+  expect({ canReply: message?.canReply, hasThread: message?.thread !== null }).toEqual({ canReply, hasThread })
+})
+
+test('a runtime chat has no threads', () => {
+  expect(
+    conversationWith([replyRow(2, 'agent')])?.messages.map(({ canReply, thread }) => ({ canReply, thread })),
+  ).toEqual([
+    { canReply: false, thread: null },
+    { canReply: false, thread: null },
+  ])
 })

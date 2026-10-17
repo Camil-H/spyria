@@ -14,6 +14,7 @@ const stepAt = (seq: number, step: MessageRow['step']): MessageRow => ({
   detail: null,
   step,
   replyToId: null,
+  threadRootId: null,
   createdAt: '2026-10-16T10:00:00.000Z',
   editedAt: null,
   deletedAt: null,

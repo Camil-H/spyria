@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { chatId, memberId, messageId, workspaceId } from '@hq/kernel'
-import { MessageDeleted, NotMessageAuthor } from './errors.ts'
-import { deletedMessage, editedMessage, type Message } from './message.ts'
+import { InvalidThreadRoot, MessageDeleted, NoThreadsInRuntimeChat, NotMessageAuthor } from './errors.ts'
+import { type ConversationChat, deletedMessage, editedMessage, type Message, threadRootOf } from './message.ts'
 import { MessageBody } from './message-body.ts'
 
 const alice = memberId('alice')
@@ -21,6 +21,7 @@ const messageByAlice: Message = {
   editedAt: null,
   deletedAt: null,
   replyToId: null,
+  threadRootId: null,
 }
 
 test('editedMessage and deletedMessage reject other members', () => {
@@ -36,4 +37,31 @@ test('a deleted message can be neither edited nor deleted', () => {
   const deleted = deletedMessage(messageByAlice, alice, editedAt)
   expect(() => editedMessage(deleted, alice, MessageBody('Hi'), editedAt)).toThrow(MessageDeleted)
   expect(() => deletedMessage(deleted, alice, editedAt)).toThrow(MessageDeleted)
+})
+
+const channel: ConversationChat = {
+  workspaceId: workspaceId('acme'),
+  type: 'channel',
+  harness: null,
+  ownerId: alice,
+  localSession: null,
+}
+
+test('threadRootOf accepts a top-level message of the same channel that is not deleted', () => {
+  expect(threadRootOf(channel, chatId('chat'), messageByAlice)).toBe(messageId('message'))
+})
+
+test.each<[string, Message | undefined, string]>([
+  ['a missing message', undefined, 'chat'],
+  ['a message of another chat', messageByAlice, 'chat-other'],
+  ['a reply', { ...messageByAlice, threadRootId: messageId('root') }, 'chat'],
+  ['a deleted message', { ...messageByAlice, deletedAt: editedAt }, 'chat'],
+])('threadRootOf refuses %s', (_, root, chat) => {
+  expect(() => threadRootOf(channel, chatId(chat), root)).toThrow(InvalidThreadRoot)
+})
+
+test('threadRootOf refuses any root in a runtime chat', () => {
+  expect(() => threadRootOf({ ...channel, type: 'runtime' }, chatId('chat'), messageByAlice)).toThrow(
+    NoThreadsInRuntimeChat,
+  )
 })

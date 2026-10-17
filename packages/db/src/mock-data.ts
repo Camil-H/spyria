@@ -99,6 +99,7 @@ const message = (
   detail,
   step,
   replyToId: null,
+  threadRootId: null,
   createdAt: `2026-09-30T${time}:00.000Z`,
   editedAt: null,
   deletedAt: null,
@@ -193,6 +194,7 @@ export const createMockSnapshot = (): Snapshot => {
       { workspaceId: acme, memberId: alice, chatId: welcomeChat, lastReadSeq: 2 },
       { workspaceId: acme, memberId: alice, chatId: invoiceChat, lastReadSeq: 4 },
     ],
+    threadReadMarkers: [],
     files: [
       file('billing', 'folder'),
       file('billing/invoice.ts'),

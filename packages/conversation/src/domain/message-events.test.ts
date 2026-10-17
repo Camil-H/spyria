@@ -20,7 +20,7 @@ const eventAt = (
 })
 const posted = { kind: 'member', detail: null, replyToId: null } as const
 
-test('messagesFromEvents folds posted, replied, edited and deleted events into message rows', () => {
+test('messagesFromEvents folds posted, replied, thread reply, edited and deleted events into message rows', () => {
   expect(
     messagesFromEvents([
       eventAt(1, 'message.posted', 'alice', { ...posted, body: 'Hello' }, 'question'),
@@ -32,7 +32,7 @@ test('messagesFromEvents folds posted, replied, edited and deleted events into m
         'answer',
       ),
       eventAt(3, 'message.edited', 'alice', { messageId: 'question', body: 'Hello there' }),
-      eventAt(4, 'message.posted', 'alice', { ...posted, body: 'Oops' }, 'mistake'),
+      eventAt(4, 'message.posted', 'alice', { ...posted, body: 'Oops', threadRootId: 'question' }, 'mistake'),
       eventAt(5, 'message.deleted', 'alice', { messageId: 'mistake' }),
     ]),
   ).toEqual([
@@ -47,6 +47,7 @@ test('messagesFromEvents folds posted, replied, edited and deleted events into m
       detail: null,
       step: null,
       replyToId: null,
+      threadRootId: null,
       createdAt: minute(1),
       editedAt: minute(3),
       deletedAt: null,
@@ -62,6 +63,7 @@ test('messagesFromEvents folds posted, replied, edited and deleted events into m
       detail: 'Read 2 files',
       step: null,
       replyToId: 'question',
+      threadRootId: null,
       createdAt: minute(2),
       editedAt: null,
       deletedAt: null,
@@ -77,6 +79,7 @@ test('messagesFromEvents folds posted, replied, edited and deleted events into m
       detail: null,
       step: null,
       replyToId: null,
+      threadRootId: 'question',
       createdAt: minute(4),
       editedAt: null,
       deletedAt: minute(5),

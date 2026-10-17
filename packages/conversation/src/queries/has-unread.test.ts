@@ -16,6 +16,7 @@ const messageOf = (seq: number, authorId: MessageRow['authorId']): MessageRow =>
   detail: null,
   step: null,
   replyToId: null,
+  threadRootId: null,
   createdAt: '2026-10-01T09:00:00.000Z',
   editedAt: null,
   deletedAt: null,
@@ -55,6 +56,12 @@ test.each([
     false,
   ],
   ['an agent answer makes a chat unread', [messageOf(1, alice), stepOrNotice(2, 'step'), messageOf(3, null)], 1, true],
+  [
+    'a thread reply never makes a chat unread',
+    [messageOf(1, alice), { ...messageOf(2, bob), threadRootId: messageId('message-1') }],
+    1,
+    false,
+  ],
 ])('%s', (_, threadOrderedMessages, lastReadSeq, isUnread) => {
   expect(unreadFor(threadOrderedMessages, lastReadSeq)).toBe(isUnread)
 })

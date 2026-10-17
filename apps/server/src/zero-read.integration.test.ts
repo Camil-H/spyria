@@ -61,6 +61,7 @@ const visibleTo = (snapshot: Snapshot, viewerId: MemberId, workspaceIds: readonl
     sources: inReadableChats(snapshot.sources),
     chatMembers: inReadableChats(snapshot.chatMembers),
     readMarkers: inReadableChats(ownedByViewer(snapshot.readMarkers)),
+    threadReadMarkers: inReadableChats(ownedByViewer(snapshot.threadReadMarkers)),
     llmCredentials: ownedByViewer(snapshot.llmCredentials),
     workspaceConnections: ownedByViewerOrReadableChatOwner(snapshot.workspaceConnections),
     toolConnections: ownedByViewerOrReadableChatOwner(snapshot.toolConnections),
@@ -306,4 +307,46 @@ test('a private channel reaches only its participants; one made private through 
   expect(sees(bobStore, lounge)()).toBe(true)
   await (await changeVisibility('public')).confirmation
   await waitFor(sees(leeStore, lounge))
+})
+
+test('a member’s thread read markers reach only his replica, and only for the chats he can read', async () => {
+  const chat = await newChat({
+    type: 'channel',
+    visibility: 'private',
+    participants: [{ memberId: lee, roleId: 'reader' }],
+  })
+  const aliceStore = await openZeroStore(createZeroStore, alice, [acme])
+  const leeStore = await openZeroStore(createZeroStore, lee, [acme])
+  await waitFor(() => leeStore.read().chats.some((row) => row.id === chat))
+  const post = (fields: { id: string; threadRootId?: string }) =>
+    aliceStore.mutate(
+      acme,
+      conversationMutators.conversation.sendMessage({ workspaceId: acme, chatId: chat, text: 'Hi', ...fields }),
+    )
+  await (await post({ id: `${chat}-root` })).confirmation
+  await (await post({ id: `${chat}-reply`, threadRootId: `${chat}-root` })).confirmation
+  await waitFor(() => leeStore.read().messages.some((row) => row.id === `${chat}-reply`))
+  await (
+    await leeStore.mutate(
+      acme,
+      conversationMutators.conversation.markThreadRead({
+        workspaceId: acme,
+        chatId: chat,
+        threadRootId: `${chat}-root`,
+      }),
+    )
+  ).confirmation
+  const markersOf = (store: typeof aliceStore) =>
+    store
+      .read()
+      .threadReadMarkers.filter((row) => row.chatId === chat)
+      .map(({ memberId, lastReadSeq }) => ({ memberId, lastReadSeq }))
+  await waitFor(() => markersOf(leeStore).length === 1)
+  expect(markersOf(leeStore)).toEqual([{ memberId: lee, lastReadSeq: 2 }])
+  expect(markersOf(aliceStore)).toEqual([])
+  await database.$client`delete from chat_participants where chat_id = ${chat} and user_id = ${lee}`
+  await waitFor(() => markersOf(leeStore).length === 0)
+  expect(
+    await database.$client`select last_read_seq from thread_read_markers where chat_id = ${chat} and user_id = ${lee}`,
+  ).toEqual([{ last_read_seq: 2 }] as never)
 })
