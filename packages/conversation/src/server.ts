@@ -11,13 +11,12 @@ export { awaitTaskTool, routerTools, stillRunningOf, subagentFailureOf, unknownT
 export { genericModelCallNoticeOf, type ModelCallFailure } from './domain/model-call-failures.ts'
 export type { DelegatedFrame, QuestionFrame } from './domain/streamed-reply.ts'
 export {
-  guestToolRefusalOf,
-  notApprovedOf,
+  guestPrompterOf,
+  isGuestToolMethod,
   type ToolCallFailure,
   toolCallFailureOf,
   toolCallNoticeOf,
   toolGatewayUnreachable,
-  toolServerOf,
 } from './domain/tool-calls.ts'
 export type { AgentStream, ConversationCommands } from './entrypoints/commands.ts'
 export { planModeOf, questionAnswerOf } from './entrypoints/endpoints.ts'

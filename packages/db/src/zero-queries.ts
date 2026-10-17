@@ -43,21 +43,18 @@ const readableBy = (userId: MemberId) => (chat: Query<'chats', Schema>) =>
     ),
   )
 
-export const memberChatPermissions = async (
-  tx: Transaction,
-  workspaceId: WorkspaceId,
-  chatId: ChatId,
-  memberId: MemberId,
-) => {
-  const chat = await tx.run(
-    zql.chats
-      .where('workspaceId', workspaceId)
-      .where('id', chatId)
-      .related('participants', (participant) => participant.where('userId', memberId).related('role'))
-      .one(),
-  )
-  return chat ? permissionsOf(chat, chat.participants[0]?.role) : []
-}
+export const chatPermissionsOf = (tx: Transaction, workspaceId: WorkspaceId) => ({
+  permissions: async (chatId: ChatId, memberId: MemberId) => {
+    const chat = await tx.run(
+      zql.chats
+        .where('workspaceId', workspaceId)
+        .where('id', chatId)
+        .related('participants', (participant) => participant.where('userId', memberId).related('role'))
+        .one(),
+    )
+    return chat ? permissionsOf(chat, chat.participants[0]?.role) : []
+  },
+})
 
 export const queries = defineQueries({
   users: defineQuery(({ ctx }) =>

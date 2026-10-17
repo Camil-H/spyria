@@ -15,7 +15,7 @@ import {
 } from '@hq/conversation/server'
 import type { Database } from '@hq/db/postgres'
 import { schema } from '@hq/db/zero'
-import { memberChatPermissions, type Transact, type ZeroContext, zql } from '@hq/db/zero-queries'
+import { chatPermissionsOf, type Transact, type ZeroContext, zql } from '@hq/db/zero-queries'
 import { can, chatId, type MemberId, type MessageId, workspaceId } from '@hq/kernel'
 import type { SandboxProvider } from '@hq/runtime/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
@@ -270,7 +270,7 @@ export const createAgentBridge = ({
         )
         return (
           isMember !== undefined &&
-          can(await memberChatPermissions(tx, chat.workspaceId, chat.chatId, memberId), 'chat.read')
+          can(await chatPermissionsOf(tx, chat.workspaceId).permissions(chat.chatId, memberId), 'chat.read')
         )
       })
     const isStored = (chat: AgentChat) =>
@@ -295,7 +295,7 @@ export const createAgentBridge = ({
       setPlanMode: handlers.setPlanMode,
       recordModelCallFailure: handlers.recordModelCallFailure,
       recordToolCall: handlers.recordToolCall,
-      requestToolApproval: handlers.requestToolApproval,
+      authorizeToolCall: handlers.authorizeToolCall,
       resumeHost: async (host: AgentHost) => {
         await resumeActiveTurns()
         return handlers.promptWaiting(host)

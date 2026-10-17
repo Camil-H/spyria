@@ -1,3 +1,5 @@
+import { type MemberId, toolNamePartsOf } from '@hq/kernel'
+
 export type ToolCallFailure = 'needs_connection' | 'not_allowed' | 'unavailable'
 type Names = { ownerName: string; server: string; isReconnect: boolean }
 
@@ -6,13 +8,21 @@ export const hqToolTimeoutSeconds = 330
 export const notApprovedOf = (ownerName: string) => `${ownerName} did not approve this call`
 export const toolGatewayUnreachable = 'The tool gateway is unreachable, try again shortly'
 const connectionNotice = / needs to (re)?connect (\S+)$/
+const guestMethods = ['initialize', 'ping', 'tools/list', 'tools/call']
 
-export const toolServerOf = (toolName: string) => toolName.split('-')[0] ?? toolName
+export const guestPrompterOf = ({ ownerId, prompterId }: { ownerId: MemberId; prompterId: MemberId | null }) =>
+  prompterId !== ownerId ? prompterId : null
+
+export const isGuestToolMethod = (rpc: unknown) => {
+  const { id, method } = (rpc ?? {}) as { id?: unknown; method?: unknown }
+  const isNotification = id === undefined && String(method).startsWith('notifications/')
+  return typeof rpc === 'object' && (guestMethods.includes(String(method)) || isNotification)
+}
 
 export const toolDisplayNameOf = (prefixedName: string) => {
   const toolName = prefixedName.replace(/^mcp__(hq|router)__/, '')
-  const separator = toolName.indexOf('-')
-  return separator === -1 ? toolName : `${toolName.slice(separator + 1)} (${toolName.slice(0, separator)})`
+  const { server, tool } = toolNamePartsOf(toolName)
+  return toolName.includes('-') ? `${tool} (${server})` : toolName
 }
 
 export const toolCallFailureOf = (text: string): ToolCallFailure | undefined => {

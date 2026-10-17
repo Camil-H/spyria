@@ -1,4 +1,4 @@
-import type { MemberId, WorkspaceId } from '@hq/kernel'
+import { type MemberId, toolNamePartsOf, type WorkspaceId } from '@hq/kernel'
 import type { ToolGateway } from '../contracts/repositories.ts'
 import type { ProfileTransactor } from '../contracts/transactor.ts'
 import { NoGatewayKey, ToolNotInCatalog } from '../domain/errors.ts'
@@ -71,7 +71,7 @@ export const guestToolAccess = async (
   { transactor, gateway }: Dependencies,
   { workspaceId, ownerId, prompterId, toolName }: GuestCall,
 ) => {
-  const [server = '', tool = ''] = toolName.split(/-(.*)/)
+  const { server, tool } = toolNamePartsOf(toolName)
   const servers = await gateway.toolServers()
   if (servers.some(({ name, isPersonal }) => isPersonal && name === server)) return 'personal'
   const [ownerKeyId, prompterKeyId] = await transactor.run(({ memberGatewayKeys }) =>

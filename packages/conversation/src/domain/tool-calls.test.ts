@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import { agentProjectionOf } from './agent-events.ts'
 import { observedStep, type StoredStep } from './agent-steps.ts'
 import { acpUpdate } from './testing.ts'
-import { toolCallFailureOf, toolCallNoticeOf, toolConnectionOf, toolDisplayNameOf, toolServerOf } from './tool-calls.ts'
+import { toolCallFailureOf, toolCallNoticeOf, toolConnectionOf, toolDisplayNameOf } from './tool-calls.ts'
 
 const authenticationRequired =
   'Authentication required for fake. Open this URL to connect your account: http://localhost:5190/gateway-oauth/workspace/mcp-sessions/auth?flow=c9b2227c-ecb2-4ece-864b-59fcdfa1cd88'
@@ -21,7 +21,6 @@ test('an MCP tool name shows as the tool and its server', () => {
   expect(toolDisplayNameOf('mcp__hq__fake-whoami')).toBe('whoami (fake)')
   expect(toolDisplayNameOf('Notion-notion-search')).toBe('notion-search (Notion)')
   expect(toolDisplayNameOf('terminal')).toBe('terminal')
-  expect(toolServerOf('Notion-notion-search')).toBe('Notion')
 })
 
 test('tool errors the member must act on map to HQ wording, without the consent URL or key names', () => {

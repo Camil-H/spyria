@@ -14,6 +14,7 @@ import { type AgentLlm, createHqAgentClient } from '../integrations/hq-agent-cli
 import { createRuntimeAgentRuntimes, type SandboxProvider } from '../integrations/runtime-agent-runtimes.ts'
 import { createTransactingZeroTransactor } from '../integrations/zero-transactor.ts'
 import { closeReopenedTurn, reopenAgentTurn, sweepAgentTurns } from '../operations/agent-turn-safety.ts'
+import { authorizeToolCall } from '../operations/authorize-tool-call.ts'
 import { awaitTask, delegateTask } from '../operations/delegate-task.ts'
 import { forwardToAgent } from '../operations/forward-to-agent.ts'
 import {
@@ -24,7 +25,7 @@ import {
 } from '../operations/model-calls.ts'
 import { promptAgent, startAgentSession } from '../operations/prompt-agent.ts'
 import { recordAgentEvent } from '../operations/record-agent-event.ts'
-import { answerToolApproval, requestToolApproval } from '../operations/request-tool-approval.ts'
+import { answerToolApproval } from '../operations/request-tool-approval.ts'
 import { promptWaitingChats } from '../operations/retry-agent.ts'
 import { interruptAgent } from '../operations/stop-agent.ts'
 
@@ -128,8 +129,10 @@ export const createAgentHandlers = ({
     awaitTask: (input: Parameters<typeof awaitTask>[1]) => awaitTask(dependenciesOf(input.chat.workspaceId), input),
     recordModelCallFailure: (call: Parameters<typeof recordModelCallFailure>[1]) =>
       recordModelCallFailure(dependenciesOf(call.chat.workspaceId), call),
-    requestToolApproval: (input: Parameters<typeof requestToolApproval>[1]) =>
-      requestToolApproval(dependenciesOf(input.chat.workspaceId), input),
+    authorizeToolCall: (
+      input: Parameters<typeof authorizeToolCall>[1],
+      checks: Parameters<typeof authorizeToolCall>[2],
+    ) => authorizeToolCall(dependenciesOf(input.turn.chat.workspaceId), input, checks),
     recordToolCall: (workspace: WorkspaceId, call: Parameters<typeof recordToolCall>[1]) =>
       recordToolCall(dependenciesOf(workspace), call),
   }

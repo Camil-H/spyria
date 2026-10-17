@@ -2,20 +2,19 @@ import {
   type AgentChat,
   awaitTaskTool,
   genericModelCallNoticeOf,
-  guestToolRefusalOf,
+  guestPrompterOf,
+  isGuestToolMethod,
   type ModelCallFailure,
-  notApprovedOf,
   routerTools,
   type ToolCallDecision,
   type ToolCallFailure,
   toolCallFailureOf,
   toolCallNoticeOf,
   toolGatewayUnreachable,
-  toolServerOf,
 } from '@hq/conversation/server'
 import type { Database } from '@hq/db/postgres'
 import { schema } from '@hq/db/zero'
-import type { MemberId } from '@hq/kernel'
+import { type MemberId, toolNamePartsOf } from '@hq/kernel'
 import { type createLlmGateway, createMemberKeyReader, createToolCallOwnerAccess } from '@hq/profile/server'
 import type { ConnectedHost } from '@hq/runtime/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
@@ -51,12 +50,8 @@ type RouterCall = {
   params?: { protocolVersion?: string; name?: string; arguments?: Record<string, unknown> }
 }
 
-const guestMethods = ['initialize', 'ping', 'tools/list', 'tools/call']
-const isGuestMethod = (rpc: unknown) => {
-  const { id, method } = (rpc ?? {}) as { id?: unknown; method?: unknown }
-  const isNotification = id === undefined && String(method).startsWith('notifications/')
-  return typeof rpc === 'object' && (guestMethods.includes(String(method)) || isNotification)
-}
+const methodNotFound = { error: { code: -32601, message: 'Method not found' } }
+const toolErrorOf = (text: string) => ({ result: { content: [{ type: 'text', text }], isError: true } })
 const picked = (headers: Iterable<[string, string]>, names: string[]) =>
   Object.fromEntries([...headers].filter(([name]) => names.includes(name.toLowerCase())))
 const jsonOf = (text: string): unknown => {
@@ -108,6 +103,8 @@ export const createModelCallRelay = ({
       if (body !== undefined) send({ type: 'gw_chunk', sid, data: JSON.stringify(body) })
       send({ type: 'gw_end', sid })
     }
+    const answerRpc = (id: unknown, outcome: object, headers?: Record<string, string>) =>
+      answer(200, { jsonrpc: '2.0', id, ...outcome }, headers)
     const stream = async (response: Response, failedText?: (text: string) => Promise<unknown>) => {
       send({ type: 'gw_head', sid, status: response.status, headers: picked(response.headers, answeredHeaders) })
       try {
@@ -144,7 +141,7 @@ export const createModelCallRelay = ({
       const rpc = jsonOf(body) as RouterCall | undefined
       if (rpc?.id === undefined) return answer(202, undefined)
       const reply = (result: object, replyHeaders?: Record<string, string>) =>
-        answer(200, { jsonrpc: '2.0', id: rpc.id, result }, replyHeaders)
+        answerRpc(rpc.id, { result }, replyHeaders)
       if (rpc.method === 'initialize')
         return reply(
           { protocolVersion: rpc.params?.protocolVersion ?? '2025-06-18', ...routerInfo },
@@ -152,9 +149,8 @@ export const createModelCallRelay = ({
         )
       if (rpc.method === 'ping') return reply({})
       if (rpc.method === 'tools/list') return reply({ tools: routerTools })
-      if (rpc.method !== 'tools/call')
-        return answer(200, { jsonrpc: '2.0', id: rpc.id, error: { code: -32601, message: 'Method not found' } })
-      if (!turn) return reply({ content: [{ type: 'text', text: 'This runtime has no active turn' }], isError: true })
+      if (rpc.method !== 'tools/call') return answerRpc(rpc.id, methodNotFound)
+      if (!turn) return answerRpc(rpc.id, toolErrorOf('This runtime has no active turn'))
       const { task, effort, model, taskId } = rpc.params?.arguments ?? {}
       const { text, isError } =
         rpc.params?.name === awaitTaskTool.name
@@ -199,7 +195,7 @@ export const createModelCallRelay = ({
         | undefined
       const isToolCall = rpc?.method === 'tools/call'
       const toolName = String(rpc?.params?.name ?? '')
-      const server = toolServerOf(toolName)
+      const { server, tool } = toolNamePartsOf(toolName)
       const { ownerId, prompterId, ownerName } = turn
       const call = {
         readOnly: null as boolean | null,
@@ -208,18 +204,13 @@ export const createModelCallRelay = ({
         decidedBy: null as MemberId | null,
         calledAt: new Date(),
       }
-      const toolError = (text: string) =>
-        answer(200, { jsonrpc: '2.0', id: rpc?.id, result: { content: [{ type: 'text', text }], isError: true } })
+      const toolError = (text: string) => answerRpc(rpc?.id, toolErrorOf(text))
       const noticeOf = (failure: ToolCallFailure, isReconnect = false) =>
         toolCallNoticeOf(failure, { ownerName, server, isReconnect })
       if (isToolCall && !prompterId) return toolError('This runtime has no active turn')
-      const isGuestTurn = prompterId !== null && prompterId !== ownerId
-      if (method === 'POST' && (Array.isArray(rpc) || (isGuestTurn && !isGuestMethod(rpc))))
-        return answer(200, {
-          jsonrpc: '2.0',
-          id: rpc?.id ?? null,
-          error: { code: -32601, message: 'Method not found' },
-        })
+      const isGuestTurn = guestPrompterOf(turn) !== null
+      if (method === 'POST' && (Array.isArray(rpc) || (isGuestTurn && !isGuestToolMethod(rpc))))
+        return answerRpc(rpc?.id ?? null, methodNotFound)
       const isGuestCall = isToolCall && isGuestTurn
       try {
         const virtualKey = await keyOf(host.workspaceId, ownerId).catch(() => null)
@@ -228,12 +219,6 @@ export const createModelCallRelay = ({
         if (!virtualKey) return answer(virtualKey === null ? 502 : 401, unreachable)
         if (rpc?.method === 'initialize')
           await tools.grantAvailableTools(host.workspaceId, ownerId).catch(() => undefined)
-        if (isGuestCall && prompterId) {
-          const access = await tools.guestToolAccess(host.workspaceId, ownerId, prompterId, toolName).catch(() => null)
-          if (!access) return toolError(toolGatewayUnreachable)
-          if (access !== 'allowed')
-            return toolError(guestToolRefusalOf(access, { ownerName, prompterName: turn.prompterName ?? '', server }))
-        }
         const callHeaders = {
           ...picked(headers, toolHeaders),
           authorization: `Bearer ${virtualKey}`,
@@ -243,25 +228,16 @@ export const createModelCallRelay = ({
           'x-bf-dim-workspace': host.workspaceId,
           ...(isGuestCall && { 'x-bf-mcp-include-clients': server }),
         }
-        if (isToolCall) call.readOnly = await isReadOnly(callHeaders, toolName)
-        if (isGuestCall && !call.readOnly) {
-          Object.assign(
-            call,
-            await handlers.requestToolApproval({
-              chat: turn.chat,
-              promptId: turn.promptId,
-              ownerId,
-              signal,
-              approval: {
-                server,
-                tool: toolName.slice(server.length + 1),
-                arguments: JSON.stringify(rpc?.params?.arguments ?? {}),
-                prompterName: turn.prompterName ?? '',
-                ownerName,
-              },
-            }),
+        if (isToolCall) {
+          const { refusal, ...authorization } = await handlers.authorizeToolCall(
+            { turn, toolName, toolArguments: rpc?.params?.arguments, signal },
+            {
+              guestAccessOf: (guestId) => tools.guestToolAccess(host.workspaceId, ownerId, guestId, toolName),
+              isReadOnly: () => isReadOnly(callHeaders, toolName),
+            },
           )
-          if (call.decision !== 'approved') return toolError(notApprovedOf(ownerName))
+          Object.assign(call, authorization)
+          if (refusal) return toolError(refusal)
         }
         call.status = 'failed'
         let response: Response
@@ -279,7 +255,7 @@ export const createModelCallRelay = ({
         const text = result?.content?.map((part) => part.text ?? '').join('') ?? ''
         if (result?.isError) call.status = 'failed'
         const failure = result?.isError ? toolCallFailureOf(text) : undefined
-        if (!failure) return answer(200, { jsonrpc: '2.0', id: rpc?.id, result })
+        if (!failure) return answerRpc(rpc?.id, { result })
         const isReconnect =
           failure === 'needs_connection' && (await tools.flagToolConnection(host.workspaceId, ownerId, server))
         return toolError(noticeOf(failure, isReconnect))
@@ -291,7 +267,7 @@ export const createModelCallRelay = ({
               prompterId,
               ownerId,
               server,
-              tool: toolName.slice(server.length + 1),
+              tool,
               ...call,
             })
             .catch(() => console.error(`Recording a tool call of chat ${turn.chat.chatId} failed`))

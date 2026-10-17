@@ -23,7 +23,7 @@ import {
   stopRunningDelegations,
 } from '@hq/db/server-writes'
 import type { Message as MessageRow } from '@hq/db/zero'
-import { memberChatPermissions, skippingRefusedRebase, type Transact, zql } from '@hq/db/zero-queries'
+import { chatPermissionsOf, skippingRefusedRebase, type Transact, zql } from '@hq/db/zero-queries'
 import {
   type ChatId,
   type ChatPermission,
@@ -395,7 +395,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
           localSession: row.localSession ?? null,
         }
       },
-      permissions: (id, member) => memberChatPermissions(tx, contextWorkspaceId, id, member),
+      ...chatPermissionsOf(tx, contextWorkspaceId),
       join: async (id, member) => {
         if (!(await participantRow(id, member)))
           await changeParticipant({

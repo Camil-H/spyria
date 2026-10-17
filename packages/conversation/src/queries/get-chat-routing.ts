@@ -5,13 +5,12 @@ import {
   listedModelsOf,
   memberModelsOf,
 } from '@hq/db/server-writes'
-import { memberChatPermissions, type ZeroContext } from '@hq/db/zero-queries'
+import { chatPermissionsOf, type ZeroContext } from '@hq/db/zero-queries'
 import {
-  can,
   chatModelsOf,
   listedChatModelIdsOf,
-  MissingChatPermission,
   type Model,
+  requireChatPermission,
   routableModelNames,
   chatId as toChatId,
   withPricesOf,
@@ -34,8 +33,7 @@ export const getChatRouting = async (
   chatId: string,
 ): Promise<ChatRoutingRead> => {
   const { contextTokens, reachable, adapterModels, hqRuntimeAvailable } = await transact(async (tx) => {
-    if (!can(await memberChatPermissions(tx, workspaceId, toChatId(chatId), userId), 'chat.read'))
-      throw new MissingChatPermission('chat.read')
+    await requireChatPermission(chatPermissionsOf(tx, workspaceId), toChatId(chatId), userId, 'chat.read')
     return {
       contextTokens: await chatContextTokens(tx, workspaceId, chatId),
       reachable: chatModelsOf((await memberModelsOf(tx, workspaceId, userId)) ?? []),

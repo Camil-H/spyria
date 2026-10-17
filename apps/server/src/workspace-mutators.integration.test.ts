@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { schema } from '@hq/db/zero'
-import { memberChatPermissions } from '@hq/db/zero-queries'
+import { chatPermissionsOf } from '@hq/db/zero-queries'
 import { builtInChatRoles, chatId, memberId } from '@hq/kernel'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import {
@@ -107,7 +107,7 @@ test.each([
 ])('the permissions read gives %s their effective permissions', async (_, chat, member, permissions) => {
   expect(
     await zeroDrizzle(schema, database).transaction((tx) =>
-      memberChatPermissions(tx, acme, chatId(chat), memberId(member)),
+      chatPermissionsOf(tx, acme).permissions(chatId(chat), memberId(member)),
     ),
   ).toEqual(permissions as never)
 })
