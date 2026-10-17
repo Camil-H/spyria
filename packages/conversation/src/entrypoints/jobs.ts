@@ -26,6 +26,7 @@ import { promptAgent, startAgentSession } from '../operations/prompt-agent.ts'
 import { recordAgentEvent } from '../operations/record-agent-event.ts'
 import { promptWaitingChats } from '../operations/retry-agent.ts'
 import { interruptAgent } from '../operations/stop-agent.ts'
+import { answerToolApproval, requestToolApproval } from '../operations/tool-approvals.ts'
 
 type AgentJob = Omit<Job, 'transact'>
 
@@ -46,6 +47,7 @@ export const createAgentHandlers = ({
   eventSockets,
   now = Date.now,
   resumeAfterMilliseconds,
+  approvalWindowMilliseconds,
   hqAgentImage,
 }: {
   transact: Transact
@@ -55,6 +57,7 @@ export const createAgentHandlers = ({
   eventSockets: AgentEventSockets
   now?: () => number
   resumeAfterMilliseconds?: number
+  approvalWindowMilliseconds?: number
   hqAgentImage?: string
 }) => {
   const runtimes = createRuntimeAgentRuntimes(transact, sandboxProvider, { hqAgentImage })
@@ -68,6 +71,7 @@ export const createAgentHandlers = ({
     classifier,
     fixedLlm: llm,
     resumeAfterMilliseconds,
+    approvalWindowMilliseconds,
   })
   return {
     jobs: {
@@ -100,7 +104,8 @@ export const createAgentHandlers = ({
       await runtimes.touch(chat)
       return recorded
     },
-    answerQuestion: (chat: AgentChat, member: MemberId, questionId: string, answer: object) =>
+    answerQuestion: async (chat: AgentChat, member: MemberId, questionId: string, answer: object) =>
+      answerToolApproval(chat, member, questionId, answer) ??
       forwardToAgent(
         dependenciesOf(chat.workspaceId),
         { chat, memberId: member, permission: 'chat.post' },
@@ -123,6 +128,8 @@ export const createAgentHandlers = ({
     awaitTask: (input: Parameters<typeof awaitTask>[1]) => awaitTask(dependenciesOf(input.chat.workspaceId), input),
     recordModelCallFailure: (call: Parameters<typeof recordModelCallFailure>[1]) =>
       recordModelCallFailure(dependenciesOf(call.chat.workspaceId), call),
+    requestToolApproval: (input: Parameters<typeof requestToolApproval>[1]) =>
+      requestToolApproval(dependenciesOf(input.chat.workspaceId), input),
     recordToolCall: (workspace: WorkspaceId, call: Parameters<typeof recordToolCall>[1]) =>
       recordToolCall(dependenciesOf(workspace), call),
   }

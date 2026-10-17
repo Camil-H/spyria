@@ -216,6 +216,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         return {
           ownerId: turn?.ownerId ? memberId(turn.ownerId) : null,
           prompterId: turn?.promptId && turn.prompterId ? memberId(turn.prompterId) : null,
+          promptId: turn?.promptId ? messageId(turn.promptId) : null,
         }
       },
       lastFailure: async (id) => (await chatTurnOf(tx, contextWorkspaceId, id))?.failure ?? null,

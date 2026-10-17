@@ -2,6 +2,7 @@ import { type ChatId, type MemberId, type MessageId, requireChatPermission, type
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { stoppedByNoticeOf } from '../domain/agent-events.ts'
 import { type AgentDependencies, closeAgentTurn } from './agent-turn.ts'
+import { cancelToolApprovals } from './tool-approvals.ts'
 
 type Input = { workspaceId: WorkspaceId; chatId: ChatId; promptId: MessageId; memberId: MemberId }
 
@@ -26,6 +27,7 @@ export const interruptAgent = async (
   if (endpoint?.conversationId) await agentClient.interrupt({ ...endpoint, conversationId: endpoint.conversationId })
   for (const conversationId of subConversationIds)
     if (endpoint) await agentClient.interrupt({ ...endpoint, conversationId }).catch(() => undefined)
+  cancelToolApprovals(chat)
   eventSockets.stopStreaming(chat, promptId)
   await transactor.run(async (unitOfWork) => {
     const notice = stoppedByNoticeOf(await unitOfWork.members.displayNameOf(memberId))

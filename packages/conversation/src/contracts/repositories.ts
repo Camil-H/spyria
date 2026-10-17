@@ -29,7 +29,9 @@ export type AgentTurnRepository = {
   lock(chatId: ChatId): Promise<MessageId | null>
   set(chatId: ChatId, prompt: Pick<Message, 'id' | 'authorId'> | null): Promise<void>
   modelCallTurn(chatId: ChatId): Promise<ModelCallTurn | undefined>
-  toolCallTurn(chatId: ChatId): Promise<{ ownerId: MemberId | null; prompterId: MemberId | null }>
+  toolCallTurn(
+    chatId: ChatId,
+  ): Promise<{ ownerId: MemberId | null; prompterId: MemberId | null; promptId: MessageId | null }>
   recordFailure(chatId: ChatId, promptId: MessageId, notice: string): Promise<void>
   lastFailure(chatId: ChatId): Promise<string | null>
   nextPrompt(chatId: ChatId): Promise<Message | undefined>
@@ -39,6 +41,7 @@ export type AgentTurnRepository = {
   active(): Promise<{ chatId: ChatId; promptId: MessageId; lastEventAt: number }[]>
 }
 
+export type ToolCallDecision = 'not_needed' | 'approved' | 'denied' | 'expired' | 'cancelled'
 export type ToolCall = Readonly<{
   chatId: ChatId
   prompterId: MemberId
@@ -46,7 +49,8 @@ export type ToolCall = Readonly<{
   server: string
   tool: string
   readOnly: boolean | null
-  decision: 'not_needed'
+  decision: ToolCallDecision
+  decidedBy: MemberId | null
   status: 'succeeded' | 'failed' | 'refused'
   calledAt: Date
 }>

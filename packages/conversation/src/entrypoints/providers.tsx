@@ -25,3 +25,7 @@ export const ConversationProvider = ({
 export const AnswerQuestionContext = createContext<
   ((questionId: string, answer: QuestionAnswer) => Promise<number>) | undefined
 >(undefined)
+
+export const OwnerAnswerContext = createContext<
+  ((questionId: string, answer: QuestionAnswer) => Promise<number>) | undefined
+>(undefined)

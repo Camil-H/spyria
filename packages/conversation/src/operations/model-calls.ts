@@ -49,12 +49,13 @@ export const findToolCallTurn = async (dependencies: Dependencies, host: AgentHo
   const tokenChat = await tokenChatOf(dependencies, host, token)
   if (!tokenChat) return undefined
   return dependencies.transactor.run(async ({ agentTurns, members }) => {
-    const { ownerId, prompterId } = await agentTurns.toolCallTurn(tokenChat.chatId)
+    const { ownerId, prompterId, promptId } = await agentTurns.toolCallTurn(tokenChat.chatId)
     return (
       ownerId && {
         chat: { workspaceId: host.workspaceId, chatId: tokenChat.chatId },
         ownerId,
         prompterId,
+        promptId,
         ownerName: await members.displayNameOf(ownerId),
         prompterName: prompterId && (await members.displayNameOf(prompterId)),
         delegationId: tokenChat.delegationId,
@@ -63,8 +64,8 @@ export const findToolCallTurn = async (dependencies: Dependencies, host: AgentHo
   })
 }
 
-export const recordToolCall = ({ transactor }: Dependencies, call: Omit<ToolCall, 'decision'>) =>
-  transactor.run(({ toolCalls }) => toolCalls.record({ ...call, decision: 'not_needed' }))
+export const recordToolCall = ({ transactor }: Dependencies, call: ToolCall) =>
+  transactor.run(({ toolCalls }) => toolCalls.record(call))
 
 export const recordModelCallFailure = async (
   { transactor }: Dependencies,

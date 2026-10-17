@@ -4,7 +4,9 @@ import {
   genericModelCallNoticeOf,
   guestToolRefusalOf,
   type ModelCallFailure,
+  notApprovedOf,
   routerTools,
+  type ToolCallDecision,
   type ToolCallFailure,
   toolCallFailureOf,
   toolCallNoticeOf,
@@ -13,6 +15,7 @@ import {
 } from '@hq/conversation/server'
 import type { Database } from '@hq/db/postgres'
 import { schema } from '@hq/db/zero'
+import type { MemberId } from '@hq/kernel'
 import { type createLlmGateway, createMemberKeyReader, createToolCallOwnerAccess } from '@hq/profile/server'
 import type { ConnectedHost } from '@hq/runtime/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
@@ -47,6 +50,12 @@ type RouterCall = {
   params?: { protocolVersion?: string; name?: string; arguments?: Record<string, unknown> }
 }
 
+const guestMethods = ['initialize', 'ping', 'tools/list', 'tools/call']
+const isGuestMethod = (rpc: unknown) => {
+  const { id, method } = (rpc ?? {}) as { id?: unknown; method?: unknown }
+  const isNotification = id === undefined && String(method).startsWith('notifications/')
+  return typeof rpc === 'object' && !Array.isArray(rpc) && (guestMethods.includes(String(method)) || isNotification)
+}
 const picked = (headers: Iterable<[string, string]>, names: string[]) =>
   Object.fromEntries([...headers].filter(([name]) => names.includes(name.toLowerCase())))
 const jsonOf = (text: string): unknown => {
@@ -177,18 +186,33 @@ export const createModelCallRelay = ({
     if (isToolPath) {
       const turn = token ? await handlers.toolCallTurn(host, token) : undefined
       if (!turn) return answer(401, refusalOf('This runtime has no chat owner'))
-      const rpc = jsonOf(body) as { id?: unknown; method?: string; params?: { name?: unknown } } | undefined
+      const rpc = jsonOf(body) as
+        | { id?: unknown; method?: string; params?: { name?: unknown; arguments?: unknown } }
+        | undefined
       const isToolCall = rpc?.method === 'tools/call'
       const toolName = String(rpc?.params?.name ?? '')
       const server = toolServerOf(toolName)
       const { ownerId, prompterId, ownerName } = turn
-      const call = { readOnly: null as boolean | null, status: 'refused' as ToolCallStatus, calledAt: new Date() }
+      const call = {
+        readOnly: null as boolean | null,
+        status: 'refused' as ToolCallStatus,
+        decision: 'not_needed' as ToolCallDecision,
+        decidedBy: null as MemberId | null,
+        calledAt: new Date(),
+      }
       const toolError = (text: string) =>
         answer(200, { jsonrpc: '2.0', id: rpc?.id, result: { content: [{ type: 'text', text }], isError: true } })
       const noticeOf = (failure: ToolCallFailure, isReconnect = false) =>
         toolCallNoticeOf(failure, { ownerName, server, isReconnect })
       if (isToolCall && !prompterId) return toolError('This runtime has no active turn')
-      const isGuestCall = isToolCall && prompterId !== null && prompterId !== ownerId
+      const isGuestTurn = prompterId !== null && prompterId !== ownerId
+      if (isGuestTurn && method === 'POST' && !isGuestMethod(rpc))
+        return answer(200, {
+          jsonrpc: '2.0',
+          id: rpc?.id ?? null,
+          error: { code: -32601, message: 'Method not found' },
+        })
+      const isGuestCall = isToolCall && isGuestTurn
       try {
         const virtualKey = await keyOf(host.workspaceId, ownerId).catch(() => null)
         if (!virtualKey && isToolCall)
@@ -212,6 +236,24 @@ export const createModelCallRelay = ({
           ...(isGuestCall && { 'x-bf-mcp-include-clients': server }),
         }
         if (isToolCall) call.readOnly = await isReadOnly(callHeaders, toolName)
+        if (isGuestCall && !call.readOnly) {
+          Object.assign(
+            call,
+            await handlers.requestToolApproval({
+              chat: turn.chat,
+              promptId: turn.promptId,
+              ownerId,
+              approval: {
+                server,
+                tool: toolName.slice(server.length + 1),
+                arguments: JSON.stringify(rpc?.params?.arguments ?? {}),
+                prompterName: turn.prompterName ?? '',
+                ownerName,
+              },
+            }),
+          )
+          if (call.decision !== 'approved') return toolError(notApprovedOf(ownerName))
+        }
         call.status = 'failed'
         let response: Response
         try {

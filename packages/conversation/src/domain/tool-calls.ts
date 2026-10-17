@@ -1,6 +1,9 @@
 export type ToolCallFailure = 'needs_connection' | 'not_allowed' | 'unavailable'
 type Names = { ownerName: string; server: string; isReconnect: boolean }
 
+export const toolApprovalWindowMilliseconds = 300_000
+export const hqToolTimeoutSeconds = 330
+export const notApprovedOf = (ownerName: string) => `${ownerName} did not approve this call`
 export const toolGatewayUnreachable = 'The tool gateway is unreachable, try again shortly'
 const connectionNotice = / needs to (re)?connect (\S+)$/
 

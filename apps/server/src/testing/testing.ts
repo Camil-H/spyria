@@ -434,6 +434,9 @@ export const runtimeTurn = async (host: { id: string }, prompterId: string | nul
       insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
       values (${acme}, ${chatId}, ${promptId}, 1, 'member', ${prompterId ?? alice}, 'Go', now())`
     await sql`
+      insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
+      values (${acme}, ${chatId}, ${promptId}, 1, 'message.posted', ${prompterId ?? alice}, '{}', now())`
+    await sql`
       insert into runtimes (workspace_id, id, chat_id, host_id, state, host_online, image, llm_token_hash, last_active_at, created_at, state_changed_at)
       values (${acme}, ${crypto.randomUUID()}, ${chatId}, ${host.id}, 'running', true, ${testHqAgentImage}, ${sha256(token)}, now(), now(), now())`
     if (prompterId)
@@ -448,6 +451,7 @@ export const startAgentStack = async ({
   llm,
   now,
   resumeAfterMilliseconds,
+  approvalWindowMilliseconds,
   hqAgentImage = testHqAgentImage,
   promptsWaitingAfterHello = false,
 }: {
@@ -455,6 +459,7 @@ export const startAgentStack = async ({
   llm?: Parameters<typeof createAgentBridge>[0]['llm']
   now?: () => number
   resumeAfterMilliseconds?: number
+  approvalWindowMilliseconds?: number
   hqAgentImage?: string
   promptsWaitingAfterHello?: boolean
 } = {}) => {
@@ -473,6 +478,7 @@ export const startAgentStack = async ({
     llm,
     now,
     resumeAfterMilliseconds,
+    approvalWindowMilliseconds,
     hqAgentImage,
     sessionClassifierOf: routing ? sessionClassifierOf(llmGateway, { timeoutMilliseconds: 300 }) : undefined,
     reopenDelayMilliseconds: 50,

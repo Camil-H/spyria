@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test'
 import { type AgentConversation, AgentStartFailure } from '../contracts/agent.ts'
 import { defaultResumeAfterMilliseconds, delegateTimeoutSeconds } from '../domain/delegation.ts'
 import { type HarnessLaunch, piModelOf } from '../domain/session-routing.ts'
+import { hqToolTimeoutSeconds, toolApprovalWindowMilliseconds } from '../domain/tool-calls.ts'
 import { createHqAgentClient, piCommandOf } from './hq-agent-client.ts'
 
 const requests: { method: string; path: string; body?: string }[] = []
@@ -270,10 +271,13 @@ test('a parent Pi reaches HQ tools and the router with its LLM token; a sub reac
     exposure: 'direct',
   })
   expect(parent.mcp).toEqual({
-    mcpServers: { hq: toolServer('/mcp'), router: { ...toolServer('/mcp/router'), timeout: delegateTimeoutSeconds } },
+    mcpServers: {
+      hq: { ...toolServer('/mcp'), timeout: hqToolTimeoutSeconds },
+      router: { ...toolServer('/mcp/router'), timeout: delegateTimeoutSeconds },
+    },
   })
   const sub = await createdPiOf({ parentConversationId: 'conversation-1' })
-  expect(sub.mcp).toEqual({ mcpServers: { hq: toolServer('/mcp') } })
+  expect(sub.mcp).toEqual({ mcpServers: { hq: { ...toolServer('/mcp'), timeout: hqToolTimeoutSeconds } } })
   expect(sub.created.secrets).toEqual({
     HQ_LLM_TOKEN: { kind: 'StaticSecret', value: 'runtime-llm-token' },
     HQ_MCP_TOKEN: { kind: 'StaticSecret', value: 'runtime-llm-token' },
@@ -287,4 +291,9 @@ test('the router answers a running delegation well before Pi gives up on the del
   const piDefaultMcpTimeoutMilliseconds = 60_000
   expect(delegateTimeoutSeconds * 1000).toBeGreaterThan(piDefaultMcpTimeoutMilliseconds)
   expect(defaultResumeAfterMilliseconds).toBeLessThan(piDefaultMcpTimeoutMilliseconds)
+})
+
+test('a tool call waiting for the owner’s approval is decided before Pi gives up on it', () => {
+  expect(hqToolTimeoutSeconds * 1000).toBeGreaterThan(toolApprovalWindowMilliseconds)
+  expect(delegateTimeoutSeconds).toBe(120)
 })

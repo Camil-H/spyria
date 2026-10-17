@@ -8,8 +8,9 @@ import { Link, Navigate, useOutletContext, useParams } from 'react-router'
 import { runsOnNames, runsOnWaitingNoticeOf } from '../domain/session-routing.ts'
 import { getConversation } from '../queries/get-conversation.ts'
 import { Composer } from './Composer.tsx'
+import type { QuestionAnswer } from './endpoints.ts'
 import { MessageList } from './MessageList.tsx'
-import { AnswerQuestionContext, useConversationCommands } from './providers.tsx'
+import { AnswerQuestionContext, OwnerAnswerContext, useConversationCommands } from './providers.tsx'
 import { PlanModeToggle, RunsOnChip, SessionChip } from './SessionChip.tsx'
 import { useLiveMessages, withLiveMessages } from './useLiveMessages.ts'
 
@@ -61,6 +62,8 @@ export const ChatView = ({
     conversation.type === 'runtime' &&
     conversation.runsOn !== null &&
     (conversation.localSession ? conversation.isOwner : conversation.canPost && hasLlmKey)
+  const answerQuestion = (questionId: string, answer: QuestionAnswer) =>
+    commands.answerQuestion({ workspaceId, chatId, questionId, answer })
   const status = runtimeStatus(conversation.canPost)
   const branch = live.workspace?.branch ?? conversation.gitBranch
   const ChatTypeIcon = conversation.type === 'runtime' ? Bot : Hash
@@ -91,18 +94,14 @@ export const ChatView = ({
           </Link>
         )}
       </header>
-      <AnswerQuestionContext
-        value={
-          mayPrompt
-            ? (questionId, answer) => commands.answerQuestion({ workspaceId, chatId, questionId, answer })
-            : undefined
-        }
-      >
-        <MessageList
-          conversation={conversation}
-          items={withLiveMessages(conversation.items, live)}
-          onStop={conversation.canConfigure ? () => commands.stopAgent({ workspaceId, chatId }) : undefined}
-        />
+      <AnswerQuestionContext value={mayPrompt ? answerQuestion : undefined}>
+        <OwnerAnswerContext value={conversation.isOwner ? answerQuestion : undefined}>
+          <MessageList
+            conversation={conversation}
+            items={withLiveMessages(conversation.items, live)}
+            onStop={conversation.canConfigure ? () => commands.stopAgent({ workspaceId, chatId }) : undefined}
+          />
+        </OwnerAnswerContext>
       </AnswerQuestionContext>
       {isRunsOnOpen && conversation.runsOnChoices && conversation.runsOnChoices.length > 1 && (
         <fieldset aria-label="Runs on" className="flex flex-col gap-2 text-sm">

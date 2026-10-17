@@ -7,7 +7,7 @@ import Markdown from './Markdown.tsx'
 
 type QuestionStep = Extract<AgentStep, { type: 'question' }>
 
-const closedLabels = { stopped: 'Stopped', cancelled: 'Cancelled', turn_end: 'Closed at turn end' }
+const closedLabels = { stopped: 'Stopped', cancelled: 'Cancelled', turn_end: 'Closed at turn end', expired: 'Expired' }
 const refusalNotices: Record<number, string> = {
   403: 'You cannot answer in this chat',
   409: 'This question is no longer waiting for an answer',
@@ -17,6 +17,7 @@ const outcomeOf = (step: QuestionStep, answeredByName: string | undefined) => {
   if (step.closed) return closedLabels[step.closed]
   const by = answeredByName ? ` by ${answeredByName}` : ''
   if (step.kind === 'plan') return `${step.approved ? 'Approved' : 'Kept planning'}${by}`
+  if (step.kind === 'approval') return `${step.approved ? 'Approved' : 'Denied'}${by}`
   const isSkipped =
     Object.keys(step.answers ?? {}).length === 0 && Object.values(step.free ?? {}).every((text) => text === '')
   return `${isSkipped ? 'Skipped' : 'Answered'}${by}`
@@ -34,16 +35,19 @@ const answerTextOf = (question: AgentQuestion, step: QuestionStep) =>
 
 const QuestionCard = ({
   message,
-  answerQuestion,
+  answerQuestion: answerAsPrompter,
+  answerAsOwner,
 }: {
   message: ConversationMessage
   answerQuestion?: (questionId: string, answer: QuestionAnswer) => Promise<number>
+  answerAsOwner?: (questionId: string, answer: QuestionAnswer) => Promise<number>
 }) => {
   const step = message.step as QuestionStep
   const [chosen, setChosen] = useState<Record<string, string[]>>({})
   const [free, setFree] = useState<Record<string, string>>({})
   const [notice, setNotice] = useState<string>()
   const isPending = step.closed === undefined && step.answers === undefined && step.approved === undefined
+  const answerQuestion = step.kind === 'approval' ? answerAsOwner : answerAsPrompter
   const canAnswer = isPending && answerQuestion !== undefined
   const send = async (answer: QuestionAnswer) => {
     const status = (await answerQuestion?.(step.questionId, answer).catch(() => 0)) ?? 0
@@ -78,6 +82,33 @@ const QuestionCard = ({
       {notice}
     </p>
   )
+  if (step.approval)
+    return (
+      <section
+        aria-label="Tool approval"
+        className="flex flex-col gap-2 rounded-lg border border-line bg-raised p-3 text-sm"
+      >
+        <p>
+          {step.approval.prompterName} asks to run <strong>{step.approval.tool}</strong> ({step.approval.server})
+        </p>
+        <pre className="overflow-x-auto rounded-md bg-app px-2 py-1 font-mono text-xs">{step.approval.arguments}</pre>
+        {canAnswer && (
+          <div className="flex gap-2">
+            <button type="button" className={buttonClass} onClick={() => send({ approve: true })}>
+              Approve
+            </button>
+            <button type="button" className={ghostButtonClass} onClick={() => send({ approve: false })}>
+              Deny
+            </button>
+          </div>
+        )}
+        {isPending && !canAnswer && (
+          <p className="text-xs text-muted">Waiting for {step.approval.ownerName}'s approval</p>
+        )}
+        {outcome}
+        {alert}
+      </section>
+    )
   if (step.kind === 'plan')
     return (
       <section aria-label="Plan approval" className="flex flex-col gap-2 rounded-lg border border-line bg-raised p-3">

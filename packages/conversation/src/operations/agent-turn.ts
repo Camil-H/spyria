@@ -15,6 +15,7 @@ export type AgentDependencies = {
   classifier?: SessionClassifier
   fixedLlm?: { model: string }
   resumeAfterMilliseconds?: number
+  approvalWindowMilliseconds?: number
 }
 
 export const appendNotice = ({ messages }: UnitOfWork, prompt: Message, text: string) =>

@@ -11,6 +11,7 @@ import {
 import type { AgentEvent } from '../domain/agent-events.ts'
 import { delegateTimeoutSeconds } from '../domain/delegation.ts'
 import { type HarnessLaunch, piModelOf } from '../domain/session-routing.ts'
+import { hqToolTimeoutSeconds } from '../domain/tool-calls.ts'
 
 export type AgentLlm = { model: string }
 
@@ -148,7 +149,7 @@ export const piCommandOf = (
     }),
   }
   const mcpServers = {
-    hq: piMcpServerOf(gatewayUrl, '/mcp'),
+    hq: { ...piMcpServerOf(gatewayUrl, '/mcp'), timeout: hqToolTimeoutSeconds },
     ...(!sub && { router: { ...piMcpServerOf(gatewayUrl, '/mcp/router'), timeout: delegateTimeoutSeconds } }),
   }
   return [

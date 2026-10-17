@@ -34,15 +34,17 @@ export type AgentStep =
       type: 'question'
       questionId: string
       toolCallId?: string
-      kind: 'question' | 'plan'
+      kind: 'question' | 'plan' | 'approval'
+      approval?: ToolApproval
       questions?: AgentQuestion[]
       plan?: string
       answers?: Record<string, string | string[]>
       free?: Record<string, string>
       approved?: boolean
       answeredBy?: string
-      closed?: 'stopped' | 'cancelled' | 'turn_end'
+      closed?: 'stopped' | 'cancelled' | 'turn_end' | 'expired'
     }
+export type ToolApproval = { server: string; tool: string; arguments: string; prompterName: string; ownerName: string }
 export type AgentQuestion = {
   id: string
   header?: string

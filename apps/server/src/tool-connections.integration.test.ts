@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeEach, expect, setDefaultTimeout, test } from 'bun:test'
+import { chatId as toChatId } from '@hq/kernel'
 import { websocket } from 'hono/bun'
 import { createAgentBridge } from './agent-bridge/bridge.ts'
 import { createApp, defaultLlm } from './app.ts'
@@ -9,6 +10,7 @@ import {
   acme,
   addLlmKey,
   alice,
+  aliceInAcme,
   captureConsole,
   createFakeHosts,
   everyStoredText,
@@ -17,12 +19,15 @@ import {
   runtimeTurn,
   bob,
   sessionTokenOf,
+  startAgentStack,
   testAuthSettings,
   virtualKeyOf,
   waitFor,
 } from './testing/testing.ts'
 
 setDefaultTimeout(30_000)
+const approvalWindowMilliseconds = 2_000
+const approvals = await startAgentStack({ routing: true, approvalWindowMilliseconds })
 const { database, app, port, gateway, llmGateway, fakeMcp } = await openSharedTestApp()
 const { fakeHost, disconnectFakeHosts } = createFakeHosts({ port, database })
 afterEach(() => disconnectFakeHosts())
@@ -250,17 +255,15 @@ test('on a guest’s prompt a workspace tool needs both the owner’s and the pr
   const callsBefore = fakeMcp.records.length
   try {
     expect(textOf((await mcpCall(host, token, lookup)).result)).toBe('ran lookup')
-    expect(textOf((await mcpCall(host, token, update)).result)).toBe('ran update')
 
-    await allowSharedTools(bob, ['lookup'])
-    expect(textOf((await mcpCall(host, token, lookup)).result)).toBe('ran lookup')
-    expect(refused(await mcpCall(host, token, update))).toEqual({
+    await allowSharedTools(bob, ['update'])
+    expect(refused(await mcpCall(host, token, lookup))).toEqual({
       status: 200,
       text: `${sharedToolServer} isn't available on Bob's prompts in this chat`,
     })
     await allowSharedTools(bob, ['*'])
-    await allowSharedTools(alice, ['lookup'])
-    expect(refused(await mcpCall(host, token, update))).toEqual({
+    await allowSharedTools(alice, ['update'])
+    expect(refused(await mcpCall(host, token, lookup))).toEqual({
       status: 200,
       text: `${sharedToolServer} isn't available on Bob's prompts in this chat`,
     })
@@ -268,11 +271,7 @@ test('on a guest’s prompt a workspace tool needs both the owner’s and the pr
     await allowSharedTools(alice, ['*'])
     await allowSharedTools(bob, ['*'])
   }
-  expect(fakeMcp.records.slice(callsBefore)).toEqual([
-    { tool: 'lookup', user: 'shared' },
-    { tool: 'update', user: 'shared' },
-    { tool: 'lookup', user: 'shared' },
-  ])
+  expect(fakeMcp.records.slice(callsBefore)).toEqual([{ tool: 'lookup', user: 'shared' }])
   const audited = {
     prompter_id: bob,
     owner_id: alice,
@@ -280,12 +279,10 @@ test('on a guest’s prompt a workspace tool needs both the owner’s and the pr
     decision: 'not_needed',
     decided_by: null,
   }
-  expect(await toolCallRows(chatId, 5)).toEqual([
+  expect(await toolCallRows(chatId, 3)).toEqual([
     { ...audited, tool: 'lookup', read_only: true, status: 'succeeded' },
-    { ...audited, tool: 'update', read_only: false, status: 'succeeded' },
-    { ...audited, tool: 'lookup', read_only: true, status: 'succeeded' },
-    { ...audited, tool: 'update', read_only: null, status: 'refused' },
-    { ...audited, tool: 'update', read_only: null, status: 'refused' },
+    { ...audited, tool: 'lookup', read_only: null, status: 'refused' },
+    { ...audited, tool: 'lookup', read_only: null, status: 'refused' },
   ])
 })
 
@@ -414,4 +411,127 @@ test('no OAuth token, client secret or virtual key reaches HQ tables, logs or fr
     expect(logged).not.toContain(secret)
     expect(frames).not.toContain(secret)
   }
+})
+
+test('a guest’s turn answers only tool and session methods, so resources, prompts and batches never reach the gateway on the owner’s key', async () => {
+  const host = await fakeHost('Guest methods host')
+  const { chatId, token } = await runtimeTurn(host, bob)
+  const notFound = { jsonrpc: '2.0', id: 7, error: { code: -32601, message: 'Method not found' } }
+  for (const method of ['resources/list', 'prompts/list', 'completion/complete'])
+    expect(JSON.parse((await mcpCall(host, token, rpcOf(method))).body)).toEqual(notFound)
+  expect(JSON.parse((await mcpCall(host, token, `[${whoami}]`)).body)).toEqual({ ...notFound, id: null })
+  expect(
+    (await mcpCall(host, token, JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }))).status,
+  ).toBe(202)
+  expect((await mcpCall(host, token, rpcOf('ping'))).result).toEqual({})
+
+  await promptedBy(chatId, alice)
+  expect(JSON.parse((await mcpCall(host, token, rpcOf('resources/list'))).body).error.message).toBe(
+    'resources not supported',
+  )
+})
+
+const approvalOf = async (frames: string[], count: number) => {
+  const shown = () =>
+    frames.map((frame) => JSON.parse(frame).question).filter((question) => question?.kind === 'approval')
+  await waitFor(() => shown().length >= count)
+  return shown()[count - 1]
+}
+const answerAs = async (userId: string, chatId: string, questionId: string, approve: boolean) =>
+  (
+    await approvals.app.request(`/api/chats/${chatId}/questions/${questionId}`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${await sessionTokenOf(database, acme, userId)}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ approve }),
+    })
+  ).status
+const guestTurnWithApprovals = async (name: string) => {
+  const host = await approvals.fakeHost(name)
+  const { chatId, token } = await runtimeTurn(host, bob)
+  return { host, chatId, token, frames: (await approvals.openStream(toChatId(chatId))).frames }
+}
+const approvalStepsOf = async (chatId: string, count: number) => {
+  const steps = async () =>
+    (
+      await database.$client`
+        select step from messages where chat_id = ${chatId} and step->>'kind' = 'approval' order by seq`
+    ).map(({ step }) => ({ approved: step.approved, answeredBy: step.answeredBy, closed: step.closed }))
+  await waitFor(async () => (await steps()).length >= count)
+  return steps()
+}
+const notApproved = { status: 200, text: 'Alice did not approve this call' }
+
+test('a guest’s write call waits for the owner: approved it runs, denied it gets the refusal; only the owner answers and read-only calls never wait', async () => {
+  const { host, chatId, token, frames } = await guestTurnWithApprovals('Approvals host')
+  const callsBefore = fakeMcp.records.length
+  expect(textOf((await mcpCall(host, token, lookup)).result)).toBe('ran lookup')
+
+  const approvedCall = mcpCall(host, token, update)
+  const first = await approvalOf(frames, 1)
+  expect(first).toMatchObject({
+    sessionUpdate: 'question',
+    approval: {
+      server: sharedToolServer,
+      tool: 'update',
+      arguments: '{"text":"new"}',
+      prompterName: 'Bob',
+      ownerName: 'Alice',
+    },
+  })
+  expect(await answerAs(bob, chatId, first.questionId, true)).toBe(403)
+  expect(await answerAs(alice, chatId, first.questionId, true)).toBe(200)
+  expect(textOf((await approvedCall).result)).toBe('ran update')
+  expect(await answerAs(alice, chatId, first.questionId, true)).toBe(409)
+
+  const deniedCall = mcpCall(host, token, update)
+  expect(await answerAs(alice, chatId, (await approvalOf(frames, 2)).questionId, false)).toBe(200)
+  expect(refused(await deniedCall)).toEqual(notApproved)
+
+  expect(fakeMcp.records.slice(callsBefore)).toEqual([
+    { tool: 'lookup', user: 'shared' },
+    { tool: 'update', user: 'shared' },
+  ])
+  expect(await approvalStepsOf(chatId, 2)).toEqual([
+    { approved: true, answeredBy: alice, closed: undefined },
+    { approved: false, answeredBy: alice, closed: undefined },
+  ])
+  const audited = { prompter_id: bob, owner_id: alice, server: sharedToolServer }
+  expect(await toolCallRows(chatId, 3)).toEqual([
+    { ...audited, tool: 'lookup', read_only: true, decision: 'not_needed', decided_by: null, status: 'succeeded' },
+    { ...audited, tool: 'update', read_only: false, decision: 'approved', decided_by: alice, status: 'succeeded' },
+    { ...audited, tool: 'update', read_only: false, decision: 'denied', decided_by: alice, status: 'refused' },
+  ])
+})
+
+test('an approval nobody answers expires, Stop cancels a pending one, and the owner’s own write call never asks', async () => {
+  const { host, chatId, token, frames } = await guestTurnWithApprovals('Expiring approvals host')
+  const startedAt = Date.now()
+  const expiringCall = mcpCall(host, token, update)
+  await approvalOf(frames, 1)
+  expect(refused(await expiringCall)).toEqual(notApproved)
+  expect(Date.now() - startedAt).toBeGreaterThanOrEqual(approvalWindowMilliseconds)
+
+  const stoppedCall = mcpCall(host, token, update)
+  await approvalOf(frames, 2)
+  await approvals.mutate(aliceInAcme, 'conversation.stopAgent', { workspaceId: acme, chatId })
+  expect(refused(await stoppedCall)).toEqual(notApproved)
+
+  const ownerTurn = await runtimeTurn(host, alice)
+  expect(textOf((await mcpCall(host, ownerTurn.token, update)).result)).toBe('ran update')
+  expect(await approvalStepsOf(chatId, 2)).toEqual([
+    { approved: undefined, answeredBy: undefined, closed: 'expired' },
+    { approved: undefined, answeredBy: undefined, closed: 'stopped' },
+  ])
+  const audited = { owner_id: alice, server: sharedToolServer, tool: 'update', read_only: false, decided_by: null }
+  expect(await toolCallRows(chatId, 2)).toEqual([
+    { ...audited, prompter_id: bob, decision: 'expired', status: 'refused' },
+    { ...audited, prompter_id: bob, decision: 'cancelled', status: 'refused' },
+  ])
+  expect(await toolCallRows(ownerTurn.chatId, 1)).toEqual([
+    { ...audited, prompter_id: alice, decision: 'not_needed', status: 'succeeded' },
+  ])
+  expect(frames.filter((frame) => JSON.parse(frame).question).length).toBe(2)
 })

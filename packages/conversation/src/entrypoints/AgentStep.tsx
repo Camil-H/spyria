@@ -6,7 +6,7 @@ import { Link, useOutletContext, useParams } from 'react-router'
 import type { AgentStep as Step } from '../domain/agent-steps.ts'
 import { type ConversationMessage, durationLabelOf } from '../queries/get-conversation.ts'
 import { Disclosure, ThoughtStep } from './Disclosure.tsx'
-import { AnswerQuestionContext, useConversationCommands } from './providers.tsx'
+import { AnswerQuestionContext, OwnerAnswerContext, useConversationCommands } from './providers.tsx'
 
 const QuestionCard = lazy(() => import('./QuestionCard.tsx'))
 const DelegationStep = lazy(() => import('./DelegationStep.tsx'))
@@ -172,7 +172,11 @@ export const AgentStep = ({ message }: { message: ConversationMessage }) => {
   if (step?.type === 'question')
     return (
       <Suspense>
-        <QuestionCard message={message} answerQuestion={use(AnswerQuestionContext)} />
+        <QuestionCard
+          message={message}
+          answerQuestion={use(AnswerQuestionContext)}
+          answerAsOwner={use(OwnerAnswerContext)}
+        />
       </Suspense>
     )
   if (step?.type === 'error') return <ErrorStep step={step} />

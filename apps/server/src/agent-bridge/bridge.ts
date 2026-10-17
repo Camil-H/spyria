@@ -8,6 +8,7 @@ import {
   type DelegatedFrame,
   isAuthRequiredError,
   isStoredAgentEvent,
+  type QuestionFrame,
   type SessionClassifier,
   streamedTextOf,
 } from '@hq/conversation/server'
@@ -35,6 +36,7 @@ export const createAgentBridge = ({
   sessionClassifierOf,
   now,
   resumeAfterMilliseconds,
+  approvalWindowMilliseconds,
   hqAgentImage,
   reopenDelayMilliseconds = 1000,
 }: {
@@ -43,6 +45,7 @@ export const createAgentBridge = ({
   sessionClassifierOf?: (database: Database) => SessionClassifier
   now?: () => number
   resumeAfterMilliseconds?: number
+  approvalWindowMilliseconds?: number
   hqAgentImage?: string
   reopenDelayMilliseconds?: number
 }) => {
@@ -67,6 +70,7 @@ export const createAgentBridge = ({
     const viewers = new Map<string, Map<WSContext, MemberId>>()
     const viewersOf = (chat: AgentChat) => viewers.get(keyOf(chat))?.keys() ?? []
     const delegatedTexts = new Map<string, Map<string, DelegatedFrame>>()
+    const shownQuestions = new Map<string, Map<string, QuestionFrame>>()
     const send = (viewer: WSContext, chat: AgentChat, frame: object) =>
       viewer.send(JSON.stringify({ chatId: chat.chatId, ...frame }))
     const transact: Transact = (work) => zeroDrizzle(schema, database).transaction(work)
@@ -77,8 +81,17 @@ export const createAgentBridge = ({
       classifier: sessionClassifierOf?.(database),
       now,
       resumeAfterMilliseconds,
+      approvalWindowMilliseconds,
       hqAgentImage,
       eventSockets: {
+        showQuestion: (chat, frame) => {
+          shownQuestions.set(
+            keyOf(chat),
+            (shownQuestions.get(keyOf(chat)) ?? new Map()).set(frame.question.questionId, frame),
+          )
+          for (const viewer of viewersOf(chat)) send(viewer, chat, frame)
+        },
+        hideQuestion: (chat, questionId) => shownQuestions.get(keyOf(chat))?.delete(questionId),
         ensureOpen: (...target) => ensureOpen(...target),
         streamDelegated: (chat, frame) => {
           const texts = delegatedTexts.get(keyOf(chat)) ?? new Map<string, DelegatedFrame>()
@@ -276,6 +289,7 @@ export const createAgentBridge = ({
       setPlanMode: handlers.setPlanMode,
       recordModelCallFailure: handlers.recordModelCallFailure,
       recordToolCall: handlers.recordToolCall,
+      requestToolApproval: handlers.requestToolApproval,
       resumeHost: async (host: AgentHost) => {
         await resumeActiveTurns()
         return handlers.promptWaiting(host)
@@ -299,7 +313,10 @@ export const createAgentBridge = ({
         for (const question of streaming?.questions.values() ?? [])
           send(viewer, chat, { promptId: streaming?.promptId, question, isSnapshot: true })
         if (streaming?.workspace) send(viewer, chat, { workspace: streaming.workspace, isSnapshot: true })
-        for (const frame of delegatedTexts.get(keyOf(chat))?.values() ?? [])
+        for (const frame of [
+          ...(delegatedTexts.get(keyOf(chat))?.values() ?? []),
+          ...(shownQuestions.get(keyOf(chat))?.values() ?? []),
+        ])
           send(viewer, chat, { ...frame, isSnapshot: true })
         send(viewer, chat, { subscribed: true })
       },
