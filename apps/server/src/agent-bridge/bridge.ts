@@ -266,7 +266,11 @@ export const createAgentBridge = ({
     const isReadableBy = (memberId: MemberId, chat: AgentChat) =>
       transact(async (tx) => {
         const isMember = await tx.run(
-          zql.memberships.where('workspaceId', chat.workspaceId).where('userId', memberId).one(),
+          zql.memberships
+            .where('workspaceId', chat.workspaceId)
+            .where('userId', memberId)
+            .where('removedAt', 'IS', null)
+            .one(),
         )
         return (
           isMember !== undefined &&
@@ -333,6 +337,11 @@ export const createAgentBridge = ({
       revokeUnreadable: async (chat: AgentChat) => {
         for (const [viewer, memberId] of viewers.get(keyOf(chat)) ?? [])
           if (!(await isReadableBy(memberId, chat))) viewers.get(keyOf(chat))?.delete(viewer)
+      },
+      closeMemberStreams: (workspaceId: string, memberId: string) => {
+        for (const [key, watching] of viewers)
+          if (key.startsWith(`${workspaceId}/`))
+            for (const [viewer, viewerId] of watching) if (viewerId === memberId) viewer.close(4001, 'Not signed in')
       },
       unwatch: (viewer: WSContext, chat?: AgentChat) => {
         for (const watching of chat ? [viewers.get(keyOf(chat))] : viewers.values()) watching?.delete(viewer)

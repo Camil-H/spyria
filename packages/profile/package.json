@@ -5,7 +5,8 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/client.ts",
-    "./server": "./src/server.ts"
+    "./server": "./src/server.ts",
+    "./published": "./src/published.ts"
   },
   "scripts": {
     "typecheck": "tsc -p ."

@@ -164,10 +164,10 @@ export const createMockSnapshot = (): Snapshot => {
       { id: globex, name: 'Globex', localSessions: true },
     ],
     memberships: [
-      { memberId: alice, workspaceId: acme, displayName: 'Alice', role: 'admin' },
-      { memberId: bob, workspaceId: acme, displayName: 'Bob', role: 'member' },
-      { memberId: lee, workspaceId: acme, displayName: 'Lee', role: 'member' },
-      { memberId: alice, workspaceId: globex, displayName: 'Alice', role: 'admin' },
+      { memberId: alice, workspaceId: acme, displayName: 'Alice', role: 'admin', removedAt: null },
+      { memberId: bob, workspaceId: acme, displayName: 'Bob', role: 'member', removedAt: null },
+      { memberId: lee, workspaceId: acme, displayName: 'Lee', role: 'member', removedAt: null },
+      { memberId: alice, workspaceId: globex, displayName: 'Alice', role: 'admin', removedAt: null },
     ],
     projects: [
       { id: onboarding, workspaceId: acme, name: 'Onboarding', archived: false },

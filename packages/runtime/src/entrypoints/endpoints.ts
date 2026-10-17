@@ -4,7 +4,11 @@ import type { Transaction } from '@rocicorp/zero'
 import { z } from 'zod/mini'
 import type { SandboxProvider } from '../contracts/sandbox-provider.ts'
 import { assertAdmin, type HostDeclaration, type HostSystem } from '../domain/runtime-host.ts'
-import { createTransactingZeroTransactor, createZeroTransactor } from '../integrations/zero-transactor.ts'
+import {
+  contextRoleOf,
+  createTransactingZeroTransactor,
+  createZeroTransactor,
+} from '../integrations/zero-transactor.ts'
 import { addRuntimeHost } from '../operations/add-runtime-host.ts'
 import { claimRuntimeHost } from '../operations/claim-runtime-host.ts'
 import { markHostOffline } from '../operations/mark-host-offline.ts'
@@ -16,30 +20,30 @@ import { renewClaimCode } from '../operations/renew-claim-code.ts'
 const dependenciesOf = (tx: Transaction) => ({ transactor: createZeroTransactor(tx) })
 const textOf = (value: unknown) => (typeof value === 'string' ? value : '')
 
-export const addRuntimeHostFromRequest = (tx: Transaction, context: ZeroContext, body: unknown) =>
+export const addRuntimeHostFromRequest = async (tx: Transaction, context: ZeroContext, body: unknown) =>
   addRuntimeHost(dependenciesOf(tx), {
     id: crypto.randomUUID(),
     workspaceId: context.workspaceId,
     memberId: context.userId,
-    role: context.role,
+    role: await contextRoleOf(tx, context),
     name: textOf((body as Record<string, unknown> | null)?.name),
     personal: (body as Record<string, unknown> | null)?.personal === true,
     now: Date.now(),
   })
 
 export const countMachinesFromRequest = async (tx: Transaction, context: ZeroContext) => {
-  assertAdmin(context.role)
+  assertAdmin(await contextRoleOf(tx, context))
   const machines = await createZeroTransactor(tx).run(({ runtimeHosts }) =>
     runtimeHosts.listMachines(context.workspaceId),
   )
   return { count: machines.length }
 }
 
-export const renewClaimCodeFromRequest = (tx: Transaction, context: ZeroContext, hostId: string) =>
+export const renewClaimCodeFromRequest = async (tx: Transaction, context: ZeroContext, hostId: string) =>
   renewClaimCode(dependenciesOf(tx), {
     workspaceId: context.workspaceId,
     memberId: context.userId,
-    role: context.role,
+    role: await contextRoleOf(tx, context),
     hostId: runtimeHostId(hostId),
     now: Date.now(),
   })

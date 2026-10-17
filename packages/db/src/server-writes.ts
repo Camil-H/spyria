@@ -63,7 +63,33 @@ export const setVirtualKeyId = (tx: Transaction, workspaceId: string, userId: st
       )
 
 export const lockMembership = (tx: Transaction, workspaceId: string, userId: string) =>
-  onServer(tx, 'select 1 from memberships where workspace_id = $1 and user_id = $2 for update', [workspaceId, userId])
+  onServer(tx, 'select 1 from memberships where workspace_id = $1 and user_id = $2 and removed_at is null for update', [
+    workspaceId,
+    userId,
+  ])
+
+export const lockActiveAdminIds = async (tx: Transaction, workspaceId: string) =>
+  (
+    await onServer<{ userId: string }>(
+      tx,
+      `select user_id as "userId" from memberships where workspace_id = $1 and role = 'admin' and removed_at is null
+       order by user_id for update`,
+      [workspaceId],
+    )
+  ).map((row) => row.userId)
+
+export const deleteMemberSessions = (tx: Transaction, workspaceId: string, userId: string) =>
+  onServer(tx, 'delete from sessions where workspace_id = $1 and user_id = $2', [workspaceId, userId])
+
+export const appendWorkspaceEvent = (
+  tx: Transaction,
+  event: { workspaceId: string; type: string; actorId: string; payload: object },
+) =>
+  onServer(
+    tx,
+    'insert into workspace_events (workspace_id, id, type, actor_id, payload, created_at) values ($1, $2, $3, $4, $5::jsonb, now())',
+    [event.workspaceId, crypto.randomUUID(), event.type, event.actorId, JSON.stringify(event.payload)],
+  )
 
 export const enqueueJob = (
   tx: Transaction,

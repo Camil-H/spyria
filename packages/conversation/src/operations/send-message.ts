@@ -1,7 +1,7 @@
 import { type ChatId, type MemberId, type MessageId, messageId, requireChatPermission } from '@hq/kernel'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { NoLlmKey, RunsOnNotChosen } from '../domain/errors.ts'
-import { newMessage, threadRootOf } from '../domain/message.ts'
+import { newMessage, requireNotFrozen, threadRootOf } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
 import { noLlmKeyNoticeOf } from '../domain/model-call-failures.ts'
 import { localSessionNotices, runsOnWaitingNoticeOf } from '../domain/session-routing.ts'
@@ -15,6 +15,7 @@ export const sendMessage = ({ transactor }: Dependencies, { id, chatId, authorId
     const chat = await unitOfWork.chats.get(chatId)
     const { members } = unitOfWork
     await requireChatPermission(unitOfWork.chats, chatId, authorId, 'chat.post')
+    requireNotFrozen(chat)
     const threadRoot = threadRootId ? threadRootOf(chat, chatId, await unitOfWork.messages.find(threadRootId)) : null
     if (chat.type === 'runtime' && chat.localSession === null)
       throw new RunsOnNotChosen(runsOnWaitingNoticeOf(chat.ownerId ? await members.displayNameOf(chat.ownerId) : ''))

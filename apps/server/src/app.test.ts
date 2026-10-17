@@ -34,7 +34,7 @@ test.each(['/api/query', '/api/mutate', llmCredentialsPath, runtimeHostsPath, `$
 test('refuses a token with a database claim without test hooks, without opening any database', async () => {
   const { token } = await issueSessionToken(
     testAuthSettings.tokenSecret,
-    { userId: 'member-alice', workspaceId: 'workspace-acme', role: 'admin', sessionId: 'session-1' },
+    { userId: 'member-alice', workspaceId: 'workspace-acme', sessionId: 'session-1' },
     { databaseName: 'hq_other' },
   )
   const response = await app.request('/api/query', {

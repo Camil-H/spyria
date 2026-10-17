@@ -12,6 +12,7 @@ export type MemberRepository = {
 export type LlmCredentialRepository = {
   add(credential: LlmCredential, key: GatewayKey): Promise<void>
   remove(workspaceId: WorkspaceId, memberId: MemberId, credentialId: CredentialId): Promise<GatewayKey | undefined>
+  removeAll(workspaceId: WorkspaceId, memberId: MemberId): Promise<GatewayKey[]>
   gatewayKeysOf(workspaceId: WorkspaceId, memberId: MemberId): Promise<GatewayKey[]>
 }
 
@@ -35,6 +36,7 @@ export type PersonalConnectionRepository = {
   connect(connection: PersonalConnection): Promise<void>
   disconnect(workspaceId: WorkspaceId, memberId: MemberId, tool: string): Promise<void>
   statusOf(workspaceId: WorkspaceId, memberId: MemberId, tool: string): Promise<string | undefined>
+  removeAll(workspaceId: WorkspaceId, memberId: MemberId): Promise<void>
 }
 
 export type ToolServer = { id: string; name: string; tools: string[]; isPersonal: boolean }

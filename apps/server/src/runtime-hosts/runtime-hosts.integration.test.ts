@@ -1,6 +1,7 @@
 import { afterAll, expect, test } from 'bun:test'
 import { createHash } from 'node:crypto'
 import { createZeroStore } from '@hq/db/zero-store'
+import { runtimeMutators } from '@hq/runtime/server'
 import { websocket } from 'hono/bun'
 import { createApp } from '../app.ts'
 import {
@@ -10,8 +11,10 @@ import {
   captureConsole,
   failedWith,
   globex,
+  lee,
   openSharedTestApp,
   openZeroStore,
+  removeFromAcme,
   requestMutation,
   bob,
   bobInAcme,
@@ -35,6 +38,7 @@ afterAll(() => {
 type Member = { workspaceId: string; userId: string }
 type Frame = { type: string; [field: string]: unknown }
 const aliceInGlobex = { workspaceId: globex, userId: alice }
+const leeInAcme = { workspaceId: acme, userId: lee }
 const gibibyte = 1024 ** 3
 const hostSystem = {
   cpus: 4,
@@ -424,4 +428,41 @@ test('a machine is read and removed by its owner only, and admins see only how m
   expect(await removeHost(bobInAcme, acme, id)).toEqual(succeeded)
   await host.closed
   expect(await countMachines(aliceInAcme)).toEqual({ count: 0 })
+})
+
+test('removing a member removes their machine and closes its connection', async () => {
+  await database.$client`update runtime_hosts set removed_at = now() where owner_id is not null`
+  const { id, host } = await pairedMachine(bobInAcme)
+  expect(await removeFromAcme(app, database, bob)).toEqual(succeeded)
+  await host.closed
+  expect((await hostRow(id)).removed_at).toBeInstanceOf(Date)
+})
+
+test('a member promoted to admin reads and manages workspace hosts at once without a new sign-in, and is refused at once when demoted', async () => {
+  const changeLeeRole = (role: string) =>
+    requestMutation(app, database, aliceInAcme, 'workspace.changeMemberRole', {
+      workspaceId: acme,
+      memberId: lee,
+      role,
+    })
+  const setLocalSessions = (isOn: boolean) => runtimeMutators.runtime.setLocalSessions({ workspaceId: acme, isOn })
+  const localSessionsOn = async () =>
+    (await database.$client`select local_sessions from workspaces where workspace_id = ${acme}`)[0]?.local_sessions
+  const { id } = await pairedHost('Promotion host')
+  const leesAcme = await openStore(leeInAcme)
+  expect(leesAcme.read().runtimeHosts).toEqual([])
+  expect(await changeLeeRole('admin')).toEqual(succeeded)
+  await waitFor(() => leesAcme.read().runtimeHosts.some((host) => host.id === id))
+  await (await leesAcme.mutate(acme, setLocalSessions(false))).confirmation
+  expect(await localSessionsOn()).toBe(false)
+  expect(await changeLeeRole('member')).toEqual(succeeded)
+  await waitFor(() => leesAcme.read().runtimeHosts.length === 0)
+  await expect(leesAcme.mutate(acme, setLocalSessions(true))).rejects.toThrow(
+    'Only workspace admins can manage runtime hosts',
+  )
+  expect(await removeHost(leeInAcme, acme, id)).toEqual(failedWith('Only workspace admins can manage runtime hosts'))
+  expect(await localSessionsOn()).toBe(false)
+  expect(
+    await requestMutation(app, database, aliceInAcme, 'runtime.setLocalSessions', { workspaceId: acme, isOn: true }),
+  ).toEqual(succeeded)
 })

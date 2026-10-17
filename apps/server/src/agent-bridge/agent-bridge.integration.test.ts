@@ -466,3 +466,32 @@ test.each([
     expect(textsOf(aliceViewer.frames).join('')).toBe(replyOf(1).body)
   },
 )
+
+test('removing the owner of a runtime chat closes their stream, stops the turn and the runtime, and freezes the chat until an admin transfers it', async () => {
+  await agentHost()
+  const chat = await newRuntimeChat({ ownerId: bob, participants: [{ memberId: alice, roleId: 'prompter' }] })
+  const aliceViewer = await openStream(chat)
+  const bobViewer = await openStream(chat, { token: await sessionTokenOf(database, acme, bob) })
+  await Promise.all([aliceViewer.subscribed, bobViewer.subscribed])
+  const question = await prompt(chat, 'stub:linger Stream until the owner leaves')
+  await holds.reached('linger')
+  expect(await mutate(aliceInAcme, 'workspace.removeMember', { workspaceId: acme, memberId: bob })).toEqual(succeeded)
+  await bobViewer.closed
+  await turnEnded(chat)
+  expect(await repliesTo(question)).toContainEqual({ kind: 'notice', body: 'Stopped by Alice', detail: null })
+  await waitFor(async () => (await runtimeOf(chat)).state === 'stopped')
+  await holds.release('linger')
+  expect(
+    await mutate(aliceInAcme, 'conversation.sendMessage', {
+      workspaceId: acme,
+      id: 'frozen',
+      chatId: chat,
+      text: 'Hi',
+    }),
+  ).toEqual(failedWith('This chat is frozen: its owner left the workspace'))
+  expect(
+    await mutate(aliceInAcme, 'workspace.transferChat', { workspaceId: acme, chatId: chat, ownerId: alice }),
+  ).toEqual(succeeded)
+  await answered(await prompt(chat, 'Back after the transfer'))
+  expect((await runtimeOf(chat)).state).toBe('running')
+})

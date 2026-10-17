@@ -35,7 +35,7 @@ export const createOidc = ({ issuer, clientId, redirectUri }: OidcSettings) => {
         client_id: clientId,
         redirect_uri: redirectUri,
         response_type: 'code',
-        scope: 'openid email',
+        scope: 'openid email profile',
         code_challenge: await oauth.calculatePKCECodeChallenge(login.codeVerifier),
         code_challenge_method: 'S256',
         state: login.state,
@@ -43,7 +43,7 @@ export const createOidc = ({ issuer, clientId, redirectUri }: OidcSettings) => {
       }).toString()
       return { url: url.href, login }
     },
-    verifiedEmailOf: async (callbackUrl: URL, login: LoginState) => {
+    verifiedIdentityOf: async (callbackUrl: URL, login: LoginState) => {
       const { server, keys } = await discover()
       const parameters = oauth.validateAuthResponse(server, client, callbackUrl, login.state)
       const response = await oauth.authorizationCodeGrantRequest(
@@ -66,7 +66,7 @@ export const createOidc = ({ issuer, clientId, redirectUri }: OidcSettings) => {
       })
       if (payload.nonce !== login.nonce || payload.email_verified !== true || typeof payload.email !== 'string')
         throw new Error('The ID token carries no verified email for this login')
-      return payload.email
+      return { email: payload.email, name: payload.name }
     },
   }
 }

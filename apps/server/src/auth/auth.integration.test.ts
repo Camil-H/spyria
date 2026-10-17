@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test'
 import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@hq/db/testing'
 import { exportJWK, generateKeyPair, type JWTPayload, SignJWT } from 'jose'
 import { createApp } from '../app.ts'
-import { acme, globex, testAuthSettings } from '../testing/testing.ts'
+import { acme, alice, globex, bob, testAuthSettings, workspaceEventsOf } from '../testing/testing.ts'
 import { issueSessionToken } from './session-tokens.ts'
 import { openSessions } from './sessions.ts'
 
@@ -92,7 +92,7 @@ const signInAs = (email: string, loginPath?: string) => signInWith(verifiedEmail
 const sessionsOf = async (cookie: string, server = app) =>
   (await (await server.request('/auth/sessions', { headers: { cookie } })).json()) as {
     userId?: string
-    sessions: { workspaceId: string; token: string; role: string; expiresAt: number }[]
+    sessions: { workspaceId: string; token: string; expiresAt: number }[]
   }
 
 const queryWith = (token: string) =>
@@ -127,10 +127,7 @@ test('a verified email of a member opens a session in each of their workspaces',
   expect(signIn.page).toContain(JSON.stringify(appOrigin))
   const { userId, sessions } = await sessionsOf(signIn.cookie)
   expect(userId).toBe('member-alice')
-  expect(sessions.map(({ workspaceId, role }) => ({ workspaceId, role }))).toEqual([
-    { workspaceId: acme, role: 'admin' },
-    { workspaceId: globex, role: 'admin' },
-  ])
+  expect(sessions.map(({ workspaceId }) => workspaceId)).toEqual([acme, globex])
   for (const session of sessions) expect((await queryWith(session.token)).status).toBe(200)
 })
 
@@ -335,4 +332,80 @@ test('signs in through the real Dex form', async () => {
     acme,
     globex,
   ])
+})
+
+const membershipsOf = async (email: string) => [
+  ...(await database.$client`
+    select memberships.workspace_id, role, display_name, removed_at
+    from memberships join users on users.id = memberships.user_id where users.email = ${email}
+    order by memberships.workspace_id`),
+]
+const userIdOf = async (email: string) =>
+  (await database.$client<{ id: string }[]>`select id from users where email = ${email}`).map(({ id }) => id)
+const invite = (
+  workspaceId: string,
+  email: string,
+  { role = 'member', expiresIn = '7 days', isRevoked = false } = {},
+) =>
+  database.$client`
+    insert into invitations (workspace_id, id, email, role, invited_by, created_at, expires_at, revoked_at)
+    values (${workspaceId}, ${crypto.randomUUID()}, ${email}, ${role}, ${alice}, now(), now() + ${expiresIn}::interval,
+      case when ${isRevoked} then now() end)`
+const signInNamed = (email: string, name?: string) =>
+  signInWith((nonce) => signIdToken({ nonce, email, email_verified: true, ...(name && { name }) }))
+
+test('a first verified sign-in creates the user named by the name claim and joins every workspace inviting the email, whatever its case', async () => {
+  await invite(acme, 'pat@example.com', { role: 'admin' })
+  await invite(globex, 'pat@example.com')
+  const signIn = await signInNamed('PAT@example.COM', 'Pat Doe')
+  expect(signIn.page).toContain('"status":"signed_in"')
+  const { userId, sessions } = await sessionsOf(signIn.cookie)
+  expect(await userIdOf('pat@example.com')).toEqual([String(userId)])
+  expect(sessions.map((session) => session.workspaceId)).toEqual([acme, globex])
+  expect(await membershipsOf('pat@example.com')).toEqual([
+    { workspace_id: acme, role: 'admin', display_name: 'Pat Doe', removed_at: null },
+    { workspace_id: globex, role: 'member', display_name: 'Pat Doe', removed_at: null },
+  ])
+  expect(
+    [...(await database.$client`select accepted_at from invitations where email = 'pat@example.com'`)].every(
+      (invitation) => invitation.accepted_at !== null,
+    ),
+  ).toBe(true)
+  expect(await workspaceEventsOf(database)).toEqual([
+    {
+      type: 'member.joined',
+      actorId: String(userId),
+      payload: { memberId: String(userId), role: 'admin', invitationId: expect.any(String) },
+    },
+  ])
+  expect((await signInNamed('pat@example.com', 'Pat Doe')).page).toContain('"status":"signed_in"')
+  expect(await userIdOf('pat@example.com')).toEqual([String(userId)])
+})
+
+test('an expired or revoked invite is not accepted and creates no user; without a name claim the email names the member', async () => {
+  await invite(acme, 'quinn@example.com', { expiresIn: '-1 second' })
+  await invite(globex, 'quinn@example.com', { isRevoked: true })
+  const refused = await signInNamed('quinn@example.com', 'Quinn')
+  expect(refused.status).toBe(403)
+  expect(refused.page).toContain('"status":"not_invited","email":"quinn@example.com"')
+  expect(await userIdOf('quinn@example.com')).toEqual([])
+  await invite(acme, 'rae.lee@example.com')
+  expect((await signInNamed('Rae.Lee@example.com')).page).toContain('"status":"signed_in"')
+  expect(await membershipsOf('rae.lee@example.com')).toEqual([
+    { workspace_id: acme, role: 'member', display_name: 'rae.lee', removed_at: null },
+  ])
+})
+
+test('a removed member signs in to nothing, and a new invite reactivates the same membership with its role and name', async () => {
+  await database.$client`update memberships set removed_at = now() where workspace_id = ${acme} and user_id = ${bob}`
+  const refused = await signInAs('bob@example.com')
+  expect(refused.page).toContain('"status":"not_invited"')
+  expect(refused.cookie).not.toContain('hq_s_')
+  await invite(acme, 'bob@example.com', { role: 'admin' })
+  expect((await signInNamed('bob@example.com', 'Samuel')).page).toContain('"status":"signed_in"')
+  expect(await userIdOf('bob@example.com')).toEqual([bob])
+  expect(await membershipsOf('bob@example.com')).toEqual([
+    { workspace_id: acme, role: 'admin', display_name: 'Bob', removed_at: null },
+  ])
+  expect((await workspaceEventsOf(database)).at(-1)).toMatchObject({ type: 'member.joined', actorId: bob })
 })

@@ -12,7 +12,6 @@ import { type Schema, schema } from './zero.ts'
 export type ZeroContext = {
   userId: MemberId
   workspaceId: WorkspaceId
-  role: 'admin' | 'member'
   hqAgentImage?: string
 }
 
@@ -43,6 +42,22 @@ const readableBy = (userId: MemberId) => (chat: Query<'chats', Schema>) =>
     ),
   )
 
+const activeAdmin = (userId: MemberId) => (membership: Query<'memberships', Schema>) =>
+  membership.where('userId', userId).where('role', 'admin').where('removedAt', 'IS', null)
+
+export const activeMemberRoleOf = async (tx: Transaction, workspaceId: WorkspaceId, userId: MemberId) =>
+  (
+    await tx.run(
+      zql.memberships.where('workspaceId', workspaceId).where('userId', userId).where('removedAt', 'IS', null).one(),
+    )
+  )?.role
+
+export const isOwnerRemoved = async (tx: Transaction, workspaceId: WorkspaceId, ownerId: string | null) =>
+  ownerId !== null &&
+  (await tx.run(
+    zql.memberships.where('workspaceId', workspaceId).where('userId', ownerId).where('removedAt', 'IS NOT', null).one(),
+  )) !== undefined
+
 export const chatPermissionsOf = (tx: Transaction, workspaceId: WorkspaceId) => ({
   permissions: async (chatId: ChatId, memberId: MemberId) => {
     const chat = await tx.run(
@@ -58,14 +73,24 @@ export const chatPermissionsOf = (tx: Transaction, workspaceId: WorkspaceId) => 
 
 export const queries = defineQueries({
   users: defineQuery(({ ctx }) =>
-    zql.users.whereExists('memberships', (membership) => membership.where('workspaceId', ctx.workspaceId)),
+    zql.users.whereExists('memberships', (membership) =>
+      membership.where('workspaceId', ctx.workspaceId).where('removedAt', 'IS', null),
+    ),
   ),
   workspaces: defineQuery(({ ctx }) =>
     zql.workspaces
-      .whereExists('memberships', (membership) => membership.where('userId', ctx.userId))
+      .whereExists('memberships', (membership) => membership.where('userId', ctx.userId).where('removedAt', 'IS', null))
       .orderBy('createdAt', 'asc'),
   ),
   memberships: defineQuery(({ ctx }) => zql.memberships.where('workspaceId', ctx.workspaceId)),
+  invitations: defineQuery(({ ctx }) =>
+    zql.invitations
+      .where('workspaceId', ctx.workspaceId)
+      .where('revokedAt', 'IS', null)
+      .where('acceptedAt', 'IS', null)
+      .whereExists('memberships', activeAdmin(ctx.userId))
+      .orderBy('createdAt', 'asc'),
+  ),
   serviceIdentities: defineQuery(({ ctx }) => zql.serviceIdentities.where('workspaceId', ctx.workspaceId)),
   projects: defineQuery(({ ctx }) => zql.projects.where('workspaceId', ctx.workspaceId).orderBy('createdAt', 'asc')),
   chats: defineQuery(({ ctx }) =>
@@ -139,8 +164,8 @@ export const queries = defineQueries({
   runtimeHosts: defineQuery(({ ctx }) =>
     zql.runtimeHosts
       .where('workspaceId', ctx.workspaceId)
-      .where(({ or, and, cmp, cmpLit }) =>
-        or(cmp('ownerId', ctx.userId), and(cmpLit(ctx.role, '=', 'admin'), cmp('ownerId', 'IS', null))),
+      .where(({ or, and, cmp, exists }) =>
+        or(cmp('ownerId', ctx.userId), and(cmp('ownerId', 'IS', null), exists('memberships', activeAdmin(ctx.userId)))),
       )
       .where('removedAt', 'IS', null)
       .orderBy('createdAt', 'asc'),

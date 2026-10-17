@@ -31,7 +31,12 @@ export const getMembers = (workspaceId: WorkspaceId, chatId: ChatId, viewerId: M
       ? assignableRoles.filter((role) => canGrant(permissions, role))
       : [],
     invitees: snapshot.memberships
-      .filter((membership) => membership.workspaceId === workspaceId && !participantIds.has(membership.memberId))
+      .filter(
+        (membership) =>
+          membership.workspaceId === workspaceId &&
+          membership.removedAt === null &&
+          !participantIds.has(membership.memberId),
+      )
       .map(({ memberId }) => ({ memberId, name: memberName(memberId) })),
   }
 }

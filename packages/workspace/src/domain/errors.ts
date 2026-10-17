@@ -37,3 +37,39 @@ export const RuntimeChatPrivate = errorKind(
   () => 'A runtime chat is always private',
   WorkspaceError,
 )
+export const NotWorkspaceAdmin = errorKind(
+  'not_admin',
+  () => 'Only a workspace admin can manage members',
+  WorkspaceError,
+)
+export const InvalidEmail = errorKind('invalid_email', (email: string) => `${email} is not an email`, WorkspaceError)
+export const AlreadyMember = errorKind(
+  'already_member',
+  (email: string) => `${email} is already a member of this workspace`,
+  WorkspaceError,
+)
+export const InviteAlreadyPending = errorKind(
+  'invite_already_pending',
+  (email: string) => `${email} already has a pending invite`,
+  WorkspaceError,
+)
+export const InviteNotFound = errorKind(
+  'invite_not_found',
+  (invitationId: string) => `Invite ${invitationId} is not pending`,
+  WorkspaceError,
+)
+export const MemberNotFound = errorKind(
+  'member_not_found',
+  (memberId: string) => `${memberId} is not a member of this workspace`,
+  WorkspaceError,
+)
+export const LastAdmin = errorKind(
+  'last_admin',
+  () => 'The last admin of a workspace can be neither demoted nor removed',
+  WorkspaceError,
+)
+export const ChatNotFrozen = errorKind(
+  'chat_not_frozen',
+  () => 'Only a chat whose owner left the workspace can be transferred',
+  WorkspaceError,
+)

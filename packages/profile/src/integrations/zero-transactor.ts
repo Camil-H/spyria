@@ -46,6 +46,16 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
         await tx.mutate.llmCredentials.delete({ workspaceId, id })
         return storedRef ? gatewayKeyOf(storedRef) : undefined
       },
+      removeAll: async (workspaceId, memberId) => {
+        const refs = await gatewayKeyRefsOf(tx, workspaceId, memberId)
+        for (const row of await tx.run(
+          zql.llmCredentials
+            .where('workspaceId', asContextMember(workspaceId, memberId).workspaceId)
+            .where('userId', memberId),
+        ))
+          await tx.mutate.llmCredentials.delete({ workspaceId, id: row.id })
+        return refs.flatMap((ref) => gatewayKeyOf(ref) ?? [])
+      },
       gatewayKeysOf: async (workspaceId, memberId) => {
         asContextMember(workspaceId, memberId)
         return (await gatewayKeyRefsOf(tx, workspaceId, memberId)).flatMap((ref) => gatewayKeyOf(ref) ?? [])
@@ -81,6 +91,17 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
       },
       disconnect: (workspaceId, memberId, tool) =>
         tx.mutate.toolConnections.delete({ ...asContextMember(workspaceId, memberId), tool }),
+      removeAll: async (workspaceId, memberId) => {
+        const owner = asContextMember(workspaceId, memberId)
+        for (const { tool } of await tx.run(
+          zql.toolConnections.where('workspaceId', workspaceId).where('userId', memberId),
+        ))
+          await tx.mutate.toolConnections.delete({ ...owner, tool })
+        for (const { tool } of await tx.run(
+          zql.workspaceConnections.where('workspaceId', workspaceId).where('userId', memberId),
+        ))
+          await tx.mutate.workspaceConnections.delete({ ...owner, tool })
+      },
       statusOf: async (workspaceId, memberId, tool) =>
         (
           await tx.run(
@@ -99,7 +120,6 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
 export const memberContext = (workspace: WorkspaceId, member: MemberId): ZeroContext => ({
   workspaceId: workspace,
   userId: member,
-  role: 'member',
 })
 
 export const createTransactingZeroTransactor = (transact: Transact, context: ZeroContext): ProfileTransactor => ({

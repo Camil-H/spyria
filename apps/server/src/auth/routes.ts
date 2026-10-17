@@ -4,7 +4,7 @@ import { deleteCookie, getCookie, getSignedCookie, setCookie, setSignedCookie } 
 import { HTTPException } from 'hono/http-exception'
 import type { Oidc } from './oidc.ts'
 import { type Authentication, errorByStatus, issueSessionToken, type SessionClaims } from './session-tokens.ts'
-import { deleteSession, findLiveSessions, openSessions } from './sessions.ts'
+import { deleteSession, findLiveSessions, openSessions, signInUser } from './sessions.ts'
 
 type AuthRouteSettings = {
   oidc: Oidc
@@ -98,13 +98,13 @@ export const createAuthRoutes = ({
       const signedLogin = await getSignedCookie(context, tokenSecret, loginCookie)
       deleteCookie(context, loginCookie, { path: '/auth/callback' })
       const { workspaceId, ...login } = signedLogin ? JSON.parse(signedLogin) : { workspaceId: undefined }
-      const email = signedLogin
-        ? await oidc.verifiedEmailOf(new URL(context.req.url), login).catch(() => undefined)
+      const identity = signedLogin
+        ? await oidc.verifiedIdentityOf(new URL(context.req.url), login).catch(() => undefined)
         : undefined
-      if (email === undefined) return popup(context, { status: 'failed' }, 400)
+      if (identity === undefined) return popup(context, { status: 'failed' }, 400)
       const scope = scopeOf(context)
-      const user = await scope.database.query.users.findFirst({ where: { email } })
-      return completeSignIn(context, scope, { userId: user?.id, email, workspaceId })
+      const { userId, email } = await signInUser(scope.database, identity)
+      return completeSignIn(context, scope, { userId, email, workspaceId })
     })
     .get('/sessions', async (context) => {
       const scope = scopeOf(context)

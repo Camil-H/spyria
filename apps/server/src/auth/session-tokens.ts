@@ -2,11 +2,11 @@ import type { ZeroContext } from '@hq/db/zero-queries'
 import { memberId, workspaceId } from '@hq/kernel'
 import { jwtVerify, SignJWT } from 'jose'
 
-export type SessionClaims = { workspaceId: string; userId: string; role: ZeroContext['role']; sessionId: string }
+export type SessionClaims = { workspaceId: string; userId: string; sessionId: string }
 export type FindMember = (
-  claims: Omit<SessionClaims, 'role'>,
+  claims: SessionClaims,
   databaseName: string | undefined,
-) => Promise<{ role: ZeroContext['role']; hasLiveSession: boolean } | undefined>
+) => Promise<{ hasLiveSession: boolean } | undefined>
 export type Authentication = { status: 200; context: ZeroContext; databaseName?: string } | { status: 401 | 403 }
 
 export const errorByStatus = { 401: 'unauthorized', 403: 'forbidden' } as const
@@ -18,7 +18,7 @@ const keyOf = (secret: string) => new TextEncoder().encode(secret)
 
 export const issueSessionToken = async (
   secret: string,
-  { workspaceId, userId, role, sessionId }: SessionClaims,
+  { workspaceId, userId, sessionId }: SessionClaims,
   { databaseName, lifetimeSeconds = defaultLifetimeSeconds }: { databaseName?: string; lifetimeSeconds?: number } = {},
 ) => {
   const expiresAt = Date.now() + lifetimeSeconds * 1000
@@ -28,7 +28,7 @@ export const issueSessionToken = async (
     .setIssuedAt()
     .setExpirationTime(Math.floor(expiresAt / 1000))
     .sign(keyOf(secret))
-  return { workspaceId, role, token, expiresAt }
+  return { workspaceId, token, expiresAt }
 }
 
 export const createSessionAuthenticator =
@@ -50,5 +50,5 @@ export const createSessionAuthenticator =
     const member = await findMember({ ...context, sessionId: claims.sid }, databaseName)
     if (member === undefined) return { status: 403 }
     if (!member.hasLiveSession) return { status: 401 }
-    return { status: 200, context: { ...context, role: member.role }, databaseName }
+    return { status: 200, context, databaseName }
   }

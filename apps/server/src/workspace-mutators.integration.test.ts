@@ -141,7 +141,7 @@ test('createWorkspace creates the workspace, the caller admin membership with th
     createdBy: bob,
   })
   expect(await database.query.memberships.findMany({ where: { workspaceId: 'workspace-new' } })).toEqual([
-    { workspaceId: 'workspace-new', userId: bob, role: 'admin', displayName: 'Bob' },
+    { workspaceId: 'workspace-new', userId: bob, role: 'admin', displayName: 'Bob', removedAt: null },
   ])
   expect(
     (await database.query.chatRoles.findMany({ where: { workspaceId: 'workspace-new' }, orderBy: { id: 'asc' } })).map(

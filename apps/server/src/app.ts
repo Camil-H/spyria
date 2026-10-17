@@ -195,6 +195,13 @@ export const createApp = ({
             if ('error' in response.result) return response
             if (mutation.name === 'runtime.removeHost')
               runtimeHosts.disconnect(ctx.workspaceId, (mutation.args[0] as { hostId: RuntimeHostId }).hostId)
+            if (mutation.name === 'workspace.removeMember') {
+              const { memberId } = mutation.args[0] as { memberId: string }
+              agentBridge.forDatabase(context.get('database')).closeMemberStreams(ctx.workspaceId, memberId)
+              for (const { id } of await context.get('database').$client<{ id: RuntimeHostId }[]>`
+                select id from runtime_hosts where workspace_id = ${ctx.workspaceId} and owner_id = ${memberId}`)
+                runtimeHosts.disconnect(ctx.workspaceId, id)
+            }
             if (readRevokingMutations.has(mutation.name))
               await agentBridge.forDatabase(context.get('database')).revokeUnreadable({
                 workspaceId: ctx.workspaceId,

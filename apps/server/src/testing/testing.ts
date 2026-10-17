@@ -23,6 +23,7 @@ import {
   workspaceId,
 } from '@hq/kernel'
 import { createLlmGateway } from '@hq/profile/server'
+import { runtimeMutators } from '@hq/runtime/server'
 import { workspaceMutators } from '@hq/workspace/server'
 import { Hono } from 'hono'
 import { websocket } from 'hono/bun'
@@ -55,6 +56,28 @@ export const aliceInAcme = { workspaceId: acme, userId: alice }
 export const bobInAcme = { workspaceId: acme, userId: bob }
 export const succeeded = {}
 export const failedWith = (message: string) => expect.objectContaining({ error: 'app', message })
+
+export const inviteToAcme = (
+  app: Parameters<typeof requestMutation>[0],
+  database: Database,
+  email: string,
+  role: 'admin' | 'member' = 'member',
+) =>
+  requestMutation(app, database, aliceInAcme, 'workspace.inviteMember', {
+    workspaceId: acme,
+    id: crypto.randomUUID(),
+    email,
+    role,
+  })
+
+export const removeFromAcme = (app: Parameters<typeof requestMutation>[0], database: Database, memberId: string) =>
+  requestMutation(app, database, aliceInAcme, 'workspace.removeMember', { workspaceId: acme, memberId })
+
+export const workspaceEventsOf = async (database: Database, workspaceId: string = acme) => [
+  ...(await database.$client<{ type: string; actorId: string; payload: Record<string, unknown> }[]>`
+    select type, actor_id as "actorId", payload from workspace_events where workspace_id = ${workspaceId}
+    order by created_at`),
+]
 
 export const issueTestSession = async (
   database: Database,
@@ -261,7 +284,7 @@ export const zeroSessionsOf = async (viewerId: string, workspaceIds: readonly st
       }),
   )
 
-const zeroStoreMutators = { ...workspaceMutators, ...conversationMutators }
+const zeroStoreMutators = { ...workspaceMutators, ...conversationMutators, ...runtimeMutators }
 export const openZeroStore = async <Store extends { whenLoaded: (workspace: WorkspaceId) => Promise<unknown> }>(
   createStore: (options: {
     memberId: MemberId

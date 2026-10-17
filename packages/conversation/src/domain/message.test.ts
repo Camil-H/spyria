@@ -1,7 +1,14 @@
 import { expect, test } from 'bun:test'
 import { chatId, memberId, messageId, workspaceId } from '@hq/kernel'
-import { InvalidThreadRoot, MessageDeleted, NoThreadsInRuntimeChat, NotMessageAuthor } from './errors.ts'
-import { type ConversationChat, deletedMessage, editedMessage, type Message, threadRootOf } from './message.ts'
+import { ChatFrozen, InvalidThreadRoot, MessageDeleted, NoThreadsInRuntimeChat, NotMessageAuthor } from './errors.ts'
+import {
+  type ConversationChat,
+  deletedMessage,
+  editedMessage,
+  type Message,
+  requireNotFrozen,
+  threadRootOf,
+} from './message.ts'
 import { MessageBody } from './message-body.ts'
 
 const alice = memberId('alice')
@@ -47,6 +54,7 @@ const channel: ConversationChat = {
   harness: null,
   ownerId: alice,
   localSession: null,
+  isFrozen: false,
 }
 
 test('threadRootOf accepts a top-level message of the same channel that is not deleted', () => {
@@ -66,4 +74,9 @@ test('threadRootOf refuses any root in a runtime chat', () => {
   expect(() => threadRootOf({ ...channel, type: 'runtime' }, chatId('chat'), messageByAlice)).toThrow(
     NoThreadsInRuntimeChat,
   )
+})
+
+test('requireNotFrozen refuses a frozen chat and allows any other', () => {
+  expect(() => requireNotFrozen({ ...channel, isFrozen: true })).toThrow(ChatFrozen)
+  expect(() => requireNotFrozen(channel)).not.toThrow()
 })

@@ -1,6 +1,6 @@
 import type { ChatId, ChatVisibility, MemberId, MessageId, WorkspaceId } from '@hq/kernel'
 import type { StoredStep } from './agent-steps.ts'
-import { InvalidThreadRoot, MessageDeleted, NoThreadsInRuntimeChat, NotMessageAuthor } from './errors.ts'
+import { ChatFrozen, InvalidThreadRoot, MessageDeleted, NoThreadsInRuntimeChat, NotMessageAuthor } from './errors.ts'
 import type { MessageBody } from './message-body.ts'
 import type { Harness } from './session-routing.ts'
 
@@ -34,7 +34,12 @@ export type ConversationChat = Readonly<{
   harness: Harness | null
   ownerId: MemberId | null
   localSession: boolean | null
+  isFrozen: boolean
 }>
+
+export const requireNotFrozen = (chat: Pick<ConversationChat, 'isFrozen'>) => {
+  if (chat.isFrozen) throw new ChatFrozen()
+}
 
 const assertChangeable = (message: Message, memberId: MemberId) => {
   if (message.authorId !== memberId) throw new NotMessageAuthor()

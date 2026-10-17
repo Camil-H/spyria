@@ -2,11 +2,11 @@ import { DomainError, type MemberId, type WorkspaceId } from '@hq/kernel'
 import { type AnyMutatorRegistry, type MutatorResultDetails, type Row, Zero } from '@rocicorp/zero'
 import type { DraftRow, Snapshot } from './schema.ts'
 import { type Schema, schema } from './zero.ts'
-import { queries, type ZeroContext } from './zero-queries.ts'
+import { queries } from './zero-queries.ts'
 
 type TableName = keyof Schema['tables']
 type ZeroRows = { [Table in TableName]: readonly Row<Schema['tables'][Table]>[] }
-export type WorkspaceSession = { workspaceId: WorkspaceId; token: string; role: ZeroContext['role']; expiresAt: number }
+export type WorkspaceSession = { workspaceId: WorkspaceId; token: string; expiresAt: number }
 type ZeroStoreOptions = {
   memberId: MemberId
   sessions: readonly WorkspaceSession[]
@@ -26,7 +26,7 @@ type Unbranded<Value> = Value extends string
       ? { [Key in keyof Value]: Unbranded<Value[Key]> }
       : Value
 
-const unmaterializedQueries = ['~', 'users', 'serviceIdentities'] as const
+const unmaterializedQueries = ['~', 'users', 'serviceIdentities', 'invitations'] as const
 const materializedTables = Object.keys(queries).filter(
   (table) => !unmaterializedQueries.includes(table as never),
 ) as Exclude<keyof typeof queries, (typeof unmaterializedQueries)[number]>[]
@@ -65,11 +65,23 @@ const snapshotFromZeroRows = (
     })),
     memberships: uniqueBy(
       [
-        ...workspaces.map(({ workspaceId }) => ({ workspaceId, userId: viewerId, displayName: '', role: 'member' })),
+        ...workspaces.map(({ workspaceId }) => ({
+          workspaceId,
+          userId: viewerId,
+          displayName: '',
+          role: 'member',
+          removedAt: null,
+        })),
         ...memberships,
       ],
       (membership) => `${membership.workspaceId}/${membership.userId}`,
-    ).map(({ workspaceId, userId, displayName, role }) => ({ workspaceId, memberId: userId, displayName, role })),
+    ).map(({ workspaceId, userId, displayName, role, removedAt }) => ({
+      workspaceId,
+      memberId: userId,
+      displayName,
+      role,
+      removedAt: isoOrNull(removedAt ?? null),
+    })),
     projects: rowsOf('projects').map(withoutCreatedAt),
     chats: rowsOf('chats').map(({ ownerKind, ownerUserId, ownerServiceIdentityId, mode, createdAt, ...chat }) => ({
       ...chat,
@@ -196,13 +208,13 @@ export const createZeroStore = ({
     await zero.connection.connect({ auth: renewed.token })
   }
   const connect = (session: WorkspaceSession) => {
-    const { workspaceId, token, role } = session
+    const { workspaceId, token } = session
     const zero = new Zero({
       cacheURL,
       schema,
       userID: memberId,
       auth: token,
-      context: { userId: memberId, workspaceId, role },
+      context: { userId: memberId, workspaceId },
       storageKey: `${storageKeyPrefix}${workspaceId}`,
       kvStore,
       mutators,

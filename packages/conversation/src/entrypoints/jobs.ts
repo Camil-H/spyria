@@ -12,11 +12,13 @@ import type {
 import { type AgentEvent, agentJobTypes, isStoredAgentEvent, type TurnOutcome } from '../domain/agent-events.ts'
 import { type AgentLlm, createHqAgentClient } from '../integrations/hq-agent-client.ts'
 import { createRuntimeAgentRuntimes, type SandboxProvider } from '../integrations/runtime-agent-runtimes.ts'
+import { workspaceJobTypes } from '../integrations/workspace-jobs.ts'
 import { createTransactingZeroTransactor } from '../integrations/zero-transactor.ts'
 import { closeReopenedTurn, reopenAgentTurn, sweepAgentTurns } from '../operations/agent-turn-safety.ts'
 import { authorizeToolCall } from '../operations/authorize-tool-call.ts'
 import { awaitTask, delegateTask } from '../operations/delegate-task.ts'
 import { forwardToAgent } from '../operations/forward-to-agent.ts'
+import { interruptOwnedTurns } from '../operations/interrupt-owned-turns.ts'
 import {
   findModelCallTurn,
   findToolCallTurn,
@@ -38,6 +40,10 @@ const interruptPayload = z.object({
   chatId: z.pipe(id, z.transform(chatId)),
   promptId: z.pipe(id, z.transform(messageId)),
   memberId: z.pipe(id, z.transform(memberId)),
+})
+const memberRemovedPayload = z.object({
+  memberId: z.pipe(id, z.transform(memberId)),
+  actorId: z.pipe(id, z.transform(memberId)),
 })
 
 export const createAgentHandlers = ({
@@ -88,6 +94,8 @@ export const createAgentHandlers = ({
         interruptAgent(dependenciesOf(workspaceId), { workspaceId, ...interruptPayload.parse(payload) }),
       [agentJobTypes.sweep]: ({ workspaceId }: AgentJob) =>
         sweepAgentTurns(dependenciesOf(workspaceId), { workspaceId, now: now() }),
+      [workspaceJobTypes.memberRemoved]: ({ workspaceId, payload }: AgentJob) =>
+        interruptOwnedTurns(dependenciesOf(workspaceId), { workspaceId, ...memberRemovedPayload.parse(payload) }),
     },
     openEvents: async (chat: AgentChat, conversation: AgentConversation, listener: AgentEventListener) =>
       agentClient.openEvents(

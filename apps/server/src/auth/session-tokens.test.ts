@@ -6,17 +6,16 @@ const secret = 'unit-test-secret'
 const aliceInAcme: SessionClaims = {
   userId: 'member-alice',
   workspaceId: 'workspace-acme',
-  role: 'admin',
   sessionId: 'session-1',
 }
 const revokedSessionIds = new Set(['session-revoked'])
 const authenticate = createSessionAuthenticator(secret, async ({ workspaceId, userId, sessionId }) =>
   workspaceId === aliceInAcme.workspaceId && userId === aliceInAcme.userId
-    ? { role: 'admin', hasLiveSession: !revokedSessionIds.has(sessionId) }
+    ? { hasLiveSession: !revokedSessionIds.has(sessionId) }
     : undefined,
 )
 const nowInSeconds = () => Math.floor(Date.now() / 1000)
-const claimsOf = (workspace: string) => ({ workspaceId: workspace, role: 'admin', sid: 'session-1' })
+const claimsOf = (workspace: string) => ({ workspaceId: workspace, sid: 'session-1' })
 const signed = (workspace: string, expiresAt: number, signingSecret = secret) =>
   new SignJWT(claimsOf(workspace))
     .setProtectedHeader({ alg: 'HS256' })
@@ -29,13 +28,13 @@ const issued = async (claims: SessionClaims) => (await issueSessionToken(secret,
 test('accepts an issued token and builds the context from the membership', async () => {
   expect(await authenticate(bearer(await issued(aliceInAcme)))).toMatchObject({
     status: 200,
-    context: { userId: aliceInAcme.userId, workspaceId: aliceInAcme.workspaceId, role: 'admin' },
+    context: { userId: aliceInAcme.userId, workspaceId: aliceInAcme.workspaceId },
   })
 })
 
 test('issues a token with its expiry for the client', async () => {
   const session = await issueSessionToken(secret, aliceInAcme, { lifetimeSeconds: 60 })
-  expect(session).toMatchObject({ workspaceId: aliceInAcme.workspaceId, role: 'admin' })
+  expect(session).toMatchObject({ workspaceId: aliceInAcme.workspaceId })
   expect(session.expiresAt).toBeGreaterThan(Date.now() + 55_000)
   expect(session.expiresAt).toBeLessThanOrEqual(Date.now() + 60_000)
 })

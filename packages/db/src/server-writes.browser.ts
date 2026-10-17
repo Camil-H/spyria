@@ -9,6 +9,9 @@ export const setModelDirectory = skippedOnClient
 export const listedModelsOf = () => []
 export const setVirtualKeyId = skippedOnClient
 export const lockMembership = skippedOnClient
+export const lockActiveAdminIds = async () => []
+export const deleteMemberSessions = skippedOnClient
+export const appendWorkspaceEvent = skippedOnClient
 export const enqueueJob = skippedOnClient
 export const setRuntimeHostSecretHash = skippedOnClient
 export const lockRuntimeHost = skippedOnClient

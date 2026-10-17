@@ -26,10 +26,16 @@ const chatScoped = { ...tenant, chatId: text().notNull() }
 const tenantReference = (columns: [PgColumn, PgColumn], foreignColumns: [PgColumn, PgColumn]) =>
   foreignKey({ columns, foreignColumns })
 
-export const users = table('users', {
-  id: text().primaryKey(),
-  email: text().notNull().unique(),
-})
+const normalizedEmail = (name: string, email: PgColumn) => check(name, sql`${email} = lower(btrim(${email}))`)
+
+export const users = table(
+  'users',
+  {
+    id: text().primaryKey(),
+    email: text().notNull().unique(),
+  },
+  (table) => [normalizedEmail('users_email_normalized', table.email)],
+)
 
 export const workspaces = table('workspaces', {
   workspaceId: text().primaryKey(),
@@ -52,12 +58,54 @@ export const memberships = table(
       .references(() => users.id),
     role: text().$type<'admin' | 'member'>().notNull(),
     displayName: text().notNull(),
+    removedAt: instant(),
   },
   (table) => [primaryKey({ columns: [table.workspaceId, table.userId] })],
 )
 
 const memberReference = (table: { workspaceId: PgColumn }, userColumn: PgColumn) =>
   tenantReference([table.workspaceId, userColumn], [memberships.workspaceId, memberships.userId])
+
+export const invitations = table(
+  'invitations',
+  {
+    workspaceId: text()
+      .notNull()
+      .references(() => workspaces.workspaceId),
+    id: text().notNull(),
+    email: text().notNull(),
+    role: text().$type<'admin' | 'member'>().notNull(),
+    invitedBy: text().notNull(),
+    createdAt: instant().notNull(),
+    expiresAt: instant().notNull(),
+    revokedAt: instant(),
+    acceptedAt: instant(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.id] }),
+    memberReference(table, table.invitedBy),
+    normalizedEmail('invitations_email_normalized', table.email),
+    uniqueIndex('invitations_one_pending_per_email')
+      .on(table.workspaceId, table.email)
+      .where(sql`${table.revokedAt} is null and ${table.acceptedAt} is null`),
+    index().on(table.email),
+  ],
+)
+
+export const workspaceEvents = table(
+  'workspace_events',
+  {
+    workspaceId: text()
+      .notNull()
+      .references(() => workspaces.workspaceId),
+    id: text().notNull(),
+    type: text().notNull(),
+    actorId: text(),
+    payload: jsonb().notNull(),
+    createdAt: instant().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.workspaceId, table.id] })],
+)
 
 export const identities = table(
   'identities',
@@ -566,6 +614,7 @@ export const relations = defineRelations(
     users,
     workspaces,
     memberships,
+    invitations,
     projects,
     chats,
     chatRoles,
@@ -584,6 +633,7 @@ export const relations = defineRelations(
     browserPages,
     sources,
     usageEntries,
+    runtimeHosts,
     runtimes,
   },
   (r) => {
@@ -595,6 +645,12 @@ export const relations = defineRelations(
       },
       workspaces: {
         memberships: r.many.memberships({ from: r.workspaces.workspaceId, to: r.memberships.workspaceId }),
+      },
+      invitations: {
+        memberships: r.many.memberships({ from: r.invitations.workspaceId, to: r.memberships.workspaceId }),
+      },
+      runtimeHosts: {
+        memberships: r.many.memberships({ from: r.runtimeHosts.workspaceId, to: r.memberships.workspaceId }),
       },
       workspaceConnections: {
         ownedChats: r.many.chats({

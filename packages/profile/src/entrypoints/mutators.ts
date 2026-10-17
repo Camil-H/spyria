@@ -1,11 +1,12 @@
 import type { ZeroContext } from '@hq/db/zero-queries'
-import { credentialId } from '@hq/kernel'
+import { credentialId, type MemberId, type WorkspaceId } from '@hq/kernel'
 import { defineMutator, defineMutators, type Transaction } from '@rocicorp/zero'
 import { z } from 'zod/mini'
 import { DisplayName } from '../domain/display-name.ts'
 import { NotOwnProfile } from '../domain/errors.ts'
-import { createZeroTransactor } from '../integrations/zero-transactor.ts'
+import { createZeroTransactor, memberContext } from '../integrations/zero-transactor.ts'
 import { removeLlmCredential } from '../operations/remove-llm-credential.ts'
+import { removeMemberProfile } from '../operations/remove-member-profile.ts'
 import { renameMember } from '../operations/rename-member.ts'
 
 const workspaceArguments = z.object({ workspaceId: z.string().check(z.minLength(1)) })
@@ -31,3 +32,11 @@ export const profileMutators = defineMutators({
     ),
   },
 })
+
+export const removeMemberProfileOnServer = async (tx: Transaction, workspaceId: WorkspaceId, memberId: MemberId) => {
+  if (tx.location === 'server')
+    await removeMemberProfile(
+      { transactor: createZeroTransactor(tx, memberContext(workspaceId, memberId)) },
+      { workspaceId, memberId },
+    )
+}

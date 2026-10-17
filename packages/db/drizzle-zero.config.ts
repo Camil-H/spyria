@@ -6,6 +6,7 @@ export default drizzleZeroConfig(tables, {
     users: true,
     workspaces: true,
     memberships: true,
+    invitations: true,
     serviceIdentities: true,
     projects: true,
     chats: {

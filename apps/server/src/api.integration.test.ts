@@ -256,7 +256,6 @@ test.each(['/api/query', '/api/mutate', llmCredentialsPath])(
     const { token } = await issueSessionToken(testAuthSettings.tokenSecret, {
       userId: bob,
       workspaceId: globex,
-      role: 'member',
       sessionId: 'no-session',
     })
     const credentialCount = await testDatabase.database.$count(llmCredentials)
@@ -283,7 +282,7 @@ test('with test hooks, the database claim of a token selects the database the se
   expect(await openSessions(testDatabase.database, 'member-dana', acme)).toHaveLength(0)
   const [danaSession] = await openSessions(otherDatabase.database, 'member-dana', acme)
   if (!danaSession) throw new Error('Dana has no session')
-  expect(danaSession.role).toBe('member')
+  expect(danaSession.userId).toBe('member-dana')
   const issued = await issueSessionToken(testAuthSettings.tokenSecret, danaSession, {
     databaseName: otherDatabase.name,
   })

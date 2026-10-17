@@ -23,7 +23,7 @@ import {
   stopRunningDelegations,
 } from '@hq/db/server-writes'
 import type { Message as MessageRow } from '@hq/db/zero'
-import { chatPermissionsOf, skippingRefusedRebase, type Transact, zql } from '@hq/db/zero-queries'
+import { chatPermissionsOf, isOwnerRemoved, skippingRefusedRebase, type Transact, zql } from '@hq/db/zero-queries'
 import {
   type ChatId,
   type ChatPermission,
@@ -226,8 +226,13 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         (await tx.run(zql.llmCredentials.where('workspaceId', contextWorkspaceId).where('userId', id).one())) !==
         undefined,
       isMember: async (id) =>
-        (await tx.run(zql.memberships.where('workspaceId', contextWorkspaceId).where('userId', id).one())) !==
-        undefined,
+        (await tx.run(
+          zql.memberships
+            .where('workspaceId', contextWorkspaceId)
+            .where('userId', id)
+            .where('removedAt', 'IS', null)
+            .one(),
+        )) !== undefined,
     },
     agentTurns: {
       lock: async (id) => {
@@ -393,6 +398,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
           harness: row.harness ?? null,
           ownerId: row.ownerUserId ? memberId(row.ownerUserId) : null,
           localSession: row.localSession ?? null,
+          isFrozen: await isOwnerRemoved(tx, contextWorkspaceId, row.ownerUserId),
         }
       },
       ...chatPermissionsOf(tx, contextWorkspaceId),

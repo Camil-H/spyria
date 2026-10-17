@@ -14,6 +14,7 @@
   "dependencies": {
     "@hq/db": "workspace:*",
     "@hq/kernel": "workspace:*",
+    "@hq/profile": "workspace:*",
     "@hq/runtime": "workspace:*",
     "@hq/session": "workspace:*",
     "@hq/ui": "workspace:*",

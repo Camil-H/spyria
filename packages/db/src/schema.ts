@@ -13,7 +13,13 @@ import {
 } from '@hq/kernel'
 
 type WorkspaceRow = { id: WorkspaceId; name: string; localSessions: boolean }
-type MembershipRow = { memberId: MemberId; workspaceId: WorkspaceId; displayName: string; role: 'admin' | 'member' }
+type MembershipRow = {
+  memberId: MemberId
+  workspaceId: WorkspaceId
+  displayName: string
+  role: 'admin' | 'member'
+  removedAt: string | null
+}
 export type RuntimeHostCapacity = {
   cpus: number
   memoryBytes: number
