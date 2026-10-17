@@ -9,7 +9,7 @@ import {
 import type { MemberDirectory } from '../contracts/repositories.ts'
 import type { RuntimeChatStarter } from '../contracts/runtime-chat-starter.ts'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
-import { MessageDeleted } from '../domain/errors.ts'
+import { MessageDeleted, RuntimeOnlyFromChannel } from '../domain/errors.ts'
 import { type Message, newMessage } from '../domain/message.ts'
 import { chatNameFrom } from '../domain/message-body.ts'
 import { channelThreadHeaderOf, threadWrapperOf } from '../domain/thread-wrapper.ts'
@@ -33,8 +33,10 @@ export const startRuntimeFromMessage = (
     const source = await messages.get(messageId)
     await requireChatPermission(chats, source.chatId, memberId, 'chat.read')
     if (source.deletedAt) throw new MessageDeleted()
+    const sourceChat = await chats.get(source.chatId)
+    if (sourceChat.type !== 'channel') throw new RuntimeOnlyFromChannel()
     const rootId = source.threadRootId ?? source.id
-    const thread = await messages.thread(rootId)
+    const thread = await messages.thread(source.chatId, rootId)
     await runtimeChatStarter.start({
       id: chatId,
       sourceChatId: source.chatId,
@@ -47,21 +49,19 @@ export const startRuntimeFromMessage = (
       messageId: rootId,
       startedBy: memberId,
     })
+    const seedId = toMessageId(id)
     await messages.record({
       type: 'message.posted',
       actorId: memberId,
       message: newMessage({
-        id: toMessageId(id),
+        id: seedId,
         workspaceId: source.workspaceId,
         chatId,
         kind: 'member',
         authorId: memberId,
-        body: threadWrapperOf(
-          channelThreadHeaderOf((await chats.get(source.chatId)).name),
-          await quotedMessagesOf(members, thread),
-        ),
+        body: threadWrapperOf(channelThreadHeaderOf(sourceChat.name), await quotedMessagesOf(members, thread)),
         createdAt: new Date(),
-        replyToId: source.id,
+        replyToId: seedId,
       }),
     })
     const otherAuthorIds = new Set(

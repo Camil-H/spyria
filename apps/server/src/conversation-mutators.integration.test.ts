@@ -119,8 +119,9 @@ test('startRuntimeFromMessage creates the runtime chat, its wrapped seed message
   const wrapper =
     'Conversation so far, from the channel thread in #Welcome:\n\nBob (member, human) · 2026-09-30 09:00 UTC\nWelcome to the team!'
   expect(await messagesOf('chat-started')).toMatchObject([
-    { id: 'message-seed', seq: 2, authorId: alice, body: wrapper, replyToId: 'message-welcome-1' },
+    { id: 'message-seed', seq: 2, authorId: alice, body: wrapper, replyToId: 'message-seed' },
   ])
+  expect(await database.query.messages.findMany({ where: { replyToId: 'message-welcome-1' } })).toEqual([])
   expect(await database.query.runtimeOrigins.findMany({ where: { runtimeChatId: 'chat-started' } })).toEqual([
     {
       workspaceId: acme,
@@ -146,7 +147,7 @@ test('startRuntimeFromMessage creates the runtime chat, its wrapped seed message
       seq: 2,
       type: 'message.posted',
       actor: alice,
-      payload: expect.objectContaining({ body: wrapper, replyToId: 'message-welcome-1' }),
+      payload: expect.objectContaining({ body: wrapper, replyToId: 'message-seed' }),
     },
     { seq: 3, type: 'member.invited', actor: alice, payload: { memberId: bob, roleId: 'reader' } },
   ])
@@ -370,6 +371,24 @@ test('posting in a public channel makes a non-participant a Prompter and leaves 
   expect(await roleOf(bob)).toBe('owner')
 })
 
+test('posting in a private chat never joins it: a removed member is refused and no member.joined is recorded', async () => {
+  const chat = await newChat({
+    type: 'channel',
+    visibility: 'private',
+    participants: [{ memberId: bob, roleId: 'prompter' }],
+  })
+  expect(await sendTo(bobInAcme, chat, `message-${crypto.randomUUID()}`, 'Before')).toEqual(succeeded)
+  expect(
+    await resultOf(aliceInAcme, 'conversation.removeMember', { workspaceId: acme, chatId: chat, memberId: bob }),
+  ).toEqual(succeeded)
+  expect(await sendTo(bobInAcme, chat, `message-${crypto.randomUUID()}`, 'After')).toEqual(
+    missingPermission('chat.post'),
+  )
+  expect((await changesOf(chat)).filter(({ type }) => type.startsWith('member.'))).toEqual([
+    { seq: expect.any(Number), type: 'member.removed', actor: alice, payload: { memberId: bob } },
+  ])
+})
+
 const participantsOf = async (chatId: string) =>
   Object.fromEntries(
     (
@@ -521,6 +540,46 @@ test.each([
   expect(await memberChange(member, name, chat, args)).toEqual(failedWith(message))
   expect(await participantsOf(chat)).toEqual(participantsBefore)
   expect(await changesOf(chat)).toEqual([])
+})
+
+test.each([
+  ['inviting as Reader', 'inviteMember', { memberId: lee, roleId: 'reader' }],
+  ['changing a role to Reader', 'changeMemberRole', { memberId: bob, roleId: 'reader' }],
+  ['removing a member', 'removeMember', { memberId: bob }],
+])('a public channel refuses %s and writes nothing, the same change passes once private', async (_, name, args) => {
+  const publicChannel = await newChat({ type: 'channel', participants: [{ memberId: bob, roleId: 'prompter' }] })
+  expect(await memberChange(aliceInAcme, name, publicChannel, args)).toEqual(
+    failedWith('Everyone can read and post in a public chat; make it private to restrict someone'),
+  )
+  expect(await participantsOf(publicChannel)).toEqual({ [alice]: 'owner', [bob]: 'prompter' })
+  expect(await changesOf(publicChannel)).toEqual([])
+  const privateChannel = await newChat({
+    type: 'channel',
+    visibility: 'private',
+    participants: [{ memberId: bob, roleId: 'prompter' }],
+  })
+  expect(await memberChange(aliceInAcme, name, privateChannel, args)).toEqual(succeeded)
+})
+
+test('changeMemberRole refuses a role above the manager’s own permissions and allows one within them', async () => {
+  await database.$client`
+    insert into chat_roles (workspace_id, id, name, permissions, built_in)
+    values (${acme}, 'member-manager', 'Member manager', ${['chat.read', 'chat.post', 'members.manage']}, false)
+    on conflict do nothing`
+  const chat = await newChat({
+    participants: [
+      { memberId: bob, roleId: 'member-manager' },
+      { memberId: lee, roleId: 'reader' },
+    ],
+  })
+  expect(await memberChange(bobInAcme, 'changeMemberRole', chat, { memberId: lee, roleId: 'editor' })).toEqual(
+    failedWith('You can only give a role within your own permissions'),
+  )
+  expect((await participantsOf(chat))[lee]).toBe('reader')
+  expect(await memberChange(bobInAcme, 'changeMemberRole', chat, { memberId: lee, roleId: 'prompter' })).toEqual(
+    succeeded,
+  )
+  expect((await participantsOf(chat))[lee]).toBe('prompter')
 })
 
 test.each(
@@ -760,6 +819,18 @@ test('startRuntimeFromMessage leaves out of the participants a thread author who
     { user_id: alice, role_id: 'owner' },
     { user_id: bob, role_id: 'reader' },
   ] as never)
+})
+
+test('startRuntimeFromMessage quotes only the thread messages of the source chat', async () => {
+  const chat = await newChat({ type: 'channel' })
+  const root = await rootIn(chat)
+  const otherChat = await newChat({ type: 'channel' })
+  await database.$client`
+    insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, thread_root_id, created_at)
+    values (${acme}, ${otherChat}, ${`message-${crypto.randomUUID()}`}, 1, 'member', ${bob}, 'Elsewhere', ${root}, now())`
+  const started = await startRuntimeFrom(root)
+  expect(started.wrapper).not.toContain('Elsewhere')
+  expect(started.participants).toEqual([{ user_id: alice, role_id: 'owner' }] as never)
 })
 
 const forkOf = async (member: typeof aliceInAcme, sourceChatId: string) => {

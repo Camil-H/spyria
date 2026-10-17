@@ -1,5 +1,5 @@
 import { chatPermissionsIn, findChat, inChat, memberNamesIn, type Snapshot } from '@hq/db'
-import { type ChatId, can, canGrant, type MemberId, type WorkspaceId } from '@hq/kernel'
+import { type ChatId, can, canGrant, isRoleAllowedIn, type MemberId, type WorkspaceId } from '@hq/kernel'
 
 export const getMembers = (workspaceId: WorkspaceId, chatId: ChatId, viewerId: MemberId) => (snapshot: Snapshot) => {
   const chat = findChat(snapshot, workspaceId, chatId)
@@ -9,7 +9,7 @@ export const getMembers = (workspaceId: WorkspaceId, chatId: ChatId, viewerId: M
   const roles = snapshot.chatRoles
     .filter((role) => role.workspaceId === workspaceId)
     .toSorted((first, second) => second.permissions.length - first.permissions.length)
-  const assignableRoles = roles.filter((role) => role.id !== 'owner')
+  const assignableRoles = roles.filter((role) => role.id !== 'owner' && isRoleAllowedIn(chat, role))
   const isOwner = (memberId: MemberId) => Number(memberId === chat.ownerId)
   const participants = snapshot.chatMembers.filter(inChat(workspaceId, chatId))
   const participantIds = new Set(participants.map((participant) => participant.memberId))
@@ -24,6 +24,7 @@ export const getMembers = (workspaceId: WorkspaceId, chatId: ChatId, viewerId: M
         isOwner: memberId === chat.ownerId,
       })),
     canManage: can(permissions, 'members.manage'),
+    canRemove: can(permissions, 'members.manage') && chat.visibility === 'private',
     canLeave: participantIds.has(viewerId) && viewerId !== chat.ownerId,
     assignableRoles,
     invitableRoles: can(permissions, 'members.invite')

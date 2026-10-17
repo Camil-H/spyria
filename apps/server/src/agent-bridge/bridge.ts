@@ -273,6 +273,11 @@ export const createAgentBridge = ({
           can(await memberChatPermissions(tx, chat.workspaceId, chat.chatId, memberId), 'chat.read')
         )
       })
+    const isStored = (chat: AgentChat) =>
+      transact(
+        async (tx) =>
+          (await tx.run(zql.chats.where('workspaceId', chat.workspaceId).where('id', chat.chatId).one())) !== undefined,
+      )
     const resumeActiveTurns = async () => {
       const chats = await database.$client<{ workspaceId: string; chatId: string }[]>`
         select workspace_id as "workspaceId", id as "chatId" from chats where agent_turn_message_id is not null`
@@ -298,7 +303,7 @@ export const createAgentBridge = ({
       resumeActiveTurns,
       watch: async (viewer: WSContext, context: ZeroContext, chat: AgentChat) => {
         for (let waited = 0; !(await isReadableBy(context.userId, chat)); waited += readableRetryMilliseconds) {
-          if (waited >= readyTimeoutMilliseconds) return
+          if (waited >= readyTimeoutMilliseconds || (await isStored(chat))) return
           await Bun.sleep(readableRetryMilliseconds)
         }
         if (viewer.readyState !== 1) return

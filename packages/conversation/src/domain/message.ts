@@ -1,4 +1,4 @@
-import type { ChatId, MemberId, MessageId, WorkspaceId } from '@hq/kernel'
+import type { ChatId, ChatVisibility, MemberId, MessageId, WorkspaceId } from '@hq/kernel'
 import type { StoredStep } from './agent-steps.ts'
 import { InvalidThreadRoot, MessageDeleted, NoThreadsInRuntimeChat, NotMessageAuthor } from './errors.ts'
 import type { MessageBody } from './message-body.ts'
@@ -30,6 +30,7 @@ export type ConversationChat = Readonly<{
   workspaceId: WorkspaceId
   name: string
   type: 'channel' | 'runtime'
+  visibility: ChatVisibility
   harness: Harness | null
   ownerId: MemberId | null
   localSession: boolean | null

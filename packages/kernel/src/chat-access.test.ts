@@ -4,6 +4,7 @@ import {
   type ChatPermission,
   can,
   canGrant,
+  isRoleAllowedIn,
   MissingChatPermission,
   permissionsOf,
   requireChatPermission,
@@ -72,4 +73,11 @@ test('a role can be granted only when its permissions are within the granter’s
   expect(grantableBy('editor')).toEqual(['editor', 'prompter', 'reader'])
   expect(grantableBy('prompter')).toEqual(['prompter', 'reader'])
   expect(grantableBy('reader')).toEqual(['reader'])
+})
+
+test('a public chat allows only roles that keep its read and post access, a private chat allows every role', () => {
+  const allowedIn = (visibility: 'public' | 'private') =>
+    builtInChatRoles.filter((role) => isRoleAllowedIn({ visibility }, role)).map((role) => role.id)
+  expect(allowedIn('public')).toEqual(['owner', 'editor', 'prompter'])
+  expect(allowedIn('private')).toEqual(['owner', 'editor', 'prompter', 'reader'])
 })

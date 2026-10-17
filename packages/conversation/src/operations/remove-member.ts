@@ -1,6 +1,6 @@
 import { type ChatId, type MemberId, requireChatPermission } from '@hq/kernel'
 import type { ConversationTransactor, UnitOfWork } from '../contracts/transactor.ts'
-import { NotParticipant, OwnerStays } from '../domain/errors.ts'
+import { NotParticipant, OwnerStays, PublicChatOpenToAll } from '../domain/errors.ts'
 
 type Dependencies = { transactor: ConversationTransactor }
 type Input = { chatId: ChatId; memberId: MemberId; actorId: MemberId }
@@ -14,5 +14,6 @@ export const removeMember = ({ transactor }: Dependencies, { chatId, memberId, a
   transactor.run(async (unitOfWork) => {
     await requireChatPermission(unitOfWork.chats, chatId, actorId, 'members.manage')
     await requireNonOwnerParticipant(unitOfWork, chatId, memberId)
+    if ((await unitOfWork.chats.get(chatId)).visibility === 'public') throw new PublicChatOpenToAll()
     await unitOfWork.chats.changeParticipant({ type: 'member.removed', chatId, memberId, roleId: null, actorId })
   })

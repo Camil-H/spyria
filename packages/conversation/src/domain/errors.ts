@@ -71,7 +71,17 @@ export const OwnerRoleNotAssignable = errorKind(
   () => 'The Owner role cannot be given',
   ConversationError,
 )
+export const RuntimeOnlyFromChannel = errorKind(
+  'runtime_only_from_channel',
+  () => 'A runtime starts only from a channel message',
+  ConversationError,
+)
 export const NotForkable = errorKind('not_forkable', () => 'Only runtime chats can be forked', ConversationError)
+export const PublicChatOpenToAll = errorKind(
+  'public_chat_open_to_all',
+  () => 'Everyone can read and post in a public chat; make it private to restrict someone',
+  ConversationError,
+)
 export const OwnerStays = errorKind(
   'owner_stays',
   () => 'The owner keeps the Owner role and stays in the chat',

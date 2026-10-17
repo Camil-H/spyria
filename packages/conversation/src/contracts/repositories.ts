@@ -14,7 +14,7 @@ export type MessageRepository = {
   find(messageId: MessageId): Promise<Message | undefined>
   setStep(messageId: MessageId, step: StoredStep): Promise<void>
   replies(promptId: MessageId): Promise<Message[]>
-  thread(rootId: MessageId): Promise<Message[]>
+  thread(chatId: ChatId, rootId: MessageId): Promise<Message[]>
   inChat(chatId: ChatId): Promise<Message[]>
   wrapperFor(prompt: Message): Promise<Message | undefined>
 }

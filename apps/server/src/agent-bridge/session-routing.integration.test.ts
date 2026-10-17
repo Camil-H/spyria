@@ -360,6 +360,28 @@ test('a runtime chat started from a thread sends nothing until the first prompt,
   expect(stack.fakeLlmBodies.some((body) => body.includes(JSON.stringify(firstPrompt).slice(1, -1)))).toBe(true)
 })
 
+test('a first prompt deleted before it was sent leaves the seed to the next prompt', async () => {
+  const chat = `chat-${crypto.randomUUID()}` as ChatId
+  expect(
+    await mutate(aliceInAcme, 'conversation.startRuntimeFromMessage', {
+      workspaceId: acme,
+      id: `message-${crypto.randomUUID()}`,
+      chatId: chat,
+      messageId: 'message-welcome-1',
+    }),
+  ).toEqual(succeeded)
+  expect(await routing(chat, aliceInAcme, { runsOn: 'runtime' })).toEqual(succeeded)
+  const deletedPrompt = await prompt(chat, 'Never sent.')
+  expect(
+    await mutate(aliceInAcme, 'conversation.deleteMessage', { workspaceId: acme, messageId: deletedPrompt }),
+  ).toEqual(succeeded)
+  const { relay } = await fakeAgent()
+  const wrapper = (await database.query.messages.findFirst({ where: { chatId: chat } }))?.body
+  routeWith({ tier: 'small', confidence: 'high', effort: 'low' })
+  await answered(await prompt(chat, 'Summarise the thread.'))
+  expect(relay.prompts).toEqual([`${wrapper}\n\nSummarise the thread.`])
+})
+
 test('a fork sends nothing until the forker’s first prompt, which reaches the model as the source history then the prompt, once, routed on the forker’s keys', async () => {
   const { relay } = await fakeAgent()
   await addLlmKey(bob, 'OpenAI')

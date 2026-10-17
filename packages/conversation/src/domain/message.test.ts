@@ -43,6 +43,7 @@ const channel: ConversationChat = {
   workspaceId: workspaceId('acme'),
   name: 'Welcome',
   type: 'channel',
+  visibility: 'public',
   harness: null,
   ownerId: alice,
   localSession: null,

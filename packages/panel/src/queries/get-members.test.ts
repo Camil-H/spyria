@@ -49,3 +49,30 @@ test('the controls follow the viewer’s permissions on the chat', () => {
   })
   expect(controlsOf(getMembers(acme, research, alice)(snapshot))?.invitees).toEqual(['Bob', 'Lee'])
 })
+
+test('a public channel offers no Reader role and no Remove, and offers them again once private', () => {
+  const welcome = chatId('chat-welcome')
+  const controlsOf = (members: ReturnType<ReturnType<typeof getMembers>>) =>
+    members && {
+      canManage: members.canManage,
+      canRemove: members.canRemove,
+      assignable: members.assignableRoles.map((role) => role.id),
+      invitable: members.invitableRoles.map((role) => role.id),
+    }
+  expect(controlsOf(getMembers(acme, welcome, alice)(snapshot))).toEqual({
+    canManage: true,
+    canRemove: false,
+    assignable: ['editor', 'prompter'],
+    invitable: ['editor', 'prompter'],
+  })
+  const privateWelcome = {
+    ...snapshot,
+    chats: snapshot.chats.map((chat) => (chat.id === welcome ? { ...chat, visibility: 'private' as const } : chat)),
+  }
+  expect(controlsOf(getMembers(acme, welcome, alice)(privateWelcome))).toEqual({
+    canManage: true,
+    canRemove: true,
+    assignable: ['editor', 'prompter', 'reader'],
+    invitable: ['editor', 'prompter', 'reader'],
+  })
+})

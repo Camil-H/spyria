@@ -104,6 +104,30 @@ test('prompts to one chat are delivered one turn at a time, in order, each exact
   await secondWorker.stop()
 })
 
+test('starting a runtime from a runtime chat message is refused and that chat’s queued prompt still runs', async () => {
+  const { relay } = await agentHost()
+  const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'reader' }] })
+  const first = await prompt(chat, 'stub:linger First question')
+  await waitFor(() => relay.prompts.length === 1)
+  const queued = await prompt(chat, 'Queued question')
+  const started = `chat-${crypto.randomUUID()}`
+  expect(
+    await mutate(bobInAcme, 'conversation.startRuntimeFromMessage', {
+      workspaceId: acme,
+      id: `message-${crypto.randomUUID()}`,
+      chatId: started,
+      messageId: queued,
+    }),
+  ).toEqual(failedWith('A runtime starts only from a channel message'))
+  expect(await database.query.chats.findFirst({ where: { id: started } })).toBeUndefined()
+  await holds.release('linger')
+  await answered(queued)
+  await turnEnded(chat)
+  expect(relay.prompts).toEqual(['stub:linger First question', 'Queued question'])
+  for (const [index, question] of [first, queued].entries())
+    expect(await repliesTo(question)).toEqual([replyOf(index + 1)])
+})
+
 test('each step is stored once and updated by its final call, the full command output stays in its workspace, and a rebuild matches', async () => {
   await agentHost()
   const chat = await newRuntimeChat()
@@ -402,6 +426,19 @@ test.each(chatAccessRows(['reader', 'prompter', 'editor', 'owner', 'public']))(
     expect(viewer.frames).toEqual([])
   },
 )
+
+test('a watch on a stored chat the member cannot read returns at once and sends nothing', async () => {
+  const chat = await newRuntimeChat()
+  const frames: unknown[] = []
+  const viewer = { readyState: 1, send: (frame: unknown) => frames.push(frame) }
+  const startedAt = performance.now()
+  await agentBridge.forDatabase(database).watch(viewer as never, { userId: bob, workspaceId: acme } as never, {
+    workspaceId: acme,
+    chatId: chat,
+  })
+  expect(performance.now() - startedAt).toBeLessThan(1_000)
+  expect(frames).toEqual([])
+})
 
 test.each([
   ['the owner removes him', aliceInAcme, 'removeMember', { memberId: bob }],

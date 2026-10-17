@@ -149,3 +149,30 @@ test('30-5. a channel shows no agent bar, and only a channel offers Public or Pr
   await newChatDialogOf(page).getByRole('radio', { name: 'Runtime' }).check()
   await expect(visibilityOf(page)).toHaveCount(0)
 })
+
+test('35-3. a public channel’s Members tab offers no Reader role and no Remove, both come back once it is private', async ({
+  page,
+  browser,
+  workerStack,
+}) => {
+  const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+  await newChannel(page, 'Open floor', 'Public')
+  await joinFromBrowse(bobPage, 'Open floor')
+  await panelTabOf(page, 'Members').click()
+  const optionsOf = (select: ReturnType<typeof tabPanelOf>) =>
+    select.locator('option').evaluateAll((options) => options.map((option) => option.textContent))
+  const bobRole = tabPanelOf(page).getByLabel('Role of Bob')
+  await expect(bobRole).toHaveValue('prompter')
+  expect(await optionsOf(bobRole)).toEqual(['Editor', 'Prompter'])
+  await expect(tabPanelOf(page).getByRole('button', { name: 'Remove Bob' })).toHaveCount(0)
+  await tabPanelOf(page).getByRole('button', { name: 'Invite' }).click()
+  expect(await optionsOf(tabPanelOf(page).getByRole('form', { name: 'Invite' }).getByLabel('Role'))).toEqual([
+    'Editor',
+    'Prompter',
+  ])
+  await tabPanelOf(page).getByRole('button', { name: 'Cancel' }).click()
+  await chatAction(page, 'Open floor', 'Make private')
+  await expect(tabPanelOf(page).getByRole('button', { name: 'Remove Bob' })).toBeVisible()
+  expect(await optionsOf(bobRole)).toEqual(['Editor', 'Prompter', 'Reader'])
+  await bobPage.context().close()
+})

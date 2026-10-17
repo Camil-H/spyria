@@ -97,14 +97,16 @@ const MembersTab = ({ workspaceId, chatId }: TabProps) => {
                 >
                   {optionsOf(roleOptions(view.assignableRoles))}
                 </select>
-                <button
-                  type="button"
-                  aria-label={`Remove ${name}`}
-                  className={removeButtonClass}
-                  onClick={() => run(() => commands.removeMember({ ...target, memberId }))}
-                >
-                  Remove
-                </button>
+                {view.canRemove && (
+                  <button
+                    type="button"
+                    aria-label={`Remove ${name}`}
+                    className={removeButtonClass}
+                    onClick={() => run(() => commands.removeMember({ ...target, memberId }))}
+                  >
+                    Remove
+                  </button>
+                )}
               </span>
             ) : (
               <span className="text-xs text-muted">{role}</span>

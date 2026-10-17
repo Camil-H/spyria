@@ -153,11 +153,12 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       },
       setStep: (id, step) => tx.mutate.messages.update({ workspaceId: contextWorkspaceId, id, step }),
       replies: async (promptId) => (await tx.run(repliesTo(promptId).orderBy('seq', 'asc'))).map(toMessage),
-      thread: async (rootId) =>
+      thread: async (id, rootId) =>
         (
           await tx.run(
             zql.messages
               .where('workspaceId', contextWorkspaceId)
+              .where('chatId', id)
               .where(({ or, cmp }) => or(cmp('id', rootId), cmp('threadRootId', rootId)))
               .orderBy('seq', 'asc'),
           )
@@ -172,11 +173,19 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
           .where('chatId', prompt.chatId)
           .where('kind', 'member')
           .orderBy('seq', 'asc')
-        const [wrapper, firstPrompt] = await Promise.all([
+        const [wrapper, firstLivePrompt, earlierTurnReply] = await Promise.all([
           tx.run(memberMessages.where('replyToId', 'IS NOT', null).where('deletedAt', 'IS', null).one()),
-          tx.run(memberMessages.where('replyToId', 'IS', null).one()),
+          tx.run(memberMessages.where('replyToId', 'IS', null).where('deletedAt', 'IS', null).one()),
+          tx.run(
+            zql.messages
+              .where('workspaceId', contextWorkspaceId)
+              .where('chatId', prompt.chatId)
+              .where('kind', 'IN', ['agent', 'step'])
+              .where('replyToId', '!=', prompt.id)
+              .one(),
+          ),
         ])
-        return wrapper && firstPrompt?.id === prompt.id ? toMessage(wrapper) : undefined
+        return wrapper && firstLivePrompt?.id === prompt.id && !earlierTurnReply ? toMessage(wrapper) : undefined
       },
     },
     agentJobs: {
@@ -365,6 +374,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
           workspaceId: workspaceId(row.workspaceId),
           name: row.name,
           type: row.type,
+          visibility: row.visibility,
           harness: row.harness ?? null,
           ownerId: row.ownerUserId ? memberId(row.ownerUserId) : null,
           localSession: row.localSession ?? null,

@@ -31,7 +31,7 @@ export const sendMessage = ({ transactor }: Dependencies, { id, chatId, authorId
       replyToId: null,
       threadRootId: threadRoot,
     })
-    await unitOfWork.chats.join(chatId, authorId)
+    if (chat.visibility === 'public') await unitOfWork.chats.join(chatId, authorId)
     await unitOfWork.messages.record({ type: 'message.posted', actorId: authorId, message })
     if (chat.localSession && authorId !== chat.ownerId)
       await appendNotice(unitOfWork, message, localSessionNotices.ownerOnly)
