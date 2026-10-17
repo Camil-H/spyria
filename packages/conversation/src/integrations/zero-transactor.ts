@@ -6,6 +6,7 @@ import {
   enqueueJob,
   insertDelegation,
   insertRoutingDecision,
+  insertToolCall,
   isChatEventStored,
   isSessionStartPending,
   lastAgentEvent,
@@ -291,6 +292,11 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       },
       record: async (decision) => {
         await insertRoutingDecision(tx, { workspaceId: contextWorkspaceId, ...decision })
+      },
+    },
+    toolCalls: {
+      record: async (call) => {
+        await insertToolCall(tx, { workspaceId: contextWorkspaceId, ...call })
       },
     },
     delegations: {

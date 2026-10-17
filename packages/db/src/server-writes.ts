@@ -465,6 +465,9 @@ export const insertRoutingDecision = (tx: Transaction, decision: Record<string, 
 export const insertDelegation = (tx: Transaction, delegation: Record<string, unknown>) =>
   insertServerOnlyRow(tx, 'delegations', delegation)
 
+export const insertToolCall = (tx: Transaction, call: Record<string, unknown>) =>
+  insertServerOnlyRow(tx, 'tool_calls', call)
+
 export const setDelegationFields = (
   tx: Transaction,
   workspaceId: string,

@@ -275,6 +275,7 @@ export const createAgentBridge = ({
       answerQuestion: handlers.answerQuestion,
       setPlanMode: handlers.setPlanMode,
       recordModelCallFailure: handlers.recordModelCallFailure,
+      recordToolCall: handlers.recordToolCall,
       resumeHost: async (host: AgentHost) => {
         await resumeActiveTurns()
         return handlers.promptWaiting(host)

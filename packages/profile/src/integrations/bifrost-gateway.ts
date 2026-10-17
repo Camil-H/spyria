@@ -4,8 +4,8 @@ import { UnsupportedProvider } from '../domain/errors.ts'
 import type { GatewayKey } from '../domain/llm-credential.ts'
 
 export type LlmGatewaySettings = { url: string; adminUser: string; adminPassword: string; timeoutMilliseconds?: number }
-export type ToolServerSetup = { name: string; url: string; oauthConfig?: Record<string, unknown> }
-type McpClient = { config: { client_id: string; name: string }; tools?: { name?: string }[] }
+export type ToolServerSetup = { name: string; url: string; oauthConfig?: Record<string, unknown>; isShared?: boolean }
+type McpClient = { config: { client_id: string; name: string; auth_type: string }; tools?: { name?: string }[] }
 type McpConfig = { id: number; mcp_client: { name: string }; tools_to_execute: string[] }
 type BifrostGateway = LlmGateway &
   ToolGateway & {
@@ -108,8 +108,17 @@ export const createLlmGateway = ({
         id: config.client_id,
         name: config.name,
         tools: (tools ?? []).flatMap((tool) => tool.name ?? []),
+        isPersonal: config.auth_type === 'per_user_oauth',
       }),
     )
+  const toolConfigsOf = async (virtualKeyId: string) => {
+    const { body } = await request('GET', `/api/governance/virtual-keys/${virtualKeyId}`)
+    return ((body.virtual_key as { mcp_configs?: McpConfig[] }).mcp_configs ?? []).map((config) => ({
+      id: config.id,
+      mcp_client_name: config.mcp_client.name,
+      tools_to_execute: config.tools_to_execute,
+    }))
+  }
   const finishToolConsent = async (callbackQuery: string) => {
     const response = await fetch(`${url}/api/oauth/callback${callbackQuery}`, {
       redirect: 'manual',
@@ -144,33 +153,32 @@ export const createLlmGateway = ({
     },
     toolServers,
     finishToolConsent,
-    setUpToolServer: async ({ name, url: endpoint, oauthConfig = {} }, logIn = logInAutomatically) => {
+    setUpToolServer: async ({ name, url: endpoint, oauthConfig = {}, isShared }, logIn = logInAutomatically) => {
       if ((await toolServers()).some((server) => server.name === name)) return false
       const { body } = await request('POST', '/api/mcp/client', {
         name,
         connection_type: 'http',
         connection_string: endpoint,
-        auth_type: 'per_user_oauth',
-        oauth_config: oauthConfig,
         tools_to_execute: ['*'],
+        ...(isShared ? { auth_type: 'none' } : { auth_type: 'per_user_oauth', oauth_config: oauthConfig }),
       })
+      if (isShared) return true
       await logIn(String(body.authorize_url))
       await request('POST', `/api/mcp/client/${body.oauth_config_id}/complete-oauth`)
       return true
     },
     grantToolServers: async (virtualKeyId, servers) => {
-      const { body } = await request('GET', `/api/governance/virtual-keys/${virtualKeyId}`)
-      const configs = ((body.virtual_key as { mcp_configs?: McpConfig[] }).mcp_configs ?? []).map((config) => ({
-        id: config.id,
-        mcp_client_name: config.mcp_client.name,
-        tools_to_execute: config.tools_to_execute,
-      }))
+      const configs = await toolConfigsOf(virtualKeyId)
       const missing = servers.filter((server) => !configs.some((config) => config.mcp_client_name === server.name))
       if (missing.length > 0)
         await request('PUT', `/api/governance/virtual-keys/${virtualKeyId}`, {
           mcp_configs: [...configs, ...missing.map(({ name }) => ({ mcp_client_name: name, tools_to_execute: ['*'] }))],
         })
     },
+    grantedTools: async (virtualKeyId) =>
+      Object.fromEntries(
+        (await toolConfigsOf(virtualKeyId)).map((config) => [config.mcp_client_name, config.tools_to_execute]),
+      ),
     startToolConsent: async (virtualKeyId, server) => {
       const response = await fetch(`${url}/mcp`, {
         method: 'POST',

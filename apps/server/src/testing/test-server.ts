@@ -19,7 +19,7 @@ import { readHqAgentImage } from '../hq-agent-image.ts'
 import { startJobWorker } from '../job-worker.ts'
 import { createModelCallRelay } from '../llm-relay.ts'
 import { createRuntimeHostGateway } from '../runtime-hosts/gateway.ts'
-import { createFakeMcp } from './fake-mcp.ts'
+import { createFakeMcp, sharedToolServer } from './fake-mcp.ts'
 import { createHqAgentRelay } from './hq-agent-relay.ts'
 import { createFakeHosts, createHolds, type FakeHost, issueTestSession, testAuthSettings } from './testing.ts'
 
@@ -310,6 +310,11 @@ const app = createApp({
   .post('/test/tool-servers', async (context) => {
     for (const name of testToolServers)
       await llmGateway.setUpToolServer({ name, url: `http://host.docker.internal:${fakeMcpPort}/mcp` })
+    await llmGateway.setUpToolServer({
+      name: sharedToolServer,
+      url: `http://host.docker.internal:${fakeMcpPort}/shared/mcp`,
+      isShared: true,
+    })
     return context.body(null, 204)
   })
   .post('/test/token', async (context) => {

@@ -39,6 +39,19 @@ export type AgentTurnRepository = {
   active(): Promise<{ chatId: ChatId; promptId: MessageId; lastEventAt: number }[]>
 }
 
+export type ToolCall = Readonly<{
+  chatId: ChatId
+  prompterId: MemberId
+  ownerId: MemberId
+  server: string
+  tool: string
+  readOnly: boolean | null
+  decision: 'not_needed'
+  status: 'succeeded' | 'failed' | 'refused'
+  calledAt: Date
+}>
+export type ToolCallRepository = { record(call: ToolCall): Promise<void> }
+
 export type ModelCallTurn = { promptId: MessageId; prompterId: MemberId; ownerId: MemberId | null }
 
 export type MemberDirectory = {

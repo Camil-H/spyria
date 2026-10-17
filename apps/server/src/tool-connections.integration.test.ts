@@ -4,8 +4,10 @@ import { createAgentBridge } from './agent-bridge/bridge.ts'
 import { createApp, defaultLlm } from './app.ts'
 import { createModelCallRelay } from './llm-relay.ts'
 import { createRuntimeHostGateway } from './runtime-hosts/gateway.ts'
+import { sharedToolServer } from './testing/fake-mcp.ts'
 import {
   acme,
+  addLlmKey,
   alice,
   captureConsole,
   createFakeHosts,
@@ -148,7 +150,7 @@ test('/mcp runs as the chat owner with HQ’s attribution, lists tools outside a
   await connectAlice()
   const host = await fakeHost('Tools host')
   const otherHost = await fakeHost('Other tools host')
-  const { chatId, token } = await runtimeTurn(host, bob)
+  const { chatId, token } = await runtimeTurn(host, alice)
   const callsBefore = fakeMcp.records.length
 
   const initialized = await mcpCall(
@@ -182,9 +184,116 @@ test('/mcp runs as the chat owner with HQ’s attribution, lists tools outside a
   await waitFor(async () => (await mcpLogs()).length >= 1)
   for (const log of await mcpLogs()) {
     expect(log.virtual_key_id).toBe(ownerKey.id)
-    expect(log.metadata).toMatchObject({ chat: chatId, owner: alice, workspace: acme })
+    expect(log.metadata).toMatchObject({ chat: chatId, owner: alice, prompter: alice, workspace: acme })
   }
-  expect((await mcpLogs()).map((log) => log.metadata?.prompter)).toContain(bob)
+})
+
+const lookup = rpcOf('tools/call', { name: `${sharedToolServer}-lookup`, arguments: {} })
+const update = rpcOf('tools/call', { name: `${sharedToolServer}-update`, arguments: { text: 'new' } })
+const promptedBy = (chatId: string, prompterId: string) =>
+  database.$client`update chats set agent_turn_prompter_id = ${prompterId} where id = ${chatId}`
+const toolCallRows = async (chatId: string, count: number) => {
+  const rows = async () => [
+    ...(await database.$client`
+      select prompter_id, owner_id, server, tool, read_only, decision, decided_by, status
+      from tool_calls where chat_id = ${chatId} order by called_at`),
+  ]
+  await waitFor(async () => (await rows()).length >= count)
+  return rows()
+}
+const allowSharedTools = async (userId: string, tools: string[]) => {
+  const key = (await virtualKeyOf(userId)) as unknown as {
+    id: string
+    mcp_configs: { id: number; mcp_client: { name: string }; tools_to_execute: string[] }[]
+  }
+  await gateway.call(`/api/governance/virtual-keys/${key.id}`, {
+    method: 'PUT',
+    body: {
+      mcp_configs: key.mcp_configs.map((config) => ({
+        id: config.id,
+        mcp_client_name: config.mcp_client.name,
+        tools_to_execute: config.mcp_client.name === sharedToolServer ? tools : config.tools_to_execute,
+      })),
+    },
+  })
+}
+const refused = (answer: { status: number | undefined; result: { content?: { text: string }[] } }) => ({
+  status: answer.status,
+  text: textOf(answer.result),
+})
+
+test('on a guest’s prompt the owner’s personal connection is refused before the gateway, and the owner’s own prompt uses it; every call is audited', async () => {
+  await connectAlice()
+  const host = await fakeHost('Guest personal host')
+  const { chatId, token } = await runtimeTurn(host, bob)
+  const callsBefore = fakeMcp.records.length
+
+  const guestCall = await mcpCall(host, token, whoami)
+  expect(guestCall).toMatchObject({ status: 200, result: { isError: true } })
+  expect(textOf(guestCall.result)).toBe("fake is Alice's personal connection, used only on Alice's own prompts")
+  expect(fakeMcp.records.slice(callsBefore)).toEqual([])
+  expect(await connectionRows()).toEqual([{ user_id: alice, tool: 'fake', status: 'Connected' }])
+
+  await promptedBy(chatId, alice)
+  expect(textOf((await mcpCall(host, token, whoami)).result)).toBe(`you are ${aliceAccount}`)
+  const audited = { owner_id: alice, server: 'fake', tool: 'whoami', decision: 'not_needed', decided_by: null }
+  expect(await toolCallRows(chatId, 2)).toEqual([
+    { ...audited, prompter_id: bob, read_only: null, status: 'refused' },
+    { ...audited, prompter_id: alice, read_only: true, status: 'succeeded' },
+  ])
+})
+
+test('on a guest’s prompt a workspace tool needs both the owner’s and the prompter’s grants, and the gateway only sees that server', async () => {
+  await addLlmKey(bob, 'Fake')
+  const host = await fakeHost('Guest workspace host')
+  const { chatId, token } = await runtimeTurn(host, bob)
+  const callsBefore = fakeMcp.records.length
+  try {
+    expect(textOf((await mcpCall(host, token, lookup)).result)).toBe('ran lookup')
+    expect(textOf((await mcpCall(host, token, update)).result)).toBe('ran update')
+
+    await allowSharedTools(bob, ['lookup'])
+    expect(textOf((await mcpCall(host, token, lookup)).result)).toBe('ran lookup')
+    expect(refused(await mcpCall(host, token, update))).toEqual({
+      status: 200,
+      text: `${sharedToolServer} isn't available on Bob's prompts in this chat`,
+    })
+    await allowSharedTools(bob, ['*'])
+    await allowSharedTools(alice, ['lookup'])
+    expect(refused(await mcpCall(host, token, update))).toEqual({
+      status: 200,
+      text: `${sharedToolServer} isn't available on Bob's prompts in this chat`,
+    })
+  } finally {
+    await allowSharedTools(alice, ['*'])
+    await allowSharedTools(bob, ['*'])
+  }
+  expect(fakeMcp.records.slice(callsBefore)).toEqual([
+    { tool: 'lookup', user: 'shared' },
+    { tool: 'update', user: 'shared' },
+    { tool: 'lookup', user: 'shared' },
+  ])
+  const audited = {
+    prompter_id: bob,
+    owner_id: alice,
+    server: sharedToolServer,
+    decision: 'not_needed',
+    decided_by: null,
+  }
+  expect(await toolCallRows(chatId, 5)).toEqual([
+    { ...audited, tool: 'lookup', read_only: true, status: 'succeeded' },
+    { ...audited, tool: 'update', read_only: false, status: 'succeeded' },
+    { ...audited, tool: 'lookup', read_only: true, status: 'succeeded' },
+    { ...audited, tool: 'update', read_only: null, status: 'refused' },
+    { ...audited, tool: 'update', read_only: null, status: 'refused' },
+  ])
+})
+
+test('the profile lists only personal servers, and a workspace server cannot be connected', async () => {
+  expect(JSON.parse((await asMember(alice, 'GET', '/api/tool-connections')).body).available).toEqual(['fake'])
+  expect(await asMember(alice, 'POST', `/api/tool-connections/${sharedToolServer}/connect`)).toMatchObject({
+    status: 400,
+  })
 })
 
 test('a server the owner has not connected, or whose token was revoked, answers HQ’s wording and flags the connection', async () => {
@@ -207,7 +316,7 @@ test('a server the owner has not connected, or whose token was revoked, answers 
   }
 })
 
-test('session headers pass through, gateway failures become error results instead of 5xx, and model calls carry an empty include-clients header', async () => {
+test('session headers pass through, gateway failures become error results instead of 5xx, model calls carry an empty include-clients header and guest calls their server only', async () => {
   const seen: { path: string; headers: Record<string, string> }[] = []
   let gatewayAnswer = 200
   const stubGateway = Bun.serve({
@@ -234,7 +343,7 @@ test('session headers pass through, gateway failures become error results instea
   const hosts = createFakeHosts({ port: Number(server.port), database })
   try {
     const host = await hosts.fakeHost('Stubbed gateway host')
-    const { token } = await runtimeTurn(host, alice)
+    const { chatId, token } = await runtimeTurn(host, alice)
     const ownerKey = await virtualKeyOf(alice)
     const listed = await mcpCall(host, token, rpcOf('tools/list'), {
       'mcp-session-id': 'agent-session',
@@ -271,6 +380,12 @@ test('session headers pass through, gateway failures become error results instea
     })
     const modelCall = seen.findLast((request) => request.path === '/v1/chat/completions')
     expect(modelCall?.headers['x-bf-mcp-include-clients']).toBe('')
+
+    await promptedBy(chatId, bob)
+    await mcpCall(host, token, lookup)
+    expect(seen.findLast((request) => request.path === '/mcp')?.headers['x-bf-mcp-include-clients']).toBe(
+      sharedToolServer,
+    )
   } finally {
     await hosts.disconnectFakeHosts()
     void server.stop(true)

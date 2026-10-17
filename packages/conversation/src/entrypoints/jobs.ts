@@ -16,7 +16,12 @@ import { createTransactingZeroTransactor } from '../integrations/zero-transactor
 import { forwardToAgent } from '../operations/agent-questions.ts'
 import { closeReopenedTurn, reopenAgentTurn, sweepAgentTurns } from '../operations/agent-turn-safety.ts'
 import { awaitTask, delegateTask } from '../operations/delegate-task.ts'
-import { findModelCallTurn, findToolCallTurn, recordModelCallFailure } from '../operations/model-calls.ts'
+import {
+  findModelCallTurn,
+  findToolCallTurn,
+  recordModelCallFailure,
+  recordToolCall,
+} from '../operations/model-calls.ts'
 import { promptAgent, startAgentSession } from '../operations/prompt-agent.ts'
 import { recordAgentEvent } from '../operations/record-agent-event.ts'
 import { promptWaitingChats } from '../operations/retry-agent.ts'
@@ -118,5 +123,7 @@ export const createAgentHandlers = ({
     awaitTask: (input: Parameters<typeof awaitTask>[1]) => awaitTask(dependenciesOf(input.chat.workspaceId), input),
     recordModelCallFailure: (call: Parameters<typeof recordModelCallFailure>[1]) =>
       recordModelCallFailure(dependenciesOf(call.chat.workspaceId), call),
+    recordToolCall: (workspace: WorkspaceId, call: Parameters<typeof recordToolCall>[1]) =>
+      recordToolCall(dependenciesOf(workspace), call),
   }
 }

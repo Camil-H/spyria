@@ -7,6 +7,7 @@ import { connectedTool, connectionStatusOf } from '../domain/personal-connection
 type Dependencies = { transactor: ProfileTransactor; gateway: ToolGateway }
 type Member = { workspaceId: WorkspaceId; memberId: MemberId }
 type Input = Member & { tool: string }
+type GuestCall = { workspaceId: WorkspaceId; ownerId: MemberId; prompterId: MemberId; toolName: string }
 
 const virtualKeyOf = ({ transactor }: Dependencies, { workspaceId, memberId }: Member) =>
   transactor.run(({ memberGatewayKeys }) => memberGatewayKeys.virtualKeyOf(workspaceId, memberId))
@@ -17,8 +18,11 @@ const sessionsOf = async (dependencies: Dependencies, { tool, ...member }: Input
   return server && virtualKeyId ? dependencies.gateway.toolSessions(virtualKeyId, server) : []
 }
 
+const personalServersOf = async (gateway: ToolGateway) =>
+  (await gateway.toolServers()).filter(({ isPersonal }) => isPersonal)
+
 export const availableTools = async ({ gateway }: Pick<Dependencies, 'gateway'>) =>
-  (await gateway.toolServers()).map(({ name }) => name)
+  (await personalServersOf(gateway)).map(({ name }) => name)
 
 export const grantAvailableTools = async (dependencies: Dependencies, member: Member) => {
   const virtualKeyId = await virtualKeyOf(dependencies, member)
@@ -28,7 +32,7 @@ export const grantAvailableTools = async (dependencies: Dependencies, member: Me
 export const startToolConnection = async (dependencies: Dependencies, input: Input) => {
   const { gateway } = dependencies
   const servers = await gateway.toolServers()
-  const server = servers.find(({ name }) => name === input.tool)
+  const server = servers.find(({ name, isPersonal }) => isPersonal && name === input.tool)
   if (!server) throw new ToolNotInCatalog(input.tool)
   const virtualKeyId = await virtualKeyOf(dependencies, input)
   if (!virtualKeyId) throw new NoGatewayKey()
@@ -62,3 +66,20 @@ export const flagToolConnection = ({ transactor }: Pick<Dependencies, 'transacto
     if (isConnected) await personalConnections.connect({ ...input, status: 'Needs reconnection' })
     return isConnected
   })
+
+export const guestToolAccess = async (
+  dependencies: Dependencies,
+  { workspaceId, ownerId, prompterId, toolName }: GuestCall,
+) => {
+  const [server = '', tool = ''] = toolName.split(/-(.*)/)
+  if ((await personalServersOf(dependencies.gateway)).some(({ name }) => name === server)) return 'personal'
+  await grantAvailableTools(dependencies, { workspaceId, memberId: prompterId })
+  const grants = await Promise.all(
+    [ownerId, prompterId].map(async (memberId): Promise<Record<string, string[]>> => {
+      const virtualKeyId = await virtualKeyOf(dependencies, { workspaceId, memberId })
+      return virtualKeyId ? dependencies.gateway.grantedTools(virtualKeyId) : {}
+    }),
+  )
+  const isAllowed = grants.every((granted) => granted[server]?.some((name) => name === '*' || name === tool))
+  return isAllowed ? 'allowed' : 'not_allowed'
+}

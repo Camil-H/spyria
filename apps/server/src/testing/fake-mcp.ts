@@ -9,6 +9,22 @@ const whoamiTool = {
   inputSchema: { type: 'object', properties: {} },
   annotations: { readOnlyHint: true },
 }
+const sharedTools = [
+  {
+    name: 'lookup',
+    description: 'Reads a record',
+    inputSchema: { type: 'object', properties: {} },
+    annotations: { readOnlyHint: true },
+  },
+  {
+    name: 'update',
+    description: 'Changes a record',
+    inputSchema: { type: 'object', properties: { text: { type: 'string' } } },
+    annotations: { readOnlyHint: false },
+  },
+]
+const sharedUser = 'shared'
+export const sharedToolServer = 'crm'
 
 export const createFakeMcp = () => {
   const clients = new Map<string, { secret: string; redirectUris: string[] }>()
@@ -20,8 +36,10 @@ export const createFakeMcp = () => {
     tokens.set(access, grant).set(refresh, grant)
     return { access_token: access, token_type: 'Bearer', expires_in: 3600, refresh_token: refresh, scope: 'read' }
   }
-  const mcp = async (request: Request, base: string) => {
-    const user = tokens.get(request.headers.get('authorization')?.replace(/^Bearer /i, '') ?? '')?.user
+  const mcp = async (request: Request, base: string, isShared = false) => {
+    const user = isShared
+      ? sharedUser
+      : tokens.get(request.headers.get('authorization')?.replace(/^Bearer /i, '') ?? '')?.user
     if (!user)
       return Response.json(
         { error: 'invalid_token' },
@@ -40,9 +58,9 @@ export const createFakeMcp = () => {
       message.method === 'initialize'
         ? { protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'fake', version: '1' } }
         : message.method === 'tools/list'
-          ? { tools: [whoamiTool] }
+          ? { tools: isShared ? sharedTools : [whoamiTool] }
           : message.method === 'tools/call'
-            ? { content: [{ type: 'text', text: `you are ${user}` }] }
+            ? { content: [{ type: 'text', text: isShared ? `ran ${message.params.name}` : `you are ${user}` }] }
             : {}
     return Response.json({ jsonrpc: '2.0', id: message.id, result })
   }
@@ -112,6 +130,7 @@ export const createFakeMcp = () => {
     }
     if (url.pathname === '/token') return token(request)
     if (url.pathname === '/mcp') return mcp(request, base)
+    if (url.pathname === '/shared/mcp') return mcp(request, base, true)
     return new Response('not found', { status: 404 })
   }
   return {

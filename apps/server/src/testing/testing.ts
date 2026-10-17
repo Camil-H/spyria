@@ -34,7 +34,7 @@ import { createFakeLlm, type FakeLlmScript, fakeRoutableModels } from '../fake-l
 import { startJobWorker } from '../job-worker.ts'
 import { createModelCallRelay } from '../llm-relay.ts'
 import { createRuntimeHostGateway } from '../runtime-hosts/gateway.ts'
-import { createFakeMcp } from './fake-mcp.ts'
+import { createFakeMcp, sharedToolServer } from './fake-mcp.ts'
 import {
   type ContainerAgent,
   createHqAgentRelay,
@@ -188,6 +188,11 @@ const startSharedTestApp = async () => {
     throw zeroCache.status === 'rejected' ? zeroCache.reason : (gateway as PromiseRejectedResult).reason
   }
   await llmGateway.setUpToolServer({ name: 'fake', url: `http://host.docker.internal:${fakeMcpServer.port}/mcp` })
+  await llmGateway.setUpToolServer({
+    name: sharedToolServer,
+    url: `http://host.docker.internal:${fakeMcpServer.port}/shared/mcp`,
+    isShared: true,
+  })
   const resultOf = (member: { workspaceId: string; userId: string }, name: string, args: Record<string, unknown>) =>
     requestMutation(app, database, member, name, args)
   const eventsOf = async (chatId: string) =>

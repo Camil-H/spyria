@@ -38,8 +38,13 @@ const connectFake = async (page: Page, account: string, workspace = 'workspace-a
   await inPopup(page, () => connectionsOf(page).getByRole('button', { name: 'Connect fake', exact: true }).click())
   await expect(connectedRowOf(page)).toContainText('Connected')
 }
-const promptTool = async (page: Page, agentScript: (chat: string, script: object) => Promise<void>, text: string) => {
-  await agentScript(research, toolScript)
+const promptTool = async (
+  page: Page,
+  agentScript: (chat: string, script: object) => Promise<void>,
+  text: string,
+  script: object = toolScript,
+) => {
+  await agentScript(research, script)
   await openChat(page, 'Research')
   await sendMessage(page, text)
   await expect(workingIndicatorOf(page)).toHaveCount(0)
@@ -95,23 +100,29 @@ test('3. a call before connecting shows Connect fake; after connecting in the po
   await expect(await lastToolResultOf(page)).toContainText(`you are ${account}`)
 })
 
-test('4. another prompter triggers the tool as the owner and sees that the owner must connect, without a button', async ({
+test('4. another prompter cannot use the owner’s personal connection: the agent gets a refusal, while the owner’s own prompt uses it (spec 33, e2e 1)', async ({
   page,
   browser,
   workerStack,
   agentScript,
 }) => {
+  const account = accountOf('alice-acme')
+  await connectFake(page, account)
   await addParticipant(workerStack, research, 'member-bob', 'prompter')
   const bobPage = await openPageAs(browser, workerStack, 'member-bob')
   await addLlmKey(bobPage, 'Fake')
-  await promptTool(bobPage, agentScript, 'Bob asks who the agent is')
-  await expect(messageItemsOf(bobPage).filter({ hasText: 'Alice needs to connect fake' })).toHaveCount(1)
+  await promptTool(bobPage, agentScript, 'Bob asks who the agent is', {
+    ...toolScript,
+    text: 'I cannot use Alice’s personal connections.',
+  })
+  await expect(await lastToolResultOf(bobPage)).toContainText(
+    "fake is Alice's personal connection, used only on Alice's own prompts",
+  )
+  await expect(messageItemsOf(bobPage).filter({ hasText: 'I cannot use Alice’s personal connections.' })).toHaveCount(1)
   await expect(messageItemsOf(bobPage).getByRole('button', { name: 'Connect fake' })).toHaveCount(0)
 
-  const account = accountOf('alice-acme')
-  await connectFake(page, account)
-  await promptTool(bobPage, agentScript, 'Bob asks again')
-  await expect(await lastToolResultOf(bobPage)).toContainText(`you are ${account}`)
+  await promptTool(page, agentScript, 'Alice asks who the agent is')
+  await expect(await lastToolResultOf(page)).toContainText(`you are ${account}`)
   await bobPage.context().close()
 })
 

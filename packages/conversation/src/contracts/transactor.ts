@@ -10,6 +10,7 @@ import type {
   PlanRepository,
   ReadMarkerRepository,
   RoutingRepository,
+  ToolCallRepository,
 } from './repositories.ts'
 
 export type UnitOfWork = {
@@ -23,6 +24,7 @@ export type UnitOfWork = {
   plans: PlanRepository
   routing: RoutingRepository
   delegations: DelegationRepository
+  toolCalls: ToolCallRepository
 }
 
 export type ConversationTransactor = Transactor<UnitOfWork>

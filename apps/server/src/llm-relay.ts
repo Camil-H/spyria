@@ -2,6 +2,7 @@ import {
   type AgentChat,
   awaitTaskTool,
   genericModelCallNoticeOf,
+  guestToolRefusalOf,
   type ModelCallFailure,
   routerTools,
   type ToolCallFailure,
@@ -20,6 +21,8 @@ import type { AgentBridge } from './agent-bridge/bridge.ts'
 export type RelayFrame = { sid?: unknown; method?: unknown; path?: unknown; headers?: unknown; body?: unknown }
 type Send = (frame: object) => void
 type ToolResult = { content?: { text?: string }[]; isError?: boolean }
+type ListedTool = { name?: string; annotations?: { readOnlyHint?: boolean } }
+type ToolCallStatus = 'succeeded' | 'failed' | 'refused'
 
 const forwardedHeaders = [
   'content-type',
@@ -151,6 +154,18 @@ export const createModelCallRelay = ({
     const { keyOf, tools } = databaseAccess(database)
     const isAnthropicPath = path.startsWith(anthropicPathPrefix)
     const isTokenCount = path.startsWith(`${anthropicPathPrefix}/count_tokens`)
+    const isReadOnly = async (callHeaders: Record<string, string>, toolName: string) => {
+      const listed = await fetch(`${gatewayUrlOf(database)}/mcp`, {
+        method: 'POST',
+        headers: { ...callHeaders, 'x-bf-mcp-include-tools': toolName },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+        signal: AbortSignal.any([signal, AbortSignal.timeout(headTimeoutMilliseconds)]),
+      })
+        .then((response) => response.text())
+        .catch(() => '')
+      const { tools: listedTools = [] } = (jsonOf(listed) as { result?: { tools?: ListedTool[] } })?.result ?? {}
+      return listedTools.find((tool) => tool.name === toolName)?.annotations?.readOnlyHint === true
+    }
     const gatewayCall = (callHeaders: Record<string, string>, timeoutSignal: AbortSignal) =>
       fetch(`${gatewayUrlOf(database)}${isAnthropicPath ? '/anthropic' : ''}${path}`, {
         method,
@@ -164,45 +179,72 @@ export const createModelCallRelay = ({
       if (!turn) return answer(401, refusalOf('This runtime has no chat owner'))
       const rpc = jsonOf(body) as { id?: unknown; method?: string; params?: { name?: unknown } } | undefined
       const isToolCall = rpc?.method === 'tools/call'
-      const server = toolServerOf(String(rpc?.params?.name ?? ''))
+      const toolName = String(rpc?.params?.name ?? '')
+      const server = toolServerOf(toolName)
+      const { ownerId, prompterId, ownerName } = turn
+      const call = { readOnly: null as boolean | null, status: 'refused' as ToolCallStatus, calledAt: new Date() }
       const toolError = (text: string) =>
         answer(200, { jsonrpc: '2.0', id: rpc?.id, result: { content: [{ type: 'text', text }], isError: true } })
       const noticeOf = (failure: ToolCallFailure, isReconnect = false) =>
-        toolCallNoticeOf(failure, { ownerName: turn.ownerName, server, isReconnect })
-      if (isToolCall && !turn.prompterId) return toolError('This runtime has no active turn')
-      const virtualKey = await keyOf(host.workspaceId, turn.ownerId).catch(() => null)
-      if (!virtualKey && isToolCall)
-        return toolError(virtualKey === null ? toolGatewayUnreachable : noticeOf('needs_connection'))
-      if (!virtualKey) return answer(virtualKey === null ? 502 : 401, unreachable)
-      if (rpc?.method === 'initialize')
-        await tools.grantAvailableTools(host.workspaceId, turn.ownerId).catch(() => undefined)
-      let response: Response
+        toolCallNoticeOf(failure, { ownerName, server, isReconnect })
+      if (isToolCall && !prompterId) return toolError('This runtime has no active turn')
+      const isGuestCall = isToolCall && prompterId !== null && prompterId !== ownerId
       try {
-        response = await gatewayCall(
-          {
-            ...picked(headers, toolHeaders),
-            authorization: `Bearer ${virtualKey}`,
-            'x-bf-dim-chat': turn.chat.chatId,
-            'x-bf-dim-prompter': turn.prompterId ?? '',
-            'x-bf-dim-owner': turn.ownerId,
-            'x-bf-dim-workspace': host.workspaceId,
-          },
-          AbortSignal.timeout(headTimeoutMilliseconds),
-        )
-      } catch {
-        if (signal.aborted) return
-        return isToolCall ? toolError(toolGatewayUnreachable) : answer(502, unreachable)
+        const virtualKey = await keyOf(host.workspaceId, ownerId).catch(() => null)
+        if (!virtualKey && isToolCall)
+          return toolError(virtualKey === null ? toolGatewayUnreachable : noticeOf('needs_connection'))
+        if (!virtualKey) return answer(virtualKey === null ? 502 : 401, unreachable)
+        if (rpc?.method === 'initialize')
+          await tools.grantAvailableTools(host.workspaceId, ownerId).catch(() => undefined)
+        if (isGuestCall && prompterId) {
+          const access = await tools.guestToolAccess(host.workspaceId, ownerId, prompterId, toolName).catch(() => null)
+          if (!access) return toolError(toolGatewayUnreachable)
+          if (access !== 'allowed')
+            return toolError(guestToolRefusalOf(access, { ownerName, prompterName: turn.prompterName ?? '', server }))
+        }
+        const callHeaders = {
+          ...picked(headers, toolHeaders),
+          authorization: `Bearer ${virtualKey}`,
+          'x-bf-dim-chat': turn.chat.chatId,
+          'x-bf-dim-prompter': prompterId ?? '',
+          'x-bf-dim-owner': ownerId,
+          'x-bf-dim-workspace': host.workspaceId,
+          ...(isGuestCall && { 'x-bf-mcp-include-clients': server }),
+        }
+        if (isToolCall) call.readOnly = await isReadOnly(callHeaders, toolName)
+        call.status = 'failed'
+        let response: Response
+        try {
+          response = await gatewayCall(callHeaders, AbortSignal.timeout(headTimeoutMilliseconds))
+        } catch {
+          if (signal.aborted) return
+          return isToolCall ? toolError(toolGatewayUnreachable) : answer(502, unreachable)
+        }
+        if (!isToolCall) return stream(response)
+        if (!response.ok) return toolError(toolGatewayUnreachable)
+        call.status = 'succeeded'
+        if (!response.headers.get('content-type')?.includes('application/json')) return stream(response)
+        const result = (jsonOf(await response.text()) as { result?: ToolResult })?.result
+        const text = result?.content?.map((part) => part.text ?? '').join('') ?? ''
+        if (result?.isError) call.status = 'failed'
+        const failure = result?.isError ? toolCallFailureOf(text) : undefined
+        if (!failure) return answer(200, { jsonrpc: '2.0', id: rpc?.id, result })
+        const isReconnect =
+          failure === 'needs_connection' && (await tools.flagToolConnection(host.workspaceId, ownerId, server))
+        return toolError(noticeOf(failure, isReconnect))
+      } finally {
+        if (isToolCall && prompterId)
+          await handlers
+            .recordToolCall(host.workspaceId, {
+              chatId: turn.chat.chatId,
+              prompterId,
+              ownerId,
+              server,
+              tool: toolName.slice(server.length + 1),
+              ...call,
+            })
+            .catch(() => console.error(`Recording a tool call of chat ${turn.chat.chatId} failed`))
       }
-      if (!isToolCall) return stream(response)
-      if (!response.ok) return toolError(toolGatewayUnreachable)
-      if (!response.headers.get('content-type')?.includes('application/json')) return stream(response)
-      const result = (jsonOf(await response.text()) as { result?: ToolResult })?.result
-      const text = result?.content?.map((part) => part.text ?? '').join('') ?? ''
-      const failure = result?.isError ? toolCallFailureOf(text) : undefined
-      if (!failure) return answer(200, { jsonrpc: '2.0', id: rpc?.id, result })
-      const isReconnect =
-        failure === 'needs_connection' && (await tools.flagToolConnection(host.workspaceId, turn.ownerId, server))
-      return toolError(noticeOf(failure, isReconnect))
     }
 
     const turn = token ? await handlers.modelCallTurn(host, token) : undefined

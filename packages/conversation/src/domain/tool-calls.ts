@@ -27,6 +27,14 @@ export const toolCallNoticeOf = (failure: ToolCallFailure, { ownerName, server, 
     unavailable: `${server} is unavailable, try again shortly`,
   })[failure]
 
+export const guestToolRefusalOf = (
+  refusal: 'personal' | 'not_allowed',
+  { ownerName, prompterName, server }: { ownerName: string; prompterName: string; server: string },
+) =>
+  refusal === 'personal'
+    ? `${server} is ${ownerName}'s personal connection, used only on ${ownerName}'s own prompts`
+    : `${server} isn't available on ${prompterName}'s prompts in this chat`
+
 export const toolConnectionOf = (result: string) => {
   const [, reconnect, server] = result.match(connectionNotice) ?? []
   return server ? { server, isReconnect: reconnect !== undefined } : undefined

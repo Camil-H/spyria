@@ -1,5 +1,6 @@
 import type { MessageId } from '@hq/kernel'
 import type { AgentChat, AgentHost } from '../contracts/agent.ts'
+import type { ToolCall } from '../contracts/repositories.ts'
 import {
   isContextWindowFailure,
   type ModelCallFailure,
@@ -55,11 +56,15 @@ export const findToolCallTurn = async (dependencies: Dependencies, host: AgentHo
         ownerId,
         prompterId,
         ownerName: await members.displayNameOf(ownerId),
+        prompterName: prompterId && (await members.displayNameOf(prompterId)),
         delegationId: tokenChat.delegationId,
       }
     )
   })
 }
+
+export const recordToolCall = ({ transactor }: Dependencies, call: Omit<ToolCall, 'decision'>) =>
+  transactor.run(({ toolCalls }) => toolCalls.record({ ...call, decision: 'not_needed' }))
 
 export const recordModelCallFailure = async (
   { transactor }: Dependencies,

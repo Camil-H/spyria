@@ -487,6 +487,24 @@ export const modelCalls = table(
   (table) => [primaryKey({ columns: [table.workspaceId, table.id] })],
 )
 
+export const toolCalls = table(
+  'tool_calls',
+  {
+    ...chatScoped,
+    id: text().notNull(),
+    prompterId: text().notNull(),
+    ownerId: text().notNull(),
+    server: text().notNull(),
+    tool: text().notNull(),
+    readOnly: boolean(),
+    decision: text().$type<'not_needed' | 'approved' | 'denied' | 'expired' | 'cancelled'>().notNull(),
+    decidedBy: text(),
+    status: text().$type<'succeeded' | 'failed' | 'refused'>().notNull(),
+    calledAt: instant().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.workspaceId, table.id] }), chatReference(table)],
+)
+
 export const routingDecisions = table(
   'routing_decisions',
   {

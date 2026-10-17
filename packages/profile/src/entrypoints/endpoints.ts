@@ -11,6 +11,7 @@ import {
   disconnectTool,
   flagToolConnection,
   grantAvailableTools,
+  guestToolAccess,
   refreshToolConnection,
   startToolConnection,
 } from '../operations/tool-connections.ts'
@@ -73,6 +74,13 @@ export const createToolCallOwnerAccess = (transact: Transact, gateway: ToolGatew
       grantAvailableTools(dependenciesOf(workspace, member), { workspaceId: workspace, memberId: member }),
     flagToolConnection: (workspace: WorkspaceId, member: MemberId, tool: string) =>
       flagToolConnection(dependenciesOf(workspace, member), { workspaceId: workspace, memberId: member, tool }),
+    guestToolAccess: (workspace: WorkspaceId, owner: MemberId, prompter: MemberId, toolName: string) =>
+      guestToolAccess(dependenciesOf(workspace, owner), {
+        workspaceId: workspace,
+        ownerId: owner,
+        prompterId: prompter,
+        toolName,
+      }),
   }
 }
 

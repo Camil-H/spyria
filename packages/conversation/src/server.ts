@@ -4,6 +4,7 @@ export { awaitTaskTool, routerTools, stillRunningOf, subagentFailureOf, unknownT
 export { genericModelCallNoticeOf, type ModelCallFailure } from './domain/model-call-failures.ts'
 export type { DelegatedFrame } from './domain/streamed-reply.ts'
 export {
+  guestToolRefusalOf,
   type ToolCallFailure,
   toolCallFailureOf,
   toolCallNoticeOf,

@@ -29,9 +29,9 @@ test('admin requests, the OAuth fetches and the consent call give up after the t
     expect(gateway.removeToolSession('session-1')).rejects.toMatchObject(timedOut),
     expect(gateway.finishToolConsent('?state=1')).rejects.toMatchObject(timedOut),
     expect(gateway.setUpToolServer({ name: 'docs', url: 'http://docs.test/mcp' })).rejects.toMatchObject(timedOut),
-    expect(gateway.startToolConsent('key-1', { id: 'docs', name: 'docs', tools: ['search'] })).rejects.toMatchObject(
-      timedOut,
-    ),
+    expect(
+      gateway.startToolConsent('key-1', { id: 'docs', name: 'docs', tools: ['search'], isPersonal: true }),
+    ).rejects.toMatchObject(timedOut),
   ])
   expect(Date.now() - startedAt).toBeLessThan(2_000)
 })
