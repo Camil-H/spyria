@@ -1,4 +1,4 @@
-import type { MemberId, ProjectId } from '@hq/kernel'
+import { type MemberId, type ProjectId, requireChatPermission } from '@hq/kernel'
 import type { WorkspaceTransactor } from '../contracts/transactor.ts'
 import { archivedProject, type ChatsPolicy } from '../domain/project.ts'
 
@@ -10,6 +10,8 @@ export const archiveProject = ({ transactor }: Dependencies, { projectId, chatsP
     const project = await unitOfWork.projects.get(projectId)
     const chats = await unitOfWork.chats.listByProject(projectId)
     const archived = archivedProject(project, chats, chatsPolicy)
+    if (chatsPolicy === 'archive')
+      for (const chat of archived.chats) await requireChatPermission(unitOfWork.chats, chat.id, actorId, 'chat.admin')
     await unitOfWork.projects.save(archived.project)
     const type = chatsPolicy === 'archive' ? 'chat.archived' : 'chat.moved'
     for (const chat of archived.chats) {

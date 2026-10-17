@@ -5,8 +5,17 @@ import {
   listedModelsOf,
   memberModelsOf,
 } from '@hq/db/server-writes'
-import type { ZeroContext } from '@hq/db/zero-queries'
-import { chatModelsOf, listedChatModelIdsOf, type Model, routableModelNames, withPricesOf } from '@hq/kernel'
+import { memberChatPermissions, type ZeroContext } from '@hq/db/zero-queries'
+import {
+  can,
+  chatModelsOf,
+  listedChatModelIdsOf,
+  MissingChatPermission,
+  type Model,
+  routableModelNames,
+  chatId as toChatId,
+  withPricesOf,
+} from '@hq/kernel'
 import type { Transaction } from '@rocicorp/zero'
 
 export type ChatRoutingRead = {
@@ -24,12 +33,16 @@ export const getChatRouting = async (
   { workspaceId, userId }: ZeroContext,
   chatId: string,
 ): Promise<ChatRoutingRead> => {
-  const { contextTokens, reachable, adapterModels, hqRuntimeAvailable } = await transact(async (tx) => ({
-    contextTokens: await chatContextTokens(tx, workspaceId, chatId),
-    reachable: chatModelsOf((await memberModelsOf(tx, workspaceId, userId)) ?? []),
-    adapterModels: await lastAdapterModelsOf(tx, workspaceId, chatId),
-    hqRuntimeAvailable: await isWorkspaceHostOnline(tx, workspaceId),
-  }))
+  const { contextTokens, reachable, adapterModels, hqRuntimeAvailable } = await transact(async (tx) => {
+    if (!can(await memberChatPermissions(tx, workspaceId, toChatId(chatId), userId), 'chat.read'))
+      throw new MissingChatPermission('chat.read')
+    return {
+      contextTokens: await chatContextTokens(tx, workspaceId, chatId),
+      reachable: chatModelsOf((await memberModelsOf(tx, workspaceId, userId)) ?? []),
+      adapterModels: await lastAdapterModelsOf(tx, workspaceId, chatId),
+      hqRuntimeAvailable: await isWorkspaceHostOnline(tx, workspaceId),
+    }
+  })
   return {
     reachableModels: withPricesOf(reachable, listedModelsOf()),
     listedModelIds: listedChatModelIdsOf(reachable, listedModelsOf()).filter(

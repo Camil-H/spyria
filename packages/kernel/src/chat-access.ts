@@ -1,3 +1,6 @@
+import { DomainError, errorKind } from './errors.ts'
+import type { ChatId, MemberId } from './ids.ts'
+
 export type ChatPermission =
   | 'chat.read'
   | 'chat.post'
@@ -38,3 +41,18 @@ export const permissionsOf = (
 
 export const can = (permissions: readonly ChatPermission[], permission: ChatPermission) =>
   permissions.includes(permission)
+
+export const MissingChatPermission = errorKind(
+  'missing_chat_permission',
+  (permission: ChatPermission) => `You need the ${permission} permission on this chat`,
+  DomainError,
+)
+
+export const requireChatPermission = async (
+  chats: { permissions(chatId: ChatId, memberId: MemberId): Promise<readonly ChatPermission[]> },
+  chatId: ChatId,
+  memberId: MemberId,
+  permission: ChatPermission,
+) => {
+  if (!can(await chats.permissions(chatId, memberId), permission)) throw new MissingChatPermission(permission)
+}

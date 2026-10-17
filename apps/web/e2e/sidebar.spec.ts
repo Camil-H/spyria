@@ -357,9 +357,9 @@ test('renames chats in place, in their project and in the open header', async ({
   })
 
   await test.step('confirms with Enter', async () => {
-    await renameChat(page, 'Standup', 'Daily standup')
+    await renameChat(page, 'Market research', 'Deep research')
     await page.keyboard.press('Enter')
-    await expect(chatRowIn(looseChatsOf(page), 'Daily standup')).toBeVisible()
+    await expect(chatRowIn(looseChatsOf(page), 'Deep research')).toBeVisible()
   })
 })
 

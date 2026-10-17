@@ -1,4 +1,4 @@
-import { type ChatId, type MemberId, type MessageId, messageId as toMessageId } from '@hq/kernel'
+import { type ChatId, type MemberId, type MessageId, requireChatPermission, messageId as toMessageId } from '@hq/kernel'
 import type { RuntimeChatStarter } from '../contracts/runtime-chat-starter.ts'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { MessageDeleted } from '../domain/errors.ts'
@@ -14,6 +14,7 @@ export const startRuntimeFromMessage = (
 ) =>
   transactor.run(async (unitOfWork) => {
     const source = await unitOfWork.messages.get(messageId)
+    await requireChatPermission(unitOfWork.chats, source.chatId, memberId, 'chat.read')
     if (source.deletedAt) throw new MessageDeleted()
     await runtimeChatStarter.start({
       id: chatId,

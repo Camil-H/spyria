@@ -7,9 +7,13 @@ import {
   acme,
   alice,
   aliceInAcme,
+  chatAccessRows,
+  chatAs,
   failedWith,
   globex,
   lee,
+  missingPermission,
+  newChat,
   openSharedTestApp,
   bob,
   bobInAcme,
@@ -136,7 +140,7 @@ test.each([
   [
     'moveChat to a project of another workspace',
     'workspace.moveChat',
-    { chatId: 'chat-research', projectId: 'project-launch' },
+    { chatId: 'chat-standup', projectId: 'project-launch' },
     'Project project-launch was not found',
   ],
   [
@@ -200,4 +204,51 @@ test('refuses invalid arguments', async () => {
     }),
   ).toMatchObject({ error: 'app' })
   expect(await projectRow('project-billing')).toMatchObject({ archived: false })
+})
+
+test.each(chatAccessRows(['owner']))(
+  'renameChat, moveChat and archiveChat need chat.admin: $name',
+  async ({ member, isAllowed, ...role }) => {
+    const chat = await chatAs(role)
+    const expected = isAllowed ? succeeded : missingPermission('chat.admin')
+    expect(
+      await resultOf(member, 'workspace.renameChat', { workspaceId: acme, chatId: chat, name: 'Renamed' }),
+    ).toEqual(expected)
+    expect(
+      await resultOf(member, 'workspace.moveChat', { workspaceId: acme, chatId: chat, projectId: 'project-billing' }),
+    ).toEqual(expected)
+    expect(await resultOf(member, 'workspace.archiveChat', { workspaceId: acme, chatId: chat })).toEqual(expected)
+    expect(await chatRow(chat)).toMatchObject(
+      isAllowed
+        ? { name: 'Renamed', projectId: 'project-billing', archived: true }
+        : { name: 'Runtime chat', projectId: null, archived: false },
+    )
+  },
+)
+
+test('archiving a project with its chats needs chat.admin on each of them, even those the member cannot read; releasing them needs none', async () => {
+  const project = (id: string) =>
+    resultOf(bobInAcme, 'workspace.createProject', { workspaceId: acme, id, name: 'Shared' })
+  const inProject = async (projectId: string, ownerId: string) => {
+    const chat = await newChat({ ownerId })
+    await database.$client`update chats set project_id = ${projectId} where id = ${chat}`
+    return chat
+  }
+  const archive = (projectId: string, chatsPolicy: string) =>
+    resultOf(bobInAcme, 'workspace.archiveProject', { workspaceId: acme, projectId, chatsPolicy })
+  await project('project-mixed')
+  const bobsChat = await inProject('project-mixed', bob)
+  const alicesChat = await inProject('project-mixed', alice)
+  expect(await archive('project-mixed', 'archive')).toEqual(missingPermission('chat.admin'))
+  expect(await projectRow('project-mixed')).toMatchObject({ archived: false })
+  expect(await chatRow(bobsChat)).toMatchObject({ archived: false })
+  expect(await chatRow(alicesChat)).toMatchObject({ archived: false })
+  expect(await archive('project-mixed', 'release')).toEqual(succeeded)
+  expect(await projectRow('project-mixed')).toMatchObject({ archived: true })
+  expect(await chatRow(alicesChat)).toMatchObject({ projectId: null, archived: false })
+
+  await project('project-own')
+  const ownChat = await inProject('project-own', bob)
+  expect(await archive('project-own', 'archive')).toEqual(succeeded)
+  expect(await chatRow(ownChat)).toMatchObject({ archived: true })
 })

@@ -5,6 +5,8 @@ import {
   addLlmKey,
   alice,
   aliceInAcme,
+  chatAccessRows,
+  chatAs,
   gatewayLogsOf,
   bob,
   bobInAcme,
@@ -192,6 +194,21 @@ test('the routing read lists the member’s reachable models and the context tok
     contextTokens: 450,
   })
 })
+
+test.each(chatAccessRows(['reader', 'prompter', 'editor', 'owner', 'public']))(
+  'the routing read needs chat.read: $name',
+  async (role) => {
+    const response = await app.request(`/api/chats/${await chatAs(role)}/routing`, {
+      headers: { authorization: `Bearer ${await sessionTokenOf(database, acme, role.userId)}` },
+    })
+    expect(response.status).toBe(role.isAllowed ? 200 : 403)
+    expect(await response.json()).toMatchObject(
+      role.isAllowed
+        ? { reachableModels: expect.any(Array) }
+        : { error: 'missing_chat_permission', message: 'You need the chat.read permission on this chat' },
+    )
+  },
+)
 
 let decisionModelKey: Promise<void> | undefined
 type RoutingRow = {

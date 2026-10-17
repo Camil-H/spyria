@@ -72,6 +72,7 @@ export type ReadMarkerRepository = { markNewestRead(chatId: ChatId, memberId: Me
 export type ChatRepository = {
   get(chatId: ChatId): Promise<ConversationChat>
   permissions(chatId: ChatId, memberId: MemberId): Promise<readonly ChatPermission[]>
+  join(chatId: ChatId, memberId: MemberId): Promise<void>
   localSessionsAllowed(): Promise<boolean>
   hasAgentSession(chatId: ChatId): Promise<boolean>
   isSessionStartPending(chatId: ChatId): Promise<boolean>

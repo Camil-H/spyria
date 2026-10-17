@@ -1,4 +1,4 @@
-import { type ChatId, type MemberId, messageId } from '@hq/kernel'
+import { type ChatId, type MemberId, messageId, requireChatPermission } from '@hq/kernel'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { NoLlmKey, RunsOnNotChosen } from '../domain/errors.ts'
 import { newMessage } from '../domain/message.ts'
@@ -14,6 +14,7 @@ export const sendMessage = ({ transactor }: Dependencies, { id, chatId, authorId
   transactor.run(async (unitOfWork) => {
     const chat = await unitOfWork.chats.get(chatId)
     const { members } = unitOfWork
+    await requireChatPermission(unitOfWork.chats, chatId, authorId, 'chat.post')
     if (chat.type === 'runtime' && chat.localSession === null)
       throw new RunsOnNotChosen(runsOnWaitingNoticeOf(chat.ownerId ? await members.displayNameOf(chat.ownerId) : ''))
     if (chat.type === 'runtime' && !chat.localSession && !(await members.hasLlmCredential(authorId)))
@@ -28,6 +29,7 @@ export const sendMessage = ({ transactor }: Dependencies, { id, chatId, authorId
       createdAt: new Date(),
       replyToId: null,
     })
+    await unitOfWork.chats.join(chatId, authorId)
     await unitOfWork.messages.record({ type: 'message.posted', actorId: authorId, message })
     if (chat.localSession && authorId !== chat.ownerId)
       await appendNotice(unitOfWork, message, localSessionNotices.ownerOnly)

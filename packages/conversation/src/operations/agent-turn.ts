@@ -1,9 +1,9 @@
-import { type ChatId, type MessageId, messageId } from '@hq/kernel'
+import { type ChatId, can, type MessageId, messageId } from '@hq/kernel'
 import type { AgentClient, AgentEventSockets, AgentRuntimes, SessionClassifier } from '../contracts/agent.ts'
 import type { ConversationTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import { type Message, newMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
-import { noLlmKeyNoticeOf } from '../domain/model-call-failures.ts'
+import { noLlmKeyNoticeOf, noLongerPromptsNoticeOf } from '../domain/model-call-failures.ts'
 import { forgetDelegationsOf } from './running-delegations.ts'
 
 type NoticeOf = (hasReply: boolean) => string | undefined
@@ -48,6 +48,10 @@ export const beginAgentTurn = async (unitOfWork: UnitOfWork, chatId: ChatId): Pr
   const { agentTurns, members } = unitOfWork
   if ((await agentTurns.lock(chatId)) !== null) return undefined
   const prompt = await agentTurns.nextPrompt(chatId)
+  if (prompt?.authorId && !can(await unitOfWork.chats.permissions(chatId, prompt.authorId), 'chat.post')) {
+    await appendNotice(unitOfWork, prompt, noLongerPromptsNoticeOf(await members.displayNameOf(prompt.authorId)))
+    return beginAgentTurn(unitOfWork, chatId)
+  }
   const needsLlmKey = !(await unitOfWork.chats.get(chatId)).localSession
   if (prompt?.authorId && needsLlmKey && !(await members.hasLlmCredential(prompt.authorId))) {
     await appendNotice(unitOfWork, prompt, noLlmKeyNoticeOf(await members.displayNameOf(prompt.authorId)))

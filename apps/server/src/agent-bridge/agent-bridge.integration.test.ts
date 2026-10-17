@@ -8,6 +8,8 @@ import {
   acme,
   alice,
   captureConsole,
+  chatAccessRows,
+  chatAs,
   failedWith,
   globex,
   bob,
@@ -45,6 +47,12 @@ const replyOf = (turn: number) => ({
   body: `[t${turn}] Hello from the stub (model hq/fake/fake-model, mode default).`,
   detail: null,
 })
+const outputOf = async (path: string, workspaceId: string, userId: string) => {
+  const response = await app.request(path, {
+    headers: { authorization: `Bearer ${await sessionTokenOf(database, workspaceId, userId)}` },
+  })
+  return { status: response.status, body: await response.text() }
+}
 const turnEnded = (chat: string) => waitFor(async () => (await turnOf(chat as never)) === null)
 
 test('a prompt starts the runtime, creates one Pi conversation with the runtime LLM token and is answered once', async () => {
@@ -119,14 +127,10 @@ test('each step is stored once and updated by its final call, the full command o
     expect.objectContaining({ promptId: question, text: 'Thinking ', isReasoning: true }),
   )
   const terminal = live.findLast((message) => message.kind === 'step' && message.step?.type === 'command')
-  const fullOutputAs = async (workspaceId: string) =>
-    (
-      await app.request(commandOutputPathOf(chat, String(terminal?.id)), {
-        headers: { authorization: `Bearer ${await sessionTokenOf(database, workspaceId, alice)}` },
-      })
-    ).text()
-  expect(await fullOutputAs(acme)).toBe('one\ntwo\nfailed')
-  expect(await fullOutputAs(globex)).toBe('')
+  const fullOutputAs = (workspaceId: string) =>
+    outputOf(commandOutputPathOf(chat, String(terminal?.id)), workspaceId, alice)
+  expect(await fullOutputAs(acme)).toEqual({ status: 200, body: 'one\ntwo\nfailed' })
+  expect((await fullOutputAs(globex)).status).toBe(403)
   await zeroDrizzle(schema, database).transaction((tx) => rebuildMessages(tx, { chatId: chat }))
   expect(await messagesOf(chat)).toEqual(live)
 })
@@ -269,21 +273,31 @@ test('a member without an LLM key cannot prompt a runtime chat, and still posts 
   expect(await send('chat-welcome')).toEqual(succeeded)
 })
 
-test('a prompt whose author has no LLM key at turn time ends with HQ’s notice without reaching the agent', async () => {
-  const { relay } = await agentHost()
-  const chat = await newRuntimeChat()
+const queuedPrompt = async (
+  chat: string,
+  authorId: string,
+  beforeTurn: (sql: typeof database.$client) => unknown = () => undefined,
+) => {
   const promptId = `message-${crypto.randomUUID()}`
   await database.$client.begin(async (sql) => {
     await sql`
       insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
-      values (${acme}, ${chat}, ${promptId}, 1, 'member', ${bob}, 'Prompt after my key was removed', now())`
+      values (${acme}, ${chat}, ${promptId}, 1, 'member', ${authorId}, 'Queued prompt', now())`
     await sql`
       insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
-      values (${acme}, ${chat}, ${promptId}, 1, 'message.posted', ${bob}, '{}'::jsonb, now())`
+      values (${acme}, ${chat}, ${promptId}, 1, 'message.posted', ${authorId}, '{}'::jsonb, now())`
+    await beforeTurn(sql as never)
     await sql`
       insert into jobs (workspace_id, id, type, payload, run_at, attempts, state)
       values (${acme}, ${crypto.randomUUID()}, 'agent.prompt', ${JSON.stringify({ messageId: promptId })}::jsonb, now(), 0, 'queued')`
   })
+  return promptId
+}
+
+test('a prompt whose author has no LLM key at turn time ends with HQ’s notice without reaching the agent', async () => {
+  const { relay } = await agentHost()
+  const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'prompter' }] })
+  const promptId = await queuedPrompt(chat, bob)
   await answered(promptId)
   expect(await repliesTo(promptId)).toEqual([
     { kind: 'notice', body: 'Bob has no LLM key in this workspace', detail: null },
@@ -307,3 +321,54 @@ test('a model failure recorded by the relay shows as the error at the turn end, 
     message: 'The LLM key of Alice was refused',
   })
 })
+
+test('a prompter removed after posting is refused at turn time with HQ’s notice, without reaching the agent', async () => {
+  const { relay } = await agentHost()
+  const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'prompter' }] })
+  const promptId = await queuedPrompt(
+    chat,
+    bob,
+    (sql) => sql`delete from chat_participants where chat_id = ${chat} and user_id = ${bob}`,
+  )
+  await answered(promptId)
+  expect(await repliesTo(promptId)).toEqual([
+    { kind: 'notice', body: 'Bob can no longer prompt in this chat', detail: null },
+  ])
+  expect(relay.prompts).toEqual([])
+  expect(await turnOf(chat)).toBeNull()
+})
+
+test.each(chatAccessRows(['reader', 'prompter', 'editor', 'owner', 'public']))(
+  'the full command output needs chat.read: $name',
+  async (role) => {
+    const output = await outputOf(commandOutputPathOf(await chatAs(role), 'step-1'), acme, role.userId)
+    expect(output).toEqual(
+      role.isAllowed
+        ? { status: 200, body: '' }
+        : {
+            status: 403,
+            body: JSON.stringify({
+              error: 'missing_chat_permission',
+              message: 'You need the chat.read permission on this chat',
+            }),
+          },
+    )
+  },
+)
+
+test('a command output of a chat that does not exist is refused like one the member cannot read', async () => {
+  expect((await outputOf(commandOutputPathOf('chat-missing', 'step-1'), acme, alice)).status).toBe(403)
+})
+
+test.each(chatAccessRows(['reader', 'prompter', 'editor', 'owner', 'public']))(
+  'watching the agent stream needs chat.read, a refused watch gets nothing: $name',
+  async (role) => {
+    const viewer = await openStream(await chatAs(role), { token: await sessionTokenOf(database, acme, role.userId) })
+    const isSubscribed = await Promise.race([
+      viewer.subscribed.then(() => true),
+      Bun.sleep(role.isAllowed ? 5_000 : 6_000).then(() => false),
+    ])
+    expect(isSubscribed).toBe(role.isAllowed)
+    expect(viewer.frames).toEqual([])
+  },
+)

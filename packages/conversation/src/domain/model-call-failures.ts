@@ -15,6 +15,7 @@ const unavailableModelCodes = ['model_blocked', 'provider_blocked', 'no_key_supp
 const unavailableStatuses = [500, 502, 503, 529]
 
 export const noLlmKeyNoticeOf = (memberName: string) => `${memberName} has no LLM key in this workspace`
+export const noLongerPromptsNoticeOf = (memberName: string) => `${memberName} can no longer prompt in this chat`
 export const genericModelCallNoticeOf = (status: number) => `The model call failed (error ${status})`
 
 const codesOf = (body: unknown) => {

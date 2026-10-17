@@ -13,8 +13,8 @@ import {
 } from '@hq/conversation/server'
 import type { Database } from '@hq/db/postgres'
 import { schema } from '@hq/db/zero'
-import type { ZeroContext } from '@hq/db/zero-queries'
-import { chatId, type MessageId, workspaceId } from '@hq/kernel'
+import { memberChatPermissions, type Transact, type ZeroContext, zql } from '@hq/db/zero-queries'
+import { can, chatId, type MessageId, workspaceId } from '@hq/kernel'
 import type { SandboxProvider } from '@hq/runtime/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { upgradeWebSocket } from 'hono/bun'
@@ -25,7 +25,7 @@ type Segment = { first: AgentEvent; last: AgentEvent; text: string; isReasoning:
 type StreamFrame = { type?: unknown; token?: unknown; chatId?: unknown }
 
 const readyTimeoutMilliseconds = 5000
-const visibleRetryMilliseconds = 100
+const readableRetryMilliseconds = 100
 const keyOf = (chat: AgentChat) => `${chat.workspaceId}/${chat.chatId}`
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : 'an unknown error')
 
@@ -68,8 +68,9 @@ export const createAgentBridge = ({
     const delegatedTexts = new Map<string, Map<string, DelegatedFrame>>()
     const send = (viewer: WSContext, chat: AgentChat, frame: object) =>
       viewer.send(JSON.stringify({ chatId: chat.chatId, ...frame }))
+    const transact: Transact = (work) => zeroDrizzle(schema, database).transaction(work)
     const handlers = createAgentHandlers({
-      transact: (work) => zeroDrizzle(schema, database).transaction(work),
+      transact,
       sandboxProvider,
       llm,
       classifier: sessionClassifierOf?.(database),
@@ -269,15 +270,19 @@ export const createAgentBridge = ({
       },
       resumeActiveTurns,
       watch: async (viewer: WSContext, context: ZeroContext, chat: AgentChat) => {
-        const isVisible = async () =>
-          (
-            await database.$client`
-              select 1 from chats join memberships on memberships.workspace_id = chats.workspace_id and memberships.user_id = ${context.userId}
-              where chats.workspace_id = ${chat.workspaceId} and chats.id = ${chat.chatId}`
-          ).length > 0
-        for (let waited = 0; !(await isVisible()); waited += visibleRetryMilliseconds) {
+        const isReadable = () =>
+          transact(async (tx) => {
+            const isMember = await tx.run(
+              zql.memberships.where('workspaceId', chat.workspaceId).where('userId', context.userId).one(),
+            )
+            return (
+              isMember !== undefined &&
+              can(await memberChatPermissions(tx, chat.workspaceId, chat.chatId, context.userId), 'chat.read')
+            )
+          })
+        for (let waited = 0; !(await isReadable()); waited += readableRetryMilliseconds) {
           if (waited >= readyTimeoutMilliseconds) return
-          await Bun.sleep(visibleRetryMilliseconds)
+          await Bun.sleep(readableRetryMilliseconds)
         }
         if (viewer.readyState !== 1) return
         viewers.set(keyOf(chat), (viewers.get(keyOf(chat)) ?? new Set()).add(viewer))

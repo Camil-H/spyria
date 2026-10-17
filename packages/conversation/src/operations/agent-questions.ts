@@ -1,4 +1,4 @@
-import type { ChatId, MemberId } from '@hq/kernel'
+import { type ChatId, type ChatPermission, type MemberId, requireChatPermission } from '@hq/kernel'
 import type { AgentChat, AgentConversation } from '../contracts/agent.ts'
 import type { UnitOfWork } from '../contracts/transactor.ts'
 import { ChatNotFound } from '../domain/errors.ts'
@@ -15,9 +15,10 @@ export const mayPrompt = async ({ chats, members }: UnitOfWork, chatId: ChatId, 
 
 export const forwardToAgent = async (
   { transactor, runtimes }: Pick<AgentDependencies, 'transactor' | 'runtimes'>,
-  { chat, memberId }: { chat: AgentChat; memberId: MemberId },
+  { chat, memberId, permission }: { chat: AgentChat; memberId: MemberId; permission: ChatPermission },
   forward: (conversation: AgentConversation) => Promise<number>,
 ) => {
+  await transactor.run(({ chats }) => requireChatPermission(chats, chat.chatId, memberId, permission))
   const isAllowed = await transactor
     .run((unitOfWork) => mayPrompt(unitOfWork, chat.chatId, memberId))
     .catch((error) => (error instanceof ChatNotFound ? false : Promise.reject(error)))

@@ -1,5 +1,14 @@
 import { expect, test } from 'bun:test'
-import { builtInChatRoles, type ChatPermission, can, permissionsOf, visibilityOf } from './chat-access.ts'
+import {
+  builtInChatRoles,
+  type ChatPermission,
+  can,
+  MissingChatPermission,
+  permissionsOf,
+  requireChatPermission,
+  visibilityOf,
+} from './chat-access.ts'
+import { chatId, memberId } from './ids.ts'
 
 const roleNamed = (id: string) => builtInChatRoles.find((role) => role.id === id)
 const permissionsOfRole = (id: string) => roleNamed(id)?.permissions
@@ -42,4 +51,15 @@ test('can checks one permission of a set', () => {
 
 test('channels are public and runtime chats private', () => {
   expect([visibilityOf('channel'), visibilityOf('runtime')]).toEqual(['public', 'private'])
+})
+
+test('requireChatPermission passes a member holding the permission and names the missing one otherwise', async () => {
+  const chats = { permissions: async () => ['chat.read' as const] }
+  const [chat, member] = [chatId('chat-1'), memberId('member-1')]
+  await requireChatPermission(chats, chat, member, 'chat.read')
+  await expect(requireChatPermission(chats, chat, member, 'chat.post')).rejects.toBeInstanceOf(MissingChatPermission)
+  await expect(requireChatPermission(chats, chat, member, 'chat.post')).rejects.toMatchObject({
+    code: 'missing_chat_permission',
+    message: 'You need the chat.post permission on this chat',
+  })
 })

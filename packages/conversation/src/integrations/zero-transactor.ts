@@ -275,6 +275,19 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         }
       },
       permissions: (id, member) => memberChatPermissions(tx, contextWorkspaceId, id, member),
+      join: async (id, member) => {
+        const participant = zql.chatParticipants
+          .where('workspaceId', contextWorkspaceId)
+          .where('chatId', id)
+          .where('userId', member)
+        if (!(await tx.run(participant.one())))
+          await tx.mutate.chatParticipants.insert({
+            workspaceId: contextWorkspaceId,
+            chatId: id,
+            userId: member,
+            roleId: 'prompter',
+          })
+      },
       localSessionsAllowed: async () =>
         (await tx.run(zql.workspaces.where('workspaceId', contextWorkspaceId).one()))?.localSessions ?? true,
       hasAgentSession: async (id) =>

@@ -1,4 +1,4 @@
-import { type ChatId, isPickableModel, type MemberId } from '@hq/kernel'
+import { type ChatId, isPickableModel, type MemberId, requireChatPermission } from '@hq/kernel'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { InvalidRouting } from '../domain/errors.ts'
 import {
@@ -25,6 +25,7 @@ export const updateChatRouting = (
 ) =>
   transactor.run(async ({ chats, routing, agentJobs }) => {
     const chat = await chats.get(chatId)
+    await requireChatPermission(chats, chatId, memberId, 'session.configure')
     if (chat.type !== 'runtime') throw new InvalidRouting('Only runtime chats have a model')
     if ((sessionModel ?? (chat.localSession ? undefined : reasoningEffort)) !== undefined && chat.harness)
       throw new InvalidRouting(

@@ -5,6 +5,9 @@ export const chatRoutingPathOf = (chatId: string) => `/api/chats/${chatId}/routi
 export const chatQuestionPathOf = (chatId: string, questionId: string) => `/api/chats/${chatId}/questions/${questionId}`
 export const chatPlanModePathOf = (chatId: string) => `/api/chats/${chatId}/plan-mode`
 
+const storedChatWaitMilliseconds = 5000
+const storedChatRetryMilliseconds = 100
+
 type PostAsMember = (workspaceId: WorkspaceId, path: string, body?: string) => Promise<Response>
 type GetAsMember = (workspaceId: WorkspaceId, path: string) => Promise<Response>
 type ChatInput = { workspaceId: WorkspaceId; chatId: ChatId }
@@ -12,8 +15,14 @@ type ChatInput = { workspaceId: WorkspaceId; chatId: ChatId }
 export const createHttpChatCommands = (postAsMember: PostAsMember, getAsMember: GetAsMember) => ({
   commandOutput: async ({ workspaceId, chatId, stepId }: ChatInput & { stepId: string }) =>
     (await getAsMember(workspaceId, commandOutputPathOf(chatId, stepId))).text(),
-  chatRouting: async ({ workspaceId, chatId }: ChatInput) =>
-    (await getAsMember(workspaceId, chatRoutingPathOf(chatId))).json(),
+  chatRouting: async ({ workspaceId, chatId }: ChatInput) => {
+    for (let waited = 0; ; waited += storedChatRetryMilliseconds) {
+      const response = await getAsMember(workspaceId, chatRoutingPathOf(chatId))
+      if (response.ok) return response.json()
+      if (waited >= storedChatWaitMilliseconds) throw new Error(`The routing read answered ${response.status}`)
+      await new Promise((resolve) => setTimeout(resolve, storedChatRetryMilliseconds))
+    }
+  },
   answerQuestion: async ({
     workspaceId,
     chatId,

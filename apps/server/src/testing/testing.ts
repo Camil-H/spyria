@@ -2,7 +2,7 @@ import { afterAll, afterEach, expect, spyOn } from 'bun:test'
 import { createHash } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { conversationMutators } from '@hq/conversation/server'
-import { acme, alice, bob } from '@hq/db'
+import { acme, alice, lee, bob } from '@hq/db'
 import { type Database, events, resetDatabase } from '@hq/db/postgres'
 import { setModelDirectory } from '@hq/db/server-writes'
 import {
@@ -15,6 +15,7 @@ import {
 import {
   addRoutableModels,
   type ChatId,
+  type ChatPermission,
   chatId,
   type MemberId,
   memberId,
@@ -351,6 +352,61 @@ export const virtualKeyOf = async (userId: string) => {
   ).virtual_key
 }
 
+export const newChat = async ({
+  ownerId = alice,
+  type = 'runtime',
+  visibility = type === 'runtime' ? 'private' : 'public',
+  harness = null,
+  id = `chat-${crypto.randomUUID()}`,
+  participants = [],
+}: {
+  ownerId?: string
+  type?: 'runtime' | 'channel'
+  visibility?: 'public' | 'private'
+  harness?: string | null
+  id?: string
+  participants?: { memberId: string; roleId: string }[]
+} = {}) => {
+  const { database } = await openedTestApp()
+  await database.$client.begin(async (sql) => {
+    await sql`
+      insert into chats (workspace_id, id, type, visibility, owner_kind, owner_user_id, name, local_session, harness, archived, created_at)
+      values (${acme}, ${id}, ${type}, ${visibility}, 'user', ${ownerId}, 'Runtime chat', ${harness !== null}, ${harness}, false, now())`
+    for (const { memberId, roleId } of [{ memberId: ownerId, roleId: 'owner' }, ...participants])
+      await sql`
+        insert into chat_participants (workspace_id, chat_id, user_id, role_id)
+        values (${acme}, ${id}, ${memberId}, ${roleId})`
+  })
+  return chatId(id)
+}
+
+export const chatAccessRoles = [
+  { role: 'outsider', name: 'a non-participant of a private chat', userId: bob, roleId: null, isPublic: false },
+  { role: 'reader', name: 'a reader', userId: lee, roleId: 'reader', isPublic: false },
+  { role: 'prompter', name: 'a prompter', userId: bob, roleId: 'prompter', isPublic: false },
+  { role: 'editor', name: 'an editor', userId: bob, roleId: 'editor', isPublic: false },
+  { role: 'owner', name: 'the owner', userId: alice, roleId: 'owner', isPublic: false },
+  { role: 'public', name: 'a non-participant of a public channel', userId: lee, roleId: null, isPublic: true },
+] as const
+export type ChatAccessRole = (typeof chatAccessRoles)[number]
+export const chatAccessRows = (allowedRoles: readonly ChatAccessRole['role'][]) =>
+  chatAccessRoles.map((role) => ({
+    ...role,
+    member: { workspaceId: acme, userId: role.userId },
+    isAllowed: allowedRoles.includes(role.role),
+  }))
+export const chatAs = (
+  role: { isPublic: boolean; roleId: string | null; userId: string },
+  type: 'runtime' | 'channel' = 'runtime',
+) =>
+  newChat({
+    type: role.isPublic ? 'channel' : type,
+    visibility: role.isPublic ? 'public' : 'private',
+    participants: role.roleId && role.roleId !== 'owner' ? [{ memberId: role.userId, roleId: role.roleId }] : [],
+  })
+export const missingPermission = (permission: ChatPermission) =>
+  failedWith(`You need the ${permission} permission on this chat`)
+
 export const testHqAgentImage = `sha256:${'0'.repeat(64)}`
 
 export const runtimeTurn = async (host: { id: string }, prompterId: string | null) => {
@@ -524,28 +580,7 @@ export const startAgentStack = async ({
       return { relay, host, launches: () => relay.created as Launch[] }
     },
     mutate,
-    newRuntimeChat: async ({
-      ownerId = alice,
-      harness = null,
-      id = `chat-${crypto.randomUUID()}`,
-      participants = [],
-    }: {
-      ownerId?: string
-      harness?: string | null
-      id?: string
-      participants?: { memberId: string; roleId: string }[]
-    } = {}) => {
-      await database.$client.begin(async (sql) => {
-        await sql`
-          insert into chats (workspace_id, id, type, visibility, owner_kind, owner_user_id, name, local_session, harness, archived, created_at)
-          values (${acme}, ${id}, 'runtime', 'private', 'user', ${ownerId}, 'Runtime chat', ${harness !== null}, ${harness}, false, now())`
-        for (const { memberId, roleId } of [{ memberId: ownerId, roleId: 'owner' }, ...participants])
-          await sql`
-            insert into chat_participants (workspace_id, chat_id, user_id, role_id)
-            values (${acme}, ${id}, ${memberId}, ${roleId})`
-      })
-      return chatId(id)
-    },
+    newRuntimeChat: newChat,
     prompt: async (chat: ChatId, text: string, member = aliceInAcme) => {
       const id = `message-${crypto.randomUUID()}`
       expect(await mutate(member, 'conversation.sendMessage', { workspaceId: acme, id, chatId: chat, text })).toEqual(

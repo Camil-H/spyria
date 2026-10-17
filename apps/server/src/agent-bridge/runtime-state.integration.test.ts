@@ -7,6 +7,7 @@ import {
   alice,
   aliceInAcme,
   globex,
+  missingPermission,
   bob,
   bobInAcme,
   startAgentStack,
@@ -77,7 +78,7 @@ test('Stop interrupts the agent, ends the turn once with a notice naming the mem
   await commandShown(first)
   const second = await prompt(chat, 'Then this')
 
-  expect(await command(aliceInGlobex, 'stopAgent', chat)).toEqual(succeeded)
+  expect(await command(aliceInGlobex, 'stopAgent', chat)).toEqual(missingPermission('session.configure'))
   expect(await command(aliceInGlobex, 'stopAgent', chat, acme)).not.toEqual(succeeded)
   expect(await interruptJobsOf(chat)).toEqual([])
   expect(relay.interrupts).toEqual([])

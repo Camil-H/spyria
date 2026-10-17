@@ -8,6 +8,8 @@ import {
   addLlmKey,
   alice,
   aliceInAcme,
+  chatAccessRows,
+  chatAs,
   bob,
   sessionTokenOf,
   startAgentStack,
@@ -257,4 +259,41 @@ test('a question in a delegated sub-conversation is answered with the assumption
   })
   expect(await mutate(aliceInAcme, 'conversation.stopAgent', { workspaceId: acme, chatId: chat })).toEqual(succeeded)
   await waitFor(async () => (await turnOf(chat)) === null)
+})
+
+const hasKey = async (userId: string) =>
+  (await database.$client`select 1 from llm_credentials where user_id = ${userId}`).length > 0
+const postedAs = async (path: string, body: object, userId: string) => {
+  if (!(await hasKey(userId))) await addLlmKey(userId, 'OpenAI')
+  const response = await app.request(path, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${await sessionTokenOf(database, acme, userId)}` },
+    body: JSON.stringify(body),
+  })
+  return { status: response.status, error: (await response.json().catch(() => ({}))).error }
+}
+const refused = { status: 403, error: 'missing_chat_permission' }
+
+test.each(chatAccessRows(['prompter', 'editor', 'owner', 'public']))(
+  'answering a question needs chat.post before the runtime rules: $name',
+  async (role) => {
+    const { userId, isAllowed, isPublic } = role
+    const chat = await chatAs(role)
+    expect(await postedAs(`/api/chats/${chat}/questions/question-1`, { approve: true }, userId)).toEqual(
+      !isAllowed ? refused : isPublic ? { status: 403, error: undefined } : { status: 409, error: undefined },
+    )
+  },
+)
+
+test.each(chatAccessRows(['editor', 'owner']))('the plan mode needs session.configure: $name', async (role) => {
+  const { userId, isAllowed } = role
+  const chat = await chatAs(role)
+  expect(await postedAs(`/api/chats/${chat}/plan-mode`, { enabled: true }, userId)).toEqual(
+    isAllowed ? { status: 409, error: undefined } : refused,
+  )
+})
+
+test('a chat that does not exist is refused like a chat the member cannot read', async () => {
+  expect(await postedAs('/api/chats/chat-missing/plan-mode', { enabled: true }, alice)).toEqual(refused)
+  expect(await postedAs('/api/chats/chat-missing/questions/question-1', { approve: true }, alice)).toEqual(refused)
 })

@@ -50,7 +50,7 @@ export const conversationMutators = defineMutators({
       if (tx.location === 'server')
         await retryAgent(
           { ...dependenciesOf(tx, ctx, args), runtimeRetrier: createZeroRuntimeRetrier(tx, ctx) },
-          { workspaceId: ctx.workspaceId, chatId: args.chatId },
+          { workspaceId: ctx.workspaceId, chatId: args.chatId, memberId: ctx.userId },
         )
     }),
     updateChatRouting: defineMutator(

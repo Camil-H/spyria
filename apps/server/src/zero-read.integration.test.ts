@@ -187,3 +187,65 @@ test('an optimistic message takes the next seq of its chat before the server con
   expect(invoiceMessages.at(-1)).toMatchObject({ id: 'message-optimistic', seq: 5 })
   await confirmation
 })
+
+test('the client refuses a mutation the member lacks the permission for, before it reaches the server', async () => {
+  const store = await openZeroStore(createZeroStore, lee, [acme])
+  await expect(
+    store.mutate(
+      acme,
+      conversationMutators.conversation.sendMessage({
+        workspaceId: acme,
+        id: 'message-reader-posts',
+        chatId: 'chat-invoice-bug',
+        text: 'Readers cannot post',
+      }),
+    ),
+  ).rejects.toThrow('You need the chat.post permission on this chat')
+  expect(store.read().messages.some((message) => message.id === 'message-reader-posts')).toBe(false)
+  expect(await database.query.messages.findFirst({ where: { id: 'message-reader-posts' } })).toBeUndefined()
+})
+
+test('posting in a public channel through the client joins the member as Prompter in the replica and in Postgres', async () => {
+  const store = await openZeroStore(createZeroStore, lee, [acme])
+  const { confirmation } = await store.mutate(
+    acme,
+    conversationMutators.conversation.sendMessage({
+      workspaceId: acme,
+      id: 'message-lee-joins-welcome',
+      chatId: 'chat-welcome',
+      text: 'Hello all',
+    }),
+  )
+  const leeInWelcome = (rows: readonly { chatId: string; memberId: string; roleId: string }[]) =>
+    rows.filter((row) => row.chatId === 'chat-welcome' && row.memberId === lee).map((row) => row.roleId)
+  expect(leeInWelcome(store.read().chatMembers)).toEqual(['prompter'])
+  await confirmation
+  expect(
+    await database.$client`select role_id from chat_participants where chat_id = 'chat-welcome' and user_id = ${lee}`,
+  ).toEqual([{ role_id: 'prompter' }] as never)
+})
+
+test('archiving a project whose chats the member cannot all administer is applied on the client, refused by the server and rolled back', async () => {
+  await database.$client`update chats set project_id = 'project-onboarding' where id = 'chat-research'`
+  const store = await openZeroStore(createZeroStore, bob, [acme])
+  const onboardingOf = () => store.read().projects.find((project) => project.id === 'project-onboarding')
+  await database.$client`update chat_participants set role_id = 'owner' where user_id = ${bob} and chat_id = 'chat-welcome'`
+  await waitFor(() =>
+    store
+      .read()
+      .chatMembers.some((row) => row.chatId === 'chat-welcome' && row.memberId === bob && row.roleId === 'owner'),
+  )
+  const { confirmation } = await store.mutate(
+    acme,
+    workspaceMutators.workspace.archiveProject({
+      workspaceId: acme,
+      projectId: 'project-onboarding',
+      chatsPolicy: 'archive',
+    }),
+  )
+  await expect(confirmation).rejects.toThrow('You need the chat.admin permission on this chat')
+  await waitFor(() => onboardingOf()?.archived === false)
+  expect(await database.query.projects.findFirst({ where: { id: 'project-onboarding' } })).toMatchObject({
+    archived: false,
+  })
+})

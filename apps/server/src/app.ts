@@ -14,7 +14,7 @@ import {
 import type { Database } from '@hq/db/postgres'
 import { schema } from '@hq/db/zero'
 import { queries, type Transact, type ZeroContext } from '@hq/db/zero-queries'
-import { chatId, type RuntimeHostId } from '@hq/kernel'
+import { chatId, MissingChatPermission, type RuntimeHostId } from '@hq/kernel'
 import {
   addLlmCredentialFromRequest,
   availableToolsFromRequest,
@@ -42,6 +42,7 @@ import { getMutator, mustGetMutator, mustGetQuery } from '@rocicorp/zero'
 import { handleMutateRequest, handleQueryRequest } from '@rocicorp/zero/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { Hono } from 'hono'
+import { HTTPException } from 'hono/http-exception'
 import { type AgentBridge, createAgentBridge } from './agent-bridge/bridge.ts'
 import { createOidc, type OidcSettings } from './auth/oidc.ts'
 import { createAuthRoutes } from './auth/routes.ts'
@@ -138,6 +139,13 @@ export const createApp = ({
   const app = new Hono<{
     Variables: { zeroContext: ZeroContext; transact: Transact; database: Database }
   }>()
+    .onError((error, context) => {
+      if (error instanceof MissingChatPermission)
+        return context.json({ error: error.code, message: error.message }, 403)
+      if (error instanceof HTTPException) return error.getResponse()
+      console.error(error)
+      return context.text('Internal Server Error', 500)
+    })
     .get('/health', (context) => context.json({ status: 'ok' }))
     .get('/host', runtimeHosts.upgrade)
     .get('/api/stream', agentBridge.stream(authenticate, databaseOf))
