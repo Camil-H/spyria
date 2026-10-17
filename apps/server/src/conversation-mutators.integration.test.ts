@@ -10,6 +10,7 @@ import {
   globex,
   lee,
   missingPermission,
+  newChat,
   openSharedTestApp,
   bob,
   bobInAcme,
@@ -343,4 +344,157 @@ test('posting in a public channel makes a non-participant a Prompter and leaves 
   expect(await roleOf(lee)).toBe('prompter')
   expect(await sendTo(bobInAcme, 'chat-standup', 'message-owner-posts', 'Hi')).toEqual(succeeded)
   expect(await roleOf(bob)).toBe('owner')
+})
+
+const participantsOf = async (chatId: string) =>
+  Object.fromEntries(
+    (
+      await database.$client<{ user_id: string; role_id: string }[]>`
+        select user_id, role_id from chat_participants where chat_id = ${chatId}`
+    ).map((row) => [row.user_id, row.role_id]),
+  )
+const addParticipant = (chatId: string, memberId: string, roleId: string) =>
+  database.$client`
+    insert into chat_participants (workspace_id, chat_id, user_id, role_id) values (${acme}, ${chatId}, ${memberId}, ${roleId})`
+const otherThan = (userId: string) => (userId === lee ? bob : lee)
+const memberChange = (member: typeof aliceInAcme, name: string, chatId: string, args: Record<string, unknown> = {}) =>
+  resultOf(member, `conversation.${name}`, { workspaceId: acme, chatId, ...args })
+const managers = ['owner'] as const
+
+test.each(chatAccessRows(['editor', 'owner']))(
+  'inviteMember needs members.invite: $name',
+  async ({ member, isAllowed, ...role }) => {
+    const chat = await chatAs(role)
+    const invitee = otherThan(member.userId)
+    expect(await memberChange(member, 'inviteMember', chat, { memberId: invitee, roleId: 'reader' })).toEqual(
+      isAllowed ? succeeded : missingPermission('members.invite'),
+    )
+    expect((await participantsOf(chat))[invitee]).toBe(isAllowed ? 'reader' : undefined)
+  },
+)
+
+test.each(chatAccessRows(managers))(
+  'changeMemberRole needs members.manage: $name',
+  async ({ member, isAllowed, ...role }) => {
+    const chat = await chatAs(role)
+    const target = otherThan(member.userId)
+    await addParticipant(chat, target, 'reader')
+    expect(await memberChange(member, 'changeMemberRole', chat, { memberId: target, roleId: 'prompter' })).toEqual(
+      isAllowed ? succeeded : missingPermission('members.manage'),
+    )
+    expect((await participantsOf(chat))[target]).toBe(isAllowed ? 'prompter' : 'reader')
+  },
+)
+
+test.each(chatAccessRows(managers))(
+  'removeMember needs members.manage: $name',
+  async ({ member, isAllowed, ...role }) => {
+    const chat = await chatAs(role)
+    const target = otherThan(member.userId)
+    await addParticipant(chat, target, 'reader')
+    expect(await memberChange(member, 'removeMember', chat, { memberId: target })).toEqual(
+      isAllowed ? succeeded : missingPermission('members.manage'),
+    )
+    expect((await participantsOf(chat))[target]).toBe(isAllowed ? undefined : 'reader')
+  },
+)
+
+test.each(
+  chatAccessRows(['reader', 'prompter', 'editor']).map((row) => ({
+    ...row,
+    refusal:
+      row.role === 'owner' ? 'The owner keeps the Owner role and stays in the chat' : 'This member is not in the chat',
+  })),
+)('leaveChat lets any participant but the owner leave: $name', async ({ member, isAllowed, refusal, ...role }) => {
+  const chat = await chatAs(role)
+  const roleBefore = (await participantsOf(chat))[member.userId]
+  expect(await memberChange(member, 'leaveChat', chat)).toEqual(isAllowed ? succeeded : failedWith(refusal))
+  expect((await participantsOf(chat))[member.userId]).toBe(isAllowed ? undefined : roleBefore)
+})
+
+test('inviting, changing a role, removing and leaving each record a member event by the acting member', async () => {
+  const chat = await newChat({ participants: [{ memberId: bob, roleId: 'editor' }] })
+  expect(await memberChange(bobInAcme, 'inviteMember', chat, { memberId: lee, roleId: 'prompter' })).toEqual(succeeded)
+  expect(await memberChange(aliceInAcme, 'changeMemberRole', chat, { memberId: lee, roleId: 'reader' })).toEqual(
+    succeeded,
+  )
+  expect(await memberChange(aliceInAcme, 'removeMember', chat, { memberId: lee })).toEqual(succeeded)
+  expect(await memberChange(bobInAcme, 'leaveChat', chat)).toEqual(succeeded)
+  expect(await participantsOf(chat)).toEqual({ [alice]: 'owner' })
+  expect(await changesOf(chat)).toEqual([
+    { seq: 1, type: 'member.invited', actor: bob, payload: { memberId: lee, roleId: 'prompter' } },
+    { seq: 2, type: 'member.role_changed', actor: alice, payload: { memberId: lee, roleId: 'reader' } },
+    { seq: 3, type: 'member.removed', actor: alice, payload: { memberId: lee } },
+    { seq: 4, type: 'member.left', actor: bob, payload: { memberId: bob } },
+  ])
+})
+
+test.each([
+  [
+    'an editor inviting with a role above their own',
+    bobInAcme,
+    'inviteMember',
+    { memberId: lee, roleId: 'tool-keeper' },
+    'You can only give a role within your own permissions',
+  ],
+  [
+    'inviting as Owner',
+    aliceInAcme,
+    'inviteMember',
+    { memberId: lee, roleId: 'owner' },
+    'The Owner role cannot be given',
+  ],
+  [
+    'inviting a non-member of the workspace',
+    aliceInAcme,
+    'inviteMember',
+    { memberId: 'member-stranger', roleId: 'reader' },
+    'Only members of this workspace can join a chat',
+  ],
+  [
+    'inviting an existing participant',
+    aliceInAcme,
+    'inviteMember',
+    { memberId: bob, roleId: 'reader' },
+    'This member is already in the chat',
+  ],
+  [
+    'inviting with a role that does not exist',
+    aliceInAcme,
+    'inviteMember',
+    { memberId: lee, roleId: 'janitor' },
+    'Role janitor was not found',
+  ],
+  [
+    'changing the owner’s role',
+    aliceInAcme,
+    'changeMemberRole',
+    { memberId: alice, roleId: 'reader' },
+    'The owner keeps the Owner role and stays in the chat',
+  ],
+  [
+    'assigning Owner',
+    aliceInAcme,
+    'changeMemberRole',
+    { memberId: bob, roleId: 'owner' },
+    'The Owner role cannot be given',
+  ],
+  [
+    'removing the owner',
+    aliceInAcme,
+    'removeMember',
+    { memberId: alice },
+    'The owner keeps the Owner role and stays in the chat',
+  ],
+  ['removing a non-participant', aliceInAcme, 'removeMember', { memberId: lee }, 'This member is not in the chat'],
+])('refuses %s and writes nothing', async (_, member, name, args, message) => {
+  await database.$client`
+    insert into chat_roles (workspace_id, id, name, permissions, built_in)
+    values (${acme}, 'tool-keeper', 'Tool keeper', ${['chat.read', 'tools.manage']}, false)
+    on conflict do nothing`
+  const chat = await newChat({ participants: [{ memberId: bob, roleId: 'editor' }] })
+  const participantsBefore = await participantsOf(chat)
+  expect(await memberChange(member, name, chat, args)).toEqual(failedWith(message))
+  expect(await participantsOf(chat)).toEqual(participantsBefore)
+  expect(await changesOf(chat)).toEqual([])
 })

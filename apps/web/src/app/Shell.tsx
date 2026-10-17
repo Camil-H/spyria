@@ -84,7 +84,7 @@ export const App = ({ app }: { app: Application }) => (
           <ProfileProvider commands={app.profileCommands}>
             <RuntimeProvider commands={app.runtimeCommands}>
               <BrowserRouter>
-                <PanelProvider>
+                <PanelProvider commands={app.conversationCommands}>
                   <Routes>
                     <Route
                       path="/w/:workspaceId"

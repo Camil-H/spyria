@@ -1,4 +1,4 @@
-import type { ChatId, ChatPermission, ListedModel, MemberId, MessageId, Model, WorkspaceId } from '@hq/kernel'
+import type { ChatId, ChatPermission, ChatRole, ListedModel, MemberId, MessageId, Model, WorkspaceId } from '@hq/kernel'
 import type { AgentEvent } from '../domain/agent-events.ts'
 import type { AgentStep, StepDelegation, StoredStep } from '../domain/agent-steps.ts'
 import type { ConversationChat, Message, MessageChange } from '../domain/message.ts'
@@ -42,6 +42,7 @@ export type ModelCallTurn = { promptId: MessageId; prompterId: MemberId; ownerId
 export type MemberDirectory = {
   displayNameOf(memberId: MemberId): Promise<string>
   hasLlmCredential(memberId: MemberId): Promise<boolean>
+  isMember(memberId: MemberId): Promise<boolean>
 }
 
 export type AgentEventRepository = {
@@ -69,10 +70,21 @@ export type DraftRepository = { replace(draft: Draft): Promise<void> }
 
 export type ReadMarkerRepository = { markNewestRead(chatId: ChatId, memberId: MemberId): Promise<void> }
 
+export type ParticipantChange = Readonly<{
+  type: 'member.invited' | 'member.role_changed' | 'member.removed' | 'member.left'
+  chatId: ChatId
+  memberId: MemberId
+  roleId: string | null
+  actorId: MemberId
+}>
+
 export type ChatRepository = {
   get(chatId: ChatId): Promise<ConversationChat>
   permissions(chatId: ChatId, memberId: MemberId): Promise<readonly ChatPermission[]>
   join(chatId: ChatId, memberId: MemberId): Promise<void>
+  roleOf(chatId: ChatId, memberId: MemberId): Promise<string | undefined>
+  role(roleId: string): Promise<ChatRole | undefined>
+  changeParticipant(change: ParticipantChange): Promise<void>
   localSessionsAllowed(): Promise<boolean>
   hasAgentSession(chatId: ChatId): Promise<boolean>
   isSessionStartPending(chatId: ChatId): Promise<boolean>

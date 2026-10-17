@@ -1,6 +1,7 @@
 import {
   composerOf,
   expect,
+  expectMembers,
   mainOf,
   messageContaining,
   openChat,
@@ -57,15 +58,6 @@ const expectOwnerConnections = async (page: Page) => {
   await expect(personalGroup.getByRole('listitem').filter({ hasText: 'GitHub' })).toContainText('Connected')
   await expect(personalGroup.getByRole('listitem').filter({ hasText: 'Slack' })).toContainText('Connected')
   await expect(personalGroup.getByRole('listitem').filter({ hasText: 'Notion' })).toContainText('Needs reconnection')
-}
-
-const expectMembers = async (page: Page, rolesByName: [string, string][]) => {
-  const members = tabPanelOf(page).getByRole('listitem')
-  await expect(members).toHaveCount(rolesByName.length)
-  for (const [index, [name, role]] of rolesByName.entries()) {
-    await expect(members.nth(index)).toContainText(name)
-    await expect(members.nth(index)).toContainText(role)
-  }
 }
 
 test.beforeEach(async ({ page }) => {

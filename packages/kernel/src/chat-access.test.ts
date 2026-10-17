@@ -3,6 +3,7 @@ import {
   builtInChatRoles,
   type ChatPermission,
   can,
+  canGrant,
   MissingChatPermission,
   permissionsOf,
   requireChatPermission,
@@ -62,4 +63,13 @@ test('requireChatPermission passes a member holding the permission and names the
     code: 'missing_chat_permission',
     message: 'You need the chat.post permission on this chat',
   })
+})
+
+test('a role can be granted only when its permissions are within the granter’s own', () => {
+  const grantableBy = (granterRoleId: string) =>
+    builtInChatRoles.filter((role) => canGrant(permissionsOfRole(granterRoleId) ?? [], role)).map((role) => role.id)
+  expect(grantableBy('owner')).toEqual(['owner', 'editor', 'prompter', 'reader'])
+  expect(grantableBy('editor')).toEqual(['editor', 'prompter', 'reader'])
+  expect(grantableBy('prompter')).toEqual(['prompter', 'reader'])
+  expect(grantableBy('reader')).toEqual(['reader'])
 })

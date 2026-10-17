@@ -53,6 +53,7 @@ import { createRuntimeHostGateway, type RuntimeHostGateway } from './runtime-hos
 
 export const defaultLlm = { model: 'openai/fake/fake-model' }
 const questionIdPattern = /^[\w-]{1,64}$/
+const readRevokingMutations = new Set(['conversation.removeMember', 'conversation.leaveChat'])
 type LlmGateway = ReturnType<typeof createLlmGateway>
 
 export const sessionClassifierOf =
@@ -187,8 +188,14 @@ export const createApp = ({
             const response = await transact((tx, name, args) =>
               mutatorNamed(name).fn({ args, tx, ctx: { ...ctx, hqAgentImage } }),
             )
-            if (mutation.name === 'runtime.removeHost' && !('error' in response.result))
+            if ('error' in response.result) return response
+            if (mutation.name === 'runtime.removeHost')
               runtimeHosts.disconnect(ctx.workspaceId, (mutation.args[0] as { hostId: RuntimeHostId }).hostId)
+            if (readRevokingMutations.has(mutation.name))
+              await agentBridge.forDatabase(context.get('database')).revokeUnreadable({
+                workspaceId: ctx.workspaceId,
+                chatId: chatId((mutation.args[0] as { chatId: string }).chatId),
+              })
             return response
           },
           request: context.req.raw,

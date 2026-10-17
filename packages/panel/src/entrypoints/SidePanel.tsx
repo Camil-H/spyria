@@ -21,14 +21,13 @@ import {
   Terminal,
   Users,
 } from 'lucide-react'
-import { Activity, type ComponentType, type ReactNode, useState } from 'react'
+import { Activity, type ComponentType, lazy, type ReactNode, Suspense, useState } from 'react'
 import { getPanelTabs, type PanelTabId } from '../queries/get-panel-tabs.ts'
 import { BrowserTab } from './BrowserTab.tsx'
 import { ChangesTab } from './ChangesTab.tsx'
 import { CommitsTab } from './CommitsTab.tsx'
 import { ConnectionsTab } from './ConnectionsTab.tsx'
 import { FilesTab } from './FilesTab.tsx'
-import { MembersTab } from './MembersTab.tsx'
 import { PlanTab } from './PlanTab.tsx'
 import { usePanel } from './providers.tsx'
 import { ResizeHandle } from './ResizeHandle.tsx'
@@ -36,6 +35,8 @@ import { SourcesTab } from './SourcesTab.tsx'
 import type { TabProps } from './TabProps.ts'
 import { TerminalTab } from './TerminalTab.tsx'
 import { tabClass } from './ui.ts'
+
+const MembersTab = lazy(() => import('./MembersTab.tsx'))
 
 const tabs: Record<PanelTabId, { label: string; Icon: LucideIcon; Component: ComponentType<TabProps> | null }> = {
   files: { label: 'Files', Icon: FolderTree, Component: FilesTab },
@@ -101,7 +102,9 @@ export const SidePanel = ({ workspaceId, chatId, Markdown, usageTab }: TabProps 
             const { Component } = tabs[tabId]
             return (
               <Content key={tabId} value={tabId} className="min-h-0 flex-1 overflow-y-auto p-4 text-ink">
-                {Component ? <Component workspaceId={workspaceId} chatId={chatId} Markdown={Markdown} /> : usageTab}
+                <Suspense>
+                  {Component ? <Component workspaceId={workspaceId} chatId={chatId} Markdown={Markdown} /> : usageTab}
+                </Suspense>
               </Content>
             )
           })}

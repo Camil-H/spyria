@@ -35,3 +35,34 @@ export const ForeignWorkspace = errorKind(
 )
 export const InvalidRouting = errorKind('invalid_routing', (message: string) => message, ConversationError)
 export const RunsOnNotChosen = errorKind('runs_on_not_chosen', (notice: string) => notice, ConversationError)
+export const NotWorkspaceMember = errorKind(
+  'not_workspace_member',
+  () => 'Only members of this workspace can join a chat',
+  ConversationError,
+)
+export const AlreadyParticipant = errorKind(
+  'already_participant',
+  () => 'This member is already in the chat',
+  ConversationError,
+)
+export const NotParticipant = errorKind('not_participant', () => 'This member is not in the chat', ConversationError)
+export const RoleNotFound = errorKind(
+  'role_not_found',
+  (roleId: string) => `Role ${roleId} was not found`,
+  ConversationError,
+)
+export const RoleAboveOwn = errorKind(
+  'role_above_own',
+  () => 'You can only give a role within your own permissions',
+  ConversationError,
+)
+export const OwnerRoleNotAssignable = errorKind(
+  'owner_role_not_assignable',
+  () => 'The Owner role cannot be given',
+  ConversationError,
+)
+export const OwnerStays = errorKind(
+  'owner_stays',
+  () => 'The owner keeps the Owner role and stays in the chat',
+  ConversationError,
+)

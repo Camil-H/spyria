@@ -7,6 +7,7 @@ import { startJobWorker } from '../job-worker.ts'
 import {
   acme,
   alice,
+  aliceInAcme,
   captureConsole,
   chatAccessRows,
   chatAs,
@@ -370,5 +371,32 @@ test.each(chatAccessRows(['reader', 'prompter', 'editor', 'owner', 'public']))(
     ])
     expect(isSubscribed).toBe(role.isAllowed)
     expect(viewer.frames).toEqual([])
+  },
+)
+
+test.each([
+  ['the owner removes him', aliceInAcme, 'removeMember', { memberId: bob }],
+  ['he leaves', bobInAcme, 'leaveChat', {}],
+])(
+  'a viewer whose access ends while a reply streams gets no further frame when %s, other viewers stream on',
+  async (_, member, name, args) => {
+    await agentHost()
+    const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'reader' }] })
+    const aliceViewer = await openStream(chat)
+    const bobViewer = await openStream(chat, { token: await sessionTokenOf(database, acme, bob) })
+    await Promise.all([aliceViewer.subscribed, bobViewer.subscribed])
+    const textsOf = (frames: string[]) => frames.flatMap((frame) => JSON.parse(frame).text ?? [])
+    const question = await prompt(chat, 'stub:linger Stream until removed')
+    await holds.reached('linger')
+    await waitFor(() => textsOf(bobViewer.frames).length > 0)
+    expect(await mutate(member, `conversation.${name}`, { workspaceId: acme, chatId: chat, ...args })).toEqual(
+      succeeded,
+    )
+    const framesAtRevocation = [...bobViewer.frames]
+    await holds.release('linger')
+    await answered(question)
+    await turnEnded(chat)
+    expect(bobViewer.frames).toEqual(framesAtRevocation)
+    expect(textsOf(aliceViewer.frames).join('')).toBe(replyOf(1).body)
   },
 )

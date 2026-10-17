@@ -9,6 +9,7 @@ import {
   alice,
   globex,
   lee,
+  newChat,
   openSharedTestApp,
   openZeroStore,
   bob,
@@ -248,4 +249,20 @@ test('archiving a project whose chats the member cannot all administer is applie
   expect(await database.query.projects.findFirst({ where: { id: 'project-onboarding' } })).toMatchObject({
     archived: false,
   })
+})
+
+test('a member invited through the client gets the chat in his replica, and loses it when removed', async () => {
+  const chat = await newChat()
+  const aliceStore = await openZeroStore(createZeroStore, alice, [acme])
+  const bobStore = await openZeroStore(createZeroStore, bob, [acme])
+  const bobSees = () => bobStore.read().chats.some((row) => row.id === chat)
+  await waitFor(() => aliceStore.read().chats.some((row) => row.id === chat))
+  expect(bobSees()).toBe(false)
+  const memberChange = { workspaceId: acme, chatId: chat, memberId: bob }
+  await (
+    await aliceStore.mutate(acme, conversationMutators.conversation.inviteMember({ ...memberChange, roleId: 'reader' }))
+  ).confirmation
+  await waitFor(bobSees)
+  await (await aliceStore.mutate(acme, conversationMutators.conversation.removeMember(memberChange))).confirmation
+  await waitFor(() => !bobSees() && bobStore.read().chatMembers.every((row) => row.chatId !== chat))
 })

@@ -14,7 +14,7 @@ import {
 import type { Database } from '@hq/db/postgres'
 import { schema } from '@hq/db/zero'
 import { memberChatPermissions, type Transact, type ZeroContext, zql } from '@hq/db/zero-queries'
-import { can, chatId, type MessageId, workspaceId } from '@hq/kernel'
+import { can, chatId, type MemberId, type MessageId, workspaceId } from '@hq/kernel'
 import type { SandboxProvider } from '@hq/runtime/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { upgradeWebSocket } from 'hono/bun'
@@ -64,7 +64,8 @@ export const createAgentBridge = ({
       }
     >()
     const streamedSeqs = new Map<string, number>()
-    const viewers = new Map<string, Set<WSContext>>()
+    const viewers = new Map<string, Map<WSContext, MemberId>>()
+    const viewersOf = (chat: AgentChat) => viewers.get(keyOf(chat))?.keys() ?? []
     const delegatedTexts = new Map<string, Map<string, DelegatedFrame>>()
     const send = (viewer: WSContext, chat: AgentChat, frame: object) =>
       viewer.send(JSON.stringify({ chatId: chat.chatId, ...frame }))
@@ -86,7 +87,7 @@ export const createAgentBridge = ({
           if (frame.text === '') texts.delete(frame.delegationId)
           else texts.set(frame.delegationId, { ...frame, text: (continues ? previous.text : '') + frame.text })
           delegatedTexts.set(keyOf(chat), texts)
-          for (const viewer of viewers.get(keyOf(chat)) ?? []) send(viewer, chat, frame)
+          for (const viewer of viewersOf(chat)) send(viewer, chat, frame)
         },
         stopStreaming: (chat, promptId) => {
           delegatedTexts.delete(keyOf(chat))
@@ -164,7 +165,7 @@ export const createAgentBridge = ({
           .then(() => handlers.recordEvent(chat, event, turnPromptId))
           .then((recorded) => {
             if (recorded?.isReplyStored && (turnPromptId ?? promptAtEvent))
-              for (const viewer of viewers.get(keyOf(chat)) ?? [])
+              for (const viewer of viewersOf(chat))
                 send(viewer, chat, { promptId: turnPromptId ?? promptAtEvent, storedId: event.id })
             if (!recorded || chatSocket.promptId !== promptAtEvent) return
             chatSocket.promptId = recorded.promptId
@@ -203,13 +204,13 @@ export const createAgentBridge = ({
           const update = event.update as { sessionUpdate?: string; questionId?: string } | undefined
           if (update?.sessionUpdate === 'question') {
             chatSocket.questions.set(String(update.questionId), update)
-            for (const viewer of viewers.get(keyOf(chat)) ?? [])
+            for (const viewer of viewersOf(chat))
               send(viewer, chat, { promptId: chatSocket.promptId, question: update })
             return
           }
           if (update?.sessionUpdate === 'workspace') {
             chatSocket.workspace = update
-            for (const viewer of viewers.get(keyOf(chat)) ?? []) send(viewer, chat, { workspace: update })
+            for (const viewer of viewersOf(chat)) send(viewer, chat, { workspace: update })
             return
           }
           if (update?.sessionUpdate === 'question_answered' || update?.sessionUpdate === 'question_closed')
@@ -234,7 +235,7 @@ export const createAgentBridge = ({
             const seq = Number(event.seq)
             if (seq > (streamedSeqs.get(conversation.conversationId) ?? 0)) {
               streamedSeqs.set(conversation.conversationId, seq)
-              for (const viewer of viewers.get(keyOf(chat)) ?? [])
+              for (const viewer of viewersOf(chat))
                 send(viewer, chat, { promptId: chatSocket.promptId, text, ...(isReasoning && { isReasoning }) })
             }
           }
@@ -248,6 +249,16 @@ export const createAgentBridge = ({
       opened.catch(closed)
       return chatSocket.isReady
     }
+    const isReadableBy = (memberId: MemberId, chat: AgentChat) =>
+      transact(async (tx) => {
+        const isMember = await tx.run(
+          zql.memberships.where('workspaceId', chat.workspaceId).where('userId', memberId).one(),
+        )
+        return (
+          isMember !== undefined &&
+          can(await memberChatPermissions(tx, chat.workspaceId, chat.chatId, memberId), 'chat.read')
+        )
+      })
     const resumeActiveTurns = async () => {
       const chats = await database.$client<{ workspaceId: string; chatId: string }[]>`
         select workspace_id as "workspaceId", id as "chatId" from chats where agent_turn_message_id is not null`
@@ -270,22 +281,12 @@ export const createAgentBridge = ({
       },
       resumeActiveTurns,
       watch: async (viewer: WSContext, context: ZeroContext, chat: AgentChat) => {
-        const isReadable = () =>
-          transact(async (tx) => {
-            const isMember = await tx.run(
-              zql.memberships.where('workspaceId', chat.workspaceId).where('userId', context.userId).one(),
-            )
-            return (
-              isMember !== undefined &&
-              can(await memberChatPermissions(tx, chat.workspaceId, chat.chatId, context.userId), 'chat.read')
-            )
-          })
-        for (let waited = 0; !(await isReadable()); waited += readableRetryMilliseconds) {
+        for (let waited = 0; !(await isReadableBy(context.userId, chat)); waited += readableRetryMilliseconds) {
           if (waited >= readyTimeoutMilliseconds) return
           await Bun.sleep(readableRetryMilliseconds)
         }
         if (viewer.readyState !== 1) return
-        viewers.set(keyOf(chat), (viewers.get(keyOf(chat)) ?? new Set()).add(viewer))
+        viewers.set(keyOf(chat), (viewers.get(keyOf(chat)) ?? new Map()).set(viewer, context.userId))
         const streaming = sockets.get(keyOf(chat))
         if (streaming?.promptId && streaming.streamedText)
           send(viewer, chat, {
@@ -300,6 +301,10 @@ export const createAgentBridge = ({
         for (const frame of delegatedTexts.get(keyOf(chat))?.values() ?? [])
           send(viewer, chat, { ...frame, isSnapshot: true })
         send(viewer, chat, { subscribed: true })
+      },
+      revokeUnreadable: async (chat: AgentChat) => {
+        for (const [viewer, memberId] of viewers.get(keyOf(chat)) ?? [])
+          if (!(await isReadableBy(memberId, chat))) viewers.get(keyOf(chat))?.delete(viewer)
       },
       unwatch: (viewer: WSContext, chat?: AgentChat) => {
         for (const watching of chat ? [viewers.get(keyOf(chat))] : viewers.values()) watching?.delete(viewer)

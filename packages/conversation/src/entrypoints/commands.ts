@@ -1,4 +1,4 @@
-import type { ChatId, MessageId, WorkspaceId } from '@hq/kernel'
+import type { ChatId, MemberId, MessageId, WorkspaceId } from '@hq/kernel'
 import type { RunsOn } from '../domain/session-routing.ts'
 import type {
   DelegatedFrame,
@@ -20,6 +20,10 @@ export type ConversationCommands = {
   stopAgent: Command<{ chatId: ChatId }>
   retryAgent: Command<{ chatId: ChatId }>
   startRuntimeFromMessage: Command<{ messageId: MessageId }>
+  inviteMember: Command<{ chatId: ChatId; memberId: MemberId; roleId: string }>
+  changeMemberRole: Command<{ chatId: ChatId; memberId: MemberId; roleId: string }>
+  removeMember: Command<{ chatId: ChatId; memberId: MemberId }>
+  leaveChat: Command<{ chatId: ChatId }>
   saveDraft: Command<{ chatId: ChatId; text: string }, void>
   commandOutput: Command<{ chatId: ChatId; stepId: string }>
   connectTool: Command<{ tool: string }, unknown>

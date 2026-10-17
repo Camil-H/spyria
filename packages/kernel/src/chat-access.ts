@@ -42,6 +42,9 @@ export const permissionsOf = (
 export const can = (permissions: readonly ChatPermission[], permission: ChatPermission) =>
   permissions.includes(permission)
 
+export const canGrant = (ownPermissions: readonly ChatPermission[], role: { permissions: readonly ChatPermission[] }) =>
+  role.permissions.every((permission) => can(ownPermissions, permission))
+
 export const MissingChatPermission = errorKind(
   'missing_chat_permission',
   (permission: ChatPermission) => `You need the ${permission} permission on this chat`,

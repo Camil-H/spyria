@@ -1,14 +1,18 @@
 import type { ZeroContext } from '@hq/db/zero-queries'
-import { chatId, messageId } from '@hq/kernel'
+import { chatId, memberId, messageId } from '@hq/kernel'
 import { defineMutator, defineMutators, type Transaction } from '@rocicorp/zero'
 import { z } from 'zod/mini'
 import { ForeignWorkspace } from '../domain/errors.ts'
 import { createZeroRuntimeRetrier } from '../integrations/runtime-agent-runtimes.ts'
 import { createZeroRuntimeChatStarter } from '../integrations/workspace-runtime-chat-starter.ts'
 import { createZeroTransactor } from '../integrations/zero-transactor.ts'
+import { changeMemberRole } from '../operations/change-member-role.ts'
 import { deleteMessage } from '../operations/delete-message.ts'
 import { editMessage } from '../operations/edit-message.ts'
+import { inviteMember } from '../operations/invite-member.ts'
+import { leaveChat } from '../operations/leave-chat.ts'
 import { markChatRead } from '../operations/mark-chat-read.ts'
+import { removeMember } from '../operations/remove-member.ts'
 import { retryAgent } from '../operations/retry-agent.ts'
 import { sendMessage } from '../operations/send-message.ts'
 import { startRuntimeFromMessage } from '../operations/start-runtime-from-message.ts'
@@ -18,9 +22,12 @@ import { updateChatRouting } from '../operations/update-chat-routing.ts'
 const id = z.string().check(z.minLength(1))
 const chatIdArgument = z.pipe(id, z.transform(chatId))
 const messageIdArgument = z.pipe(id, z.transform(messageId))
+const memberIdArgument = z.pipe(id, z.transform(memberId))
 
 const workspaceArguments = z.object({ workspaceId: id })
 const chatArguments = z.extend(workspaceArguments, { chatId: chatIdArgument })
+const memberArguments = z.extend(chatArguments, { memberId: memberIdArgument })
+const memberRoleArguments = z.extend(memberArguments, { roleId: id })
 
 const dependenciesOf = (tx: Transaction, context: ZeroContext, args: { workspaceId: string }) => {
   if (args.workspaceId !== context.workspaceId) throw new ForeignWorkspace()
@@ -62,6 +69,18 @@ export const conversationMutators = defineMutators({
         reasoningEffort: z.optional(z.string().check(z.regex(/^[a-z]{1,16}$/))),
       }),
       ({ tx, ctx, args }) => updateChatRouting(dependenciesOf(tx, ctx, args), { ...args, memberId: ctx.userId }),
+    ),
+    inviteMember: defineMutator(memberRoleArguments, ({ tx, ctx, args }) =>
+      inviteMember(dependenciesOf(tx, ctx, args), { ...args, actorId: ctx.userId }),
+    ),
+    changeMemberRole: defineMutator(memberRoleArguments, ({ tx, ctx, args }) =>
+      changeMemberRole(dependenciesOf(tx, ctx, args), { ...args, actorId: ctx.userId }),
+    ),
+    removeMember: defineMutator(memberArguments, ({ tx, ctx, args }) =>
+      removeMember(dependenciesOf(tx, ctx, args), { ...args, actorId: ctx.userId }),
+    ),
+    leaveChat: defineMutator(chatArguments, ({ tx, ctx, args }) =>
+      leaveChat(dependenciesOf(tx, ctx, args), { ...args, memberId: ctx.userId }),
     ),
     startRuntimeFromMessage: defineMutator(
       z.extend(workspaceArguments, { id, chatId: chatIdArgument, messageId: messageIdArgument }),

@@ -94,6 +94,20 @@ export const panelTabOf = (page: Page, tabName: string) =>
   panelOf(page).getByRole('tablist', { name: 'Panel tabs' }).getByRole('tab', { name: tabName, exact: true })
 export const tabPanelOf = (page: Page) => panelOf(page).getByRole('tabpanel')
 
+const roleShownIn = (row: Locator) =>
+  row.evaluate((item) => {
+    const roleSelect = item.querySelector('select')
+    return roleSelect ? roleSelect.selectedOptions[0]?.textContent : item.lastElementChild?.textContent
+  })
+export const expectMembers = async (page: Page, rolesByName: [string, string][]) => {
+  const members = tabPanelOf(page).getByRole('listitem')
+  await expect(members).toHaveCount(rolesByName.length)
+  for (const [index, [name, role]] of rolesByName.entries()) {
+    await expect(members.nth(index)).toContainText(name)
+    await expect.poll(() => roleShownIn(members.nth(index))).toBe(role)
+  }
+}
+
 export const openChat = async (page: Page, chatName: string) => {
   await chatLinkOf(page, chatName).click()
   await expect(mainOf(page).getByRole('heading', { level: 1, name: chatName })).toBeVisible()

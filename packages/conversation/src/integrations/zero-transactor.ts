@@ -23,7 +23,16 @@ import {
 } from '@hq/db/server-writes'
 import type { Message as MessageRow } from '@hq/db/zero'
 import { memberChatPermissions, type Transact, zql } from '@hq/db/zero-queries'
-import { type ChatId, chatId, type MessageId, memberId, messageId, type WorkspaceId, workspaceId } from '@hq/kernel'
+import {
+  type ChatId,
+  type ChatPermission,
+  chatId,
+  type MessageId,
+  memberId,
+  messageId,
+  type WorkspaceId,
+  workspaceId,
+} from '@hq/kernel'
 import { removeChatRuntimeOnServer } from '@hq/runtime/published'
 import type { Transaction } from '@rocicorp/zero'
 import type { ConversationTransactor, UnitOfWork } from '../contracts/transactor.ts'
@@ -85,6 +94,10 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
   }
   const repliesTo = (promptId: MessageId) =>
     zql.messages.where('workspaceId', contextWorkspaceId).where('replyToId', promptId)
+  const participantRow = (id: ChatId, member: string) =>
+    tx.run(
+      zql.chatParticipants.where('workspaceId', contextWorkspaceId).where('chatId', id).where('userId', member).one(),
+    )
   const messageRow = (id: string) => tx.run(zql.messages.where('workspaceId', contextWorkspaceId).where('id', id).one())
   const enqueue = (type: string, payload: object, delayMilliseconds = 0) =>
     enqueueJob(tx, { workspaceId: contextWorkspaceId, type, payload, delayMilliseconds }).then(() => undefined)
@@ -130,6 +143,9 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
           ?.displayName ?? 'a member',
       hasLlmCredential: async (id) =>
         (await tx.run(zql.llmCredentials.where('workspaceId', contextWorkspaceId).where('userId', id).one())) !==
+        undefined,
+      isMember: async (id) =>
+        (await tx.run(zql.memberships.where('workspaceId', contextWorkspaceId).where('userId', id).one())) !==
         undefined,
     },
     agentTurns: {
@@ -276,16 +292,31 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       },
       permissions: (id, member) => memberChatPermissions(tx, contextWorkspaceId, id, member),
       join: async (id, member) => {
-        const participant = zql.chatParticipants
-          .where('workspaceId', contextWorkspaceId)
-          .where('chatId', id)
-          .where('userId', member)
-        if (!(await tx.run(participant.one())))
+        if (!(await participantRow(id, member)))
           await tx.mutate.chatParticipants.insert({
             workspaceId: contextWorkspaceId,
             chatId: id,
             userId: member,
             roleId: 'prompter',
+          })
+      },
+      roleOf: async (id, member) => (await participantRow(id, member))?.roleId,
+      role: async (roleId) => {
+        const row = await tx.run(zql.chatRoles.where('workspaceId', contextWorkspaceId).where('id', roleId).one())
+        return row && { ...row, permissions: row.permissions as ChatPermission[] }
+      },
+      changeParticipant: async ({ type, chatId: id, memberId: member, roleId, actorId }) => {
+        const key = { workspaceId: contextWorkspaceId, chatId: id, userId: member }
+        if (roleId === null) await tx.mutate.chatParticipants.delete(key)
+        else await tx.mutate.chatParticipants.upsert({ ...key, roleId })
+        if (tx.location === 'server')
+          await appendChatEvent(tx, {
+            workspaceId: contextWorkspaceId,
+            chatId: id,
+            type,
+            actor: actorId,
+            payload: { memberId: member, ...(roleId !== null && { roleId }) },
+            createdAt: new Date(),
           })
       },
       localSessionsAllowed: async () =>
