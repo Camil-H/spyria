@@ -303,7 +303,11 @@ export const createAgentBridge = ({
       resumeActiveTurns,
       watch: async (viewer: WSContext, context: ZeroContext, chat: AgentChat) => {
         for (let waited = 0; !(await isReadableBy(context.userId, chat)); waited += readableRetryMilliseconds) {
-          if (waited >= readyTimeoutMilliseconds || (await isStored(chat))) return
+          if (
+            waited >= readyTimeoutMilliseconds ||
+            ((await isStored(chat)) && !(await isReadableBy(context.userId, chat)))
+          )
+            return
           await Bun.sleep(readableRetryMilliseconds)
         }
         if (viewer.readyState !== 1) return
