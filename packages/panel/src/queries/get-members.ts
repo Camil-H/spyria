@@ -1,4 +1,4 @@
-import { chatPermissionsIn, findChat, inChat, memberNamesIn, type Snapshot } from '@hq/db'
+import { chatParticipantsIn, chatPermissionsIn, findChat, memberNamesIn, type Snapshot } from '@hq/db'
 import { type ChatId, can, canGrant, isRoleAllowedIn, type MemberId, type WorkspaceId } from '@hq/kernel'
 
 export const getMembers = (workspaceId: WorkspaceId, chatId: ChatId, viewerId: MemberId) => (snapshot: Snapshot) => {
@@ -11,7 +11,7 @@ export const getMembers = (workspaceId: WorkspaceId, chatId: ChatId, viewerId: M
     .toSorted((first, second) => second.permissions.length - first.permissions.length)
   const assignableRoles = roles.filter((role) => role.id !== 'owner' && isRoleAllowedIn(chat, role))
   const isOwner = (memberId: MemberId) => Number(memberId === chat.ownerId)
-  const participants = snapshot.chatMembers.filter(inChat(workspaceId, chatId))
+  const participants = chatParticipantsIn(snapshot, workspaceId, chatId)
   const participantIds = new Set(participants.map((participant) => participant.memberId))
   return {
     members: participants

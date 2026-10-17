@@ -3,7 +3,6 @@ import { MessageBody } from './message-body.ts'
 import {
   agentPromptTextOf,
   channelThreadHeaderOf,
-  chatHistoryOf,
   type QuotedMessage,
   runtimeChatHeaderOf,
   threadWrapperOf,
@@ -70,20 +69,15 @@ test('the prompt sent to the agent is the wrapper, a blank line, then the prompt
   expect(agentPromptTextOf(prompt, undefined)).toBe('Summarise it.')
 })
 
-test('a forked runtime chat quotes its member and agent messages under the runtime chat header, without steps, notices or deleted messages', () => {
+test('a forked runtime chat quotes its member and agent messages under the runtime chat header, without deleted messages', () => {
   expect(
     String(
-      threadWrapperOf(
-        runtimeChatHeaderOf('Invoice bug'),
-        chatHistoryOf([
-          quoted('Alice', 'Find the bug.', '09:05'),
-          quoted('Agent', 'Read invoice.ts', '09:06', { kind: 'step' }),
-          quoted('Agent', 'Found it.', '09:07', { kind: 'agent' }),
-          quoted('Agent', 'Stopped by Alice', '09:08', { kind: 'notice' }),
-          quoted('Alice', 'Gone', '09:09', { deletedAt: new Date('2026-10-17T09:10:00.000Z') }),
-          quoted('Alice', 'Fix it.', '09:11'),
-        ]),
-      ),
+      threadWrapperOf(runtimeChatHeaderOf('Invoice bug'), [
+        quoted('Alice', 'Find the bug.', '09:05'),
+        quoted('Agent', 'Found it.', '09:07', { kind: 'agent' }),
+        quoted('Alice', 'Gone', '09:09', { deletedAt: new Date('2026-10-17T09:10:00.000Z') }),
+        quoted('Alice', 'Fix it.', '09:11'),
+      ]),
     ),
   ).toBe(
     [

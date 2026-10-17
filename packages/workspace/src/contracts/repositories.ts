@@ -14,6 +14,8 @@ export type ChatRepository = {
   record(change: ChatChange): Promise<void>
   listByProject(projectId: ProjectId): Promise<Chat[]>
   permissions(chatId: ChatId, memberId: MemberId): Promise<readonly ChatPermission[]>
+  participantRoles(chatId: ChatId): Promise<{ memberId: MemberId; permissions: readonly ChatPermission[] }[]>
+  changeRole(change: { chatId: ChatId; memberId: MemberId; roleId: string; actorId: MemberId }): Promise<void>
 }
 
 export type WorkspaceRepository = {

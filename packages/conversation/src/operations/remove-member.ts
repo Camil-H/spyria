@@ -7,13 +7,15 @@ type Input = { chatId: ChatId; memberId: MemberId; actorId: MemberId }
 
 export const requireNonOwnerParticipant = async ({ chats }: UnitOfWork, chatId: ChatId, memberId: MemberId) => {
   if (!(await chats.roleOf(chatId, memberId))) throw new NotParticipant()
-  if ((await chats.get(chatId)).ownerId === memberId) throw new OwnerStays()
+  const chat = await chats.get(chatId)
+  if (chat.ownerId === memberId) throw new OwnerStays()
+  return chat
 }
 
 export const removeMember = ({ transactor }: Dependencies, { chatId, memberId, actorId }: Input) =>
   transactor.run(async (unitOfWork) => {
     await requireChatPermission(unitOfWork.chats, chatId, actorId, 'members.manage')
-    await requireNonOwnerParticipant(unitOfWork, chatId, memberId)
-    if ((await unitOfWork.chats.get(chatId)).visibility === 'public') throw new PublicChatOpenToAll()
+    const chat = await requireNonOwnerParticipant(unitOfWork, chatId, memberId)
+    if (chat.visibility === 'public') throw new PublicChatOpenToAll()
     await unitOfWork.chats.changeParticipant({ type: 'member.removed', chatId, memberId, roleId: null, actorId })
   })

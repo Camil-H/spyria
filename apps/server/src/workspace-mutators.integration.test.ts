@@ -291,6 +291,47 @@ test.each(chatAccessRows(['owner']))(
   },
 )
 
+test('making a channel public turns its Readers into Prompters, recorded as role changes by the member who changed it', async () => {
+  const chat = await newChat({
+    type: 'channel',
+    visibility: 'private',
+    participants: [
+      { memberId: bob, roleId: 'reader' },
+      { memberId: lee, roleId: 'prompter' },
+    ],
+  })
+  expect(
+    await resultOf(aliceInAcme, 'workspace.changeVisibility', {
+      workspaceId: acme,
+      chatId: chat,
+      visibility: 'public',
+    }),
+  ).toEqual(succeeded)
+  expect(await participantsOf(chat)).toEqual(
+    expect.arrayContaining([
+      { userId: alice, roleId: 'owner' },
+      { userId: bob, roleId: 'prompter' },
+      { userId: lee, roleId: 'prompter' },
+    ]),
+  )
+  expect(await changesOf(chat)).toEqual([
+    { seq: 1, type: 'chat.visibility_changed', actor: alice, payload: { visibility: 'public' } },
+    { seq: 2, type: 'member.role_changed', actor: alice, payload: { memberId: bob, roleId: 'prompter' } },
+  ])
+  expect(
+    await resultOf(aliceInAcme, 'workspace.changeVisibility', {
+      workspaceId: acme,
+      chatId: chat,
+      visibility: 'private',
+    }),
+  ).toEqual(succeeded)
+  expect((await changesOf(chat)).map(({ type }) => type)).toEqual([
+    'chat.visibility_changed',
+    'member.role_changed',
+    'chat.visibility_changed',
+  ])
+})
+
 test('changeVisibility refuses a runtime chat, even for its owner', async () => {
   const chat = await newChat()
   expect(

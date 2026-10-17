@@ -85,3 +85,38 @@ test.each([
     }
   },
 )
+
+test('the tool server list is read once per short window, and again after a server is set up or the window ends', async () => {
+  const listings: number[] = []
+  const toolServerListMilliseconds = 200
+  const clientServer = Bun.serve({
+    port: 0,
+    fetch: (request) => {
+      const { pathname } = new URL(request.url)
+      if (pathname === '/api/mcp/clients') listings.push(Date.now())
+      return Response.json(pathname === '/api/mcp/clients' ? { clients: [] } : {})
+    },
+  })
+  const listingGateway = createLlmGateway({
+    url: `http://localhost:${clientServer.port}`,
+    adminUser: 'admin',
+    adminPassword: 'secret',
+    toolServerListMilliseconds,
+  })
+  try {
+    await Promise.all([listingGateway.toolServers(), listingGateway.toolServers()])
+    await listingGateway.toolServers()
+    expect(listings).toHaveLength(1)
+    await listingGateway.setUpToolServer({ name: 'docs', url: 'http://docs.test/mcp', isShared: true })
+    expect(listings).toHaveLength(2)
+    await listingGateway.toolServers()
+    expect(listings).toHaveLength(3)
+    await listingGateway.toolServers()
+    expect(listings).toHaveLength(3)
+    await Bun.sleep(toolServerListMilliseconds + 50)
+    await listingGateway.toolServers()
+    expect(listings).toHaveLength(4)
+  } finally {
+    clientServer.stop(true)
+  }
+})

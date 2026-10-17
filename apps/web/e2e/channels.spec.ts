@@ -150,7 +150,7 @@ test('30-5. a channel shows no agent bar, and only a channel offers Public or Pr
   await expect(visibilityOf(page)).toHaveCount(0)
 })
 
-test('35-3. a public channel’s Members tab offers no Reader role and no Remove, both come back once it is private', async ({
+test('35-3. a public channel’s Members tab offers no Reader role and no Remove, both come back once it is private, and making it public again turns a Reader into a Prompter', async ({
   page,
   browser,
   workerStack,
@@ -174,5 +174,10 @@ test('35-3. a public channel’s Members tab offers no Reader role and no Remove
   await chatAction(page, 'Open floor', 'Make private')
   await expect(tabPanelOf(page).getByRole('button', { name: 'Remove Bob' })).toBeVisible()
   expect(await optionsOf(bobRole)).toEqual(['Editor', 'Prompter', 'Reader'])
+  await bobRole.selectOption('reader')
+  await expect(bobRole).toHaveValue('reader')
+  await chatAction(page, 'Open floor', 'Make public')
+  await expect(bobRole).toHaveValue('prompter')
+  expect(await optionsOf(bobRole)).toEqual(['Editor', 'Prompter'])
   await bobPage.context().close()
 })

@@ -14,13 +14,15 @@ import { type Message, newMessage } from '../domain/message.ts'
 import { chatNameFrom } from '../domain/message-body.ts'
 import { channelThreadHeaderOf, threadWrapperOf } from '../domain/thread-wrapper.ts'
 
-export const quotedMessagesOf = (members: MemberDirectory, messages: readonly Message[]) =>
-  Promise.all(
-    messages.map(async (message) => ({
-      ...message,
-      authorName: message.authorId ? await members.displayNameOf(message.authorId) : 'Agent',
-    })),
-  )
+export const quotedMessagesOf = async (members: MemberDirectory, messages: readonly Message[]) => {
+  const authorNameOf = await members.displayNamesOf([
+    ...new Set(messages.flatMap(({ authorId }) => (authorId ? [authorId] : []))),
+  ])
+  return messages.map((message) => ({
+    ...message,
+    authorName: message.authorId ? authorNameOf(message.authorId) : 'Agent',
+  }))
+}
 
 type Dependencies = { transactor: ConversationTransactor; runtimeChatStarter: RuntimeChatStarter }
 type Input = { id: string; chatId: ChatId; messageId: MessageId; memberId: MemberId }

@@ -3,7 +3,7 @@ import type { RuntimeChatStarter } from '../contracts/runtime-chat-starter.ts'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { NotForkable } from '../domain/errors.ts'
 import { newMessage } from '../domain/message.ts'
-import { chatHistoryOf, runtimeChatHeaderOf, threadWrapperOf } from '../domain/thread-wrapper.ts'
+import { runtimeChatHeaderOf, threadWrapperOf } from '../domain/thread-wrapper.ts'
 import { quotedMessagesOf } from './start-runtime-from-message.ts'
 
 type Dependencies = { transactor: ConversationTransactor; runtimeChatStarter: RuntimeChatStarter }
@@ -30,7 +30,7 @@ export const forkChat = (
         authorId: memberId,
         body: threadWrapperOf(
           runtimeChatHeaderOf(source.name),
-          await quotedMessagesOf(members, chatHistoryOf(await messages.inChat(sourceChatId))),
+          await quotedMessagesOf(members, await messages.history(sourceChatId)),
         ),
         createdAt: new Date(),
         replyToId: wrapperId,

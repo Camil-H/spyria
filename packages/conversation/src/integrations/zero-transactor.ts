@@ -28,6 +28,7 @@ import {
   type ChatId,
   type ChatPermission,
   chatId,
+  type MemberId,
   type MessageId,
   memberId,
   messageId,
@@ -121,6 +122,16 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         createdAt: new Date(),
       })
   }
+  const displayNamesOf = async (ids: readonly MemberId[]) => {
+    const nameByMemberId = new Map(
+      ids.length === 0
+        ? []
+        : (await tx.run(zql.memberships.where('workspaceId', contextWorkspaceId).where('userId', 'IN', [...ids]))).map(
+            (membership) => [membership.userId, membership.displayName],
+          ),
+    )
+    return (id: MemberId) => nameByMemberId.get(id) ?? 'a member'
+  }
   const messageRow = (id: string) => tx.run(zql.messages.where('workspaceId', contextWorkspaceId).where('id', id).one())
   const enqueue = (type: string, payload: object, delayMilliseconds = 0) =>
     enqueueJob(tx, { workspaceId: contextWorkspaceId, type, payload, delayMilliseconds }).then(() => undefined)
@@ -163,9 +174,15 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
               .orderBy('seq', 'asc'),
           )
         ).map(toMessage),
-      inChat: async (id) =>
+      history: async (id) =>
         (
-          await tx.run(zql.messages.where('workspaceId', contextWorkspaceId).where('chatId', id).orderBy('seq', 'asc'))
+          await tx.run(
+            zql.messages
+              .where('workspaceId', contextWorkspaceId)
+              .where('chatId', id)
+              .where('kind', 'IN', ['member', 'agent'])
+              .orderBy('seq', 'asc'),
+          )
         ).map(toMessage),
       wrapperFor: async (prompt) => {
         const memberMessages = zql.messages
@@ -195,9 +212,8 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       sweepLater: () => enqueue(agentJobTypes.sweep, {}, agentSweepIntervalMilliseconds),
     },
     members: {
-      displayNameOf: async (id) =>
-        (await tx.run(zql.memberships.where('workspaceId', contextWorkspaceId).where('userId', id).one()))
-          ?.displayName ?? 'a member',
+      displayNameOf: async (id) => (await displayNamesOf([id]))(id),
+      displayNamesOf,
       hasLlmCredential: async (id) =>
         (await tx.run(zql.llmCredentials.where('workspaceId', contextWorkspaceId).where('userId', id).one())) !==
         undefined,

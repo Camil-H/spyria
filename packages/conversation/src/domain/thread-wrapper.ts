@@ -9,9 +9,6 @@ export const channelThreadHeaderOf = (channelName: string) =>
   `Conversation so far, from the channel thread in #${channelName}:`
 export const runtimeChatHeaderOf = (chatName: string) => `Conversation so far, from the runtime chat ${chatName}:`
 
-export const chatHistoryOf = <Quoted extends Pick<Message, 'kind'>>(messages: readonly Quoted[]) =>
-  messages.filter(({ kind }) => kind === 'member' || kind === 'agent')
-
 export const threadWrapperOf = (header: string, messages: readonly QuotedMessage[]) =>
   MessageBody(
     [

@@ -1,0 +1,3 @@
+CREATE INDEX "chat_participants_workspace_id_user_id_index" ON "chat_participants" ("workspace_id","user_id");--> statement-breakpoint
+CREATE INDEX "messages_workspace_id_reply_to_id_index" ON "messages" ("workspace_id","reply_to_id") WHERE "reply_to_id" is not null;--> statement-breakpoint
+CREATE INDEX "messages_workspace_id_thread_root_id_index" ON "messages" ("workspace_id","thread_root_id") WHERE "thread_root_id" is not null;

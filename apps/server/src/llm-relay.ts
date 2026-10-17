@@ -40,6 +40,7 @@ const forwardedHeaders = [
 const toolHeaders = [...forwardedHeaders, 'mcp-session-id', 'mcp-protocol-version', 'last-event-id']
 const answeredHeaders = ['content-type', 'x-request-id', 'mcp-session-id']
 const headTimeoutMilliseconds = 300_000
+const readOnlyHintMilliseconds = 10_000
 const unreachable = { error: { message: 'The model gateway is unreachable', type: 'gateway_unavailable' } }
 const refusalOf = (message: string) => ({ error: { message, type: 'hq_refused' } })
 const routerPath = '/mcp/router'
@@ -92,6 +93,7 @@ export const createModelCallRelay = ({
     return {
       keyOf: createMemberKeyReader(transact, llmGateway),
       tools: createToolCallOwnerAccess(transact, llmGateway),
+      readOnlyHints: new Map<string, { isReadOnly: boolean; listedAt: number }>(),
     }
   }
   const databaseAccess = (database: Database) => {
@@ -160,10 +162,12 @@ export const createModelCallRelay = ({
           : await handlers.delegate({ chat: turn.chat, turn, task: String(task ?? ''), effort, model })
       return reply({ content: [{ type: 'text', text }], isError })
     }
-    const { keyOf, tools } = databaseAccess(database)
+    const { keyOf, tools, readOnlyHints } = databaseAccess(database)
     const isAnthropicPath = path.startsWith(anthropicPathPrefix)
     const isTokenCount = path.startsWith(`${anthropicPathPrefix}/count_tokens`)
     const isReadOnly = async (callHeaders: Record<string, string>, toolName: string) => {
+      const hint = readOnlyHints.get(toolName)
+      if (hint && Date.now() - hint.listedAt <= readOnlyHintMilliseconds) return hint.isReadOnly
       const listed = await fetch(`${gatewayUrlOf(database)}/mcp`, {
         method: 'POST',
         headers: { ...callHeaders, 'x-bf-mcp-include-tools': toolName },
@@ -173,7 +177,11 @@ export const createModelCallRelay = ({
         .then((response) => response.text())
         .catch(() => '')
       const { tools: listedTools = [] } = (jsonOf(listed) as { result?: { tools?: ListedTool[] } })?.result ?? {}
-      return listedTools.find((tool) => tool.name === toolName)?.annotations?.readOnlyHint === true
+      const listedTool = listedTools.find((tool) => tool.name === toolName)
+      if (!listedTool) return false
+      const isListedReadOnly = listedTool.annotations?.readOnlyHint === true
+      readOnlyHints.set(toolName, { isReadOnly: isListedReadOnly, listedAt: Date.now() })
+      return isListedReadOnly
     }
     const gatewayCall = (callHeaders: Record<string, string>, timeoutSignal: AbortSignal) =>
       fetch(`${gatewayUrlOf(database)}${isAnthropicPath ? '/anthropic' : ''}${path}`, {

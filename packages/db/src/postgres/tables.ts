@@ -182,6 +182,7 @@ export const chatParticipants = table(
     chatReference(table),
     memberReference(table, table.userId),
     tenantReference([table.workspaceId, table.roleId], [chatRoles.workspaceId, chatRoles.id]),
+    index().on(table.workspaceId, table.userId),
   ],
 )
 
@@ -227,6 +228,8 @@ export const messages = table(
     memberReference(table, table.authorId),
     tenantReference([table.workspaceId, table.replyToId], [table.workspaceId, table.id]),
     tenantReference([table.workspaceId, table.threadRootId], [table.workspaceId, table.id]),
+    index().on(table.workspaceId, table.replyToId).where(sql`${table.replyToId} is not null`),
+    index().on(table.workspaceId, table.threadRootId).where(sql`${table.threadRootId} is not null`),
   ],
 )
 

@@ -3,7 +3,13 @@ import type { LlmGateway, ToolGateway, ToolServer } from '../contracts/repositor
 import { UnsupportedProvider } from '../domain/errors.ts'
 import type { GatewayKey } from '../domain/llm-credential.ts'
 
-export type LlmGatewaySettings = { url: string; adminUser: string; adminPassword: string; timeoutMilliseconds?: number }
+export type LlmGatewaySettings = {
+  url: string
+  adminUser: string
+  adminPassword: string
+  timeoutMilliseconds?: number
+  toolServerListMilliseconds?: number
+}
 export type ToolServerSetup = { name: string; url: string; oauthConfig?: Record<string, unknown>; isShared?: boolean }
 type McpClient = { config: { client_id: string; name: string; auth_type: string }; tools?: { name?: string }[] }
 type McpConfig = { id: number; mcp_client: { name: string }; tools_to_execute: string[] }
@@ -58,6 +64,7 @@ export const createLlmGateway = ({
   adminUser,
   adminPassword,
   timeoutMilliseconds = 10_000,
+  toolServerListMilliseconds = 10_000,
 }: LlmGatewaySettings): BifrostGateway => {
   const authorization = `Basic ${btoa(`${adminUser}:${adminPassword}`)}`
   const virtualKeyValues = new Map<string, string>()
@@ -102,7 +109,8 @@ export const createLlmGateway = ({
       key_ids: keys.filter((key) => key.provider === provider).map((key) => key.id),
     })),
   })
-  const toolServers = async () =>
+  let toolServerList: { servers: Promise<ToolServer[]>; loadedAt: number } | undefined
+  const freshToolServers = async () =>
     ((await request('GET', '/api/mcp/clients')).body.clients as McpClient[]).map(
       ({ config, tools }): ToolServer => ({
         id: config.client_id,
@@ -111,6 +119,16 @@ export const createLlmGateway = ({
         isPersonal: config.auth_type === 'per_user_oauth',
       }),
     )
+  const toolServers = () => {
+    if (!toolServerList || Date.now() - toolServerList.loadedAt > toolServerListMilliseconds) {
+      const servers = freshToolServers()
+      toolServerList = { servers, loadedAt: Date.now() }
+      servers.catch(() => {
+        if (toolServerList?.servers === servers) toolServerList = undefined
+      })
+    }
+    return toolServerList.servers
+  }
   const toolConfigsOf = async (virtualKeyId: string) => {
     const { body } = await request('GET', `/api/governance/virtual-keys/${virtualKeyId}`)
     return ((body.virtual_key as { mcp_configs?: McpConfig[] }).mcp_configs ?? []).map((config) => ({
@@ -155,7 +173,7 @@ export const createLlmGateway = ({
     finishToolConsent,
     setUpToolServer: async ({ name, url: endpoint, oauthConfig = {}, isShared }, logIn = logInAutomatically) => {
       if (name.includes('-')) throw new Error(`A tool server name cannot contain "-": ${name}`)
-      if ((await toolServers()).some((server) => server.name === name)) return false
+      if ((await freshToolServers()).some((server) => server.name === name)) return false
       const { body } = await request('POST', '/api/mcp/client', {
         name,
         connection_type: 'http',
@@ -163,9 +181,11 @@ export const createLlmGateway = ({
         tools_to_execute: ['*'],
         ...(isShared ? { auth_type: 'none' } : { auth_type: 'per_user_oauth', oauth_config: oauthConfig }),
       })
-      if (isShared) return true
-      await logIn(String(body.authorize_url))
-      await request('POST', `/api/mcp/client/${body.oauth_config_id}/complete-oauth`)
+      if (!isShared) {
+        await logIn(String(body.authorize_url))
+        await request('POST', `/api/mcp/client/${body.oauth_config_id}/complete-oauth`)
+      }
+      toolServerList = undefined
       return true
     },
     grantToolServers: async (virtualKeyId, servers) => {

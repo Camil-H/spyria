@@ -8,8 +8,8 @@ type Input = { chatId: ChatId; memberId: MemberId; roleId: string; actorId: Memb
 
 export const changeMemberRole = ({ transactor }: Dependencies, { chatId, memberId, roleId, actorId }: Input) =>
   transactor.run(async (unitOfWork) => {
-    await requireChatPermission(unitOfWork.chats, chatId, actorId, 'members.manage')
-    await requireNonOwnerParticipant(unitOfWork, chatId, memberId)
-    await requireAssignableRole(unitOfWork, chatId, actorId, roleId)
+    const actorPermissions = await requireChatPermission(unitOfWork.chats, chatId, actorId, 'members.manage')
+    const chat = await requireNonOwnerParticipant(unitOfWork, chatId, memberId)
+    await requireAssignableRole(unitOfWork, chat, actorPermissions, roleId)
     await unitOfWork.chats.changeParticipant({ type: 'member.role_changed', chatId, memberId, roleId, actorId })
   })

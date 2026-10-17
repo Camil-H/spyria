@@ -62,5 +62,7 @@ export const requireChatPermission = async (
   memberId: MemberId,
   permission: ChatPermission,
 ) => {
-  if (!can(await chats.permissions(chatId, memberId), permission)) throw new MissingChatPermission(permission)
+  const permissions = await chats.permissions(chatId, memberId)
+  if (!can(permissions, permission)) throw new MissingChatPermission(permission)
+  return permissions
 }

@@ -15,7 +15,7 @@ export type MessageRepository = {
   setStep(messageId: MessageId, step: StoredStep): Promise<void>
   replies(promptId: MessageId): Promise<Message[]>
   thread(chatId: ChatId, rootId: MessageId): Promise<Message[]>
-  inChat(chatId: ChatId): Promise<Message[]>
+  history(chatId: ChatId): Promise<Message[]>
   wrapperFor(prompt: Message): Promise<Message | undefined>
 }
 
@@ -61,6 +61,7 @@ export type ModelCallTurn = { promptId: MessageId; prompterId: MemberId; ownerId
 
 export type MemberDirectory = {
   displayNameOf(memberId: MemberId): Promise<string>
+  displayNamesOf(memberIds: readonly MemberId[]): Promise<(memberId: MemberId) => string>
   hasLlmCredential(memberId: MemberId): Promise<boolean>
   isMember(memberId: MemberId): Promise<boolean>
 }

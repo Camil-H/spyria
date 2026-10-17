@@ -221,14 +221,36 @@ export const memberNamesIn = (snapshot: Snapshot, workspaceId: WorkspaceId) => {
   return (memberId: MemberId) => nameByMemberId.get(memberId) ?? 'Unknown'
 }
 
+const participantIndexBySnapshot = new WeakMap<
+  Snapshot,
+  { participantsByChat: Map<string, ChatMemberRow[]>; roleById: Map<string, ChatRoleRow> }
+>()
+
+const participantIndexOf = (snapshot: Snapshot) => {
+  const cached = participantIndexBySnapshot.get(snapshot)
+  if (cached) return cached
+  const index = {
+    participantsByChat: Map.groupBy(snapshot.chatMembers, (row) => `${row.workspaceId}/${row.chatId}`),
+    roleById: new Map(snapshot.chatRoles.map((role) => [`${role.workspaceId}/${role.id}`, role])),
+  }
+  participantIndexBySnapshot.set(snapshot, index)
+  return index
+}
+
+export const chatParticipantsIn = (
+  snapshot: Snapshot,
+  workspaceId: WorkspaceId,
+  chatId: ChatId,
+): readonly ChatMemberRow[] => participantIndexOf(snapshot).participantsByChat.get(`${workspaceId}/${chatId}`) ?? []
+
 export const participantIn = (snapshot: Snapshot, workspaceId: WorkspaceId, memberId: MemberId) => (chat: ChatRow) =>
-  snapshot.chatMembers.find((row) => inChat(workspaceId, chat.id)(row) && row.memberId === memberId)
+  chatParticipantsIn(snapshot, workspaceId, chat.id).find((row) => row.memberId === memberId)
 
 export const chatPermissionsIn =
   (snapshot: Snapshot, workspaceId: WorkspaceId, memberId: MemberId) => (chat: ChatRow) => {
     const participant = participantIn(snapshot, workspaceId, memberId)(chat)
     return permissionsOf(
       chat,
-      snapshot.chatRoles.find((role) => role.workspaceId === workspaceId && role.id === participant?.roleId),
+      participant && participantIndexOf(snapshot).roleById.get(`${workspaceId}/${participant.roleId}`),
     )
   }

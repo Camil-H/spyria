@@ -68,18 +68,24 @@ export const flagToolConnection = ({ transactor }: Pick<Dependencies, 'transacto
   })
 
 export const guestToolAccess = async (
-  dependencies: Dependencies,
+  { transactor, gateway }: Dependencies,
   { workspaceId, ownerId, prompterId, toolName }: GuestCall,
 ) => {
   const [server = '', tool = ''] = toolName.split(/-(.*)/)
-  if ((await personalServersOf(dependencies.gateway)).some(({ name }) => name === server)) return 'personal'
-  await grantAvailableTools(dependencies, { workspaceId, memberId: prompterId })
-  const grants = await Promise.all(
-    [ownerId, prompterId].map(async (memberId): Promise<Record<string, string[]>> => {
-      const virtualKeyId = await virtualKeyOf(dependencies, { workspaceId, memberId })
-      return virtualKeyId ? dependencies.gateway.grantedTools(virtualKeyId) : {}
-    }),
+  const servers = await gateway.toolServers()
+  if (servers.some(({ name, isPersonal }) => isPersonal && name === server)) return 'personal'
+  const [ownerKeyId, prompterKeyId] = await transactor.run(({ memberGatewayKeys }) =>
+    Promise.all([ownerId, prompterId].map((memberId) => memberGatewayKeys.virtualKeyOf(workspaceId, memberId))),
   )
-  const isAllowed = grants.every((granted) => granted[server]?.some((name) => name === '*' || name === tool))
+  const grantedToolsOf = async (virtualKeyId: string | undefined): Promise<Record<string, string[]>> =>
+    virtualKeyId ? gateway.grantedTools(virtualKeyId) : {}
+  const [ownerGrants, prompterGrants] = await Promise.all([grantedToolsOf(ownerKeyId), grantedToolsOf(prompterKeyId)])
+  if (prompterKeyId && servers.some(({ name }) => !prompterGrants[name])) {
+    await gateway.grantToolServers(prompterKeyId, servers)
+    for (const { name } of servers) prompterGrants[name] ??= ['*']
+  }
+  const isAllowed = [ownerGrants, prompterGrants].every((granted) =>
+    granted[server]?.some((name) => name === '*' || name === tool),
+  )
   return isAllowed ? 'allowed' : 'not_allowed'
 }

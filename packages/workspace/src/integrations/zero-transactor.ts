@@ -1,7 +1,7 @@
 import { appendChatEvent } from '@hq/db/server-writes'
 import type { Chat as ChatRow, Project as ProjectRow } from '@hq/db/zero'
 import { memberChatPermissions, type ZeroContext, zql } from '@hq/db/zero-queries'
-import { builtInChatRoles, chatId, memberId, projectId, workspaceId } from '@hq/kernel'
+import { builtInChatRoles, type ChatPermission, chatId, memberId, projectId, workspaceId } from '@hq/kernel'
 import { removeChatRuntimeOnServer } from '@hq/runtime/published'
 import type { Transaction } from '@rocicorp/zero'
 import type { UnitOfWork, WorkspaceTransactor } from '../contracts/transactor.ts'
@@ -126,6 +126,32 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
       listByProject: async (id) =>
         (await tx.run(zql.chats.where('workspaceId', context.workspaceId).where('projectId', id))).map(toChat),
       permissions: (id, memberId) => memberChatPermissions(tx, context.workspaceId, id, memberId),
+      participantRoles: async (id) =>
+        (
+          await tx.run(
+            zql.chatParticipants.where('workspaceId', context.workspaceId).where('chatId', id).related('role'),
+          )
+        ).map((row) => ({
+          memberId: memberId(row.userId),
+          permissions: (row.role?.permissions ?? []) as ChatPermission[],
+        })),
+      changeRole: async ({ chatId: id, memberId: member, roleId, actorId }) => {
+        await tx.mutate.chatParticipants.update({
+          workspaceId: context.workspaceId,
+          chatId: id,
+          userId: member,
+          roleId,
+        })
+        if (tx.location === 'server')
+          await appendChatEvent(tx, {
+            workspaceId: context.workspaceId,
+            chatId: id,
+            type: 'member.role_changed',
+            actor: actorId,
+            payload: { memberId: member, roleId },
+            createdAt: new Date(),
+          })
+      },
     },
     chatRuntimes: {
       remove: (chatId) => removeChatRuntimeOnServer(tx, context.workspaceId, chatId),
