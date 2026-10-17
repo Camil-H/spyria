@@ -1,5 +1,5 @@
 import type { ChatId, WorkspaceId } from '@hq/kernel'
-import { buttonClass, Dialog, menuContentClass, tooltipClass } from '@hq/ui'
+import { buttonClass, Dialog, menuContentClass, tooltipClass, type useGuardedAction } from '@hq/ui'
 import { Content, Item, Root, Sub, SubContent, SubTrigger, Trigger } from '@radix-ui/react-dropdown-menu'
 import {
   Content as TooltipContent,
@@ -17,16 +17,19 @@ import { menuItemClass, menuTriggerClass, navLinkClass } from './ui.ts'
 
 type SidebarChat = Sidebar['looseChats'][number]
 export type ChatAdornment = (chatId: ChatId) => ReactNode
+export type ChatAction = ReturnType<typeof useGuardedAction>
 
 export const ChatRow = ({
   workspaceId,
   chat,
   projects,
+  chatAction,
   chatAdornment,
 }: {
   workspaceId: WorkspaceId
   chat: SidebarChat
   projects: Sidebar['projects']
+  chatAction: ChatAction
   chatAdornment?: ChatAdornment
 }) => {
   const commands = useWorkspaceCommands()
@@ -85,12 +88,15 @@ export const ChatRow = ({
                 {chat.type === 'channel' && (
                   <Item
                     className={menuItemClass}
+                    disabled={chatAction.isPending}
                     onSelect={() =>
-                      commands.changeVisibility({
-                        workspaceId,
-                        chatId: chat.id,
-                        visibility: chat.visibility === 'public' ? 'private' : 'public',
-                      })
+                      chatAction.run(() =>
+                        commands.changeVisibility({
+                          workspaceId,
+                          chatId: chat.id,
+                          visibility: chat.visibility === 'public' ? 'private' : 'public',
+                        }),
+                      )
                     }
                   >
                     {chat.visibility === 'public' ? 'Make private' : 'Make public'}
@@ -102,8 +108,12 @@ export const ChatRow = ({
               </>
             )}
             {chat.canLeave && (
-              <Item className={menuItemClass} onSelect={() => commands.leaveChat({ workspaceId, chatId: chat.id })}>
-                Leave channel
+              <Item
+                className={menuItemClass}
+                disabled={chatAction.isPending}
+                onSelect={() => chatAction.run(() => commands.leaveChat({ workspaceId, chatId: chat.id }))}
+              >
+                {chat.type === 'channel' ? 'Leave channel' : 'Leave chat'}
               </Item>
             )}
           </Content>

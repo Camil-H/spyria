@@ -1,4 +1,4 @@
-import { type ChatId, type MemberId, permissionsOf, type WorkspaceId } from '@hq/kernel'
+import { type ChatId, DomainError, type MemberId, permissionsOf, type WorkspaceId } from '@hq/kernel'
 import {
   createBuilder,
   defineQueries,
@@ -20,6 +20,14 @@ export type Transact = <Result>(work: (tx: ServerTransaction) => Promise<Result>
 export type Job = { workspaceId: WorkspaceId; payload: unknown; isLastAttempt: boolean; transact: Transact }
 
 export const zql = createBuilder(schema)
+
+export const skippingRefusedRebase = <Result>(tx: Transaction, work: () => Promise<Result>) =>
+  tx.location === 'client' && tx.reason === 'rebase'
+    ? work().catch((error: unknown) => {
+        if (error instanceof DomainError) return undefined as Result
+        throw error
+      })
+    : work()
 
 declare module '@rocicorp/zero' {
   interface DefaultTypes {

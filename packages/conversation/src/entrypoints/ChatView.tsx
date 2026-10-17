@@ -1,7 +1,7 @@
 import { useQuery } from '@hq/db/react'
 import { type ChatId, chatId as toChatId, type WorkspaceId } from '@hq/kernel'
 import { useSession } from '@hq/session'
-import { buttonClass } from '@hq/ui'
+import { buttonClass, ErrorMessage, useGuardedAction } from '@hq/ui'
 import { Bot, Folder, GitBranch, Hash } from 'lucide-react'
 import { type ReactNode, useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate, useOutletContext, useParams } from 'react-router'
@@ -43,6 +43,7 @@ export const ChatView = ({
   )
   const commands = useConversationCommands()
   const navigate = useNavigate()
+  const join = useGuardedAction()
   const isChoosingRunsOn = conversation?.type === 'runtime' && conversation.isOwner && conversation.runsOn === null
   useEffect(() => {
     if (isChoosingRunsOn)
@@ -145,13 +146,17 @@ export const ChatView = ({
         </fieldset>
       )}
       {conversation.canJoin ? (
-        <button
-          type="button"
-          className={`${buttonClass} self-center`}
-          onClick={() => commands.joinChannel({ workspaceId, chatId })}
-        >
-          Join channel
-        </button>
+        <div className="flex flex-col items-center gap-2">
+          <button
+            type="button"
+            className={buttonClass}
+            disabled={join.isPending}
+            onClick={() => join.run(() => commands.joinChannel({ workspaceId, chatId }))}
+          >
+            Join channel
+          </button>
+          <ErrorMessage message={join.errorMessage} />
+        </div>
       ) : (
         <Composer
           workspaceId={workspaceId}

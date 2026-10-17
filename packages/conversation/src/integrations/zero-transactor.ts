@@ -23,7 +23,7 @@ import {
   stopRunningDelegations,
 } from '@hq/db/server-writes'
 import type { Message as MessageRow } from '@hq/db/zero'
-import { memberChatPermissions, type Transact, zql } from '@hq/db/zero-queries'
+import { memberChatPermissions, skippingRefusedRebase, type Transact, zql } from '@hq/db/zero-queries'
 import {
   type ChatId,
   type ChatPermission,
@@ -445,7 +445,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         )) !== undefined,
     },
   }
-  return { run: (work) => work(unitOfWork) }
+  return { run: (work) => skippingRefusedRebase(tx, () => work(unitOfWork)) }
 }
 
 export const createTransactingZeroTransactor = (

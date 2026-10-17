@@ -8,6 +8,7 @@ import {
   mainOf,
   messageContaining,
   modeOf,
+  mutationGateOf,
   type Page,
   panelTabOf,
   runsOnOf,
@@ -179,5 +180,33 @@ test('35-3. a public channel’s Members tab offers no Reader role and no Remove
   await chatAction(page, 'Open floor', 'Make public')
   await expect(bobRole).toHaveValue('prompter')
   expect(await optionsOf(bobRole)).toEqual(['Editor', 'Prompter'])
+  await bobPage.context().close()
+})
+
+test('35-2. a join waits for the server with every Join disabled; a join refused because the channel turned private shows its error', async ({
+  page,
+  browser,
+  workerStack,
+}) => {
+  const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+  const gate = await mutationGateOf(bobPage)
+  await newChannel(page, 'Lounge', 'Public')
+  await newChannel(page, 'Garden', 'Public')
+  await openBrowse(bobPage)
+  gate.hold()
+  await browsedChannelOf(bobPage, 'Lounge').getByRole('button', { name: 'Join' }).click()
+  await expect(browsedChannelOf(bobPage, 'Garden').getByRole('button', { name: 'Join' })).toBeDisabled()
+  await chatAction(page, 'Lounge', 'Make private')
+  await expect
+    .poll(
+      async () =>
+        (await workerStack.database.$client`select visibility from chats where name = 'Lounge'`)[0]?.visibility,
+    )
+    .toBe('private')
+  gate.release()
+  await expect(browseOf(bobPage).getByRole('alert')).toHaveText('You need the chat.read permission on this chat')
+  await expect(browsedChannelOf(bobPage, 'Garden').getByRole('button', { name: 'Join' })).toBeEnabled()
+  await expect(browsedChannelOf(bobPage, 'Lounge')).toHaveCount(0)
+  await expect(chatLinkOf(bobPage, 'Lounge')).toHaveCount(0)
   await bobPage.context().close()
 })

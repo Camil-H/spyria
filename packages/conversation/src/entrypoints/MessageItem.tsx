@@ -1,5 +1,5 @@
 import { chatId as toChatId, type WorkspaceId } from '@hq/kernel'
-import { focusRing } from '@hq/ui'
+import { ErrorMessage, focusRing, Spinner, useGuardedAction } from '@hq/ui'
 import { GitFork } from 'lucide-react'
 import { lazy, type Ref, Suspense, useEffect, useState } from 'react'
 import { Link, useOutletContext, useParams } from 'react-router'
@@ -23,16 +23,23 @@ const timeFormat = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'UTC',
 })
 
-export const ForkButton = ({ onFork }: { onFork: () => void }) => (
-  <button
-    type="button"
-    onClick={onFork}
-    className={`flex w-fit items-center gap-1 rounded-full border border-line px-2 py-0.5 text-xs text-ink hover:bg-hover ${focusRing}`}
-  >
-    <GitFork aria-hidden size={12} />
-    Fork into my session
-  </button>
-)
+export const ForkButton = ({ onFork }: { onFork: () => Promise<unknown> }) => {
+  const { errorMessage, isPending, run } = useGuardedAction()
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        disabled={isPending}
+        onClick={() => run(onFork)}
+        className={`flex w-fit items-center gap-1 rounded-full border border-line px-2 py-0.5 text-xs text-ink hover:bg-hover disabled:cursor-not-allowed disabled:opacity-60 ${focusRing}`}
+      >
+        {isPending ? <Spinner /> : <GitFork aria-hidden size={12} />}
+        {isPending ? 'Forking…' : 'Fork into my session'}
+      </button>
+      <ErrorMessage message={errorMessage} />
+    </div>
+  )
+}
 
 type ThreadRoot = ConversationMessage & { thread: NonNullable<ConversationMessage['thread']> }
 
@@ -103,7 +110,7 @@ export const MessageItem = ({
 }: {
   message: ConversationMessage
   hasMenu: boolean
-  onFork?: (() => void) | undefined
+  onFork?: (() => Promise<unknown>) | undefined
   ref?: Ref<HTMLLIElement>
 }) => {
   const [mode, setMode] = useState<'view' | 'edit' | 'delete'>('view')

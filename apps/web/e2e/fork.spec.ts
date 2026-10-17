@@ -7,6 +7,7 @@ import {
   mainOf,
   messageContaining,
   messageItemsOf,
+  mutationGateOf,
   newRuntimeChat,
   openChat,
   type Page,
@@ -118,5 +119,25 @@ test('34-4. an invitee whose keys cannot reach the session’s model forks from 
   await expect(mainOf(bobPage).getByRole('heading', { level: 1, name: 'Alice large (fork)' })).toBeVisible()
   await expect(mainOf(bobPage).getByRole('link', { name: 'Forked from Alice large' })).toBeVisible()
   await expect(messageItemsOf(bobPage).nth(0)).toContainText('Bob joins the large session')
+  await bobPage.context().close()
+})
+
+test('35-1. a double click on Fork creates exactly one fork; the button reads Forking… until the server confirms', async ({
+  browser,
+  workerStack,
+}) => {
+  await addParticipant(workerStack, research, 'member-bob', 'reader')
+  const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+  const gate = await mutationGateOf(bobPage)
+  await openChat(bobPage, 'Research')
+  gate.hold()
+  await forkButtonOf(bobPage).dblclick()
+  const pendingFork = mainOf(bobPage).getByRole('button', { name: 'Forking…' })
+  await expect(pendingFork).toBeDisabled()
+  await expect(mainOf(bobPage).getByRole('heading', { level: 1, name: 'Research' })).toBeVisible()
+  gate.release()
+  await expect(mainOf(bobPage).getByRole('heading', { level: 1, name: forkName })).toBeVisible()
+  await expect(chatLinkOf(bobPage, forkName)).toHaveCount(1)
+  expect(await workerStack.database.$client`select id from chats where name = ${forkName}`).toHaveLength(1)
   await bobPage.context().close()
 })

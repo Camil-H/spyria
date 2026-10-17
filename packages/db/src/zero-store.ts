@@ -1,4 +1,4 @@
-import type { MemberId, WorkspaceId } from '@hq/kernel'
+import { DomainError, type MemberId, type WorkspaceId } from '@hq/kernel'
 import { type AnyMutatorRegistry, type MutatorResultDetails, type Row, Zero } from '@rocicorp/zero'
 import type { DraftRow, Snapshot } from './schema.ts'
 import { type Schema, schema } from './zero.ts'
@@ -130,8 +130,14 @@ const snapshotFromZeroRows = (
 
 export type Store = ReturnType<typeof createZeroStore>
 
-const failureOf = (details: MutatorResultDetails) =>
-  details.type === 'error' ? new Error(details.error.message) : undefined
+const failureOf = (details: MutatorResultDetails) => {
+  if (details.type !== 'error') return undefined
+  const domainCode =
+    details.error.type === 'app' ? (details.error.details as { code?: unknown } | null | undefined)?.code : undefined
+  return typeof domainCode === 'string'
+    ? new DomainError(domainCode, details.error.message)
+    : new Error(details.error.message)
+}
 
 export const createZeroStore = ({
   memberId,

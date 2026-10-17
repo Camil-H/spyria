@@ -5,6 +5,10 @@ export class DomainError extends Error {
     super(message)
     this.code = code
   }
+
+  get details() {
+    return { code: this.code }
+  }
 }
 
 export const errorKind = <Details extends unknown[]>(

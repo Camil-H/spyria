@@ -1,6 +1,7 @@
 import { useQuery } from '@hq/db/react'
 import type { WorkspaceId } from '@hq/kernel'
 import { useSession } from '@hq/session'
+import { ErrorMessage, useGuardedAction } from '@hq/ui'
 import { Provider } from '@radix-ui/react-tooltip'
 import { CircleUser, FolderPlus, Hash, Settings, SquarePen } from 'lucide-react'
 import { lazy, Suspense, useState } from 'react'
@@ -31,6 +32,7 @@ export const Sidebar = ({
   const joinableChannels = useQuery(listJoinableChannels(workspaceId, memberId))
   const commands = useWorkspaceCommands()
   const isAdmin = useIsWorkspaceAdmin(workspaceId)
+  const chatAction = useGuardedAction()
   const [openDialog, setOpenDialog] = useState<'project' | 'chat' | 'channels' | null>(null)
   const closeDialog = () => setOpenDialog(null)
   return (
@@ -69,6 +71,7 @@ export const Sidebar = ({
               workspaceId={workspaceId}
               project={project}
               projects={sidebar.projects}
+              chatAction={chatAction}
               chatAdornment={chatAdornment}
             />
           ))}
@@ -83,12 +86,14 @@ export const Sidebar = ({
                   workspaceId={workspaceId}
                   chat={chat}
                   projects={sidebar.projects}
+                  chatAction={chatAction}
                   chatAdornment={chatAdornment}
                 />
               ))}
             </ul>
           </fieldset>
         </div>
+        <ErrorMessage message={chatAction.errorMessage} />
         <div className="flex flex-col">
           <button
             type="button"

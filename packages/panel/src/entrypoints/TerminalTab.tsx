@@ -3,7 +3,7 @@ import { getTerminal } from '../queries/get-terminal.ts'
 import type { TabProps } from './TabProps.ts'
 import { emptyClass } from './ui.ts'
 
-export const TerminalTab = ({ workspaceId, chatId }: TabProps) => {
+const TerminalTab = ({ workspaceId, chatId }: TabProps) => {
   const lines = useQuery(getTerminal(workspaceId, chatId))
   if (lines.length === 0) return <p className={emptyClass}>No terminal output</p>
   return (
@@ -12,3 +12,5 @@ export const TerminalTab = ({ workspaceId, chatId }: TabProps) => {
     </pre>
   )
 }
+
+export default TerminalTab

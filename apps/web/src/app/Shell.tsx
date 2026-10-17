@@ -2,13 +2,17 @@ import { ChatIndicators, ChatView, ConversationProvider, Markdown } from '@hq/co
 import { StoreProvider } from '@hq/db/react'
 import { chatId as toChatId, type WorkspaceId } from '@hq/kernel'
 import { PanelProvider, PanelToggle, SidePanel } from '@hq/panel'
-import { ProfileProvider, ProfileView, useHasLlmCredential } from '@hq/profile'
-import { MyMachineSection, RuntimeHostsSection, RuntimeProvider, RuntimeStatus } from '@hq/runtime'
-import { SessionProvider, useSession } from '@hq/session'
-import { ChatUsageTable, UsageSection } from '@hq/usage'
-import { useIsWorkspaceAdmin, WorkspaceLayout, WorkspaceProvider } from '@hq/workspace'
+import { ProfileProvider, useHasLlmCredential } from '@hq/profile'
+import { RuntimeProvider, RuntimeStatus } from '@hq/runtime'
+import { SessionProvider } from '@hq/session'
+import { WorkspaceLayout, WorkspaceProvider } from '@hq/workspace'
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Link, Navigate, Route, Routes, useOutletContext, useParams } from 'react-router'
 import type { Application } from './factory.ts'
+
+const SettingsRoute = lazy(() => import('./SettingsRoute.tsx'))
+const ProfileRoute = lazy(() => import('./ProfileRoute.tsx'))
+const ChatUsageTable = lazy(() => import('@hq/usage').then(({ ChatUsageTable }) => ({ default: ChatUsageTable })))
 
 const ChatRoute = ({ commands }: { commands: Application['conversationCommands'] }) => {
   const workspaceId = useOutletContext<WorkspaceId>()
@@ -46,36 +50,6 @@ const ChatRoute = ({ commands }: { commands: Application['conversationCommands']
   )
 }
 
-const SettingsRoute = () => {
-  const workspaceId = useOutletContext<WorkspaceId>()
-  const isAdmin = useIsWorkspaceAdmin(workspaceId)
-  return (
-    <div className="flex max-w-3xl flex-col gap-8 p-6">
-      <h1 className="text-2xl font-semibold">Workspace settings</h1>
-      {isAdmin ? (
-        <>
-          <RuntimeHostsSection workspaceId={workspaceId} />
-          <UsageSection workspaceId={workspaceId} />
-        </>
-      ) : (
-        <p className="text-muted">Only workspace admins can see this page</p>
-      )}
-    </div>
-  )
-}
-
-const ProfileRoute = () => {
-  const workspaceId = useOutletContext<WorkspaceId>()
-  const { memberId } = useSession()
-  return (
-    <div className="p-6">
-      <ProfileView>
-        <MyMachineSection workspaceId={workspaceId} memberId={memberId} />
-      </ProfileView>
-    </div>
-  )
-}
-
 export const App = ({ app }: { app: Application }) => (
   <StoreProvider store={app.store}>
     <SessionProvider session={app.session}>
@@ -92,8 +66,22 @@ export const App = ({ app }: { app: Application }) => (
                     >
                       <Route index element={<p className="p-6 text-muted">Select a chat</p>} />
                       <Route path="chats/:chatId" element={<ChatRoute commands={app.conversationCommands} />} />
-                      <Route path="settings" element={<SettingsRoute />} />
-                      <Route path="profile" element={<ProfileRoute />} />
+                      <Route
+                        path="settings"
+                        element={
+                          <Suspense>
+                            <SettingsRoute />
+                          </Suspense>
+                        }
+                      />
+                      <Route
+                        path="profile"
+                        element={
+                          <Suspense>
+                            <ProfileRoute />
+                          </Suspense>
+                        }
+                      />
                     </Route>
                     <Route path="*" element={<Navigate to={`/w/${app.session.defaultWorkspaceId}`} replace />} />
                   </Routes>

@@ -17,7 +17,7 @@ import type { TabProps } from './TabProps.ts'
 
 type Option = { value: string; label: string }
 
-const removeButtonClass = `rounded-md px-2 py-1 text-xs text-muted hover:bg-hover hover:text-ink ${focusRing}`
+const removeButtonClass = `rounded-md px-2 py-1 text-xs text-muted hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:opacity-60 ${focusRing}`
 
 const optionsOf = (options: readonly Option[]) =>
   options.map((option) => (
@@ -30,11 +30,13 @@ const InviteForm = ({
   invitees,
   roles,
   invite,
+  isPending,
   onClose,
 }: {
   invitees: readonly Option[]
   roles: readonly Option[]
   invite: (memberId: MemberId, roleId: string) => Promise<boolean>
+  isPending: boolean
   onClose: () => void
 }) => {
   const [memberId, setMemberId] = useState(invitees[0]?.value ?? '')
@@ -58,7 +60,7 @@ const InviteForm = ({
         </select>
       </label>
       <div className="flex gap-2">
-        <button type="submit" className={buttonClass}>
+        <button type="submit" className={buttonClass} disabled={isPending}>
           Add to chat
         </button>
         <button type="button" className={ghostButtonClass} onClick={onClose}>
@@ -73,7 +75,7 @@ const MembersTab = ({ workspaceId, chatId }: TabProps) => {
   const { memberId: viewerId } = useSession()
   const view = useQuery(getMembers(workspaceId, chatId, viewerId))
   const commands = usePanelCommands()
-  const { errorMessage, run } = useGuardedAction()
+  const { errorMessage, isPending, run } = useGuardedAction()
   const [isInviting, setIsInviting] = useState(false)
   if (!view) return null
   const target = { workspaceId, chatId }
@@ -91,6 +93,7 @@ const MembersTab = ({ workspaceId, chatId }: TabProps) => {
                   aria-label={`Role of ${name}`}
                   className={fieldClass}
                   value={roleId}
+                  disabled={isPending}
                   onChange={(event) =>
                     run(() => commands.changeMemberRole({ ...target, memberId, roleId: event.target.value }))
                   }
@@ -102,6 +105,7 @@ const MembersTab = ({ workspaceId, chatId }: TabProps) => {
                     type="button"
                     aria-label={`Remove ${name}`}
                     className={removeButtonClass}
+                    disabled={isPending}
                     onClick={() => run(() => commands.removeMember({ ...target, memberId }))}
                   >
                     Remove
@@ -120,6 +124,7 @@ const MembersTab = ({ workspaceId, chatId }: TabProps) => {
             invitees={view.invitees.map(({ memberId, name }) => ({ value: memberId, label: name }))}
             roles={roleOptions(view.invitableRoles)}
             invite={(memberId, roleId) => run(() => commands.inviteMember({ ...target, memberId, roleId }))}
+            isPending={isPending}
             onClose={() => setIsInviting(false)}
           />
         ) : (
@@ -131,6 +136,7 @@ const MembersTab = ({ workspaceId, chatId }: TabProps) => {
         <button
           type="button"
           className={`${ghostButtonClass} self-start`}
+          disabled={isPending}
           onClick={() => run(() => commands.leaveChat(target))}
         >
           Leave chat

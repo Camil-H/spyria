@@ -408,8 +408,14 @@ test('starts runtime chats from channel messages', async ({ page, workerStack })
   await test.step('links back to the source channel and sends nothing to the agent', async () => {
     await expect(workingIndicatorOf(page)).toHaveCount(0)
     await expect
-      .poll(() => workerStack.database.query.messages.findFirst({ where: { replyToId: 'message-welcome-2' } }))
-      .toBeDefined()
+      .poll(
+        async () =>
+          (
+            await workerStack.database
+              .$client`select chat_id from runtime_origins where message_id = 'message-welcome-2'`
+          ).length,
+      )
+      .toBe(1)
     expect(await agentPromptJobs(workerStack)).toEqual([])
     await expect(messageContaining(page, agentReplyText)).toHaveCount(0)
     await mainOf(page).getByRole('link', { name: 'Started from Welcome' }).click()

@@ -119,6 +119,28 @@ export const openPanelTab = async (page: Page, chatName: string, tabName: string
   await expect(panelTabOf(page, tabName)).toHaveAttribute('aria-selected', 'true')
 }
 
+export const mutationGateOf = async (page: Page) => {
+  let heldPushes: (() => void)[] | null = null
+  await page.routeWebSocket(/.*/, (pageSocket) => {
+    const serverSocket = pageSocket.connectToServer()
+    pageSocket.onMessage((message) => {
+      if (heldPushes && String(message).startsWith('["push"')) heldPushes.push(() => serverSocket.send(message))
+      else serverSocket.send(message)
+    })
+  })
+  await page.reload()
+  return {
+    hold: () => {
+      heldPushes = []
+    },
+    release: () => {
+      const pushes = heldPushes ?? []
+      heldPushes = null
+      for (const send of pushes) send()
+    },
+  }
+}
+
 export const openProfile = async (page: Page) => {
   await sidebarOf(page).getByRole('link', { name: 'Profile' }).click()
   await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Profile' })).toBeVisible()

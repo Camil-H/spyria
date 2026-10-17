@@ -1,6 +1,6 @@
 import { appendChatEvent } from '@hq/db/server-writes'
 import type { Chat as ChatRow, Project as ProjectRow } from '@hq/db/zero'
-import { memberChatPermissions, type ZeroContext, zql } from '@hq/db/zero-queries'
+import { memberChatPermissions, skippingRefusedRebase, type ZeroContext, zql } from '@hq/db/zero-queries'
 import { builtInChatRoles, type ChatPermission, chatId, memberId, projectId, workspaceId } from '@hq/kernel'
 import { removeChatRuntimeOnServer } from '@hq/runtime/published'
 import type { Transaction } from '@rocicorp/zero'
@@ -157,5 +157,5 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
       remove: (chatId) => removeChatRuntimeOnServer(tx, context.workspaceId, chatId),
     },
   }
-  return { run: (work) => work(unitOfWork) }
+  return { run: (work) => skippingRefusedRebase(tx, () => work(unitOfWork)) }
 }

@@ -1,4 +1,4 @@
-import { buttonClass, fieldClass, ghostButtonClass } from '@hq/ui'
+import { buttonClass, fieldClass, ghostButtonClass, Spinner } from '@hq/ui'
 import { type FormEvent, useState } from 'react'
 import type { AgentQuestion, AgentStep } from '../domain/agent-steps.ts'
 import type { ConversationMessage } from '../queries/get-conversation.ts'
@@ -46,13 +46,26 @@ const QuestionCard = ({
   const [chosen, setChosen] = useState<Record<string, string[]>>({})
   const [free, setFree] = useState<Record<string, string>>({})
   const [notice, setNotice] = useState<string>()
+  const [sentAnswer, setSentAnswer] = useState<QuestionAnswer>()
   const isPending = step.closed === undefined && step.answers === undefined && step.approved === undefined
   const answerQuestion = step.kind === 'approval' ? answerAsOwner : answerAsPrompter
   const canAnswer = isPending && answerQuestion !== undefined
+  const isSending = sentAnswer !== undefined
   const send = async (answer: QuestionAnswer) => {
+    setSentAnswer(answer)
     const status = (await answerQuestion?.(step.questionId, answer).catch(() => 0)) ?? 0
+    if (status !== 200) setSentAnswer(undefined)
     setNotice(status === 200 ? undefined : (refusalNotices[status] ?? 'The answer could not be sent'))
   }
+  const labelOf = (isApproving: boolean, label: string, pendingLabel: string) =>
+    sentAnswer && 'approve' in sentAnswer && sentAnswer.approve === isApproving ? (
+      <span className="flex items-center gap-1.5">
+        <Spinner />
+        {pendingLabel}
+      </span>
+    ) : (
+      label
+    )
   const submit = (event: FormEvent) => {
     event.preventDefault()
     void send({
@@ -94,11 +107,16 @@ const QuestionCard = ({
         <pre className="overflow-x-auto rounded-md bg-app px-2 py-1 font-mono text-xs">{step.approval.arguments}</pre>
         {canAnswer && (
           <div className="flex gap-2">
-            <button type="button" className={buttonClass} onClick={() => send({ approve: true })}>
-              Approve
+            <button type="button" className={buttonClass} disabled={isSending} onClick={() => send({ approve: true })}>
+              {labelOf(true, 'Approve', 'Approving…')}
             </button>
-            <button type="button" className={ghostButtonClass} onClick={() => send({ approve: false })}>
-              Deny
+            <button
+              type="button"
+              className={ghostButtonClass}
+              disabled={isSending}
+              onClick={() => send({ approve: false })}
+            >
+              {labelOf(false, 'Deny', 'Denying…')}
             </button>
           </div>
         )}
@@ -115,11 +133,16 @@ const QuestionCard = ({
         <Markdown text={step.plan ?? ''} />
         {canAnswer && (
           <div className="flex gap-2">
-            <button type="button" className={buttonClass} onClick={() => send({ approve: true })}>
-              Approve the plan
+            <button type="button" className={buttonClass} disabled={isSending} onClick={() => send({ approve: true })}>
+              {labelOf(true, 'Approve the plan', 'Approving…')}
             </button>
-            <button type="button" className={ghostButtonClass} onClick={() => send({ approve: false })}>
-              Keep planning
+            <button
+              type="button"
+              className={ghostButtonClass}
+              disabled={isSending}
+              onClick={() => send({ approve: false })}
+            >
+              {labelOf(false, 'Keep planning', 'Sending…')}
             </button>
           </div>
         )}
@@ -173,10 +196,10 @@ const QuestionCard = ({
       ))}
       {canAnswer && (
         <div className="flex gap-2">
-          <button type="submit" className={buttonClass}>
+          <button type="submit" className={buttonClass} disabled={isSending}>
             Submit
           </button>
-          <button type="button" className={ghostButtonClass} onClick={() => send({ answers: {} })}>
+          <button type="button" className={ghostButtonClass} disabled={isSending} onClick={() => send({ answers: {} })}>
             Skip
           </button>
         </div>

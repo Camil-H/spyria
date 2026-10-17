@@ -41,7 +41,7 @@ export const MessageList = ({
   conversation: Conversation
   items: readonly ConversationItem[]
   onStop: (() => void) | undefined
-  onFork: (() => void) | undefined
+  onFork: (() => Promise<unknown>) | undefined
 }) => (
   <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
     {items.length === 0 ? (

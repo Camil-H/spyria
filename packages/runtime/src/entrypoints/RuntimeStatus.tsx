@@ -1,6 +1,6 @@
 import { useQuery } from '@hq/db/react'
 import type { ChatId, WorkspaceId } from '@hq/kernel'
-import { focusRing } from '@hq/ui'
+import { focusRing, Spinner } from '@hq/ui'
 import { useState } from 'react'
 import type { RuntimeStatus as Status } from '../domain/runtime.ts'
 import { getRuntimeStatus } from '../queries/get-runtime-status.ts'
@@ -40,10 +40,7 @@ export const RuntimeStatus = ({
       <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${dotClasses[status]}`} />
       {retriedStatus !== null ? (
         <>
-          <span
-            aria-hidden
-            className="size-3 shrink-0 animate-spin rounded-full border border-current border-t-transparent"
-          />
+          <Spinner />
           Retrying…
         </>
       ) : status === 'Could not start' && onRetry ? (

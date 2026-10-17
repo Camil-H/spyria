@@ -3,7 +3,7 @@ import { getCommits } from '../queries/get-commits.ts'
 import type { TabProps } from './TabProps.ts'
 import { emptyClass } from './ui.ts'
 
-export const CommitsTab = ({ workspaceId, chatId }: TabProps) => {
+const CommitsTab = ({ workspaceId, chatId }: TabProps) => {
   const commits = useQuery(getCommits(workspaceId, chatId))
   if (commits.length === 0) return <p className={emptyClass}>No commits</p>
   return (
@@ -21,3 +21,5 @@ export const CommitsTab = ({ workspaceId, chatId }: TabProps) => {
     </ul>
   )
 }
+
+export default CommitsTab

@@ -1,4 +1,5 @@
 import {
+  addParticipant,
   chatAction,
   chatLinkOf,
   chatRowIn,
@@ -417,12 +418,37 @@ test('28-5. only a member with chat.admin gets Rename, Move and Archive on a cha
 
   const bobPage = await openPageAs(browser, workerStack, 'member-bob')
   await expect(chatLinkOf(bobPage, 'Invoice bug')).toBeVisible()
-  await expect(bobPage.getByRole('button', { name: 'Chat actions for Invoice bug' })).toHaveCount(0)
+  await bobPage.getByRole('button', { name: 'Chat actions for Invoice bug' }).click()
+  await expect(bobPage.getByRole('menuitem')).toHaveText(['Leave chat'])
+  await bobPage.keyboard.press('Escape')
   await expect(bobPage.getByRole('button', { name: 'Chat actions for Standup' })).toHaveCount(1)
   await projectAction(bobPage, 'Billing', 'Archive project')
   await expect(dialogOf(bobPage, 'Archive project').getByRole('button', { name: 'Archive, keep chats' })).toBeVisible()
   await expect(
     dialogOf(bobPage, 'Archive project').getByRole('button', { name: 'Archive with its chats' }),
   ).toHaveCount(0)
+  await bobPage.context().close()
+})
+
+test('35-4. Bob leaves a runtime chat he was invited to from its sidebar menu; its owner gets no Leave there', async ({
+  page,
+  browser,
+  workerStack,
+}) => {
+  const chatId = await newRuntimeChat(page, 'Invited runtime')
+  await addParticipant(workerStack, chatId, 'member-bob', 'reader')
+  await page.getByRole('button', { name: 'Chat actions for Invited runtime' }).click()
+  await expect(page.getByRole('menuitem', { name: /^Leave/ })).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+  await chatAction(bobPage, 'Invited runtime', 'Leave chat')
+  await expect(chatLinkOf(bobPage, 'Invited runtime')).toHaveCount(0)
+  await expect
+    .poll(async () =>
+      (await workerStack.database.$client`select user_id from chat_participants where chat_id = ${chatId}`).map(
+        ({ user_id }) => user_id,
+      ),
+    )
+    .toEqual(['member-alice'])
   await bobPage.context().close()
 })

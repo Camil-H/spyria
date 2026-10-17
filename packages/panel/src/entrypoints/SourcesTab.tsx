@@ -3,7 +3,7 @@ import { getSources } from '../queries/get-sources.ts'
 import { LabelList } from './LabelList.tsx'
 import type { TabProps } from './TabProps.ts'
 
-export const SourcesTab = ({ workspaceId, chatId }: TabProps) => {
+const SourcesTab = ({ workspaceId, chatId }: TabProps) => {
   const sources = useQuery(getSources(workspaceId, chatId))
   return (
     <LabelList
@@ -12,3 +12,5 @@ export const SourcesTab = ({ workspaceId, chatId }: TabProps) => {
     />
   )
 }
+
+export default SourcesTab

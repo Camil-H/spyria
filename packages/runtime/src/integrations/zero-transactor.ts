@@ -13,7 +13,7 @@ import {
   setServerOnlyRuntimeValue,
 } from '@hq/db/server-writes'
 import type { RuntimeHost as RuntimeHostRow, Runtime as RuntimeRow } from '@hq/db/zero'
-import { type Transact, zql } from '@hq/db/zero-queries'
+import { skippingRefusedRebase, type Transact, zql } from '@hq/db/zero-queries'
 import { chatId, memberId, runtimeHostId, runtimeId, type WorkspaceId, workspaceId } from '@hq/kernel'
 import type { Transaction } from '@rocicorp/zero'
 import type { RuntimeTransactor, UnitOfWork } from '../contracts/transactor.ts'
@@ -142,7 +142,7 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
       setLocalSessions: (workspaceId, isOn) => tx.mutate.workspaces.update({ workspaceId, localSessions: isOn }),
     },
   }
-  return { run: (work) => work(unitOfWork) }
+  return { run: (work) => skippingRefusedRebase(tx, () => work(unitOfWork)) }
 }
 
 export const createTransactingZeroTransactor = (transact: Transact): RuntimeTransactor => ({

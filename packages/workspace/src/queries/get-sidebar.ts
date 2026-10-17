@@ -29,7 +29,7 @@ export const getSidebar =
         type: chat.type,
         visibility: chat.visibility,
         canAdmin: can(permissionsOf(chat), 'chat.admin'),
-        canLeave: chat.type === 'channel' && chat.ownerId !== viewerId,
+        canLeave: chat.ownerId !== viewerId,
       })
       chatsByProjectId.set(chat.projectId, projectChats)
     }

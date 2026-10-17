@@ -17,7 +17,7 @@ test.each([
     alice,
     [
       { name: 'Welcome', canAdmin: true, canLeave: false },
-      { name: 'Setup helper', canAdmin: false, canLeave: false },
+      { name: 'Setup helper', canAdmin: false, canLeave: true },
       { name: 'Invoice bug', canAdmin: true, canLeave: false },
       { name: 'Standup', canAdmin: false, canLeave: true },
       { name: 'Research', canAdmin: true, canLeave: false },
@@ -29,11 +29,11 @@ test.each([
     [
       { name: 'Welcome', canAdmin: false, canLeave: true },
       { name: 'Setup helper', canAdmin: true, canLeave: false },
-      { name: 'Invoice bug', canAdmin: false, canLeave: false },
+      { name: 'Invoice bug', canAdmin: false, canLeave: true },
       { name: 'Standup', canAdmin: true, canLeave: false },
     ],
   ],
-  ['Lee', lee, [{ name: 'Invoice bug', canAdmin: false, canLeave: false }]],
+  ['Lee', lee, [{ name: 'Invoice bug', canAdmin: false, canLeave: true }]],
 ])('the sidebar lists only the chats %s is a participant of', (_, viewerId, chats) => {
   expect(sidebarChatsOf(viewerId)).toEqual(chats)
 })

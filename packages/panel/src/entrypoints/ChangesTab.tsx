@@ -5,7 +5,7 @@ import { getChanges } from '../queries/get-changes.ts'
 import type { TabProps } from './TabProps.ts'
 import { emptyClass } from './ui.ts'
 
-export const ChangesTab = ({ workspaceId, chatId }: TabProps) => {
+const ChangesTab = ({ workspaceId, chatId }: TabProps) => {
   const changes = useQuery(getChanges(workspaceId, chatId))
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   if (changes.length === 0) return <p className={emptyClass}>No changes</p>
@@ -33,3 +33,5 @@ export const ChangesTab = ({ workspaceId, chatId }: TabProps) => {
     </div>
   )
 }
+
+export default ChangesTab

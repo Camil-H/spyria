@@ -5,7 +5,7 @@ import { Ellipsis } from 'lucide-react'
 import { useState } from 'react'
 import type { ChatsPolicy } from '../domain/project.ts'
 import type { Sidebar } from '../queries/get-sidebar.ts'
-import { type ChatAdornment, ChatRow } from './ChatRow.tsx'
+import { type ChatAction, type ChatAdornment, ChatRow } from './ChatRow.tsx'
 import { NameDialog } from './NameDialog.tsx'
 import { useWorkspaceCommands } from './providers.tsx'
 import { menuItemClass, menuTriggerClass } from './ui.ts'
@@ -14,11 +14,13 @@ export const ProjectGroup = ({
   workspaceId,
   project,
   projects,
+  chatAction,
   chatAdornment,
 }: {
   workspaceId: WorkspaceId
   project: Sidebar['projects'][number]
   projects: Sidebar['projects']
+  chatAction: ChatAction
   chatAdornment?: ChatAdornment
 }) => {
   const [isExpanded, setIsExpanded] = useState(true)
@@ -90,6 +92,7 @@ export const ProjectGroup = ({
               workspaceId={workspaceId}
               chat={chat}
               projects={projects}
+              chatAction={chatAction}
               chatAdornment={chatAdornment}
             />
           ))}

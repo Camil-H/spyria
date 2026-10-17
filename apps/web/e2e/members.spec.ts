@@ -8,6 +8,7 @@ import {
   mainOf,
   messageContaining,
   messageItemsOf,
+  mutationGateOf,
   newRuntimeChat,
   openChat,
   openPanelTab,
@@ -161,4 +162,47 @@ test('29-5. Bob leaves a chat he was invited to, and the owner has no Leave, rol
   await expect(mainOf(bobPage)).toContainText('Select a chat')
   await expectMembers(page, [['Alice', 'Owner']])
   await bobPage.context().close()
+})
+
+test('35-2. a role change waits for the server with its select disabled; a leave refused by the server shows its error', async ({
+  page,
+  browser,
+  workerStack,
+}) => {
+  const chatId = await newRuntimeChat(page, 'Pending roles')
+  await addParticipant(workerStack, chatId, 'member-bob', 'prompter')
+  const gate = await mutationGateOf(page)
+  await openPanelTab(page, 'Pending roles', 'Members')
+  gate.hold()
+  await tabPanelOf(page).getByLabel('Role of Bob').selectOption({ label: 'Reader' })
+  await expect(tabPanelOf(page).getByLabel('Role of Bob')).toBeDisabled()
+  gate.release()
+  await expect(tabPanelOf(page).getByLabel('Role of Bob')).toBeEnabled()
+  await expectMembers(page, [
+    ['Alice', 'Owner'],
+    ['Bob', 'Reader'],
+  ])
+
+  const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+  const bobGate = await mutationGateOf(bobPage)
+  const secondBobPage = await openPageAs(browser, workerStack, 'member-bob')
+  await openPanelTab(bobPage, 'Welcome', 'Members')
+  bobGate.hold()
+  await tabPanelOf(bobPage).getByRole('button', { name: 'Leave chat' }).click()
+  await openPanelTab(secondBobPage, 'Welcome', 'Members')
+  await tabPanelOf(secondBobPage).getByRole('button', { name: 'Leave chat' }).click()
+  await expect
+    .poll(
+      async () =>
+        (
+          await workerStack.database.$client`
+            select user_id from chat_participants where chat_id = 'chat-welcome' and user_id = 'member-bob'`
+        ).length,
+    )
+    .toBe(0)
+  bobGate.release()
+  await expect(tabPanelOf(bobPage).getByRole('alert')).toHaveText('This member is not in the chat')
+  await expect(tabPanelOf(bobPage).getByRole('button', { name: 'Leave chat' })).toHaveCount(0)
+  await bobPage.context().close()
+  await secondBobPage.context().close()
 })

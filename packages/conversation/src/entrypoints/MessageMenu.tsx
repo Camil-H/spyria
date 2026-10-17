@@ -1,5 +1,5 @@
 import type { MessageId, WorkspaceId } from '@hq/kernel'
-import { focusRing, menuContentClass } from '@hq/ui'
+import { ErrorMessage, focusRing, menuContentClass, useGuardedAction } from '@hq/ui'
 import { Content, Item, Root, Trigger } from '@radix-ui/react-dropdown-menu'
 import { Ellipsis } from 'lucide-react'
 import { useRef } from 'react'
@@ -28,9 +28,13 @@ export const MessageMenu = ({
   const workspaceId = useOutletContext<WorkspaceId>()
   const navigate = useNavigate()
   const isOpeningThread = useRef(false)
-  const startRuntime = async () => {
-    const newChatId = await commands.startRuntimeFromMessage({ workspaceId, messageId })
-    navigate(`../${newChatId}`, { relative: 'path' })
+  const { errorMessage, isPending, run } = useGuardedAction()
+  const startRuntime = (event: Event) => {
+    event.preventDefault()
+    run(async () => {
+      const newChatId = await commands.startRuntimeFromMessage({ workspaceId, messageId })
+      navigate(`../${newChatId}`, { relative: 'path' })
+    })
   }
   return (
     <Root>
@@ -61,8 +65,8 @@ export const MessageMenu = ({
             Reply in thread
           </Item>
         )}
-        <Item className={menuItemClass} onSelect={startRuntime}>
-          Start runtime from this message
+        <Item className={menuItemClass} disabled={isPending} onSelect={startRuntime}>
+          {isPending ? 'Starting runtime…' : 'Start runtime from this message'}
         </Item>
         <Item className={menuItemClass} disabled={!canEdit} onSelect={onEdit}>
           Edit
@@ -70,6 +74,11 @@ export const MessageMenu = ({
         <Item className={menuItemClass} disabled={!canEdit} onSelect={onDelete}>
           Delete
         </Item>
+        {errorMessage && (
+          <div className="max-w-60 px-2 py-1.5">
+            <ErrorMessage message={errorMessage} />
+          </div>
+        )}
       </Content>
     </Root>
   )

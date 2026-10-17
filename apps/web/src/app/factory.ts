@@ -105,9 +105,14 @@ export const createApp = async (
     const { confirmation } = await store.mutate(input.workspaceId, mutator({ ...input, id } as never))
     return { id, confirmation }
   }
+  const mutateConfirmed = (mutator: Mutator) => async (input: CommandInput) => {
+    const { id, confirmation } = await mutate(mutator, input)
+    await confirmation
+    return id
+  }
   const mutateIntoNewChat = (mutator: Mutator) => async (input: CommandInput) => {
     const newChatId = crypto.randomUUID()
-    await mutate(mutator, { ...input, chatId: newChatId })
+    await (await mutate(mutator, { ...input, chatId: newChatId })).confirmation
     return newChatId
   }
   const commandsOf = <Commands>(mutators: Record<string, Mutator>, overrides: Partial<Commands>) =>
@@ -157,8 +162,9 @@ export const createApp = async (
         )
         return id
       },
-      joinChannel: async (input) => (await mutate(conversationMutators.conversation.joinChannel, input)).id,
-      leaveChat: async (input) => (await mutate(conversationMutators.conversation.leaveChat, input)).id,
+      changeVisibility: mutateConfirmed(workspaceMutators.workspace.changeVisibility),
+      joinChannel: mutateConfirmed(conversationMutators.conversation.joinChannel),
+      leaveChat: mutateConfirmed(conversationMutators.conversation.leaveChat),
     }),
     conversationCommands: commandsOf<ConversationCommands>(conversationMutators.conversation, {
       saveDraft: (input) => saveDraft({ drafts }, { ...input, memberId }),
@@ -166,11 +172,12 @@ export const createApp = async (
       connectTool: toolConnections.connectTool,
       startRuntimeFromMessage: mutateIntoNewChat(conversationMutators.conversation.startRuntimeFromMessage),
       forkChat: mutateIntoNewChat(conversationMutators.conversation.forkChat),
-      retryAgent: async (input) => {
-        const { id, confirmation } = await mutate(conversationMutators.conversation.retryAgent, input)
-        await confirmation
-        return id
-      },
+      inviteMember: mutateConfirmed(conversationMutators.conversation.inviteMember),
+      changeMemberRole: mutateConfirmed(conversationMutators.conversation.changeMemberRole),
+      removeMember: mutateConfirmed(conversationMutators.conversation.removeMember),
+      joinChannel: mutateConfirmed(conversationMutators.conversation.joinChannel),
+      leaveChat: mutateConfirmed(conversationMutators.conversation.leaveChat),
+      retryAgent: mutateConfirmed(conversationMutators.conversation.retryAgent),
     }),
     agentStream: createAgentStream(store),
     profileCommands: commandsOf<ProfileCommands>(profileMutators.profile, {

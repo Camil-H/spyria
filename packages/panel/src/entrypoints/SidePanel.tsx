@@ -24,18 +24,18 @@ import {
 import { Activity, type ComponentType, lazy, type ReactNode, Suspense, useState } from 'react'
 import { getPanelTabs, type PanelTabId } from '../queries/get-panel-tabs.ts'
 import { BrowserTab } from './BrowserTab.tsx'
-import { ChangesTab } from './ChangesTab.tsx'
-import { CommitsTab } from './CommitsTab.tsx'
-import { ConnectionsTab } from './ConnectionsTab.tsx'
 import { FilesTab } from './FilesTab.tsx'
-import { PlanTab } from './PlanTab.tsx'
 import { usePanel } from './providers.tsx'
 import { ResizeHandle } from './ResizeHandle.tsx'
-import { SourcesTab } from './SourcesTab.tsx'
 import type { TabProps } from './TabProps.ts'
-import { TerminalTab } from './TerminalTab.tsx'
 import { tabClass } from './ui.ts'
 
+const ChangesTab = lazy(() => import('./ChangesTab.tsx'))
+const TerminalTab = lazy(() => import('./TerminalTab.tsx'))
+const PlanTab = lazy(() => import('./PlanTab.tsx'))
+const CommitsTab = lazy(() => import('./CommitsTab.tsx'))
+const SourcesTab = lazy(() => import('./SourcesTab.tsx'))
+const ConnectionsTab = lazy(() => import('./ConnectionsTab.tsx'))
 const MembersTab = lazy(() => import('./MembersTab.tsx'))
 
 const tabs: Record<PanelTabId, { label: string; Icon: LucideIcon; Component: ComponentType<TabProps> | null }> = {

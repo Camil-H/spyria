@@ -7,7 +7,7 @@ import {
   setVirtualKeyId,
   virtualKeyIdOf,
 } from '@hq/db/server-writes'
-import { type Transact, type ZeroContext, zql } from '@hq/db/zero-queries'
+import { skippingRefusedRebase, type Transact, type ZeroContext, zql } from '@hq/db/zero-queries'
 import type { MemberId, WorkspaceId } from '@hq/kernel'
 import type { Transaction } from '@rocicorp/zero'
 import type { ProfileTransactor, UnitOfWork } from '../contracts/transactor.ts'
@@ -93,7 +93,7 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
         )?.status,
     },
   }
-  return { run: (work) => work(unitOfWork) }
+  return { run: (work) => skippingRefusedRebase(tx, () => work(unitOfWork)) }
 }
 
 export const memberContext = (workspace: WorkspaceId, member: MemberId): ZeroContext => ({

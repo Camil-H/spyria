@@ -15,7 +15,7 @@ const ConnectionGroup = ({ title, ...list }: { title: string } & Parameters<type
   </LabelledSection>
 )
 
-export const ConnectionsTab = ({ workspaceId, chatId }: TabProps) => {
+const ConnectionsTab = ({ workspaceId, chatId }: TabProps) => {
   const connections = useQuery(getConnections(workspaceId, chatId))
   if (!connections) return null
   return (
@@ -34,3 +34,5 @@ export const ConnectionsTab = ({ workspaceId, chatId }: TabProps) => {
     </div>
   )
 }
+
+export default ConnectionsTab

@@ -1,5 +1,5 @@
 import type { WorkspaceId } from '@hq/kernel'
-import { Dialog, ghostButtonClass } from '@hq/ui'
+import { Dialog, ErrorMessage, ghostButtonClass, useGuardedAction } from '@hq/ui'
 import { Link } from 'react-router'
 import type { JoinableChannel } from '../queries/list-joinable-channels.ts'
 import { useWorkspaceCommands } from './providers.tsx'
@@ -14,6 +14,7 @@ const BrowseChannelsDialog = ({
   onClose: () => void
 }) => {
   const commands = useWorkspaceCommands()
+  const { errorMessage, isPending, run } = useGuardedAction()
   return (
     <Dialog label="Browse channels" closeLabel="Close" onClose={onClose}>
       {channels.length === 0 ? (
@@ -37,7 +38,8 @@ const BrowseChannelsDialog = ({
               <button
                 type="button"
                 className={ghostButtonClass}
-                onClick={() => commands.joinChannel({ workspaceId, chatId: channel.id })}
+                disabled={isPending}
+                onClick={() => run(() => commands.joinChannel({ workspaceId, chatId: channel.id }))}
               >
                 Join
               </button>
@@ -45,6 +47,7 @@ const BrowseChannelsDialog = ({
           ))}
         </ul>
       )}
+      <ErrorMessage message={errorMessage} />
     </Dialog>
   )
 }

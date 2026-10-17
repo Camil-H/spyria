@@ -95,3 +95,38 @@ test('5. the owner’s own write call runs without any approval card', async ({ 
   await expect(messageItemsOf(page).filter({ hasText: 'ran update' })).not.toHaveCount(0)
   await expect(approvalCardOf(page)).toHaveCount(0)
 })
+
+test('35-2. Approve reads Approving… while it is sent; when another page denies first, the late Approve is refused and the card keeps Denied by Alice', async ({
+  page,
+  browser,
+  workerStack,
+  agentScript,
+}) => {
+  const bobPage = await openAsBob(browser, workerStack)
+  const secondAlicePage = await openPageAs(browser, workerStack, 'member-alice')
+  await openChat(secondAlicePage, 'Research')
+  await agentScript(research, updateScript('Alice did not approve the update.'))
+  await sendMessage(bobPage, 'Bob asks to update the record')
+  let sendAnswer = () => {}
+  const isAnswerSent = new Promise<void>((resolve) => {
+    sendAnswer = resolve
+  })
+  await page.route('**/api/chats/*/questions/*', async (route) => {
+    await isAnswerSent
+    await route.continue()
+  })
+  await approvalCardOf(page).getByRole('button', { name: 'Approve' }).click()
+  await expect(approvalCardOf(page).getByRole('button', { name: 'Approving…' })).toBeDisabled()
+  await expect(approvalCardOf(page).getByRole('button', { name: 'Deny' })).toBeDisabled()
+
+  await approvalCardOf(secondAlicePage).getByRole('button', { name: 'Deny' }).click()
+  await expect(approvalCardOf(page)).toContainText('Denied by Alice')
+  const lateAnswer = page.waitForResponse('**/api/chats/*/questions/*')
+  sendAnswer()
+  expect((await lateAnswer).status()).toBe(409)
+  await expect(workingIndicatorOf(bobPage)).toHaveCount(0)
+  await expect(approvalCardOf(page)).toContainText('Denied by Alice')
+  await expect(approvalCardOf(bobPage)).toContainText('Denied by Alice')
+  await bobPage.context().close()
+  await secondAlicePage.context().close()
+})
