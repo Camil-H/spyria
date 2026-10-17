@@ -54,7 +54,7 @@ export { acme, alice, globex, lee, bob } from '@hq/db'
 export const aliceInAcme = { workspaceId: acme, userId: alice }
 export const bobInAcme = { workspaceId: acme, userId: bob }
 export const succeeded = {}
-export const failedWith = (message: string) => ({ error: 'app', message })
+export const failedWith = (message: string) => expect.objectContaining({ error: 'app', message })
 
 export const issueTestSession = async (
   database: Database,

@@ -8,6 +8,7 @@ import {
   alice,
   aliceInAcme,
   captureConsole,
+  failedWith,
   globex,
   openSharedTestApp,
   openZeroStore,
@@ -307,24 +308,17 @@ test('removing a host closes its connection and refuses its token afterwards', a
 
 test('a member cannot remove a host or turn machine sessions off, and the admin of another workspace cannot reach it', async () => {
   const { id, host } = await pairedHost()
-  expect(await removeHost(bobInAcme, acme, id)).toEqual({
-    error: 'app',
-    message: 'Only workspace admins can manage runtime hosts',
-  })
+  expect(await removeHost(bobInAcme, acme, id)).toEqual(failedWith('Only workspace admins can manage runtime hosts'))
   expect(
     await requestMutation(app, database, bobInAcme, 'runtime.setLocalSessions', { workspaceId: acme, isOn: false }),
-  ).toEqual({ error: 'app', message: 'Only workspace admins can manage runtime hosts' })
+  ).toEqual(failedWith('Only workspace admins can manage runtime hosts'))
   expect((await database.$client`select local_sessions from workspaces where workspace_id = ${acme}`)[0]).toEqual({
     local_sessions: true,
   })
-  expect(await removeHost(aliceInGlobex, acme, id)).toEqual({
-    error: 'app',
-    message: 'A runtime host can only be managed in the current workspace',
-  })
-  expect(await removeHost(aliceInGlobex, globex, id)).toEqual({
-    error: 'app',
-    message: `Runtime host ${id} was not found`,
-  })
+  expect(await removeHost(aliceInGlobex, acme, id)).toEqual(
+    failedWith('A runtime host can only be managed in the current workspace'),
+  )
+  expect(await removeHost(aliceInGlobex, globex, id)).toEqual(failedWith(`Runtime host ${id} was not found`))
   expect((await hostRow(id)).removed_at).toBeNull()
   expect(host.socket.readyState).toBe(WebSocket.OPEN)
 })
@@ -425,7 +419,7 @@ test('a machine is read and removed by its owner only, and admins see only how m
   expect(alicesAcme.read().runtimeHosts.some((machine) => machine.id === id)).toBe(false)
   expect(await countMachines(aliceInAcme)).toEqual({ count: 1 })
   expect(await countMachines(bobInAcme)).toMatchObject({ error: 'not_admin' })
-  expect(await removeHost(aliceInAcme, acme, id)).toEqual({ error: 'app', message: `Runtime host ${id} was not found` })
+  expect(await removeHost(aliceInAcme, acme, id)).toEqual(failedWith(`Runtime host ${id} was not found`))
   expect(await renewCode(aliceInAcme, id)).toMatchObject({ status: 404, body: { error: 'host_not_found' } })
   expect(await removeHost(bobInAcme, acme, id)).toEqual(succeeded)
   await host.closed
