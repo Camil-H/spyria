@@ -321,3 +321,41 @@ test('the real listing gives datasheet prices to the routable models a key reach
     { id: 'openai/gpt-5-nano', name: 'GPT-5 nano', tier: 'small', dollarsPerMillionInputTokens: 0.05 },
   ])
 })
+
+test('a runtime chat started from a thread sends nothing until the first prompt, which reaches the model as the thread then the prompt, once', async () => {
+  const { relay } = await fakeAgent()
+  const post = async (member: typeof aliceInAcme, text: string, threadRootId?: string) => {
+    const id = `message-${crypto.randomUUID()}`
+    expect(
+      await mutate(member, 'conversation.sendMessage', {
+        workspaceId: acme,
+        id,
+        chatId: 'chat-welcome',
+        text,
+        threadRootId,
+      }),
+    ).toEqual(succeeded)
+    return id
+  }
+  const root = await post(aliceInAcme, 'Can we ship the invoice fix?')
+  const reply = await post(bobInAcme, 'Yes, after review.', root)
+  const chat = `chat-${crypto.randomUUID()}` as ChatId
+  expect(
+    await mutate(aliceInAcme, 'conversation.startRuntimeFromMessage', {
+      workspaceId: acme,
+      id: `message-${crypto.randomUUID()}`,
+      chatId: chat,
+      messageId: reply,
+    }),
+  ).toEqual(succeeded)
+  expect(await routing(chat, aliceInAcme, { runsOn: 'runtime' })).toEqual(succeeded)
+  expect(relay.prompts).toEqual([])
+  const wrapper = (await database.query.messages.findFirst({ where: { chatId: chat } }))?.body
+  expect(wrapper).toStartWith('Conversation so far, from the channel thread in #Welcome:')
+  routeWith({ tier: 'small', confidence: 'high', effort: 'low' })
+  await answered(await prompt(chat, 'Summarise the thread.'))
+  await answered(await prompt(chat, 'And then?'))
+  const firstPrompt = `${wrapper}\n\nSummarise the thread.`
+  expect(relay.prompts).toEqual([firstPrompt, 'And then?'])
+  expect(stack.fakeLlmBodies.some((body) => body.includes(JSON.stringify(firstPrompt).slice(1, -1)))).toBe(true)
+})

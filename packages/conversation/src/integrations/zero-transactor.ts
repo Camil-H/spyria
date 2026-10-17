@@ -161,6 +161,18 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
               .orderBy('seq', 'asc'),
           )
         ).map(toMessage),
+      wrapperFor: async (prompt) => {
+        const memberMessages = zql.messages
+          .where('workspaceId', contextWorkspaceId)
+          .where('chatId', prompt.chatId)
+          .where('kind', 'member')
+          .orderBy('seq', 'asc')
+        const [wrapper, firstPrompt] = await Promise.all([
+          tx.run(memberMessages.where('replyToId', 'IS NOT', null).where('deletedAt', 'IS', null).one()),
+          tx.run(memberMessages.where('replyToId', 'IS', null).one()),
+        ])
+        return wrapper && firstPrompt?.id === prompt.id ? toMessage(wrapper) : undefined
+      },
     },
     agentJobs: {
       prompt: (message) => enqueue(agentJobTypes.prompt, { messageId: message.id }),
@@ -340,6 +352,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         if (!row) throw new ChatNotFound(id)
         return {
           workspaceId: workspaceId(row.workspaceId),
+          name: row.name,
           type: row.type,
           harness: row.harness ?? null,
           ownerId: row.ownerUserId ? memberId(row.ownerUserId) : null,
@@ -363,6 +376,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         return row && { ...row, permissions: row.permissions as ChatPermission[] }
       },
       changeParticipant,
+      recordRuntimeOrigin: (origin) => tx.mutate.runtimeOrigins.insert({ workspaceId: contextWorkspaceId, ...origin }),
       localSessionsAllowed: async () =>
         (await tx.run(zql.workspaces.where('workspaceId', contextWorkspaceId).one()))?.localSessions ?? true,
       hasAgentSession: async (id) =>

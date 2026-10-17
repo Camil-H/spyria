@@ -1,6 +1,6 @@
 import { chatId as toChatId, type WorkspaceId } from '@hq/kernel'
 import { lazy, type Ref, Suspense, useEffect, useState } from 'react'
-import { useOutletContext, useParams } from 'react-router'
+import { Link, useOutletContext, useParams } from 'react-router'
 import type { ConversationMessage } from '../queries/get-conversation.ts'
 import { AgentStep } from './AgentStep.tsx'
 import { Composer } from './Composer.tsx'
@@ -49,6 +49,21 @@ const OpenThread = ({ root }: { root: ThreadRoot }) => {
         />
       )}
     </div>
+  )
+}
+
+const RuntimeLinks = ({ runtimes }: { runtimes: ConversationMessage['runtimes'] }) => {
+  const workspaceId = useOutletContext<WorkspaceId>()
+  return runtimes.map(({ chatId, startedByName, name }) =>
+    name ? (
+      <Link key={chatId} to={`/w/${workspaceId}/chats/${chatId}`} className="mt-1 block text-xs text-muted underline">
+        Runtime: {name}
+      </Link>
+    ) : (
+      <p key={chatId} className="mt-1 text-xs text-muted">
+        {startedByName} started a runtime
+      </p>
+    ),
   )
 }
 
@@ -106,6 +121,7 @@ export const MessageItem = ({
             ) : (
               <p className={plainTextClassName}>{message.body}</p>
             )}
+            {message.runtimes.length > 0 && <RuntimeLinks runtimes={message.runtimes} />}
             {hasMenu && !message.isDeleted && mode !== 'edit' && (
               <MessageMenu
                 messageId={message.id}

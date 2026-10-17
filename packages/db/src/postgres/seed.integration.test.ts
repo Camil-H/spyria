@@ -63,6 +63,7 @@ const readSnapshot = async () => {
     })),
     readMarkers: readMarkers.map(userAsMember),
     threadReadMarkers: (await database.select().from(tables.threadReadMarkers)).map(userAsMember),
+    runtimeOrigins: await database.select().from(tables.runtimeOrigins),
     llmCredentials: (await database.select().from(tables.llmCredentials)).map(({ secretRef, ...credential }) =>
       userAsMember(credential),
     ),

@@ -89,6 +89,9 @@ export const queries = defineQueries({
       .where('userId', ctx.userId)
       .whereExists('chat', readableBy(ctx.userId)),
   ),
+  runtimeOrigins: defineQuery(({ ctx }) =>
+    zql.runtimeOrigins.where('workspaceId', ctx.workspaceId).whereExists('chat', readableBy(ctx.userId)),
+  ),
   llmCredentials: defineQuery(({ ctx }) =>
     zql.llmCredentials.where('workspaceId', ctx.workspaceId).where('userId', ctx.userId),
   ),

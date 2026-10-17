@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import { conversationMutators } from '@hq/conversation/server'
 import { createMockSnapshot, type Snapshot } from '@hq/db'
 import { createZeroStore } from '@hq/db/zero-store'
-import type { ChatId, MemberId, WorkspaceId } from '@hq/kernel'
+import { type ChatId, chatId, type MemberId, messageId, type WorkspaceId } from '@hq/kernel'
 import { workspaceMutators } from '@hq/workspace/server'
 import {
   acme,
@@ -349,4 +349,51 @@ test('a member’s thread read markers reach only his replica, and only for the 
   expect(
     await database.$client`select last_read_seq from thread_read_markers where chat_id = ${chat} and user_id = ${lee}`,
   ).toEqual([{ last_read_seq: 2 }] as never)
+})
+
+test('a runtime’s origin reaches the readers of its source channel without its private runtime chat, and leaves with the channel', async () => {
+  const channel = await newChat({
+    type: 'channel',
+    visibility: 'private',
+    participants: [{ memberId: lee, roleId: 'reader' }],
+  })
+  const aliceStore = await openZeroStore(createZeroStore, alice, [acme])
+  const leeStore = await openZeroStore(createZeroStore, lee, [acme])
+  const bobStore = await openZeroStore(createZeroStore, bob, [acme])
+  await (
+    await aliceStore.mutate(
+      acme,
+      conversationMutators.conversation.sendMessage({
+        workspaceId: acme,
+        id: `${channel}-root`,
+        chatId: channel,
+        text: 'Hi',
+      }),
+    )
+  ).confirmation
+  const runtime = `chat-${crypto.randomUUID()}`
+  await (
+    await aliceStore.mutate(
+      acme,
+      conversationMutators.conversation.startRuntimeFromMessage({
+        workspaceId: acme,
+        id: `${runtime}-seed`,
+        chatId: runtime,
+        messageId: `${channel}-root`,
+      }),
+    )
+  ).confirmation
+  const originsOf = (store: typeof aliceStore) =>
+    store
+      .read()
+      .runtimeOrigins.filter((row) => row.chatId === channel)
+      .map(({ runtimeChatId, messageId, startedBy }) => ({ runtimeChatId, messageId, startedBy }))
+  const origin = { runtimeChatId: chatId(runtime), messageId: messageId(`${channel}-root`), startedBy: alice }
+  await waitFor(() => originsOf(leeStore).length === 1)
+  expect(originsOf(leeStore)).toEqual([origin])
+  expect(originsOf(aliceStore)).toEqual([origin])
+  expect(leeStore.read().chats.some((row) => row.id === runtime)).toBe(false)
+  expect(originsOf(bobStore)).toEqual([])
+  await database.$client`delete from chat_participants where chat_id = ${channel} and user_id = ${lee}`
+  await waitFor(() => originsOf(leeStore).length === 0)
 })

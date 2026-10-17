@@ -41,6 +41,7 @@ test('a deleted message can be neither edited nor deleted', () => {
 
 const channel: ConversationChat = {
   workspaceId: workspaceId('acme'),
+  name: 'Welcome',
   type: 'channel',
   harness: null,
   ownerId: alice,

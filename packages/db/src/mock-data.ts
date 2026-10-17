@@ -195,6 +195,7 @@ export const createMockSnapshot = (): Snapshot => {
       { workspaceId: acme, memberId: alice, chatId: invoiceChat, lastReadSeq: 4 },
     ],
     threadReadMarkers: [],
+    runtimeOrigins: [],
     files: [
       file('billing', 'folder'),
       file('billing/invoice.ts'),

@@ -64,6 +64,7 @@ const liveMessageOf = (
   isRunning: true,
   canConnectTools: false,
   canReply: false,
+  runtimes: [],
   thread: null,
 })
 

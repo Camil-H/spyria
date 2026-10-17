@@ -1,4 +1,12 @@
-import { type ChatRow, chatPermissionsIn, findChat, participantIn, type Snapshot } from '@hq/db'
+import {
+  type ChatRow,
+  chatPermissionsIn,
+  findChat,
+  inChat,
+  participantIn,
+  type RuntimeOriginRow,
+  type Snapshot,
+} from '@hq/db'
 import { type ChatId, can, type MemberId, type MessageId, messageId, type WorkspaceId } from '@hq/kernel'
 import { stoppedByPrefix } from '../domain/agent-events.ts'
 import type { AgentStep, StoredStep, ThoughtStep } from '../domain/agent-steps.ts'
@@ -20,6 +28,7 @@ export type ConversationMessage = Readonly<{
   canConnectTools: boolean
   canReply: boolean
   thread: Readonly<{ replies: readonly ConversationMessage[]; newCount: number }> | null
+  runtimes: readonly RuntimeLink[]
   answeredByName?: string
   delegation?: Readonly<{
     id: string
@@ -32,6 +41,8 @@ export type ConversationMessage = Readonly<{
     live?: Readonly<{ text: string; isReasoning: boolean }>
   }>
 }>
+
+export type RuntimeLink = Readonly<{ chatId: ChatId; startedByName: string; name: string | null }>
 
 export type ConversationItem =
   | Readonly<{ type: 'message'; message: ConversationMessage }>
@@ -258,6 +269,15 @@ export const getConversation =
       chatMessages.filter((message) => message.threadRootId !== null),
       (message) => message.threadRootId,
     )
+    const runtimesByMessageId = Map.groupBy(
+      snapshot.runtimeOrigins.filter(inChat(workspaceId, chatId)),
+      (origin) => origin.messageId,
+    )
+    const runtimeLinkOf = ({ runtimeChatId, startedBy }: RuntimeOriginRow): RuntimeLink => {
+      const runtimeChat = findChat(snapshot, workspaceId, runtimeChatId)
+      const canOpen = runtimeChat && can(chatPermissionsIn(snapshot, workspaceId, viewerId)(runtimeChat), 'chat.read')
+      return { chatId: runtimeChatId, startedByName: memberName(startedBy), name: canOpen ? runtimeChat.name : null }
+    }
     const conversationMessageOf = (message: (typeof chatMessages)[number]): ConversationMessage => {
       const step = message.step as StoredStep | null
       const replies = repliesByRootId.get(message.id) ?? []
@@ -287,6 +307,7 @@ export const getConversation =
               ).length,
             }
           : null,
+        runtimes: (runtimesByMessageId.get(message.id) ?? []).map(runtimeLinkOf),
         ...(step?.type === 'question' &&
           step.answeredBy && { answeredByName: memberName(step.answeredBy as MemberId) }),
       }

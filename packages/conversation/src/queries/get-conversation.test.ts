@@ -663,3 +663,29 @@ test('a runtime chat has no threads', () => {
     { canReply: false, thread: null },
   ])
 })
+
+test('a message started into runtimes links each one the viewer can read and names the starter of the others', () => {
+  const runtimeOrigins = [
+    { workspaceId: acme, chatId: welcome, runtimeChatId: research, messageId: welcomeRoot, startedBy: alice },
+    {
+      workspaceId: acme,
+      chatId: welcome,
+      runtimeChatId: chatId('chat-invoice-bug'),
+      messageId: welcomeRoot,
+      startedBy: bob,
+    },
+  ]
+  const runtimesSeenBy = (viewer: typeof alice) =>
+    welcomeFor(viewer, [], { runtimeOrigins })?.messages.find((message) => message.id === welcomeRoot)?.runtimes
+  expect(runtimesSeenBy(alice)).toEqual([
+    { chatId: research, startedByName: 'Alice', name: 'Research' },
+    { chatId: chatId('chat-invoice-bug'), startedByName: 'Bob', name: 'Invoice bug' },
+  ])
+  expect(runtimesSeenBy(lee)).toEqual([
+    { chatId: research, startedByName: 'Alice', name: null },
+    { chatId: chatId('chat-invoice-bug'), startedByName: 'Bob', name: 'Invoice bug' },
+  ])
+  expect(
+    welcomeFor(alice, [], { runtimeOrigins })?.messages.filter((message) => message.runtimes.length > 0),
+  ).toHaveLength(1)
+})

@@ -15,6 +15,7 @@ export type MessageRepository = {
   setStep(messageId: MessageId, step: StoredStep): Promise<void>
   replies(promptId: MessageId): Promise<Message[]>
   thread(rootId: MessageId): Promise<Message[]>
+  wrapperFor(prompt: Message): Promise<Message | undefined>
 }
 
 export type AgentJobs = {
@@ -82,6 +83,13 @@ export type ParticipantChange = Readonly<{
   actorId: MemberId
 }>
 
+export type RuntimeOrigin = Readonly<{
+  runtimeChatId: ChatId
+  chatId: ChatId
+  messageId: MessageId
+  startedBy: MemberId
+}>
+
 export type ChatRepository = {
   get(chatId: ChatId): Promise<ConversationChat>
   permissions(chatId: ChatId, memberId: MemberId): Promise<readonly ChatPermission[]>
@@ -89,6 +97,7 @@ export type ChatRepository = {
   roleOf(chatId: ChatId, memberId: MemberId): Promise<string | undefined>
   role(roleId: string): Promise<ChatRole | undefined>
   changeParticipant(change: ParticipantChange): Promise<void>
+  recordRuntimeOrigin(origin: RuntimeOrigin): Promise<void>
   localSessionsAllowed(): Promise<boolean>
   hasAgentSession(chatId: ChatId): Promise<boolean>
   isSessionStartPending(chatId: ChatId): Promise<boolean>

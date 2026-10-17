@@ -100,6 +100,7 @@ const snapshotFromZeroRows = (
     drafts,
     readMarkers: rowsOf('readMarkers').map(withMemberId),
     threadReadMarkers: rowsOf('threadReadMarkers').map(withMemberId),
+    runtimeOrigins: rowsOf('runtimeOrigins'),
     files: rowsOf('files'),
     changes: rowsOf('changes'),
     terminalLines: rowsOf('terminalLines').map(withoutPosition),

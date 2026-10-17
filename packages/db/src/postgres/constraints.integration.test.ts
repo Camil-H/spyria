@@ -1,6 +1,15 @@
 import { afterAll, expect, test } from 'bun:test'
 import { eq } from 'drizzle-orm'
-import { chatParticipants, chatRoles, chats, events, messages, readMarkers, threadReadMarkers } from './tables.ts'
+import {
+  chatParticipants,
+  chatRoles,
+  chats,
+  events,
+  messages,
+  readMarkers,
+  runtimeOrigins,
+  threadReadMarkers,
+} from './tables.ts'
 import { createTestDatabase, databaseDropTimeoutMilliseconds } from './testing.ts'
 
 const seededDatabase = await createTestDatabase()
@@ -54,6 +63,22 @@ const crossTenantWrites = {
       chatId: 'chat-general',
       threadRootId: 'message-welcome-1',
       lastReadSeq: 1,
+    }),
+  'a runtime origin whose runtime chat is in another workspace': () =>
+    database.insert(runtimeOrigins).values({
+      workspaceId: 'workspace-globex',
+      chatId: 'chat-general',
+      runtimeChatId: 'chat-research',
+      messageId: 'message-general-1',
+      startedBy: 'member-alice',
+    }),
+  'a runtime origin on a message of another workspace': () =>
+    database.insert(runtimeOrigins).values({
+      workspaceId: 'workspace-globex',
+      chatId: 'chat-general',
+      runtimeChatId: 'chat-general',
+      messageId: 'message-welcome-1',
+      startedBy: 'member-alice',
     }),
   'a chat in a project of another workspace': () =>
     database.insert(chats).values({

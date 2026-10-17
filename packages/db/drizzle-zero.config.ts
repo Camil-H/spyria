@@ -36,6 +36,7 @@ export default drizzleZeroConfig(tables, {
     messages: true,
     readMarkers: true,
     threadReadMarkers: true,
+    runtimeOrigins: true,
     llmCredentials: { workspaceId: true, id: true, userId: true, provider: true, last4: true },
     workspaceConnections: true,
     toolConnections: true,

@@ -29,6 +29,7 @@ import {
   thoughtLevelOf,
   unreachableSessionNoticeOf,
 } from '../domain/session-routing.ts'
+import { agentPromptTextOf } from '../domain/thread-wrapper.ts'
 import {
   type AgentDependencies,
   beginAgentTurn,
@@ -332,7 +333,8 @@ export const promptAgent = async (
       return transactor.run((unitOfWork) => closeAgentTurn(unitOfWork, chatId, prompt.id, () => prepared.refusal))
     conversation = prepared.conversation
     await eventSockets.ensureOpen(chat, conversation, prompt.id)
-    await agentClient.sendMessage(conversation, prompt.body)
+    const wrapper = await transactor.run(({ messages }) => messages.wrapperFor(prompt))
+    await agentClient.sendMessage(conversation, agentPromptTextOf(prompt, wrapper))
   } catch (error) {
     if (!(error instanceof AgentStartFailure) && !isLastAttempt) {
       await transactor.run((unitOfWork) => releaseAgentTurn(unitOfWork, chatId, prompt.id))

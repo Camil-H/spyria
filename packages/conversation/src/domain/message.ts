@@ -28,6 +28,7 @@ export type MessageChange = Readonly<{
 
 export type ConversationChat = Readonly<{
   workspaceId: WorkspaceId
+  name: string
   type: 'channel' | 'runtime'
   harness: Harness | null
   ownerId: MemberId | null

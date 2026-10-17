@@ -251,6 +251,18 @@ export const threadReadMarkers = table(
   ],
 )
 
+export const runtimeOrigins = table(
+  'runtime_origins',
+  { ...chatScoped, runtimeChatId: text().notNull(), messageId: text().notNull(), startedBy: text().notNull() },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.runtimeChatId] }),
+    chatReference(table),
+    tenantReference([table.workspaceId, table.runtimeChatId], [chats.workspaceId, chats.id]),
+    tenantReference([table.workspaceId, table.messageId], [messages.workspaceId, messages.id]),
+    memberReference(table, table.startedBy),
+  ],
+)
+
 export const llmCredentials = table(
   'llm_credentials',
   {
@@ -540,6 +552,7 @@ export const relations = defineRelations(
     messages,
     readMarkers,
     threadReadMarkers,
+    runtimeOrigins,
     workspaceConnections,
     toolConnections,
     files,
@@ -590,6 +603,7 @@ export const relations = defineRelations(
       messages: { chat: chatOf(r.messages) },
       readMarkers: { chat: chatOf(r.readMarkers) },
       threadReadMarkers: { chat: chatOf(r.threadReadMarkers) },
+      runtimeOrigins: { chat: chatOf(r.runtimeOrigins) },
       files: { chat: chatOf(r.files) },
       changes: { chat: chatOf(r.changes) },
       terminalLines: { chat: chatOf(r.terminalLines) },
