@@ -14,15 +14,23 @@ import {
   test,
   unreadIconOf,
 } from './fixtures'
+import type { WorkerStack } from './stack'
 
 const menuButtonOf = (page: Page, chatName: string) =>
   page.getByRole('button', { name: `Chat actions for ${chatName}` })
+const makeAliceAdminOf = async (workerStack: WorkerStack, chatId: string) => {
+  await workerStack.database.$client`
+    insert into chat_participants (workspace_id, chat_id, user_id, role_id)
+    values ('workspace-acme', ${chatId}, 'member-alice', 'owner')
+    on conflict (workspace_id, chat_id, user_id) do update set role_id = 'owner'`
+}
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
 })
 
-test('shows the unread indicator, its place, colours and tooltip, per workspace', async ({ page }) => {
+test('shows the unread indicator, its place, colours and tooltip, per workspace', async ({ page, workerStack }) => {
+  await makeAliceAdminOf(workerStack, 'chat-standup')
   await test.step('shows the icon on chats with unread messages only', async () => {
     await expect(unreadIconOf(page, 'Standup')).toBeVisible()
     await expect(unreadIconOf(page, 'Setup helper')).toBeVisible()
@@ -111,7 +119,11 @@ test('notifies agent replies only in chats that are not open, never own messages
   })
 })
 
-test('shows the unread and draft icons side by side, distinct in light and dark mode', async ({ page }) => {
+test('shows the unread and draft icons side by side, distinct in light and dark mode', async ({
+  page,
+  workerStack,
+}) => {
+  await makeAliceAdminOf(workerStack, 'chat-setup-helper')
   await openChat(page, 'Setup helper')
   await sendMessage(page, 'Question to the agent')
   await composerOf(page).fill('Draft for later')

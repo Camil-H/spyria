@@ -1,14 +1,15 @@
-import type {
-  ChatId,
-  ChatPermission,
-  ChatVisibility,
-  CredentialId,
-  MemberId,
-  MessageId,
-  ProjectId,
-  RuntimeHostId,
-  RuntimeId,
-  WorkspaceId,
+import {
+  type ChatId,
+  type ChatPermission,
+  type ChatVisibility,
+  type CredentialId,
+  type MemberId,
+  type MessageId,
+  type ProjectId,
+  permissionsOf,
+  type RuntimeHostId,
+  type RuntimeId,
+  type WorkspaceId,
 } from '@hq/kernel'
 
 type WorkspaceRow = { id: WorkspaceId; name: string; localSessions: boolean }
@@ -208,3 +209,14 @@ export const memberNamesIn = (snapshot: Snapshot, workspaceId: WorkspaceId) => {
   )
   return (memberId: MemberId) => nameByMemberId.get(memberId) ?? 'Unknown'
 }
+
+export const chatPermissionsIn =
+  (snapshot: Snapshot, workspaceId: WorkspaceId, memberId: MemberId) => (chat: ChatRow) => {
+    const participant = snapshot.chatMembers.find(
+      (row) => inChat(workspaceId, chat.id)(row) && row.memberId === memberId,
+    )
+    return permissionsOf(
+      chat,
+      snapshot.chatRoles.find((role) => role.workspaceId === workspaceId && role.id === participant?.roleId),
+    )
+  }

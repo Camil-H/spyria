@@ -10,12 +10,12 @@ const menuItemClass =
 
 export const MessageMenu = ({
   messageId,
-  isOwn,
+  canEdit,
   onEdit,
   onDelete,
 }: {
   messageId: MessageId
-  isOwn: boolean
+  canEdit: boolean
   onEdit: () => void
   onDelete: () => void
 }) => {
@@ -38,10 +38,10 @@ export const MessageMenu = ({
         <Item className={menuItemClass} onSelect={startRuntime}>
           Start runtime from this message
         </Item>
-        <Item className={menuItemClass} disabled={!isOwn} onSelect={onEdit}>
+        <Item className={menuItemClass} disabled={!canEdit} onSelect={onEdit}>
           Edit
         </Item>
-        <Item className={menuItemClass} disabled={!isOwn} onSelect={onDelete}>
+        <Item className={menuItemClass} disabled={!canEdit} onSelect={onDelete}>
           Delete
         </Item>
       </Content>

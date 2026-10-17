@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { acme, alice, createMockSnapshot, type Snapshot, bob } from '@hq/db'
+import { acme, alice, createMockSnapshot, lee, type Snapshot, bob } from '@hq/db'
 import { chatId, messageId, runtimeHostId, runtimeId } from '@hq/kernel'
 import { stillRunningOf } from '../domain/delegation.ts'
 import type { RunsOn } from '../domain/session-routing.ts'
@@ -385,6 +385,29 @@ test('a delegation still running reads running, without its still-running answer
   expect(interrupted(true)).toEqual(['stopped'])
   expect(interrupted(false)).toEqual(['failed'])
 })
+
+test.each([
+  ['the owner', alice, { canPost: true, canConfigure: true }, true],
+  ['a prompter', bob, { canPost: true, canConfigure: false }, true],
+  ['a reader', lee, { canPost: false, canConfigure: false }, false],
+])(
+  '%s of Invoice bug posts and configures by their role, and edits only their own messages when they post',
+  (_, viewer, access, canEditOwn) => {
+    const invoiceBug = chatId('chat-invoice-bug')
+    const snapshot = createMockSnapshot()
+    const othersMessage = { ...replyRow(2, 'agent'), chatId: invoiceBug, id: messageId('others'), authorId: null }
+    const ownMessage = { ...othersMessage, kind: 'member' as const, id: messageId('own'), authorId: viewer }
+    const conversation = getConversation(
+      acme,
+      invoiceBug,
+      viewer,
+    )({ ...snapshot, messages: [...snapshot.messages, othersMessage, ownMessage] })
+    const canEditOf = (id: string) => conversation?.messages.find((message) => message.id === id)?.canEdit
+    expect(conversation).toMatchObject(access)
+    expect(canEditOf('own')).toBe(canEditOwn)
+    expect(canEditOf('others')).toBe(false)
+  },
+)
 
 test('messages carry their edited flag, the agent as their author, and tool connections only for the chat owner', () => {
   const edited = { ...replyRow(2, 'agent'), editedAt: '2026-10-01T09:01:00.000Z' }

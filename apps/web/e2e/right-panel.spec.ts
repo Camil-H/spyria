@@ -2,14 +2,17 @@ import {
   composerOf,
   expect,
   mainOf,
+  messageContaining,
   openChat,
   openPanelTab,
   type Page,
   panelOf,
+  sendMessage,
   panelTabOf as tabOf,
   tabPanelOf,
   test,
 } from './fixtures'
+import { openPageAs } from './stack'
 
 const tabListOf = (page: Page) => panelOf(page).getByRole('tablist', { name: 'Panel tabs' })
 const panelWidthOf = async (page: Page) => (await panelOf(page).boundingBox())!.width
@@ -205,7 +208,7 @@ test('shows every tab of the Invoice bug runtime panel', async ({ page }) => {
     await expectOwnerConnections(page)
   })
 
-  await test.step('lists the members with their role on Invoice bug', async () => {
+  await test.step('28-6. lists the members with their role rows on Invoice bug, the owner first', async () => {
     await openPanelTab(page, 'Invoice bug', 'Members')
     await expectMembers(page, [
       ['Alice', 'Owner'],
@@ -457,4 +460,25 @@ test('themes the panel in light and dark mode', async ({ page }) => {
       .evaluate((element) => getComputedStyle(element).color)
     expect(panelContentColor).toBe(pageTitleColor)
   })
+})
+
+test('28-4. a member who is not a participant reads the public Welcome channel, and posting there joins it as Prompter', async ({
+  browser,
+  workerStack,
+}) => {
+  const leePage = await openPageAs(browser, workerStack, 'member-lee')
+  await openPanelTab(leePage, 'Welcome', 'Members')
+  await expect(messageContaining(leePage, 'Welcome to the team!')).toHaveCount(1)
+  await expectMembers(leePage, [
+    ['Alice', 'Owner'],
+    ['Bob', 'Prompter'],
+  ])
+  await sendMessage(leePage, 'Lee says hello')
+  await expect(messageContaining(leePage, 'Lee says hello')).toHaveCount(1)
+  await expectMembers(leePage, [
+    ['Alice', 'Owner'],
+    ['Lee', 'Prompter'],
+    ['Bob', 'Prompter'],
+  ])
+  await leePage.context().close()
 })

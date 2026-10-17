@@ -21,7 +21,7 @@ export const RuntimeStatus = ({
 }: {
   workspaceId: WorkspaceId
   chatId: ChatId
-  onRetry: () => Promise<unknown>
+  onRetry: (() => Promise<unknown>) | undefined
 }) => {
   const status = useQuery(getRuntimeStatus(workspaceId, chatId))
   const [retriedStatus, setRetriedStatus] = useState<Status | null>(null)
@@ -30,7 +30,7 @@ export const RuntimeStatus = ({
   const retry = () => {
     setRetriedStatus(status)
     setRetryError(null)
-    onRetry().catch((error: unknown) => {
+    onRetry?.().catch((error: unknown) => {
       setRetriedStatus(null)
       setRetryError(error instanceof Error ? error.message : 'Could not retry')
     })
@@ -46,7 +46,7 @@ export const RuntimeStatus = ({
           />
           Retrying…
         </>
-      ) : status === 'Could not start' ? (
+      ) : status === 'Could not start' && onRetry ? (
         <button type="button" onClick={retry} className={`rounded-md text-ink hover:underline ${focusRing}`}>
           Could not start · Retry
         </button>

@@ -18,12 +18,12 @@ const workspaceChipClass =
 export const ChatView = ({
   headerActions,
   runtimeStatus,
-  canPrompt,
+  hasLlmKey,
   blockedNotice,
 }: {
   headerActions: ReactNode
-  runtimeStatus: ReactNode
-  canPrompt: boolean
+  runtimeStatus: (canRetry: boolean) => ReactNode
+  hasLlmKey: boolean
   blockedNotice: ReactNode
 }) => {
   const workspaceId = useOutletContext<WorkspaceId>()
@@ -59,7 +59,8 @@ export const ChatView = ({
   const mayPrompt =
     conversation.type === 'runtime' &&
     conversation.runsOn !== null &&
-    (conversation.localSession ? conversation.isOwner : canPrompt)
+    (conversation.localSession ? conversation.isOwner : conversation.canPost && hasLlmKey)
+  const status = runtimeStatus(conversation.canPost)
   const branch = live.workspace?.branch ?? conversation.gitBranch
   const ChatTypeIcon = conversation.type === 'runtime' ? Bot : Hash
   const chatTypeLabel = conversation.type === 'runtime' ? 'Runtime chat' : 'Channel'
@@ -99,7 +100,7 @@ export const ChatView = ({
         <MessageList
           conversation={conversation}
           items={withLiveMessages(conversation.items, live)}
-          onStop={() => commands.stopAgent({ workspaceId, chatId })}
+          onStop={conversation.canConfigure ? () => commands.stopAgent({ workspaceId, chatId }) : undefined}
         />
       </AnswerQuestionContext>
       {isRunsOnOpen && conversation.runsOnChoices && conversation.runsOnChoices.length > 1 && (
@@ -126,13 +127,19 @@ export const ChatView = ({
       <Composer
         workspaceId={workspaceId}
         chatId={chatId}
-        isBlocked={isRunsOnOpen || (conversation.type === 'runtime' && !conversation.localSession && !canPrompt)}
+        isBlocked={
+          isRunsOnOpen ||
+          !conversation.canPost ||
+          (conversation.type === 'runtime' && !conversation.localSession && !hasLlmKey)
+        }
         blockedNotice={
           isRunsOnOpen
             ? conversation.isOwner
               ? 'Choose where this chat runs to send'
               : runsOnWaitingNoticeOf(conversation.ownerName)
-            : blockedNotice
+            : conversation.canPost
+              ? blockedNotice
+              : 'You can read this chat'
         }
         aboveBox={
           (live.workspace || branch !== null) && (
@@ -161,10 +168,10 @@ export const ChatView = ({
                   chatId={chatId}
                   runsOn={conversation.runsOn}
                   runsOnChoices={conversation.runsOnChoices}
-                  status={runtimeStatus}
+                  status={status}
                 />
               ) : (
-                runtimeStatus
+                status
               )}
               <SessionChip
                 workspaceId={workspaceId}
@@ -175,6 +182,7 @@ export const ChatView = ({
                 harness={conversation.harness}
                 localSession={conversation.localSession}
                 isOwner={conversation.isOwner}
+                canConfigure={conversation.canConfigure}
               />
               {conversation.runsOn !== null && (
                 <PlanModeToggle
@@ -182,7 +190,7 @@ export const ChatView = ({
                   chatId={chatId}
                   isPlanning={conversation.isPlanning}
                   hasSession={live.workspace !== undefined}
-                  mayPrompt={mayPrompt}
+                  mayChange={mayPrompt && conversation.canConfigure}
                 />
               )}
             </>

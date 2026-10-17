@@ -56,8 +56,8 @@ const CommandStep = ({ id, step, isRunning }: { id: string; step: StepOf<'comman
       {step.truncatedLines > 0 && fullOutput === undefined && (
         <button
           type="button"
-          onClick={async () =>
-            setFullOutput(await commands.commandOutput({ workspaceId, chatId: currentChatId, stepId: id }))
+          onClick={() =>
+            commands.commandOutput({ workspaceId, chatId: currentChatId, stepId: id }).then(setFullOutput, () => {})
           }
           className={`mt-1 text-xs text-muted underline hover:text-ink ${focusRing}`}
         >

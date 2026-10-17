@@ -72,9 +72,11 @@ export const ProjectGroup = ({
       )}
       {openDialog === 'archive' && (
         <Dialog label="Archive project" subject={project.name} onClose={closeDialog}>
-          <button type="button" className={buttonClass} onClick={() => archiveWith('archive')}>
-            Archive with its chats
-          </button>
+          {project.chats.every((chat) => chat.canAdmin) && (
+            <button type="button" className={buttonClass} onClick={() => archiveWith('archive')}>
+              Archive with its chats
+            </button>
+          )}
           <button type="button" className={buttonClass} onClick={() => archiveWith('release')}>
             Archive, keep chats
           </button>

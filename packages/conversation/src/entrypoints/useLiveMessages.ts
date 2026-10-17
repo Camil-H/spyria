@@ -58,7 +58,7 @@ const liveMessageOf = (
   authorName: 'Agent',
   createdAt: messages.find((message) => message.id === promptId)?.createdAt ?? new Date(0).toISOString(),
   replyToId: messageId(promptId),
-  isOwn: false,
+  canEdit: false,
   isDeleted: false,
   isEdited: false,
   isRunning: true,

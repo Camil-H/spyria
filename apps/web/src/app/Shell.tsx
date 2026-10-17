@@ -13,7 +13,7 @@ import type { Application } from './factory.ts'
 const ChatRoute = ({ commands }: { commands: Application['conversationCommands'] }) => {
   const workspaceId = useOutletContext<WorkspaceId>()
   const chatId = toChatId(useParams().chatId ?? '')
-  const canPrompt = useHasLlmCredential(workspaceId)
+  const hasLlmKey = useHasLlmCredential(workspaceId)
   const blockedNotice = (
     <>
       Connect an LLM key in your profile to prompt.{' '}
@@ -26,14 +26,14 @@ const ChatRoute = ({ commands }: { commands: Application['conversationCommands']
     <div className="flex h-full">
       <ChatView
         headerActions={<PanelToggle />}
-        runtimeStatus={
+        runtimeStatus={(canRetry) => (
           <RuntimeStatus
             workspaceId={workspaceId}
             chatId={chatId}
-            onRetry={() => commands.retryAgent({ workspaceId, chatId })}
+            onRetry={canRetry ? () => commands.retryAgent({ workspaceId, chatId }) : undefined}
           />
-        }
-        canPrompt={canPrompt}
+        )}
+        hasLlmKey={hasLlmKey}
         blockedNotice={blockedNotice}
       />
       <SidePanel

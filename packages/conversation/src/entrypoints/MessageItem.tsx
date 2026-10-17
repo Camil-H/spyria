@@ -55,7 +55,7 @@ export const MessageItem = ({
           {hasMenu && !message.isDeleted && mode !== 'edit' && (
             <MessageMenu
               messageId={message.id}
-              isOwn={message.isOwn}
+              canEdit={message.canEdit}
               onEdit={() => setMode('edit')}
               onDelete={() => setMode('delete')}
             />

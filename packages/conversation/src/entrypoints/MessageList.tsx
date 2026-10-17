@@ -39,7 +39,7 @@ export const MessageList = ({
 }: {
   conversation: Conversation
   items: readonly ConversationItem[]
-  onStop: () => void
+  onStop: (() => void) | undefined
 }) => (
   <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
     {items.length === 0 ? (
@@ -67,7 +67,7 @@ export const MessageList = ({
           <span aria-hidden className="size-2 animate-pulse rounded-full bg-accent" />
           Agent is working…
         </span>
-        {conversation.hasActiveTurn && (
+        {conversation.hasActiveTurn && onStop && (
           <button
             type="button"
             onClick={onStop}

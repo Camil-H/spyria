@@ -1,5 +1,6 @@
 import { jobs } from '@hq/db/postgres'
 import {
+  addParticipant,
   agentReplyText,
   chatAction,
   chatLinkOf,
@@ -11,6 +12,7 @@ import {
   mainOf,
   messageContaining,
   messageItemsOf,
+  newRuntimeChat,
   openChat,
   type Page,
   sendButtonOf,
@@ -19,7 +21,7 @@ import {
   test,
   workingIndicatorOf,
 } from './fixtures'
-import type { WorkerStack } from './stack'
+import { openPageAs, type WorkerStack } from './stack'
 
 const messagesOf = (page: Page) => page.getByRole('list', { name: 'Messages' })
 
@@ -458,4 +460,40 @@ test('edits then deletes an own message', async ({ page }) => {
     await expect(messageContaining(page, 'Thanks, happy to be here.')).toHaveCount(0)
     await expect(messageItemsOf(page)).toHaveCount(2)
   })
+})
+
+test('28-3. a reader sees a reply arrive live but cannot post, stop, or edit and delete messages', async ({
+  page,
+  browser,
+  workerStack,
+  agentScript,
+  release,
+}) => {
+  const readerNotice = 'You can read this chat'
+  const chatId = await newRuntimeChat(page, 'Lee reads')
+  await addParticipant(workerStack, chatId, 'member-lee', 'reader')
+  await addParticipant(workerStack, 'chat-welcome', 'member-lee', 'reader')
+  const leePage = await openPageAs(browser, workerStack, 'member-lee')
+  await openChat(leePage, 'Lee reads')
+  await composerOf(leePage).fill('Lee would like to ask')
+  await expect(sendButtonOf(leePage)).toBeDisabled()
+  await expect(mainOf(leePage)).toContainText(readerNotice)
+
+  await agentScript(chatId, { hold: 'answer' })
+  await sendMessage(page, 'Alice asks while Lee reads')
+  await expect(messageContaining(leePage, 'Alice asks while Lee reads')).toHaveCount(1)
+  await expect(workingIndicatorOf(leePage)).toBeVisible()
+  await expect(mainOf(page).getByRole('button', { name: 'Stop' })).toBeVisible()
+  await expect(mainOf(leePage).getByRole('button', { name: 'Stop' })).toHaveCount(0)
+  await release('answer')
+  await expect(messageContaining(leePage, agentReplyText)).toHaveCount(1)
+
+  await openChat(leePage, 'Welcome')
+  await expect(sendButtonOf(leePage)).toBeDisabled()
+  await expect(mainOf(leePage)).toContainText(readerNotice)
+  await openMessageMenu(messageContaining(leePage, 'Thanks, glad to be here.'))
+  await expect(leePage.getByRole('menuitem', { name: 'Start runtime from this message' })).toBeEnabled()
+  await expect(leePage.getByRole('menuitem', { name: 'Edit' })).toBeDisabled()
+  await expect(leePage.getByRole('menuitem', { name: 'Delete' })).toBeDisabled()
+  await leePage.context().close()
 })

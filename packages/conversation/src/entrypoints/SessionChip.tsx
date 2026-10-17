@@ -61,20 +61,20 @@ export const PlanModeToggle = ({
   chatId,
   isPlanning,
   hasSession,
-  mayPrompt,
+  mayChange,
 }: {
   workspaceId: WorkspaceId
   chatId: ChatId
   isPlanning: boolean
   hasSession: boolean
-  mayPrompt: boolean
+  mayChange: boolean
 }) => {
   const commands = useConversationCommands()
   return (
     <fieldset
       aria-label="Mode"
       title={hasSession ? undefined : 'Plan and Auto are available once the agent session has started'}
-      disabled={!hasSession || !mayPrompt}
+      disabled={!hasSession || !mayChange}
       className="flex items-center text-xs"
     >
       <div className="flex rounded-md border border-line p-0.5 in-disabled:opacity-40">
@@ -110,6 +110,7 @@ export const SessionChip = (chip: {
   harness: Harness | null
   localSession: boolean
   isOwner: boolean
+  canConfigure: boolean
 }) => {
   const { workspaceId, chatId } = chip
   const commands = useConversationCommands()
@@ -156,11 +157,13 @@ export const SessionChip = (chip: {
         <div
           role="dialog"
           aria-label="Session"
-          className="absolute bottom-full left-0 z-50 mb-1 flex w-80 flex-col gap-3 rounded-lg border border-line bg-raised p-3 text-sm shadow-lg"
+          className="absolute bottom-full left-0 z-50 mb-1 w-80 rounded-lg border border-line bg-raised p-3 text-sm shadow-lg"
         >
-          <Suspense fallback={null}>
-            <SessionDialog chip={chip} routing={routing} nameOf={nameOf} adapterNameOf={adapterNameOf} />
-          </Suspense>
+          <fieldset disabled={!chip.canConfigure} className="flex min-w-0 flex-col gap-3">
+            <Suspense fallback={null}>
+              <SessionDialog chip={chip} routing={routing} nameOf={nameOf} adapterNameOf={adapterNameOf} />
+            </Suspense>
+          </fieldset>
         </div>
       )}
     </div>

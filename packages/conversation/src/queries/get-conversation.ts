@@ -1,5 +1,5 @@
-import { type ChatRow, findChat, type Snapshot } from '@hq/db'
-import { type ChatId, type MemberId, type MessageId, messageId, type WorkspaceId } from '@hq/kernel'
+import { type ChatRow, chatPermissionsIn, findChat, type Snapshot } from '@hq/db'
+import { type ChatId, can, type MemberId, type MessageId, messageId, type WorkspaceId } from '@hq/kernel'
 import { stoppedByPrefix } from '../domain/agent-events.ts'
 import type { AgentStep, StoredStep, ThoughtStep } from '../domain/agent-steps.ts'
 import { stillRunningOf } from '../domain/delegation.ts'
@@ -13,7 +13,7 @@ export type ConversationMessage = Readonly<{
   body: string
   step: AgentStep | null
   replyToId: MessageId | null
-  isOwn: boolean
+  canEdit: boolean
   isDeleted: boolean
   isEdited: boolean
   isRunning: boolean
@@ -46,6 +46,8 @@ export type Conversation = Readonly<{
   isPlanning: boolean
   runsOn: RunsOn | null
   isOwner: boolean
+  canPost: boolean
+  canConfigure: boolean
   runsOnChoices: readonly RunsOn[] | null
   gitBranch: string | null
   ownerName: string
@@ -218,6 +220,8 @@ export const getConversation =
     const chatMessages = snapshot.messages.filter((message) => message.chatId === chatId)
     const hasActiveTurn = chat.agentTurnMessageId !== null
     const isOwner = chat.ownerId === viewerId
+    const permissions = chatPermissionsIn(snapshot, workspaceId, viewerId)(chat)
+    const canPost = can(permissions, 'chat.post')
     const machine = snapshot.workspaces.some((workspace) => workspace.id === workspaceId && workspace.localSessions)
       ? snapshot.runtimeHosts.find((host) => host.workspaceId === workspaceId && host.ownerId === viewerId)
       : undefined
@@ -251,7 +255,7 @@ export const getConversation =
         body: message.body,
         step,
         replyToId: message.replyToId,
-        isOwn: message.authorId === viewerId,
+        canEdit: canPost && message.authorId === viewerId,
         isDeleted: message.deletedAt !== null,
         isEdited: message.editedAt !== null,
         isRunning: hasActiveTurn && message.replyToId === chat.agentTurnMessageId,
@@ -271,6 +275,8 @@ export const getConversation =
       isPlanning: chat.isPlanning,
       runsOn: runsOnOf(chat),
       isOwner,
+      canPost,
+      canConfigure: can(permissions, 'session.configure'),
       runsOnChoices,
       gitBranch: chat.gitBranch,
       ownerName: memberName(chat.ownerId),

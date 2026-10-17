@@ -6,6 +6,7 @@ import {
   expect,
   mainOf,
   messageItemsOf,
+  modeRadioOf,
   newRuntimeChat,
   openChat,
   openSession,
@@ -13,6 +14,7 @@ import {
   sendMessage,
   sessionOf,
   test,
+  workingIndicatorOf,
 } from './fixtures'
 import { openPageAs } from './stack'
 
@@ -253,5 +255,42 @@ test('12. a member whose only key is a decision model is told to add an LLM key 
   await bobPage.keyboard.press('Escape')
   await sendMessage(bobPage, 'Only a decision key')
   await expect(mainOf(bobPage)).toContainText('Bob has no LLM key in this workspace')
+  await bobPage.context().close()
+})
+
+test('28-2. a prompter prompts on his own key, his session window is read-only and he gets no Stop', async ({
+  page,
+  browser,
+  workerStack,
+  agentScript,
+  release,
+}) => {
+  const chatId = await newRuntimeChat(page, 'Bob prompts')
+  await addParticipant(workerStack, chatId, 'member-bob', 'prompter')
+  await promptAndWait(page, 'Alice starts', 1)
+  const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+  await addLlmKey(bobPage, 'Fake')
+  await openChat(bobPage, 'Bob prompts')
+  await agentScript(chatId, { hold: 'answer' })
+  await sendMessage(bobPage, 'Bob asks')
+  await expect(workingIndicatorOf(bobPage)).toBeVisible()
+  await expect(mainOf(page).getByRole('button', { name: 'Stop' })).toBeVisible()
+  await expect(mainOf(bobPage).getByRole('button', { name: 'Stop' })).toHaveCount(0)
+  await release('answer')
+  await expect(repliesOf(bobPage)).toHaveCount(2)
+  await expect
+    .poll(async () =>
+      (await workerStack.database.$client`select prompter_id from model_calls where chat_id = ${chatId}`).map(
+        ({ prompter_id }) => prompter_id,
+      ),
+    )
+    .toContain('member-bob')
+
+  await expect(modeRadioOf(bobPage, 'Plan')).toBeDisabled()
+  await openSession(bobPage)
+  await expect(sessionOf(bobPage).getByLabel('Main model')).toHaveValue('fake/fake-medium')
+  for (const label of ['Main model', 'Search all models', 'Effort', 'Subagents'])
+    await expect(sessionOf(bobPage).getByLabel(label)).toBeDisabled()
+  await expect(sessionOf(bobPage).getByRole('button', { name: 'Switch' })).toHaveCount(0)
   await bobPage.context().close()
 })

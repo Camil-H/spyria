@@ -1,5 +1,6 @@
 import { useQuery } from '@hq/db/react'
 import type { WorkspaceId } from '@hq/kernel'
+import { useSession } from '@hq/session'
 import { Provider } from '@radix-ui/react-tooltip'
 import { CircleUser, FolderPlus, Settings, SquarePen } from 'lucide-react'
 import { useState } from 'react'
@@ -22,7 +23,8 @@ export const Sidebar = ({
   workspaceId: WorkspaceId
   chatAdornment?: ChatAdornment
 }) => {
-  const sidebar = useQuery(getSidebar(workspaceId))
+  const { memberId } = useSession()
+  const sidebar = useQuery(getSidebar(workspaceId, memberId))
   const commands = useWorkspaceCommands()
   const isAdmin = useIsWorkspaceAdmin(workspaceId)
   const [openDialog, setOpenDialog] = useState<'project' | 'chat' | null>(null)

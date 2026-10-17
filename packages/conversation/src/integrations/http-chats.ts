@@ -13,8 +13,11 @@ type GetAsMember = (workspaceId: WorkspaceId, path: string) => Promise<Response>
 type ChatInput = { workspaceId: WorkspaceId; chatId: ChatId }
 
 export const createHttpChatCommands = (postAsMember: PostAsMember, getAsMember: GetAsMember) => ({
-  commandOutput: async ({ workspaceId, chatId, stepId }: ChatInput & { stepId: string }) =>
-    (await getAsMember(workspaceId, commandOutputPathOf(chatId, stepId))).text(),
+  commandOutput: async ({ workspaceId, chatId, stepId }: ChatInput & { stepId: string }) => {
+    const response = await getAsMember(workspaceId, commandOutputPathOf(chatId, stepId))
+    if (!response.ok) throw new Error(`The command output read answered ${response.status}`)
+    return response.text()
+  },
   chatRouting: async ({ workspaceId, chatId }: ChatInput) => {
     for (let waited = 0; ; waited += storedChatRetryMilliseconds) {
       const response = await getAsMember(workspaceId, chatRoutingPathOf(chatId))

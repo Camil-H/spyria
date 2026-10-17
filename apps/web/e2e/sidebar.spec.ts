@@ -1,9 +1,11 @@
 import {
   chatAction,
+  chatLinkOf,
   chatRowIn,
   expect,
   looseChatsOf,
   mainOf,
+  newRuntimeChat,
   type Page,
   projectAction,
   projectGroupOf,
@@ -11,6 +13,7 @@ import {
   switcherOf,
   test,
 } from './fixtures'
+import { openPageAs } from './stack'
 
 const moveChatTo = async (page: Page, chatName: string, destination: string) => {
   await chatAction(page, chatName, 'Move to')
@@ -383,4 +386,43 @@ test('renames a project, keeps its chats and offers the new name as a destinatio
     await moveChatTo(page, 'Research', 'Billing and invoicing')
     await expect(chatRowIn(projectGroupOf(page, 'Billing and invoicing'), 'Research')).toBeVisible()
   })
+})
+
+test('28-1. a private runtime chat of Alice and Research never reach Bob, and the private chat URL shows the not-found state', async ({
+  page,
+  browser,
+  workerStack,
+}) => {
+  await newRuntimeChat(page, 'Alice only', null)
+  const privateChatUrl = page.url()
+  const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+  await expect(chatLinkOf(bobPage, 'Invoice bug')).toBeVisible()
+  await expect(chatLinkOf(bobPage, 'Alice only')).toHaveCount(0)
+  await expect(chatLinkOf(bobPage, 'Research')).toHaveCount(0)
+  await bobPage.goto(privateChatUrl)
+  await expect(mainOf(bobPage)).toContainText('Select a chat')
+  await expect(mainOf(bobPage).getByRole('heading', { level: 1 })).toHaveCount(0)
+  await bobPage.context().close()
+})
+
+test('28-5. only a member with chat.admin gets Rename, Move and Archive on a chat, and Archive with its chats needs it on every chat of the project', async ({
+  page,
+  browser,
+  workerStack,
+}) => {
+  await page.getByRole('button', { name: 'Chat actions for Invoice bug' }).click()
+  for (const itemName of ['Rename chat', 'Move to', 'Archive chat'])
+    await expect(page.getByRole('menuitem', { name: itemName })).toBeVisible()
+  await page.keyboard.press('Escape')
+
+  const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+  await expect(chatLinkOf(bobPage, 'Invoice bug')).toBeVisible()
+  await expect(bobPage.getByRole('button', { name: 'Chat actions for Invoice bug' })).toHaveCount(0)
+  await expect(bobPage.getByRole('button', { name: 'Chat actions for Standup' })).toHaveCount(1)
+  await projectAction(bobPage, 'Billing', 'Archive project')
+  await expect(dialogOf(bobPage, 'Archive project').getByRole('button', { name: 'Archive, keep chats' })).toBeVisible()
+  await expect(
+    dialogOf(bobPage, 'Archive project').getByRole('button', { name: 'Archive with its chats' }),
+  ).toHaveCount(0)
+  await bobPage.context().close()
 })
