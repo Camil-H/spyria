@@ -47,7 +47,7 @@ export type FakeHostConversation = {
 }
 type WarmRuntime = { runtime: typeof runtimes.$inferSelect }
 const testGateway = testGatewayAt(gatewayUrl)
-type AgentScript = {
+export type AgentScript = {
   text?: string
   wordDelayMilliseconds?: number
   hold?: string

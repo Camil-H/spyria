@@ -15,6 +15,7 @@ export type MessageRepository = {
   setStep(messageId: MessageId, step: StoredStep): Promise<void>
   replies(promptId: MessageId): Promise<Message[]>
   thread(rootId: MessageId): Promise<Message[]>
+  inChat(chatId: ChatId): Promise<Message[]>
   wrapperFor(prompt: Message): Promise<Message | undefined>
 }
 

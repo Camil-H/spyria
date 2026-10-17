@@ -21,6 +21,7 @@ export type ConversationCommands = {
   stopAgent: Command<{ chatId: ChatId }>
   retryAgent: Command<{ chatId: ChatId }>
   startRuntimeFromMessage: Command<{ messageId: MessageId }>
+  forkChat: Command<{ sourceChatId: ChatId }>
   inviteMember: Command<{ chatId: ChatId; memberId: MemberId; roleId: string }>
   changeMemberRole: Command<{ chatId: ChatId; memberId: MemberId; roleId: string }>
   removeMember: Command<{ chatId: ChatId; memberId: MemberId }>

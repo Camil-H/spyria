@@ -6,7 +6,12 @@ import { Link, useOutletContext, useParams } from 'react-router'
 import type { AgentStep as Step } from '../domain/agent-steps.ts'
 import { type ConversationMessage, durationLabelOf } from '../queries/get-conversation.ts'
 import { Disclosure, ThoughtStep } from './Disclosure.tsx'
-import { AnswerQuestionContext, OwnerAnswerContext, useConversationCommands } from './providers.tsx'
+import {
+  AnswerQuestionContext,
+  OwnerAnswerContext,
+  ToolsAwaitingApprovalContext,
+  useConversationCommands,
+} from './providers.tsx'
 
 const QuestionCard = lazy(() => import('./QuestionCard.tsx'))
 const DelegationStep = lazy(() => import('./DelegationStep.tsx'))
@@ -92,12 +97,15 @@ const ToolStep = ({ step, canConnect }: { step: StepOf<'tool'>; canConnect: bool
   const commands = useConversationCommands()
   const workspaceId = useOutletContext<WorkspaceId>()
   const { connection } = step
+  const isAwaitingApproval = step.result === null && use(ToolsAwaitingApprovalContext).has(step.name)
   return (
     <>
       <Disclosure
         label={
           <>
-            <span className="shrink-0">Used {step.name}</span>
+            <span className="shrink-0">
+              {isAwaitingApproval ? 'Waiting to use' : 'Used'} {step.name}
+            </span>
             <code className="truncate font-mono text-xs">{step.arguments.slice(0, toolSummaryLength)}</code>
           </>
         }

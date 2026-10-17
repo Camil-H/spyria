@@ -36,10 +36,12 @@ export const MessageList = ({
   conversation,
   items,
   onStop,
+  onFork,
 }: {
   conversation: Conversation
   items: readonly ConversationItem[]
   onStop: (() => void) | undefined
+  onFork: (() => void) | undefined
 }) => (
   <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
     {items.length === 0 ? (
@@ -55,6 +57,7 @@ export const MessageList = ({
               key={item.message.id}
               message={item.message}
               hasMenu={conversation.type === 'channel'}
+              onFork={onFork}
               ref={ref}
             />
           )

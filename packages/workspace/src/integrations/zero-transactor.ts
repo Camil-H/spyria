@@ -30,7 +30,12 @@ const toChat = ({ createdAt, mode, ownerKind, ownerUserId, ownerServiceIdentityI
 const chatFields = ({ ownerId, ...chat }: Chat) => chat
 
 const eventPayloadOf: Record<ChatChange['type'], (chat: Chat) => object> = {
-  'chat.created': ({ name, type, projectId }) => ({ name, type, projectId }),
+  'chat.created': ({ name, type, projectId, originChatId }) => ({
+    name,
+    type,
+    projectId,
+    ...(originChatId && { originChatId }),
+  }),
   'chat.renamed': ({ name }) => ({ name }),
   'chat.moved': ({ projectId }) => ({ projectId }),
   'chat.archived': () => ({}),

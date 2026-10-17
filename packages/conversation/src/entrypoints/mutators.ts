@@ -9,6 +9,7 @@ import { createZeroTransactor } from '../integrations/zero-transactor.ts'
 import { changeMemberRole } from '../operations/change-member-role.ts'
 import { deleteMessage } from '../operations/delete-message.ts'
 import { editMessage } from '../operations/edit-message.ts'
+import { forkChat } from '../operations/fork-chat.ts'
 import { inviteMember } from '../operations/invite-member.ts'
 import { joinChannel } from '../operations/join-channel.ts'
 import { leaveChat } from '../operations/leave-chat.ts'
@@ -99,6 +100,14 @@ export const conversationMutators = defineMutators({
       z.extend(workspaceArguments, { id, chatId: chatIdArgument, messageId: messageIdArgument }),
       ({ tx, ctx, args }) =>
         startRuntimeFromMessage(
+          { ...dependenciesOf(tx, ctx, args), runtimeChatStarter: createZeroRuntimeChatStarter(tx, ctx) },
+          { ...args, memberId: ctx.userId },
+        ),
+    ),
+    forkChat: defineMutator(
+      z.extend(workspaceArguments, { id, chatId: chatIdArgument, sourceChatId: chatIdArgument }),
+      ({ tx, ctx, args }) =>
+        forkChat(
           { ...dependenciesOf(tx, ctx, args), runtimeChatStarter: createZeroRuntimeChatStarter(tx, ctx) },
           { ...args, memberId: ctx.userId },
         ),

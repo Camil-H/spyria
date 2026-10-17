@@ -105,6 +105,11 @@ export const createApp = async (
     const { confirmation } = await store.mutate(input.workspaceId, mutator({ ...input, id } as never))
     return { id, confirmation }
   }
+  const mutateIntoNewChat = (mutator: Mutator) => async (input: CommandInput) => {
+    const newChatId = crypto.randomUUID()
+    await mutate(mutator, { ...input, chatId: newChatId })
+    return newChatId
+  }
   const commandsOf = <Commands>(mutators: Record<string, Mutator>, overrides: Partial<Commands>) =>
     ({
       ...Object.fromEntries(
@@ -159,11 +164,8 @@ export const createApp = async (
       saveDraft: (input) => saveDraft({ drafts }, { ...input, memberId }),
       ...createHttpChatCommands(postAsMember, fetchAsMember),
       connectTool: toolConnections.connectTool,
-      startRuntimeFromMessage: async (input) => {
-        const newChatId = crypto.randomUUID()
-        await mutate(conversationMutators.conversation.startRuntimeFromMessage, { ...input, chatId: newChatId })
-        return newChatId
-      },
+      startRuntimeFromMessage: mutateIntoNewChat(conversationMutators.conversation.startRuntimeFromMessage),
+      forkChat: mutateIntoNewChat(conversationMutators.conversation.forkChat),
       retryAgent: async (input) => {
         const { id, confirmation } = await mutate(conversationMutators.conversation.retryAgent, input)
         await confirmation

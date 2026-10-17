@@ -1,6 +1,9 @@
 import { chatId as toChatId, type WorkspaceId } from '@hq/kernel'
+import { focusRing } from '@hq/ui'
+import { GitFork } from 'lucide-react'
 import { lazy, type Ref, Suspense, useEffect, useState } from 'react'
 import { Link, useOutletContext, useParams } from 'react-router'
+import { isUnreachableSessionNotice } from '../domain/session-routing.ts'
 import type { ConversationMessage } from '../queries/get-conversation.ts'
 import { AgentStep } from './AgentStep.tsx'
 import { Composer } from './Composer.tsx'
@@ -19,6 +22,17 @@ const timeFormat = new Intl.DateTimeFormat('en-GB', {
   hourCycle: 'h23',
   timeZone: 'UTC',
 })
+
+export const ForkButton = ({ onFork }: { onFork: () => void }) => (
+  <button
+    type="button"
+    onClick={onFork}
+    className={`flex w-fit items-center gap-1 rounded-full border border-line px-2 py-0.5 text-xs text-ink hover:bg-hover ${focusRing}`}
+  >
+    <GitFork aria-hidden size={12} />
+    Fork into my session
+  </button>
+)
 
 type ThreadRoot = ConversationMessage & { thread: NonNullable<ConversationMessage['thread']> }
 
@@ -84,10 +98,12 @@ const Thread = ({ root, isInitiallyOpen }: { root: ThreadRoot; isInitiallyOpen: 
 export const MessageItem = ({
   message,
   hasMenu,
+  onFork,
   ref,
 }: {
   message: ConversationMessage
   hasMenu: boolean
+  onFork?: (() => void) | undefined
   ref?: Ref<HTMLLIElement>
 }) => {
   const [mode, setMode] = useState<'view' | 'edit' | 'delete'>('view')
@@ -98,7 +114,10 @@ export const MessageItem = ({
     <>
       <li ref={ref} className="group relative rounded-md px-3 py-2 hover:bg-hover">
         {message.kind === 'notice' ? (
-          <p className="text-sm text-muted">{message.body}</p>
+          <div className="flex flex-col gap-1">
+            <p className="text-sm text-muted">{message.body}</p>
+            {onFork && isUnreachableSessionNotice(message.body) && <ForkButton onFork={onFork} />}
+          </div>
         ) : message.kind === 'step' ? (
           <AgentStep message={message} />
         ) : (

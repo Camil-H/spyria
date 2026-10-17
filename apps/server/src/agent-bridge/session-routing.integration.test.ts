@@ -359,3 +359,33 @@ test('a runtime chat started from a thread sends nothing until the first prompt,
   expect(relay.prompts).toEqual([firstPrompt, 'And then?'])
   expect(stack.fakeLlmBodies.some((body) => body.includes(JSON.stringify(firstPrompt).slice(1, -1)))).toBe(true)
 })
+
+test('a fork sends nothing until the forker’s first prompt, which reaches the model as the source history then the prompt, once, routed on the forker’s keys', async () => {
+  const { relay } = await fakeAgent()
+  await addLlmKey(bob, 'OpenAI')
+  const source = await newRuntimeChat(alice, [{ memberId: bob, roleId: 'reader' }])
+  await database.$client`
+    insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
+    values (${acme}, ${source}, ${`message-${crypto.randomUUID()}`}, 1, 'member', ${alice}, 'Find the bug.', now()),
+      (${acme}, ${source}, ${`message-${crypto.randomUUID()}`}, 2, 'agent', null, 'Found it.', now())`
+  const fork = `chat-${crypto.randomUUID()}` as ChatId
+  expect(
+    await mutate(bobInAcme, 'conversation.forkChat', {
+      workspaceId: acme,
+      id: `message-${crypto.randomUUID()}`,
+      chatId: fork,
+      sourceChatId: source,
+    }),
+  ).toEqual(succeeded)
+  expect(await routing(fork, bobInAcme, { runsOn: 'runtime' })).toEqual(succeeded)
+  expect(relay.prompts).toEqual([])
+  const wrapper = (await database.query.messages.findFirst({ where: { chatId: fork } }))?.body
+  expect(wrapper).toStartWith('Conversation so far, from the runtime chat Runtime chat:')
+  routeWith({ tier: 'small', confidence: 'high', effort: 'low' })
+  await answered(await prompt(fork, 'Fix it.', bobInAcme))
+  await answered(await prompt(fork, 'And then?', bobInAcme))
+  const firstPrompt = `${wrapper}\n\nFix it.`
+  expect(relay.prompts).toEqual([firstPrompt, 'And then?'])
+  expect(stack.fakeLlmBodies.some((body) => body.includes(JSON.stringify(firstPrompt).slice(1, -1)))).toBe(true)
+  expect(await decisionsOf(fork)).toMatchObject([{ role: 'session', member_id: bob }])
+})

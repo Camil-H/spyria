@@ -47,8 +47,10 @@ export const piModelOf = (id: string) => `${id.startsWith('anthropic/') ? 'hq-an
 export const thoughtLevelOf = (effort: string | null) =>
   effort && piThoughtLevels.includes(effort) ? effort : undefined
 
+const unreachableSessionNoticePrefix = 'Your keys cannot reach '
 export const unreachableSessionNoticeOf = (model: string) =>
-  `Your keys cannot reach ${modelNameOf(model)}; switch the model or add a key`
+  `${unreachableSessionNoticePrefix}${modelNameOf(model)}; switch the model or add a key`
+export const isUnreachableSessionNotice = (body: string) => body.startsWith(unreachableSessionNoticePrefix)
 
 export const harnesses = { 'claude-code': { name: 'Claude Code' }, codex: { name: 'Codex' } } as const
 export type Harness = keyof typeof harnesses

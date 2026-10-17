@@ -118,6 +118,11 @@ test('rebuilding the messages from the events reproduces the live projection, an
   })
   await succeeds('conversation.updateChatRouting', { chatId: 'chat-history-runtime', runsOn: 'runtime' })
   await succeeds('conversation.sendMessage', { id: 'message-history-4', chatId: 'chat-history-runtime', text: 'Go' })
+  await succeeds('conversation.forkChat', {
+    id: 'message-history-fork',
+    chatId: 'chat-history-fork',
+    sourceChatId: 'chat-history-runtime',
+  })
   await succeeds('workspace.createChat', { id: 'chat-history', name: 'History', type: 'channel', projectId: null })
   await succeeds('conversation.sendMessage', { id: 'message-history-5', chatId: 'chat-history', text: 'Hi' })
   await succeeds('workspace.renameChat', { chatId: 'chat-history', name: 'History, renamed' })

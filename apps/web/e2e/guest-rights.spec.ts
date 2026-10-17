@@ -45,6 +45,8 @@ test('2. a guest’s write call waits for the owner’s approval; once approved 
   await expect(approvalCardOf(page)).toContainText('{"text":"Renewal on 1 May"}')
   await expect(approvalCardOf(bobPage)).toContainText("Waiting for Alice's approval")
   await expect(approvalCardOf(bobPage).getByRole('button', { name: 'Approve' })).toHaveCount(0)
+  await expect(messageItemsOf(bobPage).getByRole('button', { name: 'Waiting to use update (crm)' })).toBeVisible()
+  await expect(updateStepOf(bobPage)).toHaveCount(0)
 
   await approvalCardOf(page).getByRole('button', { name: 'Approve' }).click()
   await expect(approvalCardOf(bobPage)).toContainText('Approved by Alice')

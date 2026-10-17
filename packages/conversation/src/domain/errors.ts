@@ -71,6 +71,7 @@ export const OwnerRoleNotAssignable = errorKind(
   () => 'The Owner role cannot be given',
   ConversationError,
 )
+export const NotForkable = errorKind('not_forkable', () => 'Only runtime chats can be forked', ConversationError)
 export const OwnerStays = errorKind(
   'owner_stays',
   () => 'The owner keeps the Owner role and stays in the chat',

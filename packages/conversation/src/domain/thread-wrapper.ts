@@ -5,15 +5,22 @@ export type QuotedMessage = Pick<Message, 'kind' | 'body' | 'createdAt' | 'delet
 
 const quotedTimeOf = (at: Date) => `${at.toISOString().slice(0, 16).replace('T', ' ')} UTC`
 
-export const threadWrapperOf = (channelName: string, messages: readonly QuotedMessage[]) =>
+export const channelThreadHeaderOf = (channelName: string) =>
+  `Conversation so far, from the channel thread in #${channelName}:`
+export const runtimeChatHeaderOf = (chatName: string) => `Conversation so far, from the runtime chat ${chatName}:`
+
+export const chatHistoryOf = <Quoted extends Pick<Message, 'kind'>>(messages: readonly Quoted[]) =>
+  messages.filter(({ kind }) => kind === 'member' || kind === 'agent')
+
+export const threadWrapperOf = (header: string, messages: readonly QuotedMessage[]) =>
   MessageBody(
     [
-      `Conversation so far, from the channel thread in #${channelName}:`,
+      header,
       ...messages
         .filter((message) => message.deletedAt === null)
         .map(
           ({ authorName, kind, createdAt, body }) =>
-            `${authorName} (member, ${kind === 'agent' ? 'agent' : 'human'}) · ${quotedTimeOf(createdAt)}\n${body}`,
+            `${authorName} (${kind === 'agent' ? 'agent' : 'member, human'}) · ${quotedTimeOf(createdAt)}\n${body}`,
         ),
     ].join('\n\n'),
   )

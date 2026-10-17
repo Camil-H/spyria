@@ -162,6 +162,10 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
               .orderBy('seq', 'asc'),
           )
         ).map(toMessage),
+      inChat: async (id) =>
+        (
+          await tx.run(zql.messages.where('workspaceId', contextWorkspaceId).where('chatId', id).orderBy('seq', 'asc'))
+        ).map(toMessage),
       wrapperFor: async (prompt) => {
         const memberMessages = zql.messages
           .where('workspaceId', contextWorkspaceId)

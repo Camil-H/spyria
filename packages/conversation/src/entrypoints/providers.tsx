@@ -29,3 +29,5 @@ export const AnswerQuestionContext = createContext<
 export const OwnerAnswerContext = createContext<
   ((questionId: string, answer: QuestionAnswer) => Promise<number>) | undefined
 >(undefined)
+
+export const ToolsAwaitingApprovalContext = createContext<ReadonlySet<string>>(new Set())

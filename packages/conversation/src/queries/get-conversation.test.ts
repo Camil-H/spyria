@@ -572,7 +572,7 @@ test('a chat started from a chat the viewer cannot read shows no origin link', (
       ...snapshot,
       chats: snapshot.chats.map((chat) => (chat.id === research ? { ...chat, originChatId: chatId(sourceId) } : chat)),
     })?.origin
-  expect(startedFrom('chat-welcome')).toEqual({ chatId: chatId('chat-welcome'), name: 'Welcome' })
+  expect(startedFrom('chat-welcome')).toEqual({ chatId: chatId('chat-welcome'), name: 'Welcome', type: 'channel' })
   expect(startedFrom('chat-not-synced')).toBeNull()
 })
 

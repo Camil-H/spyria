@@ -6,12 +6,21 @@ import {
   requireChatPermission,
   messageId as toMessageId,
 } from '@hq/kernel'
+import type { MemberDirectory } from '../contracts/repositories.ts'
 import type { RuntimeChatStarter } from '../contracts/runtime-chat-starter.ts'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { MessageDeleted } from '../domain/errors.ts'
-import { newMessage } from '../domain/message.ts'
+import { type Message, newMessage } from '../domain/message.ts'
 import { chatNameFrom } from '../domain/message-body.ts'
-import { threadWrapperOf } from '../domain/thread-wrapper.ts'
+import { channelThreadHeaderOf, threadWrapperOf } from '../domain/thread-wrapper.ts'
+
+export const quotedMessagesOf = (members: MemberDirectory, messages: readonly Message[]) =>
+  Promise.all(
+    messages.map(async (message) => ({
+      ...message,
+      authorName: message.authorId ? await members.displayNameOf(message.authorId) : 'Agent',
+    })),
+  )
 
 type Dependencies = { transactor: ConversationTransactor; runtimeChatStarter: RuntimeChatStarter }
 type Input = { id: string; chatId: ChatId; messageId: MessageId; memberId: MemberId }
@@ -38,12 +47,6 @@ export const startRuntimeFromMessage = (
       messageId: rootId,
       startedBy: memberId,
     })
-    const quotedMessages = await Promise.all(
-      thread.map(async (message) => ({
-        ...message,
-        authorName: message.authorId ? await members.displayNameOf(message.authorId) : 'Agent',
-      })),
-    )
     await messages.record({
       type: 'message.posted',
       actorId: memberId,
@@ -53,7 +56,10 @@ export const startRuntimeFromMessage = (
         chatId,
         kind: 'member',
         authorId: memberId,
-        body: threadWrapperOf((await chats.get(source.chatId)).name, quotedMessages),
+        body: threadWrapperOf(
+          channelThreadHeaderOf((await chats.get(source.chatId)).name),
+          await quotedMessagesOf(members, thread),
+        ),
         createdAt: new Date(),
         replyToId: source.id,
       }),

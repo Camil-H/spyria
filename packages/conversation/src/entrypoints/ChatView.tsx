@@ -4,13 +4,19 @@ import { useSession } from '@hq/session'
 import { buttonClass } from '@hq/ui'
 import { Bot, Folder, GitBranch, Hash } from 'lucide-react'
 import { type ReactNode, useEffect, useState } from 'react'
-import { Link, Navigate, useOutletContext, useParams } from 'react-router'
+import { Link, Navigate, useNavigate, useOutletContext, useParams } from 'react-router'
 import { runsOnNames, runsOnWaitingNoticeOf } from '../domain/session-routing.ts'
 import { getConversation } from '../queries/get-conversation.ts'
 import { Composer } from './Composer.tsx'
 import type { QuestionAnswer } from './endpoints.ts'
+import { ForkButton } from './MessageItem.tsx'
 import { MessageList } from './MessageList.tsx'
-import { AnswerQuestionContext, OwnerAnswerContext, useConversationCommands } from './providers.tsx'
+import {
+  AnswerQuestionContext,
+  OwnerAnswerContext,
+  ToolsAwaitingApprovalContext,
+  useConversationCommands,
+} from './providers.tsx'
 import { PlanModeToggle, RunsOnChip, SessionChip } from './SessionChip.tsx'
 import { useLiveMessages, withLiveMessages } from './useLiveMessages.ts'
 
@@ -36,6 +42,7 @@ export const ChatView = ({
     getConversation(workspaceId, chatId, memberId, hqRuntime?.chatId === chatId ? hqRuntime.isAvailable : undefined),
   )
   const commands = useConversationCommands()
+  const navigate = useNavigate()
   const isChoosingRunsOn = conversation?.type === 'runtime' && conversation.isOwner && conversation.runsOn === null
   useEffect(() => {
     if (isChoosingRunsOn)
@@ -64,6 +71,13 @@ export const ChatView = ({
     (conversation.localSession ? conversation.isOwner : conversation.canPost && hasLlmKey)
   const answerQuestion = (questionId: string, answer: QuestionAnswer) =>
     commands.answerQuestion({ workspaceId, chatId, questionId, answer })
+  const fork = async () =>
+    navigate(`/w/${workspaceId}/chats/${await commands.forkChat({ workspaceId, sourceChatId: chatId })}`)
+  const toolsAwaitingApproval = new Set(
+    live.messages.flatMap(({ step }) =>
+      step?.type === 'question' && step.approval ? [`${step.approval.tool} (${step.approval.server})`] : [],
+    ),
+  )
   const status = runtimeStatus(conversation.canPost)
   const branch = live.workspace?.branch ?? conversation.gitBranch
   const ChatTypeIcon = conversation.type === 'runtime' ? Bot : Hash
@@ -78,9 +92,12 @@ export const ChatView = ({
           </div>
           <div className="ml-auto flex min-w-0 items-center gap-x-2 whitespace-nowrap">
             {conversation.type === 'runtime' && (
-              <span className="text-sm text-muted">
-                Agent acts as <strong className="font-semibold text-ink">{conversation.ownerName}</strong>
-              </span>
+              <>
+                <span className="text-sm text-muted">
+                  Agent acts as <strong className="font-semibold text-ink">{conversation.ownerName}</strong>
+                </span>
+                <ForkButton onFork={fork} />
+              </>
             )}
             {headerActions}
           </div>
@@ -90,17 +107,20 @@ export const ChatView = ({
             to={`/w/${workspaceId}/chats/${conversation.origin.chatId}`}
             className="mt-1 inline-block text-sm text-muted underline"
           >
-            Started from {conversation.origin.name}
+            {conversation.origin.type === 'runtime' ? 'Forked from' : 'Started from'} {conversation.origin.name}
           </Link>
         )}
       </header>
       <AnswerQuestionContext value={mayPrompt ? answerQuestion : undefined}>
         <OwnerAnswerContext value={conversation.isOwner ? answerQuestion : undefined}>
-          <MessageList
-            conversation={conversation}
-            items={withLiveMessages(conversation.items, live)}
-            onStop={conversation.canConfigure ? () => commands.stopAgent({ workspaceId, chatId }) : undefined}
-          />
+          <ToolsAwaitingApprovalContext value={toolsAwaitingApproval}>
+            <MessageList
+              conversation={conversation}
+              items={withLiveMessages(conversation.items, live)}
+              onStop={conversation.canConfigure ? () => commands.stopAgent({ workspaceId, chatId }) : undefined}
+              onFork={conversation.isOwner ? undefined : fork}
+            />
+          </ToolsAwaitingApprovalContext>
         </OwnerAnswerContext>
       </AnswerQuestionContext>
       {isRunsOnOpen && conversation.runsOnChoices && conversation.runsOnChoices.length > 1 && (
