@@ -103,7 +103,7 @@ export const MessageItem = ({
       <li ref={ref} className="group relative rounded-md px-3 py-2 hover:bg-hover">
         {message.kind === 'notice' ? (
           <div className="flex flex-col gap-1">
-            <p className="text-sm text-muted">{message.body}</p>
+            <p className="whitespace-pre-wrap text-sm text-muted">{message.body}</p>
             {onFork && isUnreachableSessionNotice(message.body) && <ForkButton onFork={onFork} />}
           </div>
         ) : message.kind === 'step' ? (

@@ -468,3 +468,17 @@ test.each([
 ] as const)('a reopened turn that hq-agent reports %s closes as %s', (executionStatus, outcome) => {
   expect(reopenedTurnOutcomeOf(executionStatus)).toBe(outcome)
 })
+
+test('a failed setup script is stored and shown as a notice with its exit code and last output lines', () => {
+  const setupFailed = acpUpdate(1, {
+    sessionUpdate: 'setup_failed',
+    exitCode: 127,
+    output: 'installing\ntool: not found',
+  })
+  expect(isStoredAgentEvent(setupFailed)).toBe(true)
+  expect(agentProjectionOf(setupFailed)).toEqual({
+    type: 'message',
+    body: 'The setup script .hq/setup.sh failed with exit code 127; the session started anyway.\ninstalling\ntool: not found',
+    kind: 'notice',
+  })
+})

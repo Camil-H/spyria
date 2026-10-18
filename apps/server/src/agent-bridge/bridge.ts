@@ -10,6 +10,7 @@ import {
   isAuthRequiredError,
   isStoredAgentEvent,
   type QuestionFrame,
+  type RepositoryCheckouts,
   type SessionClassifier,
   streamedTextOf,
 } from '@hq/conversation/server'
@@ -40,6 +41,7 @@ export const createAgentBridge = ({
   approvalWindowMilliseconds,
   hqAgentImage,
   reopenDelayMilliseconds = 1000,
+  repositoryCheckoutsOf,
 }: {
   sandboxProvider: SandboxProvider
   llm?: AgentLlm
@@ -49,6 +51,7 @@ export const createAgentBridge = ({
   approvalWindowMilliseconds?: number
   hqAgentImage?: string
   reopenDelayMilliseconds?: number
+  repositoryCheckoutsOf?: (database: Database) => RepositoryCheckouts
 }) => {
   const bridgeOf = (database: Database) => {
     const sockets = new Map<
@@ -84,6 +87,7 @@ export const createAgentBridge = ({
       resumeAfterMilliseconds,
       approvalWindowMilliseconds,
       hqAgentImage,
+      checkouts: repositoryCheckoutsOf?.(database),
       eventSockets: {
         showQuestion: (chat, frame) => {
           shownQuestions.set(

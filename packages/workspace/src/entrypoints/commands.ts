@@ -1,5 +1,6 @@
 import type { ChatId, ChatVisibility, MemberId, ProjectId, WorkspaceId } from '@hq/kernel'
 import type { Chat } from '../domain/chat.ts'
+import type { GitHubRepository, GitHubSettingsInput, GitHubSettingsView } from '../domain/github.ts'
 import type { WorkspaceRole } from '../domain/member.ts'
 import type { Name } from '../domain/name.ts'
 import type { ChatsPolicy } from '../domain/project.ts'
@@ -31,4 +32,9 @@ export type WorkspaceCommands = {
     domain: string
     email: string
   }) => Promise<SsoSettingsView | null>
+  readGitHubSettings: (input: { workspaceId: WorkspaceId }) => Promise<GitHubSettingsView | null>
+  saveGitHubSettings: (input: GitHubSettingsInput & { workspaceId: WorkspaceId }) => Promise<GitHubSettingsView | null>
+  listRepositories: (input: { workspaceId: WorkspaceId }) => Promise<GitHubRepository[]>
+  listBranches: (input: { workspaceId: WorkspaceId; repository: string }) => Promise<string[]>
+  createDevChat: Command<{ name: Name; projectId: ProjectId | null; repository: string; baseBranch: string }>
 }

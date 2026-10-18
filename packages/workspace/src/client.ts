@@ -1,3 +1,4 @@
+export { GitHubSection } from './entrypoints/GitHubSection.tsx'
 export { MembersSection } from './entrypoints/MembersSection.tsx'
 export { WorkspaceProvider } from './entrypoints/providers.tsx'
 export { SignInScreen } from './entrypoints/SignInScreen.tsx'

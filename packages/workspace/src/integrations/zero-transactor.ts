@@ -31,7 +31,7 @@ const toProject = ({ createdAt, ...row }: ProjectRow): Project => ({
   name: Name(row.name),
 })
 
-const toChat = ({ createdAt, mode, ownerKind, ownerUserId, ownerServiceIdentityId, ...row }: ChatRow): Chat => ({
+const toChat = ({ createdAt, ownerKind, ownerUserId, ownerServiceIdentityId, ...row }: ChatRow): Chat => ({
   ...row,
   id: chatId(row.id),
   workspaceId: workspaceId(row.workspaceId),
@@ -59,11 +59,12 @@ const toInvitation = (row: InvitationRow): Invitation => ({
 })
 
 const eventPayloadOf: Record<ChatChange['type'], (chat: Chat) => object> = {
-  'chat.created': ({ name, type, projectId, originChatId }) => ({
+  'chat.created': ({ name, type, projectId, originChatId, repository, baseBranch }) => ({
     name,
     type,
     projectId,
     ...(originChatId && { originChatId }),
+    ...(repository && { repository, baseBranch }),
   }),
   'chat.renamed': ({ name }) => ({ name }),
   'chat.moved': ({ projectId }) => ({ projectId }),
@@ -192,7 +193,6 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
         if (type === 'chat.created') {
           await tx.mutate.chats.insert({
             ...chatFields(inContextWorkspace(chat)),
-            mode: null,
             ownerKind: 'user',
             ownerUserId: chat.ownerId,
             ownerServiceIdentityId: null,

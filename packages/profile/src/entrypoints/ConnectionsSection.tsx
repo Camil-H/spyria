@@ -5,6 +5,7 @@ import { Content, List, Root, Trigger } from '@radix-ui/react-tabs'
 import { useEffect, useState } from 'react'
 import { getPersonalConnections } from '../queries/get-personal-connections.ts'
 import { getSharedConnections } from '../queries/get-shared-connections.ts'
+import { GitHubConnectionRow } from './GitHubConnectionRow.tsx'
 import { useProfileCommands } from './providers.tsx'
 
 const rowClass = 'flex flex-wrap items-center gap-x-3 gap-y-1'
@@ -48,6 +49,7 @@ export const ConnectionsSection = ({ workspaceId, memberId }: { workspaceId: Wor
           )}
         </Content>
         <Content value="personal" className="flex flex-col gap-3">
+          <GitHubConnectionRow workspaceId={workspaceId} />
           {connected.length === 0 && <p className="text-sm text-muted">No personal connections</p>}
           <ul className="flex flex-col gap-2 text-sm">
             {connected.map(({ tool, status }) => (

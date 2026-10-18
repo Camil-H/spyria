@@ -36,7 +36,7 @@ export type SsoDependencies = {
   mailer?: Mailer
   appOrigin?: string
 }
-type Sql = Parameters<Parameters<Database['$client']['begin']>[1]>[0]
+export type Sql = Parameters<Parameters<Database['$client']['begin']>[1]>[0]
 type Member = { workspaceId: string; userId: string }
 
 export const domainVerificationLinkPath = '/auth/verify-domain'
@@ -59,14 +59,20 @@ export const ssoProviderOf = async (
       order by workspaces.created_at limit 1`
   )[0]
 
-const assertAdmin = async (sql: Sql, { workspaceId, userId }: Member) => {
+export const assertAdmin = async (sql: Sql, { workspaceId, userId }: Member) => {
   const [admin] = await sql`
     select 1 from memberships where workspace_id = ${workspaceId} and user_id = ${userId} and role = 'admin'
       and removed_at is null`
   if (!admin) throw new NotWorkspaceAdmin()
 }
 
-const recordWorkspaceEvent = (sql: Sql, workspaceId: string, type: string, actorId: string | null, payload: object) =>
+export const recordWorkspaceEvent = (
+  sql: Sql,
+  workspaceId: string,
+  type: string,
+  actorId: string | null,
+  payload: object,
+) =>
   sql`
     insert into workspace_events (workspace_id, id, type, actor_id, payload, created_at)
     values (${workspaceId}, ${crypto.randomUUID()}, ${type}, ${actorId}, ${JSON.stringify(payload)}::jsonb, now())`

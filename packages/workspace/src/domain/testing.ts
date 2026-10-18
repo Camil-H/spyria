@@ -25,7 +25,10 @@ export const chatInAcme: Chat = {
   archived: false,
   model: 'openai/gpt-5',
   reasoningEffort: 'medium',
+  mode: null,
   gitBranch: 'main',
+  repository: null,
+  baseBranch: null,
   originChatId: null,
 }
 

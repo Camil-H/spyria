@@ -1,5 +1,11 @@
 import { type ChatId, can, type MessageId, messageId } from '@hq/kernel'
-import type { AgentClient, AgentEventSockets, AgentRuntimes, SessionClassifier } from '../contracts/agent.ts'
+import type {
+  AgentClient,
+  AgentEventSockets,
+  AgentRuntimes,
+  RepositoryCheckouts,
+  SessionClassifier,
+} from '../contracts/agent.ts'
 import type { ConversationTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import { type Message, newMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
@@ -14,6 +20,7 @@ export type AgentDependencies = {
   agentClient: AgentClient
   eventSockets: AgentEventSockets
   classifier?: SessionClassifier
+  checkouts?: RepositoryCheckouts
   fixedLlm?: { model: string }
   resumeAfterMilliseconds?: number
   approvalWindowMilliseconds?: number

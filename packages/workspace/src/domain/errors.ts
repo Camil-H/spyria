@@ -95,3 +95,24 @@ export const MailNotSent = errorKind(
   (reason: string) => `The verification email could not be sent: ${reason}`,
   WorkspaceError,
 )
+export const InvalidGitHubSettings = errorKind('invalid_github_settings', (reason: string) => reason, WorkspaceError)
+export const GitHubNotConfigured = errorKind(
+  'github_not_configured',
+  () => 'No GitHub App is configured for this workspace',
+  WorkspaceError,
+)
+export const GitHubRefused = errorKind(
+  'github_refused',
+  (reason: string) => `GitHub refused the request: ${reason}`,
+  WorkspaceError,
+)
+export const RepositoryNotGranted = errorKind(
+  'repository_not_granted',
+  (repository: string) => `${repository} is not granted to the workspace's GitHub App`,
+  WorkspaceError,
+)
+export const BranchNotFound = errorKind(
+  'branch_not_found',
+  (repository: string, branch: string) => `${repository} has no branch ${branch}`,
+  WorkspaceError,
+)

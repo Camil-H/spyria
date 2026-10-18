@@ -31,6 +31,8 @@ export const agentNotices = {
   noResponse: 'The agent did not respond',
   newSession: 'The agent started a new session; it does not remember earlier messages',
 }
+export const setupFailedNoticeOf = (exitCode: unknown, output: unknown) =>
+  `The setup script .hq/setup.sh failed with exit code ${exitCode}; the session started anyway.\n${output}`
 export const waitingNotices = [
   agentNotices.noHost,
   agentNotices.couldNotStart,
@@ -175,6 +177,8 @@ const acpUpdateProjectionOf = (event: AgentEvent): AgentProjection => {
       ...(typeof reason === 'string' && { closed: reason }),
     } as StoredStep)
   }
+  if (kind === 'setup_failed')
+    return { type: 'message', body: setupFailedNoticeOf(update?.exitCode, update?.output), kind: 'notice' }
   if (kind === 'session_started' && update?.resumeFailed === true)
     return { type: 'message', body: agentNotices.newSession, kind: 'notice' }
   if (kind === 'turn_end' && (update?.stopReason !== 'cancelled' || update?.keptPlanning === true))
@@ -208,6 +212,7 @@ const storedAcpUpdates = [
   'turn_end',
   'error',
   'session_started',
+  'setup_failed',
   'config_option_update',
   'agent_message',
   'agent_thought',

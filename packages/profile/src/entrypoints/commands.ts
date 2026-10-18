@@ -1,5 +1,6 @@
 import type { CredentialId, MemberId, WorkspaceId } from '@hq/kernel'
 import type { DisplayName } from '../domain/display-name.ts'
+import type { GitHubConnection } from '../domain/github-connection.ts'
 import type { Secret } from '../domain/secret.ts'
 import type { ConnectionInput } from '../domain/workspace-connection.ts'
 
@@ -19,4 +20,7 @@ export type ProfileCommands = {
   disconnectTool: Command<{ tool: string }>
   availableTools: (input: { workspaceId: WorkspaceId }) => Promise<string[]>
   addLlmCredential: Command<{ provider: string; secret: Secret }>
+  readGitHubConnection: (input: { workspaceId: WorkspaceId }) => Promise<GitHubConnection>
+  connectGitHub: (input: { workspaceId: WorkspaceId }) => Promise<GitHubConnection>
+  disconnectGitHub: Command<object>
 }

@@ -86,6 +86,8 @@ export type ChatRow = {
   localSession: boolean | null
   isPlanning: boolean
   gitBranch: string | null
+  repository: string | null
+  baseBranch: string | null
   originChatId: ChatId | null
   agentTurnMessageId: MessageId | null
 }

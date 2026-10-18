@@ -6,6 +6,7 @@ import {
   AgentStartFailure,
   type PiLaunch,
   type PiModel,
+  type RepositoryCheckout,
   type SubConversation,
 } from '../contracts/agent.ts'
 import type { AgentEvent } from '../domain/agent-events.ts'
@@ -16,18 +17,38 @@ import { hqToolTimeoutSeconds } from '../domain/tool-calls.ts'
 export type AgentLlm = { model: string }
 
 const requestTimeoutMilliseconds = 30_000
+const checkoutTimeoutMilliseconds = 120_000
 const notFoundStatus = 404
 
-const send = (endpoint: AgentEndpoint, method: string, path: string, body?: object) =>
+const send = (
+  endpoint: AgentEndpoint,
+  method: string,
+  path: string,
+  body?: object,
+  timeoutMilliseconds = requestTimeoutMilliseconds,
+) =>
   endpoint.transport.fetch({
     method,
     path,
     headers: { 'content-type': 'application/json', 'x-session-api-key': endpoint.apiKey },
     body: body && JSON.stringify(body),
-    timeoutMilliseconds: requestTimeoutMilliseconds,
+    timeoutMilliseconds,
   })
-const call = async (endpoint: AgentEndpoint, method: string, path: string, body?: object) => {
-  const response = await send(endpoint, method, path, body)
+
+const repositoryLaunchOf = ({ url, token, baseBranch, workingBranch }: RepositoryCheckout) => ({
+  url,
+  token,
+  base_branch: baseBranch,
+  working_branch: workingBranch,
+})
+const call = async (
+  endpoint: AgentEndpoint,
+  method: string,
+  path: string,
+  body?: object,
+  timeoutMilliseconds?: number,
+) => {
+  const response = await send(endpoint, method, path, body, timeoutMilliseconds)
   if (response.status === notFoundStatus && method === 'GET') return undefined
   if (response.status >= 300) throw new Error(`hq-agent answered ${method} ${path} with ${response.status}`)
   return JSON.parse(response.body || '{}') as Record<string, unknown>
@@ -188,16 +209,23 @@ const piConversationOf = (
 })
 
 export const createHqAgentClient = (): AgentClient => ({
-  createConversation: async (conversation, llmToken, llm, sub) => {
-    const created = await call(conversation, 'POST', '/api/conversations', {
-      id: conversation.conversationId,
-      ...('harness' in llm
-        ? harnessConversationOf(conversation, llmToken, llm.harness, llm)
-        : piConversationOf(conversation, llmToken, llm.pi, llm, sub)),
-      workspace: { kind: 'LocalWorkspace', working_dir: '/workspace/project' },
-      autotitle: false,
-      ...(sub && { parent_conversation_id: sub.parentConversationId }),
-    })
+  createConversation: async (conversation, llmToken, llm, sub, checkout) => {
+    const created = await call(
+      conversation,
+      'POST',
+      '/api/conversations',
+      {
+        id: conversation.conversationId,
+        ...('harness' in llm
+          ? harnessConversationOf(conversation, llmToken, llm.harness, llm)
+          : piConversationOf(conversation, llmToken, llm.pi, llm, sub)),
+        workspace: { kind: 'LocalWorkspace', working_dir: '/workspace/project' },
+        autotitle: false,
+        ...(sub && { parent_conversation_id: sub.parentConversationId }),
+        ...(checkout && { repository: repositoryLaunchOf(checkout) }),
+      },
+      checkout && checkoutTimeoutMilliseconds,
+    )
     if (created?.execution_status === 'error') {
       await call(conversation, 'DELETE', `/api/conversations/${conversation.conversationId}`).catch(() => undefined)
       throw new AgentStartFailure(String(created.error))

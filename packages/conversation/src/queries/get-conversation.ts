@@ -66,6 +66,7 @@ export type Conversation = Readonly<{
   canConfigure: boolean
   runsOnChoices: readonly RunsOn[] | null
   gitBranch: string | null
+  repository: string | null
   ownerName: string
   origin: Readonly<{ chatId: ChatId; name: string; type: 'channel' | 'runtime' }> | null
   isAgentWorking: boolean
@@ -333,6 +334,7 @@ export const getConversation =
       canConfigure: can(permissions, 'session.configure'),
       runsOnChoices,
       gitBranch: chat.gitBranch,
+      repository: chat.repository,
       ownerName: memberName(chat.ownerId),
       origin: origin ? { chatId: origin.id, name: origin.name, type: origin.type } : null,
       isAgentWorking: hasActiveTurn || chatMessages.some((message) => message.needsReply),

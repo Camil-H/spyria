@@ -1,4 +1,11 @@
-export type { AgentChat, AgentConversation, AgentHost, SessionClassifier } from './contracts/agent.ts'
+export type {
+  AgentChat,
+  AgentConversation,
+  AgentHost,
+  RepositoryCheckout,
+  RepositoryCheckouts,
+  SessionClassifier,
+} from './contracts/agent.ts'
 export type { ToolCallDecision } from './contracts/repositories.ts'
 export {
   type AgentEvent,

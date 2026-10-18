@@ -6,8 +6,11 @@ import { createBifrostUsageLogs } from '@hq/usage/server'
 import { websocket } from 'hono/bun'
 import { createAgentBridge } from './agent-bridge/bridge.ts'
 import { createApp, sessionClassifierOf } from './app.ts'
+import { createSecretBox } from './auth/secret-box.ts'
 import { enqueueSweeps } from './auth/sessions.ts'
 import { createFakeLlm, fakeRoutableModels } from './fake-llm.ts'
+import { createGitHubCheckouts } from './github/github.ts'
+import { createGitHubApi, githubDotCom } from './github/github-api.ts'
 import { readHqAgentImage } from './hq-agent-image.ts'
 import { startJobWorker } from './job-worker.ts'
 import { createModelCallRelay } from './llm-relay.ts'
@@ -37,11 +40,20 @@ const runtimeHosts = createRuntimeHostGateway({
   relayModelCall: createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),
 })
 const llmModel = process.env.HQ_LLM_MODEL
+const secretsKey = authMode === 'sso' ? requiredEnvironment('HQ_SECRETS_KEY') : process.env.HQ_SECRETS_KEY
+const github = {
+  api: createGitHubApi({
+    apiUrl: process.env.HQ_GITHUB_API_URL ?? githubDotCom.apiUrl,
+    webUrl: process.env.HQ_GITHUB_WEB_URL ?? githubDotCom.webUrl,
+  }),
+  secretBox: secretsKey ? createSecretBox(secretsKey) : undefined,
+}
 const agentBridge = createAgentBridge({
   sandboxProvider: runtimeHosts.sandboxProvider,
   hqAgentImage,
   llm: llmModel ? { model: llmModel } : undefined,
   sessionClassifierOf: sessionClassifierOf(llmGateway),
+  repositoryCheckoutsOf: (checkoutDatabase) => createGitHubCheckouts(checkoutDatabase, github),
 })
 const app = createApp({
   database,
@@ -52,7 +64,8 @@ const app = createApp({
     redirectUri: requiredEnvironment('HQ_OIDC_REDIRECT_URI'),
   },
   authMode,
-  secretsKey: authMode === 'sso' ? requiredEnvironment('HQ_SECRETS_KEY') : process.env.HQ_SECRETS_KEY,
+  secretsKey,
+  github,
   mail: process.env.HQ_SMTP_URL
     ? { smtpUrl: process.env.HQ_SMTP_URL, from: requiredEnvironment('HQ_MAIL_FROM') }
     : undefined,

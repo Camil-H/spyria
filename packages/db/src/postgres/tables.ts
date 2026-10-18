@@ -128,6 +128,18 @@ export const workspaceSso = table('workspace_sso', {
   updatedAt: instant().notNull(),
 })
 
+export const githubApps = table('github_apps', {
+  workspaceId: text()
+    .primaryKey()
+    .references(() => workspaces.workspaceId),
+  appId: text().notNull(),
+  clientId: text().notNull(),
+  encryptedClientSecret: text().notNull(),
+  encryptedPrivateKey: text().notNull(),
+  encryptedWebhookSecret: text().notNull(),
+  updatedAt: instant().notNull(),
+})
+
 export const ssoDomains = table(
   'sso_domains',
   {
@@ -210,6 +222,8 @@ export const chats = table(
     localSession: boolean().default(false),
     isPlanning: boolean().notNull().default(false),
     gitBranch: text(),
+    repository: text(),
+    baseBranch: text(),
     originChatId: text(),
     agentTurnMessageId: text(),
     agentTurnPrompterId: text(),
@@ -415,6 +429,21 @@ export const toolConnections = table(
     unique().on(table.workspaceId, table.userId, table.position),
     memberReference(table, table.userId),
   ],
+)
+
+export const githubConnections = table(
+  'github_connections',
+  {
+    ...tenant,
+    userId: text().notNull(),
+    login: text().notNull(),
+    encryptedAccessToken: text().notNull(),
+    encryptedRefreshToken: text(),
+    accessExpiresAt: instant(),
+    needsReconnection: boolean().notNull().default(false),
+    updatedAt: instant().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.workspaceId, table.userId] }), memberReference(table, table.userId)],
 )
 
 export const jobs = table(

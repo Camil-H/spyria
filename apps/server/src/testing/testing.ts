@@ -33,6 +33,7 @@ import { createApp, sessionClassifierOf } from '../app.ts'
 import { issueSessionToken } from '../auth/session-tokens.ts'
 import { openSessions } from '../auth/sessions.ts'
 import { createFakeLlm, type FakeLlmScript, fakeRoutableModels } from '../fake-llm.ts'
+import { createGitHubCheckouts, type GitHubDependencies } from '../github/github.ts'
 import { startJobWorker } from '../job-worker.ts'
 import { createModelCallRelay } from '../llm-relay.ts'
 import { createRuntimeHostGateway } from '../runtime-hosts/gateway.ts'
@@ -530,6 +531,7 @@ export const startAgentStack = async ({
   approvalWindowMilliseconds,
   hqAgentImage = testHqAgentImage,
   promptsWaitingAfterHello = false,
+  github,
 }: {
   routing?: boolean
   llm?: Parameters<typeof createAgentBridge>[0]['llm']
@@ -538,6 +540,7 @@ export const startAgentStack = async ({
   approvalWindowMilliseconds?: number
   hqAgentImage?: string
   promptsWaitingAfterHello?: boolean
+  github?: GitHubDependencies
 } = {}) => {
   const testApp = await openSharedTestApp()
   const { database, llmGateway } = testApp
@@ -558,6 +561,7 @@ export const startAgentStack = async ({
     hqAgentImage,
     sessionClassifierOf: routing ? sessionClassifierOf(llmGateway, { timeoutMilliseconds: 300 }) : undefined,
     reopenDelayMilliseconds: 50,
+    repositoryCheckoutsOf: github && ((checkoutDatabase) => createGitHubCheckouts(checkoutDatabase, github)),
   })
   const app = createApp({
     database,
@@ -566,6 +570,7 @@ export const startAgentStack = async ({
     runtimeHosts,
     agentBridge,
     hqAgentImage,
+    github,
   })
   const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
   const worker = startJobWorker(database, {

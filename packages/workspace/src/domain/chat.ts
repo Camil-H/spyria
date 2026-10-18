@@ -1,5 +1,6 @@
 import type { ChatId, ChatVisibility, MemberId, ProjectId, WorkspaceId } from '@hq/kernel'
 import { CrossWorkspaceMove, RuntimeChatPrivate, SourceChatArchived } from './errors.ts'
+import { workingBranchOf } from './github.ts'
 import type { Name } from './name.ts'
 
 export type Chat = Readonly<{
@@ -13,7 +14,10 @@ export type Chat = Readonly<{
   archived: boolean
   model: string | null
   reasoningEffort: string | null
+  mode: 'dev' | 'non-dev' | null
   gitBranch: string | null
+  repository: string | null
+  baseBranch: string | null
   originChatId: ChatId | null
 }>
 
@@ -47,8 +51,19 @@ export const startRuntimeChat = (source: Chat, fields: { id: ChatId; name: Name;
     visibility: 'private',
     model: null,
     reasoningEffort: null,
+    mode: null,
     gitBranch: null,
+    repository: null,
+    baseBranch: null,
     originChatId: source.id,
     archived: false,
   }
 }
+
+export const devChat = (chat: Chat, repository: string, baseBranch: string): Chat => ({
+  ...chat,
+  mode: 'dev',
+  repository,
+  baseBranch,
+  gitBranch: workingBranchOf(chat.name, chat.id),
+})

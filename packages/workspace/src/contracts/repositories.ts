@@ -1,5 +1,6 @@
 import type { ChatId, ChatPermission, MemberId, ProjectId } from '@hq/kernel'
 import type { Chat, ChatChange } from '../domain/chat.ts'
+import type { GitHubRepository } from '../domain/github.ts'
 import type { Invitation } from '../domain/invitation.ts'
 import type { Member } from '../domain/member.ts'
 import type { Project } from '../domain/project.ts'
@@ -54,4 +55,9 @@ export type WorkspaceEventLog = {
 export type ChatRuntimeRepository = {
   remove(chatId: ChatId): Promise<void>
   stop(chatId: ChatId): Promise<void>
+}
+
+export type GitHubRepositories = {
+  granted(): Promise<GitHubRepository[]>
+  branches(fullName: string): Promise<string[]>
 }

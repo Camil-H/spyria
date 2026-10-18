@@ -13,20 +13,33 @@ import { setCookie } from 'hono/cookie'
 import { createAgentBridge } from '../agent-bridge/bridge.ts'
 import { createApp, sessionClassifierOf } from '../app.ts'
 import { sessionCookieOptions, setSessionCookie, testCookie } from '../auth/routes.ts'
+import { createSecretBox } from '../auth/secret-box.ts'
 import { openSessions } from '../auth/sessions.ts'
 import { createFakeLlm, type FakeLlmScript, fakeRoutableModels } from '../fake-llm.ts'
+import { createGitHubCheckouts } from '../github/github.ts'
+import { createGitHubApi } from '../github/github-api.ts'
 import { readHqAgentImage } from '../hq-agent-image.ts'
 import { startJobWorker } from '../job-worker.ts'
 import { createModelCallRelay } from '../llm-relay.ts'
 import { createRuntimeHostGateway } from '../runtime-hosts/gateway.ts'
+import { fakeGitHubAppId, fakeGitHubClientId, fakeGitHubClientSecret, startFakeGitHub } from './fake-github.ts'
 import { createFakeMcp, sharedToolServer } from './fake-mcp.ts'
 import { createHqAgentRelay } from './hq-agent-relay.ts'
-import { createFakeHosts, createHolds, type FakeHost, issueTestSession, testAuthSettings } from './testing.ts'
+import {
+  createFakeHosts,
+  createHolds,
+  type FakeHost,
+  issueTestSession,
+  testAuthSettings,
+  testSecretsKey,
+} from './testing.ts'
 
 const port = Number(process.env.PORT ?? 3100)
 const fakeMcpPort = Number(process.env.HQ_FAKE_MCP_PORT ?? 3101)
 const testToolServers = ['fake', 'GitHub', 'Slack', 'Notion', 'Linear']
 Bun.serve({ port: fakeMcpPort, fetch: createFakeMcp().fetch })
+const fakeGitHub = startFakeGitHub()
+const github = { api: createGitHubApi(fakeGitHub.urls), secretBox: createSecretBox(testSecretsKey) }
 
 type ServedDatabase = {
   database: Database
@@ -141,6 +154,7 @@ const agentBridge = createAgentBridge({
   sessionClassifierOf: sessionClassifierOf(llmGateway, { gatewayUrlOf, headersOf: testHeadersOf }),
   resumeAfterMilliseconds: 5_000,
   reopenDelayMilliseconds: 50,
+  repositoryCheckoutsOf: (database) => createGitHubCheckouts(database, github),
   ...placement,
 })
 
@@ -164,6 +178,7 @@ const app = createApp({
   llmGateway,
   runtimeHosts,
   agentBridge,
+  github,
   ...placement,
   fakeLlm: createFakeLlm(async (request, isClassifier, prompt) => {
     const chatKey = request.headers.get('x-hq-chat') ?? (await chatKeyOfPrompt(prompt))
@@ -317,6 +332,14 @@ const app = createApp({
     })
     return context.body(null, 204)
   })
+  .get('/test/github-app', (context) =>
+    context.json({
+      appId: fakeGitHubAppId,
+      clientId: fakeGitHubClientId,
+      clientSecret: fakeGitHubClientSecret,
+      privateKey: fakeGitHub.appPrivateKey,
+    }),
+  )
   .post('/test/token', async (context) => {
     const { db = '', user = '', workspace = '' } = context.req.query()
     return context.json(await issueTestSession(databaseByName(db), workspace, user, db))

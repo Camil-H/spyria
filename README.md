@@ -44,6 +44,20 @@ A domain routes sign-in only once verified. Admins verify a domain in Workspace 
 
 `--preset` is `google` (Google Workspace), `microsoft` (Microsoft Entra, tenant-specific issuer only) or `oidc` with `--issuer <url>`. The command checks the issuer's discovery document, creates the workspace with its SSO settings and makes the admin a member; the admin then signs in and manages the provider in Workspace settings > Sign-in and invites members in Members.
 
+## Registering the GitHub App (dev chats)
+
+Each deployment registers its own GitHub App (GitHub settings > Developer settings > GitHub Apps > New GitHub App, on the organization that owns the repositories):
+
+- **Callback URL:** `<HQ_APP_ORIGIN>/auth/github/callback`, with **Request user authorization (OAuth) during installation** off and **Expire user authorization tokens** on (HQ refreshes them).
+- **Webhook:** a random secret (`openssl rand -hex 32`); HQ's webhook URL comes with Phase 4.3 (pull request cards), until then leave the webhook inactive.
+- **Repository permissions:** Contents read and write, Pull requests read and write, Metadata read-only.
+- **Subscribe to events:** Pull request, Pull request review, Pull request review comment, Check suite, Check run.
+- Generate a **private key** and a **client secret**, then install the App on the repositories HQ may use.
+
+In Workspace settings > GitHub, an admin enters the App id, the client id, the private key, the client secret and the webhook secret (secrets are encrypted with `HQ_SECRETS_KEY`, shown only as set, replaced by entering a new value). The section lists the repositories granted by the App's installations. Members link their own GitHub account in Profile > Connections > My connections (used to publish from 4.3). GitHub Enterprise: set `HQ_GITHUB_API_URL` (for example `https://github.example.com/api/v3`) and `HQ_GITHUB_WEB_URL`.
+
+A dev runtime chat (New chat > Runtime > Dev) clones the chosen repository into the runtime's workspace volume with a short-lived read-only installation token (never left in the agent's environment or `.git/config`), checks out `hq/<chat slug>-<id>` from the base branch and runs `.hq/setup.sh` when present; clone and setup must finish within 2 minutes (the host relay's request limit).
+
 ## Adding a runtime host for dev
 
 Runtimes (HQ's runtime image with hq-agent) run on runtime hosts: any machine with Docker running the `hq-host` container, which dials out to HQ.

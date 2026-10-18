@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, dirname, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 
@@ -520,6 +520,7 @@ const turn = async (id, { sessionId, prompt }) => {
     if (has('slow')) await lingerAs('slow')
     await say(`[t${session.prompts}] `)
     if (has('env')) await say(`env:${JSON.stringify(Object.keys(process.env).sort())} `)
+    if (has('ls')) await say(`files:${readdirSync('.').sort().join(',')} `)
     if (has('tools')) {
       const edit = `edit-${session.prompts}`
       update({

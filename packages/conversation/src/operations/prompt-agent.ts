@@ -194,15 +194,19 @@ const storedConversationOf = async (
 }
 
 const createdConversationOf = async (
-  { runtimes, agentClient }: AgentDependencies,
+  { runtimes, agentClient, checkouts }: AgentDependencies,
   chat: AgentChat,
   endpoint: AgentEndpoint,
   llm: AgentLlmChoice,
 ): Promise<AgentConversation> => {
   const newId = crypto.randomUUID()
   const conversation = { ...endpoint, conversationId: await runtimes.rememberConversation(chat, newId) }
-  if (conversation.conversationId === newId)
-    await agentClient.createConversation(conversation, await runtimes.issueLlmToken(chat), llm)
+  if (conversation.conversationId === newId) {
+    const checkout = await checkouts?.checkoutOf(chat).catch((error: Error) => {
+      throw new AgentStartFailure(error.message)
+    })
+    await agentClient.createConversation(conversation, await runtimes.issueLlmToken(chat), llm, undefined, checkout)
+  }
   return conversation
 }
 

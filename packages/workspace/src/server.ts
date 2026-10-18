@@ -1,11 +1,27 @@
+export type { GitHubRepositories } from './contracts/repositories.ts'
 export {
+  BranchNotFound,
   DomainClaimed,
+  GitHubNotConfigured,
+  GitHubRefused,
+  InvalidGitHubSettings,
   InvalidSsoSettings,
   MailNotConfigured,
   MailNotSent,
   NotWorkspaceAdmin,
+  RepositoryNotGranted,
   SsoDiscoveryFailed,
 } from './domain/errors.ts'
+export {
+  enteredSecretsOf,
+  type GitHubRepository,
+  type GitHubSecrets,
+  type GitHubSettingsInput,
+  type GitHubSettingsView,
+  githubSecretNames,
+  githubSettingsFrom,
+  grantedRepositoryOf,
+} from './domain/github.ts'
 export { displayNameFrom, normalizedEmail } from './domain/invitation.ts'
 export {
   domainOfEmail,
@@ -19,7 +35,15 @@ export {
   tenantIdOf,
 } from './domain/sso.ts'
 export type { WorkspaceCommands } from './entrypoints/commands.ts'
+export { createDevChatFromRequest } from './entrypoints/endpoints.ts'
 export { workspaceMutators } from './entrypoints/mutators.ts'
+export {
+  createHttpGitHubCommands,
+  devChatsPath,
+  githubBranchesPath,
+  githubRepositoriesPath,
+  githubSettingsPath,
+} from './integrations/http-github.ts'
 export {
   createHttpSsoSettingsCommands,
   domainVerificationPath,

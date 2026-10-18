@@ -63,6 +63,8 @@ const chat = (
   localSession: false,
   isPlanning: false,
   gitBranch: runtime?.gitBranch ?? null,
+  repository: null,
+  baseBranch: null,
   originChatId: null,
   agentTurnMessageId: null,
 })

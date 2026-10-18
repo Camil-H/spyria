@@ -13,6 +13,11 @@ export {
 export { createProfileJobs } from './entrypoints/jobs.ts'
 export { profileMutators } from './entrypoints/mutators.ts'
 export { createLlmGateway, type LlmGatewaySettings, type ToolServerSetup } from './integrations/bifrost-gateway.ts'
+export {
+  createHttpGitHubConnection,
+  githubConnectionChannel,
+  githubConnectionPath,
+} from './integrations/http-github-connection.ts'
 export { createHttpLlmCredentialAdder, llmCredentialsPath } from './integrations/http-llm-credentials.ts'
 export { createHttpToolConnections, toolConnectionsPath } from './integrations/http-tool-connections.ts'
 export {

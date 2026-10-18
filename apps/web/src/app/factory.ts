@@ -9,6 +9,7 @@ import {
 import { createZeroStore, type Store, type WorkspaceSession } from '@hq/db/zero-store'
 import { type ChatId, type MemberId, type WorkspaceId, workspaceId } from '@hq/kernel'
 import {
+  createHttpGitHubConnection,
   createHttpLlmCredentialAdder,
   createHttpToolConnections,
   createHttpWorkspaceConnections,
@@ -17,7 +18,12 @@ import {
 } from '@hq/profile/server'
 import { createHttpRuntimeHostCommands, type RuntimeCommands, runtimeMutators } from '@hq/runtime/server'
 import type { Session } from '@hq/session'
-import { createHttpSsoSettingsCommands, type WorkspaceCommands, workspaceMutators } from '@hq/workspace/server'
+import {
+  createHttpGitHubCommands,
+  createHttpSsoSettingsCommands,
+  type WorkspaceCommands,
+  workspaceMutators,
+} from '@hq/workspace/server'
 import { logOut, openSession, renew, signInWithPopup } from './auth.ts'
 
 const zeroCacheURL = import.meta.env.VITE_ZERO_URL ?? 'http://localhost:4848'
@@ -141,6 +147,20 @@ export const createApp = async (
   const fetchAsMember = (workspaceId: WorkspaceId, path: string, method = 'GET') =>
     fetch(path, { method, headers: { authorization: `Bearer ${store.tokenOf(workspaceId)}` } })
   const toolConnections = createHttpToolConnections(fetchAsMember)
+  const githubCommands = createHttpGitHubCommands(postAsMember, fetchAsMember)
+  const whenChatSynced = (chatId: ChatId) =>
+    new Promise<void>((resolve) => {
+      const isSynced = () => store.read().chats.some(({ id }) => id === chatId)
+      const unsubscribe = store.subscribe(() => {
+        if (!isSynced()) return
+        unsubscribe()
+        resolve()
+      })
+      if (isSynced()) {
+        unsubscribe()
+        resolve()
+      }
+    })
   return {
     store,
     session: {
@@ -175,6 +195,12 @@ export const createApp = async (
       removeMember: mutateConfirmed(workspaceMutators.workspace.removeMember),
       transferChat: mutateConfirmed(workspaceMutators.workspace.transferChat),
       ...createHttpSsoSettingsCommands(postAsMember, fetchAsMember),
+      ...githubCommands,
+      createDevChat: async (input) => {
+        const chatId = await githubCommands.createDevChat(input)
+        await whenChatSynced(chatId)
+        return chatId
+      },
       joinChannel: mutateConfirmed(conversationMutators.conversation.joinChannel),
       leaveChat: mutateConfirmed(conversationMutators.conversation.leaveChat),
     }),
@@ -196,6 +222,7 @@ export const createApp = async (
       addLlmCredential: createHttpLlmCredentialAdder(postAsMember),
       ...toolConnections,
       ...createHttpWorkspaceConnections(postAsMember),
+      ...createHttpGitHubConnection(fetchAsMember),
     }),
     runtimeCommands: commandsOf<RuntimeCommands>(
       runtimeMutators.runtime,

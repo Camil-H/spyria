@@ -169,12 +169,14 @@ export const ChatView = ({
                 : 'You can read this chat'
           }
           aboveBox={
-            (live.workspace || branch !== null) && (
+            (live.workspace || branch !== null || conversation.repository !== null) && (
               <div className="flex min-w-0 gap-2">
-                {live.workspace && (
-                  <span title={live.workspace.cwd} className={workspaceChipClass}>
+                {(live.workspace || conversation.repository !== null) && (
+                  <span title={live.workspace?.cwd} className={workspaceChipClass}>
                     <Folder aria-label="Working directory" role="img" size={12} className="shrink-0" />
-                    <span className="truncate">{live.workspace.cwd.split('/').filter(Boolean).at(-1) ?? '/'}</span>
+                    <span className="truncate">
+                      {conversation.repository ?? live.workspace?.cwd.split('/').filter(Boolean).at(-1) ?? '/'}
+                    </span>
                   </span>
                 )}
                 {branch !== null && (

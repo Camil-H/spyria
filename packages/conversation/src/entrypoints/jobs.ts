@@ -7,6 +7,7 @@ import type {
   AgentEventListener,
   AgentEventSockets,
   AgentHost,
+  RepositoryCheckouts,
   SessionClassifier,
 } from '../contracts/agent.ts'
 import { type AgentEvent, agentJobTypes, isStoredAgentEvent, type TurnOutcome } from '../domain/agent-events.ts'
@@ -56,6 +57,7 @@ export const createAgentHandlers = ({
   resumeAfterMilliseconds,
   approvalWindowMilliseconds,
   hqAgentImage,
+  checkouts,
 }: {
   transact: Transact
   sandboxProvider: SandboxProvider
@@ -66,6 +68,7 @@ export const createAgentHandlers = ({
   resumeAfterMilliseconds?: number
   approvalWindowMilliseconds?: number
   hqAgentImage?: string
+  checkouts?: RepositoryCheckouts
 }) => {
   const runtimes = createRuntimeAgentRuntimes(transact, sandboxProvider, { hqAgentImage })
   const agentClient = createHqAgentClient()
@@ -76,6 +79,7 @@ export const createAgentHandlers = ({
     agentClient,
     eventSockets,
     classifier,
+    checkouts,
     fixedLlm: llm,
     resumeAfterMilliseconds,
     approvalWindowMilliseconds,

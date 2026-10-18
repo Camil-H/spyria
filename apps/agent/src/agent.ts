@@ -1,6 +1,7 @@
 import { timingSafeEqual } from 'node:crypto'
 import type { ServerWebSocket } from 'bun'
 import { AcpError, type AdapterConnection, type AdapterRequest, connectAdapter, type Json } from './acp.ts'
+import { checkOut, type Repository } from './checkout.ts'
 import { connectPi } from './pi.ts'
 
 type Status = 'starting' | 'idle' | 'running' | 'finished' | 'error'
@@ -59,6 +60,7 @@ type Launch = {
   }
   secrets?: Record<string, { value?: string }>
   workspace?: { working_dir?: string }
+  repository?: Repository
   parent_conversation_id?: string
 }
 
@@ -183,6 +185,7 @@ export const startAgent = ({
   requestTimeoutMilliseconds?: number
 }) => {
   const conversations = new Map<string, Conversation>()
+  const checkouts = new Map<string, ReturnType<typeof checkOut>>()
   const apiKeyBytes = Buffer.from(apiKey)
   const isApiKey = (given: unknown) => {
     const givenBytes = Buffer.from(String(given ?? ''))
@@ -404,6 +407,12 @@ export const startAgent = ({
     conversation.status = 'idle'
   }
 
+  const checkedOut = (id: string, cwd: string, repository: Repository) => {
+    const checkout = checkouts.get(id) ?? checkOut(cwd, repository, adapterEnvironmentOf({}))
+    checkouts.set(id, checkout)
+    return checkout.finally(() => checkouts.delete(id))
+  }
+
   const create = async (launch: Launch) => {
     const command = launch.agent?.acp_command
     if (!Array.isArray(command) || command.length === 0 || !command.every((part) => typeof part === 'string'))
@@ -417,6 +426,14 @@ export const startAgent = ({
     }
     const id = launch.id ?? crypto.randomUUID()
     const cwd = launch.workspace?.working_dir ?? defaultWorkingDirectory
+    const { failure, setupFailed } =
+      launch.repository && !launch.parent_conversation_id ? await checkedOut(id, cwd, launch.repository) : {}
+    const raced = conversations.get(id)
+    if (raced) {
+      await raced.started
+      return Response.json({ id, ...summaryOf(raced) })
+    }
+    if (failure) return Response.json({ id, execution_status: 'error', error: failure }, { status: 201 })
     const conversation: Conversation = {
       id,
       status: 'starting',
@@ -449,6 +466,7 @@ export const startAgent = ({
       ),
     }
     conversations.set(id, conversation)
+    if (setupFailed) emit(conversation, { sessionUpdate: 'setup_failed', ...setupFailed })
     conversation.started = start(conversation, launch).catch((error) => {
       fail(conversation, error)
       conversation.connection.close()

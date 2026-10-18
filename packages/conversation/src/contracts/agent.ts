@@ -59,12 +59,15 @@ export type PiLaunch = Readonly<{
   compaction?: Readonly<{ reserveTokens: number; keepRecentTokens: number }>
 }>
 export type SubConversation = Readonly<{ parentConversationId: string }>
+export type RepositoryCheckout = Readonly<{ url: string; token: string; baseBranch: string; workingBranch: string }>
+export type RepositoryCheckouts = { checkoutOf(chat: AgentChat): Promise<RepositoryCheckout | undefined> }
 export type AgentClient = {
   createConversation(
     conversation: AgentConversation,
     llmToken: string,
     llm: AgentLlmChoice,
     sub?: SubConversation,
+    checkout?: RepositoryCheckout,
   ): Promise<void>
   switchModel(conversation: AgentConversation, model: string | undefined, thoughtLevel?: string): Promise<void>
   sendMessage(conversation: AgentConversation, text: string): Promise<void>

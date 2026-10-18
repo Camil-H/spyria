@@ -20,6 +20,8 @@ import {
   availableToolsFromRequest,
   type createLlmGateway,
   createMemberKeyReader,
+  githubConnectionChannel,
+  githubConnectionPath,
   llmCredentialsPath,
   profileMutators,
   toolConnectionFromRequest,
@@ -37,7 +39,19 @@ import {
   runtimeHostsPath,
   runtimeMutators,
 } from '@hq/runtime/server'
-import { domainVerificationPath, type SsoSettingsInput, ssoSettingsPath, workspaceMutators } from '@hq/workspace/server'
+import {
+  createDevChatFromRequest,
+  devChatsPath,
+  domainVerificationPath,
+  type GitHubSettingsInput,
+  githubBranchesPath,
+  githubRepositoriesPath,
+  githubSettingsPath,
+  grantedRepositoryOf,
+  type SsoSettingsInput,
+  ssoSettingsPath,
+  workspaceMutators,
+} from '@hq/workspace/server'
 import { getMutator, mustGetMutator, mustGetQuery } from '@rocicorp/zero'
 import { handleMutateRequest, handleQueryRequest } from '@rocicorp/zero/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
@@ -51,6 +65,19 @@ import { createSecretBox } from './auth/secret-box.ts'
 import { createSessionAuthenticator, errorByStatus } from './auth/session-tokens.ts'
 import { findMemberIn } from './auth/sessions.ts'
 import { readSsoSettings, saveSsoSettings, sendDomainVerification } from './auth/sso.ts'
+import {
+  disconnectGitHub,
+  finishGitHubConnection,
+  type GitHubDependencies,
+  githubCallbackPath,
+  githubConnectionOf,
+  grantedRepositories,
+  readGitHubSettings,
+  repositoryBranches,
+  saveGitHubSettings,
+  startGitHubConnection,
+} from './github/github.ts'
+import { createGitHubApi, githubDotCom } from './github/github-api.ts'
 import { createModelCallRelay } from './llm-relay.ts'
 import { createRuntimeHostGateway, type RuntimeHostGateway } from './runtime-hosts/gateway.ts'
 
@@ -62,7 +89,9 @@ const readRevokingMutations = new Set([
   'workspace.changeVisibility',
 ])
 type LlmGateway = ReturnType<typeof createLlmGateway>
-type ApiEnvironment = { Variables: { zeroContext: ZeroContext; transact: Transact; database: Database } }
+type ApiEnvironment = {
+  Variables: { zeroContext: ZeroContext; transact: Transact; database: Database; databaseName?: string }
+}
 type ApiContext = Context<ApiEnvironment>
 
 export const sessionClassifierOf =
@@ -89,6 +118,7 @@ export const sessionClassifierOf =
 
 const statusByErrorCode: Record<string, number> = {
   not_admin: 403,
+  github_refused: 502,
   local_sessions_off: 403,
   host_not_found: 404,
 }
@@ -126,6 +156,7 @@ export const createApp = ({
   agentBridge = createAgentBridge({ sandboxProvider: runtimeHosts.sandboxProvider, llm: defaultLlm }),
   fakeLlm,
   hqAgentImage,
+  github,
 }: {
   database: Database
   tokenSecret: string
@@ -141,6 +172,7 @@ export const createApp = ({
   agentBridge?: AgentBridge
   fakeLlm?: Hono
   hqAgentImage?: string
+  github?: GitHubDependencies
 }) => {
   const mutatorNamed = (name: string) =>
     getMutator(workspaceMutators, name) ??
@@ -156,6 +188,10 @@ export const createApp = ({
     mailer: mail && createSmtpMailer(mail),
     appOrigin,
   }
+  const githubDependencies = github ?? { api: createGitHubApi(githubDotCom), secretBox: sso.secretBox }
+  const githubCallbackUrl = `${appOrigin}${githubCallbackPath}`
+  const githubConnectionPage = (isConnected: boolean) =>
+    `<!doctype html><meta charset="utf-8"><title>GitHub</title><p>${isConnected ? 'GitHub is connected. You can close this window.' : 'GitHub could not be connected. Close this window and try again.'}</p><script>new BroadcastChannel('${githubConnectionChannel}').postMessage(${isConnected});window.close()</script>`
   const gatewayOf = () => {
     if (!llmGateway) throw new Error('No LLM gateway is configured')
     return llmGateway
@@ -187,6 +223,14 @@ export const createApp = ({
     .get(toolConsentCallbackPath, async (context) =>
       context.html(await toolConsentPageFromRequest(gatewayOf(), new URL(context.req.url).search)),
     )
+    .get(githubCallbackPath, async (context) => {
+      const { code = '', state = '' } = context.req.query()
+      const isConnected = await finishGitHubConnection(databaseOf, githubDependencies, tokenSecret, {
+        code,
+        state,
+      }).catch(() => false)
+      return context.html(githubConnectionPage(isConnected), isConnected ? 200 : 400)
+    })
     .route(
       '/auth',
       createAuthRoutes({
@@ -208,6 +252,7 @@ export const createApp = ({
       const requestDatabase = databaseOf(authentication.databaseName) ?? database
       context.set('zeroContext', authentication.context)
       context.set('database', requestDatabase)
+      context.set('databaseName', authentication.databaseName)
       const zeroDatabase = zeroDrizzle(schema, requestDatabase)
       context.set('transact', (work) => zeroDatabase.transaction(work))
       await next()
@@ -327,6 +372,68 @@ export const createApp = ({
         settings: await sendDomainVerification(context.get('database'), sso, context.get('zeroContext'), input),
       }))
     })
+    .get(githubSettingsPath, (context) =>
+      endpointResponse('Reading the GitHub settings', 200, async () => ({
+        settings: await readGitHubSettings(context.get('database'), githubDependencies, context.get('zeroContext')),
+      })),
+    )
+    .post(githubSettingsPath, async (context) => {
+      const input = ((await context.req.json().catch(() => null)) ?? {}) as GitHubSettingsInput
+      return endpointResponse('Saving the GitHub settings', 200, async () => ({
+        settings: await saveGitHubSettings(
+          context.get('database'),
+          githubDependencies,
+          context.get('zeroContext'),
+          input,
+        ),
+      }))
+    })
+    .get(githubRepositoriesPath, (context) =>
+      endpointResponse('Listing GitHub repositories', 200, async () => ({
+        repositories: await grantedRepositories(
+          context.get('database'),
+          githubDependencies,
+          context.get('zeroContext').workspaceId,
+        ),
+      })),
+    )
+    .get(githubBranchesPath, (context) => {
+      const database = context.get('database')
+      const { workspaceId } = context.get('zeroContext')
+      return endpointResponse('Listing GitHub branches', 200, async () => {
+        const repositories = await grantedRepositories(database, githubDependencies, workspaceId)
+        const { fullName } = grantedRepositoryOf(repositories, context.req.query('repository') ?? '')
+        return { branches: await repositoryBranches(database, githubDependencies, workspaceId, fullName) }
+      })
+    })
+    .post(devChatsPath, async (context) => {
+      const body = await context.req.json().catch(() => null)
+      const database = context.get('database')
+      const { workspaceId } = context.get('zeroContext')
+      return endpointResponse('Creating a dev chat', 201, () =>
+        createDevChatFromRequest(context.get('transact'), context.get('zeroContext'), body, {
+          granted: () => grantedRepositories(database, githubDependencies, workspaceId),
+          branches: (fullName) => repositoryBranches(database, githubDependencies, workspaceId, fullName),
+        }),
+      )
+    })
+    .get(githubConnectionPath, (context) =>
+      endpointResponse('Reading the GitHub connection', 200, async () => ({
+        connection: await githubConnectionOf(context.get('database'), githubDependencies, context.get('zeroContext')),
+      })),
+    )
+    .post(`${githubConnectionPath}/:action{connect|disconnect}`, (context) =>
+      endpointResponse('A GitHub connection request', 200, async () => {
+        const member = context.get('zeroContext')
+        const database = context.get('database')
+        if (context.req.param('action') === 'disconnect') return void (await disconnectGitHub(database, member))
+        return startGitHubConnection(database, githubDependencies, member, {
+          tokenSecret,
+          callbackUrl: githubCallbackUrl,
+          databaseName: context.get('databaseName'),
+        })
+      }),
+    )
     .post(runtimeHostsPath, async (context) => {
       const body = await context.req.json().catch(() => null)
       return endpointResponse('A runtime host request', 201, () =>
