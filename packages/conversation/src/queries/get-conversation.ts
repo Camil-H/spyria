@@ -12,6 +12,7 @@ import { type ChatId, can, type MemberId, type MessageId, messageId, type Worksp
 import { stoppedByPrefix } from '../domain/agent-events.ts'
 import type { AgentStep, StoredStep, ThoughtStep } from '../domain/agent-steps.ts'
 import { stillRunningOf } from '../domain/delegation.ts'
+import { isFrozen } from '../domain/message.ts'
 import { type Harness, localSessions, type RunsOn, runsOnOf } from '../domain/session-routing.ts'
 
 export type ConversationMessage = Readonly<{
@@ -59,6 +60,7 @@ export type Conversation = Readonly<{
   isPlanning: boolean
   runsOn: RunsOn | null
   isOwner: boolean
+  isFrozen: boolean
   canPost: boolean
   canJoin: boolean
   canConfigure: boolean
@@ -319,6 +321,13 @@ export const getConversation =
       isPlanning: chat.isPlanning,
       runsOn: runsOnOf(chat),
       isOwner,
+      isFrozen: isFrozen({
+        type: chat.type,
+        isOwnerRemoved: snapshot.memberships.some(
+          (member) =>
+            member.workspaceId === workspaceId && member.memberId === chat.ownerId && member.removedAt !== null,
+        ),
+      }),
       canPost,
       canJoin: chat.type === 'channel' && !participantIn(snapshot, workspaceId, viewerId)(chat),
       canConfigure: can(permissions, 'session.configure'),

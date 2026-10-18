@@ -96,7 +96,7 @@ const signIn = async (
   if (!signedIn.ok()) throw new Error(`The test sign-in failed with ${signedIn.status()}`)
 }
 
-export const openPageAs = async (browser: Browser, workerStack: WorkerStack, user: string) => {
+export const openPageAs = async (browser: Browser, workerStack: WorkerStack, user: string | null) => {
   const context = await browser.newContext({ baseURL: viteUrl, timezoneId: 'UTC' })
   await signIn(context, workerStack, user)
   const page = await context.newPage()

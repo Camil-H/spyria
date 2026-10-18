@@ -39,6 +39,7 @@ export type Application = {
 }
 
 const streamReconnectMilliseconds = 1000
+const notSignedInCloseCode = 4001
 
 const createAgentStream = (store: Store): AgentStream => {
   type Listener = Parameters<AgentStream['subscribe']>[2]
@@ -61,12 +62,16 @@ const createAgentStream = (store: Store): AgentStream => {
       if (frame.subscribed) return
       for (const listener of listenersByWorkspace.get(workspaceId)?.get(frame.chatId) ?? []) listener(frame)
     }
-    socket.onclose = () => {
+    socket.onclose = async (event) => {
       if (socketByWorkspace.get(workspaceId) !== socket) return
       socketByWorkspace.delete(workspaceId)
-      if (listenersByWorkspace.get(workspaceId)?.size)
-        setTimeout(() => connect(workspaceId), streamReconnectMilliseconds)
+      if (event.code === notSignedInCloseCode) await store.renewSession(workspaceId)
+      if (listenersByWorkspace.get(workspaceId)?.size && store.signedInWorkspaceIds().has(workspaceId))
+        setTimeout(reconnect, streamReconnectMilliseconds, workspaceId)
     }
+  }
+  const reconnect = (workspaceId: WorkspaceId) => {
+    if (!socketByWorkspace.has(workspaceId)) connect(workspaceId)
   }
   return {
     subscribe: (workspaceId, chatId, listener) => {
@@ -75,7 +80,7 @@ const createAgentStream = (store: Store): AgentStream => {
       const listeners = listenersByChat.get(chatId) ?? new Set()
       if (listeners.size === 0) sendTo(workspaceId, { type: 'subscribe', chatId })
       listenersByChat.set(chatId, listeners.add(listener))
-      if (!socketByWorkspace.has(workspaceId)) connect(workspaceId)
+      reconnect(workspaceId)
       return () => {
         listeners.delete(listener)
         if (listeners.size > 0) return
@@ -163,6 +168,11 @@ export const createApp = async (
         return id
       },
       changeVisibility: mutateConfirmed(workspaceMutators.workspace.changeVisibility),
+      inviteMember: mutateConfirmed(workspaceMutators.workspace.inviteMember),
+      revokeInvite: mutateConfirmed(workspaceMutators.workspace.revokeInvite),
+      changeMemberRole: mutateConfirmed(workspaceMutators.workspace.changeMemberRole),
+      removeMember: mutateConfirmed(workspaceMutators.workspace.removeMember),
+      transferChat: mutateConfirmed(workspaceMutators.workspace.transferChat),
       joinChannel: mutateConfirmed(conversationMutators.conversation.joinChannel),
       leaveChat: mutateConfirmed(conversationMutators.conversation.leaveChat),
     }),

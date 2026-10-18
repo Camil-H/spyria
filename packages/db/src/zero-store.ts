@@ -26,7 +26,7 @@ type Unbranded<Value> = Value extends string
       ? { [Key in keyof Value]: Unbranded<Value[Key]> }
       : Value
 
-const unmaterializedQueries = ['~', 'users', 'serviceIdentities', 'invitations'] as const
+const unmaterializedQueries = ['~', 'serviceIdentities'] as const
 const materializedTables = Object.keys(queries).filter(
   (table) => !unmaterializedQueries.includes(table as never),
 ) as Exclude<keyof typeof queries, (typeof unmaterializedQueries)[number]>[]
@@ -51,6 +51,7 @@ const snapshotFromZeroRows = (
     rowsByWorkspace.flatMap((rows) => rows[table] ?? []) as ZeroRows[Table]
   const workspaces = uniqueBy(rowsOf('workspaces'), (workspace) => workspace.workspaceId)
   const memberships = rowsOf('memberships')
+  const emailByUserId = new Map(rowsOf('users').map((user) => [user.id, user.email]))
   const messages = rowsOf('messages')
   const runtimeChatIds = new Set(rowsOf('chats').flatMap((chat) => (chat.type === 'runtime' ? [chat.id] : [])))
   const answeredMessageIds = new Set(messages.map((message) => message.replyToId))
@@ -79,8 +80,16 @@ const snapshotFromZeroRows = (
       workspaceId,
       memberId: userId,
       displayName,
+      email: emailByUserId.get(userId) ?? '',
       role,
       removedAt: isoOrNull(removedAt ?? null),
+    })),
+    invitations: rowsOf('invitations').map(({ workspaceId, id, email, role, expiresAt }) => ({
+      workspaceId,
+      id,
+      email,
+      role,
+      expiresAt,
     })),
     projects: rowsOf('projects').map(withoutCreatedAt),
     chats: rowsOf('chats').map(({ ownerKind, ownerUserId, ownerServiceIdentityId, mode, createdAt, ...chat }) => ({
@@ -290,6 +299,7 @@ export const createZeroStore = ({
       return { confirmation }
     },
     signedInWorkspaceIds: () => signedInWorkspaceIds,
+    renewSession: renewNow,
     tokenOf: (workspaceId: WorkspaceId) => tokenByWorkspace.get(workspaceId) ?? '',
     signOut,
     signIn: async (session: WorkspaceSession) => {

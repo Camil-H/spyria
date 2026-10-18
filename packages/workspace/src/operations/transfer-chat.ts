@@ -1,6 +1,6 @@
 import type { ChatId, MemberId } from '@hq/kernel'
 import type { WorkspaceTransactor } from '../contracts/transactor.ts'
-import { ChatNotFrozen } from '../domain/errors.ts'
+import { ChatOwnerActive } from '../domain/errors.ts'
 import { isActive, requireActiveMember, requireAdmin } from '../domain/member.ts'
 
 type Dependencies = { transactor: WorkspaceTransactor }
@@ -10,7 +10,7 @@ export const transferChat = ({ transactor }: Dependencies, { chatId, ownerId, ac
   transactor.run(async ({ memberships, chats, workspaceEvents }) => {
     requireAdmin(await memberships.get(actorId))
     const chat = await chats.get(chatId)
-    if (isActive(await memberships.get(chat.ownerId))) throw new ChatNotFrozen()
+    if (isActive(await memberships.get(chat.ownerId))) throw new ChatOwnerActive()
     requireActiveMember(await memberships.get(ownerId), ownerId)
     await chats.transfer({ chat, ownerId, actorId })
     await workspaceEvents.record({

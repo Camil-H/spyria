@@ -1,5 +1,6 @@
-import type { ChatId, ChatVisibility, ProjectId, WorkspaceId } from '@hq/kernel'
+import type { ChatId, ChatVisibility, MemberId, ProjectId, WorkspaceId } from '@hq/kernel'
 import type { Chat } from '../domain/chat.ts'
+import type { WorkspaceRole } from '../domain/member.ts'
 import type { Name } from '../domain/name.ts'
 import type { ChatsPolicy } from '../domain/project.ts'
 
@@ -17,4 +18,9 @@ export type WorkspaceCommands = {
   leaveChat: Command<{ chatId: ChatId }>
   renameProject: Command<{ projectId: ProjectId; name: Name }>
   createWorkspace: Command<{ name: Name }>
+  inviteMember: Command<{ email: string; role: WorkspaceRole }>
+  revokeInvite: Command<{ invitationId: string }>
+  changeMemberRole: Command<{ memberId: MemberId; role: WorkspaceRole }>
+  removeMember: Command<{ memberId: MemberId }>
+  transferChat: Command<{ chatId: ChatId; ownerId: MemberId }>
 }

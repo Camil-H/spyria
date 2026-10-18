@@ -124,7 +124,7 @@ test('an admin changes roles, never demotes or removes the last admin, and a mem
   ])
 })
 
-test('removing a member ends their sessions, participations, keys and connections; their own chat freezes', async () => {
+test('removing a member ends their sessions, participations, keys and connections; their runtime chat freezes, their channel stays open', async () => {
   await addLlmKey(bob, 'openai')
   const [credential] = await database.$client`select secret_ref from llm_credentials where user_id = ${bob}`
   const providerKeyId = String(credential?.secret_ref).replace(/^gateway:openai\//, '')
@@ -139,12 +139,13 @@ test('removing a member ends their sessions, participations, keys and connection
     visibility: 'private',
     participants: [{ memberId: bob, roleId: 'prompter' }],
   })
-  const bobsChat = await newChat({
+  const bobsChannel = await newChat({
     ownerId: bob,
     type: 'channel',
     visibility: 'private',
     participants: [{ memberId: alice, roleId: 'prompter' }],
   })
+  const bobsRuntimeChat = await newChat({ ownerId: bob, participants: [{ memberId: alice, roleId: 'prompter' }] })
   const bobSession = await issueTestSession(database, acme, bob)
   expect((await queryAs(bobSession.token)).status).toBe(200)
   expect(await removeFromAcme(app, database, bob)).toEqual(succeeded)
@@ -158,7 +159,7 @@ test('removing a member ends their sessions, participations, keys and connection
   const ownedChatIds = await chatIdsOf(
     database.$client<{ id: string }[]>`select id from chats where owner_user_id = ${bob}`,
   )
-  expect(ownedChatIds).toContain(bobsChat)
+  expect(ownedChatIds).toEqual(expect.arrayContaining([bobsChannel, bobsRuntimeChat]))
   expect(
     await chatIdsOf(
       database.$client<{ id: string }[]>`select chat_id as id from chat_participants where user_id = ${bob}`,
@@ -184,13 +185,17 @@ test('removing a member ends their sessions, participations, keys and connection
     payload: { memberId: bob },
   })
 
-  expect(await sendTo(aliceInAcme, bobsChat, `message-${crypto.randomUUID()}`, 'Still there?')).toEqual(frozen)
+  expect(await sendTo(aliceInAcme, bobsRuntimeChat, `message-${crypto.randomUUID()}`, 'Still there?')).toEqual(frozen)
+  expect(await sendTo(aliceInAcme, bobsChannel, `message-${crypto.randomUUID()}`, 'Channel still open')).toEqual(
+    succeeded,
+  )
   expect(await sendTo(aliceInAcme, alicesChat, `message-${crypto.randomUUID()}`, 'Not frozen')).toEqual(succeeded)
   expect(await removeFromAcme(app, database, bob)).toEqual(failedWith(`${bob} is not a member of this workspace`))
 })
 
-test('an admin transfers a frozen chat to an active member, which unfreezes it; nothing else can be transferred', async () => {
-  const leesChat = await newChat({
+test("an admin transfers a removed member's chat to an active member, which unfreezes it; a chat of an active owner cannot be transferred", async () => {
+  const leesChat = await newChat({ ownerId: lee, participants: [{ memberId: alice, roleId: 'prompter' }] })
+  const leesChannel = await newChat({
     ownerId: lee,
     type: 'channel',
     visibility: 'private',
@@ -220,6 +225,11 @@ test('an admin transfers a frozen chat to an active member, which unfreezes it; 
     payload: { chatId: leesChat, fromId: lee, toId: alice },
   })
   expect(await sendTo(aliceInAcme, leesChat, `message-${crypto.randomUUID()}`, 'Back to work')).toEqual(succeeded)
+  expect(await sendTo(aliceInAcme, leesChannel, `message-${crypto.randomUUID()}`, 'Still open')).toEqual(succeeded)
+  expect(await transfer(aliceInAcme, leesChannel, alice)).toEqual(succeeded)
+  expect([...(await database.$client`select owner_user_id from chats where id = ${leesChannel}`)]).toEqual([
+    { owner_user_id: alice },
+  ])
 })
 
 test('a removed member can be invited again with any role, and their removal left Alice the last admin', async () => {

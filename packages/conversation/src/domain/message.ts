@@ -34,11 +34,14 @@ export type ConversationChat = Readonly<{
   harness: Harness | null
   ownerId: MemberId | null
   localSession: boolean | null
-  isFrozen: boolean
+  isOwnerRemoved: boolean
 }>
 
-export const requireNotFrozen = (chat: Pick<ConversationChat, 'isFrozen'>) => {
-  if (chat.isFrozen) throw new ChatFrozen()
+export const isFrozen = (chat: Pick<ConversationChat, 'type' | 'isOwnerRemoved'>) =>
+  chat.type === 'runtime' && chat.isOwnerRemoved
+
+export const requireNotFrozen = (chat: Pick<ConversationChat, 'type' | 'isOwnerRemoved'>) => {
+  if (isFrozen(chat)) throw new ChatFrozen()
 }
 
 const assertChangeable = (message: Message, memberId: MemberId) => {

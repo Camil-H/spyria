@@ -68,8 +68,8 @@ export const LastAdmin = errorKind(
   () => 'The last admin of a workspace can be neither demoted nor removed',
   WorkspaceError,
 )
-export const ChatNotFrozen = errorKind(
-  'chat_not_frozen',
+export const ChatOwnerActive = errorKind(
+  'chat_owner_active',
   () => 'Only a chat whose owner left the workspace can be transferred',
   WorkspaceError,
 )

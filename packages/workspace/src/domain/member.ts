@@ -24,6 +24,9 @@ export const requireActiveMember = (member: Member | undefined, memberId: Member
   return member
 }
 
+export const isLastAdmin = (member: Pick<Member, 'id' | 'role'>, activeAdminIds: readonly MemberId[]) =>
+  member.role === 'admin' && activeAdminIds.every((adminId) => adminId === member.id)
+
 export const requireAnotherAdmin = (member: Member, activeAdminIds: readonly MemberId[]) => {
-  if (member.role === 'admin' && activeAdminIds.every((adminId) => adminId === member.id)) throw new LastAdmin()
+  if (isLastAdmin(member, activeAdminIds)) throw new LastAdmin()
 }

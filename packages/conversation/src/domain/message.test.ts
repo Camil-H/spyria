@@ -54,7 +54,7 @@ const channel: ConversationChat = {
   harness: null,
   ownerId: alice,
   localSession: null,
-  isFrozen: false,
+  isOwnerRemoved: false,
 }
 
 test('threadRootOf accepts a top-level message of the same channel that is not deleted', () => {
@@ -76,7 +76,8 @@ test('threadRootOf refuses any root in a runtime chat', () => {
   )
 })
 
-test('requireNotFrozen refuses a frozen chat and allows any other', () => {
-  expect(() => requireNotFrozen({ ...channel, isFrozen: true })).toThrow(ChatFrozen)
-  expect(() => requireNotFrozen(channel)).not.toThrow()
+test('requireNotFrozen refuses a runtime chat whose owner was removed and allows any other, channels included', () => {
+  expect(() => requireNotFrozen({ ...channel, type: 'runtime', isOwnerRemoved: true })).toThrow(ChatFrozen)
+  expect(() => requireNotFrozen({ ...channel, type: 'runtime' })).not.toThrow()
+  expect(() => requireNotFrozen({ ...channel, isOwnerRemoved: true })).not.toThrow()
 })

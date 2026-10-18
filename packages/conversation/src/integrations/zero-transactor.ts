@@ -398,7 +398,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
           harness: row.harness ?? null,
           ownerId: row.ownerUserId ? memberId(row.ownerUserId) : null,
           localSession: row.localSession ?? null,
-          isFrozen: await isOwnerRemoved(tx, contextWorkspaceId, row.ownerUserId),
+          isOwnerRemoved: await isOwnerRemoved(tx, contextWorkspaceId, row.ownerUserId),
         }
       },
       ...chatPermissionsOf(tx, contextWorkspaceId),

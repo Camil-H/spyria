@@ -5,6 +5,7 @@ import { buttonClass, chatTypeIconOf, ErrorMessage, SegmentedChoice, useGuardedA
 import { Folder, GitBranch } from 'lucide-react'
 import { type ReactNode, useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate, useOutletContext, useParams } from 'react-router'
+import { ChatFrozen } from '../domain/errors.ts'
 import { runsOnNames, runsOnWaitingNoticeOf } from '../domain/session-routing.ts'
 import { getConversation } from '../queries/get-conversation.ts'
 import { Composer } from './Composer.tsx'
@@ -15,6 +16,7 @@ import { QuestionAnswererContext, ToolsAwaitingApprovalContext, useConversationC
 import { PlanModeToggle, RunsOnChip, SessionChip } from './SessionChip.tsx'
 import { useLiveMessages, withLiveMessages } from './useLiveMessages.ts'
 
+const frozenNotice = new ChatFrozen().message
 const workspaceChipClass =
   'flex min-w-0 items-center gap-1.5 rounded-md border border-line bg-raised px-2 py-1 text-xs text-muted'
 
@@ -23,11 +25,13 @@ export const ChatView = ({
   runtimeStatus,
   hasLlmKey,
   blockedNotice,
+  frozenActions,
 }: {
   headerActions: ReactNode
   runtimeStatus: (canRetry: boolean) => ReactNode
   hasLlmKey: boolean
   blockedNotice: ReactNode
+  frozenActions: ReactNode
 }) => {
   const workspaceId = useOutletContext<WorkspaceId>()
   const { memberId } = useSession()
@@ -129,7 +133,12 @@ export const ChatView = ({
           />
         </fieldset>
       )}
-      {conversation.canJoin ? (
+      {conversation.isFrozen ? (
+        <div className="flex flex-col items-center gap-2 text-sm">
+          <p className="text-muted">{frozenNotice}</p>
+          {frozenActions}
+        </div>
+      ) : conversation.canJoin ? (
         <div className="flex flex-col items-center gap-2">
           <button
             type="button"

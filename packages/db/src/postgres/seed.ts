@@ -36,12 +36,7 @@ const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
   const creatorByWorkspace = new Map(
     snapshot.memberships.toReversed().map((membership) => [membership.workspaceId, membership.memberId]),
   )
-  const emailByUserId = new Map(
-    snapshot.memberships.map((membership) => [
-      membership.memberId,
-      `${membership.displayName.toLowerCase()}@example.com`,
-    ]),
-  )
+  const emailByUserId = new Map(snapshot.memberships.map((membership) => [membership.memberId, membership.email]))
   await transaction.insert(tables.users).values([...emailByUserId].map(([id, email]) => ({ id, email })))
   await transaction
     .insert(tables.workspaces)
@@ -51,7 +46,7 @@ const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
       ),
     )
   await transaction.insert(tables.memberships).values(
-    snapshot.memberships.map(({ memberId, removedAt, ...membership }) => ({
+    snapshot.memberships.map(({ memberId, email, removedAt, ...membership }) => ({
       ...membership,
       userId: memberId,
       removedAt: removedAt === null ? null : new Date(removedAt),

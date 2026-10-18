@@ -79,6 +79,17 @@ export const foldOf = (page: Page, steps: number) =>
   messageItemsOf(page).getByRole('button', { name: new RegExp(`^Worked for .+ · ${steps} steps$`) })
 export const signedOutScreenOf = (page: Page, workspaceName: string) =>
   page.getByText(`You are signed out of ${workspaceName}`)
+export const signInButtonOf = (page: Page) => page.getByRole('button', { name: 'Sign in' })
+export const signInThroughDex = async (page: Page, email: string) => {
+  const popupOpened = page.waitForEvent('popup')
+  await signInButtonOf(page).click()
+  const popup = await popupOpened
+  const popupClosed = popup.waitForEvent('close')
+  await popup.locator('#login').fill(email)
+  await popup.locator('#password').fill('password')
+  await popup.locator('#submit-login').click()
+  await popupClosed
+}
 
 export const chatAction = async (page: Page, chatName: string, itemName: string) => {
   await page.getByRole('button', { name: `Chat actions for ${chatName}` }).click()

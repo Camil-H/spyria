@@ -17,8 +17,16 @@ type MembershipRow = {
   memberId: MemberId
   workspaceId: WorkspaceId
   displayName: string
+  email: string
   role: 'admin' | 'member'
   removedAt: string | null
+}
+type InvitationRow = {
+  workspaceId: WorkspaceId
+  id: string
+  email: string
+  role: 'admin' | 'member'
+  expiresAt: number
 }
 export type RuntimeHostCapacity = {
   cpus: number
@@ -182,6 +190,7 @@ type ChatRoleRow = {
 export type Snapshot = {
   workspaces: readonly WorkspaceRow[]
   memberships: readonly MembershipRow[]
+  invitations: readonly InvitationRow[]
   projects: readonly ProjectRow[]
   chats: readonly ChatRow[]
   messages: readonly MessageRow[]

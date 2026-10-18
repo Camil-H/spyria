@@ -4,26 +4,14 @@ import {
   logOutOf,
   menuItemNamesOf,
   messageItemsOf,
-  type Page,
   serverUrl,
   sidebarOf,
   signedOutScreenOf,
+  signInButtonOf,
+  signInThroughDex,
   switcherOf,
   test,
 } from './fixtures'
-
-const signInButtonOf = (page: Page) => page.getByRole('button', { name: 'Sign in' })
-
-const signInThroughDex = async (page: Page, email: string) => {
-  const popupOpened = page.waitForEvent('popup')
-  await signInButtonOf(page).click()
-  const popup = await popupOpened
-  const popupClosed = popup.waitForEvent('close')
-  await popup.locator('#login').fill(email)
-  await popup.locator('#password').fill('password')
-  await popup.locator('#submit-login').click()
-  await popupClosed
-}
 
 const alicesWorkspacesSignedIn = ['New workspace', 'Acme', 'Log out of Acme', 'Globex', 'Log out of Globex']
 

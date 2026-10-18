@@ -18,8 +18,9 @@ const groupedByChat = <Row extends { chatId: string }>(rows: readonly Row[]) =>
 const userAsMember = <Row extends { userId: string }>({ userId, ...row }: Row) => ({ ...row, memberId: userId })
 
 const readSnapshot = async () => {
-  const [memberships, chats, messages, readMarkers] = await Promise.all([
+  const [memberships, users, chats, messages, readMarkers] = await Promise.all([
     database.select().from(tables.memberships),
+    database.select().from(tables.users),
     database.select().from(tables.chats).orderBy(tables.chats.createdAt),
     database.select().from(tables.messages).orderBy(tables.messages.chatId, tables.messages.seq),
     database.select().from(tables.readMarkers),
@@ -32,7 +33,11 @@ const readSnapshot = async () => {
       name,
       localSessions,
     })),
-    memberships: memberships.map(userAsMember),
+    memberships: memberships.map((membership) => ({
+      ...userAsMember(membership),
+      email: users.find((user) => user.id === membership.userId)?.email,
+    })),
+    invitations: await database.select().from(tables.invitations),
     projects: (await database.select().from(tables.projects).orderBy(tables.projects.createdAt)).map(
       ({ createdAt, ...project }) => project,
     ),

@@ -19,6 +19,7 @@ export const globex = workspaceId('workspace-globex')
 export const alice = memberId('member-alice')
 export const bob = memberId('member-bob')
 export const lee = memberId('member-lee')
+const aliceEmail = 'alice@example.com'
 const onboarding = projectId('project-onboarding')
 const billing = projectId('project-billing')
 const launch = projectId('project-launch')
@@ -164,11 +165,26 @@ export const createMockSnapshot = (): Snapshot => {
       { id: globex, name: 'Globex', localSessions: true },
     ],
     memberships: [
-      { memberId: alice, workspaceId: acme, displayName: 'Alice', role: 'admin', removedAt: null },
-      { memberId: bob, workspaceId: acme, displayName: 'Bob', role: 'member', removedAt: null },
-      { memberId: lee, workspaceId: acme, displayName: 'Lee', role: 'member', removedAt: null },
-      { memberId: alice, workspaceId: globex, displayName: 'Alice', role: 'admin', removedAt: null },
+      { memberId: alice, workspaceId: acme, displayName: 'Alice', email: aliceEmail, role: 'admin', removedAt: null },
+      {
+        memberId: bob,
+        workspaceId: acme,
+        displayName: 'Bob',
+        email: 'bob@example.com',
+        role: 'member',
+        removedAt: null,
+      },
+      {
+        memberId: lee,
+        workspaceId: acme,
+        displayName: 'Lee',
+        email: 'lee@example.com',
+        role: 'member',
+        removedAt: null,
+      },
+      { memberId: alice, workspaceId: globex, displayName: 'Alice', email: aliceEmail, role: 'admin', removedAt: null },
     ],
+    invitations: [],
     projects: [
       { id: onboarding, workspaceId: acme, name: 'Onboarding', archived: false },
       { id: billing, workspaceId: acme, name: 'Billing', archived: false },

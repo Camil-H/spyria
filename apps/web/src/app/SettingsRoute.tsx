@@ -1,7 +1,7 @@
 import type { WorkspaceId } from '@hq/kernel'
 import { RuntimeHostsSection } from '@hq/runtime'
 import { UsageSection } from '@hq/usage'
-import { useIsWorkspaceAdmin } from '@hq/workspace'
+import { MembersSection, useIsWorkspaceAdmin } from '@hq/workspace'
 import { useOutletContext } from 'react-router'
 
 const SettingsRoute = () => {
@@ -12,6 +12,7 @@ const SettingsRoute = () => {
       <h1 className="text-2xl font-semibold">Workspace settings</h1>
       {isAdmin ? (
         <>
+          <MembersSection workspaceId={workspaceId} />
           <RuntimeHostsSection workspaceId={workspaceId} />
           <UsageSection workspaceId={workspaceId} />
         </>

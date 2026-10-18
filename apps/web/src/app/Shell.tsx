@@ -5,7 +5,7 @@ import { PanelProvider, PanelToggle, SidePanel } from '@hq/panel'
 import { ProfileProvider, useHasLlmCredential } from '@hq/profile'
 import { RuntimeProvider, RuntimeStatus } from '@hq/runtime'
 import { SessionProvider } from '@hq/session'
-import { WorkspaceLayout, WorkspaceProvider } from '@hq/workspace'
+import { TransferChatForm, WorkspaceLayout, WorkspaceProvider } from '@hq/workspace'
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Link, Navigate, Route, Routes, useOutletContext, useParams } from 'react-router'
 import type { Application } from './factory.ts'
@@ -39,6 +39,7 @@ const ChatRoute = ({ commands }: { commands: Application['conversationCommands']
         )}
         hasLlmKey={hasLlmKey}
         blockedNotice={blockedNotice}
+        frozenActions={<TransferChatForm workspaceId={workspaceId} chatId={chatId} />}
       />
       <SidePanel
         workspaceId={workspaceId}
