@@ -79,21 +79,9 @@ const readSnapshot = async () => {
     ).map(({ position, ...connection }) => userAsMember(connection)),
     chatMembers: (await database.select().from(tables.chatParticipants)).map(userAsMember),
     chatRoles: await database.select().from(tables.chatRoles),
-    files: await database.select().from(tables.files),
-    changes: await database.select().from(tables.changes),
-    terminalLines: (
-      await database
-        .select()
-        .from(tables.terminalLines)
-        .orderBy(tables.terminalLines.chatId, tables.terminalLines.position)
-    ).map(({ position, ...line }) => line),
     planSteps: (
       await database.select().from(tables.planSteps).orderBy(tables.planSteps.chatId, tables.planSteps.position)
     ).map(({ position, ...step }) => step),
-    commits: (await database.select().from(tables.commits)).map(({ committedAt, ...commit }) => ({
-      ...commit,
-      committedAt: committedAt.toISOString(),
-    })),
     browserPages: await database.select().from(tables.browserPages),
     sources: await database.select().from(tables.sources),
     usageEntries: (await database.select().from(tables.usageEntries)).map(userAsMember),
@@ -103,14 +91,13 @@ const readSnapshot = async () => {
 }
 
 const expectSnapshotRoundTrip = async () => {
-  const { drafts, projects, chats, messages, terminalLines, planSteps, toolConnections, ...unorderedCollections } =
+  const { drafts, projects, chats, messages, planSteps, toolConnections, ...unorderedCollections } =
     createMockSnapshot()
   const stored = await readSnapshot()
   expect(stored.toolConnections).toEqual([...toolConnections])
   expect(stored.projects).toEqual([...projects])
   expect(stored.chats).toEqual([...chats])
   expect(stored.messages).toEqual(groupedByChat(messages).map(({ replyToId, ...message }) => message))
-  expect(stored.terminalLines).toEqual(groupedByChat(terminalLines))
   expect(stored.planSteps).toEqual(groupedByChat(planSteps))
   for (const [name, rows] of Object.entries(unorderedCollections))
     expect({ [name]: unordered(stored[name as keyof typeof unorderedCollections]) }).toEqual({

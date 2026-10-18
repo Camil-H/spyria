@@ -118,27 +118,8 @@ export type RuntimeOriginRow = {
   messageId: MessageId
   startedBy: MemberId
 }
-export type FileRow = { workspaceId: WorkspaceId; chatId: ChatId; path: string; kind: 'file' | 'folder' }
 export type MessageStep = { readonly type: string; readonly [field: string]: unknown }
-export type DiffLine = { kind: 'added' | 'removed' | 'context'; text: string }
-export type ChangeRow = {
-  workspaceId: WorkspaceId
-  chatId: ChatId
-  path: string
-  additions: number
-  deletions: number
-  diffLines: readonly DiffLine[]
-}
-type TerminalLineRow = { workspaceId: WorkspaceId; chatId: ChatId; text: string }
 type PlanStepRow = { workspaceId: WorkspaceId; chatId: ChatId; title: string; status: string }
-type CommitRow = {
-  workspaceId: WorkspaceId
-  chatId: ChatId
-  sha: string
-  message: string
-  authorId: MemberId
-  committedAt: string
-}
 type BrowserPageRow = {
   workspaceId: WorkspaceId
   chatId: ChatId
@@ -211,11 +192,7 @@ export type Snapshot = {
   readMarkers: readonly ReadMarkerRow[]
   threadReadMarkers: readonly ThreadReadMarkerRow[]
   runtimeOrigins: readonly RuntimeOriginRow[]
-  files: readonly FileRow[]
-  changes: readonly ChangeRow[]
-  terminalLines: readonly TerminalLineRow[]
   planSteps: readonly PlanStepRow[]
-  commits: readonly CommitRow[]
   browserPages: readonly BrowserPageRow[]
   usageEntries: readonly UsageEntryRow[]
   sources: readonly SourceRow[]

@@ -653,12 +653,14 @@ export const startAgentStack = async ({
       {
         ownerId,
         signedIn,
+        relayLimitMilliseconds,
         routesModelCalls = false,
         containerAgentOf = (relay) => relay.containerAgent,
         ...relayOptions
       }: Omit<NonNullable<Parameters<typeof createHqAgentRelay>[0]>, 'modelCall'> & {
         ownerId?: string
         signedIn?: string[]
+        relayLimitMilliseconds?: number
         routesModelCalls?: boolean
         containerAgentOf?: (relay: ReturnType<typeof createHqAgentRelay>) => ContainerAgent
       } = {},
@@ -668,7 +670,12 @@ export const startAgentStack = async ({
         modelCall: routesModelCalls ? () => host.modelCall : undefined,
       })
       relays.push(relay)
-      const host = await fakeHost(name, { containerAgent: containerAgentOf(relay), ownerId, signedIn })
+      const host = await fakeHost(name, {
+        containerAgent: containerAgentOf(relay),
+        ownerId,
+        signedIn,
+        relayLimitMilliseconds,
+      })
       return { relay, host, launches: () => relay.created as Launch[] }
     },
     mutate,
@@ -805,12 +812,14 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
       boot = async () => {},
       ownerId,
       signedIn = [],
+      relayLimitMilliseconds,
     }: {
       memoryGibibytes?: number
       containerAgent?: ContainerAgent
       boot?: () => Promise<unknown>
       ownerId?: string
       signedIn?: string[]
+      relayLimitMilliseconds?: number
     } = {},
   ) => {
     const id = crypto.randomUUID()
@@ -939,9 +948,18 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
             const isReady = isReadyProbe && container?.running && container.isBooted !== false
             const answered =
               container?.running && !isReadyProbe
-                ? containerAgent?.respond(frame as Parameters<ContainerAgent['respond']>[0], container)
+                ? Promise.resolve(
+                    containerAgent?.respond(frame as Parameters<ContainerAgent['respond']>[0], container),
+                  ).catch((error: Error) => ({ error: error.message }))
                 : undefined
-            void Promise.resolve(answered).then((response) =>
+            const limited =
+              relayLimitMilliseconds === undefined
+                ? answered
+                : Promise.race([
+                    answered,
+                    Bun.sleep(relayLimitMilliseconds).then(() => ({ error: 'The operation timed out.' })),
+                  ])
+            void Promise.resolve(limited).then((response) =>
               send({
                 type: 'http_res',
                 sid: frame.sid,

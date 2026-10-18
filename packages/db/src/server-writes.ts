@@ -89,6 +89,9 @@ export const lockActiveAdminIds = async (tx: Transaction, workspaceId: string) =
 export const deleteMemberSessions = (tx: Transaction, workspaceId: string, userId: string) =>
   onServer(tx, 'delete from sessions where workspace_id = $1 and user_id = $2', [workspaceId, userId])
 
+export const deleteGitHubConnection = (tx: Transaction, workspaceId: string, userId: string) =>
+  onServer(tx, 'delete from github_connections where workspace_id = $1 and user_id = $2', [workspaceId, userId])
+
 export const appendWorkspaceEvent = (
   tx: Transaction,
   event: { workspaceId: string; type: string; actorId: string; payload: object },
@@ -180,6 +183,7 @@ const serverOnlyRuntimeColumns = {
   llmTokenHash: 'llm_token_hash',
   llmSwitchTokenHash: 'llm_switch_token_hash',
   agentConversation: 'agent_conversation_id',
+  workspaceSnapshot: 'workspace_snapshot',
 }
 type ServerOnlyRuntimeColumn = keyof typeof serverOnlyRuntimeColumns
 

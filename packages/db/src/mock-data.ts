@@ -12,7 +12,7 @@ import {
   type WorkspaceId,
   workspaceId,
 } from '@hq/kernel'
-import type { ChangeRow, ChatRow, FileRow, MessageRow, Snapshot } from './schema.ts'
+import type { ChatRow, MessageRow, Snapshot } from './schema.ts'
 
 export const acme = workspaceId('workspace-acme')
 export const globex = workspaceId('workspace-globex')
@@ -29,15 +29,6 @@ const welcomeChat = chatId('chat-welcome')
 
 const currentMonth = () => new Date().toISOString().slice(0, 7)
 const invoiceBug = { workspaceId: acme, chatId: invoiceChat }
-const file = (path: string, kind: FileRow['kind'] = 'file'): FileRow => ({ ...invoiceBug, path, kind })
-const change = (path: string, additions: number, deletions: number, diffLines: ChangeRow['diffLines']): ChangeRow => ({
-  ...invoiceBug,
-  path,
-  additions,
-  deletions,
-  diffLines,
-})
-const terminalLine = (text: string) => ({ ...invoiceBug, text })
 const planStep = (title: string, status: string) => ({ ...invoiceBug, title, status })
 const toolConnection = (tool: string, status: string) => ({ workspaceId: acme, memberId: alice, tool, status })
 const chat = (
@@ -208,37 +199,10 @@ export const createMockSnapshot = (): Snapshot => {
     ],
     threadReadMarkers: [],
     runtimeOrigins: [],
-    files: [
-      file('billing', 'folder'),
-      file('billing/invoice.ts'),
-      file('billing/tax.ts'),
-      file('tests', 'folder'),
-      file('tests/invoice.test.ts'),
-      file('package.json'),
-    ],
-    changes: [
-      change('billing/tax.ts', 3, 5, [
-        { kind: 'context', text: 'export const invoiceTotal = (net: number) => {' },
-        { kind: 'removed', text: 'const total = applyTax(applyTax(net))' },
-        { kind: 'added', text: 'const total = applyTax(net)' },
-        { kind: 'context', text: 'return total' },
-      ]),
-      change('tests/invoice.test.ts', 12, 0, [{ kind: 'added', text: "test('applies tax once', () => {})" }]),
-    ],
-    terminalLines: [terminalLine('$ bun test'), terminalLine('3 pass'), terminalLine('0 fail')],
     planSteps: [
       planStep('Reproduce the bug', 'done'),
       planStep('Fix the tax calculation', 'in-progress'),
       planStep('Add a regression test', 'todo'),
-    ],
-    commits: [
-      {
-        ...invoiceBug,
-        sha: 'a1b2c3d',
-        message: 'Fix tax applied twice',
-        authorId: alice,
-        committedAt: '2026-09-30T11:20:00.000Z',
-      },
     ],
     browserPages: [
       {

@@ -43,6 +43,8 @@ export type AgentRuntimes = {
   chatsOnHost(host: AgentHost): Promise<ChatId[]>
   touch(chat: AgentChat): Promise<void>
   expireSignIn(chat: AgentChat, tool: string): Promise<void>
+  snapshotOf(chat: AgentChat): Promise<string | undefined>
+  keepSnapshot(chat: AgentChat, snapshot: string): Promise<void>
 }
 
 export type RuntimeRetrier = { retry(chat: AgentChat): Promise<void> }
@@ -76,6 +78,7 @@ export type AgentClient = {
   statusOf(conversation: AgentConversation): Promise<string | undefined>
   interrupt(conversation: AgentConversation): Promise<void>
   deleteConversation(conversation: AgentConversation): Promise<void>
+  readWorkspace(endpoint: AgentEndpoint, path: string): Promise<object | undefined>
   openEvents(conversation: AgentConversation, last: AgentLastEvent | null, listener: AgentEventListener): AgentSocket
 }
 

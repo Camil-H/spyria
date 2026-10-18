@@ -266,6 +266,7 @@ export const createHqAgentClient = (): AgentClient => ({
   deleteConversation: async (conversation) => {
     await call(conversation, 'DELETE', `/api/conversations/${conversation.conversationId}`)
   },
+  readWorkspace: (endpoint, path) => call(endpoint, 'GET', path),
   openEvents: (conversation: AgentConversation, last, listener) => {
     const { conversationId } = conversation
     const after = last?.id.startsWith(`${conversationId}:`) ? (last.seq ?? 0) : 0

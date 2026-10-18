@@ -209,7 +209,7 @@ const devChatAndPrompt = async (repository: string, text: string) => {
   const promptId = await stack.prompt(id, text)
   await stack.answered(promptId)
   await waitFor(async () => (await stack.turnOf(id)) === null, 15_000)
-  return { id, replies: await stack.repliesTo(promptId) }
+  return { id, promptId, replies: await stack.repliesTo(promptId) }
 }
 
 test('a dev chat clones its repository with a read-only installation token kept out of the agent and the repository config, on the working branch; a failing setup script shows a notice and the session still answers', async () => {
@@ -217,7 +217,7 @@ test('a dev chat clones its repository with a read-only installation token kept 
   const { id, replies } = await devChatAndPrompt('acme/app', 'stub:ls stub:env')
   const { gitBranch } = (await stack.chatRow(id)) ?? {}
   const answer = replies.map(({ body }) => body).join('')
-  expect(answer).toContain('files:.git,AGENTS.md,README.md,only-in-acme-app.txt')
+  expect(answer).toContain('files:.git,AGENTS.md,README.md,only-in-acme-app.txt,src')
   const [launch] = launches() as unknown as { repository: Record<string, string>; secrets: object }[]
   expect(launch?.repository).toEqual({
     url: `${fakeGitHub.urls.webUrl}/acme/app.git`,
@@ -242,12 +242,14 @@ test('a dev chat clones its repository with a read-only installation token kept 
   expect(gitConfig).toContain(`url = ${fakeGitHub.urls.webUrl}/acme/app.git`)
 
   const failing = await devChatAndPrompt('acme/docs', 'stub:ls')
-  expect(failing.replies.map(({ kind, body }) => ({ kind, body }))).toEqual([
+  expect(failing.replies.map(({ body }) => body).join('')).toContain('files:.git,.hq,README.md')
+  const notices = async () => (await stack.repliesTo(failing.promptId)).filter(({ kind }) => kind === 'notice')
+  await waitFor(async () => (await notices()).length > 0, 15_000)
+  expect(await notices()).toEqual([
     {
       kind: 'notice',
       body: 'The setup script .hq/setup.sh failed with exit code 127; the session started anyway.\ninstalling the docs toolchain\ndocs-tool: command not found',
     },
-    expect.objectContaining({ body: expect.stringContaining('files:.git,.hq,README.md') }),
   ])
   expect(existsSync(join(String(workspaceFrame?.workspace.cwd), 'only-in-acme-app.txt'))).toBe(true)
-})
+}, 30_000)

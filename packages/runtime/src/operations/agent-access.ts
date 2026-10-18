@@ -73,6 +73,21 @@ export const forgetAgentConversation = ({ transactor }: Dependencies, { workspac
     if (runtime) await runtimes.forgetAgentConversation(runtime)
   })
 
+export const readWorkspaceSnapshot = ({ transactor }: Dependencies, { workspaceId, chatId }: ChatRuntime) =>
+  transactor.run(async ({ runtimes }) => {
+    const runtime = await runtimes.findByChat(workspaceId, chatId)
+    return runtime && runtimes.workspaceSnapshotOf(runtime)
+  })
+
+export const keepWorkspaceSnapshot = (
+  { transactor }: Dependencies,
+  { workspaceId, chatId, snapshot }: ChatRuntime & { snapshot: string },
+) =>
+  transactor.run(async ({ runtimes }) => {
+    const runtime = await runtimes.findByChat(workspaceId, chatId)
+    if (runtime) await runtimes.keepWorkspaceSnapshot(runtime, snapshot)
+  })
+
 export const listHostChats = (
   { transactor }: Dependencies,
   { workspaceId, hostId }: { workspaceId: WorkspaceId; hostId: RuntimeHostId },

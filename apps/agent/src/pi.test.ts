@@ -42,6 +42,23 @@ test('a Pi turn over RPC streams thought and text, a command with its output and
       rawOutput: { formatted_output: 'one\ntwo\nfailed', exit_code: 2 },
     },
   ])
+  const live = socket.events.filter(
+    (event) => kindOf('tool_call_update')(event) && !event.completed && event.update.toolCallId === 'terminal-1',
+  )
+  expect(live.map(({ update }) => update)).toEqual([
+    {
+      sessionUpdate: 'tool_call_update',
+      toolCallId: 'terminal-1',
+      status: 'in_progress',
+      rawOutput: { formatted_output: 'one\n' },
+    },
+    {
+      sessionUpdate: 'tool_call_update',
+      toolCallId: 'terminal-1',
+      status: 'in_progress',
+      rawOutput: { formatted_output: 'one\ntwo\n' },
+    },
+  ])
   expect(textOf(socket.events)).toBe(`[t1] permission:allow-always ${piHello(1).slice(5)}`)
   expect(socket.events.at(-1)?.update).toEqual({ sessionUpdate: 'turn_end', stopReason: 'end_turn' })
 })

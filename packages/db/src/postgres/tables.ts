@@ -17,7 +17,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
 import { defineRelations } from 'drizzle-orm/relations'
-import type { DiffLine, MessageStep, RuntimeFailure, RuntimeHostCapacity, RuntimeState } from '../schema.ts'
+import type { MessageStep, RuntimeFailure, RuntimeHostCapacity, RuntimeState } from '../schema.ts'
 
 const table = snakeCase.table
 const instant = () => timestamp({ withTimezone: true, mode: 'date' })
@@ -511,6 +511,7 @@ export const runtimes = table(
     llmTokenHash: text(),
     llmSwitchTokenHash: text(),
     agentConversationId: text(),
+    workspaceSnapshot: text(),
     lastActiveAt: instant().notNull(),
     createdAt: instant().notNull(),
     stateChangedAt: instant().notNull(),
@@ -523,50 +524,10 @@ export const runtimes = table(
   ],
 )
 
-export const files = table(
-  'files',
-  { ...chatScoped, path: text().notNull(), kind: text().$type<'file' | 'folder'>().notNull() },
-  (table) => [primaryKey({ columns: [table.workspaceId, table.chatId, table.path] }), chatReference(table)],
-)
-
-export const changes = table(
-  'changes',
-  {
-    ...chatScoped,
-    path: text().notNull(),
-    additions: integer().notNull(),
-    deletions: integer().notNull(),
-    diffLines: jsonb().$type<readonly DiffLine[]>().notNull(),
-  },
-  (table) => [primaryKey({ columns: [table.workspaceId, table.chatId, table.path] }), chatReference(table)],
-)
-
-export const terminalLines = table(
-  'terminal_lines',
-  { ...chatScoped, position: integer().notNull(), text: text().notNull() },
-  (table) => [primaryKey({ columns: [table.workspaceId, table.chatId, table.position] }), chatReference(table)],
-)
-
 export const planSteps = table(
   'plan_steps',
   { ...chatScoped, position: integer().notNull(), title: text().notNull(), status: text().notNull() },
   (table) => [primaryKey({ columns: [table.workspaceId, table.chatId, table.position] }), chatReference(table)],
-)
-
-export const commits = table(
-  'commits',
-  {
-    ...chatScoped,
-    sha: text().notNull(),
-    message: text().notNull(),
-    authorId: text().notNull(),
-    committedAt: instant().notNull(),
-  },
-  (table) => [
-    primaryKey({ columns: [table.workspaceId, table.chatId, table.sha] }),
-    chatReference(table),
-    memberReference(table, table.authorId),
-  ],
 )
 
 export const browserPages = table(
@@ -708,11 +669,7 @@ export const relations = defineRelations(
     workspaceConnections,
     connectionRestrictions,
     toolConnections,
-    files,
-    changes,
-    terminalLines,
     planSteps,
-    commits,
     browserPages,
     sources,
     usageEntries,
@@ -768,11 +725,7 @@ export const relations = defineRelations(
       readMarkers: { chat: chatOf(r.readMarkers) },
       threadReadMarkers: { chat: chatOf(r.threadReadMarkers) },
       runtimeOrigins: { chat: chatOf(r.runtimeOrigins) },
-      files: { chat: chatOf(r.files) },
-      changes: { chat: chatOf(r.changes) },
-      terminalLines: { chat: chatOf(r.terminalLines) },
       planSteps: { chat: chatOf(r.planSteps) },
-      commits: { chat: chatOf(r.commits) },
       browserPages: { chat: chatOf(r.browserPages) },
       sources: { chat: chatOf(r.sources) },
       usageEntries: { chat: chatOf(r.usageEntries) },

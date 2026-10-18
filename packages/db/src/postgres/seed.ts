@@ -100,13 +100,7 @@ const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
     })),
   )
   await transaction.insert(tables.toolConnections).values(snapshot.toolConnections.map(withUserIdAndPosition))
-  await transaction.insert(tables.files).values([...snapshot.files])
-  await transaction.insert(tables.changes).values([...snapshot.changes])
-  await transaction.insert(tables.terminalLines).values(positionedWithinChat(snapshot.terminalLines))
   await transaction.insert(tables.planSteps).values(positionedWithinChat(snapshot.planSteps))
-  await transaction
-    .insert(tables.commits)
-    .values(snapshot.commits.map(({ committedAt, ...commit }) => ({ ...commit, committedAt: new Date(committedAt) })))
   await transaction.insert(tables.browserPages).values([...snapshot.browserPages])
   await transaction.insert(tables.sources).values([...snapshot.sources])
   await transaction.insert(tables.usageEntries).values(snapshot.usageEntries.map(withUserId))

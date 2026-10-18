@@ -2,12 +2,14 @@ import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 export type Repository = { url: string; token: string; base_branch: string; working_branch: string }
-export type Checkout = { failure?: string; setupFailed?: { exitCode: number; output: string } }
+export type Checkout = { failure?: string; hasSetup?: boolean }
 
 const setupScript = '.hq/setup.sh'
+export const setupCommand = `sh ${setupScript}`
 const shownOutputLines = 20
+const keptOutputCharacters = 20_000
 
-const lastLinesOf = (output: string) => output.trimEnd().split('\n').slice(-shownOutputLines).join('\n')
+export const lastLinesOf = (output: string) => output.trimEnd().split('\n').slice(-shownOutputLines).join('\n')
 
 const run = async (command: string[], cwd: string, env: Record<string, string>) => {
   const child = Bun.spawn(command, { cwd, env, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' })
@@ -39,7 +41,16 @@ export const checkOut = async (
   const branch = await run(['git', 'checkout', '--quiet', '-b', repository.working_branch], cwd, environment)
   if (branch.exitCode !== 0)
     return { failure: `The working branch could not be created: ${lastLinesOf(branch.output)}` }
-  if (!existsSync(join(cwd, setupScript))) return {}
-  const setup = await run(['sh', '-c', `sh ${setupScript} 2>&1`], cwd, environment)
-  return setup.exitCode === 0 ? {} : { setupFailed: { exitCode: setup.exitCode, output: lastLinesOf(setup.output) } }
+  return { hasSetup: existsSync(join(cwd, setupScript)) }
+}
+
+export const runSetup = async (cwd: string, env: Record<string, string>, onOutput: (output: string) => void) => {
+  const child = Bun.spawn(['sh', '-c', `${setupCommand} 2>&1`], { cwd, env, stdin: 'ignore', stdout: 'pipe' })
+  const decoder = new TextDecoder()
+  let output = ''
+  for await (const chunk of child.stdout) {
+    output = (output + decoder.decode(chunk, { stream: true })).slice(-keptOutputCharacters)
+    onOutput(output)
+  }
+  return { exitCode: await child.exited, output }
 }

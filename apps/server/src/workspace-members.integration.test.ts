@@ -124,7 +124,7 @@ test('an admin changes roles, never demotes or removes the last admin, and a mem
   ])
 })
 
-test('removing a member ends their sessions, participations, keys and connections; their runtime chat freezes, their channel stays open', async () => {
+test('removing a member ends their sessions, participations, keys and connections (their GitHub one too); their runtime chat freezes, their channel stays open', async () => {
   await addLlmKey(bob, 'openai')
   const [credential] = await database.$client`select secret_ref from llm_credentials where user_id = ${bob}`
   const providerKeyId = String(credential?.secret_ref).replace(/^gateway:openai\//, '')
@@ -135,6 +135,9 @@ test('removing a member ends their sessions, participations, keys and connection
   await database.$client`
     insert into connection_restrictions (workspace_id, connection_id, user_id, allowed_tools)
     values (${acme}, 'connection-crm', ${bob}, '["lookup"]')`
+  await database.$client`
+    insert into github_connections (workspace_id, user_id, login, encrypted_access_token, updated_at)
+    values (${acme}, ${bob}, 'bob-gh', 'sealed', now())`
   const alicesChat = await newChat({
     type: 'channel',
     visibility: 'private',
@@ -171,7 +174,7 @@ test('removing a member ends their sessions, participations, keys and connection
     actor: alice,
     payload: { memberId: bob },
   })
-  for (const table of ['llm_credentials', 'tool_connections', 'connection_restrictions'])
+  for (const table of ['llm_credentials', 'tool_connections', 'connection_restrictions', 'github_connections'])
     expect(await database.$client`select 1 from ${database.$client(table)} where user_id = ${bob}`).toHaveLength(0)
   await waitFor(
     async () => (await database.$client`select 1 from member_gateway_keys where user_id = ${bob}`).length === 0,

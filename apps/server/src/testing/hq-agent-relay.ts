@@ -108,7 +108,7 @@ export const createHqAgentRelay = ({
     )
   const agents = new Map<string, Promise<Agent>>()
   const workspaces = new Map<string, string>()
-  const workspaceOf = ({ apiKey }: FakeContainer) => {
+  const workspaceOf = (apiKey: string) => {
     const workspace = workspaces.get(apiKey) ?? join(directory, `workspace-${workspaces.size + 1}`)
     mkdirSync(workspace, { recursive: true })
     workspaces.set(apiKey, workspace)
@@ -132,6 +132,7 @@ export const createHqAgentRelay = ({
         HOME: directory,
         PORT: '0',
         OH_SESSION_API_KEYS_0: apiKey,
+        HQ_WORKSPACE_DIR: workspaceOf(apiKey),
       },
       stdout: 'pipe',
       stderr: 'inherit',
@@ -174,7 +175,7 @@ export const createHqAgentRelay = ({
       const response = await fetch(`http://localhost:${port}${path}`, {
         method,
         headers,
-        body: launch ? JSON.stringify({ ...launch, workspace: { working_dir: workspaceOf(container) } }) : body,
+        body: launch ? JSON.stringify({ ...launch, workspace: { working_dir: workspaceOf(container.apiKey) } }) : body,
       })
       return { status: response.status, body: await response.text() }
     },

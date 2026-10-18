@@ -1,12 +1,14 @@
 import type { ChatId, MemberId, MessageId, WorkspaceId } from '@hq/kernel'
 import type { RunsOn } from '../domain/session-routing.ts'
 import type {
+  CommandOutputFrame,
   DelegatedFrame,
   QuestionFrame,
   StoredFrame,
   StreamFrame,
   WorkspaceFrame,
 } from '../domain/streamed-reply.ts'
+import type { WorkspaceRead, WorkspaceReading } from '../domain/workspace-reads.ts'
 import type { ChatRoutingRead } from '../queries/get-chat-routing.ts'
 import type { QuestionAnswer } from './endpoints.ts'
 
@@ -41,12 +43,16 @@ export type ConversationCommands = {
   chatRouting: Command<{ chatId: ChatId }, ChatRoutingRead>
   answerQuestion: Command<{ chatId: ChatId; questionId: string; answer: QuestionAnswer }, number>
   setPlanMode: Command<{ chatId: ChatId; enabled: boolean }, number>
+  readWorkspace: Command<{ chatId: ChatId; read: WorkspaceRead; path: string }, WorkspaceReading>
+  wakeWorkspace: Command<{ chatId: ChatId }, void>
 }
 
 export type AgentStream = {
   subscribe(
     workspaceId: WorkspaceId,
     chatId: ChatId,
-    listener: (frame: StreamFrame | StoredFrame | QuestionFrame | WorkspaceFrame | DelegatedFrame) => void,
+    listener: (
+      frame: StreamFrame | StoredFrame | QuestionFrame | WorkspaceFrame | DelegatedFrame | CommandOutputFrame,
+    ) => void,
   ): () => void
 }

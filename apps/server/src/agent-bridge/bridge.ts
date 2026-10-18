@@ -13,6 +13,7 @@ import {
   type RepositoryCheckouts,
   type SessionClassifier,
   streamedTextOf,
+  toolCallIdOf,
 } from '@hq/conversation/server'
 import type { Database } from '@hq/db/postgres'
 import { schema } from '@hq/db/zero'
@@ -67,6 +68,7 @@ export const createAgentBridge = ({
         isReady: Promise<void>
         questions: Map<string, object>
         workspace?: object
+        commandOutputs: Map<string, string>
         close(): void
       }
     >()
@@ -162,6 +164,7 @@ export const createAgentBridge = ({
         isClosed: false,
         questions: new Map<string, object>(),
         workspace: undefined as object | undefined,
+        commandOutputs: new Map<string, string>(),
         close: () => {
           chatSocket.isClosed = true
           opened.then(
@@ -229,6 +232,15 @@ export const createAgentBridge = ({
           if (update?.sessionUpdate === 'workspace') {
             chatSocket.workspace = update
             for (const viewer of viewersOf(chat)) send(viewer, chat, { workspace: update })
+            return
+          }
+          const stepId = update?.sessionUpdate === 'tool_call_update' ? toolCallIdOf(event) : undefined
+          const output = (update as { rawOutput?: { formatted_output?: unknown } } | undefined)?.rawOutput
+            ?.formatted_output
+          if (stepId && event.completed) chatSocket.commandOutputs.delete(stepId)
+          if (stepId && !event.completed && typeof output === 'string') {
+            chatSocket.commandOutputs.set(stepId, output)
+            for (const viewer of viewersOf(chat)) send(viewer, chat, { commandOutput: { stepId, output } })
             return
           }
           if (update?.sessionUpdate === 'question_answered' || update?.sessionUpdate === 'question_closed')
@@ -301,6 +313,8 @@ export const createAgentBridge = ({
       awaitTask: handlers.awaitTask,
       answerQuestion: handlers.answerQuestion,
       setPlanMode: handlers.setPlanMode,
+      readWorkspace: handlers.readWorkspace,
+      wakeWorkspace: handlers.wakeWorkspace,
       recordModelCallFailure: handlers.recordModelCallFailure,
       recordToolCall: handlers.recordToolCall,
       authorizeToolCall: handlers.authorizeToolCall,
@@ -331,6 +345,8 @@ export const createAgentBridge = ({
         for (const question of streaming?.questions.values() ?? [])
           send(viewer, chat, { promptId: streaming?.promptId, question, isSnapshot: true })
         if (streaming?.workspace) send(viewer, chat, { workspace: streaming.workspace, isSnapshot: true })
+        for (const [stepId, output] of streaming?.commandOutputs ?? [])
+          send(viewer, chat, { commandOutput: { stepId, output }, isSnapshot: true })
         for (const frame of [
           ...(delegatedTexts.get(keyOf(chat))?.values() ?? []),
           ...(shownQuestions.get(keyOf(chat))?.values() ?? []),

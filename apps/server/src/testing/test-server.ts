@@ -5,7 +5,12 @@ import { databaseUrlOf } from '@hq/db/testing'
 import { schema } from '@hq/db/zero'
 import { addRoutableModels, chatId } from '@hq/kernel'
 import { createLlmGateway } from '@hq/profile/server'
-import { createRuntimeTransactor, ensureRuntimeRunning, type SandboxProvider } from '@hq/runtime/server'
+import {
+  createRuntimeTransactor,
+  ensureRuntimeRunning,
+  type SandboxProvider,
+  stopChatRuntime,
+} from '@hq/runtime/server'
 import { createBifrostUsageLogs, syncUsageNow } from '@hq/usage/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { websocket } from 'hono/bun'
@@ -313,13 +318,13 @@ const app = createApp({
     })
   })
   .post('/test/runtime', async (context) => {
-    const { db = '', chat = '' } = context.req.query()
-    await zeroDrizzle(schema, databaseByName(db)).transaction((tx) =>
-      ensureRuntimeRunning(
-        { transactor: createRuntimeTransactor(tx), ...placement },
-        { workspaceId: acme, chatId: chatId(chat), id: crypto.randomUUID(), now: Date.now() },
-      ),
-    )
+    const { db = '', chat = '', stop } = context.req.query()
+    const target = { workspaceId: acme, chatId: chatId(chat), now: Date.now() }
+    await zeroDrizzle(schema, databaseByName(db)).transaction(async (tx) => {
+      const transactor = createRuntimeTransactor(tx)
+      if (stop === 'true') return stopChatRuntime({ transactor }, target)
+      await ensureRuntimeRunning({ transactor, ...placement }, { ...target, id: crypto.randomUUID() })
+    })
     return context.body(null, 204)
   })
   .post('/test/tool-servers', async (context) => {

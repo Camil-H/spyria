@@ -398,6 +398,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
           harness: row.harness ?? null,
           ownerId: row.ownerUserId ? memberId(row.ownerUserId) : null,
           localSession: row.localSession ?? null,
+          baseBranch: row.baseBranch ?? null,
           isOwnerRemoved: await isOwnerRemoved(tx, contextWorkspaceId, row.ownerUserId),
         }
       },

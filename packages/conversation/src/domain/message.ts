@@ -34,6 +34,7 @@ export type ConversationChat = Readonly<{
   harness: Harness | null
   ownerId: MemberId | null
   localSession: boolean | null
+  baseBranch: string | null
   isOwnerRemoved: boolean
 }>
 

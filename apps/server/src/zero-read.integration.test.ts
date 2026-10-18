@@ -52,11 +52,7 @@ const visibleTo = (snapshot: Snapshot, viewerId: MemberId, workspaceIds: readonl
     chats: readableChats,
     chatRoles: inWorkspaces(snapshot.chatRoles),
     messages: inReadableChats(snapshot.messages),
-    files: inReadableChats(snapshot.files),
-    changes: inReadableChats(snapshot.changes),
-    terminalLines: inReadableChats(snapshot.terminalLines),
     planSteps: inReadableChats(snapshot.planSteps),
-    commits: inReadableChats(snapshot.commits),
     browserPages: inReadableChats(snapshot.browserPages),
     usageEntries: inReadableChats(snapshot.usageEntries),
     sources: inReadableChats(snapshot.sources),
@@ -117,7 +113,7 @@ test.each([
     expect(read.chats.map((chat) => chat.name)).toEqual([...chats])
     const readableChatIds = new Set<string>(read.chats.map((chat) => chat.id))
     const chatIdsOf = (rows: readonly { chatId: string }[]) => rows.map((row) => row.chatId)
-    for (const rows of [read.messages, read.chatMembers, read.files, read.usageEntries, read.browserPages])
+    for (const rows of [read.messages, read.chatMembers, read.planSteps, read.usageEntries, read.browserPages])
       expect(chatIdsOf(rows).filter((id) => !readableChatIds.has(id))).toEqual([])
     expect(read.chatRoles.map((role) => role.id)).toEqual(['editor', 'owner', 'prompter', 'reader'])
   },

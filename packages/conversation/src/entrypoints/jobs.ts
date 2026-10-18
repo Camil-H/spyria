@@ -11,6 +11,7 @@ import type {
   SessionClassifier,
 } from '../contracts/agent.ts'
 import { type AgentEvent, agentJobTypes, isStoredAgentEvent, type TurnOutcome } from '../domain/agent-events.ts'
+import type { WorkspaceRead } from '../domain/workspace-reads.ts'
 import { type AgentLlm, createHqAgentClient } from '../integrations/hq-agent-client.ts'
 import { createRuntimeAgentRuntimes, type SandboxProvider } from '../integrations/runtime-agent-runtimes.ts'
 import { workspaceJobTypes } from '../integrations/workspace-jobs.ts'
@@ -27,6 +28,7 @@ import {
   recordToolCall,
 } from '../operations/model-calls.ts'
 import { promptAgent, startAgentSession } from '../operations/prompt-agent.ts'
+import { readWorkspace, snapshotWorkspace, wakeWorkspace } from '../operations/read-workspace.ts'
 import { recordAgentEvent } from '../operations/record-agent-event.ts'
 import { answerToolApproval } from '../operations/request-tool-approval.ts'
 import { promptWaitingChats } from '../operations/retry-agent.ts'
@@ -115,8 +117,16 @@ export const createAgentHandlers = ({
       )
       if (recorded.expiredSignIn) await runtimes.expireSignIn(chat, recorded.expiredSignIn)
       await runtimes.touch(chat)
+      if ((event.update as { sessionUpdate?: string } | undefined)?.sessionUpdate === 'turn_end')
+        void snapshotWorkspace(dependenciesOf(chat.workspaceId), chat).catch((error) =>
+          console.error(`Keeping the workspace snapshot of chat ${chat.chatId} failed: ${error}`),
+        )
       return recorded
     },
+    readWorkspace: (chat: AgentChat, member: MemberId, read: WorkspaceRead, path: string) =>
+      readWorkspace(dependenciesOf(chat.workspaceId), { chat, memberId: member, read, path }),
+    wakeWorkspace: (chat: AgentChat, member: MemberId) =>
+      wakeWorkspace(dependenciesOf(chat.workspaceId), { chat, memberId: member }),
     answerQuestion: async (chat: AgentChat, member: MemberId, questionId: string, answer: object) =>
       answerToolApproval(chat, member, questionId, answer) ??
       forwardToAgent(

@@ -85,6 +85,7 @@ const liveAfter = (
 ): LiveState => {
   const live = current.chatKey === chatKey ? current : emptyLiveOf(chatKey)
   const { reply, questions, delegated } = live
+  if ('commandOutput' in frame) return live
   if ('workspace' in frame) {
     const { sessionUpdate: _, ...workspace } = frame.workspace
     return { ...live, workspace }

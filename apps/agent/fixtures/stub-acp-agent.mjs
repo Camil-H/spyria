@@ -192,7 +192,16 @@ const piUpdate = (update) => {
     call.isStarted = true
     piSend({ type: 'tool_execution_start', toolCallId, toolName, args: piArgumentsOf(toolName, call) })
   }
-  if (!isDone) return
+  if (!isDone) {
+    if (update._meta?.terminal_output)
+      piSend({
+        type: 'tool_execution_update',
+        toolCallId,
+        toolName,
+        partialResult: { content: [{ type: 'text', text: call.output }] },
+      })
+    return
+  }
   piToolCalls.delete(toolCallId)
   const exitCode = update._meta?.terminal_exit?.exit_code
   const text =

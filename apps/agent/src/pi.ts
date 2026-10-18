@@ -1,5 +1,13 @@
 import { existsSync } from 'node:fs'
-import { AcpError, type AdapterHandlers, type AdapterLaunch, type Json, methodNotFound, spawnJsonLines } from './acp.ts'
+import {
+  AcpError,
+  type AdapterHandlers,
+  type AdapterLaunch,
+  type Json,
+  liveOutputCharacters,
+  methodNotFound,
+  spawnJsonLines,
+} from './acp.ts'
 
 type PiModel = { provider: string; id: string; name?: string }
 type PiEdit = { oldText?: string; newText?: string }
@@ -173,6 +181,13 @@ export const connectPi = (launch: AdapterLaunch, { onUpdate, onExit, onRequest }
         ...(toolName !== 'bash' && { rawInput: input }),
       })
     }
+    if (type === 'tool_execution_update' && toolName === 'bash')
+      return update({
+        sessionUpdate: 'tool_call_update',
+        toolCallId,
+        status: 'in_progress',
+        rawOutput: { formatted_output: textOf((record.partialResult ?? {}) as Json).slice(-liveOutputCharacters) },
+      })
     if (type === 'tool_execution_end') {
       const input = toolInputs.get(toolCallId) ?? {}
       toolInputs.delete(toolCallId)

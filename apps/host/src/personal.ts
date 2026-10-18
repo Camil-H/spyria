@@ -8,6 +8,7 @@ const allowedRequests = [
   new RegExp(`^(GET|DELETE) ${conversationPath}$`),
   new RegExp(`^POST ${conversationPath}/(events|interrupt|switch_acp_model|plan_mode|questions/${conversationId})$`),
   new RegExp(`^WS /sockets/events/${conversationId}(\\?after=\\d+)?$`),
+  /^GET \/api\/workspace\/(tree|file|changes)(\?[\w%=&.~+-]*)?$/,
 ]
 const tokenFormat = /sk-ant-(?:oat|ort)[\w-]*|eyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]+/g
 const claudeTokenValue = /"(?:accessToken|refreshToken)"\s*:\s*"([^"]{8,})"/g

@@ -19,6 +19,7 @@ export type WorkspaceFrame = Readonly<{
   workspace: AgentWorkspace & { sessionUpdate: 'workspace' }
   isSnapshot?: boolean
 }>
+export type CommandOutputFrame = Readonly<{ commandOutput: { stepId: string; output: string }; isSnapshot?: boolean }>
 export type StreamedReply = Readonly<{
   promptId: string
   text: string

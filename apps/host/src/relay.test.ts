@@ -80,7 +80,7 @@ const tokenServer = Bun.serve({
     server.upgrade(request)
       ? undefined
       : Response.json({
-          path: new URL(request.url).pathname,
+          path: `${new URL(request.url).pathname}${new URL(request.url).search}`,
           output: `{"accessToken":"${accessToken}","refreshToken":"${refreshToken}"} and sk-ant-ort01-OTHER_refresh-9`,
         }),
   websocket: {
@@ -114,6 +114,9 @@ test.each([
   ['GET', `/api/conversations/${conversationId}/agent_final_response`],
   ['GET', `/api/conversations/${conversationId}/questions/${conversationId}`],
   ['POST', `/api/conversations/${conversationId}/questions/../../interrupt`],
+  ['POST', '/api/workspace/tree'],
+  ['GET', '/api/workspace/../conversations'],
+  ['GET', '/api/workspace/file?path=../x/y'],
 ])('a personal host refuses %s %s', async (method, path) => {
   const { relay, nextOf } = personalRelay()
   await relay.handle({ type: 'http', sid: 1, runtimeId: 'runtime-1', method, path })
@@ -149,6 +152,9 @@ test.each([
   ['POST', `/api/conversations/${conversationId}/switch_acp_model`],
   ['POST', `/api/conversations/${conversationId}/plan_mode`],
   ['POST', `/api/conversations/${conversationId}/questions/${conversationId}`],
+  ['GET', '/api/workspace/tree?path=src%2Futil'],
+  ['GET', '/api/workspace/file?path=README.md'],
+  ['GET', '/api/workspace/changes?base=main'],
 ])('a personal host forwards %s %s', async (method, path) => {
   const { relay, nextOf } = personalRelay()
   await relay.handle({ type: 'http', sid: 3, runtimeId: 'runtime-1', method, path })

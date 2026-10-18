@@ -13,10 +13,11 @@ export {
   isAuthRequiredError,
   isStoredAgentEvent,
   streamedTextOf,
+  toolCallIdOf,
 } from './domain/agent-events.ts'
 export { awaitTaskTool, routerTools, stillRunningOf, subagentFailureOf, unknownTaskOf } from './domain/delegation.ts'
 export { genericModelCallNoticeOf, type ModelCallFailure } from './domain/model-call-failures.ts'
-export type { DelegatedFrame, QuestionFrame } from './domain/streamed-reply.ts'
+export type { CommandOutputFrame, DelegatedFrame, QuestionFrame } from './domain/streamed-reply.ts'
 export {
   guestPrompterOf,
   isGuestToolMethod,
@@ -25,6 +26,7 @@ export {
   toolCallNoticeOf,
   toolGatewayUnreachable,
 } from './domain/tool-calls.ts'
+export { isWorkspaceRead } from './domain/workspace-reads.ts'
 export type { AgentStream, ConversationCommands } from './entrypoints/commands.ts'
 export { planModeOf, questionAnswerOf } from './entrypoints/endpoints.ts'
 export { createAgentHandlers } from './entrypoints/jobs.ts'
@@ -35,6 +37,7 @@ export {
   chatPlanModePathOf,
   chatQuestionPathOf,
   chatRoutingPathOf,
+  chatWorkspacePathOf,
   commandOutputPathOf,
   createHttpChatCommands,
 } from './integrations/http-chats.ts'

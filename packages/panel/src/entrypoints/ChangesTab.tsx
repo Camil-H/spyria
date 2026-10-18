@@ -1,17 +1,27 @@
-import { useQuery } from '@hq/db/react'
 import { DiffView, focusRing } from '@hq/ui'
 import { useState } from 'react'
-import { getChanges } from '../queries/get-changes.ts'
+import { fileChangesOf } from '../domain/workspace.ts'
 import type { TabProps } from './TabProps.ts'
 import { emptyClass } from './ui.ts'
+import { useWorkspaceReading } from './useWorkspaceReading.ts'
+import { WorkspaceStatus } from './WorkspaceStatus.tsx'
 
 const ChangesTab = ({ workspaceId, chatId }: TabProps) => {
-  const changes = useQuery(getChanges(workspaceId, chatId))
+  const { reading, refresh } = useWorkspaceReading(workspaceId, chatId, 'changes')
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
-  if (changes.length === 0) return <p className={emptyClass}>No changes</p>
+  const changes = fileChangesOf(reading?.patch)
   const selectedChange = changes.find((change) => change.path === selectedPath)
   return (
     <div className="flex flex-col gap-4">
+      <WorkspaceStatus workspaceId={workspaceId} chatId={chatId} />
+      <button
+        type="button"
+        onClick={refresh}
+        className={`self-end rounded-md px-1 text-xs text-muted hover:text-ink ${focusRing}`}
+      >
+        Refresh
+      </button>
+      {reading && changes.length === 0 && <p className={emptyClass}>No changes</p>}
       <ul className="flex flex-col gap-1 text-sm">
         {changes.map((change) => (
           <li key={change.path}>
@@ -23,13 +33,14 @@ const ChangesTab = ({ workspaceId, chatId }: TabProps) => {
             >
               <span className="break-all">{change.path}</span>
               <span className="font-mono text-xs text-muted">
-                +{change.additions} −{change.deletions}
+                {change.status} +{change.additions} −{change.deletions}
               </span>
             </button>
           </li>
         ))}
       </ul>
-      {selectedChange && <DiffView lines={selectedChange.diffLines} />}
+      {reading?.truncated === true && <p className={emptyClass}>Diff truncated</p>}
+      {selectedChange && <DiffView lines={selectedChange.lines} />}
     </div>
   )
 }

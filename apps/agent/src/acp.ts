@@ -26,6 +26,7 @@ export class AcpError extends Error {
 }
 
 export const methodNotFound = -32601
+export const liveOutputCharacters = 4_000
 const permissionPreference = ['allow_always', 'allow_once']
 
 const permissionAnswerOf = (params: Json | undefined) => {

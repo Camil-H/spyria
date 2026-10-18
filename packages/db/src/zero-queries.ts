@@ -145,20 +145,8 @@ export const queries = defineQueries({
       .where(({ or, cmp, exists }) => or(cmp('userId', ctx.userId), exists('ownedChats', readableBy(ctx.userId))))
       .orderBy('position', 'asc'),
   ),
-  files: defineQuery(({ ctx }) =>
-    zql.files.where('workspaceId', ctx.workspaceId).whereExists('chat', readableBy(ctx.userId)),
-  ),
-  changes: defineQuery(({ ctx }) =>
-    zql.changes.where('workspaceId', ctx.workspaceId).whereExists('chat', readableBy(ctx.userId)),
-  ),
-  terminalLines: defineQuery(({ ctx }) =>
-    zql.terminalLines.where('workspaceId', ctx.workspaceId).whereExists('chat', readableBy(ctx.userId)),
-  ),
   planSteps: defineQuery(({ ctx }) =>
     zql.planSteps.where('workspaceId', ctx.workspaceId).whereExists('chat', readableBy(ctx.userId)),
-  ),
-  commits: defineQuery(({ ctx }) =>
-    zql.commits.where('workspaceId', ctx.workspaceId).whereExists('chat', readableBy(ctx.userId)),
   ),
   browserPages: defineQuery(({ ctx }) =>
     zql.browserPages.where('workspaceId', ctx.workspaceId).whereExists('chat', readableBy(ctx.userId)),

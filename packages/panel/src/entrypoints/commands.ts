@@ -1,10 +1,19 @@
 import type { ChatId, MemberId, WorkspaceId } from '@hq/kernel'
+import type { WorkspaceRead, WorkspaceReading } from '../domain/workspace.ts'
 
-type Command<Input> = (input: Input & { workspaceId: WorkspaceId }) => Promise<unknown>
+type Command<Input, Result = unknown> = (input: Input & { workspaceId: WorkspaceId }) => Promise<Result>
+type CommandOutput = { stepId: string; output: string }
 
 export type PanelCommands = {
   inviteMember: Command<{ chatId: ChatId; memberId: MemberId; roleId: string }>
   changeMemberRole: Command<{ chatId: ChatId; memberId: MemberId; roleId: string }>
   removeMember: Command<{ chatId: ChatId; memberId: MemberId }>
   leaveChat: Command<{ chatId: ChatId }>
+  readWorkspace: Command<{ chatId: ChatId; read: WorkspaceRead; path: string }, WorkspaceReading>
+  wakeWorkspace: Command<{ chatId: ChatId }>
+  watchCommandOutput: (
+    workspaceId: WorkspaceId,
+    chatId: ChatId,
+    listener: (output: CommandOutput) => void,
+  ) => () => void
 }

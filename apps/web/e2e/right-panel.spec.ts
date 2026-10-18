@@ -99,18 +99,8 @@ test('shows every tab of the Invoice bug runtime panel', async ({ page }) => {
     expect(toggleBox.x + toggleBox.width).toBeLessThanOrEqual(panelBox.x)
   })
 
-  await test.step('files: shows the tree and expands and collapses a folder', async () => {
-    const billingFolder = tabPanelOf(page).getByRole('button', { name: 'billing' })
-    await expect(billingFolder).toHaveAttribute('aria-expanded', 'false')
-    await expect(tabPanelOf(page).getByText('tests', { exact: true })).toBeVisible()
-    await expect(tabPanelOf(page).getByText('package.json')).toBeVisible()
-    await expect(tabPanelOf(page).getByText('tax.ts')).toBeHidden()
-    await billingFolder.click()
-    await expect(billingFolder).toHaveAttribute('aria-expanded', 'true')
-    await expect(tabPanelOf(page).getByText('invoice.ts', { exact: true })).toBeVisible()
-    await expect(tabPanelOf(page).getByText('tax.ts')).toBeVisible()
-    await billingFolder.click()
-    await expect(tabPanelOf(page).getByText('tax.ts')).toBeHidden()
+  await test.step('files: shows no files for a chat without a workspace', async () => {
+    await expect(tabPanelOf(page)).toContainText('No files')
   })
 
   await test.step('explains each tab in a tooltip on hover', async () => {
@@ -136,45 +126,11 @@ test('shows every tab of the Invoice bug runtime panel', async ({ page }) => {
     await expect(steps.nth(2)).toContainText('To do')
   })
 
-  await test.step('changes: lists the changed files with their counts', async () => {
-    await openPanelTab(page, 'Invoice bug', 'Changes')
-    const taxChange = tabPanelOf(page).getByRole('button', { name: /billing\/tax\.ts/ })
-    await expect(taxChange).toContainText('+3')
-    await expect(taxChange).toContainText(/[−-]5/)
-    const testChange = tabPanelOf(page).getByRole('button', { name: /tests\/invoice\.test\.ts/ })
-    await expect(testChange).toContainText('+12')
-    await expect(testChange).toContainText(/[−-]0/)
-  })
-
-  await test.step('changes: shows the diff of the selected file', async () => {
-    await tabPanelOf(page)
-      .getByRole('button', { name: /billing\/tax\.ts/ })
-      .click()
-    const diffOf = tabPanelOf(page).getByRole('region', { name: 'Diff' })
-    await expect(diffOf).toContainText('const total = applyTax(applyTax(net))')
-    await expect(diffOf).toContainText('const total = applyTax(net)')
-    const diffText = (await diffOf.textContent()) ?? ''
-    expect(diffText.indexOf('applyTax(applyTax(net))')).toBeLessThan(
-      diffText.lastIndexOf('const total = applyTax(net)'),
-    )
-  })
-
-  await test.step('terminal: shows the output without any input', async () => {
+  await test.step('terminal: shows the stored command steps without any input', async () => {
     await openPanelTab(page, 'Invoice bug', 'Terminal')
-    await expect(tabPanelOf(page)).toContainText('$ bun test')
-    await expect(tabPanelOf(page)).toContainText('3 pass')
-    await expect(tabPanelOf(page)).toContainText('0 fail')
+    await expect(tabPanelOf(page)).toContainText('$ Read: billing/invoice.ts')
+    await expect(tabPanelOf(page)).toContainText('export const total = ...')
     await expect(panelOf(page).getByRole('textbox')).toHaveCount(0)
-  })
-
-  await test.step('commits: lists the commit with its author and time', async () => {
-    await openPanelTab(page, 'Invoice bug', 'Commits')
-    const commits = tabPanelOf(page).getByRole('listitem')
-    await expect(commits).toHaveCount(1)
-    await expect(commits.nth(0)).toContainText('a1b2c3d')
-    await expect(commits.nth(0)).toContainText('Fix tax applied twice')
-    await expect(commits.nth(0)).toContainText('Alice')
-    await expect(commits.nth(0)).toContainText('11:20')
   })
 
   await test.step('usage: shows one row per member and a total on a runtime chat', async () => {
@@ -262,7 +218,7 @@ test('shows the empty states and the panel of another owner', async ({ page }) =
 
   await test.step('shows the empty state of each runtime tab without data', async () => {
     await openChat(page, 'Research')
-    await expect(tabPanelOf(page)).toContainText('No files')
+    await expect(tabOf(page, 'Files')).toHaveAttribute('aria-selected', 'true')
     for (const [tabName, emptyText] of [
       ['Changes', 'No changes'],
       ['Terminal', 'No terminal output'],

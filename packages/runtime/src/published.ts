@@ -11,8 +11,10 @@ export {
   forgetAgentConversation,
   isRuntimeWaitingOnHost,
   issueAgentLlmToken,
+  keepWorkspaceSnapshot,
   listHostChats,
   readAgentAccess,
+  readWorkspaceSnapshot,
   rememberAgentConversation,
 } from './operations/agent-access.ts'
 export { ensureRuntimeRunning, type RuntimePlacement, retryRuntime } from './operations/ensure-runtime-running.ts'

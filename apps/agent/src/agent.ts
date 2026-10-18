@@ -1,8 +1,16 @@
 import { timingSafeEqual } from 'node:crypto'
 import type { ServerWebSocket } from 'bun'
-import { AcpError, type AdapterConnection, type AdapterRequest, connectAdapter, type Json } from './acp.ts'
-import { checkOut, type Repository } from './checkout.ts'
+import {
+  AcpError,
+  type AdapterConnection,
+  type AdapterRequest,
+  connectAdapter,
+  type Json,
+  liveOutputCharacters,
+} from './acp.ts'
+import { checkOut, lastLinesOf, type Repository, runSetup, setupCommand } from './checkout.ts'
 import { connectPi } from './pi.ts'
+import { changesOf, fileOf, treeOf } from './workspace.ts'
 
 type Status = 'starting' | 'idle' | 'running' | 'finished' | 'error'
 type AgentEvent = { id: string; seq: number; timestamp: string; completed: boolean; update: Json }
@@ -65,7 +73,6 @@ type Launch = {
 }
 
 const inheritedEnvironment = ['PATH', 'HOME', 'LANG', 'TMPDIR', 'CLAUDE_CODE_EXECUTABLE', 'CODEX_PATH']
-const defaultWorkingDirectory = '/workspace/project'
 const permissiveModes = ['bypassPermissions', 'agent-full-access']
 const planMode = 'plan'
 const collaborationMode = 'collaboration_mode'
@@ -80,6 +87,8 @@ const terminalToolStatuses = ['completed', 'failed']
 const conversationRoute =
   /^\/api\/conversations\/([\w-]+)(?:\/(events|interrupt|switch_acp_model|plan_mode)|\/questions\/([\w-]+))?$/
 const socketRoute = /^\/sockets\/events\/([\w-]+)$/
+const workspaceRoute = /^\/api\/workspace\/(tree|file|changes)$/
+const setupToolCallId = 'hq-setup'
 const conversationIdPattern = /^[\w-]{1,64}$/
 
 const adapterEnvironmentOf = (secrets: Launch['secrets']) => ({
@@ -177,12 +186,14 @@ export const startAgent = ({
   bufferSize = 10_000,
   authTimeoutMilliseconds = 5_000,
   requestTimeoutMilliseconds = 60_000,
+  workspaceDirectory = '/workspace/project',
 }: {
   apiKey: string
   port: number
   bufferSize?: number
   authTimeoutMilliseconds?: number
   requestTimeoutMilliseconds?: number
+  workspaceDirectory?: string
 }) => {
   const conversations = new Map<string, Conversation>()
   const checkouts = new Map<string, ReturnType<typeof checkOut>>()
@@ -407,6 +418,40 @@ export const startAgent = ({
     conversation.status = 'idle'
   }
 
+  const setUp = async (conversation: Conversation) => {
+    const call = { toolCallId: setupToolCallId, title: setupCommand, kind: 'execute' }
+    emit(conversation, { sessionUpdate: 'tool_call', ...call, status: 'in_progress' })
+    const { exitCode, output } = await runSetup(conversation.cwd, adapterEnvironmentOf({}), (soFar) =>
+      emit(conversation, {
+        sessionUpdate: 'tool_call_update',
+        toolCallId: setupToolCallId,
+        status: 'in_progress',
+        rawOutput: { formatted_output: soFar.slice(-liveOutputCharacters) },
+      }),
+    )
+    emit(
+      conversation,
+      {
+        sessionUpdate: 'tool_call_update',
+        ...call,
+        status: exitCode === 0 ? 'completed' : 'failed',
+        rawOutput: { formatted_output: output, exit_code: exitCode },
+      },
+      true,
+    )
+    if (exitCode !== 0) emit(conversation, { sessionUpdate: 'setup_failed', exitCode, output: lastLinesOf(output) })
+  }
+
+  const readWorkspace = async (read: string, parameters: URLSearchParams) => {
+    const environment = adapterEnvironmentOf({})
+    const path = parameters.get('path') ?? ''
+    if (read === 'tree') return Response.json(await treeOf(workspaceDirectory, path, environment))
+    if (read === 'changes')
+      return Response.json(await changesOf(workspaceDirectory, parameters.get('base') ?? '', environment))
+    const file = await fileOf(workspaceDirectory, path)
+    return file ? Response.json(file) : Response.json({ error: 'Not found' }, { status: 404 })
+  }
+
   const checkedOut = (id: string, cwd: string, repository: Repository) => {
     const checkout = checkouts.get(id) ?? checkOut(cwd, repository, adapterEnvironmentOf({}))
     checkouts.set(id, checkout)
@@ -425,8 +470,8 @@ export const startAgent = ({
       return Response.json({ id: known.id, ...summaryOf(known) })
     }
     const id = launch.id ?? crypto.randomUUID()
-    const cwd = launch.workspace?.working_dir ?? defaultWorkingDirectory
-    const { failure, setupFailed } =
+    const cwd = launch.workspace?.working_dir ?? workspaceDirectory
+    const { failure, hasSetup } =
       launch.repository && !launch.parent_conversation_id ? await checkedOut(id, cwd, launch.repository) : {}
     const raced = conversations.get(id)
     if (raced) {
@@ -466,12 +511,12 @@ export const startAgent = ({
       ),
     }
     conversations.set(id, conversation)
-    if (setupFailed) emit(conversation, { sessionUpdate: 'setup_failed', ...setupFailed })
     conversation.started = start(conversation, launch).catch((error) => {
       fail(conversation, error)
       conversation.connection.close()
     })
     await conversation.started
+    if (hasSetup && conversation.status !== 'error') void setUp(conversation)
     return Response.json({ id, ...summaryOf(conversation) }, { status: 201 })
   }
 
@@ -524,8 +569,10 @@ export const startAgent = ({
     return Response.json({})
   }
 
-  const route = async (method: string, pathname: string, request: Request) => {
+  const route = async (method: string, { pathname, searchParams }: URL, request: Request) => {
     if (method === 'POST' && pathname === '/api/conversations') return create(await request.json())
+    const [, read] = workspaceRoute.exec(pathname) ?? []
+    if (read && method === 'GET') return readWorkspace(read, searchParams)
     const [, conversationId = '', action, questionId] = conversationRoute.exec(pathname) ?? []
     const conversation = conversations.get(conversationId)
     if (!conversation) return Response.json({ error: 'Not found' }, { status: 404 })
@@ -583,7 +630,7 @@ export const startAgent = ({
       }
       if (!isApiKey(request.headers.get('x-session-api-key')))
         return Response.json({ error: 'Unauthorized' }, { status: 401 })
-      return route(request.method, pathname, request).catch((error) =>
+      return route(request.method, new URL(request.url), request).catch((error) =>
         Response.json({ error: errorUpdateOf(error).message }, { status: 502 }),
       )
     },

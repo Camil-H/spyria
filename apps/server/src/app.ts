@@ -3,11 +3,13 @@ import {
   chatPlanModePathOf,
   chatQuestionPathOf,
   chatRoutingPathOf,
+  chatWorkspacePathOf,
   commandOutputPathOf,
   conversationMutators,
   createGatewaySessionClassifier,
   getChatRouting,
   getCommandOutput,
+  isWorkspaceRead,
   planModeOf,
   questionAnswerOf,
 } from '@hq/conversation/server'
@@ -329,6 +331,28 @@ export const createApp = ({
         .forDatabase(context.get('database'))
         .setPlanMode({ workspaceId, chatId: chatId(context.req.param('chatId') ?? '') }, userId, planMode.enabled)
       return new Response(null, { status })
+    })
+    .get(chatWorkspacePathOf(':chatId', ':read'), async (context) => {
+      const read = context.req.param('read') ?? ''
+      if (!isWorkspaceRead(read)) return context.json({ error: 'invalid_read' }, 400)
+      const { workspaceId, userId } = context.get('zeroContext')
+      return context.json(
+        await agentBridge
+          .forDatabase(context.get('database'))
+          .readWorkspace(
+            { workspaceId, chatId: chatId(context.req.param('chatId') ?? '') },
+            userId,
+            read,
+            context.req.query('path') ?? '',
+          ),
+      )
+    })
+    .post(chatWorkspacePathOf(':chatId', 'wake'), async (context) => {
+      const { workspaceId, userId } = context.get('zeroContext')
+      await agentBridge
+        .forDatabase(context.get('database'))
+        .wakeWorkspace({ workspaceId, chatId: chatId(context.req.param('chatId') ?? '') }, userId)
+      return new Response(null, { status: 204 })
     })
     .post(llmCredentialsPath, async (context) => {
       const body = await context.req.json().catch(() => null)

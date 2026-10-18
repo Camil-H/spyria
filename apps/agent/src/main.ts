@@ -6,7 +6,11 @@ if (!apiKey) {
   console.error('hq-agent needs OH_SESSION_API_KEYS_0')
   process.exit(2)
 }
-const agent = startAgent({ apiKey, port: Number(process.env.PORT ?? 8000) })
+const agent = startAgent({
+  apiKey,
+  port: Number(process.env.PORT ?? 8000),
+  workspaceDirectory: process.env.HQ_WORKSPACE_DIR,
+})
 console.log(`hq-agent listening on port ${agent.port}`)
 for (const signal of ['SIGTERM', 'SIGINT'] as const)
   process.on(signal, async () => {

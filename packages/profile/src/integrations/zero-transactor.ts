@@ -1,5 +1,6 @@
 import {
   appendWorkspaceEvent,
+  deleteGitHubConnection,
   enqueueJob,
   gatewayKeyRefOf,
   gatewayKeyRefsOf,
@@ -117,6 +118,7 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
           zql.toolConnections.where('workspaceId', workspaceId).where('userId', memberId),
         ))
           await tx.mutate.toolConnections.delete({ ...owner, tool })
+        await deleteGitHubConnection(tx, workspaceId, memberId)
       },
       statusOf: async (workspaceId, memberId, tool) =>
         (

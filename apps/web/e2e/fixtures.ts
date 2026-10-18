@@ -326,3 +326,33 @@ export const lastToolResultOf = async (page: Page) => {
     .filter({ has: page.getByRole('button', { name: toolStep, expanded: true }) })
     .last()
 }
+
+export const githubSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'GitHub' })
+export const newChatDialogOf = (page: Page) => page.getByRole('dialog', { name: 'New chat' })
+export const configureGitHubApp = async (page: Page) => {
+  const app = (await (await fetch(`${serverUrl}/test/github-app`)).json()) as Record<string, string>
+  await openSettings(page)
+  const section = githubSectionOf(page)
+  await section.getByLabel('App id').fill(app.appId ?? '')
+  await section.getByLabel('Client id').fill(app.clientId ?? '')
+  await section.getByLabel('Private key').fill(app.privateKey ?? '')
+  await section.getByLabel('Client secret').fill(app.clientSecret ?? '')
+  await section.getByLabel('Webhook secret').fill('e2e-webhook-secret')
+  await section.getByRole('button', { name: 'Save' }).click()
+  await expect(section.getByText('Saved')).toBeVisible()
+  return app
+}
+
+export const newDevChat = async (page: Page, name: string, repository: string) => {
+  await page.getByRole('button', { name: 'New chat' }).click()
+  const dialog = newChatDialogOf(page)
+  await dialog.getByRole('radio', { name: 'Runtime' }).check()
+  await dialog.getByRole('radio', { name: 'Dev', exact: true }).check()
+  await dialog.getByLabel('Repository').selectOption(repository)
+  await expect(dialog.getByLabel('Base branch')).toHaveValue('main')
+  await dialog.getByRole('textbox', { name: 'Chat name' }).fill(name)
+  await dialog.getByRole('button', { name: 'Confirm' }).click()
+  await expect(mainOf(page).getByRole('heading', { level: 1, name })).toBeVisible()
+  await chooseRunsOn(page, 'HQ runtime')
+  return page.url().split('/').at(-1) ?? ''
+}

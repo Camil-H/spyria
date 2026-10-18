@@ -21,6 +21,7 @@ export const fakeGitHubRepositories: Repository[] = [
       'README.md': '# acme app\n',
       'AGENTS.md': 'Run the tests before committing.\n',
       'only-in-acme-app.txt': 'This file only exists in acme/app.\n',
+      'src/app.ts': 'export const total = 1\n',
     },
   },
   {
@@ -28,7 +29,8 @@ export const fakeGitHubRepositories: Repository[] = [
     branches: ['main'],
     files: {
       'README.md': '# acme docs\n',
-      '.hq/setup.sh': 'echo "installing the docs toolchain"\necho "docs-tool: command not found" >&2\nexit 127\n',
+      '.hq/setup.sh':
+        'echo "installing the docs toolchain"\nsleep 3\necho "docs-tool: command not found" >&2\nexit 127\n',
     },
   },
 ]

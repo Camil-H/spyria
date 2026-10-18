@@ -8,6 +8,7 @@ import {
 } from '@hq/conversation/server'
 import { createZeroStore, type Store, type WorkspaceSession } from '@hq/db/zero-store'
 import { type ChatId, type MemberId, type WorkspaceId, workspaceId } from '@hq/kernel'
+import type { PanelCommands } from '@hq/panel'
 import {
   createHttpGitHubConnection,
   createHttpLlmCredentialAdder,
@@ -41,6 +42,7 @@ export type Application = {
   workspaceCommands: WorkspaceCommands
   conversationCommands: ConversationCommands
   agentStream: AgentStream
+  panelCommands: PanelCommands
   profileCommands: ProfileCommands
   runtimeCommands: RuntimeCommands
 }
@@ -161,6 +163,20 @@ export const createApp = async (
         resolve()
       }
     })
+  const conversationCommands = commandsOf<ConversationCommands>(conversationMutators.conversation, {
+    saveDraft: (input) => saveDraft({ drafts }, { ...input, memberId }),
+    ...createHttpChatCommands(postAsMember, fetchAsMember),
+    connectTool: toolConnections.connectTool,
+    startRuntimeFromMessage: mutateIntoNewChat(conversationMutators.conversation.startRuntimeFromMessage),
+    forkChat: mutateIntoNewChat(conversationMutators.conversation.forkChat),
+    inviteMember: mutateConfirmed(conversationMutators.conversation.inviteMember),
+    changeMemberRole: mutateConfirmed(conversationMutators.conversation.changeMemberRole),
+    removeMember: mutateConfirmed(conversationMutators.conversation.removeMember),
+    joinChannel: mutateConfirmed(conversationMutators.conversation.joinChannel),
+    leaveChat: mutateConfirmed(conversationMutators.conversation.leaveChat),
+    retryAgent: mutateConfirmed(conversationMutators.conversation.retryAgent),
+  })
+  const agentStream = createAgentStream(store)
   return {
     store,
     session: {
@@ -204,20 +220,15 @@ export const createApp = async (
       joinChannel: mutateConfirmed(conversationMutators.conversation.joinChannel),
       leaveChat: mutateConfirmed(conversationMutators.conversation.leaveChat),
     }),
-    conversationCommands: commandsOf<ConversationCommands>(conversationMutators.conversation, {
-      saveDraft: (input) => saveDraft({ drafts }, { ...input, memberId }),
-      ...createHttpChatCommands(postAsMember, fetchAsMember),
-      connectTool: toolConnections.connectTool,
-      startRuntimeFromMessage: mutateIntoNewChat(conversationMutators.conversation.startRuntimeFromMessage),
-      forkChat: mutateIntoNewChat(conversationMutators.conversation.forkChat),
-      inviteMember: mutateConfirmed(conversationMutators.conversation.inviteMember),
-      changeMemberRole: mutateConfirmed(conversationMutators.conversation.changeMemberRole),
-      removeMember: mutateConfirmed(conversationMutators.conversation.removeMember),
-      joinChannel: mutateConfirmed(conversationMutators.conversation.joinChannel),
-      leaveChat: mutateConfirmed(conversationMutators.conversation.leaveChat),
-      retryAgent: mutateConfirmed(conversationMutators.conversation.retryAgent),
-    }),
-    agentStream: createAgentStream(store),
+    conversationCommands,
+    agentStream,
+    panelCommands: {
+      ...conversationCommands,
+      watchCommandOutput: (workspaceId, chatId, listener) =>
+        agentStream.subscribe(workspaceId, chatId, (frame) => {
+          if ('commandOutput' in frame) listener(frame.commandOutput)
+        }),
+    },
     profileCommands: commandsOf<ProfileCommands>(profileMutators.profile, {
       addLlmCredential: createHttpLlmCredentialAdder(postAsMember),
       ...toolConnections,

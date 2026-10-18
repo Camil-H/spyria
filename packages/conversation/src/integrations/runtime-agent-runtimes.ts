@@ -7,9 +7,11 @@ import {
   forgetAgentConversation,
   isRuntimeWaitingOnHost,
   issueAgentLlmToken,
+  keepWorkspaceSnapshot,
   listHostChats,
   type RuntimePlacement,
   readAgentAccess,
+  readWorkspaceSnapshot,
   rememberAgentConversation,
   retryRuntime,
   type SandboxProvider,
@@ -62,6 +64,9 @@ export const createRuntimeAgentRuntimes = (
     chatsOnHost: (host) => inTransaction((dependencies) => listHostChats(dependencies, host)),
     touch: (chat) => inTransaction((dependencies) => touchRuntime(dependencies, { ...chat, now: Date.now() })),
     expireSignIn: (chat, tool) => inTransaction((dependencies) => expireSignIn(dependencies, { ...chat, tool })),
+    snapshotOf: (chat) => inTransaction((dependencies) => readWorkspaceSnapshot(dependencies, chat)),
+    keepSnapshot: (chat, snapshot) =>
+      inTransaction((dependencies) => keepWorkspaceSnapshot(dependencies, { ...chat, snapshot })),
   }
 }
 

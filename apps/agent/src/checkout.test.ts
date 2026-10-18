@@ -2,12 +2,14 @@ import { afterAll, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createAgentTestbed, kindOf } from './testing.ts'
+import { type AgentEvent, createAgentTestbed, kindOf } from './testing.ts'
 
 const { stubCommand, launchOf, started } = createAgentTestbed()
 const directory = mkdtempSync(join(tmpdir(), 'hq-agent-checkout-'))
 afterAll(() => rmSync(directory, { recursive: true, force: true }))
 const token = 'ghs_installation_token_never_kept'
+const isSetup = (event: AgentEvent) => event.update.toolCallId === 'hq-setup'
+const setupEnded = (event: AgentEvent) => isSetup(event) && event.completed
 
 const git = (cwd: string, ...command: string[]) => {
   const result = Bun.spawnSync(['git', '-c', 'init.defaultBranch=main', ...command], { cwd, stderr: 'pipe' })
@@ -44,7 +46,7 @@ const launchIn = (name: string, url: string, extra: object = {}) => {
   }
 }
 
-test('a launch with a repository clones it, checks out the working branch and runs the setup script before the agent starts; the token stays out of the agent and the repository config', async () => {
+test('a launch with a repository clones it, checks out the working branch and runs the setup script once the agent started, as a command step; the token stays out of the agent and the repository config', async () => {
   const url = bareRepository('app', {
     'AGENTS.md': 'Rules',
     'src/AGENTS.md': 'Nested rules',
@@ -60,6 +62,17 @@ test('a launch with a repository clones it, checks out the working branch and ru
     cwd: workingDirectory,
     branch: 'hq/fix-totals-1a2b3c',
   })
+  await socket.until(setupEnded)
+  const setupEvents = socket.events.filter(isSetup).map(({ update }) => update)
+  expect(socket.events.findIndex(isSetup)).toBeGreaterThan(socket.events.findIndex(kindOf('session_started')))
+  expect(setupEvents.at(0)).toEqual({
+    sessionUpdate: 'tool_call',
+    toolCallId: 'hq-setup',
+    title: 'sh .hq/setup.sh',
+    kind: 'execute',
+    status: 'in_progress',
+  })
+  expect(setupEvents.at(-1)).toMatchObject({ status: 'completed', rawOutput: { exit_code: 0 } })
   expect(socket.events.some(kindOf('setup_failed'))).toBe(false)
   for (const file of ['AGENTS.md', 'src/AGENTS.md', 'prepared.txt'])
     expect(existsSync(join(workingDirectory, file))).toBe(true)
@@ -72,6 +85,9 @@ test('a launch with a repository clones it, checks out the working branch and ru
   const resumed = await create({ ...launch, id: 'resumed' })
   expect((await call('GET', `/api/conversations/${resumed}`)).body).toMatchObject({ execution_status: 'idle' })
   expect(readFileSync(join(workingDirectory, 'kept.txt'), 'utf8')).toBe('work in progress')
+  const resumedSocket = open(resumed)
+  await resumedSocket.until(kindOf('workspace'))
+  expect(resumedSocket.events.some(isSetup)).toBe(false)
 })
 
 test('a failing setup script shows its exit code and last output lines and the session still starts; a clone failure fails the launch', async () => {
@@ -80,7 +96,11 @@ test('a failing setup script shows its exit code and last output lines and the s
   const { call, open, create } = started()
   const id = await create(launchIn('broken', url).launch)
   const socket = open(id)
-  await socket.until(kindOf('workspace'))
+  await socket.until(kindOf('setup_failed'))
+  expect(socket.events.filter(isSetup).at(-1)?.update).toMatchObject({
+    status: 'failed',
+    rawOutput: { exit_code: 3, formatted_output: expect.stringContaining('line 1\n') },
+  })
   const setupFailed = socket.events.find(kindOf('setup_failed'))
   expect(setupFailed?.completed).toBe(true)
   expect(setupFailed?.update).toEqual({
@@ -97,4 +117,20 @@ test('a failing setup script shows its exit code and last output lines and the s
   expect(missing.status).toBe(201)
   expect(missing.body).toMatchObject({ execution_status: 'error' })
   expect(String(missing.body.error)).toStartWith('The repository could not be cloned: ')
+})
+
+test('a slow setup script does not hold the launch: the session starts at once and the output streams as live updates', async () => {
+  const url = bareRepository('slow', { '.hq/setup.sh': 'echo installing\nsleep 1\necho installed\n' })
+  const { call, open, create } = started()
+  const startedAt = Date.now()
+  const id = await create(launchIn('slow', url).launch)
+  expect(Date.now() - startedAt).toBeLessThan(1000)
+  expect((await call('GET', `/api/conversations/${id}`)).body).toMatchObject({ execution_status: 'idle' })
+  const socket = open(id)
+  await socket.until(setupEnded)
+  const updates = socket.events.filter(isSetup)
+  expect(updates.find((event) => !event.completed && event.update.rawOutput)?.update.rawOutput).toEqual({
+    formatted_output: 'installing\n',
+  })
+  expect(updates.at(-1)?.update.rawOutput).toEqual({ formatted_output: 'installing\ninstalled\n', exit_code: 0 })
 })
