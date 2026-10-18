@@ -26,6 +26,8 @@ import {
   toolConnectionsPath,
   toolConsentCallbackPath,
   toolConsentPageFromRequest,
+  workspaceConnectionFromRequest,
+  workspaceConnectionsPath,
 } from '@hq/profile/server'
 import {
   addRuntimeHostFromRequest,
@@ -39,7 +41,7 @@ import { domainVerificationPath, type SsoSettingsInput, ssoSettingsPath, workspa
 import { getMutator, mustGetMutator, mustGetQuery } from '@rocicorp/zero'
 import { handleMutateRequest, handleQueryRequest } from '@rocicorp/zero/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
-import { Hono } from 'hono'
+import { type Context, Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import { type AgentBridge, createAgentBridge } from './agent-bridge/bridge.ts'
 import { createSmtpMailer } from './auth/mail.ts'
@@ -60,6 +62,8 @@ const readRevokingMutations = new Set([
   'workspace.changeVisibility',
 ])
 type LlmGateway = ReturnType<typeof createLlmGateway>
+type ApiEnvironment = { Variables: { zeroContext: ZeroContext; transact: Transact; database: Database } }
+type ApiContext = Context<ApiEnvironment>
 
 export const sessionClassifierOf =
   (
@@ -156,9 +160,20 @@ export const createApp = ({
     if (!llmGateway) throw new Error('No LLM gateway is configured')
     return llmGateway
   }
-  const app = new Hono<{
-    Variables: { zeroContext: ZeroContext; transact: Transact; database: Database }
-  }>()
+  const workspaceConnectionResponse = async (context: ApiContext, action: string, connectionId: string) => {
+    const body = await context.req.json().catch(() => null)
+    return endpointResponse('A workspace connection request', action === 'add' ? 201 : 200, () =>
+      workspaceConnectionFromRequest(
+        context.get('transact'),
+        context.get('zeroContext'),
+        gatewayOf(),
+        action,
+        connectionId,
+        body,
+      ),
+    )
+  }
+  const app = new Hono<ApiEnvironment>()
     .onError((error, context) => {
       if (error instanceof MissingChatPermission)
         return context.json({ error: error.code, message: error.message }, 403)
@@ -291,6 +306,10 @@ export const createApp = ({
         ),
       )
     })
+    .post(workspaceConnectionsPath, (context) => workspaceConnectionResponse(context, 'add', ''))
+    .post(`${workspaceConnectionsPath}/:connectionId/:action{edit|remove|tools|restrict}`, (context) =>
+      workspaceConnectionResponse(context, context.req.param('action'), context.req.param('connectionId')),
+    )
     .get(ssoSettingsPath, (context) =>
       endpointResponse('Reading the SSO settings', 200, async () => ({
         settings: await readSsoSettings(context.get('database'), context.get('zeroContext')),

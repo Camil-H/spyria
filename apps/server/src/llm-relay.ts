@@ -217,8 +217,7 @@ export const createModelCallRelay = ({
         if (!virtualKey && isToolCall)
           return toolError(virtualKey === null ? toolGatewayUnreachable : noticeOf('needs_connection'))
         if (!virtualKey) return answer(virtualKey === null ? 502 : 401, unreachable)
-        if (rpc?.method === 'initialize')
-          await tools.grantAvailableTools(host.workspaceId, ownerId).catch(() => undefined)
+        if (rpc?.method === 'initialize') await tools.grantMemberTools(host.workspaceId, ownerId).catch(() => undefined)
         const callHeaders = {
           ...picked(headers, toolHeaders),
           authorization: `Bearer ${virtualKey}`,
@@ -232,7 +231,7 @@ export const createModelCallRelay = ({
           const { refusal, ...authorization } = await handlers.authorizeToolCall(
             { turn, toolName, toolArguments: rpc?.params?.arguments, signal },
             {
-              guestAccessOf: (guestId) => tools.guestToolAccess(host.workspaceId, ownerId, guestId, toolName),
+              accessOf: (prompter) => tools.toolCallAccess(host.workspaceId, ownerId, prompter, toolName),
               isReadOnly: () => isReadOnly(callHeaders, toolName),
             },
           )

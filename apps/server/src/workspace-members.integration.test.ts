@@ -133,7 +133,8 @@ test('removing a member ends their sessions, participations, keys and connection
   await database.$client`
     insert into tool_connections (workspace_id, user_id, tool, status, position) values (${acme}, ${bob}, 'fake', 'connected', 1)`
   await database.$client`
-    insert into workspace_connections (workspace_id, user_id, tool, access, position) values (${acme}, ${bob}, 'fake', 'read', 1)`
+    insert into connection_restrictions (workspace_id, connection_id, user_id, allowed_tools)
+    values (${acme}, 'connection-crm', ${bob}, '["lookup"]')`
   const alicesChat = await newChat({
     type: 'channel',
     visibility: 'private',
@@ -170,7 +171,7 @@ test('removing a member ends their sessions, participations, keys and connection
     actor: alice,
     payload: { memberId: bob },
   })
-  for (const table of ['llm_credentials', 'tool_connections', 'workspace_connections'])
+  for (const table of ['llm_credentials', 'tool_connections', 'connection_restrictions'])
     expect(await database.$client`select 1 from ${database.$client(table)} where user_id = ${bob}`).toHaveLength(0)
   await waitFor(
     async () => (await database.$client`select 1 from member_gateway_keys where user_id = ${bob}`).length === 0,

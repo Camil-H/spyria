@@ -25,6 +25,7 @@ const sharedTools = [
 ]
 const sharedUser = 'shared'
 export const sharedToolServer = 'crm'
+export const sharedSecretHeader = 'x-crm-key'
 
 export const createFakeMcp = () => {
   const clients = new Map<string, { secret: string; redirectUris: string[] }>()
@@ -38,7 +39,7 @@ export const createFakeMcp = () => {
   }
   const mcp = async (request: Request, base: string, isShared = false) => {
     const user = isShared
-      ? sharedUser
+      ? (request.headers.get(sharedSecretHeader) ?? sharedUser)
       : tokens.get(request.headers.get('authorization')?.replace(/^Bearer /i, '') ?? '')?.user
     if (!user)
       return Response.json(

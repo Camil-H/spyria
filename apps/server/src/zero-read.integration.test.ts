@@ -18,8 +18,9 @@ import {
 } from './testing/testing.ts'
 
 const { database } = await openSharedTestApp()
+await database.$client`delete from workspace_connections`
 
-const collectionsInStoredOrder = ['messages', 'terminalLines', 'planSteps', 'workspaceConnections', 'toolConnections']
+const collectionsInStoredOrder = ['messages', 'terminalLines', 'planSteps', 'toolConnections']
 
 const visibleTo = (snapshot: Snapshot, viewerId: MemberId, workspaceIds: readonly WorkspaceId[]): Snapshot => {
   const inWorkspaces = <Row extends { workspaceId: WorkspaceId }>(rows: readonly Row[]) =>
@@ -63,7 +64,7 @@ const visibleTo = (snapshot: Snapshot, viewerId: MemberId, workspaceIds: readonl
     readMarkers: inReadableChats(ownedByViewer(snapshot.readMarkers)),
     threadReadMarkers: inReadableChats(ownedByViewer(snapshot.threadReadMarkers)),
     llmCredentials: ownedByViewer(snapshot.llmCredentials),
-    workspaceConnections: ownedByViewerOrReadableChatOwner(snapshot.workspaceConnections),
+    workspaceConnections: inWorkspaces(snapshot.workspaceConnections),
     toolConnections: ownedByViewerOrReadableChatOwner(snapshot.toolConnections),
   }
 }

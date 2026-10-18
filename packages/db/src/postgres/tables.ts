@@ -364,17 +364,39 @@ export const memberGatewayKeys = table(
   (table) => [primaryKey({ columns: [table.workspaceId, table.userId] }), memberReference(table, table.userId)],
 )
 
+export type ConnectionTool = { name: string; readOnly: boolean }
+
 export const workspaceConnections = table(
   'workspace_connections',
   {
+    workspaceId: text()
+      .notNull()
+      .references(() => workspaces.workspaceId),
+    id: text().notNull(),
+    name: text().notNull(),
+    gatewayName: text().notNull().unique(),
+    url: text().notNull(),
+    headerName: text(),
+    tools: jsonb().$type<ConnectionTool[]>().notNull(),
+    allowedTools: jsonb().$type<string[]>().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.workspaceId, table.id] })],
+)
+
+export const connectionRestrictions = table(
+  'connection_restrictions',
+  {
     ...tenant,
+    connectionId: text().notNull(),
     userId: text().notNull(),
-    tool: text().notNull(),
-    access: text().notNull(),
-    position: integer().notNull(),
+    allowedTools: jsonb().$type<string[]>().notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.workspaceId, table.userId, table.tool] }),
+    primaryKey({ columns: [table.workspaceId, table.connectionId, table.userId] }),
+    tenantReference(
+      [table.workspaceId, table.connectionId],
+      [workspaceConnections.workspaceId, workspaceConnections.id],
+    ).onDelete('cascade'),
     memberReference(table, table.userId),
   ],
 )
@@ -655,6 +677,7 @@ export const relations = defineRelations(
     threadReadMarkers,
     runtimeOrigins,
     workspaceConnections,
+    connectionRestrictions,
     toolConnections,
     files,
     changes,
@@ -683,10 +706,14 @@ export const relations = defineRelations(
       runtimeHosts: {
         memberships: r.many.memberships({ from: r.runtimeHosts.workspaceId, to: r.memberships.workspaceId }),
       },
-      workspaceConnections: {
+      connectionRestrictions: {
         ownedChats: r.many.chats({
-          from: [r.workspaceConnections.workspaceId, r.workspaceConnections.userId],
+          from: [r.connectionRestrictions.workspaceId, r.connectionRestrictions.userId],
           to: [r.chats.workspaceId, r.chats.ownerUserId],
+        }),
+        memberships: r.many.memberships({
+          from: r.connectionRestrictions.workspaceId,
+          to: r.memberships.workspaceId,
         }),
       },
       toolConnections: {

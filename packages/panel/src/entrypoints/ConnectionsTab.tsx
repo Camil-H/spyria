@@ -24,7 +24,11 @@ const ConnectionsTab = ({ workspaceId, chatId }: TabProps) => {
       <ConnectionGroup
         title="Workspace"
         emptyMessage="No workspace connections"
-        rows={connections.workspace.map(({ tool, access }) => ({ key: tool, label: tool, value: access }))}
+        rows={connections.workspace.map(({ id, name, tools }) => ({
+          key: id,
+          label: name,
+          value: tools.length > 0 ? tools.join(', ') : 'No tools',
+        }))}
       />
       <ConnectionGroup
         title="Personal"

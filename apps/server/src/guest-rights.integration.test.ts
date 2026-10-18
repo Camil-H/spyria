@@ -22,7 +22,6 @@ import {
   sessionTokenOf,
   startAgentStack,
   textOf,
-  virtualKeyOf,
   waitFor,
   whoami,
 } from './testing/testing.ts'
@@ -35,7 +34,7 @@ const approvals = await startAgentStack({
   approvalWindowMilliseconds,
   now: () => Date.now() + clockOffsetMilliseconds,
 })
-const { database, port, gateway, fakeMcp } = await openSharedTestApp()
+const { database, port, fakeMcp } = await openSharedTestApp()
 const { fakeHost, disconnectFakeHosts } = createFakeHosts({ port, database })
 afterEach(() => disconnectFakeHosts())
 afterAll(() => disconnectFakeHosts())
@@ -54,21 +53,12 @@ const toolCallRows = async (chatId: string, count: number) => {
   await waitFor(async () => (await rows()).length >= count)
   return rows()
 }
-const allowSharedTools = async (userId: string, tools: string[]) => {
-  const key = (await virtualKeyOf(userId)) as unknown as {
-    id: string
-    mcp_configs: { id: number; mcp_client: { name: string }; tools_to_execute: string[] }[]
-  }
-  await gateway.call(`/api/governance/virtual-keys/${key.id}`, {
-    method: 'PUT',
-    body: {
-      mcp_configs: key.mcp_configs.map((config) => ({
-        id: config.id,
-        mcp_client_name: config.mcp_client.name,
-        tools_to_execute: config.mcp_client.name === sharedToolServer ? tools : config.tools_to_execute,
-      })),
-    },
+const restrictSharedTools = async (memberId: string, allowedTools: string[] | null) => {
+  const answer = await asMember(alice, 'POST', '/api/workspace-connections/connection-crm/restrict', {
+    memberId,
+    allowedTools,
   })
+  if (answer.status !== 200) throw new Error(`Restricting ${memberId} answered ${answer.status}`)
 }
 const refused = (answer: { status: number | undefined; result: { content?: { text: string }[] } }) => ({
   status: answer.status,
@@ -96,7 +86,7 @@ test('on a guest’s prompt the owner’s personal connection is refused before 
   ])
 })
 
-test('on a guest’s prompt a workspace tool needs both the owner’s and the prompter’s grants, and the gateway only sees that server', async () => {
+test('on a guest’s prompt a workspace tool needs both the owner’s and the prompter’s restrictions to allow it, and the gateway only sees that server', async () => {
   await addLlmKey(bob, 'Fake')
   const host = await fakeHost('Guest workspace host')
   const { chatId, token } = await runtimeTurn(host, bob)
@@ -104,20 +94,20 @@ test('on a guest’s prompt a workspace tool needs both the owner’s and the pr
   try {
     expect(textOf((await mcpCall(host, token, lookup)).result)).toBe('ran lookup')
 
-    await allowSharedTools(bob, ['update'])
+    await restrictSharedTools(bob, ['update'])
     expect(refused(await mcpCall(host, token, lookup))).toEqual({
       status: 200,
       text: `${sharedToolServer} isn't available on Bob's prompts in this chat`,
     })
-    await allowSharedTools(bob, ['*'])
-    await allowSharedTools(alice, ['update'])
+    await restrictSharedTools(bob, null)
+    await restrictSharedTools(alice, ['update'])
     expect(refused(await mcpCall(host, token, lookup))).toEqual({
       status: 200,
       text: `${sharedToolServer} isn't available on Bob's prompts in this chat`,
     })
   } finally {
-    await allowSharedTools(alice, ['*'])
-    await allowSharedTools(bob, ['*'])
+    await restrictSharedTools(alice, null)
+    await restrictSharedTools(bob, null)
   }
   expect(fakeMcp.records.slice(callsBefore)).toEqual([{ tool: 'lookup', user: 'shared' }])
   const audited = {

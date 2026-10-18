@@ -1,10 +1,18 @@
-import type { CredentialId, WorkspaceId } from '@hq/kernel'
+import type { CredentialId, MemberId, WorkspaceId } from '@hq/kernel'
 import type { DisplayName } from '../domain/display-name.ts'
 import type { Secret } from '../domain/secret.ts'
+import type { ConnectionInput } from '../domain/workspace-connection.ts'
 
 type Command<Input> = (input: Input & { workspaceId: WorkspaceId }) => Promise<unknown>
 
+type ConnectionCommand<Input> = Command<Input & { connectionId: string }>
+
 export type ProfileCommands = {
+  addWorkspaceConnection: Command<ConnectionInput>
+  editWorkspaceConnection: ConnectionCommand<ConnectionInput>
+  removeWorkspaceConnection: ConnectionCommand<object>
+  allowConnectionTools: ConnectionCommand<{ allowedTools: string[] }>
+  restrictConnectionMember: ConnectionCommand<{ memberId: MemberId; allowedTools: string[] | null }>
   renameMember: Command<{ name: DisplayName }>
   removeLlmCredential: Command<{ credentialId: CredentialId }>
   connectTool: Command<{ tool: string }>

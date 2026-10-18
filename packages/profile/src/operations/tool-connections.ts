@@ -3,11 +3,12 @@ import type { ToolGateway } from '../contracts/repositories.ts'
 import type { ProfileTransactor } from '../contracts/transactor.ts'
 import { NoGatewayKey, ToolNotInCatalog } from '../domain/errors.ts'
 import { connectedTool, connectionStatusOf } from '../domain/personal-connection.ts'
+import { memberToolsOf } from '../domain/workspace-connection.ts'
 
 type Dependencies = { transactor: ProfileTransactor; gateway: ToolGateway }
 type Member = { workspaceId: WorkspaceId; memberId: MemberId }
 type Input = Member & { tool: string }
-type GuestCall = { workspaceId: WorkspaceId; ownerId: MemberId; prompterId: MemberId; toolName: string }
+type ToolCall = { workspaceId: WorkspaceId; ownerId: MemberId; prompterId: MemberId; toolName: string }
 
 const virtualKeyOf = ({ transactor }: Dependencies, { workspaceId, memberId }: Member) =>
   transactor.run(({ memberGatewayKeys }) => memberGatewayKeys.virtualKeyOf(workspaceId, memberId))
@@ -24,10 +25,29 @@ const personalServersOf = async (gateway: ToolGateway) =>
 export const availableTools = async ({ gateway }: Pick<Dependencies, 'gateway'>) =>
   (await personalServersOf(gateway)).map(({ name }) => name)
 
-export const grantAvailableTools = async (dependencies: Dependencies, member: Member) => {
-  const virtualKeyId = await virtualKeyOf(dependencies, member)
-  if (virtualKeyId) await dependencies.gateway.grantToolServers(virtualKeyId, await dependencies.gateway.toolServers())
+export const grantWorkspaceTools = async (
+  { transactor, gateway }: Dependencies,
+  workspaceId: WorkspaceId,
+  memberIds?: readonly MemberId[],
+) => {
+  const { connections, restrictions, virtualKeys } = await transactor.run(
+    async ({ workspaceConnections, memberGatewayKeys }) => ({
+      connections: await workspaceConnections.list(workspaceId),
+      restrictions: await workspaceConnections.restrictionsOf(workspaceId),
+      virtualKeys: await memberGatewayKeys.virtualKeysIn(workspaceId),
+    }),
+  )
+  for (const { memberId, virtualKeyId } of virtualKeys.filter((key) => memberIds?.includes(key.memberId) ?? true))
+    await gateway.setToolGrants(
+      virtualKeyId,
+      Object.fromEntries(
+        connections.map((connection) => [connection.gatewayName, memberToolsOf(connection, restrictions, memberId)]),
+      ),
+    )
 }
+
+export const grantMemberTools = (dependencies: Dependencies, { workspaceId, memberId }: Member) =>
+  grantWorkspaceTools(dependencies, workspaceId, [memberId])
 
 export const startToolConnection = async (dependencies: Dependencies, input: Input) => {
   const { gateway } = dependencies
@@ -36,7 +56,7 @@ export const startToolConnection = async (dependencies: Dependencies, input: Inp
   if (!server) throw new ToolNotInCatalog(input.tool)
   const virtualKeyId = await virtualKeyOf(dependencies, input)
   if (!virtualKeyId) throw new NoGatewayKey()
-  await gateway.grantToolServers(virtualKeyId, servers)
+  await grantMemberTools(dependencies, input)
   for (const session of await gateway.toolSessions(virtualKeyId, server)) await gateway.removeToolSession(session.id)
   return { authorizeUrl: await gateway.startToolConsent(virtualKeyId, server) }
 }
@@ -67,25 +87,23 @@ export const flagToolConnection = ({ transactor }: Pick<Dependencies, 'transacto
     return isConnected
   })
 
-export const guestToolAccess = async (
+export const toolCallAccess = async (
   { transactor, gateway }: Dependencies,
-  { workspaceId, ownerId, prompterId, toolName }: GuestCall,
+  { workspaceId, ownerId, prompterId, toolName }: ToolCall,
 ) => {
   const { server, tool } = toolNamePartsOf(toolName)
-  const servers = await gateway.toolServers()
-  if (servers.some(({ name, isPersonal }) => isPersonal && name === server)) return 'personal'
-  const [ownerKeyId, prompterKeyId] = await transactor.run(({ memberGatewayKeys }) =>
-    Promise.all([ownerId, prompterId].map((memberId) => memberGatewayKeys.virtualKeyOf(workspaceId, memberId))),
-  )
-  const grantedToolsOf = async (virtualKeyId: string | undefined): Promise<Record<string, string[]>> =>
-    virtualKeyId ? gateway.grantedTools(virtualKeyId) : {}
-  const [ownerGrants, prompterGrants] = await Promise.all([grantedToolsOf(ownerKeyId), grantedToolsOf(prompterKeyId)])
-  if (prompterKeyId && servers.some(({ name }) => !prompterGrants[name])) {
-    await gateway.grantToolServers(prompterKeyId, servers)
-    for (const { name } of servers) prompterGrants[name] ??= ['*']
+  const isGuest = prompterId !== ownerId
+  const { connection, restrictions } = await transactor.run(async ({ workspaceConnections }) => {
+    const found = await workspaceConnections.findByGatewayName(workspaceId, server)
+    return { connection: found, restrictions: found ? await workspaceConnections.restrictionsOf(workspaceId) : [] }
+  })
+  if (!connection) {
+    const isPersonal = (await gateway.toolServers()).some(({ name, isPersonal }) => isPersonal && name === server)
+    if (!isPersonal) return 'not_allowed'
+    return isGuest ? 'personal' : 'allowed'
   }
-  const isAllowed = [ownerGrants, prompterGrants].every((granted) =>
-    granted[server]?.some((name) => name === '*' || name === tool),
+  const isAllowed = [ownerId, prompterId].every((memberId) =>
+    memberToolsOf(connection, restrictions, memberId).includes(tool),
   )
   return isAllowed ? 'allowed' : 'not_allowed'
 }

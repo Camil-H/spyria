@@ -1,9 +1,10 @@
 import type { MemberId, WorkspaceId } from '@hq/kernel'
-import type { GatewaySyncJob, LlmGateway } from '../contracts/repositories.ts'
+import type { GatewaySyncJob, LlmGateway, ToolGateway } from '../contracts/repositories.ts'
 import type { ProfileTransactor } from '../contracts/transactor.ts'
 import type { GatewayKey, LlmCredential } from '../domain/llm-credential.ts'
+import { grantMemberTools } from './tool-connections.ts'
 
-type Dependencies = { transactor: ProfileTransactor; gateway: LlmGateway }
+type Dependencies = { transactor: ProfileTransactor; gateway: LlmGateway & ToolGateway }
 type Member = { workspaceId: WorkspaceId; memberId: MemberId }
 
 const syncsByMember = new Map<string, Promise<unknown>>()
@@ -24,6 +25,10 @@ export const syncMemberGatewayKey = (
 ) =>
   inMemberOrder(member, async () => {
     const { workspaceId, memberId } = member
+    const grantTools = () =>
+      grantMemberTools({ transactor, gateway }, member).catch((error) =>
+        console.error(`Granting the workspace tools of member ${memberId} failed: ${error}`),
+      )
     const { keys, virtualKeyId } = await transactor.run(async ({ llmCredentials, memberGatewayKeys }) => ({
       keys: await llmCredentials.gatewayKeysOf(workspaceId, memberId),
       virtualKeyId: await memberGatewayKeys.virtualKeyOf(workspaceId, memberId),
@@ -31,11 +36,14 @@ export const syncMemberGatewayKey = (
     const syncedKeys = added ? [...keys, added.key] : keys
     if (syncedKeys.length === 0) {
       if (virtualKeyId) await gateway.removeVirtualKey(virtualKeyId)
-      await transactor.run(({ memberGatewayKeys }) => memberGatewayKeys.setVirtualKey(workspaceId, memberId, null))
+      await transactor.run(async ({ memberGatewayKeys, personalConnections }) => {
+        await memberGatewayKeys.setVirtualKey(workspaceId, memberId, null)
+        await personalConnections.removeAll(workspaceId, memberId)
+      })
       return
     }
     const savedId = await gateway.saveVirtualKey({ id: virtualKeyId, keys: syncedKeys })
-    if (savedId === virtualKeyId && !added) return
+    if (savedId === virtualKeyId && !added) return grantTools()
     try {
       await transactor.run(async ({ llmCredentials, memberGatewayKeys }) => {
         if (added) await llmCredentials.add(added.credential, added.key)
@@ -46,6 +54,7 @@ export const syncMemberGatewayKey = (
       else await gateway.saveVirtualKey({ id: virtualKeyId, keys })
       throw error
     }
+    await grantTools()
   })
 
 export const runGatewaySync = async (dependencies: Dependencies, { key, ...member }: GatewaySyncJob) => {
@@ -53,7 +62,10 @@ export const runGatewaySync = async (dependencies: Dependencies, { key, ...membe
   await dependencies.gateway.removeProviderKey(key)
 }
 
-export const virtualKeyValueOf = async ({ transactor, gateway }: Dependencies, { workspaceId, memberId }: Member) => {
+export const virtualKeyValueOf = async (
+  { transactor, gateway }: { transactor: ProfileTransactor; gateway: LlmGateway },
+  { workspaceId, memberId }: Member,
+) => {
   const virtualKeyId = await transactor.run(({ memberGatewayKeys }) =>
     memberGatewayKeys.virtualKeyOf(workspaceId, memberId),
   )

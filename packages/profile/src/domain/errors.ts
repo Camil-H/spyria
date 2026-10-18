@@ -43,3 +43,24 @@ export const ToolNotInCatalog = errorKind(
   ProfileError,
 )
 export const NoGatewayKey = errorKind('no_gateway_key', () => 'Add an LLM key before connecting tools', ProfileError)
+export const NotWorkspaceAdmin = errorKind(
+  'not_admin',
+  () => 'Only workspace admins can manage workspace connections',
+  ProfileError,
+)
+export const InvalidConnection = errorKind('invalid_connection', (reason: string) => reason, ProfileError)
+export const ConnectionNotFound = errorKind(
+  'connection_not_found',
+  (connectionId: string) => `Workspace connection ${connectionId} was not found`,
+  ProfileError,
+)
+export const ConnectionUnreachable = errorKind(
+  'connection_unreachable',
+  (url: string) => `No tools could be listed from ${url}`,
+  ProfileError,
+)
+export const SecretRequired = errorKind(
+  'secret_required',
+  (header: string) => `Enter the ${header} header again to change the URL`,
+  ProfileError,
+)

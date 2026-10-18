@@ -370,6 +370,15 @@ const aliceSeededCredential = {
 }
 type SeedWriter = { execute: (query: SQL) => Promise<unknown> }
 
+export const testCrmConnection = { id: 'connection-crm', name: 'CRM', gatewayName: 'crm' }
+export const shareTestCrm = (writer: SeedWriter) =>
+  writer.execute(
+    sql`insert into workspace_connections (workspace_id, id, name, gateway_name, url, header_name, tools, allowed_tools)
+      values (${aliceSeededCredential.workspaceId}, ${testCrmConnection.id}, ${testCrmConnection.name},
+        ${testCrmConnection.gatewayName}, 'http://fake-mcp/shared/mcp', null,
+        '[{"name":"lookup","readOnly":true},{"name":"update","readOnly":false}]', '["lookup","update"]')`,
+  )
+
 type SeededGatewayKeys = ((writer: SeedWriter) => Promise<void>) & { keyId: string; virtualKeyId: string }
 const isUntouched = async (gateway: TestGateway, { keyId, virtualKeyId }: SeededGatewayKeys) => {
   const read = await gateway.request(`/api/governance/virtual-keys/${virtualKeyId}`)

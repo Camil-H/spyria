@@ -2,6 +2,7 @@ import type { ListedModel } from '@hq/kernel'
 import type { LlmGateway, ToolGateway, ToolServer } from '../contracts/repositories.ts'
 import { UnsupportedProvider } from '../domain/errors.ts'
 import type { GatewayKey } from '../domain/llm-credential.ts'
+import type { ConnectionTool } from '../domain/workspace-connection.ts'
 
 export type LlmGatewaySettings = {
   url: string
@@ -11,7 +12,11 @@ export type LlmGatewaySettings = {
   toolServerListMilliseconds?: number
 }
 export type ToolServerSetup = { name: string; url: string; oauthConfig?: Record<string, unknown>; isShared?: boolean }
-type McpClient = { config: { client_id: string; name: string; auth_type: string }; tools?: { name?: string }[] }
+type McpClient = {
+  config: { client_id: string; name: string; auth_type: string; headers?: Record<string, unknown> }
+  tools?: { name?: string }[]
+}
+type ListedTool = { name: string; annotations?: { readOnlyHint?: boolean } }
 type McpConfig = { id: number; mcp_client: { name: string }; tools_to_execute: string[] }
 type BifrostGateway = LlmGateway &
   ToolGateway & {
@@ -110,8 +115,10 @@ export const createLlmGateway = ({
     })),
   })
   let toolServerList: { servers: Promise<ToolServer[]>; loadedAt: number } | undefined
+  const mcpClients = async () => (await request('GET', '/api/mcp/clients')).body.clients as McpClient[]
+  const clientNamed = async (name: string) => (await mcpClients()).find(({ config }) => config.name === name)
   const freshToolServers = async () =>
-    ((await request('GET', '/api/mcp/clients')).body.clients as McpClient[]).map(
+    (await mcpClients()).map(
       ({ config, tools }): ToolServer => ({
         id: config.client_id,
         name: config.name,
@@ -188,18 +195,77 @@ export const createLlmGateway = ({
       toolServerList = undefined
       return true
     },
-    grantToolServers: async (virtualKeyId, servers) => {
-      const configs = await toolConfigsOf(virtualKeyId)
-      const missing = servers.filter((server) => !configs.some((config) => config.mcp_client_name === server.name))
-      if (missing.length > 0)
-        await request('PUT', `/api/governance/virtual-keys/${virtualKeyId}`, {
-          mcp_configs: [...configs, ...missing.map(({ name }) => ({ mcp_client_name: name, tools_to_execute: ['*'] }))],
+    addToolServer: async ({ name, url: endpoint, secretHeader }) => {
+      await request('POST', '/api/mcp/client', {
+        name,
+        connection_type: 'http',
+        connection_string: endpoint,
+        tools_to_execute: ['*'],
+        auth_type: secretHeader ? 'headers' : 'none',
+        ...(secretHeader && { headers: { [secretHeader.name]: secretHeader.value } }),
+      })
+      toolServerList = undefined
+      const listingKey = virtualKeyOf(
+        (
+          await request('POST', '/api/governance/virtual-keys', {
+            name: `vk_listing_${crypto.randomUUID()}`,
+            is_active: true,
+            mcp_configs: [{ mcp_client_name: name, tools_to_execute: ['*'] }],
+          })
+        ).body,
+      )
+      try {
+        const response = await fetch(`${url}/mcp`, {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${listingKey.value}`,
+            'content-type': 'application/json',
+            accept: 'application/json, text/event-stream',
+          },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+          signal: AbortSignal.timeout(timeoutMilliseconds),
         })
+        const { result } = (await response.json()) as { result?: { tools?: ListedTool[] } }
+        return (result?.tools ?? []).map(
+          (tool): ConnectionTool => ({
+            name: tool.name.slice(name.length + 1),
+            readOnly: tool.annotations?.readOnlyHint === true,
+          }),
+        )
+      } finally {
+        await request('DELETE', `/api/governance/virtual-keys/${listingKey.id}`)
+      }
     },
-    grantedTools: async (virtualKeyId) =>
-      Object.fromEntries(
-        (await toolConfigsOf(virtualKeyId)).map((config) => [config.mcp_client_name, config.tools_to_execute]),
-      ),
+    replaceToolServerHeader: async (name, secretHeader) => {
+      const client = await clientNamed(name)
+      if (!client) throw new Error(`The gateway has no tool server ${name}`)
+      await request('PUT', `/api/mcp/client/${client.config.client_id}`, {
+        ...client.config,
+        headers: secretHeader ? { [secretHeader.name]: secretHeader.value } : {},
+      })
+    },
+    removeToolServer: async (name) => {
+      const client = await clientNamed(name)
+      if (client) await request('DELETE', `/api/mcp/client/${client.config.client_id}`)
+      toolServerList = undefined
+    },
+    setToolGrants: async (virtualKeyId, workspaceGrants) => {
+      const [servers, configs] = await Promise.all([toolServers(), toolConfigsOf(virtualKeyId)])
+      const granted = servers.flatMap(({ name, isPersonal }) => {
+        const config = configs.find(({ mcp_client_name }) => mcp_client_name === name)
+        const tools = isPersonal ? (config?.tools_to_execute ?? ['*']) : (workspaceGrants[name] ?? [])
+        return tools.length > 0
+          ? [{ ...(config && { id: config.id }), mcp_client_name: name, tools_to_execute: tools }]
+          : []
+      })
+      const isUnchanged =
+        granted.length === configs.length &&
+        granted.every((grant) => {
+          const config = configs.find(({ mcp_client_name }) => mcp_client_name === grant.mcp_client_name)
+          return config && config.tools_to_execute.join() === grant.tools_to_execute.join()
+        })
+      if (!isUnchanged) await request('PUT', `/api/governance/virtual-keys/${virtualKeyId}`, { mcp_configs: granted })
+    },
     startToolConsent: async (virtualKeyId, server) => {
       const response = await fetch(`${url}/mcp`, {
         method: 'POST',

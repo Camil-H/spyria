@@ -1,7 +1,7 @@
 import type { Job } from '@hq/db/zero-queries'
 import { memberId, workspaceId } from '@hq/kernel'
 import { z } from 'zod/mini'
-import type { LlmGateway } from '../contracts/repositories.ts'
+import type { LlmGateway, ToolGateway } from '../contracts/repositories.ts'
 import { profileJobTypes } from '../domain/llm-credential.ts'
 import { createTransactingZeroTransactor, memberContext } from '../integrations/zero-transactor.ts'
 import { runGatewaySync } from '../operations/sync-member-gateway-key.ts'
@@ -12,7 +12,7 @@ const gatewaySyncPayload = z.object({
   key: z.object({ provider: id, id }),
 })
 
-export const createProfileJobs = (gateway: LlmGateway) => ({
+export const createProfileJobs = (gateway: LlmGateway & ToolGateway) => ({
   [profileJobTypes.gatewaySync]: ({ workspaceId: workspace, payload, transact }: Job) => {
     const job = gatewaySyncPayload.parse(payload)
     const transactor = createTransactingZeroTransactor(transact, memberContext(workspaceId(workspace), job.memberId))

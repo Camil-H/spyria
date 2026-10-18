@@ -42,6 +42,14 @@ export const virtualKeyIdOf = async (tx: Transaction, workspaceId: string, userI
     )
   )?.id
 
+export const virtualKeyIdsIn = (tx: Transaction, workspaceId: string) =>
+  onServer<{ memberId: string; virtualKeyId: string }>(
+    tx,
+    `select user_id as "memberId", virtual_key_id as "virtualKeyId" from member_gateway_keys
+     join memberships using (workspace_id, user_id) where workspace_id = $1 and removed_at is null`,
+    [workspaceId],
+  )
+
 let listedModels: () => readonly ListedModel[] = () => []
 export const setModelDirectory = (directory: typeof listedModels) => {
   listedModels = directory

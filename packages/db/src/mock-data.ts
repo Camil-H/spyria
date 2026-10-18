@@ -40,12 +40,6 @@ const change = (path: string, additions: number, deletions: number, diffLines: C
 const terminalLine = (text: string) => ({ ...invoiceBug, text })
 const planStep = (title: string, status: string) => ({ ...invoiceBug, title, status })
 const toolConnection = (tool: string, status: string) => ({ workspaceId: acme, memberId: alice, tool, status })
-const workspaceConnection = (memberId: MemberId, tool: string, access: string) => ({
-  workspaceId: acme,
-  memberId,
-  tool,
-  access,
-})
 const chat = (
   id: string,
   workspace: WorkspaceId,
@@ -297,11 +291,8 @@ export const createMockSnapshot = (): Snapshot => {
         last4: 'a1b2',
       },
     ],
-    workspaceConnections: [
-      workspaceConnection(alice, 'Postgres', '2 of 5 tables'),
-      workspaceConnection(alice, 'Onyx', 'All sources'),
-      workspaceConnection(bob, 'Postgres', '1 of 5 tables'),
-    ],
+    workspaceConnections: [],
+    connectionRestrictions: [],
     runtimeHosts: [],
     runtimes: [],
   }

@@ -115,17 +115,16 @@ test('shows the profile without changing it', async ({ page }) => {
     await expect(connectionsTabOf(page, 'Shared with me')).toHaveAttribute('aria-selected', 'true')
   })
 
-  await test.step('lists the shared connections with the access of the member, read-only', async () => {
+  await test.step('lists the shared connections with the tools of the member, read-only', async () => {
     const sharedSection = connectionsPanelOf(page)
-    await expect(sharedSection.getByRole('listitem').filter({ hasText: 'Postgres' })).toContainText('2 of 5 tables')
-    await expect(sharedSection.getByRole('listitem').filter({ hasText: 'Onyx' })).toContainText('All sources')
+    await expect(sharedSection.getByRole('listitem')).toHaveText(['CRMlookup, update'])
     await expect(sharedSection.getByRole('button')).toHaveCount(0)
   })
 
   await test.step('switches tabs with the mouse and the arrow keys', async () => {
     await connectionsTabOf(page, 'My connections').click()
     await expect(connectionsPanelOf(page)).toContainText('GitHub')
-    await expect(connectionsPanelOf(page)).not.toContainText('2 of 5 tables')
+    await expect(connectionsPanelOf(page)).not.toContainText('lookup, update')
     await connectionsTabOf(page, 'Shared with me').focus()
     await page.keyboard.press('ArrowRight')
     await expect(connectionsTabOf(page, 'My connections')).toBeFocused()

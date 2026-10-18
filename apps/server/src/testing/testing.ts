@@ -8,6 +8,7 @@ import { setModelDirectory } from '@hq/db/server-writes'
 import {
   createTestDatabase,
   prepareSeededGatewayKeys,
+  shareTestCrm,
   startTestGateway,
   startZeroCache,
   testGatewayAdmin,
@@ -156,6 +157,7 @@ export const requestMutation = async (
 const integrationGatewayPort = 4880
 const integrationAppPort = 4882
 const integrationFakeMcpPort = 4883
+export const sharedMcpUrl = `http://host.docker.internal:${integrationFakeMcpPort}/shared/mcp`
 export const llmGatewayAt = (url: string) =>
   createLlmGateway({ url, adminUser: testGatewayAdmin.user, adminPassword: testGatewayAdmin.password })
 
@@ -263,7 +265,11 @@ export const openSharedTestApp = async () => {
   const testApp = await sharedTestApp
   await closeZeroStores()
   testApp.holds.releaseAll()
-  await resetDatabase(testApp.database, await testApp.seededGatewayKeys())
+  const writeSeededGatewayKeys = await testApp.seededGatewayKeys()
+  await resetDatabase(testApp.database, async (transaction) => {
+    await writeSeededGatewayKeys(transaction)
+    await shareTestCrm(transaction)
+  })
   if (testApp.llmGateway.listedModels().length === 0) await testApp.llmGateway.refreshListedModels()
   return testApp
 }
@@ -367,14 +373,15 @@ export const addLlmKey = async (userId: string, provider: string, secret = `fake
 
 export const virtualKeyOf = async (userId: string) => {
   const { database, gateway } = await openedTestApp()
-  const [row] = await database.$client`select virtual_key_id from member_gateway_keys where user_id = ${userId}`
+  const [row] = await database.$client`
+    select virtual_key_id from member_gateway_keys where workspace_id = ${acme} and user_id = ${userId}`
   return (
     await gateway.call<{
       virtual_key: {
         id: string
         name: string
         value: string
-        mcp_configs: { mcp_client: { name: string } }[]
+        mcp_configs: { mcp_client: { name: string }; tools_to_execute: string[] }[]
         provider_configs: { keys: { key_id: string }[] }[]
       }
     }>(`/api/governance/virtual-keys/${row?.virtual_key_id}`)
@@ -490,20 +497,21 @@ export const rootIn = async (chatId: string) => {
 
 export const testHqAgentImage = `sha256:${'0'.repeat(64)}`
 
-export const runtimeTurn = async (host: { id: string }, prompterId: string | null) => {
+export const runtimeTurn = async (host: { id: string }, prompterId: string | null, ownerId = alice) => {
   const { database } = await openedTestApp()
   const promptId = `message-${crypto.randomUUID()}`
   const token = `runtime-token-${crypto.randomUUID()}`
   const turnChatId = await newChat({
-    participants: prompterId && prompterId !== alice ? [{ memberId: prompterId, roleId: 'prompter' }] : [],
+    ownerId,
+    participants: prompterId && prompterId !== ownerId ? [{ memberId: prompterId, roleId: 'prompter' }] : [],
   })
   await database.$client.begin(async (sql) => {
     await sql`
       insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
-      values (${acme}, ${turnChatId}, ${promptId}, 1, 'member', ${prompterId ?? alice}, 'Go', now())`
+      values (${acme}, ${turnChatId}, ${promptId}, 1, 'member', ${prompterId ?? ownerId}, 'Go', now())`
     await sql`
       insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
-      values (${acme}, ${turnChatId}, ${promptId}, 1, 'message.posted', ${prompterId ?? alice}, '{}', now())`
+      values (${acme}, ${turnChatId}, ${promptId}, 1, 'message.posted', ${prompterId ?? ownerId}, '{}', now())`
     await sql`
       insert into runtimes (workspace_id, id, chat_id, host_id, state, host_online, image, llm_token_hash, last_active_at, created_at, state_changed_at)
       values (${acme}, ${crypto.randomUUID()}, ${turnChatId}, ${host.id}, 'running', true, ${testHqAgentImage}, ${sha256(token)}, now(), now(), now())`
@@ -717,11 +725,12 @@ const fakeHostGatewayUrl = 'http://fake-gateway-relay.test:4000/v1'
 type HostCommand = { op: string; runtimeId?: string; image?: string; apiKey?: string }
 export type FakeHost = Awaited<ReturnType<ReturnType<typeof createFakeHosts>['fakeHost']>>
 
-export const asMember = async (userId: string, method: string, path: string) => {
+export const asMember = async (userId: string, method: string, path: string, body?: object, workspaceId = acme) => {
   const { app, database } = await openedTestApp()
   const response = await app.request(path, {
     method,
-    headers: { authorization: `Bearer ${await sessionTokenOf(database, acme, userId)}` },
+    headers: { authorization: `Bearer ${await sessionTokenOf(database, workspaceId, userId)}` },
+    body: body && JSON.stringify(body),
   })
   return { status: response.status, body: await response.text() }
 }

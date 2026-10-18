@@ -11,6 +11,7 @@ import { type ChatId, type MemberId, type WorkspaceId, workspaceId } from '@hq/k
 import {
   createHttpLlmCredentialAdder,
   createHttpToolConnections,
+  createHttpWorkspaceConnections,
   type ProfileCommands,
   profileMutators,
 } from '@hq/profile/server'
@@ -194,6 +195,7 @@ export const createApp = async (
     profileCommands: commandsOf<ProfileCommands>(profileMutators.profile, {
       addLlmCredential: createHttpLlmCredentialAdder(postAsMember),
       ...toolConnections,
+      ...createHttpWorkspaceConnections(postAsMember),
     }),
     runtimeCommands: commandsOf<RuntimeCommands>(
       runtimeMutators.runtime,

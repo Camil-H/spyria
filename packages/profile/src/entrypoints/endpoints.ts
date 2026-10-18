@@ -1,5 +1,5 @@
 import type { Transact, ZeroContext } from '@hq/db/zero-queries'
-import type { MemberId, WorkspaceId } from '@hq/kernel'
+import { type MemberId, memberId, type WorkspaceId } from '@hq/kernel'
 import type { LlmGateway, ToolGateway } from '../contracts/repositories.ts'
 import { Secret } from '../domain/secret.ts'
 import { toolConsentChannel } from '../integrations/http-tool-connections.ts'
@@ -10,11 +10,18 @@ import {
   availableTools,
   disconnectTool,
   flagToolConnection,
-  grantAvailableTools,
-  guestToolAccess,
+  grantMemberTools,
   refreshToolConnection,
   startToolConnection,
+  toolCallAccess,
 } from '../operations/tool-connections.ts'
+import {
+  addWorkspaceConnection,
+  allowConnectionTools,
+  editWorkspaceConnection,
+  removeWorkspaceConnection,
+  restrictConnectionMember,
+} from '../operations/workspace-connections.ts'
 
 const textOf = (value: unknown) => (typeof value === 'string' ? value : '')
 
@@ -22,7 +29,7 @@ export const addLlmCredentialFromRequest = (
   transact: Transact,
   context: ZeroContext,
   body: unknown,
-  gateway: LlmGateway,
+  gateway: LlmGateway & ToolGateway,
 ) => {
   const { provider, secret } = (body ?? {}) as Record<string, unknown>
   return addLlmCredential(
@@ -70,18 +77,57 @@ export const createToolCallOwnerAccess = (transact: Transact, gateway: ToolGatew
     gateway,
   })
   return {
-    grantAvailableTools: (workspace: WorkspaceId, member: MemberId) =>
-      grantAvailableTools(dependenciesOf(workspace, member), { workspaceId: workspace, memberId: member }),
+    grantMemberTools: (workspace: WorkspaceId, member: MemberId) =>
+      grantMemberTools(dependenciesOf(workspace, member), { workspaceId: workspace, memberId: member }),
     flagToolConnection: (workspace: WorkspaceId, member: MemberId, tool: string) =>
       flagToolConnection(dependenciesOf(workspace, member), { workspaceId: workspace, memberId: member, tool }),
-    guestToolAccess: (workspace: WorkspaceId, owner: MemberId, prompter: MemberId, toolName: string) =>
-      guestToolAccess(dependenciesOf(workspace, owner), {
+    toolCallAccess: (workspace: WorkspaceId, owner: MemberId, prompter: MemberId, toolName: string) =>
+      toolCallAccess(dependenciesOf(workspace, owner), {
         workspaceId: workspace,
         ownerId: owner,
         prompterId: prompter,
         toolName,
       }),
   }
+}
+
+const textListOf = (value: unknown) =>
+  Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+const secretHeaderOf = (value: unknown) => {
+  if (value === null) return null
+  const { name, value: secret } = (value ?? {}) as Record<string, unknown>
+  return value === undefined ? undefined : { name: textOf(name), value: textOf(secret) }
+}
+
+export const workspaceConnectionFromRequest = (
+  transact: Transact,
+  context: ZeroContext,
+  gateway: ToolGateway,
+  action: string,
+  connectionId: string,
+  body: unknown,
+) => {
+  const fields = (body ?? {}) as Record<string, unknown>
+  const dependencies = { transactor: createTransactingZeroTransactor(transact, context), gateway }
+  const target = { workspaceId: context.workspaceId, actorId: context.userId, connectionId }
+  const connection = {
+    name: textOf(fields.name),
+    url: textOf(fields.url),
+    secretHeader: secretHeaderOf(fields.secretHeader),
+  }
+  const actions: Record<string, () => Promise<unknown>> = {
+    add: () => addWorkspaceConnection(dependencies, { ...target, ...connection }),
+    edit: () => editWorkspaceConnection(dependencies, { ...target, ...connection }),
+    remove: () => removeWorkspaceConnection(dependencies, target),
+    tools: () => allowConnectionTools(dependencies, { ...target, allowedTools: textListOf(fields.allowedTools) }),
+    restrict: () =>
+      restrictConnectionMember(dependencies, {
+        ...target,
+        memberId: memberId(textOf(fields.memberId)),
+        allowedTools: fields.allowedTools === null ? null : textListOf(fields.allowedTools),
+      }),
+  }
+  return actions[action]?.() ?? Promise.resolve()
 }
 
 export const toolConsentCallbackPath = '/gateway-oauth/api/oauth/callback'

@@ -126,10 +126,18 @@ export const queries = defineQueries({
     zql.llmCredentials.where('workspaceId', ctx.workspaceId).where('userId', ctx.userId),
   ),
   workspaceConnections: defineQuery(({ ctx }) =>
-    zql.workspaceConnections
+    zql.workspaceConnections.where('workspaceId', ctx.workspaceId).orderBy('name', 'asc'),
+  ),
+  connectionRestrictions: defineQuery(({ ctx }) =>
+    zql.connectionRestrictions
       .where('workspaceId', ctx.workspaceId)
-      .where(({ or, cmp, exists }) => or(cmp('userId', ctx.userId), exists('ownedChats', readableBy(ctx.userId))))
-      .orderBy('position', 'asc'),
+      .where(({ or, cmp, exists }) =>
+        or(
+          cmp('userId', ctx.userId),
+          exists('ownedChats', readableBy(ctx.userId)),
+          exists('memberships', activeAdmin(ctx.userId)),
+        ),
+      ),
   ),
   toolConnections: defineQuery(({ ctx }) =>
     zql.toolConnections

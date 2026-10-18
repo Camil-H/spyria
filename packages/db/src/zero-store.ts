@@ -134,7 +134,8 @@ const snapshotFromZeroRows = (
     chatMembers: rowsOf('chatParticipants').map(withMemberId),
     chatRoles: rowsOf('chatRoles'),
     llmCredentials: rowsOf('llmCredentials').map(withMemberId),
-    workspaceConnections: rowsOf('workspaceConnections').map((connection) => withoutPosition(withMemberId(connection))),
+    workspaceConnections: rowsOf('workspaceConnections'),
+    connectionRestrictions: rowsOf('connectionRestrictions').map(withMemberId),
     runtimeHosts: rowsOf('runtimeHosts').map(({ lastSeenAt, createdBy, createdAt, removedAt, ...host }) => host),
     runtimes: rowsOf('runtimes').map(({ workspaceId, id, chatId, hostId, state, failure, hostOnline }) => ({
       workspaceId,

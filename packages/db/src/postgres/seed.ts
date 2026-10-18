@@ -99,7 +99,6 @@ const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
       secretRef: `gateway:${credential.id}`,
     })),
   )
-  await transaction.insert(tables.workspaceConnections).values(snapshot.workspaceConnections.map(withUserIdAndPosition))
   await transaction.insert(tables.toolConnections).values(snapshot.toolConnections.map(withUserIdAndPosition))
   await transaction.insert(tables.files).values([...snapshot.files])
   await transaction.insert(tables.changes).values([...snapshot.changes])

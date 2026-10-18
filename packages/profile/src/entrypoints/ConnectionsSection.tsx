@@ -38,10 +38,10 @@ export const ConnectionsSection = ({ workspaceId, memberId }: { workspaceId: Wor
             <p className="text-sm text-muted">No shared connections</p>
           ) : (
             <ul className="flex flex-col gap-2 text-sm">
-              {shared.map(({ tool, access }) => (
-                <li key={tool} className={rowClass}>
-                  <span className="font-medium">{tool}</span>
-                  <span className="text-muted">{access}</span>
+              {shared.map(({ id, name, tools }) => (
+                <li key={id} className={rowClass}>
+                  <span className="font-medium">{name}</span>
+                  <span className="text-muted">{tools.length > 0 ? tools.join(', ') : 'No tools'}</span>
                 </li>
               ))}
             </ul>

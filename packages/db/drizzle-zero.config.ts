@@ -40,6 +40,7 @@ export default drizzleZeroConfig(tables, {
     runtimeOrigins: true,
     llmCredentials: { workspaceId: true, id: true, userId: true, provider: true, last4: true },
     workspaceConnections: true,
+    connectionRestrictions: true,
     toolConnections: true,
     files: true,
     changes: true,

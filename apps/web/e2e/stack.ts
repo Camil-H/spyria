@@ -13,6 +13,7 @@ import {
   createTestDatabase,
   dropDatabase,
   prepareSeededGatewayKeys,
+  shareTestCrm,
   startZeroCache,
   testGatewayAt,
 } from '@hq/db/testing'
@@ -23,7 +24,7 @@ import { gatewayUrl, serverUrl, templateDatabaseName, viteUrl, zeroCachePortOf }
 
 export { expect } from '@playwright/test'
 
-type ResetOptions = { runtimeHost: boolean; warmRuntimes: boolean }
+type ResetOptions = { runtimeHost: boolean; warmRuntimes: boolean; sharedCrm: boolean }
 type PairedHost = {
   host: typeof runtimeHosts.$inferSelect
   start: () => Promise<void>
@@ -182,13 +183,16 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
           if (isWarm) warmRuntimes.set(runtime.chatId, { runtime })
         }
       }
-      const writeReset = async (options: ResetOptions = { runtimeHost: false, warmRuntimes: false }) => {
+      const writeReset = async (
+        options: ResetOptions = { runtimeHost: false, warmRuntimes: false, sharedCrm: true },
+      ) => {
         const epoch = `epoch-${workerInfo.workerIndex}-${++epochNumber}`
         const writeSeededGatewayKeys = await prepareSeededGatewayKeys(testGateway, seededGatewayKeys)
         seededGatewayKeys = writeSeededGatewayKeys
         const reset = () =>
           resetDatabase(testDatabase.database, async (transaction) => {
             await writeSeededGatewayKeys(transaction)
+            if (options.sharedCrm) await shareTestCrm(transaction)
             await transaction.insert(users).values({ id: barrierMemberId, email: 'e2e-barrier@example.com' })
             await transaction.insert(workspaces).values({
               workspaceId: barrierWorkspaceId,
@@ -299,13 +303,17 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
   ],
   runtimeHost: [true, { option: true }],
   warmRuntimes: [true, { option: true }],
+  sharedCrm: [true, { option: true }],
   resetStack: [
-    async ({ workerStack, context, signedInAs, tokenSeconds, runtimeHost, warmRuntimes, fakeBootHold }, use) => {
+    async (
+      { workerStack, context, signedInAs, tokenSeconds, runtimeHost, warmRuntimes, sharedCrm, fakeBootHold },
+      use,
+    ) => {
       await postToServer('/test/fake-llm-script', { db: workerStack.databaseName })
       await postToServer('/test/fake-boot', { db: workerStack.databaseName })
       await postToServer('/test/runtime-creation', { db: workerStack.databaseName, failing: 'false' })
       await workerStack.setGatewayReachable(true)
-      await workerStack.reset({ runtimeHost, warmRuntimes })
+      await workerStack.reset({ runtimeHost, warmRuntimes, sharedCrm })
       if (fakeBootHold) await postToServer('/test/fake-boot', { db: workerStack.databaseName, hold: fakeBootHold })
       await signIn(context, workerStack, signedInAs, tokenSeconds)
       await use(undefined)

@@ -15,7 +15,7 @@ type Turn = {
 }
 type Input = { turn: Turn; toolName: string; toolArguments: unknown; signal: AbortSignal }
 type Checks = {
-  guestAccessOf: (guestId: MemberId) => Promise<'allowed' | 'personal' | 'not_allowed'>
+  accessOf: (prompterId: MemberId) => Promise<'allowed' | 'personal' | 'not_allowed'>
   isReadOnly: () => Promise<boolean>
 }
 type Authorization = {
@@ -30,18 +30,16 @@ const notNeeded = { decision: 'not_needed', decidedBy: null } as const
 export const authorizeToolCall = async (
   dependencies: AgentDependencies,
   { turn, toolName, toolArguments, signal }: Input,
-  { guestAccessOf, isReadOnly }: Checks,
+  { accessOf, isReadOnly }: Checks,
 ): Promise<Authorization> => {
   const { server, tool } = toolNamePartsOf(toolName)
   const { chat, promptId, ownerId, ownerName } = turn
   const prompterName = turn.prompterName ?? ''
   const guestId = guestPrompterOf(turn)
-  if (guestId) {
-    const access = await guestAccessOf(guestId).catch(() => null)
-    if (!access) return { refusal: toolGatewayUnreachable, readOnly: null, ...notNeeded }
-    if (access !== 'allowed')
-      return { refusal: guestToolRefusalOf(access, { ownerName, prompterName, server }), readOnly: null, ...notNeeded }
-  }
+  const access = await accessOf(turn.prompterId ?? ownerId).catch(() => null)
+  if (!access) return { refusal: toolGatewayUnreachable, readOnly: null, ...notNeeded }
+  if (access !== 'allowed')
+    return { refusal: guestToolRefusalOf(access, { ownerName, prompterName, server }), readOnly: null, ...notNeeded }
   const readOnly = await isReadOnly()
   if (!guestId || readOnly) return { readOnly, ...notNeeded }
   const decided = await requestToolApproval(dependencies, {

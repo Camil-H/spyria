@@ -167,11 +167,22 @@ type LlmCredentialRow = {
   provider: string
   last4: string
 }
+export type ConnectionToolRow = { name: string; readOnly: boolean }
 type WorkspaceConnectionRow = {
   workspaceId: WorkspaceId
+  id: string
+  name: string
+  gatewayName: string
+  url: string
+  headerName: string | null
+  tools: readonly ConnectionToolRow[]
+  allowedTools: readonly string[]
+}
+type ConnectionRestrictionRow = {
+  workspaceId: WorkspaceId
+  connectionId: string
   memberId: MemberId
-  tool: string
-  access: string
+  allowedTools: readonly string[]
 }
 type ChatMemberRow = {
   workspaceId: WorkspaceId
@@ -211,6 +222,7 @@ export type Snapshot = {
   chatRoles: readonly ChatRoleRow[]
   llmCredentials: readonly LlmCredentialRow[]
   workspaceConnections: readonly WorkspaceConnectionRow[]
+  connectionRestrictions: readonly ConnectionRestrictionRow[]
   runtimeHosts: readonly RuntimeHostRow[]
   runtimes: readonly RuntimeRow[]
 }
@@ -226,6 +238,17 @@ export const inChat = (workspaceId: WorkspaceId, chatId: ChatId) => (row: ChatSc
 export const ownedBy =
   (workspaceId: WorkspaceId, memberId: MemberId) => (row: { workspaceId: WorkspaceId; memberId: MemberId }) =>
     row.workspaceId === workspaceId && row.memberId === memberId
+
+export const workspaceConnectionsIn = (snapshot: Snapshot, workspaceId: WorkspaceId) =>
+  snapshot.workspaceConnections.filter((connection) => connection.workspaceId === workspaceId)
+
+export const memberToolsIn = (snapshot: Snapshot, connection: WorkspaceConnectionRow, memberId: MemberId) => {
+  const restriction = snapshot.connectionRestrictions.find(
+    (row) =>
+      row.workspaceId === connection.workspaceId && row.connectionId === connection.id && row.memberId === memberId,
+  )
+  return connection.allowedTools.filter((tool) => restriction?.allowedTools.includes(tool) ?? true)
+}
 
 export const memberNamesIn = (snapshot: Snapshot, workspaceId: WorkspaceId) => {
   const nameByMemberId = new Map(

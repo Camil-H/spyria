@@ -1,4 +1,5 @@
 import {
+  appendWorkspaceEvent,
   enqueueJob,
   gatewayKeyRefOf,
   gatewayKeyRefsOf,
@@ -6,20 +7,30 @@ import {
   lockMembership,
   setVirtualKeyId,
   virtualKeyIdOf,
+  virtualKeyIdsIn,
 } from '@hq/db/server-writes'
-import { skippingRefusedRebase, type Transact, type ZeroContext, zql } from '@hq/db/zero-queries'
-import type { MemberId, WorkspaceId } from '@hq/kernel'
+import { activeMemberRoleOf, skippingRefusedRebase, type Transact, type ZeroContext, zql } from '@hq/db/zero-queries'
+import { type MemberId, memberId as toMemberId, type WorkspaceId } from '@hq/kernel'
 import type { Transaction } from '@rocicorp/zero'
 import type { ProfileTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import { DisplayName } from '../domain/display-name.ts'
-import { CredentialNotFound, MemberNotFound, NotOwnProfile } from '../domain/errors.ts'
+import { ConnectionNotFound, CredentialNotFound, MemberNotFound, NotOwnProfile } from '../domain/errors.ts'
 import { gatewayKeyOf, profileJobTypes, gatewayKeyRefOf as refOf } from '../domain/llm-credential.ts'
+import type { WorkspaceConnection } from '../domain/workspace-connection.ts'
 
 export const createZeroTransactor = (tx: Transaction, context: ZeroContext): ProfileTransactor => {
   const asContextMember = (workspaceId: WorkspaceId, memberId: MemberId) => {
     if (workspaceId !== context.workspaceId || memberId !== context.userId) throw new NotOwnProfile()
     return { workspaceId, userId: memberId }
   }
+  const inContextWorkspace = (workspaceId: WorkspaceId) => {
+    if (workspaceId !== context.workspaceId) throw new NotOwnProfile()
+    return workspaceId
+  }
+  const connectionOf = (row: Omit<WorkspaceConnection, 'workspaceId'> & { workspaceId: string }) =>
+    ({ ...row, workspaceId: inContextWorkspace(row.workspaceId as WorkspaceId) }) as WorkspaceConnection
+  const connectionRows = (workspaceId: WorkspaceId) =>
+    zql.workspaceConnections.where('workspaceId', inContextWorkspace(workspaceId))
   const unitOfWork: UnitOfWork = {
     members: {
       get: async (workspaceId, memberId) => {
@@ -30,6 +41,10 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
       },
       save: (member) =>
         tx.mutate.memberships.update({ ...asContextMember(member.workspaceId, member.id), displayName: member.name }),
+      isActiveAdmin: async (workspaceId, memberId) =>
+        (await activeMemberRoleOf(tx, inContextWorkspace(workspaceId), memberId)) === 'admin',
+      isActive: async (workspaceId, memberId) =>
+        (await activeMemberRoleOf(tx, inContextWorkspace(workspaceId), memberId)) !== undefined,
     },
     llmCredentials: {
       add: async ({ workspaceId, memberId, id, provider, last4 }, key) => {
@@ -67,6 +82,11 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
         asContextMember(workspaceId, memberId)
         await setVirtualKeyId(tx, workspaceId, memberId, virtualKeyId)
       },
+      virtualKeysIn: async (workspaceId) =>
+        (await virtualKeyIdsIn(tx, inContextWorkspace(workspaceId))).map((row) => ({
+          ...row,
+          memberId: toMemberId(row.memberId),
+        })),
     },
     gatewayJobs: {
       syncLater: async (job) => {
@@ -97,10 +117,6 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
           zql.toolConnections.where('workspaceId', workspaceId).where('userId', memberId),
         ))
           await tx.mutate.toolConnections.delete({ ...owner, tool })
-        for (const { tool } of await tx.run(
-          zql.workspaceConnections.where('workspaceId', workspaceId).where('userId', memberId),
-        ))
-          await tx.mutate.workspaceConnections.delete({ ...owner, tool })
       },
       statusOf: async (workspaceId, memberId, tool) =>
         (
@@ -112,6 +128,55 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
               .one(),
           )
         )?.status,
+    },
+    workspaceConnections: {
+      list: async (workspaceId) => (await tx.run(connectionRows(workspaceId))).map(connectionOf),
+      get: async (workspaceId, connectionId) => {
+        const row = await tx.run(connectionRows(workspaceId).where('id', connectionId).one())
+        if (!row) throw new ConnectionNotFound(connectionId)
+        return connectionOf(row)
+      },
+      findByGatewayName: async (workspaceId, gatewayName) => {
+        const row = await tx.run(connectionRows(workspaceId).where('gatewayName', gatewayName).one())
+        return row && connectionOf(row)
+      },
+      add: (connection) => tx.mutate.workspaceConnections.insert(connection),
+      save: (connection) => tx.mutate.workspaceConnections.update(connection),
+      remove: async (workspaceId, connectionId) => {
+        for (const { userId } of await tx.run(
+          zql.connectionRestrictions.where('workspaceId', workspaceId).where('connectionId', connectionId),
+        ))
+          await tx.mutate.connectionRestrictions.delete({ workspaceId, connectionId, userId })
+        await tx.mutate.workspaceConnections.delete({ workspaceId: inContextWorkspace(workspaceId), id: connectionId })
+      },
+      restrictionsOf: async (workspaceId) =>
+        (await tx.run(zql.connectionRestrictions.where('workspaceId', inContextWorkspace(workspaceId)))).map(
+          ({ connectionId, userId, allowedTools }) => ({ connectionId, memberId: toMemberId(userId), allowedTools }),
+        ),
+      restrict: (workspaceId, { connectionId, memberId, allowedTools }) =>
+        tx.mutate.connectionRestrictions.upsert({
+          workspaceId: inContextWorkspace(workspaceId),
+          connectionId,
+          userId: memberId,
+          allowedTools,
+        }),
+      unrestrict: (workspaceId, connectionId, memberId) =>
+        tx.mutate.connectionRestrictions.delete({
+          workspaceId: inContextWorkspace(workspaceId),
+          connectionId,
+          userId: memberId,
+        }),
+      removeRestrictionsOf: async (workspaceId, memberId) => {
+        for (const { connectionId } of await tx.run(
+          zql.connectionRestrictions.where('workspaceId', inContextWorkspace(workspaceId)).where('userId', memberId),
+        ))
+          await tx.mutate.connectionRestrictions.delete({ workspaceId, connectionId, userId: memberId })
+      },
+    },
+    workspaceEvents: {
+      record: async ({ workspaceId, ...event }) => {
+        await appendWorkspaceEvent(tx, { ...event, workspaceId: inContextWorkspace(workspaceId) })
+      },
     },
   }
   return { run: (work) => skippingRefusedRebase(tx, () => work(unitOfWork)) }
