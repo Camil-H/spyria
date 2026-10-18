@@ -58,7 +58,12 @@ export type ToolCall = Readonly<{
 }>
 export type ToolCallRepository = { record(call: ToolCall): Promise<void> }
 
-export type ModelCallTurn = { promptId: MessageId; prompterId: MemberId; ownerId: MemberId | null }
+export type ModelCallTurn = {
+  promptId: MessageId
+  prompterId: MemberId
+  ownerId: MemberId | null
+  sessionId: string | null
+}
 
 export type MemberDirectory = {
   displayNameOf(memberId: MemberId): Promise<string>

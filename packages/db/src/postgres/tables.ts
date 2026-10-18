@@ -621,9 +621,15 @@ export const modelCalls = table(
     costMicros: integer().notNull(),
     status: text().$type<'success' | 'error'>().notNull(),
     role: text(),
+    turnId: text(),
+    sessionId: text(),
     calledAt: instant().notNull(),
   },
-  (table) => [primaryKey({ columns: [table.workspaceId, table.id] })],
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.id] }),
+    index('model_calls_prompter_index').on(table.workspaceId, table.prompterId, table.calledAt),
+    index('model_calls_chat_index').on(table.workspaceId, table.chatId, table.calledAt),
+  ],
 )
 
 export const toolCalls = table(

@@ -1,11 +1,14 @@
 import type { WorkspaceId } from '@hq/kernel'
 import type { AuditPage } from '../domain/audit.ts'
+import type { SpendReport } from '../domain/spend.ts'
 
-type AuditRequest = { workspaceId: WorkspaceId; search: Readonly<Record<string, string>> }
+type SearchRequest = { workspaceId: WorkspaceId; search: Readonly<Record<string, string>> }
 
 export type UsageCommands = {
-  readAuditPage: (input: AuditRequest) => Promise<AuditPage>
-  exportAuditCsv: (input: AuditRequest) => Promise<Blob>
+  readAuditPage: (input: SearchRequest) => Promise<AuditPage>
+  exportAuditCsv: (input: SearchRequest) => Promise<Blob>
   readAuditRetention: (input: { workspaceId: WorkspaceId }) => Promise<number | null>
+  readWorkspaceSpend: (input: SearchRequest) => Promise<SpendReport>
+  readOwnSpend: (input: SearchRequest) => Promise<SpendReport>
   saveAuditRetention: (input: { workspaceId: WorkspaceId; retentionDays: number | null }) => Promise<number | null>
 }

@@ -268,6 +268,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
               promptId: messageId(turn.promptId),
               prompterId: memberId(turn.prompterId),
               ownerId: turn.ownerId === null ? null : memberId(turn.ownerId),
+              sessionId: turn.sessionId,
             }
           : undefined
       },

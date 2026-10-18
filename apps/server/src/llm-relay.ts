@@ -334,6 +334,8 @@ export const createModelCallRelay = ({
           'x-bf-dim-prompter': turn.prompterId,
           'x-bf-dim-owner': turn.ownerId ?? '',
           'x-bf-dim-workspace': host.workspaceId,
+          'x-bf-dim-turn': turn.promptId,
+          'x-bf-dim-session': turn.sessionId ?? '',
           'x-bf-mcp-include-clients': '',
           ...(turn.delegationId && { 'x-bf-dim-role': 'delegate', 'x-bf-dim-delegation': turn.delegationId }),
           ...providerHeadersOf?.(database, turn.chat),

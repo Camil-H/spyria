@@ -75,6 +75,8 @@ export const createBifrostUsageLogs = ({
                   costMicros: Math.round((cost ?? 0) * 1_000_000),
                   status,
                   role: metadata.role ?? null,
+                  turnId: metadata.turn || null,
+                  sessionId: metadata.session || null,
                   calledAt: new Date(timestamp),
                 },
               ]

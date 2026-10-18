@@ -1,7 +1,10 @@
 import type { Transact, ZeroContext } from '@hq/db/zero-queries'
 import { auditCsvHeader, auditCsvLinesOf, auditCsvPageSize, auditFilterFrom, auditPageSize } from '../domain/audit.ts'
+import { spendFilterFrom } from '../domain/spend.ts'
 import { createPostgresAuditTransactor } from '../integrations/postgres-audit-log.ts'
+import { createPostgresSpendTransactor } from '../integrations/postgres-spend.ts'
 import { readAuditPage, readAuditRetention, setAuditRetention } from '../operations/audit-log.ts'
+import { readOwnSpend, readWorkspaceSpend } from '../operations/spend.ts'
 
 type Query = Readonly<Record<string, string | undefined>>
 
@@ -46,3 +49,15 @@ export const auditRetentionFromRequest = async (transact: Transact, context: Zer
           retentionDays: (body as { retentionDays?: unknown } | null)?.retentionDays,
         }),
 })
+
+const spendRequestOf = (transact: Transact, context: ZeroContext, query: Query) =>
+  [
+    { transactor: createPostgresSpendTransactor(transact, context.workspaceId) },
+    { memberId: context.userId, filter: spendFilterFrom(query, new Date()) },
+  ] as const
+
+export const workspaceSpendFromRequest = (transact: Transact, context: ZeroContext, query: Query) =>
+  readWorkspaceSpend(...spendRequestOf(transact, context, query))
+
+export const ownSpendFromRequest = (transact: Transact, context: ZeroContext, query: Query) =>
+  readOwnSpend(...spendRequestOf(transact, context, query))

@@ -7,12 +7,13 @@ const recordCalls = `
   with incoming as (
     select * from jsonb_to_recordset($2::jsonb) as call(
       id text, "chatId" text, "prompterId" text, "ownerId" text, model text, provider text,
-      "inputTokens" int, "outputTokens" int, "costMicros" int, status text, role text, "calledAt" timestamptz)
+      "inputTokens" int, "outputTokens" int, "costMicros" int, status text, role text, "turnId" text,
+      "sessionId" text, "calledAt" timestamptz)
   ), inserted as (
     insert into model_calls (workspace_id, id, chat_id, prompter_id, owner_id, model, provider,
-      input_tokens, output_tokens, cost_micros, status, role, called_at)
+      input_tokens, output_tokens, cost_micros, status, role, turn_id, session_id, called_at)
     select $1, id, "chatId", "prompterId", "ownerId", model, provider,
-      "inputTokens", "outputTokens", "costMicros", status, role, "calledAt" from incoming
+      "inputTokens", "outputTokens", "costMicros", status, role, "turnId", "sessionId", "calledAt" from incoming
     on conflict do nothing
     returning *)
   insert into usage_entries (workspace_id, month, chat_id, user_id, tokens, cost_micros, calls)

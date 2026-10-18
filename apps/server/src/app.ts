@@ -59,6 +59,10 @@ import {
   auditPageFromRequest,
   auditRetentionFromRequest,
   auditRetentionPath,
+  ownSpendFromRequest,
+  ownSpendPath,
+  spendPath,
+  workspaceSpendFromRequest,
 } from '@hq/usage/server'
 import {
   createDevChatFromRequest,
@@ -444,6 +448,16 @@ export const createApp = ({
           },
         })
       }),
+    )
+    .get(spendPath, (context) =>
+      endpointResponse('Reading the workspace spend', 200, () =>
+        workspaceSpendFromRequest(context.get('transact'), context.get('zeroContext'), context.req.query()),
+      ),
+    )
+    .get(ownSpendPath, (context) =>
+      endpointResponse('Reading own usage', 200, () =>
+        ownSpendFromRequest(context.get('transact'), context.get('zeroContext'), context.req.query()),
+      ),
     )
     .get(auditRetentionPath, (context) =>
       endpointResponse('Reading the audit retention', 200, () =>

@@ -520,7 +520,7 @@ export const runtimeTurn = async (host: { id: string }, prompterId: string | nul
       await sql`
         update chats set agent_turn_message_id = ${promptId}, agent_turn_prompter_id = ${prompterId} where id = ${turnChatId}`
   })
-  return { chatId: turnChatId, token }
+  return { chatId: turnChatId, token, promptId }
 }
 
 export const startAgentStack = async ({

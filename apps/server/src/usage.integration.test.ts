@@ -45,7 +45,7 @@ const month = new Date().toISOString().slice(0, 7)
 test('the sync records each gateway call once across overlapping windows and reruns, by the labels of the call', async () => {
   await modelCall({ ...research, prompter: alice })
   await modelCall({ ...research, prompter: alice })
-  await modelCall({ ...research, prompter: bob })
+  await modelCall({ ...research, prompter: bob, turn: 'turn-bob', session: 'session-bob' })
   await landed()
   await sync()
   await sync()
@@ -65,6 +65,12 @@ test('the sync records each gateway call once across overlapping windows and rer
       status: 'success',
     },
   ])
+  expect([...(await database.$client`select turn_id, session_id from model_calls where prompter_id = ${bob}`)]).toEqual(
+    [{ turn_id: 'turn-bob', session_id: 'session-bob' }],
+  )
+  expect([
+    ...(await database.$client`select distinct turn_id, session_id from model_calls where prompter_id = ${alice}`),
+  ]).toEqual([{ turn_id: null, session_id: null }])
 
   await database.$client`update usage_sync_marks set logs_since = now() - interval '1 hour' where workspace_id = ${acme}`
   await modelCall({ ...research, prompter: alice })

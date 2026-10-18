@@ -425,3 +425,78 @@ export const prepareSeededGatewayKeys = async (
   }
   return Object.assign(write, { keyId, virtualKeyId: virtual_key.id })
 }
+
+const monthDayOf = (now: Date, monthsBack: number, day: number, hour = 12) =>
+  new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - monthsBack, day, hour)).toISOString()
+
+export const seedSpend = async (writer: SeedWriter, now = new Date()) => {
+  const calls = [1, 0].flatMap((monthsBack) => {
+    const scale = monthsBack === 0 ? 2 : 1
+    const month = monthsBack === 0 ? 'this' : 'last'
+    const call = (prompter: string, chat: string, provider: string, model: string, turn: string, day: number) => ({
+      workspace: 'workspace-acme',
+      id: `call-${crypto.randomUUID()}`,
+      chat,
+      prompter,
+      provider,
+      model,
+      input: 400 * scale,
+      output: 100 * scale,
+      cost: 5000 * scale,
+      role: model === 'gpt-5-mini' ? 'delegate' : null,
+      turn: `turn-${turn}-${month}`,
+      session: `session-${prompter}-${month}`,
+      at: monthDayOf(now, monthsBack, day),
+    })
+    return [
+      call('member-alice', 'chat-invoice-bug', 'anthropic', 'claude-sonnet', 'alice-1', 2),
+      call('member-alice', 'chat-invoice-bug', 'openai', 'gpt-5-mini', 'alice-1', 2),
+      call('member-alice', 'chat-invoice-bug', 'anthropic', 'claude-sonnet', 'alice-2', 3),
+      call('member-alice', 'chat-invoice-bug', 'anthropic', 'claude-sonnet', 'alice-2', 3),
+      call('member-bob', 'chat-research', 'openai', 'gpt-5', 'bob', 2),
+      call('member-bob', 'chat-research', 'openai', 'gpt-5', 'bob', 2),
+      call('member-lee', 'chat-setup-helper', 'openai', 'gpt-5', 'lee', 3),
+      call('member-lee', 'chat-setup-helper', 'openai', 'gpt-5', 'lee', 3),
+    ]
+  })
+  const globexCall = {
+    ...calls[0],
+    workspace: 'workspace-globex',
+    id: 'call-globex',
+    chat: 'chat-launch-plan',
+    cost: 999_000,
+  }
+  await writer.execute(sql`insert into model_calls (workspace_id, id, chat_id, prompter_id, owner_id, model, provider,
+      input_tokens, output_tokens, cost_micros, status, role, turn_id, session_id, called_at)
+    select workspace, id, chat, prompter, null, model, provider, input, output, cost, 'success', role, turn, session, at
+    from jsonb_to_recordset(${JSON.stringify([...calls, globexCall])}::jsonb) as call(workspace text, id text, chat text,
+      prompter text, provider text, model text, input int, output int, cost int, role text, turn text, session text,
+      at timestamptz)`)
+  const step = (state: string) =>
+    JSON.stringify({
+      type: 'pull_request',
+      repository: 'acme/app',
+      number: 7,
+      url: 'https://github.com/acme/app/pull/7',
+      title: 'Fix the invoice total',
+      state,
+    })
+  for (const [id, type, payload, at] of [
+    [
+      'spend-pull-request',
+      'message.posted',
+      `{"kind":"step","body":"pull_request","replyToId":null,"step":${step('open')}}`,
+      monthDayOf(now, 0, 2, 13),
+    ],
+    [
+      'spend-pull-request-merged',
+      'message.step_changed',
+      `{"messageId":"spend-pull-request","step":${step('merged')}}`,
+      monthDayOf(now, 0, 3, 13),
+    ],
+  ])
+    await writer.execute(sql`insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
+      select 'workspace-acme', 'chat-invoice-bug', ${id}, coalesce(max(seq), 0) + 1, ${type}, 'member-alice',
+        ${payload}::jsonb, ${at}::timestamptz
+      from events where workspace_id = 'workspace-acme' and chat_id = 'chat-invoice-bug'`)
+}

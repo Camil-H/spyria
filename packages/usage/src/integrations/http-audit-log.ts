@@ -10,7 +10,7 @@ type PostAsMember = (workspaceId: WorkspaceId, path: string, body?: string) => P
 type GetAsMember = (workspaceId: WorkspaceId, path: string) => Promise<Response>
 type AuditSearch = Readonly<Record<string, string>>
 
-const succeeded = async (response: Response) => {
+export const succeeded = async (response: Response) => {
   if (response.ok) return response
   const { error, message } = (await response.json().catch(() => ({}))) as { error?: string; message?: string }
   throw new UsageError(error ?? 'internal', message ?? `The request was refused with ${response.status}`)

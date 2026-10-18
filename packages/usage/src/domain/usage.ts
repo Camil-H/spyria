@@ -1,16 +1,9 @@
-import type { ChatId, MemberId, ProjectId } from '@hq/kernel'
+import type { ChatId, MemberId } from '@hq/kernel'
 
 export type UsageMonth = string
 export type UsageTotals = { tokens: number; costMicros: number; calls: number }
 type MemberUsage = UsageTotals & { memberId: MemberId; name: string }
-type ProjectUsage = UsageTotals & { projectId: ProjectId | null; name: string }
 export type ChatUsage = { months: readonly UsageMonth[]; rows: readonly MemberUsage[]; total: UsageTotals }
-export type WorkspaceUsage = {
-  months: readonly UsageMonth[]
-  total: UsageTotals
-  byMember: readonly MemberUsage[]
-  byProject: readonly ProjectUsage[]
-}
 
 export type ModelCall = {
   id: string
@@ -24,6 +17,8 @@ export type ModelCall = {
   costMicros: number
   status: 'success' | 'error'
   role: string | null
+  turnId: string | null
+  sessionId: string | null
   calledAt: Date
 }
 

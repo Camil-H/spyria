@@ -86,6 +86,9 @@ const pullRequestRecords = `
   ) change
   where change.type = 'message.posted' or change.step->>'state' is distinct from change.previous_state`
 
+export const activeAdminStatement = `select 1 from memberships where workspace_id = $1 and user_id = $2
+  and role = 'admin' and removed_at is null`
+
 const auditRecordsStatement = `
   select to_char(page.at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as at, page.key, page.kind,
     page.actor_id as "actorId", actor.display_name as "actorName", page.target, page.details
@@ -106,14 +109,7 @@ export const createPostgresAuditTransactor = (transact: Transact, workspaceId: W
           )
         )[0]?.retentionDays ?? null
       return work({
-        isActiveAdmin: async (memberId) =>
-          (
-            await query(
-              `select 1 from memberships where workspace_id = $1 and user_id = $2 and role = 'admin'
-               and removed_at is null`,
-              [memberId],
-            )
-          ).length > 0,
+        isActiveAdmin: async (memberId) => (await query(activeAdminStatement, [memberId])).length > 0,
         records: async ({ since, until, personId, kinds, before, limit }: AuditQuery) =>
           query<AuditRecord>(auditRecordsStatement, [
             before?.at ?? null,

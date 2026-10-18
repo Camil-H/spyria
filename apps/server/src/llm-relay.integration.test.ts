@@ -34,7 +34,9 @@ await addLlmKey(bob, 'Fake', bobSecret)
 
 test('a relayed call runs on the turn prompter’s virtual key with HQ’s attribution, streams back, and drops spoofed auth and x-bf headers', async () => {
   const host = await fakeHost('Relay host')
-  const { chatId, token } = await runtimeTurn(host, bob)
+  const { chatId, token, promptId } = await runtimeTurn(host, bob)
+  const sessionId = `conversation-${crypto.randomUUID()}`
+  await database.$client`update runtimes set agent_conversation_id = ${sessionId} where chat_id = ${chatId}`
   const bobKey = await virtualKeyOf(bob)
   const consoleCalls = captureConsole()
   const callsBefore = fakeLlmCalls.length
@@ -65,6 +67,8 @@ test('a relayed call runs on the turn prompter’s virtual key with HQ’s attri
     prompter: bob,
     owner: alice,
     workspace: acme,
+    turn: promptId,
+    session: sessionId,
   })
   const everyFrame = host.receivedFrames.join('\n')
   const logged = consoleCalls.logged()

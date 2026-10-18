@@ -255,7 +255,13 @@ test('g-4. a long task answers still running before Pi’s timeout for the route
   const [delegation] = await delegationsOf(chat)
   const id = String(delegation?.id)
   expect((await stepsOf(promptId))[0]?.result).toBe(stillRunningOf(id))
-  const otherTurn = { promptId: messageId('message-other'), prompterId: alice, ownerId: alice, prompterName: 'Alice' }
+  const otherTurn = {
+    promptId: messageId('message-other'),
+    prompterId: alice,
+    ownerId: alice,
+    prompterName: 'Alice',
+    sessionId: null,
+  }
   const awaitElsewhere = (otherChat: ChatId) =>
     agentBridge.forDatabase(database).awaitTask({
       chat: { workspaceId: acme, chatId: otherChat },
@@ -292,7 +298,7 @@ test('a long task the turn never resumed is forgotten and stopped when the turn 
   expect((await stepsOf(promptId))[0]?.result).toBe(stillRunningOf(id))
   const awaited = await agentBridge.forDatabase(database).awaitTask({
     chat: { workspaceId: acme, chatId: chat },
-    turn: { promptId: messageId(promptId), prompterId: alice, ownerId: alice },
+    turn: { promptId: messageId(promptId), prompterId: alice, ownerId: alice, sessionId: null },
     taskId: id,
   })
   expect(awaited).toEqual({ text: unknownTaskOf(id), isError: true })

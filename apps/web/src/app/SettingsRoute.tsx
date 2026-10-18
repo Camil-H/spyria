@@ -61,7 +61,7 @@ const cardSections: readonly { title: string; cards: readonly SettingsCard[] }[]
       {
         path: 'costs',
         title: 'Analyze costs',
-        description: 'Tokens and costs by member and project',
+        description: 'Spend over time by member, project, chat and model, with what drove it',
         Page: UsageSection,
       },
       {

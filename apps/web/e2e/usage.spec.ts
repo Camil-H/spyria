@@ -30,6 +30,7 @@ const memberTableOf = (page: Page) => usageSectionOf(page).getByRole('table', { 
 const projectTableOf = (page: Page) => usageSectionOf(page).getByRole('table', { name: 'Usage by project' })
 const rowOf = (table: Locator, name: string) => table.getByRole('row', { name: new RegExp(`^${name}\\b`) })
 const monthPickerOf = (scope: Locator) => scope.getByRole('combobox', { name: 'Month' })
+const periodPickerOf = (page: Page) => usageSectionOf(page).getByRole('combobox', { name: 'Period' })
 
 const cellsOf = async (row: Locator) => {
   const [tokens = '', cost = '', calls = ''] = await row.getByRole('cell').allTextContents()
@@ -115,18 +116,18 @@ test('3. two prompters each get a row, the total is their sum, and workspace set
   const aliceInInvoiceBug = await cellsOf(rowOf(invoiceTable, 'Alice'))
   const bobInInvoiceBug = await cellsOf(rowOf(invoiceTable, 'Bob'))
 
+  expect(invoiceBug.tokens).toBe(aliceInInvoiceBug.tokens + bobInInvoiceBug.tokens)
+
   await openUsageSettings(page)
-  await expect(monthPickerOf(usageSectionOf(page))).toHaveValue(currentMonth)
+  await expect(periodPickerOf(page)).toHaveValue('this_month')
   await expect(rowOf(projectTableOf(page), 'No project')).toBeVisible()
   expect(await cellsOf(rowOf(projectTableOf(page), 'No project'))).toEqual(research)
-  expect((await cellsOf(rowOf(projectTableOf(page), 'Billing'))).tokens).toBe(invoiceBug.tokens)
-  expect((await cellsOf(rowOf(memberTableOf(page), 'Alice'))).tokens).toBe(
-    aliceInResearch.tokens + aliceInInvoiceBug.tokens,
-  )
-  expect((await cellsOf(rowOf(memberTableOf(page), 'Bob'))).tokens).toBe(bobInResearch.tokens + bobInInvoiceBug.tokens)
+  await expect(rowOf(projectTableOf(page), 'Billing')).toHaveCount(0)
+  expect((await cellsOf(rowOf(memberTableOf(page), 'Alice'))).tokens).toBe(aliceInResearch.tokens)
+  expect((await cellsOf(rowOf(memberTableOf(page), 'Bob'))).tokens).toBe(bobInResearch.tokens)
   const workspaceTotal = await cellsOf(rowOf(memberTableOf(page), 'Total'))
-  expect(workspaceTotal.tokens).toBe(research.tokens + invoiceBug.tokens)
-  expect(workspaceTotal.calls).toBe(research.calls + invoiceBug.calls)
+  expect(workspaceTotal.tokens).toBe(research.tokens)
+  expect(workspaceTotal.calls).toBe(research.calls)
 })
 
 test('4. a row of an earlier month appears only when that month is picked, in both views', async ({
@@ -136,6 +137,12 @@ test('4. a row of an earlier month appears only when that month is picked, in bo
   await workerStack.database.$client`
     insert into usage_entries (workspace_id, month, chat_id, user_id, tokens, cost_micros, calls)
     values ('workspace-acme', ${earlierMonth}, 'chat-research', 'member-alice', 4321, 70000, 3)`
+  await workerStack.database.$client`
+    insert into model_calls (workspace_id, id, chat_id, prompter_id, owner_id, model, provider, input_tokens, output_tokens, cost_micros, status, called_at)
+    select 'workspace-acme', 'earlier-' || n, 'chat-research', 'member-alice', 'member-alice', 'fake-model', 'fake',
+      case when n = 1 then 4000 else 100 end, case when n = 1 then 121 else 0 end, case when n = 1 then 50000 else 10000 end,
+      'success', ${`${earlierMonth}-15T12:00:00Z`}::timestamptz
+    from generate_series(1, 3) n`
 
   await openUsageTab(page, 'Research')
   const usageTable = tabPanelOf(page).getByRole('table')
@@ -147,8 +154,8 @@ test('4. a row of an earlier month appears only when that month is picked, in bo
   await expect(rowOf(usageTable, 'Alice').getByRole('cell').nth(2)).toHaveText('3')
 
   await openUsageSettings(page)
-  await expect(projectTableOf(page)).not.toContainText('4,321')
-  await monthPickerOf(usageSectionOf(page)).selectOption(earlierMonth)
+  await expect(usageSectionOf(page).getByText('No usage in this period')).toBeVisible()
+  await periodPickerOf(page).selectOption('last_month')
   await expect(rowOf(projectTableOf(page), 'No project')).toContainText('4,321')
   await expect(rowOf(memberTableOf(page), 'Alice')).toContainText('4,321')
   await expect(rowOf(memberTableOf(page), 'Total')).toContainText('$0.07')

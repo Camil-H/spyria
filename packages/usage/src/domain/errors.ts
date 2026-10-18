@@ -2,7 +2,12 @@ import { DomainError, errorKind } from '@hq/kernel'
 
 export class UsageError extends DomainError {}
 
-export const NotWorkspaceAdmin = errorKind('not_admin', () => 'Only workspace admins can see the audit log', UsageError)
+export const NotWorkspaceAdmin = errorKind(
+  'not_admin',
+  (action = 'see the audit log') => `Only workspace admins can ${action}`,
+  UsageError,
+)
+export const InvalidSpendFilter = errorKind('invalid_spend_filter', () => 'The spend filter is not valid', UsageError)
 export const InvalidAuditFilter = errorKind(
   'invalid_audit_filter',
   () => 'The audit log filter is not valid',
