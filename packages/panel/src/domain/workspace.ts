@@ -1,12 +1,29 @@
-export type WorkspaceRead = 'tree' | 'file' | 'changes'
+export type WorkspaceRead = 'tree' | 'file' | 'changes' | 'status'
 export type WorkspaceReading = Readonly<{ isLive: boolean; [field: string]: unknown }>
-export type DiffLine = { kind: 'added' | 'removed' | 'context'; text: string }
+export type DiffLine = {
+  kind: 'added' | 'removed' | 'context' | 'hunk'
+  text: string
+  oldNumber: number | null
+  newNumber: number | null
+}
+export type DiffRow = { left: DiffLine | null; right: DiffLine | null }
+export type DiffLayout = 'unified' | 'split'
 export type FileStatus = 'Added' | 'Modified' | 'Deleted'
 export type FileChange = { path: string; status: FileStatus; additions: number; deletions: number; lines: DiffLine[] }
 export type TreeEntry = { name: string; path: string; isFolder: boolean }
 export type Commit = { sha: string; subject: string; author: string; committedAt: string }
+export type BranchStatus = {
+  aheadOfBase?: number
+  behindBase?: number
+  aheadOfPushed?: number
+  behindPushed?: number
+  uncommitted?: number
+  pushedAt?: string
+}
 
-const lineKinds: Record<string, DiffLine['kind']> = { '+': 'added', '-': 'removed', ' ': 'context', '@': 'context' }
+const lineKinds: Record<string, DiffLine['kind']> = { '+': 'added', '-': 'removed', ' ': 'context', '@': 'hunk' }
+const hunkPattern = /^@@ -(\d+)(?:,\d+)? \+(\d+)/
+const collapsedAboveLines = 400
 
 const pathOf = (header: string, lines: readonly string[]) => {
   const target = lines.find((line) => line.startsWith('+++ b/'))
@@ -14,14 +31,34 @@ const pathOf = (header: string, lines: readonly string[]) => {
   return (target ?? source)?.slice(6) ?? header.slice(header.lastIndexOf(' b/') + 3)
 }
 
+const numberedLinesOf = (body: readonly string[]) => {
+  let oldNumber = 0
+  let newNumber = 0
+  return body.map((line): DiffLine => {
+    const kind = lineKinds[line[0] ?? ' '] ?? 'context'
+    if (kind === 'hunk') {
+      const [, oldStart = '0', newStart = '0'] = hunkPattern.exec(line) ?? []
+      oldNumber = Number(oldStart)
+      newNumber = Number(newStart)
+      return { kind, text: line, oldNumber: null, newNumber: null }
+    }
+    const numbered = {
+      kind,
+      text: line.slice(1),
+      oldNumber: kind === 'added' ? null : oldNumber,
+      newNumber: kind === 'removed' ? null : newNumber,
+    }
+    if (kind !== 'added') oldNumber += 1
+    if (kind !== 'removed') newNumber += 1
+    return numbered
+  })
+}
+
 const fileChangeOf = (section: string): FileChange => {
   const [header = '', ...lines] = section.split('\n')
   const hunkStart = lines.findIndex((line) => line.startsWith('@@'))
   const body = hunkStart < 0 ? [] : lines.slice(hunkStart).filter((line) => line[0] && line[0] in lineKinds)
-  const diffLines = body.map((line) => ({
-    kind: lineKinds[line[0] ?? ' '] ?? 'context',
-    text: line.startsWith('@@') ? line : line.slice(1),
-  }))
+  const diffLines = numberedLinesOf(body)
   const head = hunkStart < 0 ? lines : lines.slice(0, hunkStart)
   return {
     path: pathOf(header, head),
@@ -73,3 +110,64 @@ export const codeFenceOf = (path: string, content: string) => {
   const fence = '`'.repeat(Math.max(3, ...[...content.matchAll(/`+/g)].map(([run]) => run.length + 1)))
   return `${fence}${path.split('.').at(-1) ?? ''}\n${content}\n${fence}`
 }
+
+export const isCollapsedByDefault = (changes: readonly FileChange[]) =>
+  changes.reduce((total, change) => total + change.lines.length, 0) > collapsedAboveLines
+
+export const splitRowsOf = (lines: readonly DiffLine[]) => {
+  const rows: DiffRow[] = []
+  let removed: DiffLine[] = []
+  let added: DiffLine[] = []
+  const pairChanges = () => {
+    for (let index = 0; index < Math.max(removed.length, added.length); index += 1)
+      rows.push({ left: removed[index] ?? null, right: added[index] ?? null })
+    removed = []
+    added = []
+  }
+  for (const line of lines) {
+    if (line.kind === 'removed') removed.push(line)
+    else if (line.kind === 'added') added.push(line)
+    else {
+      pairChanges()
+      rows.push({ left: line, right: line })
+    }
+  }
+  pairChanges()
+  return rows
+}
+
+const countAgainst = (ahead: number | undefined, behind: number | undefined, target: string, upToDate: string) => {
+  if (ahead === undefined || behind === undefined) return []
+  if (ahead === 0 && behind === 0) return [upToDate]
+  return [...(ahead > 0 ? [`${ahead} ahead of ${target}`] : []), ...(behind > 0 ? [`${behind} behind ${target}`] : [])]
+}
+
+export const branchStatusOf = (reading: WorkspaceReading | undefined): BranchStatus => {
+  const numberOf = (field: string) => (typeof reading?.[field] === 'number' ? (reading[field] as number) : undefined)
+  return {
+    aheadOfBase: numberOf('aheadOfBase'),
+    behindBase: numberOf('behindBase'),
+    aheadOfPushed: numberOf('aheadOfPushed'),
+    behindPushed: numberOf('behindPushed'),
+    uncommitted: numberOf('uncommitted'),
+    pushedAt: typeof reading?.pushedAt === 'string' ? reading.pushedAt : undefined,
+  }
+}
+
+export const branchStatusPartsOf = (status: BranchStatus, baseBranch: string) => [
+  ...countAgainst(status.aheadOfBase, status.behindBase, baseBranch, `Up to date with ${baseBranch}`),
+  ...countAgainst(status.aheadOfPushed, status.behindPushed, 'the pushed branch', 'Pushed branch up to date'),
+  ...(status.uncommitted === undefined
+    ? []
+    : [
+        status.uncommitted === 0
+          ? 'No uncommitted files'
+          : `${status.uncommitted} ${status.uncommitted === 1 ? 'file' : 'files'} uncommitted`,
+      ]),
+]
+
+export const conflictPromptOf = (baseBranch: string, conflicts: readonly string[]) =>
+  [
+    `Merge the latest ${baseBranch} (fetched as refs/hq/base) into the working branch, resolve the conflicts in these files, then commit:`,
+    ...conflicts.map((path) => `- ${path}`),
+  ].join('\n')

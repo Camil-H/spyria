@@ -64,6 +64,8 @@ const pushAndRecord = async (
   })
   if (!pushed) return refused(noGitHubConnection)
   if (pushed.failure) return refused(pushed.failure)
+  const endpoint = pushed.head && (await runtimes.endpointOf(chat))
+  if (endpoint) await agentClient.actOnWorkspace(endpoint, 'pushed', { head: pushed.head })
   const pullRequest = card?.step?.type === 'pull_request' ? card.step : undefined
   const openPullRequest = pullRequest && !closedStates.includes(pullRequest.state) ? pullRequest : undefined
   if (!openPullRequest && action === 'push') return { isRefused: false, text: `Pushed ${pushed.branch}` }

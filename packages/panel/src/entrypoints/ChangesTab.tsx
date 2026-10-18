@@ -1,9 +1,14 @@
-import { DiffView, focusRing, iconButtonClass } from '@hq/ui'
+import { useQuery } from '@hq/db/react'
+import { useSession } from '@hq/session'
+import { iconButtonClass } from '@hq/ui'
 import { FileDiff, RefreshCw } from 'lucide-react'
-import { useState } from 'react'
 import { createPortal } from 'react-dom'
-import { commitsOf, fileChangesOf } from '../domain/workspace.ts'
+import { branchStatusOf, commitsOf, fileChangesOf } from '../domain/workspace.ts'
+import { getPublishing } from '../queries/get-publishing.ts'
+import { BranchStatusLine } from './BranchStatusLine.tsx'
 import { EmptyState } from './EmptyState.tsx'
+import { FileDiffList } from './FileDiffList.tsx'
+import { GitActions } from './GitActions.tsx'
 import { PublishActions } from './PublishActions.tsx'
 import type { TabProps } from './TabProps.ts'
 import { emptyClass } from './ui.ts'
@@ -11,19 +16,41 @@ import { useWorkspaceReading } from './useWorkspaceReading.ts'
 import { WorkspaceStatus } from './WorkspaceStatus.tsx'
 
 const ChangesTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
-  const { reading, refresh } = useWorkspaceReading(workspaceId, chatId, 'changes')
-  const [selectedPath, setSelectedPath] = useState<string | null>(null)
+  const { memberId } = useSession()
+  const { workingBranch, baseBranch } = useQuery(getPublishing(workspaceId, chatId, memberId))
+  const { reading, refresh: refreshChanges } = useWorkspaceReading(workspaceId, chatId, 'changes')
+  const { reading: statusReading, refresh: refreshStatus } = useWorkspaceReading(workspaceId, chatId, 'status')
   const changes = fileChangesOf(reading?.patch)
-  const selectedChange = changes.find((change) => change.path === selectedPath)
+  const refresh = () => {
+    refreshChanges()
+    refreshStatus()
+  }
   return (
     <div className="flex flex-col gap-4">
       <WorkspaceStatus workspaceId={workspaceId} chatId={chatId} />
+      {workingBranch && baseBranch && (
+        <BranchStatusLine
+          workingBranch={workingBranch}
+          baseBranch={baseBranch}
+          status={branchStatusOf(statusReading)}
+        />
+      )}
       <PublishActions
         workspaceId={workspaceId}
         chatId={chatId}
         actionsSlot={actionsSlot}
         commitSubjects={commitsOf(reading?.log).map(({ subject }) => subject)}
+        onPublished={refreshStatus}
       />
+      {baseBranch && (
+        <GitActions
+          workspaceId={workspaceId}
+          chatId={chatId}
+          actionsSlot={actionsSlot}
+          baseBranch={baseBranch}
+          onChanged={refresh}
+        />
+      )}
       {actionsSlot &&
         createPortal(
           <button
@@ -40,25 +67,8 @@ const ChangesTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
       {reading && changes.length === 0 && (
         <EmptyState Icon={FileDiff} title="No changes" hint="Edits on the working branch against its base show here." />
       )}
-      <ul className="flex flex-col gap-1 text-sm">
-        {changes.map((change) => (
-          <li key={change.path}>
-            <button
-              type="button"
-              aria-pressed={change.path === selectedPath}
-              onClick={() => setSelectedPath(change.path)}
-              className={`flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-md px-2 py-1 text-left hover:bg-hover aria-pressed:bg-selected ${focusRing}`}
-            >
-              <span className="break-all">{change.path}</span>
-              <span className="font-mono text-xs text-muted">
-                {change.status} +{change.additions} −{change.deletions}
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
+      <FileDiffList changes={changes} />
       {reading?.truncated === true && <p className={emptyClass}>Diff truncated</p>}
-      {selectedChange && <DiffView lines={selectedChange.lines} />}
     </div>
   )
 }

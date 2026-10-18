@@ -1,5 +1,17 @@
 import { expect, test } from 'bun:test'
-import { changeMarkOf, codeFenceOf, commitsOf, fileChangesOf, treeEntriesOf } from './workspace.ts'
+import {
+  branchStatusOf,
+  branchStatusPartsOf,
+  changeMarkOf,
+  codeFenceOf,
+  commitsOf,
+  conflictPromptOf,
+  type FileChange,
+  fileChangesOf,
+  isCollapsedByDefault,
+  splitRowsOf,
+  treeEntriesOf,
+} from './workspace.ts'
 
 const patch = `diff --git a/README.md b/README.md
 index 1a2b3c4..5d6e7f8 100644
@@ -31,7 +43,7 @@ index 0000000..aaaaaaa
 Binary files /dev/null and b/logo.png differ
 `
 
-test('a patch becomes one change per file with its status, counts and diff lines', () => {
+test('a patch becomes one change per file with its status, counts and diff lines numbered on both sides', () => {
   expect(fileChangesOf(patch)).toEqual([
     {
       path: 'README.md',
@@ -39,10 +51,10 @@ test('a patch becomes one change per file with its status, counts and diff lines
       additions: 1,
       deletions: 1,
       lines: [
-        { kind: 'context', text: '@@ -1,2 +1,2 @@' },
-        { kind: 'context', text: '# acme app' },
-        { kind: 'removed', text: 'Old line' },
-        { kind: 'added', text: 'New line' },
+        { kind: 'hunk', text: '@@ -1,2 +1,2 @@', oldNumber: null, newNumber: null },
+        { kind: 'context', text: '# acme app', oldNumber: 1, newNumber: 1 },
+        { kind: 'removed', text: 'Old line', oldNumber: 2, newNumber: null },
+        { kind: 'added', text: 'New line', oldNumber: null, newNumber: 2 },
       ],
     },
     {
@@ -51,9 +63,9 @@ test('a patch becomes one change per file with its status, counts and diff lines
       additions: 2,
       deletions: 0,
       lines: [
-        { kind: 'context', text: '@@ -0,0 +1,2 @@' },
-        { kind: 'added', text: 'export const added = 1' },
-        { kind: 'added', text: 'export const twice = 2' },
+        { kind: 'hunk', text: '@@ -0,0 +1,2 @@', oldNumber: null, newNumber: null },
+        { kind: 'added', text: 'export const added = 1', oldNumber: null, newNumber: 1 },
+        { kind: 'added', text: 'export const twice = 2', oldNumber: null, newNumber: 2 },
       ],
     },
     {
@@ -62,8 +74,8 @@ test('a patch becomes one change per file with its status, counts and diff lines
       additions: 0,
       deletions: 1,
       lines: [
-        { kind: 'context', text: '@@ -1 +0,0 @@' },
-        { kind: 'removed', text: 'gone' },
+        { kind: 'hunk', text: '@@ -1 +0,0 @@', oldNumber: null, newNumber: null },
+        { kind: 'removed', text: 'gone', oldNumber: 1, newNumber: null },
       ],
     },
     { path: 'logo.png', status: 'Added', additions: 0, deletions: 0, lines: [] },
@@ -111,4 +123,97 @@ test('tree entries are marked by their change, folders when they contain one', (
 test('a file shows in a code fence longer than any backtick run it holds, tagged by its extension', () => {
   expect(codeFenceOf('src/app.ts', 'const a = 1')).toBe('```ts\nconst a = 1\n```')
   expect(codeFenceOf('README.md', 'Use ```ts blocks``````')).toBe('```````md\nUse ```ts blocks``````\n```````')
+})
+
+const hunkPatch = `diff --git a/src/app.ts b/src/app.ts
+--- a/src/app.ts
++++ b/src/app.ts
+@@ -10,4 +10,5 @@ export const app
+ const first = 1
+-const second = 2
+-const third = 3
++const second = 20
++const added = 21
++const third = 30
+ const last = 4
+`
+
+test('hunk headers start the numbering, and the split layout pairs removed lines with added ones beside the shared context', () => {
+  const [change] = fileChangesOf(hunkPatch)
+  const lines = change?.lines ?? []
+  expect(lines.map(({ oldNumber, newNumber }) => [oldNumber, newNumber])).toEqual([
+    [null, null],
+    [10, 10],
+    [11, null],
+    [12, null],
+    [null, 11],
+    [null, 12],
+    [null, 13],
+    [13, 14],
+  ])
+  expect(splitRowsOf(lines).map(({ left, right }) => [left?.text ?? null, right?.text ?? null])).toEqual([
+    ['@@ -10,4 +10,5 @@ export const app', '@@ -10,4 +10,5 @@ export const app'],
+    ['const first = 1', 'const first = 1'],
+    ['const second = 2', 'const second = 20'],
+    ['const third = 3', 'const added = 21'],
+    [null, 'const third = 30'],
+    ['const last = 4', 'const last = 4'],
+  ])
+})
+
+test('files start collapsed only when the whole diff is long', () => {
+  const changeOf = (lineCount: number): FileChange => ({
+    path: 'a.ts',
+    status: 'Modified',
+    additions: lineCount,
+    deletions: 0,
+    lines: Array.from({ length: lineCount }, () => ({ kind: 'added', text: '', oldNumber: null, newNumber: 1 })),
+  })
+  expect(isCollapsedByDefault([changeOf(200), changeOf(200)])).toBe(false)
+  expect(isCollapsedByDefault([changeOf(200), changeOf(201)])).toBe(true)
+})
+
+test('the branch status reads ahead and behind counts, uncommitted files and leaves unknown values out', () => {
+  expect(
+    branchStatusPartsOf(
+      branchStatusOf({ isLive: true, aheadOfBase: 1, behindBase: 0, uncommitted: 2, pushedAt: 'x' }),
+      'main',
+    ),
+  ).toEqual(['1 ahead of main', '2 files uncommitted'])
+  expect(
+    branchStatusPartsOf(
+      branchStatusOf({
+        isLive: true,
+        aheadOfBase: 2,
+        behindBase: 3,
+        aheadOfPushed: 1,
+        behindPushed: 0,
+        uncommitted: 0,
+      }),
+      'main',
+    ),
+  ).toEqual(['2 ahead of main', '3 behind main', '1 ahead of the pushed branch', 'No uncommitted files'])
+  expect(
+    branchStatusPartsOf(
+      branchStatusOf({
+        isLive: true,
+        aheadOfBase: 0,
+        behindBase: 0,
+        aheadOfPushed: 0,
+        behindPushed: 0,
+        uncommitted: 1,
+      }),
+      'main',
+    ),
+  ).toEqual(['Up to date with main', 'Pushed branch up to date', '1 file uncommitted'])
+  expect(branchStatusPartsOf(branchStatusOf({ isLive: false }), 'main')).toEqual([])
+  expect(branchStatusOf({ isLive: true, pushedAt: '2026-10-18T10:00:00.000Z' }).pushedAt).toBe(
+    '2026-10-18T10:00:00.000Z',
+  )
+})
+
+test('the conflict prompt names the base and every conflicting file', () => {
+  expect(conflictPromptOf('main', ['src/app.ts', 'README.md'])).toBe(
+    'Merge the latest main (fetched as refs/hq/base) into the working branch, resolve the conflicts in these files, then commit:\n- src/app.ts\n- README.md',
+  )
 })

@@ -63,15 +63,20 @@ export type PiLaunch = Readonly<{
 }>
 export type SubConversation = Readonly<{ parentConversationId: string }>
 export type RepositoryCheckout = Readonly<{ url: string; token: string; baseBranch: string; workingBranch: string }>
+export type WorkspaceAction = 'commit' | 'merge' | 'pushed'
 export type BranchBundle = Readonly<{ bundle: string } | { failure: string }>
 export type BundleOf = (branch: string, prerequisite: string | null) => Promise<BranchBundle>
+export type GitAuthor = Readonly<{ name: string; email: string }>
+export type BaseBundle = Readonly<{ head: string; bundle: string } | { failure: string }>
 export type RepositoryCheckouts = {
   checkoutOf(chat: AgentChat): Promise<RepositoryCheckout | undefined>
   pushBranch(
     chat: AgentChat,
     ownerId: MemberId,
     bundleOf: BundleOf,
-  ): Promise<{ branch: string; failure?: string } | undefined>
+  ): Promise<{ branch: string; head?: string | undefined; failure?: string } | undefined>
+  bundleBase(chat: AgentChat, runtimeBaseHead: string | null): Promise<BaseBundle>
+  authorOf(chat: AgentChat, ownerId: MemberId): Promise<GitAuthor | undefined>
   openPullRequest(chat: AgentChat, ownerId: MemberId, draft: PullRequestDraft): Promise<PullRequestStep>
   refreshPullRequest(chat: AgentChat, ownerId: MemberId, pullRequest: PullRequestStep): Promise<PullRequestStep>
 }
@@ -92,6 +97,11 @@ export type AgentClient = {
   deleteConversation(conversation: AgentConversation): Promise<void>
   readWorkspace(endpoint: AgentEndpoint, path: string): Promise<object | undefined>
   bundleBranch(endpoint: AgentEndpoint, branch: string, prerequisite: string | null): Promise<BranchBundle>
+  actOnWorkspace(
+    endpoint: AgentEndpoint,
+    action: WorkspaceAction,
+    body: object,
+  ): Promise<Readonly<{ failure: string } | { [field: string]: unknown }>>
   openEvents(conversation: AgentConversation, last: AgentLastEvent | null, listener: AgentEventListener): AgentSocket
 }
 

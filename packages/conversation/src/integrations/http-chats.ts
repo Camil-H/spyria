@@ -1,4 +1,5 @@
 import type { ChatId, WorkspaceId } from '@hq/kernel'
+import type { GitAction, GitActionOutcome } from '../domain/git-actions.ts'
 import type { PublishAction, PullRequestDraft } from '../domain/pull-requests.ts'
 import type { WorkspaceRead, WorkspaceReading } from '../domain/workspace-reads.ts'
 
@@ -8,6 +9,7 @@ export const chatQuestionPathOf = (chatId: string, questionId: string) => `/api/
 export const chatPlanModePathOf = (chatId: string) => `/api/chats/${chatId}/plan-mode`
 export const chatWorkspacePathOf = (chatId: string, read: string) => `/api/chats/${chatId}/workspace/${read}`
 export const chatPublishPathOf = (chatId: string, action: string) => `/api/chats/${chatId}/publish/${action}`
+export const chatGitPathOf = (chatId: string, action: string) => `/api/chats/${chatId}/git/${action}`
 
 const storedChatWaitMilliseconds = 5000
 const storedChatRetryMilliseconds = 100
@@ -56,6 +58,16 @@ export const createHttpChatCommands = (postAsMember: PostAsMember, getAsMember: 
     const response = await postAsMember(workspaceId, chatPublishPathOf(chatId, action), JSON.stringify(draft))
     const { text } = (await response.json().catch(() => ({}))) as { text?: string }
     return { isRefused: !response.ok, text: text ?? `Publishing answered ${response.status}` }
+  },
+  runGitAction: async ({
+    workspaceId,
+    chatId,
+    action,
+    message,
+  }: ChatInput & { action: GitAction; message: string }): Promise<GitActionOutcome> => {
+    const response = await postAsMember(workspaceId, chatGitPathOf(chatId, action), JSON.stringify({ message }))
+    const outcome = (await response.json().catch(() => ({}))) as Partial<GitActionOutcome>
+    return { ...outcome, isRefused: !response.ok, text: outcome.text ?? `The git action answered ${response.status}` }
   },
   wakeWorkspace: async ({ workspaceId, chatId }: ChatInput) => {
     const response = await postAsMember(workspaceId, chatWorkspacePathOf(chatId, 'wake'))

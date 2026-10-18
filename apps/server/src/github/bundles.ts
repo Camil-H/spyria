@@ -4,8 +4,11 @@ import { join } from 'node:path'
 import type { BundleOf } from '@hq/conversation/server'
 
 type Push = { url: string; token: string; branch: string; baseBranch: string; bundleOf: BundleOf }
+type BaseFetch = { url: string; token: string; baseBranch: string; runtimeBaseHead: string | null }
 
 const shownOutputLines = 10
+const commitPattern = /^[0-9a-f]{40}$/
+const maximumBundleBytes = 20_000_000
 const lastLinesOf = (output: string) => output.trimEnd().split('\n').slice(-shownOutputLines).join('\n')
 
 const gitEnvironmentOf = (home: string, url: string, token: string) => {
@@ -37,8 +40,14 @@ const gitEnvironmentOf = (home: string, url: string, token: string) => {
   }
 }
 
-export const pushBundle = async ({ url, token, branch, baseBranch, bundleOf }: Push) => {
-  const directory = await mkdtemp(join(tmpdir(), 'hq-push-'))
+type InRepository = (...args: string[]) => Promise<{ isDone: boolean; stdout: string; output: string }>
+
+const inTemporaryRepository = async <Result>(
+  url: string,
+  token: string,
+  work: (inRepository: InRepository, directory: string) => Promise<Result>,
+) => {
+  const directory = await mkdtemp(join(tmpdir(), 'hq-git-'))
   const repository = join(directory, 'repository.git')
   const env = gitEnvironmentOf(directory, url, token)
   const git = async (...args: string[]) => {
@@ -46,10 +55,17 @@ export const pushBundle = async ({ url, token, branch, baseBranch, bundleOf }: P
     const [stdout, stderr] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()])
     return { isDone: (await child.exited) === 0, stdout, output: `${stdout}${stderr}` }
   }
-  const inRepository = (...args: string[]) => git('-C', repository, ...args)
-  const branchRef = `refs/heads/${branch}`
   try {
     await git('init', '--quiet', '--bare', repository)
+    return await work((...args) => git('-C', repository, ...args), directory)
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+}
+
+export const pushBundle = ({ url, token, branch, baseBranch, bundleOf }: Push) =>
+  inTemporaryRepository(url, token, async (inRepository, directory) => {
+    const branchRef = `refs/heads/${branch}`
     const listed = await inRepository('ls-remote', url, branchRef, `refs/heads/${baseBranch}`)
     if (!listed.isDone) return { failure: `GitHub refused the push: ${lastLinesOf(listed.output)}` }
     const remoteHeads = new Map(listed.stdout.split('\n').map((line) => line.split('\t').reverse() as [string, string]))
@@ -57,7 +73,7 @@ export const pushBundle = async ({ url, token, branch, baseBranch, bundleOf }: P
     const prerequisite = remoteHeads.get(prerequisiteRef) ?? null
     const bundled = await bundleOf(branch, prerequisite)
     if ('failure' in bundled) return { failure: bundled.failure }
-    if (bundled.bundle === '') return {}
+    if (bundled.bundle === '') return { head: remoteHeads.get(branchRef) }
     const bundle = join(directory, 'branch.bundle')
     await writeFile(bundle, Buffer.from(bundled.bundle, 'base64'))
     const heads = await inRepository('bundle', 'list-heads', bundle)
@@ -71,8 +87,28 @@ export const pushBundle = async ({ url, token, branch, baseBranch, bundleOf }: P
     const fetched = await inRepository('fetch', '--quiet', bundle, `${branchRef}:${branchRef}`)
     if (!fetched.isDone) return { failure: `The runtime's bundle could not be read: ${lastLinesOf(fetched.output)}` }
     const pushed = await inRepository('push', '--quiet', '--no-verify', url, `${branchRef}:${branchRef}`)
-    return pushed.isDone ? {} : { failure: `The branch could not be pushed: ${lastLinesOf(pushed.output)}` }
-  } finally {
-    await rm(directory, { recursive: true, force: true })
-  }
-}
+    return pushed.isDone
+      ? { head: head.split(' ')[0] }
+      : { failure: `The branch could not be pushed: ${lastLinesOf(pushed.output)}` }
+  })
+
+export const baseBundle = ({ url, token, baseBranch, runtimeBaseHead }: BaseFetch) =>
+  inTemporaryRepository(url, token, async (inRepository, directory) => {
+    const baseRef = `refs/heads/${baseBranch}`
+    const fetched = await inRepository('fetch', '--quiet', '--no-tags', url, `${baseRef}:${baseRef}`)
+    if (!fetched.isDone) return { failure: `GitHub refused the fetch: ${lastLinesOf(fetched.output)}` }
+    const head = (await inRepository('rev-parse', '--verify', baseRef)).stdout.trim()
+    const prerequisite = runtimeBaseHead && commitPattern.test(runtimeBaseHead) ? runtimeBaseHead : undefined
+    if (head === prerequisite) return { head, bundle: '' }
+    const isAncestor =
+      prerequisite !== undefined && (await inRepository('merge-base', '--is-ancestor', prerequisite, head)).isDone
+    const bundle = join(directory, 'base.bundle')
+    const created = await inRepository('bundle', 'create', bundle, baseRef, ...(isAncestor ? [`^${prerequisite}`] : []))
+    if (!created.isDone) return { failure: `The base branch could not be bundled: ${lastLinesOf(created.output)}` }
+    const bytes = await Bun.file(bundle).bytes()
+    if (bytes.length > maximumBundleBytes)
+      return {
+        failure: `The base branch's new commits weigh more than ${maximumBundleBytes / 1_000_000} MB; update from your machine`,
+      }
+    return { head, bundle: Buffer.from(bytes).toString('base64') }
+  })

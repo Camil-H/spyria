@@ -82,7 +82,10 @@ const TabPanel = ({ tabId, usageTab, ...panelProps }: PanelProps & { tabId: Pane
     <Content value={tabId} className="flex min-h-0 flex-1 flex-col">
       <div className="flex min-h-11 flex-wrap items-center gap-2 border-b border-line px-4 py-1.5">
         <h2 className="mr-auto text-sm font-semibold">{label}</h2>
-        <div ref={setActionsSlot} className="flex items-center gap-2" />
+        <div
+          ref={setActionsSlot}
+          className="flex flex-wrap items-center justify-end gap-2 [&>button]:whitespace-nowrap"
+        />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-4 text-ink">
         <Suspense>{Component ? <Component {...panelProps} actionsSlot={actionsSlot} /> : usageTab}</Suspense>

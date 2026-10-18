@@ -291,6 +291,12 @@ export const createHqAgentClient = (): AgentClient => ({
     if (response.status === 200 && typeof bundle === 'string') return { bundle }
     return { failure: error ?? `hq-agent answered the bundle request with ${response.status}` }
   },
+  actOnWorkspace: async (endpoint, action, body) => {
+    const response = await send(endpoint, 'POST', `/api/workspace/${action}`, body, bundleTimeoutMilliseconds)
+    const { error, ...answer } = JSON.parse(response.body || '{}') as { error?: string }
+    if (response.status === 200) return answer
+    return { failure: error ?? `hq-agent answered the ${action} request with ${response.status}` }
+  },
   openEvents: (conversation: AgentConversation, last, listener) => {
     const { conversationId } = conversation
     const after = last?.id.startsWith(`${conversationId}:`) ? (last.seq ?? 0) : 0

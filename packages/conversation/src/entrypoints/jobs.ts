@@ -20,6 +20,7 @@ import { closeReopenedTurn, reopenAgentTurn, sweepAgentTurns } from '../operatio
 import { authorizeToolCall } from '../operations/authorize-tool-call.ts'
 import { awaitTask, delegateTask } from '../operations/delegate-task.ts'
 import { forwardToAgent } from '../operations/forward-to-agent.ts'
+import { runGitAction } from '../operations/git-actions.ts'
 import { interruptOwnedTurns } from '../operations/interrupt-owned-turns.ts'
 import {
   findModelCallTurn,
@@ -128,6 +129,8 @@ export const createAgentHandlers = ({
       readWorkspace(dependenciesOf(chat.workspaceId), { chat, memberId: member, read, path }),
     publishBranch: (input: Parameters<typeof publishBranch>[1]) =>
       publishBranch(dependenciesOf(input.chat.workspaceId), input),
+    runGitAction: (input: Parameters<typeof runGitAction>[1]) =>
+      runGitAction(dependenciesOf(input.chat.workspaceId), input),
     recordPullRequest: (input: Parameters<typeof recordPullRequest>[1]) =>
       recordPullRequest(dependenciesOf(input.chat.workspaceId), input),
     wakeWorkspace: (chat: AgentChat, member: MemberId) =>

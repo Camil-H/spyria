@@ -15,8 +15,8 @@ import {
 } from '@hq/workspace/server'
 import type { SecretBox } from '../auth/secret-box.ts'
 import { assertAdmin, recordWorkspaceEvent } from '../auth/sso.ts'
+import { baseBundle, pushBundle } from './bundles.ts'
 import { appJwtOf, type GitHubApi, type UserTokens } from './github-api.ts'
-import { pushBundle } from './push.ts'
 import {
   isSignedBy,
   pullRequestNumbersOf,
@@ -337,6 +337,23 @@ export const createGitHubCheckouts = (database: Database, dependencies: GitHubDe
         branch: workingBranch,
         ...(await pushBundle({ url, token, branch: workingBranch, baseBranch, bundleOf })),
       }
+    },
+    bundleBase: async (chat, runtimeBaseHead) => {
+      const { repository, baseBranch } = (await chatRepositoryOf(database, chat)) ?? {}
+      if (!repository || !baseBranch) throw new GitHubNotConfigured()
+      const credentials = await appCredentialsOf(database, dependencies, chat.workspaceId)
+      const token = await githubCall(() => repositoryTokenOf(api, credentials, repository, { contents: 'read' }))
+      return baseBundle({ url: api.cloneUrlOf(repository), token, baseBranch, runtimeBaseHead })
+    },
+    authorOf: async (chat, ownerId) => {
+      const token = await userTokenOf(database, dependencies, { workspaceId: chat.workspaceId, userId: ownerId })
+      const user = token ? await api.user(token).catch(() => undefined) : undefined
+      return (
+        user && {
+          name: user.name || user.login,
+          email: user.email || `${user.id}+${user.login}@users.noreply.github.com`,
+        }
+      )
     },
     openPullRequest: async (chat, ownerId, { title, body }) => {
       const { repository, baseBranch, workingBranch, token } = await publishingOf(chat, ownerId)

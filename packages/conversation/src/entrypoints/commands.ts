@@ -1,4 +1,5 @@
 import type { ChatId, MemberId, MessageId, WorkspaceId } from '@hq/kernel'
+import type { GitAction, GitActionOutcome } from '../domain/git-actions.ts'
 import type { PublishAction, PullRequestDraft } from '../domain/pull-requests.ts'
 import type { RunsOn } from '../domain/session-routing.ts'
 import type {
@@ -50,6 +51,7 @@ export type ConversationCommands = {
     { chatId: ChatId; action: PublishAction; draft: PullRequestDraft },
     { isRefused: boolean; text: string }
   >
+  runGitAction: Command<{ chatId: ChatId; action: GitAction; message: string }, GitActionOutcome>
 }
 
 export type AgentStream = {

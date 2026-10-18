@@ -9,6 +9,9 @@ const maximumCommits = 200
 const branchPattern = /^\w[\w./-]*$/
 const commitPattern = /^[0-9a-f]{40}$/
 const maximumBundleBytes = 20_000_000
+const identityPattern = /^[^<>\n\0]+$/
+const baseRef = 'refs/hq/base'
+const pushedRef = 'refs/hq/pushed'
 
 const git = async (cwd: string, args: string[], env: Record<string, string>, input = '') => {
   const child = Bun.spawn(['git', '-C', cwd, ...args], {
@@ -59,10 +62,16 @@ export const fileOf = async (root: string, path: string) => {
   }
 }
 
+const baseRefOf = async (root: string, base: string, env: Record<string, string>) => {
+  if (!branchPattern.test(base)) return undefined
+  for (const ref of [baseRef, `refs/remotes/origin/${base}`])
+    if ((await git(root, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], env)).trim()) return ref
+  return undefined
+}
+
 export const changesOf = async (root: string, base: string, env: Record<string, string>) => {
-  const mergeBase = branchPattern.test(base)
-    ? (await git(root, ['merge-base', `origin/${base}`, 'HEAD'], env)).trim()
-    : ''
+  const ref = await baseRefOf(root, base, env)
+  const mergeBase = ref ? (await git(root, ['merge-base', ref, 'HEAD'], env)).trim() : ''
   if (!mergeBase) return { patch: '', log: '', truncated: false }
   const index = join(tmpdir(), `hq-index-${crypto.randomUUID()}`)
   try {
@@ -113,4 +122,113 @@ export const bundleOf = async (
       failure: `The new commits weigh more than ${maximumBundleBytes / 1_000_000} MB; push them from your machine`,
     }
   return { bundle: Buffer.from(bundled.bytes).toString('base64') }
+}
+
+const countsAgainst = async (root: string, ref: string | undefined, env: Record<string, string>) => {
+  const [behind, ahead] = ref
+    ? (await git(root, ['rev-list', '--left-right', '--count', `${ref}...HEAD`], env)).trim().split('\t').map(Number)
+    : []
+  return ahead === undefined || behind === undefined || Number.isNaN(ahead) ? undefined : { ahead, behind }
+}
+
+export const statusOf = async (root: string, base: string, env: Record<string, string>) => {
+  const ref = await baseRefOf(root, base, env)
+  const [baseHead, toBase, toPushed, pushedLog, uncommitted] = await Promise.all([
+    ref ? git(root, ['rev-parse', ref], env) : '',
+    countsAgainst(root, ref, env),
+    countsAgainst(root, pushedRef, env),
+    git(root, ['log', '--walk-reflogs', '--max-count=1', '--format=%gd', '--date=unix', pushedRef], env),
+    git(root, ['status', '--porcelain', '--no-renames', '--untracked-files=all', '-z'], env),
+  ])
+  const [, pushedSeconds] = /@\{(\d+)\}/.exec(pushedLog) ?? []
+  return {
+    ...(baseHead.trim() && { baseHead: baseHead.trim() }),
+    ...(toBase && { aheadOfBase: toBase.ahead, behindBase: toBase.behind }),
+    ...(toPushed && { aheadOfPushed: toPushed.ahead, behindPushed: toPushed.behind }),
+    ...(pushedSeconds && { pushedAt: new Date(Number(pushedSeconds) * 1000).toISOString() }),
+    uncommitted: uncommitted.split('\0').filter(Boolean).length,
+  }
+}
+
+const authorEnvironmentOf = (author: unknown) => {
+  const { name, email } = (author ?? {}) as { name?: unknown; email?: unknown }
+  if (typeof name !== 'string' || typeof email !== 'string') return undefined
+  if (!identityPattern.test(name) || !identityPattern.test(email)) return undefined
+  return { GIT_AUTHOR_NAME: name, GIT_AUTHOR_EMAIL: email, GIT_COMMITTER_NAME: name, GIT_COMMITTER_EMAIL: email }
+}
+
+export const commitOf = async (
+  root: string,
+  { message, author }: { message?: unknown; author?: unknown },
+  env: Record<string, string>,
+) => {
+  const authorEnvironment = authorEnvironmentOf(author)
+  if (typeof message !== 'string' || !authorEnvironment) return { failure: 'The commit request is not valid' }
+  if (!message.trim()) return { failure: 'Write a commit message' }
+  await gitBytes(root, ['add', '--all'], env)
+  if ((await gitBytes(root, ['diff', '--cached', '--quiet'], env)).isDone)
+    return { failure: 'There is nothing to commit' }
+  const committed = await gitBytes(root, ['commit', '--quiet', '-m', message.trim()], {
+    ...env,
+    ...authorEnvironment,
+  })
+  if (!committed.isDone) return { failure: `The commit failed: ${committed.errors.trim()}` }
+  return { sha: (await git(root, ['rev-parse', 'HEAD'], env)).trim() }
+}
+
+const isCommit = async (root: string, sha: string, env: Record<string, string>) =>
+  Boolean(await git(root, ['rev-parse', '--verify', '--quiet', `${sha}^{commit}`], env))
+
+const fetchedBase = async (root: string, base: string, head: string, bundle: string, env: Record<string, string>) => {
+  if (!bundle)
+    return (await isCommit(root, head, env)) && (await gitBytes(root, ['update-ref', baseRef, head], env)).isDone
+  const file = join(tmpdir(), `hq-base-${crypto.randomUUID()}.bundle`)
+  try {
+    await Bun.write(file, Buffer.from(bundle, 'base64'))
+    const heads = await git(root, ['bundle', 'list-heads', file], env)
+    if (heads !== `${head} refs/heads/${base}\n`) return false
+    if (!(await gitBytes(root, ['bundle', 'verify', '--quiet', file], env)).isDone) return false
+    return (await gitBytes(root, ['fetch', '--quiet', '--no-tags', file, `+refs/heads/${base}:${baseRef}`], env)).isDone
+  } finally {
+    await rm(file, { force: true })
+  }
+}
+
+export const mergeOf = async (
+  root: string,
+  { base, head, bundle, author }: { base?: unknown; head?: unknown; bundle?: unknown; author?: unknown },
+  env: Record<string, string>,
+) => {
+  const authorEnvironment = authorEnvironmentOf(author)
+  if (
+    typeof base !== 'string' ||
+    !branchPattern.test(base) ||
+    typeof head !== 'string' ||
+    !commitPattern.test(head) ||
+    typeof bundle !== 'string' ||
+    !authorEnvironment
+  )
+    return { failure: 'The update request is not valid' }
+  if ((await git(root, ['status', '--porcelain'], env)).trim())
+    return { failure: 'Commit the uncommitted changes before updating from base' }
+  if (!(await fetchedBase(root, base, head, bundle, env)))
+    return { failure: `The base branch ${base} could not be read from the bundle` }
+  if ((await gitBytes(root, ['merge-base', '--is-ancestor', baseRef, 'HEAD'], env)).isDone) return { isUpToDate: true }
+  const working = (await git(root, ['branch', '--show-current'], env)).trim()
+  const merged = await gitBytes(
+    root,
+    ['merge', '--no-ff', '--no-edit', '-m', `Merge branch '${base}' into ${working}`, baseRef],
+    { ...env, ...authorEnvironment },
+  )
+  if (merged.isDone) return { isUpToDate: false }
+  const conflicts = (await git(root, ['diff', '--name-only', '--diff-filter=U'], env)).split('\n').filter(Boolean)
+  await gitBytes(root, ['merge', '--abort'], env)
+  return conflicts.length > 0 ? { conflicts } : { failure: `The merge failed: ${merged.errors.trim()}` }
+}
+
+export const pushedOf = async (root: string, { head }: { head?: unknown }, env: Record<string, string>) => {
+  if (typeof head !== 'string' || !commitPattern.test(head)) return { failure: 'The pushed head is not valid' }
+  if (!(await isCommit(root, head, env))) return { failure: 'The pushed head is not in the runtime' }
+  await gitBytes(root, ['update-ref', '--create-reflog', '-m', 'pushed', pushedRef, head], env)
+  return {}
 }

@@ -3,15 +3,13 @@ import {
   addLlmKey,
   addParticipant,
   configureGitHubApp,
-  connectionsOf,
+  connectGitHub,
   expect,
-  inPopup,
   mainOf,
   messageContaining,
   messageItemsOf,
   newDevChat,
   openChat,
-  openMyConnections,
   type Page,
   panelTabOf,
   sendMessage,
@@ -32,13 +30,6 @@ const chipOf = (page: Page, state: string) => mainOf(page).getByRole('link', { n
 const finished = (page: Page) => expect(workingIndicatorOf(page)).toHaveCount(0)
 const pushButtonOf = (page: Page) => tabPanelOf(page).getByRole('button', { name: 'Push', exact: true })
 
-const connectGitHub = async (page: Page) => {
-  await openMyConnections(page)
-  const github = connectionsOf(page).getByRole('group', { name: 'GitHub account' })
-  await inPopup(page, () => github.getByRole('button', { name: 'Connect GitHub account' }).click())
-  await expect(github).toContainText('Connected (alice-martin)')
-  await page.goto('/')
-}
 const githubStateOf = async (workerStack: WorkerStack, chatId: string) => {
   const [{ git_branch: branch } = {}] = await workerStack.database
     .$client`select git_branch from chats where id = ${chatId}`

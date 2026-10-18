@@ -2,6 +2,7 @@ import type { ChatId, MemberId, WorkspaceId } from '@hq/kernel'
 import type { WorkspaceRead, WorkspaceReading } from '../domain/workspace.ts'
 
 type Command<Input, Result = unknown> = (input: Input & { workspaceId: WorkspaceId }) => Promise<Result>
+export type GitActionOutcome = { isRefused: boolean; text: string; conflicts?: string[] | undefined }
 
 export type PanelCommands = {
   inviteMember: Command<{ chatId: ChatId; memberId: MemberId; roleId: string }>
@@ -14,4 +15,6 @@ export type PanelCommands = {
     { chatId: ChatId; action: 'push' | 'pull_request'; draft: { title: string; body: string } },
     { isRefused: boolean; text: string }
   >
+  runGitAction: Command<{ chatId: ChatId; action: 'commit' | 'update'; message: string }, GitActionOutcome>
+  sendMessage: Command<{ chatId: ChatId; text: string }>
 }

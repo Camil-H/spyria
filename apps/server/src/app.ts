@@ -1,5 +1,6 @@
 import {
   type AgentChat,
+  chatGitPathOf,
   chatPlanModePathOf,
   chatPublishPathOf,
   chatQuestionPathOf,
@@ -10,6 +11,7 @@ import {
   createGatewaySessionClassifier,
   getChatRouting,
   getCommandOutput,
+  isGitAction,
   isWorkspaceRead,
   type PublishAction,
   planModeOf,
@@ -391,6 +393,19 @@ export const createApp = ({
         draft: { title: typeof title === 'string' ? title : '', body: typeof body === 'string' ? body : '' },
       })
       return context.json(publication, publication.isRefused ? 403 : 200)
+    })
+    .post(chatGitPathOf(':chatId', ':action'), async (context) => {
+      const action = context.req.param('action') ?? ''
+      if (!isGitAction(action)) return context.json({ error: 'invalid_action' }, 400)
+      const { message } = ((await context.req.json().catch(() => null)) ?? {}) as Record<string, unknown>
+      const { workspaceId, userId } = context.get('zeroContext')
+      const outcome = await agentBridge.forDatabase(context.get('database')).runGitAction({
+        chat: { workspaceId, chatId: chatId(context.req.param('chatId') ?? '') },
+        memberId: userId,
+        action,
+        message: typeof message === 'string' ? message : '',
+      })
+      return context.json(outcome, outcome.isRefused ? 403 : 200)
     })
     .post(chatWorkspacePathOf(':chatId', 'wake'), async (context) => {
       const { workspaceId, userId } = context.get('zeroContext')

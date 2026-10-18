@@ -10,7 +10,7 @@ import {
 } from './acp.ts'
 import { checkOut, lastLinesOf, type Repository, runSetup, setupCommand } from './checkout.ts'
 import { connectPi } from './pi.ts'
-import { bundleOf, changesOf, fileOf, treeOf } from './workspace.ts'
+import { bundleOf, changesOf, commitOf, fileOf, mergeOf, pushedOf, statusOf, treeOf } from './workspace.ts'
 
 type Status = 'starting' | 'idle' | 'running' | 'finished' | 'error'
 type AgentEvent = { id: string; seq: number; timestamp: string; completed: boolean; update: Json }
@@ -87,7 +87,9 @@ const terminalToolStatuses = ['completed', 'failed']
 const conversationRoute =
   /^\/api\/conversations\/([\w-]+)(?:\/(events|interrupt|switch_acp_model|plan_mode)|\/questions\/([\w-]+))?$/
 const socketRoute = /^\/sockets\/events\/([\w-]+)$/
-const workspaceRoute = /^\/api\/workspace\/(tree|file|changes)$/
+const workspaceRoute = /^\/api\/workspace\/(tree|file|changes|status)$/
+const workspaceActions = { bundle: bundleOf, commit: commitOf, merge: mergeOf, pushed: pushedOf }
+const workspaceActionRoute = /^\/api\/workspace\/(bundle|commit|merge|pushed)$/
 const setupToolCallId = 'hq-setup'
 const conversationIdPattern = /^[\w-]{1,64}$/
 
@@ -446,8 +448,14 @@ export const startAgent = ({
     const environment = adapterEnvironmentOf({})
     const path = parameters.get('path') ?? ''
     if (read === 'tree') return Response.json(await treeOf(workspaceDirectory, path, environment))
-    if (read === 'changes')
-      return Response.json(await changesOf(workspaceDirectory, parameters.get('base') ?? '', environment))
+    if (read === 'changes' || read === 'status')
+      return Response.json(
+        await (read === 'changes' ? changesOf : statusOf)(
+          workspaceDirectory,
+          parameters.get('base') ?? '',
+          environment,
+        ),
+      )
     const file = await fileOf(workspaceDirectory, path)
     return file ? Response.json(file) : Response.json({ error: 'Not found' }, { status: 404 })
   }
@@ -573,9 +581,14 @@ export const startAgent = ({
     if (method === 'POST' && pathname === '/api/conversations') return create(await request.json())
     const [, read] = workspaceRoute.exec(pathname) ?? []
     if (read && method === 'GET') return readWorkspace(read, searchParams)
-    if (method === 'POST' && pathname === '/api/workspace/bundle') {
-      const bundled = await bundleOf(workspaceDirectory, await request.json(), adapterEnvironmentOf({}))
-      return 'failure' in bundled ? Response.json({ error: bundled.failure }, { status: 422 }) : Response.json(bundled)
+    const [, workspaceAction] = workspaceActionRoute.exec(pathname) ?? []
+    if (method === 'POST' && workspaceAction) {
+      const acted = await workspaceActions[workspaceAction as keyof typeof workspaceActions](
+        workspaceDirectory,
+        await request.json(),
+        adapterEnvironmentOf({}),
+      )
+      return 'failure' in acted ? Response.json({ error: acted.failure }, { status: 422 }) : Response.json(acted)
     }
     const [, conversationId = '', action, questionId] = conversationRoute.exec(pathname) ?? []
     const conversation = conversations.get(conversationId)

@@ -14,11 +14,13 @@ export const PublishActions = ({
   chatId,
   actionsSlot,
   commitSubjects,
+  onPublished,
 }: {
   workspaceId: WorkspaceId
   chatId: ChatId
   actionsSlot: HTMLElement | null
   commitSubjects: readonly string[]
+  onPublished: () => void
 }) => {
   const { memberId } = useSession()
   const { canPublish, chatName, hasOpenPullRequest } = useQuery(getPublishing(workspaceId, chatId, memberId))
@@ -39,6 +41,7 @@ export const PublishActions = ({
     setOutcome(published)
     setIsPublishing(false)
     if (!published.isRefused) setDraft(undefined)
+    onPublished()
   }
   const submit = (event: FormEvent) => {
     event.preventDefault()

@@ -315,6 +315,7 @@ export const createAgentBridge = ({
       setPlanMode: handlers.setPlanMode,
       readWorkspace: handlers.readWorkspace,
       publishBranch: handlers.publishBranch,
+      runGitAction: handlers.runGitAction,
       recordPullRequest: handlers.recordPullRequest,
       wakeWorkspace: handlers.wakeWorkspace,
       recordModelCallFailure: handlers.recordModelCallFailure,

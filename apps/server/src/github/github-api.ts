@@ -83,7 +83,8 @@ export const createGitHubApi = ({ apiUrl, webUrl }: GitHubUrls) => {
       ),
     branches: (token: string, fullName: string) =>
       request<{ name: string }[]>(`/repos/${fullName}/branches?per_page=100`, { token }),
-    user: (token: string) => request<{ login: string }>('/user', { token }),
+    user: (token: string) =>
+      request<{ login: string; id: number; name: string | null; email: string | null }>('/user', { token }),
     authorizeUrlOf: (clientId: string, redirectUri: string, state: string) =>
       `${webUrl}/login/oauth/authorize?${new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, state })}`,
     exchangeCode: (clientId: string, clientSecret: string, code: string) =>

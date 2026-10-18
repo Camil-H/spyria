@@ -7,6 +7,8 @@ export const fakeGitHubAppId = '4242'
 export const fakeGitHubClientId = 'Iv1.fakeclient'
 export const fakeGitHubClientSecret = 'fake-client-secret'
 export const fakeGitHubLogin = 'alice-martin'
+export const fakeGitHubUserId = 1001
+export const fakeGitHubName = 'Alice Martin'
 const installationId = 77
 const accessLifetimeSeconds = 8 * 60 * 60
 
@@ -121,6 +123,36 @@ export const startFakeGitHub = () => {
       return ''
     }
   }
+  const branchNamesOf = ({ fullName, branches }: Repository) => [
+    ...branches,
+    ...git(bareOf(fullName), 'for-each-ref', '--format=%(refname:lstrip=2)', 'refs/heads/e2e-base-*')
+      .split('\n')
+      .filter(Boolean),
+  ]
+  const commitToBranch = (
+    repository: string,
+    {
+      branch,
+      from = 'main',
+      files,
+      message,
+    }: { branch: string; from?: string; files: Record<string, string>; message: string },
+  ) => {
+    const source = mkdtempSync(join(root, 'commit-'))
+    try {
+      git(root, 'clone', '-q', '--branch', branchHeadOf(repository, branch) ? branch : from, bareOf(repository), source)
+      for (const [path, content] of Object.entries(files)) {
+        mkdirSync(join(source, path, '..'), { recursive: true })
+        writeFileSync(join(source, path), content)
+      }
+      git(source, 'add', '.')
+      git(source, '-c', 'user.name=Rita', '-c', 'user.email=rita@example.com', 'commit', '-q', '-m', message)
+      git(source, 'push', '-q', 'origin', `HEAD:refs/heads/${branch}`)
+      return branchHeadOf(repository, branch)
+    } finally {
+      rmSync(source, { recursive: true, force: true })
+    }
+  }
   const commitSubjectsOf = (repository: string, branch: string, base = 'main') =>
     branchHeadOf(repository, branch)
       ? git(bareOf(repository), 'log', '--format=%s', `${base}..refs/heads/${branch}`).split('\n').filter(Boolean)
@@ -207,7 +239,7 @@ export const startFakeGitHub = () => {
     if (branches) {
       if (!installationTokenOf(request)) return unauthorized()
       const repository = repositoryNamed(branches[1] ?? '')
-      return repository ? Response.json(repository.branches.map((name) => ({ name }))) : notFound()
+      return repository ? Response.json(branchNamesOf(repository).map((name) => ({ name }))) : notFound()
     }
     const pulls = /^\/repos\/([\w.-]+\/[\w.-]+)\/pulls(?:\/(\d+))?$/.exec(path)
     if (pulls) {
@@ -245,7 +277,9 @@ export const startFakeGitHub = () => {
     }
     if (path === '/user') {
       const expiresAt = userTokens.get((request.headers.get('authorization') ?? '').replace(/^Bearer /, ''))
-      return expiresAt && expiresAt > Date.now() ? Response.json({ login: fakeGitHubLogin }) : unauthorized()
+      return expiresAt && expiresAt > Date.now()
+        ? Response.json({ login: fakeGitHubLogin, id: fakeGitHubUserId, name: fakeGitHubName, email: null })
+        : unauthorized()
     }
     return notFound()
   }
@@ -290,6 +324,7 @@ export const startFakeGitHub = () => {
     pullRequests,
     branchHeadOf,
     commitSubjectsOf,
+    commitToBranch,
     userTokens: () => [...userTokens.keys()],
     expireUserTokens: () => {
       for (const token of userTokens.keys()) userTokens.set(token, 0)

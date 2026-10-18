@@ -17,6 +17,7 @@ export {
   toolCallIdOf,
 } from './domain/agent-events.ts'
 export { awaitTaskTool, routerTools, stillRunningOf, subagentFailureOf, unknownTaskOf } from './domain/delegation.ts'
+export { type GitAction, isGitAction } from './domain/git-actions.ts'
 export { genericModelCallNoticeOf, type ModelCallFailure } from './domain/model-call-failures.ts'
 export {
   checksOf,
@@ -46,6 +47,7 @@ export { conversationMutators } from './entrypoints/mutators.ts'
 export { createGatewaySessionClassifier } from './integrations/gateway-session-classifier.ts'
 export { type AgentLlm, createHqAgentClient } from './integrations/hq-agent-client.ts'
 export {
+  chatGitPathOf,
   chatPlanModePathOf,
   chatPublishPathOf,
   chatQuestionPathOf,

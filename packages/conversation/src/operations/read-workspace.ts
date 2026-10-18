@@ -1,6 +1,6 @@
 import { type ChatPermission, type MemberId, requireChatPermission } from '@hq/kernel'
 import type { AgentChat } from '../contracts/agent.ts'
-import { agentWorkspacePathOf, snapshotReadingOf, type WorkspaceRead } from '../domain/workspace-reads.ts'
+import { agentWorkspacePathOf, branchReads, snapshotReadingOf, type WorkspaceRead } from '../domain/workspace-reads.ts'
 import type { AgentDependencies } from './agent-turn.ts'
 
 type Dependencies = Pick<AgentDependencies, 'transactor' | 'runtimes' | 'agentClient'>
@@ -23,7 +23,7 @@ export const readWorkspace = async (
 ) => {
   const { type, baseBranch } = await permittedChat(dependencies, input, 'chat.read')
   const { chat, read, path } = input
-  if (type !== 'runtime' || (read === 'changes' && !baseBranch)) return { isLive: false }
+  if (type !== 'runtime' || (branchReads.includes(read) && !baseBranch)) return { isLive: false }
   const reading = await liveReadingOf(dependencies, chat, agentWorkspacePathOf(read, path, baseBranch ?? ''))
   if (reading) return { isLive: true, ...reading }
   return { isLive: false, ...snapshotReadingOf(await dependencies.runtimes.snapshotOf(chat), read, path) }
@@ -31,11 +31,13 @@ export const readWorkspace = async (
 
 export const snapshotWorkspace = async (dependencies: Dependencies, chat: AgentChat) => {
   const { baseBranch } = await dependencies.transactor.run(({ chats }) => chats.get(chat.chatId))
-  const [tree, changes] = await Promise.all([
+  const [tree, changes, status] = await Promise.all([
     liveReadingOf(dependencies, chat, agentWorkspacePathOf('tree', '', '')),
-    baseBranch ? liveReadingOf(dependencies, chat, agentWorkspacePathOf('changes', '', baseBranch)) : undefined,
+    ...branchReads.map((read) =>
+      baseBranch ? liveReadingOf(dependencies, chat, agentWorkspacePathOf(read, '', baseBranch)) : undefined,
+    ),
   ])
-  if (tree) await dependencies.runtimes.keepSnapshot(chat, JSON.stringify({ tree, changes }))
+  if (tree) await dependencies.runtimes.keepSnapshot(chat, JSON.stringify({ tree, changes, status }))
 }
 
 export const wakeWorkspace = async (dependencies: Dependencies, input: Input) => {

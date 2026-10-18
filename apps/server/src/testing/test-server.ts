@@ -365,6 +365,12 @@ const app = createApp({
         })),
     })
   })
+  .post('/test/github-commit', async (context) => {
+    const { repository, ...commit } = (await context.req.json()) as Parameters<typeof fakeGitHub.commitToBranch>[1] & {
+      repository: string
+    }
+    return context.json({ head: fakeGitHub.commitToBranch(repository, commit) })
+  })
   .post('/test/token', async (context) => {
     const { db = '', user = '', workspace = '' } = context.req.query()
     return context.json(await issueTestSession(databaseByName(db), workspace, user, db))
