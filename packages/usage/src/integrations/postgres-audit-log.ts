@@ -20,12 +20,13 @@ const workspaceEventRecords = `
   select event.created_at as at, 'w:' || event.id as key, event.type as kind, event.actor_id,
     case
       when event.type like 'connection.%' then coalesce(event.payload->>'name', connection.name)
+      when event.type like 'role.%' then event.payload->>'name'
       when event.type = 'chat.transferred' then chat.name
       when event.type like 'budget.%' then coalesce(member.display_name, 'Workspace total')
       when event.payload ? 'memberId' then member.display_name
       else coalesce(event.payload->>'email', event.payload->>'domain', event.payload->>'issuer', event.payload->>'appId')
     end as target,
-    jsonb_strip_nulls((event.payload - 'memberId' - 'chatId' - 'connectionId' - 'invitationId' - 'fromId' - 'toId')
+    jsonb_strip_nulls((event.payload - 'memberId' - 'chatId' - 'connectionId' - 'invitationId' - 'fromId' - 'toId' - 'roleId')
       || jsonb_build_object('member', member.display_name, 'chat', chat.name, 'from', from_member.display_name,
         'to', to_member.display_name))::json as details
   from workspace_events event

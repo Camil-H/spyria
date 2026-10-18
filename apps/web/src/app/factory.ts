@@ -217,6 +217,9 @@ export const createApp = async (
       changeMemberRole: mutateConfirmed(workspaceMutators.workspace.changeMemberRole),
       removeMember: mutateConfirmed(workspaceMutators.workspace.removeMember),
       transferChat: mutateConfirmed(workspaceMutators.workspace.transferChat),
+      createChatRole: mutateConfirmed(workspaceMutators.workspace.createChatRole),
+      updateChatRole: mutateConfirmed(workspaceMutators.workspace.updateChatRole),
+      deleteChatRole: mutateConfirmed(workspaceMutators.workspace.deleteChatRole),
       ...createHttpSsoSettingsCommands(postAsMember, fetchAsMember),
       ...githubCommands,
       createDevChat: async (input) => {

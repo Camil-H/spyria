@@ -301,6 +301,7 @@ export const chatRoles = table(
   (table) => [
     primaryKey({ columns: [table.workspaceId, table.id] }),
     check('chat_roles_permissions_read', sql`'chat.read' = any(${table.permissions})`),
+    uniqueIndex('chat_roles_name_index').on(table.workspaceId, sql`lower(${table.name})`),
   ],
 )
 

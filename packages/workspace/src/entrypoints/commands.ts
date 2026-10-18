@@ -1,4 +1,4 @@
-import type { ChatId, ChatVisibility, MemberId, ProjectId, WorkspaceId } from '@hq/kernel'
+import type { ChatId, ChatPermission, ChatVisibility, MemberId, ProjectId, WorkspaceId } from '@hq/kernel'
 import type { Chat } from '../domain/chat.ts'
 import type { GitHubRepository, GitHubSettingsInput, GitHubSettingsView } from '../domain/github.ts'
 import type { WorkspaceRole } from '../domain/member.ts'
@@ -25,6 +25,9 @@ export type WorkspaceCommands = {
   changeMemberRole: Command<{ memberId: MemberId; role: WorkspaceRole }>
   removeMember: Command<{ memberId: MemberId }>
   transferChat: Command<{ chatId: ChatId; ownerId: MemberId }>
+  createChatRole: Command<{ name: string; permissions: readonly ChatPermission[] }>
+  updateChatRole: Command<{ roleId: string; name: string; permissions: readonly ChatPermission[] }>
+  deleteChatRole: Command<{ roleId: string }>
   readSsoSettings: (input: { workspaceId: WorkspaceId }) => Promise<SsoSettingsView | null>
   saveSsoSettings: (input: SsoSettingsInput & { workspaceId: WorkspaceId }) => Promise<SsoSettingsView | null>
   sendDomainVerification: (input: {

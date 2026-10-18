@@ -85,13 +85,20 @@ const cardStatusesOf =
       rows.filter((row) => row.workspaceId === workspaceId)
     const memberCount = inWorkspace(snapshot.memberships).filter((membership) => membership.removedAt === null).length
     const inviteCount = inWorkspace(snapshot.invitations).length
+    const roles = inWorkspace(snapshot.chatRoles)
+    const customRoleCount = roles.filter((role) => !role.builtIn).length
     const month = new Date().toISOString().slice(0, 7)
     const monthCostMicros = inWorkspace(snapshot.usageEntries)
       .filter((entry) => entry.month === month)
       .reduce((sum, entry) => sum + entry.costMicros, 0)
     return {
       ...(isDexSignIn && { sso: "Signs in with this deployment's Dex" }),
-      roles: countLabelOf(inWorkspace(snapshot.chatRoles).filter((role) => role.builtIn).length, 'built-in role'),
+      roles: [
+        countLabelOf(roles.filter((role) => role.builtIn).length, 'built-in role'),
+        customRoleCount > 0 && countLabelOf(customRoleCount, 'custom role'),
+      ]
+        .filter(Boolean)
+        .join(' · '),
       team: [countLabelOf(memberCount, 'member'), inviteCount > 0 && countLabelOf(inviteCount, 'pending invite')]
         .filter(Boolean)
         .join(' · '),

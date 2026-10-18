@@ -12,7 +12,15 @@ import type {
   Project as ProjectRow,
 } from '@hq/db/zero'
 import { chatPermissionsOf, skippingRefusedRebase, type ZeroContext, zql } from '@hq/db/zero-queries'
-import { builtInChatRoles, type ChatPermission, chatId, memberId, projectId, workspaceId } from '@hq/kernel'
+import {
+  builtInChatRoles,
+  type ChatPermission,
+  type ChatRole,
+  chatId,
+  memberId,
+  projectId,
+  workspaceId,
+} from '@hq/kernel'
 import { removeMemberProfileOnServer } from '@hq/profile/published'
 import { removeChatRuntimeOnServer, removeMemberMachineOnServer, stopChatRuntimeOnServer } from '@hq/runtime/published'
 import type { Transaction } from '@rocicorp/zero'
@@ -81,6 +89,13 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
   const membershipsInContext = zql.memberships.where('workspaceId', context.workspaceId)
   const invitationsInContext = zql.invitations.where('workspaceId', context.workspaceId)
   const chatsInContext = zql.chats.where('workspaceId', context.workspaceId)
+  const chatRolesInContext = zql.chatRoles.where('workspaceId', context.workspaceId)
+  const chatRoleRowOf = (role: ChatRole) => ({
+    workspaceId: context.workspaceId,
+    id: role.id,
+    name: role.name,
+    permissions: [...role.permissions],
+  })
   const recordChatEvent = async (event: Omit<Parameters<typeof appendChatEvent>[1], 'workspaceId' | 'createdAt'>) => {
     if (tx.location === 'server')
       await appendChatEvent(tx, { ...event, workspaceId: context.workspaceId, createdAt: new Date() })
@@ -270,6 +285,24 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
           payload: { fromId: chat.ownerId, toId: ownerId },
         })
       },
+    },
+    chatRoles: {
+      get: async (id) => {
+        const row = await tx.run(chatRolesInContext.where('id', id).one())
+        return row && { ...row, permissions: row.permissions as ChatPermission[] }
+      },
+      list: async () =>
+        (await tx.run(chatRolesInContext)).map((row) => ({ ...row, permissions: row.permissions as ChatPermission[] })),
+      holders: async (id) => {
+        const rows = await tx.run(zql.chatParticipants.where('workspaceId', context.workspaceId).where('roleId', id))
+        return {
+          memberCount: new Set(rows.map((row) => row.userId)).size,
+          chatCount: new Set(rows.map((row) => row.chatId)).size,
+        }
+      },
+      add: (role) => tx.mutate.chatRoles.insert({ ...chatRoleRowOf(role), builtIn: false }),
+      save: (role) => tx.mutate.chatRoles.update(chatRoleRowOf(role)),
+      remove: (id) => tx.mutate.chatRoles.delete({ workspaceId: context.workspaceId, id }),
     },
     chatRuntimes: {
       remove: (chatId) => removeChatRuntimeOnServer(tx, context.workspaceId, chatId),

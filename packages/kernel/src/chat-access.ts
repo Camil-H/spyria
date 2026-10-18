@@ -1,32 +1,22 @@
 import { DomainError, errorKind } from './errors.ts'
 import type { ChatId, MemberId } from './ids.ts'
 
-export type ChatPermission =
-  | 'chat.read'
-  | 'chat.post'
-  | 'session.configure'
-  | 'tools.manage'
-  | 'members.invite'
-  | 'members.manage'
-  | 'chat.admin'
+export const chatPermissions = [
+  'chat.read',
+  'chat.post',
+  'session.configure',
+  'tools.manage',
+  'members.invite',
+  'members.manage',
+  'chat.admin',
+] as const
+export type ChatPermission = (typeof chatPermissions)[number]
 export type ChatVisibility = 'public' | 'private'
 type ChatRoleId = 'owner' | 'editor' | 'prompter' | 'reader'
 export type ChatRole = Readonly<{ id: string; name: string; permissions: readonly ChatPermission[] }>
 
 export const builtInChatRoles: readonly (ChatRole & { id: ChatRoleId })[] = [
-  {
-    id: 'owner',
-    name: 'Owner',
-    permissions: [
-      'chat.read',
-      'chat.post',
-      'session.configure',
-      'tools.manage',
-      'members.invite',
-      'members.manage',
-      'chat.admin',
-    ],
-  },
+  { id: 'owner', name: 'Owner', permissions: chatPermissions },
   { id: 'editor', name: 'Editor', permissions: ['chat.read', 'chat.post', 'session.configure', 'members.invite'] },
   { id: 'prompter', name: 'Prompter', permissions: ['chat.read', 'chat.post'] },
   { id: 'reader', name: 'Reader', permissions: ['chat.read'] },

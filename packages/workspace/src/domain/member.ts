@@ -15,8 +15,8 @@ export const workspaceJobTypes = { memberRemoved: 'workspace.member-removed' } a
 export const isActive = (member: Member | undefined): member is Member =>
   member !== undefined && member.removedAt === null
 
-export const requireAdmin = (actor: Member | undefined) => {
-  if (!isActive(actor) || actor.role !== 'admin') throw new NotWorkspaceAdmin()
+export const requireAdmin = (actor: Member | undefined, action?: string) => {
+  if (!isActive(actor) || actor.role !== 'admin') throw new NotWorkspaceAdmin(action)
 }
 
 export const requireActiveMember = (member: Member | undefined, memberId: MemberId) => {

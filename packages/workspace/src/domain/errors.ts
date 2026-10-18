@@ -39,7 +39,7 @@ export const RuntimeChatPrivate = errorKind(
 )
 export const NotWorkspaceAdmin = errorKind(
   'not_admin',
-  () => 'Only a workspace admin can manage members',
+  (action = 'manage members') => `Only a workspace admin can ${action}`,
   WorkspaceError,
 )
 export const InvalidEmail = errorKind('invalid_email', (email: string) => `${email} is not an email`, WorkspaceError)
@@ -119,5 +119,35 @@ export const RepositoryNotGranted = errorKind(
 export const BranchNotFound = errorKind(
   'branch_not_found',
   (repository: string, branch: string) => `${repository} has no branch ${branch}`,
+  WorkspaceError,
+)
+export const InvalidRoleName = errorKind(
+  'invalid_role_name',
+  () => 'A role name has 1 to 40 characters',
+  WorkspaceError,
+)
+export const ReservedRoleName = errorKind(
+  'reserved_role_name',
+  (name: string) => `${name} is the name of a built-in role`,
+  WorkspaceError,
+)
+export const RoleNameTaken = errorKind(
+  'role_name_taken',
+  (name: string) => `A role named ${name} already exists`,
+  WorkspaceError,
+)
+export const UnknownChatPermission = errorKind(
+  'unknown_chat_permission',
+  (permission: string) => `${permission} is not a chat permission`,
+  WorkspaceError,
+)
+export const CustomRoleNotFound = errorKind(
+  'custom_role_not_found',
+  (roleId: string) => `${roleId} is not a custom role of this workspace`,
+  WorkspaceError,
+)
+export const RoleInUse = errorKind(
+  'role_in_use',
+  (name: string, holders: string) => `${name} is held by ${holders}; change their role first`,
   WorkspaceError,
 )

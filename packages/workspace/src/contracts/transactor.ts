@@ -1,6 +1,7 @@
 import type { Transactor } from '@hq/kernel'
 import type {
   ChatRepository,
+  ChatRoleRepository,
   ChatRuntimeRepository,
   InvitationRepository,
   MemberAccess,
@@ -15,6 +16,7 @@ export type UnitOfWork = {
   memberships: MembershipRepository
   projects: ProjectRepository
   chats: ChatRepository
+  chatRoles: ChatRoleRepository
   chatRuntimes: ChatRuntimeRepository
   invitations: InvitationRepository
   memberAccess: MemberAccess

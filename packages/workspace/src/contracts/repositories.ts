@@ -1,5 +1,6 @@
-import type { ChatId, ChatPermission, MemberId, ProjectId } from '@hq/kernel'
+import type { ChatId, ChatPermission, ChatRole, MemberId, ProjectId } from '@hq/kernel'
 import type { Chat, ChatChange } from '../domain/chat.ts'
+import type { RoleHolders, StoredChatRole } from '../domain/chat-role.ts'
 import type { GitHubRepository } from '../domain/github.ts'
 import type { Invitation } from '../domain/invitation.ts'
 import type { Member } from '../domain/member.ts'
@@ -22,6 +23,15 @@ export type ChatRepository = {
   participatedBy(memberId: MemberId): Promise<Chat[]>
   removeParticipant(change: { chatId: ChatId; memberId: MemberId; actorId: MemberId }): Promise<void>
   transfer(change: { chat: Chat; ownerId: MemberId; actorId: MemberId }): Promise<void>
+}
+
+export type ChatRoleRepository = {
+  get(roleId: string): Promise<StoredChatRole | undefined>
+  list(): Promise<ChatRole[]>
+  holders(roleId: string): Promise<RoleHolders>
+  add(role: ChatRole): Promise<void>
+  save(role: ChatRole): Promise<void>
+  remove(roleId: string): Promise<void>
 }
 
 export type WorkspaceRepository = {

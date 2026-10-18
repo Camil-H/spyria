@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "chat_roles_name_index" ON "chat_roles" ("workspace_id",lower("name"));

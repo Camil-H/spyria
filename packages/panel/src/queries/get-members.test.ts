@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { acme, alice, createMockSnapshot, lee, bob } from '@hq/db'
-import { chatId } from '@hq/kernel'
+import { type ChatId, type ChatPermission, chatId, chatPermissions, type MemberId } from '@hq/kernel'
 import { getMembers } from './get-members.ts'
 
 const snapshot = createMockSnapshot()
@@ -74,5 +74,41 @@ test('a public channel offers no Reader role and no Remove, and offers them agai
     canRemove: true,
     assignable: ['editor', 'prompter', 'reader'],
     invitable: ['editor', 'prompter', 'reader'],
+  })
+})
+
+test('custom roles are assignable within the actor’s own permissions, never as Owner, and only with chat.post on a public channel', () => {
+  const customRole = (id: string, permissions: readonly ChatPermission[]) => ({
+    workspaceId: acme,
+    id,
+    name: id,
+    permissions,
+    builtIn: false,
+  })
+  const withCustomRoles = {
+    ...snapshot,
+    chatRoles: [
+      ...snapshot.chatRoles,
+      customRole('reviewer', ['chat.read', 'session.configure']),
+      customRole('poster', ['chat.read', 'chat.post', 'session.configure']),
+      customRole('superuser', chatPermissions),
+    ],
+    chatMembers: [...snapshot.chatMembers, { workspaceId: acme, chatId: research, memberId: bob, roleId: 'editor' }],
+  }
+  const rolesOf = (chat: ChatId, viewerId: MemberId) => {
+    const members = getMembers(acme, chat, viewerId)(withCustomRoles)
+    return {
+      assignable: members?.assignableRoles.map((role) => role.id),
+      invitable: members?.invitableRoles.map((role) => role.id),
+    }
+  }
+  expect(rolesOf(invoiceBug, alice)).toEqual({
+    assignable: ['superuser', 'editor', 'poster', 'prompter', 'reviewer', 'reader'],
+    invitable: ['superuser', 'editor', 'poster', 'prompter', 'reviewer', 'reader'],
+  })
+  expect(rolesOf(research, bob).invitable).toEqual(['editor', 'poster', 'prompter', 'reviewer', 'reader'])
+  expect(rolesOf(chatId('chat-welcome'), alice)).toEqual({
+    assignable: ['superuser', 'editor', 'poster', 'prompter'],
+    invitable: ['superuser', 'editor', 'poster', 'prompter'],
   })
 })
