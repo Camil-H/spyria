@@ -287,6 +287,20 @@ test('a parent Pi reaches HQ tools and the router with its LLM token; a sub reac
   expect(piCommandOf('http://hq-gateway-relay:4000/v1', piLaunch, { sub: true })).toEqual(sub.command)
 })
 
+test('a parent Pi in a dev chat also reaches the GitHub tools; a sub never does', () => {
+  const mcpOf = (command: string[]) =>
+    JSON.parse(command.find((part) => part.startsWith('HQ_PI_MCP='))?.slice(10) ?? '{}').mcpServers
+  const gateway = 'http://hq-gateway-relay:4000/v1'
+  expect(mcpOf(piCommandOf(gateway, piLaunch, { sub: false, hasRepository: true })).github).toEqual({
+    url: 'http://hq-gateway-relay:4000/mcp/github',
+    headers: { Authorization: `Bearer \${HQ_MCP_TOKEN}` },
+    exposure: 'direct',
+    timeout: 120,
+  })
+  expect(Object.keys(mcpOf(piCommandOf(gateway, piLaunch, { sub: true, hasRepository: true })))).toEqual(['hq'])
+  expect(Object.keys(mcpOf(piCommandOf(gateway, piLaunch, { sub: false })))).toEqual(['hq', 'router'])
+})
+
 test('the router answers a running delegation well before Pi gives up on the delegate call', () => {
   const piDefaultMcpTimeoutMilliseconds = 60_000
   expect(delegateTimeoutSeconds * 1000).toBeGreaterThan(piDefaultMcpTimeoutMilliseconds)

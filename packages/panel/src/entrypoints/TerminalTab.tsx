@@ -27,13 +27,15 @@ const TerminalTab = ({ workspaceId, chatId }: TabProps) => {
           aria-label="Terminal output"
           className="flex flex-col gap-3 overflow-x-auto rounded-md border border-line bg-app p-3 font-mono text-xs"
         >
-          {commands.map(({ stepId, command, output, exitCode }) => (
+          {commands.map(({ stepId, command, output, exitCode, isRunning }) => (
             <div key={stepId} className="flex flex-col gap-1">
               <span className="font-semibold text-ink">$ {command}</span>
               <pre className="whitespace-pre-wrap text-muted">
                 {exitCode === null ? (liveOutputs[stepId] ?? output) : output}
               </pre>
-              <span className="text-muted">{exitCode === null ? 'running…' : `exit ${exitCode}`}</span>
+              <span className="text-muted">
+                {exitCode !== null ? `exit ${exitCode}` : isRunning ? 'running…' : 'stopped'}
+              </span>
             </div>
           ))}
         </section>

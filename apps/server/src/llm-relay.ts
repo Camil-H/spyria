@@ -2,9 +2,12 @@ import {
   type AgentChat,
   awaitTaskTool,
   genericModelCallNoticeOf,
+  githubTools,
+  githubToolsPath,
   guestPrompterOf,
   isGuestToolMethod,
   type ModelCallFailure,
+  publishActionOf,
   routerTools,
   type ToolCallDecision,
   type ToolCallFailure,
@@ -43,7 +46,7 @@ const readOnlyHintMilliseconds = 10_000
 const unreachable = { error: { message: 'The model gateway is unreachable', type: 'gateway_unavailable' } }
 const refusalOf = (message: string) => ({ error: { message, type: 'hq_refused' } })
 const routerPath = '/mcp/router'
-const routerInfo = { capabilities: { tools: {} }, serverInfo: { name: 'hq-router', version: '1.0.0' } }
+const hqServerInfoOf = (name: string) => ({ capabilities: { tools: {} }, serverInfo: { name, version: '1.0.0' } })
 type RouterCall = {
   id?: unknown
   method?: string
@@ -125,7 +128,7 @@ export const createModelCallRelay = ({
     const path = relayPathOf(String(frame.path ?? ''))
     const method = String(frame.method ?? 'POST')
     const isToolPath = path === '/mcp' || path.startsWith('/mcp?')
-    if (!path.startsWith('/v1/') && !isToolPath && path !== routerPath)
+    if (!path.startsWith('/v1/') && !isToolPath && path !== routerPath && path !== githubToolsPath)
       return answer(404, { error: { message: 'Not found', type: 'not_found' } })
     const headers = Object.entries((frame.headers ?? {}) as Record<string, string>)
     const { authorization, 'x-api-key': apiKey } = picked(headers, ['authorization', 'x-api-key'])
@@ -133,23 +136,59 @@ export const createModelCallRelay = ({
     const handlers = agentBridge().forDatabase(database)
     const body = typeof frame.body === 'string' ? frame.body : ''
 
-    if (path === routerPath) {
+    if (path === routerPath || path === githubToolsPath) {
       if (method !== 'POST') return answer(method === 'DELETE' ? 200 : 405, undefined)
-      const turn = token ? await handlers.modelCallTurn(host, token) : undefined
+      const isRouter = path === routerPath
+      const turn = token && isRouter ? await handlers.modelCallTurn(host, token) : undefined
       const runtime = turn ?? (token ? await handlers.toolCallTurn(host, token) : undefined)
-      if (!runtime || runtime.delegationId) return answer(401, refusalOf('This runtime has no chat owner'))
+      if (!runtime || ('delegationId' in runtime && runtime.delegationId))
+        return answer(401, refusalOf('This runtime has no chat owner'))
       const rpc = jsonOf(body) as RouterCall | undefined
       if (rpc?.id === undefined) return answer(202, undefined)
       const reply = (result: object, replyHeaders?: Record<string, string>) =>
         answerRpc(rpc.id, { result }, replyHeaders)
       if (rpc.method === 'initialize')
         return reply(
-          { protocolVersion: rpc.params?.protocolVersion ?? '2025-06-18', ...routerInfo },
+          {
+            protocolVersion: rpc.params?.protocolVersion ?? '2025-06-18',
+            ...hqServerInfoOf(isRouter ? 'hq-router' : 'hq-github'),
+          },
           { 'mcp-session-id': crypto.randomUUID() },
         )
       if (rpc.method === 'ping') return reply({})
-      if (rpc.method === 'tools/list') return reply({ tools: routerTools })
+      if (rpc.method === 'tools/list') return reply({ tools: isRouter ? routerTools : githubTools })
       if (rpc.method !== 'tools/call') return answerRpc(rpc.id, methodNotFound)
+      if (!isRouter && 'ownerId' in runtime && runtime.prompterId && runtime.ownerId) {
+        const { title, body: description } = rpc.params?.arguments ?? {}
+        const toolName = String(rpc.params?.name ?? '')
+        const action = publishActionOf(toolName)
+        const calledAt = new Date()
+        const { isRefused, text } = action
+          ? await handlers
+              .publishBranch({
+                chat: runtime.chat,
+                memberId: runtime.prompterId,
+                action,
+                draft: { title: String(title ?? ''), body: String(description ?? '') },
+              })
+              .catch(() => ({ isRefused: true, text: 'Publishing failed' }))
+          : { isRefused: true, text: `Unknown tool ${toolName}` }
+        await handlers
+          .recordToolCall(host.workspaceId, {
+            chatId: runtime.chat.chatId,
+            prompterId: runtime.prompterId,
+            ownerId: runtime.ownerId,
+            server: 'github',
+            tool: toolName,
+            readOnly: false,
+            decision: 'not_needed',
+            decidedBy: null,
+            status: isRefused ? 'refused' : 'succeeded',
+            calledAt,
+          })
+          .catch(() => console.error(`Recording a tool call of chat ${runtime.chat.chatId} failed`))
+        return reply({ content: [{ type: 'text', text }], isError: isRefused })
+      }
       if (!turn) return answerRpc(rpc.id, toolErrorOf('This runtime has no active turn'))
       const { task, effort, model, taskId } = rpc.params?.arguments ?? {}
       const { text, isError } =

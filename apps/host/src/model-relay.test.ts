@@ -85,6 +85,8 @@ test('relays hq-agent’s MCP calls on /mcp with their session headers', async (
     path: '/mcp',
     headers: { authorization: 'Bearer runtime-token', 'mcp-session-id': 'session-1' },
   })
+  void relay.fetch(new Request('http://hq-gateway-relay:4000/mcp/github', { method: 'POST', body: '{}' }))
+  expect(await nextOf('gw_req')).toMatchObject({ path: '/mcp/github' })
   expect((await relay.fetch(new Request('http://hq-gateway-relay:4000/mcp/other'))).status).toBe(404)
 })
 

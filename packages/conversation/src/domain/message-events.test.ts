@@ -114,3 +114,19 @@ test('messagesFromEvents keeps messages of different workspaces apart', () => {
     { workspaceId: 'acme', body: '' },
   ])
 })
+
+test('a posted step keeps its step and a step change replaces it in place', () => {
+  const card = { type: 'pull_request', number: 1, state: 'open' }
+  const [projected] = messagesFromEvents([
+    eventAt(
+      1,
+      'message.posted',
+      'alice',
+      { kind: 'step', body: 'pull_request', detail: null, replyToId: null, step: card },
+      'card',
+    ),
+    eventAt(2, 'message.step_changed', null, { messageId: 'card', step: { ...card, state: 'merged' } }),
+    eventAt(3, 'message.step_changed', null, { messageId: 'unknown', step: card }),
+  ])
+  expect(projected).toMatchObject({ id: 'card', seq: 1, kind: 'step', authorId: 'alice', step: { state: 'merged' } })
+})

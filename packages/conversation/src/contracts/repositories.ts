@@ -17,6 +17,7 @@ export type MessageRepository = {
   thread(chatId: ChatId, rootId: MessageId): Promise<Message[]>
   history(chatId: ChatId): Promise<Message[]>
   seedFor(prompt: Message): Promise<Message | undefined>
+  pullRequestCard(chatId: ChatId): Promise<Message | undefined>
 }
 
 export type AgentJobs = {

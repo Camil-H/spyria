@@ -11,6 +11,7 @@ import {
 } from '../contracts/agent.ts'
 import type { AgentEvent } from '../domain/agent-events.ts'
 import { delegateTimeoutSeconds } from '../domain/delegation.ts'
+import { githubToolsPath } from '../domain/pull-requests.ts'
 import { type HarnessLaunch, piModelOf } from '../domain/session-routing.ts'
 import { hqToolTimeoutSeconds } from '../domain/tool-calls.ts'
 
@@ -18,6 +19,8 @@ export type AgentLlm = { model: string }
 
 const requestTimeoutMilliseconds = 30_000
 const checkoutTimeoutMilliseconds = 120_000
+const bundleTimeoutMilliseconds = 110_000
+const githubToolTimeoutSeconds = 120
 const notFoundStatus = 404
 
 const send = (
@@ -113,10 +116,14 @@ const harnessConversationOf = (
   llmToken: string,
   harness: HarnessLaunch,
   { resumeSessionId, adapterModel, effort }: AgentLlmChoice,
+  hasRepository: boolean,
 ) => ({
   agent: {
     acp_command: harnessLaunches[harness],
-    mcp_config: { hq: mcpServerOf(endpoint, '/mcp', llmToken) },
+    mcp_config: {
+      hq: mcpServerOf(endpoint, '/mcp', llmToken),
+      ...(hasRepository && { github: mcpServerOf(endpoint, githubToolsPath, llmToken) }),
+    },
     ...(resumeSessionId && { acp_resume_session_id: resumeSessionId }),
     ...(adapterModel && { acp_model: adapterModel }),
     ...(effort && { acp_thought_level: effort }),
@@ -159,7 +166,7 @@ exec pi --mode rpc --no-themes`
 export const piCommandOf = (
   gatewayUrl: string,
   { models, compactionModel, compaction }: PiLaunch,
-  { sub }: { sub: boolean },
+  { sub, hasRepository = false }: { sub: boolean; hasRepository?: boolean },
 ) => {
   const anthropicModels = models.filter((model) => model.id.startsWith('anthropic/'))
   const otherModels = models.filter((model) => !anthropicModels.includes(model))
@@ -172,6 +179,10 @@ export const piCommandOf = (
   const mcpServers = {
     hq: { ...piMcpServerOf(gatewayUrl, '/mcp'), timeout: hqToolTimeoutSeconds },
     ...(!sub && { router: { ...piMcpServerOf(gatewayUrl, '/mcp/router'), timeout: delegateTimeoutSeconds } }),
+    ...(!sub &&
+      hasRepository && {
+        github: { ...piMcpServerOf(gatewayUrl, githubToolsPath), timeout: githubToolTimeoutSeconds },
+      }),
   }
   return [
     'env',
@@ -194,9 +205,10 @@ const piConversationOf = (
   pi: PiLaunch,
   { resumeSessionId, adapterModel, effort }: AgentLlmChoice,
   sub: SubConversation | undefined,
+  hasRepository: boolean,
 ) => ({
   agent: {
-    acp_command: piCommandOf(endpoint.transport.gatewayUrl, pi, { sub: Boolean(sub) }),
+    acp_command: piCommandOf(endpoint.transport.gatewayUrl, pi, { sub: Boolean(sub), hasRepository }),
     adapter: 'pi-rpc',
     ...(resumeSessionId && { acp_resume_session_id: resumeSessionId }),
     ...(adapterModel && { acp_model: adapterModel }),
@@ -217,8 +229,8 @@ export const createHqAgentClient = (): AgentClient => ({
       {
         id: conversation.conversationId,
         ...('harness' in llm
-          ? harnessConversationOf(conversation, llmToken, llm.harness, llm)
-          : piConversationOf(conversation, llmToken, llm.pi, llm, sub)),
+          ? harnessConversationOf(conversation, llmToken, llm.harness, llm, Boolean(checkout))
+          : piConversationOf(conversation, llmToken, llm.pi, llm, sub, Boolean(checkout))),
         workspace: { kind: 'LocalWorkspace', working_dir: '/workspace/project' },
         autotitle: false,
         ...(sub && { parent_conversation_id: sub.parentConversationId }),
@@ -267,6 +279,18 @@ export const createHqAgentClient = (): AgentClient => ({
     await call(conversation, 'DELETE', `/api/conversations/${conversation.conversationId}`)
   },
   readWorkspace: (endpoint, path) => call(endpoint, 'GET', path),
+  bundleBranch: async (endpoint, branch, prerequisite) => {
+    const response = await send(
+      endpoint,
+      'POST',
+      '/api/workspace/bundle',
+      { branch, prerequisite },
+      bundleTimeoutMilliseconds,
+    )
+    const { bundle, error } = JSON.parse(response.body || '{}') as { bundle?: string; error?: string }
+    if (response.status === 200 && typeof bundle === 'string') return { bundle }
+    return { failure: error ?? `hq-agent answered the bundle request with ${response.status}` }
+  },
   openEvents: (conversation: AgentConversation, last, listener) => {
     const { conversationId } = conversation
     const after = last?.id.startsWith(`${conversationId}:`) ? (last.seq ?? 0) : 0

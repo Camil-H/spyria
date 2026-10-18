@@ -1,4 +1,5 @@
 import { createHmac, createPrivateKey, timingSafeEqual } from 'node:crypto'
+import type { AgentChat, PullRequestStep, RepositoryCheckouts } from '@hq/conversation/server'
 import type { Database } from '@hq/db/postgres'
 import {
   enteredSecretsOf,
@@ -15,6 +16,14 @@ import {
 import type { SecretBox } from '../auth/secret-box.ts'
 import { assertAdmin, recordWorkspaceEvent } from '../auth/sso.ts'
 import { appJwtOf, type GitHubApi, type UserTokens } from './github-api.ts'
+import { pushBundle } from './push.ts'
+import {
+  isSignedBy,
+  pullRequestNumbersOf,
+  pullRequestStepOf,
+  updatedPullRequest,
+  type WebhookPayload,
+} from './webhooks.ts'
 
 export type GitHubDependencies = { api: GitHubApi; secretBox?: SecretBox }
 export type GitHubConnectionView = { login: string; state: 'connected' | 'needs_reconnection' }
@@ -29,6 +38,7 @@ type AppRow = {
 type ConnectionState = { workspaceId: string; userId: string; databaseName?: string; expiresAt: number }
 
 export const githubCallbackPath = '/auth/github/callback'
+export const githubWebhooksPath = '/api/github/webhooks'
 const connectionStateLifetimeMilliseconds = 10 * 60 * 1000
 const secretLabels: Record<keyof GitHubSecrets, string> = {
   clientSecret: 'A client secret',
@@ -287,24 +297,99 @@ export const disconnectGitHub = (database: Database, member: Member) =>
   database.$client`
     delete from github_connections where workspace_id = ${member.workspaceId} and user_id = ${member.userId}`
 
-export const createGitHubCheckouts = (database: Database, dependencies: GitHubDependencies) => ({
-  checkoutOf: async ({ workspaceId, chatId }: { workspaceId: string; chatId: string }) => {
-    const [chat] = await database.$client<
-      { repository: string | null; baseBranch: string | null; workingBranch: string | null }[]
-    >`
+const userTokenOf = async (database: Database, dependencies: GitHubDependencies, member: Member) => {
+  const connection = await githubConnectionOf(database, dependencies, member)
+  const [row] = await database.$client<{ encryptedAccessToken: string }[]>`
+    select encrypted_access_token as "encryptedAccessToken" from github_connections
+    where workspace_id = ${member.workspaceId} and user_id = ${member.userId}`
+  return connection?.state === 'connected' && row && dependencies.secretBox?.open(row.encryptedAccessToken)
+}
+
+const chatRepositoryOf = async (database: Database, { workspaceId, chatId }: AgentChat) =>
+  (
+    await database.$client<{ repository: string | null; baseBranch: string | null; workingBranch: string | null }[]>`
       select repository, base_branch as "baseBranch", git_branch as "workingBranch"
       from chats where workspace_id = ${workspaceId} and id = ${chatId}`
-    if (!chat?.repository || !chat.baseBranch || !chat.workingBranch) return undefined
-    const credentials = await appCredentialsOf(database, dependencies, workspaceId)
-    const repository = chat.repository
-    const token = await githubCall(() =>
-      repositoryTokenOf(dependencies.api, credentials, repository, { contents: 'read' }),
-    )
-    return {
-      url: dependencies.api.cloneUrlOf(repository),
-      token,
-      baseBranch: chat.baseBranch,
-      workingBranch: chat.workingBranch,
-    }
-  },
-})
+  )[0]
+
+export const createGitHubCheckouts = (database: Database, dependencies: GitHubDependencies): RepositoryCheckouts => {
+  const { api } = dependencies
+  const publishingOf = async (chat: AgentChat, ownerId: string) => {
+    const { repository, baseBranch, workingBranch } = (await chatRepositoryOf(database, chat)) ?? {}
+    const token = await userTokenOf(database, dependencies, { workspaceId: chat.workspaceId, userId: ownerId })
+    if (!repository || !baseBranch || !workingBranch || !token) throw new GitHubNotConfigured()
+    return { repository, baseBranch, workingBranch, token }
+  }
+  return {
+    checkoutOf: async (chat) => {
+      const { repository, baseBranch, workingBranch } = (await chatRepositoryOf(database, chat)) ?? {}
+      if (!repository || !baseBranch || !workingBranch) return undefined
+      const credentials = await appCredentialsOf(database, dependencies, chat.workspaceId)
+      const token = await githubCall(() => repositoryTokenOf(api, credentials, repository, { contents: 'read' }))
+      return { url: api.cloneUrlOf(repository), token, baseBranch, workingBranch }
+    },
+    pushBranch: async (chat, ownerId, bundleOf) => {
+      const { repository, baseBranch, workingBranch } = (await chatRepositoryOf(database, chat)) ?? {}
+      const token = await userTokenOf(database, dependencies, { workspaceId: chat.workspaceId, userId: ownerId })
+      if (!repository || !baseBranch || !workingBranch || !token) return undefined
+      const url = api.cloneUrlOf(repository)
+      return {
+        branch: workingBranch,
+        ...(await pushBundle({ url, token, branch: workingBranch, baseBranch, bundleOf })),
+      }
+    },
+    openPullRequest: async (chat, ownerId, { title, body }) => {
+      const { repository, baseBranch, workingBranch, token } = await publishingOf(chat, ownerId)
+      return githubCall(async () =>
+        pullRequestStepOf(
+          repository,
+          await api.createPullRequest(token, repository, { title, body, head: workingBranch, base: baseBranch }),
+        ),
+      )
+    },
+    refreshPullRequest: async (chat, ownerId, pullRequest) => {
+      const { token } = await publishingOf(chat, ownerId)
+      return githubCall(async () =>
+        pullRequestStepOf(
+          pullRequest.repository,
+          await api.pullRequest(token, pullRequest.repository, pullRequest.number),
+          pullRequest,
+        ),
+      )
+    },
+  }
+}
+
+type PullRequestCard = { workspaceId: string; chatId: string; id: string; step: PullRequestStep }
+type WebhookDelivery = { appId?: string; event?: string; deliveryId?: string; signature?: string; body: string }
+
+export const receiveGitHubWebhook = async (
+  database: Database,
+  { secretBox }: GitHubDependencies,
+  { appId, event = '', deliveryId = '', signature, body }: WebhookDelivery,
+  record: (card: PullRequestCard, step: PullRequestStep) => Promise<unknown>,
+) => {
+  const apps = await database.$client<{ workspaceId: string; encryptedWebhookSecret: string }[]>`
+    select workspace_id as "workspaceId", encrypted_webhook_secret as "encryptedWebhookSecret" from github_apps
+    where ${appId ? database.$client`app_id = ${appId}` : database.$client`true`}`
+  const signedBy = await Promise.all(
+    apps.map(async (app) => secretBox && isSignedBy(await secretBox.open(app.encryptedWebhookSecret), body, signature)),
+  )
+  const workspaceId = apps.find((_, index) => signedBy[index])?.workspaceId
+  if (!workspaceId || !deliveryId) return 'refused'
+  const [delivered] = await database.$client`
+    insert into github_webhook_deliveries (workspace_id, delivery_id, received_at)
+    values (${workspaceId}, ${deliveryId}, now()) on conflict do nothing returning 1`
+  if (!delivered) return 'duplicate'
+  const payload = JSON.parse(body) as WebhookPayload
+  const numbers = pullRequestNumbersOf(event, payload).map(String)
+  const cards = await database.$client<PullRequestCard[]>`
+    select workspace_id as "workspaceId", chat_id as "chatId", id, step from messages
+    where workspace_id = ${workspaceId} and step->>'type' = 'pull_request'
+      and step->>'repository' = ${payload.repository?.full_name ?? ''} and step->>'number' = any(${numbers})`
+  for (const card of cards) {
+    const step = updatedPullRequest(card.step, event, payload)
+    if (JSON.stringify(step) !== JSON.stringify(card.step)) await record(card, step)
+  }
+  return cards.length > 0 ? 'applied' : 'ignored'
+}

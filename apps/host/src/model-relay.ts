@@ -26,7 +26,7 @@ export const createModelRelay = ({
   return {
     fetch: async (request: Request) => {
       const url = new URL(request.url)
-      if (!url.pathname.startsWith('/v1/') && !['/mcp', '/mcp/router'].includes(url.pathname))
+      if (!url.pathname.startsWith('/v1/') && !['/mcp', '/mcp/router', '/mcp/github'].includes(url.pathname))
         return new Response('Not found', { status: 404 })
       const sid = nextSid++
       const head = new Promise<Response>((resolveHead) => pending.set(sid, { resolveHead }))

@@ -13,6 +13,7 @@ import { stoppedByPrefix } from '../domain/agent-events.ts'
 import type { AgentStep, StoredStep, ThoughtStep } from '../domain/agent-steps.ts'
 import { stillRunningOf } from '../domain/delegation.ts'
 import { isFrozen } from '../domain/message.ts'
+import type { PullRequestStep } from '../domain/pull-requests.ts'
 import { type Harness, localSessions, type RunsOn, runsOnOf } from '../domain/session-routing.ts'
 
 export type ConversationMessage = Readonly<{
@@ -67,6 +68,7 @@ export type Conversation = Readonly<{
   runsOnChoices: readonly RunsOn[] | null
   gitBranch: string | null
   repository: string | null
+  pullRequest: Readonly<Pick<PullRequestStep, 'number' | 'state' | 'url'>> | null
   ownerName: string
   origin: Readonly<{ chatId: ChatId; name: string; type: 'channel' | 'runtime' }> | null
   isAgentWorking: boolean
@@ -311,6 +313,9 @@ export const getConversation =
       }
     }
     const messages = chatMessages.filter((message) => message.threadRootId === null).map(conversationMessageOf)
+    const pullRequest = messages.findLast((message) => message.step?.type === 'pull_request')?.step as
+      | PullRequestStep
+      | undefined
     return {
       title: chat.name,
       type: chat.type,
@@ -335,6 +340,7 @@ export const getConversation =
       runsOnChoices,
       gitBranch: chat.gitBranch,
       repository: chat.repository,
+      pullRequest: pullRequest ? { number: pullRequest.number, state: pullRequest.state, url: pullRequest.url } : null,
       ownerName: memberName(chat.ownerId),
       origin: origin ? { chatId: origin.id, name: origin.name, type: origin.type } : null,
       isAgentWorking: hasActiveTurn || chatMessages.some((message) => message.needsReply),

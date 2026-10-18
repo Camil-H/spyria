@@ -1,4 +1,5 @@
 import type { ChatId, MemberId, MessageId, WorkspaceId } from '@hq/kernel'
+import type { PublishAction, PullRequestDraft } from '../domain/pull-requests.ts'
 import type { RunsOn } from '../domain/session-routing.ts'
 import type {
   CommandOutputFrame,
@@ -45,6 +46,10 @@ export type ConversationCommands = {
   setPlanMode: Command<{ chatId: ChatId; enabled: boolean }, number>
   readWorkspace: Command<{ chatId: ChatId; read: WorkspaceRead; path: string }, WorkspaceReading>
   wakeWorkspace: Command<{ chatId: ChatId }, void>
+  publishBranch: Command<
+    { chatId: ChatId; action: PublishAction; draft: PullRequestDraft },
+    { isRefused: boolean; text: string }
+  >
 }
 
 export type AgentStream = {

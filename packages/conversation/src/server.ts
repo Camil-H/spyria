@@ -2,6 +2,7 @@ export type {
   AgentChat,
   AgentConversation,
   AgentHost,
+  BundleOf,
   RepositoryCheckout,
   RepositoryCheckouts,
   SessionClassifier,
@@ -17,6 +18,17 @@ export {
 } from './domain/agent-events.ts'
 export { awaitTaskTool, routerTools, stillRunningOf, subagentFailureOf, unknownTaskOf } from './domain/delegation.ts'
 export { genericModelCallNoticeOf, type ModelCallFailure } from './domain/model-call-failures.ts'
+export {
+  checksOf,
+  githubTools,
+  githubToolsPath,
+  noGitHubConnection,
+  type PublishAction,
+  type PullRequestDraft,
+  type PullRequestStep,
+  publishActionOf,
+  type ReviewComment,
+} from './domain/pull-requests.ts'
 export type { CommandOutputFrame, DelegatedFrame, QuestionFrame } from './domain/streamed-reply.ts'
 export {
   guestPrompterOf,
@@ -35,6 +47,7 @@ export { createGatewaySessionClassifier } from './integrations/gateway-session-c
 export { type AgentLlm, createHqAgentClient } from './integrations/hq-agent-client.ts'
 export {
   chatPlanModePathOf,
+  chatPublishPathOf,
   chatQuestionPathOf,
   chatRoutingPathOf,
   chatWorkspacePathOf,

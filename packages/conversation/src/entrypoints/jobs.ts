@@ -28,6 +28,7 @@ import {
   recordToolCall,
 } from '../operations/model-calls.ts'
 import { promptAgent, startAgentSession } from '../operations/prompt-agent.ts'
+import { publishBranch, recordPullRequest } from '../operations/publish-branch.ts'
 import { readWorkspace, snapshotWorkspace, wakeWorkspace } from '../operations/read-workspace.ts'
 import { recordAgentEvent } from '../operations/record-agent-event.ts'
 import { answerToolApproval } from '../operations/request-tool-approval.ts'
@@ -125,6 +126,10 @@ export const createAgentHandlers = ({
     },
     readWorkspace: (chat: AgentChat, member: MemberId, read: WorkspaceRead, path: string) =>
       readWorkspace(dependenciesOf(chat.workspaceId), { chat, memberId: member, read, path }),
+    publishBranch: (input: Parameters<typeof publishBranch>[1]) =>
+      publishBranch(dependenciesOf(input.chat.workspaceId), input),
+    recordPullRequest: (input: Parameters<typeof recordPullRequest>[1]) =>
+      recordPullRequest(dependenciesOf(input.chat.workspaceId), input),
     wakeWorkspace: (chat: AgentChat, member: MemberId) =>
       wakeWorkspace(dependenciesOf(chat.workspaceId), { chat, memberId: member }),
     answerQuestion: async (chat: AgentChat, member: MemberId, questionId: string, answer: object) =>

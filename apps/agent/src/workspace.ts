@@ -7,6 +7,8 @@ const maximumFileBytes = 256_000
 const maximumPatchCharacters = 400_000
 const maximumCommits = 200
 const branchPattern = /^\w[\w./-]*$/
+const commitPattern = /^[0-9a-f]{40}$/
+const maximumBundleBytes = 20_000_000
 
 const git = async (cwd: string, args: string[], env: Record<string, string>, input = '') => {
   const child = Bun.spawn(['git', '-C', cwd, ...args], {
@@ -79,4 +81,36 @@ export const changesOf = async (root: string, base: string, env: Record<string, 
   } finally {
     await rm(index, { force: true })
   }
+}
+
+const gitBytes = async (cwd: string, args: string[], env: Record<string, string>) => {
+  const child = Bun.spawn(['git', '-C', cwd, ...args], { env, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' })
+  const [bytes, errors] = await Promise.all([new Response(child.stdout).bytes(), new Response(child.stderr).text()])
+  return { isDone: (await child.exited) === 0, bytes, errors }
+}
+
+export const bundleOf = async (
+  root: string,
+  { branch, prerequisite }: { branch?: unknown; prerequisite?: unknown },
+  env: Record<string, string>,
+) => {
+  const isPrerequisite = typeof prerequisite === 'string' && commitPattern.test(prerequisite)
+  if (typeof branch !== 'string' || !branchPattern.test(branch) || (prerequisite !== null && !isPrerequisite))
+    return { failure: 'The bundle request is not valid' }
+  const tip = (await git(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}^{commit}`], env)).trim()
+  if (!tip) return { failure: `The branch ${branch} has no commit in the runtime` }
+  if (tip === prerequisite) return { bundle: '' }
+  const isAncestor =
+    isPrerequisite && (await gitBytes(root, ['merge-base', '--is-ancestor', prerequisite, tip], env)).isDone
+  const bundled = await gitBytes(
+    root,
+    ['bundle', 'create', '-', `refs/heads/${branch}`, ...(isAncestor ? [`^${prerequisite}`] : [])],
+    env,
+  )
+  if (!bundled.isDone) return { failure: `The branch could not be bundled: ${bundled.errors.trim()}` }
+  if (bundled.bytes.length > maximumBundleBytes)
+    return {
+      failure: `The new commits weigh more than ${maximumBundleBytes / 1_000_000} MB; push them from your machine`,
+    }
+  return { bundle: Buffer.from(bundled.bytes).toString('base64') }
 }

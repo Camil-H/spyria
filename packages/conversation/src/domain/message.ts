@@ -21,7 +21,7 @@ export type Message = Readonly<{
 }>
 
 export type MessageChange = Readonly<{
-  type: 'message.posted' | 'message.replied' | 'message.edited' | 'message.deleted'
+  type: 'message.posted' | 'message.replied' | 'message.edited' | 'message.deleted' | 'message.step_changed'
   actorId: MemberId | null
   message: Message
 }>

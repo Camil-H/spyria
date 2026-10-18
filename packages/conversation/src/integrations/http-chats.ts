@@ -1,4 +1,5 @@
 import type { ChatId, WorkspaceId } from '@hq/kernel'
+import type { PublishAction, PullRequestDraft } from '../domain/pull-requests.ts'
 import type { WorkspaceRead, WorkspaceReading } from '../domain/workspace-reads.ts'
 
 export const commandOutputPathOf = (chatId: string, stepId: string) => `/api/chats/${chatId}/steps/${stepId}/output`
@@ -6,6 +7,7 @@ export const chatRoutingPathOf = (chatId: string) => `/api/chats/${chatId}/routi
 export const chatQuestionPathOf = (chatId: string, questionId: string) => `/api/chats/${chatId}/questions/${questionId}`
 export const chatPlanModePathOf = (chatId: string) => `/api/chats/${chatId}/plan-mode`
 export const chatWorkspacePathOf = (chatId: string, read: string) => `/api/chats/${chatId}/workspace/${read}`
+export const chatPublishPathOf = (chatId: string, action: string) => `/api/chats/${chatId}/publish/${action}`
 
 const storedChatWaitMilliseconds = 5000
 const storedChatRetryMilliseconds = 100
@@ -44,6 +46,16 @@ export const createHttpChatCommands = (postAsMember: PostAsMember, getAsMember: 
     )
     if (!response.ok) throw new Error(`The workspace read answered ${response.status}`)
     return (await response.json()) as WorkspaceReading
+  },
+  publishBranch: async ({
+    workspaceId,
+    chatId,
+    action,
+    draft,
+  }: ChatInput & { action: PublishAction; draft: PullRequestDraft }) => {
+    const response = await postAsMember(workspaceId, chatPublishPathOf(chatId, action), JSON.stringify(draft))
+    const { text } = (await response.json().catch(() => ({}))) as { text?: string }
+    return { isRefused: !response.ok, text: text ?? `Publishing answered ${response.status}` }
   },
   wakeWorkspace: async ({ workspaceId, chatId }: ChatInput) => {
     const response = await postAsMember(workspaceId, chatWorkspacePathOf(chatId, 'wake'))

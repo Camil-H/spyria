@@ -36,6 +36,7 @@ export type PostedPayload = Pick<ProjectedMessage, 'body' | 'detail' | 'replyToI
   threadRootId?: string
 }
 export type ChangedPayload = { messageId: string; body: string }
+export type StepChangedPayload = { messageId: string; step: StoredStep }
 export type AgentEventPayload = {
   replyToId: string | null
   event: AgentEvent
@@ -88,6 +89,11 @@ export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMes
           (projection.type === 'step' && projection.id) || id,
         )
       }
+    }
+    if (type === 'message.step_changed') {
+      const { messageId, step } = payload as StepChangedPayload
+      const message = messageByKey.get(`${workspaceId}/${messageId}`)
+      if (message) messageByKey.set(`${workspaceId}/${messageId}`, { ...message, step })
     }
     if (type !== 'message.edited' && type !== 'message.deleted') continue
     const { messageId, body } = payload as ChangedPayload

@@ -109,3 +109,40 @@ test('changes are the diff against the base branch with commits, uncommitted edi
       truncated: false,
     })
 })
+
+test('a bundle carries the working branch from a prerequisite the remote has, or whole when none; it holds no credential and refuses bad requests', async () => {
+  const bundled = join(directory, 'bundled')
+  git(directory, 'clone', '-q', source, bundled)
+  git(bundled, 'checkout', '-q', '-b', 'hq/bundle')
+  write(bundled, { 'src/app.ts': 'export const total = 2\n' })
+  git(bundled, 'commit', '-q', '-am', 'Fix the total')
+  const base = Bun.spawnSync(['git', 'rev-parse', 'main'], { cwd: bundled }).stdout.toString().trim()
+  const tip = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: bundled }).stdout.toString().trim()
+  const { call } = started({ workspaceDirectory: bundled })
+  const headsOf = async (prerequisite: string | null) => {
+    const { status, body } = await call('POST', '/api/workspace/bundle', { branch: 'hq/bundle', prerequisite })
+    expect(status).toBe(200)
+    const file = join(directory, `bundle-${prerequisite ?? 'whole'}`)
+    writeFileSync(file, Buffer.from(String(body.bundle), 'base64'))
+    return Bun.spawnSync(['git', 'bundle', 'list-heads', file]).stdout.toString()
+  }
+  expect(await headsOf(base)).toBe(`${tip} refs/heads/hq/bundle\n`)
+  const verified = Bun.spawnSync(['git', 'bundle', 'verify', join(directory, `bundle-${base}`)], { cwd: source })
+  expect(verified.stderr.toString()).toContain(base)
+  expect(await headsOf(null)).toBe(`${tip} refs/heads/hq/bundle\n`)
+  expect(await headsOf('0'.repeat(40))).toBe(`${tip} refs/heads/hq/bundle\n`)
+  expect((await call('POST', '/api/workspace/bundle', { branch: 'hq/bundle', prerequisite: tip })).body).toEqual({
+    bundle: '',
+  })
+  for (const request of [
+    { branch: '--all', prerequisite: null },
+    { branch: 'hq/bundle', prerequisite: 'HEAD~1' },
+  ])
+    expect(await call('POST', '/api/workspace/bundle', request)).toEqual({
+      status: 422,
+      body: { error: 'The bundle request is not valid' },
+    })
+  expect((await call('POST', '/api/workspace/bundle', { branch: 'hq/missing', prerequisite: null })).body).toEqual({
+    error: 'The branch hq/missing has no commit in the runtime',
+  })
+})

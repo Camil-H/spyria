@@ -345,6 +345,26 @@ const app = createApp({
       privateKey: fakeGitHub.appPrivateKey,
     }),
   )
+  .get('/test/github', async (context) => {
+    const { db = '', repository = '', branch = '' } = context.req.query()
+    const connections = await databaseByName(db).$client<{ userId: string; sealedToken: string }[]>`
+      select user_id as "userId", encrypted_access_token as "sealedToken" from github_connections`
+    const ownerOfToken = new Map(
+      await Promise.all(
+        connections.map(async ({ userId, sealedToken }) => [await github.secretBox.open(sealedToken), userId] as const),
+      ),
+    )
+    return context.json({
+      commits: fakeGitHub.commitSubjectsOf(repository, branch),
+      headSha: fakeGitHub.branchHeadOf(repository, branch),
+      pullRequests: fakeGitHub.pullRequests
+        .filter((pullRequest) => pullRequest.repository === repository && pullRequest.head === branch)
+        .map(({ authorToken, ...pullRequest }) => ({
+          ...pullRequest,
+          authorId: ownerOfToken.get(authorToken) ?? null,
+        })),
+    })
+  })
   .post('/test/token', async (context) => {
     const { db = '', user = '', workspace = '' } = context.req.query()
     return context.json(await issueTestSession(databaseByName(db), workspace, user, db))

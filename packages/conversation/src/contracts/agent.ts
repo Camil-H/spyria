@@ -1,5 +1,6 @@
 import type { ChatId, ListedModel, MemberId, MessageId, Model, RuntimeHostId, WorkspaceId } from '@hq/kernel'
 import type { AgentEvent } from '../domain/agent-events.ts'
+import type { PullRequestDraft, PullRequestStep } from '../domain/pull-requests.ts'
 import type { HarnessLaunch } from '../domain/session-routing.ts'
 import type { DelegatedFrame, QuestionFrame } from '../domain/streamed-reply.ts'
 
@@ -62,7 +63,18 @@ export type PiLaunch = Readonly<{
 }>
 export type SubConversation = Readonly<{ parentConversationId: string }>
 export type RepositoryCheckout = Readonly<{ url: string; token: string; baseBranch: string; workingBranch: string }>
-export type RepositoryCheckouts = { checkoutOf(chat: AgentChat): Promise<RepositoryCheckout | undefined> }
+export type BranchBundle = Readonly<{ bundle: string } | { failure: string }>
+export type BundleOf = (branch: string, prerequisite: string | null) => Promise<BranchBundle>
+export type RepositoryCheckouts = {
+  checkoutOf(chat: AgentChat): Promise<RepositoryCheckout | undefined>
+  pushBranch(
+    chat: AgentChat,
+    ownerId: MemberId,
+    bundleOf: BundleOf,
+  ): Promise<{ branch: string; failure?: string } | undefined>
+  openPullRequest(chat: AgentChat, ownerId: MemberId, draft: PullRequestDraft): Promise<PullRequestStep>
+  refreshPullRequest(chat: AgentChat, ownerId: MemberId, pullRequest: PullRequestStep): Promise<PullRequestStep>
+}
 export type AgentClient = {
   createConversation(
     conversation: AgentConversation,
@@ -79,6 +91,7 @@ export type AgentClient = {
   interrupt(conversation: AgentConversation): Promise<void>
   deleteConversation(conversation: AgentConversation): Promise<void>
   readWorkspace(endpoint: AgentEndpoint, path: string): Promise<object | undefined>
+  bundleBranch(endpoint: AgentEndpoint, branch: string, prerequisite: string | null): Promise<BranchBundle>
   openEvents(conversation: AgentConversation, last: AgentLastEvent | null, listener: AgentEventListener): AgentSocket
 }
 

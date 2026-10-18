@@ -1,4 +1,5 @@
 import { createPrivateKey, createSign } from 'node:crypto'
+import type { GitHubPullRequest } from './webhooks.ts'
 
 export type GitHubUrls = { apiUrl: string; webUrl: string }
 export type UserTokens = { accessToken: string; refreshToken: string | null; accessExpiresAt: Date | null }
@@ -94,6 +95,13 @@ export const createGitHubApi = ({ apiUrl, webUrl }: GitHubUrls) => {
         grant_type: 'refresh_token',
         refresh_token: refreshToken,
       }),
+    createPullRequest: (
+      token: string,
+      fullName: string,
+      body: { title: string; body: string; head: string; base: string },
+    ) => request<GitHubPullRequest>(`/repos/${fullName}/pulls`, { token, method: 'POST', body }),
+    pullRequest: (token: string, fullName: string, number: number) =>
+      request<GitHubPullRequest>(`/repos/${fullName}/pulls/${number}`, { token }),
     cloneUrlOf: (fullName: string) => `${webUrl}/${fullName}.git`,
   }
 }

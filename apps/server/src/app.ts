@@ -1,6 +1,7 @@
 import {
   type AgentChat,
   chatPlanModePathOf,
+  chatPublishPathOf,
   chatQuestionPathOf,
   chatRoutingPathOf,
   chatWorkspacePathOf,
@@ -10,13 +11,21 @@ import {
   getChatRouting,
   getCommandOutput,
   isWorkspaceRead,
+  type PublishAction,
   planModeOf,
   questionAnswerOf,
 } from '@hq/conversation/server'
 import type { Database } from '@hq/db/postgres'
 import { schema } from '@hq/db/zero'
 import { queries, type Transact, type ZeroContext } from '@hq/db/zero-queries'
-import { chatId, DomainError, MissingChatPermission, type RuntimeHostId } from '@hq/kernel'
+import {
+  chatId,
+  DomainError,
+  MissingChatPermission,
+  messageId,
+  type RuntimeHostId,
+  workspaceId as toWorkspaceId,
+} from '@hq/kernel'
 import {
   addLlmCredentialFromRequest,
   availableToolsFromRequest,
@@ -73,8 +82,10 @@ import {
   type GitHubDependencies,
   githubCallbackPath,
   githubConnectionOf,
+  githubWebhooksPath,
   grantedRepositories,
   readGitHubSettings,
+  receiveGitHubWebhook,
   repositoryBranches,
   saveGitHubSettings,
   startGitHubConnection,
@@ -233,6 +244,29 @@ export const createApp = ({
       }).catch(() => false)
       return context.html(githubConnectionPage(isConnected), isConnected ? 200 : 400)
     })
+    .post(githubWebhooksPath, async (context) => {
+      const testDatabaseName = testDatabaseByName && context.req.query('db')
+      const webhookDatabase = (testDatabaseName && databaseOf(testDatabaseName)) || database
+      const outcome = await receiveGitHubWebhook(
+        webhookDatabase,
+        githubDependencies,
+        {
+          appId: context.req.header('x-github-hook-installation-target-id'),
+          event: context.req.header('x-github-event'),
+          deliveryId: context.req.header('x-github-delivery'),
+          signature: context.req.header('x-hub-signature-256'),
+          body: await context.req.text(),
+        },
+        (card, step) =>
+          agentBridge.forDatabase(webhookDatabase).recordPullRequest({
+            chat: { workspaceId: toWorkspaceId(card.workspaceId), chatId: chatId(card.chatId) },
+            actorId: null,
+            step,
+            cardId: messageId(card.id),
+          }),
+      )
+      return context.json({ outcome }, outcome === 'refused' ? 401 : outcome === 'ignored' ? 202 : 200)
+    })
     .route(
       '/auth',
       createAuthRoutes({
@@ -346,6 +380,17 @@ export const createApp = ({
             context.req.query('path') ?? '',
           ),
       )
+    })
+    .post(chatPublishPathOf(':chatId', ':action{push|pull_request}'), async (context) => {
+      const { title, body } = ((await context.req.json().catch(() => null)) ?? {}) as Record<string, unknown>
+      const { workspaceId, userId } = context.get('zeroContext')
+      const publication = await agentBridge.forDatabase(context.get('database')).publishBranch({
+        chat: { workspaceId, chatId: chatId(context.req.param('chatId') ?? '') },
+        memberId: userId,
+        action: context.req.param('action') as PublishAction,
+        draft: { title: typeof title === 'string' ? title : '', body: typeof body === 'string' ? body : '' },
+      })
+      return context.json(publication, publication.isRefused ? 403 : 200)
     })
     .post(chatWorkspacePathOf(':chatId', 'wake'), async (context) => {
       const { workspaceId, userId } = context.get('zeroContext')

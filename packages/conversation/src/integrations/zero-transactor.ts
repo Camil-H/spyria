@@ -44,7 +44,7 @@ import type { StoredStep } from '../domain/agent-steps.ts'
 import { ChatNotFound, ForeignWorkspace, MessageNotFound } from '../domain/errors.ts'
 import type { Message, MessageChange } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
-import type { AgentEventPayload, ChangedPayload, PostedPayload } from '../domain/message-events.ts'
+import type { AgentEventPayload, ChangedPayload, PostedPayload, StepChangedPayload } from '../domain/message-events.ts'
 
 const dateOrNull = (time: number | null) => (time === null ? null : new Date(time))
 const timeOrNull = (date: Date | null) => date?.getTime() ?? null
@@ -77,7 +77,7 @@ const isPosted = (type: MessageChange['type']) => type === 'message.posted' || t
 const payloadOf = ({
   type,
   message,
-}: MessageChange): PostedPayload | ChangedPayload | Pick<ChangedPayload, 'messageId'> =>
+}: MessageChange): PostedPayload | ChangedPayload | StepChangedPayload | Pick<ChangedPayload, 'messageId'> =>
   isPosted(type)
     ? {
         kind: message.kind,
@@ -85,10 +85,13 @@ const payloadOf = ({
         detail: message.detail,
         replyToId: message.replyToId,
         ...(message.threadRootId && { threadRootId: message.threadRootId }),
+        ...(message.step && { step: message.step }),
       }
     : type === 'message.edited'
       ? { messageId: message.id, body: message.body }
-      : { messageId: message.id }
+      : type === 'message.step_changed'
+        ? { messageId: message.id, step: message.step }
+        : { messageId: message.id }
 
 export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: WorkspaceId): ConversationTransactor => {
   const newestInChat = (id: ChatId) =>
@@ -102,7 +105,10 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       type: change.type,
       actor: change.actorId,
       payload: payloadOf(change),
-      createdAt: message.deletedAt ?? message.editedAt ?? message.createdAt,
+      createdAt:
+        change.type === 'message.step_changed'
+          ? new Date()
+          : (message.deletedAt ?? message.editedAt ?? message.createdAt),
       ...(isPosted(change.type) && { id: message.id }),
     })
   }
@@ -192,6 +198,18 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
               .orderBy('seq', 'asc'),
           )
         ).map(toMessage),
+      pullRequestCard: async (id) => {
+        const row = await tx.run(
+          zql.messages
+            .where('workspaceId', contextWorkspaceId)
+            .where('chatId', id)
+            .where('kind', 'step')
+            .where('authorId', 'IS NOT', null)
+            .orderBy('seq', 'desc')
+            .one(),
+        )
+        return row?.step?.type === 'pull_request' ? toMessage(row) : undefined
+      },
       seedFor: async (prompt) => {
         const memberMessages = zql.messages
           .where('workspaceId', contextWorkspaceId)

@@ -1,7 +1,7 @@
 import { useQuery } from '@hq/db/react'
 import { type ChatId, chatId as toChatId, type WorkspaceId } from '@hq/kernel'
 import { useSession } from '@hq/session'
-import { buttonClass, chatTypeIconOf, ErrorMessage, SegmentedChoice, useGuardedAction } from '@hq/ui'
+import { buttonClass, chatTypeIconOf, ErrorMessage, focusRing, SegmentedChoice, useGuardedAction } from '@hq/ui'
 import { Folder, GitBranch } from 'lucide-react'
 import { type ReactNode, useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate, useOutletContext, useParams } from 'react-router'
@@ -88,6 +88,16 @@ export const ChatView = ({
           <div className="flex min-w-0 max-w-1/2 shrink-0 items-center gap-2">
             <ChatTypeIcon aria-label={chatTypeLabel} role="img" size={20} className="shrink-0 text-muted" />
             <h1 className="truncate text-2xl font-semibold">{conversation.title}</h1>
+            {conversation.pullRequest && (
+              <a
+                href={conversation.pullRequest.url}
+                target="_blank"
+                rel="noreferrer"
+                className={`shrink-0 rounded-full border border-line px-2 py-0.5 text-xs text-ink hover:bg-hover ${focusRing}`}
+              >
+                PR #{conversation.pullRequest.number} · {conversation.pullRequest.state}
+              </a>
+            )}
           </div>
           <div className="ml-auto flex min-w-0 items-center gap-x-2 whitespace-nowrap">
             {conversation.type === 'runtime' && (

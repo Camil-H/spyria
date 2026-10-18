@@ -117,6 +117,7 @@ export const createHqAgentRelay = ({
   const upstreams = new Set<WebSocket>()
   const bridgeSends = new Set<(data: string) => void>()
   const created: Record<string, unknown>[] = []
+  const requests: { method: string; path: string; body?: string }[] = []
   const prompts: string[] = []
   const modelSwitches: (string | undefined)[] = []
   const thoughtLevels: (string | undefined)[] = []
@@ -166,6 +167,7 @@ export const createHqAgentRelay = ({
       const sent = method === 'POST' ? JSON.parse(body || '{}') : {}
       const launch = method === 'POST' && path === '/api/conversations' ? sent : undefined
       if (launch) created.push(structuredClone(launch))
+      requests.push({ method, path, body })
       if (path.endsWith('/events')) prompts.push(sent.content?.[0]?.text)
       if (path.endsWith('/interrupt')) interrupts.push(path.split('/')[3] ?? '')
       if (path.endsWith('/switch_acp_model')) {
@@ -218,6 +220,7 @@ export const createHqAgentRelay = ({
   return {
     containerAgent,
     created,
+    requests,
     prompts,
     modelSwitches,
     thoughtLevels,

@@ -12,6 +12,15 @@ const accessLifetimeSeconds = 8 * 60 * 60
 
 type Repository = { fullName: string; branches: string[]; files: Record<string, string> }
 type IssuedToken = { token: string; repositories?: string[]; permissions?: Record<string, string> }
+export type FakePullRequest = {
+  repository: string
+  number: number
+  title: string
+  body: string
+  head: string
+  base: string
+  authorToken: string
+}
 
 export const fakeGitHubRepositories: Repository[] = [
   {
@@ -38,6 +47,7 @@ export const fakeGitHubRepositories: Repository[] = [
 const git = (cwd: string, ...command: string[]) => {
   const result = Bun.spawnSync(['git', '-c', 'init.defaultBranch=main', ...command], { cwd, stderr: 'pipe' })
   if (result.exitCode !== 0) throw new Error(result.stderr.toString())
+  return result.stdout.toString().trim()
 }
 
 const bareRepositoryOf = (root: string, { fullName, branches, files }: Repository) => {
@@ -102,15 +112,44 @@ export const startFakeGitHub = () => {
       scope: '',
     })
   }
+  const pullRequests: FakePullRequest[] = []
+  const bareOf = (repository: string) => join(root, `${repository}.git`)
+  const branchHeadOf = (repository: string, branch: string) => {
+    try {
+      return git(bareOf(repository), 'rev-parse', '--verify', `refs/heads/${branch}`)
+    } catch {
+      return ''
+    }
+  }
+  const commitSubjectsOf = (repository: string, branch: string, base = 'main') =>
+    branchHeadOf(repository, branch)
+      ? git(bareOf(repository), 'log', '--format=%s', `${base}..refs/heads/${branch}`).split('\n').filter(Boolean)
+      : []
+  const pullRequestJsonOf = (origin: string, { repository, number, title, head, base }: FakePullRequest) => ({
+    number,
+    html_url: `${origin}/${repository}/pull/${number}`,
+    title,
+    state: 'open',
+    draft: false,
+    merged: false,
+    head: { sha: branchHeadOf(repository, head), ref: head },
+    commits: commitSubjectsOf(repository, head, base).length,
+  })
   const notFound = () => Response.json({ message: 'Not Found' }, { status: 404 })
   const unauthorized = () => Response.json({ message: 'Bad credentials' }, { status: 401 })
 
+  const isUserToken = (token: string) => (userTokens.get(token) ?? 0) > Date.now()
+  const bearerOf = (request: Request) => (request.headers.get('authorization') ?? '').replace(/^(Bearer|token) /, '')
   const serveGit = async (request: Request, pathInfo: string) => {
     const [, basic = ''] = /^Basic (.+)$/.exec(request.headers.get('authorization') ?? '') ?? []
     const password = Buffer.from(basic, 'base64').toString().split(':')[1] ?? ''
     const fullName = pathInfo.split('.git/')[0]?.slice(1) ?? ''
     const issued = installationTokens.get(password)
-    if (!issued || !(issued.repositories ?? [fullName]).includes(fullName.split('/')[1] ?? ''))
+    const isPush = pathInfo.endsWith('/git-receive-pack') || request.url.includes('service=git-receive-pack')
+    const isAllowed = isPush
+      ? isUserToken(password)
+      : isUserToken(password) || (issued && (issued.repositories ?? [fullName]).includes(fullName.split('/')[1] ?? ''))
+    if (!isAllowed || !repositoryNamed(fullName))
       return new Response('Authentication required', { status: 401, headers: { 'www-authenticate': 'Basic' } })
     gitAuthorizations.push(password)
     const url = new URL(request.url)
@@ -125,6 +164,7 @@ export const startFakeGitHub = () => {
         CONTENT_TYPE: request.headers.get('content-type') ?? '',
         HTTP_CONTENT_ENCODING: request.headers.get('content-encoding') ?? '',
         GIT_PROTOCOL: request.headers.get('git-protocol') ?? '',
+        REMOTE_USER: fakeGitHubLogin,
       },
       stdin: request.method === 'POST' ? new Uint8Array(await request.arrayBuffer()) : 'ignore',
       stdout: 'pipe',
@@ -168,6 +208,40 @@ export const startFakeGitHub = () => {
       if (!installationTokenOf(request)) return unauthorized()
       const repository = repositoryNamed(branches[1] ?? '')
       return repository ? Response.json(repository.branches.map((name) => ({ name }))) : notFound()
+    }
+    const pulls = /^\/repos\/([\w.-]+\/[\w.-]+)\/pulls(?:\/(\d+))?$/.exec(path)
+    if (pulls) {
+      const [, repository = '', number] = pulls
+      const token = bearerOf(request)
+      if (!isUserToken(token)) return unauthorized()
+      if (!repositoryNamed(repository)) return notFound()
+      if (request.method === 'POST') {
+        const { title = '', body = '', head = '', base = '' } = (await request.json()) as Record<string, string>
+        if (!branchHeadOf(repository, head)) return Response.json({ message: 'Validation Failed' }, { status: 422 })
+        const ownPullRequests = pullRequests.filter(
+          (known) => known.repository === repository && known.authorToken === token,
+        )
+        pullRequests.push({
+          repository,
+          title,
+          body,
+          head,
+          base,
+          authorToken: token,
+          number: ownPullRequests.length + 1,
+        })
+      }
+      const pullRequest = pullRequests.findLast(
+        (known) =>
+          known.repository === repository &&
+          known.authorToken === token &&
+          (number === undefined || known.number === Number(number)),
+      )
+      return pullRequest
+        ? Response.json(pullRequestJsonOf(new URL(request.url).origin, pullRequest), {
+            status: request.method === 'POST' ? 201 : 200,
+          })
+        : notFound()
     }
     if (path === '/user') {
       const expiresAt = userTokens.get((request.headers.get('authorization') ?? '').replace(/^Bearer /, ''))
@@ -213,6 +287,10 @@ export const startFakeGitHub = () => {
     appPrivateKey,
     installationTokens,
     gitAuthorizations,
+    pullRequests,
+    branchHeadOf,
+    commitSubjectsOf,
+    userTokens: () => [...userTokens.keys()],
     expireUserTokens: () => {
       for (const token of userTokens.keys()) userTokens.set(token, 0)
     },

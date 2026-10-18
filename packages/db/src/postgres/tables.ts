@@ -140,6 +140,18 @@ export const githubApps = table('github_apps', {
   updatedAt: instant().notNull(),
 })
 
+export const githubWebhookDeliveries = table(
+  'github_webhook_deliveries',
+  {
+    workspaceId: text()
+      .notNull()
+      .references(() => githubApps.workspaceId, { onDelete: 'cascade' }),
+    deliveryId: text().notNull(),
+    receivedAt: instant().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.workspaceId, table.deliveryId] })],
+)
+
 export const ssoDomains = table(
   'sso_domains',
   {

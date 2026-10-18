@@ -10,7 +10,7 @@ import {
 } from './acp.ts'
 import { checkOut, lastLinesOf, type Repository, runSetup, setupCommand } from './checkout.ts'
 import { connectPi } from './pi.ts'
-import { changesOf, fileOf, treeOf } from './workspace.ts'
+import { bundleOf, changesOf, fileOf, treeOf } from './workspace.ts'
 
 type Status = 'starting' | 'idle' | 'running' | 'finished' | 'error'
 type AgentEvent = { id: string; seq: number; timestamp: string; completed: boolean; update: Json }
@@ -573,6 +573,10 @@ export const startAgent = ({
     if (method === 'POST' && pathname === '/api/conversations') return create(await request.json())
     const [, read] = workspaceRoute.exec(pathname) ?? []
     if (read && method === 'GET') return readWorkspace(read, searchParams)
+    if (method === 'POST' && pathname === '/api/workspace/bundle') {
+      const bundled = await bundleOf(workspaceDirectory, await request.json(), adapterEnvironmentOf({}))
+      return 'failure' in bundled ? Response.json({ error: bundled.failure }, { status: 422 }) : Response.json(bundled)
+    }
     const [, conversationId = '', action, questionId] = conversationRoute.exec(pathname) ?? []
     const conversation = conversations.get(conversationId)
     if (!conversation) return Response.json({ error: 'Not found' }, { status: 404 })

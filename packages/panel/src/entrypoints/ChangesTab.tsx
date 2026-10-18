@@ -1,6 +1,7 @@
 import { DiffView, focusRing } from '@hq/ui'
 import { useState } from 'react'
-import { fileChangesOf } from '../domain/workspace.ts'
+import { commitsOf, fileChangesOf } from '../domain/workspace.ts'
+import { PublishActions } from './PublishActions.tsx'
 import type { TabProps } from './TabProps.ts'
 import { emptyClass } from './ui.ts'
 import { useWorkspaceReading } from './useWorkspaceReading.ts'
@@ -14,6 +15,11 @@ const ChangesTab = ({ workspaceId, chatId }: TabProps) => {
   return (
     <div className="flex flex-col gap-4">
       <WorkspaceStatus workspaceId={workspaceId} chatId={chatId} />
+      <PublishActions
+        workspaceId={workspaceId}
+        chatId={chatId}
+        commitSubjects={commitsOf(reading?.log).map(({ subject }) => subject)}
+      />
       <button
         type="button"
         onClick={refresh}

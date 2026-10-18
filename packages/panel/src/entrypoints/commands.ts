@@ -11,6 +11,10 @@ export type PanelCommands = {
   leaveChat: Command<{ chatId: ChatId }>
   readWorkspace: Command<{ chatId: ChatId; read: WorkspaceRead; path: string }, WorkspaceReading>
   wakeWorkspace: Command<{ chatId: ChatId }>
+  publishBranch: Command<
+    { chatId: ChatId; action: 'push' | 'pull_request'; draft: { title: string; body: string } },
+    { isRefused: boolean; text: string }
+  >
   watchCommandOutput: (
     workspaceId: WorkspaceId,
     chatId: ChatId,

@@ -1,3 +1,4 @@
+import type { PullRequestStep } from './pull-requests.ts'
 import { toolConnectionOf } from './tool-calls.ts'
 
 export type DiffLine = { kind: 'added' | 'removed' | 'context'; text: string }
@@ -30,6 +31,7 @@ export type AgentStep =
     }
   | { type: 'plan'; items: { title: string; status: string }[] }
   | { type: 'error'; message: string; signIn?: string }
+  | PullRequestStep
   | {
       type: 'question'
       questionId: string

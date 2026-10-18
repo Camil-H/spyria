@@ -314,6 +314,8 @@ export const createAgentBridge = ({
       answerQuestion: handlers.answerQuestion,
       setPlanMode: handlers.setPlanMode,
       readWorkspace: handlers.readWorkspace,
+      publishBranch: handlers.publishBranch,
+      recordPullRequest: handlers.recordPullRequest,
       wakeWorkspace: handlers.wakeWorkspace,
       recordModelCallFailure: handlers.recordModelCallFailure,
       recordToolCall: handlers.recordToolCall,
