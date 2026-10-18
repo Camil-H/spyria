@@ -73,3 +73,14 @@ export const ChatOwnerActive = errorKind(
   () => 'Only a chat whose owner left the workspace can be transferred',
   WorkspaceError,
 )
+export const InvalidSsoSettings = errorKind('invalid_sso_settings', (reason: string) => reason, WorkspaceError)
+export const DomainClaimed = errorKind(
+  'domain_claimed',
+  (domain: string) => `${domain} already signs in through another provider`,
+  WorkspaceError,
+)
+export const SsoDiscoveryFailed = errorKind(
+  'sso_discovery_failed',
+  (issuer: string, reason: string) => `The discovery of ${issuer} failed: ${reason}`,
+  WorkspaceError,
+)

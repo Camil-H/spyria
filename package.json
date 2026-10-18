@@ -30,7 +30,8 @@
     "db:rebuild-messages": "bun apps/server/src/operator-cli.ts rebuild-messages",
     "jobs:failed": "bun apps/server/src/operator-cli.ts failed-jobs",
     "jobs:retry": "bun apps/server/src/operator-cli.ts retry-jobs",
-    "tools:setup": "bun apps/server/src/operator-cli.ts tools-setup"
+    "tools:setup": "bun apps/server/src/operator-cli.ts tools-setup",
+    "operator": "bun apps/server/src/operator-cli.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",

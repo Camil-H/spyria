@@ -1,0 +1,32 @@
+issuer: http://localhost:5557/dex
+storage:
+  type: memory
+web:
+  http: 0.0.0.0:5556
+oauth2:
+  skipApprovalScreen: true
+  responseTypes: [code]
+enablePasswordDB: true
+staticClients:
+  - id: hq-sso
+    name: HQ SSO e2e
+    secret: hq-sso-e2e-secret
+    redirectURIs:
+      - http://localhost:3102/auth/callback
+staticPasswords:
+  - email: alice@example.com
+    hash: "$2b$10$VQQ8E.Dr9ub0UjJjMVwrZ.z8mmsId1wLzJ7vu9Bnkm1mbOIqJk45y"
+    username: alice
+    userID: 08a8684b-db88-4b73-90a9-3cd1661f5466
+  - email: bob@example.com
+    hash: "$2b$10$VQQ8E.Dr9ub0UjJjMVwrZ.z8mmsId1wLzJ7vu9Bnkm1mbOIqJk45y"
+    username: bob
+    userID: 41331323-6f44-45e6-b3b9-2c4b60c02be5
+  - email: nina@example.com
+    hash: "$2b$10$VQQ8E.Dr9ub0UjJjMVwrZ.z8mmsId1wLzJ7vu9Bnkm1mbOIqJk45y"
+    username: nina
+    userID: 6f1c2a4e-8d3b-4f7a-9c5e-2b1d0e9a7c31
+  - email: olive@example.com
+    hash: "$2b$10$VQQ8E.Dr9ub0UjJjMVwrZ.z8mmsId1wLzJ7vu9Bnkm1mbOIqJk45y"
+    username: olive
+    userID: 9b7e3d21-5c4a-4e8f-a1d6-3f2b8c0e7d54

@@ -29,6 +29,19 @@ The app signs in through Dex in a popup (allow popups for `localhost:5173`). The
 
 `bun run dev` sets dev values for `HQ_TOKEN_SECRET`, `HQ_OIDC_ISSUER`, `HQ_OIDC_CLIENT_ID`, `HQ_OIDC_REDIRECT_URI`, `HQ_APP_ORIGIN`, `HQ_GATEWAY_URL`, `HQ_GATEWAY_ADMIN_USER` and `HQ_GATEWAY_ADMIN_PASSWORD`; the server refuses to start without them.
 
+## Signing in in production (SSO)
+
+`HQ_AUTH_MODE` is `dex` (default: dev and tests, one global issuer from `HQ_OIDC_ISSUER` and `HQ_OIDC_CLIENT_ID`) or `sso` (production: each workspace signs in through its own OIDC provider). In `sso` mode the server needs `HQ_SECRETS_KEY` (at least 32 characters, for example `openssl rand -hex 32`; it encrypts the providers' client secrets with AES-GCM and can never change without re-entering every secret) and `HQ_OIDC_REDIRECT_URI` (`<server origin>/auth/callback`, registered at every provider). The sign-in screen asks for a work email; its domain routes to the provider of the workspace using that domain.
+
+Create the first workspace of a fresh deployment from the operator CLI, with the client secret in the environment (not in the shell history):
+
+```sh
+HQ_SECRETS_KEY=… HQ_SSO_CLIENT_SECRET=… bun run operator sso:bootstrap --name Acme --admin admin@acme.com \
+  --preset microsoft --tenant <tenant id> --client-id <client id> --domains acme.com,acme.io
+```
+
+`--preset` is `google` (Google Workspace), `microsoft` (Microsoft Entra, tenant-specific issuer only) or `oidc` with `--issuer <url>`. The command checks the issuer's discovery document, creates the workspace with its SSO settings and makes the admin a member; the admin then signs in and manages the provider in Workspace settings > Sign-in and invites members in Members.
+
 ## Adding a runtime host for dev
 
 Runtimes (HQ's runtime image with hq-agent) run on runtime hosts: any machine with Docker running the `hq-host` container, which dials out to HQ.
@@ -130,7 +143,7 @@ bun run test:integration   # needs bun run stack:up; runs its own gateway (hq-te
 bun run check:boundaries
 bun run lint
 bun run check:bundle       # builds the app, main chunk at most 760 kB, one React, no server-only SQL
-bun run test:e2e           # starts its own stack per worker and one gateway (hq-test-gateway-e2e on 4881)
+bun run test:e2e           # starts its own stack per worker, one gateway (hq-test-gateway-e2e on 4881) and an sso-mode stack (server 3102, app 5191, Dex hq-test-dex-e2e on 5557)
 ```
 
 `check:related [--base <ref>]` takes the uncommitted changes plus the commits since `<ref>` (default `HEAD`). It runs the unit and integration test files that changed or import a changed module, directly or not (dependency-cruiser's graph), and Playwright `--only-changed=<ref>` when a spec imports a changed module. It prints what it selected and why. It runs a whole suite when it cannot decide: a changed file outside the module graph (lock file, config, SQL, infra) runs every suite, `integration-setup.ts` runs every integration test, and an e2e harness file (`test-server.ts`, `testing.ts`, the fake LLM, `global-setup.ts`, `playwright.config.ts`) runs the whole e2e suite. App code that e2e reaches only through the servers is left to `check:all`.

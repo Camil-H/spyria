@@ -3,6 +3,7 @@ import type { Chat } from '../domain/chat.ts'
 import type { WorkspaceRole } from '../domain/member.ts'
 import type { Name } from '../domain/name.ts'
 import type { ChatsPolicy } from '../domain/project.ts'
+import type { SsoSettingsInput, SsoSettingsView } from '../domain/sso.ts'
 
 type Command<Input> = (input: Input & { workspaceId: WorkspaceId }) => Promise<string>
 
@@ -23,4 +24,6 @@ export type WorkspaceCommands = {
   changeMemberRole: Command<{ memberId: MemberId; role: WorkspaceRole }>
   removeMember: Command<{ memberId: MemberId }>
   transferChat: Command<{ chatId: ChatId; ownerId: MemberId }>
+  readSsoSettings: (input: { workspaceId: WorkspaceId }) => Promise<SsoSettingsView | null>
+  saveSsoSettings: (input: SsoSettingsInput & { workspaceId: WorkspaceId }) => Promise<SsoSettingsView | null>
 }

@@ -2,7 +2,10 @@ import { rebuildMessages } from '@hq/conversation/server'
 import { createDatabase } from '@hq/db/postgres'
 import { schema } from '@hq/db/zero'
 import { createLlmGateway, type ToolServerSetup } from '@hq/profile/server'
+import type { SsoPreset } from '@hq/workspace/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
+import { createSecretBox } from './auth/secret-box.ts'
+import { bootstrapSsoWorkspace } from './auth/sso.ts'
 import { listFailedJobs, retryFailedJobs } from './job-worker.ts'
 
 const [command = '', ...options] = process.argv.slice(2)
@@ -12,6 +15,9 @@ const requiredEnvironment = (name: string) => {
   if (!value) throw new Error(`${name} is required`)
   return value
 }
+const optionOf = (name: string) => (options.includes(name) ? options[options.indexOf(name) + 1] : undefined)
+const bootstrapUsage =
+  'Usage: HQ_SECRETS_KEY=… HQ_SSO_CLIENT_SECRET=… bun run operator sso:bootstrap --name <workspace> --admin <email> --preset google|microsoft|oidc [--tenant <id>] [--issuer <url>] --client-id <id> --domains <a.com,b.com>'
 const toolServers: Record<string, () => ToolServerSetup> = {
   github: () => ({
     name: 'GitHub',
@@ -53,6 +59,34 @@ const commands: Record<string, () => Promise<void>> = {
     const server = setup()
     const isNew = await gateway.setUpToolServer(server, name === 'fake' ? undefined : logInAsAdmin)
     console.log(isNew ? `${server.name} is set up: members can connect it` : `${server.name} was already set up`)
+  },
+  'sso:bootstrap': async () => {
+    const [workspaceName, adminEmail, preset, clientId, domains] = [
+      '--name',
+      '--admin',
+      '--preset',
+      '--client-id',
+      '--domains',
+    ].map(optionOf)
+    if (!workspaceName || !adminEmail || !preset || !clientId || !domains) throw new Error(bootstrapUsage)
+    const { workspaceId } = await bootstrapSsoWorkspace(
+      database,
+      {
+        secretBox: createSecretBox(requiredEnvironment('HQ_SECRETS_KEY')),
+        microsoftLoginOrigin: process.env.HQ_MICROSOFT_LOGIN_ORIGIN,
+      },
+      {
+        workspaceName,
+        adminEmail,
+        preset: preset as SsoPreset,
+        tenantId: optionOf('--tenant'),
+        issuer: optionOf('--issuer'),
+        clientId,
+        clientSecret: requiredEnvironment('HQ_SSO_CLIENT_SECRET'),
+        domains: domains.split(','),
+      },
+    )
+    console.log(`Workspace ${workspaceName} (${workspaceId}) is created: ${adminEmail} signs in as its first admin`)
   },
   'retry-jobs': async () => {
     const [target] = options

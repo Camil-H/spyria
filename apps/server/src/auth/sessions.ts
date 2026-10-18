@@ -1,18 +1,20 @@
 import type { Database } from '@hq/db/postgres'
 import type { WorkspaceId } from '@hq/kernel'
-import { displayNameFrom, normalizedEmail } from '@hq/workspace/server'
+import { displayNameFrom, domainOfEmail, normalizedEmail } from '@hq/workspace/server'
 import type { ServerTransaction } from '@rocicorp/zero'
 import type { FindMember, SessionClaims } from './session-tokens.ts'
 
 type LiveSession = SessionClaims & { createdAt: Date }
 
-export const openSessions = (database: Database, userId: string, workspaceId?: string) =>
+export const openSessions = (database: Database, userId: string, workspaceId?: string, issuer?: string) =>
   database.$client<LiveSession[]>`
     with opened as (
       insert into sessions (workspace_id, id, user_id, created_at, expires_at)
       select workspace_id, gen_random_uuid()::text, user_id, now(), now() + interval '7 days'
       from memberships where user_id = ${userId} and workspace_id = coalesce(${workspaceId ?? null}::text, workspace_id)
-        and removed_at is null
+        and removed_at is null and (${issuer ?? null}::text is null or exists(
+          select 1 from workspace_sso where workspace_sso.workspace_id = memberships.workspace_id
+            and workspace_sso.issuer = ${issuer ?? ''}))
       returning workspace_id, id, user_id, created_at)
     select opened.workspace_id as "workspaceId", opened.user_id as "userId", opened.id as "sessionId",
       opened.created_at as "createdAt"
@@ -49,13 +51,34 @@ export const findMemberIn =
     return member
   }
 
-export const signInUser = (database: Database, identity: { email: string; name?: unknown }) => {
+type Identity = { email: string; name?: unknown; issuer?: string; subject?: string }
+
+export const signInUser = (database: Database, identity: Identity, isSso = false) => {
   const email = normalizedEmail(identity.email)
+  const { issuer = '', subject = '' } = identity
   return database.$client.begin(async (sql) => {
+    const ssoWorkspaceIds = (
+      await sql<{ workspaceId: string }[]>`
+        select workspace_id as "workspaceId" from workspace_sso
+        where issuer = ${issuer} and ${domainOfEmail(email)} = any(domains)`
+    ).map(({ workspaceId }) => workspaceId)
+    if (isSso && ssoWorkspaceIds.length === 0) return { email }
     const invitations = await sql<{ workspaceId: string; id: string; role: string }[]>`
       select workspace_id as "workspaceId", id, role from invitations
-      where email = ${email} and revoked_at is null and accepted_at is null and expires_at > now() for update`
-    const [found] = await sql<{ id: string }[]>`select id from users where email = ${email}`
+      where email = ${email} and revoked_at is null and accepted_at is null and expires_at > now()
+        and (not ${isSso}::boolean or workspace_id = any(${ssoWorkspaceIds}::text[])) for update`
+    const [found] = isSso
+      ? await sql<{ id: string }[]>`
+          select id from (
+            select user_id as id, 1 as rank from identities where issuer = ${issuer} and subject = ${subject}
+            union all
+            select users.id, 2 from users join memberships on memberships.user_id = users.id
+            where users.email = ${email} and memberships.removed_at is null
+              and memberships.workspace_id = any(${ssoWorkspaceIds}::text[])
+            union all
+            select id, 3 from users where email = ${email} and ${invitations.length > 0}::boolean
+          ) as candidates order by rank limit 1`
+      : await sql<{ id: string }[]>`select id from users where email = ${email}`
     if (!found && invitations.length === 0) return { email }
     const [user] = found
       ? [found]
@@ -77,6 +100,12 @@ export const signInUser = (database: Database, identity: { email: string; name?:
           values (${invitation.workspaceId}, ${crypto.randomUUID()}, 'member.joined', ${userId},
             ${JSON.stringify({ memberId: userId, role: invitation.role, invitationId: invitation.id })}::jsonb, now())`
     }
+    if (isSso)
+      await sql`
+        insert into identities (workspace_id, issuer, subject, user_id)
+        select workspace_id, ${issuer}, ${subject}, user_id from memberships
+        where user_id = ${userId} and removed_at is null and workspace_id = any(${ssoWorkspaceIds}::text[])
+        on conflict do nothing`
     return { userId, email }
   })
 }

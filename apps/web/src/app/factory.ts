@@ -16,7 +16,7 @@ import {
 } from '@hq/profile/server'
 import { createHttpRuntimeHostCommands, type RuntimeCommands, runtimeMutators } from '@hq/runtime/server'
 import type { Session } from '@hq/session'
-import { type WorkspaceCommands, workspaceMutators } from '@hq/workspace/server'
+import { createHttpSsoSettingsCommands, type WorkspaceCommands, workspaceMutators } from '@hq/workspace/server'
 import { logOut, openSession, renew, signInWithPopup } from './auth.ts'
 
 const zeroCacheURL = import.meta.env.VITE_ZERO_URL ?? 'http://localhost:4848'
@@ -152,7 +152,7 @@ export const createApp = async (
         await store.signOut(workspaceId)
       },
       signIn: async (workspaceId) => {
-        if ((await signInWithPopup(workspaceId)).status !== 'signed_in') return
+        if ((await signInWithPopup({ workspace: workspaceId })).status !== 'signed_in') return
         const session = await renew(workspaceId)
         if (session) await store.signIn(session)
       },
@@ -173,6 +173,7 @@ export const createApp = async (
       changeMemberRole: mutateConfirmed(workspaceMutators.workspace.changeMemberRole),
       removeMember: mutateConfirmed(workspaceMutators.workspace.removeMember),
       transferChat: mutateConfirmed(workspaceMutators.workspace.transferChat),
+      ...createHttpSsoSettingsCommands(postAsMember, fetchAsMember),
       joinChannel: mutateConfirmed(conversationMutators.conversation.joinChannel),
       leaveChat: mutateConfirmed(conversationMutators.conversation.leaveChat),
     }),

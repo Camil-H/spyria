@@ -4,7 +4,7 @@ import { fakeMcpUrl, serverUrl, viteUrl } from './stack-ports.ts'
 
 export * from '@playwright/test'
 export { test } from './stack.ts'
-export { serverUrl } from './stack-ports.ts'
+export { serverUrl, ssoDexIssuer, ssoServerUrl, ssoViteUrl } from './stack-ports.ts'
 
 type Machine = {
   id: string

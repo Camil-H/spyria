@@ -1,5 +1,6 @@
-import { execFile, execSync, spawn } from 'node:child_process'
-import { openSync } from 'node:fs'
+import { execFile, execSync, spawn, spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import { openSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -19,6 +20,9 @@ import {
   gatewayUrl,
   maximumWorkerCount,
   serverUrl,
+  ssoDexIssuer,
+  ssoServerUrl,
+  ssoViteUrl,
   templateDatabaseName,
   viteUrl,
   zeroCachePortOf,
@@ -31,6 +35,8 @@ const sweptPorts = [
   new URL(serverUrl).port,
   new URL(viteUrl).port,
   new URL(fakeMcpUrl).port,
+  new URL(ssoServerUrl).port,
+  new URL(ssoViteUrl).port,
   ...Array.from({ length: maximumWorkerCount }, (_, index) => [
     zeroCachePortOf(index),
     zeroCachePortOf(index) + 1,
@@ -76,13 +82,47 @@ const startDetached = async (command: string[], cwd: string, env: Record<string,
   return () => process.kill(-(child.pid ?? 0), 'SIGTERM')
 }
 
+const ssoDexContainer = 'hq-test-dex-e2e'
+const ssoDexConfig = new URL('./dex-sso.yaml', import.meta.url).pathname
+const docker = (...args: string[]) => spawnSync('docker', args, { stdio: ['ignore', 'pipe', 'pipe'] })
+
+const startSsoDex = async () => {
+  const configHash = createHash('sha256').update(readFileSync(ssoDexConfig)).digest('hex').slice(0, 16)
+  const discoveryUrl = `${ssoDexIssuer}/.well-known/openid-configuration`
+  const running = docker('inspect', '-f', '{{.State.Running}} {{index .Config.Labels "hq.setup"}}', ssoDexContainer)
+  if (running.stdout.toString().trim() === `true ${configHash}` && (await httpStatusOf(discoveryUrl)) === 200) return
+  docker('rm', '-f', ssoDexContainer)
+  const started = docker(
+    'run',
+    '-d',
+    '--name',
+    ssoDexContainer,
+    '--label',
+    `hq.setup=${configHash}`,
+    '-p',
+    `127.0.0.1:${new URL(ssoDexIssuer).port}:5556`,
+    '-v',
+    `${ssoDexConfig}:/etc/dex/config.yaml:ro`,
+    'dexidp/dex:v2.43.1',
+    'dex',
+    'serve',
+    '/etc/dex/config.yaml',
+  )
+  if (started.status !== 0) throw new Error(`Starting ${ssoDexContainer} failed: ${started.stderr}`)
+  for (let attempt = 1; (await httpStatusOf(discoveryUrl)) !== 200; attempt++) {
+    if (attempt === 400) throw new Error(`${ssoDexContainer} did not start`)
+    await sleep(50)
+  }
+}
+
 export default async function globalSetup() {
   execSync('docker compose -f infra/docker-compose.yml up -d --wait --no-recreate postgres dex', {
     cwd: repositoryRoot,
     stdio: 'ignore',
   })
   await sweepLeftovers()
-  const [, , stopServer, stopVite] = await Promise.all([
+  const webBuild = promisify(execFile)('bun', ['run', 'build', ...e2eBuild], { cwd: `${repositoryRoot}apps/web` })
+  const [, , stopServer, stopVite, stopSsoServer, stopSsoVite] = await Promise.all([
     buildTemplateDatabase(templateDatabaseName),
     startTestGateway({
       name: 'e2e',
@@ -103,12 +143,28 @@ export default async function globalSetup() {
       },
       `${serverUrl}/health`,
     ),
-    promisify(execFile)('bun', ['run', 'build', ...e2eBuild], { cwd: `${repositoryRoot}apps/web` }).then(() =>
+    webBuild.then(() =>
       startDetached(
         ['bunx', 'vite', 'preview', ...e2eBuild, '--port', new URL(viteUrl).port],
         `${repositoryRoot}apps/web`,
         { HQ_SERVER_URL: serverUrl },
         viteUrl,
+      ),
+    ),
+    startSsoDex().then(() =>
+      startDetached(
+        ['bun', 'src/testing/sso-test-server.ts'],
+        `${repositoryRoot}apps/server`,
+        { PORT: new URL(ssoServerUrl).port, HQ_APP_ORIGIN: ssoViteUrl },
+        `${ssoServerUrl}/health`,
+      ),
+    ),
+    webBuild.then(() =>
+      startDetached(
+        ['bunx', 'vite', 'preview', ...e2eBuild, '--port', new URL(ssoViteUrl).port],
+        `${repositoryRoot}apps/web`,
+        { HQ_SERVER_URL: ssoServerUrl },
+        ssoViteUrl,
       ),
     ),
   ])
@@ -117,6 +173,8 @@ export default async function globalSetup() {
   return async () => {
     stopVite()
     stopServer()
+    stopSsoVite()
+    stopSsoServer()
     removeWorkerHosts()
   }
 }

@@ -19,6 +19,9 @@ const requiredEnvironment = (name: string) => {
   return value
 }
 
+const authModes = ['dex', 'sso'] as const
+const authMode = authModes.find((mode) => mode === (process.env.HQ_AUTH_MODE ?? 'dex'))
+if (!authMode) throw new Error('HQ_AUTH_MODE must be dex or sso')
 const database = createDatabase()
 const gatewaySettings = {
   url: requiredEnvironment('HQ_GATEWAY_URL'),
@@ -44,10 +47,12 @@ const app = createApp({
   database,
   tokenSecret: requiredEnvironment('HQ_TOKEN_SECRET'),
   oidc: {
-    issuer: requiredEnvironment('HQ_OIDC_ISSUER'),
-    clientId: requiredEnvironment('HQ_OIDC_CLIENT_ID'),
+    issuer: authMode === 'dex' ? requiredEnvironment('HQ_OIDC_ISSUER') : '',
+    clientId: authMode === 'dex' ? requiredEnvironment('HQ_OIDC_CLIENT_ID') : '',
     redirectUri: requiredEnvironment('HQ_OIDC_REDIRECT_URI'),
   },
+  authMode,
+  secretsKey: authMode === 'sso' ? requiredEnvironment('HQ_SECRETS_KEY') : process.env.HQ_SECRETS_KEY,
   appOrigin: requiredEnvironment('HQ_APP_ORIGIN'),
   llmGateway,
   runtimeHosts,

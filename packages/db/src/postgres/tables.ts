@@ -112,9 +112,22 @@ export const identities = table(
   { ...tenant, issuer: text().notNull(), subject: text().notNull(), userId: text().notNull() },
   (table) => [
     primaryKey({ columns: [table.workspaceId, table.issuer, table.subject] }),
+    index('identities_issuer_subject_index').on(table.issuer, table.subject),
     memberReference(table, table.userId),
   ],
 )
+
+export const workspaceSso = table('workspace_sso', {
+  workspaceId: text()
+    .primaryKey()
+    .references(() => workspaces.workspaceId),
+  preset: text().$type<'google' | 'microsoft' | 'oidc'>().notNull(),
+  issuer: text().notNull(),
+  clientId: text().notNull(),
+  encryptedClientSecret: text().notNull(),
+  domains: text().array().notNull(),
+  updatedAt: instant().notNull(),
+})
 
 export const sessions = table(
   'sessions',

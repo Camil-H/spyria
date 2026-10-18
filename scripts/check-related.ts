@@ -60,7 +60,7 @@ const isIntegrationTest = (file: string) => file.endsWith('.integration.test.ts'
 const isOutsideTests = (file: string) =>
   /\.md$|^\.claude\/|^scripts\/|^\.gitignore$|^biome\.json$|^\.dependency-cruiser\.cjs$/.test(file)
 const isE2eHarness = (file: string) =>
-  /^apps\/server\/src\/(testing\/(test-server|testing)|fake-llm)\.ts$|^apps\/web\/(playwright\.config|e2e\/global-setup|e2e\/stack-ports)\.ts$/.test(
+  /^apps\/server\/src\/(testing\/(test-server|sso-test-server|testing)|fake-llm)\.ts$|^apps\/web\/(playwright\.config|e2e\/global-setup|e2e\/stack-ports)\.ts$/.test(
     file,
   )
 const isWebAsset = (file: string) => /^apps\/web\/(index\.html|(src|public)\/.+\.(css|html|svg|png|ico))$/.test(file)

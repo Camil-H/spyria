@@ -14,14 +14,13 @@ import {
 import type { Database } from '@hq/db/postgres'
 import { schema } from '@hq/db/zero'
 import { queries, type Transact, type ZeroContext } from '@hq/db/zero-queries'
-import { chatId, MissingChatPermission, type RuntimeHostId } from '@hq/kernel'
+import { chatId, DomainError, MissingChatPermission, type RuntimeHostId } from '@hq/kernel'
 import {
   addLlmCredentialFromRequest,
   availableToolsFromRequest,
   type createLlmGateway,
   createMemberKeyReader,
   llmCredentialsPath,
-  ProfileError,
   profileMutators,
   toolConnectionFromRequest,
   toolConnectionsPath,
@@ -32,12 +31,11 @@ import {
   addRuntimeHostFromRequest,
   countMachinesFromRequest,
   machinesPath,
-  RuntimeError,
   renewClaimCodeFromRequest,
   runtimeHostsPath,
   runtimeMutators,
 } from '@hq/runtime/server'
-import { workspaceMutators } from '@hq/workspace/server'
+import { type SsoSettingsInput, ssoSettingsPath, workspaceMutators } from '@hq/workspace/server'
 import { getMutator, mustGetMutator, mustGetQuery } from '@rocicorp/zero'
 import { handleMutateRequest, handleQueryRequest } from '@rocicorp/zero/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
@@ -45,9 +43,11 @@ import { Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import { type AgentBridge, createAgentBridge } from './agent-bridge/bridge.ts'
 import { createOidc, type OidcSettings } from './auth/oidc.ts'
-import { createAuthRoutes } from './auth/routes.ts'
+import { type AuthMode, createAuthRoutes } from './auth/routes.ts'
+import { createSecretBox } from './auth/secret-box.ts'
 import { createSessionAuthenticator, errorByStatus } from './auth/session-tokens.ts'
 import { findMemberIn } from './auth/sessions.ts'
+import { readSsoSettings, saveSsoSettings } from './auth/sso.ts'
 import { createModelCallRelay } from './llm-relay.ts'
 import { createRuntimeHostGateway, type RuntimeHostGateway } from './runtime-hosts/gateway.ts'
 
@@ -93,7 +93,7 @@ const endpointResponse = async (request: string, successStatus: number, endpoint
     const result = await endpoint()
     return result ? Response.json(result, { status: successStatus }) : new Response(null, { status: successStatus })
   } catch (error) {
-    if (error instanceof RuntimeError || error instanceof ProfileError)
+    if (error instanceof DomainError)
       return Response.json(
         { error: error.code, message: error.message },
         { status: statusByErrorCode[error.code] ?? 400 },
@@ -107,6 +107,9 @@ export const createApp = ({
   database,
   tokenSecret,
   oidc,
+  authMode = 'dex',
+  secretsKey,
+  microsoftLoginOrigin,
   appOrigin,
   testDatabaseByName,
   llmGateway,
@@ -121,6 +124,9 @@ export const createApp = ({
   database: Database
   tokenSecret: string
   oidc: OidcSettings
+  authMode?: AuthMode
+  secretsKey?: string
+  microsoftLoginOrigin?: string
   appOrigin: string
   testDatabaseByName?: (databaseName: string) => Database
   llmGateway?: LlmGateway
@@ -137,6 +143,7 @@ export const createApp = ({
   const databaseOf = (databaseName: string | undefined) =>
     databaseName === undefined ? database : testDatabaseByName?.(databaseName)
   const authenticate = createSessionAuthenticator(tokenSecret, findMemberIn(databaseOf))
+  const sso = { secretBox: secretsKey ? createSecretBox(secretsKey) : undefined, microsoftLoginOrigin }
   const gatewayOf = () => {
     if (!llmGateway) throw new Error('No LLM gateway is configured')
     return llmGateway
@@ -159,7 +166,17 @@ export const createApp = ({
     )
     .route(
       '/auth',
-      createAuthRoutes({ oidc: createOidc(oidc), tokenSecret, appOrigin, database, authenticate, testDatabaseByName }),
+      createAuthRoutes({
+        oidc: createOidc(oidc),
+        redirectUri: oidc.redirectUri,
+        authMode,
+        sso,
+        tokenSecret,
+        appOrigin,
+        database,
+        authenticate,
+        testDatabaseByName,
+      }),
     )
     .use('/api/*', async (context, next) => {
       const authentication = await authenticate(context.req.header('authorization'))
@@ -265,6 +282,17 @@ export const createApp = ({
           action,
         ),
       )
+    })
+    .get(ssoSettingsPath, (context) =>
+      endpointResponse('Reading the SSO settings', 200, async () => ({
+        settings: await readSsoSettings(context.get('database'), context.get('zeroContext')),
+      })),
+    )
+    .post(ssoSettingsPath, async (context) => {
+      const input = ((await context.req.json().catch(() => null)) ?? {}) as SsoSettingsInput
+      return endpointResponse('Saving the SSO settings', 200, async () => ({
+        settings: await saveSsoSettings(context.get('database'), sso, context.get('zeroContext'), input),
+      }))
     })
     .post(runtimeHostsPath, async (context) => {
       const body = await context.req.json().catch(() => null)

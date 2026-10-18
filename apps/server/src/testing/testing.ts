@@ -45,6 +45,7 @@ import {
   type ModelCall,
 } from './hq-agent-relay.ts'
 
+export const testSecretsKey = 'e2e-and-integration-test-secrets-key'
 export const testAuthSettings = {
   tokenSecret: 'integration-test-secret',
   appOrigin: 'http://localhost:5190',

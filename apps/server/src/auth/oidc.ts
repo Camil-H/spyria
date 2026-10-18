@@ -1,20 +1,38 @@
-import { createRemoteJWKSet, jwtVerify } from 'jose'
+import { createRemoteJWKSet, type JWTPayload, jwtVerify } from 'jose'
 import * as oauth from 'oauth4webapi'
 
 export type OidcSettings = { issuer: string; clientId: string; redirectUri: string }
+type ClientSettings = OidcSettings & {
+  clientSecret?: string
+  emailOf?: (claims: JWTPayload) => string | undefined
+}
 type LoginState = { state: string; nonce: string; codeVerifier: string }
 
 const idTokenClockToleranceSeconds = 30
 
-export const createOidc = ({ issuer, clientId, redirectUri }: OidcSettings) => {
+const insecureOptionOf = (issuerUrl: URL) => ({ [oauth.allowInsecureRequests]: issuerUrl.protocol === 'http:' })
+
+export const discoverIssuer = async (issuer: string) => {
   const issuerUrl = new URL(issuer)
-  const insecureOption = { [oauth.allowInsecureRequests]: issuerUrl.protocol === 'http:' }
+  const response = await oauth.discoveryRequest(issuerUrl, { algorithm: 'oidc', ...insecureOptionOf(issuerUrl) })
+  return oauth.processDiscoveryResponse(issuerUrl, response)
+}
+
+const verifiedEmailOf = (claims: JWTPayload) =>
+  claims.email_verified === true && typeof claims.email === 'string' ? claims.email : undefined
+
+export const createOidc = ({
+  issuer,
+  clientId,
+  redirectUri,
+  clientSecret,
+  emailOf = verifiedEmailOf,
+}: ClientSettings) => {
   const client: oauth.Client = { client_id: clientId }
+  const clientAuthentication = clientSecret ? oauth.ClientSecretPost(clientSecret) : oauth.None()
   let discovery: Promise<{ server: oauth.AuthorizationServer; keys: ReturnType<typeof createRemoteJWKSet> }> | undefined
   const discover = () => {
-    discovery ??= oauth
-      .discoveryRequest(issuerUrl, { algorithm: 'oidc', ...insecureOption })
-      .then((response) => oauth.processDiscoveryResponse(issuerUrl, response))
+    discovery ??= discoverIssuer(issuer)
       .then((server) => ({ server, keys: createRemoteJWKSet(new URL(server.jwks_uri ?? '')) }))
       .catch((error) => {
         discovery = undefined
@@ -49,11 +67,11 @@ export const createOidc = ({ issuer, clientId, redirectUri }: OidcSettings) => {
       const response = await oauth.authorizationCodeGrantRequest(
         server,
         client,
-        oauth.None(),
+        clientAuthentication,
         parameters,
         redirectUri,
         login.codeVerifier,
-        insecureOption,
+        insecureOptionOf(new URL(issuer)),
       )
       const result = await oauth.processAuthorizationCodeResponse(server, client, response, {
         expectedNonce: login.nonce,
@@ -64,9 +82,10 @@ export const createOidc = ({ issuer, clientId, redirectUri }: OidcSettings) => {
         audience: clientId,
         clockTolerance: idTokenClockToleranceSeconds,
       })
-      if (payload.nonce !== login.nonce || payload.email_verified !== true || typeof payload.email !== 'string')
-        throw new Error('The ID token carries no verified email for this login')
-      return { email: payload.email, name: payload.name }
+      const email = emailOf(payload)
+      if (payload.nonce !== login.nonce || email === undefined || typeof payload.sub !== 'string')
+        throw new Error('The ID token carries no trusted email for this login')
+      return { email, name: payload.name, issuer: server.issuer, subject: payload.sub }
     },
   }
 }

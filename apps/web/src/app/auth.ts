@@ -4,6 +4,7 @@ import type { MemberId, WorkspaceId } from '@hq/kernel'
 type SignInResult =
   | { status: 'signed_in' }
   | { status: 'not_invited'; email: string }
+  | { status: 'unknown_domain'; domain: string }
   | { status: 'failed' }
   | { status: 'closed' }
 
@@ -18,6 +19,8 @@ const postAuth = (path: string, workspaceId: WorkspaceId, headers: Record<string
 
 export const loadSessions = async (): Promise<{ userId?: MemberId; sessions: WorkspaceSession[] }> =>
   (await fetch('/auth/sessions')).json()
+
+export const loadAuthMode = async (): Promise<'dex' | 'sso'> => (await (await fetch('/auth/mode')).json()).authMode
 
 export const renew = async (workspaceId: WorkspaceId): Promise<WorkspaceSession | undefined> => {
   const response = await postAuth('/auth/renew', workspaceId)
@@ -34,10 +37,10 @@ export const openSession = async (workspaceId: WorkspaceId, bearerToken: string)
   return response.json()
 }
 
-export const signInWithPopup = (workspaceId?: WorkspaceId) =>
+export const signInWithPopup = (target: { workspace?: WorkspaceId; email?: string } = {}) =>
   new Promise<SignInResult>((resolve) => {
-    const query = workspaceId === undefined ? '' : `?workspace=${encodeURIComponent(workspaceId)}`
-    const popup = window.open(`/auth/login${query}`, 'hq-sign-in', 'popup,width=480,height=640')
+    const query = new URLSearchParams(Object.entries(target).filter((entry): entry is [string, string] => !!entry[1]))
+    const popup = window.open(`/auth/login?${query}`, 'hq-sign-in', 'popup,width=480,height=640')
     if (!popup) return resolve({ status: 'closed' })
     const settle = (result: SignInResult) => {
       clearInterval(closedPoll)
