@@ -4,7 +4,7 @@ import type { WorkspaceId } from '@hq/kernel'
 import { WorkspaceConnectionsSection } from '@hq/profile'
 import { RuntimeHostsSection } from '@hq/runtime'
 import { focusRing, formatCost, iconButtonClass, LabelledSection } from '@hq/ui'
-import { UsageSection } from '@hq/usage'
+import { AuditLogSection, UsageSection } from '@hq/usage'
 import { GitHubSection, MembersSection, RolesSection, SignInSection, useIsWorkspaceAdmin } from '@hq/workspace'
 import { ArrowLeft } from 'lucide-react'
 import { type ComponentType, use } from 'react'
@@ -63,6 +63,12 @@ const cardSections: readonly { title: string; cards: readonly SettingsCard[] }[]
         title: 'Analyze costs',
         description: 'Tokens and costs by member and project',
         Page: UsageSection,
+      },
+      {
+        path: 'audit',
+        title: 'Audit log',
+        description: 'Who changed what in the workspace, with tool calls and publishing',
+        Page: AuditLogSection,
       },
     ],
   },

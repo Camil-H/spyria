@@ -3,7 +3,7 @@ import { expect, mainOf, type Page, sidebarOf, test } from './fixtures'
 const cardsBySection = {
   'Setup your organization': ['Setup SSO', 'Connect GitHub', 'Roles and Permissions', 'Manage Team'],
   'Setup your agents': ['Connect runtime', 'MCP tools'],
-  'Analyze usage': ['Analyze costs'],
+  'Analyze usage': ['Analyze costs', 'Audit log'],
 }
 const sectionShownBy: Record<string, string> = {
   'Setup SSO': 'Sign-in',
@@ -13,6 +13,7 @@ const sectionShownBy: Record<string, string> = {
   'Connect runtime': 'Runtime hosts',
   'MCP tools': 'Connections',
   'Analyze costs': 'Usage',
+  'Audit log': 'Audit log',
 }
 const cardOf = (page: Page, title: string) => mainOf(page).getByRole('link', { name: title, exact: true })
 const settingsHeadingOf = (page: Page) => mainOf(page).getByRole('heading', { level: 1, name: 'Workspace settings' })

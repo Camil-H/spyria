@@ -20,6 +20,16 @@ import { defineRelations } from 'drizzle-orm/relations'
 import type { MessageStep, RuntimeFailure, RuntimeHostCapacity, RuntimeState } from '../schema.ts'
 
 const table = snakeCase.table
+const auditedChatEventTypes = [
+  'member.invited',
+  'member.joined',
+  'member.role_changed',
+  'member.removed',
+  'member.left',
+  'chat.visibility_changed',
+  'chat.created',
+  'branch.pushed',
+]
 const instant = () => timestamp({ withTimezone: true, mode: 'date' })
 const tenant = { workspaceId: text().notNull() }
 const chatScoped = { ...tenant, chatId: text().notNull() }
@@ -104,7 +114,22 @@ export const workspaceEvents = table(
     payload: jsonb().notNull(),
     createdAt: instant().notNull(),
   },
-  (table) => [primaryKey({ columns: [table.workspaceId, table.id] })],
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.id] }),
+    index('workspace_events_created_at_index').on(table.workspaceId, table.createdAt),
+    index('workspace_events_actor_index').on(table.workspaceId, table.actorId, table.createdAt),
+  ],
+)
+
+export const auditSettings = table(
+  'audit_settings',
+  {
+    workspaceId: text()
+      .primaryKey()
+      .references(() => workspaces.workspaceId),
+    retentionDays: integer(),
+  },
+  (table) => [check('audit_settings_retention_days', sql`${table.retentionDays} between 1 and 36500`)],
 )
 
 export const identities = table(
@@ -306,6 +331,14 @@ export const events = table(
     primaryKey({ columns: [table.workspaceId, table.id] }),
     unique().on(table.chatId, table.seq),
     chatReference(table),
+    index('events_audit_index')
+      .on(table.workspaceId, table.createdAt)
+      .where(sql`${table.type} in (${sql.raw(auditedChatEventTypes.map((type) => `'${type}'`).join(', '))})`),
+    index('events_pull_request_index')
+      .on(table.workspaceId, table.createdAt)
+      .where(
+        sql`${table.type} in ('message.posted', 'message.step_changed') and (${table.payload} -> 'step' ->> 'type') = 'pull_request'`,
+      ),
   ],
 )
 
@@ -608,7 +641,12 @@ export const toolCalls = table(
     status: text().$type<'succeeded' | 'failed' | 'refused'>().notNull(),
     calledAt: instant().notNull(),
   },
-  (table) => [primaryKey({ columns: [table.workspaceId, table.id] }), chatReference(table)],
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.id] }),
+    chatReference(table),
+    index('tool_calls_called_at_index').on(table.workspaceId, table.calledAt),
+    index('tool_calls_prompter_index').on(table.workspaceId, table.prompterId, table.calledAt),
+  ],
 )
 
 export const routingDecisions = table(

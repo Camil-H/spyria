@@ -5,6 +5,7 @@ import { PanelProvider, PanelToggle, SidePanel } from '@hq/panel'
 import { ProfileProvider, useHasLlmCredential } from '@hq/profile'
 import { RuntimeProvider, RuntimeStatus } from '@hq/runtime'
 import { SessionProvider } from '@hq/session'
+import { UsageProvider } from '@hq/usage'
 import { TransferChatForm, WorkspaceLayout, WorkspaceProvider } from '@hq/workspace'
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Link, Navigate, Route, Routes, useOutletContext, useParams } from 'react-router'
@@ -58,36 +59,38 @@ export const App = ({ app }: { app: Application }) => (
         <ConversationProvider commands={app.conversationCommands} agentStream={app.agentStream}>
           <ProfileProvider commands={app.profileCommands}>
             <RuntimeProvider commands={app.runtimeCommands}>
-              <BrowserRouter>
-                <PanelProvider commands={app.panelCommands}>
-                  <Routes>
-                    <Route
-                      path="/w/:workspaceId"
-                      element={<WorkspaceLayout chatAdornment={(chatId) => <ChatIndicators chatId={chatId} />} />}
-                    >
-                      <Route index element={<p className="p-6 text-muted">Select a chat</p>} />
-                      <Route path="chats/:chatId" element={<ChatRoute commands={app.conversationCommands} />} />
+              <UsageProvider commands={app.usageCommands}>
+                <BrowserRouter>
+                  <PanelProvider commands={app.panelCommands}>
+                    <Routes>
                       <Route
-                        path="settings/:card?"
-                        element={
-                          <Suspense>
-                            <SettingsRoute />
-                          </Suspense>
-                        }
-                      />
-                      <Route
-                        path="profile"
-                        element={
-                          <Suspense>
-                            <ProfileRoute />
-                          </Suspense>
-                        }
-                      />
-                    </Route>
-                    <Route path="*" element={<Navigate to={`/w/${app.session.defaultWorkspaceId}`} replace />} />
-                  </Routes>
-                </PanelProvider>
-              </BrowserRouter>
+                        path="/w/:workspaceId"
+                        element={<WorkspaceLayout chatAdornment={(chatId) => <ChatIndicators chatId={chatId} />} />}
+                      >
+                        <Route index element={<p className="p-6 text-muted">Select a chat</p>} />
+                        <Route path="chats/:chatId" element={<ChatRoute commands={app.conversationCommands} />} />
+                        <Route
+                          path="settings/:card?"
+                          element={
+                            <Suspense>
+                              <SettingsRoute />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="profile"
+                          element={
+                            <Suspense>
+                              <ProfileRoute />
+                            </Suspense>
+                          }
+                        />
+                      </Route>
+                      <Route path="*" element={<Navigate to={`/w/${app.session.defaultWorkspaceId}`} replace />} />
+                    </Routes>
+                  </PanelProvider>
+                </BrowserRouter>
+              </UsageProvider>
             </RuntimeProvider>
           </ProfileProvider>
         </ConversationProvider>

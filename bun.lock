@@ -197,6 +197,7 @@
         "@hq/kernel": "workspace:*",
         "@hq/ui": "workspace:*",
         "@rocicorp/zero": "1.9.0",
+        "lucide-react": "1.49.0",
         "react": "19.3.0",
       },
       "devDependencies": {

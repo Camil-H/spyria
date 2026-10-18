@@ -151,6 +151,9 @@ test('only the owner pushes and opens a pull request, with their own GitHub toke
     body: { isRefused: false, text: `Pushed ${branch}` },
   })
   expect(fakeGitHub.commitSubjectsOf('acme/app', branch)).toEqual(['Fix the totals'])
+  expect([
+    ...(await database.$client`select actor, payload->>'branch' as branch from events where chat_id = ${id} and type = 'branch.pushed'`),
+  ]).toEqual([{ actor: alice, branch }])
   expect(await cardOf(id)).toBeUndefined()
   const opened = await publish(alice, id, 'pull_request', { title: 'Fix the totals', body: 'Totals now add up.' })
   expect(opened).toEqual({

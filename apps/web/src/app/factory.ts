@@ -19,6 +19,7 @@ import {
 } from '@hq/profile/server'
 import { createHttpRuntimeHostCommands, type RuntimeCommands, runtimeMutators } from '@hq/runtime/server'
 import type { Session } from '@hq/session'
+import { createHttpAuditLogCommands, type UsageCommands } from '@hq/usage/server'
 import {
   createHttpGitHubCommands,
   createHttpSsoSettingsCommands,
@@ -45,6 +46,7 @@ export type Application = {
   panelCommands: PanelCommands
   profileCommands: ProfileCommands
   runtimeCommands: RuntimeCommands
+  usageCommands: UsageCommands
 }
 
 const streamReconnectMilliseconds = 1000
@@ -233,5 +235,6 @@ export const createApp = async (
       runtimeMutators.runtime,
       createHttpRuntimeHostCommands(postAsMember, fetchAsMember),
     ),
+    usageCommands: createHttpAuditLogCommands(postAsMember, fetchAsMember),
   }
 }

@@ -5,7 +5,7 @@ import type { Job, Transact } from '@hq/db/zero-queries'
 import { type WorkspaceId, workspaceId } from '@hq/kernel'
 import { type createLlmGateway, createProfileJobs } from '@hq/profile/server'
 import { createRuntimeJobs, type SandboxProvider } from '@hq/runtime/server'
-import { createUsageJobs } from '@hq/usage/server'
+import { auditJobs, createUsageJobs } from '@hq/usage/server'
 import type { ServerTransaction } from '@rocicorp/zero'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import type { AgentBridge } from './agent-bridge/bridge.ts'
@@ -45,6 +45,7 @@ export const startJobWorker = (
     ...agentBridge?.forDatabase(database).jobs,
     ...(llmGateway && createProfileJobs(llmGateway)),
     ...(usageLogs && createUsageJobs(usageLogs)),
+    ...auditJobs,
   }
   const zeroDatabase = zeroDrizzle(schema, database)
   const transact: Transact = (work) => zeroDatabase.transaction(work)

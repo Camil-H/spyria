@@ -53,6 +53,14 @@ import {
   runtimeMutators,
 } from '@hq/runtime/server'
 import {
+  auditCsvFromRequest,
+  auditCsvPath,
+  auditLogPath,
+  auditPageFromRequest,
+  auditRetentionFromRequest,
+  auditRetentionPath,
+} from '@hq/usage/server'
+import {
   createDevChatFromRequest,
   devChatsPath,
   domainVerificationPath,
@@ -141,6 +149,7 @@ const statusByErrorCode: Record<string, number> = {
 const endpointResponse = async (request: string, successStatus: number, endpoint: () => Promise<unknown>) => {
   try {
     const result = await endpoint()
+    if (result instanceof Response) return result
     return result ? Response.json(result, { status: successStatus }) : new Response(null, { status: successStatus })
   } catch (error) {
     if (error instanceof DomainError)
@@ -419,6 +428,33 @@ export const createApp = ({
       return endpointResponse('Adding an LLM credential', 201, async () => {
         await addLlmCredentialFromRequest(context.get('transact'), context.get('zeroContext'), body, gatewayOf())
       })
+    })
+    .get(auditLogPath, (context) =>
+      endpointResponse('Reading the audit log', 200, () =>
+        auditPageFromRequest(context.get('transact'), context.get('zeroContext'), context.req.query()),
+      ),
+    )
+    .get(auditCsvPath, (context) =>
+      endpointResponse('Exporting the audit log', 200, async () => {
+        const csv = await auditCsvFromRequest(context.get('transact'), context.get('zeroContext'), context.req.query())
+        return new Response(csv.pipeThrough(new TextEncoderStream()), {
+          headers: {
+            'content-type': 'text/csv; charset=utf-8',
+            'content-disposition': 'attachment; filename="audit-log.csv"',
+          },
+        })
+      }),
+    )
+    .get(auditRetentionPath, (context) =>
+      endpointResponse('Reading the audit retention', 200, () =>
+        auditRetentionFromRequest(context.get('transact'), context.get('zeroContext')),
+      ),
+    )
+    .post(auditRetentionPath, async (context) => {
+      const body = await context.req.json().catch(() => null)
+      return endpointResponse('Saving the audit retention', 200, () =>
+        auditRetentionFromRequest(context.get('transact'), context.get('zeroContext'), body),
+      )
     })
     .get(toolConnectionsPath, () =>
       endpointResponse('Listing tool servers', 200, () => availableToolsFromRequest(gatewayOf())),

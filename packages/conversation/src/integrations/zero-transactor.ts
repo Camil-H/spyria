@@ -438,6 +438,17 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       },
       changeParticipant,
       recordRuntimeOrigin: (origin) => tx.mutate.runtimeOrigins.insert({ workspaceId: contextWorkspaceId, ...origin }),
+      recordPush: async ({ chatId: id, actorId, branch, head }) => {
+        if (tx.location === 'server')
+          await appendChatEvent(tx, {
+            workspaceId: contextWorkspaceId,
+            chatId: id,
+            type: 'branch.pushed',
+            actor: actorId,
+            payload: { branch, head },
+            createdAt: new Date(),
+          })
+      },
       localSessionsAllowed: async () =>
         (await tx.run(zql.workspaces.where('workspaceId', contextWorkspaceId).one()))?.localSessions ?? true,
       hasAgentSession: async (id) =>

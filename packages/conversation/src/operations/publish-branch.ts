@@ -64,6 +64,9 @@ const pushAndRecord = async (
   })
   if (!pushed) return refused(noGitHubConnection)
   if (pushed.failure) return refused(pushed.failure)
+  await transactor.run(({ chats }) =>
+    chats.recordPush({ chatId: chat.chatId, actorId: ownerId, branch: pushed.branch, head: pushed.head ?? null }),
+  )
   const endpoint = pushed.head && (await runtimes.endpointOf(chat))
   if (endpoint) await agentClient.actOnWorkspace(endpoint, 'pushed', { head: pushed.head })
   const pullRequest = card?.step?.type === 'pull_request' ? card.step : undefined
