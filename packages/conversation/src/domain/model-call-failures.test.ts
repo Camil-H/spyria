@@ -148,6 +148,16 @@ test.each([
     'The model call failed (error 403)',
   ],
   ['a body that is not JSON', answered(418, "I'm a teapot"), 'The model call failed (error 418)'],
+  [
+    "the prompter's budget used up",
+    { reached: 'over_budget', budget: 'member' },
+    "Alice's monthly AI budget is used up; an admin can raise it in Workspace settings",
+  ],
+  [
+    "the workspace's budget used up",
+    { reached: 'over_budget', budget: 'workspace' },
+    "The workspace's monthly AI budget is used up; an admin can raise it in Workspace settings",
+  ],
 ] as [string, ModelCallFailure, string][])('%s', (_, failure, notice) => {
   expect(modelCallNoticeOf(failure, names)).toBe(notice)
 })

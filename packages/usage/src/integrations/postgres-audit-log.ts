@@ -21,6 +21,7 @@ const workspaceEventRecords = `
     case
       when event.type like 'connection.%' then coalesce(event.payload->>'name', connection.name)
       when event.type = 'chat.transferred' then chat.name
+      when event.type like 'budget.%' then coalesce(member.display_name, 'Workspace total')
       when event.payload ? 'memberId' then member.display_name
       else coalesce(event.payload->>'email', event.payload->>'domain', event.payload->>'issuer', event.payload->>'appId')
     end as target,

@@ -59,6 +59,11 @@ import {
   auditPageFromRequest,
   auditRetentionFromRequest,
   auditRetentionPath,
+  budgetsFromRequest,
+  budgetsPath,
+  createBudgetGuard,
+  ownBudgetFromRequest,
+  ownBudgetPath,
   ownSpendFromRequest,
   ownSpendPath,
   spendPath,
@@ -134,14 +139,18 @@ export const sessionClassifierOf =
       timeoutMilliseconds?: number
     } = {},
   ) =>
-  (database: Database) =>
-    createGatewaySessionClassifier({
+  (database: Database) => {
+    const transact: Transact = (work) => zeroDrizzle(schema, database).transaction(work)
+    const usedUpBudgetOf = createBudgetGuard(transact)
+    return createGatewaySessionClassifier({
       gatewayUrl: () => gatewayUrlOf(database),
-      virtualKeyOf: createMemberKeyReader((work) => zeroDrizzle(schema, database).transaction(work), llmGateway),
+      virtualKeyOf: createMemberKeyReader(transact, llmGateway),
+      isBudgetUsedUp: async (workspaceId, memberId) => (await usedUpBudgetOf(workspaceId, memberId)) !== null,
       listedModels: llmGateway.listedModels,
       headersOf: headersOf && ((chat) => headersOf(database, chat)),
       timeoutMilliseconds,
     })
+  }
 
 const statusByErrorCode: Record<string, number> = {
   not_admin: 403,
@@ -470,6 +479,22 @@ export const createApp = ({
         auditRetentionFromRequest(context.get('transact'), context.get('zeroContext'), body),
       )
     })
+    .get(budgetsPath, (context) =>
+      endpointResponse('Reading the budgets', 200, () =>
+        budgetsFromRequest(context.get('transact'), context.get('zeroContext')),
+      ),
+    )
+    .post(budgetsPath, async (context) => {
+      const body = await context.req.json().catch(() => null)
+      return endpointResponse('Saving a budget', 200, () =>
+        budgetsFromRequest(context.get('transact'), context.get('zeroContext'), body),
+      )
+    })
+    .get(ownBudgetPath, (context) =>
+      endpointResponse('Reading own budget', 200, () =>
+        ownBudgetFromRequest(context.get('transact'), context.get('zeroContext')),
+      ),
+    )
     .get(toolConnectionsPath, () =>
       endpointResponse('Listing tool servers', 200, () => availableToolsFromRequest(gatewayOf())),
     )

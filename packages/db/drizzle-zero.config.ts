@@ -48,6 +48,7 @@ export default drizzleZeroConfig(tables, {
     browserPages: true,
     sources: true,
     usageEntries: true,
+    budgetAlerts: true,
     runtimeHosts: {
       workspaceId: true,
       id: true,

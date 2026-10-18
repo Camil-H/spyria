@@ -157,6 +157,11 @@ export const queries = defineQueries({
   usageEntries: defineQuery(({ ctx }) =>
     zql.usageEntries.where('workspaceId', ctx.workspaceId).whereExists('chat', readableBy(ctx.userId)),
   ),
+  budgetAlerts: defineQuery(({ ctx }) =>
+    zql.budgetAlerts
+      .where('workspaceId', ctx.workspaceId)
+      .where(({ or, cmp, exists }) => or(cmp('memberId', ctx.userId), exists('memberships', activeAdmin(ctx.userId)))),
+  ),
   runtimeHosts: defineQuery(({ ctx }) =>
     zql.runtimeHosts
       .where('workspaceId', ctx.workspaceId)

@@ -3,8 +3,10 @@ import type { GatewayUsageLogs } from '../contracts/usage-sync.ts'
 import { auditJobTypes } from '../domain/audit.ts'
 import { usageJobTypes, usageSync } from '../domain/usage.ts'
 import { createPostgresAuditTransactor } from '../integrations/postgres-audit-log.ts'
+import { createPostgresBudgetTransactor } from '../integrations/postgres-budgets.ts'
 import { createPostgresUsageLedger } from '../integrations/postgres-usage-ledger.ts'
 import { sweepAuditRecords } from '../operations/audit-log.ts'
+import { recordBudgetAlerts } from '../operations/budgets.ts'
 import { syncUsage } from '../operations/sync-usage.ts'
 
 type UsageJob = Pick<Job, 'workspaceId' | 'transact'>
@@ -14,6 +16,7 @@ export const syncUsageNow = async (logs: GatewayUsageLogs, { workspaceId, transa
     { logs, ledger: createPostgresUsageLedger(transact) },
     { workspaceId, now: new Date() },
   )
+  await recordBudgetAlerts({ transactor: createPostgresBudgetTransactor(transact, workspaceId) }, { now: new Date() })
   if (behindMilliseconds > usageSync.alertBehindMilliseconds)
     console.error(
       `Usage of ${workspaceId} is ${Math.round(behindMilliseconds / 60_000)} minutes behind the gateway logs`,

@@ -125,6 +125,7 @@ const snapshotFromZeroRows = (
     planSteps: rowsOf('planSteps').map(withoutPosition),
     browserPages: rowsOf('browserPages'),
     usageEntries: rowsOf('usageEntries').map(withMemberId),
+    budgetAlerts: rowsOf('budgetAlerts').map(({ reachedAt, ...alert }) => alert),
     sources: rowsOf('sources'),
     toolConnections: rowsOf('toolConnections').map((connection) => withoutPosition(withMemberId(connection))),
     chatMembers: rowsOf('chatParticipants').map(withMemberId),

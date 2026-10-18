@@ -25,12 +25,14 @@ export const ChatView = ({
   runtimeStatus,
   hasLlmKey,
   blockedNotice,
+  budgetNotice,
   frozenActions,
 }: {
   headerActions: ReactNode
   runtimeStatus: (canRetry: boolean) => ReactNode
   hasLlmKey: boolean
   blockedNotice: ReactNode
+  budgetNotice: ReactNode
   frozenActions: ReactNode
 }) => {
   const workspaceId = useOutletContext<WorkspaceId>()
@@ -179,24 +181,27 @@ export const ChatView = ({
                 : 'You can read this chat'
           }
           aboveBox={
-            (live.workspace || branch !== null || conversation.repository !== null) && (
-              <div className="flex min-w-0 gap-2">
-                {(live.workspace || conversation.repository !== null) && (
-                  <span title={live.workspace?.cwd} className={workspaceChipClass}>
-                    <Folder aria-label="Working directory" role="img" size={12} className="shrink-0" />
-                    <span className="truncate">
-                      {conversation.repository ?? live.workspace?.cwd.split('/').filter(Boolean).at(-1) ?? '/'}
+            <>
+              {conversation.type === 'runtime' && budgetNotice}
+              {(live.workspace || branch !== null || conversation.repository !== null) && (
+                <div className="flex min-w-0 gap-2">
+                  {(live.workspace || conversation.repository !== null) && (
+                    <span title={live.workspace?.cwd} className={workspaceChipClass}>
+                      <Folder aria-label="Working directory" role="img" size={12} className="shrink-0" />
+                      <span className="truncate">
+                        {conversation.repository ?? live.workspace?.cwd.split('/').filter(Boolean).at(-1) ?? '/'}
+                      </span>
                     </span>
-                  </span>
-                )}
-                {branch !== null && (
-                  <span className={workspaceChipClass}>
-                    <GitBranch aria-label="Git branch" role="img" size={12} className="shrink-0" />
-                    <span className="truncate">{branch}</span>
-                  </span>
-                )}
-              </div>
-            )
+                  )}
+                  {branch !== null && (
+                    <span className={workspaceChipClass}>
+                      <GitBranch aria-label="Git branch" role="img" size={12} className="shrink-0" />
+                      <span className="truncate">{branch}</span>
+                    </span>
+                  )}
+                </div>
+              )}
+            </>
           }
           bottomBar={
             conversation.type === 'runtime' && (

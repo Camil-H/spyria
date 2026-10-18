@@ -3,6 +3,9 @@ export {
   auditCsvFromRequest,
   auditPageFromRequest,
   auditRetentionFromRequest,
+  budgetsFromRequest,
+  createBudgetGuard,
+  ownBudgetFromRequest,
   ownSpendFromRequest,
   workspaceSpendFromRequest,
 } from './entrypoints/endpoints.ts'
@@ -14,4 +17,5 @@ export {
   auditRetentionPath,
   createHttpAuditLogCommands,
 } from './integrations/http-audit-log.ts'
+export { budgetsPath, createHttpBudgetCommands, ownBudgetPath } from './integrations/http-budgets.ts'
 export { createHttpSpendCommands, ownSpendPath, spendPath } from './integrations/http-spend.ts'

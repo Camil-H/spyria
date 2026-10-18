@@ -20,6 +20,7 @@ import { schema } from '@hq/db/zero'
 import { type MemberId, toolNamePartsOf } from '@hq/kernel'
 import { type createLlmGateway, createMemberKeyReader, createToolCallOwnerAccess } from '@hq/profile/server'
 import type { ConnectedHost } from '@hq/runtime/server'
+import { createBudgetGuard } from '@hq/usage/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import type { AgentBridge } from './agent-bridge/bridge.ts'
 
@@ -90,6 +91,7 @@ export const createModelCallRelay = ({
       zeroDrizzle(schema, database).transaction(work)
     return {
       keyOf: createMemberKeyReader(transact, llmGateway),
+      usedUpBudgetOf: createBudgetGuard(transact),
       tools: createToolCallOwnerAccess(transact, llmGateway),
       readOnlyHints: new Map<string, { isReadOnly: boolean; listedAt: number }>(),
     }
@@ -197,7 +199,7 @@ export const createModelCallRelay = ({
           : await handlers.delegate({ chat: turn.chat, turn, task: String(task ?? ''), effort, model })
       return reply({ content: [{ type: 'text', text }], isError })
     }
-    const { keyOf, tools, readOnlyHints } = databaseAccess(database)
+    const { keyOf, usedUpBudgetOf, tools, readOnlyHints } = databaseAccess(database)
     const isAnthropicPath = path.startsWith(anthropicPathPrefix)
     const isTokenCount = path.startsWith(`${anthropicPathPrefix}/count_tokens`)
     const isReadOnly = async (callHeaders: Record<string, string>, toolName: string) => {
@@ -316,6 +318,8 @@ export const createModelCallRelay = ({
     if (!turn) return answer(401, refusalOf('This runtime has no active turn'))
     const record = (failure: ModelCallFailure) =>
       handlers.recordModelCallFailure({ ...turn, model: modelOf(body), failure })
+    const usedUpBudget = isTokenCount ? null : await usedUpBudgetOf(host.workspaceId, turn.prompterId)
+    if (usedUpBudget) return answer(402, refusalOf(await record({ reached: 'over_budget', budget: usedUpBudget })))
     const virtualKey = await keyOf(host.workspaceId, turn.prompterId).catch(() => null)
     if (virtualKey === null) {
       await record({ reached: 'unreachable' })

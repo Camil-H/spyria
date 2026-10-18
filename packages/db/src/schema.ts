@@ -136,6 +136,13 @@ type UsageEntryRow = {
   costMicros: number
   calls: number
 }
+type BudgetAlertRow = {
+  workspaceId: WorkspaceId
+  id: string
+  memberId: MemberId | null
+  month: string
+  threshold: number
+}
 type SourceRow = { workspaceId: WorkspaceId; chatId: ChatId; name: string; origin: string }
 type ToolConnectionRow = {
   workspaceId: WorkspaceId
@@ -195,6 +202,7 @@ export type Snapshot = {
   planSteps: readonly PlanStepRow[]
   browserPages: readonly BrowserPageRow[]
   usageEntries: readonly UsageEntryRow[]
+  budgetAlerts: readonly BudgetAlertRow[]
   sources: readonly SourceRow[]
   toolConnections: readonly ToolConnectionRow[]
   chatMembers: readonly ChatMemberRow[]

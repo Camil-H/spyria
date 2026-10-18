@@ -1,9 +1,12 @@
 import type { Transact, ZeroContext } from '@hq/db/zero-queries'
+import type { MemberId, WorkspaceId } from '@hq/kernel'
 import { auditCsvHeader, auditCsvLinesOf, auditCsvPageSize, auditFilterFrom, auditPageSize } from '../domain/audit.ts'
 import { spendFilterFrom } from '../domain/spend.ts'
 import { createPostgresAuditTransactor } from '../integrations/postgres-audit-log.ts'
+import { createPostgresBudgetTransactor } from '../integrations/postgres-budgets.ts'
 import { createPostgresSpendTransactor } from '../integrations/postgres-spend.ts'
 import { readAuditPage, readAuditRetention, setAuditRetention } from '../operations/audit-log.ts'
+import { findUsedUpBudget, readBudgets, readOwnBudget, setBudget } from '../operations/budgets.ts'
 import { readOwnSpend, readWorkspaceSpend } from '../operations/spend.ts'
 
 type Query = Readonly<Record<string, string | undefined>>
@@ -61,3 +64,22 @@ export const workspaceSpendFromRequest = (transact: Transact, context: ZeroConte
 
 export const ownSpendFromRequest = (transact: Transact, context: ZeroContext, query: Query) =>
   readOwnSpend(...spendRequestOf(transact, context, query))
+
+const budgetDependenciesOf = (transact: Transact, workspaceId: WorkspaceId) => ({
+  transactor: createPostgresBudgetTransactor(transact, workspaceId),
+})
+
+export const budgetsFromRequest = (transact: Transact, context: ZeroContext, body?: unknown) =>
+  body === undefined
+    ? readBudgets(budgetDependenciesOf(transact, context.workspaceId), { memberId: context.userId, now: new Date() })
+    : setBudget(budgetDependenciesOf(transact, context.workspaceId), {
+        memberId: context.userId,
+        budget: body,
+        now: new Date(),
+      })
+
+export const ownBudgetFromRequest = (transact: Transact, context: ZeroContext) =>
+  readOwnBudget(budgetDependenciesOf(transact, context.workspaceId), { memberId: context.userId, now: new Date() })
+
+export const createBudgetGuard = (transact: Transact) => (workspaceId: WorkspaceId, memberId: MemberId) =>
+  findUsedUpBudget(budgetDependenciesOf(transact, workspaceId), { memberId, now: new Date() })

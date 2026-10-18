@@ -12,7 +12,7 @@ const ProfileRoute = () => {
     <div className="p-6">
       <ProfileView>
         <MyMachineSection workspaceId={workspaceId} memberId={memberId} />
-        <MyUsageSection workspaceId={workspaceId} />
+        <MyUsageSection workspaceId={workspaceId} memberId={memberId} />
       </ProfileView>
     </div>
   )

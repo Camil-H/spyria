@@ -4,8 +4,8 @@ import { chatId as toChatId, type WorkspaceId } from '@hq/kernel'
 import { PanelProvider, PanelToggle, SidePanel } from '@hq/panel'
 import { ProfileProvider, useHasLlmCredential } from '@hq/profile'
 import { RuntimeProvider, RuntimeStatus } from '@hq/runtime'
-import { SessionProvider } from '@hq/session'
-import { UsageProvider } from '@hq/usage'
+import { SessionProvider, useSession } from '@hq/session'
+import { BudgetNotice, UsageProvider } from '@hq/usage'
 import { TransferChatForm, WorkspaceLayout, WorkspaceProvider } from '@hq/workspace'
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Link, Navigate, Route, Routes, useOutletContext, useParams } from 'react-router'
@@ -19,6 +19,7 @@ const ChatRoute = ({ commands }: { commands: Application['conversationCommands']
   const workspaceId = useOutletContext<WorkspaceId>()
   const chatId = toChatId(useParams().chatId ?? '')
   const hasLlmKey = useHasLlmCredential(workspaceId)
+  const { memberId } = useSession()
   const blockedNotice = (
     <>
       Connect an LLM key in your profile to prompt.{' '}
@@ -40,6 +41,7 @@ const ChatRoute = ({ commands }: { commands: Application['conversationCommands']
         )}
         hasLlmKey={hasLlmKey}
         blockedNotice={blockedNotice}
+        budgetNotice={<BudgetNotice workspaceId={workspaceId} memberId={memberId} />}
         frozenActions={<TransferChatForm workspaceId={workspaceId} chatId={chatId} />}
       />
       <SidePanel

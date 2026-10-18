@@ -4,7 +4,7 @@ import type { WorkspaceId } from '@hq/kernel'
 import { WorkspaceConnectionsSection } from '@hq/profile'
 import { RuntimeHostsSection } from '@hq/runtime'
 import { focusRing, formatCost, iconButtonClass, LabelledSection } from '@hq/ui'
-import { AuditLogSection, UsageSection } from '@hq/usage'
+import { AuditLogSection, countBudgetAlerts, UsageSection } from '@hq/usage'
 import { GitHubSection, MembersSection, RolesSection, SignInSection, useIsWorkspaceAdmin } from '@hq/workspace'
 import { ArrowLeft } from 'lucide-react'
 import { type ComponentType, use } from 'react'
@@ -109,6 +109,7 @@ const SettingsRoute = () => {
   const isAdmin = useIsWorkspaceAdmin(workspaceId)
   const isDexSignIn = use(authModeLoading) === 'dex'
   const statuses = useQuery(cardStatusesOf(workspaceId, isDexSignIn))
+  const budgetAlertCount = useQuery(countBudgetAlerts(workspaceId, new Date().toISOString().slice(0, 7)))
   const { card } = useParams()
   const openCard = cardSections.flatMap(({ cards }) => cards).find(({ path }) => path === card)
   const settingsPath = `/w/${workspaceId}/settings`
@@ -139,7 +140,14 @@ const SettingsRoute = () => {
                     aria-describedby={`settings-card-${path}`}
                     className={`flex h-full flex-col gap-1 rounded-lg border border-line bg-raised p-4 hover:bg-hover ${focusRing}`}
                   >
-                    <span className="font-medium">{cardTitle}</span>
+                    <span className="flex items-center justify-between gap-2 font-medium">
+                      {cardTitle}
+                      {path === 'costs' && budgetAlertCount > 0 && (
+                        <span className="rounded-full bg-removed px-2 py-0.5 text-xs font-medium">
+                          {countLabelOf(budgetAlertCount, 'budget alert')}
+                        </span>
+                      )}
+                    </span>
                     <span id={`settings-card-${path}`} className="flex flex-1 flex-col gap-2 text-sm text-muted">
                       {description}
                       {statuses[path] && <span className="mt-auto text-xs text-ink">{statuses[path]}</span>}

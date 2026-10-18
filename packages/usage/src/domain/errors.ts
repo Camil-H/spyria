@@ -18,3 +18,13 @@ export const InvalidRetention = errorKind(
   () => 'Keep audit records forever or for 1 to 36500 days',
   UsageError,
 )
+export const InvalidBudget = errorKind(
+  'invalid_budget',
+  () => 'A monthly budget is an amount above $0 and up to $1,000,000',
+  UsageError,
+)
+export const BudgetMemberNotFound = errorKind(
+  'budget_member_not_found',
+  () => 'Budgets are set for active members of the workspace',
+  UsageError,
+)

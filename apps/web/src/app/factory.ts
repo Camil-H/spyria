@@ -19,7 +19,12 @@ import {
 } from '@hq/profile/server'
 import { createHttpRuntimeHostCommands, type RuntimeCommands, runtimeMutators } from '@hq/runtime/server'
 import type { Session } from '@hq/session'
-import { createHttpAuditLogCommands, createHttpSpendCommands, type UsageCommands } from '@hq/usage/server'
+import {
+  createHttpAuditLogCommands,
+  createHttpBudgetCommands,
+  createHttpSpendCommands,
+  type UsageCommands,
+} from '@hq/usage/server'
 import {
   createHttpGitHubCommands,
   createHttpSsoSettingsCommands,
@@ -238,6 +243,7 @@ export const createApp = async (
     usageCommands: {
       ...createHttpAuditLogCommands(postAsMember, fetchAsMember),
       ...createHttpSpendCommands(fetchAsMember),
+      ...createHttpBudgetCommands(postAsMember, fetchAsMember),
     },
   }
 }

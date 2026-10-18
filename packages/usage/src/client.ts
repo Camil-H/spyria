@@ -1,5 +1,7 @@
 export { AuditLogSection } from './entrypoints/AuditLogSection.tsx'
+export { BudgetNotice } from './entrypoints/BudgetNotice.tsx'
 export { ChatUsageTable } from './entrypoints/ChatUsageTable.tsx'
 export { MyUsageSection } from './entrypoints/MyUsageSection.tsx'
 export { UsageProvider } from './entrypoints/providers.tsx'
 export { UsageSection } from './entrypoints/UsageSection.tsx'
+export { countBudgetAlerts } from './queries/budget-alerts.ts'

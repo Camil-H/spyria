@@ -223,6 +223,7 @@ export const createMockSnapshot = (): Snapshot => {
       { ...invoiceBug, month: currentMonth(), memberId: alice, tokens: 12400, costMicros: 180_000, calls: 3 },
       { ...invoiceBug, month: currentMonth(), memberId: bob, tokens: 3100, costMicros: 50_000, calls: 1 },
     ],
+    budgetAlerts: [],
     sources: [
       { workspaceId: acme, chatId: welcomeChat, name: 'Employee handbook', origin: 'Onyx' },
       { workspaceId: acme, chatId: welcomeChat, name: 'Onboarding wiki page', origin: 'Wiki' },

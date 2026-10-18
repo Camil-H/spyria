@@ -604,6 +604,35 @@ export const usageEntries = table(
   ],
 )
 
+export const budgets = table(
+  'budgets',
+  { ...tenant, memberId: text(), limitMicros: bigint({ mode: 'number' }).notNull() },
+  (table) => [
+    unique('budgets_scope_key').on(table.workspaceId, table.memberId).nullsNotDistinct(),
+    check('budgets_limit_micros', sql`${table.limitMicros} > 0`),
+    foreignKey({ columns: [table.workspaceId], foreignColumns: [workspaces.workspaceId] }),
+    memberReference(table, table.memberId),
+  ],
+)
+
+export const budgetAlerts = table(
+  'budget_alerts',
+  {
+    ...tenant,
+    id: text().notNull(),
+    memberId: text(),
+    month: text().notNull(),
+    threshold: integer().notNull(),
+    reachedAt: instant().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.id] }),
+    check('budget_alerts_threshold', sql`${table.threshold} in (80, 100)`),
+    foreignKey({ columns: [table.workspaceId], foreignColumns: [workspaces.workspaceId] }),
+    memberReference(table, table.memberId),
+  ],
+)
+
 export const modelCalls = table(
   'model_calls',
   {
@@ -729,6 +758,7 @@ export const relations = defineRelations(
     browserPages,
     sources,
     usageEntries,
+    budgetAlerts,
     runtimeHosts,
     runtimes,
   },
@@ -747,6 +777,9 @@ export const relations = defineRelations(
       },
       runtimeHosts: {
         memberships: r.many.memberships({ from: r.runtimeHosts.workspaceId, to: r.memberships.workspaceId }),
+      },
+      budgetAlerts: {
+        memberships: r.many.memberships({ from: r.budgetAlerts.workspaceId, to: r.memberships.workspaceId }),
       },
       connectionRestrictions: {
         ownedChats: r.many.chats({

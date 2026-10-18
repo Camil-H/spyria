@@ -85,6 +85,7 @@ const readSnapshot = async () => {
     browserPages: await database.select().from(tables.browserPages),
     sources: await database.select().from(tables.sources),
     usageEntries: (await database.select().from(tables.usageEntries)).map(userAsMember),
+    budgetAlerts: (await database.select().from(tables.budgetAlerts)).map(({ reachedAt, ...alert }) => alert),
     runtimeHosts: await database.select().from(tables.runtimeHosts),
     runtimes: await database.select().from(tables.runtimes),
   }

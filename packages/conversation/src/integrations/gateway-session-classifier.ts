@@ -6,6 +6,7 @@ const failureByErrorName: Record<string, string> = { TimeoutError: 'timeout', Sy
 export const createGatewaySessionClassifier = ({
   gatewayUrl,
   virtualKeyOf,
+  isBudgetUsedUp,
   headersOf,
   timeoutMilliseconds = 3000,
   listedModels,
@@ -14,11 +15,13 @@ export const createGatewaySessionClassifier = ({
   gatewayUrl: () => string
   timeoutMilliseconds?: number
   virtualKeyOf(workspaceId: WorkspaceId, memberId: MemberId): Promise<string | null | undefined>
+  isBudgetUsedUp?(workspaceId: WorkspaceId, memberId: MemberId): Promise<boolean>
   headersOf?: (chat: AgentChat) => Record<string, string>
 }): SessionClassifier => ({
   listedModels,
   classify: async ({ chat, prompterId, ownerId, model, request }) => {
     try {
+      if (await isBudgetUsedUp?.(chat.workspaceId, prompterId)) return { failure: 'monthly AI budget used up' }
       const virtualKey = await virtualKeyOf(chat.workspaceId, prompterId)
       if (!virtualKey) return { failure: 'no gateway key' }
       const response = await fetch(`${gatewayUrl()}/v1/${isDecisionModel(model) ? 'decisions' : 'chat/completions'}`, {

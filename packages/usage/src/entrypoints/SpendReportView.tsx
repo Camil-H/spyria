@@ -1,6 +1,6 @@
 import type { WorkspaceId } from '@hq/kernel'
 import { ErrorMessage, fieldClass, formatCost, LabelledSection, labelClass, SegmentedChoice } from '@hq/ui'
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, type ReactNode, Suspense, useEffect, useState } from 'react'
 import {
   type SpendDimension,
   type SpendFactorName,
@@ -146,7 +146,9 @@ export const SpendReportView = ({
   readReport,
   chartDimensions,
   tableDimensions,
+  children,
 }: {
+  children?: ReactNode
   title: string
   workspaceId: WorkspaceId
   readReport: (input: { workspaceId: WorkspaceId; search: Readonly<Record<string, string>> }) => Promise<SpendReport>
@@ -179,6 +181,7 @@ export const SpendReportView = ({
   const chart = report?.charts[stack]
   return (
     <LabelledSection title={title}>
+      {children}
       <fieldset aria-label="Period" className="flex flex-wrap items-end gap-2">
         <label className={labelClass}>
           Period
