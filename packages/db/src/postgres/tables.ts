@@ -125,9 +125,27 @@ export const workspaceSso = table('workspace_sso', {
   issuer: text().notNull(),
   clientId: text().notNull(),
   encryptedClientSecret: text().notNull(),
-  domains: text().array().notNull(),
   updatedAt: instant().notNull(),
 })
+
+export const ssoDomains = table(
+  'sso_domains',
+  {
+    workspaceId: text()
+      .notNull()
+      .references(() => workspaceSso.workspaceId, { onDelete: 'cascade' }),
+    domain: text().notNull(),
+    verifiedAt: instant(),
+    verificationEmail: text(),
+    verificationTokenHash: text(),
+    verificationExpiresAt: instant(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.domain] }),
+    index('sso_domains_domain_index').on(table.domain),
+    uniqueIndex('sso_domains_verification_token_hash_index').on(table.verificationTokenHash),
+  ],
+)
 
 export const sessions = table(
   'sessions',

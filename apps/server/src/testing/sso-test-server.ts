@@ -2,9 +2,11 @@ import { createDatabase, type Database } from '@hq/db/postgres'
 import { databaseUrlOf } from '@hq/db/testing'
 import { websocket } from 'hono/bun'
 import { createApp } from '../app.ts'
+import { startFakeSmtp } from './fake-smtp.ts'
 import { testAuthSettings, testSecretsKey } from './testing.ts'
 
 const port = Number(process.env.PORT ?? 3102)
+const smtp = startFakeSmtp()
 const databaseByName = new Map<string, Database>()
 const databaseNamed = (databaseName: string) => {
   const known = databaseByName.get(databaseName)
@@ -22,6 +24,7 @@ const app = createApp({
   authMode: 'sso',
   secretsKey: testSecretsKey,
   testDatabaseByName: databaseNamed,
-})
+  mail: { smtpUrl: smtp.url, from: 'HQ <hq@e2e.test>' },
+}).get('/test/mails', (context) => context.json(smtp.mails))
 
 export default { port, hostname: '0.0.0.0', idleTimeout: 0, fetch: app.fetch, websocket }

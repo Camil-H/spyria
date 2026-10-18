@@ -2,10 +2,12 @@ import { afterAll, expect, test } from 'bun:test'
 import { createTestDatabase, databaseDropTimeoutMilliseconds, databaseUrlOf } from '@hq/db/testing'
 import { exportJWK, generateKeyPair, type JWTPayload, SignJWT } from 'jose'
 import { createApp } from '../app.ts'
+import { startFakeSmtp, verificationLinkIn } from '../testing/fake-smtp.ts'
 import { acme, alice, globex, bob, testAuthSettings, workspaceEventsOf } from '../testing/testing.ts'
 import { createSecretBox } from './secret-box.ts'
 import { issueSessionToken } from './session-tokens.ts'
 import { openSessions } from './sessions.ts'
+import { verifyDomainByOperator } from './sso.ts'
 
 const testDatabase = await createTestDatabase()
 const { database } = testDatabase
@@ -63,9 +65,12 @@ const acmeIdp = await startFakeIdp()
 const otherIdp = await startFakeIdp()
 const entraIdp = await startFakeIdp('/tenant-1/v2.0')
 const bootstrapIdp = await startFakeIdp()
+const smtp = startFakeSmtp()
 const ssoSettings = { ...testAuthSettings, authMode: 'sso' as const, secretsKey, microsoftLoginOrigin: entraIdp.origin }
-const app = createApp({ database, ...ssoSettings })
+const app = createApp({ database, ...ssoSettings, mail: { smtpUrl: smtp.url, from: 'HQ <hq@test.local>' } })
+const appWithoutMail = createApp({ database, ...ssoSettings })
 afterAll(async () => {
+  smtp.stop()
   for (const idp of [acmeIdp, otherIdp, entraIdp, bootstrapIdp]) await idp.server.stop(true)
   await testDatabase.drop()
 }, databaseDropTimeoutMilliseconds)
@@ -83,6 +88,31 @@ const saveSso = async (workspaceId: string, settings: object, userId = alice) =>
   })
   return { status: response.status, body: await response.text() }
 }
+const sendVerification = async (workspaceId: string, domain: string, email: string, server = app) => {
+  const response = await server.request('/api/sso-settings/domain-verification', {
+    method: 'POST',
+    headers: { authorization: await bearerOf(workspaceId, alice), 'content-type': 'application/json' },
+    body: JSON.stringify({ domain, email }),
+  })
+  return { status: response.status, body: await response.json() }
+}
+const lastLinkTo = (email: string) => verificationLinkIn(smtp.mails.findLast((mail) => mail.to.includes(email)))
+const openLink = async (link: string) => {
+  const response = await app.request(new URL(link).pathname + new URL(link).search)
+  return { status: response.status, page: await response.text() }
+}
+const runOperator = async (args: string[], environment: Record<string, string> = {}) => {
+  const operator = Bun.spawn([process.execPath, new URL('../operator-cli.ts', import.meta.url).pathname, ...args], {
+    stderr: 'pipe',
+    env: { ...process.env, DATABASE_URL: databaseUrlOf(testDatabase.name), ...environment },
+  })
+  return {
+    exitCode: await operator.exited,
+    stdout: await new Response(operator.stdout).text(),
+    stderr: await new Response(operator.stderr).text(),
+  }
+}
+const unverified = (domain: string) => ({ domain, isVerified: false, sentTo: null, expiresAt: null })
 const readSso = async (workspaceId: string, userId = alice) => {
   const response = await app.request('/api/sso-settings', {
     headers: { authorization: await bearerOf(workspaceId, userId) },
@@ -148,7 +178,9 @@ test('an admin saves the SSO settings: the secret is encrypted at rest, never re
   const saved = await configureIdp(acmeIdp, acme, [' Example.com'], 'acme-secret-1')
   expect(saved.status).toBe(200)
   const view = { preset: 'oidc', issuer: acmeIdp.issuer, clientId: `hq-${acme}`, domains: ['example.com'] }
-  expect(JSON.parse(saved.body)).toEqual({ settings: { ...view, tenantId: '', hasSecret: true } })
+  expect(JSON.parse(saved.body)).toEqual({
+    settings: { ...view, tenantId: '', hasSecret: true, domainStates: [unverified('example.com')] },
+  })
   const [stored] = await database.$client<{ encryptedClientSecret: string }[]>`
     select encrypted_client_secret as "encryptedClientSecret" from workspace_sso where workspace_id = ${acme}`
   expect(stored?.encryptedClientSecret).not.toContain('acme-secret-1')
@@ -161,7 +193,12 @@ test('an admin saves the SSO settings: the secret is encrypted at rest, never re
     expect(read.body).not.toContain('acme-secret')
     expect(read.body).not.toContain(stored?.encryptedClientSecret ?? '')
   }
-  expect(JSON.parse((await readSso(acme)).body).settings).toEqual({ ...view, tenantId: '', hasSecret: true })
+  expect(JSON.parse((await readSso(acme)).body).settings).toEqual({
+    ...view,
+    tenantId: '',
+    hasSecret: true,
+    domainStates: [unverified('example.com')],
+  })
   expect(
     (await workspaceEventsOf(database))
       .filter((event) => event.type.startsWith('sso.'))
@@ -224,6 +261,61 @@ test('an unknown domain is refused before any redirect to a provider', async () 
   expect(acmeIdp.requests.length).toBe(requestCount)
 })
 
+test('a domain verifies through a single-use emailed link; until then it does not route sign-in', async () => {
+  expect((await app.request('/auth/login?email=nina@example.com')).status).toBe(404)
+  expect((await sendVerification(acme, 'example.com', 'it@other.com')).body).toEqual({
+    error: 'invalid_sso_settings',
+    message: 'Enter an address at example.com',
+  })
+  const sent = await sendVerification(acme, 'example.com', 'IT@example.com')
+  expect(sent.status).toBe(200)
+  const [pending] = sent.body.settings.domainStates
+  expect(pending).toMatchObject({ domain: 'example.com', isVerified: false, sentTo: 'it@example.com' })
+  expect(pending.expiresAt).toBeGreaterThan(Date.now() + 23.9 * 60 * 60 * 1000)
+  expect(pending.expiresAt).toBeLessThan(Date.now() + 24.1 * 60 * 60 * 1000)
+  const firstLink = lastLinkTo('it@example.com')
+  expect(firstLink).toStartWith(`${testAuthSettings.appOrigin}/auth/verify-domain?token=`)
+  const [stored] = await database.$client<{ hash: string }[]>`
+    select verification_token_hash as hash from sso_domains where workspace_id = ${acme}`
+  expect(stored?.hash).toMatch(/^[0-9a-f]{64}$/)
+  expect(firstLink).not.toContain(stored?.hash ?? '')
+
+  const invalid = 'This verification link is invalid, used or expired. Send a new one from Workspace settings.'
+  expect(await openLink(`${firstLink}x`)).toEqual({ status: 400, page: expect.stringContaining(invalid) })
+  await sendVerification(acme, 'example.com', 'it@example.com')
+  expect(await openLink(firstLink)).toEqual({ status: 400, page: expect.stringContaining(invalid) })
+  await database.$client`update sso_domains set verification_expires_at = now() - interval '1 second'`
+  expect(await openLink(lastLinkTo('it@example.com'))).toEqual({ status: 400, page: expect.stringContaining(invalid) })
+
+  await sendVerification(acme, 'example.com', 'it@example.com')
+  const link = lastLinkTo('it@example.com')
+  expect(await openLink(link)).toEqual({
+    status: 200,
+    page: expect.stringContaining('example.com is verified: people with an example.com email can now sign in'),
+  })
+  expect(await openLink(link)).toEqual({ status: 400, page: expect.stringContaining(invalid) })
+  const verifiedEvent = (await workspaceEventsOf(database)).at(-1)
+  expect(verifiedEvent?.actorId).toBeNull()
+  expect(verifiedEvent).toMatchObject({
+    type: 'sso.domain_verified',
+    payload: { domain: 'example.com', email: 'it@example.com' },
+  })
+  expect(JSON.parse((await readSso(acme)).body).settings.domainStates).toEqual([
+    { domain: 'example.com', isVerified: true, sentTo: null, expiresAt: null },
+  ])
+  expect((await app.request('/auth/login?email=nina@example.com')).status).toBe(302)
+})
+
+test('without SMTP the verification link is refused with a clear message', async () => {
+  await database.$client`insert into sso_domains (workspace_id, domain) values (${acme}, 'example.net')`
+  expect((await sendVerification(acme, 'example.net', 'it@example.net', appWithoutMail)).body).toEqual({
+    error: 'mail_not_configured',
+    message:
+      'Email is not configured on this server (HQ_SMTP_URL): the operator can verify the domain with sso:verify-domain',
+  })
+  await database.$client`delete from sso_domains where domain = 'example.net'`
+})
+
 test('the first sign-in binds the identity through an invite; a later sign-in matches the subject after an email change', async () => {
   await invite(acme, 'nina@example.com')
   const first = await signInThrough(acmeIdp, 'email=nina@example.com', {
@@ -271,6 +363,7 @@ test('an Entra token without email_verified signs in by preferred_username for a
     domains: ['initech.com'],
   })
   expect(JSON.parse(saved.body).settings).toMatchObject({ issuer: entraIdp.issuer, tenantId: 'tenant-1' })
+  await verifyDomainByOperator(database, 'initech', 'initech.com')
   await invite('initech', 'peter@initech.com')
   const signedIn = await signInThrough(entraIdp, 'email=peter@initech.com', {
     sub: 'peter-subject',
@@ -297,6 +390,8 @@ test('a domain claimed by another issuer is refused; the same issuer shares it a
       })
     ).status,
   ).toBe(200)
+  const verified = await runOperator(['sso:verify-domain', '--workspace', globex, '--domain', 'example.com'])
+  expect(verified).toEqual({ exitCode: 0, stdout: `example.com is verified for workspace ${globex}\n`, stderr: '' })
   const aliceSignIn = await signInThrough(acmeIdp, 'email=alice@example.com', {
     sub: 'alice-subject',
     email: 'alice@example.com',
@@ -304,6 +399,26 @@ test('a domain claimed by another issuer is refused; the same issuer shares it a
   expect(aliceSignIn.userId).toBe(alice)
   expect(aliceSignIn.sessions.map(({ workspaceId }) => workspaceId)).toEqual([acme, globex])
   expect((await identitiesOf('alice-subject')).map(({ workspace_id }) => workspace_id)).toEqual([acme, globex])
+})
+
+test('an unverified claim blocks no one; a verified domain refuses another issuer at save and at verification', async () => {
+  await addWorkspace('hooli')
+  await addWorkspace('pied-piper')
+  expect((await configureIdp(otherIdp, 'hooli', ['shared.com'])).status).toBe(200)
+  expect((await configureIdp(entraIdp, 'pied-piper', ['shared.com'])).status).toBe(200)
+  expect((await app.request('/auth/login?email=pat@shared.com')).status).toBe(404)
+  await verifyDomainByOperator(database, 'hooli', 'shared.com')
+  await expect(verifyDomainByOperator(database, 'pied-piper', 'shared.com')).rejects.toThrow(
+    'shared.com already signs in through another provider',
+  )
+  await sendVerification('pied-piper', 'shared.com', 'it@shared.com')
+  expect(await openLink(lastLinkTo('it@shared.com'))).toEqual({
+    status: 400,
+    page: expect.stringContaining('shared.com already signs in through another provider'),
+  })
+  expect(JSON.parse((await configureIdp(entraIdp, 'pied-piper', ['shared.com'])).body).error).toBe('domain_claimed')
+  const login = await app.request('/auth/login?email=pat@shared.com')
+  expect(new URL(login.headers.get('location') ?? '').origin).toBe(otherIdp.origin)
 })
 
 test('the test sign-in hook works in sso mode', async () => {
@@ -316,10 +431,8 @@ test('the test sign-in hook works in sso mode', async () => {
 
 test('the operator bootstrap creates a workspace with its SSO and a first admin who signs in through it', async () => {
   bootstrapIdp.clientSecret = 'bootstrap-secret'
-  const bootstrap = Bun.spawn(
+  const bootstrap = await runOperator(
     [
-      process.execPath,
-      new URL('../operator-cli.ts', import.meta.url).pathname,
       'sso:bootstrap',
       '--name',
       'Umbrella',
@@ -334,22 +447,14 @@ test('the operator bootstrap creates a workspace with its SSO and a first admin 
       '--domains',
       'umbrella.com',
     ],
-    {
-      stderr: 'pipe',
-      env: {
-        ...process.env,
-        DATABASE_URL: databaseUrlOf(testDatabase.name),
-        HQ_SECRETS_KEY: secretsKey,
-        HQ_SSO_CLIENT_SECRET: 'bootstrap-secret',
-      },
-    },
+    { HQ_SECRETS_KEY: secretsKey, HQ_SSO_CLIENT_SECRET: 'bootstrap-secret' },
   )
-  expect(await bootstrap.exited).toBe(0)
-  expect(await new Response(bootstrap.stderr).text()).toBe('')
+  expect(bootstrap.exitCode).toBe(0)
+  expect(bootstrap.stderr).toBe('')
   const [workspace] = await database.$client<{ workspaceId: string }[]>`
     select workspace_id as "workspaceId" from workspaces where name = 'Umbrella'`
   const workspaceId = workspace?.workspaceId ?? ''
-  expect(await new Response(bootstrap.stdout).text()).toContain(`Workspace Umbrella (${workspaceId}) is created`)
+  expect(bootstrap.stdout).toContain(`Workspace Umbrella (${workspaceId}) is created`)
   expect([
     ...(await database.$client`
       select users.email, role, display_name from memberships join users on users.id = memberships.user_id
@@ -359,6 +464,9 @@ test('the operator bootstrap creates a workspace with its SSO and a first admin 
     'member.joined',
     'sso.configured',
   ])
+  expect([
+    ...(await database.$client`select domain from sso_domains where workspace_id = ${workspaceId} and verified_at is not null`),
+  ]).toEqual([{ domain: 'umbrella.com' }])
   const signedIn = await signInThrough(bootstrapIdp, 'email=alice@umbrella.com', {
     sub: 'alice-subject',
     email: 'alice@umbrella.com',

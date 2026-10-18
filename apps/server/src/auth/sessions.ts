@@ -59,8 +59,8 @@ export const signInUser = (database: Database, identity: Identity, isSso = false
   return database.$client.begin(async (sql) => {
     const ssoWorkspaceIds = (
       await sql<{ workspaceId: string }[]>`
-        select workspace_id as "workspaceId" from workspace_sso
-        where issuer = ${issuer} and ${domainOfEmail(email)} = any(domains)`
+        select workspace_id as "workspaceId" from workspace_sso join sso_domains using (workspace_id)
+        where issuer = ${issuer} and domain = ${domainOfEmail(email)} and verified_at is not null`
     ).map(({ workspaceId }) => workspaceId)
     if (isSso && ssoWorkspaceIds.length === 0) return { email }
     const invitations = await sql<{ workspaceId: string; id: string; role: string }[]>`

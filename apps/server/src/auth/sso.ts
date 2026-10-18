@@ -1,12 +1,16 @@
+import { createHash } from 'node:crypto'
 import type { Database } from '@hq/db/postgres'
 import {
   DomainClaimed,
   displayNameFrom,
   domainOfEmail,
   InvalidSsoSettings,
+  MailNotConfigured,
+  MailNotSent,
   NotWorkspaceAdmin,
   normalizedEmail,
   SsoDiscoveryFailed,
+  type SsoDomainState,
   type SsoPreset,
   type SsoSettings,
   type SsoSettingsInput,
@@ -14,6 +18,7 @@ import {
   ssoSettingsFrom,
   tenantIdOf,
 } from '@hq/workspace/server'
+import type { Mailer } from './mail.ts'
 import { discoverIssuer } from './oidc.ts'
 import type { SecretBox } from './secret-box.ts'
 
@@ -25,9 +30,18 @@ export type SsoProvider = {
   encryptedClientSecret: string
   updatedAt: Date
 }
-export type SsoDependencies = { secretBox?: SecretBox; microsoftLoginOrigin?: string }
+export type SsoDependencies = {
+  secretBox?: SecretBox
+  microsoftLoginOrigin?: string
+  mailer?: Mailer
+  appOrigin?: string
+}
 type Sql = Parameters<Parameters<Database['$client']['begin']>[1]>[0]
 type Member = { workspaceId: string; userId: string }
+
+export const domainVerificationLinkPath = '/auth/verify-domain'
+const verificationLifetime = '24 hours'
+const hashOf = (token: string) => createHash('sha256').update(token).digest('hex')
 
 export const ssoProviderOf = async (
   database: Database,
@@ -39,7 +53,9 @@ export const ssoProviderOf = async (
         encrypted_client_secret as "encryptedClientSecret", updated_at as "updatedAt"
       from workspace_sso join workspaces using (workspace_id)
       where workspace_id = coalesce(${workspaceId ?? null}::text, workspace_id)
-        and (${domain ?? null}::text is null or ${domain ?? ''} = any(domains))
+        and (${domain ?? null}::text is null or exists(
+          select 1 from sso_domains where sso_domains.workspace_id = workspace_sso.workspace_id
+            and sso_domains.domain = ${domain ?? ''} and sso_domains.verified_at is not null))
       order by workspaces.created_at limit 1`
   )[0]
 
@@ -63,6 +79,23 @@ const checkedSettings = async (input: SsoSettingsInput, { microsoftLoginOrigin }
   return settings
 }
 
+const assertNotVerifiedElsewhere = async (sql: Sql, workspaceId: string, issuer: string, domains: string[]) => {
+  await sql`lock table sso_domains in share row exclusive mode`
+  const [claimed] = await sql<{ domain: string }[]>`
+    select domain from sso_domains join workspace_sso using (workspace_id)
+    where workspace_id <> ${workspaceId} and issuer <> ${issuer} and verified_at is not null
+      and domain = any(${domains}::text[])
+    limit 1`
+  if (claimed) throw new DomainClaimed(claimed.domain)
+}
+
+const settingsOf = (sql: Sql, workspaceId: string) =>
+  sql<SsoSettings[]>`
+    select preset, issuer, client_id as "clientId",
+      array(select domain from sso_domains where sso_domains.workspace_id = workspace_sso.workspace_id order by domain)
+        as domains
+    from workspace_sso where workspace_id = ${workspaceId}`
+
 const storeSsoSettings = async (
   sql: Sql,
   { secretBox }: SsoDependencies,
@@ -78,36 +111,48 @@ const storeSsoSettings = async (
     clientSecret?: string
   },
 ) => {
-  await sql`lock table workspace_sso in share row exclusive mode`
-  const [claimed] = await sql<{ domain: string }[]>`
-    select domain from workspace_sso, unnest(domains) as domain
-    where workspace_id <> ${workspaceId} and issuer <> ${settings.issuer} and domain = any(${settings.domains}::text[])
-    limit 1`
-  if (claimed) throw new DomainClaimed(claimed.domain)
-  const [previous] = await sql<SsoSettings[]>`
-    select preset, issuer, client_id as "clientId", domains from workspace_sso where workspace_id = ${workspaceId}`
+  await assertNotVerifiedElsewhere(sql, workspaceId, settings.issuer, settings.domains)
+  const [previous] = await settingsOf(sql, workspaceId)
   if (!previous && clientSecret.trim() === '') throw new InvalidSsoSettings('A client secret is required')
   if (clientSecret.trim() !== '' && !secretBox) throw new InvalidSsoSettings('HQ_SECRETS_KEY is not set on this server')
   const encryptedClientSecret =
     clientSecret.trim() === '' ? null : ((await secretBox?.seal(clientSecret.trim())) ?? null)
   await sql`
-    insert into workspace_sso (workspace_id, preset, issuer, client_id, encrypted_client_secret, domains, updated_at)
+    insert into workspace_sso (workspace_id, preset, issuer, client_id, encrypted_client_secret, updated_at)
     values (${workspaceId}, ${settings.preset}, ${settings.issuer}, ${settings.clientId}, ${encryptedClientSecret ?? ''},
-      ${settings.domains}::text[], now())
+      now())
     on conflict (workspace_id) do update set preset = excluded.preset, issuer = excluded.issuer,
-      client_id = excluded.client_id, domains = excluded.domains, updated_at = excluded.updated_at,
+      client_id = excluded.client_id, updated_at = excluded.updated_at,
       encrypted_client_secret = coalesce(${encryptedClientSecret}::text, workspace_sso.encrypted_client_secret)`
-  if (JSON.stringify(previous) !== JSON.stringify(settings))
+  await sql`
+    delete from sso_domains where workspace_id = ${workspaceId} and domain <> all(${settings.domains}::text[])`
+  await sql`
+    insert into sso_domains (workspace_id, domain, verified_at)
+    select ${workspaceId}, domain, case when ${actorId}::text is null then now() end
+    from unnest(${settings.domains}::text[]) as domain
+    on conflict do nothing`
+  const domains = settings.domains.toSorted()
+  if (JSON.stringify(previous) !== JSON.stringify({ ...settings, domains }))
     await recordWorkspaceEvent(sql, workspaceId, 'sso.configured', actorId, settings)
   if (previous && encryptedClientSecret) await recordWorkspaceEvent(sql, workspaceId, 'sso.secret_rotated', actorId, {})
 }
 
 const ssoSettingsViewOf = async (sql: Sql, member: Member): Promise<SsoSettingsView | null> => {
   await assertAdmin(sql, member)
-  const [settings] = await sql<SsoSettings[]>`
-    select preset, issuer, client_id as "clientId", domains from workspace_sso where workspace_id = ${member.workspaceId}`
+  const [settings] = await settingsOf(sql, member.workspaceId)
+  const domainStates = await sql<SsoDomainState[]>`
+    select domain, verified_at is not null as "isVerified",
+      case when verified_at is null and verification_expires_at > now() then verification_email end as "sentTo",
+      case when verified_at is null and verification_expires_at > now()
+        then (extract(epoch from verification_expires_at) * 1000)::float8 end as "expiresAt"
+    from sso_domains where workspace_id = ${member.workspaceId} order by domain`
   return settings
-    ? { ...settings, tenantId: settings.preset === 'microsoft' ? tenantIdOf(settings.issuer) : '', hasSecret: true }
+    ? {
+        ...settings,
+        tenantId: settings.preset === 'microsoft' ? tenantIdOf(settings.issuer) : '',
+        hasSecret: true,
+        domainStates: [...domainStates],
+      }
     : null
 }
 
@@ -165,3 +210,74 @@ export const bootstrapSsoWorkspace = async (
   })
   return { workspaceId }
 }
+
+const markDomainVerified = async (
+  sql: Sql,
+  {
+    workspaceId,
+    domain,
+    actorId,
+    email,
+  }: { workspaceId: string; domain: string; actorId: string | null; email?: string },
+) => {
+  const [claim] = await sql<{ issuer: string }[]>`
+    select issuer from sso_domains join workspace_sso using (workspace_id)
+    where workspace_id = ${workspaceId} and domain = ${domain}`
+  if (!claim) throw new InvalidSsoSettings(`${domain} is not a domain of this workspace`)
+  await assertNotVerifiedElsewhere(sql, workspaceId, claim.issuer, [domain])
+  await sql`
+    update sso_domains set verified_at = now(), verification_token_hash = null, verification_expires_at = null
+    where workspace_id = ${workspaceId} and domain = ${domain}`
+  await recordWorkspaceEvent(sql, workspaceId, 'sso.domain_verified', actorId, { domain, ...(email && { email }) })
+}
+
+export const sendDomainVerification = async (
+  database: Database,
+  { mailer, appOrigin }: SsoDependencies,
+  member: Member,
+  { domain, email }: { domain?: unknown; email?: unknown },
+) => {
+  const address = normalizedEmail(String(email ?? ''))
+  const claimedDomain = String(domain ?? '')
+  return database.$client.begin(async (sql) => {
+    await assertAdmin(sql, member)
+    if (domainOfEmail(address) !== claimedDomain || !address.split('@')[0])
+      throw new InvalidSsoSettings(`Enter an address at ${claimedDomain}`)
+    if (!mailer) throw new MailNotConfigured()
+    const token = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url')
+    const [pending] = await sql<{ workspaceName: string }[]>`
+      update sso_domains set verification_email = ${address}, verification_token_hash = ${hashOf(token)},
+        verification_expires_at = now() + ${verificationLifetime}::interval
+      from workspaces
+      where sso_domains.workspace_id = ${member.workspaceId} and domain = ${claimedDomain} and verified_at is null
+        and workspaces.workspace_id = sso_domains.workspace_id
+      returning workspaces.name as "workspaceName"`
+    if (!pending)
+      throw new InvalidSsoSettings(`${claimedDomain} is not a domain of this workspace waiting for verification`)
+    const link = `${appOrigin}${domainVerificationLinkPath}?token=${token}`
+    await mailer
+      .send({
+        to: address,
+        subject: `Verify ${claimedDomain} for HQ`,
+        text: `Open this link to confirm that the HQ workspace ${pending.workspaceName} signs in people of ${claimedDomain}:\n\n${link}\n\nThe link works once and expires in 24 hours.`,
+      })
+      .catch((error: Error) => {
+        throw new MailNotSent(error.message)
+      })
+    return ssoSettingsViewOf(sql, member)
+  })
+}
+
+export const verifyDomainByToken = (database: Database, token: string) =>
+  database.$client.begin(async (sql) => {
+    const [pending] = await sql<{ workspaceId: string; domain: string; email: string }[]>`
+      select workspace_id as "workspaceId", domain, verification_email as email from sso_domains
+      where verification_token_hash = ${hashOf(token)} and verification_expires_at > now() and verified_at is null
+      for update`
+    if (!pending) return undefined
+    await markDomainVerified(sql, { ...pending, actorId: null })
+    return pending.domain
+  })
+
+export const verifyDomainByOperator = (database: Database, workspaceId: string, domain: string) =>
+  database.$client.begin((sql) => markDomainVerified(sql, { workspaceId, domain, actorId: null }))

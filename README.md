@@ -40,6 +40,8 @@ HQ_SECRETS_KEY=… HQ_SSO_CLIENT_SECRET=… bun run operator sso:bootstrap --nam
   --preset microsoft --tenant <tenant id> --client-id <client id> --domains acme.com,acme.io
 ```
 
+A domain routes sign-in only once verified. Admins verify a domain in Workspace settings > Sign-in by sending a single-use link (24 h) to any address at it; this needs SMTP: `HQ_SMTP_URL` (for example `smtp://user:pass@smtp.example.com:587`) and `HQ_MAIL_FROM` (for example `HQ <hq@example.com>`). Without SMTP, the operator verifies a domain directly: `bun run operator sso:verify-domain --workspace <id> --domain <domain>`. Domains given to `sso:bootstrap` are verified.
+
 `--preset` is `google` (Google Workspace), `microsoft` (Microsoft Entra, tenant-specific issuer only) or `oidc` with `--issuer <url>`. The command checks the issuer's discovery document, creates the workspace with its SSO settings and makes the admin a member; the admin then signs in and manages the provider in Workspace settings > Sign-in and invites members in Members.
 
 ## Adding a runtime host for dev

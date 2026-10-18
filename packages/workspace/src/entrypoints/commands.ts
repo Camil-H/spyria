@@ -26,4 +26,9 @@ export type WorkspaceCommands = {
   transferChat: Command<{ chatId: ChatId; ownerId: MemberId }>
   readSsoSettings: (input: { workspaceId: WorkspaceId }) => Promise<SsoSettingsView | null>
   saveSsoSettings: (input: SsoSettingsInput & { workspaceId: WorkspaceId }) => Promise<SsoSettingsView | null>
+  sendDomainVerification: (input: {
+    workspaceId: WorkspaceId
+    domain: string
+    email: string
+  }) => Promise<SsoSettingsView | null>
 }

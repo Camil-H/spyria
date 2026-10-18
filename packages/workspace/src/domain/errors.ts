@@ -84,3 +84,14 @@ export const SsoDiscoveryFailed = errorKind(
   (issuer: string, reason: string) => `The discovery of ${issuer} failed: ${reason}`,
   WorkspaceError,
 )
+export const MailNotConfigured = errorKind(
+  'mail_not_configured',
+  () =>
+    'Email is not configured on this server (HQ_SMTP_URL): the operator can verify the domain with sso:verify-domain',
+  WorkspaceError,
+)
+export const MailNotSent = errorKind(
+  'mail_not_sent',
+  (reason: string) => `The verification email could not be sent: ${reason}`,
+  WorkspaceError,
+)

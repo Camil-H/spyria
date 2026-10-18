@@ -53,6 +53,9 @@ const app = createApp({
   },
   authMode,
   secretsKey: authMode === 'sso' ? requiredEnvironment('HQ_SECRETS_KEY') : process.env.HQ_SECRETS_KEY,
+  mail: process.env.HQ_SMTP_URL
+    ? { smtpUrl: process.env.HQ_SMTP_URL, from: requiredEnvironment('HQ_MAIL_FROM') }
+    : undefined,
   appOrigin: requiredEnvironment('HQ_APP_ORIGIN'),
   llmGateway,
   runtimeHosts,

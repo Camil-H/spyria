@@ -5,7 +5,7 @@ import { createLlmGateway, type ToolServerSetup } from '@hq/profile/server'
 import type { SsoPreset } from '@hq/workspace/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { createSecretBox } from './auth/secret-box.ts'
-import { bootstrapSsoWorkspace } from './auth/sso.ts'
+import { bootstrapSsoWorkspace, verifyDomainByOperator } from './auth/sso.ts'
 import { listFailedJobs, retryFailedJobs } from './job-worker.ts'
 
 const [command = '', ...options] = process.argv.slice(2)
@@ -87,6 +87,13 @@ const commands: Record<string, () => Promise<void>> = {
       },
     )
     console.log(`Workspace ${workspaceName} (${workspaceId}) is created: ${adminEmail} signs in as its first admin`)
+  },
+  'sso:verify-domain': async () => {
+    const [workspaceId, domain] = ['--workspace', '--domain'].map(optionOf)
+    if (!workspaceId || !domain)
+      throw new Error('Usage: bun run operator sso:verify-domain --workspace <id> --domain <domain>')
+    await verifyDomainByOperator(database, workspaceId, domain)
+    console.log(`${domain} is verified for workspace ${workspaceId}`)
   },
   'retry-jobs': async () => {
     const [target] = options

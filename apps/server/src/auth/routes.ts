@@ -6,7 +6,13 @@ import { HTTPException } from 'hono/http-exception'
 import { createOidc, type Oidc } from './oidc.ts'
 import { type Authentication, errorByStatus, issueSessionToken, type SessionClaims } from './session-tokens.ts'
 import { deleteSession, findLiveSessions, openSessions, signInUser } from './sessions.ts'
-import { type SsoDependencies, type SsoProvider, ssoProviderOf } from './sso.ts'
+import {
+  domainVerificationLinkPath,
+  type SsoDependencies,
+  type SsoProvider,
+  ssoProviderOf,
+  verifyDomainByToken,
+} from './sso.ts'
 
 export type AuthMode = 'dex' | 'sso'
 type AuthRouteSettings = {
@@ -112,6 +118,21 @@ export const createAuthRoutes = ({
       await next()
     })
     .get('/mode', (context) => context.json({ authMode }))
+    .get(domainVerificationLinkPath.slice('/auth'.length), async (context) => {
+      const verified = await verifyDomainByToken(scopeOf(context).database, context.req.query('token') ?? '').catch(
+        (error: Error) => error,
+      )
+      const message =
+        typeof verified === 'string'
+          ? `${verified} is verified: people with an ${verified} email can now sign in to HQ through your provider.`
+          : verified instanceof Error
+            ? verified.message
+            : 'This verification link is invalid, used or expired. Send a new one from Workspace settings.'
+      return context.html(
+        `<!doctype html><meta charset="utf-8"><title>Domain verification</title><p>${message.replaceAll('<', '&lt;')}</p>`,
+        typeof verified === 'string' ? 200 : 400,
+      )
+    })
     .get('/login', async (context) => {
       const scope = scopeOf(context)
       const workspaceId = context.req.query('workspace')

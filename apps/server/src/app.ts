@@ -35,19 +35,20 @@ import {
   runtimeHostsPath,
   runtimeMutators,
 } from '@hq/runtime/server'
-import { type SsoSettingsInput, ssoSettingsPath, workspaceMutators } from '@hq/workspace/server'
+import { domainVerificationPath, type SsoSettingsInput, ssoSettingsPath, workspaceMutators } from '@hq/workspace/server'
 import { getMutator, mustGetMutator, mustGetQuery } from '@rocicorp/zero'
 import { handleMutateRequest, handleQueryRequest } from '@rocicorp/zero/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import { type AgentBridge, createAgentBridge } from './agent-bridge/bridge.ts'
+import { createSmtpMailer } from './auth/mail.ts'
 import { createOidc, type OidcSettings } from './auth/oidc.ts'
 import { type AuthMode, createAuthRoutes } from './auth/routes.ts'
 import { createSecretBox } from './auth/secret-box.ts'
 import { createSessionAuthenticator, errorByStatus } from './auth/session-tokens.ts'
 import { findMemberIn } from './auth/sessions.ts'
-import { readSsoSettings, saveSsoSettings } from './auth/sso.ts'
+import { readSsoSettings, saveSsoSettings, sendDomainVerification } from './auth/sso.ts'
 import { createModelCallRelay } from './llm-relay.ts'
 import { createRuntimeHostGateway, type RuntimeHostGateway } from './runtime-hosts/gateway.ts'
 
@@ -110,6 +111,7 @@ export const createApp = ({
   authMode = 'dex',
   secretsKey,
   microsoftLoginOrigin,
+  mail,
   appOrigin,
   testDatabaseByName,
   llmGateway,
@@ -127,6 +129,7 @@ export const createApp = ({
   authMode?: AuthMode
   secretsKey?: string
   microsoftLoginOrigin?: string
+  mail?: { smtpUrl: string; from: string }
   appOrigin: string
   testDatabaseByName?: (databaseName: string) => Database
   llmGateway?: LlmGateway
@@ -143,7 +146,12 @@ export const createApp = ({
   const databaseOf = (databaseName: string | undefined) =>
     databaseName === undefined ? database : testDatabaseByName?.(databaseName)
   const authenticate = createSessionAuthenticator(tokenSecret, findMemberIn(databaseOf))
-  const sso = { secretBox: secretsKey ? createSecretBox(secretsKey) : undefined, microsoftLoginOrigin }
+  const sso = {
+    secretBox: secretsKey ? createSecretBox(secretsKey) : undefined,
+    microsoftLoginOrigin,
+    mailer: mail && createSmtpMailer(mail),
+    appOrigin,
+  }
   const gatewayOf = () => {
     if (!llmGateway) throw new Error('No LLM gateway is configured')
     return llmGateway
@@ -292,6 +300,12 @@ export const createApp = ({
       const input = ((await context.req.json().catch(() => null)) ?? {}) as SsoSettingsInput
       return endpointResponse('Saving the SSO settings', 200, async () => ({
         settings: await saveSsoSettings(context.get('database'), sso, context.get('zeroContext'), input),
+      }))
+    })
+    .post(domainVerificationPath, async (context) => {
+      const input = (await context.req.json().catch(() => null)) ?? {}
+      return endpointResponse('Sending a domain verification', 200, async () => ({
+        settings: await sendDomainVerification(context.get('database'), sso, context.get('zeroContext'), input),
       }))
     })
     .post(runtimeHostsPath, async (context) => {

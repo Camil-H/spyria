@@ -11,7 +11,8 @@ export type SsoSettingsInput = {
   domains: string[]
 }
 export type SsoSettings = { preset: SsoPreset; issuer: string; clientId: string; domains: string[] }
-export type SsoSettingsView = SsoSettings & { tenantId: string; hasSecret: boolean }
+export type SsoDomainState = { domain: string; isVerified: boolean; sentTo: string | null; expiresAt: number | null }
+export type SsoSettingsView = SsoSettings & { tenantId: string; hasSecret: boolean; domainStates: SsoDomainState[] }
 
 export const googleIssuer = 'https://accounts.google.com'
 export const microsoftLoginOrigin = 'https://login.microsoftonline.com'

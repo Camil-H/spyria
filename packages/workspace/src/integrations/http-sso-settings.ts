@@ -2,6 +2,7 @@ import { DomainError, type WorkspaceId } from '@hq/kernel'
 import type { SsoSettingsInput, SsoSettingsView } from '../domain/sso.ts'
 
 export const ssoSettingsPath = '/api/sso-settings'
+export const domainVerificationPath = `${ssoSettingsPath}/domain-verification`
 
 type PostAsMember = (workspaceId: WorkspaceId, path: string, body?: string) => Promise<Response>
 type GetAsMember = (workspaceId: WorkspaceId, path: string) => Promise<Response>
@@ -22,4 +23,13 @@ export const createHttpSsoSettingsCommands = (postAsMember: PostAsMember, getAsM
     settingsOf(await getAsMember(workspaceId, ssoSettingsPath)),
   saveSsoSettings: async ({ workspaceId, ...input }: SsoSettingsInput & { workspaceId: WorkspaceId }) =>
     settingsOf(await postAsMember(workspaceId, ssoSettingsPath, JSON.stringify(input))),
+  sendDomainVerification: async ({
+    workspaceId,
+    domain,
+    email,
+  }: {
+    workspaceId: WorkspaceId
+    domain: string
+    email: string
+  }) => settingsOf(await postAsMember(workspaceId, domainVerificationPath, JSON.stringify({ domain, email }))),
 })
