@@ -1,5 +1,6 @@
 import { useQuery } from '@hq/db/react'
 import type { WorkspaceId } from '@hq/kernel'
+import { useSession } from '@hq/session'
 import {
   buttonClass,
   Dialog,
@@ -11,14 +12,12 @@ import {
   useGuardedAction,
 } from '@hq/ui'
 import { type SubmitEvent, useState } from 'react'
-import { LastAdmin } from '../domain/errors.ts'
 import type { WorkspaceRole } from '../domain/member.ts'
 import { listInvitations, listMembers, type WorkspaceMember } from '../queries/list-members.ts'
 import { useWorkspaceCommands } from './providers.tsx'
 
 const roleLabels: Record<WorkspaceRole, string> = { admin: 'Admin', member: 'Member' }
 const dayMilliseconds = 24 * 60 * 60 * 1000
-const lastAdminReason = new LastAdmin().message
 
 const expiryLabelOf = (expiresAt: number) => {
   const days = Math.ceil((expiresAt - Date.now()) / dayMilliseconds)
@@ -80,6 +79,7 @@ const InviteForm = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
 
 export const MembersSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
   const commands = useWorkspaceCommands()
+  const { memberId: viewerId } = useSession()
   const members = useQuery(listMembers(workspaceId))
   const invitations = useQuery(listInvitations(workspaceId))
   const [removing, setRemoving] = useState<WorkspaceMember | null>(null)
@@ -94,24 +94,27 @@ export const MembersSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
           <li key={member.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className="font-medium">{member.name}</span>
             <span className="text-muted">{member.email}</span>
-            <span className="ml-auto flex items-center gap-2">
-              <RoleSelect
-                label={`Role of ${member.name}`}
-                role={member.role}
-                isDisabled={isPending || member.isLastAdmin}
-                onChange={(role) => run(() => commands.changeMemberRole({ workspaceId, memberId: member.id, role }))}
-              />
-              <button
-                type="button"
-                aria-label={`Remove ${member.name}`}
-                className={ghostButtonClass}
-                disabled={isPending || member.isLastAdmin}
-                onClick={() => setRemoving(member)}
-              >
-                Remove
-              </button>
-            </span>
-            {member.isLastAdmin && <span className="basis-full text-xs text-muted">{lastAdminReason}</span>}
+            {member.id === viewerId ? (
+              <span className="ml-auto text-muted">{roleLabels[member.role]} (you)</span>
+            ) : (
+              <span className="ml-auto flex items-center gap-2">
+                <RoleSelect
+                  label={`Role of ${member.name}`}
+                  role={member.role}
+                  isDisabled={isPending}
+                  onChange={(role) => run(() => commands.changeMemberRole({ workspaceId, memberId: member.id, role }))}
+                />
+                <button
+                  type="button"
+                  aria-label={`Remove ${member.name}`}
+                  className={ghostButtonClass}
+                  disabled={isPending}
+                  onClick={() => setRemoving(member)}
+                >
+                  Remove
+                </button>
+              </span>
+            )}
           </li>
         ))}
       </ul>

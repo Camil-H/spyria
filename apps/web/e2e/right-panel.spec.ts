@@ -36,17 +36,7 @@ const tabLabelsOf = (page: Page) =>
 const isTabListScrollable = (page: Page) =>
   tabListOf(page).evaluate((element) => element.scrollWidth > element.clientWidth)
 
-const runtimeTabNames = [
-  'Files',
-  'Changes',
-  'Terminal',
-  'Plan',
-  'Commits',
-  'Browser',
-  'Usage',
-  'Connected tools',
-  'Members',
-]
+const runtimeTabNames = ['Files', 'Changes', 'Plan', 'Commits', 'Browser', 'Usage', 'Connected tools', 'Members']
 const channelTabNames = ['Browser', 'Sources', 'Usage', 'Connected tools', 'Members']
 
 const expectOwnerConnections = async (page: Page) => {
@@ -124,13 +114,6 @@ test('shows every tab of the Invoice bug runtime panel', async ({ page }) => {
     await expect(steps.nth(1)).toContainText('In progress')
     await expect(steps.nth(2)).toContainText('Add a regression test')
     await expect(steps.nth(2)).toContainText('To do')
-  })
-
-  await test.step('terminal: shows the stored command steps without any input', async () => {
-    await openPanelTab(page, 'Invoice bug', 'Terminal')
-    await expect(tabPanelOf(page)).toContainText('$ Read: billing/invoice.ts')
-    await expect(tabPanelOf(page)).toContainText('export const total = ...')
-    await expect(panelOf(page).getByRole('textbox')).toHaveCount(0)
   })
 
   await test.step('usage: shows one row per member and a total on a runtime chat', async () => {
@@ -221,12 +204,12 @@ test('shows the empty states and the panel of another owner', async ({ page }) =
     await expect(tabOf(page, 'Files')).toHaveAttribute('aria-selected', 'true')
     for (const [tabName, emptyText] of [
       ['Changes', 'No changes'],
-      ['Terminal', 'No terminal output'],
       ['Plan', 'No plan'],
       ['Commits', 'No commits'],
     ] as const) {
       await tabOf(page, tabName).click()
       await expect(tabOf(page, tabName)).toHaveAttribute('aria-selected', 'true')
+      await expect(tabPanelOf(page).getByRole('heading', { level: 2, name: tabName })).toBeVisible()
       await expect(tabPanelOf(page)).toContainText(emptyText)
     }
   })

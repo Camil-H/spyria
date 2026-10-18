@@ -1,5 +1,6 @@
 import type { WorkspaceId } from '@hq/kernel'
-import { Dialog, ErrorMessage, ghostButtonClass, useGuardedAction } from '@hq/ui'
+import { Dialog, ErrorMessage, fieldClass, ghostButtonClass, useGuardedAction } from '@hq/ui'
+import { useState } from 'react'
 import { Link } from 'react-router'
 import type { JoinableChannel } from '../queries/list-joinable-channels.ts'
 import { useWorkspaceCommands } from './providers.tsx'
@@ -15,13 +16,31 @@ const BrowseChannelsDialog = ({
 }) => {
   const commands = useWorkspaceCommands()
   const { errorMessage, isPending, run } = useGuardedAction()
+  const [search, setSearch] = useState('')
+  const searched = search.trim().toLowerCase()
+  const matchingChannels = channels.filter((channel) =>
+    [channel.name, channel.projectName ?? ''].some((text) => text.toLowerCase().includes(searched)),
+  )
   return (
     <Dialog label="Browse channels" closeLabel="Close" onClose={onClose}>
       {channels.length === 0 ? (
         <p className="text-sm text-muted">No channels to join</p>
       ) : (
+        <>
+          <input
+            type="search"
+            aria-label="Search channels"
+            placeholder="Search by channel or project"
+            className={fieldClass}
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+          {matchingChannels.length === 0 && <p className="text-sm text-muted">No channels match “{search.trim()}”</p>}
+        </>
+      )}
+      {matchingChannels.length > 0 && (
         <ul className="-mx-2 flex max-h-80 flex-col overflow-y-auto">
-          {channels.map((channel) => (
+          {matchingChannels.map((channel) => (
             <li
               key={channel.id}
               aria-label={channel.name}

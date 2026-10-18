@@ -123,7 +123,7 @@ test.describe('1. access', () => {
   test('an admin opens Workspace settings from the sidebar and sees an empty Runtime hosts section', async ({
     page,
   }) => {
-    await openSettings(page)
+    await openSettings(page, 'Connect runtime')
     await expect(hostsSectionOf(page).getByRole('heading', { level: 2, name: 'Runtime hosts' })).toBeVisible()
     await expect(hostsSectionOf(page).getByText('No runtime host yet')).toBeVisible()
   })
@@ -134,7 +134,7 @@ test.describe('1. access', () => {
     test('a member has no settings link and the settings URL is refused', async ({ page }) => {
       await expect(sidebarOf(page).getByRole('link', { name: 'Profile' })).toBeVisible()
       await expect(sidebarOf(page).getByRole('link', { name: 'Workspace settings' })).toHaveCount(0)
-      await page.goto('/w/workspace-acme/settings')
+      await page.goto('/w/workspace-acme/settings/runtime')
       await expect(mainOf(page).getByText('Only workspace admins can see this page')).toBeVisible()
       await expect(hostsSectionOf(page)).toHaveCount(0)
     })
@@ -146,7 +146,7 @@ test('2 and g-8. adding a host shows one copyable command that replaces hq-host 
   context,
 }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write'])
-  await openSettings(page)
+  await openSettings(page, 'Connect runtime')
   await hostsSectionOf(page).getByRole('button', { name: 'Add runtime host' }).click()
   await addDialogOf(page).getByRole('textbox', { name: 'Host name' }).fill('Home server')
   await addDialogOf(page).getByRole('button', { name: 'Add' }).click()
@@ -180,7 +180,7 @@ test('3, 4, 6 and 7. a host’s lifecycle: online with its capacity, its code wo
   page,
   hosts,
 }) => {
-  await openSettings(page)
+  await openSettings(page, 'Connect runtime')
   const url = await addHost(page, 'Home server')
   const stateDirectory = hosts.newStateDirectory()
   const firstRun = hosts.start(url, stateDirectory)
@@ -225,7 +225,7 @@ test('5. an expired code is refused, the row shows Code expired and New command 
   hosts,
   workerStack,
 }) => {
-  await openSettings(page)
+  await openSettings(page, 'Connect runtime')
   const expiredUrl = await addHost(page, 'Home server')
   await workerStack.database.$client`update runtime_hosts set claim_expires_at = now() - interval '1 second'`
   await expect(hostRowOf(page, 'Home server')).toContainText('Code expired')
@@ -247,7 +247,7 @@ test('9. (f-7) badges show Docker: root or Docker: rootless with a tooltip, and 
   page,
   hosts,
 }) => {
-  await openSettings(page)
+  await openSettings(page, 'Connect runtime')
   hosts.fake(await addHost(page, 'Rooted box'), { rootless: false, limitsEnforced: true })
   hosts.fake(await addHost(page, 'Rootless box'), { rootless: true, limitsEnforced: false })
   await expectOnline(page, 'Rooted box')

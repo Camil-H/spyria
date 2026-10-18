@@ -22,7 +22,11 @@ const commitCommand = `git add -A && git -c user.name='Pi Agent' -c user.email=a
 const treeRowOf = (page: Page, name: string) => tabPanelOf(page).getByRole('button', { name, exact: false })
 const changeOf = (page: Page, path: string) =>
   tabPanelOf(page).getByRole('button', { name: new RegExp(`^${path.replace('.', '\\.')}`) })
-const terminalOf = (page: Page) => tabPanelOf(page).getByRole('region', { name: 'Terminal output' })
+const openCommandStep = async (page: Page, command: string) => {
+  const step = messageContaining(page, `$ ${command}`)
+  await step.getByRole('button', { expanded: false }).click()
+  return step
+}
 const finished = (page: Page) => expect(workingIndicatorOf(page)).toHaveCount(0)
 
 const devChatWithEdits = async (
@@ -91,7 +95,7 @@ test('40-2. after the agent edits src/app.ts and creates src/new.ts, Changes lis
   await expect(diff).toContainText('+ export const total = 2')
 })
 
-test('40-3. the Terminal shows a running command and its output live, then its exit code, with no input field', async ({
+test('40-3. a running command shows its output live in its conversation step, then its exit code; the panel has no Terminal tab', async ({
   page,
   agentScript,
   heldCommand,
@@ -101,15 +105,16 @@ test('40-3. the Terminal shows a running command and its output live, then its e
   const chatId = await newDevChat(page, 'Run tests', 'acme/app')
   const command = `printf 'running 3 tests\\n' && ${heldCommand('tests')} && printf '3 passed\\n'`
   await agentScript(chatId, { steps: [{ command }], text: 'The tests pass.' })
-  await panelTabOf(page, 'Terminal').click()
   await sendMessage(page, 'Run the tests')
-  await expect(terminalOf(page)).toContainText(`$ ${command}`)
-  await expect(terminalOf(page)).toContainText('running 3 tests')
-  await expect(terminalOf(page)).toContainText('running…')
-  await expect(terminalOf(page)).not.toContainText(/running 3 tests\s+3 passed/)
+  const step = await openCommandStep(page, command)
+  const output = step.locator('pre')
+  await expect(output).toContainText('running 3 tests')
+  await expect(step.getByRole('img', { name: 'Running' })).toBeVisible()
+  await expect(output).not.toContainText(/running 3 tests\s+3 passed/)
   await release('tests')
-  await expect(terminalOf(page)).toContainText(/running 3 tests\s+3 passed/)
-  await expect(terminalOf(page)).toContainText('exit 0')
+  await expect(output).toContainText(/running 3 tests\s+3 passed/)
+  await expect(step).toContainText('exit 0')
+  await expect(panelTabOf(page, 'Terminal')).toHaveCount(0)
   await expect(panelOf(page).getByRole('textbox')).toHaveCount(0)
 })
 
@@ -164,18 +169,17 @@ test('40-5. a stopped runtime shows the last snapshot as asleep, and Wake restar
   await expect(tabPanelOf(page).getByRole('region', { name: 'README.md' }).locator('code')).toHaveText('# acme app')
 })
 
-test('40-6. a slow .hq/setup.sh no longer holds the session start: the agent answers while the setup output streams into the Terminal', async ({
+test('40-6. a slow .hq/setup.sh no longer holds the session start: the agent answers while the setup output streams into its conversation step', async ({
   page,
 }) => {
   await configureGitHubApp(page)
   await newDevChat(page, 'Docs setup', 'acme/docs')
-  await panelTabOf(page, 'Terminal').click()
   await sendMessage(page, 'stub:ls')
   await expect(messageContaining(page, 'files:.git,.hq,README.md')).toHaveCount(1)
-  await expect(terminalOf(page)).toContainText('$ sh .hq/setup.sh')
-  await expect(terminalOf(page)).toContainText('installing the docs toolchain')
-  await expect(terminalOf(page)).not.toContainText('exit 127')
-  await expect(terminalOf(page)).toContainText('docs-tool: command not found')
-  await expect(terminalOf(page)).toContainText('exit 127')
+  const setup = await openCommandStep(page, 'sh .hq/setup.sh')
+  await expect(setup.locator('pre')).toContainText('installing the docs toolchain')
+  await expect(setup).not.toContainText('exit 127')
+  await expect(setup.locator('pre')).toContainText('docs-tool: command not found')
+  await expect(setup).toContainText('exit 127')
   await expect(messageContaining(page, 'The setup script .hq/setup.sh failed with exit code 127')).toHaveCount(1)
 })

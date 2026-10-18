@@ -33,7 +33,7 @@ const crmCardOf = (page: Page) =>
 const notOffered = (gatewayName: string, tool: string) => `Tool ${gatewayName}-${tool} not found`
 
 const registerCrm = async (page: Page, workerStack: WorkerStack) => {
-  await openSettings(page)
+  await openSettings(page, 'MCP tools')
   const form = settingsSectionOf(page).getByRole('form', { name: 'Add connection' })
   await form.getByLabel('Name').fill('CRM')
   await form.getByLabel('MCP URL').fill(crmUrl)

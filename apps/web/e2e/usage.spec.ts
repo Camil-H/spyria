@@ -43,7 +43,7 @@ const cellsOf = async (row: Locator) => {
 const openUsageTab = (page: Page, chatName: string) => openPanelTab(page, chatName, 'Usage')
 
 const openUsageSettings = async (page: Page) => {
-  await openSettings(page)
+  await openSettings(page, 'Analyze costs')
   await expect(usageSectionOf(page).getByRole('heading', { level: 2, name: 'Usage' })).toBeVisible()
 }
 
@@ -159,7 +159,7 @@ test.describe('5. as a member', () => {
   test.use({ signedInAs: 'member-bob' })
 
   test('Bob has no Usage section in settings but sees every prompter in the chat Usage tab', async ({ page }) => {
-    await page.goto('/w/workspace-acme/settings')
+    await page.goto('/w/workspace-acme/settings/costs')
     await expect(mainOf(page).getByText('Only workspace admins can see this page')).toBeVisible()
     await expect(usageSectionOf(page)).toHaveCount(0)
 

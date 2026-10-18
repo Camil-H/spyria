@@ -3,6 +3,7 @@ import type { ChatId, WorkspaceId } from '@hq/kernel'
 import { useSession } from '@hq/session'
 import { buttonClass, fieldClass, ghostButtonClass, labelClass, Spinner } from '@hq/ui'
 import { type FormEvent, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { getPublishing } from '../queries/get-publishing.ts'
 import { usePanelCommands } from './providers.tsx'
 
@@ -11,10 +12,12 @@ type Outcome = { isRefused: boolean; text: string }
 export const PublishActions = ({
   workspaceId,
   chatId,
+  actionsSlot,
   commitSubjects,
 }: {
   workspaceId: WorkspaceId
   chatId: ChatId
+  actionsSlot: HTMLElement | null
   commitSubjects: readonly string[]
 }) => {
   const { memberId } = useSession()
@@ -42,7 +45,7 @@ export const PublishActions = ({
     void publish('pull_request')
   }
   return (
-    <div className="flex flex-col gap-2">
+    <>
       {draft ? (
         <form aria-label="Open pull request" onSubmit={submit} className="flex flex-col gap-2">
           <label className={labelClass}>
@@ -72,23 +75,27 @@ export const PublishActions = ({
           </div>
         </form>
       ) : (
-        <div className="flex flex-wrap gap-2">
-          <button type="button" disabled={isPublishing} onClick={() => publish('push')} className={ghostButtonClass}>
-            Push
-          </button>
-          {!hasOpenPullRequest && (
-            <button
-              type="button"
-              disabled={isPublishing}
-              onClick={() =>
-                setDraft({ title: chatName, body: commitSubjects.map((subject) => `- ${subject}`).join('\n') })
-              }
-              className={buttonClass}
-            >
-              Open pull request
+        actionsSlot &&
+        createPortal(
+          <>
+            <button type="button" disabled={isPublishing} onClick={() => publish('push')} className={ghostButtonClass}>
+              Push
             </button>
-          )}
-        </div>
+            {!hasOpenPullRequest && (
+              <button
+                type="button"
+                disabled={isPublishing}
+                onClick={() =>
+                  setDraft({ title: chatName, body: commitSubjects.map((subject) => `- ${subject}`).join('\n') })
+                }
+                className={buttonClass}
+              >
+                Open pull request
+              </button>
+            )}
+          </>,
+          actionsSlot,
+        )
       )}
       {isPublishing && <Spinner />}
       {outcome && (
@@ -96,6 +103,6 @@ export const PublishActions = ({
           {outcome.text}
         </p>
       )}
-    </div>
+    </>
   )
 }

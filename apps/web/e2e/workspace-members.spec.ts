@@ -20,7 +20,6 @@ import {
 import { openPageAs, type WorkerStack } from './stack'
 
 const frozenNotice = 'This chat is frozen: its owner left the workspace'
-const lastAdminReason = 'The last admin of a workspace can be neither demoted nor removed'
 const bobsChatId = 'chat-sams-runtime'
 const streamReconnectWaitMilliseconds = 2500
 const bobsChatName = "Bob's runtime"
@@ -60,7 +59,7 @@ const insertBobsRuntimeChat = async (workerStack: WorkerStack) => {
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
-  await openSettings(page)
+  await openSettings(page, 'Manage Team')
 })
 
 test('1. an invited email signs in through Dex, lands in Acme and is listed as a member', async ({
@@ -107,9 +106,10 @@ test('3. promoting Bob shows him Workspace settings without a reload, demoting h
 
   await membersSectionOf(page).getByRole('combobox', { name: 'Role of Bob' }).selectOption('admin')
   await expect(settingsLinkOf(bobPage)).toBeVisible()
-  await openSettings(bobPage)
+  await openSettings(bobPage, 'Manage Team')
   await expect(membersSectionOf(bobPage)).toBeVisible()
-  await expect(membersSectionOf(page).getByRole('combobox', { name: 'Role of Alice' })).toBeEnabled()
+  await expect(memberRowOf(bobPage, 'Bob').getByRole('combobox')).toHaveCount(0)
+  await expect(memberRowOf(bobPage, 'Alice').getByRole('combobox', { name: 'Role of Alice' })).toBeEnabled()
 
   await membersSectionOf(page).getByRole('combobox', { name: 'Role of Bob' }).selectOption('member')
   await expect(settingsLinkOf(bobPage)).toHaveCount(0)
@@ -130,13 +130,13 @@ machineTest(
       if (socket.url().endsWith('/api/stream')) bobStreamConnections++
     })
     await openChat(bobPage, bobsChatName)
-    await page.reload()
+    await page.goto('/w/workspace-acme/settings/runtime')
     await expect(hostsSectionOf(page)).toContainText('1 member uses their machine')
     await openChat(page, bobsChatName)
     await sendMessage(page, 'Watch this')
     await expect(messageContaining(bobPage, 'Understood,')).toHaveCount(1)
 
-    await openSettings(page)
+    await openSettings(page, 'Manage Team')
     await removeMember(page, 'Bob')
     await expect(signedOutScreenOf(bobPage, 'Acme')).toBeVisible()
     await expect(messageItemsOf(bobPage)).toHaveCount(0)
@@ -153,7 +153,7 @@ machineTest(
       )
       .toBeTruthy()
     const machinesCounted = page.waitForResponse((response) => response.url().endsWith('/runtime-hosts/machines'))
-    await page.reload()
+    await page.goto('/w/workspace-acme/settings/runtime')
     await machinesCounted
     await expect(hostsSectionOf(page)).not.toContainText('uses their machine')
 
@@ -186,10 +186,11 @@ test('5. a removed member invited again signs in and is back in Acme', async ({ 
   await bobPage.context().close()
 })
 
-test('6. the last admin can neither demote nor remove themselves', async ({ page }) => {
+test('6. an admin sees their own row without a role select or Remove, and both on the other rows', async ({ page }) => {
   const aliceRow = memberRowOf(page, 'Alice')
-  await expect(aliceRow.getByRole('combobox', { name: 'Role of Alice' })).toBeDisabled()
-  await expect(aliceRow.getByRole('button', { name: 'Remove Alice' })).toBeDisabled()
-  await expect(aliceRow).toContainText(lastAdminReason)
+  await expect(aliceRow).toContainText('Admin (you)')
+  await expect(aliceRow.getByRole('combobox')).toHaveCount(0)
+  await expect(aliceRow.getByRole('button')).toHaveCount(0)
+  await expect(memberRowOf(page, 'Bob').getByRole('combobox', { name: 'Role of Bob' })).toBeEnabled()
   await expect(memberRowOf(page, 'Bob').getByRole('button', { name: 'Remove Bob' })).toBeEnabled()
 })

@@ -25,7 +25,7 @@ const sessionNotice = "Sessions on members' machines are turned off for this wor
 const switchOf = (page: Page) => hostsSectionOf(page).getByRole('switch', { name: switchName })
 
 const setLocalSessions = async (page: Page, isOn: boolean) => {
-  await openSettings(page)
+  await openSettings(page, 'Connect runtime')
   await expect(switchOf(page)).toHaveAttribute('aria-checked', String(!isOn))
   await switchOf(page).click()
   await expect(switchOf(page)).toHaveAttribute('aria-checked', String(isOn))

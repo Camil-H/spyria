@@ -1,6 +1,7 @@
+import { GitCommitHorizontal } from 'lucide-react'
 import { commitsOf } from '../domain/workspace.ts'
+import { EmptyState } from './EmptyState.tsx'
 import type { TabProps } from './TabProps.ts'
-import { emptyClass } from './ui.ts'
 import { useWorkspaceReading } from './useWorkspaceReading.ts'
 import { WorkspaceStatus } from './WorkspaceStatus.tsx'
 
@@ -10,7 +11,9 @@ const CommitsTab = ({ workspaceId, chatId }: TabProps) => {
   return (
     <>
       <WorkspaceStatus workspaceId={workspaceId} chatId={chatId} />
-      {reading && commits.length === 0 && <p className={emptyClass}>No commits</p>}
+      {reading && commits.length === 0 && (
+        <EmptyState Icon={GitCommitHorizontal} title="No commits" hint="Commits on the working branch show here." />
+      )}
       <ul className="flex flex-col gap-2 text-sm">
         {commits.map((commit) => (
           <li key={commit.sha} className="flex flex-col gap-0.5">

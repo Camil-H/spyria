@@ -1,6 +1,6 @@
 import type { ChatId, WorkspaceId } from '@hq/kernel'
 import { focusRing } from '@hq/ui'
-import { ArrowLeft, ChevronDown, ChevronRight } from 'lucide-react'
+import { ArrowLeft, ChevronDown, ChevronRight, FolderTree } from 'lucide-react'
 import { Suspense, useState } from 'react'
 import {
   changeMarkOf,
@@ -10,6 +10,7 @@ import {
   type TreeEntry,
   treeEntriesOf,
 } from '../domain/workspace.ts'
+import { EmptyState } from './EmptyState.tsx'
 import type { TabProps } from './TabProps.ts'
 import { emptyClass } from './ui.ts'
 import { useWorkspaceReading } from './useWorkspaceReading.ts'
@@ -65,7 +66,11 @@ const TreeLevel = ({ path, ...tree }: TreeProps & { path: string }) => {
   const { reading } = useWorkspaceReading(tree.workspaceId, tree.chatId, 'tree', path)
   const entries = treeEntriesOf(reading)
   if (!reading) return null
-  if (entries.length === 0) return <p className={emptyClass}>{path === '' ? 'No files' : 'Empty folder'}</p>
+  if (entries.length === 0 && path === '')
+    return (
+      <EmptyState Icon={FolderTree} title="No files" hint="The runtime's workspace shows here once the agent starts." />
+    )
+  if (entries.length === 0) return <p className={emptyClass}>Empty folder</p>
   return (
     <>
       <ul className="flex flex-col text-sm">

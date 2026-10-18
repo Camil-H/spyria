@@ -68,7 +68,7 @@ export const App = ({ app }: { app: Application }) => (
                       <Route index element={<p className="p-6 text-muted">Select a chat</p>} />
                       <Route path="chats/:chatId" element={<ChatRoute commands={app.conversationCommands} />} />
                       <Route
-                        path="settings"
+                        path="settings/:card?"
                         element={
                           <Suspense>
                             <SettingsRoute />

@@ -222,13 +222,7 @@ export const createApp = async (
     }),
     conversationCommands,
     agentStream,
-    panelCommands: {
-      ...conversationCommands,
-      watchCommandOutput: (workspaceId, chatId, listener) =>
-        agentStream.subscribe(workspaceId, chatId, (frame) => {
-          if ('commandOutput' in frame) listener(frame.commandOutput)
-        }),
-    },
+    panelCommands: conversationCommands,
     profileCommands: commandsOf<ProfileCommands>(profileMutators.profile, {
       addLlmCredential: createHttpLlmCredentialAdder(postAsMember),
       ...toolConnections,

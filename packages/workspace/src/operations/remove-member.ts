@@ -1,6 +1,6 @@
 import type { MemberId } from '@hq/kernel'
 import type { WorkspaceTransactor } from '../contracts/transactor.ts'
-import { requireActiveMember, requireAdmin, requireAnotherAdmin } from '../domain/member.ts'
+import { requireActiveMember, requireAdmin, requireAnotherAdmin, requireAnotherMember } from '../domain/member.ts'
 
 type Dependencies = { transactor: WorkspaceTransactor }
 type Input = { memberId: MemberId; actorId: MemberId; now: number }
@@ -8,6 +8,7 @@ type Input = { memberId: MemberId; actorId: MemberId; now: number }
 export const removeMember = ({ transactor }: Dependencies, { memberId, actorId, now }: Input) =>
   transactor.run(async ({ memberships, memberAccess, chats, chatRuntimes, workspaceEvents }) => {
     requireAdmin(await memberships.get(actorId))
+    requireAnotherMember(memberId, actorId)
     const member = requireActiveMember(await memberships.get(memberId), memberId)
     requireAnotherAdmin(member, await memberships.activeAdminIds())
     await memberships.save({ ...member, removedAt: now })

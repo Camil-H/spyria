@@ -1,6 +1,8 @@
 import { useQuery } from '@hq/db/react'
+import { ListChecks } from 'lucide-react'
 import { Suspense } from 'react'
 import { getPlan } from '../queries/get-plan.ts'
+import { EmptyState } from './EmptyState.tsx'
 import { LabelList } from './LabelList.tsx'
 import type { TabProps } from './TabProps.ts'
 
@@ -16,7 +18,7 @@ const PlanTab = ({ workspaceId, chatId, Markdown }: TabProps) => {
     </section>
   ) : (
     <LabelList
-      emptyMessage="No plan"
+      empty={<EmptyState Icon={ListChecks} title="No plan" hint="A plan the agent writes in plan mode shows here." />}
       rows={steps.map((step) => ({
         key: step.title,
         label: step.title,

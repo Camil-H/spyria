@@ -266,7 +266,7 @@ test('f-9. an approved plan shows as Markdown in the Plan tab until a newer chec
   await sendMessage(page, 'stub:exit-plan')
   await expect(planCardOf(page).getByRole('button', { name: 'Approve the plan' })).toBeVisible()
   await openPlanTab()
-  await expect(planTab).toHaveText('No plan')
+  await expect(planTab).toHaveText(/^PlanNo planA plan the agent writes in plan mode shows here\.$/)
   await planCardOf(page).getByRole('button', { name: 'Approve the plan' }).click()
   await turnEnded(page)
   await expect(approvedPlan.getByRole('listitem')).toHaveText(['Create x.txt', 'Done'])

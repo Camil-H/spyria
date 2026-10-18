@@ -72,7 +72,16 @@ const DomainRow = ({
   )
 }
 
-export const SignInSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
+export const SignInSection = ({ workspaceId, isDexSignIn }: { workspaceId: WorkspaceId; isDexSignIn: boolean }) =>
+  isDexSignIn ? (
+    <LabelledSection title="Sign-in">
+      <p className="text-sm text-muted">Sign-in uses this deployment's Dex: SSO settings apply in SSO mode only.</p>
+    </LabelledSection>
+  ) : (
+    <SsoSettingsForm workspaceId={workspaceId} />
+  )
+
+const SsoSettingsForm = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
   const commands = useWorkspaceCommands()
   const [form, setForm] = useState<typeof emptyForm>()
   const [clientSecret, setClientSecret] = useState('')

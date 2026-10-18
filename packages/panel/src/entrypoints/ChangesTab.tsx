@@ -1,13 +1,16 @@
-import { DiffView, focusRing } from '@hq/ui'
+import { DiffView, focusRing, iconButtonClass } from '@hq/ui'
+import { FileDiff, RefreshCw } from 'lucide-react'
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { commitsOf, fileChangesOf } from '../domain/workspace.ts'
+import { EmptyState } from './EmptyState.tsx'
 import { PublishActions } from './PublishActions.tsx'
 import type { TabProps } from './TabProps.ts'
 import { emptyClass } from './ui.ts'
 import { useWorkspaceReading } from './useWorkspaceReading.ts'
 import { WorkspaceStatus } from './WorkspaceStatus.tsx'
 
-const ChangesTab = ({ workspaceId, chatId }: TabProps) => {
+const ChangesTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
   const { reading, refresh } = useWorkspaceReading(workspaceId, chatId, 'changes')
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const changes = fileChangesOf(reading?.patch)
@@ -18,16 +21,25 @@ const ChangesTab = ({ workspaceId, chatId }: TabProps) => {
       <PublishActions
         workspaceId={workspaceId}
         chatId={chatId}
+        actionsSlot={actionsSlot}
         commitSubjects={commitsOf(reading?.log).map(({ subject }) => subject)}
       />
-      <button
-        type="button"
-        onClick={refresh}
-        className={`self-end rounded-md px-1 text-xs text-muted hover:text-ink ${focusRing}`}
-      >
-        Refresh
-      </button>
-      {reading && changes.length === 0 && <p className={emptyClass}>No changes</p>}
+      {actionsSlot &&
+        createPortal(
+          <button
+            type="button"
+            aria-label="Refresh"
+            title="Refresh"
+            onClick={refresh}
+            className={`-order-1 ${iconButtonClass}`}
+          >
+            <RefreshCw aria-hidden className="size-4" />
+          </button>,
+          actionsSlot,
+        )}
+      {reading && changes.length === 0 && (
+        <EmptyState Icon={FileDiff} title="No changes" hint="Edits on the working branch against its base show here." />
+      )}
       <ul className="flex flex-col gap-1 text-sm">
         {changes.map((change) => (
           <li key={change.path}>

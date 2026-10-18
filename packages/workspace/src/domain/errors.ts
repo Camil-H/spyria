@@ -63,6 +63,11 @@ export const MemberNotFound = errorKind(
   (memberId: string) => `${memberId} is not a member of this workspace`,
   WorkspaceError,
 )
+export const OwnMembership = errorKind(
+  'own_membership',
+  () => 'Admins can neither change their own role nor remove themselves',
+  WorkspaceError,
+)
 export const LastAdmin = errorKind(
   'last_admin',
   () => 'The last admin of a workspace can be neither demoted nor removed',

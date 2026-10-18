@@ -18,7 +18,6 @@ import {
   ListChecks,
   type LucideIcon,
   Plug,
-  Terminal,
   Users,
 } from 'lucide-react'
 import { Activity, type ComponentType, lazy, type ReactNode, Suspense, useState } from 'react'
@@ -27,11 +26,10 @@ import { BrowserTab } from './BrowserTab.tsx'
 import { FilesTab } from './FilesTab.tsx'
 import { usePanel } from './providers.tsx'
 import { ResizeHandle } from './ResizeHandle.tsx'
-import type { TabProps } from './TabProps.ts'
+import type { PanelProps, TabProps } from './TabProps.ts'
 import { tabClass } from './ui.ts'
 
 const ChangesTab = lazy(() => import('./ChangesTab.tsx'))
-const TerminalTab = lazy(() => import('./TerminalTab.tsx'))
 const PlanTab = lazy(() => import('./PlanTab.tsx'))
 const CommitsTab = lazy(() => import('./CommitsTab.tsx'))
 const SourcesTab = lazy(() => import('./SourcesTab.tsx'))
@@ -41,7 +39,6 @@ const MembersTab = lazy(() => import('./MembersTab.tsx'))
 const tabs: Record<PanelTabId, { label: string; Icon: LucideIcon; Component: ComponentType<TabProps> | null }> = {
   files: { label: 'Files', Icon: FolderTree, Component: FilesTab },
   changes: { label: 'Changes', Icon: FileDiff, Component: ChangesTab },
-  terminal: { label: 'Terminal', Icon: Terminal, Component: TerminalTab },
   plan: { label: 'Plan', Icon: ListChecks, Component: PlanTab },
   commits: { label: 'Commits', Icon: GitCommitHorizontal, Component: CommitsTab },
   browser: { label: 'Browser', Icon: Globe, Component: BrowserTab },
@@ -78,7 +75,24 @@ const TabTrigger = ({ tabId }: { tabId: PanelTabId }) => {
   )
 }
 
-export const SidePanel = ({ workspaceId, chatId, Markdown, usageTab }: TabProps & { usageTab: ReactNode }) => {
+const TabPanel = ({ tabId, usageTab, ...panelProps }: PanelProps & { tabId: PanelTabId; usageTab: ReactNode }) => {
+  const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null)
+  const { label, Component } = tabs[tabId]
+  return (
+    <Content value={tabId} className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-11 flex-wrap items-center gap-2 border-b border-line px-4 py-1.5">
+        <h2 className="mr-auto text-sm font-semibold">{label}</h2>
+        <div ref={setActionsSlot} className="flex items-center gap-2" />
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-4 text-ink">
+        <Suspense>{Component ? <Component {...panelProps} actionsSlot={actionsSlot} /> : usageTab}</Suspense>
+      </div>
+    </Content>
+  )
+}
+
+export const SidePanel = ({ usageTab, ...panelProps }: PanelProps & { usageTab: ReactNode }) => {
+  const { workspaceId, chatId } = panelProps
   const tabIds = useQuery(getPanelTabs(workspaceId, chatId))
   const { isOpen, width } = usePanel()
   if (!tabIds) return null
@@ -92,22 +106,18 @@ export const SidePanel = ({ workspaceId, chatId, Markdown, usageTab }: TabProps 
         <ResizeHandle />
         <Root key={chatId} defaultValue={tabIds[0]} className="flex min-h-0 flex-1 flex-col">
           <TooltipProvider>
-            <List aria-label="Panel tabs" className="flex overflow-x-auto border-b border-line px-1 scrollbar-thin">
+            <List
+              aria-label="Panel tabs"
+              className="flex gap-0.5 overflow-x-auto border-b border-line px-1 pt-1 scrollbar-thin"
+            >
               {tabIds.map((tabId) => (
                 <TabTrigger key={tabId} tabId={tabId} />
               ))}
             </List>
           </TooltipProvider>
-          {tabIds.map((tabId) => {
-            const { Component } = tabs[tabId]
-            return (
-              <Content key={tabId} value={tabId} className="min-h-0 flex-1 overflow-y-auto p-4 text-ink">
-                <Suspense>
-                  {Component ? <Component workspaceId={workspaceId} chatId={chatId} Markdown={Markdown} /> : usageTab}
-                </Suspense>
-              </Content>
-            )
-          })}
+          {tabIds.map((tabId) => (
+            <TabPanel key={tabId} tabId={tabId} usageTab={usageTab} {...panelProps} />
+          ))}
         </Root>
       </section>
     </Activity>

@@ -35,17 +35,31 @@ const withLiveDelegation =
     return { ...item, message: { ...item.message, delegation: { ...delegation, live: { text, isReasoning } } } }
   }
 
+const withLiveCommandOutput =
+  (commandOutputs: LiveState['commandOutputs']) =>
+  (item: ConversationItem): ConversationItem => {
+    const step = item.type === 'message' ? item.message.step : null
+    const output = item.type === 'message' ? commandOutputs[item.message.id] : undefined
+    if (item.type !== 'message' || step?.type !== 'command' || step.exitCode !== null || output === undefined)
+      return item
+    return { ...item, message: { ...item.message, step: { ...step, output } } }
+  }
+
 export const withLiveMessages = (
   items: readonly ConversationItem[],
   {
     messages: liveMessages,
     delegated,
-  }: { messages: readonly ConversationMessage[]; delegated: LiveState['delegated'] },
+    commandOutputs,
+  }: Pick<LiveState, 'delegated' | 'commandOutputs'> & { messages: readonly ConversationMessage[] },
 ): readonly ConversationItem[] => {
   const isPlanSwitch = isPlanSwitchIn(liveMessages)
   return liveMessages.reduce(
     withLiveMessage,
-    items.filter((item) => item.type === 'fold' || !isPlanSwitch(item.message)).map(withLiveDelegation(delegated)),
+    items
+      .filter((item) => item.type === 'fold' || !isPlanSwitch(item.message))
+      .map(withLiveDelegation(delegated))
+      .map(withLiveCommandOutput(commandOutputs)),
   )
 }
 
@@ -73,8 +87,15 @@ type LiveState = {
   questions: readonly QuestionFrame[]
   workspace?: AgentWorkspace
   delegated: Readonly<Record<string, StreamedReply>>
+  commandOutputs: Readonly<Record<string, string>>
 }
-const emptyLiveOf = (chatKey: string): LiveState => ({ chatKey, reply: null, questions: [], delegated: {} })
+const emptyLiveOf = (chatKey: string): LiveState => ({
+  chatKey,
+  reply: null,
+  questions: [],
+  delegated: {},
+  commandOutputs: {},
+})
 type Frame = Parameters<Parameters<AgentStream['subscribe']>[2]>[0]
 
 const liveAfter = (
@@ -85,7 +106,10 @@ const liveAfter = (
 ): LiveState => {
   const live = current.chatKey === chatKey ? current : emptyLiveOf(chatKey)
   const { reply, questions, delegated } = live
-  if ('commandOutput' in frame) return live
+  if ('commandOutput' in frame) {
+    const { stepId, output } = frame.commandOutput
+    return { ...live, commandOutputs: { ...live.commandOutputs, [stepId]: output } }
+  }
   if ('workspace' in frame) {
     const { sessionUpdate: _, ...workspace } = frame.workspace
     return { ...live, workspace }
@@ -144,7 +168,10 @@ export const useLiveMessages = (
   workspaceId: WorkspaceId,
   chatId: ChatId,
   messages: readonly ConversationMessage[],
-): { messages: readonly ConversationMessage[]; workspace?: AgentWorkspace; delegated: LiveState['delegated'] } => {
+): Pick<LiveState, 'delegated' | 'commandOutputs'> & {
+  messages: readonly ConversationMessage[]
+  workspace?: AgentWorkspace
+} => {
   const agentStream = useAgentStream()
   const store = useStore()
   const chatKey = `${workspaceId}/${chatId}`
@@ -158,5 +185,10 @@ export const useLiveMessages = (
     [agentStream, store, workspaceId, chatId, chatKey],
   )
   const current = live.chatKey === chatKey ? live : emptyLiveOf(chatKey)
-  return { messages: liveMessagesOf(current, messages), workspace: current.workspace, delegated: current.delegated }
+  return {
+    messages: liveMessagesOf(current, messages),
+    workspace: current.workspace,
+    delegated: current.delegated,
+    commandOutputs: current.commandOutputs,
+  }
 }

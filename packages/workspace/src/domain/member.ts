@@ -1,5 +1,5 @@
 import type { MemberId, WorkspaceId } from '@hq/kernel'
-import { LastAdmin, MemberNotFound, NotWorkspaceAdmin } from './errors.ts'
+import { LastAdmin, MemberNotFound, NotWorkspaceAdmin, OwnMembership } from './errors.ts'
 
 export type WorkspaceRole = 'admin' | 'member'
 
@@ -24,9 +24,10 @@ export const requireActiveMember = (member: Member | undefined, memberId: Member
   return member
 }
 
-export const isLastAdmin = (member: Pick<Member, 'id' | 'role'>, activeAdminIds: readonly MemberId[]) =>
-  member.role === 'admin' && activeAdminIds.every((adminId) => adminId === member.id)
+export const requireAnotherMember = (memberId: MemberId, actorId: MemberId) => {
+  if (memberId === actorId) throw new OwnMembership()
+}
 
 export const requireAnotherAdmin = (member: Member, activeAdminIds: readonly MemberId[]) => {
-  if (isLastAdmin(member, activeAdminIds)) throw new LastAdmin()
+  if (member.role === 'admin' && activeAdminIds.every((adminId) => adminId === member.id)) throw new LastAdmin()
 }

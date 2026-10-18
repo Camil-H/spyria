@@ -10,21 +10,11 @@ const withLeeRemoved = {
   ),
 }
 
-test('lists the active members of a workspace by name, marking its only admin as the last admin', () => {
+test('lists the active members of a workspace by name', () => {
   expect(listMembers(acme)(withLeeRemoved)).toEqual([
-    { id: alice, name: 'Alice', email: 'alice@example.com', role: 'admin', isLastAdmin: true },
-    { id: bob, name: 'Bob', email: 'bob@example.com', role: 'member', isLastAdmin: false },
+    { id: alice, name: 'Alice', email: 'alice@example.com', role: 'admin' },
+    { id: bob, name: 'Bob', email: 'bob@example.com', role: 'member' },
   ])
-})
-
-test('no admin is the last admin while another active admin remains', () => {
-  const withBobAdmin = {
-    ...snapshot,
-    memberships: snapshot.memberships.map((membership) =>
-      membership.memberId === bob ? { ...membership, role: 'admin' as const } : membership,
-    ),
-  }
-  expect(listMembers(acme)(withBobAdmin).map(({ isLastAdmin }) => isLastAdmin)).toEqual([false, false, false])
 })
 
 test('lists the open invitations of the workspace only', () => {

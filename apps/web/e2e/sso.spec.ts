@@ -112,7 +112,7 @@ test.describe('as Alice', () => {
   }) => {
     await verifyByLink(workerStack)
     await page.goto('/')
-    await openSettings(page)
+    await openSettings(page, 'Setup SSO')
     const section = signInSectionOf(page)
     const secretField = section.getByLabel('Client secret')
 
@@ -158,7 +158,7 @@ test.describe('as Alice', () => {
   }) => {
     await configureAcmeSso(workerStack, ['example.net'])
     await page.goto('/')
-    await openSettings(page)
+    await openSettings(page, 'Setup SSO')
     const section = signInSectionOf(page)
     await section.getByLabel('Email domains').fill('example.net, example.com')
     await section.getByRole('button', { name: 'Save' }).click()

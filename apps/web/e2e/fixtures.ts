@@ -176,9 +176,11 @@ export const addLlmKey = async (page: Page, provider: string, secret = `fake-key
   ).toBeVisible()
 }
 
-export const openSettings = async (page: Page) => {
+export const openSettings = async (page: Page, cardTitle: string) => {
   await sidebarOf(page).getByRole('link', { name: 'Workspace settings' }).click()
   await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Workspace settings' })).toBeVisible()
+  await mainOf(page).getByRole('link', { name: cardTitle, exact: true }).click()
+  await expect(mainOf(page).getByRole('heading', { level: 1, name: cardTitle })).toBeVisible()
 }
 export const hostsSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Runtime hosts' })
 export const urlOf = (command: string) => `${viteUrl}/h/${command.match(/\/h\/([A-Z0-9]{8})\b/)?.[1]}`
@@ -331,7 +333,7 @@ export const githubSectionOf = (page: Page) => mainOf(page).getByRole('region', 
 export const newChatDialogOf = (page: Page) => page.getByRole('dialog', { name: 'New chat' })
 export const configureGitHubApp = async (page: Page) => {
   const app = (await (await fetch(`${serverUrl}/test/github-app`)).json()) as Record<string, string>
-  await openSettings(page)
+  await openSettings(page, 'Connect GitHub')
   const section = githubSectionOf(page)
   await section.getByLabel('App id').fill(app.appId ?? '')
   await section.getByLabel('Client id').fill(app.clientId ?? '')

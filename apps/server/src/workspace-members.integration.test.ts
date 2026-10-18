@@ -28,6 +28,7 @@ afterAll(() => worker.stop())
 
 const notAdmin = failedWith('Only a workspace admin can manage members')
 const lastAdmin = failedWith('The last admin of a workspace can be neither demoted nor removed')
+const ownMembership = failedWith('Admins can neither change their own role nor remove themselves')
 const frozen = failedWith('This chat is frozen: its owner left the workspace')
 const invitationsOf = async (email: string) => [
   ...(await database.$client`
@@ -105,14 +106,17 @@ test('an expired invite does not block a new one, which replaces it', async () =
   expect(renewed).toMatchObject({ role: 'admin', revoked_at: null, accepted_at: null })
 })
 
-test('an admin changes roles, never demotes or removes the last admin, and a member changes nothing', async () => {
+test('an admin changes the roles of others, never their own nor removes themselves, and a member changes nothing', async () => {
   expect(await changeRole(bobInAcme, lee, 'admin')).toEqual(notAdmin)
-  expect(await changeRole(aliceInAcme, alice, 'member')).toEqual(lastAdmin)
-  expect(await removeFromAcme(app, database, alice)).toEqual(lastAdmin)
+  expect(await changeRole(aliceInAcme, alice, 'member')).toEqual(ownMembership)
+  expect(await removeFromAcme(app, database, alice)).toEqual(ownMembership)
   expect(await changeRole(aliceInAcme, bob, 'admin')).toEqual(succeeded)
   expect(await membershipOf(bob)).toEqual({ role: 'admin', removed_at: null })
   expect(await changeRole(bobInAcme, alice, 'member')).toEqual(succeeded)
-  expect(await changeRole(bobInAcme, bob, 'member')).toEqual(lastAdmin)
+  expect(await changeRole(bobInAcme, bob, 'member')).toEqual(ownMembership)
+  expect(await resultOf(bobInAcme, 'workspace.removeMember', { workspaceId: acme, memberId: bob })).toEqual(
+    ownMembership,
+  )
   expect(await changeRole(bobInAcme, alice, 'admin')).toEqual(succeeded)
   expect(await changeRole(aliceInAcme, bob, 'member')).toEqual(succeeded)
   expect(await changeRole(bobInAcme, alice, 'member')).toEqual(notAdmin)
@@ -122,6 +126,19 @@ test('an admin changes roles, never demotes or removes the last admin, and a mem
     { type: 'member.role_changed', actorId: bob, payload: { memberId: alice, role: 'admin' } },
     { type: 'member.role_changed', actorId: alice, payload: { memberId: bob, role: 'member' } },
   ])
+})
+
+test('two admins demoting each other at once leave one admin: the last-admin guard stays as the safety net', async () => {
+  expect(await changeRole(aliceInAcme, bob, 'admin')).toEqual(succeeded)
+  const results = await Promise.all([changeRole(aliceInAcme, bob, 'member'), changeRole(bobInAcme, alice, 'member')])
+  const [refused, ...others] = results.filter((result) => !Bun.deepEquals(result, succeeded))
+  expect(others).toEqual([])
+  expect([lastAdmin, notAdmin]).toContainEqual(refused)
+  const admins = await database.$client`
+    select user_id from memberships where workspace_id = ${acme} and role = 'admin' and removed_at is null`
+  expect(admins).toHaveLength(1)
+  if (admins[0]?.user_id === bob) expect(await changeRole(bobInAcme, alice, 'admin')).toEqual(succeeded)
+  expect(await changeRole(aliceInAcme, bob, 'member')).toEqual(succeeded)
 })
 
 test('removing a member ends their sessions, participations, keys and connections (their GitHub one too); their runtime chat freezes, their channel stays open', async () => {
@@ -236,8 +253,8 @@ test("an admin transfers a removed member's chat to an active member, which unfr
   ])
 })
 
-test('a removed member can be invited again with any role, and their removal left Alice the last admin', async () => {
+test('a removed member can be invited again with any role, and Alice still cannot demote himself', async () => {
   expect(await inviteToAcme(app, database, 'lee@example.com', 'admin')).toEqual(succeeded)
   expect(await invitationsOf('lee@example.com')).toEqual([expect.objectContaining({ role: 'admin', revoked_at: null })])
-  expect(await changeRole(aliceInAcme, alice, 'member')).toEqual(lastAdmin)
+  expect(await changeRole(aliceInAcme, alice, 'member')).toEqual(ownMembership)
 })

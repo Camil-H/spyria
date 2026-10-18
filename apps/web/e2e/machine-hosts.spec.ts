@@ -70,7 +70,7 @@ const addMachine = async (page: Page) => {
   return command
 }
 const addWorkspaceHost = async (page: Page) => {
-  await openSettings(page)
+  await openSettings(page, 'Connect runtime')
   await hostsSectionOf(page).getByRole('button', { name: 'Add runtime host' }).click()
   const dialog = page.getByRole('dialog', { name: 'Add runtime host' })
   await dialog.getByRole('textbox', { name: 'Host name' }).fill('Workspace box')
@@ -115,7 +115,7 @@ test.describe('as a member', () => {
     await expect(machineSectionOf(page).getByRole('button', { name: 'Add my machine' })).toHaveCount(0)
 
     const adminPage = await openPageAs(browser, workerStack, 'member-alice')
-    await openSettings(adminPage)
+    await openSettings(adminPage, 'Connect runtime')
     await expect(hostsSectionOf(adminPage)).toContainText('1 member uses their machine')
     await expect(hostsSectionOf(adminPage).getByRole('listitem')).toHaveCount(0)
     await expect(hostsSectionOf(adminPage)).not.toContainText('My machine')

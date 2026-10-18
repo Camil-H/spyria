@@ -1,7 +1,14 @@
 import { expect, test } from 'bun:test'
 import { memberId, workspaceId } from '@hq/kernel'
-import { LastAdmin, MemberNotFound, NotWorkspaceAdmin } from './errors.ts'
-import { isActive, type Member, requireActiveMember, requireAdmin, requireAnotherAdmin } from './member.ts'
+import { LastAdmin, MemberNotFound, NotWorkspaceAdmin, OwnMembership } from './errors.ts'
+import {
+  isActive,
+  type Member,
+  requireActiveMember,
+  requireAdmin,
+  requireAnotherAdmin,
+  requireAnotherMember,
+} from './member.ts'
 
 const alice: Member = { workspaceId: workspaceId('acme'), id: memberId('alice'), role: 'admin', removedAt: null }
 const bob: Member = { ...alice, id: memberId('bob'), role: 'member' }
@@ -22,4 +29,9 @@ test('the last active admin can be neither demoted nor removed, any other member
   expect(() => requireAnotherAdmin(alice, [])).toThrow(LastAdmin)
   expect(() => requireAnotherAdmin(alice, [alice.id, memberId('lee')])).not.toThrow()
   expect(() => requireAnotherAdmin(bob, [alice.id])).not.toThrow()
+})
+
+test('an admin changes or removes only another member', () => {
+  expect(() => requireAnotherMember(alice.id, alice.id)).toThrow(OwnMembership)
+  expect(() => requireAnotherMember(bob.id, alice.id)).not.toThrow()
 })

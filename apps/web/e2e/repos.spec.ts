@@ -87,7 +87,7 @@ test('5. a member without admin rights sees no GitHub section, and a non-dev run
 }) => {
   await configureGitHubApp(page)
   const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-  await bobPage.goto('/w/workspace-acme/settings')
+  await bobPage.goto('/w/workspace-acme/settings/github')
   await expect(mainOf(bobPage).getByText('Only workspace admins can see this page')).toBeVisible()
   await expect(githubSectionOf(bobPage)).toHaveCount(0)
   await bobPage.getByRole('button', { name: 'New chat' }).click()
@@ -96,5 +96,35 @@ test('5. a member without admin rights sees no GitHub section, and a non-dev run
   await expect(dialog.getByRole('radio', { name: 'Non-dev' })).toBeChecked()
   await expect(dialog.getByLabel('Repository')).toHaveCount(0)
   await expect(dialog.getByLabel('Base branch')).toHaveCount(0)
+  await bobPage.context().close()
+})
+
+test('42-3. without a GitHub App, Dev shows Connect GitHub instead of the pickers (a link for an admin, text for a member), and Non-dev shows no repository', async ({
+  page,
+  browser,
+  workerStack,
+}) => {
+  await page.getByRole('button', { name: 'New chat' }).click()
+  const dialog = newChatDialogOf(page)
+  await dialog.getByRole('radio', { name: 'Runtime' }).check()
+  await expect(dialog.getByLabel('Repository')).toHaveCount(0)
+  await dialog.getByRole('radio', { name: 'Dev', exact: true }).check()
+  const connectLink = dialog.getByRole('link', { name: 'Connect GitHub in Workspace settings' })
+  await expect(connectLink).toBeVisible()
+  await expect(dialog.getByLabel('Repository')).toHaveCount(0)
+  await expect(dialog.getByLabel('Base branch')).toHaveCount(0)
+  await expect(dialog).not.toContainText('Loading…')
+  await expect(dialog.getByRole('button', { name: 'Confirm' })).toBeDisabled()
+  await connectLink.click()
+  await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Connect GitHub' })).toBeVisible()
+  await expect(githubSectionOf(page)).toBeVisible()
+
+  const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+  await bobPage.getByRole('button', { name: 'New chat' }).click()
+  const bobDialog = newChatDialogOf(bobPage)
+  await bobDialog.getByRole('radio', { name: 'Runtime' }).check()
+  await bobDialog.getByRole('radio', { name: 'Dev', exact: true }).check()
+  await expect(bobDialog.getByText('Connect GitHub in Workspace settings')).toBeVisible()
+  await expect(bobDialog.getByRole('link', { name: 'Connect GitHub in Workspace settings' })).toHaveCount(0)
   await bobPage.context().close()
 })

@@ -210,3 +210,35 @@ test('35-2. a join waits for the server with every Join disabled; a join refused
   await expect(chatLinkOf(bobPage, 'Lounge')).toHaveCount(0)
   await bobPage.context().close()
 })
+
+test('42-5. Browse channels searches the joinable channels by name and by project, with a message when none match', async ({
+  page,
+  browser,
+  workerStack,
+}) => {
+  await newChannel(page, 'Lounge', 'Public')
+  await page.getByRole('button', { name: 'New chat' }).click()
+  await newChatDialogOf(page).getByRole('radio', { name: 'Channel' }).check()
+  await newChatDialogOf(page).getByRole('textbox', { name: 'Chat name' }).fill('Invoices')
+  await newChatDialogOf(page).getByLabel('Project').selectOption({ label: 'Billing' })
+  await newChatDialogOf(page).getByRole('button', { name: 'Confirm' }).click()
+  await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Invoices' })).toBeVisible()
+
+  const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+  await openBrowse(bobPage)
+  const search = browseOf(bobPage).getByRole('searchbox', { name: 'Search channels' })
+  await expect(browsedChannelOf(bobPage, 'Lounge')).toBeVisible()
+  await expect(browsedChannelOf(bobPage, 'Invoices')).toBeVisible()
+  await search.fill('LOU')
+  await expect(browsedChannelOf(bobPage, 'Lounge')).toBeVisible()
+  await expect(browsedChannelOf(bobPage, 'Invoices')).toHaveCount(0)
+  await search.fill('billing')
+  await expect(browsedChannelOf(bobPage, 'Invoices')).toBeVisible()
+  await expect(browsedChannelOf(bobPage, 'Lounge')).toHaveCount(0)
+  await search.fill('zzz')
+  await expect(browseOf(bobPage).getByRole('listitem')).toHaveCount(0)
+  await expect(browseOf(bobPage)).toContainText('No channels match “zzz”')
+  await search.fill('')
+  await expect(browsedChannelOf(bobPage, 'Lounge')).toBeVisible()
+  await bobPage.context().close()
+})

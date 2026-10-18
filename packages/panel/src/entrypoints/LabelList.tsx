@@ -1,10 +1,10 @@
-import { emptyClass } from './ui.ts'
+import type { ReactNode } from 'react'
 
 type LabelListRow = { key: string; label: string; value: string }
 
-export const LabelList = ({ rows, emptyMessage }: { rows: readonly LabelListRow[]; emptyMessage: string }) =>
+export const LabelList = ({ rows, empty }: { rows: readonly LabelListRow[]; empty: ReactNode }) =>
   rows.length === 0 ? (
-    <p className={emptyClass}>{emptyMessage}</p>
+    empty
   ) : (
     <ul className="flex flex-col gap-2 text-sm">
       {rows.map((row) => (
