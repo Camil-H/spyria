@@ -162,6 +162,8 @@ bun run check:boundaries
 bun run lint
 bun run check:bundle       # builds the app, main chunk at most 760 kB, one React, no server-only SQL
 bun run test:e2e           # starts its own stack per worker, one gateway (hq-test-gateway-e2e on 4881) and an sso-mode stack (server 3102, app 5191, Dex hq-test-dex-e2e on 5557)
+bun run test:e2e:smoke     # the @smoke critical paths only (about 25 tests)
+bun run test:e2e -- e2e/04-agent   # one segment
 ```
 
 `check:related [--base <ref>]` takes the uncommitted changes plus the commits since `<ref>` (default `HEAD`). It runs the unit and integration test files that changed or import a changed module, directly or not (dependency-cruiser's graph), and Playwright `--only-changed=<ref>` when a spec imports a changed module. It prints what it selected and why. It runs a whole suite when it cannot decide: a changed file outside the module graph (lock file, config, SQL, infra) runs every suite, `integration-setup.ts` runs every integration test, and an e2e harness file (`test-server.ts`, `testing.ts`, the fake LLM, `global-setup.ts`, `playwright.config.ts`) runs the whole e2e suite. App code that e2e reaches only through the servers is left to `check:all`.

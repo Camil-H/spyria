@@ -74,7 +74,7 @@ Every rule of the architecture standard (`.claude/skills/architecture`) and what
 | T3 | Real dependencies in containers | integration tests on the compose Postgres 18 from a template (`packages/db/src/postgres/testing.ts`) and one shared zero-cache (`apps/server/src/testing/testing.ts`); e2e on real zero-cache and Dex; integration `sandbox` drives the local Docker through a real `hq-host`, including one full runtime lifecycle through the jobs (create, ready, stop, start with the same key and files, remove with its volumes), skipped with a message when Docker or the pinned image is missing; integration `personal-host` drives a real `hq-host --personal` (credentials volume, allowlist refusals, conversation create and delete, signed-in report) |
 | T9a | Parametrized matrices | review (`test.each` in `constraints.integration.test.ts`) |
 | T9b | Composed requests asserted | review |
-| T10 | Critical journeys end to end | Playwright `apps/web/e2e/*.spec.ts` against the full stack per worker |
+| T10 | Critical journeys end to end | Playwright `apps/web/e2e/**/*.spec.ts` against the full stack per worker |
 | T11 | No masked flakes | `playwright.config.ts` sets no retries; quarantine by review |
 | N2 | Strict type checker | typecheck: `tsconfig.base.json` `strict`, `noUncheckedIndexedAccess`, TypeScript pinned; no `ts-ignore` or `ts-expect-error` |
 | N4 | Names state behaviour | review |
