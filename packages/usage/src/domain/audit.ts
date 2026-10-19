@@ -26,7 +26,14 @@ export const auditKindsByGroup = {
     'pull_request.closed',
   ],
   Budgets: ['budget.changed', 'budget.threshold_reached'],
-  Roles: ['role.created', 'role.updated', 'role.deleted'],
+  Roles: [
+    'role.created',
+    'role.updated',
+    'role.deleted',
+    'workspace_role.created',
+    'workspace_role.updated',
+    'workspace_role.deleted',
+  ],
 } as const
 export type AuditGroup = keyof typeof auditKindsByGroup
 export const auditGroups = Object.keys(auditKindsByGroup) as AuditGroup[]
@@ -67,6 +74,9 @@ const actionByKind: Record<string, string> = {
   'role.created': 'Created a chat role',
   'role.updated': 'Changed a chat role',
   'role.deleted': 'Deleted a chat role',
+  'workspace_role.created': 'Created a workspace role',
+  'workspace_role.updated': 'Changed a workspace role',
+  'workspace_role.deleted': 'Deleted a workspace role',
 }
 
 export type AuditRecord = {

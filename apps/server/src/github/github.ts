@@ -14,7 +14,7 @@ import {
   InvalidGitHubSettings,
 } from '@hq/workspace/server'
 import type { SecretBox } from '../auth/secret-box.ts'
-import { assertAdmin, recordWorkspaceEvent } from '../auth/sso.ts'
+import { recordWorkspaceEvent, requireMemberPermission } from '../auth/sso.ts'
 import { baseBundle, pushBundle } from './bundles.ts'
 import { appJwtOf, type GitHubApi, type UserTokens } from './github-api.ts'
 import {
@@ -129,7 +129,7 @@ export const readGitHubSettings = async (
   dependencies: GitHubDependencies,
   member: Member,
 ): Promise<GitHubSettingsView | null> => {
-  await database.$client.begin((sql) => assertAdmin(sql, member))
+  await database.$client.begin((sql) => requireMemberPermission(sql, member, 'github.manage'))
   const row = await appRowOf(database, member.workspaceId)
   if (!row) return null
   const listing = await grantedRepositories(database, dependencies, member.workspaceId).then(
@@ -148,7 +148,7 @@ export const saveGitHubSettings = async (
   const { secretBox, api } = dependencies
   const settings = githubSettingsFrom(input)
   const entered = enteredSecretsOf(input)
-  await database.$client.begin((sql) => assertAdmin(sql, member))
+  await database.$client.begin((sql) => requireMemberPermission(sql, member, 'github.manage'))
   const previous = await appRowOf(database, member.workspaceId)
   const missing = githubSecretNames.find((name) => !previous && !entered[name])
   if (missing) throw new InvalidGitHubSettings(`${secretLabels[missing]} is required`)
@@ -169,7 +169,7 @@ export const saveGitHubSettings = async (
     ),
   ) as Pick<AppRow, 'encryptedClientSecret' | 'encryptedPrivateKey' | 'encryptedWebhookSecret'>
   await database.$client.begin(async (sql) => {
-    await assertAdmin(sql, member)
+    await requireMemberPermission(sql, member, 'github.manage')
     await sql`
       insert into github_apps (workspace_id, app_id, client_id, encrypted_client_secret, encrypted_private_key,
         encrypted_webhook_secret, updated_at)

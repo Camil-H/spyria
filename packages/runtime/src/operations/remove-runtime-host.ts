@@ -1,4 +1,4 @@
-import type { MemberId, RuntimeHostId, WorkspaceId } from '@hq/kernel'
+import type { MemberId, RuntimeHostId, WorkspaceId, WorkspacePermission } from '@hq/kernel'
 import type { RuntimeTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import { transitioned } from '../domain/runtime.ts'
 import { assertCanManage, assertNotRemoved, type RuntimeHost } from '../domain/runtime-host.ts'
@@ -7,7 +7,7 @@ type Dependencies = { transactor: RuntimeTransactor }
 type Input = {
   workspaceId: WorkspaceId
   memberId: MemberId
-  role: 'admin' | 'member'
+  permissions: readonly WorkspacePermission[]
   hostId: RuntimeHostId
   now: number
 }
@@ -22,8 +22,11 @@ export const retireHost = async (
     if (runtime.failure !== 'lost') await runtimes.save(transitioned(runtime, 'failed', now, 'lost'))
 }
 
-export const removeRuntimeHost = ({ transactor }: Dependencies, { workspaceId, memberId, role, hostId, now }: Input) =>
+export const removeRuntimeHost = (
+  { transactor }: Dependencies,
+  { workspaceId, memberId, permissions, hostId, now }: Input,
+) =>
   transactor.run(async (unitOfWork) => {
     const host = await unitOfWork.runtimeHosts.get(workspaceId, hostId)
-    await retireHost(unitOfWork, assertCanManage(assertNotRemoved(host), memberId, role), now)
+    await retireHost(unitOfWork, assertCanManage(assertNotRemoved(host), memberId, permissions), now)
   })

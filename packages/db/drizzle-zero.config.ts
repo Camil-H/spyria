@@ -5,6 +5,8 @@ export default drizzleZeroConfig(tables, {
   tables: {
     users: true,
     workspaces: true,
+    workspaceRoles: true,
+    workspaceRolePermissions: true,
     memberships: true,
     invitations: true,
     serviceIdentities: true,

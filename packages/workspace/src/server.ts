@@ -8,7 +8,6 @@ export {
   InvalidSsoSettings,
   MailNotConfigured,
   MailNotSent,
-  NotWorkspaceAdmin,
   RepositoryNotGranted,
   SsoDiscoveryFailed,
 } from './domain/errors.ts'

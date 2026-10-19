@@ -1,4 +1,4 @@
-import { DomainError, type MemberId, type WorkspaceId } from '@hq/kernel'
+import { DomainError, type MemberId, type WorkspaceId, workspacePermissions } from '@hq/kernel'
 import { type AnyMutatorRegistry, type MutatorResultDetails, type Row, Zero } from '@rocicorp/zero'
 import type { DraftRow, Snapshot } from './schema.ts'
 import { type Schema, schema } from './zero.ts'
@@ -53,6 +53,7 @@ const snapshotFromZeroRows = (
   const memberships = rowsOf('memberships')
   const emailByUserId = new Map(rowsOf('users').map((user) => [user.id, user.email]))
   const messages = rowsOf('messages')
+  const rolePermissions = rowsOf('workspaceRolePermissions')
   const runtimeChatIds = new Set(rowsOf('chats').flatMap((chat) => (chat.type === 'runtime' ? [chat.id] : [])))
   const answeredMessageIds = new Set(messages.map((message) => message.replyToId))
   const seqByMessageId = new Map(messages.map((message) => [`${message.chatId}/${message.id}`, message.seq]))
@@ -83,6 +84,15 @@ const snapshotFromZeroRows = (
       email: emailByUserId.get(userId) ?? '',
       role,
       removedAt: isoOrNull(removedAt ?? null),
+    })),
+    workspaceRoles: rowsOf('workspaceRoles').map((role) => ({
+      ...role,
+      permissions: workspacePermissions.filter((permission) =>
+        rolePermissions.some(
+          (granted) =>
+            granted.workspaceId === role.workspaceId && granted.roleId === role.id && granted.permission === permission,
+        ),
+      ),
     })),
     invitations: rowsOf('invitations').map(({ workspaceId, id, email, role, expiresAt }) => ({
       workspaceId,

@@ -1,4 +1,4 @@
-import type { MemberId, RuntimeHostId, WorkspaceId } from '@hq/kernel'
+import type { MemberId, RuntimeHostId, WorkspaceId, WorkspacePermission } from '@hq/kernel'
 import type { RuntimeTransactor } from '../contracts/transactor.ts'
 import { claimLifetimeMilliseconds, hashSecret, newClaimCode } from '../domain/claim.ts'
 import { CodeNotRenewable } from '../domain/errors.ts'
@@ -8,19 +8,19 @@ type Dependencies = { transactor: RuntimeTransactor }
 type Input = {
   workspaceId: WorkspaceId
   memberId: MemberId
-  role: 'admin' | 'member'
+  permissions: readonly WorkspacePermission[]
   hostId: RuntimeHostId
   now: number
 }
 
 export const renewClaimCode = async (
   { transactor }: Dependencies,
-  { workspaceId, memberId, role, hostId, now }: Input,
+  { workspaceId, memberId, permissions, hostId, now }: Input,
 ) => {
   const code = newClaimCode()
   const claimCodeHash = await hashSecret(code)
   await transactor.run(async ({ runtimeHosts }) => {
-    const host = assertCanManage(assertNotRemoved(await runtimeHosts.get(workspaceId, hostId)), memberId, role)
+    const host = assertCanManage(assertNotRemoved(await runtimeHosts.get(workspaceId, hostId)), memberId, permissions)
     if (!canRenewClaim(host)) throw new CodeNotRenewable()
     await runtimeHosts.save({ ...host, status: 'waiting', claimExpiresAt: now + claimLifetimeMilliseconds })
     await runtimeHosts.setSecretHash(host, 'claimCode', claimCodeHash)

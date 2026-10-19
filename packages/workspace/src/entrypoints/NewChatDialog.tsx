@@ -7,7 +7,7 @@ import type { GitHubRepository } from '../domain/github.ts'
 import { Name } from '../domain/name.ts'
 import type { Sidebar } from '../queries/get-sidebar.ts'
 import { useWorkspaceCommands } from './providers.tsx'
-import { useIsWorkspaceAdmin } from './useIsWorkspaceAdmin.ts'
+import { useWorkspacePermissions } from './useWorkspacePermissions.ts'
 
 export const NewChatDialog = ({
   workspaceId,
@@ -31,7 +31,7 @@ export const NewChatDialog = ({
   const [baseBranch, setBaseBranch] = useState('')
   const { errorMessage, isPending, run } = useGuardedAction()
   const isDev = type === 'runtime' && mode === 'dev'
-  const isAdmin = useIsWorkspaceAdmin(workspaceId)
+  const canConnectGitHub = useWorkspacePermissions(workspaceId).includes('github.manage')
   const [loadFailure, setLoadFailure] = useState<string | null>(null)
   const [isGitHubMissing, setIsGitHubMissing] = useState(false)
   useEffect(() => {
@@ -110,7 +110,7 @@ export const NewChatDialog = ({
         )}
         {isDev && isGitHubMissing && (
           <p className="text-sm text-muted">
-            {isAdmin ? (
+            {canConnectGitHub ? (
               <Link to={`/w/${workspaceId}/settings/github`} onClick={onClose} className="text-ink underline">
                 Connect GitHub in Workspace settings
               </Link>

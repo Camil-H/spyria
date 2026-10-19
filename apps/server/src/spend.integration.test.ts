@@ -36,7 +36,10 @@ beforeEach(async () => {
 test('members are refused the workspace spend; their own usage is open to them', async () => {
   expect(await asMember(bob, 'GET', '/api/spend')).toEqual({
     status: 403,
-    body: JSON.stringify({ error: 'not_admin', message: 'Only workspace admins can analyze costs' }),
+    body: JSON.stringify({
+      error: 'missing_workspace_permission',
+      message: 'Your workspace role does not allow this: View costs',
+    }),
   })
   expect((await asMember(bob, 'GET', '/api/spend/mine')).status).toBe(200)
   expect((await asMember(alice, 'GET', '/api/spend?period=yesterday')).status).toBe(400)

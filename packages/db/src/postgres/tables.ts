@@ -1,4 +1,4 @@
-import type { ChatPermission, ChatVisibility } from '@hq/kernel'
+import type { ChatPermission, ChatVisibility, WorkspacePermission } from '@hq/kernel'
 import { sql } from 'drizzle-orm'
 import {
   bigint,
@@ -57,6 +57,37 @@ export const workspaces = table('workspaces', {
   createdAt: instant().notNull(),
 })
 
+export const workspaceRoles = table(
+  'workspace_roles',
+  {
+    workspaceId: text()
+      .notNull()
+      .references(() => workspaces.workspaceId),
+    id: text().notNull(),
+    name: text().notNull(),
+    builtIn: boolean().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.id] }),
+    uniqueIndex('workspace_roles_name_index').on(table.workspaceId, sql`lower(${table.name})`),
+  ],
+)
+
+export const workspaceRolePermissions = table(
+  'workspace_role_permissions',
+  {
+    workspaceId: text().notNull(),
+    roleId: text().notNull(),
+    permission: text().$type<WorkspacePermission>().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.roleId, table.permission] }),
+    tenantReference([table.workspaceId, table.roleId], [workspaceRoles.workspaceId, workspaceRoles.id]).onDelete(
+      'cascade',
+    ),
+  ],
+)
+
 export const memberships = table(
   'memberships',
   {
@@ -66,11 +97,14 @@ export const memberships = table(
     userId: text()
       .notNull()
       .references(() => users.id),
-    role: text().$type<'admin' | 'member'>().notNull(),
+    role: text().notNull(),
     displayName: text().notNull(),
     removedAt: instant(),
   },
-  (table) => [primaryKey({ columns: [table.workspaceId, table.userId] })],
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.userId] }),
+    tenantReference([table.workspaceId, table.role], [workspaceRoles.workspaceId, workspaceRoles.id]),
+  ],
 )
 
 const memberReference = (table: { workspaceId: PgColumn }, userColumn: PgColumn) =>
@@ -84,7 +118,7 @@ export const invitations = table(
       .references(() => workspaces.workspaceId),
     id: text().notNull(),
     email: text().notNull(),
-    role: text().$type<'admin' | 'member'>().notNull(),
+    role: text().notNull(),
     invitedBy: text().notNull(),
     createdAt: instant().notNull(),
     expiresAt: instant().notNull(),
@@ -742,6 +776,8 @@ export const relations = defineRelations(
   {
     users,
     workspaces,
+    workspaceRoles,
+    workspaceRolePermissions,
     memberships,
     invitations,
     projects,
@@ -772,6 +808,18 @@ export const relations = defineRelations(
       },
       workspaces: {
         memberships: r.many.memberships({ from: r.workspaces.workspaceId, to: r.memberships.workspaceId }),
+      },
+      memberships: {
+        workspaceRole: r.one.workspaceRoles({
+          from: [r.memberships.workspaceId, r.memberships.role],
+          to: [r.workspaceRoles.workspaceId, r.workspaceRoles.id],
+        }),
+      },
+      workspaceRoles: {
+        permissions: r.many.workspaceRolePermissions({
+          from: [r.workspaceRoles.workspaceId, r.workspaceRoles.id],
+          to: [r.workspaceRolePermissions.workspaceId, r.workspaceRolePermissions.roleId],
+        }),
       },
       invitations: {
         memberships: r.many.memberships({ from: r.invitations.workspaceId, to: r.memberships.workspaceId }),

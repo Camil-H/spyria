@@ -5,16 +5,16 @@ import { buttonClass, ErrorMessage, fieldClass, useGuardedAction } from '@hq/ui'
 import { type SubmitEvent, useState } from 'react'
 import { listMembers } from '../queries/list-members.ts'
 import { useWorkspaceCommands } from './providers.tsx'
-import { useIsWorkspaceAdmin } from './useIsWorkspaceAdmin.ts'
+import { useWorkspacePermissions } from './useWorkspacePermissions.ts'
 
 export const TransferChatForm = ({ workspaceId, chatId }: { workspaceId: WorkspaceId; chatId: ChatId }) => {
   const commands = useWorkspaceCommands()
   const { memberId } = useSession()
-  const isAdmin = useIsWorkspaceAdmin(workspaceId)
+  const canTransfer = useWorkspacePermissions(workspaceId).includes('members.manage')
   const members = useQuery(listMembers(workspaceId))
   const [ownerId, setOwnerId] = useState<string>(memberId)
   const { errorMessage, isPending, run } = useGuardedAction()
-  if (!isAdmin) return null
+  if (!canTransfer) return null
   const submit = async (event: SubmitEvent) => {
     event.preventDefault()
     await run(() => commands.transferChat({ workspaceId, chatId, ownerId: toMemberId(ownerId) }))

@@ -1,4 +1,11 @@
-import { type ChatId, DomainError, type MemberId, permissionsOf, type WorkspaceId } from '@hq/kernel'
+import {
+  type ChatId,
+  DomainError,
+  type MemberId,
+  permissionsOf,
+  type WorkspaceId,
+  type WorkspacePermission,
+} from '@hq/kernel'
 import {
   createBuilder,
   defineQueries,
@@ -42,15 +49,26 @@ const readableBy = (userId: MemberId) => (chat: Query<'chats', Schema>) =>
     ),
   )
 
-const activeAdmin = (userId: MemberId) => (membership: Query<'memberships', Schema>) =>
-  membership.where('userId', userId).where('role', 'admin').where('removedAt', 'IS', null)
+const activeMember = (userId: MemberId) => (membership: Query<'memberships', Schema>) =>
+  membership.where('userId', userId).where('removedAt', 'IS', null)
 
-export const activeMemberRoleOf = async (tx: Transaction, workspaceId: WorkspaceId, userId: MemberId) =>
-  (
-    await tx.run(
-      zql.memberships.where('workspaceId', workspaceId).where('userId', userId).where('removedAt', 'IS', null).one(),
+const activeMemberWith =
+  (userId: MemberId, permission: WorkspacePermission) => (membership: Query<'memberships', Schema>) =>
+    activeMember(userId)(membership).whereExists('workspaceRole', (role) =>
+      role.whereExists('permissions', (granted) => granted.where('permission', permission)),
     )
-  )?.role
+
+export const workspacePermissionsOf = async (tx: Transaction, workspaceId: WorkspaceId, userId: MemberId) => {
+  const membership = await tx.run(
+    activeMember(userId)(zql.memberships.where('workspaceId', workspaceId))
+      .related('workspaceRole', (role) => role.related('permissions'))
+      .one(),
+  )
+  return membership?.workspaceRole?.permissions.map((granted) => granted.permission as WorkspacePermission) ?? []
+}
+
+export const isActiveMember = async (tx: Transaction, workspaceId: WorkspaceId, userId: MemberId) =>
+  (await tx.run(activeMember(userId)(zql.memberships.where('workspaceId', workspaceId)).one())) !== undefined
 
 export const isOwnerRemoved = async (tx: Transaction, workspaceId: WorkspaceId, ownerId: string | null) =>
   ownerId !== null &&
@@ -83,12 +101,16 @@ export const queries = defineQueries({
       .orderBy('createdAt', 'asc'),
   ),
   memberships: defineQuery(({ ctx }) => zql.memberships.where('workspaceId', ctx.workspaceId)),
+  workspaceRoles: defineQuery(({ ctx }) => zql.workspaceRoles.where('workspaceId', ctx.workspaceId)),
+  workspaceRolePermissions: defineQuery(({ ctx }) =>
+    zql.workspaceRolePermissions.where('workspaceId', ctx.workspaceId),
+  ),
   invitations: defineQuery(({ ctx }) =>
     zql.invitations
       .where('workspaceId', ctx.workspaceId)
       .where('revokedAt', 'IS', null)
       .where('acceptedAt', 'IS', null)
-      .whereExists('memberships', activeAdmin(ctx.userId))
+      .whereExists('memberships', activeMemberWith(ctx.userId, 'members.invite'))
       .orderBy('createdAt', 'asc'),
   ),
   serviceIdentities: defineQuery(({ ctx }) => zql.serviceIdentities.where('workspaceId', ctx.workspaceId)),
@@ -135,7 +157,7 @@ export const queries = defineQueries({
         or(
           cmp('userId', ctx.userId),
           exists('ownedChats', readableBy(ctx.userId)),
-          exists('memberships', activeAdmin(ctx.userId)),
+          exists('memberships', activeMemberWith(ctx.userId, 'tools.manage')),
         ),
       ),
   ),
@@ -160,13 +182,18 @@ export const queries = defineQueries({
   budgetAlerts: defineQuery(({ ctx }) =>
     zql.budgetAlerts
       .where('workspaceId', ctx.workspaceId)
-      .where(({ or, cmp, exists }) => or(cmp('memberId', ctx.userId), exists('memberships', activeAdmin(ctx.userId)))),
+      .where(({ or, cmp, exists }) =>
+        or(cmp('memberId', ctx.userId), exists('memberships', activeMemberWith(ctx.userId, 'budgets.manage'))),
+      ),
   ),
   runtimeHosts: defineQuery(({ ctx }) =>
     zql.runtimeHosts
       .where('workspaceId', ctx.workspaceId)
       .where(({ or, and, cmp, exists }) =>
-        or(cmp('ownerId', ctx.userId), and(cmp('ownerId', 'IS', null), exists('memberships', activeAdmin(ctx.userId)))),
+        or(
+          cmp('ownerId', ctx.userId),
+          and(cmp('ownerId', 'IS', null), exists('memberships', activeMemberWith(ctx.userId, 'runtimes.manage'))),
+        ),
       )
       .where('removedAt', 'IS', null)
       .orderBy('createdAt', 'asc'),

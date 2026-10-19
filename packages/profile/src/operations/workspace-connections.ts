@@ -1,7 +1,7 @@
-import type { MemberId, WorkspaceId } from '@hq/kernel'
+import { type MemberId, requirePermissionIn, type WorkspaceId } from '@hq/kernel'
 import type { ToolGateway } from '../contracts/repositories.ts'
 import type { ProfileTransactor, UnitOfWork } from '../contracts/transactor.ts'
-import { ConnectionUnreachable, MemberNotFound, NotWorkspaceAdmin, SecretRequired } from '../domain/errors.ts'
+import { ConnectionUnreachable, MemberNotFound, SecretRequired } from '../domain/errors.ts'
 import {
   allowedAfterRelisting,
   type ConnectionInput,
@@ -13,16 +13,16 @@ import {
 import { grantMemberTools, grantWorkspaceTools } from './tool-connections.ts'
 
 type Dependencies = { transactor: ProfileTransactor; gateway: ToolGateway }
-type Admin = { workspaceId: WorkspaceId; actorId: MemberId }
-type ConnectionTarget = Admin & { connectionId: string }
+type ConnectionManager = { workspaceId: WorkspaceId; actorId: MemberId }
+type ConnectionTarget = ConnectionManager & { connectionId: string }
 
-const asAdmin = <Result>(
+const asConnectionManager = <Result>(
   { transactor }: Dependencies,
-  { workspaceId, actorId }: Admin,
+  { workspaceId, actorId }: ConnectionManager,
   work: (unitOfWork: UnitOfWork) => Promise<Result>,
 ) =>
   transactor.run(async (unitOfWork) => {
-    if (!(await unitOfWork.members.isActiveAdmin(workspaceId, actorId))) throw new NotWorkspaceAdmin()
+    requirePermissionIn(await unitOfWork.members.permissions(workspaceId, actorId), 'tools.manage')
     return work(unitOfWork)
   })
 
@@ -36,10 +36,13 @@ const registeredTools = async (
   throw new ConnectionUnreachable(server.url)
 }
 
-export const addWorkspaceConnection = async (dependencies: Dependencies, input: Admin & ConnectionInput) => {
+export const addWorkspaceConnection = async (
+  dependencies: Dependencies,
+  input: ConnectionManager & ConnectionInput,
+) => {
   const { workspaceId, actorId } = input
   const { name, url, secretHeader } = connectionInputOf(input)
-  await asAdmin(dependencies, input, async () => {})
+  await asConnectionManager(dependencies, input, async () => {})
   const gatewayName = gatewayNameOf(name)
   const tools = await registeredTools(dependencies.gateway, { name: gatewayName, url, secretHeader })
   const connection = {
@@ -53,7 +56,7 @@ export const addWorkspaceConnection = async (dependencies: Dependencies, input: 
     allowedTools: tools.map((tool) => tool.name),
   }
   try {
-    await asAdmin(dependencies, input, async ({ workspaceConnections, workspaceEvents }) => {
+    await asConnectionManager(dependencies, input, async ({ workspaceConnections, workspaceEvents }) => {
       await workspaceConnections.add(connection)
       await workspaceEvents.record({
         workspaceId,
@@ -82,7 +85,7 @@ export const editWorkspaceConnection = async (
   const { workspaceId, actorId, connectionId } = input
   const { name, url, secretHeader } = connectionInputOf(input)
   const { gateway } = dependencies
-  const previous = await asAdmin(dependencies, input, ({ workspaceConnections }) =>
+  const previous = await asConnectionManager(dependencies, input, ({ workspaceConnections }) =>
     workspaceConnections.get(workspaceId, connectionId),
   )
   const isUrlChanged = url !== previous.url
@@ -99,7 +102,7 @@ export const editWorkspaceConnection = async (
     allowedTools: allowedAfterRelisting(previous, tools),
     headerName: secretHeader === undefined ? previous.headerName : (secretHeader?.name ?? null),
   }
-  await asAdmin(dependencies, input, async ({ workspaceConnections, workspaceEvents }) => {
+  await asConnectionManager(dependencies, input, async ({ workspaceConnections, workspaceEvents }) => {
     await workspaceConnections.save(connection)
     await workspaceEvents.record({
       workspaceId,
@@ -115,11 +118,11 @@ export const editWorkspaceConnection = async (
 
 export const removeWorkspaceConnection = async (dependencies: Dependencies, input: ConnectionTarget) => {
   const { workspaceId, actorId, connectionId } = input
-  const connection = await asAdmin(dependencies, input, ({ workspaceConnections }) =>
+  const connection = await asConnectionManager(dependencies, input, ({ workspaceConnections }) =>
     workspaceConnections.get(workspaceId, connectionId),
   )
   await dependencies.gateway.removeToolServer(connection.gatewayName)
-  await asAdmin(dependencies, input, async ({ workspaceConnections, workspaceEvents }) => {
+  await asConnectionManager(dependencies, input, async ({ workspaceConnections, workspaceEvents }) => {
     await workspaceConnections.remove(workspaceId, connectionId)
     await workspaceEvents.record({
       workspaceId,
@@ -135,7 +138,7 @@ export const allowConnectionTools = async (
   input: ConnectionTarget & { allowedTools: string[] },
 ) => {
   const { workspaceId, actorId, connectionId } = input
-  await asAdmin(dependencies, input, async ({ workspaceConnections, workspaceEvents }) => {
+  await asConnectionManager(dependencies, input, async ({ workspaceConnections, workspaceEvents }) => {
     const connection = await workspaceConnections.get(workspaceId, connectionId)
     const allowedTools = knownToolsOf(connection, input.allowedTools)
     await workspaceConnections.save({ ...connection, allowedTools })
@@ -154,7 +157,7 @@ export const restrictConnectionMember = async (
   input: ConnectionTarget & { memberId: MemberId; allowedTools: string[] | null },
 ) => {
   const { workspaceId, actorId, connectionId, memberId } = input
-  await asAdmin(dependencies, input, async ({ members, workspaceConnections, workspaceEvents }) => {
+  await asConnectionManager(dependencies, input, async ({ members, workspaceConnections, workspaceEvents }) => {
     if (!(await members.isActive(workspaceId, memberId))) throw new MemberNotFound(memberId)
     const connection = await workspaceConnections.get(workspaceId, connectionId)
     const allowedTools = input.allowedTools && knownToolsOf(connection, input.allowedTools)

@@ -1,16 +1,21 @@
-import { type MemberId, runtimeHostId, type WorkspaceId } from '@hq/kernel'
+import {
+  type MemberId,
+  requirePermissionIn,
+  runtimeHostId,
+  type WorkspaceId,
+  type WorkspacePermission,
+} from '@hq/kernel'
 import type { RuntimeTransactor } from '../contracts/transactor.ts'
 import { claimLifetimeMilliseconds, hashSecret, newClaimCode } from '../domain/claim.ts'
 import { LocalSessionsOff, MachineAlreadyAdded } from '../domain/errors.ts'
 import { HostName } from '../domain/host-name.ts'
-import { assertAdmin } from '../domain/runtime-host.ts'
 
 type Dependencies = { transactor: RuntimeTransactor }
 type Input = {
   id: string
   workspaceId: WorkspaceId
   memberId: MemberId
-  role: 'admin' | 'member'
+  permissions: readonly WorkspacePermission[]
   name: string
   personal: boolean
   now: number
@@ -20,9 +25,9 @@ const machineName = 'My machine'
 
 export const addRuntimeHost = async (
   { transactor }: Dependencies,
-  { id, memberId, role, name, personal, now, ...input }: Input,
+  { id, memberId, permissions, name, personal, now, ...input }: Input,
 ) => {
-  if (!personal) assertAdmin(role)
+  if (!personal) requirePermissionIn(permissions, 'runtimes.manage')
   const host = {
     ...input,
     id: runtimeHostId(id),

@@ -1,6 +1,5 @@
-import type { MemberId } from '@hq/kernel'
+import { type MemberId, requireWorkspacePermission } from '@hq/kernel'
 import type { SpendLedger, SpendTransactor } from '../contracts/spend.ts'
-import { NotWorkspaceAdmin } from '../domain/errors.ts'
 import { type SpendDimension, type SpendFilter, type SpendReport, spendReportOf } from '../domain/spend.ts'
 
 type Dependencies = { transactor: SpendTransactor }
@@ -26,7 +25,7 @@ const reportOf = async (
 
 export const readWorkspaceSpend = ({ transactor }: Dependencies, { memberId, filter }: Request) =>
   transactor.run(async (ledger): Promise<SpendReport> => {
-    if (!(await ledger.isActiveAdmin(memberId))) throw new NotWorkspaceAdmin('analyze costs')
+    await requireWorkspacePermission(ledger, memberId, 'costs.view')
     return reportOf(ledger, filter, {
       prompterId: null,
       tableDimensions: ['member', 'project', 'chat', 'model'],

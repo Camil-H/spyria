@@ -288,7 +288,7 @@ test.describe('Usage per chat and per member', () => {
       tag: ['@spec-13'],
     }, async ({ page }) => {
       await page.goto('/w/workspace-acme/settings/costs')
-      await expect(mainOf(page).getByText('Only workspace admins can see this page')).toBeVisible()
+      await expect(mainOf(page).getByText('Your workspace role does not give access to this page')).toBeVisible()
       await expect(usageSectionOf(page)).toHaveCount(0)
 
       await openUsageTab(page, 'Invoice bug')

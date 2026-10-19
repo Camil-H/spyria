@@ -1,5 +1,5 @@
 import { useQuery } from '@hq/db/react'
-import type { WorkspaceId } from '@hq/kernel'
+import { canGrantWorkspaceRole, memberRoleId, type WorkspaceId, type WorkspaceRole } from '@hq/kernel'
 import { useSession } from '@hq/session'
 import {
   buttonClass,
@@ -12,11 +12,11 @@ import {
   useGuardedAction,
 } from '@hq/ui'
 import { type SubmitEvent, useState } from 'react'
-import type { WorkspaceRole } from '../domain/member.ts'
 import { listInvitations, listMembers, type WorkspaceMember } from '../queries/list-members.ts'
+import { listWorkspaceRoles } from '../queries/list-roles.ts'
 import { useWorkspaceCommands } from './providers.tsx'
+import { useWorkspacePermissions } from './useWorkspacePermissions.ts'
 
-const roleLabels: Record<WorkspaceRole, string> = { admin: 'Admin', member: 'Member' }
 const dayMilliseconds = 24 * 60 * 60 * 1000
 
 const expiryLabelOf = (expiresAt: number) => {
@@ -28,33 +28,35 @@ const expiryLabelOf = (expiresAt: number) => {
 const RoleSelect = ({
   label,
   role,
+  roles,
   isDisabled,
   onChange,
 }: {
   label: string
-  role: WorkspaceRole
+  role: string
+  roles: readonly WorkspaceRole[]
   isDisabled?: boolean
-  onChange: (role: WorkspaceRole) => void
+  onChange: (role: string) => void
 }) => (
   <select
     aria-label={label}
     className={fieldClass}
     value={role}
     disabled={isDisabled}
-    onChange={(event) => onChange(event.target.value as WorkspaceRole)}
+    onChange={(event) => onChange(event.target.value)}
   >
-    {Object.entries(roleLabels).map(([value, roleLabel]) => (
-      <option key={value} value={value}>
-        {roleLabel}
+    {roles.map((option) => (
+      <option key={option.id} value={option.id}>
+        {option.name}
       </option>
     ))}
   </select>
 )
 
-const InviteForm = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
+const InviteForm = ({ workspaceId, roles }: { workspaceId: WorkspaceId; roles: readonly WorkspaceRole[] }) => {
   const commands = useWorkspaceCommands()
   const [email, setEmail] = useState('')
-  const [role, setRole] = useState<WorkspaceRole>('member')
+  const [role, setRole] = useState<string>(memberRoleId)
   const { errorMessage, isPending, run } = useGuardedAction()
   const submit = async (event: SubmitEvent) => {
     event.preventDefault()
@@ -66,7 +68,7 @@ const InviteForm = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
         Email
         <input type="email" className={fieldClass} value={email} onChange={(event) => setEmail(event.target.value)} />
       </label>
-      <RoleSelect label="Role" role={role} onChange={setRole} />
+      <RoleSelect label="Role" role={role} roles={roles} onChange={setRole} />
       <button type="submit" className={buttonClass} disabled={isPending || email.trim() === ''}>
         Invite
       </button>
@@ -82,6 +84,14 @@ export const MembersSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
   const { memberId: viewerId } = useSession()
   const members = useQuery(listMembers(workspaceId))
   const invitations = useQuery(listInvitations(workspaceId))
+  const roles = useQuery(listWorkspaceRoles(workspaceId))
+  const permissions = useWorkspacePermissions(workspaceId)
+  const grantableRoles = roles.filter((role) => canGrantWorkspaceRole(permissions, role))
+  const roleNameOf = (roleId: string) => roles.find((role) => role.id === roleId)?.name ?? roleId
+  const canManage = (member: WorkspaceMember) =>
+    member.id !== viewerId &&
+    permissions.includes('members.manage') &&
+    grantableRoles.some((role) => role.id === member.role)
   const [removing, setRemoving] = useState<WorkspaceMember | null>(null)
   const { errorMessage, isPending, run } = useGuardedAction()
   const remove = async (member: WorkspaceMember) => {
@@ -94,13 +104,17 @@ export const MembersSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
           <li key={member.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className="font-medium">{member.name}</span>
             <span className="text-muted">{member.email}</span>
-            {member.id === viewerId ? (
-              <span className="ml-auto text-muted">{roleLabels[member.role]} (you)</span>
+            {!canManage(member) ? (
+              <span className="ml-auto text-muted">
+                {roleNameOf(member.role)}
+                {member.id === viewerId && ' (you)'}
+              </span>
             ) : (
               <span className="ml-auto flex items-center gap-2">
                 <RoleSelect
                   label={`Role of ${member.name}`}
                   role={member.role}
+                  roles={grantableRoles}
                   isDisabled={isPending}
                   onChange={(role) => run(() => commands.changeMemberRole({ workspaceId, memberId: member.id, role }))}
                 />
@@ -124,7 +138,7 @@ export const MembersSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
           {invitations.map((invitation) => (
             <li key={invitation.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span className="font-medium">{invitation.email}</span>
-              <span className="text-muted">{roleLabels[invitation.role]}</span>
+              <span className="text-muted">{roleNameOf(invitation.role)}</span>
               <span className="text-muted">{expiryLabelOf(invitation.expiresAt)}</span>
               <button
                 type="button"
@@ -139,11 +153,12 @@ export const MembersSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
           ))}
         </ul>
       )}
-      <InviteForm workspaceId={workspaceId} />
+      {permissions.includes('members.invite') && <InviteForm workspaceId={workspaceId} roles={grantableRoles} />}
       {removing && (
         <Dialog label="Remove member" subject={removing.name} onClose={() => setRemoving(null)}>
           <p className="text-sm text-muted">
-            They lose access at once. The runtime chats they own freeze until an admin transfers them.
+            They lose access at once. The runtime chats they own freeze until someone who manages members transfers
+            them.
           </p>
           <ErrorMessage message={errorMessage} />
           <button type="button" className={buttonClass} disabled={isPending} onClick={() => remove(removing)}>

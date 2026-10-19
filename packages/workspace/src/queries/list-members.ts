@@ -1,12 +1,11 @@
 import type { Snapshot } from '@hq/db'
 import type { MemberId, WorkspaceId } from '@hq/kernel'
-import type { WorkspaceRole } from '../domain/member.ts'
 
 export type WorkspaceMember = Readonly<{
   id: MemberId
   name: string
   email: string
-  role: WorkspaceRole
+  role: string
 }>
 
 export const listMembers =

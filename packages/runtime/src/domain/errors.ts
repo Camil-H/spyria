@@ -4,11 +4,6 @@ export class RuntimeError extends DomainError {}
 
 export class HostRefused extends RuntimeError {}
 
-export const NotWorkspaceAdmin = errorKind(
-  'not_admin',
-  () => 'Only workspace admins can manage runtime hosts',
-  RuntimeError,
-)
 export const MachineAlreadyAdded = errorKind(
   'machine_already_added',
   () => 'Your machine is already added: remove it first',

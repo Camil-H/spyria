@@ -9,6 +9,7 @@ import type {
   ProjectRepository,
   WorkspaceEventLog,
   WorkspaceRepository,
+  WorkspaceRoleRepository,
 } from './repositories.ts'
 
 export type UnitOfWork = {
@@ -17,6 +18,7 @@ export type UnitOfWork = {
   projects: ProjectRepository
   chats: ChatRepository
   chatRoles: ChatRoleRepository
+  workspaceRoles: WorkspaceRoleRepository
   chatRuntimes: ChatRuntimeRepository
   invitations: InvitationRepository
   memberAccess: MemberAccess

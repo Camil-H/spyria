@@ -61,7 +61,10 @@ test('GitHub App settings: admins only, secrets required at first, sealed at res
   for (const [method, body] of [['GET'], ['POST', appSettings]] as const)
     expect(await request(bob, method, '/api/github-settings', body)).toMatchObject({
       status: 403,
-      body: { error: 'not_admin' },
+      body: {
+        error: 'missing_workspace_permission',
+        message: 'Your workspace role does not allow this: Connect GitHub',
+      },
     })
   expect(await request(alice, 'GET', '/api/github-settings')).toMatchObject({ status: 200, body: { settings: null } })
   expect(await request(alice, 'POST', '/api/github-settings', { ...appSettings, webhookSecret: '' })).toMatchObject({

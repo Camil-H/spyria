@@ -1,8 +1,8 @@
 import type { Transact } from '@hq/db/zero-queries'
-import type { WorkspaceId } from '@hq/kernel'
+import type { WorkspaceId, WorkspacePermission } from '@hq/kernel'
 import type { SpendTransactor } from '../contracts/spend.ts'
 import type { MergedPull, SpendCall, SpendCounts } from '../domain/spend.ts'
-import { activeAdminStatement } from './postgres-audit-log.ts'
+import { workspacePermissionsStatement } from './postgres-audit-log.ts'
 
 const callsStatement = `
   select grouped.bucket, grouped.prompter_id as "prompterId",
@@ -62,7 +62,10 @@ export const createPostgresSpendTransactor = (transact: Transact, workspaceId: W
       const query = async <Row>(statement: string, parameters: unknown[]) =>
         [...(await tx.dbTransaction.query(statement, [workspaceId, ...parameters]))] as Row[]
       return work({
-        isActiveAdmin: async (memberId) => (await query(activeAdminStatement, [memberId])).length > 0,
+        permissions: async (memberId) =>
+          (await query<{ permission: WorkspacePermission }>(workspacePermissionsStatement, [memberId])).map(
+            (granted) => granted.permission,
+          ),
         calls: (range, granularity, prompterId) =>
           query<SpendCall>(callsStatement, [range.from.toISOString(), range.to.toISOString(), granularity, prompterId]),
         counts: async ({ current, previous }, prompterId) => {

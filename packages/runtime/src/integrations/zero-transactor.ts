@@ -13,7 +13,13 @@ import {
   setServerOnlyRuntimeValue,
 } from '@hq/db/server-writes'
 import type { RuntimeHost as RuntimeHostRow, Runtime as RuntimeRow } from '@hq/db/zero'
-import { activeMemberRoleOf, skippingRefusedRebase, type Transact, type ZeroContext, zql } from '@hq/db/zero-queries'
+import {
+  skippingRefusedRebase,
+  type Transact,
+  workspacePermissionsOf,
+  type ZeroContext,
+  zql,
+} from '@hq/db/zero-queries'
 import { chatId, memberId, runtimeHostId, runtimeId, type WorkspaceId, workspaceId } from '@hq/kernel'
 import type { Transaction } from '@rocicorp/zero'
 import type { RuntimeTransactor, UnitOfWork } from '../contracts/transactor.ts'
@@ -21,8 +27,8 @@ import { HostNotFound, RuntimeNotFound } from '../domain/errors.ts'
 import type { Runtime } from '../domain/runtime.ts'
 import type { RuntimeHost } from '../domain/runtime-host.ts'
 
-export const contextRoleOf = async (tx: Transaction, context: ZeroContext) =>
-  (await activeMemberRoleOf(tx, context.workspaceId, context.userId)) ?? 'member'
+export const contextPermissionsOf = (tx: Transaction, context: ZeroContext) =>
+  workspacePermissionsOf(tx, context.workspaceId, context.userId)
 
 const hostOf = (row: RuntimeHostRow): RuntimeHost => ({
   ...row,

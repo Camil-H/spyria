@@ -1,5 +1,13 @@
+import type { Snapshot } from '@hq/db'
 import { useQuery } from '@hq/db/react'
-import { type ChatPermission, type ChatRole, chatPermissions, type WorkspaceId } from '@hq/kernel'
+import {
+  type ChatPermission,
+  chatPermissions,
+  type WorkspaceId,
+  type WorkspacePermission,
+  workspacePermissionLabels,
+  workspacePermissions,
+} from '@hq/kernel'
 import {
   buttonClass,
   Dialog,
@@ -8,39 +16,94 @@ import {
   ghostButtonClass,
   LabelledSection,
   labelClass,
+  tabTriggerClass,
   useGuardedAction,
 } from '@hq/ui'
+import { Content, List, Root, Trigger } from '@radix-ui/react-tabs'
 import { type SubmitEvent, useState } from 'react'
-import { listChatRoles } from '../queries/list-chat-roles.ts'
+import { listChatRoles, listWorkspaceRoles } from '../queries/list-roles.ts'
+import type { WorkspaceCommands } from './commands.ts'
 import { useWorkspaceCommands } from './providers.tsx'
 
-const permissionLabels: Record<ChatPermission, string> = {
-  'chat.read': 'Read the chat',
-  'chat.post': 'Post and prompt the agent',
-  'session.configure': 'Choose the model and stop the agent',
-  'tools.manage': "Manage the chat's tools",
-  'members.invite': 'Invite people to the chat',
-  'members.manage': 'Change roles and remove people',
-  'chat.admin': 'Rename, move and archive the chat, change its visibility',
+type StoredRole<Permission extends string> = {
+  id: string
+  name: string
+  permissions: readonly Permission[]
+  builtIn: boolean
+}
+type RoleInput<Permission extends string> = { name: string; permissions: readonly Permission[] }
+type RoleTarget = { workspaceId: WorkspaceId; roleId: string }
+type RoleKind<Permission extends string> = {
+  title: string
+  description: string
+  deletionHint: string
+  permissions: readonly Permission[]
+  labels: Record<Permission, string>
+  lockedPermissions: readonly Permission[]
+  listRoles: (workspaceId: WorkspaceId) => (snapshot: Snapshot) => readonly StoredRole<Permission>[]
+  commandsOf: (commands: WorkspaceCommands) => {
+    create: (input: RoleInput<Permission> & { workspaceId: WorkspaceId }) => Promise<string>
+    update: (input: RoleInput<Permission> & RoleTarget) => Promise<string>
+    remove: (target: RoleTarget) => Promise<string>
+  }
 }
 
-type RoleInput = { name: string; permissions: readonly ChatPermission[] }
+const workspaceRoleKind: RoleKind<WorkspacePermission> = {
+  title: 'Workspace roles',
+  description:
+    'Each member holds one of these roles in the workspace. Built-in roles are fixed; custom roles can be changed.',
+  deletionHint: 'A role still held by a member or a pending invite cannot be deleted.',
+  permissions: workspacePermissions,
+  labels: workspacePermissionLabels,
+  lockedPermissions: [],
+  listRoles: listWorkspaceRoles,
+  commandsOf: (commands) => ({
+    create: commands.createWorkspaceRole,
+    update: commands.updateWorkspaceRole,
+    remove: commands.deleteWorkspaceRole,
+  }),
+}
 
-const RoleForm = ({
+const chatRoleKind: RoleKind<ChatPermission> = {
+  title: 'Chat roles',
+  description: 'Each chat gives its people one of these roles. Built-in roles are fixed; custom roles can be changed.',
+  deletionHint: 'A role still held in a chat cannot be deleted.',
+  permissions: chatPermissions,
+  labels: {
+    'chat.read': 'Read the chat',
+    'chat.post': 'Post and prompt the agent',
+    'session.configure': 'Choose the model and stop the agent',
+    'tools.manage': "Manage the chat's tools",
+    'members.invite': 'Invite people to the chat',
+    'members.manage': 'Change roles and remove people',
+    'chat.admin': 'Rename, move and archive the chat, change its visibility',
+  },
+  lockedPermissions: ['chat.read'],
+  listRoles: listChatRoles,
+  commandsOf: (commands) => ({
+    create: commands.createChatRole,
+    update: commands.updateChatRole,
+    remove: commands.deleteChatRole,
+  }),
+}
+
+const RoleForm = <Permission extends string>({
+  kind,
   label,
   role,
   save,
   onClose,
 }: {
+  kind: RoleKind<Permission>
   label: string
-  role?: ChatRole
-  save: (input: RoleInput) => Promise<unknown>
+  role?: StoredRole<Permission>
+  save: (input: RoleInput<Permission>) => Promise<unknown>
   onClose: () => void
 }) => {
   const [name, setName] = useState(role?.name ?? '')
-  const [permissions, setPermissions] = useState<readonly ChatPermission[]>(role?.permissions ?? ['chat.read'])
+  const [permissions, setPermissions] = useState<readonly Permission[]>(role?.permissions ?? kind.lockedPermissions)
   const { errorMessage, isPending, run } = useGuardedAction()
-  const toggle = (permission: ChatPermission) =>
+  const toggle = (permission: Permission) =>
     setPermissions(
       permissions.includes(permission)
         ? permissions.filter((granted) => granted !== permission)
@@ -58,17 +121,20 @@ const RoleForm = ({
       </label>
       <fieldset className="flex flex-col gap-1.5 text-sm">
         <legend className="mb-1 text-xs font-semibold uppercase text-muted">Permissions</legend>
-        {chatPermissions.map((permission) => (
-          <label key={permission} className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={permission === 'chat.read' || permissions.includes(permission)}
-              disabled={permission === 'chat.read' || isPending}
-              onChange={() => toggle(permission)}
-            />
-            {permissionLabels[permission]}
-          </label>
-        ))}
+        {kind.permissions.map((permission) => {
+          const isLocked = kind.lockedPermissions.includes(permission)
+          return (
+            <label key={permission} className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={isLocked || permissions.includes(permission)}
+                disabled={isLocked || isPending}
+                onChange={() => toggle(permission)}
+              />
+              {kind.labels[permission]}
+            </label>
+          )
+        })}
       </fieldset>
       <ErrorMessage message={errorMessage} />
       <div className="flex gap-2">
@@ -83,8 +149,16 @@ const RoleForm = ({
   )
 }
 
-const CustomRoleActions = ({ workspaceId, role }: { workspaceId: WorkspaceId; role: ChatRole }) => {
-  const commands = useWorkspaceCommands()
+const CustomRoleActions = <Permission extends string>({
+  kind,
+  workspaceId,
+  role,
+}: {
+  kind: RoleKind<Permission>
+  workspaceId: WorkspaceId
+  role: StoredRole<Permission>
+}) => {
+  const commands = kind.commandsOf(useWorkspaceCommands())
   const [isEditing, setIsEditing] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const { errorMessage, isPending, run } = useGuardedAction()
@@ -112,22 +186,23 @@ const CustomRoleActions = ({ workspaceId, role }: { workspaceId: WorkspaceId; ro
       {isEditing && (
         <div className="mt-3">
           <RoleForm
+            kind={kind}
             label={`Edit ${role.name}`}
             role={role}
-            save={(input) => commands.updateChatRole({ ...target, ...input })}
+            save={(input) => commands.update({ ...target, ...input })}
             onClose={() => setIsEditing(false)}
           />
         </div>
       )}
       {isDeleting && (
         <Dialog label="Delete role" subject={role.name} onClose={() => setIsDeleting(false)}>
-          <p className="text-sm text-muted">A role still held in a chat cannot be deleted.</p>
+          <p className="text-sm text-muted">{kind.deletionHint}</p>
           <ErrorMessage message={errorMessage} />
           <button
             type="button"
             className={buttonClass}
             disabled={isPending}
-            onClick={() => run(() => commands.deleteChatRole(target))}
+            onClick={() => run(() => commands.remove(target))}
           >
             Delete
           </button>
@@ -137,32 +212,41 @@ const CustomRoleActions = ({ workspaceId, role }: { workspaceId: WorkspaceId; ro
   )
 }
 
-export const RolesSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
-  const commands = useWorkspaceCommands()
-  const roles = useQuery(listChatRoles(workspaceId))
+const RoleList = <Permission extends string>({
+  kind,
+  workspaceId,
+}: {
+  kind: RoleKind<Permission>
+  workspaceId: WorkspaceId
+}) => {
+  const commands = kind.commandsOf(useWorkspaceCommands())
+  const roles = useQuery(kind.listRoles(workspaceId))
   const [isCreating, setIsCreating] = useState(false)
   return (
-    <LabelledSection title="Chat roles">
-      <p className="text-sm text-muted">
-        Each chat gives its people one of these roles. Built-in roles are fixed; custom roles can be changed.
-      </p>
-      <ul aria-label="Chat roles" className="flex flex-col gap-3">
+    <LabelledSection title={kind.title}>
+      <p className="text-sm text-muted">{kind.description}</p>
+      <ul aria-label={kind.title} className="flex flex-col gap-3">
         {roles.map((role) => (
           <li key={role.id} aria-label={role.name} className="rounded-lg border border-line p-3">
             <h3 className="font-medium">{role.name}</h3>
-            <ul className="mt-1 list-disc pl-5 text-sm text-muted">
-              {role.permissions.map((permission) => (
-                <li key={permission}>{permissionLabels[permission]}</li>
-              ))}
-            </ul>
-            {!role.builtIn && <CustomRoleActions workspaceId={workspaceId} role={role} />}
+            {role.permissions.length === 0 ? (
+              <p className="mt-1 text-sm text-muted">No permissions</p>
+            ) : (
+              <ul className="mt-1 list-disc pl-5 text-sm text-muted">
+                {role.permissions.map((permission) => (
+                  <li key={permission}>{kind.labels[permission]}</li>
+                ))}
+              </ul>
+            )}
+            {!role.builtIn && <CustomRoleActions kind={kind} workspaceId={workspaceId} role={role} />}
           </li>
         ))}
       </ul>
       {isCreating ? (
         <RoleForm
+          kind={kind}
           label="New role"
-          save={(input) => commands.createChatRole({ workspaceId, ...input })}
+          save={(input) => commands.create({ workspaceId, ...input })}
           onClose={() => setIsCreating(false)}
         />
       ) : (
@@ -173,3 +257,23 @@ export const RolesSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
     </LabelledSection>
   )
 }
+
+const tabClass = `${tabTriggerClass} px-3`
+
+export const RolesSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => (
+  <Root defaultValue={workspaceRoleKind.title} className="flex flex-col gap-4">
+    <List aria-label="Role lists" className="flex gap-2 border-b border-line">
+      {[workspaceRoleKind.title, chatRoleKind.title].map((title) => (
+        <Trigger key={title} value={title} className={tabClass}>
+          {title}
+        </Trigger>
+      ))}
+    </List>
+    <Content value={workspaceRoleKind.title}>
+      <RoleList kind={workspaceRoleKind} workspaceId={workspaceId} />
+    </Content>
+    <Content value={chatRoleKind.title}>
+      <RoleList kind={chatRoleKind} workspaceId={workspaceId} />
+    </Content>
+  </Root>
+)

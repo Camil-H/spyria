@@ -1,4 +1,4 @@
-import type { CredentialId, MemberId, WorkspaceId } from '@hq/kernel'
+import type { CredentialId, MemberId, WorkspaceId, WorkspacePermission } from '@hq/kernel'
 import type { GatewayKey, LlmCredential } from '../domain/llm-credential.ts'
 import type { Member } from '../domain/member.ts'
 import type { PersonalConnection } from '../domain/personal-connection.ts'
@@ -13,7 +13,7 @@ import type {
 export type MemberRepository = {
   get(workspaceId: WorkspaceId, memberId: MemberId): Promise<Member>
   save(member: Member): Promise<void>
-  isActiveAdmin(workspaceId: WorkspaceId, memberId: MemberId): Promise<boolean>
+  permissions(workspaceId: WorkspaceId, memberId: MemberId): Promise<readonly WorkspacePermission[]>
   isActive(workspaceId: WorkspaceId, memberId: MemberId): Promise<boolean>
 }
 

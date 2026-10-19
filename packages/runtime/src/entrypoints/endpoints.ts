@@ -1,11 +1,11 @@
 import type { Transact, ZeroContext } from '@hq/db/zero-queries'
-import { type RuntimeHostId, runtimeHostId, type WorkspaceId } from '@hq/kernel'
+import { type RuntimeHostId, requirePermissionIn, runtimeHostId, type WorkspaceId } from '@hq/kernel'
 import type { Transaction } from '@rocicorp/zero'
 import { z } from 'zod/mini'
 import type { SandboxProvider } from '../contracts/sandbox-provider.ts'
-import { assertAdmin, type HostDeclaration, type HostSystem } from '../domain/runtime-host.ts'
+import type { HostDeclaration, HostSystem } from '../domain/runtime-host.ts'
 import {
-  contextRoleOf,
+  contextPermissionsOf,
   createTransactingZeroTransactor,
   createZeroTransactor,
 } from '../integrations/zero-transactor.ts'
@@ -25,14 +25,14 @@ export const addRuntimeHostFromRequest = async (tx: Transaction, context: ZeroCo
     id: crypto.randomUUID(),
     workspaceId: context.workspaceId,
     memberId: context.userId,
-    role: await contextRoleOf(tx, context),
+    permissions: await contextPermissionsOf(tx, context),
     name: textOf((body as Record<string, unknown> | null)?.name),
     personal: (body as Record<string, unknown> | null)?.personal === true,
     now: Date.now(),
   })
 
 export const countMachinesFromRequest = async (tx: Transaction, context: ZeroContext) => {
-  assertAdmin(await contextRoleOf(tx, context))
+  requirePermissionIn(await contextPermissionsOf(tx, context), 'runtimes.manage')
   const machines = await createZeroTransactor(tx).run(({ runtimeHosts }) =>
     runtimeHosts.listMachines(context.workspaceId),
   )
@@ -43,7 +43,7 @@ export const renewClaimCodeFromRequest = async (tx: Transaction, context: ZeroCo
   renewClaimCode(dependenciesOf(tx), {
     workspaceId: context.workspaceId,
     memberId: context.userId,
-    role: await contextRoleOf(tx, context),
+    permissions: await contextPermissionsOf(tx, context),
     hostId: runtimeHostId(hostId),
     now: Date.now(),
   })

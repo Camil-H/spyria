@@ -1,8 +1,8 @@
 import type { Transact } from '@hq/db/zero-queries'
-import type { WorkspaceId } from '@hq/kernel'
+import type { WorkspaceId, WorkspacePermission } from '@hq/kernel'
 import type { BudgetTransactor } from '../contracts/budgets.ts'
 import { type BudgetUse, budgetAlertIdOf, budgetLabelOf, type MemberSpend } from '../domain/budgets.ts'
-import { activeAdminStatement } from './postgres-audit-log.ts'
+import { workspacePermissionsStatement } from './postgres-audit-log.ts'
 
 const spentSince = (prompterCondition: string) => `coalesce((select sum(call.cost_micros) from model_calls call
   where call.workspace_id = $1 and call.called_at >= $2 and ${prompterCondition}), 0)::float8`
@@ -39,7 +39,10 @@ export const createPostgresBudgetTransactor = (transact: Transact, workspaceId: 
       const query = async <Row>(statement: string, parameters: unknown[]) =>
         [...(await tx.dbTransaction.query(statement, [workspaceId, ...parameters]))] as Row[]
       return work({
-        isActiveAdmin: async (memberId) => (await query(activeAdminStatement, [memberId])).length > 0,
+        permissions: async (memberId) =>
+          (await query<{ permission: WorkspacePermission }>(workspacePermissionsStatement, [memberId])).map(
+            (granted) => granted.permission,
+          ),
         uses: (since, memberId) => query<BudgetUse>(usesStatement, [since.toISOString(), memberId]),
         memberSpends: (since, memberId) => query<MemberSpend>(memberSpendsStatement, [since.toISOString(), memberId]),
         workspaceSpentMicros: async (since) =>

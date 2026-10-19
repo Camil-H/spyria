@@ -80,7 +80,10 @@ test('members are refused the budgets and read only their own; a malformed budge
   ] as const)
     expect(await asMember(bob, method, '/api/budgets', body)).toEqual({
       status: 403,
-      body: JSON.stringify({ error: 'not_admin', message: 'Only workspace admins can manage budgets' }),
+      body: JSON.stringify({
+        error: 'missing_workspace_permission',
+        message: 'Your workspace role does not allow this: Manage budgets',
+      }),
     })
   expect(await ownBudgetOf(bob)).toEqual({ limitMicros: null, spentMicros: 0, percent: null })
   for (const body of [{ memberId: bob, dollars: 0 }, { memberId: bob }, { memberId: bob, dollars: '2' }])

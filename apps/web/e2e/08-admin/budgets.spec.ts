@@ -204,7 +204,7 @@ test('Lee sees his own budget only; the budget change appears in the Audit log',
   await expect(mainOf(leePage)).not.toContainText('Bob')
   await expect(mainOf(leePage)).not.toContainText('$0.90')
   await leePage.goto('/w/workspace-acme/settings/costs')
-  await expect(mainOf(leePage)).toContainText('Only workspace admins can see this page')
+  await expect(mainOf(leePage)).toContainText('Your workspace role does not give access to this page')
   await expect(mainOf(leePage).getByRole('region', { name: 'Budgets' })).toHaveCount(0)
   await leePage.context().close()
 

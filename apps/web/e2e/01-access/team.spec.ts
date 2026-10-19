@@ -3,7 +3,9 @@ import {
   agentReplyText,
   composerOf,
   expect,
+  giveWorkspaceRole,
   hostsSectionOf,
+  insertWorkspaceRole,
   machineTest,
   mainOf,
   messageContaining,
@@ -110,7 +112,7 @@ test('promoting Bob shows him Workspace settings without a reload, demoting him 
   await membersSectionOf(page).getByRole('combobox', { name: 'Role of Bob' }).selectOption('member')
   await expect(settingsLinkOf(bobPage)).toHaveCount(0)
   await expect(membersSectionOf(bobPage)).toHaveCount(0)
-  await expect(mainOf(bobPage)).toContainText('Only workspace admins can see this page')
+  await expect(mainOf(bobPage)).toContainText('Your workspace role does not give access to this page')
   await bobPage.context().close()
 })
 
@@ -187,8 +189,8 @@ test('a removed member invited again signs in and is back in Acme', { tag: ['@sp
   await bobPage.context().close()
 })
 
-test('an admin sees their own row without a role select or Remove, and both on the other rows', {
-  tag: ['@spec-36'],
+test('As an Admin, I cannot change my own role or remove myself, and I can on the other rows', {
+  tag: ['@spec-36', '@spec-50'],
 }, async ({ page }) => {
   const aliceRow = memberRowOf(page, 'Alice')
   await expect(aliceRow).toContainText('Admin (you)')
@@ -196,4 +198,60 @@ test('an admin sees their own row without a role select or Remove, and both on t
   await expect(aliceRow.getByRole('button')).toHaveCount(0)
   await expect(memberRowOf(page, 'Bob').getByRole('combobox', { name: 'Role of Bob' })).toBeEnabled()
   await expect(memberRowOf(page, 'Bob').getByRole('button', { name: 'Remove Bob' })).toBeEnabled()
+})
+
+const roleOptionsOf = (page: Page, name: string) =>
+  memberRowOf(page, name)
+    .getByRole('combobox', { name: `Role of ${name}` })
+    .locator('option')
+    .evaluateAll((options) => options.map((option) => option.textContent))
+
+test('As a member who manages members, I change Lee to a role within my permissions only, and it applies to him at once', {
+  tag: ['@spec-50'],
+}, async ({ page, browser, workerStack }) => {
+  await insertWorkspaceRole(workerStack, 'role-manager', 'Manager', ['members.invite', 'members.manage'])
+  await insertWorkspaceRole(workerStack, 'role-finance', 'Finance', ['costs.view'])
+  await giveWorkspaceRole(workerStack, 'member-bob', 'role-manager')
+  const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+  const leePage = await openPageAs(browser, workerStack, 'member-lee')
+  await expect(sidebarOf(leePage).getByRole('link', { name: 'Profile' })).toBeVisible()
+  await expect(settingsLinkOf(leePage)).toHaveCount(0)
+
+  await openSettings(bobPage, 'Manage Team')
+  expect(await roleOptionsOf(bobPage, 'Lee')).toEqual(['Member', 'Manager'])
+  await expect(memberRowOf(bobPage, 'Alice')).toContainText('Admin')
+  await expect(memberRowOf(bobPage, 'Alice').getByRole('combobox')).toHaveCount(0)
+  await memberRowOf(bobPage, 'Lee').getByRole('combobox', { name: 'Role of Lee' }).selectOption({ label: 'Manager' })
+
+  await expect(settingsLinkOf(leePage)).toBeVisible()
+  await expect(memberRowOf(page, 'Lee').getByRole('combobox', { name: 'Role of Lee' })).toHaveValue('role-manager')
+  await bobPage.context().close()
+  await leePage.context().close()
+})
+
+test('As the last Admin, I cannot be demoted by anyone; once Lee is a second Admin, he demotes me', {
+  tag: ['@spec-50'],
+}, async ({ page, browser, workerStack }) => {
+  await insertWorkspaceRole(workerStack, 'role-manager', 'Manager', ['members.manage'])
+  await giveWorkspaceRole(workerStack, 'member-bob', 'role-manager')
+  const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+  await openSettings(bobPage, 'Manage Team')
+  await expect(memberRowOf(bobPage, 'Alice')).toContainText('Admin')
+  await expect(memberRowOf(bobPage, 'Alice').getByRole('combobox')).toHaveCount(0)
+  await expect(memberRowOf(bobPage, 'Alice').getByRole('button')).toHaveCount(0)
+  await expect(memberRowOf(page, 'Alice')).toContainText('Admin (you)')
+  await expect(memberRowOf(page, 'Alice').getByRole('combobox')).toHaveCount(0)
+
+  await memberRowOf(page, 'Lee').getByRole('combobox', { name: 'Role of Lee' }).selectOption({ label: 'Admin' })
+  const leePage = await openPageAs(browser, workerStack, 'member-lee')
+  await openSettings(leePage, 'Manage Team')
+  const alicesRole = memberRowOf(leePage, 'Alice').getByRole('combobox', { name: 'Role of Alice' })
+  await alicesRole.selectOption({ label: 'Member' })
+  await expect(alicesRole).toHaveValue('member')
+  await expect(mainOf(page)).toContainText('Your workspace role does not give access to this page')
+  await expect(settingsLinkOf(page)).toHaveCount(0)
+  await page.goto('/w/workspace-acme/settings')
+  await expect(mainOf(page)).toContainText('You have no workspace settings to manage')
+  await bobPage.context().close()
+  await leePage.context().close()
 })

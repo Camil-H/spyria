@@ -10,6 +10,7 @@ import {
   type RuntimeHostId,
   type RuntimeId,
   type WorkspaceId,
+  type WorkspacePermission,
 } from '@hq/kernel'
 
 type WorkspaceRow = { id: WorkspaceId; name: string; localSessions: boolean }
@@ -18,14 +19,14 @@ type MembershipRow = {
   workspaceId: WorkspaceId
   displayName: string
   email: string
-  role: 'admin' | 'member'
+  role: string
   removedAt: string | null
 }
 type InvitationRow = {
   workspaceId: WorkspaceId
   id: string
   email: string
-  role: 'admin' | 'member'
+  role: string
   expiresAt: number
 }
 export type RuntimeHostCapacity = {
@@ -187,10 +188,18 @@ type ChatRoleRow = {
   permissions: readonly ChatPermission[]
   builtIn: boolean
 }
+type WorkspaceRoleRow = {
+  workspaceId: WorkspaceId
+  id: string
+  name: string
+  permissions: readonly WorkspacePermission[]
+  builtIn: boolean
+}
 
 export type Snapshot = {
   workspaces: readonly WorkspaceRow[]
   memberships: readonly MembershipRow[]
+  workspaceRoles: readonly WorkspaceRoleRow[]
   invitations: readonly InvitationRow[]
   projects: readonly ProjectRow[]
   chats: readonly ChatRow[]
@@ -279,3 +288,13 @@ export const chatPermissionsIn =
       participant && participantIndexOf(snapshot).roleById.get(`${workspaceId}/${participant.roleId}`),
     )
   }
+
+export const workspacePermissionsIn = (snapshot: Snapshot, workspaceId: WorkspaceId, memberId: MemberId) => {
+  const membership = snapshot.memberships.find(
+    (row) => row.workspaceId === workspaceId && row.memberId === memberId && row.removedAt === null,
+  )
+  return (
+    snapshot.workspaceRoles.find((role) => role.workspaceId === workspaceId && role.id === membership?.role)
+      ?.permissions ?? []
+  )
+}

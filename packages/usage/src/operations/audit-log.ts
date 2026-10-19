@@ -1,5 +1,5 @@
-import type { MemberId } from '@hq/kernel'
-import type { AuditLog, AuditTransactor } from '../contracts/audit-log.ts'
+import { type MemberId, requireWorkspacePermission } from '@hq/kernel'
+import type { AuditTransactor } from '../contracts/audit-log.ts'
 import {
   type AuditFilter,
   type AuditPage,
@@ -10,20 +10,15 @@ import {
   keptSince,
   retentionDaysFrom,
 } from '../domain/audit.ts'
-import { NotWorkspaceAdmin } from '../domain/errors.ts'
 
 type Dependencies = { transactor: AuditTransactor }
-
-const requireAdmin = async (auditLog: AuditLog, memberId: MemberId) => {
-  if (!(await auditLog.isActiveAdmin(memberId))) throw new NotWorkspaceAdmin()
-}
 
 export const readAuditPage = (
   { transactor }: Dependencies,
   { memberId, filter, limit, now }: { memberId: MemberId; filter: AuditFilter; limit: number; now: Date },
 ) =>
   transactor.run(async (auditLog): Promise<AuditPage> => {
-    await requireAdmin(auditLog, memberId)
+    await requireWorkspacePermission(auditLog, memberId, 'audit.view')
     const records = await auditLog.records({
       since: keptSince(filter.from, await auditLog.retentionDays(), now),
       until: filter.to,
@@ -42,7 +37,7 @@ export const readAuditPage = (
 
 export const readAuditRetention = ({ transactor }: Dependencies, { memberId }: { memberId: MemberId }) =>
   transactor.run(async (auditLog) => {
-    await requireAdmin(auditLog, memberId)
+    await requireWorkspacePermission(auditLog, memberId, 'audit.view')
     return auditLog.retentionDays()
   })
 
@@ -51,7 +46,7 @@ export const setAuditRetention = (
   { memberId, retentionDays }: { memberId: MemberId; retentionDays: unknown },
 ) =>
   transactor.run(async (auditLog) => {
-    await requireAdmin(auditLog, memberId)
+    await requireWorkspacePermission(auditLog, memberId, 'audit.view')
     const days = retentionDaysFrom(retentionDays)
     if (days !== (await auditLog.retentionDays())) await auditLog.setRetentionDays(days, memberId)
     return days

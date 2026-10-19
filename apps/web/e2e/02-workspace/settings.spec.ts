@@ -8,7 +8,7 @@ const cardsBySection = {
 const sectionShownBy: Record<string, string> = {
   'Setup SSO': 'Sign-in',
   'Connect GitHub': 'GitHub',
-  'Roles and Permissions': 'Chat roles',
+  'Roles and Permissions': 'Workspace roles',
   'Manage Team': 'Members',
   'Connect runtime': 'Runtime hosts',
   'MCP tools': 'Connections',
@@ -33,7 +33,7 @@ test('Workspace settings list their cards in three sections with a status; each 
     for (const cardTitle of cardTitles) await expect(section.getByRole('link', { name: cardTitle })).toBeVisible()
   }
   await expect(cardOf(page, 'Setup SSO')).toContainText("Signs in with this deployment's Dex")
-  await expect(cardOf(page, 'Roles and Permissions')).toContainText('4 built-in roles')
+  await expect(cardOf(page, 'Roles and Permissions')).toContainText('6 built-in roles')
   await expect(cardOf(page, 'Manage Team')).toContainText('3 members')
   await expect(cardOf(page, 'Connect runtime')).toContainText('1 runtime host')
   await expect(cardOf(page, 'MCP tools')).toContainText('1 shared connection')
@@ -53,6 +53,7 @@ test('a card page opens from its URL; Roles and Permissions lists the built-in r
 }, async ({ page }) => {
   await page.goto('/w/workspace-acme/settings/roles')
   await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Roles and Permissions' })).toBeVisible()
+  await mainOf(page).getByRole('tab', { name: 'Chat roles' }).click()
   const roles = mainOf(page).getByRole('list', { name: 'Chat roles' }).getByRole('listitem', { name: /.+/ })
   await expect(roles).toHaveCount(4)
   await expect(mainOf(page).getByRole('listitem', { name: 'Reader' })).toHaveText(/^Reader\s*Read the chat$/)

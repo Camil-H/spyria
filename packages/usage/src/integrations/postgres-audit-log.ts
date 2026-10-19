@@ -1,5 +1,5 @@
 import type { Transact } from '@hq/db/zero-queries'
-import type { WorkspaceId } from '@hq/kernel'
+import type { WorkspaceId, WorkspacePermission } from '@hq/kernel'
 import type { AuditQuery, AuditTransactor } from '../contracts/audit-log.ts'
 import { type AuditRecord, auditJobTypes } from '../domain/audit.ts'
 
@@ -20,7 +20,7 @@ const workspaceEventRecords = `
   select event.created_at as at, 'w:' || event.id as key, event.type as kind, event.actor_id,
     case
       when event.type like 'connection.%' then coalesce(event.payload->>'name', connection.name)
-      when event.type like 'role.%' then event.payload->>'name'
+      when event.type like 'role.%' or event.type like 'workspace_role.%' then event.payload->>'name'
       when event.type = 'chat.transferred' then chat.name
       when event.type like 'budget.%' then coalesce(member.display_name, 'Workspace total')
       when event.payload ? 'memberId' then member.display_name
@@ -28,7 +28,7 @@ const workspaceEventRecords = `
     end as target,
     jsonb_strip_nulls((event.payload - 'memberId' - 'chatId' - 'connectionId' - 'invitationId' - 'fromId' - 'toId' - 'roleId')
       || jsonb_build_object('member', member.display_name, 'chat', chat.name, 'from', from_member.display_name,
-        'to', to_member.display_name))::json as details
+        'to', to_member.display_name, 'role', coalesce(workspace_role.name, event.payload->>'role')))::json as details
   from workspace_events event
   ${memberNamed('member', "event.payload->>'memberId'")}
   ${memberNamed('from_member', "event.payload->>'fromId'")}
@@ -36,6 +36,8 @@ const workspaceEventRecords = `
   ${chatNamed('chat', "event.payload->>'chatId'")}
   left join workspace_connections connection on connection.workspace_id = $1
     and connection.id = event.payload->>'connectionId'
+  left join workspace_roles workspace_role on workspace_role.workspace_id = $1
+    and workspace_role.id = event.payload->>'role'
   where event.workspace_id = $1`
 
 const chatEventRecords = `
@@ -88,8 +90,10 @@ const pullRequestRecords = `
   ) change
   where change.type = 'message.posted' or change.step->>'state' is distinct from change.previous_state`
 
-export const activeAdminStatement = `select 1 from memberships where workspace_id = $1 and user_id = $2
-  and role = 'admin' and removed_at is null`
+export const workspacePermissionsStatement = `select granted.permission from memberships member
+  join workspace_role_permissions granted on granted.workspace_id = member.workspace_id
+    and granted.role_id = member.role
+  where member.workspace_id = $1 and member.user_id = $2 and member.removed_at is null`
 
 const auditRecordsStatement = `
   select to_char(page.at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as at, page.key, page.kind,
@@ -111,7 +115,10 @@ export const createPostgresAuditTransactor = (transact: Transact, workspaceId: W
           )
         )[0]?.retentionDays ?? null
       return work({
-        isActiveAdmin: async (memberId) => (await query(activeAdminStatement, [memberId])).length > 0,
+        permissions: async (memberId) =>
+          (await query<{ permission: WorkspacePermission }>(workspacePermissionsStatement, [memberId])).map(
+            (granted) => granted.permission,
+          ),
         records: async ({ since, until, personId, kinds, before, limit }: AuditQuery) =>
           query<AuditRecord>(auditRecordsStatement, [
             before?.at ?? null,

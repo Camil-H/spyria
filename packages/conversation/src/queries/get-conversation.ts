@@ -7,6 +7,7 @@ import {
   participantIn,
   type RuntimeOriginRow,
   type Snapshot,
+  workspacePermissionsIn,
 } from '@hq/db'
 import { type ChatId, can, type MemberId, type MessageId, messageId, type WorkspaceId } from '@hq/kernel'
 import { stoppedByPrefix } from '../domain/agent-events.ts'
@@ -243,10 +244,7 @@ export const getConversation =
     const connectedHarnesses = (Object.keys(localSessions) as Harness[]).filter(
       (harness) => machine?.status === 'online' && machine.capacity?.signedIn?.includes(localSessions[harness].signIn),
     )
-    const isAdmin = snapshot.memberships.some(
-      (member) => member.workspaceId === workspaceId && member.memberId === viewerId && member.role === 'admin',
-    )
-    const hasWorkspaceHost = isAdmin
+    const hasWorkspaceHost = workspacePermissionsIn(snapshot, workspaceId, viewerId).includes('runtimes.manage')
       ? snapshot.runtimeHosts.some(
           (host) => host.workspaceId === workspaceId && host.ownerId === null && host.status === 'online',
         )

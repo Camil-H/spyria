@@ -15,7 +15,7 @@ import { NewChatDialog } from './NewChatDialog.tsx'
 import { ProjectGroup } from './ProjectGroup.tsx'
 import { useWorkspaceCommands } from './providers.tsx'
 import { navLinkClass } from './ui.ts'
-import { useIsWorkspaceAdmin } from './useIsWorkspaceAdmin.ts'
+import { useWorkspacePermissions } from './useWorkspacePermissions.ts'
 import { WorkspaceSwitcher } from './WorkspaceSwitcher.tsx'
 
 const BrowseChannelsDialog = lazy(() => import('./BrowseChannelsDialog.tsx'))
@@ -31,7 +31,7 @@ export const Sidebar = ({
   const sidebar = useQuery(getSidebar(workspaceId, memberId))
   const joinableChannels = useQuery(listJoinableChannels(workspaceId, memberId))
   const commands = useWorkspaceCommands()
-  const isAdmin = useIsWorkspaceAdmin(workspaceId)
+  const hasWorkspaceSettings = useWorkspacePermissions(workspaceId).length > 0
   const chatAction = useGuardedAction()
   const [openDialog, setOpenDialog] = useState<'project' | 'chat' | 'channels' | null>(null)
   const closeDialog = () => setOpenDialog(null)
@@ -104,7 +104,7 @@ export const Sidebar = ({
             <span className="flex-1">Browse channels</span>
             {joinableChannels.length > 0 && <span className="text-xs text-muted">{joinableChannels.length}</span>}
           </button>
-          {isAdmin && (
+          {hasWorkspaceSettings && (
             <NavLink to={`/w/${workspaceId}/settings`} className={navLinkClass('flex items-center gap-2 py-1.5')}>
               <Settings aria-hidden className="size-4" />
               Workspace settings

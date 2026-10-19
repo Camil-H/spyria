@@ -1,5 +1,6 @@
 import {
   builtInChatRoles,
+  builtInWorkspaceRoles,
   chatId,
   credentialId,
   type MemberId,
@@ -171,6 +172,9 @@ export const createMockSnapshot = (): Snapshot => {
       },
       { memberId: alice, workspaceId: globex, displayName: 'Alice', email: aliceEmail, role: 'admin', removedAt: null },
     ],
+    workspaceRoles: [acme, globex].flatMap((workspaceId) =>
+      builtInWorkspaceRoles.map((role) => ({ ...role, workspaceId, builtIn: true })),
+    ),
     invitations: [],
     projects: [
       { id: onboarding, workspaceId: acme, name: 'Onboarding', archived: false },

@@ -1,4 +1,4 @@
-import type { MemberId } from '@hq/kernel'
+import { type MemberId, requireWorkspacePermission } from '@hq/kernel'
 import type { BudgetLedger, BudgetTransactor } from '../contracts/budgets.ts'
 import {
   type BudgetOverview,
@@ -10,7 +10,7 @@ import {
   monthStartOf,
   usedUpBudgetOf,
 } from '../domain/budgets.ts'
-import { BudgetMemberNotFound, NotWorkspaceAdmin } from '../domain/errors.ts'
+import { BudgetMemberNotFound } from '../domain/errors.ts'
 
 type Dependencies = { transactor: BudgetTransactor }
 
@@ -23,16 +23,12 @@ const overviewOf = async (ledger: BudgetLedger, now: Date) => {
   })
 }
 
-const requireAdmin = async (ledger: BudgetLedger, memberId: MemberId) => {
-  if (!(await ledger.isActiveAdmin(memberId))) throw new NotWorkspaceAdmin('manage budgets')
-}
-
 const recordReachedAlerts = async (ledger: BudgetLedger, now: Date) =>
   ledger.recordAlerts(monthOf(now), budgetAlertsOf(await ledger.uses(monthStartOf(now), null)))
 
 export const readBudgets = ({ transactor }: Dependencies, { memberId, now }: { memberId: MemberId; now: Date }) =>
   transactor.run(async (ledger): Promise<BudgetOverview> => {
-    await requireAdmin(ledger, memberId)
+    await requireWorkspacePermission(ledger, memberId, 'budgets.manage')
     return overviewOf(ledger, now)
   })
 
@@ -41,7 +37,7 @@ export const setBudget = (
   { memberId, budget, now }: { memberId: MemberId; budget: unknown; now: Date },
 ) =>
   transactor.run(async (ledger): Promise<BudgetOverview> => {
-    await requireAdmin(ledger, memberId)
+    await requireWorkspacePermission(ledger, memberId, 'budgets.manage')
     const change = budgetChangeFrom(budget)
     const overview = await overviewOf(ledger, now)
     const current =

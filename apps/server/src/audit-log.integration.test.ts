@@ -90,7 +90,10 @@ test('only active admins read the audit log, its CSV and its retention; members 
     expect({ path, status: refused.status, body: JSON.parse(refused.body) }).toEqual({
       path,
       status: 403,
-      body: { error: 'not_admin', message: 'Only workspace admins can see the audit log' },
+      body: {
+        error: 'missing_workspace_permission',
+        message: 'Your workspace role does not allow this: View the audit log',
+      },
     })
   }
   expect((await sql`select * from audit_settings`).length).toBe(0)
@@ -166,7 +169,7 @@ test('workspace events, chat events, tool calls, pushes and pull requests merge 
       .reverse(),
   )
   expect(detailsOf(entries[0])).toEqual({ Member: 'Lee', Role: 'Reader' })
-  expect(detailsOf(entries[1])).toEqual({ Email: 'nina@example.com', Role: 'member' })
+  expect(detailsOf(entries[1])).toEqual({ Email: 'nina@example.com', Role: 'Member' })
   expect(detailsOf(entries[2])).toEqual({
     Chat: 'Research',
     Server: 'crm',
@@ -274,7 +277,7 @@ test('filters by person, grouped type and date range, and the CSV holds the same
     ),
   )
   expect(rows[0]).toBe(
-    `${page.entries[0]?.at},Alice,Invited a member,nina@example.com,Role: member; Email: nina@example.com`,
+    `${page.entries[0]?.at},Alice,Invited a member,nina@example.com,Role: Member; Email: nina@example.com`,
   )
 })
 

@@ -1,4 +1,5 @@
 import { afterAll, expect, test } from 'bun:test'
+import { workspacePermissions } from '@hq/kernel'
 import { createMockSnapshot } from '../mock-data.ts'
 import { resetDatabase } from './seed.ts'
 import * as tables from './tables.ts'
@@ -18,6 +19,7 @@ const groupedByChat = <Row extends { chatId: string }>(rows: readonly Row[]) =>
 const userAsMember = <Row extends { userId: string }>({ userId, ...row }: Row) => ({ ...row, memberId: userId })
 
 const readSnapshot = async () => {
+  const grantedPermissions = await database.select().from(tables.workspaceRolePermissions)
   const [memberships, users, chats, messages, readMarkers] = await Promise.all([
     database.select().from(tables.memberships),
     database.select().from(tables.users),
@@ -79,6 +81,15 @@ const readSnapshot = async () => {
     ).map(({ position, ...connection }) => userAsMember(connection)),
     chatMembers: (await database.select().from(tables.chatParticipants)).map(userAsMember),
     chatRoles: await database.select().from(tables.chatRoles),
+    workspaceRoles: (await database.select().from(tables.workspaceRoles)).map((role) => ({
+      ...role,
+      permissions: workspacePermissions.filter((permission) =>
+        grantedPermissions.some(
+          (granted) =>
+            granted.workspaceId === role.workspaceId && granted.roleId === role.id && granted.permission === permission,
+        ),
+      ),
+    })),
     planSteps: (
       await database.select().from(tables.planSteps).orderBy(tables.planSteps.chatId, tables.planSteps.position)
     ).map(({ position, ...step }) => step),

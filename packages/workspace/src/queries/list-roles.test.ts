@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { acme, createMockSnapshot, globex } from '@hq/db'
-import { listChatRoles } from './list-chat-roles.ts'
+import { listChatRoles, listWorkspaceRoles } from './list-roles.ts'
 
 const snapshot = createMockSnapshot()
 const customRole = (id: string, name: string, workspaceId = acme) => ({
@@ -29,4 +29,13 @@ test('lists the built-in roles from the widest, then the custom roles of the wor
     'Auditor',
     'Reviewer',
   ])
+})
+
+test('lists Admin, Member, then the custom workspace roles of the workspace by name', () => {
+  const finance = { ...customRole('role-finance', 'Finance'), permissions: ['costs.view' as const] }
+  const withCustomRoles = {
+    ...snapshot,
+    workspaceRoles: [finance, { ...finance, id: 'role-globex', workspaceId: globex }, ...snapshot.workspaceRoles],
+  }
+  expect(listWorkspaceRoles(acme)(withCustomRoles).map((role) => role.name)).toEqual(['Admin', 'Member', 'Finance'])
 })

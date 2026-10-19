@@ -13,7 +13,9 @@ import { createChat } from '../operations/create-chat.ts'
 import { createChatRole } from '../operations/create-chat-role.ts'
 import { createProject } from '../operations/create-project.ts'
 import { createWorkspace } from '../operations/create-workspace.ts'
+import { createWorkspaceRole } from '../operations/create-workspace-role.ts'
 import { deleteChatRole } from '../operations/delete-chat-role.ts'
+import { deleteWorkspaceRole } from '../operations/delete-workspace-role.ts'
 import { inviteMember } from '../operations/invite-member.ts'
 import { moveChat } from '../operations/move-chat.ts'
 import { removeMember } from '../operations/remove-member.ts'
@@ -22,6 +24,7 @@ import { renameProject } from '../operations/rename-project.ts'
 import { revokeInvite } from '../operations/revoke-invite.ts'
 import { transferChat } from '../operations/transfer-chat.ts'
 import { updateChatRole } from '../operations/update-chat-role.ts'
+import { updateWorkspaceRole } from '../operations/update-workspace-role.ts'
 
 const id = z.string().check(z.minLength(1))
 const name = z.pipe(z.string(), z.transform(Name))
@@ -30,8 +33,8 @@ const projectIdArgument = z.pipe(id, z.transform(projectId))
 
 const memberIdArgument = z.pipe(id, z.transform(memberId))
 const visibilityArgument = z.enum(['public', 'private'])
-const roleArgument = z.enum(['admin', 'member'])
-const chatRoleArguments = {
+const roleArgument = id
+const roleArguments = {
   name: z.string().check(z.maxLength(200)),
   permissions: z.array(z.string().check(z.maxLength(64))).check(z.maxLength(16)),
 }
@@ -98,16 +101,26 @@ export const workspaceMutators = defineMutators({
     removeMember: defineMutator(z.extend(workspaceArguments, { memberId: memberIdArgument }), ({ tx, ctx, args }) =>
       removeMember(dependenciesOf(tx, ctx, args), { ...args, actorId: ctx.userId, now: Date.now() }),
     ),
-    createChatRole: defineMutator(z.extend(workspaceArguments, { id, ...chatRoleArguments }), ({ tx, ctx, args }) =>
+    createChatRole: defineMutator(z.extend(workspaceArguments, { id, ...roleArguments }), ({ tx, ctx, args }) =>
       createChatRole(dependenciesOf(tx, ctx, args), { ...args, actorId: ctx.userId }),
     ),
-    updateChatRole: defineMutator(
-      z.extend(workspaceArguments, { roleId: id, ...chatRoleArguments }),
-      ({ tx, ctx, args }) => updateChatRole(dependenciesOf(tx, ctx, args), { ...args, actorId: ctx.userId }),
+    updateChatRole: defineMutator(z.extend(workspaceArguments, { roleId: id, ...roleArguments }), ({ tx, ctx, args }) =>
+      updateChatRole(dependenciesOf(tx, ctx, args), { ...args, actorId: ctx.userId }),
     ),
     deleteChatRole: defineMutator(z.extend(workspaceArguments, { roleId: id }), async ({ tx, ctx, args }) => {
       if (tx.location === 'server')
         await deleteChatRole(dependenciesOf(tx, ctx, args), { ...args, actorId: ctx.userId })
+    }),
+    createWorkspaceRole: defineMutator(z.extend(workspaceArguments, { id, ...roleArguments }), ({ tx, ctx, args }) =>
+      createWorkspaceRole(dependenciesOf(tx, ctx, args), { ...args, actorId: ctx.userId }),
+    ),
+    updateWorkspaceRole: defineMutator(
+      z.extend(workspaceArguments, { roleId: id, ...roleArguments }),
+      ({ tx, ctx, args }) => updateWorkspaceRole(dependenciesOf(tx, ctx, args), { ...args, actorId: ctx.userId }),
+    ),
+    deleteWorkspaceRole: defineMutator(z.extend(workspaceArguments, { roleId: id }), async ({ tx, ctx, args }) => {
+      if (tx.location === 'server')
+        await deleteWorkspaceRole(dependenciesOf(tx, ctx, args), { ...args, actorId: ctx.userId })
     }),
     transferChat: defineMutator(
       z.extend(workspaceArguments, { chatId: chatIdArgument, ownerId: memberIdArgument }),

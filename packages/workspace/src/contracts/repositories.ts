@@ -1,10 +1,18 @@
-import type { ChatId, ChatPermission, ChatRole, MemberId, ProjectId } from '@hq/kernel'
+import type {
+  ChatId,
+  ChatPermission,
+  ChatRole,
+  MemberId,
+  ProjectId,
+  WorkspacePermission,
+  WorkspaceRole,
+} from '@hq/kernel'
 import type { Chat, ChatChange } from '../domain/chat.ts'
-import type { RoleHolders, StoredChatRole } from '../domain/chat-role.ts'
 import type { GitHubRepository } from '../domain/github.ts'
 import type { Invitation } from '../domain/invitation.ts'
 import type { Member } from '../domain/member.ts'
 import type { Project } from '../domain/project.ts'
+import type { RoleHolders, StoredChatRole, StoredWorkspaceRole, WorkspaceRoleHolders } from '../domain/role.ts'
 import type { Membership, Workspace } from '../domain/workspace.ts'
 
 export type ProjectRepository = {
@@ -34,6 +42,15 @@ export type ChatRoleRepository = {
   remove(roleId: string): Promise<void>
 }
 
+export type WorkspaceRoleRepository = {
+  get(roleId: string): Promise<StoredWorkspaceRole | undefined>
+  list(): Promise<WorkspaceRole[]>
+  holders(roleId: string): Promise<WorkspaceRoleHolders>
+  add(role: WorkspaceRole): Promise<void>
+  save(role: WorkspaceRole): Promise<void>
+  remove(roleId: string): Promise<void>
+}
+
 export type WorkspaceRepository = {
   add(workspace: Workspace): Promise<void>
 }
@@ -42,6 +59,7 @@ export type MembershipRepository = {
   add(membership: Membership): Promise<void>
   get(memberId: MemberId): Promise<Member | undefined>
   findByEmail(email: string): Promise<Member | undefined>
+  permissions(memberId: MemberId): Promise<readonly WorkspacePermission[]>
   activeAdminIds(): Promise<MemberId[]>
   save(member: Member): Promise<void>
 }

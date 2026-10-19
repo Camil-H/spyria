@@ -194,7 +194,7 @@ test.describe('Workspace runtime hosts', () => {
         await expect(sidebarOf(page).getByRole('link', { name: 'Profile' })).toBeVisible()
         await expect(sidebarOf(page).getByRole('link', { name: 'Workspace settings' })).toHaveCount(0)
         await page.goto('/w/workspace-acme/settings/runtime')
-        await expect(mainOf(page).getByText('Only workspace admins can see this page')).toBeVisible()
+        await expect(mainOf(page).getByText('Your workspace role does not give access to this page')).toBeVisible()
         await expect(hostsSectionOf(page)).toHaveCount(0)
       })
     })

@@ -1,11 +1,11 @@
 import type { Snapshot } from '@hq/db'
 import { useQuery } from '@hq/db/react'
-import type { WorkspaceId } from '@hq/kernel'
+import type { WorkspaceId, WorkspacePermission } from '@hq/kernel'
 import { WorkspaceConnectionsSection } from '@hq/profile'
 import { RuntimeHostsSection } from '@hq/runtime'
 import { focusRing, formatCost, iconButtonClass, LabelledSection } from '@hq/ui'
 import { AuditLogSection, countBudgetAlerts, UsageSection } from '@hq/usage'
-import { GitHubSection, MembersSection, RolesSection, SignInSection, useIsWorkspaceAdmin } from '@hq/workspace'
+import { GitHubSection, MembersSection, RolesSection, SignInSection, useWorkspacePermissions } from '@hq/workspace'
 import { ArrowLeft } from 'lucide-react'
 import { type ComponentType, use } from 'react'
 import { Link, useOutletContext, useParams } from 'react-router'
@@ -15,7 +15,12 @@ type SettingsCard = {
   path: string
   title: string
   description: string
-  Page: ComponentType<{ workspaceId: WorkspaceId; isDexSignIn: boolean }>
+  permissions: readonly WorkspacePermission[]
+  Page: ComponentType<{
+    workspaceId: WorkspaceId
+    isDexSignIn: boolean
+    permissions: readonly WorkspacePermission[]
+  }>
 }
 
 const cardSections: readonly { title: string; cards: readonly SettingsCard[] }[] = [
@@ -26,16 +31,30 @@ const cardSections: readonly { title: string; cards: readonly SettingsCard[] }[]
         path: 'sso',
         title: 'Setup SSO',
         description: 'Sign members in through your identity provider',
+        permissions: ['sso.manage'],
         Page: SignInSection,
       },
       {
         path: 'github',
         title: 'Connect GitHub',
         description: 'The GitHub App dev chats clone and push with',
+        permissions: ['github.manage'],
         Page: GitHubSection,
       },
-      { path: 'roles', title: 'Roles and Permissions', description: 'What each chat role allows', Page: RolesSection },
-      { path: 'team', title: 'Manage Team', description: 'Members, workspace roles and invites', Page: MembersSection },
+      {
+        path: 'roles',
+        title: 'Roles and Permissions',
+        description: 'What each workspace and chat role allows',
+        permissions: ['roles.manage'],
+        Page: RolesSection,
+      },
+      {
+        path: 'team',
+        title: 'Manage Team',
+        description: 'Members, workspace roles and invites',
+        permissions: ['members.invite', 'members.manage'],
+        Page: MembersSection,
+      },
     ],
   },
   {
@@ -45,12 +64,14 @@ const cardSections: readonly { title: string; cards: readonly SettingsCard[] }[]
         path: 'runtime',
         title: 'Connect runtime',
         description: "Runtime hosts and members' own machines",
+        permissions: ['runtimes.manage'],
         Page: RuntimeHostsSection,
       },
       {
         path: 'mcp-tools',
         title: 'MCP tools',
         description: 'Tool servers shared with the workspace',
+        permissions: ['tools.manage'],
         Page: WorkspaceConnectionsSection,
       },
     ],
@@ -62,12 +83,14 @@ const cardSections: readonly { title: string; cards: readonly SettingsCard[] }[]
         path: 'costs',
         title: 'Analyze costs',
         description: 'Spend over time by member, project, chat and model, with what drove it',
+        permissions: ['costs.view', 'budgets.manage'],
         Page: UsageSection,
       },
       {
         path: 'audit',
         title: 'Audit log',
         description: 'Who changed what in the workspace, with tool calls and publishing',
+        permissions: ['audit.view'],
         Page: AuditLogSection,
       },
     ],
@@ -85,7 +108,7 @@ const cardStatusesOf =
       rows.filter((row) => row.workspaceId === workspaceId)
     const memberCount = inWorkspace(snapshot.memberships).filter((membership) => membership.removedAt === null).length
     const inviteCount = inWorkspace(snapshot.invitations).length
-    const roles = inWorkspace(snapshot.chatRoles)
+    const roles = [...inWorkspace(snapshot.workspaceRoles), ...inWorkspace(snapshot.chatRoles)]
     const customRoleCount = roles.filter((role) => !role.builtIn).length
     const month = new Date().toISOString().slice(0, 7)
     const monthCostMicros = inWorkspace(snapshot.usageEntries)
@@ -113,14 +136,21 @@ const cardStatusesOf =
 
 const SettingsRoute = () => {
   const workspaceId = useOutletContext<WorkspaceId>()
-  const isAdmin = useIsWorkspaceAdmin(workspaceId)
+  const permissions = useWorkspacePermissions(workspaceId)
   const isDexSignIn = use(authModeLoading) === 'dex'
   const statuses = useQuery(cardStatusesOf(workspaceId, isDexSignIn))
   const budgetAlertCount = useQuery(countBudgetAlerts(workspaceId, new Date().toISOString().slice(0, 7)))
   const { card } = useParams()
+  const isAllowed = (settingsCard: SettingsCard) =>
+    settingsCard.permissions.some((permission) => permissions.includes(permission))
+  const allowedSections = cardSections
+    .map((section) => ({ ...section, cards: section.cards.filter(isAllowed) }))
+    .filter((section) => section.cards.length > 0)
   const openCard = cardSections.flatMap(({ cards }) => cards).find(({ path }) => path === card)
   const settingsPath = `/w/${workspaceId}/settings`
-  if (isAdmin && openCard)
+  if (openCard && !isAllowed(openCard))
+    return <p className="p-6 text-muted">Your workspace role does not give access to this page</p>
+  if (openCard)
     return (
       <div className="flex max-w-3xl flex-col gap-6 p-6">
         <div className="flex items-center gap-2">
@@ -129,14 +159,14 @@ const SettingsRoute = () => {
           </Link>
           <h1 className="text-2xl font-semibold">{openCard.title}</h1>
         </div>
-        <openCard.Page workspaceId={workspaceId} isDexSignIn={isDexSignIn} />
+        <openCard.Page workspaceId={workspaceId} isDexSignIn={isDexSignIn} permissions={permissions} />
       </div>
     )
   return (
     <div className="flex max-w-4xl flex-col gap-8 p-6">
       <h1 className="text-2xl font-semibold">Workspace settings</h1>
-      {isAdmin ? (
-        cardSections.map(({ title, cards }) => (
+      {allowedSections.length > 0 ? (
+        allowedSections.map(({ title, cards }) => (
           <LabelledSection key={title} title={title}>
             <ul className="grid gap-3 sm:grid-cols-2">
               {cards.map(({ path, title: cardTitle, description }) => (
@@ -166,7 +196,7 @@ const SettingsRoute = () => {
           </LabelledSection>
         ))
       ) : (
-        <p className="text-muted">Only workspace admins can see this page</p>
+        <p className="text-muted">You have no workspace settings to manage</p>
       )}
     </div>
   )

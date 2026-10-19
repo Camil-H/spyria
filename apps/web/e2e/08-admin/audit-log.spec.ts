@@ -118,7 +118,7 @@ test('Export CSV downloads the filtered rows with a header', { tag: ['@spec-44']
   expect(header).toBe('Time,Person,Action,Target,Details')
   expect(rows).toHaveLength(2)
   expect(rows[0]).toContain(',Alice,Removed a member,Bob,')
-  expect(rows[1]).toContain(',Alice,Invited a member,nina@example.com,Role: member; Email: nina@example.com')
+  expect(rows[1]).toContain(',Alice,Invited a member,nina@example.com,Role: Member; Email: nina@example.com')
   expect(shownTexts[0]).toMatch(removalText)
   expect(shownTexts[1]).toMatch(inviteText)
 })
@@ -144,11 +144,11 @@ test('retention starts at Forever; 30 days is saved and shows in the log itself'
 test.describe('as a member', () => {
   test.use({ signedInAs: 'member-bob' })
 
-  test('Bob gets "Only workspace admins can see this page" and no audit log', { tag: ['@spec-44'] }, async ({
-    page,
-  }) => {
+  test('Bob gets "Your workspace role does not give access to this page" and no audit log', {
+    tag: ['@spec-44'],
+  }, async ({ page }) => {
     await page.goto('/w/workspace-acme/settings/audit')
-    await expect(mainOf(page).getByText('Only workspace admins can see this page')).toBeVisible()
+    await expect(mainOf(page).getByText('Your workspace role does not give access to this page')).toBeVisible()
     await expect(auditSectionOf(page)).toHaveCount(0)
   })
 })

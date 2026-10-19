@@ -7,6 +7,7 @@ import {
   runtimes,
   sessions,
   users,
+  workspaceRoles,
   workspaces,
 } from '@hq/db/postgres'
 import {
@@ -200,6 +201,9 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
               createdBy: barrierMemberId,
               createdAt: new Date(),
             })
+            await transaction
+              .insert(workspaceRoles)
+              .values({ workspaceId: barrierWorkspaceId, id: 'member', name: 'Member', builtIn: true })
             await transaction.insert(memberships).values({
               workspaceId: barrierWorkspaceId,
               userId: barrierMemberId,

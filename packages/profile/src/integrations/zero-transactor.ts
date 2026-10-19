@@ -10,7 +10,14 @@ import {
   virtualKeyIdOf,
   virtualKeyIdsIn,
 } from '@hq/db/server-writes'
-import { activeMemberRoleOf, skippingRefusedRebase, type Transact, type ZeroContext, zql } from '@hq/db/zero-queries'
+import {
+  isActiveMember,
+  skippingRefusedRebase,
+  type Transact,
+  workspacePermissionsOf,
+  type ZeroContext,
+  zql,
+} from '@hq/db/zero-queries'
 import { type MemberId, memberId as toMemberId, type WorkspaceId } from '@hq/kernel'
 import type { Transaction } from '@rocicorp/zero'
 import type { ProfileTransactor, UnitOfWork } from '../contracts/transactor.ts'
@@ -42,10 +49,8 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
       },
       save: (member) =>
         tx.mutate.memberships.update({ ...asContextMember(member.workspaceId, member.id), displayName: member.name }),
-      isActiveAdmin: async (workspaceId, memberId) =>
-        (await activeMemberRoleOf(tx, inContextWorkspace(workspaceId), memberId)) === 'admin',
-      isActive: async (workspaceId, memberId) =>
-        (await activeMemberRoleOf(tx, inContextWorkspace(workspaceId), memberId)) !== undefined,
+      permissions: (workspaceId, memberId) => workspacePermissionsOf(tx, inContextWorkspace(workspaceId), memberId),
+      isActive: (workspaceId, memberId) => isActiveMember(tx, inContextWorkspace(workspaceId), memberId),
     },
     llmCredentials: {
       add: async ({ workspaceId, memberId, id, provider, last4 }, key) => {

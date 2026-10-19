@@ -26,9 +26,10 @@ const { database, app, gateway, llmGateway, resultOf, changesOf } = await openSh
 const worker = startJobWorker(database, { pollIntervalMilliseconds: 5, retryDelayMilliseconds: 100, llmGateway })
 afterAll(() => worker.stop())
 
-const notAdmin = failedWith('Only a workspace admin can manage members')
+const cannotInvite = failedWith('Your workspace role does not allow this: Invite members')
+const cannotManageMembers = failedWith('Your workspace role does not allow this: Change roles and remove members')
 const lastAdmin = failedWith('The last admin of a workspace can be neither demoted nor removed')
-const ownMembership = failedWith('Admins can neither change their own role nor remove themselves')
+const ownMembership = failedWith('You can neither change your own role nor remove yourself')
 const frozen = failedWith('This chat is frozen: its owner left the workspace')
 const invitationsOf = async (email: string) => [
   ...(await database.$client`
@@ -80,8 +81,8 @@ test('an admin invites a normalized email once for 7 days and revokes it; a memb
       email: 'x@example.com',
       role: 'member',
     }),
-  ).toEqual(notAdmin)
-  expect(await resultOf(bobInAcme, 'workspace.revokeInvite', { workspaceId: acme, invitationId })).toEqual(notAdmin)
+  ).toEqual(cannotInvite)
+  expect(await resultOf(bobInAcme, 'workspace.revokeInvite', { workspaceId: acme, invitationId })).toEqual(cannotInvite)
   expect(await resultOf(aliceInAcme, 'workspace.revokeInvite', { workspaceId: acme, invitationId })).toEqual(succeeded)
   expect(await resultOf(aliceInAcme, 'workspace.revokeInvite', { workspaceId: acme, invitationId })).toEqual(
     failedWith(`Invite ${invitationId} is not pending`),
@@ -107,7 +108,7 @@ test('an expired invite does not block a new one, which replaces it', async () =
 })
 
 test('an admin changes the roles of others, never their own nor removes themselves, and a member changes nothing', async () => {
-  expect(await changeRole(bobInAcme, lee, 'admin')).toEqual(notAdmin)
+  expect(await changeRole(bobInAcme, lee, 'admin')).toEqual(cannotManageMembers)
   expect(await changeRole(aliceInAcme, alice, 'member')).toEqual(ownMembership)
   expect(await removeFromAcme(app, database, alice)).toEqual(ownMembership)
   expect(await changeRole(aliceInAcme, bob, 'admin')).toEqual(succeeded)
@@ -119,7 +120,7 @@ test('an admin changes the roles of others, never their own nor removes themselv
   )
   expect(await changeRole(bobInAcme, alice, 'admin')).toEqual(succeeded)
   expect(await changeRole(aliceInAcme, bob, 'member')).toEqual(succeeded)
-  expect(await changeRole(bobInAcme, alice, 'member')).toEqual(notAdmin)
+  expect(await changeRole(bobInAcme, alice, 'member')).toEqual(cannotManageMembers)
   expect((await workspaceEventsOf(database)).filter(({ type }) => type === 'member.role_changed')).toEqual([
     { type: 'member.role_changed', actorId: alice, payload: { memberId: bob, role: 'admin' } },
     { type: 'member.role_changed', actorId: bob, payload: { memberId: alice, role: 'member' } },
@@ -133,7 +134,7 @@ test('two admins demoting each other at once leave one admin: the last-admin gua
   const results = await Promise.all([changeRole(aliceInAcme, bob, 'member'), changeRole(bobInAcme, alice, 'member')])
   const [refused, ...others] = results.filter((result) => !Bun.deepEquals(result, succeeded))
   expect(others).toEqual([])
-  expect([lastAdmin, notAdmin]).toContainEqual(refused)
+  expect([lastAdmin, cannotManageMembers]).toContainEqual(refused)
   const admins = await database.$client`
     select user_id from memberships where workspace_id = ${acme} and role = 'admin' and removed_at is null`
   expect(admins).toHaveLength(1)

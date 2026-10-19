@@ -37,11 +37,6 @@ export const RuntimeChatPrivate = errorKind(
   () => 'A runtime chat is always private',
   WorkspaceError,
 )
-export const NotWorkspaceAdmin = errorKind(
-  'not_admin',
-  (action = 'manage members') => `Only a workspace admin can ${action}`,
-  WorkspaceError,
-)
 export const InvalidEmail = errorKind('invalid_email', (email: string) => `${email} is not an email`, WorkspaceError)
 export const AlreadyMember = errorKind(
   'already_member',
@@ -65,7 +60,7 @@ export const MemberNotFound = errorKind(
 )
 export const OwnMembership = errorKind(
   'own_membership',
-  () => 'Admins can neither change their own role nor remove themselves',
+  () => 'You can neither change your own role nor remove yourself',
   WorkspaceError,
 )
 export const LastAdmin = errorKind(
@@ -149,5 +144,20 @@ export const CustomRoleNotFound = errorKind(
 export const RoleInUse = errorKind(
   'role_in_use',
   (name: string, holders: string) => `${name} is held by ${holders}; change their role first`,
+  WorkspaceError,
+)
+export const UnknownWorkspacePermission = errorKind(
+  'unknown_workspace_permission',
+  (permission: string) => `${permission} is not a workspace permission`,
+  WorkspaceError,
+)
+export const WorkspaceRoleNotFound = errorKind(
+  'workspace_role_not_found',
+  (roleId: string) => `${roleId} is not a role of this workspace`,
+  WorkspaceError,
+)
+export const RoleNotGrantable = errorKind(
+  'role_not_grantable',
+  (name: string) => `${name} has permissions your own role does not have`,
   WorkspaceError,
 )

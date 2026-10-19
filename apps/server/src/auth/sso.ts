@@ -1,13 +1,19 @@
 import { createHash } from 'node:crypto'
 import type { Database } from '@hq/db/postgres'
 import {
+  adminRoleId,
+  builtInChatRoles,
+  builtInWorkspaceRoles,
+  MissingWorkspacePermission,
+  type WorkspacePermission,
+} from '@hq/kernel'
+import {
   DomainClaimed,
   displayNameFrom,
   domainOfEmail,
   InvalidSsoSettings,
   MailNotConfigured,
   MailNotSent,
-  NotWorkspaceAdmin,
   normalizedEmail,
   SsoDiscoveryFailed,
   type SsoDomainState,
@@ -59,11 +65,18 @@ export const ssoProviderOf = async (
       order by workspaces.created_at limit 1`
   )[0]
 
-export const assertAdmin = async (sql: Sql, { workspaceId, userId }: Member) => {
-  const [admin] = await sql`
-    select 1 from memberships where workspace_id = ${workspaceId} and user_id = ${userId} and role = 'admin'
-      and removed_at is null`
-  if (!admin) throw new NotWorkspaceAdmin()
+export const requireMemberPermission = async (
+  sql: Sql,
+  { workspaceId, userId }: Member,
+  permission: WorkspacePermission,
+) => {
+  const [granted] = await sql`
+    select 1 from memberships member
+    join workspace_role_permissions granted on granted.workspace_id = member.workspace_id
+      and granted.role_id = member.role
+    where member.workspace_id = ${workspaceId} and member.user_id = ${userId} and member.removed_at is null
+      and granted.permission = ${permission}`
+  if (!granted) throw new MissingWorkspacePermission(permission)
 }
 
 export const recordWorkspaceEvent = (
@@ -144,7 +157,7 @@ const storeSsoSettings = async (
 }
 
 const ssoSettingsViewOf = async (sql: Sql, member: Member): Promise<SsoSettingsView | null> => {
-  await assertAdmin(sql, member)
+  await requireMemberPermission(sql, member, 'sso.manage')
   const [settings] = await settingsOf(sql, member.workspaceId)
   const domainStates = await sql<SsoDomainState[]>`
     select domain, verified_at is not null as "isVerified",
@@ -203,10 +216,22 @@ export const bootstrapSsoWorkspace = async (
     await sql`
       insert into workspaces (workspace_id, name, created_by, created_at)
       values (${workspaceId}, ${workspaceName.trim()}, ${userId}, now())`
+    for (const role of builtInWorkspaceRoles) {
+      await sql`
+        insert into workspace_roles (workspace_id, id, name, built_in) values (${workspaceId}, ${role.id}, ${role.name}, true)`
+      for (const permission of role.permissions)
+        await sql`
+          insert into workspace_role_permissions (workspace_id, role_id, permission)
+          values (${workspaceId}, ${role.id}, ${permission})`
+    }
+    for (const role of builtInChatRoles)
+      await sql`
+        insert into chat_roles (workspace_id, id, name, permissions, built_in)
+        values (${workspaceId}, ${role.id}, ${role.name}, ${sql.array([...role.permissions])}, true)`
     await sql`
       insert into memberships (workspace_id, user_id, role, display_name)
-      values (${workspaceId}, ${userId}, 'admin', ${displayNameFrom({ email })})`
-    await recordWorkspaceEvent(sql, workspaceId, 'member.joined', null, { memberId: userId, role: 'admin' })
+      values (${workspaceId}, ${userId}, ${adminRoleId}, ${displayNameFrom({ email })})`
+    await recordWorkspaceEvent(sql, workspaceId, 'member.joined', null, { memberId: userId, role: adminRoleId })
     await storeSsoSettings(sql, dependencies, {
       workspaceId,
       actorId: null,
@@ -246,7 +271,7 @@ export const sendDomainVerification = async (
   const address = normalizedEmail(String(email ?? ''))
   const claimedDomain = String(domain ?? '')
   return database.$client.begin(async (sql) => {
-    await assertAdmin(sql, member)
+    await requireMemberPermission(sql, member, 'sso.manage')
     if (domainOfEmail(address) !== claimedDomain || !address.split('@')[0])
       throw new InvalidSsoSettings(`Enter an address at ${claimedDomain}`)
     if (!mailer) throw new MailNotConfigured()

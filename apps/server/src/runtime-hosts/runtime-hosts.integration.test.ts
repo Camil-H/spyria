@@ -312,10 +312,12 @@ test('removing a host closes its connection and refuses its token afterwards', a
 
 test('a member cannot remove a host or turn machine sessions off, and the admin of another workspace cannot reach it', async () => {
   const { id, host } = await pairedHost()
-  expect(await removeHost(bobInAcme, acme, id)).toEqual(failedWith('Only workspace admins can manage runtime hosts'))
+  expect(await removeHost(bobInAcme, acme, id)).toEqual(
+    failedWith('Your workspace role does not allow this: Manage runtime hosts and local sessions'),
+  )
   expect(
     await requestMutation(app, database, bobInAcme, 'runtime.setLocalSessions', { workspaceId: acme, isOn: false }),
-  ).toEqual(failedWith('Only workspace admins can manage runtime hosts'))
+  ).toEqual(failedWith('Your workspace role does not allow this: Manage runtime hosts and local sessions'))
   expect((await database.$client`select local_sessions from workspaces where workspace_id = ${acme}`)[0]).toEqual({
     local_sessions: true,
   })
@@ -422,7 +424,7 @@ test('a machine is read and removed by its owner only, and admins see only how m
   const alicesAcme = await openStore(aliceInAcme)
   expect(alicesAcme.read().runtimeHosts.some((machine) => machine.id === id)).toBe(false)
   expect(await countMachines(aliceInAcme)).toEqual({ count: 1 })
-  expect(await countMachines(bobInAcme)).toMatchObject({ error: 'not_admin' })
+  expect(await countMachines(bobInAcme)).toMatchObject({ error: 'missing_workspace_permission' })
   expect(await removeHost(aliceInAcme, acme, id)).toEqual(failedWith(`Runtime host ${id} was not found`))
   expect(await renewCode(aliceInAcme, id)).toMatchObject({ status: 404, body: { error: 'host_not_found' } })
   expect(await removeHost(bobInAcme, acme, id)).toEqual(succeeded)
@@ -458,9 +460,11 @@ test('a member promoted to admin reads and manages workspace hosts at once witho
   expect(await changeLeeRole('member')).toEqual(succeeded)
   await waitFor(() => leesAcme.read().runtimeHosts.length === 0)
   await expect(leesAcme.mutate(acme, setLocalSessions(true))).rejects.toThrow(
-    'Only workspace admins can manage runtime hosts',
+    'Your workspace role does not allow this: Manage runtime hosts and local sessions',
   )
-  expect(await removeHost(leeInAcme, acme, id)).toEqual(failedWith('Only workspace admins can manage runtime hosts'))
+  expect(await removeHost(leeInAcme, acme, id)).toEqual(
+    failedWith('Your workspace role does not allow this: Manage runtime hosts and local sessions'),
+  )
   expect(await localSessionsOn()).toBe(false)
   expect(
     await requestMutation(app, database, aliceInAcme, 'runtime.setLocalSessions', { workspaceId: acme, isOn: true }),

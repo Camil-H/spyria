@@ -1,15 +1,17 @@
-import type { MemberId } from '@hq/kernel'
+import { type MemberId, requireWorkspacePermission } from '@hq/kernel'
 import type { WorkspaceTransactor } from '../contracts/transactor.ts'
-import { requireActiveMember, requireAdmin, requireAnotherAdmin, requireAnotherMember } from '../domain/member.ts'
+import { requireActiveMember, requireAnotherAdmin, requireAnotherMember } from '../domain/member.ts'
+import { requireGrantableRole } from '../domain/role.ts'
 
 type Dependencies = { transactor: WorkspaceTransactor }
 type Input = { memberId: MemberId; actorId: MemberId; now: number }
 
 export const removeMember = ({ transactor }: Dependencies, { memberId, actorId, now }: Input) =>
-  transactor.run(async ({ memberships, memberAccess, chats, chatRuntimes, workspaceEvents }) => {
-    requireAdmin(await memberships.get(actorId))
+  transactor.run(async ({ memberships, workspaceRoles, memberAccess, chats, chatRuntimes, workspaceEvents }) => {
+    const actorPermissions = await requireWorkspacePermission(memberships, actorId, 'members.manage')
     requireAnotherMember(memberId, actorId)
     const member = requireActiveMember(await memberships.get(memberId), memberId)
+    requireGrantableRole(actorPermissions, await workspaceRoles.get(member.role), member.role)
     requireAnotherAdmin(member, await memberships.activeAdminIds())
     await memberships.save({ ...member, removedAt: now })
     await memberAccess.revoke(memberId)

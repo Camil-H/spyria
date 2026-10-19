@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from 'bun:test'
 import { createTestDatabase, databaseDropTimeoutMilliseconds, databaseUrlOf } from '@hq/db/testing'
+import { workspacePermissions } from '@hq/kernel'
 import { exportJWK, generateKeyPair, type JWTPayload, SignJWT } from 'jose'
 import { createApp } from '../app.ts'
 import { startFakeSmtp, verificationLinkIn } from '../testing/fake-smtp.ts'
@@ -132,6 +133,12 @@ const configureIdp = (idp: FakeIdp, workspaceId: string, domains: string[], clie
 const addWorkspace = async (workspaceId: string) => {
   await database.$client`
     insert into workspaces (workspace_id, name, created_by, created_at) values (${workspaceId}, ${workspaceId}, ${alice}, now())`
+  await database.$client`
+    insert into workspace_roles (workspace_id, id, name, built_in)
+    values (${workspaceId}, 'admin', 'Admin', true), (${workspaceId}, 'member', 'Member', true)`
+  await database.$client`
+    insert into workspace_role_permissions (workspace_id, role_id, permission)
+    select ${workspaceId}, 'admin', unnest(${database.$client.array([...workspacePermissions])}::text[])`
   await database.$client`
     insert into memberships (workspace_id, user_id, role, display_name) values (${workspaceId}, ${alice}, 'admin', 'Alice')`
 }

@@ -19,7 +19,7 @@ import {
 const { database, resultOf } = await openSharedTestApp()
 
 const reviewerId = 'role-reviewer'
-const notAdmin = failedWith('Only a workspace admin can manage roles')
+const cannotManageRoles = failedWith('Your workspace role does not allow this: Manage roles')
 const roleChange = (member: typeof aliceInAcme, name: string, args: Record<string, unknown>) =>
   resultOf(member, `workspace.${name}ChatRole`, { workspaceId: acme, ...args })
 const createRole = (args: { id?: string; name: string; permissions: string[] }, member = aliceInAcme) =>
@@ -76,10 +76,10 @@ test('an admin creates, renames, re-permissions and deletes a custom role, each 
 })
 
 test('a member who is not an admin can neither create, change nor delete a role', async () => {
-  expect(await createRole({ id: 'role-bob', ...reviewer }, bobInAcme)).toEqual(notAdmin)
+  expect(await createRole({ id: 'role-bob', ...reviewer }, bobInAcme)).toEqual(cannotManageRoles)
   expect(await createRole(reviewer)).toEqual(succeeded)
-  expect(await updateRole({ name: 'Mine', permissions: [] }, bobInAcme)).toEqual(notAdmin)
-  expect(await deleteRole(reviewerId, bobInAcme)).toEqual(notAdmin)
+  expect(await updateRole({ name: 'Mine', permissions: [] }, bobInAcme)).toEqual(cannotManageRoles)
+  expect(await deleteRole(reviewerId, bobInAcme)).toEqual(cannotManageRoles)
   expect(await roleRowsOf()).toEqual([
     { id: reviewerId, name: 'Reviewer', permissions: ['chat.read', 'session.configure'], builtIn: false },
   ])

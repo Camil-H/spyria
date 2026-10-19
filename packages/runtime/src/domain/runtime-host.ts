@@ -1,5 +1,11 @@
-import type { MemberId, RuntimeHostId, WorkspaceId } from '@hq/kernel'
-import { HostNotFound, NotWorkspaceAdmin, PairedAsMachine, PairedAsWorkspaceHost } from './errors.ts'
+import {
+  type MemberId,
+  type RuntimeHostId,
+  requirePermissionIn,
+  type WorkspaceId,
+  type WorkspacePermission,
+} from '@hq/kernel'
+import { HostNotFound, PairedAsMachine, PairedAsWorkspaceHost } from './errors.ts'
 
 export type HostSystem = {
   cpus: number
@@ -44,12 +50,8 @@ export const assertNotRemoved = (host: RuntimeHost) => {
 
 export const canRenewClaim = (host: RuntimeHost) => host.status === 'waiting' || host.status === 'expired'
 
-export const assertAdmin = (role: 'admin' | 'member') => {
-  if (role !== 'admin') throw new NotWorkspaceAdmin()
-}
-
-export const assertCanManage = (host: RuntimeHost, memberId: MemberId, role: 'admin' | 'member') => {
-  if (host.ownerId === null) assertAdmin(role)
+export const assertCanManage = (host: RuntimeHost, memberId: MemberId, permissions: readonly WorkspacePermission[]) => {
+  if (host.ownerId === null) requirePermissionIn(permissions, 'runtimes.manage')
   else if (host.ownerId !== memberId) throw new HostNotFound(host.id)
   return host
 }

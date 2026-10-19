@@ -1,5 +1,6 @@
 import { expect, type Page } from '@playwright/test'
 import { switcherOf } from '../fixtures.ts'
+import type { WorkerStack } from '../stack'
 
 export * from '../fixtures.ts'
 
@@ -36,3 +37,19 @@ export const logOutOf = async (page: Page, workspaceName: string) => {
     .getByRole('button', { name: 'Log out' })
     .click()
 }
+export const insertWorkspaceRole = async (
+  workerStack: WorkerStack,
+  id: string,
+  name: string,
+  permissions: string[],
+) => {
+  await workerStack.database.$client`
+    insert into workspace_roles (workspace_id, id, name, built_in) values ('workspace-acme', ${id}, ${name}, false)`
+  for (const permission of permissions)
+    await workerStack.database.$client`
+      insert into workspace_role_permissions (workspace_id, role_id, permission)
+      values ('workspace-acme', ${id}, ${permission})`
+}
+export const giveWorkspaceRole = (workerStack: WorkerStack, memberId: string, roleId: string) =>
+  workerStack.database.$client`
+    update memberships set role = ${roleId} where workspace_id = 'workspace-acme' and user_id = ${memberId}`

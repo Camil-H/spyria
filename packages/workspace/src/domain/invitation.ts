@@ -1,12 +1,11 @@
 import type { MemberId, WorkspaceId } from '@hq/kernel'
 import { InvalidEmail } from './errors.ts'
-import type { WorkspaceRole } from './member.ts'
 
 export type Invitation = Readonly<{
   workspaceId: WorkspaceId
   id: string
   email: string
-  role: WorkspaceRole
+  role: string
   invitedBy: MemberId
   createdAt: number
   expiresAt: number

@@ -1,22 +1,24 @@
-import type { MemberId, WorkspaceId } from '@hq/kernel'
+import { type MemberId, requireWorkspacePermission, type WorkspaceId } from '@hq/kernel'
 import type { WorkspaceTransactor } from '../contracts/transactor.ts'
 import { AlreadyMember, InviteAlreadyPending } from '../domain/errors.ts'
 import { Email, isPending, newInvitation } from '../domain/invitation.ts'
-import { isActive, requireAdmin, type WorkspaceRole } from '../domain/member.ts'
+import { isActive } from '../domain/member.ts'
+import { requireGrantableRole } from '../domain/role.ts'
 
 type Dependencies = { transactor: WorkspaceTransactor }
 type Input = {
   workspaceId: WorkspaceId
   id: string
   email: string
-  role: WorkspaceRole
+  role: string
   actorId: MemberId
   now: number
 }
 
 export const inviteMember = ({ transactor }: Dependencies, { email: text, role, actorId, now, ...input }: Input) =>
-  transactor.run(async ({ memberships, invitations, workspaceEvents }) => {
-    requireAdmin(await memberships.get(actorId))
+  transactor.run(async ({ memberships, workspaceRoles, invitations, workspaceEvents }) => {
+    const actorPermissions = await requireWorkspacePermission(memberships, actorId, 'members.invite')
+    requireGrantableRole(actorPermissions, await workspaceRoles.get(role), role)
     const email = Email(text)
     if (isActive(await memberships.findByEmail(email))) throw new AlreadyMember(email)
     const open = await invitations.findOpen(email)

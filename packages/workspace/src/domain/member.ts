@@ -1,12 +1,10 @@
-import type { MemberId, WorkspaceId } from '@hq/kernel'
-import { LastAdmin, MemberNotFound, NotWorkspaceAdmin, OwnMembership } from './errors.ts'
-
-export type WorkspaceRole = 'admin' | 'member'
+import { adminRoleId, type MemberId, type WorkspaceId } from '@hq/kernel'
+import { LastAdmin, MemberNotFound, OwnMembership } from './errors.ts'
 
 export type Member = Readonly<{
   workspaceId: WorkspaceId
   id: MemberId
-  role: WorkspaceRole
+  role: string
   removedAt: number | null
 }>
 
@@ -14,10 +12,6 @@ export const workspaceJobTypes = { memberRemoved: 'workspace.member-removed' } a
 
 export const isActive = (member: Member | undefined): member is Member =>
   member !== undefined && member.removedAt === null
-
-export const requireAdmin = (actor: Member | undefined, action?: string) => {
-  if (!isActive(actor) || actor.role !== 'admin') throw new NotWorkspaceAdmin(action)
-}
 
 export const requireActiveMember = (member: Member | undefined, memberId: MemberId) => {
   if (!isActive(member)) throw new MemberNotFound(memberId)
@@ -29,5 +23,5 @@ export const requireAnotherMember = (memberId: MemberId, actorId: MemberId) => {
 }
 
 export const requireAnotherAdmin = (member: Member, activeAdminIds: readonly MemberId[]) => {
-  if (member.role === 'admin' && activeAdminIds.every((adminId) => adminId === member.id)) throw new LastAdmin()
+  if (member.role === adminRoleId && activeAdminIds.every((adminId) => adminId === member.id)) throw new LastAdmin()
 }

@@ -64,7 +64,7 @@ export const inviteToAcme = (
   app: Parameters<typeof requestMutation>[0],
   database: Database,
   email: string,
-  role: 'admin' | 'member' = 'member',
+  role = 'member',
 ) =>
   requestMutation(app, database, aliceInAcme, 'workspace.inviteMember', {
     workspaceId: acme,

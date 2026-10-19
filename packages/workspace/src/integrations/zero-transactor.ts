@@ -11,15 +11,27 @@ import type {
   Membership as MembershipRow,
   Project as ProjectRow,
 } from '@hq/db/zero'
-import { chatPermissionsOf, skippingRefusedRebase, type ZeroContext, zql } from '@hq/db/zero-queries'
 import {
+  chatPermissionsOf,
+  skippingRefusedRebase,
+  workspacePermissionsOf,
+  type ZeroContext,
+  zql,
+} from '@hq/db/zero-queries'
+import {
+  adminRoleId,
   builtInChatRoles,
+  builtInWorkspaceRoles,
   type ChatPermission,
   type ChatRole,
   chatId,
   memberId,
+  memberRoleId,
   projectId,
+  type WorkspacePermission,
+  type WorkspaceRole,
   workspaceId,
+  workspacePermissions,
 } from '@hq/kernel'
 import { removeMemberProfileOnServer } from '@hq/profile/published'
 import { removeChatRuntimeOnServer, removeMemberMachineOnServer, stopChatRuntimeOnServer } from '@hq/runtime/published'
@@ -90,6 +102,27 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
   const invitationsInContext = zql.invitations.where('workspaceId', context.workspaceId)
   const chatsInContext = zql.chats.where('workspaceId', context.workspaceId)
   const chatRolesInContext = zql.chatRoles.where('workspaceId', context.workspaceId)
+  const workspaceRolesInContext = zql.workspaceRoles.where('workspaceId', context.workspaceId)
+  const workspaceRoleOf = (row: {
+    id: string
+    name: string
+    builtIn: boolean
+    permissions: readonly { permission: string }[]
+  }) => ({
+    id: row.id,
+    name: row.name,
+    builtIn: row.builtIn,
+    permissions: workspacePermissions.filter((permission) =>
+      row.permissions.some((granted) => granted.permission === permission),
+    ),
+  })
+  const insertWorkspaceRole = async (inWorkspaceId: string, role: WorkspaceRole, builtIn: boolean) => {
+    await tx.mutate.workspaceRoles.insert({ workspaceId: inWorkspaceId, id: role.id, name: role.name, builtIn })
+    for (const permission of role.permissions)
+      await tx.mutate.workspaceRolePermissions.insert({ workspaceId: inWorkspaceId, roleId: role.id, permission })
+  }
+  const grantsOf = async (roleId: string) =>
+    tx.run(zql.workspaceRolePermissions.where('workspaceId', context.workspaceId).where('roleId', roleId))
   const chatRoleRowOf = (role: ChatRole) => ({
     workspaceId: context.workspaceId,
     id: role.id,
@@ -113,6 +146,7 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
             permissions: [...role.permissions],
             builtIn: true,
           })
+        for (const role of builtInWorkspaceRoles) await insertWorkspaceRole(id, role, true)
       },
     },
     memberships: {
@@ -125,7 +159,7 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
         await tx.mutate.memberships.insert({
           workspaceId: membership.workspaceId,
           userId: membership.memberId,
-          role: 'admin',
+          role: adminRoleId,
           displayName: creator?.displayName ?? '',
         })
       },
@@ -142,9 +176,10 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
         const [row] = user.flatMap((found) => found.memberships)
         return row && toMember(row)
       },
+      permissions: (id) => workspacePermissionsOf(tx, context.workspaceId, id),
       activeAdminIds: async () => {
         await lockActiveAdminIds(tx, context.workspaceId)
-        const admins = await tx.run(membershipsInContext.where('role', 'admin').where('removedAt', 'IS', null))
+        const admins = await tx.run(membershipsInContext.where('role', adminRoleId).where('removedAt', 'IS', null))
         return admins.map((row) => memberId(row.userId))
       },
       save: ({ id, role, removedAt }) =>
@@ -303,6 +338,40 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
       add: (role) => tx.mutate.chatRoles.insert({ ...chatRoleRowOf(role), builtIn: false }),
       save: (role) => tx.mutate.chatRoles.update(chatRoleRowOf(role)),
       remove: (id) => tx.mutate.chatRoles.delete({ workspaceId: context.workspaceId, id }),
+    },
+    workspaceRoles: {
+      get: async (id) => {
+        const row = await tx.run(workspaceRolesInContext.where('id', id).related('permissions').one())
+        return row && workspaceRoleOf(row)
+      },
+      list: async () => (await tx.run(workspaceRolesInContext.related('permissions'))).map(workspaceRoleOf),
+      holders: async (id) => ({
+        memberCount: (await tx.run(membershipsInContext.where('role', id).where('removedAt', 'IS', null))).length,
+        inviteCount: (
+          await tx.run(
+            invitationsInContext.where('role', id).where('revokedAt', 'IS', null).where('acceptedAt', 'IS', null),
+          )
+        ).length,
+      }),
+      add: (role) => insertWorkspaceRole(context.workspaceId, role, false),
+      save: async (role) => {
+        await tx.mutate.workspaceRoles.update({ workspaceId: context.workspaceId, id: role.id, name: role.name })
+        for (const granted of await grantsOf(role.id))
+          if (!role.permissions.includes(granted.permission as WorkspacePermission))
+            await tx.mutate.workspaceRolePermissions.delete(granted)
+        for (const permission of role.permissions)
+          await tx.mutate.workspaceRolePermissions.upsert({
+            workspaceId: context.workspaceId,
+            roleId: role.id,
+            permission,
+          })
+      },
+      remove: async (id) => {
+        for (const removed of await tx.run(membershipsInContext.where('role', id).where('removedAt', 'IS NOT', null)))
+          await tx.mutate.memberships.update({ ...removed, role: memberRoleId })
+        for (const granted of await grantsOf(id)) await tx.mutate.workspaceRolePermissions.delete(granted)
+        await tx.mutate.workspaceRoles.delete({ workspaceId: context.workspaceId, id })
+      },
     },
     chatRuntimes: {
       remove: (chatId) => removeChatRuntimeOnServer(tx, context.workspaceId, chatId),

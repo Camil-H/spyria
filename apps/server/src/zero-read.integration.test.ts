@@ -48,6 +48,7 @@ const visibleTo = (snapshot: Snapshot, viewerId: MemberId, workspaceIds: readonl
     ...snapshot,
     workspaces: snapshot.workspaces.filter((workspace) => workspaceIds.includes(workspace.id)),
     memberships: inWorkspaces(snapshot.memberships),
+    workspaceRoles: inWorkspaces(snapshot.workspaceRoles),
     projects: inWorkspaces(snapshot.projects),
     chats: readableChats,
     chatRoles: inWorkspaces(snapshot.chatRoles),

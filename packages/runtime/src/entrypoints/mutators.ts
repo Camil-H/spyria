@@ -2,7 +2,7 @@ import { type ChatId, type MemberId, runtimeHostId, type WorkspaceId } from '@hq
 import { defineMutator, defineMutators, type Transaction } from '@rocicorp/zero'
 import { z } from 'zod/mini'
 import { NotCurrentWorkspace } from '../domain/errors.ts'
-import { contextRoleOf, createZeroTransactor } from '../integrations/zero-transactor.ts'
+import { contextPermissionsOf, createZeroTransactor } from '../integrations/zero-transactor.ts'
 import { removeChatRuntime } from '../operations/remove-chat-runtime.ts'
 import { removeMemberMachine } from '../operations/remove-member-machine.ts'
 import { removeRuntimeHost } from '../operations/remove-runtime-host.ts'
@@ -23,7 +23,7 @@ export const runtimeMutators = defineMutators({
         {
           workspaceId: ctx.workspaceId,
           memberId: ctx.userId,
-          role: await contextRoleOf(tx, ctx),
+          permissions: await contextPermissionsOf(tx, ctx),
           hostId: args.hostId,
           now: Date.now(),
         },
@@ -33,7 +33,7 @@ export const runtimeMutators = defineMutators({
       if (args.workspaceId !== ctx.workspaceId) throw new NotCurrentWorkspace()
       await setLocalSessions(
         { transactor: createZeroTransactor(tx) },
-        { workspaceId: ctx.workspaceId, role: await contextRoleOf(tx, ctx), isOn: args.isOn },
+        { workspaceId: ctx.workspaceId, permissions: await contextPermissionsOf(tx, ctx), isOn: args.isOn },
       )
     }),
   },
