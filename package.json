@@ -1,6 +1,7 @@
 {
   "name": "hq",
   "private": true,
+  "license": "SEE LICENSE IN LICENSE",
   "workspaces": [
     "apps/*",
     "packages/*"

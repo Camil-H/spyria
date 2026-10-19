@@ -5,14 +5,14 @@ import { auditJobs } from '@hq/usage/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import {
   acme,
-  asMember,
   alice,
+  asMember,
+  bob,
   globex,
   inviteToAcme,
   lee,
   newChat,
   openSharedTestApp,
-  bob,
   sendTo,
   sessionTokenOf,
   succeeded,

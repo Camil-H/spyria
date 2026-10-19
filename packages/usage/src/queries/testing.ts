@@ -1,4 +1,4 @@
-import { acme, alice, createMockSnapshot, globex, type Snapshot, bob } from '@hq/db'
+import { acme, alice, bob, createMockSnapshot, globex, type Snapshot } from '@hq/db'
 import { chatId } from '@hq/kernel'
 
 export const month = '2026-10'

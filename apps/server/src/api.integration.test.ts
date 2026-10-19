@@ -11,7 +11,7 @@ import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { createApp } from './app.ts'
 import { issueSessionToken } from './auth/session-tokens.ts'
 import { openSessions } from './auth/sessions.ts'
-import { acme, alice, globex, lee, bob, sessionTokenOf, testAuthSettings } from './testing/testing.ts'
+import { acme, alice, bob, globex, lee, sessionTokenOf, testAuthSettings } from './testing/testing.ts'
 
 const testDatabase = await createTestDatabase()
 const otherDatabase = await createTestDatabase()
@@ -204,9 +204,9 @@ test('workspace connections are visible to every member of their workspace, a re
   for (const reader of ['Alice in Acme', 'Bob in Acme', 'Lee in Acme'])
     expect(columnOf(reader, 'workspace_connections', 'name')).toEqual(['CRM'])
   expect(columnOf('Alice in Globex', 'workspace_connections', 'name')).toEqual(['ERP'])
-  expect(columnOf('Alice in Acme', 'connection_restrictions', 'user_id')?.toSorted()).toEqual([lee, bob])
+  expect(columnOf('Alice in Acme', 'connection_restrictions', 'user_id')?.toSorted()).toEqual([bob, lee])
   expect(columnOf('Bob in Acme', 'connection_restrictions', 'user_id')).toEqual([bob])
-  expect(columnOf('Lee in Acme', 'connection_restrictions', 'user_id')?.toSorted()).toEqual([lee, bob])
+  expect(columnOf('Lee in Acme', 'connection_restrictions', 'user_id')?.toSorted()).toEqual([bob, lee])
   expect(columnOf('Alice in Globex', 'connection_restrictions', 'user_id')).toEqual([])
 })
 
@@ -219,18 +219,18 @@ test('workspaces lists every workspace of the member and users lists the members
   expect(idsOf('Alice in Acme', 'workspaces', 'workspace_id')).toEqual([acme, globex])
   expect(idsOf('Alice in Globex', 'workspaces', 'workspace_id')).toEqual([acme, globex])
   expect(idsOf('Bob in Acme', 'workspaces', 'workspace_id')).toEqual([acme])
-  expect(idsOf('Alice in Acme', 'users', 'id')).toEqual([alice, lee, bob])
+  expect(idsOf('Alice in Acme', 'users', 'id')).toEqual([alice, bob, lee])
   expect(idsOf('Alice in Globex', 'users', 'id')).toEqual([alice])
 })
 
 test('an ownership change hides the restriction of Bob from a member who no longer reads any chat of his', async () => {
   const restrictedOf = async (workspace: string, user: string) =>
     ((await readAll(workspace, user)).get('connection_restrictions') ?? []).map((row) => row.user_id).toSorted()
-  expect(await restrictedOf(acme, lee)).toEqual([lee, bob])
+  expect(await restrictedOf(acme, lee)).toEqual([bob, lee])
   await testDatabase.database.$client`update chats set owner_user_id = ${alice} where owner_user_id = ${bob}`
   expect(await restrictedOf(acme, lee)).toEqual([lee])
   expect(await restrictedOf(acme, bob)).toEqual([bob])
-  expect(await restrictedOf(acme, alice)).toEqual([lee, bob])
+  expect(await restrictedOf(acme, alice)).toEqual([bob, lee])
 })
 
 test('the connections keep their position order', () => {

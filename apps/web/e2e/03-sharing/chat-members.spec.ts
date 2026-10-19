@@ -127,13 +127,13 @@ test.describe('Chat members', () => {
     await invite(bobPage, 'Lee', 'Editor')
     await expectMembers(bobPage, [
       ['Alice', 'Owner'],
-      ['Lee', 'Editor'],
       ['Bob', 'Editor'],
+      ['Lee', 'Editor'],
     ])
     await bobPage.context().close()
   })
 
-  test('As an invitee, I leave a chat from its Members tab, while the owner has no Leave, role select or Remove on his own row', {
+  test('As an invitee, I leave a chat from its Members tab, while the owner has no Leave, role select or Remove on her own row', {
     tag: ['@spec-29'],
   }, async ({ page, browser, workerStack }) => {
     const chatId = await newRuntimeChat(page, 'Bob leaves')

@@ -161,7 +161,7 @@ bun run test:integration   # needs bun run stack:up; runs its own gateway (hq-te
 bun run check:boundaries
 bun run lint
 bun run check:bundle       # builds the app, main chunk at most 760 kB, one React, no server-only SQL
-bun run test:e2e           # starts its own stack per worker, one gateway (hq-test-gateway-e2e on 4881) and an sso-mode stack (server 3102, app 5191, Dex hq-test-dex-e2e on 5557); e2e/00-platform runs first and gates the rest
+bun run test:e2e           # starts its own stack per worker, one gateway (hq-test-gateway-e2e on 4881), one test Dex for both stacks (hq-test-dex-e2e on 5557, `apps/web/e2e/dex-test.yaml`, never the dev Dex) and an sso-mode stack (server 3102, app 5191); e2e/00-platform runs first and gates the rest
 bun run test:e2e:smoke     # the @smoke critical paths only (29 tests, every segment), after the 00-platform gate
 bun run test:e2e -- e2e/04-agent   # one segment (00-platform still runs first)
 bun run test:ui            # the visual suite apps/web/ui: screenshots light and dark against the baselines, keyboard and resize checks; not in check:all

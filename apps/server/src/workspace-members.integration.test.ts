@@ -6,6 +6,8 @@ import {
   addLlmKey,
   alice,
   aliceInAcme,
+  bob,
+  bobInAcme,
   failedWith,
   inviteToAcme,
   issueTestSession,
@@ -13,8 +15,6 @@ import {
   newChat,
   openSharedTestApp,
   removeFromAcme,
-  bob,
-  bobInAcme,
   sendTo,
   succeeded,
   testAuthSettings,
@@ -69,7 +69,7 @@ test('an admin invites a normalized email once for 7 days and revokes it; a memb
   expect(await inviteToAcme(app, database, 'nina@example.com', 'admin')).toEqual(
     failedWith('nina@example.com already has a pending invite'),
   )
-  expect(await inviteToAcme(app, database, 'SAM@example.com')).toEqual(
+  expect(await inviteToAcme(app, database, 'BOB@example.com')).toEqual(
     failedWith('bob@example.com is already a member of this workspace'),
   )
   expect(await inviteToAcme(app, database, 'not an email')).toEqual(failedWith('not an email is not an email'))
@@ -254,7 +254,7 @@ test("an admin transfers a removed member's chat to an active member, which unfr
   ])
 })
 
-test('a removed member can be invited again with any role, and Alice still cannot demote himself', async () => {
+test('a removed member can be invited again with any role, and Alice still cannot demote herself', async () => {
   expect(await inviteToAcme(app, database, 'lee@example.com', 'admin')).toEqual(succeeded)
   expect(await invitationsOf('lee@example.com')).toEqual([expect.objectContaining({ role: 'admin', revoked_at: null })])
   expect(await changeRole(aliceInAcme, alice, 'member')).toEqual(ownMembership)

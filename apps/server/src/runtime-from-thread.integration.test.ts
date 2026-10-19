@@ -3,6 +3,8 @@ import {
   acme,
   alice,
   aliceInAcme,
+  bob,
+  bobInAcme,
   countOf,
   jobsOf,
   lee,
@@ -11,8 +13,6 @@ import {
   openSharedTestApp,
   replyTo,
   rootIn,
-  bob,
-  bobInAcme,
   succeeded,
 } from './testing/testing.ts'
 

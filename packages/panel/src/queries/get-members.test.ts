@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { acme, alice, createMockSnapshot, lee, bob } from '@hq/db'
+import { acme, alice, bob, createMockSnapshot, lee } from '@hq/db'
 import { type ChatId, type ChatPermission, chatId, chatPermissions, type MemberId } from '@hq/kernel'
 import { getMembers } from './get-members.ts'
 

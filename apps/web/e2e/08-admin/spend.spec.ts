@@ -41,12 +41,12 @@ test.describe('Spend', () => {
       await expect(section.getByRole('combobox', { name: 'Period' })).toHaveValue('this_month')
       await expect(section.getByRole('radio', { name: 'Day' })).toBeChecked()
       await expect(section.getByRole('img', { name: 'Spend over time by member' })).toBeVisible()
-      await expect(legendOf(section)).toHaveText(['Alice$0.04', 'Lee$0.02', 'Bob$0.02'])
+      await expect(legendOf(section)).toHaveText(['Alice$0.04', 'Bob$0.02', 'Lee$0.02'])
       const expectedRows = {
         'Usage by member': [
           ['Alice', ['4,000', '$0.04', '4', '50%']],
-          ['Lee', ['2,000', '$0.02', '2', '25%']],
           ['Bob', ['2,000', '$0.02', '2', '25%']],
+          ['Lee', ['2,000', '$0.02', '2', '25%']],
         ],
         'Usage by project': [
           ['Billing', ['4,000', '$0.04', '4', '50%']],

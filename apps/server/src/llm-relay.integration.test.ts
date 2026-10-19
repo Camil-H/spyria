@@ -5,6 +5,7 @@ import {
   acme,
   addLlmKey,
   alice,
+  bob,
   captureConsole,
   createFakeHosts,
   type FakeHost,
@@ -12,7 +13,6 @@ import {
   llmGatewayAt,
   openSharedTestApp,
   runtimeTurn,
-  bob,
   testAuthSettings,
   virtualKeyOf,
 } from './testing/testing.ts'

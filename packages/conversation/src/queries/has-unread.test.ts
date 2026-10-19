@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { acme, alice, createMockSnapshot, type MessageRow, bob } from '@hq/db'
+import { acme, alice, bob, createMockSnapshot, type MessageRow } from '@hq/db'
 import { chatId, messageId } from '@hq/kernel'
 import { hasUnread } from './has-unread.ts'
 

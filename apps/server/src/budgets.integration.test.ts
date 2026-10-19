@@ -7,12 +7,12 @@ import type { FakeLlmScript } from './fake-llm.ts'
 import {
   acme,
   addLlmKey,
-  asMember,
   alice,
+  asMember,
+  bob,
   type Launch,
   openZeroStore,
   runtimeTurn,
-  bob,
   startAgentStack,
   waitFor,
   workspaceEventsOf,
@@ -102,8 +102,8 @@ test('an admin sets a member budget, audited once as budget.changed, and only th
   expect(status).toBe(200)
   expect(body.members).toEqual([
     { memberId: alice, name: 'Alice', limitMicros: null, spentMicros: 0, percent: null },
-    { memberId: lee, name: 'Lee', limitMicros: null, spentMicros: 0, percent: null },
     { memberId: bob, name: 'Bob', limitMicros: 1_000_000, spentMicros: 700_000, percent: 70 },
+    { memberId: lee, name: 'Lee', limitMicros: null, spentMicros: 0, percent: null },
   ])
   expect(body.workspace).toEqual({ limitMicros: null, spentMicros: 700_000, percent: null })
   await saveBudget({ memberId: bob, dollars: 1 })

@@ -3,6 +3,8 @@ import {
   acme,
   alice,
   aliceInAcme,
+  bob,
+  bobInAcme,
   chatAccessRows,
   chatAs,
   countOf,
@@ -15,8 +17,6 @@ import {
   readers,
   replyTo,
   rootIn,
-  bob,
-  bobInAcme,
   succeeded,
   writtenMessage,
 } from './testing/testing.ts'

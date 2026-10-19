@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test'
 import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@hq/db/testing'
 import { exportJWK, generateKeyPair, type JWTPayload, SignJWT } from 'jose'
 import { createApp } from '../app.ts'
-import { acme, alice, globex, bob, testAuthSettings, workspaceEventsOf } from '../testing/testing.ts'
+import { acme, alice, bob, globex, testAuthSettings, workspaceEventsOf } from '../testing/testing.ts'
 import { issueSessionToken } from './session-tokens.ts'
 import { openSessions } from './sessions.ts'
 

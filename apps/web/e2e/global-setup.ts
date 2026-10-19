@@ -82,41 +82,41 @@ const startDetached = async (command: string[], cwd: string, env: Record<string,
   return () => process.kill(-(child.pid ?? 0), 'SIGTERM')
 }
 
-const ssoDexContainer = 'hq-test-dex-e2e'
-const ssoDexConfig = new URL('./dex-sso.yaml', import.meta.url).pathname
+const testDexContainer = 'hq-test-dex-e2e'
+const testDexConfig = new URL('./dex-test.yaml', import.meta.url).pathname
 const docker = (...args: string[]) => spawnSync('docker', args, { stdio: ['ignore', 'pipe', 'pipe'] })
 
-const startSsoDex = async () => {
-  const configHash = createHash('sha256').update(readFileSync(ssoDexConfig)).digest('hex').slice(0, 16)
+const startTestDex = async () => {
+  const configHash = createHash('sha256').update(readFileSync(testDexConfig)).digest('hex').slice(0, 16)
   const discoveryUrl = `${ssoProviderIssuer}/.well-known/openid-configuration`
-  const running = docker('inspect', '-f', '{{.State.Running}} {{index .Config.Labels "hq.setup"}}', ssoDexContainer)
+  const running = docker('inspect', '-f', '{{.State.Running}} {{index .Config.Labels "hq.setup"}}', testDexContainer)
   if (running.stdout.toString().trim() === `true ${configHash}` && (await httpStatusOf(discoveryUrl)) === 200) return
-  docker('rm', '-f', ssoDexContainer)
+  docker('rm', '-f', testDexContainer)
   const started = docker(
     'run',
     '-d',
     '--name',
-    ssoDexContainer,
+    testDexContainer,
     '--label',
     `hq.setup=${configHash}`,
     '-p',
     `127.0.0.1:${new URL(ssoProviderIssuer).port}:5556`,
     '-v',
-    `${ssoDexConfig}:/etc/dex/config.yaml:ro`,
+    `${testDexConfig}:/etc/dex/config.yaml:ro`,
     'dexidp/dex:v2.43.1',
     'dex',
     'serve',
     '/etc/dex/config.yaml',
   )
-  if (started.status !== 0) throw new Error(`Starting ${ssoDexContainer} failed: ${started.stderr}`)
+  if (started.status !== 0) throw new Error(`Starting ${testDexContainer} failed: ${started.stderr}`)
   for (let attempt = 1; (await httpStatusOf(discoveryUrl)) !== 200; attempt++) {
-    if (attempt === 400) throw new Error(`${ssoDexContainer} did not start`)
+    if (attempt === 400) throw new Error(`${testDexContainer} did not start`)
     await sleep(50)
   }
 }
 
 export default async function globalSetup() {
-  execSync('docker compose -f infra/docker-compose.yml up -d --wait --no-recreate postgres dex', {
+  execSync('docker compose -f infra/docker-compose.yml up -d --wait --no-recreate postgres', {
     cwd: repositoryRoot,
     stdio: 'ignore',
   })
@@ -151,7 +151,7 @@ export default async function globalSetup() {
         viteUrl,
       ),
     ),
-    startSsoDex().then(() =>
+    startTestDex().then(() =>
       startDetached(
         ['bun', 'src/testing/sso-test-server.ts'],
         `${repositoryRoot}apps/server`,

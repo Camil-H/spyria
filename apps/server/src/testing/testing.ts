@@ -2,7 +2,7 @@ import { afterAll, afterEach, expect, spyOn } from 'bun:test'
 import { createHash } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { conversationMutators } from '@hq/conversation/server'
-import { acme, alice, lee, bob } from '@hq/db'
+import { acme, alice, bob, lee } from '@hq/db'
 import { type Database, events, jobs, resetDatabase } from '@hq/db/postgres'
 import { setModelDirectory } from '@hq/db/server-writes'
 import {
@@ -54,7 +54,7 @@ export const testAuthSettings = {
   oidc: { issuer: 'http://localhost:5556/dex', clientId: 'hq', redirectUri: 'http://localhost:3100/auth/callback' },
 }
 
-export { acme, alice, globex, lee, bob } from '@hq/db'
+export { acme, alice, bob, globex, lee } from '@hq/db'
 export const aliceInAcme = { workspaceId: acme, userId: alice }
 export const bobInAcme = { workspaceId: acme, userId: bob }
 export const succeeded = {}

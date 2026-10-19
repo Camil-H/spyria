@@ -7,12 +7,12 @@ import { workspaceMutators } from '@hq/workspace/server'
 import {
   acme,
   alice,
+  bob,
   globex,
   lee,
   newChat,
   openSharedTestApp,
   openZeroStore,
-  bob,
   waitFor,
   zeroSessionsOf,
 } from './testing/testing.ts'

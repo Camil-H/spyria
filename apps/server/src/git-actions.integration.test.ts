@@ -6,7 +6,7 @@ import { type ChatId, chatId } from '@hq/kernel'
 import { createSecretBox } from './auth/secret-box.ts'
 import { createGitHubApi } from './github/github-api.ts'
 import { fakeGitHubAppId, fakeGitHubClientId, fakeGitHubClientSecret, startFakeGitHub } from './testing/fake-github.ts'
-import { acme, alice, lee, bob, sessionTokenOf, startAgentStack, testSecretsKey, waitFor } from './testing/testing.ts'
+import { acme, alice, bob, lee, sessionTokenOf, startAgentStack, testSecretsKey, waitFor } from './testing/testing.ts'
 
 setDefaultTimeout(60_000)
 const fakeGitHub = startFakeGitHub()

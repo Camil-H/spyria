@@ -179,6 +179,7 @@ const chatKeyOfPrompt = async (prompt = '') => {
 const app = createApp({
   database: createDatabase(),
   ...testAuthSettings,
+  oidc: { ...testAuthSettings.oidc, issuer: 'http://localhost:5557/dex' },
   testDatabaseByName: databaseByName,
   llmGateway,
   runtimeHosts,

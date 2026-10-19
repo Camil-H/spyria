@@ -196,8 +196,8 @@ test.describe('Chat permissions', () => {
       await expect(messageContaining(leePage, 'Lee says hello')).toHaveCount(1)
       await expectMembers(leePage, [
         ['Alice', 'Owner'],
-        ['Lee', 'Prompter'],
         ['Bob', 'Prompter'],
+        ['Lee', 'Prompter'],
       ])
       await leePage.context().close()
     })

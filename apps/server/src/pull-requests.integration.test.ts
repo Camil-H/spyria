@@ -9,10 +9,10 @@ import { fakeGitHubAppId, fakeGitHubClientId, fakeGitHubClientSecret, startFakeG
 import {
   acme,
   alice,
+  bob,
   lee,
   rpcOf,
   runtimeTurn,
-  bob,
   sessionTokenOf,
   startAgentStack,
   testSecretsKey,

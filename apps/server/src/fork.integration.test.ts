@@ -3,6 +3,8 @@ import {
   acme,
   alice,
   type aliceInAcme,
+  bob,
+  bobInAcme,
   chatAccessRows,
   chatAs,
   failedWith,
@@ -11,8 +13,6 @@ import {
   newChat,
   openSharedTestApp,
   readers,
-  bob,
-  bobInAcme,
   succeeded,
 } from './testing/testing.ts'
 

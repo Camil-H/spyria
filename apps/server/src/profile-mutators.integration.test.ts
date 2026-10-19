@@ -5,6 +5,8 @@ import {
   acme,
   alice,
   aliceInAcme,
+  bob,
+  bobInAcme,
   captureConsole,
   everyStoredText,
   failedWith,
@@ -12,8 +14,6 @@ import {
   lee,
   llmGatewayAt,
   openSharedTestApp,
-  bob,
-  bobInAcme,
   sessionTokenOf,
   succeeded,
   testAuthSettings,
@@ -224,8 +224,8 @@ test('renameMember changes the display name of the member in the current workspa
   const names = await database.query.memberships.findMany({ orderBy: { workspaceId: 'asc', userId: 'asc' } })
   expect(names.map(({ workspaceId, userId, displayName }) => [workspaceId, userId, displayName])).toEqual([
     [acme, alice, 'Alice D.'],
-    [acme, lee, 'Lee'],
     [acme, bob, 'Bob'],
+    [acme, lee, 'Lee'],
     [globex, alice, 'Alice'],
   ])
   expect(await resultOf(aliceInAcme, 'profile.renameMember', { workspaceId: globex, name: 'Other' })).toEqual(

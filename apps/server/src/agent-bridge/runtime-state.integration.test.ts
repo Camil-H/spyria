@@ -3,13 +3,13 @@ import type { ChatId } from '@hq/kernel'
 import type { createHqAgentRelay } from '../testing/hq-agent-relay.ts'
 import {
   acme,
-  type ContainerAgent,
   alice,
   aliceInAcme,
-  globex,
-  missingPermission,
   bob,
   bobInAcme,
+  type ContainerAgent,
+  globex,
+  missingPermission,
   startAgentStack,
   succeeded,
   waitFor,

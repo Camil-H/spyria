@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { builtInChatRoles, type ChatPermission, chatId, type MemberId } from '@hq/kernel'
-import { acme, alice, createMockSnapshot, globex, lee, bob } from './mock-data.ts'
+import { acme, alice, bob, createMockSnapshot, globex, lee } from './mock-data.ts'
 import { chatParticipantsIn, chatPermissionsIn, type Snapshot } from './schema.ts'
 
 const snapshot = createMockSnapshot()

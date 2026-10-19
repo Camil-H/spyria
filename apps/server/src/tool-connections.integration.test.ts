@@ -8,8 +8,9 @@ import { sharedToolServer } from './testing/fake-mcp.ts'
 import {
   acme,
   addLlmKey,
-  asMember,
   alice,
+  asMember,
+  bob,
   captureConsole,
   connectAlice,
   connectionPath,
@@ -23,7 +24,6 @@ import {
   promptedBy,
   rpcOf,
   runtimeTurn,
-  bob,
   testAuthSettings,
   textOf,
   virtualKeyOf,

@@ -6,7 +6,7 @@ import type { SandboxProvider } from '@hq/runtime/server'
 import { createAgentBridge } from './agent-bridge/bridge.ts'
 import { enqueueSweeps } from './auth/sessions.ts'
 import { listFailedJobs, maximumJobAttempts, retryFailedJobs, startJobWorker } from './job-worker.ts'
-import { acme, alice, globex, bob, waitFor } from './testing/testing.ts'
+import { acme, alice, bob, globex, waitFor } from './testing/testing.ts'
 
 const testDatabase = await createTestDatabase()
 const { database } = testDatabase

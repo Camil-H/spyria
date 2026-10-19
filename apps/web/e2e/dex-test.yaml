@@ -8,6 +8,11 @@ oauth2:
   responseTypes: [code]
 enablePasswordDB: true
 staticClients:
+  - id: hq
+    name: HQ e2e
+    public: true
+    redirectURIs:
+      - http://localhost:3100/auth/callback
   - id: hq-sso
     name: HQ SSO e2e
     secret: hq-sso-e2e-secret

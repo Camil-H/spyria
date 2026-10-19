@@ -145,8 +145,8 @@ test.describe('Side panel', () => {
       await openPanelTab(page, 'Invoice bug', 'Members')
       await expectMembers(page, [
         ['Alice', 'Owner'],
-        ['Lee', 'Reader'],
         ['Bob', 'Prompter'],
+        ['Lee', 'Reader'],
       ])
     })
   })

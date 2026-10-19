@@ -141,7 +141,7 @@ test.describe('Shared tools', () => {
     await bobPage.context().close()
   })
 
-  test('As a member who can manage MCP tools, I restrict a chat owner from update and a guest’s prompt in his chat cannot use it either, while lookup works', {
+  test('As a member who can manage MCP tools, I restrict a chat owner from update and a guest’s prompt in her chat cannot use it either, while lookup works', {
     tag: ['@spec-38'],
   }, async ({ page, browser, workerStack, agentScript }) => {
     const gatewayName = await registerCrm(page, workerStack)

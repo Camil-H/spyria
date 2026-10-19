@@ -1,6 +1,6 @@
 import { beforeEach, expect, test } from 'bun:test'
 import { seedSpend } from '@hq/db/testing'
-import { asMember, alice, openSharedTestApp, bob } from './testing/testing.ts'
+import { alice, asMember, bob, openSharedTestApp } from './testing/testing.ts'
 
 const { database } = await openSharedTestApp()
 
@@ -50,8 +50,8 @@ test('this month totals each member, project, chat and model of the workspace on
   expect(report.total).toEqual({ costMicros: 80_000, tokens: 8000, requests: 8 })
   expect(rowsOf(report.tables.member)).toEqual([
     ['Alice', 40_000, 4],
-    ['Lee', 20_000, 2],
     ['Bob', 20_000, 2],
+    ['Lee', 20_000, 2],
   ])
   expect(rowsOf(report.tables.project)).toEqual([
     ['Billing', 40_000, 4],
@@ -75,8 +75,8 @@ test('this month totals each member, project, chat and model of the workspace on
     memberChart?.series.map((series) => [series.key, series.costs[secondDay], series.costs[secondDay + 1]]),
   ).toEqual([
     ['member-alice', 20_000, 20_000],
-    ['member-lee', 0, 20_000],
     ['member-bob', 20_000, 0],
+    ['member-lee', 0, 20_000],
   ])
   expect(report.charts.model?.series.map((series) => series.key)).toEqual([
     'openai/gpt-5',

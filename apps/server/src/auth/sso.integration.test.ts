@@ -4,7 +4,7 @@ import { workspacePermissions } from '@hq/kernel'
 import { exportJWK, generateKeyPair, type JWTPayload, SignJWT } from 'jose'
 import { createApp } from '../app.ts'
 import { startFakeSmtp, verificationLinkIn } from '../testing/fake-smtp.ts'
-import { acme, alice, globex, bob, testAuthSettings, workspaceEventsOf } from '../testing/testing.ts'
+import { acme, alice, bob, globex, testAuthSettings, workspaceEventsOf } from '../testing/testing.ts'
 import { createSecretBox } from './secret-box.ts'
 import { issueSessionToken } from './session-tokens.ts'
 import { openSessions } from './sessions.ts'
@@ -444,7 +444,7 @@ test('the operator bootstrap creates a workspace with its SSO and a first admin 
       '--name',
       'Umbrella',
       '--admin',
-      'Alice@umbrella.com',
+      'Carol@umbrella.com',
       '--preset',
       'oidc',
       '--issuer',
@@ -466,7 +466,7 @@ test('the operator bootstrap creates a workspace with its SSO and a first admin 
     ...(await database.$client`
       select users.email, role, display_name from memberships join users on users.id = memberships.user_id
       where workspace_id = ${workspaceId}`),
-  ]).toEqual([{ email: 'alice@umbrella.com', role: 'admin', display_name: 'alice' }])
+  ]).toEqual([{ email: 'carol@umbrella.com', role: 'admin', display_name: 'carol' }])
   expect((await workspaceEventsOf(database, workspaceId)).map(({ type }) => type)).toEqual([
     'member.joined',
     'sso.configured',
@@ -474,9 +474,9 @@ test('the operator bootstrap creates a workspace with its SSO and a first admin 
   expect([
     ...(await database.$client`select domain from sso_domains where workspace_id = ${workspaceId} and verified_at is not null`),
   ]).toEqual([{ domain: 'umbrella.com' }])
-  const signedIn = await signInThrough(bootstrapIdp, 'email=alice@umbrella.com', {
-    sub: 'alice-subject',
-    email: 'alice@umbrella.com',
+  const signedIn = await signInThrough(bootstrapIdp, 'email=carol@umbrella.com', {
+    sub: 'carol-subject',
+    email: 'carol@umbrella.com',
   })
   expect(signedIn.sessions.map((session) => session.workspaceId)).toEqual([workspaceId])
 })

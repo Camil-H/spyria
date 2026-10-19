@@ -4,7 +4,7 @@ import { schema } from '@hq/db/zero'
 import { type WorkspaceId, workspaceId } from '@hq/kernel'
 import { createBifrostUsageLogs, createUsageJobs, syncUsageNow } from '@hq/usage/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
-import { acme, alice, gatewayLogsOf, globex, openSharedTestApp, bob, virtualKeyOf } from './testing/testing.ts'
+import { acme, alice, bob, gatewayLogsOf, globex, openSharedTestApp, virtualKeyOf } from './testing/testing.ts'
 
 setDefaultTimeout(60_000)
 const { database, gateway } = await openSharedTestApp()

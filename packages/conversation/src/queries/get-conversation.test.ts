@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { acme, alice, createMockSnapshot, lee, type Snapshot, bob } from '@hq/db'
+import { acme, alice, bob, createMockSnapshot, lee, type Snapshot } from '@hq/db'
 import { chatId, messageId, runtimeHostId, runtimeId } from '@hq/kernel'
 import { stillRunningOf } from '../domain/delegation.ts'
 import type { RunsOn } from '../domain/session-routing.ts'

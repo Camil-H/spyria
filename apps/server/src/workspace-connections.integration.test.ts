@@ -8,8 +8,9 @@ import { sharedSecretHeader, sharedToolServer } from './testing/fake-mcp.ts'
 import {
   acme,
   addLlmKey,
-  asMember,
   alice,
+  asMember,
+  bob,
   createFakeHosts,
   everyStoredText,
   globex,
@@ -19,7 +20,6 @@ import {
   openZeroStore,
   rpcOf,
   runtimeTurn,
-  bob,
   sharedMcpUrl,
   succeeded,
   textOf,

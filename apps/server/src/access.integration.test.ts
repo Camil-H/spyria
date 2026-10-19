@@ -2,6 +2,8 @@ import { expect, test } from 'bun:test'
 import {
   acme,
   alice,
+  bob,
+  bobInAcme,
   chatAccessRows,
   chatAs,
   countOf,
@@ -11,8 +13,6 @@ import {
   openSharedTestApp,
   posters,
   readers,
-  bob,
-  bobInAcme,
   sendTo,
   succeeded,
   writtenMessage,

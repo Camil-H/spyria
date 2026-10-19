@@ -4,6 +4,8 @@ import {
   addParticipant,
   alice,
   aliceInAcme,
+  bob,
+  bobInAcme,
   chatAccessRows,
   chatAs,
   failedWith,
@@ -11,8 +13,6 @@ import {
   missingPermission,
   newChat,
   openSharedTestApp,
-  bob,
-  bobInAcme,
   sendTo,
   succeeded,
 } from './testing/testing.ts'
