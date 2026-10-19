@@ -4,7 +4,7 @@ import { serverUrl } from './stack-ports.ts'
 
 export * from '@playwright/test'
 export { test } from './stack.ts'
-export { serverUrl, ssoDexIssuer, ssoServerUrl, ssoViteUrl } from './stack-ports.ts'
+export { serverUrl, ssoProviderIssuer, ssoServerUrl, ssoViteUrl } from './stack-ports.ts'
 
 type Machine = {
   id: string
@@ -195,4 +195,113 @@ export const inPopup = async (page: Page, open: () => Promise<void>) => {
   const popup = page.waitForEvent('popup')
   await open()
   await (await popup).waitForEvent('close')
+}
+
+export const openChatRoles = async (page: Page) => {
+  await openSettings(page, 'Roles and Permissions')
+  await mainOf(page).getByRole('tab', { name: 'Chat roles' }).click()
+}
+export const rolesSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Chat roles' })
+export const roleItemOf = (page: Page, name: string) =>
+  rolesSectionOf(page).getByRole('list', { name: 'Chat roles' }).getByRole('listitem', { name, exact: true })
+export const roleFormOf = (page: Page, label: string) => rolesSectionOf(page).getByRole('form', { name: label })
+export const deleteDialogOf = (page: Page) => page.getByRole('dialog', { name: 'Delete role' })
+export const inviteRoleOptionsOf = async (page: Page) => {
+  await tabPanelOf(page).getByRole('button', { name: 'Invite' }).click()
+  return tabPanelOf(page)
+    .getByRole('form', { name: 'Invite' })
+    .getByLabel('Role')
+    .locator('option')
+    .evaluateAll((options) => options.map((option) => option.textContent))
+}
+export const insertRole = (workerStack: WorkerStack, id: string, name: string, permissions: string[]) =>
+  workerStack.database.$client`
+    insert into chat_roles (workspace_id, id, name, permissions, built_in)
+    values ('workspace-acme', ${id}, ${name}, ${workerStack.database.$client.array(permissions)}, false)`
+export const fillRoleForm = async (page: Page, label: string, name: string, permissionLabels: string[]) => {
+  const form = roleFormOf(page, label)
+  await form.getByRole('textbox', { name: 'Name' }).fill(name)
+  for (const permissionLabel of permissionLabels) await form.getByLabel(permissionLabel).check()
+  await form.getByRole('button', { name: 'Save' }).click()
+  await expect(form).toHaveCount(0)
+}
+export const createRole = async (page: Page, name: string, permissionLabels: string[]) => {
+  await openChatRoles(page)
+  await rolesSectionOf(page).getByRole('button', { name: 'New role' }).click()
+  await expect(roleFormOf(page, 'New role').getByLabel('Read the chat')).toBeDisabled()
+  await expect(roleFormOf(page, 'New role').getByLabel('Read the chat')).toBeChecked()
+  await fillRoleForm(page, 'New role', name, permissionLabels)
+  await expect(roleItemOf(page, name)).toBeVisible()
+}
+export const editRole = async (page: Page, name: string, permissionLabels: string[]) => {
+  await roleItemOf(page, name)
+    .getByRole('button', { name: `Edit ${name}` })
+    .click()
+  await fillRoleForm(page, `Edit ${name}`, name, permissionLabels)
+}
+export const deleteRole = async (page: Page, name: string) => {
+  await roleItemOf(page, name)
+    .getByRole('button', { name: `Delete ${name}` })
+    .click()
+  await deleteDialogOf(page).getByRole('button', { name: 'Delete' }).click()
+}
+
+export const mutationGateOf = async (page: Page) => {
+  let heldPushes: (() => void)[] | null = null
+  await page.routeWebSocket(/.*/, (pageSocket) => {
+    const serverSocket = pageSocket.connectToServer()
+    pageSocket.onMessage((message) => {
+      if (heldPushes && String(message).startsWith('["push"')) heldPushes.push(() => serverSocket.send(message))
+      else serverSocket.send(message)
+    })
+  })
+  await page.reload()
+  return {
+    hold: () => {
+      heldPushes = []
+    },
+    release: () => {
+      const pushes = heldPushes ?? []
+      heldPushes = null
+      for (const send of pushes) send()
+    },
+  }
+}
+export const alicesWelcomeMessage = 'Thanks, glad to be here.'
+export const quotedTime = '\\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d UTC'
+export const threadToggleName = /^\d+ repl(y|ies)/
+export const threadToggleOf = (page: Page) => mainOf(page).getByRole('button', { name: threadToggleName })
+export const repliesOf = (page: Page) =>
+  mainOf(page).getByRole('list', { name: 'Thread replies' }).getByRole('listitem')
+export const replyBoxOf = (page: Page) => mainOf(page).getByRole('textbox', { name: 'Reply' })
+export const openMessageMenu = async (message: Locator) => {
+  await message.hover()
+  await message.getByRole('button', { name: 'Message actions' }).click()
+}
+export const replyInThread = async (page: Page, text: string) => {
+  await openMessageMenu(messageContaining(page, alicesWelcomeMessage).first())
+  await page.getByRole('menuitem', { name: 'Reply in thread' }).click()
+  await expect(replyBoxOf(page)).toBeFocused()
+  await replyBoxOf(page).fill(text)
+  await replyBoxOf(page).press('ControlOrMeta+Enter')
+  await expect(repliesOf(page).filter({ hasText: text })).toHaveCount(1)
+}
+export const openWelcome = async (page: Page) => {
+  await openChat(page, 'Welcome')
+  await expect(messageContaining(page, alicesWelcomeMessage)).toBeVisible()
+}
+
+export const githubSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'GitHub' })
+export const configureGitHubApp = async (page: Page) => {
+  const app = (await (await fetch(`${serverUrl}/test/github-app`)).json()) as Record<string, string>
+  await openSettings(page, 'Connect GitHub')
+  const section = githubSectionOf(page)
+  await section.getByLabel('App id').fill(app.appId ?? '')
+  await section.getByLabel('Client id').fill(app.clientId ?? '')
+  await section.getByLabel('Private key').fill(app.privateKey ?? '')
+  await section.getByLabel('Client secret').fill(app.clientSecret ?? '')
+  await section.getByLabel('Webhook secret').fill('e2e-webhook-secret')
+  await section.getByRole('button', { name: 'Save' }).click()
+  await expect(section.getByText('Saved')).toBeVisible()
+  return app
 }

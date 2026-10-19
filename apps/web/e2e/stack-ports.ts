@@ -8,4 +8,4 @@ export const gatewayUrl = `http://127.0.0.1:${gatewayPort}`
 export const fakeMcpUrl = 'http://localhost:3101'
 export const ssoServerUrl = 'http://localhost:3102'
 export const ssoViteUrl = 'http://localhost:5191'
-export const ssoDexIssuer = 'http://localhost:5557/dex'
+export const ssoProviderIssuer = 'http://localhost:5557/dex'

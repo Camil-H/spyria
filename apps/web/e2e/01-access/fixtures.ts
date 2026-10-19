@@ -6,16 +6,19 @@ export * from '../fixtures.ts'
 
 export const signedOutScreenOf = (page: Page, workspaceName: string) =>
   page.getByText(`You are signed out of ${workspaceName}`)
+export const anySignedOutScreenOf = (page: Page) => page.getByText(/You are signed out of/)
 export const signInButtonOf = (page: Page) => page.getByRole('button', { name: 'Sign in' })
-export const signInThroughDex = async (page: Page, email: string) => {
-  const popupOpened = page.waitForEvent('popup')
-  await signInButtonOf(page).click()
-  const popup = await popupOpened
+export const logInAtProvider = async (popup: Page, email: string) => {
   const popupClosed = popup.waitForEvent('close')
   await popup.locator('#login').fill(email)
   await popup.locator('#password').fill('password')
   await popup.locator('#submit-login').click()
   await popupClosed
+}
+export const signInThroughProvider = async (page: Page, email: string) => {
+  const popupOpened = page.waitForEvent('popup')
+  await signInButtonOf(page).click()
+  await logInAtProvider(await popupOpened, email)
 }
 export const openMenu = async (page: Page) => {
   await switcherOf(page).click()

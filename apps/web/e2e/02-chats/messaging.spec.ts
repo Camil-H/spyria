@@ -1,0 +1,285 @@
+import { jobs } from '@hq/db/postgres'
+import type { WorkerStack } from '../stack'
+import {
+  agentReplyText,
+  chatLinkOf,
+  chipOf,
+  composerOf,
+  draftIconOf,
+  expect,
+  type Locator,
+  mainOf,
+  messageContaining,
+  messageItemsOf,
+  openChat,
+  type Page,
+  sendButtonOf,
+  sendMessage,
+  test,
+  workingIndicatorOf,
+} from './fixtures'
+
+const messagesOf = (page: Page) => page.getByRole('list', { name: 'Messages' })
+
+const openMessageMenu = async (message: Locator) => {
+  await message.hover()
+  await message.getByRole('button', { name: 'Message actions' }).click()
+}
+const openMessageAction = async (page: Page, messageText: string, actionName: string) => {
+  await openMessageMenu(messageContaining(page, messageText))
+  await page.getByRole('menuitem', { name: actionName }).click()
+}
+const deleteDialogOf = (page: Page) => page.getByRole('dialog', { name: 'Delete message' })
+const agentPromptJobs = async (workerStack: WorkerStack) =>
+  (await workerStack.database.select().from(jobs)).filter((job) => job.type === 'agent.prompt')
+
+test.describe('Messaging', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-10-01T12:34:00Z'))
+    await page.goto('/')
+  })
+
+  test('As a member, I send in a channel, keep a draft per chat and see the newest message scrolled into view', {
+    tag: ['@smoke'],
+  }, async ({ page, workerStack }) => {
+    await openChat(page, 'Welcome')
+
+    await test.step('sends with the Send button, clears the textbox and keeps focus in it', async () => {
+      await composerOf(page).fill('Hello team')
+      await sendButtonOf(page).click()
+      await expect(messageItemsOf(page)).toHaveCount(3)
+      await expect(messageItemsOf(page).nth(2)).toContainText('Alice')
+      await expect(messageItemsOf(page).nth(2)).toContainText(/\d{2}:\d{2}/)
+      await expect(messageItemsOf(page).nth(2)).toContainText('Hello team')
+      await expect(composerOf(page)).toHaveValue('')
+      await expect(composerOf(page)).toBeFocused()
+    })
+
+    await test.step('appends only the member message', async () => {
+      await expect(workingIndicatorOf(page)).toHaveCount(0)
+      await expect
+        .poll(() => workerStack.database.query.messages.findFirst({ where: { body: 'Hello team' } }))
+        .toBeDefined()
+      expect(await agentPromptJobs(workerStack)).toEqual([])
+      await expect(messageContaining(page, agentReplyText)).toHaveCount(0)
+      await expect(messageItemsOf(page)).toHaveCount(3)
+    })
+
+    await test.step('sends with Cmd+Enter', async () => {
+      await sendMessage(page, 'Sent from the keyboard')
+      await expect(messageContaining(page, 'Sent from the keyboard')).toBeVisible()
+      await expect(composerOf(page)).toHaveValue('')
+    })
+
+    await test.step('keeps each chat messages separate and persistent while switching, with a draft per chat', async () => {
+      await composerOf(page).fill('Work in progress')
+      await expect(draftIconOf(page, 'Welcome')).toBeVisible()
+      await openChat(page, 'Standup')
+      await expect(messageContaining(page, 'Sent from the keyboard')).toHaveCount(0)
+      await expect(messageContaining(page, 'Standup at 10.')).toBeVisible()
+      await expect(composerOf(page)).toHaveValue('')
+      await expect(draftIconOf(page, 'Welcome')).toBeVisible()
+      await expect(draftIconOf(page, 'Standup')).toHaveCount(0)
+      await openChat(page, 'Welcome')
+      await expect(messageContaining(page, 'Sent from the keyboard')).toBeVisible()
+      await expect(composerOf(page)).toHaveValue('Work in progress')
+    })
+
+    await test.step('clears the draft and the pencil when the message is sent', async () => {
+      await composerOf(page).press('ControlOrMeta+Enter')
+      await expect(draftIconOf(page, 'Welcome')).toHaveCount(0)
+    })
+
+    await test.step('scrolls the newest message into view when opening a chat and after sending', async () => {
+      await workerStack.database.$client.begin(async (sql) => {
+        await sql`select 1 from chats where id = 'chat-welcome' for update`
+        await sql`
+        with fillers as (
+          select 'filler-' || number as id, 'Filler ' || number as body,
+            (select max(seq) from events where chat_id = 'chat-welcome') + number as seq
+          from generate_series(1, 29) as number
+        ), posted as (
+          insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
+          select 'workspace-acme', 'chat-welcome', id, seq, 'message.posted', 'member-alice',
+            jsonb_build_object('kind', 'member', 'body', body, 'detail', null, 'replyToId', null), now()
+          from fillers
+        )
+        insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
+        select 'workspace-acme', 'chat-welcome', id, seq, 'member', 'member-alice', body, now() from fillers`
+      })
+      await expect(messageContaining(page, 'Filler 29')).toHaveCount(1)
+      await sendMessage(page, 'Filler 30')
+      await expect(messageContaining(page, 'Filler 30')).toBeInViewport()
+      await expect(messageContaining(page, 'Welcome to the team!')).not.toBeInViewport()
+      await openChat(page, 'Standup')
+      await openChat(page, 'Welcome')
+      await expect(messageContaining(page, 'Filler 30')).toBeInViewport()
+    })
+  })
+
+  test('As a member, I edit then delete my own message', async ({ page }) => {
+    await openChat(page, 'Welcome')
+
+    await test.step('prefills the text and saves the edit with an edited marker', async () => {
+      await openMessageAction(page, 'Thanks, glad to be here.', 'Edit')
+      const editBox = page.getByRole('textbox', { name: 'Edit message' })
+      await expect(editBox).toHaveValue('Thanks, glad to be here.')
+      await editBox.fill('Thanks, happy to be here.')
+      await page.getByRole('button', { name: 'Save' }).click()
+      const editedMessage = messageContaining(page, 'Thanks, happy to be here.')
+      await expect(editedMessage).toContainText('(edited)')
+      await expect(editedMessage).toContainText('Alice')
+      await expect(editedMessage).toContainText('09:02')
+      await expect(messageContaining(page, 'glad to be here')).toHaveCount(0)
+    })
+
+    await test.step('replaces the message with a tombstone after confirmation', async () => {
+      await openMessageAction(page, 'Thanks, happy to be here.', 'Delete')
+      await deleteDialogOf(page).getByRole('button', { name: 'Delete' }).click()
+      await expect(messageContaining(page, 'This message was deleted')).toBeVisible()
+      await expect(messageContaining(page, 'Thanks, happy to be here.')).toHaveCount(0)
+      await expect(messageItemsOf(page)).toHaveCount(2)
+    })
+  })
+  test('As a member, I read a channel with its authors and times, and its composer and message menu allow only what I may do', async ({
+    page,
+  }) => {
+    await openChat(page, 'Welcome')
+
+    await test.step('shows the channel header and its messages with author, time and body', async () => {
+      await expect(mainOf(page).getByRole('img', { name: 'Channel' })).toBeVisible()
+      await expect(mainOf(page)).not.toContainText('Channel view')
+      await expect(mainOf(page)).not.toContainText('Agent acts as')
+      await expect(mainOf(page)).not.toContainText('GPT-5')
+      await expect(mainOf(page)).not.toContainText('Claude Sonnet 5.5')
+      await expect(mainOf(page).getByRole('img', { name: 'Git branch' })).toHaveCount(0)
+      await expect(messageItemsOf(page)).toHaveCount(2)
+      await expect(messageItemsOf(page).nth(0)).toContainText('Bob')
+      await expect(messageItemsOf(page).nth(0)).toContainText('09:00')
+      await expect(messageItemsOf(page).nth(0)).toContainText('Welcome to the team!')
+      await expect(messageItemsOf(page).nth(1)).toContainText('Alice')
+      await expect(messageItemsOf(page).nth(1)).toContainText('09:02')
+      await expect(messageItemsOf(page).nth(1)).toContainText('Thanks, glad to be here.')
+    })
+
+    await test.step('disables Send while the text is blank or whitespace', async () => {
+      await expect(sendButtonOf(page)).toBeDisabled()
+      await composerOf(page).fill('   ')
+      await expect(sendButtonOf(page)).toBeDisabled()
+      await composerOf(page).fill('Hello')
+      await expect(sendButtonOf(page)).toBeEnabled()
+    })
+
+    await test.step('inserts a new line on Enter and Shift+Enter without sending', async () => {
+      await composerOf(page).fill('first')
+      await composerOf(page).press('Enter')
+      await composerOf(page).pressSequentially('second')
+      await composerOf(page).press('Shift+Enter')
+      await composerOf(page).pressSequentially('third')
+      await expect(composerOf(page)).toHaveValue('first\nsecond\nthird')
+      await expect(messageItemsOf(page)).toHaveCount(2)
+    })
+
+    await test.step('shows no pencil for a whitespace-only draft', async () => {
+      await composerOf(page).fill('   ')
+      await expect(draftIconOf(page, 'Welcome')).toHaveCount(0)
+    })
+
+    await test.step('offers the three actions, with edit and delete enabled on own messages', async () => {
+      await openMessageMenu(messageContaining(page, 'Thanks, glad to be here.'))
+      await expect(page.getByRole('menuitem', { name: 'Start runtime from this message' })).toBeEnabled()
+      await expect(page.getByRole('menuitem', { name: 'Edit' })).toBeEnabled()
+      await expect(page.getByRole('menuitem', { name: 'Delete' })).toBeEnabled()
+      await page.keyboard.press('Escape')
+    })
+
+    await test.step('disables edit and delete on messages of other members', async () => {
+      await openMessageMenu(messageContaining(page, 'Welcome to the team!'))
+      await expect(page.getByRole('menuitem', { name: 'Start runtime from this message' })).toBeEnabled()
+      await expect(page.getByRole('menuitem', { name: 'Edit' })).toBeDisabled()
+      await expect(page.getByRole('menuitem', { name: 'Delete' })).toBeDisabled()
+      await page.keyboard.press('Escape')
+      await expect(page.getByRole('menuitem')).toHaveCount(0)
+    })
+
+    await test.step('keeps the original text on cancel', async () => {
+      await openMessageAction(page, 'Thanks, glad to be here.', 'Edit')
+      await page.getByRole('textbox', { name: 'Edit message' }).fill('Something else')
+      await page.getByRole('button', { name: 'Cancel' }).click()
+      await expect(messageContaining(page, 'Thanks, glad to be here.')).not.toContainText('(edited)')
+      await expect(page.getByRole('textbox', { name: 'Edit message' })).toHaveCount(0)
+    })
+
+    await test.step('cannot save a blank text', async () => {
+      await openMessageAction(page, 'Thanks, glad to be here.', 'Edit')
+      await page.getByRole('textbox', { name: 'Edit message' }).fill('   ')
+      await expect(page.getByRole('button', { name: 'Save' })).toBeDisabled()
+      await page.getByRole('button', { name: 'Cancel' }).click()
+      await expect(page.getByRole('textbox', { name: 'Edit message' })).toHaveCount(0)
+    })
+
+    await test.step('keeps the message when the deletion is cancelled', async () => {
+      await openMessageAction(page, 'Thanks, glad to be here.', 'Delete')
+      await deleteDialogOf(page).getByRole('button', { name: 'Cancel' }).click()
+      await expect(deleteDialogOf(page)).toHaveCount(0)
+      await expect(messageContaining(page, 'Thanks, glad to be here.')).toBeVisible()
+    })
+  })
+
+  test('As a member, I read a runtime chat’s history with its owner, model, branch and tool calls, and an empty chat invites the first prompt', async ({
+    page,
+  }) => {
+    await test.step('moves focus to the composer when a chat is opened from the sidebar', async () => {
+      await chatLinkOf(page, 'Welcome').click()
+      await expect(composerOf(page)).toBeFocused()
+      await chatLinkOf(page, 'Invoice bug').click()
+      await expect(composerOf(page)).toBeFocused()
+    })
+
+    await test.step('shows member and agent messages and the runtime header', async () => {
+      await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Invoice bug' })).toBeVisible()
+      await expect(mainOf(page).getByRole('img', { name: 'Runtime chat' })).toBeVisible()
+      await expect(mainOf(page)).not.toContainText('Runtime view')
+      await expect(mainOf(page)).toContainText('Agent acts as Alice')
+      await expect(chipOf(page, 'hq')).toHaveText('Sonnet 5.5 (high)')
+      await expect(mainOf(page)).toContainText('fix/invoice-tax')
+      await expect(mainOf(page).getByRole('img', { name: 'Git branch' })).toBeVisible()
+      await expect(messageContaining(page, 'Why do invoices show the wrong total?')).toContainText('Alice')
+      await expect(messageContaining(page, 'Checking the invoice calculation.')).toContainText('Agent')
+      await expect(messageContaining(page, 'The tax is applied twice.')).toContainText('Agent')
+    })
+
+    await test.step('has no message menu in a runtime chat', async () => {
+      await expect(page.getByRole('button', { name: 'Message actions' })).toHaveCount(0)
+    })
+
+    await test.step('collapses and expands a tool call', async () => {
+      const toolCallToggle = messagesOf(page).getByRole('button', { name: 'Read: billing/invoice.ts' })
+      await expect(toolCallToggle).toHaveAttribute('aria-expanded', 'false')
+      await expect(messagesOf(page).getByText('export const total = ...')).toBeHidden()
+      await toolCallToggle.click()
+      await expect(toolCallToggle).toHaveAttribute('aria-expanded', 'true')
+      await expect(messagesOf(page).getByText('export const total = ...')).toBeVisible()
+      await toolCallToggle.click()
+      await expect(messagesOf(page).getByText('export const total = ...')).toBeHidden()
+    })
+
+    await test.step('shows the owner and the model of another runtime chat', async () => {
+      await openChat(page, 'Setup helper')
+      await expect(mainOf(page)).toContainText('Agent acts as Bob')
+      await expect(chipOf(page, 'hq')).toHaveText('GPT-5 (medium)')
+      await expect(mainOf(page)).toContainText('main')
+      await expect(mainOf(page).getByRole('img', { name: 'Git branch' })).toBeVisible()
+      await expect(messageContaining(page, 'Dependencies installed.')).toContainText('Agent')
+    })
+
+    await test.step('shows an empty state, no git branch without a repository and keeps the composer available', async () => {
+      await openChat(page, 'Research')
+      await expect(mainOf(page)).toContainText('Model chosen at first prompt')
+      await expect(mainOf(page).getByRole('img', { name: 'Git branch' })).toHaveCount(0)
+      await expect(mainOf(page)).toContainText('No messages yet')
+      await expect(messageItemsOf(page)).toHaveCount(0)
+      await expect(composerOf(page)).toBeVisible()
+    })
+  })
+})

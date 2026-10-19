@@ -161,14 +161,18 @@ bun run test:integration   # needs bun run stack:up; runs its own gateway (hq-te
 bun run check:boundaries
 bun run lint
 bun run check:bundle       # builds the app, main chunk at most 760 kB, one React, no server-only SQL
-bun run test:e2e           # starts its own stack per worker, one gateway (hq-test-gateway-e2e on 4881) and an sso-mode stack (server 3102, app 5191, Dex hq-test-dex-e2e on 5557)
-bun run test:e2e:smoke     # the @smoke critical paths only (about 25 tests)
-bun run test:e2e -- e2e/04-agent   # one segment
+bun run test:e2e           # starts its own stack per worker, one gateway (hq-test-gateway-e2e on 4881) and an sso-mode stack (server 3102, app 5191, Dex hq-test-dex-e2e on 5557); e2e/00-platform runs first and gates the rest
+bun run test:e2e:smoke     # the @smoke critical paths only (29 tests, every segment), after the 00-platform gate
+bun run test:e2e -- e2e/04-agent   # one segment (00-platform still runs first)
+bun run test:ui            # the visual suite apps/web/ui: screenshots light and dark against the baselines, keyboard and resize checks; not in check:all
+bun run test:ui:update     # regenerate the screenshot baselines after an intended design change, then review the changed PNGs
 ```
 
 `check:related [--base <ref>]` takes the uncommitted changes plus the commits since `<ref>` (default `HEAD`). It runs the unit and integration test files that changed or import a changed module, directly or not (dependency-cruiser's graph), and Playwright `--only-changed=<ref>` when a spec imports a changed module. It prints what it selected and why. It runs a whole suite when it cannot decide: a changed file outside the module graph (lock file, config, SQL, infra) runs every suite, `integration-setup.ts` runs every integration test, and an e2e harness file (`test-server.ts`, `testing.ts`, the fake LLM, `global-setup.ts`, `playwright.config.ts`) runs the whole e2e suite. App code that e2e reaches only through the servers is left to `check:all`.
 
 `check:all` writes its full output to `.check/last-check-all.log` and a summary to `.check/last-check-all.json`: the `git stash create` fingerprint (HEAD when the tree is clean), HEAD, the tree hash of the working tree including untracked files, the exit code, and each step's result and duration. `--verify` compares that tree hash with the current tree.
+
+e2e is organized in segments under `apps/web/e2e` (`00-platform` … `08-admin`), one file per area, one `describe` per area and titles as user stories ("As <role>, I …") with spec tags (`@spec-NN`), `@smoke` and `@slow`. The `platform` Playwright project (`00-platform`: standalone reset check, a browser mutation confirmed by the server, an agent stream frame of a scripted turn, a gateway call recorded with its prompter and owner) is a dependency of the `e2e` project: when it fails, nothing else runs and `e2e/platform-gate.ts` prints that the stack, not a feature, is broken. In `04-agent`, questions, plan mode, Stop, steps and streaming run once per harness (`[Pi]` on an HQ runtime, `[Claude Code]` and `[Codex]` on the fake machine) through `forEachHarness`. The `ui` project (`apps/web/ui`) holds the looks: `toHaveScreenshot` in light and dark on fixed states (baselines in `apps/web/ui/*-snapshots/`, platform-specific), plus keyboard, resize and colour assertions.
 
 e2e tests run on one fake runtime host per worker database: the test server relays its runtimes to a real hq-agent process driving `stub-acp-agent.mjs` (Pi flavour), which runs each chat's fake LLM script through the real relay and gateway, running commands with `bash` and editing files in a temporary directory. A fake runtime answers `/ready` 200 ms after its start (`fakeBootMilliseconds` changes it per test, 1.5 s keeps Starting… visible). `agentScript` replaces a chat's fake LLM script only once a model call has used the previous one (the test server refuses with 409 after 30 s), so a test can switch to a fast script while a slow turn is starting. Failed tests keep a screenshot and `error-context.md` in `apps/web/test-results`; traces are off because recording one per test made the suite about 25% slower, so add `--trace retain-on-failure` when chasing a failure. Real containers run only in `bun run check:docker` (integration: `sandbox`, `personal-host`, `pi`).
 

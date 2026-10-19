@@ -111,142 +111,144 @@ const reviewWithComments = async (workerStack: WorkerStack, headSha: string) => 
     })
 }
 
-test.beforeEach(async ({ page }) => {
-  await page.goto('/')
-})
-
-test('the owner pushes the agent’s commit and opens a pull request: the card and the header chip show it, authored with the owner’s token', {
-  tag: ['@spec-41', '@smoke'],
-}, async ({ page, agentScript, workerStack }) => {
-  await configureGitHubApp(page)
-  await connectGitHub(page)
-  const chatId = await devChatWithCommit(page, agentScript, 'Publish totals')
-  await panelTabOf(page, 'Changes').click()
-  await pushButtonOf(page).click()
-  await expect(tabPanelOf(page).getByRole('status')).toContainText(/^Pushed hq\/publish-totals-/)
-  expect((await githubStateOf(workerStack, chatId)).commits).toEqual(['Fix the totals'])
-  await openPullRequest(page)
-  const card = cardOf(page)
-  await expect(card).toContainText('Fix the totals')
-  await expect(card).toContainText('#1')
-  await expect(card).toContainText('open')
-  await expect(card).toContainText('Checks pending')
-  await expect(card).toContainText('1 commit')
-  await expect(chipOf(page, 'open')).toBeVisible()
-  await expect(tabPanelOf(page).getByRole('button', { name: 'Open pull request' })).toHaveCount(0)
-  expect((await githubStateOf(workerStack, chatId)).pullRequests).toEqual([
-    expect.objectContaining({ number: 1, title: 'Fix the totals', authorId: 'member-alice' }),
-  ])
-})
-
-test('a prompter’s request to push is refused to the agent with the owner-only notice, and the prompter has no Push or Open pull request', {
-  tag: ['@spec-41'],
-}, async ({ page, browser, agentScript, workerStack }) => {
-  await configureGitHubApp(page)
-  await connectGitHub(page)
-  const chatId = await devChatWithCommit(page, agentScript, 'Guest push')
-  await addParticipant(workerStack, chatId, 'member-bob', 'prompter')
-  const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-  await addLlmKey(bobPage, 'Fake')
-  await openChat(bobPage, 'Guest push')
-  await agentScript(chatId, { steps: [{ tool: 'push_branch' }], text: 'Only Alice can publish here.' })
-  await sendMessage(bobPage, 'Push the branch')
-  await expect(messageContaining(bobPage, 'Only Alice can publish here.')).toHaveCount(1)
-  await finished(bobPage)
-  await messageItemsOf(bobPage)
-    .getByRole('button', { name: /^Used push_branch/ })
-    .click()
-  await expect(messageContaining(bobPage, 'Used push_branch')).toContainText(
-    'Only Alice can push or open pull requests in this chat',
-  )
-  await panelTabOf(bobPage, 'Changes').click()
-  await expect(tabPanelOf(bobPage).getByRole('button', { name: /^src\/app\.ts/ })).toBeVisible()
-  await expect(pushButtonOf(bobPage)).toHaveCount(0)
-  await expect(tabPanelOf(bobPage).getByRole('button', { name: 'Open pull request' })).toHaveCount(0)
-  expect((await githubStateOf(workerStack, chatId)).commits).toEqual([])
-  const [refusal] = await workerStack.database.$client`
-    select prompter_id, tool, status from tool_calls where chat_id = ${chatId} and server = 'github'`
-  expect(refusal).toEqual({ prompter_id: 'member-bob', tool: 'push_branch', status: 'refused' })
-})
-
-test('signed webhooks turn the checks to passing and show the requested changes with their comments; a bad signature changes nothing', {
-  tag: ['@spec-41'],
-}, async ({ page, agentScript, workerStack }) => {
-  const { headSha } = await openedPullRequest(page, agentScript, workerStack, 'Checked totals')
-  const suite = {
-    action: 'completed',
-    check_suite: { id: 7, head_sha: headSha, conclusion: 'success', pull_requests: [{ number: 1 }] },
-  }
-  expect(await sendWebhook(workerStack, 'check_suite', suite, 'not-the-secret')).toBe(401)
-  await expect(cardOf(page)).toContainText('Checks pending')
-  expect(await sendWebhook(workerStack, 'check_suite', suite)).toBe(200)
-  await expect(cardOf(page)).toContainText('Checks passing')
-  await reviewWithComments(workerStack, headSha)
-  const card = cardOf(page)
-  await expect(card).toContainText('Changes requested')
-  const comments = card.getByRole('list', { name: 'Review comments' }).getByRole('listitem')
-  await expect(comments).toHaveText([
-    'src/app.ts:1 rita: Name this total',
-    'src/app.ts:1 rita: Add a test for the totals',
-  ])
-})
-
-test('Address review comments prompts the agent with both comments; after its edit the owner pushes and the card counts the new commit', {
-  tag: ['@spec-41'],
-}, async ({ page, agentScript, workerStack }) => {
-  const { chatId, headSha } = await openedPullRequest(page, agentScript, workerStack, 'Reviewed totals')
-  await reviewWithComments(workerStack, headSha)
-  await agentScript(chatId, {
-    steps: [
-      { edit: { path: 'src/app.ts', oldText: 'export const total = 2\n', newText: 'export const invoiceTotal = 2\n' } },
-      { command: commitCommand('Address the review') },
-    ],
-    text: 'Addressed the review.',
+test.describe('Pull requests', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/')
   })
-  await expect(cardOf(page).getByRole('list', { name: 'Review comments' }).getByRole('listitem')).toHaveCount(2)
-  await cardOf(page).getByRole('button', { name: 'Address review comments' }).click()
-  const prompt = messageContaining(page, 'Address the review comments on pull request #1, then commit:')
-  await expect(prompt).toContainText('- src/app.ts:1 (rita): Name this total')
-  await expect(prompt).toContainText('- src/app.ts:1 (rita): Add a test for the totals')
-  await expect(messageContaining(page, 'Addressed the review.')).toHaveCount(1)
-  await finished(page)
-  await panelTabOf(page, 'Changes').click()
-  await pushButtonOf(page).click()
-  await expect(tabPanelOf(page).getByRole('status')).toContainText('to pull request #1 (2 commits)')
-  await expect(cardOf(page)).toContainText('2 commits')
-  expect((await githubStateOf(workerStack, chatId)).commits).toEqual(['Address the review', 'Fix the totals'])
-})
 
-test('an owner without a GitHub connection is asked to connect it on Push', { tag: ['@spec-41'] }, async ({
-  page,
-  agentScript,
-}) => {
-  await configureGitHubApp(page)
-  await devChatWithCommit(page, agentScript, 'Unconnected totals')
-  await panelTabOf(page, 'Changes').click()
-  await pushButtonOf(page).click()
-  await expect(tabPanelOf(page).getByRole('alert')).toHaveText('Connect your GitHub account in your profile to push')
-})
+  test('As a chat owner, I push the agent’s commit and open a pull request: the card and the header chip show it, authored with my token', {
+    tag: ['@spec-41', '@smoke'],
+  }, async ({ page, agentScript, workerStack }) => {
+    await configureGitHubApp(page)
+    await connectGitHub(page)
+    const chatId = await devChatWithCommit(page, agentScript, 'Publish totals')
+    await panelTabOf(page, 'Changes').click()
+    await pushButtonOf(page).click()
+    await expect(tabPanelOf(page).getByRole('status')).toContainText(/^Pushed hq\/publish-totals-/)
+    expect((await githubStateOf(workerStack, chatId)).commits).toEqual(['Fix the totals'])
+    await openPullRequest(page)
+    const card = cardOf(page)
+    await expect(card).toContainText('Fix the totals')
+    await expect(card).toContainText('#1')
+    await expect(card).toContainText('open')
+    await expect(card).toContainText('Checks pending')
+    await expect(card).toContainText('1 commit')
+    await expect(chipOf(page, 'open')).toBeVisible()
+    await expect(tabPanelOf(page).getByRole('button', { name: 'Open pull request' })).toHaveCount(0)
+    expect((await githubStateOf(workerStack, chatId)).pullRequests).toEqual([
+      expect.objectContaining({ number: 1, title: 'Fix the totals', authorId: 'member-alice' }),
+    ])
+  })
 
-test('a merged pull_request webhook turns the card and the header chip to merged', { tag: ['@spec-41'] }, async ({
-  page,
-  agentScript,
-  workerStack,
-}) => {
-  const { headSha } = await openedPullRequest(page, agentScript, workerStack, 'Merged totals')
-  await expect(chipOf(page, 'open')).toBeVisible()
-  const pullRequest = {
-    number: 1,
-    html_url: 'https://github.test/acme/app/pull/1',
-    title: 'Fix the totals',
-    head: { sha: headSha },
-  }
-  expect(
-    await sendWebhook(workerStack, 'pull_request', {
-      action: 'closed',
-      pull_request: { ...pullRequest, state: 'closed', merged: true, commits: 1 },
-    }),
-  ).toBe(200)
-  await expect(cardOf(page)).toContainText('merged')
-  await expect(chipOf(page, 'merged')).toBeVisible()
+  test('As a prompter, my request to push is refused to the agent with the owner-only notice, and I have no Push or Open pull request', {
+    tag: ['@spec-41'],
+  }, async ({ page, browser, agentScript, workerStack }) => {
+    await configureGitHubApp(page)
+    await connectGitHub(page)
+    const chatId = await devChatWithCommit(page, agentScript, 'Guest push')
+    await addParticipant(workerStack, chatId, 'member-bob', 'prompter')
+    const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+    await addLlmKey(bobPage, 'Fake')
+    await openChat(bobPage, 'Guest push')
+    await agentScript(chatId, { steps: [{ tool: 'push_branch' }], text: 'Only Alice can publish here.' })
+    await sendMessage(bobPage, 'Push the branch')
+    await expect(messageContaining(bobPage, 'Only Alice can publish here.')).toHaveCount(1)
+    await finished(bobPage)
+    await messageItemsOf(bobPage)
+      .getByRole('button', { name: /^Used push_branch/ })
+      .click()
+    await expect(messageContaining(bobPage, 'Used push_branch')).toContainText(
+      'Only Alice can push or open pull requests in this chat',
+    )
+    await panelTabOf(bobPage, 'Changes').click()
+    await expect(tabPanelOf(bobPage).getByRole('button', { name: /^src\/app\.ts/ })).toBeVisible()
+    await expect(pushButtonOf(bobPage)).toHaveCount(0)
+    await expect(tabPanelOf(bobPage).getByRole('button', { name: 'Open pull request' })).toHaveCount(0)
+    expect((await githubStateOf(workerStack, chatId)).commits).toEqual([])
+    const [refusal] = await workerStack.database.$client`
+    select prompter_id, tool, status from tool_calls where chat_id = ${chatId} and server = 'github'`
+    expect(refusal).toEqual({ prompter_id: 'member-bob', tool: 'push_branch', status: 'refused' })
+  })
+
+  test('As a chat owner, I see signed webhooks turn the checks to passing and show the requested changes with their comments, while a bad signature changes nothing', {
+    tag: ['@spec-41'],
+  }, async ({ page, agentScript, workerStack }) => {
+    const { headSha } = await openedPullRequest(page, agentScript, workerStack, 'Checked totals')
+    const suite = {
+      action: 'completed',
+      check_suite: { id: 7, head_sha: headSha, conclusion: 'success', pull_requests: [{ number: 1 }] },
+    }
+    expect(await sendWebhook(workerStack, 'check_suite', suite, 'not-the-secret')).toBe(401)
+    await expect(cardOf(page)).toContainText('Checks pending')
+    expect(await sendWebhook(workerStack, 'check_suite', suite)).toBe(200)
+    await expect(cardOf(page)).toContainText('Checks passing')
+    await reviewWithComments(workerStack, headSha)
+    const card = cardOf(page)
+    await expect(card).toContainText('Changes requested')
+    const comments = card.getByRole('list', { name: 'Review comments' }).getByRole('listitem')
+    await expect(comments).toHaveText([
+      'src/app.ts:1 rita: Name this total',
+      'src/app.ts:1 rita: Add a test for the totals',
+    ])
+  })
+
+  test('As a chat owner, I address review comments: the agent is prompted with both, and after its edit I push and the card counts the new commit', {
+    tag: ['@spec-41'],
+  }, async ({ page, agentScript, workerStack }) => {
+    const { chatId, headSha } = await openedPullRequest(page, agentScript, workerStack, 'Reviewed totals')
+    await reviewWithComments(workerStack, headSha)
+    await agentScript(chatId, {
+      steps: [
+        {
+          edit: { path: 'src/app.ts', oldText: 'export const total = 2\n', newText: 'export const invoiceTotal = 2\n' },
+        },
+        { command: commitCommand('Address the review') },
+      ],
+      text: 'Addressed the review.',
+    })
+    await expect(cardOf(page).getByRole('list', { name: 'Review comments' }).getByRole('listitem')).toHaveCount(2)
+    await cardOf(page).getByRole('button', { name: 'Address review comments' }).click()
+    const prompt = messageContaining(page, 'Address the review comments on pull request #1, then commit:')
+    await expect(prompt).toContainText('- src/app.ts:1 (rita): Name this total')
+    await expect(prompt).toContainText('- src/app.ts:1 (rita): Add a test for the totals')
+    await expect(messageContaining(page, 'Addressed the review.')).toHaveCount(1)
+    await finished(page)
+    await panelTabOf(page, 'Changes').click()
+    await pushButtonOf(page).click()
+    await expect(tabPanelOf(page).getByRole('status')).toContainText('to pull request #1 (2 commits)')
+    await expect(cardOf(page)).toContainText('2 commits')
+    expect((await githubStateOf(workerStack, chatId)).commits).toEqual(['Address the review', 'Fix the totals'])
+  })
+
+  test('As a chat owner without a GitHub connection, I am asked to connect it on Push', { tag: ['@spec-41'] }, async ({
+    page,
+    agentScript,
+  }) => {
+    await configureGitHubApp(page)
+    await devChatWithCommit(page, agentScript, 'Unconnected totals')
+    await panelTabOf(page, 'Changes').click()
+    await pushButtonOf(page).click()
+    await expect(tabPanelOf(page).getByRole('alert')).toHaveText('Connect your GitHub account in your profile to push')
+  })
+
+  test('As a chat owner, I see a merged pull request turn the card and the header chip to merged', {
+    tag: ['@spec-41'],
+  }, async ({ page, agentScript, workerStack }) => {
+    const { headSha } = await openedPullRequest(page, agentScript, workerStack, 'Merged totals')
+    await expect(chipOf(page, 'open')).toBeVisible()
+    const pullRequest = {
+      number: 1,
+      html_url: 'https://github.test/acme/app/pull/1',
+      title: 'Fix the totals',
+      head: { sha: headSha },
+    }
+    expect(
+      await sendWebhook(workerStack, 'pull_request', {
+        action: 'closed',
+        pull_request: { ...pullRequest, state: 'closed', merged: true, commits: 1 },
+      }),
+    ).toBe(200)
+    await expect(cardOf(page)).toContainText('merged')
+    await expect(chipOf(page, 'merged')).toBeVisible()
+  })
 })

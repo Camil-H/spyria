@@ -6,8 +6,10 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc -p .",
-    "test:e2e": "playwright test",
-    "test:e2e:smoke": "playwright test --grep @smoke"
+    "test:e2e": "playwright test --project=e2e",
+    "test:e2e:smoke": "playwright test --project=e2e --grep @smoke",
+    "test:ui": "playwright test --project=ui",
+    "test:ui:update": "playwright test --project=ui --update-snapshots=all"
   },
   "dependencies": {
     "@hq/conversation": "workspace:*",

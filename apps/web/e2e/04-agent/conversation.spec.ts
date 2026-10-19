@@ -2,32 +2,42 @@ import { openPageAs, runtimeStateOf } from '../stack'
 import {
   addParticipant,
   agentReplyText,
+  composerOf,
   expect,
-  foldOf,
+  forEachHarness,
   mainOf,
   messageContaining,
   messageItemsOf,
+  modeRadioOf,
+  newHarnessChat,
+  newRuntimeChat,
+  newSessionNotice,
   openChat,
   type Page,
   research,
+  sendButtonOf,
   sendMessage,
-  test,
+  machineTest as test,
+  turnEnded,
   unreadIconOf,
   workingIndicatorOf,
 } from './fixtures'
 
-test.describe('Prompting the agent', () => {
+const workingDirectoryOf = (page: Page) =>
+  mainOf(page).getByRole('img', { name: 'Working directory' }).locator('xpath=..')
+const branchOf = (page: Page) => mainOf(page).getByRole('img', { name: 'Git branch' }).locator('xpath=..')
+
+test.describe('Conversation', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/')
   })
 
-  test.describe('without a runtime yet', () => {
+  test.describe(() => {
     test.use({ warmRuntimes: false })
 
-    test('the first prompt starts the agent, shown working until its reply arrives', { tag: ['@spec-09'] }, async ({
-      page,
-      workerStack,
-    }) => {
+    test('As a prompter, my first prompt starts the agent, shown working until its reply arrives', {
+      tag: ['@spec-09'],
+    }, async ({ page, workerStack }) => {
       expect(await runtimeStateOf(workerStack, research)).toBeUndefined()
       await openChat(page, 'Research')
       await sendMessage(page, 'Find the latest pricing')
@@ -41,7 +51,7 @@ test.describe('Prompting the agent', () => {
     })
   })
 
-  test('the prompt and the reply stay after a reload, and the chat is not unread for the person who prompted', {
+  test('As a prompter, my prompt and its reply stay after a reload, and the chat is not unread for me', {
     tag: ['@spec-09'],
   }, async ({ page }) => {
     await openChat(page, 'Research')
@@ -57,7 +67,7 @@ test.describe('Prompting the agent', () => {
     await expect(unreadIconOf(page, 'Research')).toHaveCount(0)
   })
 
-  test('a reload during a turn shows the prompt, then the reply once it completes, without a duplicate', {
+  test('As a prompter, I reload during a turn and see my prompt, then the reply once it completes, without a duplicate', {
     tag: ['@spec-09'],
   }, async ({ page, agentScript, release }) => {
     await agentScript(research, { hold: 'answer' })
@@ -73,193 +83,166 @@ test.describe('Prompting the agent', () => {
     await expect(messageItemsOf(page)).toHaveCount(2)
   })
 
-  test('another member viewing the chat sees the reply stream in, then the stored reply, and no unread icon', {
-    tag: ['@spec-09'],
-  }, async ({ page, browser, workerStack, agentScript, release }) => {
-    await agentScript(research, { hold: 'answer' })
-    await addParticipant(workerStack, research, 'member-bob', 'reader')
-    const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-    await openChat(bobPage, 'Research')
+  test('As a prompter, I send while the agent works and get one reply per message, in order', async ({ page }) => {
     await openChat(page, 'Research')
-    await sendMessage(page, 'Watch this')
-
-    await expect(messageContaining(bobPage, 'Watch this')).toHaveCount(1)
-    const bobReply = messageItemsOf(bobPage).nth(1)
-    await expect(bobReply).toContainText('Understood,')
-    expect(await bobReply.textContent()).not.toContain(agentReplyText)
-    await release('answer')
-    await expect(bobReply).toContainText(agentReplyText)
-    await expect(workingIndicatorOf(bobPage)).toHaveCount(0)
-    await expect(messageContaining(bobPage, agentReplyText)).toHaveCount(1)
-    await expect(unreadIconOf(bobPage, 'Research')).toHaveCount(0)
-    await bobPage.context().close()
-  })
-})
-
-test.describe('Following the agent’s steps', () => {
-  const thinking = 'I will check the toolchain, then fix the totals.'
-  const fixedText = 'Fixed the totals and added the tax line.'
-  const createTotals = `python3 --version && printf 'export const total = 1\\n' > totals.ts`
-  const fixSteps = (commandPrefix = '', thinkingHold?: string) => [
-    { think: thinking, hold: thinkingHold },
-    { command: `${commandPrefix}${createTotals}` },
-    {
-      edit: {
-        path: 'totals.ts',
-        oldText: 'export const total = 1\n',
-        newText: 'export const total = 2\nexport const tax = 0.2\n',
-      },
-    },
-  ]
-  const failingCommand = `bash -c 'echo step one; echo step two; exit 3'`
-  const stepButtonOf = (page: Page, name: string | RegExp) => messageItemsOf(page).getByRole('button', { name })
-
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/')
-    await openChat(page, 'Research')
-  })
-
-  test('the agent’s steps show live while it works: thinking, the running command, its exit code, then the edit', {
-    tag: ['@spec-10', '@smoke'],
-  }, async ({ page, agentScript, release, heldCommand }) => {
-    const steps = fixSteps(`${heldCommand('command')} && `, 'thinking')
-    await agentScript(research, { steps, text: fixedText, hold: 'answer' })
-    await sendMessage(page, 'Fix the totals')
-
-    await expect(messageContaining(page, 'Thinking…')).toHaveCount(1)
-    await release('thinking')
-    const command = messageContaining(page, 'python3 --version')
-    await expect(command.getByRole('img', { name: 'Running' })).toBeVisible()
-    await release('command')
-    await expect(command.getByRole('img', { name: 'Succeeded' })).toBeVisible()
-    await expect(command).toContainText('exit 0')
-    await expect(messageContaining(page, 'Edited totals.ts +2 −1')).toHaveCount(1)
+    await sendMessage(page, 'First question')
     await expect(workingIndicatorOf(page)).toBeVisible()
-    await expect(messageContaining(page, fixedText)).toHaveCount(0)
-    await release('answer')
-    await expect(messageContaining(page, fixedText)).toHaveCount(1)
+
+    await composerOf(page).fill('Second question')
+    await expect(sendButtonOf(page)).toBeEnabled()
+    await composerOf(page).press('ControlOrMeta+Enter')
+
+    await expect(messageContaining(page, 'Second question')).toBeVisible()
+    await expect(workingIndicatorOf(page)).toBeVisible()
+    await expect(messageContaining(page, agentReplyText)).toHaveCount(2)
+    await expect(workingIndicatorOf(page)).toHaveCount(0)
+
+    await expect(messageItemsOf(page)).toHaveCount(4)
+    await expect(messageItemsOf(page).nth(0)).toContainText('First question')
+    await expect(messageItemsOf(page).nth(1)).toContainText(agentReplyText)
+    await expect(messageItemsOf(page).nth(1)).toContainText('Agent')
+    await expect(messageItemsOf(page).nth(2)).toContainText('Second question')
+    await expect(messageItemsOf(page).nth(3)).toContainText(agentReplyText)
   })
 
-  test('after the answer the steps fold into one line above it, expand in order, and stay folded after a reload', {
-    tag: ['@spec-10'],
-  }, async ({ page, agentScript }) => {
-    await agentScript(research, { steps: fixSteps(), text: fixedText })
-    await sendMessage(page, 'Fix the totals')
+  test('As a prompter, I see the working directory, then the branch once the agent switches to one, also after a reload', {
+    tag: ['@spec-25', '@stage-e'],
+  }, async ({ page }) => {
+    await newRuntimeChat(page, 'Branch chip')
+    await sendMessage(page, 'stub:hello')
+    await turnEnded(page, 1)
+    await expect(workingDirectoryOf(page)).toBeVisible()
+    await expect(branchOf(page)).toHaveCount(0)
 
-    await expect(foldOf(page, 3)).toBeVisible()
-    await expect(workingIndicatorOf(page)).toHaveCount(0)
-    await expect(messageItemsOf(page)).toHaveCount(3)
-    await expect(messageItemsOf(page).nth(1)).toContainText(/^Worked for .+ · 3 steps$/)
-    await expect(messageItemsOf(page).nth(2)).toContainText(fixedText)
-    await foldOf(page, 3).click()
-    await expect(foldOf(page, 3)).toHaveAttribute('aria-expanded', 'true')
-    await expect(messageItemsOf(page)).toHaveCount(6)
-    await expect(messageItemsOf(page).nth(2)).toContainText(/Thought for .+s/)
-    await expect(messageItemsOf(page).nth(3)).toContainText('python3 --version')
-    await expect(messageItemsOf(page).nth(4)).toContainText('Edited totals.ts +2 −1')
-    await expect(messageItemsOf(page).nth(5)).toContainText(fixedText)
+    await sendMessage(page, 'stub:branch feature/composer')
+    await turnEnded(page, 2)
+    await expect(branchOf(page)).toHaveText('feature/composer')
 
     await page.reload()
-    await expect(foldOf(page, 3)).toBeVisible()
-    await expect(foldOf(page, 3)).toHaveAttribute('aria-expanded', 'false')
-    await expect(messageItemsOf(page)).toHaveCount(3)
+    await expect(branchOf(page)).toHaveText('feature/composer')
+    await expect(workingDirectoryOf(page)).toHaveText(/^workspace-\d+$/)
+    await expect(modeRadioOf(page, 'Plan')).toBeEnabled()
   })
 
-  test('a reasoning step expands to the reasoning text the agent produced', { tag: ['@spec-10'] }, async ({
-    page,
-    agentScript,
-  }) => {
-    await agentScript(research, { steps: [{ think: thinking }] })
-    await sendMessage(page, 'Think first')
+  forEachHarness((harness) => {
+    test(`As a member watching, I see the reply stream in, then the stored reply once, with no unread icon [${harness.name}]`, {
+      tag: ['@spec-09'],
+    }, async ({ page, browser, workerStack, agentScript, release, machine }) => {
+      if (harness.name === 'Pi') {
+        await agentScript(research, { hold: 'answer' })
+        await addParticipant(workerStack, research, 'member-bob', 'reader')
+        const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+        await openChat(bobPage, 'Research')
+        await openChat(page, 'Research')
+        await sendMessage(page, 'Watch this')
 
-    const reasoning = stepButtonOf(page, /Thought for .+s/)
-    await expect(reasoning).toBeVisible()
-    await expect(workingIndicatorOf(page)).toHaveCount(0)
-    await expect(mainOf(page).getByText(thinking)).toHaveCount(0)
-    await reasoning.click()
-    await expect(mainOf(page).getByText(thinking)).toBeVisible()
-  })
+        await expect(messageContaining(bobPage, 'Watch this')).toHaveCount(1)
+        const bobReply = messageItemsOf(bobPage).nth(1)
+        await expect(bobReply).toContainText('Understood,')
+        expect(await bobReply.textContent()).not.toContain(agentReplyText)
+        await release('answer')
+        await expect(bobReply).toContainText(agentReplyText)
+        await expect(workingIndicatorOf(bobPage)).toHaveCount(0)
+        await expect(messageContaining(bobPage, agentReplyText)).toHaveCount(1)
+        await expect(unreadIconOf(bobPage, 'Research')).toHaveCount(0)
+        await bobPage.context().close()
+        return
+      }
+      const chatName = `${harness.name} watched`
+      const chatId = await newHarnessChat(page, harness, chatName, { machine, workerStack })
+      await addParticipant(workerStack, chatId, 'member-bob', 'reader')
+      const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+      await openChat(bobPage, chatName)
+      await sendMessage(page, 'stub:linger Watch this')
 
-  test('a successful command shows its output on click; a failing one shows exit 3 and its last lines at once', {
-    tag: ['@spec-10'],
-  }, async ({ page, agentScript }) => {
-    await agentScript(research, { steps: [{ command: 'echo all good' }] })
-    await sendMessage(page, 'Run the good command')
-    const good = stepButtonOf(page, 'echo all good')
-    await expect(good).toBeVisible()
-    await expect(workingIndicatorOf(page)).toHaveCount(0)
-    await expect(mainOf(page).getByText('all good', { exact: true })).toHaveCount(0)
-    await good.click()
-    await expect(mainOf(page).getByText('all good', { exact: true })).toBeVisible()
+      await expect(messageContaining(bobPage, 'Watch this')).toHaveCount(1)
+      const bobReply = messageItemsOf(bobPage).nth(1)
+      await expect(bobReply).toContainText('[t1]')
+      expect(await bobReply.textContent()).not.toContain('Hello from the stub')
+      await release('linger')
+      await expect(bobReply).toContainText('Hello from the stub')
+      await expect(workingIndicatorOf(bobPage)).toHaveCount(0)
+      await expect(messageContaining(bobPage, 'Hello from the stub')).toHaveCount(1)
+      await expect(unreadIconOf(bobPage, chatName)).toHaveCount(0)
+      await bobPage.context().close()
+    })
 
-    await agentScript(research, { steps: [{ command: failingCommand }] })
-    await sendMessage(page, 'Run the failing command')
-    const failing = messageContaining(page, failingCommand)
-    await expect(failing.getByRole('img', { name: 'Failed' })).toBeVisible()
-    await expect(failing).toContainText('exit 3')
-    await expect(failing).toContainText('step two')
-  })
+    test(`As a prompter, after leaving and reopening the chat, I see a turn stream each word once and the stored answer match it [${harness.name}]`, {
+      tag: ['@spec-25', '@stage-f'],
+    }, async ({ page, agentScript, reached, release, machine, workerStack }) => {
+      if (harness.name === 'Pi') {
+        await openChat(page, 'Research')
+        for (const _ of [1, 2]) {
+          await openChat(page, 'Welcome')
+          await openChat(page, 'Research')
+        }
+        await agentScript(research, { text: 'Alpha beta gamma delta.', hold: 'stream' })
+        await sendMessage(page, 'Stream it')
+        await reached('stream')
+        const answer = messageContaining(page, 'Alpha')
+        await expect(answer).toBeVisible()
+        await expect(answer).not.toContainText(/Alpha\s*Alpha/)
+        await release('stream')
+        await expect(workingIndicatorOf(page)).toHaveCount(0)
+        await expect(answer).toHaveCount(1)
+        await expect(answer).toContainText('Alpha beta gamma delta.')
+        return
+      }
+      const chatName = `${harness.name} reopened`
+      await newHarnessChat(page, harness, chatName, { machine, workerStack })
+      for (const _ of [1, 2]) {
+        await openChat(page, 'Welcome')
+        await openChat(page, chatName)
+      }
+      await sendMessage(page, 'stub:linger Stream it')
+      const answer = messageContaining(page, '[t1]')
+      await expect(answer).toBeVisible()
+      await expect(answer).not.toContainText(/\[t1\]\s*\[t1\]/)
+      await release('linger')
+      await expect(workingIndicatorOf(page)).toHaveCount(0)
+      await expect(answer).toHaveCount(1)
+      await expect(answer).toContainText('Hello from the stub')
+    })
 
-  test('expanding a file edit shows its added and removed lines', { tag: ['@spec-10'] }, async ({
-    page,
-    agentScript,
-  }) => {
-    await agentScript(research, { steps: fixSteps(), text: fixedText })
-    await sendMessage(page, 'Fix the totals')
-    await foldOf(page, 3).click({ timeout: 30_000 })
-    const edit = stepButtonOf(page, 'Edited totals.ts +2 −1')
-    await edit.click()
+    test(`As a prompter, I stop a turn during a command and the prompt I queued behind it is answered next in the same session [${harness.name}]`, {
+      tag: ['@spec-25'],
+    }, async ({ page, agentScript, machine, workerStack }) => {
+      if (harness.name === 'Pi') {
+        await openChat(page, 'Research')
+        await agentScript(research, { steps: [{ command: 'sleep 30' }], text: 'Never shown.' })
+        await sendMessage(page, 'Sleep for a while')
+        await expect(messageContaining(page, 'sleep 30').getByRole('img', { name: 'Running' })).toBeVisible()
+        await sendMessage(page, 'Carry on')
+        await expect(messageContaining(page, 'Carry on')).toHaveCount(1)
+        await agentScript(research, { text: 'Carried on.' })
+        await mainOf(page).getByRole('button', { name: 'Stop' }).click()
+        await expect(messageContaining(page, 'Stopped by Alice')).toHaveCount(1)
 
-    const diff = mainOf(page).getByRole('region', { name: 'Diff' })
-    await expect(diff).toContainText('- export const total = 1')
-    await expect(diff).toContainText('+ export const total = 2')
-    await expect(diff).toContainText('+ export const tax = 0.2')
-  })
+        await expect(messageContaining(page, 'Carried on.')).toHaveCount(1)
+        await expect(workingIndicatorOf(page)).toHaveCount(0)
+        await expect(messageItemsOf(page).nth(0)).toContainText('Sleep for a while')
+        await expect(messageItemsOf(page).nth(-3)).toContainText('Stopped by Alice')
+        await expect(messageItemsOf(page).nth(-2)).toContainText('Carry on')
+        await expect(messageItemsOf(page).nth(-1)).toContainText('Carried on.')
+        await expect(mainOf(page)).not.toContainText('Never shown.')
+        await expect(mainOf(page)).not.toContainText(newSessionNotice)
+        return
+      }
+      await newHarnessChat(page, harness, `${harness.name} stopped`, { machine, workerStack })
+      await sendMessage(page, 'stub:long Sleep for a while')
+      await expect(messageContaining(page, 'sleep 600').getByRole('img', { name: 'Running' })).toBeVisible()
+      await sendMessage(page, 'Carry on')
+      await expect(messageContaining(page, 'Carry on')).toHaveCount(1)
+      await mainOf(page).getByRole('button', { name: 'Stop' }).click()
+      await expect(messageContaining(page, 'Stopped by Alice')).toHaveCount(1)
 
-  test('Markdown answers render tables, highlighted code with copy (✓ Copied for a moment, the code in the clipboard), links with their domain, raw HTML as text and images on click', {
-    tag: ['@spec-10', '@spec-25', '@stage-g'],
-  }, async ({ page, context, agentScript }) => {
-    await context.grantPermissions(['clipboard-read', 'clipboard-write'])
-    const answer = [
-      '| Plan | Price |',
-      '| --- | --- |',
-      '| Team | 20 |',
-      '',
-      '```ts',
-      'const total = 1',
-      '```',
-      '',
-      'See [the pricing](https://docs.example.com/pricing).',
-      '',
-      '<script>window.hqInjected = true</script>',
-      '',
-      'Inline <img src="x" onerror="window.hqInjected = true"> tag.',
-      '',
-      '![Chart](https://images.example.com/chart.png)',
-    ].join('\n')
-    await agentScript(research, { text: answer })
-    await sendMessage(page, 'Show the pricing')
-
-    const reply = messageContaining(page, 'See the pricing')
-    await expect(reply.getByRole('table')).toBeVisible()
-    await expect(reply.getByRole('cell', { name: 'Team' })).toBeVisible()
-    await expect(reply.locator('code .hljs-keyword').first()).toHaveText('const')
-    const copyCode = reply.getByRole('button', { name: 'Copy code' })
-    await expect(copyCode).toHaveText('Copy')
-    await copyCode.click()
-    await expect(copyCode).toHaveText('✓ Copied')
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('const total = 1')
-    await expect(copyCode).toHaveText('Copy', { timeout: 4000 })
-    const link = reply.getByRole('link', { name: /the pricing/ })
-    await expect(link).toContainText('docs.example.com')
-    await expect(link).toHaveAttribute('rel', 'noopener noreferrer')
-    await expect(link).toHaveAttribute('target', '_blank')
-    await expect(reply).toContainText('<script>window.hqInjected = true</script>')
-    await expect(reply).toContainText('<img src="x" onerror="window.hqInjected = true">')
-    expect(await page.evaluate(() => (window as Window & { hqInjected?: boolean }).hqInjected)).toBeUndefined()
-    await expect(reply.locator('img')).toHaveCount(0)
-    await expect(workingIndicatorOf(page)).toHaveCount(0)
-    await reply.getByRole('button', { name: 'Load image from images.example.com' }).click()
-    await expect(reply.locator('img')).toHaveAttribute('src', 'https://images.example.com/chart.png')
+      await expect(messageContaining(page, '[t2] Hello from the stub')).toHaveCount(1)
+      await expect(workingIndicatorOf(page)).toHaveCount(0)
+      await expect(messageItemsOf(page).nth(0)).toContainText('Sleep for a while')
+      await expect(messageItemsOf(page).nth(-3)).toContainText('Stopped by Alice')
+      await expect(messageItemsOf(page).nth(-2)).toContainText('Carry on')
+      await expect(messageItemsOf(page).nth(-1)).toContainText('[t2] Hello from the stub')
+      await expect(mainOf(page)).not.toContainText(newSessionNotice)
+    })
   })
 })

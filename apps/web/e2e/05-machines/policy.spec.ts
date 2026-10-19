@@ -1,0 +1,122 @@
+import { openPageAs, type WorkerStack } from '../stack'
+import {
+  chipOf,
+  expect,
+  hostsSectionOf,
+  llmSectionOf,
+  machineSectionOf,
+  mainOf,
+  messageContaining,
+  newRuntimeChat,
+  openChat,
+  openProfile,
+  openSettings,
+  type Page,
+  runsOnChoiceOf,
+  sendMessage,
+  serverUrl,
+  machineTest as test,
+} from './fixtures'
+
+test.describe('Policy', () => {
+  const switchName = 'Members can run sessions on their own machine'
+  const turnedOffNotice = "Your workspace turned off sessions on members' machines"
+  const sessionNotice = "Sessions on members' machines are turned off for this workspace"
+
+  const switchOf = (page: Page) => hostsSectionOf(page).getByRole('switch', { name: switchName })
+
+  const setLocalSessions = async (page: Page, isOn: boolean) => {
+    await openSettings(page, 'Connect runtime')
+    await expect(switchOf(page)).toHaveAttribute('aria-checked', String(!isOn))
+    await switchOf(page).click()
+    await expect(switchOf(page)).toHaveAttribute('aria-checked', String(isOn))
+  }
+  const openNewChat = async (page: Page) => {
+    await page.getByRole('button', { name: 'New chat' }).click()
+    return page.getByRole('dialog', { name: 'New chat' })
+  }
+  const tokenOf = async (workerStack: WorkerStack, user: string) =>
+    (
+      await (
+        await fetch(`${serverUrl}/test/token?db=${workerStack.databaseName}&user=${user}&workspace=workspace-acme`, {
+          method: 'POST',
+        })
+      ).json()
+    ).token as string
+
+  test.use({ runtimeHost: false })
+
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/')
+  })
+
+  test('As a member who can manage runtime hosts, I turn sessions on members’ machines off: My machine shows the notice with no Add my machine and no Use Claude Code or Use Codex, an add is refused, and the chip offers no machine', {
+    tag: ['@spec-22'],
+  }, async ({ page, browser, workerStack, machine }) => {
+    await setLocalSessions(page, false)
+
+    const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+    await openProfile(bobPage)
+    await expect(machineSectionOf(bobPage)).toContainText(turnedOffNotice)
+    await expect(machineSectionOf(bobPage).getByRole('button', { name: 'Add my machine' })).toHaveCount(0)
+    await expect(machineSectionOf(bobPage).getByRole('button', { name: /Use Claude Code|Use Codex/ })).toHaveCount(0)
+    await expect(machineSectionOf(bobPage)).not.toContainText('docker')
+    await expect(llmSectionOf(bobPage).getByRole('button', { name: /Claude Code|Codex/ })).toHaveCount(0)
+
+    const response = await fetch(`${serverUrl}/api/runtime-hosts`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${await tokenOf(workerStack, 'member-bob')}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ personal: true }),
+    })
+    expect(response.status).toBe(403)
+    expect((await response.json()).message).toBe(turnedOffNotice)
+    expect(
+      await workerStack.database
+        .$client`select 1 from runtime_hosts where owner_id = 'member-bob' and removed_at is null`,
+    ).toHaveLength(0)
+
+    await machine({ owner: 'member-bob', signedIn: 'claude' })
+    await expect(machineSectionOf(bobPage)).toContainText('Online')
+    await expect(machineSectionOf(bobPage).getByRole('button', { name: 'Remove' })).toBeVisible()
+    const dialog = await openNewChat(bobPage)
+    await expect(dialog.getByRole('radiogroup', { name: 'Chat type' }).getByRole('radio')).toHaveCount(2)
+    await dialog.getByRole('radio', { name: 'Runtime' }).check()
+    await dialog.getByRole('textbox', { name: 'Chat name' }).fill('Bob while off')
+    await dialog.getByRole('button', { name: 'Confirm' }).click()
+    await expect(mainOf(bobPage).getByRole('heading', { level: 1, name: 'Bob while off' })).toBeVisible()
+    await expect(runsOnChoiceOf(bobPage)).toHaveCount(0)
+    await expect(chipOf(bobPage, 'routed')).toHaveText('Model chosen at first prompt')
+    const runsOn = mainOf(bobPage).getByRole('combobox', { name: 'Runs on' })
+    await expect(runsOn).toBeDisabled()
+    await expect(runsOn).toHaveValue('runtime')
+    await bobPage.context().close()
+  })
+
+  test('As a member who can manage runtime hosts, I turn machine sessions off and an existing one answers prompts with the notice, then again once I turn them back on', {
+    tag: ['@spec-22'],
+  }, async ({ page, machine }) => {
+    await machine({ owner: 'member-alice', signedIn: 'claude' })
+    await newRuntimeChat(page, 'Laptop switch', 'Local · Claude Code')
+    await expect(mainOf(page).getByRole('button', { name: 'Claude Code · subscription' })).toBeVisible()
+    await sendMessage(page, 'Before the switch')
+    await expect(messageContaining(page, '[t1] Hello from the stub')).toBeVisible()
+    await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0)
+
+    await setLocalSessions(page, false)
+    await openChat(page, 'Laptop switch')
+    await expect(messageContaining(page, '[t1] Hello from the stub')).toBeVisible()
+    await sendMessage(page, 'While it is off')
+    await expect(messageContaining(page, sessionNotice)).toHaveCount(1)
+    expect((await machine()).prompts).toEqual(['Before the switch'])
+
+    await setLocalSessions(page, true)
+    await openChat(page, 'Laptop switch')
+    await sendMessage(page, 'Back on')
+    await expect(messageContaining(page, '[t2] Hello from the stub')).toBeVisible()
+    expect((await machine()).prompts).toEqual(['Before the switch', 'Back on'])
+    await expect(messageContaining(page, sessionNotice)).toHaveCount(1)
+  })
+})

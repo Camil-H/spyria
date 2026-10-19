@@ -2,15 +2,15 @@ import { defineConfig } from '@playwright/test'
 import { viteUrl } from './e2e/stack-ports.ts'
 
 export default defineConfig({
-  testDir: 'e2e',
   fullyParallel: true,
   workers: Number(process.env.WORKERS ?? 3),
   globalSetup: './e2e/global-setup.ts',
   timeout: 60_000,
-  expect: { timeout: 15_000 },
+  expect: { timeout: 15_000, toHaveScreenshot: { animations: 'disabled', caret: 'hide', maxDiffPixelRatio: 0.01 } },
   retries: 0,
   reporter: [
     ['list'],
+    ['./e2e/platform-gate.ts'],
     [
       'json',
       {
@@ -19,4 +19,9 @@ export default defineConfig({
     ],
   ],
   use: { baseURL: viteUrl, timezoneId: 'UTC', screenshot: 'only-on-failure' },
+  projects: [
+    { name: 'platform', testDir: 'e2e/00-platform' },
+    { name: 'e2e', testDir: 'e2e', testIgnore: '00-platform/**', dependencies: ['platform'] },
+    { name: 'ui', testDir: 'ui' },
+  ],
 })

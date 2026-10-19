@@ -20,7 +20,7 @@ import {
   gatewayUrl,
   maximumWorkerCount,
   serverUrl,
-  ssoDexIssuer,
+  ssoProviderIssuer,
   ssoServerUrl,
   ssoViteUrl,
   templateDatabaseName,
@@ -88,7 +88,7 @@ const docker = (...args: string[]) => spawnSync('docker', args, { stdio: ['ignor
 
 const startSsoDex = async () => {
   const configHash = createHash('sha256').update(readFileSync(ssoDexConfig)).digest('hex').slice(0, 16)
-  const discoveryUrl = `${ssoDexIssuer}/.well-known/openid-configuration`
+  const discoveryUrl = `${ssoProviderIssuer}/.well-known/openid-configuration`
   const running = docker('inspect', '-f', '{{.State.Running}} {{index .Config.Labels "hq.setup"}}', ssoDexContainer)
   if (running.stdout.toString().trim() === `true ${configHash}` && (await httpStatusOf(discoveryUrl)) === 200) return
   docker('rm', '-f', ssoDexContainer)
@@ -100,7 +100,7 @@ const startSsoDex = async () => {
     '--label',
     `hq.setup=${configHash}`,
     '-p',
-    `127.0.0.1:${new URL(ssoDexIssuer).port}:5556`,
+    `127.0.0.1:${new URL(ssoProviderIssuer).port}:5556`,
     '-v',
     `${ssoDexConfig}:/etc/dex/config.yaml:ro`,
     'dexidp/dex:v2.43.1',
