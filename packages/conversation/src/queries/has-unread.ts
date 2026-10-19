@@ -1,5 +1,5 @@
-import type { Snapshot } from '@hq/db'
-import type { ChatId, MemberId, WorkspaceId } from '@hq/kernel'
+import type { Snapshot } from '@spyria/db'
+import type { ChatId, MemberId, WorkspaceId } from '@spyria/kernel'
 
 const unreadChatKeysBySnapshot = new WeakMap<Snapshot, { memberId: MemberId; chatKeys: ReadonlySet<string> }>()
 

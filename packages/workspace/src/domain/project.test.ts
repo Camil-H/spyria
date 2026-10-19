@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { chatId } from '@hq/kernel'
+import { chatId } from '@spyria/kernel'
 import { archivedChat, movedChat } from './chat.ts'
 import { archivedProject } from './project.ts'
 import { acme, chatInAcme, projectIn } from './testing.ts'

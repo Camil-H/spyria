@@ -1,6 +1,6 @@
 import { afterEach, expect, setDefaultTimeout, test } from 'bun:test'
-import type { ChatId } from '@hq/kernel'
-import type { createHqAgentRelay } from '../testing/hq-agent-relay.ts'
+import type { ChatId } from '@spyria/kernel'
+import type { createSpyriaAgentRelay } from '../testing/spyria-agent-relay.ts'
 import {
   acme,
   alice,
@@ -45,7 +45,7 @@ afterEach(() => {
 })
 
 const aliceInGlobex = { workspaceId: globex, userId: alice }
-type Relay = ReturnType<typeof createHqAgentRelay>
+type Relay = ReturnType<typeof createSpyriaAgentRelay>
 const agentHost = (name = 'Agent host', containerAgentOf?: (relay: Relay) => ContainerAgent) =>
   stack.agentHost(name, { holdUrl, containerAgentOf })
 const command = (member: typeof aliceInAcme, name: string, chat: ChatId, workspaceId: string = member.workspaceId) =>
@@ -160,7 +160,7 @@ test('a prompt whose conversation create keeps failing ends with "could not star
   const failed = await prompt(chat, 'Start please')
   await waitFor(async () => (await noticesOf(failed)).length > 0, firstTurnMilliseconds)
   expect(await repliesTo(failed)).toEqual([
-    notice('The agent could not start: hq-agent answered POST /api/conversations with 500'),
+    notice('The agent could not start: spyria-agent answered POST /api/conversations with 500'),
   ])
   await turnIs(chat, null)
 
@@ -232,7 +232,7 @@ test('a turn ends with a notice when its runtime stops, its host stays offline p
   await endsWith(removed, stoppedEarly.body)
 })
 
-test('the sweep keeps a silent turn hq-agent still runs and touches its runtime, ends a silent turn hq-agent finished and turns whose runtime is not running, and reschedules itself', async () => {
+test('the sweep keeps a silent turn spyria-agent still runs and touches its runtime, ends a silent turn spyria-agent finished and turns whose runtime is not running, and reschedules itself', async () => {
   await agentHost()
   const silent = await newRuntimeChat()
   const silentPrompt = await prompt(silent, 'stub:long Stay silent')
@@ -322,7 +322,7 @@ test("a turn end arriving after its turn was closed does not end the next prompt
   expect(relay.prompts).toEqual(['stub:linger Slow first', 'Then this'])
 })
 
-test('on reconnect, a turn hq-agent finished while away is closed from the resent events, and a turn whose conversation is gone ends with a notice', async () => {
+test('on reconnect, a turn spyria-agent finished while away is closed from the resent events, and a turn whose conversation is gone ends with a notice', async () => {
   let isHoldingStatus = false
   const { relay } = await agentHost('Agent host', (relay) => ({
     ...relay.containerAgent,

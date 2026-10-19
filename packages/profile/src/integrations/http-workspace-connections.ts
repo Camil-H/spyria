@@ -1,4 +1,4 @@
-import type { MemberId, WorkspaceId } from '@hq/kernel'
+import type { MemberId, WorkspaceId } from '@spyria/kernel'
 import type { ConnectionInput } from '../domain/workspace-connection.ts'
 import { throwOnRefusal } from './http-refusal.ts'
 

@@ -1,4 +1,4 @@
-import { formatCost, formatTokens } from '@hq/ui'
+import { formatCost, formatTokens } from '@spyria/ui'
 import type { UsageTotals } from '../domain/usage.ts'
 
 type UsageRow = UsageTotals & { key: string; name: string; share?: number }

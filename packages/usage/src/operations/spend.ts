@@ -1,4 +1,4 @@
-import { type MemberId, requireWorkspacePermission } from '@hq/kernel'
+import { type MemberId, requireWorkspacePermission } from '@spyria/kernel'
 import type { SpendLedger, SpendTransactor } from '../contracts/spend.ts'
 import { type SpendDimension, type SpendFilter, type SpendReport, spendReportOf } from '../domain/spend.ts'
 

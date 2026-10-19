@@ -40,7 +40,7 @@ export const fakeGitHubRepositories: Repository[] = [
     branches: ['main'],
     files: {
       'README.md': '# acme docs\n',
-      '.hq/setup.sh':
+      '.spyria/setup.sh':
         'echo "installing the docs toolchain"\nsleep 3\necho "docs-tool: command not found" >&2\nexit 127\n',
     },
   },
@@ -88,7 +88,7 @@ const cgiResponseOf = (output: Buffer) => {
 }
 
 export const startFakeGitHub = () => {
-  const root = mkdtempSync(join(tmpdir(), 'hq-fake-github-'))
+  const root = mkdtempSync(join(tmpdir(), 'spyria-fake-github-'))
   for (const repository of fakeGitHubRepositories) bareRepositoryOf(root, repository)
   const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 })
   const appPrivateKey = privateKey.export({ type: 'pkcs1', format: 'pem' }).toString()
@@ -207,7 +207,8 @@ export const startFakeGitHub = () => {
 
   const api = async (request: Request, path: string) => {
     const isApp = jwtIssuerOf(request.headers.get('authorization'), publicKey) === fakeGitHubAppId
-    if (path === '/app') return isApp ? Response.json({ id: Number(fakeGitHubAppId), slug: 'hq-test' }) : unauthorized()
+    if (path === '/app')
+      return isApp ? Response.json({ id: Number(fakeGitHubAppId), slug: 'spyria-test' }) : unauthorized()
     if (path === '/app/installations')
       return isApp ? Response.json([{ id: installationId, account: { login: 'acme' } }]) : unauthorized()
     const repositoryInstallation = /^\/repos\/([\w.-]+\/[\w.-]+)\/installation$/.exec(path)

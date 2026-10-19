@@ -1,5 +1,5 @@
 import { beforeEach, expect, test } from 'bun:test'
-import { seedSpend } from '@hq/db/testing'
+import { seedSpend } from '@spyria/db/testing'
 import { alice, asMember, bob, openSharedTestApp } from './testing/testing.ts'
 
 const { database } = await openSharedTestApp()

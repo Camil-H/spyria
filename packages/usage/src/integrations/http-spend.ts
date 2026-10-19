@@ -1,4 +1,4 @@
-import type { WorkspaceId } from '@hq/kernel'
+import type { WorkspaceId } from '@spyria/kernel'
 import type { SpendReport } from '../domain/spend.ts'
 import { succeeded } from './http-audit-log.ts'
 

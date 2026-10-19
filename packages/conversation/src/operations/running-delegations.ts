@@ -1,4 +1,4 @@
-import type { ChatId, MessageId } from '@hq/kernel'
+import type { ChatId, MessageId } from '@spyria/kernel'
 
 export type DelegationResult = { text: string; isError: boolean }
 export type RunningDelegation = {

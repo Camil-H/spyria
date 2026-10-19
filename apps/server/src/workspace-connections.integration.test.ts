@@ -1,8 +1,8 @@
 import { afterAll, afterEach, expect, setDefaultTimeout, test } from 'bun:test'
-import { schema } from '@hq/db/zero'
-import { createZeroStore } from '@hq/db/zero-store'
-import { createToolCallOwnerAccess } from '@hq/profile/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
+import { schema } from '@spyria/db/zero'
+import { createZeroStore } from '@spyria/db/zero-store'
+import { createToolCallOwnerAccess } from '@spyria/profile/server'
 import { startJobWorker } from './job-worker.ts'
 import { sharedSecretHeader, sharedToolServer } from './testing/fake-mcp.ts'
 import {
@@ -77,7 +77,7 @@ const removeKeysOf = async (userId: string) => {
   )
 }
 
-test('an admin registers a shared server with a secret header: HQ lists its tools, the secret reaches the server only through the gateway, never an HQ table or read, and the event is recorded', async () => {
+test('an admin registers a shared server with a secret header: Spyria lists its tools, the secret reaches the server only through the gateway, never a Spyria table or read, and the event is recorded', async () => {
   const secret = `crm-secret-${crypto.randomUUID()}`
   expect((await asMember(bob, 'POST', connectionsPath, { name: 'Billing', url: sharedMcpUrl })).status).toBe(403)
   const { connectionId } = await register('Billing', secret)
@@ -231,7 +231,7 @@ test('a workspace’s connections are never granted to, listed for or callable b
   expect(await access.toolCallAccess(acme, alice, alice, `${gatewayName}-lookup`)).toBe('allowed')
 })
 
-test('editing replaces the secret in place, a new URL registers the server again and regrants it, and removing deletes it from the gateway and HQ', async () => {
+test('editing replaces the secret in place, a new URL registers the server again and regrants it, and removing deletes it from the gateway and Spyria', async () => {
   const { connectionId } = await register('Orders', 'first-secret')
   const path = (action: string) => `${connectionsPath}/${connectionId}/${action}`
   const firstName = (await connectionRow(connectionId))?.gatewayName ?? ''

@@ -1,4 +1,4 @@
-import { adminRoleId, type MemberId, type WorkspaceId } from '@hq/kernel'
+import { adminRoleId, type MemberId, type WorkspaceId } from '@spyria/kernel'
 import { LastAdmin, MemberNotFound, OwnMembership } from './errors.ts'
 
 export type Member = Readonly<{

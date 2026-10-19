@@ -1,4 +1,4 @@
-import { type MemberId, type MessageId, toolNamePartsOf } from '@hq/kernel'
+import { type MemberId, type MessageId, toolNamePartsOf } from '@spyria/kernel'
 import type { AgentChat } from '../contracts/agent.ts'
 import type { ToolCallDecision } from '../contracts/repositories.ts'
 import { guestPrompterOf, guestToolRefusalOf, notApprovedOf, toolGatewayUnreachable } from '../domain/tool-calls.ts'

@@ -1,4 +1,4 @@
-import { type ChatId, runtimeId, type WorkspaceId } from '@hq/kernel'
+import { type ChatId, runtimeId, type WorkspaceId } from '@spyria/kernel'
 import type { RuntimeTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import { newSecretToken } from '../domain/claim.ts'
 import { RetryRefused } from '../domain/errors.ts'
@@ -12,7 +12,7 @@ import {
   transitioned,
 } from '../domain/runtime.ts'
 
-export type RuntimePlacement = { hqAgentImage?: string }
+export type RuntimePlacement = { spyriaAgentImage?: string }
 type Dependencies = RuntimePlacement & { transactor: RuntimeTransactor }
 type Input = { workspaceId: WorkspaceId; chatId: ChatId; id: string; now: number }
 
@@ -20,14 +20,14 @@ const placeRuntime = async (
   { runtimes, runtimeHosts, secrets, jobs }: UnitOfWork,
   { workspaceId, chatId, id, now }: Input,
   existing: Runtime | undefined,
-  { hqAgentImage }: RuntimePlacement,
+  { spyriaAgentImage }: RuntimePlacement,
 ) => {
   if (existing) {
     await secrets.discard(existing)
     await runtimes.delete(existing)
   }
   const placement = placementOf(await runtimeHosts.lockLoads(workspaceId, chatId))
-  const failure = placement.failure ?? (hqAgentImage ? null : 'no_image')
+  const failure = placement.failure ?? (spyriaAgentImage ? null : 'no_image')
   const runtime: Runtime = {
     workspaceId,
     id: runtimeId(id),
@@ -36,7 +36,7 @@ const placeRuntime = async (
     state: failure ? 'failed' : 'creating',
     failure,
     hostOnline: placement.hostId !== undefined,
-    image: hqAgentImage ?? '',
+    image: spyriaAgentImage ?? '',
     lastActiveAt: now,
     createdAt: now,
     stateChangedAt: now,

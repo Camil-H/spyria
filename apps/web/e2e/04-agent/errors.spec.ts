@@ -29,7 +29,7 @@ test.describe('Errors', () => {
     await page.goto('/')
   })
 
-  test('As a prompter whose key the provider refuses, I see the turn end with HQ’s notice and no provider text', {
+  test('As a prompter whose key the provider refuses, I see the turn end with Spyria’s notice and no provider text', {
     tag: ['@spec-12'],
   }, async ({ page }) => {
     await removeKey(page, 'Anthropic')
@@ -44,7 +44,7 @@ test.describe('Errors', () => {
     await expect(mainOf(page)).not.toContainText('fake-refused')
   })
 
-  test('As a prompter, I get HQ’s notice while the gateway is down, and my next prompt is answered once it is back', {
+  test('As a prompter, I get Spyria’s notice while the gateway is down, and my next prompt is answered once it is back', {
     tag: ['@spec-12'],
   }, async ({ page, workerStack }) => {
     await openChat(page, 'Research')

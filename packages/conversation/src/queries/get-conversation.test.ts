@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
-import { acme, alice, bob, createMockSnapshot, lee, type Snapshot } from '@hq/db'
-import { chatId, messageId, runtimeHostId, runtimeId } from '@hq/kernel'
+import { acme, alice, bob, createMockSnapshot, lee, type Snapshot } from '@spyria/db'
+import { chatId, messageId, runtimeHostId, runtimeId } from '@spyria/kernel'
 import { stillRunningOf } from '../domain/delegation.ts'
 import type { RunsOn } from '../domain/session-routing.ts'
 import { durationLabelOf, getConversation } from './get-conversation.ts'
@@ -426,7 +426,7 @@ test('messages carry their edited flag and the agent as their author', () => {
 type RunsOnSetup = {
   viewer?: typeof alice
   isOwner?: boolean
-  hqRuntimeAvailable?: boolean
+  spyriaRuntimeAvailable?: boolean
   isTurnActive?: boolean
   machineSession?: 'online' | 'offline'
   workspaceHost?: 'online' | 'offline'
@@ -438,7 +438,7 @@ type RunsOnSetup = {
 const runsOnChoicesOf = ({
   viewer = alice,
   isOwner = true,
-  hqRuntimeAvailable,
+  spyriaRuntimeAvailable,
   isTurnActive = false,
   machineSession,
   workspaceHost,
@@ -471,7 +471,7 @@ const runsOnChoicesOf = ({
     acme,
     research,
     viewer,
-    hqRuntimeAvailable,
+    spyriaRuntimeAvailable,
   )({
     ...snapshot,
     workspaces: snapshot.workspaces.map((workspace) => ({
@@ -527,18 +527,18 @@ test.each<[string, RunsOnSetup, readonly RunsOn[] | null]>([
   ],
   ['member owner, availability unknown, nothing connected', { viewer: bob }, ['runtime']],
   [
-    'member owner, HQ runtime available, Claude signed in',
-    { viewer: bob, hqRuntimeAvailable: true, machine: 'online', signedIn: ['claude'] },
+    'member owner, Spyria runtime available, Claude signed in',
+    { viewer: bob, spyriaRuntimeAvailable: true, machine: 'online', signedIn: ['claude'] },
     ['runtime', 'claude-code'],
   ],
   [
-    'member owner, HQ runtime unavailable, Claude signed in',
-    { viewer: bob, hqRuntimeAvailable: false, machine: 'online', signedIn: ['claude'] },
+    'member owner, Spyria runtime unavailable, Claude signed in',
+    { viewer: bob, spyriaRuntimeAvailable: false, machine: 'online', signedIn: ['claude'] },
     ['claude-code'],
   ],
   [
     'member owner ignores an online workspace host',
-    { viewer: bob, hqRuntimeAvailable: false, workspaceHost: 'online', machine: 'online', signedIn: ['codex'] },
+    { viewer: bob, spyriaRuntimeAvailable: false, workspaceHost: 'online', machine: 'online', signedIn: ['codex'] },
     ['codex'],
   ],
   ['an active turn', { isTurnActive: true, workspaceHost: 'online' }, null],

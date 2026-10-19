@@ -1,4 +1,4 @@
-import { DomainError, type WorkspaceId } from '@hq/kernel'
+import { DomainError, type WorkspaceId } from '@spyria/kernel'
 import type { SsoSettingsInput, SsoSettingsView } from '../domain/sso.ts'
 
 export const ssoSettingsPath = '/api/sso-settings'

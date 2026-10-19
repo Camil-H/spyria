@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { memberId } from '@hq/kernel'
+import { memberId } from '@spyria/kernel'
 import {
   type BudgetUse,
   budgetAlertIdOf,

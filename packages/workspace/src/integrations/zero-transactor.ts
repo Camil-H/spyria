@@ -1,23 +1,24 @@
+import type { Transaction } from '@rocicorp/zero'
 import {
   appendChatEvent,
   appendWorkspaceEvent,
   deleteMemberSessions,
   enqueueJob,
   lockActiveAdminIds,
-} from '@hq/db/server-writes'
+} from '@spyria/db/server-writes'
 import type {
   Chat as ChatRow,
   Invitation as InvitationRow,
   Membership as MembershipRow,
   Project as ProjectRow,
-} from '@hq/db/zero'
+} from '@spyria/db/zero'
 import {
   chatPermissionsOf,
   skippingRefusedRebase,
   workspacePermissionsOf,
   type ZeroContext,
   zql,
-} from '@hq/db/zero-queries'
+} from '@spyria/db/zero-queries'
 import {
   adminRoleId,
   builtInChatRoles,
@@ -32,10 +33,13 @@ import {
   type WorkspaceRole,
   workspaceId,
   workspacePermissions,
-} from '@hq/kernel'
-import { removeMemberProfileOnServer } from '@hq/profile/published'
-import { removeChatRuntimeOnServer, removeMemberMachineOnServer, stopChatRuntimeOnServer } from '@hq/runtime/published'
-import type { Transaction } from '@rocicorp/zero'
+} from '@spyria/kernel'
+import { removeMemberProfileOnServer } from '@spyria/profile/published'
+import {
+  removeChatRuntimeOnServer,
+  removeMemberMachineOnServer,
+  stopChatRuntimeOnServer,
+} from '@spyria/runtime/published'
 import type { UnitOfWork, WorkspaceTransactor } from '../contracts/transactor.ts'
 import type { Chat, ChatChange } from '../domain/chat.ts'
 import { ChatNotFound, ForeignWorkspace, ProjectNotFound } from '../domain/errors.ts'

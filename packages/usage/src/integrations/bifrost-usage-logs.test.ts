@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from 'bun:test'
-import { workspaceId } from '@hq/kernel'
+import { workspaceId } from '@spyria/kernel'
 import { createBifrostUsageLogs } from './bifrost-usage-logs.ts'
 
 const hangingGateway = Bun.serve({ port: 0, fetch: () => new Promise<Response>(() => {}) })

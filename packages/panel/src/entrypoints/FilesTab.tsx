@@ -1,5 +1,5 @@
-import type { ChatId, WorkspaceId } from '@hq/kernel'
-import { focusRing } from '@hq/ui'
+import type { ChatId, WorkspaceId } from '@spyria/kernel'
+import { focusRing } from '@spyria/ui'
 import { ArrowLeft, ChevronDown, ChevronRight, FolderTree } from 'lucide-react'
 import { Suspense, useState } from 'react'
 import {

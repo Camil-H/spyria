@@ -79,7 +79,7 @@ test.describe('Fork', () => {
     await openChat(bobPage, 'Research')
     await forkButtonOf(bobPage).click()
     await expect(mainOf(bobPage).getByRole('heading', { level: 1, name: forkName })).toBeVisible()
-    await chooseRunsOn(bobPage, 'HQ runtime')
+    await chooseRunsOn(bobPage, 'Spyria runtime')
     await agentScript(bobPage.url().split('/').at(-1) ?? '', { text: 'Fixed on Bob’s session.' })
     await sendMessage(bobPage, 'Fix it.')
     await expect(messageContaining(bobPage, 'Fixed on Bob’s session.')).toHaveCount(1, { timeout: 30_000 })

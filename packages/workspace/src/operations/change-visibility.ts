@@ -1,4 +1,4 @@
-import { type ChatId, type ChatVisibility, isRoleAllowedIn, type MemberId, requireChatPermission } from '@hq/kernel'
+import { type ChatId, type ChatVisibility, isRoleAllowedIn, type MemberId, requireChatPermission } from '@spyria/kernel'
 import type { WorkspaceTransactor } from '../contracts/transactor.ts'
 import { visibleChat } from '../domain/chat.ts'
 

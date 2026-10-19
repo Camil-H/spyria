@@ -1,4 +1,4 @@
-import { isDecisionModel, type ListedModel, type MemberId, type WorkspaceId } from '@hq/kernel'
+import { isDecisionModel, type ListedModel, type MemberId, type WorkspaceId } from '@spyria/kernel'
 import type { AgentChat, SessionClassifier } from '../contracts/agent.ts'
 
 const failureByErrorName: Record<string, string> = { TimeoutError: 'timeout', SyntaxError: 'unparseable reply' }

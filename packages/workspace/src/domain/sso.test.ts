@@ -1,13 +1,13 @@
 import { expect, test } from 'bun:test'
 import { domainOfEmail, ssoEmailOf, ssoSettingsFrom } from './sso.ts'
 
-const base = { clientId: ' hq ', domains: [' Acme.com', '@acme.com', 'acme.io'] }
+const base = { clientId: ' spyria ', domains: [' Acme.com', '@acme.com', 'acme.io'] }
 
 test('presets give the issuer, and domains are normalized and deduplicated', () => {
   expect(ssoSettingsFrom({ ...base, preset: 'google' })).toEqual({
     preset: 'google',
     issuer: 'https://accounts.google.com',
-    clientId: 'hq',
+    clientId: 'spyria',
     domains: ['acme.com', 'acme.io'],
   })
   expect(ssoSettingsFrom({ ...base, preset: 'microsoft', tenantId: 'tenant-1' }).issuer).toBe(

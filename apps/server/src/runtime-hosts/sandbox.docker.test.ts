@@ -2,15 +2,20 @@ import { afterAll, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@hq/db/testing'
-import { schema } from '@hq/db/zero'
-import { chatId, runtimeHostId } from '@hq/kernel'
-import { createRuntimeJobs, createRuntimeTransactor, ensureRuntimeRunning, removeChatRuntime } from '@hq/runtime/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
+import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@spyria/db/testing'
+import { schema } from '@spyria/db/zero'
+import { chatId, runtimeHostId } from '@spyria/kernel'
+import {
+  createRuntimeJobs,
+  createRuntimeTransactor,
+  ensureRuntimeRunning,
+  removeChatRuntime,
+} from '@spyria/runtime/server'
 import { websocket } from 'hono/bun'
 import { createApp } from '../app.ts'
-import { readHqAgentImage } from '../hq-agent-image.ts'
 import { startJobWorker } from '../job-worker.ts'
+import { readSpyriaAgentImage } from '../spyria-agent-image.ts'
 import { acme, aliceInAcme, openSharedTestApp, sessionTokenOf, testAuthSettings, waitFor } from '../testing/testing.ts'
 import { createRuntimeHostGateway } from './gateway.ts'
 
@@ -20,18 +25,18 @@ const dockerText = (...args: string[]) =>
     .stdout.toString()
     .trim()
 const hasDocker = docker('info').exitCode === 0
-const hqImage = (await readHqAgentImage()) ?? ''
-const hasImage = hasDocker && hqImage !== '' && docker('image', 'inspect', hqImage).exitCode === 0
-const skipReason = !hasDocker ? 'Docker is unavailable' : "HQ's runtime image is not built (bun run agent:build)"
+const spyriaImage = (await readSpyriaAgentImage()) ?? ''
+const hasImage = hasDocker && spyriaImage !== '' && docker('image', 'inspect', spyriaImage).exitCode === 0
+const skipReason = !hasDocker ? 'Docker is unavailable' : "Spyria's runtime image is not built (bun run agent:build)"
 if (!hasImage) console.warn(`Skipping the runtime host Docker test: ${skipReason}`)
 
-const prefix = `hq-test-${crypto.randomUUID().slice(0, 8)}-`
+const prefix = `spyria-test-${crypto.randomUUID().slice(0, 8)}-`
 const hostProgram = new URL('../../../host/src/main.ts', import.meta.url).pathname
-const stateDirectory = mkdtempSync(join(tmpdir(), 'hq-test-host-'))
+const stateDirectory = mkdtempSync(join(tmpdir(), 'spyria-test-host-'))
 const shared = await openSharedTestApp()
 const testDatabase = await createTestDatabase()
 await testDatabase.database.transaction(await shared.seededGatewayKeys())
-const gateway = createRuntimeHostGateway({ databases: () => [testDatabase.database], hqAgentImage: hqImage })
+const gateway = createRuntimeHostGateway({ databases: () => [testDatabase.database], spyriaAgentImage: spyriaImage })
 const app = createApp({ database: testDatabase.database, ...testAuthSettings, runtimeHosts: gateway })
 const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
 let hostProcess: ReturnType<typeof Bun.spawn> | undefined
@@ -65,7 +70,7 @@ const connectHost = async () => {
   })
   const { id, code } = (await added.json()) as { id: string; code: string }
   hostProcess = Bun.spawn(['bun', hostProgram, `http://localhost:${server.port}/h/${code}`], {
-    env: { ...process.env, HQ_HOST_STATE_DIR: stateDirectory, HQ_HOST_PREFIX: prefix },
+    env: { ...process.env, SPYRIA_HOST_STATE_DIR: stateDirectory, SPYRIA_HOST_PREFIX: prefix },
     stdout: 'inherit',
     stderr: 'inherit',
   })
@@ -82,7 +87,7 @@ const hostId = () => {
 }
 
 test.skipIf(!hasImage)(
-  "hq-host creates a hardened runtime from HQ's image, relays HTTP to hq-agent, then stops and removes it with its volumes",
+  "spyria-host creates a hardened runtime from Spyria's image, relays HTTP to spyria-agent, then stops and removes it with its volumes",
   async () => {
     const startedAt = performance.now()
     const id = await hostId()
@@ -93,7 +98,7 @@ test.skipIf(!hasImage)(
     await expect(provider.create({ ...runtime, image: 'docker.io/library/alpine:3', apiKey })).rejects.toThrow(
       'refused',
     )
-    await provider.create({ ...runtime, image: hqImage, apiKey })
+    await provider.create({ ...runtime, image: spyriaImage, apiKey })
     expect(await provider.status(runtime)).toBe('stopped')
 
     const [inspected] = JSON.parse(dockerText('inspect', containerName))
@@ -138,7 +143,7 @@ test.skipIf(!hasImage)(
         () => false,
       )
     for (const deadline = Date.now() + 30_000; !(await isReady()); await Bun.sleep(100))
-      if (Date.now() > deadline) throw new Error('hq-agent was not ready within 30 s')
+      if (Date.now() > deadline) throw new Error('spyria-agent was not ready within 30 s')
     const unauthenticated = await transport.fetch({ method: 'GET', path: '/api/conversations/unknown' })
     expect(unauthenticated.status).toBe(401)
     const authenticated = await transport.fetch({
@@ -161,14 +166,14 @@ test.skipIf(!hasImage)(
 )
 
 test.skipIf(!hasImage)(
-  'two runtimes on one host cannot reach each other, while hq-host relays to both',
+  'two runtimes on one host cannot reach each other, while spyria-host relays to both',
   async () => {
     const host = { workspaceId: acme, hostId: runtimeHostId(await hostId()) }
     const provider = gateway.sandboxProvider
     const apiKey = 'test-api-key-0123456789abcdef'
     const runtimes = ['isolated-a', 'isolated-b'].map((runtimeId) => ({ ...host, runtimeId }))
     for (const runtime of runtimes) {
-      await provider.create({ ...runtime, image: hqImage, apiKey })
+      await provider.create({ ...runtime, image: spyriaImage, apiKey })
       await provider.start(runtime)
     }
     const isReady = (runtime: (typeof runtimes)[number]) =>
@@ -204,7 +209,7 @@ test.skipIf(!hasImage)(
 )
 
 test.skipIf(!hasImage)(
-  "runtime jobs create, stop, resume with the same key and files, and remove a real runtime of HQ's image; prepare refuses another image",
+  "runtime jobs create, stop, resume with the same key and files, and remove a real runtime of Spyria's image; prepare refuses another image",
   async () => {
     const startedAt = performance.now()
     const host = { workspaceId: acme, hostId: runtimeHostId(await hostId()) }
@@ -215,7 +220,7 @@ test.skipIf(!hasImage)(
         'ghcr.io/openhands/agent-server@sha256:977a4791b90f46c0873f63d879180692802e47e7a0e760ab5add5d5a2505027d',
       ),
     ).rejects.toThrow('refused')
-    await gateway.prepare(host, hqImage)
+    await gateway.prepare(host, spyriaImage)
 
     const { database } = testDatabase
     const worker = startJobWorker(database, { pollIntervalMilliseconds: 20, sandboxProvider: gateway.sandboxProvider })
@@ -225,7 +230,7 @@ test.skipIf(!hasImage)(
     const ensure = () =>
       zeroDatabase.transaction((tx) =>
         ensureRuntimeRunning(
-          { transactor: createRuntimeTransactor(tx), hqAgentImage: hqImage },
+          { transactor: createRuntimeTransactor(tx), spyriaAgentImage: spyriaImage },
           { ...runtimeInput, id: crypto.randomUUID(), now: Date.now() },
         ),
       )

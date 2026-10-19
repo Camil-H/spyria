@@ -1,4 +1,4 @@
-import { SignInScreen } from '@hq/workspace'
+import { SignInScreen } from '@spyria/workspace'
 import { createRoot } from 'react-dom/client'
 import { loadAuthMode, loadSessions, signInWithPopup } from './app/auth.ts'
 import { createApp } from './app/factory.ts'

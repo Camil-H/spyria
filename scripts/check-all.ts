@@ -18,7 +18,7 @@ const git = (args: string[], env: Record<string, string> = {}) =>
     .stdout.toString()
     .trim()
 const workingTreeOf = () => {
-  const index = join(tmpdir(), `hq-check-index-${process.pid}`)
+  const index = join(tmpdir(), `spyria-check-index-${process.pid}`)
   git(['read-tree', 'HEAD'], { GIT_INDEX_FILE: index })
   git(['add', '-A'], { GIT_INDEX_FILE: index })
   const tree = git(['write-tree'], { GIT_INDEX_FILE: index })

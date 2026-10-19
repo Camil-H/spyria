@@ -5,10 +5,10 @@ import {
   createHttpChatCommands,
   createStoreDraftRepository,
   saveDraft,
-} from '@hq/conversation/server'
-import { createZeroStore, type Store, type WorkspaceSession } from '@hq/db/zero-store'
-import { type ChatId, type MemberId, type WorkspaceId, workspaceId } from '@hq/kernel'
-import type { PanelCommands } from '@hq/panel'
+} from '@spyria/conversation/server'
+import { createZeroStore, type Store, type WorkspaceSession } from '@spyria/db/zero-store'
+import { type ChatId, type MemberId, type WorkspaceId, workspaceId } from '@spyria/kernel'
+import type { PanelCommands } from '@spyria/panel'
 import {
   createHttpGitHubConnection,
   createHttpLlmCredentialAdder,
@@ -16,27 +16,27 @@ import {
   createHttpWorkspaceConnections,
   type ProfileCommands,
   profileMutators,
-} from '@hq/profile/server'
-import { createHttpRuntimeHostCommands, type RuntimeCommands, runtimeMutators } from '@hq/runtime/server'
-import type { Session } from '@hq/session'
+} from '@spyria/profile/server'
+import { createHttpRuntimeHostCommands, type RuntimeCommands, runtimeMutators } from '@spyria/runtime/server'
+import type { Session } from '@spyria/session'
 import {
   createHttpAuditLogCommands,
   createHttpBudgetCommands,
   createHttpSpendCommands,
   type UsageCommands,
-} from '@hq/usage/server'
+} from '@spyria/usage/server'
 import {
   createHttpGitHubCommands,
   createHttpSsoSettingsCommands,
   type WorkspaceCommands,
   workspaceMutators,
-} from '@hq/workspace/server'
+} from '@spyria/workspace/server'
 import { logOut, openSession, renew, signInWithPopup } from './auth.ts'
 
 const zeroCacheURL = import.meta.env.VITE_ZERO_URL ?? 'http://localhost:4848'
 const testStack =
   import.meta.env.MODE === 'e2e'
-    ? (window as Window & { hqTestStack?: { zeroCacheURL: string } }).hqTestStack
+    ? (window as Window & { spyriaTestStack?: { zeroCacheURL: string } }).spyriaTestStack
     : undefined
 
 type CommandInput = { workspaceId: WorkspaceId; [argument: string]: unknown }

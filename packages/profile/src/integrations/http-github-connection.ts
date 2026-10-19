@@ -1,9 +1,9 @@
-import type { WorkspaceId } from '@hq/kernel'
+import type { WorkspaceId } from '@spyria/kernel'
 import type { GitHubConnection } from '../domain/github-connection.ts'
 import { throwOnRefusal } from './http-refusal.ts'
 
 export const githubConnectionPath = '/api/github/connection'
-export const githubConnectionChannel = 'hq-github-connection'
+export const githubConnectionChannel = 'spyria-github-connection'
 
 type RequestAsMember = (workspaceId: WorkspaceId, path: string, method: string) => Promise<Response>
 type Input = { workspaceId: WorkspaceId }

@@ -232,7 +232,7 @@ const setPiMode = (session, mode) => {
     type: 'extension_ui_request',
     id: randomUUID(),
     method: 'setStatus',
-    statusKey: 'hq-plan',
+    statusKey: 'spyria-plan',
     statusText: mode,
   })
 }
@@ -263,7 +263,7 @@ const proposePlan = (toolCallId, { plan }, session, update) =>
   })
 const gatewayUrl = process.env.STUB_GATEWAY
 const piConfigOf = (name) => JSON.parse(process.env[name] || '{}')
-const mcpServers = piConfigOf('HQ_PI_MCP').mcpServers ?? {}
+const mcpServers = piConfigOf('SPYRIA_PI_MCP').mcpServers ?? {}
 const piTools = ['bash', 'read', 'edit', 'write']
 const withEnvironment = (value) => String(value).replace(/\$\{(\w+)\}/g, (_, name) => process.env[name] ?? '')
 const gatewayCall = (url, authorization, body, signal) =>
@@ -301,7 +301,7 @@ const mcpToolsOf = async () => {
 }
 const completionOf = async (session, signal, update) => {
   const [provider = ''] = session.model.split('/')
-  const { baseUrl, apiKey } = piConfigOf('HQ_PI_MODELS').providers[provider]
+  const { baseUrl, apiKey } = piConfigOf('SPYRIA_PI_MODELS').providers[provider]
   const response = await gatewayCall(
     `${baseUrl.replace(/\/v1$/, '')}/v1/chat/completions`,
     `Bearer ${withEnvironment(apiKey)}`,
@@ -867,7 +867,7 @@ const piCommands = {
   get_available_models: () => ({ models: models.map(({ value, name }) => ({ ...piModelOf(value), name })) }),
   get_available_thinking_levels: () => ({ levels: thoughtLevels }),
   set_model: ({ provider, modelId }) => {
-    const { providers } = piConfigOf('HQ_PI_MODELS')
+    const { providers } = piConfigOf('SPYRIA_PI_MODELS')
     if (providers && !providers[provider]?.models.some(({ id }) => id === modelId))
       throw new Error(`Model not found: ${provider}/${modelId}`)
     return Object.assign(piSession(), { model: `${provider}/${modelId}`, thought_level: 'off' }) && {}
@@ -888,7 +888,7 @@ const onPiCommand = async ({ id, type, ...fields }) => {
   if (type === 'extension_ui_response') return dialogs.get(id)?.(fields)
   if (isSilentOn(type)) return
   const respond = (data) => piSend({ id, type: 'response', command: type, success: true, data })
-  if (type === 'prompt' && fields.message.startsWith('/hq-plan ')) {
+  if (type === 'prompt' && fields.message.startsWith('/spyria-plan ')) {
     setPiMode(piSession(), fields.message.endsWith(' on') ? 'plan' : 'default')
     return respond({ disposition: 'handled' })
   }

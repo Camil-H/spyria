@@ -1,4 +1,4 @@
-import { buttonClass, fieldClass, labelClass } from '@hq/ui'
+import { buttonClass, fieldClass, labelClass } from '@spyria/ui'
 import { type SubmitEvent, useState } from 'react'
 import { fullScreenClass } from './ui.ts'
 
@@ -28,7 +28,7 @@ export const SignInScreen = ({
   }
   return (
     <main className={fullScreenClass}>
-      <h1 className="text-xl font-medium">Sign in to HQ</h1>
+      <h1 className="text-xl font-medium">Sign in to Spyria</h1>
       <form aria-label="Sign in" onSubmit={submit} className="flex w-full max-w-xs flex-col gap-3 text-left">
         {isEmailFirst && (
           <label className={labelClass}>

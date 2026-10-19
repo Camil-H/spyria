@@ -1,5 +1,5 @@
-import type { WorkspaceId } from '@hq/kernel'
-import { buttonClass, ErrorMessage, fieldClass, LabelledSection, labelClass, useGuardedAction } from '@hq/ui'
+import type { WorkspaceId } from '@spyria/kernel'
+import { buttonClass, ErrorMessage, fieldClass, LabelledSection, labelClass, useGuardedAction } from '@spyria/ui'
 import { type SubmitEvent, useEffect, useState } from 'react'
 import type { SsoDomainState, SsoPreset, SsoSettingsView } from '../domain/sso.ts'
 import { useWorkspaceCommands } from './providers.tsx'

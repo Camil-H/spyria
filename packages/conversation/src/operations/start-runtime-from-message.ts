@@ -1,4 +1,4 @@
-import { type ChatId, can, type MemberId, type MessageId, requireChatPermission } from '@hq/kernel'
+import { type ChatId, can, type MemberId, type MessageId, requireChatPermission } from '@spyria/kernel'
 import type { RuntimeChatStarter } from '../contracts/runtime-chat-starter.ts'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { MessageDeleted, RuntimeOnlyFromChannel } from '../domain/errors.ts'

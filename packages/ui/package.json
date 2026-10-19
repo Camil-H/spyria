@@ -1,5 +1,5 @@
 {
-  "name": "@hq/ui",
+  "name": "@spyria/ui",
   "private": true,
   "type": "module",
   "exports": "./src/index.ts",
@@ -7,7 +7,7 @@
     "typecheck": "tsc -p ."
   },
   "dependencies": {
-    "@hq/kernel": "workspace:*",
+    "@spyria/kernel": "workspace:*",
     "lucide-react": "1.49.0"
   },
   "peerDependencies": {

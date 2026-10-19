@@ -1,4 +1,4 @@
-import type { ChatId, MemberId, WorkspaceId } from '@hq/kernel'
+import type { ChatId, MemberId, WorkspaceId } from '@spyria/kernel'
 import type { DraftRepository } from '../contracts/repositories.ts'
 
 type Dependencies = { drafts: DraftRepository }

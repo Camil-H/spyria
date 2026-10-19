@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "hq",
+      "name": "spyria",
       "devDependencies": {
         "@biomejs/biome": "^2.5.15",
         "@swc/core": "^1.16.13",
@@ -14,22 +14,22 @@
       },
     },
     "apps/agent": {
-      "name": "@hq/agent",
+      "name": "@spyria/agent",
     },
     "apps/host": {
-      "name": "@hq/host",
+      "name": "@spyria/host",
     },
     "apps/server": {
-      "name": "@hq/server",
+      "name": "@spyria/server",
       "dependencies": {
-        "@hq/conversation": "workspace:*",
-        "@hq/db": "workspace:*",
-        "@hq/kernel": "workspace:*",
-        "@hq/profile": "workspace:*",
-        "@hq/runtime": "workspace:*",
-        "@hq/usage": "workspace:*",
-        "@hq/workspace": "workspace:*",
         "@rocicorp/zero": "1.9.0",
+        "@spyria/conversation": "workspace:*",
+        "@spyria/db": "workspace:*",
+        "@spyria/kernel": "workspace:*",
+        "@spyria/profile": "workspace:*",
+        "@spyria/runtime": "workspace:*",
+        "@spyria/usage": "workspace:*",
+        "@spyria/workspace": "workspace:*",
         "hono": "4.13.12",
         "jose": "6.2.12",
         "nodemailer": "10.0.13",
@@ -40,19 +40,19 @@
       },
     },
     "apps/web": {
-      "name": "@hq/web",
+      "name": "@spyria/web",
       "dependencies": {
-        "@hq/conversation": "workspace:*",
-        "@hq/db": "workspace:*",
-        "@hq/kernel": "workspace:*",
-        "@hq/panel": "workspace:*",
-        "@hq/profile": "workspace:*",
-        "@hq/runtime": "workspace:*",
-        "@hq/session": "workspace:*",
-        "@hq/ui": "workspace:*",
-        "@hq/usage": "workspace:*",
-        "@hq/workspace": "workspace:*",
         "@openhands/ui": "1.0.0-beta.9",
+        "@spyria/conversation": "workspace:*",
+        "@spyria/db": "workspace:*",
+        "@spyria/kernel": "workspace:*",
+        "@spyria/panel": "workspace:*",
+        "@spyria/profile": "workspace:*",
+        "@spyria/runtime": "workspace:*",
+        "@spyria/session": "workspace:*",
+        "@spyria/ui": "workspace:*",
+        "@spyria/usage": "workspace:*",
+        "@spyria/workspace": "workspace:*",
         "lucide-react": "1.49.0",
         "react": "19.3.0",
         "react-dom": "19.3.0",
@@ -74,17 +74,17 @@
       },
     },
     "packages/conversation": {
-      "name": "@hq/conversation",
+      "name": "@spyria/conversation",
       "dependencies": {
-        "@hq/db": "workspace:*",
-        "@hq/kernel": "workspace:*",
-        "@hq/runtime": "workspace:*",
-        "@hq/session": "workspace:*",
-        "@hq/ui": "workspace:*",
-        "@hq/workspace": "workspace:*",
         "@radix-ui/react-dropdown-menu": "2.1.24",
         "@radix-ui/react-tooltip": "1.2.16",
         "@rocicorp/zero": "1.9.0",
+        "@spyria/db": "workspace:*",
+        "@spyria/kernel": "workspace:*",
+        "@spyria/runtime": "workspace:*",
+        "@spyria/session": "workspace:*",
+        "@spyria/ui": "workspace:*",
+        "@spyria/workspace": "workspace:*",
         "highlight.js": "11.12.0",
         "lucide-react": "1.49.0",
         "react": "19.3.0",
@@ -98,10 +98,10 @@
       },
     },
     "packages/db": {
-      "name": "@hq/db",
+      "name": "@spyria/db",
       "dependencies": {
-        "@hq/kernel": "workspace:*",
         "@rocicorp/zero": "1.9.0",
+        "@spyria/kernel": "workspace:*",
         "drizzle-orm": "1.0.0-rc.4",
         "postgres": "3.4.9",
       },
@@ -116,17 +116,17 @@
       },
     },
     "packages/kernel": {
-      "name": "@hq/kernel",
+      "name": "@spyria/kernel",
     },
     "packages/panel": {
-      "name": "@hq/panel",
+      "name": "@spyria/panel",
       "dependencies": {
-        "@hq/db": "workspace:*",
-        "@hq/kernel": "workspace:*",
-        "@hq/session": "workspace:*",
-        "@hq/ui": "workspace:*",
         "@radix-ui/react-tabs": "1.1.21",
         "@radix-ui/react-tooltip": "1.2.16",
+        "@spyria/db": "workspace:*",
+        "@spyria/kernel": "workspace:*",
+        "@spyria/session": "workspace:*",
+        "@spyria/ui": "workspace:*",
         "lucide-react": "1.49.0",
         "react": "19.3.0",
         "react-dom": "19.3.0",
@@ -136,14 +136,14 @@
       },
     },
     "packages/profile": {
-      "name": "@hq/profile",
+      "name": "@spyria/profile",
       "dependencies": {
-        "@hq/db": "workspace:*",
-        "@hq/kernel": "workspace:*",
-        "@hq/session": "workspace:*",
-        "@hq/ui": "workspace:*",
         "@radix-ui/react-tabs": "1.1.21",
         "@rocicorp/zero": "1.9.0",
+        "@spyria/db": "workspace:*",
+        "@spyria/kernel": "workspace:*",
+        "@spyria/session": "workspace:*",
+        "@spyria/ui": "workspace:*",
         "react": "19.3.0",
         "react-router": "7.18.2",
         "zod": "4.6.5",
@@ -153,12 +153,12 @@
       },
     },
     "packages/runtime": {
-      "name": "@hq/runtime",
+      "name": "@spyria/runtime",
       "dependencies": {
-        "@hq/db": "workspace:*",
-        "@hq/kernel": "workspace:*",
-        "@hq/ui": "workspace:*",
         "@rocicorp/zero": "1.9.0",
+        "@spyria/db": "workspace:*",
+        "@spyria/kernel": "workspace:*",
+        "@spyria/ui": "workspace:*",
         "react": "19.3.0",
         "zod": "4.6.5",
       },
@@ -167,9 +167,9 @@
       },
     },
     "packages/session": {
-      "name": "@hq/session",
+      "name": "@spyria/session",
       "dependencies": {
-        "@hq/kernel": "workspace:*",
+        "@spyria/kernel": "workspace:*",
         "react": "19.3.0",
       },
       "devDependencies": {
@@ -177,9 +177,9 @@
       },
     },
     "packages/ui": {
-      "name": "@hq/ui",
+      "name": "@spyria/ui",
       "dependencies": {
-        "@hq/kernel": "workspace:*",
+        "@spyria/kernel": "workspace:*",
         "lucide-react": "1.49.0",
       },
       "devDependencies": {
@@ -191,12 +191,12 @@
       },
     },
     "packages/usage": {
-      "name": "@hq/usage",
+      "name": "@spyria/usage",
       "dependencies": {
-        "@hq/db": "workspace:*",
-        "@hq/kernel": "workspace:*",
-        "@hq/ui": "workspace:*",
         "@rocicorp/zero": "1.9.0",
+        "@spyria/db": "workspace:*",
+        "@spyria/kernel": "workspace:*",
+        "@spyria/ui": "workspace:*",
         "lucide-react": "1.49.0",
         "react": "19.3.0",
       },
@@ -205,18 +205,18 @@
       },
     },
     "packages/workspace": {
-      "name": "@hq/workspace",
+      "name": "@spyria/workspace",
       "dependencies": {
-        "@hq/db": "workspace:*",
-        "@hq/kernel": "workspace:*",
-        "@hq/profile": "workspace:*",
-        "@hq/runtime": "workspace:*",
-        "@hq/session": "workspace:*",
-        "@hq/ui": "workspace:*",
         "@radix-ui/react-dropdown-menu": "2.1.24",
         "@radix-ui/react-tabs": "1.1.21",
         "@radix-ui/react-tooltip": "1.2.16",
         "@rocicorp/zero": "1.9.0",
+        "@spyria/db": "workspace:*",
+        "@spyria/kernel": "workspace:*",
+        "@spyria/profile": "workspace:*",
+        "@spyria/runtime": "workspace:*",
+        "@spyria/session": "workspace:*",
+        "@spyria/ui": "workspace:*",
         "lucide-react": "1.49.0",
         "react": "19.3.0",
         "react-router": "7.18.2",
@@ -401,34 +401,6 @@
     "@grpc/grpc-js": ["@grpc/grpc-js@1.14.5", "", { "dependencies": { "@grpc/proto-loader": "^0.8.0", "@js-sdsl/ordered-map": "^4.4.2" } }, "sha512-7VZM+SVdEcUUqSQeNI3zM8Qs/BhQKZndPo2h5VkYkAM8Iz0wJIa8mKV5ekQGqG8UUsnkQ0NMxIxwkIHYvj0qOw=="],
 
     "@grpc/proto-loader": ["@grpc/proto-loader@0.8.1", "", { "dependencies": { "lodash.camelcase": "^4.3.0", "long": "^5.0.0", "protobufjs": "^7.5.5", "yargs": "^17.7.2" }, "bin": { "proto-loader-gen-types": "build/bin/proto-loader-gen-types.js" } }, "sha512-wtF6h+DY6M3YaDBPAmvuuA6jV8Sif9MjtOI5euKFWRgCDl5PeDpPsHR9u2l6St5ceY8AZgoNDww5+HvEsXFsGg=="],
-
-    "@hq/agent": ["@hq/agent@workspace:apps/agent"],
-
-    "@hq/conversation": ["@hq/conversation@workspace:packages/conversation"],
-
-    "@hq/db": ["@hq/db@workspace:packages/db"],
-
-    "@hq/host": ["@hq/host@workspace:apps/host"],
-
-    "@hq/kernel": ["@hq/kernel@workspace:packages/kernel"],
-
-    "@hq/panel": ["@hq/panel@workspace:packages/panel"],
-
-    "@hq/profile": ["@hq/profile@workspace:packages/profile"],
-
-    "@hq/runtime": ["@hq/runtime@workspace:packages/runtime"],
-
-    "@hq/server": ["@hq/server@workspace:apps/server"],
-
-    "@hq/session": ["@hq/session@workspace:packages/session"],
-
-    "@hq/ui": ["@hq/ui@workspace:packages/ui"],
-
-    "@hq/usage": ["@hq/usage@workspace:packages/usage"],
-
-    "@hq/web": ["@hq/web@workspace:apps/web"],
-
-    "@hq/workspace": ["@hq/workspace@workspace:packages/workspace"],
 
     "@isaacs/cliui": ["@isaacs/cliui@8.0.2", "", { "dependencies": { "string-width": "^5.1.2", "string-width-cjs": "npm:string-width@^4.2.0", "strip-ansi": "^7.0.1", "strip-ansi-cjs": "npm:strip-ansi@^6.0.1", "wrap-ansi": "^8.1.0", "wrap-ansi-cjs": "npm:wrap-ansi@^7.0.0" } }, "sha512-O8jcjabXaleOG9DQ0+ARXWZBTfnP4WNAqzuiJK7ll44AmxGKv/J2M4TPjxjY3znBCfvBXFzucm1twdyFybFqEA=="],
 
@@ -771,6 +743,34 @@
     "@rolldown/plugin-babel": ["@rolldown/plugin-babel@0.2.4", "", { "dependencies": { "picomatch": "^4.0.7" }, "peerDependencies": { "@babel/core": "^7.29.0 || ^8.0.0-rc.1", "@babel/plugin-transform-runtime": "^7.29.0 || ^8.0.0-rc.1", "@babel/runtime": "^7.27.0 || ^8.0.0-rc.1", "rolldown": "^1.0.0-rc.5", "vite": "^8.0.0" }, "optionalPeers": ["@babel/plugin-transform-runtime", "@babel/runtime", "vite"] }, "sha512-ygmm2j/mN+aCvstHo0x3IOu4uc6LqXT9SJ3q4kpfG/+Yhfz0B+E47FITcC0FljZADwUFARP6E2kiE+Lc26D8wg=="],
 
     "@rolldown/pluginutils": ["@rolldown/pluginutils@1.0.1", "", {}, "sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw=="],
+
+    "@spyria/agent": ["@spyria/agent@workspace:apps/agent"],
+
+    "@spyria/conversation": ["@spyria/conversation@workspace:packages/conversation"],
+
+    "@spyria/db": ["@spyria/db@workspace:packages/db"],
+
+    "@spyria/host": ["@spyria/host@workspace:apps/host"],
+
+    "@spyria/kernel": ["@spyria/kernel@workspace:packages/kernel"],
+
+    "@spyria/panel": ["@spyria/panel@workspace:packages/panel"],
+
+    "@spyria/profile": ["@spyria/profile@workspace:packages/profile"],
+
+    "@spyria/runtime": ["@spyria/runtime@workspace:packages/runtime"],
+
+    "@spyria/server": ["@spyria/server@workspace:apps/server"],
+
+    "@spyria/session": ["@spyria/session@workspace:packages/session"],
+
+    "@spyria/ui": ["@spyria/ui@workspace:packages/ui"],
+
+    "@spyria/usage": ["@spyria/usage@workspace:packages/usage"],
+
+    "@spyria/web": ["@spyria/web@workspace:apps/web"],
+
+    "@spyria/workspace": ["@spyria/workspace@workspace:packages/workspace"],
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 

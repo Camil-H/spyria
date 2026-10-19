@@ -1,4 +1,4 @@
-import { DomainError, errorKind } from '@hq/kernel'
+import { DomainError, errorKind } from '@spyria/kernel'
 
 class ConversationError extends DomainError {}
 

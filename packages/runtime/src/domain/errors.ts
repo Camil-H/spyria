@@ -1,4 +1,4 @@
-import { DomainError, errorKind } from '@hq/kernel'
+import { DomainError, errorKind } from '@spyria/kernel'
 
 export class RuntimeError extends DomainError {}
 
@@ -46,12 +46,12 @@ export const HostRemoved = errorKind('host_removed', () => 'This host was remove
 export const HostNotRegistered = errorKind('host_not_registered', () => 'This host is not registered', HostRefused)
 export const PairedAsMachine = errorKind(
   'paired_as_machine',
-  () => 'This host was paired as your machine: restart hq-host with --personal',
+  () => 'This host was paired as your machine: restart spyria-host with --personal',
   HostRefused,
 )
 export const PairedAsWorkspaceHost = errorKind(
   'paired_as_workspace_host',
-  () => 'This host was paired as a workspace host: restart hq-host without --personal',
+  () => 'This host was paired as a workspace host: restart spyria-host without --personal',
   HostRefused,
 )
 export const RuntimeNotFound = errorKind(

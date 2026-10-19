@@ -1,4 +1,4 @@
-import type { ChatId, ListedModel, MemberId, MessageId, Model, RuntimeHostId, WorkspaceId } from '@hq/kernel'
+import type { ChatId, ListedModel, MemberId, MessageId, Model, RuntimeHostId, WorkspaceId } from '@spyria/kernel'
 import type { AgentEvent } from '../domain/agent-events.ts'
 import type { PullRequestDraft, PullRequestStep } from '../domain/pull-requests.ts'
 import type { HarnessLaunch } from '../domain/session-routing.ts'

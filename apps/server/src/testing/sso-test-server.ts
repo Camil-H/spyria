@@ -1,5 +1,5 @@
-import { createDatabase, type Database } from '@hq/db/postgres'
-import { databaseUrlOf } from '@hq/db/testing'
+import { createDatabase, type Database } from '@spyria/db/postgres'
+import { databaseUrlOf } from '@spyria/db/testing'
 import { websocket } from 'hono/bun'
 import { createApp } from '../app.ts'
 import { startFakeSmtp } from './fake-smtp.ts'
@@ -19,12 +19,12 @@ const databaseNamed = (databaseName: string) => {
 const app = createApp({
   database: createDatabase(),
   ...testAuthSettings,
-  appOrigin: process.env.HQ_APP_ORIGIN ?? 'http://localhost:5191',
+  appOrigin: process.env.SPYRIA_APP_ORIGIN ?? 'http://localhost:5191',
   oidc: { ...testAuthSettings.oidc, redirectUri: `http://localhost:${port}/auth/callback` },
   authMode: 'sso',
   secretsKey: testSecretsKey,
   testDatabaseByName: databaseNamed,
-  mail: { smtpUrl: smtp.url, from: 'HQ <hq@e2e.test>' },
+  mail: { smtpUrl: smtp.url, from: 'Spyria <spyria@e2e.test>' },
 }).get('/test/mails', (context) => context.json(smtp.mails))
 
 export default { port, hostname: '0.0.0.0', idleTimeout: 0, fetch: app.fetch, websocket }

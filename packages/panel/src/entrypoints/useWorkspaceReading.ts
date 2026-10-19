@@ -1,5 +1,5 @@
-import { useQuery } from '@hq/db/react'
-import type { ChatId, WorkspaceId } from '@hq/kernel'
+import { useQuery } from '@spyria/db/react'
+import type { ChatId, WorkspaceId } from '@spyria/kernel'
 import { useEffect, useState } from 'react'
 import type { WorkspaceRead, WorkspaceReading } from '../domain/workspace.ts'
 import { getDevWorkspace } from '../queries/get-dev-workspace.ts'

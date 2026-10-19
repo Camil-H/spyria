@@ -1,4 +1,4 @@
-import { ErrorMessage, focusRing, Spinner, useGuardedAction } from '@hq/ui'
+import { ErrorMessage, focusRing, Spinner, useGuardedAction } from '@spyria/ui'
 import { GitFork } from 'lucide-react'
 
 export const ForkButton = ({ onFork }: { onFork: () => Promise<unknown> }) => {

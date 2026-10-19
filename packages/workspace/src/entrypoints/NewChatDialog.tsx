@@ -1,5 +1,13 @@
-import { type ChatVisibility, DomainError, type ProjectId, projectId, type WorkspaceId } from '@hq/kernel'
-import { buttonClass, Dialog, ErrorMessage, fieldClass, labelClass, SegmentedChoice, useGuardedAction } from '@hq/ui'
+import { type ChatVisibility, DomainError, type ProjectId, projectId, type WorkspaceId } from '@spyria/kernel'
+import {
+  buttonClass,
+  Dialog,
+  ErrorMessage,
+  fieldClass,
+  labelClass,
+  SegmentedChoice,
+  useGuardedAction,
+} from '@spyria/ui'
 import { type SubmitEvent, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import type { Chat } from '../domain/chat.ts'

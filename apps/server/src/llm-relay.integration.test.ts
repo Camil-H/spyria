@@ -32,7 +32,7 @@ const failureOf = async (chatId: string) =>
   (await database.$client`select agent_turn_failure from chats where id = ${chatId}`)[0]?.agent_turn_failure
 await addLlmKey(bob, 'Fake', bobSecret)
 
-test('a relayed call runs on the turn prompter’s virtual key with HQ’s attribution, streams back, and drops spoofed auth and x-bf headers', async () => {
+test('a relayed call runs on the turn prompter’s virtual key with Spyria’s attribution, streams back, and drops spoofed auth and x-bf headers', async () => {
   const host = await fakeHost('Relay host')
   const { chatId, token, promptId } = await runtimeTurn(host, bob)
   const sessionId = `conversation-${crypto.randomUUID()}`
@@ -162,7 +162,7 @@ test('a machine session’s runtime token is refused for model calls before the 
   expect(fakeLlmCalls.length).toBe(callsBefore)
 })
 
-test('a prompter without a gateway key is refused and HQ’s notice is recorded on the turn', async () => {
+test('a prompter without a gateway key is refused and Spyria’s notice is recorded on the turn', async () => {
   const host = await fakeHost('No key host')
   const { chatId, token } = await runtimeTurn(host, alice)
   await database.$client`delete from member_gateway_keys where user_id = ${alice}`
@@ -193,7 +193,7 @@ test('a context-window rejection reaches the agent unchanged and records no turn
   expect(await failureOf(chatId)).toBeNull()
 })
 
-test('an unreachable gateway answers 502 and records HQ’s notice', async () => {
+test('an unreachable gateway answers 502 and records Spyria’s notice', async () => {
   const unreachableApp = createApp({ database, ...testAuthSettings, llmGateway: llmGatewayAt('http://127.0.0.1:9') })
   const server = Bun.serve({ port: 0, fetch: unreachableApp.fetch, websocket })
   const hosts = createFakeHosts({ port: Number(server.port), database })

@@ -1,7 +1,7 @@
-import type { Database } from '@hq/db/postgres'
-import type { WorkspaceId } from '@hq/kernel'
-import { displayNameFrom, domainOfEmail, normalizedEmail } from '@hq/workspace/server'
 import type { ServerTransaction } from '@rocicorp/zero'
+import type { Database } from '@spyria/db/postgres'
+import type { WorkspaceId } from '@spyria/kernel'
+import { displayNameFrom, domainOfEmail, normalizedEmail } from '@spyria/workspace/server'
 import type { FindMember, SessionClaims } from './session-tokens.ts'
 
 type LiveSession = SessionClaims & { createdAt: Date }

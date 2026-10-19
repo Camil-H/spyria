@@ -1,5 +1,5 @@
-import { chatId, type WorkspaceId } from '@hq/kernel'
-import { focusRing, ghostButtonClass } from '@hq/ui'
+import { chatId, type WorkspaceId } from '@spyria/kernel'
+import { focusRing, ghostButtonClass } from '@spyria/ui'
 import { GitPullRequest } from 'lucide-react'
 import { use, useState } from 'react'
 import { useOutletContext, useParams } from 'react-router'

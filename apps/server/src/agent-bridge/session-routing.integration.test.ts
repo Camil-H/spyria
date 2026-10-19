@@ -1,5 +1,5 @@
 import { expect, setDefaultTimeout, test } from 'bun:test'
-import { type ChatId, reachableModelsOf, withPricesOf } from '@hq/kernel'
+import { type ChatId, reachableModelsOf, withPricesOf } from '@spyria/kernel'
 import {
   acme,
   addLlmKey,

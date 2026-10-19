@@ -1,4 +1,4 @@
-import { type ChatId, type MemberId, type ProjectId, requireChatPermission } from '@hq/kernel'
+import { type ChatId, type MemberId, type ProjectId, requireChatPermission } from '@spyria/kernel'
 import type { WorkspaceTransactor } from '../contracts/transactor.ts'
 import { movedChat } from '../domain/chat.ts'
 

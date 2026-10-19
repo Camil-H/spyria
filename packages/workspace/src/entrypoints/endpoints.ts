@@ -1,5 +1,5 @@
-import type { Transact, ZeroContext } from '@hq/db/zero-queries'
-import { projectId } from '@hq/kernel'
+import type { Transact, ZeroContext } from '@spyria/db/zero-queries'
+import { projectId } from '@spyria/kernel'
 import type { GitHubRepositories } from '../contracts/repositories.ts'
 import { type DevChatInput, existingBranchOf, grantedRepositoryOf } from '../domain/github.ts'
 import { Name } from '../domain/name.ts'

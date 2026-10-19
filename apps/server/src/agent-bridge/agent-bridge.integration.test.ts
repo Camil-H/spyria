@@ -1,8 +1,8 @@
 import { expect, setDefaultTimeout, test } from 'bun:test'
 import { createHash } from 'node:crypto'
-import { commandOutputPathOf, rebuildMessages } from '@hq/conversation/server'
-import { schema } from '@hq/db/zero'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
+import { commandOutputPathOf, rebuildMessages } from '@spyria/conversation/server'
+import { schema } from '@spyria/db/zero'
 import { startJobWorker } from '../job-worker.ts'
 import {
   acme,
@@ -67,7 +67,7 @@ test('a prompt starts the runtime, creates one Pi conversation with the runtime 
   expect(runtime).toMatchObject({ state: 'running' })
   const [launch] = launches()
   expect(launches()).toHaveLength(1)
-  const llmToken = String(launch?.secrets.HQ_LLM_TOKEN?.value)
+  const llmToken = String(launch?.secrets.SPYRIA_LLM_TOKEN?.value)
   expect(llmToken.length).toBeGreaterThanOrEqual(16)
   expect(llmToken).not.toBe(runtime.api_key)
   expect(runtime.llm_token_hash).toBe(createHash('sha256').update(llmToken).digest('hex'))
@@ -181,7 +181,7 @@ test('stream frames reach browsers of the chat workspace only, and no secret rea
     await anonymous.closed
 
     const runtime = await runtimeOf(chat)
-    const llmToken = String(launches()[0]?.secrets.HQ_LLM_TOKEN?.value)
+    const llmToken = String(launches()[0]?.secrets.SPYRIA_LLM_TOKEN?.value)
     const everyFrame = [...acmeViewer.frames, ...globexViewer.frames].join('\n')
     const logged = consoleCalls.logged()
     for (const secret of [runtime.api_key, llmToken, runtime.llm_token_hash]) {
@@ -348,7 +348,7 @@ const queuedPrompt = async (
   return promptId
 }
 
-test('a prompt whose author has no LLM key at turn time ends with HQ’s notice without reaching the agent', async () => {
+test('a prompt whose author has no LLM key at turn time ends with Spyria’s notice without reaching the agent', async () => {
   const { relay } = await agentHost()
   const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'prompter' }] })
   const promptId = await queuedPrompt(chat, bob)
@@ -376,7 +376,7 @@ test('a model failure recorded by the relay shows as the error at the turn end, 
   })
 })
 
-test('a prompter removed after posting is refused at turn time with HQ’s notice, without reaching the agent', async () => {
+test('a prompter removed after posting is refused at turn time with Spyria’s notice, without reaching the agent', async () => {
   const { relay } = await agentHost()
   const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'prompter' }] })
   const promptId = await queuedPrompt(

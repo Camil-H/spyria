@@ -1,4 +1,4 @@
-import { DomainError, type MemberId, type MessageId, messageId, requireChatPermission } from '@hq/kernel'
+import { DomainError, type MemberId, type MessageId, messageId, requireChatPermission } from '@spyria/kernel'
 import type { AgentChat } from '../contracts/agent.ts'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { type Message, newMessage } from '../domain/message.ts'

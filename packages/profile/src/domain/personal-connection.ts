@@ -1,4 +1,4 @@
-import type { MemberId, WorkspaceId } from '@hq/kernel'
+import type { MemberId, WorkspaceId } from '@spyria/kernel'
 import { ToolNotInCatalog } from './errors.ts'
 
 export type PersonalConnection = Readonly<{

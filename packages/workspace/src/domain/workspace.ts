@@ -1,4 +1,4 @@
-import type { MemberId, WorkspaceId } from '@hq/kernel'
+import type { MemberId, WorkspaceId } from '@spyria/kernel'
 import type { Name } from './name.ts'
 
 export type Workspace = Readonly<{ id: WorkspaceId; name: Name }>

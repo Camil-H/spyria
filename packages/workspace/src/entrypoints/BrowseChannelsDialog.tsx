@@ -1,5 +1,5 @@
-import type { WorkspaceId } from '@hq/kernel'
-import { Dialog, ErrorMessage, fieldClass, ghostButtonClass, useGuardedAction } from '@hq/ui'
+import type { WorkspaceId } from '@spyria/kernel'
+import { Dialog, ErrorMessage, fieldClass, ghostButtonClass, useGuardedAction } from '@spyria/ui'
 import { useState } from 'react'
 import { Link } from 'react-router'
 import type { JoinableChannel } from '../queries/list-joinable-channels.ts'

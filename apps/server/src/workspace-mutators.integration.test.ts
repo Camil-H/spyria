@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test'
-import { schema } from '@hq/db/zero'
-import { chatPermissionsOf } from '@hq/db/zero-queries'
-import { builtInChatRoles, chatId, memberId } from '@hq/kernel'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
+import { schema } from '@spyria/db/zero'
+import { chatPermissionsOf } from '@spyria/db/zero-queries'
+import { builtInChatRoles, chatId, memberId } from '@spyria/kernel'
 import {
   acme,
   alice,

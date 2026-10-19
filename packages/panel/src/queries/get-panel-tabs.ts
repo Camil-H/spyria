@@ -1,5 +1,5 @@
-import { findChat, type Snapshot } from '@hq/db'
-import type { ChatId, WorkspaceId } from '@hq/kernel'
+import { findChat, type Snapshot } from '@spyria/db'
+import type { ChatId, WorkspaceId } from '@spyria/kernel'
 
 const allTabs = [
   'files',

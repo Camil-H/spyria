@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeEach, expect, setDefaultTimeout, test } from 'bun:test'
 import { createHash } from 'node:crypto'
-import { chatId as toChatId } from '@hq/kernel'
+import { chatId as toChatId } from '@spyria/kernel'
 import { sharedToolServer } from './testing/fake-mcp.ts'
 import {
   acme,

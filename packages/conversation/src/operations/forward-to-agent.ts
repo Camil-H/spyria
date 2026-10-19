@@ -1,4 +1,4 @@
-import { type ChatId, type ChatPermission, type MemberId, requireChatPermission } from '@hq/kernel'
+import { type ChatId, type ChatPermission, type MemberId, requireChatPermission } from '@spyria/kernel'
 import type { AgentChat, AgentConversation } from '../contracts/agent.ts'
 import type { UnitOfWork } from '../contracts/transactor.ts'
 import { ChatNotFound } from '../domain/errors.ts'

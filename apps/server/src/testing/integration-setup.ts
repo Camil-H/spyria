@@ -1,8 +1,8 @@
 import { afterAll } from 'bun:test'
-import { buildTemplateDatabase, databaseDropTimeoutMilliseconds } from '@hq/db/testing'
-import { stopAllHqAgents } from './hq-agent-relay.ts'
+import { buildTemplateDatabase, databaseDropTimeoutMilliseconds, startTestDex } from '@spyria/db/testing'
+import { stopAllSpyriaAgents } from './spyria-agent-relay.ts'
 import { stopSharedTestApp } from './testing.ts'
 
-await buildTemplateDatabase()
+await Promise.all([buildTemplateDatabase(), startTestDex()])
 afterAll(stopSharedTestApp, databaseDropTimeoutMilliseconds)
-afterAll(stopAllHqAgents)
+afterAll(stopAllSpyriaAgents)

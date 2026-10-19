@@ -148,7 +148,7 @@ export const chooseRunsOn = async (page: Page, runsOn: string) => {
   if (await radio.isVisible()) await radio.click()
   await expect(runsOnChoiceOf(page)).toHaveCount(0)
 }
-export const newRuntimeChat = async (page: Page, name: string, runsOn: string | null = 'HQ runtime') => {
+export const newRuntimeChat = async (page: Page, name: string, runsOn: string | null = 'Spyria runtime') => {
   await page.getByRole('button', { name: 'New chat' }).click()
   const dialog = page.getByRole('dialog', { name: 'New chat' })
   await dialog.getByRole('radio', { name: 'Runtime' }).check()
@@ -161,7 +161,7 @@ export const newRuntimeChat = async (page: Page, name: string, runsOn: string | 
 
 const chipNames = {
   harness: /^Model: (Claude Code|Codex) · /,
-  hq: /^Model: (?!Claude Code · |Codex · |Model chosen at first prompt$)/,
+  spyria: /^Model: (?!Claude Code · |Codex · |Model chosen at first prompt$)/,
   routed: /^Model: (?!Claude Code · |Codex · )/,
   any: /^Model: /,
 }

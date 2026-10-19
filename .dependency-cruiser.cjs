@@ -125,10 +125,10 @@ module.exports = {
       to: { path: '^(apps|packages)/', pathNot: ['^apps/server/', serverEntry, '^packages/(kernel|db)/'] },
     },
     {
-      name: 'host-and-agent-import-nothing-from-hq',
+      name: 'host-and-agent-import-nothing-from-spyria',
       severity: 'error',
       from: { path: '^apps/(host|agent)/' },
-      to: { path: ['^(apps|packages)/', '^@hq/'], pathNot: '^apps/$1/' },
+      to: { path: ['^(apps|packages)/', '^@spyria/'], pathNot: '^apps/$1/' },
     },
     {
       name: 'host-and-agent-imported-by-nothing',

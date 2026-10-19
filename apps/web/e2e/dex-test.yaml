@@ -8,14 +8,14 @@ oauth2:
   responseTypes: [code]
 enablePasswordDB: true
 staticClients:
-  - id: hq
-    name: HQ e2e
+  - id: spyria
+    name: Spyria tests
     public: true
     redirectURIs:
       - http://localhost:3100/auth/callback
-  - id: hq-sso
-    name: HQ SSO e2e
-    secret: hq-sso-e2e-secret
+  - id: spyria-sso
+    name: Spyria SSO e2e
+    secret: spyria-sso-e2e-secret
     redirectURIs:
       - http://localhost:3102/auth/callback
 staticPasswords:

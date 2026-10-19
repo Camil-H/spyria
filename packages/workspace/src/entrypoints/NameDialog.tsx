@@ -1,4 +1,4 @@
-import { buttonClass, Dialog, fieldClass, labelClass } from '@hq/ui'
+import { buttonClass, Dialog, fieldClass, labelClass } from '@spyria/ui'
 import { type SubmitEvent, useState } from 'react'
 import { Name } from '../domain/name.ts'
 

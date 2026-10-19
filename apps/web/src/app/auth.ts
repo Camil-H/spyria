@@ -1,5 +1,5 @@
-import type { WorkspaceSession } from '@hq/db/zero-store'
-import type { MemberId, WorkspaceId } from '@hq/kernel'
+import type { WorkspaceSession } from '@spyria/db/zero-store'
+import type { MemberId, WorkspaceId } from '@spyria/kernel'
 
 type SignInResult =
   | { status: 'signed_in' }
@@ -13,7 +13,7 @@ const popupPollMilliseconds = 200
 const postAuth = (path: string, workspaceId: WorkspaceId, headers: Record<string, string> = {}) =>
   fetch(path, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-hq-csrf': '1', ...headers },
+    headers: { 'content-type': 'application/json', 'x-spyria-csrf': '1', ...headers },
     body: JSON.stringify({ workspaceId }),
   })
 
@@ -40,7 +40,7 @@ export const openSession = async (workspaceId: WorkspaceId, bearerToken: string)
 export const signInWithPopup = (target: { workspace?: WorkspaceId; email?: string } = {}) =>
   new Promise<SignInResult>((resolve) => {
     const query = new URLSearchParams(Object.entries(target).filter((entry): entry is [string, string] => !!entry[1]))
-    const popup = window.open(`/auth/login?${query}`, 'hq-sign-in', 'popup,width=480,height=640')
+    const popup = window.open(`/auth/login?${query}`, 'spyria-sign-in', 'popup,width=480,height=640')
     if (!popup) return resolve({ status: 'closed' })
     const settle = (result: SignInResult) => {
       clearInterval(closedPoll)

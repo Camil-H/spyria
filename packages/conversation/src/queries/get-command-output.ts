@@ -1,7 +1,7 @@
-import { finishedToolCallEventOf } from '@hq/db/server-writes'
-import { chatPermissionsOf, type ZeroContext } from '@hq/db/zero-queries'
-import { requireChatPermission, chatId as toChatId } from '@hq/kernel'
 import type { Transaction } from '@rocicorp/zero'
+import { finishedToolCallEventOf } from '@spyria/db/server-writes'
+import { chatPermissionsOf, type ZeroContext } from '@spyria/db/zero-queries'
+import { requireChatPermission, chatId as toChatId } from '@spyria/kernel'
 import { type AgentEvent, agentProjectionOf } from '../domain/agent-events.ts'
 import { textOf } from '../domain/agent-steps.ts'
 

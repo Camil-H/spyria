@@ -1,5 +1,6 @@
-import type { Snapshot } from '@hq/db'
-import { useQuery } from '@hq/db/react'
+import { Content, List, Root, Trigger } from '@radix-ui/react-tabs'
+import type { Snapshot } from '@spyria/db'
+import { useQuery } from '@spyria/db/react'
 import {
   type ChatPermission,
   chatPermissions,
@@ -7,7 +8,7 @@ import {
   type WorkspacePermission,
   workspacePermissionLabels,
   workspacePermissions,
-} from '@hq/kernel'
+} from '@spyria/kernel'
 import {
   buttonClass,
   Dialog,
@@ -18,8 +19,7 @@ import {
   labelClass,
   tabTriggerClass,
   useGuardedAction,
-} from '@hq/ui'
-import { Content, List, Root, Trigger } from '@radix-ui/react-tabs'
+} from '@spyria/ui'
 import { type SubmitEvent, useState } from 'react'
 import { listChatRoles, listWorkspaceRoles } from '../queries/list-roles.ts'
 import type { WorkspaceCommands } from './commands.ts'

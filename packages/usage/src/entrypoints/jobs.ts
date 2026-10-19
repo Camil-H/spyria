@@ -1,4 +1,4 @@
-import type { Job } from '@hq/db/zero-queries'
+import type { Job } from '@spyria/db/zero-queries'
 import type { GatewayUsageLogs } from '../contracts/usage-sync.ts'
 import { auditJobTypes } from '../domain/audit.ts'
 import { usageJobTypes, usageSync } from '../domain/usage.ts'

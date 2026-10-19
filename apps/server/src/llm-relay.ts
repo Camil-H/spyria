@@ -1,3 +1,4 @@
+import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import {
   type AgentChat,
   awaitTaskTool,
@@ -14,14 +15,13 @@ import {
   toolCallFailureOf,
   toolCallNoticeOf,
   toolGatewayUnreachable,
-} from '@hq/conversation/server'
-import type { Database } from '@hq/db/postgres'
-import { schema } from '@hq/db/zero'
-import { type MemberId, toolNamePartsOf } from '@hq/kernel'
-import { type createLlmGateway, createMemberKeyReader, createToolCallOwnerAccess } from '@hq/profile/server'
-import type { ConnectedHost } from '@hq/runtime/server'
-import { createBudgetGuard } from '@hq/usage/server'
-import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
+} from '@spyria/conversation/server'
+import type { Database } from '@spyria/db/postgres'
+import { schema } from '@spyria/db/zero'
+import { type MemberId, toolNamePartsOf } from '@spyria/kernel'
+import { type createLlmGateway, createMemberKeyReader, createToolCallOwnerAccess } from '@spyria/profile/server'
+import type { ConnectedHost } from '@spyria/runtime/server'
+import { createBudgetGuard } from '@spyria/usage/server'
 import type { AgentBridge } from './agent-bridge/bridge.ts'
 
 export type RelayFrame = { sid?: unknown; method?: unknown; path?: unknown; headers?: unknown; body?: unknown }
@@ -45,9 +45,9 @@ const answeredHeaders = ['content-type', 'x-request-id', 'mcp-session-id']
 const headTimeoutMilliseconds = 300_000
 const readOnlyHintMilliseconds = 10_000
 const unreachable = { error: { message: 'The model gateway is unreachable', type: 'gateway_unavailable' } }
-const refusalOf = (message: string) => ({ error: { message, type: 'hq_refused' } })
+const refusalOf = (message: string) => ({ error: { message, type: 'spyria_refused' } })
 const routerPath = '/mcp/router'
-const hqServerInfoOf = (name: string) => ({ capabilities: { tools: {} }, serverInfo: { name, version: '1.0.0' } })
+const spyriaServerInfoOf = (name: string) => ({ capabilities: { tools: {} }, serverInfo: { name, version: '1.0.0' } })
 type RouterCall = {
   id?: unknown
   method?: string
@@ -153,7 +153,7 @@ export const createModelCallRelay = ({
         return reply(
           {
             protocolVersion: rpc.params?.protocolVersion ?? '2025-06-18',
-            ...hqServerInfoOf(isRouter ? 'hq-router' : 'hq-github'),
+            ...spyriaServerInfoOf(isRouter ? 'spyria-router' : 'spyria-github'),
           },
           { 'mcp-session-id': crypto.randomUUID() },
         )

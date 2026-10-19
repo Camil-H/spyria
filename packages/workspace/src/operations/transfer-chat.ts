@@ -1,4 +1,4 @@
-import { type ChatId, type MemberId, requireWorkspacePermission } from '@hq/kernel'
+import { type ChatId, type MemberId, requireWorkspacePermission } from '@spyria/kernel'
 import type { WorkspaceTransactor } from '../contracts/transactor.ts'
 import { ChatOwnerActive } from '../domain/errors.ts'
 import { isActive, requireActiveMember } from '../domain/member.ts'

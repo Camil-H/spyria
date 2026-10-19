@@ -1,4 +1,4 @@
-import type { RuntimeHostId, WorkspaceId } from '@hq/kernel'
+import type { RuntimeHostId, WorkspaceId } from '@spyria/kernel'
 
 type HostInput = { workspaceId: WorkspaceId; hostId: RuntimeHostId }
 

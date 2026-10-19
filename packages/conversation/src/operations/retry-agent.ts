@@ -1,4 +1,4 @@
-import { type ChatId, type MemberId, requireChatPermission, type WorkspaceId } from '@hq/kernel'
+import { type ChatId, type MemberId, requireChatPermission, type WorkspaceId } from '@spyria/kernel'
 import type { AgentHost, RuntimeRetrier } from '../contracts/agent.ts'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { requireNotFrozen } from '../domain/message.ts'

@@ -73,7 +73,7 @@ export const changesOf = async (root: string, base: string, env: Record<string, 
   const ref = await baseRefOf(root, base, env)
   const mergeBase = ref ? (await git(root, ['merge-base', ref, 'HEAD'], env)).trim() : ''
   if (!mergeBase) return { patch: '', log: '', truncated: false }
-  const index = join(tmpdir(), `hq-index-${crypto.randomUUID()}`)
+  const index = join(tmpdir(), `spyria-index-${crypto.randomUUID()}`)
   try {
     await copyFile(join(root, '.git', 'index'), index).catch(() => undefined)
     const indexEnvironment = { ...env, GIT_INDEX_FILE: index }
@@ -182,7 +182,7 @@ const isCommit = async (root: string, sha: string, env: Record<string, string>) 
 const fetchedBase = async (root: string, base: string, head: string, bundle: string, env: Record<string, string>) => {
   if (!bundle)
     return (await isCommit(root, head, env)) && (await gitBytes(root, ['update-ref', baseRef, head], env)).isDone
-  const file = join(tmpdir(), `hq-base-${crypto.randomUUID()}.bundle`)
+  const file = join(tmpdir(), `spyria-base-${crypto.randomUUID()}.bundle`)
   try {
     await Bun.write(file, Buffer.from(bundle, 'base64'))
     const heads = await git(root, ['bundle', 'list-heads', file], env)

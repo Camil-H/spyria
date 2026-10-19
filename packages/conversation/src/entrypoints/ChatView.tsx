@@ -1,7 +1,7 @@
-import { useQuery } from '@hq/db/react'
-import { type ChatId, chatId as toChatId, type WorkspaceId } from '@hq/kernel'
-import { useSession } from '@hq/session'
-import { buttonClass, chatTypeIconOf, ErrorMessage, focusRing, SegmentedChoice, useGuardedAction } from '@hq/ui'
+import { useQuery } from '@spyria/db/react'
+import { type ChatId, chatId as toChatId, type WorkspaceId } from '@spyria/kernel'
+import { useSession } from '@spyria/session'
+import { buttonClass, chatTypeIconOf, ErrorMessage, focusRing, SegmentedChoice, useGuardedAction } from '@spyria/ui'
 import { Folder, GitBranch } from 'lucide-react'
 import { type ReactNode, useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate, useOutletContext, useParams } from 'react-router'
@@ -38,9 +38,14 @@ export const ChatView = ({
   const workspaceId = useOutletContext<WorkspaceId>()
   const { memberId } = useSession()
   const chatId = toChatId(useParams().chatId ?? '')
-  const [hqRuntime, setHqRuntime] = useState<{ chatId: ChatId; isAvailable: boolean }>()
+  const [spyriaRuntime, setSpyriaRuntime] = useState<{ chatId: ChatId; isAvailable: boolean }>()
   const conversation = useQuery(
-    getConversation(workspaceId, chatId, memberId, hqRuntime?.chatId === chatId ? hqRuntime.isAvailable : undefined),
+    getConversation(
+      workspaceId,
+      chatId,
+      memberId,
+      spyriaRuntime?.chatId === chatId ? spyriaRuntime.isAvailable : undefined,
+    ),
   )
   const commands = useConversationCommands()
   const navigate = useNavigate()
@@ -49,8 +54,8 @@ export const ChatView = ({
   useEffect(() => {
     if (isChoosingRunsOn)
       commands.chatRouting({ workspaceId, chatId }).then(
-        ({ hqRuntimeAvailable }) => setHqRuntime({ chatId, isAvailable: hqRuntimeAvailable }),
-        () => setHqRuntime({ chatId, isAvailable: true }),
+        ({ spyriaRuntimeAvailable }) => setSpyriaRuntime({ chatId, isAvailable: spyriaRuntimeAvailable }),
+        () => setSpyriaRuntime({ chatId, isAvailable: true }),
       )
   }, [commands, workspaceId, chatId, isChoosingRunsOn])
   const live = useLiveMessages(workspaceId, chatId, conversation?.messages ?? [])

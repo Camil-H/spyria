@@ -116,9 +116,9 @@ export const startZeroCache = async ({
   for (const busyPort of [port, port + 1])
     if (typeof (await httpStatusOf(`http://localhost:${busyPort}/`)) === 'number')
       throw new Error(`zero-cache cannot start: port ${busyPort} is in use (a leftover zero-cache? free it first)`)
-  const replicaFile = join(tmpdir(), `hq-zero-${appId}.db`)
+  const replicaFile = join(tmpdir(), `spyria-zero-${appId}.db`)
   for (const suffix of ['', '-wal', '-shm', '-wal2']) rmSync(`${replicaFile}${suffix}`, { force: true })
-  const logFile = openSync(join(tmpdir(), `hq-zero-${appId}.log`), 'w')
+  const logFile = openSync(join(tmpdir(), `spyria-zero-${appId}.log`), 'w')
   const zeroCache = spawn('node', [zeroCacheCli], {
     detached: true,
     stdio: ['ignore', logFile, 'pipe'],
@@ -132,11 +132,11 @@ export const startZeroCache = async ({
       ZERO_REPLICA_FILE: replicaFile,
       ZERO_APP_ID: appId,
       ZERO_APP_PUBLICATIONS: 'hq_zero',
-      ZERO_ADMIN_PASSWORD: 'hq-test',
+      ZERO_ADMIN_PASSWORD: 'spyria-test',
       ZERO_NUM_SYNC_WORKERS: '1',
       ZERO_UPSTREAM_MAX_CONNS: '4',
       ZERO_CVR_MAX_CONNS: '4',
-      ZERO_LOG_LEVEL: process.env.HQ_ZERO_LOG_LEVEL ?? 'error',
+      ZERO_LOG_LEVEL: process.env.SPYRIA_ZERO_LOG_LEVEL ?? 'error',
       ZERO_ENABLE_TELEMETRY: 'false',
     },
   })
@@ -157,7 +157,7 @@ export const startZeroCache = async ({
 }
 
 const gatewayImage = 'maximhq/bifrost:v2.2.6@sha256:d0b4708ace1aa175766f94afa715fd9bba3a1b56c1dc2afff15a21edf3ae4e2a'
-export const testGatewayAdmin = { user: 'hq-test', password: 'hq-test-gateway-password' }
+export const testGatewayAdmin = { user: 'spyria-test', password: 'spyria-test-gateway-password' }
 const gatewayProviders = ['openai', 'anthropic', 'mistral', 'typesafe', 'openrouter', 'gemini', 'xai']
 const zaiPaths = {
   chat_completion: '/chat/completions',
@@ -215,6 +215,50 @@ type TestGateway = ReturnType<typeof testGatewayAt>
 
 const docker = (...args: string[]) => spawnSync('docker', args, { stdio: ['ignore', 'pipe', 'pipe'] })
 
+export const testDexIssuer = 'http://localhost:5557/dex'
+const testDexContainer = 'spyria-test-dex'
+const testDexConfig = new URL('../../../../apps/web/e2e/dex-test.yaml', import.meta.url).pathname
+
+const removeLegacyTestContainers = () => {
+  const legacy = docker('ps', '-aq', '--filter', 'name=^hq-test-').stdout.toString().split('\n').filter(Boolean)
+  if (legacy.length > 0) docker('rm', '-fv', ...legacy)
+}
+
+export const startTestDex = async () => {
+  removeLegacyTestContainers()
+  const configHash = createHash('sha256').update(readFileSync(testDexConfig)).digest('hex').slice(0, 16)
+  const discoveryUrl = `${testDexIssuer}/.well-known/openid-configuration`
+  const running = docker(
+    'inspect',
+    '-f',
+    '{{.State.Running}} {{index .Config.Labels "spyria.setup"}}',
+    testDexContainer,
+  )
+  if (running.stdout.toString().trim() === `true ${configHash}` && (await httpStatusOf(discoveryUrl)) === 200) return
+  docker('rm', '-f', testDexContainer)
+  const started = docker(
+    'run',
+    '-d',
+    '--name',
+    testDexContainer,
+    '--label',
+    `spyria.setup=${configHash}`,
+    '-p',
+    `127.0.0.1:${new URL(testDexIssuer).port}:5556`,
+    '-v',
+    `${testDexConfig}:/etc/dex/config.yaml:ro`,
+    'dexidp/dex:v2.43.1',
+    'dex',
+    'serve',
+    '/etc/dex/config.yaml',
+  )
+  if (started.status !== 0) throw new Error(`Starting ${testDexContainer} failed: ${started.stderr}`)
+  for (let attempt = 1; (await httpStatusOf(discoveryUrl)) !== 200; attempt++) {
+    if (attempt === 400) throw new Error(`${testDexContainer} did not start`)
+    await sleep(50)
+  }
+}
+
 export const startTestGateway = async ({
   name,
   port,
@@ -226,7 +270,8 @@ export const startTestGateway = async ({
   fakeLlmUrl: string
   oauthBase: string
 }) => {
-  const containerName = `hq-test-gateway-${name}`
+  removeLegacyTestContainers()
+  const containerName = `spyria-test-gateway-${name}`
   const databaseName = `hq_test_gateway_${name}`
   const configFile = join(tmpdir(), `${containerName}.json`)
   const gatewayConfig = JSON.parse(readFileSync(new URL('../../../../infra/bifrost.json', import.meta.url), 'utf8'))
@@ -252,7 +297,7 @@ export const startTestGateway = async ({
     const names = JSON.stringify(overrides.ok ? await overrides.json() : {})
     return Object.keys(testModelPrices).every((model) => names.includes(`"${model}"`))
   }
-  const running = docker('inspect', '-f', '{{.State.Running}} {{index .Config.Labels "hq.setup"}}', containerName)
+  const running = docker('inspect', '-f', '{{.State.Running}} {{index .Config.Labels "spyria.setup"}}', containerName)
   if (running.stdout.toString().trim() === `true ${setupHash}` && (await isReady()) && (await isSetUp())) {
     const { clients } = await gateway.call<{ clients: { config: { client_id: string } }[] | null }>('/api/mcp/clients')
     for (const { config } of clients ?? [])
@@ -287,7 +332,7 @@ export const startTestGateway = async ({
     '--name',
     containerName,
     '--label',
-    `hq.setup=${setupHash}`,
+    `spyria.setup=${setupHash}`,
     '--add-host',
     'host.docker.internal:host-gateway',
     '-p',
@@ -295,15 +340,15 @@ export const startTestGateway = async ({
     '-v',
     `${configFile}:/app/data/config.json:ro`,
     '-e',
-    'BIFROST_ENCRYPTION_KEY=hq-test-gateway-encryption-key',
+    'BIFROST_ENCRYPTION_KEY=spyria-test-gateway-encryption-key',
     '-e',
-    'BIFROST_SETUP_TOKEN=hq-test-gateway-setup-token',
+    'BIFROST_SETUP_TOKEN=spyria-test-gateway-setup-token',
     '-e',
     `BIFROST_ADMIN_USER=${testGatewayAdmin.user}`,
     '-e',
     `BIFROST_ADMIN_PASSWORD=${testGatewayAdmin.password}`,
     '-e',
-    `HQ_GATEWAY_OAUTH_BASE=${oauthBase}`,
+    `SPYRIA_GATEWAY_OAUTH_BASE=${oauthBase}`,
     gatewayImage,
   )
   if (started.status !== 0) {

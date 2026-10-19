@@ -31,7 +31,7 @@ test('a runtime that cannot be placed reads as no host, any other failure as cou
   expect(agentNotices.couldNotStart).toBe('The agent could not start')
   expect(startFailureNoticeOf('no_host')).toBe(agentNotices.noHost)
   expect(startFailureNoticeOf('no_capacity')).toBe(agentNotices.noHost)
-  expect(startFailureNoticeOf('no_image')).toBe("HQ's runtime image is not built: run bun run agent:build")
+  expect(startFailureNoticeOf('no_image')).toBe("Spyria's runtime image is not built: run bun run agent:build")
   for (const failure of ['create_failed', 'start_failed', 'lost'])
     expect(startFailureNoticeOf(failure)).toBe(agentNotices.couldNotStart)
 })
@@ -136,7 +136,7 @@ const toolCallUpdate = (seq: number, toolCallId: string, status: string, fields:
     ...fields,
   })
 
-test('Claude Code edits, reads and HQ tools get their step types, a subagent’s calls keep their ids inside its group, and its messages stay out of the chat', () => {
+test('Claude Code edits, reads and Spyria tools get their step types, a subagent’s calls keep their ids inside its group, and its messages stay out of the chat', () => {
   const subagent = { id: 'conversation-1:toolu_task', model: '', modelName: '', task: '' }
   const diff = [{ type: 'diff', path: '/workspace/project/notes.md', oldText: null, newText: 'one\ntwo\n' }]
   const write = { title: 'Write notes.md', kind: 'edit', content: diff }
@@ -182,7 +182,7 @@ test('Claude Code edits, reads and HQ tools get their step types, a subagent’s
   ])
 })
 
-test('a Codex command and an HQ tool call start in progress and finish with Codex’s output shapes', () => {
+test('a Codex command and a Spyria tool call start in progress and finish with Codex’s output shapes', () => {
   const command = { title: 'echo hello', kind: 'execute', rawInput: { command: 'echo hello' } }
   const mcp = {
     title: 'mcp.hq.fake-whoami',
@@ -281,7 +281,7 @@ test('a Skill call is titled with its skill from the final event, with its args 
   expect(JSON.stringify(skillStep?.step)).not.toContain('"skill"')
 })
 
-test('an hq-agent sequence projects text, a thought with its duration, steps merged by their final call, and a turn end', () => {
+test('a spyria-agent sequence projects text, a thought with its duration, steps merged by their final call, and a turn end', () => {
   const diff = { type: 'diff', path: '/workspace/project/app.ts', oldText: 'one', newText: 'two' }
   const edit = {
     toolCallId: 'edit-1',
@@ -327,7 +327,7 @@ test('Pi’s read, write and edit calls carry their path in rawInput.path, and a
   })
 })
 
-test('an hq-agent turn ends finished or in error, a cancelled turn end ends nothing, and a failed resume says so', () => {
+test('a spyria-agent turn ends finished or in error, a cancelled turn end ends nothing, and a failed resume says so', () => {
   const turnEnd = (stopReason: string) => agentProjectionOf(acpUpdate(9, { sessionUpdate: 'turn_end', stopReason }))
   expect(turnEnd('end_turn')).toEqual({ type: 'turn-end', outcome: 'finished' })
   expect(turnEnd('error')).toEqual({ type: 'turn-end', outcome: 'error' })
@@ -344,7 +344,7 @@ test('an hq-agent turn ends finished or in error, a cancelled turn end ends noth
   })
 })
 
-test('hq-agent chunks stream and are never stored, while completed items and tool calls are', () => {
+test('spyria-agent chunks stream and are never stored, while completed items and tool calls are', () => {
   const chunk = (sessionUpdate: string, text: string) =>
     acpUpdate(3, { sessionUpdate, content: { type: 'text', text } }, false)
   expect(streamedTextOf(chunk('agent_message_chunk', 'Hi'))).toEqual({ text: 'Hi', isReasoning: false })
@@ -402,7 +402,7 @@ test('plan mode follows the mode update, the mode or collaboration mode option, 
   expect(isStoredAgentEvent(acpUpdate(1, { sessionUpdate: 'current_mode_update' }))).toBe(true)
 })
 
-test('an hq-agent plan update becomes a plan step with its entries mapped to HQ statuses', () => {
+test('a spyria-agent plan update becomes a plan step with its entries mapped to Spyria statuses', () => {
   const entries = [
     { content: 'Write tests', status: 'completed', priority: 'high' },
     { content: 'Fix the bug', status: 'in_progress', priority: 'medium' },
@@ -421,7 +421,7 @@ test('an hq-agent plan update becomes a plan step with its entries mapped to HQ 
   })
 })
 
-test('an hq-agent tool call made while a Task call is open belongs to its subagent, whatever the Task is titled', () => {
+test('a spyria-agent tool call made while a Task call is open belongs to its subagent, whatever the Task is titled', () => {
   const task = acpUpdate(
     3,
     { sessionUpdate: 'tool_call', toolCallId: 'task-1', title: 'Explore the repo', kind: 'think', status: 'pending' },
@@ -465,7 +465,7 @@ test.each([
   ['finished', 'finished'],
   ['paused', 'finished'],
   ['error', 'error'],
-] as const)('a reopened turn that hq-agent reports %s closes as %s', (executionStatus, outcome) => {
+] as const)('a reopened turn that spyria-agent reports %s closes as %s', (executionStatus, outcome) => {
   expect(reopenedTurnOutcomeOf(executionStatus)).toBe(outcome)
 })
 
@@ -478,7 +478,7 @@ test('a failed setup script is stored and shown as a notice with its exit code a
   expect(isStoredAgentEvent(setupFailed)).toBe(true)
   expect(agentProjectionOf(setupFailed)).toEqual({
     type: 'message',
-    body: 'The setup script .hq/setup.sh failed with exit code 127; the session started anyway.\ninstalling\ntool: not found',
+    body: 'The setup script .spyria/setup.sh failed with exit code 127; the session started anyway.\ninstalling\ntool: not found',
     kind: 'notice',
   })
 })

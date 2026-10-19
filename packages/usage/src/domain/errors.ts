@@ -1,4 +1,4 @@
-import { DomainError, errorKind } from '@hq/kernel'
+import { DomainError, errorKind } from '@spyria/kernel'
 
 export class UsageError extends DomainError {}
 

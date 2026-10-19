@@ -1,8 +1,8 @@
-import type { WorkspaceId } from '@hq/kernel'
-import { ProfileView } from '@hq/profile'
-import { MyMachineSection } from '@hq/runtime'
-import { useSession } from '@hq/session'
-import { MyUsageSection } from '@hq/usage'
+import type { WorkspaceId } from '@spyria/kernel'
+import { ProfileView } from '@spyria/profile'
+import { MyMachineSection } from '@spyria/runtime'
+import { useSession } from '@spyria/session'
+import { MyUsageSection } from '@spyria/usage'
 import { useOutletContext } from 'react-router'
 
 const ProfileRoute = () => {

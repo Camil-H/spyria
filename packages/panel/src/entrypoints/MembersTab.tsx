@@ -1,6 +1,6 @@
-import { useQuery } from '@hq/db/react'
-import { type MemberId, memberId as toMemberId } from '@hq/kernel'
-import { useSession } from '@hq/session'
+import { useQuery } from '@spyria/db/react'
+import { type MemberId, memberId as toMemberId } from '@spyria/kernel'
+import { useSession } from '@spyria/session'
 import {
   buttonClass,
   ErrorMessage,
@@ -9,7 +9,7 @@ import {
   ghostButtonClass,
   labelClass,
   useGuardedAction,
-} from '@hq/ui'
+} from '@spyria/ui'
 import { type SubmitEvent, useState } from 'react'
 import { getMembers } from '../queries/get-members.ts'
 import { usePanelCommands } from './providers.tsx'

@@ -22,6 +22,6 @@ export const newDevChat = async (page: Page, name: string, repository: string, b
   await dialog.getByRole('textbox', { name: 'Chat name' }).fill(name)
   await dialog.getByRole('button', { name: 'Confirm' }).click()
   await expect(mainOf(page).getByRole('heading', { level: 1, name })).toBeVisible()
-  await chooseRunsOn(page, 'HQ runtime')
+  await chooseRunsOn(page, 'Spyria runtime')
   return page.url().split('/').at(-1) ?? ''
 }

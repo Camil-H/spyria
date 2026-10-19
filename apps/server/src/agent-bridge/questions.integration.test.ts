@@ -1,8 +1,8 @@
 import { afterEach, expect, setDefaultTimeout, test } from 'bun:test'
-import { rebuildMessages } from '@hq/conversation/server'
-import { schema } from '@hq/db/zero'
-import type { ChatId } from '@hq/kernel'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
+import { rebuildMessages } from '@spyria/conversation/server'
+import { schema } from '@spyria/db/zero'
+import type { ChatId } from '@spyria/kernel'
 import {
   acme,
   addLlmKey,
@@ -118,7 +118,7 @@ test('a machine question reaches viewers live and again after a reconnect; the o
   expect(await messagesOf(chat)).toEqual(live)
 })
 
-test('on an HQ runtime chat another member who may prompt answers, a member without a key cannot', async () => {
+test('on a Spyria runtime chat another member who may prompt answers, a member without a key cannot', async () => {
   await workspaceHost()
   await database.$client`delete from llm_credentials where user_id = ${bob}`
   const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'prompter' }] })
@@ -238,7 +238,8 @@ test('a question in a delegated sub-conversation is answered with the assumption
   stack.setFakeLlmScript({ delegateRoute: { tier: 'small', confidence: 'high', effort: 'low' } })
   const parent = await prompt(chat, 'stub:long')
   await stack.commandShown(parent)
-  const token = (relay.created[0] as { secrets: { HQ_LLM_TOKEN: { value: string } } }).secrets.HQ_LLM_TOKEN.value
+  const token = (relay.created[0] as { secrets: { SPYRIA_LLM_TOKEN: { value: string } } }).secrets.SPYRIA_LLM_TOKEN
+    .value
   const delegated = await host.modelCall({
     path: '/mcp/router',
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },

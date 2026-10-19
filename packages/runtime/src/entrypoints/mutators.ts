@@ -1,5 +1,5 @@
-import { type ChatId, type MemberId, runtimeHostId, type WorkspaceId } from '@hq/kernel'
 import { defineMutator, defineMutators, type Transaction } from '@rocicorp/zero'
+import { type ChatId, type MemberId, runtimeHostId, type WorkspaceId } from '@spyria/kernel'
 import { z } from 'zod/mini'
 import { NotCurrentWorkspace } from '../domain/errors.ts'
 import { contextPermissionsOf, createZeroTransactor } from '../integrations/zero-transactor.ts'

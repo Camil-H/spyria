@@ -1,5 +1,5 @@
-import { memberToolsIn, type Snapshot, workspaceConnectionsIn } from '@hq/db'
-import type { MemberId, WorkspaceId } from '@hq/kernel'
+import { memberToolsIn, type Snapshot, workspaceConnectionsIn } from '@spyria/db'
+import type { MemberId, WorkspaceId } from '@spyria/kernel'
 
 export const getSharedConnections = (workspaceId: WorkspaceId, memberId: MemberId) => (snapshot: Snapshot) =>
   workspaceConnectionsIn(snapshot, workspaceId).map((connection) => ({

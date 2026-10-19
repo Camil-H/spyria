@@ -200,8 +200,9 @@ const readerOnceConnected = async (docker: Docker, readerName: string) => {
       },
     )
     if (reader) return reader
-    if (Date.now() > deadline) throw new Error('hq-host did not connect to HQ: check its logs with docker logs hq-host')
-    if (attempt === 0) console.log('Waiting for hq-host to connect to HQ…')
+    if (Date.now() > deadline)
+      throw new Error('spyria-host did not connect to Spyria: check its logs with docker logs hq-host')
+    if (attempt === 0) console.log('Waiting for spyria-host to connect to Spyria…')
     await Bun.sleep(readerPollMilliseconds)
   }
 }

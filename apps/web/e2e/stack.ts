@@ -1,4 +1,5 @@
 import { setTimeout as sleep } from 'node:timers/promises'
+import { type Browser, type BrowserContext, test as base } from '@playwright/test'
 import {
   type Database,
   memberships,
@@ -9,7 +10,7 @@ import {
   users,
   workspaceRoles,
   workspaces,
-} from '@hq/db/postgres'
+} from '@spyria/db/postgres'
 import {
   createTestDatabase,
   dropDatabase,
@@ -17,10 +18,9 @@ import {
   shareTestCrm,
   startZeroCache,
   testGatewayAt,
-} from '@hq/db/testing'
-import { createZeroStore, type WorkspaceSession } from '@hq/db/zero-store'
-import { memberId, workspaceId } from '@hq/kernel'
-import { type Browser, type BrowserContext, test as base } from '@playwright/test'
+} from '@spyria/db/testing'
+import { createZeroStore, type WorkspaceSession } from '@spyria/db/zero-store'
+import { memberId, workspaceId } from '@spyria/kernel'
 import { gatewayUrl, serverUrl, templateDatabaseName, viteUrl, zeroCachePortOf } from './stack-ports.ts'
 
 export { expect } from '@playwright/test'
@@ -86,7 +86,7 @@ const signIn = async (
 ) => {
   await context.addInitScript(
     (testStack) => {
-      Object.assign(window, { hqTestStack: testStack })
+      Object.assign(window, { spyriaTestStack: testStack })
     },
     { zeroCacheURL: workerStack.zeroCacheURL },
   )

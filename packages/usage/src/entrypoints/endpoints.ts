@@ -1,5 +1,5 @@
-import type { Transact, ZeroContext } from '@hq/db/zero-queries'
-import type { MemberId, WorkspaceId } from '@hq/kernel'
+import type { Transact, ZeroContext } from '@spyria/db/zero-queries'
+import type { MemberId, WorkspaceId } from '@spyria/kernel'
 import { auditCsvHeader, auditCsvLinesOf, auditCsvPageSize, auditFilterFrom, auditPageSize } from '../domain/audit.ts'
 import { spendFilterFrom } from '../domain/spend.ts'
 import { createPostgresAuditTransactor } from '../integrations/postgres-audit-log.ts'

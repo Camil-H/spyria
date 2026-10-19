@@ -8,8 +8,8 @@ import {
   type RuntimeOriginRow,
   type Snapshot,
   workspacePermissionsIn,
-} from '@hq/db'
-import { type ChatId, can, type MemberId, type MessageId, messageId, type WorkspaceId } from '@hq/kernel'
+} from '@spyria/db'
+import { type ChatId, can, type MemberId, type MessageId, messageId, type WorkspaceId } from '@spyria/kernel'
 import { stoppedByPrefix } from '../domain/agent-events.ts'
 import type { AgentStep, StoredStep, ThoughtStep } from '../domain/agent-steps.ts'
 import { stillRunningOf } from '../domain/delegation.ts'
@@ -226,7 +226,7 @@ const turnItemsOf = (messages: readonly ConversationMessage[]): ConversationItem
 }
 
 export const getConversation =
-  (workspaceId: WorkspaceId, chatId: ChatId, viewerId: MemberId, hqRuntimeAvailable?: boolean) =>
+  (workspaceId: WorkspaceId, chatId: ChatId, viewerId: MemberId, spyriaRuntimeAvailable?: boolean) =>
   (snapshot: Snapshot): Conversation | null => {
     const chat = findChat(snapshot, workspaceId, chatId)
     if (!chat) return null
@@ -248,7 +248,7 @@ export const getConversation =
       ? snapshot.runtimeHosts.some(
           (host) => host.workspaceId === workspaceId && host.ownerId === null && host.status === 'online',
         )
-      : hqRuntimeAvailable
+      : spyriaRuntimeAvailable
     const hasMachineSession = snapshot.runtimes.some((runtime) => runtime.chatId === chatId && runtime.hostOnline)
     const runsOnChoices =
       isOwner &&

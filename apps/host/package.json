@@ -1,9 +1,9 @@
 {
-  "name": "@hq/host",
+  "name": "@spyria/host",
   "private": true,
   "type": "module",
   "scripts": {
     "typecheck": "tsc -p .",
-    "build": "bun build --compile --minify src/main.ts --outfile dist/hq-host"
+    "build": "bun build --compile --minify src/main.ts --outfile dist/spyria-host"
   }
 }

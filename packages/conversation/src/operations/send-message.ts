@@ -1,4 +1,4 @@
-import { type ChatId, type MemberId, type MessageId, messageId, requireChatPermission } from '@hq/kernel'
+import { type ChatId, type MemberId, type MessageId, messageId, requireChatPermission } from '@spyria/kernel'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { NoLlmKey, RunsOnNotChosen } from '../domain/errors.ts'
 import { newMessage, requireNotFrozen, threadRootOf } from '../domain/message.ts'

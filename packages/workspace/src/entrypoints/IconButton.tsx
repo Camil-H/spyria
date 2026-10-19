@@ -1,5 +1,5 @@
-import { iconButtonClass, tooltipClass } from '@hq/ui'
 import { Content, Portal, Root, Trigger } from '@radix-ui/react-tooltip'
+import { iconButtonClass, tooltipClass } from '@spyria/ui'
 import type { LucideIcon } from 'lucide-react'
 
 export const IconButton = ({

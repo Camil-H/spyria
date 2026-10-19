@@ -215,9 +215,9 @@ test.describe('Steps', () => {
         '',
         'See [the pricing](https://docs.example.com/pricing).',
         '',
-        '<script>window.hqInjected = true</script>',
+        '<script>window.spyriaInjected = true</script>',
         '',
-        'Inline <img src="x" onerror="window.hqInjected = true"> tag.',
+        'Inline <img src="x" onerror="window.spyriaInjected = true"> tag.',
         '',
         '![Chart](https://images.example.com/chart.png)',
       ].join('\n')
@@ -238,9 +238,11 @@ test.describe('Steps', () => {
       await expect(link).toContainText('docs.example.com')
       await expect(link).toHaveAttribute('rel', 'noopener noreferrer')
       await expect(link).toHaveAttribute('target', '_blank')
-      await expect(reply).toContainText('<script>window.hqInjected = true</script>')
-      await expect(reply).toContainText('<img src="x" onerror="window.hqInjected = true">')
-      expect(await page.evaluate(() => (window as Window & { hqInjected?: boolean }).hqInjected)).toBeUndefined()
+      await expect(reply).toContainText('<script>window.spyriaInjected = true</script>')
+      await expect(reply).toContainText('<img src="x" onerror="window.spyriaInjected = true">')
+      expect(
+        await page.evaluate(() => (window as Window & { spyriaInjected?: boolean }).spyriaInjected),
+      ).toBeUndefined()
       await expect(reply.locator('img')).toHaveCount(0)
       await expect(workingIndicatorOf(page)).toHaveCount(0)
       await reply.getByRole('button', { name: 'Load image from images.example.com' }).click()
@@ -282,7 +284,7 @@ test.describe('Steps', () => {
     await expect(command.getByRole('img', { name: 'Succeeded' })).toBeVisible()
     await expect(messageContaining(bobPage, 'Answered on Sonnet 5.5.')).toHaveCount(1)
     await expect(workingIndicatorOf(bobPage)).toHaveCount(0)
-    await expect(chipOf(bobPage, 'hq')).toHaveText('Sonnet 5.5 (medium)')
+    await expect(chipOf(bobPage, 'spyria')).toHaveText('Sonnet 5.5 (medium)')
     await command.getByRole('button', { name: commandText }).click()
     await expect(command).toContainText('one')
     await expect(command).toContainText('two')

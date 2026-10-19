@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test'
 import { createRelay } from './relay.ts'
 import { nextFrameOf, waitFor } from './testing.ts'
 
-const hqAgent = Bun.serve({
+const spyriaAgent = Bun.serve({
   port: 0,
   fetch: (request, server) =>
     server.upgrade(request)
@@ -16,14 +16,14 @@ const hqAgent = Bun.serve({
     },
   },
 })
-afterAll(() => hqAgent.stop(true))
+afterAll(() => spyriaAgent.stop(true))
 
 const relayCollecting = () => {
   const sent: Record<string, unknown>[] = []
   const relay = createRelay({
     addressOf: async (runtimeId) => {
       if (runtimeId !== 'runtime-1') throw new Error('refused: not a managed runtime')
-      return `http://localhost:${hqAgent.port}`
+      return `http://localhost:${spyriaAgent.port}`
     },
     send: (frame) => sent.push(frame),
     maximumQueuedMessages: 2,

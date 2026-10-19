@@ -1,4 +1,4 @@
-import type { ChatId, MemberId } from '@hq/kernel'
+import type { ChatId, MemberId } from '@spyria/kernel'
 
 export type UsageMonth = string
 export type UsageTotals = { tokens: number; costMicros: number; calls: number }

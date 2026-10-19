@@ -1,5 +1,5 @@
-import { useQuery } from '@hq/db/react'
-import { focusRing, Spinner } from '@hq/ui'
+import { useQuery } from '@spyria/db/react'
+import { focusRing, Spinner } from '@spyria/ui'
 import { useState } from 'react'
 import { getDevWorkspace } from '../queries/get-dev-workspace.ts'
 import { usePanelCommands } from './providers.tsx'

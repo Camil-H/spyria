@@ -1,5 +1,5 @@
-import type { MemberId, WorkspaceId } from '@hq/kernel'
-import { formatCost, LabelledSection } from '@hq/ui'
+import type { MemberId, WorkspaceId } from '@spyria/kernel'
+import { formatCost, LabelledSection } from '@spyria/ui'
 import { useEffect, useState } from 'react'
 import type { BudgetProgress } from '../domain/budgets.ts'
 import { BudgetBar, BudgetNotice, useOwnBudgetAlert } from './BudgetNotice.tsx'

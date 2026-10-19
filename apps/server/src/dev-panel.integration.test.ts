@@ -1,7 +1,7 @@
 import { afterAll, expect, setDefaultTimeout, test } from 'bun:test'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { type ChatId, chatId } from '@hq/kernel'
+import { type ChatId, chatId } from '@spyria/kernel'
 import { createSecretBox } from './auth/secret-box.ts'
 import { createGitHubApi } from './github/github-api.ts'
 import { fakeGitHubAppId, fakeGitHubClientId, fakeGitHubClientSecret, startFakeGitHub } from './testing/fake-github.ts'
@@ -71,7 +71,7 @@ const workspaceOf = async (id: ChatId) => {
 const snapshotOf = async (id: ChatId) =>
   (await database.$client`select workspace_snapshot from runtimes where chat_id = ${id}`)[0]?.workspace_snapshot
 
-test('a dev chat reads its tree, files, changes against base and commits through hq-agent, for readers only, with caps', async () => {
+test('a dev chat reads its tree, files, changes against base and commits through spyria-agent, for readers only, with caps', async () => {
   await stack.agentHost('panel host')
   const id = await newDevChat('acme/app')
   await promptAndWait(id, 'stub:ls')
@@ -168,12 +168,12 @@ test('an asleep runtime serves the snapshot of the last turn end, a read never w
   })
 })
 
-test('a slow .hq/setup.sh no longer holds the launch past the relay limit: the session answers, the setup streams as a command step and its failure stays a notice', async () => {
+test('a slow .spyria/setup.sh no longer holds the launch past the relay limit: the session answers, the setup streams as a command step and its failure stays a notice', async () => {
   await stack.agentHost('slow setup host', { relayLimitMilliseconds: 2000 })
   const id = await newDevChat('acme/docs')
   const { frames } = await stack.openStream(id)
   const replies = await promptAndWait(id, 'stub:ls')
-  expect(replies.map(({ body }) => body).join('')).toContain('files:.git,.hq,README.md')
+  expect(replies.map(({ body }) => body).join('')).toContain('files:.git,.spyria,README.md')
   await waitFor(
     async () => (await database.$client`select 1 from messages where chat_id = ${id} and kind = 'notice'`).length > 0,
     15_000,
@@ -183,13 +183,13 @@ test('a slow .hq/setup.sh no longer holds the launch past the relay limit: the s
     select step from messages where chat_id = ${id} and step->>'type' = 'command'`
   )[0]?.step
   expect(setupStep).toMatchObject({
-    command: 'sh .hq/setup.sh',
+    command: 'sh .spyria/setup.sh',
     exitCode: 127,
     output: 'installing the docs toolchain\ndocs-tool: command not found\n',
   })
   const liveOutputs = frames.map((frame) => JSON.parse(frame).commandOutput).filter(Boolean)
   expect(liveOutputs[0]).toEqual({
-    stepId: expect.stringMatching(/:hq-setup$/),
+    stepId: expect.stringMatching(/:spyria-setup$/),
     output: 'installing the docs toolchain\n',
   })
   expect(
@@ -197,6 +197,6 @@ test('a slow .hq/setup.sh no longer holds the launch past the relay limit: the s
       ({ body }) => body,
     ),
   ).toEqual([
-    'The setup script .hq/setup.sh failed with exit code 127; the session started anyway.\ninstalling the docs toolchain\ndocs-tool: command not found',
+    'The setup script .spyria/setup.sh failed with exit code 127; the session started anyway.\ninstalling the docs toolchain\ndocs-tool: command not found',
   ])
 })

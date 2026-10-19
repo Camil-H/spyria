@@ -1,4 +1,4 @@
-import { DomainError } from '@hq/kernel'
+import { DomainError } from '@spyria/kernel'
 import { useState } from 'react'
 
 export const useGuardedAction = () => {

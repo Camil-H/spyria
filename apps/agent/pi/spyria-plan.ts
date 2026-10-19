@@ -10,9 +10,9 @@ export default (pi: ExtensionAPI) => {
   let isPlanning = false
   const setPlanning = (ui: ExtensionUIContext, value: boolean) => {
     isPlanning = value
-    ui.setStatus('hq-plan', value ? 'plan' : 'default')
+    ui.setStatus('spyria-plan', value ? 'plan' : 'default')
   }
-  pi.registerCommand('hq-plan', {
+  pi.registerCommand('spyria-plan', {
     description: 'Plan mode: on or off',
     handler: async (mode, context) => setPlanning(context.ui, mode.trim() === 'on'),
   })
@@ -65,7 +65,7 @@ export default (pi: ExtensionAPI) => {
     isPlanning
       ? {
           message: {
-            customType: 'hq-plan',
+            customType: 'spyria-plan',
             content: 'Plan mode: read only. When ready, call propose_plan.',
             display: false,
           },

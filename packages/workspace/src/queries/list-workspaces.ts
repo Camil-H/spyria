@@ -1,5 +1,5 @@
-import type { Snapshot } from '@hq/db'
-import type { MemberId, WorkspaceId } from '@hq/kernel'
+import type { Snapshot } from '@spyria/db'
+import type { MemberId, WorkspaceId } from '@spyria/kernel'
 
 export const listWorkspaces = (memberId: MemberId) => (snapshot: Snapshot) => {
   const workspaceIds = new Set<WorkspaceId>()

@@ -1,3 +1,4 @@
+import type { Transaction } from '@rocicorp/zero'
 import {
   appendWorkspaceEvent,
   deleteGitHubConnection,
@@ -9,7 +10,7 @@ import {
   setVirtualKeyId,
   virtualKeyIdOf,
   virtualKeyIdsIn,
-} from '@hq/db/server-writes'
+} from '@spyria/db/server-writes'
 import {
   isActiveMember,
   skippingRefusedRebase,
@@ -17,9 +18,8 @@ import {
   workspacePermissionsOf,
   type ZeroContext,
   zql,
-} from '@hq/db/zero-queries'
-import { type MemberId, memberId as toMemberId, type WorkspaceId } from '@hq/kernel'
-import type { Transaction } from '@rocicorp/zero'
+} from '@spyria/db/zero-queries'
+import { type MemberId, memberId as toMemberId, type WorkspaceId } from '@spyria/kernel'
 import type { ProfileTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import { DisplayName } from '../domain/display-name.ts'
 import { ConnectionNotFound, CredentialNotFound, MemberNotFound, NotOwnProfile } from '../domain/errors.ts'

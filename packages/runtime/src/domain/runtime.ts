@@ -1,4 +1,4 @@
-import type { ChatId, RuntimeHostId, RuntimeId, WorkspaceId } from '@hq/kernel'
+import type { ChatId, RuntimeHostId, RuntimeId, WorkspaceId } from '@spyria/kernel'
 import { TransitionRefused } from './errors.ts'
 
 export type RuntimeState =

@@ -1,5 +1,5 @@
 {
-  "name": "@hq/db",
+  "name": "@spyria/db",
   "private": true,
   "type": "module",
   "exports": {
@@ -22,7 +22,7 @@
     "generate-zero": "drizzle-zero generate --force --skip-builder -c drizzle-zero.config.ts -o src/zero.ts && biome format --write src/zero.ts"
   },
   "dependencies": {
-    "@hq/kernel": "workspace:*",
+    "@spyria/kernel": "workspace:*",
     "@rocicorp/zero": "1.9.0",
     "drizzle-orm": "1.0.0-rc.4",
     "postgres": "3.4.9"

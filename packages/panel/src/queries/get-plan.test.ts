@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
-import { acme, type MessageRow } from '@hq/db'
-import { chatId, messageId } from '@hq/kernel'
+import { acme, type MessageRow } from '@spyria/db'
+import { chatId, messageId } from '@spyria/kernel'
 import { approvedPlanOf } from './get-plan.ts'
 
 const stepAt = (seq: number, step: MessageRow['step']): MessageRow => ({

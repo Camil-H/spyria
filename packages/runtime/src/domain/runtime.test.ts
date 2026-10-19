@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { runtimeHostId } from '@hq/kernel'
+import { runtimeHostId } from '@spyria/kernel'
 import {
   canTransition,
   ensureStepOf,

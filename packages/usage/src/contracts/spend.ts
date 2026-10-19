@@ -1,4 +1,4 @@
-import type { MemberId, Transactor, WorkspacePermission } from '@hq/kernel'
+import type { MemberId, Transactor, WorkspacePermission } from '@spyria/kernel'
 import type { MergedPull, SpendCall, SpendCounts, SpendFilter, SpendGranularity, SpendRange } from '../domain/spend.ts'
 
 export type SpendLedger = {

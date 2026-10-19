@@ -13,7 +13,7 @@ import type { AgentEvent } from '../domain/agent-events.ts'
 import { delegateTimeoutSeconds } from '../domain/delegation.ts'
 import { githubToolsPath } from '../domain/pull-requests.ts'
 import { type HarnessLaunch, piModelOf } from '../domain/session-routing.ts'
-import { hqToolTimeoutSeconds } from '../domain/tool-calls.ts'
+import { spyriaToolTimeoutSeconds } from '../domain/tool-calls.ts'
 
 export type AgentLlm = { model: string }
 
@@ -53,11 +53,11 @@ const call = async (
 ) => {
   const response = await send(endpoint, method, path, body, timeoutMilliseconds)
   if (response.status === notFoundStatus && method === 'GET') return undefined
-  if (response.status >= 300) throw new Error(`hq-agent answered ${method} ${path} with ${response.status}`)
+  if (response.status >= 300) throw new Error(`spyria-agent answered ${method} ${path} with ${response.status}`)
   return JSON.parse(response.body || '{}') as Record<string, unknown>
 }
 
-const hqAgentEventOf = (data: string): AgentEvent | undefined => {
+const spyriaAgentEventOf = (data: string): AgentEvent | undefined => {
   try {
     const { id, seq, timestamp, completed, update } = JSON.parse(data)
     return typeof id === 'string' && typeof timestamp === 'string' && typeof update === 'object'
@@ -100,10 +100,10 @@ ${backgroundFeaturesOff}`
 
 const codexSubscriptionCommand = [
   'env',
-  `HQ_CODEX_CONFIG=${subscriptionConfig}`,
+  `SPYRIA_CODEX_CONFIG=${subscriptionConfig}`,
   'sh',
   '-c',
-  'set -e; printf %s "$HQ_CODEX_CONFIG" > "$HOME/.codex/config.toml.$$"; mv "$HOME/.codex/config.toml.$$" "$HOME/.codex/config.toml"; exec codex-acp',
+  'set -e; printf %s "$SPYRIA_CODEX_CONFIG" > "$HOME/.codex/config.toml.$$"; mv "$HOME/.codex/config.toml.$$" "$HOME/.codex/config.toml"; exec codex-acp',
 ]
 
 const harnessLaunches: Record<HarnessLaunch, string[]> = {
@@ -135,12 +135,12 @@ const piSettings = {
   quietStartup: true,
   enableInstallTelemetry: false,
   retry: { enabled: false },
-  extensions: ['/usr/local/lib/hq/pi/hq-compaction.ts', '/usr/local/lib/hq/pi/hq-plan.ts'],
+  extensions: ['/usr/local/lib/spyria/pi/spyria-compaction.ts', '/usr/local/lib/spyria/pi/spyria-plan.ts'],
 }
 const piProviderOf = (baseUrl: string, api: string, models: readonly PiModel[]) => ({
   baseUrl,
   api,
-  apiKey: `\${HQ_LLM_TOKEN}`,
+  apiKey: `\${SPYRIA_LLM_TOKEN}`,
   models: models.map(({ id, name, reasoning, contextWindow }) => ({
     id,
     name,
@@ -151,16 +151,16 @@ const piProviderOf = (baseUrl: string, api: string, models: readonly PiModel[]) 
 })
 const piMcpServerOf = (gatewayUrl: string, path: string) => ({
   url: gatewayUrl.replace(/\/v1$/, path),
-  headers: { Authorization: `Bearer \${HQ_MCP_TOKEN}` },
+  headers: { Authorization: `Bearer \${SPYRIA_MCP_TOKEN}` },
   exposure: 'direct',
 })
 const piLauncherOf = (directory: string) => `set -e
 export PI_CODING_AGENT_DIR="$HOME/.pi/${directory}"
 mkdir -p "$PI_CODING_AGENT_DIR"
 write() { printf %s "$2" > "$PI_CODING_AGENT_DIR/$1.tmp"; mv "$PI_CODING_AGENT_DIR/$1.tmp" "$PI_CODING_AGENT_DIR/$1"; }
-write models.json "$HQ_PI_MODELS"
-write settings.json "$HQ_PI_SETTINGS"
-write mcp.json "$HQ_PI_MCP"
+write models.json "$SPYRIA_PI_MODELS"
+write settings.json "$SPYRIA_PI_SETTINGS"
+write mcp.json "$SPYRIA_PI_MCP"
 exec pi --mode rpc --no-themes`
 
 export const piCommandOf = (
@@ -177,7 +177,7 @@ export const piCommandOf = (
     }),
   }
   const mcpServers = {
-    hq: { ...piMcpServerOf(gatewayUrl, '/mcp'), timeout: hqToolTimeoutSeconds },
+    hq: { ...piMcpServerOf(gatewayUrl, '/mcp'), timeout: spyriaToolTimeoutSeconds },
     ...(!sub && { router: { ...piMcpServerOf(gatewayUrl, '/mcp/router'), timeout: delegateTimeoutSeconds } }),
     ...(!sub &&
       hasRepository && {
@@ -189,10 +189,10 @@ export const piCommandOf = (
     'PI_OFFLINE=1',
     'PI_SKIP_VERSION_CHECK=1',
     'PI_TELEMETRY=0',
-    `HQ_COMPACTION_MODEL=${piModelOf(compactionModel)}`,
-    `HQ_PI_MODELS=${JSON.stringify({ providers })}`,
-    `HQ_PI_SETTINGS=${JSON.stringify({ ...piSettings, ...(compaction && { compaction }) })}`,
-    `HQ_PI_MCP=${JSON.stringify({ mcpServers })}`,
+    `SPYRIA_COMPACTION_MODEL=${piModelOf(compactionModel)}`,
+    `SPYRIA_PI_MODELS=${JSON.stringify({ providers })}`,
+    `SPYRIA_PI_SETTINGS=${JSON.stringify({ ...piSettings, ...(compaction && { compaction }) })}`,
+    `SPYRIA_PI_MCP=${JSON.stringify({ mcpServers })}`,
     'sh',
     '-c',
     piLauncherOf(sub ? 'sub' : 'agent'),
@@ -215,12 +215,12 @@ const piConversationOf = (
     ...(adapterModel && effort && { acp_thought_level: effort }),
   },
   secrets: {
-    HQ_LLM_TOKEN: { kind: 'StaticSecret', value: llmToken },
-    HQ_MCP_TOKEN: { kind: 'StaticSecret', value: llmToken },
+    SPYRIA_LLM_TOKEN: { kind: 'StaticSecret', value: llmToken },
+    SPYRIA_MCP_TOKEN: { kind: 'StaticSecret', value: llmToken },
   },
 })
 
-export const createHqAgentClient = (): AgentClient => ({
+export const createSpyriaAgentClient = (): AgentClient => ({
   createConversation: async (conversation, llmToken, llm, sub, checkout) => {
     const created = await call(
       conversation,
@@ -289,13 +289,13 @@ export const createHqAgentClient = (): AgentClient => ({
     )
     const { bundle, error } = JSON.parse(response.body || '{}') as { bundle?: string; error?: string }
     if (response.status === 200 && typeof bundle === 'string') return { bundle }
-    return { failure: error ?? `hq-agent answered the bundle request with ${response.status}` }
+    return { failure: error ?? `spyria-agent answered the bundle request with ${response.status}` }
   },
   actOnWorkspace: async (endpoint, action, body) => {
     const response = await send(endpoint, 'POST', `/api/workspace/${action}`, body, bundleTimeoutMilliseconds)
     const { error, ...answer } = JSON.parse(response.body || '{}') as { error?: string }
     if (response.status === 200) return answer
-    return { failure: error ?? `hq-agent answered the ${action} request with ${response.status}` }
+    return { failure: error ?? `spyria-agent answered the ${action} request with ${response.status}` }
   },
   openEvents: (conversation: AgentConversation, last, listener) => {
     const { conversationId } = conversation
@@ -303,7 +303,7 @@ export const createHqAgentClient = (): AgentClient => ({
     const socket = conversation.transport.openSocket(`/sockets/events/${conversationId}?after=${after}`, {
       onOpen: () => socket.send(JSON.stringify({ type: 'auth', session_api_key: conversation.apiKey })),
       onMessage: (data) => {
-        const event = hqAgentEventOf(data)
+        const event = spyriaAgentEventOf(data)
         if (event) listener.onEvent(event)
       },
       onClose: listener.onClose,

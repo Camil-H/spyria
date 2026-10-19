@@ -1,4 +1,4 @@
-import { DomainError, errorKind } from '@hq/kernel'
+import { DomainError, errorKind } from '@spyria/kernel'
 
 class WorkspaceError extends DomainError {}
 
@@ -87,7 +87,7 @@ export const SsoDiscoveryFailed = errorKind(
 export const MailNotConfigured = errorKind(
   'mail_not_configured',
   () =>
-    'Email is not configured on this server (HQ_SMTP_URL): the operator can verify the domain with sso:verify-domain',
+    'Email is not configured on this server (SPYRIA_SMTP_URL): the operator can verify the domain with sso:verify-domain',
   WorkspaceError,
 )
 export const MailNotSent = errorKind(

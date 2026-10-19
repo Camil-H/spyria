@@ -1,4 +1,4 @@
-import type { RuntimeId, WorkspaceId } from '@hq/kernel'
+import type { RuntimeId, WorkspaceId } from '@spyria/kernel'
 import type { SandboxProvider } from '../contracts/sandbox-provider.ts'
 import type { RuntimeTransactor } from '../contracts/transactor.ts'
 import { locationOf, transitioned } from '../domain/runtime.ts'

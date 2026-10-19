@@ -1,5 +1,5 @@
-import { bob, type ChatRow, type Snapshot } from '@hq/db'
-import { chatId, type MemberId, memberId, projectId, workspaceId } from '@hq/kernel'
+import { bob, type ChatRow, type Snapshot } from '@spyria/db'
+import { chatId, type MemberId, memberId, projectId, workspaceId } from '@spyria/kernel'
 import type { Chat } from './chat.ts'
 import { Name } from './name.ts'
 import type { Project } from './project.ts'

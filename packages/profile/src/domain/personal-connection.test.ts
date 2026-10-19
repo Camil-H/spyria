@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { memberId, workspaceId } from '@hq/kernel'
+import { memberId, workspaceId } from '@spyria/kernel'
 import { ToolNotInCatalog } from './errors.ts'
 import { connectedTool, connectionStatusOf } from './personal-connection.ts'
 

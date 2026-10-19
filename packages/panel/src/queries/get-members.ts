@@ -1,5 +1,5 @@
-import { chatParticipantsIn, chatPermissionsIn, findChat, memberNamesIn, type Snapshot } from '@hq/db'
-import { type ChatId, can, canGrant, isRoleAllowedIn, type MemberId, type WorkspaceId } from '@hq/kernel'
+import { chatParticipantsIn, chatPermissionsIn, findChat, memberNamesIn, type Snapshot } from '@spyria/db'
+import { type ChatId, can, canGrant, isRoleAllowedIn, type MemberId, type WorkspaceId } from '@spyria/kernel'
 
 export const getMembers = (workspaceId: WorkspaceId, chatId: ChatId, viewerId: MemberId) => (snapshot: Snapshot) => {
   const chat = findChat(snapshot, workspaceId, chatId)

@@ -1,5 +1,5 @@
-import { chatId, type WorkspaceId } from '@hq/kernel'
-import { DiffView, focusRing } from '@hq/ui'
+import { chatId, type WorkspaceId } from '@spyria/kernel'
+import { DiffView, focusRing } from '@spyria/ui'
 import { Check, LoaderCircle, X } from 'lucide-react'
 import { lazy, Suspense, use, useState } from 'react'
 import { Link, useOutletContext, useParams } from 'react-router'

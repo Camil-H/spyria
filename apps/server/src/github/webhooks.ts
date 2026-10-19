@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
-import type { PullRequestStep, ReviewComment } from '@hq/conversation/server'
+import type { PullRequestStep, ReviewComment } from '@spyria/conversation/server'
 
 export type GitHubPullRequest = {
   number: number

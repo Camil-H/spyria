@@ -1,5 +1,5 @@
-import type { Snapshot } from '@hq/db'
-import type { MemberId, WorkspaceId } from '@hq/kernel'
+import type { Snapshot } from '@spyria/db'
+import type { MemberId, WorkspaceId } from '@spyria/kernel'
 
 export type WorkspaceMember = Readonly<{
   id: MemberId

@@ -1,4 +1,4 @@
-import { focusRing } from '@hq/ui'
+import { focusRing } from '@spyria/ui'
 import { ChevronRight } from 'lucide-react'
 import { type Ref, useState } from 'react'
 import type { Conversation, ConversationItem } from '../queries/get-conversation.ts'

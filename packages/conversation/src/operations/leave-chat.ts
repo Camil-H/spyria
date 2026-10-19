@@ -1,4 +1,4 @@
-import type { ChatId, MemberId } from '@hq/kernel'
+import type { ChatId, MemberId } from '@spyria/kernel'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { requireNonOwner, requireParticipant } from '../domain/participant.ts'
 

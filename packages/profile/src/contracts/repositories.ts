@@ -1,4 +1,4 @@
-import type { CredentialId, MemberId, WorkspaceId, WorkspacePermission } from '@hq/kernel'
+import type { CredentialId, MemberId, WorkspaceId, WorkspacePermission } from '@spyria/kernel'
 import type { GatewayKey, LlmCredential } from '../domain/llm-credential.ts'
 import type { Member } from '../domain/member.ts'
 import type { PersonalConnection } from '../domain/personal-connection.ts'

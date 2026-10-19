@@ -1,4 +1,4 @@
-import { CopyButton, focusRing } from '@hq/ui'
+import { CopyButton, focusRing } from '@spyria/ui'
 import { Children, type ReactElement, type ReactNode, useEffect, useState } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'

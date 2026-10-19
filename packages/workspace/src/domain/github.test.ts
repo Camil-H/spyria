@@ -10,7 +10,7 @@ import {
 
 test('GitHub settings need a numeric App id and a client id; only entered secrets are kept', () => {
   expect(githubSettingsFrom({ appId: ' 4242 ', clientId: ' Iv1.abc ' })).toEqual({ appId: '4242', clientId: 'Iv1.abc' })
-  expect(() => githubSettingsFrom({ appId: 'hq-app', clientId: 'Iv1.abc' })).toThrow(InvalidGitHubSettings)
+  expect(() => githubSettingsFrom({ appId: 'spyria-app', clientId: 'Iv1.abc' })).toThrow(InvalidGitHubSettings)
   expect(() => githubSettingsFrom({ appId: '4242', clientId: ' ' })).toThrow(InvalidGitHubSettings)
   expect(
     enteredSecretsOf({ appId: '1', clientId: 'c', clientSecret: ' s ', privateKey: '', webhookSecret: '  ' }),
@@ -28,9 +28,9 @@ test('a dev chat needs a granted repository and an existing base branch', () => 
   expect(() => existingBranchOf('acme/app', ['main'], 'gone')).toThrow(new BranchNotFound('acme/app', 'gone'))
 })
 
-test('the working branch is hq/<chat slug>-<short id>', () => {
-  expect(workingBranchOf('Fix the invoice totals!', '1a2b3c4d-5e6f')).toBe('hq/fix-the-invoice-totals-1a2b3c')
-  expect(workingBranchOf('Été café', 'abcdef12')).toBe('hq/ete-cafe-abcdef')
-  expect(workingBranchOf('***', 'abcdef12')).toBe('hq/chat-abcdef')
-  expect(workingBranchOf('a'.repeat(60), 'abcdef12')).toBe(`hq/${'a'.repeat(40)}-abcdef`)
+test('the working branch is spyria/<chat slug>-<short id>', () => {
+  expect(workingBranchOf('Fix the invoice totals!', '1a2b3c4d-5e6f')).toBe('spyria/fix-the-invoice-totals-1a2b3c')
+  expect(workingBranchOf('Été café', 'abcdef12')).toBe('spyria/ete-cafe-abcdef')
+  expect(workingBranchOf('***', 'abcdef12')).toBe('spyria/chat-abcdef')
+  expect(workingBranchOf('a'.repeat(60), 'abcdef12')).toBe(`spyria/${'a'.repeat(40)}-abcdef`)
 })

@@ -6,7 +6,7 @@ import type {
   ProjectId,
   WorkspacePermission,
   WorkspaceRole,
-} from '@hq/kernel'
+} from '@spyria/kernel'
 import type { Chat, ChatChange } from '../domain/chat.ts'
 import type { GitHubRepository } from '../domain/github.ts'
 import type { Invitation } from '../domain/invitation.ts'

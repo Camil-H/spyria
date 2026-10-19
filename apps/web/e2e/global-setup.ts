@@ -1,26 +1,25 @@
-import { execFile, execSync, spawn, spawnSync } from 'node:child_process'
-import { createHash } from 'node:crypto'
-import { openSync, readFileSync } from 'node:fs'
+import { execFile, execSync, spawn } from 'node:child_process'
+import { openSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { promisify } from 'node:util'
-import { createDatabase } from '@hq/db/postgres'
+import { createDatabase } from '@spyria/db/postgres'
 import {
   buildTemplateDatabase,
   databaseUrlOf,
   dropDatabase,
   httpStatusOf,
+  startTestDex,
   startTestGateway,
   testGatewayAdmin,
-} from '@hq/db/testing'
+} from '@spyria/db/testing'
 import {
   fakeMcpUrl,
   gatewayPort,
   gatewayUrl,
   maximumWorkerCount,
   serverUrl,
-  ssoProviderIssuer,
   ssoServerUrl,
   ssoViteUrl,
   templateDatabaseName,
@@ -68,7 +67,7 @@ const removeWorkerHosts = () => {
 
 const startDetached = async (command: string[], cwd: string, env: Record<string, string>, readyUrl: string) => {
   const [executable = '', ...args] = command
-  const logFile = openSync(join(tmpdir(), `hq-e2e-${new URL(readyUrl).port}.log`), 'w')
+  const logFile = openSync(join(tmpdir(), `spyria-e2e-${new URL(readyUrl).port}.log`), 'w')
   const child = spawn(executable, args, {
     cwd,
     env: { ...process.env, ...env },
@@ -80,39 +79,6 @@ const startDetached = async (command: string[], cwd: string, env: Record<string,
     await sleep(50)
   }
   return () => process.kill(-(child.pid ?? 0), 'SIGTERM')
-}
-
-const testDexContainer = 'hq-test-dex-e2e'
-const testDexConfig = new URL('./dex-test.yaml', import.meta.url).pathname
-const docker = (...args: string[]) => spawnSync('docker', args, { stdio: ['ignore', 'pipe', 'pipe'] })
-
-const startTestDex = async () => {
-  const configHash = createHash('sha256').update(readFileSync(testDexConfig)).digest('hex').slice(0, 16)
-  const discoveryUrl = `${ssoProviderIssuer}/.well-known/openid-configuration`
-  const running = docker('inspect', '-f', '{{.State.Running}} {{index .Config.Labels "hq.setup"}}', testDexContainer)
-  if (running.stdout.toString().trim() === `true ${configHash}` && (await httpStatusOf(discoveryUrl)) === 200) return
-  docker('rm', '-f', testDexContainer)
-  const started = docker(
-    'run',
-    '-d',
-    '--name',
-    testDexContainer,
-    '--label',
-    `hq.setup=${configHash}`,
-    '-p',
-    `127.0.0.1:${new URL(ssoProviderIssuer).port}:5556`,
-    '-v',
-    `${testDexConfig}:/etc/dex/config.yaml:ro`,
-    'dexidp/dex:v2.43.1',
-    'dex',
-    'serve',
-    '/etc/dex/config.yaml',
-  )
-  if (started.status !== 0) throw new Error(`Starting ${testDexContainer} failed: ${started.stderr}`)
-  for (let attempt = 1; (await httpStatusOf(discoveryUrl)) !== 200; attempt++) {
-    if (attempt === 400) throw new Error(`${testDexContainer} did not start`)
-    await sleep(50)
-  }
 }
 
 export default async function globalSetup() {
@@ -135,11 +101,11 @@ export default async function globalSetup() {
       `${repositoryRoot}apps/server`,
       {
         PORT: new URL(serverUrl).port,
-        HQ_APP_ORIGIN: viteUrl,
-        HQ_GATEWAY_URL: gatewayUrl,
-        HQ_GATEWAY_ADMIN_USER: testGatewayAdmin.user,
-        HQ_GATEWAY_ADMIN_PASSWORD: testGatewayAdmin.password,
-        HQ_FAKE_MCP_PORT: new URL(fakeMcpUrl).port,
+        SPYRIA_APP_ORIGIN: viteUrl,
+        SPYRIA_GATEWAY_URL: gatewayUrl,
+        SPYRIA_GATEWAY_ADMIN_USER: testGatewayAdmin.user,
+        SPYRIA_GATEWAY_ADMIN_PASSWORD: testGatewayAdmin.password,
+        SPYRIA_FAKE_MCP_PORT: new URL(fakeMcpUrl).port,
       },
       `${serverUrl}/health`,
     ),
@@ -147,7 +113,7 @@ export default async function globalSetup() {
       startDetached(
         ['bunx', 'vite', 'preview', ...e2eBuild, '--port', new URL(viteUrl).port],
         `${repositoryRoot}apps/web`,
-        { HQ_SERVER_URL: serverUrl },
+        { SPYRIA_SERVER_URL: serverUrl },
         viteUrl,
       ),
     ),
@@ -155,7 +121,7 @@ export default async function globalSetup() {
       startDetached(
         ['bun', 'src/testing/sso-test-server.ts'],
         `${repositoryRoot}apps/server`,
-        { PORT: new URL(ssoServerUrl).port, HQ_APP_ORIGIN: ssoViteUrl },
+        { PORT: new URL(ssoServerUrl).port, SPYRIA_APP_ORIGIN: ssoViteUrl },
         `${ssoServerUrl}/health`,
       ),
     ),
@@ -163,7 +129,7 @@ export default async function globalSetup() {
       startDetached(
         ['bunx', 'vite', 'preview', ...e2eBuild, '--port', new URL(ssoViteUrl).port],
         `${repositoryRoot}apps/web`,
-        { HQ_SERVER_URL: ssoServerUrl },
+        { SPYRIA_SERVER_URL: ssoServerUrl },
         ssoViteUrl,
       ),
     ),

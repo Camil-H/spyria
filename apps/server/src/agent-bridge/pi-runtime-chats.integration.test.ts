@@ -1,5 +1,5 @@
 import { expect, setDefaultTimeout, test } from 'bun:test'
-import type { ChatId } from '@hq/kernel'
+import type { ChatId } from '@spyria/kernel'
 import {
   acme,
   addLlmKey,
@@ -29,7 +29,7 @@ const stop = async (chat: ChatId) => {
 const piFilesOf = ({ agent }: Launch) =>
   Object.fromEntries(
     agent.acp_command
-      .filter((part) => /^(HQ_PI_\w+|HQ_COMPACTION_MODEL)=/.test(part))
+      .filter((part) => /^(SPYRIA_PI_\w+|SPYRIA_COMPACTION_MODEL)=/.test(part))
       .map((part) => [part.slice(0, part.indexOf('=')), part.slice(part.indexOf('=') + 1)]),
   )
 const decisionsOf = (chat: ChatId) => stack.decisionsOf(chat, ['role', 'model', 'member_id', 'conversation_id'])
@@ -108,13 +108,13 @@ test.each([
     expect(launch?.agent.acp_command.at(-1)).toEndWith('exec pi --mode rpc --no-themes')
     expect(launch?.agent).toMatchObject({ acp_model: adapterModel, acp_thought_level: 'medium' })
     const files = piFilesOf(launch as Launch)
-    const { providers } = JSON.parse(files.HQ_PI_MODELS ?? '{}')
+    const { providers } = JSON.parse(files.SPYRIA_PI_MODELS ?? '{}')
     expect(Object.keys(providers)).toEqual([piProvider])
-    expect(providers[piProvider]).toMatchObject({ baseUrl, api, apiKey: `\${HQ_LLM_TOKEN}` })
+    expect(providers[piProvider]).toMatchObject({ baseUrl, api, apiKey: `\${SPYRIA_LLM_TOKEN}` })
     expect(providers[piProvider].models.map(({ id }: { id: string }) => id).toSorted()).toEqual(models.toSorted())
     expect(providers[piProvider].models.every(({ reasoning }: { reasoning: boolean }) => reasoning)).toBe(true)
-    expect(files.HQ_COMPACTION_MODEL).toBe(`${piProvider}/${models[2]}`)
-    expect(Object.keys(launch?.secrets ?? {}).toSorted()).toEqual(['HQ_LLM_TOKEN', 'HQ_MCP_TOKEN'])
+    expect(files.SPYRIA_COMPACTION_MODEL).toBe(`${piProvider}/${models[2]}`)
+    expect(Object.keys(launch?.secrets ?? {}).toSorted()).toEqual(['SPYRIA_LLM_TOKEN', 'SPYRIA_MCP_TOKEN'])
     for (const { value } of Object.values(launch?.secrets ?? {}))
       expect(JSON.stringify(launch?.agent)).not.toContain(value)
     expect([...(await decisionsOf(chat))]).toEqual([
@@ -198,14 +198,14 @@ test('a manual pick from the full listing relaunches Pi with that model on the s
     acp_model: 'hq/openrouter/moonshotai/kimi-k3',
     acp_resume_session_id: String(firstSession?.sessionId),
   })
-  const { providers } = JSON.parse(piFilesOf(relaunch).HQ_PI_MODELS ?? '{}')
+  const { providers } = JSON.parse(piFilesOf(relaunch).SPYRIA_PI_MODELS ?? '{}')
   expect(providers.hq.models.map(({ id }: { id: string }) => id)).toEqual([
     'openrouter/anthropic/claude-opus-5.5',
     'openrouter/anthropic/claude-sonnet-5.5',
     'openrouter/anthropic/claude-haiku-5.5',
     'openrouter/moonshotai/kimi-k3',
   ])
-  expect(piFilesOf(relaunch).HQ_COMPACTION_MODEL).toBe('hq/openrouter/anthropic/claude-haiku-5.5')
+  expect(piFilesOf(relaunch).SPYRIA_COMPACTION_MODEL).toBe('hq/openrouter/anthropic/claude-haiku-5.5')
 })
 
 test('g2. a curated pick on a provider whose key was added after Pi launched relaunches Pi on the same session with that model, and the next turn answers on it with the context kept', async () => {
@@ -235,7 +235,7 @@ test('g2. a curated pick on a provider whose key was added after Pi launched rel
     acp_model: 'hq/openai/gpt-5-mini',
     acp_resume_session_id: String(firstSession?.sessionId),
   })
-  const { providers } = JSON.parse(piFilesOf(relaunch).HQ_PI_MODELS ?? '{}')
+  const { providers } = JSON.parse(piFilesOf(relaunch).SPYRIA_PI_MODELS ?? '{}')
   expect(providers.hq.models.map(({ id }: { id: string }) => id)).toContain('openai/gpt-5-mini')
   expect(relay.prompts).toEqual(['Start on Anthropic', 'Now on OpenAI'])
 })

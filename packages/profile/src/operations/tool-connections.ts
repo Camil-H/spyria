@@ -1,4 +1,4 @@
-import { type MemberId, toolNamePartsOf, type WorkspaceId } from '@hq/kernel'
+import { type MemberId, toolNamePartsOf, type WorkspaceId } from '@spyria/kernel'
 import type { ToolGateway } from '../contracts/repositories.ts'
 import type { ProfileTransactor } from '../contracts/transactor.ts'
 import { NoGatewayKey, ToolNotInCatalog } from '../domain/errors.ts'

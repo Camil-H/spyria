@@ -1,5 +1,5 @@
-import type { Job } from '@hq/db/zero-queries'
-import { memberId, workspaceId } from '@hq/kernel'
+import type { Job } from '@spyria/db/zero-queries'
+import { memberId, workspaceId } from '@spyria/kernel'
 import { z } from 'zod/mini'
 import type { LlmGateway, ToolGateway } from '../contracts/repositories.ts'
 import { profileJobTypes } from '../domain/llm-credential.ts'

@@ -1,19 +1,19 @@
-import { ChatIndicators, ChatView, ConversationProvider, Markdown } from '@hq/conversation'
-import { StoreProvider } from '@hq/db/react'
-import { chatId as toChatId, type WorkspaceId } from '@hq/kernel'
-import { PanelProvider, PanelToggle, SidePanel } from '@hq/panel'
-import { ProfileProvider, useHasLlmCredential } from '@hq/profile'
-import { RuntimeProvider, RuntimeStatus } from '@hq/runtime'
-import { SessionProvider, useSession } from '@hq/session'
-import { BudgetNotice, UsageProvider } from '@hq/usage'
-import { TransferChatForm, WorkspaceLayout, WorkspaceProvider } from '@hq/workspace'
+import { ChatIndicators, ChatView, ConversationProvider, Markdown } from '@spyria/conversation'
+import { StoreProvider } from '@spyria/db/react'
+import { chatId as toChatId, type WorkspaceId } from '@spyria/kernel'
+import { PanelProvider, PanelToggle, SidePanel } from '@spyria/panel'
+import { ProfileProvider, useHasLlmCredential } from '@spyria/profile'
+import { RuntimeProvider, RuntimeStatus } from '@spyria/runtime'
+import { SessionProvider, useSession } from '@spyria/session'
+import { BudgetNotice, UsageProvider } from '@spyria/usage'
+import { TransferChatForm, WorkspaceLayout, WorkspaceProvider } from '@spyria/workspace'
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Link, Navigate, Route, Routes, useOutletContext, useParams } from 'react-router'
 import type { Application } from './factory.ts'
 
 const SettingsRoute = lazy(() => import('./SettingsRoute.tsx'))
 const ProfileRoute = lazy(() => import('./ProfileRoute.tsx'))
-const ChatUsageTable = lazy(() => import('@hq/usage').then(({ ChatUsageTable }) => ({ default: ChatUsageTable })))
+const ChatUsageTable = lazy(() => import('@spyria/usage').then(({ ChatUsageTable }) => ({ default: ChatUsageTable })))
 
 const ChatRoute = ({ commands }: { commands: Application['conversationCommands'] }) => {
   const workspaceId = useOutletContext<WorkspaceId>()

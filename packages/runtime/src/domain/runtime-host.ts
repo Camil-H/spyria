@@ -4,7 +4,7 @@ import {
   requirePermissionIn,
   type WorkspaceId,
   type WorkspacePermission,
-} from '@hq/kernel'
+} from '@spyria/kernel'
 import { HostNotFound, PairedAsMachine, PairedAsWorkspaceHost } from './errors.ts'
 
 export type HostSystem = {

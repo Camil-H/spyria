@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { chatId, memberId, messageId, workspaceId } from '@hq/kernel'
+import { chatId, memberId, messageId, workspaceId } from '@spyria/kernel'
 import { ChatFrozen, InvalidThreadRoot, MessageDeleted, NoThreadsInRuntimeChat, NotMessageAuthor } from './errors.ts'
 import {
   type ConversationChat,

@@ -1,10 +1,10 @@
 import { afterAll, afterEach, expect, spyOn } from 'bun:test'
 import { createHash } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { conversationMutators } from '@hq/conversation/server'
-import { acme, alice, bob, lee } from '@hq/db'
-import { type Database, events, jobs, resetDatabase } from '@hq/db/postgres'
-import { setModelDirectory } from '@hq/db/server-writes'
+import { conversationMutators } from '@spyria/conversation/server'
+import { acme, alice, bob, lee } from '@spyria/db'
+import { type Database, events, jobs, resetDatabase } from '@spyria/db/postgres'
+import { setModelDirectory } from '@spyria/db/server-writes'
 import {
   createTestDatabase,
   prepareSeededGatewayKeys,
@@ -12,7 +12,7 @@ import {
   startTestGateway,
   startZeroCache,
   testGatewayAdmin,
-} from '@hq/db/testing'
+} from '@spyria/db/testing'
 import {
   addRoutableModels,
   type ChatId,
@@ -22,10 +22,10 @@ import {
   memberId,
   type WorkspaceId,
   workspaceId,
-} from '@hq/kernel'
-import { createLlmGateway } from '@hq/profile/server'
-import { runtimeMutators } from '@hq/runtime/server'
-import { workspaceMutators } from '@hq/workspace/server'
+} from '@spyria/kernel'
+import { createLlmGateway } from '@spyria/profile/server'
+import { runtimeMutators } from '@spyria/runtime/server'
+import { workspaceMutators } from '@spyria/workspace/server'
 import { Hono } from 'hono'
 import { websocket } from 'hono/bun'
 import { createAgentBridge } from '../agent-bridge/bridge.ts'
@@ -40,21 +40,21 @@ import { createRuntimeHostGateway } from '../runtime-hosts/gateway.ts'
 import { createFakeMcp, sharedToolServer } from './fake-mcp.ts'
 import {
   type ContainerAgent,
-  createHqAgentRelay,
+  createSpyriaAgentRelay,
   type FakeContainer,
   type HostFrame,
   type Launch,
   type ModelCall,
-} from './hq-agent-relay.ts'
+} from './spyria-agent-relay.ts'
 
 export const testSecretsKey = 'e2e-and-integration-test-secrets-key'
 export const testAuthSettings = {
   tokenSecret: 'integration-test-secret',
   appOrigin: 'http://localhost:5190',
-  oidc: { issuer: 'http://localhost:5556/dex', clientId: 'hq', redirectUri: 'http://localhost:3100/auth/callback' },
+  oidc: { issuer: 'http://localhost:5557/dex', clientId: 'spyria', redirectUri: 'http://localhost:3100/auth/callback' },
 }
 
-export { acme, alice, bob, globex, lee } from '@hq/db'
+export { acme, alice, bob, globex, lee } from '@spyria/db'
 export const aliceInAcme = { workspaceId: acme, userId: alice }
 export const bobInAcme = { workspaceId: acme, userId: bob }
 export const succeeded = {}
@@ -496,7 +496,7 @@ export const rootIn = async (chatId: string) => {
   return root
 }
 
-export const testHqAgentImage = `sha256:${'0'.repeat(64)}`
+export const testSpyriaAgentImage = `sha256:${'0'.repeat(64)}`
 
 export const runtimeTurn = async (host: { id: string }, prompterId: string | null, ownerId = alice) => {
   const { database } = await openedTestApp()
@@ -515,7 +515,7 @@ export const runtimeTurn = async (host: { id: string }, prompterId: string | nul
       values (${acme}, ${turnChatId}, ${promptId}, 1, 'message.posted', ${prompterId ?? ownerId}, '{}', now())`
     await sql`
       insert into runtimes (workspace_id, id, chat_id, host_id, state, host_online, image, llm_token_hash, last_active_at, created_at, state_changed_at)
-      values (${acme}, ${crypto.randomUUID()}, ${turnChatId}, ${host.id}, 'running', true, ${testHqAgentImage}, ${sha256(token)}, now(), now(), now())`
+      values (${acme}, ${crypto.randomUUID()}, ${turnChatId}, ${host.id}, 'running', true, ${testSpyriaAgentImage}, ${sha256(token)}, now(), now(), now())`
     if (prompterId)
       await sql`
         update chats set agent_turn_message_id = ${promptId}, agent_turn_prompter_id = ${prompterId} where id = ${turnChatId}`
@@ -529,7 +529,7 @@ export const startAgentStack = async ({
   now,
   resumeAfterMilliseconds,
   approvalWindowMilliseconds,
-  hqAgentImage = testHqAgentImage,
+  spyriaAgentImage = testSpyriaAgentImage,
   promptsWaitingAfterHello = false,
   github,
 }: {
@@ -538,7 +538,7 @@ export const startAgentStack = async ({
   now?: () => number
   resumeAfterMilliseconds?: number
   approvalWindowMilliseconds?: number
-  hqAgentImage?: string
+  spyriaAgentImage?: string
   promptsWaitingAfterHello?: boolean
   github?: GitHubDependencies
 } = {}) => {
@@ -546,7 +546,7 @@ export const startAgentStack = async ({
   const { database, llmGateway } = testApp
   const runtimeHosts = createRuntimeHostGateway({
     databases: () => [database],
-    hqAgentImage,
+    spyriaAgentImage,
     relayModelCall: routing ? createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }) : undefined,
     afterHello: promptsWaitingAfterHello
       ? (helloDatabase, host) => agentBridge.forDatabase(helloDatabase).resumeHost(host)
@@ -558,7 +558,7 @@ export const startAgentStack = async ({
     now,
     resumeAfterMilliseconds,
     approvalWindowMilliseconds,
-    hqAgentImage,
+    spyriaAgentImage,
     sessionClassifierOf: routing ? sessionClassifierOf(llmGateway, { timeoutMilliseconds: 300 }) : undefined,
     reopenDelayMilliseconds: 50,
     repositoryCheckoutsOf: github && ((checkoutDatabase) => createGitHubCheckouts(checkoutDatabase, github)),
@@ -569,7 +569,7 @@ export const startAgentStack = async ({
     llmGateway: routing ? llmGateway : undefined,
     runtimeHosts,
     agentBridge,
-    hqAgentImage,
+    spyriaAgentImage,
     github,
   })
   const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
@@ -581,7 +581,7 @@ export const startAgentStack = async ({
   })
   const { fakeHost, disconnectFakeHosts } = createFakeHosts({ port: Number(server.port), database })
   const browserSockets: WebSocket[] = []
-  const relays: ReturnType<typeof createHqAgentRelay>[] = []
+  const relays: ReturnType<typeof createSpyriaAgentRelay>[] = []
   afterEach(async () => {
     for (const socket of browserSockets.splice(0)) socket.close()
     testApp.setFakeLlmScript(undefined)
@@ -657,15 +657,15 @@ export const startAgentStack = async ({
         routesModelCalls = false,
         containerAgentOf = (relay) => relay.containerAgent,
         ...relayOptions
-      }: Omit<NonNullable<Parameters<typeof createHqAgentRelay>[0]>, 'modelCall'> & {
+      }: Omit<NonNullable<Parameters<typeof createSpyriaAgentRelay>[0]>, 'modelCall'> & {
         ownerId?: string
         signedIn?: string[]
         relayLimitMilliseconds?: number
         routesModelCalls?: boolean
-        containerAgentOf?: (relay: ReturnType<typeof createHqAgentRelay>) => ContainerAgent
+        containerAgentOf?: (relay: ReturnType<typeof createSpyriaAgentRelay>) => ContainerAgent
       } = {},
     ) => {
-      const relay = createHqAgentRelay({
+      const relay = createSpyriaAgentRelay({
         ...relayOptions,
         modelCall: routesModelCalls ? () => host.modelCall : undefined,
       })
@@ -747,7 +747,7 @@ export const asMember = async (userId: string, method: string, path: string, bod
   return { status: response.status, body: await response.text() }
 }
 export const connectionPath = (action: string) => `/api/tool-connections/fake/${action}`
-export const consentThroughHq = async (authorizeUrl: string, cookie: string) => {
+export const consentThroughSpyria = async (authorizeUrl: string, cookie: string) => {
   const { app } = await openedTestApp()
   const authorized = await fetch(authorizeUrl, { redirect: 'manual', headers: { cookie } })
   const callback = new URL(authorized.headers.get('location') ?? '')
@@ -757,7 +757,7 @@ export const consentThroughHq = async (authorizeUrl: string, cookie: string) => 
 export const connectAlice = async (cookie: string) => {
   const started = await asMember(alice, 'POST', connectionPath('connect'))
   expect(started.status).toBe(200)
-  const consent = await consentThroughHq(JSON.parse(started.body).authorizeUrl, cookie)
+  const consent = await consentThroughSpyria(JSON.parse(started.body).authorizeUrl, cookie)
   expect(consent.page).toContain('"connected":true')
   expect(await asMember(alice, 'POST', connectionPath('refresh'))).toEqual({
     status: 200,

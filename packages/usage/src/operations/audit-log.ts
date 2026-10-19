@@ -1,4 +1,4 @@
-import { type MemberId, requireWorkspacePermission } from '@hq/kernel'
+import { type MemberId, requireWorkspacePermission } from '@spyria/kernel'
 import type { AuditTransactor } from '../contracts/audit-log.ts'
 import {
   type AuditFilter,

@@ -3,7 +3,7 @@ const encoder = new TextEncoder()
 
 export const createSecretBox = (secretsKey: string) => {
   if (secretsKey.length < minimumSecretsKeyLength)
-    throw new Error(`HQ_SECRETS_KEY must be at least ${minimumSecretsKeyLength} characters`)
+    throw new Error(`SPYRIA_SECRETS_KEY must be at least ${minimumSecretsKeyLength} characters`)
   const key = crypto.subtle
     .digest('SHA-256', encoder.encode(secretsKey))
     .then((digest) => crypto.subtle.importKey('raw', digest, 'AES-GCM', false, ['encrypt', 'decrypt']))

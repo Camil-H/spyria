@@ -2,17 +2,17 @@ import { afterAll, expect, setDefaultTimeout, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createHqAgentClient } from '@hq/conversation/server'
-import { testGatewayAdmin } from '@hq/db/testing'
-import { schema } from '@hq/db/zero'
-import { runtimeHostId } from '@hq/kernel'
-import { createBifrostUsageLogs, syncUsageNow } from '@hq/usage/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
+import { createSpyriaAgentClient } from '@spyria/conversation/server'
+import { testGatewayAdmin } from '@spyria/db/testing'
+import { schema } from '@spyria/db/zero'
+import { runtimeHostId } from '@spyria/kernel'
+import { createBifrostUsageLogs, syncUsageNow } from '@spyria/usage/server'
 import { websocket } from 'hono/bun'
 import { createApp } from '../app.ts'
-import { readHqAgentImage } from '../hq-agent-image.ts'
 import { createModelCallRelay } from '../llm-relay.ts'
 import { createRuntimeHostGateway } from '../runtime-hosts/gateway.ts'
+import { readSpyriaAgentImage } from '../spyria-agent-image.ts'
 import {
   acme,
   addLlmKey,
@@ -30,21 +30,21 @@ import { createAgentBridge } from './bridge.ts'
 
 setDefaultTimeout(180_000)
 const docker = (...args: string[]) => Bun.spawnSync(['docker', ...args], { stderr: 'pipe' })
-const hqImage = await readHqAgentImage()
-if (!hqImage || docker('image', 'inspect', hqImage).exitCode !== 0)
-  throw new Error('HQ image missing: run bun run agent:build')
+const spyriaImage = await readSpyriaAgentImage()
+if (!spyriaImage || docker('image', 'inspect', spyriaImage).exitCode !== 0)
+  throw new Error('Spyria image missing: run bun run agent:build')
 
 const { database, gateway, llmGateway, fakeLlmBodies, setFakeLlmScript } = await openSharedTestApp()
 const runtimeHosts = createRuntimeHostGateway({
   databases: () => [database],
-  hqAgentImage: hqImage,
+  spyriaAgentImage: spyriaImage,
   relayModelCall: createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),
 })
-const agentBridge = createAgentBridge({ sandboxProvider: runtimeHosts.sandboxProvider, hqAgentImage: hqImage })
+const agentBridge = createAgentBridge({ sandboxProvider: runtimeHosts.sandboxProvider, spyriaAgentImage: spyriaImage })
 const app = createApp({ database, ...testAuthSettings, llmGateway, runtimeHosts, agentBridge })
 const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
-const prefix = `hq-test-${crypto.randomUUID().slice(0, 8)}-`
-const stateDirectory = mkdtempSync(join(tmpdir(), 'hq-test-host-'))
+const prefix = `spyria-test-${crypto.randomUUID().slice(0, 8)}-`
+const stateDirectory = mkdtempSync(join(tmpdir(), 'spyria-test-host-'))
 const hostProgram = new URL('../../../host/src/main.ts', import.meta.url).pathname
 let hostProcess: ReturnType<typeof Bun.spawn> | undefined
 const listed = (...command: string[]) =>
@@ -76,7 +76,7 @@ const startHost = async () => {
   })
   const { id, code } = (await added.json()) as { id: string; code: string }
   hostProcess = Bun.spawn(['bun', hostProgram, '--personal', `http://localhost:${server.port}/h/${code}`], {
-    env: { ...process.env, HQ_HOST_STATE_DIR: stateDirectory, HQ_HOST_PREFIX: prefix },
+    env: { ...process.env, SPYRIA_HOST_STATE_DIR: stateDirectory, SPYRIA_HOST_PREFIX: prefix },
     stdout: 'inherit',
     stderr: 'inherit',
   })
@@ -93,9 +93,9 @@ let runtimeStarted: Promise<{ id: string; transport: AgentTransport }> | undefin
 const startRuntime = async () => {
   const id = await startHost()
   const host = { workspaceId: acme, hostId: runtimeHostId(id) }
-  await runtimeHosts.prepare(host, hqImage)
+  await runtimeHosts.prepare(host, spyriaImage)
   const runtime = { ...host, runtimeId: 'pi-smoke' }
-  await runtimeHosts.sandboxProvider.create({ ...runtime, image: hqImage, apiKey })
+  await runtimeHosts.sandboxProvider.create({ ...runtime, image: spyriaImage, apiKey })
   await runtimeHosts.sandboxProvider.start(runtime)
   const transport = runtimeHosts.sandboxProvider.connect(runtime)
   const isReady = () =>
@@ -125,7 +125,7 @@ type Update = {
   cwd?: string
   entries?: unknown
 }
-const agentClient = createHqAgentClient()
+const agentClient = createSpyriaAgentClient()
 type AgentLlmChoice = Parameters<typeof agentClient.createConversation>[2]
 const piConversationOf = async (transport: AgentTransport, token: string, llm: AgentLlmChoice) => {
   const conversation = { transport, apiKey, conversationId: crypto.randomUUID() }
@@ -167,7 +167,7 @@ const modelCallsOf = async (chatId: string, minimum: number) => {
     select prompter_id, owner_id, model, provider, status from model_calls where chat_id = ${chatId}`
 }
 
-test("Pi in HQ's image answers through the LLM relay on the chat and Anthropic routes, streams its text to the events socket, ends the turn and each call is attributed to the prompter and the owner", async () => {
+test("Pi in Spyria's image answers through the LLM relay on the chat and Anthropic routes, streams its text to the events socket, ends the turn and each call is attributed to the prompter and the owner", async () => {
   await addLlmKey(bob, 'Fake')
   await addLlmKey(bob, 'Anthropic')
   const { id, transport } = await runtime()
@@ -298,7 +298,7 @@ test('a long Pi conversation compacts on the compaction model, recorded with pro
   expect(request?.split('After the restart')).toHaveLength(2)
 })
 
-test("Pi in HQ's image runs a command with its output, asks through HQ's extension and gets a free answer, in plan mode is refused a write and proposes a plan that is approved, keeps a plan with update_plan as its system prompt asks, streams text around a command once, and reports a provider error", async () => {
+test("Pi in Spyria's image runs a command with its output, asks through Spyria's extension and gets a free answer, in plan mode is refused a write and proposes a plan that is approved, keeps a plan with update_plan as its system prompt asks, streams text around a command once, and reports a provider error", async () => {
   await addLlmKey(bob, 'Fake')
   const { id, transport } = await runtime()
   const { token } = await runtimeTurn({ id }, bob)

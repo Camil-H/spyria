@@ -101,7 +101,7 @@ test.describe('Delegation', () => {
     await bobPage.context().close()
   })
 
-  test('As a prompter, I see a subagent failure answered with HQ’s error, the group marked failed, and the main agent going on', {
+  test('As a prompter, I see a subagent failure answered with Spyria’s error, the group marked failed, and the main agent going on', {
     tag: ['@spec-16'],
   }, async ({ page, agentScript }) => {
     const answer = 'The subagent failed, I will do it myself.'

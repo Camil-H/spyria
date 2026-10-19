@@ -1,4 +1,4 @@
-import type { WorkspaceId, WorkspacePermission } from '@hq/kernel'
+import type { WorkspaceId, WorkspacePermission } from '@spyria/kernel'
 import { BudgetsSection } from './BudgetsSection.tsx'
 import { useUsageCommands } from './providers.tsx'
 import { SpendReportView } from './SpendReportView.tsx'

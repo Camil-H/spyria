@@ -1,3 +1,4 @@
+import type { Transaction } from '@rocicorp/zero'
 import {
   activeAgentTurns,
   appendChatEvent,
@@ -21,9 +22,9 @@ import {
   setChatTurnPrompter,
   setDelegationFields,
   stopRunningDelegations,
-} from '@hq/db/server-writes'
-import type { Message as MessageRow } from '@hq/db/zero'
-import { chatPermissionsOf, isOwnerRemoved, skippingRefusedRebase, type Transact, zql } from '@hq/db/zero-queries'
+} from '@spyria/db/server-writes'
+import type { Message as MessageRow } from '@spyria/db/zero'
+import { chatPermissionsOf, isOwnerRemoved, skippingRefusedRebase, type Transact, zql } from '@spyria/db/zero-queries'
 import {
   type ChatId,
   type ChatPermission,
@@ -34,9 +35,8 @@ import {
   messageId,
   type WorkspaceId,
   workspaceId,
-} from '@hq/kernel'
-import { removeChatRuntimeOnServer } from '@hq/runtime/published'
-import type { Transaction } from '@rocicorp/zero'
+} from '@spyria/kernel'
+import { removeChatRuntimeOnServer } from '@spyria/runtime/published'
 import type { ParticipantChange } from '../contracts/repositories.ts'
 import type { ConversationTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import { agentJobTypes, agentSweepIntervalMilliseconds, waitingNotices } from '../domain/agent-events.ts'

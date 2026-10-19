@@ -1,5 +1,5 @@
 {
-  "name": "@hq/session",
+  "name": "@spyria/session",
   "private": true,
   "type": "module",
   "exports": "./src/session.tsx",
@@ -7,7 +7,7 @@
     "typecheck": "tsc -p ."
   },
   "dependencies": {
-    "@hq/kernel": "workspace:*",
+    "@spyria/kernel": "workspace:*",
     "react": "19.3.0"
   },
   "devDependencies": {

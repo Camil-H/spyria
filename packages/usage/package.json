@@ -1,5 +1,5 @@
 {
-  "name": "@hq/usage",
+  "name": "@spyria/usage",
   "private": true,
   "type": "module",
   "exports": {
@@ -10,9 +10,9 @@
     "typecheck": "tsc -p ."
   },
   "dependencies": {
-    "@hq/db": "workspace:*",
-    "@hq/kernel": "workspace:*",
-    "@hq/ui": "workspace:*",
+    "@spyria/db": "workspace:*",
+    "@spyria/kernel": "workspace:*",
+    "@spyria/ui": "workspace:*",
     "@rocicorp/zero": "1.9.0",
     "lucide-react": "1.49.0",
     "react": "19.3.0"

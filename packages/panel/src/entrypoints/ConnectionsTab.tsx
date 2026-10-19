@@ -1,5 +1,5 @@
-import { useQuery } from '@hq/db/react'
-import { LabelledSection } from '@hq/ui'
+import { useQuery } from '@spyria/db/react'
+import { LabelledSection } from '@spyria/ui'
 import { getConnections } from '../queries/get-connections.ts'
 import { LabelList } from './LabelList.tsx'
 import type { TabProps } from './TabProps.ts'

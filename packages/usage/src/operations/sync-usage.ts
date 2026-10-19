@@ -1,4 +1,4 @@
-import type { WorkspaceId } from '@hq/kernel'
+import type { WorkspaceId } from '@spyria/kernel'
 import type { GatewayUsageLogs, UsageLedger } from '../contracts/usage-sync.ts'
 import { nextLogsSince, usageSync } from '../domain/usage.ts'
 

@@ -1,5 +1,5 @@
-import type { WorkspaceId } from '@hq/kernel'
-import { buttonClass, ErrorMessage, fieldClass, labelClass, useGuardedAction } from '@hq/ui'
+import type { WorkspaceId } from '@spyria/kernel'
+import { buttonClass, ErrorMessage, fieldClass, labelClass, useGuardedAction } from '@spyria/ui'
 import { type SubmitEvent, useState } from 'react'
 import { Secret } from '../domain/secret.ts'
 import { useProfileCommands } from './providers.tsx'

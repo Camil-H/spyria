@@ -1,4 +1,4 @@
-import type { MessageId, WorkspaceId } from '@hq/kernel'
+import type { MessageId, WorkspaceId } from '@spyria/kernel'
 import type { AgentChat } from '../contracts/agent.ts'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import {

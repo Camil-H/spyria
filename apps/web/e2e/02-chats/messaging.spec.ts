@@ -1,4 +1,4 @@
-import { jobs } from '@hq/db/postgres'
+import { jobs } from '@spyria/db/postgres'
 import type { WorkerStack } from '../stack'
 import {
   agentReplyText,
@@ -241,7 +241,7 @@ test.describe('Messaging', () => {
       await expect(mainOf(page).getByRole('img', { name: 'Runtime chat' })).toBeVisible()
       await expect(mainOf(page)).not.toContainText('Runtime view')
       await expect(mainOf(page)).toContainText('Agent acts as Alice')
-      await expect(chipOf(page, 'hq')).toHaveText('Sonnet 5.5 (high)')
+      await expect(chipOf(page, 'spyria')).toHaveText('Sonnet 5.5 (high)')
       await expect(mainOf(page)).toContainText('fix/invoice-tax')
       await expect(mainOf(page).getByRole('img', { name: 'Git branch' })).toBeVisible()
       await expect(messageContaining(page, 'Why do invoices show the wrong total?')).toContainText('Alice')
@@ -267,7 +267,7 @@ test.describe('Messaging', () => {
     await test.step('shows the owner and the model of another runtime chat', async () => {
       await openChat(page, 'Setup helper')
       await expect(mainOf(page)).toContainText('Agent acts as Bob')
-      await expect(chipOf(page, 'hq')).toHaveText('GPT-5 (medium)')
+      await expect(chipOf(page, 'spyria')).toHaveText('GPT-5 (medium)')
       await expect(mainOf(page)).toContainText('main')
       await expect(mainOf(page).getByRole('img', { name: 'Git branch' })).toBeVisible()
       await expect(messageContaining(page, 'Dependencies installed.')).toContainText('Agent')

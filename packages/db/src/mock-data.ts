@@ -12,7 +12,7 @@ import {
   visibilityOf,
   type WorkspaceId,
   workspaceId,
-} from '@hq/kernel'
+} from '@spyria/kernel'
 import type { ChatRow, MessageRow, Snapshot } from './schema.ts'
 
 export const acme = workspaceId('workspace-acme')

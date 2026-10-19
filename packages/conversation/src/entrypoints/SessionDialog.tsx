@@ -1,5 +1,5 @@
-import { type ChatId, rereadDollarsOf, type WorkspaceId } from '@hq/kernel'
-import { buttonClass, fieldClass, formatCost, ghostButtonClass, labelClass } from '@hq/ui'
+import { type ChatId, rereadDollarsOf, type WorkspaceId } from '@spyria/kernel'
+import { buttonClass, fieldClass, formatCost, ghostButtonClass, labelClass } from '@spyria/ui'
 import { useId, useState } from 'react'
 import { type Harness, piThoughtLevels } from '../domain/session-routing.ts'
 import type { ChatRoutingRead } from '../queries/get-chat-routing.ts'

@@ -1,4 +1,4 @@
-import { formatCost } from '@hq/ui'
+import { formatCost } from '@spyria/ui'
 import type { SpendChart as SpendChartData, SpendGranularity } from '../domain/spend.ts'
 import { formatBucket } from './format.ts'
 

@@ -38,7 +38,7 @@ const clientCode = readdirSync(`${distDirectory}assets`)
   .toLowerCase()
 for (const statement of serverOnlySql)
   if (clientCode.includes(statement)) failures.push(`client assets contain server-only SQL "${statement}"`)
-if (clientCode.includes('hqteststack')) failures.push('client assets contain the e2e test hook hqTestStack')
+if (clientCode.includes('spyriateststack')) failures.push('client assets contain the e2e test hook spyriaTestStack')
 
 if (failures.length > 0) {
   console.error(failures.join('\n'))

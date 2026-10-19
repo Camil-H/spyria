@@ -13,7 +13,7 @@ type PiModel = { provider: string; id: string; name?: string }
 type PiEdit = { oldText?: string; newText?: string }
 
 const otherChoice = 'Other…'
-const planModeCommand = '/hq-plan'
+const planModeCommand = '/spyria-plan'
 const dialogMethods = ['select', 'confirm', 'input', 'editor']
 const askingTools = ['ask_member', 'propose_plan']
 const planTool = 'update_plan'
@@ -66,7 +66,7 @@ export const connectPi = (launch: AdapterLaunch, { onUpdate, onExit, onRequest }
   const update = (fields: Json) => onUpdate({ update: fields })
   const send = (type: string, fields: Json = {}) => {
     if (pi.hasExited) return Promise.reject(new AcpError('The adapter exited'))
-    const id = `hq-${nextId++}`
+    const id = `spyria-${nextId++}`
     const request = Promise.withResolvers<Json>()
     pending.set(id, request)
     pi.write({ id, type, ...fields })
@@ -138,7 +138,7 @@ export const connectPi = (launch: AdapterLaunch, { onUpdate, onExit, onRequest }
       return
     }
     if (type === 'extension_ui_request') {
-      if (record.method === 'setStatus' && record.statusKey === 'hq-plan' && record.statusText !== mode) {
+      if (record.method === 'setStatus' && record.statusKey === 'spyria-plan' && record.statusText !== mode) {
         mode = record.statusText === 'plan' ? 'plan' : 'default'
         update({ sessionUpdate: 'current_mode_update', currentModeId: mode })
       }

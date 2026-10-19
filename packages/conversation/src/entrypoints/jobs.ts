@@ -1,5 +1,5 @@
-import type { Job, Transact } from '@hq/db/zero-queries'
-import { chatId, type MemberId, type MessageId, memberId, messageId, type WorkspaceId } from '@hq/kernel'
+import type { Job, Transact } from '@spyria/db/zero-queries'
+import { chatId, type MemberId, type MessageId, memberId, messageId, type WorkspaceId } from '@spyria/kernel'
 import { z } from 'zod/mini'
 import type {
   AgentChat,
@@ -12,8 +12,8 @@ import type {
 } from '../contracts/agent.ts'
 import { type AgentEvent, agentJobTypes, isStoredAgentEvent, type TurnOutcome } from '../domain/agent-events.ts'
 import type { WorkspaceRead } from '../domain/workspace-reads.ts'
-import { type AgentLlm, createHqAgentClient } from '../integrations/hq-agent-client.ts'
 import { createRuntimeAgentRuntimes, type SandboxProvider } from '../integrations/runtime-agent-runtimes.ts'
+import { type AgentLlm, createSpyriaAgentClient } from '../integrations/spyria-agent-client.ts'
 import { workspaceJobTypes } from '../integrations/workspace-jobs.ts'
 import { createTransactingZeroTransactor } from '../integrations/zero-transactor.ts'
 import { closeReopenedTurn, reopenAgentTurn, sweepAgentTurns } from '../operations/agent-turn-safety.ts'
@@ -60,7 +60,7 @@ export const createAgentHandlers = ({
   now = Date.now,
   resumeAfterMilliseconds,
   approvalWindowMilliseconds,
-  hqAgentImage,
+  spyriaAgentImage,
   checkouts,
 }: {
   transact: Transact
@@ -71,11 +71,11 @@ export const createAgentHandlers = ({
   now?: () => number
   resumeAfterMilliseconds?: number
   approvalWindowMilliseconds?: number
-  hqAgentImage?: string
+  spyriaAgentImage?: string
   checkouts?: RepositoryCheckouts
 }) => {
-  const runtimes = createRuntimeAgentRuntimes(transact, sandboxProvider, { hqAgentImage })
-  const agentClient = createHqAgentClient()
+  const runtimes = createRuntimeAgentRuntimes(transact, sandboxProvider, { spyriaAgentImage })
+  const agentClient = createSpyriaAgentClient()
   const transactorOf = (id: WorkspaceId) => createTransactingZeroTransactor(transact, id)
   const dependenciesOf = (id: WorkspaceId) => ({
     transactor: transactorOf(id),

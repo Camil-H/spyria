@@ -1,4 +1,4 @@
-import { chatId, memberId, type WorkspaceId } from '@hq/kernel'
+import { chatId, memberId, type WorkspaceId } from '@spyria/kernel'
 import type { GatewayUsageLogs } from '../contracts/usage-sync.ts'
 import type { ModelCall } from '../domain/usage.ts'
 

@@ -86,7 +86,7 @@ test('the credential endpoint refuses blank, missing, malformed or unsupported f
 })
 
 describe('Alice’s OpenAI credential, added then removed', () => {
-  test('adding a credential stores the secret in the gateway under an opaque name, binds it to the member virtual key, and HQ keeps no secret and logs nothing', async () => {
+  test('adding a credential stores the secret in the gateway under an opaque name, binds it to the member virtual key, and Spyria keeps no secret and logs nothing', async () => {
     const consoleCalls = captureConsole()
     try {
       const response = await postCredentialAs(aliceInAcme, { provider: ' OpenAI ', secret: secretValue })
@@ -145,7 +145,7 @@ describe('Alice’s OpenAI credential, added then removed', () => {
     expect(await virtualKeyIdOf(bob)).toBeUndefined()
   })
 
-  test('a failed HQ commit deletes the gateway key it just created and logs no secret', async () => {
+  test('a failed Spyria commit deletes the gateway key it just created and logs no secret', async () => {
     const keysBefore = await gatewayKeysOf('mistral')
     await database.$client`alter table llm_credentials add constraint refuse_provider check (provider <> 'Mistral') not valid`
     const consoleCalls = captureConsole()

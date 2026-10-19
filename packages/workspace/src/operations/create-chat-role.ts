@@ -1,4 +1,4 @@
-import { type MemberId, requireWorkspacePermission } from '@hq/kernel'
+import { type MemberId, requireWorkspacePermission } from '@spyria/kernel'
 import type { WorkspaceTransactor } from '../contracts/transactor.ts'
 import { customChatRoleOf, requireUniqueRoleName } from '../domain/role.ts'
 

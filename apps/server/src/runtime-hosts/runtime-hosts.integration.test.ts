@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from 'bun:test'
 import { createHash } from 'node:crypto'
-import { createZeroStore } from '@hq/db/zero-store'
-import { runtimeMutators } from '@hq/runtime/server'
+import { createZeroStore } from '@spyria/db/zero-store'
+import { runtimeMutators } from '@spyria/runtime/server'
 import { websocket } from 'hono/bun'
 import { createApp } from '../app.ts'
 import {
@@ -210,9 +210,9 @@ test('a claim of an unknown, used, expired or removed code and a hello without a
     'code of a removed host': 'This host was removed',
     'hello without a token': 'This host is not registered',
     'hello with a wrong token': 'This host is not registered',
-    'machine hello without personal': 'This host was paired as your machine: restart hq-host with --personal',
+    'machine hello without personal': 'This host was paired as your machine: restart spyria-host with --personal',
     'workspace host hello with personal':
-      'This host was paired as a workspace host: restart hq-host without --personal',
+      'This host was paired as a workspace host: restart spyria-host without --personal',
   })
 })
 

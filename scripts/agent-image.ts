@@ -21,13 +21,23 @@ const build = () => {
     `--target=bun-linux-${architecture}`,
     'src/main.ts',
     '--outfile',
-    'dist/hq-agent',
+    'dist/spyria-agent',
   ])
   const packages = Object.values(readVersions())
     .map((tool) => `${tool.package}@${tool.version}`)
     .join(' ')
-  run(['docker', 'build', '--iidfile', 'image-id', '-t', 'hq-agent:dev', '--build-arg', `PACKAGES=${packages}`, '.'])
-  console.log(`HQ runtime image ${readFileSync(`${agentDirectory}image-id`, 'utf8').trim()}`)
+  run([
+    'docker',
+    'build',
+    '--iidfile',
+    'image-id',
+    '-t',
+    'spyria-agent:dev',
+    '--build-arg',
+    `PACKAGES=${packages}`,
+    '.',
+  ])
+  console.log(`Spyria runtime image ${readFileSync(`${agentDirectory}image-id`, 'utf8').trim()}`)
 }
 
 const [command, tool] = process.argv.slice(2)

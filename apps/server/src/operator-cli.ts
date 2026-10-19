@@ -1,9 +1,9 @@
-import { rebuildMessages } from '@hq/conversation/server'
-import { createDatabase } from '@hq/db/postgres'
-import { schema } from '@hq/db/zero'
-import { createLlmGateway, type ToolServerSetup } from '@hq/profile/server'
-import type { SsoPreset } from '@hq/workspace/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
+import { rebuildMessages } from '@spyria/conversation/server'
+import { createDatabase } from '@spyria/db/postgres'
+import { schema } from '@spyria/db/zero'
+import { createLlmGateway, type ToolServerSetup } from '@spyria/profile/server'
+import type { SsoPreset } from '@spyria/workspace/server'
 import { createSecretBox } from './auth/secret-box.ts'
 import { bootstrapSsoWorkspace, verifyDomainByOperator } from './auth/sso.ts'
 import { listFailedJobs, retryFailedJobs } from './job-worker.ts'
@@ -17,7 +17,7 @@ const requiredEnvironment = (name: string) => {
 }
 const optionOf = (name: string) => (options.includes(name) ? options[options.indexOf(name) + 1] : undefined)
 const bootstrapUsage =
-  'Usage: HQ_SECRETS_KEY=… HQ_SSO_CLIENT_SECRET=… bun run operator sso:bootstrap --name <workspace> --admin <email> --preset google|microsoft|oidc [--tenant <id>] [--issuer <url>] --client-id <id> --domains <a.com,b.com>'
+  'Usage: SPYRIA_SECRETS_KEY=… SPYRIA_SSO_CLIENT_SECRET=… bun run operator sso:bootstrap --name <workspace> --admin <email> --preset google|microsoft|oidc [--tenant <id>] [--issuer <url>] --client-id <id> --domains <a.com,b.com>'
 const toolServers: Record<string, () => ToolServerSetup> = {
   github: () => ({
     name: 'GitHub',
@@ -29,10 +29,10 @@ const toolServers: Record<string, () => ToolServerSetup> = {
     },
   }),
   notion: () => ({ name: 'Notion', url: 'https://mcp.notion.com/mcp' }),
-  fake: () => ({ name: 'fake', url: `${process.env.HQ_FAKE_MCP_URL ?? 'http://host.docker.internal:3001'}/mcp` }),
+  fake: () => ({ name: 'fake', url: `${process.env.SPYRIA_FAKE_MCP_URL ?? 'http://host.docker.internal:3001'}/mcp` }),
 }
 const logInAsAdmin = async (authorizeUrl: string) => {
-  console.log(`Log in once as the HQ admin of this server, then press Enter:\n${authorizeUrl}`)
+  console.log(`Log in once as the Spyria admin of this server, then press Enter:\n${authorizeUrl}`)
   for await (const _ of console) break
 }
 const commands: Record<string, () => Promise<void>> = {
@@ -52,9 +52,9 @@ const commands: Record<string, () => Promise<void>> = {
     const setup = toolServers[name]
     if (!setup) throw new Error(`Usage: bun run tools:setup ${Object.keys(toolServers).join('|')}`)
     const gateway = createLlmGateway({
-      url: process.env.HQ_GATEWAY_URL ?? 'http://127.0.0.1:8180',
-      adminUser: process.env.HQ_GATEWAY_ADMIN_USER ?? 'hq',
-      adminPassword: process.env.HQ_GATEWAY_ADMIN_PASSWORD ?? 'hq-dev-gateway',
+      url: process.env.SPYRIA_GATEWAY_URL ?? 'http://127.0.0.1:8180',
+      adminUser: process.env.SPYRIA_GATEWAY_ADMIN_USER ?? 'hq',
+      adminPassword: process.env.SPYRIA_GATEWAY_ADMIN_PASSWORD ?? 'hq-dev-gateway',
     })
     const server = setup()
     const isNew = await gateway.setUpToolServer(server, name === 'fake' ? undefined : logInAsAdmin)
@@ -72,8 +72,8 @@ const commands: Record<string, () => Promise<void>> = {
     const { workspaceId } = await bootstrapSsoWorkspace(
       database,
       {
-        secretBox: createSecretBox(requiredEnvironment('HQ_SECRETS_KEY')),
-        microsoftLoginOrigin: process.env.HQ_MICROSOFT_LOGIN_ORIGIN,
+        secretBox: createSecretBox(requiredEnvironment('SPYRIA_SECRETS_KEY')),
+        microsoftLoginOrigin: process.env.SPYRIA_MICROSOFT_LOGIN_ORIGIN,
       },
       {
         workspaceName,
@@ -82,7 +82,7 @@ const commands: Record<string, () => Promise<void>> = {
         tenantId: optionOf('--tenant'),
         issuer: optionOf('--issuer'),
         clientId,
-        clientSecret: requiredEnvironment('HQ_SSO_CLIENT_SECRET'),
+        clientSecret: requiredEnvironment('SPYRIA_SSO_CLIENT_SECRET'),
         domains: domains.split(','),
       },
     )

@@ -1,5 +1,5 @@
-import type { MessageId, WorkspaceId } from '@hq/kernel'
-import { buttonClass, Dialog } from '@hq/ui'
+import type { MessageId, WorkspaceId } from '@spyria/kernel'
+import { buttonClass, Dialog } from '@spyria/ui'
 import { useOutletContext } from 'react-router'
 import { useConversationCommands } from './providers.tsx'
 

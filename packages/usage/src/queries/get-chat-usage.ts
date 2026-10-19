@@ -1,5 +1,5 @@
-import { findChat, inChat, memberNamesIn, type Snapshot } from '@hq/db'
-import { type ChatId, can, type MemberId, type WorkspaceId } from '@hq/kernel'
+import { findChat, inChat, memberNamesIn, type Snapshot } from '@spyria/db'
+import { type ChatId, can, type MemberId, type WorkspaceId } from '@spyria/kernel'
 import { type ChatUsage, monthsNewestFirst, sumUsage, type UsageMonth } from '../domain/usage.ts'
 
 export const getChatUsage =

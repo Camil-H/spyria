@@ -1,7 +1,7 @@
-import type { Snapshot } from '@hq/db'
-import type { WorkspaceId } from '@hq/kernel'
-import { useSession } from '@hq/session'
-import { buttonClass, focusRing } from '@hq/ui'
+import type { Snapshot } from '@spyria/db'
+import type { WorkspaceId } from '@spyria/kernel'
+import { useSession } from '@spyria/session'
+import { buttonClass, focusRing } from '@spyria/ui'
 import { Link } from 'react-router'
 import { fullScreenClass } from './ui.ts'
 

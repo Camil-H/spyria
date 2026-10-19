@@ -10,7 +10,7 @@ export class Refused extends Error {
 const imagePattern = /^sha256:[a-f0-9]{64}$/
 const runtimeIdPattern = /^[a-z0-9][a-z0-9-]{0,62}$/
 const apiKeyPattern = /^[A-Za-z0-9_-]{16,128}$/
-const hqAgentPort = 8000
+const spyriaAgentPort = 8000
 export const gatewayRelayAlias = 'hq-gateway-relay'
 const gibibyte = 1024 ** 3
 const volumeTargets = { ws: '/workspace', home: '/home/openhands', tmp: '/tmp' }
@@ -149,7 +149,7 @@ export const createCommandRunner = ({
   const prepare = async (image: string) => {
     await docker('GET', `/images/${image}/json`).catch((error) => {
       ignoringMissing(error)
-      throw new Error("HQ's runtime image is missing on this machine: run bun run agent:build")
+      throw new Error("Spyria's runtime image is missing on this machine: run bun run agent:build")
     })
     if (personal) await ensureCredentialsReaders(docker, prefix, image)
   }
@@ -190,7 +190,7 @@ export const createCommandRunner = ({
       const networks = Object.values((await managedContainer(runtimeId)).NetworkSettings?.Networks ?? {})
       const address = networks.find((network) => network.IPAddress)?.IPAddress
       if (!address) throw new Refused('runtime is not running')
-      return `http://${address}:${hqAgentPort}`
+      return `http://${address}:${spyriaAgentPort}`
     },
     runningCount: async () => {
       const filters = encodeURIComponent(JSON.stringify({ label: ['hq.managed=1'] }))

@@ -1,4 +1,4 @@
-import type { ChatId, RuntimeHostId, WorkspaceId } from '@hq/kernel'
+import type { ChatId, RuntimeHostId, WorkspaceId } from '@spyria/kernel'
 import type { RuntimeTransactor } from '../contracts/transactor.ts'
 import { hashSecret, newSecretToken } from '../domain/claim.ts'
 import { RuntimeNotFound } from '../domain/errors.ts'

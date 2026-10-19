@@ -1,5 +1,5 @@
 {
-  "name": "@hq/profile",
+  "name": "@spyria/profile",
   "private": true,
   "type": "module",
   "sideEffects": false,
@@ -12,10 +12,10 @@
     "typecheck": "tsc -p ."
   },
   "dependencies": {
-    "@hq/db": "workspace:*",
-    "@hq/kernel": "workspace:*",
-    "@hq/session": "workspace:*",
-    "@hq/ui": "workspace:*",
+    "@spyria/db": "workspace:*",
+    "@spyria/kernel": "workspace:*",
+    "@spyria/session": "workspace:*",
+    "@spyria/ui": "workspace:*",
     "@radix-ui/react-tabs": "1.1.21",
     "@rocicorp/zero": "1.9.0",
     "react": "19.3.0",

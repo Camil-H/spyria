@@ -1,4 +1,4 @@
-import { seedSpend } from '@hq/db/testing'
+import { seedSpend } from '@spyria/db/testing'
 import {
   addLlmKey,
   addParticipant,

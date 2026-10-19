@@ -1,5 +1,5 @@
-import type { Transact } from '@hq/db/zero-queries'
-import type { WorkspaceId, WorkspacePermission } from '@hq/kernel'
+import type { Transact } from '@spyria/db/zero-queries'
+import type { WorkspaceId, WorkspacePermission } from '@spyria/kernel'
 import type { AuditQuery, AuditTransactor } from '../contracts/audit-log.ts'
 import { type AuditRecord, auditJobTypes } from '../domain/audit.ts'
 

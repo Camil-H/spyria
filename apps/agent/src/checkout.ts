@@ -4,7 +4,7 @@ import { join } from 'node:path'
 export type Repository = { url: string; token: string; base_branch: string; working_branch: string }
 export type Checkout = { failure?: string; hasSetup?: boolean }
 
-const setupScript = '.hq/setup.sh'
+const setupScript = '.spyria/setup.sh'
 export const setupCommand = `sh ${setupScript}`
 const shownOutputLines = 20
 const keptOutputCharacters = 20_000

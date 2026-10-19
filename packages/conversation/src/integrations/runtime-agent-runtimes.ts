@@ -1,4 +1,5 @@
-import type { Transact } from '@hq/db/zero-queries'
+import type { Transaction } from '@rocicorp/zero'
+import type { Transact } from '@spyria/db/zero-queries'
 import {
   createRuntimeTransactor,
   ensureRuntimeRunning,
@@ -16,8 +17,7 @@ import {
   retryRuntime,
   type SandboxProvider,
   touchRuntime,
-} from '@hq/runtime/published'
-import type { Transaction } from '@rocicorp/zero'
+} from '@spyria/runtime/published'
 import type { AgentChat, AgentEndpoint, AgentRuntimes, RuntimeRetrier } from '../contracts/agent.ts'
 
 export type { SandboxProvider }

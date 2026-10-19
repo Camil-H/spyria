@@ -1,5 +1,5 @@
-import { findChat, memberToolsIn, ownedBy, type Snapshot, workspaceConnectionsIn } from '@hq/db'
-import type { ChatId, WorkspaceId } from '@hq/kernel'
+import { findChat, memberToolsIn, ownedBy, type Snapshot, workspaceConnectionsIn } from '@spyria/db'
+import type { ChatId, WorkspaceId } from '@spyria/kernel'
 
 export const getConnections = (workspaceId: WorkspaceId, chatId: ChatId) => (snapshot: Snapshot) => {
   const chat = findChat(snapshot, workspaceId, chatId)

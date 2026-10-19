@@ -1,4 +1,4 @@
-import type { MemberId } from '@hq/kernel'
+import type { MemberId } from '@spyria/kernel'
 import { BudgetMemberNotFound, InvalidBudget } from './errors.ts'
 
 export const budgetThresholds = [80, 100] as const

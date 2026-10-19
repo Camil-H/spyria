@@ -1,4 +1,4 @@
-import type { ChatId, MemberId, RuntimeHostId, RuntimeId, WorkspaceId } from '@hq/kernel'
+import type { ChatId, MemberId, RuntimeHostId, RuntimeId, WorkspaceId } from '@spyria/kernel'
 import type { HostLoad, Runtime } from '../domain/runtime.ts'
 import type { RuntimeHost } from '../domain/runtime-host.ts'
 

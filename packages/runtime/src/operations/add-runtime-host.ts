@@ -4,7 +4,7 @@ import {
   runtimeHostId,
   type WorkspaceId,
   type WorkspacePermission,
-} from '@hq/kernel'
+} from '@spyria/kernel'
 import type { RuntimeTransactor } from '../contracts/transactor.ts'
 import { claimLifetimeMilliseconds, hashSecret, newClaimCode } from '../domain/claim.ts'
 import { LocalSessionsOff, MachineAlreadyAdded } from '../domain/errors.ts'

@@ -1,4 +1,4 @@
-import type { WorkspaceId } from '@hq/kernel'
+import type { WorkspaceId } from '@spyria/kernel'
 import type { RuntimeTransactor } from '../contracts/transactor.ts'
 import { idleStepOf, runtimeJobTypes, sweepIntervalMilliseconds, transitioned } from '../domain/runtime.ts'
 import { requestRemoval } from './remove-chat-runtime.ts'

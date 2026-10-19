@@ -1,4 +1,4 @@
-import type { MemberId, WorkspaceId } from '@hq/kernel'
+import type { MemberId, WorkspaceId } from '@spyria/kernel'
 import type { AgentDependencies } from './agent-turn.ts'
 import { interruptAgent } from './stop-agent.ts'
 

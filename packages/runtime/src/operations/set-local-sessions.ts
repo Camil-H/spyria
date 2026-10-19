@@ -1,4 +1,4 @@
-import { requirePermissionIn, type WorkspaceId, type WorkspacePermission } from '@hq/kernel'
+import { requirePermissionIn, type WorkspaceId, type WorkspacePermission } from '@spyria/kernel'
 import type { RuntimeTransactor } from '../contracts/transactor.ts'
 
 type Dependencies = { transactor: RuntimeTransactor }

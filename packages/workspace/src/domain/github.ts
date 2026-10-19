@@ -51,5 +51,5 @@ export const workingBranchOf = (chatName: string, chatId: string) => {
     .replace(/[^a-z0-9]+/g, '-')
     .slice(0, workingBranchSlugLength)
     .replace(/^-+|-+$/g, '')
-  return `hq/${slug || 'chat'}-${chatId.replace(/-/g, '').slice(0, 6)}`
+  return `spyria/${slug || 'chat'}-${chatId.replace(/-/g, '').slice(0, 6)}`
 }

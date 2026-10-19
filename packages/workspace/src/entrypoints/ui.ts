@@ -1,4 +1,4 @@
-import { focusRing } from '@hq/ui'
+import { focusRing } from '@spyria/ui'
 
 export const menuTriggerClass = `flex items-center rounded-md p-1.5 text-muted hover:bg-hover hover:text-ink data-[state=open]:bg-hover ${focusRing}`
 export const fullScreenClass =

@@ -1,4 +1,4 @@
-import type { MessageId } from '@hq/kernel'
+import type { MessageId } from '@spyria/kernel'
 import type { AgentChat, AgentHost } from '../contracts/agent.ts'
 import type { ToolCall } from '../contracts/repositories.ts'
 import {

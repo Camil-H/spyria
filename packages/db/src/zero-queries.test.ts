@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
-import { DomainError } from '@hq/kernel'
 import type { Transaction } from '@rocicorp/zero'
+import { DomainError } from '@spyria/kernel'
 import { skippingRefusedRebase } from './zero-queries.ts'
 
 const transactionOf = (location: string, reason: string) => ({ location, reason }) as Transaction

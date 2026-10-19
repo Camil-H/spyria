@@ -1,5 +1,5 @@
-import type { WorkspaceId } from '@hq/kernel'
-import { ErrorMessage, fieldClass, formatCost, LabelledSection, labelClass, SegmentedChoice } from '@hq/ui'
+import type { WorkspaceId } from '@spyria/kernel'
+import { ErrorMessage, fieldClass, formatCost, LabelledSection, labelClass, SegmentedChoice } from '@spyria/ui'
 import { lazy, type ReactNode, Suspense, useEffect, useState } from 'react'
 import {
   type SpendDimension,

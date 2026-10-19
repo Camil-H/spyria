@@ -1,5 +1,5 @@
-import type { Database } from '@hq/db/postgres'
-import { domainOfEmail, ssoEmailOf } from '@hq/workspace/server'
+import type { Database } from '@spyria/db/postgres'
+import { domainOfEmail, ssoEmailOf } from '@spyria/workspace/server'
 import { type Context, Hono } from 'hono'
 import { deleteCookie, getCookie, getSignedCookie, setCookie, setSignedCookie } from 'hono/cookie'
 import { HTTPException } from 'hono/http-exception'
@@ -33,9 +33,9 @@ type PopupResult =
   | { status: 'unknown_domain'; domain: string }
   | { status: 'failed' }
 
-const sessionCookiePrefix = 'hq_s_'
-const loginCookie = 'hq_login'
-export const testCookie = 'hq_test'
+const sessionCookiePrefix = 'spyria_s_'
+const loginCookie = 'spyria_login'
+export const testCookie = 'spyria_test'
 const loginCookieSeconds = 5 * 60
 
 export const sessionCookieOptions = (appOrigin: string) =>
@@ -82,7 +82,7 @@ export const createAuthRoutes = ({
     const clientKey = `${provider.issuer} ${provider.clientId} ${provider.encryptedClientSecret}`
     const known = ssoClients.get(clientKey)
     if (known) return known
-    if (!sso.secretBox) throw new Error('HQ_SECRETS_KEY is required in sso mode')
+    if (!sso.secretBox) throw new Error('SPYRIA_SECRETS_KEY is required in sso mode')
     const client = createOidc({
       issuer: provider.issuer,
       clientId: provider.clientId,
@@ -95,7 +95,7 @@ export const createAuthRoutes = ({
   }
   const popup = (context: Context, result: PopupResult, status: 200 | 400 | 403 | 404 = 200) =>
     context.html(
-      `<!doctype html><meta charset="utf-8"><title>Signing in to HQ</title><script>window.opener?.postMessage(${JSON.stringify(result).replaceAll('<', '\\u003c')}, ${JSON.stringify(appOrigin)});window.close()</script>`,
+      `<!doctype html><meta charset="utf-8"><title>Signing in to Spyria</title><script>window.opener?.postMessage(${JSON.stringify(result).replaceAll('<', '\\u003c')}, ${JSON.stringify(appOrigin)});window.close()</script>`,
       status,
     )
   const completeSignIn = async (
@@ -113,7 +113,7 @@ export const createAuthRoutes = ({
 
   return new Hono()
     .use('/:action{renew|logout}', async (context, next) => {
-      if (context.req.header('origin') !== appOrigin || context.req.header('x-hq-csrf') !== '1')
+      if (context.req.header('origin') !== appOrigin || context.req.header('x-spyria-csrf') !== '1')
         return context.json({ error: 'forbidden' }, 403)
       await next()
     })
@@ -124,7 +124,7 @@ export const createAuthRoutes = ({
       )
       const message =
         typeof verified === 'string'
-          ? `${verified} is verified: people with an ${verified} email can now sign in to HQ through your provider.`
+          ? `${verified} is verified: people with an ${verified} email can now sign in to Spyria through your provider.`
           : verified instanceof Error
             ? verified.message
             : 'This verification link is invalid, used or expired. Send a new one from Workspace settings.'

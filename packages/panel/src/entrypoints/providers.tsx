@@ -1,4 +1,4 @@
-import { createCommandsContext } from '@hq/ui'
+import { createCommandsContext } from '@spyria/ui'
 import { createContext, type ReactNode, useContext, useState } from 'react'
 import type { PanelCommands } from './commands.ts'
 

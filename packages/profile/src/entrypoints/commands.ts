@@ -1,4 +1,4 @@
-import type { CredentialId, MemberId, WorkspaceId } from '@hq/kernel'
+import type { CredentialId, MemberId, WorkspaceId } from '@spyria/kernel'
 import type { DisplayName } from '../domain/display-name.ts'
 import type { GitHubConnection } from '../domain/github-connection.ts'
 import type { Secret } from '../domain/secret.ts'

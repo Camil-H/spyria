@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
-import { acme, alice, bob, createMockSnapshot, type MessageRow } from '@hq/db'
-import { chatId, messageId } from '@hq/kernel'
+import { acme, alice, bob, createMockSnapshot, type MessageRow } from '@spyria/db'
+import { chatId, messageId } from '@spyria/kernel'
 import { hasUnread } from './has-unread.ts'
 
 const research = chatId('chat-research')

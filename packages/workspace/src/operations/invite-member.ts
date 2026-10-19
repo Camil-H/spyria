@@ -1,4 +1,4 @@
-import { type MemberId, requireWorkspacePermission, type WorkspaceId } from '@hq/kernel'
+import { type MemberId, requireWorkspacePermission, type WorkspaceId } from '@spyria/kernel'
 import type { WorkspaceTransactor } from '../contracts/transactor.ts'
 import { AlreadyMember, InviteAlreadyPending } from '../domain/errors.ts'
 import { Email, isPending, newInvitation } from '../domain/invitation.ts'

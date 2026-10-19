@@ -1,12 +1,4 @@
 import {
-  type ChatId,
-  DomainError,
-  type MemberId,
-  permissionsOf,
-  type WorkspaceId,
-  type WorkspacePermission,
-} from '@hq/kernel'
-import {
   createBuilder,
   defineQueries,
   defineQuery,
@@ -14,12 +6,20 @@ import {
   type ServerTransaction,
   type Transaction,
 } from '@rocicorp/zero'
+import {
+  type ChatId,
+  DomainError,
+  type MemberId,
+  permissionsOf,
+  type WorkspaceId,
+  type WorkspacePermission,
+} from '@spyria/kernel'
 import { type Schema, schema } from './zero.ts'
 
 export type ZeroContext = {
   userId: MemberId
   workspaceId: WorkspaceId
-  hqAgentImage?: string
+  spyriaAgentImage?: string
 }
 
 export type Transact = <Result>(work: (tx: ServerTransaction) => Promise<Result>) => Promise<Result>

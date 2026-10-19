@@ -1,4 +1,4 @@
-import { type MemberId, type MessageId, requireChatPermission } from '@hq/kernel'
+import { type MemberId, type MessageId, requireChatPermission } from '@spyria/kernel'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { editedMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'

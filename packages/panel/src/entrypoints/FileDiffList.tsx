@@ -1,4 +1,4 @@
-import { focusRing, SegmentedChoice } from '@hq/ui'
+import { focusRing, SegmentedChoice } from '@spyria/ui'
 import { ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import {
@@ -9,7 +9,7 @@ import {
   splitRowsOf,
 } from '../domain/workspace.ts'
 
-const layoutStorageKey = 'hq.diff-layout'
+const layoutStorageKey = 'spyria.diff-layout'
 const layouts: readonly DiffLayout[] = ['unified', 'split']
 const layoutLabels: Record<DiffLayout, string> = { unified: 'Unified', split: 'Side by side' }
 const markers: Record<DiffLine['kind'], string> = { added: '+', removed: '-', context: ' ', hunk: '' }

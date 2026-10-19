@@ -201,13 +201,13 @@ test.describe('Questions and plans', () => {
         await sendMessage(page, 'stub:hello')
         await turnEnded(page)
         await togglePlan(page, true)
-        await expect(chipOf(page, 'hq')).toBeVisible()
+        await expect(chipOf(page, 'spyria')).toBeVisible()
         await sendMessage(page, 'stub:hello')
         await expect(
           messageContaining(page, '[t2] Hello from the stub (model hq/fake/fake-medium, mode plan).'),
         ).toHaveCount(1)
         await togglePlan(page, false)
-        await expect(chipOf(page, 'hq')).toBeVisible()
+        await expect(chipOf(page, 'spyria')).toBeVisible()
         await sendMessage(page, 'stub:hello')
         await expect(
           messageContaining(page, '[t3] Hello from the stub (model hq/fake/fake-medium, mode default).'),

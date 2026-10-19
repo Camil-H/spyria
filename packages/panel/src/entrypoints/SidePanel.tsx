@@ -1,5 +1,3 @@
-import { useQuery } from '@hq/db/react'
-import { tooltipClass } from '@hq/ui'
 import { Content, List, Root, Trigger } from '@radix-ui/react-tabs'
 import {
   Content as TooltipContent,
@@ -8,6 +6,8 @@ import {
   Root as TooltipRoot,
   Trigger as TooltipTrigger,
 } from '@radix-ui/react-tooltip'
+import { useQuery } from '@spyria/db/react'
+import { tooltipClass } from '@spyria/ui'
 import {
   BookOpen,
   ChartColumn,

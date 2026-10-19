@@ -1,6 +1,6 @@
 import { createHmac, createPrivateKey, timingSafeEqual } from 'node:crypto'
-import type { AgentChat, PullRequestStep, RepositoryCheckouts } from '@hq/conversation/server'
-import type { Database } from '@hq/db/postgres'
+import type { AgentChat, PullRequestStep, RepositoryCheckouts } from '@spyria/conversation/server'
+import type { Database } from '@spyria/db/postgres'
 import {
   enteredSecretsOf,
   GitHubNotConfigured,
@@ -12,7 +12,7 @@ import {
   githubSecretNames,
   githubSettingsFrom,
   InvalidGitHubSettings,
-} from '@hq/workspace/server'
+} from '@spyria/workspace/server'
 import type { SecretBox } from '../auth/secret-box.ts'
 import { recordWorkspaceEvent, requireMemberPermission } from '../auth/sso.ts'
 import { baseBundle, pushBundle } from './bundles.ts'
@@ -152,7 +152,7 @@ export const saveGitHubSettings = async (
   const previous = await appRowOf(database, member.workspaceId)
   const missing = githubSecretNames.find((name) => !previous && !entered[name])
   if (missing) throw new InvalidGitHubSettings(`${secretLabels[missing]} is required`)
-  if (!secretBox) throw new InvalidGitHubSettings('HQ_SECRETS_KEY is not set on this server')
+  if (!secretBox) throw new InvalidGitHubSettings('SPYRIA_SECRETS_KEY is not set on this server')
   const privateKey = entered.privateKey ?? (await secretBox.open(previous?.encryptedPrivateKey ?? ''))
   try {
     createPrivateKey(privateKey)

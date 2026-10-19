@@ -1,4 +1,4 @@
-import { useQuery } from '@hq/db/react'
+import { useQuery } from '@spyria/db/react'
 import { Globe } from 'lucide-react'
 import { getBrowser } from '../queries/get-browser.ts'
 import { EmptyState } from './EmptyState.tsx'

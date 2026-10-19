@@ -51,9 +51,9 @@ const renewWith = (sessionId: string) =>
     method: 'POST',
     headers: {
       origin: testAuthSettings.appOrigin,
-      'x-hq-csrf': '1',
+      'x-spyria-csrf': '1',
       'content-type': 'application/json',
-      cookie: `hq_s_${acme}=${sessionId}`,
+      cookie: `spyria_s_${acme}=${sessionId}`,
     },
     body: JSON.stringify({ workspaceId: acme }),
   })

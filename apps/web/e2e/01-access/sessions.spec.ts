@@ -28,7 +28,7 @@ test.describe('Sessions', () => {
     tag: ['@spec-05'],
   }, async ({ page }) => {
     await test.step('first visit shows the sign-in screen and nothing from any workspace', async () => {
-      await expect(page.getByRole('heading', { name: 'Sign in to HQ' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Sign in to Spyria' })).toBeVisible()
       await expect(signInButtonOf(page)).toBeEnabled()
       await expect(sidebarOf(page)).toHaveCount(0)
       await expect(page.getByText(/Acme|Globex/)).toHaveCount(0)
@@ -41,7 +41,7 @@ test.describe('Sessions', () => {
       await expect(popup.locator('#login')).toBeVisible()
       await popup.close()
       await expect(signInButtonOf(page)).toBeEnabled()
-      await expect(page.getByRole('heading', { name: 'Sign in to HQ' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Sign in to Spyria' })).toBeVisible()
       await expect(page.getByText(/invited|error|failed/i)).toHaveCount(0)
       const secondPopupOpened = page.waitForEvent('popup')
       await signInButtonOf(page).click()

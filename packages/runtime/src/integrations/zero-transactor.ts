@@ -1,3 +1,4 @@
+import type { Transaction } from '@rocicorp/zero'
 import {
   enqueueJob,
   findRuntimeHostBySecretHash,
@@ -11,17 +12,16 @@ import {
   setRuntimeHostSecretHash,
   setRuntimesHostOnline,
   setServerOnlyRuntimeValue,
-} from '@hq/db/server-writes'
-import type { RuntimeHost as RuntimeHostRow, Runtime as RuntimeRow } from '@hq/db/zero'
+} from '@spyria/db/server-writes'
+import type { RuntimeHost as RuntimeHostRow, Runtime as RuntimeRow } from '@spyria/db/zero'
 import {
   skippingRefusedRebase,
   type Transact,
   workspacePermissionsOf,
   type ZeroContext,
   zql,
-} from '@hq/db/zero-queries'
-import { chatId, memberId, runtimeHostId, runtimeId, type WorkspaceId, workspaceId } from '@hq/kernel'
-import type { Transaction } from '@rocicorp/zero'
+} from '@spyria/db/zero-queries'
+import { chatId, memberId, runtimeHostId, runtimeId, type WorkspaceId, workspaceId } from '@spyria/kernel'
 import type { RuntimeTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import { HostNotFound, RuntimeNotFound } from '../domain/errors.ts'
 import type { Runtime } from '../domain/runtime.ts'

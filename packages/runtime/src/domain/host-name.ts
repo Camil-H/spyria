@@ -1,4 +1,4 @@
-import type { Brand } from '@hq/kernel'
+import type { Brand } from '@spyria/kernel'
 import { BlankHostName, HostNameTooLong } from './errors.ts'
 
 export type HostName = Brand<'HostName'>

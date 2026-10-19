@@ -1,5 +1,5 @@
-import type { Snapshot } from '@hq/db'
-import type { WorkspaceId } from '@hq/kernel'
+import type { Snapshot } from '@spyria/db'
+import type { WorkspaceId } from '@spyria/kernel'
 
 type ListedRole = { workspaceId: WorkspaceId; name: string; permissions: readonly string[]; builtIn: boolean }
 

@@ -43,10 +43,10 @@ export type ModelCall = (request: {
 type Agent = { port: number; process: Bun.Subprocess<'ignore', 'pipe', 'inherit'> }
 
 const repositoryRoot = new URL('../../../../', import.meta.url).pathname
-const listening = /hq-agent listening on port (\d+)/
+const listening = /spyria-agent listening on port (\d+)/
 const modelCallMilliseconds = 300_000
 const runningAgents = new Set<Bun.Subprocess>()
-export const stopAllHqAgents = () => {
+export const stopAllSpyriaAgents = () => {
   for (const agent of runningAgents) agent.kill()
 }
 
@@ -79,7 +79,7 @@ const serveGateway = (modelCall: () => ModelCall) =>
     },
   })
 
-export const createHqAgentRelay = ({
+export const createSpyriaAgentRelay = ({
   gapMilliseconds = 20,
   startFails = false,
   holdUrl,
@@ -90,7 +90,7 @@ export const createHqAgentRelay = ({
   holdUrl?: string
   modelCall?: () => ModelCall
 } = {}) => {
-  const directory = mkdtempSync(join(tmpdir(), 'hq-agent-relay-'))
+  const directory = mkdtempSync(join(tmpdir(), 'spyria-agent-relay-'))
   const shims = join(directory, 'bin')
   const launches = join(directory, 'launches')
   const gateway = modelCall && serveGateway(modelCall)
@@ -126,14 +126,14 @@ export const createHqAgentRelay = ({
 
   let isStopped = false
   const startAgent = async (apiKey: string): Promise<Agent> => {
-    if (isStopped) throw new Error('The hq-agent relay was stopped')
+    if (isStopped) throw new Error('The spyria-agent relay was stopped')
     const child = Bun.spawn([process.execPath, `${repositoryRoot}apps/agent/src/main.ts`], {
       env: {
         PATH: `${shims}:${process.env.PATH}`,
         HOME: directory,
         PORT: '0',
         OH_SESSION_API_KEYS_0: apiKey,
-        HQ_WORKSPACE_DIR: workspaceOf(apiKey),
+        SPYRIA_WORKSPACE_DIR: workspaceOf(apiKey),
       },
       stdout: 'pipe',
       stderr: 'inherit',
@@ -148,7 +148,7 @@ export const createHqAgentRelay = ({
       const port = listening.exec(output)?.[1]
       if (port) return { port: Number(port), process: child }
     }
-    throw new Error('hq-agent exited before listening')
+    throw new Error('spyria-agent exited before listening')
   }
   const agentOf = ({ apiKey }: FakeContainer) => {
     const agent = agents.get(apiKey) ?? startAgent(apiKey)

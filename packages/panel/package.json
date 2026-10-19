@@ -1,5 +1,5 @@
 {
-  "name": "@hq/panel",
+  "name": "@spyria/panel",
   "private": true,
   "type": "module",
   "exports": "./src/client.ts",
@@ -7,10 +7,10 @@
     "typecheck": "tsc -p ."
   },
   "dependencies": {
-    "@hq/db": "workspace:*",
-    "@hq/kernel": "workspace:*",
-    "@hq/session": "workspace:*",
-    "@hq/ui": "workspace:*",
+    "@spyria/db": "workspace:*",
+    "@spyria/kernel": "workspace:*",
+    "@spyria/session": "workspace:*",
+    "@spyria/ui": "workspace:*",
     "@radix-ui/react-tabs": "1.1.21",
     "@radix-ui/react-tooltip": "1.2.16",
     "lucide-react": "1.49.0",

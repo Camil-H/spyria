@@ -1,4 +1,4 @@
-import type { WorkspaceId } from '@hq/kernel'
+import type { WorkspaceId } from '@spyria/kernel'
 import type { ModelCall } from '../domain/usage.ts'
 
 export type GatewayUsageLogs = {

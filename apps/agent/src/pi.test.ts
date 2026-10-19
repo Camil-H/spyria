@@ -113,7 +113,7 @@ test('Stop aborts a Pi turn as cancelled and the next prompt continues the sessi
   expect(socket.events.findLast(kindOf('turn_end'))?.update.stopReason).toBe('end_turn')
 })
 
-test('a new hq-agent reopens a Pi session from its file with no replay, and a missing file falls back to a new session', async () => {
+test('a new spyria-agent reopens a Pi session from its file with no replay, and a missing file falls back to a new session', async () => {
   const first = started()
   const id = await first.create(piLaunchOf())
   const socket = first.open(id)

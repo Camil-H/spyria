@@ -3,7 +3,7 @@ import tailwindcss from '@tailwindcss/vite'
 import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
-const serverUrl = process.env.HQ_SERVER_URL ?? 'http://localhost:3000'
+const serverUrl = process.env.SPYRIA_SERVER_URL ?? 'http://localhost:3000'
 
 export default defineConfig({
   plugins: [tailwindcss(), react(), babel({ presets: [reactCompilerPreset()] })],

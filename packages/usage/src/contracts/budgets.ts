@@ -1,4 +1,4 @@
-import type { MemberId, Transactor, WorkspacePermission } from '@hq/kernel'
+import type { MemberId, Transactor, WorkspacePermission } from '@spyria/kernel'
 import type { BudgetAlert, BudgetChange, BudgetUse, MemberSpend } from '../domain/budgets.ts'
 
 export type BudgetLedger = {

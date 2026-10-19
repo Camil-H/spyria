@@ -1,4 +1,4 @@
-import type { MemberId, WorkspaceId } from '@hq/kernel'
+import type { MemberId, WorkspaceId } from '@spyria/kernel'
 import type { RuntimeTransactor } from '../contracts/transactor.ts'
 import { retireHost } from './remove-runtime-host.ts'
 

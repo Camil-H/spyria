@@ -1,9 +1,9 @@
 {
-  "name": "@hq/agent",
+  "name": "@spyria/agent",
   "private": true,
   "type": "module",
   "scripts": {
     "typecheck": "tsc -p .",
-    "build": "bun build --compile --minify src/main.ts --outfile dist/hq-agent"
+    "build": "bun build --compile --minify src/main.ts --outfile dist/spyria-agent"
   }
 }

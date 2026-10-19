@@ -1,5 +1,5 @@
-import type { MemberId, WorkspaceId } from '@hq/kernel'
-import { ErrorMessage, fieldClass, formatCost, ghostButtonClass, LabelledSection, useGuardedAction } from '@hq/ui'
+import type { MemberId, WorkspaceId } from '@spyria/kernel'
+import { ErrorMessage, fieldClass, formatCost, ghostButtonClass, LabelledSection, useGuardedAction } from '@spyria/ui'
 import { useEffect, useState } from 'react'
 import { type BudgetOverview, type BudgetProgress, isOverAlertLine } from '../domain/budgets.ts'
 import { useUsageCommands } from './providers.tsx'

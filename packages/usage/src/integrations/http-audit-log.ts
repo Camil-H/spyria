@@ -1,4 +1,4 @@
-import type { WorkspaceId } from '@hq/kernel'
+import type { WorkspaceId } from '@spyria/kernel'
 import type { AuditPage } from '../domain/audit.ts'
 import { UsageError } from '../domain/errors.ts'
 

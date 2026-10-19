@@ -1,4 +1,4 @@
-import { modelNameOf, withPricesOf } from '@hq/kernel'
+import { modelNameOf, withPricesOf } from '@spyria/kernel'
 import type { AgentChat, AgentConversation } from '../contracts/agent.ts'
 import type { ModelCallTurn } from '../contracts/repositories.ts'
 import { executionStatusOf, isStoredAgentEvent, streamedTextOf, toolCallIdOf } from '../domain/agent-events.ts'

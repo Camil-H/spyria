@@ -20,18 +20,18 @@ const givenArguments = process.argv.slice(2)
 const isPersonal = givenArguments.includes('--personal')
 const [claimUrlArgument] = givenArguments.filter((argument) => argument !== '--personal')
 const dockerSocket = process.env.DOCKER_SOCKET ?? '/var/run/docker.sock'
-const prefix = process.env.HQ_HOST_PREFIX ?? 'hq-'
+const prefix = process.env.SPYRIA_HOST_PREFIX ?? 'hq-'
 const docker = createDocker(dockerSocket)
 const toolNames: Record<CredentialsTool, string> = { claude: 'Claude Code', codex: 'Codex' }
 if (claimUrlArgument === 'login' || claimUrlArgument === 'logout') {
   const action: CredentialsAction = claimUrlArgument
   const tool = givenArguments[1] as CredentialsTool
   if (!credentialsTools.includes(tool)) {
-    console.error(`Usage: hq-host ${action} ${credentialsTools.join('|')}`)
+    console.error(`Usage: spyria-host ${action} ${credentialsTools.join('|')}`)
     process.exit(2)
   }
   if (action === 'login' && !process.stdin.isTTY) {
-    console.error(`Run it in a terminal: docker exec -it hq-host hq-host login ${tool}`)
+    console.error(`Run it in a terminal: docker exec -it hq-host spyria-host login ${tool}`)
     process.exit(2)
   }
   await runCredentialsCommand(docker, { socketPath: dockerSocket, prefix, tool, action }).catch((error) => {
@@ -43,14 +43,16 @@ if (claimUrlArgument === 'login' || claimUrlArgument === 'logout') {
   process.exit(0)
 }
 if (!claimUrlArgument) {
-  console.error('Usage: hq-host [--personal] <https://hq.example.com/h/CODE>, or hq-host login|logout claude|codex')
+  console.error(
+    'Usage: spyria-host [--personal] <https://spyria.example.com/h/CODE>, or spyria-host login|logout claude|codex',
+  )
   process.exit(2)
 }
 const claimUrl = new URL(claimUrlArgument)
 const claimCode = claimUrl.pathname.match(/\/h\/([A-Za-z0-9]+)$/)?.[1]
 const socketUrl = new URL('/host', claimUrl)
 socketUrl.protocol = claimUrl.protocol === 'https:' ? 'wss:' : 'ws:'
-const stateDirectory = process.env.HQ_HOST_STATE_DIR ?? '/state'
+const stateDirectory = process.env.SPYRIA_HOST_STATE_DIR ?? '/state'
 const tokenPath = join(stateDirectory, 'token')
 const isInContainer = existsSync('/.dockerenv')
 const runner = createCommandRunner({
@@ -68,19 +70,19 @@ const declaration = async () => {
   })
   return { personal: true, signedIn: credentials.signedIn, credentialsChangedAt: credentials.credentialsChangedAt }
 }
-let sendToHq = (_frame: object) => false
+let sendToSpyria = (_frame: object) => false
 const modelRelay = createModelRelay({
-  send: (frame) => sendToHq(frame),
+  send: (frame) => sendToSpyria(frame),
   redact: isPersonal ? (text) => redacted(text, credentials.secrets) : undefined,
 })
 const modelRelayServer = Bun.serve({
-  port: Number(process.env.HQ_HOST_GATEWAY_PORT ?? (isInContainer ? 4000 : 0)),
+  port: Number(process.env.SPYRIA_HOST_GATEWAY_PORT ?? (isInContainer ? 4000 : 0)),
   hostname: '0.0.0.0',
   idleTimeout: 0,
   fetch: modelRelay.fetch,
 })
 const gatewayUrl = `http://${isInContainer ? gatewayRelayAlias : 'host.docker.internal'}:${modelRelayServer.port}/v1`
-const heartbeatMilliseconds = Number(process.env.HQ_HOST_HEARTBEAT_MS ?? 30_000)
+const heartbeatMilliseconds = Number(process.env.SPYRIA_HOST_HEARTBEAT_MS ?? 30_000)
 const maximumBufferedBytes = 16 * 1024 * 1024
 const maximumReconnectDelayMilliseconds = 30_000
 let reconnectDelayMilliseconds = 1000
@@ -119,7 +121,7 @@ const connect = () => {
   }
   const hello = async (token: string) => {
     send({ type: 'hello', token, gatewayUrl, system: await systemOf(docker), ...(await declaration()) })
-    sendToHq = (frame) => socket.readyState === WebSocket.OPEN && (send(frame), true)
+    sendToSpyria = (frame) => socket.readyState === WebSocket.OPEN && (send(frame), true)
     reconnectDelayMilliseconds = 1000
     heartbeatTimer = setInterval(() => sendHeartbeat().catch(() => {}), heartbeatMilliseconds)
     console.log(`Connected to ${socketUrl.origin}`)
@@ -158,7 +160,7 @@ const connect = () => {
   socket.onclose = (event) => {
     clearInterval(heartbeatTimer)
     relay.closeAll()
-    sendToHq = () => false
+    sendToSpyria = () => false
     modelRelay.closeAll()
     if (isRefusal(event.code) && storedToken() && claimCode && !isTokenRefused) {
       console.error(`${event.reason}; pairing again with the code in the URL`)
@@ -169,7 +171,7 @@ const connect = () => {
       console.error(event.reason)
       process.exit(1)
     }
-    console.error(`Disconnected from HQ (${event.code}), reconnecting`)
+    console.error(`Disconnected from Spyria (${event.code}), reconnecting`)
     setTimeout(connect, reconnectDelayMilliseconds * (0.5 + Math.random()))
     reconnectDelayMilliseconds = Math.min(reconnectDelayMilliseconds * 2, maximumReconnectDelayMilliseconds)
   }

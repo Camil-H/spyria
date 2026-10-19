@@ -123,7 +123,7 @@ test('the final tool call update carries the merged call; turn ends and adapter 
   })
   expect(failing.body).toMatchObject({ execution_status: 'error', error: 'Authentication required' })
 
-  const missing = await create({ ...launchOf(), agent: { acp_command: ['hq-agent-no-such-adapter'] } })
+  const missing = await create({ ...launchOf(), agent: { acp_command: ['spyria-agent-no-such-adapter'] } })
   expect((await call('GET', `/api/conversations/${missing}`)).body).toMatchObject({ execution_status: 'error' })
   const failedStart = open(missing)
   await failedStart.until(kindOf('error'))
@@ -160,7 +160,7 @@ test('a create with a known id returns that conversation without a second adapte
 
 test('the workspace is reported at session start and after a turn only when it changed: no branch without git, then the branch; resent on reconnect', async () => {
   const { open, create, prompt } = started()
-  const workingDirectory = mkdtempSync(join(tmpdir(), 'hq-agent-workspace-'))
+  const workingDirectory = mkdtempSync(join(tmpdir(), 'spyria-agent-workspace-'))
   const id = await create({ ...launchOf(), workspace: { working_dir: workingDirectory } })
   const socket = open(id)
   const turns = [
@@ -198,9 +198,9 @@ test('the workspace is reported at session start and after a turn only when it c
   rmSync(workingDirectory, { recursive: true, force: true })
 })
 
-test('a subscription launch gets no gateway URL and no key, hq-agent never logs environment values, and its own children never see its session key', async () => {
-  const secretValues = ['inherited-anthropic-key-0001', 'http://gateway.invalid/v1', 'sk-hq-llm-token-0002', apiKey]
-  const fakeGitDirectory = mkdtempSync(join(tmpdir(), 'hq-agent-git-'))
+test('a subscription launch gets no gateway URL and no key, spyria-agent never logs environment values, and its own children never see its session key', async () => {
+  const secretValues = ['inherited-anthropic-key-0001', 'http://gateway.invalid/v1', 'sk-spyria-llm-token-0002', apiKey]
+  const fakeGitDirectory = mkdtempSync(join(tmpdir(), 'spyria-agent-git-'))
   const gitEnvironmentPath = join(fakeGitDirectory, 'environment')
   writeFileSync(join(fakeGitDirectory, 'git'), `#!/bin/sh\nenv > ${gitEnvironmentPath}\nexit 1\n`, { mode: 0o755 })
   const child = Bun.spawn(['bun', new URL('./main.ts', import.meta.url).pathname], {
@@ -219,7 +219,7 @@ test('a subscription launch gets no gateway URL and no key, hq-agent never logs 
   let output = ''
   while (!/port (\d+)/.test(output)) {
     const { value, done } = await reader.read()
-    if (done) throw new Error(`hq-agent did not start: ${output}`)
+    if (done) throw new Error(`spyria-agent did not start: ${output}`)
     output += new TextDecoder().decode(value)
   }
   const { open, create, prompt } = clientOf(Number(/port (\d+)/.exec(output)?.[1]))
@@ -238,13 +238,13 @@ test('a subscription launch gets no gateway URL and no key, hq-agent never logs 
     const apiKeyLaunch = await envOf(
       launchOf(
         { acp_command: ['env', 'ANTHROPIC_BASE_URL=http://gateway.invalid', ...stubCommand] },
-        { ANTHROPIC_API_KEY: { kind: 'StaticSecret', value: 'sk-hq-llm-token-0002' } },
+        { ANTHROPIC_API_KEY: { kind: 'StaticSecret', value: 'sk-spyria-llm-token-0002' } },
       ),
     )
     expect(apiKeyLaunch).toEqual(expect.arrayContaining(['ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL']))
     await create({
-      ...launchOf({ acp_command: ['hq-agent-no-such-adapter'] }),
-      secrets: { X: { value: 'sk-hq-llm-token-0002' } },
+      ...launchOf({ acp_command: ['spyria-agent-no-such-adapter'] }),
+      secrets: { X: { value: 'sk-spyria-llm-token-0002' } },
     })
   } finally {
     child.kill()
@@ -252,7 +252,7 @@ test('a subscription launch gets no gateway URL and no key, hq-agent never logs 
   for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read())
     output += new TextDecoder().decode(chunk.value)
   const logs = output + (await new Response(child.stderr).text())
-  expect(logs).toContain('hq-agent listening')
+  expect(logs).toContain('spyria-agent listening')
   for (const value of secretValues) expect(logs).not.toContain(value)
   const gitEnvironment = readFileSync(gitEnvironmentPath, 'utf8')
   rmSync(fakeGitDirectory, { recursive: true, force: true })
@@ -261,7 +261,7 @@ test('a subscription launch gets no gateway URL and no key, hq-agent never logs 
   expect(gitEnvironment).not.toContain(apiKey)
 })
 
-test('a new hq-agent resumes the session of an earlier one, and a missing session falls back to a new one', async () => {
+test('a new spyria-agent resumes the session of an earlier one, and a missing session falls back to a new one', async () => {
   const first = started()
   const id = await first.create(launchOf())
   const socket = first.open(id)

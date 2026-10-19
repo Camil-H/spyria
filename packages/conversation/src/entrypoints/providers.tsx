@@ -1,4 +1,4 @@
-import { createCommandsContext } from '@hq/ui'
+import { createCommandsContext } from '@spyria/ui'
 import { createContext, type ReactNode } from 'react'
 import type { AgentStream, ConversationCommands } from './commands.ts'
 import type { QuestionAnswer } from './endpoints.ts'

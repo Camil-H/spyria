@@ -63,7 +63,7 @@ test.describe('Branch actions', () => {
     await configureGitHubApp(page)
     const chatId = await devChatWithCommit(page, agentScript, 'Status totals')
     const statusLine = statusLineOf(page)
-    await expect(statusLine).toContainText(/hq\/status-totals-\w+ → main/)
+    await expect(statusLine).toContainText(/spyria\/status-totals-\w+ → main/)
     await expect(statusLine).toContainText('1 ahead of main')
     await expect(statusLine).toContainText('No uncommitted files')
     await runAgent(
@@ -84,7 +84,7 @@ test.describe('Branch actions', () => {
     await connectGitHub(page)
     const chatId = await devChatWithCommit(page, agentScript, 'Commit totals')
     await headerButtonOf(page, 'Push').click()
-    await expect(tabPanelOf(page).getByRole('status')).toContainText(/^Pushed hq\/commit-totals-/)
+    await expect(tabPanelOf(page).getByRole('status')).toContainText(/^Pushed spyria\/commit-totals-/)
     const statusLine = statusLineOf(page)
     await expect(statusLine).toContainText('Pushed branch up to date')
     await expect(statusLine).toContainText('Last push')
@@ -135,7 +135,7 @@ test.describe('Branch actions', () => {
 
     await panelTabOf(page, 'Commits').click()
     await expect(tabPanelOf(page).getByRole('listitem').first()).toContainText(
-      new RegExp(`Merge branch '${baseBranch}' into hq/update-totals-`),
+      new RegExp(`Merge branch '${baseBranch}' into spyria/update-totals-`),
     )
     await panelTabOf(page, 'Files').click()
     await tabPanelOf(page).getByRole('button', { name: 'docs', exact: false }).click()

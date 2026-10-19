@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
-import { acme, alice, bob, createMockSnapshot, lee } from '@hq/db'
-import { type ChatId, type ChatPermission, chatId, chatPermissions, type MemberId } from '@hq/kernel'
+import { acme, alice, bob, createMockSnapshot, lee } from '@spyria/db'
+import { type ChatId, type ChatPermission, chatId, chatPermissions, type MemberId } from '@spyria/kernel'
 import { getMembers } from './get-members.ts'
 
 const snapshot = createMockSnapshot()

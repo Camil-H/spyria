@@ -17,14 +17,14 @@ const completionRequest = () =>
     body: '{"model":"fake/fake-model"}',
   })
 
-test('refuses anything outside /v1 without contacting HQ', async () => {
+test('refuses anything outside /v1 without contacting Spyria', async () => {
   const { relay, sent } = relayCollecting()
   for (const path of ['/api/providers', '/health', '/v2/chat', '/'])
     expect((await relay.fetch(new Request(`http://hq-gateway-relay:4000${path}`))).status).toBe(404)
   expect(sent).toEqual([])
 })
 
-test('relays a /v1 call to HQ and streams the answer chunk by chunk', async () => {
+test('relays a /v1 call to Spyria and streams the answer chunk by chunk', async () => {
   const { relay, nextOf } = relayCollecting()
   const answer = relay.fetch(completionRequest())
   const request = await nextOf('gw_req')
@@ -47,7 +47,7 @@ test('relays a /v1 call to HQ and streams the answer chunk by chunk', async () =
   expect((await reader.read()).done).toBe(true)
 })
 
-test('answers 502 when HQ reports an error, when the socket closes or while disconnected', async () => {
+test('answers 502 when Spyria reports an error, when the socket closes or while disconnected', async () => {
   const { relay, nextOf } = relayCollecting()
   const failed = relay.fetch(completionRequest())
   relay.handle({ type: 'gw_error', sid: (await nextOf('gw_req')).sid })
@@ -62,7 +62,7 @@ test('answers 502 when HQ reports an error, when the socket closes or while disc
   expect((await relayCollecting(false).relay.fetch(completionRequest())).status).toBe(502)
 })
 
-test('tells HQ to cancel when the caller stops reading', async () => {
+test('tells Spyria to cancel when the caller stops reading', async () => {
   const { relay, nextOf } = relayCollecting()
   const answer = relay.fetch(completionRequest())
   const { sid } = await nextOf('gw_req')
@@ -72,7 +72,7 @@ test('tells HQ to cancel when the caller stops reading', async () => {
   relay.handle({ type: 'gw_chunk', sid, data: 'late' })
 })
 
-test('relays hq-agent’s MCP calls on /mcp with their session headers', async () => {
+test('relays spyria-agent’s MCP calls on /mcp with their session headers', async () => {
   const { relay, nextOf } = relayCollecting()
   void relay.fetch(
     new Request('http://hq-gateway-relay:4000/mcp', {

@@ -1,4 +1,4 @@
-import { useQuery } from '@hq/db/react'
+import { useQuery } from '@spyria/db/react'
 import { ListChecks } from 'lucide-react'
 import { Suspense } from 'react'
 import { getPlan } from '../queries/get-plan.ts'

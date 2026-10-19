@@ -121,7 +121,7 @@ test('creates the container with exactly the hardening flags and three named vol
   })
 })
 
-test('relays only to paths on the hq-agent port of the runtime', () => {
+test('relays only to paths on the spyria-agent port of the runtime', () => {
   expect(relayUrlOf('http://172.20.0.2:8000', '/api/conversations?limit=5').href).toBe(
     'http://172.20.0.2:8000/api/conversations?limit=5',
   )
@@ -180,7 +180,7 @@ test('removing a runtime never deletes the credentials volumes', async () => {
   ])
 })
 
-test('each runtime gets its own network, which a containerized hq-host joins on create and start and leaves on remove', async () => {
+test('each runtime gets its own network, which a containerized spyria-host joins on create and start and leaves on remove', async () => {
   const { docker, calls } = recordingDocker()
   const runner = createCommandRunner({ docker, prefix: 'hq-', selfContainerId: 'self-1' })
   const joined = { Container: 'self-1', EndpointConfig: { Aliases: ['hq-gateway-relay'] } }

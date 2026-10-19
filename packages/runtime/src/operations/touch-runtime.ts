@@ -1,4 +1,4 @@
-import type { ChatId, WorkspaceId } from '@hq/kernel'
+import type { ChatId, WorkspaceId } from '@spyria/kernel'
 import type { RuntimeTransactor } from '../contracts/transactor.ts'
 import { isTouchDue } from '../domain/runtime.ts'
 

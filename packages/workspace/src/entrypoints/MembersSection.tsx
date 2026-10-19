@@ -1,6 +1,6 @@
-import { useQuery } from '@hq/db/react'
-import { canGrantWorkspaceRole, memberRoleId, type WorkspaceId, type WorkspaceRole } from '@hq/kernel'
-import { useSession } from '@hq/session'
+import { useQuery } from '@spyria/db/react'
+import { canGrantWorkspaceRole, memberRoleId, type WorkspaceId, type WorkspaceRole } from '@spyria/kernel'
+import { useSession } from '@spyria/session'
 import {
   buttonClass,
   Dialog,
@@ -10,7 +10,7 @@ import {
   LabelledSection,
   labelClass,
   useGuardedAction,
-} from '@hq/ui'
+} from '@spyria/ui'
 import { type SubmitEvent, useState } from 'react'
 import { listInvitations, listMembers, type WorkspaceMember } from '../queries/list-members.ts'
 import { listWorkspaceRoles } from '../queries/list-roles.ts'

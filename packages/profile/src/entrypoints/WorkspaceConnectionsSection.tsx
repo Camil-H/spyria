@@ -1,5 +1,5 @@
-import { useQuery } from '@hq/db/react'
-import type { MemberId, WorkspaceId } from '@hq/kernel'
+import { useQuery } from '@spyria/db/react'
+import type { MemberId, WorkspaceId } from '@spyria/kernel'
 import {
   buttonClass,
   Dialog,
@@ -9,7 +9,7 @@ import {
   LabelledSection,
   labelClass,
   useGuardedAction,
-} from '@hq/ui'
+} from '@spyria/ui'
 import { type SubmitEvent, useState } from 'react'
 import type { ConnectionInput } from '../domain/workspace-connection.ts'
 import { type ListedWorkspaceConnection, listWorkspaceConnections } from '../queries/list-workspace-connections.ts'

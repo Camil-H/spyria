@@ -1,5 +1,5 @@
-import { DomainError, type MemberId, type WorkspaceId, workspacePermissions } from '@hq/kernel'
 import { type AnyMutatorRegistry, type MutatorResultDetails, type Row, Zero } from '@rocicorp/zero'
+import { DomainError, type MemberId, type WorkspaceId, workspacePermissions } from '@spyria/kernel'
 import type { DraftRow, Snapshot } from './schema.ts'
 import { type Schema, schema } from './zero.ts'
 import { queries } from './zero-queries.ts'
@@ -178,7 +178,7 @@ export const createZeroStore = ({
   mutators,
   draftStorage,
 }: ZeroStoreOptions) => {
-  const draftKeyPrefix = `hq.draft:${memberId}:`
+  const draftKeyPrefix = `spyria.draft:${memberId}:`
   const draftKeyOf = (draft: DraftRow) => `${draftKeyPrefix}${draft.workspaceId}:${draft.chatId}`
   let drafts: readonly DraftRow[] = Array.from({ length: draftStorage?.length ?? 0 }, (_, index) =>
     draftStorage?.key(index),

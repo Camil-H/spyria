@@ -1,4 +1,4 @@
-import type { MemberId, Transactor, WorkspacePermission } from '@hq/kernel'
+import type { MemberId, Transactor, WorkspacePermission } from '@spyria/kernel'
 import type { AuditRecord } from '../domain/audit.ts'
 
 export type AuditQuery = {

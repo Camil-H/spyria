@@ -1,4 +1,4 @@
-import { chatId as toChatId, type WorkspaceId } from '@hq/kernel'
+import { chatId as toChatId, type WorkspaceId } from '@spyria/kernel'
 import { type Ref, Suspense, useEffect, useState } from 'react'
 import { Link, useOutletContext, useParams } from 'react-router'
 import { isUnreachableSessionNotice } from '../domain/session-routing.ts'

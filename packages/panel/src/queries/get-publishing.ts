@@ -1,5 +1,5 @@
-import { findChat, inChat, type Snapshot } from '@hq/db'
-import type { ChatId, MemberId, WorkspaceId } from '@hq/kernel'
+import { findChat, inChat, type Snapshot } from '@spyria/db'
+import type { ChatId, MemberId, WorkspaceId } from '@spyria/kernel'
 
 const openStates = ['open', 'draft']
 

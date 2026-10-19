@@ -1,6 +1,6 @@
-import type { WorkspaceId } from '@hq/kernel'
-import { buttonClass, Dialog, focusRing, menuContentClass, menuItemClass } from '@hq/ui'
 import { Content, Item, Root, Trigger } from '@radix-ui/react-dropdown-menu'
+import type { WorkspaceId } from '@spyria/kernel'
+import { buttonClass, Dialog, focusRing, menuContentClass, menuItemClass } from '@spyria/ui'
 import { Ellipsis } from 'lucide-react'
 import { useState } from 'react'
 import type { ChatsPolicy } from '../domain/project.ts'

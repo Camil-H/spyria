@@ -1,4 +1,4 @@
-import { chatModelsOf, type Model, type ModelTier, nearestModelOf, routableModelOf } from '@hq/kernel'
+import { chatModelsOf, type Model, type ModelTier, nearestModelOf, routableModelOf } from '@spyria/kernel'
 import { type Answers, confidenceThreshold } from './decisions.ts'
 
 const efforts = ['small', 'medium', 'large']

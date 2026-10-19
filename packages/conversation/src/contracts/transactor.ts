@@ -1,4 +1,4 @@
-import type { Transactor } from '@hq/kernel'
+import type { Transactor } from '@spyria/kernel'
 import type {
   AgentEventRepository,
   AgentJobs,

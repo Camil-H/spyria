@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { memberId, workspaceId } from '@hq/kernel'
+import { memberId, workspaceId } from '@spyria/kernel'
 import { LastAdmin, MemberNotFound, OwnMembership } from './errors.ts'
 import { isActive, type Member, requireActiveMember, requireAnotherAdmin, requireAnotherMember } from './member.ts'
 

@@ -11,7 +11,7 @@ import {
   type RuntimeId,
   type WorkspaceId,
   type WorkspacePermission,
-} from '@hq/kernel'
+} from '@spyria/kernel'
 
 type WorkspaceRow = { id: WorkspaceId; name: string; localSessions: boolean }
 type MembershipRow = {

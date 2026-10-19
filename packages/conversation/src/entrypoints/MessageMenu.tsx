@@ -1,6 +1,6 @@
-import type { MessageId, WorkspaceId } from '@hq/kernel'
-import { ErrorMessage, focusRing, menuContentClass, menuItemClass, useGuardedAction } from '@hq/ui'
 import { Content, Item, Root, Trigger } from '@radix-ui/react-dropdown-menu'
+import type { MessageId, WorkspaceId } from '@spyria/kernel'
+import { ErrorMessage, focusRing, menuContentClass, menuItemClass, useGuardedAction } from '@spyria/ui'
 import { Ellipsis } from 'lucide-react'
 import { useRef } from 'react'
 import { useNavigate, useOutletContext } from 'react-router'

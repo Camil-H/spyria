@@ -1,6 +1,6 @@
-import type { ZeroContext } from '@hq/db/zero-queries'
-import { chatId, memberId, projectId, workspaceId } from '@hq/kernel'
 import { defineMutator, defineMutators, type Transaction } from '@rocicorp/zero'
+import type { ZeroContext } from '@spyria/db/zero-queries'
+import { chatId, memberId, projectId, workspaceId } from '@spyria/kernel'
 import { z } from 'zod/mini'
 import { ForeignWorkspace } from '../domain/errors.ts'
 import { Name } from '../domain/name.ts'

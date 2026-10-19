@@ -1,6 +1,6 @@
-import type { RuntimeHostRow } from '@hq/db'
-import { useQuery } from '@hq/db/react'
-import type { WorkspaceId } from '@hq/kernel'
+import type { RuntimeHostRow } from '@spyria/db'
+import { useQuery } from '@spyria/db/react'
+import type { WorkspaceId } from '@spyria/kernel'
 import {
   buttonClass,
   Dialog,
@@ -11,7 +11,7 @@ import {
   labelClass,
   Switch,
   useGuardedAction,
-} from '@hq/ui'
+} from '@spyria/ui'
 import { type SubmitEvent, useEffect, useState } from 'react'
 import { isClaimExpired } from '../domain/claim.ts'
 import { listRuntimeHosts, localSessionsOf } from '../queries/list-runtime-hosts.ts'

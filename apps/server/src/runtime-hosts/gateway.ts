@@ -1,6 +1,7 @@
-import type { Database } from '@hq/db/postgres'
-import { schema } from '@hq/db/zero'
-import type { RuntimeHostId, WorkspaceId } from '@hq/kernel'
+import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
+import type { Database } from '@spyria/db/postgres'
+import { schema } from '@spyria/db/zero'
+import type { RuntimeHostId, WorkspaceId } from '@spyria/kernel'
 import {
   type ConnectedHost,
   createHostSessionHandlers,
@@ -12,8 +13,7 @@ import {
   type SandboxResponse,
   type SandboxSocketListener,
   type SandboxStatus,
-} from '@hq/runtime/server'
-import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
+} from '@spyria/runtime/server'
 import { upgradeWebSocket } from 'hono/bun'
 import type { WSContext } from 'hono/ws'
 import type { ModelCallRelay, RelayFrame } from '../llm-relay.ts'
@@ -57,13 +57,13 @@ export const createRuntimeHostGateway = ({
   pingIntervalMilliseconds = 25_000,
   afterHello,
   relayModelCall,
-  hqAgentImage,
+  spyriaAgentImage,
 }: {
   databases: () => Iterable<Database>
   pingIntervalMilliseconds?: number
   afterHello?: (database: Database, host: ConnectedHost) => Promise<unknown>
   relayModelCall?: ModelCallRelay
-  hqAgentImage?: string
+  spyriaAgentImage?: string
 }) => {
   const connectionByHost = new Map<string, Connection>()
   const operationChains = new Map<string, Promise<unknown>>()
@@ -137,8 +137,8 @@ export const createRuntimeHostGateway = ({
     )
     if (connection.identified) connection.identified.database = database
     connection.identifying.resolve()
-    if (hqAgentImage)
-      prepare(host, hqAgentImage).catch((error) =>
+    if (spyriaAgentImage)
+      prepare(host, spyriaAgentImage).catch((error) =>
         console.error(`Preparing runtime host ${host.hostId} failed: ${errorMessageOf(error)}`),
       )
     handlers

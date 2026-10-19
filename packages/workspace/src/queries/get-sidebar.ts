@@ -1,5 +1,5 @@
-import { type ChatRow, chatPermissionsIn, participantIn, type Snapshot } from '@hq/db'
-import { type ChatId, can, type MemberId, type ProjectId, type WorkspaceId } from '@hq/kernel'
+import { type ChatRow, chatPermissionsIn, participantIn, type Snapshot } from '@spyria/db'
+import { type ChatId, can, type MemberId, type ProjectId, type WorkspaceId } from '@spyria/kernel'
 
 type ChatSummaryRow = Readonly<{
   id: ChatId

@@ -59,7 +59,7 @@ export const questionAt = async (socket: ReturnType<ReturnType<typeof clientOf>[
   String((await socket.until(kindOf('question'), count)).filter(kindOf('question'))[count - 1]?.update.questionId)
 
 export const createAgentTestbed = () => {
-  const stateDirectory = mkdtempSync(join(tmpdir(), 'hq-agent-test-'))
+  const stateDirectory = mkdtempSync(join(tmpdir(), 'spyria-agent-test-'))
   const stubCommand = ['env', `STUB_STATE=${stateDirectory}`, 'STUB_GAP_MS=5', 'node', stub]
   const launchOf = (extra: Record<string, unknown> = {}, secrets = {}) => ({
     agent: { kind: 'ACPAgent', acp_command: stubCommand, ...extra },

@@ -1,4 +1,4 @@
-import { type ChatId, can, type MessageId, messageId } from '@hq/kernel'
+import { type ChatId, can, type MessageId, messageId } from '@spyria/kernel'
 import type {
   AgentClient,
   AgentEventSockets,

@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { BundleOf } from '@hq/conversation/server'
+import type { BundleOf } from '@spyria/conversation/server'
 
 type Push = { url: string; token: string; branch: string; baseBranch: string; bundleOf: BundleOf }
 type BaseFetch = { url: string; token: string; baseBranch: string; runtimeBaseHead: string | null }
@@ -47,7 +47,7 @@ const inTemporaryRepository = async <Result>(
   token: string,
   work: (inRepository: InRepository, directory: string) => Promise<Result>,
 ) => {
-  const directory = await mkdtemp(join(tmpdir(), 'hq-git-'))
+  const directory = await mkdtemp(join(tmpdir(), 'spyria-git-'))
   const repository = join(directory, 'repository.git')
   const env = gitEnvironmentOf(directory, url, token)
   const git = async (...args: string[]) => {
@@ -81,7 +81,7 @@ export const pushBundle = ({ url, token, branch, baseBranch, bundleOf }: Push) =
     if (!heads.isDone || otherHeads.length > 0 || head?.split(' ')[1] !== branchRef)
       return { failure: 'The runtime sent a bundle for other branches' }
     if (prerequisite)
-      await inRepository('fetch', '--quiet', '--depth=1', url, `${prerequisiteRef}:refs/hq/prerequisite`)
+      await inRepository('fetch', '--quiet', '--depth=1', url, `${prerequisiteRef}:refs/spyria/prerequisite`)
     const verified = await inRepository('bundle', 'verify', '--quiet', bundle)
     if (!verified.isDone) return { failure: `The runtime's bundle is not valid: ${lastLinesOf(verified.output)}` }
     const fetched = await inRepository('fetch', '--quiet', bundle, `${branchRef}:${branchRef}`)

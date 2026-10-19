@@ -1,9 +1,9 @@
 import { expect, setDefaultTimeout, spyOn, test } from 'bun:test'
-import { testGatewayAdmin } from '@hq/db/testing'
-import { schema } from '@hq/db/zero'
-import { type WorkspaceId, workspaceId } from '@hq/kernel'
-import { createBifrostUsageLogs, createUsageJobs, syncUsageNow } from '@hq/usage/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
+import { testGatewayAdmin } from '@spyria/db/testing'
+import { schema } from '@spyria/db/zero'
+import { type WorkspaceId, workspaceId } from '@spyria/kernel'
+import { createBifrostUsageLogs, createUsageJobs, syncUsageNow } from '@spyria/usage/server'
 import { acme, alice, bob, gatewayLogsOf, globex, openSharedTestApp, virtualKeyOf } from './testing/testing.ts'
 
 setDefaultTimeout(60_000)

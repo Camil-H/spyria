@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from 'bun:test'
-import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@hq/db/testing'
+import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@spyria/db/testing'
 import { exportJWK, generateKeyPair, type JWTPayload, SignJWT } from 'jose'
 import { createApp } from '../app.ts'
 import { acme, alice, bob, globex, testAuthSettings, workspaceEventsOf } from '../testing/testing.ts'
@@ -102,7 +102,7 @@ const queryWith = (token: string) =>
     body: JSON.stringify(['transform', [{ id: 'chats', name: 'chats', args: [] }]]),
   })
 
-const sameAppHeaders = { origin: appOrigin, 'x-hq-csrf': '1', 'content-type': 'application/json' }
+const sameAppHeaders = { origin: appOrigin, 'x-spyria-csrf': '1', 'content-type': 'application/json' }
 const postAuth = (path: string, cookie: string, body: object, headers: Record<string, string> = sameAppHeaders) =>
   app.request(path, { method: 'POST', headers: { ...headers, cookie }, body: JSON.stringify(body) })
 
@@ -111,13 +111,13 @@ test('login redirects to the IdP with PKCE, state and nonce', async () => {
   expect(login.status).toBe(302)
   expect(login.location.origin).toBe(idpIssuer)
   expect(Object.fromEntries(login.location.searchParams)).toMatchObject({
-    client_id: 'hq',
+    client_id: 'spyria',
     redirect_uri: testAuthSettings.oidc.redirectUri,
     response_type: 'code',
     code_challenge_method: 'S256',
   })
   expect(login.location.searchParams.get('code_challenge')?.length).toBeGreaterThan(40)
-  expect(login.cookie).toContain('hq_login=')
+  expect(login.cookie).toContain('spyria_login=')
 })
 
 test('a verified email of a member opens a session in each of their workspaces', async () => {
@@ -141,7 +141,7 @@ test('an email without any membership is not invited and opens nothing', async (
   expect(signIn.status).toBe(403)
   expect(signIn.page).toContain('"status":"not_invited"')
   expect(signIn.page).toContain('nina@example.com')
-  expect(signIn.cookie).not.toContain('hq_s_')
+  expect(signIn.cookie).not.toContain('spyria_s_')
 })
 
 test.each<[string, (nonce: string, previousNonce: string) => Promise<string>]>([
@@ -165,7 +165,14 @@ test.each<[string, (nonce: string, previousNonce: string) => Promise<string>]>([
       const [header, , signature] = (
         await signIdToken({ nonce, email: 'bob@example.com', email_verified: true })
       ).split('.')
-      const payload = { nonce, email: 'alice@example.com', email_verified: true, iss: idpIssuer, aud: 'hq', sub: 's' }
+      const payload = {
+        nonce,
+        email: 'alice@example.com',
+        email_verified: true,
+        iss: idpIssuer,
+        aud: 'spyria',
+        sub: 's',
+      }
       return `${header}.${Buffer.from(JSON.stringify({ ...payload, exp: nowInSeconds() + 60, iat: nowInSeconds() })).toString('base64url')}.${signature}`
     },
   ],
@@ -175,7 +182,7 @@ test.each<[string, (nonce: string, previousNonce: string) => Promise<string>]>([
       new SignJWT({ nonce, email: 'alice@example.com', email_verified: true })
         .setProtectedHeader({ alg: 'RS256', kid: 'fake-idp' })
         .setIssuer(idpIssuer)
-        .setAudience('hq')
+        .setAudience('spyria')
         .setSubject('subject-1')
         .setIssuedAt()
         .setExpirationTime(nowInSeconds() + 60)
@@ -187,20 +194,20 @@ test.each<[string, (nonce: string, previousNonce: string) => Promise<string>]>([
   const signIn = await signInWith((nonce) => idTokenOf(nonce, previousLogin.nonce))
   expect(signIn.status).toBe(400)
   expect(signIn.page).toContain('"status":"failed"')
-  expect(signIn.cookie).not.toContain('hq_s_')
+  expect(signIn.cookie).not.toContain('spyria_s_')
 })
 
 test('the callback refuses a wrong state, a missing login cookie and a tampered login cookie', async () => {
   const login = await startLogin()
   nextIdToken = await signIdToken({ nonce: login.nonce, email: 'alice@example.com', email_verified: true })
-  const tamperedCookie = login.cookie.replace(/hq_login=([^;]*)/, (_, value) => `hq_login=x${value}`)
+  const tamperedCookie = login.cookie.replace(/spyria_login=([^;]*)/, (_, value) => `spyria_login=x${value}`)
   for (const response of [
     await callback('wrong-state', login.cookie),
     await callback(login.state, ''),
     await callback(login.state, tamperedCookie),
   ]) {
     expect(response.status).toBe(400)
-    expect(cookieHeaderOf(response)).not.toContain('hq_s_')
+    expect(cookieHeaderOf(response)).not.toContain('spyria_s_')
   }
 })
 
@@ -247,7 +254,7 @@ test('renewal issues a new token from the session cookie', async () => {
 
 test('renewal is refused without the CSRF header, from another origin, without a cookie and after logout', async () => {
   const { cookie } = await signInAs('alice@example.com')
-  const { 'x-hq-csrf': _, ...withoutCsrf } = sameAppHeaders
+  const { 'x-spyria-csrf': _, ...withoutCsrf } = sameAppHeaders
   expect((await postAuth('/auth/renew', cookie, { workspaceId: acme }, withoutCsrf)).status).toBe(403)
   expect(
     (await postAuth('/auth/renew', cookie, { workspaceId: acme }, { ...sameAppHeaders, origin: 'http://evil.test' }))
@@ -276,7 +283,7 @@ test('a new session for another workspace needs a bearer token of a member of bo
   expect((await openFor(bobInAcme)).status).toBe(403)
   const opened = await openFor(aliceInAcme)
   expect(opened.status).toBe(200)
-  expect(cookieHeaderOf(opened)).toContain(`hq_s_${globex}=`)
+  expect(cookieHeaderOf(opened)).toContain(`spyria_s_${globex}=`)
   expect((await queryWith(((await opened.json()) as { token: string }).token)).status).toBe(200)
 })
 
@@ -285,11 +292,11 @@ test('Bob signed in through the IdP has a session in Acme only', async () => {
   expect(sessions.map((session) => session.workspaceId)).toEqual([acme])
 })
 
-test('without test hooks the app ignores the hq_test cookie, the test routes and database claims', async () => {
+test('without test hooks the app ignores the spyria_test cookie, the test routes and database claims', async () => {
   const [aliceInOther] = await openSessions(otherDatabase.database, 'member-alice', acme)
   if (!aliceInOther) throw new Error('missing session')
-  const testCookie = `hq_test=${encodeURIComponent(JSON.stringify({ db: otherDatabase.name, user: 'member-alice', tokenSeconds: 1 }))}`
-  const cookie = `${testCookie}; hq_s_${acme}=${aliceInOther.sessionId}`
+  const testCookie = `spyria_test=${encodeURIComponent(JSON.stringify({ db: otherDatabase.name, user: 'member-alice', tokenSeconds: 1 }))}`
+  const cookie = `${testCookie}; spyria_s_${acme}=${aliceInOther.sessionId}`
   expect(await sessionsOf(cookie)).toEqual({ sessions: [] })
   const login = await startLogin()
   const loginWithTestCookie = await app.request('/auth/login', { headers: { cookie: testCookie } })
@@ -400,7 +407,7 @@ test('a removed member signs in to nothing, and a new invite reactivates the sam
   await database.$client`update memberships set removed_at = now() where workspace_id = ${acme} and user_id = ${bob}`
   const refused = await signInAs('bob@example.com')
   expect(refused.page).toContain('"status":"not_invited"')
-  expect(refused.cookie).not.toContain('hq_s_')
+  expect(refused.cookie).not.toContain('spyria_s_')
   await invite(acme, 'bob@example.com', { role: 'admin' })
   expect((await signInNamed('bob@example.com', 'Samuel')).page).toContain('"status":"signed_in"')
   expect(await userIdOf('bob@example.com')).toEqual([bob])

@@ -1,4 +1,4 @@
-import type { MemberId, RuntimeHostId, WorkspaceId, WorkspacePermission } from '@hq/kernel'
+import type { MemberId, RuntimeHostId, WorkspaceId, WorkspacePermission } from '@spyria/kernel'
 import type { RuntimeTransactor } from '../contracts/transactor.ts'
 import { claimLifetimeMilliseconds, hashSecret, newClaimCode } from '../domain/claim.ts'
 import { CodeNotRenewable } from '../domain/errors.ts'

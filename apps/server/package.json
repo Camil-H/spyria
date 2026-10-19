@@ -1,19 +1,19 @@
 {
-  "name": "@hq/server",
+  "name": "@spyria/server",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "HQ_TOKEN_SECRET=$(openssl rand -hex 32) HQ_OIDC_ISSUER=http://localhost:5556/dex HQ_OIDC_CLIENT_ID=hq HQ_OIDC_REDIRECT_URI=http://localhost:3000/auth/callback HQ_APP_ORIGIN=http://localhost:5173 HQ_GATEWAY_URL=http://127.0.0.1:8180 HQ_GATEWAY_ADMIN_USER=hq HQ_GATEWAY_ADMIN_PASSWORD=hq-dev-gateway bun --watch src/index.ts",
+    "dev": "SPYRIA_TOKEN_SECRET=$(openssl rand -hex 32) SPYRIA_OIDC_ISSUER=http://localhost:5556/dex SPYRIA_OIDC_CLIENT_ID=hq SPYRIA_OIDC_REDIRECT_URI=http://localhost:3000/auth/callback SPYRIA_APP_ORIGIN=http://localhost:5173 SPYRIA_GATEWAY_URL=http://127.0.0.1:8180 SPYRIA_GATEWAY_ADMIN_USER=hq SPYRIA_GATEWAY_ADMIN_PASSWORD=hq-dev-gateway bun --watch src/index.ts",
     "typecheck": "tsc -p ."
   },
   "dependencies": {
-    "@hq/conversation": "workspace:*",
-    "@hq/db": "workspace:*",
-    "@hq/kernel": "workspace:*",
-    "@hq/profile": "workspace:*",
-    "@hq/runtime": "workspace:*",
-    "@hq/usage": "workspace:*",
-    "@hq/workspace": "workspace:*",
+    "@spyria/conversation": "workspace:*",
+    "@spyria/db": "workspace:*",
+    "@spyria/kernel": "workspace:*",
+    "@spyria/profile": "workspace:*",
+    "@spyria/runtime": "workspace:*",
+    "@spyria/usage": "workspace:*",
+    "@spyria/workspace": "workspace:*",
     "@rocicorp/zero": "1.9.0",
     "hono": "4.13.12",
     "jose": "6.2.12",

@@ -1,4 +1,4 @@
-import { focusRing } from '@hq/ui'
+import { focusRing } from '@spyria/ui'
 import { ChevronRight } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import type { AgentStep } from '../domain/agent-steps.ts'

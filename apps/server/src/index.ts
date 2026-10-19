@@ -1,8 +1,8 @@
-import { createDatabase } from '@hq/db/postgres'
-import { setModelDirectory } from '@hq/db/server-writes'
-import { addRoutableModels } from '@hq/kernel'
-import { createLlmGateway } from '@hq/profile/server'
-import { createBifrostUsageLogs } from '@hq/usage/server'
+import { createDatabase } from '@spyria/db/postgres'
+import { setModelDirectory } from '@spyria/db/server-writes'
+import { addRoutableModels } from '@spyria/kernel'
+import { createLlmGateway } from '@spyria/profile/server'
+import { createBifrostUsageLogs } from '@spyria/usage/server'
 import { websocket } from 'hono/bun'
 import { createAgentBridge } from './agent-bridge/bridge.ts'
 import { createApp, sessionClassifierOf } from './app.ts'
@@ -11,10 +11,10 @@ import { enqueueSweeps } from './auth/sessions.ts'
 import { createFakeLlm, fakeRoutableModels } from './fake-llm.ts'
 import { createGitHubCheckouts } from './github/github.ts'
 import { createGitHubApi, githubDotCom } from './github/github-api.ts'
-import { readHqAgentImage } from './hq-agent-image.ts'
 import { startJobWorker } from './job-worker.ts'
 import { createModelCallRelay } from './llm-relay.ts'
 import { createRuntimeHostGateway } from './runtime-hosts/gateway.ts'
+import { readSpyriaAgentImage } from './spyria-agent-image.ts'
 
 const requiredEnvironment = (name: string) => {
   const value = process.env[name]
@@ -23,57 +23,57 @@ const requiredEnvironment = (name: string) => {
 }
 
 const authModes = ['dex', 'sso'] as const
-const authMode = authModes.find((mode) => mode === (process.env.HQ_AUTH_MODE ?? 'dex'))
-if (!authMode) throw new Error('HQ_AUTH_MODE must be dex or sso')
+const authMode = authModes.find((mode) => mode === (process.env.SPYRIA_AUTH_MODE ?? 'dex'))
+if (!authMode) throw new Error('SPYRIA_AUTH_MODE must be dex or sso')
 const database = createDatabase()
 const gatewaySettings = {
-  url: requiredEnvironment('HQ_GATEWAY_URL'),
-  adminUser: requiredEnvironment('HQ_GATEWAY_ADMIN_USER'),
-  adminPassword: requiredEnvironment('HQ_GATEWAY_ADMIN_PASSWORD'),
+  url: requiredEnvironment('SPYRIA_GATEWAY_URL'),
+  adminUser: requiredEnvironment('SPYRIA_GATEWAY_ADMIN_USER'),
+  adminPassword: requiredEnvironment('SPYRIA_GATEWAY_ADMIN_PASSWORD'),
 }
 const llmGateway = createLlmGateway(gatewaySettings)
-const hqAgentImage = await readHqAgentImage()
+const spyriaAgentImage = await readSpyriaAgentImage()
 const runtimeHosts = createRuntimeHostGateway({
-  hqAgentImage,
+  spyriaAgentImage,
   databases: () => [database],
   afterHello: (helloDatabase, host) => agentBridge.forDatabase(helloDatabase).resumeHost(host),
   relayModelCall: createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),
 })
-const llmModel = process.env.HQ_LLM_MODEL
-const secretsKey = authMode === 'sso' ? requiredEnvironment('HQ_SECRETS_KEY') : process.env.HQ_SECRETS_KEY
+const llmModel = process.env.SPYRIA_LLM_MODEL
+const secretsKey = authMode === 'sso' ? requiredEnvironment('SPYRIA_SECRETS_KEY') : process.env.SPYRIA_SECRETS_KEY
 const github = {
   api: createGitHubApi({
-    apiUrl: process.env.HQ_GITHUB_API_URL ?? githubDotCom.apiUrl,
-    webUrl: process.env.HQ_GITHUB_WEB_URL ?? githubDotCom.webUrl,
+    apiUrl: process.env.SPYRIA_GITHUB_API_URL ?? githubDotCom.apiUrl,
+    webUrl: process.env.SPYRIA_GITHUB_WEB_URL ?? githubDotCom.webUrl,
   }),
   secretBox: secretsKey ? createSecretBox(secretsKey) : undefined,
 }
 const agentBridge = createAgentBridge({
   sandboxProvider: runtimeHosts.sandboxProvider,
-  hqAgentImage,
+  spyriaAgentImage,
   llm: llmModel ? { model: llmModel } : undefined,
   sessionClassifierOf: sessionClassifierOf(llmGateway),
   repositoryCheckoutsOf: (checkoutDatabase) => createGitHubCheckouts(checkoutDatabase, github),
 })
 const app = createApp({
   database,
-  tokenSecret: requiredEnvironment('HQ_TOKEN_SECRET'),
+  tokenSecret: requiredEnvironment('SPYRIA_TOKEN_SECRET'),
   oidc: {
-    issuer: authMode === 'dex' ? requiredEnvironment('HQ_OIDC_ISSUER') : '',
-    clientId: authMode === 'dex' ? requiredEnvironment('HQ_OIDC_CLIENT_ID') : '',
-    redirectUri: requiredEnvironment('HQ_OIDC_REDIRECT_URI'),
+    issuer: authMode === 'dex' ? requiredEnvironment('SPYRIA_OIDC_ISSUER') : '',
+    clientId: authMode === 'dex' ? requiredEnvironment('SPYRIA_OIDC_CLIENT_ID') : '',
+    redirectUri: requiredEnvironment('SPYRIA_OIDC_REDIRECT_URI'),
   },
   authMode,
   secretsKey,
   github,
-  mail: process.env.HQ_SMTP_URL
-    ? { smtpUrl: process.env.HQ_SMTP_URL, from: requiredEnvironment('HQ_MAIL_FROM') }
+  mail: process.env.SPYRIA_SMTP_URL
+    ? { smtpUrl: process.env.SPYRIA_SMTP_URL, from: requiredEnvironment('SPYRIA_MAIL_FROM') }
     : undefined,
-  appOrigin: requiredEnvironment('HQ_APP_ORIGIN'),
+  appOrigin: requiredEnvironment('SPYRIA_APP_ORIGIN'),
   llmGateway,
   runtimeHosts,
   agentBridge,
-  hqAgentImage,
+  spyriaAgentImage,
   fakeLlm: llmModel ? undefined : createFakeLlm(() => undefined),
 })
 setModelDirectory(llmGateway.listedModels)

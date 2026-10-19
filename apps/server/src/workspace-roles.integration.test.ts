@@ -1,5 +1,5 @@
 import { beforeEach, expect, test } from 'bun:test'
-import { createZeroStore } from '@hq/db/zero-store'
+import { createZeroStore } from '@spyria/db/zero-store'
 import {
   acme,
   alice,

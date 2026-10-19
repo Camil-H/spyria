@@ -1,4 +1,4 @@
-import type { MemberId, RuntimeHostId, WorkspaceId, WorkspacePermission } from '@hq/kernel'
+import type { MemberId, RuntimeHostId, WorkspaceId, WorkspacePermission } from '@spyria/kernel'
 import type { RuntimeTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import { transitioned } from '../domain/runtime.ts'
 import { assertCanManage, assertNotRemoved, type RuntimeHost } from '../domain/runtime-host.ts'

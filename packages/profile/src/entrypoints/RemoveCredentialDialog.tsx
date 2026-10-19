@@ -1,5 +1,5 @@
-import type { CredentialId, WorkspaceId } from '@hq/kernel'
-import { buttonClass, Dialog, ErrorMessage, useGuardedAction } from '@hq/ui'
+import type { CredentialId, WorkspaceId } from '@spyria/kernel'
+import { buttonClass, Dialog, ErrorMessage, useGuardedAction } from '@spyria/ui'
 import { useProfileCommands } from './providers.tsx'
 
 export const RemoveCredentialDialog = ({

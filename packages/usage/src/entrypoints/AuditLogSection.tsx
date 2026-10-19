@@ -1,5 +1,5 @@
-import { useQuery } from '@hq/db/react'
-import type { WorkspaceId } from '@hq/kernel'
+import { useQuery } from '@spyria/db/react'
+import type { WorkspaceId } from '@spyria/kernel'
 import {
   buttonClass,
   ErrorMessage,
@@ -8,7 +8,7 @@ import {
   LabelledSection,
   labelClass,
   useGuardedAction,
-} from '@hq/ui'
+} from '@spyria/ui'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { type SubmitEvent, useEffect, useState } from 'react'
 import { type AuditEntry, auditGroups, retentionLabelOf } from '../domain/audit.ts'

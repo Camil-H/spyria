@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { memberId, workspaceId } from '@hq/kernel'
+import { memberId, workspaceId } from '@spyria/kernel'
 import { InvalidEmail } from './errors.ts'
 import { displayNameFrom, Email, inviteLifetimeMilliseconds, isOpen, isPending, newInvitation } from './invitation.ts'
 

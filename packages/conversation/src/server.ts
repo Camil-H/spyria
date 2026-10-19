@@ -45,7 +45,6 @@ export { planModeOf, questionAnswerOf } from './entrypoints/endpoints.ts'
 export { createAgentHandlers } from './entrypoints/jobs.ts'
 export { conversationMutators } from './entrypoints/mutators.ts'
 export { createGatewaySessionClassifier } from './integrations/gateway-session-classifier.ts'
-export { type AgentLlm, createHqAgentClient } from './integrations/hq-agent-client.ts'
 export {
   chatGitPathOf,
   chatPlanModePathOf,
@@ -57,6 +56,7 @@ export {
   createHttpChatCommands,
 } from './integrations/http-chats.ts'
 export { rebuildMessages } from './integrations/postgres-message-projection.ts'
+export { type AgentLlm, createSpyriaAgentClient } from './integrations/spyria-agent-client.ts'
 export { createStoreDraftRepository } from './integrations/store-draft-repository.ts'
 export { saveDraft } from './operations/save-draft.ts'
 export { getChatRouting } from './queries/get-chat-routing.ts'

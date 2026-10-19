@@ -2,11 +2,11 @@ import { afterAll, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@hq/db/testing'
-import { runtimeHostId } from '@hq/kernel'
+import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@spyria/db/testing'
+import { runtimeHostId } from '@spyria/kernel'
 import { websocket } from 'hono/bun'
 import { createApp } from '../app.ts'
-import { readHqAgentImage } from '../hq-agent-image.ts'
+import { readSpyriaAgentImage } from '../spyria-agent-image.ts'
 import { acme, aliceInAcme, sessionTokenOf, testAuthSettings, waitFor } from '../testing/testing.ts'
 import { createRuntimeHostGateway } from './gateway.ts'
 
@@ -15,15 +15,15 @@ const dockerText = (...args: string[]) =>
   docker(...args)
     .stdout.toString()
     .trim()
-const hqImage = await readHqAgentImage()
-if (!hqImage || docker('image', 'inspect', hqImage).exitCode !== 0)
-  throw new Error('HQ image missing: run bun run agent:build')
+const spyriaImage = await readSpyriaAgentImage()
+if (!spyriaImage || docker('image', 'inspect', spyriaImage).exitCode !== 0)
+  throw new Error('Spyria image missing: run bun run agent:build')
 
-const prefix = `hq-test-${crypto.randomUUID().slice(0, 8)}-`
+const prefix = `spyria-test-${crypto.randomUUID().slice(0, 8)}-`
 const hostProgram = new URL('../../../host/src/main.ts', import.meta.url).pathname
-const stateDirectory = mkdtempSync(join(tmpdir(), 'hq-test-host-'))
+const stateDirectory = mkdtempSync(join(tmpdir(), 'spyria-test-host-'))
 const testDatabase = await createTestDatabase()
-const gateway = createRuntimeHostGateway({ databases: () => [testDatabase.database], hqAgentImage: hqImage })
+const gateway = createRuntimeHostGateway({ databases: () => [testDatabase.database], spyriaAgentImage: spyriaImage })
 const app = createApp({ database: testDatabase.database, ...testAuthSettings, runtimeHosts: gateway })
 const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
 let hostProcess: ReturnType<typeof Bun.spawn> | undefined
@@ -54,14 +54,19 @@ const hostRow = async (id: string) =>
   (await testDatabase.database.$client`select status, capacity from runtime_hosts where id = ${id}`)[0]
 const startPersonalHost = async (id: string, url: string) => {
   hostProcess = Bun.spawn(['bun', hostProgram, '--personal', url], {
-    env: { ...process.env, HQ_HOST_STATE_DIR: stateDirectory, HQ_HOST_PREFIX: prefix, HQ_HOST_HEARTBEAT_MS: '200' },
+    env: {
+      ...process.env,
+      SPYRIA_HOST_STATE_DIR: stateDirectory,
+      SPYRIA_HOST_PREFIX: prefix,
+      SPYRIA_HOST_HEARTBEAT_MS: '200',
+    },
     stdout: 'inherit',
     stderr: 'inherit',
   })
   await waitFor(async () => (await hostRow(id))?.status === 'online', 30_000)
 }
 
-test("a real hq-host --personal runs HQ's image with the credentials volume, relays only hq-agent's routes, lists the real adapter models without a login and reports the sign-in", async () => {
+test("a real spyria-host --personal runs Spyria's image with the credentials volume, relays only spyria-agent's routes, lists the real adapter models without a login and reports the sign-in", async () => {
   const added = await app.request('/api/runtime-hosts', {
     method: 'POST',
     headers: {
@@ -76,11 +81,11 @@ test("a real hq-host --personal runs HQ's image with the credentials volume, rel
   expect((await hostRow(id))?.capacity).toMatchObject({ personal: true, signedIn: [] })
 
   const host = { workspaceId: acme, hostId: runtimeHostId(id) }
-  await gateway.prepare(host, hqImage)
+  await gateway.prepare(host, spyriaImage)
   const runtime = { ...host, runtimeId: 'personal-smoke' }
   const apiKey = 'test-api-key-0123456789abcdef'
   const containerName = `${prefix}rt-personal-smoke`
-  await gateway.sandboxProvider.create({ ...runtime, image: hqImage, apiKey })
+  await gateway.sandboxProvider.create({ ...runtime, image: spyriaImage, apiKey })
   const [inspected] = JSON.parse(dockerText('inspect', containerName))
   expect(
     (inspected.HostConfig.Mounts as { Source: string; Target: string }[]).map(({ Source, Target }) => [Source, Target]),
@@ -93,7 +98,7 @@ test("a real hq-host --personal runs HQ's image with the credentials volume, rel
       () => false,
     )
   for (const deadline = Date.now() + 30_000; !(await isReady()); await Bun.sleep(100))
-    if (Date.now() > deadline) throw new Error('hq-agent was not ready within 30 s')
+    if (Date.now() > deadline) throw new Error('spyria-agent was not ready within 30 s')
   const headers = { 'x-session-api-key': apiKey, 'content-type': 'application/json' }
   const startSession = async (command: string[]) => {
     const created = await transport.fetch({
@@ -143,7 +148,7 @@ test("a real hq-host --personal runs HQ's image with the credentials volume, rel
   })
   const written = docker(
     ...['run', '--rm', '--name', `${prefix}write-credentials`, '--user', '10001:10001', '--network', 'none'],
-    ...['--mount', `type=volume,src=${prefix}cred-claude,dst=/c`, '--entrypoint', 'sh', hqImage],
+    ...['--mount', `type=volume,src=${prefix}cred-claude,dst=/c`, '--entrypoint', 'sh', spyriaImage],
     ...['-c', `umask 077 && printf '%s' '${credentialsFile}' > /c/.credentials.json`],
   )
   expect(written.stderr.toString()).toBe('')

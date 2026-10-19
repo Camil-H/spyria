@@ -1,4 +1,4 @@
-import type { RoutableModel } from '@hq/kernel'
+import type { RoutableModel } from '@spyria/kernel'
 import { Hono } from 'hono'
 
 type FakeLlmStep = (

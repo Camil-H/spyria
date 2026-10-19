@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto'
-import type { Database } from '@hq/db/postgres'
+import type { Database } from '@spyria/db/postgres'
 import {
   adminRoleId,
   builtInChatRoles,
   builtInWorkspaceRoles,
   MissingWorkspacePermission,
   type WorkspacePermission,
-} from '@hq/kernel'
+} from '@spyria/kernel'
 import {
   DomainClaimed,
   displayNameFrom,
@@ -23,7 +23,7 @@ import {
   type SsoSettingsView,
   ssoSettingsFrom,
   tenantIdOf,
-} from '@hq/workspace/server'
+} from '@spyria/workspace/server'
 import type { Mailer } from './mail.ts'
 import { discoverIssuer } from './oidc.ts'
 import type { SecretBox } from './secret-box.ts'
@@ -133,7 +133,8 @@ const storeSsoSettings = async (
   await assertNotVerifiedElsewhere(sql, workspaceId, settings.issuer, settings.domains)
   const [previous] = await settingsOf(sql, workspaceId)
   if (!previous && clientSecret.trim() === '') throw new InvalidSsoSettings('A client secret is required')
-  if (clientSecret.trim() !== '' && !secretBox) throw new InvalidSsoSettings('HQ_SECRETS_KEY is not set on this server')
+  if (clientSecret.trim() !== '' && !secretBox)
+    throw new InvalidSsoSettings('SPYRIA_SECRETS_KEY is not set on this server')
   const encryptedClientSecret =
     clientSecret.trim() === '' ? null : ((await secretBox?.seal(clientSecret.trim())) ?? null)
   await sql`
@@ -289,8 +290,8 @@ export const sendDomainVerification = async (
     await mailer
       .send({
         to: address,
-        subject: `Verify ${claimedDomain} for HQ`,
-        text: `Open this link to confirm that the HQ workspace ${pending.workspaceName} signs in people of ${claimedDomain}:\n\n${link}\n\nThe link works once and expires in 24 hours.`,
+        subject: `Verify ${claimedDomain} for Spyria`,
+        text: `Open this link to confirm that the Spyria workspace ${pending.workspaceName} signs in people of ${claimedDomain}:\n\n${link}\n\nThe link works once and expires in 24 hours.`,
       })
       .catch((error: Error) => {
         throw new MailNotSent(error.message)

@@ -4,6 +4,7 @@ playwright-report
 test-results
 .DS_Store
 .hq-host
+.spyria-host
 .check
 *.bun-build
 apps/agent/image-id

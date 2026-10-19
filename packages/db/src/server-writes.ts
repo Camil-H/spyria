@@ -1,5 +1,5 @@
-import { type ListedModel, providersOfGatewayRefs, reachableModelsOf } from '@hq/kernel'
 import type { ServerTransaction, Transaction } from '@rocicorp/zero'
+import { type ListedModel, providersOfGatewayRefs, reachableModelsOf } from '@spyria/kernel'
 
 const onServer = async <Row = unknown>(tx: Transaction, statement: string, parameters: unknown[]) =>
   (tx.location === 'server' ? [...(await tx.dbTransaction.query(statement, parameters))] : []) as Row[]

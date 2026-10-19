@@ -1,4 +1,4 @@
-const hostImage = 'hq-host'
+const hostImage = 'spyria-host'
 const dockerSocket = '/var/run/docker.sock'
 const rootlessFlags = `--user 0 -v $XDG_RUNTIME_DIR/docker.sock:${dockerSocket}`
 const rootedFlags = `--group-add $(test "$(uname)" = Darwin && echo 0 || stat -c %g ${dockerSocket}) -v ${dockerSocket}:${dockerSocket}`
@@ -7,7 +7,7 @@ const hostGateway = 'host.docker.internal'
 
 export type SignInTool = 'claude' | 'codex'
 
-export const signInCommandOf = (tool: SignInTool) => `docker exec -it hq-host hq-host login ${tool}`
+export const signInCommandOf = (tool: SignInTool) => `docker exec -it hq-host spyria-host login ${tool}`
 
 export const hostCommandOf = ({
   origin,

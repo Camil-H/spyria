@@ -1,4 +1,11 @@
-import { type ChatVisibility, chatId, type MemberId, type ProjectId, visibilityOf, type WorkspaceId } from '@hq/kernel'
+import {
+  type ChatVisibility,
+  chatId,
+  type MemberId,
+  type ProjectId,
+  visibilityOf,
+  type WorkspaceId,
+} from '@spyria/kernel'
 import type { WorkspaceTransactor } from '../contracts/transactor.ts'
 import { type Chat, devChat, movedChat, visibleChat } from '../domain/chat.ts'
 import type { Name } from '../domain/name.ts'

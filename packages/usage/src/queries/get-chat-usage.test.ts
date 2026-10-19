@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
-import { acme, alice, bob } from '@hq/db'
-import { chatId } from '@hq/kernel'
+import { acme, alice, bob } from '@spyria/db'
+import { chatId } from '@spyria/kernel'
 import { getChatUsage } from './get-chat-usage.ts'
 import { earlier, month, snapshot } from './testing.ts'
 

@@ -2,8 +2,8 @@ import { expect, test } from 'bun:test'
 import { type AgentConversation, AgentStartFailure } from '../contracts/agent.ts'
 import { defaultResumeAfterMilliseconds, delegateTimeoutSeconds } from '../domain/delegation.ts'
 import { type HarnessLaunch, piModelOf } from '../domain/session-routing.ts'
-import { hqToolTimeoutSeconds, toolApprovalWindowMilliseconds } from '../domain/tool-calls.ts'
-import { createHqAgentClient, piCommandOf } from './hq-agent-client.ts'
+import { spyriaToolTimeoutSeconds, toolApprovalWindowMilliseconds } from '../domain/tool-calls.ts'
+import { createSpyriaAgentClient, piCommandOf } from './spyria-agent-client.ts'
 
 const requests: { method: string; path: string; body?: string }[] = []
 const socketPaths: string[] = []
@@ -24,11 +24,11 @@ const endpoint: AgentConversation = {
 }
 const createdBodyOf = async (harness: HarnessLaunch, adapterModel?: string) => {
   requests.length = 0
-  await createHqAgentClient().createConversation(endpoint, 'runtime-token', { harness, adapterModel })
+  await createSpyriaAgentClient().createConversation(endpoint, 'runtime-token', { harness, adapterModel })
   return JSON.parse(requests[0]?.body ?? '{}')
 }
 
-test('a subscription session launches Claude Code without the relay, a model, or secrets, and keeps HQ tools', async () => {
+test('a subscription session launches Claude Code without the relay, a model, or secrets, and keeps Spyria tools', async () => {
   const created = await createdBodyOf('claude-code-subscription')
   const command: string[] = created.agent.acp_command
   expect(command.at(-1)).toBe('claude-agent-acp')
@@ -49,18 +49,18 @@ test('a subscription session launches Claude Code without the relay, a model, or
 test('Pi summarizes on its compaction model through its provider, starts at the routed thinking level and takes test compaction budgets', async () => {
   const anthropicCompaction = { ...piLaunch, compactionModel: 'anthropic/claude-haiku-5-5' }
   const command = piCommandOf('http://hq-gateway-relay:4000/v1', anthropicCompaction, { sub: false })
-  expect(command).toContain('HQ_COMPACTION_MODEL=hq-anthropic/anthropic/claude-haiku-5-5')
+  expect(command).toContain('SPYRIA_COMPACTION_MODEL=hq-anthropic/anthropic/claude-haiku-5-5')
   const { created, envOf } = await createdPiOf(undefined, { effort: 'high' })
   expect(created.agent.acp_thought_level).toBe('high')
   expect((await createdPiOf(undefined, { effort: 'high', adapterModel: undefined })).created.agent).not.toHaveProperty(
     'acp_thought_level',
   )
-  expect(JSON.parse(envOf('HQ_PI_SETTINGS') ?? '')).not.toHaveProperty('compaction')
+  expect(JSON.parse(envOf('SPYRIA_PI_SETTINGS') ?? '')).not.toHaveProperty('compaction')
   const budgets = { reserveTokens: 3999, keepRecentTokens: 1 }
   const tested = piCommandOf('http://hq-gateway-relay:4000/v1', { ...piLaunch, compaction: budgets }, { sub: false })
-  const settings = tested.find((part) => part.startsWith('HQ_PI_SETTINGS='))?.slice('HQ_PI_SETTINGS='.length)
+  const settings = tested.find((part) => part.startsWith('SPYRIA_PI_SETTINGS='))?.slice('SPYRIA_PI_SETTINGS='.length)
   expect(JSON.parse(settings ?? '')).toMatchObject({
-    extensions: ['/usr/local/lib/hq/pi/hq-compaction.ts', '/usr/local/lib/hq/pi/hq-plan.ts'],
+    extensions: ['/usr/local/lib/spyria/pi/spyria-compaction.ts', '/usr/local/lib/spyria/pi/spyria-plan.ts'],
     compaction: budgets,
   })
 })
@@ -68,8 +68,8 @@ test('Pi summarizes on its compaction model through its provider, starts at the 
 test('a model switch carries the thinking level only when one is given', async () => {
   requests.length = 0
   const conversation = { ...endpoint, conversationId: 'conversation-1' }
-  await createHqAgentClient().switchModel(conversation, 'hq/openai/gpt-6.1-sol', 'high')
-  await createHqAgentClient().switchModel(conversation, 'hq/mistral/mistral-small-latest')
+  await createSpyriaAgentClient().switchModel(conversation, 'hq/openai/gpt-6.1-sol', 'high')
+  await createSpyriaAgentClient().switchModel(conversation, 'hq/mistral/mistral-small-latest')
   expect(requests.map(({ body }) => body)).toEqual([
     '{"model":"hq/openai/gpt-6.1-sol","thoughtLevel":"high"}',
     '{"model":"hq/mistral/mistral-small-latest"}',
@@ -83,7 +83,7 @@ test('a model picked for a subscription session is sent as acp_model, still with
   expect(JSON.stringify(created)).not.toMatch(/ANTHROPIC_BASE_URL|ANTHROPIC_MODEL|ANTHROPIC_API_KEY|base_url/)
   expect((await createdBodyOf('claude-code-subscription')).agent).not.toHaveProperty('acp_model')
   requests.length = 0
-  await createHqAgentClient().switchModel({ ...endpoint, conversationId: 'conversation-1' }, 'haiku')
+  await createSpyriaAgentClient().switchModel({ ...endpoint, conversationId: 'conversation-1' }, 'haiku')
   expect(requests).toMatchObject([
     { path: '/api/conversations/conversation-1/switch_acp_model', body: '{"model":"haiku"}' },
   ])
@@ -92,7 +92,7 @@ test('a model picked for a subscription session is sent as acp_model, still with
 test('a Codex subscription session writes its config atomically and launches without a relay, a provider, a model, or secrets', async () => {
   const created = await createdBodyOf('codex-subscription')
   const command: string[] = created.agent.acp_command
-  const config = command.find((part) => part.startsWith('HQ_CODEX_CONFIG=')) ?? ''
+  const config = command.find((part) => part.startsWith('SPYRIA_CODEX_CONFIG=')) ?? ''
   expect(config).toContain('forced_login_method = "chatgpt"')
   expect(config).toMatch(/\[analytics\]\nenabled = false/)
   expect(config).toMatch(/\[feedback\]\nenabled = false/)
@@ -109,8 +109,8 @@ test('a Codex subscription session writes its config atomically and launches wit
   )
 })
 
-test('an hq-agent session sends the bare ACP launch with its resume id, and resumes its socket after the last stored seq of that conversation only', async () => {
-  const server = createHqAgentClient()
+test('a spyria-agent session sends the bare ACP launch with its resume id, and resumes its socket after the last stored seq of that conversation only', async () => {
+  const server = createSpyriaAgentClient()
   await server.createConversation(endpoint, 'runtime-token', {
     harness: 'claude-code-subscription',
     resumeSessionId: 'session-1',
@@ -136,7 +136,7 @@ test('an hq-agent session sends the bare ACP launch with its resume id, and resu
   ])
 })
 
-test('an hq-agent conversation that failed to start is deleted and reported with the adapter message', async () => {
+test('a spyria-agent conversation that failed to start is deleted and reported with the adapter message', async () => {
   requests.length = 0
   const failed: AgentConversation = {
     ...endpoint,
@@ -153,7 +153,7 @@ test('an hq-agent conversation that failed to start is deleted and reported with
     },
   }
   await expect(
-    createHqAgentClient().createConversation(failed, 'runtime-token', { harness: 'claude-code-subscription' }),
+    createSpyriaAgentClient().createConversation(failed, 'runtime-token', { harness: 'claude-code-subscription' }),
   ).rejects.toEqual(new AgentStartFailure('Authentication required'))
   expect(requests.map(({ method, path }) => `${method} ${path}`)).toEqual([
     'POST /api/conversations',
@@ -171,7 +171,7 @@ const piLaunch = {
 }
 const createdPiOf = async (sub?: { parentConversationId: string }, llm = {}) => {
   requests.length = 0
-  await createHqAgentClient().createConversation(
+  await createSpyriaAgentClient().createConversation(
     endpoint,
     'runtime-llm-token',
     { pi: piLaunch, adapterModel: 'hq-anthropic/anthropic/claude-sonnet-5-5', ...llm },
@@ -181,31 +181,32 @@ const createdPiOf = async (sub?: { parentConversationId: string }, llm = {}) => 
   const command: string[] = created.agent.acp_command
   const envOf = (name: string) => command.find((part) => part.startsWith(`${name}=`))?.slice(name.length + 1)
   const filesOf = (name: string) => JSON.parse(envOf(name) ?? '{}')
-  return { created, command, envOf, models: filesOf('HQ_PI_MODELS'), mcp: filesOf('HQ_PI_MCP') }
+  return { created, command, envOf, models: filesOf('SPYRIA_PI_MODELS'), mcp: filesOf('SPYRIA_PI_MCP') }
 }
 
 test("a Pi launch passes the tokens only as secrets, runs offline, writes its files atomically and execs Pi's RPC mode last", async () => {
   const { created, command, envOf } = await createdPiOf()
   expect(created.secrets).toEqual({
-    HQ_LLM_TOKEN: { kind: 'StaticSecret', value: 'runtime-llm-token' },
-    HQ_MCP_TOKEN: { kind: 'StaticSecret', value: 'runtime-llm-token' },
+    SPYRIA_LLM_TOKEN: { kind: 'StaticSecret', value: 'runtime-llm-token' },
+    SPYRIA_MCP_TOKEN: { kind: 'StaticSecret', value: 'runtime-llm-token' },
   })
   expect(created.agent.acp_model).toBe('hq-anthropic/anthropic/claude-sonnet-5-5')
   expect(created.agent.adapter).toBe('pi-rpc')
   expect(created.agent).not.toHaveProperty('mcp_config')
   expect(JSON.stringify(command)).not.toContain('runtime-llm-token')
   expect(command.slice(0, 4)).toEqual(['env', 'PI_OFFLINE=1', 'PI_SKIP_VERSION_CHECK=1', 'PI_TELEMETRY=0'])
-  expect(envOf('HQ_COMPACTION_MODEL')).toBe('hq/mistral/mistral-small-latest')
-  expect(JSON.parse(envOf('HQ_PI_SETTINGS') ?? '')).toEqual({
+  expect(envOf('SPYRIA_COMPACTION_MODEL')).toBe('hq/mistral/mistral-small-latest')
+  expect(JSON.parse(envOf('SPYRIA_PI_SETTINGS') ?? '')).toEqual({
     quietStartup: true,
     enableInstallTelemetry: false,
     retry: { enabled: false },
-    extensions: ['/usr/local/lib/hq/pi/hq-compaction.ts', '/usr/local/lib/hq/pi/hq-plan.ts'],
+    extensions: ['/usr/local/lib/spyria/pi/spyria-compaction.ts', '/usr/local/lib/spyria/pi/spyria-plan.ts'],
   })
   const script = command.at(-1) ?? ''
   expect(command.slice(-3, -1)).toEqual(['sh', '-c'])
   expect(script).toContain('export PI_CODING_AGENT_DIR="$HOME/.pi/agent"')
-  for (const file of ['models.json', 'settings.json', 'mcp.json']) expect(script).toContain(`write ${file} "$HQ_PI_`)
+  for (const file of ['models.json', 'settings.json', 'mcp.json'])
+    expect(script).toContain(`write ${file} "$SPYRIA_PI_`)
   expect(script).toContain(
     '> "$PI_CODING_AGENT_DIR/$1.tmp"; mv "$PI_CODING_AGENT_DIR/$1.tmp" "$PI_CODING_AGENT_DIR/$1"',
   )
@@ -219,7 +220,7 @@ test('Pi lists Anthropic models on the Anthropic route without /v1 and the other
       hq: {
         baseUrl: 'http://hq-gateway-relay:4000/v1',
         api: 'openai-completions',
-        apiKey: `\${HQ_LLM_TOKEN}`,
+        apiKey: `\${SPYRIA_LLM_TOKEN}`,
         models: [
           { id: 'openai/gpt-6.1-sol', name: 'GPT-6.1-Sol', reasoning: true, contextWindow: 1050000 },
           {
@@ -233,7 +234,7 @@ test('Pi lists Anthropic models on the Anthropic route without /v1 and the other
       'hq-anthropic': {
         baseUrl: 'http://hq-gateway-relay:4000',
         api: 'anthropic-messages',
-        apiKey: `\${HQ_LLM_TOKEN}`,
+        apiKey: `\${SPYRIA_LLM_TOKEN}`,
         models: [{ id: 'anthropic/claude-sonnet-5-5', name: 'Sonnet 5.5', reasoning: true, contextWindow: 200000 }],
       },
     },
@@ -253,34 +254,36 @@ test.each([
     { models: [{ id, name: id, reasoning: true }], compactionModel: id },
     { sub: false },
   )
-  const models = JSON.parse(command.find((part) => part.startsWith('HQ_PI_MODELS='))?.slice(13) ?? '{}')
+  const models = JSON.parse(
+    command.find((part) => part.startsWith('SPYRIA_PI_MODELS='))?.slice('SPYRIA_PI_MODELS='.length) ?? '{}',
+  )
   expect(models.providers).toEqual({
     hq: expect.objectContaining({
       api: 'openai-completions',
       models: [{ id, name: id, reasoning: true, compat: { supportsDeveloperRole: false } }],
     }),
   })
-  expect(command).toContain(`HQ_COMPACTION_MODEL=hq/${id}`)
+  expect(command).toContain(`SPYRIA_COMPACTION_MODEL=hq/${id}`)
 })
 
-test('a parent Pi reaches HQ tools and the router with its LLM token; a sub reaches only HQ tools with its own token from its own directory', async () => {
+test('a parent Pi reaches Spyria tools and the router with its LLM token; a sub reaches only Spyria tools with its own token from its own directory', async () => {
   const parent = await createdPiOf()
   const toolServer = (path: string) => ({
     url: `http://hq-gateway-relay:4000${path}`,
-    headers: { Authorization: `Bearer \${HQ_MCP_TOKEN}` },
+    headers: { Authorization: `Bearer \${SPYRIA_MCP_TOKEN}` },
     exposure: 'direct',
   })
   expect(parent.mcp).toEqual({
     mcpServers: {
-      hq: { ...toolServer('/mcp'), timeout: hqToolTimeoutSeconds },
+      hq: { ...toolServer('/mcp'), timeout: spyriaToolTimeoutSeconds },
       router: { ...toolServer('/mcp/router'), timeout: delegateTimeoutSeconds },
     },
   })
   const sub = await createdPiOf({ parentConversationId: 'conversation-1' })
-  expect(sub.mcp).toEqual({ mcpServers: { hq: { ...toolServer('/mcp'), timeout: hqToolTimeoutSeconds } } })
+  expect(sub.mcp).toEqual({ mcpServers: { hq: { ...toolServer('/mcp'), timeout: spyriaToolTimeoutSeconds } } })
   expect(sub.created.secrets).toEqual({
-    HQ_LLM_TOKEN: { kind: 'StaticSecret', value: 'runtime-llm-token' },
-    HQ_MCP_TOKEN: { kind: 'StaticSecret', value: 'runtime-llm-token' },
+    SPYRIA_LLM_TOKEN: { kind: 'StaticSecret', value: 'runtime-llm-token' },
+    SPYRIA_MCP_TOKEN: { kind: 'StaticSecret', value: 'runtime-llm-token' },
   })
   expect(JSON.stringify(sub.command)).not.toMatch(/runtime-llm-token/)
   expect(sub.command.at(-1)).toContain('export PI_CODING_AGENT_DIR="$HOME/.pi/sub"')
@@ -289,11 +292,12 @@ test('a parent Pi reaches HQ tools and the router with its LLM token; a sub reac
 
 test('a parent Pi in a dev chat also reaches the GitHub tools; a sub never does', () => {
   const mcpOf = (command: string[]) =>
-    JSON.parse(command.find((part) => part.startsWith('HQ_PI_MCP='))?.slice(10) ?? '{}').mcpServers
+    JSON.parse(command.find((part) => part.startsWith('SPYRIA_PI_MCP='))?.slice('SPYRIA_PI_MCP='.length) ?? '{}')
+      .mcpServers
   const gateway = 'http://hq-gateway-relay:4000/v1'
   expect(mcpOf(piCommandOf(gateway, piLaunch, { sub: false, hasRepository: true })).github).toEqual({
     url: 'http://hq-gateway-relay:4000/mcp/github',
-    headers: { Authorization: `Bearer \${HQ_MCP_TOKEN}` },
+    headers: { Authorization: `Bearer \${SPYRIA_MCP_TOKEN}` },
     exposure: 'direct',
     timeout: 120,
   })
@@ -308,6 +312,6 @@ test('the router answers a running delegation well before Pi gives up on the del
 })
 
 test('a tool call waiting for the owner’s approval is decided before Pi gives up on it', () => {
-  expect(hqToolTimeoutSeconds * 1000).toBeGreaterThan(toolApprovalWindowMilliseconds)
+  expect(spyriaToolTimeoutSeconds * 1000).toBeGreaterThan(toolApprovalWindowMilliseconds)
   expect(delegateTimeoutSeconds).toBe(120)
 })

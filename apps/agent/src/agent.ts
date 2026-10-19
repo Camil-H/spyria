@@ -90,7 +90,7 @@ const socketRoute = /^\/sockets\/events\/([\w-]+)$/
 const workspaceRoute = /^\/api\/workspace\/(tree|file|changes|status)$/
 const workspaceActions = { bundle: bundleOf, commit: commitOf, merge: mergeOf, pushed: pushedOf }
 const workspaceActionRoute = /^\/api\/workspace\/(bundle|commit|merge|pushed)$/
-const setupToolCallId = 'hq-setup'
+const setupToolCallId = 'spyria-setup'
 const conversationIdPattern = /^[\w-]{1,64}$/
 
 const adapterEnvironmentOf = (secrets: Launch['secrets']) => ({
@@ -108,7 +108,7 @@ const mcpServersOf = (config: NonNullable<Launch['agent']>['mcp_config']) =>
 
 const errorUpdateOf = (error: unknown) => ({
   sessionUpdate: 'error',
-  message: error instanceof AcpError ? error.message : 'hq-agent failed',
+  message: error instanceof AcpError ? error.message : 'spyria-agent failed',
   ...(error instanceof AcpError && error.code !== undefined && { code: error.code }),
 })
 

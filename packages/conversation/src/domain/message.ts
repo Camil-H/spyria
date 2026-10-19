@@ -1,4 +1,4 @@
-import type { ChatId, ChatVisibility, MemberId, MessageId, WorkspaceId } from '@hq/kernel'
+import type { ChatId, ChatVisibility, MemberId, MessageId, WorkspaceId } from '@spyria/kernel'
 import type { StoredStep } from './agent-steps.ts'
 import { ChatFrozen, InvalidThreadRoot, MessageDeleted, NoThreadsInRuntimeChat, NotMessageAuthor } from './errors.ts'
 import type { MessageBody } from './message-body.ts'

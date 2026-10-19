@@ -1,4 +1,4 @@
-import { chatModelsOf, type Model, type ModelTier, modelNameOf, nearestModelOf } from '@hq/kernel'
+import { chatModelsOf, type Model, type ModelTier, modelNameOf, nearestModelOf } from '@spyria/kernel'
 import { type Answers, confidenceThreshold } from './decisions.ts'
 
 export type Effort = 'high' | 'medium' | 'low'
@@ -63,13 +63,13 @@ export const localSessions = {
   'claude-code': {
     launch: 'claude-code-subscription',
     signIn: 'claude',
-    signInNotice: 'Sign in to Claude Code on your machine: docker exec -it hq-host hq-host login claude',
+    signInNotice: 'Sign in to Claude Code on your machine: docker exec -it hq-host spyria-host login claude',
     expiredNotice: 'Authentication required — sign in to Claude Code again',
   },
   codex: {
     launch: 'codex-subscription',
     signIn: 'codex',
-    signInNotice: 'Sign in to Codex on your machine: docker exec -it hq-host hq-host login codex',
+    signInNotice: 'Sign in to Codex on your machine: docker exec -it hq-host spyria-host login codex',
     expiredNotice: 'Authentication required — sign in to Codex again',
   },
 } as const satisfies Record<
@@ -79,7 +79,7 @@ export const localSessions = {
 export type LocalSession = (typeof localSessions)[Harness]
 export type RunsOn = 'runtime' | Harness
 export const runsOnNames: Record<RunsOn, string> = {
-  runtime: 'HQ runtime',
+  runtime: 'Spyria runtime',
   'claude-code': 'Local · Claude Code',
   codex: 'Local · Codex',
 }

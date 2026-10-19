@@ -124,7 +124,7 @@ test.describe('Chat view', () => {
       const titleBox = (await mainOf(page).getByRole('heading', { level: 1, name: 'Invoice bug' }).boundingBox())!
       const ownerBox = (await mainOf(page).getByText('Agent acts as Alice').boundingBox())!
       const branchBox = (await mainOf(page).getByText('fix/invoice-tax').boundingBox())!
-      const modelBox = (await chipOf(page, 'hq').boundingBox())!
+      const modelBox = (await chipOf(page, 'spyria').boundingBox())!
       const runtimeBox = (await mainOf(page).getByRole('status', { name: 'Runtime' }).boundingBox())!
       const composerBox = (await composerOf(page).boundingBox())!
       expect(Math.abs(ownerBox.y + ownerBox.height / 2 - (titleBox.y + titleBox.height / 2))).toBeLessThan(16)
@@ -177,8 +177,8 @@ test.describe('Chat view', () => {
     await expect(modeRadioOf(page, 'Auto')).toBeChecked()
     await expect(modeOf(page)).not.toHaveAttribute('title')
     await expect(modeOf(page)).toHaveText('PlanAuto')
-    await expect(chipOf(page, 'hq')).toHaveText(/^Fake medium( \((low|medium|high)\))?$/)
-    await chipOf(page, 'hq').click()
+    await expect(chipOf(page, 'spyria')).toHaveText(/^Fake medium( \((low|medium|high)\))?$/)
+    await chipOf(page, 'spyria').click()
     await expect(sessionOf(page).getByLabel('Subagents')).toHaveValue('auto')
     await page.keyboard.press('Escape')
     await expect(workingDirectoryOf(page)).toHaveText(/^workspace-\d+$/)
@@ -186,7 +186,7 @@ test.describe('Chat view', () => {
 
     const textBox = await boxOf(composerOf(page))
     const runsOn = await boxOf(mainOf(page).getByRole('combobox', { name: 'Runs on' }))
-    const model = await boxOf(chipOf(page, 'hq'))
+    const model = await boxOf(chipOf(page, 'spyria'))
     const mode = await boxOf(modeOf(page))
     expect((await boxOf(workingDirectoryOf(page))).bottom).toBeLessThanOrEqual(textBox.top)
     for (const control of [runsOn, model, mode]) {

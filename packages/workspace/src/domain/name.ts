@@ -1,4 +1,4 @@
-import type { Brand } from '@hq/kernel'
+import type { Brand } from '@spyria/kernel'
 import { BlankName } from './errors.ts'
 
 export type Name = Brand<'Name'>

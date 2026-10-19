@@ -1,4 +1,4 @@
-import { type ChatId, type MessageId, messageId, type WorkspaceId } from '@hq/kernel'
+import { type ChatId, type MessageId, messageId, type WorkspaceId } from '@spyria/kernel'
 import type { ConversationTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import {
   type AgentEvent,

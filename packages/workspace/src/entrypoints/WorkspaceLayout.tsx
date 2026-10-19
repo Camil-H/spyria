@@ -1,5 +1,5 @@
-import { useQuery } from '@hq/db/react'
-import { useSession } from '@hq/session'
+import { useQuery } from '@spyria/db/react'
+import { useSession } from '@spyria/session'
 import { Outlet, useParams } from 'react-router'
 import { listWorkspaces } from '../queries/list-workspaces.ts'
 import type { ChatAdornment } from './ChatRow.tsx'

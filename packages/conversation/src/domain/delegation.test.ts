@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { reachableModelsOf } from '@hq/kernel'
+import { reachableModelsOf } from '@spyria/kernel'
 import { askedChoiceOf, delegationChoiceOf, routerTools, stillRunningOf } from './delegation.ts'
 
 const anthropicModels = reachableModelsOf(['anthropic'])

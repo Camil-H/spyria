@@ -1,8 +1,8 @@
-import type { WorkspaceId } from '@hq/kernel'
+import type { WorkspaceId } from '@spyria/kernel'
 import { throwOnRefusal } from './http-refusal.ts'
 
 export const toolConnectionsPath = '/api/tool-connections'
-export const toolConsentChannel = 'hq-tool-consent'
+export const toolConsentChannel = 'spyria-tool-consent'
 
 type RequestAsMember = (workspaceId: WorkspaceId, path: string, method: string) => Promise<Response>
 type ToolInput = { workspaceId: WorkspaceId; tool: string }

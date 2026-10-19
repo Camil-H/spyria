@@ -1,5 +1,5 @@
-import { inChat, type MessageRow, type Snapshot } from '@hq/db'
-import type { ChatId, WorkspaceId } from '@hq/kernel'
+import { inChat, type MessageRow, type Snapshot } from '@spyria/db'
+import type { ChatId, WorkspaceId } from '@spyria/kernel'
 
 const isApprovedPlan = (step: MessageRow['step']) =>
   step?.type === 'question' && step.kind === 'plan' && step.approved === true && typeof step.plan === 'string'

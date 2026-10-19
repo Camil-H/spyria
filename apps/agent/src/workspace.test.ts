@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { createAgentTestbed } from './testing.ts'
 
 const { started } = createAgentTestbed()
-const directory = mkdtempSync(join(tmpdir(), 'hq-agent-workspace-'))
+const directory = mkdtempSync(join(tmpdir(), 'spyria-agent-workspace-'))
 afterAll(() => rmSync(directory, { recursive: true, force: true }))
 
 const git = (cwd: string, ...command: string[]) => {
@@ -29,7 +29,7 @@ git(source, 'add', '.')
 git(source, 'commit', '-q', '-m', 'Initial commit')
 const workspace = join(directory, 'workspace')
 git(directory, 'clone', '-q', source, workspace)
-git(workspace, 'checkout', '-q', '-b', 'hq/work')
+git(workspace, 'checkout', '-q', '-b', 'spyria/work')
 write(directory, { 'secret.txt': 'outside' })
 
 const read = async (path: string, key?: string) => {
@@ -86,7 +86,7 @@ test('a file read returns its text, refuses paths outside the workspace and mark
 test('changes are the diff against the base branch with commits, uncommitted edits and new files, without ignored files', async () => {
   const changes = join(directory, 'changes')
   git(directory, 'clone', '-q', source, changes)
-  git(changes, 'checkout', '-q', '-b', 'hq/fix')
+  git(changes, 'checkout', '-q', '-b', 'spyria/fix')
   write(changes, { 'src/app.ts': 'export const total = 2\n' })
   git(changes, 'commit', '-q', '-am', 'Fix the total')
   write(changes, { 'README.md': '# app\nFixed.\n', 'src/new.ts': 'export {}\n', 'node_modules/x.js': '' })
@@ -113,37 +113,37 @@ test('changes are the diff against the base branch with commits, uncommitted edi
 test('a bundle carries the working branch from a prerequisite the remote has, or whole when none; it holds no credential and refuses bad requests', async () => {
   const bundled = join(directory, 'bundled')
   git(directory, 'clone', '-q', source, bundled)
-  git(bundled, 'checkout', '-q', '-b', 'hq/bundle')
+  git(bundled, 'checkout', '-q', '-b', 'spyria/bundle')
   write(bundled, { 'src/app.ts': 'export const total = 2\n' })
   git(bundled, 'commit', '-q', '-am', 'Fix the total')
   const base = Bun.spawnSync(['git', 'rev-parse', 'main'], { cwd: bundled }).stdout.toString().trim()
   const tip = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: bundled }).stdout.toString().trim()
   const { call } = started({ workspaceDirectory: bundled })
   const headsOf = async (prerequisite: string | null) => {
-    const { status, body } = await call('POST', '/api/workspace/bundle', { branch: 'hq/bundle', prerequisite })
+    const { status, body } = await call('POST', '/api/workspace/bundle', { branch: 'spyria/bundle', prerequisite })
     expect(status).toBe(200)
     const file = join(directory, `bundle-${prerequisite ?? 'whole'}`)
     writeFileSync(file, Buffer.from(String(body.bundle), 'base64'))
     return Bun.spawnSync(['git', 'bundle', 'list-heads', file]).stdout.toString()
   }
-  expect(await headsOf(base)).toBe(`${tip} refs/heads/hq/bundle\n`)
+  expect(await headsOf(base)).toBe(`${tip} refs/heads/spyria/bundle\n`)
   const verified = Bun.spawnSync(['git', 'bundle', 'verify', join(directory, `bundle-${base}`)], { cwd: source })
   expect(verified.stderr.toString()).toContain(base)
-  expect(await headsOf(null)).toBe(`${tip} refs/heads/hq/bundle\n`)
-  expect(await headsOf('0'.repeat(40))).toBe(`${tip} refs/heads/hq/bundle\n`)
-  expect((await call('POST', '/api/workspace/bundle', { branch: 'hq/bundle', prerequisite: tip })).body).toEqual({
+  expect(await headsOf(null)).toBe(`${tip} refs/heads/spyria/bundle\n`)
+  expect(await headsOf('0'.repeat(40))).toBe(`${tip} refs/heads/spyria/bundle\n`)
+  expect((await call('POST', '/api/workspace/bundle', { branch: 'spyria/bundle', prerequisite: tip })).body).toEqual({
     bundle: '',
   })
   for (const request of [
     { branch: '--all', prerequisite: null },
-    { branch: 'hq/bundle', prerequisite: 'HEAD~1' },
+    { branch: 'spyria/bundle', prerequisite: 'HEAD~1' },
   ])
     expect(await call('POST', '/api/workspace/bundle', request)).toEqual({
       status: 422,
       body: { error: 'The bundle request is not valid' },
     })
-  expect((await call('POST', '/api/workspace/bundle', { branch: 'hq/missing', prerequisite: null })).body).toEqual({
-    error: 'The branch hq/missing has no commit in the runtime',
+  expect((await call('POST', '/api/workspace/bundle', { branch: 'spyria/missing', prerequisite: null })).body).toEqual({
+    error: 'The branch spyria/missing has no commit in the runtime',
   })
 })
 
@@ -161,7 +161,7 @@ const baseBundleOf = (upstream: string, prerequisite?: string) => {
 const workingCopyOf = (name: string, upstream: string) => {
   const copy = join(directory, name)
   git(directory, 'clone', '-q', upstream, copy)
-  git(copy, 'checkout', '-q', '-b', `hq/${name}`)
+  git(copy, 'checkout', '-q', '-b', `spyria/${name}`)
   return copy
 }
 
@@ -252,11 +252,11 @@ test('an update fetches the base from a thin bundle into refs/hq/base only and m
     body: { isUpToDate: false },
   })
   expect(outputOf(copy, 'log', '-1', '--format=%s|%an|%P')).toBe(
-    `Merge branch 'main' into hq/merge|Alice|${revisionOf(copy, 'HEAD~1')} ${head}\n`,
+    `Merge branch 'main' into spyria/merge|Alice|${revisionOf(copy, 'HEAD~1')} ${head}\n`,
   )
   expect(revisionOf(copy, 'refs/hq/base')).toBe(head)
   expect(outputOf(copy, 'for-each-ref', '--format=%(refname) %(objectname)', 'refs/heads', 'refs/remotes')).toBe(
-    branchesBefore.replace(/refs\/heads\/hq\/merge \w+/, `refs/heads/hq/merge ${revisionOf(copy, 'HEAD')}`),
+    branchesBefore.replace(/refs\/heads\/spyria\/merge \w+/, `refs/heads/spyria/merge ${revisionOf(copy, 'HEAD')}`),
   )
   expect((await call('GET', '/api/workspace/status?base=main')).body).toMatchObject({
     baseHead: head,
@@ -300,7 +300,7 @@ test('an update refuses a bundle carrying other refs, a mismatched head and inva
   git(upstream, 'commit', '-q', '-m', 'Add base docs')
   const head = revisionOf(upstream, 'main')
   const otherRefs = join(directory, 'other-refs.bundle')
-  git(upstream, 'bundle', 'create', otherRefs, 'refs/heads/main', 'refs/heads/hq/upstream-refused')
+  git(upstream, 'bundle', 'create', otherRefs, 'refs/heads/main', 'refs/heads/spyria/upstream-refused')
   const otherBundle = Buffer.from(await Bun.file(otherRefs).bytes()).toString('base64')
   const { call } = started({ workspaceDirectory: copy })
   for (const request of [

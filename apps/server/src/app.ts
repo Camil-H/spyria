@@ -1,3 +1,6 @@
+import { getMutator, mustGetMutator, mustGetQuery } from '@rocicorp/zero'
+import { handleMutateRequest, handleQueryRequest } from '@rocicorp/zero/server'
+import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import {
   type AgentChat,
   chatGitPathOf,
@@ -16,10 +19,10 @@ import {
   type PublishAction,
   planModeOf,
   questionAnswerOf,
-} from '@hq/conversation/server'
-import type { Database } from '@hq/db/postgres'
-import { schema } from '@hq/db/zero'
-import { queries, type Transact, type ZeroContext } from '@hq/db/zero-queries'
+} from '@spyria/conversation/server'
+import type { Database } from '@spyria/db/postgres'
+import { schema } from '@spyria/db/zero'
+import { queries, type Transact, type ZeroContext } from '@spyria/db/zero-queries'
 import {
   chatId,
   DomainError,
@@ -27,7 +30,7 @@ import {
   messageId,
   type RuntimeHostId,
   workspaceId as toWorkspaceId,
-} from '@hq/kernel'
+} from '@spyria/kernel'
 import {
   addLlmCredentialFromRequest,
   availableToolsFromRequest,
@@ -43,7 +46,7 @@ import {
   toolConsentPageFromRequest,
   workspaceConnectionFromRequest,
   workspaceConnectionsPath,
-} from '@hq/profile/server'
+} from '@spyria/profile/server'
 import {
   addRuntimeHostFromRequest,
   countMachinesFromRequest,
@@ -51,7 +54,7 @@ import {
   renewClaimCodeFromRequest,
   runtimeHostsPath,
   runtimeMutators,
-} from '@hq/runtime/server'
+} from '@spyria/runtime/server'
 import {
   auditCsvFromRequest,
   auditCsvPath,
@@ -68,7 +71,7 @@ import {
   ownSpendPath,
   spendPath,
   workspaceSpendFromRequest,
-} from '@hq/usage/server'
+} from '@spyria/usage/server'
 import {
   createDevChatFromRequest,
   devChatsPath,
@@ -81,10 +84,7 @@ import {
   type SsoSettingsInput,
   ssoSettingsPath,
   workspaceMutators,
-} from '@hq/workspace/server'
-import { getMutator, mustGetMutator, mustGetQuery } from '@rocicorp/zero'
-import { handleMutateRequest, handleQueryRequest } from '@rocicorp/zero/server'
-import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
+} from '@spyria/workspace/server'
 import { type Context, Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import { type AgentBridge, createAgentBridge } from './agent-bridge/bridge.ts'
@@ -192,7 +192,7 @@ export const createApp = ({
   }),
   agentBridge = createAgentBridge({ sandboxProvider: runtimeHosts.sandboxProvider, llm: defaultLlm }),
   fakeLlm,
-  hqAgentImage,
+  spyriaAgentImage,
   github,
 }: {
   database: Database
@@ -208,7 +208,7 @@ export const createApp = ({
   runtimeHosts?: RuntimeHostGateway
   agentBridge?: AgentBridge
   fakeLlm?: Hono
-  hqAgentImage?: string
+  spyriaAgentImage?: string
   github?: GitHubDependencies
 }) => {
   const mutatorNamed = (name: string) =>
@@ -335,7 +335,7 @@ export const createApp = ({
           dbProvider: zeroDrizzle(schema, context.get('database')),
           handler: async (transact, mutation) => {
             const response = await transact((tx, name, args) =>
-              mutatorNamed(name).fn({ args, tx, ctx: { ...ctx, hqAgentImage } }),
+              mutatorNamed(name).fn({ args, tx, ctx: { ...ctx, spyriaAgentImage } }),
             )
             if ('error' in response.result) return response
             if (mutation.name === 'runtime.removeHost')

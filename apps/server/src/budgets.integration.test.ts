@@ -1,8 +1,8 @@
 import { beforeEach, expect, setDefaultTimeout, test } from 'bun:test'
-import { schema } from '@hq/db/zero'
-import { createZeroStore } from '@hq/db/zero-store'
-import { syncUsageNow } from '@hq/usage/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
+import { schema } from '@spyria/db/zero'
+import { createZeroStore } from '@spyria/db/zero-store'
+import { syncUsageNow } from '@spyria/usage/server'
 import type { FakeLlmScript } from './fake-llm.ts'
 import {
   acme,
@@ -195,7 +195,7 @@ test('once the prompter’s budget is used up, a running sub-agent’s calls and
   await prompt(chat, 'Delegate slowly')
   await waitFor(() => subs().length === 1)
   await holds.reached('sub')
-  const subToken = String(subs()[0]?.secrets.HQ_LLM_TOKEN?.value)
+  const subToken = String(subs()[0]?.secrets.SPYRIA_LLM_TOKEN?.value)
   await saveBudget({ memberId: alice, dollars: 1 })
   await spend(alice, 1_000_000)
   const callsBefore = fakeLlmCalls.length
@@ -207,7 +207,7 @@ test('once the prompter’s budget is used up, a running sub-agent’s calls and
   expect(JSON.parse(subCall.body)).toEqual({
     error: {
       message: "Alice's monthly AI budget is used up; an admin can raise it in Workspace settings",
-      type: 'hq_refused',
+      type: 'spyria_refused',
     },
   })
   await holds.release('sub')

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { acme, createMockSnapshot, globex } from '@hq/db'
+import { acme, createMockSnapshot, globex } from '@spyria/db'
 import { listChatRoles, listWorkspaceRoles } from './list-roles.ts'
 
 const snapshot = createMockSnapshot()

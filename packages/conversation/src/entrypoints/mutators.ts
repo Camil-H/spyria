@@ -1,6 +1,6 @@
-import type { ZeroContext } from '@hq/db/zero-queries'
-import { chatId, memberId, messageId } from '@hq/kernel'
 import { defineMutator, defineMutators, type Transaction } from '@rocicorp/zero'
+import type { ZeroContext } from '@spyria/db/zero-queries'
+import { chatId, memberId, messageId } from '@spyria/kernel'
 import { z } from 'zod/mini'
 import { ForeignWorkspace } from '../domain/errors.ts'
 import { createZeroRuntimeRetrier } from '../integrations/runtime-agent-runtimes.ts'

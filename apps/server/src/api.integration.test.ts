@@ -1,13 +1,13 @@
 import { afterAll, expect, test } from 'bun:test'
-import { llmCredentials } from '@hq/db/postgres'
-import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@hq/db/testing'
-import { schema } from '@hq/db/zero'
-import { queries } from '@hq/db/zero-queries'
-import { llmCredentialsPath } from '@hq/profile/server'
 import type { AST } from '@rocicorp/zero'
 import type { ServerSchema } from '@rocicorp/zero/server'
 import { executePostgresQuery } from '@rocicorp/zero/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
+import { llmCredentials } from '@spyria/db/postgres'
+import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@spyria/db/testing'
+import { schema } from '@spyria/db/zero'
+import { queries } from '@spyria/db/zero-queries'
+import { llmCredentialsPath } from '@spyria/profile/server'
 import { createApp } from './app.ts'
 import { issueSessionToken } from './auth/session-tokens.ts'
 import { openSessions } from './auth/sessions.ts'
@@ -302,14 +302,14 @@ test('with test hooks, the database claim of a token selects the database the se
 })
 
 test('the routing read tells a member whether a workspace host of their workspace is online, without host details', async () => {
-  const hqRuntimeAvailableFor = async (user: string) =>
+  const spyriaRuntimeAvailableFor = async (user: string) =>
     (
       (await (
         await app.request('/api/chats/chat-invoice-bug/routing', {
           headers: { authorization: `Bearer ${await tokenOf(acme, user)}` },
         })
-      ).json()) as { hqRuntimeAvailable: boolean }
-    ).hqRuntimeAvailable
+      ).json()) as { spyriaRuntimeAvailable: boolean }
+    ).spyriaRuntimeAvailable
   const addHost = (workspace: string, id: string, status: string, ownerId: string | null) =>
     testDatabase.database.$client`
       insert into runtime_hosts (workspace_id, id, name, status, running_runtimes, created_by, owner_id, created_at)
@@ -317,10 +317,10 @@ test('the routing read tells a member whether a workspace host of their workspac
   await addHost(acme, 'host-acme-offline', 'offline', null)
   await addHost(acme, 'host-bob-machine', 'online', bob)
   await addHost(globex, 'host-globex-online', 'online', null)
-  expect(await hqRuntimeAvailableFor(bob)).toBe(false)
+  expect(await spyriaRuntimeAvailableFor(bob)).toBe(false)
   await testDatabase.database.$client`update runtime_hosts set status = 'online' where id = 'host-acme-offline'`
-  expect(await hqRuntimeAvailableFor(bob)).toBe(true)
-  expect(await hqRuntimeAvailableFor(alice)).toBe(true)
+  expect(await spyriaRuntimeAvailableFor(bob)).toBe(true)
+  expect(await spyriaRuntimeAvailableFor(alice)).toBe(true)
   await testDatabase.database.$client`
     delete from runtime_hosts where id in ('host-acme-offline', 'host-bob-machine', 'host-globex-online')`
 })

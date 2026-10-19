@@ -1,6 +1,6 @@
-import { useQuery } from '@hq/db/react'
-import type { WorkspaceId } from '@hq/kernel'
-import { useSession } from '@hq/session'
+import { useQuery } from '@spyria/db/react'
+import type { WorkspaceId } from '@spyria/kernel'
+import { useSession } from '@spyria/session'
 import { getWorkspacePermissions } from '../queries/get-workspace-permissions.ts'
 
 export const useWorkspacePermissions = (workspaceId: WorkspaceId) =>

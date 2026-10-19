@@ -108,7 +108,7 @@ test.describe('Machine sessions', () => {
       await expect(messageContaining(page, 'Hello from the stub')).toBeVisible()
       const sidePanel = page.getByRole('region', { name: 'Side panel' })
       await sidePanel.getByRole('tab', { name: 'Usage', exact: true }).click()
-      await expect(sidePanel).toContainText('Subscription session on your machine, not metered by HQ')
+      await expect(sidePanel).toContainText('Subscription session on your machine, not metered by Spyria')
     })
   }
 

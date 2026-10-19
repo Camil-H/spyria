@@ -1,4 +1,4 @@
-import type { MemberId } from '@hq/kernel'
+import type { MemberId } from '@spyria/kernel'
 import { InvalidAuditFilter, InvalidRetention } from './errors.ts'
 
 export const auditKindsByGroup = {

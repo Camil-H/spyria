@@ -1,18 +1,18 @@
-import { acme } from '@hq/db'
-import { createDatabase, type Database } from '@hq/db/postgres'
-import { setModelDirectory } from '@hq/db/server-writes'
-import { databaseUrlOf } from '@hq/db/testing'
-import { schema } from '@hq/db/zero'
-import { addRoutableModels, chatId } from '@hq/kernel'
-import { createLlmGateway } from '@hq/profile/server'
+import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
+import { acme } from '@spyria/db'
+import { createDatabase, type Database } from '@spyria/db/postgres'
+import { setModelDirectory } from '@spyria/db/server-writes'
+import { databaseUrlOf } from '@spyria/db/testing'
+import { schema } from '@spyria/db/zero'
+import { addRoutableModels, chatId } from '@spyria/kernel'
+import { createLlmGateway } from '@spyria/profile/server'
 import {
   createRuntimeTransactor,
   ensureRuntimeRunning,
   type SandboxProvider,
   stopChatRuntime,
-} from '@hq/runtime/server'
-import { createBifrostUsageLogs, syncUsageNow } from '@hq/usage/server'
-import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
+} from '@spyria/runtime/server'
+import { createBifrostUsageLogs, syncUsageNow } from '@spyria/usage/server'
 import { websocket } from 'hono/bun'
 import { setCookie } from 'hono/cookie'
 import { createAgentBridge } from '../agent-bridge/bridge.ts'
@@ -23,13 +23,13 @@ import { openSessions } from '../auth/sessions.ts'
 import { createFakeLlm, type FakeLlmScript, fakeRoutableModels } from '../fake-llm.ts'
 import { createGitHubCheckouts } from '../github/github.ts'
 import { createGitHubApi } from '../github/github-api.ts'
-import { readHqAgentImage } from '../hq-agent-image.ts'
 import { startJobWorker } from '../job-worker.ts'
 import { createModelCallRelay } from '../llm-relay.ts'
 import { createRuntimeHostGateway } from '../runtime-hosts/gateway.ts'
+import { readSpyriaAgentImage } from '../spyria-agent-image.ts'
 import { fakeGitHubAppId, fakeGitHubClientId, fakeGitHubClientSecret, startFakeGitHub } from './fake-github.ts'
 import { createFakeMcp, sharedToolServer } from './fake-mcp.ts'
-import { createHqAgentRelay } from './hq-agent-relay.ts'
+import { createSpyriaAgentRelay } from './spyria-agent-relay.ts'
 import {
   createFakeHosts,
   createHolds,
@@ -40,7 +40,7 @@ import {
 } from './testing.ts'
 
 const port = Number(process.env.PORT ?? 3100)
-const fakeMcpPort = Number(process.env.HQ_FAKE_MCP_PORT ?? 3101)
+const fakeMcpPort = Number(process.env.SPYRIA_FAKE_MCP_PORT ?? 3101)
 const testToolServers = ['fake', 'GitHub', 'Slack', 'Notion', 'Linear']
 Bun.serve({ port: fakeMcpPort, fetch: createFakeMcp().fetch })
 const fakeGitHub = startFakeGitHub()
@@ -60,21 +60,21 @@ const holds = createHolds()
 const waitForRelease = (databaseName: string, name: string) => holds.wait(`${databaseName}/${name}`)
 const fakeHostByDatabase = new Map<
   string,
-  { host: FakeHost; relay: ReturnType<typeof createHqAgentRelay>; isOnline: boolean }
+  { host: FakeHost; relay: ReturnType<typeof createSpyriaAgentRelay>; isOnline: boolean }
 >()
-const fakeMachineByDatabase = new Map<string, { host: FakeHost; relay: ReturnType<typeof createHqAgentRelay> }>()
+const fakeMachineByDatabase = new Map<string, { host: FakeHost; relay: ReturnType<typeof createSpyriaAgentRelay> }>()
 const nameOf = (database: Database) =>
   [...servedDatabaseByName].find(([, served]) => served.database === database)?.[0] ?? ''
 const gatewaySettings = {
-  url: process.env.HQ_GATEWAY_URL ?? '',
-  adminUser: process.env.HQ_GATEWAY_ADMIN_USER ?? '',
-  adminPassword: process.env.HQ_GATEWAY_ADMIN_PASSWORD ?? '',
+  url: process.env.SPYRIA_GATEWAY_URL ?? '',
+  adminUser: process.env.SPYRIA_GATEWAY_ADMIN_USER ?? '',
+  adminPassword: process.env.SPYRIA_GATEWAY_ADMIN_PASSWORD ?? '',
 }
 const llmGateway = createLlmGateway(gatewaySettings)
 setModelDirectory(llmGateway.listedModels)
 addRoutableModels(fakeRoutableModels)
 const usageSyncIntervalMilliseconds = 2_000
-const stubGapMilliseconds = Number(process.env.HQ_STUB_GAP_MS ?? 20)
+const stubGapMilliseconds = Number(process.env.SPYRIA_STUB_GAP_MS ?? 20)
 const defaultBootMilliseconds = 200
 const holdUrlOf = (databaseName: string) => `http://localhost:${port}/test/hold?db=${databaseName}`
 const bootOf = (databaseName: string) => () => {
@@ -137,11 +137,11 @@ const { appOrigin } = testAuthSettings
 const gatewayUrlOf = (database: Database) =>
   databasesWithoutGateway.has(nameOf(database)) ? 'http://127.0.0.1:9' : llmGateway.url
 const testHeadersOf = (database: Database, chat: { chatId: string }) => ({
-  'x-bf-eh-x-hq-chat': `${nameOf(database)}/${chat.chatId}`,
+  'x-bf-eh-x-spyria-chat': `${nameOf(database)}/${chat.chatId}`,
   'x-bf-dim-database': nameOf(database),
 })
-const hqAgentImage = (await readHqAgentImage()) ?? `sha256:${'0'.repeat(64)}`
-const placement = { hqAgentImage }
+const spyriaAgentImage = (await readSpyriaAgentImage()) ?? `sha256:${'0'.repeat(64)}`
+const placement = { spyriaAgentImage }
 const runtimeHosts = createRuntimeHostGateway({
   ...placement,
   databases: () => [...servedDatabaseByName.values()].map((served) => served.database),
@@ -179,7 +179,6 @@ const chatKeyOfPrompt = async (prompt = '') => {
 const app = createApp({
   database: createDatabase(),
   ...testAuthSettings,
-  oidc: { ...testAuthSettings.oidc, issuer: 'http://localhost:5557/dex' },
   testDatabaseByName: databaseByName,
   llmGateway,
   runtimeHosts,
@@ -187,7 +186,7 @@ const app = createApp({
   github,
   ...placement,
   fakeLlm: createFakeLlm(async (request, isClassifier, prompt) => {
-    const chatKey = request.headers.get('x-hq-chat') ?? (await chatKeyOfPrompt(prompt))
+    const chatKey = request.headers.get('x-spyria-chat') ?? (await chatKeyOfPrompt(prompt))
     const chatScript = scriptByChat.get(chatKey)
     if (!isClassifier) chatScript?.used.resolve(true)
     const [databaseName = ''] = chatKey.split('/')
@@ -266,7 +265,7 @@ const app = createApp({
     const { db = '', online, forgetSessions, keepAgentsOf } = context.req.query()
     let fakeHost = fakeHostByDatabase.get(db)
     if (!fakeHost) {
-      const relay = createHqAgentRelay({
+      const relay = createSpyriaAgentRelay({
         gapMilliseconds: stubGapMilliseconds,
         holdUrl: holdUrlOf(db),
         modelCall: () => created.modelCall,
@@ -291,7 +290,7 @@ const app = createApp({
     if (owner) {
       await fakeMachineByDatabase.get(db)?.host.disconnect()
       await fakeMachineByDatabase.get(db)?.relay.stop()
-      const relay = createHqAgentRelay({ gapMilliseconds: stubGapMilliseconds, holdUrl: holdUrlOf(db) })
+      const relay = createSpyriaAgentRelay({ gapMilliseconds: stubGapMilliseconds, holdUrl: holdUrlOf(db) })
       const host = await createFakeHosts({ port, database: databaseByName(db) }).fakeHost('My machine', {
         memoryGibibytes: 16,
         containerAgent: relay.containerAgent,

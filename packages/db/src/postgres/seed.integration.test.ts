@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from 'bun:test'
-import { workspacePermissions } from '@hq/kernel'
+import { workspacePermissions } from '@spyria/kernel'
 import { createMockSnapshot } from '../mock-data.ts'
 import { resetDatabase } from './seed.ts'
 import * as tables from './tables.ts'

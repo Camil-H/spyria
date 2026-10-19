@@ -1,4 +1,4 @@
-import { type ChatId, chatId, DomainError, type ProjectId, type WorkspaceId } from '@hq/kernel'
+import { type ChatId, chatId, DomainError, type ProjectId, type WorkspaceId } from '@spyria/kernel'
 import type { GitHubRepository, GitHubSettingsInput, GitHubSettingsView } from '../domain/github.ts'
 
 export const githubSettingsPath = '/api/github-settings'

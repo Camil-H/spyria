@@ -1,4 +1,4 @@
-import type { MemberId, WorkspaceId } from '@hq/kernel'
+import type { MemberId, WorkspaceId } from '@spyria/kernel'
 import type { BudgetOverview, BudgetProgress } from '../domain/budgets.ts'
 import { succeeded } from './http-audit-log.ts'
 

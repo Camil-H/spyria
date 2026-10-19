@@ -1,5 +1,5 @@
-import type { Transact } from '@hq/db/zero-queries'
-import type { WorkspaceId } from '@hq/kernel'
+import type { Transact } from '@spyria/db/zero-queries'
+import type { WorkspaceId } from '@spyria/kernel'
 import type { UsageLedger } from '../contracts/usage-sync.ts'
 import { usageJobTypes } from '../domain/usage.ts'
 

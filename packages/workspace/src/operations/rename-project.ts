@@ -1,4 +1,4 @@
-import type { ProjectId } from '@hq/kernel'
+import type { ProjectId } from '@spyria/kernel'
 import type { WorkspaceTransactor } from '../contracts/transactor.ts'
 import type { Name } from '../domain/name.ts'
 import { renamedProject } from '../domain/project.ts'

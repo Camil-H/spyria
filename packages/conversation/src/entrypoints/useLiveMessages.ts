@@ -1,5 +1,5 @@
-import { useStore } from '@hq/db/react'
-import { type ChatId, messageId, type WorkspaceId } from '@hq/kernel'
+import { useStore } from '@spyria/db/react'
+import { type ChatId, messageId, type WorkspaceId } from '@spyria/kernel'
 import { useEffect, useState } from 'react'
 import {
   type AgentWorkspace,

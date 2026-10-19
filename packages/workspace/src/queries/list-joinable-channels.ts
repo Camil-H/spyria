@@ -1,5 +1,5 @@
-import { chatParticipantsIn, participantIn, type Snapshot } from '@hq/db'
-import type { ChatId, MemberId, WorkspaceId } from '@hq/kernel'
+import { chatParticipantsIn, participantIn, type Snapshot } from '@spyria/db'
+import type { ChatId, MemberId, WorkspaceId } from '@spyria/kernel'
 
 export type JoinableChannel = Readonly<{ id: ChatId; name: string; projectName: string | null; memberCount: number }>
 

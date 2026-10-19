@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from 'bun:test'
-import { createTestDatabase, databaseDropTimeoutMilliseconds, databaseUrlOf } from '@hq/db/testing'
-import { workspacePermissions } from '@hq/kernel'
+import { createTestDatabase, databaseDropTimeoutMilliseconds, databaseUrlOf } from '@spyria/db/testing'
+import { workspacePermissions } from '@spyria/kernel'
 import { exportJWK, generateKeyPair, type JWTPayload, SignJWT } from 'jose'
 import { createApp } from '../app.ts'
 import { startFakeSmtp, verificationLinkIn } from '../testing/fake-smtp.ts'
@@ -68,7 +68,7 @@ const entraIdp = await startFakeIdp('/tenant-1/v2.0')
 const bootstrapIdp = await startFakeIdp()
 const smtp = startFakeSmtp()
 const ssoSettings = { ...testAuthSettings, authMode: 'sso' as const, secretsKey, microsoftLoginOrigin: entraIdp.origin }
-const app = createApp({ database, ...ssoSettings, mail: { smtpUrl: smtp.url, from: 'HQ <hq@test.local>' } })
+const app = createApp({ database, ...ssoSettings, mail: { smtpUrl: smtp.url, from: 'Spyria <spyria@test.local>' } })
 const appWithoutMail = createApp({ database, ...ssoSettings })
 afterAll(async () => {
   smtp.stop()
@@ -125,7 +125,7 @@ const configureIdp = (idp: FakeIdp, workspaceId: string, domains: string[], clie
   return saveSso(workspaceId, {
     preset: 'oidc',
     issuer: idp.issuer,
-    clientId: `hq-${workspaceId}`,
+    clientId: `spyria-${workspaceId}`,
     clientSecret,
     domains,
   })
@@ -184,7 +184,7 @@ test('the server tells its auth mode', async () => {
 test('an admin saves the SSO settings: the secret is encrypted at rest, never returned, and changes are recorded', async () => {
   const saved = await configureIdp(acmeIdp, acme, [' Example.com'], 'acme-secret-1')
   expect(saved.status).toBe(200)
-  const view = { preset: 'oidc', issuer: acmeIdp.issuer, clientId: `hq-${acme}`, domains: ['example.com'] }
+  const view = { preset: 'oidc', issuer: acmeIdp.issuer, clientId: `spyria-${acme}`, domains: ['example.com'] }
   expect(JSON.parse(saved.body)).toEqual({
     settings: { ...view, tenantId: '', hasSecret: true, domainStates: [unverified('example.com')] },
   })
@@ -229,7 +229,7 @@ test('saving refuses a failing discovery with its reason, a multi-tenant Entra i
   const unreachable = await saveSso(globex, {
     preset: 'oidc',
     issuer: 'http://127.0.0.1:9/nothing',
-    clientId: 'hq',
+    clientId: 'spyria',
     clientSecret: 's',
     domains: ['globex.com'],
   })
@@ -241,7 +241,7 @@ test('saving refuses a failing discovery with its reason, a multi-tenant Entra i
   const common = await saveSso(globex, {
     preset: 'microsoft',
     tenantId: 'common',
-    clientId: 'hq',
+    clientId: 'spyria',
     clientSecret: 's',
     domains: ['globex.com'],
   })
@@ -252,7 +252,7 @@ test('saving refuses a failing discovery with its reason, a multi-tenant Entra i
   const withoutSecret = await saveSso(globex, {
     preset: 'oidc',
     issuer: otherIdp.issuer,
-    clientId: 'hq',
+    clientId: 'spyria',
     domains: ['globex.com'],
   })
   expect(JSON.parse(withoutSecret.body).message).toBe('A client secret is required')
@@ -318,7 +318,7 @@ test('without SMTP the verification link is refused with a clear message', async
   expect((await sendVerification(acme, 'example.net', 'it@example.net', appWithoutMail)).body).toEqual({
     error: 'mail_not_configured',
     message:
-      'Email is not configured on this server (HQ_SMTP_URL): the operator can verify the domain with sso:verify-domain',
+      'Email is not configured on this server (SPYRIA_SMTP_URL): the operator can verify the domain with sso:verify-domain',
   })
   await database.$client`delete from sso_domains where domain = 'example.net'`
 })
@@ -332,7 +332,7 @@ test('the first sign-in binds the identity through an invite; a later sign-in ma
   expect(first.page).toContain('"status":"signed_in"')
   expect(first.sessions.map(({ workspaceId }) => workspaceId)).toEqual([acme])
   expect(Object.fromEntries(acmeIdp.tokenRequests.at(-1) ?? [])).toMatchObject({
-    client_id: `hq-${acme}`,
+    client_id: `spyria-${acme}`,
     client_secret: 'acme-secret-2',
     code_verifier: expect.any(String),
   })
@@ -365,7 +365,7 @@ test('an Entra token without email_verified signs in by preferred_username for a
   const saved = await saveSso('initech', {
     preset: 'microsoft',
     tenantId: 'tenant-1',
-    clientId: 'hq-initech',
+    clientId: 'spyria-initech',
     clientSecret: 'entra-secret',
     domains: ['initech.com'],
   })
@@ -391,7 +391,7 @@ test('a domain claimed by another issuer is refused; the same issuer shares it a
       await saveSso(globex, {
         preset: 'oidc',
         issuer: acmeIdp.issuer,
-        clientId: 'hq-globex',
+        clientId: 'spyria-globex',
         clientSecret: 'acme-secret-2',
         domains: ['example.com'],
       })
@@ -430,10 +430,10 @@ test('an unverified claim blocks no one; a verified domain refuses another issue
 
 test('the test sign-in hook works in sso mode', async () => {
   const testApp = createApp({ database, ...ssoSettings, testDatabaseByName: () => database })
-  const testCookie = `hq_test=${encodeURIComponent(JSON.stringify({ db: testDatabase.name, user: bob }))}`
+  const testCookie = `spyria_test=${encodeURIComponent(JSON.stringify({ db: testDatabase.name, user: bob }))}`
   const login = await testApp.request('/auth/login', { headers: { cookie: testCookie } })
   expect(await login.text()).toContain('"status":"signed_in"')
-  expect(cookieHeaderOf(login)).toContain(`hq_s_${acme}=`)
+  expect(cookieHeaderOf(login)).toContain(`spyria_s_${acme}=`)
 })
 
 test('the operator bootstrap creates a workspace with its SSO and a first admin who signs in through it', async () => {
@@ -450,11 +450,11 @@ test('the operator bootstrap creates a workspace with its SSO and a first admin 
       '--issuer',
       bootstrapIdp.issuer,
       '--client-id',
-      'hq-umbrella',
+      'spyria-umbrella',
       '--domains',
       'umbrella.com',
     ],
-    { HQ_SECRETS_KEY: secretsKey, HQ_SSO_CLIENT_SECRET: 'bootstrap-secret' },
+    { SPYRIA_SECRETS_KEY: secretsKey, SPYRIA_SSO_CLIENT_SECRET: 'bootstrap-secret' },
   )
   expect(bootstrap.exitCode).toBe(0)
   expect(bootstrap.stderr).toBe('')

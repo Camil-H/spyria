@@ -1,5 +1,5 @@
-import { memberToolsIn, type Snapshot, workspaceConnectionsIn } from '@hq/db'
-import type { WorkspaceId } from '@hq/kernel'
+import { memberToolsIn, type Snapshot, workspaceConnectionsIn } from '@spyria/db'
+import type { WorkspaceId } from '@spyria/kernel'
 
 export const listWorkspaceConnections = (workspaceId: WorkspaceId) => (snapshot: Snapshot) => {
   const members = snapshot.memberships

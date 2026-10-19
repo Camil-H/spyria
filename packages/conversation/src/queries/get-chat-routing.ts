@@ -1,11 +1,12 @@
+import type { Transaction } from '@rocicorp/zero'
 import {
   chatContextTokens,
   isWorkspaceHostOnline,
   lastAdapterModelsOf,
   listedModelsOf,
   memberModelsOf,
-} from '@hq/db/server-writes'
-import { chatPermissionsOf, type ZeroContext } from '@hq/db/zero-queries'
+} from '@spyria/db/server-writes'
+import { chatPermissionsOf, type ZeroContext } from '@spyria/db/zero-queries'
 import {
   chatModelsOf,
   listedChatModelIdsOf,
@@ -14,8 +15,7 @@ import {
   routableModelNames,
   chatId as toChatId,
   withPricesOf,
-} from '@hq/kernel'
-import type { Transaction } from '@rocicorp/zero'
+} from '@spyria/kernel'
 
 export type ChatRoutingRead = {
   reachableModels: Model[]
@@ -24,7 +24,7 @@ export type ChatRoutingRead = {
   contextTokens: number | null
   adapterModels: { currentModelId: string | null; available: { id: string; name: string }[] }
   adapterEfforts: { current: string | null; available: { id: string; name: string }[] }
-  hqRuntimeAvailable: boolean
+  spyriaRuntimeAvailable: boolean
 }
 
 export const getChatRouting = async (
@@ -32,13 +32,13 @@ export const getChatRouting = async (
   { workspaceId, userId }: ZeroContext,
   chatId: string,
 ): Promise<ChatRoutingRead> => {
-  const { contextTokens, reachable, adapterModels, hqRuntimeAvailable } = await transact(async (tx) => {
+  const { contextTokens, reachable, adapterModels, spyriaRuntimeAvailable } = await transact(async (tx) => {
     await requireChatPermission(chatPermissionsOf(tx, workspaceId), toChatId(chatId), userId, 'chat.read')
     return {
       contextTokens: await chatContextTokens(tx, workspaceId, chatId),
       reachable: chatModelsOf((await memberModelsOf(tx, workspaceId, userId)) ?? []),
       adapterModels: await lastAdapterModelsOf(tx, workspaceId, chatId),
-      hqRuntimeAvailable: await isWorkspaceHostOnline(tx, workspaceId),
+      spyriaRuntimeAvailable: await isWorkspaceHostOnline(tx, workspaceId),
     }
   })
   return {
@@ -56,6 +56,6 @@ export const getChatRouting = async (
       current: adapterModels?.isThisChat ? adapterModels.currentEffort : null,
       available: adapterModels?.availableEfforts ?? [],
     },
-    hqRuntimeAvailable,
+    spyriaRuntimeAvailable,
   }
 }

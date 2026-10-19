@@ -1,4 +1,4 @@
-import type { ChatId, MemberId, WorkspaceId } from '@hq/kernel'
+import type { ChatId, MemberId, WorkspaceId } from '@spyria/kernel'
 import type { WorkspaceRead, WorkspaceReading } from '../domain/workspace.ts'
 
 type Command<Input, Result = unknown> = (input: Input & { workspaceId: WorkspaceId }) => Promise<Result>

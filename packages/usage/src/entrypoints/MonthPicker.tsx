@@ -1,4 +1,4 @@
-import { fieldClass } from '@hq/ui'
+import { fieldClass } from '@spyria/ui'
 import type { UsageMonth } from '../domain/usage.ts'
 import { formatMonth } from './format.ts'
 

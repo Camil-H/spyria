@@ -1,5 +1,5 @@
-import { type ChatId, modelNameOf, type WorkspaceId } from '@hq/kernel'
-import { focusRing } from '@hq/ui'
+import { type ChatId, modelNameOf, type WorkspaceId } from '@spyria/kernel'
+import { focusRing } from '@spyria/ui'
 import { ChevronDown } from 'lucide-react'
 import { lazy, type ReactNode, Suspense, useEffect, useRef, useState } from 'react'
 import { chipLabelOf, type Harness, type RunsOn, runsOnNames } from '../domain/session-routing.ts'

@@ -2,7 +2,7 @@ import { afterAll, expect, setDefaultTimeout, test } from 'bun:test'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { type ChatId, chatId } from '@hq/kernel'
+import { type ChatId, chatId } from '@spyria/kernel'
 import { createSecretBox } from './auth/secret-box.ts'
 import { createGitHubApi } from './github/github-api.ts'
 import { fakeGitHubAppId, fakeGitHubClientId, fakeGitHubClientSecret, startFakeGitHub } from './testing/fake-github.ts'
@@ -93,7 +93,7 @@ const agentCommit = (workspace: string, total: number) => {
   gitIn(workspace, 'commit', '-qam', `Set the total to ${total}`)
 }
 
-test('only the owner commits and updates from base; prompters and editors are refused, as are an empty message and nothing to commit; the author comes from GitHub, else HQ', async () => {
+test('only the owner commits and updates from base; prompters and editors are refused, as are an empty message and nothing to commit; the author comes from GitHub, else Spyria', async () => {
   await stack.agentHost('Git roles host')
   const { id, branch } = await newDevChat(baseBranchOf('roles'), [
     { memberId: bob, roleId: 'prompter' },
@@ -117,7 +117,9 @@ test('only the owner commits and updates from base; prompters and editors are re
   const committed = await gitAction(alice, id, 'commit', 'Raise the total')
   expect(committed.status).toBe(200)
   expect(committed.body.text).toMatch(/^Committed [0-9a-f]{7}$/)
-  expect(gitIn(workspace, 'log', '-1', '--format=%s|%an|%ae')).toBe(`Raise the total|Alice|${alice}@users.noreply.hq\n`)
+  expect(gitIn(workspace, 'log', '-1', '--format=%s|%an|%ae')).toBe(
+    `Raise the total|Alice|${alice}@users.noreply.spyria\n`,
+  )
   expect(await gitAction(alice, id, 'commit', 'Again')).toEqual({
     status: 403,
     body: { isRefused: true, text: 'There is nothing to commit' },
@@ -174,7 +176,7 @@ test('commit and update are refused while an agent turn runs and while the runti
   expect((await stack.runtimeOf(id)).state).toBe('stopped')
 })
 
-test('update from base merges the base’s new commit from a thin bundle of the base only; no token reaches hq-agent or the runtime', async () => {
+test('update from base merges the base’s new commit from a thin bundle of the base only; no token reaches spyria-agent or the runtime', async () => {
   const { relay } = await stack.agentHost('Git update host')
   const baseBranch = baseBranchOf('merge')
   const { id, branch } = await newDevChat(baseBranch)
@@ -207,7 +209,7 @@ test('update from base merges the base’s new commit from a thin bundle of the 
   const [merge] = updateRequests.filter(({ path }) => path === '/api/workspace/merge')
   const { bundle, head, base } = JSON.parse(String(merge?.body))
   expect([head, base]).toEqual([newBase, baseBranch])
-  const bundleFile = join(tmpdir(), `hq-git-actions-${crypto.randomUUID()}.bundle`)
+  const bundleFile = join(tmpdir(), `spyria-git-actions-${crypto.randomUUID()}.bundle`)
   writeFileSync(bundleFile, Buffer.from(bundle, 'base64'))
   expect(Bun.spawnSync(['git', 'bundle', 'list-heads', bundleFile]).stdout.toString()).toBe(
     `${newBase} refs/heads/${baseBranch}\n`,

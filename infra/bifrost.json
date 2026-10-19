@@ -15,7 +15,7 @@
     "allow_direct_keys": false,
     "disable_content_logging": true,
     "log_retention_days": 30,
-    "mcp_external_client_url": "env.HQ_GATEWAY_OAUTH_BASE",
+    "mcp_external_client_url": "env.SPYRIA_GATEWAY_OAUTH_BASE",
     "mcp_disable_auto_tool_inject": true
   },
   "config_store": {

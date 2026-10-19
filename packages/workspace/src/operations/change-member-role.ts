@@ -1,4 +1,4 @@
-import { type MemberId, requireWorkspacePermission } from '@hq/kernel'
+import { type MemberId, requireWorkspacePermission } from '@spyria/kernel'
 import type { WorkspaceTransactor } from '../contracts/transactor.ts'
 import { requireActiveMember, requireAnotherAdmin, requireAnotherMember } from '../domain/member.ts'
 import { requireGrantableRole } from '../domain/role.ts'

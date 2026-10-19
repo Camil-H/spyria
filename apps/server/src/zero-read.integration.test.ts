@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test'
-import { conversationMutators } from '@hq/conversation/server'
-import { createMockSnapshot, type Snapshot } from '@hq/db'
-import { createZeroStore } from '@hq/db/zero-store'
-import { type ChatId, chatId, type MemberId, messageId, type WorkspaceId } from '@hq/kernel'
-import { workspaceMutators } from '@hq/workspace/server'
+import { conversationMutators } from '@spyria/conversation/server'
+import { createMockSnapshot, type Snapshot } from '@spyria/db'
+import { createZeroStore } from '@spyria/db/zero-store'
+import { type ChatId, chatId, type MemberId, messageId, type WorkspaceId } from '@spyria/kernel'
+import { workspaceMutators } from '@spyria/workspace/server'
 import {
   acme,
   alice,

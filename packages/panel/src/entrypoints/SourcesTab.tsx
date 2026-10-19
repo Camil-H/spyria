@@ -1,4 +1,4 @@
-import { useQuery } from '@hq/db/react'
+import { useQuery } from '@spyria/db/react'
 import { BookOpen } from 'lucide-react'
 import { getSources } from '../queries/get-sources.ts'
 import { EmptyState } from './EmptyState.tsx'

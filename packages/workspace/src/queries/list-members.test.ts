@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { acme, alice, bob, createMockSnapshot, globex, lee } from '@hq/db'
+import { acme, alice, bob, createMockSnapshot, globex, lee } from '@spyria/db'
 import { listInvitations, listMembers } from './list-members.ts'
 
 const snapshot = createMockSnapshot()

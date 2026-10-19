@@ -22,7 +22,7 @@ type AgentProjection =
 export const agentNotices = {
   noHost: 'No runtime host is available',
   couldNotStart: 'The agent could not start',
-  imageNotBuilt: "HQ's runtime image is not built: run bun run agent:build",
+  imageNotBuilt: "Spyria's runtime image is not built: run bun run agent:build",
   stoppedWithError: 'The agent stopped with an error',
   noReply: 'The agent finished without a reply',
   hostOffline: 'The runtime host is offline',
@@ -32,7 +32,7 @@ export const agentNotices = {
   newSession: 'The agent started a new session; it does not remember earlier messages',
 }
 export const setupFailedNoticeOf = (exitCode: unknown, output: unknown) =>
-  `The setup script .hq/setup.sh failed with exit code ${exitCode}; the session started anyway.\n${output}`
+  `The setup script .spyria/setup.sh failed with exit code ${exitCode}; the session started anyway.\n${output}`
 export const waitingNotices = [
   agentNotices.noHost,
   agentNotices.couldNotStart,
@@ -72,7 +72,7 @@ type AcpToolCall = {
   rawOutput: unknown
   content: Fields[] | undefined
 }
-const hqAgentToolCallOf = (event: AgentEvent, update: Fields): AcpToolCall => ({
+const spyriaAgentToolCallOf = (event: AgentEvent, update: Fields): AcpToolCall => ({
   id: `${event.id.split(':')[0]}:${update?.toolCallId}`,
   title: String(update?.title),
   kind: update?.kind,
@@ -156,10 +156,10 @@ const acpUpdateProjectionOf = (event: AgentEvent): AgentProjection => {
     return thought && stepOf(thought)
   }
   if (kind === 'tool_call') {
-    const call = hqAgentToolCallOf(event, update)
+    const call = spyriaAgentToolCallOf(event, update)
     return { type: 'step', step: acpStepOf(call), id: call.id }
   }
-  if (kind === 'tool_call_update') return acpToolCallProjectionOf(hqAgentToolCallOf(event, update))
+  if (kind === 'tool_call_update') return acpToolCallProjectionOf(spyriaAgentToolCallOf(event, update))
   if (kind === 'plan' && Array.isArray(update?.entries))
     return stepOf({
       type: 'plan',
@@ -189,7 +189,7 @@ const acpUpdateProjectionOf = (event: AgentEvent): AgentProjection => {
 export const toolCallIdOf = (event: AgentEvent) => {
   const update = event.update as Fields
   return event.kind === 'ACPUpdate' && String(update?.sessionUpdate).startsWith('tool_call')
-    ? hqAgentToolCallOf(event, update).id
+    ? spyriaAgentToolCallOf(event, update).id
     : undefined
 }
 

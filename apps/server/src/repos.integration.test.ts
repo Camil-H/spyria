@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from 'bun:test'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { chatId } from '@hq/kernel'
+import { chatId } from '@spyria/kernel'
 import { createSecretBox } from './auth/secret-box.ts'
 import { createGitHubApi } from './github/github-api.ts'
 import {
@@ -187,7 +187,7 @@ test('a dev chat needs a granted repository and an existing base branch, and sto
     mode: 'dev',
     repository: 'acme/app',
     baseBranch: 'release',
-    gitBranch: `hq/fix-the-totals-${id.replace(/-/g, '').slice(0, 6)}`,
+    gitBranch: `spyria/fix-the-totals-${id.replace(/-/g, '').slice(0, 6)}`,
     ownerUserId: alice,
   })
   expect((await stack.changesOf(id))[0]).toMatchObject({
@@ -245,13 +245,13 @@ test('a dev chat clones its repository with a read-only installation token kept 
   expect(gitConfig).toContain(`url = ${fakeGitHub.urls.webUrl}/acme/app.git`)
 
   const failing = await devChatAndPrompt('acme/docs', 'stub:ls')
-  expect(failing.replies.map(({ body }) => body).join('')).toContain('files:.git,.hq,README.md')
+  expect(failing.replies.map(({ body }) => body).join('')).toContain('files:.git,.spyria,README.md')
   const notices = async () => (await stack.repliesTo(failing.promptId)).filter(({ kind }) => kind === 'notice')
   await waitFor(async () => (await notices()).length > 0, 15_000)
   expect(await notices()).toEqual([
     {
       kind: 'notice',
-      body: 'The setup script .hq/setup.sh failed with exit code 127; the session started anyway.\ninstalling the docs toolchain\ndocs-tool: command not found',
+      body: 'The setup script .spyria/setup.sh failed with exit code 127; the session started anyway.\ninstalling the docs toolchain\ndocs-tool: command not found',
     },
   ])
   expect(existsSync(join(String(workspaceFrame?.workspace.cwd), 'only-in-acme-app.txt'))).toBe(true)

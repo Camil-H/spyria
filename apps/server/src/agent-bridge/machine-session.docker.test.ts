@@ -1,12 +1,12 @@
 import { afterAll, expect, setDefaultTimeout, test } from 'bun:test'
-import { readHqAgentImage } from '../hq-agent-image.ts'
+import { readSpyriaAgentImage } from '../spyria-agent-image.ts'
 import { waitFor } from '../testing/testing.ts'
 
 setDefaultTimeout(240_000)
 const docker = (...args: string[]) => Bun.spawnSync(['docker', ...args], { stderr: 'pipe' })
-const hqImage = await readHqAgentImage()
-if (!hqImage || docker('image', 'inspect', hqImage).exitCode !== 0)
-  throw new Error('HQ image missing: run bun run agent:build')
+const spyriaImage = await readSpyriaAgentImage()
+if (!spyriaImage || docker('image', 'inspect', spyriaImage).exitCode !== 0)
+  throw new Error('Spyria image missing: run bun run agent:build')
 
 type ProviderRequest = {
   path: string
@@ -106,7 +106,7 @@ const provider = Bun.serve({
 const providerUrl = `http://host.docker.internal:${provider.port}`
 
 const apiKey = 'test-api-key-0123456789abcdef'
-const container = `hq-test-${crypto.randomUUID().slice(0, 8)}-effort`
+const container = `spyria-test-${crypto.randomUUID().slice(0, 8)}-effort`
 const started = docker(
   ...['run', '-d', '--rm', '--name', container, '-e', `OH_SESSION_API_KEYS_0=${apiKey}`, '-p', '127.0.0.1::8000'],
   ...['--add-host', 'host.docker.internal:host-gateway', '--read-only', '--tmpfs', '/tmp:exec'],
@@ -118,7 +118,7 @@ const started = docker(
     '-u',
     '10001:10001',
   ],
-  hqImage,
+  spyriaImage,
 )
 if (started.exitCode !== 0) throw new Error(started.stderr.toString())
 const agentUrl = `http://${docker('port', container, '8000').stdout.toString().trim().split('\n')[0]}`
@@ -205,11 +205,11 @@ test('Codex: the launch effort and a later effort change reach the Responses req
       acp_command: [
         'sh',
         '-c',
-        'mkdir -p "$HOME/.codex" && printf %s "$HQ_CODEX_CONFIG" > "$HOME/.codex/config.toml" && exec codex-acp',
+        'mkdir -p "$HOME/.codex" && printf %s "$SPYRIA_CODEX_CONFIG" > "$HOME/.codex/config.toml" && exec codex-acp',
       ],
       acp_thought_level: 'high',
     },
-    { HQ_CODEX_CONFIG: { value: config }, FAKE_OPENAI_KEY: { value: 'fake-effort-key' } },
+    { SPYRIA_CODEX_CONFIG: { value: config }, FAKE_OPENAI_KEY: { value: 'fake-effort-key' } },
   )
   const turnEfforts = () =>
     requests

@@ -8,7 +8,7 @@ import {
   type WorkspacePermission,
   type WorkspaceRole,
   workspacePermissions,
-} from '@hq/kernel'
+} from '@spyria/kernel'
 import {
   CustomRoleNotFound,
   InvalidRoleName,

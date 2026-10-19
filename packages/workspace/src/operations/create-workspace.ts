@@ -1,4 +1,4 @@
-import { type MemberId, workspaceId } from '@hq/kernel'
+import { type MemberId, workspaceId } from '@spyria/kernel'
 import type { WorkspaceTransactor } from '../contracts/transactor.ts'
 import type { Name } from '../domain/name.ts'
 

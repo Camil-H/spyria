@@ -1,4 +1,4 @@
-import { type ChatPermission, type ChatRole, canGrant, isRoleAllowedIn, type MemberId } from '@hq/kernel'
+import { type ChatPermission, type ChatRole, canGrant, isRoleAllowedIn, type MemberId } from '@spyria/kernel'
 import {
   NotParticipant,
   OwnerRoleNotAssignable,

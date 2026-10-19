@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { addRoutableModels, reachableModelsOf } from '@hq/kernel'
+import { addRoutableModels, reachableModelsOf } from '@spyria/kernel'
 import {
   chipLabelOf,
   runsOnFieldsOf,

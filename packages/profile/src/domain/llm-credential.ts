@@ -1,4 +1,4 @@
-import type { CredentialId, MemberId, WorkspaceId } from '@hq/kernel'
+import type { CredentialId, MemberId, WorkspaceId } from '@spyria/kernel'
 import { BlankProvider, UnsupportedProvider } from './errors.ts'
 import type { Secret } from './secret.ts'
 

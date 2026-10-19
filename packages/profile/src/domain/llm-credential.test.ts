@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { memberId, workspaceId } from '@hq/kernel'
+import { memberId, workspaceId } from '@spyria/kernel'
 import { BlankProvider, UnsupportedProvider } from './errors.ts'
 import { gatewayKeyOf, gatewayKeyRefOf, newLlmCredential } from './llm-credential.ts'
 import { Secret } from './secret.ts'

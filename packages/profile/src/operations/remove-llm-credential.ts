@@ -1,4 +1,4 @@
-import type { CredentialId, MemberId, WorkspaceId } from '@hq/kernel'
+import type { CredentialId, MemberId, WorkspaceId } from '@spyria/kernel'
 import type { ProfileTransactor } from '../contracts/transactor.ts'
 
 type Dependencies = { transactor: ProfileTransactor }

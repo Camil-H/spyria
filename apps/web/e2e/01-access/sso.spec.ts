@@ -13,8 +13,13 @@ import {
   test,
 } from './fixtures'
 
-const providerClientSecret = 'hq-sso-e2e-secret'
-const acmeSso = { preset: 'oidc', issuer: ssoProviderIssuer, clientId: 'hq-sso', clientSecret: providerClientSecret }
+const providerClientSecret = 'spyria-sso-e2e-secret'
+const acmeSso = {
+  preset: 'oidc',
+  issuer: ssoProviderIssuer,
+  clientId: 'spyria-sso',
+  clientSecret: providerClientSecret,
+}
 
 const postAsAlice = async (workerStack: WorkerStack, path: string, body: object) => {
   const tokenQuery = new URLSearchParams({
@@ -44,7 +49,7 @@ const lastLinkTo = async (address: string) => {
 const verifyByLink = async (workerStack: WorkerStack, domain = 'example.com') => {
   const address = verificationAddressOf(workerStack, domain)
   await postAsAlice(workerStack, '/api/sso-settings/domain-verification', { domain, email: address })
-  const testCookie = `hq_test=${encodeURIComponent(JSON.stringify({ db: workerStack.databaseName }))}`
+  const testCookie = `spyria_test=${encodeURIComponent(JSON.stringify({ db: workerStack.databaseName }))}`
   const opened = await fetch(await lastLinkTo(address), { headers: { cookie: testCookie } })
   expect(opened.status).toBe(200)
 }
@@ -82,7 +87,7 @@ test.describe('SSO', () => {
     await verifyByLink(workerStack)
     await inviteToAcme(workerStack, 'nina@example.com')
     await page.goto('/')
-    await expect(page.getByRole('heading', { name: 'Sign in to HQ' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Sign in to Spyria' })).toBeVisible()
     await signInThroughCompanyProvider(page, 'nina@example.com')
     await expect(switcherOf(page)).toContainText('Acme')
 
@@ -123,7 +128,7 @@ test.describe('SSO', () => {
       await test.step('the section shows the provider, client id, domains and "Secret: set", never the secret', async () => {
         await expect(section.getByLabel('Provider')).toHaveValue('oidc')
         await expect(section.getByLabel('Issuer')).toHaveValue(ssoProviderIssuer)
-        await expect(section.getByLabel('Client id')).toHaveValue('hq-sso')
+        await expect(section.getByLabel('Client id')).toHaveValue('spyria-sso')
         await expect(section.getByLabel('Email domains')).toHaveValue('example.com')
         await expect(section.getByText('Secret: set')).toBeVisible()
         await expect(secretField).toHaveValue('')

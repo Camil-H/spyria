@@ -115,7 +115,7 @@ test.each([
   ['the gateway unreachable', { reached: 'unreachable' }, 'The model gateway is unreachable'],
   ['no answer in time', { reached: 'timeout' }, 'The model took too long to respond'],
   ['a gateway timeout status', answered(504, ''), 'The model took too long to respond'],
-  ['a call refused by HQ', { reached: 'refused' }, 'Alice has no LLM key in this workspace'],
+  ['a call refused by Spyria', { reached: 'refused' }, 'Alice has no LLM key in this workspace'],
   ['Bifrost: provider key refused', answered(401, recordedBifrost.providerKeyRefused), keyRefused],
   ['Bifrost: virtual key revoked', answered(401, recordedBifrost.virtualKeyRevoked), keyRefused],
   ['Bifrost: model blocked', answered(403, recordedBifrost.modelBlocked), modelUnavailable],

@@ -1,3 +1,4 @@
+import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import {
   type AgentChat,
   type AgentConversation,
@@ -14,13 +15,12 @@ import {
   type SessionClassifier,
   streamedTextOf,
   toolCallIdOf,
-} from '@hq/conversation/server'
-import type { Database } from '@hq/db/postgres'
-import { schema } from '@hq/db/zero'
-import { chatPermissionsOf, type Transact, type ZeroContext, zql } from '@hq/db/zero-queries'
-import { can, chatId, type MemberId, type MessageId, workspaceId } from '@hq/kernel'
-import type { SandboxProvider } from '@hq/runtime/server'
-import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
+} from '@spyria/conversation/server'
+import type { Database } from '@spyria/db/postgres'
+import { schema } from '@spyria/db/zero'
+import { chatPermissionsOf, type Transact, type ZeroContext, zql } from '@spyria/db/zero-queries'
+import { can, chatId, type MemberId, type MessageId, workspaceId } from '@spyria/kernel'
+import type { SandboxProvider } from '@spyria/runtime/server'
 import { upgradeWebSocket } from 'hono/bun'
 import type { WSContext } from 'hono/ws'
 import type { Authentication } from '../auth/session-tokens.ts'
@@ -40,7 +40,7 @@ export const createAgentBridge = ({
   now,
   resumeAfterMilliseconds,
   approvalWindowMilliseconds,
-  hqAgentImage,
+  spyriaAgentImage,
   reopenDelayMilliseconds = 1000,
   repositoryCheckoutsOf,
 }: {
@@ -50,7 +50,7 @@ export const createAgentBridge = ({
   now?: () => number
   resumeAfterMilliseconds?: number
   approvalWindowMilliseconds?: number
-  hqAgentImage?: string
+  spyriaAgentImage?: string
   reopenDelayMilliseconds?: number
   repositoryCheckoutsOf?: (database: Database) => RepositoryCheckouts
 }) => {
@@ -88,7 +88,7 @@ export const createAgentBridge = ({
       now,
       resumeAfterMilliseconds,
       approvalWindowMilliseconds,
-      hqAgentImage,
+      spyriaAgentImage,
       checkouts: repositoryCheckoutsOf?.(database),
       eventSockets: {
         showQuestion: (chat, frame) => {

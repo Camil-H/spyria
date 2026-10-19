@@ -1,4 +1,4 @@
-import type { ChatId, MemberId, MessageId, WorkspaceId } from '@hq/kernel'
+import type { ChatId, MemberId, MessageId, WorkspaceId } from '@spyria/kernel'
 import type { GitAction, GitActionOutcome } from '../domain/git-actions.ts'
 import type { PublishAction, PullRequestDraft } from '../domain/pull-requests.ts'
 import type { RunsOn } from '../domain/session-routing.ts'

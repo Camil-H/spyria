@@ -1,4 +1,4 @@
-import { projects } from '@hq/db/postgres'
+import { projects } from '@spyria/db/postgres'
 import {
   agentReplyText,
   expect,

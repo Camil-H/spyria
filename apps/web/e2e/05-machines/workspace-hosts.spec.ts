@@ -73,7 +73,7 @@ test.describe('Workspace hosts', () => {
     })
   })
 
-  test('As a member who can manage runtime hosts, I add a host and get one command that replaces hq-host and picks rootless or rooted Docker itself', {
+  test('As a member who can manage runtime hosts, I add a host and get one command that replaces spyria-host and picks rootless or rooted Docker itself', {
     tag: ['@spec-07', '@spec-25', '@stage-g'],
   }, async ({ page }) => {
     await openSettings(page, 'Connect runtime')
@@ -82,10 +82,10 @@ test.describe('Workspace hosts', () => {
     await addDialogOf(page).getByRole('button', { name: 'Add' }).click()
 
     await expect(addDialogOf(page).getByRole('switch', { name: 'Rootless Docker' })).toHaveCount(0)
-    await expect(addDialogOf(page)).toContainText('within 15 minutes, from the HQ repo folder')
+    await expect(addDialogOf(page)).toContainText('within 15 minutes, from the Spyria repo folder')
     const command = await commandOf(page).inputValue()
     expect(command).toMatch(
-      /^docker build -q -t hq-host apps\/host >\/dev\/null && docker rm -f hq-host .*; docker volume rm hq-host /,
+      /^docker build -q -t spyria-host apps\/host >\/dev\/null && docker rm -f hq-host .*; docker volume rm hq-host /,
     )
     expect(command).toContain('docker run')
     expect(command).toContain('--restart unless-stopped')
@@ -96,7 +96,7 @@ test.describe('Workspace hosts', () => {
     expect(command).not.toContain('--personal')
     expect(command).not.toContain('login')
     const dockerOrigin = viteUrl.replace('localhost', 'host.docker.internal')
-    expect(command).toMatch(new RegExp(` hq-host ${dockerOrigin}/h/[A-HJ-NP-Z2-9]{8}$`))
+    expect(command).toMatch(new RegExp(` spyria-host ${dockerOrigin}/h/[A-HJ-NP-Z2-9]{8}$`))
 
     await addDialogOf(page).getByRole('button', { name: 'Close' }).click()
     await expect(addDialogOf(page)).toHaveCount(0)
@@ -110,7 +110,7 @@ test.describe('Workspace hosts', () => {
     const url = await addHost(page, 'Home server')
     const stateDirectory = hosts.newStateDirectory()
     const firstRun = hosts.start(url, stateDirectory)
-    await test.step('starting hq-host with the displayed URL turns the row Online with its capacity', async () => {
+    await test.step('starting spyria-host with the displayed URL turns the row Online with its capacity', async () => {
       await expectOnline(page, 'Home server')
       const { cpus, memoryBytes, rootless } = dockerSystem()
       const cap = Math.max(1, Math.floor((memoryBytes - 2 * gibibyte) / gibibyte))
@@ -120,7 +120,7 @@ test.describe('Workspace hosts', () => {
       await expect(row).toContainText(`0 / ${cap}`)
       await expect(row.getByText(rootless ? 'Docker: rootless' : 'Docker: root', { exact: true })).toBeVisible()
     })
-    await test.step('a second hq-host with the same URL is refused and the first stays online', async () => {
+    await test.step('a second spyria-host with the same URL is refused and the first stays online', async () => {
       const secondHost = hosts.start(url)
       expect(await secondHost.exited).not.toBe(0)
       expect(secondHost.output()).toContain('This code was already used')
@@ -191,14 +191,14 @@ test.describe('Workspace hosts', () => {
   }, async ({ page, pair }) => {
     await test.step('a machine paired without --personal', async () => {
       const machine = pair(urlOf(await addMachine(page)), {})
-      expect(await machine.closed).toBe('This host was paired as your machine: restart hq-host with --personal')
+      expect(await machine.closed).toBe('This host was paired as your machine: restart spyria-host with --personal')
       await expect(machineSectionOf(page)).toContainText('Offline')
     })
     await test.step('a workspace host paired with --personal', async () => {
       const command = await addWorkspaceHost(page)
       expect(command).not.toContain('--personal')
       const host = pair(urlOf(command), { personal: true, signedIn: [] })
-      expect(await host.closed).toBe('This host was paired as a workspace host: restart hq-host without --personal')
+      expect(await host.closed).toBe('This host was paired as a workspace host: restart spyria-host without --personal')
       await expect(hostsSectionOf(page).getByRole('listitem').filter({ hasText: 'Workspace box' })).toContainText(
         'Offline',
       )

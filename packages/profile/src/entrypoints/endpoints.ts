@@ -1,5 +1,5 @@
-import type { Transact, ZeroContext } from '@hq/db/zero-queries'
-import { type MemberId, memberId, type WorkspaceId } from '@hq/kernel'
+import type { Transact, ZeroContext } from '@spyria/db/zero-queries'
+import { type MemberId, memberId, type WorkspaceId } from '@spyria/kernel'
 import type { LlmGateway, ToolGateway } from '../contracts/repositories.ts'
 import { Secret } from '../domain/secret.ts'
 import { toolConsentChannel } from '../integrations/http-tool-connections.ts'
@@ -134,7 +134,7 @@ export const toolConsentCallbackPath = '/gateway-oauth/api/oauth/callback'
 
 export const toolConsentPageFromRequest = async (gateway: ToolGateway, callbackQuery: string) => {
   const connected = await gateway.finishToolConsent(callbackQuery).catch(() => false)
-  return `<!doctype html><meta charset="utf-8"><title>HQ</title>
+  return `<!doctype html><meta charset="utf-8"><title>Spyria</title>
 <p>${connected ? 'Connected' : 'The connection failed'}. You can close this window.</p>
 <script>new BroadcastChannel('${toolConsentChannel}').postMessage(${JSON.stringify({ connected })});close()</script>`
 }

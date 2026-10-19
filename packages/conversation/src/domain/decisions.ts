@@ -1,4 +1,4 @@
-import { isDecisionModel, type Model } from '@hq/kernel'
+import { isDecisionModel, type Model } from '@spyria/kernel'
 
 export type Questions = Readonly<Record<string, { instructions: string; criteria: Readonly<Record<string, string>> }>>
 export type Answers = Readonly<Record<string, { value: string; confidence: number }>>

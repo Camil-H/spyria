@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { chatId, workspaceId } from '@hq/kernel'
+import { chatId, workspaceId } from '@spyria/kernel'
 import { alice } from './mock-data.ts'
 import { createZeroStore } from './zero-store.ts'
 
@@ -34,8 +34,8 @@ test('keeps the drafts of the same chat id in two workspaces apart and stores ea
   store.replaceDraft(draftIn('workspace-acme', 'In Acme'))
   store.replaceDraft(draftIn('workspace-globex', 'In Globex'))
   expect([...items.keys()]).toEqual([
-    'hq.draft:member-alice:workspace-acme:chat-shared-id',
-    'hq.draft:member-alice:workspace-globex:chat-shared-id',
+    'spyria.draft:member-alice:workspace-acme:chat-shared-id',
+    'spyria.draft:member-alice:workspace-globex:chat-shared-id',
   ])
   await Promise.resolve()
   expect(store.read().drafts).toEqual([draftIn('workspace-acme', 'In Acme'), draftIn('workspace-globex', 'In Globex')])

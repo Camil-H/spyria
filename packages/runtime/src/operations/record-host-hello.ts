@@ -1,4 +1,4 @@
-import type { RuntimeHostId, WorkspaceId } from '@hq/kernel'
+import type { RuntimeHostId, WorkspaceId } from '@spyria/kernel'
 import type { RuntimeTransactor } from '../contracts/transactor.ts'
 import { hashSecret } from '../domain/claim.ts'
 import { HostNotRegistered, HostRemoved } from '../domain/errors.ts'

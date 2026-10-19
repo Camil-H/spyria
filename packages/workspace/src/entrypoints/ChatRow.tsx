@@ -1,4 +1,11 @@
-import type { ChatId, WorkspaceId } from '@hq/kernel'
+import { Content, Item, Root, Sub, SubContent, SubTrigger, Trigger } from '@radix-ui/react-dropdown-menu'
+import {
+  Content as TooltipContent,
+  Portal as TooltipPortal,
+  Root as TooltipRoot,
+  Trigger as TooltipTrigger,
+} from '@radix-ui/react-tooltip'
+import type { ChatId, WorkspaceId } from '@spyria/kernel'
 import {
   buttonClass,
   chatTypeIconOf,
@@ -7,14 +14,7 @@ import {
   menuItemClass,
   tooltipClass,
   type useGuardedAction,
-} from '@hq/ui'
-import { Content, Item, Root, Sub, SubContent, SubTrigger, Trigger } from '@radix-ui/react-dropdown-menu'
-import {
-  Content as TooltipContent,
-  Portal as TooltipPortal,
-  Root as TooltipRoot,
-  Trigger as TooltipTrigger,
-} from '@radix-ui/react-tooltip'
+} from '@spyria/ui'
 import { Ellipsis } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { NavLink } from 'react-router'

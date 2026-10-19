@@ -1,4 +1,4 @@
-import { focusRing } from '@hq/ui'
+import { focusRing } from '@spyria/ui'
 import { type KeyboardEvent, type PointerEvent, useRef } from 'react'
 import { maximumPanelWidth, minimumPanelWidth, usePanel } from './providers.tsx'
 

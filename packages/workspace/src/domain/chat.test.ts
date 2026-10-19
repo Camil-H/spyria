@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { chatId, memberId, projectId } from '@hq/kernel'
+import { chatId, memberId, projectId } from '@spyria/kernel'
 import { archivedChat, type Chat, devChat, movedChat, startRuntimeChat, visibleChat } from './chat.ts'
 import { CrossWorkspaceMove, RuntimeChatPrivate, SourceChatArchived } from './errors.ts'
 import { Name } from './name.ts'
@@ -54,7 +54,7 @@ test('devChat stores the repository, the base branch and the working branch of a
     mode: 'dev',
     repository: 'acme/app',
     baseBranch: 'main',
-    gitBranch: 'hq/fix-totals-7f3e9a',
+    gitBranch: 'spyria/fix-totals-7f3e9a',
   })
 })
 

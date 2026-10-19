@@ -1,4 +1,4 @@
-import type { RuntimeHostId, WorkspaceId } from '@hq/kernel'
+import type { RuntimeHostId, WorkspaceId } from '@spyria/kernel'
 import { RuntimeError } from '../domain/errors.ts'
 
 export const runtimeHostsPath = '/api/runtime-hosts'

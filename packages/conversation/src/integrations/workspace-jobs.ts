@@ -1,1 +1,1 @@
-export { workspaceJobTypes } from '@hq/workspace/published'
+export { workspaceJobTypes } from '@spyria/workspace/published'

@@ -1,4 +1,13 @@
-import type { ChatId, ChatPermission, ChatRole, ListedModel, MemberId, MessageId, Model, WorkspaceId } from '@hq/kernel'
+import type {
+  ChatId,
+  ChatPermission,
+  ChatRole,
+  ListedModel,
+  MemberId,
+  MessageId,
+  Model,
+  WorkspaceId,
+} from '@spyria/kernel'
 import type { AgentEvent } from '../domain/agent-events.ts'
 import type { AgentStep, StepDelegation, StoredStep } from '../domain/agent-steps.ts'
 import type { ConversationChat, Message, MessageChange } from '../domain/message.ts'

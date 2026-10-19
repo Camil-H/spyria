@@ -1,8 +1,8 @@
 import { afterEach, expect, setDefaultTimeout, test } from 'bun:test'
-import { rebuildMessages } from '@hq/conversation/server'
-import { schema } from '@hq/db/zero'
-import { type ChatId, chatId, runtimeHostId } from '@hq/kernel'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
+import { rebuildMessages } from '@spyria/conversation/server'
+import { schema } from '@spyria/db/zero'
+import { type ChatId, chatId, runtimeHostId } from '@spyria/kernel'
 import {
   acme,
   alice,
@@ -285,7 +285,7 @@ test.each([
     const refused = await prompt(chat, 'Hello')
     await waitFor(async () => (await repliesTo(refused)).length > 0)
     expect(bodiesOf(await repliesTo(refused))).toEqual([
-      `notice:Sign in to ${name} on your machine: docker exec -it hq-host hq-host login ${tool}`,
+      `notice:Sign in to ${name} on your machine: docker exec -it hq-host spyria-host login ${tool}`,
     ])
 
     host.signIn([tool])
@@ -380,7 +380,7 @@ test.each([
   },
 )
 
-test('nothing starts for a signed-out tool, a non-owner or a choice of the HQ runtime', async () => {
+test('nothing starts for a signed-out tool, a non-owner or a choice of the Spyria runtime', async () => {
   const relay = await machine({ signedIn: [] })
   const signedOut = await newRuntimeChat()
   expect(await chooseRunsOn(signedOut, 'claude-code')).toEqual(succeeded)

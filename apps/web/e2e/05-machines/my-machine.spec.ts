@@ -51,12 +51,12 @@ test.describe('My machine', () => {
       await machineSectionOf(page).getByRole('button', { name: 'Add my machine' }).click()
       const dialog = page.getByRole('dialog', { name: 'Add my machine' })
       await expect(dialog).toContainText(
-        "This runs HQ's agent container on this computer. Your sign-ins never leave this computer.",
+        "This runs Spyria's agent container on this computer. Your sign-ins never leave this computer.",
       )
       await expect(dialog).toContainText('Never run it on a machine others use.')
       const command = await dialog.getByRole('textbox', { name: 'Command' }).inputValue()
       expect(command).toContain('docker run')
-      expect(command).toMatch(/ hq-host --personal https?:\/\/\S+\/h\/[A-HJ-NP-Z2-9]{8}$/)
+      expect(command).toMatch(/ spyria-host --personal https?:\/\/\S+\/h\/[A-HJ-NP-Z2-9]{8}$/)
       await dialog.getByRole('button', { name: 'Close' }).click()
 
       pair(urlOf(command), { personal: true, signedIn: ['claude'] })
@@ -112,18 +112,18 @@ test.describe('My machine', () => {
         'signs in to Claude Code with your own plan. The sign-in never leaves this computer',
       )
       await expect(dialog).toContainText('Never run it on a machine others use.')
-      await expect(dialog).toContainText('within 15 minutes, from the HQ repo folder')
+      await expect(dialog).toContainText('within 15 minutes, from the Spyria repo folder')
       const commandBox = dialog.getByRole('textbox', { name: 'Command' })
       const command = await commandBox.inputValue()
-      expect(command).toMatch(/^docker build -q -t hq-host apps\/host >\/dev\/null && docker rm -f hq-host /)
+      expect(command).toMatch(/^docker build -q -t spyria-host apps\/host >\/dev\/null && docker rm -f hq-host /)
       expect(command).toMatch(
-        / hq-host --personal http:\/\/host\.docker\.internal:\d+\/h\/[A-HJ-NP-Z2-9]{8} && docker exec -it hq-host hq-host login claude$/,
+        / spyria-host --personal http:\/\/host\.docker\.internal:\d+\/h\/[A-HJ-NP-Z2-9]{8} && docker exec -it hq-host spyria-host login claude$/,
       )
       await expect(dialog).toContainText('Your machine: Waiting for the host')
 
       const machine = pair(urlOf(command), { personal: true, signedIn: [] })
       await expect(dialog).toContainText('Your machine: Online')
-      await expect(commandBox).toHaveValue('docker exec -it hq-host hq-host login claude')
+      await expect(commandBox).toHaveValue('docker exec -it hq-host spyria-host login claude')
       machine.heartbeat(['claude'])
       await expect(dialog).toContainText(
         'Claude Code is ready: in a new Runtime chat, set Runs on to Local · Claude Code',
@@ -149,7 +149,7 @@ test.describe('My machine', () => {
       await machineToolOf(page, 'Codex').click()
       const dialog = useToolDialogOf(page, 'Codex')
       await expect(dialog.getByRole('textbox', { name: 'Command' })).toHaveValue(
-        'docker exec -it hq-host hq-host login codex',
+        'docker exec -it hq-host spyria-host login codex',
       )
       await expect(dialog.getByRole('textbox')).toHaveCount(1)
       await expect(dialog).not.toContainText('docker build')
@@ -195,7 +195,7 @@ test.describe('My machine', () => {
       await expect(
         messageContaining(
           page,
-          `Sign in to ${tool.name} on your machine: docker exec -it hq-host hq-host login ${tool.login}`,
+          `Sign in to ${tool.name} on your machine: docker exec -it hq-host spyria-host login ${tool.login}`,
         ),
       ).toHaveCount(1)
       expect((await machine()).prompts).toEqual([])

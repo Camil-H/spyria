@@ -1,4 +1,4 @@
-import { type ChatId, type MemberId, requireChatPermission } from '@hq/kernel'
+import { type ChatId, type MemberId, requireChatPermission } from '@spyria/kernel'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { PublicChatOpenToAll } from '../domain/errors.ts'
 import { requireNonOwner, requireParticipant } from '../domain/participant.ts'

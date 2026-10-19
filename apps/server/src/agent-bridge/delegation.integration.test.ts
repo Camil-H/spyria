@@ -1,6 +1,6 @@
 import { expect, setDefaultTimeout, test } from 'bun:test'
-import { stillRunningOf, subagentFailureOf, unknownTaskOf } from '@hq/conversation/server'
-import { type ChatId, messageId } from '@hq/kernel'
+import { stillRunningOf, subagentFailureOf, unknownTaskOf } from '@spyria/conversation/server'
+import { type ChatId, messageId } from '@spyria/kernel'
 import type { FakeLlmScript } from '../fake-llm.ts'
 import {
   acme,
@@ -39,7 +39,7 @@ const fakeAgent = async () => {
     subs: () => launches().filter((launch) => launch.parent_conversation_id),
   }
 }
-const tokenOf = (launch: Launch | undefined, name = 'HQ_LLM_TOKEN') => String(launch?.secrets[name]?.value)
+const tokenOf = (launch: Launch | undefined, name = 'SPYRIA_LLM_TOKEN') => String(launch?.secrets[name]?.value)
 const promptAndAnswer = async (chat: ChatId, text: string) => {
   const id = await prompt(chat, text)
   await waitFor(async () => (await repliesTo(id)).some((reply) => reply.kind === 'agent'), 20_000)
@@ -175,7 +175,7 @@ test('the delegation token works only while its delegation runs and only from it
   const answered = promptAndAnswer(chat, 'Delegate slowly')
   await waitFor(() => subs().length === 1)
   const subToken = tokenOf(subs()[0])
-  expect(tokenOf(subs()[0], 'HQ_MCP_TOKEN')).toBe(subToken)
+  expect(tokenOf(subs()[0], 'SPYRIA_MCP_TOKEN')).toBe(subToken)
   const otherHost = await fakeHost('Other host')
   expect((await completionWith(otherHost, subToken)).status).toBe(401)
   expect((await completionWith(host, subToken)).status).toBe(200)
@@ -186,7 +186,7 @@ test('the delegation token works only while its delegation runs and only from it
 
   expect((await completionWith(host, subToken)).status).toBe(401)
   expect((await toolListWith(host, subToken)).status).toBe(401)
-  const withoutTurn = await routerCallWith(host, tokenOf(main(), 'HQ_MCP_TOKEN'))
+  const withoutTurn = await routerCallWith(host, tokenOf(main(), 'SPYRIA_MCP_TOKEN'))
   expect(withoutTurn.status).toBe(200)
   expect(JSON.parse(withoutTurn.body).result).toEqual({
     content: [{ type: 'text', text: 'This runtime has no active turn' }],
@@ -248,8 +248,8 @@ test('g-4. a long task answers still running before Pi’s timeout for the route
   const promptId = await prompt(chat, 'Delegate a long task')
   await holds.reached('resume')
   const mcp = main()
-    ?.agent.acp_command.find((part) => part.startsWith('HQ_PI_MCP='))
-    ?.slice('HQ_PI_MCP='.length)
+    ?.agent.acp_command.find((part) => part.startsWith('SPYRIA_PI_MCP='))
+    ?.slice('SPYRIA_PI_MCP='.length)
   expect(Date.now() - startedAt).toBeLessThan(JSON.parse(String(mcp)).mcpServers.router.timeout * 1000)
   await waitFor(async () => (await stepsOf(promptId))[0]?.result?.startsWith('Task ') === true)
   const [delegation] = await delegationsOf(chat)
@@ -333,7 +333,7 @@ test('stopping the turn interrupts the running subagent, marks its delegation st
   ])
 })
 
-test('a failed subagent answers the tool call with an error in HQ wording and leaves the main turn untouched', async () => {
+test('a failed subagent answers the tool call with an error in Spyria wording and leaves the main turn untouched', async () => {
   await fakeAgent()
   const chat = await newRuntimeChat()
   const failing = { steps: [{ command: 'echo sub' }, { fail: 'Overloaded' }] }

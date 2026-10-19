@@ -1,4 +1,4 @@
-import type { RuntimeHostId, WorkspaceId } from '@hq/kernel'
+import type { RuntimeHostId, WorkspaceId } from '@spyria/kernel'
 
 export type SandboxLocation = { workspaceId: WorkspaceId; hostId: RuntimeHostId; runtimeId: string }
 export type SandboxStatus = 'running' | 'stopped' | 'missing'

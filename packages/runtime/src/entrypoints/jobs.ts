@@ -1,5 +1,5 @@
-import type { Job } from '@hq/db/zero-queries'
-import { runtimeId } from '@hq/kernel'
+import type { Job } from '@spyria/db/zero-queries'
+import { runtimeId } from '@spyria/kernel'
 import { z } from 'zod/mini'
 import type { SandboxProvider } from '../contracts/sandbox-provider.ts'
 import { runtimeJobTypes } from '../domain/runtime.ts'

@@ -7,7 +7,7 @@ import {
   type MessageId,
   type WorkspaceId,
   withPricesOf,
-} from '@hq/kernel'
+} from '@spyria/kernel'
 import {
   type AgentChat,
   type AgentConversation,

@@ -1,5 +1,5 @@
-import type { WorkspaceId } from '@hq/kernel'
-import { ErrorMessage, ghostButtonClass, useGuardedAction } from '@hq/ui'
+import type { WorkspaceId } from '@spyria/kernel'
+import { ErrorMessage, ghostButtonClass, useGuardedAction } from '@spyria/ui'
 import { useEffect, useState } from 'react'
 import { type GitHubConnection, githubConnectionStatusOf } from '../domain/github-connection.ts'
 import { useProfileCommands } from './providers.tsx'

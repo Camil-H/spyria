@@ -1,4 +1,4 @@
-import { type ChatPermission, type MemberId, requireChatPermission } from '@hq/kernel'
+import { type ChatPermission, type MemberId, requireChatPermission } from '@spyria/kernel'
 import type { AgentChat } from '../contracts/agent.ts'
 import { agentWorkspacePathOf, branchReads, snapshotReadingOf, type WorkspaceRead } from '../domain/workspace-reads.ts'
 import type { AgentDependencies } from './agent-turn.ts'

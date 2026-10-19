@@ -1,4 +1,4 @@
-import type { ChatPermission, ChatVisibility, WorkspacePermission } from '@hq/kernel'
+import type { ChatPermission, ChatVisibility, WorkspacePermission } from '@spyria/kernel'
 import { sql } from 'drizzle-orm'
 import {
   bigint,

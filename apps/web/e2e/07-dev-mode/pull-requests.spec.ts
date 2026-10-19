@@ -124,7 +124,7 @@ test.describe('Pull requests', () => {
     const chatId = await devChatWithCommit(page, agentScript, 'Publish totals')
     await panelTabOf(page, 'Changes').click()
     await pushButtonOf(page).click()
-    await expect(tabPanelOf(page).getByRole('status')).toContainText(/^Pushed hq\/publish-totals-/)
+    await expect(tabPanelOf(page).getByRole('status')).toContainText(/^Pushed spyria\/publish-totals-/)
     expect((await githubStateOf(workerStack, chatId)).commits).toEqual(['Fix the totals'])
     await openPullRequest(page)
     const card = cardOf(page)

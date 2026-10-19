@@ -1,4 +1,4 @@
-import type { ChatId, ChatVisibility, MemberId, ProjectId, WorkspaceId } from '@hq/kernel'
+import type { ChatId, ChatVisibility, MemberId, ProjectId, WorkspaceId } from '@spyria/kernel'
 import { CrossWorkspaceMove, RuntimeChatPrivate, SourceChatArchived } from './errors.ts'
 import { workingBranchOf } from './github.ts'
 import type { Name } from './name.ts'

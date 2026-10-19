@@ -1,4 +1,4 @@
-import { credentialId, type MemberId, type WorkspaceId } from '@hq/kernel'
+import { credentialId, type MemberId, type WorkspaceId } from '@spyria/kernel'
 import type { LlmGateway, ToolGateway } from '../contracts/repositories.ts'
 import type { ProfileTransactor } from '../contracts/transactor.ts'
 import { newLlmCredential } from '../domain/llm-credential.ts'

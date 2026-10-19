@@ -24,7 +24,7 @@ test('an MCP tool name shows as the tool and its server', () => {
   expect(toolDisplayNameOf('terminal')).toBe('terminal')
 })
 
-test('tool errors the member must act on map to HQ wording, without the consent URL or key names', () => {
+test('tool errors the member must act on map to Spyria wording, without the consent URL or key names', () => {
   expect(toolCallFailureOf(authenticationRequired)).toBe('needs_connection')
   expect(toolCallFailureOf(revoked)).toBe('needs_connection')
   expect(toolCallFailureOf(notAllowed)).toBe('not_allowed')

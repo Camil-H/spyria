@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { acme, alice, bob, createMockSnapshot, globex, lee } from '@hq/db'
+import { acme, alice, bob, createMockSnapshot, globex, lee } from '@spyria/db'
 import { withChannel } from '../domain/testing.ts'
 import { listJoinableChannels } from './list-joinable-channels.ts'
 

@@ -1,4 +1,4 @@
-import type { RuntimeId, WorkspaceId } from '@hq/kernel'
+import type { RuntimeId, WorkspaceId } from '@spyria/kernel'
 import type { SandboxProvider, SandboxTransport } from '../contracts/sandbox-provider.ts'
 import type { RuntimeTransactor } from '../contracts/transactor.ts'
 import { ApiKeyMissing, RuntimeNotReady } from '../domain/errors.ts'

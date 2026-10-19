@@ -1,4 +1,4 @@
-import type { ChatId, WorkspaceId } from '@hq/kernel'
+import type { ChatId, WorkspaceId } from '@spyria/kernel'
 import type { RuntimeTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import { type Runtime, removalStepOf, runtimeJobTypes, transitioned } from '../domain/runtime.ts'
 

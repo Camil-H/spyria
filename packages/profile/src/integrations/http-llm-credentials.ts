@@ -1,4 +1,4 @@
-import type { WorkspaceId } from '@hq/kernel'
+import type { WorkspaceId } from '@spyria/kernel'
 import type { Secret } from '../domain/secret.ts'
 import { throwOnRefusal } from './http-refusal.ts'
 

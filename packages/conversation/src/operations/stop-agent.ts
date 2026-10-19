@@ -1,4 +1,4 @@
-import { type ChatId, type MemberId, type MessageId, requireChatPermission, type WorkspaceId } from '@hq/kernel'
+import { type ChatId, type MemberId, type MessageId, requireChatPermission, type WorkspaceId } from '@spyria/kernel'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { stoppedByNoticeOf } from '../domain/agent-events.ts'
 import { type AgentDependencies, closeAgentTurn } from './agent-turn.ts'

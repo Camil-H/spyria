@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
-import { createDatabase } from '@hq/db/postgres'
-import { llmCredentialsPath } from '@hq/profile/server'
-import { runtimeHostsPath } from '@hq/runtime/server'
+import { createDatabase } from '@spyria/db/postgres'
+import { llmCredentialsPath } from '@spyria/profile/server'
+import { runtimeHostsPath } from '@spyria/runtime/server'
 import { createApp } from './app.ts'
 import { issueSessionToken } from './auth/session-tokens.ts'
 import { testAuthSettings } from './testing/testing.ts'
@@ -10,10 +10,10 @@ const unreachableDatabase = createDatabase('postgres://unused:unused@127.0.0.1:1
 const app = createApp({ database: unreachableDatabase, ...testAuthSettings })
 
 const contextServerEntries = [
-  '@hq/workspace/server',
-  '@hq/conversation/server',
-  '@hq/profile/server',
-  '@hq/runtime/server',
+  '@spyria/workspace/server',
+  '@spyria/conversation/server',
+  '@spyria/profile/server',
+  '@spyria/runtime/server',
 ]
 
 test('serves health', async () => {
@@ -35,7 +35,7 @@ test('refuses a token with a database claim without test hooks, without opening 
   const { token } = await issueSessionToken(
     testAuthSettings.tokenSecret,
     { userId: 'member-alice', workspaceId: 'workspace-acme', sessionId: 'session-1' },
-    { databaseName: 'hq_other' },
+    { databaseName: 'spyria_other' },
   )
   const response = await app.request('/api/query', {
     method: 'POST',

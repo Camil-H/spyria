@@ -1,8 +1,8 @@
 import { beforeEach, expect, test } from 'bun:test'
-import { schema } from '@hq/db/zero'
-import { workspaceId } from '@hq/kernel'
-import { auditJobs } from '@hq/usage/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
+import { schema } from '@spyria/db/zero'
+import { workspaceId } from '@spyria/kernel'
+import { auditJobs } from '@spyria/usage/server'
 import {
   acme,
   alice,
@@ -138,7 +138,7 @@ test('workspace events, chat events, tool calls, pushes and pull requests merge 
     'pushed',
     'branch.pushed',
     bob,
-    { branch: 'hq/fix', head: 'abc123' },
+    { branch: 'spyria/fix', head: 'abc123' },
     minutesAgo(10),
   )
   await insertToolCall('call', minutesAgo(6))
@@ -181,7 +181,7 @@ test('workspace events, chat events, tool calls, pushes and pull requests merge 
     Status: 'succeeded',
   })
   expect(detailsOf(entries[3])).toMatchObject({ Chat: 'Bob private', State: 'merged', Title: 'Fix the invoice total' })
-  expect(detailsOf(entries[5])).toEqual({ Branch: 'hq/fix', Head: 'abc123' })
+  expect(detailsOf(entries[5])).toEqual({ Branch: 'spyria/fix', Head: 'abc123' })
   const csv = await asMember(alice, 'GET', '/api/audit-log/csv')
   expect([...(await sql`select body from messages where chat_id = ${privateChat} and kind = 'member'`)]).toEqual([
     { body: 'the secret body of a private message' },

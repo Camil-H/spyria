@@ -1,4 +1,4 @@
-import { jobs } from '@hq/db/postgres'
+import { jobs } from '@spyria/db/postgres'
 import { openPageAs, type WorkerStack } from '../stack'
 import {
   addParticipant,
@@ -144,7 +144,7 @@ test.describe('Runtime from a thread', () => {
   }, async ({ page, browser, workerStack }) => {
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
     await startRuntimeFromThread(page, bobPage)
-    await chooseRunsOn(page, 'HQ runtime')
+    await chooseRunsOn(page, 'Spyria runtime')
     expect(await agentPromptJobs(workerStack)).toEqual([])
     await sendMessage(page, 'Summarise the thread.')
     await expect(messageContaining(page, agentReplyText)).toBeVisible({ timeout: 30_000 })

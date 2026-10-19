@@ -1,5 +1,5 @@
-import type { ZeroContext } from '@hq/db/zero-queries'
-import { memberId, workspaceId } from '@hq/kernel'
+import type { ZeroContext } from '@spyria/db/zero-queries'
+import { memberId, workspaceId } from '@spyria/kernel'
 import { jwtVerify, SignJWT } from 'jose'
 
 export type SessionClaims = { workspaceId: string; userId: string; sessionId: string }

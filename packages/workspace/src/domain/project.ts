@@ -1,4 +1,4 @@
-import type { ProjectId, WorkspaceId } from '@hq/kernel'
+import type { ProjectId, WorkspaceId } from '@spyria/kernel'
 import { type Chat, movedChat } from './chat.ts'
 import type { Name } from './name.ts'
 

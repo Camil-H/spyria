@@ -15,7 +15,7 @@ import {
   connectAlice,
   connectionPath,
   connectionRows,
-  consentThroughHq,
+  consentThroughSpyria,
   createFakeHosts,
   everyStoredText,
   lookup,
@@ -51,7 +51,7 @@ const sessionsOf = async (virtualKeyId: string) =>
     )
   ).sessions
 
-test('Connect grants the server on the member key, runs the consent through HQ’s callback, and Disconnect deletes the gateway session', async () => {
+test('Connect grants the server on the member key, runs the consent through Spyria’s callback, and Disconnect deletes the gateway session', async () => {
   const providerKeysBefore = (await virtualKeyOf(alice)).provider_configs.flatMap((config) => config.keys)
   const started = await asMember(alice, 'POST', connectionPath('connect'))
   expect(started.status).toBe(200)
@@ -61,7 +61,7 @@ test('Connect grants the server on the member key, runs the consent through HQ�
   expect(key.mcp_configs.map((config) => config.mcp_client.name)).toContain('fake')
   expect(key.provider_configs.flatMap((config) => config.keys)).toEqual(providerKeysBefore)
 
-  const consent = await consentThroughHq(authorizeUrl, aliceCookie)
+  const consent = await consentThroughSpyria(authorizeUrl, aliceCookie)
   expect(consent).toMatchObject({ callbackPath: '/gateway-oauth/api/oauth/callback', status: 200 })
   expect(consent.page).toContain('"connected":true')
   expect(await asMember(alice, 'POST', connectionPath('refresh'))).toEqual({
@@ -110,7 +110,7 @@ test('a member acts only on their own key: unknown servers and members without a
   expect((await asMember(bob, 'POST', connectionPath('connect'))).status).toBe(400)
 })
 
-test('/mcp runs as the chat owner with HQ’s attribution, lists tools outside a turn but calls them only during one, and refuses another host’s token', async () => {
+test('/mcp runs as the chat owner with Spyria’s attribution, lists tools outside a turn but calls them only during one, and refuses another host’s token', async () => {
   await connectAlice(aliceCookie)
   const host = await fakeHost('Tools host')
   const otherHost = await fakeHost('Other tools host')
@@ -159,7 +159,7 @@ test('the profile lists only personal servers, and a workspace server cannot be 
   })
 })
 
-test('a server the owner has not connected, or whose token was revoked, answers HQ’s wording and flags the connection', async () => {
+test('a server the owner has not connected, or whose token was revoked, answers Spyria’s wording and flags the connection', async () => {
   const host = await fakeHost('Unconnected tools host')
   const { token } = await runtimeTurn(host, alice)
   await mcpCall(host, token, rpcOf('initialize', { protocolVersion: '2025-06-18', capabilities: {} }))
@@ -261,7 +261,7 @@ test('session headers pass through, gateway failures become error results instea
   }
 })
 
-test('no OAuth token, client secret or virtual key reaches HQ tables, logs or frames to hosts', async () => {
+test('no OAuth token, client secret or virtual key reaches Spyria tables, logs or frames to hosts', async () => {
   const consoleCalls = captureConsole()
   let frames = ''
   try {

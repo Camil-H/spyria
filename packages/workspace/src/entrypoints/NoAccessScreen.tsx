@@ -1,4 +1,4 @@
-import { focusRing } from '@hq/ui'
+import { focusRing } from '@spyria/ui'
 import { Link } from 'react-router'
 import { fullScreenClass } from './ui.ts'
 

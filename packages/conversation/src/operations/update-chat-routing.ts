@@ -1,4 +1,4 @@
-import { type ChatId, isPickableModel, type MemberId, requireChatPermission } from '@hq/kernel'
+import { type ChatId, isPickableModel, type MemberId, requireChatPermission } from '@spyria/kernel'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { InvalidRouting } from '../domain/errors.ts'
 import {

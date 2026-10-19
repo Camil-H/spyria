@@ -1,6 +1,6 @@
-import { useQuery } from '@hq/db/react'
-import type { MemberId, WorkspaceId } from '@hq/kernel'
-import { formatCost } from '@hq/ui'
+import { useQuery } from '@spyria/db/react'
+import type { MemberId, WorkspaceId } from '@spyria/kernel'
+import { formatCost } from '@spyria/ui'
 import { type BudgetProgress, monthOf } from '../domain/budgets.ts'
 import { getOwnBudgetAlert } from '../queries/budget-alerts.ts'
 

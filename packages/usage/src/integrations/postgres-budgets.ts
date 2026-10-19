@@ -1,5 +1,5 @@
-import type { Transact } from '@hq/db/zero-queries'
-import type { WorkspaceId, WorkspacePermission } from '@hq/kernel'
+import type { Transact } from '@spyria/db/zero-queries'
+import type { WorkspaceId, WorkspacePermission } from '@spyria/kernel'
 import type { BudgetTransactor } from '../contracts/budgets.ts'
 import { type BudgetUse, budgetAlertIdOf, budgetLabelOf, type MemberSpend } from '../domain/budgets.ts'
 import { workspacePermissionsStatement } from './postgres-audit-log.ts'

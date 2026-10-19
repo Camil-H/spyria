@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
-import { acme, alice, bob, createMockSnapshot, lee } from '@hq/db'
-import type { MemberId } from '@hq/kernel'
+import { acme, alice, bob, createMockSnapshot, lee } from '@spyria/db'
+import type { MemberId } from '@spyria/kernel'
 import { withChannel } from '../domain/testing.ts'
 import { getSidebar } from './get-sidebar.ts'
 

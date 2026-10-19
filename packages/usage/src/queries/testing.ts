@@ -1,5 +1,5 @@
-import { acme, alice, bob, createMockSnapshot, globex, type Snapshot } from '@hq/db'
-import { chatId } from '@hq/kernel'
+import { acme, alice, bob, createMockSnapshot, globex, type Snapshot } from '@spyria/db'
+import { chatId } from '@spyria/kernel'
 
 export const month = '2026-10'
 export const earlier = '2026-08'

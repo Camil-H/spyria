@@ -1,4 +1,4 @@
-import { buttonClass, fieldClass, ghostButtonClass, Spinner } from '@hq/ui'
+import { buttonClass, fieldClass, ghostButtonClass, Spinner } from '@spyria/ui'
 import { type FormEvent, use, useState } from 'react'
 import type { AgentQuestion, AgentStep } from '../domain/agent-steps.ts'
 import type { ConversationMessage } from '../queries/get-conversation.ts'

@@ -1,4 +1,4 @@
-import { DomainError, type MemberId, requireChatPermission } from '@hq/kernel'
+import { DomainError, type MemberId, requireChatPermission } from '@spyria/kernel'
 import type { AgentChat, AgentEndpoint, GitAuthor } from '../contracts/agent.ts'
 import {
   asleepRefusal,

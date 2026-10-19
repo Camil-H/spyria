@@ -6,7 +6,7 @@ import type {
   ProjectId,
   WorkspaceId,
   WorkspacePermission,
-} from '@hq/kernel'
+} from '@spyria/kernel'
 import type { Chat } from '../domain/chat.ts'
 import type { GitHubRepository, GitHubSettingsInput, GitHubSettingsView } from '../domain/github.ts'
 import type { Name } from '../domain/name.ts'

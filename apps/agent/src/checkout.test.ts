@@ -5,10 +5,10 @@ import { join } from 'node:path'
 import { type AgentEvent, createAgentTestbed, kindOf } from './testing.ts'
 
 const { stubCommand, launchOf, started } = createAgentTestbed()
-const directory = mkdtempSync(join(tmpdir(), 'hq-agent-checkout-'))
+const directory = mkdtempSync(join(tmpdir(), 'spyria-agent-checkout-'))
 afterAll(() => rmSync(directory, { recursive: true, force: true }))
 const token = 'ghs_installation_token_never_kept'
-const isSetup = (event: AgentEvent) => event.update.toolCallId === 'hq-setup'
+const isSetup = (event: AgentEvent) => event.update.toolCallId === 'spyria-setup'
 const setupEnded = (event: AgentEvent) => isSetup(event) && event.completed
 
 const git = (cwd: string, ...command: string[]) => {
@@ -32,7 +32,7 @@ const bareRepository = (name: string, files: Record<string, string>) => {
 const launchIn = (name: string, url: string, extra: object = {}) => {
   const workingDirectory = join(directory, `${name}-workspace`)
   const environmentFile = join(directory, `${name}-environment`)
-  const repository = { url, token, base_branch: 'main', working_branch: 'hq/fix-totals-1a2b3c' }
+  const repository = { url, token, base_branch: 'main', working_branch: 'spyria/fix-totals-1a2b3c' }
   const command = ['sh', '-c', `env > ${environmentFile}; exec "$@"`, 'sh', ...stubCommand]
   return {
     launch: {
@@ -50,7 +50,7 @@ test('a launch with a repository clones it, checks out the working branch and ru
   const url = bareRepository('app', {
     'AGENTS.md': 'Rules',
     'src/AGENTS.md': 'Nested rules',
-    '.hq/setup.sh': 'echo prepared > prepared.txt',
+    '.spyria/setup.sh': 'echo prepared > prepared.txt',
   })
   const { call, open, create } = started()
   const { launch, workingDirectory, environmentFile } = launchIn('app', url)
@@ -60,15 +60,15 @@ test('a launch with a repository clones it, checks out the working branch and ru
   expect(socket.events.find(kindOf('workspace'))?.update).toEqual({
     sessionUpdate: 'workspace',
     cwd: workingDirectory,
-    branch: 'hq/fix-totals-1a2b3c',
+    branch: 'spyria/fix-totals-1a2b3c',
   })
   await socket.until(setupEnded)
   const setupEvents = socket.events.filter(isSetup).map(({ update }) => update)
   expect(socket.events.findIndex(isSetup)).toBeGreaterThan(socket.events.findIndex(kindOf('session_started')))
   expect(setupEvents.at(0)).toEqual({
     sessionUpdate: 'tool_call',
-    toolCallId: 'hq-setup',
-    title: 'sh .hq/setup.sh',
+    toolCallId: 'spyria-setup',
+    title: 'sh .spyria/setup.sh',
     kind: 'execute',
     status: 'in_progress',
   })
@@ -92,7 +92,7 @@ test('a launch with a repository clones it, checks out the working branch and ru
 
 test('a failing setup script shows its exit code and last output lines and the session still starts; a clone failure fails the launch', async () => {
   const lines = Array.from({ length: 25 }, (_, index) => `echo line ${index + 1}`).join('\n')
-  const url = bareRepository('broken', { '.hq/setup.sh': `${lines}\necho missing tool >&2\nexit 3\n` })
+  const url = bareRepository('broken', { '.spyria/setup.sh': `${lines}\necho missing tool >&2\nexit 3\n` })
   const { call, open, create } = started()
   const id = await create(launchIn('broken', url).launch)
   const socket = open(id)
@@ -120,7 +120,7 @@ test('a failing setup script shows its exit code and last output lines and the s
 })
 
 test('a slow setup script does not hold the launch: the session starts at once and the output streams as live updates', async () => {
-  const url = bareRepository('slow', { '.hq/setup.sh': 'echo installing\nsleep 1\necho installed\n' })
+  const url = bareRepository('slow', { '.spyria/setup.sh': 'echo installing\nsleep 1\necho installed\n' })
   const { call, open, create } = started()
   const startedAt = Date.now()
   const id = await create(launchIn('slow', url).launch)

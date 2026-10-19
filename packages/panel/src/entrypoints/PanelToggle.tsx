@@ -1,4 +1,4 @@
-import { iconButtonClass } from '@hq/ui'
+import { iconButtonClass } from '@spyria/ui'
 import { PanelRightClose, PanelRightOpen } from 'lucide-react'
 import { usePanel } from './providers.tsx'
 

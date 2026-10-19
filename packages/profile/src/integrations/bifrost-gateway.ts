@@ -1,4 +1,4 @@
-import type { ListedModel } from '@hq/kernel'
+import type { ListedModel } from '@spyria/kernel'
 import type { LlmGateway, ToolGateway, ToolServer } from '../contracts/repositories.ts'
 import { UnsupportedProvider } from '../domain/errors.ts'
 import type { GatewayKey } from '../domain/llm-credential.ts'

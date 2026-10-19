@@ -1,4 +1,4 @@
-import { classifierModelOf, type MemberId, type Model, withPricesOf } from '@hq/kernel'
+import { classifierModelOf, type MemberId, type Model, withPricesOf } from '@spyria/kernel'
 import type { AgentChat } from '../contracts/agent.ts'
 import { answersOf, decisionRequestOf, type Questions } from '../domain/decisions.ts'
 import type { AgentDependencies } from './agent-turn.ts'

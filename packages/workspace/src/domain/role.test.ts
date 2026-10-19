@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { builtInChatRoles, builtInWorkspaceRoles } from '@hq/kernel'
+import { builtInChatRoles, builtInWorkspaceRoles } from '@spyria/kernel'
 import {
   CustomRoleNotFound,
   InvalidRoleName,
