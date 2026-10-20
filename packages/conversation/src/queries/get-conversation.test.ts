@@ -236,7 +236,7 @@ const delegateAction = (task: string, result: string | null) => ({
 })
 const delegatedEdit = (id: string, task = 'List the files') => ({
   ...edit,
-  delegation: { id, model: 'fake/fake-small', modelName: 'Fake small', task },
+  delegation: { id, model: 'mistral/mistral-small-latest', modelName: 'Mistral Small', task },
 })
 const delegationGroupsOf = (conversation: ReturnType<typeof conversationWith>) =>
   conversation?.items

@@ -67,7 +67,7 @@ test.describe('Roles', () => {
     const chatId = await newRuntimeChat(page, 'Lee reviews')
     await addParticipant(workerStack, chatId, 'member-lee', 'reader')
     const leePage = await openPageAs(browser, workerStack, 'member-lee')
-    await addLlmKey(leePage, 'Fake')
+    await addLlmKey(leePage, 'Mistral')
     await openChat(leePage, 'Lee reviews')
     await chipOf(leePage, 'any').click()
     await expect(sessionOf(leePage).getByLabel('Subagents')).toBeDisabled()
@@ -91,7 +91,7 @@ test.describe('Roles', () => {
     const chatId = await newRuntimeChat(page, 'Lee posts')
     await addParticipant(workerStack, chatId, 'member-lee', 'role-reviewer')
     const leePage = await openPageAs(browser, workerStack, 'member-lee')
-    await addLlmKey(leePage, 'Fake')
+    await addLlmKey(leePage, 'Mistral')
     await openChat(leePage, 'Lee posts')
     await expect(mainOf(leePage)).toContainText(readerNotice)
 

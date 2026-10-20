@@ -45,15 +45,15 @@ test.describe('Delegation', () => {
     }
     await agentScript(
       researchChatId,
-      delegating(answer, { delegateRoute: confidentSmall, subagents: { 'fake-small': work } }),
+      delegating(answer, { delegateRoute: confidentSmall, subagents: { 'mistral-small-latest': work } }),
     )
     await promptAndWait(page, 'Delegate the listing', answer)
-    const group = groupOf(page, 'Fake small')
+    const group = groupOf(page, 'Mistral Small')
     await expect(group).toBeVisible()
     await expect(messageItemsOf(page).last()).toContainText(answer)
     await expect(mainOf(page)).not.toContainText('$ echo listing')
     await group.click()
-    const steps = page.getByRole('group', { name: 'Steps of Fake small' })
+    const steps = page.getByRole('group', { name: 'Steps of Mistral Small' })
     await expect(steps).toContainText('$ echo listing')
     await expect(steps).toContainText('$ echo done')
     await expect(messageItemsOf(page).filter({ has: steps })).toContainText('Two files.')
@@ -68,10 +68,10 @@ test.describe('Delegation', () => {
     await page.keyboard.press('Escape')
     await agentScript(
       researchChatId,
-      delegating(answer, { delegateRoute: confidentSmall, subagents: { 'fake-medium': subagentWork } }),
+      delegating(answer, { delegateRoute: confidentSmall, subagents: { 'mistral-medium-latest': subagentWork } }),
     )
     await promptAndWait(page, 'Delegate on the same model', answer)
-    await expect(groupOf(page, 'Fake medium')).toBeVisible()
+    await expect(groupOf(page, 'Mistral Medium')).toBeVisible()
   })
 
   const delegatingTo = (model: string, answer: string, script: object) => ({
@@ -91,13 +91,16 @@ test.describe('Delegation', () => {
     tag: ['@spec-16'],
   }, async ({ browser, workerStack, agentScript }) => {
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-    await addLlmKey(bobPage, 'Fake-small')
+    await addLlmKey(bobPage, 'xAI')
     const bobChatId = await newRuntimeChat(bobPage, 'Bob delegates')
     const answer = 'Listed on what Bob can reach.'
-    await agentScript(bobChatId, delegatingTo('fake-large', answer, { subagents: { 'fake-small': subagentWork } }))
-    await promptAndWait(bobPage, 'Use fake-large to list the files', answer)
-    await expect(groupOf(bobPage, 'Fake small')).toBeVisible()
-    await expect(mainOf(bobPage)).toContainText("Fake large isn't reachable with Bob's keys; used Fake small")
+    await agentScript(
+      bobChatId,
+      delegatingTo('mistral-large-latest', answer, { subagents: { 'grok-4.7': subagentWork } }),
+    )
+    await promptAndWait(bobPage, 'Use mistral-large-latest to list the files', answer)
+    await expect(groupOf(bobPage, 'Grok 4.7')).toBeVisible()
+    await expect(mainOf(bobPage)).toContainText("Mistral Large isn't reachable with Bob's keys; used Grok 4.7")
     await bobPage.context().close()
   })
 
@@ -108,16 +111,16 @@ test.describe('Delegation', () => {
     const failing = { steps: [{ command: 'echo listing' }, { fail: 'Overloaded' }] }
     await agentScript(
       researchChatId,
-      delegating(answer, { delegateRoute: confidentSmall, subagents: { 'fake-small': failing } }),
+      delegating(answer, { delegateRoute: confidentSmall, subagents: { 'mistral-small-latest': failing } }),
     )
     await promptAndWait(page, 'Delegate a failing listing', answer)
-    const group = mainOf(page).getByRole('button', { name: /^Delegated to Fake small · failed · / })
+    const group = mainOf(page).getByRole('button', { name: /^Delegated to Mistral Small · failed · / })
     await expect(group).toBeVisible()
     await expect(mainOf(page)).not.toContainText('The agent stopped with an error')
     await group.click()
-    const steps = page.getByRole('group', { name: 'Steps of Fake small' })
+    const steps = page.getByRole('group', { name: 'Steps of Mistral Small' })
     await expect(messageItemsOf(page).filter({ has: steps })).toContainText(
-      'The subagent on Fake small stopped with an error',
+      'The subagent on Mistral Small stopped with an error',
     )
   })
 
@@ -128,21 +131,21 @@ test.describe('Delegation', () => {
     const heldWork = { ...subagentWork, text: 'The slow listing found two files today.', hold: 'subagent' }
     await agentScript(
       researchChatId,
-      resuming(answer, { delegateRoute: confidentSmall, subagents: { 'fake-small': heldWork } }, 'resume'),
+      resuming(answer, { delegateRoute: confidentSmall, subagents: { 'mistral-small-latest': heldWork } }, 'resume'),
     )
     await sendMessage(page, 'Delegate a long listing')
     await reached('resume')
-    await expect(mainOf(page).getByRole('button', { name: /^Subagent · Fake small · working…/ })).toBeVisible()
+    await expect(mainOf(page).getByRole('button', { name: /^Subagent · Mistral Small · working…/ })).toBeVisible()
     await expect(mainOf(page)).not.toContainText(/timed out|failed/)
     await release('subagent')
     await delegationsFinished(workerStack, researchChatId)
     await release('resume')
     await expect(messageItemsOf(page).filter({ hasText: answer })).toBeVisible()
-    await expect(groupOf(page, 'Fake small')).toHaveCount(1)
+    await expect(groupOf(page, 'Mistral Small')).toHaveCount(1)
     await expect(mainOf(page).getByRole('button', { name: /^Used (delegate|await_task)/ })).toHaveCount(0)
     await expect(mainOf(page)).not.toContainText(/validation|There is no task/)
-    await groupOf(page, 'Fake small').click()
-    const group = messageItemsOf(page).filter({ has: page.getByRole('group', { name: 'Steps of Fake small' }) })
+    await groupOf(page, 'Mistral Small').click()
+    const group = messageItemsOf(page).filter({ has: page.getByRole('group', { name: 'Steps of Mistral Small' }) })
     await expect(group).toContainText('The slow listing found two files today.')
     await expect(group).not.toContainText('is still running')
     await expect(messageItemsOf(page).filter({ hasText: answer })).toHaveCount(1)
@@ -158,13 +161,13 @@ test.describe('Delegation', () => {
     }
     await agentScript(
       researchChatId,
-      resuming('Never shown.', { delegateRoute: confidentSmall, subagents: { 'fake-small': longWork } }),
+      resuming('Never shown.', { delegateRoute: confidentSmall, subagents: { 'mistral-small-latest': longWork } }),
     )
     await sendMessage(page, 'Delegate a very long listing')
-    await expect(mainOf(page).getByRole('button', { name: /^Subagent · Fake small · working…/ })).toBeVisible()
+    await expect(mainOf(page).getByRole('button', { name: /^Subagent · Mistral Small · working…/ })).toBeVisible()
     await mainOf(page).getByRole('button', { name: 'Stop' }).click()
     await expect(
-      mainOf(page).getByRole('button', { name: /^Delegated to Fake small · stopped · 1 step/ }),
+      mainOf(page).getByRole('button', { name: /^Delegated to Mistral Small · stopped · 1 step/ }),
     ).toBeVisible()
     await expect(messageItemsOf(page).filter({ hasText: 'Stopped by Alice' })).toHaveCount(1)
     await agentScript(researchChatId, { text: 'Back to work.' })
@@ -179,14 +182,14 @@ test.describe('Delegation', () => {
     const liveWork = { steps: [{ command: 'echo listing' }], text: 'Counting the files now.', hold: 'subagent' }
     await agentScript(
       researchChatId,
-      resuming(answer, { delegateRoute: confidentSmall, subagents: { 'fake-small': liveWork } }, 'resume'),
+      resuming(answer, { delegateRoute: confidentSmall, subagents: { 'mistral-small-latest': liveWork } }, 'resume'),
     )
     await sendMessage(page, 'Delegate a live listing')
-    const running = mainOf(page).getByRole('button', { name: /^Subagent · Fake small · working…/ })
+    const running = mainOf(page).getByRole('button', { name: /^Subagent · Mistral Small · working…/ })
     await expect(running).toBeVisible()
     await expect(mainOf(page)).not.toContainText('$ echo listing')
     await running.click()
-    const steps = page.getByRole('group', { name: 'Steps of Fake small' })
+    const steps = page.getByRole('group', { name: 'Steps of Mistral Small' })
     await expect(steps).toContainText('$ echo listing')
     await expect(steps).toContainText('Counting')
     await reached('resume')
@@ -196,7 +199,7 @@ test.describe('Delegation', () => {
     await delegationsFinished(workerStack, researchChatId)
     await release('resume')
     await expect(messageItemsOf(page).filter({ hasText: answer })).toBeVisible()
-    const finished = mainOf(page).getByRole('button', { name: /^Delegated to Fake small · 1 step · / })
+    const finished = mainOf(page).getByRole('button', { name: /^Delegated to Mistral Small · 1 step · / })
     await expect(finished).toHaveAttribute('aria-expanded', 'true')
     await expect(steps).toContainText('$ echo listing')
     await expect(steps).not.toContainText('Counting')

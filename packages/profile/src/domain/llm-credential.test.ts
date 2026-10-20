@@ -29,7 +29,7 @@ const gatewayProviderOrErrorOf = (provider: string) => {
 test.each([
   ['Anthropic', 'anthropic'],
   ['mistral', 'mistral'],
-  ['Fake', 'fake'],
+  ['Fake', expect.any(UnsupportedProvider)],
   ['OpenRouter', 'openrouter'],
   ['Google', 'gemini'],
   ['Gemini', 'gemini'],

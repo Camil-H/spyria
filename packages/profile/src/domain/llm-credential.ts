@@ -26,10 +26,8 @@ const gatewayProviders: Record<string, string> = {
   deepseek: 'deepseek',
   zai: 'zai',
   'z.ai': 'zai',
-  fake: 'fake',
-  'fake-small': 'fake-small',
 }
-const gatewayKeyRefPattern = /^gateway:([a-z-]+)\/(.+)$/
+const gatewayKeyRefPattern = /^gateway:([a-z]+)\/(.+)$/
 
 export const gatewayKeyRefOf = (key: GatewayKey) => `gateway:${key.provider}/${key.id}`
 

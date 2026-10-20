@@ -87,7 +87,7 @@ test('on a guest’s prompt the owner’s personal connection is refused before 
 })
 
 test('on a guest’s prompt a workspace tool needs both the owner’s and the prompter’s restrictions to allow it, and the gateway only sees that server', async () => {
-  await addLlmKey(bob, 'Fake')
+  await addLlmKey(bob, 'Mistral')
   const host = await fakeHost('Guest workspace host')
   const { chatId, token } = await runtimeTurn(host, bob)
   const callsBefore = fakeMcp.records.length
@@ -150,7 +150,7 @@ const delegationTokenOn = async (chatId: string) => {
   const tokenHash = createHash('sha256').update(JSON.stringify(subToken)).digest('hex')
   await database.$client`
     insert into delegations (workspace_id, chat_id, id, prompt_id, task, effort_hint, policy, model, reason, status, token_hash, created_at)
-    select workspace_id, id, ${crypto.randomUUID()}, agent_turn_message_id, 'Look up', 'small', 'auto', 'fake/fake-small', 'asked', 'running', ${tokenHash}, now()
+    select workspace_id, id, ${crypto.randomUUID()}, agent_turn_message_id, 'Look up', 'small', 'auto', 'mistral/mistral-small-latest', 'asked', 'running', ${tokenHash}, now()
     from chats where id = ${chatId}`
   return subToken
 }
@@ -173,7 +173,7 @@ test('a sub-agent token acts only during the turn that started its delegation, n
   const completionWith = (callToken: string) =>
     host.modelCall({
       headers: { authorization: `Bearer ${callToken}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ model: 'fake/fake-small', messages: [{ role: 'user', content: 'hi' }] }),
+      body: JSON.stringify({ model: 'mistral/mistral-small-latest', messages: [{ role: 'user', content: 'hi' }] }),
     })
   expect((await mcpCall(host, subToken, rpcOf('tools/list'))).status).toBe(200)
 

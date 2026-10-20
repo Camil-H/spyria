@@ -165,16 +165,13 @@ const zaiPaths = {
   list_models: '/models',
 }
 const testModelPrices = {
-  'fake-model': 0.000009,
-  'fake-large': 0.00003,
-  'fake-medium': 0.000015,
-  'fake-small': 0.000006,
   'claude-opus-5-5': 0.000005,
   'claude-sonnet-5-5': 0.000003,
   'claude-haiku-5-5': 0.000001,
-  'mistral-large-latest': 0.000004,
-  'mistral-medium-latest': 0.000002,
-  'mistral-small-latest': 0.0000005,
+  'mistral-large-latest': 0.00003,
+  'mistral-medium-latest': 0.000015,
+  'mistral-small-latest': 0.000006,
+  'codestral-latest': 0.000009,
   'gemini-pro-latest': 0.000004,
   'gemini-flash-latest': 0.000002,
   'gemini-flash-lite-latest': 0.0000005,
@@ -354,16 +351,6 @@ export const startTestGateway = async ({
       await sleep(250)
     }
     const networkConfig = { base_url: fakeLlmUrl, default_request_timeout_in_seconds: 60, max_retries: 0 }
-    for (const provider of ['fake', 'fake-small'])
-      await gateway.call('/api/providers', {
-        method: 'POST',
-        body: {
-          provider,
-          keys: [],
-          network_config: networkConfig,
-          custom_provider_config: { base_provider_type: 'openai' },
-        },
-      })
     for (const provider of gatewayProviders)
       await gateway.call('/api/providers', {
         method: 'POST',
@@ -435,7 +422,7 @@ export const prepareSeededGatewayKeys = async (
   previous?: SeededGatewayKeys,
 ): Promise<SeededGatewayKeys> => {
   if (previous && (await isUntouched(gateway, previous))) return previous
-  const { id: keyId } = await gateway.call<{ id: string }>('/api/providers/fake/keys', {
+  const { id: keyId } = await gateway.call<{ id: string }>('/api/providers/mistral/keys', {
     method: 'POST',
     body: {
       name: `cred_${crypto.randomUUID()}`,
@@ -449,13 +436,13 @@ export const prepareSeededGatewayKeys = async (
     body: {
       name: `vk_${crypto.randomUUID()}`,
       is_active: true,
-      provider_configs: [{ provider: 'fake', weight: 1, allowed_models: ['*'], key_ids: [keyId] }],
+      provider_configs: [{ provider: 'mistral', weight: 1, allowed_models: ['*'], key_ids: [keyId] }],
     },
   })
   const { workspaceId, id, userId } = aliceSeededCredential
   const write = async (writer: SeedWriter) => {
     await writer.execute(
-      sql`update llm_credentials set secret_ref = ${`gateway:fake/${keyId}`} where workspace_id = ${workspaceId} and id = ${id}`,
+      sql`update llm_credentials set secret_ref = ${`gateway:mistral/${keyId}`} where workspace_id = ${workspaceId} and id = ${id}`,
     )
     await writer.execute(
       sql`insert into member_gateway_keys (workspace_id, user_id, virtual_key_id) values (${workspaceId}, ${userId}, ${virtual_key.id})`,

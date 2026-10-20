@@ -272,8 +272,8 @@ test('after a runtime restart the next prompt loads the Pi session and no earlie
   ])
   expect((await messagesOf(chat)).map(({ kind, body }) => `${kind}:${body}`)).toEqual([
     'member:Before the restart',
-    'agent:[t1] Hello from the stub (model spyria/fake/fake-medium, mode default).',
+    'agent:[t1] Hello from the stub (model spyria/mistral/mistral-medium-latest, mode default).',
     'member:After the restart',
-    'agent:[t2] Hello from the stub (model spyria/fake/fake-medium, mode default).',
+    'agent:[t2] Hello from the stub (model spyria/mistral/mistral-medium-latest, mode default).',
   ])
 })

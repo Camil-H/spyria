@@ -244,12 +244,12 @@ test('session headers pass through, gateway failures become error results instea
     gatewayUrl = stubGateway.url.origin
     await host.modelCall({
       headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ model: 'fake/fake-model', messages: [] }),
+      body: JSON.stringify({ model: 'mistral/codestral-latest', messages: [] }),
     })
     const modelCall = seen.findLast((request) => request.path === '/v1/chat/completions')
     expect(modelCall?.headers['x-bf-mcp-include-clients']).toBe('')
 
-    await addLlmKey(bob, 'Fake')
+    await addLlmKey(bob, 'Mistral')
     await promptedBy(chatId, bob)
     await mcpCall(host, token, lookup)
     expect(seen.findLast((request) => request.path === '/mcp')?.headers['x-bf-mcp-include-clients']).toBe(

@@ -10,7 +10,7 @@ import { acme, alice, bob, sessionTokenOf, startAgentStack, testSecretsKey, wait
 setDefaultTimeout(30_000)
 const fakeGitHub = startFakeGitHub()
 const stack = await startAgentStack({
-  llm: { model: 'openai/fake/fake-model' },
+  llm: { model: 'openai/mistral/codestral-latest' },
   github: { api: createGitHubApi(fakeGitHub.urls), secretBox: createSecretBox(testSecretsKey) },
 })
 afterAll(() => fakeGitHub.stop())

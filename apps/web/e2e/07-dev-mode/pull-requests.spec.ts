@@ -148,7 +148,7 @@ test.describe('Pull requests', () => {
     const chatId = await devChatWithCommit(page, agentScript, 'Guest push')
     await addParticipant(workerStack, chatId, 'member-bob', 'prompter')
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-    await addLlmKey(bobPage, 'Fake')
+    await addLlmKey(bobPage, 'Mistral')
     await openChat(bobPage, 'Guest push')
     await agentScript(chatId, { steps: [{ tool: 'push_branch' }], text: 'Only Alice can publish here.' })
     await sendMessage(bobPage, 'Push the branch')

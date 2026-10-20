@@ -23,7 +23,7 @@ const { database, fakeLlmCalls, fakeHost, setFakeLlmScript, holds, prompt, turnO
   routing: true,
   resumeAfterMilliseconds: 5_000,
 })
-await addLlmKey(bob, 'Fake')
+await addLlmKey(bob, 'Mistral')
 const lee = 'member-lee'
 const zeroDatabase = zeroDrizzle(schema, database)
 const sync = () =>
@@ -33,14 +33,14 @@ const sync = () =>
   )
 const memberNotice = "Bob's monthly AI budget is used up; an admin can raise it in Workspace settings"
 const workspaceNotice = "The workspace's monthly AI budget is used up; an admin can raise it in Workspace settings"
-const completion = JSON.stringify({ model: 'fake/fake-model', messages: [{ role: 'user', content: 'hi' }] })
+const completion = JSON.stringify({ model: 'mistral/codestral-latest', messages: [{ role: 'user', content: 'hi' }] })
 const month = new Date().toISOString().slice(0, 7)
 
 const spend = (prompterId: string, costMicros: number, calledAt = new Date()) =>
   database.$client`
     insert into model_calls (workspace_id, id, chat_id, prompter_id, owner_id, model, provider, input_tokens,
       output_tokens, cost_micros, status, called_at)
-    values (${acme}, ${`call-${crypto.randomUUID()}`}, 'chat-research', ${prompterId}, null, 'fake-model', 'fake', 1, 1,
+    values (${acme}, ${`call-${crypto.randomUUID()}`}, 'chat-research', ${prompterId}, null, 'codestral-latest', 'mistral', 1, 1,
       ${costMicros}, 'success', ${calledAt.toISOString()})`
 const saveBudget = async (body: object, userId = alice) => {
   const answer = await asMember(userId, 'POST', '/api/budgets', body)
@@ -184,7 +184,7 @@ const delegatingScript: FakeLlmScript = {
   steps: [{ tool: 'delegate', arguments: { task: 'List the files', effort: 'small' } }],
   text: 'Main done.',
   delegateRoute: { tier: 'small', confidence: 'high', effort: 'low' },
-  subagents: { 'fake-small': { steps: [{ command: 'echo started' }], text: 'Sub done.', hold: 'sub' } },
+  subagents: { 'mistral-small-latest': { steps: [{ command: 'echo started' }], text: 'Sub done.', hold: 'sub' } },
 }
 
 test('once the prompter’s budget is used up, a running sub-agent’s calls and the router of the next turn are refused before the gateway', async () => {
@@ -201,7 +201,7 @@ test('once the prompter’s budget is used up, a running sub-agent’s calls and
   const callsBefore = fakeLlmCalls.length
   const subCall = await host.modelCall({
     headers: { authorization: `Bearer ${subToken}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ model: 'fake/fake-small', messages: [{ role: 'user', content: 'hi' }] }),
+    body: JSON.stringify({ model: 'mistral/mistral-small-latest', messages: [{ role: 'user', content: 'hi' }] }),
   })
   expect(subCall.status).toBe(402)
   expect(JSON.parse(subCall.body)).toEqual({

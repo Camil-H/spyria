@@ -14,7 +14,7 @@ const completionRequest = () =>
   new Request('http://spyria-gateway-relay:4000/v1/chat/completions?stream=true', {
     method: 'POST',
     headers: { authorization: 'Bearer runtime-token', 'content-type': 'application/json' },
-    body: '{"model":"fake/fake-model"}',
+    body: '{"model":"mistral/codestral-latest"}',
   })
 
 test('refuses anything outside /v1 without contacting Spyria', async () => {
@@ -31,7 +31,7 @@ test('relays a /v1 call to Spyria and streams the answer chunk by chunk', async 
   expect(request).toMatchObject({
     method: 'POST',
     path: '/v1/chat/completions?stream=true',
-    body: '{"model":"fake/fake-model"}',
+    body: '{"model":"mistral/codestral-latest"}',
     headers: { authorization: 'Bearer runtime-token', 'content-type': 'application/json' },
   })
   relay.handle({ type: 'gw_head', sid: request.sid, status: 200, headers: { 'content-type': 'text/event-stream' } })

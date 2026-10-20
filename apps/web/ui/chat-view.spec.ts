@@ -177,7 +177,7 @@ test.describe('Chat view', () => {
     await expect(modeRadioOf(page, 'Auto')).toBeChecked()
     await expect(modeOf(page)).not.toHaveAttribute('title')
     await expect(modeOf(page)).toHaveText('PlanAuto')
-    await expect(chipOf(page, 'spyria')).toHaveText(/^Fake medium( \((low|medium|high)\))?$/)
+    await expect(chipOf(page, 'spyria')).toHaveText(/^Mistral Medium( \((low|medium|high)\))?$/)
     await chipOf(page, 'spyria').click()
     await expect(sessionOf(page).getByLabel('Subagents')).toHaveValue('auto')
     await page.keyboard.press('Escape')

@@ -125,7 +125,7 @@ const keptPlanningReplyOf = {
 }
 
 const nextReplyInPlanOf = {
-  Pi: '[t2] Hello from the stub (model spyria/fake/fake-medium, mode plan).',
+  Pi: '[t2] Hello from the stub (model spyria/mistral/mistral-medium-latest, mode plan).',
   'Claude Code': '[t2] Hello from the stub (model stub-default, mode plan).',
   Codex: '[t2] Hello from the stub (model gpt-stub, mode bypassPermissions).',
 }
@@ -204,13 +204,16 @@ test.describe('Questions and plans', () => {
         await expect(chipOf(page, 'spyria')).toBeVisible()
         await sendMessage(page, 'stub:hello')
         await expect(
-          messageContaining(page, '[t2] Hello from the stub (model spyria/fake/fake-medium, mode plan).'),
+          messageContaining(page, '[t2] Hello from the stub (model spyria/mistral/mistral-medium-latest, mode plan).'),
         ).toHaveCount(1)
         await togglePlan(page, false)
         await expect(chipOf(page, 'spyria')).toBeVisible()
         await sendMessage(page, 'stub:hello')
         await expect(
-          messageContaining(page, '[t3] Hello from the stub (model spyria/fake/fake-medium, mode default).'),
+          messageContaining(
+            page,
+            '[t3] Hello from the stub (model spyria/mistral/mistral-medium-latest, mode default).',
+          ),
         ).toHaveCount(1)
         return
       }
@@ -364,9 +367,9 @@ test.describe('Questions and plans', () => {
       await release('resume')
       await expect(messageContaining(page, answer)).toHaveCount(1)
       await mainOf(page)
-        .getByRole('button', { name: /^Delegated to Fake small · / })
+        .getByRole('button', { name: /^Delegated to Mistral Small · / })
         .click()
-      const steps = page.getByRole('group', { name: 'Steps of Fake small' })
+      const steps = page.getByRole('group', { name: 'Steps of Mistral Small' })
       await expect(steps.getByRole('form', { name: 'Question' })).toContainText(assumption)
       await expect(steps.getByRole('form', { name: 'Question' }).getByRole('button')).toHaveCount(0)
       await expect(messageItemsOf(page).filter({ has: steps })).toContainText(

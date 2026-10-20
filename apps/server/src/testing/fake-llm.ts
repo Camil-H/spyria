@@ -1,4 +1,3 @@
-import type { RoutableModel } from '@spyria/kernel'
 import { Hono } from 'hono'
 
 type FakeLlmStep = (
@@ -210,10 +209,6 @@ const anthropicReplyOf = async (request: AnthropicRequest, script: FakeLlmScript
 }
 
 const listedModelIds = [
-  'fake-model',
-  'fake-large',
-  'fake-medium',
-  'fake-small',
   'gpt-5',
   'gpt-5-mini',
   'gpt-5-nano',
@@ -224,6 +219,7 @@ const listedModelIds = [
   'mistral-large-latest',
   'mistral-medium-latest',
   'mistral-small-latest',
+  'codestral-latest',
   'grok-4.7',
   'grok-4.3',
   'grok-code-fast-1',
@@ -238,14 +234,7 @@ const listedModelIds = [
   'anthropic/claude-haiku-5.5',
   'moonshotai/kimi-k3',
 ]
-export const fakeAgentLlm = { model: 'openai/fake/fake-model' }
-
-export const fakeRoutableModels: RoutableModel[] = [
-  { id: 'fake/fake-large', name: 'Fake large', tier: 'large' },
-  { id: 'fake/fake-medium', name: 'Fake medium', tier: 'medium' },
-  { id: 'fake/fake-small', name: 'Fake small', tier: 'small' },
-  { id: 'fake-small/fake-small', name: 'Fake small', tier: 'small' },
-]
+export const fakeAgentLlm = { model: 'openai/mistral/codestral-latest' }
 
 const refusedKeyOf = (key: string) => ({
   error: {

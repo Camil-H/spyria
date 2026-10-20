@@ -31,8 +31,8 @@ const spend = (workerStack: WorkerStack, prompterId: string, costMicros: number)
   workerStack.database.$client`
     insert into model_calls (workspace_id, id, chat_id, prompter_id, owner_id, model, provider, input_tokens,
       output_tokens, cost_micros, status, called_at)
-    values ('workspace-acme', ${`call-${crypto.randomUUID()}`}, 'chat-research', ${prompterId}, null, 'fake-model',
-      'fake', 1, 1, ${costMicros}, 'success', now())`
+    values ('workspace-acme', ${`call-${crypto.randomUUID()}`}, 'chat-research', ${prompterId}, null, 'codestral-latest',
+      'mistral', 1, 1, ${costMicros}, 'success', now())`
 const seedBudget = (workerStack: WorkerStack, memberId: string | null, limitMicros: number) =>
   workerStack.database.$client`
     insert into budgets (workspace_id, member_id, limit_micros) values ('workspace-acme', ${memberId}, ${limitMicros})`
@@ -58,7 +58,7 @@ const saveBudget = async (page: Page, name: string, dollars: string) => {
 const openBobInResearch = async (browser: Parameters<typeof openPageAs>[0], workerStack: WorkerStack) => {
   await addParticipant(workerStack, 'chat-research', 'member-bob', 'prompter')
   const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-  await addLlmKey(bobPage, 'Fake')
+  await addLlmKey(bobPage, 'Mistral')
   await openChat(bobPage, 'Research')
   return bobPage
 }

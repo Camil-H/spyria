@@ -14,7 +14,6 @@ import {
   testGatewayAdmin,
 } from '@spyria/db/testing'
 import {
-  addRoutableModels,
   type ChatId,
   type ChatPermission,
   chatId,
@@ -39,7 +38,7 @@ import { createGitHubCheckouts, type GitHubDependencies } from '../github/github
 import { startJobWorker } from '../job-worker.ts'
 import { createModelCallRelay } from '../llm-relay.ts'
 import { createRuntimeHostGateway } from '../runtime-hosts/gateway.ts'
-import { createFakeLlm, type FakeLlmScript, fakeAgentLlm, fakeRoutableModels } from './fake-llm.ts'
+import { createFakeLlm, type FakeLlmScript, fakeAgentLlm } from './fake-llm.ts'
 import { createFakeMcp, sharedToolServer } from './fake-mcp.ts'
 import {
   type ContainerAgent,
@@ -192,7 +191,6 @@ const startSharedTestApp = async () => {
     )
   const llmGateway = llmGatewayAt(`http://127.0.0.1:${integrationGatewayPort}`)
   setModelDirectory(llmGateway.listedModels)
-  addRoutableModels(fakeRoutableModels)
   const runtimeHosts = createRuntimeHostGateway({
     databases: () => [database],
     relayModelCall: createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),

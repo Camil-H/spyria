@@ -33,7 +33,7 @@ test.describe('Errors', () => {
     tag: ['@spec-12'],
   }, async ({ page }) => {
     await removeKey(page, 'Anthropic')
-    await addLlmKey(page, 'Fake', newSecret('fake-refused'))
+    await addLlmKey(page, 'Mistral', newSecret('fake-refused'))
     await openChat(page, 'Research')
     await sendMessage(page, 'Use my refused key')
 

@@ -4,7 +4,7 @@ import { createDatabase, type Database } from '@spyria/db/postgres'
 import { setModelDirectory } from '@spyria/db/server-writes'
 import { databaseUrlOf } from '@spyria/db/testing'
 import { schema } from '@spyria/db/zero'
-import { addRoutableModels, chatId } from '@spyria/kernel'
+import { chatId } from '@spyria/kernel'
 import { createLlmGateway } from '@spyria/profile/server'
 import {
   createRuntimeTransactor,
@@ -28,7 +28,7 @@ import { createRuntimeHostGateway } from '../runtime-hosts/gateway.ts'
 import { readSpyriaAgentImage } from '../spyria-agent-image.ts'
 import { startTelemetry } from '../telemetry.ts'
 import { fakeGitHubAppId, fakeGitHubClientId, fakeGitHubClientSecret, startFakeGitHub } from './fake-github.ts'
-import { createFakeLlm, type FakeLlmScript, fakeRoutableModels } from './fake-llm.ts'
+import { createFakeLlm, type FakeLlmScript } from './fake-llm.ts'
 import { createFakeMcp, sharedToolServer } from './fake-mcp.ts'
 import { createSpyriaAgentRelay } from './spyria-agent-relay.ts'
 import {
@@ -74,7 +74,6 @@ const gatewaySettings = {
 }
 const llmGateway = createLlmGateway(gatewaySettings)
 setModelDirectory(llmGateway.listedModels)
-addRoutableModels(fakeRoutableModels)
 const usageSyncIntervalMilliseconds = 2_000
 const stubGapMilliseconds = Number(process.env.SPYRIA_STUB_GAP_MS ?? 20)
 const defaultBootMilliseconds = 200

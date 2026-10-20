@@ -6,14 +6,17 @@ import {
   publicModelNameOf,
 } from './model-call-failures.ts'
 
-const names = { memberName: 'Alice', model: 'fake-model' }
+const names = { memberName: 'Alice', model: 'codestral-latest' }
 const answered = (status: number, body: unknown): ModelCallFailure => ({ reached: 'answered', status, body })
 const recordedBifrost = {
   providerKeyRefused: {
     is_bifrost_error: false,
     status_code: 401,
     error: { type: 'invalid_request_error', code: 'invalid_api_key', message: 'Incorrect API key provided: go****ey' },
-    extra_fields: { routing_info: { provider: 'fake', model: 'fake-model', key: 'cred_bad' }, provider: 'fake' },
+    extra_fields: {
+      routing_info: { provider: 'mistral', model: 'codestral-latest', key: 'cred_bad' },
+      provider: 'mistral',
+    },
   },
   virtualKeyRevoked: {
     type: 'access_not_found',
@@ -24,7 +27,7 @@ const recordedBifrost = {
   modelBlocked: {
     type: 'model_blocked',
     status_code: 403,
-    error: { message: "Model 'fake-model' is not allowed for virtual key 'vk_0f3a'" },
+    error: { message: "Model 'codestral-latest' is not allowed for virtual key 'vk_0f3a'" },
   },
   providerBlocked: {
     type: 'provider_blocked',
@@ -36,9 +39,9 @@ const recordedBifrost = {
     type: 'no_key_supports_model',
     status_code: 400,
     error: {
-      error: 'no keys found for provider: fake and model: fake-model',
+      error: 'no keys found for provider: mistral and model: codestral-latest',
       type: 'no_key_supports_model',
-      message: 'no keys found for provider: fake and model: fake-model',
+      message: 'no keys found for provider: mistral and model: codestral-latest',
     },
   },
   rateLimited: {
@@ -104,7 +107,7 @@ const gemini = {
 }
 
 const keyRefused = 'The LLM key of Alice was refused'
-const modelUnavailable = "fake-model isn't available with Alice's keys"
+const modelUnavailable = "codestral-latest isn't available with Alice's keys"
 const outOfCredit = 'The provider account of Alice is out of credit'
 const rateLimited = 'Rate limited by the provider, try again shortly'
 const tooLong = 'The conversation is too long for this model'
@@ -171,11 +174,11 @@ test('a notice never carries the provider or gateway text', () => {
   ]
   for (const body of bodies)
     for (const status of [400, 401, 403, 404, 429, 500])
-      expect(modelCallNoticeOf(answered(status, body), names)).toMatch(/^(The|Rate|Alice|fake-model)[^:*]*$/)
+      expect(modelCallNoticeOf(answered(status, body), names)).toMatch(/^(The|Rate|Alice|codestral-latest)[^:*]*$/)
 })
 
 test('the public model name drops the provider route', () => {
-  expect(publicModelNameOf('fake/fake-model')).toBe('fake-model')
+  expect(publicModelNameOf('mistral/codestral-latest')).toBe('codestral-latest')
   expect(publicModelNameOf('openai/anthropic/claude-sonnet-4-5')).toBe('claude-sonnet-4-5')
   expect(publicModelNameOf('gpt-4o')).toBe('gpt-4o')
   expect(publicModelNameOf(undefined)).toBe('this model')

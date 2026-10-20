@@ -155,7 +155,7 @@ test.describe('LLM keys', () => {
       await expect(mainOf(bobPage)).toContainText(blockedNotice)
       await expect(sendButtonOf(bobPage)).toBeDisabled()
     })
-    await addLlmKey(bobPage, 'Fake', newSecret())
+    await addLlmKey(bobPage, 'Mistral', newSecret())
     await openChat(page, 'Research')
     await sendMessage(page, 'Before removing my key')
     await expect(messageContaining(page, agentReplyText)).toHaveCount(1)

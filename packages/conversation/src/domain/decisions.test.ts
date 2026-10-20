@@ -3,7 +3,7 @@ import { answersOf, decisionRequestOf } from './decisions.ts'
 import { sessionQuestions } from './session-routing.ts'
 
 const jev = { id: 'typesafe/jev-latest', name: 'Jev' }
-const fakeSmall = { id: 'fake/fake-small', name: 'Fake small', tier: 'small' as const }
+const fakeSmall = { id: 'mistral/mistral-small-latest', name: 'Mistral Small', tier: 'small' as const }
 const chatReply = (content: string) => ({ choices: [{ message: { content } }] })
 
 test('a decision model gets choice questions, a chat model the json_schema request', () => {
@@ -17,7 +17,7 @@ test('a decision model gets choice questions, a chat model the json_schema reque
   })
   const chatRequest = decisionRequestOf(fakeSmall, 'Refactor the billing module', sessionQuestions)
   expect(chatRequest).toMatchObject({
-    model: 'fake/fake-small',
+    model: 'mistral/mistral-small-latest',
     response_format: { type: 'json_schema', json_schema: { schema: { required: ['tier', 'effort', 'confidence'] } } },
   })
   expect(JSON.stringify(chatRequest)).toContain('Refactor the billing module')

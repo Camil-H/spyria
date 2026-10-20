@@ -164,7 +164,7 @@ test.describe('Personal tools', () => {
     const globexAccount = accountOf('alice-globex')
     await connectFake(page, acmeAccount)
     await page.goto('/w/workspace-globex')
-    await addLlmKey(page, 'Fake')
+    await addLlmKey(page, 'Mistral')
     await connectFake(page, globexAccount, 'workspace-globex')
 
     await page.goto('/w/workspace-acme')

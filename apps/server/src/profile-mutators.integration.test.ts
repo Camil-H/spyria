@@ -207,7 +207,7 @@ describe('Alice’s OpenAI credential, added then removed', () => {
       await resultOf(aliceInAcme, 'profile.removeLlmCredential', { workspaceId: acme, credentialId: seeded?.id }),
     ).toEqual(succeeded)
     await waitFor(async () => (await gateway.request(`/api/governance/virtual-keys/${virtualKeyId}`)).status === 404)
-    await waitFor(async () => (await gateway.request(`/api/providers/fake/keys/${seededKey.id}`)).status === 404)
+    await waitFor(async () => (await gateway.request(`/api/providers/mistral/keys/${seededKey.id}`)).status === 404)
     expect(await virtualKeyIdOf(alice)).toBeUndefined()
     const gatewaySyncStates = async () => [
       ...(await database.$client`select state from jobs where type = 'profile.gateway-sync'`),

@@ -178,18 +178,18 @@ const modelCallsOf = async (chatId: string, minimum: number) => {
 }
 
 test("Pi in Spyria's image answers through the LLM relay on the chat and Anthropic routes, streams its text to the events socket, ends the turn and each call is attributed to the prompter and the owner", async () => {
-  await addLlmKey(bob, 'Fake')
+  await addLlmKey(bob, 'Mistral')
   await addLlmKey(bob, 'Anthropic')
   const { id, transport } = await runtime()
   const { chatId, token } = await runtimeTurn({ id }, bob)
   const { conversation, turnEnds, answerOf, close } = await piConversationOf(transport, token, {
-    adapterModel: 'spyria/fake/fake-medium',
+    adapterModel: 'spyria/mistral/mistral-medium-latest',
     pi: {
       models: [
-        { id: 'fake/fake-medium', name: 'Fake medium', reasoning: false },
+        { id: 'mistral/mistral-medium-latest', name: 'Mistral Medium', reasoning: false },
         { id: 'anthropic/claude-haiku-5-5', name: 'Haiku 5.5', reasoning: false, contextWindow: 200000 },
       ],
-      compactionModel: 'fake/fake-small',
+      compactionModel: 'mistral/mistral-small-latest',
     },
   })
   expect(await answerOf('Hello Pi')).toBe('Understood, working on it.')
@@ -201,7 +201,13 @@ test("Pi in Spyria's image answers through the LLM relay on the chat and Anthrop
   const calls = await modelCallsOf(chatId, 2)
   expect(new Set(calls.map((call) => JSON.stringify(call)))).toEqual(
     new Set([
-      JSON.stringify({ prompter_id: bob, owner_id: alice, model: 'fake-medium', provider: 'fake', status: 'success' }),
+      JSON.stringify({
+        prompter_id: bob,
+        owner_id: alice,
+        model: 'mistral-medium-latest',
+        provider: 'mistral',
+        status: 'success',
+      }),
       JSON.stringify({
         prompter_id: bob,
         owner_id: alice,
@@ -214,15 +220,18 @@ test("Pi in Spyria's image answers through the LLM relay on the chat and Anthrop
 })
 
 test('a model switch keeps the conversation: the next request on a curated model of another provider, and after a relaunch on the same session with a picked model, carries the earlier turns', async () => {
-  await addLlmKey(bob, 'Fake')
+  await addLlmKey(bob, 'Mistral')
   await addLlmKey(bob, 'Anthropic')
   const { id, transport } = await runtime()
   const { token } = await runtimeTurn({ id }, bob)
   const models = [
-    { id: 'fake/fake-medium', name: 'Fake medium', reasoning: false },
+    { id: 'mistral/mistral-medium-latest', name: 'Mistral Medium', reasoning: false },
     { id: 'anthropic/claude-haiku-5-5', name: 'Haiku 5.5', reasoning: false, contextWindow: 200000 },
   ]
-  const llm = { adapterModel: 'spyria/fake/fake-medium', pi: { models, compactionModel: 'fake/fake-medium' } }
+  const llm = {
+    adapterModel: 'spyria/mistral/mistral-medium-latest',
+    pi: { models, compactionModel: 'mistral/mistral-medium-latest' },
+  }
   const bodiesBefore = fakeLlmBodies.length
   const requestOf = (text: string) => fakeLlmBodies.slice(bodiesBefore).find((body) => body.includes(text)) ?? ''
   const first = await piConversationOf(transport, token, llm)
@@ -233,10 +242,10 @@ test('a model switch keeps the conversation: the next request on a curated model
   first.close()
   await agentClient.deleteConversation(first.conversation)
 
-  const picked = { id: 'fake/fake-small', name: 'Fake small', reasoning: false }
+  const picked = { id: 'mistral/mistral-small-latest', name: 'Mistral Small', reasoning: false }
   const relaunched = await piConversationOf(transport, token, {
-    adapterModel: 'spyria/fake/fake-small',
-    pi: { models: [...models, picked], compactionModel: 'fake/fake-medium' },
+    adapterModel: 'spyria/mistral/mistral-small-latest',
+    pi: { models: [...models, picked], compactionModel: 'mistral/mistral-medium-latest' },
     resumeSessionId: sessionId,
   })
   await relaunched.answerOf('Picked switch: what is the code word?')
@@ -247,25 +256,25 @@ test('a model switch keeps the conversation: the next request on a curated model
   })
   expect(requestOf('Curated switch')).toContain('"model":"claude-haiku-5-5"')
   expect(requestOf('Curated switch')).toContain('The code word is PAPAYA')
-  expect(requestOf('Picked switch')).toContain('"model":"fake-small"')
+  expect(requestOf('Picked switch')).toContain('"model":"mistral-small-latest"')
   expect(requestOf('Picked switch')).toContain('The code word is PAPAYA')
   expect(requestOf('Picked switch')).toContain('Curated switch: what is the code word?')
 })
 
 test('a long Pi conversation compacts on the compaction model, recorded with prompter and owner, and a new conversation loads the session without replaying it and keeps its context', async () => {
-  await addLlmKey(bob, 'Fake')
+  await addLlmKey(bob, 'Mistral')
   const summary = 'Summary of the earlier turns: the word to remember is PAPAYA.'
   setFakeLlmScript({ summary })
   const { id, transport } = await runtime()
   const { chatId, token } = await runtimeTurn({ id }, bob)
   const llm = {
-    adapterModel: 'spyria/fake/fake-medium',
+    adapterModel: 'spyria/mistral/mistral-medium-latest',
     pi: {
       models: [
-        { id: 'fake/fake-medium', name: 'Fake medium', reasoning: false, contextWindow: 4000 },
-        { id: 'fake/fake-small', name: 'Fake small', reasoning: false, contextWindow: 4000 },
+        { id: 'mistral/mistral-medium-latest', name: 'Mistral Medium', reasoning: false, contextWindow: 4000 },
+        { id: 'mistral/mistral-small-latest', name: 'Mistral Small', reasoning: false, contextWindow: 4000 },
       ],
-      compactionModel: 'fake/fake-small',
+      compactionModel: 'mistral/mistral-small-latest',
       compaction: { reserveTokens: 3999, keepRecentTokens: 1 },
     },
   }
@@ -275,10 +284,10 @@ test('a long Pi conversation compacts on the compaction model, recorded with pro
   first.close()
   await agentClient.deleteConversation(first.conversation)
 
-  const summaryRequests = fakeLlmBodies.filter((body) => body.startsWith('{"model":"fake-small"'))
+  const summaryRequests = fakeLlmBodies.filter((body) => body.startsWith('{"model":"mistral-small-latest"'))
   expect(summaryRequests.some((body) => body.includes('Remember the word PAPAYA'))).toBe(true)
   const calls = await modelCallsOf(chatId, 4)
-  const attributed = { prompter_id: bob, owner_id: alice, provider: 'fake', status: 'success' }
+  const attributed = { prompter_id: bob, owner_id: alice, provider: 'mistral', status: 'success' }
   expect(
     new Set(
       calls.map(({ prompter_id, owner_id, model, provider, status }) =>
@@ -287,8 +296,8 @@ test('a long Pi conversation compacts on the compaction model, recorded with pro
     ),
   ).toEqual(
     new Set([
-      JSON.stringify({ ...attributed, model: 'fake-medium' }),
-      JSON.stringify({ ...attributed, model: 'fake-small' }),
+      JSON.stringify({ ...attributed, model: 'mistral-medium-latest' }),
+      JSON.stringify({ ...attributed, model: 'mistral-small-latest' }),
     ]),
   )
 
@@ -309,14 +318,14 @@ test('a long Pi conversation compacts on the compaction model, recorded with pro
 })
 
 test("Pi in Spyria's image runs a command with its output, asks through Spyria's extension and gets a free answer, in plan mode is refused a write and proposes a plan that is approved, keeps a plan with update_plan as its system prompt asks, streams text around a command once, and reports a provider error", async () => {
-  await addLlmKey(bob, 'Fake')
+  await addLlmKey(bob, 'Mistral')
   const { id, transport } = await runtime()
   const { token } = await runtimeTurn({ id }, bob)
   const pi = await piConversationOf(transport, token, {
-    adapterModel: 'spyria/fake/fake-medium',
+    adapterModel: 'spyria/mistral/mistral-medium-latest',
     pi: {
-      models: [{ id: 'fake/fake-medium', name: 'Fake medium', reasoning: false }],
-      compactionModel: 'fake/fake-medium',
+      models: [{ id: 'mistral/mistral-medium-latest', name: 'Mistral Medium', reasoning: false }],
+      compactionModel: 'mistral/mistral-medium-latest',
     },
   })
   const finalOf = (title: string) =>
@@ -412,7 +421,7 @@ test("Pi in Spyria's image runs a command with its output, asks through Spyria's
 })
 
 test('a turn through a real spyria-host and spyria-agent carries the server’s trace into their JSON lines', async () => {
-  await addLlmKey(bob, 'Fake')
+  await addLlmKey(bob, 'Mistral')
   setFakeLlmScript(undefined)
   const { id, transport } = await runtime()
   const { token, promptId } = await runtimeTurn({ id }, bob)
@@ -426,10 +435,10 @@ test('a turn through a real spyria-host and spyria-agent carries the server’s 
     const traceId = await withSpan('test turn', {}, async (span) => {
       await runtimeHosts.sandboxProvider.status({ workspaceId: acme, hostId: runtimeHostId(id), runtimeId: 'pi-smoke' })
       const pi = await piConversationOf(transport, token, {
-        adapterModel: 'spyria/fake/fake-medium',
+        adapterModel: 'spyria/mistral/mistral-medium-latest',
         pi: {
-          models: [{ id: 'fake/fake-medium', name: 'Fake medium', reasoning: false }],
-          compactionModel: 'fake/fake-medium',
+          models: [{ id: 'mistral/mistral-medium-latest', name: 'Mistral Medium', reasoning: false }],
+          compactionModel: 'mistral/mistral-medium-latest',
         },
       })
       expect(await pi.answerOf('Hello traced Pi')).toBe('Understood, working on it.')
@@ -452,7 +461,7 @@ test('a turn through a real spyria-host and spyria-agent carries the server’s 
     expect(telemetry.lines().find((line) => line.event === 'gen_ai.call')).toMatchObject({
       'service.name': 'spyria-server',
       'turn.id': promptId,
-      'gen_ai.request.model': 'fake/fake-medium',
+      'gen_ai.request.model': 'mistral/mistral-medium-latest',
       'http.response.status_code': 200,
     })
   } finally {

@@ -25,7 +25,7 @@ import {
 const fakeGitHub = startFakeGitHub()
 const secretBox = createSecretBox(testSecretsKey)
 const stack = await startAgentStack({
-  llm: { model: 'openai/fake/fake-model' },
+  llm: { model: 'openai/mistral/codestral-latest' },
   github: { api: createGitHubApi(fakeGitHub.urls), secretBox },
 })
 afterAll(() => fakeGitHub.stop())

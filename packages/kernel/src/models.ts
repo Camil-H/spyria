@@ -8,7 +8,7 @@ export type ListedModel = Readonly<{
 }>
 export type Model = RoutableModel & Omit<ListedModel, 'id'>
 
-const routableModels: RoutableModel[] = [
+const routableModels: readonly RoutableModel[] = [
   { id: 'anthropic/claude-opus-5-5', name: 'Opus 5.5', tier: 'large' },
   { id: 'openai/gpt-5', name: 'GPT-5', tier: 'large' },
   { id: 'mistral/mistral-large-latest', name: 'Mistral Large', tier: 'large' },
@@ -41,9 +41,6 @@ const tiersFrom: Record<ModelTier, ModelTier[]> = {
   small: ['small', 'medium', 'large'],
 }
 
-export const addRoutableModels = (models: readonly RoutableModel[]) => {
-  routableModels.push(...models.filter((model) => !routableModels.some(({ id }) => id === model.id)))
-}
 export const routableModelNames = () => Object.fromEntries(routableModels.map(({ id, name }) => [id, name]))
 export const routableModelOf = (text: string) => {
   const wanted = text.trim().toLowerCase()
@@ -53,7 +50,7 @@ export const routableModelOf = (text: string) => {
 }
 export const modelNameOf = (id: string) => routableModels.find((model) => model.id === id)?.name ?? id
 export const providersOfGatewayRefs = (refs: readonly string[]) => [
-  ...new Set(refs.flatMap((ref) => ref.match(/^gateway:([a-z-]+)\//)?.[1] ?? [])),
+  ...new Set(refs.flatMap((ref) => ref.match(/^gateway:([a-z]+)\//)?.[1] ?? [])),
 ]
 const providerOf = (id: string) => id.split('/')[0] ?? ''
 export const reachableModelsOf = (providers: readonly string[]): Model[] =>

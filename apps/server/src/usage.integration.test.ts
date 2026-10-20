@@ -28,7 +28,7 @@ const sync = (workspace: WorkspaceId = acme) => syncUsageNow(logs, { workspaceId
 
 const aliceKey = await virtualKeyOf(alice)
 let callsMade = 0
-const modelCall = async (labels: Record<string, string>, model = 'fake/fake-model') => {
+const modelCall = async (labels: Record<string, string>, model = 'mistral/codestral-latest') => {
   callsMade++
   await fetch(`${gateway.url}/v1/chat/completions`, {
     method: 'POST',
@@ -66,8 +66,8 @@ test('the sync records each gateway call once across overlapping windows and rer
     {
       chat_id: 'chat-research',
       owner_id: alice,
-      model: 'fake-model',
-      provider: 'fake',
+      model: 'codestral-latest',
+      provider: 'mistral',
       input_tokens: 1,
       output_tokens: 1,
       cost_micros: 18,

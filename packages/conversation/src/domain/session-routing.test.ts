@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { addRoutableModels, reachableModelsOf } from '@spyria/kernel'
+import { reachableModelsOf } from '@spyria/kernel'
 import {
   chipLabelOf,
   runsOnFieldsOf,
@@ -9,14 +9,8 @@ import {
   thoughtLevelOf,
 } from './session-routing.ts'
 
-addRoutableModels([
-  { id: 'fake/fake-large', name: 'Fake large', tier: 'large' },
-  { id: 'fake/fake-medium', name: 'Fake medium', tier: 'medium' },
-  { id: 'fake/fake-small', name: 'Fake small', tier: 'small' },
-  { id: 'fake-small/fake-small', name: 'Fake small', tier: 'small' },
-])
-const fake = reachableModelsOf(['fake'])
-const smallOnly = reachableModelsOf(['fake-small'])
+const mistral = reachableModelsOf(['mistral'])
+const smallOnly = reachableModelsOf(['xai']).filter((model) => model.tier === 'small')
 const jev = reachableModelsOf(['typesafe'])
 
 const classified = (tier: 'large' | 'medium' | 'small', confidence = 0.9) => ({
@@ -25,17 +19,23 @@ const classified = (tier: 'large' | 'medium' | 'small', confidence = 0.9) => ({
 })
 
 test('only a confident large or small classification moves away from the medium tier', () => {
-  const route = (answers: ReturnType<typeof classified> | undefined) => sessionChoiceOf({ reachable: fake, answers })
+  const route = (answers: ReturnType<typeof classified> | undefined) => sessionChoiceOf({ reachable: mistral, answers })
   expect(route(classified('large'))).toMatchObject({
-    model: { id: 'fake/fake-large' },
+    model: { id: 'mistral/mistral-large-latest' },
     effort: 'low',
     reason: 'classified large',
   })
-  expect(route(classified('small'))).toMatchObject({ model: { id: 'fake/fake-small' } })
-  expect(route(classified('large', 0.8))).toMatchObject({ model: { id: 'fake/fake-large' } })
-  expect(route(classified('large', 0.79))).toMatchObject({ model: { id: 'fake/fake-medium' }, effort: 'low' })
-  expect(route(classified('medium'))).toMatchObject({ model: { id: 'fake/fake-medium' }, reason: 'default' })
-  expect(route(undefined)).toMatchObject({ model: { id: 'fake/fake-medium' }, effort: 'medium' })
+  expect(route(classified('small'))).toMatchObject({ model: { id: 'mistral/mistral-small-latest' } })
+  expect(route(classified('large', 0.8))).toMatchObject({ model: { id: 'mistral/mistral-large-latest' } })
+  expect(route(classified('large', 0.79))).toMatchObject({
+    model: { id: 'mistral/mistral-medium-latest' },
+    effort: 'low',
+  })
+  expect(route(classified('medium'))).toMatchObject({
+    model: { id: 'mistral/mistral-medium-latest' },
+    reason: 'default',
+  })
+  expect(route(undefined)).toMatchObject({ model: { id: 'mistral/mistral-medium-latest' }, effort: 'medium' })
 })
 
 test('the fallback is the best reachable model of the prompter: medium tier first, ties in catalog order', () => {
@@ -46,13 +46,13 @@ test('the fallback is the best reachable model of the prompter: medium tier firs
   expect(sessionChoiceOf({ reachable: reachableModelsOf(['mistral', 'openai']), answers: undefined })?.model.id).toBe(
     'openai/gpt-5-mini',
   )
-  expect(sessionChoiceOf({ reachable: smallOnly, answers: classified('large') })?.model.id).toBe(
-    'fake-small/fake-small',
-  )
-  expect(sessionChoiceOf({ reachable: smallOnly, answers: undefined })?.model.id).toBe('fake-small/fake-small')
+  expect(sessionChoiceOf({ reachable: smallOnly, answers: classified('large') })?.model.id).toBe('xai/grok-code-fast-1')
+  expect(sessionChoiceOf({ reachable: smallOnly, answers: undefined })?.model.id).toBe('xai/grok-code-fast-1')
   expect(sessionChoiceOf({ reachable: [], answers: undefined })).toBeUndefined()
   expect(sessionChoiceOf({ reachable: jev, answers: undefined })).toBeUndefined()
-  expect(sessionChoiceOf({ reachable: [...jev, ...fake], answers: undefined })?.model.id).toBe('fake/fake-medium')
+  expect(sessionChoiceOf({ reachable: [...jev, ...mistral], answers: undefined })?.model.id).toBe(
+    'mistral/mistral-medium-latest',
+  )
 })
 
 test.each([
@@ -64,10 +64,10 @@ test.each([
     'Codex · Adapter gpt-large (high)',
   ],
   [
-    { localSession: false, harness: null, model: 'fake/fake-large', reasoningEffort: 'high' },
-    'Named fake/fake-large (high)',
+    { localSession: false, harness: null, model: 'mistral/mistral-large-latest', reasoningEffort: 'high' },
+    'Named mistral/mistral-large-latest (high)',
   ],
-  [{ localSession: false, harness: null, model: 'fake/fake-small' }, 'Named fake/fake-small'],
+  [{ localSession: false, harness: null, model: 'mistral/mistral-small-latest' }, 'Named mistral/mistral-small-latest'],
   [{ localSession: false, harness: 'codex', model: null }, 'Model chosen at first prompt'],
 ] as const)(
   'the session chip reads %o as %s: model and effort only, the subagent policy stays in the dialog',

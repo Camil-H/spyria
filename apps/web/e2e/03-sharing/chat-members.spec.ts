@@ -65,7 +65,7 @@ test.describe('Chat members', () => {
     const chatId = await newRuntimeChat(page, 'Bob is promoted')
     await addParticipant(workerStack, chatId, 'member-bob', 'reader')
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-    await addLlmKey(bobPage, 'Fake')
+    await addLlmKey(bobPage, 'Mistral')
     await openChat(bobPage, 'Bob is promoted')
     await expect(mainOf(bobPage)).toContainText(readerNotice)
 

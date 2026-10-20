@@ -142,7 +142,7 @@ test.describe('Chat permissions', () => {
       await addParticipant(workerStack, chatId, 'member-bob', 'prompter')
       await promptAndWait(page, 'Alice starts', 1)
       const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-      await addLlmKey(bobPage, 'Fake')
+      await addLlmKey(bobPage, 'Mistral')
       await openChat(bobPage, 'Bob prompts')
       await agentScript(chatId, { hold: 'answer' })
       await sendMessage(bobPage, 'Bob asks')
@@ -161,7 +161,7 @@ test.describe('Chat permissions', () => {
 
       await expect(modeRadioOf(bobPage, 'Plan')).toBeDisabled()
       await openSession(bobPage)
-      await expect(sessionOf(bobPage).getByLabel('Main model')).toHaveValue('fake/fake-medium')
+      await expect(sessionOf(bobPage).getByLabel('Main model')).toHaveValue('mistral/mistral-medium-latest')
       for (const label of ['Main model', 'Search all models', 'Effort', 'Subagents'])
         await expect(sessionOf(bobPage).getByLabel(label)).toBeDisabled()
       await expect(sessionOf(bobPage).getByRole('button', { name: 'Switch' })).toHaveCount(0)

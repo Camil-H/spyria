@@ -140,7 +140,7 @@ test('on a Spyria runtime chat another member who may prompt answers, a member w
     '[t1]',
     'tool',
     'question',
-    'answer:The member answered: Buildkite Hello from the stub (model spyria/fake/fake-medium, mode default).',
+    'answer:The member answered: Buildkite Hello from the stub (model spyria/mistral/mistral-medium-latest, mode default).',
   ])
   expect(replies[2]?.step).toMatchObject({
     type: 'question',
@@ -256,7 +256,7 @@ test('a question in a delegated sub-conversation is answered with the assumption
   expect((await questionItemsOf(chat))[0]?.step).toMatchObject({
     type: 'question',
     free: { answer: assumption },
-    delegation: { model: 'fake/fake-small' },
+    delegation: { model: 'mistral/mistral-small-latest' },
   })
   expect(await mutate(aliceInAcme, 'conversation.stopAgent', { workspaceId: acme, chatId: chat })).toEqual(succeeded)
   await waitFor(async () => (await turnOf(chat)) === null)

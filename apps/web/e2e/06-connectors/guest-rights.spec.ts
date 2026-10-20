@@ -27,7 +27,7 @@ const updateStepOf = (page: Page) => messageItemsOf(page).getByRole('button', { 
 const openAsBob = async (browser: Parameters<typeof openPageAs>[0], workerStack: WorkerStack) => {
   await addParticipant(workerStack, research, 'member-bob', 'prompter')
   const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-  await addLlmKey(bobPage, 'Fake')
+  await addLlmKey(bobPage, 'Mistral')
   await openChat(bobPage, 'Research')
   return bobPage
 }
@@ -45,7 +45,7 @@ test.describe('Guest rights', () => {
     await connectFake(page, account)
     await addParticipant(workerStack, research, 'member-bob', 'prompter')
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-    await addLlmKey(bobPage, 'Fake')
+    await addLlmKey(bobPage, 'Mistral')
     await promptTool(bobPage, agentScript, 'Bob asks who the agent is', {
       ...toolScript,
       text: 'I cannot use Alice’s personal connections.',

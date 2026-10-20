@@ -62,7 +62,7 @@ test.describe('Shared tools', () => {
   }
   const openAsBobWithKey = async (browser: Parameters<typeof openPageAs>[0], workerStack: WorkerStack) => {
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-    await addLlmKey(bobPage, 'Fake')
+    await addLlmKey(bobPage, 'Mistral')
     return bobPage
   }
   const promptIn = async (
@@ -124,7 +124,7 @@ test.describe('Shared tools', () => {
     )
 
     await openProfile(bobPage)
-    await llmSectionOf(bobPage).getByRole('button', { name: 'Remove Fake' }).click()
+    await llmSectionOf(bobPage).getByRole('button', { name: 'Remove Mistral' }).click()
     await bobPage.getByRole('dialog', { name: 'Remove LLM key' }).getByRole('button', { name: 'Remove' }).click()
     await expect
       .poll(
@@ -132,7 +132,7 @@ test.describe('Shared tools', () => {
           (await workerStack.database.$client`select 1 from member_gateway_keys where user_id = 'member-bob'`).length,
       )
       .toBe(0)
-    await addLlmKey(bobPage, 'Fake')
+    await addLlmKey(bobPage, 'Mistral')
     await expect(await promptIn(bobPage, agentScript, update, 'Update it again')).toContainText(
       notOffered(gatewayName, 'update'),
     )

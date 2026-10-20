@@ -92,7 +92,9 @@ test('a new runtime chat has no model before its first prompt and the auto polic
     }),
   ).toEqual(succeeded)
   expect(await chatRow('chat-routed')).toMatchObject({ subagentPolicy: 'auto', model: null, reasoningEffort: null })
-  expect(await routing({ defaultModel: 'fake/fake-small', subagentPolicy: 'same_as_main' })).toEqual(succeeded)
+  expect(await routing({ defaultModel: 'mistral/mistral-small-latest', subagentPolicy: 'same_as_main' })).toEqual(
+    succeeded,
+  )
   expect(await chatRow('chat-routed')).toMatchObject({ subagentPolicy: 'same_as_main', model: null })
   expect(await chatRow('chat-routed')).not.toHaveProperty('defaultModel')
 })

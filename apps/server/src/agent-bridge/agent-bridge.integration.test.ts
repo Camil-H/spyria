@@ -39,13 +39,13 @@ const {
   holdUrl,
   jobDone,
   ...stack
-} = await startAgentStack({ llm: { model: 'openai/fake/fake-model' } })
+} = await startAgentStack({ llm: { model: 'openai/mistral/codestral-latest' } })
 const repliesTo = (messageId: string) => stack.repliesTo(messageId, ['kind', 'body', 'detail'])
 const answered = stack.answered
 const agentHost = () => stack.agentHost('Agent host', { holdUrl })
 const replyOf = (turn: number) => ({
   kind: 'agent' as const,
-  body: `[t${turn}] Hello from the stub (model spyria/fake/fake-model, mode default).`,
+  body: `[t${turn}] Hello from the stub (model spyria/mistral/codestral-latest, mode default).`,
   detail: null,
 })
 const outputOf = async (path: string, workspaceId: string, userId: string) => {
@@ -71,7 +71,7 @@ test('a prompt starts the runtime, creates one Pi conversation with the runtime 
   expect(llmToken.length).toBeGreaterThanOrEqual(16)
   expect(llmToken).not.toBe(runtime.api_key)
   expect(runtime.llm_token_hash).toBe(createHash('sha256').update(llmToken).digest('hex'))
-  expect(launch?.agent.acp_model).toBe('spyria/fake/fake-model')
+  expect(launch?.agent.acp_model).toBe('spyria/mistral/codestral-latest')
   expect(launch?.agent.acp_command.at(-1)).toEndWith('exec pi --mode rpc --no-themes')
   expect(relay.socketPaths).toEqual([`/sockets/events/${runtime.agent_conversation_id}?after=0`])
   expect(relay.prompts).toEqual(['Find the latest pricing'])

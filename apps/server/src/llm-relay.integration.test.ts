@@ -25,13 +25,13 @@ afterEach(() => disconnectFakeHosts())
 
 const bobSecret = `fake-key-bob-${crypto.randomUUID()}`
 const completion = JSON.stringify({
-  model: 'fake/fake-model',
+  model: 'mistral/codestral-latest',
   stream: true,
   messages: [{ role: 'user', content: 'hi' }],
 })
 const failureOf = async (chatId: string) =>
   (await database.$client`select agent_turn_failure from chats where id = ${chatId}`)[0]?.agent_turn_failure
-await addLlmKey(bob, 'Fake', bobSecret)
+await addLlmKey(bob, 'Mistral', bobSecret)
 
 test('a relayed call runs on the turn prompter’s virtual key with Spyria’s attribution, streams back, and drops spoofed auth and x-bf headers', async () => {
   const host = await fakeHost('Relay host')
@@ -175,7 +175,7 @@ test('a prompter without a gateway key is refused and Spyria’s notice is recor
 test('a key the provider refuses is classified on the turn without provider text', async () => {
   const host = await fakeHost('Refused key host')
   await database.$client`delete from llm_credentials where user_id = ${alice}`
-  await addLlmKey(alice, 'Fake', `fake-refused-${crypto.randomUUID()}`)
+  await addLlmKey(alice, 'Mistral', `fake-refused-${crypto.randomUUID()}`)
   const { chatId, token } = await runtimeTurn(host, alice)
   const refused = await host.modelCall({ headers: { authorization: `Bearer ${token}` }, body: completion })
   expect(refused.status).toBe(401)

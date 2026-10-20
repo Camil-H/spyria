@@ -130,7 +130,7 @@ test('a server that lists no tools is refused and left out of the gateway', asyn
 
 test('a member restricted to lookup is refused update on their own prompts, their key holds exactly lookup, and a key recreated after the last LLM key is removed gets the restriction back', async () => {
   expect((await restrict(bob, ['lookup'])).status).toBe(200)
-  await addLlmKey(bob, 'Fake')
+  await addLlmKey(bob, 'Mistral')
   expect((await grantsOf(bob))[sharedToolServer]).toEqual(['lookup'])
 
   const host = await fakeHost('Restricted member host')
@@ -142,7 +142,7 @@ test('a member restricted to lookup is refused update on their own prompts, thei
 
   const keyBefore = (await virtualKeyOf(bob)).id
   await removeKeysOf(bob)
-  await addLlmKey(bob, 'Fake')
+  await addLlmKey(bob, 'Mistral')
   expect((await virtualKeyOf(bob)).id).not.toBe(keyBefore)
   expect((await grantsOf(bob))[sharedToolServer]).toEqual(['lookup'])
   expect(textOf((await mcpCall(host, token, callOf(sharedToolServer, 'update'))).result)).toBe(
@@ -203,7 +203,7 @@ test('a workspace’s connections are never granted to, listed for or callable b
     alice,
     'POST',
     '/api/llm-credentials',
-    { provider: 'Fake', secret: 'fake-globex' },
+    { provider: 'Mistral', secret: 'fake-globex' },
     globex,
   )
   expect(globexKey.status).toBe(201)

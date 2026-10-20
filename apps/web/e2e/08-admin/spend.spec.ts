@@ -217,7 +217,7 @@ test.describe('Spend', () => {
     }, async ({ page, browser, workerStack }) => {
       await addParticipant(workerStack, 'chat-research', 'member-bob', 'prompter')
       const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-      await addLlmKey(bobPage, 'Fake')
+      await addLlmKey(bobPage, 'Mistral')
       await prompt(page, 'Alice asks', 1)
       await prompt(bobPage, 'Bob asks', 2)
       await syncUntilResearchCalls(workerStack, 3)
@@ -261,7 +261,7 @@ test.describe('Spend', () => {
     values ('workspace-acme', ${earlierMonth}, 'chat-research', 'member-alice', 4321, 70000, 3)`
       await workerStack.database.$client`
     insert into model_calls (workspace_id, id, chat_id, prompter_id, owner_id, model, provider, input_tokens, output_tokens, cost_micros, status, called_at)
-    select 'workspace-acme', 'earlier-' || n, 'chat-research', 'member-alice', 'member-alice', 'fake-model', 'fake',
+    select 'workspace-acme', 'earlier-' || n, 'chat-research', 'member-alice', 'member-alice', 'codestral-latest', 'mistral',
       case when n = 1 then 4000 else 100 end, case when n = 1 then 121 else 0 end, case when n = 1 then 50000 else 10000 end,
       'success', ${`${earlierMonth}-15T12:00:00Z`}::timestamptz
     from generate_series(1, 3) n`

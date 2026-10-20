@@ -76,7 +76,7 @@ test.describe('Models', () => {
     ])
     await sessionOf(bobPage).getByLabel('Search all models').fill('kimi')
     await expect(mainModel.getByRole('option', { name: 'openrouter/moonshotai/kimi-k3', exact: true })).toHaveCount(1)
-    await expect(mainModel.getByRole('option', { name: /fake|gpt|mistral/ })).toHaveCount(0)
+    await expect(mainModel.getByRole('option', { name: /grok|gpt|mistral/ })).toHaveCount(0)
     await mainModel.selectOption('openrouter/moonshotai/kimi-k3')
     await sessionOf(bobPage).getByRole('button', { name: 'Switch' }).click()
     await expect(chipOf(bobPage, 'routed')).toHaveText('openrouter/moonshotai/kimi-k3 (medium)')
@@ -101,25 +101,25 @@ test.describe('Models', () => {
       steps: [{ tool: 'delegate', arguments: { task: 'List the project files', effort: 'small' } }],
       text: 'Main done.',
       delegateRoute: { tier: 'small', confidence: 'high', effort: 'low' },
-      subagents: { 'fake-small': { text: 'Two files.' } },
+      subagents: { 'mistral-small-latest': { text: 'Two files.' } },
     })
     await sendMessage(page, 'The code word is PAPAYA, delegate the listing')
     await expect(messageItemsOf(page).filter({ hasText: 'Main done.' })).toHaveCount(1)
     await agentScript(chatId, { text: 'Context holds $userMessages prompts.' })
 
     await openSession(page)
-    await sessionOf(page).getByLabel('Main model').selectOption('fake/fake-large')
+    await sessionOf(page).getByLabel('Main model').selectOption('mistral/mistral-large-latest')
     await sessionOf(page).getByRole('button', { name: 'Switch' }).click()
-    await expect(chipOf(page, 'routed')).toHaveText(/^Fake large( \(\w+\))?$/)
+    await expect(chipOf(page, 'routed')).toHaveText(/^Mistral Large( \(\w+\))?$/)
     await page.keyboard.press('Escape')
     await sendMessage(page, 'Curated switch')
     await expect(messageItemsOf(page).filter({ hasText: 'Context holds 2 prompts.' })).toHaveCount(1)
 
     await openSession(page)
-    await sessionOf(page).getByLabel('Search all models').fill('fake-model')
-    await sessionOf(page).getByLabel('Main model').selectOption('fake/fake-model')
+    await sessionOf(page).getByLabel('Search all models').fill('codestral-latest')
+    await sessionOf(page).getByLabel('Main model').selectOption('mistral/codestral-latest')
     await sessionOf(page).getByRole('button', { name: 'Switch' }).click()
-    await expect(chipOf(page, 'routed')).toHaveText(/^fake\/fake-model( \(\w+\))?$/)
+    await expect(chipOf(page, 'routed')).toHaveText(/^mistral\/codestral-latest( \(\w+\))?$/)
     await page.keyboard.press('Escape')
     await sendMessage(page, 'Searched switch')
     await expect(messageItemsOf(page).filter({ hasText: 'Context holds 3 prompts.' })).toHaveCount(1)
@@ -135,31 +135,31 @@ test.describe('Models', () => {
     await expect(sessionOf(page).getByLabel('Main model')).toHaveCount(0)
     await page.keyboard.press('Escape')
     await promptAndWait(page, 'Start on the main model', 1)
-    await expect(chipOf(page, 'routed')).toHaveText('Fake medium (medium)')
+    await expect(chipOf(page, 'routed')).toHaveText('Mistral Medium (medium)')
     await openSession(page)
-    await expect(sessionOf(page).getByLabel('Main model')).toHaveValue('fake/fake-medium')
+    await expect(sessionOf(page).getByLabel('Main model')).toHaveValue('mistral/mistral-medium-latest')
     await expect(sessionOf(page).getByLabel('Default model')).toHaveCount(0)
   })
 
-  test('As a member reaching only a small model, I get it, and I am refused in a session on a model my keys cannot reach', {
+  test('As a member whose keys reach another provider, I get its model, and I am refused in a session on a model my keys cannot reach', {
     tag: ['@spec-15'],
   }, async ({ page, browser, workerStack, agentScript }) => {
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-    await addLlmKey(bobPage, 'Fake-small')
-    const bobChatId = await newRuntimeChat(bobPage, 'Bob small')
+    await addLlmKey(bobPage, 'xAI')
+    const bobChatId = await newRuntimeChat(bobPage, 'Bob on xAI')
     await agentScript(bobChatId, confident('large'))
     await promptAndWait(bobPage, 'A big refactor please', 1)
-    await expect(chipOf(bobPage, 'routed')).toHaveText('Fake small (high)')
+    await expect(chipOf(bobPage, 'routed')).toHaveText('Grok 4.7 (high)')
 
     const aliceChatId = await newRuntimeChat(page, 'Alice large')
     await addParticipant(workerStack, aliceChatId, 'member-bob', 'prompter')
     await agentScript(aliceChatId, confident('large'))
     await promptAndWait(page, 'Redesign everything', 1)
-    await expect(chipOf(page, 'routed')).toHaveText('Fake large (high)')
+    await expect(chipOf(page, 'routed')).toHaveText('Mistral Large (high)')
     await openChat(bobPage, 'Alice large')
     await sendMessage(bobPage, 'Bob joins the large session')
     await expect(messageItemsOf(bobPage).filter({ hasText: 'Bob joins the large session' })).toBeVisible()
-    await expect(mainOf(bobPage)).toContainText('Your keys cannot reach Fake large; switch the model or add a key')
+    await expect(mainOf(bobPage)).toContainText('Your keys cannot reach Mistral Large; switch the model or add a key')
     await bobPage.context().close()
   })
 
@@ -168,19 +168,19 @@ test.describe('Models', () => {
   }, async ({ page, browser, workerStack }) => {
     await addParticipant(workerStack, await newRuntimeChat(page, 'Switched'), 'member-bob', 'reader')
     await promptAndWait(page, 'Start on the default', 1)
-    await expect(chipOf(page, 'routed')).toHaveText('Fake medium (medium)')
+    await expect(chipOf(page, 'routed')).toHaveText('Mistral Medium (medium)')
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
     await openChat(bobPage, 'Switched')
-    await expect(chipOf(bobPage, 'routed')).toHaveText('Fake medium (medium)')
+    await expect(chipOf(bobPage, 'routed')).toHaveText('Mistral Medium (medium)')
 
     await openSession(page)
-    await sessionOf(page).getByLabel('Main model').selectOption({ label: 'Fake large' })
+    await sessionOf(page).getByLabel('Main model').selectOption({ label: 'Mistral Large' })
     await expect(sessionOf(page)).toContainText(
-      /The next reply rereads the whole conversation with Fake large \(about (\$\d+\.\d{2}|< \$0\.01)\)/,
+      /The next reply rereads the whole conversation with Mistral Large \(about (\$\d+\.\d{2}|< \$0\.01)\)/,
     )
     await sessionOf(page).getByRole('button', { name: 'Switch' }).click()
-    await expect(chipOf(page, 'routed')).toHaveText('Fake large (medium)')
-    await expect(chipOf(bobPage, 'routed')).toHaveText('Fake large (medium)')
+    await expect(chipOf(page, 'routed')).toHaveText('Mistral Large (medium)')
+    await expect(chipOf(bobPage, 'routed')).toHaveText('Mistral Large (medium)')
     await bobPage.context().close()
 
     await page.keyboard.press('Escape')
@@ -204,7 +204,7 @@ test.describe('Models', () => {
     ])
     await expect(sessionOf(page).getByLabel('Effort')).toHaveValue('medium')
     await sessionOf(page).getByLabel('Effort').selectOption({ label: 'High' })
-    await expect(chipOf(page, 'routed')).toHaveText('Fake medium (high)')
+    await expect(chipOf(page, 'routed')).toHaveText('Mistral Medium (high)')
     await page.keyboard.press('Escape')
     await sendMessage(page, 'Think harder')
     await expect(messageItemsOf(page).filter({ hasText: 'Effort high with 2 prompts.' })).toHaveCount(1)
@@ -231,7 +231,7 @@ test.describe('Models', () => {
     const chatId = await newRuntimeChat(page, 'Decided')
     await agentScript(chatId, { route: { tier: 'large', confidence: 0.9, effort: 'high' } })
     await promptAndWait(page, 'Decide', 1)
-    await expect(chipOf(page, 'routed')).toHaveText('Fake large (high)')
+    await expect(chipOf(page, 'routed')).toHaveText('Mistral Large (high)')
   })
 
   test('As a member whose only key is a decision model, I am told to add an LLM key and cannot pick it', {

@@ -174,12 +174,12 @@ test('a Pi model switch sets the thinking level after Pi resets it, at launch an
   expect(valuesOf(socket.events.findLast(kindOf('config_option_update'))?.update)).toEqual(['stub/stub-default', 'low'])
 
   await call('POST', `/api/conversations/${id}/switch_acp_model`, { model: 'stub/stub-large', thoughtLevel: 'ultra' })
-  await call('POST', `/api/conversations/${id}/switch_acp_model`, { model: 'spyria/fake/fake-small' })
+  await call('POST', `/api/conversations/${id}/switch_acp_model`, { model: 'spyria/mistral/mistral-small-latest' })
   await socket.until(kindOf('config_option_update'), 4)
   const unlisted = socket.events.filter(kindOf('config_option_update')).slice(-2)
   expect(unlisted.map(({ update }) => valuesOf(update))).toEqual([
     ['stub/stub-large', 'off'],
-    ['spyria/fake/fake-small', 'off'],
+    ['spyria/mistral/mistral-small-latest', 'off'],
   ])
 })
 

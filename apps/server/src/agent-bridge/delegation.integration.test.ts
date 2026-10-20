@@ -27,7 +27,7 @@ const delegatingScript = (script: FakeLlmScript = {}): FakeLlmScript => ({
   steps: [delegatedTask],
   text: 'Main done.',
   delegateRoute: confidentSmall,
-  subagents: { 'fake-small': { steps: [{ command: 'echo sub' }], text: 'Sub done.' } },
+  subagents: { 'mistral-small-latest': { steps: [{ command: 'echo sub' }], text: 'Sub done.' } },
   ...script,
 })
 const fakeAgent = async () => {
@@ -54,7 +54,7 @@ const delegationsOf = (chat: ChatId) =>
 const completionWith = (host: FakeHost, token: string) =>
   host.modelCall({
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ model: 'fake/fake-small', messages: [{ role: 'user', content: 'hi' }] }),
+    body: JSON.stringify({ model: 'mistral/mistral-small-latest', messages: [{ role: 'user', content: 'hi' }] }),
   })
 const routerCallWith = (host: FakeHost, token: string) =>
   host.modelCall({
@@ -76,7 +76,7 @@ test('a delegated task runs in a Pi sub-conversation on the classified model, it
   const { relay, host, main, subs } = await fakeAgent()
   const chat = await newRuntimeChat()
   const subagent = { steps: [{ command: 'echo sub', say: 'Let me look.' }], text: 'Sub done.' }
-  setFakeLlmScript(delegatingScript({ subagents: { 'fake-small': subagent } }))
+  setFakeLlmScript(delegatingScript({ subagents: { 'mistral-small-latest': subagent } }))
   const promptId = await promptAndAnswer(chat, 'Delegate the listing')
 
   const [sub] = subs()
@@ -84,13 +84,13 @@ test('a delegated task runs in a Pi sub-conversation on the classified model, it
   expect(relay.agentCount()).toBe(1)
   expect(relay.prompts).toEqual(['Delegate the listing', 'List the files'])
   expect(sub?.parent_conversation_id).toBe((await stack.runtimeOf(chat)).agent_conversation_id)
-  expect(sub?.agent).toMatchObject({ acp_model: 'spyria/fake/fake-small', acp_thought_level: 'low' })
+  expect(sub?.agent).toMatchObject({ acp_model: 'spyria/mistral/mistral-small-latest', acp_thought_level: 'low' })
   expect(tokenOf(sub)).toStartWith('dl_')
-  expect(main()?.agent.acp_model).toBe('spyria/fake/fake-medium')
+  expect(main()?.agent.acp_model).toBe('spyria/mistral/mistral-medium-latest')
 
   const [delegation] = await delegationsOf(chat)
   expect(delegation).toMatchObject({
-    model: 'fake/fake-small',
+    model: 'mistral/mistral-small-latest',
     reason: 'classified small',
     policy: 'auto',
     status: 'finished',
@@ -109,8 +109,8 @@ test('a delegated task runs in a Pi sub-conversation on the classified model, it
   expect(seqs).toEqual(seqs.toSorted((first, second) => first - second))
   expect(stored[0]?.payload.delegation).toEqual({
     id: delegation?.id,
-    model: 'fake/fake-small',
-    modelName: 'Fake small',
+    model: 'mistral/mistral-small-latest',
+    modelName: 'Mistral Small',
     task: 'List the files',
   })
 
@@ -127,7 +127,7 @@ test('a delegated task runs in a Pi sub-conversation on the classified model, it
 
   for (const log of await gatewayLogsOf(gateway, `metadata_chat=${chat}&metadata_role=delegate`, 2))
     expect(log).toMatchObject({
-      model: 'fake-small',
+      model: 'mistral-small-latest',
       metadata: { role: 'delegate', delegation: delegation?.id, prompter: alice, owner: alice },
     })
   expect((await completionWith(host, tokenOf(sub))).status).toBe(401)
@@ -137,7 +137,7 @@ test('g-6. while the subagent runs, a viewer receives its text live tagged with 
   await fakeAgent()
   const chat = await newRuntimeChat()
   const work = { ...heldWork, steps: [{ command: 'echo started', say: 'Let me look.' }] }
-  setFakeLlmScript(delegatingScript({ subagents: { 'fake-small': work } }))
+  setFakeLlmScript(delegatingScript({ subagents: { 'mistral-small-latest': work } }))
   const viewer = await stack.openStream(chat)
   await viewer.subscribed
   const promptId = await prompt(chat, 'Delegate slowly')
@@ -171,7 +171,7 @@ test('g-6. while the subagent runs, a viewer receives its text live tagged with 
 test('the delegation token works only while its delegation runs and only from its runtime host, and the router refuses it and answers no active turn', async () => {
   const { host, main, subs } = await fakeAgent()
   const chat = await newRuntimeChat()
-  setFakeLlmScript(delegatingScript({ subagents: { 'fake-small': heldWork } }))
+  setFakeLlmScript(delegatingScript({ subagents: { 'mistral-small-latest': heldWork } }))
   const answered = promptAndAnswer(chat, 'Delegate slowly')
   await waitFor(() => subs().length === 1)
   const subToken = tokenOf(subs()[0])
@@ -202,18 +202,30 @@ test.each([
     policy: 'auto',
     route: 'fail',
     asked: undefined,
-    model: 'fake/fake-medium',
+    model: 'mistral/mistral-medium-latest',
     reason: 'routing unavailable: HTTP 500',
   },
   {
     policy: 'same_as_main',
     route: confidentSmall,
     asked: undefined,
-    model: 'fake/fake-medium',
+    model: 'mistral/mistral-medium-latest',
     reason: 'same as main',
   },
-  { policy: 'auto', route: confidentSmall, asked: 'fake-large', model: 'fake/fake-large', reason: 'asked' },
-  { policy: 'same_as_main', route: confidentSmall, asked: 'large', model: 'fake/fake-large', reason: 'asked' },
+  {
+    policy: 'auto',
+    route: confidentSmall,
+    asked: 'mistral-large-latest',
+    model: 'mistral/mistral-large-latest',
+    reason: 'asked',
+  },
+  {
+    policy: 'same_as_main',
+    route: confidentSmall,
+    asked: 'large',
+    model: 'mistral/mistral-large-latest',
+    reason: 'asked',
+  },
 ] as const)(
   'a model asked by the agent comes before the policy, then the classifier: $policy, route $route, asked $asked',
   async ({ policy, route, asked, model, reason }) => {
@@ -224,7 +236,11 @@ test.each([
     const step = { ...delegatedTask, arguments: { ...delegatedTask.arguments, model: asked } }
     const subagent = { steps: [{ command: 'echo sub' }], text: `Sub on ${model}.` }
     setFakeLlmScript(
-      delegatingScript({ steps: [step], delegateRoute: route, subagents: { [model.replace('fake/', '')]: subagent } }),
+      delegatingScript({
+        steps: [step],
+        delegateRoute: route,
+        subagents: { [model.replace('mistral/', '')]: subagent },
+      }),
     )
     await promptAndAnswer(chat, `Delegate with ${policy}`)
     expect(subs().map((sub) => sub.agent.acp_model)).toEqual([`spyria/${model}`])
@@ -243,7 +259,9 @@ test('g-4. a long task answers still running before Pi’s timeout for the route
   const { subs, main } = await fakeAgent()
   const chat = await newRuntimeChat()
   const awaitCall = { tool: 'await_task', arguments: { taskId: '$taskId' }, hold: 'resume' }
-  setFakeLlmScript(delegatingScript({ steps: [delegatedTask, awaitCall], subagents: { 'fake-small': heldWork } }))
+  setFakeLlmScript(
+    delegatingScript({ steps: [delegatedTask, awaitCall], subagents: { 'mistral-small-latest': heldWork } }),
+  )
   const startedAt = Date.now()
   const promptId = await prompt(chat, 'Delegate a long task')
   await holds.reached('resume')
@@ -291,7 +309,7 @@ test('g-4. a long task answers still running before Pi’s timeout for the route
 test('a long task the turn never resumed is forgotten and stopped when the turn ends, and its token is refused from then on', async () => {
   const { host, subs } = await fakeAgent()
   const chat = await newRuntimeChat()
-  setFakeLlmScript(delegatingScript({ subagents: { 'fake-small': heldWork } }))
+  setFakeLlmScript(delegatingScript({ subagents: { 'mistral-small-latest': heldWork } }))
   const promptId = await promptAndAnswer(chat, 'Delegate and move on')
   const [delegation] = await delegationsOf(chat)
   const id = String(delegation?.id)
@@ -318,7 +336,7 @@ test('a long task the turn never resumed is forgotten and stopped when the turn 
 test('stopping the turn interrupts the running subagent, marks its delegation stopped, and the next prompt runs', async () => {
   const { relay } = await fakeAgent()
   const chat = await newRuntimeChat()
-  setFakeLlmScript(delegatingScript({ subagents: { 'fake-small': heldWork } }))
+  setFakeLlmScript(delegatingScript({ subagents: { 'mistral-small-latest': heldWork } }))
   const promptId = await prompt(chat, 'Delegate then stop')
   await waitFor(async () => (await repliesTo(promptId)).length >= 2, 20_000)
   expect(await mutate(aliceInAcme, 'conversation.stopAgent', { workspaceId: acme, chatId: chat })).toEqual(succeeded)
@@ -337,7 +355,7 @@ test('a failed subagent answers the tool call with an error in Spyria wording an
   await fakeAgent()
   const chat = await newRuntimeChat()
   const failing = { steps: [{ command: 'echo sub' }, { fail: 'Overloaded' }] }
-  setFakeLlmScript(delegatingScript({ subagents: { 'fake-small': failing } }))
+  setFakeLlmScript(delegatingScript({ subagents: { 'mistral-small-latest': failing } }))
   const promptId = await promptAndAnswer(chat, 'Delegate a failing task')
 
   const [delegation] = await delegationsOf(chat)
@@ -345,7 +363,7 @@ test('a failed subagent answers the tool call with an error in Spyria wording an
   const replies = await repliesTo(promptId)
   const [delegateStep] = await stepsOf(promptId)
   expect(delegateStep).toMatchObject({ name: 'delegate', isError: true })
-  expect(delegateStep?.result).toStartWith(subagentFailureOf('Fake small', ''))
+  expect(delegateStep?.result).toStartWith(subagentFailureOf('Mistral Small', ''))
   expect(replies.at(-1)).toMatchObject({ kind: 'agent', body: 'Main done.' })
   expect(replies.filter((reply) => reply.kind === 'notice')).toEqual([])
   expect(
@@ -362,7 +380,7 @@ test('g-3. after a delegation, a model picked from the listing relaunches Pi on 
     .map((event) => event.payload as { event: { update: Record<string, unknown> }; delegation?: object })
     .filter((payload) => payload.event.update.sessionUpdate === 'session_started')
   expect(sessionsStarted.map((payload) => Boolean(payload.delegation))).toEqual([false, true])
-  const pick = { workspaceId: acme, chatId: chat, sessionModel: 'fake/fake-model' }
+  const pick = { workspaceId: acme, chatId: chat, sessionModel: 'mistral/codestral-latest' }
   expect(await mutate(aliceInAcme, 'conversation.updateChatRouting', pick)).toEqual(succeeded)
   setFakeLlmScript({ text: 'Picked.' })
   await promptAndAnswer(chat, 'What is the code word?')
@@ -370,11 +388,11 @@ test('g-3. after a delegation, a model picked from the listing relaunches Pi on 
   const mains = (relay.created as Launch[]).filter((launch) => !launch.parent_conversation_id)
   expect(mains).toHaveLength(2)
   expect(mains[1]?.agent).toMatchObject({
-    acp_model: 'spyria/fake/fake-model',
+    acp_model: 'spyria/mistral/codestral-latest',
     acp_resume_session_id: String(sessionsStarted[0]?.event.update.sessionId),
   })
   const request = stack.fakeLlmBodies.findLast((body) => body.includes('What is the code word?')) ?? ''
-  expect(request).toContain('"model":"fake-model"')
+  expect(request).toContain('"model":"codestral-latest"')
   const userMessages = (JSON.parse(request).messages as { role: string; content: string }[])
     .filter((message) => message.role === 'user')
     .map((message) => message.content)
