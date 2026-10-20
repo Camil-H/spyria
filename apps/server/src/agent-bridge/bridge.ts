@@ -1,3 +1,4 @@
+import { context, ROOT_CONTEXT, type Span, trace } from '@opentelemetry/api'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import {
   type AgentChat,
@@ -5,6 +6,7 @@ import {
   type AgentEvent,
   type AgentHost,
   type AgentLlm,
+  agentJobTypes,
   createAgentHandlers,
   type DelegatedFrame,
   isApprovalQuestion,
@@ -19,7 +21,7 @@ import {
 import type { Database } from '@spyria/db/postgres'
 import { schema } from '@spyria/db/zero'
 import { chatPermissionsOf, type Transact, type ZeroContext, zql } from '@spyria/db/zero-queries'
-import { can, chatId, type MemberId, type MessageId, workspaceId } from '@spyria/kernel'
+import { can, chatId, log, type MemberId, type MessageId, workspaceId } from '@spyria/kernel'
 import type { SandboxProvider } from '@spyria/runtime/server'
 import { upgradeWebSocket } from 'hono/bun'
 import type { WSContext } from 'hono/ws'
@@ -31,7 +33,7 @@ type StreamFrame = { type?: unknown; token?: unknown; chatId?: unknown }
 const readyTimeoutMilliseconds = 5000
 const readableRetryMilliseconds = 100
 const keyOf = (chat: AgentChat) => `${chat.workspaceId}/${chat.chatId}`
-const messageOf = (error: unknown) => (error instanceof Error ? error.message : 'an unknown error')
+const turnKeyOf = (workspace: string, promptId: string) => `${workspace}/${promptId}`
 
 export const createAgentBridge = ({
   sandboxProvider,
@@ -54,6 +56,40 @@ export const createAgentBridge = ({
   reopenDelayMilliseconds?: number
   repositoryCheckoutsOf?: (database: Database) => RepositoryCheckouts
 }) => {
+  const turnSpans = new Map<string, { span: Span; startedAt: number }>()
+  const turnContextOf = (workspace: string, promptId: string) => {
+    const turn = turnSpans.get(turnKeyOf(workspace, promptId))
+    return turn ? trace.setSpan(ROOT_CONTEXT, turn.span) : ROOT_CONTEXT
+  }
+  const inTurn = <Result>(workspace: string, promptId: string, work: () => Promise<Result>) => {
+    const key = turnKeyOf(workspace, promptId)
+    const turn = turnSpans.get(key) ?? {
+      span: trace
+        .getTracer('spyria')
+        .startSpan('chat.turn', { attributes: { 'workspace.id': workspace, 'turn.id': promptId } }),
+      startedAt: performance.now(),
+    }
+    turnSpans.set(key, turn)
+    return context.with(trace.setSpan(context.active(), turn.span), work)
+  }
+  const endTurn = (chat: AgentChat, promptId: string) => {
+    const turn = turnSpans.get(turnKeyOf(chat.workspaceId, promptId))
+    if (!turn) return
+    turnSpans.delete(turnKeyOf(chat.workspaceId, promptId))
+    context.with(trace.setSpan(ROOT_CONTEXT, turn.span), () =>
+      log.info({
+        event: 'agent.turn',
+        body: 'Agent turn ended',
+        attributes: {
+          'workspace.id': chat.workspaceId,
+          'chat.id': chat.chatId,
+          'turn.id': promptId,
+          duration_ms: Math.round(performance.now() - turn.startedAt),
+        },
+      }),
+    )
+    turn.span.end()
+  }
   const bridgeOf = (database: Database) => {
     const sockets = new Map<
       string,
@@ -110,6 +146,7 @@ export const createAgentBridge = ({
           for (const viewer of viewersOf(chat)) send(viewer, chat, frame)
         },
         stopStreaming: (chat, promptId) => {
+          endTurn(chat, promptId)
           delegatedTexts.delete(keyOf(chat))
           const socket = sockets.get(keyOf(chat))
           if (socket?.promptId === promptId)
@@ -124,7 +161,12 @@ export const createAgentBridge = ({
     })
     let isReleased = false
     const logFailure = (chat: AgentChat) => (error: unknown) =>
-      console.error(`Reopening the agent turn of chat ${chat.chatId} failed: ${messageOf(error)}`)
+      log.error({
+        event: 'agent.turn.reopen_failed',
+        body: 'Reopening an agent turn failed',
+        attributes: { 'workspace.id': chat.workspaceId, 'chat.id': chat.chatId },
+        error,
+      })
     const reopenLater = (chat: AgentChat) => setTimeout(() => void reopen(chat), reopenDelayMilliseconds)
     const reopen = async (chat: AgentChat) => {
       if (isReleased || sockets.has(keyOf(chat))) return
@@ -191,11 +233,17 @@ export const createAgentBridge = ({
             if (!recorded || chatSocket.promptId !== promptAtEvent) return
             chatSocket.promptId = recorded.promptId
             if (recorded.promptId !== null) return
+            if (promptAtEvent) endTurn(chat, promptAtEvent)
             chatSocket.streamedText = ''
             delegatedTexts.delete(keyOf(chat))
           })
           .catch((error) =>
-            console.error(`Recording an agent event of chat ${chat.chatId} failed: ${messageOf(error)}`),
+            log.error({
+              event: 'agent.event.record_failed',
+              body: 'Recording an agent event failed',
+              attributes: { 'workspace.id': chat.workspaceId, 'chat.id': chat.chatId },
+              error,
+            }),
           )
       }
       const flushSegment = (boundary: AgentEvent) => {
@@ -305,7 +353,13 @@ export const createAgentBridge = ({
         await reopen({ workspaceId: workspaceId(chat.workspaceId), chatId: chatId(chat.chatId) })
     }
     return {
-      jobs: handlers.jobs,
+      jobs: {
+        ...handlers.jobs,
+        [agentJobTypes.prompt]: (job: Parameters<(typeof handlers.jobs)[typeof agentJobTypes.prompt]>[0]) =>
+          inTurn(job.workspaceId, String((job.payload as { messageId?: unknown }).messageId), () =>
+            handlers.jobs[agentJobTypes.prompt](job),
+          ),
+      },
       ensureOpen,
       modelCallTurn: handlers.modelCallTurn,
       toolCallTurn: handlers.toolCallTurn,
@@ -384,6 +438,7 @@ export const createAgentBridge = ({
   }
   return {
     forDatabase,
+    turnContextOf,
     release: (database: Database) => {
       bridges.get(database)?.release()
       bridges.delete(database)
@@ -419,7 +474,7 @@ export const createAgentBridge = ({
             receiving = receiving
               .then(() => receive(JSON.parse(String(event.data)), viewer))
               .catch((error) => {
-                console.error(`An agent stream failed: ${messageOf(error)}`)
+                log.error({ event: 'agent.stream.failed', body: 'An agent stream failed', error })
                 viewer.close(1011, 'Internal error')
               })
           },

@@ -10,6 +10,7 @@ import {
 } from './acp.ts'
 import { checkOut, lastLinesOf, type Repository, runSetup, setupCommand } from './checkout.ts'
 import { connectPi } from './pi.ts'
+import { contextOf, log, withSpan } from './telemetry.ts'
 import { bundleOf, changesOf, commitOf, fileOf, mergeOf, pushedOf, statusOf, treeOf } from './workspace.ts'
 
 type Status = 'starting' | 'idle' | 'running' | 'finished' | 'error'
@@ -534,39 +535,71 @@ export const startAgent = ({
     error: conversation.failure,
   })
 
-  const prompt = (conversation: Conversation, body: { content?: { type?: string; text?: string }[] }) => {
+  const prompt = (
+    conversation: Conversation,
+    body: { content?: { type?: string; text?: string }[] },
+    traceHeaders: Record<string, unknown>,
+  ) => {
     if (!conversation.sessionId || conversation.status === 'error')
       return Response.json({ error: 'The conversation has no running session' }, { status: 409 })
+    const { sessionId } = conversation
     conversation.status = 'running'
     conversation.keptPlanning = false
-    void conversation.connection
-      .request('session/prompt', {
-        sessionId: conversation.sessionId,
-        prompt: (body.content ?? [])
-          .filter((block) => block.type === 'text')
-          .map(({ text }) => ({ type: 'text', text })),
+    const startedAt = performance.now()
+    const turnEnded = (stopReason: unknown) =>
+      log.info({
+        event: 'agent.turn',
+        body: 'Agent turn ended',
+        attributes: {
+          'conversation.id': conversation.id,
+          'agent.stop_reason': String(stopReason),
+          duration_ms: Math.round(performance.now() - startedAt),
+        },
       })
-      .then(
-        (result) => {
-          conversation.status = 'finished'
-          closeQuestions(conversation, 'turn_end')
-          emit(conversation, {
-            sessionUpdate: 'turn_end',
-            stopReason: result.stopReason,
-            ...(result.stopReason === 'cancelled' && conversation.keptPlanning && { keptPlanning: true }),
+    void withSpan(
+      'agent.turn',
+      { 'conversation.id': conversation.id },
+      () =>
+        conversation.connection
+          .request('session/prompt', {
+            sessionId,
+            prompt: (body.content ?? [])
+              .filter((block) => block.type === 'text')
+              .map(({ text }) => ({ type: 'text', text })),
           })
-          void reportWorkspace(conversation)
-        },
-        (error) => {
-          if (conversation.status !== 'error') {
-            conversation.status = 'finished'
-            emit(conversation, errorUpdateOf(error))
-          }
-          closeQuestions(conversation, 'turn_end')
-          emit(conversation, { sessionUpdate: 'turn_end', stopReason: 'error' })
-          void reportWorkspace(conversation)
-        },
-      )
+          .then(
+            (result) => {
+              turnEnded(result.stopReason)
+              conversation.status = 'finished'
+              closeQuestions(conversation, 'turn_end')
+              emit(conversation, {
+                sessionUpdate: 'turn_end',
+                stopReason: result.stopReason,
+                ...(result.stopReason === 'cancelled' && conversation.keptPlanning && { keptPlanning: true }),
+              })
+              void reportWorkspace(conversation)
+            },
+            (error) => {
+              log.warn({
+                event: 'agent.turn',
+                body: 'Agent turn failed',
+                attributes: {
+                  'conversation.id': conversation.id,
+                  duration_ms: Math.round(performance.now() - startedAt),
+                },
+                error,
+              })
+              if (conversation.status !== 'error') {
+                conversation.status = 'finished'
+                emit(conversation, errorUpdateOf(error))
+              }
+              closeQuestions(conversation, 'turn_end')
+              emit(conversation, { sessionUpdate: 'turn_end', stopReason: 'error' })
+              void reportWorkspace(conversation)
+            },
+          ),
+      contextOf(traceHeaders),
+    )
     return Response.json({})
   }
 
@@ -605,7 +638,11 @@ export const startAgent = ({
     if (method === 'DELETE' && !action) return remove(conversation)
     if (method !== 'POST') return Response.json({ error: 'Not found' }, { status: 404 })
     await conversation.started
-    if (action === 'events') return prompt(conversation, await request.json())
+    if (action === 'events')
+      return prompt(conversation, await request.json(), {
+        traceparent: request.headers.get('traceparent'),
+        tracestate: request.headers.get('tracestate'),
+      })
     if (action === 'interrupt') {
       if (conversation.sessionId)
         conversation.connection.notify('session/cancel', { sessionId: conversation.sessionId })

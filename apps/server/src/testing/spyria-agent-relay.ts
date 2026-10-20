@@ -15,6 +15,7 @@ export type HostFrame = {
   body?: string
   data?: string
   status?: number
+  traceparent?: string
 }
 export type Launch = {
   agent: { acp_command: string[]; acp_model?: string; acp_thought_level?: string; acp_resume_session_id?: string }
@@ -43,7 +44,7 @@ export type ModelCall = (request: {
 type Agent = { port: number; process: Bun.Subprocess<'ignore', 'pipe', 'inherit'> }
 
 const repositoryRoot = new URL('../../../../', import.meta.url).pathname
-const listening = /spyria-agent listening on port (\d+)/
+const listening = /"event.name":"agent.listening".*"server.port":(\d+)/
 const modelCallMilliseconds = 300_000
 const runningAgents = new Set<Bun.Subprocess>()
 export const stopAllSpyriaAgents = () => {
@@ -124,6 +125,7 @@ export const createSpyriaAgentRelay = ({
   const interrupts: string[] = []
   const socketPaths: string[] = []
 
+  const agentOutput: string[] = []
   let isStopped = false
   const startAgent = async (apiKey: string): Promise<Agent> => {
     if (isStopped) throw new Error('The spyria-agent relay was stopped')
@@ -146,7 +148,14 @@ export const createSpyriaAgentRelay = ({
     for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
       output += decoder.decode(chunk.value)
       const port = listening.exec(output)?.[1]
-      if (port) return { port: Number(port), process: child }
+      if (port) {
+        agentOutput.push(output)
+        void (async () => {
+          for (let next = await reader.read(); !next.done; next = await reader.read())
+            agentOutput.push(decoder.decode(next.value))
+        })()
+        return { port: Number(port), process: child }
+      }
     }
     throw new Error('spyria-agent exited before listening')
   }
@@ -162,7 +171,7 @@ export const createSpyriaAgentRelay = ({
   }
 
   const containerAgent = {
-    respond: async ({ method, path, headers, body }, container) => {
+    respond: async ({ method, path, headers, body, traceparent }, container) => {
       const { port } = await agentOf(container)
       const sent = method === 'POST' ? JSON.parse(body || '{}') : {}
       const launch = method === 'POST' && path === '/api/conversations' ? sent : undefined
@@ -176,7 +185,7 @@ export const createSpyriaAgentRelay = ({
       }
       const response = await fetch(`http://localhost:${port}${path}`, {
         method,
-        headers,
+        headers: { ...headers, ...(traceparent && { traceparent }) },
         body: launch ? JSON.stringify({ ...launch, workspace: { working_dir: workspaceOf(container.apiKey) } }) : body,
       })
       return { status: response.status, body: await response.text() }
@@ -227,6 +236,11 @@ export const createSpyriaAgentRelay = ({
     interrupts,
     socketPaths,
     agentCount: () => agents.size,
+    agentLogLines: () =>
+      agentOutput
+        .join('')
+        .split('\n')
+        .filter((line) => line.startsWith('{')),
     adapterLaunches: () => (existsSync(launches) ? readFileSync(launches, 'utf8').trim().split('\n') : []),
     restart: stopAgents,
     stopAgentsExcept,

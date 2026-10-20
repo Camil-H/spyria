@@ -1,3 +1,4 @@
+import { context, propagation } from '@opentelemetry/api'
 import type { ServerTransaction, Transaction } from '@rocicorp/zero'
 import { type HarnessId, type ListedModel, providersOfGatewayRefs, reachableModelsOf } from '@spyria/kernel'
 
@@ -102,6 +103,12 @@ export const appendWorkspaceEvent = (
     [event.workspaceId, crypto.randomUUID(), event.type, event.actorId, JSON.stringify(event.payload)],
   )
 
+const traceContextOf = (delayMilliseconds: number) => {
+  const carrier: Record<string, string> = {}
+  if (delayMilliseconds === 0) propagation.inject(context.active(), carrier)
+  return carrier
+}
+
 export const enqueueJob = (
   tx: Transaction,
   job: { workspaceId: string; type: string; payload: object; delayMilliseconds: number },
@@ -109,7 +116,13 @@ export const enqueueJob = (
   onServer(
     tx,
     `insert into jobs (workspace_id, id, type, payload, run_at, attempts, state) values ($1, $2, $3, $4::jsonb, now() + make_interval(secs => $5::double precision / 1000), 0, 'queued') on conflict do nothing`,
-    [job.workspaceId, crypto.randomUUID(), job.type, JSON.stringify(job.payload), job.delayMilliseconds],
+    [
+      job.workspaceId,
+      crypto.randomUUID(),
+      job.type,
+      JSON.stringify({ ...job.payload, ...traceContextOf(job.delayMilliseconds) }),
+      job.delayMilliseconds,
+    ],
   )
 
 const secretHashColumns = { claimCode: 'claim_code_hash', token: 'token_hash' }

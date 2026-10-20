@@ -22,6 +22,7 @@
     "generate-zero": "drizzle-zero generate --force --skip-builder -c drizzle-zero.config.ts -o src/zero.ts && biome format --write src/zero.ts"
   },
   "dependencies": {
+    "@opentelemetry/api": "1.9.1",
     "@spyria/kernel": "workspace:*",
     "@rocicorp/zero": "1.9.0",
     "drizzle-orm": "1.0.0-rc.4",

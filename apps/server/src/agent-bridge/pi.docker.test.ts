@@ -13,6 +13,8 @@ import { createApp } from '../app.ts'
 import { createModelCallRelay } from '../llm-relay.ts'
 import { createRuntimeHostGateway } from '../runtime-hosts/gateway.ts'
 import { readSpyriaAgentImage } from '../spyria-agent-image.ts'
+import { withSpan } from '../telemetry.ts'
+import { startTestTelemetry } from '../testing/telemetry.ts'
 import {
   acme,
   addLlmKey,
@@ -47,6 +49,7 @@ const prefix = `spyria-test-${crypto.randomUUID().slice(0, 8)}-`
 const stateDirectory = mkdtempSync(join(tmpdir(), 'spyria-test-host-'))
 const hostProgram = new URL('../../../host/src/main.ts', import.meta.url).pathname
 let hostProcess: ReturnType<typeof Bun.spawn> | undefined
+const hostOutput: string[] = []
 const listed = (...command: string[]) =>
   docker(...command, '--filter', `name=^${prefix}`)
     .stdout.toString()
@@ -75,11 +78,18 @@ const startHost = async () => {
     body: JSON.stringify({ personal: true }),
   })
   const { id, code } = (await added.json()) as { id: string; code: string }
-  hostProcess = Bun.spawn(['bun', hostProgram, '--personal', `http://localhost:${server.port}/h/${code}`], {
+  const spawned = Bun.spawn(['bun', hostProgram, '--personal', `http://localhost:${server.port}/h/${code}`], {
     env: { ...process.env, SPYRIA_HOST_STATE_DIR: stateDirectory, SPYRIA_HOST_PREFIX: prefix },
-    stdout: 'inherit',
+    stdout: 'pipe',
     stderr: 'inherit',
   })
+  hostProcess = spawned
+  void (async () => {
+    for await (const chunk of spawned.stdout) {
+      hostOutput.push(new TextDecoder().decode(chunk))
+      process.stdout.write(chunk)
+    }
+  })()
   await waitFor(
     async () => (await database.$client`select status from runtime_hosts where id = ${id}`)[0]?.status === 'online',
     30_000,
@@ -399,4 +409,53 @@ test("Pi in Spyria's image runs a command with its output, asks through Spyria's
     { sessionUpdate: 'turn_end', stopReason: 'end_turn' },
   ])
   pi.close()
+})
+
+test('a turn through a real spyria-host and spyria-agent carries the server’s trace into their JSON lines', async () => {
+  await addLlmKey(bob, 'Fake')
+  setFakeLlmScript(undefined)
+  const { id, transport } = await runtime()
+  const { token, promptId } = await runtimeTurn({ id }, bob)
+  const telemetry = startTestTelemetry({})
+  const linesOf = (text: string) =>
+    text
+      .split('\n')
+      .filter((line) => line.startsWith('{'))
+      .map((line) => JSON.parse(line))
+  try {
+    const traceId = await withSpan('test turn', {}, async (span) => {
+      await runtimeHosts.sandboxProvider.status({ workspaceId: acme, hostId: runtimeHostId(id), runtimeId: 'pi-smoke' })
+      const pi = await piConversationOf(transport, token, {
+        adapterModel: 'spyria/fake/fake-medium',
+        pi: {
+          models: [{ id: 'fake/fake-medium', name: 'Fake medium', reasoning: false }],
+          compactionModel: 'fake/fake-medium',
+        },
+      })
+      expect(await pi.answerOf('Hello traced Pi')).toBe('Understood, working on it.')
+      pi.close()
+      return span.spanContext().traceId
+    })
+    await waitFor(() =>
+      linesOf(hostOutput.join('')).some((line) => line['event.name'] === 'host.command' && line.trace_id === traceId),
+    )
+    expect(linesOf(hostOutput.join('')).find((line) => line.trace_id === traceId)).toMatchObject({
+      'service.name': 'spyria-host',
+      'event.name': 'host.command',
+      'host.command': 'status',
+    })
+    const agentLines = () => linesOf(docker('logs', `${prefix}rt-pi-smoke`).stdout.toString())
+    await waitFor(() => agentLines().some((line) => line['event.name'] === 'agent.turn' && line.trace_id === traceId))
+    expect(agentLines().find((line) => line['event.name'] === 'agent.listening')).toMatchObject({
+      'service.name': 'spyria-agent',
+    })
+    expect(telemetry.lines().find((line) => line.event === 'gen_ai.call')).toMatchObject({
+      'service.name': 'spyria-server',
+      'turn.id': promptId,
+      'gen_ai.request.model': 'fake/fake-medium',
+      'http.response.status_code': 200,
+    })
+  } finally {
+    await telemetry.stop()
+  }
 })

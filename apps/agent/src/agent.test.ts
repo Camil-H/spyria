@@ -217,12 +217,12 @@ test('a subscription launch gets no gateway URL and no key, spyria-agent never l
   })
   const reader = child.stdout.getReader()
   let output = ''
-  while (!/port (\d+)/.test(output)) {
+  while (!/"server.port":(\d+)/.test(output)) {
     const { value, done } = await reader.read()
     if (done) throw new Error(`spyria-agent did not start: ${output}`)
     output += new TextDecoder().decode(value)
   }
-  const { open, create, prompt } = clientOf(Number(/port (\d+)/.exec(output)?.[1]))
+  const { open, create, prompt } = clientOf(Number(/"server.port":(\d+)/.exec(output)?.[1]))
   try {
     const envOf = async (launch: object) => {
       const id = await create(launch)
@@ -252,7 +252,7 @@ test('a subscription launch gets no gateway URL and no key, spyria-agent never l
   for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read())
     output += new TextDecoder().decode(chunk.value)
   const logs = output + (await new Response(child.stderr).text())
-  expect(logs).toContain('spyria-agent listening')
+  expect(logs).toContain('"event.name":"agent.listening"')
   for (const value of secretValues) expect(logs).not.toContain(value)
   const gitEnvironment = readFileSync(gitEnvironmentPath, 'utf8')
   rmSync(fakeGitDirectory, { recursive: true, force: true })

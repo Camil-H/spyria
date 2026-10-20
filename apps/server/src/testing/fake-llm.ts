@@ -238,6 +238,8 @@ const listedModelIds = [
   'anthropic/claude-haiku-5.5',
   'moonshotai/kimi-k3',
 ]
+export const fakeAgentLlm = { model: 'openai/fake/fake-model' }
+
 export const fakeRoutableModels: RoutableModel[] = [
   { id: 'fake/fake-large', name: 'Fake large', tier: 'large' },
   { id: 'fake/fake-medium', name: 'Fake medium', tier: 'medium' },

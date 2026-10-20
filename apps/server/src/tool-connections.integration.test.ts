@@ -1,9 +1,10 @@
 import { afterAll, afterEach, beforeEach, expect, setDefaultTimeout, test } from 'bun:test'
 import { websocket } from 'hono/bun'
 import { createAgentBridge } from './agent-bridge/bridge.ts'
-import { createApp, defaultLlm } from './app.ts'
+import { createApp } from './app.ts'
 import { createModelCallRelay } from './llm-relay.ts'
 import { createRuntimeHostGateway } from './runtime-hosts/gateway.ts'
+import { fakeAgentLlm } from './testing/fake-llm.ts'
 import { sharedToolServer } from './testing/fake-mcp.ts'
 import {
   acme,
@@ -204,7 +205,7 @@ test('session headers pass through, gateway failures become error results instea
       agentBridge: () => agentBridge,
     }),
   })
-  const agentBridge = createAgentBridge({ sandboxProvider: runtimeHosts.sandboxProvider, llm: defaultLlm })
+  const agentBridge = createAgentBridge({ sandboxProvider: runtimeHosts.sandboxProvider, llm: fakeAgentLlm })
   const stubbedApp = createApp({ database, ...testAuthSettings, llmGateway, runtimeHosts, agentBridge })
   const server = Bun.serve({ port: 0, fetch: stubbedApp.fetch, websocket })
   const hosts = createFakeHosts({ port: Number(server.port), database })

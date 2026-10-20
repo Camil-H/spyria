@@ -18,11 +18,12 @@ import {
 } from '@spyria/conversation/server'
 import type { Database } from '@spyria/db/postgres'
 import { schema } from '@spyria/db/zero'
-import { type MemberId, toolNamePartsOf } from '@spyria/kernel'
+import { log, type MemberId, toolNamePartsOf } from '@spyria/kernel'
 import { type createLlmGateway, createMemberKeyReader, createToolCallOwnerAccess } from '@spyria/profile/server'
 import type { ConnectedHost } from '@spyria/runtime/server'
 import { createBudgetGuard } from '@spyria/usage/server'
 import type { AgentBridge } from './agent-bridge/bridge.ts'
+import { traceHeadersOf, withSpan } from './telemetry.ts'
 
 export type RelayFrame = { sid?: unknown; method?: unknown; path?: unknown; headers?: unknown; body?: unknown }
 type Send = (frame: object) => void
@@ -73,6 +74,25 @@ const relayPathOf = (path: string) => {
 }
 const modelOf = (body: string) => (jsonOf(body) as { model?: unknown } | undefined)?.model?.toString()
 const anthropicPathPrefix = '/v1/messages'
+const usagePatterns = {
+  'gen_ai.usage.input_tokens': /"(?:input_tokens|prompt_tokens)"\s*:\s*(\d+)/g,
+  'gen_ai.usage.output_tokens': /"(?:output_tokens|completion_tokens)"\s*:\s*(\d+)/g,
+}
+
+export const createUsageReader = () => {
+  let window = ''
+  const usage: Record<string, number> = {}
+  return {
+    usage,
+    read: (text: string) => {
+      window = (window + text).slice(-4096)
+      for (const [name, pattern] of Object.entries(usagePatterns)) {
+        const last = [...window.matchAll(pattern)].at(-1)
+        if (last) usage[name] = Number(last[1])
+      }
+    },
+  }
+}
 
 export const createModelCallRelay = ({
   llmGateway,
@@ -103,6 +123,13 @@ export const createModelCallRelay = ({
   }
   return async (database: Database, host: ConnectedHost, frame: RelayFrame, send: Send, signal: AbortSignal) => {
     const sid = frame.sid
+    const logToolCallFailure = (chatId: string, error: unknown) =>
+      log.error({
+        event: 'tool_call.record_failed',
+        body: 'Recording a tool call failed',
+        attributes: { 'workspace.id': host.workspaceId, 'chat.id': chatId },
+        error,
+      })
     const answer = (status: number, body: unknown, headers: Record<string, string> = {}) => {
       send({ type: 'gw_head', sid, status, headers: { 'content-type': 'application/json', ...headers } })
       if (body !== undefined) send({ type: 'gw_chunk', sid, data: JSON.stringify(body) })
@@ -110,7 +137,11 @@ export const createModelCallRelay = ({
     }
     const answerRpc = (id: unknown, outcome: object, headers?: Record<string, string>) =>
       answer(200, { jsonrpc: '2.0', id, ...outcome }, headers)
-    const stream = async (response: Response, failedText?: (text: string) => Promise<unknown>) => {
+    const stream = async (
+      response: Response,
+      failedText?: (text: string) => Promise<unknown>,
+      read?: (text: string) => void,
+    ) => {
       send({ type: 'gw_head', sid, status: response.status, headers: picked(response.headers, answeredHeaders) })
       try {
         if (failedText) {
@@ -119,8 +150,11 @@ export const createModelCallRelay = ({
           send({ type: 'gw_chunk', sid, data: text })
         } else {
           const decoder = new TextDecoder()
-          for await (const chunk of response.body ?? [])
-            send({ type: 'gw_chunk', sid, data: decoder.decode(chunk, { stream: true }) })
+          for await (const chunk of response.body ?? []) {
+            const data = decoder.decode(chunk, { stream: true })
+            read?.(data)
+            send({ type: 'gw_chunk', sid, data })
+          }
         }
         send({ type: 'gw_end', sid })
       } catch {
@@ -188,7 +222,7 @@ export const createModelCallRelay = ({
             status: isRefused ? 'refused' : 'succeeded',
             calledAt,
           })
-          .catch(() => console.error(`Recording a tool call of chat ${runtime.chat.chatId} failed`))
+          .catch((error) => logToolCallFailure(runtime.chat.chatId, error))
         return reply({ content: [{ type: 'text', text }], isError: isRefused })
       }
       if (!turn) return answerRpc(rpc.id, toolErrorOf('This runtime has no active turn'))
@@ -310,60 +344,101 @@ export const createModelCallRelay = ({
               tool,
               ...call,
             })
-            .catch(() => console.error(`Recording a tool call of chat ${turn.chat.chatId} failed`))
+            .catch((error) => logToolCallFailure(turn.chat.chatId, error))
       }
     }
 
     const turn = token ? await handlers.modelCallTurn(host, token) : undefined
     if (!turn) return answer(401, refusalOf('This runtime has no active turn'))
-    const record = (failure: ModelCallFailure) =>
-      handlers.recordModelCallFailure({ ...turn, model: modelOf(body), failure })
-    const usedUpBudget = isTokenCount ? null : await usedUpBudgetOf(host.workspaceId, turn.prompterId)
-    if (usedUpBudget) return answer(402, refusalOf(await record({ reached: 'over_budget', budget: usedUpBudget })))
-    const virtualKey = await keyOf(host.workspaceId, turn.prompterId).catch(() => null)
-    if (virtualKey === null) {
-      await record({ reached: 'unreachable' })
-      return answer(502, unreachable)
+    const model = modelOf(body)
+    const startedAt = performance.now()
+    const usageReader = createUsageReader()
+    const callAttributes = {
+      'gen_ai.operation.name': 'chat',
+      'gen_ai.provider.name': isAnthropicPath ? 'anthropic' : model?.split('/')[0],
+      'gen_ai.request.model': model,
+      'workspace.id': host.workspaceId,
+      'chat.id': turn.chat.chatId,
+      'turn.id': turn.promptId,
     }
-    if (!virtualKey) return answer(401, refusalOf(await record({ reached: 'refused' })))
-    const headTimeout = new AbortController()
-    const timer = setTimeout(() => headTimeout.abort(), headTimeoutMilliseconds)
-    let response: Response
-    try {
-      response = await gatewayCall(
-        {
-          ...picked(headers, forwardedHeaders),
-          authorization: `Bearer ${virtualKey}`,
-          'x-bf-dim-chat': turn.chat.chatId,
-          'x-bf-dim-prompter': turn.prompterId,
-          'x-bf-dim-owner': turn.ownerId ?? '',
-          'x-bf-dim-workspace': host.workspaceId,
-          'x-bf-dim-turn': turn.promptId,
-          'x-bf-dim-session': turn.sessionId ?? '',
-          'x-bf-mcp-include-clients': '',
-          ...(turn.delegationId && { 'x-bf-dim-role': 'delegate', 'x-bf-dim-delegation': turn.delegationId }),
-          ...providerHeadersOf?.(database, turn.chat),
-        },
-        headTimeout.signal,
-      )
-    } catch {
-      if (signal.aborted) return
-      if (!isTokenCount) await record({ reached: headTimeout.signal.aborted ? 'timeout' : 'unreachable' })
-      return answer(502, unreachable)
-    } finally {
-      clearTimeout(timer)
+    const answered = (status: number, answerBody: unknown) => {
+      answer(status, answerBody)
+      return { status }
     }
-    return stream(
-      response,
-      response.ok || isTokenCount
-        ? undefined
-        : async (text) => {
-            const notice = await record({ reached: 'answered', status: response.status, body: jsonOf(text) })
-            if (notice === genericModelCallNoticeOf(response.status))
-              console.error(
-                `A model call failed with ${response.status} (gateway request ${response.headers.get('x-request-id')})`,
-              )
+    const relayed = async (): Promise<{ status?: number; isUnexplained?: boolean; gatewayRequestId?: string }> => {
+      const record = (failure: ModelCallFailure) => handlers.recordModelCallFailure({ ...turn, model, failure })
+      const usedUpBudget = isTokenCount ? null : await usedUpBudgetOf(host.workspaceId, turn.prompterId)
+      if (usedUpBudget) return answered(402, refusalOf(await record({ reached: 'over_budget', budget: usedUpBudget })))
+      const virtualKey = await keyOf(host.workspaceId, turn.prompterId).catch(() => null)
+      if (virtualKey === null) {
+        await record({ reached: 'unreachable' })
+        return answered(502, unreachable)
+      }
+      if (!virtualKey) return answered(401, refusalOf(await record({ reached: 'refused' })))
+      const headTimeout = new AbortController()
+      const timer = setTimeout(() => headTimeout.abort(), headTimeoutMilliseconds)
+      let response: Response
+      try {
+        response = await gatewayCall(
+          {
+            ...picked(headers, forwardedHeaders),
+            ...traceHeadersOf(),
+            authorization: `Bearer ${virtualKey}`,
+            'x-bf-dim-chat': turn.chat.chatId,
+            'x-bf-dim-prompter': turn.prompterId,
+            'x-bf-dim-owner': turn.ownerId ?? '',
+            'x-bf-dim-workspace': host.workspaceId,
+            'x-bf-dim-turn': turn.promptId,
+            'x-bf-dim-session': turn.sessionId ?? '',
+            'x-bf-mcp-include-clients': '',
+            ...(turn.delegationId && { 'x-bf-dim-role': 'delegate', 'x-bf-dim-delegation': turn.delegationId }),
+            ...providerHeadersOf?.(database, turn.chat),
           },
+          headTimeout.signal,
+        )
+      } catch {
+        if (signal.aborted) return {}
+        if (!isTokenCount) await record({ reached: headTimeout.signal.aborted ? 'timeout' : 'unreachable' })
+        return answered(502, unreachable)
+      } finally {
+        clearTimeout(timer)
+      }
+      let isUnexplained = false
+      await stream(
+        response,
+        response.ok || isTokenCount
+          ? undefined
+          : async (text) => {
+              const notice = await record({ reached: 'answered', status: response.status, body: jsonOf(text) })
+              isUnexplained = notice === genericModelCallNoticeOf(response.status)
+            },
+        usageReader.read,
+      )
+      return {
+        status: response.status,
+        isUnexplained,
+        gatewayRequestId: response.headers.get('x-request-id') ?? undefined,
+      }
+    }
+    return withSpan(
+      `chat ${model ?? 'unknown'}`,
+      callAttributes,
+      async (span) => {
+        const { status, isUnexplained, gatewayRequestId } = await relayed()
+        const attributes = {
+          ...callAttributes,
+          ...usageReader.usage,
+          'http.response.status_code': status,
+          'gateway.request.id': gatewayRequestId,
+        }
+        span.setAttributes(Object.fromEntries(Object.entries(attributes).filter(([, value]) => value !== undefined)))
+        log[isUnexplained ? 'error' : status === undefined || status < 400 ? 'info' : 'warn']({
+          event: 'gen_ai.call',
+          body: isUnexplained ? 'A model call failed without a known cause' : 'Model call relayed',
+          attributes: { ...attributes, duration_ms: Math.round(performance.now() - startedAt) },
+        })
+      },
+      agentBridge().turnContextOf(host.workspaceId, turn.promptId),
     )
   }
 }

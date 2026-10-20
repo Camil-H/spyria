@@ -14,6 +14,7 @@ import { createModelCallRelay } from './llm-relay.ts'
 import { productionProblemsOf } from './production.ts'
 import { createRuntimeHostGateway } from './runtime-hosts/gateway.ts'
 import { readSpyriaAgentImage } from './spyria-agent-image.ts'
+import { startTelemetry } from './telemetry.ts'
 
 const productionProblems = productionProblemsOf(process.env)
 if (productionProblems.length > 0) {
@@ -27,6 +28,7 @@ const requiredEnvironment = (name: string) => {
   return value
 }
 
+const telemetry = startTelemetry()
 const shutdownMilliseconds = 10_000
 const authModes = ['dex', 'sso'] as const
 const authMode = authModes.find((mode) => mode === (process.env.SPYRIA_AUTH_MODE ?? 'dex'))
@@ -95,6 +97,7 @@ const shutDown = async () => {
   await runtimeHosts.close()
   await server.stop(true)
   await database.$client.end({ timeout: 5 })
+  await telemetry.shutdown()
   process.exit(0)
 }
 process.once('SIGTERM', shutDown)

@@ -1,4 +1,4 @@
-import { modelNameOf, withPricesOf } from '@spyria/kernel'
+import { log, modelNameOf, withPricesOf } from '@spyria/kernel'
 import type { AgentChat, AgentConversation } from '../contracts/agent.ts'
 import type { ModelCallTurn } from '../contracts/repositories.ts'
 import { executionStatusOf, isStoredAgentEvent, streamedTextOf, toolCallIdOf } from '../domain/agent-events.ts'
@@ -102,7 +102,14 @@ const runSubConversation = (
           recording = recording
             .then(() => recordAgentEvent({ transactor }, { ...chat, event, delegation }))
             .then(() => runtimes.touch(chat))
-            .catch((error) => console.error(`Recording a subagent event of chat ${chat.chatId} failed: ${error}`))
+            .catch((error) =>
+              log.error({
+                event: 'delegation.event.record_failed',
+                body: 'Recording a subagent event failed',
+                attributes: { 'workspace.id': chat.workspaceId, 'chat.id': chat.chatId },
+                error,
+              }),
+            )
         const status = executionStatusOf(event)
         if (status) finish(status)
       },

@@ -1,5 +1,5 @@
 import type { Job, Transact } from '@spyria/db/zero-queries'
-import { chatId, type MemberId, type MessageId, memberId, messageId, type WorkspaceId } from '@spyria/kernel'
+import { chatId, log, type MemberId, type MessageId, memberId, messageId, type WorkspaceId } from '@spyria/kernel'
 import { z } from 'zod/mini'
 import type {
   AgentChat,
@@ -121,7 +121,12 @@ export const createAgentHandlers = ({
       await runtimes.touch(chat)
       if ((event.update as { sessionUpdate?: string } | undefined)?.sessionUpdate === 'turn_end')
         void snapshotWorkspace(dependenciesOf(chat.workspaceId), chat).catch((error) =>
-          console.error(`Keeping the workspace snapshot of chat ${chat.chatId} failed: ${error}`),
+          log.error({
+            event: 'workspace_snapshot.failed',
+            body: 'Keeping the workspace snapshot failed',
+            attributes: { 'workspace.id': chat.workspaceId, 'chat.id': chat.chatId },
+            error,
+          }),
         )
       return recorded
     },

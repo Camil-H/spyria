@@ -1,4 +1,4 @@
-import type { MemberId, WorkspaceId } from '@spyria/kernel'
+import { log, type MemberId, type WorkspaceId } from '@spyria/kernel'
 import type { GatewaySyncJob, LlmGateway, ToolGateway } from '../contracts/repositories.ts'
 import type { ProfileTransactor } from '../contracts/transactor.ts'
 import type { GatewayKey, LlmCredential } from '../domain/llm-credential.ts'
@@ -27,7 +27,12 @@ export const syncMemberGatewayKey = (
     const { workspaceId, memberId } = member
     const grantTools = () =>
       grantMemberTools({ transactor, gateway }, member).catch((error) =>
-        console.error(`Granting the workspace tools of member ${memberId} failed: ${error}`),
+        log.error({
+          event: 'member_tools.grant_failed',
+          body: 'Granting the workspace tools of a member failed',
+          attributes: { 'workspace.id': workspaceId, 'member.id': memberId },
+          error,
+        }),
       )
     const { keys, virtualKeyId } = await transactor.run(async ({ llmCredentials, memberGatewayKeys }) => ({
       keys: await llmCredentials.gatewayKeysOf(workspaceId, memberId),

@@ -10,6 +10,7 @@ export type {
 export type { ToolCallDecision } from './contracts/repositories.ts'
 export {
   type AgentEvent,
+  agentJobTypes,
   isApprovalQuestion,
   isAuthRequiredError,
   isStoredAgentEvent,

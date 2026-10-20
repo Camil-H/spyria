@@ -1,5 +1,6 @@
 import { Refused, relayUrlOf } from './commands.ts'
 import { isAllowedOnPersonalHost, redacted } from './personal.ts'
+import { contextOf, traceHeadersOf, withSpan } from './telemetry.ts'
 
 type Frame = { type: string; sid?: unknown; [field: string]: unknown }
 type Stream = { socket: WebSocket; queue: string[] | null }
@@ -39,11 +40,18 @@ export const createRelay = ({
     return relayUrlOf(await addressOf(String(frame.runtimeId)), String(frame.path))
   }
   const forwarded = (text: string) => (personal ? redacted(text, personal.secrets()) : text)
-  const relayHttp = async (sid: number, frame: Frame) => {
+  const relayHttp = (sid: number, frame: Frame) =>
+    withSpan(
+      `host http ${String(frame.method)}`,
+      { 'http.request.method': String(frame.method) },
+      () => relayHttpInSpan(sid, frame),
+      contextOf(frame),
+    )
+  const relayHttpInSpan = async (sid: number, frame: Frame) => {
     try {
       const response = await fetch(await urlOf(frame, String(frame.method)), {
         method: String(frame.method),
-        headers: frame.headers as Record<string, string> | undefined,
+        headers: { ...(frame.headers as Record<string, string> | undefined), ...traceHeadersOf() },
         body: typeof frame.body === 'string' ? frame.body : undefined,
         redirect: 'manual',
         signal: AbortSignal.timeout(timeoutOf(frame.timeoutMilliseconds)),

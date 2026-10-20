@@ -18,8 +18,11 @@ import {
   type ChatId,
   type ChatPermission,
   chatId,
+  type LogEvent,
+  type LogSeverity,
   type MemberId,
   memberId,
+  setLogOutput,
   type WorkspaceId,
   workspaceId,
 } from '@spyria/kernel'
@@ -36,7 +39,7 @@ import { createGitHubCheckouts, type GitHubDependencies } from '../github/github
 import { startJobWorker } from '../job-worker.ts'
 import { createModelCallRelay } from '../llm-relay.ts'
 import { createRuntimeHostGateway } from '../runtime-hosts/gateway.ts'
-import { createFakeLlm, type FakeLlmScript, fakeRoutableModels } from './fake-llm.ts'
+import { createFakeLlm, type FakeLlmScript, fakeAgentLlm, fakeRoutableModels } from './fake-llm.ts'
 import { createFakeMcp, sharedToolServer } from './fake-mcp.ts'
 import {
   type ContainerAgent,
@@ -190,7 +193,15 @@ const startSharedTestApp = async () => {
   const llmGateway = llmGatewayAt(`http://127.0.0.1:${integrationGatewayPort}`)
   setModelDirectory(llmGateway.listedModels)
   addRoutableModels(fakeRoutableModels)
-  const app = createApp({ database, ...testAuthSettings, llmGateway }).route('/fake-llm', fakeLlm)
+  const runtimeHosts = createRuntimeHostGateway({
+    databases: () => [database],
+    relayModelCall: createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),
+  })
+  const agentBridge = createAgentBridge({ sandboxProvider: runtimeHosts.sandboxProvider, llm: fakeAgentLlm })
+  const app = createApp({ database, ...testAuthSettings, llmGateway, runtimeHosts, agentBridge }).route(
+    '/fake-llm',
+    fakeLlm,
+  )
   const server = Bun.serve({ port: integrationAppPort, fetch: app.fetch, websocket })
   const fakeMcp = createFakeMcp()
   const fakeMcpServer = Bun.serve({ port: integrationFakeMcpPort, fetch: fakeMcp.fetch })
@@ -337,6 +348,12 @@ export const captureConsole = () => {
       for (const spy of spies) spy.mockRestore()
     },
   }
+}
+
+export const captureLogs = () => {
+  const events: (LogEvent & { severity: LogSeverity })[] = []
+  setLogOutput((severity, logEvent) => events.push({ severity, ...logEvent }))
+  return { events, restore: () => setLogOutput(undefined) }
 }
 
 export const everyStoredText = async (database: Database) => {
@@ -532,6 +549,7 @@ export const startAgentStack = async ({
   spyriaAgentImage = testSpyriaAgentImage,
   promptsWaitingAfterHello = false,
   github,
+  gatewayUrlOf,
 }: {
   routing?: boolean
   llm?: Parameters<typeof createAgentBridge>[0]['llm']
@@ -541,13 +559,16 @@ export const startAgentStack = async ({
   spyriaAgentImage?: string
   promptsWaitingAfterHello?: boolean
   github?: GitHubDependencies
+  gatewayUrlOf?: () => string
 } = {}) => {
   const testApp = await openSharedTestApp()
   const { database, llmGateway } = testApp
   const runtimeHosts = createRuntimeHostGateway({
     databases: () => [database],
     spyriaAgentImage,
-    relayModelCall: routing ? createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }) : undefined,
+    relayModelCall: routing
+      ? createModelCallRelay({ llmGateway, gatewayUrlOf, agentBridge: () => agentBridge })
+      : undefined,
     afterHello: promptsWaitingAfterHello
       ? (helloDatabase, host) => agentBridge.forDatabase(helloDatabase).resumeHost(host)
       : undefined,

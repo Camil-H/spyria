@@ -1,7 +1,7 @@
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import type { Database } from '@spyria/db/postgres'
 import { schema } from '@spyria/db/zero'
-import type { RuntimeHostId, WorkspaceId } from '@spyria/kernel'
+import { log, type RuntimeHostId, type WorkspaceId } from '@spyria/kernel'
 import {
   type ConnectedHost,
   createHostSessionHandlers,
@@ -17,6 +17,7 @@ import {
 import { upgradeWebSocket } from 'hono/bun'
 import type { WSContext } from 'hono/ws'
 import type { ModelCallRelay, RelayFrame } from '../llm-relay.ts'
+import { traceHeadersOf } from '../telemetry.ts'
 
 type Frame = { type?: unknown; id?: unknown; sid?: unknown; [field: string]: unknown }
 type HostSessionHandlers = ReturnType<typeof createHostSessionHandlers>
@@ -43,8 +44,7 @@ const installTimeoutMilliseconds = 240_000
 const identifyTimeoutMilliseconds = 10_000
 const defaultGatewayRelayUrl = 'http://spyria-gateway-relay:4000/v1'
 
-const errorNameOf = (error: unknown) => (error instanceof Error ? error.name : 'an unknown error')
-const errorMessageOf = (error: unknown) => (error instanceof Error ? error.message : 'an unknown error')
+const hostAttributesOf = (host: ConnectedHost) => ({ 'workspace.id': host.workspaceId, 'runtime_host.id': host.hostId })
 const frameOf = (text: string): Frame => {
   try {
     return JSON.parse(text)
@@ -106,7 +106,12 @@ export const createRuntimeHostGateway = ({
     if (!identified || connectionByHost.get(keyOf(identified.host)) !== connection) return
     connectionByHost.delete(keyOf(identified.host))
     inOrder(identified.token, () => identified.handlers.offline(identified.host)).catch((error) =>
-      console.error(`Marking runtime host ${identified.host.hostId} offline failed with ${errorNameOf(error)}`),
+      log.error({
+        event: 'runtime_host.offline_failed',
+        body: 'Marking a runtime host offline failed',
+        attributes: hostAttributesOf(identified.host),
+        error,
+      }),
     )
   }
 
@@ -138,15 +143,17 @@ export const createRuntimeHostGateway = ({
     )
     if (connection.identified) connection.identified.database = database
     connection.identifying.resolve()
+    const logFailure = (event: string, body: string) => (error: unknown) =>
+      log.error({ event, body, attributes: hostAttributesOf(host), error })
     if (spyriaAgentImage)
-      prepare(host, spyriaAgentImage).catch((error) =>
-        console.error(`Preparing runtime host ${host.hostId} failed: ${errorMessageOf(error)}`),
+      prepare(host, spyriaAgentImage).catch(
+        logFailure('runtime_host.prepare_failed', 'Preparing a runtime host failed'),
       )
     handlers
       .reconcile(host, sandboxProvider)
-      .catch((error) => console.error(`Reconciling runtime host ${host.hostId} failed: ${errorMessageOf(error)}`))
+      .catch(logFailure('runtime_host.reconcile_failed', 'Reconciling a runtime host failed'))
       .then(() => afterHello?.(database, host))
-      .catch((error) => console.error(`Resuming prompts on host ${host.hostId} failed: ${errorMessageOf(error)}`))
+      .catch(logFailure('runtime_host.resume_failed', 'Resuming prompts on a runtime host failed'))
   }
 
   const relayModelCallOf = (connection: Connection, frame: Frame) => {
@@ -164,7 +171,12 @@ export const createRuntimeHostGateway = ({
       call.signal,
     )
       .catch((error) => {
-        console.error(`A model call through host ${identified.host.hostId} failed with ${errorNameOf(error)}`)
+        log.error({
+          event: 'gen_ai.call.failed',
+          body: 'A model call through a runtime host failed',
+          attributes: hostAttributesOf(identified.host),
+          error,
+        })
         sendTo(connection, { type: 'gw_error', sid })
       })
       .finally(() => modelCalls.delete(sid))
@@ -230,7 +242,7 @@ export const createRuntimeHostGateway = ({
       onMessage: (event, socket) =>
         receive(connection, String(event.data)).catch((error) => {
           if (error instanceof HostRefused) return socket.close(refusedCloseCode, error.message)
-          console.error(`A runtime host connection failed with ${errorNameOf(error)}`)
+          log.error({ event: 'runtime_host.connection_failed', body: 'A runtime host connection failed', error })
           socket.close(1011, 'Internal error')
         }),
       onClose: () => {
@@ -260,7 +272,7 @@ export const createRuntimeHostGateway = ({
       timeoutMilliseconds,
     )
     connection.pending.set(id, response)
-    sendTo(connection, { ...frame, id, sid: id, runtimeId: target.runtimeId })
+    sendTo(connection, { ...frame, id, sid: id, runtimeId: target.runtimeId, ...traceHeadersOf() })
     return response.promise.finally(() => {
       clearTimeout(timer)
       connection.pending.delete(id)

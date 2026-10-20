@@ -16,6 +16,7 @@ import {
 } from './personal.ts'
 import { createRelay, messageOf } from './relay.ts'
 import { freeMemoryBytes, systemOf } from './system.ts'
+import { contextOf, log, startTelemetry, withSpan } from './telemetry.ts'
 
 const givenArguments = process.argv.slice(2)
 const isPersonal = givenArguments.includes('--personal')
@@ -48,6 +49,7 @@ if (!claimUrlArgument) {
   )
   process.exit(2)
 }
+const telemetry = startTelemetry()
 const claimUrl = new URL(claimUrlArgument)
 const claimCode = claimUrl.pathname.match(/\/h\/([A-Za-z0-9]+)$/)?.[1]
 const socketUrl = new URL('/host', claimUrl)
@@ -65,7 +67,7 @@ let credentials: Credentials = { signedIn: [], secrets: [], credentialsChangedAt
 const declaration = async () => {
   if (!isPersonal) return { personal: false }
   credentials = await readCredentials(docker, prefix).catch((error) => {
-    console.error(`Reading the sign-ins failed: ${messageOf(error)}`)
+    log.error({ event: 'host.sign_ins_unreadable', body: 'Reading the sign-ins failed', error })
     return credentials
   })
   return { personal: true, signedIn: credentials.signedIn, credentialsChangedAt: credentials.credentialsChangedAt }
@@ -91,13 +93,21 @@ try {
   mkdirSync(stateDirectory, { recursive: true })
   accessSync(stateDirectory, constants.W_OK)
 } catch {
-  console.error(`The state directory ${stateDirectory} is not writable, so the host token could not be kept`)
+  log.error({
+    event: 'host.state_not_writable',
+    body: 'The state directory is not writable, so the host token could not be kept',
+    attributes: { 'host.state_directory': stateDirectory },
+  })
+  await telemetry.shutdown()
   process.exit(1)
 }
 
 let isTokenRefused = false
 const storedToken = () => (existsSync(tokenPath) ? readFileSync(tokenPath, 'utf8').trim() : undefined)
 const isRefusal = (closeCode: number) => closeCode >= 4000 && closeCode < 4100
+const logHelloFailure = (error: unknown) =>
+  log.error({ event: 'host.hello_failed', body: 'Saying hello to Spyria failed', error })
+type Carrier = Record<string, unknown>
 
 const connect = () => {
   const socket = new WebSocket(socketUrl)
@@ -124,38 +134,55 @@ const connect = () => {
     sendToSpyria = (frame) => socket.readyState === WebSocket.OPEN && (send(frame), true)
     reconnectDelayMilliseconds = 1000
     heartbeatTimer = setInterval(() => sendHeartbeat().catch(() => {}), heartbeatMilliseconds)
-    console.log(`Connected to ${socketUrl.origin}`)
+    log.info({ event: 'host.connected', body: 'Connected to Spyria', attributes: { 'server.address': socketUrl.host } })
   }
-  const runCommand = async (frame: { id?: unknown; op?: unknown; args?: unknown }) => {
-    try {
-      send({
-        type: 'res',
-        id: frame.id,
-        data: (await runner.run(parseCommand(frame.op, frame.args))) ?? null,
-      })
-    } catch (error) {
-      console.error(`Command ${String(frame.op)} failed: ${messageOf(error)}`)
-      send({ type: 'res', id: frame.id, error: messageOf(error) })
+  const runCommand = (frame: { id?: unknown; op?: unknown; args?: unknown; runtimeId?: unknown } & Carrier) => {
+    const startedAt = performance.now()
+    const attributes = {
+      'host.command': String(frame.op),
+      'runtime.id': typeof frame.runtimeId === 'string' ? frame.runtimeId : undefined,
     }
+    return withSpan(
+      `host command ${String(frame.op)}`,
+      {},
+      async () => {
+        try {
+          send({ type: 'res', id: frame.id, data: (await runner.run(parseCommand(frame.op, frame.args))) ?? null })
+          log.info({
+            event: 'host.command',
+            body: 'Host command done',
+            attributes: { ...attributes, duration_ms: Math.round(performance.now() - startedAt) },
+          })
+        } catch (error) {
+          log.error({ event: 'host.command', body: 'Host command failed', attributes, error })
+          send({ type: 'res', id: frame.id, error: messageOf(error) })
+        }
+      },
+      contextOf(frame),
+    )
   }
   socket.onopen = () => {
     const token = storedToken()
-    if (token && !isTokenRefused) return void hello(token).catch((error) => console.error(messageOf(error)))
+    if (token && !isTokenRefused) return void hello(token).catch(logHelloFailure)
     if (claimCode) return send({ type: 'claim', code: claimCode })
-    console.error('No stored token and no code in the URL')
-    process.exit(1)
+    log.error({ event: 'host.unpaired', body: 'No stored token and no code in the URL' })
+    void telemetry.shutdown().finally(() => process.exit(1))
   }
   socket.onmessage = (message) => {
     const frame = JSON.parse(String(message.data))
     if (frame.type === 'ping') return send({ type: 'pong' })
     if (frame.type === 'token') {
       writeFileSync(tokenPath, frame.token, { mode: 0o600 })
-      return void hello(frame.token).catch((error) => console.error(messageOf(error)))
+      return void hello(frame.token).catch(logHelloFailure)
     }
     if (frame.type === 'cmd') return void runCommand(frame)
     if (['http', 'ws_connect', 'ws_msg', 'ws_close'].includes(frame.type)) return void relay.handle(frame)
     if (frame.type.startsWith('gw_')) return modelRelay.handle(frame)
-    console.error(`Refused frame ${String(frame.type)}`)
+    log.warn({
+      event: 'host.frame_refused',
+      body: 'Refused a frame',
+      attributes: { 'host.frame_type': String(frame.type) },
+    })
   }
   socket.onclose = (event) => {
     clearInterval(heartbeatTimer)
@@ -163,19 +190,32 @@ const connect = () => {
     sendToSpyria = () => false
     modelRelay.closeAll()
     if (isRefusal(event.code) && storedToken() && claimCode && !isTokenRefused) {
-      console.error(`${event.reason}; pairing again with the code in the URL`)
+      log.warn({
+        event: 'host.token_refused',
+        body: 'The host token was refused, pairing again with the code in the URL',
+        attributes: { 'host.close_reason': event.reason },
+      })
       isTokenRefused = true
       return connect()
     }
     if (isRefusal(event.code)) {
-      console.error(event.reason)
-      process.exit(1)
+      log.error({
+        event: 'host.refused',
+        body: 'Spyria refused this host',
+        attributes: { 'host.close_reason': event.reason },
+      })
+      return void telemetry.shutdown().finally(() => process.exit(1))
     }
-    console.error(`Disconnected from Spyria (${event.code}), reconnecting`)
+    log.warn({
+      event: 'host.disconnected',
+      body: 'Disconnected from Spyria, reconnecting',
+      attributes: { 'host.close_code': event.code },
+    })
     setTimeout(connect, reconnectDelayMilliseconds * (0.5 + Math.random()))
     reconnectDelayMilliseconds = Math.min(reconnectDelayMilliseconds * 2, maximumReconnectDelayMilliseconds)
   }
 }
 
-for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => process.exit(0))
+for (const signal of ['SIGTERM', 'SIGINT'])
+  process.on(signal, () => void telemetry.shutdown().finally(() => process.exit(0)))
 connect()

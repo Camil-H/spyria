@@ -26,6 +26,7 @@ import { queries, type Transact, type ZeroContext } from '@spyria/db/zero-querie
 import {
   chatId,
   DomainError,
+  log,
   MissingChatPermission,
   messageId,
   type RuntimeHostId,
@@ -87,6 +88,7 @@ import {
 } from '@spyria/workspace/server'
 import { type Context, Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
+import { routePath } from 'hono/route'
 import { type AgentBridge, createAgentBridge } from './agent-bridge/bridge.ts'
 import { createSmtpMailer } from './auth/mail.ts'
 import { createOidc, type OidcSettings } from './auth/oidc.ts'
@@ -112,8 +114,8 @@ import {
 import { createGitHubApi, githubDotCom } from './github/github-api.ts'
 import { createModelCallRelay } from './llm-relay.ts'
 import { createRuntimeHostGateway, type RuntimeHostGateway } from './runtime-hosts/gateway.ts'
+import { contextOf, withSpan } from './telemetry.ts'
 
-export const defaultLlm = { model: 'openai/fake/fake-model' }
 const healthCheckMilliseconds = 2000
 const passesWithinTimeout = (check: () => Promise<boolean>) =>
   Promise.race([check().catch(() => false), Bun.sleep(healthCheckMilliseconds).then(() => false)])
@@ -173,7 +175,7 @@ const endpointResponse = async (request: string, successStatus: number, endpoint
         { error: error.code, message: error.message },
         { status: statusByErrorCode[error.code] ?? 400 },
       )
-    console.error(`${request} failed with ${error instanceof Error ? error.name : 'an unknown error'}`)
+    log.error({ event: 'http.request.failed', body: `${request} failed`, error })
     return Response.json({ error: 'internal' }, { status: 500 })
   }
 }
@@ -193,7 +195,7 @@ export const createApp = ({
     databases: () => [database],
     relayModelCall: llmGateway && createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),
   }),
-  agentBridge = createAgentBridge({ sandboxProvider: runtimeHosts.sandboxProvider, llm: defaultLlm }),
+  agentBridge = createAgentBridge({ sandboxProvider: runtimeHosts.sandboxProvider }),
   spyriaAgentImage,
   github,
 }: {
@@ -248,11 +250,40 @@ export const createApp = ({
     )
   }
   const app = new Hono<ApiEnvironment>()
+    .use((context, next) => {
+      const startedAt = performance.now()
+      const method = context.req.method
+      const incoming = { traceparent: context.req.header('traceparent'), tracestate: context.req.header('tracestate') }
+      return withSpan(
+        method,
+        { 'http.request.method': method, 'url.path': context.req.path },
+        async (span) => {
+          await next()
+          const route = routePath(context, -1)
+          const status = context.res.status
+          span.updateName(`${method} ${route}`)
+          span.setAttributes({ 'http.route': route, 'http.response.status_code': status })
+          log.info({
+            event: 'http.request',
+            body: 'Request handled',
+            attributes: {
+              'http.request.method': method,
+              'url.path': context.req.path,
+              'http.route': route,
+              'http.response.status_code': status,
+              duration_ms: Math.round(performance.now() - startedAt),
+              'workspace.id': context.get('zeroContext')?.workspaceId,
+            },
+          })
+        },
+        contextOf(incoming),
+      )
+    })
     .onError((error, context) => {
       if (error instanceof MissingChatPermission)
         return context.json({ error: error.code, message: error.message }, 403)
       if (error instanceof HTTPException) return error.getResponse()
-      console.error(error)
+      log.error({ event: 'http.request.failed', body: 'A request failed', error })
       return context.text('Internal Server Error', 500)
     })
     .get('/health', async (context) => {
@@ -349,7 +380,9 @@ export const createApp = ({
           dbProvider: zeroDrizzle(schema, context.get('database')),
           handler: async (transact, mutation) => {
             const response = await transact((tx, name, args) =>
-              mutatorNamed(name).fn({ args, tx, ctx: { ...ctx, spyriaAgentImage } }),
+              withSpan(`mutate ${name}`, { 'mutation.name': name, 'workspace.id': ctx.workspaceId }, () =>
+                mutatorNamed(name).fn({ args, tx, ctx: { ...ctx, spyriaAgentImage } }),
+              ),
             )
             if ('error' in response.result) return response
             if (mutation.name === 'runtime.removeHost')

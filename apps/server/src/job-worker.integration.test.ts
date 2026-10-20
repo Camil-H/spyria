@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, spyOn, test } from 'bun:test'
+import { afterAll, describe, expect, test } from 'bun:test'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { jobs, sessions } from '@spyria/db/postgres'
 import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@spyria/db/testing'
@@ -6,7 +6,7 @@ import type { SandboxProvider } from '@spyria/runtime/server'
 import { createAgentBridge } from './agent-bridge/bridge.ts'
 import { enqueueSweeps } from './auth/sessions.ts'
 import { listFailedJobs, maximumJobAttempts, retryFailedJobs, startJobWorker } from './job-worker.ts'
-import { acme, alice, bob, globex, waitFor } from './testing/testing.ts'
+import { acme, alice, bob, captureLogs, globex, waitFor } from './testing/testing.ts'
 
 const testDatabase = await createTestDatabase()
 const { database } = testDatabase
@@ -46,7 +46,7 @@ const repliesTo = async (messageId: string) =>
 describe('the dead jobs left by a throwing job', () => {
   test('a throwing job is retried with a growing delay, then dead after 5 attempts with its last error', async () => {
     await addAgentPromptJob('job-broken', 'message-missing')
-    const errorLog = spyOn(console, 'error').mockImplementation(() => {})
+    const logged = captureLogs()
     const startedAt = Date.now()
     const worker = startWorker({ retryDelayMilliseconds: 60 })
     await waitFor(async () => ((await jobRow('job-broken'))?.attempts ?? 0) >= 1)
@@ -60,8 +60,11 @@ describe('the dead jobs left by a throwing job', () => {
       state: 'failed',
       lastError: missingMessageError,
     })
-    expect(errorLog.mock.calls.filter(([message]) => String(message).includes('job-broken'))).toHaveLength(1)
-    errorLog.mockRestore()
+    logged.restore()
+    const brokenJobErrors = logged.events.filter(
+      ({ severity, attributes }) => severity === 'ERROR' && attributes?.['job.id'] === 'job-broken',
+    )
+    expect(brokenJobErrors).toHaveLength(1)
   })
 
   test('jobs:failed lists the dead jobs and jobs:retry requeues one, which then succeeds', async () => {
@@ -90,13 +93,13 @@ describe('the dead jobs left by a throwing job', () => {
   test('jobs:retry --all requeues every dead job', async () => {
     expect((await retryFailedJobs(database, 'all')).toSorted()).toEqual(['job-broken', 'job-dead-2'])
     expect(await jobRow('job-broken')).toMatchObject({ state: 'queued', attempts: 0 })
-    const errorLog = spyOn(console, 'error').mockImplementation(() => {})
+    const logged = captureLogs()
     const worker = startWorker({ retryDelayMilliseconds: 0 })
     await waitFor(
       async () => (await jobRow('job-dead-2'))?.state === 'done' && (await jobRow('job-broken'))?.state === 'failed',
     )
     await worker.stop()
-    errorLog.mockRestore()
+    logged.restore()
     expect(await jobRow('job-dead-2')).toMatchObject({ state: 'done', attempts: 1 })
     expect(await retryFailedJobs(database, 'job-unknown')).toEqual([])
   })

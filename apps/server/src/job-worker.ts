@@ -4,16 +4,32 @@ import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import type { Database } from '@spyria/db/postgres'
 import { schema } from '@spyria/db/zero'
 import type { Job, Transact } from '@spyria/db/zero-queries'
-import { type WorkspaceId, workspaceId } from '@spyria/kernel'
+import { log, type WorkspaceId, workspaceId } from '@spyria/kernel'
 import { type createLlmGateway, createProfileJobs } from '@spyria/profile/server'
 import { createRuntimeJobs, type SandboxProvider } from '@spyria/runtime/server'
 import { auditJobs, createUsageJobs } from '@spyria/usage/server'
 import type { AgentBridge } from './agent-bridge/bridge.ts'
 import { sessionJobs } from './auth/sessions.ts'
+import { contextOf, withSpan } from './telemetry.ts'
 
 type TransactionalJobHandler = (tx: ServerTransaction, workspaceId: WorkspaceId, payload: unknown) => Promise<unknown>
 type JobHandler = (job: Job) => Promise<unknown>
-type ClaimedJob = { workspace_id: string; id: string; type: string; payload: unknown; attempt: number; lease: string }
+type JobOutcome = keyof typeof jobLogs
+type ClaimedJob = {
+  workspace_id: string
+  id: string
+  type: string
+  payload: Record<string, unknown>
+  attempt: number
+  lease: string
+}
+
+const jobLogs = {
+  done: { severity: 'info', body: 'Job finished' },
+  rescheduled: { severity: 'info', body: 'Job rescheduled' },
+  retried: { severity: 'warn', body: 'Job failed and will be retried' },
+  failed: { severity: 'error', body: 'Job failed after its last attempt' },
+} as const
 
 export const maximumJobAttempts = 5
 const leaseMilliseconds = 5 * 60_000
@@ -66,7 +82,31 @@ export const startJobWorker = (
         [jobTypes, leaseMilliseconds],
       )
     )[0]
-  const runJob = async (job: ClaimedJob) => {
+  const runJob = ({ payload: { traceparent, tracestate, ...payload }, ...claimed }: ClaimedJob) => {
+    const job = { ...claimed, payload }
+    const startedAt = performance.now()
+    const attributes = {
+      'job.id': job.id,
+      'job.type': job.type,
+      'job.attempt': job.attempt,
+      'workspace.id': job.workspace_id,
+    }
+    return withSpan(
+      `job ${job.type}`,
+      attributes,
+      async () => {
+        const { outcome, error } = await runClaimedJob(job)
+        log[jobLogs[outcome].severity]({
+          event: 'job.run',
+          body: jobLogs[outcome].body,
+          attributes: { ...attributes, 'job.outcome': outcome, duration_ms: Math.round(performance.now() - startedAt) },
+          error,
+        })
+      },
+      contextOf({ traceparent, tracestate }),
+    )
+  }
+  const runClaimedJob = async (job: ClaimedJob): Promise<{ outcome: JobOutcome; error?: unknown }> => {
     const jobKey = [job.workspace_id, job.id, job.lease]
     const isLastAttempt = job.attempt >= maximumJobAttempts
     const transactional = transactionalHandlers[job.type]
@@ -94,6 +134,7 @@ export const startJobWorker = (
                where ${claimedJob}`,
           outcome?.retryInMilliseconds === undefined ? jobKey : [...jobKey, outcome.retryInMilliseconds],
         )
+        if (outcome?.retryInMilliseconds !== undefined) return { outcome: 'rescheduled' }
       }
     } catch (error) {
       const state = isLastAttempt ? 'failed' : 'queued'
@@ -108,8 +149,9 @@ export const startJobWorker = (
           isLastAttempt ? 0 : job.attempt * retryDelayMilliseconds,
         ],
       )
-      if (isLastAttempt) console.error(`Job ${job.id} (${job.type}) failed after ${job.attempt} attempts`, error)
+      return { outcome: isLastAttempt ? 'failed' : 'retried', error }
     }
+    return { outcome: 'done' }
   }
   const pollUntilStopped = async () => {
     while (isRunning) {
@@ -123,7 +165,8 @@ export const startJobWorker = (
           return claimed
         },
         (error) => {
-          if (!hasLoggedPollFailure) console.error('The job worker could not poll its queue', error)
+          if (!hasLoggedPollFailure)
+            log.error({ event: 'job.poll_failed', body: 'The job worker could not poll its queue', error })
           hasLoggedPollFailure = true
           return undefined
         },
@@ -133,7 +176,14 @@ export const startJobWorker = (
         continue
       }
       const running = runJob(job)
-        .catch((error) => console.error(`The job worker could not record the outcome of job ${job.id}`, error))
+        .catch((error) =>
+          log.error({
+            event: 'job.record_failed',
+            body: 'The job worker could not record the outcome of a job',
+            attributes: { 'job.id': job.id, 'job.type': job.type },
+            error,
+          }),
+        )
         .finally(() => runningJobs.delete(running))
       runningJobs.add(running)
     }

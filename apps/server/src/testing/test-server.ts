@@ -26,6 +26,7 @@ import { startJobWorker } from '../job-worker.ts'
 import { createModelCallRelay } from '../llm-relay.ts'
 import { createRuntimeHostGateway } from '../runtime-hosts/gateway.ts'
 import { readSpyriaAgentImage } from '../spyria-agent-image.ts'
+import { startTelemetry } from '../telemetry.ts'
 import { fakeGitHubAppId, fakeGitHubClientId, fakeGitHubClientSecret, startFakeGitHub } from './fake-github.ts'
 import { createFakeLlm, type FakeLlmScript, fakeRoutableModels } from './fake-llm.ts'
 import { createFakeMcp, sharedToolServer } from './fake-mcp.ts'
@@ -177,6 +178,7 @@ const chatKeyOfPrompt = async (prompt = '') => {
   return ''
 }
 
+startTelemetry()
 const app = createApp({
   database: createDatabase(),
   ...testAuthSettings,

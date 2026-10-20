@@ -1,10 +1,19 @@
-import { expect, setDefaultTimeout, spyOn, test } from 'bun:test'
+import { expect, setDefaultTimeout, test } from 'bun:test'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { testGatewayAdmin } from '@spyria/db/testing'
 import { schema } from '@spyria/db/zero'
 import { type WorkspaceId, workspaceId } from '@spyria/kernel'
 import { createBifrostUsageLogs, createUsageJobs, syncUsageNow } from '@spyria/usage/server'
-import { acme, alice, bob, gatewayLogsOf, globex, openSharedTestApp, virtualKeyOf } from './testing/testing.ts'
+import {
+  acme,
+  alice,
+  bob,
+  captureLogs,
+  gatewayLogsOf,
+  globex,
+  openSharedTestApp,
+  virtualKeyOf,
+} from './testing/testing.ts'
 
 setDefaultTimeout(60_000)
 const { database, gateway } = await openSharedTestApp()
@@ -102,11 +111,14 @@ test('with the gateway down the sync changes nothing and the job reschedules its
   const downLogs = createBifrostUsageLogs({ url: 'http://127.0.0.1:9', ...gatewayAdmin })
   await expect(syncUsageNow(downLogs, { workspaceId: acme, transact })).rejects.toThrow()
   const job = createUsageJobs(downLogs)['usage.sync']
-  const logged = spyOn(console, 'error').mockImplementation(() => {})
+  const logged = captureLogs()
   await job?.({ workspaceId: workspaceId(acme), transact })
   await job?.({ workspaceId: workspaceId(acme), transact })
-  expect(logged).toHaveBeenCalledTimes(2)
-  logged.mockRestore()
+  logged.restore()
+  expect(logged.events.map(({ severity, event }) => [severity, event])).toEqual([
+    ['ERROR', 'usage.sync_failed'],
+    ['ERROR', 'usage.sync_failed'],
+  ])
   expect({
     usage: [...(await usageRows())],
     mark: [...(await database.$client`select * from usage_sync_marks`)],

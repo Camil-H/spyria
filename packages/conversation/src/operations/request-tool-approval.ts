@@ -1,4 +1,4 @@
-import type { MemberId, MessageId } from '@spyria/kernel'
+import { log, type MemberId, type MessageId } from '@spyria/kernel'
 import type { AgentChat } from '../contracts/agent.ts'
 import type { ToolApproval } from '../domain/agent-steps.ts'
 import { toolApprovalWindowMilliseconds } from '../domain/tool-calls.ts'
@@ -53,7 +53,12 @@ export const requestToolApproval = async (
     update,
   }
   await recordAgentEvent({ transactor }, { ...chat, event, turnPromptId: promptId ?? undefined }).catch((error) =>
-    console.error(`Recording a tool approval of chat ${chat.chatId} failed: ${error}`),
+    log.error({
+      event: 'tool_approval.record_failed',
+      body: 'Recording a tool approval failed',
+      attributes: { 'workspace.id': chat.workspaceId, 'chat.id': chat.chatId },
+      error,
+    }),
   )
   eventSockets.hideQuestion(chat, question.questionId)
   return outcome

@@ -88,7 +88,13 @@ export const containerBodyOf = ({
     Image: image,
     Hostname: name,
     User: '10001:10001',
-    Env: [`OH_SESSION_API_KEYS_0=${apiKey}`, ...(personal ? harnessEnvironment : [])],
+    Env: [
+      `OH_SESSION_API_KEYS_0=${apiKey}`,
+      ...(personal ? harnessEnvironment : []),
+      ...(process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+        ? [`OTEL_EXPORTER_OTLP_ENDPOINT=${process.env.OTEL_EXPORTER_OTLP_ENDPOINT}`]
+        : []),
+    ],
     Labels: { 'spyria.managed': '1', 'spyria.runtime': runtimeId },
     HostConfig: {
       NetworkMode: networkNameOf(prefix, runtimeId),

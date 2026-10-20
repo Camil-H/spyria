@@ -1,4 +1,4 @@
-import { classifierModelOf, type MemberId, type Model, withPricesOf } from '@spyria/kernel'
+import { classifierModelOf, log, type MemberId, type Model, withPricesOf } from '@spyria/kernel'
 import type { AgentChat } from '../contracts/agent.ts'
 import { answersOf, decisionRequestOf, type Questions } from '../domain/decisions.ts'
 import type { AgentDependencies } from './agent-turn.ts'
@@ -32,7 +32,12 @@ export const decide = async (
   const reply = await classifier.classify({ ...call, model, request })
   const answers = 'body' in reply ? answersOf(model, call.questions, reply.body) : undefined
   const failure = 'failure' in reply ? reply.failure : answers ? undefined : 'unreadable answers'
-  if (failure) console.warn(`Routing of chat ${call.chat.chatId} fell back without the classifier: ${failure}`)
+  if (failure)
+    log.warn({
+      event: 'routing.classifier_failed',
+      body: 'Routing fell back without the classifier',
+      attributes: { 'workspace.id': call.chat.workspaceId, 'chat.id': call.chat.chatId, 'routing.failure': failure },
+    })
   const usage = 'body' in reply ? reply : { inputTokens: 0, outputTokens: 0 }
   return {
     answers,

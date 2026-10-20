@@ -1,4 +1,4 @@
-import type { RuntimeId, WorkspaceId } from '@spyria/kernel'
+import { log, type RuntimeId, type WorkspaceId } from '@spyria/kernel'
 import type { SandboxProvider, SandboxTransport } from '../contracts/sandbox-provider.ts'
 import type { RuntimeTransactor } from '../contracts/transactor.ts'
 import { ApiKeyMissing, RuntimeNotReady } from '../domain/errors.ts'
@@ -74,6 +74,11 @@ export const bringUpRuntime = async (
     await recordIfUnchanged(transactor, started, ({ runtimes }, current) =>
       runtimes.save(transitioned(current, 'failed', now, current.hostOnline ? failure : 'no_host')),
     )
-    console.error(`Runtime ${runtimeId} ${failure}: ${error instanceof Error ? error.message : 'unknown error'}`)
+    log.error({
+      event: 'runtime.bring_up_failed',
+      body: 'A runtime could not be brought up',
+      attributes: { 'workspace.id': workspaceId, 'runtime.id': runtimeId, 'runtime.failure': failure },
+      error,
+    })
   }
 }
