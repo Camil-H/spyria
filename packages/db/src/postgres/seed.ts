@@ -103,12 +103,13 @@ const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
     })),
   )
   await transaction.insert(tables.readMarkers).values(snapshot.readMarkers.map(withUserId))
-  await transaction.insert(tables.llmCredentials).values(
-    snapshot.llmCredentials.map((credential) => ({
-      ...withUserId(credential),
-      secretRef: `gateway:${credential.id}`,
-    })),
-  )
+  if (snapshot.llmCredentials.length > 0)
+    await transaction.insert(tables.llmCredentials).values(
+      snapshot.llmCredentials.map((credential) => ({
+        ...withUserId(credential),
+        secretRef: `gateway:${credential.id}`,
+      })),
+    )
   await transaction.insert(tables.toolConnections).values(snapshot.toolConnections.map(withUserIdAndPosition))
   await transaction.insert(tables.planSteps).values(positionedWithinChat(snapshot.planSteps))
   await transaction.insert(tables.browserPages).values([...snapshot.browserPages])
@@ -122,12 +123,13 @@ const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
 export const resetDatabase = (
   database: Database,
   afterSeed: (transaction: Transaction) => Promise<unknown> = async () => {},
+  snapshot: Snapshot = createMockSnapshot(),
 ) =>
   database.transaction(async (transaction) => {
     await transaction.execute(
       sql.raw(`truncate ${allTables.map((table) => `"${getTableName(table)}"`).join(', ')} restart identity cascade`),
     )
-    await insertSnapshot(transaction, createMockSnapshot())
+    await insertSnapshot(transaction, snapshot)
     await afterSeed(transaction)
   })
 
@@ -135,7 +137,7 @@ if (import.meta.main) {
   const database = createDatabase()
   const shouldReset = process.argv.includes('--reset')
   const isSeeded = !shouldReset && (await database.$count(tables.users)) > 0
-  if (!isSeeded) await resetDatabase(database, (transaction) => transaction.delete(tables.llmCredentials))
+  if (!isSeeded) await resetDatabase(database, undefined, { ...createMockSnapshot(), llmCredentials: [] })
   await database.$client.end()
   console.log(
     isSeeded
