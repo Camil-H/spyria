@@ -3,6 +3,7 @@ import {
   type ChatPermission,
   type ChatVisibility,
   type CredentialId,
+  type HarnessId,
   type MemberId,
   type MessageId,
   type ProjectId,
@@ -83,7 +84,7 @@ export type ChatRow = {
   model: string | null
   reasoningEffort: string | null
   subagentPolicy: 'auto' | 'same_as_main'
-  harness: 'claude-code' | 'codex' | null
+  harness: HarnessId | null
   localSession: boolean | null
   isPlanning: boolean
   gitBranch: string | null

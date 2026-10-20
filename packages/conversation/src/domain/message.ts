@@ -1,8 +1,7 @@
-import type { ChatId, ChatVisibility, MemberId, MessageId, WorkspaceId } from '@spyria/kernel'
+import type { ChatId, ChatVisibility, HarnessId, MemberId, MessageId, WorkspaceId } from '@spyria/kernel'
 import type { StoredStep } from './agent-steps.ts'
 import { ChatFrozen, InvalidThreadRoot, MessageDeleted, NoThreadsInRuntimeChat, NotMessageAuthor } from './errors.ts'
 import type { MessageBody } from './message-body.ts'
-import type { Harness } from './session-routing.ts'
 
 export type Message = Readonly<{
   id: MessageId
@@ -31,7 +30,7 @@ export type ConversationChat = Readonly<{
   name: string
   type: 'channel' | 'runtime'
   visibility: ChatVisibility
-  harness: Harness | null
+  harness: HarnessId | null
   ownerId: MemberId | null
   localSession: boolean | null
   baseBranch: string | null

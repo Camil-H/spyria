@@ -25,7 +25,7 @@ afterEach(async () => {
 })
 
 type QuestionFrame = { chatId: string; promptId?: string; isSnapshot?: boolean; question: Record<string, unknown> }
-const machine = async (signedIn = ['claude']) => (await agentHost('Machine', { ownerId: alice, signedIn })).relay
+const machine = async (signedIn = ['claude-code']) => (await agentHost('Machine', { ownerId: alice, signedIn })).relay
 const workspaceHost = () => agentHost('Workspace host')
 const repliesTo = (messageId: string) => stack.repliesTo(messageId, ['kind', 'body', 'step'])
 const questionsIn = (frames: string[]) =>
@@ -213,24 +213,24 @@ test('plan approval continues the turn and leaves plan mode; keep planning ends 
   )
 })
 
-test.each([
-  { tool: 'claude', harness: 'claude-code' },
-  { tool: 'codex', harness: 'codex' },
-])('the plan mode endpoint toggles $harness plan mode for who may prompt', async ({ tool, harness }) => {
-  await machine([tool])
-  const chat = await newRuntimeChat({ harness })
-  expect(await planMode(chat, true)).toBe(409)
-  await finished(await prompt(chat, 'Hello'), chat)
-  expect(await planMode(chat, true, bob)).toBe(403)
-  expect(await post(`/api/chats/${chat}/plan-mode`, { enabled: 'yes' })).toBe(400)
-  expect(await planMode(chat, true)).toBe(200)
-  await waitFor(async () => (await isPlanning(chat)) === true)
-  if (harness === 'claude-code')
-    expect((await finished(await prompt(chat, 'Plan'), chat)).at(-1)?.body).toContain('mode plan).')
-  expect(await planMode(chat, false)).toBe(200)
-  await waitFor(async () => (await isPlanning(chat)) === false)
-  expect((await finished(await prompt(chat, 'Build'), chat)).at(-1)?.body).toContain('mode bypassPermissions).')
-})
+test.each([{ harness: 'claude-code' }, { harness: 'codex' }])(
+  'the plan mode endpoint toggles $harness plan mode for who may prompt',
+  async ({ harness }) => {
+    await machine([harness])
+    const chat = await newRuntimeChat({ harness })
+    expect(await planMode(chat, true)).toBe(409)
+    await finished(await prompt(chat, 'Hello'), chat)
+    expect(await planMode(chat, true, bob)).toBe(403)
+    expect(await post(`/api/chats/${chat}/plan-mode`, { enabled: 'yes' })).toBe(400)
+    expect(await planMode(chat, true)).toBe(200)
+    await waitFor(async () => (await isPlanning(chat)) === true)
+    if (harness === 'claude-code')
+      expect((await finished(await prompt(chat, 'Plan'), chat)).at(-1)?.body).toContain('mode plan).')
+    expect(await planMode(chat, false)).toBe(200)
+    await waitFor(async () => (await isPlanning(chat)) === false)
+    expect((await finished(await prompt(chat, 'Build'), chat)).at(-1)?.body).toContain('mode bypassPermissions).')
+  },
+)
 
 test('a question in a delegated sub-conversation is answered with the assumption and stored in the delegation', async () => {
   const { host, relay } = await workspaceHost()

@@ -1,4 +1,4 @@
-import type { ChatPermission, ChatVisibility, WorkspacePermission } from '@spyria/kernel'
+import type { ChatPermission, ChatVisibility, HarnessId, WorkspacePermission } from '@spyria/kernel'
 import { sql } from 'drizzle-orm'
 import {
   bigint,
@@ -289,7 +289,7 @@ export const chats = table(
     subagentPolicy: text().$type<'auto' | 'same_as_main'>().notNull().default('auto'),
     agentModel: text(),
     agentReasoningEffort: text(),
-    harness: text().$type<'claude-code' | 'codex'>(),
+    harness: text().$type<HarnessId>(),
     localSession: boolean().default(false),
     isPlanning: boolean().notNull().default(false),
     gitBranch: text(),

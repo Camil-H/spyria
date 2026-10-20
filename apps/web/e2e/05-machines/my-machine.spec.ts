@@ -20,7 +20,7 @@ import {
 } from './fixtures'
 
 const tools = [
-  { name: 'Claude Code', signedIn: 'claude', login: 'claude' },
+  { name: 'Claude Code', signedIn: 'claude-code', login: 'claude-code' },
   { name: 'Codex', signedIn: 'codex', login: 'codex' },
 ]
 
@@ -59,7 +59,7 @@ test.describe('My machine', () => {
       expect(command).toMatch(/ spyria-host --personal https?:\/\/\S+\/h\/[A-HJ-NP-Z2-9]{8}$/)
       await dialog.getByRole('button', { name: 'Close' }).click()
 
-      pair(urlOf(command), { personal: true, signedIn: ['claude'] })
+      pair(urlOf(command), { personal: true, signedIn: ['claude-code'] })
       await expect(machineSectionOf(page)).toContainText('Online')
       await expect(machineToolOf(page, 'Claude Code')).toHaveText('✓ Claude Code connected')
       await expect(machineToolOf(page, 'Codex')).toHaveText('Use Codex')
@@ -117,14 +117,14 @@ test.describe('My machine', () => {
       const command = await commandBox.inputValue()
       expect(command).toMatch(/^docker build -q -t spyria-host apps\/host >\/dev\/null && docker rm -f spyria-host /)
       expect(command).toMatch(
-        / spyria-host --personal http:\/\/host\.docker\.internal:\d+\/h\/[A-HJ-NP-Z2-9]{8} && docker exec -it spyria-host spyria-host login claude$/,
+        / spyria-host --personal http:\/\/host\.docker\.internal:\d+\/h\/[A-HJ-NP-Z2-9]{8} && docker exec -it spyria-host spyria-host login claude-code$/,
       )
       await expect(dialog).toContainText('Your machine: Waiting for the host')
 
       const machine = pair(urlOf(command), { personal: true, signedIn: [] })
       await expect(dialog).toContainText('Your machine: Online')
-      await expect(commandBox).toHaveValue('docker exec -it spyria-host spyria-host login claude')
-      machine.heartbeat(['claude'])
+      await expect(commandBox).toHaveValue('docker exec -it spyria-host spyria-host login claude-code')
+      machine.heartbeat(['claude-code'])
       await expect(dialog).toContainText(
         'Claude Code is ready: in a new Runtime chat, set Runs on to Local · Claude Code',
       )
@@ -140,7 +140,7 @@ test.describe('My machine', () => {
     test('As a member whose machine is signed in to Claude only, I get only the Codex sign-in command for Use Codex', {
       tag: ['@spec-23'],
     }, async ({ page, pair }) => {
-      pair(urlOf(await addMachine(page)), { personal: true, signedIn: ['claude'] })
+      pair(urlOf(await addMachine(page)), { personal: true, signedIn: ['claude-code'] })
       await expect(machineSectionOf(page)).toContainText('Online')
       await expect(machineToolOf(page, 'Claude Code')).toHaveText('✓ Claude Code connected')
       await expect(machineSectionOf(page).getByRole('button', { name: 'Use Claude Code' })).toHaveCount(0)

@@ -1,5 +1,5 @@
 import type { ServerTransaction, Transaction } from '@rocicorp/zero'
-import { type ListedModel, providersOfGatewayRefs, reachableModelsOf } from '@spyria/kernel'
+import { type HarnessId, type ListedModel, providersOfGatewayRefs, reachableModelsOf } from '@spyria/kernel'
 
 const onServer = async <Row = unknown>(tx: Transaction, statement: string, parameters: unknown[]) =>
   (tx.location === 'server' ? [...(await tx.dbTransaction.query(statement, parameters))] : []) as Row[]
@@ -465,7 +465,7 @@ export const chatRoutingOf = (tx: Transaction, workspaceId: string, chatId: stri
     agentModel: string | null
     agentReasoningEffort: string | null
     subagentPolicy: string
-    harness: 'claude-code' | 'codex' | null
+    harness: HarnessId | null
   }>(
     tx,
     `select mode, owner_user_id as "ownerId", model, reasoning_effort as "reasoningEffort",

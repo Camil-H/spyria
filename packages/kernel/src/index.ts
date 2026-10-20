@@ -1,5 +1,6 @@
 export * from './chat-access.ts'
 export * from './errors.ts'
+export * from './harnesses.ts'
 export * from './ids.ts'
 export * from './models.ts'
 export * from './tool-names.ts'

@@ -1,7 +1,8 @@
+import type { HarnessId } from '@spyria/kernel'
 import { type ChatId, rereadDollarsOf, type WorkspaceId } from '@spyria/kernel'
 import { buttonClass, fieldClass, formatCost, ghostButtonClass, labelClass } from '@spyria/ui'
 import { useId, useState } from 'react'
-import { type Harness, piThoughtLevels } from '../domain/session-routing.ts'
+import { piThoughtLevels } from '../domain/session-routing.ts'
 import type { ChatRoutingRead } from '../queries/get-chat-routing.ts'
 import { useConversationCommands } from './providers.tsx'
 
@@ -28,7 +29,7 @@ const SessionDialog = ({
     model: string | null
     reasoningEffort: string | null
     subagentPolicy: Policy
-    harness: Harness | null
+    harness: HarnessId | null
     localSession: boolean
     isOwner: boolean
   }

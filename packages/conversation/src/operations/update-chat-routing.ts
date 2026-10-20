@@ -1,13 +1,7 @@
-import { type ChatId, isPickableModel, type MemberId, requireChatPermission } from '@spyria/kernel'
+import { type ChatId, harnesses, isPickableModel, type MemberId, requireChatPermission } from '@spyria/kernel'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { InvalidRouting } from '../domain/errors.ts'
-import {
-  harnesses,
-  type RunsOn,
-  runsOnFieldsOf,
-  runsOnOf,
-  unreachableSessionNoticeOf,
-} from '../domain/session-routing.ts'
+import { type RunsOn, runsOnFieldsOf, runsOnOf, unreachableSessionNoticeOf } from '../domain/session-routing.ts'
 
 type Input = {
   chatId: ChatId

@@ -3,6 +3,7 @@ import type { ZeroContext } from '@spyria/db/zero-queries'
 import { chatId, memberId, messageId } from '@spyria/kernel'
 import { z } from 'zod/mini'
 import { ForeignWorkspace } from '../domain/errors.ts'
+import { runsOns } from '../domain/session-routing.ts'
 import { createZeroRuntimeRetrier } from '../integrations/runtime-agent-runtimes.ts'
 import { createZeroRuntimeChatStarter } from '../integrations/workspace-runtime-chat-starter.ts'
 import { createZeroTransactor } from '../integrations/zero-transactor.ts'
@@ -75,7 +76,7 @@ export const conversationMutators = defineMutators({
       z.extend(chatArguments, {
         sessionModel: z.optional(z.string()),
         subagentPolicy: z.optional(z.enum(['auto', 'same_as_main'])),
-        runsOn: z.optional(z.enum(['runtime', 'claude-code', 'codex'])),
+        runsOn: z.optional(z.enum(runsOns)),
         adapterModel: z.optional(z.string()),
         reasoningEffort: z.optional(z.string().check(z.regex(/^[a-z]{1,16}$/))),
       }),

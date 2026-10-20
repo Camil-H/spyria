@@ -1,15 +1,13 @@
 import { useQuery } from '@spyria/db/react'
-import type { MemberId, WorkspaceId } from '@spyria/kernel'
+import { type HarnessId, harnesses, harnessIds, type MemberId, signInCommandOf, type WorkspaceId } from '@spyria/kernel'
 import { buttonClass, Dialog, ghostButtonClass, LabelledSection } from '@spyria/ui'
 import { useEffect, useState } from 'react'
-import { type SignInTool, signInCommandOf } from '../domain/host-command.ts'
 import { getMachine, localSessionsOf } from '../queries/list-runtime-hosts.ts'
 import { CommandBox, HostCommand, HostCommandDialog, PersonalNotice } from './HostCommandDialog.tsx'
 import { useRuntimeCommands } from './providers.tsx'
 import { statusLabelOf } from './RuntimeHostsSection.tsx'
 
 const rowClass = 'flex flex-wrap items-center gap-x-3 gap-y-1'
-const toolNames: Record<SignInTool, string> = { claude: 'Claude Code', codex: 'Codex' }
 const myMachineAnchor = 'my-machine'
 
 export const MyMachineSection = ({ workspaceId, memberId }: { workspaceId: WorkspaceId; memberId: MemberId }) => {
@@ -17,12 +15,12 @@ export const MyMachineSection = ({ workspaceId, memberId }: { workspaceId: Works
   const machine = useQuery(getMachine(workspaceId, memberId))
   const localSessions = useQuery(localSessionsOf(workspaceId))
   const [code, setCode] = useState<string | null>(null)
-  const [openDialog, setOpenDialog] = useState<'add' | 'remove' | SignInTool | null>(null)
+  const [openDialog, setOpenDialog] = useState<'add' | 'remove' | HarnessId | null>(null)
   useEffect(() => {
     if (location.hash === `#${myMachineAnchor}`) document.getElementById(myMachineAnchor)?.scrollIntoView()
   }, [])
   const isOnline = machine?.status === 'online'
-  const open = async (dialog: 'add' | SignInTool) => {
+  const open = async (dialog: 'add' | HarnessId) => {
     setOpenDialog(dialog)
     if (!machine) setCode((await commands.addMachine({ workspaceId })).code)
   }
@@ -46,7 +44,7 @@ export const MyMachineSection = ({ workspaceId, memberId }: { workspaceId: Works
       )}
       {localSessions ? (
         <div className="flex flex-wrap gap-2">
-          {(Object.keys(toolNames) as SignInTool[]).map((tool) => {
+          {harnessIds.map((tool) => {
             const isConnected = isOnline && machine.capacity?.signedIn?.includes(tool)
             return (
               <button
@@ -59,7 +57,7 @@ export const MyMachineSection = ({ workspaceId, memberId }: { workspaceId: Works
                 }
                 onClick={() => open(tool)}
               >
-                {isConnected ? `✓ ${toolNames[tool]} connected` : `Use ${toolNames[tool]}`}
+                {isConnected ? `✓ ${harnesses[tool].name} connected` : `Use ${harnesses[tool].name}`}
               </button>
             )
           })}
@@ -71,24 +69,24 @@ export const MyMachineSection = ({ workspaceId, memberId }: { workspaceId: Works
         <HostCommandDialog label="Add my machine" code={code} personal onClose={() => setOpenDialog(null)} />
       )}
       {connectingTool && (
-        <Dialog label={`Use ${toolNames[connectingTool]}`} closeLabel="Close" onClose={() => setOpenDialog(null)}>
+        <Dialog label={`Use ${harnesses[connectingTool].name}`} closeLabel="Close" onClose={() => setOpenDialog(null)}>
           {machine && <p className="text-sm">Your machine: {statusLabelOf(machine)}</p>}
           {isOnline ? (
             machine.capacity?.signedIn?.includes(connectingTool) ? (
               <p className="text-sm">
-                {toolNames[connectingTool]} is ready: in a new Runtime chat, set Runs on to Local ·{' '}
-                {toolNames[connectingTool]}
+                {harnesses[connectingTool].name} is ready: in a new Runtime chat, set Runs on to Local ·{' '}
+                {harnesses[connectingTool].name}
               </p>
             ) : (
               <>
-                <p className="text-sm text-muted">Sign in to {toolNames[connectingTool]} on your machine:</p>
+                <p className="text-sm text-muted">Sign in to {harnesses[connectingTool].name} on your machine:</p>
                 <CommandBox command={signInCommandOf(connectingTool)} />
               </>
             )
           ) : (
             code && (
               <>
-                <PersonalNotice toolName={toolNames[connectingTool]} />
+                <PersonalNotice toolName={harnesses[connectingTool].name} />
                 <HostCommand code={code} personal signIn={connectingTool} />
               </>
             )

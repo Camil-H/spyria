@@ -2,7 +2,7 @@ import { afterEach, expect, setDefaultTimeout, test } from 'bun:test'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { rebuildMessages } from '@spyria/conversation/server'
 import { schema } from '@spyria/db/zero'
-import { type ChatId, chatId, runtimeHostId } from '@spyria/kernel'
+import { type ChatId, chatId, defaultHarness, runtimeHostId } from '@spyria/kernel'
 import {
   acme,
   alice,
@@ -26,13 +26,13 @@ afterEach(async () => {
 const machine = async ({
   gapMilliseconds,
   startFails,
-  signedIn = ['claude'],
+  signedIn = [defaultHarness],
 }: {
   gapMilliseconds?: number
   startFails?: boolean
   signedIn?: string[]
 } = {}) => (await stack.agentHost('Machine', { ownerId: alice, signedIn, gapMilliseconds, startFails })).relay
-const newMachineChat = () => newRuntimeChat({ harness: 'claude-code' })
+const newMachineChat = () => newRuntimeChat({ harness: defaultHarness })
 const repliesTo = (messageId: string) => stack.repliesTo(messageId, ['kind', 'body', 'step'])
 const bodiesOf = (replies: { kind: string; body: string }[]) =>
   replies.map(({ kind, body }) => (kind === 'step' ? body : `${kind}:${body}`))
@@ -64,12 +64,12 @@ const toolsRepliesOf = (model: string) => [
 const toolsReplies = toolsRepliesOf('stub-default')
 
 test.each([
-  { tool: 'claude', harness: 'claude-code', model: 'stub-default' },
-  { tool: 'codex', harness: 'codex', model: 'gpt-stub' },
+  { harness: 'claude-code', model: 'stub-default' },
+  { harness: 'codex', model: 'gpt-stub' },
 ])(
   'a $harness turn on the machine streams text, shows final steps with the diff, ends once and launches with no base URL and no key',
-  async ({ tool, harness, model }) => {
-    const relay = await machine({ signedIn: [tool] })
+  async ({ harness, model }) => {
+    const relay = await machine({ signedIn: [harness] })
     const chat = await newRuntimeChat({ harness })
     const frames = await stack.subscribedFrames(chat)
     const question = await prompt(chat, 'stub:tools')
@@ -199,14 +199,12 @@ test('the adapter’s models list in the routing read, and a pick is switched in
 
 test.each([
   {
-    tool: 'claude',
     harness: 'claude-code',
     launched: 'default',
     levels: ['default', 'low', 'medium', 'high', 'xhigh', 'max'],
     picked: 'max',
   },
   {
-    tool: 'codex',
     harness: 'codex',
     launched: 'low',
     levels: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
@@ -214,8 +212,8 @@ test.each([
   },
 ])(
   'a $harness effort: the routing read lists the tool’s levels, only the owner picks one, and it is set on the same session at the next prompt only',
-  async ({ tool, harness, launched, levels, picked }) => {
-    const relay = await machine({ signedIn: [tool] })
+  async ({ harness, launched, levels, picked }) => {
+    const relay = await machine({ signedIn: [harness] })
     const chat = await newRuntimeChat({ harness, participants: [{ memberId: bob, roleId: 'editor' }] })
     await finished(await prompt(chat, 'Hello'), chat)
     expect((await routingReadOf(chat)).adapterEfforts).toEqual({
@@ -252,12 +250,12 @@ test('a late chunk of a stopped turn does not land in the next turn', async () =
 })
 
 test.each([
-  { tool: 'claude', harness: 'claude-code', name: 'Claude Code' },
-  { tool: 'codex', harness: 'codex', name: 'Codex' },
+  { harness: 'claude-code', name: 'Claude Code' },
+  { harness: 'codex', name: 'Codex' },
 ])(
   'an expired $name login ends the turn with one sign-in error and no agent message, and the tool stays signed out until its credentials change',
-  async ({ tool, harness, name }) => {
-    const { host } = await stack.agentHost('Machine', { ownerId: alice, signedIn: [tool] })
+  async ({ harness, name }) => {
+    const { host } = await stack.agentHost('Machine', { ownerId: alice, signedIn: [harness] })
     const chat = await newRuntimeChat({ harness })
     const frames = await stack.subscribedFrames(chat)
     const expired = await prompt(chat, 'stub:auth-expired')
@@ -276,7 +274,7 @@ test.each([
       {
         kind: 'step',
         body: 'error',
-        step: { type: 'error', message: `Authentication required — sign in to ${name} again`, signIn: tool },
+        step: { type: 'error', message: `Authentication required — sign in to ${name} again`, signIn: harness },
       },
     ])
     expect(await signedIn()).toEqual([])
@@ -285,12 +283,12 @@ test.each([
     const refused = await prompt(chat, 'Hello')
     await waitFor(async () => (await repliesTo(refused)).length > 0)
     expect(bodiesOf(await repliesTo(refused))).toEqual([
-      `notice:Sign in to ${name} on your machine: docker exec -it spyria-host spyria-host login ${tool}`,
+      `notice:Sign in to ${name} on your machine: docker exec -it spyria-host spyria-host login ${harness}`,
     ])
 
-    host.signIn([tool])
+    host.signIn([harness])
     await reconnect()
-    expect(await signedIn()).toEqual([tool])
+    expect(await signedIn()).toEqual([harness])
     expect(bodiesOf(await finished(await prompt(chat, 'Hello'), chat))).toEqual([
       expect.stringContaining('agent:[t2] Hello from the stub'),
     ])
@@ -355,13 +353,10 @@ const startedEventsOf = async (chat: ChatId) =>
       'session_started',
   )
 
-test.each([
-  { tool: 'claude', harness: 'claude-code' },
-  { tool: 'codex', harness: 'codex' },
-])(
+test.each([{ harness: 'claude-code' }, { harness: 'codex' }])(
   'choosing $harness on the machine starts the session once with no prompt, and the first prompt joins it',
-  async ({ tool, harness }) => {
-    const relay = await machine({ signedIn: [tool] })
+  async ({ harness }) => {
+    const relay = await machine({ signedIn: [harness] })
     const chat = await newRuntimeChat()
     expect(await chooseRunsOn(chat, harness)).toEqual(succeeded)
     await waitFor(async () => (await startedEventsOf(chat)).length === 1)
@@ -383,12 +378,12 @@ test.each([
 test('nothing starts for a signed-out tool, a non-owner or a choice of the Spyria runtime', async () => {
   const relay = await machine({ signedIn: [] })
   const signedOut = await newRuntimeChat()
-  expect(await chooseRunsOn(signedOut, 'claude-code')).toEqual(succeeded)
+  expect(await chooseRunsOn(signedOut, defaultHarness)).toEqual(succeeded)
   await waitFor(async () => (await startJobsOf(signedOut)).every(({ state }) => state === 'done'))
   expect(relay.created).toHaveLength(0)
 
   const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'editor' }] })
-  expect(await chooseRunsOn(chat, 'claude-code', bobInAcme)).toEqual(
+  expect(await chooseRunsOn(chat, defaultHarness, bobInAcme)).toEqual(
     failedWith('Only the owner changes how this session runs'),
   )
   expect(await sessionFieldsOf(chat)).toEqual({ harness: null, local_session: false })
@@ -403,7 +398,7 @@ test('a prompt sent at once after the choice joins the one session and streams l
   await Bun.sleep(subscribeBeforeStoredMilliseconds)
   await newRuntimeChat({ id: chat })
   await subscribed
-  expect(await chooseRunsOn(chat, 'claude-code')).toEqual(succeeded)
+  expect(await chooseRunsOn(chat, defaultHarness)).toEqual(succeeded)
   const replies = await finished(await prompt(chat, 'stub:think'), chat)
   expect(replies.at(-1)?.kind).toBe('agent')
   expect(streamedText(frames, true)).toBe('Thinking about the plan.')
@@ -421,7 +416,7 @@ test('before the owner chooses, a member’s prompt is refused with the waiting 
   )
   expect(await messagesOf(chat)).toEqual([])
 
-  expect(await chooseRunsOn(chat, 'claude-code')).toEqual(succeeded)
+  expect(await chooseRunsOn(chat, defaultHarness)).toEqual(succeeded)
   await finished(await prompt(chat, 'Alice prompts'), chat)
   expect(bodiesOf(await repliesTo(await prompt(chat, 'Bob tries', bobInAcme)))).toEqual([
     'notice:Only the owner prompts a session on their machine',
@@ -433,7 +428,7 @@ const machineLosingFirstCreate = async () => {
   const createReached = Promise.withResolvers<void>()
   const { relay, host } = await stack.agentHost('Machine', {
     ownerId: alice,
-    signedIn: ['claude'],
+    signedIn: [defaultHarness],
     containerAgentOf: (relay) => ({
       ...relay.containerAgent,
       respond: async (request, container) => {
@@ -451,23 +446,23 @@ const machineLosingFirstCreate = async () => {
 test('a session start whose answer is lost to a host reconnect keeps its one conversation, and the first prompt joins it', async () => {
   const { relay, host, createReached } = await machineLosingFirstCreate()
   const chat = await newRuntimeChat()
-  expect(await chooseRunsOn(chat, 'claude-code')).toEqual(succeeded)
+  expect(await chooseRunsOn(chat, defaultHarness)).toEqual(succeeded)
   await createReached
   await host.disconnect()
   await host.connect()
   const replies = await finished(await prompt(chat, 'Hello'), chat)
 
   expect(replies.at(-1)?.body).toContain('[t1] ')
-  expect(relay.adapterLaunches()).toEqual(['claude'])
+  expect(relay.adapterLaunches()).toEqual([defaultHarness])
   expect(await startedEventsOf(chat)).toHaveLength(1)
   await waitFor(async () => (await startJobsOf(chat)).every(({ state }) => state === 'done'))
 })
 
 test('the machine going offline while its runtime starts shows "Your machine is offline", not a start failure', async () => {
-  const { relay, host } = await stack.agentHost('Machine', { ownerId: alice, signedIn: ['claude'] })
+  const { relay, host } = await stack.agentHost('Machine', { ownerId: alice, signedIn: [defaultHarness] })
   host.hold('start')
   const chat = await newRuntimeChat()
-  expect(await chooseRunsOn(chat, 'claude-code')).toEqual(succeeded)
+  expect(await chooseRunsOn(chat, defaultHarness)).toEqual(succeeded)
   const question = await prompt(chat, 'Hello')
   await waitFor(async () => host.commands.some(({ op }) => op === 'start'))
   await host.disconnect()
@@ -479,5 +474,5 @@ test('the machine going offline while its runtime starts shows "Your machine is 
   await host.connect()
   await stack.agentBridge.forDatabase(database).resumeHost({ workspaceId: acme, hostId: runtimeHostId(host.id) })
   expect((await finished(question, chat)).at(-1)?.body).toContain('[t1] ')
-  expect(relay.adapterLaunches()).toEqual(['claude'])
+  expect(relay.adapterLaunches()).toEqual([defaultHarness])
 })

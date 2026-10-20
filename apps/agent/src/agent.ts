@@ -77,8 +77,8 @@ const permissiveModes = ['bypassPermissions', 'agent-full-access']
 const planMode = 'plan'
 const collaborationMode = 'collaboration_mode'
 const planOptionIds = { approve: ['exit-plan-bypass', 'implement_plan'], keepPlanning: ['reject', 'revise_plan'] }
-const formShapes: Record<'claudeCode' | 'codex', FormShape> = {
-  claudeCode: { free: '_custom', header: 'title', text: 'description' },
+export const formShapes: Record<'claude-code' | 'codex', FormShape> = {
+  'claude-code': { free: '_custom', header: 'title', text: 'description' },
   codex: { free: '_note', header: 'description', text: 'title', none: 'None of the above' },
 }
 const subAnswerText = 'No member is available; decide yourself and state your assumption.'
@@ -140,7 +140,7 @@ const formOf = (params: Json) => {
   const ids = Object.keys(properties).filter((id) => properties[id]?.oneOf ?? properties[id]?.items?.anyOf)
   const shape =
     Object.values(formShapes).find(({ free }) => ids.some((id) => `${id}${free}` in properties)) ??
-    formShapes.claudeCode
+    formShapes['claude-code']
   const questions = ids.map((id) => {
     const field = properties[id] ?? {}
     return definedFieldsOf({

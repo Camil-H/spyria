@@ -1,7 +1,15 @@
-import type { ChatId, ListedModel, MemberId, MessageId, Model, RuntimeHostId, WorkspaceId } from '@spyria/kernel'
+import type {
+  ChatId,
+  HarnessId,
+  ListedModel,
+  MemberId,
+  MessageId,
+  Model,
+  RuntimeHostId,
+  WorkspaceId,
+} from '@spyria/kernel'
 import type { AgentEvent } from '../domain/agent-events.ts'
 import type { PullRequestDraft, PullRequestStep } from '../domain/pull-requests.ts'
-import type { HarnessLaunch } from '../domain/session-routing.ts'
 import type { DelegatedFrame, QuestionFrame } from '../domain/streamed-reply.ts'
 
 export class AgentStartFailure extends Error {}
@@ -53,7 +61,7 @@ export type RuntimeRetrier = { retry(chat: AgentChat): Promise<void> }
 type AgentLastEvent = Readonly<{ id: string; seq: number | null; timestamp: string }>
 export type AgentEventListener = { onEvent(event: AgentEvent): void; onClose(): void }
 export type AgentLlmChoice = Readonly<
-  { effort?: string; resumeSessionId?: string; adapterModel?: string } & ({ harness: HarnessLaunch } | { pi: PiLaunch })
+  { effort?: string; resumeSessionId?: string; adapterModel?: string } & ({ harness: HarnessId } | { pi: PiLaunch })
 >
 export type PiModel = Readonly<Pick<Model, 'id' | 'name' | 'contextWindow'> & { reasoning: boolean }>
 export type PiLaunch = Readonly<{

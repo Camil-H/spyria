@@ -19,7 +19,7 @@ const hardening = { CapDrop: ['ALL'], SecurityOpt: ['no-new-privileges'], Readon
 
 type SignIn = { signedIn: boolean; secrets: unknown[] }
 const credentialStores = {
-  claude: {
+  'claude-code': {
     target: '/home/openhands/.claude',
     file: '.credentials.json',
     login: ['claude-agent-acp', '--cli', 'auth', 'login', '--claudeai'],

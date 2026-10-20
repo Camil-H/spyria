@@ -2,7 +2,7 @@ import { afterAll, afterEach, expect, test } from 'bun:test'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { schema } from '@spyria/db/zero'
 import { createZeroStore } from '@spyria/db/zero-store'
-import { type ChatId, chatId } from '@spyria/kernel'
+import { type ChatId, chatId, defaultHarness } from '@spyria/kernel'
 import { createRuntimeJobs, createRuntimeTransactor, ensureRuntimeRunning, touchRuntime } from '@spyria/runtime/server'
 import { websocket } from 'hono/bun'
 import { createApp } from '../app.ts'
@@ -127,7 +127,7 @@ test("a runtime on a workspace host or on a machine only ever gets Spyria's cont
   const machineChat = chatId(`chat-${crypto.randomUUID()}`)
   await database.$client`
     insert into chats (workspace_id, id, type, visibility, owner_kind, owner_user_id, name, local_session, harness, archived, created_at)
-    values (${acme}, ${machineChat}, 'runtime', 'private', 'user', ${alice}, 'Machine chat', true, 'claude-code', false, now())`
+    values (${acme}, ${machineChat}, 'runtime', 'private', 'user', ${alice}, 'Machine chat', true, ${defaultHarness}, false, now())`
   const hostChat = await newRuntimeChat()
   for (const chat of [machineChat, hostChat])
     expect(await ensure(chat, '')).toMatchObject({ state: 'failed', failure: 'no_image', hostId: null })

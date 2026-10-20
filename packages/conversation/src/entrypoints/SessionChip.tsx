@@ -1,8 +1,9 @@
+import type { HarnessId } from '@spyria/kernel'
 import { type ChatId, modelNameOf, type WorkspaceId } from '@spyria/kernel'
 import { focusRing } from '@spyria/ui'
 import { ChevronDown } from 'lucide-react'
 import { lazy, type ReactNode, Suspense, useEffect, useRef, useState } from 'react'
-import { chipLabelOf, type Harness, type RunsOn, runsOnNames } from '../domain/session-routing.ts'
+import { chipLabelOf, type RunsOn, runsOnNames } from '../domain/session-routing.ts'
 import type { ChatRoutingRead } from '../queries/get-chat-routing.ts'
 import type { Conversation } from '../queries/get-conversation.ts'
 import { useConversationCommands } from './providers.tsx'
@@ -107,7 +108,7 @@ export const SessionChip = (chip: {
   model: string | null
   reasoningEffort: string | null
   subagentPolicy: Policy
-  harness: Harness | null
+  harness: HarnessId | null
   localSession: boolean
   isOwner: boolean
   canConfigure: boolean

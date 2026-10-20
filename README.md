@@ -78,7 +78,7 @@ Each runtime gets its own Docker network (`spyria-rt-<id>-net`), which `spyria-h
 
 ## Spyria runtime image
 
-Workspace hosts and personal machines run Spyria's own image (`apps/agent`: spyria-agent with Claude Code, Codex and Pi, each pinned separately from its ACP adapter in `apps/agent/versions.json`). Build it locally before the first runtime; the server reads its content ID from `apps/agent/image-id` (or `SPYRIA_AGENT_IMAGE`) at start, and no `spyria-host` ever pulls it:
+Workspace hosts and personal machines run Spyria's own image (`apps/agent`: spyria-agent with Claude Code, Codex and Pi; Claude Code, Codex and their ACP adapters are pinned in the harness registry `packages/kernel/src/harnesses.ts`, Pi in `apps/agent/versions.json`). Build it locally before the first runtime; the server reads its content ID from `apps/agent/image-id` (or `SPYRIA_AGENT_IMAGE`) at start, and no `spyria-host` ever pulls it:
 
 ```sh
 bun run agent:build          # compile spyria-agent and docker build; cached by Docker
@@ -94,7 +94,7 @@ A member can run Claude Code on their own Claude subscription, or Codex on their
 
 1. **Profile**, **My machine**, **Add my machine**: copy the command, which ends with `spyria-host --personal <claim URL>` (on a Mac, switch **Rootless Docker** off and replace `localhost` with `host.docker.internal` as above), and run it on your machine. Never run it on a machine others use: the agent there can read your Claude and ChatGPT sign-ins.
 2. Sign in once:
-   - Claude Code: `docker exec -it spyria-host spyria-host login claude`, open the printed URL, sign in and paste the code. The sign-in stays in the `spyria-cred-claude` volume. `docker exec -it spyria-host spyria-host logout claude` deletes it.
+   - Claude Code: `docker exec -it spyria-host spyria-host login claude-code`, open the printed URL, sign in and paste the code. The sign-in stays in the `spyria-cred-claude-code` volume. `docker exec -it spyria-host spyria-host logout claude-code` deletes it.
    - Codex: `docker exec -it spyria-host spyria-host login codex`, open the printed URL and enter the one-time code. ChatGPT may ask you to enable device code sign-in first (ChatGPT settings, **Security**). The sign-in stays in the `spyria-cred-codex` volume (Codex's whole home, shared by your Codex sessions). `docker exec -it spyria-host spyria-host logout codex` deletes it offline; to also revoke the session at OpenAI, log out of all devices in ChatGPT's **Security** settings.
    - Both stay on your machine only; Spyria never sees them.
 3. **New chat**, **On my machine · Claude Code subscription** or **On my machine · Codex (ChatGPT plan)**. Only you prompt it (other members read it); it runs on your plan's default model, without Spyria's routing, keys or metering.
@@ -103,9 +103,9 @@ Admins turn this off for the workspace with **Workspace settings**, **Runtime ho
 
 Manual checks, not covered by tests (they need a real subscription):
 
-- After `spyria-host login claude`, a real turn in an "On my machine" chat answers on the subscription.
+- After `spyria-host login claude-code`, a real turn in an "On my machine" chat answers on the subscription.
 - Ask the agent to print `~/.claude/.credentials.json`: the stored step shows `[redacted]`, and `grep sk-ant-` over the chat's events in Postgres finds nothing.
-- The session keeps working after the token expires and refreshes, and after its runtime is removed (the sign-in survives in `spyria-cred-claude`); VS Code's **Dev Containers: Attach to Running Container** opens the runtime (its server and extensions downloaded on the Mac, since runtimes have no internet).
+- The session keeps working after the token expires and refreshes, and after its runtime is removed (the sign-in survives in `spyria-cred-claude-code`); VS Code's **Dev Containers: Attach to Running Container** opens the runtime (its server and extensions downloaded on the Mac, since runtimes have no internet).
 - `spyria-host login codex` completes with the device code (note whether ChatGPT asked to enable device code sign-in); `auth.json` in `spyria-cred-codex` is `0600` with `auth_mode: "chatgpt"`.
 - The refresh token's shape, without printing values: `jq '.tokens | map_values(.[0:6] + "…" + (length|tostring))' auth.json`. `id_token` and `access_token` start with `eyJ`; if `refresh_token` has a stable prefix, add it to the redaction formats in `apps/host/src/personal.ts`.
 - A real turn in an "On my machine · Codex" chat answers on the plan's default model (the model shows in the stored events).

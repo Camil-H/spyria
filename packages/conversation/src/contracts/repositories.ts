@@ -2,6 +2,7 @@ import type {
   ChatId,
   ChatPermission,
   ChatRole,
+  HarnessId,
   ListedModel,
   MemberId,
   MessageId,
@@ -11,7 +12,6 @@ import type {
 import type { AgentEvent } from '../domain/agent-events.ts'
 import type { AgentStep, StepDelegation, StoredStep } from '../domain/agent-steps.ts'
 import type { ConversationChat, Message, MessageChange } from '../domain/message.ts'
-import type { Harness } from '../domain/session-routing.ts'
 import type { AgentInterrupt } from './agent.ts'
 
 export type Draft = Readonly<{ workspaceId: WorkspaceId; chatId: ChatId; memberId: MemberId; text: string }>
@@ -149,7 +149,7 @@ type ChatRouting = Readonly<{
   agentModel: string | null
   agentReasoningEffort: string | null
   subagentPolicy: string
-  harness: Harness | null
+  harness: HarnessId | null
 }>
 type RoutingDecision = Readonly<{
   chatId: ChatId
@@ -194,7 +194,7 @@ export type RoutingRepository = {
       model: string | null
       reasoningEffort: string
       subagentPolicy: string
-      harness: Harness | null
+      harness: HarnessId | null
       localSession: boolean
     }>,
   ): Promise<void>

@@ -504,12 +504,12 @@ test.each<[string, RunsOnSetup, readonly RunsOn[] | null]>([
   ['admin owner, nothing connected', {}, ['runtime']],
   [
     'admin owner, workspace host and both tools',
-    { workspaceHost: 'online', machine: 'online', signedIn: ['claude', 'codex'] },
+    { workspaceHost: 'online', machine: 'online', signedIn: ['claude-code', 'codex'] },
     ['runtime', 'claude-code', 'codex'],
   ],
   [
     'admin owner, offline workspace host, Claude signed in',
-    { workspaceHost: 'offline', machine: 'online', signedIn: ['claude'] },
+    { workspaceHost: 'offline', machine: 'online', signedIn: ['claude-code'] },
     ['claude-code'],
   ],
   [
@@ -518,22 +518,26 @@ test.each<[string, RunsOnSetup, readonly RunsOn[] | null]>([
     ['runtime', 'codex'],
   ],
   ['admin owner, machine online with no tool signed in', { machine: 'online' }, ['runtime']],
-  ['admin owner, machine offline with both tools', { machine: 'offline', signedIn: ['claude', 'codex'] }, ['runtime']],
+  [
+    'admin owner, machine offline with both tools',
+    { machine: 'offline', signedIn: ['claude-code', 'codex'] },
+    ['runtime'],
+  ],
   ['not the owner', { isOwner: false }, null],
   [
     'member owner, availability unknown, Claude signed in',
-    { viewer: bob, machine: 'online', signedIn: ['claude'] },
+    { viewer: bob, machine: 'online', signedIn: ['claude-code'] },
     null,
   ],
   ['member owner, availability unknown, nothing connected', { viewer: bob }, ['runtime']],
   [
     'member owner, Spyria runtime available, Claude signed in',
-    { viewer: bob, spyriaRuntimeAvailable: true, machine: 'online', signedIn: ['claude'] },
+    { viewer: bob, spyriaRuntimeAvailable: true, machine: 'online', signedIn: ['claude-code'] },
     ['runtime', 'claude-code'],
   ],
   [
     'member owner, Spyria runtime unavailable, Claude signed in',
-    { viewer: bob, spyriaRuntimeAvailable: false, machine: 'online', signedIn: ['claude'] },
+    { viewer: bob, spyriaRuntimeAvailable: false, machine: 'online', signedIn: ['claude-code'] },
     ['claude-code'],
   ],
   [
@@ -542,15 +546,19 @@ test.each<[string, RunsOnSetup, readonly RunsOn[] | null]>([
     ['codex'],
   ],
   ['an active turn', { isTurnActive: true, workspaceHost: 'online' }, null],
-  ['a machine session on an online host', { machineSession: 'online', machine: 'online', signedIn: ['claude'] }, null],
+  [
+    'a machine session on an online host',
+    { machineSession: 'online', machine: 'online', signedIn: ['claude-code'] },
+    null,
+  ],
   [
     'a machine session whose host is offline',
-    { machineSession: 'offline', machine: 'online', signedIn: ['claude'] },
+    { machineSession: 'offline', machine: 'online', signedIn: ['claude-code'] },
     ['claude-code'],
   ],
   [
     'the workspace switch off',
-    { isSwitchOff: true, workspaceHost: 'online', machine: 'online', signedIn: ['claude', 'codex'] },
+    { isSwitchOff: true, workspaceHost: 'online', machine: 'online', signedIn: ['claude-code', 'codex'] },
     ['runtime'],
   ],
   ['an agent message', { reply: 'agent' }, null],

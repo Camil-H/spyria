@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test'
+import { harnessIds } from '@spyria/kernel'
 import { hostCommandOf } from './host-command.ts'
 
 test('the host command replaces spyria-host and its state, picks rootless or rooted Docker itself and rewrites localhost', () => {
@@ -20,7 +21,7 @@ test('the host command replaces spyria-host and its state, picks rootless or roo
 })
 
 test('the personal host command signs in to the chosen tool once the host runs', () => {
-  for (const tool of ['claude', 'codex'] as const)
+  for (const tool of harnessIds)
     expect(hostCommandOf({ origin: 'https://spyria.test', code: 'ABCDEFGH', personal: true, signIn: tool })).toEndWith(
       ` spyria-host --personal https://spyria.test/h/ABCDEFGH && docker exec -it spyria-host spyria-host login ${tool}`,
     )

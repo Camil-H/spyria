@@ -28,7 +28,7 @@ export const machineTest = test.extend<{ machine: (query?: MachineQuery) => Prom
 export const agentReplyText = 'Understood, working on it.'
 export const research = 'chat-research'
 export const blockedNotice = 'Connect an LLM key in your profile to prompt'
-export const signedInMachine = { owner: 'member-alice', signedIn: 'claude' }
+export const signedInMachine = { owner: 'member-alice', signedIn: 'claude-code' }
 
 export const sessionStarted = (workerStack: WorkerStack, chatId: string) =>
   expect

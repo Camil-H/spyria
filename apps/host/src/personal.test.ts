@@ -1,6 +1,12 @@
 import { expect, test } from 'bun:test'
 import { type Docker, DockerError } from './docker.ts'
-import { credentialsContainerBodyOf, credentialsReaderBodyOf, readCredentials, redacted } from './personal.ts'
+import {
+  credentialsContainerBodyOf,
+  credentialsReaderBodyOf,
+  credentialsTools,
+  readCredentials,
+  redacted,
+} from './personal.ts'
 
 const image = `sha256:${'a'.repeat(64)}`
 const accessToken = 'sk-ant-oat01-FAKEACCESS-dummy-file-000000000000'
@@ -34,7 +40,7 @@ const dockerWithArchive =
   async (_method, path) => {
     const found = path.startsWith('/containers/spyria-cred-codex-reader/archive?path=/workspace/project/auth.json')
       ? codexArchive
-      : path.startsWith('/containers/spyria-cred-claude-reader/archive?path=/workspace/project/.credentials.json')
+      : path.startsWith('/containers/spyria-cred-claude-code-reader/archive?path=/workspace/project/.credentials.json')
         ? archive
         : (() => {
             throw new Error(`unexpected ${path}`)
@@ -45,13 +51,13 @@ const dockerWithArchive =
 
 test('signedIn follows the presence of the credentials file, its change time is reported and its token values are kept for redaction', async () => {
   expect(await readCredentials(dockerWithArchive(tarOf(credentialsFile)), 'spyria-')).toEqual({
-    signedIn: ['claude'],
+    signedIn: ['claude-code'],
     secrets: [accessToken, refreshToken],
-    credentialsChangedAt: { claude: changedAt },
+    credentialsChangedAt: { 'claude-code': changedAt },
   })
   expect(
     (await readCredentials(dockerWithArchive(tarOf(credentialsFile, changedAt + 60)), 'spyria-')).credentialsChangedAt,
-  ).toEqual({ claude: changedAt + 60 })
+  ).toEqual({ 'claude-code': changedAt + 60 })
   expect(await readCredentials(dockerWithArchive(undefined), 'spyria-')).toEqual({
     signedIn: [],
     secrets: [],
@@ -79,7 +85,7 @@ test('the token formats and the exact current token values are redacted, the res
 })
 
 test('login runs the documented command in a one-off TTY container of the pinned image on the credentials volume, as uid 10001', () => {
-  expect(credentialsContainerBodyOf('spyria-', image, 'claude', 'login')).toEqual({
+  expect(credentialsContainerBodyOf('spyria-', image, 'claude-code', 'login')).toEqual({
     Image: image,
     User: '10001:10001',
     Entrypoint: ['claude-agent-acp', '--cli', 'auth', 'login', '--claudeai'],
@@ -97,27 +103,30 @@ test('login runs the documented command in a one-off TTY container of the pinned
       NetworkMode: 'bridge',
       AutoRemove: true,
       Tmpfs: { '/home/openhands': 'uid=10001,gid=10001,mode=0700', '/tmp': '' },
-      Mounts: [{ Type: 'volume', Source: 'spyria-cred-claude', Target: '/home/openhands/.claude' }],
+      Mounts: [{ Type: 'volume', Source: 'spyria-cred-claude-code', Target: '/home/openhands/.claude' }],
     },
   })
 })
 
 test('logout deletes the credentials file without a network or a terminal', () => {
-  expect(credentialsContainerBodyOf('spyria-', image, 'claude', 'logout')).toMatchObject({
+  expect(credentialsContainerBodyOf('spyria-', image, 'claude-code', 'logout')).toMatchObject({
     User: '10001:10001',
     Entrypoint: ['rm', '-f', '/home/openhands/.claude/.credentials.json'],
     Tty: false,
     OpenStdin: false,
-    HostConfig: { NetworkMode: 'none', Mounts: [{ Source: 'spyria-cred-claude', Target: '/home/openhands/.claude' }] },
+    HostConfig: {
+      NetworkMode: 'none',
+      Mounts: [{ Source: 'spyria-cred-claude-code', Target: '/home/openhands/.claude' }],
+    },
   })
 })
 
 test('the credentials reader is never started and mounts the volume where the image owns an empty directory', () => {
-  expect(credentialsReaderBodyOf('spyria-', image, 'claude')).toMatchObject({
+  expect(credentialsReaderBodyOf('spyria-', image, 'claude-code')).toMatchObject({
     Image: image,
     User: '10001:10001',
     NetworkDisabled: true,
-    HostConfig: { NetworkMode: 'none', Mounts: [{ Source: 'spyria-cred-claude', Target: '/workspace/project' }] },
+    HostConfig: { NetworkMode: 'none', Mounts: [{ Source: 'spyria-cred-claude-code', Target: '/workspace/project' }] },
   })
 })
 
@@ -128,9 +137,9 @@ test('signedIn includes codex only for a ChatGPT auth.json, and its token values
     credentialsChangedAt: { codex: changedAt },
   })
   expect(await readCredentials(dockerWithArchive(tarOf(credentialsFile), tarOf(codexApiKeyFile)), 'spyria-')).toEqual({
-    signedIn: ['claude'],
+    signedIn: ['claude-code'],
     secrets: [accessToken, refreshToken, codexApiKey],
-    credentialsChangedAt: { claude: changedAt, codex: changedAt },
+    credentialsChangedAt: { 'claude-code': changedAt, codex: changedAt },
   })
 })
 
@@ -194,4 +203,8 @@ test('the Codex reader mounts its volume where the image owns an empty directory
     NetworkDisabled: true,
     HostConfig: { NetworkMode: 'none', Mounts: [{ Source: 'spyria-cred-codex', Target: '/workspace/project' }] },
   })
+})
+
+test('the credentials stores are keyed by the harness ids of the registry', () => {
+  expect(credentialsTools).toEqual(['claude-code', 'codex'])
 })

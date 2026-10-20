@@ -1,9 +1,22 @@
 import { readFileSync, writeFileSync } from 'node:fs'
+import { harnesses } from '../packages/kernel/src/harnesses.ts'
 
 const agentDirectory = new URL('../apps/agent/', import.meta.url).pathname
 const versionsFile = `${agentDirectory}versions.json`
-const readVersions = (): Record<string, { package: string; version: string }> =>
-  JSON.parse(readFileSync(versionsFile, 'utf8'))
+const harnessesFile = new URL('../packages/kernel/src/harnesses.ts', import.meta.url).pathname
+type Pinned = { package: string; version: string }
+const imageVersions = (): Record<string, Pinned> => JSON.parse(readFileSync(versionsFile, 'utf8'))
+const harnessVersions = () =>
+  Object.fromEntries(
+    Object.values(harnesses).flatMap(({ packages }) =>
+      packages.map((pinned) => {
+        const separator = pinned.lastIndexOf('@')
+        const packageName = pinned.slice(0, separator)
+        return [packageName.split('/').at(-1), { package: packageName, version: pinned.slice(separator + 1) }]
+      }),
+    ),
+  ) as Record<string, Pinned>
+const readVersions = () => ({ ...harnessVersions(), ...imageVersions() })
 const run = (command: string[]) => {
   const result = Bun.spawnSync(command, { cwd: agentDirectory, stdout: 'pipe', stderr: 'inherit' })
   if (result.exitCode !== 0) process.exit(result.exitCode)
@@ -53,7 +66,18 @@ else if (command === 'bump') {
   const versions = readVersions()
   const pinned = versions[tool ?? '']
   if (!pinned) throw new Error(`Unknown tool ${tool}; choose from ${Object.keys(versions).join(', ')}`)
-  pinned.version = latestOf(pinned.package)
-  writeFileSync(versionsFile, `${JSON.stringify(versions, null, 2)}\n`)
+  const latest = latestOf(pinned.package)
+  if (tool && tool in imageVersions()) {
+    const pinnedInImage = imageVersions()
+    pinnedInImage[tool] = { ...pinned, version: latest }
+    writeFileSync(versionsFile, `${JSON.stringify(pinnedInImage, null, 2)}\n`)
+  } else
+    writeFileSync(
+      harnessesFile,
+      readFileSync(harnessesFile, 'utf8').replace(
+        `'${pinned.package}@${pinned.version}'`,
+        `'${pinned.package}@${latest}'`,
+      ),
+    )
   build()
 } else throw new Error('Usage: agent-image.ts build | versions | bump <tool>')

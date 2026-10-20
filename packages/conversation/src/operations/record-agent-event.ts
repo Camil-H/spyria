@@ -1,4 +1,4 @@
-import { type ChatId, type MessageId, messageId, type WorkspaceId } from '@spyria/kernel'
+import { type ChatId, expiredNoticeOf, harnessOf, type MessageId, messageId, type WorkspaceId } from '@spyria/kernel'
 import type { ConversationTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import {
   type AgentEvent,
@@ -14,7 +14,6 @@ import {
 import type { StepDelegation } from '../domain/agent-steps.ts'
 import { newMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
-import { localSessions } from '../domain/session-routing.ts'
 import { closeAgentTurn } from './agent-turn.ts'
 
 type Dependencies = { transactor: ConversationTransactor }
@@ -48,7 +47,7 @@ const recordIn = async (
   const failure =
     (isError || (turnEnd && previous?.sessionUpdate !== 'error')) && (await unitOfWork.agentTurns.lastFailure(chatId))
   const chat = isError && isAuthRequiredError(event) ? await unitOfWork.chats.get(chatId) : undefined
-  const expired = chat?.localSession ? localSessions[chat.harness ?? 'claude-code'] : undefined
+  const expired = chat?.localSession ? harnessOf(chat.harness) : undefined
   const projection =
     seq === undefined
       ? undefined
@@ -56,7 +55,7 @@ const recordIn = async (
           failure
             ? { type: 'step', step: { type: 'error', message: failure } }
             : expired
-              ? { type: 'step', step: { type: 'error', message: expired.expiredNotice, signIn: expired.signIn } }
+              ? { type: 'step', step: { type: 'error', message: expiredNoticeOf(expired), signIn: expired } }
               : projected,
           delegation,
         )
@@ -97,7 +96,7 @@ const recordIn = async (
   return {
     promptId: turnEnd ? null : activePromptId,
     isReplyStored: projection?.type === 'message' || projection?.type === 'step',
-    expiredSignIn: expired?.signIn,
+    expiredSignIn: expired,
   }
 }
 

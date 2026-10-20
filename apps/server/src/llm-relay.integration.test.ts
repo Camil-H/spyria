@@ -1,4 +1,5 @@
 import { afterAll, afterEach, expect, setDefaultTimeout, test } from 'bun:test'
+import { defaultHarness } from '@spyria/kernel'
 import { websocket } from 'hono/bun'
 import { createApp } from './app.ts'
 import {
@@ -154,7 +155,7 @@ test('calls outside /v1, without an active turn or with another host’s runtime
 test('a machine session’s runtime token is refused for model calls before the gateway', async () => {
   const host = await fakeHost('Local session host')
   const { chatId, token } = await runtimeTurn(host, alice)
-  await database.$client`update chats set local_session = true, harness = 'claude-code' where id = ${chatId}`
+  await database.$client`update chats set local_session = true, harness = ${defaultHarness} where id = ${chatId}`
   const callsBefore = fakeLlmCalls.length
   const headers = { 'x-api-key': token, 'content-type': 'application/json' }
   expect(await host.modelCall({ path: '/v1/messages', headers, body: completion })).toMatchObject({ status: 401 })

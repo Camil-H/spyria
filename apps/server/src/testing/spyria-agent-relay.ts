@@ -97,7 +97,7 @@ export const createSpyriaAgentRelay = ({
   mkdirSync(shims)
   mkdirSync(join(directory, '.codex'))
   for (const { command, flavour } of [
-    { command: 'claude-agent-acp', flavour: 'claude' },
+    { command: 'claude-agent-acp', flavour: 'claude-code' },
     { command: 'codex-acp', flavour: 'codex' },
     { command: 'pi', flavour: 'pi' },
   ])

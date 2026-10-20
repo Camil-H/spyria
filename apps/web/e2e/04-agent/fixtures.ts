@@ -25,7 +25,7 @@ export const delegationsFinished = (workerStack: WorkerStack, chatId: string) =>
 export type Harness = { name: 'Pi' | 'Claude Code' | 'Codex'; machine?: { owner: string; signedIn: string } }
 export const harnesses: Harness[] = [
   { name: 'Pi' },
-  { name: 'Claude Code', machine: { owner: 'member-alice', signedIn: 'claude' } },
+  { name: 'Claude Code', machine: { owner: 'member-alice', signedIn: 'claude-code' } },
   { name: 'Codex', machine: { owner: 'member-alice', signedIn: 'codex' } },
 ]
 export const forEachHarness = (declare: (harness: Harness) => void) => {
@@ -48,7 +48,7 @@ export const newOnlineSession = async (
         (
           await workerStack.database.$client`
             select 1 from runtime_hosts where owner_id = 'member-alice' and status = 'online'
-              and capacity->'signedIn' ? ${tool === 'Codex' ? 'codex' : 'claude'}`
+              and capacity->'signedIn' ? ${tool === 'Codex' ? 'codex' : 'claude-code'}`
         ).length,
     )
     .toBe(1)

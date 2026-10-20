@@ -20,21 +20,21 @@ test('the default cap is one runtime per GB after a 2 GB reserve, at least one',
 })
 
 test('an expired sign-in drops the tool until its credentials file changes or goes', () => {
-  const declared = { signedIn: ['claude', 'codex'], credentialsChangedAt: { claude: 100, codex: 200 } }
-  const expired = withExpiredSignIn({ ...capacityOf(system), ...declared }, 'claude')
-  expect(expired).toMatchObject({ signedIn: ['codex'], expiredSignIns: { claude: 100 } })
+  const declared = { signedIn: ['claude-code', 'codex'], credentialsChangedAt: { 'claude-code': 100, codex: 200 } }
+  const expired = withExpiredSignIn({ ...capacityOf(system), ...declared }, 'claude-code')
+  expect(expired).toMatchObject({ signedIn: ['codex'], expiredSignIns: { 'claude-code': 100 } })
   expect(signInsOf(declared, expired.expiredSignIns)).toEqual({
     ...declared,
     signedIn: ['codex'],
-    expiredSignIns: { claude: 100 },
+    expiredSignIns: { 'claude-code': 100 },
   })
-  expect(signInsOf({ ...declared, credentialsChangedAt: { claude: 101, codex: 200 } }, expired.expiredSignIns)).toEqual(
-    {
-      signedIn: ['claude', 'codex'],
-      credentialsChangedAt: { claude: 101, codex: 200 },
-      expiredSignIns: {},
-    },
-  )
+  expect(
+    signInsOf({ ...declared, credentialsChangedAt: { 'claude-code': 101, codex: 200 } }, expired.expiredSignIns),
+  ).toEqual({
+    signedIn: ['claude-code', 'codex'],
+    credentialsChangedAt: { 'claude-code': 101, codex: 200 },
+    expiredSignIns: {},
+  })
   expect(
     signInsOf({ signedIn: ['codex'], credentialsChangedAt: { codex: 200 } }, expired.expiredSignIns),
   ).toMatchObject({

@@ -29,6 +29,7 @@ import {
   type ChatId,
   type ChatPermission,
   chatId,
+  type HarnessId,
   type MemberId,
   type MessageId,
   memberId,
@@ -347,7 +348,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         tx.mutate.chats.update({
           workspaceId: contextWorkspaceId,
           id,
-          ...(fields as Partial<{ subagentPolicy: 'auto' | 'same_as_main'; harness: 'claude-code' | 'codex' | null }>),
+          ...(fields as Partial<{ subagentPolicy: 'auto' | 'same_as_main'; harness: HarnessId | null }>),
         }),
       setAgentModel: async (id, model, reasoningEffort) => {
         await setChatAgentModel(tx, contextWorkspaceId, id, model, reasoningEffort)

@@ -2,9 +2,12 @@ import {
   type ChatId,
   chatModelsOf,
   cheapestModelOf,
+  type HarnessId,
+  harnessOf,
   isPickableModel,
   type MemberId,
   type MessageId,
+  signInNoticeOf,
   type WorkspaceId,
   withPricesOf,
 } from '@spyria/kernel'
@@ -21,8 +24,6 @@ import type { Message } from '../domain/message.ts'
 import { noLlmKeyNoticeOf } from '../domain/model-call-failures.ts'
 import { agentPromptTextOf } from '../domain/seed-message.ts'
 import {
-  type LocalSession,
-  localSessions,
   piModelOf,
   sessionChoiceOf,
   sessionQuestions,
@@ -214,13 +215,13 @@ const machineConversationFor = async (
   dependencies: AgentDependencies,
   chat: AgentChat,
   endpoint: AgentEndpoint,
-  localSession: LocalSession,
+  harness: HarnessId,
 ) => {
   const { transactor } = dependencies
   const { model, reasoningEffort } = await transactor.run(({ routing }) => routing.chatRouting(chat.chatId))
   const resumeSessionId = await transactor.run(({ agentEvents }) => agentEvents.lastSessionId(chat.chatId))
   const conversation = await createdConversationOf(dependencies, chat, endpoint, {
-    harness: localSession.launch,
+    harness,
     resumeSessionId,
     adapterModel: model ?? undefined,
     effort: reasoningEffort ?? undefined,
@@ -234,19 +235,19 @@ const conversationFor = async (
   chat: AgentChat,
   { endpoint, signedIn }: Extract<RuntimeReadiness, { state: 'ready' }>,
   prompt: Message,
-  localSession: LocalSession | undefined,
+  harness: HarnessId | undefined,
 ): Promise<Prepared> => {
   const { transactor, fixedLlm } = dependencies
   const prompterId = prompt.authorId
-  if (localSession && !signedIn.includes(localSession.signIn)) return { refusal: localSession.signInNotice }
+  if (harness && !signedIn.includes(harness)) return { refusal: signInNoticeOf(harness) }
   const storedConversation = await storedConversationOf(dependencies, chat, endpoint)
   if (storedConversation) {
-    if (localSession) return keepAdapterModel(dependencies, chat, storedConversation)
+    if (harness) return keepAdapterModel(dependencies, chat, storedConversation)
     return fixedLlm || !prompterId
       ? { conversation: storedConversation }
       : keepSession(dependencies, chat, storedConversation, prompterId)
   }
-  if (localSession) return { conversation: await machineConversationFor(dependencies, chat, endpoint, localSession) }
+  if (harness) return { conversation: await machineConversationFor(dependencies, chat, endpoint, harness) }
   const routed = fixedLlm || !prompterId ? undefined : await routeSession(dependencies, chat, prompterId, prompt)
   const llm: AgentLlmChoice | undefined =
     routed?.choice && prompterId
@@ -292,12 +293,11 @@ export const startAgentSession = async (
   const readiness = await runtimes.ensureRunning(chat)
   if (readiness.state === 'starting') return { retryInMilliseconds: runtimeStartPollMilliseconds }
   if (readiness.state !== 'ready') return undefined
-  const session = localSessions[harness ?? 'claude-code']
-  if (!readiness.signedIn.includes(session.signIn)) return undefined
+  if (!readiness.signedIn.includes(harnessOf(harness))) return undefined
   await eventSockets.ensureOpen(
     chat,
     (await storedConversationOf(dependencies, chat, readiness.endpoint)) ??
-      (await machineConversationFor(dependencies, chat, readiness.endpoint, session)),
+      (await machineConversationFor(dependencies, chat, readiness.endpoint, harnessOf(harness))),
     null,
   )
   return undefined
@@ -331,7 +331,7 @@ export const promptAgent = async (
       chat,
       readiness,
       prompt,
-      localSession ? localSessions[harness ?? 'claude-code'] : undefined,
+      localSession ? harnessOf(harness) : undefined,
     )
     if ('refusal' in prepared)
       return transactor.run((unitOfWork) => closeAgentTurn(unitOfWork, chatId, prompt.id, () => prepared.refusal))

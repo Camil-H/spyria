@@ -1,4 +1,14 @@
-import { chatModelsOf, type Model, type ModelTier, modelNameOf, nearestModelOf } from '@spyria/kernel'
+import {
+  chatModelsOf,
+  type HarnessId,
+  harnesses,
+  harnessIds,
+  harnessOf,
+  type Model,
+  type ModelTier,
+  modelNameOf,
+  nearestModelOf,
+} from '@spyria/kernel'
 import { type Answers, confidenceThreshold } from './decisions.ts'
 
 export type Effort = 'high' | 'medium' | 'low'
@@ -52,41 +62,20 @@ export const unreachableSessionNoticeOf = (model: string) =>
   `${unreachableSessionNoticePrefix}${modelNameOf(model)}; switch the model or add a key`
 export const isUnreachableSessionNotice = (body: string) => body.startsWith(unreachableSessionNoticePrefix)
 
-export const harnesses = { 'claude-code': { name: 'Claude Code' }, codex: { name: 'Codex' } } as const
-export type Harness = keyof typeof harnesses
-export type HarnessLaunch = 'claude-code-subscription' | 'codex-subscription'
 export const localSessionNotices = {
   ownerOnly: 'Only the owner prompts a session on their machine',
   turnedOff: "Sessions on members' machines are turned off for this workspace",
 }
-export const localSessions = {
-  'claude-code': {
-    launch: 'claude-code-subscription',
-    signIn: 'claude',
-    signInNotice: 'Sign in to Claude Code on your machine: docker exec -it spyria-host spyria-host login claude',
-    expiredNotice: 'Authentication required — sign in to Claude Code again',
-  },
-  codex: {
-    launch: 'codex-subscription',
-    signIn: 'codex',
-    signInNotice: 'Sign in to Codex on your machine: docker exec -it spyria-host spyria-host login codex',
-    expiredNotice: 'Authentication required — sign in to Codex again',
-  },
-} as const satisfies Record<
-  Harness,
-  { launch: HarnessLaunch; signIn: string; signInNotice: string; expiredNotice: string }
->
-export type LocalSession = (typeof localSessions)[Harness]
-export type RunsOn = 'runtime' | Harness
-export const runsOnNames: Record<RunsOn, string> = {
+export type RunsOn = 'runtime' | HarnessId
+export const runsOns = ['runtime', ...harnessIds] as [RunsOn, ...RunsOn[]]
+export const runsOnNames = {
   runtime: 'Spyria runtime',
-  'claude-code': 'Local · Claude Code',
-  codex: 'Local · Codex',
-}
+  ...Object.fromEntries(harnessIds.map((harness) => [harness, `Local · ${harnesses[harness].name}`])),
+} as Record<RunsOn, string>
 export const runsOnFieldsOf = (runsOn: RunsOn) =>
   runsOn === 'runtime' ? { harness: null, localSession: false } : { harness: runsOn, localSession: true }
-export const runsOnOf = (chat: { localSession: boolean | null; harness: Harness | null }): RunsOn | null =>
-  chat.localSession === null ? null : chat.localSession ? (chat.harness ?? 'claude-code') : 'runtime'
+export const runsOnOf = (chat: { localSession: boolean | null; harness: HarnessId | null }): RunsOn | null =>
+  chat.localSession === null ? null : chat.localSession ? harnessOf(chat.harness) : 'runtime'
 export const runsOnWaitingNoticeOf = (ownerName: string) => `Waiting for ${ownerName} to choose where this chat runs`
 const effortSuffixOf = (reasoningEffort: string | null) => (reasoningEffort ? ` (${reasoningEffort})` : '')
 export const chipLabelOf = (
@@ -97,7 +86,7 @@ export const chipLabelOf = (
     reasoningEffort,
   }: {
     localSession: boolean
-    harness: Harness | null
+    harness: HarnessId | null
     model: string | null
     reasoningEffort: string | null
   },
@@ -105,7 +94,7 @@ export const chipLabelOf = (
   adapterNameOf: (id: string) => string,
 ) =>
   localSession
-    ? `${harnesses[harness ?? 'claude-code'].name} · ${model ? adapterNameOf(model) : 'subscription'}${effortSuffixOf(reasoningEffort)}`
+    ? `${harnesses[harnessOf(harness)].name} · ${model ? adapterNameOf(model) : 'subscription'}${effortSuffixOf(reasoningEffort)}`
     : model
       ? `${nameOf(model)}${effortSuffixOf(reasoningEffort)}`
       : 'Model chosen at first prompt'

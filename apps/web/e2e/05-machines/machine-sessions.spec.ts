@@ -21,7 +21,7 @@ import {
 test.describe('Machine sessions', () => {
   const claudeCode = {
     name: 'Claude Code',
-    signedIn: 'claude',
+    signedIn: 'claude-code',
     models: ['Default (stub)', 'Large (stub)'],
     large: { label: 'Large (stub)', id: 'stub-large' },
     efforts: ['default', 'low', 'medium', 'high', 'xhigh', 'max'],

@@ -40,7 +40,7 @@ test.describe('Where a chat runs', () => {
     if (!(await sessionOf(page).isVisible())) await chipOf(page, 'any').click()
     await expect(sessionOf(page)).toBeVisible()
   }
-  const machineOf = { owner: 'member-alice', signedIn: 'claude' }
+  const machineOf = { owner: 'member-alice', signedIn: 'claude-code' }
   const expectRunsOnLockedLocal = async (page: Page) => {
     await expect(runsOnOf(page)).toBeDisabled()
     await expect(runsOnOf(page)).toHaveText('Local')
@@ -159,13 +159,13 @@ test.describe('Where a chat runs', () => {
     for (const { step, query, options } of [
       {
         step: 'signed in to both tools',
-        query: { signedIn: 'claude,codex' },
+        query: { signedIn: 'claude-code,codex' },
         options: [claudeOnMachine, codexOnMachine],
       },
       { step: 'offline', query: { online: 'false' }, options: [] },
       { step: 'back online', query: { online: 'true' }, options: [claudeOnMachine, codexOnMachine] },
       { step: 'signed in to neither tool', query: { signedIn: '' }, options: [] },
-      { step: 'signed in to Claude Code again', query: { signedIn: 'claude' }, options: [claudeOnMachine] },
+      { step: 'signed in to Claude Code again', query: { signedIn: 'claude-code' }, options: [claudeOnMachine] },
     ])
       await test.step(`a machine ${step} offers ${options.join(' and ') || 'Spyria runtime only'}`, async () => {
         await machine(query)
@@ -263,7 +263,7 @@ test.describe('Where a chat runs', () => {
 
     test.describe(() => {
       test.use({ signedInAs: 'member-bob' })
-      const bobMachine = { owner: 'member-bob', signedIn: 'claude' }
+      const bobMachine = { owner: 'member-bob', signedIn: 'claude-code' }
 
       test('As a member with no workspace host online, I get my only machine tool chosen for me and the session started', {
         tag: ['@spec-25'],
@@ -298,7 +298,7 @@ test.describe('Where a chat runs', () => {
     test('As a chat owner with only my machine online, my ordinary runtime chats and another member’s wait with the no-host notice', {
       tag: ['@spec-20'],
     }, async ({ page, browser, workerStack, pair }) => {
-      pair(urlOf(await addMachine(page)), { personal: true, signedIn: ['claude'] })
+      pair(urlOf(await addMachine(page)), { personal: true, signedIn: ['claude-code'] })
       await expect(machineSectionOf(page)).toContainText('Online')
 
       await openChat(page, 'Research')

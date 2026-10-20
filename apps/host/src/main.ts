@@ -22,7 +22,7 @@ const [claimUrlArgument] = givenArguments.filter((argument) => argument !== '--p
 const dockerSocket = process.env.DOCKER_SOCKET ?? '/var/run/docker.sock'
 const prefix = process.env.SPYRIA_HOST_PREFIX ?? 'spyria-'
 const docker = createDocker(dockerSocket)
-const toolNames: Record<CredentialsTool, string> = { claude: 'Claude Code', codex: 'Codex' }
+const toolNames: Record<CredentialsTool, string> = { 'claude-code': 'Claude Code', codex: 'Codex' }
 if (claimUrlArgument === 'login' || claimUrlArgument === 'logout') {
   const action: CredentialsAction = claimUrlArgument
   const tool = givenArguments[1] as CredentialsTool
@@ -44,7 +44,7 @@ if (claimUrlArgument === 'login' || claimUrlArgument === 'logout') {
 }
 if (!claimUrlArgument) {
   console.error(
-    'Usage: spyria-host [--personal] <https://spyria.example.com/h/CODE>, or spyria-host login|logout claude|codex',
+    `Usage: spyria-host [--personal] <https://spyria.example.com/h/CODE>, or spyria-host login|logout ${credentialsTools.join('|')}`,
   )
   process.exit(2)
 }

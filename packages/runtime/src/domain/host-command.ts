@@ -1,13 +1,11 @@
+import { type HarnessId, signInCommandOf } from '@spyria/kernel'
+
 const hostImage = 'spyria-host'
 const dockerSocket = '/var/run/docker.sock'
 const rootlessFlags = `--user 0 -v $XDG_RUNTIME_DIR/docker.sock:${dockerSocket}`
 const rootedFlags = `--group-add $(test "$(uname)" = Darwin && echo 0 || stat -c %g ${dockerSocket}) -v ${dockerSocket}:${dockerSocket}`
 const dockerFlags = `$(docker info -f '{{.SecurityOptions}}' | grep -q rootless && echo "${rootlessFlags}" || echo "${rootedFlags}")`
 const hostGateway = 'host.docker.internal'
-
-export type SignInTool = 'claude' | 'codex'
-
-export const signInCommandOf = (tool: SignInTool) => `docker exec -it spyria-host spyria-host login ${tool}`
 
 export const hostCommandOf = ({
   origin,
@@ -18,7 +16,7 @@ export const hostCommandOf = ({
   origin: string
   code: string
   personal?: boolean
-  signIn?: SignInTool
+  signIn?: HarnessId
 }) => {
   const url = new URL(origin)
   const isLocalhost = url.hostname === 'localhost'

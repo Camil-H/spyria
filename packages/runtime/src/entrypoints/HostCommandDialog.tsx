@@ -1,5 +1,6 @@
+import type { HarnessId } from '@spyria/kernel'
 import { CopyButton, Dialog, ghostButtonClass } from '@spyria/ui'
-import { hostCommandOf, type SignInTool } from '../domain/host-command.ts'
+import { hostCommandOf } from '../domain/host-command.ts'
 
 export const PersonalNotice = ({ toolName }: { toolName?: string }) => (
   <p className="text-sm text-muted">
@@ -23,7 +24,7 @@ export const CommandBox = ({ command }: { command: string }) => (
   </>
 )
 
-export const HostCommand = ({ code, personal, signIn }: { code: string; personal?: boolean; signIn?: SignInTool }) => (
+export const HostCommand = ({ code, personal, signIn }: { code: string; personal?: boolean; signIn?: HarnessId }) => (
   <>
     <p className="text-sm text-muted">
       Run this command in a terminal within 15 minutes

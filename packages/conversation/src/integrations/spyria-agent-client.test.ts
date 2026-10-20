@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test'
+import type { HarnessId } from '@spyria/kernel'
 import { type AgentConversation, AgentStartFailure } from '../contracts/agent.ts'
 import { defaultResumeAfterMilliseconds, delegateTimeoutSeconds } from '../domain/delegation.ts'
-import { type HarnessLaunch, piModelOf } from '../domain/session-routing.ts'
+import { piModelOf } from '../domain/session-routing.ts'
 import { spyriaToolTimeoutSeconds, toolApprovalWindowMilliseconds } from '../domain/tool-calls.ts'
 import { createSpyriaAgentClient, piCommandOf } from './spyria-agent-client.ts'
 
@@ -22,14 +23,14 @@ const endpoint: AgentConversation = {
     },
   },
 }
-const createdBodyOf = async (harness: HarnessLaunch, adapterModel?: string) => {
+const createdBodyOf = async (harness: HarnessId, adapterModel?: string) => {
   requests.length = 0
   await createSpyriaAgentClient().createConversation(endpoint, 'runtime-token', { harness, adapterModel })
   return JSON.parse(requests[0]?.body ?? '{}')
 }
 
 test('a subscription session launches Claude Code without the relay, a model, or secrets, and keeps Spyria tools', async () => {
-  const created = await createdBodyOf('claude-code-subscription')
+  const created = await createdBodyOf('claude-code')
   const command: string[] = created.agent.acp_command
   expect(command.at(-1)).toBe('claude-agent-acp')
   expect(command).toEqual(
@@ -81,11 +82,11 @@ test('a model switch carries the thinking level only when one is given', async (
 })
 
 test('a model picked for a subscription session is sent as acp_model, still without the relay or secrets, and switched in place', async () => {
-  const created = await createdBodyOf('claude-code-subscription', 'sonnet')
+  const created = await createdBodyOf('claude-code', 'sonnet')
   expect(created.agent.acp_model).toBe('sonnet')
   expect(created.secrets).toEqual({})
   expect(JSON.stringify(created)).not.toMatch(/ANTHROPIC_BASE_URL|ANTHROPIC_MODEL|ANTHROPIC_API_KEY|base_url/)
-  expect((await createdBodyOf('claude-code-subscription')).agent).not.toHaveProperty('acp_model')
+  expect((await createdBodyOf('claude-code')).agent).not.toHaveProperty('acp_model')
   requests.length = 0
   await createSpyriaAgentClient().switchModel({ ...endpoint, conversationId: 'conversation-1' }, 'haiku')
   expect(requests).toMatchObject([
@@ -94,7 +95,7 @@ test('a model picked for a subscription session is sent as acp_model, still with
 })
 
 test('a Codex subscription session writes its config atomically and launches without a relay, a provider, a model, or secrets', async () => {
-  const created = await createdBodyOf('codex-subscription')
+  const created = await createdBodyOf('codex')
   const command: string[] = created.agent.acp_command
   const config = command.find((part) => part.startsWith('SPYRIA_CODEX_CONFIG=')) ?? ''
   expect(config).toContain('forced_login_method = "chatgpt"')
@@ -116,7 +117,7 @@ test('a Codex subscription session writes its config atomically and launches wit
 test('a spyria-agent session sends the bare ACP launch with its resume id, and resumes its socket after the last stored seq of that conversation only', async () => {
   const server = createSpyriaAgentClient()
   await server.createConversation(endpoint, 'runtime-token', {
-    harness: 'claude-code-subscription',
+    harness: 'claude-code',
     resumeSessionId: 'session-1',
   })
   const { id, agent, secrets } = JSON.parse(requests.at(-1)?.body ?? '{}')
@@ -157,7 +158,7 @@ test('a spyria-agent conversation that failed to start is deleted and reported w
     },
   }
   await expect(
-    createSpyriaAgentClient().createConversation(failed, 'runtime-token', { harness: 'claude-code-subscription' }),
+    createSpyriaAgentClient().createConversation(failed, 'runtime-token', { harness: 'claude-code' }),
   ).rejects.toEqual(new AgentStartFailure('Authentication required'))
   expect(requests.map(({ method, path }) => `${method} ${path}`)).toEqual([
     'POST /api/conversations',

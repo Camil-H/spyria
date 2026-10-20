@@ -1,3 +1,4 @@
+import { type HarnessId, harnesses } from '@spyria/kernel'
 import {
   type AgentClient,
   type AgentConversation,
@@ -12,7 +13,7 @@ import {
 import type { AgentEvent } from '../domain/agent-events.ts'
 import { delegateTimeoutSeconds } from '../domain/delegation.ts'
 import { githubToolsPath } from '../domain/pull-requests.ts'
-import { type HarnessLaunch, piModelOf } from '../domain/session-routing.ts'
+import { piModelOf } from '../domain/session-routing.ts'
 import { spyriaToolTimeoutSeconds } from '../domain/tool-calls.ts'
 
 export type AgentLlm = { model: string }
@@ -74,52 +75,15 @@ const mcpServerOf = (endpoint: AgentEndpoint, path: string, token: string) => ({
   headers: { Authorization: `Bearer ${token}` },
 })
 
-const claudeCodeSettings = [
-  'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1',
-  'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1',
-  'CLAUDE_CODE_MAX_RETRIES=0',
-]
-
-const backgroundFeaturesOff = `[analytics]
-enabled = false
-
-[feedback]
-enabled = false
-
-[features]
-plugins = false
-remote_plugin = false
-apps = false
-`
-
-const subscriptionConfig = `forced_login_method = "chatgpt"
-check_for_update_on_startup = false
-cli_auth_credentials_store = "file"
-
-${backgroundFeaturesOff}`
-
-const codexSubscriptionCommand = [
-  'env',
-  `SPYRIA_CODEX_CONFIG=${subscriptionConfig}`,
-  'sh',
-  '-c',
-  'set -e; printf %s "$SPYRIA_CODEX_CONFIG" > "$HOME/.codex/config.toml.$$"; mv "$HOME/.codex/config.toml.$$" "$HOME/.codex/config.toml"; exec codex-acp',
-]
-
-const harnessLaunches: Record<HarnessLaunch, string[]> = {
-  'claude-code-subscription': ['env', ...claudeCodeSettings, 'claude-agent-acp'],
-  'codex-subscription': codexSubscriptionCommand,
-}
-
 const harnessConversationOf = (
   endpoint: AgentEndpoint,
   llmToken: string,
-  harness: HarnessLaunch,
+  harness: HarnessId,
   { resumeSessionId, adapterModel, effort }: AgentLlmChoice,
   hasRepository: boolean,
 ) => ({
   agent: {
-    acp_command: harnessLaunches[harness],
+    acp_command: harnesses[harness].launch,
     mcp_config: {
       spyria: mcpServerOf(endpoint, '/mcp', llmToken),
       ...(hasRepository && { github: mcpServerOf(endpoint, githubToolsPath, llmToken) }),

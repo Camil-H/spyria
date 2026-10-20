@@ -89,7 +89,7 @@ test("a real spyria-host --personal runs Spyria's image with the credentials vol
   const [inspected] = JSON.parse(dockerText('inspect', containerName))
   expect(
     (inspected.HostConfig.Mounts as { Source: string; Target: string }[]).map(({ Source, Target }) => [Source, Target]),
-  ).toContainEqual([`${prefix}cred-claude`, '/home/openhands/.claude'])
+  ).toContainEqual([`${prefix}cred-claude-code`, '/home/openhands/.claude'])
   await gateway.sandboxProvider.start(runtime)
   const transport = gateway.sandboxProvider.connect(runtime)
   const isReady = () =>
@@ -148,7 +148,7 @@ test("a real spyria-host --personal runs Spyria's image with the credentials vol
   })
   const written = docker(
     ...['run', '--rm', '--name', `${prefix}write-credentials`, '--user', '10001:10001', '--network', 'none'],
-    ...['--mount', `type=volume,src=${prefix}cred-claude,dst=/c`, '--entrypoint', 'sh', spyriaImage],
+    ...['--mount', `type=volume,src=${prefix}cred-claude-code,dst=/c`, '--entrypoint', 'sh', spyriaImage],
     ...['-c', `umask 077 && printf '%s' '${credentialsFile}' > /c/.credentials.json`],
   )
   expect(written.stderr.toString()).toBe('')
@@ -171,11 +171,14 @@ test("a real spyria-host --personal runs Spyria's image with the credentials vol
   ).rejects.toThrow('refused')
 
   await gateway.sandboxProvider.remove(runtime)
-  expect(dockerText('volume', 'ls', '-q', '--filter', `name=^${prefix}cred-claude$`)).toBe(`${prefix}cred-claude`)
+  expect(dockerText('volume', 'ls', '-q', '--filter', `name=^${prefix}cred-claude-code$`)).toBe(
+    `${prefix}cred-claude-code`,
+  )
 
   await waitFor(
     async () =>
-      ((await hostRow(id))?.capacity as { signedIn?: string[] } | undefined)?.signedIn?.includes('claude') === true,
+      ((await hostRow(id))?.capacity as { signedIn?: string[] } | undefined)?.signedIn?.includes('claude-code') ===
+      true,
   )
-  expect((await hostRow(id))?.capacity).toMatchObject({ personal: true, signedIn: ['claude'] })
+  expect((await hostRow(id))?.capacity).toMatchObject({ personal: true, signedIn: ['claude-code'] })
 }, 180_000)

@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { startAgent } from './agent.ts'
+import { formShapes, startAgent } from './agent.ts'
 import {
   type AgentEvent,
   apiKey,
@@ -666,4 +666,8 @@ test('a sub-conversation answers its own questions: a free assumption where the 
     approved: true,
   })
   expect(socket.events.filter(kindOf('question'))).toEqual([])
+})
+
+test('the question form shapes are keyed by the harness ids of the registry', () => {
+  expect(Object.keys(formShapes)).toEqual(['claude-code', 'codex'])
 })

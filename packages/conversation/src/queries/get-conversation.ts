@@ -9,13 +9,21 @@ import {
   type Snapshot,
   workspacePermissionsIn,
 } from '@spyria/db'
-import { type ChatId, can, type MemberId, type MessageId, messageId, type WorkspaceId } from '@spyria/kernel'
+import {
+  type ChatId,
+  can,
+  harnessIds,
+  type MemberId,
+  type MessageId,
+  messageId,
+  type WorkspaceId,
+} from '@spyria/kernel'
 import { stoppedByPrefix } from '../domain/agent-events.ts'
 import type { AgentStep, StoredStep, ThoughtStep } from '../domain/agent-steps.ts'
 import { stillRunningOf } from '../domain/delegation.ts'
 import { isFrozen } from '../domain/message.ts'
 import type { PullRequestStep } from '../domain/pull-requests.ts'
-import { type Harness, localSessions, type RunsOn, runsOnOf } from '../domain/session-routing.ts'
+import { type RunsOn, runsOnOf } from '../domain/session-routing.ts'
 
 export type ConversationMessage = Readonly<{
   id: MessageId
@@ -241,8 +249,8 @@ export const getConversation =
     const machine = snapshot.workspaces.some((workspace) => workspace.id === workspaceId && workspace.localSessions)
       ? snapshot.runtimeHosts.find((host) => host.workspaceId === workspaceId && host.ownerId === viewerId)
       : undefined
-    const connectedHarnesses = (Object.keys(localSessions) as Harness[]).filter(
-      (harness) => machine?.status === 'online' && machine.capacity?.signedIn?.includes(localSessions[harness].signIn),
+    const connectedHarnesses = harnessIds.filter(
+      (harness) => machine?.status === 'online' && machine.capacity?.signedIn?.includes(harness),
     )
     const hasWorkspaceHost = workspacePermissionsIn(snapshot, workspaceId, viewerId).includes('runtimes.manage')
       ? snapshot.runtimeHosts.some(

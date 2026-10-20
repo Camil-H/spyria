@@ -1,6 +1,7 @@
 import { afterAll, expect, test } from 'bun:test'
 import { createHash } from 'node:crypto'
 import { createZeroStore } from '@spyria/db/zero-store'
+import { defaultHarness } from '@spyria/kernel'
 import { runtimeMutators } from '@spyria/runtime/server'
 import { websocket } from 'hono/bun'
 import { createApp } from '../app.ts'
@@ -256,7 +257,7 @@ test('a valid code yields one token whose hash only is stored, a renewed code pa
     credentialsChangedAt: {},
     expiredSignIns: {},
   })
-  machine.send({ type: 'heartbeat', memoryFreeBytes: gibibyte, running: 0, signedIn: ['claude'] })
+  machine.send({ type: 'heartbeat', memoryFreeBytes: gibibyte, running: 0, signedIn: [defaultHarness] })
   await waitFor(async () => ((await hostRow(machineId)).capacity as { signedIn: string[] }).signedIn.length === 1)
   await database.$client`update runtime_hosts set removed_at = now() where owner_id is not null`
 })

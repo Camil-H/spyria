@@ -78,7 +78,7 @@ test.describe('Policy', () => {
         .$client`select 1 from runtime_hosts where owner_id = 'member-bob' and removed_at is null`,
     ).toHaveLength(0)
 
-    await machine({ owner: 'member-bob', signedIn: 'claude' })
+    await machine({ owner: 'member-bob', signedIn: 'claude-code' })
     await expect(machineSectionOf(bobPage)).toContainText('Online')
     await expect(machineSectionOf(bobPage).getByRole('button', { name: 'Remove' })).toBeVisible()
     const dialog = await openNewChat(bobPage)
@@ -98,7 +98,7 @@ test.describe('Policy', () => {
   test('As a member who can manage runtime hosts, I turn machine sessions off and an existing one answers prompts with the notice, then again once I turn them back on', {
     tag: ['@spec-22'],
   }, async ({ page, machine }) => {
-    await machine({ owner: 'member-alice', signedIn: 'claude' })
+    await machine({ owner: 'member-alice', signedIn: 'claude-code' })
     await newRuntimeChat(page, 'Laptop switch', 'Local · Claude Code')
     await expect(mainOf(page).getByRole('button', { name: 'Claude Code · subscription' })).toBeVisible()
     await sendMessage(page, 'Before the switch')

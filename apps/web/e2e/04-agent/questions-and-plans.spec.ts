@@ -29,7 +29,7 @@ import {
   workingIndicatorOf,
 } from './fixtures'
 
-const claude = { owner: 'member-alice', signedIn: 'claude' }
+const claude = { owner: 'member-alice', signedIn: 'claude-code' }
 const assumption = 'No member is available; decide yourself and state your assumption.'
 
 const askPromptOf = { Pi: 'stub:ask', 'Claude Code': 'stub:ask', Codex: 'stub:ask-codex' }

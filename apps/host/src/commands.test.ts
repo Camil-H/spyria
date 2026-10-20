@@ -146,7 +146,7 @@ const recordingDocker = () => {
 test('a personal create mounts both credentials volumes at ~/.claude and ~/.codex, a workspace create does not', () => {
   const personalMounts = containerBodyOf({ prefix: 'spyria-', ...create, personal: true }).HostConfig.Mounts
   expect(personalMounts.slice(-2)).toEqual([
-    { Type: 'volume', Source: 'spyria-cred-claude', Target: '/home/openhands/.claude' },
+    { Type: 'volume', Source: 'spyria-cred-claude-code', Target: '/home/openhands/.claude' },
     { Type: 'volume', Source: 'spyria-cred-codex', Target: '/home/openhands/.codex' },
   ])
   expect(personalMounts.slice(0, -2)).toEqual(containerBodyOf({ prefix: 'spyria-', ...create }).HostConfig.Mounts)
@@ -158,12 +158,14 @@ test('a personal host creates the runtime with both credentials volumes after pr
   await createCommandRunner({ docker, prefix: 'spyria-', personal: true }).run({ op: 'create', ...create })
   const created = calls.filter((call) => call.path.startsWith('/containers/create'))
   expect(created.map((call) => call.path)).toEqual([
-    '/containers/create?name=spyria-cred-claude-reader',
+    '/containers/create?name=spyria-cred-claude-code-reader',
     '/containers/create?name=spyria-cred-codex-reader',
     '/containers/create?name=spyria-rt-runtime-1',
   ])
   expect(JSON.stringify(created[1]?.body)).toContain('"Source":"spyria-cred-codex","Target":"/workspace/project"')
-  expect(JSON.stringify(created[2]?.body)).toContain('"Source":"spyria-cred-claude","Target":"/home/openhands/.claude"')
+  expect(JSON.stringify(created[2]?.body)).toContain(
+    '"Source":"spyria-cred-claude-code","Target":"/home/openhands/.claude"',
+  )
   expect(JSON.stringify(created[2]?.body)).toContain('"Source":"spyria-cred-codex","Target":"/home/openhands/.codex"')
 })
 
