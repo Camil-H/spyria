@@ -2,7 +2,7 @@ import type { RuntimeId, WorkspaceId } from '@spyria/kernel'
 import type { SandboxProvider, SandboxTransport } from '../contracts/sandbox-provider.ts'
 import type { RuntimeTransactor } from '../contracts/transactor.ts'
 import { ApiKeyMissing, RuntimeNotReady } from '../domain/errors.ts'
-import { locationOf, transitioned } from '../domain/runtime.ts'
+import { installFailureOf, locationOf, transitioned } from '../domain/runtime.ts'
 import { recordIfUnchanged } from './record-if-unchanged.ts'
 
 type Dependencies = { transactor: RuntimeTransactor; provider: SandboxProvider }
@@ -27,31 +27,51 @@ const waitUntilReady = async (transport: SandboxTransport, runtimeId: RuntimeId)
     if (Date.now() > deadline) throw new RuntimeNotReady(runtimeId)
 }
 
+class HarnessInstallFailed extends Error {}
+
 export const bringUpRuntime = async (
   { transactor, provider }: Dependencies,
   { workspaceId, runtimeId, now, isLastAttempt }: Input,
 ) => {
-  const { runtime, apiKey } = await transactor.run(async ({ runtimes, secrets }) => {
+  const { runtime, apiKey, harness } = await transactor.run(async ({ runtimes, secrets }) => {
     const runtime = await runtimes.lock(workspaceId, runtimeId)
-    return { runtime, apiKey: await secrets.valueOf(runtime, 'apiKey') }
+    return {
+      runtime,
+      apiKey: await secrets.valueOf(runtime, 'apiKey'),
+      harness: await runtimes.localHarnessOf(runtime),
+    }
   })
   const sandbox = locationOf(runtime)
-  if ((runtime.state !== 'creating' && runtime.state !== 'starting') || !sandbox) return
+  if (!['creating', 'starting', 'installing'].includes(runtime.state) || !sandbox) return
+  let started = runtime
   try {
     const status = await provider.status(sandbox)
     if (status === 'missing') {
       if (!apiKey) throw new ApiKeyMissing(runtimeId)
       await provider.create({ ...sandbox, image: runtime.image, apiKey })
     }
+    if (harness && !(await provider.hasHarness({ ...sandbox, harness }))) {
+      const installing = runtime.state === 'installing' ? runtime : transitioned(runtime, 'installing', now)
+      await recordIfUnchanged(transactor, runtime, ({ runtimes }) => runtimes.save(installing))
+      started = installing
+      await provider.installHarness({ ...sandbox, harness }).catch((error: Error) => {
+        throw new HarnessInstallFailed(error.message)
+      })
+    }
     if (status !== 'running') await provider.start(sandbox)
     await waitUntilReady(provider.connect(sandbox), runtimeId)
-    await recordIfUnchanged(transactor, runtime, ({ runtimes }, current) =>
+    await recordIfUnchanged(transactor, started, ({ runtimes }, current) =>
       runtimes.save({ ...transitioned(current, 'running', now), lastActiveAt: now }),
     )
   } catch (error) {
-    if (!isLastAttempt) throw error
-    const failure = runtime.state === 'creating' ? 'create_failed' : 'start_failed'
-    await recordIfUnchanged(transactor, runtime, ({ runtimes }, current) =>
+    const isInstallFailure = error instanceof HarnessInstallFailed
+    if (!isLastAttempt && !isInstallFailure) throw error
+    const failure = isInstallFailure
+      ? installFailureOf(error.message)
+      : runtime.state === 'creating'
+        ? 'create_failed'
+        : 'start_failed'
+    await recordIfUnchanged(transactor, started, ({ runtimes }, current) =>
       runtimes.save(transitioned(current, 'failed', now, current.hostOnline ? failure : 'no_host')),
     )
     console.error(`Runtime ${runtimeId} ${failure}: ${error instanceof Error ? error.message : 'unknown error'}`)

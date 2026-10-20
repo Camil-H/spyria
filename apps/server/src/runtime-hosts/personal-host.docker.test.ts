@@ -7,6 +7,7 @@ import { runtimeHostId } from '@spyria/kernel'
 import { websocket } from 'hono/bun'
 import { createApp } from '../app.ts'
 import { readSpyriaAgentImage } from '../spyria-agent-image.ts'
+import { requireTestHarnesses, testHarnessesVolume } from '../testing/harnesses.ts'
 import { acme, aliceInAcme, sessionTokenOf, testAuthSettings, waitFor } from '../testing/testing.ts'
 import { createRuntimeHostGateway } from './gateway.ts'
 
@@ -18,6 +19,7 @@ const dockerText = (...args: string[]) =>
 const spyriaImage = await readSpyriaAgentImage()
 if (!spyriaImage || docker('image', 'inspect', spyriaImage).exitCode !== 0)
   throw new Error('Spyria image missing: run bun run agent:build')
+requireTestHarnesses()
 
 const prefix = `spyria-test-${crypto.randomUUID().slice(0, 8)}-`
 const hostProgram = new URL('../../../host/src/main.ts', import.meta.url).pathname
@@ -59,6 +61,8 @@ const startPersonalHost = async (id: string, url: string) => {
       SPYRIA_HOST_STATE_DIR: stateDirectory,
       SPYRIA_HOST_PREFIX: prefix,
       SPYRIA_HOST_HEARTBEAT_MS: '200',
+      SPYRIA_HARNESSES_VOLUME: testHarnessesVolume,
+      SPYRIA_HARNESS_REGISTRY: 'http://127.0.0.1:9',
     },
     stdout: 'inherit',
     stderr: 'inherit',

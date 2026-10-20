@@ -54,6 +54,7 @@ export type RuntimeHostRow = {
 }
 export type RuntimeState =
   | 'creating'
+  | 'installing'
   | 'running'
   | 'stopping'
   | 'stopped'
@@ -61,7 +62,14 @@ export type RuntimeState =
   | 'removing'
   | 'removed'
   | 'failed'
-export type RuntimeFailure = 'no_host' | 'no_capacity' | 'no_image' | 'create_failed' | 'start_failed' | 'lost'
+export type RuntimeFailure =
+  | 'no_host'
+  | 'no_capacity'
+  | 'no_image'
+  | 'create_failed'
+  | 'start_failed'
+  | 'lost'
+  | `install_failed: ${string}`
 type RuntimeRow = {
   workspaceId: WorkspaceId
   id: RuntimeId

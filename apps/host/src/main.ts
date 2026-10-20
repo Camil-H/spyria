@@ -3,6 +3,7 @@ import { hostname } from 'node:os'
 import { join } from 'node:path'
 import { createCommandRunner, gatewayRelayAlias, parseCommand } from './commands.ts'
 import { createDocker } from './docker.ts'
+import { harnessNames } from './harnesses.ts'
 import { createModelRelay } from './model-relay.ts'
 import {
   type Credentials,
@@ -22,7 +23,6 @@ const [claimUrlArgument] = givenArguments.filter((argument) => argument !== '--p
 const dockerSocket = process.env.DOCKER_SOCKET ?? '/var/run/docker.sock'
 const prefix = process.env.SPYRIA_HOST_PREFIX ?? 'spyria-'
 const docker = createDocker(dockerSocket)
-const toolNames: Record<CredentialsTool, string> = { 'claude-code': 'Claude Code', codex: 'Codex' }
 if (claimUrlArgument === 'login' || claimUrlArgument === 'logout') {
   const action: CredentialsAction = claimUrlArgument
   const tool = givenArguments[1] as CredentialsTool
@@ -39,7 +39,7 @@ if (claimUrlArgument === 'login' || claimUrlArgument === 'logout') {
     process.exit(1)
   })
   const { signedIn } = await readCredentials(docker, prefix)
-  console.log(`${signedIn.includes(tool) ? 'Signed in' : 'Not signed in'} to ${toolNames[tool]}`)
+  console.log(`${signedIn.includes(tool) ? 'Signed in' : 'Not signed in'} to ${harnessNames[tool]}`)
   process.exit(0)
 }
 if (!claimUrlArgument) {

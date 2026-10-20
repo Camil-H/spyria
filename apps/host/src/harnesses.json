@@ -1,0 +1,20 @@
+{
+  "claude-code": {
+    "packages": {
+      "@anthropic-ai/claude-code": "2.1.296",
+      "@agentclientprotocol/claude-agent-acp": "0.90.0"
+    },
+    "executables": {
+      "CLAUDE_CODE_EXECUTABLE": "claude"
+    }
+  },
+  "codex": {
+    "packages": {
+      "@openai/codex": "0.162.1",
+      "@agentclientprotocol/codex-acp": "2.2.2"
+    },
+    "executables": {
+      "CODEX_PATH": "codex"
+    }
+  }
+}

@@ -21,7 +21,7 @@ import {
   type ZeroContext,
   zql,
 } from '@spyria/db/zero-queries'
-import { chatId, memberId, runtimeHostId, runtimeId, type WorkspaceId, workspaceId } from '@spyria/kernel'
+import { chatId, harnessOf, memberId, runtimeHostId, runtimeId, type WorkspaceId, workspaceId } from '@spyria/kernel'
 import type { RuntimeTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import { HostNotFound, RuntimeNotFound } from '../domain/errors.ts'
 import type { Runtime } from '../domain/runtime.ts'
@@ -108,6 +108,10 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
       findByChat: async (workspaceId, chatId) => {
         const row = await tx.run(zql.runtimes.where('workspaceId', workspaceId).where('chatId', chatId).one())
         return row && runtimeOf(row)
+      },
+      localHarnessOf: async (runtime) => {
+        const chat = await tx.run(zql.chats.where('workspaceId', runtime.workspaceId).where('id', runtime.chatId).one())
+        return chat?.localSession ? harnessOf(chat.harness) : undefined
       },
       add: (runtime) => tx.mutate.runtimes.insert(runtime),
       save: (runtime) => tx.mutate.runtimes.update(runtime),

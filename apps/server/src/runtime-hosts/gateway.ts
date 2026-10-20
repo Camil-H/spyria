@@ -39,6 +39,7 @@ type Connection = {
 const refusedCloseCode = 4001
 const replacedCloseCode = 4002
 const requestTimeoutMilliseconds = 180_000
+const installTimeoutMilliseconds = 240_000
 const identifyTimeoutMilliseconds = 10_000
 const defaultGatewayRelayUrl = 'http://spyria-gateway-relay:4000/v1'
 
@@ -246,13 +247,17 @@ export const createRuntimeHostGateway = ({
     return connection
   }
 
-  const request = (target: ConnectedHost & { runtimeId?: string }, frame: object) => {
+  const request = (
+    target: ConnectedHost & { runtimeId?: string },
+    frame: object,
+    timeoutMilliseconds = requestTimeoutMilliseconds,
+  ) => {
     const connection = connectionOf(target)
     const id = nextRequestId++
     const response = Promise.withResolvers<Frame>()
     const timer = setTimeout(
       () => response.reject(new Error(`Runtime host ${target.hostId} did not answer in time`)),
-      requestTimeoutMilliseconds,
+      timeoutMilliseconds,
     )
     connection.pending.set(id, response)
     sendTo(connection, { ...frame, id, sid: id, runtimeId: target.runtimeId })
@@ -262,8 +267,8 @@ export const createRuntimeHostGateway = ({
     })
   }
 
-  const command = async (host: ConnectedHost, op: string, args: object) =>
-    (await request(host, { type: 'cmd', op, args })).data
+  const command = async (host: ConnectedHost, op: string, args: object, timeoutMilliseconds?: number) =>
+    (await request(host, { type: 'cmd', op, args }, timeoutMilliseconds)).data
 
   const prepare = async (host: ConnectedHost, image: string) => {
     await command(host, 'prepare', { image })
@@ -281,6 +286,11 @@ export const createRuntimeHostGateway = ({
     stop: commandWithoutResult('stop'),
     remove: commandWithoutResult('remove'),
     status: async (sandbox) => (await command(sandbox, 'status', { runtimeId: sandbox.runtimeId })) as SandboxStatus,
+    hasHarness: async ({ harness, ...sandbox }) =>
+      (await command(sandbox, 'installed', { runtimeId: sandbox.runtimeId, harness })) === true,
+    installHarness: async ({ harness, ...sandbox }) => {
+      await command(sandbox, 'install', { runtimeId: sandbox.runtimeId, harness }, installTimeoutMilliseconds)
+    },
     connect: (sandbox) => ({
       gatewayUrl: connectionByHost.get(keyOf(sandbox))?.identified?.gatewayUrl ?? defaultGatewayRelayUrl,
       fetch: async (sandboxRequest) => {

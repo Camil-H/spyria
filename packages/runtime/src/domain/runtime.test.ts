@@ -4,6 +4,8 @@ import {
   canTransition,
   ensureStepOf,
   idleStepOf,
+  installFailureOf,
+  installFailureReasonOf,
   isTouchDue,
   placementOf,
   type Runtime,
@@ -32,8 +34,9 @@ const runtime = (fields: Partial<Runtime> = {}) =>
     ...fields,
   }) as Runtime
 const allowedTransitions: Record<RuntimeState, RuntimeState[]> = {
-  creating: ['running', 'removing', 'failed'],
-  starting: ['running', 'removing', 'failed'],
+  creating: ['installing', 'running', 'removing', 'failed'],
+  starting: ['installing', 'running', 'removing', 'failed'],
+  installing: ['running', 'removing', 'failed'],
   running: ['stopping', 'stopped', 'removing', 'failed'],
   stopping: ['stopped', 'removing', 'failed'],
   stopped: ['starting', 'running', 'removing', 'failed'],
@@ -139,4 +142,13 @@ test.each<[RuntimeState | undefined, boolean, RuntimeStatus]>([
   ['failed', false, 'Could not start'],
 ])('a %s runtime with its host online %p reads %s', (state, hostOnline, status) => {
   expect(runtimeStatusOf(state && { state, hostOnline })).toBe(status)
+})
+
+test('an installing runtime reads Installing with its harness name, and an install failure keeps npm’s reason', () => {
+  expect(runtimeStatusOf({ state: 'installing', hostOnline: true }, 'Claude Code')).toBe('Installing Claude Code…')
+  expect(runtimeStatusOf({ state: 'installing', hostOnline: true })).toBe('Starting…')
+  const failure = installFailureOf('404 Not Found - GET http://registry/@openai%2fcodex')
+  expect(runtimeStatusOf({ state: 'failed', hostOnline: true }, 'Codex')).toBe('Could not start')
+  expect(installFailureReasonOf(failure)).toBe('404 Not Found - GET http://registry/@openai%2fcodex')
+  expect(installFailureReasonOf('start_failed')).toBeUndefined()
 })

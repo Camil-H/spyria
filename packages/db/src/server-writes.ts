@@ -170,7 +170,7 @@ export const lockRuntimeHostLoads = (tx: Transaction, workspaceId: string, chatI
     tx,
     `select id as "hostId", status = 'online' as online, coalesce((capacity->>'cap')::int, 0) as cap,
        (select count(*)::int from runtimes where runtimes.workspace_id = runtime_hosts.workspace_id
-          and runtimes.host_id = runtime_hosts.id and runtimes.state in ('creating', 'starting', 'running', 'stopping')
+          and runtimes.host_id = runtime_hosts.id and runtimes.state in ('creating', 'starting', 'installing', 'running', 'stopping')
        ) as running
      from runtime_hosts where workspace_id = $1 and removed_at is null and owner_id is not distinct from
        (select case when local_session then owner_user_id end from chats where workspace_id = $1 and id = $2)

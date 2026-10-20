@@ -1,4 +1,12 @@
-import { type Docker, DockerError } from './docker.ts'
+import { type Docker, DockerError, type Mount } from './docker.ts'
+import {
+  type HarnessId,
+  harnessEnvironment,
+  harnessesMountOf,
+  harnessIds,
+  installHarness,
+  isHarnessInstalled,
+} from './harnesses.ts'
 import { credentialsMountsOf, ensureCredentialsReaders } from './personal.ts'
 
 export class Refused extends Error {
@@ -14,13 +22,14 @@ const spyriaAgentPort = 8000
 export const gatewayRelayAlias = 'spyria-gateway-relay'
 const gibibyte = 1024 ** 3
 const volumeTargets = { ws: '/workspace', home: '/home/openhands', tmp: '/tmp' }
-const operations = ['create', 'prepare', 'start', 'stop', 'remove', 'status'] as const
+const operations = ['create', 'prepare', 'start', 'stop', 'remove', 'status', 'installed', 'install'] as const
 const imageRefusal = 'image other than a local content ID (sha256:<64 hex>)'
 
 type Operation = (typeof operations)[number]
-type RuntimeOperation = Exclude<Operation, 'create' | 'prepare'>
+type HarnessOperation = 'installed' | 'install'
+type RuntimeOperation = Exclude<Operation, 'create' | 'prepare' | HarnessOperation>
 type ContainerInfo = {
-  Config?: { Labels?: Record<string, string> }
+  Config?: { Labels?: Record<string, string>; Image?: string }
   State?: { Running?: boolean }
   NetworkSettings?: { Networks?: Record<string, { IPAddress?: string }> }
 }
@@ -29,6 +38,7 @@ export type Command =
   | ({ op: 'create' } & CreateRequest)
   | { op: 'prepare'; image: string }
   | { op: RuntimeOperation; runtimeId: string }
+  | { op: HarnessOperation; runtimeId: string; harness: HarnessId }
 
 const fieldOf = (fields: Record<string, unknown>, name: string, pattern: RegExp, reason: string) => {
   const value = fields[name]
@@ -39,12 +49,21 @@ const fieldOf = (fields: Record<string, unknown>, name: string, pattern: RegExp,
 export const parseCommand = (op: unknown, args: unknown): Command => {
   if (!operations.includes(op as Operation)) throw new Refused(`unknown command ${String(op)}`)
   const fields = (typeof args === 'object' && args !== null ? args : {}) as Record<string, unknown>
-  const allowedFields = { create: ['runtimeId', 'image', 'apiKey'], prepare: ['image'] }[op as string] ?? ['runtimeId']
+  const allowedFields = {
+    create: ['runtimeId', 'image', 'apiKey'],
+    prepare: ['image'],
+    installed: ['runtimeId', 'harness'],
+    install: ['runtimeId', 'harness'],
+  }[op as string] ?? ['runtimeId']
   const extraFields = Object.keys(fields).filter((field) => !allowedFields.includes(field))
   if (extraFields.length > 0) throw new Refused(`unexpected fields ${extraFields.join(', ')}`)
   const imageOf = () => fieldOf(fields, 'image', imagePattern, imageRefusal)
   if (op === 'prepare') return { op, image: imageOf() }
   const runtimeId = fieldOf(fields, 'runtimeId', runtimeIdPattern, 'invalid runtime id')
+  if (op === 'installed' || op === 'install') {
+    if (!harnessIds.includes(fields.harness as HarnessId)) throw new Refused('unknown harness')
+    return { op, runtimeId, harness: fields.harness as HarnessId }
+  }
   if (op !== 'create') return { op: op as RuntimeOperation, runtimeId }
   return {
     op,
@@ -69,7 +88,7 @@ export const containerBodyOf = ({
     Image: image,
     Hostname: name,
     User: '10001:10001',
-    Env: [`OH_SESSION_API_KEYS_0=${apiKey}`],
+    Env: [`OH_SESSION_API_KEYS_0=${apiKey}`, ...(personal ? harnessEnvironment : [])],
     Labels: { 'spyria.managed': '1', 'spyria.runtime': runtimeId },
     HostConfig: {
       NetworkMode: networkNameOf(prefix, runtimeId),
@@ -84,12 +103,12 @@ export const containerBodyOf = ({
       PidsLimit: 512,
       RestartPolicy: { Name: 'no' },
       Mounts: [
-        ...Object.entries(volumeTargets).map(([suffix, target]) => ({
+        ...Object.entries(volumeTargets).map(([suffix, target]): Mount => ({
           Type: 'volume',
           Source: `${name}-${suffix}`,
           Target: target,
         })),
-        ...(personal ? credentialsMountsOf(prefix) : []),
+        ...(personal ? [...credentialsMountsOf(prefix), harnessesMountOf(prefix)] : []),
       ],
     },
   }
@@ -168,6 +187,12 @@ export const createCommandRunner = ({
     if (command.op === 'prepare') return void (await prepare(command.image))
     const name = containerNameOf(prefix, command.runtimeId)
     if (command.op === 'create') return create(command)
+    if (command.op === 'installed' || command.op === 'install') {
+      if (!personal) throw new Refused('harnesses install only on a personal host')
+      if (command.op === 'installed') return isHarnessInstalled(docker, name, command.harness)
+      const image = (await managedContainer(command.runtimeId)).Config?.Image ?? ''
+      return installHarness(docker, prefix, image, command.harness)
+    }
     if (command.op === 'status')
       return managedContainer(command.runtimeId).then(
         (container) => (container.State?.Running ? 'running' : 'stopped'),

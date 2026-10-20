@@ -3,7 +3,13 @@ import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { schema } from '@spyria/db/zero'
 import { createZeroStore } from '@spyria/db/zero-store'
 import { type ChatId, chatId, defaultHarness } from '@spyria/kernel'
-import { createRuntimeJobs, createRuntimeTransactor, ensureRuntimeRunning, touchRuntime } from '@spyria/runtime/server'
+import {
+  createRuntimeJobs,
+  createRuntimeTransactor,
+  ensureRuntimeRunning,
+  retryRuntime,
+  touchRuntime,
+} from '@spyria/runtime/server'
 import { websocket } from 'hono/bun'
 import { createApp } from '../app.ts'
 import { startJobWorker } from '../job-worker.ts'
@@ -43,11 +49,11 @@ afterAll(async () => {
   void server.stop(true)
 })
 
-const newRuntimeChat = async (name = 'Runtime chat', readerId?: string) => {
+const newRuntimeChat = async (name = 'Runtime chat', readerId?: string, harness: string | null = null) => {
   const id = `chat-${crypto.randomUUID()}`
   await database.$client`
-    insert into chats (workspace_id, id, type, visibility, owner_kind, owner_user_id, name, archived, created_at)
-    values (${acme}, ${id}, 'runtime', 'private', 'user', ${alice}, ${name}, false, now())`
+    insert into chats (workspace_id, id, type, visibility, owner_kind, owner_user_id, name, local_session, harness, archived, created_at)
+    values (${acme}, ${id}, 'runtime', 'private', 'user', ${alice}, ${name}, ${harness !== null}, ${harness}, false, now())`
   for (const [memberId, roleId] of [[alice, 'owner'], ...(readerId ? [[readerId, 'reader']] : [])] as const)
     await database.$client`
       insert into chat_participants (workspace_id, chat_id, user_id, role_id) values (${acme}, ${id}, ${memberId}, ${roleId})`
@@ -72,6 +78,19 @@ const sweep = () =>
     isLastAttempt: false,
     transact: (work) => zeroDatabase.transaction(work),
   })
+const retry = (chat: ChatId) =>
+  zeroDatabase.transaction((tx) =>
+    retryRuntime(
+      { transactor: createRuntimeTransactor(tx), spyriaAgentImage: testSpyriaAgentImage },
+      { workspaceId: acme, chatId: chat, id: crypto.randomUUID(), now: Date.now() },
+    ),
+  )
+const harnessCommands = (host: { commands: { op: string }[] }) =>
+  host.commands.filter(({ op }) => ['create', 'installed', 'install', 'start'].includes(op)).map(({ op }) => op)
+const newMachine = async () => {
+  await database.$client`update runtime_hosts set removed_at = now() where owner_id = ${alice} and removed_at is null`
+  return fakeHost('Machine', { ownerId: alice })
+}
 const runtimeOf = async (chat: ChatId) => {
   const [row] = await database.$client`select * from runtimes where chat_id = ${chat}`
   if (!row) throw new Error(`No runtime for ${chat}`)
@@ -394,4 +413,57 @@ test('a runtime job whose worker died after claiming it is claimed again once it
   expect(host.lifecycleCommands()).toEqual(['start'])
   await waitFor(async () => (await jobsOf('runtime.create', id))[0]?.state === 'done')
   expect(await jobsOf('runtime.create', id)).toMatchObject([{ state: 'done', attempts: 2 }])
+})
+
+test('a machine session installs its harness once while the runtime reads installing; a restart and a second session install nothing, and a workspace runtime never asks', async () => {
+  const workspaceHost = await fakeHost('Workspace host')
+  await runningRuntime(await newRuntimeChat())
+  const machine = await newMachine()
+  const chat = await newRuntimeChat('Machine chat', undefined, defaultHarness)
+  const release = machine.hold('install')
+  await ensure(chat)
+  await runtimeIn(chat, 'installing')
+  release()
+  await runtimeIn(chat, 'running')
+  expect(harnessCommands(machine)).toEqual(['create', 'installed', 'install', 'start'])
+  expect(machine.commands.find(({ op }) => op === 'install')).toMatchObject({ harness: defaultHarness })
+
+  machine.commands.length = 0
+  await stoppedRuntime(chat)
+  await ensure(chat)
+  await runtimeIn(chat, 'running')
+  await runningRuntime(await newRuntimeChat('Second machine chat', undefined, defaultHarness))
+  expect(harnessCommands(machine)).toEqual(['installed', 'start', 'create', 'installed', 'start'])
+  expect(workspaceHost.commands.map(({ op }) => op)).not.toContain('installed')
+  expect(workspaceHost.commands.map(({ op }) => op)).not.toContain('install')
+})
+
+test("a failed install fails the runtime at once with npm's reason, and a retry installs and runs", async () => {
+  const machine = await newMachine()
+  const chat = await newRuntimeChat('Machine chat', undefined, 'codex')
+  const reason =
+    "code E404\n404 Not Found - GET http://registry.invalid/@openai%2fcodex - '@openai/codex@0.162.1' is not in this registry."
+  machine.failInstall(reason)
+  const capturedConsole = captureConsole()
+  await ensure(chat)
+  await runtimeIn(chat, 'failed')
+  capturedConsole.restore()
+  expect((await runtimeOf(chat)).failure).toBe(`install_failed: ${reason}`)
+  expect(harnessCommands(machine)).toEqual(['create', 'installed', 'install'])
+
+  machine.failInstall(undefined)
+  await retry(chat)
+  await runtimeIn(chat, 'running')
+  expect((await runtimeOf(chat)).failure).toBeNull()
+  expect(machine.installedHarnesses).toEqual(new Set(['codex']))
+})
+
+test('a Claude Code or Codex session is never placed on a workspace host: with only a workspace host online it fails with no_host', async () => {
+  await database.$client`update runtime_hosts set removed_at = now() where owner_id = ${alice} and removed_at is null`
+  const workspaceHost = await fakeHost('Workspace host')
+  for (const harness of ['claude-code', 'codex']) {
+    const failed = await ensure(await newRuntimeChat('Machine chat', undefined, harness))
+    expect(failed).toMatchObject({ state: 'failed', failure: 'no_host', hostId: null })
+  }
+  expect(harnessCommands(workspaceHost)).toEqual([])
 })

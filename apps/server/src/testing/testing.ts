@@ -833,6 +833,8 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
     const commands: HostCommand[] = []
     const heldReplies = new Map<string, Promise<void>>()
     const failingOps = new Set<string>()
+    const installedHarnesses = new Set<string>()
+    let installFailure: string | undefined
     const streams = new Map<number, ReturnType<ContainerAgent['connect']>>()
     const modelCalls = new Map<
       number,
@@ -840,8 +842,11 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
     >()
     const receivedFrames: string[] = []
     let nextModelCallId = 1
-    const run = (op: string, { runtimeId = '', apiKey = '' }: Record<string, string>) => {
+    const run = (op: string, { runtimeId = '', apiKey = '', harness = '' }: Record<string, string>) => {
       if (failingOps.has(op)) throw new Error(`${op} failed`)
+      if (op === 'installed') return installedHarnesses.has(harness)
+      if (op === 'install' && installFailure) throw new Error(installFailure)
+      if (op === 'install') installedHarnesses.add(harness)
       const container = containers.get(runtimeId)
       if (op === 'create') containers.set(runtimeId, { running: false, apiKey })
       if (op === 'start' && container) {
@@ -865,6 +870,10 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
       containers,
       commands,
       failing: (op: string) => failingOps.add(op),
+      installedHarnesses,
+      failInstall: (reason: string | undefined) => {
+        installFailure = reason
+      },
       hold: (op: string) => {
         const { promise, resolve } = Promise.withResolvers<void>()
         heldReplies.set(op, promise)

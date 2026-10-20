@@ -46,7 +46,8 @@ export const createRuntimeAgentRuntimes = (
       const runtime = await inTransaction((dependencies) =>
         ensureRuntimeRunning({ ...dependencies, ...placement }, { ...chat, id: crypto.randomUUID(), now: Date.now() }),
       )
-      if (['creating', 'starting', 'stopping', 'removing'].includes(runtime.state)) return { state: 'starting' }
+      if (['creating', 'starting', 'installing', 'stopping', 'removing'].includes(runtime.state))
+        return { state: 'starting' }
       if (!runtime.hostOnline && ['running', 'stopped'].includes(runtime.state)) return { state: 'host_offline' }
       const access = runtime.state === 'running' ? await accessOf(chat) : undefined
       return access

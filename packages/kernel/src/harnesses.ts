@@ -23,12 +23,10 @@ apps = false
 export const harnesses = {
   'claude-code': {
     name: 'Claude Code',
-    packages: ['@anthropic-ai/claude-code@2.1.296', '@agentclientprotocol/claude-agent-acp@0.90.0'],
     launch: ['env', ...claudeCodeSettings, 'claude-agent-acp'],
   },
   codex: {
     name: 'Codex',
-    packages: ['@openai/codex@0.162.1', '@agentclientprotocol/codex-acp@2.2.2'],
     launch: [
       'env',
       `SPYRIA_CODEX_CONFIG=${codexSubscriptionConfig}`,
@@ -37,7 +35,7 @@ export const harnesses = {
       'set -e; printf %s "$SPYRIA_CODEX_CONFIG" > "$HOME/.codex/config.toml.$$"; mv "$HOME/.codex/config.toml.$$" "$HOME/.codex/config.toml"; exec codex-acp',
     ],
   },
-} as const satisfies Record<string, { name: string; packages: readonly string[]; launch: readonly string[] }>
+} as const satisfies Record<string, { name: string; launch: readonly string[] }>
 
 export type HarnessId = keyof typeof harnesses
 export const harnessIds = Object.keys(harnesses) as HarnessId[]

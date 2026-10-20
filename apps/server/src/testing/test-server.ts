@@ -62,6 +62,7 @@ const fakeHostByDatabase = new Map<
   string,
   { host: FakeHost; relay: ReturnType<typeof createSpyriaAgentRelay>; isOnline: boolean }
 >()
+const heldInstallByDatabase = new Map<string, () => void>()
 const fakeMachineByDatabase = new Map<string, { host: FakeHost; relay: ReturnType<typeof createSpyriaAgentRelay> }>()
 const nameOf = (database: Database) =>
   [...servedDatabaseByName].find(([, served]) => served.database === database)?.[0] ?? ''
@@ -286,7 +287,7 @@ const app = createApp({
     return context.json({ id: fakeHost.host.id, conversations: fakeHost.relay.created })
   })
   .post('/test/fake-machine', async (context) => {
-    const { db = '', owner, signedIn, online, drop } = context.req.query()
+    const { db = '', owner, signedIn, online, drop, installFailure, holdInstall } = context.req.query()
     if (owner) {
       await fakeMachineByDatabase.get(db)?.host.disconnect()
       await fakeMachineByDatabase.get(db)?.relay.stop()
@@ -309,12 +310,16 @@ const app = createApp({
     if (online === 'false') await machine?.host.disconnect()
     if (online === 'true') await machine?.host.connect()
     if (drop === 'true') machine?.relay.dropSockets()
+    if (installFailure !== undefined) machine?.host.failInstall(installFailure || undefined)
+    if (holdInstall === 'true' && machine) heldInstallByDatabase.set(db, machine.host.hold('install'))
+    if (holdInstall === 'false') heldInstallByDatabase.get(db)?.()
     return context.json({
       id: machine?.host.id,
       conversations: machine?.relay.created ?? [],
       prompts: machine?.relay.prompts ?? [],
       modelSwitches: machine?.relay.modelSwitches ?? [],
       socketPaths: machine?.relay.socketPaths ?? [],
+      installs: machine?.host.commands.filter(({ op }) => op === 'install').length ?? 0,
     })
   })
   .post('/test/runtime', async (context) => {

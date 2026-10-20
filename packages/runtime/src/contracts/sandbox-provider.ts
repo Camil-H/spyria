@@ -1,4 +1,4 @@
-import type { RuntimeHostId, WorkspaceId } from '@spyria/kernel'
+import type { HarnessId, RuntimeHostId, WorkspaceId } from '@spyria/kernel'
 
 export type SandboxLocation = { workspaceId: WorkspaceId; hostId: RuntimeHostId; runtimeId: string }
 export type SandboxStatus = 'running' | 'stopped' | 'missing'
@@ -29,5 +29,7 @@ export type SandboxProvider = {
   stop(sandbox: SandboxLocation): Promise<void>
   remove(sandbox: SandboxLocation): Promise<void>
   status(sandbox: SandboxLocation): Promise<SandboxStatus>
+  hasHarness(sandbox: SandboxLocation & { harness: HarnessId }): Promise<boolean>
+  installHarness(sandbox: SandboxLocation & { harness: HarnessId }): Promise<void>
   connect(sandbox: SandboxLocation): SandboxTransport
 }

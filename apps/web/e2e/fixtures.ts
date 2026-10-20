@@ -11,8 +11,15 @@ type Machine = {
   conversations: { agent: Record<string, unknown>; secrets: object }[]
   prompts: string[]
   modelSwitches: string[]
+  installs: number
 }
-type MachineQuery = { owner?: string; signedIn?: string; online?: string }
+type MachineQuery = {
+  owner?: string
+  signedIn?: string
+  online?: string
+  installFailure?: string
+  holdInstall?: 'true' | 'false'
+}
 
 export const machineTest = test.extend<{ machine: (query?: MachineQuery) => Promise<Machine> }>({
   machine: async ({ workerStack }, use) => {

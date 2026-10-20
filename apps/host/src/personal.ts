@@ -1,4 +1,5 @@
-import { type Docker, DockerError } from './docker.ts'
+import { type Docker, DockerError, type Mount } from './docker.ts'
+import { harnessEnvironment, harnessesMountOf, harnessNames, installHarness, isHarnessInstalled } from './harnesses.ts'
 
 const conversationId = '[0-9a-f-]{32,36}'
 const conversationPath = `/api/conversations/${conversationId}`
@@ -54,7 +55,7 @@ export const isAllowedOnPersonalHost = (method: string, path: string) =>
 export const redacted = (text: string, secrets: readonly string[]) =>
   secrets.reduce((result, secret) => result.replaceAll(secret, '[redacted]'), text).replace(tokenFormat, '[redacted]')
 
-const credentialsMountOf = (prefix: string, tool: CredentialsTool, target = credentialStores[tool].target) => ({
+const credentialsMountOf = (prefix: string, tool: CredentialsTool, target = credentialStores[tool].target): Mount => ({
   Type: 'volume',
   Source: `${prefix}cred-${tool}`,
   Target: target,
@@ -86,6 +87,7 @@ export const credentialsContainerBodyOf = (
     Image: image,
     User: '10001:10001',
     Entrypoint: credentialsCommandOf(tool, action),
+    ...(isLogin && { Env: harnessEnvironment }),
     Tty: isLogin,
     OpenStdin: isLogin,
     StdinOnce: isLogin,
@@ -98,7 +100,7 @@ export const credentialsContainerBodyOf = (
       NetworkMode: isLogin ? 'bridge' : 'none',
       AutoRemove: isLogin,
       Tmpfs: { '/home/openhands': 'uid=10001,gid=10001,mode=0700', '/tmp': '' },
-      Mounts: [credentialsMountOf(prefix, tool)],
+      Mounts: [credentialsMountOf(prefix, tool), ...(isLogin ? [harnessesMountOf(prefix)] : [])],
     },
   }
 }
@@ -230,6 +232,10 @@ export const runCredentialsCommand = async (
     await docker('POST', `/containers/${name}/start`)
     await docker('POST', `/containers/${name}/wait`)
     return void (await docker('DELETE', `/containers/${name}`))
+  }
+  if (!(await isHarnessInstalled(docker, name, tool))) {
+    console.log(`Installing ${harnessNames[tool]}…`)
+    await installHarness(docker, prefix, reader.Config.Image, tool)
   }
   const terminal = await attachTerminal(socketPath, name)
   await docker('POST', `/containers/${name}/start`)

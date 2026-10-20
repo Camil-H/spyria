@@ -1,13 +1,20 @@
 import { expect, test } from 'bun:test'
 import { containerBodyOf, createCommandRunner, parseCommand, relayUrlOf } from './commands.ts'
 import { type Docker, DockerError } from './docker.ts'
+import { harnessEnvironment } from './harnesses.ts'
 
 const image = `sha256:${'a'.repeat(64)}`
 const apiKey = 'k'.repeat(32)
 const create = { runtimeId: 'runtime-1', image, apiKey }
 
-test('accepts exactly create, prepare, start, stop, remove and status with their arguments', () => {
+test('accepts exactly create, prepare, start, stop, remove, status, installed and install with their arguments', () => {
   expect(parseCommand('create', create)).toEqual({ op: 'create', ...create })
+  for (const op of ['installed', 'install'] as const)
+    expect(parseCommand(op, { runtimeId: 'runtime-1', harness: 'codex' })).toEqual({
+      op,
+      runtimeId: 'runtime-1',
+      harness: 'codex',
+    })
   expect(parseCommand('prepare', { image })).toEqual({ op: 'prepare', image })
   for (const op of ['start', 'stop', 'remove', 'status'] as const)
     expect(parseCommand(op, { runtimeId: 'runtime-1' })).toEqual({ op, runtimeId: 'runtime-1' })
@@ -36,8 +43,27 @@ test.each([
 
 const contentId = `sha256:${'b'.repeat(64)}`
 
-test.each([true, false])('a create sets only the session key in the environment (personal %p)', (personal) => {
-  expect(containerBodyOf({ prefix: 'spyria-', ...create, personal }).Env).toEqual([`OH_SESSION_API_KEYS_0=${apiKey}`])
+test('a workspace create sets only the session key in the environment, a personal one adds the harness paths', () => {
+  expect(containerBodyOf({ prefix: 'spyria-', ...create }).Env).toEqual([`OH_SESSION_API_KEYS_0=${apiKey}`])
+  expect(containerBodyOf({ prefix: 'spyria-', ...create, personal: true }).Env).toEqual([
+    `OH_SESSION_API_KEYS_0=${apiKey}`,
+    ...harnessEnvironment,
+  ])
+})
+
+test.each([
+  ['an unknown harness', { runtimeId: 'runtime-1', harness: 'pi' }],
+  ['no harness', { runtimeId: 'runtime-1' }],
+  ['an image', { runtimeId: 'runtime-1', harness: 'codex', image }],
+  ['a registry', { runtimeId: 'runtime-1', harness: 'codex', registry: 'https://evil.example' }],
+])('refuses an install with %s', (_, fields) => {
+  expect(() => parseCommand('install', fields)).toThrow('refused')
+})
+
+test('a workspace host refuses to check or install a harness', async () => {
+  const runner = createCommandRunner({ docker: (async () => ({})) as Docker, prefix: 'spyria-' })
+  for (const op of ['installed', 'install'] as const)
+    await expect(runner.run({ op, runtimeId: 'runtime-1', harness: 'claude-code' })).rejects.toThrow('refused')
 })
 
 test.each([true, false])(
@@ -143,14 +169,16 @@ const recordingDocker = () => {
   return { docker, calls }
 }
 
-test('a personal create mounts both credentials volumes at ~/.claude and ~/.codex, a workspace create does not', () => {
+test('a personal create mounts both credentials volumes and the harnesses read-only, a workspace create does not', () => {
   const personalMounts = containerBodyOf({ prefix: 'spyria-', ...create, personal: true }).HostConfig.Mounts
-  expect(personalMounts.slice(-2)).toEqual([
+  expect(personalMounts.slice(-3)).toEqual([
     { Type: 'volume', Source: 'spyria-cred-claude-code', Target: '/home/openhands/.claude' },
     { Type: 'volume', Source: 'spyria-cred-codex', Target: '/home/openhands/.codex' },
+    { Type: 'volume', Source: 'spyria-harnesses', Target: '/harnesses', ReadOnly: true },
   ])
-  expect(personalMounts.slice(0, -2)).toEqual(containerBodyOf({ prefix: 'spyria-', ...create }).HostConfig.Mounts)
+  expect(personalMounts.slice(0, -3)).toEqual(containerBodyOf({ prefix: 'spyria-', ...create }).HostConfig.Mounts)
   expect(JSON.stringify(containerBodyOf({ prefix: 'spyria-', ...create }))).not.toContain('cred-')
+  expect(JSON.stringify(containerBodyOf({ prefix: 'spyria-', ...create }))).not.toContain('harnesses')
 })
 
 test('a personal host creates the runtime with both credentials volumes after preparing their readers', async () => {

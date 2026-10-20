@@ -3,6 +3,7 @@ import { TransitionRefused } from './errors.ts'
 
 export type RuntimeState =
   | 'creating'
+  | 'installing'
   | 'running'
   | 'stopping'
   | 'stopped'
@@ -10,7 +11,18 @@ export type RuntimeState =
   | 'removing'
   | 'removed'
   | 'failed'
-export type RuntimeFailure = 'no_host' | 'no_capacity' | 'no_image' | 'create_failed' | 'start_failed' | 'lost'
+const installFailedPrefix = 'install_failed: '
+export type RuntimeFailure =
+  | 'no_host'
+  | 'no_capacity'
+  | 'no_image'
+  | 'create_failed'
+  | 'start_failed'
+  | 'lost'
+  | `${typeof installFailedPrefix}${string}`
+export const installFailureOf = (reason: string): RuntimeFailure => `${installFailedPrefix}${reason}`
+export const installFailureReasonOf = (failure: string | null | undefined) =>
+  failure?.startsWith(installFailedPrefix) ? failure.slice(installFailedPrefix.length) : undefined
 
 export type Runtime = Readonly<{
   workspaceId: WorkspaceId
@@ -37,8 +49,9 @@ export const runtimeJobTypes = {
 } as const
 
 const nextStates: Record<RuntimeState, readonly RuntimeState[]> = {
-  creating: ['running', 'removing', 'failed'],
-  starting: ['running', 'removing', 'failed'],
+  creating: ['installing', 'running', 'removing', 'failed'],
+  starting: ['installing', 'running', 'removing', 'failed'],
+  installing: ['running', 'removing', 'failed'],
   running: ['stopping', 'stopped', 'removing', 'failed'],
   stopping: ['stopped', 'removing', 'failed'],
   stopped: ['starting', 'running', 'removing', 'failed'],
@@ -110,11 +123,19 @@ export const reconciledStateOf = (runtime: Runtime, status: 'running' | 'stopped
     : undefined
 }
 
-export type RuntimeStatus = 'Not started' | 'Starting…' | 'Ready' | 'Sleeping' | 'Host offline' | 'Could not start'
+export type RuntimeStatus =
+  | 'Not started'
+  | 'Starting…'
+  | `Installing ${string}…`
+  | 'Ready'
+  | 'Sleeping'
+  | 'Host offline'
+  | 'Could not start'
 
 const statusByState: Record<RuntimeState, RuntimeStatus> = {
   creating: 'Starting…',
   starting: 'Starting…',
+  installing: 'Starting…',
   running: 'Ready',
   stopping: 'Sleeping',
   stopped: 'Sleeping',
@@ -126,8 +147,12 @@ const statusByState: Record<RuntimeState, RuntimeStatus> = {
 export const isAwaitingHost = (runtime: Pick<Runtime, 'state' | 'hostOnline'>) =>
   !runtime.hostOnline && (runtime.state === 'running' || runtime.state === 'stopped')
 
-export const runtimeStatusOf = (runtime: Pick<Runtime, 'state' | 'hostOnline'> | undefined): RuntimeStatus => {
+export const runtimeStatusOf = (
+  runtime: Pick<Runtime, 'state' | 'hostOnline'> | undefined,
+  harnessName?: string,
+): RuntimeStatus => {
   if (!runtime) return 'Not started'
+  if (runtime.state === 'installing' && harnessName) return `Installing ${harnessName}…`
   return isAwaitingHost(runtime) ? 'Host offline' : statusByState[runtime.state]
 }
 

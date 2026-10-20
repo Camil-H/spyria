@@ -1,5 +1,6 @@
 import { afterAll, expect, setDefaultTimeout, test } from 'bun:test'
 import { readSpyriaAgentImage } from '../spyria-agent-image.ts'
+import { requireTestHarnesses, testHarnessEnvironment, testHarnessesVolume } from '../testing/harnesses.ts'
 import { waitFor } from '../testing/testing.ts'
 
 setDefaultTimeout(240_000)
@@ -7,6 +8,7 @@ const docker = (...args: string[]) => Bun.spawnSync(['docker', ...args], { stder
 const spyriaImage = await readSpyriaAgentImage()
 if (!spyriaImage || docker('image', 'inspect', spyriaImage).exitCode !== 0)
   throw new Error('Spyria image missing: run bun run agent:build')
+requireTestHarnesses()
 
 type ProviderRequest = {
   path: string
@@ -110,6 +112,8 @@ const container = `spyria-test-${crypto.randomUUID().slice(0, 8)}-effort`
 const started = docker(
   ...['run', '-d', '--rm', '--name', container, '-e', `OH_SESSION_API_KEYS_0=${apiKey}`, '-p', '127.0.0.1::8000'],
   ...['--add-host', 'host.docker.internal:host-gateway', '--read-only', '--tmpfs', '/tmp:exec'],
+  ...['--mount', `type=volume,src=${testHarnessesVolume},dst=/harnesses,readonly`],
+  ...testHarnessEnvironment.flatMap((variable) => ['-e', variable]),
   ...[
     '--tmpfs',
     '/home/openhands:uid=10001,gid=10001',

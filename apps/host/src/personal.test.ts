@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test'
 import { type Docker, DockerError } from './docker.ts'
+import { harnessEnvironment } from './harnesses.ts'
 import {
   credentialsContainerBodyOf,
   credentialsReaderBodyOf,
@@ -89,6 +90,7 @@ test('login runs the documented command in a one-off TTY container of the pinned
     Image: image,
     User: '10001:10001',
     Entrypoint: ['claude-agent-acp', '--cli', 'auth', 'login', '--claudeai'],
+    Env: harnessEnvironment,
     Tty: true,
     OpenStdin: true,
     StdinOnce: true,
@@ -103,7 +105,10 @@ test('login runs the documented command in a one-off TTY container of the pinned
       NetworkMode: 'bridge',
       AutoRemove: true,
       Tmpfs: { '/home/openhands': 'uid=10001,gid=10001,mode=0700', '/tmp': '' },
-      Mounts: [{ Type: 'volume', Source: 'spyria-cred-claude-code', Target: '/home/openhands/.claude' }],
+      Mounts: [
+        { Type: 'volume', Source: 'spyria-cred-claude-code', Target: '/home/openhands/.claude' },
+        { Type: 'volume', Source: 'spyria-harnesses', Target: '/harnesses', ReadOnly: true },
+      ],
     },
   })
 })
@@ -169,6 +174,7 @@ test('login codex runs the device sign-in in a one-off TTY container on the Code
     Image: image,
     User: '10001:10001',
     Entrypoint: ['codex-acp', 'cli', 'login', '--device-auth'],
+    Env: harnessEnvironment,
     Tty: true,
     OpenStdin: true,
     StdinOnce: true,
@@ -183,7 +189,10 @@ test('login codex runs the device sign-in in a one-off TTY container on the Code
       NetworkMode: 'bridge',
       AutoRemove: true,
       Tmpfs: { '/home/openhands': 'uid=10001,gid=10001,mode=0700', '/tmp': '' },
-      Mounts: [{ Type: 'volume', Source: 'spyria-cred-codex', Target: '/home/openhands/.codex' }],
+      Mounts: [
+        { Type: 'volume', Source: 'spyria-cred-codex', Target: '/home/openhands/.codex' },
+        { Type: 'volume', Source: 'spyria-harnesses', Target: '/harnesses', ReadOnly: true },
+      ],
     },
   })
 })
