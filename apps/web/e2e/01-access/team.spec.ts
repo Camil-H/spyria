@@ -25,7 +25,7 @@ import {
 } from './fixtures'
 
 const frozenNotice = 'This chat is frozen: its owner left the workspace'
-const bobsChatId = 'chat-sams-runtime'
+const bobsChatId = 'chat-bobs-runtime'
 const streamReconnectWaitMilliseconds = 2500
 const bobsChatName = "Bob's runtime"
 

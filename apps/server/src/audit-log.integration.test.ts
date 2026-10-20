@@ -232,7 +232,7 @@ test('filters by person, grouped type and date range, and the CSV holds the same
   )
   await insertWorkspaceEvent('sso', 'sso.configured', alice, { issuer: 'https://login.example.com' }, minutesAgo(4))
   await insertWorkspaceEvent('old-removal', 'member.removed', alice, { memberId: bob }, daysAgo(3))
-  await insertToolCall('sams-call', minutesAgo(3))
+  await insertToolCall('bobs-call', minutesAgo(3))
   await insertWorkspaceEvent('globex', 'member.invited', alice, { email: 'globex@example.com' }, minutesAgo(2), globex)
 
   expect((await auditPageOf({ person: alice })).entries.map(summaryOf)).toEqual([
