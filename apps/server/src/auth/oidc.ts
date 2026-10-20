@@ -1,3 +1,4 @@
+import { withRetries } from '@spyria/kernel'
 import { createRemoteJWKSet, type JWTPayload, jwtVerify } from 'jose'
 import * as oauth from 'oauth4webapi'
 
@@ -9,12 +10,18 @@ type ClientSettings = OidcSettings & {
 type LoginState = { state: string; nonce: string; codeVerifier: string }
 
 const idTokenClockToleranceSeconds = 30
+const providerTimeoutMilliseconds = 10_000
 
 const insecureOptionOf = (issuerUrl: URL) => ({ [oauth.allowInsecureRequests]: issuerUrl.protocol === 'http:' })
 
 export const discoverIssuer = async (issuer: string) => {
   const issuerUrl = new URL(issuer)
-  const response = await oauth.discoveryRequest(issuerUrl, { algorithm: 'oidc', ...insecureOptionOf(issuerUrl) })
+  const response = await oauth.discoveryRequest(issuerUrl, {
+    algorithm: 'oidc',
+    ...insecureOptionOf(issuerUrl),
+    [oauth.customFetch]: (url, options) =>
+      withRetries((signal) => fetch(url, { ...options, signal }), { timeoutMilliseconds: providerTimeoutMilliseconds }),
+  })
   return oauth.processDiscoveryResponse(issuerUrl, response)
 }
 
@@ -71,7 +78,7 @@ export const createOidc = ({
         parameters,
         redirectUri,
         login.codeVerifier,
-        insecureOptionOf(new URL(issuer)),
+        { ...insecureOptionOf(new URL(issuer)), signal: AbortSignal.timeout(providerTimeoutMilliseconds) },
       )
       const result = await oauth.processAuthorizationCodeResponse(server, client, response, {
         expectedNonce: login.nonce,

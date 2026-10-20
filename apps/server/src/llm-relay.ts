@@ -18,7 +18,7 @@ import {
 } from '@spyria/conversation/server'
 import type { Database } from '@spyria/db/postgres'
 import { schema } from '@spyria/db/zero'
-import { log, type MemberId, toolNamePartsOf } from '@spyria/kernel'
+import { isConnectionRefused, log, type MemberId, toolNamePartsOf, withRetries } from '@spyria/kernel'
 import { type createLlmGateway, createMemberKeyReader, createToolCallOwnerAccess } from '@spyria/profile/server'
 import type { ConnectedHost } from '@spyria/runtime/server'
 import { createBudgetGuard } from '@spyria/usage/server'
@@ -379,23 +379,29 @@ export const createModelCallRelay = ({
       const timer = setTimeout(() => headTimeout.abort(), headTimeoutMilliseconds)
       let response: Response
       try {
-        response = await gatewayCall(
-          {
-            ...picked(headers, forwardedHeaders),
-            ...traceHeadersOf(),
-            authorization: `Bearer ${virtualKey}`,
-            'x-bf-dim-chat': turn.chat.chatId,
-            'x-bf-dim-prompter': turn.prompterId,
-            'x-bf-dim-owner': turn.ownerId ?? '',
-            'x-bf-dim-workspace': host.workspaceId,
-            'x-bf-dim-turn': turn.promptId,
-            'x-bf-dim-session': turn.sessionId ?? '',
-            'x-bf-mcp-include-clients': '',
-            ...(turn.delegationId && { 'x-bf-dim-role': 'delegate', 'x-bf-dim-delegation': turn.delegationId }),
-            ...providerHeadersOf?.(database, turn.chat),
-          },
-          headTimeout.signal,
-        )
+        const modelCall = () =>
+          gatewayCall(
+            {
+              ...picked(headers, forwardedHeaders),
+              ...traceHeadersOf(),
+              authorization: `Bearer ${virtualKey}`,
+              'x-bf-dim-chat': turn.chat.chatId,
+              'x-bf-dim-prompter': turn.prompterId,
+              'x-bf-dim-owner': turn.ownerId ?? '',
+              'x-bf-dim-workspace': host.workspaceId,
+              'x-bf-dim-turn': turn.promptId,
+              'x-bf-dim-session': turn.sessionId ?? '',
+              'x-bf-mcp-include-clients': '',
+              ...(turn.delegationId && { 'x-bf-dim-role': 'delegate', 'x-bf-dim-delegation': turn.delegationId }),
+              ...providerHeadersOf?.(database, turn.chat),
+            },
+            headTimeout.signal,
+          )
+        response = await withRetries(modelCall, {
+          attempts: 2,
+          timeoutMilliseconds: headTimeoutMilliseconds,
+          isRetried: (outcome) => 'error' in outcome && isConnectionRefused(outcome.error),
+        })
       } catch {
         if (signal.aborted) return {}
         if (!isTokenCount) await record({ reached: headTimeout.signal.aborted ? 'timeout' : 'unreachable' })

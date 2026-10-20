@@ -113,6 +113,14 @@ import {
 } from './github/github.ts'
 import { createGitHubApi, githubDotCom } from './github/github-api.ts'
 import { createModelCallRelay } from './llm-relay.ts'
+import {
+  createRateLimiter,
+  limitOfMutation,
+  type RateBudgets,
+  rateBudgets,
+  rateLimitedBy,
+  type TrustedProxy,
+} from './rate-limits.ts'
 import { createRuntimeHostGateway, type RuntimeHostGateway } from './runtime-hosts/gateway.ts'
 import { contextOf, withSpan } from './telemetry.ts'
 
@@ -198,6 +206,8 @@ export const createApp = ({
   agentBridge = createAgentBridge({ sandboxProvider: runtimeHosts.sandboxProvider }),
   spyriaAgentImage,
   github,
+  rateLimits = rateBudgets,
+  trustedProxy,
 }: {
   database: Database
   tokenSecret: string
@@ -213,7 +223,11 @@ export const createApp = ({
   agentBridge?: AgentBridge
   spyriaAgentImage?: string
   github?: GitHubDependencies
+  rateLimits?: RateBudgets
+  trustedProxy?: TrustedProxy
 }) => {
+  const limit = createRateLimiter(rateLimits)
+  const rateLimited = rateLimitedBy(limit, trustedProxy)
   const mutatorNamed = (name: string) =>
     getMutator(workspaceMutators, name) ??
     getMutator(profileMutators, name) ??
@@ -300,7 +314,7 @@ export const createApp = ({
       const failing = checks.flatMap(([name], index) => (passed[index] ? [] : [name]))
       return failing.length === 0 ? context.json({ status: 'ok' }) : context.json({ status: 'degraded', failing }, 503)
     })
-    .get('/host', runtimeHosts.upgrade)
+    .get('/host', rateLimited('hostConnection'), runtimeHosts.upgrade)
     .get('/api/stream', agentBridge.stream(authenticate, databaseOf))
     .get(toolConsentCallbackPath, async (context) =>
       context.html(await toolConsentPageFromRequest(gatewayOf(), new URL(context.req.url).search)),
@@ -313,7 +327,7 @@ export const createApp = ({
       }).catch(() => false)
       return context.html(githubConnectionPage(isConnected), isConnected ? 200 : 400)
     })
-    .post(githubWebhooksPath, async (context) => {
+    .post(githubWebhooksPath, rateLimited('githubWebhooks'), async (context) => {
       const testDatabaseName = testDatabaseByName && context.req.query('db')
       const webhookDatabase = (testDatabaseName && databaseOf(testDatabaseName)) || database
       const outcome = await receiveGitHubWebhook(
@@ -348,6 +362,7 @@ export const createApp = ({
         database,
         authenticate,
         testDatabaseByName,
+        rateLimited,
       }),
     )
     .use('/api/*', async (context, next) => {
@@ -380,9 +395,11 @@ export const createApp = ({
           dbProvider: zeroDrizzle(schema, context.get('database')),
           handler: async (transact, mutation) => {
             const response = await transact((tx, name, args) =>
-              withSpan(`mutate ${name}`, { 'mutation.name': name, 'workspace.id': ctx.workspaceId }, () =>
-                mutatorNamed(name).fn({ args, tx, ctx: { ...ctx, spyriaAgentImage } }),
-              ),
+              withSpan(`mutate ${name}`, { 'mutation.name': name, 'workspace.id': ctx.workspaceId }, () => {
+                const limitName = limitOfMutation(name, args)
+                if (limitName) limit(limitName, ctx)
+                return mutatorNamed(name).fn({ args, tx, ctx: { ...ctx, spyriaAgentImage } })
+              }),
             )
             if ('error' in response.result) return response
             if (mutation.name === 'runtime.removeHost')
@@ -572,7 +589,7 @@ export const createApp = ({
         settings: await saveSsoSettings(context.get('database'), sso, context.get('zeroContext'), input),
       }))
     })
-    .post(domainVerificationPath, async (context) => {
+    .post(domainVerificationPath, rateLimited('verificationEmails'), async (context) => {
       const input = (await context.req.json().catch(() => null)) ?? {}
       return endpointResponse('Sending a domain verification', 200, async () => ({
         settings: await sendDomainVerification(context.get('database'), sso, context.get('zeroContext'), input),
@@ -612,7 +629,7 @@ export const createApp = ({
         return { branches: await repositoryBranches(database, githubDependencies, workspaceId, fullName) }
       })
     })
-    .post(devChatsPath, async (context) => {
+    .post(devChatsPath, rateLimited('runtimeCreation'), async (context) => {
       const body = await context.req.json().catch(() => null)
       const database = context.get('database')
       const { workspaceId } = context.get('zeroContext')

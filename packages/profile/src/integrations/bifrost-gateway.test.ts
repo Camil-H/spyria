@@ -120,3 +120,38 @@ test('the tool server list is read once per short window, and again after a serv
     clientServer.stop(true)
   }
 })
+
+test('an admin read answering 503 once is retried; a 400 and a failing creation are not', async () => {
+  const requests: string[] = []
+  const flakyServer = Bun.serve({
+    port: 0,
+    fetch: (request) => {
+      const { pathname } = new URL(request.url)
+      requests.push(`${request.method} ${pathname}`)
+      if (pathname === '/api/governance/virtual-keys/refused') return new Response('', { status: 400 })
+      if (request.method === 'POST') return new Response('', { status: 503 })
+      const isFirst = requests.filter((sent) => sent === `GET ${pathname}`).length === 1
+      return isFirst
+        ? new Response('', { status: 503 })
+        : Response.json({ virtual_key: { id: 'flaky', value: 'sk-bf-flaky' } })
+    },
+  })
+  const flakyGateway = createLlmGateway({
+    url: `http://localhost:${flakyServer.port}`,
+    adminUser: 'admin',
+    adminPassword: 'secret',
+  })
+  try {
+    expect(await flakyGateway.virtualKeyValue('flaky')).toBe('sk-bf-flaky')
+    await expect(flakyGateway.virtualKeyValue('refused')).rejects.toThrow('with 400')
+    await expect(flakyGateway.saveVirtualKey({ id: undefined, keys: [] })).rejects.toThrow('with 503')
+    expect(requests).toEqual([
+      'GET /api/governance/virtual-keys/flaky',
+      'GET /api/governance/virtual-keys/flaky',
+      'GET /api/governance/virtual-keys/refused',
+      'POST /api/governance/virtual-keys',
+    ])
+  } finally {
+    flakyServer.stop(true)
+  }
+})

@@ -1,9 +1,10 @@
 import type { Database } from '@spyria/db/postgres'
 import { DomainError } from '@spyria/kernel'
 import { domainOfEmail, ssoEmailOf } from '@spyria/workspace/server'
-import { type Context, Hono } from 'hono'
+import { type Context, Hono, type MiddlewareHandler } from 'hono'
 import { deleteCookie, getCookie, getSignedCookie, setCookie, setSignedCookie } from 'hono/cookie'
 import { HTTPException } from 'hono/http-exception'
+import type { RateLimitName } from '../rate-limits.ts'
 import { createOidc, type Oidc } from './oidc.ts'
 import { type Authentication, errorByStatus, issueSessionToken, type SessionClaims } from './session-tokens.ts'
 import { deleteSession, findLiveSessions, openSessions, signInUser } from './sessions.ts'
@@ -30,6 +31,7 @@ type AuthRouteSettings = {
   database: Database
   authenticate: (authorization: string | undefined) => Promise<Authentication>
   testDatabaseByName?: (databaseName: string) => Database
+  rateLimited: (name: RateLimitName) => MiddlewareHandler
 }
 type TestSettings = { db?: string; user?: string; tokenSeconds?: number }
 type PopupResult =
@@ -77,6 +79,7 @@ export const createAuthRoutes = ({
   database,
   authenticate,
   testDatabaseByName,
+  rateLimited,
 }: AuthRouteSettings) => {
   const scopeOf = (context: Context, tokenDatabaseName?: string) => {
     const testSettings: TestSettings = testDatabaseByName ? JSON.parse(getCookie(context, testCookie) ?? '{}') : {}
@@ -144,7 +147,7 @@ export const createAuthRoutes = ({
         canCreateWorkspace: authMode === 'sso' && (await hasNoWorkspace(scopeOf(context).database.$client)),
       }),
     )
-    .post('/first-workspace', async (context) => {
+    .post('/first-workspace', rateLimited('firstWorkspace'), async (context) => {
       if (authMode !== 'sso' || context.req.header('origin') !== appOrigin)
         return context.json({ error: 'forbidden' }, 403)
       const firstWorkspace = await prepareFirstWorkspace(
@@ -156,7 +159,7 @@ export const createAuthRoutes = ({
         return popup(context, { status: 'refused', message: firstWorkspace.message }, 400)
       return redirectToProvider(context, await oidcOf(firstWorkspace.provider), { firstWorkspace })
     })
-    .get(domainVerificationLinkPath.slice('/auth'.length), async (context) => {
+    .get(domainVerificationLinkPath.slice('/auth'.length), rateLimited('verificationLink'), async (context) => {
       const verified = await verifyDomainByToken(scopeOf(context).database, context.req.query('token') ?? '').catch(
         (error: Error) => error,
       )
@@ -171,7 +174,7 @@ export const createAuthRoutes = ({
         typeof verified === 'string' ? 200 : 400,
       )
     })
-    .get('/login', async (context) => {
+    .get('/login', rateLimited('emailRouting'), async (context) => {
       const scope = scopeOf(context)
       const workspaceId = context.req.query('workspace')
       if (scope.testUserId) return completeSignIn(context, scope, { userId: scope.testUserId, email: '', workspaceId })
@@ -185,7 +188,7 @@ export const createAuthRoutes = ({
         providerWorkspaceId: provider?.workspaceId,
       })
     })
-    .get('/callback', async (context) => {
+    .get('/callback', rateLimited('signInCallback'), async (context) => {
       const signedLogin = await getSignedCookie(context, tokenSecret, loginCookie)
       deleteCookie(context, loginCookie, { path: '/auth/callback' })
       const { workspaceId, providerWorkspaceId, firstWorkspace, ...login } = signedLogin ? JSON.parse(signedLogin) : {}

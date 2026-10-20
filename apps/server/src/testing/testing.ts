@@ -37,6 +37,7 @@ import { openSessions } from '../auth/sessions.ts'
 import { createGitHubCheckouts, type GitHubDependencies } from '../github/github.ts'
 import { startJobWorker } from '../job-worker.ts'
 import { createModelCallRelay } from '../llm-relay.ts'
+import { type RateBudgets, rateBudgets } from '../rate-limits.ts'
 import { createRuntimeHostGateway } from '../runtime-hosts/gateway.ts'
 import { createFakeLlm, type FakeLlmScript, fakeAgentLlm } from './fake-llm.ts'
 import { createFakeMcp, sharedToolServer } from './fake-mcp.ts'
@@ -50,7 +51,11 @@ import {
 } from './spyria-agent-relay.ts'
 
 export const testSecretsKey = 'e2e-and-integration-test-secrets-key'
+const unlimitedRateBudgets = Object.fromEntries(
+  Object.entries(rateBudgets).map(([name, budget]) => [name, { ...budget, count: 1_000_000_000 }]),
+) as RateBudgets
 export const testAuthSettings = {
+  rateLimits: unlimitedRateBudgets,
   tokenSecret: 'integration-test-secret',
   appOrigin: 'http://localhost:5190',
   oidc: { issuer: 'http://localhost:5557/dex', clientId: 'spyria', redirectUri: 'http://localhost:3100/auth/callback' },

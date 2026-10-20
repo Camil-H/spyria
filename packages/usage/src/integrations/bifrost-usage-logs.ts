@@ -1,4 +1,4 @@
-import { chatId, memberId, type WorkspaceId } from '@spyria/kernel'
+import { chatId, memberId, type WorkspaceId, withRetries } from '@spyria/kernel'
 import type { GatewayUsageLogs } from '../contracts/usage-sync.ts'
 import type { ModelCall } from '../domain/usage.ts'
 
@@ -40,10 +40,12 @@ export const createBifrostUsageLogs = ({
         Object.entries({ ...labels, workspace: workspaceId }).map(([name, value]) => [`metadata_${name}`, value]),
       ),
     })
-    const response = await fetch(`${url}/api/logs?${query}`, {
-      headers: { authorization },
-      signal: AbortSignal.timeout(timeoutMilliseconds),
-    })
+    const response = await withRetries(
+      (signal) => fetch(`${url}/api/logs?${query}`, { headers: { authorization }, signal }),
+      {
+        timeoutMilliseconds,
+      },
+    )
     if (!response.ok) throw new Error(`The gateway answered GET /api/logs with ${response.status}`)
     return ((await response.json()) as { logs: LogRow[] | null }).logs ?? []
   }

@@ -5,7 +5,7 @@ const decodedQuotedPrintable = (body: string) =>
     .replace(/=\r\n/g, '')
     .replace(/=([0-9A-F]{2})/g, (_, hex: string) => String.fromCharCode(Number.parseInt(hex, 16)))
 
-export const startFakeSmtp = (port = 0) => {
+export const startFakeSmtp = (port = 0, { dropsAfterMessage = false } = {}) => {
   const mails: CapturedMail[] = []
   const replyTo = (line: string, isLastDataLine: boolean) => {
     if (isLastDataLine) return '250 queued'
@@ -38,6 +38,7 @@ export const startFakeSmtp = (port = 0) => {
             mails.push({ to: session.to, text: decodedQuotedPrintable(message.slice(message.indexOf('\r\n\r\n') + 4)) })
             session.data = null
             session.to = []
+            if (dropsAfterMessage) return void socket.end()
           }
           if (/^RCPT TO:/i.test(line)) session.to.push(line.replace(/^RCPT TO:\s*<?([^>]*)>?.*$/i, '$1').toLowerCase())
           if (/^DATA$/i.test(line)) session.data = []

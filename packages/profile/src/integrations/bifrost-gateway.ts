@@ -1,4 +1,4 @@
-import type { ListedModel } from '@spyria/kernel'
+import { type ListedModel, withRetries } from '@spyria/kernel'
 import type { LlmGateway, ToolGateway, ToolServer } from '../contracts/repositories.ts'
 import { UnsupportedProvider } from '../domain/errors.ts'
 import type { GatewayKey } from '../domain/llm-credential.ts'
@@ -92,12 +92,17 @@ export const createLlmGateway = ({
     })
   }
   const request = async (method: string, path: string, body?: object, toleratedStatus = notFound) => {
-    const response = await fetch(`${url}${path}`, {
-      method,
-      headers: { authorization, 'content-type': 'application/json' },
-      body: body && JSON.stringify(body),
-      signal: AbortSignal.timeout(timeoutMilliseconds),
-    })
+    const send = (signal: AbortSignal) =>
+      fetch(`${url}${path}`, {
+        method,
+        headers: { authorization, 'content-type': 'application/json' },
+        body: body && JSON.stringify(body),
+        signal,
+      })
+    const response =
+      method === 'POST'
+        ? await send(AbortSignal.timeout(timeoutMilliseconds))
+        : await withRetries(send, { timeoutMilliseconds })
     if (!response.ok && response.status !== toleratedStatus)
       throw new Error(`The gateway answered ${method} ${path.replace(/[0-9a-f-]{36}/g, ':id')} with ${response.status}`)
     const text = response.ok ? await response.text() : ''

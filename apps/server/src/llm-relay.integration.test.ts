@@ -1,7 +1,10 @@
 import { afterAll, afterEach, expect, setDefaultTimeout, test } from 'bun:test'
 import { defaultHarness } from '@spyria/kernel'
 import { websocket } from 'hono/bun'
+import { createAgentBridge } from './agent-bridge/bridge.ts'
 import { createApp } from './app.ts'
+import { createModelCallRelay } from './llm-relay.ts'
+import { createRuntimeHostGateway } from './runtime-hosts/gateway.ts'
 import {
   acme,
   addLlmKey,
@@ -19,7 +22,7 @@ import {
 } from './testing/testing.ts'
 
 setDefaultTimeout(30_000)
-const { database, port, gateway, fakeLlmCalls, fakeLlmBodies } = await openSharedTestApp()
+const { database, port, gateway, llmGateway, fakeLlmCalls, fakeLlmBodies } = await openSharedTestApp()
 const { fakeHost, disconnectFakeHosts } = createFakeHosts({ port, database })
 afterEach(() => disconnectFakeHosts())
 
@@ -208,6 +211,48 @@ test('an unreachable gateway answers 502 and records Spyria’s notice', async (
   } finally {
     await hosts.disconnectFakeHosts()
     void server.stop(true)
+  }
+})
+
+test('a model call is retried once when the gateway refuses the connection, never once the gateway has answered', async () => {
+  let nextGatewayUrls: string[] = []
+  const failingGatewayCalls: string[] = []
+  const failingGateway = Bun.serve({
+    port: 0,
+    fetch: (request) => {
+      failingGatewayCalls.push(new URL(request.url).pathname)
+      return Response.json({ error: { message: 'overloaded' } }, { status: 503 })
+    },
+  })
+  const runtimeHosts = createRuntimeHostGateway({
+    databases: () => [database],
+    relayModelCall: createModelCallRelay({
+      llmGateway,
+      gatewayUrlOf: () => nextGatewayUrls.shift() ?? llmGateway.url,
+      agentBridge: () => agentBridge,
+    }),
+  })
+  const agentBridge = createAgentBridge({ sandboxProvider: runtimeHosts.sandboxProvider })
+  const relayApp = createApp({ database, ...testAuthSettings, llmGateway, runtimeHosts, agentBridge })
+  const server = Bun.serve({ port: 0, fetch: relayApp.fetch, websocket })
+  const hosts = createFakeHosts({ port: Number(server.port), database })
+  try {
+    const host = await hosts.fakeHost('Retrying gateway host')
+    const { chatId, token } = await runtimeTurn(host, bob)
+    const call = () => host.modelCall({ headers: { authorization: `Bearer ${token}` }, body: completion })
+    nextGatewayUrls = ['http://127.0.0.1:9']
+    expect(await call()).toMatchObject({ status: 200, ended: 'gw_end' })
+    expect(await failureOf(chatId)).toBeNull()
+    nextGatewayUrls = ['http://127.0.0.1:9', 'http://127.0.0.1:9', 'http://127.0.0.1:9']
+    expect((await call()).status).toBe(502)
+    expect(nextGatewayUrls).toHaveLength(1)
+    nextGatewayUrls = [failingGateway.url.origin, failingGateway.url.origin]
+    expect((await call()).status).toBe(503)
+    expect(failingGatewayCalls).toEqual(['/v1/chat/completions'])
+  } finally {
+    await hosts.disconnectFakeHosts()
+    void server.stop(true)
+    void failingGateway.stop(true)
   }
 })
 

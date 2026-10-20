@@ -29,6 +29,8 @@ export const productionProblemsOf = (environment: Record<string, string | undefi
     (!originOf(appOrigin) || originOf(settingOf('SPYRIA_OIDC_REDIRECT_URI')) !== originOf(appOrigin)) &&
       'SPYRIA_OIDC_REDIRECT_URI must be on SPYRIA_APP_ORIGIN.',
     ...requiredSettings.map((name) => !settingOf(name) && `${name} is required.`),
+    ![undefined, '', 'cloudflare'].includes(environment.SPYRIA_TRUSTED_PROXY) &&
+      'SPYRIA_TRUSTED_PROXY must be unset or cloudflare.',
     ...['SPYRIA_GATEWAY_ADMIN_USER', 'SPYRIA_GATEWAY_ADMIN_PASSWORD'].map(
       (name) => isDevelopmentDefault(settingOf(name)) && `${name} must not be a development default.`,
     ),

@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test'
+import { createApp } from './app.ts'
+import { rateBudgets } from './rate-limits.ts'
 import {
   acme,
   alice,
@@ -11,8 +13,10 @@ import {
   jobsOf,
   messageRow,
   openSharedTestApp,
+  requestMutation,
   sendTo,
   succeeded,
+  testAuthSettings,
 } from './testing/testing.ts'
 
 const { database, resultOf, eventsOf, changesOf, chatRow } = await openSharedTestApp()
@@ -152,4 +156,25 @@ test.each([
   const before = await countOf()
   expect(await resultOf(bobInAcme, name, { workspaceId: acme, ...args })).toEqual(failedWith(message))
   expect(await countOf()).toEqual(before)
+})
+
+test('a member sends at most 30 messages a minute: the next one is refused with the rate-limit message and not written, another member still sends', async () => {
+  const limitedApp = createApp({ database, ...testAuthSettings, rateLimits: rateBudgets })
+  const send = (member: typeof aliceInAcme, id: string) =>
+    requestMutation(limitedApp, database, member, 'conversation.sendMessage', {
+      workspaceId: acme,
+      chatId: 'chat-welcome',
+      id,
+      text: 'Hi',
+    })
+  for (let sent = 0; sent < rateBudgets.prompts.count; sent++)
+    expect(await send(aliceInAcme, `message-burst-${sent}`)).toEqual(succeeded)
+  expect(await send(aliceInAcme, 'message-burst-over')).toEqual(
+    expect.objectContaining({
+      error: 'app',
+      message: expect.stringMatching(/^Too many requests: try again in [12] seconds\.$/),
+    }),
+  )
+  expect(await messageRow('message-burst-over')).toBeUndefined()
+  expect(await send(bobInAcme, 'message-burst-bob')).toEqual(succeeded)
 })

@@ -3,8 +3,10 @@ import { createTestDatabase, databaseDropTimeoutMilliseconds, databaseUrlOf } fr
 import { workspacePermissions } from '@spyria/kernel'
 import { exportJWK, generateKeyPair, type JWTPayload, SignJWT } from 'jose'
 import { createApp } from '../app.ts'
+import { rateBudgets } from '../rate-limits.ts'
 import { startFakeSmtp, verificationLinkIn } from '../testing/fake-smtp.ts'
-import { acme, alice, bob, globex, testAuthSettings, workspaceEventsOf } from '../testing/testing.ts'
+import { acme, alice, bob, captureLogs, globex, testAuthSettings, workspaceEventsOf } from '../testing/testing.ts'
+import { createSmtpMailer } from './mail.ts'
 import { createSecretBox } from './secret-box.ts'
 import { issueSessionToken } from './session-tokens.ts'
 import { openSessions } from './sessions.ts'
@@ -349,6 +351,68 @@ test('without SMTP the verification link is refused with a clear message', async
   })
 })
 
+test('a workspace sends at most 3 verification emails an hour: the next is refused with 429, Retry-After and a message, another workspace is not', async () => {
+  const limitedApp = createApp({
+    database,
+    ...ssoSettings,
+    rateLimits: rateBudgets,
+    mail: { smtpUrl: smtp.url, from: 'Spyria <spyria@test.local>' },
+  })
+  const logs = captureLogs()
+  try {
+    for (let sent = 0; sent < 3; sent++)
+      expect((await sendVerification(acme, 'example.com', 'it@example.com', limitedApp)).status).not.toBe(429)
+    const response = await limitedApp.request('/api/sso-settings/domain-verification', {
+      method: 'POST',
+      headers: { authorization: await bearerOf(acme, alice), 'content-type': 'application/json' },
+      body: JSON.stringify({ domain: 'example.com', email: 'it@example.com' }),
+    })
+    expect(response.status).toBe(429)
+    expect(Number(response.headers.get('retry-after'))).toBe(1200)
+    expect(await response.json()).toEqual({
+      error: 'rate_limited',
+      message: 'Too many requests: try again in 1200 seconds.',
+    })
+    expect((await sendVerification(globex, 'globex.com', 'it@globex.com', limitedApp)).status).not.toBe(429)
+  } finally {
+    logs.restore()
+  }
+  expect(logs.events.filter((logged) => logged.event === 'rate_limit.hit')).toEqual([
+    expect.objectContaining({
+      severity: 'WARN',
+      attributes: { 'rate_limit.name': 'verificationEmails', 'workspace.id': acme },
+    }),
+  ])
+})
+
+test('a mail is retried while the SMTP connection is refused, and never sent twice once the server has the message', async () => {
+  const probe = Bun.listen({ hostname: '127.0.0.1', port: 0, socket: { data: () => {} } })
+  const { port } = probe
+  probe.stop(true)
+  const mail = { to: 'it@example.com', subject: 'Verify', text: 'Open the link' }
+  const startedAt = Date.now()
+  const sent = createSmtpMailer({ smtpUrl: `smtp://127.0.0.1:${port}`, from: 'Spyria <spyria@test.local>' }).send(mail)
+  await Bun.sleep(50)
+  const lateSmtp = startFakeSmtp(port)
+  try {
+    await sent
+    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(100)
+    expect(lateSmtp.mails.map((received) => received.to)).toEqual([['it@example.com']])
+  } finally {
+    lateSmtp.stop()
+  }
+  const droppingSmtp = startFakeSmtp(0, { dropsAfterMessage: true })
+  try {
+    await expect(
+      createSmtpMailer({ smtpUrl: droppingSmtp.url, from: 'Spyria <spyria@test.local>' }).send(mail),
+    ).rejects.toThrow()
+    await Bun.sleep(300)
+    expect(droppingSmtp.mails).toHaveLength(1)
+  } finally {
+    droppingSmtp.stop()
+  }
+})
+
 test('the first sign-in binds the identity through an invite; a later sign-in matches the subject after an email change', async () => {
   await invite(acme, 'nina@example.com')
   const first = await signInThrough(acmeIdp, 'email=nina@example.com', {
@@ -491,6 +555,37 @@ const countsOf = async () =>
     await emptyInstance.database.$client`
       select (select count(*) from workspaces)::int as workspaces, (select count(*) from users)::int as users`
   )[0]
+
+test('sign-in routing, the sign-in callback, workspace creation and the verification link answer 429 with Retry-After past their budget per address', async () => {
+  const limitedApp = createApp({ database: emptyInstance.database, ...ssoSettings, rateLimits: rateBudgets })
+  const requests = {
+    emailRouting: () => limitedApp.request('/auth/login?email=pat@other.com'),
+    signInCallback: () => limitedApp.request('/auth/callback?code=forged&state=forged'),
+    firstWorkspace: () =>
+      limitedApp.request('/auth/first-workspace', { method: 'POST', headers: { origin: 'https://elsewhere.example' } }),
+    verificationLink: () => limitedApp.request('/auth/verify-domain?token=forged'),
+  }
+  const logs = captureLogs()
+  try {
+    for (const [name, request] of Object.entries(requests) as [keyof typeof requests, () => Promise<Response>][]) {
+      for (let sent = 0; sent < rateBudgets[name].count; sent++) expect((await request()).status).not.toBe(429)
+      const refused = await request()
+      expect({ name, status: refused.status }).toEqual({ name, status: 429 })
+      const retryAfter = Number(refused.headers.get('retry-after'))
+      expect(retryAfter).toBeGreaterThan(0)
+      expect(retryAfter).toBeLessThanOrEqual(
+        Math.ceil(rateBudgets[name].perMilliseconds / rateBudgets[name].count / 1000),
+      )
+      expect(await refused.text()).toBe(`Too many requests: try again in ${retryAfter} seconds.`)
+    }
+  } finally {
+    logs.restore()
+  }
+  expect(await countsOf()).toEqual({ workspaces: 0, users: 0 })
+  expect(logs.events.filter((logged) => logged.event === 'rate_limit.hit').map((logged) => logged.attributes)).toEqual(
+    Object.keys(requests).map((name) => ({ 'rate_limit.name': name })),
+  )
+})
 
 test('on an empty instance, creating a workspace refuses another origin, invalid settings, a failing discovery and an email outside the domain, creating nothing', async () => {
   expect((await startCreation(umbrellaForm(), 'https://elsewhere.example')).status).toBe(403)

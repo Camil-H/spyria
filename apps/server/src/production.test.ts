@@ -74,3 +74,8 @@ test('the gateway admin login is present and not the dev default', () => {
 test('every problem is listed at once', () => {
   expect(productionProblemsOf({ SPYRIA_ENV: 'production' })).toHaveLength(10)
 })
+
+test('a trusted proxy is unset or cloudflare', () => {
+  expect(problemsWith({ SPYRIA_TRUSTED_PROXY: 'cloudflare' })).toEqual([])
+  expect(problemsWith({ SPYRIA_TRUSTED_PROXY: 'nginx' })).toEqual(['SPYRIA_TRUSTED_PROXY must be unset or cloudflare.'])
+})

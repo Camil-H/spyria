@@ -1,4 +1,5 @@
 import { createPrivateKey, createSign } from 'node:crypto'
+import { withRetries } from '@spyria/kernel'
 import type { GitHubPullRequest } from './webhooks.ts'
 
 export type GitHubUrls = { apiUrl: string; webUrl: string }
@@ -30,17 +31,22 @@ export const appJwtOf = (appId: string, privateKey: string, now = Date.now()) =>
 
 export const createGitHubApi = ({ apiUrl, webUrl }: GitHubUrls) => {
   const request = async <Result>(path: string, { token, method = 'GET', body }: Requested) => {
-    const response = await fetch(`${apiUrl}${path}`, {
-      method,
-      headers: {
-        accept: 'application/vnd.github+json',
-        authorization: `Bearer ${token}`,
-        'x-github-api-version': '2022-11-28',
-        ...(body && { 'content-type': 'application/json' }),
-      },
-      body: body && JSON.stringify(body),
-      signal: AbortSignal.timeout(requestTimeoutMilliseconds),
-    })
+    const send = (signal: AbortSignal) =>
+      fetch(`${apiUrl}${path}`, {
+        method,
+        headers: {
+          accept: 'application/vnd.github+json',
+          authorization: `Bearer ${token}`,
+          'x-github-api-version': '2022-11-28',
+          ...(body && { 'content-type': 'application/json' }),
+        },
+        body: body && JSON.stringify(body),
+        signal,
+      })
+    const response =
+      method === 'GET'
+        ? await withRetries(send, { timeoutMilliseconds: requestTimeoutMilliseconds })
+        : await send(AbortSignal.timeout(requestTimeoutMilliseconds))
     if (!response.ok) {
       const { message } = (await response.json().catch(() => ({}))) as { message?: string }
       throw new GitHubRequestFailed(response.status, `${response.status} ${message ?? response.statusText}`)
