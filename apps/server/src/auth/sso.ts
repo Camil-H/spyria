@@ -14,6 +14,7 @@ import {
   InvalidSsoSettings,
   MailNotConfigured,
   MailNotSent,
+  Name,
   normalizedEmail,
   SsoDiscoveryFailed,
   type SsoDomainState,
@@ -23,6 +24,7 @@ import {
   type SsoSettingsView,
   ssoSettingsFrom,
   tenantIdOf,
+  WorkspaceCreationClosed,
 } from '@spyria/workspace/server'
 import type { Mailer } from './mail.ts'
 import { discoverIssuer } from './oidc.ts'
@@ -117,26 +119,16 @@ const settingsOf = (sql: Sql, workspaceId: string) =>
 
 const storeSsoSettings = async (
   sql: Sql,
-  { secretBox }: SsoDependencies,
   {
     workspaceId,
     actorId,
     settings,
-    clientSecret = '',
-  }: {
-    workspaceId: string
-    actorId: string | null
-    settings: SsoSettings
-    clientSecret?: string
-  },
+    encryptedClientSecret,
+  }: { workspaceId: string; actorId: string; settings: SsoSettings; encryptedClientSecret: string | null },
 ) => {
   await assertNotVerifiedElsewhere(sql, workspaceId, settings.issuer, settings.domains)
   const [previous] = await settingsOf(sql, workspaceId)
-  if (!previous && clientSecret.trim() === '') throw new InvalidSsoSettings('A client secret is required')
-  if (clientSecret.trim() !== '' && !secretBox)
-    throw new InvalidSsoSettings('SPYRIA_SECRETS_KEY is not set on this server')
-  const encryptedClientSecret =
-    clientSecret.trim() === '' ? null : ((await secretBox?.seal(clientSecret.trim())) ?? null)
+  if (!previous && !encryptedClientSecret) throw new InvalidSsoSettings('A client secret is required')
   await sql`
     insert into workspace_sso (workspace_id, preset, issuer, client_id, encrypted_client_secret, updated_at)
     values (${workspaceId}, ${settings.preset}, ${settings.issuer}, ${settings.clientId}, ${encryptedClientSecret ?? ''},
@@ -147,9 +139,8 @@ const storeSsoSettings = async (
   await sql`
     delete from sso_domains where workspace_id = ${workspaceId} and domain <> all(${settings.domains}::text[])`
   await sql`
-    insert into sso_domains (workspace_id, domain, verified_at)
-    select ${workspaceId}, domain, case when ${actorId}::text is null then now() end
-    from unnest(${settings.domains}::text[]) as domain
+    insert into sso_domains (workspace_id, domain)
+    select ${workspaceId}, domain from unnest(${settings.domains}::text[]) as domain
     on conflict do nothing`
   const domains = settings.domains.toSorted()
   if (JSON.stringify(previous) !== JSON.stringify({ ...settings, domains }))
@@ -187,36 +178,82 @@ export const saveSsoSettings = async (
 ) => {
   await readSsoSettings(database, member)
   const settings = await checkedSettings(input, dependencies)
+  const clientSecret = String(input.clientSecret ?? '').trim()
+  if (clientSecret !== '' && !dependencies.secretBox)
+    throw new InvalidSsoSettings('SPYRIA_SECRETS_KEY is not set on this server')
+  const encryptedClientSecret =
+    clientSecret === '' ? null : ((await dependencies.secretBox?.seal(clientSecret)) ?? null)
   return database.$client.begin(async (sql) => {
-    await storeSsoSettings(sql, dependencies, {
+    await storeSsoSettings(sql, {
       workspaceId: member.workspaceId,
       actorId: member.userId,
       settings,
-      clientSecret: input.clientSecret,
+      encryptedClientSecret,
     })
     return ssoSettingsViewOf(sql, member)
   })
 }
 
-export const bootstrapSsoWorkspace = async (
+export const hasNoWorkspace = async (sql: Sql | Database['$client']) =>
+  (await sql`select 1 from workspaces limit 1`).length === 0
+
+const assertWorkspaceCreationOpen = async (sql: Sql | Database['$client']) => {
+  if (!(await hasNoWorkspace(sql))) throw new WorkspaceCreationClosed()
+}
+
+export type FirstWorkspace = {
+  workspaceName: string
+  domain: string
+  provider: Omit<SsoProvider, 'workspaceId' | 'updatedAt'>
+}
+
+export const prepareFirstWorkspace = async (
   database: Database,
   dependencies: SsoDependencies,
-  { workspaceName, adminEmail, ...input }: SsoSettingsInput & { workspaceName: string; adminEmail: string },
+  form: Record<string, unknown>,
+): Promise<FirstWorkspace> => {
+  await assertWorkspaceCreationOpen(database.$client)
+  const field = (name: string) => (typeof form[name] === 'string' ? form[name] : '').trim().slice(0, 500)
+  const workspaceName = Name(field('name'))
+  if (field('clientSecret') === '') throw new InvalidSsoSettings('A client secret is required')
+  if (!dependencies.secretBox) throw new InvalidSsoSettings('SPYRIA_SECRETS_KEY is not set on this server')
+  const settings = await checkedSettings(
+    {
+      preset: field('preset') as SsoPreset,
+      issuer: field('issuer'),
+      tenantId: field('tenantId'),
+      clientId: field('clientId'),
+      domains: [field('domain')],
+    },
+    dependencies,
+  )
+  const { domains, ...provider } = settings
+  return {
+    workspaceName,
+    domain: domains[0] ?? '',
+    provider: { ...provider, encryptedClientSecret: await dependencies.secretBox.seal(field('clientSecret')) },
+  }
+}
+
+export const createFirstWorkspace = async (
+  database: Database,
+  { workspaceName, domain, provider }: FirstWorkspace,
+  identity: { email: string; name?: unknown; subject: string },
 ) => {
-  const email = normalizedEmail(adminEmail)
-  const settings = await checkedSettings(input, dependencies)
-  if (!settings.domains.includes(domainOfEmail(email)))
-    throw new InvalidSsoSettings(`${email} is not in the email domains of the workspace`)
-  if (workspaceName.trim() === '') throw new InvalidSsoSettings('A workspace name is required')
+  const email = normalizedEmail(identity.email)
+  if (domainOfEmail(email) !== domain)
+    throw new InvalidSsoSettings(`${email} is not an address at ${domain}: no workspace was created`)
   const workspaceId = crypto.randomUUID()
-  await database.$client.begin(async (sql) => {
+  return database.$client.begin(async (sql) => {
+    await sql`lock table workspaces in share row exclusive mode`
+    await assertWorkspaceCreationOpen(sql)
     const [user] = await sql<{ id: string }[]>`
       insert into users (id, email) values (${crypto.randomUUID()}, ${email})
       on conflict (email) do update set email = excluded.email returning id`
     const userId = user?.id ?? ''
     await sql`
       insert into workspaces (workspace_id, name, created_by, created_at)
-      values (${workspaceId}, ${workspaceName.trim()}, ${userId}, now())`
+      values (${workspaceId}, ${workspaceName}, ${userId}, now())`
     for (const role of builtInWorkspaceRoles) {
       await sql`
         insert into workspace_roles (workspace_id, id, name, built_in) values (${workspaceId}, ${role.id}, ${role.name}, true)`
@@ -231,16 +268,19 @@ export const bootstrapSsoWorkspace = async (
         values (${workspaceId}, ${role.id}, ${role.name}, ${sql.array([...role.permissions])}, true)`
     await sql`
       insert into memberships (workspace_id, user_id, role, display_name)
-      values (${workspaceId}, ${userId}, ${adminRoleId}, ${displayNameFrom({ email })})`
-    await recordWorkspaceEvent(sql, workspaceId, 'member.joined', null, { memberId: userId, role: adminRoleId })
-    await storeSsoSettings(sql, dependencies, {
+      values (${workspaceId}, ${userId}, ${adminRoleId}, ${displayNameFrom({ ...identity, email })})`
+    await recordWorkspaceEvent(sql, workspaceId, 'member.joined', userId, { memberId: userId, role: adminRoleId })
+    await storeSsoSettings(sql, {
       workspaceId,
-      actorId: null,
-      settings,
-      clientSecret: input.clientSecret,
+      actorId: userId,
+      settings: { preset: provider.preset, issuer: provider.issuer, clientId: provider.clientId, domains: [domain] },
+      encryptedClientSecret: provider.encryptedClientSecret,
     })
+    await sql`
+      insert into identities (workspace_id, issuer, subject, user_id)
+      values (${workspaceId}, ${provider.issuer}, ${identity.subject}, ${userId})`
+    return { workspaceId, userId }
   })
-  return { workspaceId }
 }
 
 const markDomainVerified = async (

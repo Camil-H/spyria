@@ -2,6 +2,8 @@ import type { Transaction } from '@rocicorp/zero'
 import {
   appendChatEvent,
   appendWorkspaceEvent,
+  awaitsDomainVerification,
+  copyWorkspaceSignIn,
   deleteMemberSessions,
   enqueueJob,
   lockActiveAdminIds,
@@ -151,6 +153,11 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
             builtIn: true,
           })
         for (const role of builtInWorkspaceRoles) await insertWorkspaceRole(id, role, true)
+        await copyWorkspaceSignIn(tx, {
+          fromWorkspaceId: context.workspaceId,
+          toWorkspaceId: id,
+          userId: context.userId,
+        })
       },
     },
     memberships: {
@@ -204,6 +211,7 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
         )
         return row && toInvitation(row)
       },
+      awaitsDomainVerification: () => awaitsDomainVerification(tx, context.workspaceId),
       add: (invitation) => tx.mutate.invitations.insert(inContextWorkspace(invitation)),
       save: (invitation) => tx.mutate.invitations.update(inContextWorkspace(invitation)),
     },

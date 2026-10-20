@@ -12,6 +12,8 @@ import { verifyDomainByOperator } from './sso.ts'
 
 const testDatabase = await createTestDatabase()
 const { database } = testDatabase
+const emptyInstance = await createTestDatabase()
+await emptyInstance.database.$client`truncate workspaces, users cascade`
 const secretsKey = 'sso-integration-secrets-key-0123456789'
 const nowInSeconds = () => Math.floor(Date.now() / 1000)
 
@@ -20,6 +22,7 @@ const startFakeIdp = async (issuerPath = '') => {
   const publicKey = { ...(await exportJWK(keys.publicKey)), kid: 'fake-idp', alg: 'RS256', use: 'sig' }
   const idp = {
     claims: {} as JWTPayload,
+    claimsByCode: new Map<string, JWTPayload>(),
     clientSecret: '',
     requests: [] as string[],
     tokenRequests: [] as URLSearchParams[],
@@ -51,7 +54,7 @@ const startFakeIdp = async (issuerPath = '') => {
         aud: form.get('client_id') ?? '',
         iat: nowInSeconds(),
         exp: nowInSeconds() + 60,
-        ...idp.claims,
+        ...(idp.claimsByCode.get(form.get('code') ?? '') ?? idp.claims),
       })
         .setProtectedHeader({ alg: 'RS256', kid: 'fake-idp' })
         .sign(keys.privateKey)
@@ -65,14 +68,16 @@ type FakeIdp = Awaited<ReturnType<typeof startFakeIdp>>
 const acmeIdp = await startFakeIdp()
 const otherIdp = await startFakeIdp()
 const entraIdp = await startFakeIdp('/tenant-1/v2.0')
-const bootstrapIdp = await startFakeIdp()
+const firstWorkspaceIdp = Object.assign(await startFakeIdp(), { clientSecret: 'umbrella-secret' })
 const smtp = startFakeSmtp()
 const ssoSettings = { ...testAuthSettings, authMode: 'sso' as const, secretsKey, microsoftLoginOrigin: entraIdp.origin }
 const app = createApp({ database, ...ssoSettings, mail: { smtpUrl: smtp.url, from: 'Spyria <spyria@test.local>' } })
 const appWithoutMail = createApp({ database, ...ssoSettings })
+const emptyInstanceApp = createApp({ database: emptyInstance.database, ...ssoSettings })
 afterAll(async () => {
+  await emptyInstance.drop()
   smtp.stop()
-  for (const idp of [acmeIdp, otherIdp, entraIdp, bootstrapIdp]) await idp.server.stop(true)
+  for (const idp of [acmeIdp, otherIdp, entraIdp, firstWorkspaceIdp]) await idp.server.stop(true)
   await testDatabase.drop()
 }, databaseDropTimeoutMilliseconds)
 
@@ -174,11 +179,15 @@ const identitiesOf = async (subject: string) => [
     select workspace_id, issuer, user_id from identities where subject = ${subject} order by workspace_id`),
 ]
 
-test('the server tells its auth mode', async () => {
-  expect(await (await app.request('/auth/mode')).json()).toEqual({ authMode: 'sso' })
-  expect(await (await createApp({ database, ...testAuthSettings }).request('/auth/mode')).json()).toEqual({
-    authMode: 'dex',
+test('the server tells its auth mode and whether a workspace can be created', async () => {
+  expect(await (await app.request('/auth/mode')).json()).toEqual({ authMode: 'sso', canCreateWorkspace: false })
+  expect(await (await emptyInstanceApp.request('/auth/mode')).json()).toEqual({
+    authMode: 'sso',
+    canCreateWorkspace: true,
   })
+  expect(
+    await (await createApp({ database: emptyInstance.database, ...testAuthSettings }).request('/auth/mode')).json(),
+  ).toEqual({ authMode: 'dex', canCreateWorkspace: false })
 })
 
 test('an admin saves the SSO settings: the secret is encrypted at rest, never returned, and changes are recorded', async () => {
@@ -436,47 +445,113 @@ test('the test sign-in hook works in sso mode', async () => {
   expect(cookieHeaderOf(login)).toContain(`spyria_s_${acme}=`)
 })
 
-test('the operator bootstrap creates a workspace with its SSO and a first admin who signs in through it', async () => {
-  bootstrapIdp.clientSecret = 'bootstrap-secret'
-  const bootstrap = await runOperator(
-    [
-      'sso:bootstrap',
-      '--name',
-      'Umbrella',
-      '--admin',
-      'Carol@umbrella.com',
-      '--preset',
-      'oidc',
-      '--issuer',
-      bootstrapIdp.issuer,
-      '--client-id',
-      'spyria-umbrella',
-      '--domains',
-      'umbrella.com',
-    ],
-    { SPYRIA_SECRETS_KEY: secretsKey, SPYRIA_SSO_CLIENT_SECRET: 'bootstrap-secret' },
-  )
-  expect(bootstrap.exitCode).toBe(0)
-  expect(bootstrap.stderr).toBe('')
-  const [workspace] = await database.$client<{ workspaceId: string }[]>`
-    select workspace_id as "workspaceId" from workspaces where name = 'Umbrella'`
-  const workspaceId = workspace?.workspaceId ?? ''
-  expect(bootstrap.stdout).toContain(`Workspace Umbrella (${workspaceId}) is created`)
-  expect([
-    ...(await database.$client`
-      select users.email, role, display_name from memberships join users on users.id = memberships.user_id
-      where workspace_id = ${workspaceId}`),
-  ]).toEqual([{ email: 'carol@umbrella.com', role: 'admin', display_name: 'carol' }])
-  expect((await workspaceEventsOf(database, workspaceId)).map(({ type }) => type)).toEqual([
-    'member.joined',
-    'sso.configured',
-  ])
-  expect([
-    ...(await database.$client`select domain from sso_domains where workspace_id = ${workspaceId} and verified_at is not null`),
-  ]).toEqual([{ domain: 'umbrella.com' }])
-  const signedIn = await signInThrough(bootstrapIdp, 'email=carol@umbrella.com', {
-    sub: 'carol-subject',
-    email: 'carol@umbrella.com',
+const umbrellaForm = () => ({
+  name: ' Umbrella ',
+  domain: 'Umbrella.com',
+  preset: 'oidc',
+  issuer: firstWorkspaceIdp.issuer,
+  clientId: 'spyria-umbrella',
+  clientSecret: 'umbrella-secret',
+})
+const startCreation = (form: Record<string, string>, origin = testAuthSettings.appOrigin) =>
+  emptyInstanceApp.request('/auth/first-workspace', {
+    method: 'POST',
+    headers: { origin },
+    body: new URLSearchParams(form),
   })
-  expect(signedIn.sessions.map((session) => session.workspaceId)).toEqual([workspaceId])
+const completeCreation = async (started: Response, code: string, claims: JWTPayload) => {
+  const location = new URL(started.headers.get('location') ?? '')
+  expect(location.origin + location.pathname).toBe(`${firstWorkspaceIdp.issuer}/auth`)
+  firstWorkspaceIdp.claimsByCode.set(code, { nonce: location.searchParams.get('nonce') ?? '', ...claims })
+  const response = await emptyInstanceApp.request(
+    `/auth/callback?code=${code}&state=${location.searchParams.get('state')}`,
+    { headers: { cookie: cookieHeaderOf(started) } },
+  )
+  return { status: response.status, page: await response.text(), cookie: cookieHeaderOf(response) }
+}
+const countsOf = async () =>
+  (
+    await emptyInstance.database.$client`
+      select (select count(*) from workspaces)::int as workspaces, (select count(*) from users)::int as users`
+  )[0]
+
+test('on an empty instance, creating a workspace refuses another origin, invalid settings, a failing discovery and an email outside the domain, creating nothing', async () => {
+  expect((await startCreation(umbrellaForm(), 'https://elsewhere.example')).status).toBe(403)
+  for (const [change, reason] of [
+    [{ name: ' ' }, 'A name must contain at least one non-blank character'],
+    [{ domain: 'umbrella' }, 'umbrella is not an email domain'],
+    [{ clientSecret: '' }, 'A client secret is required'],
+    [{ preset: 'microsoft', tenantId: 'common' }, 'Only a tenant-specific Microsoft Entra issuer is accepted'],
+    [{ issuer: 'http://127.0.0.1:9/nothing' }, 'The discovery of http://127.0.0.1:9/nothing failed: '],
+  ] as const) {
+    const refused = await startCreation({ ...umbrellaForm(), ...change })
+    expect(refused.status).toBe(400)
+    expect(refused.headers.get('location')).toBeNull()
+    expect(await refused.text()).toContain(`"status":"refused","message":"${reason}`)
+  }
+  const started = await startCreation(umbrellaForm())
+  expect(started.headers.get('set-cookie')).not.toContain('umbrella-secret')
+  const outside = await completeCreation(started, 'outside', { sub: 'mallory-subject', email: 'mallory@elsewhere.com' })
+  expect(outside.status).toBe(403)
+  expect(outside.page).toContain('mallory@elsewhere.com is not an address at umbrella.com: no workspace was created')
+  expect(await countsOf()).toEqual({ workspaces: 0, users: 0 })
+})
+
+test('the first person completing sign-in becomes the Admin of an unverified workspace: of two at once exactly one wins, then creation is closed and the domain routes only once verified', async () => {
+  const [carolStart, daveStart] = [await startCreation(umbrellaForm()), await startCreation(umbrellaForm())]
+  const [carol, dave] = await Promise.all([
+    completeCreation(carolStart as Response, 'carol', { sub: 'carol-subject', email: 'Carol@umbrella.com' }),
+    completeCreation(daveStart as Response, 'dave', { sub: 'dave-subject', email: 'dave@umbrella.com' }),
+  ])
+  const [winner, loser] = carol.status === 200 ? [carol, dave] : [dave, carol]
+  expect(winner?.page).toContain('"status":"signed_in"')
+  expect(loser?.status).toBe(403)
+  expect(loser?.page).toContain('Workspace creation is closed on this instance')
+  expect(await countsOf()).toEqual({ workspaces: 1, users: 1 })
+  const [member] = await emptyInstance.database.$client<
+    { workspaceId: string; userId: string; email: string; role: string; displayName: string; name: string }[]
+  >`
+    select workspace_id as "workspaceId", user_id as "userId", users.email, role, display_name as "displayName",
+      workspaces.name
+    from memberships join users on users.id = memberships.user_id join workspaces using (workspace_id)`
+  const { workspaceId, userId } = member ?? { workspaceId: '', userId: '' }
+  expect(member).toMatchObject({
+    name: 'Umbrella',
+    role: 'admin',
+    email: winner === carol ? 'carol@umbrella.com' : 'dave@umbrella.com',
+  })
+  const sessions = await (
+    await emptyInstanceApp.request('/auth/sessions', { headers: { cookie: winner?.cookie ?? '' } })
+  ).json()
+  expect(sessions).toMatchObject({ userId, sessions: [{ workspaceId }] })
+  expect(
+    (await workspaceEventsOf(emptyInstance.database, workspaceId)).map(({ type, actorId }) => [type, actorId]),
+  ).toEqual([
+    ['member.joined', userId],
+    ['sso.configured', userId],
+  ])
+  const [stored] = await emptyInstance.database.$client`
+    select issuer, client_id as "clientId", encrypted_client_secret as "encryptedClientSecret", domain, verified_at as "verifiedAt"
+    from workspace_sso join sso_domains using (workspace_id)`
+  expect(stored).toMatchObject({
+    issuer: firstWorkspaceIdp.issuer,
+    clientId: 'spyria-umbrella',
+    domain: 'umbrella.com',
+    verifiedAt: null,
+  })
+  expect(await createSecretBox(secretsKey).open(stored?.encryptedClientSecret ?? '')).toBe('umbrella-secret')
+  expect([...(await emptyInstance.database.$client`select subject, user_id as "userId" from identities`)]).toEqual([
+    { subject: winner === carol ? 'carol-subject' : 'dave-subject', userId },
+  ])
+
+  expect(await (await emptyInstanceApp.request('/auth/mode')).json()).toEqual({
+    authMode: 'sso',
+    canCreateWorkspace: false,
+  })
+  expect(await (await startCreation(umbrellaForm())).text()).toContain(
+    '"status":"refused","message":"Workspace creation is closed on this instance: sign in with your work email"',
+  )
+  expect((await emptyInstanceApp.request('/auth/login?email=erin@umbrella.com')).status).toBe(404)
+  await verifyDomainByOperator(emptyInstance.database, workspaceId, 'umbrella.com')
+  expect((await emptyInstanceApp.request('/auth/login?email=erin@umbrella.com')).status).toBe(302)
 })

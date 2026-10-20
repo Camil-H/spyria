@@ -1,10 +1,14 @@
 import { openPageAs, type WorkerStack } from '../stack'
 import {
   expect,
+  invite,
   logInAtProvider,
   mainOf,
+  menuItemNamesOf,
+  openMenu,
   openSettings,
   type Page,
+  pendingInvitesOf,
   serverUrl,
   ssoProviderIssuer,
   ssoServerUrl,
@@ -74,6 +78,27 @@ const signInThroughCompanyProvider = async (page: Page, email: string) => {
 
 const signInSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Sign-in' })
 
+const creationFormOf = (page: Page) => page.getByRole('form', { name: 'Create a workspace' })
+
+const fillCreationForm = async (page: Page, issuer: string) => {
+  const form = creationFormOf(page)
+  await form.getByLabel('Organization name').fill('Umbrella')
+  await form.getByLabel('Email domain').fill('example.com')
+  await form.getByLabel('Provider').selectOption('oidc')
+  await form.getByLabel('Issuer').fill(issuer)
+  await form.getByLabel('Client id').fill(acmeSso.clientId)
+  await form.getByLabel('Client secret').fill(providerClientSecret)
+}
+
+const createWorkspaceThroughProvider = async (page: Page, email: string) => {
+  await fillCreationForm(page, ssoProviderIssuer)
+  const popupOpened = page.waitForEvent('popup')
+  await creationFormOf(page).getByRole('button', { name: 'Create and sign in' }).click()
+  const popup = await popupOpened
+  await expect(popup).toHaveURL(new RegExp(`^${ssoProviderIssuer}/`))
+  await logInAtProvider(popup, email)
+}
+
 test.describe('SSO', () => {
   test.use({ baseURL: ssoViteUrl, signedInAs: null, runtimeHost: false, warmRuntimes: false })
 
@@ -81,7 +106,7 @@ test.describe('SSO', () => {
     await configureAcmeSso(workerStack)
   })
 
-  test('As a member of a company domain, I enter my work email and sign in through my company provider; without an invite I am told no workspace invited me', {
+  test('As a member of a company domain, I enter my work email and sign in through my company provider, and a new workspace I create reuses my verified domain and provider; without an invite I am told no workspace invited me', {
     tag: ['@spec-37'],
   }, async ({ page, browser, workerStack }) => {
     await verifyByLink(workerStack)
@@ -91,6 +116,34 @@ test.describe('SSO', () => {
     await signInThroughCompanyProvider(page, 'nina@example.com')
     await expect(switcherOf(page)).toContainText('Acme')
 
+    await test.step('a new workspace I create reuses my verified domain and provider: one sign-in through it opens both', async () => {
+      await openMenu(page)
+      await page.getByRole('menuitem', { name: 'New workspace' }).click()
+      await page.getByRole('textbox', { name: 'Workspace name' }).fill('Nina lab')
+      await page.getByRole('button', { name: 'Confirm' }).click()
+      await expect(switcherOf(page)).toContainText('Nina lab')
+      const copiedSignIn = async () =>
+        (
+          await workerStack.database.$client`
+            select issuer, client_id as "clientId", domain, verified_at is not null as "isVerified"
+            from workspace_sso join sso_domains using (workspace_id) join workspaces using (workspace_id)
+            where workspaces.name = 'Nina lab'`
+        )[0]
+      await expect
+        .poll(copiedSignIn)
+        .toEqual({ issuer: ssoProviderIssuer, clientId: acmeSso.clientId, domain: 'example.com', isVerified: true })
+      const ninaAgain = await openPageAs(browser, workerStack, null, ssoViteUrl)
+      await signInThroughCompanyProvider(ninaAgain, 'nina@example.com')
+      expect(await menuItemNamesOf(ninaAgain)).toEqual([
+        'New workspace',
+        'Acme',
+        'Log out of Acme',
+        'Nina lab',
+        'Log out of Nina lab',
+      ])
+      await ninaAgain.context().close()
+    })
+
     await test.step('a person of the domain without membership or invite reaches the provider, then is told no workspace invited them', async () => {
       const olivePage = await openPageAs(browser, workerStack, null, ssoViteUrl)
       await signInThroughCompanyProvider(olivePage, 'olive@example.com')
@@ -99,18 +152,87 @@ test.describe('SSO', () => {
     })
   })
 
-  test('As a visitor, an email of a domain no workspace uses is refused without reaching any provider', {
-    tag: ['@spec-37'],
+  test('As a visitor of an instance that has a workspace, I am offered no workspace creation, and an email of a domain no workspace uses is refused without reaching any provider', {
+    tag: ['@spec-37', '@spec-51'],
   }, async ({ page }) => {
     const providerRequests: string[] = []
     page.context().on('request', (request) => {
       if (request.url().startsWith(ssoProviderIssuer)) providerRequests.push(request.url())
     })
     await page.goto('/')
+    await expect(page.getByRole('heading', { name: 'Sign in to Spyria' })).toBeVisible()
+    await expect(page.getByRole('form', { name: 'Create a workspace' })).toHaveCount(0)
     await continueWith(page, 'pat@other.com')
     await expect(page.getByText('No workspace signs in with other.com')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Continue' })).toBeEnabled()
     expect(providerRequests).toEqual([])
+  })
+
+  test('As the first person of an organization on an empty instance, I create a workspace through my provider and land as its Admin; until the domain is verified through the emailed link nobody else is routed and inviting is refused, then invites work and Bob signs in through routing', {
+    tag: ['@spec-51'],
+  }, async ({ page, browser, workerStack }) => {
+    await workerStack.database.$client`truncate workspaces cascade`
+    await page.goto('/')
+    await expect(page.getByRole('heading', { name: 'Create a workspace' })).toBeVisible()
+    await fillCreationForm(page, 'http://localhost:9/nothing')
+    await creationFormOf(page).getByRole('button', { name: 'Create and sign in' }).click()
+    await expect(page.getByText(/^The discovery of http:\/\/localhost:9\/nothing failed: .+/)).toBeVisible()
+    expect(await workerStack.database.$client`select 1 from workspaces`).toHaveLength(0)
+    await createWorkspaceThroughProvider(page, 'alice@example.com')
+    await expect(switcherOf(page)).toContainText('Umbrella')
+    await openSettings(page, 'Setup SSO')
+    const domainRow = signInSectionOf(page)
+      .getByRole('list', { name: 'Domains' })
+      .getByRole('listitem')
+      .filter({ hasText: 'example.com' })
+    await expect(domainRow.getByText('Not verified', { exact: true })).toBeVisible()
+    await expect(page.locator('body')).not.toContainText(providerClientSecret)
+
+    await test.step('before verification, inviting is refused with its reason and nobody else is routed to the workspace', async () => {
+      await openSettings(page, 'Manage Team')
+      await invite(page, 'bob@example.com')
+      await expect(
+        mainOf(page).getByText(
+          'Invites open once an email domain of this workspace is verified: send the verification link from the Sign-in settings',
+        ),
+      ).toBeVisible()
+      await expect(pendingInvitesOf(page)).toHaveCount(0)
+      const ninaPage = await openPageAs(browser, workerStack, null, ssoViteUrl)
+      await continueWith(ninaPage, 'nina@example.com')
+      await expect(ninaPage.getByText('No workspace signs in with example.com')).toBeVisible()
+      await ninaPage.context().close()
+    })
+
+    await test.step('Send link mails a link to the address and shows the domain pending', async () => {
+      await openSettings(page, 'Setup SSO')
+      const address = verificationAddressOf(workerStack, 'example.com')
+      await domainRow.getByLabel('Address at example.com').fill(address)
+      await domainRow.getByRole('button', { name: 'Send link' }).click()
+      await expect(domainRow.getByText(`Pending: sent to ${address}, expires `)).toBeVisible()
+      await expect(domainRow.getByRole('button', { name: 'Resend' })).toBeVisible()
+    })
+
+    await test.step('opening the link verifies the domain, and Settings show it Verified', async () => {
+      const linkPage = await page.context().newPage()
+      await linkPage.goto(await lastLinkTo(verificationAddressOf(workerStack, 'example.com')))
+      await expect(
+        linkPage.getByText('example.com is verified: people with an example.com email can now sign in'),
+      ).toBeVisible()
+      await linkPage.close()
+      await page.reload()
+      await expect(domainRow.getByText('Verified', { exact: true })).toBeVisible()
+      await expect(domainRow.getByRole('button')).toHaveCount(0)
+    })
+
+    await test.step('after verification, an invite works and Bob signs in through routing', async () => {
+      await openSettings(page, 'Manage Team')
+      await invite(page, 'bob@example.com')
+      await expect(pendingInvitesOf(page)).toContainText('bob@example.com')
+      const bobPage = await openPageAs(browser, workerStack, null, ssoViteUrl)
+      await signInThroughCompanyProvider(bobPage, 'bob@example.com')
+      await expect(switcherOf(bobPage)).toContainText('Umbrella')
+      await bobPage.context().close()
+    })
   })
 
   test.describe(() => {
@@ -157,43 +279,6 @@ test.describe('SSO', () => {
         const [stored] = await workerStack.database.$client`
           select issuer from workspace_sso where workspace_id = 'workspace-acme'`
         expect(stored?.issuer).toBe(ssoProviderIssuer)
-      })
-    })
-
-    test('As a member who can set up SSO, I add a domain and verify it through the emailed link', {
-      tag: ['@spec-37'],
-    }, async ({ page, workerStack }) => {
-      await configureAcmeSso(workerStack, ['example.net'])
-      await page.goto('/')
-      await openSettings(page, 'Setup SSO')
-      const section = signInSectionOf(page)
-      await section.getByLabel('Email domains').fill('example.net, example.com')
-      await section.getByRole('button', { name: 'Save' }).click()
-      await expect(section.getByText('Saved')).toBeVisible()
-      const domainRow = section
-        .getByRole('list', { name: 'Domains' })
-        .getByRole('listitem')
-        .filter({ hasText: 'example.com' })
-      await expect(domainRow.getByText('Not verified', { exact: true })).toBeVisible()
-      const address = verificationAddressOf(workerStack, 'example.com')
-
-      await test.step('Send link mails a link to the address and shows the domain pending', async () => {
-        await domainRow.getByLabel('Address at example.com').fill(address)
-        await domainRow.getByRole('button', { name: 'Send link' }).click()
-        await expect(domainRow.getByText(`Pending: sent to ${address}, expires `)).toBeVisible()
-        await expect(domainRow.getByRole('button', { name: 'Resend' })).toBeVisible()
-      })
-
-      await test.step('opening the link verifies the domain, and Settings show it Verified', async () => {
-        const linkPage = await page.context().newPage()
-        await linkPage.goto(await lastLinkTo(address))
-        await expect(
-          linkPage.getByText('example.com is verified: people with an example.com email can now sign in'),
-        ).toBeVisible()
-        await linkPage.close()
-        await page.reload()
-        await expect(domainRow.getByText('Verified', { exact: true })).toBeVisible()
-        await expect(domainRow.getByRole('button')).toHaveCount(0)
       })
     })
   })

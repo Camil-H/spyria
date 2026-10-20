@@ -6,8 +6,10 @@ import {
   giveWorkspaceRole,
   hostsSectionOf,
   insertWorkspaceRole,
+  invite,
   machineTest,
   mainOf,
+  membersSectionOf,
   messageContaining,
   messageItemsOf,
   openChat,
@@ -15,6 +17,7 @@ import {
   openSettings,
   type Page,
   panelTabOf,
+  pendingInvitesOf,
   sendMessage,
   sidebarOf,
   signedOutScreenOf,
@@ -29,20 +32,10 @@ const bobsChatId = 'chat-bobs-runtime'
 const streamReconnectWaitMilliseconds = 2500
 const bobsChatName = "Bob's runtime"
 
-const membersSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Members' })
 const memberRowOf = (page: Page, name: string) =>
   membersSectionOf(page).getByRole('list', { name: 'Members' }).getByRole('listitem').filter({ hasText: name })
-const pendingInvitesOf = (page: Page) =>
-  membersSectionOf(page).getByRole('list', { name: 'Pending invites' }).getByRole('listitem')
 const sectionOf = (page: Page, sectionName: string) => mainOf(page).getByRole('region', { name: sectionName })
 const settingsLinkOf = (page: Page) => sidebarOf(page).getByRole('link', { name: 'Workspace settings' })
-
-const invite = async (page: Page, email: string) => {
-  const form = membersSectionOf(page).getByRole('form', { name: 'Invite member' })
-  await form.getByRole('textbox', { name: 'Email' }).fill(email)
-  await form.getByRole('combobox', { name: 'Role' }).selectOption('member')
-  await form.getByRole('button', { name: 'Invite' }).click()
-}
 
 const removeMember = async (page: Page, name: string) => {
   await membersSectionOf(page)

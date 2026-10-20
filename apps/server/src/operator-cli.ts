@@ -3,9 +3,7 @@ import { rebuildMessages } from '@spyria/conversation/server'
 import { createDatabase } from '@spyria/db/postgres'
 import { schema } from '@spyria/db/zero'
 import { createLlmGateway, type ToolServerSetup } from '@spyria/profile/server'
-import type { SsoPreset } from '@spyria/workspace/server'
-import { createSecretBox } from './auth/secret-box.ts'
-import { bootstrapSsoWorkspace, verifyDomainByOperator } from './auth/sso.ts'
+import { verifyDomainByOperator } from './auth/sso.ts'
 import { listFailedJobs, retryFailedJobs } from './job-worker.ts'
 
 const [command = '', ...options] = process.argv.slice(2)
@@ -16,8 +14,6 @@ const requiredEnvironment = (name: string) => {
   return value
 }
 const optionOf = (name: string) => (options.includes(name) ? options[options.indexOf(name) + 1] : undefined)
-const bootstrapUsage =
-  'Usage: SPYRIA_SECRETS_KEY=… SPYRIA_SSO_CLIENT_SECRET=… bun run operator sso:bootstrap --name <workspace> --admin <email> --preset google|microsoft|oidc [--tenant <id>] [--issuer <url>] --client-id <id> --domains <a.com,b.com>'
 const toolServers: Record<string, () => ToolServerSetup> = {
   github: () => ({
     name: 'GitHub',
@@ -58,34 +54,6 @@ const commands: Record<string, () => Promise<void>> = {
     const server = setup()
     const isNew = await gateway.setUpToolServer(server, logInAsAdmin)
     console.log(isNew ? `${server.name} is set up: members can connect it` : `${server.name} was already set up`)
-  },
-  'sso:bootstrap': async () => {
-    const [workspaceName, adminEmail, preset, clientId, domains] = [
-      '--name',
-      '--admin',
-      '--preset',
-      '--client-id',
-      '--domains',
-    ].map(optionOf)
-    if (!workspaceName || !adminEmail || !preset || !clientId || !domains) throw new Error(bootstrapUsage)
-    const { workspaceId } = await bootstrapSsoWorkspace(
-      database,
-      {
-        secretBox: createSecretBox(requiredEnvironment('SPYRIA_SECRETS_KEY')),
-        microsoftLoginOrigin: process.env.SPYRIA_MICROSOFT_LOGIN_ORIGIN,
-      },
-      {
-        workspaceName,
-        adminEmail,
-        preset: preset as SsoPreset,
-        tenantId: optionOf('--tenant'),
-        issuer: optionOf('--issuer'),
-        clientId,
-        clientSecret: requiredEnvironment('SPYRIA_SSO_CLIENT_SECRET'),
-        domains: domains.split(','),
-      },
-    )
-    console.log(`Workspace ${workspaceName} (${workspaceId}) is created: ${adminEmail} signs in as its first admin`)
   },
   'sso:verify-domain': async () => {
     const [workspaceId, domain] = ['--workspace', '--domain'].map(optionOf)

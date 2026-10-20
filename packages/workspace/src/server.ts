@@ -10,6 +10,7 @@ export {
   MailNotSent,
   RepositoryNotGranted,
   SsoDiscoveryFailed,
+  WorkspaceCreationClosed,
 } from './domain/errors.ts'
 export {
   enteredSecretsOf,
@@ -22,6 +23,7 @@ export {
   grantedRepositoryOf,
 } from './domain/github.ts'
 export { displayNameFrom, normalizedEmail } from './domain/invitation.ts'
+export { Name } from './domain/name.ts'
 export {
   domainOfEmail,
   type SsoDomainState,

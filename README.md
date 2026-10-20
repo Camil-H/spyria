@@ -35,16 +35,9 @@ The app signs in through Dex in a popup (allow popups for `localhost:5173`). The
 
 `SPYRIA_AUTH_MODE` is `dex` (default: dev and tests, one global issuer from `SPYRIA_OIDC_ISSUER` and `SPYRIA_OIDC_CLIENT_ID`) or `sso` (production: each workspace signs in through its own OIDC provider). In `sso` mode the server needs `SPYRIA_SECRETS_KEY` (at least 32 characters, for example `openssl rand -hex 32`; it encrypts the providers' client secrets with AES-GCM and can never change without re-entering every secret) and `SPYRIA_OIDC_REDIRECT_URI` (`<server origin>/auth/callback`, registered at every provider). The sign-in screen asks for a work email; its domain routes to the provider of the workspace using that domain.
 
-Create the first workspace of a fresh deployment from the operator CLI, with the client secret in the environment (not in the shell history):
+On a fresh deployment (no workspace yet), the sign-in screen offers "Create a workspace": the organization name, its email domain and the provider (Google Workspace, Microsoft Entra with its tenant id, or another OIDC issuer; the discovery document is checked, the client secret is encrypted and never shown again). Submitting opens the provider's sign-in; the first person who completes it with an address at that domain becomes the Admin of the new workspace. Once a workspace exists, the screen no longer offers it and the server refuses it; "New workspace" in the app reuses the member's verified domain and provider.
 
-```sh
-SPYRIA_SECRETS_KEY=… SPYRIA_SSO_CLIENT_SECRET=… bun run operator sso:bootstrap --name Acme --admin admin@acme.com \
-  --preset microsoft --tenant <tenant id> --client-id <client id> --domains acme.com,acme.io
-```
-
-A domain routes sign-in only once verified. Admins verify a domain in Workspace settings > Sign-in by sending a single-use link (24 h) to any address at it; this needs SMTP: `SPYRIA_SMTP_URL` (for example `smtp://user:pass@smtp.example.com:587`) and `SPYRIA_MAIL_FROM` (for example `Spyria <spyria@example.com>`). Without SMTP, the operator verifies a domain directly: `bun run operator sso:verify-domain --workspace <id> --domain <domain>`. Domains given to `sso:bootstrap` are verified.
-
-`--preset` is `google` (Google Workspace), `microsoft` (Microsoft Entra, tenant-specific issuer only) or `oidc` with `--issuer <url>`. The command checks the issuer's discovery document, creates the workspace with its SSO settings and makes the admin a member; the admin then signs in and manages the provider in Workspace settings > Sign-in and invites members in Members.
+A domain routes sign-in, and a workspace can invite, only once its domain is verified. Admins verify a domain in Workspace settings > Sign-in by sending a single-use link (24 h) to any address at it; this needs SMTP: `SPYRIA_SMTP_URL` (for example `smtp://user:pass@smtp.example.com:587`) and `SPYRIA_MAIL_FROM` (for example `Spyria <spyria@example.com>`). Without SMTP, the operator verifies a domain directly: `bun run operator sso:verify-domain --workspace <id> --domain <domain>`.
 
 ## Registering the GitHub App (dev chats)
 

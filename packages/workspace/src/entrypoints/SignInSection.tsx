@@ -9,15 +9,64 @@ const presetLabels: Record<SsoPreset, string> = {
   microsoft: 'Microsoft Entra',
   oidc: 'Other OIDC',
 }
-const emptyForm = {
-  preset: 'google' as SsoPreset,
-  issuer: '',
-  tenantId: '',
-  clientId: '',
-  domains: '',
-  hasSecret: false,
-  domainStates: [] as SsoDomainState[],
-}
+export const emptyProvider = { preset: 'google' as SsoPreset, issuer: '', tenantId: '', clientId: '' }
+type ProviderField = keyof typeof emptyProvider
+const emptyForm = { ...emptyProvider, domains: '', hasSecret: false, domainStates: [] as SsoDomainState[] }
+
+export const ProviderFields = ({
+  provider,
+  edit,
+  clientSecret,
+  onClientSecretChange,
+  hasSecret = false,
+}: {
+  provider: typeof emptyProvider
+  edit: (field: ProviderField) => (event: { target: { value: string } }) => void
+  clientSecret: string
+  onClientSecretChange: (clientSecret: string) => void
+  hasSecret?: boolean
+}) => (
+  <>
+    <label className={labelClass}>
+      Provider
+      <select name="preset" className={fieldClass} value={provider.preset} onChange={edit('preset')}>
+        {Object.entries(presetLabels).map(([preset, presetLabel]) => (
+          <option key={preset} value={preset}>
+            {presetLabel}
+          </option>
+        ))}
+      </select>
+    </label>
+    {provider.preset === 'microsoft' && (
+      <label className={labelClass}>
+        Tenant id
+        <input name="tenantId" className={fieldClass} value={provider.tenantId} onChange={edit('tenantId')} />
+      </label>
+    )}
+    {provider.preset === 'oidc' && (
+      <label className={labelClass}>
+        Issuer
+        <input name="issuer" className={fieldClass} value={provider.issuer} onChange={edit('issuer')} />
+      </label>
+    )}
+    <label className={labelClass}>
+      Client id
+      <input name="clientId" className={fieldClass} value={provider.clientId} onChange={edit('clientId')} />
+    </label>
+    <label className={labelClass}>
+      Client secret
+      <input
+        name="clientSecret"
+        type="password"
+        autoComplete="off"
+        className={fieldClass}
+        placeholder={hasSecret ? 'Enter a new secret to replace it' : ''}
+        value={clientSecret}
+        onChange={(event) => onClientSecretChange(event.target.value)}
+      />
+    </label>
+  </>
+)
 
 const formOf = (settings: SsoSettingsView | null) =>
   settings ? { ...settings, domains: settings.domains.join(', ') } : emptyForm
@@ -96,11 +145,10 @@ const SsoSettingsForm = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
         <p className="text-sm text-muted">Loading…</p>
       </LabelledSection>
     )
-  const edit =
-    (field: 'preset' | 'issuer' | 'tenantId' | 'clientId' | 'domains') => (event: { target: { value: string } }) => {
-      setForm({ ...form, [field]: event.target.value })
-      setIsSaved(false)
-    }
+  const edit = (field: ProviderField | 'domains') => (event: { target: { value: string } }) => {
+    setForm({ ...form, [field]: event.target.value })
+    setIsSaved(false)
+  }
   const submit = async (event: SubmitEvent) => {
     event.preventDefault()
     const domains = form.domains.split(',')
@@ -113,43 +161,13 @@ const SsoSettingsForm = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
   return (
     <LabelledSection title="Sign-in">
       <form onSubmit={submit} className="flex flex-col gap-3">
-        <label className={labelClass}>
-          Provider
-          <select className={fieldClass} value={form.preset} onChange={edit('preset')}>
-            {Object.entries(presetLabels).map(([preset, presetLabel]) => (
-              <option key={preset} value={preset}>
-                {presetLabel}
-              </option>
-            ))}
-          </select>
-        </label>
-        {form.preset === 'microsoft' && (
-          <label className={labelClass}>
-            Tenant id
-            <input className={fieldClass} value={form.tenantId} onChange={edit('tenantId')} />
-          </label>
-        )}
-        {form.preset === 'oidc' && (
-          <label className={labelClass}>
-            Issuer
-            <input className={fieldClass} value={form.issuer} onChange={edit('issuer')} />
-          </label>
-        )}
-        <label className={labelClass}>
-          Client id
-          <input className={fieldClass} value={form.clientId} onChange={edit('clientId')} />
-        </label>
-        <label className={labelClass}>
-          Client secret
-          <input
-            type="password"
-            autoComplete="off"
-            className={fieldClass}
-            placeholder={form.hasSecret ? 'Enter a new secret to replace it' : ''}
-            value={clientSecret}
-            onChange={(event) => setClientSecret(event.target.value)}
-          />
-        </label>
+        <ProviderFields
+          provider={form}
+          edit={edit}
+          clientSecret={clientSecret}
+          onClientSecretChange={setClientSecret}
+          hasSecret={form.hasSecret}
+        />
         <p className="text-sm text-muted">{form.hasSecret ? 'Secret: set' : 'Secret: not set'}</p>
         <label className={labelClass}>
           Email domains

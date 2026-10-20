@@ -1,5 +1,5 @@
 import { expect, type Page } from '@playwright/test'
-import { switcherOf } from '../fixtures.ts'
+import { mainOf, switcherOf } from '../fixtures.ts'
 import type { WorkerStack } from '../stack'
 
 export * from '../fixtures.ts'
@@ -56,3 +56,12 @@ export const insertWorkspaceRole = async (
 export const giveWorkspaceRole = (workerStack: WorkerStack, memberId: string, roleId: string) =>
   workerStack.database.$client`
     update memberships set role = ${roleId} where workspace_id = 'workspace-acme' and user_id = ${memberId}`
+export const membersSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Members' })
+export const pendingInvitesOf = (page: Page) =>
+  membersSectionOf(page).getByRole('list', { name: 'Pending invites' }).getByRole('listitem')
+export const invite = async (page: Page, email: string) => {
+  const form = membersSectionOf(page).getByRole('form', { name: 'Invite member' })
+  await form.getByRole('textbox', { name: 'Email' }).fill(email)
+  await form.getByRole('combobox', { name: 'Role' }).selectOption('member')
+  await form.getByRole('button', { name: 'Invite' }).click()
+}

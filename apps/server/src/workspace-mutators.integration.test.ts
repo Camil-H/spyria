@@ -18,6 +18,7 @@ import {
   newChat,
   openSharedTestApp,
   succeeded,
+  workspaceEventsOf,
 } from './testing/testing.ts'
 
 const { database, resultOf, chatRow, changesOf } = await openSharedTestApp()
@@ -131,7 +132,13 @@ test('renameProject and archiveProject with the release policy update the projec
   expect(await chatRow('chat-welcome')).toMatchObject({ projectId: null, archived: false })
 })
 
-test('createWorkspace creates the workspace, the caller admin membership with their display name and the built-in chat roles', async () => {
+test("createWorkspace creates the workspace, the caller admin membership with their display name and the built-in chat roles, and reuses the caller's verified domain and provider", async () => {
+  await database.$client`
+    insert into workspace_sso (workspace_id, preset, issuer, client_id, encrypted_client_secret, updated_at)
+    values (${acme}, 'oidc', 'https://idp.example.com', 'spyria-acme', 'sealed-secret', now())`
+  await database.$client`
+    insert into sso_domains (workspace_id, domain, verified_at)
+    values (${acme}, 'example.com', now()), (${acme}, 'example.org', now())`
   expect(
     await resultOf(bobInAcme, 'workspace.createWorkspace', { workspaceId: acme, id: 'workspace-new', name: 'Initech' }),
   ).toEqual(succeeded)
@@ -152,6 +159,31 @@ test('createWorkspace creates the workspace, the caller admin membership with th
       .toSorted((first, second) => first.id.localeCompare(second.id))
       .map((role) => ({ ...role, permissions: [...role.permissions], builtIn: true })),
   )
+  expect([
+    ...(await database.$client`
+      select preset, issuer, client_id as "clientId", encrypted_client_secret as "encryptedClientSecret", domain,
+        verified_at is not null as "isVerified"
+      from workspace_sso join sso_domains using (workspace_id) where workspace_id = 'workspace-new'`),
+  ]).toEqual([
+    {
+      preset: 'oidc',
+      issuer: 'https://idp.example.com',
+      clientId: 'spyria-acme',
+      encryptedClientSecret: 'sealed-secret',
+      domain: 'example.com',
+      isVerified: true,
+    },
+  ])
+  expect(
+    (await workspaceEventsOf(database, 'workspace-new')).map(({ type, actorId, payload }) => [type, actorId, payload]),
+  ).toEqual([
+    [
+      'sso.configured',
+      bob,
+      { preset: 'oidc', issuer: 'https://idp.example.com', clientId: 'spyria-acme', domains: ['example.com'] },
+    ],
+  ])
+  await database.$client`delete from workspace_sso where workspace_id in (${acme}, 'workspace-new')`
 })
 
 test.each([

@@ -95,6 +95,17 @@ export const MailNotSent = errorKind(
   (reason: string) => `The verification email could not be sent: ${reason}`,
   WorkspaceError,
 )
+export const WorkspaceCreationClosed = errorKind(
+  'workspace_creation_closed',
+  () => 'Workspace creation is closed on this instance: sign in with your work email',
+  WorkspaceError,
+)
+export const DomainNotVerified = errorKind(
+  'domain_not_verified',
+  () =>
+    'Invites open once an email domain of this workspace is verified: send the verification link from the Sign-in settings',
+  WorkspaceError,
+)
 export const InvalidGitHubSettings = errorKind('invalid_github_settings', (reason: string) => reason, WorkspaceError)
 export const GitHubNotConfigured = errorKind(
   'github_not_configured',

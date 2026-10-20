@@ -62,7 +62,17 @@ const changeRole = (member: typeof aliceInAcme, memberId: string, role: string) 
 const transfer = (member: typeof aliceInAcme, chatId: string, ownerId: string) =>
   resultOf(member, 'workspace.transferChat', { workspaceId: acme, chatId, ownerId })
 
-test('an admin invites a normalized email once for 7 days and revokes it; a member does neither', async () => {
+test('an admin invites a normalized email once for 7 days and revokes it, through SSO only once a domain is verified; a member does neither', async () => {
+  await database.$client`
+    insert into workspace_sso (workspace_id, preset, issuer, client_id, encrypted_client_secret, updated_at)
+    values (${acme}, 'oidc', 'https://idp.example.com', 'spyria-acme', 'sealed-secret', now())`
+  await database.$client`insert into sso_domains (workspace_id, domain) values (${acme}, 'example.com')`
+  expect(await inviteToAcme(app, database, 'nina@example.com')).toEqual(
+    failedWith(
+      'Invites open once an email domain of this workspace is verified: send the verification link from the Sign-in settings',
+    ),
+  )
+  await database.$client`update sso_domains set verified_at = now() where workspace_id = ${acme}`
   expect(await inviteToAcme(app, database, ' Nina@Example.COM ')).toEqual(succeeded)
   const [invitation] = await invitationsOf('nina@example.com')
   expect(invitation).toMatchObject({ role: 'member', invited_by: alice, lifetime: '7 days', revoked_at: null })
@@ -96,6 +106,7 @@ test('an admin invites a normalized email once for 7 days and revokes it; a memb
     },
     { type: 'invite.revoked', actorId: alice, payload: { invitationId, email: 'nina@example.com' } },
   ])
+  await database.$client`delete from workspace_sso where workspace_id = ${acme}`
 })
 
 test('an expired invite does not block a new one, which replaces it', async () => {

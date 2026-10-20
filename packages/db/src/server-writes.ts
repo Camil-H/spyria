@@ -103,6 +103,44 @@ export const appendWorkspaceEvent = (
     [event.workspaceId, crypto.randomUUID(), event.type, event.actorId, JSON.stringify(event.payload)],
   )
 
+export const copyWorkspaceSignIn = async (
+  tx: Transaction,
+  { fromWorkspaceId, toWorkspaceId, userId }: { fromWorkspaceId: string; toWorkspaceId: string; userId: string },
+) => {
+  const [provider] = await onServer<{ preset: string; issuer: string; clientId: string }>(
+    tx,
+    `insert into workspace_sso (workspace_id, preset, issuer, client_id, encrypted_client_secret, updated_at)
+     select $2, preset, issuer, client_id, encrypted_client_secret, now() from workspace_sso where workspace_id = $1
+     returning preset, issuer, client_id as "clientId"`,
+    [fromWorkspaceId, toWorkspaceId],
+  )
+  if (!provider) return
+  const domains = await onServer<{ domain: string }>(
+    tx,
+    `insert into sso_domains (workspace_id, domain, verified_at)
+     select $2, domain, verified_at from sso_domains
+     where workspace_id = $1 and domain = (select split_part(email, '@', 2) from users where id = $3)
+     returning domain`,
+    [fromWorkspaceId, toWorkspaceId, userId],
+  )
+  await appendWorkspaceEvent(tx, {
+    workspaceId: toWorkspaceId,
+    type: 'sso.configured',
+    actorId: userId,
+    payload: { ...provider, domains: domains.map(({ domain }) => domain) },
+  })
+}
+
+export const awaitsDomainVerification = async (tx: Transaction, workspaceId: string) =>
+  (
+    await firstOnServer<{ awaits: boolean }>(
+      tx,
+      `select exists(select 1 from workspace_sso where workspace_id = $1)
+         and not exists(select 1 from sso_domains where workspace_id = $1 and verified_at is not null) as awaits`,
+      [workspaceId],
+    )
+  )?.awaits ?? false
+
 const traceContextOf = (delayMilliseconds: number) => {
   const carrier: Record<string, string> = {}
   if (delayMilliseconds === 0) propagation.inject(context.active(), carrier)

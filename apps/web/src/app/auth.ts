@@ -7,8 +7,10 @@ type SignInResult =
   | { status: 'unknown_domain'; domain: string }
   | { status: 'failed' }
   | { status: 'closed' }
+  | { status: 'refused'; message: string }
 
 const popupPollMilliseconds = 200
+const popupName = 'spyria-sign-in'
 
 const postAuth = (path: string, workspaceId: WorkspaceId, headers: Record<string, string> = {}) =>
   fetch(path, {
@@ -20,7 +22,8 @@ const postAuth = (path: string, workspaceId: WorkspaceId, headers: Record<string
 export const loadSessions = async (): Promise<{ userId?: MemberId; sessions: WorkspaceSession[] }> =>
   (await fetch('/auth/sessions')).json()
 
-export const loadAuthMode = async (): Promise<'dex' | 'sso'> => (await (await fetch('/auth/mode')).json()).authMode
+export const loadAuthMode = async (): Promise<{ authMode: 'dex' | 'sso'; canCreateWorkspace: boolean }> =>
+  (await fetch('/auth/mode')).json()
 
 export const renew = async (workspaceId: WorkspaceId): Promise<WorkspaceSession | undefined> => {
   const response = await postAuth('/auth/renew', workspaceId)
@@ -37,10 +40,8 @@ export const openSession = async (workspaceId: WorkspaceId, bearerToken: string)
   return response.json()
 }
 
-export const signInWithPopup = (target: { workspace?: WorkspaceId; email?: string } = {}) =>
+const resultOf = (popup: Window | null) =>
   new Promise<SignInResult>((resolve) => {
-    const query = new URLSearchParams(Object.entries(target).filter((entry): entry is [string, string] => !!entry[1]))
-    const popup = window.open(`/auth/login?${query}`, 'spyria-sign-in', 'popup,width=480,height=640')
     if (!popup) return resolve({ status: 'closed' })
     const settle = (result: SignInResult) => {
       clearInterval(closedPoll)
@@ -54,3 +55,16 @@ export const signInWithPopup = (target: { workspace?: WorkspaceId; email?: strin
     const closedPoll = setInterval(settleIfClosed, popupPollMilliseconds)
     window.addEventListener('message', receive)
   })
+
+const openPopup = (url: string) => window.open(url, popupName, 'popup,width=480,height=640')
+
+export const signInWithPopup = (target: { workspace?: WorkspaceId; email?: string } = {}) => {
+  const query = new URLSearchParams(Object.entries(target).filter((entry): entry is [string, string] => !!entry[1]))
+  return resultOf(openPopup(`/auth/login?${query}`))
+}
+
+export const createWorkspaceWithPopup = (form: HTMLFormElement) => {
+  const popup = openPopup('')
+  Object.assign(form, { method: 'post', action: '/auth/first-workspace', target: popupName }).submit()
+  return resultOf(popup)
+}
