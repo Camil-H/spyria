@@ -60,7 +60,8 @@ export const signInUser = (database: Database, identity: Identity, isSso = false
     const ssoWorkspaceIds = (
       await sql<{ workspaceId: string }[]>`
         select workspace_id as "workspaceId" from workspace_sso join sso_domains using (workspace_id)
-        where issuer = ${issuer} and domain = ${domainOfEmail(email)} and verified_at is not null`
+        where issuer = ${issuer} and domain = ${domainOfEmail(email)}
+          and (verified_at is not null or (select count(*) from workspaces) = 1)`
     ).map(({ workspaceId }) => workspaceId)
     if (isSso && ssoWorkspaceIds.length === 0) return { email }
     const invitations = await sql<{ workspaceId: string; id: string; role: string }[]>`

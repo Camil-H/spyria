@@ -8,11 +8,11 @@ export type SsoSettingsInput = {
   tenantId?: string
   clientId: string
   clientSecret?: string
-  domains: string[]
+  domain: string
 }
-export type SsoSettings = { preset: SsoPreset; issuer: string; clientId: string; domains: string[] }
+export type SsoSettings = { preset: SsoPreset; issuer: string; clientId: string; domain: string }
 export type SsoDomainState = { domain: string; isVerified: boolean; sentTo: string | null; expiresAt: number | null }
-export type SsoSettingsView = SsoSettings & { tenantId: string; hasSecret: boolean; domainStates: SsoDomainState[] }
+export type SsoSettingsView = SsoSettings & { tenantId: string; hasSecret: boolean; domainState: SsoDomainState }
 
 export const googleIssuer = 'https://accounts.google.com'
 export const microsoftLoginOrigin = 'https://login.microsoftonline.com'
@@ -21,6 +21,12 @@ const tenantIdPattern = /^[\w.-]+$/
 const domainPattern = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/
 
 export const domainOfEmail = (email: string) => email.trim().toLowerCase().split('@')[1] ?? ''
+
+export const normalizedDomain = (domain: unknown) =>
+  String(domain ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/^@/, '')
 
 export const tenantIdOf = (issuer: string) => new URL(issuer).pathname.split('/')[1] ?? ''
 
@@ -45,17 +51,10 @@ export const ssoSettingsFrom = (input: SsoSettingsInput, microsoftOrigin = micro
     throw new InvalidSsoSettings('Only a tenant-specific Microsoft Entra issuer is accepted')
   const clientId = String(input.clientId ?? '').trim()
   if (clientId === '') throw new InvalidSsoSettings('A client id is required')
-  const domains = [
-    ...new Set(
-      (Array.isArray(input.domains) ? input.domains : []).map((domain) =>
-        String(domain).trim().toLowerCase().replace(/^@/, ''),
-      ),
-    ),
-  ].filter(Boolean)
-  if (domains.length === 0) throw new InvalidSsoSettings('At least one email domain is required')
-  const invalidDomain = domains.find((domain) => !domainPattern.test(domain))
-  if (invalidDomain) throw new InvalidSsoSettings(`${invalidDomain} is not an email domain`)
-  return { preset: input.preset, issuer, clientId, domains }
+  const domain = normalizedDomain(input.domain)
+  if (domain === '') throw new InvalidSsoSettings('An email domain is required')
+  if (!domainPattern.test(domain)) throw new InvalidSsoSettings(`${domain} is not an email domain`)
+  return { preset: input.preset, issuer, clientId, domain }
 }
 
 export const ssoEmailOf = (preset: SsoPreset, claims: Record<string, unknown>) => {

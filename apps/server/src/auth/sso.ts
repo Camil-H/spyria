@@ -9,12 +9,14 @@ import {
 } from '@spyria/kernel'
 import {
   DomainClaimed,
+  DomainFixed,
   displayNameFrom,
   domainOfEmail,
   InvalidSsoSettings,
   MailNotConfigured,
   MailNotSent,
   Name,
+  normalizedDomain,
   normalizedEmail,
   SsoDiscoveryFailed,
   type SsoDomainState,
@@ -63,7 +65,8 @@ export const ssoProviderOf = async (
       where workspace_id = coalesce(${workspaceId ?? null}::text, workspace_id)
         and (${domain ?? null}::text is null or exists(
           select 1 from sso_domains where sso_domains.workspace_id = workspace_sso.workspace_id
-            and sso_domains.domain = ${domain ?? ''} and sso_domains.verified_at is not null))
+            and sso_domains.domain = ${domain ?? ''}
+            and (sso_domains.verified_at is not null or (select count(*) from workspaces) = 1)))
       order by workspaces.created_at limit 1`
   )[0]
 
@@ -100,22 +103,23 @@ const checkedSettings = async (input: SsoSettingsInput, { microsoftLoginOrigin }
   return settings
 }
 
-const assertNotVerifiedElsewhere = async (sql: Sql, workspaceId: string, issuer: string, domains: string[]) => {
+const assertNotVerifiedElsewhere = async (sql: Sql, workspaceId: string, issuer: string, domain: string) => {
   await sql`lock table sso_domains in share row exclusive mode`
-  const [claimed] = await sql<{ domain: string }[]>`
-    select domain from sso_domains join workspace_sso using (workspace_id)
-    where workspace_id <> ${workspaceId} and issuer <> ${issuer} and verified_at is not null
-      and domain = any(${domains}::text[])
+  const [claimed] = await sql`
+    select 1 from sso_domains join workspace_sso using (workspace_id)
+    where workspace_id <> ${workspaceId} and issuer <> ${issuer} and verified_at is not null and domain = ${domain}
     limit 1`
-  if (claimed) throw new DomainClaimed(claimed.domain)
+  if (claimed) throw new DomainClaimed(domain)
 }
 
 const settingsOf = (sql: Sql, workspaceId: string) =>
-  sql<SsoSettings[]>`
-    select preset, issuer, client_id as "clientId",
-      array(select domain from sso_domains where sso_domains.workspace_id = workspace_sso.workspace_id order by domain)
-        as domains
-    from workspace_sso where workspace_id = ${workspaceId}`
+  sql<(SsoSettings & Omit<SsoDomainState, 'domain'>)[]>`
+    select preset, issuer, client_id as "clientId", domain, verified_at is not null as "isVerified",
+      case when verified_at is null and verification_expires_at > now() then verification_email end as "sentTo",
+      case when verified_at is null and verification_expires_at > now()
+        then (extract(epoch from verification_expires_at) * 1000)::float8 end as "expiresAt"
+    from workspace_sso join sso_domains using (workspace_id)
+    where workspace_id = ${workspaceId} order by domain limit 1`
 
 const storeSsoSettings = async (
   sql: Sql,
@@ -126,7 +130,7 @@ const storeSsoSettings = async (
     encryptedClientSecret,
   }: { workspaceId: string; actorId: string; settings: SsoSettings; encryptedClientSecret: string | null },
 ) => {
-  await assertNotVerifiedElsewhere(sql, workspaceId, settings.issuer, settings.domains)
+  await assertNotVerifiedElsewhere(sql, workspaceId, settings.issuer, settings.domain)
   const [previous] = await settingsOf(sql, workspaceId)
   if (!previous && !encryptedClientSecret) throw new InvalidSsoSettings('A client secret is required')
   await sql`
@@ -136,35 +140,23 @@ const storeSsoSettings = async (
     on conflict (workspace_id) do update set preset = excluded.preset, issuer = excluded.issuer,
       client_id = excluded.client_id, updated_at = excluded.updated_at,
       encrypted_client_secret = coalesce(${encryptedClientSecret}::text, workspace_sso.encrypted_client_secret)`
-  await sql`
-    delete from sso_domains where workspace_id = ${workspaceId} and domain <> all(${settings.domains}::text[])`
-  await sql`
-    insert into sso_domains (workspace_id, domain)
-    select ${workspaceId}, domain from unnest(${settings.domains}::text[]) as domain
-    on conflict do nothing`
-  const domains = settings.domains.toSorted()
-  if (JSON.stringify(previous) !== JSON.stringify({ ...settings, domains }))
+  await sql`insert into sso_domains (workspace_id, domain) values (${workspaceId}, ${settings.domain}) on conflict do nothing`
+  if (!previous || (['preset', 'issuer', 'clientId'] as const).some((key) => previous[key] !== settings[key]))
     await recordWorkspaceEvent(sql, workspaceId, 'sso.configured', actorId, settings)
   if (previous && encryptedClientSecret) await recordWorkspaceEvent(sql, workspaceId, 'sso.secret_rotated', actorId, {})
 }
 
 const ssoSettingsViewOf = async (sql: Sql, member: Member): Promise<SsoSettingsView | null> => {
   await requireMemberPermission(sql, member, 'sso.manage')
-  const [settings] = await settingsOf(sql, member.workspaceId)
-  const domainStates = await sql<SsoDomainState[]>`
-    select domain, verified_at is not null as "isVerified",
-      case when verified_at is null and verification_expires_at > now() then verification_email end as "sentTo",
-      case when verified_at is null and verification_expires_at > now()
-        then (extract(epoch from verification_expires_at) * 1000)::float8 end as "expiresAt"
-    from sso_domains where workspace_id = ${member.workspaceId} order by domain`
-  return settings
-    ? {
-        ...settings,
-        tenantId: settings.preset === 'microsoft' ? tenantIdOf(settings.issuer) : '',
-        hasSecret: true,
-        domainStates: [...domainStates],
-      }
-    : null
+  const [stored] = await settingsOf(sql, member.workspaceId)
+  if (!stored) return null
+  const { isVerified, sentTo, expiresAt, ...settings } = stored
+  return {
+    ...settings,
+    tenantId: settings.preset === 'microsoft' ? tenantIdOf(settings.issuer) : '',
+    hasSecret: true,
+    domainState: { domain: settings.domain, isVerified, sentTo, expiresAt },
+  }
 }
 
 export const readSsoSettings = (database: Database, member: Member) =>
@@ -176,7 +168,8 @@ export const saveSsoSettings = async (
   member: Member,
   input: SsoSettingsInput,
 ) => {
-  await readSsoSettings(database, member)
+  const current = await readSsoSettings(database, member)
+  if (current && normalizedDomain(input.domain) !== current.domain) throw new DomainFixed(current.domain)
   const settings = await checkedSettings(input, dependencies)
   const clientSecret = String(input.clientSecret ?? '').trim()
   if (clientSecret !== '' && !dependencies.secretBox)
@@ -223,14 +216,14 @@ export const prepareFirstWorkspace = async (
       issuer: field('issuer'),
       tenantId: field('tenantId'),
       clientId: field('clientId'),
-      domains: [field('domain')],
+      domain: field('domain'),
     },
     dependencies,
   )
-  const { domains, ...provider } = settings
+  const { domain, ...provider } = settings
   return {
     workspaceName,
-    domain: domains[0] ?? '',
+    domain,
     provider: { ...provider, encryptedClientSecret: await dependencies.secretBox.seal(field('clientSecret')) },
   }
 }
@@ -273,7 +266,7 @@ export const createFirstWorkspace = async (
     await storeSsoSettings(sql, {
       workspaceId,
       actorId: userId,
-      settings: { preset: provider.preset, issuer: provider.issuer, clientId: provider.clientId, domains: [domain] },
+      settings: { preset: provider.preset, issuer: provider.issuer, clientId: provider.clientId, domain },
       encryptedClientSecret: provider.encryptedClientSecret,
     })
     await sql`
@@ -296,7 +289,7 @@ const markDomainVerified = async (
     select issuer from sso_domains join workspace_sso using (workspace_id)
     where workspace_id = ${workspaceId} and domain = ${domain}`
   if (!claim) throw new InvalidSsoSettings(`${domain} is not a domain of this workspace`)
-  await assertNotVerifiedElsewhere(sql, workspaceId, claim.issuer, [domain])
+  await assertNotVerifiedElsewhere(sql, workspaceId, claim.issuer, domain)
   await sql`
     update sso_domains set verified_at = now(), verification_token_hash = null, verification_expires_at = null
     where workspace_id = ${workspaceId} and domain = ${domain}`

@@ -125,14 +125,14 @@ const readSso = async (workspaceId: string, userId = alice) => {
   })
   return { status: response.status, body: await response.text() }
 }
-const configureIdp = (idp: FakeIdp, workspaceId: string, domains: string[], clientSecret = `${workspaceId}-secret`) => {
+const configureIdp = (idp: FakeIdp, workspaceId: string, domain: string, clientSecret = `${workspaceId}-secret`) => {
   idp.clientSecret = clientSecret
   return saveSso(workspaceId, {
     preset: 'oidc',
     issuer: idp.issuer,
     clientId: `spyria-${workspaceId}`,
     clientSecret,
-    domains,
+    domain,
   })
 }
 const addWorkspace = async (workspaceId: string) => {
@@ -158,21 +158,21 @@ const cookieHeaderOf = (response: Response) =>
     .map((cookie) => cookie.split(';')[0] ?? '')
     .filter((cookie) => !cookie.endsWith('='))
     .join('; ')
-const sessionsOf = async (cookie: string) =>
-  (await (await app.request('/auth/sessions', { headers: { cookie } })).json()) as {
+const sessionsOf = async (cookie: string, server = app) =>
+  (await (await server.request('/auth/sessions', { headers: { cookie } })).json()) as {
     userId?: string
     sessions: { workspaceId: string }[]
   }
-const signInThrough = async (idp: FakeIdp, loginQuery: string, claims: JWTPayload) => {
-  const login = await app.request(`/auth/login?${loginQuery}`)
+const signInThrough = async (idp: FakeIdp, loginQuery: string, claims: JWTPayload, server = app) => {
+  const login = await server.request(`/auth/login?${loginQuery}`)
   const location = new URL(login.headers.get('location') ?? '')
   expect(location.origin + location.pathname).toBe(`${idp.issuer}/auth`)
   idp.claims = { nonce: location.searchParams.get('nonce') ?? '', ...claims }
-  const response = await app.request(`/auth/callback?code=code-1&state=${location.searchParams.get('state')}`, {
+  const response = await server.request(`/auth/callback?code=code-1&state=${location.searchParams.get('state')}`, {
     headers: { cookie: cookieHeaderOf(login) },
   })
   const cookie = cookieHeaderOf(response)
-  return { status: response.status, page: await response.text(), ...(await sessionsOf(cookie)) }
+  return { status: response.status, page: await response.text(), ...(await sessionsOf(cookie, server)) }
 }
 const identitiesOf = async (subject: string) => [
   ...(await database.$client`
@@ -191,18 +191,18 @@ test('the server tells its auth mode and whether a workspace can be created', as
 })
 
 test('an admin saves the SSO settings: the secret is encrypted at rest, never returned, and changes are recorded', async () => {
-  const saved = await configureIdp(acmeIdp, acme, [' Example.com'], 'acme-secret-1')
+  const saved = await configureIdp(acmeIdp, acme, ' Example.com', 'acme-secret-1')
   expect(saved.status).toBe(200)
-  const view = { preset: 'oidc', issuer: acmeIdp.issuer, clientId: `spyria-${acme}`, domains: ['example.com'] }
+  const view = { preset: 'oidc', issuer: acmeIdp.issuer, clientId: `spyria-${acme}`, domain: 'example.com' }
   expect(JSON.parse(saved.body)).toEqual({
-    settings: { ...view, tenantId: '', hasSecret: true, domainStates: [unverified('example.com')] },
+    settings: { ...view, tenantId: '', hasSecret: true, domainState: unverified('example.com') },
   })
   const [stored] = await database.$client<{ encryptedClientSecret: string }[]>`
     select encrypted_client_secret as "encryptedClientSecret" from workspace_sso where workspace_id = ${acme}`
   expect(stored?.encryptedClientSecret).not.toContain('acme-secret-1')
   expect(await createSecretBox(secretsKey).open(stored?.encryptedClientSecret ?? '')).toBe('acme-secret-1')
 
-  expect((await saveSso(acme, { ...view, domains: ['example.com', 'example.org'] })).status).toBe(200)
+  expect((await saveSso(acme, { ...view, clientId: `spyria-${acme}-2` })).status).toBe(200)
   expect((await saveSso(acme, { ...view, clientSecret: 'acme-secret-2' })).status).toBe(200)
   acmeIdp.clientSecret = 'acme-secret-2'
   for (const read of [await readSso(acme), saved]) {
@@ -213,7 +213,7 @@ test('an admin saves the SSO settings: the secret is encrypted at rest, never re
     ...view,
     tenantId: '',
     hasSecret: true,
-    domainStates: [unverified('example.com')],
+    domainState: unverified('example.com'),
   })
   expect(
     (await workspaceEventsOf(database))
@@ -234,13 +234,29 @@ test('an admin saves the SSO settings: the secret is encrypted at rest, never re
   expect((await saveSso(acme, view, bob)).status).toBe(403)
 })
 
+test('the email domain is set when the workspace is created: saving refuses adding, changing or removing it', async () => {
+  const view = { preset: 'oidc', issuer: acmeIdp.issuer, clientId: `spyria-${acme}` }
+  for (const domain of ['example.com, example.org', 'example.org', ''])
+    expect(await saveSso(acme, { ...view, domain })).toEqual({
+      status: 400,
+      body: JSON.stringify({
+        error: 'domain_fixed',
+        message:
+          'The email domain of this workspace is example.com: it is set when the workspace is created and cannot be changed',
+      }),
+    })
+  expect([...(await database.$client`select domain from sso_domains where workspace_id = ${acme}`)]).toEqual([
+    { domain: 'example.com' },
+  ])
+})
+
 test('saving refuses a failing discovery with its reason, a multi-tenant Entra issuer and a first save without secret', async () => {
   const unreachable = await saveSso(globex, {
     preset: 'oidc',
     issuer: 'http://127.0.0.1:9/nothing',
     clientId: 'spyria',
     clientSecret: 's',
-    domains: ['globex.com'],
+    domain: 'globex.com',
   })
   expect(unreachable.status).toBe(400)
   expect(JSON.parse(unreachable.body)).toMatchObject({
@@ -252,7 +268,7 @@ test('saving refuses a failing discovery with its reason, a multi-tenant Entra i
     tenantId: 'common',
     clientId: 'spyria',
     clientSecret: 's',
-    domains: ['globex.com'],
+    domain: 'globex.com',
   })
   expect(JSON.parse(common.body)).toEqual({
     error: 'invalid_sso_settings',
@@ -262,7 +278,7 @@ test('saving refuses a failing discovery with its reason, a multi-tenant Entra i
     preset: 'oidc',
     issuer: otherIdp.issuer,
     clientId: 'spyria',
-    domains: ['globex.com'],
+    domain: 'globex.com',
   })
   expect(JSON.parse(withoutSecret.body).message).toBe('A client secret is required')
   expect([...(await database.$client`select 1 from workspace_sso where workspace_id = ${globex}`)]).toEqual([])
@@ -285,7 +301,7 @@ test('a domain verifies through a single-use emailed link; until then it does no
   })
   const sent = await sendVerification(acme, 'example.com', 'IT@example.com')
   expect(sent.status).toBe(200)
-  const [pending] = sent.body.settings.domainStates
+  const pending = sent.body.settings.domainState
   expect(pending).toMatchObject({ domain: 'example.com', isVerified: false, sentTo: 'it@example.com' })
   expect(pending.expiresAt).toBeGreaterThan(Date.now() + 23.9 * 60 * 60 * 1000)
   expect(pending.expiresAt).toBeLessThan(Date.now() + 24.1 * 60 * 60 * 1000)
@@ -316,20 +332,21 @@ test('a domain verifies through a single-use emailed link; until then it does no
     type: 'sso.domain_verified',
     payload: { domain: 'example.com', email: 'it@example.com' },
   })
-  expect(JSON.parse((await readSso(acme)).body).settings.domainStates).toEqual([
-    { domain: 'example.com', isVerified: true, sentTo: null, expiresAt: null },
-  ])
+  expect(JSON.parse((await readSso(acme)).body).settings.domainState).toEqual({
+    domain: 'example.com',
+    isVerified: true,
+    sentTo: null,
+    expiresAt: null,
+  })
   expect((await app.request('/auth/login?email=nina@example.com')).status).toBe(302)
 })
 
 test('without SMTP the verification link is refused with a clear message', async () => {
-  await database.$client`insert into sso_domains (workspace_id, domain) values (${acme}, 'example.net')`
-  expect((await sendVerification(acme, 'example.net', 'it@example.net', appWithoutMail)).body).toEqual({
+  expect((await sendVerification(acme, 'example.com', 'it@example.com', appWithoutMail)).body).toEqual({
     error: 'mail_not_configured',
     message:
       'Email is not configured on this server (SPYRIA_SMTP_URL): the operator can verify the domain with sso:verify-domain',
   })
-  await database.$client`delete from sso_domains where domain = 'example.net'`
 })
 
 test('the first sign-in binds the identity through an invite; a later sign-in matches the subject after an email change', async () => {
@@ -376,7 +393,7 @@ test('an Entra token without email_verified signs in by preferred_username for a
     tenantId: 'tenant-1',
     clientId: 'spyria-initech',
     clientSecret: 'entra-secret',
-    domains: ['initech.com'],
+    domain: 'initech.com',
   })
   expect(JSON.parse(saved.body).settings).toMatchObject({ issuer: entraIdp.issuer, tenantId: 'tenant-1' })
   await verifyDomainByOperator(database, 'initech', 'initech.com')
@@ -390,7 +407,7 @@ test('an Entra token without email_verified signs in by preferred_username for a
 })
 
 test('a domain claimed by another issuer is refused; the same issuer shares it and one sign-in opens both workspaces', async () => {
-  const claimed = await configureIdp(otherIdp, globex, ['example.com'])
+  const claimed = await configureIdp(otherIdp, globex, 'example.com')
   expect(JSON.parse(claimed.body)).toEqual({
     error: 'domain_claimed',
     message: 'example.com already signs in through another provider',
@@ -402,7 +419,7 @@ test('a domain claimed by another issuer is refused; the same issuer shares it a
         issuer: acmeIdp.issuer,
         clientId: 'spyria-globex',
         clientSecret: 'acme-secret-2',
-        domains: ['example.com'],
+        domain: 'example.com',
       })
     ).status,
   ).toBe(200)
@@ -420,8 +437,8 @@ test('a domain claimed by another issuer is refused; the same issuer shares it a
 test('an unverified claim blocks no one; a verified domain refuses another issuer at save and at verification', async () => {
   await addWorkspace('hooli')
   await addWorkspace('pied-piper')
-  expect((await configureIdp(otherIdp, 'hooli', ['shared.com'])).status).toBe(200)
-  expect((await configureIdp(entraIdp, 'pied-piper', ['shared.com'])).status).toBe(200)
+  expect((await configureIdp(otherIdp, 'hooli', 'shared.com')).status).toBe(200)
+  expect((await configureIdp(entraIdp, 'pied-piper', 'shared.com')).status).toBe(200)
   expect((await app.request('/auth/login?email=pat@shared.com')).status).toBe(404)
   await verifyDomainByOperator(database, 'hooli', 'shared.com')
   await expect(verifyDomainByOperator(database, 'pied-piper', 'shared.com')).rejects.toThrow(
@@ -432,7 +449,7 @@ test('an unverified claim blocks no one; a verified domain refuses another issue
     status: 400,
     page: expect.stringContaining('shared.com already signs in through another provider'),
   })
-  expect(JSON.parse((await configureIdp(entraIdp, 'pied-piper', ['shared.com'])).body).error).toBe('domain_claimed')
+  expect(JSON.parse((await configureIdp(entraIdp, 'pied-piper', 'shared.com')).body).error).toBe('domain_claimed')
   const login = await app.request('/auth/login?email=pat@shared.com')
   expect(new URL(login.headers.get('location') ?? '').origin).toBe(otherIdp.origin)
 })
@@ -497,7 +514,7 @@ test('on an empty instance, creating a workspace refuses another origin, invalid
   expect(await countsOf()).toEqual({ workspaces: 0, users: 0 })
 })
 
-test('the first person completing sign-in becomes the Admin of an unverified workspace: of two at once exactly one wins, then creation is closed and the domain routes only once verified', async () => {
+test('the first person completing sign-in becomes the Admin of an unverified workspace: of two at once exactly one wins, then creation is closed; while it is the only workspace its unverified domain routes its Admin back in by email and admits nobody new, and once a second workspace exists only a verified domain routes', async () => {
   const [carolStart, daveStart] = [await startCreation(umbrellaForm()), await startCreation(umbrellaForm())]
   const [carol, dave] = await Promise.all([
     completeCreation(carolStart as Response, 'carol', { sub: 'carol-subject', email: 'Carol@umbrella.com' }),
@@ -551,6 +568,27 @@ test('the first person completing sign-in becomes the Admin of an unverified wor
   expect(await (await startCreation(umbrellaForm())).text()).toContain(
     '"status":"refused","message":"Workspace creation is closed on this instance: sign in with your work email"',
   )
+  const winnerSubject = winner === carol ? 'carol-subject' : 'dave-subject'
+  const adminBack = await signInThrough(
+    firstWorkspaceIdp,
+    `email=${member?.email}`,
+    { sub: winnerSubject, email: member?.email },
+    emptyInstanceApp,
+  )
+  expect(adminBack.page).toContain('"status":"signed_in"')
+  expect(adminBack).toMatchObject({ userId, sessions: [{ workspaceId }] })
+  const erin = await signInThrough(
+    firstWorkspaceIdp,
+    'email=erin@umbrella.com',
+    { sub: 'erin-subject', email: 'erin@umbrella.com' },
+    emptyInstanceApp,
+  )
+  expect(erin.status).toBe(403)
+  expect(erin.page).toContain('"status":"not_invited","email":"erin@umbrella.com"')
+  expect(await countsOf()).toEqual({ workspaces: 1, users: 1 })
+  expect((await emptyInstanceApp.request('/auth/login?email=pat@other.com')).status).toBe(404)
+  await emptyInstance.database.$client`
+    insert into workspaces (workspace_id, name, created_by, created_at) values ('second', 'Second', ${userId}, now())`
   expect((await emptyInstanceApp.request('/auth/login?email=erin@umbrella.com')).status).toBe(404)
   await verifyDomainByOperator(emptyInstance.database, workspaceId, 'umbrella.com')
   expect((await emptyInstanceApp.request('/auth/login?email=erin@umbrella.com')).status).toBe(302)

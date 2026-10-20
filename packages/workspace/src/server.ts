@@ -2,6 +2,7 @@ export type { GitHubRepositories } from './contracts/repositories.ts'
 export {
   BranchNotFound,
   DomainClaimed,
+  DomainFixed,
   GitHubNotConfigured,
   GitHubRefused,
   InvalidGitHubSettings,
@@ -26,6 +27,7 @@ export { displayNameFrom, normalizedEmail } from './domain/invitation.ts'
 export { Name } from './domain/name.ts'
 export {
   domainOfEmail,
+  normalizedDomain,
   type SsoDomainState,
   type SsoPreset,
   type SsoSettings,

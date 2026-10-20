@@ -3,6 +3,7 @@ import {
   expect,
   invite,
   logInAtProvider,
+  logOutOf,
   mainOf,
   menuItemNamesOf,
   openMenu,
@@ -40,8 +41,8 @@ const postAsAlice = async (workerStack: WorkerStack, path: string, body: object)
   expect(response.status).toBe(200)
 }
 
-const configureAcmeSso = (workerStack: WorkerStack, domains = ['example.com']) =>
-  postAsAlice(workerStack, '/api/sso-settings', { ...acmeSso, domains })
+const configureAcmeSso = (workerStack: WorkerStack) =>
+  postAsAlice(workerStack, '/api/sso-settings', { ...acmeSso, domain: 'example.com' })
 
 const verificationAddressOf = (workerStack: WorkerStack, domain: string) => `it-${workerStack.databaseName}@${domain}`
 
@@ -77,6 +78,7 @@ const signInThroughCompanyProvider = async (page: Page, email: string) => {
 }
 
 const signInSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Sign-in' })
+const emailDomainOf = (page: Page) => signInSectionOf(page).getByRole('region', { name: 'Email domain' })
 
 const creationFormOf = (page: Page) => page.getByRole('form', { name: 'Create a workspace' })
 
@@ -168,7 +170,7 @@ test.describe('SSO', () => {
     expect(providerRequests).toEqual([])
   })
 
-  test('As the first person of an organization on an empty instance, I create a workspace through my provider and land as its Admin; until the domain is verified through the emailed link nobody else is routed and inviting is refused, then invites work and Bob signs in through routing', {
+  test('As the first person of an organization on an empty instance, I create a workspace through my provider and land as its Admin; until the domain is verified through the emailed link only I can sign back in by email and inviting is refused, then invites work and Bob signs in through routing', {
     tag: ['@spec-51'],
   }, async ({ page, browser, workerStack }) => {
     await workerStack.database.$client`truncate workspaces cascade`
@@ -181,14 +183,12 @@ test.describe('SSO', () => {
     await createWorkspaceThroughProvider(page, 'alice@example.com')
     await expect(switcherOf(page)).toContainText('Umbrella')
     await openSettings(page, 'Setup SSO')
-    const domainRow = signInSectionOf(page)
-      .getByRole('list', { name: 'Domains' })
-      .getByRole('listitem')
-      .filter({ hasText: 'example.com' })
+    const domainRow = emailDomainOf(page)
+    await expect(domainRow).toContainText('example.com')
     await expect(domainRow.getByText('Not verified', { exact: true })).toBeVisible()
     await expect(page.locator('body')).not.toContainText(providerClientSecret)
 
-    await test.step('before verification, inviting is refused with its reason and nobody else is routed to the workspace', async () => {
+    await test.step('before verification, inviting is refused with its reason and nobody else can sign in', async () => {
       await openSettings(page, 'Manage Team')
       await invite(page, 'bob@example.com')
       await expect(
@@ -198,9 +198,17 @@ test.describe('SSO', () => {
       ).toBeVisible()
       await expect(pendingInvitesOf(page)).toHaveCount(0)
       const ninaPage = await openPageAs(browser, workerStack, null, ssoViteUrl)
-      await continueWith(ninaPage, 'nina@example.com')
-      await expect(ninaPage.getByText('No workspace signs in with example.com')).toBeVisible()
+      await signInThroughCompanyProvider(ninaPage, 'nina@example.com')
+      await expect(ninaPage.getByText('No workspace has invited nina@example.com')).toBeVisible()
       await ninaPage.context().close()
+    })
+
+    await test.step('As the first Admin, I sign back in by email before my domain is verified', async () => {
+      await logOutOf(page, 'Umbrella')
+      await page.reload()
+      await expect(page.getByRole('heading', { name: 'Sign in to Spyria' })).toBeVisible()
+      await signInThroughCompanyProvider(page, 'alice@example.com')
+      await expect(switcherOf(page)).toContainText('Umbrella')
     })
 
     await test.step('Send link mails a link to the address and shows the domain pending', async () => {
@@ -247,11 +255,14 @@ test.describe('SSO', () => {
       const section = signInSectionOf(page)
       const secretField = section.getByLabel('Client secret')
 
-      await test.step('the section shows the provider, client id, domains and "Secret: set", never the secret', async () => {
+      await test.step('the section shows the provider, client id, the email domain read-only and "Secret: set", never the secret', async () => {
         await expect(section.getByLabel('Provider')).toHaveValue('oidc')
         await expect(section.getByLabel('Issuer')).toHaveValue(ssoProviderIssuer)
         await expect(section.getByLabel('Client id')).toHaveValue('spyria-sso')
-        await expect(section.getByLabel('Email domains')).toHaveValue('example.com')
+        await expect(emailDomainOf(page).getByText('example.com', { exact: true })).toBeVisible()
+        await expect(emailDomainOf(page).getByText('Verified', { exact: true })).toBeVisible()
+        await expect(section.getByRole('textbox', { name: /domain/i })).toHaveCount(0)
+        await expect(emailDomainOf(page).getByRole('button')).toHaveCount(0)
         await expect(section.getByText('Secret: set')).toBeVisible()
         await expect(secretField).toHaveValue('')
         await expect(page.locator('body')).not.toContainText(providerClientSecret)

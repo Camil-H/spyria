@@ -11,7 +11,6 @@ const presetLabels: Record<SsoPreset, string> = {
 }
 export const emptyProvider = { preset: 'google' as SsoPreset, issuer: '', tenantId: '', clientId: '' }
 type ProviderField = keyof typeof emptyProvider
-const emptyForm = { ...emptyProvider, domains: '', hasSecret: false, domainStates: [] as SsoDomainState[] }
 
 export const ProviderFields = ({
   provider,
@@ -68,16 +67,13 @@ export const ProviderFields = ({
   </>
 )
 
-const formOf = (settings: SsoSettingsView | null) =>
-  settings ? { ...settings, domains: settings.domains.join(', ') } : emptyForm
-
 const statusOf = ({ isVerified, sentTo, expiresAt }: SsoDomainState) => {
   if (isVerified) return 'Verified'
   if (sentTo) return `Pending: sent to ${sentTo}, expires ${new Date(expiresAt ?? 0).toLocaleString()}`
   return 'Not verified'
 }
 
-const DomainRow = ({
+const EmailDomain = ({
   workspaceId,
   state,
   onSent,
@@ -94,7 +90,7 @@ const DomainRow = ({
     await run(async () => onSent(await commands.sendDomainVerification({ workspaceId, domain: state.domain, email })))
   }
   return (
-    <li className="flex flex-col gap-1">
+    <section aria-label="Email domain" className="flex flex-col gap-1 text-sm">
       <div className="flex flex-wrap items-center gap-x-3">
         <span className="font-medium">{state.domain}</span>
         <span className="text-muted">{statusOf(state)}</span>
@@ -117,7 +113,7 @@ const DomainRow = ({
           </div>
         </form>
       )}
-    </li>
+    </section>
   )
 }
 
@@ -132,29 +128,26 @@ export const SignInSection = ({ workspaceId, isDexSignIn }: { workspaceId: Works
 
 const SsoSettingsForm = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
   const commands = useWorkspaceCommands()
-  const [form, setForm] = useState<typeof emptyForm>()
+  const [form, setForm] = useState<SsoSettingsView | null>()
   const [clientSecret, setClientSecret] = useState('')
   const [isSaved, setIsSaved] = useState(false)
   const { errorMessage, isPending, run } = useGuardedAction()
   useEffect(() => {
-    commands.readSsoSettings({ workspaceId }).then((settings) => setForm(formOf(settings)))
+    commands.readSsoSettings({ workspaceId }).then(setForm)
   }, [commands, workspaceId])
   if (!form)
     return (
       <LabelledSection title="Sign-in">
-        <p className="text-sm text-muted">Loading…</p>
+        <p className="text-sm text-muted">{form === null ? 'This workspace has no SSO settings.' : 'Loading…'}</p>
       </LabelledSection>
     )
-  const edit = (field: ProviderField | 'domains') => (event: { target: { value: string } }) => {
+  const edit = (field: ProviderField) => (event: { target: { value: string } }) => {
     setForm({ ...form, [field]: event.target.value })
     setIsSaved(false)
   }
   const submit = async (event: SubmitEvent) => {
     event.preventDefault()
-    const domains = form.domains.split(',')
-    const saved = await run(async () =>
-      setForm(formOf(await commands.saveSsoSettings({ workspaceId, ...form, domains, clientSecret }))),
-    )
+    const saved = await run(async () => setForm(await commands.saveSsoSettings({ workspaceId, ...form, clientSecret })))
     if (saved) setClientSecret('')
     setIsSaved(saved)
   }
@@ -169,10 +162,6 @@ const SsoSettingsForm = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
           hasSecret={form.hasSecret}
         />
         <p className="text-sm text-muted">{form.hasSecret ? 'Secret: set' : 'Secret: not set'}</p>
-        <label className={labelClass}>
-          Email domains
-          <input className={fieldClass} placeholder="acme.com" value={form.domains} onChange={edit('domains')} />
-        </label>
         <ErrorMessage message={errorMessage} />
         <div className="flex items-center gap-3">
           <button type="submit" className={buttonClass} disabled={isPending}>
@@ -181,23 +170,11 @@ const SsoSettingsForm = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
           {isSaved && <span className="text-sm text-muted">Saved</span>}
         </div>
       </form>
-      {form.domainStates.length > 0 && (
-        <>
-          <p className="text-sm text-muted">
-            A domain routes sign-in once verified: send a link to any address at that domain.
-          </p>
-          <ul aria-label="Domains" className="flex flex-col gap-3 text-sm">
-            {form.domainStates.map((state) => (
-              <DomainRow
-                key={state.domain}
-                workspaceId={workspaceId}
-                state={state}
-                onSent={(settings) => setForm(formOf(settings))}
-              />
-            ))}
-          </ul>
-        </>
-      )}
+      <p className="text-sm text-muted">
+        The email domain is set when the workspace is created. It routes sign-in once verified: send a link to any
+        address at that domain.
+      </p>
+      <EmailDomain workspaceId={workspaceId} state={form.domainState} onSent={setForm} />
     </LabelledSection>
   )
 }

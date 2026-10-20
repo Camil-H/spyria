@@ -79,6 +79,12 @@ export const DomainClaimed = errorKind(
   (domain: string) => `${domain} already signs in through another provider`,
   WorkspaceError,
 )
+export const DomainFixed = errorKind(
+  'domain_fixed',
+  (domain: string) =>
+    `The email domain of this workspace is ${domain}: it is set when the workspace is created and cannot be changed`,
+  WorkspaceError,
+)
 export const SsoDiscoveryFailed = errorKind(
   'sso_discovery_failed',
   (issuer: string, reason: string) => `The discovery of ${issuer} failed: ${reason}`,

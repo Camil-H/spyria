@@ -1,14 +1,14 @@
 import { expect, test } from 'bun:test'
 import { domainOfEmail, ssoEmailOf, ssoSettingsFrom } from './sso.ts'
 
-const base = { clientId: ' spyria ', domains: [' Acme.com', '@acme.com', 'acme.io'] }
+const base = { clientId: ' spyria ', domain: ' @Acme.com' }
 
-test('presets give the issuer, and domains are normalized and deduplicated', () => {
+test('presets give the issuer, and the domain is normalized', () => {
   expect(ssoSettingsFrom({ ...base, preset: 'google' })).toEqual({
     preset: 'google',
     issuer: 'https://accounts.google.com',
     clientId: 'spyria',
-    domains: ['acme.com', 'acme.io'],
+    domain: 'acme.com',
   })
   expect(ssoSettingsFrom({ ...base, preset: 'microsoft', tenantId: 'tenant-1' }).issuer).toBe(
     'https://login.microsoftonline.com/tenant-1/v2.0',
@@ -31,8 +31,8 @@ test.each([
   [{ preset: 'microsoft', tenantId: '' }, 'A Microsoft Entra tenant id is required'],
   [{ preset: 'oidc', issuer: 'not a url' }, 'The issuer must be a URL'],
   [{ preset: 'oidc', issuer: 'https://idp.acme.com', clientId: ' ' }, 'A client id is required'],
-  [{ preset: 'google', domains: [' '] }, 'At least one email domain is required'],
-  [{ preset: 'google', domains: ['acme'] }, 'acme is not an email domain'],
+  [{ preset: 'google', domain: ' ' }, 'An email domain is required'],
+  [{ preset: 'google', domain: 'acme' }, 'acme is not an email domain'],
 ] as const)('refuses %o', (input, message) => {
   expect(() => ssoSettingsFrom({ ...base, ...input } as Parameters<typeof ssoSettingsFrom>[0])).toThrow(message)
 })

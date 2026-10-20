@@ -115,7 +115,7 @@ export const copyWorkspaceSignIn = async (
     [fromWorkspaceId, toWorkspaceId],
   )
   if (!provider) return
-  const domains = await onServer<{ domain: string }>(
+  const [copied] = await onServer<{ domain: string }>(
     tx,
     `insert into sso_domains (workspace_id, domain, verified_at)
      select $2, domain, verified_at from sso_domains
@@ -127,7 +127,7 @@ export const copyWorkspaceSignIn = async (
     workspaceId: toWorkspaceId,
     type: 'sso.configured',
     actorId: userId,
-    payload: { ...provider, domains: domains.map(({ domain }) => domain) },
+    payload: { ...provider, domain: copied?.domain },
   })
 }
 

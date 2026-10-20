@@ -138,7 +138,7 @@ test("createWorkspace creates the workspace, the caller admin membership with th
     values (${acme}, 'oidc', 'https://idp.example.com', 'spyria-acme', 'sealed-secret', now())`
   await database.$client`
     insert into sso_domains (workspace_id, domain, verified_at)
-    values (${acme}, 'example.com', now()), (${acme}, 'example.org', now())`
+    values (${acme}, 'example.com', now())`
   expect(
     await resultOf(bobInAcme, 'workspace.createWorkspace', { workspaceId: acme, id: 'workspace-new', name: 'Initech' }),
   ).toEqual(succeeded)
@@ -180,7 +180,7 @@ test("createWorkspace creates the workspace, the caller admin membership with th
     [
       'sso.configured',
       bob,
-      { preset: 'oidc', issuer: 'https://idp.example.com', clientId: 'spyria-acme', domains: ['example.com'] },
+      { preset: 'oidc', issuer: 'https://idp.example.com', clientId: 'spyria-acme', domain: 'example.com' },
     ],
   ])
   await database.$client`delete from workspace_sso where workspace_id in (${acme}, 'workspace-new')`
