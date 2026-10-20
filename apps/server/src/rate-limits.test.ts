@@ -72,9 +72,10 @@ test('CF-Connecting-IP is the client address only behind Cloudflare, else the so
   expect(clientAddressOf(new Request('http://spyria.test/'), '10.0.0.5', 'cloudflare')).toBe('10.0.0.5')
 })
 
-test('invites, prompts and runtime or fork creation are the limited mutations', () => {
+test('invites, agent retries and runtime or fork creation are limited by name; a message is limited by its chat inside the mutation', () => {
   expect(limitOfMutation('workspace.inviteMember', {})).toBe('invites')
-  expect(limitOfMutation('conversation.sendMessage', {})).toBe('prompts')
+  expect(limitOfMutation('conversation.retryAgent', {})).toBe('prompts')
+  expect(limitOfMutation('conversation.sendMessage', {})).toBeUndefined()
   expect(limitOfMutation('conversation.forkChat', {})).toBe('runtimeCreation')
   expect(limitOfMutation('workspace.createChat', { type: 'runtime' })).toBe('runtimeCreation')
   expect(limitOfMutation('workspace.createChat', { type: 'channel' })).toBeUndefined()

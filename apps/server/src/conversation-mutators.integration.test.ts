@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { createApp } from './app.ts'
-import { rateBudgets } from './rate-limits.ts'
+import { createRateLimiter, rateBudgets } from './rate-limits.ts'
 import {
   acme,
   alice,
@@ -158,23 +158,25 @@ test.each([
   expect(await countOf()).toEqual(before)
 })
 
-test('a member sends at most 30 messages a minute: the next one is refused with the rate-limit message and not written, another member still sends', async () => {
-  const limitedApp = createApp({ database, ...testAuthSettings, rateLimits: rateBudgets })
-  const send = (member: typeof aliceInAcme, id: string) =>
+test('a member prompts the agent at most 30 times a minute and posts at most 120 non-prompting messages a minute: the next one is refused with the rate-limit message and not written, a channel post still goes through after the prompts run out, another member still posts', async () => {
+  const frozenAt = Date.now()
+  const rateLimiter = createRateLimiter(rateBudgets, () => frozenAt)
+  const limitedApp = createApp({ database, ...testAuthSettings, rateLimiter })
+  const send = (member: typeof aliceInAcme, chatId: string, id: string) =>
     requestMutation(limitedApp, database, member, 'conversation.sendMessage', {
       workspaceId: acme,
-      chatId: 'chat-welcome',
+      chatId,
       id,
       text: 'Hi',
     })
+  const refusedFor = (seconds: number) => failedWith(`Too many requests: try again in ${seconds} seconds.`)
   for (let sent = 0; sent < rateBudgets.prompts.count; sent++)
-    expect(await send(aliceInAcme, `message-burst-${sent}`)).toEqual(succeeded)
-  expect(await send(aliceInAcme, 'message-burst-over')).toEqual(
-    expect.objectContaining({
-      error: 'app',
-      message: expect.stringMatching(/^Too many requests: try again in [12] seconds\.$/),
-    }),
-  )
-  expect(await messageRow('message-burst-over')).toBeUndefined()
-  expect(await send(bobInAcme, 'message-burst-bob')).toEqual(succeeded)
+    expect(await send(aliceInAcme, 'chat-invoice-bug', `message-prompt-${sent}`)).toEqual(succeeded)
+  expect(await send(aliceInAcme, 'chat-invoice-bug', 'message-prompt-over')).toEqual(refusedFor(2))
+  expect(await messageRow('message-prompt-over')).toBeUndefined()
+  for (let posted = 0; posted < rateBudgets.messages.count; posted++)
+    expect(await send(aliceInAcme, 'chat-welcome', `message-post-${posted}`)).toEqual(succeeded)
+  expect(await send(aliceInAcme, 'chat-welcome', 'message-post-over')).toEqual(refusedFor(1))
+  expect(await messageRow('message-post-over')).toBeUndefined()
+  expect(await send(bobInAcme, 'chat-welcome', 'message-post-bob')).toEqual(succeeded)
 })

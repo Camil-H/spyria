@@ -117,6 +117,7 @@ import {
   createRateLimiter,
   limitOfMutation,
   type RateBudgets,
+  type RateLimiter,
   rateBudgets,
   rateLimitedBy,
   type TrustedProxy,
@@ -207,6 +208,7 @@ export const createApp = ({
   spyriaAgentImage,
   github,
   rateLimits = rateBudgets,
+  rateLimiter: limit = createRateLimiter(rateLimits),
   trustedProxy,
 }: {
   database: Database
@@ -224,9 +226,9 @@ export const createApp = ({
   spyriaAgentImage?: string
   github?: GitHubDependencies
   rateLimits?: RateBudgets
+  rateLimiter?: RateLimiter
   trustedProxy?: TrustedProxy
 }) => {
-  const limit = createRateLimiter(rateLimits)
   const rateLimited = rateLimitedBy(limit, trustedProxy)
   const mutatorNamed = (name: string) =>
     getMutator(workspaceMutators, name) ??
@@ -397,8 +399,10 @@ export const createApp = ({
             const response = await transact((tx, name, args) =>
               withSpan(`mutate ${name}`, { 'mutation.name': name, 'workspace.id': ctx.workspaceId }, () => {
                 const limitName = limitOfMutation(name, args)
-                if (limitName) limit(limitName, ctx)
-                return mutatorNamed(name).fn({ args, tx, ctx: { ...ctx, spyriaAgentImage } })
+                const requester = { ...ctx, databaseName: context.get('databaseName') }
+                if (limitName) limit(limitName, requester)
+                const limitMessage = (isPrompt: boolean) => limit(isPrompt ? 'prompts' : 'messages', requester)
+                return mutatorNamed(name).fn({ args, tx, ctx: { ...ctx, spyriaAgentImage, limitMessage } })
               }),
             )
             if ('error' in response.result) return response

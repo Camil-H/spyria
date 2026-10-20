@@ -176,6 +176,7 @@ export const createApp = async (
     connectTool: toolConnections.connectTool,
     startRuntimeFromMessage: mutateIntoNewChat(conversationMutators.conversation.startRuntimeFromMessage),
     forkChat: mutateIntoNewChat(conversationMutators.conversation.forkChat),
+    sendMessage: mutateConfirmed(conversationMutators.conversation.sendMessage),
     inviteMember: mutateConfirmed(conversationMutators.conversation.inviteMember),
     changeMemberRole: mutateConfirmed(conversationMutators.conversation.changeMemberRole),
     removeMember: mutateConfirmed(conversationMutators.conversation.removeMember),

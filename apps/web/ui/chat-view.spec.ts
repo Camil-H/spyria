@@ -51,6 +51,7 @@ test.describe('Chat view', () => {
   test('As a member, I see a channel’s Send icon with its tooltip, the message menu revealed on keyboard focus, dialogs in the app text colour and readable links', async ({
     page,
     workerStack,
+    refuseNextMessage,
   }) => {
     await openChat(page, 'Welcome')
     await expectLooks(page, mainOf(page), 'channel')
@@ -112,6 +113,12 @@ test.describe('Chat view', () => {
       const [lighter = 0, darker = 0] = [luminanceOf(foreground), luminanceOf(background)].sort((x, y) => y - x)
       const ratio = (lighter + 0.05) / (darker + 0.05)
       expect(ratio).toBeGreaterThanOrEqual(4.5)
+    })
+    await test.step('shows a refused message as not sent above the composer, with its text back in it', async () => {
+      await refuseNextMessage()
+      await sendMessage(page, 'Sent too fast')
+      await expect(mainOf(page).getByRole('alert')).toHaveText('Not sent: Too many requests: try again in 12 seconds.')
+      await expectLooks(page, mainOf(page), 'not-sent', { mask: [messageContaining(page, 'See the docs')] })
     })
   })
 

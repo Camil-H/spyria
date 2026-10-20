@@ -47,7 +47,11 @@ export const conversationMutators = defineMutators({
         text: z.string(),
         threadRootId: z.optional(messageIdArgument),
       }),
-      ({ tx, ctx, args }) => sendMessage(dependenciesOf(tx, ctx, args), { ...args, authorId: ctx.userId }),
+      ({ tx, ctx, args }) =>
+        sendMessage(
+          { ...dependenciesOf(tx, ctx, args), limitMessage: ctx.limitMessage },
+          { ...args, authorId: ctx.userId },
+        ),
     ),
     editMessage: defineMutator(
       z.extend(workspaceArguments, { messageId: messageIdArgument, text: z.string() }),

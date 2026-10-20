@@ -150,6 +150,7 @@ type TestOptions = ResetOptions & {
   resetStack: undefined
   agentScript: (chatId: string, script: AgentScript) => Promise<void>
   failRuntimeCreation: (isFailing: boolean) => Promise<void>
+  refuseNextMessage: () => Promise<void>
   fakeBootHold: string | undefined
   release: (name: string) => Promise<void>
   reached: (name: string) => Promise<void>
@@ -352,6 +353,11 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
   failRuntimeCreation: async ({ workerStack }, use) => {
     await use(async (isFailing) => {
       await postToServer('/test/runtime-creation', { db: workerStack.databaseName, failing: String(isFailing) })
+    })
+  },
+  refuseNextMessage: async ({ workerStack }, use) => {
+    await use(async () => {
+      await postToServer('/test/refuse-next-message', { db: workerStack.databaseName })
     })
   },
 })

@@ -2,7 +2,7 @@ import { DomainError, log } from '@spyria/kernel'
 import type { Context, MiddlewareHandler } from 'hono'
 
 type Budget = { count: number; perMilliseconds: number; per: 'address' | 'workspace' | 'member' }
-type Requester = { address?: string; workspaceId?: string; userId?: string }
+type Requester = { address?: string; workspaceId?: string; userId?: string; databaseName?: string | undefined }
 type RequestIp = { requestIP?: (request: Request) => { address: string } | null }
 export type TrustedProxy = 'cloudflare' | undefined
 
@@ -20,6 +20,7 @@ export const rateBudgets = {
   verificationEmails: { count: 3, perMilliseconds: hour, per: 'workspace' },
   invites: { count: 50, perMilliseconds: hour, per: 'workspace' },
   prompts: { count: 30, perMilliseconds: minute, per: 'member' },
+  messages: { count: 120, perMilliseconds: minute, per: 'member' },
   runtimeCreation: { count: 10, perMilliseconds: minute, per: 'member' },
 } as const satisfies Record<string, Budget>
 export type RateLimitName = keyof typeof rateBudgets
@@ -27,7 +28,6 @@ export type RateBudgets = Record<RateLimitName, Budget>
 
 const limitByMutation: Record<string, RateLimitName> = {
   'workspace.inviteMember': 'invites',
-  'conversation.sendMessage': 'prompts',
   'conversation.retryAgent': 'prompts',
   'conversation.startRuntimeFromMessage': 'runtimeCreation',
   'conversation.forkChat': 'runtimeCreation',

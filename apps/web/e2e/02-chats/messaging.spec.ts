@@ -117,6 +117,34 @@ test.describe('Messaging', () => {
     })
   })
 
+  test('As a member, a message refused for sending too fast shows why and I resend it', {
+    tag: ['@spec-51'],
+  }, async ({ page, workerStack, refuseNextMessage }) => {
+    await openChat(page, 'Welcome')
+    const notSent = mainOf(page).getByRole('alert')
+
+    await test.step('gets the text back in the composer with the reason, and no message is posted', async () => {
+      await refuseNextMessage()
+      await sendMessage(page, 'Sent too fast')
+      await expect(notSent).toHaveText('Not sent: Too many requests: try again in 12 seconds.')
+      await expect(composerOf(page)).toHaveValue('Sent too fast')
+      await expect(messageContaining(page, 'Sent too fast')).toHaveCount(0)
+      expect(await workerStack.database.query.messages.findFirst({ where: { body: 'Sent too fast' } })).toBeUndefined()
+    })
+
+    await test.step('resends it with Send: the message is posted once and the reason goes away', async () => {
+      await sendButtonOf(page).click()
+      await expect(messageContaining(page, 'Sent too fast')).toHaveCount(1)
+      await expect(composerOf(page)).toHaveValue('')
+      await expect(notSent).toHaveCount(0)
+      await expect
+        .poll(
+          async () => (await workerStack.database.query.messages.findMany({ where: { body: 'Sent too fast' } })).length,
+        )
+        .toBe(1)
+    })
+  })
+
   test('As a member, I edit then delete my own message', async ({ page }) => {
     await openChat(page, 'Welcome')
 

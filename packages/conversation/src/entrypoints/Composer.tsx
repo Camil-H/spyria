@@ -2,7 +2,7 @@ import { Content, Portal, Provider, Root, Trigger } from '@radix-ui/react-toolti
 import { useStore } from '@spyria/db/react'
 import type { ChatId, MessageId, WorkspaceId } from '@spyria/kernel'
 import { useSession } from '@spyria/session'
-import { focusRing, tooltipClass } from '@spyria/ui'
+import { ErrorMessage, focusRing, tooltipClass, useGuardedAction } from '@spyria/ui'
 import { ArrowUp } from 'lucide-react'
 import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from 'react'
 import { getDraft } from '../queries/get-draft.ts'
@@ -33,6 +33,7 @@ export const Composer = ({
   const [text, setText] = useState(() => (threadRootId ? '' : getDraft(workspaceId, chatId, memberId)(store.read())))
   const latestText = useRef(text)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const sending = useGuardedAction()
   useEffect(() => {
     textareaRef.current?.focus()
     if (threadRootId) return
@@ -54,7 +55,8 @@ export const Composer = ({
     if (isUnsendable) return
     change('')
     textareaRef.current?.focus()
-    await commands.sendMessage({ workspaceId, chatId, text, threadRootId })
+    if (await sending.run(() => commands.sendMessage({ workspaceId, chatId, text, threadRootId }))) return
+    change(isBlank(latestText.current) ? text : `${text}\n${latestText.current}`)
   }
   const sendOnShortcut = (event: KeyboardEvent) => {
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
@@ -66,6 +68,7 @@ export const Composer = ({
     <Provider>
       {isBlocked && <div className="text-sm text-muted">{blockedNotice}</div>}
       {aboveBox}
+      <ErrorMessage message={sending.errorMessage && `Not sent: ${sending.errorMessage}`} />
       <div className="rounded-xl border border-line bg-raised">
         <div className="flex items-end gap-2 p-2">
           <textarea

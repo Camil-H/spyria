@@ -20,6 +20,7 @@ export type ZeroContext = {
   userId: MemberId
   workspaceId: WorkspaceId
   spyriaAgentImage?: string
+  limitMessage?: (isPrompt: boolean) => void
 }
 
 export type Transact = <Result>(work: (tx: ServerTransaction) => Promise<Result>) => Promise<Result>

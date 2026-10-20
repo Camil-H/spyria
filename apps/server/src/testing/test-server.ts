@@ -24,6 +24,7 @@ import { createGitHubCheckouts } from '../github/github.ts'
 import { createGitHubApi } from '../github/github-api.ts'
 import { startJobWorker } from '../job-worker.ts'
 import { createModelCallRelay } from '../llm-relay.ts'
+import { createRateLimiter, RateLimited } from '../rate-limits.ts'
 import { createRuntimeHostGateway } from '../runtime-hosts/gateway.ts'
 import { readSpyriaAgentImage } from '../spyria-agent-image.ts'
 import { startTelemetry } from '../telemetry.ts'
@@ -58,6 +59,8 @@ const databasesFailingCreation = new Set<string>()
 const databasesWithoutGateway = new Set<string>()
 const bootHoldByDatabase = new Map<string, string>()
 const holds = createHolds()
+const databasesRefusingNextMessage = new Set<string>()
+const testRateLimiter = createRateLimiter(testAuthSettings.rateLimits)
 const waitForRelease = (databaseName: string, name: string) => holds.wait(`${databaseName}/${name}`)
 const fakeHostByDatabase = new Map<
   string,
@@ -182,6 +185,11 @@ const app = createApp({
   database: createDatabase(),
   ...testAuthSettings,
   testDatabaseByName: databaseByName,
+  rateLimiter: (name, requester) => {
+    if (name === 'messages' && databasesRefusingNextMessage.delete(requester.databaseName ?? ''))
+      throw new RateLimited(12)
+    testRateLimiter(name, requester)
+  },
   llmGateway,
   runtimeHosts,
   agentBridge,
@@ -215,6 +223,7 @@ const app = createApp({
     if (!chat) {
       if (llmGateway.listedModels().length === 0) await llmGateway.refreshListedModels()
       for (const key of scriptByChat.keys()) if (key.startsWith(`${db}/`)) scriptByChat.delete(key)
+      databasesRefusingNextMessage.delete(db)
       holds.releaseAll(`${db}/`)
       return context.body(null, 204)
     }
@@ -225,6 +234,10 @@ const app = createApp({
     ])
     if (!wasUsed) return context.text(`No model call used the previous script of ${chat}`, 409)
     scriptByChat.set(`${db}/${chat}`, { script: await context.req.json(), used: Promise.withResolvers() })
+    return context.body(null, 204)
+  })
+  .post('/test/refuse-next-message', (context) => {
+    databasesRefusingNextMessage.add(context.req.query('db') ?? '')
     return context.body(null, 204)
   })
   .post('/test/usage-sync', async (context) => {

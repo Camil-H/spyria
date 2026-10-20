@@ -7,15 +7,19 @@ import { noLlmKeyNoticeOf } from '../domain/model-call-failures.ts'
 import { localSessionNotices, runsOnWaitingNoticeOf } from '../domain/session-routing.ts'
 import { appendNotice } from './agent-turn.ts'
 
-type Dependencies = { transactor: ConversationTransactor }
+type Dependencies = { transactor: ConversationTransactor; limitMessage?: ((isPrompt: boolean) => void) | undefined }
 type Input = { id: string; chatId: ChatId; authorId: MemberId; text: string; threadRootId?: MessageId | undefined }
 
-export const sendMessage = ({ transactor }: Dependencies, { id, chatId, authorId, text, threadRootId }: Input) =>
+export const sendMessage = (
+  { transactor, limitMessage }: Dependencies,
+  { id, chatId, authorId, text, threadRootId }: Input,
+) =>
   transactor.run(async (unitOfWork) => {
     const chat = await unitOfWork.chats.get(chatId)
     const { members } = unitOfWork
     await requireChatPermission(unitOfWork.chats, chatId, authorId, 'chat.post')
     requireNotFrozen(chat)
+    limitMessage?.(chat.type === 'runtime')
     const threadRoot = threadRootId ? threadRootOf(chat, chatId, await unitOfWork.messages.find(threadRootId)) : null
     if (chat.type === 'runtime' && chat.localSession === null)
       throw new RunsOnNotChosen(runsOnWaitingNoticeOf(chat.ownerId ? await members.displayNameOf(chat.ownerId) : ''))
