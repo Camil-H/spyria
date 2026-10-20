@@ -107,6 +107,12 @@ module.exports = {
       to: { path: testOnlyModules, reachable: true },
     },
     {
+      name: 'server-code-never-imports-server-testing',
+      severity: 'error',
+      from: { path: '^apps/server/src/', pathNot: ['\\.test\\.ts$', '^apps/server/src/testing/'] },
+      to: { path: '^apps/server/src/testing/' },
+    },
+    {
       name: 'zero-schema-queries-and-server-writes-never-reach-client-or-server-only-code',
       severity: 'error',
       from: { path: '^packages/db/src/(zero(-queries)?|server-writes)\\.ts$' },

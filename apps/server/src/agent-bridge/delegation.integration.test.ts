@@ -1,7 +1,7 @@
 import { expect, setDefaultTimeout, test } from 'bun:test'
 import { stillRunningOf, subagentFailureOf, unknownTaskOf } from '@spyria/conversation/server'
 import { type ChatId, messageId } from '@spyria/kernel'
-import type { FakeLlmScript } from '../fake-llm.ts'
+import type { FakeLlmScript } from '../testing/fake-llm.ts'
 import {
   acme,
   alice,

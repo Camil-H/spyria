@@ -29,7 +29,6 @@ const toolServers: Record<string, () => ToolServerSetup> = {
     },
   }),
   notion: () => ({ name: 'Notion', url: 'https://mcp.notion.com/mcp' }),
-  fake: () => ({ name: 'fake', url: `${process.env.SPYRIA_FAKE_MCP_URL ?? 'http://host.docker.internal:3001'}/mcp` }),
 }
 const logInAsAdmin = async (authorizeUrl: string) => {
   console.log(`Log in once as the Spyria admin of this server, then press Enter:\n${authorizeUrl}`)
@@ -57,7 +56,7 @@ const commands: Record<string, () => Promise<void>> = {
       adminPassword: process.env.SPYRIA_GATEWAY_ADMIN_PASSWORD ?? 'spyria-dev-gateway',
     })
     const server = setup()
-    const isNew = await gateway.setUpToolServer(server, name === 'fake' ? undefined : logInAsAdmin)
+    const isNew = await gateway.setUpToolServer(server, logInAsAdmin)
     console.log(isNew ? `${server.name} is set up: members can connect it` : `${server.name} was already set up`)
   },
   'sso:bootstrap': async () => {

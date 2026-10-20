@@ -21,14 +21,12 @@ type McpConfig = { id: number; mcp_client: { name: string }; tools_to_execute: s
 type BifrostGateway = LlmGateway &
   ToolGateway & {
     url: string
-    registerFakeProviders(fakeLlmUrl: string): Promise<void>
     setUpToolServer(server: ToolServerSetup, logIn?: (authorizeUrl: string) => Promise<void>): Promise<boolean>
     listedModels(): readonly ListedModel[]
     refreshListedModels(): Promise<void>
   }
 
 const notFound = 404
-const conflict = 409
 const zaiProviderSetup = {
   network_config: { base_url: 'https://api.z.ai/api/paas/v4' },
   custom_provider_config: {
@@ -291,20 +289,6 @@ export const createLlmGateway = ({
         .sessions as { id: string; status: string }[],
     removeToolSession: async (sessionId) => {
       await request('DELETE', `/api/mcp/sessions/${sessionId}`)
-    },
-    registerFakeProviders: async (fakeLlmUrl) => {
-      for (const provider of ['fake', 'fake-small'])
-        await request(
-          'POST',
-          '/api/providers',
-          {
-            provider,
-            keys: [],
-            network_config: { base_url: fakeLlmUrl, max_retries: 0 },
-            custom_provider_config: { base_provider_type: 'openai' },
-          },
-          conflict,
-        )
     },
     addProviderKey: async ({ provider, name, secret }) => {
       const keyBody = { name, value: secret.reveal(), models: ['*'], weight: 1 }

@@ -114,6 +114,9 @@ import { createModelCallRelay } from './llm-relay.ts'
 import { createRuntimeHostGateway, type RuntimeHostGateway } from './runtime-hosts/gateway.ts'
 
 export const defaultLlm = { model: 'openai/fake/fake-model' }
+const healthCheckMilliseconds = 2000
+const passesWithinTimeout = (check: () => Promise<boolean>) =>
+  Promise.race([check().catch(() => false), Bun.sleep(healthCheckMilliseconds).then(() => false)])
 const questionIdPattern = /^[\w-]{1,64}$/
 const readRevokingMutations = new Set([
   'conversation.removeMember',
@@ -191,7 +194,6 @@ export const createApp = ({
     relayModelCall: llmGateway && createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),
   }),
   agentBridge = createAgentBridge({ sandboxProvider: runtimeHosts.sandboxProvider, llm: defaultLlm }),
-  fakeLlm,
   spyriaAgentImage,
   github,
 }: {
@@ -207,7 +209,6 @@ export const createApp = ({
   llmGateway?: LlmGateway
   runtimeHosts?: RuntimeHostGateway
   agentBridge?: AgentBridge
-  fakeLlm?: Hono
   spyriaAgentImage?: string
   github?: GitHubDependencies
 }) => {
@@ -254,7 +255,20 @@ export const createApp = ({
       console.error(error)
       return context.text('Internal Server Error', 500)
     })
-    .get('/health', (context) => context.json({ status: 'ok' }))
+    .get('/health', async (context) => {
+      const checks = Object.entries({
+        database: () => database.$client`select 1`.then(() => true),
+        ...(llmGateway && {
+          gateway: () =>
+            fetch(`${llmGateway.url}/health`, { signal: AbortSignal.timeout(healthCheckMilliseconds) }).then(
+              (response) => response.ok,
+            ),
+        }),
+      })
+      const passed = await Promise.all(checks.map(([, check]) => passesWithinTimeout(check)))
+      const failing = checks.flatMap(([name], index) => (passed[index] ? [] : [name]))
+      return failing.length === 0 ? context.json({ status: 'ok' }) : context.json({ status: 'degraded', failing }, 503)
+    })
     .get('/host', runtimeHosts.upgrade)
     .get('/api/stream', agentBridge.stream(authenticate, databaseOf))
     .get(toolConsentCallbackPath, async (context) =>
@@ -611,6 +625,5 @@ export const createApp = ({
         ),
       ),
     )
-  if (fakeLlm) app.route('/fake-llm', fakeLlm)
   return app
 }

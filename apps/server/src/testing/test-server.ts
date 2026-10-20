@@ -20,7 +20,6 @@ import { createApp, sessionClassifierOf } from '../app.ts'
 import { sessionCookieOptions, setSessionCookie, testCookie } from '../auth/routes.ts'
 import { createSecretBox } from '../auth/secret-box.ts'
 import { openSessions } from '../auth/sessions.ts'
-import { createFakeLlm, type FakeLlmScript, fakeRoutableModels } from '../fake-llm.ts'
 import { createGitHubCheckouts } from '../github/github.ts'
 import { createGitHubApi } from '../github/github-api.ts'
 import { startJobWorker } from '../job-worker.ts'
@@ -28,6 +27,7 @@ import { createModelCallRelay } from '../llm-relay.ts'
 import { createRuntimeHostGateway } from '../runtime-hosts/gateway.ts'
 import { readSpyriaAgentImage } from '../spyria-agent-image.ts'
 import { fakeGitHubAppId, fakeGitHubClientId, fakeGitHubClientSecret, startFakeGitHub } from './fake-github.ts'
+import { createFakeLlm, type FakeLlmScript, fakeRoutableModels } from './fake-llm.ts'
 import { createFakeMcp, sharedToolServer } from './fake-mcp.ts'
 import { createSpyriaAgentRelay } from './spyria-agent-relay.ts'
 import {
@@ -186,14 +186,17 @@ const app = createApp({
   agentBridge,
   github,
   ...placement,
-  fakeLlm: createFakeLlm(async (request, isClassifier, prompt) => {
-    const chatKey = request.headers.get('x-spyria-chat') ?? (await chatKeyOfPrompt(prompt))
-    const chatScript = scriptByChat.get(chatKey)
-    if (!isClassifier) chatScript?.used.resolve(true)
-    const [databaseName = ''] = chatKey.split('/')
-    return chatScript && { ...chatScript.script, held: (name: string) => waitForRelease(databaseName, name) }
-  }),
 })
+  .route(
+    '/fake-llm',
+    createFakeLlm(async (request, isClassifier, prompt) => {
+      const chatKey = request.headers.get('x-spyria-chat') ?? (await chatKeyOfPrompt(prompt))
+      const chatScript = scriptByChat.get(chatKey)
+      if (!isClassifier) chatScript?.used.resolve(true)
+      const [databaseName = ''] = chatKey.split('/')
+      return chatScript && { ...chatScript.script, held: (name: string) => waitForRelease(databaseName, name) }
+    }),
+  )
   .post('/test/release-database', async (context) => {
     await releaseDatabase(context.req.query('db') ?? '')
     return context.body(null, 204)

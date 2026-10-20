@@ -1,6 +1,5 @@
 import { createDatabase } from '@spyria/db/postgres'
 import { setModelDirectory } from '@spyria/db/server-writes'
-import { addRoutableModels } from '@spyria/kernel'
 import { createLlmGateway } from '@spyria/profile/server'
 import { createBifrostUsageLogs } from '@spyria/usage/server'
 import { websocket } from 'hono/bun'
@@ -8,13 +7,19 @@ import { createAgentBridge } from './agent-bridge/bridge.ts'
 import { createApp, sessionClassifierOf } from './app.ts'
 import { createSecretBox } from './auth/secret-box.ts'
 import { enqueueSweeps } from './auth/sessions.ts'
-import { createFakeLlm, fakeRoutableModels } from './fake-llm.ts'
 import { createGitHubCheckouts } from './github/github.ts'
 import { createGitHubApi, githubDotCom } from './github/github-api.ts'
 import { startJobWorker } from './job-worker.ts'
 import { createModelCallRelay } from './llm-relay.ts'
+import { productionProblemsOf } from './production.ts'
 import { createRuntimeHostGateway } from './runtime-hosts/gateway.ts'
 import { readSpyriaAgentImage } from './spyria-agent-image.ts'
+
+const productionProblems = productionProblemsOf(process.env)
+if (productionProblems.length > 0) {
+  console.error(`Spyria cannot start in production:\n${productionProblems.map((problem) => `- ${problem}`).join('\n')}`)
+  process.exit(1)
+}
 
 const requiredEnvironment = (name: string) => {
   const value = process.env[name]
@@ -22,6 +27,7 @@ const requiredEnvironment = (name: string) => {
   return value
 }
 
+const shutdownMilliseconds = 10_000
 const authModes = ['dex', 'sso'] as const
 const authMode = authModes.find((mode) => mode === (process.env.SPYRIA_AUTH_MODE ?? 'dex'))
 if (!authMode) throw new Error('SPYRIA_AUTH_MODE must be dex or sso')
@@ -39,19 +45,14 @@ const runtimeHosts = createRuntimeHostGateway({
   afterHello: (helloDatabase, host) => agentBridge.forDatabase(helloDatabase).resumeHost(host),
   relayModelCall: createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),
 })
-const llmModel = process.env.SPYRIA_LLM_MODEL
 const secretsKey = authMode === 'sso' ? requiredEnvironment('SPYRIA_SECRETS_KEY') : process.env.SPYRIA_SECRETS_KEY
 const github = {
-  api: createGitHubApi({
-    apiUrl: process.env.SPYRIA_GITHUB_API_URL ?? githubDotCom.apiUrl,
-    webUrl: process.env.SPYRIA_GITHUB_WEB_URL ?? githubDotCom.webUrl,
-  }),
+  api: createGitHubApi(githubDotCom),
   secretBox: secretsKey ? createSecretBox(secretsKey) : undefined,
 }
 const agentBridge = createAgentBridge({
   sandboxProvider: runtimeHosts.sandboxProvider,
   spyriaAgentImage,
-  llm: llmModel ? { model: llmModel } : undefined,
   sessionClassifierOf: sessionClassifierOf(llmGateway),
   repositoryCheckoutsOf: (checkoutDatabase) => createGitHubCheckouts(checkoutDatabase, github),
 })
@@ -74,17 +75,10 @@ const app = createApp({
   runtimeHosts,
   agentBridge,
   spyriaAgentImage,
-  fakeLlm: llmModel ? undefined : createFakeLlm(() => undefined),
 })
 setModelDirectory(llmGateway.listedModels)
 void llmGateway.refreshListedModels()
-if (!llmModel) {
-  addRoutableModels(fakeRoutableModels)
-  await llmGateway
-    .registerFakeProviders('http://host.docker.internal:3000/fake-llm')
-    .catch((error) => console.error(`Registering the fake LLM in the gateway failed: ${error.message}`))
-}
-startJobWorker(database, {
+const jobWorker = startJobWorker(database, {
   sandboxProvider: runtimeHosts.sandboxProvider,
   agentBridge,
   llmGateway,
@@ -92,5 +86,16 @@ startJobWorker(database, {
 })
 await enqueueSweeps(database)
 await agentBridge.forDatabase(database).resumeActiveTurns()
+const server = Bun.serve({ port: Number(process.env.PORT ?? 3000), hostname: '0.0.0.0', fetch: app.fetch, websocket })
 
-export default { port: 3000, hostname: '0.0.0.0', fetch: app.fetch, websocket }
+const shutDown = async () => {
+  setTimeout(() => process.exit(1), shutdownMilliseconds).unref()
+  void server.stop()
+  await jobWorker.stop()
+  await runtimeHosts.close()
+  await server.stop(true)
+  await database.$client.end({ timeout: 5 })
+  process.exit(0)
+}
+process.once('SIGTERM', shutDown)
+process.once('SIGINT', shutDown)

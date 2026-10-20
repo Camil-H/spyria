@@ -103,11 +103,13 @@ export const containerBodyOf = ({
       PidsLimit: 512,
       RestartPolicy: { Name: 'no' },
       Mounts: [
-        ...Object.entries(volumeTargets).map(([suffix, target]): Mount => ({
-          Type: 'volume',
-          Source: `${name}-${suffix}`,
-          Target: target,
-        })),
+        ...Object.entries(volumeTargets).map(
+          ([suffix, target]): Mount => ({
+            Type: 'volume',
+            Source: `${name}-${suffix}`,
+            Target: target,
+          }),
+        ),
         ...(personal ? [...credentialsMountsOf(prefix), harnessesMountOf(prefix)] : []),
       ],
     },

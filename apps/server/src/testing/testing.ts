@@ -32,11 +32,11 @@ import { createAgentBridge } from '../agent-bridge/bridge.ts'
 import { createApp, sessionClassifierOf } from '../app.ts'
 import { issueSessionToken } from '../auth/session-tokens.ts'
 import { openSessions } from '../auth/sessions.ts'
-import { createFakeLlm, type FakeLlmScript, fakeRoutableModels } from '../fake-llm.ts'
 import { createGitHubCheckouts, type GitHubDependencies } from '../github/github.ts'
 import { startJobWorker } from '../job-worker.ts'
 import { createModelCallRelay } from '../llm-relay.ts'
 import { createRuntimeHostGateway } from '../runtime-hosts/gateway.ts'
+import { createFakeLlm, type FakeLlmScript, fakeRoutableModels } from './fake-llm.ts'
 import { createFakeMcp, sharedToolServer } from './fake-mcp.ts'
 import {
   type ContainerAgent,
@@ -190,7 +190,7 @@ const startSharedTestApp = async () => {
   const llmGateway = llmGatewayAt(`http://127.0.0.1:${integrationGatewayPort}`)
   setModelDirectory(llmGateway.listedModels)
   addRoutableModels(fakeRoutableModels)
-  const app = createApp({ database, ...testAuthSettings, llmGateway, fakeLlm })
+  const app = createApp({ database, ...testAuthSettings, llmGateway }).route('/fake-llm', fakeLlm)
   const server = Bun.serve({ port: integrationAppPort, fetch: app.fetch, websocket })
   const fakeMcp = createFakeMcp()
   const fakeMcpServer = Bun.serve({ port: integrationFakeMcpPort, fetch: fakeMcp.fetch })

@@ -318,6 +318,13 @@ export const createRuntimeHostGateway = ({
     prepare,
     disconnect: (workspaceId: WorkspaceId, hostId: RuntimeHostId) =>
       connectionByHost.get(keyOf({ workspaceId, hostId }))?.socket.close(1000, 'Removed'),
+    close: async () => {
+      for (const connection of connectionByHost.values()) {
+        release(connection)
+        connection.socket.close(1001, 'The server is shutting down')
+      }
+      await Promise.all(operationChains.values())
+    },
   }
 }
 

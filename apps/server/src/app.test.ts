@@ -16,11 +16,12 @@ const contextServerEntries = [
   '@spyria/runtime/server',
 ]
 
-test('serves health', async () => {
+test('health names the unreachable database', async () => {
   const server = Bun.serve({ port: 0, fetch: app.fetch })
   const response = await fetch(new URL('/health', server.url))
   await server.stop()
-  expect(await response.json()).toEqual({ status: 'ok' })
+  expect(response.status).toBe(503)
+  expect(await response.json()).toEqual({ status: 'degraded', failing: ['database'] })
 })
 
 test.each(['/api/query', '/api/mutate', llmCredentialsPath, runtimeHostsPath, `${runtimeHostsPath}/host-1/code`])(

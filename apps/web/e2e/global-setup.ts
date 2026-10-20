@@ -74,7 +74,7 @@ const startDetached = async (command: string[], cwd: string, env: Record<string,
     detached: true,
     stdio: ['ignore', logFile, logFile],
   })
-  for (let attempt = 1; (await httpStatusOf(readyUrl)) !== 200; attempt++) {
+  for (let attempt = 1; typeof (await httpStatusOf(readyUrl)) !== 'number'; attempt++) {
     if (attempt === 400) throw new Error(`${command.join(' ')} did not start`)
     await sleep(50)
   }

@@ -3,7 +3,7 @@ import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { schema } from '@spyria/db/zero'
 import { createZeroStore } from '@spyria/db/zero-store'
 import { syncUsageNow } from '@spyria/usage/server'
-import type { FakeLlmScript } from './fake-llm.ts'
+import type { FakeLlmScript } from './testing/fake-llm.ts'
 import {
   acme,
   addLlmKey,
