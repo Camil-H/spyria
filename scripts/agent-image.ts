@@ -3,12 +3,20 @@ import { type HarnessId, harnessIds, installScriptOf } from '../apps/host/src/ha
 import { checkLicenses } from './check-licenses.ts'
 
 const agentDirectory = new URL('../apps/agent/', import.meta.url).pathname
-const versionsFile = `${agentDirectory}versions.json`
+const piDirectory = `${agentDirectory}pi/`
+const piManifestFile = `${piDirectory}package.json`
 const harnessesFile = new URL('../apps/host/src/harnesses.json', import.meta.url).pathname
 const testHarnessesVolume = 'spyria-test-harnesses'
 type Pinned = { package: string; version: string }
 type HarnessPins = Record<HarnessId, { packages: Record<string, string>; executables: Record<string, string> }>
-const imageVersions = (): Record<string, Pinned> => JSON.parse(readFileSync(versionsFile, 'utf8'))
+const piManifest = (): { dependencies: Record<string, string> } => JSON.parse(readFileSync(piManifestFile, 'utf8'))
+const imageVersions = (): Record<string, Pinned> =>
+  Object.fromEntries(
+    Object.entries(piManifest().dependencies).map(([packageName, version]) => [
+      'pi',
+      { package: packageName, version },
+    ]),
+  )
 const harnessPins = (): HarnessPins => JSON.parse(readFileSync(harnessesFile, 'utf8'))
 const harnessVersions = () =>
   Object.fromEntries(
@@ -20,8 +28,8 @@ const harnessVersions = () =>
     ),
   ) as Record<string, Pinned>
 const readVersions = () => ({ ...harnessVersions(), ...imageVersions() })
-const run = (command: string[]) => {
-  const result = Bun.spawnSync(command, { cwd: agentDirectory, stdout: 'pipe', stderr: 'inherit' })
+const run = (command: string[], directory = agentDirectory) => {
+  const result = Bun.spawnSync(command, { cwd: directory, stdout: 'pipe', stderr: 'inherit' })
   if (result.exitCode !== 0) process.exit(result.exitCode)
   return result.stdout.toString().trim()
 }
@@ -49,20 +57,7 @@ const build = () => {
     '--outfile',
     'dist/spyria-agent',
   ])
-  const packages = Object.values(imageVersions())
-    .map((tool) => `${tool.package}@${tool.version}`)
-    .join(' ')
-  run([
-    'docker',
-    'build',
-    '--iidfile',
-    'image-id',
-    '-t',
-    'spyria-agent:dev',
-    '--build-arg',
-    `PACKAGES=${packages}`,
-    '.',
-  ])
+  run(['docker', 'build', '--iidfile', 'image-id', '-t', 'spyria-agent:dev', '.'])
   const image = readFileSync(`${agentDirectory}image-id`, 'utf8').trim()
   if (!checkLicenses(image)) process.exit(1)
   fillTestHarnesses(image)
@@ -84,9 +79,10 @@ else if (command === 'bump') {
   if (!pinned) throw new Error(`Unknown tool ${tool}; choose from ${Object.keys(versions).join(', ')}`)
   const latest = latestOf(pinned.package)
   if (tool && tool in imageVersions()) {
-    const pinnedInImage = imageVersions()
-    pinnedInImage[tool] = { ...pinned, version: latest }
-    writeFileSync(versionsFile, `${JSON.stringify(pinnedInImage, null, 2)}\n`)
+    const manifest = piManifest()
+    manifest.dependencies[pinned.package] = latest
+    writeFileSync(piManifestFile, `${JSON.stringify(manifest, null, 2)}\n`)
+    run(['npm', 'install', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund'], piDirectory)
   } else {
     const pins = harnessPins()
     for (const { packages } of Object.values(pins)) if (pinned.package in packages) packages[pinned.package] = latest

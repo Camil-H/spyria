@@ -70,6 +70,8 @@ Runtimes (Spyria's runtime image with spyria-agent) run on runtime hosts: any ma
 docker build -t spyria-host apps/host
 ```
 
+The image installs exactly `apps/host/bun.lock`. After changing a host dependency, run `bun install` at the root, then regenerate that lock from a copy of `apps/host/package.json` and the root `bun.lock` (`bun install --lockfile-only` in a temp folder, keeping the root's versions); `bun run check:locks` fails while the two disagree.
+
 Then, signed in as a workspace admin (Alice), open the workspace menu, **Workspace settings**, **Add runtime host**, give it a name and copy the command. On a Mac (OrbStack or Docker Desktop), switch **Rootless Docker** off, and in the copied command replace `localhost` with `host.docker.internal` (the container cannot reach the Mac's `localhost`); the rooted command adds group `0` on macOS by itself. The row turns Online within seconds. Hosts never pull: build Spyria's runtime image first (below).
 
 Without Docker for `spyria-host` itself, run it as a process against the local Docker: `SPYRIA_HOST_STATE_DIR=.spyria-host bun apps/host/src/main.ts http://localhost:5173/h/<code>`. Remove the host in the settings page when done, then `docker rm -f spyria-host` and `docker volume rm spyria-host`.
@@ -80,12 +82,12 @@ Each runtime gets its own Docker network (`spyria-rt-<id>-net`), which `spyria-h
 
 ## Spyria runtime image
 
-Workspace hosts and personal machines run Spyria's own image (`apps/agent`: spyria-agent with Pi, node/npm, git and ripgrep; Pi is pinned in `apps/agent/versions.json`). Claude Code, Codex and their ACP adapters are never in the image: they are pinned in `apps/host/src/harnesses.json`, and a member's `spyria-host` installs them on that machine on first use (at `login` or when a session starts, the chat showing "Installing Claude Code…") into the `spyria-harnesses` volume, one folder per pinned set, mounted read-only into the sessions; `SPYRIA_HARNESS_REGISTRY` sets another npm registry. The build fails when a package in the image has a license outside the allowlist of `scripts/check-licenses.ts`, and fills the test-only volume `spyria-test-harnesses` with the pinned harnesses for the docker tests. Build it locally before the first runtime; the server reads its content ID from `apps/agent/image-id` (or `SPYRIA_AGENT_IMAGE`) at start, and no `spyria-host` ever pulls it:
+Workspace hosts and personal machines run Spyria's own image (`apps/agent`: spyria-agent with Pi, node/npm, git and ripgrep; Pi is pinned in `apps/agent/pi/package.json` with its `package-lock.json`, installed with `npm ci`). Claude Code, Codex and their ACP adapters are never in the image: they are pinned in `apps/host/src/harnesses.json`, and a member's `spyria-host` installs them on that machine on first use (at `login` or when a session starts, the chat showing "Installing Claude Code…") into the `spyria-harnesses` volume, one folder per pinned set, mounted read-only into the sessions; `SPYRIA_HARNESS_REGISTRY` sets another npm registry. The build fails when a package in the image has a license outside the allowlist of `scripts/check-licenses.ts`, and fills the test-only volume `spyria-test-harnesses` with the pinned harnesses for the docker tests. Build it locally before the first runtime; the server reads its content ID from `apps/agent/image-id` (or `SPYRIA_AGENT_IMAGE`) at start, and no `spyria-host` ever pulls it:
 
 ```sh
 bun run agent:build          # compile spyria-agent and docker build; cached by Docker
 bun run agent:versions       # pinned vs latest on npm, per tool
-bun run agent:bump <tool>    # pin the latest of claude-code | claude-agent-acp | codex | codex-acp | pi, then rebuild
+bun run agent:bump <tool>    # pin the latest of claude-code | claude-agent-acp | codex | codex-acp | pi, then rebuild (for Pi, also regenerates its lockfile)
 ```
 
 After a rebuild, restart the server: a new content ID applies to new runtimes. Without a built image a prompt says `Spyria's runtime image is not built: run bun run agent:build`.

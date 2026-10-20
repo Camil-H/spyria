@@ -18,6 +18,7 @@
     "test:ui": "bun run --cwd apps/web test:ui",
     "test:ui:update": "bun run --cwd apps/web test:ui:update",
     "check:boundaries": "depcruise apps packages --config .dependency-cruiser.cjs",
+    "check:locks": "bun scripts/check-locks.ts",
     "check:bundle": "bun run --cwd apps/web build && bun scripts/check-bundle.ts",
     "check:all": "bun scripts/check-all.ts",
     "check:docker": "bun scripts/check-all.ts --docker",

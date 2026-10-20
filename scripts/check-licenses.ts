@@ -15,6 +15,7 @@ const allowedLicenses = new Set([
   'Python-2.0',
 ])
 const globalModules = '/usr/local/lib/node_modules'
+const piModules = '/usr/local/lib/spyria/pi/node_modules'
 const baseImagePackages = ['npm', 'corepack']
 const listPackages = `const fs = require('fs'), path = require('path'), found = []
 const walk = (directory) => {
@@ -29,7 +30,7 @@ const walk = (directory) => {
     if (fs.existsSync(path.join(folder, 'node_modules'))) walk(path.join(folder, 'node_modules'))
   }
 }
-walk('${globalModules}')
+for (const root of ['${globalModules}', '${piModules}']) if (fs.existsSync(root)) walk(root)
 console.log(JSON.stringify(found))`
 
 type Found = { folder: string; name: string; version: string; license: unknown }

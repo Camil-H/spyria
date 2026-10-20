@@ -6,7 +6,17 @@ const isDocker = process.argv.includes('--docker')
 const checkName = isDocker ? 'check:docker' : 'check:all'
 const steps = isDocker
   ? ['stack:up', 'agent:build', 'test:docker:integration']
-  : ['lint', 'typecheck', 'check:boundaries', 'test', 'check:bundle', 'stack:up', 'test:integration', 'test:e2e']
+  : [
+      'lint',
+      'typecheck',
+      'check:boundaries',
+      'check:locks',
+      'test',
+      'check:bundle',
+      'stack:up',
+      'test:integration',
+      'test:e2e',
+    ]
 const timingFiles = isDocker ? ['integration-docker.xml'] : ['integration.xml', 'e2e-results.json']
 const repositoryRoot = new URL('../', import.meta.url).pathname
 const checkDirectory = `${repositoryRoot}.check/`
