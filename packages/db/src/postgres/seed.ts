@@ -135,7 +135,7 @@ if (import.meta.main) {
   const database = createDatabase()
   const shouldReset = process.argv.includes('--reset')
   const isSeeded = !shouldReset && (await database.$count(tables.users)) > 0
-  if (!isSeeded) await resetDatabase(database)
+  if (!isSeeded) await resetDatabase(database, (transaction) => transaction.delete(tables.llmCredentials))
   await database.$client.end()
   console.log(
     isSeeded
