@@ -43,7 +43,7 @@ export const sessionChoiceOf = ({
 }
 
 export const piThoughtLevels = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh']
-export const piModelOf = (id: string) => `${id.startsWith('anthropic/') ? 'hq-anthropic' : 'hq'}/${id}`
+export const piModelOf = (id: string) => `${id.startsWith('anthropic/') ? 'spyria-anthropic' : 'spyria'}/${id}`
 export const thoughtLevelOf = (effort: string | null) =>
   effort && piThoughtLevels.includes(effort) ? effort : undefined
 
@@ -63,13 +63,13 @@ export const localSessions = {
   'claude-code': {
     launch: 'claude-code-subscription',
     signIn: 'claude',
-    signInNotice: 'Sign in to Claude Code on your machine: docker exec -it hq-host spyria-host login claude',
+    signInNotice: 'Sign in to Claude Code on your machine: docker exec -it spyria-host spyria-host login claude',
     expiredNotice: 'Authentication required — sign in to Claude Code again',
   },
   codex: {
     launch: 'codex-subscription',
     signIn: 'codex',
-    signInNotice: 'Sign in to Codex on your machine: docker exec -it hq-host spyria-host login codex',
+    signInNotice: 'Sign in to Codex on your machine: docker exec -it spyria-host spyria-host login codex',
     expiredNotice: 'Authentication required — sign in to Codex again',
   },
 } as const satisfies Record<

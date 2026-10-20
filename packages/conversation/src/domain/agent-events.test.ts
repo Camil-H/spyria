@@ -140,7 +140,7 @@ test('Claude Code edits, reads and Spyria tools get their step types, a subagent
   const subagent = { id: 'conversation-1:toolu_task', model: '', modelName: '', task: '' }
   const diff = [{ type: 'diff', path: '/workspace/project/notes.md', oldText: null, newText: 'one\ntwo\n' }]
   const write = { title: 'Write notes.md', kind: 'edit', content: diff }
-  const mcp = { title: 'mcp__hq__fake-whoami', kind: 'other' }
+  const mcp = { title: 'mcp__spyria__fake-whoami', kind: 'other' }
   const stored = storedEventsOf([
     { event: toolCallUpdate(1, 'toolu_write', 'pending', write), delegation: subagent },
     { event: toolCallUpdate(2, 'toolu_write', 'completed', write), delegation: subagent },
@@ -185,9 +185,9 @@ test('Claude Code edits, reads and Spyria tools get their step types, a subagent
 test('a Codex command and a Spyria tool call start in progress and finish with Codex’s output shapes', () => {
   const command = { title: 'echo hello', kind: 'execute', rawInput: { command: 'echo hello' } }
   const mcp = {
-    title: 'mcp.hq.fake-whoami',
+    title: 'mcp.spyria.fake-whoami',
     kind: 'execute',
-    rawInput: { server: 'hq', tool: 'fake-whoami', arguments: { verbose: true } },
+    rawInput: { server: 'spyria', tool: 'fake-whoami', arguments: { verbose: true } },
   }
   const stored = storedEventsOf([
     { event: toolCallUpdate(1, 'call_command', 'in_progress', command) },

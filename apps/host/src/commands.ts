@@ -11,7 +11,7 @@ const imagePattern = /^sha256:[a-f0-9]{64}$/
 const runtimeIdPattern = /^[a-z0-9][a-z0-9-]{0,62}$/
 const apiKeyPattern = /^[A-Za-z0-9_-]{16,128}$/
 const spyriaAgentPort = 8000
-export const gatewayRelayAlias = 'hq-gateway-relay'
+export const gatewayRelayAlias = 'spyria-gateway-relay'
 const gibibyte = 1024 ** 3
 const volumeTargets = { ws: '/workspace', home: '/home/openhands', tmp: '/tmp' }
 const operations = ['create', 'prepare', 'start', 'stop', 'remove', 'status'] as const
@@ -70,7 +70,7 @@ export const containerBodyOf = ({
     Hostname: name,
     User: '10001:10001',
     Env: [`OH_SESSION_API_KEYS_0=${apiKey}`],
-    Labels: { 'hq.managed': '1', 'hq.runtime': runtimeId },
+    Labels: { 'spyria.managed': '1', 'spyria.runtime': runtimeId },
     HostConfig: {
       NetworkMode: networkNameOf(prefix, runtimeId),
       CapDrop: ['ALL'],
@@ -123,7 +123,8 @@ export const createCommandRunner = ({
   const managedContainer = async (runtimeId: string) => {
     const container = await docker<ContainerInfo>('GET', `/containers/${containerNameOf(prefix, runtimeId)}/json`)
     const labels = container.Config?.Labels ?? {}
-    if (labels['hq.managed'] !== '1' || labels['hq.runtime'] !== runtimeId) throw new Refused('not a managed runtime')
+    if (labels['spyria.managed'] !== '1' || labels['spyria.runtime'] !== runtimeId)
+      throw new Refused('not a managed runtime')
     return container
   }
   const joinNetwork = async (network: string) => {
@@ -134,9 +135,11 @@ export const createCommandRunner = ({
       }).catch(ignoring(403, 409))
   }
   const createNetwork = async (network: string) => {
-    await docker('POST', '/networks/create', { Name: network, Driver: 'bridge', Labels: { 'hq.managed': '1' } }).catch(
-      ignoring(409),
-    )
+    await docker('POST', '/networks/create', {
+      Name: network,
+      Driver: 'bridge',
+      Labels: { 'spyria.managed': '1' },
+    }).catch(ignoring(409))
     await joinNetwork(network)
   }
   const removeNetwork = async (network: string) => {
@@ -193,7 +196,7 @@ export const createCommandRunner = ({
       return `http://${address}:${spyriaAgentPort}`
     },
     runningCount: async () => {
-      const filters = encodeURIComponent(JSON.stringify({ label: ['hq.managed=1'] }))
+      const filters = encodeURIComponent(JSON.stringify({ label: ['spyria.managed=1'] }))
       const containers = await docker<{ Names: string[] }[]>('GET', `/containers/json?filters=${filters}`)
       return containers.filter((container) => container.Names.some((name) => name.startsWith(`/${prefix}rt-`))).length
     },

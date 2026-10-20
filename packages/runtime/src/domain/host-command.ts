@@ -7,7 +7,7 @@ const hostGateway = 'host.docker.internal'
 
 export type SignInTool = 'claude' | 'codex'
 
-export const signInCommandOf = (tool: SignInTool) => `docker exec -it hq-host spyria-host login ${tool}`
+export const signInCommandOf = (tool: SignInTool) => `docker exec -it spyria-host spyria-host login ${tool}`
 
 export const hostCommandOf = ({
   origin,
@@ -25,12 +25,12 @@ export const hostCommandOf = ({
   if (isLocalhost) url.hostname = hostGateway
   return [
     ...(isLocalhost ? [`docker build -q -t ${hostImage} apps/host >/dev/null &&`] : []),
-    'docker rm -f hq-host >/dev/null 2>&1; docker volume rm hq-host >/dev/null 2>&1;',
-    'docker run -d --name hq-host --restart unless-stopped',
+    'docker rm -f spyria-host >/dev/null 2>&1; docker volume rm spyria-host >/dev/null 2>&1;',
+    'docker run -d --name spyria-host --restart unless-stopped',
     dockerFlags,
     ...(isLocalhost ? [`--add-host ${hostGateway}:host-gateway`] : []),
     '--cap-drop ALL --security-opt no-new-privileges --read-only',
-    '-v hq-host:/state',
+    '-v spyria-host:/state',
     hostImage,
     ...(personal ? ['--personal'] : []),
     `${url.origin}/h/${code}`,

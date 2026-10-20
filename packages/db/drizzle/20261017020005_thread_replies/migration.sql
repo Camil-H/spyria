@@ -12,4 +12,4 @@ ALTER TABLE "messages" ADD CONSTRAINT "messages_3vmeRlAcBGif_fkey" FOREIGN KEY (
 ALTER TABLE "thread_read_markers" ADD CONSTRAINT "thread_read_markers_togPiyHMBi5U_fkey" FOREIGN KEY ("workspace_id","chat_id") REFERENCES "chats"("workspace_id","id");--> statement-breakpoint
 ALTER TABLE "thread_read_markers" ADD CONSTRAINT "thread_read_markers_FzeOFqBMpoKT_fkey" FOREIGN KEY ("workspace_id","user_id") REFERENCES "memberships"("workspace_id","user_id");--> statement-breakpoint
 ALTER TABLE "thread_read_markers" ADD CONSTRAINT "thread_read_markers_0MLRhzHVzBMC_fkey" FOREIGN KEY ("workspace_id","thread_root_id") REFERENCES "messages"("workspace_id","id");--> statement-breakpoint
-ALTER PUBLICATION "hq_zero" ADD TABLE "thread_read_markers";
+ALTER PUBLICATION "spyria_zero" ADD TABLE "thread_read_markers";

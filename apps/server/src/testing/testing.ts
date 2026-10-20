@@ -131,7 +131,7 @@ export const createHolds = () => {
   }
 }
 
-const sharedAppId = 'hqtest'
+const sharedAppId = 'spyriatest'
 const zeroConnectMilliseconds = 30_000
 
 export const requestMutation = async (

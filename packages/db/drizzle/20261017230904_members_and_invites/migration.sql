@@ -30,4 +30,4 @@ ALTER TABLE "invitations" ADD CONSTRAINT "invitations_workspace_id_workspaces_wo
 ALTER TABLE "invitations" ADD CONSTRAINT "invitations_dhezOQEmFv1k_fkey" FOREIGN KEY ("workspace_id","invited_by") REFERENCES "memberships"("workspace_id","user_id");--> statement-breakpoint
 ALTER TABLE "workspace_events" ADD CONSTRAINT "workspace_events_workspace_id_workspaces_workspace_id_fkey" FOREIGN KEY ("workspace_id") REFERENCES "workspaces"("workspace_id");--> statement-breakpoint
 ALTER TABLE "users" ADD CONSTRAINT "users_email_normalized" CHECK ("email" = lower(btrim("email")));--> statement-breakpoint
-ALTER PUBLICATION "hq_zero" ADD TABLE "invitations";
+ALTER PUBLICATION "spyria_zero" ADD TABLE "invitations";

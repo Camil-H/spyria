@@ -12,7 +12,7 @@ import postgres from 'postgres'
 import { createDatabase, databaseUrl } from './client.ts'
 import { resetDatabase } from './seed.ts'
 
-const templateDatabaseName = 'hq_test_template'
+const templateDatabaseName = 'spyria_test_template'
 export const databaseDropTimeoutMilliseconds = 30_000
 
 export const databaseUrlOf = (databaseName: string) =>
@@ -42,7 +42,7 @@ export const migrateDatabase = (database: ReturnType<typeof createDatabase>) =>
 
 export const createTestDatabase = async (
   template = templateDatabaseName,
-  name = `hq_test_${crypto.randomUUID().replaceAll('-', '')}`,
+  name = `spyria_test_${crypto.randomUUID().replaceAll('-', '')}`,
 ) => {
   await withAdmin(`create database "${name}" template "${template}"`)
   const database = createDatabase(databaseUrlOf(name))
@@ -60,9 +60,9 @@ const dropStaleTestObjects = async () => {
   const admin = postgres(databaseUrlOf('postgres'), { onnotice: () => {} })
   try {
     await admin`select pg_drop_replication_slot(slot_name) from pg_replication_slots
-      where not active and slot_name ~ '^(hqtest|hqe2e)'`
+      where not active and slot_name ~ '^(spyriatest|spyriae2e)'`
     const stale = await admin<{ datname: string }[]>`select datname from pg_database
-      where datname ~ '^(hq_test_[0-9a-f]{32}|hq_e2e_w[0-9]+)$'
+      where datname ~ '^(spyria_test_[0-9a-f]{32}|spyria_e2e_w[0-9]+)$'
         and datname not in (select datname from pg_stat_activity where datname is not null)`
     for (const { datname } of stale) await admin.unsafe(`drop database if exists "${datname}"`)
   } finally {
@@ -131,7 +131,7 @@ export const startZeroCache = async ({
       ZERO_CHANGE_STREAMER_PORT: String(port + 1),
       ZERO_REPLICA_FILE: replicaFile,
       ZERO_APP_ID: appId,
-      ZERO_APP_PUBLICATIONS: 'hq_zero',
+      ZERO_APP_PUBLICATIONS: 'spyria_zero',
       ZERO_ADMIN_PASSWORD: 'spyria-test',
       ZERO_NUM_SYNC_WORKERS: '1',
       ZERO_UPSTREAM_MAX_CONNS: '4',
@@ -219,13 +219,7 @@ export const testDexIssuer = 'http://localhost:5557/dex'
 const testDexContainer = 'spyria-test-dex'
 const testDexConfig = new URL('../../../../apps/web/e2e/dex-test.yaml', import.meta.url).pathname
 
-const removeLegacyTestContainers = () => {
-  const legacy = docker('ps', '-aq', '--filter', 'name=^hq-test-').stdout.toString().split('\n').filter(Boolean)
-  if (legacy.length > 0) docker('rm', '-fv', ...legacy)
-}
-
 export const startTestDex = async () => {
-  removeLegacyTestContainers()
   const configHash = createHash('sha256').update(readFileSync(testDexConfig)).digest('hex').slice(0, 16)
   const discoveryUrl = `${testDexIssuer}/.well-known/openid-configuration`
   const running = docker(
@@ -270,9 +264,8 @@ export const startTestGateway = async ({
   fakeLlmUrl: string
   oauthBase: string
 }) => {
-  removeLegacyTestContainers()
   const containerName = `spyria-test-gateway-${name}`
-  const databaseName = `hq_test_gateway_${name}`
+  const databaseName = `spyria_test_gateway_${name}`
   const configFile = join(tmpdir(), `${containerName}.json`)
   const gatewayConfig = JSON.parse(readFileSync(new URL('../../../../infra/bifrost.json', import.meta.url), 'utf8'))
   const setup = {

@@ -85,7 +85,7 @@ test.describe('Workspace hosts', () => {
     await expect(addDialogOf(page)).toContainText('within 15 minutes, from the Spyria repo folder')
     const command = await commandOf(page).inputValue()
     expect(command).toMatch(
-      /^docker build -q -t spyria-host apps\/host >\/dev\/null && docker rm -f hq-host .*; docker volume rm hq-host /,
+      /^docker build -q -t spyria-host apps\/host >\/dev\/null && docker rm -f spyria-host .*; docker volume rm spyria-host /,
     )
     expect(command).toContain('docker run')
     expect(command).toContain('--restart unless-stopped')

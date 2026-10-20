@@ -6,7 +6,7 @@ Org-agnostic, model-agnostic AI workspace: agent chats, dev sessions and knowled
 
 - Bun 1.3
 - Node 24 (zero-cache and Vite run on it)
-- Docker (Compose project `hq`: Postgres on 5434, Dex on 5556, zero-cache on 4848, the model gateway on 127.0.0.1:8180). The dev Docker objects keep their `hq` names (Compose project, `hq-*` containers and volumes, the `hq-host` container and volume, runtime and credential containers `hq-rt-*` and `hq-cred-*`) until the dev environment migration (spec 51, stage R1c)
+- Docker (Compose project `spyria`: Postgres on 5434, Dex on 5556, zero-cache on 4848, the model gateway on 127.0.0.1:8180; containers `spyria-*`)
 
 ## First run
 
@@ -17,7 +17,7 @@ bun run db:seed       # skips when the data is already there
 bun run dev           # adds zero-cache and the model gateway, then the server on 3000 and the app on http://localhost:5173
 ```
 
-Migrate and seed before the first `bun run dev`: zero-cache needs the `hq_zero` publication the migrations create.
+Migrate and seed before the first `bun run dev`: zero-cache needs the `spyria_zero` publication the migrations create.
 
 ## Signing in locally
 
@@ -27,7 +27,7 @@ The app signs in through Dex in a popup (allow popups for `localhost:5173`). The
 - `bob@example.com`: member of Acme
 - `nina@example.com`: no membership (shows the "not invited" screen)
 
-`bun run dev` sets dev values for `SPYRIA_TOKEN_SECRET`, `SPYRIA_OIDC_ISSUER`, `SPYRIA_OIDC_CLIENT_ID`, `SPYRIA_OIDC_REDIRECT_URI`, `SPYRIA_APP_ORIGIN`, `SPYRIA_GATEWAY_URL`, `SPYRIA_GATEWAY_ADMIN_USER` and `SPYRIA_GATEWAY_ADMIN_PASSWORD`; the server refuses to start without them.
+`bun run dev` sets dev values for `SPYRIA_TOKEN_SECRET`, `SPYRIA_OIDC_ISSUER`, `SPYRIA_OIDC_CLIENT_ID`, `SPYRIA_OIDC_REDIRECT_URI`, `SPYRIA_APP_ORIGIN`, `SPYRIA_GATEWAY_URL`, `SPYRIA_GATEWAY_ADMIN_USER` and `SPYRIA_GATEWAY_ADMIN_PASSWORD`; the server refuses to start without them. Every setting is listed with its dev default in `.env.example`; copy it to `.env` to change one (`bun run dev` and `bun run operator` read it, nothing needs it in dev).
 
 ## Signing in in production (SSO)
 
@@ -62,7 +62,7 @@ A dev runtime chat (New chat > Runtime > Dev) clones the chosen repository into 
 
 ## Adding a runtime host for dev
 
-Runtimes (Spyria's runtime image with spyria-agent) run on runtime hosts: any machine with Docker running the host program (image `spyria-host`, container `hq-host`), which dials out to Spyria.
+Runtimes (Spyria's runtime image with spyria-agent) run on runtime hosts: any machine with Docker running the host program (image `spyria-host`, container `spyria-host`), which dials out to Spyria.
 
 ```sh
 docker build -t spyria-host apps/host
@@ -70,11 +70,11 @@ docker build -t spyria-host apps/host
 
 Then, signed in as a workspace admin (Alice), open the workspace menu, **Workspace settings**, **Add runtime host**, give it a name and copy the command. On a Mac (OrbStack or Docker Desktop), switch **Rootless Docker** off, and in the copied command replace `localhost` with `host.docker.internal` (the container cannot reach the Mac's `localhost`); the rooted command adds group `0` on macOS by itself. The row turns Online within seconds. Hosts never pull: build Spyria's runtime image first (below).
 
-Without Docker for `spyria-host` itself, run it as a process against the local Docker: `SPYRIA_HOST_STATE_DIR=.spyria-host bun apps/host/src/main.ts http://localhost:5173/h/<code>`. Remove the host in the settings page when done, then `docker rm -f hq-host` and `docker volume rm hq-host`.
+Without Docker for `spyria-host` itself, run it as a process against the local Docker: `SPYRIA_HOST_STATE_DIR=.spyria-host bun apps/host/src/main.ts http://localhost:5173/h/<code>`. Remove the host in the settings page when done, then `docker rm -f spyria-host` and `docker volume rm spyria-host`.
 
-With a host online, a prompt in a runtime chat starts that chat's runtime and Pi answers. Runtimes call the model through their host: `spyria-host` relays `/v1/*` (at `http://hq-gateway-relay:4000/v1` on the runtime's network) to Spyria, which runs each call on the prompting member's key in the gateway. Rebuild the `spyria-host` image after pulling this change (`docker build -t spyria-host apps/host`, then recreate the container), or its runtimes cannot reach a model.
+With a host online, a prompt in a runtime chat starts that chat's runtime and Pi answers. Runtimes call the model through their host: `spyria-host` relays `/v1/*` (at `http://spyria-gateway-relay:4000/v1` on the runtime's network) to Spyria, which runs each call on the prompting member's key in the gateway. Rebuild the `spyria-host` image after pulling this change (`docker build -t spyria-host apps/host`, then recreate the container), or its runtimes cannot reach a model.
 
-Each runtime gets its own Docker network (`hq-rt-<id>-net`), which `spyria-host` joins, so runtimes on one host cannot reach each other where Docker's isolation rules apply (Docker Engine on Linux; OrbStack accepts traffic between Docker networks). Egress on cloud hosts: Spyria does not filter runtimes' outbound traffic yet; block the metadata endpoint (`169.254.169.254`) and private ranges in the cloud provider's firewall.
+Each runtime gets its own Docker network (`spyria-rt-<id>-net`), which `spyria-host` joins, so runtimes on one host cannot reach each other where Docker's isolation rules apply (Docker Engine on Linux; OrbStack accepts traffic between Docker networks). Egress on cloud hosts: Spyria does not filter runtimes' outbound traffic yet; block the metadata endpoint (`169.254.169.254`) and private ranges in the cloud provider's firewall.
 
 ## Spyria runtime image
 
@@ -94,8 +94,8 @@ A member can run Claude Code on their own Claude subscription, or Codex on their
 
 1. **Profile**, **My machine**, **Add my machine**: copy the command, which ends with `spyria-host --personal <claim URL>` (on a Mac, switch **Rootless Docker** off and replace `localhost` with `host.docker.internal` as above), and run it on your machine. Never run it on a machine others use: the agent there can read your Claude and ChatGPT sign-ins.
 2. Sign in once:
-   - Claude Code: `docker exec -it hq-host spyria-host login claude`, open the printed URL, sign in and paste the code. The sign-in stays in the `hq-cred-claude` volume. `docker exec -it hq-host spyria-host logout claude` deletes it.
-   - Codex: `docker exec -it hq-host spyria-host login codex`, open the printed URL and enter the one-time code. ChatGPT may ask you to enable device code sign-in first (ChatGPT settings, **Security**). The sign-in stays in the `hq-cred-codex` volume (Codex's whole home, shared by your Codex sessions). `docker exec -it hq-host spyria-host logout codex` deletes it offline; to also revoke the session at OpenAI, log out of all devices in ChatGPT's **Security** settings.
+   - Claude Code: `docker exec -it spyria-host spyria-host login claude`, open the printed URL, sign in and paste the code. The sign-in stays in the `spyria-cred-claude` volume. `docker exec -it spyria-host spyria-host logout claude` deletes it.
+   - Codex: `docker exec -it spyria-host spyria-host login codex`, open the printed URL and enter the one-time code. ChatGPT may ask you to enable device code sign-in first (ChatGPT settings, **Security**). The sign-in stays in the `spyria-cred-codex` volume (Codex's whole home, shared by your Codex sessions). `docker exec -it spyria-host spyria-host logout codex` deletes it offline; to also revoke the session at OpenAI, log out of all devices in ChatGPT's **Security** settings.
    - Both stay on your machine only; Spyria never sees them.
 3. **New chat**, **On my machine · Claude Code subscription** or **On my machine · Codex (ChatGPT plan)**. Only you prompt it (other members read it); it runs on your plan's default model, without Spyria's routing, keys or metering.
 
@@ -105,8 +105,8 @@ Manual checks, not covered by tests (they need a real subscription):
 
 - After `spyria-host login claude`, a real turn in an "On my machine" chat answers on the subscription.
 - Ask the agent to print `~/.claude/.credentials.json`: the stored step shows `[redacted]`, and `grep sk-ant-` over the chat's events in Postgres finds nothing.
-- The session keeps working after the token expires and refreshes, and after its runtime is removed (the sign-in survives in `hq-cred-claude`); VS Code's **Dev Containers: Attach to Running Container** opens the runtime (its server and extensions downloaded on the Mac, since runtimes have no internet).
-- `spyria-host login codex` completes with the device code (note whether ChatGPT asked to enable device code sign-in); `auth.json` in `hq-cred-codex` is `0600` with `auth_mode: "chatgpt"`.
+- The session keeps working after the token expires and refreshes, and after its runtime is removed (the sign-in survives in `spyria-cred-claude`); VS Code's **Dev Containers: Attach to Running Container** opens the runtime (its server and extensions downloaded on the Mac, since runtimes have no internet).
+- `spyria-host login codex` completes with the device code (note whether ChatGPT asked to enable device code sign-in); `auth.json` in `spyria-cred-codex` is `0600` with `auth_mode: "chatgpt"`.
 - The refresh token's shape, without printing values: `jq '.tokens | map_values(.[0:6] + "…" + (length|tostring))' auth.json`. `id_token` and `access_token` start with `eyJ`; if `refresh_token` has a stable prefix, add it to the redaction formats in `apps/host/src/personal.ts`.
 - A real turn in an "On my machine · Codex" chat answers on the plan's default model (the model shows in the stored events).
 - Two Codex sessions started at the same moment both answer, and neither is signed out (the refresh token rotates at every session start).
@@ -115,7 +115,7 @@ Manual checks, not covered by tests (they need a real subscription):
 
 ## The model gateway
 
-`bun run dev` starts `hq-gateway` (Bifrost, pinned by digest, config in `infra/bifrost.json`) on `127.0.0.1:8180`. Its first start runs the one-shot `hq-gateway-database` container, which creates a `bifrost` role and database on `hq-postgres` (outside Spyria's migrations); its own data lives in the `hq-gateway-data` volume. Members' API keys are stored in the gateway only: Spyria keeps a reference and the last 4 characters. Dev secrets come from `SPYRIA_GATEWAY_ENCRYPTION_KEY`, `SPYRIA_GATEWAY_SETUP_TOKEN`, `SPYRIA_GATEWAY_ADMIN_USER`, `SPYRIA_GATEWAY_ADMIN_PASSWORD` and `SPYRIA_GATEWAY_DB_PASSWORD` (dev defaults in `infra/docker-compose.yml`); the encryption key can never change without wiping the gateway's database.
+`bun run dev` starts `spyria-gateway` (Bifrost, pinned by digest, config in `infra/bifrost.json`) on `127.0.0.1:8180`. Its first start runs the one-shot `spyria-gateway-database` container, which creates a `bifrost` role and database on `spyria-postgres` (outside Spyria's migrations); its own data lives in the `spyria-gateway-data` volume. Members' API keys are stored in the gateway only: Spyria keeps a reference and the last 4 characters. Dev secrets come from `SPYRIA_GATEWAY_ENCRYPTION_KEY`, `SPYRIA_GATEWAY_SETUP_TOKEN`, `SPYRIA_GATEWAY_ADMIN_USER`, `SPYRIA_GATEWAY_ADMIN_PASSWORD` and `SPYRIA_GATEWAY_DB_PASSWORD` (dev defaults in `infra/docker-compose.yml`); the encryption key can never change without wiping the gateway's database.
 
 Keys added before the gateway existed, including Alice's seeded Anthropic key, are not in it: remove and re-add them in the profile, or prompts are refused. Supported providers are OpenAI, Anthropic, Mistral and Fake. Without real keys, add a key with provider `Fake` (or `Fake-small`, which reaches only `fake-small`) and any secret (a secret containing `refused` is refused, to try the error path): the dev server registers its fake LLM (`/fake-llm`) as the gateway's `fake` and `fake-small` providers. Setting `SPYRIA_LLM_MODEL` (for example `openai/anthropic/claude-sonnet-4-5` with an Anthropic key) runs every conversation on that model with routing off, and the fake LLM is not mounted.
 
@@ -133,7 +133,7 @@ Members connect tools (MCP servers) in Profile > Connections > My connections; t
 2. **Notion:** nothing to register (the gateway registers itself with Notion's MCP server); run `bun run tools:setup notion`.
 3. Each setup prints a login URL: open it, log in once with your own account (the gateway uses it only to discover the server's tools), approve, then press Enter.
 
-The OAuth redirect goes through Spyria's origin: the gateway's `mcp_external_client_url` is `SPYRIA_GATEWAY_OAUTH_BASE` (default `http://localhost:5173/gateway-oauth`, served by Vite's proxy to the server). Changing it means recreating `hq-gateway` (`docker compose -f infra/docker-compose.yml --profile gateway up -d --force-recreate gateway`) and setting servers up again. After pulling this change, recreate `hq-gateway` (new config) and rebuild `spyria-host` (it now relays `/mcp`).
+The OAuth redirect goes through Spyria's origin: the gateway's `mcp_external_client_url` is `SPYRIA_GATEWAY_OAUTH_BASE` (default `http://localhost:5173/gateway-oauth`, served by Vite's proxy to the server). Changing it means recreating `spyria-gateway` (`docker compose -f infra/docker-compose.yml --profile gateway up -d --force-recreate gateway`) and setting servers up again. After pulling this change, recreate `spyria-gateway` (new config) and rebuild `spyria-host` (it now relays `/mcp`).
 
 Without real accounts, run the fake OAuth-protected MCP server (`bun apps/server/src/testing/fake-mcp.ts`, port 3001, approves any login as `fake-admin` or as the `fake_mcp_user` cookie) and `bun run tools:setup fake`. Real GitHub and Notion smoke run (needs your login): set both up, connect them in your profile, then in a runtime chat with a real model (`SPYRIA_LLM_MODEL`) ask the agent to list your GitHub repositories and to search your Notion workspace; the chat shows "Used <tool> (GitHub)" and "Used <tool> (Notion)" steps. Disconnect revokes the gateway's token only: remove the grant at the provider (GitHub settings > Applications, Notion > Connections) to revoke it upstream.
 

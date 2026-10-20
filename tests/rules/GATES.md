@@ -97,7 +97,7 @@ Every rule of the architecture standard (`.claude/skills/architecture`) and what
 | `spyria-host` is self-contained | depcruise `host-and-agent-import-nothing-from-spyria` (also bare `@spyria/` specifiers), `host-imported-by-nothing`; proven by probe imports |
 | `spyria-host` command set | unit `apps/host/src/commands.test.ts`: only create, prepare, start, stop, remove and status, the image prefix (also for `prepare`, and integration `sandbox` "... prepare refuses another image"), no extra request field (host paths, ports, privileges, capabilities, network, user, environment), runtime id and API key patterns, relay paths on the Agent Server origin only |
 | Agent Server hardening | unit `commands.test.ts` "creates the container with exactly the hardening flags"; integration `sandbox` inspects the created container's `HostConfig` (user 10001, `CapDrop ALL`, `no-new-privileges`, read-only root, 2 GiB, 2 CPUs, 512 PIDs, no port, no bind, named volumes only) |
-| Runtime host secrets never replicated | `claim_code_hash`, `token_hash` and `runtimes.api_key_ref` are left out of the Zero schema and the `hq_zero` column list (integration `schema` "the zero publication replicates exactly ...", `runtime-hosts` and `runtimes` publication checks); bundle gate fails on them in client assets |
+| Runtime host secrets never replicated | `claim_code_hash`, `token_hash` and `runtimes.api_key_ref` are left out of the Zero schema and the `spyria_zero` column list (integration `schema` "the zero publication replicates exactly ...", `runtime-hosts` and `runtimes` publication checks); bundle gate fails on them in client assets |
 
 ## Dormant
 

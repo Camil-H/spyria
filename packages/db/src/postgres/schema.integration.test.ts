@@ -29,7 +29,7 @@ test('every table except users carries a non-null workspace_id', async () => {
 
 test('the zero publication replicates exactly the tables and columns of the Zero schema', async () => {
   const published = await emptyDatabase.database.$client<{ tablename: string; attnames: string[] }[]>`
-    select tablename, attnames from pg_publication_tables where pubname = 'hq_zero' order by tablename`
+    select tablename, attnames from pg_publication_tables where pubname = 'spyria_zero' order by tablename`
   const replicated = Object.values(schema.tables).map((table) => ({
     tablename: 'serverName' in table ? table.serverName : table.name,
     attnames: Object.entries(table.columns).map(([name, column]) =>

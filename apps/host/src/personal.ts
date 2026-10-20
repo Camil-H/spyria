@@ -66,7 +66,7 @@ export const credentialsReaderBodyOf = (prefix: string, image: string, tool: Cre
   Image: image,
   User: '10001:10001',
   NetworkDisabled: true,
-  Labels: { 'hq.managed': '1' },
+  Labels: { 'spyria.managed': '1' },
   HostConfig: { ...hardening, NetworkMode: 'none', Mounts: [credentialsMountOf(prefix, tool, readerTarget)] },
 })
 
@@ -92,7 +92,7 @@ export const credentialsContainerBodyOf = (
     AttachStdin: isLogin,
     AttachStdout: true,
     AttachStderr: true,
-    Labels: { 'hq.managed': '1' },
+    Labels: { 'spyria.managed': '1' },
     HostConfig: {
       ...hardening,
       NetworkMode: isLogin ? 'bridge' : 'none',
@@ -201,7 +201,7 @@ const readerOnceConnected = async (docker: Docker, readerName: string) => {
     )
     if (reader) return reader
     if (Date.now() > deadline)
-      throw new Error('spyria-host did not connect to Spyria: check its logs with docker logs hq-host')
+      throw new Error('spyria-host did not connect to Spyria: check its logs with docker logs spyria-host')
     if (attempt === 0) console.log('Waiting for spyria-host to connect to Spyria…')
     await Bun.sleep(readerPollMilliseconds)
   }

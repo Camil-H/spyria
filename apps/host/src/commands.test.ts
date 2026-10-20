@@ -37,7 +37,7 @@ test.each([
 const contentId = `sha256:${'b'.repeat(64)}`
 
 test.each([true, false])('a create sets only the session key in the environment (personal %p)', (personal) => {
-  expect(containerBodyOf({ prefix: 'hq-', ...create, personal }).Env).toEqual([`OH_SESSION_API_KEYS_0=${apiKey}`])
+  expect(containerBodyOf({ prefix: 'spyria-', ...create, personal }).Env).toEqual([`OH_SESSION_API_KEYS_0=${apiKey}`])
 })
 
 test.each([true, false])(
@@ -49,7 +49,7 @@ test.each([true, false])(
       throw new DockerError(404, 'No such image')
     }) as Docker
     await expect(
-      createCommandRunner({ docker, prefix: 'hq-', personal }).run({ op: 'prepare', image: contentId }),
+      createCommandRunner({ docker, prefix: 'spyria-', personal }).run({ op: 'prepare', image: contentId }),
     ).rejects.toThrow('run bun run agent:build')
     expect(calls).toEqual([`GET /images/${contentId}/json`])
   },
@@ -76,7 +76,7 @@ test.each([
   expect(() => parseCommand('create', { ...create, ...extraFields })).toThrow('refused')
 })
 
-test.each(['../hq-postgres', 'hq-postgres/../x', 'Runtime', '', 'a'.repeat(64), 'runtime 1', 42])(
+test.each(['../spyria-postgres', 'spyria-postgres/../x', 'Runtime', '', 'a'.repeat(64), 'runtime 1', 42])(
   'refuses the runtime id %p',
   (runtimeId) => {
     expect(() => parseCommand('start', { runtimeId })).toThrow('refused')
@@ -94,14 +94,14 @@ test('refuses extra arguments on start, stop, remove and status', () => {
 })
 
 test('creates the container with exactly the hardening flags and three named volumes', () => {
-  expect(containerBodyOf({ prefix: 'hq-', runtimeId: 'runtime-1', image, apiKey })).toEqual({
+  expect(containerBodyOf({ prefix: 'spyria-', runtimeId: 'runtime-1', image, apiKey })).toEqual({
     Image: image,
-    Hostname: 'hq-rt-runtime-1',
+    Hostname: 'spyria-rt-runtime-1',
     User: '10001:10001',
     Env: [`OH_SESSION_API_KEYS_0=${apiKey}`],
-    Labels: { 'hq.managed': '1', 'hq.runtime': 'runtime-1' },
+    Labels: { 'spyria.managed': '1', 'spyria.runtime': 'runtime-1' },
     HostConfig: {
-      NetworkMode: 'hq-rt-runtime-1-net',
+      NetworkMode: 'spyria-rt-runtime-1-net',
       CapDrop: ['ALL'],
       SecurityOpt: ['no-new-privileges'],
       ReadonlyRootfs: true,
@@ -113,9 +113,9 @@ test('creates the container with exactly the hardening flags and three named vol
       PidsLimit: 512,
       RestartPolicy: { Name: 'no' },
       Mounts: [
-        { Type: 'volume', Source: 'hq-rt-runtime-1-ws', Target: '/workspace' },
-        { Type: 'volume', Source: 'hq-rt-runtime-1-home', Target: '/home/openhands' },
-        { Type: 'volume', Source: 'hq-rt-runtime-1-tmp', Target: '/tmp' },
+        { Type: 'volume', Source: 'spyria-rt-runtime-1-ws', Target: '/workspace' },
+        { Type: 'volume', Source: 'spyria-rt-runtime-1-home', Target: '/home/openhands' },
+        { Type: 'volume', Source: 'spyria-rt-runtime-1-tmp', Target: '/tmp' },
       ],
     },
   })
@@ -135,8 +135,8 @@ const recordingDocker = () => {
     calls.push({ method, path, body })
     if (path.endsWith('/json') && path.startsWith('/containers/'))
       return {
-        Config: { Labels: { 'hq.managed': '1', 'hq.runtime': 'runtime-1' } },
-        NetworkSettings: { Networks: { 'hq-rt-runtime-1-net': {} } },
+        Config: { Labels: { 'spyria.managed': '1', 'spyria.runtime': 'runtime-1' } },
+        NetworkSettings: { Networks: { 'spyria-rt-runtime-1-net': {} } },
       }
     return {}
   }) as Docker
@@ -144,66 +144,70 @@ const recordingDocker = () => {
 }
 
 test('a personal create mounts both credentials volumes at ~/.claude and ~/.codex, a workspace create does not', () => {
-  const personalMounts = containerBodyOf({ prefix: 'hq-', ...create, personal: true }).HostConfig.Mounts
+  const personalMounts = containerBodyOf({ prefix: 'spyria-', ...create, personal: true }).HostConfig.Mounts
   expect(personalMounts.slice(-2)).toEqual([
-    { Type: 'volume', Source: 'hq-cred-claude', Target: '/home/openhands/.claude' },
-    { Type: 'volume', Source: 'hq-cred-codex', Target: '/home/openhands/.codex' },
+    { Type: 'volume', Source: 'spyria-cred-claude', Target: '/home/openhands/.claude' },
+    { Type: 'volume', Source: 'spyria-cred-codex', Target: '/home/openhands/.codex' },
   ])
-  expect(personalMounts.slice(0, -2)).toEqual(containerBodyOf({ prefix: 'hq-', ...create }).HostConfig.Mounts)
-  expect(JSON.stringify(containerBodyOf({ prefix: 'hq-', ...create }))).not.toContain('cred-')
+  expect(personalMounts.slice(0, -2)).toEqual(containerBodyOf({ prefix: 'spyria-', ...create }).HostConfig.Mounts)
+  expect(JSON.stringify(containerBodyOf({ prefix: 'spyria-', ...create }))).not.toContain('cred-')
 })
 
 test('a personal host creates the runtime with both credentials volumes after preparing their readers', async () => {
   const { docker, calls } = recordingDocker()
-  await createCommandRunner({ docker, prefix: 'hq-', personal: true }).run({ op: 'create', ...create })
+  await createCommandRunner({ docker, prefix: 'spyria-', personal: true }).run({ op: 'create', ...create })
   const created = calls.filter((call) => call.path.startsWith('/containers/create'))
   expect(created.map((call) => call.path)).toEqual([
-    '/containers/create?name=hq-cred-claude-reader',
-    '/containers/create?name=hq-cred-codex-reader',
-    '/containers/create?name=hq-rt-runtime-1',
+    '/containers/create?name=spyria-cred-claude-reader',
+    '/containers/create?name=spyria-cred-codex-reader',
+    '/containers/create?name=spyria-rt-runtime-1',
   ])
-  expect(JSON.stringify(created[1]?.body)).toContain('"Source":"hq-cred-codex","Target":"/workspace/project"')
-  expect(JSON.stringify(created[2]?.body)).toContain('"Source":"hq-cred-claude","Target":"/home/openhands/.claude"')
-  expect(JSON.stringify(created[2]?.body)).toContain('"Source":"hq-cred-codex","Target":"/home/openhands/.codex"')
+  expect(JSON.stringify(created[1]?.body)).toContain('"Source":"spyria-cred-codex","Target":"/workspace/project"')
+  expect(JSON.stringify(created[2]?.body)).toContain('"Source":"spyria-cred-claude","Target":"/home/openhands/.claude"')
+  expect(JSON.stringify(created[2]?.body)).toContain('"Source":"spyria-cred-codex","Target":"/home/openhands/.codex"')
 })
 
 test('removing a runtime never deletes the credentials volumes', async () => {
   const { docker, calls } = recordingDocker()
-  await createCommandRunner({ docker, prefix: 'hq-', personal: true }).run({ op: 'remove', runtimeId: 'runtime-1' })
+  await createCommandRunner({ docker, prefix: 'spyria-', personal: true }).run({ op: 'remove', runtimeId: 'runtime-1' })
   const deleted = calls.filter((call) => call.method === 'DELETE').map((call) => call.path)
   expect(deleted).toEqual([
-    '/containers/hq-rt-runtime-1?force=true',
-    '/volumes/hq-rt-runtime-1-ws',
-    '/volumes/hq-rt-runtime-1-home',
-    '/volumes/hq-rt-runtime-1-tmp',
-    '/networks/hq-rt-runtime-1-net',
+    '/containers/spyria-rt-runtime-1?force=true',
+    '/volumes/spyria-rt-runtime-1-ws',
+    '/volumes/spyria-rt-runtime-1-home',
+    '/volumes/spyria-rt-runtime-1-tmp',
+    '/networks/spyria-rt-runtime-1-net',
   ])
 })
 
 test('each runtime gets its own network, which a containerized spyria-host joins on create and start and leaves on remove', async () => {
   const { docker, calls } = recordingDocker()
-  const runner = createCommandRunner({ docker, prefix: 'hq-', selfContainerId: 'self-1' })
-  const joined = { Container: 'self-1', EndpointConfig: { Aliases: ['hq-gateway-relay'] } }
+  const runner = createCommandRunner({ docker, prefix: 'spyria-', selfContainerId: 'self-1' })
+  const joined = { Container: 'self-1', EndpointConfig: { Aliases: ['spyria-gateway-relay'] } }
   await runner.run({ op: 'create', ...create })
   expect(calls.filter((call) => call.path.startsWith('/networks/'))).toEqual([
     {
       method: 'POST',
       path: '/networks/create',
-      body: { Name: 'hq-rt-runtime-1-net', Driver: 'bridge', Labels: { 'hq.managed': '1' } },
+      body: { Name: 'spyria-rt-runtime-1-net', Driver: 'bridge', Labels: { 'spyria.managed': '1' } },
     },
-    { method: 'POST', path: '/networks/hq-rt-runtime-1-net/connect', body: joined },
+    { method: 'POST', path: '/networks/spyria-rt-runtime-1-net/connect', body: joined },
   ])
   calls.splice(0)
   await runner.run({ op: 'start', runtimeId: 'runtime-1' })
   expect(calls.map(({ method, path }) => `${method} ${path}`)).toEqual([
-    'GET /containers/hq-rt-runtime-1/json',
-    'POST /networks/hq-rt-runtime-1-net/connect',
-    'POST /containers/hq-rt-runtime-1/start',
+    'GET /containers/spyria-rt-runtime-1/json',
+    'POST /networks/spyria-rt-runtime-1-net/connect',
+    'POST /containers/spyria-rt-runtime-1/start',
   ])
   calls.splice(0)
   await runner.run({ op: 'remove', runtimeId: 'runtime-1' })
   expect(calls.filter((call) => call.path.startsWith('/networks/'))).toEqual([
-    { method: 'POST', path: '/networks/hq-rt-runtime-1-net/disconnect', body: { Container: 'self-1', Force: true } },
-    { method: 'DELETE', path: '/networks/hq-rt-runtime-1-net', body: undefined },
+    {
+      method: 'POST',
+      path: '/networks/spyria-rt-runtime-1-net/disconnect',
+      body: { Container: 'self-1', Force: true },
+    },
+    { method: 'DELETE', path: '/networks/spyria-rt-runtime-1-net', body: undefined },
   ])
 })

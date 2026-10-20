@@ -13,5 +13,5 @@ ALTER TABLE "member_gateway_keys" ADD CONSTRAINT "member_gateway_keys_ZnC0Q45Z6V
 UPDATE "runtimes" SET
   "api_key" = (SELECT "value" FROM "placeholder_secrets" WHERE "placeholder_secrets"."workspace_id" = "runtimes"."workspace_id" AND "placeholder_secrets"."ref" = "runtimes"."api_key_ref"),
   "llm_token_hash" = (SELECT encode(sha256(convert_to("value", 'UTF8')), 'hex') FROM "placeholder_secrets" WHERE "placeholder_secrets"."workspace_id" = "runtimes"."workspace_id" AND "placeholder_secrets"."ref" = "runtimes"."llm_token_ref");--> statement-breakpoint
-ALTER PUBLICATION "hq_zero" DROP TABLE "chats";--> statement-breakpoint
-ALTER PUBLICATION "hq_zero" ADD TABLE "chats" ("workspace_id", "id", "project_id", "type", "mode", "owner_kind", "owner_user_id", "owner_service_identity_id", "name", "model", "reasoning_effort", "git_branch", "origin_chat_id", "agent_turn_message_id", "archived", "created_at");
+ALTER PUBLICATION "spyria_zero" DROP TABLE "chats";--> statement-breakpoint
+ALTER PUBLICATION "spyria_zero" ADD TABLE "chats" ("workspace_id", "id", "project_id", "type", "mode", "owner_kind", "owner_user_id", "owner_service_identity_id", "name", "model", "reasoning_effort", "git_branch", "origin_chat_id", "agent_turn_message_id", "archived", "created_at");

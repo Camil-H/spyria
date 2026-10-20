@@ -84,9 +84,9 @@ test('a delegated task runs in a Pi sub-conversation on the classified model, it
   expect(relay.agentCount()).toBe(1)
   expect(relay.prompts).toEqual(['Delegate the listing', 'List the files'])
   expect(sub?.parent_conversation_id).toBe((await stack.runtimeOf(chat)).agent_conversation_id)
-  expect(sub?.agent).toMatchObject({ acp_model: 'hq/fake/fake-small', acp_thought_level: 'low' })
+  expect(sub?.agent).toMatchObject({ acp_model: 'spyria/fake/fake-small', acp_thought_level: 'low' })
   expect(tokenOf(sub)).toStartWith('dl_')
-  expect(main()?.agent.acp_model).toBe('hq/fake/fake-medium')
+  expect(main()?.agent.acp_model).toBe('spyria/fake/fake-medium')
 
   const [delegation] = await delegationsOf(chat)
   expect(delegation).toMatchObject({
@@ -227,7 +227,7 @@ test.each([
       delegatingScript({ steps: [step], delegateRoute: route, subagents: { [model.replace('fake/', '')]: subagent } }),
     )
     await promptAndAnswer(chat, `Delegate with ${policy}`)
-    expect(subs().map((sub) => sub.agent.acp_model)).toEqual([`hq/${model}`])
+    expect(subs().map((sub) => sub.agent.acp_model)).toEqual([`spyria/${model}`])
     expect(
       (await delegationsOf(chat)).map(({ model, reason, policy, classifier_output }) => ({
         model,
@@ -370,7 +370,7 @@ test('g-3. after a delegation, a model picked from the listing relaunches Pi on 
   const mains = (relay.created as Launch[]).filter((launch) => !launch.parent_conversation_id)
   expect(mains).toHaveLength(2)
   expect(mains[1]?.agent).toMatchObject({
-    acp_model: 'hq/fake/fake-model',
+    acp_model: 'spyria/fake/fake-model',
     acp_resume_session_id: String(sessionsStarted[0]?.event.update.sessionId),
   })
   const request = stack.fakeLlmBodies.findLast((body) => body.includes('What is the code word?')) ?? ''

@@ -41,7 +41,7 @@ const sessionsStartedOf = async (chat: ChatId) =>
 test.each([
   {
     provider: 'Anthropic',
-    piProvider: 'hq-anthropic',
+    piProvider: 'spyria-anthropic',
     baseUrl: 'http://fake-gateway-relay.test:4000',
     api: 'anthropic-messages',
     models: ['anthropic/claude-opus-5-5', 'anthropic/claude-sonnet-5-5', 'anthropic/claude-haiku-5-5'],
@@ -49,7 +49,7 @@ test.each([
   },
   {
     provider: 'OpenAI',
-    piProvider: 'hq',
+    piProvider: 'spyria',
     baseUrl: 'http://fake-gateway-relay.test:4000/v1',
     api: 'openai-completions',
     models: ['openai/gpt-5', 'openai/gpt-5-mini', 'openai/gpt-5-nano'],
@@ -57,7 +57,7 @@ test.each([
   },
   {
     provider: 'Mistral',
-    piProvider: 'hq',
+    piProvider: 'spyria',
     baseUrl: 'http://fake-gateway-relay.test:4000/v1',
     api: 'openai-completions',
     models: ['mistral/mistral-large-latest', 'mistral/mistral-medium-latest', 'mistral/mistral-small-latest'],
@@ -84,7 +84,7 @@ test.each([
     { provider: 'Z.ai', models: ['zai/glm-5.3', 'zai/glm-4.7', 'zai/glm-5.3-flash'] },
   ].map(({ provider, models }) => ({
     provider,
-    piProvider: 'hq',
+    piProvider: 'spyria',
     baseUrl: 'http://fake-gateway-relay.test:4000/v1',
     api: 'openai-completions',
     models,
@@ -135,7 +135,7 @@ test('a routing change mid-session switches the same Pi session to the other pro
   stack.setFakeLlmScript({ route: { tier: 'large', confidence: 'high', effort: 'high' } })
   const first = await finished(await prompt(chat, 'Start large', bobInAcme), chat)
   expect(first.at(-1)?.body).toBe(
-    '[t1] Hello from the stub (model hq-anthropic/anthropic/claude-opus-5-5, mode default).',
+    '[t1] Hello from the stub (model spyria-anthropic/anthropic/claude-opus-5-5, mode default).',
   )
   expect(launches()[0]?.agent).toMatchObject({ acp_thought_level: 'high' })
 
@@ -148,9 +148,9 @@ test('a routing change mid-session switches the same Pi session to the other pro
   ).toEqual(succeeded)
   const second = await finished(await prompt(chat, 'Now on OpenAI', bobInAcme), chat)
   expect(second.map((reply) => reply.body)).toEqual([
-    '[t2] Hello from the stub (model hq/openai/gpt-5-mini, mode default).',
+    '[t2] Hello from the stub (model spyria/openai/gpt-5-mini, mode default).',
   ])
-  expect(relay.modelSwitches).toEqual(['hq/openai/gpt-5-mini'])
+  expect(relay.modelSwitches).toEqual(['spyria/openai/gpt-5-mini'])
   expect(relay.thoughtLevels).toEqual(['high'])
   expect(launches()).toHaveLength(1)
   expect(relay.prompts).toEqual(['Start large', 'Now on OpenAI'])
@@ -167,7 +167,7 @@ test('an effort change keeps the model and session and sets Pi’s thinking leve
   expect(await setEffort('high')).toEqual(succeeded)
   const second = await finished(await prompt(chat, 'Think harder', bobInAcme), chat)
   expect(second.map((reply) => reply.body)).toEqual([
-    '[t2] Hello from the stub (model hq-anthropic/anthropic/claude-sonnet-5-5, mode default).',
+    '[t2] Hello from the stub (model spyria-anthropic/anthropic/claude-sonnet-5-5, mode default).',
   ])
   await finished(await prompt(chat, 'Same effort', bobInAcme), chat)
   expect(relay.thoughtLevels).toEqual(['high'])
@@ -180,7 +180,7 @@ test('a manual pick from the full listing relaunches Pi with that model on the s
   const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'editor' }] })
   const first = await finished(await prompt(chat, 'Start on OpenRouter', bobInAcme), chat)
   expect(first.at(-1)?.body).toBe(
-    '[t1] Hello from the stub (model hq/openrouter/anthropic/claude-sonnet-5.5, mode default).',
+    '[t1] Hello from the stub (model spyria/openrouter/anthropic/claude-sonnet-5.5, mode default).',
   )
   const [firstSession] = await sessionsStartedOf(chat)
   const pick = (sessionModel: string) =>
@@ -190,22 +190,22 @@ test('a manual pick from the full listing relaunches Pi with that model on the s
 
   const second = await finished(await prompt(chat, 'Now on Kimi', bobInAcme), chat)
   expect(second.map((reply) => reply.body)).toEqual([
-    '[t2] Hello from the stub (model hq/openrouter/moonshotai/kimi-k3, mode default).',
+    '[t2] Hello from the stub (model spyria/openrouter/moonshotai/kimi-k3, mode default).',
   ])
   expect(launches()).toHaveLength(2)
   const relaunch = launches()[1] as Launch
   expect(relaunch.agent).toMatchObject({
-    acp_model: 'hq/openrouter/moonshotai/kimi-k3',
+    acp_model: 'spyria/openrouter/moonshotai/kimi-k3',
     acp_resume_session_id: String(firstSession?.sessionId),
   })
   const { providers } = JSON.parse(piFilesOf(relaunch).SPYRIA_PI_MODELS ?? '{}')
-  expect(providers.hq.models.map(({ id }: { id: string }) => id)).toEqual([
+  expect(providers.spyria.models.map(({ id }: { id: string }) => id)).toEqual([
     'openrouter/anthropic/claude-opus-5.5',
     'openrouter/anthropic/claude-sonnet-5.5',
     'openrouter/anthropic/claude-haiku-5.5',
     'openrouter/moonshotai/kimi-k3',
   ])
-  expect(piFilesOf(relaunch).SPYRIA_COMPACTION_MODEL).toBe('hq/openrouter/anthropic/claude-haiku-5.5')
+  expect(piFilesOf(relaunch).SPYRIA_COMPACTION_MODEL).toBe('spyria/openrouter/anthropic/claude-haiku-5.5')
 })
 
 test('g2. a curated pick on a provider whose key was added after Pi launched relaunches Pi on the same session with that model, and the next turn answers on it with the context kept', async () => {
@@ -213,7 +213,7 @@ test('g2. a curated pick on a provider whose key was added after Pi launched rel
   await keysOnly('Anthropic')
   const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'editor' }] })
   const first = await finished(await prompt(chat, 'Start on Anthropic', bobInAcme), chat)
-  expect(first.at(-1)?.body).toStartWith('[t1] Hello from the stub (model hq-anthropic/anthropic/')
+  expect(first.at(-1)?.body).toStartWith('[t1] Hello from the stub (model spyria-anthropic/anthropic/')
   const [firstSession] = await sessionsStartedOf(chat)
   await addLlmKey(bob, 'OpenAI')
   expect(
@@ -226,17 +226,17 @@ test('g2. a curated pick on a provider whose key was added after Pi launched rel
 
   const second = await finished(await prompt(chat, 'Now on OpenAI', bobInAcme), chat)
   expect(second.map((reply) => reply.body)).toEqual([
-    '[t2] Hello from the stub (model hq/openai/gpt-5-mini, mode default).',
+    '[t2] Hello from the stub (model spyria/openai/gpt-5-mini, mode default).',
   ])
-  expect(relay.modelSwitches).toEqual(['hq/openai/gpt-5-mini'])
+  expect(relay.modelSwitches).toEqual(['spyria/openai/gpt-5-mini'])
   expect(launches()).toHaveLength(2)
   const relaunch = launches()[1] as Launch
   expect(relaunch.agent).toMatchObject({
-    acp_model: 'hq/openai/gpt-5-mini',
+    acp_model: 'spyria/openai/gpt-5-mini',
     acp_resume_session_id: String(firstSession?.sessionId),
   })
   const { providers } = JSON.parse(piFilesOf(relaunch).SPYRIA_PI_MODELS ?? '{}')
-  expect(providers.hq.models.map(({ id }: { id: string }) => id)).toContain('openai/gpt-5-mini')
+  expect(providers.spyria.models.map(({ id }: { id: string }) => id)).toContain('openai/gpt-5-mini')
   expect(relay.prompts).toEqual(['Start on Anthropic', 'Now on OpenAI'])
 })
 
@@ -272,8 +272,8 @@ test('after a runtime restart the next prompt loads the Pi session and no earlie
   ])
   expect((await messagesOf(chat)).map(({ kind, body }) => `${kind}:${body}`)).toEqual([
     'member:Before the restart',
-    'agent:[t1] Hello from the stub (model hq/fake/fake-medium, mode default).',
+    'agent:[t1] Hello from the stub (model spyria/fake/fake-medium, mode default).',
     'member:After the restart',
-    'agent:[t2] Hello from the stub (model hq/fake/fake-medium, mode default).',
+    'agent:[t2] Hello from the stub (model spyria/fake/fake-medium, mode default).',
   ])
 })

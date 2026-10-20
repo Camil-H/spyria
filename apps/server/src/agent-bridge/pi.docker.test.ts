@@ -173,7 +173,7 @@ test("Pi in Spyria's image answers through the LLM relay on the chat and Anthrop
   const { id, transport } = await runtime()
   const { chatId, token } = await runtimeTurn({ id }, bob)
   const { conversation, turnEnds, answerOf, close } = await piConversationOf(transport, token, {
-    adapterModel: 'hq/fake/fake-medium',
+    adapterModel: 'spyria/fake/fake-medium',
     pi: {
       models: [
         { id: 'fake/fake-medium', name: 'Fake medium', reasoning: false },
@@ -183,7 +183,7 @@ test("Pi in Spyria's image answers through the LLM relay on the chat and Anthrop
     },
   })
   expect(await answerOf('Hello Pi')).toBe('Understood, working on it.')
-  await agentClient.switchModel(conversation, 'hq-anthropic/anthropic/claude-haiku-5-5')
+  await agentClient.switchModel(conversation, 'spyria-anthropic/anthropic/claude-haiku-5-5')
   expect(await answerOf('Hello Pi on Anthropic')).toContain('Understood')
   expect(turnEnds().map((update) => update.stopReason)).toEqual(['end_turn', 'end_turn'])
   close()
@@ -212,12 +212,12 @@ test('a model switch keeps the conversation: the next request on a curated model
     { id: 'fake/fake-medium', name: 'Fake medium', reasoning: false },
     { id: 'anthropic/claude-haiku-5-5', name: 'Haiku 5.5', reasoning: false, contextWindow: 200000 },
   ]
-  const llm = { adapterModel: 'hq/fake/fake-medium', pi: { models, compactionModel: 'fake/fake-medium' } }
+  const llm = { adapterModel: 'spyria/fake/fake-medium', pi: { models, compactionModel: 'fake/fake-medium' } }
   const bodiesBefore = fakeLlmBodies.length
   const requestOf = (text: string) => fakeLlmBodies.slice(bodiesBefore).find((body) => body.includes(text)) ?? ''
   const first = await piConversationOf(transport, token, llm)
   await first.answerOf('The code word is PAPAYA')
-  await agentClient.switchModel(first.conversation, 'hq-anthropic/anthropic/claude-haiku-5-5')
+  await agentClient.switchModel(first.conversation, 'spyria-anthropic/anthropic/claude-haiku-5-5')
   await first.answerOf('Curated switch: what is the code word?')
   const sessionId = first.updates.find((update) => update.sessionUpdate === 'session_started')?.sessionId
   first.close()
@@ -225,7 +225,7 @@ test('a model switch keeps the conversation: the next request on a curated model
 
   const picked = { id: 'fake/fake-small', name: 'Fake small', reasoning: false }
   const relaunched = await piConversationOf(transport, token, {
-    adapterModel: 'hq/fake/fake-small',
+    adapterModel: 'spyria/fake/fake-small',
     pi: { models: [...models, picked], compactionModel: 'fake/fake-medium' },
     resumeSessionId: sessionId,
   })
@@ -249,7 +249,7 @@ test('a long Pi conversation compacts on the compaction model, recorded with pro
   const { id, transport } = await runtime()
   const { chatId, token } = await runtimeTurn({ id }, bob)
   const llm = {
-    adapterModel: 'hq/fake/fake-medium',
+    adapterModel: 'spyria/fake/fake-medium',
     pi: {
       models: [
         { id: 'fake/fake-medium', name: 'Fake medium', reasoning: false, contextWindow: 4000 },
@@ -303,7 +303,7 @@ test("Pi in Spyria's image runs a command with its output, asks through Spyria's
   const { id, transport } = await runtime()
   const { token } = await runtimeTurn({ id }, bob)
   const pi = await piConversationOf(transport, token, {
-    adapterModel: 'hq/fake/fake-medium',
+    adapterModel: 'spyria/fake/fake-medium',
     pi: {
       models: [{ id: 'fake/fake-medium', name: 'Fake medium', reasoning: false }],
       compactionModel: 'fake/fake-medium',

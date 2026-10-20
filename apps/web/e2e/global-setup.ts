@@ -55,7 +55,7 @@ const sweepLeftovers = async () => {
   }
   const admin = createDatabase(databaseUrlOf('postgres')).$client
   const leftoverDatabases = await admin<{ name: string }[]>`
-    select datname as name from pg_database where datname like 'hq\\_e2e\\_w%'`
+    select datname as name from pg_database where datname like 'spyria\\_e2e\\_w%'`
   await admin.end()
   for (const { name } of leftoverDatabases) await dropDatabase(name)
   removeWorkerHosts()

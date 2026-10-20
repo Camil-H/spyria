@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "SPYRIA_TOKEN_SECRET=$(openssl rand -hex 32) SPYRIA_OIDC_ISSUER=http://localhost:5556/dex SPYRIA_OIDC_CLIENT_ID=hq SPYRIA_OIDC_REDIRECT_URI=http://localhost:3000/auth/callback SPYRIA_APP_ORIGIN=http://localhost:5173 SPYRIA_GATEWAY_URL=http://127.0.0.1:8180 SPYRIA_GATEWAY_ADMIN_USER=hq SPYRIA_GATEWAY_ADMIN_PASSWORD=hq-dev-gateway bun --watch src/index.ts",
+    "dev": "SPYRIA_TOKEN_SECRET=${SPYRIA_TOKEN_SECRET:-$(openssl rand -hex 32)} SPYRIA_OIDC_ISSUER=${SPYRIA_OIDC_ISSUER:-http://localhost:5556/dex} SPYRIA_OIDC_CLIENT_ID=${SPYRIA_OIDC_CLIENT_ID:-spyria} SPYRIA_OIDC_REDIRECT_URI=${SPYRIA_OIDC_REDIRECT_URI:-http://localhost:3000/auth/callback} SPYRIA_APP_ORIGIN=${SPYRIA_APP_ORIGIN:-http://localhost:5173} SPYRIA_GATEWAY_URL=${SPYRIA_GATEWAY_URL:-http://127.0.0.1:8180} SPYRIA_GATEWAY_ADMIN_USER=${SPYRIA_GATEWAY_ADMIN_USER:-spyria} SPYRIA_GATEWAY_ADMIN_PASSWORD=${SPYRIA_GATEWAY_ADMIN_PASSWORD:-spyria-dev-gateway} bun --watch src/index.ts",
     "typecheck": "tsc -p ."
   },
   "dependencies": {

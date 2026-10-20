@@ -53,7 +53,7 @@ test('the first prompt is classified once, on the prompter’s cheapest model wi
   expect(await answered(await prompt(chat, 'Refactor the whole billing architecture'))).toEqual([
     { kind: 'agent', body: 'Understood, working on it.' },
   ])
-  expect(launches()[0]?.agent).toMatchObject({ acp_model: 'hq/fake/fake-large', acp_thought_level: 'high' })
+  expect(launches()[0]?.agent).toMatchObject({ acp_model: 'spyria/fake/fake-large', acp_thought_level: 'high' })
   const conversationId = (await database.$client`select agent_conversation_id from runtimes where chat_id = ${chat}`)[0]
     ?.agent_conversation_id
   expect(await chatOf(chat)).toMatchObject({
@@ -128,13 +128,13 @@ test('the manual switch is refused for an unreachable model, recorded, and switc
   expect(await answered(await prompt(chat, 'Now on small'))).toEqual([
     { kind: 'agent', body: 'Understood, working on it.' },
   ])
-  expect(relay.modelSwitches).toEqual(['hq/fake/fake-small'])
+  expect(relay.modelSwitches).toEqual(['spyria/fake/fake-small'])
   expect(launches()).toHaveLength(1)
   expect(await chatOf(chat)).toMatchObject({ agent_model: 'fake/fake-small' })
 
   expect(await routing(chat, aliceInAcme, { sessionModel: 'fake/fake-large' })).toEqual(succeeded)
   await answered(await prompt(chat, 'Back to large'))
-  expect(relay.modelSwitches).toEqual(['hq/fake/fake-small', 'hq/fake/fake-large'])
+  expect(relay.modelSwitches).toEqual(['spyria/fake/fake-small', 'spyria/fake/fake-large'])
   expect(relay.thoughtLevels).toEqual(['high', 'high'])
   const agentModels = (await logsOf(chat, 4)).filter((log) => !log.metadata.role).map((log) => log.model)
   expect(agentModels.toSorted()).toEqual(['fake-large', 'fake-large', 'fake-small'])
@@ -160,7 +160,7 @@ test('a prompter reaching only a small model routes to it, and is refused in a s
   routeWith({ tier: 'large', confidence: 'high', effort: 'high' })
   await answered(await prompt(bobChat, 'Big job', bobInAcme))
   expect(await chatOf(bobChat)).toMatchObject({ model: 'fake-small/fake-small' })
-  expect(launches().map((launch) => launch.agent.acp_model)).toEqual(['hq/fake-small/fake-small'])
+  expect(launches().map((launch) => launch.agent.acp_model)).toEqual(['spyria/fake-small/fake-small'])
 
   const aliceChat = await newRuntimeChat(alice, [{ memberId: bob, roleId: 'editor' }])
   await answered(await prompt(aliceChat, 'Alice starts on large'))
@@ -276,7 +276,7 @@ test.each<RoutingRow>([
     model: row.model,
     ...(row.effort && { reasoning_effort: row.effort }),
   })
-  expect(launches()[0]?.agent.acp_model).toBe(`hq/${row.model}`)
+  expect(launches()[0]?.agent.acp_model).toBe(`spyria/${row.model}`)
   if (row.reason)
     expect((await decisionsOf(chat))[0]).toMatchObject({ role: 'session', model: row.model, reason: row.reason })
   if (row.routerModel) expect(await routerLogsOf(chat)).toEqual([row.routerModel])
@@ -301,7 +301,10 @@ test('a prompter with only an OpenAI key is routed to an OpenAI model, recorded 
   expect(await decisionsOf(largeChat)).toMatchObject([
     { role: 'session', model: 'openai/gpt-5', reason: 'classified large', member_id: bob },
   ])
-  expect(launches().map((launch) => launch.agent.acp_model)).toEqual(['hq/openai/gpt-5-mini', 'hq/openai/gpt-5'])
+  expect(launches().map((launch) => launch.agent.acp_model)).toEqual([
+    'spyria/openai/gpt-5-mini',
+    'spyria/openai/gpt-5',
+  ])
 })
 
 test('the real listing gives datasheet prices to the routable models a key reaches, and only those are offered', async () => {

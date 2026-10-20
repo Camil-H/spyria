@@ -214,6 +214,6 @@ test('the branch status reads ahead and behind counts, uncommitted files and lea
 
 test('the conflict prompt names the base and every conflicting file', () => {
   expect(conflictPromptOf('main', ['src/app.ts', 'README.md'])).toBe(
-    'Merge the latest main (fetched as refs/hq/base) into the working branch, resolve the conflicts in these files, then commit:\n- src/app.ts\n- README.md',
+    'Merge the latest main (fetched as refs/spyria/base) into the working branch, resolve the conflicts in these files, then commit:\n- src/app.ts\n- README.md',
   )
 })

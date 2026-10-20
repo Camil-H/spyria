@@ -1,4 +1,4 @@
-CREATE PUBLICATION "hq_zero" FOR TABLE
+CREATE PUBLICATION "spyria_zero" FOR TABLE
   "users",
   "workspaces",
   "memberships",

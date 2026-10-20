@@ -125,7 +125,7 @@ const keptPlanningReplyOf = {
 }
 
 const nextReplyInPlanOf = {
-  Pi: '[t2] Hello from the stub (model hq/fake/fake-medium, mode plan).',
+  Pi: '[t2] Hello from the stub (model spyria/fake/fake-medium, mode plan).',
   'Claude Code': '[t2] Hello from the stub (model stub-default, mode plan).',
   Codex: '[t2] Hello from the stub (model gpt-stub, mode bypassPermissions).',
 }
@@ -204,13 +204,13 @@ test.describe('Questions and plans', () => {
         await expect(chipOf(page, 'spyria')).toBeVisible()
         await sendMessage(page, 'stub:hello')
         await expect(
-          messageContaining(page, '[t2] Hello from the stub (model hq/fake/fake-medium, mode plan).'),
+          messageContaining(page, '[t2] Hello from the stub (model spyria/fake/fake-medium, mode plan).'),
         ).toHaveCount(1)
         await togglePlan(page, false)
         await expect(chipOf(page, 'spyria')).toBeVisible()
         await sendMessage(page, 'stub:hello')
         await expect(
-          messageContaining(page, '[t3] Hello from the stub (model hq/fake/fake-medium, mode default).'),
+          messageContaining(page, '[t3] Hello from the stub (model spyria/fake/fake-medium, mode default).'),
         ).toHaveCount(1)
         return
       }

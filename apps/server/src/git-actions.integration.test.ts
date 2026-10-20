@@ -201,7 +201,7 @@ test('update from base merges the base’s new commit from a thin bundle of the 
     `Merge branch '${baseBranch}' into ${branch}|Alice Martin|${agentCommitSha} ${newBase}\n`,
   )
   expect(readFileSync(join(workspace, 'docs/from-base.md'), 'utf8')).toBe('from base\n')
-  expect(gitIn(workspace, 'rev-parse', 'refs/hq/base').trim()).toBe(newBase)
+  expect(gitIn(workspace, 'rev-parse', 'refs/spyria/base').trim()).toBe(newBase)
   expect(gitIn(workspace, 'rev-parse', `refs/remotes/origin/${baseBranch}`).trim()).toBe(previousBase)
   expect(await statusOf(alice, id)).toMatchObject({ baseHead: newBase, aheadOfBase: 2, behindBase: 0 })
 

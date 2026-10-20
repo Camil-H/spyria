@@ -21,4 +21,4 @@ ALTER TABLE "budget_alerts" ADD CONSTRAINT "budget_alerts_workspace_id_workspace
 ALTER TABLE "budget_alerts" ADD CONSTRAINT "budget_alerts_cstUFxQXHeIi_fkey" FOREIGN KEY ("workspace_id","member_id") REFERENCES "memberships"("workspace_id","user_id");--> statement-breakpoint
 ALTER TABLE "budgets" ADD CONSTRAINT "budgets_workspace_id_workspaces_workspace_id_fkey" FOREIGN KEY ("workspace_id") REFERENCES "workspaces"("workspace_id");--> statement-breakpoint
 ALTER TABLE "budgets" ADD CONSTRAINT "budgets_B4t8yjaLqPxh_fkey" FOREIGN KEY ("workspace_id","member_id") REFERENCES "memberships"("workspace_id","user_id");--> statement-breakpoint
-ALTER PUBLICATION "hq_zero" ADD TABLE "budget_alerts";
+ALTER PUBLICATION "spyria_zero" ADD TABLE "budget_alerts";

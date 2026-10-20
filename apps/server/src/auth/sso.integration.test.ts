@@ -217,7 +217,7 @@ test('an admin saves the SSO settings: the secret is encrypted at rest, never re
     ['sso.secret_rotated', alice],
   ])
   expect(
-    (await database.$client`select tablename from pg_publication_tables where pubname = 'hq_zero'`).map(
+    (await database.$client`select tablename from pg_publication_tables where pubname = 'spyria_zero'`).map(
       ({ tablename }) => tablename,
     ),
   ).not.toContain('workspace_sso')

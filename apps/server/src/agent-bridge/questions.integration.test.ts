@@ -140,7 +140,7 @@ test('on a Spyria runtime chat another member who may prompt answers, a member w
     '[t1]',
     'tool',
     'question',
-    'answer:The member answered: Buildkite Hello from the stub (model hq/fake/fake-medium, mode default).',
+    'answer:The member answered: Buildkite Hello from the stub (model spyria/fake/fake-medium, mode default).',
   ])
   expect(replies[2]?.step).toMatchObject({
     type: 'question',

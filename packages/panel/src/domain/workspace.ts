@@ -168,6 +168,6 @@ export const branchStatusPartsOf = (status: BranchStatus, baseBranch: string) =>
 
 export const conflictPromptOf = (baseBranch: string, conflicts: readonly string[]) =>
   [
-    `Merge the latest ${baseBranch} (fetched as refs/hq/base) into the working branch, resolve the conflicts in these files, then commit:`,
+    `Merge the latest ${baseBranch} (fetched as refs/spyria/base) into the working branch, resolve the conflicts in these files, then commit:`,
     ...conflicts.map((path) => `- ${path}`),
   ].join('\n')

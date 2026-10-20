@@ -221,7 +221,7 @@ test('a commit records every uncommitted change with the given author; an empty 
   expect(outputOf(copy, 'status', '--porcelain')).toBe('')
 })
 
-test('an update fetches the base from a thin bundle into refs/hq/base only and merges it with a merge commit', async () => {
+test('an update fetches the base from a thin bundle into refs/spyria/base only and merges it with a merge commit', async () => {
   const upstream = workingCopyOf('upstream-merge', source)
   git(upstream, 'checkout', '-q', 'main')
   const copy = workingCopyOf('merge', upstream)
@@ -254,7 +254,7 @@ test('an update fetches the base from a thin bundle into refs/hq/base only and m
   expect(outputOf(copy, 'log', '-1', '--format=%s|%an|%P')).toBe(
     `Merge branch 'main' into spyria/merge|Alice|${revisionOf(copy, 'HEAD~1')} ${head}\n`,
   )
-  expect(revisionOf(copy, 'refs/hq/base')).toBe(head)
+  expect(revisionOf(copy, 'refs/spyria/base')).toBe(head)
   expect(outputOf(copy, 'for-each-ref', '--format=%(refname) %(objectname)', 'refs/heads', 'refs/remotes')).toBe(
     branchesBefore.replace(/refs\/heads\/spyria\/merge \w+/, `refs/heads/spyria/merge ${revisionOf(copy, 'HEAD')}`),
   )
@@ -311,7 +311,7 @@ test('an update refuses a bundle carrying other refs, a mismatched head and inva
     expect((await call('POST', '/api/workspace/merge', request)).body).toEqual({
       error: 'The base branch main could not be read from the bundle',
     })
-  expect(Bun.spawnSync(['git', 'rev-parse', '--verify', '--quiet', 'refs/hq/base'], { cwd: copy }).exitCode).toBe(1)
+  expect(Bun.spawnSync(['git', 'rev-parse', '--verify', '--quiet', 'refs/spyria/base'], { cwd: copy }).exitCode).toBe(1)
   for (const request of [
     { base: '--all', head, bundle: '', author },
     { base: 'main', head: 'HEAD', bundle: '', author },

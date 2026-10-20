@@ -61,7 +61,7 @@ const sweepAgentTurns = () =>
   agentBridge.forDatabase(database).jobs['agent.sweep']({ workspaceId: acme, payload: {}, isLastAttempt: false })
 const agentReply = (turn: number) => ({
   kind: 'agent' as const,
-  body: `[t${turn}] Hello from the stub (model hq/fake, mode default).`,
+  body: `[t${turn}] Hello from the stub (model spyria/fake, mode default).`,
 })
 const notice = (body: string) => ({ kind: 'notice' as const, body })
 const stoppedEarly = notice('The agent stopped before finishing')

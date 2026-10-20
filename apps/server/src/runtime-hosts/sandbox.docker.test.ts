@@ -103,7 +103,7 @@ test.skipIf(!hasImage)(
 
     const [inspected] = JSON.parse(dockerText('inspect', containerName))
     expect(inspected.Config.User).toBe('10001:10001')
-    expect(inspected.Config.Labels).toMatchObject({ 'hq.managed': '1', 'hq.runtime': 'docker-test' })
+    expect(inspected.Config.Labels).toMatchObject({ 'spyria.managed': '1', 'spyria.runtime': 'docker-test' })
     expect(inspected.HostConfig).toMatchObject({
       NetworkMode: `${containerName}-net`,
       CapDrop: ['ALL'],

@@ -118,7 +118,7 @@ describe('Alice’s OpenAI credential, added then removed', () => {
 
   test('the secret never reaches a replicated row', async () => {
     const publishedTables = await database.$client<{ table: string; columns: string[] }[]>`
-    select tablename as table, attnames as columns from pg_publication_tables where pubname = 'hq_zero'`
+    select tablename as table, attnames as columns from pg_publication_tables where pubname = 'spyria_zero'`
     for (const { table, columns } of publishedTables) {
       const rows = await database.$client.unsafe(
         `select ${columns.map((column) => `"${column}"`).join(', ')} from "${table}"`,

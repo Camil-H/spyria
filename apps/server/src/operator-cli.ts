@@ -53,8 +53,8 @@ const commands: Record<string, () => Promise<void>> = {
     if (!setup) throw new Error(`Usage: bun run tools:setup ${Object.keys(toolServers).join('|')}`)
     const gateway = createLlmGateway({
       url: process.env.SPYRIA_GATEWAY_URL ?? 'http://127.0.0.1:8180',
-      adminUser: process.env.SPYRIA_GATEWAY_ADMIN_USER ?? 'hq',
-      adminPassword: process.env.SPYRIA_GATEWAY_ADMIN_PASSWORD ?? 'hq-dev-gateway',
+      adminUser: process.env.SPYRIA_GATEWAY_ADMIN_USER ?? 'spyria',
+      adminPassword: process.env.SPYRIA_GATEWAY_ADMIN_PASSWORD ?? 'spyria-dev-gateway',
     })
     const server = setup()
     const isNew = await gateway.setUpToolServer(server, name === 'fake' ? undefined : logInAsAdmin)

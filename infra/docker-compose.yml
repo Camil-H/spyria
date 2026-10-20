@@ -1,26 +1,26 @@
-name: hq
+name: spyria
 
 services:
   postgres:
     image: postgres:18
-    container_name: hq-postgres
+    container_name: spyria-postgres
     command: postgres -c wal_level=logical -c max_replication_slots=20 -c max_wal_senders=20
     environment:
-      POSTGRES_USER: hq
-      POSTGRES_PASSWORD: hq
-      POSTGRES_DB: hq
+      POSTGRES_USER: spyria
+      POSTGRES_PASSWORD: spyria
+      POSTGRES_DB: spyria
     ports:
       - 5434:5432
     volumes:
       - postgres-data:/var/lib/postgresql
     healthcheck:
-      test: pg_isready -U hq -d hq
+      test: pg_isready -U spyria -d spyria
       interval: 1s
       retries: 30
 
   dex:
     image: dexidp/dex:v2.43.1
-    container_name: hq-dex
+    container_name: spyria-dex
     command: dex serve /etc/dex/config.yaml
     ports:
       - 5556:5556
@@ -33,22 +33,22 @@ services:
 
   zero-cache:
     image: rocicorp/zero:1.9.0
-    container_name: hq-zero-cache
+    container_name: spyria-zero-cache
     profiles: [zero]
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      ZERO_APP_ID: hq
-      ZERO_APP_PUBLICATIONS: hq_zero
-      ZERO_UPSTREAM_DB: postgres://hq:hq@postgres:5432/hq
+      ZERO_APP_ID: spyria
+      ZERO_APP_PUBLICATIONS: spyria_zero
+      ZERO_UPSTREAM_DB: postgres://spyria:spyria@postgres:5432/spyria
       ZERO_QUERY_URL: http://host.docker.internal:3000/api/query
       ZERO_MUTATE_URL: http://host.docker.internal:3000/api/mutate
       ZERO_PORT: 4848
       ZERO_CHANGE_STREAMER_PORT: 4849
-      ZERO_REPLICA_FILE: /tmp/hq-replica.db
+      ZERO_REPLICA_FILE: /tmp/spyria-replica.db
       ZERO_NUM_SYNC_WORKERS: 1
-      ZERO_ADMIN_PASSWORD: hq-dev
+      ZERO_ADMIN_PASSWORD: spyria-dev
       ZERO_ENABLE_TELEMETRY: false
     extra_hosts:
       - host.docker.internal:host-gateway
@@ -61,17 +61,17 @@ services:
 
   gateway-database:
     image: postgres:18
-    container_name: hq-gateway-database
+    container_name: spyria-gateway-database
     profiles: [gateway]
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       PGHOST: postgres
-      PGUSER: hq
-      PGPASSWORD: hq
+      PGUSER: spyria
+      PGPASSWORD: spyria
       PGDATABASE: postgres
-      GATEWAY_DB_PASSWORD: ${SPYRIA_GATEWAY_DB_PASSWORD:-hq-dev-gateway-db}
+      GATEWAY_DB_PASSWORD: ${SPYRIA_GATEWAY_DB_PASSWORD:-spyria-dev-gateway-db}
     entrypoint: [sh, -ec]
     command:
       - |
@@ -81,17 +81,17 @@ services:
 
   gateway:
     image: maximhq/bifrost:v2.2.6@sha256:d0b4708ace1aa175766f94afa715fd9bba3a1b56c1dc2afff15a21edf3ae4e2a
-    container_name: hq-gateway
+    container_name: spyria-gateway
     profiles: [gateway]
     depends_on:
       gateway-database:
         condition: service_completed_successfully
     environment:
-      BIFROST_ENCRYPTION_KEY: ${SPYRIA_GATEWAY_ENCRYPTION_KEY:-hq-dev-gateway-encryption-key}
-      BIFROST_SETUP_TOKEN: ${SPYRIA_GATEWAY_SETUP_TOKEN:-hq-dev-gateway-setup-token}
-      BIFROST_ADMIN_USER: ${SPYRIA_GATEWAY_ADMIN_USER:-hq}
-      BIFROST_ADMIN_PASSWORD: ${SPYRIA_GATEWAY_ADMIN_PASSWORD:-hq-dev-gateway}
-      BIFROST_DB_PASSWORD: ${SPYRIA_GATEWAY_DB_PASSWORD:-hq-dev-gateway-db}
+      BIFROST_ENCRYPTION_KEY: ${SPYRIA_GATEWAY_ENCRYPTION_KEY:-spyria-dev-gateway-encryption-key}
+      BIFROST_SETUP_TOKEN: ${SPYRIA_GATEWAY_SETUP_TOKEN:-spyria-dev-gateway-setup-token}
+      BIFROST_ADMIN_USER: ${SPYRIA_GATEWAY_ADMIN_USER:-spyria}
+      BIFROST_ADMIN_PASSWORD: ${SPYRIA_GATEWAY_ADMIN_PASSWORD:-spyria-dev-gateway}
+      BIFROST_DB_PASSWORD: ${SPYRIA_GATEWAY_DB_PASSWORD:-spyria-dev-gateway-db}
       SPYRIA_GATEWAY_OAUTH_BASE: ${SPYRIA_GATEWAY_OAUTH_BASE:-http://localhost:5173/gateway-oauth}
     extra_hosts:
       - host.docker.internal:host-gateway
@@ -107,10 +107,10 @@ services:
 
 volumes:
   postgres-data:
-    name: hq-postgres-data
+    name: spyria-postgres-data
   gateway-data:
-    name: hq-gateway-data
+    name: spyria-gateway-data
 
 networks:
   default:
-    name: hq-network
+    name: spyria-network

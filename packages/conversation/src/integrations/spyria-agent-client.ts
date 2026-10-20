@@ -121,7 +121,7 @@ const harnessConversationOf = (
   agent: {
     acp_command: harnessLaunches[harness],
     mcp_config: {
-      hq: mcpServerOf(endpoint, '/mcp', llmToken),
+      spyria: mcpServerOf(endpoint, '/mcp', llmToken),
       ...(hasRepository && { github: mcpServerOf(endpoint, githubToolsPath, llmToken) }),
     },
     ...(resumeSessionId && { acp_resume_session_id: resumeSessionId }),
@@ -171,13 +171,13 @@ export const piCommandOf = (
   const anthropicModels = models.filter((model) => model.id.startsWith('anthropic/'))
   const otherModels = models.filter((model) => !anthropicModels.includes(model))
   const providers = {
-    ...(otherModels.length > 0 && { hq: piProviderOf(gatewayUrl, 'openai-completions', otherModels) }),
+    ...(otherModels.length > 0 && { spyria: piProviderOf(gatewayUrl, 'openai-completions', otherModels) }),
     ...(anthropicModels.length > 0 && {
-      'hq-anthropic': piProviderOf(gatewayUrl.replace(/\/v1$/, ''), 'anthropic-messages', anthropicModels),
+      'spyria-anthropic': piProviderOf(gatewayUrl.replace(/\/v1$/, ''), 'anthropic-messages', anthropicModels),
     }),
   }
   const mcpServers = {
-    hq: { ...piMcpServerOf(gatewayUrl, '/mcp'), timeout: spyriaToolTimeoutSeconds },
+    spyria: { ...piMcpServerOf(gatewayUrl, '/mcp'), timeout: spyriaToolTimeoutSeconds },
     ...(!sub && { router: { ...piMcpServerOf(gatewayUrl, '/mcp/router'), timeout: delegateTimeoutSeconds } }),
     ...(!sub &&
       hasRepository && {

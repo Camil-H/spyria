@@ -24,4 +24,4 @@ ALTER TABLE "workspace_connections" ADD CONSTRAINT "workspace_connections_gatewa
 ALTER TABLE "connection_restrictions" ADD CONSTRAINT "connection_restrictions_Dtv7aelAqLO1_fkey" FOREIGN KEY ("workspace_id","connection_id") REFERENCES "workspace_connections"("workspace_id","id") ON DELETE CASCADE;--> statement-breakpoint
 ALTER TABLE "connection_restrictions" ADD CONSTRAINT "connection_restrictions_or6kv4FyHFrO_fkey" FOREIGN KEY ("workspace_id","user_id") REFERENCES "memberships"("workspace_id","user_id");--> statement-breakpoint
 ALTER TABLE "workspace_connections" ADD CONSTRAINT "workspace_connections_workspace_id_workspaces_workspace_id_fkey" FOREIGN KEY ("workspace_id") REFERENCES "workspaces"("workspace_id");--> statement-breakpoint
-ALTER PUBLICATION "hq_zero" ADD TABLE "connection_restrictions";
+ALTER PUBLICATION "spyria_zero" ADD TABLE "connection_restrictions";

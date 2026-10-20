@@ -160,7 +160,7 @@ test.describe('Branch actions', () => {
 
     await agentScript(chatId, { steps: [], text: 'Resolved the conflicts.' })
     await tabPanelOf(page).getByRole('button', { name: 'Ask the agent to resolve conflicts' }).click()
-    const prompt = messageContaining(page, `Merge the latest ${baseBranch} (fetched as refs/hq/base)`)
+    const prompt = messageContaining(page, `Merge the latest ${baseBranch} (fetched as refs/spyria/base)`)
     await expect(prompt).toHaveCount(1)
     await expect(prompt).toContainText('Alice')
     await expect(prompt).toContainText('- src/app.ts')

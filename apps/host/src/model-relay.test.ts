@@ -11,7 +11,7 @@ const relayCollecting = (isConnected = true) => {
   return { relay, sent, nextOf }
 }
 const completionRequest = () =>
-  new Request('http://hq-gateway-relay:4000/v1/chat/completions?stream=true', {
+  new Request('http://spyria-gateway-relay:4000/v1/chat/completions?stream=true', {
     method: 'POST',
     headers: { authorization: 'Bearer runtime-token', 'content-type': 'application/json' },
     body: '{"model":"fake/fake-model"}',
@@ -20,7 +20,7 @@ const completionRequest = () =>
 test('refuses anything outside /v1 without contacting Spyria', async () => {
   const { relay, sent } = relayCollecting()
   for (const path of ['/api/providers', '/health', '/v2/chat', '/'])
-    expect((await relay.fetch(new Request(`http://hq-gateway-relay:4000${path}`))).status).toBe(404)
+    expect((await relay.fetch(new Request(`http://spyria-gateway-relay:4000${path}`))).status).toBe(404)
   expect(sent).toEqual([])
 })
 
@@ -75,7 +75,7 @@ test('tells Spyria to cancel when the caller stops reading', async () => {
 test('relays spyria-agent’s MCP calls on /mcp with their session headers', async () => {
   const { relay, nextOf } = relayCollecting()
   void relay.fetch(
-    new Request('http://hq-gateway-relay:4000/mcp', {
+    new Request('http://spyria-gateway-relay:4000/mcp', {
       method: 'POST',
       headers: { authorization: 'Bearer runtime-token', 'mcp-session-id': 'session-1' },
       body: '{"jsonrpc":"2.0","id":1,"method":"tools/list"}',
@@ -85,9 +85,9 @@ test('relays spyria-agent’s MCP calls on /mcp with their session headers', asy
     path: '/mcp',
     headers: { authorization: 'Bearer runtime-token', 'mcp-session-id': 'session-1' },
   })
-  void relay.fetch(new Request('http://hq-gateway-relay:4000/mcp/github', { method: 'POST', body: '{}' }))
+  void relay.fetch(new Request('http://spyria-gateway-relay:4000/mcp/github', { method: 'POST', body: '{}' }))
   expect(await nextOf('gw_req')).toMatchObject({ path: '/mcp/github' })
-  expect((await relay.fetch(new Request('http://hq-gateway-relay:4000/mcp/other'))).status).toBe(404)
+  expect((await relay.fetch(new Request('http://spyria-gateway-relay:4000/mcp/other'))).status).toBe(404)
 })
 
 test('redacts the body of a call leaving a personal host', async () => {
@@ -97,7 +97,10 @@ test('redacts the body of a call leaving a personal host', async () => {
     redact: (text) => text.replaceAll('sk-ant-oat01-secret', '[redacted]'),
   })
   void relay.fetch(
-    new Request('http://hq-gateway-relay:4000/mcp', { method: 'POST', body: '{"arguments":"sk-ant-oat01-secret"}' }),
+    new Request('http://spyria-gateway-relay:4000/mcp', {
+      method: 'POST',
+      body: '{"arguments":"sk-ant-oat01-secret"}',
+    }),
   )
   await waitFor(() => sent.length > 0)
   expect(sent[0]).toMatchObject({ body: '{"arguments":"[redacted]"}' })

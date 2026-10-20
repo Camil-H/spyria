@@ -8,8 +8,8 @@ oauth2:
   responseTypes: [code]
 enablePasswordDB: true
 staticClients:
-  - id: hq
-    name: HQ
+  - id: spyria
+    name: Spyria
     public: true
     redirectURIs:
       - http://localhost:3000/auth/callback

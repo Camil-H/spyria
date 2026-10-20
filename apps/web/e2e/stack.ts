@@ -68,7 +68,7 @@ const barrierTimeoutMilliseconds = 15_000
 const maximumResetAttempts = 5
 const deadlockCode = '40P01'
 const barrierSessionMilliseconds = 24 * 60 * 60 * 1000
-const workerDatabaseNameOf = (workerIndex: number) => `hq_e2e_w${workerIndex}`
+const workerDatabaseNameOf = (workerIndex: number) => `spyria_e2e_w${workerIndex}`
 const warmChatIds = ['chat-research', 'chat-setup-helper']
 const runtimeReadyMilliseconds = 90_000
 
@@ -245,7 +245,7 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
       const zeroCache = await startZeroCache({
         databaseName: testDatabase.name,
         port: zeroCachePortOf(index),
-        appId: `hqe2e${index}`,
+        appId: `spyriae2e${index}`,
         serverUrl,
       })
       const barrierSession = async () => {

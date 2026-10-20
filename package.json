@@ -11,7 +11,7 @@
     "lint": "biome check .",
     "test": "bun test ./packages ./apps/server ./apps/host ./apps/agent --path-ignore-patterns='**/*.integration.test.ts' --path-ignore-patterns='**/*.docker.test.ts'",
     "test:integration": "bun test --preload ./apps/server/src/testing/integration-setup.ts --reporter=junit --reporter-outfile=.check/integration.xml .integration.test.ts",
-    "dev": "COMPOSE_PROFILES=zero,gateway bun run stack:up && bun run --filter '@spyria/server' --filter '@spyria/web' dev",
+    "dev": "COMPOSE_PROFILES=zero,gateway bun --env-file=.env run stack:up && bun --env-file=.env run --filter '@spyria/server' --filter '@spyria/web' dev",
     "test:docker:integration": "bun test --preload ./apps/server/src/testing/integration-setup.ts --reporter=junit --reporter-outfile=.check/integration-docker.xml .docker.test.ts",
     "test:e2e": "bun run --cwd apps/web test:e2e",
     "test:e2e:smoke": "bun run --cwd apps/web test:e2e:smoke",

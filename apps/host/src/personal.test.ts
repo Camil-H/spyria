@@ -32,9 +32,9 @@ const tarOf = (content: string, modifiedAt = changedAt) => {
 const dockerWithArchive =
   (archive: string | undefined, codexArchive?: string): Docker =>
   async (_method, path) => {
-    const found = path.startsWith('/containers/hq-cred-codex-reader/archive?path=/workspace/project/auth.json')
+    const found = path.startsWith('/containers/spyria-cred-codex-reader/archive?path=/workspace/project/auth.json')
       ? codexArchive
-      : path.startsWith('/containers/hq-cred-claude-reader/archive?path=/workspace/project/.credentials.json')
+      : path.startsWith('/containers/spyria-cred-claude-reader/archive?path=/workspace/project/.credentials.json')
         ? archive
         : (() => {
             throw new Error(`unexpected ${path}`)
@@ -44,15 +44,15 @@ const dockerWithArchive =
   }
 
 test('signedIn follows the presence of the credentials file, its change time is reported and its token values are kept for redaction', async () => {
-  expect(await readCredentials(dockerWithArchive(tarOf(credentialsFile)), 'hq-')).toEqual({
+  expect(await readCredentials(dockerWithArchive(tarOf(credentialsFile)), 'spyria-')).toEqual({
     signedIn: ['claude'],
     secrets: [accessToken, refreshToken],
     credentialsChangedAt: { claude: changedAt },
   })
   expect(
-    (await readCredentials(dockerWithArchive(tarOf(credentialsFile, changedAt + 60)), 'hq-')).credentialsChangedAt,
+    (await readCredentials(dockerWithArchive(tarOf(credentialsFile, changedAt + 60)), 'spyria-')).credentialsChangedAt,
   ).toEqual({ claude: changedAt + 60 })
-  expect(await readCredentials(dockerWithArchive(undefined), 'hq-')).toEqual({
+  expect(await readCredentials(dockerWithArchive(undefined), 'spyria-')).toEqual({
     signedIn: [],
     secrets: [],
     credentialsChangedAt: {},
@@ -60,7 +60,7 @@ test('signedIn follows the presence of the credentials file, its change time is 
 })
 
 test('the token formats and the exact current token values are redacted, the rest of the frame stays valid JSON', async () => {
-  const { secrets } = await readCredentials(dockerWithArchive(tarOf(credentialsFile)), 'hq-')
+  const { secrets } = await readCredentials(dockerWithArchive(tarOf(credentialsFile)), 'spyria-')
   const httpBody = JSON.stringify({
     output: `${credentialsFile}\nother sk-ant-oat01-Older_token-1 sk-ant-ort01-x`,
     ok: 1,
@@ -79,7 +79,7 @@ test('the token formats and the exact current token values are redacted, the res
 })
 
 test('login runs the documented command in a one-off TTY container of the pinned image on the credentials volume, as uid 10001', () => {
-  expect(credentialsContainerBodyOf('hq-', image, 'claude', 'login')).toEqual({
+  expect(credentialsContainerBodyOf('spyria-', image, 'claude', 'login')).toEqual({
     Image: image,
     User: '10001:10001',
     Entrypoint: ['claude-agent-acp', '--cli', 'auth', 'login', '--claudeai'],
@@ -89,7 +89,7 @@ test('login runs the documented command in a one-off TTY container of the pinned
     AttachStdin: true,
     AttachStdout: true,
     AttachStderr: true,
-    Labels: { 'hq.managed': '1' },
+    Labels: { 'spyria.managed': '1' },
     HostConfig: {
       CapDrop: ['ALL'],
       SecurityOpt: ['no-new-privileges'],
@@ -97,37 +97,37 @@ test('login runs the documented command in a one-off TTY container of the pinned
       NetworkMode: 'bridge',
       AutoRemove: true,
       Tmpfs: { '/home/openhands': 'uid=10001,gid=10001,mode=0700', '/tmp': '' },
-      Mounts: [{ Type: 'volume', Source: 'hq-cred-claude', Target: '/home/openhands/.claude' }],
+      Mounts: [{ Type: 'volume', Source: 'spyria-cred-claude', Target: '/home/openhands/.claude' }],
     },
   })
 })
 
 test('logout deletes the credentials file without a network or a terminal', () => {
-  expect(credentialsContainerBodyOf('hq-', image, 'claude', 'logout')).toMatchObject({
+  expect(credentialsContainerBodyOf('spyria-', image, 'claude', 'logout')).toMatchObject({
     User: '10001:10001',
     Entrypoint: ['rm', '-f', '/home/openhands/.claude/.credentials.json'],
     Tty: false,
     OpenStdin: false,
-    HostConfig: { NetworkMode: 'none', Mounts: [{ Source: 'hq-cred-claude', Target: '/home/openhands/.claude' }] },
+    HostConfig: { NetworkMode: 'none', Mounts: [{ Source: 'spyria-cred-claude', Target: '/home/openhands/.claude' }] },
   })
 })
 
 test('the credentials reader is never started and mounts the volume where the image owns an empty directory', () => {
-  expect(credentialsReaderBodyOf('hq-', image, 'claude')).toMatchObject({
+  expect(credentialsReaderBodyOf('spyria-', image, 'claude')).toMatchObject({
     Image: image,
     User: '10001:10001',
     NetworkDisabled: true,
-    HostConfig: { NetworkMode: 'none', Mounts: [{ Source: 'hq-cred-claude', Target: '/workspace/project' }] },
+    HostConfig: { NetworkMode: 'none', Mounts: [{ Source: 'spyria-cred-claude', Target: '/workspace/project' }] },
   })
 })
 
 test('signedIn includes codex only for a ChatGPT auth.json, and its token values and API key are kept for redaction', async () => {
-  expect(await readCredentials(dockerWithArchive(undefined, tarOf(codexAuthFile)), 'hq-')).toEqual({
+  expect(await readCredentials(dockerWithArchive(undefined, tarOf(codexAuthFile)), 'spyria-')).toEqual({
     signedIn: ['codex'],
     secrets: [codexTokens.id_token, codexTokens.access_token, codexTokens.refresh_token],
     credentialsChangedAt: { codex: changedAt },
   })
-  expect(await readCredentials(dockerWithArchive(tarOf(credentialsFile), tarOf(codexApiKeyFile)), 'hq-')).toEqual({
+  expect(await readCredentials(dockerWithArchive(tarOf(credentialsFile), tarOf(codexApiKeyFile)), 'spyria-')).toEqual({
     signedIn: ['claude'],
     secrets: [accessToken, refreshToken, codexApiKey],
     credentialsChangedAt: { claude: changedAt, codex: changedAt },
@@ -135,7 +135,7 @@ test('signedIn includes codex only for a ChatGPT auth.json, and its token values
 })
 
 test('a JWT, the exact Codex refresh token and the API key are redacted, the account id stays', async () => {
-  const { secrets } = await readCredentials(dockerWithArchive(undefined, tarOf(codexAuthFile)), 'hq-')
+  const { secrets } = await readCredentials(dockerWithArchive(undefined, tarOf(codexAuthFile)), 'spyria-')
   const frame = JSON.stringify({
     output: `${codexAuthFile}\nother ${fakeJwt({ sub: 'another' })} ${codexApiKey}`,
     ok: 1,
@@ -156,7 +156,7 @@ test('a JWT, the exact Codex refresh token and the API key are redacted, the acc
 })
 
 test('login codex runs the device sign-in in a one-off TTY container on the Codex volume, as uid 10001', () => {
-  expect(credentialsContainerBodyOf('hq-', image, 'codex', 'login')).toEqual({
+  expect(credentialsContainerBodyOf('spyria-', image, 'codex', 'login')).toEqual({
     Image: image,
     User: '10001:10001',
     Entrypoint: ['codex-acp', 'cli', 'login', '--device-auth'],
@@ -166,7 +166,7 @@ test('login codex runs the device sign-in in a one-off TTY container on the Code
     AttachStdin: true,
     AttachStdout: true,
     AttachStderr: true,
-    Labels: { 'hq.managed': '1' },
+    Labels: { 'spyria.managed': '1' },
     HostConfig: {
       CapDrop: ['ALL'],
       SecurityOpt: ['no-new-privileges'],
@@ -174,24 +174,24 @@ test('login codex runs the device sign-in in a one-off TTY container on the Code
       NetworkMode: 'bridge',
       AutoRemove: true,
       Tmpfs: { '/home/openhands': 'uid=10001,gid=10001,mode=0700', '/tmp': '' },
-      Mounts: [{ Type: 'volume', Source: 'hq-cred-codex', Target: '/home/openhands/.codex' }],
+      Mounts: [{ Type: 'volume', Source: 'spyria-cred-codex', Target: '/home/openhands/.codex' }],
     },
   })
 })
 
 test('logout codex deletes auth.json without a network or a terminal', () => {
-  expect(credentialsContainerBodyOf('hq-', image, 'codex', 'logout')).toMatchObject({
+  expect(credentialsContainerBodyOf('spyria-', image, 'codex', 'logout')).toMatchObject({
     User: '10001:10001',
     Entrypoint: ['rm', '-f', '/home/openhands/.codex/auth.json'],
     Tty: false,
     OpenStdin: false,
-    HostConfig: { NetworkMode: 'none', Mounts: [{ Source: 'hq-cred-codex', Target: '/home/openhands/.codex' }] },
+    HostConfig: { NetworkMode: 'none', Mounts: [{ Source: 'spyria-cred-codex', Target: '/home/openhands/.codex' }] },
   })
 })
 
 test('the Codex reader mounts its volume where the image owns an empty directory', () => {
-  expect(credentialsReaderBodyOf('hq-', image, 'codex')).toMatchObject({
+  expect(credentialsReaderBodyOf('spyria-', image, 'codex')).toMatchObject({
     NetworkDisabled: true,
-    HostConfig: { NetworkMode: 'none', Mounts: [{ Source: 'hq-cred-codex', Target: '/workspace/project' }] },
+    HostConfig: { NetworkMode: 'none', Mounts: [{ Source: 'spyria-cred-codex', Target: '/workspace/project' }] },
   })
 })

@@ -11,7 +11,7 @@ const endpoint: AgentConversation = {
   apiKey: 'session-key',
   conversationId: 'conversation-1',
   transport: {
-    gatewayUrl: 'http://hq-gateway-relay:4000/v1',
+    gatewayUrl: 'http://spyria-gateway-relay:4000/v1',
     fetch: async (request) => {
       requests.push(request)
       return { status: 201, body: JSON.stringify({ id: 'conversation-1' }) }
@@ -37,8 +37,8 @@ test('a subscription session launches Claude Code without the relay, a model, or
   )
   expect(created.secrets).toEqual({})
   expect(created.agent.mcp_config).toEqual({
-    hq: {
-      url: 'http://hq-gateway-relay:4000/mcp',
+    spyria: {
+      url: 'http://spyria-gateway-relay:4000/mcp',
       transport: 'http',
       headers: { Authorization: 'Bearer runtime-token' },
     },
@@ -48,8 +48,8 @@ test('a subscription session launches Claude Code without the relay, a model, or
 
 test('Pi summarizes on its compaction model through its provider, starts at the routed thinking level and takes test compaction budgets', async () => {
   const anthropicCompaction = { ...piLaunch, compactionModel: 'anthropic/claude-haiku-5-5' }
-  const command = piCommandOf('http://hq-gateway-relay:4000/v1', anthropicCompaction, { sub: false })
-  expect(command).toContain('SPYRIA_COMPACTION_MODEL=hq-anthropic/anthropic/claude-haiku-5-5')
+  const command = piCommandOf('http://spyria-gateway-relay:4000/v1', anthropicCompaction, { sub: false })
+  expect(command).toContain('SPYRIA_COMPACTION_MODEL=spyria-anthropic/anthropic/claude-haiku-5-5')
   const { created, envOf } = await createdPiOf(undefined, { effort: 'high' })
   expect(created.agent.acp_thought_level).toBe('high')
   expect((await createdPiOf(undefined, { effort: 'high', adapterModel: undefined })).created.agent).not.toHaveProperty(
@@ -57,7 +57,11 @@ test('Pi summarizes on its compaction model through its provider, starts at the 
   )
   expect(JSON.parse(envOf('SPYRIA_PI_SETTINGS') ?? '')).not.toHaveProperty('compaction')
   const budgets = { reserveTokens: 3999, keepRecentTokens: 1 }
-  const tested = piCommandOf('http://hq-gateway-relay:4000/v1', { ...piLaunch, compaction: budgets }, { sub: false })
+  const tested = piCommandOf(
+    'http://spyria-gateway-relay:4000/v1',
+    { ...piLaunch, compaction: budgets },
+    { sub: false },
+  )
   const settings = tested.find((part) => part.startsWith('SPYRIA_PI_SETTINGS='))?.slice('SPYRIA_PI_SETTINGS='.length)
   expect(JSON.parse(settings ?? '')).toMatchObject({
     extensions: ['/usr/local/lib/spyria/pi/spyria-compaction.ts', '/usr/local/lib/spyria/pi/spyria-plan.ts'],
@@ -68,11 +72,11 @@ test('Pi summarizes on its compaction model through its provider, starts at the 
 test('a model switch carries the thinking level only when one is given', async () => {
   requests.length = 0
   const conversation = { ...endpoint, conversationId: 'conversation-1' }
-  await createSpyriaAgentClient().switchModel(conversation, 'hq/openai/gpt-6.1-sol', 'high')
-  await createSpyriaAgentClient().switchModel(conversation, 'hq/mistral/mistral-small-latest')
+  await createSpyriaAgentClient().switchModel(conversation, 'spyria/openai/gpt-6.1-sol', 'high')
+  await createSpyriaAgentClient().switchModel(conversation, 'spyria/mistral/mistral-small-latest')
   expect(requests.map(({ body }) => body)).toEqual([
-    '{"model":"hq/openai/gpt-6.1-sol","thoughtLevel":"high"}',
-    '{"model":"hq/mistral/mistral-small-latest"}',
+    '{"model":"spyria/openai/gpt-6.1-sol","thoughtLevel":"high"}',
+    '{"model":"spyria/mistral/mistral-small-latest"}',
   ])
 })
 
@@ -102,7 +106,7 @@ test('a Codex subscription session writes its config atomically and launches wit
   expect(script).toEndWith('exec codex-acp')
   expect(created.secrets).toEqual({})
   expect(created.agent.mcp_config).toEqual({
-    hq: expect.objectContaining({ headers: { Authorization: 'Bearer runtime-token' } }),
+    spyria: expect.objectContaining({ headers: { Authorization: 'Bearer runtime-token' } }),
   })
   expect(JSON.stringify(created)).not.toMatch(
     /OPENAI_API_KEY|CODEX_API_KEY|OPENAI_BASE_URL|"CODEX_CONFIG=|MODEL_PROVIDER|base_url|model/,
@@ -174,7 +178,7 @@ const createdPiOf = async (sub?: { parentConversationId: string }, llm = {}) => 
   await createSpyriaAgentClient().createConversation(
     endpoint,
     'runtime-llm-token',
-    { pi: piLaunch, adapterModel: 'hq-anthropic/anthropic/claude-sonnet-5-5', ...llm },
+    { pi: piLaunch, adapterModel: 'spyria-anthropic/anthropic/claude-sonnet-5-5', ...llm },
     sub,
   )
   const created = JSON.parse(requests[0]?.body ?? '{}')
@@ -190,12 +194,12 @@ test("a Pi launch passes the tokens only as secrets, runs offline, writes its fi
     SPYRIA_LLM_TOKEN: { kind: 'StaticSecret', value: 'runtime-llm-token' },
     SPYRIA_MCP_TOKEN: { kind: 'StaticSecret', value: 'runtime-llm-token' },
   })
-  expect(created.agent.acp_model).toBe('hq-anthropic/anthropic/claude-sonnet-5-5')
+  expect(created.agent.acp_model).toBe('spyria-anthropic/anthropic/claude-sonnet-5-5')
   expect(created.agent.adapter).toBe('pi-rpc')
   expect(created.agent).not.toHaveProperty('mcp_config')
   expect(JSON.stringify(command)).not.toContain('runtime-llm-token')
   expect(command.slice(0, 4)).toEqual(['env', 'PI_OFFLINE=1', 'PI_SKIP_VERSION_CHECK=1', 'PI_TELEMETRY=0'])
-  expect(envOf('SPYRIA_COMPACTION_MODEL')).toBe('hq/mistral/mistral-small-latest')
+  expect(envOf('SPYRIA_COMPACTION_MODEL')).toBe('spyria/mistral/mistral-small-latest')
   expect(JSON.parse(envOf('SPYRIA_PI_SETTINGS') ?? '')).toEqual({
     quietStartup: true,
     enableInstallTelemetry: false,
@@ -217,8 +221,8 @@ test('Pi lists Anthropic models on the Anthropic route without /v1 and the other
   const { models } = await createdPiOf()
   expect(models).toEqual({
     providers: {
-      hq: {
-        baseUrl: 'http://hq-gateway-relay:4000/v1',
+      spyria: {
+        baseUrl: 'http://spyria-gateway-relay:4000/v1',
         api: 'openai-completions',
         apiKey: `\${SPYRIA_LLM_TOKEN}`,
         models: [
@@ -231,8 +235,8 @@ test('Pi lists Anthropic models on the Anthropic route without /v1 and the other
           },
         ],
       },
-      'hq-anthropic': {
-        baseUrl: 'http://hq-gateway-relay:4000',
+      'spyria-anthropic': {
+        baseUrl: 'http://spyria-gateway-relay:4000',
         api: 'anthropic-messages',
         apiKey: `\${SPYRIA_LLM_TOKEN}`,
         models: [{ id: 'anthropic/claude-sonnet-5-5', name: 'Sonnet 5.5', reasoning: true, contextWindow: 200000 }],
@@ -248,9 +252,9 @@ test.each([
   'deepseek/deepseek-v4-flash',
   'zai/glm-4.7',
 ])('Pi reaches %s on the chat route with its full gateway id', (id) => {
-  expect(piModelOf(id)).toBe(`hq/${id}`)
+  expect(piModelOf(id)).toBe(`spyria/${id}`)
   const command = piCommandOf(
-    'http://hq-gateway-relay:4000/v1',
+    'http://spyria-gateway-relay:4000/v1',
     { models: [{ id, name: id, reasoning: true }], compactionModel: id },
     { sub: false },
   )
@@ -258,51 +262,51 @@ test.each([
     command.find((part) => part.startsWith('SPYRIA_PI_MODELS='))?.slice('SPYRIA_PI_MODELS='.length) ?? '{}',
   )
   expect(models.providers).toEqual({
-    hq: expect.objectContaining({
+    spyria: expect.objectContaining({
       api: 'openai-completions',
       models: [{ id, name: id, reasoning: true, compat: { supportsDeveloperRole: false } }],
     }),
   })
-  expect(command).toContain(`SPYRIA_COMPACTION_MODEL=hq/${id}`)
+  expect(command).toContain(`SPYRIA_COMPACTION_MODEL=spyria/${id}`)
 })
 
 test('a parent Pi reaches Spyria tools and the router with its LLM token; a sub reaches only Spyria tools with its own token from its own directory', async () => {
   const parent = await createdPiOf()
   const toolServer = (path: string) => ({
-    url: `http://hq-gateway-relay:4000${path}`,
+    url: `http://spyria-gateway-relay:4000${path}`,
     headers: { Authorization: `Bearer \${SPYRIA_MCP_TOKEN}` },
     exposure: 'direct',
   })
   expect(parent.mcp).toEqual({
     mcpServers: {
-      hq: { ...toolServer('/mcp'), timeout: spyriaToolTimeoutSeconds },
+      spyria: { ...toolServer('/mcp'), timeout: spyriaToolTimeoutSeconds },
       router: { ...toolServer('/mcp/router'), timeout: delegateTimeoutSeconds },
     },
   })
   const sub = await createdPiOf({ parentConversationId: 'conversation-1' })
-  expect(sub.mcp).toEqual({ mcpServers: { hq: { ...toolServer('/mcp'), timeout: spyriaToolTimeoutSeconds } } })
+  expect(sub.mcp).toEqual({ mcpServers: { spyria: { ...toolServer('/mcp'), timeout: spyriaToolTimeoutSeconds } } })
   expect(sub.created.secrets).toEqual({
     SPYRIA_LLM_TOKEN: { kind: 'StaticSecret', value: 'runtime-llm-token' },
     SPYRIA_MCP_TOKEN: { kind: 'StaticSecret', value: 'runtime-llm-token' },
   })
   expect(JSON.stringify(sub.command)).not.toMatch(/runtime-llm-token/)
   expect(sub.command.at(-1)).toContain('export PI_CODING_AGENT_DIR="$HOME/.pi/sub"')
-  expect(piCommandOf('http://hq-gateway-relay:4000/v1', piLaunch, { sub: true })).toEqual(sub.command)
+  expect(piCommandOf('http://spyria-gateway-relay:4000/v1', piLaunch, { sub: true })).toEqual(sub.command)
 })
 
 test('a parent Pi in a dev chat also reaches the GitHub tools; a sub never does', () => {
   const mcpOf = (command: string[]) =>
     JSON.parse(command.find((part) => part.startsWith('SPYRIA_PI_MCP='))?.slice('SPYRIA_PI_MCP='.length) ?? '{}')
       .mcpServers
-  const gateway = 'http://hq-gateway-relay:4000/v1'
+  const gateway = 'http://spyria-gateway-relay:4000/v1'
   expect(mcpOf(piCommandOf(gateway, piLaunch, { sub: false, hasRepository: true })).github).toEqual({
-    url: 'http://hq-gateway-relay:4000/mcp/github',
+    url: 'http://spyria-gateway-relay:4000/mcp/github',
     headers: { Authorization: `Bearer \${SPYRIA_MCP_TOKEN}` },
     exposure: 'direct',
     timeout: 120,
   })
-  expect(Object.keys(mcpOf(piCommandOf(gateway, piLaunch, { sub: true, hasRepository: true })))).toEqual(['hq'])
-  expect(Object.keys(mcpOf(piCommandOf(gateway, piLaunch, { sub: false })))).toEqual(['hq', 'router'])
+  expect(Object.keys(mcpOf(piCommandOf(gateway, piLaunch, { sub: true, hasRepository: true })))).toEqual(['spyria'])
+  expect(Object.keys(mcpOf(piCommandOf(gateway, piLaunch, { sub: false })))).toEqual(['spyria', 'router'])
 })
 
 test('the router answers a running delegation well before Pi gives up on the delegate call', () => {

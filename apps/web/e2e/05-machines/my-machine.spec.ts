@@ -115,15 +115,15 @@ test.describe('My machine', () => {
       await expect(dialog).toContainText('within 15 minutes, from the Spyria repo folder')
       const commandBox = dialog.getByRole('textbox', { name: 'Command' })
       const command = await commandBox.inputValue()
-      expect(command).toMatch(/^docker build -q -t spyria-host apps\/host >\/dev\/null && docker rm -f hq-host /)
+      expect(command).toMatch(/^docker build -q -t spyria-host apps\/host >\/dev\/null && docker rm -f spyria-host /)
       expect(command).toMatch(
-        / spyria-host --personal http:\/\/host\.docker\.internal:\d+\/h\/[A-HJ-NP-Z2-9]{8} && docker exec -it hq-host spyria-host login claude$/,
+        / spyria-host --personal http:\/\/host\.docker\.internal:\d+\/h\/[A-HJ-NP-Z2-9]{8} && docker exec -it spyria-host spyria-host login claude$/,
       )
       await expect(dialog).toContainText('Your machine: Waiting for the host')
 
       const machine = pair(urlOf(command), { personal: true, signedIn: [] })
       await expect(dialog).toContainText('Your machine: Online')
-      await expect(commandBox).toHaveValue('docker exec -it hq-host spyria-host login claude')
+      await expect(commandBox).toHaveValue('docker exec -it spyria-host spyria-host login claude')
       machine.heartbeat(['claude'])
       await expect(dialog).toContainText(
         'Claude Code is ready: in a new Runtime chat, set Runs on to Local · Claude Code',
@@ -149,7 +149,7 @@ test.describe('My machine', () => {
       await machineToolOf(page, 'Codex').click()
       const dialog = useToolDialogOf(page, 'Codex')
       await expect(dialog.getByRole('textbox', { name: 'Command' })).toHaveValue(
-        'docker exec -it hq-host spyria-host login codex',
+        'docker exec -it spyria-host spyria-host login codex',
       )
       await expect(dialog.getByRole('textbox')).toHaveCount(1)
       await expect(dialog).not.toContainText('docker build')
@@ -195,7 +195,7 @@ test.describe('My machine', () => {
       await expect(
         messageContaining(
           page,
-          `Sign in to ${tool.name} on your machine: docker exec -it hq-host spyria-host login ${tool.login}`,
+          `Sign in to ${tool.name} on your machine: docker exec -it spyria-host spyria-host login ${tool.login}`,
         ),
       ).toHaveCount(1)
       expect((await machine()).prompts).toEqual([])

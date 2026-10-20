@@ -24,4 +24,4 @@ CROSS JOIN unnest(ARRAY['members.invite', 'members.manage', 'roles.manage', 'sso
 ALTER TABLE "memberships" ADD CONSTRAINT "memberships_W6V6Me0w2fna_fkey" FOREIGN KEY ("workspace_id","role") REFERENCES "workspace_roles"("workspace_id","id");--> statement-breakpoint
 ALTER TABLE "workspace_role_permissions" ADD CONSTRAINT "workspace_role_permissions_YYXfGqC0q9PS_fkey" FOREIGN KEY ("workspace_id","role_id") REFERENCES "workspace_roles"("workspace_id","id") ON DELETE CASCADE;--> statement-breakpoint
 ALTER TABLE "workspace_roles" ADD CONSTRAINT "workspace_roles_workspace_id_workspaces_workspace_id_fkey" FOREIGN KEY ("workspace_id") REFERENCES "workspaces"("workspace_id");--> statement-breakpoint
-ALTER PUBLICATION "hq_zero" ADD TABLE "workspace_roles", "workspace_role_permissions";
+ALTER PUBLICATION "spyria_zero" ADD TABLE "workspace_roles", "workspace_role_permissions";

@@ -10,8 +10,8 @@ const branchPattern = /^\w[\w./-]*$/
 const commitPattern = /^[0-9a-f]{40}$/
 const maximumBundleBytes = 20_000_000
 const identityPattern = /^[^<>\n\0]+$/
-const baseRef = 'refs/hq/base'
-const pushedRef = 'refs/hq/pushed'
+const baseRef = 'refs/spyria/base'
+const pushedRef = 'refs/spyria/pushed'
 
 const git = async (cwd: string, args: string[], env: Record<string, string>, input = '') => {
   const child = Bun.spawn(['git', '-C', cwd, ...args], {

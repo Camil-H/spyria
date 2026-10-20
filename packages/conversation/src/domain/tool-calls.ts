@@ -20,7 +20,7 @@ export const isGuestToolMethod = (rpc: unknown) => {
 }
 
 export const toolDisplayNameOf = (prefixedName: string) => {
-  const toolName = prefixedName.replace(/^mcp__(hq|router|github)__/, '')
+  const toolName = prefixedName.replace(/^mcp__(spyria|router|github)__/, '')
   const { server, tool } = toolNamePartsOf(toolName)
   return toolName.includes('-') ? `${tool} (${server})` : toolName
 }

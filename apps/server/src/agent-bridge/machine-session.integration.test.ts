@@ -285,7 +285,7 @@ test.each([
     const refused = await prompt(chat, 'Hello')
     await waitFor(async () => (await repliesTo(refused)).length > 0)
     expect(bodiesOf(await repliesTo(refused))).toEqual([
-      `notice:Sign in to ${name} on your machine: docker exec -it hq-host spyria-host login ${tool}`,
+      `notice:Sign in to ${name} on your machine: docker exec -it spyria-host spyria-host login ${tool}`,
     ])
 
     host.signIn([tool])
