@@ -134,11 +134,20 @@ services:
 
   gateway:
     image: maximhq/bifrost:v2.2.6@sha256:d0b4708ace1aa175766f94afa715fd9bba3a1b56c1dc2afff15a21edf3ae4e2a
+    entrypoint:
+      - sh
+      - -ec
+      - |
+        mkdir -p /tmp/trust
+        awk -v distrusted=MIICTjCCAdOgAwIBAgIKPPYHqWhwDtqLhDAKBggqhkjOPQQD '/-----BEGIN/ { block = "" } { block = block $$0 "\n" } /-----END/ && !index(block, distrusted) { printf "%s", block }' /etc/ssl/certs/ca-certificates.crt > /tmp/trust/ca-certificates.crt
+        exec /app/docker-entrypoint.sh
     container_name: ${SPYRIA_DEPLOYMENT}-gateway
     depends_on:
       gateway-database:
         condition: service_completed_successfully
     environment:
+      SSL_CERT_FILE: /tmp/trust/ca-certificates.crt
+      SSL_CERT_DIR: /tmp/trust
       BIFROST_ENCRYPTION_KEY: ${SPYRIA_GATEWAY_ENCRYPTION_KEY}
       BIFROST_SETUP_TOKEN: ${SPYRIA_GATEWAY_SETUP_TOKEN}
       BIFROST_ADMIN_USER: ${SPYRIA_GATEWAY_ADMIN_USER}
@@ -188,7 +197,7 @@ services:
 
   cloudflared:
     profiles: [cloudflare]
-    image: cloudflare/cloudflared:2026.9.3
+    image: cloudflare/cloudflared:2026.10.2
     container_name: ${SPYRIA_DEPLOYMENT}-cloudflared
     command: [tunnel, --no-autoupdate, --metrics, 127.0.0.1:2000, run]
     environment:

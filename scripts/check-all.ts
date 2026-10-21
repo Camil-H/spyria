@@ -5,7 +5,7 @@ import { join } from 'node:path'
 const isDocker = process.argv.includes('--docker')
 const checkName = isDocker ? 'check:docker' : 'check:all'
 const steps = isDocker
-  ? ['stack:up', 'agent:build', 'test:docker:integration']
+  ? ['stack:up', 'agent:build', 'check:trust', 'test:docker:integration']
   : [
       'lint',
       'typecheck',

@@ -117,6 +117,16 @@ bun run agent:bump <tool>    # pin the latest of claude-code | claude-agent-acp 
 
 After a rebuild, restart the server: a new content ID applies to new runtimes. Without a built image a prompt says `Spyria's runtime image is not built: run bun run agent:build`.
 
+## Trust store
+
+In October 2026 eight eMudhra intermediate CA keys were compromised, the TLS ones chaining to `emSign ECC Root CA - G3` (and cross-signed by `AAA Certificate Services`). Until Bun ships the fix (Bun 1.3.14 and 1.4.3 still embed that root; `--use-system-ca` only adds the system store to Bun's and Node's bundled roots, it never removes one), our images drop it themselves:
+
+- server and host Dockerfiles, and `bun run agent:build` for `spyria-agent`: the root's PEM in the Bun runtime is overwritten (`DISTRUSTED_ROOT_PEM_PREFIX`), so Bun cannot load it; Debian's current `ca-certificates` (`20250419+deb13u1`, `~deb12u2`) no longer has either root, and the host copies that bundle over distroless's;
+- agent image: Node 24.22.1 dropped the root (`agent:build` pulls `node:24-bookworm-slim`);
+- gateway (Bifrost 2.2.6, Go 1.27.0): Compose filters the root out of its bundle at start and points `SSL_CERT_FILE` and `SSL_CERT_DIR` at the result; cloudflared 2026.10.2 is built with Go 1.27.3, which rejects the eight keys.
+
+`bun run check:trust` (in `check:docker`) and `smoke:prod` fail when a built image or the running gateway still holds either root. Once Bun has a release with the fix, bump Bun and remove the `DISTRUSTED_ROOT_PEM_PREFIX` lines and `scrubDistrustedRoots`; once Bifrost ships with Go 1.27.3 or later, remove the gateway `entrypoint` and `SSL_CERT_*`. Keep `check:trust`.
+
 ## Claude Code and Codex on your own machine
 
 A member can run Claude Code on their own Claude subscription, or Codex on their own ChatGPT plan, on their own machine:
@@ -195,6 +205,7 @@ bun run test:e2e:smoke     # the @smoke critical paths only (29 tests, every seg
 bun run test:e2e -- e2e/04-agent   # one segment (00-platform still runs first)
 bun run test:ui            # the visual suite apps/web/ui: screenshots light and dark against the baselines, keyboard and resize checks; not in check:all
 bun run test:ui:update     # regenerate the screenshot baselines after an intended design change, then review the changed PNGs
+bun run check:trust        # the built runtime and host images hold no distrusted root (see Trust store); in check:docker
 bun run smoke:prod         # the production Compose file under a throwaway name, then removed (see Self-hosting); not in check:all
 ```
 

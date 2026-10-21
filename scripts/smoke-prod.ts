@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { checkTrust } from './check-trust.ts'
 
 const repositoryRoot = new URL('..', import.meta.url).pathname
 const composeFile = `${repositoryRoot}deploy/compose.prod.yml`
@@ -113,6 +114,10 @@ const smoke = async () => {
       `${path} is served precompressed with ${encoding} (Vary: accept-encoding) and as is without it`,
     )
   }
+  check(
+    await checkTrust([`${deployment}-server`, `${deployment}-gateway`]),
+    'the server image and the running gateway trust no distrusted root',
+  )
   const authMode = await (await fetch(`${serverUrl}/auth/mode`)).json()
   check(
     authMode.authMode === 'sso' && authMode.canCreateWorkspace === true,

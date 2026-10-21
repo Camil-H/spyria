@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { type HarnessId, harnessIds, installScriptOf } from '../apps/host/src/harnesses.ts'
 import { checkLicenses } from './check-licenses.ts'
+import { distrustedRootPemPrefixes } from './check-trust.ts'
 
 const agentDirectory = new URL('../apps/agent/', import.meta.url).pathname
 const piDirectory = `${agentDirectory}pi/`
@@ -45,6 +46,14 @@ const fillTestHarnesses = (image: string) => {
     ])
 }
 
+const scrubDistrustedRoots = (file: string) => {
+  const binary = readFileSync(file)
+  for (const prefix of Object.values(distrustedRootPemPrefixes))
+    for (let index = binary.indexOf(prefix); index !== -1; index = binary.indexOf(prefix, index))
+      binary.fill('*', index, index + prefix.length)
+  writeFileSync(file, binary)
+}
+
 const build = () => {
   const architecture = run(['docker', 'info', '--format', '{{.Architecture}}']) === 'aarch64' ? 'arm64' : 'x64'
   run([
@@ -57,7 +66,8 @@ const build = () => {
     '--outfile',
     'dist/spyria-agent',
   ])
-  run(['docker', 'build', '--iidfile', 'image-id', '-t', 'spyria-agent:dev', '.'])
+  scrubDistrustedRoots(`${agentDirectory}dist/spyria-agent`)
+  run(['docker', 'build', '--pull', '--iidfile', 'image-id', '-t', 'spyria-agent:dev', '.'])
   const image = readFileSync(`${agentDirectory}image-id`, 'utf8').trim()
   if (!checkLicenses(image)) process.exit(1)
   fillTestHarnesses(image)
