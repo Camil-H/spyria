@@ -59,6 +59,8 @@ services:
       SPYRIA_GATEWAY_ADMIN_PASSWORD: ${SPYRIA_GATEWAY_ADMIN_PASSWORD}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+      OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-0.1}
     volumes:
       - type: bind
         source: ../apps/agent/image-id
@@ -68,6 +70,7 @@ services:
           create_host_path: false
     ports:
       - 127.0.0.1:${SPYRIA_LOCAL_PORT:-3300}:3000
+    stop_grace_period: 30s
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -164,7 +167,10 @@ services:
       SPYRIA_DEPLOYMENT: ${SPYRIA_DEPLOYMENT}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+      OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-0.1}
     group_add: ['${SPYRIA_DOCKER_GROUP:-0}']
+    stop_grace_period: 30s
     cap_drop: [ALL]
     security_opt: [no-new-privileges]
     read_only: true

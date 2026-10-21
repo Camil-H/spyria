@@ -16,7 +16,7 @@ const git = (...command: string[]) => {
   return result.stdout.toString().trim()
 }
 
-test('a base bundle over 12 MB is refused with the update-from-your-machine reason; a smaller one is sent', async () => {
+test('a base bundle over 12 MB is refused while it streams, with the update-from-your-machine reason; a smaller one is sent whole', async () => {
   git('init', '-q', 'upstream')
   writeFileSync(join(directory, 'upstream', 'small.bin'), crypto.getRandomValues(new Uint8Array(1_000)))
   git('-C', 'upstream', 'add', '.')
@@ -27,6 +27,8 @@ test('a base bundle over 12 MB is refused with the update-from-your-machine reas
   const small = await fetchBase(null)
   expect(small).toMatchObject({ head: git('-C', 'upstream', 'rev-parse', 'main') })
   const smallHead = String((small as { head: string }).head)
+  writeFileSync(join(directory, 'small.bundle'), Buffer.from(String((small as { bundle: string }).bundle), 'base64'))
+  expect(git('bundle', 'list-heads', 'small.bundle')).toBe(`${smallHead} refs/heads/main`)
   writeFileSync(join(directory, 'upstream', 'large.bin'), crypto.getRandomValues(new Uint8Array(12_100_000)))
   git('-C', 'upstream', 'add', '.')
   git('-C', 'upstream', 'commit', '-q', '-m', 'Large data')

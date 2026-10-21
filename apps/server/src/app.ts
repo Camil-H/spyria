@@ -84,7 +84,6 @@ import {
   githubRepositoriesPath,
   githubSettingsPath,
   githubWebhooksPath,
-  grantedRepositoryOf,
   type SsoSettingsInput,
   ssoSettingsPath,
   workspaceMutators,
@@ -635,22 +634,22 @@ export const createApp = ({
         ),
       })),
     )
-    .get(githubBranchesPath, (context) => {
-      const database = context.get('database')
-      const { workspaceId } = context.get('zeroContext')
-      return endpointResponse('Listing GitHub branches', 200, async () => {
-        const repositories = await grantedRepositories(database, githubDependencies, workspaceId)
-        const { fullName } = grantedRepositoryOf(repositories, context.req.query('repository') ?? '')
-        return { branches: await repositoryBranches(database, githubDependencies, workspaceId, fullName) }
-      })
-    })
+    .get(githubBranchesPath, (context) =>
+      endpointResponse('Listing GitHub branches', 200, async () => ({
+        branches: await repositoryBranches(
+          context.get('database'),
+          githubDependencies,
+          context.get('zeroContext').workspaceId,
+          context.req.query('repository') ?? '',
+        ),
+      })),
+    )
     .post(devChatsPath, rateLimited('runtimeCreation'), async (context) => {
       const body = await context.req.json().catch(() => null)
       const database = context.get('database')
       const { workspaceId } = context.get('zeroContext')
       return endpointResponse('Creating a dev chat', 201, () =>
         createDevChatFromRequest(context.get('transact'), context.get('zeroContext'), body, {
-          granted: () => grantedRepositories(database, githubDependencies, workspaceId),
           branches: (fullName) => repositoryBranches(database, githubDependencies, workspaceId, fullName),
         }),
       )

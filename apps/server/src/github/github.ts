@@ -12,11 +12,13 @@ import {
   githubSecretNames,
   githubSettingsFrom,
   InvalidGitHubSettings,
+  RepositoryNotGranted,
+  repositoryNameOf,
 } from '@spyria/workspace/server'
 import type { SecretBox } from '../auth/secret-box.ts'
 import { recordWorkspaceEvent, requireMemberPermission } from '../auth/sso.ts'
 import { baseBundle, pushBundle } from './bundles.ts'
-import { appJwtOf, type GitHubApi, type UserTokens } from './github-api.ts'
+import { appJwtOf, type GitHubApi, GitHubRequestFailed, type UserTokens } from './github-api.ts'
 import {
   isSignedBy,
   pullRequestNumbersOf,
@@ -38,6 +40,7 @@ type AppRow = {
 type ConnectionState = { workspaceId: string; userId: string; databaseName?: string; expiresAt: number }
 
 const connectionStateLifetimeMilliseconds = 10 * 60 * 1000
+const notGrantedStatuses = [404, 422]
 const secretLabels: Record<keyof GitHubSecrets, string> = {
   clientSecret: 'A client secret',
   privateKey: 'A private key',
@@ -113,13 +116,18 @@ export const repositoryBranches = async (
   database: Database,
   dependencies: GitHubDependencies,
   workspaceId: string,
-  fullName: string,
+  repository: string,
 ) => {
+  const fullName = repositoryNameOf(repository)
   const credentials = await appCredentialsOf(database, dependencies, workspaceId)
-  return githubCall(async () => {
-    const token = await repositoryTokenOf(dependencies.api, credentials, fullName, { metadata: 'read' })
-    return (await dependencies.api.branches(token, fullName)).map(({ name }) => name)
-  })
+  const token = await repositoryTokenOf(dependencies.api, credentials, fullName, { metadata: 'read' }).catch(
+    (error: unknown) => {
+      if (error instanceof GitHubRequestFailed && notGrantedStatuses.includes(error.status))
+        throw new RepositoryNotGranted(fullName)
+      throw new GitHubRefused(error instanceof Error ? error.message : 'an unknown error')
+    },
+  )
+  return githubCall(async () => (await dependencies.api.branches(token, fullName)).map(({ name }) => name))
 }
 
 export const readGitHubSettings = async (
@@ -225,21 +233,28 @@ const storeUserTokens = async (
       needs_reconnection = false, updated_at = now()`
 }
 
-export const githubConnectionOf = async (
+const connectionWithTokenOf = async (
   database: Database,
   dependencies: GitHubDependencies,
   member: Member,
-): Promise<GitHubConnectionView | null> => {
+): Promise<(GitHubConnectionView & { accessToken?: () => Promise<string | undefined> }) | null> => {
   const [row] = await database.$client<
-    { login: string; needsReconnection: boolean; encryptedRefreshToken: string | null; isExpired: boolean }[]
+    {
+      login: string
+      needsReconnection: boolean
+      encryptedAccessToken: string
+      encryptedRefreshToken: string | null
+      isExpired: boolean
+    }[]
   >`
-    select login, needs_reconnection as "needsReconnection", encrypted_refresh_token as "encryptedRefreshToken",
-      coalesce(access_expires_at <= now(), false) as "isExpired"
+    select login, needs_reconnection as "needsReconnection", encrypted_access_token as "encryptedAccessToken",
+      encrypted_refresh_token as "encryptedRefreshToken", coalesce(access_expires_at <= now(), false) as "isExpired"
     from github_connections where workspace_id = ${member.workspaceId} and user_id = ${member.userId}`
   if (!row) return null
-  if (row.needsReconnection || !row.isExpired)
-    return { login: row.login, state: row.needsReconnection ? 'needs_reconnection' : 'connected' }
   const { secretBox } = dependencies
+  if (row.needsReconnection) return { login: row.login, state: 'needs_reconnection' }
+  if (!row.isExpired)
+    return { login: row.login, state: 'connected', accessToken: async () => secretBox?.open(row.encryptedAccessToken) }
   const refreshed =
     row.encryptedRefreshToken && secretBox
       ? await appCredentialsOf(database, dependencies, member.workspaceId)
@@ -250,12 +265,21 @@ export const githubConnectionOf = async (
       : undefined
   if (refreshed && secretBox) {
     await storeUserTokens(database, secretBox, member, row.login, refreshed)
-    return { login: row.login, state: 'connected' }
+    return { login: row.login, state: 'connected', accessToken: async () => refreshed.accessToken }
   }
   await database.$client`
     update github_connections set needs_reconnection = true, updated_at = now()
     where workspace_id = ${member.workspaceId} and user_id = ${member.userId}`
   return { login: row.login, state: 'needs_reconnection' }
+}
+
+export const githubConnectionOf = async (
+  database: Database,
+  dependencies: GitHubDependencies,
+  member: Member,
+): Promise<GitHubConnectionView | null> => {
+  const connection = await connectionWithTokenOf(database, dependencies, member)
+  return connection && { login: connection.login, state: connection.state }
 }
 
 export const startGitHubConnection = async (
@@ -295,13 +319,8 @@ export const disconnectGitHub = (database: Database, member: Member) =>
   database.$client`
     delete from github_connections where workspace_id = ${member.workspaceId} and user_id = ${member.userId}`
 
-const userTokenOf = async (database: Database, dependencies: GitHubDependencies, member: Member) => {
-  const connection = await githubConnectionOf(database, dependencies, member)
-  const [row] = await database.$client<{ encryptedAccessToken: string }[]>`
-    select encrypted_access_token as "encryptedAccessToken" from github_connections
-    where workspace_id = ${member.workspaceId} and user_id = ${member.userId}`
-  return connection?.state === 'connected' && row && dependencies.secretBox?.open(row.encryptedAccessToken)
-}
+const userTokenOf = async (database: Database, dependencies: GitHubDependencies, member: Member) =>
+  (await connectionWithTokenOf(database, dependencies, member))?.accessToken?.()
 
 const chatRepositoryOf = async (database: Database, { workspaceId, chatId }: AgentChat) =>
   (

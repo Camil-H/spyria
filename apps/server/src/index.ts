@@ -29,7 +29,7 @@ const requiredEnvironment = (name: string) => {
 }
 
 const telemetry = startTelemetry()
-const shutdownMilliseconds = 10_000
+const shutdownMilliseconds = 25_000
 const authModes = ['dex', 'sso'] as const
 const authMode = authModes.find((mode) => mode === (process.env.SPYRIA_AUTH_MODE ?? 'dex'))
 if (!authMode) throw new Error('SPYRIA_AUTH_MODE must be dex or sso')

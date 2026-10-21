@@ -1,12 +1,6 @@
 import { expect, test } from 'bun:test'
 import { BranchNotFound, InvalidGitHubSettings, RepositoryNotGranted } from './errors.ts'
-import {
-  enteredSecretsOf,
-  existingBranchOf,
-  githubSettingsFrom,
-  grantedRepositoryOf,
-  workingBranchOf,
-} from './github.ts'
+import { enteredSecretsOf, existingBranchOf, githubSettingsFrom, repositoryNameOf, workingBranchOf } from './github.ts'
 
 test('GitHub settings need a numeric App id and a client id; only entered secrets are kept', () => {
   expect(githubSettingsFrom({ appId: ' 4242 ', clientId: ' Iv1.abc ' })).toEqual({ appId: '4242', clientId: 'Iv1.abc' })
@@ -19,11 +13,12 @@ test('GitHub settings need a numeric App id and a client id; only entered secret
   })
 })
 
-test('a dev chat needs a granted repository and an existing base branch', () => {
-  const repository = { fullName: 'acme/app', defaultBranch: 'main' }
-  const repositories = [repository]
-  expect(grantedRepositoryOf(repositories, ' acme/app ')).toEqual(repository)
-  expect(() => grantedRepositoryOf(repositories, 'acme/secret')).toThrow(new RepositoryNotGranted('acme/secret'))
+test('a dev chat needs a repository name GitHub can resolve and an existing base branch', () => {
+  expect(repositoryNameOf(' acme/app ')).toBe('acme/app')
+  expect(repositoryNameOf('acme-corp/app.web_2')).toBe('acme-corp/app.web_2')
+  for (const outside of ['acme/../app', 'acme/..', 'acme', 'acme/app/branches', '../app', 'acme/app?x=1'])
+    expect(() => repositoryNameOf(outside)).toThrow(new RepositoryNotGranted(outside))
+  expect(() => repositoryNameOf(' ')).toThrow(new RepositoryNotGranted('The repository'))
   expect(existingBranchOf('acme/app', ['main', 'release'], 'release ')).toBe('release')
   expect(() => existingBranchOf('acme/app', ['main'], 'gone')).toThrow(new BranchNotFound('acme/app', 'gone'))
 })

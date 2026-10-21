@@ -321,6 +321,41 @@ test('a domain verifies through a single-use emailed link; until then it does no
   await database.$client`update sso_domains set verification_expires_at = now() - interval '1 second'`
   expect(await openLink(lastLinkTo('it@example.com'))).toEqual({ status: 400, page: expect.stringContaining(invalid) })
 
+  const storedHash = async () =>
+    (
+      await database.$client<{ hash: string | null }[]>`
+        select verification_token_hash as hash from sso_domains where workspace_id = ${acme}`
+    )[0]?.hash
+  const appMailingThrough = ({ url }: { url: string }) =>
+    createApp({ database, ...ssoSettings, mail: { smtpUrl: url, from: 'Spyria <spyria@test.local>' } })
+  const slowSmtp = startFakeSmtp(0, { greetingDelayMilliseconds: 1_000 })
+  const droppingSmtp = startFakeSmtp(0, { dropsAfterMessage: true })
+  try {
+    const hashBeforeSlowSend = await storedHash()
+    const slowSend = sendVerification(acme, 'example.com', 'it@example.com', appMailingThrough(slowSmtp))
+    const startedAt = Date.now()
+    while ((await storedHash()) === hashBeforeSlowSend && Date.now() - startedAt < 900) await Bun.sleep(10)
+    expect(await storedHash()).not.toBe(hashBeforeSlowSend)
+    expect(slowSmtp.mails).toHaveLength(0)
+    expect((await slowSend).status).toBe(200)
+    expect(slowSmtp.mails).toHaveLength(1)
+    const hashOfDeliveredLink = await storedHash()
+    expect(
+      await sendVerification(acme, 'example.com', 'it@example.com', appMailingThrough(droppingSmtp)),
+    ).toMatchObject({
+      body: { error: 'mail_not_sent' },
+    })
+    expect(await storedHash()).toBe(hashOfDeliveredLink)
+    expect(droppingSmtp.mails).toHaveLength(1)
+    expect(await openLink(verificationLinkIn(droppingSmtp.mails[0]))).toEqual({
+      status: 400,
+      page: expect.stringContaining(invalid),
+    })
+  } finally {
+    slowSmtp.stop()
+    droppingSmtp.stop()
+  }
+
   await sendVerification(acme, 'example.com', 'it@example.com')
   const link = lastLinkTo('it@example.com')
   expect(await openLink(link)).toEqual({

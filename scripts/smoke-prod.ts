@@ -97,6 +97,22 @@ const smoke = async () => {
     asset.headers.get('cache-control') === 'public, max-age=31536000, immutable',
     'the hashed asset is cached for a year, immutable',
   )
+  for (const [encoding, path] of [
+    ['br', '/'],
+    ['br', assetPath],
+    ['gzip', assetPath],
+  ] as const) {
+    const compressed = await fetch(`${serverUrl}${path}`, { headers: { 'accept-encoding': encoding } })
+    const identity = await fetch(`${serverUrl}${path}`, { headers: { 'accept-encoding': 'identity' } })
+    const [compressedText, identityText] = [await compressed.text(), await identity.text()]
+    check(
+      compressed.headers.get('content-encoding') === encoding &&
+        compressed.headers.get('vary') === 'accept-encoding' &&
+        identity.headers.get('content-encoding') === null &&
+        compressedText === identityText,
+      `${path} is served precompressed with ${encoding} (Vary: accept-encoding) and as is without it`,
+    )
+  }
   const authMode = await (await fetch(`${serverUrl}/auth/mode`)).json()
   check(
     authMode.authMode === 'sso' && authMode.canCreateWorkspace === true,

@@ -17,6 +17,7 @@ export const githubSecretNames = ['clientSecret', 'privateKey', 'webhookSecret']
 export const githubCallbackPath = '/auth/github/callback'
 export const githubWebhooksPath = '/api/github/webhooks'
 const appIdPattern = /^\d+$/
+const repositoryNamePattern = /^[\w-]+\/(?!\.\.?$)[\w.-]+$/
 const workingBranchSlugLength = 40
 
 const trimmed = (value: unknown) => (typeof value === 'string' ? value.trim() : '')
@@ -34,10 +35,10 @@ export const enteredSecretsOf = (input: GitHubSettingsInput) =>
     githubSecretNames.flatMap((name) => (trimmed(input[name]) ? [[name, trimmed(input[name])]] : [])),
   ) as Partial<GitHubSecrets>
 
-export const grantedRepositoryOf = (repositories: readonly GitHubRepository[], repository: string) => {
-  const granted = repositories.find(({ fullName }) => fullName === trimmed(repository))
-  if (!granted) throw new RepositoryNotGranted(trimmed(repository) || 'The repository')
-  return granted
+export const repositoryNameOf = (repository: string) => {
+  if (!repositoryNamePattern.test(trimmed(repository)))
+    throw new RepositoryNotGranted(trimmed(repository) || 'The repository')
+  return trimmed(repository)
 }
 
 export const existingBranchOf = (repository: string, branches: readonly string[], branch: string) => {

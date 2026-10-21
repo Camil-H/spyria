@@ -1,6 +1,6 @@
 import { focusRing } from '@spyria/ui'
 import { ChevronRight } from 'lucide-react'
-import { type Ref, useRef, useState } from 'react'
+import { type Ref, useDeferredValue, useRef, useState } from 'react'
 import type { Conversation, ConversationItem } from '../queries/get-conversation.ts'
 import { MessageItem } from './MessageItem.tsx'
 
@@ -33,6 +33,7 @@ const FoldedSteps = ({
 }
 
 const earlierThresholdPixels = 400
+const newItemsPaintedFirst = 10
 
 export const MessageList = ({
   conversation,
@@ -50,6 +51,8 @@ export const MessageList = ({
   onFork: (() => Promise<unknown>) | undefined
 }) => {
   const previousScrollTop = useRef(0)
+  const renderedItems = useDeferredValue(items)
+  const shownItems = renderedItems === items ? items : items.slice(-(renderedItems.length + newItemsPaintedFirst))
   return (
     <div
       className="min-h-0 flex-1 overflow-y-auto scrollbar-thin"
@@ -67,12 +70,12 @@ export const MessageList = ({
           Show earlier messages
         </button>
       )}
-      {items.length === 0 ? (
+      {shownItems.length === 0 ? (
         isComplete && <p className="px-3 py-2 text-sm text-muted">No messages yet</p>
       ) : (
         <ol aria-label="Messages" className="flex flex-col gap-1">
-          {items.map((item, index) => {
-            const ref = index === items.length - 1 ? scrollIntoView : undefined
+          {shownItems.map((item, index) => {
+            const ref = index === shownItems.length - 1 ? scrollIntoView : undefined
             return item.type === 'fold' ? (
               <FoldedSteps key={`fold-${item.promptId}`} fold={item} ref={ref} />
             ) : (

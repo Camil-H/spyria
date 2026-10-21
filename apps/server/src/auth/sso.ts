@@ -304,33 +304,45 @@ export const sendDomainVerification = async (
 ) => {
   const address = normalizedEmail(String(email ?? ''))
   const claimedDomain = String(domain ?? '')
-  return database.$client.begin(async (sql) => {
+  const token = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url')
+  const { send, pending } = await database.$client.begin(async (sql) => {
     await requireMemberPermission(sql, member, 'sso.manage')
     if (domainOfEmail(address) !== claimedDomain || !address.split('@')[0])
       throw new InvalidSsoSettings(`Enter an address at ${claimedDomain}`)
     if (!mailer) throw new MailNotConfigured()
-    const token = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url')
-    const [pending] = await sql<{ workspaceName: string }[]>`
+    const [stored] = await sql<
+      {
+        workspaceName: string
+        previousEmail: string | null
+        previousHash: string | null
+        previousExpiresAt: string | null
+      }[]
+    >`
       update sso_domains set verification_email = ${address}, verification_token_hash = ${hashOf(token)},
         verification_expires_at = now() + ${verificationLifetime}::interval
       from workspaces
       where sso_domains.workspace_id = ${member.workspaceId} and domain = ${claimedDomain} and verified_at is null
         and workspaces.workspace_id = sso_domains.workspace_id
-      returning workspaces.name as "workspaceName"`
-    if (!pending)
+      returning workspaces.name as "workspaceName", old.verification_email as "previousEmail",
+        old.verification_token_hash as "previousHash", old.verification_expires_at::text as "previousExpiresAt"`
+    if (!stored)
       throw new InvalidSsoSettings(`${claimedDomain} is not a domain of this workspace waiting for verification`)
-    const link = `${appOrigin}${domainVerificationLinkPath}?token=${token}`
-    await mailer
-      .send({
-        to: address,
-        subject: `Verify ${claimedDomain} for Spyria`,
-        text: `Open this link to confirm that the Spyria workspace ${pending.workspaceName} signs in people of ${claimedDomain}:\n\n${link}\n\nThe link works once and expires in 24 hours.`,
-      })
-      .catch((error: Error) => {
-        throw new MailNotSent(error.message)
-      })
-    return ssoSettingsViewOf(sql, member)
+    return { send: mailer.send, pending: stored }
   })
+  const link = `${appOrigin}${domainVerificationLinkPath}?token=${token}`
+  await send({
+    to: address,
+    subject: `Verify ${claimedDomain} for Spyria`,
+    text: `Open this link to confirm that the Spyria workspace ${pending.workspaceName} signs in people of ${claimedDomain}:\n\n${link}\n\nThe link works once and expires in 24 hours.`,
+  }).catch(async (error: Error) => {
+    await database.$client`
+      update sso_domains set verification_email = ${pending.previousEmail},
+        verification_token_hash = ${pending.previousHash},
+        verification_expires_at = ${pending.previousExpiresAt}::timestamptz
+      where workspace_id = ${member.workspaceId} and domain = ${claimedDomain} and verification_token_hash = ${hashOf(token)}`
+    throw new MailNotSent(error.message)
+  })
+  return database.$client.begin((sql) => ssoSettingsViewOf(sql, member))
 }
 
 export const verifyDomainByToken = (database: Database, token: string) =>

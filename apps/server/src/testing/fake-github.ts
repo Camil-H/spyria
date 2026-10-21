@@ -97,6 +97,7 @@ export const startFakeGitHub = () => {
   const refreshTokens = new Set<string>()
   const codes = new Set<string>()
   const gitAuthorizations: string[] = []
+  const apiRequests: string[] = []
   const repositoryNamed = (fullName: string) => fakeGitHubRepositories.find((repo) => repo.fullName === fullName)
   const installationTokenOf = (request: Request) =>
     installationTokens.get((request.headers.get('authorization') ?? '').replace(/^(Bearer|token) /, ''))
@@ -206,6 +207,7 @@ export const startFakeGitHub = () => {
   }
 
   const api = async (request: Request, path: string) => {
+    apiRequests.push(`${request.method} ${path}`)
     const isApp = jwtIssuerOf(request.headers.get('authorization'), publicKey) === fakeGitHubAppId
     if (path === '/app')
       return isApp ? Response.json({ id: Number(fakeGitHubAppId), slug: 'spyria-test' }) : unauthorized()
@@ -322,6 +324,7 @@ export const startFakeGitHub = () => {
     appPrivateKey,
     installationTokens,
     gitAuthorizations,
+    apiRequests,
     pullRequests,
     branchHeadOf,
     commitSubjectsOf,

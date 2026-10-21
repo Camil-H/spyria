@@ -23,7 +23,7 @@ export {
   githubSecretNames,
   githubSettingsFrom,
   githubWebhooksPath,
-  grantedRepositoryOf,
+  repositoryNameOf,
 } from './domain/github.ts'
 export { displayNameFrom, normalizedEmail } from './domain/invitation.ts'
 export { Name } from './domain/name.ts'

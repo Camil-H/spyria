@@ -41,23 +41,30 @@ const gitEnvironmentOf = (home: string, url: string, token: string) => {
 }
 
 type InRepository = (...args: string[]) => Promise<{ isDone: boolean; stdout: string; output: string }>
+type GitChildInRepository = (...args: string[]) => Bun.Subprocess<'ignore', 'pipe', 'pipe'>
 
 const inTemporaryRepository = async <Result>(
   url: string,
   token: string,
-  work: (inRepository: InRepository, directory: string) => Promise<Result>,
+  work: (inRepository: InRepository, directory: string, gitChildInRepository: GitChildInRepository) => Promise<Result>,
 ) => {
   const directory = await mkdtemp(join(tmpdir(), 'spyria-git-'))
   const repository = join(directory, 'repository.git')
   const env = gitEnvironmentOf(directory, url, token)
+  const gitChild = (...args: string[]) =>
+    Bun.spawn(['git', ...args], { cwd: directory, env, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' })
   const git = async (...args: string[]) => {
-    const child = Bun.spawn(['git', ...args], { cwd: directory, env, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' })
+    const child = gitChild(...args)
     const [stdout, stderr] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()])
     return { isDone: (await child.exited) === 0, stdout, output: `${stdout}${stderr}` }
   }
   try {
     await git('init', '--quiet', '--bare', repository)
-    return await work((...args) => git('-C', repository, ...args), directory)
+    return await work(
+      (...args) => git('-C', repository, ...args),
+      directory,
+      (...args) => gitChild('-C', repository, ...args),
+    )
   } finally {
     await rm(directory, { recursive: true, force: true })
   }
@@ -93,7 +100,7 @@ export const pushBundle = ({ url, token, branch, baseBranch, bundleOf }: Push) =
   })
 
 export const baseBundle = ({ url, token, baseBranch, runtimeBaseHead }: BaseFetch) =>
-  inTemporaryRepository(url, token, async (inRepository, directory) => {
+  inTemporaryRepository(url, token, async (inRepository, _directory, gitChildInRepository) => {
     const baseRef = `refs/heads/${baseBranch}`
     const fetched = await inRepository('fetch', '--quiet', '--no-tags', url, `${baseRef}:${baseRef}`)
     if (!fetched.isDone) return { failure: `GitHub refused the fetch: ${lastLinesOf(fetched.output)}` }
@@ -102,13 +109,22 @@ export const baseBundle = ({ url, token, baseBranch, runtimeBaseHead }: BaseFetc
     if (head === prerequisite) return { head, bundle: '' }
     const isAncestor =
       prerequisite !== undefined && (await inRepository('merge-base', '--is-ancestor', prerequisite, head)).isDone
-    const bundle = join(directory, 'base.bundle')
-    const created = await inRepository('bundle', 'create', bundle, baseRef, ...(isAncestor ? [`^${prerequisite}`] : []))
-    if (!created.isDone) return { failure: `The base branch could not be bundled: ${lastLinesOf(created.output)}` }
-    const bytes = await Bun.file(bundle).bytes()
-    if (bytes.length > maximumBundleBytes)
-      return {
-        failure: `The base branch's new commits weigh more than ${maximumBundleBytes / 1_000_000} MB; update from your machine`,
+    const bundling = gitChildInRepository('bundle', 'create', '-', baseRef, ...(isAncestor ? [`^${prerequisite}`] : []))
+    const bundlingErrors = new Response(bundling.stderr).text()
+    const chunks: Uint8Array[] = []
+    let bundleBytes = 0
+    for await (const chunk of bundling.stdout) {
+      bundleBytes += chunk.length
+      if (bundleBytes > maximumBundleBytes) {
+        bundling.kill()
+        await bundling.exited
+        return {
+          failure: `The base branch's new commits weigh more than ${maximumBundleBytes / 1_000_000} MB; update from your machine`,
+        }
       }
-    return { head, bundle: Buffer.from(bytes).toString('base64') }
+      chunks.push(chunk)
+    }
+    if ((await bundling.exited) !== 0)
+      return { failure: `The base branch could not be bundled: ${lastLinesOf(await bundlingErrors)}` }
+    return { head, bundle: Buffer.concat(chunks).toString('base64') }
   })

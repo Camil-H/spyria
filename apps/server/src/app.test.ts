@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { brotliCompressSync, brotliDecompressSync, gunzipSync, gzipSync } from 'node:zlib'
 import { createDatabase } from '@spyria/db/postgres'
 import { llmCredentialsPath } from '@spyria/profile/server'
 import { runtimeHostsPath } from '@spyria/runtime/server'
@@ -52,6 +53,75 @@ test('with a web build, the server serves the app with SPA fallback and cache ru
   expect(health.status).toBe(503)
   expect(await health.json()).toEqual({ status: 'degraded', failing: ['database'] })
   expect((await app.request('/w/workspace-acme')).status).toBe(404)
+  rmSync(webDist, { recursive: true })
+})
+
+test('the web app serves the precompressed variant the browser accepts, with its encoding and Vary, else the file itself', async () => {
+  const webDist = mkdtempSync(join(tmpdir(), 'spyria-web-dist-'))
+  mkdirSync(join(webDist, 'assets'))
+  const page = '<!doctype html><title>Spyria</title>'
+  const script = 'console.log(1)'
+  writeFileSync(join(webDist, 'index.html'), page)
+  writeFileSync(join(webDist, 'index.html.br'), brotliCompressSync(page))
+  writeFileSync(join(webDist, 'index.html.gz'), gzipSync(page))
+  writeFileSync(join(webDist, 'assets', 'main-Ab12Cd34.js'), script)
+  writeFileSync(join(webDist, 'assets', 'main-Ab12Cd34.js.gz'), gzipSync(script))
+  writeFileSync(join(webDist, 'assets', 'plain-Ab12Cd34.js'), script)
+  const webApp = createApp({ database: unreachableDatabase, ...testAuthSettings, webDist })
+  const fetched = async (path: string, headers: Record<string, string>) => {
+    const response = await webApp.request(path, { headers })
+    const body = Buffer.from(await response.arrayBuffer())
+    const encoding = response.headers.get('content-encoding')
+    return {
+      encoding,
+      vary: response.headers.get('vary'),
+      type: response.headers.get('content-type'),
+      cacheControl: response.headers.get('cache-control'),
+      text: (encoding === 'br' ? brotliDecompressSync(body) : encoding === 'gzip' ? gunzipSync(body) : body).toString(),
+    }
+  }
+  const html = 'text/html;charset=utf-8'
+  const javascript = 'text/javascript;charset=utf-8'
+  const immutable = 'public, max-age=31536000, immutable'
+  for (const route of ['/', '/w/workspace-acme/chats/chat-1'])
+    expect(await fetched(route, { 'accept-encoding': 'gzip, deflate, br' })).toEqual({
+      encoding: 'br',
+      vary: 'accept-encoding',
+      type: html,
+      cacheControl: 'no-cache',
+      text: page,
+    })
+  expect(await fetched('/', { 'accept-encoding': 'br;q=0, gzip' })).toMatchObject({ encoding: 'gzip', text: page })
+  expect(await fetched('/assets/main-Ab12Cd34.js', { 'accept-encoding': 'gzip, br' })).toEqual({
+    encoding: 'gzip',
+    vary: 'accept-encoding',
+    type: javascript,
+    cacheControl: immutable,
+    text: script,
+  })
+  const identityRequests: Record<string, string>[] = [
+    {},
+    { 'accept-encoding': 'identity' },
+    { 'accept-encoding': 'gzip', range: 'bytes=0-3' },
+  ]
+  for (const headers of identityRequests)
+    expect(await fetched('/assets/main-Ab12Cd34.js', headers)).toEqual({
+      encoding: null,
+      vary: 'accept-encoding',
+      type: javascript,
+      cacheControl: immutable,
+      text: script,
+    })
+  expect(await fetched('/assets/plain-Ab12Cd34.js', { 'accept-encoding': 'br, gzip' })).toMatchObject({
+    encoding: null,
+    text: script,
+  })
+  const head = await webApp.request('/assets/main-Ab12Cd34.js', {
+    method: 'HEAD',
+    headers: { 'accept-encoding': 'gzip' },
+  })
+  expect(head.status).toBe(200)
+  expect(head.headers.get('content-encoding')).toBe('gzip')
   rmSync(webDist, { recursive: true })
 })
 
