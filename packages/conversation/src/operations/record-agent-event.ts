@@ -35,7 +35,7 @@ const recordIn = async (
   const delegation =
     input.delegation ??
     (toolCallIdOf(event) && promptId
-      ? subagentDelegationOf(event, await unitOfWork.messages.replies(promptId))
+      ? subagentDelegationOf(event, await unitOfWork.messages.openTaskSteps(promptId))
       : undefined)
   const recordedAt = new Date()
   const seq = await unitOfWork.agentEvents.append(chatId, event, promptId, recordedAt, delegation)

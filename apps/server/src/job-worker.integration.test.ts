@@ -105,7 +105,7 @@ describe('the dead jobs left by a throwing job', () => {
   })
 })
 
-test('the session sweep deletes only expired sessions, then reschedules itself once, a day later', async () => {
+test('the session sweep deletes only expired sessions, done jobs older than a day and webhook deliveries older than a week, then reschedules itself once, a day later', async () => {
   await database.$client`
     insert into sessions (workspace_id, id, user_id, created_at, expires_at) values
       (${acme}, 'session-expired', ${alice}, now() - interval '8 days', now() - interval '1 day'),
@@ -113,6 +113,19 @@ test('the session sweep deletes only expired sessions, then reschedules itself o
       (${acme}, 'session-live', ${bob}, now(), now() + interval '7 days'),
       (${globex}, 'session-expired-in-globex', ${alice}, now() - interval '8 days', now() - interval '1 day'),
       (${globex}, 'session-live-in-globex', ${alice}, now(), now() + interval '1 hour')`
+  await database.$client`
+    insert into jobs (workspace_id, id, type, payload, run_at, attempts, state) values
+      (${acme}, 'job-done-old', 'agent.prompt', '{}', now() - interval '25 hours', 1, 'done'),
+      (${acme}, 'job-done-recent', 'agent.prompt', '{}', now() - interval '23 hours', 1, 'done'),
+      (${acme}, 'job-failed-old', 'agent.prompt', '{}', now() - interval '25 hours', 5, 'failed'),
+      (${globex}, 'job-done-old-in-globex', 'agent.prompt', '{}', now() - interval '25 hours', 1, 'done')`
+  await database.$client`
+    insert into github_apps (workspace_id, app_id, client_id, encrypted_client_secret, encrypted_private_key,
+      encrypted_webhook_secret, updated_at)
+    values (${acme}, '1', 'client', 'secret', 'key', 'webhook', now())`
+  await database.$client`
+    insert into github_webhook_deliveries (workspace_id, delivery_id, received_at) values
+      (${acme}, 'delivery-old', now() - interval '8 days'), (${acme}, 'delivery-recent', now() - interval '6 days')`
   await Promise.all([enqueueSweeps(database), enqueueSweeps(database)])
   for (const workspaceId of [acme, globex])
     expect(await sweepsOf(workspaceId)).toMatchObject([{ state: 'queued', attempts: 0, payload: {} }])
@@ -127,6 +140,13 @@ test('the session sweep deletes only expired sessions, then reschedules itself o
     'session-live',
     'session-live-in-globex',
   ])
+  const keptJobIds = (await database.select().from(jobs)).map((job) => job.id)
+  expect(keptJobIds).toEqual(expect.arrayContaining(['job-done-recent', 'job-failed-old']))
+  expect(keptJobIds).not.toEqual(expect.arrayContaining(['job-done-old']))
+  expect(keptJobIds).not.toEqual(expect.arrayContaining(['job-done-old-in-globex']))
+  expect(
+    (await database.$client`select delivery_id from github_webhook_deliveries`).map((row) => row.delivery_id),
+  ).toEqual(['delivery-recent'])
   const oneDayLater = Date.now() + 24 * 60 * 60 * 1000
   for (const workspaceId of [acme, globex]) {
     const sweeps = await sweepsOf(workspaceId)

@@ -311,6 +311,7 @@ export const chats = table(
       [serviceIdentities.workspaceId, serviceIdentities.id],
     ),
     tenantReference([table.workspaceId, table.originChatId], [table.workspaceId, table.id]),
+    index().on(table.workspaceId, table.ownerUserId),
     check(
       'chats_owner_matches_kind',
       sql`(${table.ownerKind} = 'user' and ${table.ownerUserId} is not null and ${table.ownerServiceIdentityId} is null) or (${table.ownerKind} = 'service_identity' and ${table.ownerServiceIdentityId} is not null and ${table.ownerUserId} is null)`,
@@ -374,6 +375,11 @@ export const events = table(
       .where(
         sql`${table.type} in ('message.posted', 'message.step_changed') and (${table.payload} -> 'step' ->> 'type') = 'pull_request'`,
       ),
+    index('events_session_index')
+      .on(table.workspaceId, table.chatId, table.seq)
+      .where(
+        sql`${table.type} = 'agent.event' and ((${table.payload} -> 'event' -> 'update' ->> 'sessionUpdate') in ('session_started', 'config_option_update') or (${table.payload} -> 'event' ->> 'key') = 'agent_state')`,
+      ),
   ],
 )
 
@@ -403,6 +409,10 @@ export const messages = table(
     tenantReference([table.workspaceId, table.threadRootId], [table.workspaceId, table.id]),
     index().on(table.workspaceId, table.replyToId).where(sql`${table.replyToId} is not null`),
     index().on(table.workspaceId, table.threadRootId).where(sql`${table.threadRootId} is not null`),
+    index().on(table.workspaceId, table.chatId, table.seq.asc().nullsFirst()),
+    index('messages_pull_request_index')
+      .on(table.workspaceId, sql`(${table.step} ->> 'repository')`, sql`(${table.step} ->> 'number')`)
+      .where(sql`(${table.step} ->> 'type') = 'pull_request'`),
   ],
 )
 
@@ -601,6 +611,7 @@ export const runtimes = table(
     unique().on(table.workspaceId, table.chatId),
     chatReference(table),
     tenantReference([table.workspaceId, table.hostId], [runtimeHosts.workspaceId, runtimeHosts.id]),
+    index().on(table.workspaceId, table.hostId),
   ],
 )
 
@@ -762,6 +773,7 @@ export const delegations = table(
     primaryKey({ columns: [table.workspaceId, table.id] }),
     chatReference(table),
     uniqueIndex().on(table.tokenHash),
+    index().on(table.workspaceId, table.chatId, table.promptId).where(sql`${table.status} = 'running'`),
   ],
 )
 

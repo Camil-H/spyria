@@ -31,6 +31,7 @@ export const chatTurnOf = skippedOnClient
 export const setChatTurnFailure = skippedOnClient
 export const runtimeChatOfLlmTokenHash = skippedOnClient
 export const pendingPrompts = async () => []
+export const openTaskStepsOf = async () => []
 export const activeAgentTurns = async () => []
 export const setRuntimesHostOnline = skippedOnClient
 export const isChatEventStored = async () => false

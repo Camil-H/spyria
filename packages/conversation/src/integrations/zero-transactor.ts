@@ -15,6 +15,7 @@ import {
   listedModelsOf,
   lockChatTurn,
   memberModelsOf,
+  openTaskStepsOf,
   pendingPrompts,
   runningDelegationOfTokenHash,
   setChatAgentModel,
@@ -179,6 +180,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       },
       setStep: (id, step) => tx.mutate.messages.update({ workspaceId: contextWorkspaceId, id, step }),
       replies: async (promptId) => (await tx.run(repliesTo(promptId).orderBy('seq', 'asc'))).map(toMessage),
+      openTaskSteps: (promptId) => openTaskStepsOf<StoredStep>(tx, contextWorkspaceId, promptId),
       thread: async (id, rootId) =>
         (
           await tx.run(
@@ -226,6 +228,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
               .where('chatId', prompt.chatId)
               .where('kind', 'IN', ['agent', 'step'])
               .where('replyToId', '!=', prompt.id)
+              .orderBy('seq', 'asc')
               .one(),
           ),
         ])
@@ -462,6 +465,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
             .where('workspaceId', contextWorkspaceId)
             .where('chatId', id)
             .where('kind', 'IN', ['agent', 'step'])
+            .orderBy('seq', 'asc')
             .one(),
         )) !== undefined ||
         (await lastAgentEvent(tx, contextWorkspaceId, id)) !== undefined,

@@ -23,6 +23,7 @@ export type MessageRepository = {
   find(messageId: MessageId): Promise<Message | undefined>
   setStep(messageId: MessageId, step: StoredStep): Promise<void>
   replies(promptId: MessageId): Promise<Message[]>
+  openTaskSteps(promptId: MessageId): Promise<{ id: string; step: StoredStep }[]>
   thread(chatId: ChatId, rootId: MessageId): Promise<Message[]>
   history(chatId: ChatId): Promise<Message[]>
   seedFor(prompt: Message): Promise<Message | undefined>
