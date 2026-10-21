@@ -3,8 +3,9 @@ import {
   bucketStartsOf,
   decompositionOf,
   mergedPullsCostOf,
-  type SpendCall,
   type SpendCounts,
+  type SpendDimensionRow,
+  type SpendTotals,
   spendChartOf,
   spendFilterFrom,
   spendRowsOf,
@@ -22,20 +23,38 @@ const counts = (overrides: Partial<SpendCounts> = {}): SpendCounts => ({
   costMicros: 40_000,
   ...overrides,
 })
-const call = (overrides: Partial<SpendCall>): SpendCall => ({
-  bucket: '2026-10-02',
-  prompterId: 'member-alice',
-  prompterName: 'Alice',
-  chatId: 'chat-invoice-bug',
-  chatName: 'Invoice bug',
-  projectId: 'project-billing',
-  projectName: 'Billing',
-  model: 'anthropic/claude',
-  costMicros: 10_000,
-  tokens: 1000,
-  requests: 1,
-  ...overrides,
-})
+type Call = SpendTotals & {
+  bucket: string
+  prompterId: string
+  prompterName: string
+  chatId: string
+  chatName: string
+  projectId: string | null
+  projectName: string | null
+  model: string
+}
+const call = (overrides: Partial<Call>): SpendDimensionRow[] => {
+  const { bucket, prompterId, prompterName, chatId, chatName, projectId, projectName, model, ...totals }: Call = {
+    bucket: '2026-10-02',
+    prompterId: 'member-alice',
+    prompterName: 'Alice',
+    chatId: 'chat-invoice-bug',
+    chatName: 'Invoice bug',
+    projectId: 'project-billing',
+    projectName: 'Billing',
+    model: 'anthropic/claude',
+    costMicros: 10_000,
+    tokens: 1000,
+    requests: 1,
+    ...overrides,
+  }
+  return [
+    { dimension: 'member', bucket, key: prompterId, name: prompterName, ...totals },
+    { dimension: 'project', bucket, key: projectId ?? 'none', name: projectName ?? 'No project', ...totals },
+    { dimension: 'chat', bucket, key: chatId, name: chatName, ...totals },
+    { dimension: 'model', bucket, key: model, name: model, ...totals },
+  ]
+}
 
 test.each([
   ['this month', { period: 'this_month' }, ['2026-10-01', '2026-11-01'], ['2026-09-01', '2026-10-01']],
@@ -154,7 +173,7 @@ test('rows per dimension sum their calls, carry their share and sort by cost', (
       projectName: null,
       chatId: 'chat-research',
     }),
-  ]
+  ].flat()
   expect(spendRowsOf(calls, 'member')).toEqual([
     { key: 'member-alice', name: 'Alice', costMicros: 30_000, tokens: 3000, requests: 2, share: 0.75 },
     { key: 'member-bob', name: 'Bob', costMicros: 10_000, tokens: 1000, requests: 1, share: 0.25 },
@@ -163,12 +182,14 @@ test('rows per dimension sum their calls, carry their share and sort by cost', (
     ['project-billing', 'Billing'],
     ['none', 'No project'],
   ])
-  expect(spendRowsOf([call({ costMicros: 0 })], 'model')[0]?.share).toBe(0)
+  expect(spendRowsOf(call({ costMicros: 0 }), 'model')[0]?.share).toBe(0)
 })
 
 test('the chart fills every bucket and folds series past the fifth into Other', () => {
   const models = ['a', 'b', 'c', 'd', 'e', 'f', 'g']
-  const calls = models.map((model, index) => call({ model, costMicros: 70_000 - index * 10_000 }))
+  const callsOf = (shownModels: string[]) =>
+    shownModels.flatMap((model, index) => call({ model, costMicros: 70_000 - index * 10_000 }))
+  const calls = callsOf(models)
   const chart = spendChartOf(calls, 'model', ['2026-10-01', '2026-10-02'])
   expect(chart.series.map((series) => [series.key, series.costs])).toEqual([
     ['a', [0, 70_000]],
@@ -178,7 +199,7 @@ test('the chart fills every bucket and folds series past the fifth into Other', 
     ['e', [0, 30_000]],
     ['other', [0, 30_000]],
   ])
-  expect(spendChartOf(calls.slice(0, 6), 'model', ['2026-10-02']).series.map((series) => series.key)).toEqual(
+  expect(spendChartOf(callsOf(models.slice(0, 6)), 'model', ['2026-10-02']).series.map((series) => series.key)).toEqual(
     models.slice(0, 6),
   )
 })

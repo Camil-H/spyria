@@ -9,15 +9,11 @@ export type SpendRange = { from: Date; to: Date }
 export type SpendFilter = { current: SpendRange; previous: SpendRange; granularity: SpendGranularity }
 
 export type SpendTotals = { costMicros: number; tokens: number; requests: number }
-export type SpendCall = SpendTotals & {
-  bucket: string
-  prompterId: string
-  prompterName: string
-  chatId: string
-  chatName: string
-  projectId: string | null
-  projectName: string | null
-  model: string
+export type SpendDimensionRow = SpendTotals & {
+  dimension: SpendDimension
+  bucket: string | null
+  key: string
+  name: string
 }
 export type SpendCounts = SpendTotals & { users: number; sessions: number; turns: number }
 export type SpendRow = SpendTotals & { key: string; name: string; share: number }
@@ -138,44 +134,36 @@ const addedTotals = (sum: SpendTotals, row: SpendTotals): SpendTotals => ({
 })
 export const spendTotalOf = (calls: readonly SpendTotals[]) => calls.reduce(addedTotals, noSpend)
 
-const keyAndNameOf = (call: SpendCall, dimension: SpendDimension) =>
-  ({
-    member: { key: call.prompterId, name: call.prompterName },
-    project: { key: call.projectId ?? 'none', name: call.projectName ?? 'No project' },
-    chat: { key: call.chatId, name: call.chatName },
-    model: { key: call.model, name: call.model },
-  })[dimension]
-
-export const spendRowsOf = (calls: readonly SpendCall[], dimension: SpendDimension): SpendRow[] => {
+export const spendRowsOf = (rows: readonly SpendDimensionRow[], dimension: SpendDimension): SpendRow[] => {
+  const dimensionRows = rows.filter((row) => row.dimension === dimension)
   const rowsByKey = new Map<string, { key: string; name: string } & SpendTotals>()
-  for (const call of calls) {
-    const { key, name } = keyAndNameOf(call, dimension)
-    rowsByKey.set(key, { key, name, ...addedTotals(rowsByKey.get(key) ?? noSpend, call) })
-  }
-  const totalCost = spendTotalOf(calls).costMicros
+  for (const { key, name, ...totals } of dimensionRows)
+    rowsByKey.set(key, { key, name, ...addedTotals(rowsByKey.get(key) ?? noSpend, totals) })
+  const totalCost = spendTotalOf(dimensionRows).costMicros
   return [...rowsByKey.values()]
     .map((row) => ({ ...row, share: totalCost === 0 ? 0 : row.costMicros / totalCost }))
     .toSorted((first, second) => second.costMicros - first.costMicros || first.name.localeCompare(second.name))
 }
 
 export const spendChartOf = (
-  calls: readonly SpendCall[],
+  rows: readonly SpendDimensionRow[],
   dimension: SpendDimension,
   buckets: readonly string[],
 ): SpendChart => {
-  const rows = spendRowsOf(calls, dimension)
-  const shownRows = rows.length <= chartSeriesLimit + 1 ? rows : rows.slice(0, chartSeriesLimit)
-  const isShown = new Set(shownRows.map((row) => row.key))
+  const ranked = spendRowsOf(rows, dimension)
+  const shownRows = ranked.length <= chartSeriesLimit + 1 ? ranked : ranked.slice(0, chartSeriesLimit)
   const series = [...shownRows, { key: 'other', name: 'Other' }].map(({ key, name }) => ({
     key,
     name,
     costs: buckets.map(() => 0),
   }))
-  for (const call of calls) {
-    const callKey = keyAndNameOf(call, dimension).key
-    const target = series.find((entry) => entry.key === (isShown.has(callKey) ? callKey : 'other'))
-    const bucketIndex = buckets.indexOf(call.bucket)
-    if (target && bucketIndex >= 0) target.costs[bucketIndex] = (target.costs[bucketIndex] ?? 0) + call.costMicros
+  const seriesByKey = new Map(series.map((entry) => [entry.key, entry]))
+  const bucketIndexes = new Map(buckets.map((bucket, index) => [bucket, index]))
+  for (const row of rows) {
+    const target = row.dimension === dimension && (seriesByKey.get(row.key) ?? seriesByKey.get('other'))
+    const bucketIndex = bucketIndexes.get(row.bucket ?? '')
+    if (target && bucketIndex !== undefined)
+      target.costs[bucketIndex] = (target.costs[bucketIndex] ?? 0) + row.costMicros
   }
   return { buckets: [...buckets], series: series.filter((entry) => entry.key !== 'other' || entry.costs.some(Boolean)) }
 }
@@ -224,14 +212,14 @@ export const mergedPullsCostOf = (pulls: readonly MergedPull[]): MergedPullsCost
 
 export const spendReportOf = ({
   filter,
-  calls,
+  rows,
   counts,
   tableDimensions,
   chartDimensions,
   mergedPulls,
 }: {
   filter: SpendFilter
-  calls: readonly SpendCall[]
+  rows: readonly SpendDimensionRow[]
   counts: { current: SpendCounts; previous: SpendCounts }
   tableDimensions: readonly SpendDimension[]
   chartDimensions: readonly SpendDimension[]
@@ -243,11 +231,9 @@ export const spendReportOf = ({
     to: filter.current.to.toISOString(),
     previousFrom: filter.previous.from.toISOString(),
     granularity: filter.granularity,
-    total: spendTotalOf(calls),
-    charts: Object.fromEntries(
-      chartDimensions.map((dimension) => [dimension, spendChartOf(calls, dimension, buckets)]),
-    ),
-    tables: Object.fromEntries(tableDimensions.map((dimension) => [dimension, spendRowsOf(calls, dimension)])),
+    total: spendTotalOf([counts.current]),
+    charts: Object.fromEntries(chartDimensions.map((dimension) => [dimension, spendChartOf(rows, dimension, buckets)])),
+    tables: Object.fromEntries(tableDimensions.map((dimension) => [dimension, spendRowsOf(rows, dimension)])),
     decomposition: decompositionOf(counts.current, counts.previous),
     mergedPulls: mergedPulls && mergedPullsCostOf(mergedPulls),
   }

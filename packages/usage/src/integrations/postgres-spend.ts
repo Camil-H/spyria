@@ -1,27 +1,32 @@
 import type { Transact } from '@spyria/db/zero-queries'
 import type { WorkspaceId, WorkspacePermission } from '@spyria/kernel'
 import type { SpendTransactor } from '../contracts/spend.ts'
-import type { MergedPull, SpendCall, SpendCounts } from '../domain/spend.ts'
+import type { MergedPull, SpendCounts, SpendDimensionRow } from '../domain/spend.ts'
 import { workspacePermissionsStatement } from './postgres-audit-log.ts'
 
-const callsStatement = `
-  select grouped.bucket, grouped.prompter_id as "prompterId",
-    coalesce(member.display_name, grouped.prompter_id) as "prompterName", grouped.chat_id as "chatId",
-    coalesce(chat.name, grouped.chat_id) as "chatName", chat.project_id as "projectId", project.name as "projectName",
-    grouped.model, grouped.cost_micros as "costMicros", grouped.tokens, grouped.requests
-  from (
+const rowsStatement = `
+  with grouped as (
     select to_char(date_trunc($4::text, call.called_at at time zone 'UTC'), 'YYYY-MM-DD') as bucket,
-      call.prompter_id, call.chat_id, call.provider || '/' || call.model as model,
-      sum(call.cost_micros)::float8 as cost_micros, sum(call.input_tokens + call.output_tokens)::float8 as tokens,
-      count(*)::int as requests
+      call.prompter_id, call.chat_id, call.provider || '/' || call.model as model, sum(call.cost_micros) as cost_micros,
+      sum(call.input_tokens + call.output_tokens) as tokens, count(*) as requests
     from model_calls call
     where call.workspace_id = $1 and call.called_at >= $2 and call.called_at < $3
       and ($5::text is null or call.prompter_id = $5)
-    group by 1, 2, 3, 4
-  ) grouped
+    group by 1, 2, 3, 4)
+  select dimension.name as dimension, case when dimension.name = any($7::text[]) then grouped.bucket end as bucket,
+    dimension.key, dimension.label as name, sum(grouped.cost_micros)::float8 as "costMicros",
+    sum(grouped.tokens)::float8 as tokens, sum(grouped.requests)::int as requests
+  from grouped
   left join memberships member on member.workspace_id = $1 and member.user_id = grouped.prompter_id
   left join chats chat on chat.workspace_id = $1 and chat.id = grouped.chat_id
-  left join projects project on project.workspace_id = $1 and project.id = chat.project_id`
+  left join projects project on project.workspace_id = $1 and project.id = chat.project_id
+  cross join lateral (values
+    ('member', grouped.prompter_id, coalesce(member.display_name, grouped.prompter_id)),
+    ('project', coalesce(chat.project_id, 'none'), coalesce(project.name, 'No project')),
+    ('chat', grouped.chat_id, coalesce(chat.name, grouped.chat_id)),
+    ('model', grouped.model, grouped.model)) as dimension(name, key, label)
+  where dimension.name = any($6::text[])
+  group by 1, 2, 3, 4`
 
 const countsStatement = `
   select call.called_at >= $3 as "isCurrent", count(distinct call.prompter_id collate "C")::int as users,
@@ -66,8 +71,15 @@ export const createPostgresSpendTransactor = (transact: Transact, workspaceId: W
           (await query<{ permission: WorkspacePermission }>(workspacePermissionsStatement, [memberId])).map(
             (granted) => granted.permission,
           ),
-        calls: (range, granularity, prompterId) =>
-          query<SpendCall>(callsStatement, [range.from.toISOString(), range.to.toISOString(), granularity, prompterId]),
+        rows: (range, granularity, prompterId, { tableDimensions, chartDimensions }) =>
+          query<SpendDimensionRow>(rowsStatement, [
+            range.from.toISOString(),
+            range.to.toISOString(),
+            granularity,
+            prompterId,
+            tableDimensions,
+            chartDimensions,
+          ]),
         counts: async ({ current, previous }, prompterId) => {
           const rows = await query<SpendCounts & { isCurrent: boolean }>(countsStatement, [
             previous.from.toISOString(),

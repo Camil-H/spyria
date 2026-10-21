@@ -29,6 +29,8 @@ export const usageSync = {
   overlapMilliseconds: 60_000,
   retentionMilliseconds: 30 * 24 * 3_600_000,
   alertBehindMilliseconds: 3_600_000,
+  pendingHoldMilliseconds: 30 * 60_000,
+  pagesPerRun: 20,
 }
 
 const noUsage: UsageTotals = { tokens: 0, costMicros: 0, calls: 0 }
@@ -48,11 +50,15 @@ export const monthsNewestFirst = (rows: readonly { month: UsageMonth }[]) =>
 
 export const nextLogsSince = (
   logsSince: Date,
-  { syncedAt, oldestPendingAt }: { syncedAt: Date; oldestPendingAt?: Date },
+  { syncedAt, oldestPendingAt, nextPageFrom }: { syncedAt: Date; oldestPendingAt?: Date; nextPageFrom?: Date },
 ) =>
   new Date(
     Math.max(
       logsSince.getTime(),
-      Math.min(syncedAt.getTime() - usageSync.overlapMilliseconds, oldestPendingAt?.getTime() ?? Infinity),
+      Math.min(
+        syncedAt.getTime() - usageSync.overlapMilliseconds,
+        Math.max(oldestPendingAt?.getTime() ?? Infinity, syncedAt.getTime() - usageSync.pendingHoldMilliseconds),
+        nextPageFrom?.getTime() ?? Infinity,
+      ),
     ),
   )

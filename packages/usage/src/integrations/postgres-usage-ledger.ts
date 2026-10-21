@@ -47,7 +47,9 @@ export const createPostgresUsageLedger = (transact: Transact): UsageLedger => ({
          returning 1`,
         [workspaceId, nextLogsSince.toISOString(), readFrom?.toISOString() ?? null],
       )
-      if ([...moved].length > 0) await tx.dbTransaction.query(recordCalls, [workspaceId, JSON.stringify(calls)])
+      if ([...moved].length === 0) return false
+      await tx.dbTransaction.query(recordCalls, [workspaceId, JSON.stringify(calls)])
+      return true
     }),
   scheduleNextSync: (workspaceId: WorkspaceId, delayMilliseconds) =>
     transact(async (tx) => {

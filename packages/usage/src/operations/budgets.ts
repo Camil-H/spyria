@@ -7,7 +7,6 @@ import {
   budgetOverviewOf,
   budgetProgressOf,
   monthOf,
-  monthStartOf,
   usedUpBudgetOf,
 } from '../domain/budgets.ts'
 import { BudgetMemberNotFound } from '../domain/errors.ts'
@@ -15,16 +14,16 @@ import { BudgetMemberNotFound } from '../domain/errors.ts'
 type Dependencies = { transactor: BudgetTransactor }
 
 const overviewOf = async (ledger: BudgetLedger, now: Date) => {
-  const since = monthStartOf(now)
-  const workspaceUse = (await ledger.uses(since, null)).find((use) => use.memberId === null)
-  return budgetOverviewOf(await ledger.memberSpends(since, null), {
+  const month = monthOf(now)
+  const workspaceUse = (await ledger.uses(month, null)).find((use) => use.memberId === null)
+  return budgetOverviewOf(await ledger.memberSpends(month, null), {
     limitMicros: workspaceUse?.limitMicros ?? null,
-    spentMicros: await ledger.workspaceSpentMicros(since),
+    spentMicros: await ledger.workspaceSpentMicros(month),
   })
 }
 
 const recordReachedAlerts = async (ledger: BudgetLedger, now: Date) =>
-  ledger.recordAlerts(monthOf(now), budgetAlertsOf(await ledger.uses(monthStartOf(now), null)))
+  ledger.recordAlerts(monthOf(now), budgetAlertsOf(await ledger.uses(monthOf(now), null)))
 
 export const readBudgets = ({ transactor }: Dependencies, { memberId, now }: { memberId: MemberId; now: Date }) =>
   transactor.run(async (ledger): Promise<BudgetOverview> => {
@@ -54,12 +53,12 @@ export const setBudget = (
 
 export const readOwnBudget = ({ transactor }: Dependencies, { memberId, now }: { memberId: MemberId; now: Date }) =>
   transactor.run(async (ledger) => {
-    const [own] = await ledger.memberSpends(monthStartOf(now), memberId)
+    const [own] = await ledger.memberSpends(monthOf(now), memberId)
     return budgetProgressOf(own?.limitMicros ?? null, own?.spentMicros ?? 0)
   })
 
 export const findUsedUpBudget = ({ transactor }: Dependencies, { memberId, now }: { memberId: MemberId; now: Date }) =>
-  transactor.run(async (ledger) => usedUpBudgetOf(await ledger.uses(monthStartOf(now), memberId)))
+  transactor.run(async (ledger) => usedUpBudgetOf(await ledger.uses(monthOf(now), memberId)))
 
 export const recordBudgetAlerts = ({ transactor }: Dependencies, { now }: { now: Date }) =>
   transactor.run((ledger) => recordReachedAlerts(ledger, now))

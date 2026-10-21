@@ -13,29 +13,28 @@ type LogRow = {
   metadata?: Record<string, string> | null
 }
 
-const pageSize = 500
-
 export const createBifrostUsageLogs = ({
   url,
   adminUser,
   adminPassword,
   labels = {},
   timeoutMilliseconds = 10_000,
+  pageSize = 500,
 }: {
   url: string
   adminUser: string
   adminPassword: string
   labels?: Record<string, string>
   timeoutMilliseconds?: number
+  pageSize?: number
 }): GatewayUsageLogs => {
   const authorization = `Basic ${btoa(`${adminUser}:${adminPassword}`)}`
-  const page = async (workspaceId: WorkspaceId, since: Date, offset: number) => {
+  const page = async (workspaceId: WorkspaceId, since: Date) => {
     const query = new URLSearchParams({
       start_time: since.toISOString(),
       sort_by: 'timestamp',
       order: 'asc',
       limit: String(pageSize),
-      offset: String(offset),
       ...Object.fromEntries(
         Object.entries({ ...labels, workspace: workspaceId }).map(([name, value]) => [`metadata_${name}`, value]),
       ),
@@ -51,12 +50,8 @@ export const createBifrostUsageLogs = ({
   }
   return {
     since: async (workspaceId, since) => {
-      const rows: LogRow[] = []
-      for (let offset = 0; ; offset += pageSize) {
-        const fetched = await page(workspaceId, since, offset)
-        rows.push(...fetched)
-        if (fetched.length < pageSize) break
-      }
+      const rows = await page(workspaceId, since)
+      const lastRow = rows.length === pageSize ? rows.at(-1) : undefined
       const pending = rows.filter((row) => row.status !== 'success' && row.status !== 'error')
       return {
         calls: rows.flatMap(({ id, timestamp, provider, model, status, cost, token_usage, metadata }): ModelCall[] =>
@@ -85,6 +80,7 @@ export const createBifrostUsageLogs = ({
             : [],
         ),
         oldestPendingAt: pending[0] && new Date(pending[0].timestamp),
+        nextPageFrom: lastRow && new Date(new Date(lastRow.timestamp).getTime() - 1),
       }
     },
   }

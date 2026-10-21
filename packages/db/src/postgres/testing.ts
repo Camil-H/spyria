@@ -460,6 +460,22 @@ export const prepareSeededGatewayKeys = async (
 const monthDayOf = (now: Date, monthsBack: number, day: number, hour = 12) =>
   new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - monthsBack, day, hour)).toISOString()
 
+export const seedModelCall = (writer: SeedWriter, prompterId: string, costMicros: number, calledAt = new Date()) =>
+  writer.execute(sql`with call as (
+      insert into model_calls (workspace_id, id, chat_id, prompter_id, owner_id, model, provider, input_tokens,
+        output_tokens, cost_micros, status, called_at)
+      values ('workspace-acme', ${`call-${crypto.randomUUID()}`}, 'chat-research', ${prompterId}, null,
+        'codestral-latest', 'mistral', 1, 1, ${costMicros}, 'success', ${calledAt.toISOString()}::timestamptz)
+      returning *)
+    insert into usage_entries (workspace_id, month, chat_id, user_id, tokens, cost_micros, calls)
+    select workspace_id, to_char(called_at at time zone 'UTC', 'YYYY-MM'), chat_id, prompter_id,
+      input_tokens + output_tokens, cost_micros, 1
+    from call
+    on conflict (workspace_id, month, chat_id, user_id) do update set
+      tokens = usage_entries.tokens + excluded.tokens,
+      cost_micros = usage_entries.cost_micros + excluded.cost_micros,
+      calls = usage_entries.calls + excluded.calls`)
+
 export const seedSpend = async (writer: SeedWriter, now = new Date()) => {
   const calls = [1, 0].flatMap((monthsBack) => {
     const scale = monthsBack === 0 ? 2 : 1

@@ -1,9 +1,22 @@
 import type { MemberId, Transactor, WorkspacePermission } from '@spyria/kernel'
-import type { MergedPull, SpendCall, SpendCounts, SpendFilter, SpendGranularity, SpendRange } from '../domain/spend.ts'
+import type {
+  MergedPull,
+  SpendCounts,
+  SpendDimension,
+  SpendDimensionRow,
+  SpendFilter,
+  SpendGranularity,
+  SpendRange,
+} from '../domain/spend.ts'
 
 export type SpendLedger = {
   permissions(memberId: MemberId): Promise<readonly WorkspacePermission[]>
-  calls(range: SpendRange, granularity: SpendGranularity, prompterId: MemberId | null): Promise<SpendCall[]>
+  rows(
+    range: SpendRange,
+    granularity: SpendGranularity,
+    prompterId: MemberId | null,
+    dimensions: { tableDimensions: readonly SpendDimension[]; chartDimensions: readonly SpendDimension[] },
+  ): Promise<SpendDimensionRow[]>
   counts(filter: SpendFilter, prompterId: MemberId | null): Promise<{ current: SpendCounts; previous: SpendCounts }>
   mergedPulls(range: SpendRange): Promise<MergedPull[]>
 }

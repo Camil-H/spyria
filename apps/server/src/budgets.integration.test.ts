@@ -1,5 +1,6 @@
 import { beforeEach, expect, setDefaultTimeout, test } from 'bun:test'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
+import { seedModelCall } from '@spyria/db/testing'
 import { schema } from '@spyria/db/zero'
 import { createZeroStore } from '@spyria/db/zero-store'
 import { syncUsageNow } from '@spyria/usage/server'
@@ -36,12 +37,8 @@ const workspaceNotice = "The workspace's monthly AI budget is used up; an admin 
 const completion = JSON.stringify({ model: 'mistral/codestral-latest', messages: [{ role: 'user', content: 'hi' }] })
 const month = new Date().toISOString().slice(0, 7)
 
-const spend = (prompterId: string, costMicros: number, calledAt = new Date()) =>
-  database.$client`
-    insert into model_calls (workspace_id, id, chat_id, prompter_id, owner_id, model, provider, input_tokens,
-      output_tokens, cost_micros, status, called_at)
-    values (${acme}, ${`call-${crypto.randomUUID()}`}, 'chat-research', ${prompterId}, null, 'codestral-latest', 'mistral', 1, 1,
-      ${costMicros}, 'success', ${calledAt.toISOString()})`
+const spend = (prompterId: string, costMicros: number, calledAt?: Date) =>
+  seedModelCall(database, prompterId, costMicros, calledAt)
 const saveBudget = async (body: object, userId = alice) => {
   const answer = await asMember(userId, 'POST', '/api/budgets', body)
   return { status: answer.status, body: JSON.parse(answer.body) }
@@ -70,6 +67,7 @@ beforeEach(async () => {
   await database.$client`delete from budget_alerts`
   await database.$client`delete from budgets`
   await database.$client`delete from model_calls`
+  await database.$client`delete from usage_entries`
   await database.$client`delete from workspace_events where type like 'budget.%'`
 })
 

@@ -16,7 +16,7 @@ const reportOf = async (
 ) =>
   spendReportOf({
     filter,
-    calls: await ledger.calls(filter.current, filter.granularity, prompterId),
+    rows: await ledger.rows(filter.current, filter.granularity, prompterId, { tableDimensions, chartDimensions }),
     counts: await ledger.counts(filter, prompterId),
     tableDimensions,
     chartDimensions,

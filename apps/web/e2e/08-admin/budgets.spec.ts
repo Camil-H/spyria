@@ -1,3 +1,4 @@
+import { seedModelCall } from '@spyria/db/testing'
 import {
   addLlmKey,
   addParticipant,
@@ -28,11 +29,7 @@ const myUsageOf = (page: Page) => mainOf(page).getByRole('region', { name: 'My u
 const budgetAlertOf = (page: Page) => mainOf(page).getByRole('status', { name: 'Budget alert' })
 
 const spend = (workerStack: WorkerStack, prompterId: string, costMicros: number) =>
-  workerStack.database.$client`
-    insert into model_calls (workspace_id, id, chat_id, prompter_id, owner_id, model, provider, input_tokens,
-      output_tokens, cost_micros, status, called_at)
-    values ('workspace-acme', ${`call-${crypto.randomUUID()}`}, 'chat-research', ${prompterId}, null, 'codestral-latest',
-      'mistral', 1, 1, ${costMicros}, 'success', now())`
+  seedModelCall(workerStack.database, prompterId, costMicros)
 const seedBudget = (workerStack: WorkerStack, memberId: string | null, limitMicros: number) =>
   workerStack.database.$client`
     insert into budgets (workspace_id, member_id, limit_micros) values ('workspace-acme', ${memberId}, ${limitMicros})`
@@ -68,7 +65,8 @@ const prompt = async (page: Page, text: string) => {
 }
 
 test.describe('Budgets', () => {
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page, workerStack }) => {
+    await workerStack.database.$client`delete from usage_entries where workspace_id = 'workspace-acme'`
     await page.goto('/')
   })
 

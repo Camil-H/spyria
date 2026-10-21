@@ -2,7 +2,10 @@ import type { WorkspaceId } from '@spyria/kernel'
 import type { ModelCall } from '../domain/usage.ts'
 
 export type GatewayUsageLogs = {
-  since(workspaceId: WorkspaceId, since: Date): Promise<{ calls: ModelCall[]; oldestPendingAt?: Date }>
+  since(
+    workspaceId: WorkspaceId,
+    since: Date,
+  ): Promise<{ calls: ModelCall[]; oldestPendingAt?: Date; nextPageFrom?: Date }>
 }
 
 export type UsageLedger = {
@@ -11,6 +14,6 @@ export type UsageLedger = {
     workspaceId: WorkspaceId,
     window: { readFrom: Date | undefined; nextLogsSince: Date },
     calls: readonly ModelCall[],
-  ): Promise<void>
+  ): Promise<boolean>
   scheduleNextSync(workspaceId: WorkspaceId, delayMilliseconds: number): Promise<void>
 }

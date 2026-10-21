@@ -127,3 +127,68 @@ test('with the gateway down the sync changes nothing and the job reschedules its
     ...(await database.$client`select state from jobs where workspace_id = ${acme} and type = 'usage.sync'`),
   ]).toEqual([{ state: 'queued' }])
 })
+
+test('the sync pages through the gateway logs by time and records every call once', async () => {
+  const pagesFrom: Date[] = []
+  const pagedLogs = createBifrostUsageLogs({ url: gateway.url, ...gatewayAdmin, labels: { run }, pageSize: 2 })
+  const countedLogs = {
+    since: (workspace: WorkspaceId, since: Date) => {
+      pagesFrom.push(since)
+      return pagedLogs.since(workspace, since)
+    },
+  }
+  for (const turn of ['turn-paged-1', 'turn-paged-2', 'turn-paged-3'])
+    await modelCall({ ...research, prompter: alice, turn })
+  await landed()
+  await syncUsageNow(countedLogs, { workspaceId: acme, transact })
+  expect(pagesFrom.length).toBeGreaterThan(1)
+  expect([
+    ...(await database.$client`
+      select turn_id, count(*)::int as calls from model_calls where turn_id like 'turn-paged-%'
+      group by turn_id order by turn_id`),
+  ]).toEqual([
+    { turn_id: 'turn-paged-1', calls: 1 },
+    { turn_id: 'turn-paged-2', calls: 1 },
+    { turn_id: 'turn-paged-3', calls: 1 },
+  ])
+})
+
+test('a first sync reads a bounded number of pages, keeps each one, and a call pending past the hold no longer pins the window', async () => {
+  const markOf = async () => {
+    const [mark] = await database.$client<{ logs_since: string }[]>`
+      select logs_since from usage_sync_marks where workspace_id = ${globex}`
+    return mark && new Date(mark.logs_since)
+  }
+  await database.$client`delete from usage_sync_marks where workspace_id = ${globex}`
+  const pagesFrom: Date[] = []
+  const endlessLogs = {
+    since: async (_: WorkspaceId, since: Date) => {
+      pagesFrom.push(since)
+      return { calls: [], nextPageFrom: new Date(since.getTime() + 60_000) }
+    },
+  }
+  const startedAt = Date.now()
+  const logged = captureLogs()
+  await syncUsageNow(endlessLogs, { workspaceId: workspaceId(globex), transact })
+  logged.restore()
+  expect(pagesFrom.length).toBe(20)
+  expect(Math.abs(startedAt - 30 * 24 * 3_600_000 - (pagesFrom[0]?.getTime() ?? 0))).toBeLessThan(5_000)
+  expect((await markOf())?.getTime()).toBe((pagesFrom.at(-1)?.getTime() ?? 0) + 60_000)
+  expect(logged.events.map(({ event }) => event)).toEqual(['usage.sync_behind'])
+
+  const mark = await markOf()
+  pagesFrom.length = 0
+  const secondRun = captureLogs()
+  await syncUsageNow(endlessLogs, { workspaceId: workspaceId(globex), transact })
+  secondRun.restore()
+  expect(pagesFrom[0]).toEqual(mark)
+
+  await database.$client`update usage_sync_marks set logs_since = now() - interval '2 hours' where workspace_id = ${globex}`
+  const stuckLogs = {
+    since: async () => ({ calls: [], oldestPendingAt: new Date(Date.now() - 2 * 3_600_000 + 1_000) }),
+  }
+  await syncUsageNow(stuckLogs, { workspaceId: workspaceId(globex), transact })
+  const heldMinutes = (Date.now() - ((await markOf())?.getTime() ?? 0)) / 60_000
+  expect(heldMinutes).toBeGreaterThanOrEqual(30)
+  expect(heldMinutes).toBeLessThan(31)
+})
