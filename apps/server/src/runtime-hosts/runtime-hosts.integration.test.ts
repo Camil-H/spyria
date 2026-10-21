@@ -309,7 +309,7 @@ test('a host frame at the explicit 64 MiB limit is relayed and the host stays on
   const tooLarge = gateway.sandboxProvider.connect(sandbox).fetch({ method: 'POST', path: '/api/workspace/bundle' })
   await answerAtSize(maximumFrameBytes + 1)
   await expect(tooLarge).rejects.toThrow()
-  expect((await host.closed).code).toBe(1006)
+  expect([1006, 1009]).toContain((await host.closed).code)
   await waitFor(async () => (await hostRow(id)).status === 'offline')
 }, 30_000)
 

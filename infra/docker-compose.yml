@@ -4,7 +4,7 @@ services:
   postgres:
     image: postgres:18
     container_name: spyria-postgres
-    command: postgres -c wal_level=logical -c max_replication_slots=20 -c max_wal_senders=20
+    command: postgres -c wal_level=logical -c max_replication_slots=20 -c max_wal_senders=20 -c max_slot_wal_keep_size=4GB
     environment:
       POSTGRES_USER: spyria
       POSTGRES_PASSWORD: spyria

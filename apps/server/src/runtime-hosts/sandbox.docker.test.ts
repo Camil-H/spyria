@@ -70,7 +70,7 @@ const connectHost = async () => {
     body: JSON.stringify({ name: 'Docker test host' }),
   })
   const { id, code } = (await added.json()) as { id: string; code: string }
-  hostProcess = Bun.spawn(['bun', hostProgram, `http://localhost:${server.port}/h/${code}`], {
+  hostProcess = Bun.spawn([process.execPath, hostProgram, `http://localhost:${server.port}/h/${code}`], {
     env: { ...process.env, SPYRIA_HOST_STATE_DIR: stateDirectory, SPYRIA_DEPLOYMENT: deployment },
     stdout: 'inherit',
     stderr: 'inherit',

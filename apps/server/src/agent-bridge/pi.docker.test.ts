@@ -79,11 +79,14 @@ const startHost = async () => {
     body: JSON.stringify({ personal: true }),
   })
   const { id, code } = (await added.json()) as { id: string; code: string }
-  const spawned = Bun.spawn(['bun', hostProgram, '--personal', `http://localhost:${server.port}/h/${code}`], {
-    env: { ...process.env, SPYRIA_HOST_STATE_DIR: stateDirectory, SPYRIA_DEPLOYMENT: deployment },
-    stdout: 'pipe',
-    stderr: 'inherit',
-  })
+  const spawned = Bun.spawn(
+    [process.execPath, hostProgram, '--personal', `http://localhost:${server.port}/h/${code}`],
+    {
+      env: { ...process.env, SPYRIA_HOST_STATE_DIR: stateDirectory, SPYRIA_DEPLOYMENT: deployment },
+      stdout: 'pipe',
+      stderr: 'inherit',
+    },
+  )
   hostProcess = spawned
   void (async () => {
     for await (const chunk of spawned.stdout) {

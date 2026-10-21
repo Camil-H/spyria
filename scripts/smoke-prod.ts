@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { pruneBuildCache } from './build-cache.ts'
 import { checkTrust } from './check-trust.ts'
 
 const repositoryRoot = new URL('..', import.meta.url).pathname
@@ -49,12 +50,20 @@ const check = (isPassed: boolean, message: string) => {
   step(`ok: ${message}`)
 }
 
+const builtImagesCommand = [
+  'docker',
+  'image',
+  'ls',
+  '-aq',
+  '--filter',
+  `label=com.docker.compose.project=${deployment}`,
+]
 const leftoversOf = () =>
   [
     ['docker', 'ps', '-aq', '--filter', `name=${deployment}`],
     ['docker', 'volume', 'ls', '-q', '--filter', `name=${deployment}`],
     ['docker', 'network', 'ls', '-q', '--filter', `name=${deployment}`],
-    ['docker', 'image', 'ls', '-q', `${deployment}-*`],
+    builtImagesCommand,
   ].flatMap((command) => output(command).split('\n').filter(Boolean))
 
 let isTornDown = false
@@ -63,7 +72,8 @@ const tearDown = () => {
   isTornDown = true
   step(`tearing down ${deployment}`)
   compose('down', '--volumes', '--remove-orphans', '--timeout', '15')
-  run(['docker', 'image', 'rm', `${deployment}-server`])
+  run(['docker', 'image', 'rm', '--force', ...new Set(output(builtImagesCommand).split('\n').filter(Boolean))])
+  pruneBuildCache()
   rmSync(environmentDirectory, { recursive: true, force: true })
 }
 for (const signal of ['SIGINT', 'SIGTERM'] as const)

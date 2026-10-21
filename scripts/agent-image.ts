@@ -1,11 +1,14 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { type HarnessId, harnessIds, installScriptOf } from '../apps/host/src/harnesses.ts'
+import { pruneBuildCache } from './build-cache.ts'
 import { checkLicenses } from './check-licenses.ts'
-import { distrustedRootPemPrefixes } from './check-trust.ts'
+import { scrubDistrustedRoots } from './check-trust.ts'
+import { pinnedBunImage } from './pinned-bun.ts'
 
 const agentDirectory = new URL('../apps/agent/', import.meta.url).pathname
 const piDirectory = `${agentDirectory}pi/`
 const piManifestFile = `${piDirectory}package.json`
+const imageIdFile = `${agentDirectory}image-id`
 const harnessesFile = new URL('../apps/host/src/harnesses.json', import.meta.url).pathname
 const testHarnessesVolume = 'spyria-test-harnesses'
 type Pinned = { package: string; version: string }
@@ -46,29 +49,28 @@ const fillTestHarnesses = (image: string) => {
     ])
 }
 
-const scrubDistrustedRoots = (file: string) => {
-  const binary = readFileSync(file)
-  for (const prefix of Object.values(distrustedRootPemPrefixes))
-    for (let index = binary.indexOf(prefix); index !== -1; index = binary.indexOf(prefix, index))
-      binary.fill('*', index, index + prefix.length)
-  writeFileSync(file, binary)
+const removeReplacedImage = (previousImage: string, image: string) => {
+  if (previousImage === image || Bun.spawnSync(['docker', 'image', 'inspect', previousImage]).exitCode !== 0) return
+  const removed = Bun.spawnSync(['docker', 'image', 'rm', previousImage], { stdout: 'ignore', stderr: 'pipe' })
+  if (removed.exitCode !== 0)
+    console.log(`Kept the previous image ${previousImage}: ${removed.stderr.toString().trim()}`)
 }
 
 const build = () => {
-  const architecture = run(['docker', 'info', '--format', '{{.Architecture}}']) === 'aarch64' ? 'arm64' : 'x64'
+  const previousImage = existsSync(imageIdFile) ? readFileSync(imageIdFile, 'utf8').trim() : ''
+  const repositoryRoot = new URL('../', import.meta.url).pathname
+  mkdirSync(`${agentDirectory}dist`, { recursive: true })
   run([
-    'bun',
-    'build',
-    '--compile',
-    '--minify',
-    `--target=bun-linux-${architecture}`,
-    'src/main.ts',
-    '--outfile',
-    'dist/spyria-agent',
+    ...['docker', 'run', '--rm', '--user', `${process.getuid?.()}:${process.getgid?.()}`, '--env', 'HOME=/tmp'],
+    ...['--volume', `${repositoryRoot}:/repository:ro`, '--volume', `${agentDirectory}dist:/dist`],
+    ...['--workdir', '/repository/apps/agent', pinnedBunImage],
+    ...['bun', 'build', '--compile', '--minify', 'src/main.ts', '--outfile', '/dist/spyria-agent'],
   ])
   scrubDistrustedRoots(`${agentDirectory}dist/spyria-agent`)
   run(['docker', 'build', '--pull', '--iidfile', 'image-id', '-t', 'spyria-agent:dev', '.'])
-  const image = readFileSync(`${agentDirectory}image-id`, 'utf8').trim()
+  const image = readFileSync(imageIdFile, 'utf8').trim()
+  removeReplacedImage(previousImage, image)
+  pruneBuildCache()
   if (!checkLicenses(image)) process.exit(1)
   fillTestHarnesses(image)
   console.log(`Spyria runtime image ${image}`)

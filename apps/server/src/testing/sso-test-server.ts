@@ -17,7 +17,7 @@ const databaseNamed = (databaseName: string) => {
 }
 
 const app = createApp({
-  database: createDatabase(),
+  database: createDatabase(databaseUrlOf('postgres')),
   ...testAuthSettings,
   appOrigin: process.env.SPYRIA_APP_ORIGIN ?? 'http://localhost:5191',
   oidc: { ...testAuthSettings.oidc, redirectUri: `http://localhost:${port}/auth/callback` },

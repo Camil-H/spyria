@@ -168,15 +168,21 @@ test('a member restricted to lookup is refused update on their own prompts, thei
 
 test('a restriction syncs to its member and to admins, not to a member who reads none of their chats', async () => {
   await restrict(lee, ['lookup'])
-  const restrictionsOf = async (userId: string) => {
+  const restrictionsOf = async (userId: string, isLeeSynced: boolean) => {
     const store = await openZeroStore(createZeroStore, userId as never, [acme])
-    await waitFor(() => store.read().workspaceConnections.length > 0)
-    return store.read().connectionRestrictions.map(({ memberId, allowedTools }) => ({ memberId, allowedTools }))
+    const restrictions = () =>
+      store.read().connectionRestrictions.map(({ memberId, allowedTools }) => ({ memberId, allowedTools }))
+    await waitFor(
+      () =>
+        store.read().workspaceConnections.length > 0 &&
+        (!isLeeSynced || restrictions().some(({ memberId }) => memberId === lee)),
+    )
+    return restrictions()
   }
   const leeRestriction = { memberId: lee, allowedTools: ['lookup'] }
-  expect(await restrictionsOf(lee)).toContainEqual(leeRestriction)
-  expect(await restrictionsOf(alice)).toContainEqual(leeRestriction)
-  expect(await restrictionsOf(bob)).not.toContainEqual(leeRestriction)
+  expect(await restrictionsOf(lee, true)).toContainEqual(leeRestriction)
+  expect(await restrictionsOf(alice, true)).toContainEqual(leeRestriction)
+  expect(await restrictionsOf(bob, false)).not.toContainEqual(leeRestriction)
 })
 
 test('unticking a tool for the workspace removes it from every key and every prompt', async () => {

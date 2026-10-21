@@ -209,7 +209,9 @@ test('removing a member ends their sessions, participations, keys and connection
     async () => (await database.$client`select 1 from member_gateway_keys where user_id = ${bob}`).length === 0,
   )
   expect(
-    (await gateway.call<{ keys: { id: string }[] }>('/api/providers/openai/keys')).keys.map(({ id }) => id),
+    ((await gateway.call<{ keys: { id: string }[] | null }>('/api/providers/openai/keys')).keys ?? []).map(
+      ({ id }) => id,
+    ),
   ).not.toContain(providerKeyId)
   expect((await gateway.request(`/api/governance/virtual-keys/${virtualKeyId}`)).status).toBe(404)
   expect(await workspaceEventsOf(database)).toContainEqual({

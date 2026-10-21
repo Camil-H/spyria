@@ -12,6 +12,7 @@ import {
   httpStatusOf,
   startTestDex,
   startTestGateway,
+  startTestPostgres,
   testGatewayAdmin,
 } from '@spyria/db/testing'
 import {
@@ -82,10 +83,7 @@ const startDetached = async (command: string[], cwd: string, env: Record<string,
 }
 
 export default async function globalSetup() {
-  execSync('docker compose -f infra/docker-compose.yml up -d --wait --no-recreate postgres', {
-    cwd: repositoryRoot,
-    stdio: 'ignore',
-  })
+  await startTestPostgres()
   await sweepLeftovers()
   const webBuild = promisify(execFile)('bun', ['run', 'build', ...e2eBuild], { cwd: `${repositoryRoot}apps/web` })
   const [, , stopServer, stopVite, stopSsoServer, stopSsoVite] = await Promise.all([

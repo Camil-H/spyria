@@ -6,7 +6,7 @@ Org-agnostic, model-agnostic AI workspace: agent chats, dev sessions and knowled
 
 - Bun 1.3
 - Node 24 (zero-cache and Vite run on it)
-- Docker (Compose project `spyria`: Postgres on 5434, Dex on 5556, zero-cache on 4848, the model gateway on 127.0.0.1:8180; containers `spyria-*`)
+- Docker (Compose project `spyria`: Postgres on 5434, Dex on 5556, zero-cache on 4848, the model gateway on 127.0.0.1:8180; containers `spyria-*`). Tests never use this stack: they run their own containers `spyria-test-*`, among them `spyria-test-postgres` on 5435 (in memory, recreated when its settings change)
 
 ## First run
 
@@ -68,7 +68,7 @@ Connections: Postgres allows 200 (`max_connections`); the stack uses at most abo
 
 Runtime hosts: each running runtime has its own Docker bridge network, released when it stops. Docker's default address pools hold about 30 such networks per daemon, so a host meant to run more than about 25 runtimes at once (more than about 27 GiB of memory) needs smaller pools in `/etc/docker/daemon.json`, for example `"default-address-pools": [{ "base": "10.200.0.0/16", "size": 28 }]` (4,096 networks), then a Docker restart.
 
-`bun run smoke:prod` checks the Compose file end to end: it starts it under a throwaway name (`spyria-smoke-<random>`) with generated secrets, waits for every healthcheck, checks `/health`, the web app's `index.html` and a hashed asset with their cache headers, and that `/auth/mode` offers creating the first workspace, then removes the containers, volumes, network and the server image it built, even on failure. It needs `bun run agent:build` first and takes a few minutes, so it is not part of `check:all`.
+`bun run smoke:prod` checks the Compose file end to end: it starts it under a throwaway name (`spyria-smoke-<random>`) with generated secrets, waits for every healthcheck, checks `/health`, the web app's `index.html` and a hashed asset with their cache headers, and that `/auth/mode` offers creating the first workspace, then removes the containers, volumes, network and every image it built, even on failure. It needs `bun run agent:build` first and takes a few minutes, so it is not part of `check:all`.
 
 ### Example: Cloudflare Tunnel, Access, Email Routing and Resend
 
@@ -114,6 +114,8 @@ bun run agent:build          # compile spyria-agent and docker build; cached by 
 bun run agent:versions       # pinned vs latest on npm, per tool
 bun run agent:bump <tool>    # pin the latest of claude-code | claude-agent-acp | codex | codex-acp | pi, then rebuild (for Pi, also regenerates its lockfile)
 ```
+
+Builds and the docker tests use the pinned Bun (`scripts/pinned-bun.ts`, the version of our Dockerfiles) whatever Bun is installed locally: `agent:build` compiles spyria-agent in `oven/bun:<pinned>-slim`, and `test:docker:integration` runs the test server and the hosts it starts on a checksum-verified, root-scrubbed copy of that release cached in `node_modules/.cache/spyria-bun`.
 
 After a rebuild, restart the server: a new content ID applies to new runtimes. Without a built image a prompt says `Spyria's runtime image is not built: run bun run agent:build`.
 
@@ -188,15 +190,22 @@ bun run jobs:retry <id>|--all               # requeue dead jobs with their attem
 bun run stack:down    # stop the containers, the gateway included (data is kept in the volumes)
 ```
 
+## Disk usage
+
+- Dev Postgres keeps at most 4 GB of WAL for zero-cache's replication slot (`max_slot_wal_keep_size`): when zero-cache stays down longer, Postgres drops the slot instead of filling the disk, and zero-cache resyncs its replica (clients reload) at its next start.
+- Tests write only to `spyria-test-postgres` (in memory, 4 GB at most, WAL capped at 1 GB). Each run starts by removing what killed runs left: idle `spyria_test_<id>` and `spyria_e2e_w<n>` databases and inactive test replication slots there, and `spyria-test-<id>-*`, `spyria-test-e2e-*` and `spyria-test-certs-<id>` containers, volumes and networks older than 30 minutes. The reused fixtures (`spyria-test-postgres`, `spyria-test-dex`, `spyria-test-gateway-*`, the `spyria-test-harnesses` volume) stay.
+- `agent:build` removes the image it replaces unless a container still uses it (old runtimes `spyria-rt-*` keep theirs until removed); `check:trust` and `smoke:prod` remove the images they build. All three then prune Docker's build cache down to 10 GB (`docker builder prune --max-used-space 10GB`). The build cache belongs to the whole Docker daemon, so this also trims other projects' cache beyond that limit, oldest first.
+- Not cleaned by our commands, yours to prune: base images replaced by `--pull` (`docker image ls --filter dangling=true`), images and volumes of removed dev runtimes, `docker builder prune` below 10 GB.
+
 ## Checks
 
 ```sh
 bun run check:related      # while iterating: lint, typecheck and boundaries, then only the affected tests (see below)
-bun run check:all          # everything below in order, failing fast; starts Postgres and Dex (not the gateway), leaves the stack running
+bun run check:all          # everything below in order, failing fast; never touches the dev stack
 bun run check:all --verify # does the last check:all match the current tree, and did it pass?
 bun run typecheck
 bun run test
-bun run test:integration   # needs bun run stack:up; runs its own gateway (spyria-test-gateway-integration on 4880) and the test Dex (spyria-test-dex on 5557)
+bun run test:integration   # runs its own Postgres (spyria-test-postgres on 5435), its own gateway (spyria-test-gateway-integration on 4880) and the test Dex (spyria-test-dex on 5557)
 bun run check:boundaries
 bun run lint
 bun run check:bundle       # builds the app, main chunk at most 760 kB, one React, no server-only SQL

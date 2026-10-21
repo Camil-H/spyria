@@ -9,14 +9,17 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { type SQL, sql } from 'drizzle-orm'
 import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import postgres from 'postgres'
-import { createDatabase, databaseUrl } from './client.ts'
+import { createDatabase } from './client.ts'
 import { resetDatabase } from './seed.ts'
 
 const templateDatabaseName = 'spyria_test_template'
 export const databaseDropTimeoutMilliseconds = 30_000
+const testPostgresContainer = 'spyria-test-postgres'
+const testPostgresUrl = 'postgres://spyria:spyria-test@localhost:5435/postgres'
+const docker = (...args: string[]) => spawnSync('docker', args, { stdio: ['ignore', 'pipe', 'pipe'] })
 
 export const databaseUrlOf = (databaseName: string) =>
-  Object.assign(new URL(databaseUrl), { pathname: `/${databaseName}` }).href
+  Object.assign(new URL(testPostgresUrl), { pathname: `/${databaseName}` }).href
 
 const withAdmin = async (statement: string) => {
   const admin = postgres(databaseUrlOf('postgres'), { onnotice: () => {} })
@@ -56,13 +59,43 @@ export const createTestDatabase = async (
   }
 }
 
-const dropStaleTestObjects = async () => {
+const leftoverTestDatabaseName = /^(spyria_test_[0-9a-f]{32}|spyria_e2e_w[0-9]+)$/
+const leftoverTestSlotName = /^(spyriatest|spyriae2e)[0-9]*_/
+const leftoverTestDockerName = /^spyria-test-(([0-9a-f]{8}|other-[0-9a-f]{8}|e2e)-|certs-[0-9a-f]{8}$)/
+const leftoverDockerAgeMilliseconds = 30 * 60_000
+
+export const isLeftoverTestDockerObject = (name: string, createdAt: string, now = Date.now()) =>
+  leftoverTestDockerName.test(name) && now - new Date(createdAt).getTime() > leftoverDockerAgeMilliseconds
+
+const dockerLines = (...args: string[]) =>
+  docker(...args)
+    .stdout.toString()
+    .split('\n')
+    .filter(Boolean)
+const leftoverDockerKinds = [
+  { kind: 'container', all: ['-a'], name: '{{.Names}}', createdAt: '{{.Created}}', force: ['-fv'] },
+  { kind: 'volume', all: [], name: '{{.Name}}', createdAt: '{{.CreatedAt}}', force: [] },
+  { kind: 'network', all: [], name: '{{.Name}}', createdAt: '{{.Created}}', force: [] },
+]
+
+const removeLeftoverTestDockerObjects = () => {
+  for (const { kind, all, name, createdAt, force } of leftoverDockerKinds) {
+    const names = dockerLines(kind, 'ls', ...all, '--format', name).filter((each) => leftoverTestDockerName.test(each))
+    if (names.length === 0) continue
+    const createdAts = dockerLines(kind, 'inspect', '--format', createdAt, ...names)
+    const leftovers = names.filter((each, index) => isLeftoverTestDockerObject(each, createdAts[index] ?? ''))
+    if (leftovers.length > 0) docker(kind, 'rm', ...force, ...leftovers)
+  }
+}
+
+export const removeLeftoversOfKilledRuns = async () => {
+  removeLeftoverTestDockerObjects()
   const admin = postgres(databaseUrlOf('postgres'), { onnotice: () => {} })
   try {
     await admin`select pg_drop_replication_slot(slot_name) from pg_replication_slots
-      where not active and slot_name ~ '^(spyriatest|spyriae2e)'`
+      where not active and slot_name ~ ${leftoverTestSlotName.source}`
     const stale = await admin<{ datname: string }[]>`select datname from pg_database
-      where datname ~ '^(spyria_test_[0-9a-f]{32}|spyria_e2e_w[0-9]+)$'
+      where datname ~ ${leftoverTestDatabaseName.source}
         and datname not in (select datname from pg_stat_activity where datname is not null)`
     for (const { datname } of stale) await admin.unsafe(`drop database if exists "${datname}"`)
   } finally {
@@ -71,7 +104,7 @@ const dropStaleTestObjects = async () => {
 }
 
 export const buildTemplateDatabase = async (name = templateDatabaseName) => {
-  await dropStaleTestObjects()
+  await removeLeftoversOfKilledRuns()
   await dropDatabase(name)
   await withAdmin(`create database "${name}"`)
   const database = createDatabase(databaseUrlOf(name))
@@ -216,45 +249,56 @@ export const testGatewayAt = (url: string) => {
 }
 type TestGateway = ReturnType<typeof testGatewayAt>
 
-const docker = (...args: string[]) => spawnSync('docker', args, { stdio: ['ignore', 'pipe', 'pipe'] })
-
 export const testDexIssuer = 'http://localhost:5557/dex'
-const testDexContainer = 'spyria-test-dex'
 const testDexConfig = new URL('../../../../apps/web/e2e/dex-test.yaml', import.meta.url).pathname
 
-export const startTestDex = async () => {
-  const configHash = createHash('sha256').update(readFileSync(testDexConfig)).digest('hex').slice(0, 16)
-  const discoveryUrl = `${testDexIssuer}/.well-known/openid-configuration`
-  const running = docker(
-    'inspect',
-    '-f',
-    '{{.State.Running}} {{index .Config.Labels "spyria.setup"}}',
-    testDexContainer,
-  )
-  if (running.stdout.toString().trim() === `true ${configHash}` && (await httpStatusOf(discoveryUrl)) === 200) return
-  docker('rm', '-f', testDexContainer)
-  const started = docker(
-    'run',
-    '-d',
-    '--name',
-    testDexContainer,
-    '--label',
-    `spyria.setup=${configHash}`,
-    '-p',
-    `127.0.0.1:${new URL(testDexIssuer).port}:5556`,
-    '-v',
-    `${testDexConfig}:/etc/dex/config.yaml:ro`,
-    'dexidp/dex:v2.43.1',
-    'dex',
-    'serve',
-    '/etc/dex/config.yaml',
-  )
-  if (started.status !== 0) throw new Error(`Starting ${testDexContainer} failed: ${started.stderr}`)
-  for (let attempt = 1; (await httpStatusOf(discoveryUrl)) !== 200; attempt++) {
-    if (attempt === 400) throw new Error(`${testDexContainer} did not start`)
+const startTestContainer = async (name: string, runArguments: string[], isReady: () => Promise<boolean>) => {
+  const setupHash = createHash('sha256').update(JSON.stringify(runArguments)).digest('hex').slice(0, 16)
+  const running = docker('inspect', '-f', '{{.State.Running}} {{index .Config.Labels "spyria.setup"}}', name)
+  if (running.stdout.toString().trim() === `true ${setupHash}` && (await isReady())) return
+  docker('rm', '-fv', name)
+  const started = docker('run', '-d', '--name', name, '--label', `spyria.setup=${setupHash}`, ...runArguments)
+  if (started.status !== 0) throw new Error(`Starting ${name} failed: ${started.stderr}`)
+  for (let attempt = 1; !(await isReady()); attempt++) {
+    if (attempt === 400) throw new Error(`${name} did not start`)
     await sleep(50)
   }
 }
+
+export const startTestDex = () =>
+  startTestContainer(
+    'spyria-test-dex',
+    [
+      ...['--label', `spyria.config=${createHash('sha256').update(readFileSync(testDexConfig)).digest('hex')}`],
+      ...['-p', `127.0.0.1:${new URL(testDexIssuer).port}:5556`, '-v', `${testDexConfig}:/etc/dex/config.yaml:ro`],
+      ...['dexidp/dex:v2.43.1', 'dex', 'serve', '/etc/dex/config.yaml'],
+    ],
+    async () => (await httpStatusOf(`${testDexIssuer}/.well-known/openid-configuration`)) === 200,
+  )
+
+const isTestPostgresReady = async () => {
+  const admin = postgres(testPostgresUrl, { onnotice: () => {}, connect_timeout: 1, max: 1 })
+  try {
+    await admin`select 1`
+    return true
+  } catch {
+    return false
+  } finally {
+    await admin.end({ timeout: 1 })
+  }
+}
+
+export const startTestPostgres = () =>
+  startTestContainer(
+    testPostgresContainer,
+    [
+      ...['-p', `${new URL(testPostgresUrl).port}:5432`, '--tmpfs', '/var/lib/postgresql:size=4g', '--shm-size', '1g'],
+      ...['-e', 'POSTGRES_USER=spyria', '-e', `POSTGRES_PASSWORD=${new URL(testPostgresUrl).password}`, 'postgres:18'],
+      ...['postgres', '-c', 'wal_level=logical', '-c', 'max_slot_wal_keep_size=1GB', '-c', 'max_wal_size=1GB'],
+      ...['-c', 'max_connections=300', '-c', 'max_replication_slots=40', '-c', 'max_wal_senders=40'],
+    ],
+    isTestPostgresReady,
+  )
 
 export const startTestGateway = async ({
   name,
@@ -272,6 +316,7 @@ export const startTestGateway = async ({
   const configFile = join(tmpdir(), `${containerName}.json`)
   const gatewayConfig = JSON.parse(readFileSync(new URL('../../../../infra/bifrost.json', import.meta.url), 'utf8'))
   const setup = {
+    testPostgresStartedAt: docker('inspect', '-f', '{{.State.StartedAt}}', testPostgresContainer).stdout.toString(),
     gatewayImage,
     port,
     fakeLlmUrl,
@@ -300,7 +345,7 @@ export const startTestGateway = async ({
       await gateway.call(`/api/mcp/client/${config.client_id}`, { method: 'DELETE' })
     return gateway
   }
-  const postgresUrl = new URL(databaseUrl)
+  const postgresUrl = new URL(testPostgresUrl)
   const store = {
     enabled: true,
     type: 'postgres',

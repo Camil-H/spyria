@@ -67,7 +67,7 @@ test('a personal host installs a harness from the configured registry into its v
     body: JSON.stringify({ personal: true }),
   })
   const { id, code } = (await added.json()) as { id: string; code: string }
-  hostProcess = Bun.spawn(['bun', hostProgram, '--personal', `http://localhost:${server.port}/h/${code}`], {
+  hostProcess = Bun.spawn([process.execPath, hostProgram, '--personal', `http://localhost:${server.port}/h/${code}`], {
     env: {
       ...process.env,
       SPYRIA_HOST_STATE_DIR: stateDirectory,

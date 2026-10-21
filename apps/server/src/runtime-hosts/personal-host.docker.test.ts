@@ -56,7 +56,7 @@ afterAll(async () => {
 const hostRow = async (id: string) =>
   (await testDatabase.database.$client`select status, capacity from runtime_hosts where id = ${id}`)[0]
 const startPersonalHost = async (id: string, url: string) => {
-  hostProcess = Bun.spawn(['bun', hostProgram, '--personal', url], {
+  hostProcess = Bun.spawn([process.execPath, hostProgram, '--personal', url], {
     env: {
       ...process.env,
       SPYRIA_HOST_STATE_DIR: stateDirectory,

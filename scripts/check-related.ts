@@ -148,8 +148,6 @@ const testResults = []
 const testFiles = (suite: Suite) => [...suite.files].map((file) => `./${file}`)
 if (unit.full.length > 0) testResults.push(runInherited('unit', ['bun', 'run', 'test']))
 else if (unit.files.size > 0) testResults.push(runInherited('unit', ['bun', 'test', ...testFiles(unit)]))
-const needsStack = integration.full.length > 0 || integration.files.size > 0
-if (needsStack) runInherited('stack', ['bun', 'run', 'stack:up'])
 if (integration.full.length > 0) testResults.push(runInherited('integration', ['bun', 'run', 'test:integration']))
 else if (integration.files.size > 0)
   testResults.push(

@@ -181,7 +181,7 @@ const chatKeyOfPrompt = async (prompt = '') => {
 
 startTelemetry()
 const app = createApp({
-  database: createDatabase(),
+  database: createDatabase(databaseUrlOf('postgres')),
   ...testAuthSettings,
   testDatabaseByName: databaseByName,
   rateLimiter: (name, requester) => {
