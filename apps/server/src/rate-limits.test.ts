@@ -81,3 +81,35 @@ test('invites, agent retries and runtime or fork creation are limited by name; a
   expect(limitOfMutation('workspace.createChat', { type: 'channel' })).toBeUndefined()
   expect(limitOfMutation('conversation.markChatRead', {})).toBeUndefined()
 })
+
+test('a spray of addresses keeps at most 10,000 buckets, sweeps at most every 10 seconds, and a member call stays cheap', () => {
+  const time = clock()
+  const limit = createRateLimiter(rateBudgets, time.now)
+  for (let request = 0; request < 50_000; request++) {
+    limit('firstWorkspace', { address: `2001:db8::${request.toString(16)}` })
+    time.advance(1)
+  }
+  expect(limit.bucketCount()).toBe(10_000)
+  const durations: number[] = []
+  for (let request = 0; request < 1_000; request++) {
+    const startedAt = Bun.nanoseconds()
+    limit('messages', { workspaceId: 'acme', userId: `member-${request % 50}` })
+    durations.push(Bun.nanoseconds() - startedAt)
+    time.advance(1)
+  }
+  const medianMicroseconds = (durations.toSorted((first, second) => first - second)[500] ?? 0) / 1000
+  expect(medianMicroseconds).toBeLessThan(20)
+  expect(limit.bucketCount()).toBe(10_000)
+})
+
+test('the least recently used bucket is evicted first, so a member in use keeps its budget during a spray', () => {
+  const time = clock()
+  const limit = createRateLimiter({ ...rateBudgets, prompts: { ...rateBudgets.prompts, count: 2 } }, time.now)
+  limit('prompts', { workspaceId: 'acme', userId: 'alice' })
+  for (let request = 0; request < 18_000; request++) {
+    limit('firstWorkspace', { address: `198.51.${request >> 8}.${request & 255}` })
+    if (request === 9_000) limit('prompts', { workspaceId: 'acme', userId: 'alice' })
+  }
+  expect(limit.bucketCount()).toBe(10_000)
+  expect(refusalOf(() => limit('prompts', { workspaceId: 'acme', userId: 'alice' }))).toBeInstanceOf(RateLimited)
+})

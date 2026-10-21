@@ -63,7 +63,12 @@ export const createAgentBridge = ({
     const turn = turnSpans.get(turnKeyOf(workspace, promptId))
     return turn ? trace.setSpan(ROOT_CONTEXT, turn.span) : ROOT_CONTEXT
   }
-  const inTurn = <Result>(workspace: string, promptId: string, work: () => Promise<Result>) => {
+  const inTurn = async <Result>(
+    workspace: string,
+    promptId: string,
+    work: () => Promise<Result>,
+    isStreaming: () => boolean,
+  ) => {
     const key = turnKeyOf(workspace, promptId)
     const turn = turnSpans.get(key) ?? {
       span: trace
@@ -72,7 +77,14 @@ export const createAgentBridge = ({
       startedAt: performance.now(),
     }
     turnSpans.set(key, turn)
-    return context.with(trace.setSpan(context.active(), turn.span), work)
+    try {
+      return await context.with(trace.setSpan(context.active(), turn.span), work)
+    } finally {
+      if (!isStreaming() && turnSpans.get(key) === turn) {
+        turnSpans.delete(key)
+        turn.span.end()
+      }
+    }
   }
   const endTurn = (chat: AgentChat, promptId: string) => {
     const turn = turnSpans.get(turnKeyOf(chat.workspaceId, promptId))
@@ -113,6 +125,11 @@ export const createAgentBridge = ({
     const streamedSeqs = new Map<string, number>()
     const viewers = new Map<string, Map<WSContext, MemberId>>()
     const viewersOf = (chat: AgentChat) => viewers.get(keyOf(chat))?.keys() ?? []
+    const unwatchChat = (viewer: WSContext, key: string) => {
+      const watching = viewers.get(key)
+      watching?.delete(viewer)
+      if (watching?.size === 0) viewers.delete(key)
+    }
     const delegatedTexts = new Map<string, Map<string, DelegatedFrame>>()
     const shownQuestions = new Map<string, Map<string, QuestionFrame>>()
     const send = (viewer: WSContext, chat: AgentChat, frame: object) =>
@@ -137,7 +154,11 @@ export const createAgentBridge = ({
           )
           for (const viewer of viewersOf(chat)) send(viewer, chat, frame)
         },
-        hideQuestion: (chat, questionId) => shownQuestions.get(keyOf(chat))?.delete(questionId),
+        hideQuestion: (chat, questionId) => {
+          const shown = shownQuestions.get(keyOf(chat))
+          shown?.delete(questionId)
+          if (shown?.size === 0) shownQuestions.delete(keyOf(chat))
+        },
         ensureOpen: (...target) => ensureOpen(...target),
         streamDelegated: (chat, frame) => {
           const texts = delegatedTexts.get(keyOf(chat)) ?? new Map<string, DelegatedFrame>()
@@ -145,20 +166,22 @@ export const createAgentBridge = ({
           const continues = previous && Boolean(previous.isReasoning) === Boolean(frame.isReasoning)
           if (frame.text === '') texts.delete(frame.delegationId)
           else texts.set(frame.delegationId, { ...frame, text: (continues ? previous.text : '') + frame.text })
-          delegatedTexts.set(keyOf(chat), texts)
+          if (texts.size === 0) delegatedTexts.delete(keyOf(chat))
+          else delegatedTexts.set(keyOf(chat), texts)
           for (const viewer of viewersOf(chat)) send(viewer, chat, frame)
         },
         stopStreaming: (chat, promptId) => {
           endTurn(chat, promptId)
           delegatedTexts.delete(keyOf(chat))
           const socket = sockets.get(keyOf(chat))
-          if (socket?.promptId === promptId)
-            Object.assign(socket, {
-              promptId: null,
-              streamedText: '',
-              segment: undefined,
-              drainingPromptId: socket.endedPromptId !== promptId ? promptId : null,
-            })
+          if (socket?.promptId !== promptId) return
+          streamedSeqs.delete(socket.conversationId)
+          Object.assign(socket, {
+            promptId: null,
+            streamedText: '',
+            segment: undefined,
+            drainingPromptId: socket.endedPromptId !== promptId ? promptId : null,
+          })
         },
       },
     })
@@ -170,28 +193,37 @@ export const createAgentBridge = ({
         attributes: { 'workspace.id': chat.workspaceId, 'chat.id': chat.chatId },
         error,
       })
-    const reopenLater = (chat: AgentChat) => setTimeout(() => void reopen(chat), reopenDelayMilliseconds)
-    const reopen = async (chat: AgentChat) => {
+    const reopenLater = (chat: AgentChat, closedPromptId?: string) =>
+      setTimeout(() => void reopen(chat, closedPromptId), reopenDelayMilliseconds)
+    const reopen = async (chat: AgentChat, closedPromptId?: string) => {
       if (isReleased || sockets.has(keyOf(chat))) return
       const target = await handlers.reopenTarget(chat).catch((error) => {
         logFailure(chat)(error)
-        reopenLater(chat)
-        return undefined
+        reopenLater(chat, closedPromptId)
+        return null
       })
+      if (target === null) return
+      if (closedPromptId && target?.promptId !== closedPromptId) endTurn(chat, closedPromptId)
       if (!target) return
       await ensureOpen(chat, target.conversation, target.promptId)
       const { promptId, outcome } = target
       if (outcome)
         setTimeout(
-          () => void handlers.closeReopenedTurn(chat, promptId, outcome).catch(logFailure(chat)),
+          () =>
+            void handlers
+              .closeReopenedTurn(chat, promptId, outcome)
+              .then(() => endTurn(chat, promptId))
+              .catch(logFailure(chat)),
           reopenDelayMilliseconds,
         )
     }
     const ensureOpen = (chat: AgentChat, conversation: AgentConversation, promptId: MessageId | null) => {
       const current = sockets.get(keyOf(chat))
       if (current?.conversationId === conversation.conversationId) {
-        if (promptId && current.promptId !== promptId)
+        if (promptId && current.promptId !== promptId) {
+          if (current.promptId) endTurn(chat, current.promptId)
           Object.assign(current, { promptId, streamedText: '', segment: undefined })
+        }
         return current.isReady
       }
       current?.close()
@@ -222,7 +254,7 @@ export const createAgentBridge = ({
         ready.resolve()
         if (chatSocket.isClosed || sockets.get(keyOf(chat)) !== chatSocket) return
         sockets.delete(keyOf(chat))
-        if (chatSocket.promptId) reopenLater(chat)
+        if (chatSocket.promptId) reopenLater(chat, chatSocket.promptId)
       }
       sockets.set(keyOf(chat), chatSocket)
       const record = (event: AgentEvent, turnPromptId?: MessageId) => {
@@ -237,6 +269,7 @@ export const createAgentBridge = ({
             chatSocket.promptId = recorded.promptId
             if (recorded.promptId !== null) return
             if (promptAtEvent) endTurn(chat, promptAtEvent)
+            streamedSeqs.delete(conversation.conversationId)
             chatSocket.streamedText = ''
             delegatedTexts.delete(keyOf(chat))
           })
@@ -358,10 +391,15 @@ export const createAgentBridge = ({
     return {
       jobs: {
         ...handlers.jobs,
-        [agentJobTypes.prompt]: (job: Parameters<(typeof handlers.jobs)[typeof agentJobTypes.prompt]>[0]) =>
-          inTurn(job.workspaceId, String((job.payload as { messageId?: unknown }).messageId), () =>
-            handlers.jobs[agentJobTypes.prompt](job),
-          ),
+        [agentJobTypes.prompt]: (job: Parameters<(typeof handlers.jobs)[typeof agentJobTypes.prompt]>[0]) => {
+          const promptId = String((job.payload as { messageId?: unknown }).messageId)
+          return inTurn(
+            job.workspaceId,
+            promptId,
+            () => handlers.jobs[agentJobTypes.prompt](job),
+            () => [...sockets.values()].some((socket) => socket.promptId === promptId),
+          )
+        },
       },
       ensureOpen,
       modelCallTurn: handlers.modelCallTurn,
@@ -416,7 +454,7 @@ export const createAgentBridge = ({
       },
       revokeUnreadable: async (chat: AgentChat) => {
         for (const [viewer, memberId] of viewers.get(keyOf(chat)) ?? [])
-          if (!(await isReadableBy(memberId, chat))) viewers.get(keyOf(chat))?.delete(viewer)
+          if (!(await isReadableBy(memberId, chat))) unwatchChat(viewer, keyOf(chat))
       },
       closeMemberStreams: (workspaceId: string, memberId: string) => {
         for (const [key, watching] of viewers)
@@ -424,8 +462,15 @@ export const createAgentBridge = ({
             for (const [viewer, viewerId] of watching) if (viewerId === memberId) viewer.close(4001, 'Not signed in')
       },
       unwatch: (viewer: WSContext, chat?: AgentChat) => {
-        for (const watching of chat ? [viewers.get(keyOf(chat))] : viewers.values()) watching?.delete(viewer)
+        for (const key of chat ? [keyOf(chat)] : [...viewers.keys()]) unwatchChat(viewer, key)
       },
+      retained: () => ({
+        turnSpans: turnSpans.size,
+        viewers: viewers.size,
+        shownQuestions: shownQuestions.size,
+        delegatedTexts: delegatedTexts.size,
+        streamedSeqs: streamedSeqs.size,
+      }),
       release: () => {
         isReleased = true
         for (const socket of sockets.values()) socket.close()

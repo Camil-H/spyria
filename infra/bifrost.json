@@ -27,7 +27,9 @@
       "user": "bifrost",
       "password": "env.BIFROST_DB_PASSWORD",
       "db_name": "bifrost",
-      "ssl_mode": "disable"
+      "ssl_mode": "disable",
+      "max_open_conns": 10,
+      "max_idle_conns": 2
     }
   },
   "logs_store": {
@@ -39,7 +41,9 @@
       "user": "bifrost",
       "password": "env.BIFROST_DB_PASSWORD",
       "db_name": "bifrost",
-      "ssl_mode": "disable"
+      "ssl_mode": "disable",
+      "max_open_conns": 10,
+      "max_idle_conns": 2
     }
   }
 }

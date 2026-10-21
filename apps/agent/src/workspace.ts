@@ -8,7 +8,7 @@ const maximumPatchCharacters = 400_000
 const maximumCommits = 200
 const branchPattern = /^\w[\w./-]*$/
 const commitPattern = /^[0-9a-f]{40}$/
-const maximumBundleBytes = 20_000_000
+const maximumBundleBytes = 12_000_000
 const identityPattern = /^[^<>\n\0]+$/
 const baseRef = 'refs/spyria/base'
 const pushedRef = 'refs/spyria/pushed'
@@ -117,7 +117,7 @@ export const bundleOf = async (
     env,
   )
   if (!bundled.isDone) return { failure: `The branch could not be bundled: ${bundled.errors.trim()}` }
-  if (bundled.bytes.length > maximumBundleBytes)
+  if (bundled.bytes.byteLength > maximumBundleBytes)
     return {
       failure: `The new commits weigh more than ${maximumBundleBytes / 1_000_000} MB; push them from your machine`,
     }

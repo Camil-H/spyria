@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from 'bun:test'
-import { createRelay } from './relay.ts'
+import { createRelay, frameTextOf } from './relay.ts'
 import { nextFrameOf, waitFor } from './testing.ts'
 
 const spyriaAgent = Bun.serve({
@@ -208,4 +208,17 @@ test('a workspace host forwards any path and leaves bodies untouched', async () 
   await relay.handle({ type: 'http', sid: 7, runtimeId: 'runtime-1', method: 'GET', path: '/api/file/download?path=x' })
   await waitFor(() => sent.length > 0)
   expect(String(sent[0]?.body)).toContain(accessToken)
+})
+
+test('a frame over the limit is never sent: an HTTP answer becomes an error under the limit, any other frame is dropped', () => {
+  const body = 'x'.repeat(1000)
+  expect(JSON.parse(String(frameTextOf({ type: 'http_res', sid: 7, status: 200, body }, 2000)))).toMatchObject({
+    sid: 7,
+    body,
+  })
+  const refused = String(frameTextOf({ type: 'http_res', sid: 7, status: 200, body: body.repeat(3) }, 2000))
+  expect(JSON.parse(refused)).toEqual({ type: 'http_res', sid: 7, error: 'The response is too large to relay' })
+  expect(Buffer.byteLength(refused)).toBeLessThan(2000)
+  expect(frameTextOf({ type: 'gw_req', sid: 8, body: 'é'.repeat(900) }, 2000)).toBeDefined()
+  expect(frameTextOf({ type: 'gw_req', sid: 8, body: 'é'.repeat(1100) }, 2000)).toBeUndefined()
 })

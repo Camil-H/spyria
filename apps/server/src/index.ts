@@ -3,7 +3,6 @@ import { setModelDirectory } from '@spyria/db/server-writes'
 import { deploymentOf } from '@spyria/kernel'
 import { createLlmGateway } from '@spyria/profile/server'
 import { createBifrostUsageLogs } from '@spyria/usage/server'
-import { websocket } from 'hono/bun'
 import { createAgentBridge } from './agent-bridge/bridge.ts'
 import { createApp, sessionClassifierOf } from './app.ts'
 import { createSecretBox } from './auth/secret-box.ts'
@@ -13,7 +12,7 @@ import { createGitHubApi, githubDotCom } from './github/github-api.ts'
 import { startJobWorker } from './job-worker.ts'
 import { createModelCallRelay } from './llm-relay.ts'
 import { productionProblemsOf } from './production.ts'
-import { createRuntimeHostGateway } from './runtime-hosts/gateway.ts'
+import { createRuntimeHostGateway, serverWebSocket } from './runtime-hosts/gateway.ts'
 import { readSpyriaAgentImage } from './spyria-agent-image.ts'
 import { startTelemetry } from './telemetry.ts'
 
@@ -94,7 +93,12 @@ const jobWorker = startJobWorker(database, {
 })
 await enqueueSweeps(database)
 await agentBridge.forDatabase(database).resumeActiveTurns()
-const server = Bun.serve({ port: Number(process.env.PORT ?? 3000), hostname: '0.0.0.0', fetch: app.fetch, websocket })
+const server = Bun.serve({
+  port: Number(process.env.PORT ?? 3000),
+  hostname: '0.0.0.0',
+  fetch: app.fetch,
+  websocket: serverWebSocket,
+})
 
 const shutDown = async () => {
   setTimeout(() => process.exit(1), shutdownMilliseconds).unref()

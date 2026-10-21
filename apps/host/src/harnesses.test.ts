@@ -8,6 +8,7 @@ import {
   installFailureOf,
   installHarness,
   installScriptOf,
+  installTimeoutMilliseconds,
   isHarnessInstalled,
   pinnedPackagesOf,
 } from './harnesses.ts'
@@ -101,4 +102,23 @@ test("two installs of one harness at once share one container, and a failure car
   for (const install of installs) await expect(install).rejects.toThrow('code E404\n404 Not Found')
   expect(calls.filter((call) => call.startsWith('POST /containers/create'))).toHaveLength(1)
   expect(calls.at(-1)).toBe('DELETE /containers/spyria-harness-install-codex')
+})
+
+test('an install whose container never exits times out within the server budget, removes its container and lets the next install run anew', async () => {
+  const calls: string[] = []
+  const waitTimeouts: (number | undefined)[] = []
+  const docker = (async (method: string, path: string, _body?: unknown, timeoutMilliseconds?: number) => {
+    calls.push(`${method} ${path.split('?')[0]}`)
+    if (path.endsWith('/wait')) {
+      waitTimeouts.push(timeoutMilliseconds)
+      throw new DOMException('The operation timed out.', 'TimeoutError')
+    }
+    return {}
+  }) as Docker
+  await expect(installHarness(docker, 'spyria-', image, 'claude-code')).rejects.toThrow('timed out')
+  expect(calls.at(-1)).toBe('DELETE /containers/spyria-harness-install-claude-code')
+  await expect(installHarness(docker, 'spyria-', image, 'claude-code')).rejects.toThrow('timed out')
+  expect(calls.filter((call) => call.startsWith('POST /containers/create'))).toHaveLength(2)
+  expect(waitTimeouts).toEqual([installTimeoutMilliseconds, installTimeoutMilliseconds])
+  expect(installTimeoutMilliseconds).toBeLessThan(240_000)
 })

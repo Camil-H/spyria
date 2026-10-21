@@ -29,7 +29,6 @@ import { createLlmGateway } from '@spyria/profile/server'
 import { runtimeMutators } from '@spyria/runtime/server'
 import { workspaceMutators } from '@spyria/workspace/server'
 import { Hono } from 'hono'
-import { websocket } from 'hono/bun'
 import { createAgentBridge } from '../agent-bridge/bridge.ts'
 import { createApp, sessionClassifierOf } from '../app.ts'
 import { issueSessionToken } from '../auth/session-tokens.ts'
@@ -38,7 +37,7 @@ import { createGitHubCheckouts, type GitHubDependencies } from '../github/github
 import { startJobWorker } from '../job-worker.ts'
 import { createModelCallRelay } from '../llm-relay.ts'
 import { type RateBudgets, rateBudgets } from '../rate-limits.ts'
-import { createRuntimeHostGateway } from '../runtime-hosts/gateway.ts'
+import { createRuntimeHostGateway, serverWebSocket } from '../runtime-hosts/gateway.ts'
 import { createFakeLlm, type FakeLlmScript, fakeAgentLlm } from './fake-llm.ts'
 import { createFakeMcp, sharedToolServer } from './fake-mcp.ts'
 import {
@@ -205,7 +204,7 @@ const startSharedTestApp = async () => {
     '/fake-llm',
     fakeLlm,
   )
-  const server = Bun.serve({ port: integrationAppPort, fetch: app.fetch, websocket })
+  const server = Bun.serve({ port: integrationAppPort, fetch: app.fetch, websocket: serverWebSocket })
   const fakeMcp = createFakeMcp()
   const fakeMcpServer = Bun.serve({ port: integrationFakeMcpPort, fetch: fakeMcp.fetch })
   const stopServerAndDatabase = async () => {
@@ -596,7 +595,7 @@ export const startAgentStack = async ({
     spyriaAgentImage,
     github,
   })
-  const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
+  const server = Bun.serve({ port: 0, fetch: app.fetch, websocket: serverWebSocket })
   const worker = startJobWorker(database, {
     pollIntervalMilliseconds: 5,
     retryDelayMilliseconds: 100,
@@ -662,7 +661,7 @@ export const startAgentStack = async ({
       socket.send(JSON.stringify({ type: 'subscribe', chatId: chat }))
       await waitFor(() => subscriptions > before)
     }
-    return { frames, closed, subscribed: subscribed.promise, resubscribe }
+    return { frames, closed, subscribed: subscribed.promise, resubscribe, close: () => socket.close() }
   }
   return {
     ...testApp,

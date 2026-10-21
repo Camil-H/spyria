@@ -9,6 +9,7 @@ export const harnessNames: Record<HarnessId, string> = { 'claude-code': 'Claude 
 const harnessesTarget = '/harnesses'
 const systemPath = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
 const maximumFailureLength = 400
+export const installTimeoutMilliseconds = 220_000
 const terminalEscape = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*[A-Za-z]`, 'g')
 
 export const pinnedPackagesOf = (harness: HarnessId) =>
@@ -100,7 +101,12 @@ const runInstall = async (docker: Docker, prefix: string, image: string, harness
   await docker('POST', `/containers/create?name=${name}`, installContainerBodyOf(prefix, image, harness))
   try {
     await docker('POST', `/containers/${name}/start`)
-    const { StatusCode } = await docker<{ StatusCode: number }>('POST', `/containers/${name}/wait`)
+    const { StatusCode } = await docker<{ StatusCode: number }>(
+      'POST',
+      `/containers/${name}/wait`,
+      undefined,
+      installTimeoutMilliseconds,
+    )
     if (StatusCode !== 0)
       throw new Error(installFailureOf(await docker<string>('GET', `/containers/${name}/logs?stdout=1&stderr=1`)))
   } finally {

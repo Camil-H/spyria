@@ -197,7 +197,7 @@ const runtimeLocks = {
     select chats.id from chats join runtime_hosts on runtime_hosts.workspace_id = chats.workspace_id
       and runtime_hosts.owner_id = chats.owner_user_id
     where chats.workspace_id = $1 and chats.local_session and runtime_hosts.id = $2)) for update`,
-  sweepable: "state in ('running', 'stopped') for update skip locked",
+  sweepable: "(state in ('running', 'stopped') or state = 'failed' and host_id is not null) for update skip locked",
 }
 
 export const lockRuntimes = async (

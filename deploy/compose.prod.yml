@@ -9,7 +9,8 @@ services:
   postgres:
     image: postgres:18
     container_name: ${SPYRIA_DEPLOYMENT}-postgres
-    command: postgres -c wal_level=logical
+    command: postgres -c wal_level=logical -c max_connections=200 -c max_slot_wal_keep_size=10GB
+    shm_size: 1g
     environment:
       POSTGRES_USER: spyria
       POSTGRES_PASSWORD: ${SPYRIA_POSTGRES_PASSWORD}
@@ -40,6 +41,10 @@ services:
     container_name: ${SPYRIA_DEPLOYMENT}-server
     environment:
       DATABASE_URL: *database-url
+      DATABASE_POOL_MAX: 20
+      DATABASE_IDLE_TIMEOUT_SECONDS: 60
+      DATABASE_MAX_LIFETIME_SECONDS: 1800
+      DATABASE_APPLICATION_NAME: spyria-server
       SPYRIA_DEPLOYMENT: ${SPYRIA_DEPLOYMENT}
       SPYRIA_AUTH_MODE: sso
       SPYRIA_APP_ORIGIN: ${SPYRIA_APP_ORIGIN}
@@ -86,6 +91,9 @@ services:
       ZERO_APP_ID: spyria
       ZERO_APP_PUBLICATIONS: spyria_zero
       ZERO_UPSTREAM_DB: *database-url
+      ZERO_UPSTREAM_MAX_CONNS: 20
+      ZERO_CVR_MAX_CONNS: 30
+      ZERO_CHANGE_MAX_CONNS: 5
       ZERO_QUERY_URL: http://server:3000/api/query
       ZERO_MUTATE_URL: http://server:3000/api/mutate
       ZERO_PORT: 4848

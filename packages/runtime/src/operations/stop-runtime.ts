@@ -11,7 +11,7 @@ export const stopRuntime = async ({ transactor, provider }: Dependencies, { work
   const runtime = await transactor.run(({ runtimes }) => runtimes.lock(workspaceId, runtimeId))
   const sandbox = locationOf(runtime)
   if (runtime.state !== 'stopping' || !sandbox) return
-  if ((await provider.status(sandbox)) === 'running') await provider.stop(sandbox)
+  await provider.stop(sandbox)
   await recordIfUnchanged(transactor, runtime, ({ runtimes }, current) =>
     runtimes.save(transitioned(current, 'stopped', now)),
   )

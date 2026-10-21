@@ -13,7 +13,6 @@ import {
   stopChatRuntime,
 } from '@spyria/runtime/server'
 import { createBifrostUsageLogs, syncUsageNow } from '@spyria/usage/server'
-import { websocket } from 'hono/bun'
 import { setCookie } from 'hono/cookie'
 import { createAgentBridge } from '../agent-bridge/bridge.ts'
 import { createApp, sessionClassifierOf } from '../app.ts'
@@ -25,7 +24,7 @@ import { createGitHubApi } from '../github/github-api.ts'
 import { startJobWorker } from '../job-worker.ts'
 import { createModelCallRelay } from '../llm-relay.ts'
 import { createRateLimiter, RateLimited } from '../rate-limits.ts'
-import { createRuntimeHostGateway } from '../runtime-hosts/gateway.ts'
+import { createRuntimeHostGateway, serverWebSocket } from '../runtime-hosts/gateway.ts'
 import { readSpyriaAgentImage } from '../spyria-agent-image.ts'
 import { startTelemetry } from '../telemetry.ts'
 import { fakeGitHubAppId, fakeGitHubClientId, fakeGitHubClientSecret, startFakeGitHub } from './fake-github.ts'
@@ -398,4 +397,4 @@ const app = createApp({
     return context.json(await issueTestSession(databaseByName(db), workspace, user, db))
   })
 
-export default { port, hostname: '0.0.0.0', idleTimeout: 0, fetch: app.fetch, websocket }
+export default { port, hostname: '0.0.0.0', idleTimeout: 0, fetch: app.fetch, websocket: serverWebSocket }

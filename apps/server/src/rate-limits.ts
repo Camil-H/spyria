@@ -8,7 +8,8 @@ export type TrustedProxy = 'cloudflare' | undefined
 
 const minute = 60_000
 const hour = 60 * minute
-const maxBuckets = 10_000
+const maximumBuckets = 10_000
+const sweepIntervalMilliseconds = 10_000
 
 export const rateBudgets = {
   emailRouting: { count: 10, perMilliseconds: minute, per: 'address' },
@@ -47,18 +48,22 @@ export class RateLimited extends DomainError {
 
 export const createRateLimiter = (budgets: RateBudgets, now = Date.now) => {
   const buckets = new Map<string, { tokens: number; refilledAt: number; perMilliseconds: number }>()
+  let sweptAt = Number.NEGATIVE_INFINITY
   const forgetRefilled = (at: number) => {
+    sweptAt = at
     for (const [bucketKey, bucket] of buckets)
       if (at - bucket.refilledAt >= bucket.perMilliseconds) buckets.delete(bucketKey)
   }
-  return (name: RateLimitName, { address = '', workspaceId = '', userId = '' }: Requester) => {
+  const limit = (name: RateLimitName, { address = '', workspaceId = '', userId = '' }: Requester) => {
     const { count, perMilliseconds, per } = budgets[name]
     const at = now()
-    if (buckets.size >= maxBuckets) forgetRefilled(at)
+    if (buckets.size >= maximumBuckets && at - sweptAt >= sweepIntervalMilliseconds) forgetRefilled(at)
     const bucketKey = `${name} ${per === 'address' ? address : per === 'workspace' ? workspaceId : `${workspaceId} ${userId}`}`
     const bucket = buckets.get(bucketKey) ?? { tokens: count, refilledAt: at, perMilliseconds }
     bucket.tokens = Math.min(count, bucket.tokens + ((at - bucket.refilledAt) * count) / perMilliseconds)
     bucket.refilledAt = at
+    buckets.delete(bucketKey)
+    if (buckets.size >= maximumBuckets) buckets.delete(buckets.keys().next().value ?? '')
     buckets.set(bucketKey, bucket)
     if (bucket.tokens >= 1) {
       bucket.tokens -= 1
@@ -75,8 +80,9 @@ export const createRateLimiter = (budgets: RateBudgets, now = Date.now) => {
     })
     throw new RateLimited(Math.ceil(((1 - bucket.tokens) * perMilliseconds) / count / 1000))
   }
+  return Object.assign(limit, { bucketCount: () => buckets.size })
 }
-export type RateLimiter = ReturnType<typeof createRateLimiter>
+export type RateLimiter = (name: RateLimitName, requester: Requester) => void
 
 export const clientAddressOf = (request: Request, socketAddress: string | undefined, trustedProxy: TrustedProxy) =>
   (trustedProxy === 'cloudflare' && request.headers.get('cf-connecting-ip')) || socketAddress || ''

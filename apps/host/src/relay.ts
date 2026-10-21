@@ -2,7 +2,7 @@ import { Refused, relayUrlOf } from './commands.ts'
 import { isAllowedOnPersonalHost, redacted } from './personal.ts'
 import { contextOf, traceHeadersOf, withSpan } from './telemetry.ts'
 
-type Frame = { type: string; sid?: unknown; [field: string]: unknown }
+export type Frame = { type: string; sid?: unknown; [field: string]: unknown }
 type Stream = { socket: WebSocket; queue: string[] | null }
 
 const maximumTimeoutMilliseconds = 120_000
@@ -12,6 +12,15 @@ const timeoutOf = (requested: unknown) =>
     : maximumTimeoutMilliseconds
 
 export const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
+
+export const maximumFrameBytes = 64 * 1024 * 1024
+export const frameTextOf = (frame: Frame, maximumBytes = maximumFrameBytes) => {
+  const text = JSON.stringify(frame)
+  if (Buffer.byteLength(text) <= maximumBytes) return text
+  if (frame.type === 'http_res')
+    return JSON.stringify({ type: 'http_res', sid: frame.sid, error: 'The response is too large to relay' })
+  return undefined
+}
 
 export const createRelay = ({
   addressOf,

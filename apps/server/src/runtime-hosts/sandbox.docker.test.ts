@@ -313,3 +313,73 @@ test.skipIf(!hasImage)(
   },
   120_000,
 )
+
+test.skipIf(!hasImage)(
+  'a runtime holds its Docker network only while it runs: stop releases it, start recreates it and relays again',
+  async () => {
+    const host = { workspaceId: acme, hostId: runtimeHostId(await hostId()) }
+    const provider = gateway.sandboxProvider
+    const runtimes = ['cycle-a', 'cycle-b', 'cycle-c'].map((runtimeId) => ({ ...host, runtimeId }))
+    const runtimeNetworks = () =>
+      dockerText('network', 'ls', '--format', '{{.Name}}', '--filter', `name=^${prefix}rt-cycle-`)
+        .split('\n')
+        .filter(Boolean)
+    const readyOf = (runtime: (typeof runtimes)[number]) =>
+      provider
+        .connect(runtime)
+        .fetch({ method: 'GET', path: '/ready', timeoutMilliseconds: 1000 })
+        .then(
+          (response) => response.status === 200,
+          () => false,
+        )
+    const ready = async (runtime: (typeof runtimes)[number]) => {
+      for (const deadline = Date.now() + 30_000; !(await readyOf(runtime)); await Bun.sleep(100))
+        if (Date.now() > deadline) throw new Error(`${runtime.runtimeId} was not ready within 30 s`)
+    }
+    for (const runtime of runtimes) {
+      await provider.create({ ...runtime, image: spyriaImage, apiKey: 'test-api-key-0123456789abcdef' })
+      await provider.start(runtime)
+    }
+    for (const runtime of runtimes) await ready(runtime)
+    expect(runtimeNetworks()).toHaveLength(3)
+    for (let cycle = 0; cycle < 3; cycle++) {
+      for (const runtime of runtimes) await provider.stop(runtime)
+      expect(runtimeNetworks()).toEqual([])
+      for (const runtime of runtimes) await provider.start(runtime)
+      expect(runtimeNetworks()).toHaveLength(3)
+    }
+    for (const runtime of runtimes) await ready(runtime)
+    for (const runtime of runtimes) await provider.stop(runtime)
+    expect(runtimeNetworks()).toEqual([])
+    for (const runtime of runtimes) await provider.remove(runtime)
+    expect(dockerText('ps', '-aq', '--filter', `name=^${prefix}rt-cycle-`)).toBe('')
+  },
+  180_000,
+)
+
+test.skipIf(!hasImage)(
+  "removing a runtime whose container is gone removes its network and volumes, never another deployment's objects of the same runtime id",
+  async () => {
+    const host = { workspaceId: acme, hostId: runtimeHostId(await hostId()) }
+    const runtime = { ...host, runtimeId: 'orphaned' }
+    const otherPrefix = `spyria-test-other-${crypto.randomUUID().slice(0, 8)}-`
+    const otherObjects = { network: `${otherPrefix}rt-orphaned-net`, volume: `${otherPrefix}rt-orphaned-ws` }
+    try {
+      docker('network', 'create', '--label', 'spyria.managed=1', otherObjects.network)
+      docker('volume', 'create', otherObjects.volume)
+      await gateway.sandboxProvider.create({ ...runtime, image: spyriaImage, apiKey: 'test-api-key-0123456789abcdef' })
+      docker('rm', '-f', `${prefix}rt-orphaned`)
+      expect(await gateway.sandboxProvider.status(runtime)).toBe('missing')
+      expect(dockerText('volume', 'ls', '-q', '--filter', `name=^${prefix}rt-orphaned-`)).not.toBe('')
+      await gateway.sandboxProvider.remove(runtime)
+      expect(dockerText('volume', 'ls', '-q', '--filter', `name=^${prefix}rt-orphaned-`)).toBe('')
+      expect(dockerText('network', 'ls', '-q', '--filter', `name=^${prefix}rt-orphaned-net$`)).toBe('')
+      expect(dockerText('network', 'ls', '-q', '--filter', `name=^${otherObjects.network}$`)).not.toBe('')
+      expect(dockerText('volume', 'ls', '-q', '--filter', `name=^${otherObjects.volume}$`)).not.toBe('')
+    } finally {
+      docker('network', 'rm', otherObjects.network)
+      docker('volume', 'rm', '-f', otherObjects.volume)
+    }
+  },
+  60_000,
+)

@@ -91,14 +91,16 @@ test('placement picks the least-loaded online host below its cap', () => {
   expect(placementOf([host('full', 2, 2), host('last-slot', 13, 14)])).toEqual({ hostId: runtimeHostId('last-slot') })
 })
 
-test('a runtime idle for more than an hour stops, a stopped one idle for more than 30 days is removed', () => {
+test('a runtime idle for more than an hour stops, a stopped or failed one idle for more than 30 days is removed', () => {
   const idleFor = (state: RuntimeState, milliseconds: number) =>
     idleStepOf(runtime({ state, lastActiveAt: now - milliseconds }), now)
   expect(idleFor('running', 60 * minute)).toBeUndefined()
   expect(idleFor('running', 60 * minute + 1)).toBe('stopping')
   expect(idleFor('stopped', 30 * 24 * 60 * minute)).toBeUndefined()
   expect(idleFor('stopped', 30 * 24 * 60 * minute + 1)).toBe('removing')
-  for (const state of ['creating', 'starting', 'stopping', 'removing', 'removed', 'failed'] as const)
+  expect(idleFor('failed', 30 * 24 * 60 * minute)).toBeUndefined()
+  expect(idleFor('failed', 30 * 24 * 60 * minute + 1)).toBe('removing')
+  for (const state of ['creating', 'starting', 'stopping', 'removing', 'removed'] as const)
     expect(idleFor(state, 365 * 24 * 60 * minute)).toBeUndefined()
 })
 

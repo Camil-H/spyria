@@ -45,6 +45,7 @@ export const runtimeJobTypes = {
   start: 'runtime.start',
   stop: 'runtime.stop',
   remove: 'runtime.remove',
+  discard: 'runtime.discard',
   sweep: 'runtime.sweep',
 } as const
 
@@ -104,7 +105,8 @@ export const placementOf = (hosts: readonly HostLoad[]): Placement => {
 export const idleStepOf = (runtime: Runtime, now: number) => {
   const idleMilliseconds = now - runtime.lastActiveAt
   if (runtime.state === 'running' && idleMilliseconds > idleStopMilliseconds) return 'stopping'
-  if (runtime.state === 'stopped' && idleMilliseconds > idleRemovalMilliseconds) return 'removing'
+  if ((runtime.state === 'stopped' || runtime.state === 'failed') && idleMilliseconds > idleRemovalMilliseconds)
+    return 'removing'
   return undefined
 }
 

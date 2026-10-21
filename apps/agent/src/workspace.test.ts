@@ -147,6 +147,20 @@ test('a bundle carries the working branch from a prerequisite the remote has, or
   })
 })
 
+test('a bundle over 12 MB is refused with the push-from-your-machine reason, so its frame stays far under the host limit', async () => {
+  const heavy = join(directory, 'heavy')
+  git(directory, 'clone', '-q', source, heavy)
+  git(heavy, 'checkout', '-q', '-b', 'spyria/heavy')
+  writeFileSync(join(heavy, 'data.bin'), crypto.getRandomValues(new Uint8Array(12_100_000)))
+  git(heavy, 'add', 'data.bin')
+  git(heavy, 'commit', '-q', '-m', 'Add data')
+  const base = Bun.spawnSync(['git', 'rev-parse', 'main'], { cwd: heavy }).stdout.toString().trim()
+  const { call } = started({ workspaceDirectory: heavy })
+  expect((await call('POST', '/api/workspace/bundle', { branch: 'spyria/heavy', prerequisite: base })).body).toEqual({
+    error: 'The new commits weigh more than 12 MB; push them from your machine',
+  })
+})
+
 const author = { name: 'Alice', email: 'alice@example.com' }
 const revisionOf = (cwd: string, revision: string) =>
   Bun.spawnSync(['git', 'rev-parse', revision], { cwd }).stdout.toString().trim()

@@ -14,7 +14,7 @@ import {
   redacted,
   runCredentialsCommand,
 } from './personal.ts'
-import { createRelay, messageOf } from './relay.ts'
+import { createRelay, type Frame, frameTextOf, messageOf } from './relay.ts'
 import { freeMemoryBytes, systemOf } from './system.ts'
 import { contextOf, log, startTelemetry, withSpan } from './telemetry.ts'
 
@@ -78,7 +78,7 @@ const declaration = async () => {
   })
   return { personal: true, signedIn: credentials.signedIn, credentialsChangedAt: credentials.credentialsChangedAt }
 }
-let sendToSpyria = (_frame: object) => false
+let sendToSpyria = (_frame: Frame) => false
 const modelRelay = createModelRelay({
   send: (frame) => sendToSpyria(frame),
   redact: isPersonal ? (text) => redacted(text, credentials.secrets) : undefined,
@@ -117,7 +117,17 @@ type Carrier = Record<string, unknown>
 
 const connect = () => {
   const socket = new WebSocket(socketUrl)
-  const send = (frame: object) => socket.send(JSON.stringify(frame))
+  const send = (frame: Frame) => {
+    const text = frameTextOf(frame)
+    if (text) socket.send(text)
+    else
+      log.warn({
+        event: 'host.frame_too_large',
+        body: 'A frame too large to relay was dropped',
+        attributes: { 'host.frame_type': frame.type },
+      })
+    return text !== undefined
+  }
   const relay = createRelay({
     addressOf: runner.originOf,
     send,
@@ -136,8 +146,11 @@ const connect = () => {
     })
   }
   const hello = async (token: string) => {
-    send({ type: 'hello', token, gatewayUrl, system: await systemOf(docker), ...(await declaration()) })
-    sendToSpyria = (frame) => socket.readyState === WebSocket.OPEN && (send(frame), true)
+    const system = await systemOf(docker)
+    const declared = await declaration()
+    if (socket.readyState !== WebSocket.OPEN) return
+    send({ type: 'hello', token, gatewayUrl, system, ...declared })
+    sendToSpyria = (frame) => socket.readyState === WebSocket.OPEN && send(frame)
     reconnectDelayMilliseconds = 1000
     heartbeatTimer = setInterval(() => sendHeartbeat().catch(() => {}), heartbeatMilliseconds)
     log.info({ event: 'host.connected', body: 'Connected to Spyria', attributes: { 'server.address': socketUrl.host } })

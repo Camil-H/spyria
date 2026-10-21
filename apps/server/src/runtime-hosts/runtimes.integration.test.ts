@@ -458,6 +458,42 @@ test("a failed install fails the runtime at once with npm's reason, and a retry 
   expect(machine.installedHarnesses).toEqual(new Set(['codex']))
 })
 
+test('a failed bring-up stops its container to release its network; a retry removes it from its host, and failed runtimes idle for 30 days are removed by the sweep', async () => {
+  const machine = await newMachine()
+  const [retriedChat, abandonedChat] = [
+    await newRuntimeChat('Retried chat', undefined, 'codex'),
+    await newRuntimeChat('Abandoned chat', undefined, 'codex'),
+  ]
+  machine.failInstall('code E404')
+  const capturedConsole = captureConsole()
+  for (const chat of [retriedChat, abandonedChat]) {
+    await ensure(chat)
+    await runtimeIn(chat, 'failed')
+  }
+  capturedConsole.restore()
+  const [failed, abandoned] = [await runtimeOf(retriedChat), await runtimeOf(abandonedChat)]
+  const opsOf = (runtimeId: string) =>
+    machine.commands.filter((command) => command.runtimeId === runtimeId).map(({ op }) => op)
+  await waitFor(() => opsOf(failed.id).includes('stop') && opsOf(abandoned.id).includes('stop'))
+  expect(machine.containers.get(failed.id)?.running).toBe(false)
+
+  machine.failInstall(undefined)
+  await retry(retriedChat)
+  await runtimeIn(retriedChat, 'running')
+  await waitFor(() => !machine.containers.has(failed.id))
+  expect(opsOf(failed.id).at(-1)).toBe('remove')
+  expect((await runtimeOf(retriedChat)).id).not.toBe(failed.id)
+
+  await idleFor(abandonedChat, '29 days')
+  await sweep()
+  expect((await runtimeOf(abandonedChat)).state).toBe('failed')
+  await idleFor(abandonedChat, '31 days')
+  await sweep()
+  await runtimeIn(abandonedChat, 'removed')
+  expect(machine.containers.has(abandoned.id)).toBe(false)
+  expect(opsOf(abandoned.id).at(-1)).toBe('remove')
+})
+
 test('a Claude Code or Codex session is never placed on a workspace host: with only a workspace host online it fails with no_host', async () => {
   await database.$client`update runtime_hosts set removed_at = now() where owner_id = ${alice} and removed_at is null`
   const workspaceHost = await fakeHost('Workspace host')

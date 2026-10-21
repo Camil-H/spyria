@@ -74,6 +74,7 @@ export const bringUpRuntime = async (
     await recordIfUnchanged(transactor, started, ({ runtimes }, current) =>
       runtimes.save(transitioned(current, 'failed', now, current.hostOnline ? failure : 'no_host')),
     )
+    await provider.stop(sandbox).catch(() => {})
     log.error({
       event: 'runtime.bring_up_failed',
       body: 'A runtime could not be brought up',

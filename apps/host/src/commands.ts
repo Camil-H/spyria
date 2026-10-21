@@ -209,16 +209,22 @@ export const createCommandRunner = ({
           return 'missing'
         },
       )
-    const container = await managedContainer(command.runtimeId)
+    const network = networkNameOf(prefix, command.runtimeId)
     if (command.op === 'start') {
-      for (const network of Object.keys(container.NetworkSettings?.Networks ?? {})) await joinNetwork(network)
+      await managedContainer(command.runtimeId)
+      await createNetwork(network)
+      await docker('POST', `/networks/${network}/connect`, { Container: name })
       return docker('POST', `/containers/${name}/start`)
     }
-    if (command.op === 'stop') return docker('POST', `/containers/${name}/stop?t=10`)
-    await docker('DELETE', `/containers/${name}?force=true`)
+    const container = await managedContainer(command.runtimeId).catch(ignoringMissing)
+    if (command.op === 'stop') {
+      if (container) await docker('POST', `/containers/${name}/stop?t=10`)
+      return removeNetwork(network)
+    }
+    if (container) await docker('DELETE', `/containers/${name}?force=true`)
     for (const suffix of Object.keys(volumeTargets))
       await docker('DELETE', `/volumes/${name}-${suffix}`).catch(ignoringMissing)
-    await removeNetwork(networkNameOf(prefix, command.runtimeId))
+    await removeNetwork(network)
   }
   return {
     run,

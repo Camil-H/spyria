@@ -25,6 +25,8 @@ const placeRuntime = async (
   if (existing) {
     await secrets.discard(existing)
     await runtimes.delete(existing)
+    if (existing.hostId && existing.state !== 'removed' && existing.failure !== 'lost')
+      await jobs.enqueue(workspaceId, runtimeJobTypes.discard, { runtimeId: existing.id, hostId: existing.hostId })
   }
   const placement = placementOf(await runtimeHosts.lockLoads(workspaceId, chatId))
   const failure = placement.failure ?? (spyriaAgentImage ? null : 'no_image')

@@ -14,7 +14,7 @@ import {
   type SandboxSocketListener,
   type SandboxStatus,
 } from '@spyria/runtime/server'
-import { upgradeWebSocket } from 'hono/bun'
+import { upgradeWebSocket, websocket } from 'hono/bun'
 import type { WSContext } from 'hono/ws'
 import type { ModelCallRelay, RelayFrame } from '../llm-relay.ts'
 import { traceHeadersOf } from '../telemetry.ts'
@@ -43,6 +43,8 @@ const requestTimeoutMilliseconds = 180_000
 const installTimeoutMilliseconds = 240_000
 const identifyTimeoutMilliseconds = 10_000
 const defaultGatewayRelayUrl = 'http://spyria-gateway-relay:4000/v1'
+export const maximumFrameBytes = 64 * 1024 * 1024
+export const serverWebSocket = { ...websocket, maxPayloadLength: maximumFrameBytes }
 
 const hostAttributesOf = (host: ConnectedHost) => ({ 'workspace.id': host.workspaceId, 'runtime_host.id': host.hostId })
 const frameOf = (text: string): Frame => {

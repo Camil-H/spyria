@@ -8,7 +8,7 @@ type BaseFetch = { url: string; token: string; baseBranch: string; runtimeBaseHe
 
 const shownOutputLines = 10
 const commitPattern = /^[0-9a-f]{40}$/
-const maximumBundleBytes = 20_000_000
+const maximumBundleBytes = 12_000_000
 const lastLinesOf = (output: string) => output.trimEnd().split('\n').slice(-shownOutputLines).join('\n')
 
 const gitEnvironmentOf = (home: string, url: string, token: string) => {

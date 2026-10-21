@@ -1,5 +1,5 @@
 import type { Job } from '@spyria/db/zero-queries'
-import { runtimeId } from '@spyria/kernel'
+import { runtimeHostId, runtimeId } from '@spyria/kernel'
 import { z } from 'zod/mini'
 import type { SandboxProvider } from '../contracts/sandbox-provider.ts'
 import { runtimeJobTypes } from '../domain/runtime.ts'
@@ -10,6 +10,10 @@ import { stopRuntime } from '../operations/stop-runtime.ts'
 import { sweepRuntimes } from '../operations/sweep-runtimes.ts'
 
 const runtimePayload = z.object({ runtimeId: z.pipe(z.string().check(z.minLength(1)), z.transform(runtimeId)) })
+const discardPayload = z.object({
+  runtimeId: z.string().check(z.minLength(1)),
+  hostId: z.pipe(z.string().check(z.minLength(1)), z.transform(runtimeHostId)),
+})
 
 export const createRuntimeJobs = (provider: SandboxProvider) => {
   const forRuntime =
@@ -24,6 +28,8 @@ export const createRuntimeJobs = (provider: SandboxProvider) => {
     [runtimeJobTypes.start]: forRuntime(bringUpRuntime),
     [runtimeJobTypes.stop]: forRuntime(stopRuntime),
     [runtimeJobTypes.remove]: forRuntime(removeRuntime),
+    [runtimeJobTypes.discard]: ({ workspaceId, payload }: Job) =>
+      provider.remove({ workspaceId, ...discardPayload.parse(payload) }),
     [runtimeJobTypes.sweep]: ({ workspaceId, transact }: Job) =>
       sweepRuntimes({ transactor: createTransactingZeroTransactor(transact) }, { workspaceId, now: Date.now() }),
   }

@@ -1,9 +1,8 @@
 import { afterAll, expect, test } from 'bun:test'
 import { createHash } from 'node:crypto'
 import { createZeroStore } from '@spyria/db/zero-store'
-import { defaultHarness } from '@spyria/kernel'
+import { defaultHarness, runtimeHostId } from '@spyria/kernel'
 import { runtimeMutators } from '@spyria/runtime/server'
-import { websocket } from 'hono/bun'
 import { createApp } from '../app.ts'
 import {
   acme,
@@ -24,12 +23,12 @@ import {
   testAuthSettings,
   waitFor,
 } from '../testing/testing.ts'
-import { createRuntimeHostGateway } from './gateway.ts'
+import { createRuntimeHostGateway, maximumFrameBytes, serverWebSocket } from './gateway.ts'
 
 const { database } = await openSharedTestApp()
 const gateway = createRuntimeHostGateway({ databases: () => [database], pingIntervalMilliseconds: 100 })
 const app = createApp({ database, ...testAuthSettings, runtimeHosts: gateway })
-const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
+const server = Bun.serve({ port: 0, fetch: app.fetch, websocket: serverWebSocket })
 const openedSockets: WebSocket[] = []
 afterAll(() => {
   for (const socket of openedSockets) socket.close()
@@ -108,7 +107,7 @@ const connectFakeHost = async ({ answersPings = true } = {}) => {
       if (outcome) return outcome
     }
   }
-  return { socket, send, closed, frameOrClose }
+  return { socket, send, closed, frameOrClose, frames }
 }
 
 const claim = async (code: string) => {
@@ -288,6 +287,31 @@ test('a second connection of a host replaces the first, which is closed, and the
   expect(secondConnection.socket.readyState).toBe(WebSocket.OPEN)
   expect((await hostRow(id)).status).toBe('online')
 })
+
+test('a host frame at the explicit 64 MiB limit is relayed and the host stays online; one byte more closes that connection', async () => {
+  const { id, host } = await pairedHost()
+  const sandbox = { workspaceId: acme, hostId: runtimeHostId(id), runtimeId: 'large-bundle' }
+  const answerAtSize = async (frameBytes: number) => {
+    const { frame } = (await host.frameOrClose('http')) as { frame: Frame }
+    const envelope = { type: 'http_res', sid: frame.sid, status: 200, headers: {}, body: '' }
+    const bodyLength = frameBytes - JSON.stringify(envelope).length
+    host.send({ ...envelope, body: 'b'.repeat(bodyLength) })
+    host.frames.splice(0)
+    return bodyLength
+  }
+  const relayed = gateway.sandboxProvider.connect(sandbox).fetch({ method: 'POST', path: '/api/workspace/bundle' })
+  const bodyLength = await answerAtSize(maximumFrameBytes)
+  expect((await relayed).body).toHaveLength(bodyLength)
+  await Bun.sleep(200)
+  expect(host.socket.readyState).toBe(WebSocket.OPEN)
+  expect((await hostRow(id)).status).toBe('online')
+
+  const tooLarge = gateway.sandboxProvider.connect(sandbox).fetch({ method: 'POST', path: '/api/workspace/bundle' })
+  await answerAtSize(maximumFrameBytes + 1)
+  await expect(tooLarge).rejects.toThrow()
+  expect((await host.closed).code).toBe(1006)
+  await waitFor(async () => (await hostRow(id)).status === 'offline')
+}, 30_000)
 
 test('closing the connection marks the host offline', async () => {
   const { id, host } = await pairedHost()
