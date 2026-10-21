@@ -103,8 +103,17 @@ const readSnapshot = async () => {
 }
 
 const expectSnapshotRoundTrip = async () => {
-  const { drafts, projects, chats, messages, planSteps, toolConnections, ...unorderedCollections } =
-    createMockSnapshot()
+  const {
+    drafts,
+    latestMessages,
+    pinnedSteps,
+    projects,
+    chats,
+    messages,
+    planSteps,
+    toolConnections,
+    ...unorderedCollections
+  } = createMockSnapshot()
   const stored = await readSnapshot()
   expect(stored.toolConnections).toEqual([...toolConnections])
   expect(stored.projects).toEqual([...projects])

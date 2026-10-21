@@ -5,7 +5,7 @@ const openStates = ['open', 'draft']
 
 export const getPublishing = (workspaceId: WorkspaceId, chatId: ChatId, viewerId: MemberId) => (snapshot: Snapshot) => {
   const chat = findChat(snapshot, workspaceId, chatId)
-  const card = snapshot.messages
+  const card = [...snapshot.pinnedSteps, ...snapshot.messages]
     .filter((message) => inChat(workspaceId, chatId)(message) && message.step?.type === 'pull_request')
     .reduce<Snapshot['messages'][number] | undefined>(
       (latest, message) => (latest && latest.seq > message.seq ? latest : message),

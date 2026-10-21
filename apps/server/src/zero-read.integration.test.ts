@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test'
 import { conversationMutators } from '@spyria/conversation/server'
 import { createMockSnapshot, type Snapshot } from '@spyria/db'
-import { createZeroStore } from '@spyria/db/zero-store'
+import { pinnedStepTypes } from '@spyria/db/zero-queries'
+import { createZeroStore, type ScopedQueryName } from '@spyria/db/zero-store'
 import { type ChatId, chatId, type MemberId, messageId, type WorkspaceId } from '@spyria/kernel'
 import { workspaceMutators } from '@spyria/workspace/server'
 import {
@@ -37,6 +38,22 @@ const visibleTo = (snapshot: Snapshot, viewerId: MemberId, workspaceIds: readonl
   const readableChatKeys = new Set(readableChats.map((chat) => keyOf(chat.workspaceId, chat.id)))
   const inReadableChats = <Row extends { workspaceId: WorkspaceId; chatId: ChatId }>(rows: readonly Row[]) =>
     rows.filter((row) => readableChatKeys.has(keyOf(row.workspaceId, row.chatId)))
+  const readableMessages = inReadableChats(snapshot.messages)
+  const latestMessages = readableChats.flatMap((chat) =>
+    readableMessages
+      .filter(
+        (message) =>
+          message.chatId === chat.id &&
+          message.workspaceId === chat.workspaceId &&
+          (message.kind === 'member' || message.kind === 'agent') &&
+          message.deletedAt === null &&
+          message.threadRootId === null &&
+          message.authorId !== viewerId,
+      )
+      .toSorted((first, second) => second.seq - first.seq)
+      .slice(0, 1)
+      .map((message) => ({ ...message, needsReply: false })),
+  )
   const readableChatOwners = new Set(readableChats.map((chat) => `${chat.workspaceId}/${chat.ownerId}`))
   const ownedByViewerOrReadableChatOwner = <Row extends { workspaceId: WorkspaceId; memberId: MemberId }>(
     rows: readonly Row[],
@@ -52,7 +69,11 @@ const visibleTo = (snapshot: Snapshot, viewerId: MemberId, workspaceIds: readonl
     projects: inWorkspaces(snapshot.projects),
     chats: readableChats,
     chatRoles: inWorkspaces(snapshot.chatRoles),
-    messages: inReadableChats(snapshot.messages),
+    messages: readableMessages,
+    latestMessages,
+    pinnedSteps: readableMessages
+      .filter((message) => message.kind === 'step' && pinnedStepTypes.includes(message.body))
+      .map((message) => ({ ...message, needsReply: false })),
     planSteps: inReadableChats(snapshot.planSteps),
     browserPages: inReadableChats(snapshot.browserPages),
     usageEntries: inReadableChats(snapshot.usageEntries),
@@ -82,7 +103,33 @@ const normalized = (snapshot: Snapshot) =>
 
 const expectedFor = (viewerId: MemberId, workspaceIds: readonly WorkspaceId[]) =>
   normalized(visibleTo(createMockSnapshot(), viewerId, workspaceIds))
+type ZeroStore = Awaited<ReturnType<typeof openZeroStore<ReturnType<typeof createZeroStore>>>>
+const chatQueries = (chatId: string): [ScopedQueryName, Record<string, string | number>][] => [
+  ['chatMessages', { chatId, limit: 1000 }],
+  ['chatPinnedSteps', { chatId }],
+  ['chatBrowserPages', { chatId }],
+  ['chatUsage', { chatId }],
+]
+const watchChats = async (store: ZeroStore, workspaceId: WorkspaceId, chatIds: readonly string[]) => {
+  const watched = chatIds.flatMap(chatQueries)
+  for (const [name, args] of watched) store.watch(workspaceId, name, args)
+  await waitFor(() => watched.every(([name, args]) => store.scopedStatus(workspaceId, name, args)?.isComplete))
+}
+const watchReadableChats = (store: ZeroStore) =>
+  Promise.all(
+    store.read().workspaces.map((workspace) =>
+      watchChats(
+        store,
+        workspace.id,
+        store
+          .read()
+          .chats.filter((chat) => chat.workspaceId === workspace.id)
+          .map((chat) => chat.id),
+      ),
+    ),
+  )
 const replicaWatcher = await openZeroStore(createZeroStore, alice, [acme, globex])
+await watchReadableChats(replicaWatcher)
 await waitFor(() => Bun.deepEquals(normalized(replicaWatcher.read()), expectedFor(alice, [acme, globex])))
 
 test.each([
@@ -91,6 +138,7 @@ test.each([
   { viewer: 'Lee', viewerId: lee, workspaceIds: [acme] },
 ])('$viewer reads through Zero exactly the mock snapshot visible to them', async ({ viewerId, workspaceIds }) => {
   const store = await openZeroStore(createZeroStore, viewerId, workspaceIds)
+  await watchReadableChats(store)
   expect(normalized(store.read())).toEqual(expectedFor(viewerId, workspaceIds))
 })
 
@@ -110,12 +158,28 @@ test.each([
   '$viewer reads the public channels and the private chats they take part in, nothing of the others',
   async ({ viewerId, chats }) => {
     const store = await openZeroStore(createZeroStore, viewerId, [acme])
+    await watchChats(store, acme, [
+      'chat-welcome',
+      'chat-setup-helper',
+      'chat-invoice-bug',
+      'chat-standup',
+      'chat-research',
+    ])
     const read = store.read()
     expect(read.chats.map((chat) => chat.name)).toEqual([...chats])
     const readableChatIds = new Set<string>(read.chats.map((chat) => chat.id))
     const chatIdsOf = (rows: readonly { chatId: string }[]) => rows.map((row) => row.chatId)
-    for (const rows of [read.messages, read.chatMembers, read.planSteps, read.usageEntries, read.browserPages])
+    for (const rows of [
+      read.messages,
+      read.latestMessages,
+      read.pinnedSteps,
+      read.chatMembers,
+      read.planSteps,
+      read.usageEntries,
+      read.browserPages,
+    ])
       expect(chatIdsOf(rows).filter((id) => !readableChatIds.has(id))).toEqual([])
+    expect(read.messages.length).toBeGreaterThan(0)
     expect(read.chatRoles.map((role) => role.id)).toEqual(['editor', 'owner', 'prompter', 'reader'])
   },
 )
@@ -173,6 +237,7 @@ test('a mutation through the store reaches the replica and, once the server conf
 
 test('an optimistic message takes the next seq of its chat before the server confirms it', async () => {
   const store = await openZeroStore(createZeroStore, alice, [acme])
+  await watchChats(store, acme, ['chat-invoice-bug'])
   const { confirmation } = await store.mutate(
     acme,
     conversationMutators.conversation.sendMessage({
@@ -316,6 +381,7 @@ test('a member’s thread read markers reach only his replica, and only for the 
   const aliceStore = await openZeroStore(createZeroStore, alice, [acme])
   const leeStore = await openZeroStore(createZeroStore, lee, [acme])
   await waitFor(() => leeStore.read().chats.some((row) => row.id === chat))
+  await watchChats(aliceStore, acme, [chat])
   const post = (fields: { id: string; threadRootId?: string }) =>
     aliceStore.mutate(
       acme,
@@ -323,6 +389,7 @@ test('a member’s thread read markers reach only his replica, and only for the 
     )
   await (await post({ id: `${chat}-root` })).confirmation
   await (await post({ id: `${chat}-reply`, threadRootId: `${chat}-root` })).confirmation
+  await watchChats(leeStore, acme, [chat])
   await waitFor(() => leeStore.read().messages.some((row) => row.id === `${chat}-reply`))
   await (
     await leeStore.mutate(
@@ -358,6 +425,7 @@ test('a runtime’s origin reaches the readers of its source channel without its
   const aliceStore = await openZeroStore(createZeroStore, alice, [acme])
   const leeStore = await openZeroStore(createZeroStore, lee, [acme])
   const bobStore = await openZeroStore(createZeroStore, bob, [acme])
+  await watchChats(aliceStore, acme, [channel])
   await (
     await aliceStore.mutate(
       acme,
@@ -394,4 +462,51 @@ test('a runtime’s origin reaches the readers of its source channel without its
   expect(originsOf(bobStore)).toEqual([])
   await database.$client`delete from chat_participants where chat_id = ${channel} and user_id = ${lee}`
   await waitFor(() => originsOf(leeStore).length === 0)
+})
+
+test('a member watching a chat he cannot read receives none of its messages, steps, pages or usage until he joins it', async () => {
+  const chat = await newChat({ type: 'channel', visibility: 'private' })
+  const aliceStore = await openZeroStore(createZeroStore, alice, [acme])
+  await waitFor(() => aliceStore.read().chats.some((row) => row.id === chat))
+  await (
+    await aliceStore.mutate(
+      acme,
+      conversationMutators.conversation.sendMessage({
+        workspaceId: acme,
+        id: `${chat}-hello`,
+        chatId: chat,
+        text: 'Hi',
+      }),
+    )
+  ).confirmation
+  await database.$client`
+    insert into usage_entries (workspace_id, chat_id, month, user_id, tokens, cost_micros, calls)
+    values (${acme}, ${chat}, ${new Date().toISOString().slice(0, 7)}, ${alice}, 10, 1000, 1)`
+  await database.$client`
+    insert into browser_pages (workspace_id, chat_id, url, title, body_text) values (${acme}, ${chat}, 'u', 't', 'Secret')`
+  const bobStore = await openZeroStore(createZeroStore, bob, [acme])
+  await watchChats(bobStore, acme, [chat])
+  bobStore.watch(acme, 'monthUsage', { month: new Date().toISOString().slice(0, 7) })
+  const rowsOfChat = () => {
+    const read = bobStore.read()
+    return [read.messages, read.latestMessages, read.pinnedSteps, read.browserPages, read.usageEntries]
+      .flat()
+      .filter((row) => row.chatId === chat).length
+  }
+  await waitFor(
+    () =>
+      bobStore.scopedStatus(acme, 'monthUsage', { month: new Date().toISOString().slice(0, 7) })?.isComplete === true,
+  )
+  expect(rowsOfChat()).toBe(0)
+  await database.$client`
+    insert into chat_participants (workspace_id, chat_id, user_id, role_id) values (${acme}, ${chat}, ${bob}, 'reader')`
+  await waitFor(() => rowsOfChat() === 4)
+  expect(
+    bobStore
+      .read()
+      .latestMessages.filter((row) => row.chatId === chat)
+      .map((row) => row.id),
+  ).toEqual([messageId(`${chat}-hello`)])
+  await database.$client`delete from chat_participants where chat_id = ${chat} and user_id = ${bob}`
+  await waitFor(() => rowsOfChat() === 0)
 })

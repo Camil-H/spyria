@@ -14,6 +14,7 @@ import {
   type WorkspaceId,
   type WorkspacePermission,
 } from '@spyria/kernel'
+import { z } from 'zod/mini'
 import { type Schema, schema } from './zero.ts'
 
 export type ZeroContext = {
@@ -49,6 +50,12 @@ const readableBy = (userId: MemberId) => (chat: Query<'chats', Schema>) =>
       exists('participants', (participant) => participant.where('userId', userId)),
     ),
   )
+
+const id = z.string().check(z.minLength(1))
+export const pinnedStepTypes = ['question', 'plan', 'pull_request']
+
+const messagesOf = (ctx: ZeroContext, chatId: string) =>
+  zql.messages.where('workspaceId', ctx.workspaceId).where('chatId', chatId).whereExists('chat', readableBy(ctx.userId))
 
 const activeMember = (userId: MemberId) => (membership: Query<'memberships', Schema>) =>
   membership.where('userId', userId).where('removedAt', 'IS', null)
@@ -123,12 +130,28 @@ export const queries = defineQueries({
   chatParticipants: defineQuery(({ ctx }) =>
     zql.chatParticipants.where('workspaceId', ctx.workspaceId).whereExists('chat', readableBy(ctx.userId)),
   ),
-  messages: defineQuery(({ ctx }) =>
-    zql.messages
-      .where('workspaceId', ctx.workspaceId)
-      .whereExists('chat', readableBy(ctx.userId))
-      .orderBy('chatId', 'asc')
-      .orderBy('seq', 'asc'),
+  latestMessages: defineQuery(({ ctx }) =>
+    readableBy(ctx.userId)(zql.chats.where('workspaceId', ctx.workspaceId)).related('messages', (message) =>
+      message
+        .where('kind', 'IN', ['member', 'agent'])
+        .where('deletedAt', 'IS', null)
+        .where('threadRootId', 'IS', null)
+        .where(({ or, cmp }) => or(cmp('authorId', 'IS', null), cmp('authorId', '!=', ctx.userId)))
+        .orderBy('seq', 'desc')
+        .limit(1),
+    ),
+  ),
+  chatMessages: defineQuery(z.object({ chatId: id, limit: z.number() }), ({ ctx, args }) =>
+    messagesOf(ctx, args.chatId)
+      .where('threadRootId', 'IS', null)
+      .where(({ or, cmp }) => or(cmp('replyToId', 'IS', null), cmp('kind', 'member')))
+      .orderBy('seq', 'desc')
+      .limit(args.limit)
+      .related('replies')
+      .related('threadReplies'),
+  ),
+  chatPinnedSteps: defineQuery(z.object({ chatId: id }), ({ ctx, args }) =>
+    messagesOf(ctx, args.chatId).where('kind', 'step').where('body', 'IN', pinnedStepTypes),
   ),
   readMarkers: defineQuery(({ ctx }) =>
     zql.readMarkers
@@ -171,14 +194,26 @@ export const queries = defineQueries({
   planSteps: defineQuery(({ ctx }) =>
     zql.planSteps.where('workspaceId', ctx.workspaceId).whereExists('chat', readableBy(ctx.userId)),
   ),
-  browserPages: defineQuery(({ ctx }) =>
-    zql.browserPages.where('workspaceId', ctx.workspaceId).whereExists('chat', readableBy(ctx.userId)),
+  chatBrowserPages: defineQuery(z.object({ chatId: id }), ({ ctx, args }) =>
+    zql.browserPages
+      .where('workspaceId', ctx.workspaceId)
+      .where('chatId', args.chatId)
+      .whereExists('chat', readableBy(ctx.userId)),
   ),
   sources: defineQuery(({ ctx }) =>
     zql.sources.where('workspaceId', ctx.workspaceId).whereExists('chat', readableBy(ctx.userId)),
   ),
-  usageEntries: defineQuery(({ ctx }) =>
-    zql.usageEntries.where('workspaceId', ctx.workspaceId).whereExists('chat', readableBy(ctx.userId)),
+  chatUsage: defineQuery(z.object({ chatId: id }), ({ ctx, args }) =>
+    zql.usageEntries
+      .where('workspaceId', ctx.workspaceId)
+      .where('chatId', args.chatId)
+      .whereExists('chat', readableBy(ctx.userId)),
+  ),
+  monthUsage: defineQuery(z.object({ month: id }), ({ ctx, args }) =>
+    zql.usageEntries
+      .where('workspaceId', ctx.workspaceId)
+      .where('month', args.month)
+      .whereExists('chat', readableBy(ctx.userId)),
   ),
   budgetAlerts: defineQuery(({ ctx }) =>
     zql.budgetAlerts

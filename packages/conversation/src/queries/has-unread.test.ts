@@ -30,7 +30,7 @@ const unreadFor = (threadOrderedMessages: MessageRow[], lastReadSeq: number) =>
     alice,
   )({
     ...createMockSnapshot(),
-    messages: threadOrderedMessages,
+    latestMessages: threadOrderedMessages,
     readMarkers: [{ workspaceId: acme, memberId: alice, chatId: research, lastReadSeq }],
   })
 

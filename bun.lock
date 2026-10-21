@@ -136,6 +136,7 @@
         "@spyria/kernel": "workspace:*",
         "drizzle-orm": "1.0.0-rc.4",
         "postgres": "3.4.9",
+        "zod": "4.6.5",
       },
       "devDependencies": {
         "@types/react": "19.3.0",

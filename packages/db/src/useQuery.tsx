@@ -1,6 +1,7 @@
-import { createContext, type ReactNode, use, useState, useSyncExternalStore } from 'react'
+import type { ChatId, WorkspaceId } from '@spyria/kernel'
+import { createContext, type ReactNode, use, useEffect, useState, useSyncExternalStore } from 'react'
 import type { Snapshot } from './schema.ts'
-import type { Store } from './zero-store.ts'
+import type { ScopedQueryName, Store } from './zero-store.ts'
 
 const isContainer = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
 
@@ -51,4 +52,38 @@ export const useQuery = <Args extends readonly unknown[], Result>(
   const store = useStore()
   const [readQuery] = useState(createQueryCache)
   return useSyncExternalStore(store.subscribe, () => readQuery(store.read(), query, args))
+}
+
+export const useScoped = (
+  workspaceId: WorkspaceId,
+  name: ScopedQueryName,
+  args: Record<string, string | number> | null,
+) => {
+  const store = useStore()
+  const key = args && JSON.stringify(args)
+  useEffect(() => (key ? store.watch(workspaceId, name, JSON.parse(key)) : undefined), [store, workspaceId, name, key])
+  return useSyncExternalStore(store.subscribe, () => (args ? store.scopedStatus(workspaceId, name, args) : undefined))
+}
+
+export const chatPageSize = 50
+
+const oldestSeqOf = (roots: readonly object[]) => Math.min(...roots.map((root) => (root as { seq: number }).seq))
+
+export const useChatMessages = (workspaceId: WorkspaceId, chatId: ChatId) => {
+  const [shown, setShown] = useState({ chatId, limit: chatPageSize, oldestSeq: Number.POSITIVE_INFINITY })
+  const limit = shown.chatId === chatId ? shown.limit : chatPageSize
+  const roots = useScoped(workspaceId, 'chatMessages', { chatId, limit })
+  useScoped(workspaceId, 'chatPinnedSteps', { chatId })
+  const hasEarlier = roots?.rows.length === limit
+  const oldestSeq = roots?.isComplete && roots.rows.length > 0 ? oldestSeqOf(roots.rows) : undefined
+  if (shown.chatId !== chatId) setShown({ chatId, limit, oldestSeq: Number.POSITIVE_INFINITY })
+  else if (oldestSeq !== undefined && oldestSeq !== shown.oldestSeq)
+    setShown(
+      hasEarlier && oldestSeq > shown.oldestSeq ? { ...shown, limit: limit + chatPageSize } : { ...shown, oldestSeq },
+    )
+  return {
+    isComplete: roots?.isComplete === true,
+    hasEarlier,
+    loadEarlier: () => setShown({ ...shown, chatId, limit: limit + chatPageSize }),
+  }
 }

@@ -61,37 +61,72 @@ for (const column of await testDatabase.database.$client<{ table: string; column
   }
 
 const dbProvider = zeroDrizzle(schema, testDatabase.database)
-const rowsOf = (ast: AST) =>
-  dbProvider.transaction(
+const listed = { singular: false, relationships: {} }
+const windowFormat = { singular: false, relationships: { replies: listed, threadReplies: listed } }
+type Row = Record<string, unknown>
+const rowsOf = async (ast: AST) => {
+  const rows = (await dbProvider.transaction(
     (transaction) =>
       executePostgresQuery(
         transaction.dbTransaction,
         ast,
-        { singular: false, relationships: {} },
+        ast.related?.length ? windowFormat : listed,
         serverNamedSchema as unknown as typeof schema,
         serverSchema,
-      ) as Promise<Record<string, unknown>[]>,
-  )
+      ) as Promise<Row[]>,
+  )) as Row[]
+  const flattened = rows.flatMap(({ replies, threadReplies, ...row }) => [
+    row,
+    ...((replies as Row[] | undefined) ?? []),
+    ...((threadReplies as Row[] | undefined) ?? []),
+  ])
+  return [...new Map(flattened.map((row) => [JSON.stringify([row.id ?? row, row.chat_id]), row])).values()]
+}
 
 const tokenOf = (workspace: string, user: string) => sessionTokenOf(testDatabase.database, workspace, user)
 
-const transform = async (token: string, args: unknown[] = []) => {
+const perChatReads: Record<string, (chatId: string) => readonly [string, object]> = {
+  messages: (chatId) => ['chatMessages', { chatId, limit: 1000 }],
+  usageEntries: (chatId) => ['chatUsage', { chatId }],
+  browserPages: (chatId) => ['chatBrowserPages', { chatId }],
+}
+const allChatIds = (await testDatabase.database.$client<{ id: string }[]>`select id from chats`).map(({ id }) => id)
+
+const transformOf = async (token: string, requests: readonly { id: string; name: string; args: unknown[] }[]) => {
   const response = await app.request('/api/query', {
     method: 'POST',
     headers: { authorization: `Bearer ${token}` },
-    body: JSON.stringify(['transform', replicatedTables.map(({ name }) => ({ id: name, name, args }))]),
+    body: JSON.stringify(['transform', requests]),
   })
-  const body = (await response.json()) as { queries: { name: string; ast: AST }[] }
-  return { status: response.status, astByTable: new Map(body.queries.map(({ name, ast }) => [name, ast])) }
+  const body = (await response.json()) as { queries: { id: string; ast: AST }[] }
+  return { status: response.status, astByTable: new Map(body.queries.map(({ id, ast }) => [id, ast])) }
+}
+const transform = (token: string, args: unknown[] = []) =>
+  transformOf(
+    token,
+    replicatedTables.filter(({ name }) => !perChatReads[name]).map(({ name }) => ({ id: name, name, args })),
+  )
+const readPerChat = async (token: string, readOf: (chatId: string) => readonly [string, object]) => {
+  const { astByTable } = await transformOf(
+    token,
+    allChatIds.map((chatId) => {
+      const [name, args] = readOf(chatId)
+      return { id: chatId, name, args: [args] }
+    }),
+  )
+  return (await Promise.all([...astByTable.values()].map(rowsOf))).flat()
 }
 
 const readAll = async (workspace: string, user: string) => {
-  const { astByTable } = await transform(await tokenOf(workspace, user))
+  const token = await tokenOf(workspace, user)
+  const { astByTable } = await transform(token)
   return new Map(
     await Promise.all(
-      replicatedTables.map(
-        async (table) => [serverNameOf(table.name, table), await rowsOf(astByTable.get(table.name) as AST)] as const,
-      ),
+      replicatedTables.map(async (table) => {
+        const readOf = perChatReads[table.name]
+        const rows = readOf ? await readPerChat(token, readOf) : await rowsOf(astByTable.get(table.name) as AST)
+        return [serverNameOf(table.name, table), rows] as const
+      }),
     ),
   )
 }
@@ -144,13 +179,46 @@ const tenantTables = replicatedTables
   .map((table) => serverNameOf(table.name, table))
   .filter((table) => table !== 'users' && table !== 'workspaces')
 
-test('there is one synced query per replicated table', () => {
+test('there is one synced query per replicated table, messages, usage and pages read per chat or month', () => {
   expect(
     Object.keys(queries)
       .filter((key) => key !== '~')
       .sort(),
-  ).toEqual(replicatedTables.map(({ name }) => name).sort())
+  ).toEqual(
+    [
+      ...replicatedTables.map(({ name }) => name).filter((name) => !perChatReads[name]),
+      'latestMessages',
+      'chatMessages',
+      'chatPinnedSteps',
+      'chatBrowserPages',
+      'chatUsage',
+      'monthUsage',
+    ].sort(),
+  )
 })
+
+test.each(readers)(
+  '$name reads the newest window, pinned steps and month usage only of the chats it may read',
+  async (reader) => {
+    const token = await tokenOf(reader.workspace, reader.user)
+    const readableChatIds = new Set(
+      rowsByReader
+        .get(reader.name)
+        ?.get('chats')
+        ?.map((row) => row.id),
+    )
+    const month = new Date().toISOString().slice(0, 7)
+    const roots = await readPerChat(token, (chatId) => ['chatMessages', { chatId, limit: 1 }])
+    const pinned = await readPerChat(token, (chatId) => ['chatPinnedSteps', { chatId }])
+    const { astByTable } = await transformOf(token, [{ id: 'month', name: 'monthUsage', args: [{ month }] }])
+    const monthUsage = await rowsOf(astByTable.get('month') as AST)
+    for (const row of [...roots, ...pinned, ...monthUsage]) expect(readableChatIds.has(row.chat_id)).toBe(true)
+    expect(roots.length).toBeGreaterThan(0)
+    expect(monthUsage).toEqual(
+      (rowsByReader.get(reader.name)?.get('usage_entries') ?? []).filter((row) => row.month === month),
+    )
+  },
+)
 
 test.each(readers.flatMap((reader) => tenantTables.map((table) => [reader.name, table, reader] as const)))(
   '%s reads only the rows of %s it may read in its own workspace',

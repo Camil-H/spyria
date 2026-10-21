@@ -213,6 +213,8 @@ export type Snapshot = {
   projects: readonly ProjectRow[]
   chats: readonly ChatRow[]
   messages: readonly MessageRow[]
+  latestMessages: readonly MessageRow[]
+  pinnedSteps: readonly MessageRow[]
   drafts: readonly DraftRow[]
   readMarkers: readonly ReadMarkerRow[]
   threadReadMarkers: readonly ThreadReadMarkerRow[]

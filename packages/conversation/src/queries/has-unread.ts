@@ -12,7 +12,7 @@ const unreadChatKeysOf = (snapshot: Snapshot, memberId: MemberId) => {
       .map((marker) => [`${marker.workspaceId}/${marker.chatId}`, marker.lastReadSeq]),
   )
   const chatKeys = new Set<string>()
-  for (const message of snapshot.messages) {
+  for (const message of snapshot.latestMessages) {
     const chatKey = `${message.workspaceId}/${message.chatId}`
     if (
       message.seq > (lastReadSeqByChat.get(chatKey) ?? 0) &&

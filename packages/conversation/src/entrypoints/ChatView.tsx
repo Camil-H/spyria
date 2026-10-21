@@ -1,4 +1,4 @@
-import { useQuery } from '@spyria/db/react'
+import { useChatMessages, useQuery } from '@spyria/db/react'
 import { type ChatId, chatId as toChatId, type WorkspaceId } from '@spyria/kernel'
 import { useSession } from '@spyria/session'
 import { buttonClass, chatTypeIconOf, ErrorMessage, focusRing, SegmentedChoice, useGuardedAction } from '@spyria/ui'
@@ -46,6 +46,11 @@ export const ChatView = ({
     memberId,
     spyriaRuntime?.chatId === chatId ? spyriaRuntime.isAvailable : undefined,
   )
+  const chatMessages = useChatMessages(workspaceId, chatId)
+  const runsOnChoices =
+    conversation?.runsOn === null || (chatMessages.isComplete && !chatMessages.hasEarlier)
+      ? (conversation?.runsOnChoices ?? null)
+      : null
   const commands = useConversationCommands()
   const navigate = useNavigate()
   const join = useGuardedAction()
@@ -63,9 +68,7 @@ export const ChatView = ({
     if (isReadMarkerBehind) commands.markChatRead({ workspaceId, chatId })
   }, [commands, workspaceId, chatId, isReadMarkerBehind])
   const soleChoice =
-    conversation?.isOwner && conversation.runsOn === null && conversation.runsOnChoices?.length === 1
-      ? conversation.runsOnChoices[0]
-      : null
+    conversation?.isOwner && conversation.runsOn === null && runsOnChoices?.length === 1 ? runsOnChoices[0] : null
   useEffect(() => {
     if (soleChoice) commands.updateChatRouting({ workspaceId, chatId, runsOn: soleChoice })
   }, [commands, workspaceId, chatId, soleChoice])
@@ -133,16 +136,18 @@ export const ChatView = ({
           <MessageList
             conversation={conversation}
             items={withLiveMessages(conversation.items, live)}
+            isComplete={chatMessages.isComplete}
+            onLoadEarlier={chatMessages.isComplete && chatMessages.hasEarlier ? chatMessages.loadEarlier : undefined}
             onStop={conversation.canConfigure ? () => commands.stopAgent({ workspaceId, chatId }) : undefined}
             onFork={conversation.isOwner ? undefined : fork}
           />
         </ToolsAwaitingApprovalContext>
       </QuestionAnswererContext>
-      {isRunsOnOpen && conversation.runsOnChoices && conversation.runsOnChoices.length > 1 && (
+      {isRunsOnOpen && runsOnChoices && runsOnChoices.length > 1 && (
         <fieldset aria-label="Runs on">
           <SegmentedChoice
             name="runs-on"
-            options={conversation.runsOnChoices}
+            options={runsOnChoices}
             labels={runsOnNames}
             value={null}
             onChange={(choice) => commands.updateChatRouting({ workspaceId, chatId, runsOn: choice })}
@@ -215,7 +220,7 @@ export const ChatView = ({
                     workspaceId={workspaceId}
                     chatId={chatId}
                     runsOn={conversation.runsOn}
-                    runsOnChoices={conversation.runsOnChoices}
+                    runsOnChoices={runsOnChoices}
                     status={status}
                   />
                 ) : (

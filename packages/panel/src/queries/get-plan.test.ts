@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
-import { acme, type MessageRow } from '@spyria/db'
+import { acme, createMockSnapshot, type MessageRow } from '@spyria/db'
 import { chatId, messageId } from '@spyria/kernel'
-import { approvedPlanOf } from './get-plan.ts'
+import { approvedPlanOf, getPlan } from './get-plan.ts'
 
 const stepAt = (seq: number, step: MessageRow['step']): MessageRow => ({
   id: messageId(`message-${seq}`),
@@ -49,4 +49,12 @@ test('a plan that was not approved, a question and delegated steps are ignored',
     delegation: {},
   })
   expect(approvedPlanOf([delegatedPlan])).toBeNull()
+})
+
+test('the approved plan is found among the pinned steps when it is older than the synced messages', () => {
+  const pinned = { ...planQuestion(1, true, '# Older plan'), chatId: chatId('chat-invoice-bug') }
+  const snapshot = createMockSnapshot()
+  expect(getPlan(acme, chatId('chat-invoice-bug'))({ ...snapshot, pinnedSteps: [pinned] }).approvedPlan).toBe(
+    '# Older plan',
+  )
 })

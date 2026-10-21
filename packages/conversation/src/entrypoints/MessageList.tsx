@@ -1,6 +1,6 @@
 import { focusRing } from '@spyria/ui'
 import { ChevronRight } from 'lucide-react'
-import { type Ref, useState } from 'react'
+import { type Ref, useRef, useState } from 'react'
 import type { Conversation, ConversationItem } from '../queries/get-conversation.ts'
 import { MessageItem } from './MessageItem.tsx'
 
@@ -32,54 +32,78 @@ const FoldedSteps = ({
   )
 }
 
+const earlierThresholdPixels = 400
+
 export const MessageList = ({
   conversation,
   items,
+  isComplete,
+  onLoadEarlier,
   onStop,
   onFork,
 }: {
   conversation: Conversation
   items: readonly ConversationItem[]
+  isComplete: boolean
+  onLoadEarlier: (() => void) | undefined
   onStop: (() => void) | undefined
   onFork: (() => Promise<unknown>) | undefined
-}) => (
-  <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
-    {items.length === 0 ? (
-      <p className="px-3 py-2 text-sm text-muted">No messages yet</p>
-    ) : (
-      <ol aria-label="Messages" className="flex flex-col gap-1">
-        {items.map((item, index) => {
-          const ref = index === items.length - 1 ? scrollIntoView : undefined
-          return item.type === 'fold' ? (
-            <FoldedSteps key={`fold-${item.promptId}`} fold={item} ref={ref} />
-          ) : (
-            <MessageItem
-              key={item.message.id}
-              message={item.message}
-              hasMenu={conversation.type === 'channel'}
-              onFork={onFork}
-              ref={ref}
-            />
-          )
-        })}
-      </ol>
-    )}
-    {conversation.isAgentWorking && (
-      <div ref={scrollIntoView} className="flex items-center gap-2 px-3 py-2 text-sm text-muted">
-        <span role="status" aria-label="Agent is working" className="flex items-center gap-2">
-          <span aria-hidden className="size-2 animate-pulse rounded-full bg-accent" />
-          Agent is working…
-        </span>
-        {conversation.hasActiveTurn && onStop && (
-          <button
-            type="button"
-            onClick={onStop}
-            className={`rounded-full border border-line px-2 py-0.5 text-xs text-ink hover:bg-hover ${focusRing}`}
-          >
-            Stop
-          </button>
-        )}
-      </div>
-    )}
-  </div>
-)
+}) => {
+  const previousScrollTop = useRef(0)
+  return (
+    <div
+      className="min-h-0 flex-1 overflow-y-auto scrollbar-thin"
+      onScroll={({ currentTarget: { scrollTop } }) => {
+        if (scrollTop < previousScrollTop.current && scrollTop < earlierThresholdPixels) onLoadEarlier?.()
+        previousScrollTop.current = scrollTop
+      }}
+    >
+      {onLoadEarlier && (
+        <button
+          type="button"
+          onClick={onLoadEarlier}
+          className={`mx-auto mb-2 block rounded-full px-3 py-1 text-xs text-muted hover:bg-hover hover:text-ink ${focusRing}`}
+        >
+          Show earlier messages
+        </button>
+      )}
+      {items.length === 0 ? (
+        isComplete && <p className="px-3 py-2 text-sm text-muted">No messages yet</p>
+      ) : (
+        <ol aria-label="Messages" className="flex flex-col gap-1">
+          {items.map((item, index) => {
+            const ref = index === items.length - 1 ? scrollIntoView : undefined
+            return item.type === 'fold' ? (
+              <FoldedSteps key={`fold-${item.promptId}`} fold={item} ref={ref} />
+            ) : (
+              <MessageItem
+                key={item.message.id}
+                message={item.message}
+                hasMenu={conversation.type === 'channel'}
+                onFork={onFork}
+                ref={ref}
+              />
+            )
+          })}
+        </ol>
+      )}
+      {conversation.isAgentWorking && (
+        <div ref={scrollIntoView} className="flex items-center gap-2 px-3 py-2 text-sm text-muted">
+          <span role="status" aria-label="Agent is working" className="flex items-center gap-2">
+            <span aria-hidden className="size-2 animate-pulse rounded-full bg-accent" />
+            Agent is working…
+          </span>
+          {conversation.hasActiveTurn && onStop && (
+            <button
+              type="button"
+              onClick={onStop}
+              className={`rounded-full border border-line px-2 py-0.5 text-xs text-ink hover:bg-hover ${focusRing}`}
+            >
+              Stop
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}

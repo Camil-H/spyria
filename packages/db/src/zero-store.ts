@@ -6,6 +6,24 @@ import { queries } from './zero-queries.ts'
 
 type TableName = keyof Schema['tables']
 type ZeroRows = { [Table in TableName]: readonly Row<Schema['tables'][Table]>[] }
+type SourceRows = Partial<Record<string, readonly object[]>>
+export const scopedQueryNames = [
+  'chatMessages',
+  'chatPinnedSteps',
+  'chatBrowserPages',
+  'chatUsage',
+  'monthUsage',
+] as const
+export type ScopedQueryName = (typeof scopedQueryNames)[number]
+export type ScopedStatus = { isComplete: boolean; rows: readonly object[] }
+type ScopedWatch = {
+  workspaceId: WorkspaceId
+  name: ScopedQueryName
+  args: Record<string, string | number>
+  count: number
+  view?: { destroy: () => void }
+  status?: ScopedStatus
+}
 export type WorkspaceSession = { workspaceId: WorkspaceId; token: string; expiresAt: number }
 type ZeroStoreOptions = {
   memberId: MemberId
@@ -26,7 +44,7 @@ type Unbranded<Value> = Value extends string
       ? { [Key in keyof Value]: Unbranded<Value[Key]> }
       : Value
 
-const unmaterializedQueries = ['~', 'serviceIdentities'] as const
+const unmaterializedQueries = ['~', 'serviceIdentities', ...scopedQueryNames] as const
 const materializedTables = Object.keys(queries).filter(
   (table) => !unmaterializedQueries.includes(table as never),
 ) as Exclude<keyof typeof queries, (typeof unmaterializedQueries)[number]>[]
@@ -42,6 +60,24 @@ const uniqueBy = <Row>(rows: readonly Row[], keyOf: (row: Row) => string) => [
 const plainOf = <Row extends object>(row: Row) => Object.fromEntries(Object.entries(row)) as Row
 const isSameSources = (previous: readonly unknown[], next: readonly unknown[]) =>
   previous.length === next.length && previous.every((source, index) => source === next[index])
+const scopedKeyOf = (workspaceId: WorkspaceId, name: ScopedQueryName, args: object) =>
+  `${workspaceId}/${name}/${JSON.stringify(args)}`
+const latestMessagesIn = (chats: readonly object[]) =>
+  chats.flatMap((chat) => (chat as { messages: readonly object[] }).messages)
+type WindowRoot = { id: string; replies: readonly object[]; threadReplies: readonly object[] }
+const messageWithoutRepliesByRow = new WeakMap<object, object>()
+const withoutReplies = (row: object) => {
+  const cached = messageWithoutRepliesByRow.get(row)
+  if (cached) return cached
+  const { replies, threadReplies, ...message } = row as WindowRoot
+  messageWithoutRepliesByRow.set(row, message)
+  return message
+}
+export const windowMessagesIn = (roots: readonly object[]) =>
+  uniqueBy(
+    (roots as readonly WindowRoot[]).flatMap((root) => [withoutReplies(root), ...root.replies, ...root.threadReplies]),
+    (message) => (message as { id: string }).id,
+  )
 const memoizedOnSources = <Sources extends readonly unknown[], Value>(build: (...sources: Sources) => Value) => {
   let previous: { sources: Sources; value: Value } | undefined
   return (...sources: Sources) => {
@@ -66,7 +102,7 @@ const renewalLeadMilliseconds = 60_000
 const renewalRetryMilliseconds = 5_000
 
 export const createSnapshotBuilder = (viewerId: MemberId) => {
-  const concatenatedRowsByTable = new Map<TableName, (...rows: readonly (readonly object[])[]) => readonly object[]>()
+  const concatenatedRowsBySource = new Map<string, (...rows: readonly (readonly object[])[]) => readonly object[]>()
   const messageRowByZeroRow = new WeakMap<ZeroRows['messages'][number], Unbranded<MessageRow>>()
   const messageRowOf = (row: ZeroRows['messages'][number], needsReply: boolean) => {
     const cached = messageRowByZeroRow.get(row)
@@ -175,6 +211,16 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
         )
       })
   })
+  const plainMessagesOf = () =>
+    memoizedOnSources((messages: ZeroRows['messages']) => messages.map((message) => messageRowOf(message, false)))
+  const latestMessagesOf = plainMessagesOf()
+  const pinnedStepsOf = plainMessagesOf()
+  const usageRowsOf = memoizedOnSources((chatUsage: ZeroRows['usageEntries'], monthUsage: ZeroRows['usageEntries']) =>
+    uniqueBy(
+      [...chatUsage, ...monthUsage],
+      (entry) => `${entry.workspaceId}/${entry.month}/${entry.chatId}/${entry.userId}`,
+    ),
+  )
   const invitationsOf = mappedRows(({ workspaceId, id, email, role, expiresAt }: ZeroRows['invitations'][number]) => ({
     workspaceId,
     id,
@@ -224,13 +270,13 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
     }),
   )
   let previous: Snapshot | undefined
-  return (rowsByWorkspace: readonly Partial<ZeroRows>[], drafts: readonly DraftRow[]) => {
-    const rowsOf = <Table extends TableName>(table: Table) => {
+  return (rowsByWorkspace: readonly SourceRows[], drafts: readonly DraftRow[]) => {
+    const rowsOf = <Table extends TableName>(table: Table, source: string = table) => {
       const concatenatedRows =
-        concatenatedRowsByTable.get(table) ??
+        concatenatedRowsBySource.get(source) ??
         memoizedOnSources((...rows: readonly (readonly object[])[]) => rows.flat())
-      concatenatedRowsByTable.set(table, concatenatedRows)
-      return concatenatedRows(...rowsByWorkspace.map((rows) => rows[table] ?? emptyRows)) as ZeroRows[Table]
+      concatenatedRowsBySource.set(source, concatenatedRows)
+      return concatenatedRows(...rowsByWorkspace.map((rows) => rows[source] ?? emptyRows)) as ZeroRows[Table]
     }
     const workspaces = workspacesOf(rowsOf('workspaces'))
     const snapshot: Unbranded<Snapshot> = {
@@ -240,14 +286,18 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
       invitations: invitationsOf(rowsOf('invitations')),
       projects: projectsOf(rowsOf('projects')),
       chats: chatsOf(rowsOf('chats')),
-      messages: messagesOf(rowsOf('messages'), runtimeChatIdsKeyOf(rowsOf('chats'))),
+      messages: messagesOf(rowsOf('messages', 'chatMessages'), runtimeChatIdsKeyOf(rowsOf('chats'))),
+      latestMessages: latestMessagesOf(rowsOf('messages', 'latestMessages')),
+      pinnedSteps: pinnedStepsOf(rowsOf('messages', 'chatPinnedSteps')),
       drafts,
       readMarkers: readMarkersOf(rowsOf('readMarkers')),
       threadReadMarkers: threadReadMarkersOf(rowsOf('threadReadMarkers')),
       runtimeOrigins: runtimeOriginsOf(rowsOf('runtimeOrigins')),
       planSteps: planStepsOf(rowsOf('planSteps')),
-      browserPages: browserPagesOf(rowsOf('browserPages')),
-      usageEntries: usageEntriesOf(rowsOf('usageEntries')),
+      browserPages: browserPagesOf(rowsOf('browserPages', 'chatBrowserPages')),
+      usageEntries: usageEntriesOf(
+        usageRowsOf(rowsOf('usageEntries', 'chatUsage'), rowsOf('usageEntries', 'monthUsage')),
+      ),
       budgetAlerts: budgetAlertsOf(rowsOf('budgetAlerts')),
       sources: sourcesOf(rowsOf('sources')),
       toolConnections: toolConnectionsOf(rowsOf('toolConnections')),
@@ -294,7 +344,8 @@ export const createZeroStore = ({
   const snapshotOf = createSnapshotBuilder(memberId)
   let snapshot = snapshotOf([], drafts)
   const listeners = new Set<() => void>()
-  const rowsByWorkspace = new Map<WorkspaceId, Partial<ZeroRows>>()
+  const rowsByWorkspace = new Map<WorkspaceId, SourceRows>()
+  const scopedWatches = new Map<string, ScopedWatch>()
   const zeroByWorkspace = new Map<WorkspaceId, Zero>()
   const tokenByWorkspace = new Map<WorkspaceId, string>()
   const loadedByWorkspace = new Map<WorkspaceId, PromiseWithResolvers<void>>()
@@ -308,6 +359,28 @@ export const createZeroStore = ({
       isPublishScheduled = false
       snapshot = snapshotOf([...rowsByWorkspace.values()], drafts)
       for (const listener of listeners) listener()
+    })
+  }
+  const feedScoped = (workspaceId: WorkspaceId, name: ScopedQueryName) => {
+    const rows = rowsByWorkspace.get(workspaceId)
+    if (!rows) return
+    const fed = [...scopedWatches.values()].filter(
+      (watch) => watch.workspaceId === workspaceId && watch.name === name && watch.status,
+    )
+    const fedRows = fed.length === 1 ? fed[0]?.status?.rows : fed.flatMap((watch) => watch.status?.rows ?? [])
+    rows[name] = name === 'chatMessages' && fedRows ? windowMessagesIn(fedRows) : fedRows
+    publish()
+  }
+  const materializeScoped = (watch: ScopedWatch) => {
+    const zero = zeroByWorkspace.get(watch.workspaceId)
+    if (!zero || watch.view) return
+    const request = (queries[watch.name] as unknown as (args: object) => Parameters<Zero['materialize']>[0])(watch.args)
+    const view = zero.materialize(request)
+    watch.view = view
+    view.addListener((data, result) => {
+      if (watch.view !== view) return
+      watch.status = { isComplete: result === 'complete', rows: data as readonly object[] }
+      feedScoped(watch.workspaceId, watch.name)
     })
   }
   const loadedOf = (workspaceId: WorkspaceId) => {
@@ -345,8 +418,8 @@ export const createZeroStore = ({
       kvStore,
       mutators,
     })
-    const rows: Partial<ZeroRows> = {}
-    const completeTables = new Set<TableName>()
+    const rows: SourceRows = {}
+    const completeTables = new Set<string>()
     rowsByWorkspace.set(workspaceId, rows)
     zeroByWorkspace.set(workspaceId, zero)
     tokenByWorkspace.set(workspaceId, token)
@@ -355,11 +428,12 @@ export const createZeroStore = ({
         .materialize((queries[table] as () => Parameters<typeof zero.materialize>[0])())
         .addListener((data, result) => {
           if (rowsByWorkspace.get(workspaceId) !== rows) return
-          rows[table] = data as never
+          rows[table] = table === 'latestMessages' ? latestMessagesIn(data as readonly object[]) : (data as object[])
           publish()
           if (result === 'complete') completeTables.add(table)
           if (completeTables.size === materializedTables.length) loadedOf(workspaceId).resolve()
         })
+    for (const watch of scopedWatches.values()) if (watch.workspaceId === workspaceId) materializeScoped(watch)
     zero.connection.state.subscribe((state) => {
       if (state.name === 'needs-auth') renewNow(workspaceId)
     })
@@ -368,6 +442,12 @@ export const createZeroStore = ({
   const close = (workspaceId: WorkspaceId) => {
     const zero = zeroByWorkspace.get(workspaceId)
     clearTimeout(renewalTimerByWorkspace.get(workspaceId))
+    for (const watch of scopedWatches.values())
+      if (watch.workspaceId === workspaceId) {
+        watch.view?.destroy()
+        watch.view = undefined
+        watch.status = undefined
+      }
     zeroByWorkspace.delete(workspaceId)
     loadedByWorkspace.delete(workspaceId)
     signedInWorkspaceIds = new Set([...signedInWorkspaceIds].filter((signedInId) => signedInId !== workspaceId))
@@ -401,6 +481,22 @@ export const createZeroStore = ({
       publish()
     },
     whenLoaded: (workspaceId: WorkspaceId) => loadedOf(workspaceId).promise,
+    watch: (workspaceId: WorkspaceId, name: ScopedQueryName, args: ScopedWatch['args']) => {
+      const key = scopedKeyOf(workspaceId, name, args)
+      const watch = scopedWatches.get(key) ?? { workspaceId, name, args, count: 0 }
+      scopedWatches.set(key, watch)
+      watch.count++
+      materializeScoped(watch)
+      return () => {
+        if (--watch.count > 0) return
+        scopedWatches.delete(key)
+        watch.view?.destroy()
+        watch.view = undefined
+        feedScoped(workspaceId, name)
+      }
+    },
+    scopedStatus: (workspaceId: WorkspaceId, name: ScopedQueryName, args: ScopedWatch['args']) =>
+      scopedWatches.get(scopedKeyOf(workspaceId, name, args))?.status,
     mutate: async (workspaceId: WorkspaceId, request: Parameters<Zero['mutate']>[0]) => {
       if (signedInWorkspaceIds.has(workspaceId)) await loadedOf(workspaceId).promise
       const zero = zeroByWorkspace.get(workspaceId)

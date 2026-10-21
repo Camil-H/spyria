@@ -407,8 +407,8 @@ export const messages = table(
     memberReference(table, table.authorId),
     tenantReference([table.workspaceId, table.replyToId], [table.workspaceId, table.id]),
     tenantReference([table.workspaceId, table.threadRootId], [table.workspaceId, table.id]),
-    index().on(table.workspaceId, table.replyToId).where(sql`${table.replyToId} is not null`),
-    index().on(table.workspaceId, table.threadRootId).where(sql`${table.threadRootId} is not null`),
+    index().on(table.workspaceId, table.replyToId),
+    index().on(table.workspaceId, table.threadRootId),
     index().on(table.workspaceId, table.chatId, table.seq.asc().nullsFirst()),
     index('messages_pull_request_index')
       .on(table.workspaceId, sql`(${table.step} ->> 'repository')`, sql`(${table.step} ->> 'number')`)
@@ -863,6 +863,10 @@ export const relations = defineRelations(
           from: [r.chats.workspaceId, r.chats.id],
           to: [r.chatParticipants.workspaceId, r.chatParticipants.chatId],
         }),
+        messages: r.many.messages({
+          from: [r.chats.workspaceId, r.chats.id],
+          to: [r.messages.workspaceId, r.messages.chatId],
+        }),
       },
       chatParticipants: {
         chat: chatOf(r.chatParticipants),
@@ -871,7 +875,17 @@ export const relations = defineRelations(
           to: [r.chatRoles.workspaceId, r.chatRoles.id],
         }),
       },
-      messages: { chat: chatOf(r.messages) },
+      messages: {
+        chat: chatOf(r.messages),
+        replies: r.many.messages({
+          from: [r.messages.workspaceId, r.messages.id],
+          to: [r.messages.workspaceId, r.messages.replyToId],
+        }),
+        threadReplies: r.many.messages({
+          from: [r.messages.workspaceId, r.messages.id],
+          to: [r.messages.workspaceId, r.messages.threadRootId],
+        }),
+      },
       readMarkers: { chat: chatOf(r.readMarkers) },
       threadReadMarkers: { chat: chatOf(r.threadReadMarkers) },
       runtimeOrigins: { chat: chatOf(r.runtimeOrigins) },

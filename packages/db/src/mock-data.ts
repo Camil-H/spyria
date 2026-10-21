@@ -196,6 +196,8 @@ export const createMockSnapshot = (): Snapshot => {
       command('invoice-3', 'chat-invoice-bug', acme, 'Read: billing/invoice.ts', '11:02', 'export const total = ...'),
       agent('invoice-4', 'chat-invoice-bug', acme, 'The tax is applied twice.', '11:03'),
     ]),
+    latestMessages: [],
+    pinnedSteps: [],
     drafts: [],
     readMarkers: [
       { workspaceId: acme, memberId: alice, chatId: welcomeChat, lastReadSeq: 2 },

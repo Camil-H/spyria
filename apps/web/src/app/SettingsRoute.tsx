@@ -1,5 +1,5 @@
 import type { Snapshot } from '@spyria/db'
-import { useQuery } from '@spyria/db/react'
+import { useQuery, useScoped } from '@spyria/db/react'
 import type { WorkspaceId, WorkspacePermission } from '@spyria/kernel'
 import { WorkspaceConnectionsSection } from '@spyria/profile'
 import { RuntimeHostsSection } from '@spyria/runtime'
@@ -139,7 +139,9 @@ const SettingsRoute = () => {
   const permissions = useWorkspacePermissions(workspaceId)
   const isDexSignIn = use(authModeLoading).authMode === 'dex'
   const statuses = useQuery(cardStatusesOf, workspaceId, isDexSignIn)
-  const budgetAlertCount = useQuery(countBudgetAlerts, workspaceId, new Date().toISOString().slice(0, 7))
+  const month = new Date().toISOString().slice(0, 7)
+  const isMonthUsageComplete = useScoped(workspaceId, 'monthUsage', { month })?.isComplete === true
+  const budgetAlertCount = useQuery(countBudgetAlerts, workspaceId, month)
   const { card } = useParams()
   const isAllowed = (settingsCard: SettingsCard) =>
     settingsCard.permissions.some((permission) => permissions.includes(permission))
@@ -187,7 +189,9 @@ const SettingsRoute = () => {
                     </span>
                     <span id={`settings-card-${path}`} className="flex flex-1 flex-col gap-2 text-sm text-muted">
                       {description}
-                      {statuses[path] && <span className="mt-auto text-xs text-ink">{statuses[path]}</span>}
+                      {statuses[path] && (path !== 'costs' || isMonthUsageComplete) && (
+                        <span className="mt-auto text-xs text-ink">{statuses[path]}</span>
+                      )}
                     </span>
                   </Link>
                 </li>

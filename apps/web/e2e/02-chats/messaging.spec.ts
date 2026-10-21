@@ -115,6 +115,35 @@ test.describe('Messaging', () => {
       await openChat(page, 'Welcome')
       await expect(messageContaining(page, 'Filler 30')).toBeInViewport()
     })
+
+    await test.step('opens on the newest 50 messages and loads the earlier ones when scrolling up', async () => {
+      await workerStack.database.$client.begin(async (sql) => {
+        await sql`select 1 from chats where id = 'chat-welcome' for update`
+        await sql`
+        with fillers as (
+          select 'later-' || number as id, 'Later ' || number as body,
+            (select max(seq) from events where chat_id = 'chat-welcome') + number as seq
+          from generate_series(1, 20) as number
+        ), posted as (
+          insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
+          select 'workspace-acme', 'chat-welcome', id, seq, 'message.posted', 'member-alice',
+            jsonb_build_object('kind', 'member', 'body', body, 'detail', null, 'replyToId', null), now()
+          from fillers
+        )
+        insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
+        select 'workspace-acme', 'chat-welcome', id, seq, 'member', 'member-alice', body, now() from fillers`
+      })
+      await expect(messageContaining(page, 'Later 20')).toHaveCount(1)
+      await openChat(page, 'Standup')
+      await openChat(page, 'Welcome')
+      await expect(messageContaining(page, 'Later 20')).toBeInViewport()
+      await expect(messageItemsOf(page)).toHaveCount(50)
+      await expect(messageContaining(page, 'Welcome to the team!')).toHaveCount(0)
+      await expect(mainOf(page).getByRole('button', { name: 'Show earlier messages' })).toBeVisible()
+      await messagesOf(page).evaluate((list) => list.parentElement?.scrollTo({ top: 0 }))
+      await expect(messageContaining(page, 'Welcome to the team!')).toHaveCount(1)
+      await expect(mainOf(page).getByRole('button', { name: 'Show earlier messages' })).toHaveCount(0)
+    })
   })
 
   test('As a member, a message refused for sending too fast shows why and I resend it', {

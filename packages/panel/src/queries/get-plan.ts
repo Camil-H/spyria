@@ -17,5 +17,5 @@ export const approvedPlanOf = (messages: readonly MessageRow[]) => {
 
 export const getPlan = (workspaceId: WorkspaceId, chatId: ChatId) => (snapshot: Snapshot) => ({
   steps: snapshot.planSteps.filter(inChat(workspaceId, chatId)),
-  approvedPlan: approvedPlanOf(snapshot.messages.filter(inChat(workspaceId, chatId))),
+  approvedPlan: approvedPlanOf([...snapshot.pinnedSteps, ...snapshot.messages].filter(inChat(workspaceId, chatId))),
 })

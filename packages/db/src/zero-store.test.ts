@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { chatId, messageId, workspaceId } from '@spyria/kernel'
 import { alice } from './mock-data.ts'
-import { createSnapshotBuilder, createZeroStore } from './zero-store.ts'
+import { createSnapshotBuilder, createZeroStore, windowMessagesIn } from './zero-store.ts'
 
 const storageOf = (items: Map<string, string>): Storage => ({
   get length() {
@@ -80,10 +80,10 @@ const snapshotFrom = (build: ReturnType<typeof createSnapshotBuilder>, rows: obj
 test('a change rebuilds only its table: other tables keep their identity, and no change keeps the snapshot', () => {
   const build = createSnapshotBuilder(alice)
   const messages = [messageOf(1), messageOf(2, { replyToId: 'message-1' })]
-  const first = snapshotFrom(build, { ...workspaceRows, messages })
-  expect(snapshotFrom(build, { ...workspaceRows, messages })).toBe(first)
+  const first = snapshotFrom(build, { ...workspaceRows, chatMessages: messages })
+  expect(snapshotFrom(build, { ...workspaceRows, chatMessages: messages })).toBe(first)
   const readMarkers = [{ ...workspaceRows.readMarkers[0], lastReadSeq: 2 }]
-  const afterRead = snapshotFrom(build, { ...workspaceRows, messages, readMarkers })
+  const afterRead = snapshotFrom(build, { ...workspaceRows, chatMessages: messages, readMarkers })
   expect(afterRead).not.toBe(first)
   expect(afterRead.readMarkers).toEqual([
     { workspaceId: workspaceId('workspace-acme'), memberId: alice, chatId: chatId('chat-research'), lastReadSeq: 2 },
@@ -96,7 +96,7 @@ test('a change rebuilds only its table: other tables keep their identity, and no
 test('a messages change shows inserts, updates and deletes, keeps unchanged rows and strips Zero’s own fields', () => {
   const build = createSnapshotBuilder(alice)
   const [prompt, answer, other] = [messageOf(1), messageOf(2, { replyToId: 'message-1' }), messageOf(3)]
-  const first = snapshotFrom(build, { ...workspaceRows, messages: [prompt, answer, other] })
+  const first = snapshotFrom(build, { ...workspaceRows, chatMessages: [prompt, answer, other] })
   expect(first.messages.map(({ id, body }) => [id, body])).toEqual([
     ['message-1', 'Body 1'],
     ['message-2', 'Body 2'],
@@ -106,7 +106,7 @@ test('a messages change shows inserts, updates and deletes, keeps unchanged rows
   expect(first.messages[0]?.createdAt).toBe('2026-10-01T09:01:00.000Z')
   const edited = { ...answer, body: 'Edited answer', editedAt: Date.UTC(2026, 9, 1, 10) }
   const late = messageOf(4, { replyToId: 'message-1' })
-  const second = snapshotFrom(build, { ...workspaceRows, messages: [prompt, edited, late] })
+  const second = snapshotFrom(build, { ...workspaceRows, chatMessages: [prompt, edited, late] })
   expect(second.messages.map(({ id, body, editedAt }) => [id, body, editedAt])).toEqual([
     ['message-1', 'Body 1', null],
     ['message-2', 'Edited answer', '2026-10-01T10:00:00.000Z'],
@@ -119,16 +119,75 @@ test('a messages change shows inserts, updates and deletes, keeps unchanged rows
 test('a reply sorts under its prompt even when a later prompt came between them', () => {
   const build = createSnapshotBuilder(alice)
   const messages = [messageOf(1), messageOf(2), messageOf(3, { replyToId: 'message-1' })]
-  expect(snapshotFrom(build, { ...workspaceRows, messages }).messages.map(({ id }) => id)).toEqual([
+  expect(snapshotFrom(build, { ...workspaceRows, chatMessages: messages }).messages.map(({ id }) => id)).toEqual([
     messageId('message-1'),
     messageId('message-3'),
     messageId('message-2'),
   ])
   const withAnswer = [...messages, messageOf(4, { replyToId: 'message-2' })]
-  expect(snapshotFrom(build, { ...workspaceRows, messages: withAnswer }).messages.map(({ id }) => id)).toEqual([
+  expect(snapshotFrom(build, { ...workspaceRows, chatMessages: withAnswer }).messages.map(({ id }) => id)).toEqual([
     messageId('message-1'),
     messageId('message-3'),
     messageId('message-2'),
     messageId('message-4'),
   ])
+})
+
+test('the latest messages, pinned steps, page bodies and usage of the watched queries reach their snapshot fields', () => {
+  const build = createSnapshotBuilder(alice)
+  const usageOf = (month: string, costMicros: number) =>
+    zeroRowOf({
+      workspaceId: 'workspace-acme',
+      chatId: 'chat-research',
+      month,
+      userId: alice,
+      tokens: 1,
+      costMicros,
+      calls: 1,
+    })
+  const page = zeroRowOf({
+    workspaceId: 'workspace-acme',
+    chatId: 'chat-research',
+    url: 'u',
+    title: 't',
+    bodyText: 'Body',
+  })
+  const snapshot = snapshotFrom(build, {
+    ...workspaceRows,
+    latestMessages: [messageOf(7)],
+    chatPinnedSteps: [messageOf(3, { replyToId: 'message-1', body: 'plan' })],
+    chatBrowserPages: [page],
+    chatUsage: [usageOf('2026-09', 10), usageOf('2026-10', 20)],
+    monthUsage: [usageOf('2026-10', 20)],
+  })
+  expect(snapshot.messages).toEqual([])
+  expect(snapshot.latestMessages.map(({ id, createdAt }) => [id, createdAt])).toEqual([
+    ['message-7', '2026-10-01T09:07:00.000Z'],
+  ])
+  expect(snapshot.pinnedSteps.map(({ id, body }) => [id, body])).toEqual([['message-3', 'plan']])
+  expect(snapshot.browserPages.map(({ bodyText }) => bodyText)).toEqual(['Body'])
+  expect(snapshot.usageEntries.map(({ month, memberId, costMicros }) => [month, memberId, costMicros])).toEqual([
+    ['2026-09', alice, 10],
+    ['2026-10', alice, 20],
+  ])
+})
+
+test('a chat window lists each shown root once with its replies and thread replies, without the nested lists', () => {
+  const seed = { ...messageOf(1, { replyToId: 'message-1' }), kind: 'member' }
+  const answer = messageOf(2, { replyToId: 'message-1' })
+  const threadReply = { ...messageOf(4), threadRootId: 'message-3' }
+  const roots = [
+    { ...messageOf(3), replies: [], threadReplies: [threadReply] },
+    { ...seed, replies: [seed, answer], threadReplies: [] },
+  ]
+  const window = windowMessagesIn(roots)
+  expect(window.map((message) => (message as { id: string }).id)).toEqual([
+    'message-3',
+    'message-4',
+    'message-1',
+    'message-2',
+  ])
+  expect(window.some((message) => 'replies' in message || 'threadReplies' in message)).toBe(false)
+  expect(windowMessagesIn(roots)[0]).toBe(window[0])
+  expect(window[3]).toBe(answer)
 })

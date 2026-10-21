@@ -3,6 +3,7 @@ import {
   chatPermissionsIn,
   findChat,
   inChat,
+  type MessageRow,
   memberNamesIn,
   participantIn,
   type RuntimeOriginRow,
@@ -326,9 +327,12 @@ export const getConversation =
         (marker) => marker.workspaceId === workspaceId && marker.chatId === chatId && marker.memberId === viewerId,
       )?.lastReadSeq ?? 0
     const messages = flowMessages.map(conversationMessageOf)
-    const pullRequest = messages.findLast((message) => message.step?.type === 'pull_request')?.step as
-      | PullRequestStep
-      | undefined
+    const pullRequest = [...snapshot.pinnedSteps, ...chatMessages]
+      .filter((message) => message.chatId === chatId && message.step?.type === 'pull_request')
+      .reduce<MessageRow | undefined>(
+        (latest, message) => (latest && latest.seq > message.seq ? latest : message),
+        undefined,
+      )?.step as PullRequestStep | undefined
     return {
       title: chat.name,
       type: chat.type,

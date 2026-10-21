@@ -711,3 +711,20 @@ test('a message started into runtimes links each one the viewer can read and nam
     welcomeFor(alice, [], { runtimeOrigins })?.messages.filter((message) => message.runtimes.length > 0),
   ).toHaveLength(1)
 })
+
+test('the pull request chip shows the newest card of the chat, also one older than the synced messages', () => {
+  const card = (seq: number, number: number) => ({
+    ...replyRow(seq, 'step', {
+      replyToId: null,
+      step: { type: 'pull_request', number, state: 'open', url: `pr/${number}` },
+    }),
+    authorId: alice,
+  })
+  const snapshot = snapshotWith({ turn: false, waiting: false })
+  const pullRequestWith = (pinnedSteps: Snapshot['pinnedSteps'], messages: Snapshot['messages']) =>
+    getConversation(acme, research, alice)({ ...snapshot, pinnedSteps, messages: [...snapshot.messages, ...messages] })
+      ?.pullRequest
+  expect(pullRequestWith([card(2, 7)], [])).toEqual({ number: 7, state: 'open', url: 'pr/7' })
+  expect(pullRequestWith([card(2, 7)], [card(9, 8)])).toEqual({ number: 8, state: 'open', url: 'pr/8' })
+  expect(pullRequestWith([], [])).toBeNull()
+})
