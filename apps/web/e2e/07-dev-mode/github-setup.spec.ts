@@ -1,5 +1,5 @@
 import { openPageAs } from '../stack'
-import { configureGitHubApp, expect, githubSectionOf, mainOf, newChatDialogOf, test } from './fixtures'
+import { configureGitHubApp, expect, githubSectionOf, mainOf, newChatDialogOf, openSettings, test } from './fixtures'
 
 test.describe('GitHub setup', () => {
   test.beforeEach(async ({ page }) => {
@@ -22,6 +22,29 @@ test.describe('GitHub setup', () => {
     }
     await expect(section.getByLabel('App id')).toHaveValue(app.appId ?? '')
     await expect(mainOf(page)).not.toContainText('PRIVATE KEY')
+  })
+
+  test("As an admin, I see how to create the GitHub App with this workspace's webhook and callback URLs, folded once the App is set", {
+    tag: ['@spec-51'],
+  }, async ({ page }) => {
+    await openSettings(page, 'Connect GitHub')
+    const section = githubSectionOf(page)
+    const appOrigin = new URL(page.url()).origin
+    for (const url of [appOrigin, `${appOrigin}/auth/github/callback`, `${appOrigin}/api/github/webhooks`])
+      await expect(section.getByText(url, { exact: true })).toBeVisible()
+    for (const name of ['Homepage URL', 'Callback URL', 'Webhook URL'])
+      await expect(section.getByRole('button', { name: `Copy ${name}` })).toBeVisible()
+    await expect(section).toContainText(
+      'Repository permissions: Contents: Read and write, Pull requests: Read and write, Checks: Read-only, Metadata: Read-only.',
+    )
+    await expect(section).toContainText(
+      'Subscribe to events: Pull request, Pull request review, Pull request review comment, Pull request review thread, Check suite, Check run.',
+    )
+    await configureGitHubApp(page)
+    await page.reload()
+    await expect(section.getByText(`${appOrigin}/api/github/webhooks`, { exact: true })).toBeHidden()
+    await section.getByText('How to create the GitHub App').click()
+    await expect(section.getByText(`${appOrigin}/api/github/webhooks`, { exact: true })).toBeVisible()
   })
 
   test('As a member without the Connect GitHub permission, I see no GitHub settings, and a non-dev runtime chat asks me for no repository', {

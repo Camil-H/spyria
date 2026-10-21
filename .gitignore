@@ -8,4 +8,6 @@ test-results
 *.bun-build
 apps/agent/image-id
 .env
+.env.dev
+.env.prod
 .claude/

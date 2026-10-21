@@ -1,5 +1,6 @@
 import { createDatabase } from '@spyria/db/postgres'
 import { setModelDirectory } from '@spyria/db/server-writes'
+import { deploymentOf } from '@spyria/kernel'
 import { createLlmGateway } from '@spyria/profile/server'
 import { createBifrostUsageLogs } from '@spyria/usage/server'
 import { websocket } from 'hono/bun'
@@ -33,6 +34,7 @@ const shutdownMilliseconds = 10_000
 const authModes = ['dex', 'sso'] as const
 const authMode = authModes.find((mode) => mode === (process.env.SPYRIA_AUTH_MODE ?? 'dex'))
 if (!authMode) throw new Error('SPYRIA_AUTH_MODE must be dex or sso')
+const deployment = deploymentOf(process.env.SPYRIA_DEPLOYMENT)
 const database = createDatabase()
 const gatewaySettings = {
   url: requiredEnvironment('SPYRIA_GATEWAY_URL'),
@@ -57,6 +59,7 @@ const agentBridge = createAgentBridge({
   spyriaAgentImage,
   sessionClassifierOf: sessionClassifierOf(llmGateway),
   repositoryCheckoutsOf: (checkoutDatabase) => createGitHubCheckouts(checkoutDatabase, github),
+  deployment,
 })
 const app = createApp({
   database,
@@ -73,6 +76,8 @@ const app = createApp({
     ? { smtpUrl: process.env.SPYRIA_SMTP_URL, from: requiredEnvironment('SPYRIA_MAIL_FROM') }
     : undefined,
   appOrigin: requiredEnvironment('SPYRIA_APP_ORIGIN'),
+  deployment,
+  webDist: process.env.SPYRIA_WEB_DIST || undefined,
   llmGateway,
   runtimeHosts,
   agentBridge,

@@ -37,8 +37,6 @@ type AppRow = {
 }
 type ConnectionState = { workspaceId: string; userId: string; databaseName?: string; expiresAt: number }
 
-export const githubCallbackPath = '/auth/github/callback'
-export const githubWebhooksPath = '/api/github/webhooks'
 const connectionStateLifetimeMilliseconds = 10 * 60 * 1000
 const secretLabels: Record<keyof GitHubSecrets, string> = {
   clientSecret: 'A client secret',

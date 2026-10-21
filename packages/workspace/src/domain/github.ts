@@ -14,6 +14,8 @@ export type GitHubSettingsView = GitHubSettings & { repositories: GitHubReposito
 export type DevChatInput = { name: string; projectId: string | null; repository: string; baseBranch: string }
 
 export const githubSecretNames = ['clientSecret', 'privateKey', 'webhookSecret'] as const
+export const githubCallbackPath = '/auth/github/callback'
+export const githubWebhooksPath = '/api/github/webhooks'
 const appIdPattern = /^\d+$/
 const workingBranchSlugLength = 40
 

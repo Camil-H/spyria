@@ -241,3 +241,23 @@ test('each runtime gets its own network, which a containerized spyria-host joins
     { method: 'DELETE', path: '/networks/spyria-rt-runtime-1-net', body: undefined },
   ])
 })
+
+test("two deployments on one Docker daemon never count or manage each other's runtimes, even when one name prefixes the other", async () => {
+  const runtimeContainers = [
+    { Names: ['/spyria-rt-a'], Labels: { 'spyria.managed': '1', 'spyria.runtime': 'a' } },
+    { Names: ['/spyria-rt-rt-b'], Labels: { 'spyria.managed': '1', 'spyria.runtime': 'b' } },
+    { Names: ['/spyria-prod-rt-c'], Labels: { 'spyria.managed': '1', 'spyria.runtime': 'c' } },
+  ]
+  const docker = (async (_method: string, path: string) => {
+    if (path.startsWith('/containers/json')) return runtimeContainers
+    const found = runtimeContainers.find(({ Names }) => path === `/containers${Names[0]}/json`)
+    if (!found) throw new DockerError(404, 'No such container')
+    return { Config: { Labels: found.Labels }, State: { Running: true } }
+  }) as Docker
+  const runnerOf = (deployment: string) => createCommandRunner({ docker, prefix: `${deployment}-` })
+  for (const deployment of ['spyria', 'spyria-rt', 'spyria-prod'])
+    expect(await runnerOf(deployment).runningCount()).toBe(1)
+  await expect(runnerOf('spyria').run({ op: 'status', runtimeId: 'rt-b' })).rejects.toThrow('not a managed runtime')
+  expect(await runnerOf('spyria-rt').run({ op: 'status', runtimeId: 'b' })).toBe('running')
+  expect(await runnerOf('spyria').run({ op: 'status', runtimeId: 'c' })).toBe('missing')
+})

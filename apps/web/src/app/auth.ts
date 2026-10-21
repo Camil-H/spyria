@@ -19,8 +19,11 @@ const postAuth = (path: string, workspaceId: WorkspaceId, headers: Record<string
     body: JSON.stringify({ workspaceId }),
   })
 
-export const loadSessions = async (): Promise<{ userId?: MemberId; sessions: WorkspaceSession[] }> =>
-  (await fetch('/auth/sessions')).json()
+export const loadSessions = async (): Promise<{
+  userId?: MemberId
+  sessions: WorkspaceSession[]
+  deployment: string
+}> => (await fetch('/auth/sessions')).json()
 
 export const loadAuthMode = async (): Promise<{ authMode: 'dex' | 'sso'; canCreateWorkspace: boolean }> =>
   (await fetch('/auth/mode')).json()

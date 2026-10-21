@@ -297,7 +297,7 @@ test('without test hooks the app ignores the spyria_test cookie, the test routes
   if (!aliceInOther) throw new Error('missing session')
   const testCookie = `spyria_test=${encodeURIComponent(JSON.stringify({ db: otherDatabase.name, user: 'member-alice', tokenSeconds: 1 }))}`
   const cookie = `${testCookie}; spyria_s_${acme}=${aliceInOther.sessionId}`
-  expect(await sessionsOf(cookie)).toEqual({ sessions: [] })
+  expect(await sessionsOf(cookie)).toEqual({ sessions: [], deployment: 'spyria' })
   const login = await startLogin()
   const loginWithTestCookie = await app.request('/auth/login', { headers: { cookie: testCookie } })
   expect(loginWithTestCookie.status).toBe(302)

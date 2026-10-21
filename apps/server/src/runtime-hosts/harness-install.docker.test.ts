@@ -20,7 +20,8 @@ const spyriaImage = await readSpyriaAgentImage()
 if (!spyriaImage || docker('image', 'inspect', spyriaImage).exitCode !== 0)
   throw new Error('Spyria image missing: run bun run agent:build')
 
-const prefix = `spyria-test-${crypto.randomUUID().slice(0, 8)}-`
+const deployment = `spyria-test-${crypto.randomUUID().slice(0, 8)}`
+const prefix = `${deployment}-`
 const harnessesVolume = `${prefix}harnesses`
 const registry = startFakeNpmRegistry(pinnedPackagesOf('claude-code'))
 const hostProgram = new URL('../../../host/src/main.ts', import.meta.url).pathname
@@ -70,7 +71,7 @@ test('a personal host installs a harness from the configured registry into its v
     env: {
       ...process.env,
       SPYRIA_HOST_STATE_DIR: stateDirectory,
-      SPYRIA_HOST_PREFIX: prefix,
+      SPYRIA_DEPLOYMENT: deployment,
       SPYRIA_HARNESS_REGISTRY: registry.url,
     },
     stdout: 'inherit',

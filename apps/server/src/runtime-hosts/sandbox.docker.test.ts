@@ -30,7 +30,8 @@ const hasImage = hasDocker && spyriaImage !== '' && docker('image', 'inspect', s
 const skipReason = !hasDocker ? 'Docker is unavailable' : "Spyria's runtime image is not built (bun run agent:build)"
 if (!hasImage) console.warn(`Skipping the runtime host Docker test: ${skipReason}`)
 
-const prefix = `spyria-test-${crypto.randomUUID().slice(0, 8)}-`
+const deployment = `spyria-test-${crypto.randomUUID().slice(0, 8)}`
+const prefix = `${deployment}-`
 const hostProgram = new URL('../../../host/src/main.ts', import.meta.url).pathname
 const stateDirectory = mkdtempSync(join(tmpdir(), 'spyria-test-host-'))
 const shared = await openSharedTestApp()
@@ -70,7 +71,7 @@ const connectHost = async () => {
   })
   const { id, code } = (await added.json()) as { id: string; code: string }
   hostProcess = Bun.spawn(['bun', hostProgram, `http://localhost:${server.port}/h/${code}`], {
-    env: { ...process.env, SPYRIA_HOST_STATE_DIR: stateDirectory, SPYRIA_HOST_PREFIX: prefix },
+    env: { ...process.env, SPYRIA_HOST_STATE_DIR: stateDirectory, SPYRIA_DEPLOYMENT: deployment },
     stdout: 'inherit',
     stderr: 'inherit',
   })
@@ -163,6 +164,32 @@ test.skipIf(!hasImage)(
     console.info(`Runtime host Docker test took ${Math.round(performance.now() - startedAt)} ms`)
   },
   60_000,
+)
+
+test.skipIf(!hasImage)(
+  "a runtime of another deployment on the same Docker daemon is out of this host's reach, even when its name extends this deployment's",
+  async () => {
+    const host = { workspaceId: acme, hostId: runtimeHostId(await hostId()) }
+    const otherDeploymentRuntime = `${deployment}-rt-rt-other`
+    docker(
+      ...[
+        'run',
+        '-d',
+        '--name',
+        otherDeploymentRuntime,
+        '--label',
+        'spyria.managed=1',
+        '--label',
+        'spyria.runtime=other',
+      ],
+      ...['--entrypoint', 'sleep', spyriaImage, '600'],
+    )
+    const runtime = { ...host, runtimeId: 'rt-other' }
+    await expect(gateway.sandboxProvider.status(runtime)).rejects.toThrow('refused')
+    await expect(gateway.sandboxProvider.remove(runtime)).rejects.toThrow('refused')
+    expect(dockerText('ps', '-q', '--filter', `name=^${otherDeploymentRuntime}$`)).not.toBe('')
+  },
+  30_000,
 )
 
 test.skipIf(!hasImage)(

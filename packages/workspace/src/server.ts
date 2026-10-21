@@ -19,8 +19,10 @@ export {
   type GitHubSecrets,
   type GitHubSettingsInput,
   type GitHubSettingsView,
+  githubCallbackPath,
   githubSecretNames,
   githubSettingsFrom,
+  githubWebhooksPath,
   grantedRepositoryOf,
 } from './domain/github.ts'
 export { displayNameFrom, normalizedEmail } from './domain/invitation.ts'

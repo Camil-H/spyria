@@ -21,7 +21,8 @@ if (!spyriaImage || docker('image', 'inspect', spyriaImage).exitCode !== 0)
   throw new Error('Spyria image missing: run bun run agent:build')
 requireTestHarnesses()
 
-const prefix = `spyria-test-${crypto.randomUUID().slice(0, 8)}-`
+const deployment = `spyria-test-${crypto.randomUUID().slice(0, 8)}`
+const prefix = `${deployment}-`
 const hostProgram = new URL('../../../host/src/main.ts', import.meta.url).pathname
 const stateDirectory = mkdtempSync(join(tmpdir(), 'spyria-test-host-'))
 const testDatabase = await createTestDatabase()
@@ -59,7 +60,7 @@ const startPersonalHost = async (id: string, url: string) => {
     env: {
       ...process.env,
       SPYRIA_HOST_STATE_DIR: stateDirectory,
-      SPYRIA_HOST_PREFIX: prefix,
+      SPYRIA_DEPLOYMENT: deployment,
       SPYRIA_HOST_HEARTBEAT_MS: '200',
       SPYRIA_HARNESSES_VOLUME: testHarnessesVolume,
       SPYRIA_HARNESS_REGISTRY: 'http://127.0.0.1:9',

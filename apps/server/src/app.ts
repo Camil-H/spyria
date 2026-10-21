@@ -26,6 +26,7 @@ import { queries, type Transact, type ZeroContext } from '@spyria/db/zero-querie
 import {
   chatId,
   DomainError,
+  defaultDeployment,
   log,
   MissingChatPermission,
   messageId,
@@ -79,8 +80,10 @@ import {
   domainVerificationPath,
   type GitHubSettingsInput,
   githubBranchesPath,
+  githubCallbackPath,
   githubRepositoriesPath,
   githubSettingsPath,
+  githubWebhooksPath,
   grantedRepositoryOf,
   type SsoSettingsInput,
   ssoSettingsPath,
@@ -101,9 +104,7 @@ import {
   disconnectGitHub,
   finishGitHubConnection,
   type GitHubDependencies,
-  githubCallbackPath,
   githubConnectionOf,
-  githubWebhooksPath,
   grantedRepositories,
   readGitHubSettings,
   receiveGitHubWebhook,
@@ -124,6 +125,7 @@ import {
 } from './rate-limits.ts'
 import { createRuntimeHostGateway, type RuntimeHostGateway } from './runtime-hosts/gateway.ts'
 import { contextOf, withSpan } from './telemetry.ts'
+import { webAppResponse } from './web-app.ts'
 
 const healthCheckMilliseconds = 2000
 const passesWithinTimeout = (check: () => Promise<boolean>) =>
@@ -198,13 +200,15 @@ export const createApp = ({
   microsoftLoginOrigin,
   mail,
   appOrigin,
+  deployment = defaultDeployment,
+  webDist,
   testDatabaseByName,
   llmGateway,
   runtimeHosts = createRuntimeHostGateway({
     databases: () => [database],
     relayModelCall: llmGateway && createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),
   }),
-  agentBridge = createAgentBridge({ sandboxProvider: runtimeHosts.sandboxProvider }),
+  agentBridge = createAgentBridge({ sandboxProvider: runtimeHosts.sandboxProvider, deployment }),
   spyriaAgentImage,
   github,
   rateLimits = rateBudgets,
@@ -219,6 +223,8 @@ export const createApp = ({
   microsoftLoginOrigin?: string
   mail?: { smtpUrl: string; from: string }
   appOrigin: string
+  deployment?: string
+  webDist?: string
   testDatabaseByName?: (databaseName: string) => Database
   llmGateway?: LlmGateway
   runtimeHosts?: RuntimeHostGateway
@@ -302,6 +308,10 @@ export const createApp = ({
       log.error({ event: 'http.request.failed', body: 'A request failed', error })
       return context.text('Internal Server Error', 500)
     })
+    .notFound(
+      async (context) =>
+        (webDist && (await webAppResponse(webDist, context.req.raw))) || context.text('404 Not Found', 404),
+    )
     .get('/health', async (context) => {
       const checks = Object.entries({
         database: () => database.$client`select 1`.then(() => true),
@@ -361,6 +371,7 @@ export const createApp = ({
         sso,
         tokenSecret,
         appOrigin,
+        deployment,
         database,
         authenticate,
         testDatabaseByName,

@@ -62,6 +62,7 @@ export const createAgentHandlers = ({
   approvalWindowMilliseconds,
   spyriaAgentImage,
   checkouts,
+  deployment,
 }: {
   transact: Transact
   sandboxProvider: SandboxProvider
@@ -73,6 +74,7 @@ export const createAgentHandlers = ({
   approvalWindowMilliseconds?: number
   spyriaAgentImage?: string
   checkouts?: RepositoryCheckouts
+  deployment?: string
 }) => {
   const runtimes = createRuntimeAgentRuntimes(transact, sandboxProvider, { spyriaAgentImage })
   const agentClient = createSpyriaAgentClient()
@@ -87,6 +89,7 @@ export const createAgentHandlers = ({
     fixedLlm: llm,
     resumeAfterMilliseconds,
     approvalWindowMilliseconds,
+    deployment,
   })
   return {
     jobs: {

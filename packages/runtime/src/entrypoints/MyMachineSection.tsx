@@ -1,5 +1,6 @@
 import { useQuery } from '@spyria/db/react'
 import { type HarnessId, harnesses, harnessIds, type MemberId, signInCommandOf, type WorkspaceId } from '@spyria/kernel'
+import { useSession } from '@spyria/session'
 import { buttonClass, Dialog, ghostButtonClass, LabelledSection } from '@spyria/ui'
 import { useEffect, useState } from 'react'
 import { getMachine, localSessionsOf } from '../queries/list-runtime-hosts.ts'
@@ -12,6 +13,7 @@ const myMachineAnchor = 'my-machine'
 
 export const MyMachineSection = ({ workspaceId, memberId }: { workspaceId: WorkspaceId; memberId: MemberId }) => {
   const commands = useRuntimeCommands()
+  const { deployment } = useSession()
   const machine = useQuery(getMachine(workspaceId, memberId))
   const localSessions = useQuery(localSessionsOf(workspaceId))
   const [code, setCode] = useState<string | null>(null)
@@ -80,7 +82,7 @@ export const MyMachineSection = ({ workspaceId, memberId }: { workspaceId: Works
             ) : (
               <>
                 <p className="text-sm text-muted">Sign in to {harnesses[connectingTool].name} on your machine:</p>
-                <CommandBox command={signInCommandOf(connectingTool)} />
+                <CommandBox command={signInCommandOf(connectingTool, deployment)} />
               </>
             )
           ) : (

@@ -45,6 +45,7 @@ export const createAgentBridge = ({
   spyriaAgentImage,
   reopenDelayMilliseconds = 1000,
   repositoryCheckoutsOf,
+  deployment,
 }: {
   sandboxProvider: SandboxProvider
   llm?: AgentLlm
@@ -55,6 +56,7 @@ export const createAgentBridge = ({
   spyriaAgentImage?: string
   reopenDelayMilliseconds?: number
   repositoryCheckoutsOf?: (database: Database) => RepositoryCheckouts
+  deployment?: string
 }) => {
   const turnSpans = new Map<string, { span: Span; startedAt: number }>()
   const turnContextOf = (workspace: string, promptId: string) => {
@@ -126,6 +128,7 @@ export const createAgentBridge = ({
       approvalWindowMilliseconds,
       spyriaAgentImage,
       checkouts: repositoryCheckoutsOf?.(database),
+      deployment,
       eventSockets: {
         showQuestion: (chat, frame) => {
           shownQuestions.set(

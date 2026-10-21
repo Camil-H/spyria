@@ -1,3 +1,5 @@
+import { hostContainerOf } from './deployment.ts'
+
 const claudeCodeSettings = [
   'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1',
   'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1',
@@ -42,8 +44,9 @@ export const harnessIds = Object.keys(harnesses) as HarnessId[]
 export const defaultHarness: HarnessId = 'claude-code'
 export const harnessOf = (harness: HarnessId | null) => harness ?? defaultHarness
 
-export const signInCommandOf = (harness: HarnessId) => `docker exec -it spyria-host spyria-host login ${harness}`
-export const signInNoticeOf = (harness: HarnessId) =>
-  `Sign in to ${harnesses[harness].name} on your machine: ${signInCommandOf(harness)}`
+export const signInCommandOf = (harness: HarnessId, deployment: string) =>
+  `docker exec -it ${hostContainerOf(deployment)} spyria-host login ${harness}`
+export const signInNoticeOf = (harness: HarnessId, deployment: string) =>
+  `Sign in to ${harnesses[harness].name} on your machine: ${signInCommandOf(harness, deployment)}`
 export const expiredNoticeOf = (harness: HarnessId) =>
   `Authentication required — sign in to ${harnesses[harness].name} again`

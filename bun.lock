@@ -190,6 +190,7 @@
         "@rocicorp/zero": "1.9.0",
         "@spyria/db": "workspace:*",
         "@spyria/kernel": "workspace:*",
+        "@spyria/session": "workspace:*",
         "@spyria/ui": "workspace:*",
         "react": "19.3.0",
         "zod": "4.6.5",

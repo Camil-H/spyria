@@ -47,7 +47,7 @@ export const hostTest = base.extend<{ hosts: Hosts; pair: (url: string, options:
       newStateDirectory,
       start: (url, stateDirectory = newStateDirectory()) => {
         const child = spawn('bun', [hostProgram, url], {
-          env: { ...process.env, SPYRIA_HOST_STATE_DIR: stateDirectory, SPYRIA_HOST_PREFIX: 'spyria-test-e2e-' },
+          env: { ...process.env, SPYRIA_HOST_STATE_DIR: stateDirectory, SPYRIA_DEPLOYMENT: 'spyria-test-e2e' },
           stdio: ['ignore', 'pipe', 'pipe'],
         })
         processes.push(child)

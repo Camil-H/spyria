@@ -1,4 +1,7 @@
 import { expect, test } from 'bun:test'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { createDatabase } from '@spyria/db/postgres'
 import { llmCredentialsPath } from '@spyria/profile/server'
 import { runtimeHostsPath } from '@spyria/runtime/server'
@@ -22,6 +25,34 @@ test('health names the unreachable database', async () => {
   await server.stop()
   expect(response.status).toBe(503)
   expect(await response.json()).toEqual({ status: 'degraded', failing: ['database'] })
+})
+
+test('with a web build, the server serves the app with SPA fallback and cache rules, never shadowing its own routes', async () => {
+  const webDist = mkdtempSync(join(tmpdir(), 'spyria-web-dist-'))
+  mkdirSync(join(webDist, 'assets'))
+  writeFileSync(join(webDist, 'index.html'), '<!doctype html><title>Spyria</title>')
+  writeFileSync(join(webDist, 'assets', 'main-Ab12Cd34.js'), 'console.log(1)')
+  const webApp = createApp({ database: unreachableDatabase, ...testAuthSettings, webDist })
+  for (const appRoute of ['/', '/w/workspace-acme/chats/chat-1', '/w/workspace-acme/settings/github']) {
+    const page = await webApp.request(appRoute)
+    expect(page.status).toBe(200)
+    expect(page.headers.get('cache-control')).toBe('no-cache')
+    expect(page.headers.get('content-type')).toStartWith('text/html')
+    expect(await page.text()).toBe('<!doctype html><title>Spyria</title>')
+  }
+  const asset = await webApp.request('/assets/main-Ab12Cd34.js')
+  expect(asset.status).toBe(200)
+  expect(asset.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
+  expect(await asset.text()).toBe('console.log(1)')
+  expect((await webApp.request('/assets/missing-00000000.js')).status).toBe(404)
+  expect((await webApp.request('/api/unknown')).status).toBe(401)
+  expect((await webApp.request('/api/query', { method: 'POST', body: '[]' })).status).toBe(401)
+  expect((await webApp.request('/auth/unknown')).status).toBe(404)
+  const health = await webApp.request('/health')
+  expect(health.status).toBe(503)
+  expect(await health.json()).toEqual({ status: 'degraded', failing: ['database'] })
+  expect((await app.request('/w/workspace-acme')).status).toBe(404)
+  rmSync(webDist, { recursive: true })
 })
 
 test.each(['/api/query', '/api/mutate', llmCredentialsPath, runtimeHostsPath, `${runtimeHostsPath}/host-1/code`])(

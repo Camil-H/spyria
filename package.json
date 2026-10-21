@@ -11,7 +11,7 @@
     "lint": "biome check .",
     "test": "bun test ./packages ./apps/server ./apps/host ./apps/agent --path-ignore-patterns='**/*.integration.test.ts' --path-ignore-patterns='**/*.docker.test.ts'",
     "test:integration": "bun test --preload ./apps/server/src/testing/integration-setup.ts --reporter=junit --reporter-outfile=.check/integration.xml .integration.test.ts",
-    "dev": "COMPOSE_PROFILES=zero,gateway bun --env-file=.env run stack:up && bun --env-file=.env run --filter '@spyria/server' --filter '@spyria/web' dev",
+    "dev": "COMPOSE_PROFILES=zero,gateway bun --env-file=.env.dev run stack:up && bun --env-file=.env.dev run --filter '@spyria/server' --filter '@spyria/web' dev",
     "test:docker:integration": "bun test --preload ./apps/server/src/testing/integration-setup.ts --reporter=junit --reporter-outfile=.check/integration-docker.xml .docker.test.ts",
     "test:e2e": "bun run --cwd apps/web test:e2e",
     "test:e2e:smoke": "bun run --cwd apps/web test:e2e:smoke",
@@ -32,11 +32,11 @@
     "db:seed": "bun run stack:up && bun packages/db/src/postgres/seed.ts",
     "db:reset": "bun run stack:up && bun packages/db/src/postgres/seed.ts --reset",
     "db:generate-zero": "bun run --cwd packages/db generate-zero",
-    "db:rebuild-messages": "bun apps/server/src/operator-cli.ts rebuild-messages",
-    "jobs:failed": "bun apps/server/src/operator-cli.ts failed-jobs",
-    "jobs:retry": "bun apps/server/src/operator-cli.ts retry-jobs",
-    "tools:setup": "bun apps/server/src/operator-cli.ts tools-setup",
-    "operator": "bun apps/server/src/operator-cli.ts"
+    "db:rebuild-messages": "bun --env-file=.env.dev apps/server/src/operator-cli.ts rebuild-messages",
+    "jobs:failed": "bun --env-file=.env.dev apps/server/src/operator-cli.ts failed-jobs",
+    "jobs:retry": "bun --env-file=.env.dev apps/server/src/operator-cli.ts retry-jobs",
+    "tools:setup": "bun --env-file=.env.dev apps/server/src/operator-cli.ts tools-setup",
+    "operator": "bun --env-file=.env.dev apps/server/src/operator-cli.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",

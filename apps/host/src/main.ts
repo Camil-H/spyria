@@ -22,7 +22,8 @@ const givenArguments = process.argv.slice(2)
 const isPersonal = givenArguments.includes('--personal')
 const [claimUrlArgument] = givenArguments.filter((argument) => argument !== '--personal')
 const dockerSocket = process.env.DOCKER_SOCKET ?? '/var/run/docker.sock'
-const prefix = process.env.SPYRIA_HOST_PREFIX ?? 'spyria-'
+const deployment = process.env.SPYRIA_DEPLOYMENT || 'spyria'
+const prefix = `${deployment}-`
 const docker = createDocker(dockerSocket)
 if (claimUrlArgument === 'login' || claimUrlArgument === 'logout') {
   const action: CredentialsAction = claimUrlArgument
@@ -32,7 +33,7 @@ if (claimUrlArgument === 'login' || claimUrlArgument === 'logout') {
     process.exit(2)
   }
   if (action === 'login' && !process.stdin.isTTY) {
-    console.error(`Run it in a terminal: docker exec -it spyria-host spyria-host login ${tool}`)
+    console.error(`Run it in a terminal: docker exec -it ${deployment}-host spyria-host login ${tool}`)
     process.exit(2)
   }
   await runCredentialsCommand(docker, { socketPath: dockerSocket, prefix, tool, action }).catch((error) => {

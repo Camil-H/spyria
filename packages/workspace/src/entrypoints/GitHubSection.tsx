@@ -2,6 +2,7 @@ import type { WorkspaceId } from '@spyria/kernel'
 import { buttonClass, ErrorMessage, fieldClass, LabelledSection, labelClass, useGuardedAction } from '@spyria/ui'
 import { type SubmitEvent, useEffect, useState } from 'react'
 import type { GitHubSecrets, GitHubSettingsView } from '../domain/github.ts'
+import { GitHubAppGuide } from './GitHubAppGuide.tsx'
 import { useWorkspaceCommands } from './providers.tsx'
 
 const secretLabels = {
@@ -43,6 +44,7 @@ export const GitHubSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => 
   const placeholder = settings ? 'Set: enter a new value to replace it' : 'Not set'
   return (
     <LabelledSection title="GitHub">
+      <GitHubAppGuide isOpen={!settings} />
       <form onSubmit={submit} className="flex flex-col gap-3">
         <label className={labelClass}>
           App id

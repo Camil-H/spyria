@@ -4,6 +4,7 @@ import { createContext, type ReactNode, use, useSyncExternalStore } from 'react'
 export type Session = {
   memberId: MemberId
   defaultWorkspaceId: WorkspaceId
+  deployment: string
   signedInWorkspaceIds: () => ReadonlySet<WorkspaceId>
   subscribe: (listener: () => void) => () => void
   signOut: (workspaceId: WorkspaceId) => Promise<void>

@@ -2,6 +2,7 @@ import {
   type ChatId,
   chatModelsOf,
   cheapestModelOf,
+  defaultDeployment,
   type HarnessId,
   harnessOf,
   isPickableModel,
@@ -237,9 +238,9 @@ const conversationFor = async (
   prompt: Message,
   harness: HarnessId | undefined,
 ): Promise<Prepared> => {
-  const { transactor, fixedLlm } = dependencies
+  const { transactor, fixedLlm, deployment = defaultDeployment } = dependencies
   const prompterId = prompt.authorId
-  if (harness && !signedIn.includes(harness)) return { refusal: signInNoticeOf(harness) }
+  if (harness && !signedIn.includes(harness)) return { refusal: signInNoticeOf(harness, deployment) }
   const storedConversation = await storedConversationOf(dependencies, chat, endpoint)
   if (storedConversation) {
     if (harness) return keepAdapterModel(dependencies, chat, storedConversation)

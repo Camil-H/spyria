@@ -27,7 +27,7 @@ The app signs in through Dex in a popup (allow popups for `localhost:5173`). The
 - `bob@example.com`: member of Acme
 - `nina@example.com`: no membership (shows the "not invited" screen)
 
-`bun run dev` sets dev values for `SPYRIA_TOKEN_SECRET`, `SPYRIA_OIDC_ISSUER`, `SPYRIA_OIDC_CLIENT_ID`, `SPYRIA_OIDC_REDIRECT_URI`, `SPYRIA_APP_ORIGIN`, `SPYRIA_GATEWAY_URL`, `SPYRIA_GATEWAY_ADMIN_USER` and `SPYRIA_GATEWAY_ADMIN_PASSWORD`; the server refuses to start without them. Every setting is listed with its dev default in `.env.example`; copy it to `.env` to change one (`bun run dev` and `bun run operator` read it, nothing needs it in dev).
+`bun run dev` sets dev values for `SPYRIA_TOKEN_SECRET`, `SPYRIA_OIDC_ISSUER`, `SPYRIA_OIDC_CLIENT_ID`, `SPYRIA_OIDC_REDIRECT_URI`, `SPYRIA_APP_ORIGIN`, `SPYRIA_GATEWAY_URL`, `SPYRIA_GATEWAY_ADMIN_USER` and `SPYRIA_GATEWAY_ADMIN_PASSWORD`; the server refuses to start without them. Every setting is listed with its dev default in `.env.example`; copy it to `.env.dev` to change one (`bun run dev` and `bun run operator` read it, nothing needs it in dev). Production reads `.env.prod` (both are git-ignored).
 
 `SPYRIA_ENV=production` makes the server check its settings first and refuse to start, listing every problem: `SPYRIA_AUTH_MODE` must be `sso`; `SPYRIA_TOKEN_SECRET` and `SPYRIA_SECRETS_KEY` set, at least 32 characters and not a dev default; `SPYRIA_APP_ORIGIN` on `https://` with `SPYRIA_OIDC_REDIRECT_URI` on it; `SPYRIA_SMTP_URL` and `SPYRIA_MAIL_FROM` set; the gateway URL and admin login set, not the dev defaults. `GET /health` answers 200 `{"status":"ok"}`, or 503 `{"status":"degraded","failing":[…]}` naming `database` and/or `gateway` (2 s per check). On SIGTERM or SIGINT the server stops accepting requests, lets the job worker finish its current jobs, closes the hosts' connections and the database, and exits within 10 s.
 
@@ -41,13 +41,7 @@ A domain routes sign-in, and a workspace can invite, only once its domain is ver
 
 ## Registering the GitHub App (dev chats)
 
-Each deployment registers its own GitHub App (GitHub settings > Developer settings > GitHub Apps > New GitHub App, on the organization that owns the repositories):
-
-- **Callback URL:** `<SPYRIA_APP_ORIGIN>/auth/github/callback`, with **Request user authorization (OAuth) during installation** off and **Expire user authorization tokens** on (Spyria refreshes them).
-- **Webhook:** active, URL `<SPYRIA_APP_ORIGIN>/api/github/webhooks`, content type `application/json`, and a random secret (`openssl rand -hex 32`). Spyria checks the `X-Hub-Signature-256` signature with that secret and ignores a delivery id it already received.
-- **Repository permissions:** Contents read and write, Pull requests read and write, Metadata read-only.
-- **Subscribe to events:** Pull request, Pull request review, Pull request review comment, Pull request review thread, Check suite, Check run (other events are acknowledged and ignored).
-- Generate a **private key** and a **client secret**, then install the App on the repositories Spyria may use.
+Each deployment registers its own GitHub App. Workspace settings > Connect GitHub shows how, before the form: the steps, the permissions and events, and the homepage, callback and webhook URLs computed from the app's origin, ready to copy. Spyria checks each webhook delivery's `X-Hub-Signature-256` with the webhook secret and ignores a delivery id it already received.
 
 In Workspace settings > GitHub, an admin enters the App id, the client id, the private key, the client secret and the webhook secret (secrets are encrypted with `SPYRIA_SECRETS_KEY`, shown only as set, replaced by entering a new value). The section lists the repositories granted by the App's installations. Members link their own GitHub account in Profile > Connections > My connections: only a chat's owner publishes, with this account (Changes > Push / Open pull request, or the agent's `push_branch` / `open_pull_request` tools on the owner's own prompts), so GitHub shows the owner as the pull request's author.
 
@@ -57,7 +51,7 @@ A dev runtime chat (New chat > Runtime > Dev) clones the chosen repository into 
 
 ## Adding a runtime host for dev
 
-Runtimes (Spyria's runtime image with spyria-agent) run on runtime hosts: any machine with Docker running the host program (image `spyria-host`, container `spyria-host`), which dials out to Spyria.
+Runtimes (Spyria's runtime image with spyria-agent) run on runtime hosts: any machine with Docker running the host program (image `spyria-host`, container `spyria-host`), which dials out to Spyria. The names come from the deployment name `SPYRIA_DEPLOYMENT` (default `spyria`): another deployment on the same Docker daemon, such as `spyria-prod`, uses image, container and state volume `spyria-prod-host`, runtimes `spyria-prod-rt-*`, sign-ins `spyria-prod-cred-*` and harnesses `spyria-prod-harnesses`, and its Add host and sign-in commands carry these names, so neither host ever sees the other's runtimes.
 
 ```sh
 docker build -t spyria-host apps/host

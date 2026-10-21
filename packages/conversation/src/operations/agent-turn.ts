@@ -24,6 +24,7 @@ export type AgentDependencies = {
   fixedLlm?: { model: string }
   resumeAfterMilliseconds?: number
   approvalWindowMilliseconds?: number
+  deployment?: string
 }
 
 export const appendNotice = ({ messages }: UnitOfWork, prompt: Message, text: string) =>

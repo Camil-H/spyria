@@ -45,7 +45,8 @@ const runtimeHosts = createRuntimeHostGateway({
 const agentBridge = createAgentBridge({ sandboxProvider: runtimeHosts.sandboxProvider, spyriaAgentImage: spyriaImage })
 const app = createApp({ database, ...testAuthSettings, llmGateway, runtimeHosts, agentBridge })
 const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
-const prefix = `spyria-test-${crypto.randomUUID().slice(0, 8)}-`
+const deployment = `spyria-test-${crypto.randomUUID().slice(0, 8)}`
+const prefix = `${deployment}-`
 const stateDirectory = mkdtempSync(join(tmpdir(), 'spyria-test-host-'))
 const hostProgram = new URL('../../../host/src/main.ts', import.meta.url).pathname
 let hostProcess: ReturnType<typeof Bun.spawn> | undefined
@@ -79,7 +80,7 @@ const startHost = async () => {
   })
   const { id, code } = (await added.json()) as { id: string; code: string }
   const spawned = Bun.spawn(['bun', hostProgram, '--personal', `http://localhost:${server.port}/h/${code}`], {
-    env: { ...process.env, SPYRIA_HOST_STATE_DIR: stateDirectory, SPYRIA_HOST_PREFIX: prefix },
+    env: { ...process.env, SPYRIA_HOST_STATE_DIR: stateDirectory, SPYRIA_DEPLOYMENT: deployment },
     stdout: 'pipe',
     stderr: 'inherit',
   })

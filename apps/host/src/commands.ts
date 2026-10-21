@@ -229,9 +229,14 @@ export const createCommandRunner = ({
       return `http://${address}:${spyriaAgentPort}`
     },
     runningCount: async () => {
-      const filters = encodeURIComponent(JSON.stringify({ label: ['spyria.managed=1'] }))
-      const containers = await docker<{ Names: string[] }[]>('GET', `/containers/json?filters=${filters}`)
-      return containers.filter((container) => container.Names.some((name) => name.startsWith(`/${prefix}rt-`))).length
+      const filters = encodeURIComponent(JSON.stringify({ label: ['spyria.managed=1', 'spyria.runtime'] }))
+      const containers = await docker<{ Names: string[]; Labels: Record<string, string> }[]>(
+        'GET',
+        `/containers/json?filters=${filters}`,
+      )
+      return containers.filter(({ Names, Labels }) =>
+        Names.includes(`/${containerNameOf(prefix, Labels['spyria.runtime'] ?? '')}`),
+      ).length
     },
   }
 }

@@ -8,10 +8,10 @@ import { App } from './app/Shell.tsx'
 const root = createRoot(document.getElementById('root') as HTMLElement)
 
 const start = async () => {
-  const { userId, sessions } = await loadSessions()
+  const { userId, sessions, deployment } = await loadSessions()
   const [defaultSession] = sessions
   if (userId && defaultSession)
-    return root.render(<App app={await createApp(userId, defaultSession.workspaceId, sessions)} />)
+    return root.render(<App app={await createApp(userId, defaultSession.workspaceId, sessions, deployment)} />)
   const startWhenSignedIn = async (result: Awaited<ReturnType<typeof signInWithPopup>>) => {
     if (result.status === 'signed_in') await start()
     return result
