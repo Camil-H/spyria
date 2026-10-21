@@ -23,6 +23,7 @@ import { schema } from '@spyria/db/zero'
 import { chatPermissionsOf, type Transact, type ZeroContext, zql } from '@spyria/db/zero-queries'
 import { can, chatId, log, type MemberId, type MessageId, workspaceId } from '@spyria/kernel'
 import type { SandboxProvider } from '@spyria/runtime/server'
+import type { ServerWebSocket } from 'bun'
 import { upgradeWebSocket } from 'hono/bun'
 import type { WSContext } from 'hono/ws'
 import type { Authentication } from '../auth/session-tokens.ts'
@@ -32,6 +33,9 @@ type StreamFrame = { type?: unknown; token?: unknown; chatId?: unknown }
 
 const readyTimeoutMilliseconds = 5000
 const readableRetryMilliseconds = 100
+const commandOutputIntervalMilliseconds = 100
+const slowViewerBytes = 4 * 1024 * 1024
+const slowViewerCloseCode = 4008
 const keyOf = (chat: AgentChat) => `${chat.workspaceId}/${chat.chatId}`
 const turnKeyOf = (workspace: string, promptId: string) => `${workspace}/${promptId}`
 
@@ -132,8 +136,18 @@ export const createAgentBridge = ({
     }
     const delegatedTexts = new Map<string, Map<string, DelegatedFrame>>()
     const shownQuestions = new Map<string, Map<string, QuestionFrame>>()
-    const send = (viewer: WSContext, chat: AgentChat, frame: object) =>
-      viewer.send(JSON.stringify({ chatId: chat.chatId, ...frame }))
+    const sendText = (viewer: WSContext, text: string) => {
+      if (((viewer.raw as ServerWebSocket | undefined)?.getBufferedAmount() ?? 0) <= slowViewerBytes)
+        return viewer.send(text)
+      for (const key of [...viewers.keys()]) unwatchChat(viewer, key)
+      viewer.close(slowViewerCloseCode, 'Too slow; reconnect to catch up')
+    }
+    const frameTextOf = (chat: AgentChat, frame: object) => JSON.stringify({ chatId: chat.chatId, ...frame })
+    const send = (viewer: WSContext, chat: AgentChat, frame: object) => sendText(viewer, frameTextOf(chat, frame))
+    const broadcast = (chat: AgentChat, frame: object) => {
+      const text = frameTextOf(chat, frame)
+      for (const viewer of viewersOf(chat)) sendText(viewer, text)
+    }
     const transact: Transact = (work) => zeroDrizzle(schema, database).transaction(work)
     const handlers = createAgentHandlers({
       transact,
@@ -152,7 +166,7 @@ export const createAgentBridge = ({
             keyOf(chat),
             (shownQuestions.get(keyOf(chat)) ?? new Map()).set(frame.question.questionId, frame),
           )
-          for (const viewer of viewersOf(chat)) send(viewer, chat, frame)
+          broadcast(chat, frame)
         },
         hideQuestion: (chat, questionId) => {
           const shown = shownQuestions.get(keyOf(chat))
@@ -168,7 +182,7 @@ export const createAgentBridge = ({
           else texts.set(frame.delegationId, { ...frame, text: (continues ? previous.text : '') + frame.text })
           if (texts.size === 0) delegatedTexts.delete(keyOf(chat))
           else delegatedTexts.set(keyOf(chat), texts)
-          for (const viewer of viewersOf(chat)) send(viewer, chat, frame)
+          broadcast(chat, frame)
         },
         stopStreaming: (chat, promptId) => {
           endTurn(chat, promptId)
@@ -263,8 +277,7 @@ export const createAgentBridge = ({
           .then(() => handlers.recordEvent(chat, event, turnPromptId))
           .then((recorded) => {
             if (recorded?.isReplyStored && (turnPromptId ?? promptAtEvent))
-              for (const viewer of viewersOf(chat))
-                send(viewer, chat, { promptId: turnPromptId ?? promptAtEvent, storedId: event.id })
+              broadcast(chat, { promptId: turnPromptId ?? promptAtEvent, storedId: event.id })
             if (!recorded || chatSocket.promptId !== promptAtEvent) return
             chatSocket.promptId = recorded.promptId
             if (recorded.promptId !== null) return
@@ -281,6 +294,23 @@ export const createAgentBridge = ({
               error,
             }),
           )
+      }
+      const unsentOutputs = new Set<string>()
+      let outputTimer: ReturnType<typeof setTimeout> | undefined
+      const flushOutputs = () => {
+        for (const stepId of unsentOutputs) {
+          const output = chatSocket.commandOutputs.get(stepId)
+          if (output !== undefined) broadcast(chat, { commandOutput: { stepId, output } })
+        }
+        unsentOutputs.clear()
+      }
+      const showOutputs = () => {
+        if (outputTimer) return
+        flushOutputs()
+        outputTimer = setTimeout(() => {
+          outputTimer = undefined
+          if (unsentOutputs.size > 0) showOutputs()
+        }, commandOutputIntervalMilliseconds)
       }
       const flushSegment = (boundary: AgentEvent) => {
         const { segment } = chatSocket
@@ -309,28 +339,32 @@ export const createAgentBridge = ({
           const update = event.update as { sessionUpdate?: string; questionId?: string } | undefined
           if (update?.sessionUpdate === 'question') {
             chatSocket.questions.set(String(update.questionId), update)
-            for (const viewer of viewersOf(chat))
-              send(viewer, chat, { promptId: chatSocket.promptId, question: update })
+            broadcast(chat, { promptId: chatSocket.promptId, question: update })
             return
           }
           if (update?.sessionUpdate === 'workspace') {
             chatSocket.workspace = update
-            for (const viewer of viewersOf(chat)) send(viewer, chat, { workspace: update })
+            broadcast(chat, { workspace: update })
             return
           }
           const stepId = update?.sessionUpdate === 'tool_call_update' ? toolCallIdOf(event) : undefined
           const output = (update as { rawOutput?: { formatted_output?: unknown } } | undefined)?.rawOutput
             ?.formatted_output
-          if (stepId && event.completed) chatSocket.commandOutputs.delete(stepId)
+          if (stepId && event.completed) {
+            flushOutputs()
+            chatSocket.commandOutputs.delete(stepId)
+          }
           if (stepId && !event.completed && typeof output === 'string') {
             chatSocket.commandOutputs.set(stepId, output)
-            for (const viewer of viewersOf(chat)) send(viewer, chat, { commandOutput: { stepId, output } })
+            unsentOutputs.add(stepId)
+            showOutputs()
             return
           }
           if (update?.sessionUpdate === 'question_answered' || update?.sessionUpdate === 'question_closed')
             chatSocket.questions.delete(String(update.questionId))
           const drainedPromptId = chatSocket.drainingPromptId ?? undefined
           if (update?.sessionUpdate === 'turn_end') {
+            flushOutputs()
             if (drainedPromptId) chatSocket.drainingPromptId = null
             else chatSocket.endedPromptId = chatSocket.promptId
           }
@@ -349,8 +383,7 @@ export const createAgentBridge = ({
             const seq = Number(event.seq)
             if (seq > (streamedSeqs.get(conversation.conversationId) ?? 0)) {
               streamedSeqs.set(conversation.conversationId, seq)
-              for (const viewer of viewersOf(chat))
-                send(viewer, chat, { promptId: chatSocket.promptId, text, ...(isReasoning && { isReasoning }) })
+              broadcast(chat, { promptId: chatSocket.promptId, text, ...(isReasoning && { isReasoning }) })
             }
           }
           if (streamed) return

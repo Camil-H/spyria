@@ -160,6 +160,23 @@ test('each step is stored once and updated by its final call, the full command o
   expect(await messagesOf(chat)).toEqual(live)
 })
 
+test('a noisy command reaches a viewer as its latest output at most every 100 ms, ending on the whole output, and is stored whole', async () => {
+  await agentHost()
+  const chat = await newRuntimeChat()
+  const viewer = await openStream(chat)
+  await viewer.subscribed
+  const question = await prompt(chat, 'stub:noisy')
+  await answered(question)
+  await turnEnded(chat)
+
+  const wholeOutput = Array.from({ length: 100 }, (_, index) => `line ${index + 1}\n`).join('')
+  const liveOutputs = viewer.frames.map((frame) => JSON.parse(frame).commandOutput).filter(Boolean)
+  expect(liveOutputs.length).toBeLessThan(20)
+  expect(liveOutputs.at(-1)).toEqual({ stepId: expect.stringMatching(/:noisy-1$/), output: wholeOutput })
+  const command = (await messagesOf(chat)).find((message) => message.step?.type === 'command')?.step
+  expect(command).toMatchObject({ command: 'npm install', exitCode: 0, output: wholeOutput })
+})
+
 test('stream frames reach browsers of the chat workspace only, and no secret reaches a frame or a log', async () => {
   const consoleCalls = captureConsole()
   try {
@@ -191,6 +208,39 @@ test('stream frames reach browsers of the chat workspace only, and no secret rea
   } finally {
     consoleCalls.restore()
   }
+})
+
+test('a viewer more than 4 MiB behind is closed so its browser reconnects and catches up; other viewers stream on', async () => {
+  await agentHost()
+  const chat = await newRuntimeChat()
+  const steadyViewer = await openStream(chat)
+  await steadyViewer.subscribed
+  const slowFrames: Record<string, unknown>[] = []
+  const closes: unknown[][] = []
+  let bufferedBytes = 0
+  const slowViewer = {
+    readyState: 1,
+    raw: { getBufferedAmount: () => bufferedBytes },
+    send: (frame: string) => {
+      slowFrames.push(JSON.parse(frame))
+      if (JSON.parse(frame).text) bufferedBytes = 4 * 1024 * 1024 + 1
+    },
+    close: (...reason: unknown[]) => closes.push(reason),
+  }
+  await agentBridge.forDatabase(database).watch(slowViewer as never, { userId: alice, workspaceId: acme } as never, {
+    workspaceId: acme,
+    chatId: chat,
+  })
+  const question = await prompt(chat, 'Stream past a slow viewer')
+  await answered(question)
+  await turnEnded(chat)
+
+  expect(slowFrames[0]).toEqual({ chatId: chat, subscribed: true })
+  expect(slowFrames.filter((frame) => frame.text)).toHaveLength(1)
+  expect(slowFrames.at(-1)).toMatchObject({ promptId: question, text: expect.any(String) })
+  expect(closes).toEqual([[4008, 'Too slow; reconnect to catch up']])
+  const steadyText = steadyViewer.frames.flatMap((frame) => JSON.parse(frame).text ?? []).join('')
+  expect(steadyText).toBe(replyOf(1).body)
 })
 
 test('a browser that leaves and reopens a chat on the same socket gets each streamed word once', async () => {

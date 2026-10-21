@@ -89,7 +89,7 @@ test('trace headers injected in a span continue its trace, and no traceparent st
   expect((await childOf({ traceparent: 42 })).traceId).not.toBe(parent.traceId)
 })
 
-test('the usage reader takes the token counts of OpenAI, Responses and Anthropic streams, even split across chunks', () => {
+test('the usage reader takes the token counts of OpenAI, Responses and Anthropic streams, even split across chunks with a name or a number cut in two', () => {
   const usageOf = (chunks: string[]) => {
     const reader = createUsageReader()
     for (const chunk of chunks) reader.read(chunk)
@@ -110,4 +110,8 @@ test('the usage reader takes the token counts of OpenAI, Responses and Anthropic
       'event: message_delta\ndata: {"usage":{"output_tokens":7}}\n\n',
     ]),
   ).toEqual({ 'gen_ai.usage.input_tokens': 20, 'gen_ai.usage.output_tokens': 7 })
+  expect(usageOf(['data: {"usage":{"input_tok', 'ens":12,"output_tokens":4', '2}}\n\n', 'data: [DONE]\n\n'])).toEqual({
+    'gen_ai.usage.input_tokens': 12,
+    'gen_ai.usage.output_tokens': 42,
+  })
 })

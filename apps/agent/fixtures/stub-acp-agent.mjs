@@ -771,6 +771,31 @@ const turn = async (id, { sessionId, prompt }) => {
         },
       })
     }
+    if (has('noisy')) {
+      const noisy = `noisy-${session.prompts}`
+      const terminal = { terminal_id: noisy }
+      update({
+        sessionUpdate: 'tool_call',
+        toolCallId: noisy,
+        title: 'npm install',
+        kind: 'execute',
+        status: 'pending',
+      })
+      for (let line = 1; line <= 100; line++)
+        update({
+          sessionUpdate: 'tool_call_update',
+          toolCallId: noisy,
+          status: 'in_progress',
+          _meta: { terminal_output: { ...terminal, data: `line ${line}\n` } },
+        })
+      await step()
+      update({
+        sessionUpdate: 'tool_call_update',
+        toolCallId: noisy,
+        status: 'completed',
+        _meta: { terminal_exit: { ...terminal, exit_code: 0, signal: null } },
+      })
+    }
     if (has('long')) {
       const command = `long-${session.prompts}`
       update({

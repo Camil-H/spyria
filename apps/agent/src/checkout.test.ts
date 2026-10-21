@@ -134,3 +134,23 @@ test('a slow setup script does not hold the launch: the session starts at once a
   })
   expect(updates.at(-1)?.update.rawOutput).toEqual({ formatted_output: 'installing\ninstalled\n', exit_code: 0 })
 })
+
+test('a chatty setup script streams at most one live update per 250 ms, the latest output, and ends on the whole output', async () => {
+  const script = 'for line in $(seq 1 30); do echo "line $line"; sleep 0.02; done\n'
+  const url = bareRepository('chatty', { '.spyria/setup.sh': script })
+  const { open, create } = started()
+  const id = await create(launchIn('chatty', url).launch)
+  const socket = open(id)
+  await socket.until(setupEnded)
+  const liveOutputs = socket.events
+    .filter((event) => isSetup(event) && !event.completed && event.update.rawOutput)
+    .map((event) => String((event.update.rawOutput as { formatted_output: string }).formatted_output))
+  const wholeOutput = Array.from({ length: 30 }, (_, index) => `line ${index + 1}\n`).join('')
+  expect(liveOutputs[0]).toBe('line 1\n')
+  expect(liveOutputs.length).toBeLessThan(10)
+  expect(liveOutputs.every((output) => wholeOutput.startsWith(output))).toBe(true)
+  expect(socket.events.filter(isSetup).at(-1)?.update.rawOutput).toEqual({
+    formatted_output: wholeOutput,
+    exit_code: 0,
+  })
+})

@@ -44,7 +44,12 @@ const installTimeoutMilliseconds = 240_000
 const identifyTimeoutMilliseconds = 10_000
 const defaultGatewayRelayUrl = 'http://spyria-gateway-relay:4000/v1'
 export const maximumFrameBytes = 64 * 1024 * 1024
-export const serverWebSocket = { ...websocket, maxPayloadLength: maximumFrameBytes }
+export const serverWebSocket = {
+  ...websocket,
+  maxPayloadLength: maximumFrameBytes,
+  backpressureLimit: 16 * 1024 * 1024,
+  closeOnBackpressureLimit: true,
+}
 
 const hostAttributesOf = (host: ConnectedHost) => ({ 'workspace.id': host.workspaceId, 'runtime_host.id': host.hostId })
 const frameOf = (text: string): Frame => {

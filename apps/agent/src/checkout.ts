@@ -8,6 +8,7 @@ const setupScript = '.spyria/setup.sh'
 export const setupCommand = `sh ${setupScript}`
 const shownOutputLines = 20
 const keptOutputCharacters = 20_000
+const shownOutputIntervalMilliseconds = 250
 
 export const lastLinesOf = (output: string) => output.trimEnd().split('\n').slice(-shownOutputLines).join('\n')
 
@@ -48,9 +49,20 @@ export const runSetup = async (cwd: string, env: Record<string, string>, onOutpu
   const child = Bun.spawn(['sh', '-c', `${setupCommand} 2>&1`], { cwd, env, stdin: 'ignore', stdout: 'pipe' })
   const decoder = new TextDecoder()
   let output = ''
-  for await (const chunk of child.stdout) {
-    output = (output + decoder.decode(chunk, { stream: true })).slice(-keptOutputCharacters)
+  let shownAt = Number.NEGATIVE_INFINITY
+  let pendingShow: ReturnType<typeof setTimeout> | undefined
+  const show = () => {
+    pendingShow = undefined
+    shownAt = performance.now()
     onOutput(output)
   }
+  for await (const chunk of child.stdout) {
+    output = (output + decoder.decode(chunk, { stream: true })).slice(-keptOutputCharacters)
+    if (pendingShow) continue
+    const wait = shownAt + shownOutputIntervalMilliseconds - performance.now()
+    if (wait <= 0) show()
+    else pendingShow = setTimeout(show, wait)
+  }
+  clearTimeout(pendingShow)
   return { exitCode: await child.exited, output }
 }

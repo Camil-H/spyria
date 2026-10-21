@@ -59,21 +59,32 @@ export const spawnJsonLines = (
   child.on('error', () => exit(null))
   child.on('exit', (code) => exit(code))
   const decoder = new TextDecoder()
-  let buffered = ''
-  child.stdout.on('data', (chunk: Buffer) => {
-    const parts = (buffered + decoder.decode(chunk, { stream: true })).split('\n')
-    buffered = parts.pop() ?? ''
-    for (const line of parts) {
-      let record: Json
-      try {
-        record = JSON.parse(line)
-      } catch {
-        continue
-      }
-      onRecord(record)
+  const readLines = lineReaderOf((line) => {
+    let record: Json
+    try {
+      record = JSON.parse(line)
+    } catch {
+      return
     }
+    onRecord(record)
   })
+  child.stdout.on('data', (chunk: Buffer) => readLines(decoder.decode(chunk, { stream: true })))
   return lines
+}
+
+export const lineReaderOf = (onLine: (line: string) => void) => {
+  let partialPieces: string[] = []
+  return (text: string) => {
+    let lineStart = 0
+    for (let lineEnd = text.indexOf('\n'); lineEnd !== -1; lineEnd = text.indexOf('\n', lineStart)) {
+      partialPieces.push(text.slice(lineStart, lineEnd))
+      const line = partialPieces.join('')
+      partialPieces = []
+      lineStart = lineEnd + 1
+      onLine(line)
+    }
+    if (lineStart < text.length) partialPieces.push(text.slice(lineStart))
+  }
 }
 
 export const connectAdapter = (

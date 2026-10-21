@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { lineReaderOf } from './acp.ts'
 import { formShapes, startAgent } from './agent.ts'
 import {
   type AgentEvent,
@@ -67,6 +68,47 @@ test('events are numbered per conversation, resent after a sequence number, from
   const intruder = open(id, 0, 'wrong-key')
   expect(await intruder.closed).toBe(1008)
   expect(intruder.events).toEqual([])
+})
+
+test('the replay buffer is also capped by bytes: it keeps the newest events that fit, and at least the last one', async () => {
+  const { open, create, prompt } = started({ bufferBytes: 1500 })
+  const id = await create(launchOf())
+  const live = open(id)
+  await prompt(id, 'stub:think')
+  const events = await live.until(kindOf('turn_end'))
+  const bytesOf = (event: AgentEvent) => Buffer.byteLength(JSON.stringify(event))
+  const kept = events.filter((_, index) => events.slice(index).reduce((sum, event) => sum + bytesOf(event), 0) <= 1500)
+  expect(kept.length).toBeGreaterThan(0)
+  expect(kept.length).toBeLessThan(events.length)
+  const replayed = open(id)
+  await replayed.until(kindOf('turn_end'))
+  expect(replayed.events.filter((event) => !kindOf('workspace')(event))).toEqual(
+    kept.filter((event) => !kindOf('workspace')(event)),
+  )
+
+  const tiny = started({ bufferBytes: 1 })
+  const tinyId = await tiny.create(launchOf())
+  const tinyLive = tiny.open(tinyId)
+  await tiny.prompt(tinyId, 'hello')
+  const tinyEvents = await tinyLive.until(kindOf('turn_end'))
+  const tinyReplay = tiny.open(tinyId)
+  await tinyReplay.until(kindOf('turn_end'))
+  expect(tinyReplay.events.filter((event) => !kindOf('workspace')(event))).toEqual(tinyEvents.slice(-1))
+})
+
+test('adapter lines are cut at every newline across chunks: carriage returns and empty lines kept, a last line without newline waits', () => {
+  const lines: string[] = []
+  const read = lineReaderOf((line) => lines.push(line))
+  for (const chunk of ['{"a":1}\r\n{"b"', ':2}', '\n\n', '{"c":', '3}\n{"d":4}']) read(chunk)
+  expect(lines).toEqual(['{"a":1}\r', '{"b":2}', '', '{"c":3}'])
+  read('\n')
+  expect(lines.at(-1)).toBe('{"d":4}')
+  const longLine = JSON.stringify({ text: 'x'.repeat(20 * 1024 * 1024) })
+  const startedAt = performance.now()
+  for (let start = 0; start < longLine.length; start += 64 * 1024) read(longLine.slice(start, start + 64 * 1024))
+  read('\n')
+  expect(performance.now() - startedAt).toBeLessThan(150)
+  expect(lines.at(-1)).toBe(longLine)
 })
 
 test('the final tool call update carries the merged call; turn ends and adapter errors are events', async () => {

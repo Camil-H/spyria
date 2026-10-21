@@ -15,6 +15,7 @@ import { bundleOf, changesOf, commitOf, fileOf, mergeOf, pushedOf, statusOf, tre
 
 type Status = 'starting' | 'idle' | 'running' | 'finished' | 'error'
 type AgentEvent = { id: string; seq: number; timestamp: string; completed: boolean; update: Json }
+type BufferedEvent = { seq: number; frame: string; bytes: number }
 type SocketData = { conversationId: string; after: number; isAuthenticated: boolean }
 type Answer = {
   answers?: Record<string, string | string[]>
@@ -51,7 +52,8 @@ type Conversation = {
   keptPlanning: boolean
   questions: Map<string, PendingQuestion>
   configOptions: Json[]
-  events: AgentEvent[]
+  events: BufferedEvent[]
+  bufferedBytes: number
   lastSeq: number
   toolCalls: Map<string, Json>
   sockets: Set<ServerWebSocket<SocketData>>
@@ -187,6 +189,7 @@ export const startAgent = ({
   apiKey,
   port,
   bufferSize = 10_000,
+  bufferBytes = 8 * 1024 * 1024,
   authTimeoutMilliseconds = 5_000,
   requestTimeoutMilliseconds = 60_000,
   workspaceDirectory = '/workspace/project',
@@ -194,6 +197,7 @@ export const startAgent = ({
   apiKey: string
   port: number
   bufferSize?: number
+  bufferBytes?: number
   authTimeoutMilliseconds?: number
   requestTimeoutMilliseconds?: number
   workspaceDirectory?: string
@@ -209,10 +213,16 @@ export const startAgent = ({
   const emit = (conversation: Conversation, update: Json, completed = !isLive(update)) => {
     const seq = ++conversation.lastSeq
     const event = { id: `${conversation.id}:${seq}`, seq, timestamp: new Date().toISOString(), completed, update }
-    conversation.events.push(event)
-    if (update.sessionUpdate === 'workspace') conversation.workspace = event
-    if (conversation.events.length > bufferSize) conversation.events.shift()
     const frame = JSON.stringify(event)
+    const bytes = Buffer.byteLength(frame)
+    conversation.events.push({ seq, frame, bytes })
+    conversation.bufferedBytes += bytes
+    if (update.sessionUpdate === 'workspace') conversation.workspace = event
+    while (
+      conversation.events.length > 1 &&
+      (conversation.events.length > bufferSize || conversation.bufferedBytes > bufferBytes)
+    )
+      conversation.bufferedBytes -= conversation.events.shift()?.bytes ?? 0
     for (const socket of conversation.sockets) socket.send(frame)
   }
 
@@ -498,6 +508,7 @@ export const startAgent = ({
       questions: new Map(),
       configOptions: [],
       events: [],
+      bufferedBytes: 0,
       lastSeq: 0,
       toolCalls: new Map(),
       sockets: new Set(),
@@ -690,6 +701,7 @@ export const startAgent = ({
     },
     websocket: {
       data: {} as SocketData,
+      closeOnBackpressureLimit: true,
       open: (socket) =>
         void setTimeout(() => {
           if (!socket.data.isAuthenticated) socket.close(1008, 'Unauthorized')
@@ -709,7 +721,7 @@ export const startAgent = ({
         socket.data.isAuthenticated = true
         const { workspace } = conversation
         if (workspace && workspace.seq <= socket.data.after) socket.send(JSON.stringify(workspace))
-        for (const event of conversation.events) if (event.seq > socket.data.after) socket.send(JSON.stringify(event))
+        for (const event of conversation.events) if (event.seq > socket.data.after) socket.send(event.frame)
         conversation.sockets.add(socket)
       },
       close: (socket) => {

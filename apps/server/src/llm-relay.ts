@@ -79,17 +79,19 @@ const usagePatterns = {
   'gen_ai.usage.output_tokens': /"(?:output_tokens|completion_tokens)"\s*:\s*(\d+)/g,
 }
 
+const usageCarryCharacters = 64
+
 export const createUsageReader = () => {
-  let window = ''
+  let carry = ''
   const usage: Record<string, number> = {}
   return {
     usage,
     read: (text: string) => {
-      window = (window + text).slice(-4096)
-      for (const [name, pattern] of Object.entries(usagePatterns)) {
-        const last = [...window.matchAll(pattern)].at(-1)
-        if (last) usage[name] = Number(last[1])
-      }
+      const scanned = carry + text
+      carry = scanned.slice(-usageCarryCharacters)
+      if (!scanned.includes('_tokens')) return
+      for (const [name, pattern] of Object.entries(usagePatterns))
+        for (const match of scanned.matchAll(pattern)) usage[name] = Number(match[1])
     },
   }
 }
