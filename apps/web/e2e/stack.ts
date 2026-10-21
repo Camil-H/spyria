@@ -249,58 +249,61 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
         appId: `spyriae2e${index}`,
         serverUrl,
       })
-      const barrierSession = async () => {
-        const query = new URLSearchParams({
-          db: testDatabase.name,
-          user: barrierMemberId,
-          workspace: barrierWorkspaceId,
-        })
-        const session = await (await fetch(`${serverUrl}/test/token?${query}`, { method: 'POST' })).json()
-        barrierSessionId = session.sessionId
-        return session as WorkspaceSession
-      }
-      const barrier = createZeroStore({
-        memberId: barrierMemberId,
-        sessions: [await barrierSession()],
-        renew: barrierSession,
-        cacheURL: zeroCache.url,
-        kvStore: 'mem',
-      })
-      const waitForEpoch = async (epoch: string) => {
-        for (const deadline = Date.now() + barrierTimeoutMilliseconds; ; await sleep(10)) {
-          if (barrier.read().workspaces.some((workspace) => workspace.name === epoch)) return
-          if (Date.now() > deadline)
-            throw new Error(`zero-cache did not replicate ${epoch} within ${barrierTimeoutMilliseconds} ms`)
+      try {
+        const barrierSession = async () => {
+          const query = new URLSearchParams({
+            db: testDatabase.name,
+            user: barrierMemberId,
+            workspace: barrierWorkspaceId,
+          })
+          const session = await (await fetch(`${serverUrl}/test/token?${query}`, { method: 'POST' })).json()
+          barrierSessionId = session.sessionId
+          return session as WorkspaceSession
         }
+        const barrier = createZeroStore({
+          memberId: barrierMemberId,
+          sessions: [await barrierSession()],
+          renew: barrierSession,
+          cacheURL: zeroCache.url,
+          kvStore: 'mem',
+        })
+        const waitForEpoch = async (epoch: string) => {
+          for (const deadline = Date.now() + barrierTimeoutMilliseconds; ; await sleep(10)) {
+            if (barrier.read().workspaces.some((workspace) => workspace.name === epoch)) return
+            if (Date.now() > deadline)
+              throw new Error(`zero-cache did not replicate ${epoch} within ${barrierTimeoutMilliseconds} ms`)
+          }
+        }
+        await waitForEpoch(firstEpoch)
+        await use({
+          databaseName: testDatabase.name,
+          zeroCacheURL: zeroCache.url,
+          database: testDatabase.database,
+          reset: async (options) => {
+            await keepWarmRuntimes()
+            pairedHost ??= await pairFakeHost(testDatabase.database, testDatabase.name)
+            const warmApiKeys = [...pairedHost.warmRuntimes.values()].map(({ runtime }) => runtime.apiKey)
+            await postToServer('/test/fake-host', { db: testDatabase.name, keepAgentsOf: warmApiKeys.join(',') })
+            await pairedHost.start()
+            await waitForEpoch(await writeReset(options))
+            const { warmRuntimes } = pairedHost
+            const coldChatIds = warmChatIds.filter((chatId) => !warmRuntimes.has(chatId))
+            if (options.runtimeHost && options.warmRuntimes && coldChatIds.length > 0)
+              await warmUp(testDatabase.database, testDatabase.name, coldChatIds)
+          },
+          stopRuntimeHost: async () => pairedHost?.stop(),
+          startRuntimeHost: async () => pairedHost?.start(),
+          gateway: (path) => testGateway.call(path),
+          fakeHost: async (query = {}) =>
+            (await postToServer('/test/fake-host', { db: testDatabase.name, ...query })).json(),
+          setGatewayReachable: async (isReachable) => {
+            await postToServer('/test/gateway', { db: testDatabase.name, reachable: String(isReachable) })
+          },
+        })
+        await barrier.close()
+      } finally {
+        await zeroCache.stop()
       }
-      await waitForEpoch(firstEpoch)
-      await use({
-        databaseName: testDatabase.name,
-        zeroCacheURL: zeroCache.url,
-        database: testDatabase.database,
-        reset: async (options) => {
-          await keepWarmRuntimes()
-          pairedHost ??= await pairFakeHost(testDatabase.database, testDatabase.name)
-          const warmApiKeys = [...pairedHost.warmRuntimes.values()].map(({ runtime }) => runtime.apiKey)
-          await postToServer('/test/fake-host', { db: testDatabase.name, keepAgentsOf: warmApiKeys.join(',') })
-          await pairedHost.start()
-          await waitForEpoch(await writeReset(options))
-          const { warmRuntimes } = pairedHost
-          const coldChatIds = warmChatIds.filter((chatId) => !warmRuntimes.has(chatId))
-          if (options.runtimeHost && options.warmRuntimes && coldChatIds.length > 0)
-            await warmUp(testDatabase.database, testDatabase.name, coldChatIds)
-        },
-        stopRuntimeHost: async () => pairedHost?.stop(),
-        startRuntimeHost: async () => pairedHost?.start(),
-        gateway: (path) => testGateway.call(path),
-        fakeHost: async (query = {}) =>
-          (await postToServer('/test/fake-host', { db: testDatabase.name, ...query })).json(),
-        setGatewayReachable: async (isReachable) => {
-          await postToServer('/test/gateway', { db: testDatabase.name, reachable: String(isReachable) })
-        },
-      })
-      await barrier.close()
-      await zeroCache.stop()
       await releaseServerDatabase()
       await testDatabase.drop()
     },

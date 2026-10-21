@@ -1,0 +1,203 @@
+name: ${SPYRIA_DEPLOYMENT}
+
+x-database-url: &database-url postgres://spyria:${SPYRIA_POSTGRES_PASSWORD}@postgres:5432/spyria
+x-server-build: &server-build
+  context: ..
+  dockerfile: apps/server/Dockerfile
+
+services:
+  postgres:
+    image: postgres:18
+    container_name: ${SPYRIA_DEPLOYMENT}-postgres
+    command: postgres -c wal_level=logical
+    environment:
+      POSTGRES_USER: spyria
+      POSTGRES_PASSWORD: ${SPYRIA_POSTGRES_PASSWORD}
+      POSTGRES_DB: spyria
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    restart: unless-stopped
+    healthcheck:
+      test: pg_isready -U spyria -d spyria
+      interval: 5s
+      retries: 30
+
+  migrate:
+    build: *server-build
+    image: ${SPYRIA_DEPLOYMENT}-server
+    container_name: ${SPYRIA_DEPLOYMENT}-migrate
+    command: [bun, run, --cwd, packages/db, migrate]
+    environment:
+      DATABASE_URL: *database-url
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  server:
+    build: *server-build
+    image: ${SPYRIA_DEPLOYMENT}-server
+    container_name: ${SPYRIA_DEPLOYMENT}-server
+    environment:
+      DATABASE_URL: *database-url
+      SPYRIA_DEPLOYMENT: ${SPYRIA_DEPLOYMENT}
+      SPYRIA_AUTH_MODE: sso
+      SPYRIA_APP_ORIGIN: ${SPYRIA_APP_ORIGIN}
+      SPYRIA_OIDC_REDIRECT_URI: ${SPYRIA_APP_ORIGIN}/auth/callback
+      SPYRIA_TOKEN_SECRET: ${SPYRIA_TOKEN_SECRET}
+      SPYRIA_SECRETS_KEY: ${SPYRIA_SECRETS_KEY}
+      SPYRIA_TRUSTED_PROXY: ${SPYRIA_TRUSTED_PROXY:-}
+      SPYRIA_SMTP_URL: ${SPYRIA_SMTP_URL}
+      SPYRIA_MAIL_FROM: ${SPYRIA_MAIL_FROM}
+      SPYRIA_GATEWAY_URL: http://gateway:8080
+      SPYRIA_GATEWAY_ADMIN_USER: ${SPYRIA_GATEWAY_ADMIN_USER}
+      SPYRIA_GATEWAY_ADMIN_PASSWORD: ${SPYRIA_GATEWAY_ADMIN_PASSWORD}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+    volumes:
+      - type: bind
+        source: ../apps/agent/image-id
+        target: /app/apps/agent/image-id
+        read_only: true
+        bind:
+          create_host_path: false
+    ports:
+      - 127.0.0.1:${SPYRIA_LOCAL_PORT:-3300}:3000
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      gateway:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, bun, -e, "fetch('http://127.0.0.1:3000/health').then((response) => process.exit(response.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      start_period: 30s
+      start_interval: 1s
+      retries: 6
+
+  zero-cache:
+    image: rocicorp/zero:1.9.0
+    container_name: ${SPYRIA_DEPLOYMENT}-zero-cache
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      ZERO_APP_ID: spyria
+      ZERO_APP_PUBLICATIONS: spyria_zero
+      ZERO_UPSTREAM_DB: *database-url
+      ZERO_QUERY_URL: http://server:3000/api/query
+      ZERO_MUTATE_URL: http://server:3000/api/mutate
+      ZERO_PORT: 4848
+      ZERO_REPLICA_FILE: /data/spyria-replica.db
+      ZERO_ADMIN_PASSWORD: ${SPYRIA_ZERO_ADMIN_PASSWORD}
+      ZERO_ENABLE_TELEMETRY: false
+    volumes:
+      - zero-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://localhost:4848/keepalive').then((response) => process.exit(response.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      start_period: 60s
+      start_interval: 1s
+      retries: 6
+
+  gateway-database:
+    image: postgres:18
+    container_name: ${SPYRIA_DEPLOYMENT}-gateway-database
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGUSER: spyria
+      PGPASSWORD: ${SPYRIA_POSTGRES_PASSWORD}
+      PGDATABASE: spyria
+      GATEWAY_DB_PASSWORD: ${SPYRIA_GATEWAY_DB_PASSWORD}
+    entrypoint: [sh, -ec]
+    command:
+      - |
+        psql -tAc "select 1 from pg_roles where rolname = 'bifrost'" | grep -q 1 || psql -c "create role bifrost login password '$$GATEWAY_DB_PASSWORD'"
+        psql -tAc "select 1 from pg_database where datname = 'bifrost'" | grep -q 1 || psql -c "create database bifrost owner bifrost template template0 encoding 'UTF8'"
+    restart: 'no'
+
+  gateway:
+    image: maximhq/bifrost:v2.2.6@sha256:d0b4708ace1aa175766f94afa715fd9bba3a1b56c1dc2afff15a21edf3ae4e2a
+    container_name: ${SPYRIA_DEPLOYMENT}-gateway
+    depends_on:
+      gateway-database:
+        condition: service_completed_successfully
+    environment:
+      BIFROST_ENCRYPTION_KEY: ${SPYRIA_GATEWAY_ENCRYPTION_KEY}
+      BIFROST_SETUP_TOKEN: ${SPYRIA_GATEWAY_SETUP_TOKEN}
+      BIFROST_ADMIN_USER: ${SPYRIA_GATEWAY_ADMIN_USER}
+      BIFROST_ADMIN_PASSWORD: ${SPYRIA_GATEWAY_ADMIN_PASSWORD}
+      BIFROST_DB_PASSWORD: ${SPYRIA_GATEWAY_DB_PASSWORD}
+      SPYRIA_GATEWAY_OAUTH_BASE: ${SPYRIA_APP_ORIGIN}/gateway-oauth
+    volumes:
+      - gateway-data:/app/data
+      - ../infra/bifrost.json:/app/data/config.json:ro
+    restart: unless-stopped
+    healthcheck:
+      test: wget -q -O /dev/null http://127.0.0.1:8080/health
+      interval: 10s
+      start_period: 60s
+      start_interval: 1s
+      retries: 6
+
+  host:
+    profiles: [host]
+    build: ../apps/host
+    image: ${SPYRIA_DEPLOYMENT}-host
+    container_name: ${SPYRIA_DEPLOYMENT}-host
+    command: ['${SPYRIA_HOST_CLAIM_URL:-}']
+    environment:
+      SPYRIA_ENV: production
+      SPYRIA_DEPLOYMENT: ${SPYRIA_DEPLOYMENT}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+    group_add: ['${SPYRIA_DOCKER_GROUP:-0}']
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges]
+    read_only: true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - host-state:/state
+    depends_on:
+      server:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, /usr/local/bin/spyria-host, health]
+      interval: 10s
+      retries: 6
+
+  cloudflared:
+    profiles: [cloudflare]
+    image: cloudflare/cloudflared:2026.9.3
+    container_name: ${SPYRIA_DEPLOYMENT}-cloudflared
+    command: [tunnel, --no-autoupdate, --metrics, 127.0.0.1:2000, run]
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      server:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, cloudflared, tunnel, --metrics, 127.0.0.1:2000, ready]
+      interval: 10s
+      retries: 6
+
+volumes:
+  postgres-data:
+    name: ${SPYRIA_DEPLOYMENT}-postgres-data
+  zero-data:
+    name: ${SPYRIA_DEPLOYMENT}-zero-data
+  gateway-data:
+    name: ${SPYRIA_DEPLOYMENT}-gateway-data
+  host-state:
+    name: ${SPYRIA_DEPLOYMENT}-host
+
+networks:
+  default:
+    name: ${SPYRIA_DEPLOYMENT}-network

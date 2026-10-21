@@ -140,6 +140,12 @@ export const startZeroCache = async ({
       ZERO_ENABLE_TELEMETRY: 'false',
     },
   })
+  const stopGroupOnExit = () => zeroCache.exitCode === null && process.kill(-(zeroCache.pid ?? 0), 'SIGKILL')
+  process.once('exit', stopGroupOnExit)
+  const stop = () => {
+    process.off('exit', stopGroupOnExit)
+    return stopProcessGroup(zeroCache)
+  }
   let errorOutput = ''
   zeroCache.stderr?.on('data', (chunk) => {
     writeSync(logFile, chunk)
@@ -148,12 +154,12 @@ export const startZeroCache = async ({
   const exited = once(zeroCache, 'exit').then(() => `zero-cache on port ${port} exited: ${errorOutput}`)
   for (let attempt = 1; (await httpStatusOf(`${url}/keepalive`)) !== 200; attempt++) {
     if (zeroCache.exitCode !== null || attempt === 600) {
-      await stopProcessGroup(zeroCache)
+      await stop()
       throw new Error(`zero-cache on port ${port} did not start: ${errorOutput}`)
     }
     await sleep(50)
   }
-  return { url, exited, stop: () => stopProcessGroup(zeroCache) }
+  return { url, exited, stop }
 }
 
 const gatewayImage = 'maximhq/bifrost:v2.2.6@sha256:d0b4708ace1aa175766f94afa715fd9bba3a1b56c1dc2afff15a21edf3ae4e2a'

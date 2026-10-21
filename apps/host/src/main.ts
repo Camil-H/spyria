@@ -25,6 +25,11 @@ const dockerSocket = process.env.DOCKER_SOCKET ?? '/var/run/docker.sock'
 const deployment = process.env.SPYRIA_DEPLOYMENT || 'spyria'
 const prefix = `${deployment}-`
 const docker = createDocker(dockerSocket)
+if (claimUrlArgument === 'health') {
+  const relayUrl = `http://127.0.0.1:${process.env.SPYRIA_HOST_GATEWAY_PORT ?? 4000}/`
+  const isRelayUp = await fetch(relayUrl).then(Boolean, () => false)
+  process.exit(isRelayUp ? 0 : 1)
+}
 if (claimUrlArgument === 'login' || claimUrlArgument === 'logout') {
   const action: CredentialsAction = claimUrlArgument
   const tool = givenArguments[1] as CredentialsTool

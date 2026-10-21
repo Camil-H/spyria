@@ -39,6 +39,40 @@ On a fresh deployment (no workspace yet), the sign-in screen offers "Create a wo
 
 A domain routes sign-in, and a workspace can invite, only once its domain is verified. Admins verify a domain in Workspace settings > Sign-in by sending a single-use link (24 h) to any address at it; this needs SMTP: `SPYRIA_SMTP_URL` (for example `smtp://user:pass@smtp.example.com:587`) and `SPYRIA_MAIL_FROM` (for example `Spyria <spyria@example.com>`). Without SMTP, the operator verifies a domain directly: `bun run operator sso:verify-domain --workspace <id> --domain <domain>`.
 
+## Self-hosting
+
+One Docker Compose file runs a production instance: `deploy/compose.prod.yml` (Postgres 18, the migrations, the server with the built web app, zero-cache, the model gateway and its database; optional profiles `host` and `cloudflare`). Every container, volume and network is named after `SPYRIA_DEPLOYMENT` (also the Compose project), so give it a name of its own, such as `spyria-prod`: `spyria` is the dev stack's.
+
+Requirements:
+
+- Docker with Compose, and Bun 1.3 to build the runtime image.
+- An HTTPS origin (for example `https://spyria.example.com`) routing by path: `/zero/*` to `zero-cache:4848` (Zero's sync WebSocket; the web app syncs on `<origin>/zero`), everything else to `server:3000` (the web app, `/api`, `/auth`, `/h/<code>`, the `/host` WebSocket, `/gateway-oauth`, `/health`). Both are on the Compose network only; the server also answers on `127.0.0.1:${SPYRIA_LOCAL_PORT:-3300}`.
+- An OIDC provider for the first workspace (Google Workspace, Microsoft Entra or any OIDC issuer) with the redirect URI `<origin>/auth/callback`.
+- An SMTP service that sends from your domain (domain verification and invites).
+- A GitHub App, later, from the app (Workspace settings > Connect GitHub shows how).
+
+Steps:
+
+```sh
+git clone <repository> spyria && cd spyria
+cp .env.example .env.prod     # fill every [prod] key: SPYRIA_DEPLOYMENT, the origin, SMTP, every secret (openssl rand -hex 32)
+bun install && bun run agent:build   # the runtime image; its content ID (apps/agent/image-id) is mounted into the server
+docker compose --env-file .env.prod -f deploy/compose.prod.yml up -d --build
+```
+
+The server refuses to start (`docker compose … logs server`) until the production check passes. Then open the origin, create the first workspace on the sign-in page (organization, email domain, provider), sign in as its Admin, and verify the domain from the link emailed by Workspace settings > Sign-in. For runtimes on this machine, Workspace settings > Add runtime host: put the claim URL from the copied command, with its origin replaced by `http://server:3000`, in `SPYRIA_HOST_CLAIM_URL`, add `host` to `COMPOSE_PROFILES` (and `SPYRIA_DOCKER_GROUP` on Linux) and run the same `up -d --build`; the `<deployment>-host` service pairs once and keeps its token in its volume. Members add their own machines from Profile > My machine.
+
+Upgrading: `git pull`, `bun run agent:build`, then the same `up -d --build`; the `migrate` service applies new migrations and the server starts only after it succeeded. Logs: `docker compose --env-file .env.prod -f deploy/compose.prod.yml logs -f server` (one JSON line per event; set `OTEL_EXPORTER_OTLP_ENDPOINT` to export traces and logs over OTLP). Health: `curl 127.0.0.1:3300/health` (200 `{"status":"ok"}`, 503 naming `database` or `gateway`), and `docker compose … ps` shows every service's healthcheck. Data lives in the `<deployment>-postgres-data`, `<deployment>-gateway-data` and `<deployment>-zero-data` volumes (backups are yours).
+
+`bun run smoke:prod` checks the Compose file end to end: it starts it under a throwaway name (`spyria-smoke-<random>`) with generated secrets, waits for every healthcheck, checks `/health`, the web app's `index.html` and a hashed asset with their cache headers, and that `/auth/mode` offers creating the first workspace, then removes the containers, volumes, network and the server image it built, even on failure. It needs `bun run agent:build` first and takes a few minutes, so it is not part of `check:all`.
+
+### Example: Cloudflare Tunnel, Access, Email Routing and Resend
+
+1. **Tunnel:** Cloudflare Zero Trust > Networks > Tunnels > Create a tunnel (cloudflared). Copy its token to `CLOUDFLARE_TUNNEL_TOKEN` and add `cloudflare` to `COMPOSE_PROFILES`. Public hostnames, in this order: `spyria.example.com` with path `^/zero/` to `http://zero-cache:4848`, then `spyria.example.com` without a path to `http://server:3000`. Set `SPYRIA_TRUSTED_PROXY=cloudflare` (rate limits read `CF-Connecting-IP`). No port opens on the machine.
+2. **Mailbox:** Email > Email Routing on the domain: forward an address such as `admin@example.com` to your inbox; it receives the domain verification link and Access one-time PINs.
+3. **OIDC through Access:** Zero Trust > Access > Applications > Add an application > SaaS, OIDC, redirect URL `https://spyria.example.com/auth/callback`, a policy allowing emails ending in `@example.com` (login method: one-time PIN or your identity provider). In "Create a workspace", choose **Other OIDC** with the issuer (`https://<team>.cloudflareaccess.com/cdn-cgi/access/sso/oidc/<client id>`), the client id and the client secret Access shows.
+4. **SMTP through Resend:** add the domain in Resend and create the DNS records it lists in Cloudflare DNS (the `send` MX and SPF TXT, the `resend._domainkey` DKIM TXT, a DMARC TXT if you have none); they do not touch Email Routing's MX. Then `SPYRIA_SMTP_URL=smtps://resend:<API key>@smtp.resend.com:465` and `SPYRIA_MAIL_FROM=Spyria <spyria@example.com>`.
+
 ## Registering the GitHub App (dev chats)
 
 Each deployment registers its own GitHub App. Workspace settings > Connect GitHub shows how, before the form: the steps, the permissions and events, and the homepage, callback and webhook URLs computed from the app's origin, ready to copy. Spyria checks each webhook delivery's `X-Hub-Signature-256` with the webhook secret and ignores a delivery id it already received.
@@ -157,6 +191,7 @@ bun run test:e2e:smoke     # the @smoke critical paths only (29 tests, every seg
 bun run test:e2e -- e2e/04-agent   # one segment (00-platform still runs first)
 bun run test:ui            # the visual suite apps/web/ui: screenshots light and dark against the baselines, keyboard and resize checks; not in check:all
 bun run test:ui:update     # regenerate the screenshot baselines after an intended design change, then review the changed PNGs
+bun run smoke:prod         # the production Compose file under a throwaway name, then removed (see Self-hosting); not in check:all
 ```
 
 `check:related [--base <ref>]` takes the uncommitted changes plus the commits since `<ref>` (default `HEAD`). It runs the unit and integration test files that changed or import a changed module, directly or not (dependency-cruiser's graph), and Playwright `--only-changed=<ref>` when a spec imports a changed module. It prints what it selected and why. It runs a whole suite when it cannot decide: a changed file outside the module graph (lock file, config, SQL, infra) runs every suite, `integration-setup.ts` runs every integration test, and an e2e harness file (`test-server.ts`, `testing.ts`, the fake LLM, `global-setup.ts`, `playwright.config.ts`) runs the whole e2e suite. App code that e2e reaches only through the servers is left to `check:all`.

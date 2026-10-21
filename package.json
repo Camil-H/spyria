@@ -23,6 +23,7 @@
     "check:all": "bun scripts/check-all.ts",
     "check:docker": "bun scripts/check-all.ts --docker",
     "check:related": "bun scripts/check-related.ts",
+    "smoke:prod": "bun scripts/smoke-prod.ts",
     "agent:build": "bun scripts/agent-image.ts build",
     "agent:versions": "bun scripts/agent-image.ts versions",
     "agent:bump": "bun scripts/agent-image.ts bump",
