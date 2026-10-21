@@ -93,6 +93,7 @@ const sessionsOf = async (cookie: string, server = app) =>
   (await (await server.request('/auth/sessions', { headers: { cookie } })).json()) as {
     userId?: string
     sessions: { workspaceId: string; token: string; expiresAt: number }[]
+    deployment: string
   }
 
 const queryWith = (token: string) =>
