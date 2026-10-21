@@ -82,9 +82,9 @@ const InviteForm = ({ workspaceId, roles }: { workspaceId: WorkspaceId; roles: r
 export const MembersSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
   const commands = useWorkspaceCommands()
   const { memberId: viewerId } = useSession()
-  const members = useQuery(listMembers(workspaceId))
-  const invitations = useQuery(listInvitations(workspaceId))
-  const roles = useQuery(listWorkspaceRoles(workspaceId))
+  const members = useQuery(listMembers, workspaceId)
+  const invitations = useQuery(listInvitations, workspaceId)
+  const roles = useQuery(listWorkspaceRoles, workspaceId)
   const permissions = useWorkspacePermissions(workspaceId)
   const grantableRoles = roles.filter((role) => canGrantWorkspaceRole(permissions, role))
   const roleNameOf = (roleId: string) => roles.find((role) => role.id === roleId)?.name ?? roleId

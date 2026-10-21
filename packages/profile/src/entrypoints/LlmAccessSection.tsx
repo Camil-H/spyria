@@ -8,7 +8,7 @@ import { RemoveCredentialDialog } from './RemoveCredentialDialog.tsx'
 import { credentialGridClass } from './ui.ts'
 
 export const LlmAccessSection = ({ workspaceId, memberId }: { workspaceId: WorkspaceId; memberId: MemberId }) => {
-  const credentials = useQuery(getLlmCredentials(workspaceId, memberId))
+  const credentials = useQuery(getLlmCredentials, workspaceId, memberId)
   const [removing, setRemoving] = useState<{ id: CredentialId; provider: string } | null>(null)
   return (
     <LabelledSection title="LLM access">

@@ -17,7 +17,7 @@ import { WorkspaceStatus } from './WorkspaceStatus.tsx'
 
 const ChangesTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
   const { memberId } = useSession()
-  const { workingBranch, baseBranch } = useQuery(getPublishing(workspaceId, chatId, memberId))
+  const { workingBranch, baseBranch } = useQuery(getPublishing, workspaceId, chatId, memberId)
   const { reading, refresh: refreshChanges } = useWorkspaceReading(workspaceId, chatId, 'changes')
   const { reading: statusReading, refresh: refreshStatus } = useWorkspaceReading(workspaceId, chatId, 'status')
   const changes = fileChangesOf(reading?.patch)

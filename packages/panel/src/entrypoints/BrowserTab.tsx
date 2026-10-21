@@ -5,7 +5,7 @@ import { EmptyState } from './EmptyState.tsx'
 import type { TabProps } from './TabProps.ts'
 
 export const BrowserTab = ({ workspaceId, chatId }: TabProps) => {
-  const page = useQuery(getBrowser(workspaceId, chatId))
+  const page = useQuery(getBrowser, workspaceId, chatId)
   if (!page) return <EmptyState Icon={Globe} title="No page open" hint="Pages the agent browses show here." />
   return (
     <div className="flex flex-col gap-3 text-sm">

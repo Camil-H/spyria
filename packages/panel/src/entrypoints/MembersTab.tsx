@@ -73,7 +73,7 @@ const InviteForm = ({
 
 const MembersTab = ({ workspaceId, chatId }: TabProps) => {
   const { memberId: viewerId } = useSession()
-  const view = useQuery(getMembers(workspaceId, chatId, viewerId))
+  const view = useQuery(getMembers, workspaceId, chatId, viewerId)
   const commands = usePanelCommands()
   const { errorMessage, isPending, run } = useGuardedAction()
   const [isInviting, setIsInviting] = useState(false)

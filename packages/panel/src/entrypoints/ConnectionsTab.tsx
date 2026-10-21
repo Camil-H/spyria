@@ -17,7 +17,7 @@ const ConnectionGroup = ({ title, ...list }: { title: string } & Parameters<type
 )
 
 const ConnectionsTab = ({ workspaceId, chatId }: TabProps) => {
-  const connections = useQuery(getConnections(workspaceId, chatId))
+  const connections = useQuery(getConnections, workspaceId, chatId)
   if (!connections) return null
   return (
     <div className="flex flex-col gap-4">

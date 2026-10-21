@@ -49,6 +49,22 @@ test('the agent works while the chat has an active turn or a prompt waiting for 
   expect(activityOf({ turn: true, waiting: true })).toEqual({ isAgentWorking: true, hasActiveTurn: true })
 })
 
+test('the read marker is behind until it reaches the newest message of the chat flow', () => {
+  const snapshot = snapshotWith({ turn: false, waiting: false })
+  const isBehindAt = (lastReadSeq: number | null) =>
+    getConversation(
+      acme,
+      research,
+      alice,
+    )({
+      ...snapshot,
+      readMarkers: lastReadSeq === null ? [] : [{ workspaceId: acme, memberId: alice, chatId: research, lastReadSeq }],
+    })?.isReadMarkerBehind
+  expect(isBehindAt(null)).toBe(true)
+  expect(isBehindAt(0)).toBe(true)
+  expect(isBehindAt(1)).toBe(false)
+})
+
 const turnStart = Date.UTC(2026, 9, 1, 9, 0)
 type StepRow = Snapshot['messages'][number]['step']
 const replyRow = (

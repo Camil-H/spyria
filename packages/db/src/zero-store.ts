@@ -1,6 +1,6 @@
 import { type AnyMutatorRegistry, type MutatorResultDetails, type Row, Zero } from '@rocicorp/zero'
 import { DomainError, type MemberId, type WorkspaceId, workspacePermissions } from '@spyria/kernel'
-import type { DraftRow, Snapshot } from './schema.ts'
+import type { DraftRow, MessageRow, Snapshot } from './schema.ts'
 import { type Schema, schema } from './zero.ts'
 import { queries } from './zero-queries.ts'
 
@@ -39,112 +39,181 @@ const withoutCreatedAt = <Row extends { createdAt: number }>({ createdAt, ...row
 const uniqueBy = <Row>(rows: readonly Row[], keyOf: (row: Row) => string) => [
   ...new Map(rows.map((row) => [keyOf(row), row])).values(),
 ]
+const plainOf = <Row extends object>(row: Row) => Object.fromEntries(Object.entries(row)) as Row
+const isSameSources = (previous: readonly unknown[], next: readonly unknown[]) =>
+  previous.length === next.length && previous.every((source, index) => source === next[index])
+const memoizedOnSources = <Sources extends readonly unknown[], Value>(build: (...sources: Sources) => Value) => {
+  let previous: { sources: Sources; value: Value } | undefined
+  return (...sources: Sources) => {
+    if (previous && isSameSources(previous.sources, sources)) return previous.value
+    previous = { sources, value: build(...sources) }
+    return previous.value
+  }
+}
+const mappedRows = <ZeroRow extends object, SnapshotRow>(map: (row: ZeroRow) => SnapshotRow) => {
+  const snapshotRowByZeroRow = new WeakMap<ZeroRow, SnapshotRow>()
+  const snapshotRowOf = (row: ZeroRow) => {
+    const cached = snapshotRowByZeroRow.get(row)
+    if (cached) return cached
+    const mapped = map(plainOf(row))
+    snapshotRowByZeroRow.set(row, mapped)
+    return mapped
+  }
+  return memoizedOnSources((rows: readonly ZeroRow[]) => rows.map(snapshotRowOf))
+}
+const emptyRows: readonly never[] = []
 const renewalLeadMilliseconds = 60_000
 const renewalRetryMilliseconds = 5_000
 
-const snapshotFromZeroRows = (
-  viewerId: MemberId,
-  rowsByWorkspace: readonly Partial<ZeroRows>[],
-  drafts: readonly DraftRow[] = [],
-) => {
-  const rowsOf = <Table extends TableName>(table: Table) =>
-    rowsByWorkspace.flatMap((rows) => rows[table] ?? []) as ZeroRows[Table]
-  const workspaces = uniqueBy(rowsOf('workspaces'), (workspace) => workspace.workspaceId)
-  const memberships = rowsOf('memberships')
-  const emailByUserId = new Map(rowsOf('users').map((user) => [user.id, user.email]))
-  const messages = rowsOf('messages')
-  const rolePermissions = rowsOf('workspaceRolePermissions')
-  const runtimeChatIds = new Set(rowsOf('chats').flatMap((chat) => (chat.type === 'runtime' ? [chat.id] : [])))
-  const answeredMessageIds = new Set(messages.map((message) => message.replyToId))
-  const seqByMessageId = new Map(messages.map((message) => [`${message.chatId}/${message.id}`, message.seq]))
-  const threadSeqOf = (message: ZeroRows['messages'][number]) =>
-    seqByMessageId.get(`${message.chatId}/${message.replyToId}`) ?? message.seq
-  const snapshot: Unbranded<Snapshot> = {
-    workspaces: workspaces.map(({ workspaceId, name, localSessions }) => ({
+export const createSnapshotBuilder = (viewerId: MemberId) => {
+  const concatenatedRowsByTable = new Map<TableName, (...rows: readonly (readonly object[])[]) => readonly object[]>()
+  const messageRowByZeroRow = new WeakMap<ZeroRows['messages'][number], Unbranded<MessageRow>>()
+  const messageRowOf = (row: ZeroRows['messages'][number], needsReply: boolean) => {
+    const cached = messageRowByZeroRow.get(row)
+    if (cached?.needsReply === needsReply) return cached
+    const { createdAt, editedAt, deletedAt, ...message } = plainOf(row)
+    const mapped = {
+      ...message,
+      createdAt: isoOf(createdAt),
+      editedAt: isoOrNull(editedAt),
+      deletedAt: isoOrNull(deletedAt),
+      needsReply,
+    }
+    messageRowByZeroRow.set(row, mapped)
+    return mapped
+  }
+  const workspacesOf = memoizedOnSources((workspaces: ZeroRows['workspaces']) =>
+    uniqueBy(workspaces, (workspace) => workspace.workspaceId),
+  )
+  const workspaceRowsOf = memoizedOnSources((workspaces: ZeroRows['workspaces']) =>
+    workspaces.map(({ workspaceId, name, localSessions }) => ({
       id: workspaceId,
       name,
       localSessions: localSessions ?? true,
     })),
-    memberships: uniqueBy(
-      [
-        ...workspaces.map(({ workspaceId }) => ({
-          workspaceId,
-          userId: viewerId,
-          displayName: '',
-          role: 'member',
-          removedAt: null,
-        })),
-        ...memberships,
-      ],
-      (membership) => `${membership.workspaceId}/${membership.userId}`,
-    ).map(({ workspaceId, userId, displayName, role, removedAt }) => ({
-      workspaceId,
-      memberId: userId,
-      displayName,
-      email: emailByUserId.get(userId) ?? '',
-      role,
-      removedAt: isoOrNull(removedAt ?? null),
-    })),
-    workspaceRoles: rowsOf('workspaceRoles').map((role) => ({
-      ...role,
-      permissions: workspacePermissions.filter((permission) =>
-        rolePermissions.some(
-          (granted) =>
-            granted.workspaceId === role.workspaceId && granted.roleId === role.id && granted.permission === permission,
+  )
+  const membershipsOf = memoizedOnSources(
+    (workspaces: ZeroRows['workspaces'], memberships: ZeroRows['memberships'], users: ZeroRows['users']) => {
+      const emailByUserId = new Map(users.map((user) => [user.id, user.email]))
+      return uniqueBy(
+        [
+          ...workspaces.map(({ workspaceId }) => ({
+            workspaceId,
+            userId: viewerId,
+            displayName: '',
+            role: 'member',
+            removedAt: null,
+          })),
+          ...memberships,
+        ],
+        (membership) => `${membership.workspaceId}/${membership.userId}`,
+      ).map(({ workspaceId, userId, displayName, role, removedAt }) => ({
+        workspaceId,
+        memberId: userId,
+        displayName,
+        email: emailByUserId.get(userId) ?? '',
+        role,
+        removedAt: isoOrNull(removedAt ?? null),
+      }))
+    },
+  )
+  const workspaceRolesOf = memoizedOnSources(
+    (roles: ZeroRows['workspaceRoles'], rolePermissions: ZeroRows['workspaceRolePermissions']) =>
+      roles.map((role) => ({
+        ...plainOf(role),
+        permissions: workspacePermissions.filter((permission) =>
+          rolePermissions.some(
+            (granted) =>
+              granted.workspaceId === role.workspaceId &&
+              granted.roleId === role.id &&
+              granted.permission === permission,
+          ),
         ),
-      ),
-    })),
-    invitations: rowsOf('invitations').map(({ workspaceId, id, email, role, expiresAt }) => ({
-      workspaceId,
-      id,
-      email,
-      role,
-      expiresAt,
-    })),
-    projects: rowsOf('projects').map(withoutCreatedAt),
-    chats: rowsOf('chats').map(({ ownerKind, ownerUserId, ownerServiceIdentityId, mode, createdAt, ...chat }) => ({
+      })),
+  )
+  const runtimeChatIdsKeyOf = memoizedOnSources((chats: ZeroRows['chats']) =>
+    chats.flatMap((chat) => (chat.type === 'runtime' ? [chat.id] : [])).join('\n'),
+  )
+  const threadSeqByZeroRow = new WeakMap<ZeroRows['messages'][number], number>()
+  const messagesOf = memoizedOnSources((messages: ZeroRows['messages'], runtimeChatIdsKey: string) => {
+    const runtimeChatIds = new Set(runtimeChatIdsKey.split('\n'))
+    const answeredMessageIds = new Set(messages.map((message) => message.replyToId))
+    const newChatIds = new Set<string>()
+    for (const message of messages) if (!threadSeqByZeroRow.has(message)) newChatIds.add(message.chatId)
+    const seqByMessageKey = new Map<string, number>()
+    for (const message of messages)
+      if (newChatIds.has(message.chatId)) seqByMessageKey.set(`${message.chatId}/${message.id}`, message.seq)
+    const threadSeqs = messages.map((message) => {
+      const cached = threadSeqByZeroRow.get(message)
+      if (cached !== undefined) return cached
+      const parentSeq = seqByMessageKey.get(`${message.chatId}/${message.replyToId}`)
+      if (parentSeq !== undefined || message.replyToId === null)
+        threadSeqByZeroRow.set(message, parentSeq ?? message.seq)
+      return parentSeq ?? message.seq
+    })
+    return messages
+      .map((_, index) => index)
+      .sort((first, second) => {
+        const firstMessage = messages[first] as ZeroRows['messages'][number]
+        const secondMessage = messages[second] as ZeroRows['messages'][number]
+        return (
+          (firstMessage.chatId === secondMessage.chatId
+            ? 0
+            : firstMessage.chatId.localeCompare(secondMessage.chatId)) ||
+          (threadSeqs[first] as number) - (threadSeqs[second] as number) ||
+          firstMessage.seq - secondMessage.seq
+        )
+      })
+      .map((index) => {
+        const message = messages[index] as ZeroRows['messages'][number]
+        return messageRowOf(
+          message,
+          runtimeChatIds.has(message.chatId) &&
+            message.kind === 'member' &&
+            message.replyToId === null &&
+            !answeredMessageIds.has(message.id),
+        )
+      })
+  })
+  const invitationsOf = mappedRows(({ workspaceId, id, email, role, expiresAt }: ZeroRows['invitations'][number]) => ({
+    workspaceId,
+    id,
+    email,
+    role,
+    expiresAt,
+  }))
+  const projectsOf = mappedRows(withoutCreatedAt<ZeroRows['projects'][number]>)
+  const chatsOf = mappedRows(
+    ({ ownerKind, ownerUserId, ownerServiceIdentityId, mode, createdAt, ...chat }: ZeroRows['chats'][number]) => ({
       ...chat,
       subagentPolicy: chat.subagentPolicy ?? 'auto',
       harness: chat.harness ?? null,
       localSession: chat.localSession ?? null,
       isPlanning: chat.isPlanning === true,
       ownerId: ownerUserId ?? '',
-    })),
-    messages: messages
-      .toSorted(
-        (first, second) =>
-          first.chatId.localeCompare(second.chatId) ||
-          threadSeqOf(first) - threadSeqOf(second) ||
-          first.seq - second.seq,
-      )
-      .map(({ createdAt, editedAt, deletedAt, ...message }) => ({
-        ...message,
-        createdAt: isoOf(createdAt),
-        editedAt: isoOrNull(editedAt),
-        deletedAt: isoOrNull(deletedAt),
-        needsReply:
-          runtimeChatIds.has(message.chatId) &&
-          message.kind === 'member' &&
-          message.replyToId === null &&
-          !answeredMessageIds.has(message.id),
-      })),
-    drafts,
-    readMarkers: rowsOf('readMarkers').map(withMemberId),
-    threadReadMarkers: rowsOf('threadReadMarkers').map(withMemberId),
-    runtimeOrigins: rowsOf('runtimeOrigins'),
-    planSteps: rowsOf('planSteps').map(withoutPosition),
-    browserPages: rowsOf('browserPages'),
-    usageEntries: rowsOf('usageEntries').map(withMemberId),
-    budgetAlerts: rowsOf('budgetAlerts').map(({ reachedAt, ...alert }) => alert),
-    sources: rowsOf('sources'),
-    toolConnections: rowsOf('toolConnections').map((connection) => withoutPosition(withMemberId(connection))),
-    chatMembers: rowsOf('chatParticipants').map(withMemberId),
-    chatRoles: rowsOf('chatRoles'),
-    llmCredentials: rowsOf('llmCredentials').map(withMemberId),
-    workspaceConnections: rowsOf('workspaceConnections'),
-    connectionRestrictions: rowsOf('connectionRestrictions').map(withMemberId),
-    runtimeHosts: rowsOf('runtimeHosts').map(({ lastSeenAt, createdBy, createdAt, removedAt, ...host }) => host),
-    runtimes: rowsOf('runtimes').map(({ workspaceId, id, chatId, hostId, state, failure, hostOnline }) => ({
+    }),
+  )
+  const readMarkersOf = mappedRows(withMemberId<ZeroRows['readMarkers'][number]>)
+  const threadReadMarkersOf = mappedRows(withMemberId<ZeroRows['threadReadMarkers'][number]>)
+  const runtimeOriginsOf = mappedRows((origin: ZeroRows['runtimeOrigins'][number]) => origin)
+  const planStepsOf = mappedRows(withoutPosition<ZeroRows['planSteps'][number]>)
+  const browserPagesOf = mappedRows((page: ZeroRows['browserPages'][number]) => page)
+  const usageEntriesOf = mappedRows(withMemberId<ZeroRows['usageEntries'][number]>)
+  const budgetAlertsOf = mappedRows(({ reachedAt, ...alert }: ZeroRows['budgetAlerts'][number]) => alert)
+  const sourcesOf = mappedRows((source: ZeroRows['sources'][number]) => source)
+  const toolConnectionsOf = mappedRows((connection: ZeroRows['toolConnections'][number]) =>
+    withoutPosition(withMemberId(connection)),
+  )
+  const chatMembersOf = mappedRows(withMemberId<ZeroRows['chatParticipants'][number]>)
+  const chatRolesOf = mappedRows((role: ZeroRows['chatRoles'][number]) => role)
+  const llmCredentialsOf = mappedRows(withMemberId<ZeroRows['llmCredentials'][number]>)
+  const workspaceConnectionsOf = mappedRows((connection: ZeroRows['workspaceConnections'][number]) => connection)
+  const connectionRestrictionsOf = mappedRows(withMemberId<ZeroRows['connectionRestrictions'][number]>)
+  const runtimeHostsOf = mappedRows(
+    ({ lastSeenAt, createdBy, createdAt, removedAt, ...host }: ZeroRows['runtimeHosts'][number]) => host,
+  )
+  const runtimesOf = mappedRows(
+    ({ workspaceId, id, chatId, hostId, state, failure, hostOnline }: ZeroRows['runtimes'][number]) => ({
       workspaceId,
       id,
       chatId,
@@ -152,9 +221,48 @@ const snapshotFromZeroRows = (
       state,
       failure,
       hostOnline: hostOnline === true,
-    })),
+    }),
+  )
+  let previous: Snapshot | undefined
+  return (rowsByWorkspace: readonly Partial<ZeroRows>[], drafts: readonly DraftRow[]) => {
+    const rowsOf = <Table extends TableName>(table: Table) => {
+      const concatenatedRows =
+        concatenatedRowsByTable.get(table) ??
+        memoizedOnSources((...rows: readonly (readonly object[])[]) => rows.flat())
+      concatenatedRowsByTable.set(table, concatenatedRows)
+      return concatenatedRows(...rowsByWorkspace.map((rows) => rows[table] ?? emptyRows)) as ZeroRows[Table]
+    }
+    const workspaces = workspacesOf(rowsOf('workspaces'))
+    const snapshot: Unbranded<Snapshot> = {
+      workspaces: workspaceRowsOf(workspaces),
+      memberships: membershipsOf(workspaces, rowsOf('memberships'), rowsOf('users')),
+      workspaceRoles: workspaceRolesOf(rowsOf('workspaceRoles'), rowsOf('workspaceRolePermissions')),
+      invitations: invitationsOf(rowsOf('invitations')),
+      projects: projectsOf(rowsOf('projects')),
+      chats: chatsOf(rowsOf('chats')),
+      messages: messagesOf(rowsOf('messages'), runtimeChatIdsKeyOf(rowsOf('chats'))),
+      drafts,
+      readMarkers: readMarkersOf(rowsOf('readMarkers')),
+      threadReadMarkers: threadReadMarkersOf(rowsOf('threadReadMarkers')),
+      runtimeOrigins: runtimeOriginsOf(rowsOf('runtimeOrigins')),
+      planSteps: planStepsOf(rowsOf('planSteps')),
+      browserPages: browserPagesOf(rowsOf('browserPages')),
+      usageEntries: usageEntriesOf(rowsOf('usageEntries')),
+      budgetAlerts: budgetAlertsOf(rowsOf('budgetAlerts')),
+      sources: sourcesOf(rowsOf('sources')),
+      toolConnections: toolConnectionsOf(rowsOf('toolConnections')),
+      chatMembers: chatMembersOf(rowsOf('chatParticipants')),
+      chatRoles: chatRolesOf(rowsOf('chatRoles')),
+      llmCredentials: llmCredentialsOf(rowsOf('llmCredentials')),
+      workspaceConnections: workspaceConnectionsOf(rowsOf('workspaceConnections')),
+      connectionRestrictions: connectionRestrictionsOf(rowsOf('connectionRestrictions')),
+      runtimeHosts: runtimeHostsOf(rowsOf('runtimeHosts')),
+      runtimes: runtimesOf(rowsOf('runtimes')),
+    }
+    if (previous && isSameSources(Object.values(previous), Object.values(snapshot))) return previous
+    previous = snapshot as Snapshot
+    return previous
   }
-  return snapshot as Snapshot
 }
 
 export type Store = ReturnType<typeof createZeroStore>
@@ -183,7 +291,8 @@ export const createZeroStore = ({
   let drafts: readonly DraftRow[] = Array.from({ length: draftStorage?.length ?? 0 }, (_, index) =>
     draftStorage?.key(index),
   ).flatMap((key) => (key?.startsWith(draftKeyPrefix) ? [JSON.parse(draftStorage?.getItem(key) ?? '{}')] : []))
-  let snapshot = snapshotFromZeroRows(memberId, [], drafts)
+  const snapshotOf = createSnapshotBuilder(memberId)
+  let snapshot = snapshotOf([], drafts)
   const listeners = new Set<() => void>()
   const rowsByWorkspace = new Map<WorkspaceId, Partial<ZeroRows>>()
   const zeroByWorkspace = new Map<WorkspaceId, Zero>()
@@ -197,7 +306,7 @@ export const createZeroStore = ({
     isPublishScheduled = true
     queueMicrotask(() => {
       isPublishScheduled = false
-      snapshot = snapshotFromZeroRows(memberId, [...rowsByWorkspace.values()], drafts)
+      snapshot = snapshotOf([...rowsByWorkspace.values()], drafts)
       for (const listener of listeners) listener()
     })
   }
@@ -246,7 +355,7 @@ export const createZeroStore = ({
         .materialize((queries[table] as () => Parameters<typeof zero.materialize>[0])())
         .addListener((data, result) => {
           if (rowsByWorkspace.get(workspaceId) !== rows) return
-          rows[table] = (data as readonly object[]).map((row) => Object.fromEntries(Object.entries(row))) as never
+          rows[table] = data as never
           publish()
           if (result === 'complete') completeTables.add(table)
           if (completeTables.size === materializedTables.length) loadedOf(workspaceId).resolve()

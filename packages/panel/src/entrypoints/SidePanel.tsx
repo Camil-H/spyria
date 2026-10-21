@@ -96,7 +96,7 @@ const TabPanel = ({ tabId, usageTab, ...panelProps }: PanelProps & { tabId: Pane
 
 export const SidePanel = ({ usageTab, ...panelProps }: PanelProps & { usageTab: ReactNode }) => {
   const { workspaceId, chatId } = panelProps
-  const tabIds = useQuery(getPanelTabs(workspaceId, chatId))
+  const tabIds = useQuery(getPanelTabs, workspaceId, chatId)
   const { isOpen, width } = usePanel()
   if (!tabIds) return null
   return (

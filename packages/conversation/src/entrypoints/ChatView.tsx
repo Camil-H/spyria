@@ -40,12 +40,11 @@ export const ChatView = ({
   const chatId = toChatId(useParams().chatId ?? '')
   const [spyriaRuntime, setSpyriaRuntime] = useState<{ chatId: ChatId; isAvailable: boolean }>()
   const conversation = useQuery(
-    getConversation(
-      workspaceId,
-      chatId,
-      memberId,
-      spyriaRuntime?.chatId === chatId ? spyriaRuntime.isAvailable : undefined,
-    ),
+    getConversation,
+    workspaceId,
+    chatId,
+    memberId,
+    spyriaRuntime?.chatId === chatId ? spyriaRuntime.isAvailable : undefined,
   )
   const commands = useConversationCommands()
   const navigate = useNavigate()
@@ -59,10 +58,10 @@ export const ChatView = ({
       )
   }, [commands, workspaceId, chatId, isChoosingRunsOn])
   const live = useLiveMessages(workspaceId, chatId, conversation?.messages ?? [])
-  const newestMessageId = conversation?.messages.at(-1)?.id
+  const isReadMarkerBehind = conversation?.isReadMarkerBehind === true
   useEffect(() => {
-    if (newestMessageId) commands.markChatRead({ workspaceId, chatId })
-  }, [commands, workspaceId, chatId, newestMessageId])
+    if (isReadMarkerBehind) commands.markChatRead({ workspaceId, chatId })
+  }, [commands, workspaceId, chatId, isReadMarkerBehind])
   const soleChoice =
     conversation?.isOwner && conversation.runsOn === null && conversation.runsOnChoices?.length === 1
       ? conversation.runsOnChoices[0]

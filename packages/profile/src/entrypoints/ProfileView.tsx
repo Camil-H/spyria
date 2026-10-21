@@ -11,7 +11,7 @@ import { LlmAccessSection } from './LlmAccessSection.tsx'
 export const ProfileView = ({ children }: { children?: ReactNode }) => {
   const workspaceId = useOutletContext<WorkspaceId>()
   const { memberId } = useSession()
-  const displayName = useQuery(getProfile(workspaceId, memberId))
+  const displayName = useQuery(getProfile, workspaceId, memberId)
   if (!displayName) return null
   return (
     <div className="flex max-w-3xl flex-col gap-8">

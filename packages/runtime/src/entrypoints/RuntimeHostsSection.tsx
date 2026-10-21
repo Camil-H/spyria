@@ -60,8 +60,8 @@ const AddHostDialog = ({ add, onClose }: { add: (name: string) => Promise<void>;
 
 export const RuntimeHostsSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
   const commands = useRuntimeCommands()
-  const hosts = useQuery(listRuntimeHosts(workspaceId))
-  const localSessions = useQuery(localSessionsOf(workspaceId))
+  const hosts = useQuery(listRuntimeHosts, workspaceId)
+  const localSessions = useQuery(localSessionsOf, workspaceId)
   const [openDialog, setOpenDialog] = useState<OpenDialog>(null)
   const [machineCount, setMachineCount] = useState(0)
   useEffect(() => {

@@ -6,7 +6,7 @@ import { getDevWorkspace } from '../queries/get-dev-workspace.ts'
 import { usePanelCommands } from './providers.tsx'
 
 export const useWorkspaceReading = (workspaceId: WorkspaceId, chatId: ChatId, read: WorkspaceRead, path = '') => {
-  const { refreshKey } = useQuery(getDevWorkspace(workspaceId, chatId))
+  const { refreshKey } = useQuery(getDevWorkspace, workspaceId, chatId)
   const { readWorkspace } = usePanelCommands()
   const [refreshCount, setRefreshCount] = useState(0)
   const [reading, setReading] = useState<{ version: string; value: WorkspaceReading }>()

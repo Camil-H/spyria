@@ -1,4 +1,4 @@
-import { createContext, type ReactNode, use, useRef, useSyncExternalStore } from 'react'
+import { createContext, type ReactNode, use, useState, useSyncExternalStore } from 'react'
 import type { Snapshot } from './schema.ts'
 import type { Store } from './zero-store.ts'
 
@@ -15,6 +15,23 @@ const replaceEqualDeep = <Value,>(previous: unknown, next: Value): Value => {
   return (isUnchanged ? previous : merged) as Value
 }
 
+type Query<Args extends readonly unknown[], Result> = (...args: Args) => (snapshot: Snapshot) => Result
+
+const isSameArgs = (previous: readonly unknown[], next: readonly unknown[]) =>
+  previous.length === next.length && previous.every((arg, index) => Object.is(arg, next[index]))
+
+export const createQueryCache = () => {
+  let previous: { snapshot: Snapshot; query: unknown; args: readonly unknown[]; value: unknown } | undefined
+  return <Args extends readonly unknown[], Result>(snapshot: Snapshot, query: Query<Args, Result>, args: Args) => {
+    if (previous?.snapshot === snapshot && previous.query === query && isSameArgs(previous.args, args))
+      return previous.value as Result
+    const next = query(...args)(snapshot)
+    const value = previous ? replaceEqualDeep(previous.value, next) : next
+    previous = { snapshot, query, args, value }
+    return value
+  }
+}
+
 const StoreContext = createContext<Store | null>(null)
 
 export const StoreProvider = ({ store, children }: { store: Store; children: ReactNode }) => (
@@ -27,15 +44,11 @@ export const useStore = () => {
   return store
 }
 
-export const useQuery = <Result,>(query: (snapshot: Snapshot) => Result): Result => {
+export const useQuery = <Args extends readonly unknown[], Result>(
+  query: Query<Args, Result>,
+  ...args: Args
+): Result => {
   const store = useStore()
-  const memo = useRef<{ snapshot: Snapshot; query: typeof query; value: Result } | null>(null)
-  return useSyncExternalStore(store.subscribe, () => {
-    const snapshot = store.read()
-    const previous = memo.current
-    if (previous?.snapshot === snapshot && previous.query === query) return previous.value
-    const value = previous ? replaceEqualDeep(previous.value, query(snapshot)) : query(snapshot)
-    memo.current = { snapshot, query, value }
-    return value
-  })
+  const [readQuery] = useState(createQueryCache)
+  return useSyncExternalStore(store.subscribe, () => readQuery(store.read(), query, args))
 }

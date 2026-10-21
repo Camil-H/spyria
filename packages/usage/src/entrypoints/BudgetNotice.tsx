@@ -5,7 +5,7 @@ import { type BudgetProgress, monthOf } from '../domain/budgets.ts'
 import { getOwnBudgetAlert } from '../queries/budget-alerts.ts'
 
 export const useOwnBudgetAlert = (workspaceId: WorkspaceId, memberId: MemberId) =>
-  useQuery(getOwnBudgetAlert(workspaceId, memberId, monthOf(new Date())))
+  useQuery(getOwnBudgetAlert, workspaceId, memberId, monthOf(new Date()))
 
 export const BudgetNotice = ({ workspaceId, memberId }: { workspaceId: WorkspaceId; memberId: MemberId }) => {
   const threshold = useOwnBudgetAlert(workspaceId, memberId)

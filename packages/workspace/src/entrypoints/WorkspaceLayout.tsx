@@ -10,7 +10,7 @@ import { SignedOutScreen } from './SignedOutScreen.tsx'
 export const WorkspaceLayout = ({ chatAdornment }: { chatAdornment?: ChatAdornment }) => {
   const { memberId, signedInWorkspaceIds } = useSession()
   const routeWorkspaceId = useParams().workspaceId
-  const workspaces = useQuery(listWorkspaces(memberId))
+  const workspaces = useQuery(listWorkspaces, memberId)
   const workspaceId = workspaces.find((workspace) => workspace.id === routeWorkspaceId)?.id
   if (!workspaceId) return <NoAccessScreen />
   if (!signedInWorkspaceIds.has(workspaceId))

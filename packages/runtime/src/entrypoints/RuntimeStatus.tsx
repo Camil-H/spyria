@@ -23,8 +23,8 @@ export const RuntimeStatus = ({
   chatId: ChatId
   onRetry: (() => Promise<unknown>) | undefined
 }) => {
-  const status = useQuery(getRuntimeStatus(workspaceId, chatId))
-  const failureReason = useQuery(getRuntimeFailureReason(workspaceId, chatId))
+  const status = useQuery(getRuntimeStatus, workspaceId, chatId)
+  const failureReason = useQuery(getRuntimeFailureReason, workspaceId, chatId)
   const [retriedStatus, setRetriedStatus] = useState<Status | null>(null)
   const [retryError, setRetryError] = useState<string | null>(null)
   if (retriedStatus !== null && retriedStatus !== status) setRetriedStatus(null)

@@ -6,7 +6,7 @@ import { usePanelCommands } from './providers.tsx'
 import type { TabProps } from './TabProps.ts'
 
 export const WorkspaceStatus = ({ workspaceId, chatId }: Pick<TabProps, 'workspaceId' | 'chatId'>) => {
-  const { isAsleep } = useQuery(getDevWorkspace(workspaceId, chatId))
+  const { isAsleep } = useQuery(getDevWorkspace, workspaceId, chatId)
   const { wakeWorkspace } = usePanelCommands()
   const [wakeState, setWakeState] = useState<'idle' | 'waking' | 'failed'>('idle')
   if (!isAsleep) return null

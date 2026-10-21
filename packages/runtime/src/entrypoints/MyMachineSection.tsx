@@ -14,8 +14,8 @@ const myMachineAnchor = 'my-machine'
 export const MyMachineSection = ({ workspaceId, memberId }: { workspaceId: WorkspaceId; memberId: MemberId }) => {
   const commands = useRuntimeCommands()
   const { deployment } = useSession()
-  const machine = useQuery(getMachine(workspaceId, memberId))
-  const localSessions = useQuery(localSessionsOf(workspaceId))
+  const machine = useQuery(getMachine, workspaceId, memberId)
+  const localSessions = useQuery(localSessionsOf, workspaceId)
   const [code, setCode] = useState<string | null>(null)
   const [openDialog, setOpenDialog] = useState<'add' | 'remove' | HarnessId | null>(null)
   useEffect(() => {

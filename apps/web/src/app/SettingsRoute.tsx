@@ -138,8 +138,8 @@ const SettingsRoute = () => {
   const workspaceId = useOutletContext<WorkspaceId>()
   const permissions = useWorkspacePermissions(workspaceId)
   const isDexSignIn = use(authModeLoading).authMode === 'dex'
-  const statuses = useQuery(cardStatusesOf(workspaceId, isDexSignIn))
-  const budgetAlertCount = useQuery(countBudgetAlerts(workspaceId, new Date().toISOString().slice(0, 7)))
+  const statuses = useQuery(cardStatusesOf, workspaceId, isDexSignIn)
+  const budgetAlertCount = useQuery(countBudgetAlerts, workspaceId, new Date().toISOString().slice(0, 7))
   const { card } = useParams()
   const isAllowed = (settingsCard: SettingsCard) =>
     settingsCard.permissions.some((permission) => permissions.includes(permission))

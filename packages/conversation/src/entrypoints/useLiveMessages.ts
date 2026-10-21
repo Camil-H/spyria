@@ -1,9 +1,9 @@
-import { useStore } from '@spyria/db/react'
 import { type ChatId, messageId, type WorkspaceId } from '@spyria/kernel'
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   type AgentWorkspace,
   type QuestionFrame,
+  replyCountIn,
   type StreamedReply,
   storedStreamedReply,
   streamedReplyAfter,
@@ -12,9 +12,6 @@ import {
 import { type ConversationItem, type ConversationMessage, isPlanSwitchIn } from '../queries/get-conversation.ts'
 import type { AgentStream } from './commands.ts'
 import { useAgentStream } from './providers.tsx'
-
-const replyCountIn = (messages: readonly { replyToId: string | null }[]) => (promptId: string) =>
-  messages.filter((message) => message.replyToId === promptId).length
 
 const withLiveMessage = (items: readonly ConversationItem[], live: ConversationMessage) => {
   const threadEnd = items.findLastIndex(
@@ -76,6 +73,7 @@ const liveMessageOf = (
   isDeleted: false,
   isEdited: false,
   isRunning: true,
+  isStreamed: true,
   canReply: false,
   runtimes: [],
   thread: null,
@@ -173,16 +171,19 @@ export const useLiveMessages = (
   workspace?: AgentWorkspace
 } => {
   const agentStream = useAgentStream()
-  const store = useStore()
   const chatKey = `${workspaceId}/${chatId}`
   const [live, setLive] = useState<LiveState>(emptyLiveOf(chatKey))
+  const messagesRef = useRef(messages)
+  useLayoutEffect(() => {
+    messagesRef.current = messages
+  })
   useEffect(
     () =>
       agentStream.subscribe(workspaceId, chatId, (frame) => {
-        const replyCountOf = replyCountIn(store.read().messages)
+        const replyCountOf = replyCountIn(messagesRef.current)
         setLive((current) => liveAfter(current, chatKey, frame, replyCountOf))
       }),
-    [agentStream, store, workspaceId, chatId, chatKey],
+    [agentStream, workspaceId, chatId, chatKey],
   )
   const current = live.chatKey === chatKey ? live : emptyLiveOf(chatKey)
   return {

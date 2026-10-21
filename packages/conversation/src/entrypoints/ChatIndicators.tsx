@@ -11,8 +11,8 @@ import { hasUnread } from '../queries/has-unread.ts'
 export const ChatIndicators = ({ chatId }: { chatId: ChatId }) => {
   const { memberId } = useSession()
   const chatWorkspaceId = workspaceId(useParams().workspaceId ?? '')
-  const isUnread = useQuery(hasUnread(chatWorkspaceId, chatId, memberId))
-  const isDraftPresent = useQuery(getDraft(chatWorkspaceId, chatId, memberId)) !== ''
+  const isUnread = useQuery(hasUnread, chatWorkspaceId, chatId, memberId)
+  const isDraftPresent = useQuery(getDraft, chatWorkspaceId, chatId, memberId) !== ''
   return (
     <>
       {isUnread && (

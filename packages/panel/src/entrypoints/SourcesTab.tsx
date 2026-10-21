@@ -6,7 +6,7 @@ import { LabelList } from './LabelList.tsx'
 import type { TabProps } from './TabProps.ts'
 
 const SourcesTab = ({ workspaceId, chatId }: TabProps) => {
-  const sources = useQuery(getSources(workspaceId, chatId))
+  const sources = useQuery(getSources, workspaceId, chatId)
   return (
     <LabelList
       empty={<EmptyState Icon={BookOpen} title="No sources" hint="Documents the agent cites show here." />}

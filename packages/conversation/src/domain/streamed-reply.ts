@@ -28,6 +28,9 @@ export type StreamedReply = Readonly<{
   storedId?: string
 }> | null
 
+export const replyCountIn = (messages: readonly { replyToId: string | null }[]) => (promptId: string) =>
+  messages.filter((message) => message.replyToId === promptId).length
+
 export const storedStreamedReply = (current: StreamedReply, { promptId, storedId }: StoredFrame): StreamedReply =>
   current?.promptId === promptId ? { ...current, storedId } : current
 

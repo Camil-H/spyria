@@ -37,6 +37,7 @@ export type ConversationMessage = Readonly<{
   isDeleted: boolean
   isEdited: boolean
   isRunning: boolean
+  isStreamed?: true
   canReply: boolean
   thread: Readonly<{ replies: readonly ConversationMessage[]; newCount: number }> | null
   runtimes: readonly RuntimeLink[]
@@ -82,6 +83,7 @@ export type Conversation = Readonly<{
   origin: Readonly<{ chatId: ChatId; name: string; type: 'channel' | 'runtime' }> | null
   isAgentWorking: boolean
   hasActiveTurn: boolean
+  isReadMarkerBehind: boolean
   messages: readonly ConversationMessage[]
   items: readonly ConversationItem[]
 }>
@@ -318,7 +320,12 @@ export const getConversation =
           step.answeredBy && { answeredByName: memberName(step.answeredBy as MemberId) }),
       }
     }
-    const messages = chatMessages.filter((message) => message.threadRootId === null).map(conversationMessageOf)
+    const flowMessages = chatMessages.filter((message) => message.threadRootId === null)
+    const lastReadSeq =
+      snapshot.readMarkers.find(
+        (marker) => marker.workspaceId === workspaceId && marker.chatId === chatId && marker.memberId === viewerId,
+      )?.lastReadSeq ?? 0
+    const messages = flowMessages.map(conversationMessageOf)
     const pullRequest = messages.findLast((message) => message.step?.type === 'pull_request')?.step as
       | PullRequestStep
       | undefined
@@ -351,6 +358,7 @@ export const getConversation =
       origin: origin ? { chatId: origin.id, name: origin.name, type: origin.type } : null,
       isAgentWorking: hasActiveTurn || chatMessages.some((message) => message.needsReply),
       hasActiveTurn,
+      isReadMarkerBehind: flowMessages.some((message) => message.seq > lastReadSeq),
       messages,
       items: turnItemsOf(messages.flatMap(withThoughtsApart)),
     }

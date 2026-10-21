@@ -28,8 +28,8 @@ export const Sidebar = ({
   chatAdornment?: ChatAdornment
 }) => {
   const { memberId } = useSession()
-  const sidebar = useQuery(getSidebar(workspaceId, memberId))
-  const joinableChannels = useQuery(listJoinableChannels(workspaceId, memberId))
+  const sidebar = useQuery(getSidebar, workspaceId, memberId)
+  const joinableChannels = useQuery(listJoinableChannels, workspaceId, memberId)
   const commands = useWorkspaceCommands()
   const hasWorkspaceSettings = useWorkspacePermissions(workspaceId).length > 0
   const chatAction = useGuardedAction()

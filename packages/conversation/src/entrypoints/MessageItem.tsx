@@ -121,7 +121,7 @@ export const MessageItem = ({
               <EditMessageForm messageId={message.id} initialText={message.body} onClose={close} />
             ) : message.isDeleted ? (
               <p className="text-sm text-muted italic">This message was deleted</p>
-            ) : message.kind === 'agent' ? (
+            ) : message.kind === 'agent' && !message.isStreamed ? (
               <Suspense fallback={<p className={plainTextClassName}>{message.body}</p>}>
                 <LazyMarkdown text={message.body} />
               </Suspense>

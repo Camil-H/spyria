@@ -16,7 +16,7 @@ export const WorkspaceSwitcher = ({ workspaceId }: { workspaceId: WorkspaceId })
   const navigate = useNavigate()
   const commands = useWorkspaceCommands()
   const { memberId, signedInWorkspaceIds, signOut } = useSession()
-  const workspaces = useQuery(listWorkspaces(memberId))
+  const workspaces = useQuery(listWorkspaces, memberId)
   const [openDialog, setOpenDialog] = useState<OpenDialog>(null)
   const closeDialog = () => setOpenDialog(null)
   return (

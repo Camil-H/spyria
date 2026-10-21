@@ -9,7 +9,7 @@ import type { TabProps } from './TabProps.ts'
 const statusLabels: Record<string, string> = { done: 'Done', 'in-progress': 'In progress', todo: 'To do' }
 
 const PlanTab = ({ workspaceId, chatId, Markdown }: TabProps) => {
-  const { steps, approvedPlan } = useQuery(getPlan(workspaceId, chatId))
+  const { steps, approvedPlan } = useQuery(getPlan, workspaceId, chatId)
   return approvedPlan !== null ? (
     <section aria-label="Approved plan">
       <Suspense fallback={<p className="text-sm whitespace-pre-wrap">{approvedPlan}</p>}>

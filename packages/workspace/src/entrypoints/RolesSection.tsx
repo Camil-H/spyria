@@ -220,7 +220,7 @@ const RoleList = <Permission extends string>({
   workspaceId: WorkspaceId
 }) => {
   const commands = kind.commandsOf(useWorkspaceCommands())
-  const roles = useQuery(kind.listRoles(workspaceId))
+  const roles = useQuery(kind.listRoles, workspaceId)
   const [isCreating, setIsCreating] = useState(false)
   return (
     <LabelledSection title={kind.title}>

@@ -39,11 +39,17 @@ const RemoteImage = ({ src, alt }: { src?: string; alt?: string }) => {
   )
 }
 
+let highlightModule: Promise<typeof import('./highlight.tsx')> | undefined
+const loadHighlight = () => {
+  highlightModule ??= import('./highlight.tsx')
+  return highlightModule
+}
+
 const CodeBlock = ({ code, language }: { code: string; language: string | undefined }) => {
   const [highlighted, setHighlighted] = useState<ReactNode>()
   useEffect(() => {
     let isCurrent = true
-    void import('./highlight.tsx').then(({ highlightedCode }) => {
+    void loadHighlight().then(({ highlightedCode }) => {
       if (isCurrent) setHighlighted(highlightedCode(code, language))
     })
     return () => {

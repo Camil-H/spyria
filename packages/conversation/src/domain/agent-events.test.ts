@@ -17,7 +17,13 @@ import {
 } from './agent-events.ts'
 import claudeCodeToolCalls from './claude-code-tool-calls.fixture.json'
 import { messagesFromEvents } from './message-events.ts'
-import { type StreamedReply, storedStreamedReply, streamedReplyAfter, visibleStreamedReply } from './streamed-reply.ts'
+import {
+  replyCountIn,
+  type StreamedReply,
+  storedStreamedReply,
+  streamedReplyAfter,
+  visibleStreamedReply,
+} from './streamed-reply.ts'
 import { acpUpdate } from './testing.ts'
 
 test('a turn ends with a notice on error, or when it finished without any reply', () => {
@@ -49,6 +55,17 @@ const repliesOf =
   (counts: Record<string, number>) =>
   (promptId: string): number =>
     counts[promptId] ?? 0
+
+test('replies are counted per prompt from the chat’s own messages', () => {
+  const chatMessages = [
+    { replyToId: null },
+    { replyToId: 'first' },
+    { replyToId: 'first' },
+    { replyToId: null },
+    { replyToId: 'second' },
+  ]
+  expect(['first', 'second', 'third'].map(replyCountIn(chatMessages))).toEqual([2, 1, 0])
+})
 
 test('deltas of one prompt append to the streamed reply until a stored reply of that prompt arrives', () => {
   let streamed: StreamedReply = null

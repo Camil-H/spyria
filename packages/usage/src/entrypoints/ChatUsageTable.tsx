@@ -8,8 +8,8 @@ import { UsageTable } from './UsageTable.tsx'
 
 export const ChatUsageTable = ({ workspaceId, chatId }: { workspaceId: WorkspaceId; chatId: ChatId }) => {
   const [month, setMonth] = useState(currentMonth)
-  const usage = useQuery(getChatUsage(workspaceId, chatId, month))
-  if (useQuery(isLocalSession(workspaceId, chatId)))
+  const usage = useQuery(getChatUsage, workspaceId, chatId, month)
+  if (useQuery(isLocalSession, workspaceId, chatId))
     return <p className="text-sm text-muted">Subscription session on your machine, not metered by Spyria</p>
   return (
     <div className="flex flex-col gap-3">

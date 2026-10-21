@@ -128,7 +128,7 @@ const AuditEntryItem = ({ entry }: { entry: AuditEntry }) => {
 
 export const AuditLogSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
   const commands = useUsageCommands()
-  const people = useQuery(listAuditPeople(workspaceId))
+  const people = useQuery(listAuditPeople, workspaceId)
   const [filters, setFilters] = useState(noFilters)
   const [entries, setEntries] = useState<readonly AuditEntry[] | null>(null)
   const [nextCursor, setNextCursor] = useState<string | null>(null)

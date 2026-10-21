@@ -14,8 +14,8 @@ const tabClass = `${tabTriggerClass} px-3 text-sm`
 export const ConnectionsSection = ({ workspaceId, memberId }: { workspaceId: WorkspaceId; memberId: MemberId }) => {
   const commands = useProfileCommands()
   const { errorMessage, run } = useGuardedAction()
-  const shared = useQuery(getSharedConnections(workspaceId, memberId))
-  const connected = useQuery(getPersonalConnections(workspaceId, memberId))
+  const shared = useQuery(getSharedConnections, workspaceId, memberId)
+  const connected = useQuery(getPersonalConnections, workspaceId, memberId)
   const [servers, setServers] = useState<string[]>([])
   useEffect(() => {
     commands.availableTools({ workspaceId }).then(setServers, () => setServers([]))

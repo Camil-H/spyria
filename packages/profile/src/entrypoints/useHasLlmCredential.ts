@@ -4,4 +4,4 @@ import { useSession } from '@spyria/session'
 import { hasLlmCredential } from '../queries/has-llm-credential.ts'
 
 export const useHasLlmCredential = (workspaceId: WorkspaceId) =>
-  useQuery(hasLlmCredential(workspaceId, useSession().memberId))
+  useQuery(hasLlmCredential, workspaceId, useSession().memberId)

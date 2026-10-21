@@ -214,7 +214,7 @@ const ConnectionCard = ({
 
 export const WorkspaceConnectionsSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
   const commands = useProfileCommands()
-  const connections = useQuery(listWorkspaceConnections(workspaceId))
+  const connections = useQuery(listWorkspaceConnections, workspaceId)
   const { errorMessage, isPending, run } = useGuardedAction()
   return (
     <LabelledSection title="Connections">

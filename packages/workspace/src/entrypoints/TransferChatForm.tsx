@@ -11,7 +11,7 @@ export const TransferChatForm = ({ workspaceId, chatId }: { workspaceId: Workspa
   const commands = useWorkspaceCommands()
   const { memberId } = useSession()
   const canTransfer = useWorkspacePermissions(workspaceId).includes('members.manage')
-  const members = useQuery(listMembers(workspaceId))
+  const members = useQuery(listMembers, workspaceId)
   const [ownerId, setOwnerId] = useState<string>(memberId)
   const { errorMessage, isPending, run } = useGuardedAction()
   if (!canTransfer) return null
