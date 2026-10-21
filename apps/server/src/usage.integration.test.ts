@@ -1,6 +1,7 @@
 import { expect, setDefaultTimeout, test } from 'bun:test'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
-import { testGatewayAdmin } from '@spyria/db/testing'
+import { createDatabase } from '@spyria/db/postgres'
+import { databaseUrlOf, testGatewayAdmin } from '@spyria/db/testing'
 import { schema } from '@spyria/db/zero'
 import { type WorkspaceId, workspaceId } from '@spyria/kernel'
 import { createBifrostUsageLogs, createUsageJobs, syncUsageNow } from '@spyria/usage/server'
@@ -140,6 +141,14 @@ test('the sync pages through the gateway logs by time and records every call onc
   for (const turn of ['turn-paged-1', 'turn-paged-2', 'turn-paged-3'])
     await modelCall({ ...research, prompter: alice, turn })
   await landed()
+  const gatewayLogs = createDatabase(databaseUrlOf('spyria_test_gateway_integration'))
+  const pagedLogIds = gatewayLogs.$client`
+    select id from logs where metadata::jsonb ->> 'run' = ${run} and metadata::jsonb ->> 'turn' like 'turn-paged-%'`
+  const sameMillisecond = await gatewayLogs.$client`
+    update logs set timestamp = (select min(timestamp) from logs where id in (${pagedLogIds}))
+    where id in (${pagedLogIds})`
+  await gatewayLogs.$client.end()
+  expect(sameMillisecond.count).toBe(3)
   await syncUsageNow(countedLogs, { workspaceId: acme, transact })
   expect(pagesFrom.length).toBeGreaterThan(1)
   expect([

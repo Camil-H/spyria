@@ -1,6 +1,8 @@
 import { chatId, memberId, type WorkspaceId, withRetries } from '@spyria/kernel'
 import type { GatewayUsageLogs } from '../contracts/usage-sync.ts'
-import type { ModelCall } from '../domain/usage.ts'
+import { logsPageCursor, type ModelCall } from '../domain/usage.ts'
+
+const largestGatewayPage = 1000
 
 type LogRow = {
   id: string
@@ -29,12 +31,17 @@ export const createBifrostUsageLogs = ({
   pageSize?: number
 }): GatewayUsageLogs => {
   const authorization = `Basic ${btoa(`${adminUser}:${adminPassword}`)}`
-  const page = async (workspaceId: WorkspaceId, since: Date) => {
+  const page = async (
+    workspaceId: WorkspaceId,
+    { from, until, limit, offset = 0 }: { from: Date; until?: string; limit: number; offset?: number },
+  ) => {
     const query = new URLSearchParams({
-      start_time: since.toISOString(),
+      start_time: from.toISOString(),
+      ...(until && { end_time: until }),
       sort_by: 'timestamp',
       order: 'asc',
-      limit: String(pageSize),
+      limit: String(limit),
+      offset: String(offset),
       ...Object.fromEntries(
         Object.entries({ ...labels, workspace: workspaceId }).map(([name, value]) => [`metadata_${name}`, value]),
       ),
@@ -48,10 +55,21 @@ export const createBifrostUsageLogs = ({
     if (!response.ok) throw new Error(`The gateway answered GET /api/logs with ${response.status}`)
     return ((await response.json()) as { logs: LogRow[] | null }).logs ?? []
   }
+  const wholeMillisecond = async (workspaceId: WorkspaceId, millisecond: Date) => {
+    const until = `${millisecond.toISOString().slice(0, -1)}999Z`
+    const rows: LogRow[] = []
+    for (let offset = 0; ; offset += largestGatewayPage) {
+      const rowsAtOffset = await page(workspaceId, { from: millisecond, until, limit: largestGatewayPage, offset })
+      rows.push(...rowsAtOffset)
+      if (rowsAtOffset.length < largestGatewayPage) return rows
+    }
+  }
   return {
     since: async (workspaceId, since) => {
-      const rows = await page(workspaceId, since)
-      const lastRow = rows.length === pageSize ? rows.at(-1) : undefined
+      const firstPage = await page(workspaceId, { from: since, limit: pageSize })
+      const lastRow = firstPage.length === pageSize ? firstPage.at(-1) : undefined
+      const cursor = logsPageCursor(since, lastRow && new Date(lastRow.timestamp))
+      const rows = cursor.readWholeMillisecond ? await wholeMillisecond(workspaceId, since) : firstPage
       const pending = rows.filter((row) => row.status !== 'success' && row.status !== 'error')
       return {
         calls: rows.flatMap(({ id, timestamp, provider, model, status, cost, token_usage, metadata }): ModelCall[] =>
@@ -80,7 +98,7 @@ export const createBifrostUsageLogs = ({
             : [],
         ),
         oldestPendingAt: pending[0] && new Date(pending[0].timestamp),
-        nextPageFrom: lastRow && new Date(new Date(lastRow.timestamp).getTime() - 1),
+        nextPageFrom: cursor.nextPageFrom,
       }
     },
   }

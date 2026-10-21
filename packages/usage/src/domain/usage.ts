@@ -48,6 +48,13 @@ export const sumUsage = (rows: readonly UsageTotals[]): UsageTotals =>
 export const monthsNewestFirst = (rows: readonly { month: UsageMonth }[]) =>
   [...new Set(rows.map((row) => row.month))].sort().reverse()
 
+export const logsPageCursor = (pageFrom: Date, lastOfFullPage: Date | undefined) =>
+  !lastOfFullPage
+    ? {}
+    : lastOfFullPage > pageFrom
+      ? { nextPageFrom: lastOfFullPage }
+      : { nextPageFrom: new Date(pageFrom.getTime() + 1), readWholeMillisecond: true }
+
 export const nextLogsSince = (
   logsSince: Date,
   { syncedAt, oldestPendingAt, nextPageFrom }: { syncedAt: Date; oldestPendingAt?: Date; nextPageFrom?: Date },

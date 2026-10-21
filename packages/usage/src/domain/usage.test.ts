@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { monthsNewestFirst, nextLogsSince, usageSync } from './usage.ts'
+import { logsPageCursor, monthsNewestFirst, nextLogsSince, usageSync } from './usage.ts'
 
 const at = (iso: string) => new Date(iso)
 const { overlapMilliseconds, pendingHoldMilliseconds } = usageSync
@@ -23,6 +23,18 @@ test('a pending call holds the window for at most the hold, and a full page move
   expect(
     nextLogsSince(at('2026-09-06T12:00:00Z'), { ...longPending, nextPageFrom: at('2026-09-07T00:00:00Z') }),
   ).toEqual(at('2026-09-07T00:00:00Z'))
+})
+
+test('a full page moves the page cursor to the millisecond of its last log, or past a millisecond it never leaves', () => {
+  const pageFrom = at('2026-10-06T12:00:00.000Z')
+  expect(logsPageCursor(pageFrom, undefined)).toEqual({})
+  expect(logsPageCursor(pageFrom, at('2026-10-06T12:00:00.250Z'))).toEqual({
+    nextPageFrom: at('2026-10-06T12:00:00.250Z'),
+  })
+  expect(logsPageCursor(pageFrom, at('2026-10-06T12:00:00.000Z'))).toEqual({
+    nextPageFrom: at('2026-10-06T12:00:00.001Z'),
+    readWholeMillisecond: true,
+  })
 })
 
 test('months are listed once, newest first', () => {
