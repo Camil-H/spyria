@@ -12,11 +12,19 @@ export const fakeGitHubName = 'Alice Martin'
 export const fakeGitHubAppSlug = 'spyria-test'
 const installationId = 77
 const accessLifetimeSeconds = 8 * 60 * 60
+const grantedAppPermissions: Permissions = {
+  contents: 'write',
+  pull_requests: 'write',
+  checks: 'read',
+  metadata: 'read',
+}
+const levels: Record<string, number> = { read: 1, write: 2 }
 
 type Repository = { fullName: string; branches: string[]; files: Record<string, string> }
 type AppManifest = { name: string; redirect_url: string; setup_url: string } & Record<string, unknown>
 export type FakeAppCreation = { owner: string; manifest: AppManifest; webhookSecret?: string }
-type IssuedToken = { token: string; repositories?: string[]; permissions?: Record<string, string> }
+type Permissions = Record<string, string>
+type IssuedToken = { token: string; repositories?: string[]; permissions: Permissions }
 export type FakePullRequest = {
   repository: string
   number: number
@@ -81,6 +89,9 @@ const jwtIssuerOf = (authorization: string | null, publicKey: ReturnType<typeof 
   return (claims.exp ?? 0) * 1000 > Date.now() ? claims.iss : undefined
 }
 
+const allows = (granted: Permissions, permission: string, level: 'read' | 'write') =>
+  (levels[granted[permission] ?? ''] ?? 0) >= (levels[level] ?? 0)
+
 const cgiResponseOf = (output: Buffer) => {
   const separator = output.indexOf('\r\n\r\n')
   const headerLines = output.subarray(0, separator).toString().split('\r\n')
@@ -96,6 +107,7 @@ export const startFakeGitHub = () => {
   const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 })
   const appPrivateKey = privateKey.export({ type: 'pkcs1', format: 'pem' }).toString()
   const installationTokens = new Map<string, IssuedToken>()
+  let installationPermissions = grantedAppPermissions
   const userTokens = new Map<string, number>()
   const refreshTokens = new Set<string>()
   const codes = new Set<string>()
@@ -193,6 +205,18 @@ export const startFakeGitHub = () => {
     commits: commitSubjectsOf(repository, head, base).length,
   })
   const notFound = () => Response.json({ message: 'Not Found' }, { status: 404 })
+  const notAccessible = () => Response.json({ message: 'Resource not accessible by integration' }, { status: 403 })
+  const installationTokenAllows = (
+    request: Request,
+    repository: string,
+    permission: string,
+    level: 'read' | 'write',
+  ) => {
+    const issued = installationTokenOf(request)
+    if (!issued) return unauthorized()
+    if (issued.repositories && !issued.repositories.includes(repository.split('/')[1] ?? '')) return notFound()
+    return allows(issued.permissions, permission, level) ? undefined : notAccessible()
+  }
   const unauthorized = () => Response.json({ message: 'Bad credentials' }, { status: 401 })
 
   const isUserToken = (token: string) => (userTokens.get(token) ?? 0) > Date.now()
@@ -208,6 +232,9 @@ export const startFakeGitHub = () => {
       : isUserToken(password) || (issued && (issued.repositories ?? [fullName]).includes(fullName.split('/')[1] ?? ''))
     if (!isAllowed || !repositoryNamed(fullName))
       return new Response('Authentication required', { status: 401, headers: { 'www-authenticate': 'Basic' } })
+    const granted = issued?.permissions ?? installationPermissions
+    if (!allows(granted, 'contents', isPush ? 'write' : 'read'))
+      return new Response('Write access to repository not granted.', { status: 403 })
     gitAuthorizations.push(password)
     const url = new URL(request.url)
     const child = Bun.spawn(['git', 'http-backend'], {
@@ -266,9 +293,21 @@ export const startFakeGitHub = () => {
           : notFound()
     if (path === `/app/installations/${installationId}/access_tokens` && request.method === 'POST') {
       if (!isApp) return unauthorized()
-      const body = (await request.json().catch(() => ({}))) as Omit<IssuedToken, 'token'>
+      const { repositories, permissions = installationPermissions } = (await request.json().catch(() => ({}))) as {
+        repositories?: string[]
+        permissions?: Permissions
+      }
+      if (
+        Object.entries(permissions).some(
+          ([permission, level]) => !allows(installationPermissions, permission, level as 'read'),
+        )
+      )
+        return Response.json(
+          { message: 'The permissions requested are not granted to this installation.' },
+          { status: 422 },
+        )
       const token = `ghs_${crypto.randomUUID()}`
-      installationTokens.set(token, { token, ...body })
+      installationTokens.set(token, { token, repositories, permissions: { ...permissions, metadata: 'read' } })
       return Response.json({ token, expires_at: new Date(Date.now() + 3_600_000).toISOString() }, { status: 201 })
     }
     if (path === '/installation/repositories')
@@ -284,7 +323,8 @@ export const startFakeGitHub = () => {
         : unauthorized()
     const branches = /^\/repos\/([\w.-]+\/[\w.-]+)\/branches$/.exec(path)
     if (branches) {
-      if (!installationTokenOf(request)) return unauthorized()
+      const refused = installationTokenAllows(request, branches[1] ?? '', 'contents', 'read')
+      if (refused) return refused
       const repository = repositoryNamed(branches[1] ?? '')
       return repository ? Response.json(branchNamesOf(repository).map((name) => ({ name }))) : notFound()
     }
@@ -294,6 +334,8 @@ export const startFakeGitHub = () => {
       const token = bearerOf(request)
       if (!isUserToken(token)) return unauthorized()
       if (!repositoryNamed(repository)) return notFound()
+      if (!allows(installationPermissions, 'pull_requests', request.method === 'POST' ? 'write' : 'read'))
+        return notAccessible()
       if (request.method === 'POST') {
         const { title = '', body = '', head = '', base = '' } = (await request.json()) as Record<string, string>
         if (!branchHeadOf(repository, head)) return Response.json({ message: 'Validation Failed' }, { status: 422 })
@@ -386,6 +428,9 @@ export const startFakeGitHub = () => {
       for (const token of userTokens.keys()) userTokens.set(token, 0)
     },
     revokeRefreshTokens: () => refreshTokens.clear(),
+    setInstallationPermissions: (permissions: Permissions = grantedAppPermissions) => {
+      installationPermissions = permissions
+    },
     stop: async () => {
       await server.stop(true)
       rmSync(root, { recursive: true, force: true })

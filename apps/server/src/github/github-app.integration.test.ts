@@ -165,7 +165,7 @@ test('the conversion stores the created App sealed like the manual form, records
   ])
   expect(await returnFromGitHub(returnPath)).toMatchObject({
     status: 400,
-    page: expect.stringContaining('GitHub refused the request: 404'),
+    page: expect.stringContaining('GitHub refused: Not Found (404)'),
   })
   const connection = await app.request('/api/github/connection/connect', {
     method: 'POST',

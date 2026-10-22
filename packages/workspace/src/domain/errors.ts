@@ -120,7 +120,12 @@ export const GitHubNotConfigured = errorKind(
 )
 export const GitHubRefused = errorKind(
   'github_refused',
-  (reason: string) => `GitHub refused the request: ${reason}`,
+  (reason: string) => `GitHub refused: ${reason}`,
+  WorkspaceError,
+)
+export const GitHubUnreachable = errorKind(
+  'github_unreachable',
+  (reason: string) => `GitHub could not be reached: ${reason}`,
   WorkspaceError,
 )
 export const RepositoryNotGranted = errorKind(

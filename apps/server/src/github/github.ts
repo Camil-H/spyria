@@ -1,6 +1,7 @@
 import { createHmac, createPrivateKey, timingSafeEqual } from 'node:crypto'
 import type { AgentChat, PullRequestStep, RepositoryCheckouts } from '@spyria/conversation/server'
 import type { Database } from '@spyria/db/postgres'
+import { DomainError, log } from '@spyria/kernel'
 import {
   enteredSecretsOf,
   GitHubNotConfigured,
@@ -9,6 +10,7 @@ import {
   type GitHubSecrets,
   type GitHubSettingsInput,
   type GitHubSettingsView,
+  GitHubUnreachable,
   githubAppManifestOf,
   githubSecretNames,
   githubSettingsFrom,
@@ -44,7 +46,6 @@ type StatePurpose = 'github-connection' | 'github-app'
 
 const connectionStateLifetimeMilliseconds = 10 * 60 * 1000
 const appCreationStateLifetimeMilliseconds = 60 * 60 * 1000
-const notGrantedStatuses = [404, 422]
 const secretLabels: Record<keyof GitHubSecrets, string> = {
   clientSecret: 'A client secret',
   privateKey: 'A private key',
@@ -56,10 +57,40 @@ const sealedColumns: Record<keyof GitHubSecrets, keyof AppRow> = {
   webhookSecret: 'encryptedWebhookSecret',
 }
 
-const githubCall = <Result>(work: () => Promise<Result>) =>
-  work().catch((error: unknown) => {
-    throw new GitHubRefused(error instanceof Error ? error.message : 'an unknown error')
+const githubFailureOf = (workspaceId: string, error: unknown) => {
+  if (error instanceof DomainError) return error
+  if (!(error instanceof GitHubRequestFailed)) {
+    log.warn({
+      event: 'github.unreachable',
+      body: 'GitHub could not be reached',
+      attributes: { 'workspace.id': workspaceId },
+      error,
+    })
+    return new GitHubUnreachable(error instanceof Error ? error.message : 'an unknown error')
+  }
+  log.warn({
+    event: 'github.refused',
+    body: 'GitHub refused a request',
+    attributes: {
+      'workspace.id': workspaceId,
+      'http.request.method': error.method,
+      'url.path': error.path,
+      'http.response.status_code': error.status,
+      'github.message': error.githubMessage,
+    },
   })
+  return new GitHubRefused(error.message)
+}
+
+const githubCall = <Result>(workspaceId: string, work: () => Promise<Result>) =>
+  work().catch((error: unknown) => {
+    throw githubFailureOf(workspaceId, error)
+  })
+
+const loggedFailure = (workspaceId: string) => (error: unknown) => {
+  githubFailureOf(workspaceId, error)
+  return undefined
+}
 
 const appRowOf = async (database: Database, workspaceId: string) =>
   (
@@ -87,7 +118,10 @@ const repositoryTokenOf = async (
   permissions: Record<string, string>,
 ) => {
   const jwt = appJwtOf(appId, privateKey)
-  const { id } = await api.repositoryInstallation(jwt, fullName)
+  const { id } = await api.repositoryInstallation(jwt, fullName).catch((error: unknown) => {
+    if (error instanceof GitHubRequestFailed && error.status === 404) throw new RepositoryNotGranted(fullName)
+    throw error
+  })
   return api.installationToken(jwt, id, { repositories: [fullName.split('/')[1]], permissions })
 }
 
@@ -98,7 +132,7 @@ export const grantedRepositories = async (
 ): Promise<GitHubRepository[]> => {
   const { appId, privateKey } = await appCredentialsOf(database, dependencies, workspaceId)
   const { api } = dependencies
-  return githubCall(async () => {
+  return githubCall(workspaceId, async () => {
     const jwt = appJwtOf(appId, privateKey)
     const listed = await Promise.all(
       (await api.installations(jwt)).map(async ({ id }) =>
@@ -124,14 +158,10 @@ export const repositoryBranches = async (
 ) => {
   const fullName = repositoryNameOf(repository)
   const credentials = await appCredentialsOf(database, dependencies, workspaceId)
-  const token = await repositoryTokenOf(dependencies.api, credentials, fullName, { metadata: 'read' }).catch(
-    (error: unknown) => {
-      if (error instanceof GitHubRequestFailed && notGrantedStatuses.includes(error.status))
-        throw new RepositoryNotGranted(fullName)
-      throw new GitHubRefused(error instanceof Error ? error.message : 'an unknown error')
-    },
-  )
-  return githubCall(async () => (await dependencies.api.branches(token, fullName)).map(({ name }) => name))
+  return githubCall(workspaceId, async () => {
+    const token = await repositoryTokenOf(dependencies.api, credentials, fullName, { contents: 'read' })
+    return (await dependencies.api.branches(token, fullName)).map(({ name }) => name)
+  })
 }
 
 export const readGitHubSettings = async (
@@ -169,7 +199,7 @@ export const saveGitHubSettings = async (
   } catch {
     throw new InvalidGitHubSettings('The private key is not a PEM key')
   }
-  await githubCall(() => api.app(appJwtOf(settings.appId, privateKey)))
+  await githubCall(member.workspaceId, () => api.app(appJwtOf(settings.appId, privateKey)))
   const sealed = Object.fromEntries(
     await Promise.all(
       githubSecretNames.map(async (name) => [
@@ -259,7 +289,7 @@ export const finishGitHubAppCreation = async (
     throw new InvalidGitHubSettings('This link is invalid or expired: create the GitHub App again from Spyria')
   const member = { workspaceId: verified.workspaceId, userId: verified.userId }
   await database.$client.begin((sql) => requireMemberPermission(sql, member, 'github.manage'))
-  const created = await githubCall(() => dependencies.api.convertManifest(code))
+  const created = await githubCall(member.workspaceId, () => dependencies.api.convertManifest(code))
   await saveGitHubSettings(database, dependencies, member, {
     appId: String(created.id),
     clientId: created.client_id,
@@ -319,7 +349,7 @@ const connectionWithTokenOf = async (
           .then(async ({ clientId, clientSecret }) =>
             dependencies.api.refresh(clientId, clientSecret, await secretBox.open(row.encryptedRefreshToken ?? '')),
           )
-          .catch(() => undefined)
+          .catch(loggedFailure(member.workspaceId))
       : undefined
   if (refreshed && secretBox) {
     await storeUserTokens(database, secretBox, member, row.login, refreshed)
@@ -366,8 +396,9 @@ export const finishGitHubConnection = async (
   const database = verified && databaseOf(verified.databaseName)
   if (!verified || !database || !dependencies.secretBox) return false
   const { clientId, clientSecret } = await appCredentialsOf(database, dependencies, verified.workspaceId)
-  const tokens = await dependencies.api.exchangeCode(clientId, clientSecret, code).catch(() => undefined)
-  const login = tokens && (await dependencies.api.user(tokens.accessToken).catch(() => undefined))?.login
+  const failed = loggedFailure(verified.workspaceId)
+  const tokens = await dependencies.api.exchangeCode(clientId, clientSecret, code).catch(failed)
+  const login = tokens && (await dependencies.api.user(tokens.accessToken).catch(failed))?.login
   if (!tokens || !login) return false
   await storeUserTokens(database, dependencies.secretBox, verified, login, tokens)
   return true
@@ -400,7 +431,9 @@ export const createGitHubCheckouts = (database: Database, dependencies: GitHubDe
       const { repository, baseBranch, workingBranch } = (await chatRepositoryOf(database, chat)) ?? {}
       if (!repository || !baseBranch || !workingBranch) return undefined
       const credentials = await appCredentialsOf(database, dependencies, chat.workspaceId)
-      const token = await githubCall(() => repositoryTokenOf(api, credentials, repository, { contents: 'read' }))
+      const token = await githubCall(chat.workspaceId, () =>
+        repositoryTokenOf(api, credentials, repository, { contents: 'read' }),
+      )
       return { url: api.cloneUrlOf(repository), token, baseBranch, workingBranch }
     },
     pushBranch: async (chat, ownerId, bundleOf) => {
@@ -417,12 +450,14 @@ export const createGitHubCheckouts = (database: Database, dependencies: GitHubDe
       const { repository, baseBranch } = (await chatRepositoryOf(database, chat)) ?? {}
       if (!repository || !baseBranch) throw new GitHubNotConfigured()
       const credentials = await appCredentialsOf(database, dependencies, chat.workspaceId)
-      const token = await githubCall(() => repositoryTokenOf(api, credentials, repository, { contents: 'read' }))
+      const token = await githubCall(chat.workspaceId, () =>
+        repositoryTokenOf(api, credentials, repository, { contents: 'read' }),
+      )
       return baseBundle({ url: api.cloneUrlOf(repository), token, baseBranch, runtimeBaseHead })
     },
     authorOf: async (chat, ownerId) => {
       const token = await userTokenOf(database, dependencies, { workspaceId: chat.workspaceId, userId: ownerId })
-      const user = token ? await api.user(token).catch(() => undefined) : undefined
+      const user = token ? await api.user(token).catch(loggedFailure(chat.workspaceId)) : undefined
       return (
         user && {
           name: user.name || user.login,
@@ -432,7 +467,7 @@ export const createGitHubCheckouts = (database: Database, dependencies: GitHubDe
     },
     openPullRequest: async (chat, ownerId, { title, body }) => {
       const { repository, baseBranch, workingBranch, token } = await publishingOf(chat, ownerId)
-      return githubCall(async () =>
+      return githubCall(chat.workspaceId, async () =>
         pullRequestStepOf(
           repository,
           await api.createPullRequest(token, repository, { title, body, head: workingBranch, base: baseBranch }),
@@ -441,7 +476,7 @@ export const createGitHubCheckouts = (database: Database, dependencies: GitHubDe
     },
     refreshPullRequest: async (chat, ownerId, pullRequest) => {
       const { token } = await publishingOf(chat, ownerId)
-      return githubCall(async () =>
+      return githubCall(chat.workspaceId, async () =>
         pullRequestStepOf(
           pullRequest.repository,
           await api.pullRequest(token, pullRequest.repository, pullRequest.number),

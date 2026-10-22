@@ -13,7 +13,13 @@ type GetAsMember = (workspaceId: WorkspaceId, path: string) => Promise<Response>
 const bodyOf = async <Body>(response: Response) => {
   const body = (await response.json().catch(() => ({}))) as Body & { error?: string; message?: string }
   if (!response.ok)
-    throw new DomainError(body.error ?? 'internal', body.message ?? `The request was refused with ${response.status}`)
+    throw new DomainError(
+      body.error ?? 'internal',
+      body.message ??
+        (response.status >= 502
+          ? `The server could not be reached (${response.status})`
+          : `The request was refused with ${response.status}`),
+    )
   return body
 }
 

@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { chatId } from '@spyria/kernel'
 import { createSecretBox } from './auth/secret-box.ts'
-import { createGitHubApi } from './github/github-api.ts'
+import { appJwtOf, createGitHubApi } from './github/github-api.ts'
 import {
   fakeGitHubAppId,
   fakeGitHubClientId,
@@ -15,6 +15,7 @@ import {
   acme,
   alice,
   bob,
+  captureLogs,
   sessionTokenOf,
   startAgentStack,
   testSecretsKey,
@@ -75,8 +76,8 @@ test('GitHub App settings: admins only, secrets required at first, sealed at res
     await request(alice, 'POST', '/api/github-settings', { ...appSettings, privateKey: 'not a key' }),
   ).toMatchObject({ status: 400, body: { message: 'The private key is not a PEM key' } })
   expect(await request(alice, 'POST', '/api/github-settings', { ...appSettings, appId: '999' })).toMatchObject({
-    status: 502,
-    body: { error: 'github_refused' },
+    status: 422,
+    body: { error: 'github_refused', message: 'GitHub refused: Bad credentials (401)' },
   })
   expect(await appRow()).toBeUndefined()
 
@@ -210,6 +211,53 @@ test('a dev chat needs a granted repository and an existing base branch, and sto
   expect((await stack.changesOf(id))[0]).toMatchObject({
     type: 'chat.created',
     payload: { repository: 'acme/app', baseBranch: 'release' },
+  })
+})
+
+test('GitHub enforces token permissions: branches need contents read; a refusal answers 422 with GitHub reason and logs one github.refused line without secrets', async () => {
+  const api = createGitHubApi(fakeGitHub.urls)
+  const jwt = appJwtOf(fakeGitHubAppId, fakeGitHub.appPrivateKey)
+  const metadataOnly = await api.installationToken(jwt, 77, {
+    repositories: ['app'],
+    permissions: { metadata: 'read' },
+  })
+  await expect(api.branches(metadataOnly, 'acme/app')).rejects.toMatchObject({
+    status: 403,
+    message: 'Resource not accessible by integration (403)',
+  })
+  const logs = captureLogs()
+  fakeGitHub.setInstallationPermissions({ metadata: 'read', pull_requests: 'write' })
+  try {
+    expect(await request(bob, 'GET', '/api/github/branches?repository=acme/app')).toMatchObject({
+      status: 422,
+      body: {
+        error: 'github_refused',
+        message: 'GitHub refused: The permissions requested are not granted to this installation. (422)',
+      },
+    })
+  } finally {
+    fakeGitHub.setInstallationPermissions()
+    logs.restore()
+  }
+  const refusals = logs.events.filter(({ event }) => event === 'github.refused')
+  expect(refusals).toEqual([
+    {
+      severity: 'WARN',
+      event: 'github.refused',
+      body: 'GitHub refused a request',
+      attributes: {
+        'workspace.id': acme,
+        'http.request.method': 'POST',
+        'url.path': '/app/installations/77/access_tokens',
+        'http.response.status_code': 422,
+        'github.message': 'The permissions requested are not granted to this installation.',
+      },
+    },
+  ])
+  expect(JSON.stringify(logs.events)).not.toMatch(/ghs_|eyJ/)
+  expect(await request(bob, 'GET', '/api/github/branches?repository=acme/app')).toMatchObject({
+    status: 200,
+    body: { branches: ['main', 'release'] },
   })
 })
 

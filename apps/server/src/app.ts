@@ -173,7 +173,8 @@ export const sessionClassifierOf =
 
 const statusByErrorCode: Record<string, number> = {
   missing_workspace_permission: 403,
-  github_refused: 502,
+  github_refused: 422,
+  github_unreachable: 502,
   local_sessions_off: 403,
   host_not_found: 404,
 }

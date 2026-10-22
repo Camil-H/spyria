@@ -24,11 +24,11 @@ test.describe('Dev chats', () => {
     await page.goto('/')
   })
 
-  test('As a member, I start a dev chat on a repository: it shows the repository and its own working branch, and the agent works on a clone', {
+  test('As a member, I start a dev chat on a repository and a base branch I pick: it shows the repository and its own working branch, and the agent works on a clone', {
     tag: ['@spec-39', '@smoke'],
   }, async ({ page }) => {
     await configureGitHubApp(page)
-    const chatId = await newDevChat(page, 'Fix totals', 'acme/app')
+    const chatId = await newDevChat(page, 'Fix totals', 'acme/app', 'release')
     const workingBranch = `spyria/fix-totals-${chatId.replace(/-/g, '').slice(0, 6)}`
     await expect(workingDirectoryOf(page)).toHaveText('acme/app')
     await expect(branchOf(page)).toHaveText(workingBranch)

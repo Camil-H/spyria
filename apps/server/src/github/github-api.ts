@@ -23,11 +23,16 @@ const clockSkewSeconds = 60
 export class GitHubRequestFailed extends Error {
   constructor(
     readonly status: number,
-    message: string,
+    readonly method: string,
+    readonly path: string,
+    readonly githubMessage: string,
   ) {
-    super(message)
+    super(`${githubMessage} (${status})`)
   }
 }
+
+const pathOf = (requested: string) =>
+  (requested.split('?')[0] ?? requested).replace(/^\/app-manifests\/[^/]+/, '/app-manifests/{code}')
 
 const base64urlOf = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url')
 
@@ -57,7 +62,7 @@ export const createGitHubApi = ({ apiUrl, webUrl }: GitHubUrls) => {
         : await send(AbortSignal.timeout(requestTimeoutMilliseconds))
     if (!response.ok) {
       const { message } = (await response.json().catch(() => ({}))) as { message?: string }
-      throw new GitHubRequestFailed(response.status, `${response.status} ${message ?? response.statusText}`)
+      throw new GitHubRequestFailed(response.status, method, pathOf(path), message ?? response.statusText)
     }
     return (await response.json()) as Result
   }
@@ -70,7 +75,12 @@ export const createGitHubApi = ({ apiUrl, webUrl }: GitHubUrls) => {
     })
     const tokens = (await response.json().catch(() => ({}))) as Record<string, string | number | undefined>
     if (!response.ok || typeof tokens.access_token !== 'string')
-      throw new GitHubRequestFailed(response.status, String(tokens.error ?? response.statusText))
+      throw new GitHubRequestFailed(
+        response.status,
+        'POST',
+        '/login/oauth/access_token',
+        String(tokens.error ?? response.statusText),
+      )
     return {
       accessToken: tokens.access_token,
       refreshToken: typeof tokens.refresh_token === 'string' ? tokens.refresh_token : null,

@@ -5,6 +5,7 @@ export {
   DomainFixed,
   GitHubNotConfigured,
   GitHubRefused,
+  GitHubUnreachable,
   InvalidGitHubSettings,
   InvalidSsoSettings,
   MailNotConfigured,
