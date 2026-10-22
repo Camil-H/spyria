@@ -5,9 +5,9 @@ import { WorkspaceConnectionsSection } from '@spyria/profile'
 import { RuntimeHostsSection } from '@spyria/runtime'
 import { focusRing, formatCost, iconButtonClass, LabelledSection } from '@spyria/ui'
 import { AuditLogSection, countBudgetAlerts, UsageSection } from '@spyria/usage'
-import { GitHubSection, MembersSection, RolesSection, SignInSection, useWorkspacePermissions } from '@spyria/workspace'
+import { GitHubSection, MembersSection, RolesSection, SignInSection, useWorkspaceCommands, useWorkspacePermissions } from '@spyria/workspace'
 import { ArrowLeft } from 'lucide-react'
-import { type ComponentType, use } from 'react'
+import { type ComponentType, use, useEffect, useState } from 'react'
 import { Link, useOutletContext, useParams } from 'react-router'
 import { loadAuthMode } from './auth.ts'
 
@@ -114,9 +114,6 @@ const cardStatusesOf =
     const monthCostMicros = inWorkspace(snapshot.usageEntries)
       .filter((entry) => entry.month === month)
       .reduce((sum, entry) => sum + entry.costMicros, 0)
-    const hasGitHubConfigured = snapshot.workspaceEvents.some(
-      ({ workspaceId: w, type }) => w === workspaceId && type === 'github.configured',
-    )
     return {
       ...(isDexSignIn && { sso: "Signs in with this deployment's Dex" }),
       roles: [
@@ -133,7 +130,6 @@ const cardStatusesOf =
         'runtime host',
       ),
       'mcp-tools': countLabelOf(inWorkspace(snapshot.workspaceConnections).length, 'shared connection'),
-      github: hasGitHubConfigured ? 'GitHub App connected' : undefined,
       costs: `${formatCost(monthCostMicros)} this month`,
     }
   }
@@ -154,6 +150,22 @@ const SettingsRoute = () => {
     .filter((section) => section.cards.length > 0)
   const openCard = cardSections.flatMap(({ cards }) => cards).find(({ path }) => path === card)
   const settingsPath = `/w/${workspaceId}/settings`
+  const commands = useWorkspaceCommands()
+  const [githubConnected, setGithubConnected] = useState<boolean | undefined>(undefined)
+  useEffect(() => {
+    if (!permissions.includes('github.manage')) return setGithubConnected(undefined)
+    let isCurrent = true
+    commands
+      .readGitHubSettings({ workspaceId })
+      .then((settings) => {
+        if (!isCurrent) return
+        setGithubConnected(settings !== null)
+      })
+      .catch(() => isCurrent && setGithubConnected(undefined))
+    return () => {
+      isCurrent = false
+    }
+  }, [commands, workspaceId, permissions])
   if (openCard && !isAllowed(openCard))
     return <p className="p-6 text-muted">Your workspace role does not give access to this page</p>
   if (openCard)
@@ -193,9 +205,12 @@ const SettingsRoute = () => {
                     </span>
                     <span id={`settings-card-${path}`} className="flex flex-1 flex-col gap-2 text-sm text-muted">
                       {description}
-                      {statuses[path] && (path !== 'costs' || isMonthUsageComplete) && (
-                        <span className="mt-auto text-xs text-ink">{statuses[path]}</span>
-                      )}
+                      {(path === 'github' ? (githubConnected ? 'GitHub App connected' : undefined) : statuses[path]) &&
+                        (path !== 'costs' || isMonthUsageComplete) && (
+                          <span className="mt-auto text-xs text-ink">
+                            {path === 'github' ? (githubConnected ? 'GitHub App connected' : undefined) : statuses[path]}
+                          </span>
+                        )}
                     </span>
                   </Link>
                 </li>
