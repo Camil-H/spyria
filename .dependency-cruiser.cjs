@@ -155,6 +155,21 @@ module.exports = {
       to: { dependencyTypesNot: ['local'], pathNot: '^packages/kernel/' },
     },
     {
+      name: 'operations-and-contracts-import-no-shared-package-but-kernel',
+      severity: 'error',
+      from: {
+        path: `^packages/${contexts}/src/(operations|contracts)/`,
+        pathNot: ['\\.test\\.ts$', '(^|/)testing\\.ts$'],
+      },
+      to: { path: '^packages/(db|ui|session)/' },
+    },
+    {
+      name: 'ui-and-session-imported-only-by-entrypoints',
+      severity: 'error',
+      from: { path: `^packages/${contexts}/src/`, pathNot: `^packages/${contexts}/src/entrypoints/` },
+      to: { path: '^packages/(ui|session)/' },
+    },
+    {
       name: 'kernel-imports-nothing',
       severity: 'error',
       from: { path: '^packages/kernel/', pathNot: '\\.test\\.ts$' },
