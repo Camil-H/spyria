@@ -5,6 +5,7 @@ import type { GitHubSecrets, GitHubSettingsView } from '../domain/github.ts'
 import { GitHubAppCreationForm } from './GitHubAppCreationForm.tsx'
 import { GitHubAppGuide } from './GitHubAppGuide.tsx'
 import { useWorkspaceCommands } from './providers.tsx'
+import { Check } from 'lucide-react'
 
 const secretLabels = {
   clientSecret: 'Client secret',
@@ -47,8 +48,9 @@ export const GitHubSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => 
     <LabelledSection title="GitHub">
       {settings && (
         <>
-          <p role="status" className="text-sm font-medium">
-            GitHub App connected
+          <p role="status" title="GitHub App connected" className="text-sm font-medium flex items-center gap-2">
+            <Check className="size-4 text-green-500" aria-hidden />
+            <span className="sr-only">GitHub App connected</span>
           </p>
           <h3 className="text-sm font-medium">Granted repositories</h3>
           {settings.listingFailure ? (
@@ -67,7 +69,7 @@ export const GitHubSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => 
           )}
         </>
       )}
-      <GitHubAppCreationForm workspaceId={workspaceId} />
+      {!settings && <GitHubAppCreationForm workspaceId={workspaceId} />}
       <h3 className="text-sm font-medium">Create it manually</h3>
       <GitHubAppGuide />
       <form onSubmit={submit} className="flex flex-col gap-3">
