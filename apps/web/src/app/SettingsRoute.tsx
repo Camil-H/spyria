@@ -114,6 +114,9 @@ const cardStatusesOf =
     const monthCostMicros = inWorkspace(snapshot.usageEntries)
       .filter((entry) => entry.month === month)
       .reduce((sum, entry) => sum + entry.costMicros, 0)
+    const hasGitHubConfigured = snapshot.workspaceEvents.some(
+      ({ workspaceId: w, type }) => w === workspaceId && type === 'github.configured',
+    )
     return {
       ...(isDexSignIn && { sso: "Signs in with this deployment's Dex" }),
       roles: [
@@ -130,6 +133,7 @@ const cardStatusesOf =
         'runtime host',
       ),
       'mcp-tools': countLabelOf(inWorkspace(snapshot.workspaceConnections).length, 'shared connection'),
+      github: hasGitHubConfigured ? 'GitHub App connected' : undefined,
       costs: `${formatCost(monthCostMicros)} this month`,
     }
   }

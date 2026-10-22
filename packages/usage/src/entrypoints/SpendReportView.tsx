@@ -32,13 +32,24 @@ const dimensionLabels: Record<SpendDimension, string> = {
   chat: 'Chat',
   model: 'Model',
 }
-const factorLabels: Record<SpendFactorName, string> = {
-  users: 'Users',
-  sessionsPerUser: 'Sessions per user',
-  turnsPerSession: 'Turns per session',
-  requestsPerTurn: 'Requests per turn',
-  tokensPerRequest: 'Tokens per request',
-  pricePerToken: 'Price per 1M tokens',
+const factorLabel = (name: SpendFactorName, isPersonal?: boolean) => {
+  const personalLabels: Record<SpendFactorName, string> = {
+    users: 'Users',
+    sessionsPerUser: 'Sessions',
+    turnsPerSession: 'Turns per session',
+    requestsPerTurn: 'Requests per turn',
+    tokensPerRequest: 'Tokens per request',
+    pricePerToken: 'Price per 1M tokens',
+  }
+  const workspaceLabels: Record<SpendFactorName, string> = {
+    users: 'Users',
+    sessionsPerUser: 'Sessions per user',
+    turnsPerSession: 'Turns per session',
+    requestsPerTurn: 'Requests per turn',
+    tokensPerRequest: 'Tokens per request',
+    pricePerToken: 'Price per 1M tokens',
+  }
+  return isPersonal ? personalLabels[name] : workspaceLabels[name]
 }
 const cellClass = 'px-2 py-1.5 text-right'
 const today = () => new Date().toISOString().slice(0, 10)
@@ -48,7 +59,7 @@ const searchOf = ({ period, from, to, granularity }: Search): Record<string, str
 
 const usageRowsOf = (rows: readonly SpendRow[]) => rows.map((row) => ({ ...row, calls: row.requests }))
 
-const Decomposition = ({ decomposition }: { decomposition: SpendReport['decomposition'] }) => (
+const Decomposition = ({ decomposition, isPersonal }: { decomposition: SpendReport['decomposition']; isPersonal?: boolean }) => (
   <LabelledSection title="Spend decomposition" Heading="h3" titleClass="font-medium">
     <p className="text-sm text-muted">
       Spend {formatCost(decomposition.current.costMicros)} against {formatCost(decomposition.previous.costMicros)} in
@@ -58,7 +69,7 @@ const Decomposition = ({ decomposition }: { decomposition: SpendReport['decompos
           ? null
           : decomposition.current.costMicros / decomposition.previous.costMicros - 1,
       )}
-      ): users × sessions per user × turns per session × requests per turn × tokens per request × price per token
+      ): {isPersonal ? 'sessions × turns per session × requests per turn × tokens per request × price per token' : 'users × sessions per user × turns per session × requests per turn × tokens per request × price per token'}
     </p>
     <table aria-label="Spend decomposition" className="w-full text-sm">
       <thead className="text-xs text-muted">
@@ -71,24 +82,26 @@ const Decomposition = ({ decomposition }: { decomposition: SpendReport['decompos
         </tr>
       </thead>
       <tbody>
-        {decomposition.factors.map((factor) => {
-          const isBiggestMover = factor.name === decomposition.biggestMover
-          return (
-            <tr
-              key={factor.name}
-              aria-current={isBiggestMover || undefined}
-              className={`border-t border-line ${isBiggestMover ? 'bg-selected font-semibold' : ''}`}
-            >
-              <th scope="row" className="px-2 py-1.5 text-left font-normal">
-                {factorLabels[factor.name]}
-                {isBiggestMover && <span className="ml-1 text-xs text-muted"> · Biggest mover</span>}
-              </th>
-              <td className={cellClass}>{formatFactor(factor.name, factor.current)}</td>
-              <td className={cellClass}>{formatFactor(factor.name, factor.previous)}</td>
-              <td className={cellClass}>{formatChange(factor.change)}</td>
-            </tr>
-          )
-        })}
+        {decomposition.factors
+          .filter((f) => !(isPersonal && f.name === 'users'))
+          .map((factor) => {
+            const isBiggestMover = factor.name === decomposition.biggestMover
+            return (
+              <tr
+                key={factor.name}
+                aria-current={isBiggestMover || undefined}
+                className={`border-t border-line ${isBiggestMover ? 'bg-selected font-semibold' : ''}`}
+              >
+                <th scope="row" className="px-2 py-1.5 text-left font-normal">
+                  {factorLabel(factor.name, isPersonal)}
+                  {isBiggestMover && <span className="ml-1 text-xs text-muted"> · Biggest mover</span>}
+                </th>
+                <td className={cellClass}>{formatFactor(factor.name, factor.current)}</td>
+                <td className={cellClass}>{formatFactor(factor.name, factor.previous)}</td>
+                <td className={cellClass}>{formatChange(factor.change)}</td>
+              </tr>
+            )
+          })}
       </tbody>
     </table>
   </LabelledSection>
@@ -147,6 +160,7 @@ export const SpendReportView = ({
   chartDimensions,
   tableDimensions,
   children,
+  isPersonal = false,
 }: {
   children?: ReactNode
   title: string
@@ -154,6 +168,7 @@ export const SpendReportView = ({
   readReport: (input: { workspaceId: WorkspaceId; search: Readonly<Record<string, string>> }) => Promise<SpendReport>
   chartDimensions: readonly SpendDimension[]
   tableDimensions: readonly SpendDimension[]
+  isPersonal?: boolean
 }) => {
   const [search, setSearch] = useState<Search>({
     period: 'this_month',
@@ -261,7 +276,7 @@ export const SpendReportView = ({
               ))}
             </>
           )}
-          <Decomposition decomposition={report.decomposition} />
+          <Decomposition decomposition={report.decomposition} isPersonal={isPersonal} />
           {report.mergedPulls && <MergedPulls mergedPulls={report.mergedPulls} />}
         </>
       )}
