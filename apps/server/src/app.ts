@@ -83,6 +83,7 @@ import {
   githubAppManifestPath,
   githubBranchesPath,
   githubCallbackPath,
+  githubConfiguredPath,
   githubRepositoriesPath,
   githubSettingsPath,
   githubWebhooksPath,
@@ -108,6 +109,7 @@ import {
   type GitHubDependencies,
   githubConnectionOf,
   grantedRepositories,
+  isGitHubConfigured,
   readGitHubSettings,
   receiveGitHubWebhook,
   repositoryBranches,
@@ -631,6 +633,11 @@ export const createApp = ({
     .get(githubSettingsPath, (context) =>
       endpointResponse('Reading the GitHub settings', 200, async () => ({
         settings: await readGitHubSettings(context.get('database'), githubDependencies, context.get('zeroContext')),
+      })),
+    )
+    .get(githubConfiguredPath, (context) =>
+      endpointResponse('Reading whether GitHub is configured', 200, async () => ({
+        configured: await isGitHubConfigured(context.get('database'), context.get('zeroContext')),
       })),
     )
     .post(githubSettingsPath, async (context) => {

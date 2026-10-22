@@ -164,6 +164,11 @@ export const repositoryBranches = async (
   })
 }
 
+export const isGitHubConfigured = async (database: Database, member: Member) => {
+  await database.$client.begin((sql) => requireMemberPermission(sql, member, 'github.manage'))
+  return (await appRowOf(database, member.workspaceId)) !== undefined
+}
+
 export const readGitHubSettings = async (
   database: Database,
   dependencies: GitHubDependencies,

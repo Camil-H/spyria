@@ -58,9 +58,13 @@ const connectionRow = async () =>
   (await database.$client`select * from github_connections where workspace_id = ${acme} and user_id = ${alice}`)[0]
 const githubEvents = async () => (await workspaceEventsOf(database)).filter(({ type }) => type.startsWith('github.'))
 
-test('GitHub App settings: admins only, secrets required at first, sealed at rest, never returned, rotations recorded, refused credentials refused', async () => {
-  for (const [method, body] of [['GET'], ['POST', appSettings]] as const)
-    expect(await request(bob, method, '/api/github-settings', body)).toMatchObject({
+test('GitHub App settings: admins only, secrets required at first, sealed at rest, never returned, rotations recorded, refused credentials refused, configured readable without secrets', async () => {
+  for (const [method, path, body] of [
+    ['GET', '/api/github-settings'],
+    ['POST', '/api/github-settings', appSettings],
+    ['GET', '/api/github-settings/configured'],
+  ] as const)
+    expect(await request(bob, method, path, body)).toMatchObject({
       status: 403,
       body: {
         error: 'missing_workspace_permission',
@@ -68,6 +72,11 @@ test('GitHub App settings: admins only, secrets required at first, sealed at res
       },
     })
   expect(await request(alice, 'GET', '/api/github-settings')).toMatchObject({ status: 200, body: { settings: null } })
+  expect(await request(alice, 'GET', '/api/github-settings/configured')).toEqual({
+    status: 200,
+    text: '{"configured":false}',
+    body: { configured: false },
+  })
   expect(await request(alice, 'POST', '/api/github-settings', { ...appSettings, webhookSecret: '' })).toMatchObject({
     status: 400,
     body: { error: 'invalid_github_settings', message: 'A webhook secret is required' },
@@ -93,6 +102,11 @@ test('GitHub App settings: admins only, secrets required at first, sealed at res
     listingFailure: null,
   })
   const read = await request(alice, 'GET', '/api/github-settings')
+  expect(await request(alice, 'GET', '/api/github-settings/configured')).toEqual({
+    status: 200,
+    text: '{"configured":true}',
+    body: { configured: true },
+  })
   for (const secret of [fakeGitHubClientSecret, webhookSecret, 'PRIVATE KEY'])
     for (const shown of [saved.text, read.text]) expect(shown).not.toContain(secret)
   const sealed = await appRow()

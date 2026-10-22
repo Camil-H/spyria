@@ -51,6 +51,7 @@ export {
   devChatsPath,
   githubAppManifestPath,
   githubBranchesPath,
+  githubConfiguredPath,
   githubRepositoriesPath,
   githubSettingsPath,
 } from './integrations/http-github.ts'
