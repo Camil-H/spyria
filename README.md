@@ -49,7 +49,7 @@ Requirements:
 - An HTTPS origin (for example `https://spyria.example.com`) routing by path: `/zero/*` to `zero-cache:4848` (Zero's sync WebSocket; the web app syncs on `<origin>/zero`), everything else to `server:3000` (the web app, `/api`, `/auth`, `/h/<code>`, the `/host` WebSocket, `/gateway-oauth`, `/health`). Both are on the Compose network only; the server also answers on `127.0.0.1:${SPYRIA_LOCAL_PORT:-3300}`.
 - An OIDC provider for the first workspace (Google Workspace, Microsoft Entra or any OIDC issuer) with the redirect URI `<origin>/auth/callback`.
 - An SMTP service that sends from your domain (domain verification and invites).
-- A GitHub App, later, from the app (Workspace settings > Connect GitHub shows how).
+- A GitHub App, later, from the app (Workspace settings > Connect GitHub creates it on GitHub in one click).
 
 Steps:
 
@@ -79,7 +79,7 @@ Runtime hosts: each running runtime has its own Docker bridge network, released 
 
 ## Registering the GitHub App (dev chats)
 
-Each deployment registers its own GitHub App. Workspace settings > Connect GitHub shows how, before the form: the steps, the permissions and events, and the homepage, callback and webhook URLs computed from the app's origin, ready to copy. Spyria checks each webhook delivery's `X-Hub-Signature-256` with the webhook secret and ignores a delivery id it already received.
+Each deployment registers its own GitHub App. In Workspace settings > Connect GitHub, "Create the GitHub App on GitHub" (on your account or an organization) sends GitHub a manifest with Spyria's permissions, events and URLs computed from the app's origin; GitHub creates the App, Spyria stores its credentials sealed, and GitHub then asks which repositories to install it on. "Create it manually" below keeps the steps and the form as a fallback (for example on GitHub Enterprise without manifests). Spyria checks each webhook delivery's `X-Hub-Signature-256` with the webhook secret and ignores a delivery id it already received.
 
 In Workspace settings > GitHub, an admin enters the App id, the client id, the private key, the client secret and the webhook secret (secrets are encrypted with `SPYRIA_SECRETS_KEY`, shown only as set, replaced by entering a new value). The section lists the repositories granted by the App's installations. Members link their own GitHub account in Profile > Connections > My connections: only a chat's owner publishes, with this account (Changes > Push / Open pull request, or the agent's `push_branch` / `open_pull_request` tools on the owner's own prompts), so GitHub shows the owner as the pull request's author.
 

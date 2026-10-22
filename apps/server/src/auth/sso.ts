@@ -353,7 +353,7 @@ export const verifyDomainByToken = (database: Database, token: string) =>
       for update`
     if (!pending) return undefined
     await markDomainVerified(sql, { ...pending, actorId: null })
-    return pending.domain
+    return pending
   })
 
 export const verifyDomainByOperator = (database: Database, workspaceId: string, domain: string) =>

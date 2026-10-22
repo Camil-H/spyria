@@ -162,19 +162,14 @@ export const createAuthRoutes = ({
       return redirectToProvider(context, await oidcOf(firstWorkspace.provider), { firstWorkspace })
     })
     .get(domainVerificationLinkPath.slice('/auth'.length), rateLimited('verificationLink'), async (context) => {
-      const verified = await verifyDomainByToken(scopeOf(context).database, context.req.query('token') ?? '').catch(
-        (error: Error) => error,
-      )
-      const message =
-        typeof verified === 'string'
-          ? `${verified} is verified: people with an ${verified} email can now sign in to Spyria through your provider.`
-          : verified instanceof Error
-            ? verified.message
-            : 'This verification link is invalid, used or expired. Send a new one from Workspace settings.'
-      return context.html(
-        `<!doctype html><meta charset="utf-8"><title>Domain verification</title><p>${message.replaceAll('<', '&lt;')}</p>`,
-        typeof verified === 'string' ? 200 : 400,
-      )
+      const { database } = scopeOf(context)
+      const verified = await verifyDomainByToken(database, context.req.query('token') ?? '').catch(() => undefined)
+      if (!verified) return context.redirect(`${appOrigin}/?domainVerification=invalid`)
+      const [session] = await findLiveSessions(database, [
+        [verified.workspaceId, sessionIdOf(context, verified.workspaceId)],
+      ])
+      const appPath = session ? `/w/${verified.workspaceId}/settings/sso` : '/'
+      return context.redirect(`${appOrigin}${appPath}?domainVerification=${encodeURIComponent(verified.domain)}`)
     })
     .get('/login', rateLimited('emailRouting'), async (context) => {
       const scope = scopeOf(context)

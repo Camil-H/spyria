@@ -2,6 +2,7 @@ import { type ChatId, chatId, DomainError, type ProjectId, type WorkspaceId } fr
 import type { GitHubRepository, GitHubSettingsInput, GitHubSettingsView } from '../domain/github.ts'
 
 export const githubSettingsPath = '/api/github-settings'
+export const githubAppManifestPath = '/api/github-settings/manifest'
 export const githubRepositoriesPath = '/api/github/repositories'
 export const githubBranchesPath = '/api/github/branches'
 export const devChatsPath = '/api/dev-chats'
@@ -26,6 +27,10 @@ export const createHttpGitHubCommands = (postAsMember: PostAsMember, getAsMember
         await postAsMember(workspaceId, githubSettingsPath, JSON.stringify(input)),
       )
     ).settings,
+  startGitHubAppCreation: async ({ workspaceId, organization }: { workspaceId: WorkspaceId; organization: string }) =>
+    bodyOf<{ formAction: string; manifest: string }>(
+      await postAsMember(workspaceId, githubAppManifestPath, JSON.stringify({ organization })),
+    ),
   listRepositories: async ({ workspaceId }: { workspaceId: WorkspaceId }) =>
     (await bodyOf<{ repositories: GitHubRepository[] }>(await getAsMember(workspaceId, githubRepositoriesPath)))
       .repositories,

@@ -79,6 +79,8 @@ import {
   devChatsPath,
   domainVerificationPath,
   type GitHubSettingsInput,
+  githubAppCreatedPath,
+  githubAppManifestPath,
   githubBranchesPath,
   githubCallbackPath,
   githubRepositoriesPath,
@@ -101,6 +103,7 @@ import { findMemberIn } from './auth/sessions.ts'
 import { readSsoSettings, saveSsoSettings, sendDomainVerification } from './auth/sso.ts'
 import {
   disconnectGitHub,
+  finishGitHubAppCreation,
   finishGitHubConnection,
   type GitHubDependencies,
   githubConnectionOf,
@@ -109,6 +112,7 @@ import {
   receiveGitHubWebhook,
   repositoryBranches,
   saveGitHubSettings,
+  startGitHubAppCreation,
   startGitHubConnection,
 } from './github/github.ts'
 import { createGitHubApi, githubDotCom } from './github/github-api.ts'
@@ -337,6 +341,20 @@ export const createApp = ({
         state,
       }).catch(() => false)
       return context.html(githubConnectionPage(isConnected), isConnected ? 200 : 400)
+    })
+    .get(githubAppCreatedPath, async (context) => {
+      const { code = '', state = '' } = context.req.query()
+      const installationUrl = await finishGitHubAppCreation(databaseOf, githubDependencies, tokenSecret, {
+        code,
+        state,
+      }).catch((error: unknown) =>
+        error instanceof DomainError ? error : new Error('The GitHub App could not be created: try again from Spyria'),
+      )
+      if (typeof installationUrl === 'string') return context.redirect(installationUrl)
+      return context.html(
+        `<!doctype html><meta charset="utf-8"><title>GitHub App</title><p>${installationUrl.message.replaceAll('<', '&lt;')}</p>`,
+        400,
+      )
     })
     .post(githubWebhooksPath, rateLimited('githubWebhooks'), async (context) => {
       const testDatabaseName = testDatabaseByName && context.req.query('db')
@@ -624,6 +642,17 @@ export const createApp = ({
           input,
         ),
       }))
+    })
+    .post(githubAppManifestPath, async (context) => {
+      const { organization } = (await context.req.json().catch(() => null)) ?? {}
+      return endpointResponse('Starting the GitHub App creation', 200, () =>
+        startGitHubAppCreation(context.get('database'), githubDependencies, context.get('zeroContext'), {
+          tokenSecret,
+          appOrigin,
+          databaseName: context.get('databaseName'),
+          organization,
+        }),
+      )
     })
     .get(githubRepositoriesPath, (context) =>
       endpointResponse('Listing GitHub repositories', 200, async () => ({

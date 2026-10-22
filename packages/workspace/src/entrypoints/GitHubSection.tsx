@@ -2,6 +2,7 @@ import type { WorkspaceId } from '@spyria/kernel'
 import { buttonClass, ErrorMessage, fieldClass, LabelledSection, labelClass, useGuardedAction } from '@spyria/ui'
 import { type SubmitEvent, useEffect, useState } from 'react'
 import type { GitHubSecrets, GitHubSettingsView } from '../domain/github.ts'
+import { GitHubAppCreationForm } from './GitHubAppCreationForm.tsx'
 import { GitHubAppGuide } from './GitHubAppGuide.tsx'
 import { useWorkspaceCommands } from './providers.tsx'
 
@@ -44,7 +45,31 @@ export const GitHubSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => 
   const placeholder = settings ? 'Set: enter a new value to replace it' : 'Not set'
   return (
     <LabelledSection title="GitHub">
-      <GitHubAppGuide isOpen={!settings} />
+      {settings && (
+        <>
+          <p role="status" className="text-sm font-medium">
+            GitHub App connected
+          </p>
+          <h3 className="text-sm font-medium">Granted repositories</h3>
+          {settings.listingFailure ? (
+            <ErrorMessage message={settings.listingFailure} />
+          ) : settings.repositories.length === 0 ? (
+            <p className="text-sm text-muted">The App is installed on no repository</p>
+          ) : (
+            <ul aria-label="Granted repositories" className="flex flex-col gap-1 text-sm">
+              {settings.repositories.map(({ fullName, defaultBranch }) => (
+                <li key={fullName} className="flex gap-3">
+                  <span className="font-medium">{fullName}</span>
+                  <span className="text-muted">{defaultBranch}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+      <GitHubAppCreationForm workspaceId={workspaceId} />
+      <h3 className="text-sm font-medium">Create it manually</h3>
+      <GitHubAppGuide />
       <form onSubmit={submit} className="flex flex-col gap-3">
         <label className={labelClass}>
           App id
@@ -92,25 +117,6 @@ export const GitHubSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => 
           {isSaved && <span className="text-sm text-muted">Saved</span>}
         </div>
       </form>
-      {settings && (
-        <>
-          <h3 className="text-sm font-medium">Granted repositories</h3>
-          {settings.listingFailure ? (
-            <ErrorMessage message={settings.listingFailure} />
-          ) : settings.repositories.length === 0 ? (
-            <p className="text-sm text-muted">The App is installed on no repository</p>
-          ) : (
-            <ul aria-label="Granted repositories" className="flex flex-col gap-1 text-sm">
-              {settings.repositories.map(({ fullName, defaultBranch }) => (
-                <li key={fullName} className="flex gap-3">
-                  <span className="font-medium">{fullName}</span>
-                  <span className="text-muted">{defaultBranch}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </>
-      )}
     </LabelledSection>
   )
 }

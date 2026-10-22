@@ -55,8 +55,8 @@ const verifyByLink = async (workerStack: WorkerStack, domain = 'example.com') =>
   const address = verificationAddressOf(workerStack, domain)
   await postAsAlice(workerStack, '/api/sso-settings/domain-verification', { domain, email: address })
   const testCookie = `spyria_test=${encodeURIComponent(JSON.stringify({ db: workerStack.databaseName }))}`
-  const opened = await fetch(await lastLinkTo(address), { headers: { cookie: testCookie } })
-  expect(opened.status).toBe(200)
+  const opened = await fetch(await lastLinkTo(address), { headers: { cookie: testCookie }, redirect: 'manual' })
+  expect(opened.headers.get('location')).toBe(`${ssoViteUrl}/?domainVerification=${domain}`)
 }
 
 const inviteToAcme = (workerStack: WorkerStack, email: string) =>
@@ -220,16 +220,25 @@ test.describe('SSO', () => {
       await expect(domainRow.getByRole('button', { name: 'Resend' })).toBeVisible()
     })
 
-    await test.step('opening the link verifies the domain, and Settings show it Verified', async () => {
+    await test.step('opening the link lands me on Setup SSO with a "Domain verified" toast, and the domain shows Verified; opening it again says the link is invalid or expired', async () => {
+      const link = await lastLinkTo(verificationAddressOf(workerStack, 'example.com'))
       const linkPage = await page.context().newPage()
-      await linkPage.goto(await lastLinkTo(verificationAddressOf(workerStack, 'example.com')))
-      await expect(
-        linkPage.getByText('example.com is verified: people with an example.com email can now sign in'),
-      ).toBeVisible()
+      await linkPage.goto(link)
+      await expect(linkPage).toHaveURL(/\/w\/[^/]+\/settings\/sso$/)
+      await expect(linkPage.getByRole('status').filter({ hasText: 'Domain example.com verified' })).toBeVisible()
+      await expect(emailDomainOf(linkPage).getByText('Verified', { exact: true })).toBeVisible()
+      await expect(emailDomainOf(linkPage).getByRole('button')).toHaveCount(0)
+      await linkPage.goto(link)
+      await expect(linkPage).not.toHaveURL(/domainVerification/)
+      const invalidToast = linkPage
+        .getByRole('status')
+        .filter({ hasText: 'This verification link is invalid or expired' })
+      await expect(invalidToast).toBeVisible()
+      await invalidToast.getByRole('link', { name: 'Workspace settings › Setup SSO' }).click()
+      await expect(mainOf(linkPage).getByRole('heading', { level: 1, name: 'Setup SSO' })).toBeVisible()
       await linkPage.close()
       await page.reload()
       await expect(domainRow.getByText('Verified', { exact: true })).toBeVisible()
-      await expect(domainRow.getByRole('button')).toHaveCount(0)
     })
 
     await test.step('after verification, an invite works and Bob signs in through routing', async () => {

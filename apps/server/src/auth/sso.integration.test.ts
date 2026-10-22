@@ -114,10 +114,11 @@ const sendVerification = async (workspaceId: string, domain: string, email: stri
   return { status: response.status, body: await response.json() }
 }
 const lastLinkTo = (email: string) => verificationLinkIn(smtp.mails.findLast((mail) => mail.to.includes(email)))
-const openLink = async (link: string) => {
-  const response = await app.request(new URL(link).pathname + new URL(link).search)
-  return { status: response.status, page: await response.text() }
+const openLink = async (link: string, cookie = '') => {
+  const response = await app.request(new URL(link).pathname + new URL(link).search, { headers: { cookie } })
+  return { status: response.status, location: response.headers.get('location') }
 }
+const invalidLinkRedirect = { status: 302, location: `${testAuthSettings.appOrigin}/?domainVerification=invalid` }
 const runOperator = async (args: string[], environment: Record<string, string> = {}) => {
   const operator = Bun.spawn([process.execPath, new URL('../operator-cli.ts', import.meta.url).pathname, ...args], {
     stderr: 'pipe',
@@ -323,12 +324,11 @@ test('a domain verifies through a single-use emailed link; until then it does no
   expect(stored?.hash).toMatch(/^[0-9a-f]{64}$/)
   expect(firstLink).not.toContain(stored?.hash ?? '')
 
-  const invalid = 'This verification link is invalid, used or expired. Send a new one from Workspace settings.'
-  expect(await openLink(`${firstLink}x`)).toEqual({ status: 400, page: expect.stringContaining(invalid) })
+  expect(await openLink(`${firstLink}x`)).toEqual(invalidLinkRedirect)
   await sendVerification(acme, 'example.com', 'it@example.com')
-  expect(await openLink(firstLink)).toEqual({ status: 400, page: expect.stringContaining(invalid) })
+  expect(await openLink(firstLink)).toEqual(invalidLinkRedirect)
   await database.$client`update sso_domains set verification_expires_at = now() - interval '1 second'`
-  expect(await openLink(lastLinkTo('it@example.com'))).toEqual({ status: 400, page: expect.stringContaining(invalid) })
+  expect(await openLink(lastLinkTo('it@example.com'))).toEqual(invalidLinkRedirect)
 
   const storedHash = async () =>
     (
@@ -356,10 +356,7 @@ test('a domain verifies through a single-use emailed link; until then it does no
     })
     expect(await storedHash()).toBe(hashOfDeliveredLink)
     expect(droppingSmtp.mails).toHaveLength(1)
-    expect(await openLink(verificationLinkIn(droppingSmtp.mails[0]))).toEqual({
-      status: 400,
-      page: expect.stringContaining(invalid),
-    })
+    expect(await openLink(verificationLinkIn(droppingSmtp.mails[0]))).toEqual(invalidLinkRedirect)
   } finally {
     slowSmtp.stop()
     droppingSmtp.stop()
@@ -367,11 +364,12 @@ test('a domain verifies through a single-use emailed link; until then it does no
 
   await sendVerification(acme, 'example.com', 'it@example.com')
   const link = lastLinkTo('it@example.com')
-  expect(await openLink(link)).toEqual({
-    status: 200,
-    page: expect.stringContaining('example.com is verified: people with an example.com email can now sign in'),
+  const [aliceSession] = await openSessions(database, alice, acme)
+  expect(await openLink(link, `spyria_s_${acme}=${aliceSession?.sessionId}`)).toEqual({
+    status: 302,
+    location: `${testAuthSettings.appOrigin}/w/${acme}/settings/sso?domainVerification=example.com`,
   })
-  expect(await openLink(link)).toEqual({ status: 400, page: expect.stringContaining(invalid) })
+  expect(await openLink(link)).toEqual(invalidLinkRedirect)
   const verifiedEvent = (await workspaceEventsOf(database)).at(-1)
   expect(verifiedEvent?.actorId).toBeNull()
   expect(verifiedEvent).toMatchObject({
@@ -546,15 +544,19 @@ test('an unverified claim blocks no one; a verified domain refuses another issue
   expect((await configureIdp(otherIdp, 'hooli', 'shared.com')).status).toBe(200)
   expect((await configureIdp(entraIdp, 'pied-piper', 'shared.com')).status).toBe(200)
   expect((await app.request('/auth/login?email=pat@shared.com')).status).toBe(404)
-  await verifyDomainByOperator(database, 'hooli', 'shared.com')
+  await sendVerification('hooli', 'shared.com', 'it@shared.com')
+  expect(await openLink(lastLinkTo('it@shared.com'))).toEqual({
+    status: 302,
+    location: `${testAuthSettings.appOrigin}/?domainVerification=shared.com`,
+  })
   expect((await rejectionOf(verifyDomainByOperator(database, 'pied-piper', 'shared.com'))).message).toContain(
     'shared.com already signs in through another provider',
   )
   await sendVerification('pied-piper', 'shared.com', 'it@shared.com')
-  expect(await openLink(lastLinkTo('it@shared.com'))).toEqual({
-    status: 400,
-    page: expect.stringContaining('shared.com already signs in through another provider'),
-  })
+  expect(await openLink(lastLinkTo('it@shared.com'))).toEqual(invalidLinkRedirect)
+  expect([
+    ...(await database.$client`select workspace_id from sso_domains where domain = 'shared.com' and verified_at is not null`),
+  ]).toEqual([{ workspace_id: 'hooli' }])
   expect(JSON.parse((await configureIdp(entraIdp, 'pied-piper', 'shared.com')).body).error).toBe('domain_claimed')
   const login = await app.request('/auth/login?email=pat@shared.com')
   expect(new URL(login.headers.get('location') ?? '').origin).toBe(otherIdp.origin)

@@ -19,10 +19,13 @@ export {
   type GitHubSecrets,
   type GitHubSettingsInput,
   type GitHubSettingsView,
+  githubAppCreatedPath,
+  githubAppManifestOf,
   githubCallbackPath,
   githubSecretNames,
   githubSettingsFrom,
   githubWebhooksPath,
+  organizationLoginOf,
   repositoryNameOf,
 } from './domain/github.ts'
 export { displayNameFrom, normalizedEmail } from './domain/invitation.ts'
@@ -45,6 +48,7 @@ export { workspaceMutators } from './entrypoints/mutators.ts'
 export {
   createHttpGitHubCommands,
   devChatsPath,
+  githubAppManifestPath,
   githubBranchesPath,
   githubRepositoriesPath,
   githubSettingsPath,

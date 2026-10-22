@@ -9,10 +9,13 @@ export const fakeGitHubClientSecret = 'fake-client-secret'
 export const fakeGitHubLogin = 'alice-martin'
 export const fakeGitHubUserId = 1001
 export const fakeGitHubName = 'Alice Martin'
+export const fakeGitHubAppSlug = 'spyria-test'
 const installationId = 77
 const accessLifetimeSeconds = 8 * 60 * 60
 
 type Repository = { fullName: string; branches: string[]; files: Record<string, string> }
+type AppManifest = { name: string; redirect_url: string; setup_url: string } & Record<string, unknown>
+export type FakeAppCreation = { owner: string; manifest: AppManifest; webhookSecret?: string }
 type IssuedToken = { token: string; repositories?: string[]; permissions?: Record<string, string> }
 export type FakePullRequest = {
   repository: string
@@ -116,6 +119,27 @@ export const startFakeGitHub = () => {
     })
   }
   const pullRequests: FakePullRequest[] = []
+  const appCreations: FakeAppCreation[] = []
+  const manifestCodes = new Map<string, FakeAppCreation>()
+  const htmlPage = (body: string) =>
+    new Response(`<!doctype html><meta charset="utf-8"><title>Fake GitHub</title>${body}`, {
+      headers: { 'content-type': 'text/html' },
+    })
+  const escaped = (text: string) => text.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;')
+  const continueButton = (target: string, label: string, parameters: Record<string, string>) =>
+    `<form method="get" action="${escaped(target)}">${Object.entries(parameters)
+      .map(([name, value]) => `<input type="hidden" name="${name}" value="${escaped(value)}">`)
+      .join('')}<button>${label}</button></form>`
+  const newAppPage = async (request: Request, owner: string) => {
+    const manifest = JSON.parse(String((await request.formData()).get('manifest') ?? '{}')) as AppManifest
+    const creation = { owner, manifest }
+    const code = `manifest-${crypto.randomUUID()}`
+    appCreations.push(creation)
+    manifestCodes.set(code, creation)
+    return htmlPage(
+      `<h1>Create GitHub App for ${escaped(owner)}</h1><pre>${escaped(JSON.stringify(manifest))}</pre>${continueButton(manifest.redirect_url, 'Create GitHub App', { code, state: new URL(request.url).searchParams.get('state') ?? '' })}`,
+    )
+  }
   const bareOf = (repository: string) => join(root, `${repository}.git`)
   const branchHeadOf = (repository: string, branch: string) => {
     try {
@@ -208,6 +232,26 @@ export const startFakeGitHub = () => {
 
   const api = async (request: Request, path: string) => {
     apiRequests.push(`${request.method} ${path}`)
+    const conversion = /^\/app-manifests\/([\w-]+)\/conversions$/.exec(path)
+    if (conversion && request.method === 'POST') {
+      const creation = manifestCodes.get(conversion[1] ?? '')
+      if (!creation) return notFound()
+      manifestCodes.delete(conversion[1] ?? '')
+      creation.webhookSecret = `whsec-${crypto.randomUUID()}`
+      return Response.json(
+        {
+          id: Number(fakeGitHubAppId),
+          slug: fakeGitHubAppSlug,
+          name: creation.manifest.name,
+          owner: { login: creation.owner },
+          client_id: fakeGitHubClientId,
+          client_secret: fakeGitHubClientSecret,
+          webhook_secret: creation.webhookSecret,
+          pem: appPrivateKey,
+        },
+        { status: 201 },
+      )
+    }
     const isApp = jwtIssuerOf(request.headers.get('authorization'), publicKey) === fakeGitHubAppId
     if (path === '/app')
       return isApp ? Response.json({ id: Number(fakeGitHubAppId), slug: 'spyria-test' }) : unauthorized()
@@ -315,6 +359,13 @@ export const startFakeGitHub = () => {
           : Response.json({ error: 'bad_verification_code' })
       }
       if (/^\/[\w.-]+\/[\w.-]+\.git\//.test(url.pathname)) return serveGit(request, url.pathname)
+      const newApp = /^(?:\/organizations\/([\w-]+))?\/settings\/apps\/new$/.exec(url.pathname)
+      if (newApp && request.method === 'POST') return newAppPage(request, newApp[1] ?? fakeGitHubLogin)
+      const created = appCreations.findLast((creation) => creation.webhookSecret)
+      if (url.pathname === `/apps/${fakeGitHubAppSlug}/installations/new` && created)
+        return htmlPage(
+          `<h1>Install ${escaped(created.manifest.name)}</h1>${continueButton(created.manifest.setup_url, 'Install', { installation_id: String(installationId), setup_action: 'install' })}`,
+        )
       return notFound()
     },
   })
@@ -326,6 +377,7 @@ export const startFakeGitHub = () => {
     gitAuthorizations,
     apiRequests,
     pullRequests,
+    appCreations,
     branchHeadOf,
     commitSubjectsOf,
     commitToBranch,

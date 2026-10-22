@@ -9,9 +9,11 @@ import {
   type GitHubSecrets,
   type GitHubSettingsInput,
   type GitHubSettingsView,
+  githubAppManifestOf,
   githubSecretNames,
   githubSettingsFrom,
   InvalidGitHubSettings,
+  organizationLoginOf,
   RepositoryNotGranted,
   repositoryNameOf,
 } from '@spyria/workspace/server'
@@ -37,9 +39,11 @@ type AppRow = {
   encryptedPrivateKey: string
   encryptedWebhookSecret: string
 }
-type ConnectionState = { workspaceId: string; userId: string; databaseName?: string; expiresAt: number }
+type SignedState = { workspaceId: string; userId: string; databaseName?: string; expiresAt: number }
+type StatePurpose = 'github-connection' | 'github-app'
 
 const connectionStateLifetimeMilliseconds = 10 * 60 * 1000
+const appCreationStateLifetimeMilliseconds = 60 * 60 * 1000
 const notGrantedStatuses = [404, 422]
 const secretLabels: Record<keyof GitHubSecrets, string> = {
   clientSecret: 'A client secret',
@@ -195,21 +199,75 @@ export const saveGitHubSettings = async (
   return readGitHubSettings(database, dependencies, member)
 }
 
-const signatureOf = (tokenSecret: string, payload: string) =>
-  createHmac('sha256', tokenSecret).update(`github-connection.${payload}`).digest('base64url')
+const signatureOf = (tokenSecret: string, purpose: StatePurpose, payload: string) =>
+  createHmac('sha256', tokenSecret).update(`${purpose}.${payload}`).digest('base64url')
 
-const signedStateOf = (tokenSecret: string, state: ConnectionState) => {
+const signedStateOf = (tokenSecret: string, purpose: StatePurpose, state: SignedState) => {
   const payload = Buffer.from(JSON.stringify(state)).toString('base64url')
-  return `${payload}.${signatureOf(tokenSecret, payload)}`
+  return `${payload}.${signatureOf(tokenSecret, purpose, payload)}`
 }
 
-const verifiedStateOf = (tokenSecret: string, signed: string) => {
+const verifiedStateOf = (tokenSecret: string, purpose: StatePurpose, signed: string) => {
   const [payload = '', signature = ''] = signed.split('.')
-  const expected = Buffer.from(signatureOf(tokenSecret, payload))
+  const expected = Buffer.from(signatureOf(tokenSecret, purpose, payload))
   const given = Buffer.from(signature)
   if (expected.length !== given.length || !timingSafeEqual(expected, given)) return undefined
-  const state = JSON.parse(Buffer.from(payload, 'base64url').toString()) as ConnectionState
+  const state = JSON.parse(Buffer.from(payload, 'base64url').toString()) as SignedState
   return state.expiresAt > Date.now() ? state : undefined
+}
+
+export const startGitHubAppCreation = async (
+  database: Database,
+  { api }: GitHubDependencies,
+  member: Member,
+  {
+    tokenSecret,
+    appOrigin,
+    databaseName,
+    organization,
+  }: { tokenSecret: string; appOrigin: string; databaseName?: string; organization: unknown },
+) => {
+  const organizationLogin = organizationLoginOf(organization)
+  const [workspace] = await database.$client.begin(async (sql) => {
+    await requireMemberPermission(sql, member, 'github.manage')
+    return sql<{ name: string }[]>`select name from workspaces where workspace_id = ${member.workspaceId}`
+  })
+  const state = signedStateOf(tokenSecret, 'github-app', {
+    workspaceId: member.workspaceId,
+    userId: member.userId,
+    databaseName,
+    expiresAt: Date.now() + appCreationStateLifetimeMilliseconds,
+  })
+  const manifest = githubAppManifestOf({
+    appOrigin,
+    workspaceId: member.workspaceId,
+    workspaceName: workspace?.name ?? '',
+    nameSuffix: Buffer.from(crypto.getRandomValues(new Uint8Array(2))).toString('hex'),
+  })
+  return { formAction: api.newAppUrlOf(organizationLogin, state), manifest: JSON.stringify(manifest) }
+}
+
+export const finishGitHubAppCreation = async (
+  databaseOf: (databaseName: string | undefined) => Database | undefined,
+  dependencies: GitHubDependencies,
+  tokenSecret: string,
+  { code, state }: { code: string; state: string },
+) => {
+  const verified = verifiedStateOf(tokenSecret, 'github-app', state)
+  const database = verified && databaseOf(verified.databaseName)
+  if (!verified || !database)
+    throw new InvalidGitHubSettings('This link is invalid or expired: create the GitHub App again from Spyria')
+  const member = { workspaceId: verified.workspaceId, userId: verified.userId }
+  await database.$client.begin((sql) => requireMemberPermission(sql, member, 'github.manage'))
+  const created = await githubCall(() => dependencies.api.convertManifest(code))
+  await saveGitHubSettings(database, dependencies, member, {
+    appId: String(created.id),
+    clientId: created.client_id,
+    clientSecret: created.client_secret,
+    privateKey: created.pem,
+    webhookSecret: created.webhook_secret,
+  })
+  return dependencies.api.installationUrlOf(created.slug)
 }
 
 const storeUserTokens = async (
@@ -289,7 +347,7 @@ export const startGitHubConnection = async (
   { tokenSecret, callbackUrl, databaseName }: { tokenSecret: string; callbackUrl: string; databaseName?: string },
 ) => {
   const { clientId } = await appCredentialsOf(database, dependencies, member.workspaceId)
-  const state = signedStateOf(tokenSecret, {
+  const state = signedStateOf(tokenSecret, 'github-connection', {
     workspaceId: member.workspaceId,
     userId: member.userId,
     databaseName,
@@ -304,7 +362,7 @@ export const finishGitHubConnection = async (
   tokenSecret: string,
   { code, state }: { code: string; state: string },
 ) => {
-  const verified = verifiedStateOf(tokenSecret, state)
+  const verified = verifiedStateOf(tokenSecret, 'github-connection', state)
   const database = verified && databaseOf(verified.databaseName)
   if (!verified || !database || !dependencies.secretBox) return false
   const { clientId, clientSecret } = await appCredentialsOf(database, dependencies, verified.workspaceId)

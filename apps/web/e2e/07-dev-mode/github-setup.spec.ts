@@ -24,12 +24,57 @@ test.describe('GitHub setup', () => {
     await expect(mainOf(page)).not.toContainText('PRIVATE KEY')
   })
 
-  test("As an admin, I see how to create the GitHub App with this workspace's webhook and callback URLs, folded once the App is set", {
+  test("As an admin, I connect GitHub in one click: GitHub creates the app with Spyria's permissions and events, I pick repositories, and Spyria shows the app connected", {
+    tag: ['@spec-51'],
+  }, async ({ page }) => {
+    await openSettings(page, 'Connect GitHub')
+    const appOrigin = new URL(page.url()).origin
+    const section = githubSectionOf(page)
+    await expect(section.getByText('GitHub App connected')).toHaveCount(0)
+    const creation = section.getByRole('form', { name: 'Create the GitHub App' })
+    await creation.getByRole('radio', { name: 'An organization' }).check()
+    await creation.getByLabel('Organization login').fill('acme-corp')
+    await creation.getByRole('button', { name: 'Create the GitHub App on GitHub' }).click()
+
+    await expect(page.getByRole('heading', { name: 'Create GitHub App for acme-corp' })).toBeVisible()
+    const manifest = JSON.parse((await page.locator('pre').textContent()) ?? '{}')
+    expect(manifest).toMatchObject({
+      url: appOrigin,
+      hook_attributes: { url: `${appOrigin}/api/github/webhooks`, active: true },
+      callback_urls: [`${appOrigin}/auth/github/callback`],
+      setup_url: `${appOrigin}/w/workspace-acme/settings/github`,
+      public: false,
+      default_permissions: { contents: 'write', pull_requests: 'write', checks: 'read', metadata: 'read' },
+      default_events: [
+        'pull_request',
+        'pull_request_review',
+        'pull_request_review_comment',
+        'pull_request_review_thread',
+        'check_suite',
+        'check_run',
+      ],
+    })
+    await page.getByRole('button', { name: 'Create GitHub App' }).click()
+    await expect(page.getByRole('heading', { name: `Install ${manifest.name}` })).toBeVisible()
+    await page.getByRole('button', { name: 'Install' }).click()
+
+    await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Connect GitHub' })).toBeVisible()
+    await expect(section.getByRole('status').filter({ hasText: 'GitHub App connected' })).toBeVisible()
+    await expect(section.getByRole('list', { name: 'Granted repositories' }).getByRole('listitem')).toHaveText([
+      'acme/appmain',
+      'acme/docsmain',
+    ])
+    await expect(mainOf(page)).not.toContainText('PRIVATE KEY')
+  })
+
+  test("As an admin, I see how to create the GitHub App manually with this workspace's webhook and callback URLs, folded until I open it", {
     tag: ['@spec-51'],
   }, async ({ page }) => {
     await openSettings(page, 'Connect GitHub')
     const section = githubSectionOf(page)
     const appOrigin = new URL(page.url()).origin
+    await expect(section.getByText(`${appOrigin}/api/github/webhooks`, { exact: true })).toBeHidden()
+    await section.getByText('How to create the GitHub App').click()
     for (const url of [appOrigin, `${appOrigin}/auth/github/callback`, `${appOrigin}/api/github/webhooks`])
       await expect(section.getByText(url, { exact: true })).toBeVisible()
     for (const name of ['Homepage URL', 'Callback URL', 'Webhook URL'])

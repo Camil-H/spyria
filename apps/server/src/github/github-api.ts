@@ -5,7 +5,15 @@ import type { GitHubPullRequest } from './webhooks.ts'
 export type GitHubUrls = { apiUrl: string; webUrl: string }
 export type UserTokens = { accessToken: string; refreshToken: string | null; accessExpiresAt: Date | null }
 type Installation = { id: number }
-type Requested = { token: string; method?: string; body?: object }
+type Requested = { token?: string; method?: string; body?: object }
+type CreatedApp = {
+  id: number
+  slug: string
+  client_id: string
+  client_secret: string
+  webhook_secret: string
+  pem: string
+}
 
 export const githubDotCom: GitHubUrls = { apiUrl: 'https://api.github.com', webUrl: 'https://github.com' }
 const requestTimeoutMilliseconds = 15_000
@@ -36,7 +44,7 @@ export const createGitHubApi = ({ apiUrl, webUrl }: GitHubUrls) => {
         method,
         headers: {
           accept: 'application/vnd.github+json',
-          authorization: `Bearer ${token}`,
+          ...(token && { authorization: `Bearer ${token}` }),
           'x-github-api-version': '2022-11-28',
           ...(body && { 'content-type': 'application/json' }),
         },
@@ -110,6 +118,11 @@ export const createGitHubApi = ({ apiUrl, webUrl }: GitHubUrls) => {
     pullRequest: (token: string, fullName: string, number: number) =>
       request<GitHubPullRequest>(`/repos/${fullName}/pulls/${number}`, { token }),
     cloneUrlOf: (fullName: string) => `${webUrl}/${fullName}.git`,
+    newAppUrlOf: (organization: string | undefined, state: string) =>
+      `${webUrl}${organization ? `/organizations/${organization}` : ''}/settings/apps/new?${new URLSearchParams({ state })}`,
+    convertManifest: (code: string) =>
+      request<CreatedApp>(`/app-manifests/${encodeURIComponent(code)}/conversions`, { method: 'POST' }),
+    installationUrlOf: (slug: string) => `${webUrl}/apps/${encodeURIComponent(slug)}/installations/new`,
   }
 }
 

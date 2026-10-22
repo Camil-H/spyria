@@ -47,6 +47,10 @@ export type WorkspaceCommands = {
   }) => Promise<SsoSettingsView | null>
   readGitHubSettings: (input: { workspaceId: WorkspaceId }) => Promise<GitHubSettingsView | null>
   saveGitHubSettings: (input: GitHubSettingsInput & { workspaceId: WorkspaceId }) => Promise<GitHubSettingsView | null>
+  startGitHubAppCreation: (input: {
+    workspaceId: WorkspaceId
+    organization: string
+  }) => Promise<{ formAction: string; manifest: string }>
   listRepositories: (input: { workspaceId: WorkspaceId }) => Promise<GitHubRepository[]>
   listBranches: (input: { workspaceId: WorkspaceId; repository: string }) => Promise<string[]>
   createDevChat: Command<{ name: Name; projectId: ProjectId | null; repository: string; baseBranch: string }>
