@@ -1,5 +1,14 @@
 import { openPageAs } from '../stack'
-import { configureGitHubApp, expect, githubSectionOf, mainOf, newChatDialogOf, openSettings, test } from './fixtures'
+import {
+  configureGitHubApp,
+  expect,
+  githubSectionOf,
+  mainOf,
+  newChatDialogOf,
+  openSettings,
+  sidebarOf,
+  test,
+} from './fixtures'
 
 test.describe('GitHub setup', () => {
   test.beforeEach(async ({ page }) => {
@@ -24,10 +33,13 @@ test.describe('GitHub setup', () => {
     await expect(mainOf(page)).not.toContainText('PRIVATE KEY')
   })
 
-  test("As an admin, I connect GitHub in one click: GitHub creates the app with Spyria's permissions and events, I pick repositories, and Spyria shows the app connected", {
+  test("As an admin, I connect GitHub in one click: GitHub creates the app with Spyria's permissions and events, I pick repositories, and Spyria shows the app connected (a tick, no creation form, the status on the settings card)", {
     tag: ['@spec-51'],
   }, async ({ page }) => {
-    await openSettings(page, 'Connect GitHub')
+    await sidebarOf(page).getByRole('link', { name: 'Workspace settings' }).click()
+    const card = mainOf(page).getByRole('link', { name: 'Connect GitHub', exact: true })
+    await expect(card).toHaveAccessibleDescription('The GitHub App dev chats clone and push with')
+    await card.click()
     const appOrigin = new URL(page.url()).origin
     const section = githubSectionOf(page)
     await expect(section.getByText('GitHub App connected')).toHaveCount(0)
@@ -59,12 +71,17 @@ test.describe('GitHub setup', () => {
     await page.getByRole('button', { name: 'Install' }).click()
 
     await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Connect GitHub' })).toBeVisible()
-    await expect(section.getByRole('status').filter({ hasText: 'GitHub App connected' })).toBeVisible()
+    const connected = section.getByRole('status').filter({ hasText: 'GitHub App connected' })
+    await expect(connected).toBeVisible()
+    await expect(connected).toHaveAttribute('title', 'GitHub App connected')
+    await expect(creation).toHaveCount(0)
     await expect(section.getByRole('list', { name: 'Granted repositories' }).getByRole('listitem')).toHaveText([
       'acme/appmain',
       'acme/docsmain',
     ])
     await expect(mainOf(page)).not.toContainText('PRIVATE KEY')
+    await page.getByRole('link', { name: 'Back to Workspace settings' }).click()
+    await expect(card).toHaveAccessibleDescription('The GitHub App dev chats clone and push with GitHub App connected')
   })
 
   test("As an admin, I see how to create the GitHub App manually with this workspace's webhook and callback URLs, folded until I open it", {

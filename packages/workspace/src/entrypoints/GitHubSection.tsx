@@ -1,17 +1,29 @@
 import type { WorkspaceId } from '@spyria/kernel'
 import { buttonClass, ErrorMessage, fieldClass, LabelledSection, labelClass, useGuardedAction } from '@spyria/ui'
+import { Check } from 'lucide-react'
 import { type SubmitEvent, useEffect, useState } from 'react'
 import type { GitHubSecrets, GitHubSettingsView } from '../domain/github.ts'
 import { GitHubAppCreationForm } from './GitHubAppCreationForm.tsx'
 import { GitHubAppGuide } from './GitHubAppGuide.tsx'
 import { useWorkspaceCommands } from './providers.tsx'
-import { Check } from 'lucide-react'
+import { useWorkspacePermissions } from './useWorkspacePermissions.ts'
 
 const secretLabels = {
   clientSecret: 'Client secret',
   webhookSecret: 'Webhook secret',
 }
 const noSecrets: GitHubSecrets = { clientSecret: '', privateKey: '', webhookSecret: '' }
+
+export const useIsGitHubConfigured = (workspaceId: WorkspaceId, isShown: boolean) => {
+  const commands = useWorkspaceCommands()
+  const canManageGitHub = useWorkspacePermissions(workspaceId).includes('github.manage')
+  const [isConfigured, setIsConfigured] = useState(false)
+  useEffect(() => {
+    if (canManageGitHub && isShown)
+      commands.isGitHubConfigured({ workspaceId }).then(setIsConfigured, () => setIsConfigured(false))
+  }, [commands, workspaceId, canManageGitHub, isShown])
+  return isConfigured
+}
 
 export const GitHubSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
   const commands = useWorkspaceCommands()

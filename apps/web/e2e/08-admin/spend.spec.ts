@@ -121,7 +121,7 @@ test.describe('Spend', () => {
     test.describe(() => {
       test.use({ signedInAs: 'member-bob' })
 
-      test('As a member, I see only my own usage in my Profile, per chat and per model, with my decomposition', {
+      test('As a member, I see only my own usage in my Profile, per chat and per model, with my decomposition without the Users factor', {
         tag: ['@spec-45'],
       }, async ({ page }) => {
         await openProfile(page)
@@ -134,7 +134,14 @@ test.describe('Spend', () => {
         const models = tableOf(section, 'Usage by model')
         await expect(models.getByRole('row')).toHaveCount(3)
         expect(await cellTextsOf(rowOf(models, 'openai/gpt-5'))).toEqual(['2,000', '$0.02', '2', '100%'])
-        expect(await cellTextsOf(rowOf(tableOf(section, 'Spend decomposition'), 'Users'))).toEqual(['1', '1', '0%'])
+        const decomposition = tableOf(section, 'Spend decomposition')
+        await expect(decomposition.getByRole('rowheader')).toHaveCount(5)
+        await expect(rowOf(decomposition, 'Users')).toHaveCount(0)
+        expect(await cellTextsOf(rowOf(decomposition, 'Sessions'))).toEqual(['1', '1', '0%'])
+        await expect(decomposition).not.toContainText('Sessions per user')
+        await expect(usageSectionOf(page, 'Spend decomposition')).toContainText(
+          '): sessions × turns per session × requests per turn × tokens per request × price per token',
+        )
         await expect(section.getByRole('table', { name: 'Usage by member' })).toHaveCount(0)
         await expect(section).not.toContainText(/Alice|Lee|Invoice bug|claude/)
       })

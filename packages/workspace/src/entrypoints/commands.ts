@@ -46,6 +46,7 @@ export type WorkspaceCommands = {
     email: string
   }) => Promise<SsoSettingsView | null>
   readGitHubSettings: (input: { workspaceId: WorkspaceId }) => Promise<GitHubSettingsView | null>
+  isGitHubConfigured: (input: { workspaceId: WorkspaceId }) => Promise<boolean>
   saveGitHubSettings: (input: GitHubSettingsInput & { workspaceId: WorkspaceId }) => Promise<GitHubSettingsView | null>
   startGitHubAppCreation: (input: {
     workspaceId: WorkspaceId

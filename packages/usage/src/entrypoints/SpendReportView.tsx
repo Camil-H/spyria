@@ -32,25 +32,18 @@ const dimensionLabels: Record<SpendDimension, string> = {
   chat: 'Chat',
   model: 'Model',
 }
-const factorLabel = (name: SpendFactorName, isPersonal?: boolean) => {
-  const personalLabels: Record<SpendFactorName, string> = {
-    users: 'Users',
-    sessionsPerUser: 'Sessions',
-    turnsPerSession: 'Turns per session',
-    requestsPerTurn: 'Requests per turn',
-    tokensPerRequest: 'Tokens per request',
-    pricePerToken: 'Price per 1M tokens',
-  }
-  const workspaceLabels: Record<SpendFactorName, string> = {
-    users: 'Users',
-    sessionsPerUser: 'Sessions per user',
-    turnsPerSession: 'Turns per session',
-    requestsPerTurn: 'Requests per turn',
-    tokensPerRequest: 'Tokens per request',
-    pricePerToken: 'Price per 1M tokens',
-  }
-  return isPersonal ? personalLabels[name] : workspaceLabels[name]
+const workspaceFactorLabels: Record<SpendFactorName, string> = {
+  users: 'Users',
+  sessionsPerUser: 'Sessions per user',
+  turnsPerSession: 'Turns per session',
+  requestsPerTurn: 'Requests per turn',
+  tokensPerRequest: 'Tokens per request',
+  pricePerToken: 'Price per 1M tokens',
 }
+const personalFactorLabels = { ...workspaceFactorLabels, sessionsPerUser: 'Sessions' }
+const workspaceFormula =
+  'users × sessions per user × turns per session × requests per turn × tokens per request × price per token'
+const personalFormula = workspaceFormula.replace('users × sessions per user', 'sessions')
 const cellClass = 'px-2 py-1.5 text-right'
 const today = () => new Date().toISOString().slice(0, 10)
 
@@ -59,7 +52,13 @@ const searchOf = ({ period, from, to, granularity }: Search): Record<string, str
 
 const usageRowsOf = (rows: readonly SpendRow[]) => rows.map((row) => ({ ...row, calls: row.requests }))
 
-const Decomposition = ({ decomposition, isPersonal }: { decomposition: SpendReport['decomposition']; isPersonal?: boolean }) => (
+export const Decomposition = ({
+  decomposition,
+  isPersonal,
+}: {
+  decomposition: SpendReport['decomposition']
+  isPersonal: boolean
+}) => (
   <LabelledSection title="Spend decomposition" Heading="h3" titleClass="font-medium">
     <p className="text-sm text-muted">
       Spend {formatCost(decomposition.current.costMicros)} against {formatCost(decomposition.previous.costMicros)} in
@@ -69,7 +68,7 @@ const Decomposition = ({ decomposition, isPersonal }: { decomposition: SpendRepo
           ? null
           : decomposition.current.costMicros / decomposition.previous.costMicros - 1,
       )}
-      ): {isPersonal ? 'sessions × turns per session × requests per turn × tokens per request × price per token' : 'users × sessions per user × turns per session × requests per turn × tokens per request × price per token'}
+      ): {isPersonal ? personalFormula : workspaceFormula}
     </p>
     <table aria-label="Spend decomposition" className="w-full text-sm">
       <thead className="text-xs text-muted">
@@ -83,7 +82,7 @@ const Decomposition = ({ decomposition, isPersonal }: { decomposition: SpendRepo
       </thead>
       <tbody>
         {decomposition.factors
-          .filter((f) => !(isPersonal && f.name === 'users'))
+          .filter((factor) => !isPersonal || factor.name !== 'users')
           .map((factor) => {
             const isBiggestMover = factor.name === decomposition.biggestMover
             return (
@@ -93,7 +92,7 @@ const Decomposition = ({ decomposition, isPersonal }: { decomposition: SpendRepo
                 className={`border-t border-line ${isBiggestMover ? 'bg-selected font-semibold' : ''}`}
               >
                 <th scope="row" className="px-2 py-1.5 text-left font-normal">
-                  {factorLabel(factor.name, isPersonal)}
+                  {(isPersonal ? personalFactorLabels : workspaceFactorLabels)[factor.name]}
                   {isBiggestMover && <span className="ml-1 text-xs text-muted"> · Biggest mover</span>}
                 </th>
                 <td className={cellClass}>{formatFactor(factor.name, factor.current)}</td>

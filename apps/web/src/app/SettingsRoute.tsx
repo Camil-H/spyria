@@ -5,7 +5,14 @@ import { WorkspaceConnectionsSection } from '@spyria/profile'
 import { RuntimeHostsSection } from '@spyria/runtime'
 import { focusRing, formatCost, iconButtonClass, LabelledSection } from '@spyria/ui'
 import { AuditLogSection, countBudgetAlerts, UsageSection } from '@spyria/usage'
-import { GitHubSection, MembersSection, RolesSection, SignInSection, useWorkspacePermissions } from '@spyria/workspace'
+import {
+  GitHubSection,
+  MembersSection,
+  RolesSection,
+  SignInSection,
+  useIsGitHubConfigured,
+  useWorkspacePermissions,
+} from '@spyria/workspace'
 import { ArrowLeft } from 'lucide-react'
 import { type ComponentType, use } from 'react'
 import { Link, useOutletContext, useParams } from 'react-router'
@@ -114,9 +121,6 @@ const cardStatusesOf =
     const monthCostMicros = inWorkspace(snapshot.usageEntries)
       .filter((entry) => entry.month === month)
       .reduce((sum, entry) => sum + entry.costMicros, 0)
-    const hasGitHubConfigured = snapshot.workspaceEvents.some(
-      ({ workspaceId: w, type }) => w === workspaceId && type === 'github.configured',
-    )
     return {
       ...(isDexSignIn && { sso: "Signs in with this deployment's Dex" }),
       roles: [
@@ -133,7 +137,6 @@ const cardStatusesOf =
         'runtime host',
       ),
       'mcp-tools': countLabelOf(inWorkspace(snapshot.workspaceConnections).length, 'shared connection'),
-      github: hasGitHubConfigured ? 'GitHub App connected' : undefined,
       costs: `${formatCost(monthCostMicros)} this month`,
     }
   }
@@ -142,11 +145,14 @@ const SettingsRoute = () => {
   const workspaceId = useOutletContext<WorkspaceId>()
   const permissions = useWorkspacePermissions(workspaceId)
   const isDexSignIn = use(authModeLoading).authMode === 'dex'
-  const statuses = useQuery(cardStatusesOf, workspaceId, isDexSignIn)
+  const { card } = useParams()
+  const syncedStatuses = useQuery(cardStatusesOf, workspaceId, isDexSignIn)
+  const statuses = useIsGitHubConfigured(workspaceId, card === undefined)
+    ? { ...syncedStatuses, github: 'GitHub App connected' }
+    : syncedStatuses
   const month = new Date().toISOString().slice(0, 7)
   const isMonthUsageComplete = useScoped(workspaceId, 'monthUsage', { month })?.isComplete === true
   const budgetAlertCount = useQuery(countBudgetAlerts, workspaceId, month)
-  const { card } = useParams()
   const isAllowed = (settingsCard: SettingsCard) =>
     settingsCard.permissions.some((permission) => permissions.includes(permission))
   const allowedSections = cardSections
