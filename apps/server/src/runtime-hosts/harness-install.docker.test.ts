@@ -8,7 +8,7 @@ import { websocket } from 'hono/bun'
 import { createApp } from '../app.ts'
 import { readSpyriaAgentImage } from '../spyria-agent-image.ts'
 import { pinnedPackagesOf, startFakeNpmRegistry } from '../testing/harnesses.ts'
-import { acme, aliceInAcme, sessionTokenOf, testAuthSettings, waitFor } from '../testing/testing.ts'
+import { acme, aliceInAcme, rejectionOf, sessionTokenOf, testAuthSettings, waitFor } from '../testing/testing.ts'
 import { createRuntimeHostGateway } from './gateway.ts'
 
 const docker = (...args: string[]) => Bun.spawnSync(['docker', ...args], { stderr: 'pipe' })
@@ -113,7 +113,7 @@ test('a personal host installs a harness from the configured registry into its v
   ).toContain('read-only')
 
   const failed = gateway.sandboxProvider.installHarness({ ...runtime, harness: 'codex' })
-  await expect(failed).rejects.toThrow(
+  expect((await rejectionOf(failed)).message).toMatch(
     /^code E404\n404 Not Found - GET http:\/\/host\.docker\.internal:\d+\/@\w+%2fcodex/,
   )
   expect(await gateway.sandboxProvider.hasHarness({ ...runtime, harness: 'codex' })).toBe(false)

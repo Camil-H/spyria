@@ -4,7 +4,7 @@ Org-agnostic, model-agnostic AI workspace: agent chats, dev sessions and knowled
 
 ## Prerequisites
 
-- Bun 1.3
+- Bun 1.4.4 (the version of our Dockerfiles: `agent:build` compiles spyria-agent with it and the docker tests run on it)
 - Node 24 (zero-cache and Vite run on it)
 - Docker (Compose project `spyria`: Postgres on 5434, Dex on 5556, zero-cache on 4848, the model gateway on 127.0.0.1:8180; containers `spyria-*`). Tests never use this stack: they run their own containers `spyria-test-*`, among them `spyria-test-postgres` on 5435 (in memory, recreated when its settings change)
 
@@ -45,7 +45,7 @@ One Docker Compose file runs a production instance: `deploy/compose.prod.yml` (P
 
 Requirements:
 
-- Docker with Compose, and Bun 1.3 to build the runtime image.
+- Docker with Compose, and Bun 1.4.4 to build the runtime image.
 - An HTTPS origin (for example `https://spyria.example.com`) routing by path: `/zero/*` to `zero-cache:4848` (Zero's sync WebSocket; the web app syncs on `<origin>/zero`), everything else to `server:3000` (the web app, `/api`, `/auth`, `/h/<code>`, the `/host` WebSocket, `/gateway-oauth`, `/health`). Both are on the Compose network only; the server also answers on `127.0.0.1:${SPYRIA_LOCAL_PORT:-3300}`.
 - An OIDC provider for the first workspace (Google Workspace, Microsoft Entra or any OIDC issuer) with the redirect URI `<origin>/auth/callback`.
 - An SMTP service that sends from your domain (domain verification and invites).
@@ -115,19 +115,13 @@ bun run agent:versions       # pinned vs latest on npm, per tool
 bun run agent:bump <tool>    # pin the latest of claude-code | claude-agent-acp | codex | codex-acp | pi, then rebuild (for Pi, also regenerates its lockfile)
 ```
 
-Builds and the docker tests use the pinned Bun (`scripts/pinned-bun.ts`, the version of our Dockerfiles) whatever Bun is installed locally: `agent:build` compiles spyria-agent in `oven/bun:<pinned>-slim`, and `test:docker:integration` runs the test server and the hosts it starts on a checksum-verified, root-scrubbed copy of that release cached in `node_modules/.cache/spyria-bun`.
-
 After a rebuild, restart the server: a new content ID applies to new runtimes. Without a built image a prompt says `Spyria's runtime image is not built: run bun run agent:build`.
 
 ## Trust store
 
-In October 2026 eight eMudhra intermediate CA keys were compromised, the TLS ones chaining to `emSign ECC Root CA - G3` (and cross-signed by `AAA Certificate Services`). Until Bun ships the fix (Bun 1.3.14 and 1.4.3 still embed that root; `--use-system-ca` only adds the system store to Bun's and Node's bundled roots, it never removes one), our images drop it themselves:
+In October 2026 eight eMudhra intermediate CA keys were compromised, the TLS ones chaining to `emSign ECC Root CA - G3` (and cross-signed by `AAA Certificate Services`). Bun 1.4.4, Node 24.22.1, Debian's current `ca-certificates` and Go 1.27.3 no longer trust them. The gateway (Bifrost 2.2.6, Go 1.27.0) still would: Compose filters the emSign root out of its bundle at start and points `SSL_CERT_FILE` and `SSL_CERT_DIR` at the result; remove that `entrypoint` and `SSL_CERT_*` once Bifrost ships with Go 1.27.3 or later.
 
-- server and host Dockerfiles, and `bun run agent:build` for `spyria-agent`: the root's PEM in the Bun runtime is overwritten (`DISTRUSTED_ROOT_PEM_PREFIX`), so Bun cannot load it; Debian's current `ca-certificates` (`20250419+deb13u1`, `~deb12u2`) no longer has either root, and the host copies that bundle over distroless's;
-- agent image: Node 24.22.1 dropped the root (`agent:build` pulls `node:24-bookworm-slim`);
-- gateway (Bifrost 2.2.6, Go 1.27.0): Compose filters the root out of its bundle at start and points `SSL_CERT_FILE` and `SSL_CERT_DIR` at the result; cloudflared 2026.10.2 is built with Go 1.27.3, which rejects the eight keys.
-
-`bun run check:trust` (in `check:docker`) and `smoke:prod` fail when a built image or the running gateway still holds either root. Once Bun has a release with the fix, bump Bun and remove the `DISTRUSTED_ROOT_PEM_PREFIX` lines and `scrubDistrustedRoots`; once Bifrost ships with Go 1.27.3 or later, remove the gateway `entrypoint` and `SSL_CERT_*`. Keep `check:trust`.
+`bun run check:trust` (in `check:docker`) and `smoke:prod` fail when a built image or the running gateway still holds either root.
 
 ## Claude Code and Codex on your own machine
 

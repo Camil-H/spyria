@@ -1,17 +1,10 @@
 import { randomBytes } from 'node:crypto'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { pruneBuildCache } from './build-cache.ts'
 
 export const distrustedRootPemPrefixes = {
   'emSign ECC Root CA - G3': 'MIICTjCCAdOgAwIBAgIKPPYHqWhwDtqLhDAKBggqhkjOPQQD',
   'AAA Certificate Services': 'MIIEMjCCAxqgAwIBAgIBATANBgkqhkiG9w0BAQUFADB7MQsw',
-}
-export const scrubDistrustedRoots = (file: string) => {
-  const binary = readFileSync(file)
-  for (const prefix of Object.values(distrustedRootPemPrefixes))
-    for (let index = binary.indexOf(prefix); index !== -1; index = binary.indexOf(prefix, index))
-      binary.fill('*', index, index + prefix.length)
-  writeFileSync(file, binary)
 }
 const systemStorePaths = ['/etc/ssl/certs', '/usr/share/ca-certificates']
 const runtimePaths = ['/usr/local/bin']

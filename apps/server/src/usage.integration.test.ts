@@ -13,6 +13,7 @@ import {
   gatewayLogsOf,
   globex,
   openSharedTestApp,
+  rejectionOf,
   virtualKeyOf,
 } from './testing/testing.ts'
 
@@ -110,7 +111,7 @@ test('with the gateway down the sync changes nothing and the job reschedules its
     mark: [...(await database.$client`select * from usage_sync_marks`)],
   }
   const downLogs = createBifrostUsageLogs({ url: 'http://127.0.0.1:9', ...gatewayAdmin })
-  await expect(syncUsageNow(downLogs, { workspaceId: acme, transact })).rejects.toThrow()
+  await rejectionOf(syncUsageNow(downLogs, { workspaceId: acme, transact }))
   const job = createUsageJobs(downLogs)['usage.sync']
   const logged = captureLogs()
   await job?.({ workspaceId: workspaceId(acme), transact })

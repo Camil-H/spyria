@@ -108,6 +108,16 @@ export const waitFor = async (isDone: () => boolean | Promise<boolean>, timeoutM
     if (Date.now() > deadline) throw new Error(`The condition was not met within ${timeoutMilliseconds / 1000} s`)
 }
 
+export const rejectionOf = async (promise: Promise<unknown>) => {
+  const settled = await promise.then(
+    (value) => ({ isRejected: false, value }),
+    (error: unknown) => ({ isRejected: true, value: error }),
+  )
+  if (!settled.isRejected) throw new Error(`Expected a rejection, got ${Bun.inspect(settled.value)}`)
+  if (!(settled.value instanceof Error)) throw new Error(`Rejected with a non-Error ${Bun.inspect(settled.value)}`)
+  return settled.value
+}
+
 export const createHolds = () => {
   const holdByName = new Map<string, { reached: PromiseWithResolvers<void>; released: PromiseWithResolvers<void> }>()
   const holdOf = (name: string) => {

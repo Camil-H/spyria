@@ -5,7 +5,16 @@ import { exportJWK, generateKeyPair, type JWTPayload, SignJWT } from 'jose'
 import { createApp } from '../app.ts'
 import { rateBudgets } from '../rate-limits.ts'
 import { startFakeSmtp, verificationLinkIn } from '../testing/fake-smtp.ts'
-import { acme, alice, bob, captureLogs, globex, testAuthSettings, workspaceEventsOf } from '../testing/testing.ts'
+import {
+  acme,
+  alice,
+  bob,
+  captureLogs,
+  globex,
+  rejectionOf,
+  testAuthSettings,
+  workspaceEventsOf,
+} from '../testing/testing.ts'
 import { createSmtpMailer } from './mail.ts'
 import { createSecretBox } from './secret-box.ts'
 import { issueSessionToken } from './session-tokens.ts'
@@ -438,9 +447,7 @@ test('a mail is retried while the SMTP connection is refused, and never sent twi
   }
   const droppingSmtp = startFakeSmtp(0, { dropsAfterMessage: true })
   try {
-    await expect(
-      createSmtpMailer({ smtpUrl: droppingSmtp.url, from: 'Spyria <spyria@test.local>' }).send(mail),
-    ).rejects.toThrow()
+    await rejectionOf(createSmtpMailer({ smtpUrl: droppingSmtp.url, from: 'Spyria <spyria@test.local>' }).send(mail))
     await Bun.sleep(300)
     expect(droppingSmtp.mails).toHaveLength(1)
   } finally {
@@ -540,7 +547,7 @@ test('an unverified claim blocks no one; a verified domain refuses another issue
   expect((await configureIdp(entraIdp, 'pied-piper', 'shared.com')).status).toBe(200)
   expect((await app.request('/auth/login?email=pat@shared.com')).status).toBe(404)
   await verifyDomainByOperator(database, 'hooli', 'shared.com')
-  await expect(verifyDomainByOperator(database, 'pied-piper', 'shared.com')).rejects.toThrow(
+  expect((await rejectionOf(verifyDomainByOperator(database, 'pied-piper', 'shared.com'))).message).toContain(
     'shared.com already signs in through another provider',
   )
   await sendVerification('pied-piper', 'shared.com', 'it@shared.com')

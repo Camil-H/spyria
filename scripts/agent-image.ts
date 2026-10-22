@@ -1,9 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { type HarnessId, harnessIds, installScriptOf } from '../apps/host/src/harnesses.ts'
 import { pruneBuildCache } from './build-cache.ts'
 import { checkLicenses } from './check-licenses.ts'
-import { scrubDistrustedRoots } from './check-trust.ts'
-import { pinnedBunImage } from './pinned-bun.ts'
 
 const agentDirectory = new URL('../apps/agent/', import.meta.url).pathname
 const piDirectory = `${agentDirectory}pi/`
@@ -58,15 +56,11 @@ const removeReplacedImage = (previousImage: string, image: string) => {
 
 const build = () => {
   const previousImage = existsSync(imageIdFile) ? readFileSync(imageIdFile, 'utf8').trim() : ''
-  const repositoryRoot = new URL('../', import.meta.url).pathname
-  mkdirSync(`${agentDirectory}dist`, { recursive: true })
+  const architecture = run(['docker', 'info', '--format', '{{.Architecture}}']) === 'aarch64' ? 'arm64' : 'x64'
   run([
-    ...['docker', 'run', '--rm', '--user', `${process.getuid?.()}:${process.getgid?.()}`, '--env', 'HOME=/tmp'],
-    ...['--volume', `${repositoryRoot}:/repository:ro`, '--volume', `${agentDirectory}dist:/dist`],
-    ...['--workdir', '/repository/apps/agent', pinnedBunImage],
-    ...['bun', 'build', '--compile', '--minify', 'src/main.ts', '--outfile', '/dist/spyria-agent'],
+    ...['bun', 'build', '--compile', '--minify', `--target=bun-linux-${architecture}`],
+    ...['src/main.ts', '--outfile', 'dist/spyria-agent'],
   ])
-  scrubDistrustedRoots(`${agentDirectory}dist/spyria-agent`)
   run(['docker', 'build', '--pull', '--iidfile', 'image-id', '-t', 'spyria-agent:dev', '.'])
   const image = readFileSync(imageIdFile, 'utf8').trim()
   removeReplacedImage(previousImage, image)

@@ -14,6 +14,7 @@ import {
   newChat,
   openSharedTestApp,
   openZeroStore,
+  rejectionOf,
   waitFor,
   zeroSessionsOf,
 } from './testing/testing.ts'
@@ -203,12 +204,13 @@ test('signing out of a workspace removes its rows but keeps it listed, signing i
   expect(store.signedInWorkspaceIds()).toEqual(new Set([acme]))
   expect(store.read().chats.filter((chat) => chat.workspaceId === globex)).toEqual([])
   expect(store.read().workspaces.map((workspace) => workspace.name)).toEqual(['Acme', 'Globex'])
-  await expect(
+  const signedOut = await rejectionOf(
     store.mutate(
       globex,
       workspaceMutators.workspace.createProject({ workspaceId: globex, id: 'project-signed-out', name: 'Signed out' }),
     ),
-  ).rejects.toThrow('Workspace workspace-globex is not open')
+  )
+  expect(signedOut.message).toContain('Workspace workspace-globex is not open')
   const [globexSession] = await zeroSessionsOf(alice, [globex])
   if (!globexSession) throw new Error('Alice has no Globex session')
   await store.signIn(globexSession)
@@ -255,7 +257,7 @@ test('an optimistic message takes the next seq of its chat before the server con
 
 test('the client refuses a mutation the member lacks the permission for, before it reaches the server', async () => {
   const store = await openZeroStore(createZeroStore, lee, [acme])
-  await expect(
+  const refused = await rejectionOf(
     store.mutate(
       acme,
       conversationMutators.conversation.sendMessage({
@@ -265,7 +267,8 @@ test('the client refuses a mutation the member lacks the permission for, before 
         text: 'Readers cannot post',
       }),
     ),
-  ).rejects.toThrow('You need the chat.post permission on this chat')
+  )
+  expect(refused.message).toContain('You need the chat.post permission on this chat')
   expect(store.read().messages.some((message) => message.id === 'message-reader-posts')).toBe(false)
   expect(await database.query.messages.findFirst({ where: { id: 'message-reader-posts' } })).toBeUndefined()
 })
@@ -308,7 +311,7 @@ test('archiving a project whose chats the member cannot all administer is applie
       chatsPolicy: 'archive',
     }),
   )
-  await expect(confirmation).rejects.toThrow('You need the chat.admin permission on this chat')
+  expect((await rejectionOf(confirmation)).message).toContain('You need the chat.admin permission on this chat')
   await waitFor(() => onboardingOf()?.archived === false)
   expect(await database.query.projects.findFirst({ where: { id: 'project-onboarding' } })).toMatchObject({
     archived: false,

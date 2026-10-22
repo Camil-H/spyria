@@ -8,7 +8,7 @@ import { websocket } from 'hono/bun'
 import { createApp } from '../app.ts'
 import { readSpyriaAgentImage } from '../spyria-agent-image.ts'
 import { requireTestHarnesses, testHarnessesVolume } from '../testing/harnesses.ts'
-import { acme, aliceInAcme, sessionTokenOf, testAuthSettings, waitFor } from '../testing/testing.ts'
+import { acme, aliceInAcme, rejectionOf, sessionTokenOf, testAuthSettings, waitFor } from '../testing/testing.ts'
 import { createRuntimeHostGateway } from './gateway.ts'
 
 const docker = (...args: string[]) => Bun.spawnSync(['docker', ...args], { stderr: 'pipe' })
@@ -159,21 +159,23 @@ test("a real spyria-host --personal runs Spyria's image with the credentials vol
   expect(written.stderr.toString()).toBe('')
 
   expect(dockerText('exec', containerName, 'cat', '/home/openhands/.claude/.credentials.json')).toBe(credentialsFile)
-  await expect(
+  const download = await rejectionOf(
     transport.fetch({
       method: 'GET',
       path: '/api/file/download?path=/home/openhands/.claude/.credentials.json',
       headers,
     }),
-  ).rejects.toThrow('refused')
-  await expect(
+  )
+  expect(download.message).toContain('refused')
+  const command = await rejectionOf(
     transport.fetch({
       method: 'POST',
       path: '/api/bash/execute_bash_command',
       headers,
       body: JSON.stringify({ command: 'cat /home/openhands/.claude/.credentials.json' }),
     }),
-  ).rejects.toThrow('refused')
+  )
+  expect(command.message).toContain('refused')
 
   await gateway.sandboxProvider.remove(runtime)
   expect(dockerText('volume', 'ls', '-q', '--filter', `name=^${prefix}cred-claude-code$`)).toBe(

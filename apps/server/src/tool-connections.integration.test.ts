@@ -23,6 +23,7 @@ import {
   mcpCall,
   openSharedTestApp,
   promptedBy,
+  rejectionOf,
   rpcOf,
   runtimeTurn,
   testAuthSettings,
@@ -287,6 +288,8 @@ test('no OAuth token, client secret or virtual key reaches Spyria tables, logs o
 
 test('a tool server name with "-" is refused at registration, so a tool name always splits into its server and tool', async () => {
   const hyphenated = { name: `${sharedToolServer}-pro`, url: 'http://host.docker.internal:1/mcp', isShared: true }
-  expect(llmGateway.setUpToolServer(hyphenated)).rejects.toThrow('A tool server name cannot contain "-"')
+  expect((await rejectionOf(llmGateway.setUpToolServer(hyphenated))).message).toContain(
+    'A tool server name cannot contain "-"',
+  )
   expect((await llmGateway.toolServers()).map(({ name }) => name)).not.toContain(hyphenated.name)
 })

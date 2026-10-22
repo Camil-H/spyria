@@ -16,6 +16,7 @@ import {
   lee,
   openSharedTestApp,
   openZeroStore,
+  rejectionOf,
   removeFromAcme,
   requestMutation,
   sessionTokenOf,
@@ -308,8 +309,8 @@ test('a host frame at the explicit 64 MiB limit is relayed and the host stays on
 
   const tooLarge = gateway.sandboxProvider.connect(sandbox).fetch({ method: 'POST', path: '/api/workspace/bundle' })
   await answerAtSize(maximumFrameBytes + 1)
-  await expect(tooLarge).rejects.toThrow()
-  expect([1006, 1009]).toContain((await host.closed).code)
+  await rejectionOf(tooLarge)
+  expect((await host.closed).code).toBe(1009)
   await waitFor(async () => (await hostRow(id)).status === 'offline')
 }, 30_000)
 
@@ -484,7 +485,7 @@ test('a member promoted to admin reads and manages workspace hosts at once witho
   expect(await localSessionsOn()).toBe(false)
   expect(await changeLeeRole('member')).toEqual(succeeded)
   await waitFor(() => leesAcme.read().runtimeHosts.length === 0)
-  await expect(leesAcme.mutate(acme, setLocalSessions(true))).rejects.toThrow(
+  expect((await rejectionOf(leesAcme.mutate(acme, setLocalSessions(true)))).message).toContain(
     'Your workspace role does not allow this: Manage runtime hosts and local sessions',
   )
   expect(await removeHost(leeInAcme, acme, id)).toEqual(

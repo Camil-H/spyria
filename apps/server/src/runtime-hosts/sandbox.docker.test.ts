@@ -16,7 +16,15 @@ import { websocket } from 'hono/bun'
 import { createApp } from '../app.ts'
 import { startJobWorker } from '../job-worker.ts'
 import { readSpyriaAgentImage } from '../spyria-agent-image.ts'
-import { acme, aliceInAcme, openSharedTestApp, sessionTokenOf, testAuthSettings, waitFor } from '../testing/testing.ts'
+import {
+  acme,
+  aliceInAcme,
+  openSharedTestApp,
+  rejectionOf,
+  sessionTokenOf,
+  testAuthSettings,
+  waitFor,
+} from '../testing/testing.ts'
 import { createRuntimeHostGateway } from './gateway.ts'
 
 const docker = (...args: string[]) => Bun.spawnSync(['docker', ...args], { stderr: 'pipe' })
@@ -96,9 +104,9 @@ test.skipIf(!hasImage)(
     const runtime = { workspaceId: acme, hostId: runtimeHostId(id), runtimeId: 'docker-test' }
     const apiKey = 'test-api-key-0123456789abcdef'
     const containerName = `${prefix}rt-docker-test`
-    await expect(provider.create({ ...runtime, image: 'docker.io/library/alpine:3', apiKey })).rejects.toThrow(
-      'refused',
-    )
+    expect(
+      (await rejectionOf(provider.create({ ...runtime, image: 'docker.io/library/alpine:3', apiKey }))).message,
+    ).toContain('refused')
     await provider.create({ ...runtime, image: spyriaImage, apiKey })
     expect(await provider.status(runtime)).toBe('stopped')
 
@@ -153,7 +161,9 @@ test.skipIf(!hasImage)(
       headers: { 'x-session-api-key': apiKey },
     })
     expect(authenticated.status).toBe(404)
-    await expect(transport.fetch({ method: 'GET', path: '@169.254.169.254/' })).rejects.toThrow('refused')
+    expect((await rejectionOf(transport.fetch({ method: 'GET', path: '@169.254.169.254/' }))).message).toContain(
+      'refused',
+    )
 
     await provider.stop(runtime)
     expect(await provider.status(runtime)).toBe('stopped')
@@ -185,8 +195,8 @@ test.skipIf(!hasImage)(
       ...['--entrypoint', 'sleep', spyriaImage, '600'],
     )
     const runtime = { ...host, runtimeId: 'rt-other' }
-    await expect(gateway.sandboxProvider.status(runtime)).rejects.toThrow('refused')
-    await expect(gateway.sandboxProvider.remove(runtime)).rejects.toThrow('refused')
+    expect((await rejectionOf(gateway.sandboxProvider.status(runtime))).message).toContain('refused')
+    expect((await rejectionOf(gateway.sandboxProvider.remove(runtime))).message).toContain('refused')
     expect(dockerText('ps', '-q', '--filter', `name=^${otherDeploymentRuntime}$`)).not.toBe('')
   },
   30_000,
@@ -240,13 +250,14 @@ test.skipIf(!hasImage)(
   async () => {
     const startedAt = performance.now()
     const host = { workspaceId: acme, hostId: runtimeHostId(await hostId()) }
-    await expect(gateway.prepare(host, 'docker.io/library/alpine:3')).rejects.toThrow('refused')
-    await expect(
+    expect((await rejectionOf(gateway.prepare(host, 'docker.io/library/alpine:3'))).message).toContain('refused')
+    const foreignImage = await rejectionOf(
       gateway.prepare(
         host,
         'ghcr.io/openhands/agent-server@sha256:977a4791b90f46c0873f63d879180692802e47e7a0e760ab5add5d5a2505027d',
       ),
-    ).rejects.toThrow('refused')
+    )
+    expect(foreignImage.message).toContain('refused')
     await gateway.prepare(host, spyriaImage)
 
     const { database } = testDatabase
