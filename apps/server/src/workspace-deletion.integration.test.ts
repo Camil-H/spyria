@@ -1,22 +1,20 @@
 import { afterAll, expect, test } from 'bun:test'
+import { createTestDatabase } from '@spyria/db/testing'
 import { openSessions } from './auth/sessions.ts'
 import { hasNoWorkspace } from './auth/sso.ts'
 import { startJobWorker } from './job-worker.ts'
 import {
   acme,
-  addLlmKey,
   alice,
   aliceInAcme,
-  bob,
   bobInAcme,
   failedWith,
   globex,
   issueTestSession,
-  newChat,
   openSharedTestApp,
   rejectionOf,
+  sessionTokenOf,
   succeeded,
-  virtualKeyOf,
   waitFor,
   workspaceEventsOf,
 } from './testing/testing.ts'
@@ -139,40 +137,84 @@ test('deleting a workspace ends its sessions, tokens and sign-ins at once, keeps
 })
 
 test('the purge erases every row of the workspace with its chat history, gateway keys, shared connections and members who belong nowhere else, and leaves other workspaces untouched', async () => {
-  await addLlmKey(bob, 'openai')
-  const { id: virtualKeyId } = await virtualKeyOf(bob)
+  const wayne = 'workspace-wayne'
+  const aliceInWayne = { workspaceId: wayne, userId: alice }
+  expect(
+    await resultOf(aliceInAcme, 'workspace.createWorkspace', { workspaceId: acme, id: wayne, name: 'Wayne' }),
+  ).toEqual(succeeded)
+  await database.$client`insert into users (id, email) values ('member-dana', 'dana@example.com')`
+  await database.$client`
+    insert into memberships (workspace_id, user_id, role, display_name) values (${wayne}, 'member-dana', 'member', 'Dana')`
+  const added = await app.request('/api/llm-credentials', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${await sessionTokenOf(database, wayne, 'member-dana')}` },
+    body: JSON.stringify({ provider: 'openai', secret: `fake-key-${crypto.randomUUID()}` }),
+  })
+  expect(added.status).toBe(201)
+  const [{ virtualKeyId = '' } = {}] = await database.$client<{ virtualKeyId: string }[]>`
+    select virtual_key_id as "virtualKeyId" from member_gateway_keys where workspace_id = ${wayne}`
   await database.$client`
     insert into workspace_connections (workspace_id, id, name, gateway_name, url, tools, allowed_tools)
-    values (${acme}, ${`connection-${crypto.randomUUID()}`}, 'CRM', ${`crm-${crypto.randomUUID()}`}, 'https://crm.example.com/mcp', '[]', '[]')`
-  await newChat({ ownerId: alice, type: 'channel' })
-  const globexRowsBefore = await rowCountsOf(globex)
-  expect(await deleteAs(aliceInAcme)).toEqual(succeeded)
+    values (${wayne}, 'connection-docs', 'Docs', ${`docs-${crypto.randomUUID()}`}, 'https://docs.example.com/mcp', '[]', '[]')`
+  expect(
+    await resultOf(aliceInWayne, 'workspace.createChat', {
+      workspaceId: wayne,
+      id: `chat-${crypto.randomUUID()}`,
+      name: 'General',
+      type: 'channel',
+      projectId: null,
+    }),
+  ).toEqual(succeeded)
+  expect((await rowCountsOf(wayne)).events).toBeGreaterThan(0)
+  const [acmeRowsBefore, globexRowsBefore] = [await rowCountsOf(acme), await rowCountsOf(globex)]
+  expect(await deleteAs(aliceInWayne)).toEqual(succeeded)
   await database.$client`
     insert into jobs (workspace_id, id, type, payload, run_at, attempts, state, last_error)
-    values (${acme}, 'removal-on-a-lost-host', 'runtime.remove', '{}', now(), 5, 'failed', 'Host offline')`
+    values (${wayne}, 'removal-on-a-lost-host', 'runtime.remove', '{}', now(), 5, 'failed', 'Host offline')`
 
-  await purgeWorkspaceNow(database, acme)
+  await purgeWorkspaceNow(database, wayne)
   await Bun.sleep(1000)
-  expect((await workspaceOf(acme))?.isDeleted).toBe(true)
-  expect([...(await abandonFailedCleanup(database, acme))]).toEqual([
+  expect((await workspaceOf(wayne))?.isDeleted).toBe(true)
+  expect([...(await abandonFailedCleanup(database, wayne))]).toEqual([
     { type: 'runtime.remove', lastError: 'Host offline' },
   ])
-  await waitFor(async () => (await workspaceOf(acme)) === undefined)
+  await waitFor(async () => (await workspaceOf(wayne)) === undefined)
 
-  expect(Object.entries(await rowCountsOf(acme)).filter(([, count]) => count > 0)).toEqual([])
+  expect(Object.entries(await rowCountsOf(wayne)).filter(([, count]) => count > 0)).toEqual([])
+  expect({ ...(await rowCountsOf(acme)), jobs: 0 }).toEqual({ ...acmeRowsBefore, jobs: 0 })
   expect({ ...(await rowCountsOf(globex)), jobs: 0 }).toEqual({ ...globexRowsBefore, jobs: 0 })
   expect((await gateway.request(`/api/governance/virtual-keys/${virtualKeyId}`)).status).toBe(404)
   expect(
-    (await database.$client`select id from users where id in (${alice}, ${bob}) order by id`).map(({ id }) => id),
+    (await database.$client`select id from users where id in (${alice}, 'member-dana') order by id`).map(
+      ({ id }) => id,
+    ),
   ).toEqual([alice])
 })
 
 test('once the last workspace of the instance is purged, its domain is free and a workspace can be created again', async () => {
-  expect(await hasNoWorkspace(database.$client)).toBe(false)
-  expect(await deleteAs(aliceInGlobex)).toEqual(succeeded)
-  expect(await hasNoWorkspace(database.$client)).toBe(false)
-  await purgeWorkspaceNow(database, globex)
-  await waitFor(async () => (await workspaceOf(globex)) === undefined)
-  expect(await hasNoWorkspace(database.$client)).toBe(true)
-  expect(await database.$client`select 1 from sso_domains`).toHaveLength(0)
+  const instance = await createTestDatabase()
+  const instanceWorker = startJobWorker(instance.database, { pollIntervalMilliseconds: 5, cleanupPollMilliseconds: 20 })
+  try {
+    const sql = instance.database.$client
+    await sql`truncate workspaces, users cascade`
+    await sql`insert into users (id, email) values ('member-erin', 'erin@umbrella.com')`
+    await sql`
+      insert into workspaces (workspace_id, name, created_by, created_at, deleted_at, purge_at)
+      values ('umbrella', 'Umbrella', 'member-erin', now(), now(), now())`
+    await sql`
+      insert into workspace_sso (workspace_id, preset, issuer, client_id, encrypted_client_secret, updated_at)
+      values ('umbrella', 'oidc', 'https://idp.umbrella.com', 'spyria', '', now())`
+    await sql`insert into sso_domains (workspace_id, domain, verified_at) values ('umbrella', 'umbrella.com', now())`
+    await sql`
+      insert into jobs (workspace_id, id, type, payload, run_at, attempts, state)
+      values ('umbrella', 'purge', 'workspace.purge', '{"stage":"release","actorId":"member-erin"}', now(), 0, 'queued')`
+    expect(await hasNoWorkspace(sql)).toBe(false)
+    await waitFor(async () => (await sql`select 1 from workspaces`).length === 0)
+    expect(await hasNoWorkspace(sql)).toBe(true)
+    expect(await sql`select 1 from sso_domains`).toHaveLength(0)
+    expect(await sql`select 1 from users`).toHaveLength(0)
+  } finally {
+    await instanceWorker.stop()
+    await instance.drop()
+  }
 })
