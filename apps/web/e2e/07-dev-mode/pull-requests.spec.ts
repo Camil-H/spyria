@@ -209,8 +209,10 @@ test.describe('Pull requests', () => {
     await expect(cardOf(page).getByRole('list', { name: 'Review comments' }).getByRole('listitem')).toHaveCount(2)
     await cardOf(page).getByRole('button', { name: 'Address review comments' }).click()
     const prompt = messageContaining(page, 'Address the review comments on pull request #1, then commit:')
-    await expect(prompt).toContainText('- src/app.ts:1 (rita): Name this total')
-    await expect(prompt).toContainText('- src/app.ts:1 (rita): Add a test for the totals')
+    await expect(prompt.getByRole('listitem')).toHaveText([
+      'src/app.ts:1 (rita): Name this total',
+      'src/app.ts:1 (rita): Add a test for the totals',
+    ])
     await expect(messageContaining(page, 'Addressed the review.')).toHaveCount(1)
     await finished(page)
     await panelTabOf(page, 'Changes').click()

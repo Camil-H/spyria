@@ -30,7 +30,7 @@ import {
 } from '../operations/model-calls.ts'
 import { promptAgent, startAgentSession } from '../operations/prompt-agent.ts'
 import { publishBranch, recordPullRequest } from '../operations/publish-branch.ts'
-import { readWorkspace, snapshotWorkspace, wakeWorkspace } from '../operations/read-workspace.ts'
+import { readRuntimeMedia, readWorkspace, snapshotWorkspace, wakeWorkspace } from '../operations/read-workspace.ts'
 import { recordAgentEvent } from '../operations/record-agent-event.ts'
 import { answerToolApproval } from '../operations/request-tool-approval.ts'
 import { promptWaitingChats } from '../operations/retry-agent.ts'
@@ -135,6 +135,8 @@ export const createAgentHandlers = ({
     },
     readWorkspace: (chat: AgentChat, member: MemberId, read: WorkspaceRead, path: string) =>
       readWorkspace(dependenciesOf(chat.workspaceId), { chat, memberId: member, read, path }),
+    readRuntimeMedia: (chat: AgentChat, member: MemberId, path: string) =>
+      readRuntimeMedia(dependenciesOf(chat.workspaceId), { chat, memberId: member, path }),
     publishBranch: (input: Parameters<typeof publishBranch>[1]) =>
       publishBranch(dependenciesOf(input.chat.workspaceId), input),
     runGitAction: (input: Parameters<typeof runGitAction>[1]) =>

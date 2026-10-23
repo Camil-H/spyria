@@ -13,6 +13,7 @@ const messageOf = (seq: number, authorId: MessageRow['authorId']): MessageRow =>
   kind: authorId ? 'member' : 'agent',
   authorId,
   body: `Message ${seq}`,
+  attachments: [],
   detail: null,
   step: null,
   replyToId: null,

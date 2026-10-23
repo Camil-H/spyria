@@ -2,8 +2,19 @@ import { CopyButton, focusRing } from '@spyria/ui'
 import { Children, type ReactElement, type ReactNode, useEffect, useState } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { isRuntimeMediaPath } from '../domain/attachments.ts'
+import { RuntimeMedia } from './Media.tsx'
 
-type MarkdownNode = { type: string; children?: MarkdownNode[] }
+type MarkdownNode = {
+  type: string
+  value?: string
+  children?: MarkdownNode[]
+  position?: { start: { offset?: number } }
+  data?: { hName?: string; hProperties?: Record<string, unknown> }
+}
+
+const autoLoadedImagesPerMessage = 4
+const onDemandProperty = 'data-on-demand'
 
 const tokenColors =
   '[&_.hljs-keyword]:text-[light-dark(#7c3aed,#c4b5fd)] [&_.hljs-string]:text-[light-dark(#15803d,#86efac)] [&_.hljs-number]:text-[light-dark(#b45309,#fcd34d)] [&_.hljs-comment]:text-muted [&_.hljs-title]:text-[light-dark(#1d4ed8,#93c5fd)] [&_.hljs-built_in]:text-[light-dark(#be123c,#fda4af)]'
@@ -14,6 +25,48 @@ const rawHtmlAsText = () => (tree: MarkdownNode) => {
     node.children?.forEach(asText)
   }
   asText(tree)
+}
+
+const underlineFromUnderscores = () => (tree: MarkdownNode, file: { value: unknown }) => {
+  const source = String(file.value)
+  const underline = (node: MarkdownNode) => {
+    if (node.type === 'strong' && source.startsWith('__', node.position?.start.offset ?? -1))
+      node.data = { ...node.data, hName: 'u' }
+    node.children?.forEach(underline)
+  }
+  underline(tree)
+}
+
+const lineBreaksKept = () => (tree: MarkdownNode) => {
+  const withBreaks = (node: MarkdownNode): MarkdownNode => ({
+    ...node,
+    children: node.children?.flatMap((child) =>
+      child.type === 'text' && child.value?.includes('\n')
+        ? child.value
+            .split(/\r?\n|\r/)
+            .flatMap((line, index) => [...(index > 0 ? [{ type: 'break' }] : []), { type: 'text', value: line }])
+        : [withBreaks(child)],
+    ),
+  })
+  tree.children = withBreaks(tree).children
+}
+
+const laterImagesOnDemand = () => (tree: MarkdownNode) => {
+  let imageCount = 0
+  const markLaterImages = (node: MarkdownNode) => {
+    if (node.type === 'image' && ++imageCount > autoLoadedImagesPerMessage)
+      node.data = { ...node.data, hProperties: { ...node.data?.hProperties, [onDemandProperty]: 'true' } }
+    node.children?.forEach(markLaterImages)
+  }
+  markLaterImages(tree)
+}
+
+const decodedPathOf = (source: string) => {
+  try {
+    return decodeURIComponent(source)
+  } catch {
+    return source
+  }
 }
 
 const domainOf = (url: string | undefined) => {
@@ -76,7 +129,20 @@ const components: Components = {
       {children} <span className="text-xs text-muted">({domainOf(href)})</span>
     </a>
   ),
-  img: ({ src, alt }) => <RemoteImage src={typeof src === 'string' ? src : undefined} alt={alt} />,
+  img: ({ src, alt, ...properties }) => {
+    const source = typeof src === 'string' ? src : undefined
+    const remoteImage = <RemoteImage src={source} alt={alt} />
+    return source && isRuntimeMediaPath(source) ? (
+      <RuntimeMedia
+        path={decodedPathOf(source)}
+        alt={alt ?? ''}
+        isOnDemand={onDemandProperty in properties}
+        fallback={remoteImage}
+      />
+    ) : (
+      remoteImage
+    )
+  },
   pre: ({ children }) => {
     const code = Children.only(children) as ReactElement<{ className?: string; children?: ReactNode }>
     return (
@@ -88,9 +154,18 @@ const components: Components = {
   },
 }
 
-const Markdown = ({ text }: { text: string }) => (
-  <div className="flex flex-col gap-2 text-sm [&_ol]:list-decimal [&_ol]:pl-5 [&_table]:border-collapse [&_td]:border [&_td]:border-line [&_td]:px-2 [&_th]:border [&_th]:border-line [&_th]:px-2 [&_ul]:list-disc [&_ul]:pl-5">
-    <ReactMarkdown remarkPlugins={[remarkGfm, rawHtmlAsText]} components={components}>
+const Markdown = ({ text, keepsLineBreaks = false }: { text: string; keepsLineBreaks?: boolean }) => (
+  <div className="flex flex-col gap-2 text-sm [&_ol]:list-decimal [&_ol]:pl-5 [&_table]:border-collapse [&_td]:border [&_td]:border-line [&_td]:px-2 [&_th]:border [&_th]:border-line [&_th]:px-2 [&_ul]:list-disc [&_ul]:pl-5 [&_:not(pre)>code]:rounded [&_:not(pre)>code]:bg-hover [&_:not(pre)>code]:px-1 [&_:not(pre)>code]:text-xs">
+    <ReactMarkdown
+      remarkPlugins={[
+        remarkGfm,
+        rawHtmlAsText,
+        underlineFromUnderscores,
+        laterImagesOnDemand,
+        ...(keepsLineBreaks ? [lineBreaksKept] : []),
+      ]}
+      components={components}
+    >
       {text}
     </ReactMarkdown>
   </div>

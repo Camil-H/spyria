@@ -1,5 +1,6 @@
 import type { ChatId, ChatVisibility, HarnessId, MemberId, MessageId, WorkspaceId } from '@spyria/kernel'
 import type { StoredStep } from './agent-steps.ts'
+import type { Attachment } from './attachments.ts'
 import { ChatFrozen, InvalidThreadRoot, MessageDeleted, NoThreadsInRuntimeChat, NotMessageAuthor } from './errors.ts'
 import type { MessageBody } from './message-body.ts'
 
@@ -10,6 +11,7 @@ export type Message = Readonly<{
   kind: 'member' | 'agent' | 'step' | 'notice'
   authorId: MemberId | null
   body: MessageBody
+  attachments: readonly Attachment[]
   detail: string | null
   step: StoredStep | null
   createdAt: Date
@@ -56,7 +58,7 @@ export const editedMessage = (message: Message, editorId: MemberId, body: Messag
 
 export const deletedMessage = (message: Message, deleterId: MemberId, at: Date): Message => {
   assertChangeable(message, deleterId)
-  return { ...message, deletedAt: at }
+  return { ...message, attachments: [], deletedAt: at }
 }
 
 export const threadRootOf = (chat: ConversationChat, chatId: ChatId, root: Message | undefined) => {
@@ -67,5 +69,13 @@ export const threadRootOf = (chat: ConversationChat, chatId: ChatId, root: Messa
 
 export const newMessage = (
   fields: Pick<Message, 'id' | 'workspaceId' | 'chatId' | 'kind' | 'authorId' | 'body' | 'createdAt' | 'replyToId'> &
-    Partial<Pick<Message, 'step' | 'threadRootId'>>,
-): Message => ({ step: null, threadRootId: null, ...fields, detail: null, editedAt: null, deletedAt: null })
+    Partial<Pick<Message, 'step' | 'threadRootId' | 'attachments'>>,
+): Message => ({
+  step: null,
+  threadRootId: null,
+  attachments: [],
+  ...fields,
+  detail: null,
+  editedAt: null,
+  deletedAt: null,
+})

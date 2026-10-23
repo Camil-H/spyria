@@ -12,6 +12,7 @@ const cardAt = (seq: number, state: string): MessageRow => ({
   kind: 'step',
   authorId: alice,
   body: 'pull_request',
+  attachments: [],
   detail: null,
   step: { type: 'pull_request', number: seq, state, url: `pr/${seq}` },
   replyToId: null,

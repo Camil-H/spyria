@@ -17,6 +17,13 @@ export const appendWorkspaceEvent = skippedOnClient
 export const copyWorkspaceSignIn = skippedOnClient
 export const awaitsDomainVerification = async () => false
 export const enqueueJob = skippedOnClient
+export const insertAttachment = skippedOnClient
+export const storedAttachmentBytesOf = async () => ({ pendingOfMember: 0, inWorkspace: 0 })
+export const deleteAbandonedAttachments = skippedOnClient
+export const lockPendingAttachments = async () => []
+export const linkAttachments = skippedOnClient
+export const deleteMessageAttachments = skippedOnClient
+export const sentAttachmentOf = skippedOnClient
 export const setRuntimeHostSecretHash = skippedOnClient
 export const lockRuntimeHost = skippedOnClient
 export const findRuntimeHostBySecretHash = skippedOnClient

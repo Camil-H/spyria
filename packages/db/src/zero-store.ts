@@ -107,9 +107,10 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
   const messageRowOf = (row: ZeroRows['messages'][number], needsReply: boolean) => {
     const cached = messageRowByZeroRow.get(row)
     if (cached?.needsReply === needsReply) return cached
-    const { createdAt, editedAt, deletedAt, ...message } = plainOf(row)
+    const { createdAt, editedAt, deletedAt, attachments, ...message } = plainOf(row)
     const mapped = {
       ...message,
+      attachments: attachments ?? [],
       createdAt: isoOf(createdAt),
       editedAt: isoOrNull(editedAt),
       deletedAt: isoOrNull(deletedAt),

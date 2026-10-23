@@ -149,10 +149,13 @@ export const createApp = async (
       ...overrides,
     }) as Commands
   const drafts = createStoreDraftRepository(store)
-  const postAsMember = (workspaceId: WorkspaceId, path: string, body?: string) =>
+  const postAsMember = (workspaceId: WorkspaceId, path: string, body?: BodyInit) =>
     fetch(path, {
       method: 'POST',
-      headers: { authorization: `Bearer ${store.tokenOf(workspaceId)}`, 'content-type': 'application/json' },
+      headers: {
+        authorization: `Bearer ${store.tokenOf(workspaceId)}`,
+        'content-type': body instanceof Blob ? 'application/octet-stream' : 'application/json',
+      },
       body,
     })
   const fetchAsMember = (workspaceId: WorkspaceId, path: string, method = 'GET') =>
