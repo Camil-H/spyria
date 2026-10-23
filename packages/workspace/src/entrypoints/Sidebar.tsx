@@ -3,7 +3,7 @@ import { useQuery } from '@spyria/db/react'
 import type { WorkspaceId } from '@spyria/kernel'
 import { useSession } from '@spyria/session'
 import { ErrorMessage, useGuardedAction } from '@spyria/ui'
-import { CircleUser, FolderPlus, Hash, Settings, SquarePen } from 'lucide-react'
+import { CircleUser, FolderPlus, Hash, PanelLeftClose, PanelLeftOpen, Settings, SquarePen } from 'lucide-react'
 import { lazy, Suspense, useState } from 'react'
 import { NavLink } from 'react-router'
 import { getSidebar } from '../queries/get-sidebar.ts'
@@ -20,6 +20,27 @@ import { WorkspaceSwitcher } from './WorkspaceSwitcher.tsx'
 
 const BrowseChannelsDialog = lazy(() => import('./BrowseChannelsDialog.tsx'))
 
+const collapsedStorageKey = 'spyria.sidebar-collapsed'
+
+const storedCollapsed = () => {
+  try {
+    return localStorage.getItem(collapsedStorageKey) === 'true'
+  } catch {
+    return false
+  }
+}
+
+const useCollapsed = () => {
+  const [isCollapsed, setIsCollapsed] = useState(storedCollapsed)
+  const toggleCollapsed = () => {
+    setIsCollapsed(!isCollapsed)
+    try {
+      localStorage.setItem(collapsedStorageKey, String(!isCollapsed))
+    } catch {}
+  }
+  return { isCollapsed, toggleCollapsed }
+}
+
 export const Sidebar = ({
   workspaceId,
   chatAdornment,
@@ -35,6 +56,15 @@ export const Sidebar = ({
   const chatAction = useGuardedAction()
   const [openDialog, setOpenDialog] = useState<'project' | 'chat' | 'channels' | null>(null)
   const closeDialog = () => setOpenDialog(null)
+  const { isCollapsed, toggleCollapsed } = useCollapsed()
+  if (isCollapsed)
+    return (
+      <Provider delayDuration={300}>
+        <nav aria-label="Sidebar" className="flex h-full shrink-0 flex-col border-r border-line bg-sidebar p-3">
+          <IconButton label="Expand sidebar" icon={PanelLeftOpen} onClick={toggleCollapsed} />
+        </nav>
+      </Provider>
+    )
   return (
     <Provider delayDuration={300}>
       <nav
@@ -42,6 +72,7 @@ export const Sidebar = ({
         className="flex h-full w-64 shrink-0 flex-col gap-3 border-r border-line bg-sidebar p-3"
       >
         <div className="flex items-center justify-between gap-2">
+          <IconButton label="Collapse sidebar" icon={PanelLeftClose} onClick={toggleCollapsed} />
           <WorkspaceSwitcher workspaceId={workspaceId} />
           <div className="flex shrink-0 gap-1">
             <IconButton label="New project" icon={FolderPlus} onClick={() => setOpenDialog('project')} />
