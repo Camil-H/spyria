@@ -4,11 +4,33 @@ import type { ChatId, MessageId, WorkspaceId } from '@spyria/kernel'
 import { useSession } from '@spyria/session'
 import { ErrorMessage, focusRing, tooltipClass, useGuardedAction } from '@spyria/ui'
 import { ArrowUp } from 'lucide-react'
-import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from 'react'
+import { type ClipboardEvent, type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from 'react'
 import { getDraft } from '../queries/get-draft.ts'
+import { continuedList, formattedText, formattingOfKey, linkedPaste, type TextEdit } from './composer-formatting.ts'
 import { useConversationCommands } from './providers.tsx'
 
 const isBlank = (text: string) => text.trim() === ''
+const isApplePlatform = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent)
+const sendKeyLabel = isApplePlatform ? '⌘↵' : 'Ctrl+Enter'
+
+const selectionOf = (textarea: HTMLTextAreaElement) => ({
+  text: textarea.value,
+  start: textarea.selectionStart,
+  end: textarea.selectionEnd,
+})
+
+const insertKeepingUndo = (textarea: HTMLTextAreaElement, edit: TextEdit, onUnsupported: (text: string) => void) => {
+  textarea.setSelectionRange(edit.start, edit.end)
+  const isNothingToChange = edit.insert === '' && edit.start === edit.end
+  const isInserted =
+    isNothingToChange ||
+    (edit.insert === '' ? document.execCommand('delete') : document.execCommand('insertText', false, edit.insert))
+  if (!isInserted) {
+    textarea.setRangeText(edit.insert, edit.start, edit.end)
+    onUnsupported(textarea.value)
+  }
+  textarea.setSelectionRange(edit.selectStart, edit.selectEnd)
+}
 
 export const Composer = ({
   workspaceId,
@@ -58,11 +80,31 @@ export const Composer = ({
     if (await sending.run(() => commands.sendMessage({ workspaceId, chatId, text, threadRootId }))) return
     change(isBlank(latestText.current) ? text : `${text}\n${latestText.current}`)
   }
-  const sendOnShortcut = (event: KeyboardEvent) => {
+  const edit = (textarea: HTMLTextAreaElement, textEdit: TextEdit | undefined) => {
+    if (!textEdit) return false
+    insertKeepingUndo(textarea, textEdit, change)
+    return true
+  }
+  const handleKey = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    const textarea = event.currentTarget
+    const isPrimary = isApplePlatform ? event.metaKey : event.ctrlKey
+    const isOtherModifier = event.altKey || (isApplePlatform ? event.ctrlKey : event.metaKey)
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
       event.preventDefault()
       send()
+      return
     }
+    if (event.key === 'Enter' && !event.shiftKey && !isPrimary && !isOtherModifier && !event.nativeEvent.isComposing) {
+      if (edit(textarea, continuedList(selectionOf(textarea)))) event.preventDefault()
+      return
+    }
+    const formatting = formattingOfKey({ key: event.key, isPrimary, isShift: event.shiftKey, isOtherModifier })
+    if (formatting && edit(textarea, formattedText(selectionOf(textarea), formatting))) event.preventDefault()
+  }
+  const paste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const { clipboardData, currentTarget } = event
+    if (edit(currentTarget, linkedPaste(selectionOf(currentTarget), clipboardData.getData('text/plain'))))
+      event.preventDefault()
   }
   return (
     <Provider>
@@ -78,7 +120,8 @@ export const Composer = ({
             className="max-h-40 min-w-0 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm leading-5 outline-none field-sizing-content"
             value={text}
             onChange={(event) => change(event.target.value)}
-            onKeyDown={sendOnShortcut}
+            onKeyDown={handleKey}
+            onPaste={paste}
           />
           <Root>
             <Trigger
@@ -92,7 +135,7 @@ export const Composer = ({
             </Trigger>
             <Portal>
               <Content sideOffset={6} className={tooltipClass}>
-                Send (⌘↵)
+                Send ({sendKeyLabel})
               </Content>
             </Portal>
           </Root>

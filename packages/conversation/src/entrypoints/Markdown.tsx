@@ -3,7 +3,12 @@ import { Children, type ReactElement, type ReactNode, useEffect, useState } from
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
-type MarkdownNode = { type: string; children?: MarkdownNode[] }
+type MarkdownNode = {
+  type: string
+  children?: MarkdownNode[]
+  position?: { start: { offset?: number } }
+  data?: { hName?: string }
+}
 
 const tokenColors =
   '[&_.hljs-keyword]:text-[light-dark(#7c3aed,#c4b5fd)] [&_.hljs-string]:text-[light-dark(#15803d,#86efac)] [&_.hljs-number]:text-[light-dark(#b45309,#fcd34d)] [&_.hljs-comment]:text-muted [&_.hljs-title]:text-[light-dark(#1d4ed8,#93c5fd)] [&_.hljs-built_in]:text-[light-dark(#be123c,#fda4af)]'
@@ -14,6 +19,16 @@ const rawHtmlAsText = () => (tree: MarkdownNode) => {
     node.children?.forEach(asText)
   }
   asText(tree)
+}
+
+const underlineFromUnderscores = () => (tree: MarkdownNode, file: { value: unknown }) => {
+  const source = String(file.value)
+  const underline = (node: MarkdownNode) => {
+    if (node.type === 'strong' && source.startsWith('__', node.position?.start.offset ?? -1))
+      node.data = { ...node.data, hName: 'u' }
+    node.children?.forEach(underline)
+  }
+  underline(tree)
 }
 
 const domainOf = (url: string | undefined) => {
@@ -89,8 +104,8 @@ const components: Components = {
 }
 
 const Markdown = ({ text }: { text: string }) => (
-  <div className="flex flex-col gap-2 text-sm [&_ol]:list-decimal [&_ol]:pl-5 [&_table]:border-collapse [&_td]:border [&_td]:border-line [&_td]:px-2 [&_th]:border [&_th]:border-line [&_th]:px-2 [&_ul]:list-disc [&_ul]:pl-5">
-    <ReactMarkdown remarkPlugins={[remarkGfm, rawHtmlAsText]} components={components}>
+  <div className="flex flex-col gap-2 text-sm [&_ol]:list-decimal [&_ol]:pl-5 [&_table]:border-collapse [&_td]:border [&_td]:border-line [&_td]:px-2 [&_th]:border [&_th]:border-line [&_th]:px-2 [&_ul]:list-disc [&_ul]:pl-5 [&_:not(pre)>code]:rounded [&_:not(pre)>code]:bg-hover [&_:not(pre)>code]:px-1 [&_:not(pre)>code]:text-xs">
+    <ReactMarkdown remarkPlugins={[remarkGfm, rawHtmlAsText, underlineFromUnderscores]} components={components}>
       {text}
     </ReactMarkdown>
   </div>

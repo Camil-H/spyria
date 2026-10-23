@@ -36,3 +36,10 @@ test('GitHub tables, task lists and fenced code with a copy button are rendered'
   expect(html).toContain('Copy code')
   expect(html).toContain('const a = 1')
 })
+
+test('double underscores underline, double stars stay bold', () => {
+  const html = render('__under__ and **bold** and a_snake_case_name')
+  expect(html).toContain('<u>under</u>')
+  expect(html).toContain('<strong>bold</strong>')
+  expect(html).toContain('a_snake_case_name')
+})
