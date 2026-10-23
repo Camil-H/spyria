@@ -255,6 +255,27 @@ test('Stop mid-command cancels the turn without deleting the conversation, and t
   expect(await sessionsStartedOf(chat)).toHaveLength(1)
 })
 
+test('the pages Pi opens with open_page are kept for the chat’s Browser, newest first, and an address of another scheme is not', async () => {
+  await stack.agentHost('Browser host', { routesModelCalls: true })
+  const chat = await newRuntimeChat()
+  stack.setFakeLlmScript({
+    steps: [
+      { tool: 'open_page', arguments: { address: '/workspace/project/reports/totals.html', title: 'Invoice totals' } },
+      { tool: 'open_page', arguments: { address: 'javascript:alert(1)', title: 'Script' } },
+      { tool: 'open_page', arguments: { address: 'https://example.com/docs' } },
+    ],
+    text: 'Opened.',
+  })
+  expect((await finished(await prompt(chat, 'Show me the totals'), chat)).at(-1)?.body).toBe('Opened.')
+  expect([
+    ...(await database.$client`
+      select url, title from browser_pages where workspace_id = ${acme} and chat_id = ${chat} order by opened_at desc`),
+  ]).toEqual([
+    { url: 'https://example.com/docs', title: 'https://example.com/docs' },
+    { url: 'reports/totals.html', title: 'Invoice totals' },
+  ])
+})
+
 test('after a runtime restart the next prompt loads the Pi session and no earlier message is duplicated', async () => {
   const { relay, launches } = await workspaceHost()
   const chat = await newRuntimeChat()

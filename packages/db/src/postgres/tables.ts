@@ -643,7 +643,7 @@ export const runtimes = table(
 
 export const browserPages = table(
   'browser_pages',
-  { ...chatScoped, url: text().notNull(), title: text().notNull(), bodyText: text().notNull() },
+  { ...chatScoped, url: text().notNull(), title: text().notNull(), openedAt: instant().notNull() },
   (table) => [primaryKey({ columns: [table.workspaceId, table.chatId, table.url] }), chatReference(table)],
 )
 
