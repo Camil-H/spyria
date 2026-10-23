@@ -397,7 +397,8 @@ export const verifyDomainByOperator = (database: Database, workspaceId: string, 
 export const assertInstanceAppsConfigured = async (database: Database, instanceApps: InstanceApps) => {
   const missing = (
     await database.$client<{ preset: SsoPreset; count: number }[]>`
-      select preset, count(*)::int as count from workspace_sso where uses_instance_app group by preset order by preset`
+      select preset, count(*)::int as count from workspace_sso join workspaces using (workspace_id)
+      where uses_instance_app and workspaces.deleted_at is null group by preset order by preset`
   ).filter(({ preset }) => preset === 'oidc' || !instanceApps[preset])
   if (missing.length > 0)
     throw new Error(

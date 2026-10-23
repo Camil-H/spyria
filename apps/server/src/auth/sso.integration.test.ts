@@ -534,6 +534,45 @@ test('an Entra token without email_verified signs in by preferred_username for a
   expect(signedIn.sessions.map(({ workspaceId }) => workspaceId)).toEqual(['initech'])
 })
 
+test('a Microsoft member bound under the per-app subject of another app signs in by user principal name and gains their object id', async () => {
+  await database.$client`insert into users (id, email) values ('member-sam', 'sam@initech.com')`
+  await database.$client`
+    insert into memberships (workspace_id, user_id, role, display_name) values ('initech', 'member-sam', 'member', 'Sam')`
+  await database.$client`
+    insert into identities (workspace_id, issuer, subject, user_id)
+    values ('initech', ${entraIdp.issuer}, 'AAAAAAAAAAAAAAAAAAAAAIkzqFVrSaSaFHy782bbtaQ', 'member-sam')`
+  const objectId = '00000000-0000-4000-8000-0000000000aa'
+  const signedIn = await signInThrough(entraIdp, 'email=sam@initech.com', {
+    sub: 'per-app-subject-of-the-other-app',
+    oid: objectId,
+    preferred_username: 'sam@initech.com',
+  })
+  expect(signedIn.page).toContain('"status":"signed_in"')
+  expect(signedIn.userId).toBe('member-sam')
+  expect(await identitiesOf(objectId)).toEqual([
+    { workspace_id: 'initech', issuer: entraIdp.issuer, user_id: 'member-sam' },
+  ])
+  const takeover = await signInThrough(entraIdp, 'email=sam@initech.com', {
+    sub: 'mallory-per-app',
+    oid: '00000000-0000-4000-8000-0000000000bb',
+    preferred_username: 'sam@initech.com',
+  })
+  expect(takeover.page).toContain('"status":"not_invited","email":"sam@initech.com"')
+})
+
+test('an Entra guest from another tenant is never bound to a member or an invite by email', async () => {
+  await invite('initech', 'gina@initech.com')
+  const guest = await signInThrough(entraIdp, 'email=gina@initech.com', {
+    sub: 'gina-per-app',
+    oid: '00000000-0000-4000-8000-0000000000cc',
+    preferred_username: 'gina@initech.com',
+    idp: 'https://sts.windows.net/another-tenant/',
+  })
+  expect(guest.status).toBe(403)
+  expect(guest.page).toContain('"status":"not_invited","email":"gina@initech.com"')
+  expect(await identitiesOf('00000000-0000-4000-8000-0000000000cc')).toEqual([])
+})
+
 test('a domain claimed by another issuer is refused; the same issuer shares it and one sign-in opens both workspaces', async () => {
   const claimed = await configureIdp(otherIdp, globex, 'example.com')
   expect(JSON.parse(claimed.body)).toEqual({
@@ -848,4 +887,9 @@ test('the server refuses to start when workspaces sign in through an app of this
   expect((await rejectionOf(assertInstanceAppsConfigured(database, {}))).message).toBe(
     'Workspaces sign in through apps of this deployment that are not configured: google (1 workspace). Set SPYRIA_GOOGLE_CLIENT_* or SPYRIA_MICROSOFT_CLIENT_* again.',
   )
+})
+
+test('a workspace awaiting its purge does not hold up the start for an app it used', async () => {
+  await database.$client`update workspaces set deleted_at = now(), purge_at = now() + interval '7 days' where workspace_id = 'stark'`
+  expect(await assertInstanceAppsConfigured(database, {})).toBeUndefined()
 })

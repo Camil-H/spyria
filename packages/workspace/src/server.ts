@@ -33,7 +33,7 @@ export { displayNameFrom, normalizedEmail } from './domain/invitation.ts'
 export { Name } from './domain/name.ts'
 export {
   domainOfEmail,
-  hostedDomainEmailOf,
+  entraObjectIdPattern,
   type InstanceAppPreset,
   type InstanceApps,
   instanceAppFor,
@@ -44,6 +44,7 @@ export {
   type SsoSettings,
   type SsoSettingsInput,
   type SsoSettingsView,
+  ssoCanBindByEmail,
   ssoEmailOf,
   ssoSettingsFrom,
   ssoSubjectOf,

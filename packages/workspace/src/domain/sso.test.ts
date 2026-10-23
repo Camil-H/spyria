@@ -1,5 +1,13 @@
 import { expect, test } from 'bun:test'
-import { domainOfEmail, hostedDomainEmailOf, instanceAppFor, ssoEmailOf, ssoSettingsFrom, ssoSubjectOf } from './sso.ts'
+import {
+  domainOfEmail,
+  entraObjectIdPattern,
+  instanceAppFor,
+  ssoCanBindByEmail,
+  ssoEmailOf,
+  ssoSettingsFrom,
+  ssoSubjectOf,
+} from './sso.ts'
 
 const base = { clientId: ' spyria ', domain: ' @Acme.com' }
 
@@ -56,14 +64,28 @@ test('the app of this Spyria serves Google and Microsoft once configured, never 
   )
 })
 
-test('through the Google app of this Spyria, only a verified email of an account managed by the Google Workspace of its domain signs in', () => {
+test('through Google, only a verified email of an account managed by the Google Workspace of its domain signs in', () => {
   const verified = { email: 'pat@acme.com', email_verified: true, hd: 'acme.com' }
-  expect(hostedDomainEmailOf(verified)).toBe('pat@acme.com')
-  expect(hostedDomainEmailOf({ ...verified, email_verified: false })).toBeUndefined()
-  expect(hostedDomainEmailOf({ email: 'pat@acme.com', hd: 'acme.com' })).toBeUndefined()
-  expect(hostedDomainEmailOf({ ...verified, hd: undefined })).toBeUndefined()
-  expect(hostedDomainEmailOf({ ...verified, hd: 'globex.com' })).toBeUndefined()
-  expect(hostedDomainEmailOf({ ...verified, email: 'pat@gmail.com' })).toBeUndefined()
+  expect(ssoEmailOf('google', verified)).toBe('pat@acme.com')
+  expect(ssoEmailOf('google', { ...verified, email_verified: false })).toBeUndefined()
+  expect(ssoEmailOf('google', { email: 'pat@acme.com', hd: 'acme.com' })).toBeUndefined()
+  expect(ssoEmailOf('google', { ...verified, hd: undefined })).toBeUndefined()
+  expect(ssoEmailOf('google', { ...verified, hd: 'globex.com' })).toBeUndefined()
+  expect(ssoEmailOf('google', { ...verified, email: 'pat@gmail.com' })).toBeUndefined()
+})
+
+test('an Entra guest, whose identity provider is another tenant, is never bound to a member by email', () => {
+  const iss = 'https://login.microsoftonline.com/tenant-1/v2.0'
+  expect(ssoCanBindByEmail('microsoft', { iss })).toBe(true)
+  expect(ssoCanBindByEmail('microsoft', { iss, idp: iss })).toBe(true)
+  expect(ssoCanBindByEmail('microsoft', { iss, idp: 'https://sts.windows.net/tenant-2/' })).toBe(false)
+  expect(ssoCanBindByEmail('oidc', { iss, idp: 'elsewhere' })).toBe(true)
+})
+
+test('an Entra object id has the GUID form, a per-app subject does not', () => {
+  const objectId = new RegExp(entraObjectIdPattern)
+  expect(objectId.test('00000000-0000-4000-8000-000000000001')).toBe(true)
+  expect(objectId.test('AAAAAAAAAAAAAAAAAAAAAIkzqFVrSaSaFHy782bbtaQ')).toBe(false)
 })
 
 test('an Entra identity is its object id, the same through every app of the tenant; other providers use the subject', () => {

@@ -66,10 +66,22 @@ export const ssoSettingsFrom = (input: SsoSettingsInput, microsoftOrigin = micro
   return { preset: input.preset, issuer, clientId, domain }
 }
 
-export const ssoEmailOf = (preset: SsoPreset, claims: Record<string, unknown>) => {
-  const email = preset === 'microsoft' ? (claims.preferred_username ?? claims.email) : claims.email
-  return typeof email === 'string' && email.includes('@') ? email : undefined
+const addressOf = (value: unknown) => (typeof value === 'string' && value.includes('@') ? value : undefined)
+
+const googleWorkspaceEmailOf = (claims: Record<string, unknown>) => {
+  const email = addressOf(claims.email)
+  return email !== undefined && claims.email_verified === true && claims.hd === domainOfEmail(email) ? email : undefined
 }
+
+export const ssoEmailOf = (preset: SsoPreset, claims: Record<string, unknown>) => {
+  if (preset === 'google') return googleWorkspaceEmailOf(claims)
+  return addressOf(preset === 'microsoft' ? (claims.preferred_username ?? claims.email) : claims.email)
+}
+
+export const entraObjectIdPattern = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+
+export const ssoCanBindByEmail = (preset: SsoPreset, claims: Record<string, unknown>) =>
+  preset !== 'microsoft' || typeof claims.idp !== 'string' || claims.idp === claims.iss
 
 const instanceAppNames: Record<InstanceAppPreset, string> = { google: 'Google', microsoft: 'Microsoft' }
 
@@ -82,11 +94,6 @@ export const instanceAppFor = (instanceApps: InstanceApps, preset: SsoPreset) =>
       `This Spyria has no ${instanceAppNames[preset]} app: enter the client id and secret of your own`,
     )
   return app
-}
-
-export const hostedDomainEmailOf = (claims: Record<string, unknown>) => {
-  const email = ssoEmailOf('google', claims)
-  return email !== undefined && claims.email_verified === true && claims.hd === domainOfEmail(email) ? email : undefined
 }
 
 export const ssoSubjectOf = (preset: SsoPreset, claims: Record<string, unknown>) => {

@@ -2,9 +2,10 @@ import type { Database } from '@spyria/db/postgres'
 import { DomainError } from '@spyria/kernel'
 import {
   domainOfEmail,
-  hostedDomainEmailOf,
+  entraObjectIdPattern,
   instanceAppFor,
   instanceAppPresets,
+  ssoCanBindByEmail,
   ssoEmailOf,
   ssoSubjectOf,
 } from '@spyria/workspace/server'
@@ -110,9 +111,9 @@ export const createAuthRoutes = ({
       clientId: instanceApp?.clientId ?? provider.clientId,
       clientSecret: instanceApp?.clientSecret ?? (await sso.secretBox?.open(provider.encryptedClientSecret)),
       redirectUri,
-      emailOf: (claims) =>
-        instanceApp && provider.preset === 'google' ? hostedDomainEmailOf(claims) : ssoEmailOf(provider.preset, claims),
+      emailOf: (claims) => ssoEmailOf(provider.preset, claims),
       subjectOf: (claims) => ssoSubjectOf(provider.preset, claims),
+      canBindByEmailOf: (claims) => ssoCanBindByEmail(provider.preset, claims),
     })
   }
   const ssoClients = new Map<string, Oidc>()
@@ -224,7 +225,12 @@ export const createAuthRoutes = ({
         return completeSignIn(context, scope, { ...created, ...identity, issuer: firstWorkspace.provider.issuer })
       }
       const issuer = provider?.issuer
-      const { userId, email } = await signInUser(scope.database, { ...identity, issuer }, authMode === 'sso')
+      const currentSubjectPattern = provider?.preset === 'microsoft' ? entraObjectIdPattern : undefined
+      const { userId, email } = await signInUser(
+        scope.database,
+        { ...identity, issuer, currentSubjectPattern },
+        authMode === 'sso',
+      )
       return completeSignIn(context, scope, { userId, email, workspaceId, issuer })
     })
     .get('/sessions', async (context) => {
