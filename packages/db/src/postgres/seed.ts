@@ -9,16 +9,6 @@ type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0]
 
 export const allTables = Object.values(tables).filter((value) => is(value, PgTable))
 
-const positionedWithinChat = <Row extends { workspaceId: string; chatId: string }>(rows: readonly Row[]) => {
-  const countByChat = new Map<string, number>()
-  return rows.map((row) => {
-    const chatKey = `${row.workspaceId}/${row.chatId}`
-    const position = (countByChat.get(chatKey) ?? 0) + 1
-    countByChat.set(chatKey, position)
-    return { ...row, position }
-  })
-}
-
 const seedCreationEpoch = Date.parse('2026-01-01T00:00:00Z')
 const createdInOrder = <Row>(row: Row, index: number) => ({
   ...row,
@@ -111,7 +101,6 @@ const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
       })),
     )
   await transaction.insert(tables.toolConnections).values(snapshot.toolConnections.map(withUserIdAndPosition))
-  await transaction.insert(tables.planSteps).values(positionedWithinChat(snapshot.planSteps))
   await transaction.insert(tables.browserPages).values([...snapshot.browserPages])
   await transaction.insert(tables.sources).values([...snapshot.sources])
   await transaction.insert(tables.usageEntries).values(snapshot.usageEntries.map(withUserId))

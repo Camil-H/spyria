@@ -184,8 +184,6 @@ export const newSession = async (page: Page, tool: string, name = `${tool} on my
   await expect(chipOf(page, 'harness')).toHaveText(`${tool} · subscription`)
   return chatId
 }
-export const modeOf = (page: Page) => mainOf(page).getByRole('group', { name: 'Mode' })
-export const modeRadioOf = (page: Page, name: 'Plan' | 'Auto') => modeOf(page).getByRole('radio', { name })
 
 export const switchWorkspace = async (page: Page, workspaceName: string) => {
   await switcherOf(page).click()

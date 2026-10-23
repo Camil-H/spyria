@@ -8,7 +8,6 @@ import {
   expectMembers,
   mainOf,
   messageContaining,
-  modeOf,
   mutationGateOf,
   type Page,
   panelTabOf,
@@ -136,7 +135,6 @@ test.describe('Channels', () => {
     await expect(composerOf(page)).toBeVisible()
     await expect(runsOnOf(page)).toHaveCount(0)
     await expect(chipOf(page, 'any')).toHaveCount(0)
-    await expect(modeOf(page)).toHaveCount(0)
     await page.getByRole('button', { name: 'New chat' }).click()
     await expect(visibilityOf(page).getByRole('radio', { name: 'Public' })).toBeChecked()
     await expect(visibilityOf(page).getByRole('radio', { name: 'Private' })).not.toBeChecked()

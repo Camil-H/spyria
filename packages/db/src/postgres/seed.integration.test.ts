@@ -90,9 +90,6 @@ const readSnapshot = async () => {
         ),
       ),
     })),
-    planSteps: (
-      await database.select().from(tables.planSteps).orderBy(tables.planSteps.chatId, tables.planSteps.position)
-    ).map(({ position, ...step }) => step),
     browserPages: await database.select().from(tables.browserPages),
     sources: await database.select().from(tables.sources),
     usageEntries: (await database.select().from(tables.usageEntries)).map(userAsMember),
@@ -103,23 +100,13 @@ const readSnapshot = async () => {
 }
 
 const expectSnapshotRoundTrip = async () => {
-  const {
-    drafts,
-    latestMessages,
-    pinnedSteps,
-    projects,
-    chats,
-    messages,
-    planSteps,
-    toolConnections,
-    ...unorderedCollections
-  } = createMockSnapshot()
+  const { drafts, latestMessages, pinnedSteps, projects, chats, messages, toolConnections, ...unorderedCollections } =
+    createMockSnapshot()
   const stored = await readSnapshot()
   expect(stored.toolConnections).toEqual([...toolConnections])
   expect(stored.projects).toEqual([...projects])
   expect(stored.chats).toEqual([...chats])
   expect(stored.messages).toEqual(groupedByChat(messages).map(({ replyToId, ...message }) => message))
-  expect(stored.planSteps).toEqual(groupedByChat(planSteps))
   for (const [name, rows] of Object.entries(unorderedCollections))
     expect({ [name]: unordered(stored[name as keyof typeof unorderedCollections]) }).toEqual({
       [name]: unordered(rows),

@@ -30,7 +30,6 @@ const welcomeChat = chatId('chat-welcome')
 
 const currentMonth = () => new Date().toISOString().slice(0, 7)
 const invoiceBug = { workspaceId: acme, chatId: invoiceChat }
-const planStep = (title: string, status: string) => ({ ...invoiceBug, title, status })
 const toolConnection = (tool: string, status: string) => ({ workspaceId: acme, memberId: alice, tool, status })
 const chat = (
   id: string,
@@ -53,7 +52,6 @@ const chat = (
   subagentPolicy: 'auto',
   harness: null,
   localSession: false,
-  isPlanning: false,
   gitBranch: runtime?.gitBranch ?? null,
   repository: null,
   baseBranch: null,
@@ -206,11 +204,6 @@ export const createMockSnapshot = (): Snapshot => {
     ],
     threadReadMarkers: [],
     runtimeOrigins: [],
-    planSteps: [
-      planStep('Reproduce the bug', 'done'),
-      planStep('Fix the tax calculation', 'in-progress'),
-      planStep('Add a regression test', 'todo'),
-    ],
     browserPages: [
       {
         ...invoiceBug,

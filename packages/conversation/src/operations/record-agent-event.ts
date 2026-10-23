@@ -5,7 +5,6 @@ import {
   agentProjectionOf,
   delegatedProjectionOf,
   isAuthRequiredError,
-  isPlanningOf,
   observedProjectionStep,
   subagentDelegationOf,
   toolCallIdOf,
@@ -74,16 +73,12 @@ const recordIn = async (
       }),
       seq,
     )
-  if (projection?.type === 'step' && projection.step.type === 'plan' && !delegation)
-    await unitOfWork.plans.replace(chatId, projection.step.items)
   if (projection?.type === 'observation') {
     const action = await unitOfWork.messages.find(messageId(projection.actionId))
     const step =
       action?.step && observedProjectionStep(action.step, projection, recordedAt.getTime() - action.createdAt.getTime())
     if (action && step) await unitOfWork.messages.setStep(action.id, step)
   }
-  const isPlanning = seq !== undefined && !delegation ? isPlanningOf(event) : undefined
-  if (isPlanning !== undefined) await unitOfWork.chats.setPlanning(chatId, isPlanning)
   const endsSignedOut =
     turnEnd &&
     previous?.sessionUpdate === 'error' &&

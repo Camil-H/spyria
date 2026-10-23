@@ -128,7 +128,7 @@ The suite lives in `apps/web/e2e`, in segments that run in this order of depende
 | `01-access` | Sign-in, sessions, SSO, workspaces, the team, roles. |
 | `02-chats` | Channels, messaging, threads, unread, organizing chats. |
 | `03-sharing` | Chat members, chat permissions, fork, runtime from a thread. |
-| `04-agent` | Conversation, steps, questions and plans, delegation, models, errors, runtime lifecycle. |
+| `04-agent` | Conversation, steps, questions, delegation, models, errors, runtime lifecycle. |
 | `05-machines` | Workspace hosts, a member's machine, harness install, machine sessions, the policy, where a chat runs. |
 | `06-connectors` | LLM keys, personal and shared tools, guest rights, the GitHub account. |
 | `07-dev-mode` | GitHub setup, dev chats, the workspace panel, branch actions, pull requests. |
@@ -139,7 +139,7 @@ Rules:
 - One file per area, one `describe` per area, shared helpers in the segment's `fixtures.ts`.
 - Every title is a user story: "As <role>, I …", for example "As a member, I create a project in the browser and the server stores it".
 - Tags: spec tags of the form `@spec-<n>` group the tests of one feature, so `--grep @spec-<n>` runs them together; `@smoke` marks the critical path of each segment (`bun run test:e2e:smoke`); `@slow` marks tests that need long waits.
-- In `04-agent`, questions, plan mode, Stop, steps and streaming run once per harness (`[Pi]` on a Spyria runtime, `[Claude Code]` and `[Codex]` on the fake machine) through `forEachHarness` in `04-agent/fixtures.ts`.
+- In `04-agent`, questions, Stop, steps and streaming run once per harness (`[Pi]` on a Spyria runtime, `[Claude Code]` and `[Codex]` on the fake machine) through `forEachHarness` in `04-agent/fixtures.ts`.
 
 ### The platform gate
 

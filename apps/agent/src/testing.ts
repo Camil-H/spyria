@@ -53,8 +53,7 @@ export const textOf = (events: AgentEvent[]) =>
     .filter(kindOf('agent_message_chunk'))
     .map(({ update }) => (update.content as { text: string }).text)
     .join('')
-export const piHello = (turn: number, mode = 'default') =>
-  `[t${turn}] Hello from the stub (model stub/stub-default, mode ${mode}).`
+export const piHello = (turn: number) => `[t${turn}] Hello from the stub (model stub/stub-default, mode default).`
 export const questionAt = async (socket: ReturnType<ReturnType<typeof clientOf>['open']>, count: number) =>
   String((await socket.until(kindOf('question'), count)).filter(kindOf('question'))[count - 1]?.update.questionId)
 

@@ -3,7 +3,6 @@ import { type FormEvent, use, useState } from 'react'
 import type { AgentQuestion, AgentStep } from '../domain/agent-steps.ts'
 import type { ConversationMessage } from '../queries/get-conversation.ts'
 import type { QuestionAnswer } from './endpoints.ts'
-import Markdown from './Markdown.tsx'
 import { QuestionAnswererContext } from './providers.tsx'
 
 type QuestionStep = Extract<AgentStep, { type: 'question' }>
@@ -17,7 +16,6 @@ const refusalNotices: Record<number, string> = {
 const outcomeOf = (step: QuestionStep, answeredByName: string | undefined) => {
   if (step.closed) return closedLabels[step.closed]
   const by = answeredByName ? ` by ${answeredByName}` : ''
-  if (step.kind === 'plan') return `${step.approved ? 'Approved' : 'Kept planning'}${by}`
   if (step.kind === 'approval') return `${step.approved ? 'Approved' : 'Denied'}${by}`
   const isSkipped =
     Object.keys(step.answers ?? {}).length === 0 && Object.values(step.free ?? {}).every((text) => text === '')
@@ -115,29 +113,6 @@ const QuestionCard = ({ message }: { message: ConversationMessage }) => {
         )}
         {isPending && !canAnswer && (
           <p className="text-xs text-muted">Waiting for {step.approval.ownerName}'s approval</p>
-        )}
-        {outcome}
-        {alert}
-      </section>
-    )
-  if (step.kind === 'plan')
-    return (
-      <section aria-label="Plan approval" className="flex flex-col gap-2 rounded-lg border border-line bg-raised p-3">
-        <Markdown text={step.plan ?? ''} />
-        {canAnswer && (
-          <div className="flex gap-2">
-            <button type="button" className={buttonClass} disabled={isSending} onClick={() => send({ approve: true })}>
-              {labelOf(true, 'Approve the plan', 'Approving…')}
-            </button>
-            <button
-              type="button"
-              className={ghostButtonClass}
-              disabled={isSending}
-              onClick={() => send({ approve: false })}
-            >
-              {labelOf(false, 'Keep planning', 'Sending…')}
-            </button>
-          </div>
         )}
         {outcome}
         {alert}

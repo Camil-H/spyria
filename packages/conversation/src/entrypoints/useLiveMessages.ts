@@ -9,7 +9,7 @@ import {
   streamedReplyAfter,
   visibleStreamedReply,
 } from '../domain/streamed-reply.ts'
-import { type ConversationItem, type ConversationMessage, isPlanSwitchIn } from '../queries/get-conversation.ts'
+import type { ConversationItem, ConversationMessage } from '../queries/get-conversation.ts'
 import type { AgentStream } from './commands.ts'
 import { useAgentStream } from './providers.tsx'
 
@@ -49,16 +49,11 @@ export const withLiveMessages = (
     delegated,
     commandOutputs,
   }: Pick<LiveState, 'delegated' | 'commandOutputs'> & { messages: readonly ConversationMessage[] },
-): readonly ConversationItem[] => {
-  const isPlanSwitch = isPlanSwitchIn(liveMessages)
-  return liveMessages.reduce(
+): readonly ConversationItem[] =>
+  liveMessages.reduce(
     withLiveMessage,
-    items
-      .filter((item) => item.type === 'fold' || !isPlanSwitch(item.message))
-      .map(withLiveDelegation(delegated))
-      .map(withLiveCommandOutput(commandOutputs)),
+    items.map(withLiveDelegation(delegated)).map(withLiveCommandOutput(commandOutputs)),
   )
-}
 
 const liveMessageOf = (
   messages: readonly ConversationMessage[],

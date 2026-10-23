@@ -142,20 +142,6 @@ const ErrorStep = ({ step }: { step: StepOf<'error'> }) => {
   )
 }
 
-const planStatusLabels: Record<string, string> = { 'in-progress': 'In progress', todo: 'To do' }
-
-const PlanStep = ({ step }: { step: StepOf<'plan'> }) => (
-  <fieldset aria-label="Plan" className="flex flex-col gap-1 text-sm">
-    {step.items.map((item) => (
-      <label key={item.title} className="flex items-center gap-2">
-        <input type="checkbox" checked={item.status === 'done'} readOnly className="accent-accent" />
-        {item.title}
-        {planStatusLabels[item.status] && <span className="text-xs text-muted">{planStatusLabels[item.status]}</span>}
-      </label>
-    ))}
-  </fieldset>
-)
-
 export const AgentStep = ({ message }: { message: ConversationMessage }) => {
   const step = message.step
   if (step?.type === 'thought') return <ThoughtStep step={step} />
@@ -172,7 +158,6 @@ export const AgentStep = ({ message }: { message: ConversationMessage }) => {
       </Suspense>
     )
   if (step?.type === 'tool') return <ToolStep step={step} />
-  if (step?.type === 'plan') return <PlanStep step={step} />
   if (step?.type === 'question')
     return (
       <Suspense>

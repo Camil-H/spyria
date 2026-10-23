@@ -199,7 +199,7 @@ The host image installs exactly `apps/host/bun.lock`. After changing a host depe
 | `packages/workspace` | Workspaces, projects, chat organization, members and invites, workspace and chat roles. |
 | `packages/profile` | A member's profile: LLM keys, tool connections. |
 | `packages/runtime` | Runtime hosts, member machines, runtimes and their lifecycle. |
-| `packages/panel` | The right panel of a chat: files, changes, commits, plan, usage, members, connected tools. |
+| `packages/panel` | The right panel of a chat: files, changes, commits, browser, usage, members, connected tools. |
 | `packages/usage` | Usage metering, spend, budgets and the audit log. |
 | `packages/kernel`, `packages/db`, `packages/ui`, `packages/session` | The shared layer: kernel types and logging, the database client and Zero schema, UI components, the signed-in member. |
 | `infra/` | The dev stack: `docker-compose.yml`, `dex.yaml`, `bifrost.json`. |

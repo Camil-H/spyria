@@ -323,7 +323,7 @@ test('a long Pi conversation compacts on the compaction model, recorded with pro
   expect(request?.split('After the restart')).toHaveLength(2)
 })
 
-test("Pi in Spyria's image runs a command with its output, asks through Spyria's extension and gets a free answer, in plan mode is refused a write and proposes a plan that is approved, keeps a plan with update_plan as its system prompt asks, streams text around a command once, and reports a provider error", async () => {
+test("Pi in Spyria's image runs a command with its output, asks through Spyria's extension and gets a free answer, streams text around a command once, and reports a provider error", async () => {
   await addLlmKey(bob, 'Mistral')
   const { id, transport } = await runtime()
   const { token } = await runtimeTurn({ id }, bob)
@@ -374,42 +374,8 @@ test("Pi in Spyria's image runs a command with its output, asks through Spyria's
     free: { answer: 'MySQL' },
   })
   expect(fakeLlmBodies.some((body) => body.includes('The member answered: MySQL'))).toBe(true)
-
-  expect(await agentClient.setPlanMode(pi.conversation, true)).toBe(200)
-  setFakeLlmScript({
-    steps: [{ command: 'touch blocked.txt' }, { tool: 'propose_plan', arguments: { plan: '1. Create notes.txt' } }],
-    text: 'Planned.',
-  })
-  const planned = pi.answerOf('Plan it')
-  const plan = await pi.questionOf('plan')
-  expect(plan).toMatchObject({ plan: '1. Create notes.txt' })
-  expect(await agentClient.answerQuestion(pi.conversation, String(plan.questionId), { approve: true })).toBe(200)
-  expect(await planned).toBe('Planned.')
-  expect(finalOf('touch blocked.txt')).toMatchObject({
-    status: 'failed',
-    rawOutput: { formatted_output: expect.stringContaining('Plan mode: read only') },
-  })
-  expect(
-    pi.updates.filter((update) => update.sessionUpdate === 'current_mode_update').map((update) => update.currentModeId),
-  ).toEqual(['plan', 'default'])
-  expect(fakeLlmBodies.some((body) => body.includes('The member approved the plan'))).toBe(true)
   expect(pi.updates.find((update) => update.sessionUpdate === 'workspace')).toMatchObject({ cwd: '/workspace/project' })
 
-  setFakeLlmScript({ steps: [{ plan: [{ content: 'Create notes.txt', status: 'in_progress' }] }], text: 'Tracked.' })
-  expect(await pi.answerOf('Track it')).toBe('Tracked.')
-  const tracked = JSON.parse(fakeLlmBodies.findLast((body) => body.includes('Track it')) ?? '{}')
-  expect(tracked.messages[0]).toMatchObject({
-    role: 'system',
-    content: expect.stringContaining('For multi-step work, keep the plan with update_plan; do not write plan files.'),
-  })
-  expect(
-    tracked.tools.find((tool: { function: { name: string } }) => tool.function.name === 'update_plan').function
-      .description,
-  ).toContain('instead of plan or TODO files')
-  expect(pi.updates.filter((update) => update.sessionUpdate === 'plan')).toEqual([
-    { sessionUpdate: 'plan', entries: [{ content: 'Create notes.txt', status: 'in_progress', priority: 'medium' }] },
-  ])
-  expect(pi.updates.some((update) => update.title === 'update_plan')).toBe(false)
   setFakeLlmScript({
     steps: [{ command: 'echo checked', say: 'Let me check that first. ' }],
     text: 'The check passed, so every word streams once.',

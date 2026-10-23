@@ -13,17 +13,9 @@ type PiModel = { provider: string; id: string; name?: string }
 type PiEdit = { oldText?: string; newText?: string }
 
 const otherChoice = 'Other…'
-const planModeCommand = '/spyria-plan'
 const dialogMethods = ['select', 'confirm', 'input', 'editor']
-const askingTools = ['ask_member', 'propose_plan']
-const planTool = 'update_plan'
+const askingTool = 'ask_member'
 const toolKinds: Record<string, string> = { bash: 'execute', read: 'read', edit: 'edit', write: 'edit' }
-const modeIds = ['default', 'plan']
-const approvePlan = 'implement_plan'
-const planOptions = [
-  { optionId: approvePlan, kind: 'allow_once' },
-  { optionId: 'revise_plan', kind: 'reject_once' },
-]
 
 const textOf = (result: Json) =>
   ((result.content ?? []) as Json[])
@@ -58,7 +50,6 @@ export const connectPi = (launch: AdapterLaunch, { onUpdate, onExit, onRequest }
   const pending = new Map<string, PromiseWithResolvers<Json>>()
   const toolInputs = new Map<string, Json>()
   let nextId = 0
-  let mode = 'default'
   let isAborting = false
   let askingToolCallId: unknown
   let freeAnswer: string | undefined
@@ -82,37 +73,26 @@ export const connectPi = (launch: AdapterLaunch, { onUpdate, onExit, onRequest }
       return
     }
     const choices = (request.options ?? []) as string[]
-    const isPlan = method === 'confirm'
-    const asked = isPlan
-      ? {
-          method: 'session/request_permission',
-          params: {
-            toolCall: { toolCallId: askingToolCallId, kind: 'switch_mode', rawInput: { plan: request.message } },
-            options: planOptions,
-          },
-        }
-      : {
-          method: 'elicitation/create',
-          params: {
-            mode: 'form',
-            toolCallId: askingToolCallId,
-            message: request.title,
-            requestedSchema: {
-              properties: {
-                answer: {
-                  type: 'string',
-                  oneOf: choices
-                    .filter((choice) => choice !== otherChoice)
-                    .map((choice) => ({ const: choice, title: choice })),
-                },
-                answer_custom: { type: 'string' },
-              },
+    const asked = {
+      method: 'elicitation/create',
+      params: {
+        mode: 'form',
+        toolCallId: askingToolCallId,
+        message: request.title,
+        requestedSchema: {
+          properties: {
+            answer: {
+              type: 'string',
+              oneOf: choices
+                .filter((choice) => choice !== otherChoice)
+                .map((choice) => ({ const: choice, title: choice })),
             },
+            answer_custom: { type: 'string' },
           },
-        }
-    const responseOf = ({ outcome, action, content }: Json) => {
-      const optionId = (outcome as Json | undefined)?.optionId
-      if (isPlan) return optionId ? { confirmed: optionId === approvePlan } : { cancelled: true }
+        },
+      },
+    }
+    const responseOf = ({ action, content }: Json) => {
       const { answer, answer_custom: free } = (content ?? {}) as Record<string, string | undefined>
       if (action !== 'accept') return { cancelled: true }
       if (!free) return { value: answer }
@@ -138,10 +118,6 @@ export const connectPi = (launch: AdapterLaunch, { onUpdate, onExit, onRequest }
       return
     }
     if (type === 'extension_ui_request') {
-      if (record.method === 'setStatus' && record.statusKey === 'spyria-plan' && record.statusText !== mode) {
-        mode = record.statusText === 'plan' ? 'plan' : 'default'
-        update({ sessionUpdate: 'current_mode_update', currentModeId: mode })
-      }
       if (dialogMethods.includes(String(record.method))) answerDialog(record)
       return
     }
@@ -157,21 +133,10 @@ export const connectPi = (launch: AdapterLaunch, { onUpdate, onExit, onRequest }
         message.stopReason === 'error' ? String(message.errorMessage ?? 'The model call failed') : undefined
     const toolCallId = String(record.toolCallId)
     const toolName = String(record.toolName)
-    if (toolName === planTool)
-      return type === 'tool_execution_start'
-        ? update({
-            sessionUpdate: 'plan',
-            entries: (((record.args as Json | undefined)?.entries ?? []) as Json[]).map(({ content, status }) => ({
-              content,
-              status,
-              priority: 'medium',
-            })),
-          })
-        : undefined
     if (type === 'tool_execution_start') {
       const input = (record.args ?? {}) as Json
       toolInputs.set(toolCallId, input)
-      if (askingTools.includes(toolName)) askingToolCallId = toolCallId
+      if (toolName === askingTool) askingToolCallId = toolCallId
       return update({
         sessionUpdate: 'tool_call',
         toolCallId,
@@ -221,7 +186,6 @@ export const connectPi = (launch: AdapterLaunch, { onUpdate, onExit, onRequest }
     const model = state.model as PiModel | undefined
     return {
       sessionId: state.sessionFile,
-      modes: { currentModeId: mode, availableModes: modeIds.map((id) => ({ id, name: id })) },
       configOptions: [
         {
           id: 'model',
@@ -271,11 +235,6 @@ export const connectPi = (launch: AdapterLaunch, { onUpdate, onExit, onRequest }
         ? send('set_model', { provider, modelId: modelId.join('/') })
         : send('set_thinking_level', { level: value }))
       return sessionOf()
-    },
-    'session/set_mode': async ({ modeId }) => {
-      mode = modeId === 'plan' ? 'plan' : 'default'
-      await send('prompt', { message: `${planModeCommand} ${mode === 'plan' ? 'on' : 'off'}` })
-      return {}
     },
   }
   return {

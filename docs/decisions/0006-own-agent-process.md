@@ -2,7 +2,7 @@
 
 ## Context
 
-Inside a runtime, something must start the agent, pass it prompts, stream its events, ask the member questions, support plan mode, stop a turn and resume after a restart. An off-the-shelf agent server would do part of this, but it bundles its own versions of the coding agents, auto-approves everything without letting the client ask the member, and needs translation layers for its event shapes.
+Inside a runtime, something must start the agent, pass it prompts, stream its events, ask the member questions, stop a turn and resume after a restart. An off-the-shelf agent server would do part of this, but it bundles its own versions of the coding agents, auto-approves everything without letting the client ask the member, and needs translation layers for its event shapes.
 
 ## Decision
 
@@ -14,7 +14,7 @@ Inside a runtime, something must start the agent, pass it prompts, stream its ev
 
 ## Consequences
 
-- Questions to the member, plan mode and Stop work the same way for every harness, through one bridge.
+- Questions to the member and Stop work the same way for every harness, through one bridge.
 - Each coding agent's version is pinned by Spyria and updated deliberately (`bun run agent:versions`, `bun run agent:bump`).
 - Spyria owns a few hundred lines of protocol code instead of a large dependency.
 - A new harness is one registry entry in the kernel plus its real differences.

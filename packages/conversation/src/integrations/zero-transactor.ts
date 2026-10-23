@@ -369,16 +369,6 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       },
       lastSessionId: (id) => lastSessionId(tx, contextWorkspaceId, id),
     },
-    plans: {
-      replace: async (id, items) => {
-        for (const { position } of await tx.run(
-          zql.planSteps.where('workspaceId', contextWorkspaceId).where('chatId', id),
-        ))
-          await tx.mutate.planSteps.delete({ workspaceId: contextWorkspaceId, chatId: id, position })
-        for (const [position, item] of items.entries())
-          await tx.mutate.planSteps.insert({ workspaceId: contextWorkspaceId, chatId: id, position, ...item })
-      },
-    },
     routing: {
       chatRouting: async (id) => {
         const row = await chatRoutingOf(tx, contextWorkspaceId, id)
@@ -511,11 +501,6 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         )) !== undefined ||
         (await lastAgentEvent(tx, contextWorkspaceId, id)) !== undefined,
       isSessionStartPending: (id) => isSessionStartPending(tx, contextWorkspaceId, id),
-      setPlanning: async (id, isPlanning) => {
-        const row = await tx.run(zql.chats.where('workspaceId', contextWorkspaceId).where('id', id).one())
-        if (row && (row.isPlanning ?? false) !== isPlanning)
-          await tx.mutate.chats.update({ workspaceId: contextWorkspaceId, id, isPlanning })
-      },
       dropRuntime: (id) => removeChatRuntimeOnServer(tx, contextWorkspaceId, id),
       stopRuntime: (id) => stopChatRuntimeOnServer(tx, contextWorkspaceId, id),
       hasMachine: async (id) =>

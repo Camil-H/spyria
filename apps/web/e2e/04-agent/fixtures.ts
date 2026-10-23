@@ -1,13 +1,5 @@
 import { expect, type Page } from '@playwright/test'
-import {
-  machineTest,
-  mainOf,
-  messageContaining,
-  modeRadioOf,
-  newRuntimeChat,
-  newSession,
-  workingIndicatorOf,
-} from '../fixtures.ts'
+import { machineTest, mainOf, messageContaining, newRuntimeChat, newSession, workingIndicatorOf } from '../fixtures.ts'
 import type { WorkerStack } from '../stack.ts'
 
 export * from '../fixtures.ts'
@@ -66,15 +58,9 @@ export const newHarnessChat = async (
 }
 
 export const questionOf = (page: Page) => mainOf(page).getByRole('form', { name: 'Question' })
-export const planCardOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Plan approval' })
 export const turnEnded = async (page: Page, count = 1) => {
   await expect(messageContaining(page, 'Hello from the stub')).toHaveCount(count)
   await expect(workingIndicatorOf(page)).toHaveCount(0)
-}
-export const togglePlan = async (page: Page, isOn: boolean) => {
-  await modeRadioOf(page, isOn ? 'Plan' : 'Auto').click()
-  await expect(modeRadioOf(page, isOn ? 'Plan' : 'Auto')).toBeChecked()
-  await expect(modeRadioOf(page, isOn ? 'Auto' : 'Plan')).not.toBeChecked()
 }
 export const holdAnswers = async (page: Page) => {
   const held = Promise.withResolvers<void>()

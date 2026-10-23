@@ -6,8 +6,6 @@ import {
   type Locator,
   mainOf,
   messageContaining,
-  modeOf,
-  modeRadioOf,
   newRuntimeChat,
   openChat,
   type Page,
@@ -181,25 +179,14 @@ test.describe('Chat view', () => {
     })
   })
 
-  test('As a prompter, I find the working directory above the text box, and Runs on, the model chip (model and effort only) and Plan/Auto in the bar under it, Plan/Auto waiting for the session with its reason in the tooltip', {
+  test('As a prompter, I find the working directory above the text box, and Runs on and the model chip (model and effort only) in the bar under it', {
     tag: ['@spec-25', '@stage-e', '@stage-g'],
   }, async ({ page }) => {
     await newRuntimeChat(page, 'Composer layout')
-    await expect(modeRadioOf(page, 'Plan')).toBeDisabled()
-    await expect(modeRadioOf(page, 'Auto')).toBeDisabled()
-    await expect(modeOf(page)).toHaveAttribute(
-      'title',
-      'Plan and Auto are available once the agent session has started',
-    )
-    await expect(modeOf(page)).toHaveText('PlanAuto')
     await expect(workingDirectoryOf(page)).toHaveCount(0)
 
     await sendMessage(page, 'stub:hello')
     await turnsEnded(page, 1)
-    await expect(modeRadioOf(page, 'Plan')).toBeEnabled()
-    await expect(modeRadioOf(page, 'Auto')).toBeChecked()
-    await expect(modeOf(page)).not.toHaveAttribute('title')
-    await expect(modeOf(page)).toHaveText('PlanAuto')
     await expect(chipOf(page, 'spyria')).toHaveText(/^Mistral Medium( \((low|medium|high)\))?$/)
     await chipOf(page, 'spyria').click()
     await expect(sessionOf(page).getByLabel('Subagents')).toHaveValue('auto')
@@ -210,9 +197,8 @@ test.describe('Chat view', () => {
     const textBox = await boxOf(composerOf(page))
     const runsOn = await boxOf(mainOf(page).getByRole('combobox', { name: 'Runs on' }))
     const model = await boxOf(chipOf(page, 'spyria'))
-    const mode = await boxOf(modeOf(page))
     expect((await boxOf(workingDirectoryOf(page))).bottom).toBeLessThanOrEqual(textBox.top)
-    for (const control of [runsOn, model, mode]) {
+    for (const control of [runsOn, model]) {
       expect(control.top).toBeGreaterThanOrEqual(textBox.bottom)
       expect(Math.abs(control.middle - runsOn.middle)).toBeLessThan(4)
     }

@@ -63,35 +63,18 @@ test('a Pi turn over RPC streams thought and text, a command with its output and
   expect(socket.events.at(-1)?.update).toEqual({ sessionUpdate: 'turn_end', stopReason: 'end_turn' })
 })
 
-test('a Pi update_plan call is an ACP plan, not a step; a provider error ends the turn with an error update', async () => {
+test('a Pi provider error ends the turn with an error update and the next prompt continues', async () => {
   const { open, create, prompt } = started()
   const id = await create(piLaunchOf())
   const socket = open(id)
-  await prompt(id, 'stub:plan')
-  await socket.until(kindOf('turn_end'))
-  expect(socket.events.filter(kindOf('plan')).map(({ update, completed }) => ({ update, completed }))).toEqual([
-    {
-      update: {
-        sessionUpdate: 'plan',
-        entries: [
-          { content: 'Write tests', status: 'completed', priority: 'medium' },
-          { content: 'Fix the bug', status: 'in_progress', priority: 'medium' },
-          { content: 'Ship', status: 'pending', priority: 'medium' },
-        ],
-      },
-      completed: true,
-    },
-  ])
-  expect(socket.events.filter((event) => String(event.update.sessionUpdate).startsWith('tool_call'))).toEqual([])
-
   await prompt(id, 'stub:provider-error')
-  await socket.until(kindOf('turn_end'), 2)
+  await socket.until(kindOf('turn_end'))
   expect(socket.events.slice(-2).map(({ update }) => update)).toEqual([
     { sessionUpdate: 'error', message: '529 overloaded' },
     { sessionUpdate: 'turn_end', stopReason: 'end_turn' },
   ])
   await prompt(id, 'hello')
-  await socket.until(kindOf('turn_end'), 3)
+  await socket.until(kindOf('turn_end'), 2)
   expect(socket.events.filter(kindOf('error'))).toHaveLength(1)
 })
 
@@ -232,45 +215,6 @@ test("a Pi question from the extension's select is one free question: a pick, an
   expect(textOf(socket.events.slice(-6))).toContain('answer:The member did not answer. ')
 })
 
-test("a Pi plan from the extension's confirm: keep planning and approve, the mode following the extension; the plan route switches it", async () => {
-  const { call, open, create, prompt } = started()
-  const id = await create(piLaunchOf())
-  const socket = open(id)
-  const modesOf = () => socket.events.filter(kindOf('current_mode_update')).map(({ update }) => update.currentModeId)
-  const decide = async (approve: boolean, turns: number) => {
-    const asked = socket.events.filter(kindOf('question')).length + 1
-    await prompt(id, 'stub:exit-plan')
-    const questionId = await questionAt(socket, asked)
-    expect((await call('POST', `/api/conversations/${id}/questions/${questionId}`, { approve })).status).toBe(200)
-    await socket.until(kindOf('turn_end'), turns)
-    return socket.events.slice(socket.events.findLastIndex(kindOf('question')))
-  }
-
-  const kept = await decide(false, 1)
-  expect(kept[0]?.update).toMatchObject({ kind: 'plan', toolCallId: 'exit-plan-1', plan: '1. Create x.txt\n2. Done' })
-  expect(kept.find(kindOf('question_answered'))?.update).toMatchObject({ kind: 'plan', approved: false })
-  expect(textOf(kept)).toBe(`plan:The member wants to keep planning. ${piHello(1, 'plan').slice(5)}`)
-  expect(kept.find(kindOf('turn_end'))?.update).toEqual({ sessionUpdate: 'turn_end', stopReason: 'end_turn' })
-  expect(modesOf()).toEqual(['plan'])
-
-  const approved = await decide(true, 2)
-  expect(textOf(approved)).toBe(
-    `plan:The member approved the plan. Plan mode is off: carry it out. ${piHello(2).slice(5)}`,
-  )
-  expect(modesOf()).toEqual(['plan', 'default'])
-
-  expect((await call('POST', `/api/conversations/${id}/plan_mode`, { enabled: true })).status).toBe(200)
-  await prompt(id, 'hello')
-  await socket.until(kindOf('turn_end'), 3)
-  expect(textOf(socket.events.slice(-4))).toContain(piHello(3, 'plan'))
-  expect((await call('POST', `/api/conversations/${id}/plan_mode`, { enabled: false })).status).toBe(200)
-  await prompt(id, 'hello')
-  await socket.until(kindOf('turn_end'), 4)
-  expect(textOf(socket.events.slice(-4))).toContain(piHello(4))
-  expect(modesOf()).toEqual(['plan', 'default', 'plan', 'default'])
-  expect(socket.events.filter(kindOf('current_mode_update')).every((event) => event.completed)).toBe(true)
-})
-
 test('Stop while a Pi question waits closes it as stopped and cancels the dialog; a sub-conversation answers Pi questions itself', async () => {
   const { call, open, create, prompt } = started()
   const id = await create(piLaunchOf())
@@ -296,13 +240,9 @@ test('Stop while a Pi question waits closes it as stopped and cancels the dialog
   const subSocket = open(sub)
   await prompt(sub, 'stub:ask')
   await subSocket.until(kindOf('turn_end'))
-  await prompt(sub, 'stub:exit-plan')
-  await subSocket.until(kindOf('turn_end'), 2)
   expect(textOf(subSocket.events)).toContain(`answer:The member answered: ${assumption} `)
-  expect(textOf(subSocket.events)).toContain('plan:The member approved the plan.')
   expect(subSocket.events.filter(kindOf('question_answered')).map(({ update }) => update)).toMatchObject([
     { kind: 'question', answers: {}, free: { answer: assumption } },
-    { kind: 'plan', approved: true },
   ])
   expect(subSocket.events.filter(kindOf('question'))).toEqual([])
 })
