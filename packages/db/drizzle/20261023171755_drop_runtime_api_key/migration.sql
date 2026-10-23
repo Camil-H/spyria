@@ -1,1 +1,2 @@
+UPDATE "runtimes" SET "state" = 'failed', "failure" = 'outdated', "state_changed_at" = now() WHERE "api_key" IS NOT NULL AND "state" NOT IN ('failed', 'removing', 'removed');--> statement-breakpoint
 ALTER TABLE "runtimes" DROP COLUMN "api_key";
