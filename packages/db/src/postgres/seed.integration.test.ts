@@ -90,7 +90,10 @@ const readSnapshot = async () => {
         ),
       ),
     })),
-    browserPages: await database.select().from(tables.browserPages),
+    browserPages: (await database.select().from(tables.browserPages)).map(({ openedAt, ...page }) => ({
+      ...page,
+      openedAt: openedAt.toISOString(),
+    })),
     sources: await database.select().from(tables.sources),
     usageEntries: (await database.select().from(tables.usageEntries)).map(userAsMember),
     budgetAlerts: (await database.select().from(tables.budgetAlerts)).map(({ reachedAt, ...alert }) => alert),

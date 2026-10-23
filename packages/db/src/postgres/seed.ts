@@ -101,7 +101,9 @@ const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
       })),
     )
   await transaction.insert(tables.toolConnections).values(snapshot.toolConnections.map(withUserIdAndPosition))
-  await transaction.insert(tables.browserPages).values([...snapshot.browserPages])
+  await transaction
+    .insert(tables.browserPages)
+    .values(snapshot.browserPages.map((page) => ({ ...page, openedAt: new Date(page.openedAt) })))
   await transaction.insert(tables.sources).values([...snapshot.sources])
   await transaction.insert(tables.usageEntries).values(snapshot.usageEntries.map(withUserId))
   await transaction

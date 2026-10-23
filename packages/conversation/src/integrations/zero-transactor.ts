@@ -369,6 +369,15 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       },
       lastSessionId: (id) => lastSessionId(tx, contextWorkspaceId, id),
     },
+    browserPages: {
+      open: (id, page, openedAt) =>
+        tx.mutate.browserPages.upsert({
+          workspaceId: contextWorkspaceId,
+          chatId: id,
+          ...page,
+          openedAt: openedAt.getTime(),
+        }),
+    },
     routing: {
       chatRouting: async (id) => {
         const row = await chatRoutingOf(tx, contextWorkspaceId, id)

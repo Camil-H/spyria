@@ -13,7 +13,6 @@ export const BrowserTab = ({ workspaceId, chatId }: TabProps) => {
     <div className="flex flex-col gap-3 text-sm">
       <p className="break-all rounded-md border border-line bg-raised px-2 py-1 font-mono text-xs">{page.url}</p>
       <h2 className="font-semibold">{page.title}</h2>
-      <p>{page.bodyText}</p>
     </div>
   )
 }
