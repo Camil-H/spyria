@@ -1,6 +1,6 @@
 # Contexts and apps
 
-Spyria is one Bun workspace: four apps under `apps/` and one package per bounded context under `packages/`, plus a small shared layer. This page says what each one owns, how it is entered, and how they talk to each other. The rules themselves are in [AGENTS.md](../../AGENTS.md); `bun run check:boundaries` enforces them.
+Spyria is one Bun workspace: four apps under `apps/` and one package per bounded context under `packages/`, plus a small shared layer. This page says what each one owns, how it is entered, and how they talk to each other. The rules themselves are in [AGENTS.md](../../AGENTS.md) and, in full, in the [architecture standard](../../.agents/skills/architecture/SKILL.md); `bun run check:boundaries` enforces the import rules.
 
 ## Why bounded contexts
 

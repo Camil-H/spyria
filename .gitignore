@@ -10,4 +10,7 @@ apps/agent/image-id
 .env
 .env.dev
 .env.prod
-.claude/
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/architecture
