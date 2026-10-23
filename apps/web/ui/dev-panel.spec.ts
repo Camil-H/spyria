@@ -23,6 +23,13 @@ const finished = (page: Page) => expect(workingIndicatorOf(page)).toHaveCount(0)
 const diffOf = (page: Page, path: string) => tabPanelOf(page).getByRole('table', { name: `Diff of ${path}` })
 const cellsOfRow = (page: Page, path: string, row: number) =>
   diffOf(page, path).getByRole('row').nth(row).getByRole('cell')
+const expectReadableRow = async (page: Page, path: string, row: number) => {
+  const cells = cellsOfRow(page, path, row)
+  const lineNumberBox = (await cells.first().boundingBox())!
+  const codeBox = (await cells.last().boundingBox())!
+  expect(lineNumberBox.width).toBeLessThan(32)
+  expect(codeBox.height).toBeLessThan(24)
+}
 const runAgent = async (page: Page, agentScript: AgentScript, chatId: string, steps: object[], text: string) => {
   await agentScript(chatId, { steps, text })
   await sendMessage(page, text.replace(/\.$/, ''))
@@ -56,9 +63,10 @@ test.describe('Dev panel', () => {
     await expect(diffOf(page, 'src/new.ts')).toBeVisible()
     await expect(tabPanelOf(page).getByRole('radiogroup', { name: 'Diff layout' })).toHaveCount(0)
 
-    await test.step('shows the diff unified at the default panel width', async () => {
+    await test.step('shows the diff unified at the default panel width, with narrow line numbers and code kept on one line', async () => {
       await expect(cellsOfRow(page, 'src/app.ts', 1)).toHaveText(['1', '', '- export const total = 1'])
       await expect(cellsOfRow(page, 'src/app.ts', 2)).toHaveText(['', '1', '+ export const total = 2'])
+      await expectReadableRow(page, 'src/app.ts', 2)
     })
 
     await test.step('collapses and expands a file', async () => {
@@ -71,7 +79,7 @@ test.describe('Dev panel', () => {
       await expect(diffOf(page, 'src/app.ts')).toBeVisible()
     })
 
-    await test.step('switches to side by side when the panel is widened to 560px and back when narrowed', async () => {
+    await test.step('switches to side by side when the panel is widened to 560px, without breaking words, and back when narrowed', async () => {
       const separator = page.getByRole('separator', { name: 'Resize panel' })
       await separator.focus()
       for (let press = 0; press < 13; press++) await page.keyboard.press('ArrowLeft')
@@ -82,6 +90,7 @@ test.describe('Dev panel', () => {
         '1',
         '+ export const total = 2',
       ])
+      await expectReadableRow(page, 'src/app.ts', 1)
       await expectLooks(page, panelOf(page), 'changes-side-by-side', {
         mask: [tabPanelOf(page).getByRole('region', { name: 'Branch status' })],
       })
