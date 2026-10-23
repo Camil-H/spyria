@@ -7,6 +7,7 @@ import { RuntimeMedia } from './Media.tsx'
 
 type MarkdownNode = {
   type: string
+  value?: string
   children?: MarkdownNode[]
   position?: { start: { offset?: number } }
   data?: { hName?: string }
@@ -31,6 +32,20 @@ const underlineFromUnderscores = () => (tree: MarkdownNode, file: { value: unkno
     node.children?.forEach(underline)
   }
   underline(tree)
+}
+
+const lineBreaksKept = () => (tree: MarkdownNode) => {
+  const withBreaks = (node: MarkdownNode): MarkdownNode => ({
+    ...node,
+    children: node.children?.flatMap((child) =>
+      child.type === 'text' && child.value?.includes('\n')
+        ? child.value
+            .split(/\r?\n|\r/)
+            .flatMap((line, index) => [...(index > 0 ? [{ type: 'break' }] : []), { type: 'text', value: line }])
+        : [withBreaks(child)],
+    ),
+  })
+  tree.children = withBreaks(tree).children
 }
 
 const decodedPathOf = (source: string) => {
@@ -121,9 +136,12 @@ const components: Components = {
   },
 }
 
-const Markdown = ({ text }: { text: string }) => (
+const Markdown = ({ text, keepsLineBreaks = false }: { text: string; keepsLineBreaks?: boolean }) => (
   <div className="flex flex-col gap-2 text-sm [&_ol]:list-decimal [&_ol]:pl-5 [&_table]:border-collapse [&_td]:border [&_td]:border-line [&_td]:px-2 [&_th]:border [&_th]:border-line [&_th]:px-2 [&_ul]:list-disc [&_ul]:pl-5 [&_:not(pre)>code]:rounded [&_:not(pre)>code]:bg-hover [&_:not(pre)>code]:px-1 [&_:not(pre)>code]:text-xs">
-    <ReactMarkdown remarkPlugins={[remarkGfm, rawHtmlAsText, underlineFromUnderscores]} components={components}>
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm, rawHtmlAsText, underlineFromUnderscores, ...(keepsLineBreaks ? [lineBreaksKept] : [])]}
+      components={components}
+    >
       {text}
     </ReactMarkdown>
   </div>

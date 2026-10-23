@@ -81,6 +81,7 @@ test.describe('Runtime from a thread', () => {
           `Alice \\(member, human\\) · ${quotedTime}\\n${alicesReply}`,
         ].join('\\n\\n'),
       ),
+      { useInnerText: true },
     )
     await expect(mainOf(page).getByRole('link', { name: 'Started from Welcome' })).toBeVisible()
     await bobPage.context().close()
@@ -134,6 +135,7 @@ test.describe('Runtime from a thread', () => {
       new RegExp(
         `Conversation so far, from the channel thread in #Welcome:\\n\\nAlice \\(member, human\\) · ${quotedTime}\\nLunch at noon\\?$`,
       ),
+      { useInnerText: true },
     )
     await openPanelTab(page, 'Lunch at noon?', 'Members')
     await expectMembers(page, [['Alice', 'Owner']])

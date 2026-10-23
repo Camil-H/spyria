@@ -64,6 +64,7 @@ test.describe('Fork', () => {
           `Agent \\(agent\\) · ${quotedTime}\\nFound it\\.$`,
         ].join('\\n\\n'),
       ),
+      { useInnerText: true },
     )
     await expect(messageItemsOf(bobPage).nth(0)).not.toContainText('lookup')
     await bobPage.context().close()

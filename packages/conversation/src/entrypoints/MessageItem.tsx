@@ -124,7 +124,7 @@ export const MessageItem = ({
               <p className="text-sm text-muted italic">This message was deleted</p>
             ) : !message.isStreamed ? (
               <Suspense fallback={<p className={plainTextClassName}>{message.body}</p>}>
-                <LazyMarkdown text={message.body} />
+                <LazyMarkdown text={message.body} keepsLineBreaks={message.kind === 'member'} />
               </Suspense>
             ) : (
               <p className={plainTextClassName}>{message.body}</p>

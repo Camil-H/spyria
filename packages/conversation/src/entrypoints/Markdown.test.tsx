@@ -59,3 +59,13 @@ test('in a runtime chat, an image path is a file of the runtime, loaded through 
   expect(html).toContain('Load image from images.example.com')
   expect(html).not.toContain('<img')
 })
+
+test('a line break stays a line break when asked, as in member messages; standard Markdown joins the lines', () => {
+  const text = 'Alice (member, human) · 09:05 UTC\nCan we ship it?\n\n- one\n- two\n\n```\na\nb\n```'
+  const kept = renderToStaticMarkup(<Markdown text={text} keepsLineBreaks />)
+  expect(kept).toContain('Alice (member, human) · 09:05 UTC<br/>\nCan we ship it?')
+  expect(kept).toContain('<li>one</li>')
+  expect(kept).toContain('a\nb')
+  expect(render(text)).toContain('Alice (member, human) · 09:05 UTC\nCan we ship it?')
+  expect(render(text)).not.toContain('<br/>')
+})
