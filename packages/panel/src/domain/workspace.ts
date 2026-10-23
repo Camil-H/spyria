@@ -24,6 +24,9 @@ export type BranchStatus = {
 const lineKinds: Record<string, DiffLine['kind']> = { '+': 'added', '-': 'removed', ' ': 'context', '@': 'hunk' }
 const hunkPattern = /^@@ -(\d+)(?:,\d+)? \+(\d+)/
 const collapsedAboveLines = 400
+const splitFromPanelWidth = 560
+const minimumLineNumberDigits = 4
+const tabWidth = 8
 
 const pathOf = (header: string, lines: readonly string[]) => {
   const target = lines.find((line) => line.startsWith('+++ b/'))
@@ -113,6 +116,21 @@ export const codeFenceOf = (path: string, content: string) => {
 
 export const isCollapsedByDefault = (changes: readonly FileChange[]) =>
   changes.reduce((total, change) => total + change.lines.length, 0) > collapsedAboveLines
+
+export const diffLayoutFor = (panelWidth: number): DiffLayout =>
+  panelWidth >= splitFromPanelWidth ? 'split' : 'unified'
+
+export const splitColumnsOf = (lines: readonly DiffLine[]) =>
+  lines.reduce(
+    (columns, line) => ({
+      numberDigits: Math.max(columns.numberDigits, String(Math.max(line.oldNumber ?? 0, line.newNumber ?? 0)).length),
+      longestText:
+        line.kind === 'hunk'
+          ? columns.longestText
+          : Math.max(columns.longestText, line.text.replaceAll('\t', ' '.repeat(tabWidth)).length),
+    }),
+    { numberDigits: minimumLineNumberDigits, longestText: 0 },
+  )
 
 export const splitRowsOf = (lines: readonly DiffLine[]) => {
   const rows: DiffRow[] = []

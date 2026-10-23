@@ -182,6 +182,15 @@ test.describe('Organize', () => {
       await expect(mainOf(page)).not.toContainText('Channel view')
     })
 
+    await test.step('starts a chat from a project’s menu with that project already chosen', async () => {
+      await projectAction(page, 'Billing', 'New chat')
+      await expect(page.getByRole('combobox', { name: 'Project' }).locator('option:checked')).toHaveText('Billing')
+      await page.getByRole('textbox', { name: 'Chat name' }).fill('Quarter close')
+      await page.getByRole('button', { name: 'Confirm' }).click()
+      await expect(chatRowIn(projectGroupOf(page, 'Billing'), 'Quarter close')).toBeVisible()
+      await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Quarter close' })).toBeVisible()
+    })
+
     await test.step('creates a runtime chat without a project as a loose chat', async () => {
       await page.getByRole('button', { name: 'New chat' }).click()
       await page.getByRole('radio', { name: 'Runtime' }).check()

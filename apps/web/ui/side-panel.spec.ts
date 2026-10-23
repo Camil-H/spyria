@@ -324,7 +324,6 @@ test.describe('Side panel', () => {
 
     await test.step('exposes the separator with its bounds and the default width', async () => {
       await expect(separator).toHaveAttribute('aria-valuemin', '280')
-      await expect(separator).toHaveAttribute('aria-valuemax', '640')
       await expect(separator).toHaveAttribute('aria-valuenow', '360')
       expect(await panelWidthOf(page)).toBeCloseTo(360, 0)
     })
@@ -355,14 +354,33 @@ test.describe('Side panel', () => {
       await openChat(page, 'Invoice bug')
     })
 
-    await test.step('stays between 280px and 640px', async () => {
+    await test.step('stays between 280px and the width that leaves the chat 320px, beyond the former 640px cap', async () => {
+      const maximumWidth = Math.floor((await mainOf(page).boundingBox())!.width - 320)
+      expect(maximumWidth).toBeGreaterThan(640)
+      await expect(separator).toHaveAttribute('aria-valuemax', String(maximumWidth))
       await dragResizeHandleBy(page, -1000)
-      expect(await panelWidthOf(page)).toBeCloseTo(640, 0)
+      expect(await panelWidthOf(page)).toBeCloseTo(maximumWidth, 0)
       await dragResizeHandleBy(page, 1000)
       expect(await panelWidthOf(page)).toBeCloseTo(280, 0)
     })
 
+    await test.step('narrows a wide panel when the window shrinks so it never covers the chat', async () => {
+      await dragResizeHandleBy(page, -1000)
+      const viewport = page.viewportSize()!
+      await page.setViewportSize({ width: viewport.width - 200, height: viewport.height })
+      const mainBox = (await mainOf(page).boundingBox())!
+      await expect.poll(() => panelWidthOf(page)).toBeCloseTo(Math.floor(mainBox.width - 320), 0)
+      const panelBox = (await panelOf(page).boundingBox())!
+      expect(panelBox.x + panelBox.width).toBeLessThanOrEqual(mainBox.x + mainBox.width + 1)
+      await page.setViewportSize(viewport)
+      const restoredMaximumWidth = Math.floor((await mainOf(page).boundingBox())!.width - 320)
+      await expect.poll(() => panelWidthOf(page)).toBeCloseTo(restoredMaximumWidth, 0)
+      await dragResizeHandleBy(page, 1000)
+      await expect.poll(() => panelWidthOf(page)).toBeCloseTo(280, 0)
+    })
+
     await test.step('scrolls the tab list horizontally when the panel is narrow and keeps the selected tab visible', async () => {
+      expect(await panelWidthOf(page)).toBeCloseTo(280, 0)
       const overflowX = await tabListOf(page).evaluate((element) => getComputedStyle(element).overflowX)
       expect(['auto', 'scroll']).toContain(overflowX)
       expect(await isTabListScrollable(page)).toBe(true)
