@@ -13,7 +13,6 @@ import {
   mainOf,
   messageContaining,
   messageItemsOf,
-  modeRadioOf,
   newRuntimeChat,
   openChat,
   openPanelTab,
@@ -159,7 +158,6 @@ test.describe('Chat permissions', () => {
         )
         .toContain('member-bob')
 
-      await expect(modeRadioOf(bobPage, 'Plan')).toBeDisabled()
       await openSession(bobPage)
       await expect(sessionOf(bobPage).getByLabel('Main model')).toHaveValue('mistral/mistral-medium-latest')
       for (const label of ['Main model', 'Search all models', 'Effort', 'Subagents'])

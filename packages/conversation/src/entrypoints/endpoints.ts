@@ -14,10 +14,8 @@ const questionAnswer = z.union([
   }),
 ])
 export type QuestionAnswer = z.infer<typeof questionAnswer>
-const planMode = z.object({ enabled: z.boolean() })
 
 export const questionAnswerOf = (body: unknown) => questionAnswer.safeParse(body).data
-export const planModeOf = (body: unknown) => planMode.safeParse(body).data
 
 export const cappedBodyOf = async (request: Request, maximumBytes: number) => {
   if (Number(request.headers.get('content-length') ?? 0) > maximumBytes) throw new AttachmentTooLarge()

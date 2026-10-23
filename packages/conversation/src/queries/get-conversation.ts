@@ -71,7 +71,6 @@ export type Conversation = Readonly<{
   subagentPolicy: ChatRow['subagentPolicy']
   harness: ChatRow['harness']
   localSession: boolean
-  isPlanning: boolean
   runsOn: RunsOn | null
   isOwner: boolean
   isFrozen: boolean
@@ -177,16 +176,6 @@ const withDelegationsGrouped = (replies: readonly ConversationMessage[], isStopp
   })
 }
 
-export const isPlanSwitchIn = (messages: readonly ConversationMessage[]) => {
-  const planToolCallSuffixes = messages.flatMap((message) =>
-    message.step?.type === 'question' && message.step.kind === 'plan' && message.step.toolCallId
-      ? [`:${message.step.toolCallId}`]
-      : [],
-  )
-  return (message: ConversationMessage) =>
-    message.step?.type === 'tool' && planToolCallSuffixes.some((suffix) => message.id.endsWith(suffix))
-}
-
 const turnItemsOf = (messages: readonly ConversationMessage[]): ConversationItem[] => {
   const repliesByPrompt = Map.groupBy(
     messages.filter((message) => message.replyToId !== null),
@@ -195,21 +184,13 @@ const turnItemsOf = (messages: readonly ConversationMessage[]): ConversationItem
   const itemsByStepId = new Map<MessageId, ConversationItem[]>()
   for (const [promptId, turnReplies] of repliesByPrompt) {
     const isStopped = turnReplies.some((reply) => reply.kind === 'notice' && reply.body.startsWith(stoppedByPrefix))
-    const isPlanSwitch = isPlanSwitchIn(turnReplies)
-    const replies = withDelegationsGrouped(
-      turnReplies.filter((reply) => !isPlanSwitch(reply)),
-      isStopped,
-    )
+    const replies = withDelegationsGrouped(turnReplies, isStopped)
     const steps = replies.filter(
       (reply) =>
         reply.kind === 'step' && reply.step?.type !== 'question' && !(isStopped && reply.step?.type === 'error'),
     )
-    const plans = steps.filter((step) => step.step?.type === 'plan')
-    const visibleSteps = steps
-      .filter((step) => step.step?.type !== 'plan' || step === plans[0])
-      .map((step) => (step === plans[0] ? { ...step, step: plans.at(-1)?.step ?? null } : step))
     const answer = replies.findLast((reply) => reply.kind === 'agent')
-    const firstStep = visibleSteps[0]
+    const firstStep = steps[0]
     const firstStepIndex = replies.findIndex((reply) => reply.id === firstStep?.id)
     for (const reply of turnReplies) if (reply.kind === 'step') itemsByStepId.set(reply.id, [])
     for (const reply of replies)
@@ -218,22 +199,22 @@ const turnItemsOf = (messages: readonly ConversationMessage[]): ConversationItem
       answer &&
       firstStep &&
       replies.indexOf(answer) > firstStepIndex &&
-      visibleSteps.length > 1 &&
+      steps.length > 1 &&
       !firstStep.isRunning &&
       !isStopped &&
       !steps.some((step) => step.step?.type === 'error')
     ) {
       const workedFor = durationLabelOf(Date.parse(answer.createdAt) - Date.parse(firstStep.createdAt))
-      const label = `Worked for ${workedFor} · ${visibleSteps.length} steps`
+      const label = `Worked for ${workedFor} · ${steps.length} steps`
       const narration = replies.filter(
         (reply, index) => reply.kind === 'agent' && reply !== answer && index > firstStepIndex,
       )
       for (const reply of narration) itemsByStepId.set(reply.id, [])
       const folded = replies.flatMap(
-        (reply) => visibleSteps.find((step) => step.id === reply.id) ?? (narration.includes(reply) ? [reply] : []),
+        (reply) => steps.find((step) => step.id === reply.id) ?? (narration.includes(reply) ? [reply] : []),
       )
       itemsByStepId.set(firstStep.id, [{ type: 'fold', promptId, label, steps: folded }])
-    } else for (const step of visibleSteps) itemsByStepId.set(step.id, [{ type: 'message', message: step }])
+    } else for (const step of steps) itemsByStepId.set(step.id, [{ type: 'message', message: step }])
   }
   return messages.flatMap((message) => itemsByStepId.get(message.id) ?? [{ type: 'message', message }])
 }
@@ -344,7 +325,6 @@ export const getConversation =
       subagentPolicy: chat.subagentPolicy,
       harness: chat.harness,
       localSession: chat.localSession === true,
-      isPlanning: chat.isPlanning,
       runsOn: runsOnOf(chat),
       isOwner,
       isFrozen: isFrozen({

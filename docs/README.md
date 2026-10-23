@@ -22,7 +22,7 @@ Start with the architecture overview, then the page for what you are doing. The 
 ## Features
 
 - [Chats and sharing](features/chats-and-sharing.md): projects, channels, threads, unread state, chat roles, forks, runtimes from a thread.
-- [Agents](features/agents.md): harnesses, models and routing, effort, plan mode, questions, delegation, steps, Stop, budgets for a member.
+- [Agents](features/agents.md): harnesses, models and routing, effort, questions, delegation, steps, Stop, budgets for a member.
 - [Machines](features/machines.md): workspace runtime hosts, a member's own machine, harness install, where a chat runs.
 - [Dev mode](features/dev-mode.md): repositories, dev chats, the setup script, the side panel, git actions, pull requests, webhooks.
 - [Administration](features/admin.md): members and invites, roles, SSO, GitHub, shared tools, spend, budgets, the audit log.

@@ -101,7 +101,7 @@ const piSettings = {
   quietStartup: true,
   enableInstallTelemetry: false,
   retry: { enabled: false },
-  extensions: ['/usr/local/lib/spyria/pi/spyria-compaction.ts', '/usr/local/lib/spyria/pi/spyria-plan.ts'],
+  extensions: ['/usr/local/lib/spyria/pi/spyria-compaction.ts', '/usr/local/lib/spyria/pi/spyria-tools.ts'],
 }
 const piProviderOf = (baseUrl: string, api: string, models: readonly PiModel[]) => ({
   baseUrl,
@@ -231,9 +231,6 @@ export const createSpyriaAgentClient = (): AgentClient => ({
         answer,
       )
     ).status,
-  setPlanMode: async (conversation, enabled) =>
-    (await send(conversation, 'POST', `/api/conversations/${conversation.conversationId}/plan_mode`, { enabled }))
-      .status,
   statusOf: async (conversation) => {
     const read = await call(conversation, 'GET', `/api/conversations/${conversation.conversationId}`)
     return read && String(read.execution_status)

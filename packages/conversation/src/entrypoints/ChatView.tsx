@@ -18,7 +18,7 @@ import {
   ToolsAwaitingApprovalContext,
   useConversationCommands,
 } from './providers.tsx'
-import { PlanModeToggle, RunsOnChip, SessionChip } from './SessionChip.tsx'
+import { RunsOnChip, SessionChip } from './SessionChip.tsx'
 import { useLiveMessages, withLiveMessages } from './useLiveMessages.ts'
 
 const frozenNotice = new ChatFrozen().message
@@ -248,15 +248,6 @@ export const ChatView = ({
                   isOwner={conversation.isOwner}
                   canConfigure={conversation.canConfigure}
                 />
-                {conversation.runsOn !== null && (
-                  <PlanModeToggle
-                    workspaceId={workspaceId}
-                    chatId={chatId}
-                    isPlanning={conversation.isPlanning}
-                    hasSession={live.workspace !== undefined}
-                    mayChange={mayPrompt && conversation.canConfigure}
-                  />
-                )}
               </>
             )
           }
