@@ -207,6 +207,7 @@ const startSharedTestApp = async () => {
   const llmGateway = llmGatewayAt(`http://127.0.0.1:${integrationGatewayPort}`)
   setModelDirectory(llmGateway.listedModels)
   const runtimeHosts = createRuntimeHostGateway({
+    runtimeKeySecret: testSecretsKey,
     databases: () => [database],
     relayModelCall: createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),
   })
@@ -238,7 +239,10 @@ const startSharedTestApp = async () => {
     await stopServerAndDatabase()
     throw zeroCache.status === 'rejected' ? zeroCache.reason : (gateway as PromiseRejectedResult).reason
   }
-  await llmGateway.setUpToolServer({ name: 'fake', url: `http://host.docker.internal:${fakeMcpServer.port}/mcp` })
+  await llmGateway.setUpToolServer(
+    { name: 'fake', url: `http://host.docker.internal:${fakeMcpServer.port}/mcp` },
+    logInToFakeToolServer(llmGateway),
+  )
   await llmGateway.setUpToolServer({
     name: sharedToolServer,
     url: `http://host.docker.internal:${fakeMcpServer.port}/shared/mcp`,
@@ -577,6 +581,7 @@ export const startAgentStack = async ({
   const testApp = await openSharedTestApp()
   const { database, llmGateway } = testApp
   const runtimeHosts = createRuntimeHostGateway({
+    runtimeKeySecret: testSecretsKey,
     databases: () => [database],
     spyriaAgentImage,
     relayModelCall: routing
@@ -787,6 +792,11 @@ export const asMember = async (userId: string, method: string, path: string, bod
   })
   return { status: response.status, body: await response.text() }
 }
+export const logInToFakeToolServer =
+  (gateway: { finishToolConsent(callbackQuery: string): Promise<boolean> }) => async (authorizeUrl: string) => {
+    const authorized = await fetch(authorizeUrl, { redirect: 'manual' })
+    await gateway.finishToolConsent(new URL(authorized.headers.get('location') ?? '').search)
+  }
 export const connectionPath = (action: string) => `/api/tool-connections/fake/${action}`
 export const consentThroughSpyria = async (authorizeUrl: string, cookie: string) => {
   const { app } = await openedTestApp()

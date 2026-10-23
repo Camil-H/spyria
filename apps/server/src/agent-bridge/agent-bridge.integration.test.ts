@@ -71,7 +71,7 @@ test('a prompt starts the runtime, creates one Pi conversation with the runtime 
   expect(launches()).toHaveLength(1)
   const llmToken = String(launch?.secrets.SPYRIA_LLM_TOKEN?.value)
   expect(llmToken.length).toBeGreaterThanOrEqual(16)
-  expect(llmToken).not.toBe(runtime.api_key)
+  expect(llmToken).not.toBe(runtimeHosts.sandboxProvider.apiKeyOf({ workspaceId: acme, runtimeId: runtime.id }))
   expect(runtime.llm_token_hash).toBe(createHash('sha256').update(llmToken).digest('hex'))
   expect(launch?.agent.acp_model).toBe('spyria/mistral/codestral-latest')
   expect(launch?.agent.acp_command.at(-1)).toEndWith('exec pi --mode rpc --no-themes')
@@ -203,7 +203,11 @@ test('stream frames reach browsers of the chat workspace only, and no secret rea
     const llmToken = String(launches()[0]?.secrets.SPYRIA_LLM_TOKEN?.value)
     const everyFrame = [...acmeViewer.frames, ...globexViewer.frames].join('\n')
     const logged = consoleCalls.logged()
-    for (const secret of [runtime.api_key, llmToken, runtime.llm_token_hash]) {
+    for (const secret of [
+      runtimeHosts.sandboxProvider.apiKeyOf({ workspaceId: acme, runtimeId: runtime.id }),
+      llmToken,
+      runtime.llm_token_hash,
+    ]) {
       expect(everyFrame).not.toContain(secret)
       expect(logged).not.toContain(secret)
     }

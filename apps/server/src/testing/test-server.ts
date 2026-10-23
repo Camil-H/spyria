@@ -4,7 +4,7 @@ import { createDatabase, type Database } from '@spyria/db/postgres'
 import { setModelDirectory } from '@spyria/db/server-writes'
 import { databaseUrlOf } from '@spyria/db/testing'
 import { schema } from '@spyria/db/zero'
-import { chatId } from '@spyria/kernel'
+import { chatId, workspaceId } from '@spyria/kernel'
 import { createLlmGateway } from '@spyria/profile/server'
 import {
   createRuntimeTransactor,
@@ -36,6 +36,7 @@ import {
   createHolds,
   type FakeHost,
   issueTestSession,
+  logInToFakeToolServer,
   testAuthSettings,
   testSecretsKey,
 } from './testing.ts'
@@ -91,6 +92,10 @@ const sandboxProviderOf = (databaseName: string): SandboxProvider => ({
     await runtimeHosts.sandboxProvider.create(sandbox)
   },
 })
+const apiKeyOfSandbox = (sandbox: string) => {
+  const [workspace = '', runtimeId = ''] = sandbox.split('/')
+  return runtimeHosts.sandboxProvider.apiKeyOf({ workspaceId: workspaceId(workspace), runtimeId })
+}
 const databaseByName = (databaseName: string) => {
   const served = servedDatabaseByName.get(databaseName)
   if (served) return served.database
@@ -146,6 +151,7 @@ const testHeadersOf = (database: Database, chat: { chatId: string }) => ({
 const spyriaAgentImage = (await readSpyriaAgentImage()) ?? `sha256:${'0'.repeat(64)}`
 const placement = { spyriaAgentImage }
 const runtimeHosts = createRuntimeHostGateway({
+  runtimeKeySecret: testSecretsKey,
   ...placement,
   databases: () => [...servedDatabaseByName.values()].map((served) => served.database),
   afterHello: (database, host) => agentBridge.forDatabase(database).resumeHost(host),
@@ -296,7 +302,8 @@ const app = createApp({
       fakeHostByDatabase.set(db, fakeHost)
     }
     if (forgetSessions === 'true') fakeHost.relay.forgetSessions()
-    if (keepAgentsOf !== undefined) await fakeHost.relay.stopAgentsExcept(keepAgentsOf.split(','))
+    if (keepAgentsOf !== undefined)
+      await fakeHost.relay.stopAgentsExcept(keepAgentsOf.split(',').filter(Boolean).map(apiKeyOfSandbox))
     if (online === 'false' && fakeHost.isOnline) await fakeHost.host.disconnect()
     if (online === 'true' && !fakeHost.isOnline) await fakeHost.host.connect()
     if (online) fakeHost.isOnline = online === 'true'
@@ -350,7 +357,10 @@ const app = createApp({
   })
   .post('/test/tool-servers', async (context) => {
     for (const name of testToolServers)
-      await llmGateway.setUpToolServer({ name, url: `http://host.docker.internal:${fakeMcpPort}/mcp` })
+      await llmGateway.setUpToolServer(
+        { name, url: `http://host.docker.internal:${fakeMcpPort}/mcp` },
+        logInToFakeToolServer(llmGateway),
+      )
     await llmGateway.setUpToolServer({
       name: sharedToolServer,
       url: `http://host.docker.internal:${fakeMcpPort}/shared/mcp`,

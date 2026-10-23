@@ -31,3 +31,24 @@ test('a plugged output receives every event with its severity', () => {
     ['WARN', 'job.run'],
   ])
 })
+
+test('a failed query is logged by its class and code only, without its parameters', () => {
+  const printed = spyOn(console, 'log').mockImplementation(() => {})
+  const failedQuery = Object.assign(
+    new Error('Failed query: update runtimes set llm_token_hash = $1\nparams: s3cret'),
+    {
+      name: 'DrizzleQueryError',
+      params: ['s3cret'],
+      cause: Object.assign(new Error('deadlock detected'), { code: '40P01' }),
+    },
+  )
+  log.error({ event: 'job.run', body: 'Job failed', error: failedQuery })
+  const [line] = printed.mock.calls.map(([text]) => String(text))
+  printed.mockRestore()
+  expect(line).not.toContain('s3cret')
+  expect(JSON.parse(line ?? '')).toMatchObject({
+    'exception.type': 'DrizzleQueryError',
+    'exception.message': 'DrizzleQueryError 40P01',
+    'exception.stacktrace': expect.stringContaining('at '),
+  })
+})

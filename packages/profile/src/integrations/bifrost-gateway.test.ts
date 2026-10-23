@@ -28,7 +28,9 @@ test('admin requests, the OAuth fetches and the consent call give up after the t
   await Promise.all([
     expect(gateway.removeToolSession('session-1')).rejects.toMatchObject(timedOut),
     expect(gateway.finishToolConsent('?state=1')).rejects.toMatchObject(timedOut),
-    expect(gateway.setUpToolServer({ name: 'docs', url: 'http://docs.test/mcp' })).rejects.toMatchObject(timedOut),
+    expect(
+      gateway.setUpToolServer({ name: 'docs', url: 'http://docs.test/mcp' }, async () => {}),
+    ).rejects.toMatchObject(timedOut),
     expect(
       gateway.startToolConsent('key-1', { id: 'docs', name: 'docs', tools: ['search'], isPersonal: true }),
     ).rejects.toMatchObject(timedOut),
@@ -153,5 +155,94 @@ test('an admin read answering 503 once is retried; a 400 and a failing creation 
     ])
   } finally {
     flakyServer.stop(true)
+  }
+})
+
+test('a consent starts on a read-only tool of the server, or on its first tool when it marks none read-only', async () => {
+  const calledTools: string[] = []
+  const flowId = crypto.randomUUID()
+  const consentServer = Bun.serve({
+    port: 0,
+    fetch: async (request) => {
+      const { pathname, origin } = new URL(request.url)
+      if (pathname === '/api/governance/virtual-keys/key-1')
+        return Response.json({ virtual_key: { id: 'key-1', value: 'sk-bf-1' } })
+      if (pathname === `/api/oauth/per-user/flows/${flowId}/start`)
+        return Response.json({ authorize_url: `${origin}/authorize` })
+      const { method, params } = (await request.json()) as { method: string; params?: { name: string } }
+      if (method === 'tools/list')
+        return Response.json({
+          result: {
+            tools: [
+              { name: 'docs-delete_page', annotations: { readOnlyHint: false } },
+              { name: 'docs-create_page' },
+              { name: 'docs-get_me', annotations: { readOnlyHint: true } },
+              { name: 'wiki-update', annotations: { readOnlyHint: false } },
+            ],
+          },
+        })
+      calledTools.push(String(params?.name))
+      return new Response(`Authentication required: ${origin}/auth?flow=${flowId}`)
+    },
+  })
+  const consentGateway = createLlmGateway({
+    url: `http://localhost:${consentServer.port}`,
+    adminUser: 'admin',
+    adminPassword: 'secret',
+  })
+  try {
+    const docs = { id: 'docs', name: 'docs', tools: ['delete_page', 'create_page', 'get_me'], isPersonal: true }
+    expect(await consentGateway.startToolConsent('key-1', docs)).toBe(
+      `http://localhost:${consentServer.port}/authorize`,
+    )
+    const wiki = { id: 'wiki', name: 'wiki', tools: ['update'], isPersonal: true }
+    expect(await consentGateway.startToolConsent('key-1', wiki)).toBe(
+      `http://localhost:${consentServer.port}/authorize`,
+    )
+    expect(calledTools).toEqual(['docs-get_me', 'wiki-update'])
+  } finally {
+    consentServer.stop(true)
+  }
+})
+
+test('a tool server with a per-member sign-in is not set up without an operator login', async () => {
+  const setUpServer = Bun.serve({ port: 0, fetch: () => Response.json({ clients: [] }) })
+  const setUpGateway = createLlmGateway({
+    url: `http://localhost:${setUpServer.port}`,
+    adminUser: 'admin',
+    adminPassword: 'secret',
+  })
+  try {
+    expect(
+      (await setUpGateway.setUpToolServer({ name: 'docs', url: 'http://docs.test/mcp' }).catch((error) => error))
+        .message,
+    ).toBe('Setting up docs needs an operator to log in to it')
+  } finally {
+    setUpServer.stop(true)
+  }
+})
+
+test('the sessions of a tool are its credentials: a pending sign-in, which lets no call run, is left out', async () => {
+  const sessionServer = Bun.serve({
+    port: 0,
+    fetch: () =>
+      Response.json({
+        sessions: [
+          { id: 'flow-1', kind: 'flow', status: 'pending' },
+          { id: 'token-1', kind: 'token', status: 'active' },
+          { id: 'header-1', kind: 'header', status: 'active' },
+        ],
+      }),
+  })
+  const sessionGateway = createLlmGateway({
+    url: `http://localhost:${sessionServer.port}`,
+    adminUser: 'admin',
+    adminPassword: 'secret',
+  })
+  try {
+    const docs = { id: 'docs', name: 'docs', tools: ['search'], isPersonal: true }
+    expect((await sessionGateway.toolSessions('key-1', docs)).map(({ id }) => id)).toEqual(['token-1', 'header-1'])
+  } finally {
+    sessionServer.stop(true)
   }
 })

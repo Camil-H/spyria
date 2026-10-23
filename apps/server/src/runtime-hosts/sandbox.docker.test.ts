@@ -23,6 +23,7 @@ import {
   rejectionOf,
   sessionTokenOf,
   testAuthSettings,
+  testSecretsKey,
   waitFor,
 } from '../testing/testing.ts'
 import { createRuntimeHostGateway } from './gateway.ts'
@@ -45,7 +46,11 @@ const stateDirectory = mkdtempSync(join(tmpdir(), 'spyria-test-host-'))
 const shared = await openSharedTestApp()
 const testDatabase = await createTestDatabase()
 await testDatabase.database.transaction(await shared.seededGatewayKeys())
-const gateway = createRuntimeHostGateway({ databases: () => [testDatabase.database], spyriaAgentImage: spyriaImage })
+const gateway = createRuntimeHostGateway({
+  runtimeKeySecret: testSecretsKey,
+  databases: () => [testDatabase.database],
+  spyriaAgentImage: spyriaImage,
+})
 const app = createApp({ database: testDatabase.database, ...testAuthSettings, runtimeHosts: gateway })
 const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
 let hostProcess: ReturnType<typeof Bun.spawn> | undefined
@@ -102,12 +107,12 @@ test.skipIf(!hasImage)(
     const id = await hostId()
     const provider = gateway.sandboxProvider
     const runtime = { workspaceId: acme, hostId: runtimeHostId(id), runtimeId: 'docker-test' }
-    const apiKey = 'test-api-key-0123456789abcdef'
+    const apiKey = provider.apiKeyOf(runtime)
     const containerName = `${prefix}rt-docker-test`
-    expect(
-      (await rejectionOf(provider.create({ ...runtime, image: 'docker.io/library/alpine:3', apiKey }))).message,
-    ).toContain('refused')
-    await provider.create({ ...runtime, image: spyriaImage, apiKey })
+    expect((await rejectionOf(provider.create({ ...runtime, image: 'docker.io/library/alpine:3' }))).message).toContain(
+      'refused',
+    )
+    await provider.create({ ...runtime, image: spyriaImage })
     expect(await provider.status(runtime)).toBe('stopped')
 
     const [inspected] = JSON.parse(dockerText('inspect', containerName))
@@ -207,10 +212,9 @@ test.skipIf(!hasImage)(
   async () => {
     const host = { workspaceId: acme, hostId: runtimeHostId(await hostId()) }
     const provider = gateway.sandboxProvider
-    const apiKey = 'test-api-key-0123456789abcdef'
     const runtimes = ['isolated-a', 'isolated-b'].map((runtimeId) => ({ ...host, runtimeId }))
     for (const runtime of runtimes) {
-      await provider.create({ ...runtime, image: spyriaImage, apiKey })
+      await provider.create({ ...runtime, image: spyriaImage })
       await provider.start(runtime)
     }
     const isReady = (runtime: (typeof runtimes)[number]) =>
@@ -281,9 +285,7 @@ test.skipIf(!hasImage)(
       const { id } = await ensure()
       await stateIs('running')
       const containerName = `${prefix}rt-${id}`
-      const [stored] = await database.$client`
-        select api_key from runtimes where id = ${id}`
-      const apiKey = String(stored?.api_key)
+      const apiKey = gateway.sandboxProvider.apiKeyOf({ ...host, runtimeId: id })
       const transport = gateway.sandboxProvider.connect({ ...host, runtimeId: id })
       const authenticatedStatus = async () =>
         (
@@ -348,7 +350,7 @@ test.skipIf(!hasImage)(
         if (Date.now() > deadline) throw new Error(`${runtime.runtimeId} was not ready within 30 s`)
     }
     for (const runtime of runtimes) {
-      await provider.create({ ...runtime, image: spyriaImage, apiKey: 'test-api-key-0123456789abcdef' })
+      await provider.create({ ...runtime, image: spyriaImage })
       await provider.start(runtime)
     }
     for (const runtime of runtimes) await ready(runtime)
@@ -378,7 +380,7 @@ test.skipIf(!hasImage)(
     try {
       docker('network', 'create', '--label', 'spyria.managed=1', otherObjects.network)
       docker('volume', 'create', otherObjects.volume)
-      await gateway.sandboxProvider.create({ ...runtime, image: spyriaImage, apiKey: 'test-api-key-0123456789abcdef' })
+      await gateway.sandboxProvider.create({ ...runtime, image: spyriaImage })
       docker('rm', '-f', `${prefix}rt-orphaned`)
       expect(await gateway.sandboxProvider.status(runtime)).toBe('missing')
       expect(dockerText('volume', 'ls', '-q', '--filter', `name=^${prefix}rt-orphaned-`)).not.toBe('')

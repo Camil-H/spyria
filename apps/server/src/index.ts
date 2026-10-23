@@ -47,17 +47,19 @@ const gatewaySettings = {
   adminPassword: requiredEnvironment('SPYRIA_GATEWAY_ADMIN_PASSWORD'),
 }
 const llmGateway = createLlmGateway(gatewaySettings)
+const tokenSecret = requiredEnvironment('SPYRIA_TOKEN_SECRET')
+const secretsKey = requiredEnvironment('SPYRIA_SECRETS_KEY')
 const spyriaAgentImage = await readSpyriaAgentImage()
 const runtimeHosts = createRuntimeHostGateway({
   spyriaAgentImage,
+  runtimeKeySecret: secretsKey,
   databases: () => [database],
   afterHello: (helloDatabase, host) => agentBridge.forDatabase(helloDatabase).resumeHost(host),
   relayModelCall: createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),
 })
-const secretsKey = authMode === 'sso' ? requiredEnvironment('SPYRIA_SECRETS_KEY') : process.env.SPYRIA_SECRETS_KEY
 const github = {
   api: createGitHubApi(githubDotCom),
-  secretBox: secretsKey ? createSecretBox(secretsKey) : undefined,
+  secretBox: createSecretBox(secretsKey),
 }
 const agentBridge = createAgentBridge({
   sandboxProvider: runtimeHosts.sandboxProvider,
@@ -73,7 +75,7 @@ const instanceSignInApps = {
 await assertInstanceAppsConfigured(database, instanceSignInApps)
 const app = createApp({
   database,
-  tokenSecret: requiredEnvironment('SPYRIA_TOKEN_SECRET'),
+  tokenSecret,
   oidc: {
     issuer: authMode === 'dex' ? requiredEnvironment('SPYRIA_OIDC_ISSUER') : '',
     clientId: authMode === 'dex' ? requiredEnvironment('SPYRIA_OIDC_CLIENT_ID') : '',

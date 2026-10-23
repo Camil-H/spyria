@@ -67,6 +67,7 @@ test('ensuring a runtime places a missing one or a retryable failure, starts a s
   expect(ensureStepOf(runtime({ state: 'removed' }))).toBe('place')
   expect(ensureStepOf(runtime({ state: 'failed', failure: 'no_host' }))).toBe('place')
   expect(ensureStepOf(runtime({ state: 'failed', failure: 'no_capacity' }))).toBe('place')
+  expect(ensureStepOf(runtime({ state: 'failed', failure: 'outdated' }))).toBe('place')
   for (const failure of ['create_failed', 'start_failed', 'lost'] as const)
     expect(ensureStepOf(runtime({ state: 'failed', failure }))).toBe('none')
   expect(ensureStepOf(runtime({ state: 'stopped' }))).toBe('start')
