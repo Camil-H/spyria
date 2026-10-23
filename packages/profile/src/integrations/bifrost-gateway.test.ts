@@ -158,7 +158,7 @@ test('an admin read answering 503 once is retried; a 400 and a failing creation 
   }
 })
 
-test('a consent starts on a read-only tool of the server, and a server without one is refused before any tool call', async () => {
+test('a consent starts on a read-only tool of the server, or on its first tool when it marks none read-only', async () => {
   const calledTools: string[] = []
   const flowId = crypto.randomUUID()
   const consentServer = Bun.serve({
@@ -196,8 +196,10 @@ test('a consent starts on a read-only tool of the server, and a server without o
       `http://localhost:${consentServer.port}/authorize`,
     )
     const wiki = { id: 'wiki', name: 'wiki', tools: ['update'], isPersonal: true }
-    expect(await consentGateway.startToolConsent('key-1', wiki).catch((error) => error.code)).toBe('no_read_only_tool')
-    expect(calledTools).toEqual(['docs-get_me'])
+    expect(await consentGateway.startToolConsent('key-1', wiki)).toBe(
+      `http://localhost:${consentServer.port}/authorize`,
+    )
+    expect(calledTools).toEqual(['docs-get_me', 'wiki-update'])
   } finally {
     consentServer.stop(true)
   }
@@ -217,5 +219,30 @@ test('a tool server with a per-member sign-in is not set up without an operator 
     ).toBe('Setting up docs needs an operator to log in to it')
   } finally {
     setUpServer.stop(true)
+  }
+})
+
+test('the sessions of a tool are its credentials: a pending sign-in, which lets no call run, is left out', async () => {
+  const sessionServer = Bun.serve({
+    port: 0,
+    fetch: () =>
+      Response.json({
+        sessions: [
+          { id: 'flow-1', kind: 'flow', status: 'pending' },
+          { id: 'token-1', kind: 'token', status: 'active' },
+          { id: 'header-1', kind: 'header', status: 'active' },
+        ],
+      }),
+  })
+  const sessionGateway = createLlmGateway({
+    url: `http://localhost:${sessionServer.port}`,
+    adminUser: 'admin',
+    adminPassword: 'secret',
+  })
+  try {
+    const docs = { id: 'docs', name: 'docs', tools: ['search'], isPersonal: true }
+    expect((await sessionGateway.toolSessions('key-1', docs)).map(({ id }) => id)).toEqual(['token-1', 'header-1'])
+  } finally {
+    sessionServer.stop(true)
   }
 })
