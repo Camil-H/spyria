@@ -424,7 +424,8 @@ export const createAgentBridge = ({
       )
     const resumeActiveTurns = async () => {
       const chats = await database.$client<{ workspaceId: string; chatId: string }[]>`
-        select workspace_id as "workspaceId", id as "chatId" from chats where agent_turn_message_id is not null`
+        select workspace_id as "workspaceId", id as "chatId" from chats join workspaces using (workspace_id)
+        where agent_turn_message_id is not null and workspaces.deleted_at is null`
       for (const chat of chats)
         await reopen({ workspaceId: workspaceId(chat.workspaceId), chatId: chatId(chat.chatId) })
     }
@@ -458,7 +459,9 @@ export const createAgentBridge = ({
       authorizeToolCall: handlers.authorizeToolCall,
       resumeHost: async (host: AgentHost) => {
         await resumeActiveTurns()
-        return handlers.promptWaiting(host)
+        const [live] = await database.$client`
+          select 1 from workspaces where workspace_id = ${host.workspaceId} and deleted_at is null`
+        return live && handlers.promptWaiting(host)
       },
       resumeActiveTurns,
       watch: async (viewer: WSContext, context: ZeroContext, chat: AgentChat) => {

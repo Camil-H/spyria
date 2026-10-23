@@ -11,7 +11,7 @@ import {
 import type { Transact } from '@spyria/db/zero-queries'
 import { chatId, log, type MemberId, memberId, type WorkspaceId } from '@spyria/kernel'
 import { releaseWorkspaceConnectionsOnServer, removeMemberProfileOnServer } from '@spyria/profile/published'
-import { removeChatRuntimeOnServer, stopChatRuntimeOnServer } from '@spyria/runtime/published'
+import { haltChatRuntimeOnServer, removeChatRuntimeOnServer } from '@spyria/runtime/published'
 import type { DeletedWorkspace } from '../contracts/repositories.ts'
 import type { DeletedWorkspaceTransactor } from '../contracts/transactor.ts'
 import { workspaceJobTypes } from '../domain/member.ts'
@@ -23,7 +23,7 @@ const deletedWorkspaceIn = (tx: ServerTransaction, workspaceId: WorkspaceId, act
   lockIfPurgeDue: () => lockDuePurge(tx, workspaceId),
   halt: async () => {
     for (const id of (await workspacePurgeTargetsOf(tx, workspaceId)).runtimeChatIds)
-      await stopChatRuntimeOnServer(tx, workspaceId, chatId(id))
+      await haltChatRuntimeOnServer(tx, workspaceId, chatId(id))
   },
   release: async () => {
     const { memberIds, runtimeChatIds } = await workspacePurgeTargetsOf(tx, workspaceId)

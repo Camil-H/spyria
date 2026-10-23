@@ -608,7 +608,8 @@ export const runningDelegationOfTokenHash = (tx: Transaction, workspaceId: strin
     `select delegations.chat_id as "chatId", delegations.id, delegations.prompt_id as "promptId" from delegations join runtimes
        on runtimes.workspace_id = delegations.workspace_id and runtimes.chat_id = delegations.chat_id
      where delegations.workspace_id = $1 and runtimes.host_id = $2 and delegations.token_hash = $3
-       and delegations.status = 'running'`,
+       and delegations.status = 'running'
+       and exists(select 1 from workspaces where workspaces.workspace_id = $1 and workspaces.deleted_at is null)`,
     [workspaceId, hostId, hash],
   )
 
