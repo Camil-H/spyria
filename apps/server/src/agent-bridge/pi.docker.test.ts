@@ -38,6 +38,7 @@ if (!spyriaImage || docker('image', 'inspect', spyriaImage).exitCode !== 0)
 
 const { database, gateway, llmGateway, fakeLlmBodies, setFakeLlmScript } = await openSharedTestApp()
 const runtimeHosts = createRuntimeHostGateway({
+  runtimeKeySecret: testAuthSettings.tokenSecret,
   databases: () => [database],
   spyriaAgentImage: spyriaImage,
   relayModelCall: createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),
@@ -101,7 +102,7 @@ const startHost = async () => {
   return id
 }
 
-const apiKey = 'test-api-key-0123456789abcdef'
+const apiKey = runtimeHosts.sandboxProvider.apiKeyOf({ workspaceId: acme, runtimeId: 'pi-smoke' })
 type AgentTransport = ReturnType<typeof runtimeHosts.sandboxProvider.connect>
 let runtimeStarted: Promise<{ id: string; transport: AgentTransport }> | undefined
 const startRuntime = async () => {
@@ -109,7 +110,7 @@ const startRuntime = async () => {
   const host = { workspaceId: acme, hostId: runtimeHostId(id) }
   await runtimeHosts.prepare(host, spyriaImage)
   const runtime = { ...host, runtimeId: 'pi-smoke' }
-  await runtimeHosts.sandboxProvider.create({ ...runtime, image: spyriaImage, apiKey })
+  await runtimeHosts.sandboxProvider.create({ ...runtime, image: spyriaImage })
   await runtimeHosts.sandboxProvider.start(runtime)
   const transport = runtimeHosts.sandboxProvider.connect(runtime)
   const isReady = () =>

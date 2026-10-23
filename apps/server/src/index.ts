@@ -47,9 +47,11 @@ const gatewaySettings = {
   adminPassword: requiredEnvironment('SPYRIA_GATEWAY_ADMIN_PASSWORD'),
 }
 const llmGateway = createLlmGateway(gatewaySettings)
+const tokenSecret = requiredEnvironment('SPYRIA_TOKEN_SECRET')
 const spyriaAgentImage = await readSpyriaAgentImage()
 const runtimeHosts = createRuntimeHostGateway({
   spyriaAgentImage,
+  runtimeKeySecret: tokenSecret,
   databases: () => [database],
   afterHello: (helloDatabase, host) => agentBridge.forDatabase(helloDatabase).resumeHost(host),
   relayModelCall: createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),
@@ -73,7 +75,7 @@ const instanceSignInApps = {
 await assertInstanceAppsConfigured(database, instanceSignInApps)
 const app = createApp({
   database,
-  tokenSecret: requiredEnvironment('SPYRIA_TOKEN_SECRET'),
+  tokenSecret,
   oidc: {
     issuer: authMode === 'dex' ? requiredEnvironment('SPYRIA_OIDC_ISSUER') : '',
     clientId: authMode === 'dex' ? requiredEnvironment('SPYRIA_OIDC_CLIENT_ID') : '',

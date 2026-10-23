@@ -31,9 +31,9 @@ export const createRuntimeAgentRuntimes = (
     work: (dependencies: { transactor: ReturnType<typeof createRuntimeTransactor> }) => Promise<Result>,
   ) => transact((tx) => work({ transactor: createRuntimeTransactor(tx) }))
   const accessOf = (chat: AgentChat) => inTransaction((dependencies) => readAgentAccess(dependencies, chat))
-  const endpointFrom = ({ sandbox, apiKey, conversationId }: NonNullable<Awaited<ReturnType<typeof accessOf>>>) => ({
+  const endpointFrom = ({ sandbox, conversationId }: NonNullable<Awaited<ReturnType<typeof accessOf>>>) => ({
     sandbox,
-    apiKey,
+    apiKey: provider.apiKeyOf(sandbox),
     conversationId,
     transport: provider.connect(sandbox),
   })

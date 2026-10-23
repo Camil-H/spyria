@@ -214,6 +214,7 @@ export const createApp = ({
   llmGateway,
   runtimeHosts = createRuntimeHostGateway({
     databases: () => [database],
+    runtimeKeySecret: tokenSecret,
     relayModelCall: llmGateway && createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),
   }),
   agentBridge = createAgentBridge({ sandboxProvider: runtimeHosts.sandboxProvider, deployment }),
