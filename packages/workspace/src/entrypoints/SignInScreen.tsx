@@ -1,7 +1,7 @@
 import { buttonClass, fieldClass, labelClass } from '@spyria/ui'
 import { type SubmitEvent, useState } from 'react'
+import { AuthScreen } from './AuthScreen.tsx'
 import { emptyProvider, ProviderFields } from './SignInSection.tsx'
-import { fullScreenClass } from './ui.ts'
 
 type SignInOutcome = { status: string; email?: string; domain?: string; message?: string }
 
@@ -47,13 +47,8 @@ export const SignInScreen = ({
     settle(await createWorkspace(event.currentTarget), creationRefusalOf)
   }
   return canCreateWorkspace ? (
-    <main className={fullScreenClass}>
-      <h1 className="text-xl font-medium">Create a workspace</h1>
-      <p className="max-w-sm text-sm text-muted">
-        No workspace exists on this Spyria yet. The first person who signs in through your provider with an address at
-        the email domain becomes the Admin of the new workspace.
-      </p>
-      <form aria-label="Create a workspace" onSubmit={create} className="flex w-full max-w-xs flex-col gap-3 text-left">
+    <AuthScreen title="Create a workspace" description="No workspace exists on this Spyria yet.">
+      <form aria-label="Create a workspace" onSubmit={create} className="flex flex-col gap-3">
         <label className={labelClass}>
           Organization name
           <input name="name" required className={fieldClass} />
@@ -68,16 +63,15 @@ export const SignInScreen = ({
           clientSecret={clientSecret}
           onClientSecretChange={setClientSecret}
         />
-        <button type="submit" className={buttonClass} disabled={isSigningIn}>
+        <button type="submit" className={`${buttonClass} mt-2`} disabled={isSigningIn}>
           Create and sign in
         </button>
       </form>
-      {refusal && <p className="max-w-sm text-sm text-muted">{refusal}</p>}
-    </main>
+      {refusal && <p className="text-sm text-muted">{refusal}</p>}
+    </AuthScreen>
   ) : (
-    <main className={fullScreenClass}>
-      <h1 className="text-xl font-medium">Sign in to Spyria</h1>
-      <form aria-label="Sign in" onSubmit={submit} className="flex w-full max-w-xs flex-col gap-3 text-left">
+    <AuthScreen title="Sign in to Spyria">
+      <form aria-label="Sign in" onSubmit={submit} className="flex flex-col gap-3">
         {isEmailFirst && (
           <label className={labelClass}>
             Work email
@@ -91,11 +85,11 @@ export const SignInScreen = ({
             />
           </label>
         )}
-        <button type="submit" className={buttonClass} disabled={isSigningIn}>
+        <button type="submit" className={`${buttonClass} mt-2`} disabled={isSigningIn}>
           {isEmailFirst ? 'Continue' : 'Sign in'}
         </button>
       </form>
       {refusal && <p className="text-sm text-muted">{refusal}</p>}
-    </main>
+    </AuthScreen>
   )
 }
