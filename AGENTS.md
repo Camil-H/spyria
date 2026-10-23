@@ -4,7 +4,7 @@ Instructions for anyone changing this repository: coding agents and people. Read
 
 ## What Spyria is
 
-An organization-agnostic, model-agnostic AI workspace: chats and channels where members and agents work together, agent runs in sandboxed runtimes (Pi on Spyria runtimes, Claude Code and Codex on a member's own machine), dev chats on GitHub repositories with pull requests, and the admin side (members, roles, SSO, budgets, audit). Self-hosted with one Docker Compose file (see README, Self-hosting).
+An organization-agnostic, model-agnostic AI workspace: chats and channels where members and agents work together, agent runs in sandboxed runtimes (Pi on Spyria runtimes, Claude Code and Codex on a member's own machine), dev chats on GitHub repositories with pull requests, and the admin side (members, roles, SSO, budgets, audit). Self-hosted with one Docker Compose file (see [docs/guides/self-hosting.md](docs/guides/self-hosting.md)). The documentation index is [docs/README.md](docs/README.md).
 
 Stack: Bun 1.4 + Hono server, React 19 with the React Compiler, TypeScript 7, Vite 8, Rocicorp Zero for UI state sync, Postgres 18 with Drizzle (pinned), Bifrost as the model gateway, OpenTelemetry. A Bun workspace: `apps/` (server, web, host, agent) and `packages/` (one per bounded context, plus `kernel`, `db`, `ui`, `session`).
 
@@ -58,7 +58,7 @@ bun run check:boundaries
 bun run check:related   # the tests your change affects (unit, integration, e2e)
 ```
 
-Run `bun run check:all` for changes that touch shared code (`packages/kernel`, `packages/db`, test helpers), and `bun run check:docker` for the host, the agent or the images. Describe in the pull request what changed, why, and how it was tested; include screenshots for UI changes. Keep pull requests to one concern.
+Run `bun run check:all` for changes that touch shared code (`packages/kernel`, `packages/db`, test helpers), and `bun run check:docker` for the host, the agent or the images. Check whether your change makes a page in [docs/](docs/README.md) stale (a decision, a guide step, a feature as users see it); if so, update it in the same pull request, or say in the pull request which page needs a follow-up. Describe in the pull request what changed, why, and how it was tested; include screenshots for UI changes. Keep pull requests to one concern.
 
 ## Conventions
 
