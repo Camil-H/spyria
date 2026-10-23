@@ -1,4 +1,7 @@
 import { expect, test } from 'bun:test'
+import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
+import { schema } from '@spyria/db/zero'
+import { sessionJobs } from './auth/sessions.ts'
 import {
   acme,
   alice,
@@ -8,6 +11,7 @@ import {
   chatAs,
   failedWith,
   globex,
+  lee,
   messageRow,
   newChat,
   openSharedTestApp,
@@ -70,15 +74,6 @@ test.each([
     status: 415,
     body: { error: 'attachment_not_allowed', message: 'Attach an image, a sound, a video or a PDF of up to 20 MB' },
   })
-  expect(await storedCount()).toBe(before)
-})
-
-test('an upload over 20 MB is refused before it is stored', async () => {
-  const chat = await newChat({ type: 'channel' })
-  const oversized = new Uint8Array(20 * 1024 * 1024 + 1)
-  oversized.set(png)
-  const before = await storedCount()
-  expect((await upload(alice, chat, oversized)).status).toBe(413)
   expect(await storedCount()).toBe(before)
 })
 
@@ -178,4 +173,103 @@ test('a session in another workspace cannot read an attachment, even of a member
     headers: { authorization: `Bearer ${await sessionTokenOf(database, globex, alice)}` },
   })
   expect(response.status).toBe(403)
+})
+
+const uploadStream = async (userId: string, chat: string, size: number, headers: Record<string, string> = {}) => {
+  const chunk = new Uint8Array(1024 * 1024)
+  chunk.set(png)
+  let sent = 0
+  const body = new ReadableStream<Uint8Array>({
+    pull: (controller) => {
+      if (sent >= size) return controller.close()
+      sent += chunk.length
+      controller.enqueue(chunk)
+    },
+  })
+  const response = await app.request(`/api/chats/${chat}/attachments?name=big.png`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${await sessionTokenOf(database, acme, userId)}`, ...headers },
+    body,
+    duplex: 'half',
+  } as RequestInit)
+  return { status: response.status, body: await response.json(), sent }
+}
+
+test('a member who may not post is refused before the upload is read', async () => {
+  const chat = await newChat({ type: 'channel', visibility: 'private' })
+  const refused = await uploadStream(bob, chat, 30 * 1024 * 1024)
+  expect(refused.status).toBe(403)
+  expect(refused.sent).toBeLessThan(30 * 1024 * 1024)
+  expect((await upload(bob, chat, new TextEncoder().encode('<svg/>'))).status).toBe(403)
+})
+
+test('an upload over 20 MB is refused as it streams in, without a size header, or at once from its size header', async () => {
+  const chat = await newChat({ type: 'channel' })
+  const before = await storedCount()
+  expect(await uploadStream(alice, chat, 21 * 1024 * 1024)).toEqual({
+    status: 413,
+    body: { error: 'attachment_too_large', message: 'The file is over 20 MB' },
+    sent: expect.any(Number),
+  })
+  const declared = await uploadStream(alice, chat, 21 * 1024 * 1024, { 'content-length': String(21 * 1024 * 1024) })
+  expect(declared.status).toBe(413)
+  expect(await storedCount()).toBe(before)
+})
+
+test('an upload to a frozen chat is refused', async () => {
+  const chat = await newChat({ ownerId: lee, participants: [{ memberId: alice, roleId: 'prompter' }] })
+  await database.$client`update memberships set removed_at = now() where workspace_id = ${acme} and user_id = ${lee}`
+  try {
+    expect(await upload(alice, chat, png)).toEqual({
+      status: 400,
+      body: { error: 'chat_frozen', message: 'This chat is frozen: its owner left the workspace' },
+    })
+  } finally {
+    await database.$client`update memberships set removed_at = null where workspace_id = ${acme} and user_id = ${lee}`
+  }
+})
+
+test('a file name keeps no line break, quote or path, and is sent in the header encoded', async () => {
+  const chat = await newChat({ type: 'channel' })
+  const { body } = await upload(alice, chat, png, 'C:\\tmp\\my "best"\r\nreport.png')
+  expect(body.name).toBe('my bestreport.png')
+  await sendWith(aliceInAcme, chat, [body])
+  expect((await download(alice, chat, String(body.id))).headers.get('content-disposition')).toBe(
+    "inline; filename*=UTF-8''my%20bestreport.png",
+  )
+})
+
+test('a member cannot keep more than 120 MB of unsent uploads, and a workspace stores at most 10 GB', async () => {
+  const chat = await newChat({ type: 'channel' })
+  const fakeRow = (id: string, size: number, messageId: string | null) => database.$client`
+    insert into message_attachments (workspace_id, chat_id, id, uploader_id, message_id, name, media_type, size, content, created_at)
+    values (${acme}, ${chat}, ${id}, ${alice}, ${messageId}, 'big.png', 'image/png', ${size}, ${Buffer.from(png)}, now())`
+  await fakeRow('attachment-pending-big', 120 * 1024 * 1024, null)
+  expect(await upload(alice, chat, png)).toEqual({
+    status: 413,
+    body: {
+      error: 'too_many_pending_uploads',
+      message: 'Send or remove the files you already attached before adding more',
+    },
+  })
+  expect((await upload(bob, chat, png)).status).toBe(201)
+  await database.$client`delete from message_attachments where id = 'attachment-pending-big'`
+  const { id } = await sendWith(aliceInAcme, chat, [(await upload(alice, chat, png)).body])
+  await fakeRow('attachment-sent-huge', 10 * 1024 * 1024 * 1024, id)
+  expect((await upload(bob, chat, png)).body.error).toBe('attachment_storage_full')
+  await database.$client`delete from message_attachments where id = 'attachment-sent-huge'`
+})
+
+test('the daily sweep erases uploads left unsent for a day, and keeps fresh and sent ones', async () => {
+  const chat = await newChat({ type: 'channel' })
+  const abandoned = (await upload(alice, chat, png)).body
+  const fresh = (await upload(alice, chat, png)).body
+  const sent = (await upload(alice, chat, png)).body
+  await sendWith(aliceInAcme, chat, [sent])
+  await database.$client`
+    update message_attachments set created_at = now() - interval '25 hours' where id in (${String(abandoned.id)}, ${String(sent.id)})`
+  await zeroDrizzle(schema, database).transaction((tx) => sessionJobs['sessions.sweep'](tx, acme))
+  const kept = await database.$client<{ id: string }[]>`
+    select id from message_attachments where id in (${String(abandoned.id)}, ${String(fresh.id)}, ${String(sent.id)})`
+  expect(kept.map(({ id }) => id).toSorted()).toEqual([String(fresh.id), String(sent.id)].toSorted())
 })

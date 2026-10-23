@@ -1,5 +1,6 @@
 import type { ServerTransaction } from '@rocicorp/zero'
 import type { Database } from '@spyria/db/postgres'
+import { deleteAbandonedAttachments } from '@spyria/db/server-writes'
 import type { WorkspaceId } from '@spyria/kernel'
 import { displayNameFrom, domainOfEmail, normalizedEmail } from '@spyria/workspace/server'
 import type { FindMember, SessionClaims } from './session-tokens.ts'
@@ -164,6 +165,7 @@ export const sessionJobs = {
       `delete from github_webhook_deliveries where workspace_id = $1 and received_at < now() - interval '7 days'`,
       [workspaceId],
     )
+    await deleteAbandonedAttachments(tx, workspaceId)
     await tx.dbTransaction.query(enqueueSweepStatement, [workspaceId, '1 day', ['sessions.sweep']])
   },
 }

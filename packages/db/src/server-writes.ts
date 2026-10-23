@@ -632,10 +632,7 @@ export const insertAttachment = (
 ) =>
   onServer(
     tx,
-    `with abandoned as (
-       delete from message_attachments where workspace_id = $1 and uploader_id = $4 and message_id is null
-         and created_at < now() - interval '1 day')
-     insert into message_attachments (workspace_id, chat_id, id, uploader_id, name, media_type, size, content, created_at)
+    `insert into message_attachments (workspace_id, chat_id, id, uploader_id, name, media_type, size, content, created_at)
      values ($1, $2, $3, $4, $5, $6, $7, $8::bytea, now())`,
     [
       attachment.workspaceId,
@@ -647,6 +644,30 @@ export const insertAttachment = (
       attachment.size,
       attachment.content,
     ],
+  )
+
+const pendingAttachmentLifetime = "interval '1 day'"
+
+export const storedAttachmentBytesOf = async (tx: Transaction, workspaceId: string, uploaderId: string) => {
+  await onServer(tx, `select pg_advisory_xact_lock(hashtextextended('message_attachments:' || $1, 0))`, [workspaceId])
+  const [stored] = await onServer<{ pendingOfMember: number; inWorkspace: number }>(
+    tx,
+    `select
+       coalesce(sum(size) filter (where uploader_id = $2 and message_id is null
+         and created_at > now() - ${pendingAttachmentLifetime}), 0)::bigint::float8 as "pendingOfMember",
+       coalesce(sum(size), 0)::bigint::float8 as "inWorkspace"
+     from message_attachments where workspace_id = $1`,
+    [workspaceId, uploaderId],
+  )
+  return stored ?? { pendingOfMember: 0, inWorkspace: 0 }
+}
+
+export const deleteAbandonedAttachments = (tx: Transaction, workspaceId: string) =>
+  onServer(
+    tx,
+    `delete from message_attachments where workspace_id = $1 and message_id is null
+       and created_at < now() - ${pendingAttachmentLifetime}`,
+    [workspaceId],
   )
 
 export const lockPendingAttachments = (

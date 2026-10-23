@@ -20,7 +20,6 @@ import {
   getCommandOutput,
   isGitAction,
   isWorkspaceRead,
-  maximumMediaBytes,
   mediaResponseOf,
   type PublishAction,
   planModeOf,
@@ -100,7 +99,6 @@ import {
   workspaceMutators,
 } from '@spyria/workspace/server'
 import { type Context, Hono } from 'hono'
-import { bodyLimit } from 'hono/body-limit'
 import { HTTPException } from 'hono/http-exception'
 import { routePath } from 'hono/route'
 import { type AgentBridge, createAgentBridge } from './agent-bridge/bridge.ts'
@@ -190,6 +188,9 @@ const statusByErrorCode: Record<string, number> = {
   local_sessions_off: 403,
   host_not_found: 404,
   attachment_not_allowed: 415,
+  attachment_too_large: 413,
+  too_many_pending_uploads: 413,
+  attachment_storage_full: 413,
   attachment_not_found: 404,
   runtime_media_unavailable: 404,
 }
@@ -524,21 +525,14 @@ export const createApp = ({
           ),
       )
     })
-    .post(
-      chatAttachmentsPathOf(':chatId'),
-      rateLimited('uploads'),
-      bodyLimit({
-        maxSize: maximumMediaBytes,
-        onError: (context) => context.json({ error: 'attachment_not_allowed', message: 'The file is over 20 MB' }, 413),
-      }),
-      (context) =>
-        endpointResponse('Uploading an attachment', 201, async () =>
-          uploadAttachmentFromRequest(context.get('transact'), context.get('zeroContext'), {
-            chatId: context.req.param('chatId') ?? '',
-            name: context.req.query('name') ?? '',
-            content: new Uint8Array(await context.req.arrayBuffer()),
-          }),
-        ),
+    .post(chatAttachmentsPathOf(':chatId'), rateLimited('uploads'), (context) =>
+      endpointResponse('Uploading an attachment', 201, async () =>
+        uploadAttachmentFromRequest(context.get('transact'), context.get('zeroContext'), {
+          chatId: context.req.param('chatId') ?? '',
+          name: context.req.query('name') ?? '',
+          request: context.req.raw,
+        }),
+      ),
     )
     .get(chatAttachmentPathOf(':chatId', ':attachmentId'), (context) =>
       endpointResponse('Reading an attachment', 200, async () =>
