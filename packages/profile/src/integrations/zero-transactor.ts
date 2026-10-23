@@ -103,6 +103,14 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
           delayMilliseconds: 0,
         })
       },
+      removeToolServerLater: async ({ workspaceId, gatewayName }) => {
+        await enqueueJob(tx, {
+          workspaceId: inContextWorkspace(workspaceId),
+          type: profileJobTypes.toolServerRemoval,
+          payload: { gatewayName },
+          delayMilliseconds: 0,
+        })
+      },
     },
     personalConnections: {
       connect: async ({ workspaceId, memberId, tool, status }) => {

@@ -6,6 +6,7 @@ import { RuntimeHostsSection } from '@spyria/runtime'
 import { focusRing, formatCost, iconButtonClass, LabelledSection } from '@spyria/ui'
 import { AuditLogSection, countBudgetAlerts, UsageSection } from '@spyria/usage'
 import {
+  DeleteWorkspaceSection,
   GitHubSection,
   MembersSection,
   RolesSection,
@@ -212,6 +213,7 @@ const SettingsRoute = () => {
       ) : (
         <p className="text-muted">You have no workspace settings to manage</p>
       )}
+      <DeleteWorkspaceSection workspaceId={workspaceId} />
     </div>
   )
 }

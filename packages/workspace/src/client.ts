@@ -1,3 +1,4 @@
+export { DeleteWorkspaceSection } from './entrypoints/DeleteWorkspaceSection.tsx'
 export { GitHubSection, useIsGitHubConfigured } from './entrypoints/GitHubSection.tsx'
 export { MembersSection } from './entrypoints/MembersSection.tsx'
 export { WorkspaceProvider } from './entrypoints/providers.tsx'

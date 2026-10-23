@@ -1,5 +1,5 @@
 import { adminRoleId, type MemberId, type WorkspaceId } from '@spyria/kernel'
-import { LastAdmin, MemberNotFound, OwnMembership } from './errors.ts'
+import { AdminOnly, LastAdmin, MemberNotFound, OwnMembership } from './errors.ts'
 
 export type Member = Readonly<{
   workspaceId: WorkspaceId
@@ -8,7 +8,10 @@ export type Member = Readonly<{
   removedAt: number | null
 }>
 
-export const workspaceJobTypes = { memberRemoved: 'workspace.member-removed' } as const
+export const workspaceJobTypes = {
+  memberRemoved: 'workspace.member-removed',
+  purge: 'workspace.purge',
+} as const
 
 export const isActive = (member: Member | undefined): member is Member =>
   member !== undefined && member.removedAt === null
@@ -24,4 +27,9 @@ export const requireAnotherMember = (memberId: MemberId, actorId: MemberId) => {
 
 export const requireAnotherAdmin = (member: Member, activeAdminIds: readonly MemberId[]) => {
   if (member.role === adminRoleId && activeAdminIds.every((adminId) => adminId === member.id)) throw new LastAdmin()
+}
+
+export const requireAdmin = (member: Member | undefined) => {
+  if (!isActive(member) || member.role !== adminRoleId) throw new AdminOnly()
+  return member
 }

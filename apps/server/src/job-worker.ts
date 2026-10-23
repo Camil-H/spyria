@@ -8,6 +8,7 @@ import { log, type WorkspaceId, workspaceId } from '@spyria/kernel'
 import { type createLlmGateway, createProfileJobs } from '@spyria/profile/server'
 import { createRuntimeJobs, type SandboxProvider } from '@spyria/runtime/server'
 import { auditJobs, createUsageJobs } from '@spyria/usage/server'
+import { createWorkspaceJobs } from '@spyria/workspace/server'
 import type { AgentBridge } from './agent-bridge/bridge.ts'
 import { sessionJobs } from './auth/sessions.ts'
 import { contextOf, withSpan } from './telemetry.ts'
@@ -41,6 +42,7 @@ export const startJobWorker = (
     pollIntervalMilliseconds = 100,
     retryDelayMilliseconds = 1000,
     concurrency = 4,
+    cleanupPollMilliseconds = 30_000,
     sandboxProvider,
     agentBridge,
     llmGateway,
@@ -49,6 +51,7 @@ export const startJobWorker = (
     pollIntervalMilliseconds?: number
     retryDelayMilliseconds?: number
     concurrency?: number
+    cleanupPollMilliseconds?: number
     sandboxProvider?: SandboxProvider
     agentBridge?: AgentBridge
     llmGateway?: ReturnType<typeof createLlmGateway>
@@ -62,6 +65,7 @@ export const startJobWorker = (
     ...(llmGateway && createProfileJobs(llmGateway)),
     ...(usageLogs && createUsageJobs(usageLogs)),
     ...auditJobs,
+    ...createWorkspaceJobs({ cleanupPollMilliseconds }),
   }
   const zeroDatabase = zeroDrizzle(schema, database)
   const transact: Transact = (work) => zeroDatabase.transaction(work)

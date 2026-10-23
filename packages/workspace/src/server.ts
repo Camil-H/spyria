@@ -45,6 +45,7 @@ export {
 } from './domain/sso.ts'
 export type { WorkspaceCommands } from './entrypoints/commands.ts'
 export { createDevChatFromRequest } from './entrypoints/endpoints.ts'
+export { createWorkspaceJobs } from './entrypoints/jobs.ts'
 export { workspaceMutators } from './entrypoints/mutators.ts'
 export {
   createHttpGitHubCommands,

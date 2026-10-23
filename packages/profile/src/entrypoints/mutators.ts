@@ -5,6 +5,7 @@ import { z } from 'zod/mini'
 import { DisplayName } from '../domain/display-name.ts'
 import { NotOwnProfile } from '../domain/errors.ts'
 import { createZeroTransactor, memberContext } from '../integrations/zero-transactor.ts'
+import { releaseWorkspaceConnections } from '../operations/release-workspace-connections.ts'
 import { removeLlmCredential } from '../operations/remove-llm-credential.ts'
 import { removeMemberProfile } from '../operations/remove-member-profile.ts'
 import { renameMember } from '../operations/rename-member.ts'
@@ -38,5 +39,17 @@ export const removeMemberProfileOnServer = async (tx: Transaction, workspaceId: 
     await removeMemberProfile(
       { transactor: createZeroTransactor(tx, memberContext(workspaceId, memberId)) },
       { workspaceId, memberId },
+    )
+}
+
+export const releaseWorkspaceConnectionsOnServer = async (
+  tx: Transaction,
+  workspaceId: WorkspaceId,
+  actorId: MemberId,
+) => {
+  if (tx.location === 'server')
+    await releaseWorkspaceConnections(
+      { transactor: createZeroTransactor(tx, memberContext(workspaceId, actorId)) },
+      { workspaceId },
     )
 }

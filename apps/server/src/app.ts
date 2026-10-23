@@ -448,6 +448,8 @@ export const createApp = ({
                 select id from runtime_hosts where workspace_id = ${ctx.workspaceId} and owner_id = ${memberId}`)
                 runtimeHosts.disconnect(ctx.workspaceId, id)
             }
+            if (mutation.name === 'workspace.deleteWorkspace')
+              agentBridge.forDatabase(context.get('database')).closeWorkspaceStreams(ctx.workspaceId)
             if (readRevokingMutations.has(mutation.name))
               await agentBridge.forDatabase(context.get('database')).revokeUnreadable({
                 workspaceId: ctx.workspaceId,

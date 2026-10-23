@@ -227,6 +227,12 @@ export const createApp = async (
       createWorkspaceRole: mutateConfirmed(workspaceMutators.workspace.createWorkspaceRole),
       updateWorkspaceRole: mutateConfirmed(workspaceMutators.workspace.updateWorkspaceRole),
       deleteWorkspaceRole: mutateConfirmed(workspaceMutators.workspace.deleteWorkspaceRole),
+      deleteWorkspace: async (input) => {
+        await mutateConfirmed(workspaceMutators.workspace.deleteWorkspace)(input)
+        await store.signOut(input.workspaceId)
+        location.assign('/')
+        return input.workspaceId
+      },
       ...createHttpSsoSettingsCommands(postAsMember, fetchAsMember),
       ...githubCommands,
       createDevChat: async (input) => {

@@ -620,3 +620,113 @@ export const chatContextTokens = async (tx: Transaction, workspaceId: string, ch
       [workspaceId, chatId],
     )
   )?.tokens ?? null
+
+const workspaceTablesInPurgeOrder = [
+  'thread_read_markers',
+  'read_markers',
+  'runtime_origins',
+  'browser_pages',
+  'plan_steps',
+  'sources',
+  'routing_decisions',
+  'delegations',
+  'tool_calls',
+  'usage_entries',
+  'events',
+  'messages',
+  'runtimes',
+  'runtime_hosts',
+  'chat_participants',
+  'chats',
+  'chat_roles',
+  'projects',
+  'service_identities',
+  'budget_alerts',
+  'budgets',
+  'connection_restrictions',
+  'workspace_connections',
+  'github_connections',
+  'identities',
+  'invitations',
+  'llm_credentials',
+  'member_gateway_keys',
+  'sessions',
+  'tool_connections',
+  'memberships',
+  'workspace_role_permissions',
+  'workspace_roles',
+  'audit_settings',
+  'github_webhook_deliveries',
+  'github_apps',
+  'jobs',
+  'model_calls',
+  'sso_domains',
+  'workspace_sso',
+  'usage_sync_marks',
+  'workspace_events',
+  'workspaces',
+] as const
+
+export const scheduleWorkspaceDeletion = (tx: Transaction, workspaceId: string, purgeAt: number) =>
+  onServer(
+    tx,
+    `with deleted as (
+       update workspaces set deleted_at = now(), purge_at = to_timestamp($2::double precision / 1000)
+       where workspace_id = $1 and deleted_at is null returning workspace_id),
+     ended_sessions as (delete from sessions where workspace_id in (select workspace_id from deleted)),
+     cancelled_jobs as (
+       delete from jobs where workspace_id in (select workspace_id from deleted) and state = 'queued')
+     select workspace_id from deleted`,
+    [workspaceId, purgeAt],
+  )
+
+export const isWorkspacePurgeDue = async (tx: Transaction, workspaceId: string) =>
+  (
+    await firstOnServer<{ isDue: boolean }>(
+      tx,
+      'select purge_at <= now() as "isDue" from workspaces where workspace_id = $1 and deleted_at is not null',
+      [workspaceId],
+    )
+  )?.isDue ?? false
+
+export const workspacePurgeTargetsOf = async (tx: Transaction, workspaceId: string) => ({
+  memberIds: (
+    await onServer<{ id: string }>(
+      tx,
+      'select user_id as id from memberships where workspace_id = $1 and removed_at is null',
+      [workspaceId],
+    )
+  ).map(({ id }) => id),
+  runtimeChatIds: (
+    await onServer<{ id: string }>(tx, `select id from chats where workspace_id = $1 and type = 'runtime'`, [
+      workspaceId,
+    ])
+  ).map(({ id }) => id),
+})
+
+export const hasPendingWorkspaceJobs = async (tx: Transaction, workspaceId: string, exceptType: string) =>
+  (
+    await firstOnServer<{ isPending: boolean }>(
+      tx,
+      `select exists(
+         select 1 from jobs where workspace_id = $1 and state in ('queued', 'running') and type <> $2
+           and type not like '%.sweep' and type <> 'usage.sync') as "isPending"`,
+      [workspaceId, exceptType],
+    )
+  )?.isPending ?? false
+
+export const purgeWorkspaceRows = async (tx: Transaction, workspaceId: string) => {
+  const userIds = (
+    await onServer<{ id: string }>(tx, 'select user_id as id from memberships where workspace_id = $1', [workspaceId])
+  ).map(({ id }) => id)
+  await onServer(tx, `select set_config('spyria.purging_workspace', $1, true)`, [workspaceId])
+  for (const table of workspaceTablesInPurgeOrder)
+    await onServer(tx, `delete from ${table} where workspace_id = $1`, [workspaceId])
+  await onServer(
+    tx,
+    `delete from users where id = any($1::text[])
+       and not exists(select 1 from memberships where memberships.user_id = users.id)
+       and not exists(select 1 from workspaces where workspaces.created_by = users.id)`,
+    [userIds],
+  )
+}
