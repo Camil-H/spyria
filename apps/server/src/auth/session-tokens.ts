@@ -7,7 +7,9 @@ export type FindMember = (
   claims: SessionClaims,
   databaseName: string | undefined,
 ) => Promise<{ hasLiveSession: boolean } | undefined>
-export type Authentication = { status: 200; context: ZeroContext; databaseName?: string } | { status: 401 | 403 }
+export type Authentication =
+  | { status: 200; context: ZeroContext; databaseName?: string; sessionId: string; expiresAt: number }
+  | { status: 401 | 403 }
 
 export const errorByStatus = { 401: 'unauthorized', 403: 'forbidden' } as const
 
@@ -43,12 +45,17 @@ export const createSessionAuthenticator =
       ({ payload }) => payload,
       () => undefined,
     )
-    if (claims?.sub === undefined || typeof claims.workspaceId !== 'string' || typeof claims.sid !== 'string')
+    if (
+      claims?.sub === undefined ||
+      claims.exp === undefined ||
+      typeof claims.workspaceId !== 'string' ||
+      typeof claims.sid !== 'string'
+    )
       return { status: 401 }
     const context = { userId: memberId(claims.sub), workspaceId: workspaceId(claims.workspaceId) }
     const databaseName = typeof claims.db === 'string' ? claims.db : undefined
     const member = await findMember({ ...context, sessionId: claims.sid }, databaseName)
     if (member === undefined) return { status: 403 }
     if (!member.hasLiveSession) return { status: 401 }
-    return { status: 200, context, databaseName }
+    return { status: 200, context, databaseName, sessionId: claims.sid, expiresAt: claims.exp * 1000 }
   }
