@@ -207,16 +207,22 @@ export const createMockSnapshot = (): Snapshot => {
     browserPages: [
       {
         ...invoiceBug,
-        url: 'http://localhost:3000/invoices',
+        url: 'reports/invoice-totals.html',
+        title: 'Invoice totals',
+        openedAt: '2026-10-01T09:05:00.000Z',
+      },
+      {
+        ...invoiceBug,
+        url: 'https://example.com/invoices',
         title: 'Invoices',
-        bodyText: 'Invoice total: 120.00',
+        openedAt: '2026-10-01T09:06:00.000Z',
       },
       {
         workspaceId: acme,
         chatId: welcomeChat,
         url: 'https://example.com/onboarding',
         title: 'Onboarding guide',
-        bodyText: 'Welcome to the team.',
+        openedAt: '2026-10-01T09:00:00.000Z',
       },
     ],
     usageEntries: [

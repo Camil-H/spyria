@@ -4,6 +4,7 @@ import type {
   AgentJobs,
   AgentTurnRepository,
   AttachmentRepository,
+  BrowserPageRepository,
   ChatRepository,
   DelegationRepository,
   MemberDirectory,
@@ -22,6 +23,7 @@ export type UnitOfWork = {
   members: MemberDirectory
   agentTurns: AgentTurnRepository
   agentEvents: AgentEventRepository
+  browserPages: BrowserPageRepository
   routing: RoutingRepository
   delegations: DelegationRepository
   toolCalls: ToolCallRepository

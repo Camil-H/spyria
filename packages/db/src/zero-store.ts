@@ -242,7 +242,10 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
   const readMarkersOf = mappedRows(withMemberId<ZeroRows['readMarkers'][number]>)
   const threadReadMarkersOf = mappedRows(withMemberId<ZeroRows['threadReadMarkers'][number]>)
   const runtimeOriginsOf = mappedRows((origin: ZeroRows['runtimeOrigins'][number]) => origin)
-  const browserPagesOf = mappedRows((page: ZeroRows['browserPages'][number]) => page)
+  const browserPagesOf = mappedRows(({ openedAt, ...page }: ZeroRows['browserPages'][number]) => ({
+    ...page,
+    openedAt: isoOf(openedAt),
+  }))
   const usageEntriesOf = mappedRows(withMemberId<ZeroRows['usageEntries'][number]>)
   const budgetAlertsOf = mappedRows(({ reachedAt, ...alert }: ZeroRows['budgetAlerts'][number]) => alert)
   const sourcesOf = mappedRows((source: ZeroRows['sources'][number]) => source)

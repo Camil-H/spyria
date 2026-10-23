@@ -131,13 +131,7 @@ export type RuntimeOriginRow = {
 }
 export type MessageStep = { readonly type: string; readonly [field: string]: unknown }
 export type MessageAttachment = Readonly<{ id: string; name: string; mediaType: string; size: number }>
-type BrowserPageRow = {
-  workspaceId: WorkspaceId
-  chatId: ChatId
-  url: string
-  title: string
-  bodyText: string
-}
+export type BrowserPageRow = { workspaceId: WorkspaceId; chatId: ChatId; url: string; title: string; openedAt: string }
 type UsageEntryRow = {
   workspaceId: WorkspaceId
   month: string
