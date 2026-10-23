@@ -5,7 +5,7 @@ import type { Database } from '@spyria/db/postgres'
 import { jobTypesOfDeletedWorkspaces } from '@spyria/db/server-writes'
 import { schema } from '@spyria/db/zero'
 import type { Job, Transact } from '@spyria/db/zero-queries'
-import { log, type WorkspaceId, workspaceId } from '@spyria/kernel'
+import { errorSummaryOf, log, type WorkspaceId, workspaceId } from '@spyria/kernel'
 import { type createLlmGateway, createProfileJobs } from '@spyria/profile/server'
 import { createRuntimeJobs, type SandboxProvider } from '@spyria/runtime/server'
 import { auditJobs, createUsageJobs } from '@spyria/usage/server'
@@ -151,12 +151,7 @@ export const startJobWorker = (
         `update jobs set state = $4, last_error = $5, attempts = attempts + 1,
            run_at = now() + make_interval(secs => $6::double precision / 1000)
          where ${claimedJob}`,
-        [
-          ...jobKey,
-          state,
-          error instanceof Error ? error.message : String(error),
-          isLastAttempt ? 0 : job.attempt * retryDelayMilliseconds,
-        ],
+        [...jobKey, state, errorSummaryOf(error), isLastAttempt ? 0 : job.attempt * retryDelayMilliseconds],
       )
       return { outcome: isLastAttempt ? 'failed' : 'retried', error }
     }

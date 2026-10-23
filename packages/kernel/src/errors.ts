@@ -21,3 +21,20 @@ export const errorKind = <Details extends unknown[]>(
       super(code, messageOf(...details))
     }
   }
+
+const codeOf = (error: Error) => {
+  const code = (error as { code?: unknown }).code ?? (error.cause as { code?: unknown } | undefined)?.code
+  return typeof code === 'string' ? code : undefined
+}
+
+export const errorSummaryOf = (error: unknown) => {
+  if (error instanceof DomainError) return error.message
+  if (!(error instanceof Error)) return 'unknown error'
+  const code = codeOf(error)
+  return code ? `${error.name} ${code}` : error.name
+}
+
+export const carriesQueryParameters = (error: unknown) => error instanceof Error && 'params' in error
+
+export const disclosableMessageOf = (error: unknown) =>
+  error instanceof Error && !carriesQueryParameters(error) ? error.message : errorSummaryOf(error)

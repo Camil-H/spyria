@@ -96,6 +96,6 @@ In production the server refuses to start while any of these is missing, shorter
 
 Logs are one JSON line per event with a name, a one-sentence message, ids (workspace, chat, member, job, trace) and outcome attributes. See [operations](../guides/operations.md).
 
-Never logged, returned in errors or put in URLs: tokens, keys, passwords, cookies, request bodies, prompts and model output. The server's log exporter also drops any attribute whose name contains a part such as `token`, `secret`, `password`, `authorization`, `cookie`, `key`, `body`, `prompt`, `content` or `query`, as a second line of defence.
+Never logged, returned in errors or put in URLs: tokens, keys, passwords, cookies, request bodies, prompts and model output. The server's log exporter also drops any attribute whose name contains a part such as `token`, `secret`, `password`, `authorization`, `cookie`, `key`, `body`, `prompt`, `content` or `query`, as a second line of defence. A failed database query is logged, and shown in a chat notice, by its class and database code only, never with its parameters; a failed job keeps only the class and code of its last error (or the message of a Spyria error, which carries ids only).
 
 What is recorded on purpose, for accountability: every model call and every tool call with its chat, prompter and owner; workspace admin actions and chat membership changes in the audit log; agent events in the chat's append-only history.
