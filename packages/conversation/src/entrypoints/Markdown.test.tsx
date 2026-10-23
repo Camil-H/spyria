@@ -69,3 +69,20 @@ test('a line break stays a line break when asked, as in member messages; standar
   expect(render(text)).toContain('Alice (member, human) · 09:05 UTC\nCan we ship it?')
   expect(render(text)).not.toContain('<br/>')
 })
+
+test('in a runtime chat, only the first four images load on their own; later ones wait for a click', () => {
+  const commands = { readMedia: async () => new Blob() } as unknown as ConversationCommands
+  const html = renderToStaticMarkup(
+    <ConversationProvider commands={commands} agentStream={{ subscribe: () => () => undefined }}>
+      <ChatMediaContext value={{ chatId: 'chat-1', isRuntime: true }}>
+        <Markdown
+          text={Array.from({ length: 6 }, (_, index) => `![Chart ${index + 1}](chart-${index + 1}.png)`).join('\n\n')}
+        />
+      </ChatMediaContext>
+    </ConversationProvider>,
+  )
+  expect(html.match(/aria-label="Loading Chart \d"/g)).toHaveLength(4)
+  expect(html).toContain('Chart 5')
+  expect(html).not.toContain('Loading Chart 5')
+  expect(html).not.toContain('Loading Chart 6')
+})
