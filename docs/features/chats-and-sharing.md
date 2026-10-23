@@ -93,4 +93,10 @@ When an admin removes a member, that member's runtime chats are **frozen**: they
 
 ## Side panel
 
-The side panel next to a chat has tabs that depend on the chat type. Runtime chats have **Files**, **Changes**, **Commits**, **Browser**, **Usage**, **Connected tools** and **Members**; channels have **Browser**, **Sources**, **Usage**, **Connected tools** and **Members**. **Usage** breaks down the chat's model spend per member, and **Connected tools** lists the workspace and personal connections the agent can use. The dev tabs are described in [Dev mode](./dev-mode.md). **Browser** and **Sources** are placeholders: nothing fills them yet.
+The side panel next to a chat has tabs that depend on the chat type. Runtime chats have **Files**, **Changes**, **Commits**, **Browser**, **Usage**, **Connected tools** and **Members**; channels have **Browser**, **Sources**, **Usage**, **Connected tools** and **Members**. **Usage** breaks down the chat's model spend per member, and **Connected tools** lists the workspace and personal connections the agent can use. The dev tabs are described in [Dev mode](./dev-mode.md). **Sources** is a placeholder: nothing fills it yet.
+
+### Browser
+
+**Browser** shows the pages the agent opens for the members of the chat, newest first, and a page the agent opens while the tab is on screen shows at once. The agent on a Spyria runtime opens a page with its `open_page` tool: a web address, or a file of the project such as an HTML report it built. Claude Code and Codex on a member's machine have no such tool.
+
+The bar at the top takes an address or a search: an address opens as it is (`example.com` opens over https, `localhost` over http), and other text is searched for with Bing. **All pages** goes back to the list, and **Open in a new tab** opens a web page outside Spyria, for sites that refuse to be shown inside another page. Pages are sandboxed: a web page runs without access to Spyria, and an HTML file of the project runs its scripts in an isolated frame. The pages a member browses are not saved or shared; the pages the agent opens are.

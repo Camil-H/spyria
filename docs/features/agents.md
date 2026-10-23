@@ -52,6 +52,10 @@ The agent can ask the member a question with suggested answers and a free answer
 
 On a guest's prompt, a tool call that is not read-only produces a **Tool approval** card that only the owner answers. See [Chats and sharing](./chats-and-sharing.md#prompts-from-someone-other-than-the-owner).
 
+## Opening pages
+
+On a Spyria runtime the agent opens a page for the chat's members with `open_page`: a web address, or a file of the project such as an HTML report it wrote. The page shows in the **Browser** tab of the side panel; see [Chats and sharing](./chats-and-sharing.md#browser).
+
 ## Delegation and subagents
 
 On a Spyria runtime the agent has two tools for parallel work: `delegate` hands a self-contained task to a subagent that shares the runtime's files, and `await_task` waits for a task still running. A delegated task answers within 45 seconds when it can; otherwise the agent gets a task id and collects the answer later with `await_task`.
