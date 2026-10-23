@@ -46,7 +46,7 @@ The seed adds no model API key. To prompt an agent, add a real provider key (Ope
 
 ## Settings and `.env.dev`
 
-The server refuses to start without `SPYRIA_TOKEN_SECRET`, `SPYRIA_OIDC_ISSUER`, `SPYRIA_OIDC_CLIENT_ID`, `SPYRIA_OIDC_REDIRECT_URI`, `SPYRIA_APP_ORIGIN`, `SPYRIA_GATEWAY_URL`, `SPYRIA_GATEWAY_ADMIN_USER` and `SPYRIA_GATEWAY_ADMIN_PASSWORD`. `bun run dev` sets a dev value for each one (a random token secret per start), so nothing is needed to get going.
+The server refuses to start without `SPYRIA_TOKEN_SECRET`, `SPYRIA_SECRETS_KEY`, `SPYRIA_OIDC_ISSUER`, `SPYRIA_OIDC_CLIENT_ID`, `SPYRIA_OIDC_REDIRECT_URI`, `SPYRIA_APP_ORIGIN`, `SPYRIA_GATEWAY_URL`, `SPYRIA_GATEWAY_ADMIN_USER` and `SPYRIA_GATEWAY_ADMIN_PASSWORD`. `bun run dev` sets a dev value for each one (a random token secret per start, and a fixed secrets key so runtimes keep working across restarts), so nothing is needed to get going.
 
 Every setting is listed with its dev default and a comment in `.env.example`. To change one, copy it to `.env.dev`: `bun run dev` and `bun run operator` read that file. Production reads `.env.prod` instead (see [Self-hosting](./self-hosting.md)). Both files are git-ignored.
 

@@ -22,13 +22,14 @@ import {
   sessionTokenOf,
   succeeded,
   testAuthSettings,
+  testSecretsKey,
   waitFor,
 } from '../testing/testing.ts'
 import { createRuntimeHostGateway, maximumFrameBytes, serverWebSocket } from './gateway.ts'
 
 const { database } = await openSharedTestApp()
 const gateway = createRuntimeHostGateway({
-  runtimeKeySecret: testAuthSettings.tokenSecret,
+  runtimeKeySecret: testSecretsKey,
   databases: () => [database],
   pingIntervalMilliseconds: 100,
 })

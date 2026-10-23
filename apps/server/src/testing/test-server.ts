@@ -151,7 +151,7 @@ const testHeadersOf = (database: Database, chat: { chatId: string }) => ({
 const spyriaAgentImage = (await readSpyriaAgentImage()) ?? `sha256:${'0'.repeat(64)}`
 const placement = { spyriaAgentImage }
 const runtimeHosts = createRuntimeHostGateway({
-  runtimeKeySecret: testAuthSettings.tokenSecret,
+  runtimeKeySecret: testSecretsKey,
   ...placement,
   databases: () => [...servedDatabaseByName.values()].map((served) => served.database),
   afterHello: (database, host) => agentBridge.forDatabase(database).resumeHost(host),

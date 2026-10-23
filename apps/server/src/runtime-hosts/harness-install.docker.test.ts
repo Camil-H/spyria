@@ -8,7 +8,15 @@ import { websocket } from 'hono/bun'
 import { createApp } from '../app.ts'
 import { readSpyriaAgentImage } from '../spyria-agent-image.ts'
 import { pinnedPackagesOf, startFakeNpmRegistry } from '../testing/harnesses.ts'
-import { acme, aliceInAcme, rejectionOf, sessionTokenOf, testAuthSettings, waitFor } from '../testing/testing.ts'
+import {
+  acme,
+  aliceInAcme,
+  rejectionOf,
+  sessionTokenOf,
+  testAuthSettings,
+  testSecretsKey,
+  waitFor,
+} from '../testing/testing.ts'
 import { createRuntimeHostGateway } from './gateway.ts'
 
 const docker = (...args: string[]) => Bun.spawnSync(['docker', ...args], { stderr: 'pipe' })
@@ -28,7 +36,7 @@ const hostProgram = new URL('../../../host/src/main.ts', import.meta.url).pathna
 const stateDirectory = mkdtempSync(join(tmpdir(), 'spyria-test-host-'))
 const testDatabase = await createTestDatabase()
 const gateway = createRuntimeHostGateway({
-  runtimeKeySecret: testAuthSettings.tokenSecret,
+  runtimeKeySecret: testSecretsKey,
   databases: () => [testDatabase.database],
   spyriaAgentImage: spyriaImage,
 })

@@ -56,8 +56,8 @@ Copy `.env.example` to `.env.prod` and fill every key marked `[prod]`. Compose r
 |---|---|
 | `SPYRIA_DEPLOYMENT` | Deployment name (lowercase letters, digits, dashes), see above. |
 | `SPYRIA_APP_ORIGIN` | Public origin, `https://`. |
-| `SPYRIA_TOKEN_SECRET` | Signs session tokens and derives the key the server uses to reach each runtime. At least 32 characters. Changing it signs everyone out and cuts the server off from running runtimes (see [security](../architecture/security.md#secrets-at-rest)). |
-| `SPYRIA_SECRETS_KEY` | Encrypts stored secrets (SSO client secrets, GitHub App keys) with AES-GCM. At least 32 characters. Never change it: every stored secret would have to be entered again. |
+| `SPYRIA_TOKEN_SECRET` | Signs session tokens. At least 32 characters. |
+| `SPYRIA_SECRETS_KEY` | Encrypts stored secrets (SSO client secrets, GitHub App keys) with AES-GCM, and derives the key the server uses to reach each runtime. At least 32 characters. Never change it: every stored secret would have to be entered again, and existing runtimes would stop answering the server. |
 | `SPYRIA_TRUSTED_PROXY` | Leave unset, except in the [Cloudflare example](#example-cloudflare). Behind a proxy, rate limits on unauthenticated routes see every client as the proxy's address. |
 | `SPYRIA_SMTP_URL`, `SPYRIA_MAIL_FROM` | Mail, for example `smtp://user:pass@smtp.example.com:587` and `Spyria <spyria@example.com>`. |
 | `SPYRIA_GOOGLE_CLIENT_ID`, `SPYRIA_GOOGLE_CLIENT_SECRET`, `SPYRIA_MICROSOFT_CLIENT_ID`, `SPYRIA_MICROSOFT_CLIENT_SECRET` | Optional apps of the deployment for one-click sign-in, see [One-click Google and Microsoft](#one-click-google-and-microsoft). |
