@@ -7,6 +7,7 @@ export type DiffLine = {
   newNumber: number | null
 }
 export type DiffRow = { left: DiffLine | null; right: DiffLine | null }
+export type DiffLayout = 'unified' | 'split'
 export type FileStatus = 'Added' | 'Modified' | 'Deleted'
 export type FileChange = { path: string; status: FileStatus; additions: number; deletions: number; lines: DiffLine[] }
 export type TreeEntry = { name: string; path: string; isFolder: boolean }
@@ -23,6 +24,7 @@ export type BranchStatus = {
 const lineKinds: Record<string, DiffLine['kind']> = { '+': 'added', '-': 'removed', ' ': 'context', '@': 'hunk' }
 const hunkPattern = /^@@ -(\d+)(?:,\d+)? \+(\d+)/
 const collapsedAboveLines = 400
+const splitFromPanelWidth = 560
 
 const pathOf = (header: string, lines: readonly string[]) => {
   const target = lines.find((line) => line.startsWith('+++ b/'))
@@ -112,6 +114,9 @@ export const codeFenceOf = (path: string, content: string) => {
 
 export const isCollapsedByDefault = (changes: readonly FileChange[]) =>
   changes.reduce((total, change) => total + change.lines.length, 0) > collapsedAboveLines
+
+export const diffLayoutFor = (panelWidth: number): DiffLayout =>
+  panelWidth >= splitFromPanelWidth ? 'split' : 'unified'
 
 export const splitRowsOf = (lines: readonly DiffLine[]) => {
   const rows: DiffRow[] = []

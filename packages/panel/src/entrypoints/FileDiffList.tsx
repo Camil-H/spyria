@@ -1,7 +1,15 @@
 import { focusRing } from '@spyria/ui'
 import { ChevronRight } from 'lucide-react'
 import { useState } from 'react'
-import { type DiffLine, type FileChange, isCollapsedByDefault, splitRowsOf } from '../domain/workspace.ts'
+import {
+  type DiffLayout,
+  type DiffLine,
+  diffLayoutFor,
+  type FileChange,
+  isCollapsedByDefault,
+  splitRowsOf,
+} from '../domain/workspace.ts'
+import { usePanel } from './providers.tsx'
 
 const markers: Record<DiffLine['kind'], string> = { added: '+', removed: '-', context: ' ', hunk: '' }
 const lineClasses: Record<DiffLine['kind'], string> = {
@@ -25,28 +33,36 @@ const LineCells = ({ line, number }: { line: DiffLine | null; number: number | n
   </>
 )
 
-const DiffTable = ({ change }: { change: FileChange }) => (
+const DiffTable = ({ change, layout }: { change: FileChange; layout: DiffLayout }) => (
   <table aria-label={`Diff of ${change.path}`} className="w-full table-fixed border-t border-line font-mono text-xs">
     <tbody>
-      {splitRowsOf(change.lines).map(({ left, right }) => (
-        <tr key={`${lineKeyOf(left)}|${lineKeyOf(right)}`}>
-          {left?.kind === 'hunk' ? (
-            <td colSpan={4} className={`${textClass} ${lineClasses.hunk}`}>
-              {left.text}
-            </td>
-          ) : (
-            <>
-              <LineCells line={left} number={left?.oldNumber} />
-              <LineCells line={right} number={right?.newNumber} />
-            </>
-          )}
-        </tr>
-      ))}
+      {layout === 'unified'
+        ? change.lines.map((line) => (
+            <tr key={lineKeyOf(line)}>
+              <td className={`${numberClass} ${lineClasses[line.kind]}`}>{line.oldNumber ?? ''}</td>
+              <LineCells line={line} number={line.newNumber} />
+            </tr>
+          ))
+        : splitRowsOf(change.lines).map(({ left, right }) => (
+            <tr key={`${lineKeyOf(left)}|${lineKeyOf(right)}`}>
+              {left?.kind === 'hunk' ? (
+                <td colSpan={4} className={`${textClass} ${lineClasses.hunk}`}>
+                  {left.text}
+                </td>
+              ) : (
+                <>
+                  <LineCells line={left} number={left?.oldNumber} />
+                  <LineCells line={right} number={right?.newNumber} />
+                </>
+              )}
+            </tr>
+          ))}
     </tbody>
   </table>
 )
 
 export const FileDiffList = ({ changes }: { changes: readonly FileChange[] }) => {
+  const layout = diffLayoutFor(usePanel().width)
   const [toggledPaths, setToggledPaths] = useState<ReadonlySet<string>>(new Set())
   const isCollapsed = isCollapsedByDefault(changes)
   const toggle = (path: string) => {
@@ -77,7 +93,7 @@ export const FileDiffList = ({ changes }: { changes: readonly FileChange[] }) =>
                 {change.status} +{change.additions} −{change.deletions}
               </span>
             </button>
-            {isExpanded && <DiffTable change={change} />}
+            {isExpanded && <DiffTable change={change} layout={layout} />}
           </section>
         )
       })}

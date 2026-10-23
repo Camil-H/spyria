@@ -41,7 +41,7 @@ test.describe('Dev panel', () => {
     await page.goto('/')
   })
 
-  test('As a chat owner, I collapse and expand the diff per file and read it side by side with line numbers on both sides, with no layout choice; the panel has no Terminal tab', {
+  test('As a chat owner, I collapse and expand the diff per file, read it unified in a narrow panel and side by side once the panel is 560px wide, with no layout choice; the panel has no Terminal tab', {
     tag: ['@spec-43'],
   }, async ({ page, agentScript }) => {
     await configureGitHubApp(page)
@@ -54,26 +54,43 @@ test.describe('Dev panel', () => {
       'Added a file.',
     )
     await expect(diffOf(page, 'src/new.ts')).toBeVisible()
-    await expect(cellsOfRow(page, 'src/app.ts', 1)).toHaveText([
-      '1',
-      '- export const total = 1',
-      '1',
-      '+ export const total = 2',
-    ])
     await expect(tabPanelOf(page).getByRole('radiogroup', { name: 'Diff layout' })).toHaveCount(0)
 
-    const fileButton = tabPanelOf(page).getByRole('button', { name: /^src\/app\.ts/ })
-    await fileButton.click()
-    await expect(fileButton).toHaveAttribute('aria-expanded', 'false')
-    await expect(diffOf(page, 'src/app.ts')).toHaveCount(0)
-    await expect(diffOf(page, 'src/new.ts')).toBeVisible()
-    await fileButton.click()
-    await expect(diffOf(page, 'src/app.ts')).toBeVisible()
+    await test.step('shows the diff unified at the default panel width', async () => {
+      await expect(cellsOfRow(page, 'src/app.ts', 1)).toHaveText(['1', '', '- export const total = 1'])
+      await expect(cellsOfRow(page, 'src/app.ts', 2)).toHaveText(['', '1', '+ export const total = 2'])
+    })
+
+    await test.step('collapses and expands a file', async () => {
+      const fileButton = tabPanelOf(page).getByRole('button', { name: /^src\/app\.ts/ })
+      await fileButton.click()
+      await expect(fileButton).toHaveAttribute('aria-expanded', 'false')
+      await expect(diffOf(page, 'src/app.ts')).toHaveCount(0)
+      await expect(diffOf(page, 'src/new.ts')).toBeVisible()
+      await fileButton.click()
+      await expect(diffOf(page, 'src/app.ts')).toBeVisible()
+    })
+
+    await test.step('switches to side by side when the panel is widened to 560px and back when narrowed', async () => {
+      const separator = page.getByRole('separator', { name: 'Resize panel' })
+      await separator.focus()
+      for (let press = 0; press < 13; press++) await page.keyboard.press('ArrowLeft')
+      await expect(separator).toHaveAttribute('aria-valuenow', '568')
+      await expect(cellsOfRow(page, 'src/app.ts', 1)).toHaveText([
+        '1',
+        '- export const total = 1',
+        '1',
+        '+ export const total = 2',
+      ])
+      await expectLooks(page, panelOf(page), 'changes-side-by-side', {
+        mask: [tabPanelOf(page).getByRole('region', { name: 'Branch status' })],
+      })
+      await page.keyboard.press('ArrowRight')
+      await expect(separator).toHaveAttribute('aria-valuenow', '552')
+      await expect(cellsOfRow(page, 'src/app.ts', 1)).toHaveText(['1', '', '- export const total = 1'])
+    })
 
     await expect(panelTabOf(page, 'Terminal')).toHaveCount(0)
     await expect(panelOf(page).getByRole('textbox')).toHaveCount(0)
-    await expectLooks(page, panelOf(page), 'changes-side-by-side', {
-      mask: [tabPanelOf(page).getByRole('region', { name: 'Branch status' })],
-    })
   })
 })
