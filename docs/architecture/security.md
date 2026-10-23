@@ -45,6 +45,7 @@ The agent of a chat acts for the chat's **owner**, and its model calls are paid 
 |---|---|---|
 | A member's provider API keys | The gateway, encrypted with its own key. Spyria stores a reference and the last four characters. | The server's relay, for that member's prompts only. |
 | A member's tool OAuth tokens | The gateway, against the member's key for that workspace. | The relay, on that member's chats. |
+| A workspace connection's secret header | The gateway, in plain text in its admin API: the gateway is reachable on the internal network only, and Spyria never logs or returns what that API answers. | The gateway, on calls to that tool server. |
 | The token a runtime holds | Issued by Spyria per runtime, stored as a hash. | Valid only through Spyria's relay, during an active turn, for that turn's prompter. A runtime never sees a real provider key. |
 | The key the server uses to reach a runtime's agent | Not stored: derived from `SPYRIA_TOKEN_SECRET` and the runtime's id when the runtime is created and on each call. | The server, to talk to that runtime only. |
 | Claude Code and Codex sign-ins | Docker volumes on the member's own machine. | The member's own sessions there. |

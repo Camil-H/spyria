@@ -27,7 +27,8 @@ Your proxy must:
 
 - terminate TLS for the origin and forward plain HTTP to both targets;
 - match `/zero/` before the catch-all route;
-- pass WebSocket upgrades (`/zero/`, `/host`, `/api/stream`) and keep long-lived connections open.
+- pass WebSocket upgrades (`/zero/`, `/host`, `/api/stream`) and keep long-lived connections open;
+- never route anything to the gateway (`gateway:8080`). Its admin API returns tool servers' header secrets in plain text, so it must stay reachable on the Compose network only. Compose publishes no gateway port, and the server forwards only the tool sign-in callback (`/gateway-oauth/api/oauth/callback`) to it.
 
 Both targets are reachable only on the Compose network `<deployment>-network`, so run the proxy or tunnel connector as a container attached to that network. The server also answers on `127.0.0.1:${SPYRIA_LOCAL_PORT:-3300}` on the machine itself, for health checks and a local proxy.
 

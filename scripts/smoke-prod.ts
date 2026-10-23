@@ -128,6 +128,16 @@ const smoke = async () => {
     await checkTrust([`${deployment}-server`, `${deployment}-gateway`]),
     'the server image and the running gateway trust no distrusted root',
   )
+  check(
+    output(['docker', 'port', `${deployment}-gateway`]) === '',
+    'the gateway publishes no port: its admin API answers on the Compose network only',
+  )
+  const gatewayAdminThroughServer = await fetch(`${serverUrl}/gateway-oauth/api/governance/virtual-keys`)
+  await gatewayAdminThroughServer.arrayBuffer()
+  check(
+    gatewayAdminThroughServer.status === 404,
+    'the server forwards the OAuth callback only, never the gateway admin API',
+  )
   const authMode = await (await fetch(`${serverUrl}/auth/mode`)).json()
   check(
     authMode.authMode === 'sso' && authMode.canCreateWorkspace === true,
