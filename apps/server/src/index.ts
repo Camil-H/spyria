@@ -27,6 +27,11 @@ const requiredEnvironment = (name: string) => {
   if (!value) throw new Error(`${name} is required`)
   return value
 }
+const instanceSignInAppOf = (preset: 'google' | 'microsoft', clientIdName: string, clientSecretName: string) => {
+  const clientId = process.env[clientIdName]
+  if (!clientId) return {}
+  return { [preset]: { clientId, clientSecret: requiredEnvironment(clientSecretName) } }
+}
 
 const telemetry = startTelemetry()
 const shutdownMilliseconds = 25_000
@@ -70,6 +75,10 @@ const app = createApp({
   },
   authMode,
   secretsKey,
+  instanceSignInApps: {
+    ...instanceSignInAppOf('google', 'SPYRIA_GOOGLE_CLIENT_ID', 'SPYRIA_GOOGLE_CLIENT_SECRET'),
+    ...instanceSignInAppOf('microsoft', 'SPYRIA_MICROSOFT_CLIENT_ID', 'SPYRIA_MICROSOFT_CLIENT_SECRET'),
+  },
   github,
   mail: process.env.SPYRIA_SMTP_URL
     ? { smtpUrl: process.env.SPYRIA_SMTP_URL, from: requiredEnvironment('SPYRIA_MAIL_FROM') }

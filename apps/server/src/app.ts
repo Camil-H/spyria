@@ -87,6 +87,7 @@ import {
   githubRepositoriesPath,
   githubSettingsPath,
   githubWebhooksPath,
+  type InstanceApps,
   type SsoSettingsInput,
   ssoSettingsPath,
   workspaceMutators,
@@ -204,6 +205,7 @@ export const createApp = ({
   authMode = 'dex',
   secretsKey,
   microsoftLoginOrigin,
+  instanceSignInApps,
   mail,
   appOrigin,
   deployment = defaultDeployment,
@@ -227,6 +229,7 @@ export const createApp = ({
   authMode?: AuthMode
   secretsKey?: string
   microsoftLoginOrigin?: string
+  instanceSignInApps?: InstanceApps
   mail?: { smtpUrl: string; from: string }
   appOrigin: string
   deployment?: string
@@ -253,6 +256,7 @@ export const createApp = ({
   const sso = {
     secretBox: secretsKey ? createSecretBox(secretsKey) : undefined,
     microsoftLoginOrigin,
+    instanceApps: instanceSignInApps,
     mailer: mail && createSmtpMailer(mail),
     appOrigin,
   }

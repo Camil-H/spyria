@@ -1,6 +1,12 @@
 import type { Database } from '@spyria/db/postgres'
 import { DomainError } from '@spyria/kernel'
-import { domainOfEmail, ssoEmailOf } from '@spyria/workspace/server'
+import {
+  domainOfEmail,
+  hostedDomainEmailOf,
+  instanceAppFor,
+  instanceAppPresets,
+  ssoEmailOf,
+} from '@spyria/workspace/server'
 import { type Context, Hono, type MiddlewareHandler } from 'hono'
 import { deleteCookie, getCookie, getSignedCookie, setCookie, setSignedCookie } from 'hono/cookie'
 import { HTTPException } from 'hono/http-exception'
@@ -96,13 +102,15 @@ export const createAuthRoutes = ({
     }
   }
   const oidcOf = async (provider: FirstWorkspace['provider']) => {
-    if (!sso.secretBox) throw new Error('SPYRIA_SECRETS_KEY is required in sso mode')
+    const instanceApp = provider.usesInstanceApp ? instanceAppFor(sso.instanceApps ?? {}, provider.preset) : undefined
+    if (!instanceApp && !sso.secretBox) throw new Error('SPYRIA_SECRETS_KEY is required in sso mode')
     return createOidc({
       issuer: provider.issuer,
-      clientId: provider.clientId,
-      clientSecret: await sso.secretBox.open(provider.encryptedClientSecret),
+      clientId: instanceApp?.clientId ?? provider.clientId,
+      clientSecret: instanceApp?.clientSecret ?? (await sso.secretBox?.open(provider.encryptedClientSecret)),
       redirectUri,
-      emailOf: (claims) => ssoEmailOf(provider.preset, claims),
+      emailOf: (claims) =>
+        instanceApp && provider.preset === 'google' ? hostedDomainEmailOf(claims) : ssoEmailOf(provider.preset, claims),
     })
   }
   const ssoClients = new Map<string, Oidc>()
@@ -149,6 +157,7 @@ export const createAuthRoutes = ({
       context.json({
         authMode,
         canCreateWorkspace: authMode === 'sso' && (await hasNoWorkspace(scopeOf(context).database.$client)),
+        instanceApps: authMode === 'sso' ? instanceAppPresets.filter((preset) => sso.instanceApps?.[preset]) : [],
       }),
     )
     .post('/first-workspace', rateLimited('firstWorkspace'), async (context) => {

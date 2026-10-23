@@ -12,7 +12,9 @@ import {
   DomainFixed,
   displayNameFrom,
   domainOfEmail,
+  type InstanceApps,
   InvalidSsoSettings,
+  instanceAppFor,
   MailNotConfigured,
   MailNotSent,
   Name,
@@ -38,11 +40,13 @@ export type SsoProvider = {
   issuer: string
   clientId: string
   encryptedClientSecret: string
+  usesInstanceApp: boolean
   updatedAt: Date
 }
 export type SsoDependencies = {
   secretBox?: SecretBox
   microsoftLoginOrigin?: string
+  instanceApps?: InstanceApps
   mailer?: Mailer
   appOrigin?: string
 }
@@ -60,7 +64,8 @@ export const ssoProviderOf = async (
   (
     await database.$client<SsoProvider[]>`
       select workspace_id as "workspaceId", preset, issuer, client_id as "clientId",
-        encrypted_client_secret as "encryptedClientSecret", updated_at as "updatedAt"
+        encrypted_client_secret as "encryptedClientSecret", uses_instance_app as "usesInstanceApp",
+        updated_at as "updatedAt"
       from workspace_sso join workspaces using (workspace_id)
       where workspace_id = coalesce(${workspaceId ?? null}::text, workspace_id)
         and workspaces.deleted_at is null
@@ -96,8 +101,9 @@ export const recordWorkspaceEvent = (
     insert into workspace_events (workspace_id, id, type, actor_id, payload, created_at)
     values (${workspaceId}, ${crypto.randomUUID()}, ${type}, ${actorId}, ${JSON.stringify(payload)}::jsonb, now())`
 
-const checkedSettings = async (input: SsoSettingsInput, { microsoftLoginOrigin }: SsoDependencies) => {
-  const settings = ssoSettingsFrom(input, microsoftLoginOrigin)
+const checkedSettings = async (input: SsoSettingsInput, { microsoftLoginOrigin, instanceApps }: SsoDependencies) => {
+  const clientId = input.usesInstanceApp ? instanceAppFor(instanceApps ?? {}, input.preset).clientId : input.clientId
+  const settings = ssoSettingsFrom({ ...input, clientId }, microsoftLoginOrigin)
   await discoverIssuer(settings.issuer).catch((error: Error) => {
     throw new SsoDiscoveryFailed(settings.issuer, error.message)
   })
@@ -114,8 +120,9 @@ const assertNotVerifiedElsewhere = async (sql: Sql, workspaceId: string, issuer:
 }
 
 const settingsOf = (sql: Sql, workspaceId: string) =>
-  sql<(SsoSettings & Omit<SsoDomainState, 'domain'>)[]>`
-    select preset, issuer, client_id as "clientId", domain, verified_at is not null as "isVerified",
+  sql<(SsoSettings & { usesInstanceApp: boolean } & Omit<SsoDomainState, 'domain'>)[]>`
+    select preset, issuer, client_id as "clientId", uses_instance_app as "usesInstanceApp", domain,
+      verified_at is not null as "isVerified",
       case when verified_at is null and verification_expires_at > now() then verification_email end as "sentTo",
       case when verified_at is null and verification_expires_at > now()
         then (extract(epoch from verification_expires_at) * 1000)::float8 end as "expiresAt"
@@ -128,22 +135,39 @@ const storeSsoSettings = async (
     workspaceId,
     actorId,
     settings,
+    usesInstanceApp,
     encryptedClientSecret,
-  }: { workspaceId: string; actorId: string; settings: SsoSettings; encryptedClientSecret: string | null },
+  }: {
+    workspaceId: string
+    actorId: string
+    settings: SsoSettings
+    usesInstanceApp: boolean
+    encryptedClientSecret: string | null
+  },
 ) => {
   await assertNotVerifiedElsewhere(sql, workspaceId, settings.issuer, settings.domain)
   const [previous] = await settingsOf(sql, workspaceId)
-  if (!previous && !encryptedClientSecret) throw new InvalidSsoSettings('A client secret is required')
+  if (!usesInstanceApp && !encryptedClientSecret && (!previous || previous.usesInstanceApp))
+    throw new InvalidSsoSettings('A client secret is required')
   await sql`
-    insert into workspace_sso (workspace_id, preset, issuer, client_id, encrypted_client_secret, updated_at)
+    insert into workspace_sso
+      (workspace_id, preset, issuer, client_id, encrypted_client_secret, uses_instance_app, updated_at)
     values (${workspaceId}, ${settings.preset}, ${settings.issuer}, ${settings.clientId}, ${encryptedClientSecret ?? ''},
-      now())
+      ${usesInstanceApp}, now())
     on conflict (workspace_id) do update set preset = excluded.preset, issuer = excluded.issuer,
-      client_id = excluded.client_id, updated_at = excluded.updated_at,
-      encrypted_client_secret = coalesce(${encryptedClientSecret}::text, workspace_sso.encrypted_client_secret)`
+      client_id = excluded.client_id, uses_instance_app = excluded.uses_instance_app, updated_at = excluded.updated_at,
+      encrypted_client_secret = case when excluded.uses_instance_app then ''
+        else coalesce(${encryptedClientSecret}::text, workspace_sso.encrypted_client_secret) end`
   await sql`insert into sso_domains (workspace_id, domain) values (${workspaceId}, ${settings.domain}) on conflict do nothing`
-  if (!previous || (['preset', 'issuer', 'clientId'] as const).some((key) => previous[key] !== settings[key]))
-    await recordWorkspaceEvent(sql, workspaceId, 'sso.configured', actorId, settings)
+  const isChanged =
+    !previous ||
+    previous.usesInstanceApp !== usesInstanceApp ||
+    (['preset', 'issuer', 'clientId'] as const).some((key) => previous[key] !== settings[key])
+  if (isChanged)
+    await recordWorkspaceEvent(sql, workspaceId, 'sso.configured', actorId, {
+      ...settings,
+      ...(usesInstanceApp && { usesInstanceApp }),
+    })
   if (previous && encryptedClientSecret) await recordWorkspaceEvent(sql, workspaceId, 'sso.secret_rotated', actorId, {})
 }
 
@@ -155,7 +179,7 @@ const ssoSettingsViewOf = async (sql: Sql, member: Member): Promise<SsoSettingsV
   return {
     ...settings,
     tenantId: settings.preset === 'microsoft' ? tenantIdOf(settings.issuer) : '',
-    hasSecret: true,
+    hasSecret: !settings.usesInstanceApp,
     domainState: { domain: settings.domain, isVerified, sentTo, expiresAt },
   }
 }
@@ -172,7 +196,8 @@ export const saveSsoSettings = async (
   const current = await readSsoSettings(database, member)
   if (current && normalizedDomain(input.domain) !== current.domain) throw new DomainFixed(current.domain)
   const settings = await checkedSettings(input, dependencies)
-  const clientSecret = String(input.clientSecret ?? '').trim()
+  const usesInstanceApp = input.usesInstanceApp === true
+  const clientSecret = usesInstanceApp ? '' : String(input.clientSecret ?? '').trim()
   if (clientSecret !== '' && !dependencies.secretBox)
     throw new InvalidSsoSettings('SPYRIA_SECRETS_KEY is not set on this server')
   const encryptedClientSecret =
@@ -182,6 +207,7 @@ export const saveSsoSettings = async (
       workspaceId: member.workspaceId,
       actorId: member.userId,
       settings,
+      usesInstanceApp,
       encryptedClientSecret,
     })
     return ssoSettingsViewOf(sql, member)
@@ -209,24 +235,26 @@ export const prepareFirstWorkspace = async (
   await assertWorkspaceCreationOpen(database.$client)
   const field = (name: string) => (typeof form[name] === 'string' ? form[name] : '').trim().slice(0, 500)
   const workspaceName = Name(field('name'))
-  if (field('clientSecret') === '') throw new InvalidSsoSettings('A client secret is required')
-  if (!dependencies.secretBox) throw new InvalidSsoSettings('SPYRIA_SECRETS_KEY is not set on this server')
+  const usesInstanceApp = field('usesInstanceApp') === 'true'
+  if (!usesInstanceApp && field('clientSecret') === '') throw new InvalidSsoSettings('A client secret is required')
+  if (!usesInstanceApp && !dependencies.secretBox)
+    throw new InvalidSsoSettings('SPYRIA_SECRETS_KEY is not set on this server')
   const settings = await checkedSettings(
     {
       preset: field('preset') as SsoPreset,
       issuer: field('issuer'),
       tenantId: field('tenantId'),
       clientId: field('clientId'),
+      usesInstanceApp,
       domain: field('domain'),
     },
     dependencies,
   )
   const { domain, ...provider } = settings
-  return {
-    workspaceName,
-    domain,
-    provider: { ...provider, encryptedClientSecret: await dependencies.secretBox.seal(field('clientSecret')) },
-  }
+  const encryptedClientSecret = usesInstanceApp
+    ? ''
+    : ((await dependencies.secretBox?.seal(field('clientSecret'))) ?? '')
+  return { workspaceName, domain, provider: { ...provider, usesInstanceApp, encryptedClientSecret } }
 }
 
 export const createFirstWorkspace = async (
@@ -268,7 +296,8 @@ export const createFirstWorkspace = async (
       workspaceId,
       actorId: userId,
       settings: { preset: provider.preset, issuer: provider.issuer, clientId: provider.clientId, domain },
-      encryptedClientSecret: provider.encryptedClientSecret,
+      usesInstanceApp: provider.usesInstanceApp,
+      encryptedClientSecret: provider.usesInstanceApp ? null : provider.encryptedClientSecret,
     })
     await sql`
       insert into identities (workspace_id, issuer, subject, user_id)

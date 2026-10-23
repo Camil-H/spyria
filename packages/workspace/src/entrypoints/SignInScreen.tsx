@@ -1,7 +1,8 @@
 import { buttonClass, fieldClass, labelClass } from '@spyria/ui'
 import { type SubmitEvent, useState } from 'react'
+import type { SsoPreset } from '../domain/sso.ts'
 import { AuthScreen } from './AuthScreen.tsx'
-import { emptyProvider, ProviderFields } from './SignInSection.tsx'
+import { continueLabelOf, emptyProvider, isInstanceAppIn, ProviderFields } from './SignInSection.tsx'
 
 type SignInOutcome = { status: string; email?: string; domain?: string; message?: string }
 
@@ -19,11 +20,13 @@ const creationRefusalOf = (outcome: SignInOutcome) =>
 export const SignInScreen = ({
   isEmailFirst,
   canCreateWorkspace,
+  instanceApps = [],
   signIn,
   createWorkspace,
 }: {
   isEmailFirst: boolean
   canCreateWorkspace: boolean
+  instanceApps?: readonly SsoPreset[]
   signIn: (email?: string) => Promise<SignInOutcome>
   createWorkspace: (form: HTMLFormElement) => Promise<SignInOutcome>
 }) => {
@@ -31,6 +34,7 @@ export const SignInScreen = ({
   const [email, setEmail] = useState('')
   const [provider, setProvider] = useState(emptyProvider)
   const [clientSecret, setClientSecret] = useState('')
+  const [usesInstanceApp, setUsesInstanceApp] = useState(true)
   const [refusal, setRefusal] = useState<string>()
   const settle = (outcome: SignInOutcome, refusalFor = refusalOf) => {
     setIsSigningIn(false)
@@ -62,9 +66,14 @@ export const SignInScreen = ({
           edit={(field) => (event) => setProvider({ ...provider, [field]: event.target.value })}
           clientSecret={clientSecret}
           onClientSecretChange={setClientSecret}
+          instanceApps={instanceApps}
+          usesInstanceApp={usesInstanceApp}
+          onUsesInstanceAppChange={setUsesInstanceApp}
         />
         <button type="submit" className={`${buttonClass} mt-2`} disabled={isSigningIn}>
-          Create and sign in
+          {isInstanceAppIn(instanceApps, provider.preset, usesInstanceApp)
+            ? continueLabelOf(provider.preset)
+            : 'Create and sign in'}
         </button>
       </form>
       {refusal && <p className="text-sm text-muted">{refusal}</p>}

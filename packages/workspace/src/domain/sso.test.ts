@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { domainOfEmail, ssoEmailOf, ssoSettingsFrom } from './sso.ts'
+import { domainOfEmail, hostedDomainEmailOf, instanceAppFor, ssoEmailOf, ssoSettingsFrom } from './sso.ts'
 
 const base = { clientId: ' spyria ', domain: ' @Acme.com' }
 
@@ -42,4 +42,22 @@ test('Entra falls back to preferred_username, other presets read only email', ()
   expect(ssoEmailOf('microsoft', { email: 'pat@acme.com', preferred_username: 'x@acme.com' })).toBe('pat@acme.com')
   expect(ssoEmailOf('oidc', { preferred_username: 'pat@acme.com' })).toBeUndefined()
   expect(domainOfEmail(' Pat@Acme.COM ')).toBe('acme.com')
+})
+
+test('the app of this Spyria serves Google and Microsoft once configured, never another provider', () => {
+  const google = { clientId: 'spyria-google', clientSecret: 'secret' }
+  expect(instanceAppFor({ google }, 'google')).toBe(google)
+  expect(() => instanceAppFor({ google }, 'microsoft')).toThrow(
+    'This Spyria has no Microsoft app: enter the client id and secret of your own',
+  )
+  expect(() => instanceAppFor({ google }, 'oidc')).toThrow(
+    'Only Google Workspace and Microsoft Entra sign in through the app of this Spyria',
+  )
+})
+
+test('through the Google app of this Spyria, only an account managed by the Google Workspace of its email domain signs in', () => {
+  expect(hostedDomainEmailOf({ email: 'pat@acme.com', hd: 'acme.com' })).toBe('pat@acme.com')
+  expect(hostedDomainEmailOf({ email: 'pat@acme.com' })).toBeUndefined()
+  expect(hostedDomainEmailOf({ email: 'pat@acme.com', hd: 'globex.com' })).toBeUndefined()
+  expect(hostedDomainEmailOf({ email: 'pat@gmail.com', hd: 'acme.com' })).toBeUndefined()
 })
