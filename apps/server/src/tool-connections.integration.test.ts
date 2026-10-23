@@ -199,6 +199,7 @@ test('session headers pass through, gateway failures become error results instea
   })
   let gatewayUrl = stubGateway.url.origin
   const runtimeHosts = createRuntimeHostGateway({
+    runtimeKeySecret: testAuthSettings.tokenSecret,
     databases: () => [database],
     relayModelCall: createModelCallRelay({
       llmGateway,

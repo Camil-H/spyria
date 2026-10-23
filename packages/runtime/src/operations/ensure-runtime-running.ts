@@ -1,6 +1,5 @@
 import { type ChatId, runtimeId, type WorkspaceId } from '@spyria/kernel'
 import type { RuntimeTransactor, UnitOfWork } from '../contracts/transactor.ts'
-import { newSecretToken } from '../domain/claim.ts'
 import { RetryRefused } from '../domain/errors.ts'
 import {
   ensureStepOf,
@@ -44,10 +43,7 @@ const placeRuntime = async (
     stateChangedAt: now,
   }
   await runtimes.add(runtime)
-  if (runtime.state === 'creating') {
-    await secrets.keep(runtime, 'apiKey', newSecretToken())
-    await jobs.enqueue(workspaceId, runtimeJobTypes.create, { runtimeId: runtime.id })
-  }
+  if (runtime.state === 'creating') await jobs.enqueue(workspaceId, runtimeJobTypes.create, { runtimeId: runtime.id })
   return runtime
 }
 

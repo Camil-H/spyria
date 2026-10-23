@@ -27,7 +27,11 @@ import {
 import { createRuntimeHostGateway, maximumFrameBytes, serverWebSocket } from './gateway.ts'
 
 const { database } = await openSharedTestApp()
-const gateway = createRuntimeHostGateway({ databases: () => [database], pingIntervalMilliseconds: 100 })
+const gateway = createRuntimeHostGateway({
+  runtimeKeySecret: testAuthSettings.tokenSecret,
+  databases: () => [database],
+  pingIntervalMilliseconds: 100,
+})
 const app = createApp({ database, ...testAuthSettings, runtimeHosts: gateway })
 const server = Bun.serve({ port: 0, fetch: app.fetch, websocket: serverWebSocket })
 const openedSockets: WebSocket[] = []

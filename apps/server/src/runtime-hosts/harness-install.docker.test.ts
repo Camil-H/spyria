@@ -27,7 +27,11 @@ const registry = startFakeNpmRegistry(pinnedPackagesOf('claude-code'))
 const hostProgram = new URL('../../../host/src/main.ts', import.meta.url).pathname
 const stateDirectory = mkdtempSync(join(tmpdir(), 'spyria-test-host-'))
 const testDatabase = await createTestDatabase()
-const gateway = createRuntimeHostGateway({ databases: () => [testDatabase.database], spyriaAgentImage: spyriaImage })
+const gateway = createRuntimeHostGateway({
+  runtimeKeySecret: testAuthSettings.tokenSecret,
+  databases: () => [testDatabase.database],
+  spyriaAgentImage: spyriaImage,
+})
 const app = createApp({ database: testDatabase.database, ...testAuthSettings, runtimeHosts: gateway })
 const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
 let hostProcess: ReturnType<typeof Bun.spawn> | undefined
@@ -83,9 +87,8 @@ test('a personal host installs a harness from the configured registry into its v
     30_000,
   )
   const runtime = { workspaceId: acme, hostId: runtimeHostId(id), runtimeId: 'harness-install' }
-  const apiKey = 'test-api-key-0123456789abcdef'
   await gateway.prepare(runtime, spyriaImage)
-  await gateway.sandboxProvider.create({ ...runtime, image: spyriaImage, apiKey })
+  await gateway.sandboxProvider.create({ ...runtime, image: spyriaImage })
   const [inspected] = JSON.parse(dockerText('inspect', `${prefix}rt-harness-install`))
   expect(inspected.HostConfig.Mounts).toContainEqual(
     expect.objectContaining({ Source: harnessesVolume, Target: '/harnesses', ReadOnly: true }),

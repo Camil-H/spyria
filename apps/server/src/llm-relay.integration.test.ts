@@ -225,6 +225,7 @@ test('a model call is retried once when the gateway refuses the connection, neve
     },
   })
   const runtimeHosts = createRuntimeHostGateway({
+    runtimeKeySecret: testAuthSettings.tokenSecret,
     databases: () => [database],
     relayModelCall: createModelCallRelay({
       llmGateway,
