@@ -122,6 +122,22 @@ test.describe('Chat view', () => {
     })
   })
 
+  test('As a member, I see the message list keep a gap on its right so step statuses and times stay clear of the scroll bar', async ({
+    page,
+  }) => {
+    await openChat(page, 'Welcome')
+    const messageList = mainOf(page).getByRole('list', { name: 'Messages' })
+    const scrollArea = messageList.locator('..')
+    const listBox = (await messageList.boundingBox())!
+    const scrollAreaBox = (await scrollArea.boundingBox())!
+    const scrollbarWidth = await scrollArea.evaluate(
+      (element) => element.getBoundingClientRect().width - element.clientWidth,
+    )
+    expect(scrollAreaBox.x + scrollAreaBox.width - scrollbarWidth - (listBox.x + listBox.width)).toBeGreaterThanOrEqual(
+      8,
+    )
+  })
+
   test('As a member, I see a runtime chat’s owner on the title row in bold, the branch above the text box and the Runs on and model chips under it', async ({
     page,
   }) => {
