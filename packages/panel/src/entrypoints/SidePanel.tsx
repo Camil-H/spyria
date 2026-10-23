@@ -97,11 +97,19 @@ const TabPanel = ({ tabId, usageTab, ...panelProps }: PanelProps & { tabId: Pane
 export const SidePanel = ({ usageTab, ...panelProps }: PanelProps & { usageTab: ReactNode }) => {
   const { workspaceId, chatId } = panelProps
   const tabIds = useQuery(getPanelTabs, workspaceId, chatId)
-  const { isOpen, width } = usePanel()
+  const { isOpen, width, fitWithin } = usePanel()
+  const fitWithinRow = (section: HTMLElement | null) => {
+    const row = section?.parentElement
+    if (!row) return
+    const observer = new ResizeObserver(([entry]) => entry && fitWithin(entry.contentRect.width))
+    observer.observe(row)
+    return () => observer.disconnect()
+  }
   if (!tabIds) return null
   return (
     <Activity mode={isOpen ? 'visible' : 'hidden'}>
       <section
+        ref={fitWithinRow}
         aria-label="Side panel"
         style={{ width }}
         className="relative flex min-w-0 shrink-0 flex-col border-l border-line bg-raised text-ink"
