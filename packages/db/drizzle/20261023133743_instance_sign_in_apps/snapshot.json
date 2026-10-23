@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "3c39b2c5-7851-4185-9a74-b5cc3b15c1c0",
-  "prevIds": ["8bfe95ec-d4cc-43cc-8874-3183e063fa64"],
+  "id": "9ed0b65c-cff5-4c55-bb6c-211ac54eefba",
+  "prevIds": ["e15f4689-f183-432e-b87a-aaecc21a4a56"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -4281,6 +4281,32 @@
       "generated": null,
       "identity": null,
       "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "workspaces"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "deleted_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "workspaces"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "purge_at",
       "entityType": "columns",
       "schema": "public",
       "table": "workspaces"
