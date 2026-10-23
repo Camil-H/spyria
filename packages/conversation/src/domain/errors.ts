@@ -102,6 +102,11 @@ export const TooManyAttachments = errorKind(
   (maximum: number) => `A message can carry up to ${maximum} attachments`,
   ConversationError,
 )
+export const RuntimeMediaUnavailable = errorKind(
+  'runtime_media_unavailable',
+  () => 'This file can be shown only while the runtime is running',
+  ConversationError,
+)
 export const AttachmentNotFound = errorKind(
   'attachment_not_found',
   () => 'This attachment is no longer available',

@@ -450,6 +450,7 @@ export const createAgentBridge = ({
       answerQuestion: handlers.answerQuestion,
       setPlanMode: handlers.setPlanMode,
       readWorkspace: handlers.readWorkspace,
+      readRuntimeMedia: handlers.readRuntimeMedia,
       publishBranch: handlers.publishBranch,
       runGitAction: handlers.runGitAction,
       recordPullRequest: handlers.recordPullRequest,

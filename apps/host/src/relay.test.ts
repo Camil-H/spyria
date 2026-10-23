@@ -120,6 +120,7 @@ test.each([
   ['POST', '/api/workspace/push'],
   ['GET', '/api/workspace/merge'],
   ['POST', '/api/workspace/status'],
+  ['POST', '/api/workspace/media'],
 ])('a personal host refuses %s %s', async (method, path) => {
   const { relay, nextOf } = personalRelay()
   await relay.handle({ type: 'http', sid: 1, runtimeId: 'runtime-1', method, path })
@@ -157,6 +158,7 @@ test.each([
   ['POST', `/api/conversations/${conversationId}/questions/${conversationId}`],
   ['GET', '/api/workspace/tree?path=src%2Futil'],
   ['GET', '/api/workspace/file?path=README.md'],
+  ['GET', '/api/workspace/media?path=out%2Fchart.png'],
   ['GET', '/api/workspace/changes?base=main'],
   ['GET', '/api/workspace/status?base=main'],
   ['POST', '/api/workspace/bundle'],

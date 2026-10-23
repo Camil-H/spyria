@@ -9,7 +9,7 @@ const allowedRequests = [
   new RegExp(`^(GET|DELETE) ${conversationPath}$`),
   new RegExp(`^POST ${conversationPath}/(events|interrupt|switch_acp_model|plan_mode|questions/${conversationId})$`),
   new RegExp(`^WS /sockets/events/${conversationId}(\\?after=\\d+)?$`),
-  /^GET \/api\/workspace\/(tree|file|changes|status)(\?[\w%=&.~+-]*)?$/,
+  /^GET \/api\/workspace\/(tree|file|media|changes|status)(\?[\w%=&.~+-]*)?$/,
   /^POST \/api\/workspace\/(bundle|commit|merge|pushed)$/,
 ]
 const tokenFormat = /sk-ant-(?:oat|ort)[\w-]*|eyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]+/g

@@ -1,9 +1,10 @@
 import { copyFile, open, readdir, realpath, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join, posix, sep } from 'node:path'
+import { isAbsolute, join, posix, relative, sep } from 'node:path'
 
 const maximumEntries = 500
 const maximumFileBytes = 256_000
+const maximumMediaBytes = 20 * 1024 * 1024
 const maximumPatchCharacters = 400_000
 const maximumCommits = 200
 const branchPattern = /^\w[\w./-]*$/
@@ -55,6 +56,23 @@ export const fileOf = async (root: string, path: string) => {
     const bytes = buffer.subarray(0, Math.min(bytesRead, maximumFileBytes))
     const isBinary = bytes.includes(0)
     return { content: isBinary ? '' : bytes.toString('utf8'), isBinary, truncated: bytesRead > maximumFileBytes }
+  } catch {
+    return undefined
+  } finally {
+    await handle.close()
+  }
+}
+
+export const mediaOf = async (root: string, path: string) => {
+  const file = await insideWorkspace(root, isAbsolute(path) ? relative(root, path) : path)
+  const handle = file && (await open(file).catch(() => undefined))
+  if (!handle) return undefined
+  try {
+    const stats = await handle.stat()
+    if (!stats.isFile()) return undefined
+    if (stats.size > maximumMediaBytes) return { isTooLarge: true }
+    const { buffer, bytesRead } = await handle.read(Buffer.alloc(stats.size), 0, stats.size, 0)
+    return { content: buffer.subarray(0, bytesRead).toString('base64') }
   } catch {
     return undefined
   } finally {
