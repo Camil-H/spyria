@@ -503,6 +503,11 @@ export const createAgentBridge = ({
       openStream: (viewer: WSContext, session: StreamSession) => {
         streams.set(viewer, session)
       },
+      closeWorkspaceStreams: (workspaceId: string) => {
+        for (const [key, watching] of viewers)
+          if (key.startsWith(`${workspaceId}/`))
+            for (const viewer of watching.keys()) viewer.close(4001, 'Not signed in')
+      },
       unwatch: (viewer: WSContext, chat?: AgentChat) => {
         for (const key of chat ? [keyOf(chat)] : [...viewers.keys()]) unwatchChat(viewer, key)
       },

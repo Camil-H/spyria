@@ -7,6 +7,7 @@ import {
   deleteMemberSessions,
   enqueueJob,
   lockActiveAdminIds,
+  scheduleWorkspaceDeletion,
 } from '@spyria/db/server-writes'
 import type {
   Chat as ChatRow,
@@ -159,6 +160,15 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
           userId: context.userId,
         })
       },
+      scheduleDeletion: async ({ purgeAt, actorId }) => {
+        await scheduleWorkspaceDeletion(tx, context.workspaceId, purgeAt)
+        await enqueueJob(tx, {
+          workspaceId: context.workspaceId,
+          type: workspaceJobTypes.purge,
+          payload: { stage: 'release', actorId },
+          delayMilliseconds: Math.max(purgeAt - Date.now(), 0),
+        })
+      },
     },
     memberships: {
       add: async (membership) => {
@@ -281,6 +291,7 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
       },
       listByProject: async (id) =>
         (await tx.run(zql.chats.where('workspaceId', context.workspaceId).where('projectId', id))).map(toChat),
+      listRuntimeChats: async () => (await tx.run(chatsInContext.where('type', 'runtime'))).map(toChat),
       ...chatPermissionsOf(tx, context.workspaceId),
       participantRoles: async (id) =>
         (

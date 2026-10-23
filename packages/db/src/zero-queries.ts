@@ -105,6 +105,7 @@ export const queries = defineQueries({
   ),
   workspaces: defineQuery(({ ctx }) =>
     zql.workspaces
+      .where('deletedAt', 'IS', null)
       .whereExists('memberships', (membership) => membership.where('userId', ctx.userId).where('removedAt', 'IS', null))
       .orderBy('createdAt', 'asc'),
   ),

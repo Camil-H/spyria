@@ -8,6 +8,7 @@ import type {
   MembershipRepository,
   ProjectRepository,
   WorkspaceEventLog,
+  WorkspacePurge,
   WorkspaceRepository,
   WorkspaceRoleRepository,
 } from './repositories.ts'
@@ -26,3 +27,4 @@ export type UnitOfWork = {
 }
 
 export type WorkspaceTransactor = Transactor<UnitOfWork>
+export type WorkspacePurgeTransactor = Transactor<{ purge: WorkspacePurge }>

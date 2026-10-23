@@ -63,10 +63,11 @@ export const ssoProviderOf = async (
         encrypted_client_secret as "encryptedClientSecret", updated_at as "updatedAt"
       from workspace_sso join workspaces using (workspace_id)
       where workspace_id = coalesce(${workspaceId ?? null}::text, workspace_id)
+        and workspaces.deleted_at is null
         and (${domain ?? null}::text is null or exists(
           select 1 from sso_domains where sso_domains.workspace_id = workspace_sso.workspace_id
             and sso_domains.domain = ${domain ?? ''}
-            and (sso_domains.verified_at is not null or (select count(*) from workspaces) = 1)))
+            and (sso_domains.verified_at is not null or (select count(*) from workspaces where deleted_at is null) = 1)))
       order by workspaces.created_at limit 1`
   )[0]
 

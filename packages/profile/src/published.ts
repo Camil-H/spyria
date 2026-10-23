@@ -1,1 +1,1 @@
-export { removeMemberProfileOnServer } from './entrypoints/mutators.ts'
+export { releaseWorkspaceConnectionsOnServer, removeMemberProfileOnServer } from './entrypoints/mutators.ts'

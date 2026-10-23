@@ -119,6 +119,21 @@ docker compose --env-file .env.prod -f deploy/compose.prod.yml exec server \
   bun apps/server/src/operator-cli.ts sso:verify-domain --workspace <workspace id> --domain example.com
 ```
 
+## Deleting a workspace
+
+An Admin deletes a workspace from **Workspace settings** ([Administration](../features/admin.md#deleting-the-workspace)). Its members lose access at once, and seven days later a background job erases it: it asks the hosts to remove its runtimes, removes its keys and tool servers from the gateway, then deletes its rows. A host that stays offline keeps that workspace's containers; the removal jobs give up after their retries and appear in `bun run jobs:failed`.
+
+During those seven days the operator can restore the workspace, or erase it now:
+
+```sh
+docker compose --env-file .env.prod -f deploy/compose.prod.yml exec server \
+  bun apps/server/src/operator-cli.ts workspace:restore <workspace id>
+docker compose --env-file .env.prod -f deploy/compose.prod.yml exec server \
+  bun apps/server/src/operator-cli.ts workspace:purge <workspace id>
+```
+
+A restore is refused once the erasing has started. When the last workspace of the deployment is erased, its domain is free and the sign-in page offers **Create a workspace** again.
+
 ## Runtime host on this machine
 
 Runtime chats run on runtime hosts: machines with Docker running the `spyria-host` program, which dials out to Spyria. See [machines](../features/machines.md) for what a host does and how members add their own machine.

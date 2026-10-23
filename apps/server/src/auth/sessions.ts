@@ -15,6 +15,8 @@ export const openSessions = (database: Database, userId: string, workspaceId?: s
         and removed_at is null and (${issuer ?? null}::text is null or exists(
           select 1 from workspace_sso where workspace_sso.workspace_id = memberships.workspace_id
             and workspace_sso.issuer = ${issuer ?? ''}))
+        and exists(select 1 from workspaces where workspaces.workspace_id = memberships.workspace_id
+          and workspaces.deleted_at is null)
       returning workspace_id, id, user_id, created_at)
     select opened.workspace_id as "workspaceId", opened.user_id as "userId", opened.id as "sessionId",
       opened.created_at as "createdAt"
@@ -28,7 +30,8 @@ export const findLiveSessions = async (database: Database, sessionIdByWorkspace:
     select sessions.workspace_id as "workspaceId", sessions.user_id as "userId", sessions.id as "sessionId",
       sessions.created_at as "createdAt"
     from sessions join memberships using (workspace_id, user_id) join workspaces using (workspace_id)
-    where memberships.removed_at is null and (sessions.workspace_id, sessions.id) in (
+    where memberships.removed_at is null and workspaces.deleted_at is null
+      and (sessions.workspace_id, sessions.id) in (
         select * from unnest(${sessionIdByWorkspace.map(([workspaceId]) => workspaceId)}::text[],
           ${sessionIdByWorkspace.map(([, sessionId]) => sessionId)}::text[]))
       and sessions.expires_at > now()
@@ -47,7 +50,9 @@ export const findMemberIn =
         select 1 from sessions where sessions.workspace_id = memberships.workspace_id
           and sessions.user_id = memberships.user_id and sessions.id = ${sessionId} and sessions.expires_at > now()
       ) as "hasLiveSession"
-      from memberships where workspace_id = ${workspaceId} and user_id = ${userId}`
+      from memberships where workspace_id = ${workspaceId} and user_id = ${userId}
+        and exists(select 1 from workspaces where workspaces.workspace_id = memberships.workspace_id
+          and workspaces.deleted_at is null)`
     return member
   }
 
@@ -61,13 +66,15 @@ export const signInUser = (database: Database, identity: Identity, isSso = false
       await sql<{ workspaceId: string }[]>`
         select workspace_id as "workspaceId" from workspace_sso join sso_domains using (workspace_id)
         where issuer = ${issuer} and domain = ${domainOfEmail(email)}
-          and (verified_at is not null or (select count(*) from workspaces) = 1)`
+          and workspace_id in (select workspace_id from workspaces where deleted_at is null)
+          and (verified_at is not null or (select count(*) from workspaces where deleted_at is null) = 1)`
     ).map(({ workspaceId }) => workspaceId)
     if (isSso && ssoWorkspaceIds.length === 0) return { email }
     const invitations = await sql<{ workspaceId: string; id: string; role: string }[]>`
       select workspace_id as "workspaceId", id, role from invitations
       where email = ${email} and revoked_at is null and accepted_at is null and expires_at > now()
-        and (not ${isSso}::boolean or workspace_id = any(${ssoWorkspaceIds}::text[])) for update`
+        and (not ${isSso}::boolean or workspace_id = any(${ssoWorkspaceIds}::text[]))
+        and workspace_id in (select workspace_id from workspaces where deleted_at is null) for update`
     const [found] = isSso
       ? await sql<{ id: string }[]>`
           select id from (
@@ -115,11 +122,12 @@ const enqueueSweepStatement = `
   insert into jobs (workspace_id, id, type, payload, run_at, attempts, state)
   select workspace_id, gen_random_uuid()::text, type, '{}'::jsonb, now() + $2::interval, 0, 'queued'
   from workspaces cross join unnest($3::text[]) as type where workspace_id = coalesce($1::text, workspace_id)
+    and deleted_at is null
   on conflict do nothing`
 
-export const enqueueSweeps = (database: Database) =>
+export const enqueueSweeps = (database: Database, workspaceId: string | null = null) =>
   database.$client.unsafe(enqueueSweepStatement, [
-    null,
+    workspaceId,
     '0 seconds',
     ['sessions.sweep', 'runtime.sweep', 'agent.sweep', 'usage.sync', 'audit.sweep'],
   ])
