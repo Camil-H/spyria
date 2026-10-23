@@ -18,47 +18,58 @@ const lineClasses: Record<DiffLine['kind'], string> = {
   context: '',
   hunk: 'bg-hover text-muted',
 }
-const numberClass = 'w-10 select-none px-1 text-right align-top text-muted tabular-nums'
-const textClass = 'whitespace-pre-wrap break-all px-2 align-top'
+const numberClass = 'w-px whitespace-nowrap select-none px-1 text-right align-top text-muted tabular-nums'
+const textClass = 'whitespace-pre px-2 align-top'
+const splitTextClass = 'w-1/2'
 
 const lineKeyOf = (line: DiffLine | null) =>
   line ? `${line.kind}:${line.oldNumber}:${line.newNumber}:${line.kind === 'hunk' ? line.text : ''}` : 'none'
 
-const LineCells = ({ line, number }: { line: DiffLine | null; number: number | null | undefined }) => (
+const LineCells = ({
+  line,
+  number,
+  widthClass = '',
+}: {
+  line: DiffLine | null
+  number: number | null | undefined
+  widthClass?: string
+}) => (
   <>
     <td className={`${numberClass} ${line ? lineClasses[line.kind] : ''}`}>{number ?? ''}</td>
-    <td className={`${textClass} ${line ? lineClasses[line.kind] : ''}`}>
+    <td className={`${textClass} ${widthClass} ${line ? lineClasses[line.kind] : ''}`}>
       {line && `${markers[line.kind]} ${line.text}`}
     </td>
   </>
 )
 
 const DiffTable = ({ change, layout }: { change: FileChange; layout: DiffLayout }) => (
-  <table aria-label={`Diff of ${change.path}`} className="w-full table-fixed border-t border-line font-mono text-xs">
-    <tbody>
-      {layout === 'unified'
-        ? change.lines.map((line) => (
-            <tr key={lineKeyOf(line)}>
-              <td className={`${numberClass} ${lineClasses[line.kind]}`}>{line.oldNumber ?? ''}</td>
-              <LineCells line={line} number={line.newNumber} />
-            </tr>
-          ))
-        : splitRowsOf(change.lines).map(({ left, right }) => (
-            <tr key={`${lineKeyOf(left)}|${lineKeyOf(right)}`}>
-              {left?.kind === 'hunk' ? (
-                <td colSpan={4} className={`${textClass} ${lineClasses.hunk}`}>
-                  {left.text}
-                </td>
-              ) : (
-                <>
-                  <LineCells line={left} number={left?.oldNumber} />
-                  <LineCells line={right} number={right?.newNumber} />
-                </>
-              )}
-            </tr>
-          ))}
-    </tbody>
-  </table>
+  <div className="overflow-x-auto border-t border-line scrollbar-thin">
+    <table aria-label={`Diff of ${change.path}`} className="w-full font-mono text-xs">
+      <tbody>
+        {layout === 'unified'
+          ? change.lines.map((line) => (
+              <tr key={lineKeyOf(line)}>
+                <td className={`${numberClass} ${lineClasses[line.kind]}`}>{line.oldNumber ?? ''}</td>
+                <LineCells line={line} number={line.newNumber} />
+              </tr>
+            ))
+          : splitRowsOf(change.lines).map(({ left, right }) => (
+              <tr key={`${lineKeyOf(left)}|${lineKeyOf(right)}`}>
+                {left?.kind === 'hunk' ? (
+                  <td colSpan={4} className={`${textClass} ${lineClasses.hunk}`}>
+                    {left.text}
+                  </td>
+                ) : (
+                  <>
+                    <LineCells line={left} number={left?.oldNumber} widthClass={splitTextClass} />
+                    <LineCells line={right} number={right?.newNumber} widthClass={splitTextClass} />
+                  </>
+                )}
+              </tr>
+            ))}
+      </tbody>
+    </table>
+  </div>
 )
 
 export const FileDiffList = ({ changes }: { changes: readonly FileChange[] }) => {
