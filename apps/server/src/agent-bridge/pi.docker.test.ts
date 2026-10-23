@@ -26,6 +26,7 @@ import {
   runtimeTurn,
   sessionTokenOf,
   testAuthSettings,
+  testSecretsKey,
   waitFor,
 } from '../testing/testing.ts'
 import { createAgentBridge } from './bridge.ts'
@@ -38,7 +39,7 @@ if (!spyriaImage || docker('image', 'inspect', spyriaImage).exitCode !== 0)
 
 const { database, gateway, llmGateway, fakeLlmBodies, setFakeLlmScript } = await openSharedTestApp()
 const runtimeHosts = createRuntimeHostGateway({
-  runtimeKeySecret: testAuthSettings.tokenSecret,
+  runtimeKeySecret: testSecretsKey,
   databases: () => [database],
   spyriaAgentImage: spyriaImage,
   relayModelCall: createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),

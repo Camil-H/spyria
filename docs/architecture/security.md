@@ -47,7 +47,7 @@ The agent of a chat acts for the chat's **owner**, and its model calls are paid 
 | A member's tool OAuth tokens | The gateway, against the member's key for that workspace. Disconnecting deletes the gateway's copy; the gateway never returns the token, so the grant at the provider stays until the member removes it there, which the profile tells them after a disconnect. | The relay, on that member's chats. |
 | A workspace connection's secret header | The gateway, in plain text in its admin API: the gateway is reachable on the internal network only, and Spyria never logs or returns what that API answers. | The gateway, on calls to that tool server. |
 | The token a runtime holds | Issued by Spyria per runtime, stored as a hash. | Valid only through Spyria's relay, during an active turn, for that turn's prompter. A runtime never sees a real provider key. |
-| The key the server uses to reach a runtime's agent | Not stored: derived from `SPYRIA_TOKEN_SECRET` and the runtime's id when the runtime is created and on each call. | The server, to talk to that runtime only. |
+| The key the server uses to reach a runtime's agent | Not stored: derived from `SPYRIA_SECRETS_KEY` and the runtime's id when the runtime is created and on each call. | The server, to talk to that runtime only. |
 | Claude Code and Codex sign-ins | Docker volumes on the member's own machine. | The member's own sessions there. |
 | SSO client secrets, GitHub App credentials | Postgres, sealed with AES-GCM under `SPYRIA_SECRETS_KEY`. Shown only as "set". | The server. |
 | A member's GitHub token | Postgres, sealed. | The server, to push and open pull requests for that member's chats. |
@@ -87,9 +87,9 @@ Budgets are a hard stop, enforced by the relay before each model call: when the 
 
 ## Secrets at rest
 
-- `SPYRIA_SECRETS_KEY` seals SSO client secrets, the GitHub App's credentials and members' GitHub tokens. It cannot change without entering every secret again.
+- `SPYRIA_SECRETS_KEY` seals SSO client secrets, the GitHub App's credentials and members' GitHub tokens, and derives the key the server uses to reach each runtime. It cannot change without entering every secret again, and the runtimes created before the change would stop answering the server.
 - The gateway's encryption key seals members' provider keys in the gateway's database. It cannot change without wiping that database.
-- `SPYRIA_TOKEN_SECRET` signs session tokens and derives the key the server uses to reach each runtime; changing it signs everyone out, and the server can no longer reach existing runtimes until their containers are removed on the hosts and the hosts reconnect (Spyria creates each one again on its chat's next prompt).
+- `SPYRIA_TOKEN_SECRET` signs session tokens; changing it signs everyone out.
 
 In production the server refuses to start while any of these is missing, shorter than 32 characters or still a development default ([self-hosting](../guides/self-hosting.md) lists every check).
 

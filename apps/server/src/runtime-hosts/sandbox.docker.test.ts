@@ -23,6 +23,7 @@ import {
   rejectionOf,
   sessionTokenOf,
   testAuthSettings,
+  testSecretsKey,
   waitFor,
 } from '../testing/testing.ts'
 import { createRuntimeHostGateway } from './gateway.ts'
@@ -46,7 +47,7 @@ const shared = await openSharedTestApp()
 const testDatabase = await createTestDatabase()
 await testDatabase.database.transaction(await shared.seededGatewayKeys())
 const gateway = createRuntimeHostGateway({
-  runtimeKeySecret: testAuthSettings.tokenSecret,
+  runtimeKeySecret: testSecretsKey,
   databases: () => [testDatabase.database],
   spyriaAgentImage: spyriaImage,
 })

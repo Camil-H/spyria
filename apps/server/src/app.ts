@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import { getMutator, mustGetMutator, mustGetQuery } from '@rocicorp/zero'
 import { handleMutateRequest, handleQueryRequest } from '@rocicorp/zero/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
@@ -214,7 +215,7 @@ export const createApp = ({
   llmGateway,
   runtimeHosts = createRuntimeHostGateway({
     databases: () => [database],
-    runtimeKeySecret: tokenSecret,
+    runtimeKeySecret: secretsKey ?? randomBytes(32).toString('hex'),
     relayModelCall: llmGateway && createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),
   }),
   agentBridge = createAgentBridge({ sandboxProvider: runtimeHosts.sandboxProvider, deployment }),

@@ -207,7 +207,7 @@ const startSharedTestApp = async () => {
   const llmGateway = llmGatewayAt(`http://127.0.0.1:${integrationGatewayPort}`)
   setModelDirectory(llmGateway.listedModels)
   const runtimeHosts = createRuntimeHostGateway({
-    runtimeKeySecret: testAuthSettings.tokenSecret,
+    runtimeKeySecret: testSecretsKey,
     databases: () => [database],
     relayModelCall: createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),
   })
@@ -581,7 +581,7 @@ export const startAgentStack = async ({
   const testApp = await openSharedTestApp()
   const { database, llmGateway } = testApp
   const runtimeHosts = createRuntimeHostGateway({
-    runtimeKeySecret: testAuthSettings.tokenSecret,
+    runtimeKeySecret: testSecretsKey,
     databases: () => [database],
     spyriaAgentImage,
     relayModelCall: routing
