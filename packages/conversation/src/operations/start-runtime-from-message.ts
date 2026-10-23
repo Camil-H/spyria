@@ -27,7 +27,7 @@ export const startRuntimeFromMessage = (
       workspaceId: source.workspaceId,
       chatId,
       sourceChatId: source.chatId,
-      name: chatNameFrom(source.body),
+      name: chatNameFrom(source.body, source.attachments[0]?.name),
       memberId,
       header: channelThreadHeaderOf(sourceChat.name),
       quoted: thread,

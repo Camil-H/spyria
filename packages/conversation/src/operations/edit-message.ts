@@ -13,6 +13,11 @@ export const editMessage = ({ transactor }: Dependencies, { messageId, editorId,
     await unitOfWork.messages.record({
       type: 'message.edited',
       actorId: editorId,
-      message: editedMessage(message, editorId, MessageBody(text), new Date()),
+      message: editedMessage(
+        message,
+        editorId,
+        MessageBody(text, { allowsBlank: message.attachments.length > 0 }),
+        new Date(),
+      ),
     })
   })

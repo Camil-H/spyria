@@ -109,6 +109,7 @@ export type MessageRow = {
   kind: 'member' | 'agent' | 'step' | 'notice'
   authorId: MemberId | null
   body: string
+  attachments: readonly MessageAttachment[]
   detail: string | null
   step: MessageStep | null
   replyToId: MessageId | null
@@ -129,6 +130,7 @@ export type RuntimeOriginRow = {
   startedBy: MemberId
 }
 export type MessageStep = { readonly type: string; readonly [field: string]: unknown }
+export type MessageAttachment = Readonly<{ id: string; name: string; mediaType: string; size: number }>
 type PlanStepRow = { workspaceId: WorkspaceId; chatId: ChatId; title: string; status: string }
 type BrowserPageRow = {
   workspaceId: WorkspaceId

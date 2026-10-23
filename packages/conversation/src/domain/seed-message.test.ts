@@ -17,6 +17,7 @@ const quoted = (
   authorName,
   kind: 'member',
   body: MessageBody(body),
+  attachments: [],
   createdAt: new Date(`2026-10-17T${time}:00.000Z`),
   deletedAt: null,
   ...fields,
@@ -62,7 +63,7 @@ test('the seed message leaves deleted messages out', () => {
 })
 
 test('the prompt sent to the agent is the seed message, a blank line, then the prompt, only when a seed message is given', () => {
-  const prompt = { body: MessageBody('Summarise it.') }
+  const prompt = { body: MessageBody('Summarise it.'), attachments: [] }
   expect(agentPromptTextOf(prompt, { body: MessageBody('Conversation so far…') })).toBe(
     'Conversation so far…\n\nSummarise it.',
   )
@@ -93,4 +94,19 @@ test('a forked runtime chat quotes its member and agent messages under the runti
       'Fix it.',
     ].join('\n'),
   )
+})
+
+test('attachments are named to the agent, which cannot read them, also on a prompt without text', () => {
+  const photo = { id: 'a1', name: 'photo.png', mediaType: 'image/png', size: 150 * 1024 }
+  expect(agentPromptTextOf({ body: MessageBody('What is this?'), attachments: [photo] }, undefined)).toBe(
+    'What is this?\n\nAttached, not readable by you: photo.png (image/png, 150 KB)',
+  )
+  expect(agentPromptTextOf({ body: MessageBody('', { allowsBlank: true }), attachments: [photo] }, undefined)).toBe(
+    'Attached, not readable by you: photo.png (image/png, 150 KB)',
+  )
+  expect(
+    String(
+      seedMessageBodyOf(channelThreadHeaderOf('Welcome'), [quoted('Alice', 'Look', '09:05', { attachments: [photo] })]),
+    ),
+  ).toContain('Alice (member, human) · 2026-10-17 09:05 UTC\nLook\n\nAttached, not readable by you: photo.png')
 })
