@@ -165,7 +165,13 @@ test('the purge erases every row of the workspace with its chat history, gateway
       projectId: null,
     }),
   ).toEqual(succeeded)
+  const [{ chatId: wayneChat = '' } = {}] = await database.$client<{ chatId: string }[]>`
+    select id as "chatId" from chats where workspace_id = ${wayne}`
+  await database.$client`
+    insert into message_attachments (workspace_id, chat_id, id, uploader_id, name, media_type, size, content, created_at)
+    values (${wayne}, ${wayneChat}, 'attachment-wayne', ${alice}, 'photo.png', 'image/png', 3, ${Buffer.from([1, 2, 3])}, now())`
   expect((await rowCountsOf(wayne)).events).toBeGreaterThan(0)
+  expect((await rowCountsOf(wayne)).message_attachments).toBe(1)
   const [acmeRowsBefore, globexRowsBefore] = [await rowCountsOf(acme), await rowCountsOf(globex)]
   expect(await deleteAs(aliceInWayne)).toEqual(succeeded)
   await database.$client`

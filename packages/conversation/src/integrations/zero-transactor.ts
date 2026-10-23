@@ -27,6 +27,7 @@ import {
   setChatTurnPrompter,
   setDelegationFields,
   stopRunningDelegations,
+  storedAttachmentBytesOf,
 } from '@spyria/db/server-writes'
 import type { Message as MessageRow } from '@spyria/db/zero'
 import { chatPermissionsOf, isOwnerRemoved, skippingRefusedRebase, type Transact, zql } from '@spyria/db/zero-queries'
@@ -270,6 +271,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       discard: async (id) => {
         await deleteMessageAttachments(tx, contextWorkspaceId, id)
       },
+      storedBytes: (uploaderId) => storedAttachmentBytesOf(tx, contextWorkspaceId, uploaderId),
     },
     agentJobs: {
       prompt: (message) => enqueue(agentJobTypes.prompt, { messageId: message.id }),

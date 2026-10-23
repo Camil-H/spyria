@@ -1,7 +1,9 @@
-import { AttachmentNotAllowed } from './errors.ts'
+import { AttachmentNotAllowed, AttachmentStorageFull, TooManyPendingUploads } from './errors.ts'
 
 export const maximumMediaBytes = 20 * 1024 * 1024
 export const maximumAttachmentsPerMessage = 6
+export const maximumPendingBytesPerMember = maximumAttachmentsPerMessage * maximumMediaBytes
+export const maximumWorkspaceAttachmentBytes = 10 * 1024 * 1024 * 1024
 const maximumNameLength = 120
 
 export type MediaKind = 'image' | 'audio' | 'video' | 'file'
@@ -49,6 +51,13 @@ export const allowedMediaFormatOf = (bytes: Uint8Array) => {
   const format = mediaFormatOf(bytes)
   if (!format) throw new AttachmentNotAllowed()
   return format
+}
+
+export type StoredBytes = Readonly<{ pendingOfMember: number; inWorkspace: number }>
+
+export const requireRoomFor = (size: number, stored: StoredBytes) => {
+  if (stored.pendingOfMember + size > maximumPendingBytesPerMember) throw new TooManyPendingUploads()
+  if (stored.inWorkspace + size > maximumWorkspaceAttachmentBytes) throw new AttachmentStorageFull()
 }
 
 export const attachmentNameOf = (rawName: string) => {

@@ -5,10 +5,13 @@ import {
   fileSizeOf,
   isRuntimeMediaPath,
   maximumMediaBytes,
+  maximumPendingBytesPerMember,
+  maximumWorkspaceAttachmentBytes,
   mediaFormatOf,
+  requireRoomFor,
   runtimeMediaKindOf,
 } from './attachments.ts'
-import { AttachmentNotAllowed } from './errors.ts'
+import { AttachmentNotAllowed, AttachmentStorageFull, TooManyPendingUploads } from './errors.ts'
 
 const bytes = (...parts: (string | number[])[]) =>
   new Uint8Array(parts.flatMap((part) => (typeof part === 'string' ? [...part].map((c) => c.charCodeAt(0)) : part)))
@@ -65,4 +68,15 @@ test('a runtime media path is a path in the workspace, never a URL', () => {
   expect(runtimeMediaKindOf('demo.MP4')).toBe('video')
   expect(runtimeMediaKindOf('voice.m4a')).toBe('audio')
   expect(runtimeMediaKindOf('chart.png')).toBe('image')
+})
+
+test('the space left is checked against the pending uploads of the member and the storage of the workspace', () => {
+  const twentyMegabytes = maximumMediaBytes
+  expect(() => requireRoomFor(twentyMegabytes, { pendingOfMember: 0, inWorkspace: 0 })).not.toThrow()
+  expect(() => requireRoomFor(1, { pendingOfMember: maximumPendingBytesPerMember, inWorkspace: 0 })).toThrow(
+    TooManyPendingUploads,
+  )
+  expect(() => requireRoomFor(1, { pendingOfMember: 0, inWorkspace: maximumWorkspaceAttachmentBytes })).toThrow(
+    AttachmentStorageFull,
+  )
 })
