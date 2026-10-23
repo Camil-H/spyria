@@ -160,8 +160,14 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
           userId: context.userId,
         })
       },
-      scheduleDeletion: async ({ purgeAt, actorId }) => {
+      scheduleDeletion: async ({ purgeAt, haltDelayMilliseconds, actorId }) => {
         await scheduleWorkspaceDeletion(tx, context.workspaceId, purgeAt)
+        await enqueueJob(tx, {
+          workspaceId: context.workspaceId,
+          type: workspaceJobTypes.halt,
+          payload: { actorId },
+          delayMilliseconds: haltDelayMilliseconds,
+        })
         await enqueueJob(tx, {
           workspaceId: context.workspaceId,
           type: workspaceJobTypes.purge,
