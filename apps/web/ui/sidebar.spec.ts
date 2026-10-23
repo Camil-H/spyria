@@ -99,6 +99,42 @@ test.describe('Sidebar', () => {
     })
   })
 
+  test('As a member, I collapse the sidebar from the icon left of the workspace name and find it collapsed after a reload', async ({
+    page,
+  }) => {
+    const collapseButton = sidebarOf(page).getByRole('button', { name: 'Collapse sidebar' })
+    const expandButton = sidebarOf(page).getByRole('button', { name: 'Expand sidebar' })
+
+    await test.step('shows the collapse icon at the top left, before the workspace name', async () => {
+      const sidebarBox = (await sidebarOf(page).boundingBox())!
+      const collapseBox = (await collapseButton.boundingBox())!
+      const switcherBox = (await switcherOf(page).boundingBox())!
+      expect(collapseBox.x).toBeLessThan(sidebarBox.x + 24)
+      expect(collapseBox.y).toBeLessThan(sidebarBox.y + 24)
+      expect(collapseBox.x + collapseBox.width).toBeLessThanOrEqual(switcherBox.x)
+    })
+
+    await test.step('hides the tree and widens the chat when collapsed, keeping the expand icon in place', async () => {
+      const collapseBox = (await collapseButton.boundingBox())!
+      const mainWidthBefore = (await mainOf(page).boundingBox())!.width
+      await collapseButton.click()
+      await expect(switcherOf(page)).toHaveCount(0)
+      await expect(looseChatsOf(page)).toHaveCount(0)
+      const expandBox = (await expandButton.boundingBox())!
+      expect(expandBox.x).toBeCloseTo(collapseBox.x, 0)
+      expect(expandBox.y).toBeCloseTo(collapseBox.y, 0)
+      expect((await mainOf(page).boundingBox())!.width).toBeGreaterThan(mainWidthBefore + 150)
+    })
+
+    await test.step('stays collapsed after a reload and expands again', async () => {
+      await page.reload()
+      await expect(expandButton).toBeVisible()
+      await expandButton.click()
+      await expect(switcherOf(page)).toBeVisible()
+      await expect(looseChatsOf(page)).toBeVisible()
+    })
+  })
+
   test('As a member, I see dialogs titled in the app text colour and the chat types offered in one row', async ({
     page,
   }) => {
