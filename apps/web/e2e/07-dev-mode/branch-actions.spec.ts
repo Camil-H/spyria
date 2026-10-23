@@ -163,7 +163,7 @@ test.describe('Branch actions', () => {
     const prompt = messageContaining(page, `Merge the latest ${baseBranch} (fetched as refs/spyria/base)`)
     await expect(prompt).toHaveCount(1)
     await expect(prompt).toContainText('Alice')
-    await expect(prompt).toContainText('- src/app.ts')
+    await expect(prompt.getByRole('listitem')).toHaveText(['src/app.ts'])
     await expect(messageContaining(page, 'Resolved the conflicts.')).toHaveCount(1)
     await expect(tabPanelOf(page).getByRole('status').filter({ hasText: 'Asked the agent' })).toBeVisible()
   })
