@@ -4,7 +4,9 @@ import {
   appendChatEvent,
   chatRoutingOf,
   chatTurnOf,
+  deleteMessageAttachments,
   enqueueJob,
+  insertAttachment,
   insertDelegation,
   insertRoutingDecision,
   insertToolCall,
@@ -12,8 +14,10 @@ import {
   isSessionStartPending,
   lastAgentEvent,
   lastSessionId,
+  linkAttachments,
   listedModelsOf,
   lockChatTurn,
+  lockPendingAttachments,
   memberModelsOf,
   openTaskStepsOf,
   pendingPrompts,
@@ -23,6 +27,7 @@ import {
   setChatTurnPrompter,
   setDelegationFields,
   stopRunningDelegations,
+  storedAttachmentBytesOf,
 } from '@spyria/db/server-writes'
 import type { Message as MessageRow } from '@spyria/db/zero'
 import { chatPermissionsOf, isOwnerRemoved, skippingRefusedRebase, type Transact, zql } from '@spyria/db/zero-queries'
@@ -51,13 +56,17 @@ import type { AgentEventPayload, ChangedPayload, PostedPayload, StepChangedPaylo
 const dateOrNull = (time: number | null) => (time === null ? null : new Date(time))
 const timeOrNull = (date: Date | null) => date?.getTime() ?? null
 
-const toMessage = ({ seq, ...row }: MessageRow): Message => ({
+const toMessage = ({ seq, attachments, ...row }: MessageRow): Message => ({
   ...row,
   id: messageId(row.id),
   workspaceId: workspaceId(row.workspaceId),
   chatId: chatId(row.chatId),
   authorId: row.authorId === null ? null : memberId(row.authorId),
-  body: row.deletedAt === null ? MessageBody(row.body) : (row.body as MessageBody),
+  attachments: attachments ?? [],
+  body:
+    row.deletedAt === null
+      ? MessageBody(row.body, { allowsBlank: (attachments ?? []).length > 0 })
+      : (row.body as MessageBody),
   createdAt: new Date(row.createdAt),
   editedAt: dateOrNull(row.editedAt),
   deletedAt: dateOrNull(row.deletedAt),
@@ -88,6 +97,7 @@ const payloadOf = ({
         replyToId: message.replyToId,
         ...(message.threadRootId && { threadRootId: message.threadRootId }),
         ...(message.step && { step: message.step }),
+        ...(message.attachments.length > 0 && { attachments: message.attachments }),
       }
     : type === 'message.edited'
       ? { messageId: message.id, body: message.body }
@@ -234,6 +244,34 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         ])
         return seed && firstLivePrompt?.id === prompt.id && !earlierTurnReply ? toMessage(seed) : undefined
       },
+    },
+    attachments: {
+      store: ({ chatId: id, uploaderId, ...attachment }) =>
+        insertAttachment(tx, { ...attachment, workspaceId: contextWorkspaceId, chatId: id, uploaderId }).then(
+          () => undefined,
+        ),
+      claim: async (id, uploaderId, requested) =>
+        requested.length === 0 || tx.location === 'client'
+          ? requested
+          : lockPendingAttachments(tx, {
+              workspaceId: contextWorkspaceId,
+              chatId: id,
+              uploaderId,
+              ids: requested.map((attachment) => attachment.id),
+            }),
+      link: async (id, attachments) => {
+        if (attachments.length > 0)
+          await linkAttachments(
+            tx,
+            contextWorkspaceId,
+            id,
+            attachments.map((attachment) => attachment.id),
+          )
+      },
+      discard: async (id) => {
+        await deleteMessageAttachments(tx, contextWorkspaceId, id)
+      },
+      storedBytes: (uploaderId) => storedAttachmentBytesOf(tx, contextWorkspaceId, uploaderId),
     },
     agentJobs: {
       prompt: (message) => enqueue(agentJobTypes.prompt, { messageId: message.id }),

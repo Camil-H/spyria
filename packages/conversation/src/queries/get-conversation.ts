@@ -21,6 +21,7 @@ import {
 } from '@spyria/kernel'
 import { stoppedByPrefix } from '../domain/agent-events.ts'
 import type { AgentStep, StoredStep, ThoughtStep } from '../domain/agent-steps.ts'
+import type { Attachment } from '../domain/attachments.ts'
 import { stillRunningOf } from '../domain/delegation.ts'
 import { isFrozen } from '../domain/message.ts'
 import type { PullRequestStep } from '../domain/pull-requests.ts'
@@ -32,6 +33,7 @@ export type ConversationMessage = Readonly<{
   authorName: string
   createdAt: string
   body: string
+  attachments: readonly Attachment[]
   step: AgentStep | null
   replyToId: MessageId | null
   canEdit: boolean
@@ -298,6 +300,7 @@ export const getConversation =
         authorName: memberName(message.authorId),
         createdAt: message.createdAt,
         body: message.body,
+        attachments: message.attachments,
         step,
         replyToId: message.replyToId,
         canEdit: canPost && message.authorId === viewerId,

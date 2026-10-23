@@ -11,7 +11,7 @@ import {
 import { checkOut, lastLinesOf, type Repository, runSetup, setupCommand } from './checkout.ts'
 import { connectPi } from './pi.ts'
 import { contextOf, log, withSpan } from './telemetry.ts'
-import { bundleOf, changesOf, commitOf, fileOf, mergeOf, pushedOf, statusOf, treeOf } from './workspace.ts'
+import { bundleOf, changesOf, commitOf, fileOf, mediaOf, mergeOf, pushedOf, statusOf, treeOf } from './workspace.ts'
 
 type Status = 'starting' | 'idle' | 'running' | 'finished' | 'error'
 type AgentEvent = { id: string; seq: number; timestamp: string; completed: boolean; update: Json }
@@ -90,7 +90,7 @@ const terminalToolStatuses = ['completed', 'failed']
 const conversationRoute =
   /^\/api\/conversations\/([\w-]+)(?:\/(events|interrupt|switch_acp_model|plan_mode)|\/questions\/([\w-]+))?$/
 const socketRoute = /^\/sockets\/events\/([\w-]+)$/
-const workspaceRoute = /^\/api\/workspace\/(tree|file|changes|status)$/
+const workspaceRoute = /^\/api\/workspace\/(tree|file|media|changes|status)$/
 const workspaceActions = { bundle: bundleOf, commit: commitOf, merge: mergeOf, pushed: pushedOf }
 const workspaceActionRoute = /^\/api\/workspace\/(bundle|commit|merge|pushed)$/
 const setupToolCallId = 'spyria-setup'
@@ -467,6 +467,11 @@ export const startAgent = ({
           environment,
         ),
       )
+    if (read === 'media') {
+      const media = await mediaOf(workspaceDirectory, path)
+      if (media && 'isTooLarge' in media) return Response.json({ error: 'Too large' }, { status: 413 })
+      return media ? Response.json(media) : Response.json({ error: 'Not found' }, { status: 404 })
+    }
     const file = await fileOf(workspaceDirectory, path)
     return file ? Response.json(file) : Response.json({ error: 'Not found' }, { status: 404 })
   }

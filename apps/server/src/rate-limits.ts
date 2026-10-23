@@ -22,6 +22,9 @@ export const rateBudgets = {
   invites: { count: 50, perMilliseconds: hour, per: 'workspace' },
   prompts: { count: 30, perMilliseconds: minute, per: 'member' },
   messages: { count: 120, perMilliseconds: minute, per: 'member' },
+  uploads: { count: 30, perMilliseconds: minute, per: 'member' },
+  attachmentReads: { count: 240, perMilliseconds: minute, per: 'member' },
+  runtimeMediaReads: { count: 30, perMilliseconds: minute, per: 'member' },
   runtimeCreation: { count: 10, perMilliseconds: minute, per: 'member' },
 } as const satisfies Record<string, Budget>
 export type RateLimitName = keyof typeof rateBudgets

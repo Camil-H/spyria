@@ -127,6 +127,38 @@ test('a dev chat reads its tree, files, changes against base and commits through
   expect((await read(alice, id, 'changes')).body).toMatchObject({ truncated: true })
 })
 
+test('a file the agent made is shown inline through the server, only to readers, only as allowed media from inside the workspace', async () => {
+  await stack.agentHost('media host')
+  const id = await newDevChat('acme/app')
+  await promptAndWait(id, 'stub:ls')
+  const workspace = await workspaceOf(id)
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13])
+  mkdirSync(join(workspace, 'out'), { recursive: true })
+  writeFileSync(join(workspace, 'out/sales chart.png'), png)
+  writeFileSync(join(workspace, 'out/page.svg'), '<svg xmlns="http://www.w3.org/2000/svg"><script/></svg>')
+  const media = async (userId: string, path: string) =>
+    app.request(`/api/chats/${id}/media?${new URLSearchParams({ path })}`, {
+      headers: { authorization: `Bearer ${await sessionTokenOf(database, acme, userId)}` },
+    })
+
+  const shown = await media(alice, 'out/sales chart.png')
+  expect(shown.status).toBe(200)
+  expect(new Uint8Array(await shown.arrayBuffer())).toEqual(png)
+  expect(Object.fromEntries(shown.headers)).toEqual(
+    expect.objectContaining({
+      'content-type': 'image/png',
+      'content-security-policy': "default-src 'none'; sandbox",
+      'x-content-type-options': 'nosniff',
+      'cache-control': 'private, no-cache',
+    }),
+  )
+  expect((await media(alice, join(workspace, 'out/sales chart.png'))).status).toBe(200)
+  expect((await media(alice, 'out/page.svg')).status).toBe(415)
+  for (const refused of ['../../etc/hosts', '/etc/hosts', 'missing.png', 'https://example.com/a.png'])
+    expect((await media(alice, refused)).status).toBe(404)
+  expect((await media(bob, 'out/sales chart.png')).status).toBe(403)
+})
+
 test('an asleep runtime serves the snapshot of the last turn end, a read never wakes it, and Wake starts it again', async () => {
   const { host, relay } = await stack.agentHost('sleep host')
   const id = await newDevChat('acme/app')

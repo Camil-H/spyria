@@ -622,6 +622,83 @@ export const chatContextTokens = async (tx: Transaction, workspaceId: string, ch
     )
   )?.tokens ?? null
 
+type StoredAttachment = { id: string; name: string; mediaType: string; size: number }
+const attachmentColumns = 'id, name, media_type as "mediaType", size'
+
+export const insertAttachment = (
+  tx: Transaction,
+  attachment: StoredAttachment & { workspaceId: string; chatId: string; uploaderId: string; content: Uint8Array },
+) =>
+  onServer(
+    tx,
+    `insert into message_attachments (workspace_id, chat_id, id, uploader_id, name, media_type, size, content, created_at)
+     values ($1, $2, $3, $4, $5, $6, $7, $8::bytea, now())`,
+    [
+      attachment.workspaceId,
+      attachment.chatId,
+      attachment.id,
+      attachment.uploaderId,
+      attachment.name,
+      attachment.mediaType,
+      attachment.size,
+      attachment.content,
+    ],
+  )
+
+const pendingAttachmentLifetime = "interval '1 day'"
+
+export const storedAttachmentBytesOf = async (tx: Transaction, workspaceId: string, uploaderId: string) => {
+  await onServer(tx, `select pg_advisory_xact_lock(hashtextextended('message_attachments:' || $1, 0))`, [workspaceId])
+  const [stored] = await onServer<{ pendingOfMember: number; inWorkspace: number }>(
+    tx,
+    `select
+       coalesce(sum(size) filter (where uploader_id = $2 and message_id is null
+         and created_at > now() - ${pendingAttachmentLifetime}), 0)::bigint::float8 as "pendingOfMember",
+       coalesce(sum(size), 0)::bigint::float8 as "inWorkspace"
+     from message_attachments where workspace_id = $1`,
+    [workspaceId, uploaderId],
+  )
+  return stored ?? { pendingOfMember: 0, inWorkspace: 0 }
+}
+
+export const deleteAbandonedAttachments = (tx: Transaction, workspaceId: string) =>
+  onServer(
+    tx,
+    `delete from message_attachments where workspace_id = $1 and message_id is null
+       and created_at < now() - ${pendingAttachmentLifetime}`,
+    [workspaceId],
+  )
+
+export const lockPendingAttachments = (
+  tx: Transaction,
+  { workspaceId, chatId, uploaderId, ids }: { workspaceId: string; chatId: string; uploaderId: string; ids: string[] },
+) =>
+  onServer<StoredAttachment>(
+    tx,
+    `select ${attachmentColumns} from message_attachments
+     where workspace_id = $1 and chat_id = $2 and uploader_id = $3 and message_id is null and id = any($4::text[])
+     order by array_position($4::text[], id) for update`,
+    [workspaceId, chatId, uploaderId, ids],
+  )
+
+export const linkAttachments = (tx: Transaction, workspaceId: string, messageId: string, ids: string[]) =>
+  onServer(
+    tx,
+    'update message_attachments set message_id = $2 where workspace_id = $1 and id = any($3::text[]) and message_id is null',
+    [workspaceId, messageId, ids],
+  )
+
+export const deleteMessageAttachments = (tx: Transaction, workspaceId: string, messageId: string) =>
+  onServer(tx, 'delete from message_attachments where workspace_id = $1 and message_id = $2', [workspaceId, messageId])
+
+export const sentAttachmentOf = (tx: Transaction, workspaceId: string, chatId: string, id: string) =>
+  firstOnServer<StoredAttachment & { content: Uint8Array<ArrayBuffer> }>(
+    tx,
+    `select ${attachmentColumns}, content from message_attachments
+     where workspace_id = $1 and chat_id = $2 and id = $3 and message_id is not null`,
+    [workspaceId, chatId, id],
+  )
+
 export const workspaceTablesInPurgeOrder = [
   'thread_read_markers',
   'read_markers',
@@ -634,6 +711,7 @@ export const workspaceTablesInPurgeOrder = [
   'tool_calls',
   'usage_entries',
   'events',
+  'message_attachments',
   'messages',
   'runtimes',
   'runtime_hosts',
@@ -684,6 +762,7 @@ const chunkedTablesInPurgeOrder = [
   'thread_read_markers',
   'read_markers',
   'runtime_origins',
+  'message_attachments',
   'tool_calls',
   'usage_entries',
   'model_calls',

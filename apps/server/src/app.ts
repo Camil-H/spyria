@@ -4,7 +4,10 @@ import { handleMutateRequest, handleQueryRequest } from '@rocicorp/zero/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import {
   type AgentChat,
+  chatAttachmentPathOf,
+  chatAttachmentsPathOf,
   chatGitPathOf,
+  chatMediaPathOf,
   chatPlanModePathOf,
   chatPublishPathOf,
   chatQuestionPathOf,
@@ -13,13 +16,16 @@ import {
   commandOutputPathOf,
   conversationMutators,
   createGatewaySessionClassifier,
+  getAttachment,
   getChatRouting,
   getCommandOutput,
   isGitAction,
   isWorkspaceRead,
+  mediaResponseOf,
   type PublishAction,
   planModeOf,
   questionAnswerOf,
+  uploadAttachmentFromRequest,
 } from '@spyria/conversation/server'
 import type { Database } from '@spyria/db/postgres'
 import { schema } from '@spyria/db/zero'
@@ -177,10 +183,17 @@ export const sessionClassifierOf =
 
 const statusByErrorCode: Record<string, number> = {
   missing_workspace_permission: 403,
+  missing_chat_permission: 403,
   github_refused: 422,
   github_unreachable: 502,
   local_sessions_off: 403,
   host_not_found: 404,
+  attachment_not_allowed: 415,
+  attachment_too_large: 413,
+  too_many_pending_uploads: 413,
+  attachment_storage_full: 413,
+  attachment_not_found: 404,
+  runtime_media_unavailable: 404,
 }
 
 const endpointResponse = async (request: string, successStatus: number, endpoint: () => Promise<unknown>) => {
@@ -512,6 +525,43 @@ export const createApp = ({
             read,
             context.req.query('path') ?? '',
           ),
+      )
+    })
+    .post(chatAttachmentsPathOf(':chatId'), rateLimited('uploads'), (context) =>
+      endpointResponse('Uploading an attachment', 201, async () =>
+        uploadAttachmentFromRequest(context.get('transact'), context.get('zeroContext'), {
+          chatId: context.req.param('chatId') ?? '',
+          name: context.req.query('name') ?? '',
+          request: context.req.raw,
+        }),
+      ),
+    )
+    .get(chatAttachmentPathOf(':chatId', ':attachmentId'), rateLimited('attachmentReads'), (context) =>
+      endpointResponse('Reading an attachment', 200, async () =>
+        mediaResponseOf({
+          ...(await context.get('transact')((tx) =>
+            getAttachment(
+              tx,
+              context.get('zeroContext'),
+              context.req.param('chatId') ?? '',
+              context.req.param('attachmentId') ?? '',
+            ),
+          )),
+          isImmutable: true,
+        }),
+      ),
+    )
+    .get(chatMediaPathOf(':chatId'), rateLimited('runtimeMediaReads'), (context) => {
+      const { workspaceId, userId } = context.get('zeroContext')
+      const path = context.req.query('path') ?? ''
+      return endpointResponse('Reading a runtime file', 200, async () =>
+        mediaResponseOf({
+          ...(await agentBridge
+            .forDatabase(context.get('database'))
+            .readRuntimeMedia({ workspaceId, chatId: chatId(context.req.param('chatId') ?? '') }, userId, path)),
+          name: path.split('/').at(-1) ?? 'file',
+          isImmutable: false,
+        }),
       )
     })
     .post(chatPublishPathOf(':chatId', ':action{push|pull_request}'), async (context) => {

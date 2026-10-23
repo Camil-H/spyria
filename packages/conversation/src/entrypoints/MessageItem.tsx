@@ -10,6 +10,7 @@ import { Disclosure } from './Disclosure.tsx'
 import { EditMessageForm } from './EditMessageForm.tsx'
 import { ForkButton } from './ForkButton.tsx'
 import { LazyMarkdown } from './LazyMarkdown.tsx'
+import { AttachmentList } from './Media.tsx'
 import { MessageMenu } from './MessageMenu.tsx'
 import { useConversationCommands } from './providers.tsx'
 
@@ -121,13 +122,14 @@ export const MessageItem = ({
               <EditMessageForm messageId={message.id} initialText={message.body} onClose={close} />
             ) : message.isDeleted ? (
               <p className="text-sm text-muted italic">This message was deleted</p>
-            ) : message.kind === 'agent' && !message.isStreamed ? (
+            ) : !message.isStreamed ? (
               <Suspense fallback={<p className={plainTextClassName}>{message.body}</p>}>
-                <LazyMarkdown text={message.body} />
+                <LazyMarkdown text={message.body} keepsLineBreaks={message.kind === 'member'} />
               </Suspense>
             ) : (
               <p className={plainTextClassName}>{message.body}</p>
             )}
+            {!message.isDeleted && mode !== 'edit' && <AttachmentList attachments={message.attachments} />}
             {message.runtimes.length > 0 && <RuntimeLinks runtimes={message.runtimes} />}
             {hasMenu && !message.isDeleted && mode !== 'edit' && (
               <MessageMenu

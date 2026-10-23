@@ -92,3 +92,34 @@ export const ChatFrozen = errorKind(
   () => 'This chat is frozen: its owner left the workspace',
   ConversationError,
 )
+export const AttachmentNotAllowed = errorKind(
+  'attachment_not_allowed',
+  () => 'Attach an image, a sound, a video or a PDF of up to 20 MB',
+  ConversationError,
+)
+export const AttachmentTooLarge = errorKind('attachment_too_large', () => 'The file is over 20 MB', ConversationError)
+export const TooManyPendingUploads = errorKind(
+  'too_many_pending_uploads',
+  () => 'Send or remove the files you already attached before adding more',
+  ConversationError,
+)
+export const AttachmentStorageFull = errorKind(
+  'attachment_storage_full',
+  () => 'This workspace has no room left for attachments: delete messages with large files to make room',
+  ConversationError,
+)
+export const TooManyAttachments = errorKind(
+  'too_many_attachments',
+  (maximum: number) => `A message can carry up to ${maximum} attachments`,
+  ConversationError,
+)
+export const RuntimeMediaUnavailable = errorKind(
+  'runtime_media_unavailable',
+  () => 'This file can be shown only while the runtime is running',
+  ConversationError,
+)
+export const AttachmentNotFound = errorKind(
+  'attachment_not_found',
+  () => 'This attachment is no longer available',
+  ConversationError,
+)

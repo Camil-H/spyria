@@ -12,6 +12,7 @@ const stepAt = (seq: number, step: MessageRow['step']): MessageRow => ({
   kind: 'step',
   authorId: null,
   body: '',
+  attachments: [],
   detail: null,
   step,
   replyToId: null,

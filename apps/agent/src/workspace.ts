@@ -1,9 +1,11 @@
-import { copyFile, open, readdir, realpath, rm } from 'node:fs/promises'
+import { constants } from 'node:fs'
+import { copyFile, open, readdir, realpath, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join, posix, sep } from 'node:path'
+import { isAbsolute, join, posix, relative, sep } from 'node:path'
 
 const maximumEntries = 500
 const maximumFileBytes = 256_000
+const maximumMediaBytes = 20 * 1024 * 1024
 const maximumPatchCharacters = 400_000
 const maximumCommits = 200
 const branchPattern = /^\w[\w./-]*$/
@@ -45,9 +47,20 @@ export const treeOf = async (root: string, path: string, env: Record<string, str
   return { entries: listed.slice(0, maximumEntries), truncated: listed.length > maximumEntries }
 }
 
+const openRegularFile = async (file: string | undefined) => {
+  const isRegularFile = file && (await stat(file).catch(() => undefined))?.isFile()
+  const handle = isRegularFile
+    ? await open(file, constants.O_RDONLY | constants.O_NONBLOCK).catch(() => undefined)
+    : undefined
+  if (handle && !(await handle.stat()).isFile()) {
+    await handle.close()
+    return undefined
+  }
+  return handle
+}
+
 export const fileOf = async (root: string, path: string) => {
-  const file = await insideWorkspace(root, path)
-  const handle = file && (await open(file).catch(() => undefined))
+  const handle = await openRegularFile(await insideWorkspace(root, path))
   if (!handle) return undefined
   try {
     const buffer = Buffer.alloc(maximumFileBytes + 1)
@@ -55,6 +68,21 @@ export const fileOf = async (root: string, path: string) => {
     const bytes = buffer.subarray(0, Math.min(bytesRead, maximumFileBytes))
     const isBinary = bytes.includes(0)
     return { content: isBinary ? '' : bytes.toString('utf8'), isBinary, truncated: bytesRead > maximumFileBytes }
+  } catch {
+    return undefined
+  } finally {
+    await handle.close()
+  }
+}
+
+export const mediaOf = async (root: string, path: string) => {
+  const handle = await openRegularFile(await insideWorkspace(root, isAbsolute(path) ? relative(root, path) : path))
+  if (!handle) return undefined
+  try {
+    const stats = await handle.stat()
+    if (stats.size > maximumMediaBytes) return { isTooLarge: true }
+    const { buffer, bytesRead } = await handle.read(Buffer.alloc(stats.size), 0, stats.size, 0)
+    return { content: buffer.subarray(0, bytesRead).toString('base64') }
   } catch {
     return undefined
   } finally {

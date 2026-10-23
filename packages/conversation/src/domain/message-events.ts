@@ -1,5 +1,6 @@
 import { type AgentEvent, agentProjectionOf, delegatedProjectionOf, observedProjectionStep } from './agent-events.ts'
 import { legacyToolCallStep, type StepDelegation, type StoredStep } from './agent-steps.ts'
+import type { Attachment } from './attachments.ts'
 import type { Message } from './message.ts'
 
 export type StoredEvent = Readonly<{
@@ -21,6 +22,7 @@ export type ProjectedMessage = Readonly<{
   kind: Message['kind']
   authorId: string | null
   body: string
+  attachments: readonly Attachment[]
   detail: string | null
   step: StoredStep | null
   replyToId: string | null
@@ -34,6 +36,7 @@ export type PostedPayload = Pick<ProjectedMessage, 'body' | 'detail' | 'replyToI
   kind: ProjectedMessage['kind'] | 'tool-call'
   step?: StoredStep | null
   threadRootId?: string
+  attachments?: readonly Attachment[]
 }
 export type ChangedPayload = { messageId: string; body: string }
 export type StepChangedPayload = { messageId: string; step: StoredStep }
@@ -48,7 +51,7 @@ export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMes
   for (const { workspaceId, chatId, id, seq, type, actor, payload, createdAt } of events) {
     const project = (
       fields: Pick<ProjectedMessage, 'kind' | 'authorId' | 'body' | 'detail' | 'step' | 'replyToId'> &
-        Partial<Pick<ProjectedMessage, 'threadRootId'>>,
+        Partial<Pick<ProjectedMessage, 'threadRootId' | 'attachments'>>,
       projectedId = id,
     ) =>
       messageByKey.set(`${workspaceId}/${projectedId}`, {
@@ -57,17 +60,26 @@ export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMes
         id: projectedId,
         seq,
         threadRootId: null,
+        attachments: [],
         ...fields,
         createdAt,
         editedAt: null,
         deletedAt: null,
       })
     if (type === 'message.posted' || type === 'message.replied') {
-      const { kind, body, detail, replyToId, step = null, threadRootId = null } = payload as PostedPayload
+      const {
+        kind,
+        body,
+        detail,
+        replyToId,
+        step = null,
+        threadRootId = null,
+        attachments = [],
+      } = payload as PostedPayload
       project(
         kind === 'tool-call'
           ? { kind: 'step', authorId: actor, body, detail, step: legacyToolCallStep(body, detail), replyToId }
-          : { kind, authorId: actor, body, detail, step, replyToId, threadRootId },
+          : { kind, authorId: actor, body, attachments, detail, step, replyToId, threadRootId },
       )
     }
     if (type === 'agent.event') {
@@ -103,7 +115,7 @@ export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMes
       `${workspaceId}/${messageId}`,
       type === 'message.edited'
         ? { ...message, body, editedAt: createdAt }
-        : { ...message, body: '', deletedAt: createdAt },
+        : { ...message, body: '', attachments: [], deletedAt: createdAt },
     )
   }
   return [...messageByKey.values()]

@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import {
   bigint,
   boolean,
+  bytea,
   check,
   foreignKey,
   index,
@@ -17,7 +18,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
 import { defineRelations } from 'drizzle-orm/relations'
-import type { MessageStep, RuntimeFailure, RuntimeHostCapacity, RuntimeState } from '../schema.ts'
+import type { MessageAttachment, MessageStep, RuntimeFailure, RuntimeHostCapacity, RuntimeState } from '../schema.ts'
 
 const table = snakeCase.table
 const auditedChatEventTypes = [
@@ -395,6 +396,7 @@ export const messages = table(
     kind: text().$type<'member' | 'agent' | 'step' | 'notice'>().notNull(),
     authorId: text(),
     body: text().notNull(),
+    attachments: jsonb().$type<readonly MessageAttachment[]>().notNull().default([]),
     detail: text(),
     step: jsonb().$type<MessageStep>(),
     replyToId: text(),
@@ -416,6 +418,29 @@ export const messages = table(
     index('messages_pull_request_index')
       .on(table.workspaceId, sql`(${table.step} ->> 'repository')`, sql`(${table.step} ->> 'number')`)
       .where(sql`(${table.step} ->> 'type') = 'pull_request'`),
+  ],
+)
+
+export const messageAttachments = table(
+  'message_attachments',
+  {
+    ...chatScoped,
+    id: text().notNull(),
+    uploaderId: text().notNull(),
+    messageId: text(),
+    name: text().notNull(),
+    mediaType: text().notNull(),
+    size: integer().notNull(),
+    content: bytea().notNull(),
+    createdAt: instant().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.id] }),
+    chatReference(table),
+    memberReference(table, table.uploaderId),
+    tenantReference([table.workspaceId, table.messageId], [messages.workspaceId, messages.id]),
+    index().on(table.workspaceId, table.messageId),
+    index().on(table.workspaceId, table.uploaderId, table.createdAt).where(sql`${table.messageId} is null`),
   ],
 )
 

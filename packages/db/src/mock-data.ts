@@ -85,6 +85,7 @@ const message = (
   kind,
   authorId,
   body,
+  attachments: [],
   detail,
   step,
   replyToId: null,

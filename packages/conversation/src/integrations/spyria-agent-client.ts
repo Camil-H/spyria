@@ -243,6 +243,12 @@ export const createSpyriaAgentClient = (): AgentClient => ({
     await call(conversation, 'DELETE', `/api/conversations/${conversation.conversationId}`)
   },
   readWorkspace: (endpoint, path) => call(endpoint, 'GET', path),
+  readMedia: async (endpoint, path) => {
+    const response = await send(endpoint, 'GET', `/api/workspace/media?${new URLSearchParams({ path })}`)
+    if (response.status !== 200) return undefined
+    const { content } = JSON.parse(response.body) as { content?: unknown }
+    return typeof content === 'string' ? new Uint8Array(Buffer.from(content, 'base64')) : undefined
+  },
   bundleBranch: async (endpoint, branch, prerequisite) => {
     const response = await send(
       endpoint,

@@ -1,4 +1,5 @@
 import type { ChatId, MemberId, MessageId, WorkspaceId } from '@spyria/kernel'
+import type { Attachment } from '../domain/attachments.ts'
 import type { GitAction, GitActionOutcome } from '../domain/git-actions.ts'
 import type { PublishAction, PullRequestDraft } from '../domain/pull-requests.ts'
 import type { RunsOn } from '../domain/session-routing.ts'
@@ -17,7 +18,14 @@ import type { QuestionAnswer } from './endpoints.ts'
 type Command<Input, Result = string> = (input: Input & { workspaceId: WorkspaceId }) => Promise<Result>
 
 export type ConversationCommands = {
-  sendMessage: Command<{ chatId: ChatId; text: string; threadRootId?: MessageId | undefined }>
+  sendMessage: Command<{
+    chatId: ChatId
+    text: string
+    threadRootId?: MessageId | undefined
+    attachments?: readonly Attachment[] | undefined
+  }>
+  uploadAttachment: Command<{ chatId: ChatId; file: File }, Attachment>
+  readMedia: Command<{ path: string }, Blob>
   editMessage: Command<{ messageId: MessageId; text: string }>
   deleteMessage: Command<{ messageId: MessageId }>
   markChatRead: Command<{ chatId: ChatId }>

@@ -2,6 +2,7 @@ import { defineMutator, defineMutators, type Transaction } from '@rocicorp/zero'
 import type { ZeroContext } from '@spyria/db/zero-queries'
 import { chatId, memberId, messageId } from '@spyria/kernel'
 import { z } from 'zod/mini'
+import { maximumAttachmentsPerMessage } from '../domain/attachments.ts'
 import { ForeignWorkspace } from '../domain/errors.ts'
 import { runsOns } from '../domain/session-routing.ts'
 import { createZeroRuntimeRetrier } from '../integrations/runtime-agent-runtimes.ts'
@@ -32,6 +33,7 @@ const workspaceArguments = z.object({ workspaceId: id })
 const chatArguments = z.extend(workspaceArguments, { chatId: chatIdArgument })
 const memberArguments = z.extend(chatArguments, { memberId: memberIdArgument })
 const memberRoleArguments = z.extend(memberArguments, { roleId: id })
+const attachmentArgument = z.object({ id, name: z.string(), mediaType: z.string(), size: z.number() })
 
 const dependenciesOf = (tx: Transaction, context: ZeroContext, args: { workspaceId: string }) => {
   if (args.workspaceId !== context.workspaceId) throw new ForeignWorkspace()
@@ -46,6 +48,7 @@ export const conversationMutators = defineMutators({
         chatId: chatIdArgument,
         text: z.string(),
         threadRootId: z.optional(messageIdArgument),
+        attachments: z.optional(z.array(attachmentArgument).check(z.maxLength(maximumAttachmentsPerMessage))),
       }),
       ({ tx, ctx, args }) =>
         sendMessage(
