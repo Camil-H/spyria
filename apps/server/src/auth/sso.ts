@@ -159,6 +159,11 @@ const storeSsoSettings = async (
       encrypted_client_secret = case when excluded.uses_instance_app then ''
         else coalesce(${encryptedClientSecret}::text, workspace_sso.encrypted_client_secret) end`
   await sql`insert into sso_domains (workspace_id, domain) values (${workspaceId}, ${settings.domain}) on conflict do nothing`
+  if (previous && previous.issuer !== settings.issuer)
+    await sql`
+      update sso_domains set verified_at = null, verification_email = null, verification_token_hash = null,
+        verification_expires_at = null
+      where workspace_id = ${workspaceId}`
   const isChanged =
     !previous ||
     previous.usesInstanceApp !== usesInstanceApp ||
@@ -388,3 +393,16 @@ export const verifyDomainByToken = (database: Database, token: string) =>
 
 export const verifyDomainByOperator = (database: Database, workspaceId: string, domain: string) =>
   database.$client.begin((sql) => markDomainVerified(sql, { workspaceId, domain, actorId: null }))
+
+export const assertInstanceAppsConfigured = async (database: Database, instanceApps: InstanceApps) => {
+  const missing = (
+    await database.$client<{ preset: SsoPreset; count: number }[]>`
+      select preset, count(*)::int as count from workspace_sso where uses_instance_app group by preset order by preset`
+  ).filter(({ preset }) => preset === 'oidc' || !instanceApps[preset])
+  if (missing.length > 0)
+    throw new Error(
+      `Workspaces sign in through apps of this deployment that are not configured: ${missing
+        .map(({ preset, count }) => `${preset} (${count} workspace${count === 1 ? '' : 's'})`)
+        .join(', ')}. Set SPYRIA_GOOGLE_CLIENT_* or SPYRIA_MICROSOFT_CLIENT_* again.`,
+    )
+}

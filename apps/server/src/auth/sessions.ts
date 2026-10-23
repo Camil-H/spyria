@@ -56,19 +56,22 @@ export const findMemberIn =
     return member
   }
 
-type Identity = { email: string; name?: unknown; issuer?: string; subject?: string }
+type Identity = { email: string; name?: unknown; issuer?: string; subject?: string; legacySubject?: string }
 
 export const signInUser = (database: Database, identity: Identity, isSso = false) => {
   const email = normalizedEmail(identity.email)
-  const { issuer = '', subject = '' } = identity
+  const { issuer = '', subject = '', legacySubject = subject } = identity
   return database.$client.begin(async (sql) => {
-    const ssoWorkspaceIds = (
-      await sql<{ workspaceId: string }[]>`
-        select workspace_id as "workspaceId" from workspace_sso join sso_domains using (workspace_id)
+    const ssoWorkspaces = await sql<{ workspaceId: string; isVerified: boolean }[]>`
+        select workspace_id as "workspaceId", verified_at is not null as "isVerified"
+        from workspace_sso join sso_domains using (workspace_id)
         where issuer = ${issuer} and domain = ${domainOfEmail(email)}
           and workspace_id in (select workspace_id from workspaces where deleted_at is null)
           and (verified_at is not null or (select count(*) from workspaces where deleted_at is null) = 1)`
-    ).map(({ workspaceId }) => workspaceId)
+    const ssoWorkspaceIds = ssoWorkspaces.map(({ workspaceId }) => workspaceId)
+    const verifiedWorkspaceIds = ssoWorkspaces
+      .filter(({ isVerified }) => isVerified)
+      .map(({ workspaceId }) => workspaceId)
     if (isSso && ssoWorkspaceIds.length === 0) return { email }
     const invitations = await sql<{ workspaceId: string; id: string; role: string }[]>`
       select workspace_id as "workspaceId", id, role from invitations
@@ -78,16 +81,22 @@ export const signInUser = (database: Database, identity: Identity, isSso = false
     const [found] = isSso
       ? await sql<{ id: string }[]>`
           select id from (
-            select user_id as id, 1 as rank from identities where issuer = ${issuer} and subject = ${subject}
+            select user_id as id, 1 as rank from identities
+            where issuer = ${issuer} and subject in (${subject}, ${legacySubject})
             union all
             select users.id, 2 from users join memberships on memberships.user_id = users.id
             where users.email = ${email} and memberships.removed_at is null
-              and memberships.workspace_id = any(${ssoWorkspaceIds}::text[])
+              and memberships.workspace_id = any(${verifiedWorkspaceIds}::text[])
+              and not exists(select 1 from identities where identities.workspace_id = memberships.workspace_id
+                and identities.issuer = ${issuer} and identities.user_id = users.id)
             union all
             select id, 3 from users where email = ${email} and ${invitations.length > 0}::boolean
+              and not exists(select 1 from identities where identities.user_id = users.id
+                and identities.issuer = ${issuer})
           ) as candidates order by rank limit 1`
       : await sql<{ id: string }[]>`select id from users where email = ${email}`
     if (!found && invitations.length === 0) return { email }
+    if (!found && (await sql`select 1 from users where email = ${email}`).length > 0) return { email }
     const [user] = found
       ? [found]
       : await sql<

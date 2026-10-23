@@ -46,6 +46,7 @@ export {
   type SsoSettingsView,
   ssoEmailOf,
   ssoSettingsFrom,
+  ssoSubjectOf,
   tenantIdOf,
 } from './domain/sso.ts'
 export type { WorkspaceCommands } from './entrypoints/commands.ts'

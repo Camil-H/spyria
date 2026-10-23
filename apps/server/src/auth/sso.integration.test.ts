@@ -19,7 +19,7 @@ import { createSmtpMailer } from './mail.ts'
 import { createSecretBox } from './secret-box.ts'
 import { issueSessionToken } from './session-tokens.ts'
 import { openSessions } from './sessions.ts'
-import { verifyDomainByOperator } from './sso.ts'
+import { assertInstanceAppsConfigured, verifyDomainByOperator } from './sso.ts'
 
 const testDatabase = await createTestDatabase()
 const { database } = testDatabase
@@ -490,6 +490,17 @@ test('the first sign-in binds the identity through an invite; a later sign-in ma
   expect([...(await database.$client`select 1 from users where email = 'nina.new@example.com'`)]).toEqual([])
 })
 
+test('a member bound to an identity is never signed in through another identity carrying their email', async () => {
+  const takeover = await signInThrough(acmeIdp, 'email=nina@example.com', {
+    sub: 'mallory-subject',
+    email: 'nina@example.com',
+  })
+  expect(takeover.status).toBe(403)
+  expect(takeover.page).toContain('"status":"not_invited","email":"nina@example.com"')
+  expect(takeover.sessions).toEqual([])
+  expect(await identitiesOf('mallory-subject')).toEqual([])
+})
+
 test('an email outside the domains or without membership and invite is refused', async () => {
   await invite(acme, 'quinn@elsewhere.com')
   for (const email of ['quinn@elsewhere.com', 'olive@example.com']) {
@@ -516,6 +527,7 @@ test('an Entra token without email_verified signs in by preferred_username for a
   await invite('initech', 'peter@initech.com')
   const signedIn = await signInThrough(entraIdp, 'email=peter@initech.com', {
     sub: 'peter-subject',
+    oid: 'peter-object',
     preferred_username: 'Peter@initech.com',
   })
   expect(signedIn.page).toContain('"status":"signed_in"')
@@ -715,6 +727,7 @@ test('the first person completing sign-in becomes the Admin of an unverified wor
   expect(await (await emptyInstanceApp.request('/auth/mode')).json()).toEqual({
     authMode: 'sso',
     canCreateWorkspace: false,
+    instanceApps: [],
   })
   expect(await (await startCreation(umbrellaForm())).text()).toContain(
     '"status":"refused","message":"Workspace creation is closed on this instance: sign in with your work email"',
@@ -778,7 +791,8 @@ test('with the Microsoft app of this Spyria, a workspace is created and signed i
     entraIdp.claimsByCode.set('pat', {
       nonce: location.searchParams.get('nonce') ?? '',
       sub: 'pat',
-      email: 'pat@initech.com',
+      oid: 'pat-object',
+      preferred_username: 'pat@initech.com',
     })
     const completed = await instanceApp.request(`/auth/callback?code=pat&state=${location.searchParams.get('state')}`, {
       headers: { cookie: cookieHeaderOf(started) },
@@ -800,11 +814,38 @@ test('with the Microsoft app of this Spyria, a workspace is created and signed i
     const signedIn = await signInThrough(
       entraIdp,
       'email=pat@initech.com',
-      { sub: 'pat', email: 'pat@initech.com' },
+      { sub: 'pat-in-another-app', oid: 'pat-object', preferred_username: 'pat@initech.com' },
       instanceApp,
     )
     expect(signedIn.sessions).toHaveLength(1)
+    expect(signedIn.userId).toBe(
+      (await instance.database.$client`select user_id as "userId" from identities where subject = 'pat-object'`)[0]
+        ?.userId,
+    )
   } finally {
     await instance.drop()
   }
+})
+
+test('pointing a workspace at another issuer asks to verify its domain again', async () => {
+  await addWorkspace('massive-dynamic')
+  expect((await configureIdp(otherIdp, 'massive-dynamic', 'massive.com')).status).toBe(200)
+  await verifyDomainByOperator(database, 'massive-dynamic', 'massive.com')
+  const sameIssuer = { preset: 'oidc', issuer: otherIdp.issuer, clientId: 'spyria-massive-2', domain: 'massive.com' }
+  expect((await saveSso('massive-dynamic', sameIssuer)).status).toBe(200)
+  expect(JSON.parse((await readSso('massive-dynamic')).body).settings.domainState.isVerified).toBe(true)
+  expect((await saveSso('massive-dynamic', { ...sameIssuer, issuer: acmeIdp.issuer })).status).toBe(200)
+  expect(JSON.parse((await readSso('massive-dynamic')).body).settings.domainState).toEqual(unverified('massive.com'))
+})
+
+test('the server refuses to start when workspaces sign in through an app of this deployment that is no longer configured', async () => {
+  await addWorkspace('stark')
+  await database.$client`
+    insert into workspace_sso (workspace_id, preset, issuer, client_id, encrypted_client_secret, uses_instance_app, updated_at)
+    values ('stark', 'google', 'https://accounts.google.com', 'spyria-google', '', true, now())`
+  const google = { clientId: 'spyria-google', clientSecret: 'secret' }
+  expect(await assertInstanceAppsConfigured(database, { google })).toBeUndefined()
+  expect((await rejectionOf(assertInstanceAppsConfigured(database, {}))).message).toBe(
+    'Workspaces sign in through apps of this deployment that are not configured: google (1 workspace). Set SPYRIA_GOOGLE_CLIENT_* or SPYRIA_MICROSOFT_CLIENT_* again.',
+  )
 })
