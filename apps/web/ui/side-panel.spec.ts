@@ -373,10 +373,14 @@ test.describe('Side panel', () => {
       const panelBox = (await panelOf(page).boundingBox())!
       expect(panelBox.x + panelBox.width).toBeLessThanOrEqual(mainBox.x + mainBox.width + 1)
       await page.setViewportSize(viewport)
+      const restoredMaximumWidth = Math.floor((await mainOf(page).boundingBox())!.width - 320)
+      await expect.poll(() => panelWidthOf(page)).toBeCloseTo(restoredMaximumWidth, 0)
       await dragResizeHandleBy(page, 1000)
+      await expect.poll(() => panelWidthOf(page)).toBeCloseTo(280, 0)
     })
 
     await test.step('scrolls the tab list horizontally when the panel is narrow and keeps the selected tab visible', async () => {
+      expect(await panelWidthOf(page)).toBeCloseTo(280, 0)
       const overflowX = await tabListOf(page).evaluate((element) => getComputedStyle(element).overflowX)
       expect(['auto', 'scroll']).toContain(overflowX)
       expect(await isTabListScrollable(page)).toBe(true)
