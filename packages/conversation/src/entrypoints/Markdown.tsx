@@ -2,6 +2,8 @@ import { CopyButton, focusRing } from '@spyria/ui'
 import { Children, type ReactElement, type ReactNode, useEffect, useState } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { isRuntimeMediaPath } from '../domain/attachments.ts'
+import { RuntimeMedia } from './Media.tsx'
 
 type MarkdownNode = {
   type: string
@@ -29,6 +31,14 @@ const underlineFromUnderscores = () => (tree: MarkdownNode, file: { value: unkno
     node.children?.forEach(underline)
   }
   underline(tree)
+}
+
+const decodedPathOf = (source: string) => {
+  try {
+    return decodeURIComponent(source)
+  } catch {
+    return source
+  }
 }
 
 const domainOf = (url: string | undefined) => {
@@ -91,7 +101,15 @@ const components: Components = {
       {children} <span className="text-xs text-muted">({domainOf(href)})</span>
     </a>
   ),
-  img: ({ src, alt }) => <RemoteImage src={typeof src === 'string' ? src : undefined} alt={alt} />,
+  img: ({ src, alt }) => {
+    const source = typeof src === 'string' ? src : undefined
+    const remoteImage = <RemoteImage src={source} alt={alt} />
+    return source && isRuntimeMediaPath(source) ? (
+      <RuntimeMedia path={decodedPathOf(source)} alt={alt ?? ''} fallback={remoteImage} />
+    ) : (
+      remoteImage
+    )
+  },
   pre: ({ children }) => {
     const code = Children.only(children) as ReactElement<{ className?: string; children?: ReactNode }>
     return (

@@ -12,7 +12,12 @@ import { Composer } from './Composer.tsx'
 import type { QuestionAnswer } from './endpoints.ts'
 import { ForkButton } from './ForkButton.tsx'
 import { MessageList } from './MessageList.tsx'
-import { QuestionAnswererContext, ToolsAwaitingApprovalContext, useConversationCommands } from './providers.tsx'
+import {
+  ChatMediaContext,
+  QuestionAnswererContext,
+  ToolsAwaitingApprovalContext,
+  useConversationCommands,
+} from './providers.tsx'
 import { PlanModeToggle, RunsOnChip, SessionChip } from './SessionChip.tsx'
 import { useLiveMessages, withLiveMessages } from './useLiveMessages.ts'
 
@@ -133,14 +138,16 @@ export const ChatView = ({
         value={{ answer: answerQuestion, mayAnswerAsPrompter: mayPrompt, isOwner: conversation.isOwner }}
       >
         <ToolsAwaitingApprovalContext value={toolsAwaitingApproval}>
-          <MessageList
-            conversation={conversation}
-            items={withLiveMessages(conversation.items, live)}
-            isComplete={chatMessages.isComplete}
-            onLoadEarlier={chatMessages.isComplete && chatMessages.hasEarlier ? chatMessages.loadEarlier : undefined}
-            onStop={conversation.canConfigure ? () => commands.stopAgent({ workspaceId, chatId }) : undefined}
-            onFork={conversation.isOwner ? undefined : fork}
-          />
+          <ChatMediaContext value={{ chatId, isRuntime: conversation.type === 'runtime' }}>
+            <MessageList
+              conversation={conversation}
+              items={withLiveMessages(conversation.items, live)}
+              isComplete={chatMessages.isComplete}
+              onLoadEarlier={chatMessages.isComplete && chatMessages.hasEarlier ? chatMessages.loadEarlier : undefined}
+              onStop={conversation.canConfigure ? () => commands.stopAgent({ workspaceId, chatId }) : undefined}
+              onFork={conversation.isOwner ? undefined : fork}
+            />
+          </ChatMediaContext>
         </ToolsAwaitingApprovalContext>
       </QuestionAnswererContext>
       {isRunsOnOpen && runsOnChoices && runsOnChoices.length > 1 && (

@@ -1,6 +1,8 @@
 import { expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
+import type { ConversationCommands } from './commands.ts'
 import Markdown from './Markdown.tsx'
+import { ChatMediaContext, ConversationProvider } from './providers.tsx'
 
 const render = (text: string) => renderToStaticMarkup(<Markdown text={text} />)
 
@@ -42,4 +44,18 @@ test('double underscores underline, double stars stay bold', () => {
   expect(html).toContain('<u>under</u>')
   expect(html).toContain('<strong>bold</strong>')
   expect(html).toContain('a_snake_case_name')
+})
+
+test('in a runtime chat, an image path is a file of the runtime, loaded through the server; a URL still waits for a click', () => {
+  const commands = { readMedia: async () => new Blob() } as unknown as ConversationCommands
+  const html = renderToStaticMarkup(
+    <ConversationProvider commands={commands} agentStream={{ subscribe: () => () => undefined }}>
+      <ChatMediaContext value={{ chatId: 'chat-1', isRuntime: true }}>
+        <Markdown text={'![Sales chart](out/sales%20chart.png)\n\n![Logo](https://images.example.com/logo.png)'} />
+      </ChatMediaContext>
+    </ConversationProvider>,
+  )
+  expect(html).toContain('aria-label="Loading Sales chart"')
+  expect(html).toContain('Load image from images.example.com')
+  expect(html).not.toContain('<img')
 })
