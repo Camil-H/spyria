@@ -192,14 +192,19 @@ const identitiesOf = async (subject: string) => [
 ]
 
 test('the server tells its auth mode and whether a workspace can be created', async () => {
-  expect(await (await app.request('/auth/mode')).json()).toEqual({ authMode: 'sso', canCreateWorkspace: false })
+  expect(await (await app.request('/auth/mode')).json()).toEqual({
+    authMode: 'sso',
+    canCreateWorkspace: false,
+    instanceApps: [],
+  })
   expect(await (await emptyInstanceApp.request('/auth/mode')).json()).toEqual({
     authMode: 'sso',
     canCreateWorkspace: true,
+    instanceApps: [],
   })
   expect(
     await (await createApp({ database: emptyInstance.database, ...testAuthSettings }).request('/auth/mode')).json(),
-  ).toEqual({ authMode: 'dex', canCreateWorkspace: false })
+  ).toEqual({ authMode: 'dex', canCreateWorkspace: false, instanceApps: [] })
 })
 
 test('an admin saves the SSO settings: the secret is encrypted at rest, never returned, and changes are recorded', async () => {
@@ -207,7 +212,13 @@ test('an admin saves the SSO settings: the secret is encrypted at rest, never re
   expect(saved.status).toBe(200)
   const view = { preset: 'oidc', issuer: acmeIdp.issuer, clientId: `spyria-${acme}`, domain: 'example.com' }
   expect(JSON.parse(saved.body)).toEqual({
-    settings: { ...view, tenantId: '', hasSecret: true, domainState: unverified('example.com') },
+    settings: {
+      ...view,
+      tenantId: '',
+      hasSecret: true,
+      usesInstanceApp: false,
+      domainState: unverified('example.com'),
+    },
   })
   const [stored] = await database.$client<{ encryptedClientSecret: string }[]>`
     select encrypted_client_secret as "encryptedClientSecret" from workspace_sso where workspace_id = ${acme}`
@@ -225,6 +236,7 @@ test('an admin saves the SSO settings: the secret is encrypted at rest, never re
     ...view,
     tenantId: '',
     hasSecret: true,
+    usesInstanceApp: false,
     domainState: unverified('example.com'),
   })
   expect(
@@ -731,4 +743,68 @@ test('the first person completing sign-in becomes the Admin of an unverified wor
   expect((await emptyInstanceApp.request('/auth/login?email=erin@umbrella.com')).status).toBe(404)
   await verifyDomainByOperator(emptyInstance.database, workspaceId, 'umbrella.com')
   expect((await emptyInstanceApp.request('/auth/login?email=erin@umbrella.com')).status).toBe(302)
+})
+
+test('with the Microsoft app of this Spyria, a workspace is created and signed in to without any client id or secret, and an app the Spyria lacks is refused', async () => {
+  const instance = await createTestDatabase()
+  await instance.database.$client`truncate workspaces, users cascade`
+  const instanceApp = createApp({
+    database: instance.database,
+    ...ssoSettings,
+    instanceSignInApps: { microsoft: { clientId: 'spyria-instance', clientSecret: 'instance-secret' } },
+  })
+  entraIdp.clientSecret = 'instance-secret'
+  try {
+    expect(await (await instanceApp.request('/auth/mode')).json()).toEqual({
+      authMode: 'sso',
+      canCreateWorkspace: true,
+      instanceApps: ['microsoft'],
+    })
+    const create = (form: Record<string, string>) =>
+      instanceApp.request('/auth/first-workspace', {
+        method: 'POST',
+        headers: { origin: testAuthSettings.appOrigin },
+        body: new URLSearchParams({ name: 'Initech', domain: 'initech.com', usesInstanceApp: 'true', ...form }),
+      })
+    const googleRefusal = await create({ preset: 'google' })
+    expect(await googleRefusal.text()).toContain(
+      'This Spyria has no Google app: enter the client id and secret of your own',
+    )
+
+    const started = await create({ preset: 'microsoft', tenantId: 'tenant-1' })
+    const location = new URL(started.headers.get('location') ?? '')
+    expect(location.origin + location.pathname).toBe(`${entraIdp.issuer}/auth`)
+    expect(location.searchParams.get('client_id')).toBe('spyria-instance')
+    entraIdp.claimsByCode.set('pat', {
+      nonce: location.searchParams.get('nonce') ?? '',
+      sub: 'pat',
+      email: 'pat@initech.com',
+    })
+    const completed = await instanceApp.request(`/auth/callback?code=pat&state=${location.searchParams.get('state')}`, {
+      headers: { cookie: cookieHeaderOf(started) },
+    })
+    expect(await completed.text()).toContain('"status":"signed_in"')
+    expect(entraIdp.tokenRequests.at(-1)?.get('client_id')).toBe('spyria-instance')
+    const [stored] = await instance.database.$client`
+      select preset, issuer, client_id as "clientId", encrypted_client_secret as "encryptedClientSecret",
+        uses_instance_app as "usesInstanceApp"
+      from workspace_sso`
+    expect(stored).toEqual({
+      preset: 'microsoft',
+      issuer: entraIdp.issuer,
+      clientId: 'spyria-instance',
+      encryptedClientSecret: '',
+      usesInstanceApp: true,
+    })
+
+    const signedIn = await signInThrough(
+      entraIdp,
+      'email=pat@initech.com',
+      { sub: 'pat', email: 'pat@initech.com' },
+      instanceApp,
+    )
+    expect(signedIn.sessions).toHaveLength(1)
+  } finally {
+    await instance.drop()
+  }
 })

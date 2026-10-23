@@ -109,8 +109,8 @@ export const copyWorkspaceSignIn = async (
 ) => {
   const [provider] = await onServer<{ preset: string; issuer: string; clientId: string }>(
     tx,
-    `insert into workspace_sso (workspace_id, preset, issuer, client_id, encrypted_client_secret, updated_at)
-     select $2, preset, issuer, client_id, encrypted_client_secret, now() from workspace_sso where workspace_id = $1
+    `insert into workspace_sso (workspace_id, preset, issuer, client_id, encrypted_client_secret, uses_instance_app, updated_at)
+     select $2, preset, issuer, client_id, encrypted_client_secret, uses_instance_app, now() from workspace_sso where workspace_id = $1
      returning preset, issuer, client_id as "clientId"`,
     [fromWorkspaceId, toWorkspaceId],
   )

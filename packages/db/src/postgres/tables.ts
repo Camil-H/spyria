@@ -186,6 +186,7 @@ export const workspaceSso = table('workspace_sso', {
   issuer: text().notNull(),
   clientId: text().notNull(),
   encryptedClientSecret: text().notNull(),
+  usesInstanceApp: boolean().notNull().default(false),
   updatedAt: instant().notNull(),
 })
 
