@@ -1,4 +1,5 @@
-import { copyFile, open, readdir, realpath, rm } from 'node:fs/promises'
+import { constants } from 'node:fs'
+import { copyFile, open, readdir, realpath, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join, posix, relative, sep } from 'node:path'
 
@@ -46,9 +47,20 @@ export const treeOf = async (root: string, path: string, env: Record<string, str
   return { entries: listed.slice(0, maximumEntries), truncated: listed.length > maximumEntries }
 }
 
+const openRegularFile = async (file: string | undefined) => {
+  const isRegularFile = file && (await stat(file).catch(() => undefined))?.isFile()
+  const handle = isRegularFile
+    ? await open(file, constants.O_RDONLY | constants.O_NONBLOCK).catch(() => undefined)
+    : undefined
+  if (handle && !(await handle.stat()).isFile()) {
+    await handle.close()
+    return undefined
+  }
+  return handle
+}
+
 export const fileOf = async (root: string, path: string) => {
-  const file = await insideWorkspace(root, path)
-  const handle = file && (await open(file).catch(() => undefined))
+  const handle = await openRegularFile(await insideWorkspace(root, path))
   if (!handle) return undefined
   try {
     const buffer = Buffer.alloc(maximumFileBytes + 1)
@@ -64,12 +76,10 @@ export const fileOf = async (root: string, path: string) => {
 }
 
 export const mediaOf = async (root: string, path: string) => {
-  const file = await insideWorkspace(root, isAbsolute(path) ? relative(root, path) : path)
-  const handle = file && (await open(file).catch(() => undefined))
+  const handle = await openRegularFile(await insideWorkspace(root, isAbsolute(path) ? relative(root, path) : path))
   if (!handle) return undefined
   try {
     const stats = await handle.stat()
-    if (!stats.isFile()) return undefined
     if (stats.size > maximumMediaBytes) return { isTooLarge: true }
     const { buffer, bytesRead } = await handle.read(Buffer.alloc(stats.size), 0, stats.size, 0)
     return { content: buffer.subarray(0, bytesRead).toString('base64') }

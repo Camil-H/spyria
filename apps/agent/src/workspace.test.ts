@@ -353,3 +353,18 @@ test('an update refuses a bundle carrying other refs, a mismatched head and inva
       body: { error: 'The update request is not valid' },
     })
 })
+
+test('a FIFO in the workspace is not read, so a file read or a media read never waits on it', async () => {
+  const fifo = join(workspace, 'pipe.png')
+  if (!existsSync(fifo)) Bun.spawnSync(['mkfifo', fifo])
+  const reads = await Promise.race([
+    Promise.all(
+      ['file', 'media', 'file', 'media', 'file'].map(
+        async (kind) => (await read(`/api/workspace/${kind}?path=pipe.png`)).status,
+      ),
+    ),
+    Bun.sleep(3000).then(() => 'blocked'),
+  ])
+  expect(reads).toEqual([404, 404, 404, 404, 404])
+  expect((await read('/api/workspace/file?path=src/app.ts')).status).toBe(200)
+})
