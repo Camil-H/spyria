@@ -1,5 +1,5 @@
 import { Refused, relayUrlOf } from './commands.ts'
-import { isAllowedOnPersonalHost, redacted } from './personal.ts'
+import { isAllowedOnPersonalHost, isMediaHoldingSecret, redacted } from './personal.ts'
 import { contextOf, traceHeadersOf, withSpan } from './telemetry.ts'
 
 export type Frame = { type: string; sid?: unknown; [field: string]: unknown }
@@ -65,12 +65,15 @@ export const createRelay = ({
         redirect: 'manual',
         signal: AbortSignal.timeout(timeoutOf(frame.timeoutMilliseconds)),
       })
+      const body = await response.text()
+      if (personal && isMediaHoldingSecret(String(frame.path), body, personal.secrets()))
+        return send({ type: 'http_res', sid, error: 'refused: this file holds a secret' })
       send({
         type: 'http_res',
         sid,
         status: response.status,
         headers: Object.fromEntries(response.headers),
-        body: forwarded(await response.text()),
+        body: forwarded(body),
       })
     } catch (error) {
       send({ type: 'http_res', sid, error: messageOf(error) })

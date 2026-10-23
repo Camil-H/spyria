@@ -55,6 +55,23 @@ export const isAllowedOnPersonalHost = (method: string, path: string) =>
 export const redacted = (text: string, secrets: readonly string[]) =>
   secrets.reduce((result, secret) => result.replaceAll(secret, '[redacted]'), text).replace(tokenFormat, '[redacted]')
 
+const mediaPath = /^\/api\/workspace\/media(\?|$)/
+
+const decodedMediaOf = (body: string) => {
+  try {
+    const { content } = JSON.parse(body) as { content?: unknown }
+    return typeof content === 'string' ? Buffer.from(content, 'base64').toString('latin1') : ''
+  } catch {
+    return ''
+  }
+}
+
+export const isMediaHoldingSecret = (path: string, body: string, secrets: readonly string[]) => {
+  if (!mediaPath.test(path)) return false
+  const decoded = decodedMediaOf(body)
+  return redacted(decoded, secrets) !== decoded
+}
+
 const credentialsMountOf = (prefix: string, tool: CredentialsTool, target = credentialStores[tool].target): Mount => ({
   Type: 'volume',
   Source: `${prefix}cred-${tool}`,
