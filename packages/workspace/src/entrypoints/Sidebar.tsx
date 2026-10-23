@@ -21,6 +21,7 @@ import { WorkspaceSwitcher } from './WorkspaceSwitcher.tsx'
 const BrowseChannelsDialog = lazy(() => import('./BrowseChannelsDialog.tsx'))
 
 const collapsedStorageKey = 'spyria.sidebar-collapsed'
+const headerRowClass = 'flex h-9 shrink-0 items-center'
 
 const storedCollapsed = () => {
   try {
@@ -61,7 +62,9 @@ export const Sidebar = ({
     return (
       <Provider delayDuration={300}>
         <nav aria-label="Sidebar" className="flex h-full shrink-0 flex-col border-r border-line bg-sidebar p-3">
-          <IconButton label="Expand sidebar" icon={PanelLeftOpen} onClick={toggleCollapsed} />
+          <div className={headerRowClass}>
+            <IconButton label="Expand sidebar" icon={PanelLeftOpen} onClick={toggleCollapsed} />
+          </div>
         </nav>
       </Provider>
     )
@@ -71,7 +74,7 @@ export const Sidebar = ({
         aria-label="Sidebar"
         className="flex h-full w-64 shrink-0 flex-col gap-3 border-r border-line bg-sidebar p-3"
       >
-        <div className="flex items-center justify-between gap-2">
+        <div className={`${headerRowClass} justify-between gap-2`}>
           <IconButton label="Collapse sidebar" icon={PanelLeftClose} onClick={toggleCollapsed} />
           <WorkspaceSwitcher workspaceId={workspaceId} />
           <div className="flex shrink-0 gap-1">
