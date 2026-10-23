@@ -11,7 +11,7 @@ import { createRuntimeJobs, type SandboxProvider } from '@spyria/runtime/server'
 import { auditJobs, createUsageJobs } from '@spyria/usage/server'
 import { createWorkspaceJobs } from '@spyria/workspace/server'
 import type { AgentBridge } from './agent-bridge/bridge.ts'
-import { sessionJobs } from './auth/sessions.ts'
+import { recurringJobTypes, sessionJobs } from './auth/sessions.ts'
 import { contextOf, withSpan } from './telemetry.ts'
 
 type TransactionalJobHandler = (tx: ServerTransaction, workspaceId: WorkspaceId, payload: unknown) => Promise<unknown>
@@ -105,6 +105,7 @@ export const startJobWorker = (
       attributes,
       async () => {
         const { outcome, error } = await runClaimedJob(job)
+        if (outcome === 'done' && recurringJobTypes.includes(job.type)) return
         log[jobLogs[outcome].severity]({
           event: 'job.run',
           body: jobLogs[outcome].body,
