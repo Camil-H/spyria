@@ -3,6 +3,7 @@ import { type ChatId, type MemberId, runtimeHostId, type WorkspaceId } from '@sp
 import { z } from 'zod/mini'
 import { NotCurrentWorkspace } from '../domain/errors.ts'
 import { contextPermissionsOf, createZeroTransactor } from '../integrations/zero-transactor.ts'
+import { haltChatRuntime } from '../operations/halt-chat-runtime.ts'
 import { removeChatRuntime } from '../operations/remove-chat-runtime.ts'
 import { removeMemberMachine } from '../operations/remove-member-machine.ts'
 import { removeRuntimeHost } from '../operations/remove-runtime-host.ts'
@@ -42,6 +43,11 @@ export const runtimeMutators = defineMutators({
 export const removeChatRuntimeOnServer = async (tx: Transaction, workspaceId: WorkspaceId, chatId: ChatId) => {
   if (tx.location === 'server')
     await removeChatRuntime({ transactor: createZeroTransactor(tx) }, { workspaceId, chatId, now: Date.now() })
+}
+
+export const haltChatRuntimeOnServer = async (tx: Transaction, workspaceId: WorkspaceId, chatId: ChatId) => {
+  if (tx.location === 'server')
+    await haltChatRuntime({ transactor: createZeroTransactor(tx) }, { workspaceId, chatId, now: Date.now() })
 }
 
 export const stopChatRuntimeOnServer = async (tx: Transaction, workspaceId: WorkspaceId, chatId: ChatId) => {

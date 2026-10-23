@@ -143,7 +143,7 @@ test('the purge erases every row of the workspace with its chat history, gateway
   const { id: virtualKeyId } = await virtualKeyOf(bob)
   await database.$client`
     insert into workspace_connections (workspace_id, id, name, gateway_name, url, tools, allowed_tools)
-    values (${acme}, 'connection-crm', 'CRM', ${`crm-${crypto.randomUUID()}`}, 'https://crm.example.com/mcp', '[]', '[]')`
+    values (${acme}, ${`connection-${crypto.randomUUID()}`}, 'CRM', ${`crm-${crypto.randomUUID()}`}, 'https://crm.example.com/mcp', '[]', '[]')`
   await newChat({ ownerId: alice, type: 'channel' })
   const globexRowsBefore = await rowCountsOf(globex)
   expect(await deleteAs(aliceInAcme)).toEqual(succeeded)

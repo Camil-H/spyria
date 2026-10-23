@@ -164,3 +164,9 @@ export const locationOf = (runtime: Runtime) =>
   runtime.hostId === null
     ? undefined
     : { workspaceId: runtime.workspaceId, hostId: runtime.hostId, runtimeId: runtime.id }
+
+export const haltStepOf = (runtime: Runtime) => {
+  if (runtime.state === 'running') return 'stop'
+  if (runtime.state === 'creating' || runtime.state === 'installing' || runtime.state === 'starting') return 'remove'
+  return undefined
+}

@@ -3,6 +3,7 @@ import { runtimeHostId } from '@spyria/kernel'
 import {
   canTransition,
   ensureStepOf,
+  haltStepOf,
   idleStepOf,
   installFailureOf,
   installFailureReasonOf,
@@ -153,4 +154,18 @@ test('an installing runtime reads Installing with its harness name, and an insta
   expect(runtimeStatusOf({ state: 'failed', hostOnline: true }, 'Codex')).toBe('Could not start')
   expect(installFailureReasonOf(failure)).toBe('404 Not Found - GET http://registry/@openai%2fcodex')
   expect(installFailureReasonOf('start_failed')).toBeUndefined()
+})
+
+test.each([
+  ['running', 'stop'],
+  ['creating', 'remove'],
+  ['installing', 'remove'],
+  ['starting', 'remove'],
+  ['stopping', undefined],
+  ['stopped', undefined],
+  ['removing', undefined],
+  ['removed', undefined],
+  ['failed', undefined],
+] as const)('halting a %s runtime of a deleted workspace: %s', (state, step) => {
+  expect(haltStepOf(runtime({ state }))).toBe(step)
 })
