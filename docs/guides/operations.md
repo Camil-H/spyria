@@ -43,6 +43,8 @@ spyria up -d --build
 
 The `migrate` service runs Drizzle's migrations against the database and exits; the server starts only after it succeeded, and zero-cache waits for it too (it needs the publication the migrations create). A failed migration leaves the old server down and the reason in `spyria logs migrate`. Migrations are never edited once shipped, so applying them in order is always safe.
 
+When a pull changes the gateway image, the gateway migrates its `bifrost` database on start, and some of its migrations cannot be reverted. Take a [backup](#backups) before `up`; going back to the previous gateway image means restoring that backup with it.
+
 A new runtime image (`agent:build`) applies to runtimes started after the server restarts; running ones keep theirs. If you run hosts on other machines, rebuild their host image and load the new runtime image there too (see [self-hosting](./self-hosting.md#other-machines)).
 
 ## Jobs

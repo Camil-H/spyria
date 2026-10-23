@@ -195,7 +195,7 @@ export const startZeroCache = async ({
   return { url, exited, stop }
 }
 
-const gatewayImage = 'maximhq/bifrost:v2.2.6@sha256:d0b4708ace1aa175766f94afa715fd9bba3a1b56c1dc2afff15a21edf3ae4e2a'
+const gatewayImage = 'maximhq/bifrost:v2.3.2@sha256:f5b18826349fe9e1c402c10d19f1cbb5567a3c800ad928580d07f72e69106ec7'
 export const testGatewayAdmin = { user: 'spyria-test', password: 'spyria-test-gateway-password' }
 const gatewayProviders = ['openai', 'anthropic', 'mistral', 'typesafe', 'openrouter', 'gemini', 'xai']
 const zaiPaths = {

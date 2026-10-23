@@ -80,22 +80,13 @@ services:
     restart: 'no'
 
   gateway:
-    image: maximhq/bifrost:v2.2.6@sha256:d0b4708ace1aa175766f94afa715fd9bba3a1b56c1dc2afff15a21edf3ae4e2a
-    entrypoint:
-      - sh
-      - -ec
-      - |
-        mkdir -p /tmp/trust
-        awk -v distrusted=MIICTjCCAdOgAwIBAgIKPPYHqWhwDtqLhDAKBggqhkjOPQQD '/-----BEGIN/ { block = "" } { block = block $$0 "\n" } /-----END/ && !index(block, distrusted) { printf "%s", block }' /etc/ssl/certs/ca-certificates.crt > /tmp/trust/ca-certificates.crt
-        exec /app/docker-entrypoint.sh
+    image: maximhq/bifrost:v2.3.2@sha256:f5b18826349fe9e1c402c10d19f1cbb5567a3c800ad928580d07f72e69106ec7
     container_name: spyria-gateway
     profiles: [gateway]
     depends_on:
       gateway-database:
         condition: service_completed_successfully
     environment:
-      SSL_CERT_FILE: /tmp/trust/ca-certificates.crt
-      SSL_CERT_DIR: /tmp/trust
       BIFROST_ENCRYPTION_KEY: ${SPYRIA_GATEWAY_ENCRYPTION_KEY:-spyria-dev-gateway-encryption-key}
       BIFROST_SETUP_TOKEN: ${SPYRIA_GATEWAY_SETUP_TOKEN:-spyria-dev-gateway-setup-token}
       BIFROST_ADMIN_USER: ${SPYRIA_GATEWAY_ADMIN_USER:-spyria}
