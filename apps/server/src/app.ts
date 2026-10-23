@@ -3,6 +3,8 @@ import { handleMutateRequest, handleQueryRequest } from '@rocicorp/zero/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import {
   type AgentChat,
+  chatAttachmentPathOf,
+  chatAttachmentsPathOf,
   chatGitPathOf,
   chatPlanModePathOf,
   chatPublishPathOf,
@@ -12,13 +14,17 @@ import {
   commandOutputPathOf,
   conversationMutators,
   createGatewaySessionClassifier,
+  getAttachment,
   getChatRouting,
   getCommandOutput,
   isGitAction,
   isWorkspaceRead,
+  maximumMediaBytes,
+  mediaResponseOf,
   type PublishAction,
   planModeOf,
   questionAnswerOf,
+  uploadAttachmentFromRequest,
 } from '@spyria/conversation/server'
 import type { Database } from '@spyria/db/postgres'
 import { schema } from '@spyria/db/zero'
@@ -93,6 +99,7 @@ import {
   workspaceMutators,
 } from '@spyria/workspace/server'
 import { type Context, Hono } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
 import { HTTPException } from 'hono/http-exception'
 import { routePath } from 'hono/route'
 import { type AgentBridge, createAgentBridge } from './agent-bridge/bridge.ts'
@@ -176,10 +183,13 @@ export const sessionClassifierOf =
 
 const statusByErrorCode: Record<string, number> = {
   missing_workspace_permission: 403,
+  missing_chat_permission: 403,
   github_refused: 422,
   github_unreachable: 502,
   local_sessions_off: 403,
   host_not_found: 404,
+  attachment_not_allowed: 415,
+  attachment_not_found: 404,
 }
 
 const endpointResponse = async (request: string, successStatus: number, endpoint: () => Promise<unknown>) => {
@@ -512,6 +522,37 @@ export const createApp = ({
           ),
       )
     })
+    .post(
+      chatAttachmentsPathOf(':chatId'),
+      rateLimited('uploads'),
+      bodyLimit({
+        maxSize: maximumMediaBytes,
+        onError: (context) => context.json({ error: 'attachment_not_allowed', message: 'The file is over 20 MB' }, 413),
+      }),
+      (context) =>
+        endpointResponse('Uploading an attachment', 201, async () =>
+          uploadAttachmentFromRequest(context.get('transact'), context.get('zeroContext'), {
+            chatId: context.req.param('chatId') ?? '',
+            name: context.req.query('name') ?? '',
+            content: new Uint8Array(await context.req.arrayBuffer()),
+          }),
+        ),
+    )
+    .get(chatAttachmentPathOf(':chatId', ':attachmentId'), (context) =>
+      endpointResponse('Reading an attachment', 200, async () =>
+        mediaResponseOf({
+          ...(await context.get('transact')((tx) =>
+            getAttachment(
+              tx,
+              context.get('zeroContext'),
+              context.req.param('chatId') ?? '',
+              context.req.param('attachmentId') ?? '',
+            ),
+          )),
+          isImmutable: true,
+        }),
+      ),
+    )
     .post(chatPublishPathOf(':chatId', ':action{push|pull_request}'), async (context) => {
       const { title, body } = ((await context.req.json().catch(() => null)) ?? {}) as Record<string, unknown>
       const { workspaceId, userId } = context.get('zeroContext')

@@ -66,6 +66,7 @@ const liveMessageOf = (
   fields: Pick<ConversationMessage, 'id' | 'kind' | 'body' | 'step'>,
 ): ConversationMessage => ({
   ...fields,
+  attachments: [],
   authorName: 'Agent',
   createdAt: messages.find((message) => message.id === promptId)?.createdAt ?? new Date(0).toISOString(),
   replyToId: messageId(promptId),

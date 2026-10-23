@@ -14,4 +14,5 @@ export const deleteMessage = ({ transactor }: Dependencies, { messageId, deleter
       actorId: deleterId,
       message: deletedMessage(message, deleterId, new Date()),
     })
+    await unitOfWork.attachments.discard(messageId)
   })

@@ -44,6 +44,7 @@ test('messagesFromEvents folds posted, replied, thread reply, edited and deleted
       kind: 'member',
       authorId: 'alice',
       body: 'Hello there',
+      attachments: [],
       detail: null,
       step: null,
       replyToId: null,
@@ -60,6 +61,7 @@ test('messagesFromEvents folds posted, replied, thread reply, edited and deleted
       kind: 'agent',
       authorId: null,
       body: 'Hi',
+      attachments: [],
       detail: 'Read 2 files',
       step: null,
       replyToId: 'question',
@@ -76,6 +78,7 @@ test('messagesFromEvents folds posted, replied, thread reply, edited and deleted
       kind: 'member',
       authorId: 'alice',
       body: '',
+      attachments: [],
       detail: null,
       step: null,
       replyToId: null,
@@ -129,4 +132,20 @@ test('a posted step keeps its step and a step change replaces it in place', () =
     eventAt(3, 'message.step_changed', null, { messageId: 'unknown', step: card }),
   ])
   expect(projected).toMatchObject({ id: 'card', seq: 1, kind: 'step', authorId: 'alice', step: { state: 'merged' } })
+})
+
+test('messagesFromEvents keeps attachments through an edit and drops them with a deletion', () => {
+  const photo = { id: 'attachment-1', name: 'photo.png', mediaType: 'image/png', size: 2048 }
+  const attachmentsAfter = (...later: StoredEvent[]) =>
+    messagesFromEvents([
+      eventAt(1, 'message.posted', 'alice', { ...posted, body: '', attachments: [photo] }, 'photo'),
+      ...later,
+    ]).map(({ body, attachments }) => ({ body, attachments }))
+  expect(attachmentsAfter()).toEqual([{ body: '', attachments: [photo] }])
+  expect(attachmentsAfter(eventAt(2, 'message.edited', 'alice', { messageId: 'photo', body: 'Look' }))).toEqual([
+    { body: 'Look', attachments: [photo] },
+  ])
+  expect(attachmentsAfter(eventAt(2, 'message.deleted', 'alice', { messageId: 'photo' }))).toEqual([
+    { body: '', attachments: [] },
+  ])
 })

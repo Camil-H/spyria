@@ -11,6 +11,7 @@ import type {
 } from '@spyria/kernel'
 import type { AgentEvent } from '../domain/agent-events.ts'
 import type { AgentStep, StepDelegation, StoredStep } from '../domain/agent-steps.ts'
+import type { Attachment } from '../domain/attachments.ts'
 import type { ConversationChat, Message, MessageChange } from '../domain/message.ts'
 import type { AgentInterrupt } from './agent.ts'
 
@@ -28,6 +29,13 @@ export type MessageRepository = {
   history(chatId: ChatId): Promise<Message[]>
   seedFor(prompt: Message): Promise<Message | undefined>
   pullRequestCard(chatId: ChatId): Promise<Message | undefined>
+}
+
+export type AttachmentRepository = {
+  store(attachment: Attachment & { chatId: ChatId; uploaderId: MemberId; content: Uint8Array }): Promise<void>
+  claim(chatId: ChatId, uploaderId: MemberId, requested: readonly Attachment[]): Promise<readonly Attachment[]>
+  link(messageId: MessageId, attachments: readonly Attachment[]): Promise<void>
+  discard(messageId: MessageId): Promise<void>
 }
 
 export type AgentJobs = {

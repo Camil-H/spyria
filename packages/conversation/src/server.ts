@@ -17,6 +17,11 @@ export {
   streamedTextOf,
   toolCallIdOf,
 } from './domain/agent-events.ts'
+export {
+  chatAttachmentPathOf,
+  chatAttachmentsPathOf,
+  maximumMediaBytes,
+} from './domain/attachments.ts'
 export { awaitTaskTool, routerTools, stillRunningOf, subagentFailureOf, unknownTaskOf } from './domain/delegation.ts'
 export { type GitAction, isGitAction } from './domain/git-actions.ts'
 export { genericModelCallNoticeOf, type ModelCallFailure } from './domain/model-call-failures.ts'
@@ -42,7 +47,7 @@ export {
 } from './domain/tool-calls.ts'
 export { isWorkspaceRead } from './domain/workspace-reads.ts'
 export type { AgentStream, ConversationCommands } from './entrypoints/commands.ts'
-export { planModeOf, questionAnswerOf } from './entrypoints/endpoints.ts'
+export { mediaResponseOf, planModeOf, questionAnswerOf, uploadAttachmentFromRequest } from './entrypoints/endpoints.ts'
 export { createAgentHandlers } from './entrypoints/jobs.ts'
 export { conversationMutators } from './entrypoints/mutators.ts'
 export { createGatewaySessionClassifier } from './integrations/gateway-session-classifier.ts'
@@ -60,5 +65,6 @@ export { rebuildMessages } from './integrations/postgres-message-projection.ts'
 export { type AgentLlm, createSpyriaAgentClient } from './integrations/spyria-agent-client.ts'
 export { createStoreDraftRepository } from './integrations/store-draft-repository.ts'
 export { saveDraft } from './operations/save-draft.ts'
+export { getAttachment } from './queries/get-attachment.ts'
 export { getChatRouting } from './queries/get-chat-routing.ts'
 export { getCommandOutput } from './queries/get-command-output.ts'

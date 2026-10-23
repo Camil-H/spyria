@@ -10,6 +10,7 @@ const answer: ConversationMessage = {
   authorName: 'Agent',
   createdAt: '2026-10-01T09:00:00.000Z',
   body: 'The **total** is `42`',
+  attachments: [],
   step: null,
   replyToId: messageId('message-prompt'),
   canEdit: false,

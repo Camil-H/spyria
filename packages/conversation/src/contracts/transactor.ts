@@ -3,6 +3,7 @@ import type {
   AgentEventRepository,
   AgentJobs,
   AgentTurnRepository,
+  AttachmentRepository,
   ChatRepository,
   DelegationRepository,
   MemberDirectory,
@@ -15,6 +16,7 @@ import type {
 
 export type UnitOfWork = {
   messages: MessageRepository
+  attachments: AttachmentRepository
   readMarkers: ReadMarkerRepository
   chats: ChatRepository
   agentJobs: AgentJobs
