@@ -10,6 +10,7 @@ import { Disclosure } from './Disclosure.tsx'
 import { EditMessageForm } from './EditMessageForm.tsx'
 import { ForkButton } from './ForkButton.tsx'
 import { LazyMarkdown } from './LazyMarkdown.tsx'
+import { AttachmentList } from './Media.tsx'
 import { MessageMenu } from './MessageMenu.tsx'
 import { useConversationCommands } from './providers.tsx'
 
@@ -128,6 +129,7 @@ export const MessageItem = ({
             ) : (
               <p className={plainTextClassName}>{message.body}</p>
             )}
+            {!message.isDeleted && mode !== 'edit' && <AttachmentList attachments={message.attachments} />}
             {message.runtimes.length > 0 && <RuntimeLinks runtimes={message.runtimes} />}
             {hasMenu && !message.isDeleted && mode !== 'edit' && (
               <MessageMenu

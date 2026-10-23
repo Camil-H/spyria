@@ -29,3 +29,5 @@ export const QuestionAnswererContext = createContext<{
 }>({ answer: async () => 0, mayAnswerAsPrompter: false, isOwner: false })
 
 export const ToolsAwaitingApprovalContext = createContext<ReadonlySet<string>>(new Set())
+
+export const ChatMediaContext = createContext<{ chatId: string; isRuntime: boolean } | null>(null)
