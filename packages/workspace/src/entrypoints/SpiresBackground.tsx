@@ -30,7 +30,7 @@ const toneOf: Record<Depth, string> = {
 const layers: readonly Layer[] = [
   {
     depth: 'far',
-    count: 11,
+    count: 7,
     apex: 36,
     lean: 0.8,
     radius: 2.4,
@@ -42,7 +42,7 @@ const layers: readonly Layer[] = [
   },
   {
     depth: 'mid',
-    count: 6,
+    count: 5,
     apex: 28,
     lean: 0.6,
     radius: 4,
@@ -76,12 +76,20 @@ const seededRandom = (seed: number) => {
   }
 }
 
+const edgenessOf = (x: number) => Math.min(Math.abs(x - vanishingPoint[0]) / 50, 1)
+
 const spiresOf = (layer: Layer, random: () => number): Spire[] =>
-  Array.from({ length: layer.count }, (_, index) => ({
-    ...layer,
-    x: ((index + 0.5) / layer.count) * 124 - 12 + (random() - 0.5) * (70 / layer.count),
-    key: `${layer.depth}-${index}`,
-  }))
+  Array.from({ length: layer.count }, (_, index) => {
+    const x = ((index + 0.5) / layer.count) * 124 - 12 + (random() - 0.5) * (70 / layer.count)
+    const edgeness = edgenessOf(x)
+    return {
+      ...layer,
+      x,
+      apex: layer.apex - 16 * edgeness ** 1.5,
+      lean: layer.lean * (1 - 0.6 * edgeness),
+      key: `${layer.depth}-${index}`,
+    }
+  })
 
 const random = seededRandom(11)
 const spires = layers.flatMap((layer) => spiresOf(layer, random))
