@@ -69,13 +69,13 @@ export const Composer = ({
       {isBlocked && <div className="text-sm text-muted">{blockedNotice}</div>}
       {aboveBox}
       <ErrorMessage message={sending.errorMessage && `Not sent: ${sending.errorMessage}`} />
-      <div className="rounded-xl border border-line bg-raised">
+      <div className="rounded-xl border border-line bg-raised has-[textarea:focus-visible]:outline-2 has-[textarea:focus-visible]:outline-focus has-[textarea:focus-visible]:-outline-offset-1">
         <div className="flex items-end gap-2 p-2">
           <textarea
             ref={textareaRef}
             aria-label={threadRootId ? 'Reply' : 'Message'}
             rows={1}
-            className={`max-h-40 min-w-0 flex-1 resize-none rounded-md bg-transparent px-2 py-1.5 text-sm field-sizing-content ${focusRing}`}
+            className="max-h-40 min-w-0 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm leading-5 outline-none field-sizing-content"
             value={text}
             onChange={(event) => change(event.target.value)}
             onKeyDown={sendOnShortcut}
