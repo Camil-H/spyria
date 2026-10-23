@@ -1,6 +1,6 @@
 import { type ChatPermission, type MemberId, requireChatPermission } from '@spyria/kernel'
 import type { AgentChat } from '../contracts/agent.ts'
-import { allowedMediaFormatOf, isRuntimeMediaPath } from '../domain/attachments.ts'
+import { allowedRuntimeMediaFormatOf, isRuntimeMediaPath } from '../domain/attachments.ts'
 import { RuntimeMediaUnavailable } from '../domain/errors.ts'
 import { agentWorkspacePathOf, branchReads, snapshotReadingOf, type WorkspaceRead } from '../domain/workspace-reads.ts'
 import type { AgentDependencies } from './agent-turn.ts'
@@ -39,7 +39,7 @@ export const readRuntimeMedia = async (dependencies: Dependencies, input: Input 
     ? await dependencies.agentClient.readMedia(endpoint, input.path).catch(() => undefined)
     : undefined
   if (!content) throw new RuntimeMediaUnavailable()
-  return { content, mediaType: allowedMediaFormatOf(content).mediaType }
+  return { content, mediaType: allowedRuntimeMediaFormatOf(content).mediaType }
 }
 
 export const snapshotWorkspace = async (dependencies: Dependencies, chat: AgentChat) => {

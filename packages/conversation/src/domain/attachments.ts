@@ -60,6 +60,12 @@ export const requireRoomFor = (size: number, stored: StoredBytes) => {
   if (stored.inWorkspace + size > maximumWorkspaceAttachmentBytes) throw new AttachmentStorageFull()
 }
 
+export const allowedRuntimeMediaFormatOf = (bytes: Uint8Array) => {
+  const format = allowedMediaFormatOf(bytes)
+  if (format.kind === 'file') throw new AttachmentNotAllowed()
+  return format
+}
+
 export const attachmentNameOf = (rawName: string) => {
   const baseName = rawName.split(/[\\/]/).at(-1) ?? ''
   const printable = baseName.replaceAll(/[\p{Cc}\p{Cf}"]/gu, '').trim()
@@ -82,7 +88,7 @@ const runtimeVideoExtensions = /\.(mp4|m4v|webm|mov)$/i
 const runtimeAudioExtensions = /\.(mp3|wav|ogg|oga|m4a|flac)$/i
 
 export const isRuntimeMediaPath = (source: string) =>
-  source !== '' && !/^[a-z][\w+.-]*:/i.test(source) && !source.startsWith('//') && !source.includes('\0')
+  source !== '' && !/^[a-z][\w+.-]*:/i.test(source) && !source.startsWith('//') && !/[\\\0]/.test(source)
 
 export const runtimeMediaKindOf = (path: string): MediaKind =>
   runtimeVideoExtensions.test(path) ? 'video' : runtimeAudioExtensions.test(path) ? 'audio' : 'image'

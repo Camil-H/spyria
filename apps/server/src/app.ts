@@ -534,7 +534,7 @@ export const createApp = ({
         }),
       ),
     )
-    .get(chatAttachmentPathOf(':chatId', ':attachmentId'), (context) =>
+    .get(chatAttachmentPathOf(':chatId', ':attachmentId'), rateLimited('attachmentReads'), (context) =>
       endpointResponse('Reading an attachment', 200, async () =>
         mediaResponseOf({
           ...(await context.get('transact')((tx) =>
@@ -549,7 +549,7 @@ export const createApp = ({
         }),
       ),
     )
-    .get(chatMediaPathOf(':chatId'), (context) => {
+    .get(chatMediaPathOf(':chatId'), rateLimited('runtimeMediaReads'), (context) => {
       const { workspaceId, userId } = context.get('zeroContext')
       const path = context.req.query('path') ?? ''
       return endpointResponse('Reading a runtime file', 200, async () =>

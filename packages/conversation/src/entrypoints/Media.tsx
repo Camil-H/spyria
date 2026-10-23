@@ -1,6 +1,6 @@
 import type { WorkspaceId } from '@spyria/kernel'
 import { focusRing } from '@spyria/ui'
-import { FileText, Play } from 'lucide-react'
+import { FileText, Image as ImageIcon, Play } from 'lucide-react'
 import { type ReactNode, use, useEffect, useRef, useState } from 'react'
 import { useOutletContext } from 'react-router'
 import {
@@ -66,6 +66,12 @@ const Failure = ({ name, failure }: { name: string; failure: string }) => (
   </span>
 )
 
+const LoadedImage = ({ url, name }: { url: string; name: string }) => (
+  <a href={url} target="_blank" rel="noopener noreferrer" className={`inline-block rounded-md ${focusRing}`}>
+    <img src={url} alt={name} className={mediaClassName} />
+  </a>
+)
+
 const ImageMedia = ({ path, name }: { path: string; name: string }) => {
   const { ref, isNear } = useIsNearViewport()
   const { url, failure } = useMediaUrl(path, isNear)
@@ -73,9 +79,7 @@ const ImageMedia = ({ path, name }: { path: string; name: string }) => {
   return (
     <span ref={ref} className="block">
       {url ? (
-        <a href={url} target="_blank" rel="noopener noreferrer" className={`inline-block rounded-md ${focusRing}`}>
-          <img src={url} alt={name} className={mediaClassName} />
-        </a>
+        <LoadedImage url={url} name={name} />
       ) : (
         <span role="img" aria-label={`Loading ${name}`} className="block h-40 w-60 animate-pulse rounded-md bg-hover" />
       )}
@@ -99,6 +103,7 @@ const OnDemandMedia = ({
   const [isWanted, setIsWanted] = useState(false)
   const { url, failure } = useMediaUrl(path, isWanted)
   if (failure) return <Failure name={name} failure={failure} />
+  if (url && kind === 'image') return <LoadedImage url={url} name={name} />
   if (url && kind === 'video')
     // biome-ignore lint/a11y/useMediaCaption: uploads and runtime files come without a caption track
     return <video src={url} controls autoPlay className={mediaClassName} />
@@ -113,7 +118,13 @@ const OnDemandMedia = ({
     )
   return (
     <button type="button" onClick={() => setIsWanted(true)} aria-busy={isWanted} className={mediaButtonClassName}>
-      {kind === 'file' ? <FileText aria-hidden size={16} /> : <Play aria-hidden size={16} />}
+      {kind === 'file' ? (
+        <FileText aria-hidden size={16} />
+      ) : kind === 'image' ? (
+        <ImageIcon aria-hidden size={16} />
+      ) : (
+        <Play aria-hidden size={16} />
+      )}
       <span className="min-w-0 truncate">{name}</span>
       <span className="shrink-0 text-xs text-muted">
         {isWanted ? 'Loading…' : detail ? `${kindLabel[kind]} · ${detail}` : kindLabel[kind]}
@@ -122,8 +133,20 @@ const OnDemandMedia = ({
   )
 }
 
-const MediaOf = ({ path, name, kind, detail }: { path: string; name: string; kind: MediaKind; detail: string }) =>
-  kind === 'image' ? (
+const MediaOf = ({
+  path,
+  name,
+  kind,
+  detail,
+  isOnDemand = false,
+}: {
+  path: string
+  name: string
+  kind: MediaKind
+  detail: string
+  isOnDemand?: boolean
+}) =>
+  kind === 'image' && !isOnDemand ? (
     <ImageMedia path={path} name={name} />
   ) : (
     <OnDemandMedia path={path} name={name} kind={kind} detail={detail} />
@@ -148,7 +171,17 @@ export const AttachmentList = ({ attachments }: { attachments: readonly Attachme
   )
 }
 
-export const RuntimeMedia = ({ path, alt, fallback }: { path: string; alt: string; fallback: ReactNode }) => {
+export const RuntimeMedia = ({
+  path,
+  alt,
+  isOnDemand,
+  fallback,
+}: {
+  path: string
+  alt: string
+  isOnDemand: boolean
+  fallback: ReactNode
+}) => {
   const chat = use(ChatMediaContext)
   if (!chat?.isRuntime) return fallback
   const name = alt || path.split('/').at(-1) || path
@@ -158,6 +191,7 @@ export const RuntimeMedia = ({ path, alt, fallback }: { path: string; alt: strin
       name={name}
       kind={runtimeMediaKindOf(path)}
       detail=""
+      isOnDemand={isOnDemand}
     />
   )
 }

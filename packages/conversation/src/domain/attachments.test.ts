@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test'
 import {
   allowedMediaFormatOf,
+  allowedRuntimeMediaFormatOf,
   attachmentNameOf,
   fileSizeOf,
   isRuntimeMediaPath,
@@ -63,11 +64,25 @@ test('sizes read in plain units', () => {
 test('a runtime media path is a path in the workspace, never a URL', () => {
   expect(isRuntimeMediaPath('out/chart.png')).toBe(true)
   expect(isRuntimeMediaPath('/workspace/project/chart.png')).toBe(true)
-  for (const url of ['https://example.com/a.png', 'data:image/png;base64,AA', 'javascript:alert(1)', '//cdn/a.png', ''])
+  for (const url of [
+    'https://example.com/a.png',
+    'data:image/png;base64,AA',
+    'javascript:alert(1)',
+    '//cdn/a.png',
+    '\\\\evil.com/x.png',
+    '/\\evil.com/x.png',
+    'out\\chart.png',
+    '',
+  ])
     expect(isRuntimeMediaPath(url)).toBe(false)
   expect(runtimeMediaKindOf('demo.MP4')).toBe('video')
   expect(runtimeMediaKindOf('voice.m4a')).toBe('audio')
   expect(runtimeMediaKindOf('chart.png')).toBe('image')
+})
+
+test('a runtime file shows inline only as an image, a sound or a video, never as a PDF', () => {
+  expect(allowedRuntimeMediaFormatOf(bytes('GIF89a')).kind).toBe('image')
+  expect(() => allowedRuntimeMediaFormatOf(bytes('%PDF-1.7'))).toThrow(AttachmentNotAllowed)
 })
 
 test('the space left is checked against the pending uploads of the member and the storage of the workspace', () => {

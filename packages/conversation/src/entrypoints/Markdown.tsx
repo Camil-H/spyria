@@ -10,8 +10,11 @@ type MarkdownNode = {
   value?: string
   children?: MarkdownNode[]
   position?: { start: { offset?: number } }
-  data?: { hName?: string }
+  data?: { hName?: string; hProperties?: Record<string, unknown> }
 }
+
+const autoLoadedImagesPerMessage = 4
+const onDemandProperty = 'data-on-demand'
 
 const tokenColors =
   '[&_.hljs-keyword]:text-[light-dark(#7c3aed,#c4b5fd)] [&_.hljs-string]:text-[light-dark(#15803d,#86efac)] [&_.hljs-number]:text-[light-dark(#b45309,#fcd34d)] [&_.hljs-comment]:text-muted [&_.hljs-title]:text-[light-dark(#1d4ed8,#93c5fd)] [&_.hljs-built_in]:text-[light-dark(#be123c,#fda4af)]'
@@ -46,6 +49,16 @@ const lineBreaksKept = () => (tree: MarkdownNode) => {
     ),
   })
   tree.children = withBreaks(tree).children
+}
+
+const laterImagesOnDemand = () => (tree: MarkdownNode) => {
+  let imageCount = 0
+  const markLaterImages = (node: MarkdownNode) => {
+    if (node.type === 'image' && ++imageCount > autoLoadedImagesPerMessage)
+      node.data = { ...node.data, hProperties: { ...node.data?.hProperties, [onDemandProperty]: 'true' } }
+    node.children?.forEach(markLaterImages)
+  }
+  markLaterImages(tree)
 }
 
 const decodedPathOf = (source: string) => {
@@ -116,11 +129,16 @@ const components: Components = {
       {children} <span className="text-xs text-muted">({domainOf(href)})</span>
     </a>
   ),
-  img: ({ src, alt }) => {
+  img: ({ src, alt, ...properties }) => {
     const source = typeof src === 'string' ? src : undefined
     const remoteImage = <RemoteImage src={source} alt={alt} />
     return source && isRuntimeMediaPath(source) ? (
-      <RuntimeMedia path={decodedPathOf(source)} alt={alt ?? ''} fallback={remoteImage} />
+      <RuntimeMedia
+        path={decodedPathOf(source)}
+        alt={alt ?? ''}
+        isOnDemand={onDemandProperty in properties}
+        fallback={remoteImage}
+      />
     ) : (
       remoteImage
     )
@@ -139,7 +157,13 @@ const components: Components = {
 const Markdown = ({ text, keepsLineBreaks = false }: { text: string; keepsLineBreaks?: boolean }) => (
   <div className="flex flex-col gap-2 text-sm [&_ol]:list-decimal [&_ol]:pl-5 [&_table]:border-collapse [&_td]:border [&_td]:border-line [&_td]:px-2 [&_th]:border [&_th]:border-line [&_th]:px-2 [&_ul]:list-disc [&_ul]:pl-5 [&_:not(pre)>code]:rounded [&_:not(pre)>code]:bg-hover [&_:not(pre)>code]:px-1 [&_:not(pre)>code]:text-xs">
     <ReactMarkdown
-      remarkPlugins={[remarkGfm, rawHtmlAsText, underlineFromUnderscores, ...(keepsLineBreaks ? [lineBreaksKept] : [])]}
+      remarkPlugins={[
+        remarkGfm,
+        rawHtmlAsText,
+        underlineFromUnderscores,
+        laterImagesOnDemand,
+        ...(keepsLineBreaks ? [lineBreaksKept] : []),
+      ]}
       components={components}
     >
       {text}
