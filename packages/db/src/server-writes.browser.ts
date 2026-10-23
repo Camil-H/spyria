@@ -52,7 +52,9 @@ export const chatContextTokens = skippedOnClient
 export const appendChatEvent = () => Promise.reject(new Error('Chat events are appended on the server only'))
 export const isSessionStartPending = async () => false
 export const scheduleWorkspaceDeletion = skippedOnClient
-export const isWorkspacePurgeDue = async () => false
+export const lockDuePurge = async () => false
+export const isWorkspaceDeleted = async () => false
+export const workspaceCleanupOf = async () => ({ isPending: false, failed: [] })
+export const purgeWorkspaceChunk = async () => 0
 export const workspacePurgeTargetsOf = async () => ({ memberIds: [], runtimeChatIds: [] })
-export const hasPendingWorkspaceJobs = async () => false
 export const purgeWorkspaceRows = skippedOnClient

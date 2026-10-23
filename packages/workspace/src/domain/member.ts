@@ -11,6 +11,7 @@ export type Member = Readonly<{
 export const workspaceJobTypes = {
   memberRemoved: 'workspace.member-removed',
   purge: 'workspace.purge',
+  halt: 'workspace.halt',
 } as const
 
 export const isActive = (member: Member | undefined): member is Member =>

@@ -1,20 +1,30 @@
-import type { WorkspacePurgeTransactor } from '../contracts/transactor.ts'
+import type { DeletedWorkspaceTransactor } from '../contracts/transactor.ts'
 import type { PurgeStage } from '../domain/workspace.ts'
 
-type Dependencies = { transactor: WorkspacePurgeTransactor; cleanupPollMilliseconds: number }
+type Dependencies = {
+  transactor: DeletedWorkspaceTransactor
+  cleanupPollMilliseconds: number
+  failedCleanupRetryMilliseconds: number
+}
 
 export const purgeWorkspace = (
-  { transactor, cleanupPollMilliseconds }: Dependencies,
+  { transactor, cleanupPollMilliseconds, failedCleanupRetryMilliseconds }: Dependencies,
   { stage }: { stage: PurgeStage },
 ) =>
-  transactor.run(async ({ purge }) => {
-    if (!(await purge.isDue())) return undefined
+  transactor.run(async ({ deletedWorkspace }) => {
+    if (!(await deletedWorkspace.lockIfPurgeDue())) return undefined
     if (stage === 'release') {
-      await purge.release()
-      await purge.deleteLater(cleanupPollMilliseconds)
+      await deletedWorkspace.release()
+      await deletedWorkspace.deleteLater(cleanupPollMilliseconds)
       return undefined
     }
-    if (await purge.hasPendingCleanup()) return { retryInMilliseconds: cleanupPollMilliseconds }
-    await purge.deleteAll()
+    const cleanup = await deletedWorkspace.cleanup()
+    if (cleanup.isPending) return { retryInMilliseconds: cleanupPollMilliseconds }
+    if (cleanup.failed.length > 0) {
+      await deletedWorkspace.reportFailedCleanup(cleanup)
+      return { retryInMilliseconds: failedCleanupRetryMilliseconds }
+    }
+    if ((await deletedWorkspace.deleteChunk()) > 0) return { retryInMilliseconds: 0 }
+    await deletedWorkspace.deleteAll()
     return undefined
   })
