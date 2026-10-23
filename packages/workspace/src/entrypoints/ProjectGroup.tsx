@@ -7,6 +7,7 @@ import type { ChatsPolicy } from '../domain/project.ts'
 import type { Sidebar } from '../queries/get-sidebar.ts'
 import { type ChatAction, type ChatAdornment, ChatRow } from './ChatRow.tsx'
 import { NameDialog } from './NameDialog.tsx'
+import { NewChatDialog } from './NewChatDialog.tsx'
 import { useWorkspaceCommands } from './providers.tsx'
 import { menuTriggerClass } from './ui.ts'
 
@@ -25,7 +26,7 @@ export const ProjectGroup = ({
 }) => {
   const [isExpanded, setIsExpanded] = useState(true)
   const commands = useWorkspaceCommands()
-  const [openDialog, setOpenDialog] = useState<'rename' | 'archive' | null>(null)
+  const [openDialog, setOpenDialog] = useState<'chat' | 'rename' | 'archive' | null>(null)
   const closeDialog = () => setOpenDialog(null)
   const archiveWith = async (chatsPolicy: ChatsPolicy) => {
     await commands.archiveProject({ workspaceId, projectId: project.id, chatsPolicy })
@@ -52,8 +53,11 @@ export const ProjectGroup = ({
           <Content
             align="start"
             className={menuContentClass}
-            onCloseAutoFocus={(event) => openDialog === 'rename' && event.preventDefault()}
+            onCloseAutoFocus={(event) => (openDialog === 'chat' || openDialog === 'rename') && event.preventDefault()}
           >
+            <Item className={menuItemClass} onSelect={() => setOpenDialog('chat')}>
+              New chat
+            </Item>
             <Item className={menuItemClass} onSelect={() => setOpenDialog('rename')}>
               Rename project
             </Item>
@@ -63,6 +67,14 @@ export const ProjectGroup = ({
           </Content>
         </Root>
       </div>
+      {openDialog === 'chat' && (
+        <NewChatDialog
+          workspaceId={workspaceId}
+          projects={projects}
+          initialProjectId={project.id}
+          onClose={closeDialog}
+        />
+      )}
       {openDialog === 'rename' && (
         <NameDialog
           label="Rename project"
