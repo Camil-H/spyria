@@ -500,13 +500,10 @@ export const createAgentBridge = ({
         closeStreamsWhere((session) => session.workspaceId === workspaceId && session.memberId === memberId),
       closeSessionStreams: (workspaceId: string, sessionId: string) =>
         closeStreamsWhere((session) => session.workspaceId === workspaceId && session.sessionId === sessionId),
+      closeWorkspaceStreams: (workspaceId: string) =>
+        closeStreamsWhere((session) => session.workspaceId === workspaceId),
       openStream: (viewer: WSContext, session: StreamSession) => {
         streams.set(viewer, session)
-      },
-      closeWorkspaceStreams: (workspaceId: string) => {
-        for (const [key, watching] of viewers)
-          if (key.startsWith(`${workspaceId}/`))
-            for (const viewer of watching.keys()) viewer.close(4001, 'Not signed in')
       },
       unwatch: (viewer: WSContext, chat?: AgentChat) => {
         for (const key of chat ? [keyOf(chat)] : [...viewers.keys()]) unwatchChat(viewer, key)
