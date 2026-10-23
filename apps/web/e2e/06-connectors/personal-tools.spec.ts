@@ -181,6 +181,11 @@ test.describe('Personal tools', () => {
     await connectFake(page, account)
     await connectionsOf(page).getByRole('button', { name: 'Disconnect fake' }).click()
     await expect(connectedRowOf(page)).toHaveCount(0)
+    await expect(
+      connectionsOf(page)
+        .getByRole('status')
+        .filter({ hasText: 'remove it in your fake settings to revoke it there too' }),
+    ).toBeVisible()
     await expect(connectionsOf(page).getByRole('group', { name: 'fake' })).toContainText('Not connected')
     await expect(connectionsOf(page).getByRole('button', { name: 'Connect fake', exact: true })).toBeVisible()
     await promptTool(page, agentScript, 'Who am I after disconnecting?')

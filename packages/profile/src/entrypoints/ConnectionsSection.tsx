@@ -17,12 +17,18 @@ export const ConnectionsSection = ({ workspaceId, memberId }: { workspaceId: Wor
   const shared = useQuery(getSharedConnections, workspaceId, memberId)
   const connected = useQuery(getPersonalConnections, workspaceId, memberId)
   const [servers, setServers] = useState<string[]>([])
+  const [disconnectedTool, setDisconnectedTool] = useState<string>()
   useEffect(() => {
     commands.availableTools({ workspaceId }).then(setServers, () => setServers([]))
   }, [commands, workspaceId])
   const available = servers.filter((server) => !connected.some(({ tool }) => tool === server))
-  const act = (command: 'connectTool' | 'disconnectTool', tool: string) => () =>
-    run(() => commands[command]({ workspaceId, tool }))
+  const connect = (tool: string) => () => {
+    setDisconnectedTool(undefined)
+    return run(() => commands.connectTool({ workspaceId, tool }))
+  }
+  const disconnect = (tool: string) => async () => {
+    if (await run(() => commands.disconnectTool({ workspaceId, tool }))) setDisconnectedTool(tool)
+  }
   return (
     <LabelledSection title="Connections">
       <Root defaultValue="shared" className="flex flex-col gap-3">
@@ -58,11 +64,11 @@ export const ConnectionsSection = ({ workspaceId, memberId }: { workspaceId: Wor
                 <span className="text-muted">{status}</span>
                 <span className="ml-auto flex gap-2">
                   {status === 'Needs reconnection' && (
-                    <button type="button" className={ghostButtonClass} onClick={act('connectTool', tool)}>
+                    <button type="button" className={ghostButtonClass} onClick={connect(tool)}>
                       Reconnect {tool}
                     </button>
                   )}
-                  <button type="button" className={ghostButtonClass} onClick={act('disconnectTool', tool)}>
+                  <button type="button" className={ghostButtonClass} onClick={disconnect(tool)}>
                     Disconnect {tool}
                   </button>
                 </span>
@@ -73,11 +79,17 @@ export const ConnectionsSection = ({ workspaceId, memberId }: { workspaceId: Wor
             <fieldset key={tool} aria-label={tool} className={`${rowClass} text-sm`}>
               <span className="font-medium">{tool}</span>
               <span className="text-muted">Not connected</span>
-              <button type="button" className={`${ghostButtonClass} ml-auto`} onClick={act('connectTool', tool)}>
+              <button type="button" className={`${ghostButtonClass} ml-auto`} onClick={connect(tool)}>
                 Connect {tool}
               </button>
             </fieldset>
           ))}
+          {disconnectedTool && (
+            <p role="status" className="text-sm text-muted">
+              Spyria no longer uses your {disconnectedTool} account. {disconnectedTool} still lists the access you
+              granted: remove it in your {disconnectedTool} settings to revoke it there too.
+            </p>
+          )}
           <ErrorMessage message={errorMessage} />
         </Content>
       </Root>
