@@ -3,6 +3,7 @@ import type {
   ChatRepository,
   ChatRoleRepository,
   ChatRuntimeRepository,
+  DeletedWorkspace,
   InvitationRepository,
   MemberAccess,
   MembershipRepository,
@@ -26,3 +27,4 @@ export type UnitOfWork = {
 }
 
 export type WorkspaceTransactor = Transactor<UnitOfWork>
+export type DeletedWorkspaceTransactor = Transactor<{ deletedWorkspace: DeletedWorkspace }>

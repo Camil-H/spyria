@@ -6,6 +6,7 @@ import { RuntimeHostsSection } from '@spyria/runtime'
 import { focusRing, formatCost, iconButtonClass, LabelledSection } from '@spyria/ui'
 import { AuditLogSection, countBudgetAlerts, UsageSection } from '@spyria/usage'
 import {
+  DeleteWorkspaceSection,
   GitHubSection,
   MembersSection,
   RolesSection,
@@ -26,6 +27,7 @@ type SettingsCard = {
   Page: ComponentType<{
     workspaceId: WorkspaceId
     isDexSignIn: boolean
+    instanceApps: readonly ('google' | 'microsoft')[]
     permissions: readonly WorkspacePermission[]
   }>
 }
@@ -144,7 +146,8 @@ const cardStatusesOf =
 const SettingsRoute = () => {
   const workspaceId = useOutletContext<WorkspaceId>()
   const permissions = useWorkspacePermissions(workspaceId)
-  const isDexSignIn = use(authModeLoading).authMode === 'dex'
+  const authMode = use(authModeLoading)
+  const isDexSignIn = authMode.authMode === 'dex'
   const { card } = useParams()
   const syncedStatuses = useQuery(cardStatusesOf, workspaceId, isDexSignIn)
   const statuses = useIsGitHubConfigured(workspaceId, card === undefined)
@@ -171,7 +174,12 @@ const SettingsRoute = () => {
           </Link>
           <h1 className="text-2xl font-semibold">{openCard.title}</h1>
         </div>
-        <openCard.Page workspaceId={workspaceId} isDexSignIn={isDexSignIn} permissions={permissions} />
+        <openCard.Page
+          workspaceId={workspaceId}
+          isDexSignIn={isDexSignIn}
+          instanceApps={authMode.instanceApps}
+          permissions={permissions}
+        />
       </div>
     )
   return (
@@ -212,6 +220,7 @@ const SettingsRoute = () => {
       ) : (
         <p className="text-muted">You have no workspace settings to manage</p>
       )}
+      <DeleteWorkspaceSection workspaceId={workspaceId} />
     </div>
   )
 }

@@ -1,6 +1,14 @@
 import type { Database } from '@spyria/db/postgres'
 import { DomainError } from '@spyria/kernel'
-import { domainOfEmail, ssoEmailOf } from '@spyria/workspace/server'
+import {
+  domainOfEmail,
+  entraObjectIdPattern,
+  instanceAppFor,
+  instanceAppPresets,
+  ssoCanBindByEmail,
+  ssoEmailOf,
+  ssoSubjectOf,
+} from '@spyria/workspace/server'
 import { type Context, Hono, type MiddlewareHandler } from 'hono'
 import { deleteCookie, getCookie, getSignedCookie, setCookie, setSignedCookie } from 'hono/cookie'
 import { HTTPException } from 'hono/http-exception'
@@ -32,6 +40,7 @@ type AuthRouteSettings = {
   database: Database
   authenticate: (authorization: string | undefined) => Promise<Authentication>
   testDatabaseByName?: (databaseName: string) => Database
+  closeSessionStreams: (database: Database, workspaceId: string, sessionId: string) => void
   rateLimited: (name: RateLimitName) => MiddlewareHandler
 }
 type TestSettings = { db?: string; user?: string; tokenSeconds?: number }
@@ -81,6 +90,7 @@ export const createAuthRoutes = ({
   database,
   authenticate,
   testDatabaseByName,
+  closeSessionStreams,
   rateLimited,
 }: AuthRouteSettings) => {
   const scopeOf = (context: Context, tokenDatabaseName?: string) => {
@@ -94,13 +104,16 @@ export const createAuthRoutes = ({
     }
   }
   const oidcOf = async (provider: FirstWorkspace['provider']) => {
-    if (!sso.secretBox) throw new Error('SPYRIA_SECRETS_KEY is required in sso mode')
+    const instanceApp = provider.usesInstanceApp ? instanceAppFor(sso.instanceApps ?? {}, provider.preset) : undefined
+    if (!instanceApp && !sso.secretBox) throw new Error('SPYRIA_SECRETS_KEY is required in sso mode')
     return createOidc({
       issuer: provider.issuer,
-      clientId: provider.clientId,
-      clientSecret: await sso.secretBox.open(provider.encryptedClientSecret),
+      clientId: instanceApp?.clientId ?? provider.clientId,
+      clientSecret: instanceApp?.clientSecret ?? (await sso.secretBox?.open(provider.encryptedClientSecret)),
       redirectUri,
       emailOf: (claims) => ssoEmailOf(provider.preset, claims),
+      subjectOf: (claims) => ssoSubjectOf(provider.preset, claims),
+      canBindByEmailOf: (claims) => ssoCanBindByEmail(provider.preset, claims),
     })
   }
   const ssoClients = new Map<string, Oidc>()
@@ -147,6 +160,7 @@ export const createAuthRoutes = ({
       context.json({
         authMode,
         canCreateWorkspace: authMode === 'sso' && (await hasNoWorkspace(scopeOf(context).database.$client)),
+        instanceApps: authMode === 'sso' ? instanceAppPresets.filter((preset) => sso.instanceApps?.[preset]) : [],
       }),
     )
     .post('/first-workspace', rateLimited('firstWorkspace'), async (context) => {
@@ -211,7 +225,12 @@ export const createAuthRoutes = ({
         return completeSignIn(context, scope, { ...created, ...identity, issuer: firstWorkspace.provider.issuer })
       }
       const issuer = provider?.issuer
-      const { userId, email } = await signInUser(scope.database, { ...identity, issuer }, authMode === 'sso')
+      const currentSubjectPattern = provider?.preset === 'microsoft' ? entraObjectIdPattern : undefined
+      const { userId, email } = await signInUser(
+        scope.database,
+        { ...identity, issuer, currentSubjectPattern },
+        authMode === 'sso',
+      )
       return completeSignIn(context, scope, { userId, email, workspaceId, issuer })
     })
     .get('/sessions', async (context) => {
@@ -234,7 +253,10 @@ export const createAuthRoutes = ({
     })
     .post('/logout', async (context) => {
       const workspaceId = await workspaceIdOfBody(context)
-      await deleteSession(scopeOf(context).database, workspaceId, sessionIdOf(context, workspaceId))
+      const { database } = scopeOf(context)
+      const sessionId = sessionIdOf(context, workspaceId)
+      await deleteSession(database, workspaceId, sessionId)
+      closeSessionStreams(database, workspaceId, sessionId)
       deleteCookie(context, `${sessionCookiePrefix}${workspaceId}`, { path: '/auth' })
       return context.body(null, 204)
     })

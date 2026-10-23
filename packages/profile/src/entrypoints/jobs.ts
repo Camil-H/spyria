@@ -11,6 +11,7 @@ const gatewaySyncPayload = z.object({
   memberId: z.pipe(id, z.transform(memberId)),
   key: z.object({ provider: id, id }),
 })
+const toolServerRemovalPayload = z.object({ gatewayName: id })
 
 export const createProfileJobs = (gateway: LlmGateway & ToolGateway) => ({
   [profileJobTypes.gatewaySync]: ({ workspaceId: workspace, payload, transact }: Job) => {
@@ -18,4 +19,6 @@ export const createProfileJobs = (gateway: LlmGateway & ToolGateway) => ({
     const transactor = createTransactingZeroTransactor(transact, memberContext(workspaceId(workspace), job.memberId))
     return runGatewaySync({ transactor, gateway }, { ...job, workspaceId: workspaceId(workspace) })
   },
+  [profileJobTypes.toolServerRemoval]: ({ payload }: Job) =>
+    gateway.removeToolServer(toolServerRemovalPayload.parse(payload).gatewayName),
 })

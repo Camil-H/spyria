@@ -7,6 +7,7 @@ import { createAgentBridge } from './agent-bridge/bridge.ts'
 import { createApp, sessionClassifierOf } from './app.ts'
 import { createSecretBox } from './auth/secret-box.ts'
 import { enqueueSweeps } from './auth/sessions.ts'
+import { assertInstanceAppsConfigured } from './auth/sso.ts'
 import { createGitHubCheckouts } from './github/github.ts'
 import { createGitHubApi, githubDotCom } from './github/github-api.ts'
 import { startJobWorker } from './job-worker.ts'
@@ -26,6 +27,11 @@ const requiredEnvironment = (name: string) => {
   const value = process.env[name]
   if (!value) throw new Error(`${name} is required`)
   return value
+}
+const instanceSignInAppOf = (preset: 'google' | 'microsoft', clientIdName: string, clientSecretName: string) => {
+  const clientId = process.env[clientIdName]
+  if (!clientId) return {}
+  return { [preset]: { clientId, clientSecret: requiredEnvironment(clientSecretName) } }
 }
 
 const telemetry = startTelemetry()
@@ -60,6 +66,11 @@ const agentBridge = createAgentBridge({
   repositoryCheckoutsOf: (checkoutDatabase) => createGitHubCheckouts(checkoutDatabase, github),
   deployment,
 })
+const instanceSignInApps = {
+  ...instanceSignInAppOf('google', 'SPYRIA_GOOGLE_CLIENT_ID', 'SPYRIA_GOOGLE_CLIENT_SECRET'),
+  ...instanceSignInAppOf('microsoft', 'SPYRIA_MICROSOFT_CLIENT_ID', 'SPYRIA_MICROSOFT_CLIENT_SECRET'),
+}
+await assertInstanceAppsConfigured(database, instanceSignInApps)
 const app = createApp({
   database,
   tokenSecret: requiredEnvironment('SPYRIA_TOKEN_SECRET'),
@@ -70,6 +81,7 @@ const app = createApp({
   },
   authMode,
   secretsKey,
+  instanceSignInApps,
   github,
   mail: process.env.SPYRIA_SMTP_URL
     ? { smtpUrl: process.env.SPYRIA_SMTP_URL, from: requiredEnvironment('SPYRIA_MAIL_FROM') }

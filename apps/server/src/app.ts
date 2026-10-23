@@ -87,6 +87,7 @@ import {
   githubRepositoriesPath,
   githubSettingsPath,
   githubWebhooksPath,
+  type InstanceApps,
   type SsoSettingsInput,
   ssoSettingsPath,
   workspaceMutators,
@@ -204,6 +205,7 @@ export const createApp = ({
   authMode = 'dex',
   secretsKey,
   microsoftLoginOrigin,
+  instanceSignInApps,
   mail,
   appOrigin,
   deployment = defaultDeployment,
@@ -227,6 +229,7 @@ export const createApp = ({
   authMode?: AuthMode
   secretsKey?: string
   microsoftLoginOrigin?: string
+  instanceSignInApps?: InstanceApps
   mail?: { smtpUrl: string; from: string }
   appOrigin: string
   deployment?: string
@@ -253,6 +256,7 @@ export const createApp = ({
   const sso = {
     secretBox: secretsKey ? createSecretBox(secretsKey) : undefined,
     microsoftLoginOrigin,
+    instanceApps: instanceSignInApps,
     mailer: mail && createSmtpMailer(mail),
     appOrigin,
   }
@@ -395,6 +399,8 @@ export const createApp = ({
         database,
         authenticate,
         testDatabaseByName,
+        closeSessionStreams: (sessionDatabase, workspaceId, sessionId) =>
+          agentBridge.forDatabase(sessionDatabase).closeSessionStreams(workspaceId, sessionId),
         rateLimited,
       }),
     )
@@ -446,6 +452,8 @@ export const createApp = ({
                 select id from runtime_hosts where workspace_id = ${ctx.workspaceId} and owner_id = ${memberId}`)
                 runtimeHosts.disconnect(ctx.workspaceId, id)
             }
+            if (mutation.name === 'workspace.deleteWorkspace')
+              agentBridge.forDatabase(context.get('database')).closeWorkspaceStreams(ctx.workspaceId)
             if (readRevokingMutations.has(mutation.name))
               await agentBridge.forDatabase(context.get('database')).revokeUnreadable({
                 workspaceId: ctx.workspaceId,

@@ -38,6 +38,7 @@ export type WorkspaceCommands = {
   createWorkspaceRole: Command<{ name: string; permissions: readonly WorkspacePermission[] }>
   updateWorkspaceRole: Command<{ roleId: string; name: string; permissions: readonly WorkspacePermission[] }>
   deleteWorkspaceRole: Command<{ roleId: string }>
+  deleteWorkspace: Command<{ confirmation: 'DELETE' }>
   readSsoSettings: (input: { workspaceId: WorkspaceId }) => Promise<SsoSettingsView | null>
   saveSsoSettings: (input: SsoSettingsInput & { workspaceId: WorkspaceId }) => Promise<SsoSettingsView | null>
   sendDomainVerification: (input: {

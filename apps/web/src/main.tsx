@@ -62,12 +62,13 @@ const start = async () => {
     if (result.status === 'signed_in') await start()
     return result
   }
-  const { authMode, canCreateWorkspace } = await loadAuthMode()
+  const { authMode, canCreateWorkspace, instanceApps } = await loadAuthMode()
   root.render(
     <>
       <SignInScreen
         isEmailFirst={authMode === 'sso'}
         canCreateWorkspace={canCreateWorkspace}
+        instanceApps={instanceApps}
         signIn={async (email) => startWhenSignedIn(await signInWithPopup({ email }))}
         createWorkspace={async (form) => startWhenSignedIn(await createWorkspaceWithPopup(form))}
       />

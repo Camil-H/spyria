@@ -27,6 +27,7 @@ export type ChatRepository = {
   permissions(chatId: ChatId, memberId: MemberId): Promise<readonly ChatPermission[]>
   participantRoles(chatId: ChatId): Promise<{ memberId: MemberId; permissions: readonly ChatPermission[] }[]>
   changeRole(change: { chatId: ChatId; memberId: MemberId; roleId: string; actorId: MemberId }): Promise<void>
+  listRuntimeChats(): Promise<Chat[]>
   participatedBy(memberId: MemberId): Promise<Chat[]>
   removeParticipant(change: { chatId: ChatId; memberId: MemberId; actorId: MemberId }): Promise<void>
   transfer(change: { chat: Chat; ownerId: MemberId; actorId: MemberId }): Promise<void>
@@ -52,6 +53,21 @@ export type WorkspaceRoleRepository = {
 
 export type WorkspaceRepository = {
   add(workspace: Workspace): Promise<void>
+  scheduleDeletion(deletion: { purgeAt: number; haltDelayMilliseconds: number; actorId: MemberId }): Promise<void>
+}
+
+export type WorkspaceCleanup = { isPending: boolean; failed: readonly { type: string; count: number }[] }
+
+export type DeletedWorkspace = {
+  isDeleted(): Promise<boolean>
+  lockIfPurgeDue(): Promise<boolean>
+  halt(): Promise<void>
+  release(): Promise<void>
+  deleteLater(delayMilliseconds: number): Promise<void>
+  cleanup(): Promise<WorkspaceCleanup>
+  reportFailedCleanup(cleanup: WorkspaceCleanup): Promise<void>
+  deleteChunk(): Promise<number>
+  deleteAll(): Promise<void>
 }
 
 export type MembershipRepository = {

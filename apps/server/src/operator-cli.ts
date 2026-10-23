@@ -5,6 +5,7 @@ import { schema } from '@spyria/db/zero'
 import { createLlmGateway, type ToolServerSetup } from '@spyria/profile/server'
 import { verifyDomainByOperator } from './auth/sso.ts'
 import { listFailedJobs, retryFailedJobs } from './job-worker.ts'
+import { abandonFailedCleanup, purgeWorkspaceNow, restoreWorkspace } from './workspace-deletion.ts'
 
 const [command = '', ...options] = process.argv.slice(2)
 const database = createDatabase()
@@ -61,6 +62,21 @@ const commands: Record<string, () => Promise<void>> = {
       throw new Error('Usage: bun run operator sso:verify-domain --workspace <id> --domain <domain>')
     await verifyDomainByOperator(database, workspaceId, domain)
     console.log(`${domain} is verified for workspace ${workspaceId}`)
+  },
+  'workspace:restore': async () => {
+    const [workspaceId] = options
+    if (!workspaceId) throw new Error('Usage: bun run operator workspace:restore <id>')
+    await restoreWorkspace(database, workspaceId)
+    console.log(`Workspace ${workspaceId} is restored: its members can sign in again`)
+  },
+  'workspace:purge': async () => {
+    const [workspaceId] = options
+    if (!workspaceId) throw new Error('Usage: bun run operator workspace:purge <id> [--abandon-failed-cleanup]')
+    if (options.includes('--abandon-failed-cleanup'))
+      for (const { type, lastError } of await abandonFailedCleanup(database, workspaceId))
+        console.log(`Abandoned the failed ${type}: ${lastError ?? 'no error recorded'}`)
+    await purgeWorkspaceNow(database, workspaceId)
+    console.log(`Workspace ${workspaceId} is being purged now`)
   },
   'retry-jobs': async () => {
     const [target] = options

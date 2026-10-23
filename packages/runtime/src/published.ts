@@ -1,5 +1,6 @@
 export type { SandboxLocation, SandboxProvider, SandboxTransport } from './contracts/sandbox-provider.ts'
 export {
+  haltChatRuntimeOnServer,
   removeChatRuntimeOnServer,
   removeMemberMachineOnServer,
   stopChatRuntimeOnServer,

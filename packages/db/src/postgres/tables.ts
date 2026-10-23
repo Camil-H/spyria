@@ -55,6 +55,8 @@ export const workspaces = table('workspaces', {
     .references(() => users.id),
   localSessions: boolean().notNull().default(true),
   createdAt: instant().notNull(),
+  deletedAt: instant(),
+  purgeAt: instant(),
 })
 
 export const workspaceRoles = table(
@@ -184,6 +186,7 @@ export const workspaceSso = table('workspace_sso', {
   issuer: text().notNull(),
   clientId: text().notNull(),
   encryptedClientSecret: text().notNull(),
+  usesInstanceApp: boolean().notNull().default(false),
   updatedAt: instant().notNull(),
 })
 
