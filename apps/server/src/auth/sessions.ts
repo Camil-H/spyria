@@ -56,11 +56,20 @@ export const findMemberIn =
     return member
   }
 
-type Identity = { email: string; name?: unknown; issuer?: string; subject?: string; legacySubject?: string }
+type Identity = {
+  email: string
+  name?: unknown
+  issuer?: string
+  subject?: string
+  legacySubject?: string
+  canBindByEmail?: boolean
+  currentSubjectPattern?: string
+}
 
 export const signInUser = (database: Database, identity: Identity, isSso = false) => {
   const email = normalizedEmail(identity.email)
-  const { issuer = '', subject = '', legacySubject = subject } = identity
+  const { issuer = '', subject = '', legacySubject = subject, currentSubjectPattern = null } = identity
+  const bindsByEmail = !isSso || identity.canBindByEmail !== false
   return database.$client.begin(async (sql) => {
     const ssoWorkspaces = await sql<{ workspaceId: string; isVerified: boolean }[]>`
         select workspace_id as "workspaceId", verified_at is not null as "isVerified"
@@ -77,7 +86,8 @@ export const signInUser = (database: Database, identity: Identity, isSso = false
       select workspace_id as "workspaceId", id, role from invitations
       where email = ${email} and revoked_at is null and accepted_at is null and expires_at > now()
         and (not ${isSso}::boolean or workspace_id = any(${ssoWorkspaceIds}::text[]))
-        and workspace_id in (select workspace_id from workspaces where deleted_at is null) for update`
+        and workspace_id in (select workspace_id from workspaces where deleted_at is null)
+        and ${bindsByEmail}::boolean for update`
     const [found] = isSso
       ? await sql<{ id: string }[]>`
           select id from (
@@ -85,14 +95,16 @@ export const signInUser = (database: Database, identity: Identity, isSso = false
             where issuer = ${issuer} and subject in (${subject}, ${legacySubject})
             union all
             select users.id, 2 from users join memberships on memberships.user_id = users.id
-            where users.email = ${email} and memberships.removed_at is null
+            where users.email = ${email} and memberships.removed_at is null and ${bindsByEmail}::boolean
               and memberships.workspace_id = any(${verifiedWorkspaceIds}::text[])
               and not exists(select 1 from identities where identities.workspace_id = memberships.workspace_id
-                and identities.issuer = ${issuer} and identities.user_id = users.id)
+                and identities.issuer = ${issuer} and identities.user_id = users.id
+                and (${currentSubjectPattern}::text is null or identities.subject ~ ${currentSubjectPattern}))
             union all
             select id, 3 from users where email = ${email} and ${invitations.length > 0}::boolean
               and not exists(select 1 from identities where identities.user_id = users.id
-                and identities.issuer = ${issuer})
+                and identities.issuer = ${issuer}
+                and (${currentSubjectPattern}::text is null or identities.subject ~ ${currentSubjectPattern}))
           ) as candidates order by rank limit 1`
       : await sql<{ id: string }[]>`select id from users where email = ${email}`
     if (!found && invitations.length === 0) return { email }
