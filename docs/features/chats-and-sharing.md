@@ -19,6 +19,12 @@ From a chat's menu in the sidebar, a member with the right permission can **Move
 
 Every chat keeps one unsent draft per member; a pencil icon in the sidebar marks a chat with a draft. In the composer, Ctrl+Enter (Cmd+Enter on a Mac) sends.
 
+Messages are written in Markdown and shown formatted. In the composer, Ctrl (Cmd on a Mac) plus **B**, **I** or **U** makes the selection bold, italic or underlined (`__text__`), Ctrl+Shift+C makes it code (a block when it spans several lines), and Ctrl+K makes it a link; pressing the same shortcut again removes the formatting. A line starting with `- ` or `1. ` continues as a list on Enter, and Enter on an empty item ends the list. Pasting a web address over selected text makes a link. Shift+Enter always adds a plain new line.
+
+The paperclip next to **Send** attaches up to six files of up to 20 MB each: images (PNG, JPEG, GIF, WebP), sounds, videos (MP4, WebM, QuickTime) and PDFs. Pasting or dropping a file into the composer attaches it too. The server checks each file's content, not its name, and refuses anything else (SVG and HTML included). Images show in the message once they scroll into view; sounds, videos and PDFs load only when a member clicks them. Only members who can read the chat can open its attachments, and deleting a message erases them.
+
+In a runtime chat, the agent can show a file it made by writing a Markdown image with the file's path in its workspace, such as `![Sales chart](out/chart.png)`. The server fetches the file from the runtime through its existing host connection, checks that it is an image, a sound or a video of up to 20 MB, and shows it inline. Such files show only while the runtime is running.
+
 ## Channels
 
 Channels are where members talk without an agent. A **public** channel is open to every member of the workspace: anyone can read it, and anyone can post after **Join channel**. **Browse channels** in the sidebar lists the public channels a member has not joined. A **private** channel is visible only to its participants.
