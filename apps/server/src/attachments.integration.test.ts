@@ -255,9 +255,10 @@ test('a member cannot keep more than 120 MB of unsent uploads, and a workspace s
   expect((await upload(bob, chat, png)).status).toBe(201)
   await database.$client`delete from message_attachments where id = 'attachment-pending-big'`
   const { id } = await sendWith(aliceInAcme, chat, [(await upload(alice, chat, png)).body])
-  await fakeRow('attachment-sent-huge', 10 * 1024 * 1024 * 1024, id)
+  const hugeRowIds = Array.from({ length: 6 }, (_, index) => `attachment-sent-huge-${index}`)
+  for (const hugeRowId of hugeRowIds) await fakeRow(hugeRowId, 1_900_000_000, id)
   expect((await upload(bob, chat, png)).body.error).toBe('attachment_storage_full')
-  await database.$client`delete from message_attachments where id = 'attachment-sent-huge'`
+  await database.$client`delete from message_attachments where id = any(${hugeRowIds})`
 })
 
 test('the daily sweep erases uploads left unsent for a day, and keeps fresh and sent ones', async () => {
