@@ -782,7 +782,12 @@ export const purgeWorkspaceChunk = async (tx: Transaction, workspaceId: string, 
 
 export const purgeWorkspaceRows = async (tx: Transaction, workspaceId: string) => {
   const userIds = (
-    await onServer<{ id: string }>(tx, 'select user_id as id from memberships where workspace_id = $1', [workspaceId])
+    await onServer<{ id: string }>(
+      tx,
+      `select user_id as id from memberships where workspace_id = $1
+       union select created_by from workspaces where workspace_id = $1`,
+      [workspaceId],
+    )
   ).map(({ id }) => id)
   await purgingWorkspace(tx, workspaceId)
   for (const table of workspaceTablesInPurgeOrder)
