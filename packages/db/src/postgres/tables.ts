@@ -295,7 +295,6 @@ export const chats = table(
     agentReasoningEffort: text(),
     harness: text().$type<HarnessId>(),
     localSession: boolean().default(false),
-    isPlanning: boolean().notNull().default(false),
     gitBranch: text(),
     repository: text(),
     baseBranch: text(),
@@ -642,12 +641,6 @@ export const runtimes = table(
   ],
 )
 
-export const planSteps = table(
-  'plan_steps',
-  { ...chatScoped, position: integer().notNull(), title: text().notNull(), status: text().notNull() },
-  (table) => [primaryKey({ columns: [table.workspaceId, table.chatId, table.position] }), chatReference(table)],
-)
-
 export const browserPages = table(
   'browser_pages',
   { ...chatScoped, url: text().notNull(), title: text().notNull(), bodyText: text().notNull() },
@@ -830,7 +823,6 @@ export const relations = defineRelations(
     workspaceConnections,
     connectionRestrictions,
     toolConnections,
-    planSteps,
     browserPages,
     sources,
     usageEntries,
@@ -916,7 +908,6 @@ export const relations = defineRelations(
       readMarkers: { chat: chatOf(r.readMarkers) },
       threadReadMarkers: { chat: chatOf(r.threadReadMarkers) },
       runtimeOrigins: { chat: chatOf(r.runtimeOrigins) },
-      planSteps: { chat: chatOf(r.planSteps) },
       browserPages: { chat: chatOf(r.browserPages) },
       sources: { chat: chatOf(r.sources) },
       usageEntries: { chat: chatOf(r.usageEntries) },

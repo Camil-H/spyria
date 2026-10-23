@@ -16,7 +16,6 @@ import {
   type Page,
   research,
   sendMessage,
-  sessionStarted,
   machineTest as test,
   workingIndicatorOf,
 } from './fixtures'
@@ -289,28 +288,5 @@ test.describe('Steps', () => {
     await expect(command).toContainText('one')
     await expect(command).toContainText('two')
     await bobPage.context().close()
-  })
-
-  test('As a prompter, I see the plan a Pi agent keeps with update_plan as one checklist in its latest state, with no tool step', {
-    tag: ['@spec-25', '@stage-e', '@stage-g'],
-  }, async ({ page, workerStack, agentScript }) => {
-    const chatId = await newRuntimeChat(page, 'Pi plan')
-    const plan = [
-      { content: 'Reproduce the bug', status: 'completed' },
-      { content: 'Fix the totals', status: 'in_progress' },
-      { content: 'Ship', status: 'pending' },
-    ]
-    const firstPlan = plan.map((item, index) => ({ ...item, status: index === 0 ? 'in_progress' : 'pending' }))
-    await agentScript(chatId, { steps: [{ plan: firstPlan }, { plan }], text: 'Planned the fix.' })
-    await sendMessage(page, 'Plan the fix')
-    await sessionStarted(workerStack, chatId)
-    const checklist = mainOf(page).getByRole('group', { name: 'Plan' })
-    await expect(checklist).toBeVisible()
-    await expect(messageContaining(page, 'Planned the fix.')).toHaveCount(1)
-    await expect(workingIndicatorOf(page)).toHaveCount(0)
-    await expect(checklist).toHaveCount(1)
-    await expect(checklist.getByRole('checkbox', { name: 'Reproduce the bug' })).toBeChecked()
-    await expect(checklist.getByRole('checkbox', { name: 'Ship' })).not.toBeChecked()
-    await expect(mainOf(page)).not.toContainText('update_plan')
   })
 })

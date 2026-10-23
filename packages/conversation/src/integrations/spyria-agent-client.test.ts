@@ -65,7 +65,7 @@ test('Pi summarizes on its compaction model through its provider, starts at the 
   )
   const settings = tested.find((part) => part.startsWith('SPYRIA_PI_SETTINGS='))?.slice('SPYRIA_PI_SETTINGS='.length)
   expect(JSON.parse(settings ?? '')).toMatchObject({
-    extensions: ['/usr/local/lib/spyria/pi/spyria-compaction.ts', '/usr/local/lib/spyria/pi/spyria-plan.ts'],
+    extensions: ['/usr/local/lib/spyria/pi/spyria-compaction.ts', '/usr/local/lib/spyria/pi/spyria-tools.ts'],
     compaction: budgets,
   })
 })
@@ -205,7 +205,7 @@ test("a Pi launch passes the tokens only as secrets, runs offline, writes its fi
     quietStartup: true,
     enableInstallTelemetry: false,
     retry: { enabled: false },
-    extensions: ['/usr/local/lib/spyria/pi/spyria-compaction.ts', '/usr/local/lib/spyria/pi/spyria-plan.ts'],
+    extensions: ['/usr/local/lib/spyria/pi/spyria-compaction.ts', '/usr/local/lib/spyria/pi/spyria-tools.ts'],
   })
   const script = command.at(-1) ?? ''
   expect(command.slice(-3, -1)).toEqual(['sh', '-c'])

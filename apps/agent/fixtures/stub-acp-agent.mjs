@@ -32,7 +32,7 @@ const thoughtLevels = ['off', 'low', 'medium', 'high']
 const effortOption = isCodex
   ? { id: 'reasoning_effort', name: 'Reasoning effort', levels: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'] }
   : { id: 'effort', name: 'Effort', levels: ['default', 'low', 'medium', 'high', 'xhigh', 'max'] }
-const modes = process.env.STUB_MODES?.split(',') ?? ['default', 'plan', 'bypassPermissions']
+const modes = process.env.STUB_MODES?.split(',') ?? ['default', 'bypassPermissions']
 const sessions = new Map()
 const answers = new Map()
 const queues = new Map()
@@ -62,17 +62,6 @@ const configOptionsOf = (session) => [
     currentValue: session[effortOption.id],
     options: effortOption.levels.map((value) => ({ value, name: value })),
   },
-  ...(isCodex
-    ? [
-        {
-          id: 'collaboration_mode',
-          name: 'Collaboration mode',
-          type: 'select',
-          currentValue: session.collaboration_mode,
-          options: ['default', 'plan'].map((value) => ({ value, name: value })),
-        },
-      ]
-    : []),
 ]
 const sessionResultOf = (session) => ({
   configOptions: configOptionsOf(session),
@@ -124,16 +113,6 @@ const codexAskSchema = {
   },
   required: ['db', 'lang', 'ci'],
 }
-const claudePlanOptions = [
-  { optionId: 'exit-plan-default', name: 'Yes, manually approve edits', kind: 'allow_once' },
-  { optionId: 'exit-plan-bypass', name: 'Yes, and bypass permissions', kind: 'allow_always' },
-  { optionId: 'exit-plan-clear-context', name: 'Yes, clear context and bypass permissions', kind: 'allow_always' },
-  { optionId: 'reject', name: 'No, keep planning', kind: 'reject_once' },
-]
-const codexPlanOptions = [
-  { optionId: 'implement_plan', name: 'Yes, implement this plan', kind: 'allow_once' },
-  { optionId: 'revise_plan', name: 'No, and tell Codex what to do differently', kind: 'reject_once' },
-]
 
 class Cancelled extends Error {}
 const piToolCalls = new Map()
@@ -226,16 +205,6 @@ const piDialog = (method, fields) => {
   piSend({ type: 'extension_ui_request', id, method, ...fields })
   return answer.promise
 }
-const setPiMode = (session, mode) => {
-  session.mode = mode
-  piSend({
-    type: 'extension_ui_request',
-    id: randomUUID(),
-    method: 'setStatus',
-    statusKey: 'spyria-plan',
-    statusText: mode,
-  })
-}
 const otherChoice = 'Other…'
 const piTool = async (toolCallId, name, rawInput, update, run) => {
   update({ sessionUpdate: 'tool_call', toolCallId, title: name, kind: 'other', status: 'in_progress', rawInput })
@@ -253,13 +222,6 @@ const askMember = (toolCallId, { question, options }, update) =>
     const { value: choice } = await piDialog('select', { title: question, options: [...options, otherChoice] })
     const answer = choice === otherChoice ? (await piDialog('input', { title: question })).value : choice
     return answer ? `The member answered: ${answer}` : 'The member did not answer.'
-  })
-const proposePlan = (toolCallId, { plan }, session, update) =>
-  piTool(toolCallId, 'propose_plan', { plan }, update, async () => {
-    if (!(await piDialog('confirm', { title: 'Approve the plan?', message: plan })).confirmed)
-      return 'The member wants to keep planning.'
-    setPiMode(session, 'default')
-    return 'The member approved the plan. Plan mode is off: carry it out.'
   })
 const gatewayUrl = process.env.STUB_GATEWAY
 const piConfigOf = (name) => JSON.parse(process.env[name] || '{}')
@@ -308,7 +270,7 @@ const completionOf = async (session, signal, update) => {
     {
       model: session.model.slice(provider.length + 1),
       messages: session.history,
-      tools: [...piTools, 'ask_member', 'propose_plan', 'update_plan', ...Object.keys(session.tools)].map((name) => ({
+      tools: [...piTools, 'ask_member', ...Object.keys(session.tools)].map((name) => ({
         type: 'function',
         function: { name },
       })),
@@ -443,8 +405,6 @@ const runTool = async ({ id, function: { name, arguments: json } }, session, sta
   if (['read', 'edit', 'write'].includes(name)) return editFile(id, name, input, update)
   if (name === 'think') return 'Your thought has been logged.'
   if (name === 'ask_member') return askMember(id, input, update)
-  if (name === 'propose_plan') return proposePlan(id, input, session, update)
-  if (name === 'update_plan') return piTool(id, name, input, update, async () => 'Plan updated.')
   return callMcpTool(id, name, input, session, state, update)
 }
 const gatewayTurn = async (session, text, state, update) => {
@@ -609,39 +569,6 @@ const turn = async (id, { sessionId, prompt }) => {
       if (has('withdraw')) send({ method: '$/cancel_request', params: { requestId: `stub-${nextRequestId - 1}` } })
       await say(`answer:${JSON.stringify((await request).result)} `)
     }
-    if (isPi && has('exit-plan')) {
-      if (session.mode !== 'plan') setPiMode(session, 'plan')
-      await say(
-        `plan:${await proposePlan(`exit-plan-${session.prompts}`, { plan: '1. Create x.txt\n2. Done' }, session, update)} `,
-      )
-      await step()
-    } else if (has('exit-plan') || has('plan-codex')) {
-      const isCodex = has('plan-codex')
-      const toolCallId = `${isCodex ? 'plan-review' : 'exit-plan'}-${session.prompts}`
-      const plan = '1. Create x.txt\n2. Done'
-      if (!isCodex && session.mode !== 'plan') {
-        session.mode = 'plan'
-        update({ sessionUpdate: 'current_mode_update', currentModeId: 'plan' })
-      }
-      const toolCall = { toolCallId, title: 'Approve Plan', kind: 'switch_mode', status: 'pending', rawInput: {} }
-      if (!isCodex) {
-        update({ sessionUpdate: 'tool_call', ...toolCall })
-        update({ sessionUpdate: 'tool_call_update', toolCallId, rawInput: { plan } })
-      }
-      const permission = await ask('session/request_permission', {
-        sessionId,
-        toolCall: isCodex ? { ...toolCall, title: 'Implement this plan?', rawInput: { plan } } : toolCall,
-        options: isCodex ? codexPlanOptions : claudePlanOptions,
-      })
-      const optionId = permission.result?.outcome?.optionId
-      await say(`plan:${optionId ?? 'cancelled'} `)
-      if (optionId === 'reject') return finish('cancelled')
-      if (optionId?.startsWith('exit-plan')) {
-        session.mode = optionId === 'exit-plan-default' ? 'default' : 'bypassPermissions'
-        update({ sessionUpdate: 'current_mode_update', currentModeId: session.mode })
-        update({ sessionUpdate: 'tool_call_update', toolCallId, status: 'completed' })
-      }
-    }
     if (has('write')) {
       const permission = await ask('session/request_permission', {
         sessionId,
@@ -653,26 +580,6 @@ const turn = async (id, { sessionId, prompt }) => {
       })
       await say(`write:${permission.result?.outcome?.optionId} `)
     }
-    if (has('plan')) {
-      const entries = [
-        { content: 'Write tests', status: 'completed', priority: 'high' },
-        { content: 'Fix the bug', status: 'in_progress', priority: 'medium' },
-        { content: 'Ship', status: 'pending', priority: 'low' },
-      ]
-      if (isPi) await piTool(`plan-${session.prompts}`, 'update_plan', { entries }, update, async () => 'Plan updated.')
-      else update({ sessionUpdate: 'plan', entries })
-    }
-    if (has('plan-progress'))
-      for (const status of ['in_progress', 'completed']) {
-        await step()
-        update({
-          sessionUpdate: 'plan',
-          entries: [
-            { content: 'Reproduce the bug', status: 'completed', priority: 'high' },
-            { content: 'Fix the totals', status, priority: 'medium' },
-          ],
-        })
-      }
     if (has('subagent')) {
       const task = `task-${session.prompts}`
       const child = `child-${session.prompts}`
@@ -830,7 +737,6 @@ const opened = (sessionId, { prompts, history }) => {
     mode: 'default',
     thought_level: 'medium',
     [effortOption.id]: effortOption.levels[0],
-    collaboration_mode: 'default',
     current: undefined,
     history,
     tools: undefined,
@@ -913,10 +819,6 @@ const onPiCommand = async ({ id, type, ...fields }) => {
   if (type === 'extension_ui_response') return dialogs.get(id)?.(fields)
   if (isSilentOn(type)) return
   const respond = (data) => piSend({ id, type: 'response', command: type, success: true, data })
-  if (type === 'prompt' && fields.message.startsWith('/spyria-plan ')) {
-    setPiMode(piSession(), fields.message.endsWith(' on') ? 'plan' : 'default')
-    return respond({ disposition: 'handled' })
-  }
   if (type === 'prompt')
     return queue(piSessionId, () => turn(id, { sessionId: piSessionId, prompt: [{ text: fields.message }] }))
   if (!piCommands[type]) return piSend({ id, type: 'response', command: type, success: false, error: `stub: ${type}` })

@@ -57,51 +57,6 @@ export const RunsOnChip = ({
   )
 }
 
-export const PlanModeToggle = ({
-  workspaceId,
-  chatId,
-  isPlanning,
-  hasSession,
-  mayChange,
-}: {
-  workspaceId: WorkspaceId
-  chatId: ChatId
-  isPlanning: boolean
-  hasSession: boolean
-  mayChange: boolean
-}) => {
-  const commands = useConversationCommands()
-  return (
-    <fieldset
-      aria-label="Mode"
-      title={hasSession ? undefined : 'Plan and Auto are available once the agent session has started'}
-      disabled={!hasSession || !mayChange}
-      className="flex items-center text-xs"
-    >
-      <div className="flex rounded-md border border-line p-0.5 in-disabled:opacity-40">
-        {[
-          { label: 'Plan', enabled: true },
-          { label: 'Auto', enabled: false },
-        ].map(({ label, enabled }) => (
-          <label
-            key={label}
-            className="relative cursor-pointer rounded px-2 py-0.5 text-muted has-checked:bg-selected has-checked:text-ink has-focus-visible:outline-2 has-focus-visible:outline-focus in-disabled:cursor-not-allowed"
-          >
-            <input
-              type="radio"
-              name={`mode-${chatId}`}
-              className="absolute inset-0 cursor-pointer opacity-0 disabled:cursor-not-allowed"
-              checked={isPlanning === enabled}
-              onChange={() => commands.setPlanMode({ workspaceId, chatId, enabled })}
-            />
-            {label}
-          </label>
-        ))}
-      </div>
-    </fieldset>
-  )
-}
-
 export const SessionChip = (chip: {
   workspaceId: WorkspaceId
   chatId: ChatId

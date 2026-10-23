@@ -8,7 +8,6 @@ import {
   mainOf,
   messageContaining,
   messageItemsOf,
-  modeRadioOf,
   newHarnessChat,
   newRuntimeChat,
   newSessionNotice,
@@ -121,7 +120,6 @@ test.describe('Conversation', () => {
     await page.reload()
     await expect(branchOf(page)).toHaveText('feature/composer')
     await expect(workingDirectoryOf(page)).toHaveText(/^workspace-\d+$/)
-    await expect(modeRadioOf(page, 'Plan')).toBeEnabled()
   })
 
   forEachHarness((harness) => {

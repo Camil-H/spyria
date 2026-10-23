@@ -163,7 +163,6 @@ test.each([
   ['POST', `/api/conversations/${conversationId}/events`],
   ['POST', `/api/conversations/${conversationId}/interrupt`],
   ['POST', `/api/conversations/${conversationId}/switch_acp_model`],
-  ['POST', `/api/conversations/${conversationId}/plan_mode`],
   ['POST', `/api/conversations/${conversationId}/questions/${conversationId}`],
   ['GET', '/api/workspace/tree?path=src%2Futil'],
   ['GET', '/api/workspace/file?path=README.md'],

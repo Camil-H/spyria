@@ -8,7 +8,6 @@ import {
   chatAttachmentsPathOf,
   chatGitPathOf,
   chatMediaPathOf,
-  chatPlanModePathOf,
   chatPublishPathOf,
   chatQuestionPathOf,
   chatRoutingPathOf,
@@ -23,7 +22,6 @@ import {
   isWorkspaceRead,
   mediaResponseOf,
   type PublishAction,
-  planModeOf,
   questionAnswerOf,
   uploadAttachmentFromRequest,
 } from '@spyria/conversation/server'
@@ -501,15 +499,6 @@ export const createApp = ({
       const status = await agentBridge
         .forDatabase(context.get('database'))
         .answerQuestion({ workspaceId, chatId: chatId(context.req.param('chatId') ?? '') }, userId, questionId, answer)
-      return new Response(null, { status })
-    })
-    .post(chatPlanModePathOf(':chatId'), async (context) => {
-      const planMode = planModeOf(await context.req.json().catch(() => null))
-      if (!planMode) return context.json({ error: 'invalid_plan_mode' }, 400)
-      const { workspaceId, userId } = context.get('zeroContext')
-      const status = await agentBridge
-        .forDatabase(context.get('database'))
-        .setPlanMode({ workspaceId, chatId: chatId(context.req.param('chatId') ?? '') }, userId, planMode.enabled)
       return new Response(null, { status })
     })
     .get(chatWorkspacePathOf(':chatId', ':read'), async (context) => {

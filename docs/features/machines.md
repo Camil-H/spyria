@@ -67,7 +67,7 @@ Claude Code, Codex and their adapters are not in the runtime image. Their versio
 
 ### What a machine session does and does not do
 
-- Only the owner prompts; other participants read. Plan mode, questions and steps work as in [Agents](./agents.md).
+- Only the owner prompts; other participants read. Questions and steps work as in [Agents](./agents.md).
 - The tool runs on your plan's models, chosen in the session chip; Spyria does not route, meter or budget it.
 - The agent's tools (MCP) still go through Spyria's gateway, as the chat owner.
 - If your machine is offline, prompts wait with "Your machine is offline".

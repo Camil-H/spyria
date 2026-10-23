@@ -29,17 +29,15 @@ export type AgentStep =
       isError?: true
       connection?: { server: string; isReconnect: boolean }
     }
-  | { type: 'plan'; items: { title: string; status: string }[] }
   | { type: 'error'; message: string; signIn?: string }
   | PullRequestStep
   | {
       type: 'question'
       questionId: string
       toolCallId?: string
-      kind: 'question' | 'plan' | 'approval'
+      kind: 'question' | 'approval'
       approval?: ToolApproval
       questions?: AgentQuestion[]
-      plan?: string
       answers?: Record<string, string | string[]>
       free?: Record<string, string>
       approved?: boolean

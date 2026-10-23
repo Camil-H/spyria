@@ -95,7 +95,6 @@ export type ChatRow = {
   subagentPolicy: 'auto' | 'same_as_main'
   harness: HarnessId | null
   localSession: boolean | null
-  isPlanning: boolean
   gitBranch: string | null
   repository: string | null
   baseBranch: string | null
@@ -132,7 +131,6 @@ export type RuntimeOriginRow = {
 }
 export type MessageStep = { readonly type: string; readonly [field: string]: unknown }
 export type MessageAttachment = Readonly<{ id: string; name: string; mediaType: string; size: number }>
-type PlanStepRow = { workspaceId: WorkspaceId; chatId: ChatId; title: string; status: string }
 type BrowserPageRow = {
   workspaceId: WorkspaceId
   chatId: ChatId
@@ -222,7 +220,6 @@ export type Snapshot = {
   readMarkers: readonly ReadMarkerRow[]
   threadReadMarkers: readonly ThreadReadMarkerRow[]
   runtimeOrigins: readonly RuntimeOriginRow[]
-  planSteps: readonly PlanStepRow[]
   browserPages: readonly BrowserPageRow[]
   usageEntries: readonly UsageEntryRow[]
   budgetAlerts: readonly BudgetAlertRow[]

@@ -548,91 +548,6 @@ test('Stop, the adapter withdrawing the request and the turn end close a waiting
   expect(textOf(socket.events)).toEndWith('[t3] Hello from the stub (model stub-default, mode bypassPermissions).')
 })
 
-test('plan approval: approve and keep planning map to the Claude Code and Codex options; plan mode refuses writes', async () => {
-  const { call, open, create, prompt } = started()
-  const id = await create(launchOf())
-  const socket = open(id)
-  const decide = async (text: string, approve: boolean, turns: number) => {
-    const asked = socket.events.filter(kindOf('question')).length + 1
-    await prompt(id, text)
-    const questionId = await questionAt(socket, asked)
-    expect((await call('POST', `/api/conversations/${id}/questions/${questionId}`, { approve })).status).toBe(200)
-    await socket.until(kindOf('turn_end'), turns)
-    return socket.events.slice(socket.events.findLastIndex(kindOf('question')))
-  }
-
-  const kept = await decide('stub:exit-plan', false, 1)
-  expect(kept[0]?.update).toMatchObject({ kind: 'plan', toolCallId: 'exit-plan-1', plan: '1. Create x.txt\n2. Done' })
-  expect(kept.find(kindOf('question_answered'))?.update).toMatchObject({ kind: 'plan', approved: false })
-  expect(textOf(kept)).toBe('plan:reject ')
-  expect(kept.find(kindOf('turn_end'))?.update).toEqual({
-    sessionUpdate: 'turn_end',
-    stopReason: 'cancelled',
-    keptPlanning: true,
-  })
-
-  await prompt(id, 'stub:write stub:read')
-  await socket.until(kindOf('turn_end'), 2)
-  expect(textOf(socket.events.slice(-6))).toContain('write:reject ')
-  expect(socket.events.findLast((event) => event.update.toolCallId === 'read-2')?.update.status).toBe('completed')
-
-  const approved = await decide('stub:exit-plan', true, 3)
-  expect(textOf(approved)).toBe(
-    'plan:exit-plan-bypass Hello from the stub (model stub-default, mode bypassPermissions).',
-  )
-  expect(approved.find(kindOf('turn_end'))?.update).toEqual({ sessionUpdate: 'turn_end', stopReason: 'end_turn' })
-  await prompt(id, 'stub:write')
-  await socket.until(kindOf('turn_end'), 4)
-  expect(textOf(socket.events.slice(-4))).toContain('write:allow-once ')
-
-  const codexApproved = await decide('stub:plan-codex', true, 5)
-  expect(codexApproved[0]?.update).toMatchObject({ kind: 'plan', plan: '1. Create x.txt\n2. Done' })
-  expect(textOf(codexApproved)).toStartWith('plan:implement_plan ')
-  const revised = await decide('stub:plan-codex', false, 6)
-  expect(textOf(revised)).toStartWith('plan:revise_plan ')
-  expect(revised.find(kindOf('turn_end'))?.update).toEqual({ sessionUpdate: 'turn_end', stopReason: 'end_turn' })
-})
-
-test("the plan mode route sets Claude Code's mode and back, Codex's collaboration mode, and refuses an agent without either", async () => {
-  const { call, open, create, prompt } = started()
-  const planMode = (id: string, enabled: unknown) => call('POST', `/api/conversations/${id}/plan_mode`, { enabled })
-  const claude = await create(launchOf())
-  const socket = open(claude)
-  expect((await planMode(claude, 'yes')).status).toBe(400)
-  expect((await planMode(claude, true)).status).toBe(200)
-  await prompt(claude, 'stub:write')
-  await socket.until(kindOf('turn_end'))
-  expect(socket.events.find(kindOf('current_mode_update'))).toMatchObject({
-    completed: true,
-    update: { currentModeId: 'plan' },
-  })
-  expect(textOf(socket.events)).toBe('[t1] write:reject Hello from the stub (model stub-default, mode plan).')
-  expect((await planMode(claude, false)).status).toBe(200)
-  await prompt(claude, 'stub:write')
-  await socket.until(kindOf('turn_end'), 2)
-  expect(socket.events.filter(kindOf('current_mode_update')).at(-1)?.update.currentModeId).toBe('bypassPermissions')
-  expect(textOf(socket.events.slice(-5))).toContain(
-    'write:allow-once Hello from the stub (model stub-default, mode bypassPermissions).',
-  )
-
-  const codex = await create(launchOf({ acp_command: ['env', 'STUB_FLAVOUR=codex', ...stubCommand.slice(1)] }))
-  const codexSocket = open(codex)
-  expect((await planMode(codex, true)).status).toBe(200)
-  const collaborationOf = (events: AgentEvent[]) =>
-    (
-      events.findLast(kindOf('config_option_update'))?.update.configOptions as
-        | { id: string; currentValue: string }[]
-        | undefined
-    )?.find((option) => option.id === 'collaboration_mode')?.currentValue
-  expect(collaborationOf(await codexSocket.until(kindOf('config_option_update')))).toBe('plan')
-  expect((await planMode(codex, false)).status).toBe(200)
-  expect(collaborationOf(await codexSocket.until(kindOf('config_option_update'), 2))).toBe('default')
-
-  const modes = 'STUB_MODES=read-only,agent-full-access'
-  const neither = await create(launchOf({ acp_command: ['env', modes, ...stubCommand.slice(1)] }))
-  expect((await planMode(neither, true)).status).toBe(409)
-})
-
 test.each([
   ['Claude Code', [], 'max', 'low'],
   ['Codex', ['STUB_FLAVOUR=codex'], 'high', 'xhigh'],
@@ -675,7 +590,7 @@ test('a Codex session selects full access among its listed modes', async () => {
   expect(textOf(socket.events)).toBe('[t1] Hello from the stub (model stub-default, mode agent-full-access).')
 })
 
-test('a sub-conversation answers its own questions: a free assumption where the form has one, plan approvals approved', async () => {
+test('a sub-conversation answers its own questions with a free assumption where the form has one', async () => {
   const { open, create, prompt } = started()
   const id = await create({ ...launchOf(), parent_conversation_id: crypto.randomUUID() })
   const socket = open(id)
@@ -698,14 +613,6 @@ test('a sub-conversation answers its own questions: a free assumption where the 
     lang_note: assumption,
     ci: 'None of the above',
     ci_note: assumption,
-  })
-
-  await prompt(id, 'stub:exit-plan')
-  await socket.until(kindOf('turn_end'), 3)
-  expect(textOf(socket.events.slice(-6))).toStartWith('plan:exit-plan-bypass ')
-  expect(socket.events.filter(kindOf('question_answered')).at(-1)?.update).toMatchObject({
-    kind: 'plan',
-    approved: true,
   })
   expect(socket.events.filter(kindOf('question'))).toEqual([])
 })
