@@ -42,11 +42,6 @@ export const ToolNotInCatalog = errorKind(
   (tool: string) => `Tool ${tool} is not in the catalog`,
   ProfileError,
 )
-export const NoReadOnlyTool = errorKind(
-  'no_read_only_tool',
-  (tool: string) => `${tool} cannot be connected: it declares no read-only tool to start the sign-in with`,
-  ProfileError,
-)
 export const ToolStillConnected = errorKind(
   'tool_still_connected',
   (tool: string) => `${tool} is still connected: disconnect it, then connect again`,

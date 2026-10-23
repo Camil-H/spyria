@@ -1,6 +1,6 @@
 import { type ListedModel, withRetries } from '@spyria/kernel'
 import type { LlmGateway, ToolGateway, ToolServer } from '../contracts/repositories.ts'
-import { NoReadOnlyTool, UnsupportedProvider } from '../domain/errors.ts'
+import { UnsupportedProvider } from '../domain/errors.ts'
 import type { GatewayKey } from '../domain/llm-credential.ts'
 import type { ConnectionTool } from '../domain/workspace-connection.ts'
 
@@ -274,15 +274,17 @@ export const createLlmGateway = ({
       const readOnlyTool = (await listedToolsOf(virtualKeyValue)).find(
         (tool) => tool.name.startsWith(`${server.name}-`) && tool.annotations?.readOnlyHint === true,
       )
-      if (!readOnlyTool) throw new NoReadOnlyTool(server.name)
-      const response = await mcpRequest(virtualKeyValue, 'tools/call', { name: readOnlyTool.name, arguments: {} })
+      const consentTool = readOnlyTool?.name ?? `${server.name}-${server.tools[0]}`
+      const response = await mcpRequest(virtualKeyValue, 'tools/call', { name: consentTool, arguments: {} })
       const flowId = (await response.text()).match(/flow=([0-9a-f-]{36})/)?.[1]
       if (!flowId) throw new Error(`The gateway started no consent for ${server.name}`)
       return String((await request('GET', `/api/oauth/per-user/flows/${flowId}/start`)).body.authorize_url)
     },
     toolSessions: async (virtualKeyId, server) =>
-      (await request('GET', `/api/mcp/sessions?virtual_key_id=${virtualKeyId}&mcp_client_id=${server.id}`)).body
-        .sessions as { id: string; status: string }[],
+      (
+        (await request('GET', `/api/mcp/sessions?virtual_key_id=${virtualKeyId}&mcp_client_id=${server.id}`)).body
+          .sessions as { id: string; status: string; kind: string }[]
+      ).filter(({ kind }) => kind !== 'flow'),
     removeToolSession: async (sessionId) => {
       await request('DELETE', `/api/mcp/sessions/${sessionId}`)
     },
