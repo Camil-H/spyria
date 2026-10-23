@@ -6,6 +6,7 @@ import {
   codeFenceOf,
   commitsOf,
   conflictPromptOf,
+  diffLayoutFor,
   type FileChange,
   fileChangesOf,
   isCollapsedByDefault,
@@ -216,4 +217,11 @@ test('the conflict prompt names the base and every conflicting file', () => {
   expect(conflictPromptOf('main', ['src/app.ts', 'README.md'])).toBe(
     'Merge the latest main (fetched as refs/spyria/base) into the working branch, resolve the conflicts in these files, then commit:\n- src/app.ts\n- README.md',
   )
+})
+
+test('the diff shows side by side from a 560px panel and unified below, where side-by-side lines would wrap mid-word', () => {
+  expect(diffLayoutFor(280)).toBe('unified')
+  expect(diffLayoutFor(559)).toBe('unified')
+  expect(diffLayoutFor(560)).toBe('split')
+  expect(diffLayoutFor(900)).toBe('split')
 })
