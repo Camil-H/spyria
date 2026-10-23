@@ -127,11 +127,11 @@ To spare every workspace registering its own client, register the deployment's o
 - **Google**: in Google Cloud, create an OAuth client of type *Web application* with the redirect URI `<origin>/auth/callback`, and an *External* consent screen asking for `openid`, `email` and `profile`. Set `SPYRIA_GOOGLE_CLIENT_ID` and `SPYRIA_GOOGLE_CLIENT_SECRET`.
 - **Microsoft**: in Microsoft Entra, register an app for *Accounts in any organizational directory* with the web redirect URI `<origin>/auth/callback`, and create a client secret. Set `SPYRIA_MICROSOFT_CLIENT_ID` and `SPYRIA_MICROSOFT_CLIENT_SECRET`. A tenant that does not let users consent to apps needs its Entra admin to consent on the first sign-in.
 
-Creating a workspace and **Setup SSO** then offer **Continue with Google** or **Continue with Microsoft** without a client id or secret. Through the Google app, only accounts of the domain's Google Workspace sign in.
+Creating a workspace and **Setup SSO** then offer **Continue with Google** or **Continue with Microsoft** without a client id or secret. Through the Google app, only verified addresses of accounts in the domain's Google Workspace sign in; through the Microsoft app, a person is recognized by their Entra object id, the same in every app of their tenant. The server refuses to start while a workspace uses an app whose variables are missing, naming the provider: set them again rather than removing them.
 
 ## Deleting a workspace
 
-An Admin deletes a workspace from **Workspace settings** ([Administration](../features/admin.md#deleting-the-workspace)). Its members lose access at once, and seven days later a background job erases it: it asks the hosts to remove its runtimes, removes its keys and tool servers from the gateway, then deletes its rows. A host that stays offline keeps that workspace's containers; the removal jobs give up after their retries and appear in `bun run jobs:failed`.
+An Admin deletes a workspace from **Workspace settings** ([Administration](../features/admin.md#deleting-the-workspace)). Its members lose access at once, and seven days later a background job erases it: it asks the hosts to remove its runtimes, removes its keys and tool servers from the gateway, then deletes its rows in chunks. From the deletion on, the job worker runs only those cleanup jobs for the workspace, and a few minutes later it stops any runtime that was still starting. If a cleanup job fails for good, for example removing runtimes from a host that stays offline, the erasing waits and logs `workspace.purge_blocked` every hour: bring the host back and retry the job (`bun run jobs:retry`), or erase anyway with `--abandon-failed-cleanup`, which prints what is left behind.
 
 During those seven days the operator can restore the workspace, or erase it now:
 
@@ -139,7 +139,7 @@ During those seven days the operator can restore the workspace, or erase it now:
 docker compose --env-file .env.prod -f deploy/compose.prod.yml exec server \
   bun apps/server/src/operator-cli.ts workspace:restore <workspace id>
 docker compose --env-file .env.prod -f deploy/compose.prod.yml exec server \
-  bun apps/server/src/operator-cli.ts workspace:purge <workspace id>
+  bun apps/server/src/operator-cli.ts workspace:purge <workspace id> [--abandon-failed-cleanup]
 ```
 
 A restore is refused once the erasing has started. When the last workspace of the deployment is erased, its domain is free and the sign-in page offers **Create a workspace** again.
