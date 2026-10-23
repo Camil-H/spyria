@@ -25,8 +25,11 @@ export const loadSessions = async (): Promise<{
   deployment: string
 }> => (await fetch('/auth/sessions')).json()
 
-export const loadAuthMode = async (): Promise<{ authMode: 'dex' | 'sso'; canCreateWorkspace: boolean }> =>
-  (await fetch('/auth/mode')).json()
+export const loadAuthMode = async (): Promise<{
+  authMode: 'dex' | 'sso'
+  canCreateWorkspace: boolean
+  instanceApps: ('google' | 'microsoft')[]
+}> => (await fetch('/auth/mode')).json()
 
 export const renew = async (workspaceId: WorkspaceId): Promise<WorkspaceSession | undefined> => {
   const response = await postAuth('/auth/renew', workspaceId)

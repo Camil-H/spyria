@@ -33,18 +33,26 @@ export { displayNameFrom, normalizedEmail } from './domain/invitation.ts'
 export { Name } from './domain/name.ts'
 export {
   domainOfEmail,
+  entraObjectIdPattern,
+  type InstanceAppPreset,
+  type InstanceApps,
+  instanceAppFor,
+  instanceAppPresets,
   normalizedDomain,
   type SsoDomainState,
   type SsoPreset,
   type SsoSettings,
   type SsoSettingsInput,
   type SsoSettingsView,
+  ssoCanBindByEmail,
   ssoEmailOf,
   ssoSettingsFrom,
+  ssoSubjectOf,
   tenantIdOf,
 } from './domain/sso.ts'
 export type { WorkspaceCommands } from './entrypoints/commands.ts'
 export { createDevChatFromRequest } from './entrypoints/endpoints.ts'
+export { createWorkspaceJobs } from './entrypoints/jobs.ts'
 export { workspaceMutators } from './entrypoints/mutators.ts'
 export {
   createHttpGitHubCommands,

@@ -109,8 +109,8 @@ export const copyWorkspaceSignIn = async (
 ) => {
   const [provider] = await onServer<{ preset: string; issuer: string; clientId: string }>(
     tx,
-    `insert into workspace_sso (workspace_id, preset, issuer, client_id, encrypted_client_secret, updated_at)
-     select $2, preset, issuer, client_id, encrypted_client_secret, now() from workspace_sso where workspace_id = $1
+    `insert into workspace_sso (workspace_id, preset, issuer, client_id, encrypted_client_secret, uses_instance_app, updated_at)
+     select $2, preset, issuer, client_id, encrypted_client_secret, uses_instance_app, now() from workspace_sso where workspace_id = $1
      returning preset, issuer, client_id as "clientId"`,
     [fromWorkspaceId, toWorkspaceId],
   )
@@ -332,7 +332,8 @@ export const runtimeChatOfLlmTokenHash = async (tx: Transaction, workspaceId: st
   (
     await firstOnServer<{ chatId: string }>(
       tx,
-      'select chat_id as "chatId" from runtimes where workspace_id = $1 and host_id = $2 and $3 in (llm_token_hash, llm_switch_token_hash)',
+      `select chat_id as "chatId" from runtimes where workspace_id = $1 and host_id = $2 and $3 in (llm_token_hash, llm_switch_token_hash)
+         and exists(select 1 from workspaces where workspaces.workspace_id = $1 and workspaces.deleted_at is null)`,
       [workspaceId, hostId, hash],
     )
   )?.chatId
@@ -607,7 +608,8 @@ export const runningDelegationOfTokenHash = (tx: Transaction, workspaceId: strin
     `select delegations.chat_id as "chatId", delegations.id, delegations.prompt_id as "promptId" from delegations join runtimes
        on runtimes.workspace_id = delegations.workspace_id and runtimes.chat_id = delegations.chat_id
      where delegations.workspace_id = $1 and runtimes.host_id = $2 and delegations.token_hash = $3
-       and delegations.status = 'running'`,
+       and delegations.status = 'running'
+       and exists(select 1 from workspaces where workspaces.workspace_id = $1 and workspaces.deleted_at is null)`,
     [workspaceId, hostId, hash],
   )
 
@@ -620,3 +622,181 @@ export const chatContextTokens = async (tx: Transaction, workspaceId: string, ch
       [workspaceId, chatId],
     )
   )?.tokens ?? null
+
+export const workspaceTablesInPurgeOrder = [
+  'thread_read_markers',
+  'read_markers',
+  'runtime_origins',
+  'browser_pages',
+  'plan_steps',
+  'sources',
+  'routing_decisions',
+  'delegations',
+  'tool_calls',
+  'usage_entries',
+  'events',
+  'messages',
+  'runtimes',
+  'runtime_hosts',
+  'chat_participants',
+  'chats',
+  'chat_roles',
+  'projects',
+  'service_identities',
+  'budget_alerts',
+  'budgets',
+  'connection_restrictions',
+  'workspace_connections',
+  'github_connections',
+  'identities',
+  'invitations',
+  'llm_credentials',
+  'member_gateway_keys',
+  'sessions',
+  'tool_connections',
+  'memberships',
+  'workspace_role_permissions',
+  'workspace_roles',
+  'audit_settings',
+  'github_webhook_deliveries',
+  'github_apps',
+  'jobs',
+  'model_calls',
+  'sso_domains',
+  'workspace_sso',
+  'usage_sync_marks',
+  'workspace_events',
+  'workspaces',
+] as const
+
+export const workspacePurgeJobType = 'workspace.purge'
+export const workspaceHaltJobType = 'workspace.halt'
+export const workspaceCleanupJobTypes = [
+  workspaceHaltJobType,
+  'runtime.stop',
+  'runtime.remove',
+  'runtime.discard',
+  'profile.gateway-sync',
+  'profile.tool-server-removal',
+] as const
+export const jobTypesOfDeletedWorkspaces = [workspacePurgeJobType, ...workspaceCleanupJobTypes]
+
+const chunkedTablesInPurgeOrder = [
+  'thread_read_markers',
+  'read_markers',
+  'runtime_origins',
+  'tool_calls',
+  'usage_entries',
+  'model_calls',
+  'events',
+  'workspace_events',
+  'sources',
+  'plan_steps',
+  'browser_pages',
+  'routing_decisions',
+  'delegations',
+] as const
+const unreferencedMessages = `
+  select message.ctid from messages message where message.workspace_id = $1
+    and not exists(select 1 from messages other where other.workspace_id = message.workspace_id
+      and other.id <> message.id and message.id in (other.reply_to_id, other.thread_root_id))
+  limit $2`
+
+export const scheduleWorkspaceDeletion = (tx: Transaction, workspaceId: string, purgeAt: number) =>
+  onServer(
+    tx,
+    `with deleted as (
+       update workspaces set deleted_at = now(), purge_at = to_timestamp($2::double precision / 1000)
+       where workspace_id = $1 and deleted_at is null returning workspace_id),
+     ended_sessions as (delete from sessions where workspace_id in (select workspace_id from deleted)),
+     cancelled_jobs as (
+       delete from jobs where workspace_id in (select workspace_id from deleted) and state = 'queued')
+     select workspace_id from deleted`,
+    [workspaceId, purgeAt],
+  )
+
+export const lockDuePurge = async (tx: Transaction, workspaceId: string) =>
+  (
+    await firstOnServer<{ isDue: boolean }>(
+      tx,
+      `select purge_at <= now() as "isDue" from workspaces where workspace_id = $1 and deleted_at is not null
+       for update`,
+      [workspaceId],
+    )
+  )?.isDue ?? false
+
+export const isWorkspaceDeleted = async (tx: Transaction, workspaceId: string) =>
+  (
+    await firstOnServer<{ isDeleted: boolean }>(
+      tx,
+      'select deleted_at is not null as "isDeleted" from workspaces where workspace_id = $1',
+      [workspaceId],
+    )
+  )?.isDeleted ?? false
+
+export const workspacePurgeTargetsOf = async (tx: Transaction, workspaceId: string) => ({
+  memberIds: (
+    await onServer<{ id: string }>(tx, 'select user_id as id from memberships where workspace_id = $1', [workspaceId])
+  ).map(({ id }) => id),
+  runtimeChatIds: (
+    await onServer<{ id: string }>(tx, `select id from chats where workspace_id = $1 and type = 'runtime'`, [
+      workspaceId,
+    ])
+  ).map(({ id }) => id),
+})
+
+export const workspaceCleanupOf = async (tx: Transaction, workspaceId: string) => {
+  const jobs = await onServer<{ type: string; state: string; count: number }>(
+    tx,
+    `select type, state, count(*)::int as count from jobs
+     where workspace_id = $1 and type = any($2::text[]) and state in ('queued', 'running', 'failed')
+     group by type, state order by type, state`,
+    [workspaceId, workspaceCleanupJobTypes],
+  )
+  return {
+    isPending: jobs.some(({ state }) => state !== 'failed'),
+    failed: jobs.filter(({ state }) => state === 'failed').map(({ type, count }) => ({ type, count })),
+  }
+}
+
+const purgingWorkspace = (tx: Transaction, workspaceId: string) =>
+  onServer(tx, `select set_config('spyria.purging_workspace', $1, true)`, [workspaceId])
+
+export const purgeWorkspaceChunk = async (tx: Transaction, workspaceId: string, chunkSize: number) => {
+  await purgingWorkspace(tx, workspaceId)
+  for (const table of chunkedTablesInPurgeOrder) {
+    const deleted = await onServer(
+      tx,
+      `delete from ${table} where ctid in (select ctid from ${table} where workspace_id = $1 limit $2) returning 1`,
+      [workspaceId, chunkSize],
+    )
+    if (deleted.length > 0) return deleted.length
+  }
+  return (
+    await onServer(tx, `delete from messages where ctid in (${unreferencedMessages}) returning 1`, [
+      workspaceId,
+      chunkSize,
+    ])
+  ).length
+}
+
+export const purgeWorkspaceRows = async (tx: Transaction, workspaceId: string) => {
+  const userIds = (
+    await onServer<{ id: string }>(
+      tx,
+      `select user_id as id from memberships where workspace_id = $1
+       union select created_by from workspaces where workspace_id = $1`,
+      [workspaceId],
+    )
+  ).map(({ id }) => id)
+  await purgingWorkspace(tx, workspaceId)
+  for (const table of workspaceTablesInPurgeOrder)
+    await onServer(tx, `delete from ${table} where workspace_id = $1`, [workspaceId])
+  await onServer(
+    tx,
+    `delete from users where id = any($1::text[])
+       and not exists(select 1 from memberships where memberships.user_id = users.id)
+       and not exists(select 1 from workspaces where workspaces.created_by = users.id)`,
+    [userIds],
+  )
+}

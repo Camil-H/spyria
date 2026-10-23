@@ -19,7 +19,7 @@ import { createSmtpMailer } from './mail.ts'
 import { createSecretBox } from './secret-box.ts'
 import { issueSessionToken } from './session-tokens.ts'
 import { openSessions } from './sessions.ts'
-import { verifyDomainByOperator } from './sso.ts'
+import { assertInstanceAppsConfigured, verifyDomainByOperator } from './sso.ts'
 
 const testDatabase = await createTestDatabase()
 const { database } = testDatabase
@@ -192,14 +192,19 @@ const identitiesOf = async (subject: string) => [
 ]
 
 test('the server tells its auth mode and whether a workspace can be created', async () => {
-  expect(await (await app.request('/auth/mode')).json()).toEqual({ authMode: 'sso', canCreateWorkspace: false })
+  expect(await (await app.request('/auth/mode')).json()).toEqual({
+    authMode: 'sso',
+    canCreateWorkspace: false,
+    instanceApps: [],
+  })
   expect(await (await emptyInstanceApp.request('/auth/mode')).json()).toEqual({
     authMode: 'sso',
     canCreateWorkspace: true,
+    instanceApps: [],
   })
   expect(
     await (await createApp({ database: emptyInstance.database, ...testAuthSettings }).request('/auth/mode')).json(),
-  ).toEqual({ authMode: 'dex', canCreateWorkspace: false })
+  ).toEqual({ authMode: 'dex', canCreateWorkspace: false, instanceApps: [] })
 })
 
 test('an admin saves the SSO settings: the secret is encrypted at rest, never returned, and changes are recorded', async () => {
@@ -207,7 +212,13 @@ test('an admin saves the SSO settings: the secret is encrypted at rest, never re
   expect(saved.status).toBe(200)
   const view = { preset: 'oidc', issuer: acmeIdp.issuer, clientId: `spyria-${acme}`, domain: 'example.com' }
   expect(JSON.parse(saved.body)).toEqual({
-    settings: { ...view, tenantId: '', hasSecret: true, domainState: unverified('example.com') },
+    settings: {
+      ...view,
+      tenantId: '',
+      hasSecret: true,
+      usesInstanceApp: false,
+      domainState: unverified('example.com'),
+    },
   })
   const [stored] = await database.$client<{ encryptedClientSecret: string }[]>`
     select encrypted_client_secret as "encryptedClientSecret" from workspace_sso where workspace_id = ${acme}`
@@ -225,6 +236,7 @@ test('an admin saves the SSO settings: the secret is encrypted at rest, never re
     ...view,
     tenantId: '',
     hasSecret: true,
+    usesInstanceApp: false,
     domainState: unverified('example.com'),
   })
   expect(
@@ -478,6 +490,17 @@ test('the first sign-in binds the identity through an invite; a later sign-in ma
   expect([...(await database.$client`select 1 from users where email = 'nina.new@example.com'`)]).toEqual([])
 })
 
+test('a member bound to an identity is never signed in through another identity carrying their email', async () => {
+  const takeover = await signInThrough(acmeIdp, 'email=nina@example.com', {
+    sub: 'mallory-subject',
+    email: 'nina@example.com',
+  })
+  expect(takeover.status).toBe(403)
+  expect(takeover.page).toContain('"status":"not_invited","email":"nina@example.com"')
+  expect(takeover.sessions).toEqual([])
+  expect(await identitiesOf('mallory-subject')).toEqual([])
+})
+
 test('an email outside the domains or without membership and invite is refused', async () => {
   await invite(acme, 'quinn@elsewhere.com')
   for (const email of ['quinn@elsewhere.com', 'olive@example.com']) {
@@ -504,10 +527,50 @@ test('an Entra token without email_verified signs in by preferred_username for a
   await invite('initech', 'peter@initech.com')
   const signedIn = await signInThrough(entraIdp, 'email=peter@initech.com', {
     sub: 'peter-subject',
+    oid: 'peter-object',
     preferred_username: 'Peter@initech.com',
   })
   expect(signedIn.page).toContain('"status":"signed_in"')
   expect(signedIn.sessions.map(({ workspaceId }) => workspaceId)).toEqual(['initech'])
+})
+
+test('a Microsoft member bound under the per-app subject of another app signs in by user principal name and gains their object id', async () => {
+  await database.$client`insert into users (id, email) values ('member-sam', 'sam@initech.com')`
+  await database.$client`
+    insert into memberships (workspace_id, user_id, role, display_name) values ('initech', 'member-sam', 'member', 'Sam')`
+  await database.$client`
+    insert into identities (workspace_id, issuer, subject, user_id)
+    values ('initech', ${entraIdp.issuer}, 'AAAAAAAAAAAAAAAAAAAAAIkzqFVrSaSaFHy782bbtaQ', 'member-sam')`
+  const objectId = '00000000-0000-4000-8000-0000000000aa'
+  const signedIn = await signInThrough(entraIdp, 'email=sam@initech.com', {
+    sub: 'per-app-subject-of-the-other-app',
+    oid: objectId,
+    preferred_username: 'sam@initech.com',
+  })
+  expect(signedIn.page).toContain('"status":"signed_in"')
+  expect(signedIn.userId).toBe('member-sam')
+  expect(await identitiesOf(objectId)).toEqual([
+    { workspace_id: 'initech', issuer: entraIdp.issuer, user_id: 'member-sam' },
+  ])
+  const takeover = await signInThrough(entraIdp, 'email=sam@initech.com', {
+    sub: 'mallory-per-app',
+    oid: '00000000-0000-4000-8000-0000000000bb',
+    preferred_username: 'sam@initech.com',
+  })
+  expect(takeover.page).toContain('"status":"not_invited","email":"sam@initech.com"')
+})
+
+test('an Entra guest from another tenant is never bound to a member or an invite by email', async () => {
+  await invite('initech', 'gina@initech.com')
+  const guest = await signInThrough(entraIdp, 'email=gina@initech.com', {
+    sub: 'gina-per-app',
+    oid: '00000000-0000-4000-8000-0000000000cc',
+    preferred_username: 'gina@initech.com',
+    idp: 'https://sts.windows.net/another-tenant/',
+  })
+  expect(guest.status).toBe(403)
+  expect(guest.page).toContain('"status":"not_invited","email":"gina@initech.com"')
+  expect(await identitiesOf('00000000-0000-4000-8000-0000000000cc')).toEqual([])
 })
 
 test('a domain claimed by another issuer is refused; the same issuer shares it and one sign-in opens both workspaces', async () => {
@@ -703,6 +766,7 @@ test('the first person completing sign-in becomes the Admin of an unverified wor
   expect(await (await emptyInstanceApp.request('/auth/mode')).json()).toEqual({
     authMode: 'sso',
     canCreateWorkspace: false,
+    instanceApps: [],
   })
   expect(await (await startCreation(umbrellaForm())).text()).toContain(
     '"status":"refused","message":"Workspace creation is closed on this instance: sign in with your work email"',
@@ -731,4 +795,101 @@ test('the first person completing sign-in becomes the Admin of an unverified wor
   expect((await emptyInstanceApp.request('/auth/login?email=erin@umbrella.com')).status).toBe(404)
   await verifyDomainByOperator(emptyInstance.database, workspaceId, 'umbrella.com')
   expect((await emptyInstanceApp.request('/auth/login?email=erin@umbrella.com')).status).toBe(302)
+})
+
+test('with the Microsoft app of this Spyria, a workspace is created and signed in to without any client id or secret, and an app the Spyria lacks is refused', async () => {
+  const instance = await createTestDatabase()
+  await instance.database.$client`truncate workspaces, users cascade`
+  const instanceApp = createApp({
+    database: instance.database,
+    ...ssoSettings,
+    instanceSignInApps: { microsoft: { clientId: 'spyria-instance', clientSecret: 'instance-secret' } },
+  })
+  entraIdp.clientSecret = 'instance-secret'
+  try {
+    expect(await (await instanceApp.request('/auth/mode')).json()).toEqual({
+      authMode: 'sso',
+      canCreateWorkspace: true,
+      instanceApps: ['microsoft'],
+    })
+    const create = (form: Record<string, string>) =>
+      instanceApp.request('/auth/first-workspace', {
+        method: 'POST',
+        headers: { origin: testAuthSettings.appOrigin },
+        body: new URLSearchParams({ name: 'Initech', domain: 'initech.com', usesInstanceApp: 'true', ...form }),
+      })
+    const googleRefusal = await create({ preset: 'google' })
+    expect(await googleRefusal.text()).toContain(
+      'This Spyria has no Google app: enter the client id and secret of your own',
+    )
+
+    const started = await create({ preset: 'microsoft', tenantId: 'tenant-1' })
+    const location = new URL(started.headers.get('location') ?? '')
+    expect(location.origin + location.pathname).toBe(`${entraIdp.issuer}/auth`)
+    expect(location.searchParams.get('client_id')).toBe('spyria-instance')
+    entraIdp.claimsByCode.set('pat', {
+      nonce: location.searchParams.get('nonce') ?? '',
+      sub: 'pat',
+      oid: 'pat-object',
+      preferred_username: 'pat@initech.com',
+    })
+    const completed = await instanceApp.request(`/auth/callback?code=pat&state=${location.searchParams.get('state')}`, {
+      headers: { cookie: cookieHeaderOf(started) },
+    })
+    expect(await completed.text()).toContain('"status":"signed_in"')
+    expect(entraIdp.tokenRequests.at(-1)?.get('client_id')).toBe('spyria-instance')
+    const [stored] = await instance.database.$client`
+      select preset, issuer, client_id as "clientId", encrypted_client_secret as "encryptedClientSecret",
+        uses_instance_app as "usesInstanceApp"
+      from workspace_sso`
+    expect(stored).toEqual({
+      preset: 'microsoft',
+      issuer: entraIdp.issuer,
+      clientId: 'spyria-instance',
+      encryptedClientSecret: '',
+      usesInstanceApp: true,
+    })
+
+    const signedIn = await signInThrough(
+      entraIdp,
+      'email=pat@initech.com',
+      { sub: 'pat-in-another-app', oid: 'pat-object', preferred_username: 'pat@initech.com' },
+      instanceApp,
+    )
+    expect(signedIn.sessions).toHaveLength(1)
+    expect(signedIn.userId).toBe(
+      (await instance.database.$client`select user_id as "userId" from identities where subject = 'pat-object'`)[0]
+        ?.userId,
+    )
+  } finally {
+    await instance.drop()
+  }
+})
+
+test('pointing a workspace at another issuer asks to verify its domain again', async () => {
+  await addWorkspace('massive-dynamic')
+  expect((await configureIdp(otherIdp, 'massive-dynamic', 'massive.com')).status).toBe(200)
+  await verifyDomainByOperator(database, 'massive-dynamic', 'massive.com')
+  const sameIssuer = { preset: 'oidc', issuer: otherIdp.issuer, clientId: 'spyria-massive-2', domain: 'massive.com' }
+  expect((await saveSso('massive-dynamic', sameIssuer)).status).toBe(200)
+  expect(JSON.parse((await readSso('massive-dynamic')).body).settings.domainState.isVerified).toBe(true)
+  expect((await saveSso('massive-dynamic', { ...sameIssuer, issuer: acmeIdp.issuer })).status).toBe(200)
+  expect(JSON.parse((await readSso('massive-dynamic')).body).settings.domainState).toEqual(unverified('massive.com'))
+})
+
+test('the server refuses to start when workspaces sign in through an app of this deployment that is no longer configured', async () => {
+  await addWorkspace('stark')
+  await database.$client`
+    insert into workspace_sso (workspace_id, preset, issuer, client_id, encrypted_client_secret, uses_instance_app, updated_at)
+    values ('stark', 'google', 'https://accounts.google.com', 'spyria-google', '', true, now())`
+  const google = { clientId: 'spyria-google', clientSecret: 'secret' }
+  expect(await assertInstanceAppsConfigured(database, { google })).toBeUndefined()
+  expect((await rejectionOf(assertInstanceAppsConfigured(database, {}))).message).toBe(
+    'Workspaces sign in through apps of this deployment that are not configured: google (1 workspace). Set SPYRIA_GOOGLE_CLIENT_* or SPYRIA_MICROSOFT_CLIENT_* again.',
+  )
+})
+
+test('a workspace awaiting its purge does not hold up the start for an app it used', async () => {
+  await database.$client`update workspaces set deleted_at = now(), purge_at = now() + interval '7 days' where workspace_id = 'stark'`
+  expect(await assertInstanceAppsConfigured(database, {})).toBeUndefined()
 })

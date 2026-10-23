@@ -20,6 +20,28 @@
   --color-removed: light-dark(var(--color-red-100), var(--color-red-950));
   --color-link: light-dark(var(--color-primary-900), var(--color-primary-500));
   --color-focus: light-dark(var(--color-primary-800), var(--color-primary-500));
+  --color-spire-far: light-dark(
+    color-mix(in oklab, var(--color-light-neutral-800) 30%, transparent),
+    color-mix(in oklab, var(--color-grey-200) 16%, transparent)
+  );
+  --color-spire-mid: light-dark(
+    color-mix(in oklab, var(--color-primary-800) 55%, transparent),
+    color-mix(in oklab, var(--color-primary-500) 34%, transparent)
+  );
+  --color-spire-near: light-dark(
+    color-mix(in oklab, var(--color-primary-900) 80%, transparent),
+    color-mix(in oklab, var(--color-primary-500) 58%, transparent)
+  );
+  --color-card-edge: light-dark(var(--color-line), color-mix(in oklab, var(--color-primary-500) 34%, transparent));
+  --color-card-glow: light-dark(
+    color-mix(in oklab, var(--color-light-neutral-985) 12%, transparent),
+    color-mix(in oklab, var(--color-primary-500) 22%, transparent)
+  );
+  --color-spire-light: light-dark(var(--color-primary-700), var(--color-primary-300));
+  --color-spire-glow: light-dark(
+    color-mix(in oklab, var(--color-primary-200) 70%, transparent),
+    color-mix(in oklab, var(--color-primary-500) 16%, transparent)
+  );
 }
 
 :root {

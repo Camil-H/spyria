@@ -1,6 +1,6 @@
 # Administration
 
-This page covers what workspace admins manage: members and invites, workspace and chat roles, sign-in, GitHub, shared tools, spend, budgets and the audit log. It describes the features as admins and members see them; deployment steps (SMTP, the identity provider, the GitHub App) are in [Self-hosting](../guides/self-hosting.md).
+This page covers what workspace admins manage: members and invites, workspace and chat roles, sign-in, GitHub, shared tools, spend, budgets and the audit log, and deleting the workspace. It describes the features as admins and members see them; deployment steps (SMTP, the identity provider, the GitHub App) are in [Self-hosting](../guides/self-hosting.md).
 
 Everything here is in **Workspace settings** (the workspace menu), as cards in three sections. A member sees only the cards their workspace role allows, and the server checks the same permission on every request, so hiding a card is a convenience, not the protection.
 
@@ -83,7 +83,7 @@ Inviting a removed member's address again creates a normal invite that restores 
 
 Production deployments sign in through each workspace's own OpenID Connect provider; there is no shared account system. See the decision records in [decisions](../decisions/) and [Security](../architecture/security.md) for the reasoning.
 
-**Setup SSO** holds the provider: Google Workspace, Microsoft Entra (a tenant-specific issuer, from its tenant id) or another OIDC issuer, with the client id and a client secret that is sealed, shown only as set and replaced by entering a new one. Saving checks the issuer's discovery document. The workspace's email domain is set when the workspace is created and cannot be changed. On a development deployment the card says sign-in uses the deployment's Dex instead.
+**Setup SSO** holds the provider: Google Workspace, Microsoft Entra (a tenant-specific issuer, from its tenant id) or another OIDC issuer, with the client id and a client secret that is sealed, shown only as set and replaced by entering a new one. When the deployment has its own Google or Microsoft app, those providers can use it instead: no client id or secret to enter (Microsoft still asks for the tenant id), **Use your own app** switches back to entering a client. Through Google, whichever app, only verified addresses of accounts managed by the domain's Google Workspace sign in. Through Microsoft, a person is recognized by their Entra object id, and guests from other tenants are never matched to a member or an invite by email. Changing the issuer (another provider, another Microsoft tenant or another OIDC issuer) unverifies the domain, and members cannot sign in until it is verified again; changing the client, or switching between your own app and the deployment's, keeps it verified. Saving checks the issuer's discovery document. The workspace's email domain is set when the workspace is created and cannot be changed. On a development deployment the card says sign-in uses the deployment's Dex instead.
 
 The sign-in screen asks for a work email and routes its domain to the provider of the workspace using it, so it never reveals who is a member. A domain routes sign-in, and the workspace can invite, only once the domain is **verified**:
 
@@ -136,6 +136,16 @@ On the same page, a member with `budgets.manage` sets an optional monthly budget
 
 Spend is counted from the gateway's usage records, which Spyria reads every few seconds, and a call is priced only after it ran. A budget can therefore be exceeded by the calls of the last few seconds, typically cents.
 
+## Deleting the workspace
+
+At the bottom of **Workspace settings**, an Admin finds **Delete workspace**. It is not a card and no workspace role can grant it: only members with the built-in Admin role see it, and the server checks the same. The dialog lists what goes and asks to type `DELETE`.
+
+- At once, every member loses access: their sessions end, their open agent streams close, running runtimes stop, and the workspace's background work, GitHub webhooks, agents' and sub-agents' model calls are refused. A few minutes later, runtimes that were still starting are removed, so a restored workspace starts those afresh. The workspace disappears from everyone's workspace switcher.
+- Seven days later, Spyria erases the workspace for good: chats and their whole history, runtimes with their containers and files on the hosts, members' model keys in the gateway, shared connections, the link to the GitHub App, the sign-in settings and the email domain, the audit log, and the accounts of people who belonged to no other workspace.
+- The GitHub App stays installed on the organization: uninstall it on GitHub.
+- Until the seven days are over, only the operator can restore the workspace ([Self-hosting](../guides/self-hosting.md#deleting-a-workspace)).
+- When the only workspace of a deployment is erased, its domain is free again and the sign-in page offers **Create a workspace**.
+
 ## Audit log
 
 **Audit log** shows, newest first, who changed what in the workspace: time, person ("System" when no member acted), action in plain words, target, and details on expand. It merges:
@@ -143,6 +153,7 @@ Spend is counted from the gateway's usage records, which Spyria reads every few 
 | Group | Records |
 |---|---|
 | Members | invites, revoked invites, joins, role changes, removals |
+| Workspace | workspace deleted, restored by the operator |
 | Sign-in | SSO configured, client secret replaced, domain verified |
 | GitHub | App configured, App secrets replaced |
 | Connections | shared connections added, changed, removed, member restrictions |
@@ -154,6 +165,6 @@ Spend is counted from the gateway's usage records, which Spyria reads every few 
 
 The log records metadata only: it never shows message bodies, including for private chats. Filter by person, group and date range; **Export CSV** downloads the filtered records.
 
-**Keep audit records** is Forever by default, or a number of days (1 to 36,500). A daily job deletes workspace events and tool call records older than that. Chat events are the conversation history itself and are never deleted; past the retention they only drop out of the audit view. Changing the retention is itself recorded.
+**Keep audit records** is Forever by default, or a number of days (1 to 36,500). A daily job deletes workspace events and tool call records older than that. Chat events are the conversation history itself and are deleted only with the workspace; past the retention they only drop out of the audit view. Changing the retention is itself recorded.
 
 Related: [Security](../architecture/security.md), [Operations](../guides/operations.md).

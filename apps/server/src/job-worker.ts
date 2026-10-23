@@ -2,12 +2,14 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import type { ServerTransaction } from '@rocicorp/zero'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import type { Database } from '@spyria/db/postgres'
+import { jobTypesOfDeletedWorkspaces } from '@spyria/db/server-writes'
 import { schema } from '@spyria/db/zero'
 import type { Job, Transact } from '@spyria/db/zero-queries'
 import { log, type WorkspaceId, workspaceId } from '@spyria/kernel'
 import { type createLlmGateway, createProfileJobs } from '@spyria/profile/server'
 import { createRuntimeJobs, type SandboxProvider } from '@spyria/runtime/server'
 import { auditJobs, createUsageJobs } from '@spyria/usage/server'
+import { createWorkspaceJobs } from '@spyria/workspace/server'
 import type { AgentBridge } from './agent-bridge/bridge.ts'
 import { sessionJobs } from './auth/sessions.ts'
 import { contextOf, withSpan } from './telemetry.ts'
@@ -41,6 +43,8 @@ export const startJobWorker = (
     pollIntervalMilliseconds = 100,
     retryDelayMilliseconds = 1000,
     concurrency = 4,
+    cleanupPollMilliseconds = 30_000,
+    failedCleanupRetryMilliseconds = 60 * 60_000,
     sandboxProvider,
     agentBridge,
     llmGateway,
@@ -49,6 +53,8 @@ export const startJobWorker = (
     pollIntervalMilliseconds?: number
     retryDelayMilliseconds?: number
     concurrency?: number
+    cleanupPollMilliseconds?: number
+    failedCleanupRetryMilliseconds?: number
     sandboxProvider?: SandboxProvider
     agentBridge?: AgentBridge
     llmGateway?: ReturnType<typeof createLlmGateway>
@@ -62,6 +68,7 @@ export const startJobWorker = (
     ...(llmGateway && createProfileJobs(llmGateway)),
     ...(usageLogs && createUsageJobs(usageLogs)),
     ...auditJobs,
+    ...createWorkspaceJobs({ cleanupPollMilliseconds, failedCleanupRetryMilliseconds }),
   }
   const zeroDatabase = zeroDrizzle(schema, database)
   const transact: Transact = (work) => zeroDatabase.transaction(work)
@@ -77,9 +84,11 @@ export const startJobWorker = (
          where (workspace_id, id) = (
            select workspace_id, id from jobs
            where state in ('queued', 'running') and run_at <= now() and type = any($1::text[])
+             and (type = any($3::text[]) or not exists(select 1 from workspaces
+               where workspaces.workspace_id = jobs.workspace_id and workspaces.deleted_at is not null))
            order by run_at limit 1 for update skip locked)
          returning workspace_id, id, type, payload, attempts + 1 as attempt, run_at::text as lease`,
-        [jobTypes, leaseMilliseconds],
+        [jobTypes, leaseMilliseconds, jobTypesOfDeletedWorkspaces],
       )
     )[0]
   const runJob = ({ payload: { traceparent, tracestate, ...payload }, ...claimed }: ClaimedJob) => {

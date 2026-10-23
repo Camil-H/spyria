@@ -59,6 +59,7 @@ Copy `.env.example` to `.env.prod` and fill every key marked `[prod]`. Compose r
 | `SPYRIA_SECRETS_KEY` | Encrypts stored secrets (SSO client secrets, GitHub App keys) with AES-GCM. At least 32 characters. Never change it: every stored secret would have to be entered again. |
 | `SPYRIA_TRUSTED_PROXY` | Leave unset, except in the [Cloudflare example](#example-cloudflare). Behind a proxy, rate limits on unauthenticated routes see every client as the proxy's address. |
 | `SPYRIA_SMTP_URL`, `SPYRIA_MAIL_FROM` | Mail, for example `smtp://user:pass@smtp.example.com:587` and `Spyria <spyria@example.com>`. |
+| `SPYRIA_GOOGLE_CLIENT_ID`, `SPYRIA_GOOGLE_CLIENT_SECRET`, `SPYRIA_MICROSOFT_CLIENT_ID`, `SPYRIA_MICROSOFT_CLIENT_SECRET` | Optional apps of the deployment for one-click sign-in, see [One-click Google and Microsoft](#one-click-google-and-microsoft). |
 | `SPYRIA_GATEWAY_ADMIN_USER`, `SPYRIA_GATEWAY_ADMIN_PASSWORD` | Admin login of the gateway. |
 | `SPYRIA_GATEWAY_ENCRYPTION_KEY` | Encrypts members' API keys inside the gateway. Never change it without wiping the gateway's database. |
 | `SPYRIA_GATEWAY_SETUP_TOKEN` | Gateway setup token. |
@@ -107,7 +108,7 @@ Compose starts Postgres, applies the migrations (`migrate`, one-shot), creates t
 
 Production signs in through each workspace's own OIDC provider. Identities are matched on the provider's issuer and subject; the email domain routes a person to the right provider. See [security](../architecture/security.md) for the model and [admin](../features/admin.md) for the settings.
 
-1. Register an OIDC client at your provider with the redirect URI `<origin>/auth/callback`.
+1. Register an OIDC client at your provider with the redirect URI `<origin>/auth/callback`, or set the deployment's own Google or Microsoft app once ([below](#one-click-google-and-microsoft)).
 2. Open the origin. On a fresh deployment the sign-in screen offers **Create a workspace**: the organization name, its email domain and the provider (Google Workspace, Microsoft Entra with its tenant id, or **Other OIDC** with an issuer). Spyria checks the provider's discovery document, encrypts the client secret and never shows it again.
 3. Submitting opens the provider's sign-in. The first person who completes it with an address at that domain becomes the Admin of the new workspace. From then on the screen no longer offers creating a workspace and the server refuses it; **New workspace** in the app reuses the member's verified domain and provider.
 4. Verify the domain right away: in **Workspace settings > Setup SSO**, send the single-use link (valid 24 hours) to any address at the domain and open it. Until the domain is verified, the workspace cannot invite, and only its existing members can sign in.
@@ -118,6 +119,30 @@ Without working SMTP, an operator can verify a domain directly from the server c
 docker compose --env-file .env.prod -f deploy/compose.prod.yml exec server \
   bun apps/server/src/operator-cli.ts sso:verify-domain --workspace <workspace id> --domain example.com
 ```
+
+### One-click Google and Microsoft
+
+To spare every workspace registering its own client, register the deployment's own apps once and set them in `.env.prod`:
+
+- **Google**: in Google Cloud, create an OAuth client of type *Web application* with the redirect URI `<origin>/auth/callback`, and an *External* consent screen asking for `openid`, `email` and `profile`. Set `SPYRIA_GOOGLE_CLIENT_ID` and `SPYRIA_GOOGLE_CLIENT_SECRET`.
+- **Microsoft**: in Microsoft Entra, register an app for *Accounts in any organizational directory* with the web redirect URI `<origin>/auth/callback`, and create a client secret. Set `SPYRIA_MICROSOFT_CLIENT_ID` and `SPYRIA_MICROSOFT_CLIENT_SECRET`. A tenant that does not let users consent to apps needs its Entra admin to consent on the first sign-in.
+
+Creating a workspace and **Setup SSO** then offer **Continue with Google** or **Continue with Microsoft** without a client id or secret. Through Google, whichever app, only verified addresses of accounts in the domain's Google Workspace sign in; through Microsoft, a person is recognized by their Entra object id, the same in every app of their tenant. The server refuses to start while a live workspace uses an app whose variables are missing, naming the provider: set them again rather than removing them.
+
+## Deleting a workspace
+
+An Admin deletes a workspace from **Workspace settings** ([Administration](../features/admin.md#deleting-the-workspace)). Its members lose access at once, and seven days later a background job erases it: it asks the hosts to remove its runtimes, removes its keys and tool servers from the gateway, then deletes its rows in chunks. From the deletion on, the job worker runs only those cleanup jobs for the workspace, and a few minutes later it removes any runtime that was still starting. Hosts stay connected until the erasing is done, since the removals go through them, but nothing new starts on them for that workspace. If a cleanup job fails for good, for example removing runtimes from a host that stays offline, the erasing waits and logs `workspace.purge_blocked` every hour: bring the host back and retry the job (`bun run jobs:retry`), or erase anyway with `--abandon-failed-cleanup`, which prints what is left behind.
+
+During those seven days the operator can restore the workspace, or erase it now:
+
+```sh
+docker compose --env-file .env.prod -f deploy/compose.prod.yml exec server \
+  bun apps/server/src/operator-cli.ts workspace:restore <workspace id>
+docker compose --env-file .env.prod -f deploy/compose.prod.yml exec server \
+  bun apps/server/src/operator-cli.ts workspace:purge <workspace id> [--abandon-failed-cleanup]
+```
+
+A restore is refused once the erasing has started. When the last workspace of the deployment is erased, its domain is free and the sign-in page offers **Create a workspace** again.
 
 ## Runtime host on this machine
 

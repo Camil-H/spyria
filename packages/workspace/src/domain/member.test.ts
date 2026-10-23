@@ -1,7 +1,14 @@
 import { expect, test } from 'bun:test'
 import { memberId, workspaceId } from '@spyria/kernel'
-import { LastAdmin, MemberNotFound, OwnMembership } from './errors.ts'
-import { isActive, type Member, requireActiveMember, requireAnotherAdmin, requireAnotherMember } from './member.ts'
+import { AdminOnly, LastAdmin, MemberNotFound, OwnMembership } from './errors.ts'
+import {
+  isActive,
+  type Member,
+  requireActiveMember,
+  requireAdmin,
+  requireAnotherAdmin,
+  requireAnotherMember,
+} from './member.ts'
 
 const alice: Member = { workspaceId: workspaceId('acme'), id: memberId('alice'), role: 'admin', removedAt: null }
 const bob: Member = { ...alice, id: memberId('bob'), role: 'member' }
@@ -24,4 +31,11 @@ test('the last active admin can be neither demoted nor removed, any other member
 test('nobody changes or removes their own membership', () => {
   expect(() => requireAnotherMember(alice.id, alice.id)).toThrow(OwnMembership)
   expect(() => requireAnotherMember(bob.id, alice.id)).not.toThrow()
+})
+
+test('only an active Admin passes the Admin check', () => {
+  expect(requireAdmin(alice)).toBe(alice)
+  expect(() => requireAdmin(bob)).toThrow(AdminOnly)
+  expect(() => requireAdmin({ ...alice, removedAt: 1 })).toThrow(AdminOnly)
+  expect(() => requireAdmin(undefined)).toThrow(AdminOnly)
 })

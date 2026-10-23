@@ -2,7 +2,10 @@ import type { CredentialId, MemberId, WorkspaceId } from '@spyria/kernel'
 import { BlankProvider, UnsupportedProvider } from './errors.ts'
 import type { Secret } from './secret.ts'
 
-export const profileJobTypes = { gatewaySync: 'profile.gateway-sync' } as const
+export const profileJobTypes = {
+  gatewaySync: 'profile.gateway-sync',
+  toolServerRemoval: 'profile.tool-server-removal',
+} as const
 
 export type LlmCredential = Readonly<{
   id: CredentialId

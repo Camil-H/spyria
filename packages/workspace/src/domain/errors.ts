@@ -183,3 +183,4 @@ export const RoleNotGrantable = errorKind(
   (name: string) => `${name} has permissions your own role does not have`,
   WorkspaceError,
 )
+export const AdminOnly = errorKind('admin_only', () => 'Only an Admin can delete this workspace', WorkspaceError)

@@ -1,0 +1,1 @@
+ALTER TABLE "workspace_sso" ADD COLUMN "uses_instance_app" boolean DEFAULT false NOT NULL;

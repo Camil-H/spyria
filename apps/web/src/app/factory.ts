@@ -89,6 +89,7 @@ const createAgentStream = (store: Store): AgentStream => {
   const reconnect = (workspaceId: WorkspaceId) => {
     if (!socketByWorkspace.has(workspaceId)) connect(workspaceId)
   }
+  store.onSessionRenewed((workspaceId) => sendTo(workspaceId, { type: 'auth', token: store.tokenOf(workspaceId) }))
   return {
     subscribe: (workspaceId, chatId, listener) => {
       const listenersByChat = listenersByWorkspace.get(workspaceId) ?? new Map<ChatId, Set<Listener>>()
@@ -226,6 +227,12 @@ export const createApp = async (
       createWorkspaceRole: mutateConfirmed(workspaceMutators.workspace.createWorkspaceRole),
       updateWorkspaceRole: mutateConfirmed(workspaceMutators.workspace.updateWorkspaceRole),
       deleteWorkspaceRole: mutateConfirmed(workspaceMutators.workspace.deleteWorkspaceRole),
+      deleteWorkspace: async (input) => {
+        await mutateConfirmed(workspaceMutators.workspace.deleteWorkspace)(input)
+        await store.signOut(input.workspaceId)
+        location.assign('/')
+        return input.workspaceId
+      },
       ...createHttpSsoSettingsCommands(postAsMember, fetchAsMember),
       ...githubCommands,
       createDevChat: async (input) => {

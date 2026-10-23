@@ -31,7 +31,11 @@ export type MemberGatewayKeyRepository = {
 }
 
 export type GatewaySyncJob = { workspaceId: WorkspaceId; memberId: MemberId; key: GatewayKey }
-export type GatewayJobs = { syncLater(job: GatewaySyncJob): Promise<void> }
+export type ToolServerRemovalJob = { workspaceId: WorkspaceId; gatewayName: string }
+export type GatewayJobs = {
+  syncLater(job: GatewaySyncJob): Promise<void>
+  removeToolServerLater(job: ToolServerRemovalJob): Promise<void>
+}
 
 export type LlmGateway = {
   addProviderKey(key: { provider: string; name: string; secret: Secret }): Promise<GatewayKey>

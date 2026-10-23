@@ -1,5 +1,13 @@
 import type { WorkspaceId } from '@spyria/kernel'
-import { buttonClass, ErrorMessage, fieldClass, LabelledSection, labelClass, useGuardedAction } from '@spyria/ui'
+import {
+  buttonClass,
+  ErrorMessage,
+  fieldClass,
+  focusRing,
+  LabelledSection,
+  labelClass,
+  useGuardedAction,
+} from '@spyria/ui'
 import { type SubmitEvent, useEffect, useState } from 'react'
 import type { SsoDomainState, SsoPreset, SsoSettingsView } from '../domain/sso.ts'
 import { useWorkspaceCommands } from './providers.tsx'
@@ -9,8 +17,14 @@ const presetLabels: Record<SsoPreset, string> = {
   microsoft: 'Microsoft Entra',
   oidc: 'Other OIDC',
 }
+const instanceAppNames: Record<SsoPreset, string> = { google: 'Google', microsoft: 'Microsoft', oidc: '' }
 export const emptyProvider = { preset: 'google' as SsoPreset, issuer: '', tenantId: '', clientId: '' }
 type ProviderField = keyof typeof emptyProvider
+const switchLinkClass = `self-start text-sm text-link underline ${focusRing}`
+
+export const isInstanceAppIn = (instanceApps: readonly SsoPreset[], preset: SsoPreset, usesInstanceApp: boolean) =>
+  usesInstanceApp && instanceApps.includes(preset)
+export const continueLabelOf = (preset: SsoPreset) => `Continue with ${instanceAppNames[preset]}`
 
 export const ProviderFields = ({
   provider,
@@ -18,54 +32,84 @@ export const ProviderFields = ({
   clientSecret,
   onClientSecretChange,
   hasSecret = false,
+  instanceApps = [],
+  usesInstanceApp = false,
+  onUsesInstanceAppChange,
 }: {
   provider: typeof emptyProvider
   edit: (field: ProviderField) => (event: { target: { value: string } }) => void
   clientSecret: string
   onClientSecretChange: (clientSecret: string) => void
   hasSecret?: boolean
-}) => (
-  <>
-    <label className={labelClass}>
-      Provider
-      <select name="preset" className={fieldClass} value={provider.preset} onChange={edit('preset')}>
-        {Object.entries(presetLabels).map(([preset, presetLabel]) => (
-          <option key={preset} value={preset}>
-            {presetLabel}
-          </option>
-        ))}
-      </select>
-    </label>
-    {provider.preset === 'microsoft' && (
+  instanceApps?: readonly SsoPreset[]
+  usesInstanceApp?: boolean
+  onUsesInstanceAppChange?: (usesInstanceApp: boolean) => void
+}) => {
+  const canUseInstanceApp = instanceApps.includes(provider.preset)
+  const isInstanceApp = isInstanceAppIn(instanceApps, provider.preset, usesInstanceApp)
+  return (
+    <>
       <label className={labelClass}>
-        Tenant id
-        <input name="tenantId" className={fieldClass} value={provider.tenantId} onChange={edit('tenantId')} />
+        Provider
+        <select name="preset" className={fieldClass} value={provider.preset} onChange={edit('preset')}>
+          {Object.entries(presetLabels).map(([preset, presetLabel]) => (
+            <option key={preset} value={preset}>
+              {presetLabel}
+            </option>
+          ))}
+        </select>
       </label>
-    )}
-    {provider.preset === 'oidc' && (
-      <label className={labelClass}>
-        Issuer
-        <input name="issuer" className={fieldClass} value={provider.issuer} onChange={edit('issuer')} />
-      </label>
-    )}
-    <label className={labelClass}>
-      Client id
-      <input name="clientId" className={fieldClass} value={provider.clientId} onChange={edit('clientId')} />
-    </label>
-    <label className={labelClass}>
-      Client secret
-      <input
-        name="clientSecret"
-        type="password"
-        autoComplete="off"
-        className={fieldClass}
-        placeholder={hasSecret ? 'Enter a new secret to replace it' : ''}
-        value={clientSecret}
-        onChange={(event) => onClientSecretChange(event.target.value)}
-      />
-    </label>
-  </>
-)
+      {provider.preset === 'microsoft' && (
+        <label className={labelClass}>
+          Tenant id
+          <input name="tenantId" className={fieldClass} value={provider.tenantId} onChange={edit('tenantId')} />
+        </label>
+      )}
+      {provider.preset === 'oidc' && (
+        <label className={labelClass}>
+          Issuer
+          <input name="issuer" className={fieldClass} value={provider.issuer} onChange={edit('issuer')} />
+        </label>
+      )}
+      {isInstanceApp ? (
+        <>
+          <input type="hidden" name="usesInstanceApp" value="true" />
+          <p className="text-sm text-muted">
+            Members sign in through the {instanceAppNames[provider.preset]} app of this Spyria: there is no client id or
+            secret to enter.
+          </p>
+          <button type="button" className={switchLinkClass} onClick={() => onUsesInstanceAppChange?.(false)}>
+            Use your own app
+          </button>
+        </>
+      ) : (
+        <>
+          <label className={labelClass}>
+            Client id
+            <input name="clientId" className={fieldClass} value={provider.clientId} onChange={edit('clientId')} />
+          </label>
+          <label className={labelClass}>
+            Client secret
+            <input
+              name="clientSecret"
+              type="password"
+              autoComplete="off"
+              className={fieldClass}
+              placeholder={hasSecret ? 'Enter a new secret to replace it' : ''}
+              value={clientSecret}
+              onChange={(event) => onClientSecretChange(event.target.value)}
+            />
+          </label>
+          {canUseInstanceApp && (
+            <button type="button" className={switchLinkClass} onClick={() => onUsesInstanceAppChange?.(true)}>
+              Use the {instanceAppNames[provider.preset]} app of this Spyria
+            </button>
+          )}
+        </>
+      )}
+    </>
+  )
+}
 
 const statusOf = ({ isVerified, sentTo, expiresAt }: SsoDomainState) => {
   if (isVerified) return 'Verified'
@@ -117,16 +161,30 @@ const EmailDomain = ({
   )
 }
 
-export const SignInSection = ({ workspaceId, isDexSignIn }: { workspaceId: WorkspaceId; isDexSignIn: boolean }) =>
+export const SignInSection = ({
+  workspaceId,
+  isDexSignIn,
+  instanceApps = [],
+}: {
+  workspaceId: WorkspaceId
+  isDexSignIn: boolean
+  instanceApps?: readonly SsoPreset[]
+}) =>
   isDexSignIn ? (
     <LabelledSection title="Sign-in">
       <p className="text-sm text-muted">Sign-in uses this deployment's Dex: SSO settings apply in SSO mode only.</p>
     </LabelledSection>
   ) : (
-    <SsoSettingsForm workspaceId={workspaceId} />
+    <SsoSettingsForm workspaceId={workspaceId} instanceApps={instanceApps} />
   )
 
-const SsoSettingsForm = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
+const SsoSettingsForm = ({
+  workspaceId,
+  instanceApps,
+}: {
+  workspaceId: WorkspaceId
+  instanceApps: readonly SsoPreset[]
+}) => {
   const commands = useWorkspaceCommands()
   const [form, setForm] = useState<SsoSettingsView | null>()
   const [clientSecret, setClientSecret] = useState('')
@@ -160,8 +218,16 @@ const SsoSettingsForm = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
           clientSecret={clientSecret}
           onClientSecretChange={setClientSecret}
           hasSecret={form.hasSecret}
+          instanceApps={instanceApps}
+          usesInstanceApp={form.usesInstanceApp}
+          onUsesInstanceAppChange={(usesInstanceApp) => {
+            setForm({ ...form, usesInstanceApp })
+            setIsSaved(false)
+          }}
         />
-        <p className="text-sm text-muted">{form.hasSecret ? 'Secret: set' : 'Secret: not set'}</p>
+        {!isInstanceAppIn(instanceApps, form.preset, form.usesInstanceApp) && (
+          <p className="text-sm text-muted">{form.hasSecret ? 'Secret: set' : 'Secret: not set'}</p>
+        )}
         <ErrorMessage message={errorMessage} />
         <div className="flex items-center gap-3">
           <button type="submit" className={buttonClass} disabled={isPending}>
@@ -172,7 +238,8 @@ const SsoSettingsForm = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
       </form>
       <p className="text-sm text-muted">
         The email domain is set when the workspace is created. It routes sign-in once verified: send a link to any
-        address at that domain.
+        address at that domain. Changing the provider, the Microsoft tenant or the issuer unverifies it, and members
+        cannot sign in until it is verified again.
       </p>
       <EmailDomain workspaceId={workspaceId} state={form.domainState} onSent={setForm} />
     </LabelledSection>

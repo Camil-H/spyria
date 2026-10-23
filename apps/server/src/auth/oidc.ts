@@ -6,6 +6,8 @@ export type OidcSettings = { issuer: string; clientId: string; redirectUri: stri
 type ClientSettings = OidcSettings & {
   clientSecret?: string
   emailOf?: (claims: JWTPayload) => string | undefined
+  subjectOf?: (claims: JWTPayload) => string | undefined
+  canBindByEmailOf?: (claims: JWTPayload) => boolean
 }
 type LoginState = { state: string; nonce: string; codeVerifier: string }
 
@@ -34,6 +36,8 @@ export const createOidc = ({
   redirectUri,
   clientSecret,
   emailOf = verifiedEmailOf,
+  subjectOf = (claims) => claims.sub,
+  canBindByEmailOf = () => true,
 }: ClientSettings) => {
   const client: oauth.Client = { client_id: clientId }
   const clientAuthentication = clientSecret ? oauth.ClientSecretPost(clientSecret) : oauth.None()
@@ -90,9 +94,18 @@ export const createOidc = ({
         clockTolerance: idTokenClockToleranceSeconds,
       })
       const email = emailOf(payload)
-      if (payload.nonce !== login.nonce || email === undefined || typeof payload.sub !== 'string')
+      const subject = subjectOf(payload)
+      if (payload.nonce !== login.nonce || email === undefined || typeof subject !== 'string' || subject === '')
         throw new Error('The ID token carries no trusted email for this login')
-      return { email, name: payload.name, issuer: server.issuer, subject: payload.sub }
+      const legacySubject = typeof payload.sub === 'string' && payload.sub !== subject ? payload.sub : undefined
+      return {
+        email,
+        name: payload.name,
+        issuer: server.issuer,
+        subject,
+        legacySubject,
+        canBindByEmail: canBindByEmailOf(payload),
+      }
     },
   }
 }

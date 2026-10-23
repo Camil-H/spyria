@@ -8,11 +8,20 @@ export type SsoSettingsInput = {
   tenantId?: string
   clientId: string
   clientSecret?: string
+  usesInstanceApp?: boolean
   domain: string
 }
 export type SsoSettings = { preset: SsoPreset; issuer: string; clientId: string; domain: string }
 export type SsoDomainState = { domain: string; isVerified: boolean; sentTo: string | null; expiresAt: number | null }
-export type SsoSettingsView = SsoSettings & { tenantId: string; hasSecret: boolean; domainState: SsoDomainState }
+export type SsoSettingsView = SsoSettings & {
+  tenantId: string
+  hasSecret: boolean
+  usesInstanceApp: boolean
+  domainState: SsoDomainState
+}
+export const instanceAppPresets = ['google', 'microsoft'] as const
+export type InstanceAppPreset = (typeof instanceAppPresets)[number]
+export type InstanceApps = Partial<Record<InstanceAppPreset, { clientId: string; clientSecret: string }>>
 
 export const googleIssuer = 'https://accounts.google.com'
 export const microsoftLoginOrigin = 'https://login.microsoftonline.com'
@@ -57,7 +66,37 @@ export const ssoSettingsFrom = (input: SsoSettingsInput, microsoftOrigin = micro
   return { preset: input.preset, issuer, clientId, domain }
 }
 
+const addressOf = (value: unknown) => (typeof value === 'string' && value.includes('@') ? value : undefined)
+
+const googleWorkspaceEmailOf = (claims: Record<string, unknown>) => {
+  const email = addressOf(claims.email)
+  return email !== undefined && claims.email_verified === true && claims.hd === domainOfEmail(email) ? email : undefined
+}
+
 export const ssoEmailOf = (preset: SsoPreset, claims: Record<string, unknown>) => {
-  const email = preset === 'microsoft' ? (claims.email ?? claims.preferred_username) : claims.email
-  return typeof email === 'string' && email.includes('@') ? email : undefined
+  if (preset === 'google') return googleWorkspaceEmailOf(claims)
+  return addressOf(preset === 'microsoft' ? (claims.preferred_username ?? claims.email) : claims.email)
+}
+
+export const entraObjectIdPattern = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+
+export const ssoCanBindByEmail = (preset: SsoPreset, claims: Record<string, unknown>) =>
+  preset !== 'microsoft' || typeof claims.idp !== 'string' || claims.idp === claims.iss
+
+const instanceAppNames: Record<InstanceAppPreset, string> = { google: 'Google', microsoft: 'Microsoft' }
+
+export const instanceAppFor = (instanceApps: InstanceApps, preset: SsoPreset) => {
+  if (preset === 'oidc')
+    throw new InvalidSsoSettings('Only Google Workspace and Microsoft Entra sign in through the app of this Spyria')
+  const app = instanceApps[preset]
+  if (!app)
+    throw new InvalidSsoSettings(
+      `This Spyria has no ${instanceAppNames[preset]} app: enter the client id and secret of your own`,
+    )
+  return app
+}
+
+export const ssoSubjectOf = (preset: SsoPreset, claims: Record<string, unknown>) => {
+  const subject = preset === 'microsoft' ? claims.oid : claims.sub
+  return typeof subject === 'string' && subject !== '' ? subject : undefined
 }

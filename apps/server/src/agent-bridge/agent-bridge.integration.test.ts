@@ -15,9 +15,11 @@ import {
   chatAs,
   failedWith,
   globex,
+  issueTestSession,
   sessionTokenOf,
   startAgentStack,
   succeeded,
+  testAuthSettings,
   waitFor,
 } from '../testing/testing.ts'
 
@@ -516,6 +518,50 @@ test.each([
     expect(textsOf(aliceViewer.frames).join('')).toBe(replyOf(1).body)
   },
 )
+
+test('signing out closes the stream of that session at once and leaves the other sessions of the member streaming', async () => {
+  const chat = await newRuntimeChat()
+  const signedOut = await issueTestSession(database, acme, alice)
+  const signedOutViewer = await openStream(chat, { token: signedOut.token })
+  const otherViewer = await openStream(chat)
+  await Promise.all([signedOutViewer.subscribed, otherViewer.subscribed])
+  const logout = await app.request('/auth/logout', {
+    method: 'POST',
+    headers: {
+      origin: testAuthSettings.appOrigin,
+      'x-spyria-csrf': '1',
+      'content-type': 'application/json',
+      cookie: `spyria_s_${acme}=${signedOut.sessionId}`,
+    },
+    body: JSON.stringify({ workspaceId: acme }),
+  })
+  expect(logout.status).toBe(204)
+  expect(await signedOutViewer.closed).toBe(4001)
+  await otherViewer.resubscribe()
+})
+
+test('a stream closes when its token expires and stays open when a renewed token arrives first', async () => {
+  const chat = await newRuntimeChat()
+  const expiring = await openStream(chat, {
+    token: (await issueTestSession(database, acme, alice, undefined, 2)).token,
+  })
+  const renewed = await openStream(chat, { token: (await issueTestSession(database, acme, alice, undefined, 2)).token })
+  await Promise.all([expiring.subscribed, renewed.subscribed])
+  renewed.authenticate(await sessionTokenOf(database, acme, alice))
+  expect(await expiring.closed).toBe(4001)
+  await renewed.resubscribe()
+})
+
+test.each([
+  ['another member', () => sessionTokenOf(database, acme, bob)],
+  ['another workspace', () => sessionTokenOf(database, globex, alice)],
+  ['an invalid token', async () => 'not-a-token'],
+])('a stream that receives a token of %s closes', async (_, tokenOf) => {
+  const viewer = await openStream(await newRuntimeChat())
+  await viewer.subscribed
+  viewer.authenticate(await tokenOf())
+  expect(await viewer.closed).toBe(4001)
+})
 
 test('removing the owner of a runtime chat closes their stream, stops the turn and the runtime, and freezes the chat until an admin transfers it', async () => {
   await agentHost()

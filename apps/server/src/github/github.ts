@@ -503,7 +503,8 @@ export const receiveGitHubWebhook = async (
 ) => {
   const apps = await database.$client<{ workspaceId: string; encryptedWebhookSecret: string }[]>`
     select workspace_id as "workspaceId", encrypted_webhook_secret as "encryptedWebhookSecret" from github_apps
-    where ${appId ? database.$client`app_id = ${appId}` : database.$client`true`}`
+    where ${appId ? database.$client`app_id = ${appId}` : database.$client`true`}
+      and workspace_id in (select workspace_id from workspaces where deleted_at is null)`
   const signedBy = await Promise.all(
     apps.map(async (app) => secretBox && isSignedBy(await secretBox.open(app.encryptedWebhookSecret), body, signature)),
   )
