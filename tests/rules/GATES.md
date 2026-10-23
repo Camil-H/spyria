@@ -1,6 +1,6 @@
 # Gate register
 
-Every rule of the architecture standard (`.claude/skills/architecture`) and what makes it true here. `bun run check:all` runs every automated gate: Biome, typecheck, dependency-cruiser (`.dependency-cruiser.cjs`), unit tests, build and bundle gates (`scripts/check-bundle.ts`), integration tests, e2e. "Review" means no tool checks it; the reason follows.
+Every rule of the architecture standard (`.agents/skills/architecture`) and what makes it true here. `bun run check:all` runs every automated gate: Biome, typecheck, dependency-cruiser (`.dependency-cruiser.cjs`), unit tests, build and bundle gates (`scripts/check-bundle.ts`), integration tests, e2e. "Review" means no tool checks it; the reason follows.
 
 ## Applied
 
