@@ -36,6 +36,7 @@ import {
   createHolds,
   type FakeHost,
   issueTestSession,
+  logInToFakeToolServer,
   testAuthSettings,
   testSecretsKey,
 } from './testing.ts'
@@ -356,7 +357,10 @@ const app = createApp({
   })
   .post('/test/tool-servers', async (context) => {
     for (const name of testToolServers)
-      await llmGateway.setUpToolServer({ name, url: `http://host.docker.internal:${fakeMcpPort}/mcp` })
+      await llmGateway.setUpToolServer(
+        { name, url: `http://host.docker.internal:${fakeMcpPort}/mcp` },
+        logInToFakeToolServer(llmGateway),
+      )
     await llmGateway.setUpToolServer({
       name: sharedToolServer,
       url: `http://host.docker.internal:${fakeMcpPort}/shared/mcp`,
