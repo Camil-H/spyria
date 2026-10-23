@@ -7,6 +7,7 @@ import {
   diffLayoutFor,
   type FileChange,
   isCollapsedByDefault,
+  splitColumnsOf,
   splitRowsOf,
 } from '../domain/workspace.ts'
 import { usePanel } from './providers.tsx'
@@ -20,10 +21,14 @@ const lineClasses: Record<DiffLine['kind'], string> = {
 }
 const numberClass = 'w-px whitespace-nowrap select-none px-1 text-right align-top text-muted tabular-nums'
 const textClass = 'whitespace-pre px-2 align-top'
-const splitTextClass = 'w-1/2'
+const splitTextClass = 'overflow-x-auto'
 
 const lineKeyOf = (line: DiffLine | null) =>
   line ? `${line.kind}:${line.oldNumber}:${line.newNumber}:${line.kind === 'hunk' ? line.text : ''}` : 'none'
+
+const markerWidth = 2
+const numberPadding = '0.5rem'
+const textPadding = '1rem'
 
 const LineCells = ({
   line,
@@ -42,33 +47,58 @@ const LineCells = ({
   </>
 )
 
-const DiffTable = ({ change, layout }: { change: FileChange; layout: DiffLayout }) => (
-  <div className="overflow-x-auto border-t border-line scrollbar-thin">
-    <table aria-label={`Diff of ${change.path}`} className="w-full font-mono text-xs">
+const UnifiedTable = ({ change }: { change: FileChange }) => (
+  <table aria-label={`Diff of ${change.path}`} className="w-full font-mono text-xs">
+    <tbody>
+      {change.lines.map((line) => (
+        <tr key={lineKeyOf(line)}>
+          <td className={`${numberClass} ${lineClasses[line.kind]}`}>{line.oldNumber ?? ''}</td>
+          <LineCells line={line} number={line.newNumber} />
+        </tr>
+      ))}
+    </tbody>
+  </table>
+)
+
+const SplitTable = ({ change }: { change: FileChange }) => {
+  const { numberDigits, longestText } = splitColumnsOf(change.lines)
+  const numberWidth = `calc(${numberDigits}ch + ${numberPadding})`
+  const halfWidth = `calc(${numberDigits}ch + ${numberPadding} + ${longestText + markerWidth}ch + ${textPadding})`
+  return (
+    <table
+      aria-label={`Diff of ${change.path}`}
+      style={{ minWidth: `calc(2 * ${halfWidth})` }}
+      className="w-full table-fixed font-mono text-xs"
+    >
+      <colgroup>
+        <col style={{ width: numberWidth }} />
+        <col />
+        <col style={{ width: numberWidth }} />
+        <col />
+      </colgroup>
       <tbody>
-        {layout === 'unified'
-          ? change.lines.map((line) => (
-              <tr key={lineKeyOf(line)}>
-                <td className={`${numberClass} ${lineClasses[line.kind]}`}>{line.oldNumber ?? ''}</td>
-                <LineCells line={line} number={line.newNumber} />
-              </tr>
-            ))
-          : splitRowsOf(change.lines).map(({ left, right }) => (
-              <tr key={`${lineKeyOf(left)}|${lineKeyOf(right)}`}>
-                {left?.kind === 'hunk' ? (
-                  <td colSpan={4} className={`${textClass} ${lineClasses.hunk}`}>
-                    {left.text}
-                  </td>
-                ) : (
-                  <>
-                    <LineCells line={left} number={left?.oldNumber} widthClass={splitTextClass} />
-                    <LineCells line={right} number={right?.newNumber} widthClass={splitTextClass} />
-                  </>
-                )}
-              </tr>
-            ))}
+        {splitRowsOf(change.lines).map(({ left, right }) => (
+          <tr key={`${lineKeyOf(left)}|${lineKeyOf(right)}`}>
+            {left?.kind === 'hunk' ? (
+              <td colSpan={4} className={`${textClass} ${lineClasses.hunk}`}>
+                {left.text}
+              </td>
+            ) : (
+              <>
+                <LineCells line={left} number={left?.oldNumber} widthClass={splitTextClass} />
+                <LineCells line={right} number={right?.newNumber} widthClass={splitTextClass} />
+              </>
+            )}
+          </tr>
+        ))}
       </tbody>
     </table>
+  )
+}
+
+const DiffTable = ({ change, layout }: { change: FileChange; layout: DiffLayout }) => (
+  <div className="overflow-x-auto border-t border-line scrollbar-thin">
+    {layout === 'unified' ? <UnifiedTable change={change} /> : <SplitTable change={change} />}
   </div>
 )
 

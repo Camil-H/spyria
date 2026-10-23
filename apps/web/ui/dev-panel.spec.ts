@@ -79,7 +79,7 @@ test.describe('Dev panel', () => {
       await expect(diffOf(page, 'src/app.ts')).toBeVisible()
     })
 
-    await test.step('switches to side by side when the panel is widened to 560px, without breaking words, and back when narrowed', async () => {
+    await test.step('switches to side by side when the panel is widened to 560px, without breaking words and with the halves lined up across files, and back when narrowed', async () => {
       const separator = page.getByRole('separator', { name: 'Resize panel' })
       await separator.focus()
       for (let press = 0; press < 13; press++) await page.keyboard.press('ArrowLeft')
@@ -91,6 +91,8 @@ test.describe('Dev panel', () => {
         '+ export const total = 2',
       ])
       await expectReadableRow(page, 'src/app.ts', 1)
+      const rightHalfStartOf = async (path: string) => (await cellsOfRow(page, path, 1).nth(2).boundingBox())!.x
+      expect(await rightHalfStartOf('src/new.ts')).toBeCloseTo(await rightHalfStartOf('src/app.ts'), 0)
       await expectLooks(page, panelOf(page), 'changes-side-by-side', {
         mask: [tabPanelOf(page).getByRole('region', { name: 'Branch status' })],
       })

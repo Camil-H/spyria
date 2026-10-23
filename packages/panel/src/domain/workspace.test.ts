@@ -6,10 +6,12 @@ import {
   codeFenceOf,
   commitsOf,
   conflictPromptOf,
+  type DiffLine,
   diffLayoutFor,
   type FileChange,
   fileChangesOf,
   isCollapsedByDefault,
+  splitColumnsOf,
   splitRowsOf,
   treeEntriesOf,
 } from './workspace.ts'
@@ -224,4 +226,21 @@ test('the diff shows side by side from a 560px panel and unified below, where si
   expect(diffLayoutFor(559)).toBe('unified')
   expect(diffLayoutFor(560)).toBe('split')
   expect(diffLayoutFor(900)).toBe('split')
+})
+
+test('the side-by-side columns fit the widest line number, at least four digits, and the longest line with tabs expanded, ignoring hunk headers', () => {
+  const lineOf = (kind: DiffLine['kind'], text: string, oldNumber: number | null, newNumber: number | null) => ({
+    kind,
+    text,
+    oldNumber,
+    newNumber,
+  })
+  expect(splitColumnsOf([])).toEqual({ numberDigits: 4, longestText: 0 })
+  expect(
+    splitColumnsOf([
+      lineOf('hunk', '@@ -99998,3 +99998,4 @@ a much longer hunk header than any line', null, null),
+      lineOf('context', 'short', 99998, 99998),
+      lineOf('added', '\tindented', null, 100001),
+    ]),
+  ).toEqual({ numberDigits: 6, longestText: 16 })
 })
