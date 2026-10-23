@@ -89,6 +89,7 @@ const createAgentStream = (store: Store): AgentStream => {
   const reconnect = (workspaceId: WorkspaceId) => {
     if (!socketByWorkspace.has(workspaceId)) connect(workspaceId)
   }
+  store.onSessionRenewed((workspaceId) => sendTo(workspaceId, { type: 'auth', token: store.tokenOf(workspaceId) }))
   return {
     subscribe: (workspaceId, chatId, listener) => {
       const listenersByChat = listenersByWorkspace.get(workspaceId) ?? new Map<ChatId, Set<Listener>>()

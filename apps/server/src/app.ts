@@ -395,6 +395,8 @@ export const createApp = ({
         database,
         authenticate,
         testDatabaseByName,
+        closeSessionStreams: (sessionDatabase, workspaceId, sessionId) =>
+          agentBridge.forDatabase(sessionDatabase).closeSessionStreams(workspaceId, sessionId),
         rateLimited,
       }),
     )

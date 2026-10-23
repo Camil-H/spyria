@@ -93,10 +93,11 @@ export const issueTestSession = async (
   workspaceId: string,
   userId: string,
   databaseName?: string,
+  lifetimeSeconds?: number,
 ) => {
   const [session] = await openSessions(database, userId, workspaceId)
   if (!session) throw new Error(`${userId} is not a member of ${workspaceId}`)
-  const issued = await issueSessionToken(testAuthSettings.tokenSecret, session, { databaseName })
+  const issued = await issueSessionToken(testAuthSettings.tokenSecret, session, { databaseName, lifetimeSeconds })
   return { ...issued, sessionId: session.sessionId }
 }
 
@@ -653,7 +654,7 @@ export const startAgentStack = async ({
     const frames: string[] = []
     const subscribed = Promise.withResolvers<void>()
     let subscriptions = 0
-    const closed = new Promise<void>((resolve) => socket.addEventListener('close', () => resolve()))
+    const closed = new Promise<number>((resolve) => socket.addEventListener('close', (event) => resolve(event.code)))
     socket.onmessage = (message) => {
       if (!JSON.parse(String(message.data)).subscribed) return frames.push(String(message.data))
       subscriptions += 1
@@ -671,7 +672,14 @@ export const startAgentStack = async ({
       socket.send(JSON.stringify({ type: 'subscribe', chatId: chat }))
       await waitFor(() => subscriptions > before)
     }
-    return { frames, closed, subscribed: subscribed.promise, resubscribe, close: () => socket.close() }
+    return {
+      frames,
+      closed,
+      subscribed: subscribed.promise,
+      resubscribe,
+      authenticate: (renewedToken: string) => socket.send(JSON.stringify({ type: 'auth', token: renewedToken })),
+      close: () => socket.close(),
+    }
   }
   return {
     ...testApp,

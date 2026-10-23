@@ -32,6 +32,7 @@ type AuthRouteSettings = {
   database: Database
   authenticate: (authorization: string | undefined) => Promise<Authentication>
   testDatabaseByName?: (databaseName: string) => Database
+  closeSessionStreams: (database: Database, workspaceId: string, sessionId: string) => void
   rateLimited: (name: RateLimitName) => MiddlewareHandler
 }
 type TestSettings = { db?: string; user?: string; tokenSeconds?: number }
@@ -81,6 +82,7 @@ export const createAuthRoutes = ({
   database,
   authenticate,
   testDatabaseByName,
+  closeSessionStreams,
   rateLimited,
 }: AuthRouteSettings) => {
   const scopeOf = (context: Context, tokenDatabaseName?: string) => {
@@ -234,7 +236,10 @@ export const createAuthRoutes = ({
     })
     .post('/logout', async (context) => {
       const workspaceId = await workspaceIdOfBody(context)
-      await deleteSession(scopeOf(context).database, workspaceId, sessionIdOf(context, workspaceId))
+      const { database } = scopeOf(context)
+      const sessionId = sessionIdOf(context, workspaceId)
+      await deleteSession(database, workspaceId, sessionId)
+      closeSessionStreams(database, workspaceId, sessionId)
       deleteCookie(context, `${sessionCookiePrefix}${workspaceId}`, { path: '/auth' })
       return context.body(null, 204)
     })

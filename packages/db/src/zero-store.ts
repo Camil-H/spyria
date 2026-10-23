@@ -344,6 +344,7 @@ export const createZeroStore = ({
   const snapshotOf = createSnapshotBuilder(memberId)
   let snapshot = snapshotOf([], drafts)
   const listeners = new Set<() => void>()
+  const renewalListeners = new Set<(workspaceId: WorkspaceId) => void>()
   const rowsByWorkspace = new Map<WorkspaceId, SourceRows>()
   const scopedWatches = new Map<string, ScopedWatch>()
   const zeroByWorkspace = new Map<WorkspaceId, Zero>()
@@ -404,6 +405,7 @@ export const createZeroStore = ({
     if (renewed === undefined) return signOut(workspaceId)
     scheduleRenewal(renewed)
     tokenByWorkspace.set(workspaceId, renewed.token)
+    for (const listener of renewalListeners) listener(workspaceId)
     await zero.connection.connect({ auth: renewed.token })
   }
   const connect = (session: WorkspaceSession) => {
@@ -513,6 +515,12 @@ export const createZeroStore = ({
     },
     signedInWorkspaceIds: () => signedInWorkspaceIds,
     renewSession: renewNow,
+    onSessionRenewed: (listener: (workspaceId: WorkspaceId) => void) => {
+      renewalListeners.add(listener)
+      return () => {
+        renewalListeners.delete(listener)
+      }
+    },
     tokenOf: (workspaceId: WorkspaceId) => tokenByWorkspace.get(workspaceId) ?? '',
     signOut,
     signIn: async (session: WorkspaceSession) => {

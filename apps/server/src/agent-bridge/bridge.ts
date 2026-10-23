@@ -36,6 +36,8 @@ const readableRetryMilliseconds = 100
 const commandOutputIntervalMilliseconds = 100
 const slowViewerBytes = 4 * 1024 * 1024
 const slowViewerCloseCode = 4008
+const notSignedInCloseCode = 4001
+type StreamSession = { workspaceId: string; memberId: MemberId; sessionId: string }
 const keyOf = (chat: AgentChat) => `${chat.workspaceId}/${chat.chatId}`
 const turnKeyOf = (workspace: string, promptId: string) => `${workspace}/${promptId}`
 
@@ -128,6 +130,11 @@ export const createAgentBridge = ({
     >()
     const streamedSeqs = new Map<string, number>()
     const viewers = new Map<string, Map<WSContext, MemberId>>()
+    const streams = new Map<WSContext, StreamSession>()
+    const closeStreamsWhere = (isClosed: (session: StreamSession) => boolean) => {
+      for (const [viewer, session] of streams)
+        if (isClosed(session)) viewer.close(notSignedInCloseCode, 'Not signed in')
+    }
     const viewersOf = (chat: AgentChat) => viewers.get(keyOf(chat))?.keys() ?? []
     const unwatchChat = (viewer: WSContext, key: string) => {
       const watching = viewers.get(key)
@@ -489,13 +496,19 @@ export const createAgentBridge = ({
         for (const [viewer, memberId] of viewers.get(keyOf(chat)) ?? [])
           if (!(await isReadableBy(memberId, chat))) unwatchChat(viewer, keyOf(chat))
       },
-      closeMemberStreams: (workspaceId: string, memberId: string) => {
-        for (const [key, watching] of viewers)
-          if (key.startsWith(`${workspaceId}/`))
-            for (const [viewer, viewerId] of watching) if (viewerId === memberId) viewer.close(4001, 'Not signed in')
+      closeMemberStreams: (workspaceId: string, memberId: string) =>
+        closeStreamsWhere((session) => session.workspaceId === workspaceId && session.memberId === memberId),
+      closeSessionStreams: (workspaceId: string, sessionId: string) =>
+        closeStreamsWhere((session) => session.workspaceId === workspaceId && session.sessionId === sessionId),
+      openStream: (viewer: WSContext, session: StreamSession) => {
+        streams.set(viewer, session)
       },
       unwatch: (viewer: WSContext, chat?: AgentChat) => {
         for (const key of chat ? [keyOf(chat)] : [...viewers.keys()]) unwatchChat(viewer, key)
+      },
+      endStream: (viewer: WSContext) => {
+        streams.delete(viewer)
+        for (const key of [...viewers.keys()]) unwatchChat(viewer, key)
       },
       retained: () => ({
         turnSpans: turnSpans.size,
@@ -529,19 +542,37 @@ export const createAgentBridge = ({
       databaseOf: (databaseName: string | undefined) => Database | undefined,
     ) =>
       upgradeWebSocket(() => {
-        let viewing: { context: ZeroContext; bridge: ReturnType<typeof bridgeOf> } | undefined
+        let viewing: { context: ZeroContext; database: Database; bridge: ReturnType<typeof bridgeOf> } | undefined
         let receiving = Promise.resolve()
+        let expiry: ReturnType<typeof setTimeout> | undefined
+        const signIn = async (frame: StreamFrame, socket: WSContext) => {
+          const authentication =
+            frame.type === 'auth' && typeof frame.token === 'string'
+              ? await authenticate(`Bearer ${frame.token}`)
+              : undefined
+          const database = authentication?.status === 200 ? databaseOf(authentication.databaseName) : undefined
+          const isSameViewer =
+            !viewing ||
+            (authentication?.status === 200 &&
+              database === viewing.database &&
+              authentication.context.userId === viewing.context.userId &&
+              authentication.context.workspaceId === viewing.context.workspaceId)
+          clearTimeout(expiry)
+          if (authentication?.status !== 200 || !database || !isSameViewer)
+            return socket.close(notSignedInCloseCode, 'Not signed in')
+          viewing ??= { context: authentication.context, database, bridge: forDatabase(database) }
+          viewing.bridge.openStream(socket, {
+            workspaceId: authentication.context.workspaceId,
+            memberId: authentication.context.userId,
+            sessionId: authentication.sessionId,
+          })
+          expiry = setTimeout(
+            () => socket.close(notSignedInCloseCode, 'Not signed in'),
+            authentication.expiresAt - Date.now(),
+          )
+        }
         const receive = async (frame: StreamFrame, socket: WSContext) => {
-          if (!viewing) {
-            const authentication =
-              frame.type === 'auth' && typeof frame.token === 'string'
-                ? await authenticate(`Bearer ${frame.token}`)
-                : undefined
-            const database = authentication?.status === 200 ? databaseOf(authentication.databaseName) : undefined
-            if (authentication?.status !== 200 || !database) return socket.close(4001, 'Not signed in')
-            viewing = { context: authentication.context, bridge: forDatabase(database) }
-            return
-          }
+          if (frame.type === 'auth' || !viewing) return signIn(frame, socket)
           if (typeof frame.chatId !== 'string') return
           const chat = { workspaceId: viewing.context.workspaceId, chatId: chatId(frame.chatId) }
           if (frame.type === 'subscribe') await viewing.bridge.watch(socket, viewing.context, chat)
@@ -560,7 +591,8 @@ export const createAgentBridge = ({
               })
           },
           onClose: () => {
-            receiving = receiving.then(() => connection && viewing?.bridge.unwatch(connection))
+            clearTimeout(expiry)
+            receiving = receiving.then(() => connection && viewing?.bridge.endStream(connection))
           },
         }
       }),
