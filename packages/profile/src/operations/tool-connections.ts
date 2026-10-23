@@ -1,7 +1,7 @@
 import { type MemberId, toolNamePartsOf, type WorkspaceId } from '@spyria/kernel'
 import type { ToolGateway } from '../contracts/repositories.ts'
 import type { ProfileTransactor } from '../contracts/transactor.ts'
-import { NoGatewayKey, ToolNotInCatalog } from '../domain/errors.ts'
+import { NoGatewayKey, ToolNotInCatalog, ToolStillConnected } from '../domain/errors.ts'
 import { connectedTool, connectionStatusOf } from '../domain/personal-connection.ts'
 import { memberToolsOf } from '../domain/workspace-connection.ts'
 
@@ -58,6 +58,7 @@ export const startToolConnection = async (dependencies: Dependencies, input: Inp
   if (!virtualKeyId) throw new NoGatewayKey()
   await grantMemberTools(dependencies, input)
   for (const session of await gateway.toolSessions(virtualKeyId, server)) await gateway.removeToolSession(session.id)
+  if ((await gateway.toolSessions(virtualKeyId, server)).length > 0) throw new ToolStillConnected(input.tool)
   return { authorizeUrl: await gateway.startToolConsent(virtualKeyId, server) }
 }
 
