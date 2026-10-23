@@ -26,13 +26,18 @@ import {
   requestMutation,
   succeeded,
   testAuthSettings,
+  testSecretsKey,
   testSpyriaAgentImage,
   waitFor,
 } from '../testing/testing.ts'
 import { createRuntimeHostGateway } from './gateway.ts'
 
 const { database } = await openSharedTestApp()
-const gateway = createRuntimeHostGateway({ databases: () => [database], spyriaAgentImage: testSpyriaAgentImage })
+const gateway = createRuntimeHostGateway({
+  runtimeKeySecret: testSecretsKey,
+  databases: () => [database],
+  spyriaAgentImage: testSpyriaAgentImage,
+})
 const app = createApp({ database, ...testAuthSettings, runtimeHosts: gateway })
 const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
 const worker = startJobWorker(database, {
@@ -118,8 +123,6 @@ const jobsOf = async (type: string, runtimeId: string) =>
   [...(await database.$client`select * from jobs where type = ${type}`)].filter(
     (job) => job.payload.runtimeId === runtimeId,
   )
-const storedApiKey = async (runtimeId: string) =>
-  (await database.$client`select api_key from runtimes where id = ${runtimeId}`)[0]?.api_key
 
 test('ensureRuntimeRunning places a runtime on the least-loaded online host, creates, starts and waits for ready', async () => {
   const firstHost = await fakeHost('First host')
@@ -136,7 +139,7 @@ test('ensureRuntimeRunning places a runtime on the least-loaded online host, cre
   expect(idleHost.lifecycleCommands()).toEqual(['create', 'start'])
   const created = idleHost.commands.find((command) => command.op === 'create')
   expect(created).toMatchObject({ runtimeId: runtime.id, image: testSpyriaAgentImage })
-  expect(created?.apiKey?.length).toBeGreaterThanOrEqual(16)
+  expect(created?.apiKey).toBe(gateway.sandboxProvider.apiKeyOf({ workspaceId: acme, runtimeId: runtime.id }))
   await runtimeIn(firstChat, 'running')
 })
 
@@ -199,6 +202,21 @@ test('ten concurrent ensureRuntimeRunning calls for one chat create one runtime 
   expect(await jobsOf('runtime.create', runtime.id)).toHaveLength(1)
 })
 
+test('a runtime the key migration marked outdated is replaced on the next prompt with a derived key, and its old container is removed', async () => {
+  const host = await fakeHost('Outdated runtime host')
+  const chat = await newRuntimeChat()
+  const old = await runningRuntime(chat)
+  await database.$client`update runtimes set state = 'failed', failure = 'outdated' where id = ${old.id}`
+
+  const placed = await ensure(chat)
+  expect(placed.id).not.toBe(old.id)
+  await runtimeIn(chat, 'running')
+  await waitFor(() => !host.containers.has(old.id))
+  expect(host.commands.find((command) => command.op === 'create' && command.runtimeId === placed.id)).toMatchObject({
+    apiKey: gateway.sandboxProvider.apiKeyOf({ workspaceId: acme, runtimeId: placed.id }),
+  })
+})
+
 test('a stopped runtime resumes with start only; a missing container is recreated with the same id and key', async () => {
   const host = await fakeHost('Resuming host')
   const chat = await newRuntimeChat()
@@ -218,7 +236,7 @@ test('a stopped runtime resumes with start only; a missing container is recreate
   await runtimeIn(chat, 'running')
   expect(host.lifecycleCommands()).toEqual(['create', 'start'])
   expect(host.commands.find((command) => command.op === 'create')).toMatchObject({ runtimeId: runtime.id, apiKey })
-  expect(await runtimeOf(chat)).toMatchObject({ id: runtime.id, api_key: apiKey })
+  expect(await runtimeOf(chat)).not.toHaveProperty('api_key')
 })
 
 test('the sweep stops runtimes idle for more than an hour only, and touchRuntime postpones it', async () => {
@@ -245,7 +263,7 @@ test('the sweep stops runtimes idle for more than an hour only, and touchRuntime
   ])
 })
 
-test('the sweep removes runtimes stopped for 30 days with their container, volumes and secret, keeping the chat history', async () => {
+test('the sweep removes runtimes stopped for 30 days with their container and volumes, keeping the chat history', async () => {
   const host = await fakeHost('Removing host')
   const oldChat = chatId('chat-invoice-bug')
   const recentChat = await newRuntimeChat()
@@ -257,7 +275,6 @@ test('the sweep removes runtimes stopped for 30 days with their container, volum
   })
   const history = await historyOf()
   expect(history.messages).toBeGreaterThan(0)
-  expect(await storedApiKey(old.id)).not.toBeNull()
 
   await idleFor(oldChat, '31 days')
   await idleFor(recentChat, '29 days')
@@ -268,7 +285,6 @@ test('the sweep removes runtimes stopped for 30 days with their container, volum
   expect(host.commands.filter((command) => command.op === 'remove').map((command) => command.runtimeId)).toEqual([
     old.id,
   ])
-  expect(await storedApiKey(old.id)).toBeNull()
   expect(await historyOf()).toEqual(history)
 })
 
@@ -279,7 +295,6 @@ test('archiving a runtime chat removes its runtime', async () => {
   expect(await archive(chat)).toEqual(succeeded)
   await runtimeIn(chat, 'removed')
   expect(host.containers.has(runtime.id)).toBe(false)
-  expect(await storedApiKey(runtime.id)).toBeNull()
 })
 
 test('commands to an offline host retry until it returns, rows stay untouched meanwhile, and hello reconciles drift', async () => {
@@ -398,11 +413,11 @@ test('a runtime job whose worker died after claiming it is claimed again once it
   const host = await fakeHost('Crashed worker host')
   const chat = await newRuntimeChat()
   const id = crypto.randomUUID()
-  const apiKey = 'an-api-key-generated-before-the-crash'
+  const apiKey = gateway.sandboxProvider.apiKeyOf({ workspaceId: acme, runtimeId: id })
   await database.$client.begin(async (sql) => {
     await sql`
-      insert into runtimes (workspace_id, id, chat_id, host_id, state, image, api_key, last_active_at, created_at, state_changed_at)
-      values (${acme}, ${id}, ${chat}, ${host.id}, 'creating', ${testSpyriaAgentImage}, ${apiKey}, now(), now(), now())`
+      insert into runtimes (workspace_id, id, chat_id, host_id, state, image, last_active_at, created_at, state_changed_at)
+      values (${acme}, ${id}, ${chat}, ${host.id}, 'creating', ${testSpyriaAgentImage}, now(), now(), now())`
     await sql`
       insert into jobs (workspace_id, id, type, payload, run_at, attempts, state)
       values (${acme}, ${`job-${id}`}, 'runtime.create', ${JSON.stringify({ runtimeId: id })}::jsonb, now() + interval '1 second', 0, 'running')`

@@ -154,12 +154,22 @@ export const createLlmGateway = ({
     })
     return /auth-success|status=success/.test(response.headers.get('location') ?? '')
   }
-  const logInAutomatically = async (authorizeUrl: string) => {
-    const authorized = await fetch(authorizeUrl, {
-      redirect: 'manual',
+  const mcpRequest = (virtualKeyValue: string | undefined, method: string, params?: object) =>
+    fetch(`${url}/mcp`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${virtualKeyValue}`,
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
       signal: AbortSignal.timeout(timeoutMilliseconds),
     })
-    await finishToolConsent(new URL(authorized.headers.get('location') ?? '').search)
+  const listedToolsOf = async (virtualKeyValue: string | undefined) => {
+    const { result } = (await (await mcpRequest(virtualKeyValue, 'tools/list')).json()) as {
+      result?: { tools?: ListedTool[] }
+    }
+    return result?.tools ?? []
   }
   const gateway: BifrostGateway = {
     url,
@@ -181,9 +191,10 @@ export const createLlmGateway = ({
     },
     toolServers,
     finishToolConsent,
-    setUpToolServer: async ({ name, url: endpoint, oauthConfig = {}, isShared }, logIn = logInAutomatically) => {
+    setUpToolServer: async ({ name, url: endpoint, oauthConfig = {}, isShared }, logIn) => {
       if (name.includes('-')) throw new Error(`A tool server name cannot contain "-": ${name}`)
       if ((await freshToolServers()).some((server) => server.name === name)) return false
+      if (!isShared && !logIn) throw new Error(`Setting up ${name} needs an operator to log in to it`)
       const { body } = await request('POST', '/api/mcp/client', {
         name,
         connection_type: 'http',
@@ -191,7 +202,7 @@ export const createLlmGateway = ({
         tools_to_execute: ['*'],
         ...(isShared ? { auth_type: 'none' } : { auth_type: 'per_user_oauth', oauth_config: oauthConfig }),
       })
-      if (!isShared) {
+      if (logIn && !isShared) {
         await logIn(String(body.authorize_url))
         await request('POST', `/api/mcp/client/${body.oauth_config_id}/complete-oauth`)
       }
@@ -218,18 +229,7 @@ export const createLlmGateway = ({
         ).body,
       )
       try {
-        const response = await fetch(`${url}/mcp`, {
-          method: 'POST',
-          headers: {
-            authorization: `Bearer ${listingKey.value}`,
-            'content-type': 'application/json',
-            accept: 'application/json, text/event-stream',
-          },
-          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
-          signal: AbortSignal.timeout(timeoutMilliseconds),
-        })
-        const { result } = (await response.json()) as { result?: { tools?: ListedTool[] } }
-        return (result?.tools ?? []).map(
+        return (await listedToolsOf(listingKey.value)).map(
           (tool): ConnectionTool => ({
             name: tool.name.slice(name.length + 1),
             readOnly: tool.annotations?.readOnlyHint === true,
@@ -270,28 +270,21 @@ export const createLlmGateway = ({
       if (!isUnchanged) await request('PUT', `/api/governance/virtual-keys/${virtualKeyId}`, { mcp_configs: granted })
     },
     startToolConsent: async (virtualKeyId, server) => {
-      const response = await fetch(`${url}/mcp`, {
-        method: 'POST',
-        headers: {
-          authorization: `Bearer ${await gateway.virtualKeyValue(virtualKeyId)}`,
-          'content-type': 'application/json',
-          accept: 'application/json, text/event-stream',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'tools/call',
-          params: { name: `${server.name}-${server.tools[0]}`, arguments: {} },
-        }),
-        signal: AbortSignal.timeout(timeoutMilliseconds),
-      })
+      const virtualKeyValue = await gateway.virtualKeyValue(virtualKeyId)
+      const readOnlyTool = (await listedToolsOf(virtualKeyValue)).find(
+        (tool) => tool.name.startsWith(`${server.name}-`) && tool.annotations?.readOnlyHint === true,
+      )
+      const consentTool = readOnlyTool?.name ?? `${server.name}-${server.tools[0]}`
+      const response = await mcpRequest(virtualKeyValue, 'tools/call', { name: consentTool, arguments: {} })
       const flowId = (await response.text()).match(/flow=([0-9a-f-]{36})/)?.[1]
       if (!flowId) throw new Error(`The gateway started no consent for ${server.name}`)
       return String((await request('GET', `/api/oauth/per-user/flows/${flowId}/start`)).body.authorize_url)
     },
     toolSessions: async (virtualKeyId, server) =>
-      (await request('GET', `/api/mcp/sessions?virtual_key_id=${virtualKeyId}&mcp_client_id=${server.id}`)).body
-        .sessions as { id: string; status: string }[],
+      (
+        (await request('GET', `/api/mcp/sessions?virtual_key_id=${virtualKeyId}&mcp_client_id=${server.id}`)).body
+          .sessions as { id: string; status: string; kind: string }[]
+      ).filter(({ kind }) => kind !== 'flow'),
     removeToolSession: async (sessionId) => {
       await request('DELETE', `/api/mcp/sessions/${sessionId}`)
     },

@@ -3,6 +3,7 @@ import {
   chatModelsOf,
   cheapestModelOf,
   defaultDeployment,
+  disclosableMessageOf,
   type HarnessId,
   harnessOf,
   isPickableModel,
@@ -205,7 +206,7 @@ const createdConversationOf = async (
   const conversation = { ...endpoint, conversationId: await runtimes.rememberConversation(chat, newId) }
   if (conversation.conversationId === newId) {
     const checkout = await checkouts?.checkoutOf(chat).catch((error: Error) => {
-      throw new AgentStartFailure(error.message)
+      throw new AgentStartFailure(disclosableMessageOf(error))
     })
     await agentClient.createConversation(conversation, await runtimes.issueLlmToken(chat), llm, undefined, checkout)
   }
@@ -347,7 +348,7 @@ export const promptAgent = async (
     }
     const notice =
       error instanceof AgentStartFailure || !(await runtimes.isWaitingOnHost(chat))
-        ? `${agentNotices.couldNotStart}: ${error instanceof Error ? error.message : 'unknown error'}`
+        ? `${agentNotices.couldNotStart}: ${disclosableMessageOf(error)}`
         : notReadyNoticeOf({ state: 'host_offline' }, localSession === true)
     return transactor.run((unitOfWork) => closeAgentTurn(unitOfWork, chatId, prompt.id, () => notice))
   }

@@ -1,7 +1,7 @@
 import { log, type RuntimeId, type WorkspaceId } from '@spyria/kernel'
 import type { SandboxProvider, SandboxTransport } from '../contracts/sandbox-provider.ts'
 import type { RuntimeTransactor } from '../contracts/transactor.ts'
-import { ApiKeyMissing, RuntimeNotReady } from '../domain/errors.ts'
+import { RuntimeNotReady } from '../domain/errors.ts'
 import { installFailureOf, locationOf, transitioned } from '../domain/runtime.ts'
 import { recordIfUnchanged } from './record-if-unchanged.ts'
 
@@ -33,23 +33,16 @@ export const bringUpRuntime = async (
   { transactor, provider }: Dependencies,
   { workspaceId, runtimeId, now, isLastAttempt }: Input,
 ) => {
-  const { runtime, apiKey, harness } = await transactor.run(async ({ runtimes, secrets }) => {
+  const { runtime, harness } = await transactor.run(async ({ runtimes }) => {
     const runtime = await runtimes.lock(workspaceId, runtimeId)
-    return {
-      runtime,
-      apiKey: await secrets.valueOf(runtime, 'apiKey'),
-      harness: await runtimes.localHarnessOf(runtime),
-    }
+    return { runtime, harness: await runtimes.localHarnessOf(runtime) }
   })
   const sandbox = locationOf(runtime)
   if (!['creating', 'starting', 'installing'].includes(runtime.state) || !sandbox) return
   let started = runtime
   try {
     const status = await provider.status(sandbox)
-    if (status === 'missing') {
-      if (!apiKey) throw new ApiKeyMissing(runtimeId)
-      await provider.create({ ...sandbox, image: runtime.image, apiKey })
-    }
+    if (status === 'missing') await provider.create({ ...sandbox, image: runtime.image })
     if (harness && !(await provider.hasHarness({ ...sandbox, harness }))) {
       const installing = runtime.state === 'installing' ? runtime : transitioned(runtime, 'installing', now)
       await recordIfUnchanged(transactor, runtime, ({ runtimes }) => runtimes.save(installing))

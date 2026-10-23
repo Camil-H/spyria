@@ -8,7 +8,15 @@ import { websocket } from 'hono/bun'
 import { createApp } from '../app.ts'
 import { readSpyriaAgentImage } from '../spyria-agent-image.ts'
 import { requireTestHarnesses, testHarnessesVolume } from '../testing/harnesses.ts'
-import { acme, aliceInAcme, rejectionOf, sessionTokenOf, testAuthSettings, waitFor } from '../testing/testing.ts'
+import {
+  acme,
+  aliceInAcme,
+  rejectionOf,
+  sessionTokenOf,
+  testAuthSettings,
+  testSecretsKey,
+  waitFor,
+} from '../testing/testing.ts'
 import { createRuntimeHostGateway } from './gateway.ts'
 
 const docker = (...args: string[]) => Bun.spawnSync(['docker', ...args], { stderr: 'pipe' })
@@ -26,7 +34,11 @@ const prefix = `${deployment}-`
 const hostProgram = new URL('../../../host/src/main.ts', import.meta.url).pathname
 const stateDirectory = mkdtempSync(join(tmpdir(), 'spyria-test-host-'))
 const testDatabase = await createTestDatabase()
-const gateway = createRuntimeHostGateway({ databases: () => [testDatabase.database], spyriaAgentImage: spyriaImage })
+const gateway = createRuntimeHostGateway({
+  runtimeKeySecret: testSecretsKey,
+  databases: () => [testDatabase.database],
+  spyriaAgentImage: spyriaImage,
+})
 const app = createApp({ database: testDatabase.database, ...testAuthSettings, runtimeHosts: gateway })
 const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
 let hostProcess: ReturnType<typeof Bun.spawn> | undefined
@@ -88,9 +100,9 @@ test("a real spyria-host --personal runs Spyria's image with the credentials vol
   const host = { workspaceId: acme, hostId: runtimeHostId(id) }
   await gateway.prepare(host, spyriaImage)
   const runtime = { ...host, runtimeId: 'personal-smoke' }
-  const apiKey = 'test-api-key-0123456789abcdef'
+  const apiKey = gateway.sandboxProvider.apiKeyOf(runtime)
   const containerName = `${prefix}rt-personal-smoke`
-  await gateway.sandboxProvider.create({ ...runtime, image: spyriaImage, apiKey })
+  await gateway.sandboxProvider.create({ ...runtime, image: spyriaImage })
   const [inspected] = JSON.parse(dockerText('inspect', containerName))
   expect(
     (inspected.HostConfig.Mounts as { Source: string; Target: string }[]).map(({ Source, Target }) => [Source, Target]),

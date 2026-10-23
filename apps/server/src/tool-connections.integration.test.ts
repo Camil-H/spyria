@@ -27,6 +27,7 @@ import {
   rpcOf,
   runtimeTurn,
   testAuthSettings,
+  testSecretsKey,
   textOf,
   virtualKeyOf,
   waitFor,
@@ -90,6 +91,19 @@ test('a refused consent shows the failure page and creates no connection', async
     body: JSON.stringify({ status: null }),
   })
   expect(await connectionRows()).toEqual([])
+})
+
+test('a pending sign-in left behind does not block Connect, and Connect while signed in drops the token so no tool reaches the server', async () => {
+  const callsBefore = fakeMcp.records.length
+  expect((await asMember(alice, 'POST', connectionPath('connect'))).status).toBe(200)
+  expect((await asMember(alice, 'POST', connectionPath('connect'))).status).toBe(200)
+  await connectAlice(aliceCookie)
+  const key = await virtualKeyOf(alice)
+  expect((await sessionsOf(key.id)).map((session) => session.status)).toEqual(['active'])
+
+  expect((await asMember(alice, 'POST', connectionPath('connect'))).status).toBe(200)
+  expect((await sessionsOf(key.id)).map((session) => session.status)).toEqual(['pending'])
+  expect(fakeMcp.records.slice(callsBefore)).toEqual([])
 })
 
 test('a member acts only on their own key: unknown servers and members without a key are refused, and Bob never touches Alice’s connection', async () => {
@@ -199,6 +213,7 @@ test('session headers pass through, gateway failures become error results instea
   })
   let gatewayUrl = stubGateway.url.origin
   const runtimeHosts = createRuntimeHostGateway({
+    runtimeKeySecret: testSecretsKey,
     databases: () => [database],
     relayModelCall: createModelCallRelay({
       llmGateway,

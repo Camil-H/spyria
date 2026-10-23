@@ -27,7 +27,8 @@ Your proxy must:
 
 - terminate TLS for the origin and forward plain HTTP to both targets;
 - match `/zero/` before the catch-all route;
-- pass WebSocket upgrades (`/zero/`, `/host`, `/api/stream`) and keep long-lived connections open.
+- pass WebSocket upgrades (`/zero/`, `/host`, `/api/stream`) and keep long-lived connections open;
+- never route anything to the gateway (`gateway:8080`). Its admin API returns tool servers' header secrets in plain text, so it must stay reachable on the Compose network only. Compose publishes no gateway port, and the server forwards only the tool sign-in callback (`/gateway-oauth/api/oauth/callback`) to it.
 
 Both targets are reachable only on the Compose network `<deployment>-network`, so run the proxy or tunnel connector as a container attached to that network. The server also answers on `127.0.0.1:${SPYRIA_LOCAL_PORT:-3300}` on the machine itself, for health checks and a local proxy.
 
@@ -56,7 +57,7 @@ Copy `.env.example` to `.env.prod` and fill every key marked `[prod]`. Compose r
 | `SPYRIA_DEPLOYMENT` | Deployment name (lowercase letters, digits, dashes), see above. |
 | `SPYRIA_APP_ORIGIN` | Public origin, `https://`. |
 | `SPYRIA_TOKEN_SECRET` | Signs session tokens. At least 32 characters. |
-| `SPYRIA_SECRETS_KEY` | Encrypts stored secrets (SSO client secrets, GitHub App keys) with AES-GCM. At least 32 characters. Never change it: every stored secret would have to be entered again. |
+| `SPYRIA_SECRETS_KEY` | Encrypts stored secrets (SSO client secrets, GitHub App keys) with AES-GCM, and derives the key the server uses to reach each runtime. At least 32 characters. Never change it: every stored secret would have to be entered again, and existing runtimes would stop answering the server. |
 | `SPYRIA_TRUSTED_PROXY` | Leave unset, except in the [Cloudflare example](#example-cloudflare). Behind a proxy, rate limits on unauthenticated routes see every client as the proxy's address. |
 | `SPYRIA_SMTP_URL`, `SPYRIA_MAIL_FROM` | Mail, for example `smtp://user:pass@smtp.example.com:587` and `Spyria <spyria@example.com>`. |
 | `SPYRIA_GOOGLE_CLIENT_ID`, `SPYRIA_GOOGLE_CLIENT_SECRET`, `SPYRIA_MICROSOFT_CLIENT_ID`, `SPYRIA_MICROSOFT_CLIENT_SECRET` | Optional apps of the deployment for one-click sign-in, see [One-click Google and Microsoft](#one-click-google-and-microsoft). |
@@ -190,7 +191,7 @@ Webhooks arrive on `/api/github/webhooks`; Spyria checks each delivery's `X-Hub-
 
 ## Tool servers in the gateway
 
-Members connect tools (MCP servers) in **Profile > Connections**; their OAuth tokens stay in the gateway. A tool server is set up once per deployment by an operator before members see it. The setup prints a login URL: log in once with your own account (the gateway uses it only to discover the server's tools), approve, then press Enter.
+Members connect tools (MCP servers) in **Profile > Connections**; their OAuth tokens stay in the gateway. A tool server is set up once per deployment by an operator before members see it. The setup prints a login URL: log in once with your own account (the gateway uses it only to discover the server's tools), approve, then press Enter. When a member connects, Spyria first deletes the member's sign-in to that server and checks none is left, then starts a new one by calling a tool the server marks read-only, or its first tool when it marks none. With no sign-in, the gateway asks for one before the call reaches the server.
 
 - **GitHub:** create a GitHub OAuth App with the callback URL `<origin>/gateway-oauth/api/oauth/callback`, then run:
 

@@ -9,16 +9,13 @@ type Dependencies = { transactor: RuntimeTransactor }
 type ChatRuntime = { workspaceId: WorkspaceId; chatId: ChatId }
 
 export const readAgentAccess = ({ transactor }: Dependencies, { workspaceId, chatId }: ChatRuntime) =>
-  transactor.run(async ({ runtimes, runtimeHosts, secrets }) => {
+  transactor.run(async ({ runtimes, runtimeHosts }) => {
     const runtime = await runtimes.findByChat(workspaceId, chatId)
     const sandbox = runtime?.state === 'running' && runtime.hostOnline ? locationOf(runtime) : undefined
     if (!runtime || !sandbox) return undefined
-    const apiKey = await secrets.valueOf(runtime, 'apiKey')
-    if (!apiKey) return undefined
     const capacity = (await runtimeHosts.find(workspaceId, sandbox.hostId))?.capacity
     return {
       sandbox,
-      apiKey,
       conversationId: (await runtimes.agentConversationOf(runtime)) ?? null,
       signedIn: capacity?.signedIn ?? [],
     }

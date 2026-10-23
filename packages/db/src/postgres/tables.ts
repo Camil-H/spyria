@@ -600,7 +600,6 @@ export const runtimes = table(
     failure: text().$type<RuntimeFailure>(),
     hostOnline: boolean().notNull().default(false),
     image: text().notNull(),
-    apiKey: text(),
     llmTokenHash: text(),
     llmSwitchTokenHash: text(),
     agentConversationId: text(),

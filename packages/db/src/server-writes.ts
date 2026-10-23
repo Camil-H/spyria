@@ -230,7 +230,6 @@ export const lockRuntimeHostLoads = (tx: Transaction, workspaceId: string, chatI
   )
 
 const serverOnlyRuntimeColumns = {
-  apiKey: 'api_key',
   llmTokenHash: 'llm_token_hash',
   llmSwitchTokenHash: 'llm_switch_token_hash',
   agentConversation: 'agent_conversation_id',

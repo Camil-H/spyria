@@ -42,6 +42,11 @@ export const ToolNotInCatalog = errorKind(
   (tool: string) => `Tool ${tool} is not in the catalog`,
   ProfileError,
 )
+export const ToolStillConnected = errorKind(
+  'tool_still_connected',
+  (tool: string) => `${tool} is still connected: disconnect it, then connect again`,
+  ProfileError,
+)
 export const NoGatewayKey = errorKind('no_gateway_key', () => 'Add an LLM key before connecting tools', ProfileError)
 export const InvalidConnection = errorKind('invalid_connection', (reason: string) => reason, ProfileError)
 export const ConnectionNotFound = errorKind(

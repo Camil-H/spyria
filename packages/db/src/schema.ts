@@ -69,6 +69,7 @@ export type RuntimeFailure =
   | 'create_failed'
   | 'start_failed'
   | 'lost'
+  | 'outdated'
   | `install_failed: ${string}`
 type RuntimeRow = {
   workspaceId: WorkspaceId

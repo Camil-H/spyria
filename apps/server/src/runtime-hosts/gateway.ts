@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import type { Database } from '@spyria/db/postgres'
 import { schema } from '@spyria/db/zero'
@@ -66,12 +67,14 @@ export const createRuntimeHostGateway = ({
   afterHello,
   relayModelCall,
   spyriaAgentImage,
+  runtimeKeySecret,
 }: {
   databases: () => Iterable<Database>
   pingIntervalMilliseconds?: number
   afterHello?: (database: Database, host: ConnectedHost) => Promise<unknown>
   relayModelCall?: ModelCallRelay
   spyriaAgentImage?: string
+  runtimeKeySecret: string
 }) => {
   const connectionByHost = new Map<string, Connection>()
   const operationChains = new Map<string, Promise<unknown>>()
@@ -297,10 +300,14 @@ export const createRuntimeHostGateway = ({
     await command(sandbox, op, { runtimeId: sandbox.runtimeId })
   }
 
+  const apiKeyOf: SandboxProvider['apiKeyOf'] = ({ workspaceId, runtimeId }) =>
+    createHmac('sha256', runtimeKeySecret).update(`runtime-api-key.${workspaceId}.${runtimeId}`).digest('base64url')
+
   const sandboxProvider: SandboxProvider = {
-    create: async ({ image, apiKey, ...sandbox }) => {
-      await command(sandbox, 'create', { runtimeId: sandbox.runtimeId, image, apiKey })
+    create: async ({ image, ...sandbox }) => {
+      await command(sandbox, 'create', { runtimeId: sandbox.runtimeId, image, apiKey: apiKeyOf(sandbox) })
     },
+    apiKeyOf,
     start: commandWithoutResult('start'),
     stop: commandWithoutResult('stop'),
     remove: commandWithoutResult('remove'),
