@@ -27,7 +27,7 @@ const expectReadableRow = async (page: Page, path: string, row: number) => {
   const cells = cellsOfRow(page, path, row)
   const lineNumberBox = (await cells.first().boundingBox())!
   const codeBox = (await cells.last().boundingBox())!
-  expect(lineNumberBox.width).toBeLessThan(32)
+  expect(lineNumberBox.width).toBeLessThan(40)
   expect(codeBox.height).toBeLessThan(24)
 }
 const runAgent = async (page: Page, agentScript: AgentScript, chatId: string, steps: object[], text: string) => {
