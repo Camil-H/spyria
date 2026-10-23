@@ -55,7 +55,7 @@ export const MessageList = ({
   const shownItems = renderedItems === items ? items : items.slice(-(renderedItems.length + newItemsPaintedFirst))
   return (
     <div
-      className="min-h-0 flex-1 overflow-y-auto scrollbar-thin"
+      className="min-h-0 flex-1 overflow-y-auto pr-3 scrollbar-thin"
       onScroll={({ currentTarget: { scrollTop } }) => {
         if (scrollTop < previousScrollTop.current && scrollTop < earlierThresholdPixels) onLoadEarlier?.()
         previousScrollTop.current = scrollTop

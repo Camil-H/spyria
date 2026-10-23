@@ -1,17 +1,17 @@
-import { focusRing, SegmentedChoice } from '@spyria/ui'
+import { focusRing } from '@spyria/ui'
 import { ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import {
   type DiffLayout,
   type DiffLine,
+  diffLayoutFor,
   type FileChange,
   isCollapsedByDefault,
+  splitColumnsOf,
   splitRowsOf,
 } from '../domain/workspace.ts'
+import { usePanel } from './providers.tsx'
 
-const layoutStorageKey = 'spyria.diff-layout'
-const layouts: readonly DiffLayout[] = ['unified', 'split']
-const layoutLabels: Record<DiffLayout, string> = { unified: 'Unified', split: 'Side by side' }
 const markers: Record<DiffLine['kind'], string> = { added: '+', removed: '-', context: ' ', hunk: '' }
 const lineClasses: Record<DiffLine['kind'], string> = {
   added: 'bg-added',
@@ -19,67 +19,93 @@ const lineClasses: Record<DiffLine['kind'], string> = {
   context: '',
   hunk: 'bg-hover text-muted',
 }
-const numberClass = 'w-10 select-none px-1 text-right align-top text-muted tabular-nums'
-const textClass = 'whitespace-pre-wrap break-all px-2 align-top'
+const numberClass = 'w-px whitespace-nowrap select-none px-1 text-right align-top text-muted tabular-nums'
+const textClass = 'whitespace-pre px-2 align-top'
+const splitTextClass = 'overflow-x-auto'
 
 const lineKeyOf = (line: DiffLine | null) =>
   line ? `${line.kind}:${line.oldNumber}:${line.newNumber}:${line.kind === 'hunk' ? line.text : ''}` : 'none'
 
-const storedLayout = (): DiffLayout => {
-  try {
-    return localStorage.getItem(layoutStorageKey) === 'split' ? 'split' : 'unified'
-  } catch {
-    return 'unified'
-  }
-}
+const markerWidth = 2
+const numberPadding = '0.5rem'
+const textPadding = '1rem'
 
-const LineCells = ({ line, number }: { line: DiffLine | null; number: number | null | undefined }) => (
+const LineCells = ({
+  line,
+  number,
+  widthClass = '',
+}: {
+  line: DiffLine | null
+  number: number | null | undefined
+  widthClass?: string
+}) => (
   <>
     <td className={`${numberClass} ${line ? lineClasses[line.kind] : ''}`}>{number ?? ''}</td>
-    <td className={`${textClass} ${line ? lineClasses[line.kind] : ''}`}>
+    <td className={`${textClass} ${widthClass} ${line ? lineClasses[line.kind] : ''}`}>
       {line && `${markers[line.kind]} ${line.text}`}
     </td>
   </>
 )
 
-const DiffTable = ({ change, layout }: { change: FileChange; layout: DiffLayout }) => (
-  <table aria-label={`Diff of ${change.path}`} className="w-full table-fixed border-t border-line font-mono text-xs">
+const UnifiedTable = ({ change }: { change: FileChange }) => (
+  <table aria-label={`Diff of ${change.path}`} className="w-full font-mono text-xs">
     <tbody>
-      {layout === 'unified'
-        ? change.lines.map((line) => (
-            <tr key={lineKeyOf(line)}>
-              <td className={`${numberClass} ${lineClasses[line.kind]}`}>{line.oldNumber ?? ''}</td>
-              <LineCells line={line} number={line.newNumber} />
-            </tr>
-          ))
-        : splitRowsOf(change.lines).map(({ left, right }) => (
-            <tr key={`${lineKeyOf(left)}|${lineKeyOf(right)}`}>
-              {left?.kind === 'hunk' ? (
-                <td colSpan={4} className={`${textClass} ${lineClasses.hunk}`}>
-                  {left.text}
-                </td>
-              ) : (
-                <>
-                  <LineCells line={left} number={left?.oldNumber} />
-                  <LineCells line={right} number={right?.newNumber} />
-                </>
-              )}
-            </tr>
-          ))}
+      {change.lines.map((line) => (
+        <tr key={lineKeyOf(line)}>
+          <td className={`${numberClass} ${lineClasses[line.kind]}`}>{line.oldNumber ?? ''}</td>
+          <LineCells line={line} number={line.newNumber} />
+        </tr>
+      ))}
     </tbody>
   </table>
 )
 
+const SplitTable = ({ change }: { change: FileChange }) => {
+  const { numberDigits, longestText } = splitColumnsOf(change.lines)
+  const numberWidth = `calc(${numberDigits}ch + ${numberPadding})`
+  const halfWidth = `calc(${numberDigits}ch + ${numberPadding} + ${longestText + markerWidth}ch + ${textPadding})`
+  return (
+    <table
+      aria-label={`Diff of ${change.path}`}
+      style={{ minWidth: `calc(2 * ${halfWidth})` }}
+      className="w-full table-fixed font-mono text-xs"
+    >
+      <colgroup>
+        <col style={{ width: numberWidth }} />
+        <col />
+        <col style={{ width: numberWidth }} />
+        <col />
+      </colgroup>
+      <tbody>
+        {splitRowsOf(change.lines).map(({ left, right }) => (
+          <tr key={`${lineKeyOf(left)}|${lineKeyOf(right)}`}>
+            {left?.kind === 'hunk' ? (
+              <td colSpan={4} className={`${textClass} ${lineClasses.hunk}`}>
+                {left.text}
+              </td>
+            ) : (
+              <>
+                <LineCells line={left} number={left?.oldNumber} widthClass={splitTextClass} />
+                <LineCells line={right} number={right?.newNumber} widthClass={splitTextClass} />
+              </>
+            )}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+const DiffTable = ({ change, layout }: { change: FileChange; layout: DiffLayout }) => (
+  <div className="overflow-x-auto border-t border-line scrollbar-thin">
+    {layout === 'unified' ? <UnifiedTable change={change} /> : <SplitTable change={change} />}
+  </div>
+)
+
 export const FileDiffList = ({ changes }: { changes: readonly FileChange[] }) => {
-  const [layout, setLayout] = useState(storedLayout)
+  const layout = diffLayoutFor(usePanel().width)
   const [toggledPaths, setToggledPaths] = useState<ReadonlySet<string>>(new Set())
   const isCollapsed = isCollapsedByDefault(changes)
-  const chooseLayout = (chosen: DiffLayout) => {
-    setLayout(chosen)
-    try {
-      localStorage.setItem(layoutStorageKey, chosen)
-    } catch {}
-  }
   const toggle = (path: string) => {
     const toggled = new Set(toggledPaths)
     if (!toggled.delete(path)) toggled.add(path)
@@ -88,14 +114,6 @@ export const FileDiffList = ({ changes }: { changes: readonly FileChange[] }) =>
   if (changes.length === 0) return null
   return (
     <div className="flex flex-col gap-3">
-      <SegmentedChoice
-        label="Diff layout"
-        name="diff-layout"
-        options={layouts}
-        labels={layoutLabels}
-        value={layout}
-        onChange={chooseLayout}
-      />
       {changes.map((change) => {
         const isExpanded = toggledPaths.has(change.path) === isCollapsed
         return (

@@ -1,11 +1,11 @@
 import { focusRing } from '@spyria/ui'
 import { type KeyboardEvent, type PointerEvent, useRef } from 'react'
-import { maximumPanelWidth, minimumPanelWidth, usePanel } from './providers.tsx'
+import { minimumPanelWidth, usePanel } from './providers.tsx'
 
 const keyboardStep = 16
 
 export const ResizeHandle = () => {
-  const { width, resizeTo } = usePanel()
+  const { width, maximumWidth, resizeTo } = usePanel()
   const drag = useRef<{ startX: number; startWidth: number } | null>(null)
   const startDrag = (event: PointerEvent<HTMLHRElement>) => {
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -24,7 +24,7 @@ export const ResizeHandle = () => {
       aria-orientation="vertical"
       aria-valuenow={width}
       aria-valuemin={minimumPanelWidth}
-      aria-valuemax={maximumPanelWidth}
+      aria-valuemax={maximumWidth}
       tabIndex={0}
       onPointerDown={startDrag}
       onPointerMove={moveDrag}

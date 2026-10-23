@@ -20,10 +20,12 @@ import { useWorkspacePermissions } from './useWorkspacePermissions.ts'
 export const NewChatDialog = ({
   workspaceId,
   projects,
+  initialProjectId = null,
   onClose,
 }: {
   workspaceId: WorkspaceId
   projects: Sidebar['projects']
+  initialProjectId?: ProjectId | null
   onClose: () => void
 }) => {
   const commands = useWorkspaceCommands()
@@ -31,7 +33,7 @@ export const NewChatDialog = ({
   const [type, setType] = useState<Chat['type']>('channel')
   const [visibility, setVisibility] = useState<ChatVisibility>('public')
   const [draftName, setDraftName] = useState('')
-  const [selectedProjectId, setSelectedProjectId] = useState<ProjectId | null>(null)
+  const [selectedProjectId, setSelectedProjectId] = useState(initialProjectId)
   const [mode, setMode] = useState<'non-dev' | 'dev'>('non-dev')
   const [repositories, setRepositories] = useState<GitHubRepository[]>()
   const [repository, setRepository] = useState('')
