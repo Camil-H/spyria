@@ -71,6 +71,7 @@ test('closes a stream whose queue before opening overflows', async () => {
   expect(await nextOf('ws_close')).toMatchObject({ type: 'ws_close', sid: 4 })
 })
 
+const pngHeader = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 const accessToken = 'sk-ant-oat01-FAKEACCESS-current-0000000000'
 const refreshToken = 'opaque-refresh-value-123456'
 const conversationId = '0b6f2c1e-1f8a-4c55-9f0e-6f1d2a3b4c5d'
@@ -81,6 +82,14 @@ const tokenServer = Bun.serve({
       ? undefined
       : Response.json({
           path: `${new URL(request.url).pathname}${new URL(request.url).search}`,
+          ...(new URL(request.url).pathname === '/api/workspace/media' && {
+            content: Buffer.concat([
+              pngHeader,
+              Buffer.from(
+                new URL(request.url).searchParams.get('path') === 'stolen.png' ? `x${refreshToken}x` : 'pixels',
+              ),
+            ]).toString('base64'),
+          }),
           output: `{"accessToken":"${accessToken}","refreshToken":"${refreshToken}"} and sk-ant-ort01-OTHER_refresh-9`,
         }),
   websocket: {
@@ -223,4 +232,25 @@ test('a frame over the limit is never sent: an HTTP answer becomes an error unde
   expect(Buffer.byteLength(refused)).toBeLessThan(2000)
   expect(frameTextOf({ type: 'gw_req', sid: 8, body: 'é'.repeat(900) }, 2000)).toBeDefined()
   expect(frameTextOf({ type: 'gw_req', sid: 8, body: 'é'.repeat(1100) }, 2000)).toBeUndefined()
+})
+
+test('a personal host relays a workspace file whose bytes hold no secret, and refuses one that hides a token behind media bytes', async () => {
+  const { relay, nextOf } = personalRelay()
+  await relay.handle({
+    type: 'http',
+    sid: 6,
+    runtimeId: 'runtime-1',
+    method: 'GET',
+    path: '/api/workspace/media?path=chart.png',
+  })
+  const relayed = JSON.parse(String((await nextOf('http_res'))?.body))
+  expect(Buffer.from(relayed.content, 'base64')).toEqual(Buffer.concat([pngHeader, Buffer.from('pixels')]))
+  await relay.handle({
+    type: 'http',
+    sid: 7,
+    runtimeId: 'runtime-1',
+    method: 'GET',
+    path: '/api/workspace/media?path=stolen.png',
+  })
+  expect(await nextOf('http_res')).toEqual({ type: 'http_res', sid: 7, error: 'refused: this file holds a secret' })
 })
