@@ -6,6 +6,7 @@ import {
   chatAttachmentPathOf,
   chatAttachmentsPathOf,
   chatGitPathOf,
+  chatMediaPathOf,
   chatPlanModePathOf,
   chatPublishPathOf,
   chatQuestionPathOf,
@@ -190,6 +191,7 @@ const statusByErrorCode: Record<string, number> = {
   host_not_found: 404,
   attachment_not_allowed: 415,
   attachment_not_found: 404,
+  runtime_media_unavailable: 404,
 }
 
 const endpointResponse = async (request: string, successStatus: number, endpoint: () => Promise<unknown>) => {
@@ -553,6 +555,19 @@ export const createApp = ({
         }),
       ),
     )
+    .get(chatMediaPathOf(':chatId'), (context) => {
+      const { workspaceId, userId } = context.get('zeroContext')
+      const path = context.req.query('path') ?? ''
+      return endpointResponse('Reading a runtime file', 200, async () =>
+        mediaResponseOf({
+          ...(await agentBridge
+            .forDatabase(context.get('database'))
+            .readRuntimeMedia({ workspaceId, chatId: chatId(context.req.param('chatId') ?? '') }, userId, path)),
+          name: path.split('/').at(-1) ?? 'file',
+          isImmutable: false,
+        }),
+      )
+    })
     .post(chatPublishPathOf(':chatId', ':action{push|pull_request}'), async (context) => {
       const { title, body } = ((await context.req.json().catch(() => null)) ?? {}) as Record<string, unknown>
       const { workspaceId, userId } = context.get('zeroContext')

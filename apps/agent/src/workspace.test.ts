@@ -83,6 +83,22 @@ test('a file read returns its text, refuses paths outside the workspace and mark
   expect(String(large.content).length).toBe(256_000)
 })
 
+test('a media read returns the whole file in base64 by relative or absolute path, only inside the workspace and up to 20 MB', async () => {
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 1, 2])
+  write(workspace, { 'out/chart.png': '' })
+  writeFileSync(join(workspace, 'out/chart.png'), png)
+  for (const path of ['out/chart.png', join(workspace, 'out/chart.png')])
+    expect((await read(`/api/workspace/media?path=${encodeURIComponent(path)}`)).body).toEqual({
+      content: png.toString('base64'),
+    })
+  if (!existsSync(join(workspace, 'escape.txt')))
+    symlinkSync(join(directory, 'secret.txt'), join(workspace, 'escape.txt'))
+  for (const path of ['../secret.txt', 'escape.txt', '/etc/hosts', 'missing.png', 'out'])
+    expect((await read(`/api/workspace/media?path=${encodeURIComponent(path)}`)).status).toBe(404)
+  writeFileSync(join(workspace, 'huge.mp4'), Buffer.alloc(20 * 1024 * 1024 + 1))
+  expect((await read('/api/workspace/media?path=huge.mp4')).status).toBe(413)
+})
+
 test('changes are the diff against the base branch with commits, uncommitted edits and new files, without ignored files', async () => {
   const changes = join(directory, 'changes')
   git(directory, 'clone', '-q', source, changes)

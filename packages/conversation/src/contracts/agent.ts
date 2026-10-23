@@ -104,6 +104,7 @@ export type AgentClient = {
   interrupt(conversation: AgentConversation): Promise<void>
   deleteConversation(conversation: AgentConversation): Promise<void>
   readWorkspace(endpoint: AgentEndpoint, path: string): Promise<object | undefined>
+  readMedia(endpoint: AgentEndpoint, path: string): Promise<Uint8Array<ArrayBuffer> | undefined>
   bundleBranch(endpoint: AgentEndpoint, branch: string, prerequisite: string | null): Promise<BranchBundle>
   actOnWorkspace(
     endpoint: AgentEndpoint,
