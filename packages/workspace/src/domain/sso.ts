@@ -67,7 +67,7 @@ export const ssoSettingsFrom = (input: SsoSettingsInput, microsoftOrigin = micro
 }
 
 export const ssoEmailOf = (preset: SsoPreset, claims: Record<string, unknown>) => {
-  const email = preset === 'microsoft' ? (claims.email ?? claims.preferred_username) : claims.email
+  const email = preset === 'microsoft' ? (claims.preferred_username ?? claims.email) : claims.email
   return typeof email === 'string' && email.includes('@') ? email : undefined
 }
 
@@ -86,5 +86,10 @@ export const instanceAppFor = (instanceApps: InstanceApps, preset: SsoPreset) =>
 
 export const hostedDomainEmailOf = (claims: Record<string, unknown>) => {
   const email = ssoEmailOf('google', claims)
-  return email !== undefined && claims.hd === domainOfEmail(email) ? email : undefined
+  return email !== undefined && claims.email_verified === true && claims.hd === domainOfEmail(email) ? email : undefined
+}
+
+export const ssoSubjectOf = (preset: SsoPreset, claims: Record<string, unknown>) => {
+  const subject = preset === 'microsoft' ? claims.oid : claims.sub
+  return typeof subject === 'string' && subject !== '' ? subject : undefined
 }

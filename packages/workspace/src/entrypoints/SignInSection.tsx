@@ -238,7 +238,7 @@ const SsoSettingsForm = ({
       </form>
       <p className="text-sm text-muted">
         The email domain is set when the workspace is created. It routes sign-in once verified: send a link to any
-        address at that domain.
+        address at that domain. Changing the provider or the tenant asks to verify it again.
       </p>
       <EmailDomain workspaceId={workspaceId} state={form.domainState} onSent={setForm} />
     </LabelledSection>

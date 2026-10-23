@@ -6,6 +6,7 @@ import {
   instanceAppFor,
   instanceAppPresets,
   ssoEmailOf,
+  ssoSubjectOf,
 } from '@spyria/workspace/server'
 import { type Context, Hono, type MiddlewareHandler } from 'hono'
 import { deleteCookie, getCookie, getSignedCookie, setCookie, setSignedCookie } from 'hono/cookie'
@@ -111,6 +112,7 @@ export const createAuthRoutes = ({
       redirectUri,
       emailOf: (claims) =>
         instanceApp && provider.preset === 'google' ? hostedDomainEmailOf(claims) : ssoEmailOf(provider.preset, claims),
+      subjectOf: (claims) => ssoSubjectOf(provider.preset, claims),
     })
   }
   const ssoClients = new Map<string, Oidc>()

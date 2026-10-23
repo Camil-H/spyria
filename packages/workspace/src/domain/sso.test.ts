@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { domainOfEmail, hostedDomainEmailOf, instanceAppFor, ssoEmailOf, ssoSettingsFrom } from './sso.ts'
+import { domainOfEmail, hostedDomainEmailOf, instanceAppFor, ssoEmailOf, ssoSettingsFrom, ssoSubjectOf } from './sso.ts'
 
 const base = { clientId: ' spyria ', domain: ' @Acme.com' }
 
@@ -37,9 +37,10 @@ test.each([
   expect(() => ssoSettingsFrom({ ...base, ...input } as Parameters<typeof ssoSettingsFrom>[0])).toThrow(message)
 })
 
-test('Entra falls back to preferred_username, other presets read only email', () => {
+test('Entra reads the user principal name before the mail attribute, other presets read only email', () => {
   expect(ssoEmailOf('microsoft', { preferred_username: 'pat@acme.com' })).toBe('pat@acme.com')
-  expect(ssoEmailOf('microsoft', { email: 'pat@acme.com', preferred_username: 'x@acme.com' })).toBe('pat@acme.com')
+  expect(ssoEmailOf('microsoft', { email: 'x@acme.com', preferred_username: 'pat@acme.com' })).toBe('pat@acme.com')
+  expect(ssoEmailOf('microsoft', { email: 'pat@acme.com' })).toBe('pat@acme.com')
   expect(ssoEmailOf('oidc', { preferred_username: 'pat@acme.com' })).toBeUndefined()
   expect(domainOfEmail(' Pat@Acme.COM ')).toBe('acme.com')
 })
@@ -55,9 +56,19 @@ test('the app of this Spyria serves Google and Microsoft once configured, never 
   )
 })
 
-test('through the Google app of this Spyria, only an account managed by the Google Workspace of its email domain signs in', () => {
-  expect(hostedDomainEmailOf({ email: 'pat@acme.com', hd: 'acme.com' })).toBe('pat@acme.com')
-  expect(hostedDomainEmailOf({ email: 'pat@acme.com' })).toBeUndefined()
-  expect(hostedDomainEmailOf({ email: 'pat@acme.com', hd: 'globex.com' })).toBeUndefined()
-  expect(hostedDomainEmailOf({ email: 'pat@gmail.com', hd: 'acme.com' })).toBeUndefined()
+test('through the Google app of this Spyria, only a verified email of an account managed by the Google Workspace of its domain signs in', () => {
+  const verified = { email: 'pat@acme.com', email_verified: true, hd: 'acme.com' }
+  expect(hostedDomainEmailOf(verified)).toBe('pat@acme.com')
+  expect(hostedDomainEmailOf({ ...verified, email_verified: false })).toBeUndefined()
+  expect(hostedDomainEmailOf({ email: 'pat@acme.com', hd: 'acme.com' })).toBeUndefined()
+  expect(hostedDomainEmailOf({ ...verified, hd: undefined })).toBeUndefined()
+  expect(hostedDomainEmailOf({ ...verified, hd: 'globex.com' })).toBeUndefined()
+  expect(hostedDomainEmailOf({ ...verified, email: 'pat@gmail.com' })).toBeUndefined()
+})
+
+test('an Entra identity is its object id, the same through every app of the tenant; other providers use the subject', () => {
+  expect(ssoSubjectOf('microsoft', { sub: 'per-app', oid: 'object-1' })).toBe('object-1')
+  expect(ssoSubjectOf('microsoft', { sub: 'per-app' })).toBeUndefined()
+  expect(ssoSubjectOf('google', { sub: 'google-1', oid: 'ignored' })).toBe('google-1')
+  expect(ssoSubjectOf('oidc', {})).toBeUndefined()
 })
