@@ -32,6 +32,11 @@
     color-mix(in oklab, var(--color-primary-900) 80%, transparent),
     color-mix(in oklab, var(--color-primary-500) 58%, transparent)
   );
+  --color-card-edge: light-dark(var(--color-line), color-mix(in oklab, var(--color-primary-500) 34%, transparent));
+  --color-card-glow: light-dark(
+    color-mix(in oklab, var(--color-light-neutral-985) 12%, transparent),
+    color-mix(in oklab, var(--color-primary-500) 22%, transparent)
+  );
   --color-spire-light: light-dark(var(--color-primary-700), var(--color-primary-300));
   --color-spire-glow: light-dark(
     color-mix(in oklab, var(--color-primary-200) 70%, transparent),
