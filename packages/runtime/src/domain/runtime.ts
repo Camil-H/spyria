@@ -19,6 +19,7 @@ export type RuntimeFailure =
   | 'create_failed'
   | 'start_failed'
   | 'lost'
+  | 'outdated'
   | `${typeof installFailedPrefix}${string}`
 export const installFailureOf = (reason: string): RuntimeFailure => `${installFailedPrefix}${reason}`
 export const installFailureReasonOf = (failure: string | null | undefined) =>
@@ -83,7 +84,8 @@ export const ensureStepOf = (runtime: Runtime | undefined) => {
     runtime.state === 'removed' ||
     runtime.failure === 'no_host' ||
     runtime.failure === 'no_capacity' ||
-    runtime.failure === 'no_image'
+    runtime.failure === 'no_image' ||
+    runtime.failure === 'outdated'
   )
     return 'place'
   if (runtime.state === 'stopped') return 'start'

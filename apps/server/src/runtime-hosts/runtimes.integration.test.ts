@@ -26,6 +26,7 @@ import {
   requestMutation,
   succeeded,
   testAuthSettings,
+  testSecretsKey,
   testSpyriaAgentImage,
   waitFor,
 } from '../testing/testing.ts'
@@ -33,7 +34,7 @@ import { createRuntimeHostGateway } from './gateway.ts'
 
 const { database } = await openSharedTestApp()
 const gateway = createRuntimeHostGateway({
-  runtimeKeySecret: testAuthSettings.tokenSecret,
+  runtimeKeySecret: testSecretsKey,
   databases: () => [database],
   spyriaAgentImage: testSpyriaAgentImage,
 })
@@ -199,6 +200,21 @@ test('ten concurrent ensureRuntimeRunning calls for one chat create one runtime 
   expect(await database.$client`select id from runtimes where chat_id = ${chat}`).toHaveLength(1)
   expect(host.lifecycleCommands()).toEqual(['create', 'start'])
   expect(await jobsOf('runtime.create', runtime.id)).toHaveLength(1)
+})
+
+test('a runtime the key migration marked outdated is replaced on the next prompt with a derived key, and its old container is removed', async () => {
+  const host = await fakeHost('Outdated runtime host')
+  const chat = await newRuntimeChat()
+  const old = await runningRuntime(chat)
+  await database.$client`update runtimes set state = 'failed', failure = 'outdated' where id = ${old.id}`
+
+  const placed = await ensure(chat)
+  expect(placed.id).not.toBe(old.id)
+  await runtimeIn(chat, 'running')
+  await waitFor(() => !host.containers.has(old.id))
+  expect(host.commands.find((command) => command.op === 'create' && command.runtimeId === placed.id)).toMatchObject({
+    apiKey: gateway.sandboxProvider.apiKeyOf({ workspaceId: acme, runtimeId: placed.id }),
+  })
 })
 
 test('a stopped runtime resumes with start only; a missing container is recreated with the same id and key', async () => {
