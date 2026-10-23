@@ -41,7 +41,7 @@ test.describe('Dev panel', () => {
     await page.goto('/')
   })
 
-  test('As a chat owner, I collapse and expand the diff per file, read line numbers on both sides, and find the side-by-side layout remembered after a reload; the panel has no Terminal tab', {
+  test('As a chat owner, I collapse and expand the diff per file and read it side by side with line numbers on both sides, with no layout choice; the panel has no Terminal tab', {
     tag: ['@spec-43'],
   }, async ({ page, agentScript }) => {
     await configureGitHubApp(page)
@@ -54,8 +54,13 @@ test.describe('Dev panel', () => {
       'Added a file.',
     )
     await expect(diffOf(page, 'src/new.ts')).toBeVisible()
-    await expect(cellsOfRow(page, 'src/app.ts', 1)).toHaveText(['1', '', '- export const total = 1'])
-    await expect(cellsOfRow(page, 'src/app.ts', 2)).toHaveText(['', '1', '+ export const total = 2'])
+    await expect(cellsOfRow(page, 'src/app.ts', 1)).toHaveText([
+      '1',
+      '- export const total = 1',
+      '1',
+      '+ export const total = 2',
+    ])
+    await expect(tabPanelOf(page).getByRole('radiogroup', { name: 'Diff layout' })).toHaveCount(0)
 
     const fileButton = tabPanelOf(page).getByRole('button', { name: /^src\/app\.ts/ })
     await fileButton.click()
@@ -65,22 +70,6 @@ test.describe('Dev panel', () => {
     await fileButton.click()
     await expect(diffOf(page, 'src/app.ts')).toBeVisible()
 
-    await tabPanelOf(page).getByRole('radio', { name: 'Side by side' }).check()
-    await expect(cellsOfRow(page, 'src/app.ts', 1)).toHaveText([
-      '1',
-      '- export const total = 1',
-      '1',
-      '+ export const total = 2',
-    ])
-    await page.reload()
-    await panelTabOf(page, 'Changes').click()
-    await expect(tabPanelOf(page).getByRole('radio', { name: 'Side by side' })).toBeChecked()
-    await expect(cellsOfRow(page, 'src/app.ts', 1)).toHaveText([
-      '1',
-      '- export const total = 1',
-      '1',
-      '+ export const total = 2',
-    ])
     await expect(panelTabOf(page, 'Terminal')).toHaveCount(0)
     await expect(panelOf(page).getByRole('textbox')).toHaveCount(0)
     await expectLooks(page, panelOf(page), 'changes-side-by-side', {
