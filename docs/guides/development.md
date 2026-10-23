@@ -83,7 +83,7 @@ The OAuth redirect goes through Spyria's origin: the gateway's external client U
 docker compose -f infra/docker-compose.yml --profile gateway up -d --force-recreate gateway
 ```
 
-Disconnecting a tool in the profile revokes the gateway's token only. To revoke the grant upstream, remove it at the provider (GitHub Settings > Applications, Notion > Connections).
+Disconnecting a tool in the profile deletes the gateway's token only. The gateway keeps the provider's token encrypted and never returns it, and it calls no revocation endpoint, so Spyria cannot revoke the grant upstream; after a disconnect the profile tells the member to remove it at the provider (GitHub Settings > Applications, Notion > Connections).
 
 ## Day to day
 
