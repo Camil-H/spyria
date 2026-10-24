@@ -8,7 +8,7 @@ alias spyria='docker compose --env-file .env.prod -f deploy/compose.prod.yml'
 
 ## Logs
 
-The server, `spyria-host` and `spyria-agent` write one JSON line per event on stdout, following OpenTelemetry's log model. Read them with `spyria logs -f server` (or `host`). Filter on `event.name`, a stable name per event (for example `http.request`, `job.run` or `gen_ai.call`), and follow a request across services with `trace_id`. Errors carry `ERROR` severity with the error type and stack trace.
+The server, `spyria-host` and `spyria-agent` write one JSON line per event on stdout, following OpenTelemetry's log model. Read them with `spyria logs -f server` (or `host`). Filter on `event.name`, a stable name per event (for example `http.request`, `job.run` or `gen_ai.call`), and follow a request across services with `trace_id`. Recurring background jobs (the sweeps and the usage sync) log only their retries and failures; their successful runs show only as trace spans. Errors carry `ERROR` severity with the error type and stack trace.
 
 ### What is never logged
 

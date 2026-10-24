@@ -147,12 +147,10 @@ const enqueueSweepStatement = `
     and deleted_at is null
   on conflict do nothing`
 
+export const recurringJobTypes = ['sessions.sweep', 'runtime.sweep', 'agent.sweep', 'usage.sync', 'audit.sweep']
+
 export const enqueueSweeps = (database: Database, workspaceId: string | null = null) =>
-  database.$client.unsafe(enqueueSweepStatement, [
-    workspaceId,
-    '0 seconds',
-    ['sessions.sweep', 'runtime.sweep', 'agent.sweep', 'usage.sync', 'audit.sweep'],
-  ])
+  database.$client.unsafe(enqueueSweepStatement, [workspaceId, '0 seconds', recurringJobTypes])
 
 export const sessionJobs = {
   'sessions.sweep': async (tx: ServerTransaction, workspaceId: WorkspaceId) => {
