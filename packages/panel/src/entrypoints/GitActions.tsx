@@ -4,7 +4,7 @@ import { useSession } from '@spyria/session'
 import { buttonClass, fieldClass, ghostButtonClass, labelClass, Spinner } from '@spyria/ui'
 import { type FormEvent, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { conflictPromptOf } from '../domain/workspace.ts'
+import { type BranchStatus, conflictPromptOf, hasNothingToCommit } from '../domain/workspace.ts'
 import { getDevWorkspace } from '../queries/get-dev-workspace.ts'
 import { getPublishing } from '../queries/get-publishing.ts'
 import type { GitActionOutcome } from './commands.ts'
@@ -15,12 +15,14 @@ export const GitActions = ({
   chatId,
   actionsSlot,
   baseBranch,
+  status,
   onChanged,
 }: {
   workspaceId: WorkspaceId
   chatId: ChatId
   actionsSlot: HTMLElement | null
   baseBranch: string
+  status: BranchStatus
   onChanged: () => void
 }) => {
   const { memberId } = useSession()
@@ -37,6 +39,7 @@ export const GitActions = ({
       ? 'Available when the runtime is awake'
       : undefined
   const isDisabled = isRunning || unavailableReason !== undefined
+  const isCommitPointless = hasNothingToCommit(status)
   const run = async (action: 'commit' | 'update', text = '') => {
     setIsRunning(true)
     setOutcome(undefined)
@@ -67,8 +70,8 @@ export const GitActions = ({
           <>
             <button
               type="button"
-              disabled={isDisabled}
-              title={unavailableReason}
+              disabled={isDisabled || isCommitPointless}
+              title={unavailableReason ?? (isCommitPointless ? 'Nothing to commit' : undefined)}
               onClick={() => setMessage('')}
               className={ghostButtonClass}
             >
@@ -98,7 +101,7 @@ export const GitActions = ({
             />
           </label>
           <div className="flex gap-2">
-            <button type="submit" disabled={isDisabled || !message.trim()} className={buttonClass}>
+            <button type="submit" disabled={isDisabled || isCommitPointless || !message.trim()} className={buttonClass}>
               Commit
             </button>
             <button type="button" onClick={() => setMessage(undefined)} className={ghostButtonClass}>

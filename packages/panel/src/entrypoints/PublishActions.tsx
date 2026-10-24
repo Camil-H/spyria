@@ -4,6 +4,7 @@ import { useSession } from '@spyria/session'
 import { buttonClass, fieldClass, ghostButtonClass, labelClass, Spinner } from '@spyria/ui'
 import { type FormEvent, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { type BranchStatus, hasNothingToPush } from '../domain/workspace.ts'
 import { getPublishing } from '../queries/get-publishing.ts'
 import { usePanelCommands } from './providers.tsx'
 
@@ -13,12 +14,14 @@ export const PublishActions = ({
   workspaceId,
   chatId,
   actionsSlot,
+  status,
   commitSubjects,
   onPublished,
 }: {
   workspaceId: WorkspaceId
   chatId: ChatId
   actionsSlot: HTMLElement | null
+  status: BranchStatus
   commitSubjects: readonly string[]
   onPublished: () => void
 }) => {
@@ -29,6 +32,7 @@ export const PublishActions = ({
   const [isPublishing, setIsPublishing] = useState(false)
   const [outcome, setOutcome] = useState<Outcome>()
   if (!canPublish) return null
+  const isPushPointless = hasNothingToPush(status)
   const publish = async (action: 'push' | 'pull_request') => {
     setIsPublishing(true)
     setOutcome(undefined)
@@ -81,7 +85,13 @@ export const PublishActions = ({
         actionsSlot &&
         createPortal(
           <>
-            <button type="button" disabled={isPublishing} onClick={() => publish('push')} className={ghostButtonClass}>
+            <button
+              type="button"
+              disabled={isPublishing || isPushPointless}
+              title={isPushPointless ? 'Nothing to push' : undefined}
+              onClick={() => publish('push')}
+              className={ghostButtonClass}
+            >
               Push
             </button>
             {!hasOpenPullRequest && (

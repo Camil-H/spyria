@@ -21,6 +21,7 @@ const ChangesTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
   const { reading, refresh: refreshChanges } = useWorkspaceReading(workspaceId, chatId, 'changes')
   const { reading: statusReading, refresh: refreshStatus } = useWorkspaceReading(workspaceId, chatId, 'status')
   const changes = fileChangesOf(reading?.patch)
+  const status = branchStatusOf(statusReading)
   const refresh = () => {
     refreshChanges()
     refreshStatus()
@@ -29,16 +30,13 @@ const ChangesTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
     <div className="flex flex-col gap-4">
       <WorkspaceStatus workspaceId={workspaceId} chatId={chatId} />
       {workingBranch && baseBranch && (
-        <BranchStatusLine
-          workingBranch={workingBranch}
-          baseBranch={baseBranch}
-          status={branchStatusOf(statusReading)}
-        />
+        <BranchStatusLine workingBranch={workingBranch} baseBranch={baseBranch} status={status} />
       )}
       <PublishActions
         workspaceId={workspaceId}
         chatId={chatId}
         actionsSlot={actionsSlot}
+        status={status}
         commitSubjects={commitsOf(reading?.log).map(({ subject }) => subject)}
         onPublished={refreshStatus}
       />
@@ -48,6 +46,7 @@ const ChangesTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
           chatId={chatId}
           actionsSlot={actionsSlot}
           baseBranch={baseBranch}
+          status={status}
           onChanged={refresh}
         />
       )}
