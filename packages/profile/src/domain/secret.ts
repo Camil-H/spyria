@@ -1,7 +1,7 @@
 import { BlankSecret } from './errors.ts'
 
 const redaction = '[redacted]'
-const lastCharacterCount = 4
+const maximumShownCharacters = 4
 
 export class Secret {
   readonly #value: string
@@ -24,6 +24,8 @@ export class Secret {
   }
 
   last4() {
-    return this.#value.trimEnd().slice(-lastCharacterCount)
+    const trimmedValue = this.#value.trimEnd()
+    const shownCharacters = Math.min(maximumShownCharacters, Math.floor(trimmedValue.length / 2))
+    return trimmedValue.slice(trimmedValue.length - shownCharacters)
   }
 }

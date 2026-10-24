@@ -17,3 +17,11 @@ test('last4 derives the last four characters and Secret rejects blank values', (
   expect(new Secret('sk-test-1234567890').reveal()).toBe('sk-test-1234567890')
   expect(() => new Secret('   ')).toThrow(BlankSecret)
 })
+
+test('last4 never shows more than half of a short secret', () => {
+  expect(new Secret('abcdefgh').last4()).toBe('efgh')
+  expect(new Secret('abcdefg').last4()).toBe('efg')
+  expect(new Secret('abcd  ').last4()).toBe('cd')
+  expect(new Secret('abc').last4()).toBe('c')
+  expect(new Secret('a').last4()).toBe('')
+})
