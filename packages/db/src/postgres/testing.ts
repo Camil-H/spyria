@@ -1,7 +1,7 @@
 import { type ChildProcess, spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { once } from 'node:events'
-import { openSync, readFileSync, rmSync, writeFileSync, writeSync } from 'node:fs'
+import { openSync, readFileSync, realpathSync, rmSync, writeFileSync, writeSync } from 'node:fs'
 import { get } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -121,7 +121,9 @@ export const httpStatusOf = (url: string, headers: Record<string, string> = {}) 
     }).on('error', (error) => resolve(String(error)))
   })
 
-const zeroCacheCli = new URL('../../node_modules/@rocicorp/zero/out/zero/src/cli.js', import.meta.url).pathname
+const zeroPackage = new URL('../../node_modules/@rocicorp/zero/', import.meta.url).pathname
+const zeroCacheCli = `${zeroPackage}out/zero/src/cli.js`
+const zeroPackageDirectories = [zeroPackage, `${realpathSync(zeroPackage)}/`]
 
 const gracefulStopMilliseconds = 5000
 
@@ -154,8 +156,11 @@ const leftoverZeroCacheGroupsOn = (ports: number[]) =>
   outputOf('lsof', ['-t', `-iTCP:${ports.join(',')}`, '-sTCP:LISTEN'])
     .split('\n')
     .filter(Boolean)
-    .map((listener) => processGroupAndCommandOf(listener).group)
-    .filter((group) => group > 1 && processGroupAndCommandOf(String(group)).command.includes(zeroCacheCli))
+    .map(processGroupAndCommandOf)
+    .filter(
+      ({ group, command }) => group > 1 && zeroPackageDirectories.some((directory) => command.includes(directory)),
+    )
+    .map(({ group }) => group)
 
 const busyPortsOf = async (ports: number[]) => {
   const answers = await Promise.all(ports.map((port) => httpStatusOf(`http://localhost:${port}/`)))
