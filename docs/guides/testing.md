@@ -84,7 +84,7 @@ Playwright runs 3 workers by default; `WORKERS=<n>` changes it (8 at most).
 
 ### Cleanup
 
-Each run starts by removing what killed runs left behind: idle `spyria_test_<id>` and `spyria_e2e_w<n>` databases and inactive test replication slots in the test Postgres, and `spyria-test-<id>-*`, `spyria-test-e2e-*` and `spyria-test-certs-<id>` containers, volumes and networks older than 30 minutes. The reused fixtures stay: `spyria-test-postgres`, `spyria-test-dex`, the `spyria-test-gateway-*` containers and the `spyria-test-harnesses` volume.
+Each run starts by removing what killed runs left behind: idle `spyria_test_<id>` and `spyria_e2e_w<n>` databases and inactive test replication slots in the test Postgres, and `spyria-test-<id>-*`, `spyria-test-e2e-*` and `spyria-test-certs-<id>` containers, volumes and networks older than 30 minutes. The reused fixtures stay: `spyria-test-postgres`, `spyria-test-dex`, the `spyria-test-gateway-*` containers and the `spyria-test-harnesses` volume. A zero-cache starts by stopping a leftover zero-cache on its ports (integration 4890–4891, e2e from 4900) and fails at once if another process still holds them. After each step, `check:all` stops and logs any spyria-agent, stub agent or zero-cache of this checkout that the step left running, so e2e never starts beside integration leftovers.
 
 ## The fakes
 
