@@ -31,10 +31,14 @@ test.describe('Runtime lifecycle', () => {
 
   const triggerIdleStop = async (workerStack: WorkerStack, chatId: string) => {
     await expect.poll(() => turnOf(workerStack, chatId)).toBeNull()
-    await workerStack.database.$client`
-    update runtimes set last_active_at = now() - interval '2 hours' where chat_id = ${chatId}`
-    await enqueueJob(workerStack, 'runtime.sweep', {})
-    await expect.poll(() => runtimeStateOf(workerStack, chatId)).toBe('stopped')
+    await expect
+      .poll(async () => {
+        await workerStack.database.$client`
+        update runtimes set last_active_at = now() - interval '2 hours' where chat_id = ${chatId} and state = 'running'`
+        await enqueueJob(workerStack, 'runtime.sweep', {})
+        return runtimeStateOf(workerStack, chatId)
+      })
+      .toBe('stopped')
   }
 
   const stopRuntime = async (workerStack: WorkerStack, chatId: string) => {
