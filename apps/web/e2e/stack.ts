@@ -189,7 +189,13 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
         options: ResetOptions = { runtimeHost: false, warmRuntimes: false, sharedCrm: true },
       ) => {
         const epoch = `epoch-${workerInfo.workerIndex}-${++epochNumber}`
-        const writeSeededGatewayKeys = await prepareSeededGatewayKeys(testGateway, seededGatewayKeys)
+        const [gatewaySync] = await testDatabase.database.$client<{ isPending: boolean }[]>`
+          select exists(select 1 from jobs where type = 'profile.gateway-sync' and state in ('queued', 'running'))
+            as "isPending"`
+        const writeSeededGatewayKeys = await prepareSeededGatewayKeys(
+          testGateway,
+          gatewaySync?.isPending ? undefined : seededGatewayKeys,
+        )
         seededGatewayKeys = writeSeededGatewayKeys
         const reset = () =>
           resetDatabase(testDatabase.database, async (transaction) => {
