@@ -205,7 +205,8 @@ const checkoutWithOwnerOf = async ({ transactor, checkouts }: AgentDependencies,
     return ownerId && { ownerId, ownerName: await members.displayNameOf(ownerId) }
   })
   if (!owner) return checkout
-  const author = (await checkouts.authorOf(chat, owner.ownerId)) ?? noReplyAuthorOf(owner.ownerName, owner.ownerId)
+  const githubAuthor = await checkouts.authorOf(chat, owner.ownerId).catch(() => undefined)
+  const author = githubAuthor ?? noReplyAuthorOf(owner.ownerName, owner.ownerId)
   return { ...checkout, author }
 }
 
