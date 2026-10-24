@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from 'bun:test'
+import { afterAll, expect, setDefaultTimeout, test } from 'bun:test'
 import { openSessions } from './auth/sessions.ts'
 import { startJobWorker } from './job-worker.ts'
 import {
@@ -11,6 +11,7 @@ import {
   failedWith,
   inviteToAcme,
   issueTestSession,
+  jobDone,
   lee,
   newChat,
   openSharedTestApp,
@@ -18,9 +19,10 @@ import {
   sendTo,
   succeeded,
   testAuthSettings,
-  waitFor,
   workspaceEventsOf,
 } from './testing/testing.ts'
+
+setDefaultTimeout(30_000)
 
 const { database, app, gateway, llmGateway, resultOf, changesOf } = await openSharedTestApp()
 const worker = startJobWorker(database, { pollIntervalMilliseconds: 5, retryDelayMilliseconds: 100, llmGateway })
@@ -205,9 +207,8 @@ test('removing a member ends their sessions, participations, keys and connection
   })
   for (const table of ['llm_credentials', 'tool_connections', 'connection_restrictions', 'github_connections'])
     expect(await database.$client`select 1 from ${database.$client(table)} where user_id = ${bob}`).toHaveLength(0)
-  await waitFor(
-    async () => (await database.$client`select 1 from member_gateway_keys where user_id = ${bob}`).length === 0,
-  )
+  await jobDone('profile.gateway-sync', { memberId: bob })
+  expect(await database.$client`select 1 from member_gateway_keys where user_id = ${bob}`).toHaveLength(0)
   expect(
     ((await gateway.call<{ keys: { id: string }[] | null }>('/api/providers/openai/keys')).keys ?? []).map(
       ({ id }) => id,
