@@ -60,16 +60,7 @@ export const Decomposition = ({
   isPersonal: boolean
 }) => (
   <LabelledSection title="Spend decomposition" Heading="h3" titleClass="font-medium">
-    <p className="text-sm text-muted">
-      Spend {formatCost(decomposition.current.costMicros)} against {formatCost(decomposition.previous.costMicros)} in
-      the previous period (
-      {formatChange(
-        decomposition.previous.costMicros === 0
-          ? null
-          : decomposition.current.costMicros / decomposition.previous.costMicros - 1,
-      )}
-      ): {isPersonal ? personalFormula : workspaceFormula}
-    </p>
+    <p className="text-sm text-muted">Spend = {isPersonal ? personalFormula : workspaceFormula}</p>
     <table aria-label="Spend decomposition" className="w-full text-sm">
       <thead className="text-xs text-muted">
         <tr>
@@ -101,6 +92,20 @@ export const Decomposition = ({
               </tr>
             )
           })}
+        <tr className="border-t border-line font-semibold">
+          <th scope="row" className="px-2 py-1.5 text-left">
+            Total spend
+          </th>
+          <td className={cellClass}>{formatCost(decomposition.current.costMicros)}</td>
+          <td className={cellClass}>{formatCost(decomposition.previous.costMicros)}</td>
+          <td className={cellClass}>
+            {formatChange(
+              decomposition.previous.costMicros === 0
+                ? null
+                : decomposition.current.costMicros / decomposition.previous.costMicros - 1,
+            )}
+          </td>
+        </tr>
       </tbody>
     </table>
   </LabelledSection>

@@ -10,6 +10,7 @@ export type LlmGatewaySettings = {
   adminPassword: string
   timeoutMilliseconds?: number
   toolServerListMilliseconds?: number
+  virtualKeyMilliseconds?: number
 }
 export type ToolServerSetup = { name: string; url: string; oauthConfig?: Record<string, unknown>; isShared?: boolean }
 type McpClient = {
@@ -68,9 +69,10 @@ export const createLlmGateway = ({
   adminPassword,
   timeoutMilliseconds = 10_000,
   toolServerListMilliseconds = 10_000,
+  virtualKeyMilliseconds = 60_000,
 }: LlmGatewaySettings): BifrostGateway => {
   const authorization = `Basic ${btoa(`${adminUser}:${adminPassword}`)}`
-  const virtualKeyValues = new Map<string, string>()
+  const virtualKeyValues = new Map<string, { value: string; readAt: number }>()
   let listing: { models: readonly ListedModel[]; loadedAt: number; loading?: Promise<void> } = {
     models: [],
     loadedAt: 0,
@@ -312,7 +314,7 @@ export const createLlmGateway = ({
         ...bindingOf(keys),
       })
       const created = virtualKeyOf(body)
-      virtualKeyValues.set(created.id, created.value)
+      virtualKeyValues.set(created.id, { value: created.value, readAt: Date.now() })
       return created.id
     },
     removeVirtualKey: async (id) => {
@@ -321,11 +323,11 @@ export const createLlmGateway = ({
     },
     virtualKeyValue: async (id) => {
       const cached = virtualKeyValues.get(id)
-      if (cached) return cached
+      if (cached && Date.now() - cached.readAt < virtualKeyMilliseconds) return cached.value
       const read = await request('GET', `/api/governance/virtual-keys/${id}`)
       if (!read.found) return undefined
       const { value } = virtualKeyOf(read.body)
-      virtualKeyValues.set(id, value)
+      virtualKeyValues.set(id, { value, readAt: Date.now() })
       return value
     },
   }
