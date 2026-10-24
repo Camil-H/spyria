@@ -9,6 +9,11 @@ import { getDevWorkspace } from '../queries/get-dev-workspace.ts'
 import { getPublishing } from '../queries/get-publishing.ts'
 import type { GitActionOutcome } from './commands.ts'
 import { usePanelCommands } from './providers.tsx'
+import type { ActionOutcome } from './useActionNotice.tsx'
+
+type ConflictOutcome = GitActionOutcome & { conflicts: string[] }
+
+const actionButtonClass = `inline-flex items-center gap-1.5 ${ghostButtonClass}`
 
 export const GitActions = ({
   workspaceId,
@@ -17,6 +22,7 @@ export const GitActions = ({
   baseBranch,
   status,
   onChanged,
+  onOutcome,
 }: {
   workspaceId: WorkspaceId
   chatId: ChatId
@@ -24,39 +30,41 @@ export const GitActions = ({
   baseBranch: string
   status: BranchStatus
   onChanged: () => void
+  onOutcome: (outcome: ActionOutcome) => void
 }) => {
   const { memberId } = useSession()
   const { canPublish, isTurnRunning } = useQuery(getPublishing, workspaceId, chatId, memberId)
   const { isAsleep } = useQuery(getDevWorkspace, workspaceId, chatId)
   const { runGitAction, sendMessage } = usePanelCommands()
   const [message, setMessage] = useState<string>()
-  const [isRunning, setIsRunning] = useState(false)
-  const [outcome, setOutcome] = useState<GitActionOutcome>()
+  const [runningAction, setRunningAction] = useState<'commit' | 'update'>()
+  const [conflictOutcome, setConflictOutcome] = useState<ConflictOutcome>()
   if (!canPublish) return null
   const unavailableReason = isTurnRunning
     ? 'Available when the agent’s turn ends'
     : isAsleep
       ? 'Available when the runtime is awake'
       : undefined
-  const isDisabled = isRunning || unavailableReason !== undefined
+  const isDisabled = runningAction !== undefined || unavailableReason !== undefined
   const isCommitPointless = hasNothingToCommit(status)
   const run = async (action: 'commit' | 'update', text = '') => {
-    setIsRunning(true)
-    setOutcome(undefined)
-    const ran = await runGitAction({ workspaceId, chatId, action, message: text }).catch(() => ({
+    setRunningAction(action)
+    setConflictOutcome(undefined)
+    const ran: GitActionOutcome = await runGitAction({ workspaceId, chatId, action, message: text }).catch(() => ({
       isRefused: true,
       text: 'The git action failed',
     }))
-    setOutcome(ran)
-    setIsRunning(false)
+    setRunningAction(undefined)
+    if (ran.conflicts) setConflictOutcome({ ...ran, conflicts: ran.conflicts })
+    else onOutcome(ran)
     if (!ran.isRefused) setMessage(undefined)
     onChanged()
   }
   const askToResolve = async (conflicts: readonly string[]) => {
-    setOutcome(undefined)
+    setConflictOutcome(undefined)
     await sendMessage({ workspaceId, chatId, text: conflictPromptOf(baseBranch, conflicts) })
-      .then(() => setOutcome({ isRefused: false, text: 'Asked the agent to resolve the conflicts' }))
-      .catch(() => setOutcome({ isRefused: true, text: 'The request to the agent failed' }))
+      .then(() => onOutcome({ isRefused: false, text: 'Asked the agent to resolve the conflicts' }))
+      .catch(() => onOutcome({ isRefused: true, text: 'The request to the agent failed' }))
   }
   const submit = (event: FormEvent) => {
     event.preventDefault()
@@ -82,8 +90,9 @@ export const GitActions = ({
               disabled={isDisabled}
               title={unavailableReason}
               onClick={() => run('update')}
-              className={ghostButtonClass}
+              className={actionButtonClass}
             >
+              {runningAction === 'update' && <Spinner />}
               Update from base
             </button>
           </>,
@@ -101,7 +110,12 @@ export const GitActions = ({
             />
           </label>
           <div className="flex gap-2">
-            <button type="submit" disabled={isDisabled || isCommitPointless || !message.trim()} className={buttonClass}>
+            <button
+              type="submit"
+              disabled={isDisabled || isCommitPointless || !message.trim()}
+              className={`inline-flex items-center gap-1.5 ${buttonClass}`}
+            >
+              {runningAction === 'commit' && <Spinner />}
               Commit
             </button>
             <button type="button" onClick={() => setMessage(undefined)} className={ghostButtonClass}>
@@ -110,17 +124,14 @@ export const GitActions = ({
           </div>
         </form>
       )}
-      {isRunning && <Spinner />}
-      {outcome && (
+      {conflictOutcome && (
         <div className="flex flex-col items-start gap-2">
-          <p role={outcome.isRefused ? 'alert' : 'status'} className="text-sm text-muted">
-            {outcome.text}
+          <p role="alert" className="text-sm text-muted">
+            {conflictOutcome.text}
           </p>
-          {outcome.conflicts && (
-            <button type="button" onClick={() => askToResolve(outcome.conflicts ?? [])} className={buttonClass}>
-              Ask the agent to resolve conflicts
-            </button>
-          )}
+          <button type="button" onClick={() => askToResolve(conflictOutcome.conflicts)} className={buttonClass}>
+            Ask the agent to resolve conflicts
+          </button>
         </div>
       )}
     </>

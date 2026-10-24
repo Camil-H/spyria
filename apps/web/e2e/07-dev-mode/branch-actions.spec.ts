@@ -142,6 +142,23 @@ test.describe('Branch actions', () => {
     await expect(headerButtonOf(page, 'Commit')).toBeDisabled()
   })
 
+  test('As a chat owner, I see a toast confirm Refresh that fades on its own, and a refused Push stays until I dismiss it', {
+    tag: ['@spec-43'],
+  }, async ({ page, agentScript }) => {
+    await configureGitHubApp(page)
+    await devChatWithCommit(page, agentScript, 'Toast totals')
+    await headerButtonOf(page, 'Refresh').click()
+    const refreshed = tabPanelOf(page).getByRole('status').filter({ hasText: 'Changes refreshed' })
+    await expect(refreshed).toBeVisible()
+    await expect(refreshed).toHaveCount(0, { timeout: 10_000 })
+
+    await headerButtonOf(page, 'Push').click()
+    const refusal = tabPanelOf(page).getByRole('alert')
+    await expect(refusal).toHaveText('Connect your GitHub account in your profile to push')
+    await refusal.getByRole('button', { name: 'Dismiss' }).click()
+    await expect(refusal).toHaveCount(0)
+  })
+
   test('As a chat owner, I see the agent’s commits authored by my GitHub account', {
     tag: ['@spec-43'],
   }, async ({ page, agentScript }) => {
