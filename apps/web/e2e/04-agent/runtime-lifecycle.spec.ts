@@ -28,6 +28,12 @@ test.describe('Runtime lifecycle', () => {
     workerStack.database.$client`
     insert into jobs (workspace_id, id, type, payload, run_at, attempts, state)
     values ('workspace-acme', ${crypto.randomUUID()}, ${type}, ${JSON.stringify(payload)}::jsonb, now(), 0, 'queued')`
+  const sweepNow = (workerStack: WorkerStack) =>
+    workerStack.database.$client`
+    insert into jobs (workspace_id, id, type, payload, run_at, attempts, state)
+    values ('workspace-acme', ${crypto.randomUUID()}, 'runtime.sweep', '{}'::jsonb, now(), 0, 'queued')
+    on conflict (workspace_id, type) where (type like '%.sweep' or type = 'usage.sync') and state = 'queued'
+    do update set run_at = now()`
 
   const triggerIdleStop = async (workerStack: WorkerStack, chatId: string) => {
     await expect.poll(() => turnOf(workerStack, chatId)).toBeNull()
@@ -35,7 +41,7 @@ test.describe('Runtime lifecycle', () => {
       .poll(async () => {
         await workerStack.database.$client`
         update runtimes set last_active_at = now() - interval '2 hours' where chat_id = ${chatId} and state = 'running'`
-        await enqueueJob(workerStack, 'runtime.sweep', {})
+        await sweepNow(workerStack)
         return runtimeStateOf(workerStack, chatId)
       })
       .toBe('stopped')
