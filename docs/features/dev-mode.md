@@ -63,7 +63,7 @@ The chat owner has two actions in the **Changes** tab. Other participants see th
 - **Commit** commits every uncommitted change with the owner's **Commit message**. The author is the owner, as for the agent's own commits (see [Clone and setup script](#clone-and-setup-script)). An empty message or nothing to commit is refused.
 - **Update from base** merges the base branch's latest commits into the working branch with a merge commit, never a rebase, so a pushed branch stays valid. The runtime gets those commits without any token: the server fetches the base with a read-only installation token and hands the runtime a git bundle. Uncommitted changes must be committed first. On a conflict the merge is aborted, the working copy is left clean, and **Ask the agent to resolve conflicts** prompts the agent, as the owner, to merge the base and resolve the listed files.
 
-Both are disabled while the agent is working ("The agent is working: wait for its turn to end") or while the runtime is asleep ("The runtime is asleep: wake it first").
+Both are disabled while the agent is working ("The agent is working: wait for its turn to end") or while the runtime is asleep ("The runtime is asleep: wake it first"). **Commit** is also greyed while the status line shows no uncommitted file ("Nothing to commit"), and **Push** while no commit is ahead of the pushed branch, or of the base before the first push ("Nothing to push").
 
 ## Pushing and pull requests
 

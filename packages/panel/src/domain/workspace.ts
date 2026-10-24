@@ -184,6 +184,10 @@ export const branchStatusPartsOf = (status: BranchStatus, baseBranch: string) =>
       ]),
 ]
 
+export const hasNothingToCommit = (status: BranchStatus) => status.uncommitted === 0
+export const hasNothingToPush = (status: BranchStatus) =>
+  status.aheadOfPushed === 0 || (status.aheadOfPushed === undefined && status.aheadOfBase === 0)
+
 export const conflictPromptOf = (baseBranch: string, conflicts: readonly string[]) =>
   [
     `Merge the latest ${baseBranch} (fetched as refs/spyria/base) into the working branch, resolve the conflicts in these files, then commit:`,

@@ -10,6 +10,8 @@ import {
   diffLayoutFor,
   type FileChange,
   fileChangesOf,
+  hasNothingToCommit,
+  hasNothingToPush,
   isCollapsedByDefault,
   splitColumnsOf,
   splitRowsOf,
@@ -243,4 +245,18 @@ test('the side-by-side columns fit the widest line number, at least four digits,
       lineOf('added', '\tindented', null, 100001),
     ]),
   ).toEqual({ numberDigits: 6, longestText: 16 })
+})
+
+test('there is nothing to commit with no uncommitted file, and nothing to push with no commit ahead of the pushed branch, or of the base before a first push; an unknown status allows both', () => {
+  const statusOf = (reading: object) => branchStatusOf({ isLive: true, ...reading })
+  expect(hasNothingToCommit(statusOf({ uncommitted: 0 }))).toBe(true)
+  expect(hasNothingToCommit(statusOf({ uncommitted: 2 }))).toBe(false)
+  expect(hasNothingToPush(statusOf({ aheadOfBase: 2, aheadOfPushed: 0, behindPushed: 0 }))).toBe(true)
+  expect(hasNothingToPush(statusOf({ aheadOfBase: 2, aheadOfPushed: 1, behindPushed: 0 }))).toBe(false)
+  expect(hasNothingToPush(statusOf({ aheadOfBase: 0, uncommitted: 3 }))).toBe(true)
+  expect(hasNothingToPush(statusOf({ aheadOfBase: 1 }))).toBe(false)
+  for (const unknown of [branchStatusOf(undefined), branchStatusOf({ isLive: false })]) {
+    expect(hasNothingToCommit(unknown)).toBe(false)
+    expect(hasNothingToPush(unknown)).toBe(false)
+  }
 })
