@@ -1,5 +1,5 @@
 import { createHmac, createPrivateKey, timingSafeEqual } from 'node:crypto'
-import type { AgentChat, PullRequestStep, RepositoryCheckouts } from '@spyria/conversation/server'
+import type { AgentChat, GitAuthor, PullRequestStep, RepositoryCheckouts } from '@spyria/conversation/server'
 import type { Database } from '@spyria/db/postgres'
 import { DomainError, log } from '@spyria/kernel'
 import {
@@ -425,6 +425,7 @@ const chatRepositoryOf = async (database: Database, { workspaceId, chatId }: Age
 
 export const createGitHubCheckouts = (database: Database, dependencies: GitHubDependencies): RepositoryCheckouts => {
   const { api } = dependencies
+  const authorsByMember = new Map<string, { login: string; author: GitAuthor }>()
   const publishingOf = async (chat: AgentChat, ownerId: string) => {
     const { repository, baseBranch, workingBranch } = (await chatRepositoryOf(database, chat)) ?? {}
     const token = await userTokenOf(database, dependencies, { workspaceId: chat.workspaceId, userId: ownerId })
@@ -461,14 +462,20 @@ export const createGitHubCheckouts = (database: Database, dependencies: GitHubDe
       return baseBundle({ url: api.cloneUrlOf(repository), token, baseBranch, runtimeBaseHead })
     },
     authorOf: async (chat, ownerId) => {
-      const token = await userTokenOf(database, dependencies, { workspaceId: chat.workspaceId, userId: ownerId })
+      const connection = await connectionWithTokenOf(database, dependencies, {
+        workspaceId: chat.workspaceId,
+        userId: ownerId,
+      })
+      if (!connection?.accessToken) return undefined
+      const memberKey = `${chat.workspaceId}:${ownerId}`
+      const cached = authorsByMember.get(memberKey)
+      if (cached?.login === connection.login) return cached.author
+      const token = await connection.accessToken()
       const user = token ? await api.user(token).catch(loggedFailure(chat.workspaceId)) : undefined
-      return (
-        user && {
-          name: user.name || user.login,
-          email: user.email || `${user.id}+${user.login}@users.noreply.github.com`,
-        }
-      )
+      if (!user) return undefined
+      const author = { name: user.login, email: `${user.id}+${user.login}@users.noreply.github.com` }
+      authorsByMember.set(memberKey, { login: connection.login, author })
+      return author
     },
     openPullRequest: async (chat, ownerId, { title, body }) => {
       const { repository, baseBranch, workingBranch, token } = await publishingOf(chat, ownerId)
