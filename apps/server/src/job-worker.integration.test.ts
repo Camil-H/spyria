@@ -105,7 +105,7 @@ describe('the dead jobs left by a throwing job', () => {
   })
 })
 
-test('the session sweep deletes only expired sessions, done jobs older than a day and webhook deliveries older than a week, then reschedules itself once, a day later', async () => {
+test('the session sweep runs without a log line, deletes only expired sessions, done jobs older than a day and webhook deliveries older than a week, then reschedules itself once, a day later', async () => {
   await database.$client`
     insert into sessions (workspace_id, id, user_id, created_at, expires_at) values
       (${acme}, 'session-expired', ${alice}, now() - interval '8 days', now() - interval '1 day'),
@@ -130,12 +130,15 @@ test('the session sweep deletes only expired sessions, done jobs older than a da
   for (const workspaceId of [acme, globex])
     expect(await sweepsOf(workspaceId)).toMatchObject([{ state: 'queued', attempts: 0, payload: {} }])
 
+  const logged = captureLogs()
   const worker = startJobWorker(database, { pollIntervalMilliseconds: 5 })
   await waitFor(async () =>
     (await Promise.all([acme, globex].map(sweepsOf))).every((sweeps) => sweeps.some((job) => job.state === 'done')),
   )
   await sleep(100)
   await worker.stop()
+  logged.restore()
+  expect(logged.events.filter(({ event }) => event === 'job.run')).toEqual([])
   expect((await database.select().from(sessions)).map((session) => session.id).toSorted()).toEqual([
     'session-live',
     'session-live-in-globex',
