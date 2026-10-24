@@ -93,15 +93,14 @@ test.describe('Spend', () => {
         ['Tokens per request', ['1,000', '500', '+100%']],
         ['Price per 1M tokens', ['$10.00', '$10.00', '0%']],
       ] as const
-      await expect(decomposition.getByRole('row')).toHaveCount(expectedFactors.length + 1)
+      await expect(decomposition.getByRole('row')).toHaveCount(expectedFactors.length + 2)
       for (const [name, cells] of expectedFactors)
         expect(await cellTextsOf(rowOf(decomposition, name))).toEqual([...cells])
       const biggestMover = decomposition.locator('tr[aria-current="true"]')
       await expect(biggestMover).toHaveCount(1)
       await expect(biggestMover.getByRole('rowheader')).toHaveText('Tokens per request · Biggest mover')
-      await expect(usageSectionOf(page, 'Spend decomposition')).toContainText(
-        'Spend $0.08 against $0.04 in the previous period (+100%)',
-      )
+      expect(await cellTextsOf(rowOf(decomposition, 'Total spend'))).toEqual(['$0.08', '$0.04', '+100%'])
+      await expect(decomposition.getByRole('row').last()).toHaveCSS('font-weight', '600')
     })
 
     test('As a member who can view costs, I see the cost per merged PR with each merged PR and its chat’s cost', {
@@ -135,12 +134,12 @@ test.describe('Spend', () => {
         await expect(models.getByRole('row')).toHaveCount(3)
         expect(await cellTextsOf(rowOf(models, 'openai/gpt-5'))).toEqual(['2,000', '$0.02', '2', '100%'])
         const decomposition = tableOf(section, 'Spend decomposition')
-        await expect(decomposition.getByRole('rowheader')).toHaveCount(5)
+        await expect(decomposition.getByRole('rowheader')).toHaveCount(6)
         await expect(rowOf(decomposition, 'Users')).toHaveCount(0)
         expect(await cellTextsOf(rowOf(decomposition, 'Sessions'))).toEqual(['1', '1', '0%'])
         await expect(decomposition).not.toContainText('Sessions per user')
         await expect(usageSectionOf(page, 'Spend decomposition')).toContainText(
-          '): sessions × turns per session × requests per turn × tokens per request × price per token',
+          'Spend = sessions × turns per session × requests per turn × tokens per request × price per token',
         )
         await expect(section.getByRole('table', { name: 'Usage by member' })).toHaveCount(0)
         await expect(section).not.toContainText(/Alice|Lee|Invoice bug|claude/)

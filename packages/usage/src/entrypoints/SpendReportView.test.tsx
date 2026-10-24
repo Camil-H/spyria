@@ -20,7 +20,7 @@ test('the workspace decomposition shows the six factors and the formula with use
   for (const label of ['|Users|', '|Sessions per user|', '|Turns per session|', '|Price per 1M tokens|'])
     expect(text).toContain(label)
   expect(text).toContain(
-    '): users × sessions per user × turns per session × requests per turn × tokens per request × price per token',
+    'Spend = users × sessions per user × turns per session × requests per turn × tokens per request × price per token',
   )
 })
 
@@ -30,6 +30,21 @@ test('the personal decomposition drops the Users factor and reads Sessions, with
   expect(text).not.toContain('Sessions per user')
   expect(text).toContain('|Sessions|')
   expect(text).toContain('|Turns per session|')
-  expect(text).toContain('): sessions × turns per session × requests per turn × tokens per request × price per token')
+  expect(text).toContain(
+    'Spend = sessions × turns per session × requests per turn × tokens per request × price per token',
+  )
   expect(text).not.toMatch(/users/i)
+})
+
+test('the decomposition ends with a bold total spend row against the previous period', async () => {
+  const { prelude } = await prerender(
+    <Decomposition
+      decomposition={{ ...decomposition, previous: { ...counts, costMicros: 10_000 } }}
+      isPersonal={false}
+    />,
+  )
+  const html = (await new Response(prelude).text()).replaceAll('<!-- -->', '')
+  const lastRow = html.slice(html.lastIndexOf('<tr'))
+  expect(lastRow).toContain('font-semibold')
+  expect(lastRow.replace(/<[^>]+>/g, '|').replace(/\|+/g, '|')).toBe('|Total spend|$0.02|$0.01|+100%|')
 })
