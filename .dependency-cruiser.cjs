@@ -143,6 +143,12 @@ module.exports = {
       to: { path: '^apps/(host|agent)/', pathNot: '^$1/$2/' },
     },
     {
+      name: 'packages-never-import-node-builtins',
+      severity: 'error',
+      from: { path: '^packages/', pathNot: testOnlyModules },
+      to: { dependencyTypes: ['core'] },
+    },
+    {
       name: 'packages-never-import-apps',
       severity: 'error',
       from: { path: '^packages/' },
