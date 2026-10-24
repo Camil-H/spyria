@@ -39,6 +39,7 @@ When the chat's runtime starts, spyria-agent clones the repository into the runt
 - The clone uses an installation token scoped to that one repository with read access only. The token lives only in the environment of the `git clone` process: it is not in the agent's environment and the remote in `.git/config` carries no credential.
 - Clone and checkout are part of the runtime's start, which the host relay limits to 2 minutes. A failed clone fails the start with "The repository could not be cloned" and git's reason.
 - If the repository has `.spyria/setup.sh`, it runs after the session has started, as a command step in the chat with live output, alongside the first turn. It runs without any token. When it fails, the chat shows a notice with its exit code and its last lines; the session keeps going.
+- The clone's git identity (`user.name` and `user.email` in `.git/config`) is the chat owner, so the agent's commits show the owner as their author: their GitHub login and `<id>+<login>@users.noreply.github.com` when their GitHub account is linked, else their Spyria name and a no-reply address. The server reads the owner's GitHub account with their token once per member and caches it; only the name and address reach the runtime. The identity is set again each time the agent starts.
 - A runtime that restarts keeps its clone: no new clone, checkout or setup.
 
 Rules files come with the clone, so every agent can read them. Pi loads `AGENTS.md` (or `CLAUDE.md`) from the working directory upward; Claude Code reads `CLAUDE.md` files; Codex reads `AGENTS.md`. A repository that wants all three to follow the same rules keeps an `AGENTS.md` and a `CLAUDE.md` that points to it.
@@ -59,7 +60,7 @@ The agent's shell commands and their output appear as steps in the conversation,
 
 The chat owner has two actions in the **Changes** tab. Other participants see the status line and the diff, and the server refuses the actions to anyone but the owner.
 
-- **Commit** commits every uncommitted change with the owner's **Commit message**. The author is the owner's GitHub name and email when their account is linked, else their Spyria name and a no-reply address. An empty message or nothing to commit is refused.
+- **Commit** commits every uncommitted change with the owner's **Commit message**. The author is the owner, as for the agent's own commits (see [Clone and setup script](#clone-and-setup-script)). An empty message or nothing to commit is refused.
 - **Update from base** merges the base branch's latest commits into the working branch with a merge commit, never a rebase, so a pushed branch stays valid. The runtime gets those commits without any token: the server fetches the base with a read-only installation token and hands the runtime a git bundle. Uncommitted changes must be committed first. On a conflict the merge is aborted, the working copy is left clean, and **Ask the agent to resolve conflicts** prompts the agent, as the owner, to merge the base and resolve the listed files.
 
 Both are disabled while the agent is working ("The agent is working: wait for its turn to end") or while the runtime is asleep ("The runtime is asleep: wake it first").

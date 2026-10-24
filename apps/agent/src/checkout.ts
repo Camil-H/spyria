@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { gitIdentityOf } from './workspace.ts'
 
-export type Repository = { url: string; token: string; base_branch: string; working_branch: string }
+export type Repository = { url: string; token: string; base_branch: string; working_branch: string; author?: unknown }
 export type Checkout = { failure?: string; hasSetup?: boolean }
 
 const setupScript = '.spyria/setup.sh'
@@ -26,12 +27,7 @@ const cloneEnvironmentOf = (environment: Record<string, string>, token: string) 
   GIT_CONFIG_VALUE_0: `Authorization: Basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`,
 })
 
-export const checkOut = async (
-  cwd: string,
-  repository: Repository,
-  environment: Record<string, string>,
-): Promise<Checkout> => {
-  if (existsSync(join(cwd, '.git'))) return {}
+const cloned = async (cwd: string, repository: Repository, environment: Record<string, string>): Promise<Checkout> => {
   mkdirSync(cwd, { recursive: true })
   const clone = await run(
     ['git', 'clone', '--quiet', '--branch', repository.base_branch, repository.url, '.'],
@@ -43,6 +39,24 @@ export const checkOut = async (
   if (branch.exitCode !== 0)
     return { failure: `The working branch could not be created: ${lastLinesOf(branch.output)}` }
   return { hasSetup: existsSync(join(cwd, setupScript)) }
+}
+
+const identified = async (cwd: string, author: unknown, environment: Record<string, string>) => {
+  const identity = gitIdentityOf(author)
+  if (!identity) return true
+  const named = await run(['git', 'config', '--local', 'user.name', identity.name], cwd, environment)
+  const emailed = await run(['git', 'config', '--local', 'user.email', identity.email], cwd, environment)
+  return named.exitCode === 0 && emailed.exitCode === 0
+}
+
+export const checkOut = async (
+  cwd: string,
+  repository: Repository,
+  environment: Record<string, string>,
+): Promise<Checkout> => {
+  const checkout = existsSync(join(cwd, '.git')) ? {} : await cloned(cwd, repository, environment)
+  if (checkout.failure || (await identified(cwd, repository.author, environment))) return checkout
+  return { failure: 'The commit author could not be set in the repository' }
 }
 
 export const runSetup = async (cwd: string, env: Record<string, string>, onOutput: (output: string) => void) => {

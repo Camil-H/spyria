@@ -110,7 +110,27 @@ test.describe('Branch actions', () => {
     const commits = tabPanelOf(page).getByRole('listitem')
     await expect(commits).toHaveCount(2)
     await expect(commits.first()).toContainText('Raise the total')
-    await expect(commits.first()).toContainText(/Alice Martin · \d\d:\d\d UTC/)
+    await expect(commits.first()).toContainText(/alice-martin · \d\d:\d\d UTC/)
+  })
+
+  test('As a chat owner, I see the agent’s commits authored by my GitHub account', {
+    tag: ['@spec-43'],
+  }, async ({ page, agentScript }) => {
+    await configureGitHubApp(page)
+    await connectGitHub(page)
+    const chatId = await newDevChat(page, 'Authored totals', 'acme/app')
+    await runAgent(
+      page,
+      agentScript,
+      chatId,
+      [appEdit(1, 2), { command: "git add -A && git commit -qm 'Fix the totals'" }],
+      'Fixed.',
+    )
+    await panelTabOf(page, 'Commits').click()
+    const commits = tabPanelOf(page).getByRole('listitem')
+    await expect(commits).toHaveCount(1)
+    await expect(commits.first()).toContainText('Fix the totals')
+    await expect(commits.first()).toContainText(/alice-martin · \d\d:\d\d UTC/)
   })
 
   test('As a chat owner, I merge a new base commit with Update from base: the status line counts the merge, Commits shows it and Files shows the base’s new file', {

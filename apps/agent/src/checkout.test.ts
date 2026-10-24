@@ -154,3 +154,26 @@ test('a chatty setup script streams at most one live update per 250 ms, the late
     exit_code: 0,
   })
 })
+
+test('a launch with an author sets it as the repository’s commit identity, again on a resumed launch, and ignores an author with a line break', async () => {
+  const url = bareRepository('authored', { 'README.md': '# authored\n' })
+  const { create } = started()
+  const { launch, workingDirectory } = launchIn('authored', url)
+  const configured = (key: string) =>
+    Bun.spawnSync(['git', 'config', '--local', key], { cwd: workingDirectory }).stdout.toString()
+  const withAuthor = (author: object) => ({ ...launch, repository: { ...launch.repository, author } })
+  await create({ ...withAuthor({ name: 'alice', email: '1+alice@users.noreply.github.com' }), id: 'authored' })
+  expect(configured('user.name')).toBe('alice\n')
+  expect(configured('user.email')).toBe('1+alice@users.noreply.github.com\n')
+  writeFileSync(join(workingDirectory, 'notes.md'), 'notes\n')
+  git(workingDirectory, 'add', 'notes.md')
+  git(workingDirectory, 'commit', '-q', '-m', 'Add notes')
+  expect(Bun.spawnSync(['git', 'log', '-1', '--format=%an|%ae|%cn'], { cwd: workingDirectory }).stdout.toString()).toBe(
+    'alice|1+alice@users.noreply.github.com|alice\n',
+  )
+
+  await create({ ...withAuthor({ name: 'bob', email: '2+bob@users.noreply.github.com' }), id: 'reauthored' })
+  expect(configured('user.name')).toBe('bob\n')
+  await create({ ...withAuthor({ name: 'eve\n', email: 'eve@example.com' }), id: 'unauthored' })
+  expect(configured('user.name')).toBe('bob\n')
+})
