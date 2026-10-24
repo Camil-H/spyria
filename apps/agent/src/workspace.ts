@@ -178,10 +178,17 @@ export const statusOf = async (root: string, base: string, env: Record<string, s
   }
 }
 
-const authorEnvironmentOf = (author: unknown) => {
+export const gitIdentityOf = (author: unknown) => {
   const { name, email } = (author ?? {}) as { name?: unknown; email?: unknown }
   if (typeof name !== 'string' || typeof email !== 'string') return undefined
   if (!identityPattern.test(name) || !identityPattern.test(email)) return undefined
+  return { name, email }
+}
+
+const authorEnvironmentOf = (author: unknown) => {
+  const identity = gitIdentityOf(author)
+  if (!identity) return undefined
+  const { name, email } = identity
   return { GIT_AUTHOR_NAME: name, GIT_AUTHOR_EMAIL: email, GIT_COMMITTER_NAME: name, GIT_COMMITTER_EMAIL: email }
 }
 

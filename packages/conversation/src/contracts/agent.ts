@@ -70,7 +70,13 @@ export type PiLaunch = Readonly<{
   compaction?: Readonly<{ reserveTokens: number; keepRecentTokens: number }>
 }>
 export type SubConversation = Readonly<{ parentConversationId: string }>
-export type RepositoryCheckout = Readonly<{ url: string; token: string; baseBranch: string; workingBranch: string }>
+export type RepositoryCheckout = Readonly<{
+  url: string
+  token: string
+  baseBranch: string
+  workingBranch: string
+  author?: GitAuthor
+}>
 export type WorkspaceAction = 'commit' | 'merge' | 'pushed'
 export type BranchBundle = Readonly<{ bundle: string } | { failure: string }>
 export type BundleOf = (branch: string, prerequisite: string | null) => Promise<BranchBundle>
