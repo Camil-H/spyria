@@ -3,6 +3,7 @@ export type {
   AgentConversation,
   AgentHost,
   BundleOf,
+  GitAuthor,
   RepositoryCheckout,
   RepositoryCheckouts,
   SessionClassifier,

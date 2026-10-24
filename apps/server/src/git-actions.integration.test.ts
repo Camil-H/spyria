@@ -5,7 +5,14 @@ import { join } from 'node:path'
 import { type ChatId, chatId } from '@spyria/kernel'
 import { createSecretBox } from './auth/secret-box.ts'
 import { createGitHubApi } from './github/github-api.ts'
-import { fakeGitHubAppId, fakeGitHubClientId, fakeGitHubClientSecret, startFakeGitHub } from './testing/fake-github.ts'
+import {
+  fakeGitHubAppId,
+  fakeGitHubClientId,
+  fakeGitHubClientSecret,
+  fakeGitHubLogin,
+  fakeGitHubUserId,
+  startFakeGitHub,
+} from './testing/fake-github.ts'
 import { acme, alice, bob, lee, sessionTokenOf, startAgentStack, testSecretsKey, waitFor } from './testing/testing.ts'
 
 setDefaultTimeout(60_000)
@@ -133,7 +140,7 @@ test('only the owner commits and updates from base; prompters and editors are re
   expect(await statusOf(lee, id)).toMatchObject({ uncommitted: 2 })
   expect((await gitAction(alice, id, 'commit', 'Name the total')).status).toBe(200)
   expect(gitIn(workspace, 'log', '-1', '--format=%s|%an|%ae')).toBe(
-    'Name the total|Alice Martin|1001+alice-martin@users.noreply.github.com\n',
+    'Name the total|alice-martin|1001+alice-martin@users.noreply.github.com\n',
   )
   const status = await statusOf(bob, id)
   expect(status).toMatchObject({
@@ -145,6 +152,28 @@ test('only the owner commits and updates from base; prompters and editors are re
     uncommitted: 0,
   })
   expect(Date.now() - Date.parse(status.pushedAt)).toBeLessThan(60_000)
+})
+
+test('the agent commits as the owner’s GitHub account, set when the runtime starts and read once per member; no token reaches the repository config', async () => {
+  await stack.agentHost('Git author host')
+  await connectGitHub(alice)
+  const githubAuthor = `${fakeGitHubLogin}|${fakeGitHubUserId}+${fakeGitHubLogin}@users.noreply.github.com`
+  const agentCommitAuthorIn = (workspace: string) => {
+    writeFileSync(join(workspace, 'src/app.ts'), 'export const total = 5\n')
+    Bun.spawnSync(['git', 'commit', '-qam', 'Set the total to 5'], { cwd: workspace })
+    return Bun.spawnSync(['git', 'log', '-1', '--format=%an|%ae|%cn|%ce'], { cwd: workspace }).stdout.toString()
+  }
+  const first = await runtimeWorkspaceOf((await newDevChat(baseBranchOf('author-first'))).id)
+  expect(agentCommitAuthorIn(first.workspace)).toBe(`${githubAuthor}|${githubAuthor}\n`)
+  expect(readFileSync(join(first.workspace, '.git/config'), 'utf8')).not.toContain('extraHeader')
+
+  const userReadsBefore = fakeGitHub.apiRequests.filter((call) => call === 'GET /user').length
+  const second = await newDevChat(baseBranchOf('author-second'))
+  const { workspace } = await runtimeWorkspaceOf(second.id)
+  expect(agentCommitAuthorIn(workspace)).toBe(`${githubAuthor}|${githubAuthor}\n`)
+  writeFileSync(join(workspace, 'notes.md'), 'notes\n')
+  expect((await gitAction(alice, second.id, 'commit', 'Add notes')).status).toBe(200)
+  expect(fakeGitHub.apiRequests.filter((call) => call === 'GET /user').length).toBe(userReadsBefore)
 })
 
 test('commit and update are refused while an agent turn runs and while the runtime sleeps', async () => {
@@ -198,7 +227,7 @@ test('update from base merges the base’s new commit from a thin bundle of the 
   })
   const agentCommitSha = gitIn(workspace, 'rev-parse', 'HEAD~1').trim()
   expect(gitIn(workspace, 'log', '-1', '--format=%s|%an|%P')).toBe(
-    `Merge branch '${baseBranch}' into ${branch}|Alice Martin|${agentCommitSha} ${newBase}\n`,
+    `Merge branch '${baseBranch}' into ${branch}|alice-martin|${agentCommitSha} ${newBase}\n`,
   )
   expect(readFileSync(join(workspace, 'docs/from-base.md'), 'utf8')).toBe('from base\n')
   expect(gitIn(workspace, 'rev-parse', 'refs/spyria/base').trim()).toBe(newBase)

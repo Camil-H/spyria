@@ -22,6 +22,7 @@ import {
   type RuntimeReadiness,
 } from '../contracts/agent.ts'
 import { agentNotices, notReadyNoticeOf } from '../domain/agent-events.ts'
+import { noReplyAuthorOf } from '../domain/git-actions.ts'
 import type { Message } from '../domain/message.ts'
 import { noLlmKeyNoticeOf } from '../domain/model-call-failures.ts'
 import { agentPromptTextOf } from '../domain/seed-message.ts'
@@ -196,16 +197,30 @@ const storedConversationOf = async (
   return undefined
 }
 
+const checkoutWithOwnerOf = async ({ transactor, checkouts }: AgentDependencies, chat: AgentChat) => {
+  const checkout = await checkouts?.checkoutOf(chat)
+  if (!checkouts || !checkout) return checkout
+  const owner = await transactor.run(async ({ chats, members }) => {
+    const { ownerId } = await chats.get(chat.chatId)
+    return ownerId && { ownerId, ownerName: await members.displayNameOf(ownerId) }
+  })
+  if (!owner) return checkout
+  const githubAuthor = await checkouts.authorOf(chat, owner.ownerId).catch(() => undefined)
+  const author = githubAuthor ?? noReplyAuthorOf(owner.ownerName, owner.ownerId)
+  return { ...checkout, author }
+}
+
 const createdConversationOf = async (
-  { runtimes, agentClient, checkouts }: AgentDependencies,
+  dependencies: AgentDependencies,
   chat: AgentChat,
   endpoint: AgentEndpoint,
   llm: AgentLlmChoice,
 ): Promise<AgentConversation> => {
+  const { runtimes, agentClient } = dependencies
   const newId = crypto.randomUUID()
   const conversation = { ...endpoint, conversationId: await runtimes.rememberConversation(chat, newId) }
   if (conversation.conversationId === newId) {
-    const checkout = await checkouts?.checkoutOf(chat).catch((error: Error) => {
+    const checkout = await checkoutWithOwnerOf(dependencies, chat).catch((error: Error) => {
       throw new AgentStartFailure(disclosableMessageOf(error))
     })
     await agentClient.createConversation(conversation, await runtimes.issueLlmToken(chat), llm, undefined, checkout)
