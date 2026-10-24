@@ -30,13 +30,13 @@ const memberSpendsStatement = `
 const recordAlertsStatement = `
   with inserted as (
     insert into budget_alerts (workspace_id, id, member_id, month, threshold, reached_at)
-    select $1, alert.id, alert."memberId", $2, alert.threshold, now()
+    select $1, alert.id, alert."memberId", $2, alert.threshold, $4::timestamptz
     from jsonb_to_recordset($3::jsonb) as alert(id text, "memberId" text, threshold int)
     on conflict do nothing
     returning member_id, threshold)
   insert into workspace_events (workspace_id, id, type, actor_id, payload, created_at)
   select $1, gen_random_uuid()::text, 'budget.threshold_reached', null,
-    jsonb_strip_nulls(jsonb_build_object('memberId', member_id, 'threshold', threshold, 'month', $2::text)), now()
+    jsonb_strip_nulls(jsonb_build_object('memberId', member_id, 'threshold', threshold, 'month', $2::text)), $4::timestamptz
   from inserted`
 
 export const createPostgresBudgetTransactor = (transact: Transact, workspaceId: WorkspaceId): BudgetTransactor => ({
@@ -68,7 +68,7 @@ export const createPostgresBudgetTransactor = (transact: Transact, workspaceId: 
           )
           await query(
             `insert into workspace_events (workspace_id, id, type, actor_id, payload, created_at)
-             values ($1, $2, 'budget.changed', $3, $4::jsonb, now())`,
+             values ($1, $2, 'budget.changed', $3, $4::jsonb, $5::timestamptz)`,
             [
               crypto.randomUUID(),
               actorId,
@@ -76,6 +76,7 @@ export const createPostgresBudgetTransactor = (transact: Transact, workspaceId: 
                 ...(memberId && { memberId }),
                 monthlyBudget: budgetLabelOf(limitMicros),
               }),
+              new Date().toISOString(),
             ],
           )
         },
@@ -90,6 +91,7 @@ export const createPostgresBudgetTransactor = (transact: Transact, workspaceId: 
             await query(recordAlertsStatement, [
               month,
               JSON.stringify(alerts.map((alert) => ({ ...alert, id: budgetAlertIdOf(month, alert) }))),
+              new Date().toISOString(),
             ])
         },
       })

@@ -99,8 +99,15 @@ export const appendWorkspaceEvent = (
 ) =>
   onServer(
     tx,
-    'insert into workspace_events (workspace_id, id, type, actor_id, payload, created_at) values ($1, $2, $3, $4, $5::jsonb, now())',
-    [event.workspaceId, crypto.randomUUID(), event.type, event.actorId, JSON.stringify(event.payload)],
+    'insert into workspace_events (workspace_id, id, type, actor_id, payload, created_at) values ($1, $2, $3, $4, $5::jsonb, $6::timestamptz)',
+    [
+      event.workspaceId,
+      crypto.randomUUID(),
+      event.type,
+      event.actorId,
+      JSON.stringify(event.payload),
+      new Date().toISOString(),
+    ],
   )
 
 export const copyWorkspaceSignIn = async (
