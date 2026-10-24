@@ -246,3 +246,26 @@ test('the sessions of a tool are its credentials: a pending sign-in, which lets 
     sessionServer.stop(true)
   }
 })
+
+test('a virtual key value rotated outside Spyria is read again once its cached value expires', async () => {
+  let value = 'sk-bf-before'
+  const rotatingServer = Bun.serve({
+    port: 0,
+    fetch: () => Response.json({ virtual_key: { id: 'rotating', value } }),
+  })
+  const rotatingGateway = createLlmGateway({
+    url: `http://localhost:${rotatingServer.port}`,
+    adminUser: 'admin',
+    adminPassword: 'secret',
+    virtualKeyMilliseconds: 50,
+  })
+  try {
+    expect(await rotatingGateway.virtualKeyValue('rotating')).toBe('sk-bf-before')
+    value = 'sk-bf-after'
+    expect(await rotatingGateway.virtualKeyValue('rotating')).toBe('sk-bf-before')
+    await Bun.sleep(60)
+    expect(await rotatingGateway.virtualKeyValue('rotating')).toBe('sk-bf-after')
+  } finally {
+    rotatingServer.stop(true)
+  }
+})
