@@ -300,14 +300,15 @@ test('a dev chat clones its repository with a read-only installation token kept 
   const { gitBranch } = (await stack.chatRow(id)) ?? {}
   const answer = replies.map(({ body }) => body).join('')
   expect(answer).toContain('files:.git,AGENTS.md,README.md,only-in-acme-app.txt,src')
-  const [launch] = launches() as unknown as { repository: Record<string, string>; secrets: object }[]
+  const [launch] = launches() as unknown as { repository: Record<string, unknown>; secrets: object }[]
   expect(launch?.repository).toEqual({
     url: `${fakeGitHub.urls.webUrl}/acme/app.git`,
     token: expect.stringMatching(/^ghs_/),
     base_branch: 'main',
     working_branch: String(gitBranch),
+    author: { name: 'Alice', email: `${alice}@users.noreply.spyria` },
   })
-  const token = launch?.repository.token ?? ''
+  const token = String(launch?.repository.token ?? '')
   expect(fakeGitHub.installationTokens.get(token)).toMatchObject({
     repositories: ['app'],
     permissions: { contents: 'read' },
@@ -322,6 +323,7 @@ test('a dev chat clones its repository with a read-only installation token kept 
   expect(gitConfig).not.toContain(token)
   expect(gitConfig).not.toContain('extraHeader')
   expect(gitConfig).toContain(`url = ${fakeGitHub.urls.webUrl}/acme/app.git`)
+  expect(gitConfig).toContain(`name = Alice\n\temail = ${alice}@users.noreply.spyria`)
 
   const failing = await devChatAndPrompt('acme/docs', 'stub:ls')
   expect(failing.replies.map(({ body }) => body).join('')).toContain('files:.git,.spyria,README.md')
