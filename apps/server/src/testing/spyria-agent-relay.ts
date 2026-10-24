@@ -47,9 +47,13 @@ const repositoryRoot = new URL('../../../../', import.meta.url).pathname
 const listening = /"event.name":"agent.listening".*"server.port":(\d+)/
 const modelCallMilliseconds = 300_000
 const runningAgents = new Set<Bun.Subprocess>()
-export const stopAllSpyriaAgents = () => {
-  for (const agent of runningAgents) agent.kill()
-}
+export const stopAllSpyriaAgents = () =>
+  Promise.all(
+    [...runningAgents].map((agent) => {
+      agent.kill()
+      return agent.exited
+    }),
+  )
 
 const serveGateway = (modelCall: () => ModelCall) =>
   Bun.serve({

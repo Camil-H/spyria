@@ -125,13 +125,54 @@ const zeroCacheCli = new URL('../../node_modules/@rocicorp/zero/out/zero/src/cli
 
 const gracefulStopMilliseconds = 5000
 
+const signalGroup = (group: number, signal: NodeJS.Signals) => {
+  try {
+    process.kill(-group, signal)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error
+  }
+}
+
 const stopProcessGroup = async (process: ChildProcess) => {
-  if (process.exitCode !== null || process.signalCode !== null) return
-  const exited = once(process, 'exit').then(() => true)
-  globalThis.process.kill(-(process.pid ?? 0), 'SIGTERM')
-  if (await Promise.race([exited, sleep(gracefulStopMilliseconds, false)])) return
-  globalThis.process.kill(process.pid ?? 0, 'SIGQUIT')
-  await exited
+  const group = process.pid ?? 0
+  if (process.exitCode === null && process.signalCode === null) {
+    const exited = once(process, 'exit')
+    signalGroup(group, 'SIGTERM')
+    await Promise.race([exited, sleep(gracefulStopMilliseconds)])
+  }
+  signalGroup(group, 'SIGKILL')
+}
+
+const outputOf = (command: string, args: string[]) => String(spawnSync(command, args).stdout ?? '')
+
+const processGroupAndCommandOf = (processId: string) => {
+  const [group = '', ...command] = outputOf('ps', ['-o', 'pgid=,args=', '-p', processId]).trim().split(/\s+/)
+  return { group: Number(group), command: command.join(' ') }
+}
+
+const leftoverZeroCacheGroupsOn = (ports: number[]) =>
+  outputOf('lsof', ['-t', `-iTCP:${ports.join(',')}`, '-sTCP:LISTEN'])
+    .split('\n')
+    .filter(Boolean)
+    .map((listener) => processGroupAndCommandOf(listener).group)
+    .filter((group) => group > 1 && processGroupAndCommandOf(String(group)).command.includes(zeroCacheCli))
+
+const busyPortsOf = async (ports: number[]) => {
+  const answers = await Promise.all(ports.map((port) => httpStatusOf(`http://localhost:${port}/`)))
+  return ports.filter((_, index) => typeof answers[index] === 'number')
+}
+
+const freeZeroCachePorts = async (ports: number[]) => {
+  for (const group of new Set(leftoverZeroCacheGroupsOn(ports))) signalGroup(group, 'SIGKILL')
+  for (let attempt = 1; ; attempt++) {
+    const busyPorts = await busyPortsOf(ports)
+    if (busyPorts.length === 0) return
+    if (attempt === 100)
+      throw new Error(
+        `zero-cache cannot start: port ${busyPorts.join(', ')} is still in use after stopping leftover zero-caches`,
+      )
+    await sleep(50)
+  }
 }
 
 export const startZeroCache = async ({
@@ -146,9 +187,7 @@ export const startZeroCache = async ({
   serverUrl: string
 }) => {
   const url = `http://localhost:${port}`
-  for (const busyPort of [port, port + 1])
-    if (typeof (await httpStatusOf(`http://localhost:${busyPort}/`)) === 'number')
-      throw new Error(`zero-cache cannot start: port ${busyPort} is in use (a leftover zero-cache? free it first)`)
+  await freeZeroCachePorts([port, port + 1])
   const replicaFile = join(tmpdir(), `spyria-zero-${appId}.db`)
   for (const suffix of ['', '-wal', '-shm', '-wal2']) rmSync(`${replicaFile}${suffix}`, { force: true })
   const logFile = openSync(join(tmpdir(), `spyria-zero-${appId}.log`), 'w')
