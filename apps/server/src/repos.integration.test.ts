@@ -351,8 +351,9 @@ test('a fork of a dev chat checks out the original working branch: on a new bran
     repository: 'acme/app',
     baseBranch: 'main',
   })
-  expect(created).toMatchObject({ status: 201, body: { chatId: expect.any(String) } })
-  const source = chatId(String(created.body.chatId))
+  const createdChatId = created.body?.chatId
+  expect({ status: created.status, chatIdType: typeof createdChatId }).toEqual({ status: 201, chatIdType: 'string' })
+  const source = chatId(createdChatId)
   const sourceRow = await stack.chatRow(source)
   expect(sourceRow).toMatchObject({ mode: 'dev', repository: 'acme/app', ownerUserId: alice })
   const sourceBranch = String(sourceRow?.gitBranch)
