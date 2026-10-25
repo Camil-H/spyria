@@ -45,7 +45,7 @@ Pick the lowest layer that proves the behaviour, and do not duplicate a check th
 - **Visual** (`apps/web/ui`): screenshots in light and dark; update baselines only for intended design changes.
 - **Docker** (`*.docker.test.ts`): real containers for the host and runtimes.
 
-Never weaken an assertion to make a test pass; if a check must change, say so in the pull request. No real LLM, identity provider, GitHub or npm call in tests: use the fakes in `apps/server/src/testing/`. In `bun test`, await a promise before asserting on its rejection (`rejectionOf(promise)` in `apps/server/src/testing/testing.ts`) rather than `expect(promise).rejects`. `toMatchObject` with an asymmetric matcher (`expect.any`, `expect.stringContaining`, …) replaces the matched value in the received object (oven-sh/bun#3521): read a value before asserting on it that way, or assert it with `toBe`/`toContain`.
+Never weaken an assertion to make a test pass; if a check must change, say so in the pull request. No real LLM, identity provider, GitHub or npm call in tests: use the fakes in `apps/server/src/testing/`. In `bun test`, await a promise before asserting on its rejection (`rejectionOf(promise)` in `apps/server/src/testing/testing.ts`) rather than `expect(promise).rejects`.
 
 ## Before opening a pull request
 
