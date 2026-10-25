@@ -17,6 +17,7 @@ import {
   prepareSeededGatewayKeys,
   shareTestCrm,
   startZeroCache,
+  stopLeftoverZeroCache,
   testGatewayAt,
 } from '@spyria/db/testing'
 import { createZeroStore, type WorkspaceSession } from '@spyria/db/zero-store'
@@ -69,6 +70,7 @@ const maximumResetAttempts = 5
 const deadlockCode = '40P01'
 const barrierSessionMilliseconds = 24 * 60 * 60 * 1000
 const workerDatabaseNameOf = (workerIndex: number) => `spyria_e2e_w${workerIndex}`
+const zeroCacheAppIdOf = (workerIndex: number) => `spyriae2e${workerIndex}`
 const warmChatIds = ['chat-research', 'chat-setup-helper']
 const runtimeReadyMilliseconds = 90_000
 
@@ -166,6 +168,7 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
       const index = workerInfo.parallelIndex
       const releaseServerDatabase = () =>
         fetch(`${serverUrl}/test/release-database?db=${workerDatabaseNameOf(index)}`, { method: 'POST' })
+      await stopLeftoverZeroCache(zeroCacheAppIdOf(index))
       await releaseServerDatabase()
       await dropDatabase(workerDatabaseNameOf(index))
       const testDatabase = await createTestDatabase(templateDatabaseName, workerDatabaseNameOf(index))
@@ -246,7 +249,7 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
       const zeroCache = await startZeroCache({
         databaseName: testDatabase.name,
         port: zeroCachePortOf(index),
-        appId: `spyriae2e${index}`,
+        appId: zeroCacheAppIdOf(index),
         serverUrl,
       })
       try {
