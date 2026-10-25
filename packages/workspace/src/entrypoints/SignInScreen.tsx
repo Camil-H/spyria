@@ -21,12 +21,14 @@ export const SignInScreen = ({
   isEmailFirst,
   canCreateWorkspace,
   instanceApps = [],
+  notice,
   signIn,
   createWorkspace,
 }: {
   isEmailFirst: boolean
   canCreateWorkspace: boolean
   instanceApps?: readonly SsoPreset[]
+  notice?: string
   signIn: (email?: string) => Promise<SignInOutcome>
   createWorkspace: (form: HTMLFormElement) => Promise<SignInOutcome>
 }) => {
@@ -35,7 +37,7 @@ export const SignInScreen = ({
   const [provider, setProvider] = useState(emptyProvider)
   const [clientSecret, setClientSecret] = useState('')
   const [usesInstanceApp, setUsesInstanceApp] = useState(true)
-  const [refusal, setRefusal] = useState<string>()
+  const [refusal, setRefusal] = useState(notice)
   const settle = (outcome: SignInOutcome, refusalFor = refusalOf) => {
     setIsSigningIn(false)
     setRefusal(refusalFor(outcome))

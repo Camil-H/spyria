@@ -45,23 +45,40 @@ const domainVerificationToast = (ssoSettingsPath?: string) =>
     </Toast>
   )
 
-const start = async () => {
+const workspaceNotLoaded = {
+  status: 'refused',
+  message: 'You are signed in, but your workspace did not load. Check your connection and sign in again.',
+} as const
+const sessionMissing = {
+  status: 'refused',
+  message: 'Sign-in finished without opening your workspace. Try again.',
+} as const
+
+const openApp = async () => {
   const { userId, sessions, deployment } = await loadSessions()
   const [defaultSession] = sessions
-  if (userId && defaultSession) {
-    const [{ createApp }, { App }] = await (earlyAppModules ?? appModules())
-    rememberSignedIn()
-    return root.render(
-      <>
-        <App app={await createApp(userId, defaultSession.workspaceId, sessions, deployment)} />
-        {domainVerificationToast(`/w/${defaultSession.workspaceId}/settings/sso`)}
-      </>,
-    )
-  }
-  const startWhenSignedIn = async (result: Awaited<ReturnType<typeof signInWithPopup>>) => {
-    if (result.status === 'signed_in') await start()
-    return result
-  }
+  if (!userId || !defaultSession) return 'signed_out'
+  const [{ createApp }, { App }] = await (earlyAppModules ?? appModules())
+  rememberSignedIn()
+  const app = await createApp(userId, defaultSession.workspaceId, sessions, deployment)
+  if (!app) return 'not_loaded'
+  root.render(
+    <>
+      <App app={app} />
+      {domainVerificationToast(`/w/${defaultSession.workspaceId}/settings/sso`)}
+    </>,
+  )
+  return 'opened'
+}
+
+const openAppWhenSignedIn = async (result: Awaited<ReturnType<typeof signInWithPopup>>) => {
+  if (result.status !== 'signed_in') return result
+  const opened = await openApp()
+  if (opened === 'opened') return result
+  return opened === 'not_loaded' ? workspaceNotLoaded : sessionMissing
+}
+
+const showSignIn = async (notice?: string) => {
   const { authMode, canCreateWorkspace, instanceApps } = await loadAuthMode()
   root.render(
     <>
@@ -69,12 +86,14 @@ const start = async () => {
         isEmailFirst={authMode === 'sso'}
         canCreateWorkspace={canCreateWorkspace}
         instanceApps={instanceApps}
-        signIn={async (email) => startWhenSignedIn(await signInWithPopup({ email }))}
-        createWorkspace={async (form) => startWhenSignedIn(await createWorkspaceWithPopup(form))}
+        notice={notice}
+        signIn={async (email) => openAppWhenSignedIn(await signInWithPopup({ email }))}
+        createWorkspace={async (form) => openAppWhenSignedIn(await createWorkspaceWithPopup(form))}
       />
       {domainVerificationToast()}
     </>,
   )
 }
 
-await start()
+const opened = await openApp()
+if (opened !== 'opened') await showSignIn(opened === 'not_loaded' ? workspaceNotLoaded.message : undefined)
