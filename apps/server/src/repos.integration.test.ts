@@ -343,13 +343,15 @@ test('a dev chat clones its repository with a read-only installation token kept 
 
 test('a fork of a dev chat checks out the original working branch: on a new branch for another member, on the same branch with the open pull request card for its owner', async () => {
   const { launches } = await stack.agentHost('fork host')
+  if (!(await request(alice, 'GET', '/api/github-settings/configured')).body.configured)
+    expect(await request(alice, 'POST', '/api/github-settings', appSettings)).toMatchObject({ status: 200 })
   const created = await request(alice, 'POST', '/api/dev-chats', {
     name: 'Fix totals',
     projectId: null,
     repository: 'acme/app',
     baseBranch: 'main',
   })
-  expect(created.status).toBe(201)
+  expect(created).toMatchObject({ status: 201, body: { chatId: expect.any(String) } })
   const source = chatId(String(created.body.chatId))
   const sourceBranch = String((await stack.chatRow(source))?.gitBranch)
   fakeGitHub.commitToBranch('acme/app', {
@@ -357,8 +359,14 @@ test('a fork of a dev chat checks out the original working branch: on a new bran
     files: { 'totals.ts': 'export const total = 2\n' },
     message: 'Fix totals',
   })
-  await database.$client`
-    insert into chat_participants (workspace_id, chat_id, user_id, role_id) values (${acme}, ${source}, ${bob}, 'reader')`
+  expect(
+    await stack.mutate(aliceInAcme, 'conversation.inviteMember', {
+      workspaceId: acme,
+      chatId: source,
+      memberId: bob,
+      roleId: 'reader',
+    }),
+  ).toEqual(succeeded)
   const card = {
     type: 'pull_request',
     repository: 'acme/app',
