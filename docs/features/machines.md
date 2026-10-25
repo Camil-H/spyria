@@ -64,6 +64,8 @@ The container name follows the deployment name (`<deployment>-host`); the defaul
 
 **Never run it on a machine others use.** The agent on that machine runs as you and can read your Claude and ChatGPT sign-ins.
 
+When your machine shows **Offline** (Docker was not running when your computer started, or the container was stopped), **Start** shows the command that starts it again, `docker start spyria-host`; it reconnects within seconds. If it stays offline, **Set up again** gives a new command that installs it afresh: the old connection stops working, and your sign-ins are kept.
+
 ### Sign-ins
 
 Each tool's sign-in lives in its own Docker volume on your machine (`<deployment>-cred-claude-code`, `<deployment>-cred-codex`) and survives runtimes being removed. `spyria-host logout claude-code` or `spyria-host logout codex` (through `docker exec -it`, as above) deletes it. Logging out of Codex is local only; to also end the session at OpenAI, log out of all devices in ChatGPT's **Security** settings. When a sign-in expires, the chat says "Authentication required — sign in to *tool* again".

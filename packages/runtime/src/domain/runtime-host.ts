@@ -48,7 +48,8 @@ export const assertNotRemoved = (host: RuntimeHost) => {
   return host
 }
 
-export const canRenewClaim = (host: RuntimeHost) => host.status === 'waiting' || host.status === 'expired'
+export const canRenewClaim = (host: RuntimeHost) =>
+  host.status === 'waiting' || host.status === 'expired' || (host.ownerId !== null && host.status === 'offline')
 
 export const assertCanManage = (host: RuntimeHost, memberId: MemberId, permissions: readonly WorkspacePermission[]) => {
   if (host.ownerId === null) requirePermissionIn(permissions, 'runtimes.manage')

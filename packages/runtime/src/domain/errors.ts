@@ -36,7 +36,7 @@ export const HostNotFound = errorKind(
 )
 export const CodeNotRenewable = errorKind(
   'code_not_renewable',
-  () => 'Only a host still waiting for its first connection gets a new command',
+  () => 'Only a host still waiting for its first connection, or your offline machine, gets a new command',
   RuntimeError,
 )
 export const CodeNotValid = errorKind('code_not_valid', () => 'This code is not valid', HostRefused)
