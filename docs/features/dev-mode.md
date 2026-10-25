@@ -32,6 +32,10 @@ Events: `pull_request`, `pull_request_review`, `pull_request_review_comment`, `p
 
 The chat gets its own working branch, `spyria/<chat name slug>-<6 characters of the chat id>`, created from the base branch. The composer's folder chip shows the repository and the branch chip the working branch.
 
+### Forking a dev chat
+
+A fork of a dev chat is a dev chat on the same repository and base branch that continues where the original stopped: its runtime checks out the original's working branch as pushed to GitHub, not the base. The member who owns the original keeps working on that same branch, and the fork shows the open pull request card, so a push updates that pull request. Any other member gets a new working branch built on top of the original's, named after the fork, and opens their own pull request from it. Commits the original never pushed stay in its runtime; when the original's branch was never pushed, the fork starts from the base.
+
 ## Clone and setup script
 
 When the chat's runtime starts, spyria-agent clones the repository into the runtime's workspace volume and checks out the working branch from the base:
