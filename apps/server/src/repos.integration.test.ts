@@ -13,6 +13,7 @@ import {
 } from './testing/fake-github.ts'
 import {
   acme,
+  addLlmKey,
   alice,
   aliceInAcme,
   bob,
@@ -408,6 +409,7 @@ test('a fork of a dev chat checks out the original working branch: on a new bran
     return { row: await stack.chatRow(forked), repository: launch?.repository, cards, answer }
   }
 
+  await addLlmKey(bob, 'Mistral')
   const bobs = await forkAs(bobInAcme)
   expect(bobs.row).toMatchObject({ mode: 'dev', repository: 'acme/app', baseBranch: 'main', ownerUserId: bob })
   expect(bobs.row?.gitBranch).toMatch(/^spyria\/fix-totals-fork-[0-9a-f]{6}$/)
