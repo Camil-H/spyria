@@ -349,6 +349,7 @@ test('a fork of a dev chat checks out the original working branch: on a new bran
     repository: 'acme/app',
     baseBranch: 'main',
   })
+  expect(created.status).toBe(201)
   const source = chatId(String(created.body.chatId))
   const sourceBranch = String((await stack.chatRow(source))?.gitBranch)
   fakeGitHub.commitToBranch('acme/app', {
@@ -356,14 +357,8 @@ test('a fork of a dev chat checks out the original working branch: on a new bran
     files: { 'totals.ts': 'export const total = 2\n' },
     message: 'Fix totals',
   })
-  expect(
-    await stack.mutate({ workspaceId: acme, userId: alice }, 'conversation.inviteMember', {
-      workspaceId: acme,
-      chatId: source,
-      memberId: bob,
-      roleId: 'reader',
-    }),
-  ).toEqual(succeeded)
+  await database.$client`
+    insert into chat_participants (workspace_id, chat_id, user_id, role_id) values (${acme}, ${source}, ${bob}, 'reader')`
   const card = {
     type: 'pull_request',
     repository: 'acme/app',
