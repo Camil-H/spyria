@@ -21,21 +21,33 @@ const docker = (...args: string[]) => spawnSync('docker', args, { stdio: ['ignor
 export const databaseUrlOf = (databaseName: string) =>
   Object.assign(new URL(testPostgresUrl), { pathname: `/${databaseName}` }).href
 
-const withAdmin = async (statement: string) => {
+const withAdmin = async (statement: string, parameters: string[] = []) => {
   const admin = postgres(databaseUrlOf('postgres'), { onnotice: () => {} })
   try {
-    await admin.unsafe(statement)
+    await admin.unsafe(statement, parameters)
   } finally {
     await admin.end()
   }
 }
 
+const releaseReplicationSlotsOf = async (name: string) => {
+  await withAdmin(
+    'select pg_terminate_backend(active_pid) from pg_replication_slots where database = $1 and active_pid is not null',
+    [name],
+  )
+  await withAdmin(
+    'select pg_drop_replication_slot(slot_name) from pg_replication_slots where database = $1 and not active',
+    [name],
+  )
+}
+
 export const dropDatabase = async (name: string) => {
   for (let attempt = 1; ; attempt++)
     try {
+      await releaseReplicationSlotsOf(name)
       return await withAdmin(`drop database if exists "${name}" with (force)`)
     } catch (error) {
-      if (attempt === 100) throw error
+      if (attempt === 200) throw error
       await sleep(50)
     }
 }
@@ -179,6 +191,8 @@ const freeZeroCachePorts = async (ports: number[]) => {
     await sleep(50)
   }
 }
+
+export const stopLeftoverZeroCache = (port: number) => freeZeroCachePorts([port, port + 1])
 
 export const startZeroCache = async ({
   databaseName,
