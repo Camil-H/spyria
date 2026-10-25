@@ -1,7 +1,7 @@
-import { spawn, spawnSync } from 'node:child_process'
+import { type ChildProcess, spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { once } from 'node:events'
-import { existsSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync, writeSync } from 'node:fs'
+import { openSync, readFileSync, rmSync, writeFileSync, writeSync } from 'node:fs'
 import { get } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -30,29 +30,7 @@ const withAdmin = async (statement: string) => {
   }
 }
 
-const slotReleaseMilliseconds = 20_000
-
-const releaseReplicationSlotsOf = async (name: string) => {
-  const admin = postgres(databaseUrlOf('postgres'), { onnotice: () => {} })
-  try {
-    for (const deadline = Date.now() + slotReleaseMilliseconds; ; await sleep(100)) {
-      const active = await admin<{ slotName: string; walSenderPid: number }[]>`
-        select slot_name as "slotName", active_pid as "walSenderPid" from pg_replication_slots
-        where database = ${name} and active`
-      if (active.length === 0) break
-      if (Date.now() > deadline)
-        throw new Error(
-          `${name} is still replicated by ${active.map(({ slotName, walSenderPid }) => `${slotName} (wal sender ${walSenderPid})`).join(', ')}: a zero-cache is still attached to it`,
-        )
-    }
-    await admin`select pg_drop_replication_slot(slot_name) from pg_replication_slots where database = ${name}`
-  } finally {
-    await admin.end()
-  }
-}
-
 export const dropDatabase = async (name: string) => {
-  await releaseReplicationSlotsOf(name)
   for (let attempt = 1; ; attempt++)
     try {
       return await withAdmin(`drop database if exists "${name}" with (force)`)
@@ -146,72 +124,14 @@ export const httpStatusOf = (url: string, headers: Record<string, string> = {}) 
 const zeroCacheCli = new URL('../../node_modules/@rocicorp/zero/out/zero/src/cli.js', import.meta.url).pathname
 
 const gracefulStopMilliseconds = 5000
-const forcedStopMilliseconds = 2000
-const zeroCacheCommand = /@rocicorp\/zero\/out\/zero\/src\/cli\.js/
 
-const zeroCachePidFileOf = (appId: string) => join(tmpdir(), `spyria-zero-${appId}.pid`)
-
-const signalsGroup = (groupId: number, signal: NodeJS.Signals | 0) => {
-  if (groupId <= 0) return false
-  try {
-    process.kill(-groupId, signal)
-    return true
-  } catch {
-    return false
-  }
-}
-
-const linuxProcessOf = (processId: string) => {
-  try {
-    const stat = readFileSync(`/proc/${processId}/stat`, 'utf8')
-    const [state = '', , groupId] = stat.slice(stat.lastIndexOf(')') + 2).split(' ')
-    const command = readFileSync(`/proc/${processId}/cmdline`, 'utf8').replaceAll('\0', ' ')
-    return { groupId: Number(groupId), state, command }
-  } catch {
-    return undefined
-  }
-}
-
-const processesOf = () =>
-  process.platform === 'linux'
-    ? readdirSync('/proc')
-        .filter((entry) => /^\d+$/.test(entry))
-        .flatMap((processId) => linuxProcessOf(processId) ?? [])
-    : spawnSync('ps', ['-axo', 'pgid=,stat=,command='])
-        .stdout.toString()
-        .split('\n')
-        .map((line) => {
-          const [groupId, state = ''] = line.trim().split(/\s+/)
-          return { groupId: Number(groupId), state, command: line }
-        })
-
-export const isProcessGroupGone = (groupId: number) =>
-  !processesOf().some((each) => each.groupId === groupId && !each.state.startsWith('Z'))
-
-const isGoneWithin = async (groupId: number, milliseconds: number) => {
-  for (const deadline = Date.now() + milliseconds; Date.now() < deadline; await sleep(50))
-    if (isProcessGroupGone(groupId)) return true
-  return isProcessGroupGone(groupId)
-}
-
-const stopProcessGroup = async (groupId: number) => {
-  if (isProcessGroupGone(groupId)) return
-  signalsGroup(groupId, 'SIGTERM')
-  if (await isGoneWithin(groupId, gracefulStopMilliseconds)) return
-  signalsGroup(groupId, 'SIGQUIT')
-  if (await isGoneWithin(groupId, forcedStopMilliseconds)) return
-  signalsGroup(groupId, 'SIGKILL')
-  await isGoneWithin(groupId, forcedStopMilliseconds)
-}
-
-const isZeroCacheGroup = (groupId: number) =>
-  processesOf().some((each) => each.groupId === groupId && zeroCacheCommand.test(each.command))
-
-export const stopLeftoverZeroCache = async (appId: string) => {
-  const pidFile = zeroCachePidFileOf(appId)
-  const groupId = Number.parseInt(existsSync(pidFile) ? readFileSync(pidFile, 'utf8') : '', 10)
-  if (groupId > 0 && isZeroCacheGroup(groupId)) await stopProcessGroup(groupId)
-  rmSync(pidFile, { force: true })
+const stopProcessGroup = async (process: ChildProcess) => {
+  if (process.exitCode !== null || process.signalCode !== null) return
+  const exited = once(process, 'exit').then(() => true)
+  globalThis.process.kill(-(process.pid ?? 0), 'SIGTERM')
+  if (await Promise.race([exited, sleep(gracefulStopMilliseconds, false)])) return
+  globalThis.process.kill(process.pid ?? 0, 'SIGQUIT')
+  await exited
 }
 
 export const startZeroCache = async ({
@@ -226,7 +146,6 @@ export const startZeroCache = async ({
   serverUrl: string
 }) => {
   const url = `http://localhost:${port}`
-  await stopLeftoverZeroCache(appId)
   for (const busyPort of [port, port + 1])
     if (typeof (await httpStatusOf(`http://localhost:${busyPort}/`)) === 'number')
       throw new Error(`zero-cache cannot start: port ${busyPort} is in use (a leftover zero-cache? free it first)`)
@@ -254,14 +173,11 @@ export const startZeroCache = async ({
       ZERO_ENABLE_TELEMETRY: 'false',
     },
   })
-  const groupId = zeroCache.pid ?? 0
-  writeFileSync(zeroCachePidFileOf(appId), String(groupId))
-  const stopGroupOnExit = () => signalsGroup(groupId, 'SIGKILL')
+  const stopGroupOnExit = () => zeroCache.exitCode === null && process.kill(-(zeroCache.pid ?? 0), 'SIGKILL')
   process.once('exit', stopGroupOnExit)
-  const stop = async () => {
+  const stop = () => {
     process.off('exit', stopGroupOnExit)
-    await stopProcessGroup(groupId)
-    rmSync(zeroCachePidFileOf(appId), { force: true })
+    return stopProcessGroup(zeroCache)
   }
   let errorOutput = ''
   zeroCache.stderr?.on('data', (chunk) => {
