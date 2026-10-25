@@ -53,6 +53,7 @@ type PopupResult =
 
 const sessionCookiePrefix = 'spyria_s_'
 const loginCookie = 'spyria_login'
+const popupSelfCloseMilliseconds = 10_000
 export const testCookie = 'spyria_test'
 const loginCookieSeconds = 5 * 60
 
@@ -134,7 +135,7 @@ export const createAuthRoutes = ({
   }
   const popup = (context: Context, result: PopupResult, status: 200 | 400 | 403 | 404 = 200) =>
     context.html(
-      `<!doctype html><meta charset="utf-8"><title>Signing in to Spyria</title><script>window.opener?.postMessage(${JSON.stringify(result).replaceAll('<', '\\u003c')}, ${JSON.stringify(appOrigin)});window.close()</script>`,
+      `<!doctype html><meta charset="utf-8"><title>Signing in to Spyria</title><script>window.opener?.postMessage(${JSON.stringify(result).replaceAll('<', '\\u003c')}, ${JSON.stringify(appOrigin)});window.opener ? setTimeout(close, ${popupSelfCloseMilliseconds}) : close()</script>`,
       status,
     )
   const completeSignIn = async (
