@@ -122,6 +122,7 @@ export const createApp = async (
     mutators: { ...workspaceMutators, ...conversationMutators, ...profileMutators, ...runtimeMutators },
     draftStorage: localStorage,
   })
+  if (testStack) Object.assign(window, { spyriaPendingQueries: store.pendingQueries })
   await store.whenLoaded(defaultWorkspaceId)
   const mutate = async (mutator: Mutator, input: CommandInput) => {
     const id = crypto.randomUUID()

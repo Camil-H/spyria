@@ -351,6 +351,7 @@ export const createZeroStore = ({
   const zeroByWorkspace = new Map<WorkspaceId, Zero>()
   const tokenByWorkspace = new Map<WorkspaceId, string>()
   const loadedByWorkspace = new Map<WorkspaceId, PromiseWithResolvers<void>>()
+  const completeTablesByWorkspace = new Map<WorkspaceId, ReadonlySet<string>>()
   const renewalTimerByWorkspace = new Map<WorkspaceId, ReturnType<typeof setTimeout>>()
   let signedInWorkspaceIds: ReadonlySet<WorkspaceId> = new Set(sessions.map((session) => session.workspaceId))
   let isPublishScheduled = false
@@ -423,6 +424,7 @@ export const createZeroStore = ({
     })
     const rows: SourceRows = {}
     const completeTables = new Set<string>()
+    completeTablesByWorkspace.set(workspaceId, completeTables)
     rowsByWorkspace.set(workspaceId, rows)
     zeroByWorkspace.set(workspaceId, zero)
     tokenByWorkspace.set(workspaceId, token)
@@ -453,6 +455,7 @@ export const createZeroStore = ({
       }
     zeroByWorkspace.delete(workspaceId)
     loadedByWorkspace.delete(workspaceId)
+    completeTablesByWorkspace.delete(workspaceId)
     signedInWorkspaceIds = new Set([...signedInWorkspaceIds].filter((signedInId) => signedInId !== workspaceId))
     rowsByWorkspace.set(workspaceId, { workspaces: rowsByWorkspace.get(workspaceId)?.workspaces ?? [] })
     publish()
@@ -484,6 +487,13 @@ export const createZeroStore = ({
       publish()
     },
     whenLoaded: (workspaceId: WorkspaceId) => loadedOf(workspaceId).promise,
+    pendingQueries: () =>
+      Object.fromEntries(
+        [...completeTablesByWorkspace].map(([workspaceId, completeTables]) => [
+          workspaceId,
+          materializedTables.filter((table) => !completeTables.has(table)),
+        ]),
+      ),
     watch: (workspaceId: WorkspaceId, name: ScopedQueryName, args: ScopedWatch['args']) => {
       const key = scopedKeyOf(workspaceId, name, args)
       const watch = scopedWatches.get(key) ?? { workspaceId, name, args, count: 0 }
