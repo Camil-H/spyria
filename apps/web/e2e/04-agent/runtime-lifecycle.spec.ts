@@ -162,6 +162,7 @@ test.describe('Runtime lifecycle', () => {
       await expect(runtimeStatusOf(page)).toHaveText('Ready')
       await sendMessage(page, 'Work for a while')
       await expect(workingIndicatorOf(page)).toBeVisible()
+      await expect(stopButtonOf(page)).toBeVisible()
       await runtimeMenuOf(page).click()
       await page.getByRole('menuitem', { name: 'Restart session' }).click()
       const confirmation = page.getByRole('dialog', { name: 'Restart session' })

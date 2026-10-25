@@ -28,19 +28,19 @@ const confirmations: Record<RuntimeAction, string> = {
 export const RuntimeMenu = ({
   workspaceId,
   chatId,
-  hasActiveTurn,
+  isAgentWorking,
   children,
 }: {
   workspaceId: WorkspaceId
   chatId: ChatId
-  hasActiveTurn: boolean
+  isAgentWorking: boolean
   children: ReactNode
 }) => {
   const commands = useConversationCommands()
   const { errorMessage, isPending, run } = useGuardedAction()
   const [confirming, setConfirming] = useState<RuntimeAction | null>(null)
   const act = (action: RuntimeAction) => run(() => commands[action]({ workspaceId, chatId }))
-  const choose = (action: RuntimeAction) => (hasActiveTurn ? setConfirming(action) : void act(action))
+  const choose = (action: RuntimeAction) => (isAgentWorking ? setConfirming(action) : void act(action))
   return (
     <>
       <Root>

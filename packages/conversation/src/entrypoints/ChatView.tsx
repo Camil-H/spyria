@@ -34,7 +34,7 @@ export const ChatView = ({
   frozenActions,
 }: {
   headerActions: ReactNode
-  runtimeStatus: (access: { canRetry: boolean; canManage: boolean; hasActiveTurn: boolean }) => ReactNode
+  runtimeStatus: (access: { canRetry: boolean; canManage: boolean; isAgentWorking: boolean }) => ReactNode
   hasLlmKey: boolean
   blockedNotice: ReactNode
   budgetNotice: ReactNode
@@ -95,7 +95,7 @@ export const ChatView = ({
   const status = runtimeStatus({
     canRetry: conversation.canPost,
     canManage: conversation.canConfigure,
-    hasActiveTurn: conversation.hasActiveTurn,
+    isAgentWorking: conversation.isAgentWorking,
   })
   const branch = live.workspace?.branch ?? conversation.gitBranch
   const { Icon: ChatTypeIcon, label: chatTypeLabel } = chatTypeIconOf(conversation.type)
