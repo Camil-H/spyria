@@ -43,7 +43,7 @@ import {
   type WorkspaceId,
   workspaceId,
 } from '@spyria/kernel'
-import { removeChatRuntimeOnServer } from '@spyria/runtime/published'
+import { removeChatRuntimeOnServer, stopChatRuntimeOnServer } from '@spyria/runtime/published'
 import type { ParticipantChange } from '../contracts/repositories.ts'
 import type { ConversationTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import { agentJobTypes, agentSweepIntervalMilliseconds, waitingNotices } from '../domain/agent-events.ts'
@@ -277,6 +277,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       prompt: (message) => enqueue(agentJobTypes.prompt, { messageId: message.id }),
       startSession: (chatId) => enqueue(agentJobTypes.startSession, { chatId }),
       interrupt: (interrupt) => enqueue(agentJobTypes.interrupt, interrupt),
+      restartSession: (restart) => enqueue(agentJobTypes.restartSession, restart),
       sweepLater: () => enqueue(agentJobTypes.sweep, {}, agentSweepIntervalMilliseconds),
     },
     members: {
@@ -514,6 +515,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
           await tx.mutate.chats.update({ workspaceId: contextWorkspaceId, id, isPlanning })
       },
       dropRuntime: (id) => removeChatRuntimeOnServer(tx, contextWorkspaceId, id),
+      stopRuntime: (id) => stopChatRuntimeOnServer(tx, contextWorkspaceId, id),
       hasMachine: async (id) =>
         (await tx.run(
           zql.runtimeHosts

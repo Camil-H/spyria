@@ -240,6 +240,18 @@ export const createSpyriaAgentClient = (): AgentClient => ({
   interrupt: async (conversation) => {
     await call(conversation, 'POST', `/api/conversations/${conversation.conversationId}/interrupt`, {})
   },
+  restartConversation: async (conversation) =>
+    String(
+      (
+        await call(
+          conversation,
+          'POST',
+          `/api/conversations/${conversation.conversationId}/restart`,
+          {},
+          checkoutTimeoutMilliseconds,
+        )
+      )?.execution_status,
+    ),
   deleteConversation: async (conversation) => {
     await call(conversation, 'DELETE', `/api/conversations/${conversation.conversationId}`)
   },
