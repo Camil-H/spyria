@@ -76,6 +76,7 @@ export type RepositoryCheckout = Readonly<{
   token: string
   baseBranch: string
   workingBranch: string
+  startBranch?: string
   author?: GitAuthor
 }>
 export type WorkspaceAction = 'commit' | 'merge' | 'pushed'

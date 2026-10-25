@@ -39,11 +39,12 @@ const send = (
     timeoutMilliseconds,
   })
 
-const repositoryLaunchOf = ({ url, token, baseBranch, workingBranch, author }: RepositoryCheckout) => ({
+const repositoryLaunchOf = ({ url, token, baseBranch, workingBranch, startBranch, author }: RepositoryCheckout) => ({
   url,
   token,
   base_branch: baseBranch,
   working_branch: workingBranch,
+  ...(startBranch && { start_branch: startBranch }),
   ...(author && { author }),
 })
 const call = async (

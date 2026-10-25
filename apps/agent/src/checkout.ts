@@ -2,7 +2,14 @@ import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { gitIdentityOf } from './workspace.ts'
 
-export type Repository = { url: string; token: string; base_branch: string; working_branch: string; author?: unknown }
+export type Repository = {
+  url: string
+  token: string
+  base_branch: string
+  working_branch: string
+  start_branch?: string
+  author?: unknown
+}
 export type Checkout = { failure?: string; hasSetup?: boolean }
 
 const setupScript = '.spyria/setup.sh'
@@ -35,7 +42,22 @@ const cloned = async (cwd: string, repository: Repository, environment: Record<s
     cloneEnvironmentOf(environment, repository.token),
   )
   if (clone.exitCode !== 0) return { failure: `The repository could not be cloned: ${lastLinesOf(clone.output)}` }
-  const branch = await run(['git', 'checkout', '--quiet', '-b', repository.working_branch], cwd, environment)
+  const startPoint = repository.start_branch && `refs/remotes/origin/${repository.start_branch}`
+  const hasStartPoint =
+    startPoint && (await run(['git', 'rev-parse', '--verify', '--quiet', startPoint], cwd, environment)).exitCode === 0
+  const branch = await run(
+    [
+      'git',
+      'checkout',
+      '--quiet',
+      '--no-track',
+      '-b',
+      repository.working_branch,
+      ...(hasStartPoint ? [startPoint] : []),
+    ],
+    cwd,
+    environment,
+  )
   if (branch.exitCode !== 0)
     return { failure: `The working branch could not be created: ${lastLinesOf(branch.output)}` }
   return { hasSetup: existsSync(join(cwd, setupScript)) }

@@ -418,9 +418,19 @@ const userTokenOf = async (database: Database, dependencies: GitHubDependencies,
 
 const chatRepositoryOf = async (database: Database, { workspaceId, chatId }: AgentChat) =>
   (
-    await database.$client<{ repository: string | null; baseBranch: string | null; workingBranch: string | null }[]>`
-      select repository, base_branch as "baseBranch", git_branch as "workingBranch"
-      from chats where workspace_id = ${workspaceId} and id = ${chatId}`
+    await database.$client<
+      {
+        repository: string | null
+        baseBranch: string | null
+        workingBranch: string | null
+        startBranch: string | null
+      }[]
+    >`
+      select chats.repository, chats.base_branch as "baseBranch", chats.git_branch as "workingBranch",
+        origin.git_branch as "startBranch"
+      from chats left join chats origin on origin.workspace_id = chats.workspace_id
+        and origin.id = chats.origin_chat_id and origin.repository = chats.repository
+      where chats.workspace_id = ${workspaceId} and chats.id = ${chatId}`
   )[0]
 
 export const createGitHubCheckouts = (database: Database, dependencies: GitHubDependencies): RepositoryCheckouts => {
@@ -434,13 +444,13 @@ export const createGitHubCheckouts = (database: Database, dependencies: GitHubDe
   }
   return {
     checkoutOf: async (chat) => {
-      const { repository, baseBranch, workingBranch } = (await chatRepositoryOf(database, chat)) ?? {}
+      const { repository, baseBranch, workingBranch, startBranch } = (await chatRepositoryOf(database, chat)) ?? {}
       if (!repository || !baseBranch || !workingBranch) return undefined
       const credentials = await appCredentialsOf(database, dependencies, chat.workspaceId)
       const token = await githubCall(chat.workspaceId, () =>
         repositoryTokenOf(api, credentials, repository, { contents: 'read' }),
       )
-      return { url: api.cloneUrlOf(repository), token, baseBranch, workingBranch }
+      return { url: api.cloneUrlOf(repository), token, baseBranch, workingBranch, ...(startBranch && { startBranch }) }
     },
     pushBranch: async (chat, ownerId, bundleOf) => {
       const { repository, baseBranch, workingBranch } = (await chatRepositoryOf(database, chat)) ?? {}
