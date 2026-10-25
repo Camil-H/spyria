@@ -353,7 +353,10 @@ test('a fork of a dev chat checks out the original working branch: on a new bran
   })
   expect(created).toMatchObject({ status: 201, body: { chatId: expect.any(String) } })
   const source = chatId(String(created.body.chatId))
-  const sourceBranch = String((await stack.chatRow(source))?.gitBranch)
+  const sourceRow = await stack.chatRow(source)
+  expect(sourceRow).toMatchObject({ mode: 'dev', repository: 'acme/app', ownerUserId: alice })
+  const sourceBranch = String(sourceRow?.gitBranch)
+  expect(sourceBranch).toMatch(/^spyria\/fix-totals-[0-9a-f]{6}$/)
   fakeGitHub.commitToBranch('acme/app', {
     branch: sourceBranch,
     files: { 'totals.ts': 'export const total = 2\n' },
