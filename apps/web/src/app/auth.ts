@@ -55,7 +55,9 @@ const resultOf = (popup: Window | null) =>
       resolve(result)
     }
     const receive = (event: MessageEvent) => {
-      if (event.source === popup) settle(event.data)
+      if (event.source !== popup) return
+      popup.close()
+      settle(event.data)
     }
     const settleIfClosed = () => popup.closed && setTimeout(settle, popupPollMilliseconds, { status: 'closed' })
     const closedPoll = setInterval(settleIfClosed, popupPollMilliseconds)
