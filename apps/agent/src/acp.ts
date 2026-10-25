@@ -14,19 +14,23 @@ type Frame = {
   method?: string
   params?: Json
   result?: Json
-  error?: { code?: number; message?: string }
+  error?: { code?: number; message?: string; data?: unknown }
 }
 
 export class AcpError extends Error {
   code?: number
-  constructor(message: string, code?: number) {
+  details?: string
+  constructor(message: string, code?: number, details?: string) {
     super(message)
     this.code = code
+    this.details = details
   }
 }
 
 export const methodNotFound = -32601
+export const internalError = -32603
 export const liveOutputCharacters = 4_000
+export const keptErrorOutputLines = 50
 const permissionPreference = ['allow_always', 'allow_once']
 
 const permissionAnswerOf = (params: Json | undefined) => {
@@ -42,12 +46,16 @@ export const spawnJsonLines = (
   onExit: (code: number | null) => void,
 ) => {
   const [program = '', ...programArguments] = command
-  const child = spawn(program, programArguments, { cwd, env, stdio: ['pipe', 'pipe', 'ignore'] })
+  const child = spawn(program, programArguments, { cwd, env, stdio: ['pipe', 'pipe', 'pipe'] })
+  const errorOutput: string[] = []
+  const closed = Promise.withResolvers<void>()
   const lines = {
     hasExited: false,
     write: (record: Json) => {
       if (!lines.hasExited) child.stdin.write(`${JSON.stringify(record)}\n`)
     },
+    errorOutput: () => [...errorOutput],
+    closed: closed.promise,
     close: () => child.kill(),
   }
   const exit = (code: number | null) => {
@@ -58,6 +66,7 @@ export const spawnJsonLines = (
   child.stdin.on('error', () => {})
   child.on('error', () => exit(null))
   child.on('exit', (code) => exit(code))
+  child.on('close', () => closed.resolve())
   const decoder = new TextDecoder()
   const readLines = lineReaderOf((line) => {
     let record: Json
@@ -69,6 +78,12 @@ export const spawnJsonLines = (
     onRecord(record)
   })
   child.stdout.on('data', (chunk: Buffer) => readLines(decoder.decode(chunk, { stream: true })))
+  const errorDecoder = new TextDecoder()
+  const readErrorLines = lineReaderOf((line) => {
+    errorOutput.push(line)
+    if (errorOutput.length > keptErrorOutputLines) errorOutput.shift()
+  })
+  child.stderr.on('data', (chunk: Buffer) => readErrorLines(errorDecoder.decode(chunk, { stream: true })))
   return lines
 }
 
@@ -87,6 +102,14 @@ export const lineReaderOf = (onLine: (line: string) => void) => {
   }
 }
 
+const detailsOf = (data: unknown) => {
+  const details = typeof data === 'object' && data !== null ? (data as Json).details : data
+  return typeof details === 'string' ? details : undefined
+}
+
+const acpErrorOf = ({ message, code, data }: NonNullable<Frame['error']>) =>
+  new AcpError(message ?? 'The adapter failed', code, detailsOf(data))
+
 export const connectAdapter = (
   launch: AdapterLaunch,
   { onUpdate, onExit, onRequest, onCancelRequest }: AdapterHandlers,
@@ -97,7 +120,7 @@ export const connectAdapter = (
     if (frame.method === undefined) {
       const request = pending.get(Number(frame.id))
       pending.delete(Number(frame.id))
-      if (frame.error) request?.reject(new AcpError(frame.error.message ?? 'The adapter failed', frame.error.code))
+      if (frame.error) request?.reject(acpErrorOf(frame.error))
       else request?.resolve(frame.result ?? {})
     } else if (frame.id !== undefined) {
       const { id, method } = frame
@@ -131,6 +154,8 @@ export const connectAdapter = (
       return request.promise
     },
     notify: (method: string, params: Json) => adapter.write({ jsonrpc: '2.0', method, params }),
+    errorOutput: adapter.errorOutput,
+    closed: adapter.closed,
     close: adapter.close,
   }
 }
