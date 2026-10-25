@@ -13,6 +13,7 @@ import {
   startTestDex,
   startTestGateway,
   startTestPostgres,
+  stopLeftoverZeroCache,
   testGatewayAdmin,
 } from '@spyria/db/testing'
 import {
@@ -48,7 +49,13 @@ const sweptListeners = () =>
     .split('\n')
     .filter(Boolean)
 
+const stopWorkerZeroCaches = () =>
+  Promise.allSettled(
+    Array.from({ length: maximumWorkerCount }, (_, index) => stopLeftoverZeroCache(zeroCachePortOf(index))),
+  )
+
 const sweepLeftovers = async () => {
+  await stopWorkerZeroCaches()
   for (const processId of sweptListeners()) process.kill(Number(processId), 'SIGTERM')
   for (let attempt = 1; sweptListeners().length > 0; attempt++) {
     if (attempt === 100) throw new Error(`Ports ${sweptPorts.join(', ')} are still in use`)
@@ -140,5 +147,6 @@ export default async function globalSetup() {
     stopSsoVite()
     stopSsoServer()
     removeWorkerHosts()
+    await stopWorkerZeroCaches()
   }
 }

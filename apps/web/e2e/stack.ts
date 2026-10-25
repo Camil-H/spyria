@@ -17,6 +17,7 @@ import {
   prepareSeededGatewayKeys,
   shareTestCrm,
   startZeroCache,
+  stopLeftoverZeroCache,
   testGatewayAt,
 } from '@spyria/db/testing'
 import { createZeroStore, type WorkspaceSession } from '@spyria/db/zero-store'
@@ -168,6 +169,7 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
       const releaseServerDatabase = () =>
         fetch(`${serverUrl}/test/release-database?db=${workerDatabaseNameOf(index)}`, { method: 'POST' })
       await releaseServerDatabase()
+      await stopLeftoverZeroCache(zeroCachePortOf(index))
       await dropDatabase(workerDatabaseNameOf(index))
       const testDatabase = await createTestDatabase(templateDatabaseName, workerDatabaseNameOf(index))
       let epochNumber = 0
