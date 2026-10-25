@@ -390,7 +390,7 @@ test('a fork of a dev chat checks out the original working branch: on a new bran
     values (${acme}, ${source}, ${`message-${crypto.randomUUID()}`}, 1, 'step', ${alice}, 'pull_request',
       ${JSON.stringify(card)}::jsonb, now())`
   const forkAs = async (member: typeof aliceInAcme) => {
-    const forked = chatId(`chat-${crypto.randomUUID()}`)
+    const forked = chatId(crypto.randomUUID())
     const forking = { workspaceId: acme, id: `message-${crypto.randomUUID()}`, chatId: forked, sourceChatId: source }
     expect(await stack.mutate(member, 'conversation.forkChat', forking)).toEqual(succeeded)
     await stack.mutate(member, 'conversation.updateChatRouting', {
