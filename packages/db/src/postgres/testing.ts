@@ -209,7 +209,8 @@ export const startZeroCache = async ({
   await freeZeroCachePorts([port, port + 1])
   const replicaFile = join(tmpdir(), `spyria-zero-${appId}.db`)
   for (const suffix of ['', '-wal', '-shm', '-wal2']) rmSync(`${replicaFile}${suffix}`, { force: true })
-  const logFile = openSync(join(tmpdir(), `spyria-zero-${appId}.log`), 'w')
+  const logPath = join(tmpdir(), `spyria-zero-${appId}.log`)
+  const logFile = openSync(logPath, 'w')
   const zeroCache = spawn('node', [zeroCacheCli], {
     detached: true,
     stdio: ['ignore', logFile, 'pipe'],
@@ -250,7 +251,7 @@ export const startZeroCache = async ({
     }
     await sleep(50)
   }
-  return { url, exited, stop }
+  return { url, exited, stop, logPath }
 }
 
 const gatewayImage = 'maximhq/bifrost:v2.3.2@sha256:f5b18826349fe9e1c402c10d19f1cbb5567a3c800ad928580d07f72e69106ec7'

@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { type Browser, type BrowserContext, test as base } from '@playwright/test'
 import {
@@ -36,6 +37,7 @@ type PairedHost = {
 export type WorkerStack = {
   databaseName: string
   zeroCacheURL: string
+  zeroCacheLogPath: string
   database: Database
   reset: (options: ResetOptions) => Promise<void>
   stopRuntimeHost: () => Promise<void>
@@ -149,7 +151,7 @@ type TestOptions = ResetOptions & {
   signedInAs: string | null
   tokenSeconds: number | undefined
   resetStack: undefined
-  pendingQueriesOnFailure: undefined
+  diagnosticsOnFailure: undefined
   agentScript: (chatId: string, script: AgentScript) => Promise<void>
   failRuntimeCreation: (isFailing: boolean) => Promise<void>
   refuseNextMessage: () => Promise<void>
@@ -287,6 +289,7 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
         await use({
           databaseName: testDatabase.name,
           zeroCacheURL: zeroCache.url,
+          zeroCacheLogPath: zeroCache.logPath,
           database: testDatabase.database,
           reset: async (options) => {
             await keepWarmRuntimes()
@@ -339,10 +342,14 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
     },
     { auto: true, timeout: 120_000 },
   ],
-  pendingQueriesOnFailure: [
-    async ({ browser, context }, use, testInfo) => {
+  diagnosticsOnFailure: [
+    async ({ browser, context, workerStack }, use, testInfo) => {
       await use(undefined)
       if (testInfo.status === testInfo.expectedStatus) return
+      await testInfo.attach('zero-cache-log', {
+        body: (await readFile(workerStack.zeroCacheLogPath, 'utf8').catch(String)).split('\n').slice(-400).join('\n'),
+        contentType: 'text/plain',
+      })
       const pages = [...new Set([context, ...browser.contexts()])].flatMap((each) => each.pages())
       const pendingByPage = await Promise.all(
         pages.map(async (page) => ({
