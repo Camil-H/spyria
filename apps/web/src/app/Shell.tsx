@@ -32,7 +32,7 @@ const ChatRoute = ({ commands }: { commands: Application['conversationCommands']
     <div className="flex h-full">
       <ChatView
         headerActions={<PanelToggle />}
-        runtimeStatus={({ canRetry, canManage, hasActiveTurn }) => (
+        runtimeStatus={({ canRetry, canManage, isAgentWorking }) => (
           <RuntimeStatus
             workspaceId={workspaceId}
             chatId={chatId}
@@ -40,7 +40,7 @@ const ChatRoute = ({ commands }: { commands: Application['conversationCommands']
             menu={
               canManage
                 ? (status) => (
-                    <RuntimeMenu workspaceId={workspaceId} chatId={chatId} hasActiveTurn={hasActiveTurn}>
+                    <RuntimeMenu workspaceId={workspaceId} chatId={chatId} isAgentWorking={isAgentWorking}>
                       {status}
                     </RuntimeMenu>
                   )
