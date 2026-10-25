@@ -24,6 +24,7 @@ export const renewClaimCode = async (
     if (!canRenewClaim(host)) throw new CodeNotRenewable()
     await runtimeHosts.save({ ...host, status: 'waiting', claimExpiresAt: now + claimLifetimeMilliseconds })
     await runtimeHosts.setSecretHash(host, 'claimCode', claimCodeHash)
+    await runtimeHosts.setSecretHash(host, 'token', null)
   })
   return { code }
 }

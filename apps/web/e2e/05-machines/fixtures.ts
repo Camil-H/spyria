@@ -30,7 +30,7 @@ type Hosts = {
   fake: (url: string, system: Partial<HostSystem>) => FakeHost
 }
 
-type FakeMachine = { closed: Promise<string>; heartbeat: (signedIn: string[]) => void }
+type FakeMachine = { closed: Promise<string>; heartbeat: (signedIn: string[]) => void; disconnect: () => void }
 type PairingOptions = { personal?: boolean; signedIn?: string[] }
 
 export const hostTest = base.extend<{ hosts: Hosts; pair: (url: string, options: PairingOptions) => FakeMachine }>({
@@ -131,6 +131,7 @@ export const hostTest = base.extend<{ hosts: Hosts; pair: (url: string, options:
         heartbeat: (heartbeatSignedIn) =>
           send({ type: 'heartbeat', memoryFreeBytes: 8 * 1024 ** 3, running: 0, signedIn: heartbeatSignedIn }),
         closed: new Promise((resolve) => socket.addEventListener('close', (event) => resolve(event.reason))),
+        disconnect: () => socket.close(),
       }
     })
     for (const socket of sockets) socket.close()

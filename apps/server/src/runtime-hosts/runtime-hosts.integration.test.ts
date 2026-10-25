@@ -446,6 +446,37 @@ test('a member adds one machine of their own under a lock on their membership; a
   expect((await adding).status).toBe(201)
 })
 
+test('an offline machine gets a new command from its owner, which revokes its old token and pairs it again; an offline workspace host does not', async () => {
+  await database.$client`update runtime_hosts set removed_at = now() where owner_id is not null`
+  const { id, token, host } = await pairedMachine(bobInAcme)
+  expect(await renewCode(bobInAcme, id)).toMatchObject({ status: 400, body: { error: 'code_not_renewable' } })
+  host.socket.close()
+  await waitFor(async () => (await hostRow(id)).status === 'offline')
+  expect(await renewCode(aliceInAcme, id)).toMatchObject({ status: 404, body: { error: 'host_not_found' } })
+
+  const renewed = await renewCode(bobInAcme, id)
+  expect(renewed.status).toBe(200)
+  expect(await hostRow(id)).toMatchObject({ status: 'waiting', token_hash: null })
+  const oldToken = await connectFakeHost()
+  oldToken.send({ type: 'hello', token, system: hostSystem, personal: true, signedIn: [] })
+  expect((await oldToken.closed).reason).toBe('This host is not registered')
+  const { host: claimingHost, token: newToken } = await claim(renewed.body?.code ?? '')
+  claimingHost.socket.close()
+  expect(newToken).toBeDefined()
+  const repaired = await connectFakeHost()
+  repaired.send({ type: 'hello', token: newToken, system: hostSystem, personal: true, signedIn: [] })
+  await waitFor(async () => (await hostRow(id)).status === 'online')
+  await database.$client`update runtime_hosts set removed_at = now() where owner_id is not null`
+
+  const workspaceHost = await pairedHost('Offline box')
+  workspaceHost.host.socket.close()
+  await waitFor(async () => (await hostRow(workspaceHost.id)).status === 'offline')
+  expect(await renewCode(aliceInAcme, workspaceHost.id)).toMatchObject({
+    status: 400,
+    body: { error: 'code_not_renewable' },
+  })
+})
+
 test('a machine is read and removed by its owner only, and admins see only how many members use one', async () => {
   await database.$client`update runtime_hosts set removed_at = now() where owner_id is not null`
   const { id, host } = await pairedMachine(bobInAcme)
