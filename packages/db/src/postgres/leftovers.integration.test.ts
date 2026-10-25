@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { spawnSync } from 'node:child_process'
 import postgres from 'postgres'
-import { databaseUrlOf, isLeftoverTestDockerObject, removeLeftoversOfKilledRuns } from './testing.ts'
+import { databaseUrlOf, dropDatabase, isLeftoverTestDockerObject, removeLeftoversOfKilledRuns } from './testing.ts'
 
 const docker = (...args: string[]) => spawnSync('docker', args, { stdio: ['ignore', 'pipe', 'pipe'] })
 const hourAgo = new Date(Date.now() - 60 * 60_000).toISOString()
@@ -49,5 +49,26 @@ test('the sweep drops idle test databases and test slots and leaves similar name
     for (const database of [testDatabase, similarDatabase]) await admin.unsafe(`drop database if exists "${database}"`)
     await admin.end()
     docker('volume', 'rm', freshVolume, similarVolume)
+  }
+})
+
+test('dropping a test database first drops the replication slots a stopped zero-cache left in it', async () => {
+  const name = `spyria_test_${crypto.randomUUID().replaceAll('-', '')}`
+  const slot = `spyriatest_${name.slice(-12)}`
+  const admin = postgres(databaseUrlOf('postgres'), { onnotice: () => {} })
+  try {
+    await admin.unsafe(`create database "${name}"`)
+    const replicated = postgres(databaseUrlOf(name), { onnotice: () => {} })
+    await replicated`select pg_create_logical_replication_slot(${slot}, 'pgoutput')`
+    await replicated.end()
+
+    await dropDatabase(name)
+
+    expect(await admin`select 1 from pg_database where datname = ${name}`).toHaveLength(0)
+    expect(await admin`select 1 from pg_replication_slots where slot_name = ${slot}`).toHaveLength(0)
+  } finally {
+    await admin`select pg_drop_replication_slot(slot_name) from pg_replication_slots where slot_name = ${slot}`
+    await admin.unsafe(`drop database if exists "${name}"`)
+    await admin.end()
   }
 })
