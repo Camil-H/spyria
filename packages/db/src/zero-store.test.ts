@@ -191,3 +191,18 @@ test('a chat window lists each shown root once with its replies and thread repli
   expect(windowMessagesIn(roots)[0]).toBe(window[0])
   expect(window[3]).toBe(answer)
 })
+
+test('a workspace whose zero-cache answers nothing lists every materialized query as pending, and none once closed', async () => {
+  const store = createZeroStore({
+    memberId: alice,
+    sessions: [{ workspaceId: workspaceId('workspace-acme'), token: 'token', expiresAt: Date.now() + 60_000 }],
+    renew: async () => undefined,
+    cacheURL: 'http://localhost:1',
+    kvStore: 'mem',
+  })
+  const pending = store.pendingQueries()['workspace-acme'] ?? []
+  expect(pending).toContain('workspaces')
+  expect(pending).toContain('memberships')
+  await store.close()
+  expect(store.pendingQueries()).toEqual({})
+})

@@ -148,6 +148,7 @@ type TestOptions = ResetOptions & {
   signedInAs: string | null
   tokenSeconds: number | undefined
   resetStack: undefined
+  pendingQueriesOnFailure: undefined
   agentScript: (chatId: string, script: AgentScript) => Promise<void>
   failRuntimeCreation: (isFailing: boolean) => Promise<void>
   refuseNextMessage: () => Promise<void>
@@ -335,6 +336,26 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
       await use(undefined)
     },
     { auto: true, timeout: 120_000 },
+  ],
+  pendingQueriesOnFailure: [
+    async ({ browser, context }, use, testInfo) => {
+      await use(undefined)
+      if (testInfo.status === testInfo.expectedStatus) return
+      const pages = [...new Set([context, ...browser.contexts()])].flatMap((each) => each.pages())
+      const pendingByPage = await Promise.all(
+        pages.map(async (page) => ({
+          url: page.url(),
+          pending: await page
+            .evaluate(() => (window as { spyriaPendingQueries?: () => unknown }).spyriaPendingQueries?.() ?? null)
+            .catch((error: Error) => error.message),
+        })),
+      )
+      await testInfo.attach('pending-zero-queries', {
+        body: JSON.stringify(pendingByPage, null, 2),
+        contentType: 'application/json',
+      })
+    },
+    { auto: true },
   ],
   agentScript: async ({ workerStack }, use) => {
     await use(async (chatId, script) => {
