@@ -33,6 +33,7 @@ export type RateBudgets = Record<RateLimitName, Budget>
 const limitByMutation: Record<string, RateLimitName> = {
   'workspace.inviteMember': 'invites',
   'conversation.retryAgent': 'prompts',
+  'conversation.restartSession': 'runtimeCreation',
   'conversation.startRuntimeFromMessage': 'runtimeCreation',
   'conversation.forkChat': 'runtimeCreation',
 }

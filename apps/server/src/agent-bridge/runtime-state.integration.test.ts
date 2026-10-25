@@ -97,6 +97,44 @@ test('Stop interrupts the agent, ends the turn once with a notice naming the mem
   expect(relay.interrupts).toHaveLength(1)
 })
 
+test('Restart session ends a running turn and reloads the same session; Stop runtime puts the runtime to sleep until the next prompt; both need session.configure', async () => {
+  const { relay } = await agentHost()
+  const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'prompter' }] })
+  const first = await prompt(chat, 'Hello')
+  await answered(first)
+  await turnIs(chat, null)
+  const conversationId = await conversationIdOf(chat)
+
+  for (const action of ['restartSession', 'stopRuntime']) {
+    expect(await command(bobInAcme, action, chat)).toEqual(missingPermission('session.configure'))
+    expect(await command(aliceInGlobex, action, chat)).toEqual(missingPermission('session.configure'))
+  }
+  expect(await jobStatesOf('agent.restart-session', { chatId: chat })).toEqual([])
+  expect((await runtimeOf(chat)).state).toBe('running')
+
+  const working = await prompt(chat, 'stub:long Keep working')
+  await commandShown(working)
+  expect(await command(aliceInAcme, 'restartSession', chat)).toEqual(succeeded)
+  await jobDone('agent.restart-session', { chatId: chat })
+  await endsWith(working, 'Stopped by Alice')
+  expect(relay.requests.filter(({ path }) => path.endsWith('/restart')).map(({ path }) => path)).toEqual([
+    `/api/conversations/${conversationId}/restart`,
+  ])
+  expect(await conversationIdOf(chat)).toBe(conversationId)
+  const afterRestart = await prompt(chat, 'After the restart')
+  await answered(afterRestart)
+  expect(await repliesTo(afterRestart)).toEqual([agentReply(3)])
+
+  const sleeping = await prompt(chat, 'stub:long Keep working')
+  await commandShown(sleeping)
+  expect(await command(aliceInAcme, 'stopRuntime', chat)).toEqual(succeeded)
+  await turnIs(chat, null)
+  await waitFor(async () => (await runtimeOf(chat)).state === 'stopped', 15_000)
+  const woken = await prompt(chat, 'Wake up')
+  await answered(woken)
+  expect((await runtimeOf(chat)).state).toBe('running')
+})
+
 test('a prompt whose turn was stopped while it was being sent is interrupted at once', async () => {
   let firstPromptId = ''
   const { relay } = await agentHost('Agent host', (relay) => ({

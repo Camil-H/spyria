@@ -34,7 +34,7 @@ export const ChatView = ({
   frozenActions,
 }: {
   headerActions: ReactNode
-  runtimeStatus: (canRetry: boolean) => ReactNode
+  runtimeStatus: (access: { canRetry: boolean; canManage: boolean; hasActiveTurn: boolean }) => ReactNode
   hasLlmKey: boolean
   blockedNotice: ReactNode
   budgetNotice: ReactNode
@@ -92,7 +92,11 @@ export const ChatView = ({
       step?.type === 'question' && step.approval ? [`${step.approval.tool} (${step.approval.server})`] : [],
     ),
   )
-  const status = runtimeStatus(conversation.canPost)
+  const status = runtimeStatus({
+    canRetry: conversation.canPost,
+    canManage: conversation.canConfigure,
+    hasActiveTurn: conversation.hasActiveTurn,
+  })
   const branch = live.workspace?.branch ?? conversation.gitBranch
   const { Icon: ChatTypeIcon, label: chatTypeLabel } = chatTypeIconOf(conversation.type)
   return (

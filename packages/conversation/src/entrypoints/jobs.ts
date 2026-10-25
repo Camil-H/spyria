@@ -33,6 +33,7 @@ import { publishBranch, recordPullRequest } from '../operations/publish-branch.t
 import { readRuntimeMedia, readWorkspace, snapshotWorkspace, wakeWorkspace } from '../operations/read-workspace.ts'
 import { recordAgentEvent } from '../operations/record-agent-event.ts'
 import { answerToolApproval } from '../operations/request-tool-approval.ts'
+import { restartAgentSession } from '../operations/restart-session.ts'
 import { promptWaitingChats } from '../operations/retry-agent.ts'
 import { interruptAgent } from '../operations/stop-agent.ts'
 
@@ -44,6 +45,10 @@ const startSessionPayload = z.object({ chatId: z.pipe(id, z.transform(chatId)) }
 const interruptPayload = z.object({
   chatId: z.pipe(id, z.transform(chatId)),
   promptId: z.pipe(id, z.transform(messageId)),
+  memberId: z.pipe(id, z.transform(memberId)),
+})
+const restartSessionPayload = z.object({
+  chatId: z.pipe(id, z.transform(chatId)),
   memberId: z.pipe(id, z.transform(memberId)),
 })
 const memberRemovedPayload = z.object({
@@ -103,6 +108,8 @@ export const createAgentHandlers = ({
         startAgentSession(dependenciesOf(workspaceId), { workspaceId, ...startSessionPayload.parse(payload) }),
       [agentJobTypes.interrupt]: ({ workspaceId, payload }: AgentJob) =>
         interruptAgent(dependenciesOf(workspaceId), { workspaceId, ...interruptPayload.parse(payload) }),
+      [agentJobTypes.restartSession]: ({ workspaceId, payload }: AgentJob) =>
+        restartAgentSession(dependenciesOf(workspaceId), { workspaceId, ...restartSessionPayload.parse(payload) }),
       [agentJobTypes.sweep]: ({ workspaceId }: AgentJob) =>
         sweepAgentTurns(dependenciesOf(workspaceId), { workspaceId, now: now() }),
       [workspaceJobTypes.memberRemoved]: ({ workspaceId, payload }: AgentJob) =>

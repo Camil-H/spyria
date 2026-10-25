@@ -18,10 +18,12 @@ import { leaveChat } from '../operations/leave-chat.ts'
 import { markChatRead } from '../operations/mark-chat-read.ts'
 import { markThreadRead } from '../operations/mark-thread-read.ts'
 import { removeMember } from '../operations/remove-member.ts'
+import { restartSession } from '../operations/restart-session.ts'
 import { retryAgent } from '../operations/retry-agent.ts'
 import { sendMessage } from '../operations/send-message.ts'
 import { startRuntimeFromMessage } from '../operations/start-runtime-from-message.ts'
 import { stopAgent } from '../operations/stop-agent.ts'
+import { stopRuntime } from '../operations/stop-runtime.ts'
 import { updateChatRouting } from '../operations/update-chat-routing.ts'
 
 const id = z.string().check(z.minLength(1))
@@ -71,6 +73,13 @@ export const conversationMutators = defineMutators({
     ),
     stopAgent: defineMutator(chatArguments, async ({ tx, ctx, args }) => {
       if (tx.location === 'server') await stopAgent(dependenciesOf(tx, ctx, args), { ...args, memberId: ctx.userId })
+    }),
+    restartSession: defineMutator(chatArguments, async ({ tx, ctx, args }) => {
+      if (tx.location === 'server')
+        await restartSession(dependenciesOf(tx, ctx, args), { ...args, memberId: ctx.userId })
+    }),
+    stopRuntime: defineMutator(chatArguments, async ({ tx, ctx, args }) => {
+      if (tx.location === 'server') await stopRuntime(dependenciesOf(tx, ctx, args), { ...args, memberId: ctx.userId })
     }),
     retryAgent: defineMutator(chatArguments, async ({ tx, ctx, args }) => {
       if (tx.location === 'server')
