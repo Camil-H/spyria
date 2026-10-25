@@ -34,6 +34,19 @@ const effortOption = isCodex
   : { id: 'effort', name: 'Effort', levels: ['default', 'low', 'medium', 'high', 'xhigh', 'max'] }
 const modes = process.env.STUB_MODES?.split(',') ?? ['default', 'plan', 'bypassPermissions']
 const sessions = new Map()
+const deadSessions = new Set()
+const claudeExited = {
+  code: -32603,
+  message: 'Internal error',
+  data: { details: 'The Claude Agent process exited unexpectedly' },
+}
+const dieAsClaude = (id, sessionId) => {
+  process.stderr.write(
+    `Claude Code started with ${process.env.CLAUDE_CODE_OAUTH_TOKEN ?? 'no token'}\nretrying with sk-ant-oat01-stubtoken0123456789\nClaude Code process exited with code 1\n`,
+  )
+  deadSessions.add(sessionId)
+  send({ id, error: claudeExited })
+}
 const answers = new Map()
 const queues = new Map()
 let nextRequestId = 0
@@ -466,6 +479,7 @@ const gatewayTurn = async (session, text, state, update) => {
 }
 const turn = async (id, { sessionId, prompt }) => {
   const session = sessions.get(sessionId)
+  if (deadSessions.has(sessionId)) return send({ id, error: claudeExited })
   session.prompts += 1
   const state = { cancelled: false, abort: new AbortController() }
   session.current = state
@@ -501,6 +515,14 @@ const turn = async (id, { sessionId, prompt }) => {
       return finish('end_turn')
     }
     if (has('crash')) process.exit(3)
+    if (has('die-early') && !existsSync(`${stateDirectory}/died-${sessionId}`)) {
+      writeFileSync(`${stateDirectory}/died-${sessionId}`, '')
+      return dieAsClaude(id, sessionId)
+    }
+    if (has('die')) {
+      await say('Working on it… ')
+      return dieAsClaude(id, sessionId)
+    }
     const branch = text.match(/stub:branch (\S+)/)?.[1]
     if (branch)
       for (const git of [
@@ -845,7 +867,7 @@ const handlers = {
     canElicit = Boolean(clientCapabilities?.elicitation?.form)
     return {
       protocolVersion: 1,
-      agentCapabilities: { sessionCapabilities: { resume: {} } },
+      agentCapabilities: { loadSession: true, sessionCapabilities: { resume: {} } },
       agentInfo: { name: 'stub-acp-agent', version: '0.0.2' },
       authMethods: [],
     }
@@ -858,6 +880,18 @@ const handlers = {
     if (!sessions.has(sessionId) && !existsSync(sessionFile(sessionId)))
       throw { code: -32002, message: 'Resource not found' }
     if (!sessions.has(sessionId)) opened(sessionId, savedOf(sessionFile(sessionId)))
+    return sessionResultOf(sessions.get(sessionId))
+  },
+  'session/load': ({ sessionId }) => {
+    if (!existsSync(sessionFile(sessionId))) throw { code: -32002, message: 'Resource not found' }
+    opened(sessionId, savedOf(sessionFile(sessionId)))
+    send({
+      method: 'session/update',
+      params: {
+        sessionId,
+        update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'REPLAYED' } },
+      },
+    })
     return sessionResultOf(sessions.get(sessionId))
   },
   'session/set_mode': ({ sessionId, modeId }) => {
