@@ -192,7 +192,7 @@ test('a chat window lists each shown root once with its replies and thread repli
   expect(window[3]).toBe(answer)
 })
 
-test('a workspace whose zero-cache answers nothing lists every materialized query as pending, and none once closed', async () => {
+test('a workspace whose zero-cache answers nothing reports every materialized query as pending with its connection state, and nothing once closed', async () => {
   const store = createZeroStore({
     memberId: alice,
     sessions: [{ workspaceId: workspaceId('workspace-acme'), token: 'token', expiresAt: Date.now() + 60_000 }],
@@ -200,9 +200,15 @@ test('a workspace whose zero-cache answers nothing lists every materialized quer
     cacheURL: 'http://localhost:1',
     kvStore: 'mem',
   })
-  const pending = store.pendingQueries()['workspace-acme'] ?? []
-  expect(pending).toContain('workspaces')
-  expect(pending).toContain('memberships')
+  const { cacheURL, workspaces } = await store.diagnostics()
+  expect(cacheURL).toBe('http://localhost:1')
+  const acme = workspaces['workspace-acme']
+  expect(acme?.pending).toContain('workspaces')
+  expect(acme?.pending).toContain('memberships')
+  expect(typeof acme?.state).toBe('object')
+  expect(typeof acme?.clientID).toBe('string')
   await store.close()
-  expect(store.pendingQueries()).toEqual({})
+  const closed = await store.diagnostics()
+  expect(closed.workspaces).toEqual({})
+  expect(closed.connectionEvents.map(({ event }) => event)).toContain('closed by the store')
 })
