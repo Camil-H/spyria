@@ -199,7 +199,7 @@ test('the purge erases every row of the workspace with its chat history, gateway
 
 test('once the last workspace of the instance is purged, its domain is free and a workspace can be created again', async () => {
   const instance = await createTestDatabase()
-  const instanceWorker = startJobWorker(instance.database, { pollIntervalMilliseconds: 5, cleanupPollMilliseconds: 20 })
+  let instanceWorker: ReturnType<typeof startJobWorker> | undefined
   try {
     const sql = instance.database.$client
     await sql`truncate workspaces, users cascade`
@@ -215,12 +215,13 @@ test('once the last workspace of the instance is purged, its domain is free and 
       insert into jobs (workspace_id, id, type, payload, run_at, attempts, state)
       values ('umbrella', 'purge', 'workspace.purge', '{"stage":"release","actorId":"member-erin"}', now(), 0, 'queued')`
     expect(await hasNoWorkspace(sql)).toBe(false)
+    instanceWorker = startJobWorker(instance.database, { pollIntervalMilliseconds: 5, cleanupPollMilliseconds: 20 })
     await waitFor(async () => (await sql`select 1 from workspaces`).length === 0)
     expect(await hasNoWorkspace(sql)).toBe(true)
     expect(await sql`select 1 from sso_domains`).toHaveLength(0)
     expect(await sql`select 1 from users`).toHaveLength(0)
   } finally {
-    await instanceWorker.stop()
+    await instanceWorker?.stop()
     await instance.drop()
   }
 })
