@@ -225,7 +225,7 @@ export const createAgentBridge = ({
       })
       if (target === null) return
       if (closedPromptId && target?.promptId !== closedPromptId) endTurn(chat, closedPromptId)
-      if (!target) return
+      if (!target || sockets.has(keyOf(chat))) return
       await ensureOpen(chat, target.conversation, target.promptId)
       const { promptId, outcome } = target
       if (outcome)

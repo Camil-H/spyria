@@ -48,6 +48,29 @@ const log = (text: string) => {
   process.stdout.write(text)
   appendFileSync(logFile, text)
 }
+const testProcessCommands = [
+  `${repositoryRoot}apps/agent/src/main.ts`,
+  `${repositoryRoot}apps/agent/fixtures/stub-acp-agent.mjs`,
+  '@rocicorp/zero/out/',
+]
+const stopLeftoverTestProcesses = (step: string) => {
+  const leftovers = Bun.spawnSync(['ps', '-eo', 'pid=,args='])
+    .stdout.toString()
+    .split('\n')
+    .map((line) => line.trim().split(/\s+/))
+    .filter(([, ...command]) => {
+      const commandLine = command.join(' ')
+      return commandLine.includes(repositoryRoot) && testProcessCommands.some((each) => commandLine.includes(each))
+    })
+  if (leftovers.length === 0) return
+  log(`\n${step} left ${leftovers.length} test processes running; stopping them:\n`)
+  for (const [processId = '', ...command] of leftovers) {
+    log(`  ${processId} ${command.join(' ').slice(0, 200)}\n`)
+    try {
+      process.kill(Number(processId), 'SIGKILL')
+    } catch {}
+  }
+}
 log(`${checkName} on ${fingerprint} (HEAD ${head}, tree ${tree}) at ${startedAt.toISOString()}\n`)
 for (const step of steps) {
   log(`\n▶ bun run ${step}\n`)
@@ -70,6 +93,7 @@ for (const step of steps) {
     for (const reader of readers) void reader.cancel()
   }
   results.push({ step, exitCode, seconds: Math.round((performance.now() - started) / 100) / 10 })
+  stopLeftoverTestProcesses(step)
   if (exitCode !== 0) break
 }
 const exitCode = results.at(-1)?.exitCode ?? 1

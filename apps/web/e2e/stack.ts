@@ -1,5 +1,9 @@
+import { spawnSync } from 'node:child_process'
+import { readFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { type Browser, type BrowserContext, test as base } from '@playwright/test'
+import { type Browser, type BrowserContext, test as base, type Page } from '@playwright/test'
 import {
   type Database,
   memberships,
@@ -14,14 +18,17 @@ import {
 import {
   createTestDatabase,
   dropDatabase,
+  httpStatusOf,
   prepareSeededGatewayKeys,
+  processTable,
   shareTestCrm,
   startZeroCache,
+  stopLeftoverZeroCache,
   testGatewayAt,
 } from '@spyria/db/testing'
 import { createZeroStore, type WorkspaceSession } from '@spyria/db/zero-store'
 import { memberId, workspaceId } from '@spyria/kernel'
-import { gatewayUrl, serverUrl, templateDatabaseName, viteUrl, zeroCachePortOf } from './stack-ports.ts'
+import { gatewayUrl, serverUrl, ssoServerUrl, templateDatabaseName, viteUrl, zeroCachePortOf } from './stack-ports.ts'
 
 export { expect } from '@playwright/test'
 
@@ -35,6 +42,7 @@ type PairedHost = {
 export type WorkerStack = {
   databaseName: string
   zeroCacheURL: string
+  zeroCacheLogPath: string
   database: Database
   reset: (options: ResetOptions) => Promise<void>
   stopRuntimeHost: () => Promise<void>
@@ -98,6 +106,19 @@ const signIn = async (
   if (!signedIn.ok()) throw new Error(`The test sign-in failed with ${signedIn.status()}`)
 }
 
+const consoleByPage = new WeakMap<Page, string[]>()
+const captureConsole = (context: BrowserContext) => {
+  const capture = (page: Page) =>
+    page.on('console', (message) => {
+      const lines = consoleByPage.get(page) ?? []
+      lines.push(`${new Date().toISOString()} ${message.type()} ${message.text()}`)
+      if (lines.length > 500) lines.shift()
+      consoleByPage.set(page, lines)
+    })
+  for (const page of context.pages()) capture(page)
+  context.on('page', capture)
+}
+
 export const openPageAs = async (
   browser: Browser,
   workerStack: WorkerStack,
@@ -105,6 +126,7 @@ export const openPageAs = async (
   baseURL = viteUrl,
 ) => {
   const context = await browser.newContext({ baseURL, timezoneId: 'UTC' })
+  captureConsole(context)
   await signIn(context, workerStack, user)
   const page = await context.newPage()
   await page.goto('/')
@@ -148,6 +170,7 @@ type TestOptions = ResetOptions & {
   signedInAs: string | null
   tokenSeconds: number | undefined
   resetStack: undefined
+  diagnosticsOnFailure: undefined
   agentScript: (chatId: string, script: AgentScript) => Promise<void>
   failRuntimeCreation: (isFailing: boolean) => Promise<void>
   refuseNextMessage: () => Promise<void>
@@ -157,16 +180,80 @@ type TestOptions = ResetOptions & {
   heldCommand: (name: string) => string
 }
 
+const repositoryRoot = new URL('../../../', import.meta.url).pathname
+const stackState = async () => {
+  const serverLogs = await Promise.all(
+    [serverUrl, ssoServerUrl].map(async (url) => ({
+      url,
+      health: await httpStatusOf(`${url}/health`),
+      lastLinesNotRequests: (
+        await readFile(join(tmpdir(), `spyria-e2e-${new URL(url).port}.log`), 'utf8').catch(String)
+      )
+        .split('\n')
+        .filter((line) => line && !line.includes('"event.name":"http.request"'))
+        .slice(-60),
+    })),
+  )
+  const dex = spawnSync('docker', ['logs', '--tail', '80', 'spyria-test-dex'])
+  return {
+    servers: serverLogs,
+    dexLog: `${dex.stdout ?? ''}${dex.stderr ?? ''}`.split('\n').filter(Boolean),
+    processes: processTable().filter(
+      ({ command }) => command.includes(repositoryRoot) || command.includes('@rocicorp/zero'),
+    ),
+  }
+}
+
+const postgresActivityOf = async (database: Database) => {
+  const sql = database.$client
+  const query = async <Row>(statement: Promise<Row[]>) => statement.catch((error: Error) => error.message)
+  return {
+    sessions: await query<object>(sql`
+      select pid, application_name, backend_type, state, wait_event_type, wait_event,
+        pg_blocking_pids(pid) as blocked_by,
+        extract(epoch from now() - xact_start)::int as transaction_seconds,
+        extract(epoch from now() - state_change)::int as since_state_change_seconds,
+        left(query, 300) as query
+      from pg_stat_activity where datname = current_database() order by xact_start nulls last`),
+    locksWaiting: await query<object>(sql`
+      select locks.pid, locks.locktype, locks.relation::regclass::text as relation, locks.mode
+      from pg_locks locks join pg_stat_activity activity using (pid)
+      where activity.datname = current_database() and not locks.granted`),
+    replicationSlots: await query<object>(sql`
+      select slot_name, active, active_pid, pg_current_wal_lsn() - confirmed_flush_lsn as lag_bytes
+      from pg_replication_slots where database = current_database()`),
+  }
+}
+
+const serverRequestsSince = async (startedAt: string) => {
+  const logs = await Promise.all(
+    [serverUrl, ssoServerUrl].map((url) =>
+      readFile(join(tmpdir(), `spyria-e2e-${new URL(url).port}.log`), 'utf8').catch(String),
+    ),
+  )
+  return logs
+    .flatMap((log) => log.split('\n'))
+    .filter(
+      (line) =>
+        /"url\.path":"\/api\/(query|mutate)"/.test(line) &&
+        (line.match(/"timestamp":"([^"]+)"/)?.[1] ?? '') >= startedAt,
+    )
+}
+
 export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
   signedInAs: [aliceMemberId, { option: true }],
   tokenSeconds: [undefined, { option: true }],
   fakeBootHold: [undefined, { option: true }],
   workerStack: [
     async ({ browserName: _ }, use, workerInfo) => {
-      const index = workerInfo.parallelIndex
-      const releaseServerDatabase = () =>
-        fetch(`${serverUrl}/test/release-database?db=${workerDatabaseNameOf(index)}`, { method: 'POST' })
-      await releaseServerDatabase()
+      const index = workerInfo.workerIndex
+      const stackId = crypto.randomUUID()
+      const releaseServerDatabase = (ownership: 'claim' | 'release') =>
+        fetch(`${serverUrl}/test/release-database?db=${workerDatabaseNameOf(index)}&${ownership}=${stackId}`, {
+          method: 'POST',
+        })
+      await releaseServerDatabase('claim')
+      await stopLeftoverZeroCache(zeroCachePortOf(index))
       await dropDatabase(workerDatabaseNameOf(index))
       const testDatabase = await createTestDatabase(templateDatabaseName, workerDatabaseNameOf(index))
       let epochNumber = 0
@@ -189,7 +276,13 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
         options: ResetOptions = { runtimeHost: false, warmRuntimes: false, sharedCrm: true },
       ) => {
         const epoch = `epoch-${workerInfo.workerIndex}-${++epochNumber}`
-        const writeSeededGatewayKeys = await prepareSeededGatewayKeys(testGateway, seededGatewayKeys)
+        const [gatewaySync] = await testDatabase.database.$client<{ isPending: boolean }[]>`
+          select exists(select 1 from jobs where type = 'profile.gateway-sync' and state in ('queued', 'running'))
+            as "isPending"`
+        const writeSeededGatewayKeys = await prepareSeededGatewayKeys(
+          testGateway,
+          gatewaySync?.isPending ? undefined : seededGatewayKeys,
+        )
         seededGatewayKeys = writeSeededGatewayKeys
         const reset = () =>
           resetDatabase(testDatabase.database, async (transaction) => {
@@ -248,6 +341,7 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
         port: zeroCachePortOf(index),
         appId: `spyriae2e${index}`,
         serverUrl,
+        logLevel: process.env.SPYRIA_ZERO_LOG_LEVEL ?? 'info',
       })
       try {
         const barrierSession = async () => {
@@ -278,6 +372,7 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
         await use({
           databaseName: testDatabase.name,
           zeroCacheURL: zeroCache.url,
+          zeroCacheLogPath: zeroCache.logPath,
           database: testDatabase.database,
           reset: async (options) => {
             await keepWarmRuntimes()
@@ -306,7 +401,7 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
       } finally {
         await zeroCache.stop()
       }
-      await releaseServerDatabase()
+      await releaseServerDatabase('release')
       await testDatabase.drop()
     },
     { scope: 'worker', timeout: 180_000 },
@@ -325,10 +420,53 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
       await workerStack.setGatewayReachable(true)
       await workerStack.reset({ runtimeHost, warmRuntimes, sharedCrm })
       if (fakeBootHold) await postToServer('/test/fake-boot', { db: workerStack.databaseName, hold: fakeBootHold })
+      captureConsole(context)
       await signIn(context, workerStack, signedInAs, tokenSeconds)
       await use(undefined)
     },
     { auto: true, timeout: 120_000 },
+  ],
+  diagnosticsOnFailure: [
+    async ({ browser, context, workerStack }, use, testInfo) => {
+      const startedAt = new Date().toISOString()
+      await use(undefined)
+      if (testInfo.status === testInfo.expectedStatus) return
+      await testInfo.attach('postgres-activity', {
+        body: JSON.stringify(await postgresActivityOf(workerStack.database), null, 2),
+        contentType: 'application/json',
+      })
+      await testInfo.attach('stack-state', {
+        body: JSON.stringify(await stackState(), null, 2),
+        contentType: 'application/json',
+      })
+      await testInfo.attach('server-requests', {
+        body: (await serverRequestsSince(startedAt)).join('\n'),
+        contentType: 'text/plain',
+      })
+      await testInfo.attach('zero-cache-log', {
+        body: (await readFile(workerStack.zeroCacheLogPath, 'utf8').catch(String)).split('\n').slice(-400).join('\n'),
+        contentType: 'text/plain',
+      })
+      const pages = [...new Set([context, ...browser.contexts()])].flatMap((each) => each.pages())
+      const diagnosticsByPage = await Promise.all(
+        pages.map(async (page) => ({
+          url: page.url(),
+          snapshot: await page
+            .locator('body')
+            .ariaSnapshot({ timeout: 5_000 })
+            .catch((error: Error) => error.message),
+          zero: await page
+            .evaluate(() => (window as { spyriaZeroDiagnostics?: () => unknown }).spyriaZeroDiagnostics?.() ?? null)
+            .catch((error: Error) => error.message),
+          console: consoleByPage.get(page) ?? [],
+        })),
+      )
+      await testInfo.attach('pages', {
+        body: JSON.stringify(diagnosticsByPage, null, 2),
+        contentType: 'application/json',
+      })
+    },
+    { auto: true },
   ],
   agentScript: async ({ workerStack }, use) => {
     await use(async (chatId, script) => {

@@ -4,7 +4,7 @@ import { createDatabase, type Database } from '@spyria/db/postgres'
 import { setModelDirectory } from '@spyria/db/server-writes'
 import { databaseUrlOf } from '@spyria/db/testing'
 import { schema } from '@spyria/db/zero'
-import { chatId, workspaceId } from '@spyria/kernel'
+import { chatId, log, workspaceId } from '@spyria/kernel'
 import { createLlmGateway } from '@spyria/profile/server'
 import {
   createRuntimeTransactor,
@@ -121,6 +121,7 @@ const databaseByName = (databaseName: string) => {
   return database
 }
 
+const databaseOwnerByName = new Map<string, string>()
 const releaseDatabase = async (databaseName: string) => {
   const fakeHost = fakeHostByDatabase.get(databaseName)
   fakeHostByDatabase.delete(databaseName)
@@ -212,7 +213,10 @@ const app = createApp({
     }),
   )
   .post('/test/release-database', async (context) => {
-    await releaseDatabase(context.req.query('db') ?? '')
+    const { db = '', claim, release } = context.req.query()
+    if (release && databaseOwnerByName.get(db) !== release) return context.body(null, 204)
+    await releaseDatabase(db)
+    if (claim) databaseOwnerByName.set(db, claim)
     return context.body(null, 204)
   })
   .post('/test/sign-in', async (context) => {
@@ -408,3 +412,17 @@ const app = createApp({
   })
 
 export default { port, hostname: '0.0.0.0', idleTimeout: 0, fetch: app.fetch, websocket: serverWebSocket }
+
+process.on('unhandledRejection', (error) =>
+  log.error({ event: 'test_server.unhandled_rejection', body: 'A promise rejected with nobody awaiting it', error }),
+)
+process.on('uncaughtException', (error) =>
+  log.error({ event: 'test_server.uncaught_exception', body: 'An exception reached the event loop', error }),
+)
+process.on('exit', (code) =>
+  log.error({
+    event: 'test_server.exit',
+    body: 'The test server process is exiting',
+    attributes: { 'process.exit_code': code },
+  }),
+)

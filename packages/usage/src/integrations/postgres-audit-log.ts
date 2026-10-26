@@ -138,8 +138,8 @@ export const createPostgresAuditTransactor = (transact: Transact, workspaceId: W
           )
           await query(
             `insert into workspace_events (workspace_id, id, type, actor_id, payload, created_at)
-             values ($1, $2, 'audit.retention_changed', $3, $4::jsonb, now())`,
-            [crypto.randomUUID(), actorId, JSON.stringify({ retentionDays: days })],
+             values ($1, $2, 'audit.retention_changed', $3, $4::jsonb, $5::timestamptz)`,
+            [crypto.randomUUID(), actorId, JSON.stringify({ retentionDays: days }), new Date().toISOString()],
           )
         },
         deleteRecordsOlderThan: async (days) => {
