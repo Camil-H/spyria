@@ -15,6 +15,7 @@ const accessLifetimeSeconds = 8 * 60 * 60
 const grantedAppPermissions: Permissions = {
   contents: 'write',
   pull_requests: 'write',
+  issues: 'read',
   checks: 'read',
   metadata: 'read',
 }
@@ -33,6 +34,27 @@ export type FakePullRequest = {
   head: string
   base: string
   authorToken: string
+}
+type FakeComment = { author: string; body: string }
+export type FakeIssue = {
+  repository: string
+  number: number
+  title: string
+  body: string
+  state: 'open' | 'closed'
+  author: string
+  labels: string[]
+  comments: FakeComment[]
+  updatedAt: string
+}
+export type FakeReviewThread = {
+  repository: string
+  pullRequest: number
+  path: string
+  line: number | null
+  isResolved: boolean
+  isOutdated: boolean
+  comments: FakeComment[]
 }
 
 export const fakeGitHubRepositories: Repository[] = [
@@ -131,6 +153,9 @@ export const startFakeGitHub = () => {
     })
   }
   const pullRequests: FakePullRequest[] = []
+  const issues: FakeIssue[] = []
+  const reviewThreads: FakeReviewThread[] = []
+  const searches: string[] = []
   const appCreations: FakeAppCreation[] = []
   const manifestCodes = new Map<string, FakeAppCreation>()
   const htmlPage = (body: string) =>
@@ -203,6 +228,18 @@ export const startFakeGitHub = () => {
     merged: false,
     head: { sha: branchHeadOf(repository, head), ref: head },
     commits: commitSubjectsOf(repository, head, base).length,
+  })
+  const fakeCommentJsonOf = ({ author, body }: FakeComment) => ({ user: { login: author }, body })
+  const issueJsonOf = (origin: string, issue: FakeIssue) => ({
+    number: issue.number,
+    html_url: `${origin}/${issue.repository}/issues/${issue.number}`,
+    title: issue.title,
+    state: issue.state,
+    body: issue.body,
+    user: { login: issue.author },
+    labels: issue.labels.map((name) => ({ name })),
+    comments: issue.comments.length,
+    updated_at: issue.updatedAt,
   })
   const notFound = () => Response.json({ message: 'Not Found' }, { status: 404 })
   const notAccessible = () => Response.json({ message: 'Resource not accessible by integration' }, { status: 403 })
@@ -334,7 +371,7 @@ export const startFakeGitHub = () => {
       const token = bearerOf(request)
       if (!isUserToken(token)) return unauthorized()
       if (!repositoryNamed(repository)) return notFound()
-      if (!allows(installationPermissions, 'pull_requests', request.method === 'POST' ? 'write' : 'read'))
+      if (!allows(installationPermissions, 'pull_requests', request.method === 'GET' ? 'read' : 'write'))
         return notAccessible()
       if (request.method === 'POST') {
         const { title = '', body = '', head = '', base = '' } = (await request.json()) as Record<string, string>
@@ -358,11 +395,53 @@ export const startFakeGitHub = () => {
           known.authorToken === token &&
           (number === undefined || known.number === Number(number)),
       )
+      if (pullRequest && request.method === 'PATCH') {
+        const { title, body } = (await request.json()) as { title?: string; body?: string }
+        if (title !== undefined) pullRequest.title = title
+        if (body !== undefined) pullRequest.body = body
+      }
       return pullRequest
         ? Response.json(pullRequestJsonOf(new URL(request.url).origin, pullRequest), {
             status: request.method === 'POST' ? 201 : 200,
           })
         : notFound()
+    }
+    const issueRead = /^\/repos\/([\w.-]+\/[\w.-]+)\/issues\/(\d+)(\/comments)?$/.exec(path)
+    if (issueRead) {
+      const [, repository = '', number, isComments] = issueRead
+      const refused = installationTokenAllows(request, repository, 'issues', 'read')
+      if (refused) return refused
+      const issue = issues.find((known) => known.repository === repository && known.number === Number(number))
+      if (!issue) return notFound()
+      return Response.json(
+        isComments ? issue.comments.map(fakeCommentJsonOf) : issueJsonOf(new URL(request.url).origin, issue),
+      )
+    }
+    if (path === '/search/issues') {
+      const query = new URL(request.url).searchParams.get('q') ?? ''
+      searches.push(query)
+      const [, repository = ''] = /(?:^| )repo:(\S+)/.exec(query) ?? []
+      const refused = installationTokenAllows(request, repository, 'issues', 'read')
+      if (refused) return refused
+      const [, state] = /(?:^| )state:(\w+)/.exec(query) ?? []
+      const labels = [...query.matchAll(/label:"([^"]*)"/g)].map(([, label]) => label)
+      const words = query
+        .replace(/(?:^| )(?:repo|is|state):\S+|label:"[^"]*"/g, '')
+        .trim()
+        .toLowerCase()
+      const items = issues
+        .filter(
+          (issue) =>
+            issue.repository === repository &&
+            (!state || issue.state === state) &&
+            labels.every((label) => issue.labels.includes(label ?? '')) &&
+            `${issue.title} ${issue.body}`.toLowerCase().includes(words),
+        )
+        .toSorted((first, second) => second.updatedAt.localeCompare(first.updatedAt))
+      return Response.json({
+        total_count: items.length,
+        items: items.map((issue) => issueJsonOf(new URL(request.url).origin, issue)),
+      })
     }
     if (path === '/user') {
       const expiresAt = userTokens.get((request.headers.get('authorization') ?? '').replace(/^Bearer /, ''))
@@ -373,10 +452,36 @@ export const startFakeGitHub = () => {
     return notFound()
   }
 
+  const graphql = async (request: Request) => {
+    const { variables } = (await request.json()) as { variables: { owner: string; name: string; number: number } }
+    const repository = `${variables.owner}/${variables.name}`
+    const refused = installationTokenAllows(request, repository, 'pull_requests', 'read')
+    if (refused) return refused
+    if (!pullRequests.some((known) => known.repository === repository && known.number === variables.number))
+      return Response.json({
+        data: { repository: { pullRequest: null } },
+        errors: [
+          { type: 'NOT_FOUND', message: `Could not resolve to a PullRequest with the number of ${variables.number}.` },
+        ],
+      })
+    const nodes = reviewThreads
+      .filter((thread) => thread.repository === repository && thread.pullRequest === variables.number)
+      .map(({ path, line, isResolved, isOutdated, comments }) => ({
+        path,
+        line: isOutdated ? null : line,
+        originalLine: line,
+        isResolved,
+        isOutdated,
+        comments: { nodes: comments.map(({ author, body }) => ({ author: { login: author }, body })) },
+      }))
+    return Response.json({ data: { repository: { pullRequest: { reviewThreads: { nodes } } } } })
+  }
+
   const server = Bun.serve({
     port: 0,
     fetch: async (request) => {
       const url = new URL(request.url)
+      if (url.pathname === '/api/graphql' && request.method === 'POST') return graphql(request)
       if (url.pathname.startsWith('/api/v3')) return api(request, url.pathname.slice('/api/v3'.length))
       if (url.pathname === '/login/oauth/authorize') {
         const code = `code-${crypto.randomUUID()}`
@@ -419,6 +524,9 @@ export const startFakeGitHub = () => {
     gitAuthorizations,
     apiRequests,
     pullRequests,
+    issues,
+    reviewThreads,
+    searches,
     appCreations,
     branchHeadOf,
     commitSubjectsOf,

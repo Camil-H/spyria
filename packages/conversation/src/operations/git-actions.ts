@@ -9,7 +9,7 @@ import {
   noReplyAuthorOf,
   turnRunningRefusal,
 } from '../domain/git-actions.ts'
-import { agentWorkspacePathOf } from '../domain/workspace-reads.ts'
+import { agentWorkspacePathOf, runtimeHeadsOf } from '../domain/workspace-reads.ts'
 import type { AgentDependencies } from './agent-turn.ts'
 
 type Dependencies = Required<Pick<AgentDependencies, 'transactor' | 'runtimes' | 'agentClient' | 'checkouts'>>
@@ -25,10 +25,8 @@ const commit = async ({ agentClient }: Dependencies, { endpoint, author, message
 }
 
 const update = async ({ agentClient, checkouts }: Dependencies, { chat, endpoint, author, baseBranch }: Acting) => {
-  const status = (await agentClient.readWorkspace(endpoint, agentWorkspacePathOf('status', '', baseBranch))) as
-    | { baseHead?: unknown }
-    | undefined
-  const bundled = await checkouts.bundleBase(chat, typeof status?.baseHead === 'string' ? status.baseHead : null)
+  const status = await agentClient.readWorkspace(endpoint, agentWorkspacePathOf('status', '', baseBranch))
+  const bundled = await checkouts.fetchBundle(chat, null, runtimeHeadsOf(status))
   if ('failure' in bundled) return refused(bundled.failure)
   const merged = await agentClient.actOnWorkspace(endpoint, 'merge', { base: baseBranch, ...bundled, author })
   if ('failure' in merged) return refused(String(merged.failure))

@@ -4,6 +4,7 @@ export {
   DomainClaimed,
   DomainFixed,
   GitHubNotConfigured,
+  GitHubPermissionMissing,
   GitHubRefused,
   GitHubUnreachable,
   InvalidGitHubSettings,

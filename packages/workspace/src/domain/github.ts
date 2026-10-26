@@ -20,6 +20,7 @@ export const githubAppCreatedPath = '/auth/github/app-created'
 export const githubAppPermissions = {
   contents: 'write',
   pull_requests: 'write',
+  issues: 'read',
   checks: 'read',
   metadata: 'read',
 } as const

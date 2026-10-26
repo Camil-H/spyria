@@ -201,6 +201,7 @@ test('the status counts commits against the base and the pushed head, uncommitte
   git(copy, 'commit', '-q', '-am', 'Fix the total')
   const { call } = started({ workspaceDirectory: copy })
   expect((await call('GET', '/api/workspace/status?base=main')).body).toEqual({
+    head: revisionOf(copy, 'HEAD'),
     baseHead: revisionOf(source, 'main'),
     aheadOfBase: 1,
     behindBase: 0,
@@ -217,6 +218,7 @@ test('the status counts commits against the base and the pushed head, uncommitte
   expect(body).toMatchObject({ aheadOfBase: 2, behindBase: 0, aheadOfPushed: 1, behindPushed: 0, uncommitted: 2 })
   expect(Date.now() - Date.parse(String(body.pushedAt))).toBeLessThan(60_000)
   expect((await call('GET', '/api/workspace/status?base=--all')).body).toEqual({
+    head: revisionOf(copy, 'HEAD'),
     aheadOfPushed: 1,
     behindPushed: 0,
     pushedAt: body.pushedAt,
@@ -351,6 +353,47 @@ test('an update refuses a bundle carrying other refs, a mismatched head and inva
     expect(await call('POST', '/api/workspace/merge', request)).toEqual({
       status: 422,
       body: { error: 'The update request is not valid' },
+    })
+})
+
+test('a fetch stores one branch from its bundle as origin/<branch> without touching the working branch, and refuses other refs and invalid requests', async () => {
+  const upstream = workingCopyOf('upstream-fetch', source)
+  write(upstream, { 'docs/feature.md': 'feature\n' })
+  git(upstream, 'add', '.')
+  git(upstream, 'commit', '-q', '-m', 'Add the feature docs')
+  const head = revisionOf(upstream, 'HEAD')
+  const copy = workingCopyOf('fetch', source)
+  const workingHead = revisionOf(copy, 'HEAD')
+  const bundleFile = join(directory, 'feature.bundle')
+  git(upstream, 'bundle', 'create', bundleFile, 'refs/heads/spyria/upstream-fetch', '^main')
+  const bundle = Buffer.from(await Bun.file(bundleFile).bytes()).toString('base64')
+  const { call } = started({ workspaceDirectory: copy })
+  expect(await call('POST', '/api/workspace/fetch', { branch: 'spyria/upstream-fetch', head, bundle })).toEqual({
+    status: 200,
+    body: { ref: 'origin/spyria/upstream-fetch' },
+  })
+  expect(revisionOf(copy, 'refs/remotes/origin/spyria/upstream-fetch')).toBe(head)
+  expect(revisionOf(copy, 'HEAD')).toBe(workingHead)
+  expect((await call('POST', '/api/workspace/fetch', { branch: 'spyria/again', head, bundle: '' })).body).toEqual({
+    ref: 'origin/spyria/again',
+  })
+  expect(revisionOf(copy, 'refs/remotes/origin/spyria/again')).toBe(head)
+  for (const request of [
+    { branch: 'main', head, bundle },
+    { branch: 'spyria/upstream-fetch', head: workingHead, bundle },
+    { branch: 'spyria/missing', head: '0'.repeat(40), bundle: '' },
+  ])
+    expect((await call('POST', '/api/workspace/fetch', request)).body).toEqual({
+      error: `The branch ${request.branch} could not be read from the bundle`,
+    })
+  for (const request of [
+    { branch: '--all', head, bundle: '' },
+    { branch: 'main', head: 'HEAD', bundle: '' },
+    { branch: 'main', head },
+  ])
+    expect(await call('POST', '/api/workspace/fetch', request)).toEqual({
+      status: 422,
+      body: { error: 'The fetch request is not valid' },
     })
 })
 

@@ -128,6 +128,11 @@ export const GitHubUnreachable = errorKind(
   (reason: string) => `GitHub could not be reached: ${reason}`,
   WorkspaceError,
 )
+export const GitHubPermissionMissing = errorKind(
+  'github_permission_missing',
+  (permission: string) => `Ask a GitHub admin to accept the ${permission} permission for this workspace's GitHub App`,
+  WorkspaceError,
+)
 export const RepositoryNotGranted = errorKind(
   'repository_not_granted',
   (repository: string) => `${repository} is not granted to the workspace's GitHub App`,
