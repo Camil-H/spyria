@@ -204,6 +204,27 @@ const stackState = async () => {
   }
 }
 
+const postgresActivityOf = async (database: Database) => {
+  const sql = database.$client
+  const query = async <Row>(statement: Promise<Row[]>) => statement.catch((error: Error) => error.message)
+  return {
+    sessions: await query<object>(sql`
+      select pid, application_name, backend_type, state, wait_event_type, wait_event,
+        pg_blocking_pids(pid) as blocked_by,
+        extract(epoch from now() - xact_start)::int as transaction_seconds,
+        extract(epoch from now() - state_change)::int as since_state_change_seconds,
+        left(query, 300) as query
+      from pg_stat_activity where datname = current_database() order by xact_start nulls last`),
+    locksWaiting: await query<object>(sql`
+      select locks.pid, locks.locktype, locks.relation::regclass::text as relation, locks.mode
+      from pg_locks locks join pg_stat_activity activity using (pid)
+      where activity.datname = current_database() and not locks.granted`),
+    replicationSlots: await query<object>(sql`
+      select slot_name, active, active_pid, pg_current_wal_lsn() - confirmed_flush_lsn as lag_bytes
+      from pg_replication_slots where database = current_database()`),
+  }
+}
+
 const serverRequestsSince = async (startedAt: string) => {
   const logs = await Promise.all(
     [serverUrl, ssoServerUrl].map((url) =>
@@ -410,6 +431,10 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
       const startedAt = new Date().toISOString()
       await use(undefined)
       if (testInfo.status === testInfo.expectedStatus) return
+      await testInfo.attach('postgres-activity', {
+        body: JSON.stringify(await postgresActivityOf(workerStack.database), null, 2),
+        contentType: 'application/json',
+      })
       await testInfo.attach('stack-state', {
         body: JSON.stringify(await stackState(), null, 2),
         contentType: 'application/json',
