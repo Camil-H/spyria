@@ -12,7 +12,7 @@ import {
 } from '../contracts/agent.ts'
 import type { AgentEvent } from '../domain/agent-events.ts'
 import { delegateTimeoutSeconds } from '../domain/delegation.ts'
-import { githubToolsPath } from '../domain/pull-requests.ts'
+import { githubToolsPath } from '../domain/github-tools.ts'
 import { piModelOf } from '../domain/session-routing.ts'
 import { spyriaToolTimeoutSeconds } from '../domain/tool-calls.ts'
 

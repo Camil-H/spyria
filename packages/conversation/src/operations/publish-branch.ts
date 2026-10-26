@@ -1,6 +1,7 @@
 import { DomainError, type MemberId, type MessageId, messageId, requireChatPermission } from '@spyria/kernel'
 import type { AgentChat } from '../contracts/agent.ts'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
+import type { PullRequestChange } from '../domain/github-tools.ts'
 import { type Message, newMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
 import {
@@ -84,26 +85,46 @@ const pushAndRecord = async (
   }
 }
 
+const publishingChatOf = ({ transactor }: Pick<Dependencies, 'transactor'>, chat: AgentChat, memberId: MemberId) =>
+  transactor.run(async ({ chats, members, messages }) => {
+    await requireChatPermission(chats, chat.chatId, memberId, 'chat.read')
+    const stored = await chats.get(chat.chatId)
+    const ownerName = stored.ownerId ? await members.displayNameOf(stored.ownerId) : 'the owner'
+    const publisherId = stored.ownerId === memberId && !stored.isOwnerRemoved ? stored.ownerId : undefined
+    return { ...stored, ownerName, publisherId, card: await messages.pullRequestCard(chat.chatId) }
+  })
+
+const refusedOnDomainError = (error: unknown) => {
+  if (error instanceof DomainError) return refused(error.message)
+  throw error
+}
+
 export const publishBranch = async (dependencies: Dependencies, { chat, memberId, action, draft }: Input) => {
-  const { transactor, checkouts } = dependencies
-  const { ownerId, ownerName, isOwnerRemoved, baseBranch, name, card } = await transactor.run(
-    async ({ chats, members, messages }) => {
-      await requireChatPermission(chats, chat.chatId, memberId, 'chat.read')
-      const stored = await chats.get(chat.chatId)
-      return {
-        ...stored,
-        ownerName: stored.ownerId ? await members.displayNameOf(stored.ownerId) : 'the owner',
-        card: await messages.pullRequestCard(chat.chatId),
-      }
-    },
-  )
-  if (!ownerId || memberId !== ownerId || isOwnerRemoved) return refused(publishingRefusalOf(ownerName))
+  const { checkouts } = dependencies
+  const { publisherId, ownerName, baseBranch, name, card } = await publishingChatOf(dependencies, chat, memberId)
+  if (!publisherId) return refused(publishingRefusalOf(ownerName))
   if (!baseBranch || !checkouts) return refused('This chat has no repository')
   return pushAndRecord(
     { ...dependencies, checkouts },
-    { chat, ownerId, action, card, draft: { ...draft, title: draft.title.trim() || name } },
-  ).catch((error: unknown) => {
-    if (error instanceof DomainError) return refused(error.message)
-    throw error
-  })
+    { chat, ownerId: publisherId, action, card, draft: { ...draft, title: draft.title.trim() || name } },
+  ).catch(refusedOnDomainError)
+}
+
+export const updatePullRequest = async (
+  dependencies: Dependencies,
+  { chat, memberId, change }: { chat: AgentChat; memberId: MemberId; change: PullRequestChange },
+): Promise<Publication> => {
+  const { transactor, checkouts } = dependencies
+  const { publisherId, ownerName, baseBranch, card } = await publishingChatOf(dependencies, chat, memberId)
+  if (!publisherId) return refused(publishingRefusalOf(ownerName))
+  if (!baseBranch || !checkouts) return refused('This chat has no repository')
+  const pullRequest = card?.step?.type === 'pull_request' && isOpenPullRequest(card.step) ? card.step : undefined
+  if (!card || !pullRequest) return refused('This chat has no open pull request: open one first')
+  try {
+    const step = await checkouts.updatePullRequest(chat, publisherId, pullRequest, change)
+    await recordPullRequest({ transactor }, { chat, actorId: publisherId, step, cardId: card.id })
+    return { isRefused: false, text: `Updated pull request #${step.number}: ${step.url}` }
+  } catch (error) {
+    return refusedOnDomainError(error)
+  }
 }

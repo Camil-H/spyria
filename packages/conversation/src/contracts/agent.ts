@@ -9,6 +9,7 @@ import type {
   WorkspaceId,
 } from '@spyria/kernel'
 import type { AgentEvent } from '../domain/agent-events.ts'
+import type { Issue, IssueFilter, IssueSummary, PullRequestChange, ReviewThread } from '../domain/github-tools.ts'
 import type { PullRequestDraft, PullRequestStep } from '../domain/pull-requests.ts'
 import type { DelegatedFrame, QuestionFrame } from '../domain/streamed-reply.ts'
 
@@ -79,11 +80,11 @@ export type RepositoryCheckout = Readonly<{
   startBranch?: string
   author?: GitAuthor
 }>
-export type WorkspaceAction = 'commit' | 'merge' | 'pushed'
+export type WorkspaceAction = 'commit' | 'fetch' | 'merge' | 'pushed'
 export type BranchBundle = Readonly<{ bundle: string } | { failure: string }>
 export type BundleOf = (branch: string, prerequisite: string | null) => Promise<BranchBundle>
 export type GitAuthor = Readonly<{ name: string; email: string }>
-export type BaseBundle = Readonly<{ head: string; bundle: string } | { failure: string }>
+export type FetchedBundle = Readonly<{ head: string; bundle: string } | { failure: string }>
 export type RepositoryCheckouts = {
   checkoutOf(chat: AgentChat): Promise<RepositoryCheckout | undefined>
   pushBranch(
@@ -91,10 +92,19 @@ export type RepositoryCheckouts = {
     ownerId: MemberId,
     bundleOf: BundleOf,
   ): Promise<{ branch: string; head?: string | undefined; failure?: string } | undefined>
-  bundleBase(chat: AgentChat, runtimeBaseHead: string | null): Promise<BaseBundle>
+  fetchBundle(chat: AgentChat, branch: string | null, runtimeHeads: string[]): Promise<FetchedBundle>
   authorOf(chat: AgentChat, ownerId: MemberId): Promise<GitAuthor | undefined>
   openPullRequest(chat: AgentChat, ownerId: MemberId, draft: PullRequestDraft): Promise<PullRequestStep>
   refreshPullRequest(chat: AgentChat, ownerId: MemberId, pullRequest: PullRequestStep): Promise<PullRequestStep>
+  updatePullRequest(
+    chat: AgentChat,
+    ownerId: MemberId,
+    pullRequest: PullRequestStep,
+    change: PullRequestChange,
+  ): Promise<PullRequestStep>
+  reviewThreadsOf(chat: AgentChat, number: number): Promise<ReviewThread[]>
+  issuesOf(chat: AgentChat, filter: IssueFilter): Promise<IssueSummary[]>
+  issueOf(chat: AgentChat, number: number): Promise<Issue>
 }
 export type AgentClient = {
   createConversation(

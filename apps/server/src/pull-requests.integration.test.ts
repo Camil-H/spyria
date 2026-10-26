@@ -299,7 +299,20 @@ test('the agent pushes and opens a pull request with its tools on the owner’s 
   expect(JSON.parse(listed.body).result.tools.map(({ name }: { name: string }) => name)).toEqual([
     'push_branch',
     'open_pull_request',
+    'update_pull_request',
+    'fetch_branch',
+    'read_review_threads',
+    'list_issues',
+    'read_issue',
   ])
+  const initialized = await host.modelCall({
+    path: '/mcp/github',
+    headers: { authorization: `Bearer ${guest.token}`, 'content-type': 'application/json' },
+    body: rpcOf('initialize', { protocolVersion: '2025-06-18' }),
+  })
+  expect(JSON.parse(initialized.body).result.instructions).toStartWith(
+    'This runtime has no GitHub credentials, by design',
+  )
 })
 
 test('signed webhooks update the card’s checks, review, comments and state; a bad signature, a duplicate delivery and an unknown pull request change nothing', async () => {
@@ -370,4 +383,200 @@ test('signed webhooks update the card’s checks, review, comments and state; a 
   const stepChanges = await database.$client`
     select count(*)::int as count from events where chat_id = ${id} and type = 'message.step_changed'`
   expect(stepChanges[0]?.count).toBe(5)
+})
+
+const toolResultsOf = (replies: { step?: unknown }[]) =>
+  replies.flatMap(({ step }) => {
+    const toolStep = step as { type?: string; name?: string; result?: string } | undefined
+    return toolStep?.type === 'tool' ? [{ name: toolStep.name, result: toolStep.result }] : []
+  })
+type AgentHost = Awaited<ReturnType<typeof stack.agentHost>>['host']
+const guestToolCall = async (host: AgentHost, token: string, name: string, input: object) => {
+  const answer = await host.modelCall({
+    path: '/mcp/github',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: rpcOf('tools/call', { name, arguments: input }),
+  })
+  const { result } = JSON.parse(answer.body)
+  return { isError: result.isError, text: textOf(result) }
+}
+
+test('the owner’s agent changes the title and description of the open pull request and the card follows; with no open pull request, or on a guest’s turn, the change is refused', async () => {
+  const { host } = await stack.agentHost('Pull request update host', { routesModelCalls: true })
+  const { id } = await newDevChat()
+  await committedWorkspace(id)
+  await connectGitHub(alice)
+  stack.setFakeLlmScript({ steps: [{ tool: 'update_pull_request', arguments: { title: 'Too early' } }], text: 'Done.' })
+  expect(toolResultsOf(await promptAndWait(id, 'Retitle the pull request'))).toEqual([
+    { name: 'update_pull_request', result: 'This chat has no open pull request: open one first' },
+  ])
+  expect((await publish(alice, id, 'pull_request', { title: 'Fix totals', body: 'First draft' })).status).toBe(200)
+  const opened = fakeGitHub.pullRequests.at(-1)
+  stack.setFakeLlmScript({
+    steps: [{ tool: 'update_pull_request', arguments: { title: 'Fix the totals', body: 'Totals now add up.' } }],
+    text: 'Updated.',
+  })
+  expect(toolResultsOf(await promptAndWait(id, 'Retitle the pull request'))).toEqual([
+    {
+      name: 'update_pull_request',
+      result: `Updated pull request #${opened?.number}: ${fakeGitHub.urls.webUrl}/acme/app/pull/${opened?.number}`,
+    },
+  ])
+  expect(fakeGitHub.pullRequests.at(-1)).toMatchObject({ title: 'Fix the totals', body: 'Totals now add up.' })
+  expect((await cardOf(id))?.step).toMatchObject({ title: 'Fix the totals', state: 'open' })
+  expect(fakeGitHub.apiRequests).toContain(`PATCH /repos/acme/app/pulls/${opened?.number}`)
+  expect((await toolCallRows(id)).map(({ tool, read_only, status }) => ({ tool, read_only, status }))).toEqual([
+    { tool: 'update_pull_request', read_only: false, status: 'refused' },
+    { tool: 'update_pull_request', read_only: false, status: 'succeeded' },
+  ])
+
+  const guest = await runtimeTurn(host, bob)
+  expect(await guestToolCall(host, guest.token, 'update_pull_request', { title: 'Guest' })).toEqual({
+    isError: true,
+    text: ownerOnly,
+  })
+})
+
+test('any prompter’s agent reads review threads and issues of the chat’s repository with a read-only installation token, never the owner’s; a missing Issues permission is named', async () => {
+  const { host } = await stack.agentHost('GitHub reads host', { routesModelCalls: true })
+  const { id } = await newDevChat()
+  await committedWorkspace(id)
+  await connectGitHub(alice)
+  expect((await publish(alice, id, 'pull_request', { title: 'Reviewed totals' })).status).toBe(200)
+  const number = Number(fakeGitHub.pullRequests.at(-1)?.number)
+  fakeGitHub.reviewThreads.push(
+    {
+      repository: 'acme/app',
+      pullRequest: number,
+      path: 'src/app.ts',
+      line: 1,
+      isResolved: false,
+      isOutdated: false,
+      comments: [
+        { author: 'rita', body: 'Use a constant.' },
+        { author: 'alice-martin', body: 'On it.' },
+      ],
+    },
+    {
+      repository: 'acme/app',
+      pullRequest: number,
+      path: 'README.md',
+      line: 3,
+      isResolved: true,
+      isOutdated: true,
+      comments: [{ author: 'rita', body: 'Typo.' }],
+    },
+  )
+  fakeGitHub.issues.push(
+    {
+      repository: 'acme/app',
+      number: 41,
+      title: 'Totals are wrong',
+      body: 'The totals add one too many.',
+      state: 'open',
+      author: 'rita',
+      labels: ['bug'],
+      comments: [{ author: 'lee', body: 'Seen it too.' }],
+      updatedAt: '2026-10-20T08:00:00Z',
+    },
+    {
+      repository: 'acme/app',
+      number: 42,
+      title: 'Document the totals',
+      body: '',
+      state: 'closed',
+      author: 'rita',
+      labels: [],
+      comments: [],
+      updatedAt: '2026-10-21T08:00:00Z',
+    },
+  )
+  const issuedBefore = new Set(fakeGitHub.installationTokens.keys())
+  stack.setFakeLlmScript({
+    steps: [
+      { tool: 'read_review_threads' },
+      { tool: 'list_issues', arguments: { labels: ['bug'], search: 'totals' } },
+      { tool: 'read_issue', arguments: { number: 41 } },
+    ],
+    text: 'Read.',
+  })
+  expect(toolResultsOf(await promptAndWait(id, 'Read the reviews and the issues'))).toEqual([
+    {
+      name: 'read_review_threads',
+      result: [
+        `Pull request #${number}: 2 review threads, 1 unresolved`,
+        '- src/app.ts:1 (unresolved)',
+        '  rita: Use a constant.',
+        '  alice-martin: On it.',
+        '- README.md:3 (resolved, outdated)',
+        '  rita: Typo.',
+      ].join('\n'),
+    },
+    {
+      name: 'list_issues',
+      result: '#41 [open] Totals are wrong by rita, labels: bug, 1 comments, updated 2026-10-20',
+    },
+    {
+      name: 'read_issue',
+      result: [
+        '#41 [open] Totals are wrong by rita, labels: bug, 1 comments, updated 2026-10-20',
+        `${fakeGitHub.urls.webUrl}/acme/app/issues/41`,
+        '',
+        'The totals add one too many.',
+        '',
+        'Comments:',
+        '  lee: Seen it too.',
+      ].join('\n'),
+    },
+  ])
+  expect(fakeGitHub.searches.at(-1)).toBe('repo:acme/app is:issue state:open label:"bug" totals')
+  const readTokens = [...fakeGitHub.installationTokens.values()].filter(({ token }) => !issuedBefore.has(token))
+  expect(readTokens.map(({ repositories, permissions }) => ({ repositories, permissions }))).toEqual([
+    { repositories: ['app'], permissions: { pull_requests: 'read', metadata: 'read' } },
+    { repositories: ['app'], permissions: { issues: 'read', metadata: 'read' } },
+    { repositories: ['app'], permissions: { issues: 'read', metadata: 'read' } },
+  ])
+  expect(
+    (await toolCallRows(id)).map(({ prompter_id, tool, read_only, status }) => ({
+      prompter_id,
+      tool,
+      read_only,
+      status,
+    })),
+  ).toEqual([
+    { prompter_id: alice, tool: 'read_review_threads', read_only: true, status: 'succeeded' },
+    { prompter_id: alice, tool: 'list_issues', read_only: true, status: 'succeeded' },
+    { prompter_id: alice, tool: 'read_issue', read_only: true, status: 'succeeded' },
+  ])
+
+  const guest = await runtimeTurn(host, bob)
+  await database.$client`
+    update chats set repository = 'acme/app', base_branch = 'main', git_branch = 'spyria/guest-reads'
+    where id = ${guest.chatId}`
+  expect(await guestToolCall(host, guest.token, 'read_issue', { number: 41 })).toMatchObject({ isError: false })
+  expect(await guestToolCall(host, guest.token, 'read_review_threads', {})).toEqual({
+    isError: true,
+    text: 'This chat has no pull request: give the number of the one to read',
+  })
+  expect(await guestToolCall(host, guest.token, 'read_review_threads', { number: 999 })).toEqual({
+    isError: true,
+    text: 'GitHub refused: Could not resolve to a PullRequest with the number of 999. (404)',
+  })
+  fakeGitHub.setInstallationPermissions({ contents: 'write', pull_requests: 'write', checks: 'read', metadata: 'read' })
+  try {
+    expect(await guestToolCall(host, guest.token, 'list_issues', {})).toEqual({
+      isError: true,
+      text: "Ask a GitHub admin to accept the Issues permission for this workspace's GitHub App",
+    })
+  } finally {
+    fakeGitHub.setInstallationPermissions()
+  }
+  expect(
+    (await toolCallRows(guest.chatId)).map(({ prompter_id, tool, status }) => ({ prompter_id, tool, status })),
+  ).toEqual([
+    { prompter_id: bob, tool: 'read_issue', status: 'succeeded' },
+    { prompter_id: bob, tool: 'read_review_threads', status: 'refused' },
+    { prompter_id: bob, tool: 'read_review_threads', status: 'refused' },
+    { prompter_id: bob, tool: 'list_issues', status: 'refused' },
+  ])
 })

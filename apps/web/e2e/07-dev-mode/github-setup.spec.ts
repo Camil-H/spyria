@@ -56,7 +56,13 @@ test.describe('GitHub setup', () => {
       callback_urls: [`${appOrigin}/auth/github/callback`],
       setup_url: `${appOrigin}/w/workspace-acme/settings/github`,
       public: false,
-      default_permissions: { contents: 'write', pull_requests: 'write', checks: 'read', metadata: 'read' },
+      default_permissions: {
+        contents: 'write',
+        pull_requests: 'write',
+        issues: 'read',
+        checks: 'read',
+        metadata: 'read',
+      },
       default_events: [
         'pull_request',
         'pull_request_review',
@@ -97,7 +103,7 @@ test.describe('GitHub setup', () => {
     for (const name of ['Homepage URL', 'Callback URL', 'Webhook URL'])
       await expect(section.getByRole('button', { name: `Copy ${name}` })).toBeVisible()
     await expect(section).toContainText(
-      'Repository permissions: Contents: Read and write, Pull requests: Read and write, Checks: Read-only, Metadata: Read-only.',
+      'Repository permissions: Contents: Read and write, Pull requests: Read and write, Issues: Read-only, Checks: Read-only, Metadata: Read-only.',
     )
     await expect(section).toContainText(
       'Subscribe to events: Pull request, Pull request review, Pull request review comment, Pull request review thread, Check suite, Check run.',

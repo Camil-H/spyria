@@ -4,11 +4,12 @@ import { join } from 'node:path'
 import type { BundleOf } from '@spyria/conversation/server'
 
 type Push = { url: string; token: string; branch: string; baseBranch: string; bundleOf: BundleOf }
-type BaseFetch = { url: string; token: string; baseBranch: string; runtimeBaseHead: string | null }
+type BranchFetch = { url: string; token: string; branch: string; baseBranch: string; runtimeHeads: string[] }
 
 const shownOutputLines = 10
 const commitPattern = /^[0-9a-f]{40}$/
 const maximumBundleBytes = 12_000_000
+const missingRemoteRef = /couldn't find remote ref/
 const lastLinesOf = (output: string) => output.trimEnd().split('\n').slice(-shownOutputLines).join('\n')
 
 const gitEnvironmentOf = (home: string, url: string, token: string) => {
@@ -99,17 +100,37 @@ export const pushBundle = ({ url, token, branch, baseBranch, bundleOf }: Push) =
       : { failure: `The branch could not be pushed: ${lastLinesOf(pushed.output)}` }
   })
 
-export const baseBundle = ({ url, token, baseBranch, runtimeBaseHead }: BaseFetch) =>
+const commitsKnownTo = async (inRepository: InRepository, commits: string[]) => {
+  const known = await Promise.all(
+    commits.map(
+      async (commit) => (await inRepository('rev-parse', '--verify', '--quiet', `${commit}^{commit}`)).isDone,
+    ),
+  )
+  return commits.filter((_, index) => known[index])
+}
+
+export const branchBundle = ({ url, token, branch, baseBranch, runtimeHeads }: BranchFetch) =>
   inTemporaryRepository(url, token, async (inRepository, _directory, gitChildInRepository) => {
-    const baseRef = `refs/heads/${baseBranch}`
-    const fetched = await inRepository('fetch', '--quiet', '--no-tags', url, `${baseRef}:${baseRef}`)
-    if (!fetched.isDone) return { failure: `GitHub refused the fetch: ${lastLinesOf(fetched.output)}` }
-    const head = (await inRepository('rev-parse', '--verify', baseRef)).stdout.trim()
-    const prerequisite = runtimeBaseHead && commitPattern.test(runtimeBaseHead) ? runtimeBaseHead : undefined
-    if (head === prerequisite) return { head, bundle: '' }
-    const isAncestor =
-      prerequisite !== undefined && (await inRepository('merge-base', '--is-ancestor', prerequisite, head)).isDone
-    const bundling = gitChildInRepository('bundle', 'create', '-', baseRef, ...(isAncestor ? [`^${prerequisite}`] : []))
+    const branchRef = `refs/heads/${branch}`
+    const fetched = await inRepository('fetch', '--quiet', '--no-tags', url, `${branchRef}:${branchRef}`)
+    if (!fetched.isDone)
+      return {
+        failure: missingRemoteRef.test(fetched.output)
+          ? `There is no branch ${branch} on GitHub`
+          : `GitHub refused the fetch: ${lastLinesOf(fetched.output)}`,
+      }
+    const head = (await inRepository('rev-parse', '--verify', branchRef)).stdout.trim()
+    const candidates = [...new Set(runtimeHeads.filter((commit) => commitPattern.test(commit)))]
+    const knownOnBranch = await commitsKnownTo(inRepository, candidates)
+    const isBaseNeeded = knownOnBranch.length === 0 && candidates.length > 0 && branch !== baseBranch
+    if (isBaseNeeded)
+      await inRepository('fetch', '--quiet', '--no-tags', url, `refs/heads/${baseBranch}:refs/spyria/base`)
+    const known = isBaseNeeded ? await commitsKnownTo(inRepository, candidates) : knownOnBranch
+    const containing = await Promise.all(
+      known.map(async (commit) => (await inRepository('merge-base', '--is-ancestor', head, commit)).isDone),
+    )
+    if (containing.includes(true)) return { head, bundle: '' }
+    const bundling = gitChildInRepository('bundle', 'create', '-', branchRef, ...known.map((commit) => `^${commit}`))
     const bundlingErrors = new Response(bundling.stderr).text()
     const chunks: Uint8Array[] = []
     let bundleBytes = 0
@@ -119,12 +140,12 @@ export const baseBundle = ({ url, token, baseBranch, runtimeBaseHead }: BaseFetc
         bundling.kill()
         await bundling.exited
         return {
-          failure: `The base branch's new commits weigh more than ${maximumBundleBytes / 1_000_000} MB; update from your machine`,
+          failure: `The new commits of ${branch} weigh more than ${maximumBundleBytes / 1_000_000} MB; bring them in from your machine`,
         }
       }
       chunks.push(chunk)
     }
     if ((await bundling.exited) !== 0)
-      return { failure: `The base branch could not be bundled: ${lastLinesOf(await bundlingErrors)}` }
+      return { failure: `The branch ${branch} could not be bundled: ${lastLinesOf(await bundlingErrors)}` }
     return { head, bundle: Buffer.concat(chunks).toString('base64') }
   })
