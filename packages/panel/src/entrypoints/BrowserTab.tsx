@@ -91,11 +91,13 @@ const ShownPage = ({
 }
 
 export const BrowserTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
-  const isComplete = useScoped(workspaceId, 'chatBrowserPages', { chatId })?.isComplete === true
+  const status = useScoped(workspaceId, 'chatBrowserPages', { chatId })
+  const isComplete = status?.isComplete === true
   const pages = useQuery(getOpenedPages, workspaceId, chatId)
+  const isLoaded = isComplete && pages.length === status?.rows.length
   const latestOpenedAt = pages[0]?.openedAt ?? ''
   const [choice, setChoice] = useState<Choice>()
-  if (isComplete && choice === undefined) setChoice({ page: null, isTyped: false, seenOpenedAt: latestOpenedAt })
+  if (isLoaded && choice === undefined) setChoice({ page: null, isTyped: false, seenOpenedAt: latestOpenedAt })
   const isNewlyOpened = choice !== undefined && latestOpenedAt > choice.seenOpenedAt
   const shown = isNewlyOpened ? (pages[0] ?? null) : (choice?.page ?? null)
   const isTyped = !isNewlyOpened && choice?.isTyped === true
