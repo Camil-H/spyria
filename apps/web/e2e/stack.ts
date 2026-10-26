@@ -1,8 +1,9 @@
+import { spawnSync } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { type Browser, type BrowserContext, test as base } from '@playwright/test'
+import { type Browser, type BrowserContext, test as base, type Page } from '@playwright/test'
 import {
   type Database,
   memberships,
@@ -105,6 +106,19 @@ const signIn = async (
   if (!signedIn.ok()) throw new Error(`The test sign-in failed with ${signedIn.status()}`)
 }
 
+const consoleByPage = new WeakMap<Page, string[]>()
+const captureConsole = (context: BrowserContext) => {
+  const capture = (page: Page) =>
+    page.on('console', (message) => {
+      const lines = consoleByPage.get(page) ?? []
+      lines.push(`${new Date().toISOString()} ${message.type()} ${message.text()}`)
+      if (lines.length > 500) lines.shift()
+      consoleByPage.set(page, lines)
+    })
+  for (const page of context.pages()) capture(page)
+  context.on('page', capture)
+}
+
 export const openPageAs = async (
   browser: Browser,
   workerStack: WorkerStack,
@@ -112,6 +126,7 @@ export const openPageAs = async (
   baseURL = viteUrl,
 ) => {
   const context = await browser.newContext({ baseURL, timezoneId: 'UTC' })
+  captureConsole(context)
   await signIn(context, workerStack, user)
   const page = await context.newPage()
   await page.goto('/')
@@ -179,8 +194,10 @@ const stackState = async () => {
         .slice(-60),
     })),
   )
+  const dex = spawnSync('docker', ['logs', '--tail', '80', 'spyria-test-dex'])
   return {
     servers: serverLogs,
+    dexLog: `${dex.stdout ?? ''}${dex.stderr ?? ''}`.split('\n').filter(Boolean),
     processes: processTable().filter(
       ({ command }) => command.includes(repositoryRoot) || command.includes('@rocicorp/zero'),
     ),
@@ -382,6 +399,7 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
       await workerStack.setGatewayReachable(true)
       await workerStack.reset({ runtimeHost, warmRuntimes, sharedCrm })
       if (fakeBootHold) await postToServer('/test/fake-boot', { db: workerStack.databaseName, hold: fakeBootHold })
+      captureConsole(context)
       await signIn(context, workerStack, signedInAs, tokenSeconds)
       await use(undefined)
     },
@@ -408,12 +426,17 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
       const diagnosticsByPage = await Promise.all(
         pages.map(async (page) => ({
           url: page.url(),
+          snapshot: await page
+            .locator('body')
+            .ariaSnapshot({ timeout: 5_000 })
+            .catch((error: Error) => error.message),
           zero: await page
             .evaluate(() => (window as { spyriaZeroDiagnostics?: () => unknown }).spyriaZeroDiagnostics?.() ?? null)
             .catch((error: Error) => error.message),
+          console: consoleByPage.get(page) ?? [],
         })),
       )
-      await testInfo.attach('zero-diagnostics', {
+      await testInfo.attach('pages', {
         body: JSON.stringify(diagnosticsByPage, null, 2),
         contentType: 'application/json',
       })

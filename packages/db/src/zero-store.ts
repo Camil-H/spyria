@@ -31,6 +31,7 @@ type ZeroStoreOptions = {
   renew: (workspaceId: WorkspaceId) => Promise<WorkspaceSession | undefined>
   cacheURL: string
   kvStore?: 'mem' | 'idb'
+  logLevel?: 'debug' | 'info' | 'warn' | 'error'
   storageKeyPrefix?: string
   mutators?: AnyMutatorRegistry
   draftStorage?: Storage
@@ -333,6 +334,7 @@ export const createZeroStore = ({
   renew,
   cacheURL,
   kvStore,
+  logLevel,
   storageKeyPrefix = '',
   mutators,
   draftStorage,
@@ -429,6 +431,7 @@ export const createZeroStore = ({
       context: { userId: memberId, workspaceId },
       storageKey: `${storageKeyPrefix}${workspaceId}`,
       kvStore,
+      logLevel,
       mutators,
     })
     const clientIds = { clientID: zero.clientID, clientGroupID: undefined as string | undefined }
