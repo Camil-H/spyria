@@ -1,6 +1,6 @@
 import { useQuery, useScoped } from '@spyria/db/react'
 import type { ChatId, WorkspaceId } from '@spyria/kernel'
-import { fieldClass, focusRing, iconButtonClass } from '@spyria/ui'
+import { fieldClass, focusRing, ghostButtonClass, iconButtonClass } from '@spyria/ui'
 import { ArrowLeft, ExternalLink, Globe } from 'lucide-react'
 import { type FormEvent, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -11,7 +11,7 @@ import type { TabProps } from './TabProps.ts'
 import { emptyClass } from './ui.ts'
 import { useWorkspaceReading } from './useWorkspaceReading.ts'
 
-type Choice = Readonly<{ page: BrowserPage | null; seenOpenedAt: string }>
+type Choice = Readonly<{ page: BrowserPage | null; isTyped: boolean; seenOpenedAt: string }>
 
 const frameClass = 'min-h-80 w-full flex-1 rounded-md border border-line bg-white'
 const webPageSandbox = 'allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox'
@@ -30,7 +30,7 @@ const WorkspaceFile = ({
   if (typeof reading.content !== 'string' || reading.isBinary === true)
     return <p className={emptyClass}>This file cannot be shown now</p>
   return isHtmlFile(page.url) ? (
-    <iframe title={page.title} sandbox="allow-scripts" srcDoc={reading.content} className={frameClass} />
+    <iframe title={page.url} sandbox="allow-scripts" srcDoc={reading.content} className={frameClass} />
   ) : (
     <pre className="min-h-0 flex-1 overflow-auto rounded-md border border-line bg-app p-2 font-mono text-xs whitespace-pre-wrap">
       {reading.content}
@@ -47,27 +47,64 @@ const OpenedPages = ({ pages, onOpen }: { pages: readonly BrowserPage[]; onOpen:
           onClick={() => onOpen(page)}
           className={`flex w-full flex-col items-start rounded-md px-2 py-1.5 text-left hover:bg-hover ${focusRing}`}
         >
-          <span className="font-medium">{page.title}</span>
-          <span className="max-w-full truncate text-xs text-muted">{page.url}</span>
+          <span className="max-w-full truncate font-medium">{page.url}</span>
+          {page.title !== page.url && <span className="max-w-full truncate text-xs text-muted">{page.title}</span>}
         </button>
       </li>
     ))}
   </ul>
 )
 
+const ShownPage = ({
+  workspaceId,
+  chatId,
+  page,
+  isTyped,
+}: {
+  workspaceId: WorkspaceId
+  chatId: ChatId
+  page: BrowserPage
+  isTyped: boolean
+}) => {
+  const [isLoaded, setIsLoaded] = useState(false)
+  if (!isTyped && !isLoaded)
+    return (
+      <div className="flex flex-col items-start gap-2 rounded-md border border-dashed border-line p-3 text-sm">
+        <p className="text-muted">The agent opened this page. Check its address before you load it.</p>
+        <p className="font-mono break-all">{page.url}</p>
+        <button type="button" onClick={() => setIsLoaded(true)} className={ghostButtonClass}>
+          Load page
+        </button>
+      </div>
+    )
+  return isWebAddress(page.url) ? (
+    <iframe
+      title={page.url}
+      src={page.url}
+      sandbox={webPageSandbox}
+      referrerPolicy="no-referrer"
+      className={frameClass}
+    />
+  ) : (
+    <WorkspaceFile workspaceId={workspaceId} chatId={chatId} page={page} />
+  )
+}
+
 export const BrowserTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
   const isComplete = useScoped(workspaceId, 'chatBrowserPages', { chatId })?.isComplete === true
   const pages = useQuery(getOpenedPages, workspaceId, chatId)
   const latestOpenedAt = pages[0]?.openedAt ?? ''
   const [choice, setChoice] = useState<Choice>()
-  if (isComplete && choice === undefined) setChoice({ page: null, seenOpenedAt: latestOpenedAt })
+  if (isComplete && choice === undefined) setChoice({ page: null, isTyped: false, seenOpenedAt: latestOpenedAt })
   const isNewlyOpened = choice !== undefined && latestOpenedAt > choice.seenOpenedAt
   const shown = isNewlyOpened ? (pages[0] ?? null) : (choice?.page ?? null)
-  const choose = (page: BrowserPage | null) => setChoice({ page, seenOpenedAt: latestOpenedAt })
+  const isTyped = !isNewlyOpened && choice?.isTyped === true
+  const choose = (page: BrowserPage | null, isTyped = false) =>
+    setChoice({ page, isTyped, seenOpenedAt: latestOpenedAt })
   const browse = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const page = browsedPageOf(String(new FormData(event.currentTarget).get('address') ?? ''))
-    if (page) choose(page)
+    if (page) choose(page, true)
   }
   return (
     <div className="flex h-full flex-col gap-3">
@@ -96,20 +133,17 @@ export const BrowserTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
             >
               <ArrowLeft aria-hidden className="size-4" />
             </button>
-            <p className="min-w-0 truncate text-sm font-medium">{shown.title}</p>
+            <p className="min-w-0 truncate text-sm font-medium" title={shown.url}>
+              {shown.url}
+            </p>
           </div>
-          {isWebAddress(shown.url) ? (
-            <iframe
-              key={shown.url}
-              title={shown.title}
-              src={shown.url}
-              sandbox={webPageSandbox}
-              referrerPolicy="no-referrer"
-              className={frameClass}
-            />
-          ) : (
-            <WorkspaceFile workspaceId={workspaceId} chatId={chatId} page={shown} />
-          )}
+          <ShownPage
+            key={`${isTyped}:${shown.url}`}
+            workspaceId={workspaceId}
+            chatId={chatId}
+            page={shown}
+            isTyped={isTyped}
+          />
         </>
       ) : pages.length > 0 ? (
         <OpenedPages pages={pages} onOpen={choose} />

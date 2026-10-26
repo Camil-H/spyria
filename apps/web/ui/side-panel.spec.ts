@@ -116,11 +116,22 @@ test.describe('Side panel', () => {
       await expect(usageTable.getByRole('row', { name: /Total/ })).toContainText('$0.23')
     })
 
-    await test.step('browser: shows the page of a runtime chat', async () => {
+    await test.step('browser: lists the pages the agent opened in a runtime chat, newest first, by address', async () => {
       await openPanelTab(page, 'Invoice bug', 'Browser')
-      await expect(tabPanelOf(page)).toContainText('http://localhost:3000/invoices')
-      await expect(tabPanelOf(page)).toContainText('Invoices')
-      await expect(tabPanelOf(page)).toContainText('Invoice total: 120.00')
+      const opened = tabPanelOf(page).getByRole('list', { name: 'Pages the agent opened' })
+      await expect(opened.getByRole('listitem')).toHaveText([
+        'https://example.com/invoicesInvoices',
+        'reports/invoice-totals.htmlInvoice totals',
+      ])
+    })
+
+    await test.step('browser: shows the address of a page the agent opened before loading it', async () => {
+      await tabPanelOf(page)
+        .getByRole('button', { name: /^https:\/\/example\.com\/invoices/ })
+        .click()
+      await expect(tabPanelOf(page)).toContainText('The agent opened this page')
+      await expect(tabPanelOf(page).getByRole('button', { name: 'Load page' })).toBeVisible()
+      await expect(tabPanelOf(page).locator('iframe')).toHaveCount(0)
     })
 
     await test.step('lists the workspace and personal connections of the owner on Invoice bug', async () => {
@@ -145,10 +156,9 @@ test.describe('Side panel', () => {
       await expect(tabOf(page, 'Browser')).toHaveAttribute('aria-selected', 'true')
     })
 
-    await test.step('browser: shows the page of a channel', async () => {
-      await expect(tabPanelOf(page)).toContainText('https://example.com/onboarding')
-      await expect(tabPanelOf(page)).toContainText('Onboarding guide')
-      await expect(tabPanelOf(page)).toContainText('Welcome to the team.')
+    await test.step('browser: lists the page the agent opened in a channel by address', async () => {
+      const opened = tabPanelOf(page).getByRole('list', { name: 'Pages the agent opened' })
+      await expect(opened.getByRole('listitem')).toHaveText(['https://example.com/onboardingOnboarding guide'])
     })
 
     await test.step('sources: lists the sources with their origin', async () => {
