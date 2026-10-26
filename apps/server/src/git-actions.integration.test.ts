@@ -288,3 +288,70 @@ test('a conflicting update is aborted with the working copy clean and names the 
   expect(existsSync(join(workspace, '.git/MERGE_HEAD'))).toBe(false)
   expect(await statusOf(alice, id)).toMatchObject({ aheadOfBase: 1, behindBase: 1, uncommitted: 0 })
 })
+
+test('the agent fetches a branch into origin/<branch> from a thin bundle of that branch only, with no token reaching the runtime; the working branch is untouched and a missing branch is named', async () => {
+  const { relay } = await stack.agentHost('Git fetch host', { routesModelCalls: true })
+  const baseBranch = baseBranchOf('fetch')
+  const { id, branch } = await newDevChat(baseBranch)
+  const { workspace } = await runtimeWorkspaceOf(id)
+  agentCommit(workspace, 2)
+  const workingHead = gitIn(workspace, 'rev-parse', 'HEAD').trim()
+  const baseHead = fakeGitHub.branchHeadOf('acme/app', baseBranch)
+  const feature = `e2e-feature-${crypto.randomUUID().slice(0, 8)}`
+  const featureHead = fakeGitHub.commitToBranch('acme/app', {
+    branch: feature,
+    from: baseBranch,
+    files: { 'docs/feature.md': 'feature\n' },
+    message: 'Add the feature docs',
+  })
+  const requestsBefore = relay.requests.length
+  const issuedBefore = new Set(fakeGitHub.installationTokens.keys())
+  stack.setFakeLlmScript({
+    steps: [
+      { tool: 'fetch_branch', arguments: { branch: `origin/${feature}` } },
+      { tool: 'fetch_branch', arguments: { branch: 'e2e-missing' } },
+    ],
+    text: 'Fetched.',
+  })
+  const promptId = await stack.prompt(id, 'Fetch the feature branch')
+  await stack.answered(promptId)
+  await waitFor(async () => (await stack.turnOf(id)) === null, 20_000)
+  const toolResults = (await stack.repliesTo(promptId, ['step'])).flatMap(({ step }) => {
+    const toolStep = step as { type?: string; result?: string } | undefined
+    return toolStep?.type === 'tool' ? [toolStep.result] : []
+  })
+  expect(toolResults).toEqual([
+    `Fetched ${feature} at ${featureHead.slice(0, 7)} into origin/${feature}`,
+    'There is no branch e2e-missing on GitHub',
+  ])
+  expect(gitIn(workspace, 'rev-parse', `refs/remotes/origin/${feature}`).trim()).toBe(featureHead)
+  expect(gitIn(workspace, 'rev-parse', 'HEAD').trim()).toBe(workingHead)
+  expect(gitIn(workspace, 'branch', '--show-current').trim()).toBe(branch)
+
+  const fetchRequests = relay.requests.slice(requestsBefore)
+  const [fetched, ...otherFetches] = fetchRequests.filter(({ path }) => path === '/api/workspace/fetch')
+  expect(otherFetches).toEqual([])
+  const { bundle, head } = JSON.parse(String(fetched?.body))
+  expect(head).toBe(featureHead)
+  const bundleFile = join(tmpdir(), `spyria-git-fetch-${crypto.randomUUID()}.bundle`)
+  writeFileSync(bundleFile, Buffer.from(bundle, 'base64'))
+  expect(Bun.spawnSync(['git', 'bundle', 'list-heads', bundleFile]).stdout.toString()).toBe(
+    `${featureHead} refs/heads/${feature}\n`,
+  )
+  const verified = Bun.spawnSync(['git', 'bundle', 'verify', bundleFile], { cwd: workspace })
+  expect(`${verified.stdout}${verified.stderr}`).toContain(baseHead)
+  const fetchTokens = [...fakeGitHub.installationTokens.keys()].filter((token) => !issuedBefore.has(token))
+  expect(fetchTokens.map((token) => fakeGitHub.installationTokens.get(token))).toEqual([
+    expect.objectContaining({ repositories: ['app'], permissions: { contents: 'read', metadata: 'read' } }),
+    expect.objectContaining({ repositories: ['app'], permissions: { contents: 'read', metadata: 'read' } }),
+  ])
+  const sentToRuntime = JSON.stringify(fetchRequests)
+  for (const token of [...fakeGitHub.installationTokens.keys(), ...fakeGitHub.userTokens()])
+    expect(sentToRuntime).not.toContain(token)
+  expect([
+    ...(await database.$client`select tool, read_only, status from tool_calls where chat_id = ${id} order by called_at`),
+  ]).toEqual([
+    { tool: 'fetch_branch', read_only: false, status: 'succeeded' },
+    { tool: 'fetch_branch', read_only: false, status: 'refused' },
+  ])
+})

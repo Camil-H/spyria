@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { checksOf, publishActionOf, publishingRefusalOf, reviewPromptOf } from './pull-requests.ts'
+import { checksOf, publishingRefusalOf, reviewPromptOf } from './pull-requests.ts'
 
 test('the checks summary is failing if any check fails, pending while any is pending or none ran, else passing', () => {
   expect(checksOf({ checks: {} })).toBe('pending')
@@ -24,11 +24,6 @@ test('the review prompt lists every unresolved comment with file, line, author a
   )
 })
 
-test('the tools map to publish actions and the refusal names the owner', () => {
-  expect([publishActionOf('push_branch'), publishActionOf('open_pull_request'), publishActionOf('x')]).toEqual([
-    'push',
-    'pull_request',
-    undefined,
-  ])
+test('the publishing refusal names the owner', () => {
   expect(publishingRefusalOf('Alice')).toBe('Only Alice can push or open pull requests in this chat')
 })

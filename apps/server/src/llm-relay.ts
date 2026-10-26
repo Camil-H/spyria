@@ -4,11 +4,12 @@ import {
   awaitTaskTool,
   genericModelCallNoticeOf,
   githubTools,
+  githubToolsInstructions,
   githubToolsPath,
   guestPrompterOf,
   isGuestToolMethod,
+  isReadOnlyGitHubTool,
   type ModelCallFailure,
-  publishActionOf,
   routerTools,
   type ToolCallDecision,
   type ToolCallFailure,
@@ -190,6 +191,7 @@ export const createModelCallRelay = ({
           {
             protocolVersion: rpc.params?.protocolVersion ?? '2025-06-18',
             ...spyriaServerInfoOf(isRouter ? 'spyria-router' : 'spyria-github'),
+            ...(!isRouter && { instructions: githubToolsInstructions }),
           },
           { 'mcp-session-id': crypto.randomUUID() },
         )
@@ -197,20 +199,25 @@ export const createModelCallRelay = ({
       if (rpc.method === 'tools/list') return reply({ tools: isRouter ? routerTools : githubTools })
       if (rpc.method !== 'tools/call') return answerRpc(rpc.id, methodNotFound)
       if (!isRouter && 'ownerId' in runtime && runtime.prompterId && runtime.ownerId) {
-        const { title, body: description } = rpc.params?.arguments ?? {}
         const toolName = String(rpc.params?.name ?? '')
-        const action = publishActionOf(toolName)
         const calledAt = new Date()
-        const { isRefused, text } = action
-          ? await handlers
-              .publishBranch({
-                chat: runtime.chat,
-                memberId: runtime.prompterId,
-                action,
-                draft: { title: String(title ?? ''), body: String(description ?? '') },
-              })
-              .catch(() => ({ isRefused: true, text: 'Publishing failed' }))
-          : { isRefused: true, text: `Unknown tool ${toolName}` }
+        const { isRefused, text, status } = await handlers
+          .callGitHubTool({
+            chat: runtime.chat,
+            memberId: runtime.prompterId,
+            name: toolName,
+            input: rpc.params?.arguments,
+          })
+          .then((outcome) => ({ ...outcome, status: outcome.isRefused ? 'refused' : 'succeeded' }) as const)
+          .catch((error: unknown) => {
+            log.error({
+              event: 'github_tool.failed',
+              body: 'A GitHub tool call failed',
+              attributes: { 'workspace.id': host.workspaceId, 'chat.id': runtime.chat.chatId, 'tool.name': toolName },
+              error,
+            })
+            return { isRefused: true, text: `${toolName} failed`, status: 'failed' } as const
+          })
         await handlers
           .recordToolCall(host.workspaceId, {
             chatId: runtime.chat.chatId,
@@ -218,10 +225,10 @@ export const createModelCallRelay = ({
             ownerId: runtime.ownerId,
             server: 'github',
             tool: toolName,
-            readOnly: false,
+            readOnly: isReadOnlyGitHubTool(toolName),
             decision: 'not_needed',
             decidedBy: null,
-            status: isRefused ? 'refused' : 'succeeded',
+            status,
             calledAt,
           })
           .catch((error) => logToolCallFailure(runtime.chat.chatId, error))

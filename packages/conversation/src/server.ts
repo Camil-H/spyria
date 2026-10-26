@@ -25,16 +25,24 @@ export {
 } from './domain/attachments.ts'
 export { awaitTaskTool, routerTools, stillRunningOf, subagentFailureOf, unknownTaskOf } from './domain/delegation.ts'
 export { type GitAction, isGitAction } from './domain/git-actions.ts'
+export {
+  githubTools,
+  githubToolsInstructions,
+  githubToolsPath,
+  type Issue,
+  type IssueFilter,
+  type IssueSummary,
+  isReadOnlyGitHubTool,
+  type PullRequestChange,
+  type ReviewThread,
+} from './domain/github-tools.ts'
 export { genericModelCallNoticeOf, type ModelCallFailure } from './domain/model-call-failures.ts'
 export {
   checksOf,
-  githubTools,
-  githubToolsPath,
   noGitHubConnection,
   type PublishAction,
   type PullRequestDraft,
   type PullRequestStep,
-  publishActionOf,
   type ReviewComment,
 } from './domain/pull-requests.ts'
 export type { CommandOutputFrame, DelegatedFrame, QuestionFrame } from './domain/streamed-reply.ts'

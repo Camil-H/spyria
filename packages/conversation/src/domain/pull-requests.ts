@@ -32,30 +32,9 @@ export const keepsSourceBranch = (
 ) => source.baseBranch !== null && source.ownerId === memberId
 export type PublishAction = 'push' | 'pull_request'
 
-export const githubToolsPath = '/mcp/github'
 export const noGitHubConnection = 'Connect your GitHub account in your profile to push'
 export const publishingRefusalOf = (ownerName: string) =>
   `Only ${ownerName} can push or open pull requests in this chat`
-
-export const githubTools = [
-  {
-    name: 'push_branch',
-    description: "Push the chat's working branch to GitHub as the chat owner. Commit your changes first.",
-    inputSchema: { type: 'object', properties: {} },
-  },
-  {
-    name: 'open_pull_request',
-    description:
-      "Push the working branch and open a pull request against the chat's base branch as the chat owner. Commit your changes first.",
-    inputSchema: {
-      type: 'object',
-      properties: { title: { type: 'string' }, body: { type: 'string' } },
-      required: ['title'],
-    },
-  },
-]
-export const publishActionOf = (toolName: unknown): PublishAction | undefined =>
-  toolName === 'push_branch' ? 'push' : toolName === 'open_pull_request' ? 'pull_request' : undefined
 
 export const checksOf = ({ checks }: Pick<PullRequestStep, 'checks'>): CheckState => {
   const states = Object.values(checks)
