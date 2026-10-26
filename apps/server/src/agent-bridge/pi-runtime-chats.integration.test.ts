@@ -268,9 +268,8 @@ test('the pages Pi opens with open_page are kept for the chat’s Browser, newes
     ],
     text: 'Opened.',
   })
-  const promptId = await prompt(chat, 'Show me the totals')
-  await stack.turnIs(chat, null)
-  expect((await repliesTo(promptId)).at(-1)?.body).toBe('Opened.')
+  const replies = await stack.finished(await prompt(chat, 'Show me the totals'), chat, 15_000, 'Opened.')
+  expect(replies.at(-1)?.body).toBe('Opened.')
   expect([
     ...(await database.$client`
       select url, title from browser_pages where workspace_id = ${acme} and chat_id = ${chat} order by opened_at desc`),
