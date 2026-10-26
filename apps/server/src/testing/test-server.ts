@@ -416,3 +416,13 @@ export default { port, hostname: '0.0.0.0', idleTimeout: 0, fetch: app.fetch, we
 process.on('unhandledRejection', (error) =>
   log.error({ event: 'test_server.unhandled_rejection', body: 'A promise rejected with nobody awaiting it', error }),
 )
+process.on('uncaughtException', (error) =>
+  log.error({ event: 'test_server.uncaught_exception', body: 'An exception reached the event loop', error }),
+)
+process.on('exit', (code) =>
+  log.error({
+    event: 'test_server.exit',
+    body: 'The test server process is exiting',
+    attributes: { 'process.exit_code': code },
+  }),
+)
