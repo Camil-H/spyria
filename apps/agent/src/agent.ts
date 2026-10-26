@@ -13,7 +13,18 @@ import { checkOut, lastLinesOf, type Repository, runSetup, setupCommand } from '
 import { connectPi } from './pi.ts'
 import { redacted } from './redaction.ts'
 import { contextOf, log, withSpan } from './telemetry.ts'
-import { bundleOf, changesOf, commitOf, fileOf, mediaOf, mergeOf, pushedOf, statusOf, treeOf } from './workspace.ts'
+import {
+  bundleOf,
+  changesOf,
+  commitOf,
+  fetchOf,
+  fileOf,
+  mediaOf,
+  mergeOf,
+  pushedOf,
+  statusOf,
+  treeOf,
+} from './workspace.ts'
 
 type Status = 'starting' | 'idle' | 'running' | 'finished' | 'error'
 type AgentEvent = { id: string; seq: number; timestamp: string; completed: boolean; update: Json }
@@ -95,8 +106,8 @@ const conversationRoute =
   /^\/api\/conversations\/([\w-]+)(?:\/(events|interrupt|restart|switch_acp_model|plan_mode)|\/questions\/([\w-]+))?$/
 const socketRoute = /^\/sockets\/events\/([\w-]+)$/
 const workspaceRoute = /^\/api\/workspace\/(tree|file|media|changes|status)$/
-const workspaceActions = { bundle: bundleOf, commit: commitOf, merge: mergeOf, pushed: pushedOf }
-const workspaceActionRoute = /^\/api\/workspace\/(bundle|commit|merge|pushed)$/
+const workspaceActions = { bundle: bundleOf, commit: commitOf, fetch: fetchOf, merge: mergeOf, pushed: pushedOf }
+const workspaceActionRoute = /^\/api\/workspace\/(bundle|commit|fetch|merge|pushed)$/
 const setupToolCallId = 'spyria-setup'
 const conversationIdPattern = /^[\w-]{1,64}$/
 const exitedUnexpectedly = /exited unexpectedly/i

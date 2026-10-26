@@ -161,7 +161,8 @@ const countsAgainst = async (root: string, ref: string | undefined, env: Record<
 
 export const statusOf = async (root: string, base: string, env: Record<string, string>) => {
   const ref = await baseRefOf(root, base, env)
-  const [baseHead, toBase, toPushed, pushedLog, uncommitted] = await Promise.all([
+  const [head, baseHead, toBase, toPushed, pushedLog, uncommitted] = await Promise.all([
+    git(root, ['rev-parse', '--verify', '--quiet', 'HEAD'], env),
     ref ? git(root, ['rev-parse', ref], env) : '',
     countsAgainst(root, ref, env),
     countsAgainst(root, pushedRef, env),
@@ -170,6 +171,7 @@ export const statusOf = async (root: string, base: string, env: Record<string, s
   ])
   const [, pushedSeconds] = /@\{(\d+)\}/.exec(pushedLog) ?? []
   return {
+    ...(head.trim() && { head: head.trim() }),
     ...(baseHead.trim() && { baseHead: baseHead.trim() }),
     ...(toBase && { aheadOfBase: toBase.ahead, behindBase: toBase.behind }),
     ...(toPushed && { aheadOfPushed: toPushed.ahead, behindPushed: toPushed.behind }),
@@ -214,19 +216,46 @@ export const commitOf = async (
 const isCommit = async (root: string, sha: string, env: Record<string, string>) =>
   Boolean(await git(root, ['rev-parse', '--verify', '--quiet', `${sha}^{commit}`], env))
 
-const fetchedBase = async (root: string, base: string, head: string, bundle: string, env: Record<string, string>) => {
-  if (!bundle)
-    return (await isCommit(root, head, env)) && (await gitBytes(root, ['update-ref', baseRef, head], env)).isDone
-  const file = join(tmpdir(), `spyria-base-${crypto.randomUUID()}.bundle`)
+type FetchedBranch = { branch: string; head: string; bundle: string }
+
+const fetchedBranchOf = ({ branch, head, bundle }: { branch?: unknown; head?: unknown; bundle?: unknown }) =>
+  typeof branch === 'string' &&
+  branchPattern.test(branch) &&
+  typeof head === 'string' &&
+  commitPattern.test(head) &&
+  typeof bundle === 'string'
+    ? { branch, head, bundle }
+    : undefined
+
+const fetchedInto = async (
+  root: string,
+  ref: string,
+  { branch, head, bundle }: FetchedBranch,
+  env: Record<string, string>,
+) => {
+  if (!bundle) return (await isCommit(root, head, env)) && (await gitBytes(root, ['update-ref', ref, head], env)).isDone
+  const file = join(tmpdir(), `spyria-fetch-${crypto.randomUUID()}.bundle`)
   try {
     await Bun.write(file, Buffer.from(bundle, 'base64'))
     const heads = await git(root, ['bundle', 'list-heads', file], env)
-    if (heads !== `${head} refs/heads/${base}\n`) return false
+    if (heads !== `${head} refs/heads/${branch}\n`) return false
     if (!(await gitBytes(root, ['bundle', 'verify', '--quiet', file], env)).isDone) return false
-    return (await gitBytes(root, ['fetch', '--quiet', '--no-tags', file, `+refs/heads/${base}:${baseRef}`], env)).isDone
+    return (await gitBytes(root, ['fetch', '--quiet', '--no-tags', file, `+refs/heads/${branch}:${ref}`], env)).isDone
   } finally {
     await rm(file, { force: true })
   }
+}
+
+export const fetchOf = async (
+  root: string,
+  request: { branch?: unknown; head?: unknown; bundle?: unknown },
+  env: Record<string, string>,
+) => {
+  const fetched = fetchedBranchOf(request)
+  if (!fetched) return { failure: 'The fetch request is not valid' }
+  if (!(await fetchedInto(root, `refs/remotes/origin/${fetched.branch}`, fetched, env)))
+    return { failure: `The branch ${fetched.branch} could not be read from the bundle` }
+  return { ref: `origin/${fetched.branch}` }
 }
 
 export const mergeOf = async (
@@ -235,24 +264,17 @@ export const mergeOf = async (
   env: Record<string, string>,
 ) => {
   const authorEnvironment = authorEnvironmentOf(author)
-  if (
-    typeof base !== 'string' ||
-    !branchPattern.test(base) ||
-    typeof head !== 'string' ||
-    !commitPattern.test(head) ||
-    typeof bundle !== 'string' ||
-    !authorEnvironment
-  )
-    return { failure: 'The update request is not valid' }
+  const fetched = fetchedBranchOf({ branch: base, head, bundle })
+  if (!fetched || !authorEnvironment) return { failure: 'The update request is not valid' }
   if ((await git(root, ['status', '--porcelain'], env)).trim())
     return { failure: 'Commit the uncommitted changes before updating from base' }
-  if (!(await fetchedBase(root, base, head, bundle, env)))
-    return { failure: `The base branch ${base} could not be read from the bundle` }
+  if (!(await fetchedInto(root, baseRef, fetched, env)))
+    return { failure: `The base branch ${fetched.branch} could not be read from the bundle` }
   if ((await gitBytes(root, ['merge-base', '--is-ancestor', baseRef, 'HEAD'], env)).isDone) return { isUpToDate: true }
   const working = (await git(root, ['branch', '--show-current'], env)).trim()
   const merged = await gitBytes(
     root,
-    ['merge', '--no-ff', '--no-edit', '-m', `Merge branch '${base}' into ${working}`, baseRef],
+    ['merge', '--no-ff', '--no-edit', '-m', `Merge branch '${fetched.branch}' into ${working}`, baseRef],
     { ...env, ...authorEnvironment },
   )
   if (merged.isDone) return { isUpToDate: false }

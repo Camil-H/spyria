@@ -130,6 +130,7 @@ test.each([
   ['GET', '/api/workspace/file?path=../x/y'],
   ['POST', '/api/workspace/push'],
   ['GET', '/api/workspace/merge'],
+  ['GET', '/api/workspace/fetch'],
   ['POST', '/api/workspace/status'],
   ['POST', '/api/workspace/media'],
 ])('a personal host refuses %s %s', async (method, path) => {
@@ -175,6 +176,7 @@ test.each([
   ['GET', '/api/workspace/status?base=main'],
   ['POST', '/api/workspace/bundle'],
   ['POST', '/api/workspace/commit'],
+  ['POST', '/api/workspace/fetch'],
   ['POST', '/api/workspace/merge'],
   ['POST', '/api/workspace/pushed'],
 ])('a personal host forwards %s %s', async (method, path) => {
