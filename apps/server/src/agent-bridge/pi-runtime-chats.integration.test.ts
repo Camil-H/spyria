@@ -255,13 +255,15 @@ test('Stop mid-command cancels the turn without deleting the conversation, and t
   expect(await sessionsStartedOf(chat)).toHaveLength(1)
 })
 
-test('the pages Pi opens with open_page are kept for the chat’s Browser, newest first, and an address of another scheme is not', async () => {
+test('the pages Pi opens with open_page are kept for the chat’s Browser, newest first, and an address of another scheme or on the member’s own network is not', async () => {
   await stack.agentHost('Browser host', { routesModelCalls: true })
   const chat = await newRuntimeChat()
   stack.setFakeLlmScript({
     steps: [
       { tool: 'open_page', arguments: { address: '/workspace/project/reports/totals.html', title: 'Invoice totals' } },
       { tool: 'open_page', arguments: { address: 'javascript:alert(1)', title: 'Script' } },
+      { tool: 'open_page', arguments: { address: 'http://localhost:3000/admin', title: 'Admin' } },
+      { tool: 'open_page', arguments: { address: 'http://192.168.1.1', title: 'Router' } },
       { tool: 'open_page', arguments: { address: 'https://example.com/docs' } },
     ],
     text: 'Opened.',

@@ -37,6 +37,51 @@ test('an address with another scheme, outside the workspace, blank or too long o
     expect(openPage({ address })).toBeUndefined()
 })
 
+test('an address on the member’s own machine or network opens nothing, in any spelling', () => {
+  for (const address of [
+    'http://localhost:3000/invoices',
+    'http://LOCALHOST./',
+    'http://app.localhost',
+    'http://printer.local',
+    'http://intranet/wiki',
+    'http://127.0.0.1:8080',
+    'http://127.1',
+    'http://2130706433',
+    'http://0x7f.1',
+    'http://0.0.0.0:3000',
+    'http://10.1.2.3',
+    'http://172.16.0.1',
+    'http://172.31.255.255',
+    'http://192.168.1.1/admin',
+    'http://169.254.169.254/latest/meta-data',
+    'http://100.64.0.1',
+    'https://user:secret@10.0.0.1:8443/x',
+    'http://[::1]:3000',
+    'http://[::]',
+    'http://[0:0:0:0:0:0:0:1]',
+    'http://[fe80::1]',
+    'http://[fd12:3456::1]',
+    'http://[::ffff:127.0.0.1]',
+    'http://[::ffff:192.168.0.1]',
+  ])
+    expect(openPage({ address })).toBeUndefined()
+})
+
+test('a public address next to a private range still opens', () => {
+  for (const address of [
+    'http://172.15.0.1',
+    'http://172.32.0.1',
+    'http://100.128.0.1',
+    'http://169.255.0.1',
+    'http://11.0.0.1',
+    'http://[2606:4700::1111]',
+    'http://[::ffff:8.8.8.8]',
+    'https://localhost.example.com',
+    'https://local.example.com',
+  ])
+    expect(openPage({ address })?.url).toBe(address)
+})
+
 test('only the start of an open_page call opens a page, not its update or another tool', () => {
   expect(openPage({ address: 'https://example.com' }, { sessionUpdate: 'tool_call_update' })).toBeUndefined()
   expect(openPage({ address: 'https://example.com' }, { title: 'bash' })).toBeUndefined()
