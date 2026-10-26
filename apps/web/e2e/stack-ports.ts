@@ -1,7 +1,12 @@
 export const serverUrl = 'http://localhost:3100'
 export const viteUrl = 'http://localhost:5190'
-export const zeroCachePortOf = (workerIndex: number) => 4900 + 2 * workerIndex
-export const maximumWorkerCount = 8
+const maximumWorkerInstances = 50
+const firstZeroCachePort = 4900
+export const zeroCachePortOf = (workerIndex: number) => firstZeroCachePort + 2 * (workerIndex % maximumWorkerInstances)
+export const workerZeroCachePorts = Array.from(
+  { length: 2 * maximumWorkerInstances },
+  (_, offset) => firstZeroCachePort + offset,
+)
 export const templateDatabaseName = 'spyria_e2e_template'
 export const gatewayPort = 4881
 export const gatewayUrl = `http://127.0.0.1:${gatewayPort}`

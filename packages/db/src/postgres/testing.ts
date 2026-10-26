@@ -211,6 +211,7 @@ const freeZeroCachePorts = async (ports: number[]) => {
 }
 
 export const stopLeftoverZeroCache = (port: number) => freeZeroCachePorts([port, port + 1])
+export const stopLeftoverZeroCaches = (ports: number[]) => freeZeroCachePorts(ports)
 
 export const startZeroCache = async ({
   databaseName,

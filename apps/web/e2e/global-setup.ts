@@ -13,20 +13,19 @@ import {
   startTestDex,
   startTestGateway,
   startTestPostgres,
-  stopLeftoverZeroCache,
+  stopLeftoverZeroCaches,
   testGatewayAdmin,
 } from '@spyria/db/testing'
 import {
   fakeMcpUrl,
   gatewayPort,
   gatewayUrl,
-  maximumWorkerCount,
   serverUrl,
   ssoServerUrl,
   ssoViteUrl,
   templateDatabaseName,
   viteUrl,
-  zeroCachePortOf,
+  workerZeroCachePorts,
 } from './stack-ports.ts'
 
 const repositoryRoot = new URL('../../../', import.meta.url).pathname
@@ -38,10 +37,7 @@ const sweptPorts = [
   new URL(fakeMcpUrl).port,
   new URL(ssoServerUrl).port,
   new URL(ssoViteUrl).port,
-  ...Array.from({ length: maximumWorkerCount }, (_, index) => [
-    zeroCachePortOf(index),
-    zeroCachePortOf(index) + 1,
-  ]).flat(),
+  ...workerZeroCachePorts,
 ]
 const sweptListeners = () =>
   execSync(`lsof -t -iTCP:${sweptPorts.join(',')} -sTCP:LISTEN || true`)
@@ -49,10 +45,7 @@ const sweptListeners = () =>
     .split('\n')
     .filter(Boolean)
 
-const stopWorkerZeroCaches = () =>
-  Promise.allSettled(
-    Array.from({ length: maximumWorkerCount }, (_, index) => stopLeftoverZeroCache(zeroCachePortOf(index))),
-  )
+const stopWorkerZeroCaches = () => stopLeftoverZeroCaches(workerZeroCachePorts).catch(() => {})
 
 const sweepLeftovers = async () => {
   await stopWorkerZeroCaches()

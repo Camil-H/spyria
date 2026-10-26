@@ -76,11 +76,11 @@ Tests start and own their containers; they never touch the dev stack.
 | Test Dex | `spyria-test-dex` on 5557 | Config `apps/web/e2e/dex-test.yaml`, shared by integration and e2e, never the dev Dex. |
 | Integration gateway | `spyria-test-gateway-integration` on 4880 | A Bifrost of its own, on its own database. |
 | e2e gateway | `spyria-test-gateway-e2e` on 4881 | One for the whole e2e run. |
-| e2e test server and app | server 3100, app 5190 | One database per worker (`spyria_e2e_w<n>`), zero-cache per worker from port 4900. |
+| e2e test server and app | server 3100, app 5190 | One database (`spyria_e2e_w<n>`) and one zero-cache (ports from 4900, 50 pairs) per worker instance, keyed by Playwright's `workerIndex`, so a worker that replaces a failed one never shares a database or ports with its predecessor. |
 | SSO-mode stack | server 3102, app 5191 | For sign-in tests in `sso` mode. |
 | Fake MCP server | 3101 | Must be free when e2e starts. |
 
-Playwright runs 3 workers by default; `WORKERS=<n>` changes it (8 at most).
+Playwright runs 3 workers by default; `WORKERS=<n>` changes it.
 
 ### Cleanup
 
