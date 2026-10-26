@@ -5,11 +5,13 @@ import {
   type AdapterConnection,
   type AdapterRequest,
   connectAdapter,
+  internalError,
   type Json,
   liveOutputCharacters,
 } from './acp.ts'
 import { checkOut, lastLinesOf, type Repository, runSetup, setupCommand } from './checkout.ts'
 import { connectPi } from './pi.ts'
+import { redacted } from './redaction.ts'
 import { contextOf, log, withSpan } from './telemetry.ts'
 import { bundleOf, changesOf, commitOf, fileOf, mediaOf, mergeOf, pushedOf, statusOf, treeOf } from './workspace.ts'
 
@@ -39,7 +41,9 @@ type FormShape = { free: string; header: 'title' | 'description'; text: 'title' 
 type PermissionOption = { optionId: string; kind?: string }
 type Conversation = {
   id: string
+  launch: Launch
   connection: AdapterConnection
+  isReloading: boolean
   status: Status
   failure?: string
   sessionId?: string
@@ -88,13 +92,17 @@ const subAnswerText = 'No member is available; decide yourself and state your as
 const cancelledPermission = { outcome: { outcome: 'cancelled' } }
 const terminalToolStatuses = ['completed', 'failed']
 const conversationRoute =
-  /^\/api\/conversations\/([\w-]+)(?:\/(events|interrupt|switch_acp_model|plan_mode)|\/questions\/([\w-]+))?$/
+  /^\/api\/conversations\/([\w-]+)(?:\/(events|interrupt|restart|switch_acp_model|plan_mode)|\/questions\/([\w-]+))?$/
 const socketRoute = /^\/sockets\/events\/([\w-]+)$/
 const workspaceRoute = /^\/api\/workspace\/(tree|file|media|changes|status)$/
 const workspaceActions = { bundle: bundleOf, commit: commitOf, merge: mergeOf, pushed: pushedOf }
 const workspaceActionRoute = /^\/api\/workspace\/(bundle|commit|merge|pushed)$/
 const setupToolCallId = 'spyria-setup'
 const conversationIdPattern = /^[\w-]{1,64}$/
+const exitedUnexpectedly = /exited unexpectedly/i
+const restartedNotice = 'The agent restarted; send your message again'
+const errorSummaryCharacters = 300
+const adapterCloseWaitMilliseconds = 2_000
 
 const adapterEnvironmentOf = (secrets: Launch['secrets']) => ({
   ...Object.fromEntries(inheritedEnvironment.flatMap((name) => (process.env[name] ? [[name, process.env[name]]] : []))),
@@ -114,6 +122,29 @@ const errorUpdateOf = (error: unknown) => ({
   message: error instanceof AcpError ? error.message : 'spyria-agent failed',
   ...(error instanceof AcpError && error.code !== undefined && { code: error.code }),
 })
+
+const isDeadSession = (error: unknown) =>
+  error instanceof AcpError &&
+  (error.code === internalError || exitedUnexpectedly.test(`${error.message} ${error.details ?? ''}`))
+
+const secretsOf = ({ secrets }: Launch) => Object.values(secrets ?? {}).map((secret) => String(secret?.value ?? ''))
+
+const errorOutputOf = (conversation: Conversation, connection: AdapterConnection) =>
+  connection.errorOutput().map((line) => redacted(line, secretsOf(conversation.launch)))
+
+const lastLineOf = (errorOutput: string[]) =>
+  errorOutput
+    .map((line) => line.trim())
+    .findLast(Boolean)
+    ?.slice(0, errorSummaryCharacters)
+
+const withSummary = (message: string, errorOutput: string[]) => {
+  const summary = lastLineOf(errorOutput)
+  return summary ? `${message}. It reported: ${summary}` : message
+}
+
+const currentValueOf = (configOptions: Json[], category: string) =>
+  configOptions.find((option) => option.category === category)?.currentValue as string | undefined
 
 const branchOf = async (cwd: string) => {
   try {
@@ -341,6 +372,7 @@ export const startAgent = ({
   }
 
   const onUpdate = (conversation: Conversation, update: Json) => {
+    if (conversation.isReloading) return
     if (update.sessionUpdate === 'current_mode_update') conversation.modeId = String(update.currentModeId)
     if (update.sessionUpdate === 'config_option_update' && Array.isArray(update.configOptions)) {
       conversation.configOptions = update.configOptions
@@ -394,7 +426,21 @@ export const startAgent = ({
     return true
   }
 
-  const start = async (conversation: Conversation, { agent }: Launch) => {
+  const reopened = async (conversation: Conversation, sessionId: string, sessionParams: Json, isReload: boolean) => {
+    const request = (method: string) =>
+      requestWithin(conversation, method, { sessionId, ...sessionParams }).then(
+        (result): Json => ({ ...result, sessionId }),
+        () => undefined,
+      )
+    if (!isReload) return request('session/resume')
+    conversation.isReloading = true
+    const loaded = await request('session/load').finally(() => {
+      conversation.isReloading = false
+    })
+    return loaded ?? request('session/resume')
+  }
+
+  const start = async (conversation: Conversation, { agent }: Launch, isReload = false) => {
     const request = (method: string, params: Json) => requestWithin(conversation, method, params)
     const sessionParams = {
       cwd: conversation.cwd,
@@ -402,11 +448,7 @@ export const startAgent = ({
     }
     await request('initialize', { protocolVersion: 1, clientCapabilities: { elicitation: { form: {} } } })
     const resumeSessionId = agent?.acp_resume_session_id
-    const resumed =
-      resumeSessionId &&
-      (await request('session/resume', { sessionId: resumeSessionId, ...sessionParams })
-        .then((result): Json => ({ ...result, sessionId: resumeSessionId }))
-        .catch(() => undefined))
+    const resumed = resumeSessionId && (await reopened(conversation, resumeSessionId, sessionParams, isReload))
     const session = resumed || (await request('session/new', sessionParams))
     const sessionId = String(session.sessionId)
     const modes = session.modes as { currentModeId?: string; availableModes?: { id: string }[] } | undefined
@@ -482,6 +524,69 @@ export const startAgent = ({
     return checkout.finally(() => checkouts.delete(id))
   }
 
+  const reportAdapterFailure = (conversation: Conversation, errorOutput: string[], error: unknown) =>
+    log.warn({
+      event: 'agent.adapter_failed',
+      body: 'The agent adapter failed',
+      attributes: { 'conversation.id': conversation.id, 'adapter.error_output': errorOutput.join('\n') },
+      error,
+    })
+
+  const connectionOf = (conversation: () => Conversation, launch: Launch, command: string[], cwd: string) => {
+    const isCurrent = () => conversation().connection === connection
+    const connection: AdapterConnection = (launch.agent?.adapter === 'pi-rpc' ? connectPi : connectAdapter)(
+      { command, env: adapterEnvironmentOf(launch.secrets), cwd },
+      {
+        onUpdate: (params) => {
+          if (isCurrent()) onUpdate(conversation(), (params.update ?? {}) as Json)
+        },
+        onRequest: (request) => onRequest(conversation(), request),
+        onCancelRequest: (requestId) => closeQuestions(conversation(), 'cancelled', requestId),
+        onExit: (code) => {
+          const exited = conversation()
+          if (conversations.get(exited.id) !== exited || !isCurrent()) return
+          const errorOutput = errorOutputOf(exited, connection)
+          const error = new AcpError(withSummary(`The adapter exited with code ${code}`, errorOutput))
+          reportAdapterFailure(exited, errorOutput, error)
+          fail(exited, error)
+        },
+      },
+    )
+    return connection
+  }
+
+  const relaunchOf = ({ launch, sessionId, configOptions }: Conversation): Launch => ({
+    ...launch,
+    agent: {
+      ...launch.agent,
+      acp_resume_session_id: sessionId ?? launch.agent?.acp_resume_session_id,
+      acp_model: currentValueOf(configOptions, 'model') ?? launch.agent?.acp_model,
+      acp_thought_level: currentValueOf(configOptions, 'thought_level') ?? launch.agent?.acp_thought_level,
+    },
+  })
+
+  const restart = async (conversation: Conversation) => {
+    const previous = conversation.connection
+    const launch = relaunchOf(conversation)
+    conversation.connection = connectionOf(
+      () => conversation,
+      launch,
+      launch.agent?.acp_command as string[],
+      conversation.cwd,
+    )
+    previous.close()
+    closeQuestions(conversation, 'stopped')
+    conversation.toolCalls.clear()
+    conversation.status = 'starting'
+    conversation.failure = undefined
+    await Promise.race([previous.closed, Bun.sleep(adapterCloseWaitMilliseconds)])
+    conversation.started = start(conversation, launch, true).catch((error) => {
+      fail(conversation, error)
+      conversation.connection.close()
+    })
+    await conversation.started
+  }
+
   const create = async (launch: Launch) => {
     const command = launch.agent?.acp_command
     if (!Array.isArray(command) || command.length === 0 || !command.every((part) => typeof part === 'string'))
@@ -505,6 +610,8 @@ export const startAgent = ({
     if (failure) return Response.json({ id, execution_status: 'error', error: failure }, { status: 201 })
     const conversation: Conversation = {
       id,
+      launch,
+      isReloading: false,
       status: 'starting',
       isSub: Boolean(launch.parent_conversation_id),
       cwd,
@@ -518,22 +625,7 @@ export const startAgent = ({
       toolCalls: new Map(),
       sockets: new Set(),
       started: Promise.resolve(),
-      connection: (launch.agent?.adapter === 'pi-rpc' ? connectPi : connectAdapter)(
-        {
-          command,
-          env: adapterEnvironmentOf(launch.secrets),
-          cwd,
-        },
-        {
-          onUpdate: (params) => onUpdate(conversation, (params.update ?? {}) as Json),
-          onRequest: (request) => onRequest(conversation, request),
-          onCancelRequest: (requestId) => closeQuestions(conversation, 'cancelled', requestId),
-          onExit: (code) => {
-            if (conversations.get(id) === conversation)
-              fail(conversation, new AcpError(`The adapter exited with code ${code}`))
-          },
-        },
-      ),
+      connection: connectionOf(() => conversation, launch, command, cwd),
     }
     conversations.set(id, conversation)
     conversation.started = start(conversation, launch).catch((error) => {
@@ -558,10 +650,13 @@ export const startAgent = ({
   ) => {
     if (!conversation.sessionId || conversation.status === 'error')
       return Response.json({ error: 'The conversation has no running session' }, { status: 409 })
-    const { sessionId } = conversation
     conversation.status = 'running'
     conversation.keptPlanning = false
     const startedAt = performance.now()
+    const promptParams = () => ({
+      sessionId: conversation.sessionId,
+      prompt: (body.content ?? []).filter((block) => block.type === 'text').map(({ text }) => ({ type: 'text', text })),
+    })
     const turnEnded = (stopReason: unknown) =>
       log.info({
         event: 'agent.turn',
@@ -572,48 +667,65 @@ export const startAgent = ({
           duration_ms: Math.round(performance.now() - startedAt),
         },
       })
+    const ended = (result: Json) => {
+      turnEnded(result.stopReason)
+      conversation.status = 'finished'
+      closeQuestions(conversation, 'turn_end')
+      emit(conversation, {
+        sessionUpdate: 'turn_end',
+        stopReason: result.stopReason,
+        ...(result.stopReason === 'cancelled' && conversation.keptPlanning && { keptPlanning: true }),
+      })
+      void reportWorkspace(conversation)
+    }
+    const failed = (error: unknown) => {
+      log.warn({
+        event: 'agent.turn',
+        body: 'Agent turn failed',
+        attributes: {
+          'conversation.id': conversation.id,
+          duration_ms: Math.round(performance.now() - startedAt),
+        },
+        error,
+      })
+      if (conversation.status !== 'error') {
+        conversation.status = 'finished'
+        emit(conversation, errorUpdateOf(error))
+      }
+      closeQuestions(conversation, 'turn_end')
+      emit(conversation, { sessionUpdate: 'turn_end', stopReason: 'error' })
+      void reportWorkspace(conversation)
+    }
+    const endedByRestart = () => {
+      turnEnded('restarted')
+      emit(conversation, { sessionUpdate: 'turn_end', stopReason: 'cancelled' })
+    }
+    const promptOnce = async (onDeadSession: (errorOutput: string[], hasStreamed: boolean) => Promise<void>) => {
+      const { connection } = conversation
+      const promptSeq = conversation.lastSeq
+      try {
+        ended(await connection.request('session/prompt', promptParams()))
+      } catch (error) {
+        if (conversation.connection !== connection) return endedByRestart()
+        if (!isDeadSession(error) || conversation.launch.agent?.adapter === 'pi-rpc') return failed(error)
+        const hasStreamed = conversation.lastSeq !== promptSeq
+        await restart(conversation)
+        const errorOutput = errorOutputOf(conversation, connection)
+        reportAdapterFailure(conversation, errorOutput, error)
+        if (conversation.status === 'error') return failed(error)
+        await onDeadSession(errorOutput, hasStreamed)
+      }
+    }
     void withSpan(
       'agent.turn',
       { 'conversation.id': conversation.id },
       () =>
-        conversation.connection
-          .request('session/prompt', {
-            sessionId,
-            prompt: (body.content ?? [])
-              .filter((block) => block.type === 'text')
-              .map(({ text }) => ({ type: 'text', text })),
-          })
-          .then(
-            (result) => {
-              turnEnded(result.stopReason)
-              conversation.status = 'finished'
-              closeQuestions(conversation, 'turn_end')
-              emit(conversation, {
-                sessionUpdate: 'turn_end',
-                stopReason: result.stopReason,
-                ...(result.stopReason === 'cancelled' && conversation.keptPlanning && { keptPlanning: true }),
-              })
-              void reportWorkspace(conversation)
-            },
-            (error) => {
-              log.warn({
-                event: 'agent.turn',
-                body: 'Agent turn failed',
-                attributes: {
-                  'conversation.id': conversation.id,
-                  duration_ms: Math.round(performance.now() - startedAt),
-                },
-                error,
-              })
-              if (conversation.status !== 'error') {
-                conversation.status = 'finished'
-                emit(conversation, errorUpdateOf(error))
-              }
-              closeQuestions(conversation, 'turn_end')
-              emit(conversation, { sessionUpdate: 'turn_end', stopReason: 'error' })
-              void reportWorkspace(conversation)
-            },
-          ),
+        promptOnce(async (errorOutput, hasStreamed) => {
+          const notice = new AcpError(withSummary(restartedNotice, errorOutput))
+          if (hasStreamed) return failed(notice)
+          conversation.status = 'running'
+          await promptOnce(async () => failed(notice))
+        }),
       contextOf(traceHeaders),
     )
     return Response.json({})
@@ -659,6 +771,10 @@ export const startAgent = ({
         traceparent: request.headers.get('traceparent'),
         tracestate: request.headers.get('tracestate'),
       })
+    if (action === 'restart') {
+      await restart(conversation)
+      return Response.json({ id: conversation.id, ...summaryOf(conversation) })
+    }
     if (action === 'interrupt') {
       if (conversation.sessionId)
         conversation.connection.notify('session/cancel', { sessionId: conversation.sessionId })

@@ -13,7 +13,7 @@ import type { AgentEvent } from '../domain/agent-events.ts'
 import type { AgentStep, StepDelegation, StoredStep } from '../domain/agent-steps.ts'
 import type { Attachment, StoredBytes } from '../domain/attachments.ts'
 import type { ConversationChat, Message, MessageChange } from '../domain/message.ts'
-import type { AgentInterrupt } from './agent.ts'
+import type { AgentInterrupt, SessionRestart } from './agent.ts'
 
 export type Draft = Readonly<{ workspaceId: WorkspaceId; chatId: ChatId; memberId: MemberId; text: string }>
 
@@ -43,6 +43,7 @@ export type AgentJobs = {
   prompt(message: Message): Promise<void>
   startSession(chatId: ChatId): Promise<void>
   interrupt(interrupt: AgentInterrupt): Promise<void>
+  restartSession(restart: SessionRestart): Promise<void>
   sweepLater(): Promise<void>
 }
 
@@ -147,6 +148,7 @@ export type ChatRepository = {
   hasAgentSession(chatId: ChatId): Promise<boolean>
   isSessionStartPending(chatId: ChatId): Promise<boolean>
   dropRuntime(chatId: ChatId): Promise<void>
+  stopRuntime(chatId: ChatId): Promise<void>
   hasMachine(memberId: MemberId): Promise<boolean>
   setPlanning(chatId: ChatId, isPlanning: boolean): Promise<void>
 }

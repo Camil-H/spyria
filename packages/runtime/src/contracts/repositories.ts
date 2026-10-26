@@ -9,7 +9,7 @@ export type RuntimeHostRepository = {
   get(workspaceId: WorkspaceId, hostId: RuntimeHostId): Promise<RuntimeHost>
   find(workspaceId: WorkspaceId, hostId: RuntimeHostId): Promise<RuntimeHost | undefined>
   save(host: RuntimeHost): Promise<void>
-  setSecretHash(host: RuntimeHost, secret: HostSecret, hash: string): Promise<void>
+  setSecretHash(host: RuntimeHost, secret: HostSecret, hash: string | null): Promise<void>
   findBySecretHash(secret: HostSecret, hash: string): Promise<{ host: RuntimeHost; claimed: boolean } | undefined>
   lockLoads(workspaceId: WorkspaceId, chatId: ChatId): Promise<HostLoad[]>
   listMachines(workspaceId: WorkspaceId): Promise<RuntimeHost[]>

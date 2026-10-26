@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { lineReaderOf } from './acp.ts'
 import { formShapes, startAgent } from './agent.ts'
+import { startTelemetry } from './telemetry.ts'
 import {
   type AgentEvent,
   apiKey,
@@ -328,6 +329,82 @@ test('a new spyria-agent resumes the session of an earlier one, and a missing se
   const [start] = await fallback.until(kindOf('session_started'))
   expect(start?.update).toMatchObject({ resumeFailed: true })
   expect(start?.update.sessionId).not.toBe(sessionId)
+})
+
+test("an ACP harness whose Claude process dies mid-turn is restarted: the turn ends with a notice, the next prompt keeps the session, and the adapter's error output is logged redacted", async () => {
+  const lines: Record<string, unknown>[] = []
+  const telemetry = startTelemetry({ write: (line) => void lines.push(JSON.parse(line)) })
+  try {
+    const { call, open, create, prompt } = started()
+    const id = await create(
+      launchOf({ acp_model: 'stub-large' }, { CLAUDE_CODE_OAUTH_TOKEN: { value: 'subscription-token-0003' } }),
+    )
+    const socket = open(id)
+    await prompt(id, 'hello')
+    await socket.until(kindOf('turn_end'))
+    await prompt(id, 'stub:die')
+    await socket.until(kindOf('turn_end'), 2)
+    expect(socket.events.filter(kindOf('error')).map(({ update }) => update.message)).toEqual([
+      'The agent restarted; send your message again. It reported: Claude Code process exited with code 1',
+    ])
+    expect(socket.events.filter(kindOf('turn_end')).at(-1)?.update.stopReason).toBe('error')
+    const [first, reloaded] = socket.events.filter(kindOf('session_started'))
+    expect(reloaded?.update).toMatchObject({ sessionId: first?.update.sessionId, resumeFailed: false })
+    expect(textOf(socket.events)).not.toContain('REPLAYED')
+    expect((await call('GET', `/api/conversations/${id}`)).body).toMatchObject({ execution_status: 'finished' })
+
+    await prompt(id, 'hello again')
+    await socket.until(kindOf('turn_end'), 3)
+    expect(textOf(socket.events)).toEndWith('[t3] Hello from the stub (model stub-large, mode bypassPermissions).')
+
+    const failure = lines.find((line) => line['event.name'] === 'agent.adapter_failed')
+    expect(failure?.['conversation.id']).toBe(id)
+    expect(String(failure?.['adapter.error_output']).split('\n')).toEqual([
+      'Claude Code started with [redacted]',
+      'retrying with [redacted]',
+      'Claude Code process exited with code 1',
+    ])
+    expect(JSON.stringify(lines)).not.toContain('subscription-token-0003')
+    expect(JSON.stringify(lines)).not.toContain('sk-ant-oat01-stubtoken')
+    expect(JSON.stringify(socket.events)).not.toContain('subscription-token-0003')
+  } finally {
+    await telemetry.shutdown()
+  }
+})
+
+test('a session found dead before any output is restarted and the prompt is sent once more', async () => {
+  const { open, create, prompt } = started()
+  const id = await create(launchOf())
+  const socket = open(id)
+  await prompt(id, 'stub:die-early')
+  await socket.until(kindOf('turn_end'))
+  expect(socket.events.filter(kindOf('error'))).toEqual([])
+  expect(socket.events.find(kindOf('turn_end'))?.update.stopReason).toBe('end_turn')
+  expect(textOf(socket.events)).toBe('[t2] Hello from the stub (model stub-default, mode bypassPermissions).')
+  expect(socket.events.filter(kindOf('session_started'))).toHaveLength(2)
+})
+
+test('restart ends a running turn and reloads the session; it also brings back a conversation whose adapter exited', async () => {
+  const { call, open, create, prompt } = started()
+  const id = await create(launchOf())
+  const socket = open(id)
+  await prompt(id, 'stub:long')
+  await socket.until((event) => event.update.status === 'in_progress')
+  const restarted = await call('POST', `/api/conversations/${id}/restart`, {})
+  expect(restarted).toMatchObject({ status: 200, body: { id, execution_status: 'idle' } })
+  await socket.until(kindOf('turn_end'))
+  expect(socket.events.find(kindOf('turn_end'))?.update.stopReason).toBe('cancelled')
+
+  await prompt(id, 'stub:crash')
+  await socket.until(kindOf('turn_end'), 2)
+  expect((await call('GET', `/api/conversations/${id}`)).body).toMatchObject({ execution_status: 'error' })
+  expect((await call('POST', `/api/conversations/${id}/restart`, {})).body).toMatchObject({ execution_status: 'idle' })
+  await prompt(id, 'hello')
+  await socket.until(kindOf('turn_end'), 3)
+  expect(textOf(socket.events)).toEndWith('[t3] Hello from the stub (model stub-default, mode bypassPermissions).')
+  const sessionIds = socket.events.filter(kindOf('session_started')).map(({ update }) => update.sessionId)
+  expect(new Set(sessionIds).size).toBe(1)
+  expect(sessionIds).toHaveLength(3)
 })
 
 const isAlive = (pid: number) => {

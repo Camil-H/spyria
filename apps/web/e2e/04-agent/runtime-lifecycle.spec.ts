@@ -19,6 +19,7 @@ test.describe('Runtime lifecycle', () => {
   const heldScript = { hold: 'answer' }
   const runtimeStatusOf = (page: Page) => mainOf(page).getByRole('status', { name: 'Runtime' })
   const stopButtonOf = (page: Page) => mainOf(page).getByRole('button', { name: 'Stop' })
+  const runtimeMenuOf = (page: Page) => runtimeStatusOf(page).getByRole('button', { name: 'Runtime actions' })
   const retryButtonOf = (page: Page) => runtimeStatusOf(page).getByRole('button', { name: 'Could not start · Retry' })
 
   const turnOf = async (workerStack: WorkerStack, chatId: string) =>
@@ -144,6 +145,41 @@ test.describe('Runtime lifecycle', () => {
       await expect(messageItemsOf(page).nth(0)).toContainText('Before the sleep')
       await expect(messageItemsOf(page).nth(2)).toContainText('After the sleep')
       await expect(mainOf(page)).not.toContainText(newSessionNotice)
+    })
+
+    test('As the owner, I restart the session or stop the runtime from the status menu, confirming while the agent works; a prompter gets no menu', {
+      tag: ['@spec-10'],
+    }, async ({ page, browser, workerStack, agentScript, release }) => {
+      await addParticipant(workerStack, research, 'member-bob', 'prompter')
+      const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+      await openChat(bobPage, 'Research')
+      await expect(runtimeStatusOf(bobPage)).toHaveText('Ready')
+      await expect(runtimeMenuOf(bobPage)).toHaveCount(0)
+      await bobPage.context().close()
+
+      await agentScript(research, heldScript)
+      await openChat(page, 'Research')
+      await expect(runtimeStatusOf(page)).toHaveText('Ready')
+      await sendMessage(page, 'Work for a while')
+      await expect(workingIndicatorOf(page)).toBeVisible()
+      await expect(stopButtonOf(page)).toBeVisible()
+      await runtimeMenuOf(page).click()
+      await page.getByRole('menuitem', { name: 'Restart session' }).click()
+      const confirmation = page.getByRole('dialog', { name: 'Restart session' })
+      await expect(confirmation).toContainText('stops this turn')
+      await confirmation.getByRole('button', { name: 'Restart session' }).click()
+      await expect(messageContaining(page, 'Stopped by Alice')).toHaveCount(1)
+      await expect(workingIndicatorOf(page)).toHaveCount(0)
+      await expect(runtimeStatusOf(page)).toHaveText('Ready')
+
+      await runtimeMenuOf(page).click()
+      await page.getByRole('menuitem', { name: 'Stop runtime' }).click()
+      await expect(page.getByRole('dialog', { name: 'Stop runtime' })).toHaveCount(0)
+      await expect(runtimeStatusOf(page)).toHaveText('Sleeping')
+      await sendMessage(page, 'Wake up')
+      await expect(runtimeStatusOf(page)).toHaveText('Starting…')
+      await release('boot')
+      await expect(runtimeStatusOf(page)).toHaveText('Ready')
     })
   })
 

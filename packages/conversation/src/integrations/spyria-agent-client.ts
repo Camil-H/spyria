@@ -39,11 +39,12 @@ const send = (
     timeoutMilliseconds,
   })
 
-const repositoryLaunchOf = ({ url, token, baseBranch, workingBranch, author }: RepositoryCheckout) => ({
+const repositoryLaunchOf = ({ url, token, baseBranch, workingBranch, startBranch, author }: RepositoryCheckout) => ({
   url,
   token,
   base_branch: baseBranch,
   working_branch: workingBranch,
+  ...(startBranch && { start_branch: startBranch }),
   ...(author && { author }),
 })
 const call = async (
@@ -240,6 +241,18 @@ export const createSpyriaAgentClient = (): AgentClient => ({
   interrupt: async (conversation) => {
     await call(conversation, 'POST', `/api/conversations/${conversation.conversationId}/interrupt`, {})
   },
+  restartConversation: async (conversation) =>
+    String(
+      (
+        await call(
+          conversation,
+          'POST',
+          `/api/conversations/${conversation.conversationId}/restart`,
+          {},
+          checkoutTimeoutMilliseconds,
+        )
+      )?.execution_status,
+    ),
   deleteConversation: async (conversation) => {
     await call(conversation, 'DELETE', `/api/conversations/${conversation.conversationId}`)
   },

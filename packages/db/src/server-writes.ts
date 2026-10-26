@@ -171,7 +171,7 @@ export const setRuntimeHostSecretHash = (
   tx: Transaction,
   host: RuntimeHostKey,
   secret: RuntimeHostSecret,
-  hash: string,
+  hash: string | null,
 ) =>
   onServer(tx, `update runtime_hosts set ${secretHashColumns[secret]} = $3 where workspace_id = $1 and id = $2`, [
     host.workspaceId,

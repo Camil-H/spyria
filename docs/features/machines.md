@@ -31,6 +31,15 @@ A Spyria runtime is placed on the least loaded online workspace host that has ro
 
 The runtime's status shows in the chat: **Not started**, **Starting…**, **Installing** *tool*…, **Ready**, **Sleeping**, **Host offline**, **Could not start**. A runtime idle for an hour is stopped (**Sleeping**) and starts again on the next prompt with its files intact; the panel shows the last snapshot of its files while it sleeps. A runtime stopped or failed for 30 days is removed.
 
+When the runtime is **Ready**, the chat's owner and Editors can open the status as a menu:
+
+- **Restart session** keeps the runtime running but starts a fresh agent process and reloads the conversation into it. Use it when the agent stops answering, for example after its process died.
+- **Stop runtime** puts the runtime to sleep as the idle stop does; the next prompt starts it again.
+
+While the agent is working, both ask for confirmation, because they stop the current turn. Other participants see the status without the menu, and the server refuses both actions to them.
+
+When an agent's Claude Code or Codex process dies, `spyria-agent` restarts it and reloads the conversation on its own. A prompt that failed before the agent wrote anything is sent again once; otherwise the chat says "The agent restarted; send your message again", with the last line the agent printed. That output is redacted like the rest of the agent's output and kept in the agent's logs.
+
 Each runtime has three volumes (its workspace, its home and its temporary directory), a 2 GiB memory limit, 2 CPUs and 512 processes, runs as a non-root user, and has all capabilities dropped and a read-only root filesystem.
 
 ## Isolation and egress
@@ -54,6 +63,8 @@ A member can run Claude Code on their Claude subscription, or Codex on their Cha
 The container name follows the deployment name (`<deployment>-host`); the default deployment is `spyria`, so the commands above use `spyria-host`. The commands Spyria shows always carry the right name.
 
 **Never run it on a machine others use.** The agent on that machine runs as you and can read your Claude and ChatGPT sign-ins.
+
+When your machine shows **Offline** (Docker was not running when your computer started, or the container was stopped), **Start** shows the command that starts it again, `docker start spyria-host`; it reconnects within seconds. If it stays offline, **Set up again** gives a new command that installs it afresh: the old connection stops working, and your sign-ins are kept.
 
 ### Sign-ins
 

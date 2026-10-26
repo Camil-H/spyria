@@ -147,7 +147,8 @@ test('each step is stored once and updated by its final call, the full command o
     { type: 'command', command: 'npm test', exitCode: 1, output: 'exit code 1' },
     { type: 'command', command: 'npm test', exitCode: 2, output: 'one\ntwo\nfailed' },
   ])
-  expect(live.at(-1)).toMatchObject({ kind: 'agent', body: expect.stringContaining('Hello from the stub') })
+  expect(live.at(-1)?.kind).toBe('agent')
+  expect(live.at(-1)?.body).toContain('Hello from the stub')
   const stored = await storedAgentEventsOf(chat)
   expect(new Set(stored.map((event) => event.id)).size).toBe(stored.length)
   expect(viewer.frames.map((frame) => JSON.parse(frame))).toContainEqual(

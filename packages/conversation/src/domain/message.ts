@@ -39,6 +39,10 @@ export type ConversationChat = Readonly<{
   isOwnerRemoved: boolean
 }>
 
+export const agentActivityKinds: readonly Message['kind'][] = ['agent', 'step']
+export const isAgentActivity = (message: Pick<Message, 'kind' | 'authorId'>) =>
+  agentActivityKinds.includes(message.kind) && message.authorId === null
+
 export const isFrozen = (chat: Pick<ConversationChat, 'type' | 'isOwnerRemoved'>) =>
   chat.type === 'runtime' && chat.isOwnerRemoved
 
