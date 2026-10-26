@@ -137,6 +137,31 @@ test.describe('My machine', () => {
       await expect(machineSectionOf(page).getByRole('button', { name: 'Use Claude Code' })).toHaveCount(0)
     })
 
+    test('As a member whose machine is offline, I get Start with the command that starts it again, or set it up again with a new command that pairs it', {
+      tag: ['@spec-20'],
+    }, async ({ page, pair }) => {
+      const startButtonOf = () => machineSectionOf(page).getByRole('button', { name: 'Start', exact: true })
+      const machine = pair(urlOf(await addMachine(page)), { personal: true, signedIn: ['claude-code'] })
+      await expect(machineSectionOf(page)).toContainText('Online')
+      await expect(startButtonOf()).toHaveCount(0)
+      machine.disconnect()
+      await expect(machineSectionOf(page)).toContainText('Offline')
+      await startButtonOf().click()
+
+      const dialog = page.getByRole('dialog', { name: 'Start my machine' })
+      const commandBoxes = dialog.getByRole('textbox', { name: 'Command' })
+      await expect(commandBoxes).toHaveValue('docker start spyria-host')
+      await dialog.getByRole('button', { name: 'Set up again' }).click()
+      await expect(dialog).toContainText('Your machine: Waiting for the host')
+      const command = await commandBoxes.nth(1).inputValue()
+      expect(command).toMatch(/ spyria-host --personal http:\/\/host\.docker\.internal:\d+\/h\/[A-HJ-NP-Z2-9]{8}$/)
+      pair(urlOf(command), { personal: true, signedIn: ['claude-code'] })
+      await expect(dialog).toContainText('Your machine: Online')
+      await dialog.getByRole('button', { name: 'Close' }).click()
+      await expect(startButtonOf()).toHaveCount(0)
+      await expect(machineToolOf(page, 'Claude Code')).toHaveText('✓ Claude Code connected')
+    })
+
     test('As a member whose machine is signed in to Claude only, I get only the Codex sign-in command for Use Codex', {
       tag: ['@spec-23'],
     }, async ({ page, pair }) => {

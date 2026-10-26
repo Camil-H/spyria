@@ -286,6 +286,8 @@ export const connectPi = (launch: AdapterLaunch, { onUpdate, onExit, onRequest }
       isAborting = true
       void send('abort').catch(() => {})
     },
+    errorOutput: pi.errorOutput,
+    closed: pi.closed,
     close: pi.close,
   }
 }

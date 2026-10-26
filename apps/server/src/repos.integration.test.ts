@@ -13,11 +13,15 @@ import {
 } from './testing/fake-github.ts'
 import {
   acme,
+  addLlmKey,
   alice,
+  aliceInAcme,
   bob,
+  bobInAcme,
   captureLogs,
   sessionTokenOf,
   startAgentStack,
+  succeeded,
   testSecretsKey,
   waitFor,
   workspaceEventsOf,
@@ -337,3 +341,92 @@ test('a dev chat clones its repository with a read-only installation token kept 
   ])
   expect(existsSync(join(String(workspaceFrame?.workspace.cwd), 'only-in-acme-app.txt'))).toBe(true)
 }, 30_000)
+
+test('a fork of a dev chat checks out the original working branch: on a new branch for another member, on the same branch with the open pull request card for its owner', async () => {
+  const { launches, relay } = await stack.agentHost('fork host')
+  if (!(await request(alice, 'GET', '/api/github-settings/configured')).body.configured)
+    expect(await request(alice, 'POST', '/api/github-settings', appSettings)).toMatchObject({ status: 200 })
+  const created = await request(alice, 'POST', '/api/dev-chats', {
+    name: 'Fix totals',
+    projectId: null,
+    repository: 'acme/app',
+    baseBranch: 'main',
+  })
+  const createdChatId = created.body?.chatId
+  expect({ status: created.status, chatIdType: typeof createdChatId }).toEqual({ status: 201, chatIdType: 'string' })
+  const source = chatId(createdChatId)
+  const sourceRow = await stack.chatRow(source)
+  expect(sourceRow).toMatchObject({ mode: 'dev', repository: 'acme/app', ownerUserId: alice })
+  const sourceBranch = String(sourceRow?.gitBranch)
+  expect(sourceBranch).toMatch(/^spyria\/fix-totals-[0-9a-f]{6}$/)
+  fakeGitHub.commitToBranch('acme/app', {
+    branch: sourceBranch,
+    files: { 'totals.ts': 'export const total = 2\n' },
+    message: 'Fix totals',
+  })
+  expect(
+    await stack.mutate(aliceInAcme, 'conversation.inviteMember', {
+      workspaceId: acme,
+      chatId: source,
+      memberId: bob,
+      roleId: 'reader',
+    }),
+  ).toEqual(succeeded)
+  const card = {
+    type: 'pull_request',
+    repository: 'acme/app',
+    number: 7,
+    url: 'https://github.com/acme/app/pull/7',
+    title: 'Fix totals',
+    state: 'open',
+    headSha: 'a'.repeat(40),
+    commits: 1,
+    checks: {},
+    review: null,
+    comments: [],
+  }
+  await database.$client`
+    insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, step, created_at)
+    values (${acme}, ${source}, ${`message-${crypto.randomUUID()}`}, 1, 'step', ${alice}, 'pull_request',
+      ${JSON.stringify(card)}::jsonb, now())`
+  const forkAs = async (member: typeof aliceInAcme) => {
+    const forked = chatId(crypto.randomUUID())
+    const forking = { workspaceId: acme, id: `message-${crypto.randomUUID()}`, chatId: forked, sourceChatId: source }
+    expect(await stack.mutate(member, 'conversation.forkChat', forking)).toEqual(succeeded)
+    await stack.mutate(member, 'conversation.updateChatRouting', {
+      workspaceId: acme,
+      chatId: forked,
+      runsOn: 'runtime',
+    })
+    const promptId = await stack.prompt(forked, 'stub:ls', member)
+    await stack.answered(promptId)
+    await waitFor(async () => (await stack.turnOf(forked)) === null, 15_000)
+    const launch = (launches() as unknown as { repository: Record<string, unknown> }[]).at(-1)
+    const cards = (await database.$client`select step from messages where chat_id = ${forked} and kind = 'step'`).map(
+      ({ step }) => step,
+    )
+    const answer = (await stack.repliesTo(promptId)).map(({ body }) => body).join('')
+    const sent = relay.prompts.at(-1)
+    return { row: await stack.chatRow(forked), repository: launch?.repository, cards, answer, sent }
+  }
+
+  await addLlmKey(bob, 'Mistral')
+  const bobs = await forkAs(bobInAcme)
+  expect(bobs.row).toMatchObject({ mode: 'dev', repository: 'acme/app', baseBranch: 'main', ownerUserId: bob })
+  expect(bobs.row?.gitBranch).toMatch(/^spyria\/fix-totals-fork-[0-9a-f]{6}$/)
+  expect(bobs.repository).toMatchObject({
+    base_branch: 'main',
+    working_branch: bobs.row?.gitBranch,
+    start_branch: sourceBranch,
+  })
+  expect(bobs.answer).toContain('totals.ts')
+  expect(bobs.sent).toContain('Conversation so far, from the runtime chat Fix totals:')
+  expect(bobs.cards).toEqual([])
+
+  const alices = await forkAs(aliceInAcme)
+  expect(alices.row).toMatchObject({ mode: 'dev', gitBranch: sourceBranch, ownerUserId: alice })
+  expect(alices.repository).toMatchObject({ working_branch: sourceBranch, start_branch: sourceBranch })
+  expect(alices.answer).toContain('totals.ts')
+  expect(alices.sent).toContain('Conversation so far, from the runtime chat Fix totals:')
+  expect(alices.cards).toEqual([card])
+}, 60_000)

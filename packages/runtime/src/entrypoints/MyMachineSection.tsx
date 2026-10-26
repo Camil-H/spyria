@@ -1,7 +1,16 @@
 import { useQuery } from '@spyria/db/react'
-import { type HarnessId, harnesses, harnessIds, type MemberId, signInCommandOf, type WorkspaceId } from '@spyria/kernel'
+import {
+  type HarnessId,
+  harnesses,
+  harnessIds,
+  hostContainerOf,
+  type MemberId,
+  type RuntimeHostId,
+  signInCommandOf,
+  type WorkspaceId,
+} from '@spyria/kernel'
 import { useSession } from '@spyria/session'
-import { buttonClass, Dialog, ghostButtonClass, LabelledSection } from '@spyria/ui'
+import { buttonClass, Dialog, ErrorMessage, ghostButtonClass, LabelledSection, useGuardedAction } from '@spyria/ui'
 import { useEffect, useState } from 'react'
 import { getMachine, localSessionsOf } from '../queries/list-runtime-hosts.ts'
 import { CommandBox, HostCommand, HostCommandDialog, PersonalNotice } from './HostCommandDialog.tsx'
@@ -11,13 +20,50 @@ import { statusLabelOf } from './RuntimeHostsSection.tsx'
 const rowClass = 'flex flex-wrap items-center gap-x-3 gap-y-1'
 const myMachineAnchor = 'my-machine'
 
+const StartMachine = ({
+  workspaceId,
+  hostId,
+  signIn,
+}: {
+  workspaceId: WorkspaceId
+  hostId: RuntimeHostId
+  signIn?: HarnessId
+}) => {
+  const commands = useRuntimeCommands()
+  const { deployment } = useSession()
+  const [code, setCode] = useState<string | null>(null)
+  const { errorMessage, isPending, run } = useGuardedAction()
+  return (
+    <>
+      <p className="text-sm text-muted">Start Docker on your computer, then run:</p>
+      <CommandBox command={`docker start ${hostContainerOf(deployment)}`} />
+      <p className="text-sm text-muted">
+        If it stays offline, set it up again. Its old connection stops working; your sign-ins are kept.
+      </p>
+      {code ? (
+        <HostCommand code={code} personal signIn={signIn} />
+      ) : (
+        <button
+          type="button"
+          className={ghostButtonClass}
+          disabled={isPending}
+          onClick={() => run(async () => setCode(await commands.renewCode({ workspaceId, hostId })))}
+        >
+          Set up again
+        </button>
+      )}
+      <ErrorMessage message={errorMessage} />
+    </>
+  )
+}
+
 export const MyMachineSection = ({ workspaceId, memberId }: { workspaceId: WorkspaceId; memberId: MemberId }) => {
   const commands = useRuntimeCommands()
   const { deployment } = useSession()
   const machine = useQuery(getMachine, workspaceId, memberId)
   const localSessions = useQuery(localSessionsOf, workspaceId)
   const [code, setCode] = useState<string | null>(null)
-  const [openDialog, setOpenDialog] = useState<'add' | 'remove' | HarnessId | null>(null)
+  const [openDialog, setOpenDialog] = useState<'add' | 'start' | 'remove' | HarnessId | null>(null)
   useEffect(() => {
     if (location.hash === `#${myMachineAnchor}`) document.getElementById(myMachineAnchor)?.scrollIntoView()
   }, [])
@@ -26,16 +72,23 @@ export const MyMachineSection = ({ workspaceId, memberId }: { workspaceId: Works
     setOpenDialog(dialog)
     if (!machine) setCode((await commands.addMachine({ workspaceId })).code)
   }
-  const connectingTool = openDialog === 'add' || openDialog === 'remove' ? null : openDialog
+  const connectingTool = openDialog === 'add' || openDialog === 'start' || openDialog === 'remove' ? null : openDialog
   return (
     <LabelledSection title="My machine" id={myMachineAnchor}>
       {machine ? (
         <div className={`${rowClass} text-sm`}>
           <span className="font-medium">{machine.name}</span>
           <span className="text-muted">{statusLabelOf(machine)}</span>
-          <button type="button" className={`ml-auto ${ghostButtonClass}`} onClick={() => setOpenDialog('remove')}>
-            Remove
-          </button>
+          <span className="ml-auto flex gap-2">
+            {!isOnline && (
+              <button type="button" className={buttonClass} onClick={() => setOpenDialog('start')}>
+                Start
+              </button>
+            )}
+            <button type="button" className={ghostButtonClass} onClick={() => setOpenDialog('remove')}>
+              Remove
+            </button>
+          </span>
         </div>
       ) : (
         localSessions && (
@@ -85,14 +138,20 @@ export const MyMachineSection = ({ workspaceId, memberId }: { workspaceId: Works
                 <CommandBox command={signInCommandOf(connectingTool, deployment)} />
               </>
             )
+          ) : code ? (
+            <>
+              <PersonalNotice toolName={harnesses[connectingTool].name} />
+              <HostCommand code={code} personal signIn={connectingTool} />
+            </>
           ) : (
-            code && (
-              <>
-                <PersonalNotice toolName={harnesses[connectingTool].name} />
-                <HostCommand code={code} personal signIn={connectingTool} />
-              </>
-            )
+            machine && <StartMachine workspaceId={workspaceId} hostId={machine.id} signIn={connectingTool} />
           )}
+        </Dialog>
+      )}
+      {openDialog === 'start' && machine && (
+        <Dialog label="Start my machine" closeLabel="Close" onClose={() => setOpenDialog(null)}>
+          <p className="text-sm">Your machine: {statusLabelOf(machine)}</p>
+          <StartMachine workspaceId={workspaceId} hostId={machine.id} />
         </Dialog>
       )}
       {openDialog === 'remove' && machine && (

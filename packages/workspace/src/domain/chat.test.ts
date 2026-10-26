@@ -58,6 +58,25 @@ test('devChat stores the repository, the base branch and the working branch of a
   })
 })
 
+test('startRuntimeChat continues a dev chat on its repository and base: on its branch for the owner, on a new branch for another member', () => {
+  const source: Chat = {
+    ...devChat({ ...chatInAcme, id: chatId('7f3e9a21-0000'), name: Name('Fix totals') }, 'acme/app', 'main'),
+    ownerId: memberId('alice'),
+  }
+  const continued = { mode: 'dev', repository: 'acme/app', baseBranch: 'main', originChatId: source.id }
+  expect(startRuntimeChat(source, { ...runtimeFields, ownerId: memberId('alice') })).toMatchObject({
+    ...continued,
+    gitBranch: 'spyria/fix-totals-7f3e9a',
+  })
+  expect(
+    startRuntimeChat(source, {
+      id: chatId('0b1c2d3e-0000'),
+      name: Name('Fix totals (fork)'),
+      ownerId: memberId('bob'),
+    }),
+  ).toMatchObject({ ...continued, gitBranch: 'spyria/fix-totals-fork-0b1c2d' })
+})
+
 test('startRuntimeChat keeps a loose source loose', () => {
   expect(startRuntimeChat({ ...chatInAcme, projectId: null }, runtimeFields).projectId).toBeNull()
 })

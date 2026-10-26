@@ -43,13 +43,13 @@ import {
   type WorkspaceId,
   workspaceId,
 } from '@spyria/kernel'
-import { removeChatRuntimeOnServer } from '@spyria/runtime/published'
+import { removeChatRuntimeOnServer, stopChatRuntimeOnServer } from '@spyria/runtime/published'
 import type { ParticipantChange } from '../contracts/repositories.ts'
 import type { ConversationTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import { agentJobTypes, agentSweepIntervalMilliseconds, waitingNotices } from '../domain/agent-events.ts'
 import type { StoredStep } from '../domain/agent-steps.ts'
 import { ChatNotFound, ForeignWorkspace, MessageNotFound } from '../domain/errors.ts'
-import type { Message, MessageChange } from '../domain/message.ts'
+import { agentActivityKinds, type Message, type MessageChange } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
 import type { AgentEventPayload, ChangedPayload, PostedPayload, StepChangedPayload } from '../domain/message-events.ts'
 
@@ -236,7 +236,8 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
             zql.messages
               .where('workspaceId', contextWorkspaceId)
               .where('chatId', prompt.chatId)
-              .where('kind', 'IN', ['agent', 'step'])
+              .where('kind', 'IN', agentActivityKinds)
+              .where('authorId', 'IS', null)
               .where('replyToId', '!=', prompt.id)
               .orderBy('seq', 'asc')
               .one(),
@@ -277,6 +278,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       prompt: (message) => enqueue(agentJobTypes.prompt, { messageId: message.id }),
       startSession: (chatId) => enqueue(agentJobTypes.startSession, { chatId }),
       interrupt: (interrupt) => enqueue(agentJobTypes.interrupt, interrupt),
+      restartSession: (restart) => enqueue(agentJobTypes.restartSession, restart),
       sweepLater: () => enqueue(agentJobTypes.sweep, {}, agentSweepIntervalMilliseconds),
     },
     members: {
@@ -502,7 +504,8 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
           zql.messages
             .where('workspaceId', contextWorkspaceId)
             .where('chatId', id)
-            .where('kind', 'IN', ['agent', 'step'])
+            .where('kind', 'IN', agentActivityKinds)
+            .where('authorId', 'IS', null)
             .orderBy('seq', 'asc')
             .one(),
         )) !== undefined ||
@@ -514,6 +517,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
           await tx.mutate.chats.update({ workspaceId: contextWorkspaceId, id, isPlanning })
       },
       dropRuntime: (id) => removeChatRuntimeOnServer(tx, contextWorkspaceId, id),
+      stopRuntime: (id) => stopChatRuntimeOnServer(tx, contextWorkspaceId, id),
       hasMachine: async (id) =>
         (await tx.run(
           zql.runtimeHosts

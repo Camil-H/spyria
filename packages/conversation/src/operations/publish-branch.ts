@@ -4,6 +4,7 @@ import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { type Message, newMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
 import {
+  isOpenPullRequest,
   noGitHubConnection,
   type PublishAction,
   type PullRequestDraft,
@@ -17,7 +18,6 @@ type Input = { chat: AgentChat; memberId: MemberId; action: PublishAction; draft
 export type Publication = { isRefused: boolean; text: string }
 
 const refused = (text: string): Publication => ({ isRefused: true, text })
-const closedStates: PullRequestStep['state'][] = ['merged', 'closed']
 
 export const recordPullRequest = (
   { transactor }: { transactor: ConversationTransactor },
@@ -70,7 +70,7 @@ const pushAndRecord = async (
   const endpoint = pushed.head && (await runtimes.endpointOf(chat))
   if (endpoint) await agentClient.actOnWorkspace(endpoint, 'pushed', { head: pushed.head })
   const pullRequest = card?.step?.type === 'pull_request' ? card.step : undefined
-  const openPullRequest = pullRequest && !closedStates.includes(pullRequest.state) ? pullRequest : undefined
+  const openPullRequest = pullRequest && isOpenPullRequest(pullRequest) ? pullRequest : undefined
   if (!openPullRequest && action === 'push') return { isRefused: false, text: `Pushed ${pushed.branch}` }
   const step = openPullRequest
     ? await checkouts.refreshPullRequest(chat, ownerId, openPullRequest)

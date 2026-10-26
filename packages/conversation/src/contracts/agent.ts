@@ -17,6 +17,7 @@ export class AgentStartFailure extends Error {}
 export type AgentChat = Readonly<{ workspaceId: WorkspaceId; chatId: ChatId }>
 export type AgentHost = Readonly<{ workspaceId: WorkspaceId; hostId: RuntimeHostId }>
 export type AgentInterrupt = Readonly<{ chatId: ChatId; promptId: MessageId; memberId: MemberId }>
+export type SessionRestart = Readonly<{ chatId: ChatId; memberId: MemberId }>
 type AgentSocket = { send(data: string): void; close(): void }
 export type AgentTransport = {
   gatewayUrl: string
@@ -75,6 +76,7 @@ export type RepositoryCheckout = Readonly<{
   token: string
   baseBranch: string
   workingBranch: string
+  startBranch?: string
   author?: GitAuthor
 }>
 export type WorkspaceAction = 'commit' | 'merge' | 'pushed'
@@ -108,6 +110,7 @@ export type AgentClient = {
   setPlanMode(conversation: AgentConversation, enabled: boolean): Promise<number>
   statusOf(conversation: AgentConversation): Promise<string | undefined>
   interrupt(conversation: AgentConversation): Promise<void>
+  restartConversation(conversation: AgentConversation): Promise<string>
   deleteConversation(conversation: AgentConversation): Promise<void>
   readWorkspace(endpoint: AgentEndpoint, path: string): Promise<object | undefined>
   readMedia(endpoint: AgentEndpoint, path: string): Promise<Uint8Array<ArrayBuffer> | undefined>

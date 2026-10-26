@@ -32,6 +32,8 @@ export type ConversationCommands = {
   markThreadRead: Command<{ chatId: ChatId; threadRootId: MessageId }>
   stopAgent: Command<{ chatId: ChatId }>
   retryAgent: Command<{ chatId: ChatId }>
+  restartSession: Command<{ chatId: ChatId }>
+  stopRuntime: Command<{ chatId: ChatId }>
   startRuntimeFromMessage: Command<{ messageId: MessageId }>
   forkChat: Command<{ sourceChatId: ChatId }>
   inviteMember: Command<{ chatId: ChatId; memberId: MemberId; roleId: string }>

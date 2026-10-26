@@ -1,4 +1,4 @@
-import { ChatIndicators, ChatView, ConversationProvider, Markdown } from '@spyria/conversation'
+import { ChatIndicators, ChatView, ConversationProvider, Markdown, RuntimeMenu } from '@spyria/conversation'
 import { StoreProvider } from '@spyria/db/react'
 import { chatId as toChatId, type WorkspaceId } from '@spyria/kernel'
 import { PanelProvider, PanelToggle, SidePanel } from '@spyria/panel'
@@ -32,11 +32,20 @@ const ChatRoute = ({ commands }: { commands: Application['conversationCommands']
     <div className="flex h-full">
       <ChatView
         headerActions={<PanelToggle />}
-        runtimeStatus={(canRetry) => (
+        runtimeStatus={({ canRetry, canManage, isAgentWorking }) => (
           <RuntimeStatus
             workspaceId={workspaceId}
             chatId={chatId}
             onRetry={canRetry ? () => commands.retryAgent({ workspaceId, chatId }) : undefined}
+            menu={
+              canManage
+                ? (status) => (
+                    <RuntimeMenu workspaceId={workspaceId} chatId={chatId} isAgentWorking={isAgentWorking}>
+                      {status}
+                    </RuntimeMenu>
+                  )
+                : undefined
+            }
           />
         )}
         hasLlmKey={hasLlmKey}

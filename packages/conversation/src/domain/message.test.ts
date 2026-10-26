@@ -5,6 +5,7 @@ import {
   type ConversationChat,
   deletedMessage,
   editedMessage,
+  isAgentActivity,
   type Message,
   requireNotFrozen,
   threadRootOf,
@@ -82,4 +83,13 @@ test('requireNotFrozen refuses a runtime chat whose owner was removed and allows
   expect(() => requireNotFrozen({ ...channel, type: 'runtime', isOwnerRemoved: true })).toThrow(ChatFrozen)
   expect(() => requireNotFrozen({ ...channel, type: 'runtime' })).not.toThrow()
   expect(() => requireNotFrozen({ ...channel, isOwnerRemoved: true })).not.toThrow()
+})
+
+test('only what the agent wrote is agent activity: its replies and steps, not a member’s pull request card or messages', () => {
+  const alice = memberId('alice')
+  expect(isAgentActivity({ kind: 'agent', authorId: null })).toBe(true)
+  expect(isAgentActivity({ kind: 'step', authorId: null })).toBe(true)
+  expect(isAgentActivity({ kind: 'step', authorId: alice })).toBe(false)
+  expect(isAgentActivity({ kind: 'member', authorId: alice })).toBe(false)
+  expect(isAgentActivity({ kind: 'notice', authorId: null })).toBe(false)
 })

@@ -188,6 +188,8 @@ export const createApp = async (
     joinChannel: mutateConfirmed(conversationMutators.conversation.joinChannel),
     leaveChat: mutateConfirmed(conversationMutators.conversation.leaveChat),
     retryAgent: mutateConfirmed(conversationMutators.conversation.retryAgent),
+    restartSession: mutateConfirmed(conversationMutators.conversation.restartSession),
+    stopRuntime: mutateConfirmed(conversationMutators.conversation.stopRuntime),
   })
   const agentStream = createAgentStream(store)
   return {

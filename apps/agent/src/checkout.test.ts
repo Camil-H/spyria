@@ -177,3 +177,40 @@ test('a launch with an author sets it as the repository’s commit identity, aga
   await create({ ...withAuthor({ name: 'eve\n', email: 'eve@example.com' }), id: 'unauthored' })
   expect(configured('user.name')).toBe('bob\n')
 })
+
+test('a launch with a start branch builds the working branch on that branch when the remote has it, keeps its name when it is the same branch, and starts from the base otherwise', async () => {
+  const url = bareRepository('forked', { 'README.md': '# forked\n' })
+  const pushed = join(directory, 'forked-pushed')
+  git(directory, 'clone', '-q', url, pushed)
+  git(pushed, 'checkout', '-q', '-b', 'spyria/fix-totals-1a2b3c')
+  writeFileSync(join(pushed, 'totals.ts'), 'export const total = 2\n')
+  git(pushed, 'add', 'totals.ts')
+  git(pushed, '-c', 'user.name=t', '-c', 'user.email=t@example.com', 'commit', '-q', '-m', 'Fix totals')
+  git(pushed, 'push', '-q', 'origin', 'spyria/fix-totals-1a2b3c')
+  const { create } = started()
+  const checkedOut = async (name: string, branches: { working_branch: string; start_branch: string }) => {
+    const { launch, workingDirectory } = launchIn(name, url)
+    await create({ ...launch, repository: { ...launch.repository, ...branches } })
+    const read = (...command: string[]) =>
+      Bun.spawnSync(['git', ...command], { cwd: workingDirectory })
+        .stdout.toString()
+        .trim()
+    return { branch: read('branch', '--show-current'), hasFix: existsSync(join(workingDirectory, 'totals.ts')), read }
+  }
+
+  const fork = await checkedOut('fork', {
+    working_branch: 'spyria/fix-totals-fork-0b1c2d',
+    start_branch: 'spyria/fix-totals-1a2b3c',
+  })
+  expect(fork).toMatchObject({ branch: 'spyria/fix-totals-fork-0b1c2d', hasFix: true })
+  expect(fork.read('config', '--get', 'branch.spyria/fix-totals-fork-0b1c2d.remote')).toBe('')
+  expect(
+    await checkedOut('same', { working_branch: 'spyria/fix-totals-1a2b3c', start_branch: 'spyria/fix-totals-1a2b3c' }),
+  ).toMatchObject({ branch: 'spyria/fix-totals-1a2b3c', hasFix: true })
+  expect(
+    await checkedOut('unpushed', {
+      working_branch: 'spyria/other-fork-3c4d5e',
+      start_branch: 'spyria/never-pushed-9f8e7d',
+    }),
+  ).toMatchObject({ branch: 'spyria/other-fork-3c4d5e', hasFix: false })
+})
