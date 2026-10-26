@@ -1,3 +1,5 @@
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 export const serverUrl = 'http://localhost:3100'
 export const viteUrl = 'http://localhost:5190'
 const maximumWorkerInstances = 50
@@ -14,3 +16,4 @@ export const fakeMcpUrl = 'http://localhost:3101'
 export const ssoServerUrl = 'http://localhost:3102'
 export const ssoViteUrl = 'http://localhost:5191'
 export const ssoProviderIssuer = 'http://localhost:5557/dex'
+export const providerLoginLockPath = join(tmpdir(), 'spyria-e2e-provider-login.lock')

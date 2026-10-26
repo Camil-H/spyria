@@ -1,5 +1,5 @@
 import { execFile, execSync, spawn } from 'node:child_process'
-import { openSync, writeSync } from 'node:fs'
+import { openSync, rmSync, writeSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -20,6 +20,7 @@ import {
   fakeMcpUrl,
   gatewayPort,
   gatewayUrl,
+  providerLoginLockPath,
   serverUrl,
   ssoServerUrl,
   ssoViteUrl,
@@ -48,6 +49,7 @@ const sweptListeners = () =>
 const stopWorkerZeroCaches = () => stopLeftoverZeroCaches(workerZeroCachePorts).catch(() => {})
 
 const sweepLeftovers = async () => {
+  rmSync(providerLoginLockPath, { recursive: true, force: true })
   await stopWorkerZeroCaches()
   for (const processId of sweptListeners()) process.kill(Number(processId), 'SIGTERM')
   for (let attempt = 1; sweptListeners().length > 0; attempt++) {

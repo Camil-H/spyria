@@ -80,7 +80,7 @@ Tests start and own their containers; they never touch the dev stack.
 | SSO-mode stack | server 3102, app 5191 | For sign-in tests in `sso` mode. |
 | Fake MCP server | 3101 | Must be free when e2e starts. |
 
-Playwright runs 3 workers by default; `WORKERS=<n>` changes it.
+Playwright runs 3 workers by default; `WORKERS=<n>` changes it. Logins at the test Dex take a lock shared by all workers (`spyria-e2e-provider-login.lock` in the temp directory), since the one Dex serves the same test users to every worker and concurrent logins of one user collide.
 
 ### Cleanup
 
