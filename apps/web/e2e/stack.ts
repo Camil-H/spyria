@@ -208,7 +208,7 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
   fakeBootHold: [undefined, { option: true }],
   workerStack: [
     async ({ browserName: _ }, use, workerInfo) => {
-      const index = workerInfo.parallelIndex
+      const index = workerInfo.workerIndex
       const stackId = crypto.randomUUID()
       const releaseServerDatabase = (ownership: 'claim' | 'release') =>
         fetch(`${serverUrl}/test/release-database?db=${workerDatabaseNameOf(index)}&${ownership}=${stackId}`, {
