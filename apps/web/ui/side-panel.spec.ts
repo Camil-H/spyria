@@ -293,9 +293,9 @@ test.describe('Side panel', () => {
       await page.getByRole('button', { name: 'Hide panel' }).click()
       await expect(panelOf(page)).toBeHidden()
       await expect(page.getByRole('button', { name: 'Show panel' })).toBeVisible()
-      const composerBox = (await composerOf(page).boundingBox())!
-      expect(composerBox.width).toBeGreaterThan(composerWidthWithPanel + 200)
-      expect(composerBox.x + composerBox.width).toBeGreaterThan(page.viewportSize()!.width - 96)
+      expect((await composerOf(page).boundingBox())!.width).toBeGreaterThan(composerWidthWithPanel + 200)
+      const sendBox = (await page.getByRole('button', { name: 'Send' }).boundingBox())!
+      expect(sendBox.x + sendBox.width).toBeGreaterThan(page.viewportSize()!.width - 96)
     })
 
     await test.step('restores the previous width and tab when shown again', async () => {
@@ -375,7 +375,10 @@ test.describe('Side panel', () => {
       await expect.poll(() => panelWidthOf(page)).toBeCloseTo(280, 0)
     })
 
-    await test.step('scrolls the tab list horizontally when the panel is narrow and keeps the selected tab visible', async () => {
+    await test.step('scrolls the tab list horizontally when the panel is narrow and the text large, and keeps the selected tab visible', async () => {
+      await page.evaluate(() => {
+        document.documentElement.style.fontSize = '20px'
+      })
       expect(await panelWidthOf(page)).toBeCloseTo(280, 0)
       const overflowX = await tabListOf(page).evaluate((element) => getComputedStyle(element).overflowX)
       expect(['auto', 'scroll']).toContain(overflowX)
