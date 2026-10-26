@@ -352,6 +352,12 @@ export const createZeroStore = ({
   const tokenByWorkspace = new Map<WorkspaceId, string>()
   const loadedByWorkspace = new Map<WorkspaceId, PromiseWithResolvers<void>>()
   const completeTablesByWorkspace = new Map<WorkspaceId, ReadonlySet<string>>()
+  const expiresAtByWorkspace = new Map<WorkspaceId, number>()
+  const connectionEvents: { at: string; workspaceId: WorkspaceId; event: string }[] = []
+  const noteConnection = (workspaceId: WorkspaceId, event: string) => {
+    connectionEvents.push({ at: new Date().toISOString(), workspaceId, event })
+    if (connectionEvents.length > 200) connectionEvents.shift()
+  }
   const renewalTimerByWorkspace = new Map<WorkspaceId, ReturnType<typeof setTimeout>>()
   let signedInWorkspaceIds: ReadonlySet<WorkspaceId> = new Set(sessions.map((session) => session.workspaceId))
   let isPublishScheduled = false
@@ -403,9 +409,11 @@ export const createZeroStore = ({
     const zero = zeroByWorkspace.get(workspaceId)
     const renewed = await renew(workspaceId).catch(() => null)
     if (!zero || zeroByWorkspace.get(workspaceId) !== zero) return
+    noteConnection(workspaceId, renewed === null ? 'renew failed' : renewed === undefined ? 'renew refused' : 'renewed')
     if (renewed === null) return renewLater(workspaceId, renewalRetryMilliseconds)
     if (renewed === undefined) return signOut(workspaceId)
     scheduleRenewal(renewed)
+    expiresAtByWorkspace.set(workspaceId, renewed.expiresAt)
     tokenByWorkspace.set(workspaceId, renewed.token)
     for (const listener of renewalListeners) listener(workspaceId)
     await zero.connection.connect({ auth: renewed.token })
@@ -428,6 +436,7 @@ export const createZeroStore = ({
     rowsByWorkspace.set(workspaceId, rows)
     zeroByWorkspace.set(workspaceId, zero)
     tokenByWorkspace.set(workspaceId, token)
+    expiresAtByWorkspace.set(workspaceId, session.expiresAt)
     for (const table of materializedTables)
       zero
         .materialize((queries[table] as () => Parameters<typeof zero.materialize>[0])())
@@ -440,12 +449,14 @@ export const createZeroStore = ({
         })
     for (const watch of scopedWatches.values()) if (watch.workspaceId === workspaceId) materializeScoped(watch)
     zero.connection.state.subscribe((state) => {
+      noteConnection(workspaceId, 'reason' in state ? `${state.name} ${JSON.stringify(state.reason)}` : state.name)
       if (state.name === 'needs-auth') renewNow(workspaceId)
     })
     scheduleRenewal(session)
   }
   const close = (workspaceId: WorkspaceId) => {
     const zero = zeroByWorkspace.get(workspaceId)
+    noteConnection(workspaceId, 'closed by the store')
     clearTimeout(renewalTimerByWorkspace.get(workspaceId))
     for (const watch of scopedWatches.values())
       if (watch.workspaceId === workspaceId) {
@@ -487,13 +498,27 @@ export const createZeroStore = ({
       publish()
     },
     whenLoaded: (workspaceId: WorkspaceId) => loadedOf(workspaceId).promise,
-    pendingQueries: () =>
-      Object.fromEntries(
-        [...completeTablesByWorkspace].map(([workspaceId, completeTables]) => [
-          workspaceId,
-          materializedTables.filter((table) => !completeTables.has(table)),
-        ]),
+    diagnostics: async () => ({
+      cacheURL,
+      connectionEvents,
+      workspaces: Object.fromEntries(
+        await Promise.all(
+          [...completeTablesByWorkspace].map(async ([workspaceId, completeTables]) => {
+            const zero = zeroByWorkspace.get(workspaceId)
+            return [
+              workspaceId,
+              {
+                pending: materializedTables.filter((table) => !completeTables.has(table)),
+                state: zero?.connection.state.current ?? 'closed',
+                clientID: zero?.clientID,
+                clientGroupID: await zero?.clientGroupID,
+                tokenExpiresAt: new Date(expiresAtByWorkspace.get(workspaceId) ?? 0).toISOString(),
+              },
+            ]
+          }),
+        ),
       ),
+    }),
     watch: (workspaceId: WorkspaceId, name: ScopedQueryName, args: ScopedWatch['args']) => {
       const key = scopedKeyOf(workspaceId, name, args)
       const watch = scopedWatches.get(key) ?? { workspaceId, name, args, count: 0 }

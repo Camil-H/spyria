@@ -40,6 +40,7 @@ const testStack =
     : undefined
 
 const workspaceLoadMilliseconds = 30_000
+let storeCount = 0
 
 type CommandInput = { workspaceId: WorkspaceId; [argument: string]: unknown }
 type Mutator = (args: never) => Parameters<Store['mutate']>[1]
@@ -124,7 +125,9 @@ export const createApp = async (
     mutators: { ...workspaceMutators, ...conversationMutators, ...profileMutators, ...runtimeMutators },
     draftStorage: localStorage,
   })
-  if (testStack) Object.assign(window, { spyriaPendingQueries: store.pendingQueries })
+  storeCount++
+  if (testStack)
+    Object.assign(window, { spyriaZeroDiagnostics: async () => ({ storeCount, ...(await store.diagnostics()) }) })
   const isLoaded = await Promise.race([
     store.whenLoaded(defaultWorkspaceId).then(() => true),
     new Promise<false>((resolve) => setTimeout(resolve, workspaceLoadMilliseconds, false)),

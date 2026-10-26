@@ -259,6 +259,7 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
         port: zeroCachePortOf(index),
         appId: `spyriae2e${index}`,
         serverUrl,
+        logLevel: process.env.SPYRIA_ZERO_LOG_LEVEL ?? 'info',
       })
       try {
         const barrierSession = async () => {
@@ -351,16 +352,16 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
         contentType: 'text/plain',
       })
       const pages = [...new Set([context, ...browser.contexts()])].flatMap((each) => each.pages())
-      const pendingByPage = await Promise.all(
+      const diagnosticsByPage = await Promise.all(
         pages.map(async (page) => ({
           url: page.url(),
-          pending: await page
-            .evaluate(() => (window as { spyriaPendingQueries?: () => unknown }).spyriaPendingQueries?.() ?? null)
+          zero: await page
+            .evaluate(() => (window as { spyriaZeroDiagnostics?: () => unknown }).spyriaZeroDiagnostics?.() ?? null)
             .catch((error: Error) => error.message),
         })),
       )
-      await testInfo.attach('pending-zero-queries', {
-        body: JSON.stringify(pendingByPage, null, 2),
+      await testInfo.attach('zero-diagnostics', {
+        body: JSON.stringify(diagnosticsByPage, null, 2),
         contentType: 'application/json',
       })
     },

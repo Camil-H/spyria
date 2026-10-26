@@ -199,11 +199,13 @@ export const startZeroCache = async ({
   port,
   appId,
   serverUrl,
+  logLevel = process.env.SPYRIA_ZERO_LOG_LEVEL ?? 'error',
 }: {
   databaseName: string
   port: number
   appId: string
   serverUrl: string
+  logLevel?: string
 }) => {
   const url = `http://localhost:${port}`
   await freeZeroCachePorts([port, port + 1])
@@ -228,7 +230,7 @@ export const startZeroCache = async ({
       ZERO_NUM_SYNC_WORKERS: '1',
       ZERO_UPSTREAM_MAX_CONNS: '4',
       ZERO_CVR_MAX_CONNS: '4',
-      ZERO_LOG_LEVEL: process.env.SPYRIA_ZERO_LOG_LEVEL ?? 'error',
+      ZERO_LOG_LEVEL: logLevel,
       ZERO_ENABLE_TELEMETRY: 'false',
     },
   })
