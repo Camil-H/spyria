@@ -4,7 +4,7 @@ import { createDatabase, type Database } from '@spyria/db/postgres'
 import { setModelDirectory } from '@spyria/db/server-writes'
 import { databaseUrlOf } from '@spyria/db/testing'
 import { schema } from '@spyria/db/zero'
-import { chatId, workspaceId } from '@spyria/kernel'
+import { chatId, log, workspaceId } from '@spyria/kernel'
 import { createLlmGateway } from '@spyria/profile/server'
 import {
   createRuntimeTransactor,
@@ -412,3 +412,7 @@ const app = createApp({
   })
 
 export default { port, hostname: '0.0.0.0', idleTimeout: 0, fetch: app.fetch, websocket: serverWebSocket }
+
+process.on('unhandledRejection', (error) =>
+  log.error({ event: 'test_server.unhandled_rejection', body: 'A promise rejected with nobody awaiting it', error }),
+)
