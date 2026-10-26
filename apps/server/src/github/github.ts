@@ -21,7 +21,7 @@ import {
 } from '@spyria/workspace/server'
 import type { SecretBox } from '../auth/secret-box.ts'
 import { recordWorkspaceEvent, requireMemberPermission } from '../auth/sso.ts'
-import { baseBundle, pushBundle } from './bundles.ts'
+import { branchBundle, pushBundle } from './bundles.ts'
 import { appJwtOf, type GitHubApi, GitHubRequestFailed, type UserTokens } from './github-api.ts'
 import {
   isSignedBy,
@@ -462,14 +462,15 @@ export const createGitHubCheckouts = (database: Database, dependencies: GitHubDe
         ...(await pushBundle({ url, token, branch: workingBranch, baseBranch, bundleOf })),
       }
     },
-    bundleBase: async (chat, runtimeBaseHead) => {
+    fetchBundle: async (chat, branch, runtimeHeads) => {
       const { repository, baseBranch } = (await chatRepositoryOf(database, chat)) ?? {}
       if (!repository || !baseBranch) throw new GitHubNotConfigured()
       const credentials = await appCredentialsOf(database, dependencies, chat.workspaceId)
       const token = await githubCall(chat.workspaceId, () =>
         repositoryTokenOf(api, credentials, repository, { contents: 'read' }),
       )
-      return baseBundle({ url: api.cloneUrlOf(repository), token, baseBranch, runtimeBaseHead })
+      const url = api.cloneUrlOf(repository)
+      return branchBundle({ url, token, branch: branch ?? baseBranch, baseBranch, runtimeHeads })
     },
     authorOf: async (chat, ownerId) => {
       const connection = await connectionWithTokenOf(database, dependencies, {

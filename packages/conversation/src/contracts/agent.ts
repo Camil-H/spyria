@@ -79,11 +79,11 @@ export type RepositoryCheckout = Readonly<{
   startBranch?: string
   author?: GitAuthor
 }>
-export type WorkspaceAction = 'commit' | 'merge' | 'pushed'
+export type WorkspaceAction = 'commit' | 'fetch' | 'merge' | 'pushed'
 export type BranchBundle = Readonly<{ bundle: string } | { failure: string }>
 export type BundleOf = (branch: string, prerequisite: string | null) => Promise<BranchBundle>
 export type GitAuthor = Readonly<{ name: string; email: string }>
-export type BaseBundle = Readonly<{ head: string; bundle: string } | { failure: string }>
+export type FetchedBundle = Readonly<{ head: string; bundle: string } | { failure: string }>
 export type RepositoryCheckouts = {
   checkoutOf(chat: AgentChat): Promise<RepositoryCheckout | undefined>
   pushBranch(
@@ -91,7 +91,7 @@ export type RepositoryCheckouts = {
     ownerId: MemberId,
     bundleOf: BundleOf,
   ): Promise<{ branch: string; head?: string | undefined; failure?: string } | undefined>
-  bundleBase(chat: AgentChat, runtimeBaseHead: string | null): Promise<BaseBundle>
+  fetchBundle(chat: AgentChat, branch: string | null, runtimeHeads: string[]): Promise<FetchedBundle>
   authorOf(chat: AgentChat, ownerId: MemberId): Promise<GitAuthor | undefined>
   openPullRequest(chat: AgentChat, ownerId: MemberId, draft: PullRequestDraft): Promise<PullRequestStep>
   refreshPullRequest(chat: AgentChat, ownerId: MemberId, pullRequest: PullRequestStep): Promise<PullRequestStep>

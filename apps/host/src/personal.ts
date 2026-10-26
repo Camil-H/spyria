@@ -12,7 +12,7 @@ const allowedRequests = [
   ),
   new RegExp(`^WS /sockets/events/${conversationId}(\\?after=\\d+)?$`),
   /^GET \/api\/workspace\/(tree|file|media|changes|status)(\?[\w%=&.~+-]*)?$/,
-  /^POST \/api\/workspace\/(bundle|commit|merge|pushed)$/,
+  /^POST \/api\/workspace\/(bundle|commit|fetch|merge|pushed)$/,
 ]
 const tokenFormat = /sk-ant-(?:oat|ort)[\w-]*|eyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]+/g
 const claudeTokenValue = /"(?:accessToken|refreshToken)"\s*:\s*"([^"]{8,})"/g
