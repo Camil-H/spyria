@@ -1,5 +1,6 @@
 import { createDatabase, type Database } from '@spyria/db/postgres'
 import { databaseUrlOf } from '@spyria/db/testing'
+import { log } from '@spyria/kernel'
 import { createApp } from '../app.ts'
 import { serverWebSocket } from '../runtime-hosts/gateway.ts'
 import { startFakeSmtp } from './fake-smtp.ts'
@@ -28,3 +29,7 @@ const app = createApp({
 }).get('/test/mails', (context) => context.json(smtp.mails))
 
 export default { port, hostname: '0.0.0.0', idleTimeout: 0, fetch: app.fetch, websocket: serverWebSocket }
+
+process.on('unhandledRejection', (error) =>
+  log.error({ event: 'test_server.unhandled_rejection', body: 'A promise rejected with nobody awaiting it', error }),
+)
