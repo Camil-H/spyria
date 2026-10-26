@@ -1,4 +1,6 @@
 import { readFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { type Browser, type BrowserContext, test as base } from '@playwright/test'
 import {
@@ -23,7 +25,7 @@ import {
 } from '@spyria/db/testing'
 import { createZeroStore, type WorkspaceSession } from '@spyria/db/zero-store'
 import { memberId, workspaceId } from '@spyria/kernel'
-import { gatewayUrl, serverUrl, templateDatabaseName, viteUrl, zeroCachePortOf } from './stack-ports.ts'
+import { gatewayUrl, serverUrl, ssoServerUrl, templateDatabaseName, viteUrl, zeroCachePortOf } from './stack-ports.ts'
 
 export { expect } from '@playwright/test'
 
@@ -161,6 +163,21 @@ type TestOptions = ResetOptions & {
   heldCommand: (name: string) => string
 }
 
+const serverRequestsSince = async (startedAt: string) => {
+  const logs = await Promise.all(
+    [serverUrl, ssoServerUrl].map((url) =>
+      readFile(join(tmpdir(), `spyria-e2e-${new URL(url).port}.log`), 'utf8').catch(String),
+    ),
+  )
+  return logs
+    .flatMap((log) => log.split('\n'))
+    .filter(
+      (line) =>
+        /"url\.path":"\/api\/(query|mutate)"/.test(line) &&
+        (line.match(/"timestamp":"([^"]+)"/)?.[1] ?? '') >= startedAt,
+    )
+}
+
 export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
   signedInAs: [aliceMemberId, { option: true }],
   tokenSeconds: [undefined, { option: true }],
@@ -168,9 +185,12 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
   workerStack: [
     async ({ browserName: _ }, use, workerInfo) => {
       const index = workerInfo.parallelIndex
-      const releaseServerDatabase = () =>
-        fetch(`${serverUrl}/test/release-database?db=${workerDatabaseNameOf(index)}`, { method: 'POST' })
-      await releaseServerDatabase()
+      const stackId = crypto.randomUUID()
+      const releaseServerDatabase = (ownership: 'claim' | 'release') =>
+        fetch(`${serverUrl}/test/release-database?db=${workerDatabaseNameOf(index)}&${ownership}=${stackId}`, {
+          method: 'POST',
+        })
+      await releaseServerDatabase('claim')
       await stopLeftoverZeroCache(zeroCachePortOf(index))
       await dropDatabase(workerDatabaseNameOf(index))
       const testDatabase = await createTestDatabase(templateDatabaseName, workerDatabaseNameOf(index))
@@ -319,7 +339,7 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
       } finally {
         await zeroCache.stop()
       }
-      await releaseServerDatabase()
+      await releaseServerDatabase('release')
       await testDatabase.drop()
     },
     { scope: 'worker', timeout: 180_000 },
@@ -345,8 +365,13 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
   ],
   diagnosticsOnFailure: [
     async ({ browser, context, workerStack }, use, testInfo) => {
+      const startedAt = new Date().toISOString()
       await use(undefined)
       if (testInfo.status === testInfo.expectedStatus) return
+      await testInfo.attach('server-requests', {
+        body: (await serverRequestsSince(startedAt)).join('\n'),
+        contentType: 'text/plain',
+      })
       await testInfo.attach('zero-cache-log', {
         body: (await readFile(workerStack.zeroCacheLogPath, 'utf8').catch(String)).split('\n').slice(-400).join('\n'),
         contentType: 'text/plain',

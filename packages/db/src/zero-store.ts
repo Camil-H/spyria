@@ -353,6 +353,7 @@ export const createZeroStore = ({
   const loadedByWorkspace = new Map<WorkspaceId, PromiseWithResolvers<void>>()
   const completeTablesByWorkspace = new Map<WorkspaceId, ReadonlySet<string>>()
   const expiresAtByWorkspace = new Map<WorkspaceId, number>()
+  const clientIdsByWorkspace = new Map<WorkspaceId, { clientID: string; clientGroupID?: string }>()
   const connectionEvents: { at: string; workspaceId: WorkspaceId; event: string }[] = []
   const noteConnection = (workspaceId: WorkspaceId, event: string) => {
     connectionEvents.push({ at: new Date().toISOString(), workspaceId, event })
@@ -430,6 +431,11 @@ export const createZeroStore = ({
       kvStore,
       mutators,
     })
+    const clientIds = { clientID: zero.clientID, clientGroupID: undefined as string | undefined }
+    clientIdsByWorkspace.set(workspaceId, clientIds)
+    zero.clientGroupID.then((clientGroupID) => {
+      clientIds.clientGroupID = clientGroupID
+    })
     const rows: SourceRows = {}
     const completeTables = new Set<string>()
     completeTablesByWorkspace.set(workspaceId, completeTables)
@@ -498,25 +504,22 @@ export const createZeroStore = ({
       publish()
     },
     whenLoaded: (workspaceId: WorkspaceId) => loadedOf(workspaceId).promise,
-    diagnostics: async () => ({
+    diagnostics: () => ({
       cacheURL,
       connectionEvents,
       workspaces: Object.fromEntries(
-        await Promise.all(
-          [...completeTablesByWorkspace].map(async ([workspaceId, completeTables]) => {
-            const zero = zeroByWorkspace.get(workspaceId)
-            return [
-              workspaceId,
-              {
-                pending: materializedTables.filter((table) => !completeTables.has(table)),
-                state: zero?.connection.state.current ?? 'closed',
-                clientID: zero?.clientID,
-                clientGroupID: await zero?.clientGroupID,
-                tokenExpiresAt: new Date(expiresAtByWorkspace.get(workspaceId) ?? 0).toISOString(),
-              },
-            ]
-          }),
-        ),
+        [...clientIdsByWorkspace].map(([workspaceId, clientIds]) => {
+          const completeTables = completeTablesByWorkspace.get(workspaceId)
+          return [
+            workspaceId,
+            {
+              ...clientIds,
+              pending: completeTables ? materializedTables.filter((table) => !completeTables.has(table)) : [],
+              state: zeroByWorkspace.get(workspaceId)?.connection.state.current ?? 'closed',
+              tokenExpiresAt: new Date(expiresAtByWorkspace.get(workspaceId) ?? 0).toISOString(),
+            },
+          ]
+        }),
       ),
     }),
     watch: (workspaceId: WorkspaceId, name: ScopedQueryName, args: ScopedWatch['args']) => {

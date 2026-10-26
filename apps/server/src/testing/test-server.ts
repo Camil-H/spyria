@@ -121,6 +121,7 @@ const databaseByName = (databaseName: string) => {
   return database
 }
 
+const databaseOwnerByName = new Map<string, string>()
 const releaseDatabase = async (databaseName: string) => {
   const fakeHost = fakeHostByDatabase.get(databaseName)
   fakeHostByDatabase.delete(databaseName)
@@ -212,7 +213,10 @@ const app = createApp({
     }),
   )
   .post('/test/release-database', async (context) => {
-    await releaseDatabase(context.req.query('db') ?? '')
+    const { db = '', claim, release } = context.req.query()
+    if (release && databaseOwnerByName.get(db) !== release) return context.body(null, 204)
+    await releaseDatabase(db)
+    if (claim) databaseOwnerByName.set(db, claim)
     return context.body(null, 204)
   })
   .post('/test/sign-in', async (context) => {

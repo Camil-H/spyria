@@ -21,14 +21,19 @@ const docker = (...args: string[]) => spawnSync('docker', args, { stdio: ['ignor
 export const databaseUrlOf = (databaseName: string) =>
   Object.assign(new URL(testPostgresUrl), { pathname: `/${databaseName}` }).href
 
-const withAdmin = async (statement: string, parameters: string[] = []) => {
+const adminRows = async <Row>(statement: string, parameters: string[] = []) => {
   const admin = postgres(databaseUrlOf('postgres'), { onnotice: () => {} })
   try {
-    await admin.unsafe(statement, parameters)
+    return [...(await admin.unsafe<Row[]>(statement, parameters))]
   } finally {
     await admin.end()
   }
 }
+const withAdmin = async (statement: string, parameters: string[] = []) => {
+  await adminRows(statement, parameters)
+}
+const databaseOidOf = async (name: string) =>
+  (await adminRows<{ oid: string }>('select oid::text as oid from pg_database where datname = $1', [name]))[0]?.oid
 
 const releaseReplicationSlotsOf = async (name: string) => {
   await withAdmin(
@@ -60,13 +65,14 @@ export const createTestDatabase = async (
   name = `spyria_test_${crypto.randomUUID().replaceAll('-', '')}`,
 ) => {
   await withAdmin(`create database "${name}" template "${template}"`)
+  const createdOid = await databaseOidOf(name)
   const database = createDatabase(databaseUrlOf(name))
   return {
     name,
     database,
     drop: async () => {
       await database.$client.end({ timeout: 5 })
-      await dropDatabase(name)
+      if ((await databaseOidOf(name)) === createdOid) await dropDatabase(name)
     },
   }
 }

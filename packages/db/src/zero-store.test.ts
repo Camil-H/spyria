@@ -200,7 +200,7 @@ test('a workspace whose zero-cache answers nothing reports every materialized qu
     cacheURL: 'http://localhost:1',
     kvStore: 'mem',
   })
-  const { cacheURL, workspaces } = await store.diagnostics()
+  const { cacheURL, workspaces } = store.diagnostics()
   expect(cacheURL).toBe('http://localhost:1')
   const acme = workspaces['workspace-acme']
   expect(acme?.pending).toContain('workspaces')
@@ -208,7 +208,7 @@ test('a workspace whose zero-cache answers nothing reports every materialized qu
   expect(typeof acme?.state).toBe('object')
   expect(typeof acme?.clientID).toBe('string')
   await store.close()
-  const closed = await store.diagnostics()
-  expect(closed.workspaces).toEqual({})
+  const closed = store.diagnostics()
+  expect(closed.workspaces['workspace-acme']).toMatchObject({ state: 'closed', pending: [], clientID: acme?.clientID })
   expect(closed.connectionEvents.map(({ event }) => event)).toContain('closed by the store')
 })
