@@ -80,7 +80,7 @@ Tests start and own their containers; they never touch the dev stack.
 | SSO-mode stack | server 3102, app 5191 | For sign-in tests in `sso` mode. |
 | Fake MCP server | 3101 | Must be free when e2e starts. |
 
-Playwright runs 3 workers by default; `WORKERS=<n>` changes it.
+Playwright runs 3 workers by default; `WORKERS=<n>` changes it. The sign-in files `01-access/sso.spec.ts` and `01-access/team.spec.ts` run first, each as its own project on one worker (`sign-in-sso`, then `sign-in-team`), because two provider sign-ins running at the same time make each other fail; the rest of the suite follows on all workers.
 
 ### Cleanup
 
