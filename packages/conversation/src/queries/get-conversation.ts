@@ -23,7 +23,7 @@ import { stoppedByPrefix } from '../domain/agent-events.ts'
 import type { AgentStep, StoredStep, ThoughtStep } from '../domain/agent-steps.ts'
 import type { Attachment } from '../domain/attachments.ts'
 import { stillRunningOf } from '../domain/delegation.ts'
-import { isFrozen } from '../domain/message.ts'
+import { isAgentActivity, isFrozen } from '../domain/message.ts'
 import type { PullRequestStep } from '../domain/pull-requests.ts'
 import { type RunsOn, runsOnOf } from '../domain/session-routing.ts'
 
@@ -268,7 +268,7 @@ export const getConversation =
       !hasActiveTurn &&
       !hasMachineSession &&
       (hasWorkspaceHost !== undefined || connectedHarnesses.length === 0) &&
-      !chatMessages.some((message) => message.kind === 'agent' || message.kind === 'step')
+      !chatMessages.some(isAgentActivity)
         ? [...(hasWorkspaceHost || connectedHarnesses.length === 0 ? ['runtime' as const] : []), ...connectedHarnesses]
         : null
     const isChannel = chat.type === 'channel'

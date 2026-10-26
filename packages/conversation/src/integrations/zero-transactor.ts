@@ -49,7 +49,7 @@ import type { ConversationTransactor, UnitOfWork } from '../contracts/transactor
 import { agentJobTypes, agentSweepIntervalMilliseconds, waitingNotices } from '../domain/agent-events.ts'
 import type { StoredStep } from '../domain/agent-steps.ts'
 import { ChatNotFound, ForeignWorkspace, MessageNotFound } from '../domain/errors.ts'
-import type { Message, MessageChange } from '../domain/message.ts'
+import { agentActivityKinds, type Message, type MessageChange } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
 import type { AgentEventPayload, ChangedPayload, PostedPayload, StepChangedPayload } from '../domain/message-events.ts'
 
@@ -236,7 +236,8 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
             zql.messages
               .where('workspaceId', contextWorkspaceId)
               .where('chatId', prompt.chatId)
-              .where('kind', 'IN', ['agent', 'step'])
+              .where('kind', 'IN', agentActivityKinds)
+              .where('authorId', 'IS', null)
               .where('replyToId', '!=', prompt.id)
               .orderBy('seq', 'asc')
               .one(),
@@ -503,7 +504,8 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
           zql.messages
             .where('workspaceId', contextWorkspaceId)
             .where('chatId', id)
-            .where('kind', 'IN', ['agent', 'step'])
+            .where('kind', 'IN', agentActivityKinds)
+            .where('authorId', 'IS', null)
             .orderBy('seq', 'asc')
             .one(),
         )) !== undefined ||

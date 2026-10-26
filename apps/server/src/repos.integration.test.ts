@@ -343,7 +343,7 @@ test('a dev chat clones its repository with a read-only installation token kept 
 }, 30_000)
 
 test('a fork of a dev chat checks out the original working branch: on a new branch for another member, on the same branch with the open pull request card for its owner', async () => {
-  const { launches } = await stack.agentHost('fork host')
+  const { launches, relay } = await stack.agentHost('fork host')
   if (!(await request(alice, 'GET', '/api/github-settings/configured')).body.configured)
     expect(await request(alice, 'POST', '/api/github-settings', appSettings)).toMatchObject({ status: 200 })
   const created = await request(alice, 'POST', '/api/dev-chats', {
@@ -406,7 +406,8 @@ test('a fork of a dev chat checks out the original working branch: on a new bran
       ({ step }) => step,
     )
     const answer = (await stack.repliesTo(promptId)).map(({ body }) => body).join('')
-    return { row: await stack.chatRow(forked), repository: launch?.repository, cards, answer }
+    const sent = relay.prompts.at(-1)
+    return { row: await stack.chatRow(forked), repository: launch?.repository, cards, answer, sent }
   }
 
   await addLlmKey(bob, 'Mistral')
@@ -419,11 +420,13 @@ test('a fork of a dev chat checks out the original working branch: on a new bran
     start_branch: sourceBranch,
   })
   expect(bobs.answer).toContain('totals.ts')
+  expect(bobs.sent).toContain('Conversation so far, from the runtime chat Fix totals:')
   expect(bobs.cards).toEqual([])
 
   const alices = await forkAs(aliceInAcme)
   expect(alices.row).toMatchObject({ mode: 'dev', gitBranch: sourceBranch, ownerUserId: alice })
   expect(alices.repository).toMatchObject({ working_branch: sourceBranch, start_branch: sourceBranch })
   expect(alices.answer).toContain('totals.ts')
+  expect(alices.sent).toContain('Conversation so far, from the runtime chat Fix totals:')
   expect(alices.cards).toEqual([card])
 }, 60_000)
