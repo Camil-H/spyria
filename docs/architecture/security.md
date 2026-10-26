@@ -66,6 +66,7 @@ Admins can turn these sessions off for the workspace. See [machines](../features
 
 - **Cloning** uses a short-lived installation token of the workspace's GitHub App, limited to reading that one repository. It is passed to `git` as a one-off header, so it is not left in the runtime's environment or in `.git/config`.
 - **Publishing** runs on the server: the runtime hands over a git bundle of the working branch, and the server pushes it with the owner's own token. A runtime has nothing it could push with.
+- **Fetching and reading** run on the server too: the agent's `fetch_branch` gets a git bundle the server built with a read-only installation token, and its review-thread and issue tools answer from read-only installation tokens. Issue and comment text comes from anyone who can comment on the repository and reaches the agent unchanged.
 - **Webhooks** are accepted only with a valid `X-Hub-Signature-256` for the App's webhook secret; a delivery id already received is ignored.
 
 ## Runtimes and hosts
