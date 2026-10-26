@@ -56,7 +56,13 @@ test.describe('GitHub setup', () => {
       callback_urls: [`${appOrigin}/auth/github/callback`],
       setup_url: `${appOrigin}/w/workspace-acme/settings/github`,
       public: false,
-      default_permissions: { contents: 'write', pull_requests: 'write', checks: 'read', metadata: 'read' },
+      default_permissions: {
+        contents: 'write',
+        pull_requests: 'write',
+        issues: 'read',
+        checks: 'read',
+        metadata: 'read',
+      },
       default_events: [
         'pull_request',
         'pull_request_review',
