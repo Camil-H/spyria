@@ -5,7 +5,36 @@ import type { GitHubPullRequest } from './webhooks.ts'
 export type GitHubUrls = { apiUrl: string; webUrl: string }
 export type UserTokens = { accessToken: string; refreshToken: string | null; accessExpiresAt: Date | null }
 type Installation = { id: number }
-type Requested = { token?: string; method?: string; body?: object }
+type Requested = { token?: string; method?: string; body?: object; baseUrl?: string }
+type GraphQlAnswer<Result> = { data?: Result; errors?: { type?: string; message: string }[] }
+export type GitHubIssue = {
+  number: number
+  html_url: string
+  title: string
+  state: string
+  body: string | null
+  user: { login: string } | null
+  labels: (string | { name?: string })[]
+  comments: number
+  updated_at: string
+}
+export type GitHubComment = { user: { login: string } | null; body: string | null }
+export type GitHubReviewThreads = {
+  repository: {
+    pullRequest: {
+      reviewThreads: {
+        nodes: {
+          path: string
+          line: number | null
+          originalLine: number | null
+          isResolved: boolean
+          isOutdated: boolean
+          comments: { nodes: { author: { login: string } | null; body: string }[] }
+        }[]
+      }
+    } | null
+  } | null
+}
 type CreatedApp = {
   id: number
   slug: string
@@ -16,6 +45,18 @@ type CreatedApp = {
 }
 
 export const githubDotCom: GitHubUrls = { apiUrl: 'https://api.github.com', webUrl: 'https://github.com' }
+const reviewThreadsQuery = `query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      reviewThreads(first: 100) {
+        nodes {
+          path line originalLine isResolved isOutdated
+          comments(first: 50) { nodes { author { login } body } }
+        }
+      }
+    }
+  }
+}`
 const requestTimeoutMilliseconds = 15_000
 const jwtLifetimeSeconds = 540
 const clockSkewSeconds = 60
@@ -43,9 +84,10 @@ export const appJwtOf = (appId: string, privateKey: string, now = Date.now()) =>
 }
 
 export const createGitHubApi = ({ apiUrl, webUrl }: GitHubUrls) => {
-  const request = async <Result>(path: string, { token, method = 'GET', body }: Requested) => {
+  const graphqlBaseUrl = apiUrl.replace(/\/v3$/, '')
+  const request = async <Result>(path: string, { token, method = 'GET', body, baseUrl = apiUrl }: Requested) => {
     const send = (signal: AbortSignal) =>
-      fetch(`${apiUrl}${path}`, {
+      fetch(`${baseUrl}${path}`, {
         method,
         headers: {
           accept: 'application/vnd.github+json',
@@ -57,7 +99,7 @@ export const createGitHubApi = ({ apiUrl, webUrl }: GitHubUrls) => {
         signal,
       })
     const response =
-      method === 'GET'
+      method === 'GET' || path === '/graphql'
         ? await withRetries(send, { timeoutMilliseconds: requestTimeoutMilliseconds })
         : await send(AbortSignal.timeout(requestTimeoutMilliseconds))
     if (!response.ok) {
@@ -127,6 +169,30 @@ export const createGitHubApi = ({ apiUrl, webUrl }: GitHubUrls) => {
     ) => request<GitHubPullRequest>(`/repos/${fullName}/pulls`, { token, method: 'POST', body }),
     pullRequest: (token: string, fullName: string, number: number) =>
       request<GitHubPullRequest>(`/repos/${fullName}/pulls/${number}`, { token }),
+    updatePullRequest: (token: string, fullName: string, number: number, change: { title?: string; body?: string }) =>
+      request<GitHubPullRequest>(`/repos/${fullName}/pulls/${number}`, { token, method: 'PATCH', body: change }),
+    reviewThreads: async (token: string, fullName: string, number: number) => {
+      const [owner, name] = fullName.split('/')
+      const answer = await request<GraphQlAnswer<GitHubReviewThreads>>('/graphql', {
+        token,
+        method: 'POST',
+        body: { query: reviewThreadsQuery, variables: { owner, name, number } },
+        baseUrl: graphqlBaseUrl,
+      })
+      const [error] = answer.errors ?? []
+      if (error)
+        throw new GitHubRequestFailed(error.type === 'NOT_FOUND' ? 404 : 422, 'POST', '/graphql', error.message)
+      return answer.data?.repository?.pullRequest?.reviewThreads.nodes
+    },
+    searchIssues: (token: string, query: string) =>
+      request<{ items: GitHubIssue[] }>(
+        `/search/issues?${new URLSearchParams({ q: query, sort: 'updated', order: 'desc', per_page: '30' })}`,
+        { token },
+      ),
+    issue: (token: string, fullName: string, number: number) =>
+      request<GitHubIssue>(`/repos/${fullName}/issues/${number}`, { token }),
+    issueComments: (token: string, fullName: string, number: number) =>
+      request<GitHubComment[]>(`/repos/${fullName}/issues/${number}/comments?per_page=100`, { token }),
     cloneUrlOf: (fullName: string) => `${webUrl}/${fullName}.git`,
     newAppUrlOf: (organization: string | undefined, state: string) =>
       `${webUrl}${organization ? `/organizations/${organization}` : ''}/settings/apps/new?${new URLSearchParams({ state })}`,
