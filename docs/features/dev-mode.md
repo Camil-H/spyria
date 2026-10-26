@@ -19,8 +19,9 @@ The repositories a workspace can use are exactly those granted to its GitHub App
 
 | Permission | Access | Why |
 |---|---|---|
-| Contents | write | clone, fetch the base branch, push the working branch |
-| Pull requests | write | open and refresh pull requests |
+| Contents | write | clone, fetch branches, push the working branch |
+| Pull requests | write | open, update and refresh pull requests, read review threads |
+| Issues | read | let the agent read the repository's issues |
 | Checks | read | show check results on the pull request card |
 | Metadata | read | required by GitHub |
 
@@ -74,7 +75,7 @@ Both are disabled while the agent is working ("The agent is working: wait for it
 Only the chat owner publishes, with their own GitHub account:
 
 - **Push** and **Open pull request** in the **Changes** tab (the form prefills the title with the chat name and the description with the branch's commit subjects). Once a pull request is open, a push updates it.
-- The agent's `push_branch` and `open_pull_request` tools, available in the main conversation of a dev chat. They run only on the owner's own prompts; on anyone else's turn they are refused with "Only <owner> can push or open pull requests in this chat", and the refusal is recorded like any tool call.
+- The agent's `push_branch`, `open_pull_request` and `update_pull_request` tools (see [The agent's GitHub tools](#the-agents-github-tools)). They run only on the owner's own prompts; on anyone else's turn they are refused with "Only <owner> can push or open pull requests in this chat", and the refusal is recorded like any tool call.
 
 The owner needs a linked GitHub account ("Connect your GitHub account in your profile to push") and a running runtime ("The runtime is asleep: wake it, then push again"); publishing never wakes it.
 
@@ -83,6 +84,26 @@ The owner needs a linked GitHub account ("Connect your GitHub account in your pr
 The owner's GitHub token can write to every repository the owner can, so it must never reach a runtime where an agent runs arbitrary commands. The runtime only hands the server a git bundle of the new commits of the working branch (at most 12 MB; larger pushes are refused with a hint to push from your own machine). The server checks that the bundle carries only that branch, rebuilds it in a fresh temporary repository with a git configuration of its own (no hooks, no credential helper, no URL rewrites from the runtime), and pushes to the repository's URL with the owner's token. There is no force push: a rewritten branch fails with git's message. The server therefore needs `git` installed. See [Security](../architecture/security.md) and the [decision records](../decisions/).
 
 The pull request is created through GitHub's API with the owner's token, from the working branch into the chat's base branch, so GitHub shows the owner as its author.
+
+## The agent's GitHub tools
+
+The runtime holds no GitHub credential, so `git fetch`, `git pull`, `git push`, `gh` and GitHub's API cannot reach a private repository from inside it. The agent reaches GitHub through tools that run on the server instead, available in the main conversation of a dev chat. The tool server tells the agent so when it connects.
+
+| Tool | Who can call it | What it does |
+|---|---|---|
+| `push_branch` | The owner's prompts | Pushes the working branch, fast-forward only |
+| `open_pull_request` | The owner's prompts | Pushes, then opens a pull request into the base branch |
+| `update_pull_request` | The owner's prompts | Changes the title or the description of the chat's open pull request |
+| `fetch_branch` | Any prompt | Fetches any branch of the chat's repository into `origin/<branch>` in the runtime, leaving the working branch as it is |
+| `read_review_threads` | Any prompt | Reads a pull request's review threads: file, line, resolved or outdated, and comments; the chat's pull request by default |
+| `list_issues` | Any prompt | Lists up to 30 issues of the repository, filtered by state, labels and words |
+| `read_issue` | Any prompt | Reads an issue with its comments |
+
+`fetch_branch` works like **Update from base**: the server fetches the branch with a read-only installation token and hands the runtime a git bundle (at most 12 MB) holding only that branch's commits the runtime lacks. Since pushes only fast-forward, the agent merges what it fetched rather than rebasing. The reading tools use read-only installation tokens too, never a member's token, and cut long texts. Every call is recorded like any tool call.
+
+Issue and comment text can be written by anyone who can comment on the repository, and it reaches the agent as it is.
+
+An App created before Spyria asked for **Issues** lacks that permission: add **Issues: Read-only** in the App's settings on GitHub, then accept it on the installation. Until then, `list_issues` and `read_issue` answer "Ask a GitHub admin to accept the Issues permission for this workspace's GitHub App".
 
 ## The pull request card and header chip
 
