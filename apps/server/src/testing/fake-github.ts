@@ -15,6 +15,7 @@ const accessLifetimeSeconds = 8 * 60 * 60
 const grantedAppPermissions: Permissions = {
   contents: 'write',
   pull_requests: 'write',
+  issues: 'read',
   checks: 'read',
   metadata: 'read',
 }
