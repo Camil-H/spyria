@@ -742,10 +742,15 @@ export const startAgentStack = async ({
     turnOf,
     turnIs: (chat: ChatId, promptId: string | null) => waitFor(async () => (await turnOf(chat)) === promptId, 15_000),
     repliesTo,
-    finished: async (promptId: string, chat: ChatId, timeoutMilliseconds?: number) => {
+    finished: async (
+      promptId: string,
+      chat: ChatId,
+      timeoutMilliseconds?: number,
+      expectedText = 'Hello from the stub',
+    ) => {
       const replies = () => repliesTo(promptId, ['kind', 'body', 'step'])
       await waitFor(
-        async () => (await replies()).some((reply) => reply.body.includes('Hello from the stub')),
+        async () => (await replies()).some((reply) => reply.body.includes(expectedText)),
         timeoutMilliseconds,
       )
       await waitFor(async () => (await turnOf(chat)) === null, timeoutMilliseconds)
