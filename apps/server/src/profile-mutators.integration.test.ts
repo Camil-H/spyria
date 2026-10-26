@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, test } from 'bun:test'
+import { afterAll, describe, expect, setDefaultTimeout, test } from 'bun:test'
 import { createApp } from './app.ts'
 import { startJobWorker } from './job-worker.ts'
 import {
@@ -11,14 +11,17 @@ import {
   everyStoredText,
   failedWith,
   globex,
+  jobDone,
+  jobStatesOf,
   lee,
   llmGatewayAt,
   openSharedTestApp,
   sessionTokenOf,
   succeeded,
   testAuthSettings,
-  waitFor,
 } from './testing/testing.ts'
+
+setDefaultTimeout(30_000)
 
 const { database, app, gateway, llmGateway, resultOf } = await openSharedTestApp()
 const worker = startJobWorker(database, { pollIntervalMilliseconds: 5, retryDelayMilliseconds: 100, llmGateway })
@@ -200,20 +203,18 @@ describe('Alice’s OpenAI credential, added then removed', () => {
     const seededKey = gatewayKeyOf(seeded as { secret_ref: string })
     expect(await resultOf(aliceInAcme, 'profile.removeLlmCredential', removal)).toEqual(succeeded)
     expect((await credentialRows()).map((row) => row.provider)).toEqual(['Anthropic'])
-    await waitFor(async () => (await gateway.request(`/api/providers/openai/keys/${openAiKey.id}`)).status === 404)
+    await jobDone('profile.gateway-sync', { memberId: alice })
+    expect((await gateway.request(`/api/providers/openai/keys/${openAiKey.id}`)).status).toBe(404)
     expect(await boundKeyIdsOf(virtualKeyId)).toEqual([seededKey.id])
 
     expect(
       await resultOf(aliceInAcme, 'profile.removeLlmCredential', { workspaceId: acme, credentialId: seeded?.id }),
     ).toEqual(succeeded)
-    await waitFor(async () => (await gateway.request(`/api/governance/virtual-keys/${virtualKeyId}`)).status === 404)
-    await waitFor(async () => (await gateway.request(`/api/providers/mistral/keys/${seededKey.id}`)).status === 404)
+    await jobDone('profile.gateway-sync', { memberId: alice })
+    expect((await gateway.request(`/api/governance/virtual-keys/${virtualKeyId}`)).status).toBe(404)
+    expect((await gateway.request(`/api/providers/mistral/keys/${seededKey.id}`)).status).toBe(404)
     expect(await virtualKeyIdOf(alice)).toBeUndefined()
-    const gatewaySyncStates = async () => [
-      ...(await database.$client`select state from jobs where type = 'profile.gateway-sync'`),
-    ]
-    await waitFor(async () => (await gatewaySyncStates()).every(({ state }) => !['queued', 'running'].includes(state)))
-    expect(await gatewaySyncStates()).toEqual([{ state: 'done' }, { state: 'done' }])
+    expect(await jobStatesOf('profile.gateway-sync', {})).toEqual(['done', 'done'])
   })
 })
 

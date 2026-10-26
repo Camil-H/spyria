@@ -31,6 +31,7 @@ type ZeroStoreOptions = {
   renew: (workspaceId: WorkspaceId) => Promise<WorkspaceSession | undefined>
   cacheURL: string
   kvStore?: 'mem' | 'idb'
+  logLevel?: 'debug' | 'info' | 'warn' | 'error'
   storageKeyPrefix?: string
   mutators?: AnyMutatorRegistry
   draftStorage?: Storage
@@ -333,6 +334,7 @@ export const createZeroStore = ({
   renew,
   cacheURL,
   kvStore,
+  logLevel,
   storageKeyPrefix = '',
   mutators,
   draftStorage,
@@ -351,6 +353,14 @@ export const createZeroStore = ({
   const zeroByWorkspace = new Map<WorkspaceId, Zero>()
   const tokenByWorkspace = new Map<WorkspaceId, string>()
   const loadedByWorkspace = new Map<WorkspaceId, PromiseWithResolvers<void>>()
+  const completeTablesByWorkspace = new Map<WorkspaceId, ReadonlySet<string>>()
+  const expiresAtByWorkspace = new Map<WorkspaceId, number>()
+  const clientIdsByWorkspace = new Map<WorkspaceId, { clientID: string; clientGroupID?: string }>()
+  const connectionEvents: { at: string; workspaceId: WorkspaceId; event: string }[] = []
+  const noteConnection = (workspaceId: WorkspaceId, event: string) => {
+    connectionEvents.push({ at: new Date().toISOString(), workspaceId, event })
+    if (connectionEvents.length > 200) connectionEvents.shift()
+  }
   const renewalTimerByWorkspace = new Map<WorkspaceId, ReturnType<typeof setTimeout>>()
   let signedInWorkspaceIds: ReadonlySet<WorkspaceId> = new Set(sessions.map((session) => session.workspaceId))
   let isPublishScheduled = false
@@ -402,9 +412,11 @@ export const createZeroStore = ({
     const zero = zeroByWorkspace.get(workspaceId)
     const renewed = await renew(workspaceId).catch(() => null)
     if (!zero || zeroByWorkspace.get(workspaceId) !== zero) return
+    noteConnection(workspaceId, renewed === null ? 'renew failed' : renewed === undefined ? 'renew refused' : 'renewed')
     if (renewed === null) return renewLater(workspaceId, renewalRetryMilliseconds)
     if (renewed === undefined) return signOut(workspaceId)
     scheduleRenewal(renewed)
+    expiresAtByWorkspace.set(workspaceId, renewed.expiresAt)
     tokenByWorkspace.set(workspaceId, renewed.token)
     for (const listener of renewalListeners) listener(workspaceId)
     await zero.connection.connect({ auth: renewed.token })
@@ -419,13 +431,21 @@ export const createZeroStore = ({
       context: { userId: memberId, workspaceId },
       storageKey: `${storageKeyPrefix}${workspaceId}`,
       kvStore,
+      logLevel,
       mutators,
+    })
+    const clientIds = { clientID: zero.clientID, clientGroupID: undefined as string | undefined }
+    clientIdsByWorkspace.set(workspaceId, clientIds)
+    zero.clientGroupID.then((clientGroupID) => {
+      clientIds.clientGroupID = clientGroupID
     })
     const rows: SourceRows = {}
     const completeTables = new Set<string>()
+    completeTablesByWorkspace.set(workspaceId, completeTables)
     rowsByWorkspace.set(workspaceId, rows)
     zeroByWorkspace.set(workspaceId, zero)
     tokenByWorkspace.set(workspaceId, token)
+    expiresAtByWorkspace.set(workspaceId, session.expiresAt)
     for (const table of materializedTables)
       zero
         .materialize((queries[table] as () => Parameters<typeof zero.materialize>[0])())
@@ -438,12 +458,14 @@ export const createZeroStore = ({
         })
     for (const watch of scopedWatches.values()) if (watch.workspaceId === workspaceId) materializeScoped(watch)
     zero.connection.state.subscribe((state) => {
+      noteConnection(workspaceId, 'reason' in state ? `${state.name} ${JSON.stringify(state.reason)}` : state.name)
       if (state.name === 'needs-auth') renewNow(workspaceId)
     })
     scheduleRenewal(session)
   }
   const close = (workspaceId: WorkspaceId) => {
     const zero = zeroByWorkspace.get(workspaceId)
+    noteConnection(workspaceId, 'closed by the store')
     clearTimeout(renewalTimerByWorkspace.get(workspaceId))
     for (const watch of scopedWatches.values())
       if (watch.workspaceId === workspaceId) {
@@ -453,6 +475,7 @@ export const createZeroStore = ({
       }
     zeroByWorkspace.delete(workspaceId)
     loadedByWorkspace.delete(workspaceId)
+    completeTablesByWorkspace.delete(workspaceId)
     signedInWorkspaceIds = new Set([...signedInWorkspaceIds].filter((signedInId) => signedInId !== workspaceId))
     rowsByWorkspace.set(workspaceId, { workspaces: rowsByWorkspace.get(workspaceId)?.workspaces ?? [] })
     publish()
@@ -484,6 +507,24 @@ export const createZeroStore = ({
       publish()
     },
     whenLoaded: (workspaceId: WorkspaceId) => loadedOf(workspaceId).promise,
+    diagnostics: () => ({
+      cacheURL,
+      connectionEvents,
+      workspaces: Object.fromEntries(
+        [...clientIdsByWorkspace].map(([workspaceId, clientIds]) => {
+          const completeTables = completeTablesByWorkspace.get(workspaceId)
+          return [
+            workspaceId,
+            {
+              ...clientIds,
+              pending: completeTables ? materializedTables.filter((table) => !completeTables.has(table)) : [],
+              state: zeroByWorkspace.get(workspaceId)?.connection.state.current ?? 'closed',
+              tokenExpiresAt: new Date(expiresAtByWorkspace.get(workspaceId) ?? 0).toISOString(),
+            },
+          ]
+        }),
+      ),
+    }),
     watch: (workspaceId: WorkspaceId, name: ScopedQueryName, args: ScopedWatch['args']) => {
       const key = scopedKeyOf(workspaceId, name, args)
       const watch = scopedWatches.get(key) ?? { workspaceId, name, args, count: 0 }

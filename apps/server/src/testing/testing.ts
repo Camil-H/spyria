@@ -488,6 +488,17 @@ export const jobsOf = async (messageId: string) =>
   (await (await openedTestApp()).database.select().from(jobs)).filter(
     (job) => (job.payload as { messageId: string }).messageId === messageId,
   )
+export const jobStatesOf = async (type: string, payload: object) => {
+  const { database } = await openedTestApp()
+  const rows = await database.$client<{ state: string }[]>`
+    select state from jobs where type = ${type} and payload @> ${JSON.stringify(payload)}::jsonb`
+  return rows.map(({ state }) => state)
+}
+export const jobDone = (type: string, payload: object) =>
+  waitFor(async () => {
+    const states = await jobStatesOf(type, payload)
+    return states.length > 0 && states.every((state) => state === 'done')
+  }, 15_000)
 export const countOf = async () => {
   const { database } = await openedTestApp()
   return {
@@ -645,11 +656,6 @@ export const startAgentStack = async ({
     (await database.query.messages.findMany({ where: { replyToId: messageId }, orderBy: { seq: 'asc' } })).map(
       (reply) => Object.fromEntries(fields.map((field) => [field, reply[field]])) as Pick<Message, Field>,
     )
-  const jobStatesOf = async (type: string, payload: object) =>
-    (
-      await database.$client<{ state: string }[]>`
-        select state from jobs where type = ${type} and payload @> ${JSON.stringify(payload)}::jsonb`
-    ).map(({ state }) => state)
   const openStream = async (
     chat: ChatId,
     { workspaceId = acme as string, token }: { workspaceId?: string; token?: string } = {},
@@ -754,11 +760,7 @@ export const startAgentStack = async ({
     answered: (messageId: string, count = 1) =>
       waitFor(async () => (await repliesTo(messageId)).length >= count, 15_000),
     jobStatesOf,
-    jobDone: (type: string, payload: object) =>
-      waitFor(async () => {
-        const states = await jobStatesOf(type, payload)
-        return states.length > 0 && states.every((state) => state === 'done')
-      }, 15_000),
+    jobDone,
     storedAgentEventsOf: async (chat: ChatId) =>
       (await database.select().from(events))
         .filter((event) => event.chatId === chat && event.type === 'agent.event')

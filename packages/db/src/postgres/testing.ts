@@ -1,7 +1,7 @@
 import { type ChildProcess, spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { once } from 'node:events'
-import { openSync, readFileSync, rmSync, writeFileSync, writeSync } from 'node:fs'
+import { openSync, readFileSync, realpathSync, rmSync, writeFileSync, writeSync } from 'node:fs'
 import { get } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -21,21 +21,38 @@ const docker = (...args: string[]) => spawnSync('docker', args, { stdio: ['ignor
 export const databaseUrlOf = (databaseName: string) =>
   Object.assign(new URL(testPostgresUrl), { pathname: `/${databaseName}` }).href
 
-const withAdmin = async (statement: string) => {
+const adminRows = async <Row>(statement: string, parameters: string[] = []) => {
   const admin = postgres(databaseUrlOf('postgres'), { onnotice: () => {} })
   try {
-    await admin.unsafe(statement)
+    return [...(await admin.unsafe<Row[]>(statement, parameters))]
   } finally {
     await admin.end()
   }
+}
+const withAdmin = async (statement: string, parameters: string[] = []) => {
+  await adminRows(statement, parameters)
+}
+const databaseOidOf = async (name: string) =>
+  (await adminRows<{ oid: string }>('select oid::text as oid from pg_database where datname = $1', [name]))[0]?.oid
+
+const releaseReplicationSlotsOf = async (name: string) => {
+  await withAdmin(
+    'select pg_terminate_backend(active_pid) from pg_replication_slots where database = $1 and active_pid is not null',
+    [name],
+  )
+  await withAdmin(
+    'select pg_drop_replication_slot(slot_name) from pg_replication_slots where database = $1 and not active',
+    [name],
+  )
 }
 
 export const dropDatabase = async (name: string) => {
   for (let attempt = 1; ; attempt++)
     try {
+      await releaseReplicationSlotsOf(name)
       return await withAdmin(`drop database if exists "${name}" with (force)`)
     } catch (error) {
-      if (attempt === 100) throw error
+      if (attempt === 200) throw error
       await sleep(50)
     }
 }
@@ -48,13 +65,14 @@ export const createTestDatabase = async (
   name = `spyria_test_${crypto.randomUUID().replaceAll('-', '')}`,
 ) => {
   await withAdmin(`create database "${name}" template "${template}"`)
+  const createdOid = await databaseOidOf(name)
   const database = createDatabase(databaseUrlOf(name))
   return {
     name,
     database,
     drop: async () => {
       await database.$client.end({ timeout: 5 })
-      await dropDatabase(name)
+      if ((await databaseOidOf(name)) === createdOid) await dropDatabase(name)
     },
   }
 }
@@ -121,37 +139,99 @@ export const httpStatusOf = (url: string, headers: Record<string, string> = {}) 
     }).on('error', (error) => resolve(String(error)))
   })
 
-const zeroCacheCli = new URL('../../node_modules/@rocicorp/zero/out/zero/src/cli.js', import.meta.url).pathname
+const zeroPackage = new URL('../../node_modules/@rocicorp/zero/', import.meta.url).pathname
+const zeroCacheCli = `${zeroPackage}out/zero/src/cli.js`
+const zeroPackageDirectories = [zeroPackage, `${realpathSync(zeroPackage)}/`]
 
 const gracefulStopMilliseconds = 5000
 
-const stopProcessGroup = async (process: ChildProcess) => {
-  if (process.exitCode !== null || process.signalCode !== null) return
-  const exited = once(process, 'exit').then(() => true)
-  globalThis.process.kill(-(process.pid ?? 0), 'SIGTERM')
-  if (await Promise.race([exited, sleep(gracefulStopMilliseconds, false)])) return
-  globalThis.process.kill(process.pid ?? 0, 'SIGQUIT')
-  await exited
+const signalGroup = (group: number, signal: NodeJS.Signals) => {
+  try {
+    process.kill(-group, signal)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error
+  }
 }
+
+const stopProcessGroup = async (process: ChildProcess) => {
+  const group = process.pid ?? 0
+  if (process.exitCode === null && process.signalCode === null) {
+    const exited = once(process, 'exit')
+    signalGroup(group, 'SIGTERM')
+    await Promise.race([exited, sleep(gracefulStopMilliseconds)])
+  }
+  signalGroup(group, 'SIGKILL')
+}
+
+const outputOf = (command: string, args: string[]) => String(spawnSync(command, args).stdout ?? '')
+
+const isZeroCacheCommand = (command: string) => zeroPackageDirectories.some((directory) => command.includes(directory))
+
+export const processTable = () =>
+  outputOf('ps', ['-eo', 'pid=,pgid=,args='])
+    .split('\n')
+    .map((line) => line.trim().split(/\s+/))
+    .filter((fields) => fields.length >= 3)
+    .map(([pid = '', group = '', ...command]) => ({
+      pid: Number(pid),
+      group: Number(group),
+      command: command.join(' '),
+    }))
+
+const leftoverZeroCacheGroupsOn = (ports: number[]) => {
+  const listeners = new Set(
+    outputOf('lsof', ['-t', `-iTCP:${ports.join(',')}`, '-sTCP:LISTEN'])
+      .split('\n')
+      .filter(Boolean)
+      .map(Number),
+  )
+  const table = processTable()
+  const listeningGroups = new Set(table.filter(({ pid }) => listeners.has(pid)).map(({ group }) => group))
+  return [...listeningGroups].filter(
+    (group) => group > 1 && table.filter((row) => row.group === group).every((row) => isZeroCacheCommand(row.command)),
+  )
+}
+
+const busyPortsOf = async (ports: number[]) => {
+  const answers = await Promise.all(ports.map((port) => httpStatusOf(`http://localhost:${port}/`)))
+  return ports.filter((_, index) => typeof answers[index] === 'number')
+}
+
+const freeZeroCachePorts = async (ports: number[]) => {
+  for (const group of new Set(leftoverZeroCacheGroupsOn(ports))) signalGroup(group, 'SIGKILL')
+  for (let attempt = 1; ; attempt++) {
+    const busyPorts = await busyPortsOf(ports)
+    if (busyPorts.length === 0) return
+    if (attempt === 100)
+      throw new Error(
+        `zero-cache cannot start: port ${busyPorts.join(', ')} is still in use after stopping leftover zero-caches`,
+      )
+    await sleep(50)
+  }
+}
+
+export const stopLeftoverZeroCache = (port: number) => freeZeroCachePorts([port, port + 1])
+export const stopLeftoverZeroCaches = (ports: number[]) => freeZeroCachePorts(ports)
 
 export const startZeroCache = async ({
   databaseName,
   port,
   appId,
   serverUrl,
+  logLevel = process.env.SPYRIA_ZERO_LOG_LEVEL ?? 'error',
 }: {
   databaseName: string
   port: number
   appId: string
   serverUrl: string
+  logLevel?: string
 }) => {
   const url = `http://localhost:${port}`
-  for (const busyPort of [port, port + 1])
-    if (typeof (await httpStatusOf(`http://localhost:${busyPort}/`)) === 'number')
-      throw new Error(`zero-cache cannot start: port ${busyPort} is in use (a leftover zero-cache? free it first)`)
+  await freeZeroCachePorts([port, port + 1])
   const replicaFile = join(tmpdir(), `spyria-zero-${appId}.db`)
   for (const suffix of ['', '-wal', '-shm', '-wal2']) rmSync(`${replicaFile}${suffix}`, { force: true })
-  const logFile = openSync(join(tmpdir(), `spyria-zero-${appId}.log`), 'w')
+  const logPath = join(tmpdir(), `spyria-zero-${appId}.log`)
+  const logFile = openSync(logPath, 'w')
   const zeroCache = spawn('node', [zeroCacheCli], {
     detached: true,
     stdio: ['ignore', logFile, 'pipe'],
@@ -169,7 +249,7 @@ export const startZeroCache = async ({
       ZERO_NUM_SYNC_WORKERS: '1',
       ZERO_UPSTREAM_MAX_CONNS: '4',
       ZERO_CVR_MAX_CONNS: '4',
-      ZERO_LOG_LEVEL: process.env.SPYRIA_ZERO_LOG_LEVEL ?? 'error',
+      ZERO_LOG_LEVEL: logLevel,
       ZERO_ENABLE_TELEMETRY: 'false',
     },
   })
@@ -192,7 +272,7 @@ export const startZeroCache = async ({
     }
     await sleep(50)
   }
-  return { url, exited, stop }
+  return { url, exited, stop, logPath }
 }
 
 const gatewayImage = 'maximhq/bifrost:v2.3.2@sha256:f5b18826349fe9e1c402c10d19f1cbb5567a3c800ad928580d07f72e69106ec7'

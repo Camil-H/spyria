@@ -76,15 +76,15 @@ Tests start and own their containers; they never touch the dev stack.
 | Test Dex | `spyria-test-dex` on 5557 | Config `apps/web/e2e/dex-test.yaml`, shared by integration and e2e, never the dev Dex. |
 | Integration gateway | `spyria-test-gateway-integration` on 4880 | A Bifrost of its own, on its own database. |
 | e2e gateway | `spyria-test-gateway-e2e` on 4881 | One for the whole e2e run. |
-| e2e test server and app | server 3100, app 5190 | One database per worker (`spyria_e2e_w<n>`), zero-cache per worker from port 4900. |
+| e2e test server and app | server 3100, app 5190 | One database (`spyria_e2e_w<n>`) and one zero-cache (ports from 4900, 50 pairs) per worker instance, keyed by Playwright's `workerIndex`, so a worker that replaces a failed one never shares a database or ports with its predecessor. |
 | SSO-mode stack | server 3102, app 5191 | For sign-in tests in `sso` mode. |
 | Fake MCP server | 3101 | Must be free when e2e starts. |
 
-Playwright runs 3 workers by default; `WORKERS=<n>` changes it (8 at most).
+Playwright runs 3 workers by default; `WORKERS=<n>` changes it. The sign-in files `01-access/sso.spec.ts` and `01-access/team.spec.ts` run first, each as its own project on one worker (`sign-in-sso`, then `sign-in-team`), because two provider sign-ins running at the same time make each other fail; the rest of the suite follows on all workers.
 
 ### Cleanup
 
-Each run starts by removing what killed runs left behind: idle `spyria_test_<id>` and `spyria_e2e_w<n>` databases and inactive test replication slots in the test Postgres, and `spyria-test-<id>-*`, `spyria-test-e2e-*` and `spyria-test-certs-<id>` containers, volumes and networks older than 30 minutes. The reused fixtures stay: `spyria-test-postgres`, `spyria-test-dex`, the `spyria-test-gateway-*` containers and the `spyria-test-harnesses` volume.
+Each run starts by removing what killed runs left behind: idle `spyria_test_<id>` and `spyria_e2e_w<n>` databases and inactive test replication slots in the test Postgres, and `spyria-test-<id>-*`, `spyria-test-e2e-*` and `spyria-test-certs-<id>` containers, volumes and networks older than 30 minutes. The reused fixtures stay: `spyria-test-postgres`, `spyria-test-dex`, the `spyria-test-gateway-*` containers and the `spyria-test-harnesses` volume. A zero-cache starts by stopping a leftover zero-cache on its ports (integration 4890–4891, e2e from 4900) and fails at once if another process still holds them. An e2e worker stops the leftover zero-cache on its ports before it recreates its database, the e2e run stops every worker's zero-cache when it starts and ends, and dropping a test database first ends the replication connections still reading it and drops its replication slots. After each step, `check:all` stops and logs any spyria-agent, stub agent or zero-cache of this checkout that the step left running, so e2e never starts beside integration leftovers.
 
 ## The fakes
 
@@ -163,7 +163,7 @@ The `ui` project (`apps/web/ui`) holds the looks: `toHaveScreenshot` in light an
 
 ## Chasing a failure
 
-- A failed Playwright test keeps a screenshot and `error-context.md` in `apps/web/test-results`.
+- A failed Playwright test keeps a screenshot and `error-context.md` in `apps/web/test-results`, plus these attachments: `postgres-activity` (the worker database's sessions with their wait events, blockers and transaction ages, its waiting locks, and its replication slots), `stack-state` (both test servers' health and last non-request log lines, Dex's last log lines, and the process table of zero-caches, servers and workers with their process groups), `pages` (per open page, popups included: its URL, an accessibility snapshot, its console with the Zero client at debug level, and its Zero state: how many stores it built, the zero-cache URL it used, and per workspace the queries still loading, the connection state, client ids and a timeline of connection changes, renewals and sign-outs) `server-requests` (the `/api/query` and `/api/mutate` lines of both test servers' logs since the test started) and `zero-cache-log` (the last 400 lines of the worker's zero-cache log, at `info` level unless `SPYRIA_ZERO_LOG_LEVEL` says otherwise).
 - Traces are off by default, because recording one per test makes the suite noticeably slower. Add one when chasing a failure: `bun run test:e2e -- e2e/04-agent --trace retain-on-failure`.
 - Run one segment or one file to iterate quickly; the platform gate still runs first.
 - If only the platform gate fails, look at the stack (database, zero-cache, gateway, ports) before any feature.
