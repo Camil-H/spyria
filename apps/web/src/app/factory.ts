@@ -122,6 +122,7 @@ export const createApp = async (
     sessions,
     renew,
     cacheURL: testStack?.zeroCacheURL ?? zeroCacheURL,
+    logLevel: testStack && 'debug',
     mutators: { ...workspaceMutators, ...conversationMutators, ...profileMutators, ...runtimeMutators },
     draftStorage: localStorage,
   })
