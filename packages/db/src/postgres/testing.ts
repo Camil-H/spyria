@@ -165,20 +165,32 @@ const stopProcessGroup = async (process: ChildProcess) => {
 
 const outputOf = (command: string, args: string[]) => String(spawnSync(command, args).stdout ?? '')
 
-const processGroupAndCommandOf = (processId: string) => {
-  const [group = '', ...command] = outputOf('ps', ['-o', 'pgid=,args=', '-p', processId]).trim().split(/\s+/)
-  return { group: Number(group), command: command.join(' ') }
-}
+const isZeroCacheCommand = (command: string) => zeroPackageDirectories.some((directory) => command.includes(directory))
 
-const leftoverZeroCacheGroupsOn = (ports: number[]) =>
-  outputOf('lsof', ['-t', `-iTCP:${ports.join(',')}`, '-sTCP:LISTEN'])
+export const processTable = () =>
+  outputOf('ps', ['-eo', 'pid=,pgid=,args='])
     .split('\n')
-    .filter(Boolean)
-    .map(processGroupAndCommandOf)
-    .filter(
-      ({ group, command }) => group > 1 && zeroPackageDirectories.some((directory) => command.includes(directory)),
-    )
-    .map(({ group }) => group)
+    .map((line) => line.trim().split(/\s+/))
+    .filter((fields) => fields.length >= 3)
+    .map(([pid = '', group = '', ...command]) => ({
+      pid: Number(pid),
+      group: Number(group),
+      command: command.join(' '),
+    }))
+
+const leftoverZeroCacheGroupsOn = (ports: number[]) => {
+  const listeners = new Set(
+    outputOf('lsof', ['-t', `-iTCP:${ports.join(',')}`, '-sTCP:LISTEN'])
+      .split('\n')
+      .filter(Boolean)
+      .map(Number),
+  )
+  const table = processTable()
+  const listeningGroups = new Set(table.filter(({ pid }) => listeners.has(pid)).map(({ group }) => group))
+  return [...listeningGroups].filter(
+    (group) => group > 1 && table.filter((row) => row.group === group).every((row) => isZeroCacheCommand(row.command)),
+  )
+}
 
 const busyPortsOf = async (ports: number[]) => {
   const answers = await Promise.all(ports.map((port) => httpStatusOf(`http://localhost:${port}/`)))

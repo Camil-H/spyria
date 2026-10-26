@@ -17,7 +17,9 @@ import {
 import {
   createTestDatabase,
   dropDatabase,
+  httpStatusOf,
   prepareSeededGatewayKeys,
+  processTable,
   shareTestCrm,
   startZeroCache,
   stopLeftoverZeroCache,
@@ -161,6 +163,28 @@ type TestOptions = ResetOptions & {
   release: (name: string) => Promise<void>
   reached: (name: string) => Promise<void>
   heldCommand: (name: string) => string
+}
+
+const repositoryRoot = new URL('../../../', import.meta.url).pathname
+const stackState = async () => {
+  const serverLogs = await Promise.all(
+    [serverUrl, ssoServerUrl].map(async (url) => ({
+      url,
+      health: await httpStatusOf(`${url}/health`),
+      lastLinesNotRequests: (
+        await readFile(join(tmpdir(), `spyria-e2e-${new URL(url).port}.log`), 'utf8').catch(String)
+      )
+        .split('\n')
+        .filter((line) => line && !line.includes('"event.name":"http.request"'))
+        .slice(-60),
+    })),
+  )
+  return {
+    servers: serverLogs,
+    processes: processTable().filter(
+      ({ command }) => command.includes(repositoryRoot) || command.includes('@rocicorp/zero'),
+    ),
+  }
 }
 
 const serverRequestsSince = async (startedAt: string) => {
@@ -368,6 +392,10 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
       const startedAt = new Date().toISOString()
       await use(undefined)
       if (testInfo.status === testInfo.expectedStatus) return
+      await testInfo.attach('stack-state', {
+        body: JSON.stringify(await stackState(), null, 2),
+        contentType: 'application/json',
+      })
       await testInfo.attach('server-requests', {
         body: (await serverRequestsSince(startedAt)).join('\n'),
         contentType: 'text/plain',

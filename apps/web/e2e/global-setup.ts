@@ -1,5 +1,5 @@
 import { execFile, execSync, spawn } from 'node:child_process'
-import { openSync } from 'node:fs'
+import { openSync, writeSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -75,18 +75,28 @@ const removeWorkerHosts = () => {
 
 const startDetached = async (command: string[], cwd: string, env: Record<string, string>, readyUrl: string) => {
   const [executable = '', ...args] = command
-  const logFile = openSync(join(tmpdir(), `spyria-e2e-${new URL(readyUrl).port}.log`), 'w')
+  const logPath = join(tmpdir(), `spyria-e2e-${new URL(readyUrl).port}.log`)
+  const logFile = openSync(logPath, 'w')
   const child = spawn(executable, args, {
     cwd,
     env: { ...process.env, ...env },
     detached: true,
     stdio: ['ignore', logFile, logFile],
   })
+  child.on('exit', (code, signal) =>
+    writeSync(logFile, `\n${command.join(' ')} exited with ${signal ?? code} at ${new Date().toISOString()}\n`),
+  )
   for (let attempt = 1; typeof (await httpStatusOf(readyUrl)) !== 'number'; attempt++) {
     if (attempt === 400) throw new Error(`${command.join(' ')} did not start`)
     await sleep(50)
   }
-  return () => process.kill(-(child.pid ?? 0), 'SIGTERM')
+  return () => {
+    if (child.exitCode !== null || child.signalCode !== null)
+      throw new Error(
+        `${command.join(' ')} exited during the run with ${child.signalCode ?? child.exitCode}: see ${logPath}`,
+      )
+    process.kill(-(child.pid ?? 0), 'SIGTERM')
+  }
 }
 
 export default async function globalSetup() {
@@ -142,11 +152,16 @@ export default async function globalSetup() {
   const toolServers = await fetch(`${serverUrl}/test/tool-servers`, { method: 'POST' })
   if (!toolServers.ok) throw new Error(`Setting up the test tool servers failed with ${toolServers.status}`)
   return async () => {
-    stopVite()
-    stopServer()
-    stopSsoVite()
-    stopSsoServer()
+    const failures = [stopVite, stopServer, stopSsoVite, stopSsoServer].flatMap((stop) => {
+      try {
+        stop()
+        return []
+      } catch (error) {
+        return [error]
+      }
+    })
     removeWorkerHosts()
     await stopWorkerZeroCaches()
+    if (failures.length > 0) throw failures[0]
   }
 }
