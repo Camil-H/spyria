@@ -1,9 +1,6 @@
-import { mkdirSync, rmSync, statSync } from 'node:fs'
-import { setTimeout as sleep } from 'node:timers/promises'
 import { expect, type Page } from '@playwright/test'
 import { mainOf, switcherOf } from '../fixtures.ts'
 import type { WorkerStack } from '../stack'
-import { providerLoginLockPath } from '../stack-ports.ts'
 
 export * from '../fixtures.ts'
 
@@ -11,34 +8,13 @@ export const signedOutScreenOf = (page: Page, workspaceName: string) =>
   page.getByText(`You are signed out of ${workspaceName}`)
 export const anySignedOutScreenOf = (page: Page) => page.getByText(/You are signed out of/)
 export const signInButtonOf = (page: Page) => page.getByRole('button', { name: 'Sign in' })
-const staleLockMilliseconds = 60_000
-const withProviderLoginLock = async <Result>(work: () => Promise<Result>) => {
-  for (;;) {
-    try {
-      mkdirSync(providerLoginLockPath)
-      break
-    } catch {
-      const heldSince = statSync(providerLoginLockPath, { throwIfNoEntry: false })?.mtimeMs ?? Date.now()
-      if (Date.now() - heldSince > staleLockMilliseconds)
-        rmSync(providerLoginLockPath, { recursive: true, force: true })
-      else await sleep(100)
-    }
-  }
-  try {
-    return await work()
-  } finally {
-    rmSync(providerLoginLockPath, { recursive: true, force: true })
-  }
+export const logInAtProvider = async (popup: Page, email: string) => {
+  const popupClosed = popup.waitForEvent('close')
+  await popup.locator('#login').fill(email)
+  await popup.locator('#password').fill('password')
+  await popup.locator('#submit-login').click()
+  await popupClosed
 }
-
-export const logInAtProvider = (popup: Page, email: string) =>
-  withProviderLoginLock(async () => {
-    const popupClosed = popup.waitForEvent('close')
-    await popup.locator('#login').fill(email)
-    await popup.locator('#password').fill('password')
-    await popup.locator('#submit-login').click()
-    await popupClosed
-  })
 export const signInThroughProvider = async (page: Page, email: string) => {
   const popupOpened = page.waitForEvent('popup')
   await signInButtonOf(page).click()
