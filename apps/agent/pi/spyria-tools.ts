@@ -20,7 +20,7 @@ export default (pi: ExtensionAPI) => {
     name: 'open_page',
     label: 'Open',
     description:
-      "Open a page in the member's Browser panel: an http or https address, or the path of a file in the project such as an HTML report you wrote.",
+      "Open a page in the member's Browser panel: a public http or https address, or the path of a file in the project such as an HTML report you wrote. Addresses on a local or private network, such as localhost or 192.168.x.x, are not opened.",
     promptGuidelines: [
       'When you build something the member should look at, such as a report or a page, open it with open_page.',
     ],
