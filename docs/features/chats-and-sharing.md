@@ -4,7 +4,7 @@ This page describes how conversations are organized in a Spyria workspace and ho
 
 ## Projects and chats
 
-The sidebar lists a workspace's **projects**, each with its chats, then the **Loose chats** that belong to no project. **Project creation** and **Chat creation** sit at the top of the sidebar, above **Search**.
+The sidebar lists a workspace's **projects**, each with its chats, then the **Loose chats** that belong to no project. **New project** and **New chat** sit at the top of the sidebar, above **Search**.
 
 A chat has one of two types, chosen in **New chat**:
 
@@ -41,7 +41,7 @@ Changing a channel's visibility needs the chat admin permission. When a channel 
 
 ## Message actions
 
-In a channel, pointing at a message, or moving the keyboard focus into it, shows its actions side by side at its top right, each an icon that names itself on hover: **Reply in thread** (top-level messages, for members who can post), **Start runtime from this message**, **Copy message as context** (**Copy thread as context** when the message has replies or is one), and, for its author only, **Edit** and **Delete**. An action a member cannot take is not shown. Runtime chats have no message actions.
+In a channel, pointing at a message, or moving the keyboard focus into it, shows its actions side by side at its top right, each an icon that names itself on hover: **Reply in thread** (top-level messages, for members who can post), **Start runtime from this message**, **Copy message as context** (**Copy thread as context** when the message has replies or is one), and, for its author only, **Edit** and **Delete**. An action a member cannot take is not shown. The actions are one stop for Tab; the left and right arrow keys, Home and End move between them. Runtime chats have no message actions.
 
 ## Threads
 
@@ -49,18 +49,18 @@ In a channel, the actions of a top-level message offer **Reply in thread**. Repl
 
 ## Search
 
-**Search** at the top of the sidebar, or the **/** key, searches the text of the messages of every chat the member can read in the workspace: the public channels and the chats they take part in. The server applies the same rule as for reading a chat, so a message of a private chat never reaches a member who is not in it, and deleted messages and agent steps are left out. The search ignores case, and wildcard characters match only themselves. It lists the 30 newest matches, each with its chat, author, date and the matched text marked. The arrow keys move through the list and Enter (or a click) opens the chat, finding the searched text there. A match in a thread opens on the thread's root message. Chats that are archived are left out.
+**Search** at the top of the sidebar, or the **/** key, searches the text of the messages of every chat the member can read in the workspace: the public channels and the chats they take part in. The server applies the same rule as for reading a chat, so a message of a private chat never reaches a member who is not in it, and deleted messages and agent steps are left out. The search ignores case, accented capitals included for a word written all lower case, capitalized or all upper case (été finds Été and ÉTÉ), and wildcard characters match only themselves. It lists the 30 newest matches, each with its chat, author, date and the matched text marked. The arrow keys move through the list and Enter (or a click) opens the chat, finding the searched text there. A match in a thread opens on the thread's root message. Chats that are archived are left out.
 
-**Find in this chat**, in the chat header or the **F** key, highlights the searched text in the messages on screen and counts the matches ("2 of 5"). It starts on the newest match; Enter or **Next match** moves down, Shift+Enter or **Previous match** moves up, and Escape closes it. It searches the messages loaded so far: **Search earlier messages** loads more. Opening a match from Search loads earlier messages until the matched one is on screen. The searched text stays in the browser and is never put in the address bar.
+**Find in this chat**, in the chat header or the **F** key, highlights the searched text in the messages on screen, even across bold, links or code inside a paragraph, and counts the matches ("2 of 5"). It starts on the newest match; Enter or **Next match** moves down, Shift+Enter or **Previous match** moves up, and Escape closes it. It searches the messages loaded so far: **Search earlier messages** loads more. Opening a match from Search loads earlier messages until the matched one is on screen. The searched text stays in the browser and is never put in the address bar.
 
 ## Keyboard shortcuts
 
-Single keys move around the workspace. They do nothing while typing in a field or while a dialog or menu is open, and **?** lists the ones available on the current page. A button's tooltip shows its shortcut's letter in bold, for example "**L**eft sidebar collapse".
+Single keys move around the workspace. They do nothing while typing in a field or while a dialog or menu is open, and **?** lists the ones available on the current page. A button's tooltip shows its shortcut's letter in bold, for example "Collapse **l**eft sidebar" or "New **c**hat".
 
 | Key | Action |
 |---|---|
 | **L** | Collapse or expand the left sidebar |
-| **R** | Collapse or expand the right sidebar (the side panel) |
+| **R** | Hide or show the side panel on the right |
 | **R** then **1**, **2**… | Open the side panel on its first, second… tab |
 | **B** | Browse channels |
 | **C** | Create a chat |
