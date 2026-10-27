@@ -58,7 +58,7 @@ Members' API keys are stored in the gateway only; Spyria keeps a reference and t
 
 ## Tools (MCP servers) in development
 
-Members connect tools in Profile > Connections > My connections. The agent of a runtime chat calls them through the runtime host's relay (`/mcp`) and the gateway, always as the chat owner. The OAuth token stays in the gateway, against the member's virtual key in that workspace (so a member needs an LLM key in the workspace first); Spyria stores only the server name and a status. See [Agents](../features/agents.md) for how members use them.
+Members connect tools in Profile > Connections > My connections. The agent of a runtime chat calls them through the runtime host's relay (`/mcp`) and the gateway, always as the chat owner. The OAuth token stays in the gateway, against the member's virtual key in that workspace, which Spyria creates when the member first needs tools, with or without an LLM key; Spyria stores only the server name and a status. See [Agents](../features/agents.md) for how members use them.
 
 A tool server is set up once per deployment before members see it:
 

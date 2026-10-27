@@ -9,7 +9,8 @@ import { runGatewaySync } from '../operations/sync-member-gateway-key.ts'
 const id = z.string().check(z.minLength(1))
 const gatewaySyncPayload = z.object({
   memberId: z.pipe(id, z.transform(memberId)),
-  key: z.object({ provider: id, id }),
+  key: z.optional(z.object({ provider: id, id })),
+  isLeaving: z.optional(z.boolean()),
 })
 const toolServerRemovalPayload = z.object({ gatewayName: id })
 

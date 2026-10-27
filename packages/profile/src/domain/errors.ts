@@ -47,7 +47,6 @@ export const ToolStillConnected = errorKind(
   (tool: string) => `${tool} is still connected: disconnect it, then connect again`,
   ProfileError,
 )
-export const NoGatewayKey = errorKind('no_gateway_key', () => 'Add an LLM key before connecting tools', ProfileError)
 export const InvalidConnection = errorKind('invalid_connection', (reason: string) => reason, ProfileError)
 export const ConnectionNotFound = errorKind(
   'connection_not_found',

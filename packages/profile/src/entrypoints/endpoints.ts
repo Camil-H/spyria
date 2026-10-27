@@ -5,12 +5,12 @@ import { Secret } from '../domain/secret.ts'
 import { toolConsentChannel } from '../integrations/http-tool-connections.ts'
 import { createTransactingZeroTransactor, memberContext } from '../integrations/zero-transactor.ts'
 import { addLlmCredential } from '../operations/add-llm-credential.ts'
-import { virtualKeyValueOf } from '../operations/sync-member-gateway-key.ts'
+import { grantMemberTools } from '../operations/grant-tools.ts'
+import { toolKeyValueOf, virtualKeyValueOf } from '../operations/sync-member-gateway-key.ts'
 import {
   availableTools,
   disconnectTool,
   flagToolConnection,
-  grantMemberTools,
   refreshToolConnection,
   startToolConnection,
   toolCallAccess,
@@ -56,7 +56,7 @@ const toolActions = { connect: startToolConnection, refresh: refreshToolConnecti
 export const toolConnectionFromRequest = (
   transact: Transact,
   context: ZeroContext,
-  gateway: ToolGateway,
+  gateway: LlmGateway & ToolGateway,
   tool: string,
   action: string,
 ) => {
@@ -71,12 +71,14 @@ export const availableToolsFromRequest = async (gateway: ToolGateway) => ({
   available: await availableTools({ gateway }),
 })
 
-export const createToolCallOwnerAccess = (transact: Transact, gateway: ToolGateway) => {
+export const createToolCallOwnerAccess = (transact: Transact, gateway: LlmGateway & ToolGateway) => {
   const dependenciesOf = (workspace: WorkspaceId, member: MemberId) => ({
     transactor: createTransactingZeroTransactor(transact, memberContext(workspace, member)),
     gateway,
   })
   return {
+    keyOf: (workspace: WorkspaceId, member: MemberId) =>
+      toolKeyValueOf(dependenciesOf(workspace, member), { workspaceId: workspace, memberId: member }),
     grantMemberTools: (workspace: WorkspaceId, member: MemberId) =>
       grantMemberTools(dependenciesOf(workspace, member), { workspaceId: workspace, memberId: member }),
     flagToolConnection: (workspace: WorkspaceId, member: MemberId, tool: string) =>

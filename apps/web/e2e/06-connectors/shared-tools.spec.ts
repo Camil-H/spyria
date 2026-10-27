@@ -111,7 +111,7 @@ test.describe('Shared tools', () => {
     await bobPage.context().close()
   })
 
-  test('As a member who can manage MCP tools, I restrict Bob to lookup and his update is refused, also after he removes and re-adds his LLM key', {
+  test('As a member who can manage MCP tools, I restrict Bob to lookup and his update is refused, also after he removes his LLM key and adds it again', {
     tag: ['@spec-38'],
   }, async ({ page, browser, workerStack, agentScript }) => {
     const gatewayName = await registerCrm(page, workerStack)
@@ -127,10 +127,14 @@ test.describe('Shared tools', () => {
     await llmSectionOf(bobPage).getByRole('button', { name: 'Remove Mistral' }).click()
     await bobPage.getByRole('dialog', { name: 'Remove LLM key' }).getByRole('button', { name: 'Remove' }).click()
     await expect
-      .poll(
-        async () =>
-          (await workerStack.database.$client`select 1 from member_gateway_keys where user_id = 'member-bob'`).length,
-      )
+      .poll(async () => {
+        const [row] = await workerStack.database.$client`
+          select virtual_key_id from member_gateway_keys where user_id = 'member-bob'`
+        const { virtual_key } = await workerStack.gateway<{ virtual_key: { provider_configs: unknown[] | null } }>(
+          `/api/governance/virtual-keys/${row?.virtual_key_id}`,
+        )
+        return virtual_key.provider_configs?.length ?? 0
+      })
       .toBe(0)
     await addLlmKey(bobPage, 'Mistral')
     await expect(await promptIn(bobPage, agentScript, update, 'Update it again')).toContainText(

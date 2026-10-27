@@ -10,7 +10,7 @@ import {
   knownToolsOf,
   type SecretHeader,
 } from '../domain/workspace-connection.ts'
-import { grantMemberTools, grantWorkspaceTools } from './tool-connections.ts'
+import { grantMemberTools, grantWorkspaceTools } from './grant-tools.ts'
 
 type Dependencies = { transactor: ProfileTransactor; gateway: ToolGateway }
 type ConnectionManager = { workspaceId: WorkspaceId; actorId: MemberId }

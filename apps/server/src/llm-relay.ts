@@ -310,7 +310,7 @@ export const createModelCallRelay = ({
         return answerRpc(rpc?.id ?? null, methodNotFound)
       const isGuestCall = isToolCall && isGuestTurn
       try {
-        const virtualKey = await keyOf(host.workspaceId, ownerId).then(
+        const virtualKey = await tools.keyOf(host.workspaceId, ownerId).then(
           (key) => key ?? undefined,
           () => null,
         )

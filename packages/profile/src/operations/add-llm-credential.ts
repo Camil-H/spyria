@@ -17,7 +17,7 @@ export const addLlmCredential = async (dependencies: Dependencies, { id, ...inpu
     secret: input.secret,
   })
   try {
-    await syncMemberGatewayKey(dependencies, input, { credential, key })
+    await syncMemberGatewayKey(dependencies, input, { added: { credential, key } })
   } catch (error) {
     await gateway.removeProviderKey(key)
     throw error
