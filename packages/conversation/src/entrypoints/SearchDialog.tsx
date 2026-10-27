@@ -6,11 +6,11 @@ import { type KeyboardEvent, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { searchNeedleOf } from '../domain/text-search.ts'
 import { getSearchResults, type SearchHit, type SearchResult } from '../queries/search-messages.ts'
+import { dateLabelOf } from './date-label.ts'
 import { type FindRequest, findRequestKey } from './useFindInChat.ts'
 
 const typingPauseMilliseconds = 250
 const focusOnMount = (element: HTMLInputElement | null) => element?.focus()
-const dateFormat = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })
 
 const useSettledText = (text: string) => {
   const [settled, setSettled] = useState(text)
@@ -49,7 +49,7 @@ const ResultRow = ({
           <span aria-hidden>·</span>
           <span className="truncate">{result.authorName}</span>
           <time dateTime={result.createdAt} className="ml-auto shrink-0">
-            {dateFormat.format(new Date(result.createdAt))}
+            {dateLabelOf(new Date(result.createdAt), new Date())}
           </time>
         </span>
         <span className="line-clamp-2 text-sm">
