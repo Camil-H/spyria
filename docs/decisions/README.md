@@ -24,3 +24,4 @@ Each record states one decision: the context that called for it, what was decide
 | [0018](0018-tests-on-their-own-stack.md) | Tests run on their own Postgres, with fakes for everything external |
 | [0019](0019-business-source-license.md) | Business Source License with a member threshold |
 | [0020](0020-instance-sign-in-apps.md) | One-click Google and Microsoft sign-in through the apps of the instance |
+| [0022](0022-no-screenshot-baselines.md) | No screenshot baselines; reviewers judge the looks |

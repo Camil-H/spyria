@@ -1,7 +1,6 @@
 import {
   composerOf,
   expect,
-  expectLooks,
   expectMembers,
   mainOf,
   openChat,
@@ -11,7 +10,7 @@ import {
   panelTabOf as tabOf,
   tabPanelOf,
   test,
-} from './fixtures'
+} from '../fixtures'
 
 const tabListOf = (page: Page) => panelOf(page).getByRole('tablist', { name: 'Panel tabs' })
 const panelWidthOf = async (page: Page) => (await panelOf(page).boundingBox())!.width
@@ -183,8 +182,6 @@ test.describe('Side panel', () => {
       await openPanelTab(page, 'Welcome', 'Connected tools')
       await expectOwnerConnections(page)
     })
-
-    await expectLooks(page, panelOf(page), 'channel-panel-connected-tools')
 
     await test.step('lists the members with their role on Welcome', async () => {
       await openPanelTab(page, 'Welcome', 'Members')

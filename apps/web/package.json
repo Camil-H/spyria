@@ -7,9 +7,7 @@
     "build": "vite build",
     "typecheck": "tsc -p .",
     "test:e2e": "playwright test --project=sign-in --project=e2e",
-    "test:e2e:smoke": "playwright test --project=sign-in --project=e2e --grep @smoke",
-    "test:ui": "playwright test --project=ui",
-    "test:ui:update": "playwright test --project=ui --update-snapshots=all"
+    "test:e2e:smoke": "playwright test --project=sign-in --project=e2e --grep @smoke"
   },
   "dependencies": {
     "@spyria/conversation": "workspace:*",
