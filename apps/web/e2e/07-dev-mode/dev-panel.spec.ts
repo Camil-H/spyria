@@ -1,7 +1,5 @@
-import { configureGitHubApp, newDevChat } from '../e2e/07-dev-mode/fixtures'
 import {
   expect,
-  expectLooks,
   messageContaining,
   type Page,
   panelOf,
@@ -10,7 +8,8 @@ import {
   tabPanelOf,
   test,
   workingIndicatorOf,
-} from './fixtures'
+} from '../fixtures'
+import { configureGitHubApp, newDevChat } from './fixtures'
 
 type AgentScript = (chatId: string, script: object) => Promise<void>
 
@@ -93,9 +92,6 @@ test.describe('Dev panel', () => {
       await expectReadableRow(page, 'src/app.ts', 1)
       const rightHalfStartOf = async (path: string) => (await cellsOfRow(page, path, 1).nth(2).boundingBox())!.x
       expect(await rightHalfStartOf('src/new.ts')).toBeCloseTo(await rightHalfStartOf('src/app.ts'), 0)
-      await expectLooks(page, panelOf(page), 'changes-side-by-side', {
-        mask: [tabPanelOf(page).getByRole('region', { name: 'Branch status' })],
-      })
       await page.keyboard.press('ArrowRight')
       await expect(separator).toHaveAttribute('aria-valuenow', '552')
       await expect(cellsOfRow(page, 'src/app.ts', 1)).toHaveText(['1', '', '- export const total = 1'])

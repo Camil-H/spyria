@@ -9,7 +9,6 @@ Spyria's tests are layered: each behaviour is proved once, at the lowest layer t
 | Unit | `*.test.ts` next to the file | Pure logic with many cases: `domain/`, parsers, formatters. | `bun test`, no container. |
 | Integration | `*.integration.test.ts` (mostly `apps/server/src`) | Server contracts, permission refusals, security invariants, data correctness, external contracts against fakes. | Its own test Postgres, gateway and Dex. |
 | e2e | `apps/web/e2e/<segment>/<area>.spec.ts` | One user story per test: the happy path and the refusal a user sees. | Playwright against a full test stack per worker. |
-| Visual | `apps/web/ui/*.spec.ts` | The looks: screenshots in light and dark, keyboard, resize and colour checks. | Playwright, same stack. |
 | Docker | `*.docker.test.ts` | The host program and runtimes in real containers. | Docker, with the built runtime image. |
 
 Pick the lowest layer that proves the behaviour, and do not repeat a check another layer already covers. A permission refusal, for example, is proved by an integration test; the e2e test shows only what the user sees when refused. Never weaken an assertion to make a test pass.
@@ -30,8 +29,6 @@ bun run check:bundle       # builds the web app and checks its main chunk
 bun run test:e2e           # the e2e suite
 bun run test:e2e:smoke     # only the tests tagged @smoke, after the platform gate
 bun run test:e2e -- e2e/04-agent   # one segment (the platform gate still runs first)
-bun run test:ui            # the visual suite; not in check:all
-bun run test:ui:update     # regenerate the screenshot baselines after an intended design change
 bun run check:docker       # agent:build, check:trust, then the docker tests
 bun run check:trust        # the built runtime and host images hold no distrusted root
 bun run smoke:prod         # the production Compose file under a throwaway name; not in check:all
@@ -127,14 +124,14 @@ The suite lives in `apps/web/e2e`, in segments that run in this order of depende
 | Segment | Covers |
 |---|---|
 | `00-platform` | The gate: the stack itself works. |
-| `01-access` | Sign-in, sessions, SSO, workspaces, the team, roles. |
-| `02-chats` | Channels, messaging, threads, unread, organizing chats. |
+| `01-access` | Sign-in and its screens, sessions, SSO, workspaces, the team, roles. |
+| `02-chats` | Channels, messaging, threads, unread, organizing chats, the chat view, the sidebar, the side panel. |
 | `03-sharing` | Chat members, chat permissions, fork, runtime from a thread. |
 | `04-agent` | Conversation, steps, questions, delegation, models, errors, runtime lifecycle. |
-| `05-machines` | Workspace hosts, a member's machine, harness install, machine sessions, the policy, where a chat runs. |
-| `06-connectors` | LLM keys, personal and shared tools, guest rights, the GitHub account. |
-| `07-dev-mode` | GitHub setup, dev chats, the workspace panel, branch actions, pull requests. |
-| `08-admin` | Audit log, spend, budgets. |
+| `05-machines` | Workspace hosts, a member's machine and its tools, harness install, machine sessions, the policy, where a chat runs. |
+| `06-connectors` | The profile, LLM keys, personal and shared tools, guest rights, the GitHub account. |
+| `07-dev-mode` | GitHub setup, dev chats, the workspace panel, the dev panel's diff, branch actions, pull requests. |
+| `08-admin` | Workspace settings, audit log, spend, budgets. |
 
 Rules:
 
@@ -151,9 +148,9 @@ Rules:
 
 Two sign-ins through the test provider at the same time make each other fail, so every file that signs in through a provider (`sso`, `team`, `sessions` and `workspaces` in `01-access`) is in the Playwright project `sign-in`, which runs its tests one at a time on a single worker while the `e2e` project runs the rest. Neither depends on the other: a failing sign-in test is one failure and the rest of the suite still runs. `bun run test:e2e` runs both projects.
 
-## The visual suite
+## The looks
 
-The `ui` project (`apps/web/ui`) holds the looks: `toHaveScreenshot` in light and dark on fixed states, plus keyboard, resize and colour assertions. Baselines are in `apps/web/ui/*-snapshots/` and are platform-specific. Run it with `bun run test:ui`; after an intended design change, run `bun run test:ui:update` and review every changed PNG before committing. Never update baselines to make an unintended difference pass.
+There are no screenshot baselines. Layout, keyboard, resize and colour rules a user relies on are e2e assertions in the segment of their area (bounding boxes, computed colours, focus); whether the result looks right is judged by the reviewer from the light and dark screenshots a UI pull request includes ([decision 0022](../decisions/0022-no-screenshot-baselines.md)).
 
 ## Docker tests
 

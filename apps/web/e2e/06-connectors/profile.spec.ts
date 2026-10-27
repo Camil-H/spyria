@@ -1,14 +1,4 @@
-import {
-  addCredential,
-  expect,
-  expectLooks,
-  type Locator,
-  llmSectionOf,
-  mainOf,
-  openProfile,
-  type Page,
-  test,
-} from './fixtures'
+import { addCredential, expect, type Locator, llmSectionOf, mainOf, openProfile, type Page, test } from '../fixtures'
 
 const sectionOf = (page: Page, sectionName: string) => mainOf(page).getByRole('region', { name: sectionName })
 const credentialRowOf = (page: Page, provider: string) =>
@@ -23,7 +13,6 @@ test.describe('Profile', () => {
   test('As a member, I see my profile’s sections, a display name form, LLM fields aligned on one row above my keys, headings in the app text colour and every field labelled', async ({
     page,
   }) => {
-    await expectLooks(page, mainOf(page), 'profile')
     await test.step('shows the heading and two sections, without a name subtitle or a Display name heading', async () => {
       await expect(mainOf(page).getByText('Alice', { exact: true })).toHaveCount(0)
       await expect(mainOf(page).getByRole('heading', { name: 'Display name' })).toHaveCount(0)
@@ -138,7 +127,6 @@ test.describe('Profile', () => {
         Math.abs(removeEdges[0]! - (await rightEdgeOf(llmSectionOf(page).getByRole('button', { name: 'Add' })))),
       ).toBeLessThan(1.5)
     })
-    await expectLooks(page, llmSectionOf(page), 'llm-keys')
   })
 
   test('As a member without keys, I see the empty message below the form', async ({ page }) => {

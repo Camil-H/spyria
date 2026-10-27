@@ -42,7 +42,6 @@ Pick the lowest layer that proves the behaviour, and do not duplicate a check th
 - **Unit** (`*.test.ts` next to the file): pure logic with many cases (`domain/`, parsers, formatters).
 - **Integration** (`*.integration.test.ts`, `apps/server/src`): server contracts, permission refusals, security invariants, data correctness, external contracts against fakes. Runs on its own test Postgres and gateway.
 - **e2e** (`apps/web/e2e/<segment>/<area>.spec.ts`): one user story per test, titled "As <role>, I …", with spec tags; the happy path plus the refusal a user sees.
-- **Visual** (`apps/web/ui`): screenshots in light and dark; update baselines only for intended design changes.
 - **Docker** (`*.docker.test.ts`): real containers for the host and runtimes.
 
 Never weaken an assertion to make a test pass; if a check must change, say so in the pull request. No real LLM, identity provider, GitHub or npm call in tests: use the fakes in `apps/server/src/testing/`. In `bun test`, await a promise before asserting on its rejection (`rejectionOf(promise)` in `apps/server/src/testing/testing.ts`) rather than `expect(promise).rejects`. `toMatchObject` with an asymmetric matcher (`expect.any`, `expect.stringContaining`…) replaces the matched field of the received object with the matcher ([oven-sh/bun#3521](https://github.com/oven-sh/bun/issues/3521)): read any value you use afterwards before asserting on it.
@@ -58,7 +57,7 @@ bun run check:boundaries
 bun run check:related   # the tests your change affects (unit, integration, e2e)
 ```
 
-Run `bun run check:all` for changes that touch shared code (`packages/kernel`, `packages/db`, test helpers), and `bun run check:docker` for the host, the agent or the images. Check whether your change makes a page in [docs/](docs/README.md) stale (a decision, a guide step, a feature as users see it); if so, update it in the same pull request, or say in the pull request which page needs a follow-up. Describe in the pull request what changed, why, and how it was tested; include screenshots for UI changes. Keep pull requests to one concern.
+Run `bun run check:all` for changes that touch shared code (`packages/kernel`, `packages/db`, test helpers), and `bun run check:docker` for the host, the agent or the images. Check whether your change makes a page in [docs/](docs/README.md) stale (a decision, a guide step, a feature as users see it); if so, update it in the same pull request, or say in the pull request which page needs a follow-up. Describe in the pull request what changed, why, and how it was tested; include screenshots in light and dark for UI changes; there are no pixel baselines, the reviewer judges the looks from them. Keep pull requests to one concern.
 
 ## Conventions
 

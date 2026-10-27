@@ -15,7 +15,7 @@ Start with the architecture overview, then the page for what you are doing. The 
 ## Guides
 
 - [Development](guides/development.md): prerequisites, the dev stack, `.env.dev`, daily commands, a local runtime host, the project layout.
-- [Testing](guides/testing.md): the test layers, commands, fakes, e2e conventions, the visual and docker suites, manual checks.
+- [Testing](guides/testing.md): the test layers, commands, fakes, e2e conventions, the looks, the docker suite, manual checks.
 - [Self-hosting](guides/self-hosting.md): requirements, `.env.prod`, Compose profiles, the first workspace, runtime hosts, the GitHub App, a Cloudflare example, pitfalls.
 - [Operations](guides/operations.md): logs, traces, health, upgrades, jobs, connections, disk, backups.
 
