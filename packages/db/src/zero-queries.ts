@@ -53,6 +53,11 @@ const readableBy = (userId: MemberId) => (chat: Query<'chats', Schema>) =>
 
 const id = z.string().check(z.minLength(1))
 export const pinnedStepTypes = ['question', 'pull_request']
+export const searchTextMinimumLength = 2
+export const searchResultLimit = 30
+export const searchTextMaximumLength = 200
+const searchText = z.string().check(z.minLength(searchTextMinimumLength), z.maxLength(searchTextMaximumLength))
+export const likeEscaped = (text: string) => text.replace(/[\\%_]/g, '\\$&')
 
 const messagesOf = (ctx: ZeroContext, chatId: string) =>
   zql.messages.where('workspaceId', ctx.workspaceId).where('chatId', chatId).whereExists('chat', readableBy(ctx.userId))
@@ -161,6 +166,16 @@ export const queries = defineQueries({
       .limit(args.limit)
       .related('replies')
       .related('threadReplies'),
+  ),
+  searchMessages: defineQuery(z.object({ text: searchText }), ({ ctx, args }) =>
+    zql.messages
+      .where('workspaceId', ctx.workspaceId)
+      .where('kind', 'IN', ['member', 'agent'])
+      .where('deletedAt', 'IS', null)
+      .where('body', 'ILIKE', `%${likeEscaped(args.text)}%`)
+      .whereExists('chat', readableBy(ctx.userId))
+      .orderBy('createdAt', 'desc')
+      .limit(searchResultLimit),
   ),
   chatPinnedSteps: defineQuery(z.object({ chatId: id }), ({ ctx, args }) =>
     messagesOf(ctx, args.chatId).where('kind', 'step').where('body', 'IN', pinnedStepTypes),

@@ -52,6 +52,16 @@
   color-scheme: light dark;
 }
 
+::highlight(find-match) {
+  background-color: color-mix(in oklab, var(--color-accent) 35%, transparent);
+  color: inherit;
+}
+
+::highlight(find-current) {
+  background-color: var(--color-accent);
+  color: var(--color-accent-ink);
+}
+
 body {
   background-color: var(--color-app);
   color: var(--color-ink);

@@ -4,10 +4,16 @@ import { Outlet, useParams } from 'react-router'
 import { listWorkspaces } from '../queries/list-workspaces.ts'
 import type { ChatAdornment } from './ChatRow.tsx'
 import { NoAccessScreen } from './NoAccessScreen.tsx'
-import { Sidebar } from './Sidebar.tsx'
+import { type SearchDialog, Sidebar } from './Sidebar.tsx'
 import { SignedOutScreen } from './SignedOutScreen.tsx'
 
-export const WorkspaceLayout = ({ chatAdornment }: { chatAdornment?: ChatAdornment }) => {
+export const WorkspaceLayout = ({
+  chatAdornment,
+  searchDialog,
+}: {
+  chatAdornment?: ChatAdornment
+  searchDialog?: SearchDialog
+}) => {
   const { memberId, signedInWorkspaceIds } = useSession()
   const routeWorkspaceId = useParams().workspaceId
   const workspaces = useQuery(listWorkspaces, memberId)
@@ -17,7 +23,7 @@ export const WorkspaceLayout = ({ chatAdornment }: { chatAdornment?: ChatAdornme
     return <SignedOutScreen workspaceId={workspaceId} workspaces={workspaces} />
   return (
     <div className="flex h-screen">
-      <Sidebar workspaceId={workspaceId} chatAdornment={chatAdornment} />
+      <Sidebar workspaceId={workspaceId} chatAdornment={chatAdornment} searchDialog={searchDialog} />
       <main className="min-w-0 flex-1 overflow-y-auto">
         <Outlet context={workspaceId} />
       </main>

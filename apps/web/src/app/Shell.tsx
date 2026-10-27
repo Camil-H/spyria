@@ -1,4 +1,11 @@
-import { ChatIndicators, ChatView, ConversationProvider, Markdown, RuntimeMenu } from '@spyria/conversation'
+import {
+  ChatIndicators,
+  ChatView,
+  ConversationProvider,
+  Markdown,
+  RuntimeMenu,
+  SearchDialog,
+} from '@spyria/conversation'
 import { StoreProvider } from '@spyria/db/react'
 import { chatId as toChatId, type WorkspaceId } from '@spyria/kernel'
 import { PanelProvider, PanelToggle, SidePanel } from '@spyria/panel'
@@ -77,7 +84,16 @@ export const App = ({ app }: { app: Application }) => (
                     <Routes>
                       <Route
                         path="/w/:workspaceId"
-                        element={<WorkspaceLayout chatAdornment={(chatId) => <ChatIndicators chatId={chatId} />} />}
+                        element={
+                          <WorkspaceLayout
+                            chatAdornment={(chatId) => <ChatIndicators chatId={chatId} />}
+                            searchDialog={(props) => (
+                              <Suspense>
+                                <SearchDialog {...props} />
+                              </Suspense>
+                            )}
+                          />
+                        }
                       >
                         <Route index element={<p className="p-6 text-muted">Select a chat</p>} />
                         <Route path="chats/:chatId" element={<ChatRoute commands={app.conversationCommands} />} />
