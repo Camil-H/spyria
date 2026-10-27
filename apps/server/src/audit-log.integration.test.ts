@@ -189,7 +189,7 @@ test('workspace events, chat events, tool calls, pushes and pull requests merge 
   expect(JSON.stringify(entries) + csv.body).not.toContain('secret body')
 })
 
-test('a deleted message shows its text to audit readers only, never in the synced message or its deletion event, until the sweep erases it', async () => {
+test('a deleted message shows its text to audit readers only, never in the synced message or any event, until the sweep erases it', async () => {
   const privateChat = await newChat({ ownerId: bob, type: 'channel', visibility: 'private' })
   await sql`update chats set name = 'Bob private' where id = ${privateChat}`
   const messageId = crypto.randomUUID()
@@ -203,9 +203,9 @@ test('a deleted message shows its text to audit readers only, never in the synce
   expect(detailsOf(entry)).toEqual({ Chat: 'Bob private', Text: 'the staging password is hunter2' })
   expect((await asMember(bob, 'GET', '/api/audit-log')).status).toBe(403)
   expect([...(await sql`select body from messages where id = ${messageId}`)]).toEqual([{ body: '' }])
-  expect([
-    ...(await sql`select payload from events where chat_id = ${privateChat} and type = 'message.deleted'`),
-  ]).toEqual([{ payload: { messageId } }])
+  expect(JSON.stringify([...(await sql`select payload from events where chat_id = ${privateChat}`)])).not.toContain(
+    'hunter2',
+  )
 
   await sql`update deleted_message_texts set deleted_at = now() - interval '31 days' where message_id = ${messageId}`
   await asMember(alice, 'POST', '/api/audit-log/retention', { retentionDays: 30 })

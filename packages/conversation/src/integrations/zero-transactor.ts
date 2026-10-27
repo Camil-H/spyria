@@ -22,6 +22,7 @@ import {
   memberModelsOf,
   openTaskStepsOf,
   pendingPrompts,
+  redactDeletedMessageEvents,
   runningDelegationOfTokenHash,
   setChatAgentModel,
   setChatTurnFailure,
@@ -191,15 +192,20 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         const seq = await appendEvent(change)
         if (isPosted(change.type)) await tx.mutate.messages.insert({ ...row, seq })
         else await tx.mutate.messages.update(row)
-        if (change.type === 'message.deleted' && change.message.status === 'deleted' && change.actorId)
-          await keepDeletedMessageText(tx, {
+        if (change.type === 'message.deleted' && change.message.status === 'deleted' && change.actorId) {
+          const deleted = {
             workspaceId: contextWorkspaceId,
             chatId: change.message.chatId,
             messageId: change.message.id,
+          }
+          await keepDeletedMessageText(tx, {
+            ...deleted,
             body: change.message.body,
             deletedBy: change.actorId,
             deletedAt: change.message.deletedAt,
           })
+          await redactDeletedMessageEvents(tx, deleted)
+        }
       },
       project: (message, seq) => tx.mutate.messages.insert({ ...rowOf(message), seq }),
       find: async (id) => {
