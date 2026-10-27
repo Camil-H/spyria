@@ -25,3 +25,24 @@ export const snippetOf = (body: string, needle: string): Snippet => {
     after: `${flattened.slice(offset + needle.length, end)}${end < flattened.length ? '…' : ''}`,
   }
 }
+
+export type TextSegment<Block> = Readonly<{ text: string; block: Block }>
+export type SegmentPosition = Readonly<{ segment: number; offset: number }>
+
+export const matchSpansIn = <Block>(segments: readonly TextSegment<Block>[], needle: string) => {
+  let joined = ''
+  const starts = segments.map((segment, index) => {
+    if (index > 0 && segment.block !== segments[index - 1]?.block) joined += '\n'
+    const start = joined.length
+    joined += segment.text
+    return start
+  })
+  const positionOf = (at: number, isEnd: boolean): SegmentPosition => {
+    const segment = starts.findLastIndex((start) => (isEnd ? start < at : start <= at))
+    return { segment, offset: at - (starts[segment] ?? 0) }
+  }
+  return matchOffsetsIn(joined, needle).map((offset) => ({
+    start: positionOf(offset, false),
+    end: positionOf(offset + needle.length, true),
+  }))
+}

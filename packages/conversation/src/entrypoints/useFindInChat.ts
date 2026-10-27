@@ -1,6 +1,6 @@
 import type { MessageId } from '@spyria/kernel'
 import { useEffect, useRef, useState } from 'react'
-import { matchOffsetsIn, searchNeedleOf } from '../domain/text-search.ts'
+import { matchSpansIn, searchNeedleOf } from '../domain/text-search.ts'
 
 export const findRequestKey = 'findInChat'
 export type FindRequest = Readonly<{ text: string; messageId: MessageId | null }>
@@ -10,17 +10,28 @@ const currentHighlightName = 'find-current'
 const supportsHighlights = () => typeof CSS !== 'undefined' && 'highlights' in CSS
 const prefersReducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-const rangesIn = (root: HTMLElement, needle: string) => {
-  const ranges: Range[] = []
+const blockSelector = 'p, li, pre, td, th, h1, h2, h3, h4, h5, h6, blockquote, div, button, time'
+
+const textNodesIn = (root: HTMLElement) => {
+  const nodes: Text[] = []
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
   for (let node = walker.nextNode(); node; node = walker.nextNode())
-    for (const offset of matchOffsetsIn(node.textContent ?? '', needle)) {
-      const range = document.createRange()
-      range.setStart(node, offset)
-      range.setEnd(node, offset + needle.length)
-      ranges.push(range)
-    }
-  return ranges
+    if (node instanceof Text && node.data !== '') nodes.push(node)
+  return nodes
+}
+
+const rangesIn = (root: HTMLElement, needle: string) => {
+  const nodes = textNodesIn(root)
+  const segments = nodes.map((node) => ({ text: node.data, block: node.parentElement?.closest(blockSelector) }))
+  return matchSpansIn(segments, needle).flatMap(({ start, end }) => {
+    const startNode = nodes[start.segment]
+    const endNode = nodes[end.segment]
+    if (!startNode || !endNode) return []
+    const range = document.createRange()
+    range.setStart(startNode, start.offset)
+    range.setEnd(endNode, end.offset)
+    return [range]
+  })
 }
 
 const scrollToRange = (range: Range | undefined) =>
