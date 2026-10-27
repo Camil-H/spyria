@@ -19,7 +19,10 @@ const agentStoppedWithError = async (workerStack: WorkerStack, chatId: string) =
     await sql`select 1 from chats where id = ${chatId} for update`
     await sql`
       with agent_rows as (
-        select id, kind, body, (select max(seq) from events where chat_id = ${chatId}) + number as seq
+        select id, kind, body, greatest(
+          (select coalesce(max(seq), 0) from events where chat_id = ${chatId}),
+          (select coalesce(max(seq), 0) from messages where chat_id = ${chatId})
+        ) + number as seq
         from (values (1, 'reply-before-failure', 'agent', 'Looking into it.'),
           (2, 'failure-notice', 'notice', 'The agent stopped with an error')) as row (number, id, kind, body)
       ), posted as (
