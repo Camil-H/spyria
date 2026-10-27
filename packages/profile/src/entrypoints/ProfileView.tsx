@@ -17,8 +17,12 @@ export const ProfileView = ({ children }: { children?: ReactNode }) => {
   return (
     <div className="flex max-w-3xl flex-col gap-8">
       <h1 className="text-2xl font-semibold">Profile</h1>
-      <ProfilePictureSection workspaceId={workspaceId} name={profile.displayName} avatar={profile.avatar} />
-      <DisplayNameForm workspaceId={workspaceId} currentName={profile.displayName} />
+      <ProfilePictureSection
+        workspaceId={workspaceId}
+        name={profile.displayName}
+        avatar={profile.avatar}
+        beside={<DisplayNameForm workspaceId={workspaceId} currentName={profile.displayName} />}
+      />
       <LlmAccessSection workspaceId={workspaceId} memberId={memberId} />
       <ConnectionsSection workspaceId={workspaceId} memberId={memberId} />
       {children}

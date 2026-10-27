@@ -72,9 +72,7 @@ const removeKeysOf = async (userId: string) => {
         credentialId: id,
       }),
     ).toEqual(succeeded)
-  await waitFor(
-    async () => (await database.$client`select 1 from member_gateway_keys where user_id = ${userId}`).length === 0,
-  )
+  await waitFor(async () => !(await virtualKeyOf(userId)).provider_configs?.length)
 }
 
 test('an admin registers a shared server with a secret header: Spyria lists its tools, the secret reaches the server only through the gateway, never a Spyria table or read, and the event is recorded', async () => {
@@ -128,7 +126,7 @@ test('a server that lists no tools is refused and left out of the gateway', asyn
   )
 })
 
-test('a member restricted to lookup is refused update on their own prompts, their key holds exactly lookup, and a key recreated after the last LLM key is removed gets the restriction back', async () => {
+test('a member restricted to lookup is refused update on their own prompts, their key holds exactly lookup, and the key kept after the last LLM key is removed keeps the restriction', async () => {
   expect((await restrict(bob, ['lookup'])).status).toBe(200)
   await addLlmKey(bob, 'Mistral')
   expect((await grantsOf(bob))[sharedToolServer]).toEqual(['lookup'])
@@ -142,9 +140,11 @@ test('a member restricted to lookup is refused update on their own prompts, thei
 
   const keyBefore = (await virtualKeyOf(bob)).id
   await removeKeysOf(bob)
-  await addLlmKey(bob, 'Mistral')
-  expect((await virtualKeyOf(bob)).id).not.toBe(keyBefore)
+  expect((await virtualKeyOf(bob)).id).toBe(keyBefore)
   expect((await grantsOf(bob))[sharedToolServer]).toEqual(['lookup'])
+  expect(textOf((await mcpCall(host, token, callOf(sharedToolServer, 'lookup'))).result)).toBe('ran lookup')
+  await addLlmKey(bob, 'Mistral')
+  expect((await virtualKeyOf(bob)).id).toBe(keyBefore)
   expect(textOf((await mcpCall(host, token, callOf(sharedToolServer, 'update'))).result)).toBe(
     `${sharedToolServer} isn't available on Bob's prompts in this chat`,
   )

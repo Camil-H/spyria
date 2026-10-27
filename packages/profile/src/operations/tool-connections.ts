@@ -1,9 +1,11 @@
 import { type MemberId, toolNamePartsOf, type WorkspaceId } from '@spyria/kernel'
-import type { ToolGateway } from '../contracts/repositories.ts'
+import type { LlmGateway, ToolGateway } from '../contracts/repositories.ts'
 import type { ProfileTransactor } from '../contracts/transactor.ts'
-import { NoGatewayKey, ToolNotInCatalog, ToolStillConnected } from '../domain/errors.ts'
+import { MemberNotFound, ToolNotInCatalog, ToolStillConnected } from '../domain/errors.ts'
 import { connectedTool, connectionStatusOf } from '../domain/personal-connection.ts'
 import { memberToolsOf } from '../domain/workspace-connection.ts'
+import { grantMemberTools } from './grant-tools.ts'
+import { ensureMemberGatewayKey } from './sync-member-gateway-key.ts'
 
 type Dependencies = { transactor: ProfileTransactor; gateway: ToolGateway }
 type Member = { workspaceId: WorkspaceId; memberId: MemberId }
@@ -25,37 +27,16 @@ const personalServersOf = async (gateway: ToolGateway) =>
 export const availableTools = async ({ gateway }: Pick<Dependencies, 'gateway'>) =>
   (await personalServersOf(gateway)).map(({ name }) => name)
 
-export const grantWorkspaceTools = async (
-  { transactor, gateway }: Dependencies,
-  workspaceId: WorkspaceId,
-  memberIds?: readonly MemberId[],
+export const startToolConnection = async (
+  dependencies: { transactor: ProfileTransactor; gateway: LlmGateway & ToolGateway },
+  input: Input,
 ) => {
-  const { connections, restrictions, virtualKeys } = await transactor.run(
-    async ({ workspaceConnections, memberGatewayKeys }) => ({
-      connections: await workspaceConnections.list(workspaceId),
-      restrictions: await workspaceConnections.restrictionsOf(workspaceId),
-      virtualKeys: await memberGatewayKeys.virtualKeysIn(workspaceId),
-    }),
-  )
-  for (const { memberId, virtualKeyId } of virtualKeys.filter((key) => memberIds?.includes(key.memberId) ?? true))
-    await gateway.setToolGrants(
-      virtualKeyId,
-      Object.fromEntries(
-        connections.map((connection) => [connection.gatewayName, memberToolsOf(connection, restrictions, memberId)]),
-      ),
-    )
-}
-
-export const grantMemberTools = (dependencies: Dependencies, { workspaceId, memberId }: Member) =>
-  grantWorkspaceTools(dependencies, workspaceId, [memberId])
-
-export const startToolConnection = async (dependencies: Dependencies, input: Input) => {
   const { gateway } = dependencies
   const servers = await gateway.toolServers()
   const server = servers.find(({ name, isPersonal }) => isPersonal && name === input.tool)
   if (!server) throw new ToolNotInCatalog(input.tool)
-  const virtualKeyId = await virtualKeyOf(dependencies, input)
-  if (!virtualKeyId) throw new NoGatewayKey()
+  const virtualKeyId = await ensureMemberGatewayKey(dependencies, input)
+  if (!virtualKeyId) throw new MemberNotFound(input.memberId)
   await grantMemberTools(dependencies, input)
   for (const session of await gateway.toolSessions(virtualKeyId, server)) await gateway.removeToolSession(session.id)
   if ((await gateway.toolSessions(virtualKeyId, server)).length > 0) throw new ToolStillConnected(input.tool)

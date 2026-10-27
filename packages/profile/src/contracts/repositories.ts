@@ -30,7 +30,7 @@ export type MemberGatewayKeyRepository = {
   virtualKeysIn(workspaceId: WorkspaceId): Promise<{ memberId: MemberId; virtualKeyId: string }[]>
 }
 
-export type GatewaySyncJob = { workspaceId: WorkspaceId; memberId: MemberId; key: GatewayKey }
+export type GatewaySyncJob = { workspaceId: WorkspaceId; memberId: MemberId; key?: GatewayKey; isLeaving?: boolean }
 export type ToolServerRemovalJob = { workspaceId: WorkspaceId; gatewayName: string }
 export type GatewayJobs = {
   syncLater(job: GatewaySyncJob): Promise<void>

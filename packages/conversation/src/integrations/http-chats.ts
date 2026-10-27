@@ -1,5 +1,5 @@
 import type { ChatId, WorkspaceId } from '@spyria/kernel'
-import { type Attachment, chatAttachmentsPathOf } from '../domain/attachments.ts'
+import { type Attachment, chatAttachmentsPathOf, isChatAttachmentPath } from '../domain/attachments.ts'
 import type { GitAction, GitActionOutcome } from '../domain/git-actions.ts'
 import type { PublishAction, PullRequestDraft } from '../domain/pull-requests.ts'
 import type { WorkspaceRead, WorkspaceReading } from '../domain/workspace-reads.ts'
@@ -11,8 +11,8 @@ export const chatWorkspacePathOf = (chatId: string, read: string) => `/api/chats
 export const chatPublishPathOf = (chatId: string, action: string) => `/api/chats/${chatId}/publish/${action}`
 export const chatGitPathOf = (chatId: string, action: string) => `/api/chats/${chatId}/git/${action}`
 
-const storedChatWaitMilliseconds = 5000
-const storedChatRetryMilliseconds = 100
+const storedWaitMilliseconds = 5000
+const storedRetryMilliseconds = 100
 
 type PostAsMember = (workspaceId: WorkspaceId, path: string, body?: BodyInit) => Promise<Response>
 type GetAsMember = (workspaceId: WorkspaceId, path: string) => Promise<Response>
@@ -25,11 +25,11 @@ export const createHttpChatCommands = (postAsMember: PostAsMember, getAsMember: 
     return response.text()
   },
   chatRouting: async ({ workspaceId, chatId }: ChatInput) => {
-    for (let waited = 0; ; waited += storedChatRetryMilliseconds) {
+    for (let waited = 0; ; waited += storedRetryMilliseconds) {
       const response = await getAsMember(workspaceId, chatRoutingPathOf(chatId))
       if (response.ok) return response.json()
-      if (waited >= storedChatWaitMilliseconds) throw new Error(`The routing read answered ${response.status}`)
-      await new Promise((resolve) => setTimeout(resolve, storedChatRetryMilliseconds))
+      if (waited >= storedWaitMilliseconds) throw new Error(`The routing read answered ${response.status}`)
+      await new Promise((resolve) => setTimeout(resolve, storedRetryMilliseconds))
     }
   },
   answerQuestion: async ({
@@ -78,7 +78,13 @@ export const createHttpChatCommands = (postAsMember: PostAsMember, getAsMember: 
     return answer
   },
   readMedia: async ({ workspaceId, path }: { workspaceId: WorkspaceId; path: string }) => {
-    const response = await getAsMember(workspaceId, path)
+    let response = await getAsMember(workspaceId, path)
+    const mayNotBeStoredYet = isChatAttachmentPath(path)
+    for (let waited = 0; mayNotBeStoredYet && response.status === 404 && waited < storedWaitMilliseconds; ) {
+      await new Promise((resolve) => setTimeout(resolve, storedRetryMilliseconds))
+      waited += storedRetryMilliseconds
+      response = await getAsMember(workspaceId, path)
+    }
     if (!response.ok) {
       const { message } = (await response.json().catch(() => ({}))) as { message?: string }
       throw new Error(message ?? `The media read answered ${response.status}`)
