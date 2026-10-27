@@ -18,6 +18,7 @@ Postgres holds all three.
 - One system to run, back up and monitor. A self-hosted instance is Postgres plus stateless processes.
 - The queue polls; it is not built for very high job rates. That is acceptable for agent turns, whose cost is dominated by model latency.
 - Every table carries `workspace_id`, which keeps scoping explicit in every query (see [security](../architecture/security.md)).
+- The event store has exactly two exceptions to append-only, both enforced by the event trigger rather than by convention: the purge of a deleted workspace, and the redaction of a deleted message's text. They exist because a history that can never lose a word cannot honour a deletion: without them, a secret posted by mistake, or the data of someone who asks for it to be removed, would stay on the server forever. Each lets through only its one change (deletes of a workspace due for purge; blanking the body of an already deleted message, in a transaction that names it), so the history keeps its order and can still be rebuilt. Removing either would bring back undeletable data; adding a third needs its own decision.
 
 ## Alternatives considered
 
