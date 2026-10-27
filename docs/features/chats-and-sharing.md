@@ -19,7 +19,15 @@ From a chat's menu in the sidebar, a member with the right permission can **Move
 
 Every chat keeps one unsent draft per member; a pencil icon in the sidebar marks a chat with a draft. In the composer, Ctrl+Enter (Cmd+Enter on a Mac) sends.
 
+A chat opens on its newest message and follows new ones as they arrive. A member who scrolls up to read earlier messages stays where they are when new ones come in, and a **Go to last message** button at the bottom of the chat takes them back down; sending a message also goes back to the newest.
+
 Messages are written in Markdown and shown formatted; in a member's message, each new line stays a new line. In the composer, Ctrl (Cmd on a Mac) plus **B**, **I** or **U** makes the selection bold, italic or underlined (`__text__`), Ctrl+Shift+C makes it code (a block when it spans several lines), and Ctrl+K makes it a link; pressing the same shortcut again removes the formatting. A line starting with `- ` or `1. ` continues as a list on Enter, and Enter on an empty item ends the list. Pasting a web address over selected text makes a link. Shift+Enter always adds a plain new line.
+
+Each message shows its author's picture next to their name, and the agent's replies a small robot. A member sets their picture per workspace in **Profile > Profile picture** (**Upload picture**, **Change picture**, **Remove picture**); without one, their initials show. The browser crops the image to a square and shrinks it to 96 pixels before sending it, and the server accepts only a small PNG, JPEG or WebP image. Every member of the workspace can see it.
+
+Typing **@** in the composer lists the workspace's members, narrowed as the name is typed; the arrow keys move through the list, Enter or Tab (or a click) puts the name in the message and Escape closes the list. In a message, a mention of a current member (`@Name`) shows in bold. Mentions only highlight the name: they send no notification and give the member no access to the chat.
+
+The author of a message can edit or delete it from its menu. A deleted message stays in the chat as "This message was deleted", and its attachments are erased. Its text no longer reaches any member's browser, and the server erases it from the chat's history, the text it was posted with and every edit. Only its last text is kept, apart from the chat: members who can view the audit log read it as a **Deleted a message** record (see [Admin](./admin.md#audit-log)) until the audit retention erases it. Copies made before the deletion stay: a quote of the message in a chat started from it, and what the agent already received.
 
 The paperclip next to **Send** attaches up to six files of up to 20 MB each: images (PNG, JPEG, GIF, WebP), sounds, videos (MP4, WebM, QuickTime) and PDFs. Pasting or dropping a file into the composer attaches it too. The server checks each file's content, not its name, and refuses anything else (SVG and HTML included). Images show in the message once they scroll into view; sounds, videos and PDFs load only when a member clicks them. Only members who can read the chat can open its attachments, and deleting a message erases them. Files attached but never sent are erased after a day. A member can hold up to 120 MB of unsent files, and a workspace stores up to 10 GB of attachments.
 
@@ -37,7 +45,7 @@ In a channel, the message menu of a top-level message offers **Reply in thread**
 
 ## Unread state
 
-A chat with messages a member has not seen shows an **Unread messages** icon in the sidebar. Opening the chat marks it read. In channels only top-level messages count: a new reply never makes the channel unread. Each thread keeps its own read marker per member; opening a thread marks it read, and its toggle shows how many replies are new.
+A chat with messages a member has not seen shows an **Unread messages** icon in the sidebar. Opening the chat marks it read. In a runtime chat, the icon's color and tooltip tell where the agent is: **working** on a turn, **waiting** for an answer to a question or a tool approval, stopped with an **error**, or **done**. A channel's icon keeps the text color. In channels only top-level messages count: a new reply never makes the channel unread. Each thread keeps its own read marker per member; opening a thread marks it read, and its toggle shows how many replies are new.
 
 ## Sharing a chat and chat roles
 

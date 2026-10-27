@@ -421,6 +421,25 @@ test('messages carry their edited flag and the agent as their author', () => {
   expect(conversationWith([replyRow(2, 'agent')])?.messages.at(-1)?.isEdited).toBe(false)
 })
 
+test('a message carries the picture of its member author, an agent message none', () => {
+  const picture = 'data:image/jpeg;base64,/9j/4AAQSkZJRg=='
+  const snapshot = snapshotWith({ turn: false, waiting: false })
+  const conversation = getConversation(
+    acme,
+    research,
+    alice,
+  )({
+    ...snapshot,
+    memberships: snapshot.memberships.map((membership) =>
+      membership.memberId === alice ? { ...membership, avatar: picture } : membership,
+    ),
+    messages: [...snapshot.messages, replyRow(2, 'agent')],
+  })
+  const messageWith = (id: string) => conversation?.messages.find((message) => message.id === id)
+  expect(messageWith(prompt)).toMatchObject({ authorName: 'Alice', authorAvatar: picture })
+  expect(messageWith(replyRow(2, 'agent').id)).toMatchObject({ authorName: 'Agent', authorAvatar: null })
+})
+
 type RunsOnSetup = {
   viewer?: typeof alice
   isOwner?: boolean

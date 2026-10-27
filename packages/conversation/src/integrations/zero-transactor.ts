@@ -12,6 +12,7 @@ import {
   insertToolCall,
   isChatEventStored,
   isSessionStartPending,
+  keepDeletedMessageText,
   lastAgentEvent,
   lastSessionId,
   linkAttachments,
@@ -21,6 +22,7 @@ import {
   memberModelsOf,
   openTaskStepsOf,
   pendingPrompts,
+  redactDeletedMessageEvents,
   runningDelegationOfTokenHash,
   setChatAgentModel,
   setChatTurnFailure,
@@ -56,24 +58,30 @@ import type { AgentEventPayload, ChangedPayload, PostedPayload, StepChangedPaylo
 const dateOrNull = (time: number | null) => (time === null ? null : new Date(time))
 const timeOrNull = (date: Date | null) => date?.getTime() ?? null
 
-const toMessage = ({ seq, attachments, ...row }: MessageRow): Message => ({
-  ...row,
-  id: messageId(row.id),
-  workspaceId: workspaceId(row.workspaceId),
-  chatId: chatId(row.chatId),
-  authorId: row.authorId === null ? null : memberId(row.authorId),
-  attachments: attachments ?? [],
-  body:
-    row.deletedAt === null
-      ? MessageBody(row.body, { allowsBlank: (attachments ?? []).length > 0 })
-      : (row.body as MessageBody),
-  createdAt: new Date(row.createdAt),
-  editedAt: dateOrNull(row.editedAt),
-  deletedAt: dateOrNull(row.deletedAt),
-  replyToId: row.replyToId === null ? null : messageId(row.replyToId),
-  threadRootId: row.threadRootId === null ? null : messageId(row.threadRootId),
-  step: row.step as StoredStep | null,
-})
+const toMessage = ({ seq, attachments, deletedAt, ...row }: MessageRow): Message => {
+  const fields = {
+    ...row,
+    id: messageId(row.id),
+    workspaceId: workspaceId(row.workspaceId),
+    chatId: chatId(row.chatId),
+    authorId: row.authorId === null ? null : memberId(row.authorId),
+    attachments: attachments ?? [],
+    createdAt: new Date(row.createdAt),
+    editedAt: dateOrNull(row.editedAt),
+    replyToId: row.replyToId === null ? null : messageId(row.replyToId),
+    threadRootId: row.threadRootId === null ? null : messageId(row.threadRootId),
+    step: row.step as StoredStep | null,
+  }
+  return deletedAt === null
+    ? {
+        ...fields,
+        status: 'live',
+        body: MessageBody(row.body, { allowsBlank: fields.attachments.length > 0 }),
+      }
+    : { ...fields, status: 'deleted', body: row.body as MessageBody, deletedAt: new Date(deletedAt) }
+}
+
+const withoutStatus = ({ status, ...message }: Message) => message
 
 const advanceReadMarker = async (
   newest: { seq: number } | undefined,
@@ -120,7 +128,9 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       createdAt:
         change.type === 'message.step_changed'
           ? new Date()
-          : (message.deletedAt ?? message.editedAt ?? message.createdAt),
+          : message.status === 'deleted'
+            ? message.deletedAt
+            : (message.editedAt ?? message.createdAt),
       ...(isPosted(change.type) && { id: message.id }),
     })
   }
@@ -168,11 +178,11 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
     return toMessage(row)
   }
   const rowOf = (message: Message) => ({
-    ...inContextWorkspace(message),
-    body: message.deletedAt === null ? message.body : '',
+    ...withoutStatus(inContextWorkspace(message)),
+    body: message.status === 'deleted' ? '' : message.body,
     createdAt: message.createdAt.getTime(),
     editedAt: timeOrNull(message.editedAt),
-    deletedAt: timeOrNull(message.deletedAt),
+    deletedAt: message.status === 'deleted' ? message.deletedAt.getTime() : null,
   })
   const unitOfWork: UnitOfWork = {
     messages: {
@@ -182,6 +192,20 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         const seq = await appendEvent(change)
         if (isPosted(change.type)) await tx.mutate.messages.insert({ ...row, seq })
         else await tx.mutate.messages.update(row)
+        if (change.type === 'message.deleted' && change.message.status === 'deleted' && change.actorId) {
+          const deleted = {
+            workspaceId: contextWorkspaceId,
+            chatId: change.message.chatId,
+            messageId: change.message.id,
+          }
+          await keepDeletedMessageText(tx, {
+            ...deleted,
+            body: change.message.body,
+            deletedBy: change.actorId,
+            deletedAt: change.message.deletedAt,
+          })
+          await redactDeletedMessageEvents(tx, deleted)
+        }
       },
       project: (message, seq) => tx.mutate.messages.insert({ ...rowOf(message), seq }),
       find: async (id) => {

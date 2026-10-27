@@ -188,6 +188,7 @@ test('there is one synced query per replicated table, messages, usage and pages 
     [
       ...replicatedTables.map(({ name }) => name).filter((name) => !perChatReads[name]),
       'latestMessages',
+      'latestAgentActivity',
       'chatMessages',
       'chatPinnedSteps',
       'chatBrowserPages',

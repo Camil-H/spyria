@@ -1,9 +1,9 @@
 import { createDatabase, type Database } from '@spyria/db/postgres'
 import { databaseUrlOf } from '@spyria/db/testing'
-import { log } from '@spyria/kernel'
 import { createApp } from '../app.ts'
 import { serverWebSocket } from '../runtime-hosts/gateway.ts'
 import { startFakeSmtp } from './fake-smtp.ts'
+import { serveWithLifecycleLogs } from './process-lifecycle.ts'
 import { testAuthSettings, testSecretsKey } from './testing.ts'
 
 const port = Number(process.env.PORT ?? 3102)
@@ -28,18 +28,6 @@ const app = createApp({
   mail: { smtpUrl: smtp.url, from: 'Spyria <spyria@e2e.test>' },
 }).get('/test/mails', (context) => context.json(smtp.mails))
 
-export default { port, hostname: '0.0.0.0', idleTimeout: 0, fetch: app.fetch, websocket: serverWebSocket }
-
-process.on('unhandledRejection', (error) =>
-  log.error({ event: 'test_server.unhandled_rejection', body: 'A promise rejected with nobody awaiting it', error }),
-)
-process.on('uncaughtException', (error) =>
-  log.error({ event: 'test_server.uncaught_exception', body: 'An exception reached the event loop', error }),
-)
-process.on('exit', (code) =>
-  log.error({
-    event: 'test_server.exit',
-    body: 'The test server process is exiting',
-    attributes: { 'process.exit_code': code },
-  }),
+serveWithLifecycleLogs('sso_test_server', port, () =>
+  Bun.serve({ port, hostname: '0.0.0.0', idleTimeout: 0, fetch: app.fetch, websocket: serverWebSocket }),
 )

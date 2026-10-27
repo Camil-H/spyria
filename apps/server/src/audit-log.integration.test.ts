@@ -189,6 +189,32 @@ test('workspace events, chat events, tool calls, pushes and pull requests merge 
   expect(JSON.stringify(entries) + csv.body).not.toContain('secret body')
 })
 
+test('a deleted message shows its text to audit readers only, never in the synced message or any event, until the sweep erases it', async () => {
+  const privateChat = await newChat({ ownerId: bob, type: 'channel', visibility: 'private' })
+  await sql`update chats set name = 'Bob private' where id = ${privateChat}`
+  const messageId = crypto.randomUUID()
+  await sendTo({ workspaceId: acme, userId: bob }, privateChat, messageId, 'the staging password is hunter2')
+  expect(
+    await resultOf({ workspaceId: acme, userId: bob }, 'conversation.deleteMessage', { workspaceId: acme, messageId }),
+  ).toEqual(succeeded)
+
+  const [entry] = (await auditPageOf({ group: 'Chats' })).entries
+  expect(entry && summaryOf(entry)).toBe('Bob | Deleted a message | Bob private')
+  expect(detailsOf(entry)).toEqual({ Chat: 'Bob private', Text: 'the staging password is hunter2' })
+  expect((await asMember(bob, 'GET', '/api/audit-log')).status).toBe(403)
+  expect([...(await sql`select body from messages where id = ${messageId}`)]).toEqual([{ body: '' }])
+  expect(JSON.stringify([...(await sql`select payload from events where chat_id = ${privateChat}`)])).not.toContain(
+    'hunter2',
+  )
+
+  await sql`update deleted_message_texts set deleted_at = now() - interval '31 days' where message_id = ${messageId}`
+  await asMember(alice, 'POST', '/api/audit-log/retention', { retentionDays: 30 })
+  await zeroDrizzle(schema, database).transaction((tx) =>
+    auditJobs['audit.sweep']({ workspaceId: workspaceId(acme), transact: (work) => work(tx) }),
+  )
+  expect([...(await sql`select body from deleted_message_texts where message_id = ${messageId}`)]).toEqual([])
+})
+
 test('pages follow a keyset cursor without gaps or repeats, also between rows of the same instant', async () => {
   const sameInstant = minutesAgo(25.5)
   for (let index = 0; index < 70; index++)

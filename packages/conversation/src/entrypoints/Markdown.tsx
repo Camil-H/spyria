@@ -3,6 +3,7 @@ import { Children, type ReactElement, type ReactNode, useEffect, useState } from
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { isRuntimeMediaPath } from '../domain/attachments.ts'
+import { mentionSegmentsOf } from '../domain/mentions.ts'
 import { RuntimeMedia } from './Media.tsx'
 
 type MarkdownNode = {
@@ -59,6 +60,22 @@ const laterImagesOnDemand = () => (tree: MarkdownNode) => {
     node.children?.forEach(markLaterImages)
   }
   markLaterImages(tree)
+}
+
+const boldMentions = (names: readonly string[]) => () => (tree: MarkdownNode) => {
+  const withMentions = (node: MarkdownNode) => {
+    if (!node.children || node.type === 'link' || node.type === 'linkReference') return
+    node.children = node.children.flatMap((child) => {
+      if (child.type !== 'text') {
+        withMentions(child)
+        return [child]
+      }
+      return mentionSegmentsOf(child.value ?? '', names).map(({ text, isMention }) =>
+        isMention ? { type: 'strong', children: [{ type: 'text', value: text }] } : { type: 'text', value: text },
+      )
+    })
+  }
+  if (names.length > 0) withMentions(tree)
 }
 
 const decodedPathOf = (source: string) => {
@@ -154,7 +171,15 @@ const components: Components = {
   },
 }
 
-const Markdown = ({ text, keepsLineBreaks = false }: { text: string; keepsLineBreaks?: boolean }) => (
+const Markdown = ({
+  text,
+  keepsLineBreaks = false,
+  mentionNames = [],
+}: {
+  text: string
+  keepsLineBreaks?: boolean
+  mentionNames?: readonly string[]
+}) => (
   <div className="flex flex-col gap-2 text-sm [&_ol]:list-decimal [&_ol]:pl-5 [&_table]:border-collapse [&_td]:border [&_td]:border-line [&_td]:px-2 [&_th]:border [&_th]:border-line [&_th]:px-2 [&_ul]:list-disc [&_ul]:pl-5 [&_:not(pre)>code]:rounded [&_:not(pre)>code]:bg-hover [&_:not(pre)>code]:px-1 [&_:not(pre)>code]:text-xs">
     <ReactMarkdown
       remarkPlugins={[
@@ -163,6 +188,7 @@ const Markdown = ({ text, keepsLineBreaks = false }: { text: string; keepsLineBr
         underlineFromUnderscores,
         laterImagesOnDemand,
         ...(keepsLineBreaks ? [lineBreaksKept] : []),
+        boldMentions(mentionNames),
       ]}
       components={components}
     >

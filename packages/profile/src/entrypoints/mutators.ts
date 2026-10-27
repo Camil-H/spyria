@@ -2,9 +2,11 @@ import { defineMutator, defineMutators, type Transaction } from '@rocicorp/zero'
 import type { ZeroContext } from '@spyria/db/zero-queries'
 import { credentialId, type MemberId, type WorkspaceId } from '@spyria/kernel'
 import { z } from 'zod/mini'
+import { Avatar } from '../domain/avatar.ts'
 import { DisplayName } from '../domain/display-name.ts'
 import { NotOwnProfile } from '../domain/errors.ts'
 import { createZeroTransactor, memberContext } from '../integrations/zero-transactor.ts'
+import { changeAvatar } from '../operations/change-avatar.ts'
 import { releaseWorkspaceConnections } from '../operations/release-workspace-connections.ts'
 import { removeLlmCredential } from '../operations/remove-llm-credential.ts'
 import { removeMemberProfile } from '../operations/remove-member-profile.ts'
@@ -24,6 +26,12 @@ export const profileMutators = defineMutators({
     renameMember: defineMutator(
       z.extend(workspaceArguments, { name: z.pipe(z.string(), z.transform(DisplayName)) }),
       ({ tx, ctx, args }) => renameMember(dependenciesOf(tx, ctx, args), { ...args, ...contextMember(ctx) }),
+    ),
+    changeAvatar: defineMutator(z.extend(workspaceArguments, { avatar: z.nullable(z.string()) }), ({ tx, ctx, args }) =>
+      changeAvatar(dependenciesOf(tx, ctx, args), {
+        ...contextMember(ctx),
+        avatar: args.avatar === null ? null : Avatar(args.avatar),
+      }),
     ),
     removeLlmCredential: defineMutator(
       z.extend(workspaceArguments, {

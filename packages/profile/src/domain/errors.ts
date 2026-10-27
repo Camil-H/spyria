@@ -64,3 +64,8 @@ export const SecretRequired = errorKind(
   (header: string) => `Enter the ${header} header again to change the URL`,
   ProfileError,
 )
+export const InvalidAvatar = errorKind(
+  'invalid_avatar',
+  () => 'A profile picture must be a small PNG, JPEG or WebP image',
+  ProfileError,
+)

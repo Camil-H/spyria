@@ -1,3 +1,4 @@
+export { AgentAvatar, MemberAvatar } from './Avatar.tsx'
 export { CopyButton } from './CopyButton.tsx'
 export { chatTypeIconOf } from './chat-type-icon.ts'
 export * from './classes.ts'

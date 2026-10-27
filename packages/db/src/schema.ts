@@ -19,6 +19,7 @@ type MembershipRow = {
   memberId: MemberId
   workspaceId: WorkspaceId
   displayName: string
+  avatar: string | null
   email: string
   role: string
   removedAt: string | null
@@ -209,6 +210,7 @@ export type Snapshot = {
   chats: readonly ChatRow[]
   messages: readonly MessageRow[]
   latestMessages: readonly MessageRow[]
+  latestAgentActivity: readonly MessageRow[]
   pinnedSteps: readonly MessageRow[]
   drafts: readonly DraftRow[]
   readMarkers: readonly ReadMarkerRow[]

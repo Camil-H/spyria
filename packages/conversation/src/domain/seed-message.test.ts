@@ -19,7 +19,7 @@ const quoted = (
   body: MessageBody(body),
   attachments: [],
   createdAt: new Date(`2026-10-17T${time}:00.000Z`),
-  deletedAt: null,
+  status: 'live',
   ...fields,
 })
 
@@ -54,7 +54,7 @@ test('the seed message leaves deleted messages out', () => {
     String(
       seedMessageBodyOf(channelThreadHeaderOf('Welcome'), [
         quoted('Alice', 'Root', '09:05'),
-        quoted('Bob', 'Gone', '09:06', { deletedAt: new Date('2026-10-17T09:08:00.000Z') }),
+        quoted('Bob', 'Gone', '09:06', { status: 'deleted' }),
       ]),
     ),
   ).toBe(
@@ -76,7 +76,7 @@ test('a forked runtime chat quotes its member and agent messages under the runti
       seedMessageBodyOf(runtimeChatHeaderOf('Invoice bug'), [
         quoted('Alice', 'Find the bug.', '09:05'),
         quoted('Agent', 'Found it.', '09:07', { kind: 'agent' }),
-        quoted('Alice', 'Gone', '09:09', { deletedAt: new Date('2026-10-17T09:10:00.000Z') }),
+        quoted('Alice', 'Gone', '09:09', { status: 'deleted' }),
         quoted('Alice', 'Fix it.', '09:11'),
       ]),
     ),

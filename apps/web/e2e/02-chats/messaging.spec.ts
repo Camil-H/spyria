@@ -116,6 +116,17 @@ test.describe('Messaging', () => {
       await expect(messageContaining(page, 'Filler 30')).toBeInViewport()
     })
 
+    await test.step('offers Go to last message while reading earlier messages, and goes back to the newest', async () => {
+      const goToLastMessage = mainOf(page).getByRole('button', { name: 'Go to last message' })
+      await expect(goToLastMessage).toHaveCount(0)
+      await messageContaining(page, 'Welcome to the team!').scrollIntoViewIfNeeded()
+      await expect(goToLastMessage).toBeVisible()
+      await expect(messageContaining(page, 'Filler 30')).not.toBeInViewport()
+      await goToLastMessage.click()
+      await expect(messageContaining(page, 'Filler 30')).toBeInViewport()
+      await expect(goToLastMessage).toHaveCount(0)
+    })
+
     await test.step('opens on the newest 50 messages and loads the earlier ones when scrolling up', async () => {
       await workerStack.database.$client.begin(async (sql) => {
         await sql`select 1 from chats where id = 'chat-welcome' for update`
@@ -171,6 +182,44 @@ test.describe('Messaging', () => {
           async () => (await workerStack.database.query.messages.findMany({ where: { body: 'Sent too fast' } })).length,
         )
         .toBe(1)
+    })
+  })
+
+  test('As a member, I mention a workspace member with @ and the mention shows in bold', async ({ page }) => {
+    await openChat(page, 'Welcome')
+    const mentionListOf = () => page.getByRole('listbox', { name: 'Members to mention' })
+
+    await test.step('lists the workspace members after @, narrowed by what I type', async () => {
+      await composerOf(page).pressSequentially('Thanks @')
+      await expect(mentionListOf().getByRole('option')).toHaveText(['Alice', 'Bob', 'Lee'])
+      await composerOf(page).pressSequentially('b')
+      await expect(mentionListOf().getByRole('option')).toHaveText(['Bob'])
+      await expect(mentionListOf().getByRole('option', { name: 'Bob' })).toHaveAttribute('aria-selected', 'true')
+    })
+
+    await test.step('inserts the chosen name with Enter, without sending', async () => {
+      await composerOf(page).press('Enter')
+      await expect(composerOf(page)).toHaveValue('Thanks @Bob ')
+      await expect(mentionListOf()).toHaveCount(0)
+      await expect(messageItemsOf(page)).toHaveCount(2)
+    })
+
+    await test.step('closes the list with Escape and picks with a click', async () => {
+      await composerOf(page).pressSequentially('and @')
+      await expect(mentionListOf()).toBeVisible()
+      await composerOf(page).press('Escape')
+      await expect(mentionListOf()).toHaveCount(0)
+      await composerOf(page).pressSequentially(' @l')
+      await mentionListOf().getByRole('option', { name: 'Lee' }).click()
+      await expect(composerOf(page)).toHaveValue('Thanks @Bob and @ @Lee ')
+      await expect(composerOf(page)).toBeFocused()
+    })
+
+    await test.step('shows the mentions of members in bold in the sent message', async () => {
+      await composerOf(page).fill('Thanks @Bob and @Lee, not @Zoe or bob@example.com')
+      await sendButtonOf(page).click()
+      const sent = messageContaining(page, 'Thanks')
+      await expect(sent.locator('strong')).toHaveText(['@Bob', '@Lee'])
     })
   })
 

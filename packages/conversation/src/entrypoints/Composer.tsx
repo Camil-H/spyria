@@ -1,5 +1,5 @@
 import { Content, Portal, Provider, Root, Trigger } from '@radix-ui/react-tooltip'
-import { useStore } from '@spyria/db/react'
+import { useQuery, useStore } from '@spyria/db/react'
 import type { ChatId, MessageId, WorkspaceId } from '@spyria/kernel'
 import { useSession } from '@spyria/session'
 import { ErrorMessage, focusRing, tooltipClass, useGuardedAction } from '@spyria/ui'
@@ -10,11 +10,14 @@ import {
   type KeyboardEvent,
   type ReactNode,
   useEffect,
+  useId,
   useRef,
   useState,
 } from 'react'
 import { type Attachment, fileSizeOf, maximumAttachmentsPerMessage, maximumMediaBytes } from '../domain/attachments.ts'
+import { mentionCandidatesOf, mentionQueryAt, mentionTextOf } from '../domain/mentions.ts'
 import { getDraft } from '../queries/get-draft.ts'
+import { getMentionableNames } from '../queries/get-mentionable-names.ts'
 import { continuedList, formattedText, formattingOfKey, linkedPaste, type TextEdit } from './composer-formatting.ts'
 import { useConversationCommands } from './providers.tsx'
 
@@ -57,6 +60,42 @@ const Shortcut = ({ label, children }: { label: string; children: ReactNode }) =
       </Content>
     </Portal>
   </Root>
+)
+
+const MentionList = ({
+  id,
+  names,
+  highlighted,
+  onChoose,
+}: {
+  id: string
+  names: readonly string[]
+  highlighted: number
+  onChoose: (name: string) => void
+}) => (
+  <div
+    id={id}
+    role="listbox"
+    aria-label="Members to mention"
+    className="absolute bottom-full left-0 z-10 mb-1 flex w-64 max-w-full flex-col rounded-md border border-line bg-raised py-1 shadow-md"
+  >
+    {names.map((name, index) => (
+      <div
+        key={name}
+        id={`${id}-${index}`}
+        role="option"
+        tabIndex={-1}
+        aria-selected={index === highlighted}
+        onMouseDown={(event) => {
+          event.preventDefault()
+          onChoose(name)
+        }}
+        className="cursor-pointer truncate px-3 py-1 text-sm hover:bg-hover aria-selected:bg-selected"
+      >
+        {name}
+      </div>
+    ))}
+  </div>
 )
 
 const PendingAttachments = ({
@@ -115,6 +154,17 @@ export const Composer = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const sending = useGuardedAction()
+  const mentionListId = useId()
+  const mentionNames = useQuery(getMentionableNames, workspaceId)
+  const [caret, setCaret] = useState<number>()
+  const [dismissedMentionStart, setDismissedMentionStart] = useState<number>()
+  const [highlightedMention, setHighlightedMention] = useState(0)
+  const mentionQuery = caret === undefined ? undefined : mentionQueryAt(text, caret)
+  const mentionCandidates =
+    mentionQuery && mentionQuery.start !== dismissedMentionStart
+      ? mentionCandidatesOf(mentionNames, mentionQuery.query)
+      : []
+  const highlighted = Math.min(highlightedMention, mentionCandidates.length - 1)
   useEffect(() => {
     textareaRef.current?.focus()
     if (threadRootId) return
@@ -173,10 +223,40 @@ export const Composer = ({
     insertKeepingUndo(textarea, textEdit, change)
     return true
   }
+  const followCaret = (textarea: HTMLTextAreaElement) => {
+    const nextCaret = textarea.selectionStart === textarea.selectionEnd ? textarea.selectionEnd : undefined
+    if (nextCaret !== caret) setHighlightedMention(0)
+    if (mentionQueryAt(textarea.value, nextCaret ?? 0)?.start !== dismissedMentionStart)
+      setDismissedMentionStart(undefined)
+    setCaret(nextCaret)
+  }
+  const mention = (name: string) => {
+    const textarea = textareaRef.current
+    if (!textarea || !mentionQuery) return
+    const insert = mentionTextOf(name)
+    const end = mentionQuery.start + insert.length
+    edit(textarea, { start: mentionQuery.start, end: textarea.selectionEnd, insert, selectStart: end, selectEnd: end })
+    setDismissedMentionStart(mentionQuery.start)
+  }
+  const handleMentionKey = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    const count = mentionCandidates.length
+    const chosen = mentionCandidates[highlighted]
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp')
+      setHighlightedMention((highlighted + (event.key === 'ArrowDown' ? 1 : count - 1)) % count)
+    else if ((event.key === 'Enter' && !event.shiftKey) || event.key === 'Tab') {
+      if (chosen) mention(chosen)
+    } else if (event.key === 'Escape') setDismissedMentionStart(mentionQuery?.start)
+    else return false
+    event.preventDefault()
+    event.stopPropagation()
+    return true
+  }
   const handleKey = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     const textarea = event.currentTarget
     const isPrimary = isApplePlatform ? event.metaKey : event.ctrlKey
     const isOtherModifier = event.altKey || (isApplePlatform ? event.ctrlKey : event.metaKey)
+    const isPlainKey = !isPrimary && !isOtherModifier && !event.nativeEvent.isComposing
+    if (mentionCandidates.length > 0 && isPlainKey && handleMentionKey(event)) return
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
       event.preventDefault()
       send()
@@ -212,7 +292,10 @@ export const Composer = ({
       {isBlocked && <div className="text-sm text-muted">{blockedNotice}</div>}
       {aboveBox}
       <ErrorMessage message={sending.errorMessage && `Not sent: ${sending.errorMessage}`} />
-      <div className="rounded-xl border border-line bg-raised has-[textarea:focus-visible]:outline-2 has-[textarea:focus-visible]:outline-focus has-[textarea:focus-visible]:-outline-offset-1">
+      <div className="relative rounded-xl border border-line bg-raised has-[textarea:focus-visible]:outline-2 has-[textarea:focus-visible]:outline-focus has-[textarea:focus-visible]:-outline-offset-1">
+        {mentionCandidates.length > 0 && (
+          <MentionList id={mentionListId} names={mentionCandidates} highlighted={highlighted} onChoose={mention} />
+        )}
         {pending.length > 0 && (
           <PendingAttachments
             pending={pending}
@@ -226,7 +309,15 @@ export const Composer = ({
             rows={1}
             className="max-h-40 min-w-0 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm leading-5 outline-none field-sizing-content"
             value={text}
-            onChange={(event) => change(event.target.value)}
+            aria-autocomplete="list"
+            aria-controls={mentionCandidates.length > 0 ? mentionListId : undefined}
+            aria-activedescendant={mentionCandidates.length > 0 ? `${mentionListId}-${highlighted}` : undefined}
+            onChange={(event) => {
+              change(event.target.value)
+              followCaret(event.target)
+            }}
+            onSelect={(event) => followCaret(event.currentTarget)}
+            onBlur={() => setCaret(undefined)}
             onKeyDown={handleKey}
             onPaste={paste}
             onDragOver={dragOver}
