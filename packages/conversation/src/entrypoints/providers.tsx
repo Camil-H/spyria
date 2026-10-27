@@ -30,4 +30,6 @@ export const QuestionAnswererContext = createContext<{
 
 export const ToolsAwaitingApprovalContext = createContext<ReadonlySet<string>>(new Set())
 
+export const MentionNamesContext = createContext<readonly string[]>([])
+
 export const ChatMediaContext = createContext<{ chatId: string; isRuntime: boolean } | null>(null)

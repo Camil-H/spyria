@@ -21,6 +21,7 @@ import {
 } from '@spyria/db/zero-queries'
 import { type MemberId, memberId as toMemberId, type WorkspaceId } from '@spyria/kernel'
 import type { ProfileTransactor, UnitOfWork } from '../contracts/transactor.ts'
+import type { Avatar } from '../domain/avatar.ts'
 import { DisplayName } from '../domain/display-name.ts'
 import { ConnectionNotFound, CredentialNotFound, MemberNotFound, NotOwnProfile } from '../domain/errors.ts'
 import { gatewayKeyOf, profileJobTypes, gatewayKeyRefOf as refOf } from '../domain/llm-credential.ts'
@@ -45,10 +46,19 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
         asContextMember(workspaceId, memberId)
         const row = await tx.run(zql.memberships.where('workspaceId', workspaceId).where('userId', memberId).one())
         if (!row) throw new MemberNotFound(memberId)
-        return { workspaceId, id: memberId, name: DisplayName(row.displayName) }
+        return {
+          workspaceId,
+          id: memberId,
+          name: DisplayName(row.displayName),
+          avatar: (row.avatar ?? null) as Avatar | null,
+        }
       },
       save: (member) =>
-        tx.mutate.memberships.update({ ...asContextMember(member.workspaceId, member.id), displayName: member.name }),
+        tx.mutate.memberships.update({
+          ...asContextMember(member.workspaceId, member.id),
+          displayName: member.name,
+          avatar: member.avatar,
+        }),
       permissions: (workspaceId, memberId) => workspacePermissionsOf(tx, inContextWorkspace(workspaceId), memberId),
       isActive: (workspaceId, memberId) => isActiveMember(tx, inContextWorkspace(workspaceId), memberId),
     },

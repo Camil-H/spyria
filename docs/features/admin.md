@@ -158,14 +158,14 @@ At the bottom of **Workspace settings**, an Admin finds **Delete workspace**. It
 | Sign-in | SSO configured, client secret replaced, domain verified |
 | GitHub | App configured, App secrets replaced |
 | Connections | shared connections added, changed, removed, member restrictions |
-| Chats | chat members added, removed, leaving, role changes, visibility changes, transfers, chats started from another chat |
+| Chats | chat members added, removed, leaving, role changes, visibility changes, transfers, chats started from another chat, deleted messages with their text |
 | Tool calls | every agent tool call, with prompter, owner, server, tool, whether it writes, approval decision and outcome |
 | Publishing | pushes, pull requests opened, reopened, turned into drafts, merged, closed |
 | Budgets | budget changes, thresholds reached |
 | Roles | custom chat and workspace roles created, changed, deleted |
 
-The log records metadata only: it never shows message bodies, including for private chats. Filter by person, group and date range; **Export CSV** downloads the filtered records.
+The log records metadata only, with one exception: a **Deleted a message** record shows the text the message had when it was deleted, in any chat, private ones included, since that text is no longer shown in the chat itself. It never shows the body of a message that is still in a chat. Filter by person, group and date range; **Export CSV** downloads the filtered records.
 
-**Keep audit records** is Forever by default, or a number of days (1 to 36,500). A daily job deletes workspace events and tool call records older than that. Chat events are the conversation history itself and are deleted only with the workspace; past the retention they only drop out of the audit view. Changing the retention is itself recorded.
+**Keep audit records** is Forever by default, or a number of days (1 to 36,500). A daily job deletes workspace events, tool call records and the texts of deleted messages older than that. Chat events are the conversation history itself and are deleted only with the workspace; past the retention they only drop out of the audit view. Changing the retention is itself recorded.
 
 Related: [Security](../architecture/security.md), [Operations](../guides/operations.md).

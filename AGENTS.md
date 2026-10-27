@@ -11,7 +11,7 @@ Stack: Bun 1.4 + Hono server, React 19 with the React Compiler, TypeScript 7, Vi
 ## Non-negotiable rules
 
 - **Auth is enforced on the server**, never only in the UI. Every table carries `workspace_id`; every read and write is scoped to the caller's workspace and checked against their permissions.
-- **Postgres is the source of truth**: data model, append-only event store, job queue. No extra broker. Migrations are Drizzle migrations; never edit one that has shipped.
+- **Postgres is the source of truth**: data model, event store, job queue. No extra broker. The event store is append-only, except the workspace purge and the redaction of a deleted message's text, both enforced by the event trigger; add no other exception (see [decision 0001](docs/decisions/0001-postgres-source-of-truth.md)). Migrations are Drizzle migrations; never edit one that has shipped.
 - **Real-time:** UI state syncs through Zero; agent tokens stream over WebSocket/SSE and never through Zero; only completed events are written to Postgres.
 - **Credentials:** model calls use the prompting member's own key through the gateway and record prompter and owner. A member's subscription tokens (Claude, ChatGPT) never reach the server. GitHub tokens never enter a runtime (the server pushes from bundles).
 - **Never log or return secrets:** tokens, keys, cookies, request bodies, prompts or model output stay out of logs, errors and URLs.

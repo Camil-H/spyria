@@ -240,6 +240,8 @@ const serverRequestsSince = async (startedAt: string) => {
     )
 }
 
+const serverCallTimeoutMilliseconds = 15_000
+
 export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
   signedInAs: [aliceMemberId, { option: true }],
   tokenSeconds: [undefined, { option: true }],
@@ -251,6 +253,9 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
       const releaseServerDatabase = (ownership: 'claim' | 'release') =>
         fetch(`${serverUrl}/test/release-database?db=${workerDatabaseNameOf(index)}&${ownership}=${stackId}`, {
           method: 'POST',
+          signal: AbortSignal.timeout(serverCallTimeoutMilliseconds),
+        }).catch((error: unknown) => {
+          throw new Error(`The test server did not ${ownership} ${workerDatabaseNameOf(index)}: ${String(error)}`)
         })
       await releaseServerDatabase('claim')
       await stopLeftoverZeroCache(zeroCachePortOf(index))

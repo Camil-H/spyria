@@ -102,6 +102,7 @@ export const memberships = table(
       .references(() => users.id),
     role: text().notNull(),
     displayName: text().notNull(),
+    avatar: text(),
     removedAt: instant(),
   },
   (table) => [
@@ -417,6 +418,23 @@ export const messages = table(
     index('messages_pull_request_index')
       .on(table.workspaceId, sql`(${table.step} ->> 'repository')`, sql`(${table.step} ->> 'number')`)
       .where(sql`(${table.step} ->> 'type') = 'pull_request'`),
+  ],
+)
+
+export const deletedMessageTexts = table(
+  'deleted_message_texts',
+  {
+    ...chatScoped,
+    messageId: text().notNull(),
+    body: text().notNull(),
+    deletedBy: text().notNull(),
+    deletedAt: instant().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.messageId] }),
+    chatReference(table),
+    memberReference(table, table.deletedBy),
+    index().on(table.workspaceId, table.deletedAt),
   ],
 )
 

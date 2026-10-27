@@ -4,7 +4,7 @@ import type { Attachment } from './attachments.ts'
 import { ChatFrozen, InvalidThreadRoot, MessageDeleted, NoThreadsInRuntimeChat, NotMessageAuthor } from './errors.ts'
 import type { MessageBody } from './message-body.ts'
 
-export type Message = Readonly<{
+type MessageFields = Readonly<{
   id: MessageId
   workspaceId: WorkspaceId
   chatId: ChatId
@@ -16,10 +16,13 @@ export type Message = Readonly<{
   step: StoredStep | null
   createdAt: Date
   editedAt: Date | null
-  deletedAt: Date | null
   replyToId: MessageId | null
   threadRootId: MessageId | null
 }>
+
+export type LiveMessage = MessageFields & Readonly<{ status: 'live' }>
+export type DeletedMessage = MessageFields & Readonly<{ status: 'deleted'; deletedAt: Date }>
+export type Message = LiveMessage | DeletedMessage
 
 export type MessageChange = Readonly<{
   type: 'message.posted' | 'message.replied' | 'message.edited' | 'message.deleted' | 'message.step_changed'
@@ -50,36 +53,44 @@ export const requireNotFrozen = (chat: Pick<ConversationChat, 'type' | 'isOwnerR
   if (isFrozen(chat)) throw new ChatFrozen()
 }
 
-const assertChangeable = (message: Message, memberId: MemberId) => {
+const changeableBy = (message: Message, memberId: MemberId): LiveMessage => {
   if (message.authorId !== memberId) throw new NotMessageAuthor()
-  if (message.deletedAt) throw new MessageDeleted()
+  if (message.status === 'deleted') throw new MessageDeleted()
+  return message
 }
 
-export const editedMessage = (message: Message, editorId: MemberId, body: MessageBody, at: Date): Message => {
-  assertChangeable(message, editorId)
-  return { ...message, body, editedAt: at }
-}
+export const editedMessage = (message: Message, editorId: MemberId, body: MessageBody, at: Date): LiveMessage => ({
+  ...changeableBy(message, editorId),
+  body,
+  editedAt: at,
+})
 
-export const deletedMessage = (message: Message, deleterId: MemberId, at: Date): Message => {
-  assertChangeable(message, deleterId)
-  return { ...message, attachments: [], deletedAt: at }
-}
+export const deletedMessage = (message: Message, deleterId: MemberId, at: Date): DeletedMessage => ({
+  ...changeableBy(message, deleterId),
+  status: 'deleted',
+  attachments: [],
+  deletedAt: at,
+})
 
 export const threadRootOf = (chat: ConversationChat, chatId: ChatId, root: Message | undefined) => {
   if (chat.type !== 'channel') throw new NoThreadsInRuntimeChat()
-  if (!root || root.chatId !== chatId || root.threadRootId !== null || root.deletedAt) throw new InvalidThreadRoot()
+  if (!root || root.chatId !== chatId || root.threadRootId !== null || root.status === 'deleted')
+    throw new InvalidThreadRoot()
   return root.id
 }
 
 export const newMessage = (
-  fields: Pick<Message, 'id' | 'workspaceId' | 'chatId' | 'kind' | 'authorId' | 'body' | 'createdAt' | 'replyToId'> &
-    Partial<Pick<Message, 'step' | 'threadRootId' | 'attachments'>>,
-): Message => ({
+  fields: Pick<
+    MessageFields,
+    'id' | 'workspaceId' | 'chatId' | 'kind' | 'authorId' | 'body' | 'createdAt' | 'replyToId'
+  > &
+    Partial<Pick<MessageFields, 'step' | 'threadRootId' | 'attachments'>>,
+): LiveMessage => ({
   step: null,
   threadRootId: null,
   attachments: [],
   ...fields,
   detail: null,
   editedAt: null,
-  deletedAt: null,
+  status: 'live',
 })

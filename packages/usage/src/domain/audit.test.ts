@@ -43,6 +43,30 @@ test('a record reads in plain words with labelled details, and a missing actor i
   expect(auditEntryOf({ ...record, kind: 'audit.retention_changed', target: null, details: {} }).target).toBe('Forever')
 })
 
+test('a deleted message reads as such with its chat and its text, and pages on from its key', () => {
+  expect(
+    auditEntryOf({
+      ...record,
+      key: 'd:message-1',
+      kind: 'message.deleted',
+      target: 'Welcome',
+      details: { chat: 'Welcome', text: 'The staging password is hunter2' },
+    }),
+  ).toMatchObject({
+    action: 'Deleted a message',
+    target: 'Welcome',
+    details: [
+      { label: 'Chat', value: 'Welcome' },
+      { label: 'Text', value: 'The staging password is hunter2' },
+    ],
+  })
+  expect(auditFilterFrom({ cursor: '2026-10-18T10:00:00.123456Z~d:message-1' }).cursor).toEqual({
+    at: '2026-10-18T10:00:00.123456Z',
+    key: 'd:message-1',
+  })
+  expect(auditKindsOf('Chats')).toContain('message.deleted')
+})
+
 test('filters are read from the query and refused when malformed', () => {
   expect(
     auditFilterFrom({

@@ -1,4 +1,4 @@
-import { execFile, execSync, spawn } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { openSync, writeSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -7,9 +7,15 @@ import { promisify } from 'node:util'
 import { createDatabase } from '@spyria/db/postgres'
 import {
   buildTemplateDatabase,
+  busyPortsOf,
   databaseUrlOf,
+  describeProcesses,
   dropDatabase,
   httpStatusOf,
+  listenersOn,
+  noteTestStack,
+  type ProcessRow,
+  processTable,
   startTestDex,
   startTestGateway,
   startTestPostgres,
@@ -39,19 +45,29 @@ const sweptPorts = [
   new URL(ssoViteUrl).port,
   ...workerZeroCachePorts,
 ]
-const sweptListeners = () =>
-  execSync(`lsof -t -iTCP:${sweptPorts.join(',')} -sTCP:LISTEN || true`)
-    .toString()
-    .split('\n')
-    .filter(Boolean)
+const terminate = (reason: string, targets: readonly ProcessRow[]) => {
+  for (const target of targets) {
+    noteTestStack(`SIGTERM to ${describeProcesses([target]).join('')}, ${reason}`)
+    try {
+      process.kill(target.pid, 'SIGTERM')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error
+    }
+  }
+}
 
 const stopWorkerZeroCaches = () => stopLeftoverZeroCaches(workerZeroCachePorts).catch(() => {})
 
 const sweepLeftovers = async () => {
   await stopWorkerZeroCaches()
-  for (const processId of sweptListeners()) process.kill(Number(processId), 'SIGTERM')
-  for (let attempt = 1; sweptListeners().length > 0; attempt++) {
-    if (attempt === 100) throw new Error(`Ports ${sweptPorts.join(', ')} are still in use`)
+  terminate('a leftover listener on a test port', listenersOn(sweptPorts))
+  for (let attempt = 1; ; attempt++) {
+    const busyPorts = await busyPortsOf(sweptPorts)
+    if (busyPorts.length === 0) break
+    if (attempt === 100)
+      throw new Error(
+        `Ports ${busyPorts.join(', ')} are still in use after the sweep, held by: ${describeProcesses(listenersOn(busyPorts)).join('; ') || 'processes lsof could not list'}`,
+      )
     await sleep(100)
   }
   const admin = createDatabase(databaseUrlOf('postgres')).$client
@@ -62,13 +78,21 @@ const sweepLeftovers = async () => {
   removeWorkerHosts()
 }
 
-const removeWorkerHosts = () => {
-  execSync(`pkill -f '${repositoryRoot}apps/host/src/main.ts ${serverUrl}/h/' || true`)
-}
+const removeWorkerHosts = () =>
+  terminate(
+    'a worker runtime host',
+    processTable().filter(({ command }) => command.includes(`${repositoryRoot}apps/host/src/main.ts ${serverUrl}/h/`)),
+  )
 
 const startDetached = async (command: string[], cwd: string, env: Record<string, string>, readyUrl: string) => {
   const [executable = '', ...args] = command
-  const logPath = join(tmpdir(), `spyria-e2e-${new URL(readyUrl).port}.log`)
+  const port = new URL(readyUrl).port
+  const holders = await busyPortsOf([port])
+  if (holders.length > 0)
+    throw new Error(
+      `${command.join(' ')} cannot start: port ${port} is held by ${describeProcesses(listenersOn([port])).join('; ') || 'a process lsof could not list'}`,
+    )
+  const logPath = join(tmpdir(), `spyria-e2e-${port}.log`)
   const logFile = openSync(logPath, 'w')
   const child = spawn(executable, args, {
     cwd,
@@ -83,11 +107,21 @@ const startDetached = async (command: string[], cwd: string, env: Record<string,
     if (attempt === 400) throw new Error(`${command.join(' ')} did not start`)
     await sleep(50)
   }
+  const strangers = listenersOn([port]).filter(({ group }) => group > 0 && group !== child.pid)
+  if (child.exitCode !== null || child.signalCode !== null || strangers.length > 0)
+    throw new Error(
+      `${command.join(' ')} exited with ${child.signalCode ?? child.exitCode ?? 'nothing yet'} while port ${port} answered from ${describeProcesses(strangers).join('; ') || 'another process'}: see ${logPath}`,
+    )
+  noteTestStack(`started ${command.join(' ')} as process group ${child.pid} on port ${port}`)
   return () => {
     if (child.exitCode !== null || child.signalCode !== null)
       throw new Error(
         `${command.join(' ')} exited during the run with ${child.signalCode ?? child.exitCode}: see ${logPath}`,
       )
+    const members = describeProcesses(processTable().filter(({ group }) => group === child.pid))
+    noteTestStack(
+      `SIGTERM to process group ${child.pid} (${command.join(' ')}) at the end of the run: ${members.join('; ')}`,
+    )
     process.kill(-(child.pid ?? 0), 'SIGTERM')
   }
 }

@@ -46,6 +46,21 @@ test('double underscores underline, double stars stay bold', () => {
   expect(html).toContain('a_snake_case_name')
 })
 
+test('a mention of a workspace member is bold, outside code and links, and on a line kept apart', () => {
+  const html = renderToStaticMarkup(
+    <Markdown
+      text={'__Hi__ @Alice Martin, see @bob\n`@Bob` [@Bob](https://example.com) mail@bob.dev'}
+      keepsLineBreaks
+      mentionNames={['Alice Martin', 'Bob']}
+    />,
+  )
+  expect(html).toContain('<u>Hi</u> <strong>@Alice Martin</strong>, see <strong>@bob</strong><br/>')
+  expect(html).toContain('<code>@Bob</code>')
+  expect(html).toContain('>@Bob <span')
+  expect(html).toContain('mail@bob.dev')
+  expect(html.match(/<strong>/g)).toHaveLength(2)
+})
+
 test('in a runtime chat, an image path is a file of the runtime, loaded through the server; a URL still waits for a click', () => {
   const commands = { readMedia: async () => new Blob() } as unknown as ConversationCommands
   const html = renderToStaticMarkup(

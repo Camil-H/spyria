@@ -142,6 +142,17 @@ export const queries = defineQueries({
         .limit(1),
     ),
   ),
+  latestAgentActivity: defineQuery(({ ctx }) =>
+    readableBy(ctx.userId)(zql.chats.where('workspaceId', ctx.workspaceId).where('type', 'runtime')).related(
+      'messages',
+      (message) =>
+        message
+          .where('kind', 'IN', ['agent', 'step', 'notice'])
+          .where('authorId', 'IS', null)
+          .orderBy('seq', 'desc')
+          .limit(1),
+    ),
+  ),
   chatMessages: defineQuery(z.object({ chatId: id, limit: z.number() }), ({ ctx, args }) =>
     messagesOf(ctx, args.chatId)
       .where('threadRootId', 'IS', null)
