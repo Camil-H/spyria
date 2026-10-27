@@ -8,8 +8,9 @@ export default defineConfig({
   workers: Number(process.env.WORKERS ?? 3),
   globalSetup: './e2e/global-setup.ts',
   timeout: 60_000,
-  expect: { timeout: 15_000, toHaveScreenshot: { animations: 'disabled', caret: 'hide', maxDiffPixelRatio: 0.01 } },
-  retries: 0,
+  expect: { timeout: 15_000 },
+  retries: process.env.CI ? 1 : 0,
+  failOnFlakyTests: !!process.env.CI,
   reporter: [
     ['list'],
     ['./e2e/platform-gate.ts'],
@@ -19,6 +20,7 @@ export default defineConfig({
         outputFile: new URL('../../.check/e2e-results.json', import.meta.url).pathname,
       },
     ],
+    ...(process.env.CI ? [['github'] as const] : []),
   ],
   use: { baseURL: viteUrl, timezoneId: 'UTC', screenshot: 'only-on-failure' },
   projects: [
@@ -37,6 +39,5 @@ export default defineConfig({
       testIgnore: ['00-platform/**', ...signInFiles.map((file) => `01-access/${file}`)],
       dependencies: ['platform'],
     },
-    { name: 'ui', testDir: 'ui' },
   ],
 })

@@ -442,13 +442,21 @@ export const startTestGateway = async ({
   const databaseName = `spyria_test_gateway_${name}`
   const configFile = join(tmpdir(), `${containerName}.json`)
   const gatewayConfig = JSON.parse(readFileSync(new URL('../../../../infra/bifrost.json', import.meta.url), 'utf8'))
+  const clientConfig = { ...gatewayConfig.client, mcp_oauth_private_allowlist: ['host.docker.internal'] }
+  const networkConfig = {
+    base_url: fakeLlmUrl,
+    default_request_timeout_in_seconds: 60,
+    max_retries: 0,
+    allow_private_network: true,
+  }
   const setup = {
     testPostgresStartedAt: docker('inspect', '-f', '{{.State.StartedAt}}', testPostgresContainer).stdout.toString(),
     gatewayImage,
     port,
-    fakeLlmUrl,
+    networkConfig,
     oauthBase,
     gatewayConfig,
+    clientConfig,
     gatewayProviders,
     zaiPaths,
     testModelPrices,
@@ -488,7 +496,10 @@ export const startTestGateway = async ({
   docker('rm', '-fv', containerName)
   await dropDatabase(databaseName)
   await withAdmin(`create database "${databaseName}" template template0 encoding 'UTF8'`)
-  writeFileSync(configFile, JSON.stringify({ ...gatewayConfig, config_store: store, logs_store: store }))
+  writeFileSync(
+    configFile,
+    JSON.stringify({ ...gatewayConfig, client: clientConfig, config_store: store, logs_store: store }),
+  )
   const remove = async () => {
     docker('rm', '-fv', containerName)
     rmSync(configFile, { force: true })
@@ -528,7 +539,6 @@ export const startTestGateway = async ({
       if (attempt === 480) throw new Error(`The test gateway did not become ready (last answer: ${lastAnswer})`)
       await sleep(250)
     }
-    const networkConfig = { base_url: fakeLlmUrl, default_request_timeout_in_seconds: 60, max_retries: 0 }
     for (const provider of gatewayProviders)
       await gateway.call('/api/providers', {
         method: 'POST',

@@ -13,6 +13,9 @@ Every change comes with tests in the right layer:
 - **Unit**: pure logic, next to the code. `bun run test`
 - **Integration**: server contracts against a real Postgres (`*.integration.test.ts`). `bun run test:integration` (it starts its own test Postgres, gateway and Dex)
 - **e2e**: user stories in the browser, under `apps/web/e2e` (one file per area, titles "As <role>, I …"). `bun run test:e2e`, or `bun run test:e2e:smoke` for the critical paths
-- **ui**: screenshots light and dark under `apps/web/ui`. `bun run test:ui`; after an intended design change, `bun run test:ui:update` and review the changed PNGs
+
+A pull request that changes the UI includes screenshots in light and dark; the reviewer judges the looks from them.
+
+Pull requests target `develop`; CI runs the checks and the tests your change affects, and `main` only receives commits of `develop` that passed the full suite.
 
 While iterating, `bun run check:related` runs lint, typecheck, boundaries and the affected tests. Before opening a pull request, `bun run check:all` runs everything. See [docs/guides/testing.md](docs/guides/testing.md) for details.

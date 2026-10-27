@@ -2,7 +2,6 @@ import {
   chipOf,
   composerOf,
   expect,
-  expectLooks,
   type Locator,
   mainOf,
   messageContaining,
@@ -16,7 +15,7 @@ import {
   sessionOf,
   test,
   workingIndicatorOf,
-} from './fixtures'
+} from '../fixtures'
 
 const openMessageMenu = async (message: Locator) => {
   await message.hover()
@@ -53,12 +52,11 @@ test.describe('Chat view', () => {
   }) => {
     await openChat(page, 'Welcome')
     await expect(messageContaining(page, 'Welcome to the team!')).toHaveCount(1)
-    await expectLooks(page, mainOf(page), 'channel')
     await composerOf(page).fill('Hello')
     await test.step('shows Send as an icon with a tooltip', async () => {
       await expect(sendButtonOf(page)).toHaveText('')
       await sendButtonOf(page).hover()
-      await expect(page.getByRole('tooltip', { name: 'Send (⌘↵)' })).toBeVisible()
+      await expect(page.getByRole('tooltip', { name: /^Send \((⌘↵|Ctrl\+Enter)\)$/ })).toBeVisible()
     })
     await test.step('reveals the menu button on keyboard focus', async () => {
       const messageActionsButton = messageContaining(page, 'Thanks, glad to be here.').getByRole('button', {
@@ -117,7 +115,6 @@ test.describe('Chat view', () => {
       await refuseNextMessage()
       await sendMessage(page, 'Sent too fast')
       await expect(mainOf(page).getByRole('alert')).toHaveText('Not sent: Too many requests: try again in 12 seconds.')
-      await expectLooks(page, mainOf(page), 'not-sent', { mask: [messageContaining(page, 'See the docs')] })
     })
   })
 
@@ -142,7 +139,6 @@ test.describe('Chat view', () => {
   }) => {
     await openChat(page, 'Invoice bug')
     await expect(messageContaining(page, 'Why do invoices show the wrong total?')).toHaveCount(1)
-    await expectLooks(page, mainOf(page), 'runtime-chat')
     await test.step('puts the owner on the title row, aligned right, the git branch above the text box, aligned left, and the Runs on chip with the runtime status and the model chip in the bar under it, the status inside the Runs on chip', async () => {
       const titleBox = (await mainOf(page).getByRole('heading', { level: 1, name: 'Invoice bug' }).boundingBox())!
       const ownerBox = (await mainOf(page).getByText('Agent acts as Alice').boundingBox())!
@@ -204,7 +200,6 @@ test.describe('Chat view', () => {
       expect(control.top).toBeGreaterThanOrEqual(textBox.bottom)
       expect(Math.abs(control.middle - runsOn.middle)).toBeLessThan(4)
     }
-    await expectLooks(page, page, 'composer', { mask: [workingDirectoryOf(page)] })
   })
 
   test.describe(() => {

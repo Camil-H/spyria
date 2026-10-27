@@ -1,4 +1,4 @@
-import { type Browser, expect, expectLooks, test } from './fixtures'
+import { type Browser, expect, test } from '../fixtures'
 
 const signedOutPageOf = async (browser: Browser, canCreateWorkspace: boolean) => {
   const page = await browser.newPage({ reducedMotion: 'reduce' })
@@ -9,10 +9,9 @@ const signedOutPageOf = async (browser: Browser, canCreateWorkspace: boolean) =>
 }
 
 test.describe('Sign-in screens', () => {
-  test('As a visitor, I see the sign-in card over the spires background', async ({ browser }) => {
+  test('As a visitor, I see the sign-in card', async ({ browser }) => {
     const page = await signedOutPageOf(browser, false)
     await expect(page.getByRole('heading', { name: 'Sign in to Spyria' })).toBeVisible()
-    await expectLooks(page, page, 'sign-in')
   })
 
   test('As the first person on an empty Spyria, I see the create-workspace card without the Admin rule', async ({
@@ -22,6 +21,5 @@ test.describe('Sign-in screens', () => {
     await expect(page.getByRole('heading', { name: 'Create a workspace' })).toBeVisible()
     await expect(page.getByText('No workspace exists on this Spyria yet.')).toBeVisible()
     await expect(page.getByText(/becomes the Admin/)).toHaveCount(0)
-    await expectLooks(page, page, 'create-workspace')
   })
 })

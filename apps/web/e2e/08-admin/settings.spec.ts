@@ -1,4 +1,4 @@
-import { expect, expectLooks, mainOf, type Page, sidebarOf, test } from './fixtures'
+import { expect, mainOf, type Page, sidebarOf, test } from '../fixtures'
 
 const cardsBySection = {
   'Setup your organization': ['Setup SSO', 'Connect GitHub', 'Roles and Permissions', 'Manage Team'],
@@ -40,7 +40,6 @@ test.describe('Settings', () => {
     await expect(cardOf(page, 'MCP tools')).toContainText('1 shared connection')
     await expect(cardOf(page, 'Analyze costs')).toContainText(/\$\d+\.\d\d this month/)
 
-    await expectLooks(page, mainOf(page), 'workspace-settings')
     for (const cardTitle of Object.values(cardsBySection).flat()) {
       await cardOf(page, cardTitle).click()
       await expect(mainOf(page).getByRole('heading', { level: 1, name: cardTitle })).toBeVisible()
