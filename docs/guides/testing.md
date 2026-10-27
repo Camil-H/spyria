@@ -76,6 +76,30 @@ With `--plan <file>`, it runs nothing but the module graph and writes the select
 
 `check:all` writes its full output to `.check/last-check-all.log` and a summary to `.check/last-check-all.json`: the `git stash create` fingerprint (HEAD when the tree is clean), HEAD, the tree hash of the working tree including untracked files, the exit code, and each step's result and duration. `--verify` compares that tree hash with the current tree and exits non-zero when they differ or the run failed, so you can tell whether a green run still applies.
 
+## CI
+
+CI is `.github/workflows/ci.yml` on GitHub Actions' standard runners ([decision 0021](../decisions/0021-ci-on-github-actions-through-develop.md)). Pull requests target `develop`.
+
+| Job | On a pull request | On a push to `develop` |
+|---|---|---|
+| `plan` | `check:related --plan` against the merge base with `develop` | `check:related --plan --full` |
+| `checks` | lint, typecheck, boundaries, locks | the same |
+| `unit`, `integration` | the selected test files, or the whole suite | the whole suite |
+| `bundle` | when the web app or a package changed | always |
+| `e2e` | the selected segments and specs, in 4 shards of 2 workers | the whole suite, in 4 shards |
+| `e2e-repeat` | the changed specs, 3 times each, without retry | not run |
+| `docker` | `check:docker` when the host, the agent, `infra` or the images changed | always |
+| `ci-ok` | fails when any job failed or was cancelled; skipped jobs pass | the same |
+| `promote` | not run | fast-forwards `main` to the commit once `ci-ok` passes |
+| `report-failure` | not run | comments the failed jobs on each pull request merged since `main` |
+
+`scripts/ci-suite.ts <suite> [shard]` runs one suite from the plan in `PLAN`. In CI, Playwright retries a failed test once and reports a test that passed on retry as flaky; a flaky test is fixed or deleted when found. A failed e2e shard keeps `apps/web/test-results` as an artifact for 7 days.
+
+The repository settings that go with it:
+
+- `develop` is the default branch; a ruleset on it requires `ci-ok` and blocks force pushes and deletion.
+- A ruleset on `main` blocks force pushes, deletion and every update except by the deploy key whose private half is the `MAIN_DEPLOY_KEY` secret, used only by `promote`.
+
 ## Test infrastructure
 
 Tests start and own their containers; they never touch the dev stack.

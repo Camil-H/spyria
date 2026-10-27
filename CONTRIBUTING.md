@@ -16,4 +16,6 @@ Every change comes with tests in the right layer:
 
 A pull request that changes the UI includes screenshots in light and dark; the reviewer judges the looks from them.
 
+Pull requests target `develop`; CI runs the checks and the tests your change affects, and `main` only receives commits of `develop` that passed the full suite.
+
 While iterating, `bun run check:related` runs lint, typecheck, boundaries and the affected tests. Before opening a pull request, `bun run check:all` runs everything. See [docs/guides/testing.md](docs/guides/testing.md) for details.
