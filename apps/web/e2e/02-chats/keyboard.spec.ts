@@ -21,27 +21,27 @@ test.describe('Keyboard shortcuts', () => {
     await test.step('lists the shortcuts, each named from its key', async () => {
       await page.keyboard.press('?')
       const help = page.getByRole('list', { name: 'Keyboard shortcuts' })
-      await expect(help.getByRole('listitem').filter({ hasText: 'Left sidebar collapse' })).toContainText('L')
-      await expect(help.getByRole('listitem').filter({ hasText: 'Right sidebar: Sources' })).toContainText('R then 2')
+      await expect(help.getByRole('listitem').filter({ hasText: 'Collapse left sidebar' })).toContainText('L')
+      await expect(help.getByRole('listitem').filter({ hasText: 'Right panel: Sources' })).toContainText('R then 2')
       await expect(help.getByRole('listitem').filter({ hasText: 'Search the workspace' })).toContainText('/')
       await expect(help.getByRole('listitem').filter({ hasText: 'Find in this chat' })).toContainText('F')
       await page.keyboard.press('Escape')
       await expect(help).toHaveCount(0)
     })
 
-    await test.step('collapses and expands the left sidebar with L, its tooltip starting with a bold L', async () => {
-      await sidebarOf(page).getByRole('button', { name: 'Left sidebar collapse' }).hover()
-      await expect(page.getByRole('tooltip', { name: 'Left sidebar collapse' }).locator('strong')).toHaveText('L')
+    await test.step('collapses and expands the left sidebar with L, its tooltip bolding the l of left', async () => {
+      await sidebarOf(page).getByRole('button', { name: 'Collapse left sidebar' }).hover()
+      await expect(page.getByRole('tooltip', { name: 'Collapse left sidebar' }).locator('strong')).toHaveText('l')
       await page.keyboard.press('l')
-      await expect(sidebarOf(page).getByRole('button', { name: 'Left sidebar expansion' })).toBeVisible()
+      await expect(sidebarOf(page).getByRole('button', { name: 'Expand left sidebar' })).toBeVisible()
       await page.keyboard.press('l')
-      await expect(sidebarOf(page).getByRole('button', { name: 'Left sidebar collapse' })).toBeVisible()
+      await expect(sidebarOf(page).getByRole('button', { name: 'Collapse left sidebar' })).toBeVisible()
     })
 
     await test.step('closes the right sidebar with R, and R then a number opens it on that tab', async () => {
       await page.keyboard.press('r')
       await expect(panelOf(page)).toBeHidden()
-      await expect(mainOf(page).getByRole('button', { name: 'Right sidebar expansion' })).toBeVisible()
+      await expect(mainOf(page).getByRole('button', { name: 'Show right panel' })).toBeVisible()
       await page.keyboard.press('r')
       await page.keyboard.press('2')
       await expect(panelOf(page)).toBeVisible()
@@ -72,6 +72,6 @@ test.describe('Keyboard shortcuts', () => {
     await page.keyboard.type('cpl')
     await expect(composerOf(page)).toHaveValue('cpl')
     await expect(page.getByRole('dialog')).toHaveCount(0)
-    await expect(sidebarOf(page).getByRole('button', { name: 'Left sidebar collapse' })).toBeVisible()
+    await expect(sidebarOf(page).getByRole('button', { name: 'Collapse left sidebar' })).toBeVisible()
   })
 })

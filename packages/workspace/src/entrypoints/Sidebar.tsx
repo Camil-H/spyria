@@ -69,11 +69,11 @@ export const Sidebar = ({
   const [openDialog, setOpenDialog] = useState<'project' | 'chat' | 'channels' | 'search' | null>(null)
   const closeDialog = () => setOpenDialog(null)
   const { isCollapsed, toggleCollapsed } = useCollapsed()
-  const toggleLabel = isCollapsed ? 'Left sidebar expansion' : 'Left sidebar collapse'
+  const toggleLabel = isCollapsed ? 'Expand left sidebar' : 'Collapse left sidebar'
   useShortcut('l', toggleLabel, toggleCollapsed)
   useShortcut('/', 'Search the workspace', () => setOpenDialog('search'), searchDialog !== undefined)
-  useShortcut('c', 'Chat creation', () => setOpenDialog('chat'))
-  useShortcut('p', 'Project creation', () => setOpenDialog('project'))
+  useShortcut('c', 'New chat', () => setOpenDialog('chat'))
+  useShortcut('p', 'New project', () => setOpenDialog('project'))
   useShortcut('b', 'Browse channels', () => setOpenDialog('channels'))
   useShortcut('s', 'Workspace settings', () => navigate(`/w/${workspaceId}/settings`), hasWorkspaceSettings)
   useShortcut('i', 'Profile', () => navigate(`/w/${workspaceId}/profile`))
@@ -119,13 +119,8 @@ export const Sidebar = ({
           <IconButton label={toggleLabel} shortcut="l" icon={PanelLeftClose} onClick={toggleCollapsed} />
           <WorkspaceSwitcher workspaceId={workspaceId} />
           <div className="flex shrink-0 gap-1">
-            <IconButton
-              label="Project creation"
-              shortcut="p"
-              icon={FolderPlus}
-              onClick={() => setOpenDialog('project')}
-            />
-            <IconButton label="Chat creation" shortcut="c" icon={SquarePen} onClick={() => setOpenDialog('chat')} />
+            <IconButton label="New project" shortcut="p" icon={FolderPlus} onClick={() => setOpenDialog('project')} />
+            <IconButton label="New chat" shortcut="c" icon={SquarePen} onClick={() => setOpenDialog('chat')} />
           </div>
         </div>
         {searchDialog && (

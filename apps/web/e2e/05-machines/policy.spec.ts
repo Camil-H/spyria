@@ -32,7 +32,7 @@ test.describe('Policy', () => {
     await expect(switchOf(page)).toHaveAttribute('aria-checked', String(isOn))
   }
   const openNewChat = async (page: Page) => {
-    await page.getByRole('button', { name: 'Chat creation' }).click()
+    await page.getByRole('button', { name: 'New chat' }).click()
     return page.getByRole('dialog', { name: 'New chat' })
   }
   const tokenOf = async (workerStack: WorkerStack, user: string) =>
