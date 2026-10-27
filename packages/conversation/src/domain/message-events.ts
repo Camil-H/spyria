@@ -39,6 +39,7 @@ export type PostedPayload = Pick<ProjectedMessage, 'body' | 'detail' | 'replyToI
   attachments?: readonly Attachment[]
 }
 export type ChangedPayload = { messageId: string; body: string }
+export type DeletedPayload = { messageId: string; body?: string }
 export type StepChangedPayload = { messageId: string; step: StoredStep }
 export type AgentEventPayload = {
   replyToId: string | null
@@ -108,14 +109,14 @@ export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMes
       if (message) messageByKey.set(`${workspaceId}/${messageId}`, { ...message, step })
     }
     if (type !== 'message.edited' && type !== 'message.deleted') continue
-    const { messageId, body } = payload as ChangedPayload
+    const { messageId, body = '' } = payload as DeletedPayload
     const message = messageByKey.get(`${workspaceId}/${messageId}`)
     if (!message) continue
     messageByKey.set(
       `${workspaceId}/${messageId}`,
       type === 'message.edited'
         ? { ...message, body, editedAt: createdAt }
-        : { ...message, body: '', attachments: [], deletedAt: createdAt },
+        : { ...message, body, attachments: [], deletedAt: createdAt },
     )
   }
   return [...messageByKey.values()]

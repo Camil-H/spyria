@@ -280,7 +280,7 @@ export const getConversation =
         kind: message.kind,
         authorName: memberName(message.authorId),
         createdAt: message.createdAt,
-        body: message.body,
+        body: message.deletedAt === null ? message.body : '',
         attachments: message.attachments,
         step,
         replyToId: message.replyToId,

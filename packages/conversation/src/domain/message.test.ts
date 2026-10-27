@@ -28,7 +28,7 @@ const messageByAlice: Message = {
   step: null,
   createdAt: new Date('2026-10-01T09:00:00Z'),
   editedAt: null,
-  deletedAt: null,
+  status: 'live',
   replyToId: null,
   threadRootId: null,
 }
@@ -38,8 +38,15 @@ test('editedMessage and deletedMessage reject other members', () => {
   expect(() => deletedMessage(messageByAlice, bob, editedAt)).toThrow(NotMessageAuthor)
 })
 
-test('deletedMessage keeps the row and records the deletion time', () => {
-  expect(deletedMessage(messageByAlice, alice, editedAt)).toEqual({ ...messageByAlice, deletedAt: editedAt })
+test('deletedMessage turns a live message into a tombstone that keeps its body and drops its attachments', () => {
+  const photo = { id: 'attachment-1', name: 'photo.png', mediaType: 'image/png', size: 2048 }
+  expect(deletedMessage({ ...messageByAlice, attachments: [photo] }, alice, editedAt)).toEqual({
+    ...messageByAlice,
+    status: 'deleted',
+    body: MessageBody('Hello'),
+    attachments: [],
+    deletedAt: editedAt,
+  })
 })
 
 test('a deleted message can be neither edited nor deleted', () => {
@@ -68,7 +75,7 @@ test.each<[string, Message | undefined, string]>([
   ['a missing message', undefined, 'chat'],
   ['a message of another chat', messageByAlice, 'chat-other'],
   ['a reply', { ...messageByAlice, threadRootId: messageId('root') }, 'chat'],
-  ['a deleted message', { ...messageByAlice, deletedAt: editedAt }, 'chat'],
+  ['a deleted message', { ...messageByAlice, status: 'deleted', deletedAt: editedAt }, 'chat'],
 ])('threadRootOf refuses %s', (_, root, chat) => {
   expect(() => threadRootOf(channel, chatId(chat), root)).toThrow(InvalidThreadRoot)
 })

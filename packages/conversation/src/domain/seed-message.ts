@@ -2,7 +2,7 @@ import { type Attachment, fileSizeOf } from './attachments.ts'
 import type { Message } from './message.ts'
 import { MessageBody } from './message-body.ts'
 
-export type QuotedMessage = Pick<Message, 'kind' | 'body' | 'attachments' | 'createdAt' | 'deletedAt'> & {
+export type QuotedMessage = Pick<Message, 'kind' | 'body' | 'attachments' | 'createdAt' | 'status'> & {
   authorName: string
 }
 
@@ -25,7 +25,7 @@ export const seedMessageBodyOf = (header: string, messages: readonly QuotedMessa
     [
       header,
       ...messages
-        .filter((message) => message.deletedAt === null)
+        .filter((message) => message.status === 'live')
         .map(
           ({ authorName, kind, createdAt, ...message }) =>
             `${authorName} (${kind === 'agent' ? 'agent' : 'member, human'}) · ${quotedTimeOf(createdAt)}\n${withAttachmentsNoted(message)}`,
