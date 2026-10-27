@@ -46,23 +46,15 @@ The chip in the chat shows the session model and effort (before the first prompt
 
 In a session on a member's machine, the owner picks the tool's own **Model** and **Effort** instead, from the lists Claude Code or Codex report.
 
-## Plan mode
-
-The **Plan** / **Auto** toggle next to the composer turns plan mode on and off once the agent session has started, for a member who may prompt and configure the session. In plan mode the agent investigates without changing anything, then proposes a plan. A **Plan approval** card offers **Approve the plan**, which turns plan mode off and lets the agent carry it out, or **Keep planning**.
-
-Each harness uses its own mechanism, mapped onto the same toggle:
-
-- **Pi:** Spyria's plan extension blocks file edits and writes, and any shell command that is not read-only, until the plan is approved.
-- **Claude Code:** its native plan mode.
-- **Codex:** its plan collaboration mode. Codex's plan mode is advisory: Codex is asked to plan first, but its writes are not blocked.
-
-On multi-step work the agent keeps its plan in the **Plan** tab of the side panel, with each step's status.
-
 ## Questions
 
 The agent can ask the member a question with suggested answers and a free answer. A question card appears in the chat; anyone who may prompt the chat answers it, and others see it read-only. Pending questions survive a page reload. A subagent cannot ask: its questions are answered automatically with "No member is available; decide yourself and state your assumption."
 
 On a guest's prompt, a tool call that is not read-only produces a **Tool approval** card that only the owner answers. See [Chats and sharing](./chats-and-sharing.md#prompts-from-someone-other-than-the-owner).
+
+## Opening pages
+
+On a Spyria runtime the agent opens a page for the chat's members with `open_page`: a public web address, or a file of the project such as an HTML report it wrote. The server refuses addresses on the member's own machine or network, and members load an opened page with a click. The page shows in the **Browser** tab of the side panel; see [Chats and sharing](./chats-and-sharing.md#browser).
 
 ## Delegation and subagents
 
@@ -78,7 +70,7 @@ Each delegation appears as one step, "Delegated to *model* · N steps · duratio
 
 ## Steps
 
-Between messages, the agent's work shows as collapsible steps: thoughts, commands with their output, files created or edited, tool calls ("Used *tool* (*server*)"), plan updates, questions and errors. When a tool needs the owner to connect or reconnect an account, the step says so with a **Connect** or **Reconnect** link. Secrets that appear in output from a member's machine are stored as `[redacted]`.
+Between messages, the agent's work shows as collapsible steps: thoughts, commands with their output, files created or edited, tool calls ("Used *tool* (*server*)"), questions and errors. When a tool needs the owner to connect or reconnect an account, the step says so with a **Connect** or **Reconnect** link. Secrets that appear in output from a member's machine are stored as `[redacted]`.
 
 Live text streams to viewers over a WebSocket; only completed events are stored in Postgres, so a reload shows the finished steps and the turn in progress resumes streaming. See [Architecture overview](../architecture/overview.md).
 

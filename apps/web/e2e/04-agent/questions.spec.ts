@@ -2,7 +2,6 @@ import { openPageAs } from '../stack'
 import {
   addCredential,
   addParticipant,
-  chipOf,
   delegationsFinished,
   expect,
   forEachHarness,
@@ -12,28 +11,19 @@ import {
   mainOf,
   messageContaining,
   messageItemsOf,
-  modeRadioOf,
   newHarnessChat,
-  newOnlineSession,
   openChat,
   openProfile,
   type Page,
-  panelOf,
-  planCardOf,
   questionOf,
   sendMessage,
-  sessionStarted,
   machineTest as test,
-  togglePlan,
   turnEnded,
-  workingIndicatorOf,
 } from './fixtures'
 
-const claude = { owner: 'member-alice', signedIn: 'claude-code' }
 const assumption = 'No member is available; decide yourself and state your assumption.'
 
 const askPromptOf = { Pi: 'stub:ask', 'Claude Code': 'stub:ask', Codex: 'stub:ask-codex' }
-const planPromptOf = { Pi: 'stub:exit-plan', 'Claude Code': 'stub:exit-plan', Codex: 'stub:plan-codex' }
 
 const radioCountOf = { Pi: 2, 'Claude Code': 2, Codex: 6 }
 
@@ -113,24 +103,7 @@ const pickAnyChoice = {
   },
 }
 
-const approvedReplyOf = {
-  Pi: 'plan:The member approved the plan. Plan mode is off: carry it out.',
-  'Claude Code': 'plan:exit-plan-bypass',
-  Codex: 'plan:implement_plan',
-}
-const keptPlanningReplyOf = {
-  Pi: 'plan:The member wants to keep planning.',
-  'Claude Code': 'plan:reject',
-  Codex: 'plan:revise_plan',
-}
-
-const nextReplyInPlanOf = {
-  Pi: '[t2] Hello from the stub (model spyria/mistral/mistral-medium-latest, mode plan).',
-  'Claude Code': '[t2] Hello from the stub (model stub-default, mode plan).',
-  Codex: '[t2] Hello from the stub (model gpt-stub, mode bypassPermissions).',
-}
-
-test.describe('Questions and plans', () => {
+test.describe('Questions', () => {
   test.use({ runtimeHost: false })
 
   test.beforeEach(async ({ page }) => {
@@ -192,122 +165,6 @@ test.describe('Questions and plans', () => {
       await sendMessage(page, 'stub:hello Carry on')
       await expect(messageContaining(page, '[t2] Hello from the stub')).toHaveCount(1)
     })
-
-    test(`As a prompter, I turn plan mode on and off and the agent follows [${harness.name}]`, {
-      tag: ['@spec-25'],
-    }, async ({ page, machine, workerStack }) => {
-      const chatId = await newHarnessChat(page, harness, `${harness.name} plan mode`, { machine, workerStack })
-      if (harness.name === 'Pi') {
-        await sendMessage(page, 'stub:hello')
-        await turnEnded(page)
-        await togglePlan(page, true)
-        await expect(chipOf(page, 'spyria')).toBeVisible()
-        await sendMessage(page, 'stub:hello')
-        await expect(
-          messageContaining(page, '[t2] Hello from the stub (model spyria/mistral/mistral-medium-latest, mode plan).'),
-        ).toHaveCount(1)
-        await togglePlan(page, false)
-        await expect(chipOf(page, 'spyria')).toBeVisible()
-        await sendMessage(page, 'stub:hello')
-        await expect(
-          messageContaining(
-            page,
-            '[t3] Hello from the stub (model spyria/mistral/mistral-medium-latest, mode default).',
-          ),
-        ).toHaveCount(1)
-        return
-      }
-      await sessionStarted(workerStack, chatId)
-      await togglePlan(page, true)
-      await expect(chipOf(page, 'harness')).toHaveText(`${harness.name} · subscription`)
-      if (harness.name === 'Codex') return togglePlan(page, false)
-      await sendMessage(page, 'stub:write stub:read')
-      await expect(messageContaining(page, 'write:reject')).toHaveCount(1)
-      await expect(messageContaining(page, 'Read notes.md')).toHaveCount(1)
-      await expect(messageContaining(page, 'mode plan).')).toHaveCount(1)
-      await togglePlan(page, false)
-      await sendMessage(page, 'Build')
-      await expect(
-        messageContaining(page, '[t2] Hello from the stub (model stub-default, mode bypassPermissions).'),
-      ).toHaveCount(1)
-    })
-
-    test(`As a prompter, I approve the plan the agent proposes: the turn continues and plan mode ends [${harness.name}]`, {
-      tag: ['@spec-25'],
-    }, async ({ page, machine, workerStack }) => {
-      await newHarnessChat(page, harness, `${harness.name} proposes a plan`, { machine, workerStack })
-      await sendMessage(page, planPromptOf[harness.name])
-      const plan = planCardOf(page)
-      await expect(plan.getByRole('listitem')).toHaveText(['Create x.txt', 'Done'])
-      if (harness.name !== 'Codex') await expect(modeRadioOf(page, 'Plan')).toBeChecked()
-      await expect(mainOf(page)).not.toContainText('Approve Plan')
-      await plan.getByRole('button', { name: 'Approve the plan' }).click()
-      await expect(messageContaining(page, approvedReplyOf[harness.name])).toHaveCount(1)
-      await turnEnded(page)
-      await expect(plan).toContainText('Approved by Alice')
-      await expect(plan.getByRole('button')).toHaveCount(0)
-      await expect(modeRadioOf(page, 'Auto')).toBeChecked()
-      await expect(mainOf(page)).not.toContainText('Approve Plan')
-    })
-
-    test(`As a prompter, I keep planning: the turn closes without Stopped and plan mode stays for the next prompt [${harness.name}]`, {
-      tag: ['@spec-25'],
-    }, async ({ page, machine, workerStack }) => {
-      await newHarnessChat(page, harness, `${harness.name} keeps planning`, { machine, workerStack })
-      await sendMessage(page, planPromptOf[harness.name])
-      await planCardOf(page).getByRole('button', { name: 'Keep planning' }).click()
-      await expect(messageContaining(page, keptPlanningReplyOf[harness.name])).toHaveCount(1)
-      await expect(workingIndicatorOf(page)).toHaveCount(0)
-      await expect(planCardOf(page)).toContainText('Kept planning by Alice')
-      await expect(mainOf(page)).not.toContainText('Stopped')
-      if (harness.name !== 'Codex') await expect(modeRadioOf(page, 'Plan')).toBeChecked()
-      await sendMessage(page, 'stub:hello Next')
-      await expect(messageContaining(page, nextReplyInPlanOf[harness.name])).toHaveCount(1)
-    })
-
-    test(`As a prompter, I stop while the plan waits for approval and the card closes [${harness.name}]`, {
-      tag: ['@spec-25'],
-    }, async ({ page, machine, workerStack }) => {
-      await newHarnessChat(page, harness, `${harness.name} stops a plan`, { machine, workerStack })
-      await sendMessage(page, planPromptOf[harness.name])
-      await expect(planCardOf(page).getByRole('button', { name: 'Approve the plan' })).toBeVisible()
-      await mainOf(page).getByRole('button', { name: 'Stop' }).click()
-      await expect(messageContaining(page, 'Stopped by Alice')).toHaveCount(1)
-      await expect(planCardOf(page)).toContainText('Stopped')
-      await expect(planCardOf(page).getByRole('button')).toHaveCount(0)
-    })
-  })
-
-  test('As a prompter, I see an approved plan as Markdown in the Plan tab until a newer checklist replaces it, shown once in its latest state', {
-    tag: ['@spec-10', '@spec-25', '@stage-f'],
-  }, async ({ page, machine, workerStack }) => {
-    const openPlanTab = () => panelOf(page).getByRole('tab', { name: 'Plan', exact: true }).click()
-    const planTab = panelOf(page).getByRole('tabpanel')
-    const approvedPlan = planTab.getByRole('region', { name: 'Approved plan' })
-    await machine(claude)
-    await newOnlineSession(page, 'Claude Code', workerStack)
-    await sendMessage(page, 'stub:exit-plan')
-    await expect(planCardOf(page).getByRole('button', { name: 'Approve the plan' })).toBeVisible()
-    await openPlanTab()
-    await expect(planTab).toHaveText(/^PlanNo planA plan the agent writes in plan mode shows here\.$/)
-    await planCardOf(page).getByRole('button', { name: 'Approve the plan' }).click()
-    await turnEnded(page)
-    await expect(approvedPlan.getByRole('listitem')).toHaveText(['Create x.txt', 'Done'])
-    await page.reload()
-    await openPlanTab()
-    await expect(approvedPlan.getByRole('listitem')).toHaveText(['Create x.txt', 'Done'])
-
-    await sendMessage(page, 'stub:plan-progress')
-    await expect(mainOf(page).getByRole('group', { name: 'Plan' })).toHaveCount(1)
-    await expect(workingIndicatorOf(page)).toHaveCount(0)
-    const checklist = mainOf(page).getByRole('group', { name: 'Plan' })
-    await expect(checklist).toHaveCount(1)
-    await expect(checklist.getByRole('checkbox', { name: 'Fix the totals' })).toBeChecked()
-    await expect(checklist.getByRole('checkbox', { name: 'Reproduce the bug' })).toBeChecked()
-    await expect(approvedPlan).toHaveCount(0)
-    await expect(planTab.getByRole('listitem')).toHaveCount(2)
-    await expect(planTab).toContainText('Fix the totals')
-    await expect(panelOf(page).getByRole('tabpanel')).not.toContainText('In progress')
   })
 
   test.describe(() => {
@@ -326,8 +183,6 @@ test.describe('Questions and plans', () => {
       const bobQuestion = questionOf(bobPage)
       await expect(bobQuestion.getByRole('radio', { name: 'SQLite', exact: true })).toBeDisabled()
       await expect(bobQuestion.getByRole('button')).toHaveCount(0)
-      await expect(modeRadioOf(bobPage, 'Plan')).toBeDisabled()
-      await expect(modeRadioOf(page, 'Plan')).toBeEnabled()
 
       await questionOf(page).getByRole('radio', { name: 'SQLite', exact: true }).check()
       const releaseAliceAnswer = await holdAnswers(page)

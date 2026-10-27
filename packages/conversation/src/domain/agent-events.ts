@@ -144,7 +144,6 @@ const acpToolCallProjectionOf = (call: AcpToolCall): AgentProjection => {
     ? { type: 'step', step: acpStepOf(call), id: call.id }
     : undefined
 }
-const planStatuses: Record<string, string> = { in_progress: 'in-progress', completed: 'done' }
 const acpUpdateProjectionOf = (event: AgentEvent): AgentProjection => {
   const update = event.update as Fields
   const kind = update?.sessionUpdate
@@ -161,14 +160,6 @@ const acpUpdateProjectionOf = (event: AgentEvent): AgentProjection => {
     return { type: 'step', step: acpStepOf(call), id: call.id }
   }
   if (kind === 'tool_call_update') return acpToolCallProjectionOf(spyriaAgentToolCallOf(event, update))
-  if (kind === 'plan' && Array.isArray(update?.entries))
-    return stepOf({
-      type: 'plan',
-      items: update.entries.map((entry: Fields) => ({
-        title: String(entry?.content ?? ''),
-        status: planStatuses[String(entry?.status)] ?? 'todo',
-      })),
-    })
   if (kind === 'error') return stepOf({ type: 'error', message: String(update?.message ?? 'Unknown error') })
   if (kind === 'question_answered' || kind === 'question_closed') {
     const { sessionUpdate: _, reason, ...question } = update as Record<string, unknown>
@@ -182,7 +173,7 @@ const acpUpdateProjectionOf = (event: AgentEvent): AgentProjection => {
     return { type: 'message', body: setupFailedNoticeOf(update?.exitCode, update?.output), kind: 'notice' }
   if (kind === 'session_started' && update?.resumeFailed === true)
     return { type: 'message', body: agentNotices.newSession, kind: 'notice' }
-  if (kind === 'turn_end' && (update?.stopReason !== 'cancelled' || update?.keptPlanning === true))
+  if (kind === 'turn_end' && update?.stopReason !== 'cancelled')
     return { type: 'turn-end', outcome: update?.stopReason === 'error' ? 'error' : 'finished' }
   return undefined
 }
@@ -217,8 +208,6 @@ const storedAcpUpdates = [
   'config_option_update',
   'agent_message',
   'agent_thought',
-  'plan',
-  'current_mode_update',
   'question_answered',
   'question_closed',
 ]
@@ -233,22 +222,6 @@ export const isStoredAgentEvent = (event: AgentEvent) =>
   storedAcpUpdates.includes(String((event.update as Fields)?.sessionUpdate)) &&
   (event.completed === true || (event.update as Fields)?.sessionUpdate === 'tool_call') &&
   !isApprovalQuestion(event)
-
-const planModeId = 'plan'
-const planModeOptionOf = (option: Fields) => option?.id === 'collaboration_mode' || option?.category === 'mode'
-export const isPlanningOf = (event: AgentEvent) => {
-  const update = event.update as Fields
-  if (update?.sessionUpdate === 'current_mode_update') return update.currentModeId === planModeId
-  const modeOptions = Array.isArray(update?.configOptions)
-    ? (update.configOptions as Fields[]).filter(planModeOptionOf)
-    : []
-  if (
-    update?.sessionUpdate === 'session_started' ||
-    (update?.sessionUpdate === 'config_option_update' && modeOptions.length > 0)
-  )
-    return modeOptions.some((option) => option?.currentValue === planModeId)
-  return undefined
-}
 
 const authRequiredCode = -32000
 export const isAuthRequiredError = (event: AgentEvent) => {

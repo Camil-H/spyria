@@ -54,7 +54,6 @@ export type ConversationCommands = {
   }>
   chatRouting: Command<{ chatId: ChatId }, ChatRoutingRead>
   answerQuestion: Command<{ chatId: ChatId; questionId: string; answer: QuestionAnswer }, number>
-  setPlanMode: Command<{ chatId: ChatId; enabled: boolean }, number>
   readWorkspace: Command<{ chatId: ChatId; read: WorkspaceRead; path: string }, WorkspaceReading>
   wakeWorkspace: Command<{ chatId: ChatId }, void>
   publishBranch: Command<

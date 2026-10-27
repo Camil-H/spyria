@@ -237,15 +237,16 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
       subagentPolicy: chat.subagentPolicy ?? 'auto',
       harness: chat.harness ?? null,
       localSession: chat.localSession ?? null,
-      isPlanning: chat.isPlanning === true,
       ownerId: ownerUserId ?? '',
     }),
   )
   const readMarkersOf = mappedRows(withMemberId<ZeroRows['readMarkers'][number]>)
   const threadReadMarkersOf = mappedRows(withMemberId<ZeroRows['threadReadMarkers'][number]>)
   const runtimeOriginsOf = mappedRows((origin: ZeroRows['runtimeOrigins'][number]) => origin)
-  const planStepsOf = mappedRows(withoutPosition<ZeroRows['planSteps'][number]>)
-  const browserPagesOf = mappedRows((page: ZeroRows['browserPages'][number]) => page)
+  const browserPagesOf = mappedRows(({ openedAt, ...page }: ZeroRows['browserPages'][number]) => ({
+    ...page,
+    openedAt: isoOf(openedAt),
+  }))
   const usageEntriesOf = mappedRows(withMemberId<ZeroRows['usageEntries'][number]>)
   const budgetAlertsOf = mappedRows(({ reachedAt, ...alert }: ZeroRows['budgetAlerts'][number]) => alert)
   const sourcesOf = mappedRows((source: ZeroRows['sources'][number]) => source)
@@ -295,7 +296,6 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
       readMarkers: readMarkersOf(rowsOf('readMarkers')),
       threadReadMarkers: threadReadMarkersOf(rowsOf('threadReadMarkers')),
       runtimeOrigins: runtimeOriginsOf(rowsOf('runtimeOrigins')),
-      planSteps: planStepsOf(rowsOf('planSteps')),
       browserPages: browserPagesOf(rowsOf('browserPages', 'chatBrowserPages')),
       usageEntries: usageEntriesOf(
         usageRowsOf(rowsOf('usageEntries', 'chatUsage'), rowsOf('usageEntries', 'monthUsage')),

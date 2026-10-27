@@ -52,7 +52,7 @@ const readableBy = (userId: MemberId) => (chat: Query<'chats', Schema>) =>
   )
 
 const id = z.string().check(z.minLength(1))
-export const pinnedStepTypes = ['question', 'plan', 'pull_request']
+export const pinnedStepTypes = ['question', 'pull_request']
 
 const messagesOf = (ctx: ZeroContext, chatId: string) =>
   zql.messages.where('workspaceId', ctx.workspaceId).where('chatId', chatId).whereExists('chat', readableBy(ctx.userId))
@@ -191,9 +191,6 @@ export const queries = defineQueries({
       .where('workspaceId', ctx.workspaceId)
       .where(({ or, cmp, exists }) => or(cmp('userId', ctx.userId), exists('ownedChats', readableBy(ctx.userId))))
       .orderBy('position', 'asc'),
-  ),
-  planSteps: defineQuery(({ ctx }) =>
-    zql.planSteps.where('workspaceId', ctx.workspaceId).whereExists('chat', readableBy(ctx.userId)),
   ),
   chatBrowserPages: defineQuery(z.object({ chatId: id }), ({ ctx, args }) =>
     zql.browserPages

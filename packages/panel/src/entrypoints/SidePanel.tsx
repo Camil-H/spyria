@@ -15,7 +15,6 @@ import {
   FolderTree,
   GitCommitHorizontal,
   Globe,
-  ListChecks,
   type LucideIcon,
   Plug,
   Users,
@@ -30,7 +29,6 @@ import type { PanelProps, TabProps } from './TabProps.ts'
 import { tabClass } from './ui.ts'
 
 const ChangesTab = lazy(() => import('./ChangesTab.tsx'))
-const PlanTab = lazy(() => import('./PlanTab.tsx'))
 const CommitsTab = lazy(() => import('./CommitsTab.tsx'))
 const SourcesTab = lazy(() => import('./SourcesTab.tsx'))
 const ConnectionsTab = lazy(() => import('./ConnectionsTab.tsx'))
@@ -39,7 +37,6 @@ const MembersTab = lazy(() => import('./MembersTab.tsx'))
 const tabs: Record<PanelTabId, { label: string; Icon: LucideIcon; Component: ComponentType<TabProps> | null }> = {
   files: { label: 'Files', Icon: FolderTree, Component: FilesTab },
   changes: { label: 'Changes', Icon: FileDiff, Component: ChangesTab },
-  plan: { label: 'Plan', Icon: ListChecks, Component: PlanTab },
   commits: { label: 'Commits', Icon: GitCommitHorizontal, Component: CommitsTab },
   browser: { label: 'Browser', Icon: Globe, Component: BrowserTab },
   sources: { label: 'Sources', Icon: BookOpen, Component: SourcesTab },

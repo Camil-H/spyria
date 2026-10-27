@@ -308,26 +308,9 @@ test('a start that fails closes the turn at once with the adapter message and do
   expect(await repliesTo(question)).toHaveLength(1)
 })
 
-test('a plan update shows as a plan step and replaces the Plan tab rows, and a Task call with its inner calls as one subagent group', async () => {
+test('a Task call with its inner calls shows as one subagent group', async () => {
   await machine()
   const chat = await newMachineChat()
-  const planned = await finished(await prompt(chat, 'stub:plan'), chat)
-  expect(planned[1]?.step).toEqual({
-    type: 'plan',
-    items: [
-      { title: 'Write tests', status: 'done' },
-      { title: 'Fix the bug', status: 'in-progress' },
-      { title: 'Ship', status: 'todo' },
-    ],
-  })
-  expect([
-    ...(await database.$client`select title, status from plan_steps where chat_id = ${chat} order by position`),
-  ]).toEqual([
-    { title: 'Write tests', status: 'done' },
-    { title: 'Fix the bug', status: 'in-progress' },
-    { title: 'Ship', status: 'todo' },
-  ])
-
   const replies = await finished(await prompt(chat, 'stub:subagent'), chat)
   const [, host, child] = replies
   expect(host?.step).toMatchObject({ type: 'tool', name: 'Task', result: 'Two files.' })
@@ -335,7 +318,7 @@ test('a plan update shows as a plan step and replaces the Plan tab rows, and a T
     type: 'command',
     command: 'ls',
     output: 'a.ts',
-    delegation: { id: expect.stringMatching(/:task-2$/) },
+    delegation: { id: expect.stringMatching(/:task-1$/) },
   })
 })
 

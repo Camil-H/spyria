@@ -30,7 +30,6 @@ const welcomeChat = chatId('chat-welcome')
 
 const currentMonth = () => new Date().toISOString().slice(0, 7)
 const invoiceBug = { workspaceId: acme, chatId: invoiceChat }
-const planStep = (title: string, status: string) => ({ ...invoiceBug, title, status })
 const toolConnection = (tool: string, status: string) => ({ workspaceId: acme, memberId: alice, tool, status })
 const chat = (
   id: string,
@@ -53,7 +52,6 @@ const chat = (
   subagentPolicy: 'auto',
   harness: null,
   localSession: false,
-  isPlanning: false,
   gitBranch: runtime?.gitBranch ?? null,
   repository: null,
   baseBranch: null,
@@ -206,24 +204,25 @@ export const createMockSnapshot = (): Snapshot => {
     ],
     threadReadMarkers: [],
     runtimeOrigins: [],
-    planSteps: [
-      planStep('Reproduce the bug', 'done'),
-      planStep('Fix the tax calculation', 'in-progress'),
-      planStep('Add a regression test', 'todo'),
-    ],
     browserPages: [
       {
         ...invoiceBug,
-        url: 'http://localhost:3000/invoices',
+        url: 'reports/invoice-totals.html',
+        title: 'Invoice totals',
+        openedAt: '2026-10-01T09:05:00.000Z',
+      },
+      {
+        ...invoiceBug,
+        url: 'https://example.com/invoices',
         title: 'Invoices',
-        bodyText: 'Invoice total: 120.00',
+        openedAt: '2026-10-01T09:06:00.000Z',
       },
       {
         workspaceId: acme,
         chatId: welcomeChat,
         url: 'https://example.com/onboarding',
         title: 'Onboarding guide',
-        bodyText: 'Welcome to the team.',
+        openedAt: '2026-10-01T09:00:00.000Z',
       },
     ],
     usageEntries: [

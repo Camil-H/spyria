@@ -47,10 +47,6 @@ const post = async (path: string, body: object, member: string = alice) =>
   ).status
 const answer = (chat: ChatId, questionId: string, body: object, member?: string) =>
   post(`/api/chats/${chat}/questions/${questionId}`, body, member)
-const planMode = (chat: ChatId, enabled: boolean, member?: string) =>
-  post(`/api/chats/${chat}/plan-mode`, { enabled }, member)
-const isPlanning = async (chat: ChatId) =>
-  (await database.$client`select is_planning from chats where id = ${chat}`)[0]?.is_planning
 const questionItemsOf = async (chat: ChatId) =>
   (await messagesOf(chat)).filter((message) => (message.step as { type?: string } | null)?.type === 'question')
 const ended = async (promptId: string, chat: ChatId) => {
@@ -170,68 +166,6 @@ test('Stop while a question waits stores it closed as stopped, a late answer is 
   expect((await finished(await prompt(chat, 'Carry on'), chat)).at(-1)?.body).toContain('[t2] ')
 })
 
-test('plan approval continues the turn and leaves plan mode; keep planning ends the turn without a Stopped notice and stays in plan mode', async () => {
-  await machine()
-  const chat = await newRuntimeChat({ harness: 'claude-code' })
-  const frames = await stack.subscribedFrames(chat)
-  const approved = await prompt(chat, 'stub:exit-plan')
-  const approvedId = await askedIn(frames)
-  expect(questionsIn(frames)[0]?.question).toMatchObject({ kind: 'plan', plan: '1. Create x.txt\n2. Done' })
-  await waitFor(async () => (await isPlanning(chat)) === true)
-  expect(await answer(chat, approvedId, { approve: true })).toBe(200)
-  const approvedReplies = await finished(approved, chat)
-  expect(approvedReplies.map(({ kind, body }) => `${kind}:${body}`)).toEqual([
-    'agent:[t1]',
-    'step:tool',
-    'step:question',
-    'agent:plan:exit-plan-bypass',
-    'agent:Hello from the stub (model stub-default, mode bypassPermissions).',
-  ])
-  expect(approvedReplies.find(({ body }) => body === 'question')?.step).toMatchObject({
-    type: 'question',
-    kind: 'plan',
-    plan: '1. Create x.txt\n2. Done',
-    approved: true,
-    answeredBy: alice,
-  })
-  expect(await isPlanning(chat)).toBe(false)
-
-  const kept = await prompt(chat, 'stub:exit-plan')
-  const keptId = await askedIn(frames, 2)
-  expect(await answer(chat, keptId, { approve: false })).toBe(200)
-  const keptReplies = await ended(kept, chat)
-  expect(keptReplies.map(({ kind, body }) => `${kind}:${body}`)).toEqual([
-    'agent:[t2]',
-    'step:tool',
-    'step:question',
-    'agent:plan:reject',
-  ])
-  expect(keptReplies[2]?.step).toMatchObject({ kind: 'plan', toolCallId: 'exit-plan-2', approved: false })
-  expect(await isPlanning(chat)).toBe(true)
-  expect((await finished(await prompt(chat, 'stub:write'), chat)).at(-1)?.body).toBe(
-    '[t3] write:reject Hello from the stub (model stub-default, mode plan).',
-  )
-})
-
-test.each([{ harness: 'claude-code' }, { harness: 'codex' }])(
-  'the plan mode endpoint toggles $harness plan mode for who may prompt',
-  async ({ harness }) => {
-    await machine([harness])
-    const chat = await newRuntimeChat({ harness })
-    expect(await planMode(chat, true)).toBe(409)
-    await finished(await prompt(chat, 'Hello'), chat)
-    expect(await planMode(chat, true, bob)).toBe(403)
-    expect(await post(`/api/chats/${chat}/plan-mode`, { enabled: 'yes' })).toBe(400)
-    expect(await planMode(chat, true)).toBe(200)
-    await waitFor(async () => (await isPlanning(chat)) === true)
-    if (harness === 'claude-code')
-      expect((await finished(await prompt(chat, 'Plan'), chat)).at(-1)?.body).toContain('mode plan).')
-    expect(await planMode(chat, false)).toBe(200)
-    await waitFor(async () => (await isPlanning(chat)) === false)
-    expect((await finished(await prompt(chat, 'Build'), chat)).at(-1)?.body).toContain('mode bypassPermissions).')
-  },
-)
-
 test('a question in a delegated sub-conversation is answered with the assumption and stored in the delegation', async () => {
   const { host, relay } = await workspaceHost()
   const chat = await newRuntimeChat()
@@ -286,15 +220,6 @@ test.each(chatAccessRows(['prompter', 'editor', 'owner', 'public']))(
   },
 )
 
-test.each(chatAccessRows(['editor', 'owner']))('the plan mode needs session.configure: $name', async (role) => {
-  const { userId, isAllowed } = role
-  const chat = await chatAs(role)
-  expect(await postedAs(`/api/chats/${chat}/plan-mode`, { enabled: true }, userId)).toEqual(
-    isAllowed ? { status: 409, error: undefined } : refused,
-  )
-})
-
 test('a chat that does not exist is refused like a chat the member cannot read', async () => {
-  expect(await postedAs('/api/chats/chat-missing/plan-mode', { enabled: true }, alice)).toEqual(refused)
   expect(await postedAs('/api/chats/chat-missing/questions/question-1', { approve: true }, alice)).toEqual(refused)
 })

@@ -448,7 +448,6 @@ export const createAgentBridge = ({
       delegate: handlers.delegate,
       awaitTask: handlers.awaitTask,
       answerQuestion: handlers.answerQuestion,
-      setPlanMode: handlers.setPlanMode,
       readWorkspace: handlers.readWorkspace,
       readRuntimeMedia: handlers.readRuntimeMedia,
       publishBranch: handlers.publishBranch,

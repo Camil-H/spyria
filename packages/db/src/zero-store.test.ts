@@ -133,7 +133,7 @@ test('a reply sorts under its prompt even when a later prompt came between them'
   ])
 })
 
-test('the latest messages, pinned steps, page bodies and usage of the watched queries reach their snapshot fields', () => {
+test('the latest messages, pinned steps, opened pages and usage of the watched queries reach their snapshot fields', () => {
   const build = createSnapshotBuilder(alice)
   const usageOf = (month: string, costMicros: number) =>
     zeroRowOf({
@@ -148,9 +148,9 @@ test('the latest messages, pinned steps, page bodies and usage of the watched qu
   const page = zeroRowOf({
     workspaceId: 'workspace-acme',
     chatId: 'chat-research',
-    url: 'u',
-    title: 't',
-    bodyText: 'Body',
+    url: 'https://example.com',
+    title: 'Example',
+    openedAt: Date.parse('2026-10-01T09:08:00Z'),
   })
   const snapshot = snapshotFrom(build, {
     ...workspaceRows,
@@ -165,7 +165,9 @@ test('the latest messages, pinned steps, page bodies and usage of the watched qu
     ['message-7', '2026-10-01T09:07:00.000Z'],
   ])
   expect(snapshot.pinnedSteps.map(({ id, body }) => [id, body])).toEqual([['message-3', 'plan']])
-  expect(snapshot.browserPages.map(({ bodyText }) => bodyText)).toEqual(['Body'])
+  expect(snapshot.browserPages.map(({ title, openedAt }) => [title, openedAt])).toEqual([
+    ['Example', '2026-10-01T09:08:00.000Z'],
+  ])
   expect(snapshot.usageEntries.map(({ month, memberId, costMicros }) => [month, memberId, costMicros])).toEqual([
     ['2026-09', alice, 10],
     ['2026-10', alice, 20],
