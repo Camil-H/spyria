@@ -21,7 +21,7 @@ import {
 const newChatDialogOf = (page: Page) => page.getByRole('dialog', { name: 'New chat' })
 const visibilityOf = (page: Page) => newChatDialogOf(page).getByRole('radiogroup', { name: 'Visibility' })
 const newChannel = async (page: Page, name: string, visibility: 'Public' | 'Private') => {
-  await page.getByRole('button', { name: 'Chat creation' }).click()
+  await page.getByRole('button', { name: 'New chat' }).click()
   await newChatDialogOf(page).getByRole('radio', { name: 'Channel' }).check()
   await visibilityOf(page).getByRole('radio', { name: visibility }).check()
   await newChatDialogOf(page).getByRole('textbox', { name: 'Chat name' }).fill(name)
@@ -135,7 +135,7 @@ test.describe('Channels', () => {
     await expect(composerOf(page)).toBeVisible()
     await expect(runsOnOf(page)).toHaveCount(0)
     await expect(chipOf(page, 'any')).toHaveCount(0)
-    await page.getByRole('button', { name: 'Chat creation' }).click()
+    await page.getByRole('button', { name: 'New chat' }).click()
     await expect(visibilityOf(page).getByRole('radio', { name: 'Public' })).toBeChecked()
     await expect(visibilityOf(page).getByRole('radio', { name: 'Private' })).not.toBeChecked()
     await newChatDialogOf(page).getByRole('radio', { name: 'Runtime' }).check()
@@ -202,7 +202,7 @@ test.describe('Channels', () => {
     tag: ['@spec-42'],
   }, async ({ page, browser, workerStack }) => {
     await newChannel(page, 'Lounge', 'Public')
-    await page.getByRole('button', { name: 'Chat creation' }).click()
+    await page.getByRole('button', { name: 'New chat' }).click()
     await newChatDialogOf(page).getByRole('radio', { name: 'Channel' }).check()
     await newChatDialogOf(page).getByRole('textbox', { name: 'Chat name' }).fill('Invoices')
     await newChatDialogOf(page).getByLabel('Project').selectOption({ label: 'Billing' })

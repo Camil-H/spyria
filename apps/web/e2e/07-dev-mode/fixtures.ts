@@ -12,7 +12,7 @@ export const connectGitHub = async (page: Page) => {
   await page.goto('/')
 }
 export const newDevChat = async (page: Page, name: string, repository: string, baseBranch = 'main') => {
-  await page.getByRole('button', { name: 'Chat creation' }).click()
+  await page.getByRole('button', { name: 'New chat' }).click()
   const dialog = newChatDialogOf(page)
   await dialog.getByRole('radio', { name: 'Runtime' }).check()
   await dialog.getByRole('radio', { name: 'Dev', exact: true }).check()

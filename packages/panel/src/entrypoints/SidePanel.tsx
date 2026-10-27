@@ -97,7 +97,7 @@ const TabPanel = ({ tabId, usageTab, ...panelProps }: PanelProps & { tabId: Pane
 }
 
 const TabShortcut = ({ tabId, index, onSelect }: { tabId: PanelTabId; index: number; onSelect: () => void }) => {
-  useShortcut(tabShortcutOf(index), `Right sidebar: ${tabs[tabId].label}`, onSelect)
+  useShortcut(tabShortcutOf(index), `Right panel: ${tabs[tabId].label}`, onSelect)
   return null
 }
 
