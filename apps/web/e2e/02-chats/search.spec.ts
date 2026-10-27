@@ -8,7 +8,7 @@ const findCountOf = (page: Page) => mainOf(page).getByRole('search', { name: 'Fi
 const highlightedMatches = (page: Page) =>
   page.evaluate(() => [...(CSS.highlights.get('find-match') ?? [])].map((range) => (range as Range).toString()))
 const searchFor = async (page: Page, text: string) => {
-  await expect(sidebarOf(page).getByRole('button', { name: 'Search' })).toBeVisible()
+  await expect(sidebarOf(page).getByRole('button', { name: 'Search', exact: true })).toBeVisible()
   await page.keyboard.press('/')
   await expect(searchDialogOf(page).getByRole('searchbox', { name: 'Search messages' })).toBeFocused()
   await page.keyboard.type(text)
