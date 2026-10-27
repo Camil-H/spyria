@@ -108,7 +108,7 @@ export const MessageItem = ({
   const quotedThread = threadRoot ? [threadRoot, ...threadRoot.thread.replies] : [message, ...(thread?.replies ?? [])]
   return (
     <>
-      <li ref={ref} className="group relative rounded-md px-3 py-2 hover:bg-hover">
+      <li ref={ref} data-message-id={message.id} className="group relative rounded-md px-3 py-2 hover:bg-hover">
         {message.kind === 'notice' ? (
           <div className="flex flex-col gap-1">
             <p className="whitespace-pre-wrap text-sm text-muted">{message.body}</p>

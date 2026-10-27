@@ -3,8 +3,8 @@ import { useQuery } from '@spyria/db/react'
 import type { WorkspaceId } from '@spyria/kernel'
 import { useSession } from '@spyria/session'
 import { ErrorMessage, IconButton, useGuardedAction, useShortcut } from '@spyria/ui'
-import { CircleUser, FolderPlus, Hash, PanelLeftClose, PanelLeftOpen, Settings, SquarePen } from 'lucide-react'
-import { lazy, Suspense, useState } from 'react'
+import { CircleUser, FolderPlus, Hash, PanelLeftClose, PanelLeftOpen, Search, Settings, SquarePen } from 'lucide-react'
+import { lazy, type ReactNode, Suspense, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router'
 import { getSidebar } from '../queries/get-sidebar.ts'
 import { listJoinableChannels } from '../queries/list-joinable-channels.ts'
@@ -18,6 +18,8 @@ import { useWorkspacePermissions } from './useWorkspacePermissions.ts'
 import { WorkspaceSwitcher } from './WorkspaceSwitcher.tsx'
 
 const BrowseChannelsDialog = lazy(() => import('./BrowseChannelsDialog.tsx'))
+
+export type SearchDialog = (props: { workspaceId: WorkspaceId; onClose: () => void }) => ReactNode
 
 const collapsedStorageKey = 'spyria.sidebar-collapsed'
 const headerRowClass = 'flex h-9 shrink-0 items-center'
@@ -51,9 +53,11 @@ const useCollapsed = () => {
 export const Sidebar = ({
   workspaceId,
   chatAdornment,
+  searchDialog,
 }: {
   workspaceId: WorkspaceId
   chatAdornment?: ChatAdornment
+  searchDialog?: SearchDialog
 }) => {
   const { memberId } = useSession()
   const sidebar = useQuery(getSidebar, workspaceId, memberId)
@@ -62,11 +66,12 @@ export const Sidebar = ({
   const navigate = useNavigate()
   const hasWorkspaceSettings = useWorkspacePermissions(workspaceId).length > 0
   const chatAction = useGuardedAction()
-  const [openDialog, setOpenDialog] = useState<'project' | 'chat' | 'channels' | null>(null)
+  const [openDialog, setOpenDialog] = useState<'project' | 'chat' | 'channels' | 'search' | null>(null)
   const closeDialog = () => setOpenDialog(null)
   const { isCollapsed, toggleCollapsed } = useCollapsed()
   const toggleLabel = isCollapsed ? 'Left sidebar expansion' : 'Left sidebar collapse'
   useShortcut('l', toggleLabel, toggleCollapsed)
+  useShortcut('/', 'Search the workspace', () => setOpenDialog('search'), searchDialog !== undefined)
   useShortcut('c', 'Chat creation', () => setOpenDialog('chat'))
   useShortcut('p', 'Project creation', () => setOpenDialog('project'))
   useShortcut('b', 'Browse channels', () => setOpenDialog('channels'))
@@ -90,6 +95,7 @@ export const Sidebar = ({
           <BrowseChannelsDialog workspaceId={workspaceId} channels={joinableChannels} onClose={closeDialog} />
         </Suspense>
       )}
+      {openDialog === 'search' && searchDialog?.({ workspaceId, onClose: closeDialog })}
     </>
   )
   if (isCollapsed)
@@ -122,6 +128,20 @@ export const Sidebar = ({
             <IconButton label="Chat creation" shortcut="c" icon={SquarePen} onClick={() => setOpenDialog('chat')} />
           </div>
         </div>
+        {searchDialog && (
+          <button
+            type="button"
+            aria-keyshortcuts="/"
+            className={`${footerLinkClass({ isActive: false })} -mb-1 border border-line bg-raised`}
+            onClick={() => setOpenDialog('search')}
+          >
+            <Search aria-hidden className="size-4" />
+            <span className="flex-1 text-muted">Search</span>
+            <kbd aria-hidden className="font-sans text-xs text-muted">
+              /
+            </kbd>
+          </button>
+        )}
         {dialogs}
         <div className="-m-1 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-1 scrollbar-thin">
           {sidebar.projects.map((project) => (

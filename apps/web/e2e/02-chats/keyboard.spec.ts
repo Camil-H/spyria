@@ -23,6 +23,8 @@ test.describe('Keyboard shortcuts', () => {
       const help = page.getByRole('list', { name: 'Keyboard shortcuts' })
       await expect(help.getByRole('listitem').filter({ hasText: 'Left sidebar collapse' })).toContainText('L')
       await expect(help.getByRole('listitem').filter({ hasText: 'Right sidebar: Sources' })).toContainText('R then 2')
+      await expect(help.getByRole('listitem').filter({ hasText: 'Search the workspace' })).toContainText('/')
+      await expect(help.getByRole('listitem').filter({ hasText: 'Find in this chat' })).toContainText('F')
       await page.keyboard.press('Escape')
       await expect(help).toHaveCount(0)
     })

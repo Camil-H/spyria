@@ -13,6 +13,7 @@ export const scopedQueryNames = [
   'chatBrowserPages',
   'chatUsage',
   'monthUsage',
+  'searchMessages',
 ] as const
 export type ScopedQueryName = (typeof scopedQueryNames)[number]
 export type ScopedStatus = { isComplete: boolean; rows: readonly object[] }
