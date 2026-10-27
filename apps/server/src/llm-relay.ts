@@ -174,6 +174,29 @@ export const createModelCallRelay = ({
     const token = String(authorization ?? apiKey ?? '').replace(/^Bearer /i, '')
     const handlers = agentBridge().forDatabase(database)
     const body = typeof frame.body === 'string' ? frame.body : ''
+    const answerSpyriaServer = (
+      rpc: RouterCall | undefined,
+      name: string,
+      tools: readonly object[],
+      instructions?: string,
+    ) => {
+      if (method !== 'POST') return answer(method === 'DELETE' ? 200 : 405, undefined)
+      if (rpc?.id === undefined) return answer(202, undefined)
+      const reply = (result: object, replyHeaders?: Record<string, string>) =>
+        answerRpc(rpc.id, { result }, replyHeaders)
+      if (rpc.method === 'initialize')
+        return reply(
+          {
+            protocolVersion: rpc.params?.protocolVersion ?? '2025-06-18',
+            ...spyriaServerInfoOf(name),
+            ...(instructions && { instructions }),
+          },
+          { 'mcp-session-id': crypto.randomUUID() },
+        )
+      if (rpc.method === 'ping') return reply({})
+      if (rpc.method === 'tools/list') return reply({ tools })
+      return answerRpc(rpc.id, methodNotFound)
+    }
 
     if (path === routerPath || path === githubToolsPath) {
       if (method !== 'POST') return answer(method === 'DELETE' ? 200 : 405, undefined)
@@ -186,18 +209,10 @@ export const createModelCallRelay = ({
       if (rpc?.id === undefined) return answer(202, undefined)
       const reply = (result: object, replyHeaders?: Record<string, string>) =>
         answerRpc(rpc.id, { result }, replyHeaders)
-      if (rpc.method === 'initialize')
-        return reply(
-          {
-            protocolVersion: rpc.params?.protocolVersion ?? '2025-06-18',
-            ...spyriaServerInfoOf(isRouter ? 'spyria-router' : 'spyria-github'),
-            ...(!isRouter && { instructions: githubToolsInstructions }),
-          },
-          { 'mcp-session-id': crypto.randomUUID() },
-        )
-      if (rpc.method === 'ping') return reply({})
-      if (rpc.method === 'tools/list') return reply({ tools: isRouter ? routerTools : githubTools })
-      if (rpc.method !== 'tools/call') return answerRpc(rpc.id, methodNotFound)
+      if (rpc.method !== 'tools/call')
+        return isRouter
+          ? answerSpyriaServer(rpc, 'spyria-router', routerTools)
+          : answerSpyriaServer(rpc, 'spyria-github', githubTools, githubToolsInstructions)
       if (!isRouter && 'ownerId' in runtime && runtime.prompterId && runtime.ownerId) {
         const toolName = String(rpc.params?.name ?? '')
         const calledAt = new Date()
@@ -274,9 +289,7 @@ export const createModelCallRelay = ({
     if (isToolPath) {
       const turn = token ? await handlers.toolCallTurn(host, token) : undefined
       if (!turn) return answer(401, refusalOf('This runtime has no chat owner'))
-      const rpc = jsonOf(body) as
-        | { id?: unknown; method?: string; params?: { name?: unknown; arguments?: unknown } }
-        | undefined
+      const rpc = jsonOf(body) as RouterCall | undefined
       const isToolCall = rpc?.method === 'tools/call'
       const toolName = String(rpc?.params?.name ?? '')
       const { server, tool } = toolNamePartsOf(toolName)
@@ -297,10 +310,13 @@ export const createModelCallRelay = ({
         return answerRpc(rpc?.id ?? null, methodNotFound)
       const isGuestCall = isToolCall && isGuestTurn
       try {
-        const virtualKey = await keyOf(host.workspaceId, ownerId).catch(() => null)
-        if (!virtualKey && isToolCall)
-          return toolError(virtualKey === null ? toolGatewayUnreachable : noticeOf('needs_connection'))
-        if (!virtualKey) return answer(virtualKey === null ? 502 : 401, unreachable)
+        const virtualKey = await keyOf(host.workspaceId, ownerId).then(
+          (key) => key ?? undefined,
+          () => null,
+        )
+        if (virtualKey === null) return isToolCall ? toolError(toolGatewayUnreachable) : answer(502, unreachable)
+        if (!virtualKey)
+          return isToolCall ? toolError(noticeOf('needs_connection')) : answerSpyriaServer(rpc, 'spyria', [])
         if (rpc?.method === 'initialize') await tools.grantMemberTools(host.workspaceId, ownerId).catch(() => undefined)
         const callHeaders = {
           ...picked(headers, toolHeaders),
