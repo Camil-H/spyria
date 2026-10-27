@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { matchOffsetsIn, searchNeedleOf, snippetOf } from './text-search.ts'
+import { matchOffsetsIn, matchSpansIn, searchNeedleOf, snippetOf } from './text-search.ts'
 
 test('a search matches every occurrence, whatever its case, without overlapping', () => {
   expect(matchOffsetsIn('Deploy, deploy, DEPLOY', 'deploy')).toEqual([0, 8, 16])
@@ -25,4 +25,26 @@ test('a snippet keeps the match, with its original case, inside a short context 
 test('a short message shows whole, and a message without the match shows its start', () => {
   expect(snippetOf('Ship it today', 'ship')).toEqual({ before: '', match: 'Ship', after: ' it today' })
   expect(snippetOf('Ship it today', 'deploy')).toEqual({ before: '', match: '', after: 'Ship it today' })
+})
+
+test('a match spans the formatting inside one block but never joins two blocks', () => {
+  const paragraph = { name: 'paragraph' }
+  const nextParagraph = { name: 'next paragraph' }
+  const segments = [
+    { text: 'Ship the ', block: paragraph },
+    { text: 'release', block: paragraph },
+    { text: ' notes', block: paragraph },
+    { text: 'notes later', block: nextParagraph },
+  ]
+  expect(matchSpansIn(segments, 'the release notes')).toEqual([
+    { start: { segment: 0, offset: 5 }, end: { segment: 2, offset: 6 } },
+  ])
+  expect(matchSpansIn(segments, 'release')).toEqual([
+    { start: { segment: 1, offset: 0 }, end: { segment: 1, offset: 7 } },
+  ])
+  expect(matchSpansIn(segments, 'notesnotes')).toEqual([])
+  expect(matchSpansIn(segments, 'notes').map(({ start }) => start)).toEqual([
+    { segment: 2, offset: 1 },
+    { segment: 3, offset: 0 },
+  ])
 })
