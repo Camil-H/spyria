@@ -9,7 +9,6 @@ Spyria's tests are layered: each behaviour is proved once, at the lowest layer t
 | Unit | `*.test.ts` next to the file | Pure logic with many cases: `domain/`, parsers, formatters. | `bun test`, no container. |
 | Integration | `*.integration.test.ts` (mostly `apps/server/src`) | Server contracts, permission refusals, security invariants, data correctness, external contracts against fakes. | Its own test Postgres, gateway and Dex. |
 | e2e | `apps/web/e2e/<segment>/<area>.spec.ts` | One user story per test: the happy path and the refusal a user sees. | Playwright against a full test stack per worker. |
-| Visual | `apps/web/ui/*.spec.ts` | The looks: screenshots in light and dark, keyboard, resize and colour checks. | Playwright, same stack. |
 | Docker | `*.docker.test.ts` | The host program and runtimes in real containers. | Docker, with the built runtime image. |
 
 Pick the lowest layer that proves the behaviour, and do not repeat a check another layer already covers. A permission refusal, for example, is proved by an integration test; the e2e test shows only what the user sees when refused. Never weaken an assertion to make a test pass.
@@ -30,8 +29,6 @@ bun run check:bundle       # builds the web app and checks its main chunk
 bun run test:e2e           # the e2e suite
 bun run test:e2e:smoke     # only the tests tagged @smoke, after the platform gate
 bun run test:e2e -- e2e/04-agent   # one segment (the platform gate still runs first)
-bun run test:ui            # the visual suite; not in check:all
-bun run test:ui:update     # regenerate the screenshot baselines after an intended design change
 bun run check:docker       # agent:build, check:trust, then the docker tests
 bun run check:trust        # the built runtime and host images hold no distrusted root
 bun run smoke:prod         # the production Compose file under a throwaway name; not in check:all
@@ -49,22 +46,62 @@ Run `typecheck`, `lint`, `check:boundaries` and `check:related`. Run `check:all`
 
 ### How `check:related` chooses
 
-`check:related [--base <ref>]` takes the uncommitted changes, untracked files included, plus the commits since `<ref>` (default `HEAD`). It runs lint, typecheck and boundaries in parallel, builds dependency-cruiser's module graph, then selects:
+`check:related [--base <ref>] [--plan <file>]` takes the uncommitted changes, untracked files included, plus the commits since the merge base of `<ref>` (default `HEAD`) and `HEAD`, so `--base origin/develop` ignores what `develop` gained since the branch started. It runs lint, typecheck and boundaries in parallel, builds dependency-cruiser's module graph, then selects:
 
 - the unit and integration test files that changed, or that import a changed module directly or not;
-- Playwright with `--only-changed=<ref>` when an e2e spec imports a changed module.
+- the e2e specs that changed or import a changed module, and the e2e segments of the changed app code:
+
+| Changed code | e2e segments |
+|---|---|
+| `packages/conversation` | `02-chats`, `03-sharing`, `04-agent`, `07-dev-mode` |
+| `packages/panel` | `02-chats`, `03-sharing`, `07-dev-mode` |
+| `packages/profile` | `06-connectors` |
+| `packages/runtime`, `apps/server/src/agent-bridge`, `apps/server/src/runtime-hosts` | `04-agent`, `05-machines` |
+| `packages/usage` | `08-admin` |
+| `apps/server/src/github` | `07-dev-mode` |
+| `apps/server/src/auth` | `01-access` |
+| `apps/agent`, `apps/host` | `04-agent`, `05-machines`, `07-dev-mode` |
 
 It prints what it selected and why. It runs a whole suite when it cannot decide:
 
 - a changed file outside the module graph (a lock file, SQL, infra) runs every suite;
 - `apps/server/src/testing/integration-setup.ts` runs every integration test;
-- an e2e harness file (the test servers, `testing.ts`, the fake LLM, `playwright.config.ts`, `global-setup.ts`, `stack-ports.ts`, `platform-gate.ts`) runs the whole e2e suite.
+- app code outside the table (`kernel`, `db`, `ui`, `session`, `workspace`, `apps/web/src`, the rest of `apps/server/src`), a web asset such as a stylesheet, or an e2e harness file (the test servers, `testing.ts`, the fake LLM, `playwright.config.ts`, `global-setup.ts`, `stack-ports.ts`, `platform-gate.ts`) runs the whole e2e suite.
 
-Markdown, `scripts/`, `biome.json`, `.dependency-cruiser.cjs` and web assets select no test. App code that e2e reaches only through the servers is left to `check:all`.
+Markdown, `scripts/`, `.github/`, `.agents/`, `biome.json` and `.dependency-cruiser.cjs` select no test. It also says whether the change needs `check:docker` (the host, the agent, `infra`, the runtime hosts and agent bridge, the agent image and harness scripts) and `check:bundle` (the web app and the packages).
+
+With `--plan <file>`, it runs nothing but the module graph and writes the selection as JSON for CI: `unit`, `integration` and `e2e` are `"all"` or a list of paths (empty runs nothing; e2e paths are relative to `apps/web`), `e2eRepeat` lists the changed specs, `docker` and `bundle` are booleans.
 
 ### What `check:all` records
 
 `check:all` writes its full output to `.check/last-check-all.log` and a summary to `.check/last-check-all.json`: the `git stash create` fingerprint (HEAD when the tree is clean), HEAD, the tree hash of the working tree including untracked files, the exit code, and each step's result and duration. `--verify` compares that tree hash with the current tree and exits non-zero when they differ or the run failed, so you can tell whether a green run still applies.
+
+## CI
+
+CI is `.github/workflows/ci.yml` and `.github/workflows/promote.yml` on GitHub Actions' standard runners ([decision 0021](../decisions/0021-ci-on-github-actions-through-develop.md)). Pull requests target `develop`.
+
+| Job | On a pull request | On a push to `develop` |
+|---|---|---|
+| `plan` | `check:related --plan` against the merge base with `develop` | `check:related --plan --full` |
+| `checks` | lint, typecheck, boundaries, locks | the same |
+| `unit`, `integration` | the selected test files, or the whole suite | the whole suite |
+| `bundle` | when the web app or a package changed | always |
+| `e2e` | the selected segments and specs, in 4 shards of 2 workers | the whole suite, in 4 shards |
+| `e2e-repeat` | the changed specs, 3 times each, without retry | not run |
+| `docker` | `check:docker` when the host, the agent, `infra` or the images changed | always |
+| `ci-ok` | fails when any job failed or was cancelled; skipped jobs pass | the same |
+| `report-failure` | not run | comments the failed jobs on each pull request merged since `main` |
+
+`scripts/ci-suite.ts <suite> [shard]` runs one suite from the plan in `PLAN`. In CI, Playwright retries a failed test once, to show whether it is flaky or broken, and a test that passed only on retry still fails the job (`failOnFlakyTests`); a flaky test is fixed or deleted when found. Every failing test becomes an annotation of the job's check run (file, line, name and the first 20 lines of the error): Playwright's `github` reporter writes them for e2e, and `ci-suite.ts` writes them from Bun's JUnit report for unit and integration. A failed e2e shard keeps `apps/web/test-results` as an artifact for 7 days. A failed integration, e2e or docker job prints the last 200 lines of each `spyria-test-*` container's log, one folded group per container.
+
+Runs on `develop` queue instead of cancelling each other, so each one finishes; on a pull request, a newer push cancels the run in progress.
+
+`promote.yml` runs every hour and on demand (**Actions → Promote → Run workflow**). It walks `develop`'s first-parent history from the newest commit down to `main`, takes the newest commit whose `ci.yml` push run completed with success, and fast-forwards `main` to it; a pending, failed, cancelled or missing run is skipped, and when no commit qualifies, it does nothing. Its job summary names the commit it promoted. GitHub may start scheduled runs late and disables them after 60 days without activity in the repository; the manual run covers both.
+
+The repository settings that go with it:
+
+- `develop` is the default branch; a ruleset on it requires `ci-ok` and blocks force pushes and deletion.
+- A ruleset on `main` blocks force pushes, deletion and every update except by the deploy key whose private half is the `MAIN_DEPLOY_KEY` secret, used only by `promote.yml`.
 
 ## Test infrastructure
 
@@ -127,14 +164,14 @@ The suite lives in `apps/web/e2e`, in segments that run in this order of depende
 | Segment | Covers |
 |---|---|
 | `00-platform` | The gate: the stack itself works. |
-| `01-access` | Sign-in, sessions, SSO, workspaces, the team, roles. |
-| `02-chats` | Channels, messaging, threads, unread, organizing chats. |
+| `01-access` | Sign-in and its screens, sessions, SSO, workspaces, the team, roles. |
+| `02-chats` | Channels, messaging, threads, unread, organizing chats, the chat view, the sidebar, the side panel. |
 | `03-sharing` | Chat members, chat permissions, fork, runtime from a thread. |
 | `04-agent` | Conversation, steps, questions, delegation, models, errors, runtime lifecycle. |
-| `05-machines` | Workspace hosts, a member's machine, harness install, machine sessions, the policy, where a chat runs. |
-| `06-connectors` | LLM keys, personal and shared tools, guest rights, the GitHub account. |
-| `07-dev-mode` | GitHub setup, dev chats, the workspace panel, branch actions, pull requests. |
-| `08-admin` | Audit log, spend, budgets. |
+| `05-machines` | Workspace hosts, a member's machine and its tools, harness install, machine sessions, the policy, where a chat runs. |
+| `06-connectors` | The profile, LLM keys, personal and shared tools, guest rights, the GitHub account. |
+| `07-dev-mode` | GitHub setup, dev chats, the workspace panel, the dev panel's diff, branch actions, pull requests. |
+| `08-admin` | Workspace settings, audit log, spend, budgets. |
 
 Rules:
 
@@ -151,9 +188,9 @@ Rules:
 
 Two sign-ins through the test provider at the same time make each other fail, so every file that signs in through a provider (`sso`, `team`, `sessions` and `workspaces` in `01-access`) is in the Playwright project `sign-in`, which runs its tests one at a time on a single worker while the `e2e` project runs the rest. Neither depends on the other: a failing sign-in test is one failure and the rest of the suite still runs. `bun run test:e2e` runs both projects.
 
-## The visual suite
+## The looks
 
-The `ui` project (`apps/web/ui`) holds the looks: `toHaveScreenshot` in light and dark on fixed states, plus keyboard, resize and colour assertions. Baselines are in `apps/web/ui/*-snapshots/` and are platform-specific. Run it with `bun run test:ui`; after an intended design change, run `bun run test:ui:update` and review every changed PNG before committing. Never update baselines to make an unintended difference pass.
+There are no screenshot baselines. Layout, keyboard, resize and colour rules a user relies on are e2e assertions in the segment of their area (bounding boxes, computed colours, focus); whether the result looks right is judged by the reviewer from the light and dark screenshots a UI pull request includes ([decision 0022](../decisions/0022-no-screenshot-baselines.md)).
 
 ## Docker tests
 

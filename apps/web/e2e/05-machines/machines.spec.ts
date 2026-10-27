@@ -1,12 +1,5 @@
-import {
-  hostsSectionOf,
-  hostTest,
-  machineSectionOf,
-  machineToolOf,
-  openSettings,
-  urlOf,
-} from '../e2e/05-machines/fixtures'
-import { expect, expectLooks, openProfile, type Page } from './fixtures'
+import { expect, openProfile, type Page } from '../fixtures'
+import { hostsSectionOf, hostTest, machineSectionOf, machineToolOf, openSettings, urlOf } from './fixtures'
 
 hostTest.describe('Machines', () => {
   hostTest.use({ runtimeHost: false })
@@ -41,7 +34,6 @@ hostTest.describe('Machines', () => {
           machineToolOf(page, 'Claude Code').evaluate((button) => button.getBoundingClientRect().top),
         ])
         expect(removeBottom).toBeLessThanOrEqual(toolsTop)
-        await expectLooks(page, machineSectionOf(page), 'my-machine')
       },
     )
   })

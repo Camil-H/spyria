@@ -192,7 +192,7 @@ The host image installs exactly `apps/host/bun.lock`. After changing a host depe
 | Path | Holds |
 |---|---|
 | `apps/server` | The Bun and Hono server: auth, HTTP API, Zero mutators, the job worker, the host WebSocket, the model and tool relays. Composition in `apps/server/src/index.ts`. |
-| `apps/web` | The React app (Vite). Composition in `apps/web/src/app/factory.ts`. e2e tests in `apps/web/e2e`, visual tests in `apps/web/ui`. |
+| `apps/web` | The React app (Vite). Composition in `apps/web/src/app/factory.ts`. e2e tests in `apps/web/e2e`. |
 | `apps/host` | `spyria-host`, the runtime host program. Imports nothing from `@spyria/*`. |
 | `apps/agent` | spyria-agent and the runtime image (Pi pinned in `apps/agent/pi`). Imports nothing from `@spyria/*`. |
 | `packages/conversation` | Chats, messages, the event store, agent turns, sharing, delegation, git actions. |

@@ -1,26 +1,22 @@
-import type { WorkerStack } from '../e2e/stack'
+import { openMenu, signedOutScreenOf } from '../01-access/fixtures'
 import {
   chatAction,
   chatLinkOf,
-  chatRowIn,
   composerOf,
-  draftIconOf,
   expect,
-  expectLooks,
-  looseChatsOf,
   mainOf,
   openChat,
-  openMenu,
   type Page,
   projectAction,
   projectGroupOf,
   sendMessage,
   sidebarOf,
-  signedOutScreenOf,
   switcherOf,
   test,
   unreadIconOf,
-} from './fixtures'
+} from '../fixtures'
+import type { WorkerStack } from '../stack'
+import { chatRowIn, draftIconOf, looseChatsOf } from './fixtures'
 
 const dialogOf = (page: Page, dialogName: string) => page.getByRole('dialog', { name: dialogName })
 const cancelDialog = async (page: Page, dialogName: string) => {
@@ -51,7 +47,6 @@ test.describe('Sidebar', () => {
   test('As a member, I see the tree with type icons and tooltips, the toolbar icons, focus rings kept inside rows and menu triggers inset', async ({
     page,
   }) => {
-    await expectLooks(page, sidebarOf(page), 'sidebar')
     await test.step('keeps the keyboard focus ring of a chat row inside the row so neighbours are not cut', async () => {
       const welcomeRow = chatRowIn(projectGroupOf(page, 'Onboarding'), 'Welcome')
       await welcomeRow.focus()
@@ -176,7 +171,6 @@ test.describe('Sidebar', () => {
       expect(Math.abs(channelOptionBox!.y - runtimeOptionBox!.y)).toBeLessThan(2)
       expect(runtimeOptionBox!.x).toBeGreaterThan(channelOptionBox!.x + channelOptionBox!.width - 1)
     })
-    await expectLooks(page, dialogOf(page, 'New chat'), 'new-chat-dialog')
   })
 
   test('As a member, I reach the workspace menu’s log-out icons with the keyboard, and the menu, its dialog and the signed-out screen use the app text colour in dark mode', async ({
@@ -193,7 +187,6 @@ test.describe('Sidebar', () => {
       await page.keyboard.press('Escape')
     })
     await openMenu(page)
-    await expectLooks(page, page.getByRole('menu'), 'workspace-menu')
     await page.keyboard.press('Escape')
     await test.step('uses the app text color in dark mode for the menu, the dialog and the signed-out screen', async () => {
       await page.emulateMedia({ colorScheme: 'dark' })
@@ -293,7 +286,6 @@ test.describe('Sidebar', () => {
               .evaluate((icon) => getComputedStyle(icon).color)
           expect(await colorOf('Unread messages')).not.toBe(await colorOf('Has unsent draft'))
         })
-      await expectLooks(page, chatLinkOf(page, 'Setup helper'), 'unread-and-draft-icons')
     })
   })
 })

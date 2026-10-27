@@ -1,0 +1,12 @@
+name: Test stack logs
+description: The last lines of every test container's log, one folded group per container
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        for container in $(docker ps -a --filter name=spyria-test- --format '{{.Names}}'); do
+          echo "::group::$container"
+          docker logs --tail 200 "$container" 2>&1
+          echo "::endgroup::"
+        done

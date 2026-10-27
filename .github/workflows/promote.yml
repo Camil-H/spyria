@@ -1,0 +1,43 @@
+name: Promote
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: promote
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: develop
+          fetch-depth: 0
+          ssh-key: ${{ secrets.MAIN_DEPLOY_KEY }}
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          candidate=""
+          for commit in $(git rev-list --first-parent origin/main..origin/develop); do
+            run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=develop&event=push&head_sha=$commit&per_page=1" \
+              --jq '.workflow_runs[0] | "\(.status) \(.conclusion)"')
+            echo "${commit:0:12}: ${run}"
+            if [ "$run" = "completed success" ]; then
+              candidate=$commit
+              break
+            fi
+          done
+          if [ -z "$candidate" ]; then
+            echo "No commit of \`develop\` ahead of \`main\` has a passing full run yet." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git push origin "$candidate:refs/heads/main"
+          echo "Promoted \`main\` to ${candidate:0:12}." >> "$GITHUB_STEP_SUMMARY"
