@@ -17,7 +17,7 @@ const moveChatTo = async (page: Page, chatName: string, destination: string) => 
 }
 
 const createProjectNamed = async (page: Page, projectName: string) => {
-  await page.getByRole('button', { name: 'New project' }).click()
+  await page.getByRole('button', { name: 'Project creation' }).click()
   await page.getByRole('textbox', { name: 'Project name' }).fill(projectName)
   await page.getByRole('button', { name: 'Confirm' }).click()
 }
@@ -78,7 +78,7 @@ test.describe('Organize', () => {
     })
 
     await test.step('new project: cannot confirm a blank name', async () => {
-      await page.getByRole('button', { name: 'New project' }).click()
+      await page.getByRole('button', { name: 'Project creation' }).click()
       await expect(page.getByRole('button', { name: 'Confirm' })).toBeDisabled()
       await page.getByRole('textbox', { name: 'Project name' }).fill('   ')
       await expect(page.getByRole('button', { name: 'Confirm' })).toBeDisabled()
@@ -86,7 +86,7 @@ test.describe('Organize', () => {
     })
 
     await test.step('new chat: cannot confirm a blank name', async () => {
-      await page.getByRole('button', { name: 'New chat' }).click()
+      await page.getByRole('button', { name: 'Chat creation' }).click()
       await page.getByRole('radio', { name: 'Channel' }).check()
       await expect(page.getByRole('button', { name: 'Confirm' })).toBeDisabled()
       await page.getByRole('textbox', { name: 'Chat name' }).fill('   ')
@@ -171,7 +171,7 @@ test.describe('Organize', () => {
     })
 
     await test.step('creates a channel inside a project and selects it', async () => {
-      await page.getByRole('button', { name: 'New chat' }).click()
+      await page.getByRole('button', { name: 'Chat creation' }).click()
       await page.getByRole('radio', { name: 'Channel' }).check()
       await page.getByRole('textbox', { name: 'Chat name' }).fill('Planning')
       await page.getByRole('combobox', { name: 'Project' }).selectOption('Billing')
@@ -192,7 +192,7 @@ test.describe('Organize', () => {
     })
 
     await test.step('creates a runtime chat without a project as a loose chat', async () => {
-      await page.getByRole('button', { name: 'New chat' }).click()
+      await page.getByRole('button', { name: 'Chat creation' }).click()
       await page.getByRole('radio', { name: 'Runtime' }).check()
       await page.getByRole('textbox', { name: 'Chat name' }).fill('Scratchpad')
       await page.getByRole('button', { name: 'Confirm' }).click()

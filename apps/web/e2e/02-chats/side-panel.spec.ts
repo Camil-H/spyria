@@ -83,7 +83,7 @@ test.describe('Side panel', () => {
     await test.step('keeps the chat header in the chat column, beside the panel', async () => {
       const panelBox = (await panelOf(page).boundingBox())!
       const titleBox = (await mainOf(page).getByRole('heading', { level: 1 }).boundingBox())!
-      const toggleBox = (await page.getByRole('button', { name: 'Hide panel' }).boundingBox())!
+      const toggleBox = (await page.getByRole('button', { name: 'Right sidebar collapse' }).boundingBox())!
       expect(titleBox.x + titleBox.width).toBeLessThan(panelBox.x)
       expect(toggleBox.x + toggleBox.width).toBeLessThanOrEqual(panelBox.x)
     })
@@ -287,27 +287,27 @@ test.describe('Side panel', () => {
 
     await test.step('hides the panel and gives the width and the full height back to the chat view', async () => {
       const composerWidthWithPanel = (await composerOf(page).boundingBox())!.width
-      await page.getByRole('button', { name: 'Hide panel' }).click()
+      await page.getByRole('button', { name: 'Right sidebar collapse' }).click()
       await expect(panelOf(page)).toBeHidden()
-      await expect(page.getByRole('button', { name: 'Show panel' })).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Right sidebar expansion' })).toBeVisible()
       expect((await composerOf(page).boundingBox())!.width).toBeGreaterThan(composerWidthWithPanel + 200)
       const sendBox = (await page.getByRole('button', { name: 'Send' }).boundingBox())!
       expect(sendBox.x + sendBox.width).toBeGreaterThan(page.viewportSize()!.width - 96)
     })
 
     await test.step('restores the previous width and tab when shown again', async () => {
-      await page.getByRole('button', { name: 'Show panel' }).click()
+      await page.getByRole('button', { name: 'Right sidebar expansion' }).click()
       await expect(panelOf(page)).toBeVisible()
-      await expect(page.getByRole('button', { name: 'Hide panel' })).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Right sidebar collapse' })).toBeVisible()
       expect(await panelWidthOf(page)).toBeCloseTo(widthBeforeHiding, 0)
       await expect(tabOf(page, 'Commits')).toHaveAttribute('aria-selected', 'true')
     })
 
     await test.step('keeps the panel hidden when switching chats', async () => {
-      await page.getByRole('button', { name: 'Hide panel' }).click()
+      await page.getByRole('button', { name: 'Right sidebar collapse' }).click()
       await openChat(page, 'Welcome')
       await expect(panelOf(page)).toBeHidden()
-      await expect(page.getByRole('button', { name: 'Show panel' })).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Right sidebar expansion' })).toBeVisible()
     })
   })
 

@@ -68,7 +68,7 @@ test.describe('Sidebar', () => {
       await chatRowIn(projectGroupOf(page, 'Onboarding'), 'Welcome').getByRole('img', { name: 'Channel' }).hover()
       await expect(page.getByRole('tooltip', { name: 'Channel' })).toBeVisible()
     })
-    for (const actionName of ['New project', 'New chat'])
+    for (const actionName of ['Project creation', 'Chat creation'])
       await test.step(`shows ${actionName} as an icon at the top right with a tooltip`, async () => {
         const actionButton = sidebarOf(page).getByRole('button', { name: actionName })
         await expect(actionButton).toHaveText('')
@@ -97,8 +97,8 @@ test.describe('Sidebar', () => {
   test('As a member, I collapse the sidebar from the icon left of the workspace name and find it collapsed after a reload', async ({
     page,
   }) => {
-    const collapseButton = sidebarOf(page).getByRole('button', { name: 'Collapse sidebar' })
-    const expandButton = sidebarOf(page).getByRole('button', { name: 'Expand sidebar' })
+    const collapseButton = sidebarOf(page).getByRole('button', { name: 'Left sidebar collapse' })
+    const expandButton = sidebarOf(page).getByRole('button', { name: 'Left sidebar expansion' })
 
     await test.step('shows the collapse icon at the top left, before the workspace name', async () => {
       const sidebarBox = (await sidebarOf(page).boundingBox())!
@@ -143,10 +143,10 @@ test.describe('Sidebar', () => {
     }
 
     await test.step('uses the app text color for the new project and new chat dialogs', async () => {
-      await page.getByRole('button', { name: 'New project' }).click()
+      await page.getByRole('button', { name: 'Project creation' }).click()
       await expectDialogTitleToUseAppTextColor('New project')
       await page.getByRole('button', { name: 'Cancel' }).click()
-      await page.getByRole('button', { name: 'New chat' }).click()
+      await page.getByRole('button', { name: 'Chat creation' }).click()
       await expectDialogTitleToUseAppTextColor('New chat')
       await cancelDialog(page, 'New chat')
     })
@@ -165,7 +165,7 @@ test.describe('Sidebar', () => {
       await cancelDialog(page, 'Rename project')
     })
     await test.step('offers channel and runtime as one row of options', async () => {
-      await page.getByRole('button', { name: 'New chat' }).click()
+      await page.getByRole('button', { name: 'Chat creation' }).click()
       const channelOptionBox = await page.getByRole('radio', { name: 'Channel' }).locator('..').boundingBox()
       const runtimeOptionBox = await page.getByRole('radio', { name: 'Runtime' }).locator('..').boundingBox()
       expect(Math.abs(channelOptionBox!.y - runtimeOptionBox!.y)).toBeLessThan(2)

@@ -85,7 +85,7 @@ test.describe('Workspaces', () => {
     })
 
     await test.step('lets the member build content in it without touching the other workspaces', async () => {
-      await page.getByRole('button', { name: 'New project' }).click()
+      await page.getByRole('button', { name: 'Project creation' }).click()
       await page.getByRole('textbox', { name: 'Project name' }).fill('Roadmap')
       await page.getByRole('button', { name: 'Confirm' }).click()
       await expect(sidebarOf(page).getByRole('group', { name: 'Roadmap' })).toBeVisible()

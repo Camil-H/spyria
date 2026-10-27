@@ -1,3 +1,4 @@
+import { Provider } from '@radix-ui/react-tooltip'
 import { useChatMessages, useQuery } from '@spyria/db/react'
 import { type ChatId, chatId as toChatId, type WorkspaceId } from '@spyria/kernel'
 import { useSession } from '@spyria/session'
@@ -104,43 +105,45 @@ export const ChatView = ({
   const { Icon: ChatTypeIcon, label: chatTypeLabel } = chatTypeIconOf(conversation.type)
   return (
     <div key={chatId} className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-4 px-4 py-6">
-      <header>
-        <div className="flex items-center gap-x-3">
-          <div className="flex min-w-0 max-w-1/2 shrink-0 items-center gap-2">
-            <ChatTypeIcon aria-label={chatTypeLabel} role="img" size={20} className="shrink-0 text-muted" />
-            <h1 className="truncate text-2xl font-semibold">{conversation.title}</h1>
-            {conversation.pullRequest && (
-              <a
-                href={conversation.pullRequest.url}
-                target="_blank"
-                rel="noreferrer"
-                className={`shrink-0 rounded-full border border-line px-2 py-0.5 text-xs text-ink hover:bg-hover ${focusRing}`}
-              >
-                PR #{conversation.pullRequest.number} · {conversation.pullRequest.state}
-              </a>
-            )}
+      <Provider delayDuration={300}>
+        <header>
+          <div className="flex items-center gap-x-3">
+            <div className="flex min-w-0 max-w-1/2 shrink-0 items-center gap-2">
+              <ChatTypeIcon aria-label={chatTypeLabel} role="img" size={20} className="shrink-0 text-muted" />
+              <h1 className="truncate text-2xl font-semibold">{conversation.title}</h1>
+              {conversation.pullRequest && (
+                <a
+                  href={conversation.pullRequest.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={`shrink-0 rounded-full border border-line px-2 py-0.5 text-xs text-ink hover:bg-hover ${focusRing}`}
+                >
+                  PR #{conversation.pullRequest.number} · {conversation.pullRequest.state}
+                </a>
+              )}
+            </div>
+            <div className="ml-auto flex min-w-0 items-center gap-x-2 whitespace-nowrap">
+              {conversation.type === 'runtime' && (
+                <>
+                  <span className="text-sm text-muted">
+                    Agent acts as <strong className="font-semibold text-ink">{conversation.ownerName}</strong>
+                  </span>
+                  <ForkButton onFork={fork} />
+                </>
+              )}
+              {headerActions}
+            </div>
           </div>
-          <div className="ml-auto flex min-w-0 items-center gap-x-2 whitespace-nowrap">
-            {conversation.type === 'runtime' && (
-              <>
-                <span className="text-sm text-muted">
-                  Agent acts as <strong className="font-semibold text-ink">{conversation.ownerName}</strong>
-                </span>
-                <ForkButton onFork={fork} />
-              </>
-            )}
-            {headerActions}
-          </div>
-        </div>
-        {conversation.origin && (
-          <Link
-            to={`/w/${workspaceId}/chats/${conversation.origin.chatId}`}
-            className="mt-1 inline-block text-sm text-muted underline"
-          >
-            {conversation.origin.type === 'runtime' ? 'Forked from' : 'Started from'} {conversation.origin.name}
-          </Link>
-        )}
-      </header>
+          {conversation.origin && (
+            <Link
+              to={`/w/${workspaceId}/chats/${conversation.origin.chatId}`}
+              className="mt-1 inline-block text-sm text-muted underline"
+            >
+              {conversation.origin.type === 'runtime' ? 'Forked from' : 'Started from'} {conversation.origin.name}
+            </Link>
+          )}
+        </header>
+      </Provider>
       <QuestionAnswererContext
         value={{ answer: answerQuestion, mayAnswerAsPrompter: mayPrompt, isOwner: conversation.isOwner }}
       >

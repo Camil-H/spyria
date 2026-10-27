@@ -156,7 +156,7 @@ export const chooseRunsOn = async (page: Page, runsOn: string) => {
   await expect(runsOnChoiceOf(page)).toHaveCount(0)
 }
 export const newRuntimeChat = async (page: Page, name: string, runsOn: string | null = 'Spyria runtime') => {
-  await page.getByRole('button', { name: 'New chat' }).click()
+  await page.getByRole('button', { name: 'Chat creation' }).click()
   const dialog = page.getByRole('dialog', { name: 'New chat' })
   await dialog.getByRole('radio', { name: 'Runtime' }).check()
   await dialog.getByRole('textbox', { name: 'Chat name' }).fill(name)

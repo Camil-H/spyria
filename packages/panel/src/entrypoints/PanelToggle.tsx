@@ -1,18 +1,15 @@
-import { iconButtonClass } from '@spyria/ui'
+import { IconButton } from '@spyria/ui'
 import { PanelRightClose, PanelRightOpen } from 'lucide-react'
-import { usePanel } from './providers.tsx'
+import { panelToggleLabelOf, usePanel } from './providers.tsx'
 
 export const PanelToggle = () => {
   const { isOpen, toggle } = usePanel()
-  const Icon = isOpen ? PanelRightClose : PanelRightOpen
   return (
-    <button
-      type="button"
-      aria-label={isOpen ? 'Hide panel' : 'Show panel'}
+    <IconButton
+      label={panelToggleLabelOf(isOpen)}
+      shortcut="r"
+      icon={isOpen ? PanelRightClose : PanelRightOpen}
       onClick={toggle}
-      className={iconButtonClass}
-    >
-      <Icon size={18} />
-    </button>
+    />
   )
 }

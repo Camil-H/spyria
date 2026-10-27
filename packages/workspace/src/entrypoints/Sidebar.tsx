@@ -2,14 +2,13 @@ import { Provider } from '@radix-ui/react-tooltip'
 import { useQuery } from '@spyria/db/react'
 import type { WorkspaceId } from '@spyria/kernel'
 import { useSession } from '@spyria/session'
-import { ErrorMessage, useGuardedAction } from '@spyria/ui'
+import { ErrorMessage, IconButton, useGuardedAction, useShortcut } from '@spyria/ui'
 import { CircleUser, FolderPlus, Hash, PanelLeftClose, PanelLeftOpen, Settings, SquarePen } from 'lucide-react'
 import { lazy, Suspense, useState } from 'react'
-import { NavLink } from 'react-router'
+import { NavLink, useNavigate } from 'react-router'
 import { getSidebar } from '../queries/get-sidebar.ts'
 import { listJoinableChannels } from '../queries/list-joinable-channels.ts'
 import { type ChatAdornment, ChatRow } from './ChatRow.tsx'
-import { IconButton } from './IconButton.tsx'
 import { NameDialog } from './NameDialog.tsx'
 import { NewChatDialog } from './NewChatDialog.tsx'
 import { ProjectGroup } from './ProjectGroup.tsx'
@@ -22,6 +21,13 @@ const BrowseChannelsDialog = lazy(() => import('./BrowseChannelsDialog.tsx'))
 
 const collapsedStorageKey = 'spyria.sidebar-collapsed'
 const headerRowClass = 'flex h-9 shrink-0 items-center'
+const footerLinkClass = navLinkClass('group flex items-center gap-2 py-1.5 text-left')
+
+const ShortcutHint = ({ shortcut }: { shortcut: string }) => (
+  <kbd aria-hidden className="hidden font-sans text-xs text-muted group-hover:inline group-focus-visible:inline">
+    {shortcut}
+  </kbd>
+)
 
 const storedCollapsed = () => {
   try {
@@ -53,18 +59,47 @@ export const Sidebar = ({
   const sidebar = useQuery(getSidebar, workspaceId, memberId)
   const joinableChannels = useQuery(listJoinableChannels, workspaceId, memberId)
   const commands = useWorkspaceCommands()
+  const navigate = useNavigate()
   const hasWorkspaceSettings = useWorkspacePermissions(workspaceId).length > 0
   const chatAction = useGuardedAction()
   const [openDialog, setOpenDialog] = useState<'project' | 'chat' | 'channels' | null>(null)
   const closeDialog = () => setOpenDialog(null)
   const { isCollapsed, toggleCollapsed } = useCollapsed()
+  const toggleLabel = isCollapsed ? 'Left sidebar expansion' : 'Left sidebar collapse'
+  useShortcut('l', toggleLabel, toggleCollapsed)
+  useShortcut('c', 'Chat creation', () => setOpenDialog('chat'))
+  useShortcut('p', 'Project creation', () => setOpenDialog('project'))
+  useShortcut('b', 'Browse channels', () => setOpenDialog('channels'))
+  useShortcut('s', 'Workspace settings', () => navigate(`/w/${workspaceId}/settings`), hasWorkspaceSettings)
+  useShortcut('i', 'Profile', () => navigate(`/w/${workspaceId}/profile`))
+  const dialogs = (
+    <>
+      {openDialog === 'project' && (
+        <NameDialog
+          label="New project"
+          fieldLabel="Project name"
+          submit={(name) => commands.createProject({ workspaceId, name })}
+          onClose={closeDialog}
+        />
+      )}
+      {openDialog === 'chat' && (
+        <NewChatDialog workspaceId={workspaceId} projects={sidebar.projects} onClose={closeDialog} />
+      )}
+      {openDialog === 'channels' && (
+        <Suspense>
+          <BrowseChannelsDialog workspaceId={workspaceId} channels={joinableChannels} onClose={closeDialog} />
+        </Suspense>
+      )}
+    </>
+  )
   if (isCollapsed)
     return (
       <Provider delayDuration={300}>
         <nav aria-label="Sidebar" className="flex h-full shrink-0 flex-col border-r border-line bg-sidebar p-3">
           <div className={headerRowClass}>
-            <IconButton label="Expand sidebar" icon={PanelLeftOpen} onClick={toggleCollapsed} />
+            <IconButton label={toggleLabel} shortcut="l" icon={PanelLeftOpen} onClick={toggleCollapsed} />
           </div>
+          {dialogs}
         </nav>
       </Provider>
     )
@@ -75,29 +110,19 @@ export const Sidebar = ({
         className="flex h-full w-64 shrink-0 flex-col gap-3 border-r border-line bg-sidebar p-3"
       >
         <div className={`${headerRowClass} justify-between gap-2`}>
-          <IconButton label="Collapse sidebar" icon={PanelLeftClose} onClick={toggleCollapsed} />
+          <IconButton label={toggleLabel} shortcut="l" icon={PanelLeftClose} onClick={toggleCollapsed} />
           <WorkspaceSwitcher workspaceId={workspaceId} />
           <div className="flex shrink-0 gap-1">
-            <IconButton label="New project" icon={FolderPlus} onClick={() => setOpenDialog('project')} />
-            <IconButton label="New chat" icon={SquarePen} onClick={() => setOpenDialog('chat')} />
+            <IconButton
+              label="Project creation"
+              shortcut="p"
+              icon={FolderPlus}
+              onClick={() => setOpenDialog('project')}
+            />
+            <IconButton label="Chat creation" shortcut="c" icon={SquarePen} onClick={() => setOpenDialog('chat')} />
           </div>
         </div>
-        {openDialog === 'project' && (
-          <NameDialog
-            label="New project"
-            fieldLabel="Project name"
-            submit={(name) => commands.createProject({ workspaceId, name })}
-            onClose={closeDialog}
-          />
-        )}
-        {openDialog === 'chat' && (
-          <NewChatDialog workspaceId={workspaceId} projects={sidebar.projects} onClose={closeDialog} />
-        )}
-        {openDialog === 'channels' && (
-          <Suspense>
-            <BrowseChannelsDialog workspaceId={workspaceId} channels={joinableChannels} onClose={closeDialog} />
-          </Suspense>
-        )}
+        {dialogs}
         <div className="-m-1 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-1 scrollbar-thin">
           {sidebar.projects.map((project) => (
             <ProjectGroup
@@ -131,22 +156,26 @@ export const Sidebar = ({
         <div className="flex flex-col">
           <button
             type="button"
-            className={navLinkClass('flex items-center gap-2 py-1.5 text-left')({ isActive: false })}
+            aria-keyshortcuts="B"
+            className={footerLinkClass({ isActive: false })}
             onClick={() => setOpenDialog('channels')}
           >
             <Hash aria-hidden className="size-4" />
             <span className="flex-1">Browse channels</span>
+            <ShortcutHint shortcut="B" />
             {joinableChannels.length > 0 && <span className="text-xs text-muted">{joinableChannels.length}</span>}
           </button>
           {hasWorkspaceSettings && (
-            <NavLink to={`/w/${workspaceId}/settings`} className={navLinkClass('flex items-center gap-2 py-1.5')}>
+            <NavLink to={`/w/${workspaceId}/settings`} aria-keyshortcuts="S" className={footerLinkClass}>
               <Settings aria-hidden className="size-4" />
-              Workspace settings
+              <span className="flex-1">Workspace settings</span>
+              <ShortcutHint shortcut="S" />
             </NavLink>
           )}
-          <NavLink to={`/w/${workspaceId}/profile`} className={navLinkClass('flex items-center gap-2 py-1.5')}>
+          <NavLink to={`/w/${workspaceId}/profile`} aria-keyshortcuts="I" className={footerLinkClass}>
             <CircleUser aria-hidden className="size-4" />
-            Profile
+            <span className="flex-1">Profile</span>
+            <ShortcutHint shortcut="I" />
           </NavLink>
         </div>
       </nav>
