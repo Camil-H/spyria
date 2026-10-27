@@ -46,18 +46,31 @@ Run `typecheck`, `lint`, `check:boundaries` and `check:related`. Run `check:all`
 
 ### How `check:related` chooses
 
-`check:related [--base <ref>]` takes the uncommitted changes, untracked files included, plus the commits since `<ref>` (default `HEAD`). It runs lint, typecheck and boundaries in parallel, builds dependency-cruiser's module graph, then selects:
+`check:related [--base <ref>] [--plan <file>]` takes the uncommitted changes, untracked files included, plus the commits since the merge base of `<ref>` (default `HEAD`) and `HEAD`, so `--base origin/develop` ignores what `develop` gained since the branch started. It runs lint, typecheck and boundaries in parallel, builds dependency-cruiser's module graph, then selects:
 
 - the unit and integration test files that changed, or that import a changed module directly or not;
-- Playwright with `--only-changed=<ref>` when an e2e spec imports a changed module.
+- the e2e specs that changed or import a changed module, and the e2e segments of the changed app code:
+
+| Changed code | e2e segments |
+|---|---|
+| `packages/conversation` | `02-chats`, `03-sharing`, `04-agent`, `07-dev-mode` |
+| `packages/panel` | `02-chats`, `03-sharing`, `07-dev-mode` |
+| `packages/profile` | `06-connectors` |
+| `packages/runtime`, `apps/server/src/agent-bridge`, `apps/server/src/runtime-hosts` | `04-agent`, `05-machines` |
+| `packages/usage` | `08-admin` |
+| `apps/server/src/github` | `07-dev-mode` |
+| `apps/server/src/auth` | `01-access` |
+| `apps/agent`, `apps/host` | `04-agent`, `05-machines`, `07-dev-mode` |
 
 It prints what it selected and why. It runs a whole suite when it cannot decide:
 
 - a changed file outside the module graph (a lock file, SQL, infra) runs every suite;
 - `apps/server/src/testing/integration-setup.ts` runs every integration test;
-- an e2e harness file (the test servers, `testing.ts`, the fake LLM, `playwright.config.ts`, `global-setup.ts`, `stack-ports.ts`, `platform-gate.ts`) runs the whole e2e suite.
+- app code outside the table (`kernel`, `db`, `ui`, `session`, `workspace`, `apps/web/src`, the rest of `apps/server/src`), a web asset such as a stylesheet, or an e2e harness file (the test servers, `testing.ts`, the fake LLM, `playwright.config.ts`, `global-setup.ts`, `stack-ports.ts`, `platform-gate.ts`) runs the whole e2e suite.
 
-Markdown, `scripts/`, `biome.json`, `.dependency-cruiser.cjs` and web assets select no test. App code that e2e reaches only through the servers is left to `check:all`.
+Markdown, `scripts/`, `.github/`, `.agents/`, `biome.json` and `.dependency-cruiser.cjs` select no test. It also says whether the change needs `check:docker` (the host, the agent, `infra`, the runtime hosts and agent bridge, the agent image and harness scripts) and `check:bundle` (the web app and the packages).
+
+With `--plan <file>`, it runs nothing but the module graph and writes the selection as JSON for CI: `unit`, `integration` and `e2e` are `"all"` or a list of paths (empty runs nothing; e2e paths are relative to `apps/web`), `e2eRepeat` lists the changed specs, `docker` and `bundle` are booleans.
 
 ### What `check:all` records
 
