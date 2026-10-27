@@ -45,7 +45,7 @@ test('sendMessage in a runtime chat enqueues one agent prompt job in the same tr
   ])
 })
 
-test('editMessage and deleteMessage append events, edit the projection and keep a deleted body in the tombstone', async () => {
+test('editMessage and deleteMessage append events, edit the projection, blank a deleted body and keep its text only server-side', async () => {
   await sendTo(bobInAcme, 'chat-standup', 'message-to-change', 'Draft plan')
   expect(
     await resultOf(bobInAcme, 'conversation.editMessage', {
@@ -59,14 +59,19 @@ test('editMessage and deleteMessage append events, edit the projection and keep 
   expect(
     await resultOf(bobInAcme, 'conversation.deleteMessage', { workspaceId: acme, messageId: 'message-to-change' }),
   ).toEqual(succeeded)
-  expect(await messageRow('message-to-change')).toMatchObject({ seq: 2, body: 'Final plan' })
+  expect(await messageRow('message-to-change')).toMatchObject({ seq: 2, body: '' })
   expect((await messageRow('message-to-change'))?.deletedAt).not.toBeNull()
   expect(await changesOf('chat-standup')).toEqual([
     { seq: 1, type: 'message.posted', actor: bob, payload: expect.anything() },
     { seq: 2, type: 'message.posted', actor: bob, payload: expect.objectContaining({ body: 'Draft plan' }) },
     { seq: 3, type: 'message.edited', actor: bob, payload: { messageId: 'message-to-change', body: 'Final plan' } },
-    { seq: 4, type: 'message.deleted', actor: bob, payload: { messageId: 'message-to-change', body: 'Final plan' } },
+    { seq: 4, type: 'message.deleted', actor: bob, payload: { messageId: 'message-to-change' } },
   ])
+  expect([
+    ...(await database.$client`
+      select chat_id as "chatId", body, deleted_by as "deletedBy" from deleted_message_texts
+      where message_id = 'message-to-change'`),
+  ]).toEqual([{ chatId: 'chat-standup', body: 'Final plan', deletedBy: bob }])
 })
 
 test('markChatRead moves the marker to the newest seq and never backwards', async () => {

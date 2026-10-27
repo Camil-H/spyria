@@ -58,6 +58,14 @@ const chatEventRecords = `
       'chat.visibility_changed', 'chat.created', 'branch.pushed')
     and (event.type <> 'chat.created' or event.payload ? 'originChatId')`
 
+const deletedMessageRecords = `
+  select deleted.deleted_at as at, 'd:' || deleted.message_id as key, 'message.deleted' as kind,
+    deleted.deleted_by as actor_id, chat.name as target,
+    json_build_object('chat', chat.name, 'text', deleted.body) as details
+  from deleted_message_texts deleted
+  ${chatNamed('chat', 'deleted.chat_id')}
+  where deleted.workspace_id = $1`
+
 const toolCallRecords = `
   select call.called_at as at, 't:' || call.id as key, 'tool.called' as kind, call.prompter_id as actor_id,
     call.server || ' · ' || call.tool as target,
@@ -98,7 +106,7 @@ export const workspacePermissionsStatement = `select granted.permission from mem
 const auditRecordsStatement = `
   select to_char(page.at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as at, page.key, page.kind,
     page.actor_id as "actorId", actor.display_name as "actorName", page.target, page.details
-  from (${[workspaceEventRecords, chatEventRecords, toolCallRecords, pullRequestRecords].map(pageOf).join(' union all ')}) page
+  from (${[workspaceEventRecords, chatEventRecords, deletedMessageRecords, toolCallRecords, pullRequestRecords].map(pageOf).join(' union all ')}) page
   ${memberNamed('actor', 'page.actor_id')}
   order by page.at desc, page.key desc limit $8`
 
@@ -146,6 +154,7 @@ export const createPostgresAuditTransactor = (transact: Transact, workspaceId: W
           for (const statement of [
             'delete from workspace_events where workspace_id = $1 and created_at < now() - make_interval(days => $2)',
             'delete from tool_calls where workspace_id = $1 and called_at < now() - make_interval(days => $2)',
+            'delete from deleted_message_texts where workspace_id = $1 and deleted_at < now() - make_interval(days => $2)',
           ])
             await query(statement, [days])
         },

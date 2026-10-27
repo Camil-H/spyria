@@ -16,6 +16,7 @@ export const auditKindsByGroup = {
     'chat.member.left',
     'chat.visibility_changed',
     'chat.forked',
+    'message.deleted',
   ],
   'Tool calls': ['tool.called'],
   Publishing: [
@@ -62,6 +63,7 @@ const actionByKind: Record<string, string> = {
   'chat.member.left': 'Left a chat',
   'chat.visibility_changed': "Changed a chat's visibility",
   'chat.forked': 'Started a chat from another chat',
+  'message.deleted': 'Deleted a message',
   'tool.called': 'Called a tool',
   'branch.pushed': 'Pushed a branch',
   'pull_request.opened': 'Opened a pull request',
@@ -115,7 +117,7 @@ export const auditSweepIntervalMilliseconds = 24 * 3_600_000
 export const auditPageSize = 50
 export const auditCsvPageSize = 500
 const dayMilliseconds = 24 * 3_600_000
-const cursorPattern = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z)~([wct]:.+)$/
+const cursorPattern = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z)~([wcdt]:.+)$/
 
 const labelOf = (name: string) => {
   const words = name.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`)
