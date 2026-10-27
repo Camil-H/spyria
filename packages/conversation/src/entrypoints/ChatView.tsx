@@ -169,7 +169,7 @@ export const ChatView = ({
             <div className="ml-auto flex min-w-0 items-center gap-x-2 whitespace-nowrap">
               {conversation.type === 'runtime' && (
                 <>
-                  <span className="text-sm text-muted">
+                  <span className="min-w-0 truncate text-sm text-muted">
                     Agent acts as <strong className="font-semibold text-ink">{conversation.ownerName}</strong>
                   </span>
                   <ForkButton onFork={fork} />
