@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import type { Transaction } from '@rocicorp/zero'
 import { DomainError } from '@spyria/kernel'
-import { likeEscaped, skippingRefusedRebase } from './zero-queries.ts'
+import { caseVariantsOf, likeEscaped, skippingRefusedRebase } from './zero-queries.ts'
 
 const transactionOf = (location: string, reason: string) => ({ location, reason }) as Transaction
 const refused = () => Promise.reject(new DomainError('not_participant', 'This member is not in the chat'))
@@ -26,4 +26,9 @@ test('a searched text matches its wildcards and backslashes literally', () => {
   expect(likeEscaped('50% off_now')).toBe('50\\% off\\_now')
   expect(likeEscaped('C:\\temp')).toBe('C:\\\\temp')
   expect(likeEscaped('plain words')).toBe('plain words')
+})
+
+test('a searched text with accented letters also tries its title and upper case, which SQLite lower() leaves as they are', () => {
+  expect(caseVariantsOf('été indien')).toEqual(['été indien', 'Été Indien', 'ÉTÉ INDIEN'])
+  expect(caseVariantsOf('Deploy Notes')).toEqual(['deploy notes'])
 })
