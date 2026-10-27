@@ -309,14 +309,18 @@ test.describe('Team', () => {
         await expect(pictureSection.locator('img')).toHaveAttribute('src', /^data:image\/jpeg;base64,/)
       })
 
-      await test.step('refuses a file that is not an image when I change the picture', async () => {
+      await test.step('refuses a file that is not an image when I change the picture, below the picture and my name', async () => {
         await pictureSection.getByRole('button', { name: 'Edit profile picture' }).click()
         await chooseFileAfter(() => page.getByRole('menuitem', { name: 'Change picture' }).click(), {
           name: 'notes.txt',
           mimeType: 'text/plain',
           buffer: Buffer.from('not an image'),
         })
-        await expect(pictureSection).toContainText('A profile picture must be a small PNG, JPEG or WebP image')
+        const refusal = mainOf(page).getByText('A profile picture must be a small PNG, JPEG or WebP image')
+        await expect(refusal).toBeVisible()
+        const pictureBox = await pictureSection.boundingBox()
+        const refusalBox = await refusal.boundingBox()
+        expect(pictureBox && refusalBox && refusalBox.y - pictureBox.y - pictureBox.height).toBeGreaterThanOrEqual(0)
       })
 
       await test.step('shows the picture next to my name in a chat, and initials for members without one', async () => {
