@@ -1,10 +1,10 @@
 # Chats and sharing
 
-This page describes how conversations are organized in a Spyria workspace and how members share them: projects, channels, runtime chats, threads, unread state, chat roles, forking and starting an agent from a channel thread. It is written for members and for contributors who need the rules the server enforces. Agent behaviour inside a runtime chat is in [Agents](./agents.md); dev chats on repositories are in [Dev mode](./dev-mode.md).
+This page describes how conversations are organized in a Spyria workspace and how members share them: projects, channels, runtime chats, threads, search, keyboard shortcuts, unread state, chat roles, forking and starting an agent from a channel thread. It is written for members and for contributors who need the rules the server enforces. Agent behaviour inside a runtime chat is in [Agents](./agents.md); dev chats on repositories are in [Dev mode](./dev-mode.md).
 
 ## Projects and chats
 
-The sidebar lists a workspace's **projects**, each with its chats, then the **Loose chats** that belong to no project. **New project** and **New chat** sit at the top of the sidebar.
+The sidebar lists a workspace's **projects**, each with its chats, then the **Loose chats** that belong to no project. **Project creation** and **Chat creation** sit at the top of the sidebar, above **Search**.
 
 A chat has one of two types, chosen in **New chat**:
 
@@ -27,7 +27,7 @@ Each message shows its author's picture next to their name, and the agent's repl
 
 Typing **@** in the composer lists the workspace's members, narrowed as the name is typed; the arrow keys move through the list, Enter or Tab (or a click) puts the name in the message and Escape closes the list. In a message, a mention of a current member (`@Name`) shows in bold. Mentions only highlight the name: they send no notification and give the member no access to the chat.
 
-The author of a message can edit or delete it from its menu. A deleted message stays in the chat as "This message was deleted", and its attachments are erased. Its text no longer reaches any member's browser, and the server erases it from the chat's history, the text it was posted with and every edit. Only its last text is kept, apart from the chat: members who can view the audit log read it as a **Deleted a message** record (see [Admin](./admin.md#audit-log)) until the audit retention erases it. Copies made before the deletion stay: a quote of the message in a chat started from it, and what the agent already received.
+The author of a message can edit or delete it from its actions. A deleted message stays in the chat as "This message was deleted", and its attachments are erased. Its text no longer reaches any member's browser, and the server erases it from the chat's history, the text it was posted with and every edit. Only its last text is kept, apart from the chat: members who can view the audit log read it as a **Deleted a message** record (see [Admin](./admin.md#audit-log)) until the audit retention erases it. Copies made before the deletion stay: a quote of the message in a chat started from it, and what the agent already received.
 
 The paperclip next to **Send** attaches up to six files of up to 20 MB each: images (PNG, JPEG, GIF, WebP), sounds, videos (MP4, WebM, QuickTime) and PDFs. Pasting or dropping a file into the composer attaches it too. The server checks each file's content, not its name, and refuses anything else (SVG and HTML included). Images show in the message once they scroll into view; sounds, videos and PDFs load only when a member clicks them. Only members who can read the chat can open its attachments, and deleting a message erases them. Files attached but never sent are erased after a day. A member can hold up to 120 MB of unsent files, and a workspace stores up to 10 GB of attachments.
 
@@ -39,9 +39,37 @@ Channels are where members talk without an agent. A **public** channel is open t
 
 Changing a channel's visibility needs the chat admin permission. When a channel becomes public, any participant whose role gives less than read and post (a Reader) becomes a Prompter, because a public channel already lets everyone post.
 
+## Message actions
+
+In a channel, pointing at a message, or moving the keyboard focus into it, shows its actions side by side at its top right, each an icon that names itself on hover: **Reply in thread** (top-level messages, for members who can post), **Start runtime from this message**, **Copy message as context** (**Copy thread as context** when the message has replies or is one), and, for its author only, **Edit** and **Delete**. An action a member cannot take is not shown. Runtime chats have no message actions.
+
 ## Threads
 
-In a channel, the message menu of a top-level message offers **Reply in thread**. Replies stay under their root message, collapsed behind a toggle such as "3 replies · 1 new"; they never appear in the channel flow. Replies are ordinary messages: their authors can edit or delete them, and a deleted root keeps its thread. Runtime chats have no threads, and the server refuses a reply there.
+In a channel, the actions of a top-level message offer **Reply in thread**. Replies stay under their root message, collapsed behind a toggle such as "3 replies · 1 new"; they never appear in the channel flow. Replies are ordinary messages: their authors can edit or delete them, and a deleted root keeps its thread. Runtime chats have no threads, and the server refuses a reply there.
+
+## Search
+
+**Search** at the top of the sidebar, or the **/** key, searches the text of the messages of every chat the member can read in the workspace: the public channels and the chats they take part in. The server applies the same rule as for reading a chat, so a message of a private chat never reaches a member who is not in it, and deleted messages and agent steps are left out. The search ignores case, and wildcard characters match only themselves. It lists the 30 newest matches, each with its chat, author, date and the matched text marked. The arrow keys move through the list and Enter (or a click) opens the chat, finding the searched text there. A match in a thread opens on the thread's root message. Chats that are archived are left out.
+
+**Find in this chat**, in the chat header or the **F** key, highlights the searched text in the messages on screen and counts the matches ("2 of 5"). It starts on the newest match; Enter or **Next match** moves down, Shift+Enter or **Previous match** moves up, and Escape closes it. It searches the messages loaded so far: **Search earlier messages** loads more. Opening a match from Search loads earlier messages until the matched one is on screen. The searched text stays in the browser and is never put in the address bar.
+
+## Keyboard shortcuts
+
+Single keys move around the workspace. They do nothing while typing in a field or while a dialog or menu is open, and **?** lists the ones available on the current page. A button's tooltip shows its shortcut's letter in bold, for example "**L**eft sidebar collapse".
+
+| Key | Action |
+|---|---|
+| **L** | Collapse or expand the left sidebar |
+| **R** | Collapse or expand the right sidebar (the side panel) |
+| **R** then **1**, **2**… | Open the side panel on its first, second… tab |
+| **B** | Browse channels |
+| **C** | Create a chat |
+| **P** | Create a project |
+| **S** | Workspace settings (for members who can open them) |
+| **I** | Profile |
+| **/** | Search the workspace |
+| **F** | Find in this chat |
+| **?** | List the keyboard shortcuts |
 
 ## Unread state
 
@@ -91,9 +119,11 @@ Only runtime chats can be forked.
 
 ## Starting a runtime from a channel thread
 
-In a channel, every message's menu has **Start runtime from this message**. It creates a runtime chat owned by the member who chose it, named from the message, and seeded with the whole thread (the root and its replies) as quoted context. The other authors of the thread who can read the channel join the new chat as Readers. The channel message shows a link to the runtime chat it started, and the runtime chat links back with "Started from".
+In a channel, every message's actions include **Start runtime from this message**. It creates a runtime chat owned by the member who chose it, named from the message, and seeded with the whole thread (the root and its replies) as quoted context. The other authors of the thread who can read the channel join the new chat as Readers. The channel message shows a link to the runtime chat it started, and the runtime chat links back with "Started from".
 
 This lets members discuss freely in a channel and bring an agent in only when there is work to do, without moving the conversation by hand.
+
+**Copy thread as context** (**Copy message as context** for a message without replies) puts the same quote in the clipboard instead, to paste into an agent elsewhere, such as a runtime chat already under way or a tool outside Spyria. The quote is built in the browser from the messages it shows, and the clipboard is the only place it goes.
 
 ## When a chat owner leaves the workspace
 
@@ -101,7 +131,7 @@ When an admin removes a member, that member's runtime chats are **frozen**: they
 
 ## Side panel
 
-The side panel next to a chat has tabs that depend on the chat type. Runtime chats have **Files**, **Changes**, **Commits**, **Browser**, **Usage**, **Connected tools** and **Members**; channels have **Browser**, **Sources**, **Usage**, **Connected tools** and **Members**. **Usage** breaks down the chat's model spend per member, and **Connected tools** lists the workspace and personal connections the agent can use. The dev tabs are described in [Dev mode](./dev-mode.md). **Sources** is a placeholder: nothing fills it yet.
+The side panel next to a chat has tabs that depend on the chat type. Runtime chats have **Files**, **Changes**, **Commits**, **Browser**, **Usage**, **Connected tools** and **Members**; channels have **Browser**, **Sources**, **Usage**, **Connected tools** and **Members**. **Usage** breaks down the chat's model spend per member, and **Connected tools** lists the workspace and personal connections the agent can use. The dev tabs are described in [Dev mode](./dev-mode.md). **Sources** is a placeholder: nothing fills it yet. **R** collapses or expands the side panel, and **R** then a number opens it on that tab; each tab's tooltip shows its number.
 
 ### Browser
 
