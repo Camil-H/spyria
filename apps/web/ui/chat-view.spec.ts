@@ -52,6 +52,7 @@ test.describe('Chat view', () => {
     refuseNextMessage,
   }) => {
     await openChat(page, 'Welcome')
+    await expect(messageContaining(page, 'Welcome to the team!')).toHaveCount(1)
     await expectLooks(page, mainOf(page), 'channel')
     await composerOf(page).fill('Hello')
     await test.step('shows Send as an icon with a tooltip', async () => {
@@ -140,6 +141,7 @@ test.describe('Chat view', () => {
     page,
   }) => {
     await openChat(page, 'Invoice bug')
+    await expect(messageContaining(page, 'Why do invoices show the wrong total?')).toHaveCount(1)
     await expectLooks(page, mainOf(page), 'runtime-chat')
     await test.step('puts the owner on the title row, aligned right, the git branch above the text box, aligned left, and the Runs on chip with the runtime status and the model chip in the bar under it, the status inside the Runs on chip', async () => {
       const titleBox = (await mainOf(page).getByRole('heading', { level: 1, name: 'Invoice bug' }).boundingBox())!
