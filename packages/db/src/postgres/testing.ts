@@ -442,6 +442,7 @@ export const startTestGateway = async ({
   const databaseName = `spyria_test_gateway_${name}`
   const configFile = join(tmpdir(), `${containerName}.json`)
   const gatewayConfig = JSON.parse(readFileSync(new URL('../../../../infra/bifrost.json', import.meta.url), 'utf8'))
+  const clientConfig = { ...gatewayConfig.client, mcp_oauth_private_allowlist: ['host.docker.internal'] }
   const networkConfig = {
     base_url: fakeLlmUrl,
     default_request_timeout_in_seconds: 60,
@@ -455,6 +456,7 @@ export const startTestGateway = async ({
     networkConfig,
     oauthBase,
     gatewayConfig,
+    clientConfig,
     gatewayProviders,
     zaiPaths,
     testModelPrices,
@@ -494,7 +496,10 @@ export const startTestGateway = async ({
   docker('rm', '-fv', containerName)
   await dropDatabase(databaseName)
   await withAdmin(`create database "${databaseName}" template template0 encoding 'UTF8'`)
-  writeFileSync(configFile, JSON.stringify({ ...gatewayConfig, config_store: store, logs_store: store }))
+  writeFileSync(
+    configFile,
+    JSON.stringify({ ...gatewayConfig, client: clientConfig, config_store: store, logs_store: store }),
+  )
   const remove = async () => {
     docker('rm', '-fv', containerName)
     rmSync(configFile, { force: true })
