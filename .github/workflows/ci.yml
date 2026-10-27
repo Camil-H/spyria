@@ -8,7 +8,7 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -167,17 +167,6 @@ jobs:
     steps:
       - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: exit 1
-
-  promote:
-    if: github.event_name == 'push'
-    needs: ci-ok
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          ssh-key: ${{ secrets.MAIN_DEPLOY_KEY }}
-      - run: git push origin "$GITHUB_SHA:refs/heads/main"
 
   report-failure:
     if: always() && github.event_name == 'push' && needs.ci-ok.result == 'failure'
