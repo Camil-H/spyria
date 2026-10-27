@@ -27,9 +27,11 @@ export const profileMutators = defineMutators({
       z.extend(workspaceArguments, { name: z.pipe(z.string(), z.transform(DisplayName)) }),
       ({ tx, ctx, args }) => renameMember(dependenciesOf(tx, ctx, args), { ...args, ...contextMember(ctx) }),
     ),
-    changeAvatar: defineMutator(
-      z.extend(workspaceArguments, { avatar: z.nullable(z.pipe(z.string(), z.transform(Avatar))) }),
-      ({ tx, ctx, args }) => changeAvatar(dependenciesOf(tx, ctx, args), { ...args, ...contextMember(ctx) }),
+    changeAvatar: defineMutator(z.extend(workspaceArguments, { avatar: z.nullable(z.string()) }), ({ tx, ctx, args }) =>
+      changeAvatar(dependenciesOf(tx, ctx, args), {
+        ...contextMember(ctx),
+        avatar: args.avatar === null ? null : Avatar(args.avatar),
+      }),
     ),
     removeLlmCredential: defineMutator(
       z.extend(workspaceArguments, {
