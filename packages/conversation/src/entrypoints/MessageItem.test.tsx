@@ -3,6 +3,7 @@ import { messageId } from '@spyria/kernel'
 import { prerender } from 'react-dom/static'
 import type { ConversationMessage } from '../queries/get-conversation.ts'
 import { MessageItem } from './MessageItem.tsx'
+import { MentionNamesContext } from './providers.tsx'
 
 const answer: ConversationMessage = {
   id: messageId('message-answer'),
@@ -34,4 +35,16 @@ test('a streamed answer shows as plain text, the stored answer as Markdown', asy
   const stored = await htmlOf(answer)
   expect(stored).toContain('<strong>total</strong>')
   expect(stored).toContain('<code>42</code>')
+})
+
+test('a stored message bolds the mentions of the member names its chat provides', async () => {
+  const mention = { ...answer, kind: 'member' as const, body: 'Thanks @Bob and @Zoe' }
+  const { prelude } = await prerender(
+    <MentionNamesContext value={['Alice', 'Bob']}>
+      <MessageItem message={mention} hasMenu={false} />
+    </MentionNamesContext>,
+  )
+  const html = await new Response(prelude).text()
+  expect(html).toContain('<strong>@Bob</strong>')
+  expect(html).not.toContain('<strong>@Zoe</strong>')
 })

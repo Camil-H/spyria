@@ -8,12 +8,14 @@ import { Link, Navigate, useNavigate, useOutletContext, useParams } from 'react-
 import { ChatFrozen } from '../domain/errors.ts'
 import { runsOnNames, runsOnWaitingNoticeOf } from '../domain/session-routing.ts'
 import { getConversation } from '../queries/get-conversation.ts'
+import { getMentionableNames } from '../queries/get-mentionable-names.ts'
 import { Composer } from './Composer.tsx'
 import type { QuestionAnswer } from './endpoints.ts'
 import { ForkButton } from './ForkButton.tsx'
 import { MessageList } from './MessageList.tsx'
 import {
   ChatMediaContext,
+  MentionNamesContext,
   QuestionAnswererContext,
   ToolsAwaitingApprovalContext,
   useConversationCommands,
@@ -52,6 +54,7 @@ export const ChatView = ({
     spyriaRuntime?.chatId === chatId ? spyriaRuntime.isAvailable : undefined,
   )
   const chatMessages = useChatMessages(workspaceId, chatId)
+  const mentionNames = useQuery(getMentionableNames, workspaceId)
   const runsOnChoices =
     conversation?.runsOn === null || (chatMessages.isComplete && !chatMessages.hasEarlier)
       ? (conversation?.runsOnChoices ?? null)
@@ -143,14 +146,18 @@ export const ChatView = ({
       >
         <ToolsAwaitingApprovalContext value={toolsAwaitingApproval}>
           <ChatMediaContext value={{ chatId, isRuntime: conversation.type === 'runtime' }}>
-            <MessageList
-              conversation={conversation}
-              items={withLiveMessages(conversation.items, live)}
-              isComplete={chatMessages.isComplete}
-              onLoadEarlier={chatMessages.isComplete && chatMessages.hasEarlier ? chatMessages.loadEarlier : undefined}
-              onStop={conversation.canConfigure ? () => commands.stopAgent({ workspaceId, chatId }) : undefined}
-              onFork={conversation.isOwner ? undefined : fork}
-            />
+            <MentionNamesContext value={mentionNames}>
+              <MessageList
+                conversation={conversation}
+                items={withLiveMessages(conversation.items, live)}
+                isComplete={chatMessages.isComplete}
+                onLoadEarlier={
+                  chatMessages.isComplete && chatMessages.hasEarlier ? chatMessages.loadEarlier : undefined
+                }
+                onStop={conversation.canConfigure ? () => commands.stopAgent({ workspaceId, chatId }) : undefined}
+                onFork={conversation.isOwner ? undefined : fork}
+              />
+            </MentionNamesContext>
           </ChatMediaContext>
         </ToolsAwaitingApprovalContext>
       </QuestionAnswererContext>
