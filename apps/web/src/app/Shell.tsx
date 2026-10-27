@@ -5,6 +5,7 @@ import { PanelProvider, PanelToggle, SidePanel } from '@spyria/panel'
 import { ProfileProvider, useHasLlmCredential } from '@spyria/profile'
 import { RuntimeProvider, RuntimeStatus } from '@spyria/runtime'
 import { SessionProvider, useSession } from '@spyria/session'
+import { KeyboardShortcuts } from '@spyria/ui'
 import { BudgetNotice, UsageProvider } from '@spyria/usage'
 import { TransferChatForm, WorkspaceLayout, WorkspaceProvider } from '@spyria/workspace'
 import { lazy, Suspense } from 'react'
@@ -99,6 +100,7 @@ export const App = ({ app }: { app: Application }) => (
                       </Route>
                       <Route path="*" element={<Navigate to={`/w/${app.session.defaultWorkspaceId}`} replace />} />
                     </Routes>
+                    <KeyboardShortcuts />
                   </PanelProvider>
                 </BrowserRouter>
               </UsageProvider>

@@ -3,6 +3,7 @@ import { createContext, type ReactNode, useContext, useState } from 'react'
 import type { PanelCommands } from './commands.ts'
 
 export const minimumPanelWidth = 280
+export const panelToggleLabelOf = (isOpen: boolean) => (isOpen ? 'Right sidebar collapse' : 'Right sidebar expansion')
 export const minimumChatWidth = 320
 
 type PanelState = {
@@ -10,6 +11,7 @@ type PanelState = {
   width: number
   maximumWidth: number
   toggle: () => void
+  open: () => void
   resizeTo: (width: number) => void
   fitWithin: (availableWidth: number) => void
 }
@@ -34,6 +36,7 @@ export const PanelProvider = ({ commands, children }: { commands: PanelCommands;
           width: Math.min(maximumWidth, preferredWidth),
           maximumWidth,
           toggle: () => setIsOpen(!isOpen),
+          open: () => setIsOpen(true),
           resizeTo,
           fitWithin: setAvailableWidth,
         }}

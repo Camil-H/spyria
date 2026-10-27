@@ -50,7 +50,7 @@ test.describe('Platform', () => {
 
   test('As a member, I create a project in the browser and the server stores it', async ({ page, workerStack }) => {
     await page.goto('/')
-    await page.getByRole('button', { name: 'New project' }).click()
+    await page.getByRole('button', { name: 'Project creation' }).click()
     await page.getByRole('textbox', { name: 'Project name' }).fill('Canary')
     await page.getByRole('button', { name: 'Confirm' }).click()
     await expect(projectGroupOf(page, 'Canary')).toBeVisible()

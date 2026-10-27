@@ -143,7 +143,7 @@ test.describe('Where a chat runs', () => {
   }, async ({ page, machine }) => {
     await machine(signedInMachine)
     await test.step('New chat offers only Channel and Runtime, even to a member with a machine', async () => {
-      await page.getByRole('button', { name: 'New chat' }).click()
+      await page.getByRole('button', { name: 'Chat creation' }).click()
       const dialog = page.getByRole('dialog', { name: 'New chat' })
       await expect(dialog.getByRole('radiogroup', { name: 'Chat type' }).getByRole('radio')).toHaveCount(2)
       await expect(dialog.getByRole('radio', { name: 'Channel' })).toBeVisible()
