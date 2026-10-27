@@ -56,7 +56,7 @@ test.describe('Chat view', () => {
     await test.step('shows Send as an icon with a tooltip', async () => {
       await expect(sendButtonOf(page)).toHaveText('')
       await sendButtonOf(page).hover()
-      await expect(page.getByRole('tooltip', { name: 'Send (⌘↵)' })).toBeVisible()
+      await expect(page.getByRole('tooltip', { name: /^Send \((⌘↵|Ctrl\+Enter)\)$/ })).toBeVisible()
     })
     await test.step('reveals the menu button on keyboard focus', async () => {
       const messageActionsButton = messageContaining(page, 'Thanks, glad to be here.').getByRole('button', {
