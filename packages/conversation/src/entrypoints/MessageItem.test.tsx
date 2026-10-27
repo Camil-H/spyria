@@ -8,6 +8,7 @@ const answer: ConversationMessage = {
   id: messageId('message-answer'),
   kind: 'agent',
   authorName: 'Agent',
+  authorAvatar: null,
   createdAt: '2026-10-01T09:00:00.000Z',
   body: 'The **total** is `42`',
   attachments: [],

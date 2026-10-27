@@ -31,6 +31,7 @@ export type ConversationMessage = Readonly<{
   id: MessageId
   kind: 'member' | 'agent' | 'step' | 'notice'
   authorName: string
+  authorAvatar: string | null
   createdAt: string
   body: string
   attachments: readonly Attachment[]
@@ -226,6 +227,11 @@ export const getConversation =
     if (!chat) return null
     const memberNameOf = memberNamesIn(snapshot, workspaceId)
     const memberName = (memberId: MemberId | null) => (memberId ? memberNameOf(memberId) : 'Agent')
+    const avatarByMemberId = new Map(
+      snapshot.memberships
+        .filter((membership) => membership.workspaceId === workspaceId)
+        .map((membership) => [membership.memberId, membership.avatar]),
+    )
     const origin = chat.originChatId ? findChat(snapshot, workspaceId, chat.originChatId) : undefined
     const chatMessages = snapshot.messages.filter((message) => message.chatId === chatId)
     const hasActiveTurn = chat.agentTurnMessageId !== null
@@ -279,6 +285,7 @@ export const getConversation =
         id: message.id,
         kind: message.kind,
         authorName: memberName(message.authorId),
+        authorAvatar: (message.authorId && avatarByMemberId.get(message.authorId)) ?? null,
         createdAt: message.createdAt,
         body: message.deletedAt === null ? message.body : '',
         attachments: message.attachments,
