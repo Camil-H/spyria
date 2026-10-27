@@ -4,7 +4,7 @@ import { createDatabase, type Database } from '@spyria/db/postgres'
 import { setModelDirectory } from '@spyria/db/server-writes'
 import { databaseUrlOf } from '@spyria/db/testing'
 import { schema } from '@spyria/db/zero'
-import { chatId, log, workspaceId } from '@spyria/kernel'
+import { chatId, workspaceId } from '@spyria/kernel'
 import { createLlmGateway } from '@spyria/profile/server'
 import {
   createRuntimeTransactor,
@@ -30,6 +30,7 @@ import { startTelemetry } from '../telemetry.ts'
 import { fakeGitHubAppId, fakeGitHubClientId, fakeGitHubClientSecret, startFakeGitHub } from './fake-github.ts'
 import { createFakeLlm, type FakeLlmScript } from './fake-llm.ts'
 import { createFakeMcp, sharedToolServer } from './fake-mcp.ts'
+import { serveWithLifecycleLogs } from './process-lifecycle.ts'
 import { createSpyriaAgentRelay } from './spyria-agent-relay.ts'
 import {
   createFakeHosts,
@@ -411,18 +412,6 @@ const app = createApp({
     return context.json(await issueTestSession(databaseByName(db), workspace, user, db))
   })
 
-export default { port, hostname: '0.0.0.0', idleTimeout: 0, fetch: app.fetch, websocket: serverWebSocket }
-
-process.on('unhandledRejection', (error) =>
-  log.error({ event: 'test_server.unhandled_rejection', body: 'A promise rejected with nobody awaiting it', error }),
-)
-process.on('uncaughtException', (error) =>
-  log.error({ event: 'test_server.uncaught_exception', body: 'An exception reached the event loop', error }),
-)
-process.on('exit', (code) =>
-  log.error({
-    event: 'test_server.exit',
-    body: 'The test server process is exiting',
-    attributes: { 'process.exit_code': code },
-  }),
+serveWithLifecycleLogs('test_server', port, () =>
+  Bun.serve({ port, hostname: '0.0.0.0', idleTimeout: 0, fetch: app.fetch, websocket: serverWebSocket }),
 )
