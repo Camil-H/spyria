@@ -2,7 +2,7 @@ import { Content, Item, Root, Trigger } from '@radix-ui/react-dropdown-menu'
 import type { WorkspaceId } from '@spyria/kernel'
 import { ErrorMessage, focusRing, MemberAvatar, menuContentClass, menuItemClass, useGuardedAction } from '@spyria/ui'
 import { Pencil } from 'lucide-react'
-import { useRef } from 'react'
+import { type ReactNode, useRef } from 'react'
 import { Avatar } from '../domain/avatar.ts'
 import { avatarImageOf } from './avatar-image.ts'
 import { useProfileCommands } from './providers.tsx'
@@ -26,10 +26,12 @@ export const ProfilePictureSection = ({
   workspaceId,
   name,
   avatar,
+  beside,
 }: {
   workspaceId: WorkspaceId
   name: string
   avatar: string | null
+  beside: ReactNode
 }) => {
   const commands = useProfileCommands()
   const { errorMessage, isPending, run } = useGuardedAction()
@@ -38,48 +40,53 @@ export const ProfilePictureSection = ({
   const upload = (file: File) =>
     run(async () => commands.changeAvatar({ workspaceId, avatar: Avatar(await avatarImageOf(file)) }))
   return (
-    <section aria-label="Profile picture" className="flex flex-col gap-2">
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept={acceptedImages}
-        aria-label="Picture file"
-        hidden
-        onChange={(event) => {
-          const file = event.target.files?.[0]
-          event.target.value = ''
-          if (file) upload(file)
-        }}
-      />
-      {avatar ? (
-        <Root>
-          <Trigger aria-label="Edit profile picture" disabled={isPending} className={pictureButtonClass}>
-            <PictureWithEditHint name={name} avatar={avatar} />
-          </Trigger>
-          <Content align="start" className={menuContentClass}>
-            <Item className={menuItemClass} onSelect={chooseFile}>
-              Change picture
-            </Item>
-            <Item
-              className={menuItemClass}
-              onSelect={() => run(() => commands.changeAvatar({ workspaceId, avatar: null }))}
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-4">
+        <section aria-label="Profile picture" className="flex">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={acceptedImages}
+            aria-label="Picture file"
+            hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0]
+              event.target.value = ''
+              if (file) upload(file)
+            }}
+          />
+          {avatar ? (
+            <Root>
+              <Trigger aria-label="Edit profile picture" disabled={isPending} className={pictureButtonClass}>
+                <PictureWithEditHint name={name} avatar={avatar} />
+              </Trigger>
+              <Content align="start" className={menuContentClass}>
+                <Item className={menuItemClass} onSelect={chooseFile}>
+                  Change picture
+                </Item>
+                <Item
+                  className={menuItemClass}
+                  onSelect={() => run(() => commands.changeAvatar({ workspaceId, avatar: null }))}
+                >
+                  Remove picture
+                </Item>
+              </Content>
+            </Root>
+          ) : (
+            <button
+              type="button"
+              aria-label="Add profile picture"
+              disabled={isPending}
+              onClick={chooseFile}
+              className={pictureButtonClass}
             >
-              Remove picture
-            </Item>
-          </Content>
-        </Root>
-      ) : (
-        <button
-          type="button"
-          aria-label="Add profile picture"
-          disabled={isPending}
-          onClick={chooseFile}
-          className={pictureButtonClass}
-        >
-          <PictureWithEditHint name={name} avatar={null} />
-        </button>
-      )}
+              <PictureWithEditHint name={name} avatar={null} />
+            </button>
+          )}
+        </section>
+        {beside}
+      </div>
       <ErrorMessage message={errorMessage} />
-    </section>
+    </div>
   )
 }
