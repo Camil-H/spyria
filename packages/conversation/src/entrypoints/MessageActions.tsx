@@ -1,12 +1,17 @@
 import { Provider } from '@radix-ui/react-tooltip'
 import type { MessageId, WorkspaceId } from '@spyria/kernel'
 import { ErrorMessage, IconButton, useGuardedAction } from '@spyria/ui'
-import { Check, ClipboardCopy, MessageSquareReply, Pencil, SquareTerminal, Trash2 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Check, ClipboardCopy, type LucideIcon, MessageSquareReply, Pencil, SquareTerminal, Trash2 } from 'lucide-react'
+import { type FocusEvent, type KeyboardEvent, useEffect, useState } from 'react'
 import { useNavigate, useOutletContext } from 'react-router'
 import { useConversationCommands } from './providers.tsx'
 
 const copyFeedbackMilliseconds = 2000
+
+type Action = { id: string; label: string; icon: LucideIcon; disabled?: boolean; onClick: () => void }
+
+const indexAfterKey = (key: string, index: number, count: number) =>
+  ({ ArrowRight: (index + 1) % count, ArrowLeft: (index - 1 + count) % count, Home: 0, End: count - 1 })[key]
 
 const useCopyFeedback = () => {
   const [feedback, setFeedback] = useState<'copied' | 'failed' | null>(null)
@@ -49,36 +54,69 @@ export const MessageActions = ({
   const { feedback, copy } = useCopyFeedback()
   const copyLabel = `Copy ${isThread ? 'thread' : 'message'} as context`
   const isPinned = isPending || errorMessage !== null || feedback !== null
+  const [focusedIndex, setFocusedIndex] = useState(0)
   const startRuntime = () =>
     run(async () => {
       const newChatId = await commands.startRuntimeFromMessage({ workspaceId, messageId })
       navigate(`../${newChatId}`, { relative: 'path' })
     })
+  const actions: Action[] = [
+    ...(onReplyInThread && canReply
+      ? [{ id: 'reply', label: 'Reply in thread', icon: MessageSquareReply, onClick: onReplyInThread }]
+      : []),
+    {
+      id: 'runtime',
+      label: isPending ? 'Starting runtime…' : 'Start runtime from this message',
+      icon: SquareTerminal,
+      disabled: isPending,
+      onClick: startRuntime,
+    },
+    {
+      id: 'copy',
+      label: feedback === 'copied' ? 'Copied' : feedback === 'failed' ? 'Copy failed' : copyLabel,
+      icon: feedback === 'copied' ? Check : ClipboardCopy,
+      onClick: () => copy(contextText()),
+    },
+    ...(canEdit
+      ? [
+          { id: 'edit', label: 'Edit', icon: Pencil, onClick: onEdit },
+          { id: 'delete', label: 'Delete', icon: Trash2, onClick: onDelete },
+        ]
+      : []),
+  ]
+  const tabStopIndex = Math.min(focusedIndex, actions.length - 1)
+  const buttonsOf = (toolbar: HTMLDivElement) => [...toolbar.querySelectorAll('button')]
+  const followFocus = (event: FocusEvent<HTMLDivElement>) => {
+    const index = buttonsOf(event.currentTarget).indexOf(document.activeElement as HTMLButtonElement)
+    if (index >= 0) setFocusedIndex(index)
+  }
+  const moveFocus = (event: KeyboardEvent<HTMLDivElement>) => {
+    const nextIndex = indexAfterKey(event.key, tabStopIndex, actions.length)
+    if (nextIndex === undefined) return
+    event.preventDefault()
+    setFocusedIndex(nextIndex)
+    buttonsOf(event.currentTarget)[nextIndex]?.focus()
+  }
   return (
     <div
       role="toolbar"
       aria-label="Message actions"
+      onFocus={followFocus}
+      onKeyDown={moveFocus}
       className={`absolute top-1 right-2 flex gap-0.5 rounded-md border border-line bg-raised p-0.5 shadow-sm group-focus-within:opacity-100 group-hover:opacity-100 ${isPinned ? 'opacity-100' : 'opacity-0'}`}
     >
       <Provider delayDuration={300}>
-        {onReplyInThread && canReply && (
-          <IconButton isSmall label="Reply in thread" icon={MessageSquareReply} onClick={onReplyInThread} />
-        )}
-        <IconButton
-          isSmall
-          label={isPending ? 'Starting runtime…' : 'Start runtime from this message'}
-          icon={SquareTerminal}
-          disabled={isPending}
-          onClick={startRuntime}
-        />
-        <IconButton
-          isSmall
-          label={feedback === 'copied' ? 'Copied' : feedback === 'failed' ? 'Copy failed' : copyLabel}
-          icon={feedback === 'copied' ? Check : ClipboardCopy}
-          onClick={() => copy(contextText())}
-        />
-        {canEdit && <IconButton isSmall label="Edit" icon={Pencil} onClick={onEdit} />}
-        {canEdit && <IconButton isSmall label="Delete" icon={Trash2} onClick={onDelete} />}
+        {actions.map((action, index) => (
+          <IconButton
+            key={action.id}
+            isSmall
+            label={action.label}
+            icon={action.icon}
+            disabled={action.disabled}
+            tabIndex={index === tabStopIndex ? 0 : -1}
+            onClick={action.onClick}
+          />
+        ))}
       </Provider>
       {errorMessage && (
         <div className="absolute top-full right-0 z-10 mt-1 w-60 rounded-md border border-line bg-raised px-2 py-1.5 shadow-lg">

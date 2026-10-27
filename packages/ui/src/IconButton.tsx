@@ -9,6 +9,7 @@ export const IconButton = ({
   shortcut,
   isSmall = false,
   disabled = false,
+  tabIndex,
   onClick,
 }: {
   label: string
@@ -16,6 +17,7 @@ export const IconButton = ({
   shortcut?: string
   isSmall?: boolean
   disabled?: boolean
+  tabIndex?: number
   onClick: () => void
 }) => (
   <Root>
@@ -24,6 +26,7 @@ export const IconButton = ({
       aria-label={label}
       aria-keyshortcuts={shortcut?.toUpperCase()}
       disabled={disabled}
+      tabIndex={tabIndex}
       className={`${iconButtonClass} ${isSmall ? 'p-1' : ''} disabled:cursor-not-allowed disabled:opacity-40`}
       onClick={onClick}
     >
