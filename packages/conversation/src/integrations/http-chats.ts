@@ -1,5 +1,5 @@
 import type { ChatId, WorkspaceId } from '@spyria/kernel'
-import { type Attachment, chatAttachmentsPathOf } from '../domain/attachments.ts'
+import { type Attachment, chatAttachmentsPathOf, isChatAttachmentPath } from '../domain/attachments.ts'
 import type { GitAction, GitActionOutcome } from '../domain/git-actions.ts'
 import type { PublishAction, PullRequestDraft } from '../domain/pull-requests.ts'
 import type { WorkspaceRead, WorkspaceReading } from '../domain/workspace-reads.ts'
@@ -79,7 +79,8 @@ export const createHttpChatCommands = (postAsMember: PostAsMember, getAsMember: 
   },
   readMedia: async ({ workspaceId, path }: { workspaceId: WorkspaceId; path: string }) => {
     let response = await getAsMember(workspaceId, path)
-    for (let waited = 0; response.status === 404 && waited < storedWaitMilliseconds; ) {
+    const mayNotBeStoredYet = isChatAttachmentPath(path)
+    for (let waited = 0; mayNotBeStoredYet && response.status === 404 && waited < storedWaitMilliseconds; ) {
       await new Promise((resolve) => setTimeout(resolve, storedRetryMilliseconds))
       waited += storedRetryMilliseconds
       response = await getAsMember(workspaceId, path)

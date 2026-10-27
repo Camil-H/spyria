@@ -83,6 +83,7 @@ export const chatAttachmentsPathOf = (chatId: string) => `/api/chats/${chatId}/a
 export const chatAttachmentPathOf = (chatId: string, attachmentId: string) =>
   `/api/chats/${chatId}/attachments/${attachmentId}`
 export const chatMediaPathOf = (chatId: string) => `/api/chats/${chatId}/media`
+export const isChatAttachmentPath = (path: string) => /^\/api\/chats\/[^/?]+\/attachments\/[^/?]+$/.test(path)
 
 const runtimeVideoExtensions = /\.(mp4|m4v|webm|mov)$/i
 const runtimeAudioExtensions = /\.(mp3|wav|ogg|oga|m4a|flac)$/i
