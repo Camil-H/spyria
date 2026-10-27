@@ -5,7 +5,6 @@ type FakeLlmStep = (
   | { command: string }
   | { read: string }
   | { edit: { path: string; create?: string; oldText?: string; newText?: string } }
-  | { plan: { content: string; status: 'pending' | 'in_progress' | 'completed' }[] }
   | { fail: string }
   | { tool: string; arguments?: Record<string, unknown> }
   | { task: string }
@@ -55,21 +54,19 @@ const wordsOf = (text: string) => text.split(/(?<= )/).filter(Boolean)
 const piToolCallOf = (step: FakeLlmStep) =>
   'command' in step
     ? { name: 'bash', arguments: { command: step.command } }
-    : 'plan' in step
-      ? { name: 'update_plan', arguments: { entries: step.plan } }
-      : 'read' in step
-        ? { name: 'read', arguments: { path: `${workingDirectory}${step.read}` } }
-        : 'edit' in step
-          ? step.edit.create === undefined
-            ? {
-                name: 'edit',
-                arguments: {
-                  path: `${workingDirectory}${step.edit.path}`,
-                  edits: [{ oldText: step.edit.oldText, newText: step.edit.newText }],
-                },
-              }
-            : { name: 'write', arguments: { path: `${workingDirectory}${step.edit.path}`, content: step.edit.create } }
-          : undefined
+    : 'read' in step
+      ? { name: 'read', arguments: { path: `${workingDirectory}${step.read}` } }
+      : 'edit' in step
+        ? step.edit.create === undefined
+          ? {
+              name: 'edit',
+              arguments: {
+                path: `${workingDirectory}${step.edit.path}`,
+                edits: [{ oldText: step.edit.oldText, newText: step.edit.newText }],
+              },
+            }
+          : { name: 'write', arguments: { path: `${workingDirectory}${step.edit.path}`, content: step.edit.create } }
+        : undefined
 
 const toolCallOf = (step: FakeLlmStep | undefined, offeredTools: readonly string[] = [], taskId = '') => {
   const call =

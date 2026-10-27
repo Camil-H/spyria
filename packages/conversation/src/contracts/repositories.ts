@@ -10,8 +10,9 @@ import type {
   WorkspaceId,
 } from '@spyria/kernel'
 import type { AgentEvent } from '../domain/agent-events.ts'
-import type { AgentStep, StepDelegation, StoredStep } from '../domain/agent-steps.ts'
+import type { StepDelegation, StoredStep } from '../domain/agent-steps.ts'
 import type { Attachment, StoredBytes } from '../domain/attachments.ts'
+import type { OpenedPage } from '../domain/browser-pages.ts'
 import type { ConversationChat, Message, MessageChange } from '../domain/message.ts'
 import type { AgentInterrupt, SessionRestart } from './agent.ts'
 
@@ -109,11 +110,9 @@ export type AgentEventRepository = {
   lastSessionId(chatId: ChatId): Promise<string | undefined>
 }
 
-export type PlanRepository = {
-  replace(chatId: ChatId, items: Extract<AgentStep, { type: 'plan' }>['items']): Promise<void>
-}
-
 export type DraftRepository = { replace(draft: Draft): Promise<void> }
+
+export type BrowserPageRepository = { open(chatId: ChatId, page: OpenedPage, openedAt: Date): Promise<void> }
 
 export type ReadMarkerRepository = {
   markNewestRead(chatId: ChatId, memberId: MemberId): Promise<void>
@@ -150,7 +149,6 @@ export type ChatRepository = {
   dropRuntime(chatId: ChatId): Promise<void>
   stopRuntime(chatId: ChatId): Promise<void>
   hasMachine(memberId: MemberId): Promise<boolean>
-  setPlanning(chatId: ChatId, isPlanning: boolean): Promise<void>
 }
 
 type ChatRouting = Readonly<{

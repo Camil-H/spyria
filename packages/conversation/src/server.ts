@@ -56,13 +56,12 @@ export {
 } from './domain/tool-calls.ts'
 export { isWorkspaceRead } from './domain/workspace-reads.ts'
 export type { AgentStream, ConversationCommands } from './entrypoints/commands.ts'
-export { mediaResponseOf, planModeOf, questionAnswerOf, uploadAttachmentFromRequest } from './entrypoints/endpoints.ts'
+export { mediaResponseOf, questionAnswerOf, uploadAttachmentFromRequest } from './entrypoints/endpoints.ts'
 export { createAgentHandlers } from './entrypoints/jobs.ts'
 export { conversationMutators } from './entrypoints/mutators.ts'
 export { createGatewaySessionClassifier } from './integrations/gateway-session-classifier.ts'
 export {
   chatGitPathOf,
-  chatPlanModePathOf,
   chatPublishPathOf,
   chatQuestionPathOf,
   chatRoutingPathOf,

@@ -101,7 +101,6 @@ const command = (exitCode: number | null) => ({
   thought,
 })
 const edit = { type: 'file', operation: 'edit', path: 'totals.ts', added: 2, removed: 1, diff: [] } as const
-const plan = (status: string) => ({ type: 'plan' as const, items: [{ title: 'Fix totals', status }] })
 const conversationWith = (rows: ReturnType<typeof replyRow>[], isTurnActive = false) => {
   const snapshot = snapshotWith({ turn: isTurnActive, waiting: false })
   return getConversation(acme, research, alice)({ ...snapshot, messages: [...snapshot.messages, ...rows] })
@@ -197,32 +196,13 @@ test('the error the interrupt causes is hidden in a stopped turn', () => {
   expect(itemSummaryOf(stopped)).toEqual(['member', 'step file', 'notice'])
 })
 
-test('a turn shows only its latest plan, where the plan first appeared', () => {
-  const conversation = conversationWith(
-    [
-      replyRow(2, 'step', { step: plan('todo') }),
-      replyRow(3, 'step', { step: edit }),
-      replyRow(4, 'step', { step: plan('done') }),
-    ],
-    true,
-  )
-  expect(itemSummaryOf(conversation)).toEqual(['member', 'step plan', 'step file'])
-  const shownPlan = conversation?.items[1]
-  expect(shownPlan?.type === 'message' && shownPlan.message.step).toEqual(plan('done'))
-})
-
-test('a question stays out of the fold where it was asked, its plan exit tool is hidden, and its answerer is named', () => {
+test('a question stays out of the fold where it was asked and its answerer is named', () => {
   const question = { type: 'question', questionId: 'q1', kind: 'question', answers: {}, answeredBy: alice } as const
-  const planQuestion = { ...question, questionId: 'q2', kind: 'plan', toolCallId: 'exit-plan-1', plan: '1. Go' }
   const conversation = conversationWith([
     replyRow(2, 'step', { step: command(0) }),
     replyRow(3, 'step', { step: question }),
     replyRow(4, 'step', { step: edit }),
-    {
-      ...replyRow(5, 'step', { step: { type: 'tool', name: 'Approve Plan', arguments: '{}', result: null } }),
-      id: messageId('event-5:exit-plan-1'),
-    },
-    replyRow(6, 'step', { step: planQuestion }),
+    replyRow(6, 'step', { step: { ...question, questionId: 'q2' } }),
     replyRow(7, 'agent', { body: 'Done.' }),
   ])
   expect(itemSummaryOf(conversation)).toEqual([

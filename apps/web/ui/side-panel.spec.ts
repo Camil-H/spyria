@@ -33,7 +33,7 @@ const tabLabelsOf = (page: Page) =>
 const isTabListScrollable = (page: Page) =>
   tabListOf(page).evaluate((element) => element.scrollWidth > element.clientWidth)
 
-const runtimeTabNames = ['Files', 'Changes', 'Plan', 'Commits', 'Browser', 'Usage', 'Connected tools', 'Members']
+const runtimeTabNames = ['Files', 'Changes', 'Commits', 'Browser', 'Usage', 'Connected tools', 'Members']
 const channelTabNames = ['Browser', 'Sources', 'Usage', 'Connected tools', 'Members']
 
 const expectOwnerConnections = async (page: Page) => {
@@ -99,23 +99,10 @@ test.describe('Side panel', () => {
     })
 
     await test.step('selects a tab on click and shows its content', async () => {
-      await tabOf(page, 'Plan').click()
-      await expect(tabOf(page, 'Plan')).toHaveAttribute('aria-selected', 'true')
+      await tabOf(page, 'Browser').click()
+      await expect(tabOf(page, 'Browser')).toHaveAttribute('aria-selected', 'true')
       await expect(tabOf(page, 'Files')).toHaveAttribute('aria-selected', 'false')
-      await expect(tabPanelOf(page)).toContainText('Reproduce the bug')
-    })
-
-    await expectLooks(page, panelOf(page), 'runtime-panel-plan')
-
-    await test.step('plan: lists the steps with their status', async () => {
-      const steps = tabPanelOf(page).getByRole('listitem')
-      await expect(steps).toHaveCount(3)
-      await expect(steps.nth(0)).toContainText('Reproduce the bug')
-      await expect(steps.nth(0)).toContainText('Done')
-      await expect(steps.nth(1)).toContainText('Fix the tax calculation')
-      await expect(steps.nth(1)).toContainText('In progress')
-      await expect(steps.nth(2)).toContainText('Add a regression test')
-      await expect(steps.nth(2)).toContainText('To do')
+      await expect(tabPanelOf(page)).toContainText('Invoices')
     })
 
     await test.step('usage: shows one row per member and a total on a runtime chat', async () => {
@@ -129,11 +116,22 @@ test.describe('Side panel', () => {
       await expect(usageTable.getByRole('row', { name: /Total/ })).toContainText('$0.23')
     })
 
-    await test.step('browser: shows the page of a runtime chat', async () => {
+    await test.step('browser: lists the pages the agent opened in a runtime chat, newest first, by address', async () => {
       await openPanelTab(page, 'Invoice bug', 'Browser')
-      await expect(tabPanelOf(page)).toContainText('http://localhost:3000/invoices')
-      await expect(tabPanelOf(page)).toContainText('Invoices')
-      await expect(tabPanelOf(page)).toContainText('Invoice total: 120.00')
+      const opened = tabPanelOf(page).getByRole('list', { name: 'Pages the agent opened' })
+      await expect(opened.getByRole('listitem')).toHaveText([
+        'https://example.com/invoicesInvoices',
+        'reports/invoice-totals.htmlInvoice totals',
+      ])
+    })
+
+    await test.step('browser: shows the address of a page the agent opened before loading it', async () => {
+      await tabPanelOf(page)
+        .getByRole('button', { name: /^https:\/\/example\.com\/invoices/ })
+        .click()
+      await expect(tabPanelOf(page)).toContainText('The agent opened this page')
+      await expect(tabPanelOf(page).getByRole('button', { name: 'Load page' })).toBeVisible()
+      await expect(tabPanelOf(page).locator('iframe')).toHaveCount(0)
     })
 
     await test.step('lists the workspace and personal connections of the owner on Invoice bug', async () => {
@@ -158,10 +156,9 @@ test.describe('Side panel', () => {
       await expect(tabOf(page, 'Browser')).toHaveAttribute('aria-selected', 'true')
     })
 
-    await test.step('browser: shows the page of a channel', async () => {
-      await expect(tabPanelOf(page)).toContainText('https://example.com/onboarding')
-      await expect(tabPanelOf(page)).toContainText('Onboarding guide')
-      await expect(tabPanelOf(page)).toContainText('Welcome to the team.')
+    await test.step('browser: lists the page the agent opened in a channel by address', async () => {
+      const opened = tabPanelOf(page).getByRole('list', { name: 'Pages the agent opened' })
+      await expect(opened.getByRole('listitem')).toHaveText(['https://example.com/onboardingOnboarding guide'])
     })
 
     await test.step('sources: lists the sources with their origin', async () => {
@@ -208,7 +205,6 @@ test.describe('Side panel', () => {
       await expect(tabOf(page, 'Files')).toHaveAttribute('aria-selected', 'true')
       for (const [tabName, emptyText] of [
         ['Changes', 'No changes'],
-        ['Plan', 'No plan'],
         ['Commits', 'No commits'],
       ] as const) {
         await tabOf(page, tabName).click()
@@ -271,7 +267,7 @@ test.describe('Side panel', () => {
     })
 
     await test.step('jumps to the first and last tab with Home and End', async () => {
-      await tabOf(page, 'Plan').focus()
+      await tabOf(page, 'Commits').focus()
       await page.keyboard.press('End')
       await expect(tabOf(page, 'Members')).toHaveAttribute('aria-selected', 'true')
       await page.keyboard.press('Home')
@@ -279,7 +275,7 @@ test.describe('Side panel', () => {
     })
 
     await test.step('selects the first tab again when another chat is opened', async () => {
-      await openPanelTab(page, 'Invoice bug', 'Plan')
+      await openPanelTab(page, 'Invoice bug', 'Commits')
       await openChat(page, 'Welcome')
       await expect(tabOf(page, 'Browser')).toHaveAttribute('aria-selected', 'true')
       await openChat(page, 'Invoice bug')
@@ -288,7 +284,7 @@ test.describe('Side panel', () => {
   })
 
   test('As a member, I hide and show the panel, which keeps its width and tab', async ({ page }) => {
-    await openPanelTab(page, 'Invoice bug', 'Plan')
+    await openPanelTab(page, 'Invoice bug', 'Commits')
     await dragResizeHandleBy(page, -100)
     const widthBeforeHiding = await panelWidthOf(page)
 
@@ -297,9 +293,9 @@ test.describe('Side panel', () => {
       await page.getByRole('button', { name: 'Hide panel' }).click()
       await expect(panelOf(page)).toBeHidden()
       await expect(page.getByRole('button', { name: 'Show panel' })).toBeVisible()
-      const composerBox = (await composerOf(page).boundingBox())!
-      expect(composerBox.width).toBeGreaterThan(composerWidthWithPanel + 200)
-      expect(composerBox.x + composerBox.width).toBeGreaterThan(page.viewportSize()!.width - 96)
+      expect((await composerOf(page).boundingBox())!.width).toBeGreaterThan(composerWidthWithPanel + 200)
+      const sendBox = (await page.getByRole('button', { name: 'Send' }).boundingBox())!
+      expect(sendBox.x + sendBox.width).toBeGreaterThan(page.viewportSize()!.width - 96)
     })
 
     await test.step('restores the previous width and tab when shown again', async () => {
@@ -307,7 +303,7 @@ test.describe('Side panel', () => {
       await expect(panelOf(page)).toBeVisible()
       await expect(page.getByRole('button', { name: 'Hide panel' })).toBeVisible()
       expect(await panelWidthOf(page)).toBeCloseTo(widthBeforeHiding, 0)
-      await expect(tabOf(page, 'Plan')).toHaveAttribute('aria-selected', 'true')
+      await expect(tabOf(page, 'Commits')).toHaveAttribute('aria-selected', 'true')
     })
 
     await test.step('keeps the panel hidden when switching chats', async () => {
@@ -379,7 +375,10 @@ test.describe('Side panel', () => {
       await expect.poll(() => panelWidthOf(page)).toBeCloseTo(280, 0)
     })
 
-    await test.step('scrolls the tab list horizontally when the panel is narrow and keeps the selected tab visible', async () => {
+    await test.step('scrolls the tab list horizontally when the panel is narrow and the text large, and keeps the selected tab visible', async () => {
+      await page.evaluate(() => {
+        document.documentElement.style.fontSize = '20px'
+      })
       expect(await panelWidthOf(page)).toBeCloseTo(280, 0)
       const overflowX = await tabListOf(page).evaluate((element) => getComputedStyle(element).overflowX)
       expect(['auto', 'scroll']).toContain(overflowX)

@@ -7,7 +7,6 @@ import type { WorkspaceRead, WorkspaceReading } from '../domain/workspace-reads.
 export const commandOutputPathOf = (chatId: string, stepId: string) => `/api/chats/${chatId}/steps/${stepId}/output`
 export const chatRoutingPathOf = (chatId: string) => `/api/chats/${chatId}/routing`
 export const chatQuestionPathOf = (chatId: string, questionId: string) => `/api/chats/${chatId}/questions/${questionId}`
-export const chatPlanModePathOf = (chatId: string) => `/api/chats/${chatId}/plan-mode`
 export const chatWorkspacePathOf = (chatId: string, read: string) => `/api/chats/${chatId}/workspace/${read}`
 export const chatPublishPathOf = (chatId: string, action: string) => `/api/chats/${chatId}/publish/${action}`
 export const chatGitPathOf = (chatId: string, action: string) => `/api/chats/${chatId}/git/${action}`
@@ -40,8 +39,6 @@ export const createHttpChatCommands = (postAsMember: PostAsMember, getAsMember: 
     answer,
   }: ChatInput & { questionId: string; answer: object }) =>
     (await postAsMember(workspaceId, chatQuestionPathOf(chatId, questionId), JSON.stringify(answer))).status,
-  setPlanMode: async ({ workspaceId, chatId, enabled }: ChatInput & { enabled: boolean }) =>
-    (await postAsMember(workspaceId, chatPlanModePathOf(chatId), JSON.stringify({ enabled }))).status,
   readWorkspace: async ({ workspaceId, chatId, read, path }: ChatInput & { read: WorkspaceRead; path: string }) => {
     const response = await getAsMember(
       workspaceId,

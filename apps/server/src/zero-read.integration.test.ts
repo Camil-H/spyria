@@ -22,7 +22,7 @@ import {
 const { database } = await openSharedTestApp()
 await database.$client`delete from workspace_connections`
 
-const collectionsInStoredOrder = ['messages', 'terminalLines', 'planSteps', 'toolConnections']
+const collectionsInStoredOrder = ['messages', 'terminalLines', 'toolConnections']
 
 const visibleTo = (snapshot: Snapshot, viewerId: MemberId, workspaceIds: readonly WorkspaceId[]): Snapshot => {
   const inWorkspaces = <Row extends { workspaceId: WorkspaceId }>(rows: readonly Row[]) =>
@@ -75,7 +75,6 @@ const visibleTo = (snapshot: Snapshot, viewerId: MemberId, workspaceIds: readonl
     pinnedSteps: readableMessages
       .filter((message) => message.kind === 'step' && pinnedStepTypes.includes(message.body))
       .map((message) => ({ ...message, needsReply: false })),
-    planSteps: inReadableChats(snapshot.planSteps),
     browserPages: inReadableChats(snapshot.browserPages),
     usageEntries: inReadableChats(snapshot.usageEntries),
     sources: inReadableChats(snapshot.sources),
@@ -175,7 +174,6 @@ test.each([
       read.latestMessages,
       read.pinnedSteps,
       read.chatMembers,
-      read.planSteps,
       read.usageEntries,
       read.browserPages,
     ])
@@ -486,7 +484,7 @@ test('a member watching a chat he cannot read receives none of its messages, ste
     insert into usage_entries (workspace_id, chat_id, month, user_id, tokens, cost_micros, calls)
     values (${acme}, ${chat}, ${new Date().toISOString().slice(0, 7)}, ${alice}, 10, 1000, 1)`
   await database.$client`
-    insert into browser_pages (workspace_id, chat_id, url, title, body_text) values (${acme}, ${chat}, 'u', 't', 'Secret')`
+    insert into browser_pages (workspace_id, chat_id, url, title, opened_at) values (${acme}, ${chat}, 'u', 'Secret', now())`
   const bobStore = await openZeroStore(createZeroStore, bob, [acme])
   await watchChats(bobStore, acme, [chat])
   bobStore.watch(acme, 'monthUsage', { month: new Date().toISOString().slice(0, 7) })
