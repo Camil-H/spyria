@@ -24,6 +24,7 @@ export const lockPendingAttachments = async () => []
 export const linkAttachments = skippedOnClient
 export const deleteMessageAttachments = skippedOnClient
 export const keepDeletedMessageText = skippedOnClient
+export const redactDeletedMessageEvents = skippedOnClient
 export const sentAttachmentOf = skippedOnClient
 export const setRuntimeHostSecretHash = skippedOnClient
 export const lockRuntimeHost = skippedOnClient

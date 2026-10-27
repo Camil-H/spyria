@@ -713,6 +713,24 @@ export const keepDeletedMessageText = (
     ],
   )
 
+export const redactDeletedMessageEvents = async (
+  tx: Transaction,
+  deleted: { workspaceId: string; chatId: string; messageId: string },
+) => {
+  await onServer(tx, `select set_config('spyria.redacting_message', $1, true)`, [
+    `${deleted.workspaceId}/${deleted.messageId}`,
+  ])
+  await onServer(
+    tx,
+    `update events set payload = payload || '{"body": "", "redacted": true}'::jsonb
+     where workspace_id = $1 and chat_id = $2
+       and ((type in ('message.posted', 'message.replied') and id = $3)
+         or (type = 'message.edited' and payload->>'messageId' = $3))`,
+    [deleted.workspaceId, deleted.chatId, deleted.messageId],
+  )
+  await onServer(tx, `select set_config('spyria.redacting_message', '', true)`, [])
+}
+
 export const deleteMessageAttachments = (tx: Transaction, workspaceId: string, messageId: string) =>
   onServer(tx, 'delete from message_attachments where workspace_id = $1 and message_id = $2', [workspaceId, messageId])
 

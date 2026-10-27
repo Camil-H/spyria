@@ -144,3 +144,32 @@ test('rejects UPDATE and DELETE on events', async () => {
   })
   expect(await database.$count(events)).toBe(12)
 })
+
+test('an event changes only to blank the body of a deleted message, in a transaction that names that message', async () => {
+  const blanked = { body: '', redacted: true }
+  const posted = async (id: string, seq: number, deletedAt: Date | null) => {
+    await database
+      .insert(messages)
+      .values(message({ workspaceId: 'workspace-acme', chatId: 'chat-welcome', id, seq, body: '', deletedAt }))
+    await database.insert(events).values(event({ id, seq, payload: { kind: 'member', body: 'hunter2' } }))
+  }
+  const redaction = (id: string, { naming = id, payload = blanked }: { naming?: string; payload?: object } = {}) =>
+    database.$client.begin(async (sql) => {
+      await sql`select set_config('spyria.redacting_message', ${`workspace-acme/${naming}`}, true)`
+      await sql`update events set payload = payload || ${JSON.stringify(payload)}::jsonb
+        where workspace_id = 'workspace-acme' and id = ${id}`
+    })
+  const payloadOf = async (id: string) => (await database.select().from(events).where(eq(events.id, id)))[0]?.payload
+  await posted('message-live', 200, null)
+  await posted('message-deleted', 201, new Date())
+  const updateRejected = { message: 'events are append-only: UPDATE rejected' }
+
+  expect(await refusalOf(redaction('message-live'))).toMatchObject(updateRejected)
+  expect(await refusalOf(redaction('message-deleted', { naming: 'message-live' }))).toMatchObject(updateRejected)
+  expect(await refusalOf(redaction('message-deleted', { payload: { body: 'forged' } }))).toMatchObject(updateRejected)
+  expect(await payloadOf('message-deleted')).toEqual({ kind: 'member', body: 'hunter2' })
+
+  expect(await refusalOf(redaction('message-deleted'))).toBe('accepted')
+  expect(await payloadOf('message-deleted')).toEqual({ kind: 'member', ...blanked })
+  expect(await payloadOf('message-live')).toEqual({ kind: 'member', body: 'hunter2' })
+})

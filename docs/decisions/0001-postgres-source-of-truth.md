@@ -9,7 +9,7 @@ Spyria needs a relational data model (workspaces, members, chats, roles, budgets
 Postgres holds all three.
 
 - The data model is Drizzle tables, changed only through Drizzle migrations. A migration that has shipped is never edited.
-- Chat history is an append-only `events` table; a trigger rejects updates and deletes, except the deletes of a workspace being erased after its deletion. The `messages` table is a projection of it and can be rebuilt (`bun run db:rebuild-messages`).
+- Chat history is an append-only `events` table; a trigger rejects updates and deletes, with two exceptions: the deletes of a workspace being erased after its deletion, and, when a member deletes a message, blanking its text in the earlier `message.posted`, `message.replied` and `message.edited` events of that message (body set to empty and `redacted` set to true, nothing else changed, and only for a message already deleted, in a transaction that names it). The event's type, order and author stay, so the history can still be rebuilt and a deleted text is truly erased. The `messages` table is a projection of it and can be rebuilt (`bun run db:rebuild-messages`).
 - Background work is a `jobs` table. Workers claim jobs with `for update skip locked`, retry with backoff up to five attempts, and leave dead jobs for an operator to inspect and requeue.
 
 ## Consequences
