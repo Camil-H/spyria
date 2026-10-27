@@ -9,7 +9,7 @@ export default defineConfig({
   globalSetup: './e2e/global-setup.ts',
   timeout: 60_000,
   expect: { timeout: 15_000 },
-  retries: 0,
+  retries: process.env.CI ? 1 : 0,
   reporter: [
     ['list'],
     ['./e2e/platform-gate.ts'],

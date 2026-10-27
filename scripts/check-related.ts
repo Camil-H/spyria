@@ -202,18 +202,19 @@ console.log(bundleReasons.length > 0 ? `bundle: yes, because of ${bundleReasons.
 
 const selectionOf = (suite: Suite) => (suite.full.length > 0 ? ('all' as const) : [...suite.files])
 if (planFile) {
-  const plan = {
-    base,
-    changedFiles,
-    unit: selectionOf(unit),
-    integration: selectionOf(integration),
-    e2e: e2eSelection,
-    e2eRepeat: changedSpecs.map(playwrightPathOf),
-    docker: dockerReasons.length > 0,
-    bundle: bundleReasons.length > 0,
-  }
-  writeFileSync(planFile, `${JSON.stringify(plan, null, 2)}\n`)
-  console.log(`\nPlan written to ${planFile}`)
+  const isFull = process.argv.includes('--full')
+  const selection = isFull
+    ? { unit: 'all', integration: 'all', e2e: 'all', e2eRepeat: [], docker: true, bundle: true }
+    : {
+        unit: selectionOf(unit),
+        integration: selectionOf(integration),
+        e2e: e2eSelection,
+        e2eRepeat: changedSpecs.map(playwrightPathOf),
+        docker: dockerReasons.length > 0,
+        bundle: bundleReasons.length > 0,
+      }
+  writeFileSync(planFile, `${JSON.stringify({ base, changedFiles, ...selection }, null, 2)}\n`)
+  console.log(`\n${isFull ? 'Full plan' : 'Plan'} written to ${planFile}`)
   process.exit(0)
 }
 
