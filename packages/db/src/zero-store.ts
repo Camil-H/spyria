@@ -63,6 +63,7 @@ const isSameSources = (previous: readonly unknown[], next: readonly unknown[]) =
   previous.length === next.length && previous.every((source, index) => source === next[index])
 const scopedKeyOf = (workspaceId: WorkspaceId, name: ScopedQueryName, args: object) =>
   `${workspaceId}/${name}/${JSON.stringify(args)}`
+const chatsWithLatestMessage = ['latestMessages', 'latestAgentActivity']
 const latestMessagesIn = (chats: readonly object[]) =>
   chats.flatMap((chat) => (chat as { messages: readonly object[] }).messages)
 type WindowRoot = { id: string; replies: readonly object[]; threadReplies: readonly object[] }
@@ -216,6 +217,7 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
   const plainMessagesOf = () =>
     memoizedOnSources((messages: ZeroRows['messages']) => messages.map((message) => messageRowOf(message, false)))
   const latestMessagesOf = plainMessagesOf()
+  const latestAgentActivityOf = plainMessagesOf()
   const pinnedStepsOf = plainMessagesOf()
   const usageRowsOf = memoizedOnSources((chatUsage: ZeroRows['usageEntries'], monthUsage: ZeroRows['usageEntries']) =>
     uniqueBy(
@@ -291,6 +293,7 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
       chats: chatsOf(rowsOf('chats')),
       messages: messagesOf(rowsOf('messages', 'chatMessages'), runtimeChatIdsKeyOf(rowsOf('chats'))),
       latestMessages: latestMessagesOf(rowsOf('messages', 'latestMessages')),
+      latestAgentActivity: latestAgentActivityOf(rowsOf('messages', 'latestAgentActivity')),
       pinnedSteps: pinnedStepsOf(rowsOf('messages', 'chatPinnedSteps')),
       drafts,
       readMarkers: readMarkersOf(rowsOf('readMarkers')),
@@ -451,7 +454,9 @@ export const createZeroStore = ({
         .materialize((queries[table] as () => Parameters<typeof zero.materialize>[0])())
         .addListener((data, result) => {
           if (rowsByWorkspace.get(workspaceId) !== rows) return
-          rows[table] = table === 'latestMessages' ? latestMessagesIn(data as readonly object[]) : (data as object[])
+          rows[table] = chatsWithLatestMessage.includes(table)
+            ? latestMessagesIn(data as readonly object[])
+            : (data as object[])
           publish()
           if (result === 'complete') completeTables.add(table)
           if (completeTables.size === materializedTables.length) loadedOf(workspaceId).resolve()

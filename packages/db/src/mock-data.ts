@@ -196,6 +196,7 @@ export const createMockSnapshot = (): Snapshot => {
       agent('invoice-4', 'chat-invoice-bug', acme, 'The tax is applied twice.', '11:03'),
     ]),
     latestMessages: [],
+    latestAgentActivity: [],
     pinnedSteps: [],
     drafts: [],
     readMarkers: [
