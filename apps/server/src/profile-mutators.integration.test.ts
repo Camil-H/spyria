@@ -47,10 +47,12 @@ const virtualKeyIdOf = async (userId: string) =>
   (await database.$client`select virtual_key_id from member_gateway_keys where user_id = ${userId}`)[0]?.virtual_key_id
 const boundKeyIdsOf = async (virtualKeyId: string) =>
   (
-    await gateway.call<{ virtual_key: { provider_configs: { keys: { key_id: string }[] }[] } }>(
-      `/api/governance/virtual-keys/${virtualKeyId}`,
-    )
-  ).virtual_key.provider_configs
+    (
+      await gateway.call<{ virtual_key: { provider_configs: { keys: { key_id: string }[] }[] | null } }>(
+        `/api/governance/virtual-keys/${virtualKeyId}`,
+      )
+    ).virtual_key.provider_configs ?? []
+  )
     .flatMap((config) => config.keys.map((key) => key.key_id))
     .toSorted()
 const appWithGateway = (url: string) => createApp({ database, ...testAuthSettings, llmGateway: llmGatewayAt(url) })
@@ -188,7 +190,7 @@ describe('Alice’s OpenAI credential, added then removed', () => {
     expect(await boundKeyIdsOf(virtualKeyId)).toEqual(boundBefore)
   })
 
-  test('a member cannot remove the credential of another member; removing one unbinds and deletes its gateway key, removing the last deletes the virtual key', async () => {
+  test('a member cannot remove the credential of another member; removing one unbinds and deletes its gateway key, removing the last keeps the virtual key with no provider for tools', async () => {
     const rows = await credentialRows()
     const [openAi] = rows.filter((row) => row.provider === 'OpenAI')
     const [seeded] = rows.filter((row) => row.provider === 'Anthropic')
@@ -211,9 +213,9 @@ describe('Alice’s OpenAI credential, added then removed', () => {
       await resultOf(aliceInAcme, 'profile.removeLlmCredential', { workspaceId: acme, credentialId: seeded?.id }),
     ).toEqual(succeeded)
     await jobDone('profile.gateway-sync', { memberId: alice })
-    expect((await gateway.request(`/api/governance/virtual-keys/${virtualKeyId}`)).status).toBe(404)
+    expect(await boundKeyIdsOf(virtualKeyId)).toEqual([])
     expect((await gateway.request(`/api/providers/mistral/keys/${seededKey.id}`)).status).toBe(404)
-    expect(await virtualKeyIdOf(alice)).toBeUndefined()
+    expect(await virtualKeyIdOf(alice)).toBe(virtualKeyId)
     expect(await jobStatesOf('profile.gateway-sync', {})).toEqual(['done', 'done'])
   })
 })

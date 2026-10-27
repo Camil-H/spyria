@@ -3,6 +3,7 @@ import {
   agentReplyText,
   composerOf,
   expect,
+  type FileChooser,
   giveWorkspaceRole,
   hostsSectionOf,
   insertWorkspaceRole,
@@ -278,7 +279,7 @@ test.describe('Team', () => {
       await expect(tabPanelOf(page).getByRole('listitem').filter({ hasText: 'Alice D.' })).toContainText('Owner')
     })
 
-    test('As a member, I upload a profile picture that shows next to my name in chat, and remove it', async ({
+    test('As a member, I click my profile picture to add one that shows next to my name in chat, change it and remove it', async ({
       page,
     }) => {
       const pictureSection = sectionOf(page, 'Profile picture')
@@ -286,27 +287,40 @@ test.describe('Team', () => {
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==',
         'base64',
       )
+      const chooseFileAfter = async (click: () => Promise<void>, file: Parameters<FileChooser['setFiles']>[0]) => {
+        const fileChooser = page.waitForEvent('filechooser')
+        await click()
+        await (await fileChooser).setFiles(file)
+      }
       await openProfile(page)
 
-      await test.step('shows my initials until I upload a picture', async () => {
-        await expect(pictureSection.getByRole('img')).toHaveCount(0)
+      await test.step('shows my initials left of my display name until I click them to add a picture', async () => {
+        await expect(pictureSection.locator('img')).toHaveCount(0)
         await expect(pictureSection).toContainText('A')
-        await pictureSection.getByLabel('Picture file').setInputFiles({
+        await expect(pictureSection.getByRole('button', { name: /picture$/ })).toHaveCount(1)
+        const pictureBox = await pictureSection.boundingBox()
+        const nameBox = await sectionOf(page, 'Display name').boundingBox()
+        expect(pictureBox && nameBox && nameBox.x - pictureBox.x - pictureBox.width).toBeGreaterThanOrEqual(0)
+        await chooseFileAfter(() => pictureSection.getByRole('button', { name: 'Add profile picture' }).click(), {
           name: 'me.png',
           mimeType: 'image/png',
           buffer: onePixelPng,
         })
         await expect(pictureSection.locator('img')).toHaveAttribute('src', /^data:image\/jpeg;base64,/)
-        await expect(pictureSection.getByRole('button', { name: 'Change picture' })).toBeVisible()
       })
 
-      await test.step('refuses a file that is not an image', async () => {
-        await pictureSection.getByLabel('Picture file').setInputFiles({
+      await test.step('refuses a file that is not an image when I change the picture, below the picture and my name', async () => {
+        await pictureSection.getByRole('button', { name: 'Edit profile picture' }).click()
+        await chooseFileAfter(() => page.getByRole('menuitem', { name: 'Change picture' }).click(), {
           name: 'notes.txt',
           mimeType: 'text/plain',
           buffer: Buffer.from('not an image'),
         })
-        await expect(pictureSection).toContainText('A profile picture must be a small PNG, JPEG or WebP image')
+        const refusal = mainOf(page).getByText('A profile picture must be a small PNG, JPEG or WebP image')
+        await expect(refusal).toBeVisible()
+        const pictureBox = await pictureSection.boundingBox()
+        const refusalBox = await refusal.boundingBox()
+        expect(pictureBox && refusalBox && refusalBox.y - pictureBox.y - pictureBox.height).toBeGreaterThanOrEqual(0)
       })
 
       await test.step('shows the picture next to my name in a chat, and initials for members without one', async () => {
@@ -318,9 +332,10 @@ test.describe('Team', () => {
 
       await test.step('removes the picture', async () => {
         await openProfile(page)
-        await pictureSection.getByRole('button', { name: 'Remove picture' }).click()
+        await pictureSection.getByRole('button', { name: 'Edit profile picture' }).click()
+        await page.getByRole('menuitem', { name: 'Remove picture' }).click()
         await expect(pictureSection.locator('img')).toHaveCount(0)
-        await expect(pictureSection.getByRole('button', { name: 'Upload picture' })).toBeVisible()
+        await expect(pictureSection.getByRole('button', { name: 'Add profile picture' })).toBeVisible()
       })
     })
   })
