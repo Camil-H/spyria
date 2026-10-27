@@ -58,6 +58,12 @@ export const searchResultLimit = 30
 export const searchTextMaximumLength = 200
 const searchText = z.string().check(z.minLength(searchTextMinimumLength), z.maxLength(searchTextMaximumLength))
 export const likeEscaped = (text: string) => text.replace(/[\\%_]/g, '\\$&')
+export const caseVariantsOf = (text: string) => {
+  const lowered = text.toLowerCase()
+  if (!/[^\p{ASCII}]/u.test(lowered)) return [lowered]
+  const titled = lowered.replace(/(^|\s)(\S)/gu, (_, space: string, letter: string) => space + letter.toUpperCase())
+  return [...new Set([lowered, titled, lowered.toUpperCase()])]
+}
 
 const messagesOf = (ctx: ZeroContext, chatId: string) =>
   zql.messages.where('workspaceId', ctx.workspaceId).where('chatId', chatId).whereExists('chat', readableBy(ctx.userId))
@@ -172,7 +178,9 @@ export const queries = defineQueries({
       .where('workspaceId', ctx.workspaceId)
       .where('kind', 'IN', ['member', 'agent'])
       .where('deletedAt', 'IS', null)
-      .where('body', 'ILIKE', `%${likeEscaped(args.text)}%`)
+      .where(({ or, cmp }) =>
+        or(...caseVariantsOf(args.text).map((variant) => cmp('body', 'ILIKE', `%${likeEscaped(variant)}%`))),
+      )
       .whereExists('chat', readableBy(ctx.userId))
       .orderBy('createdAt', 'desc')
       .limit(searchResultLimit),
