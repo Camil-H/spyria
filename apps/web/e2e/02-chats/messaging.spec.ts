@@ -116,6 +116,17 @@ test.describe('Messaging', () => {
       await expect(messageContaining(page, 'Filler 30')).toBeInViewport()
     })
 
+    await test.step('offers Go to last message while reading earlier messages, and goes back to the newest', async () => {
+      const goToLastMessage = mainOf(page).getByRole('button', { name: 'Go to last message' })
+      await expect(goToLastMessage).toHaveCount(0)
+      await messageContaining(page, 'Welcome to the team!').scrollIntoViewIfNeeded()
+      await expect(goToLastMessage).toBeVisible()
+      await expect(messageContaining(page, 'Filler 30')).not.toBeInViewport()
+      await goToLastMessage.click()
+      await expect(messageContaining(page, 'Filler 30')).toBeInViewport()
+      await expect(goToLastMessage).toHaveCount(0)
+    })
+
     await test.step('opens on the newest 50 messages and loads the earlier ones when scrolling up', async () => {
       await workerStack.database.$client.begin(async (sql) => {
         await sql`select 1 from chats where id = 'chat-welcome' for update`

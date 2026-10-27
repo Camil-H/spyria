@@ -19,6 +19,8 @@ From a chat's menu in the sidebar, a member with the right permission can **Move
 
 Every chat keeps one unsent draft per member; a pencil icon in the sidebar marks a chat with a draft. In the composer, Ctrl+Enter (Cmd+Enter on a Mac) sends.
 
+A chat opens on its newest message and follows new ones as they arrive. A member who scrolls up to read earlier messages stays where they are when new ones come in, and a **Go to last message** button at the bottom of the chat takes them back down; sending a message also goes back to the newest.
+
 Messages are written in Markdown and shown formatted; in a member's message, each new line stays a new line. In the composer, Ctrl (Cmd on a Mac) plus **B**, **I** or **U** makes the selection bold, italic or underlined (`__text__`), Ctrl+Shift+C makes it code (a block when it spans several lines), and Ctrl+K makes it a link; pressing the same shortcut again removes the formatting. A line starting with `- ` or `1. ` continues as a list on Enter, and Enter on an empty item ends the list. Pasting a web address over selected text makes a link. Shift+Enter always adds a plain new line.
 
 The author of a message can edit or delete it from its menu. A deleted message stays in the chat as "This message was deleted": Spyria keeps its last text in the chat's history (the message and its event log) and no longer shows it, while its attachments are erased. The kept text still reaches the browser of every member who can read the chat, so deleting a message does not take back a secret posted by mistake.
