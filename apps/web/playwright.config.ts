@@ -10,6 +10,7 @@ export default defineConfig({
   timeout: 60_000,
   expect: { timeout: 15_000 },
   retries: process.env.CI ? 1 : 0,
+  failOnFlakyTests: !!process.env.CI,
   reporter: [
     ['list'],
     ['./e2e/platform-gate.ts'],
@@ -19,6 +20,7 @@ export default defineConfig({
         outputFile: new URL('../../.check/e2e-results.json', import.meta.url).pathname,
       },
     ],
+    ...(process.env.CI ? [['github'] as const] : []),
   ],
   use: { baseURL: viteUrl, timezoneId: 'UTC', screenshot: 'only-on-failure' },
   projects: [
