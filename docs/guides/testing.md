@@ -80,6 +80,8 @@ Tests start and own their containers; they never touch the dev stack.
 | SSO-mode stack | server 3102, app 5191 | For sign-in tests in `sso` mode. |
 | Fake MCP server | 3101 | Must be free when e2e starts. |
 
+An e2e run starts by stopping (SIGTERM) every process listening on its ports: the servers and apps above and every worker's zero-cache port. `lsof` lists them in batches of 50 ports, since it refuses more than 100 at once; when it cannot list them, nothing is stopped. The run then checks that every port is free and refuses to start, naming the processes holding a port, if one is not. Each server it starts must be the one answering on its port, so a leftover server from an earlier run can never stand in for it. Every signal the setup and teardown send is printed with its target processes (`[test stack] SIGTERM to …`), and both test servers log `test_server.started` with their parent process chain, `test_server.signal` for any SIGTERM, SIGINT or SIGHUP they receive, `test_server.listen_failed` when their port is taken, and `test_server.exit` (`sso_test_server.*` for the SSO server).
+
 Playwright runs 3 workers by default; `WORKERS=<n>` changes it. The sign-in files `01-access/sso.spec.ts` and `01-access/team.spec.ts` run first, each as its own project on one worker (`sign-in-sso`, then `sign-in-team`), because two provider sign-ins running at the same time make each other fail; the rest of the suite follows on all workers.
 
 ### Cleanup
@@ -143,7 +145,11 @@ Rules:
 
 ### The platform gate
 
-`00-platform` is the Playwright project `platform`, a dependency of the `e2e` project. It checks the stack, not a feature: a reset leaves only the seed, a project inserted through SQL shows up live, a browser mutation is stored by the server, an agent stream frame of a scripted turn arrives, and a model call through the gateway is recorded with its prompter and owner. When it fails, nothing else runs, and `e2e/platform-gate.ts` prints that the test stack is broken rather than a feature.
+`00-platform` is the Playwright project `platform`, a dependency of the `sign-in` and `e2e` projects. It checks the stack, not a feature: a reset leaves only the seed, a project inserted through SQL shows up live, a browser mutation is stored by the server, an agent stream frame of a scripted turn arrives, and a model call through the gateway is recorded with its prompter and owner. When it fails, nothing else runs, and `e2e/platform-gate.ts` prints that the test stack is broken rather than a feature.
+
+### Sign-in tests
+
+Two sign-ins through the test provider at the same time make each other fail, so every file that signs in through a provider (`sso`, `team`, `sessions` and `workspaces` in `01-access`) is in the Playwright project `sign-in`, which runs its tests one at a time on a single worker while the `e2e` project runs the rest. Neither depends on the other: a failing sign-in test is one failure and the rest of the suite still runs. `bun run test:e2e` runs both projects.
 
 ## The visual suite
 
