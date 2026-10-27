@@ -12,10 +12,10 @@ import {
   expectMembers,
   type Locator,
   mainOf,
+  messageActionOf,
   messageContaining,
   messageItemsOf,
   openChat,
-  openMessageMenu,
   openPanelTab,
   openWelcome,
   type Page,
@@ -34,14 +34,10 @@ import {
 const bobsReply = 'Count me in for lunch'
 const alicesReply = 'See you at noon'
 const runtimeName = bobsReply
-const startRuntime = async (page: Page, message: Locator) => {
-  await openMessageMenu(message)
-  await page.getByRole('menuitem', { name: 'Start runtime from this message' }).click()
-}
-const openMessageAction = async (page: Page, messageText: string, actionName: string) => {
-  await openMessageMenu(messageContaining(page, messageText))
-  await page.getByRole('menuitem', { name: actionName }).click()
-}
+const startRuntime = async (message: Locator) =>
+  (await messageActionOf(message, 'Start runtime from this message')).click()
+const openMessageAction = async (page: Page, messageText: string, actionName: string) =>
+  (await messageActionOf(messageContaining(page, messageText), actionName)).click()
 const agentPromptJobs = async (workerStack: WorkerStack) =>
   (await workerStack.database.select().from(jobs)).filter((job) => job.type === 'agent.prompt')
 const runtimeLinkOf = (page: Page) =>
@@ -58,7 +54,7 @@ const startRuntimeFromThread = async (page: Page, bobPage: Page) => {
   await replyBoxOf(page).fill(alicesReply)
   await replyBoxOf(page).press('ControlOrMeta+Enter')
   await expect(repliesOf(page)).toHaveCount(2)
-  await startRuntime(page, repliesOf(page).filter({ hasText: bobsReply }))
+  await startRuntime(repliesOf(page).filter({ hasText: bobsReply }))
   await expect(mainOf(page).getByRole('heading', { level: 1, name: runtimeName })).toBeVisible()
 }
 
@@ -128,7 +124,7 @@ test.describe('Runtime from a thread', () => {
   }, async ({ page }) => {
     await openWelcome(page)
     await sendMessage(page, 'Lunch at noon?')
-    await startRuntime(page, messageContaining(page, 'Lunch at noon?'))
+    await startRuntime(messageContaining(page, 'Lunch at noon?'))
     await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Lunch at noon?' })).toBeVisible()
     await expect(messageItemsOf(page)).toHaveCount(1)
     await expect(messageItemsOf(page).nth(0)).toContainText(
@@ -139,6 +135,27 @@ test.describe('Runtime from a thread', () => {
     )
     await openPanelTab(page, 'Lunch at noon?', 'Members')
     await expectMembers(page, [['Alice', 'Owner']])
+  })
+
+  test('As a member, I copy a thread as context: the clipboard holds the quote a runtime started from it would get', {
+    tag: ['@spec-32'],
+  }, async ({ page }) => {
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+    await openWelcome(page)
+    await replyInThread(page, alicesReply)
+    const welcomeMessage = messageContaining(page, alicesWelcomeMessage).first()
+    await (await messageActionOf(welcomeMessage, 'Copy thread as context')).click()
+    await expect(await messageActionOf(welcomeMessage, 'Copied')).toBeVisible()
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(
+      new RegExp(
+        `^${[
+          'Conversation so far, from the channel thread in #Welcome:',
+          `Alice \\(member, human\\) · ${quotedTime}\\n${alicesWelcomeMessage.replace('.', '\\.')}`,
+          `Alice \\(member, human\\) · ${quotedTime}\\n${alicesReply}`,
+        ].join('\\n\\n')}$`,
+      ),
+    )
+    await expect(await messageActionOf(repliesOf(page).first(), 'Copy thread as context')).toBeVisible()
   })
 
   test('As a member, I create a runtime from a thread without prompting the agent, and my first prompt after Runs on is answered', {

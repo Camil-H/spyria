@@ -16,6 +16,7 @@ import { ForkButton } from './ForkButton.tsx'
 import { MessageList } from './MessageList.tsx'
 import {
   ChatMediaContext,
+  ChatNameContext,
   MentionNamesContext,
   QuestionAnswererContext,
   ToolsAwaitingApprovalContext,
@@ -150,16 +151,18 @@ export const ChatView = ({
         <ToolsAwaitingApprovalContext value={toolsAwaitingApproval}>
           <ChatMediaContext value={{ chatId, isRuntime: conversation.type === 'runtime' }}>
             <MentionNamesContext value={mentionNames}>
-              <MessageList
-                conversation={conversation}
-                items={withLiveMessages(conversation.items, live)}
-                isComplete={chatMessages.isComplete}
-                onLoadEarlier={
-                  chatMessages.isComplete && chatMessages.hasEarlier ? chatMessages.loadEarlier : undefined
-                }
-                onStop={conversation.canConfigure ? () => commands.stopAgent({ workspaceId, chatId }) : undefined}
-                onFork={conversation.isOwner ? undefined : fork}
-              />
+              <ChatNameContext value={conversation.title}>
+                <MessageList
+                  conversation={conversation}
+                  items={withLiveMessages(conversation.items, live)}
+                  isComplete={chatMessages.isComplete}
+                  onLoadEarlier={
+                    chatMessages.isComplete && chatMessages.hasEarlier ? chatMessages.loadEarlier : undefined
+                  }
+                  onStop={conversation.canConfigure ? () => commands.stopAgent({ workspaceId, chatId }) : undefined}
+                  onFork={conversation.isOwner ? undefined : fork}
+                />
+              </ChatNameContext>
             </MentionNamesContext>
           </ChatMediaContext>
         </ToolsAwaitingApprovalContext>

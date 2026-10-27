@@ -7,8 +7,8 @@ import {
   composerOf,
   draftIconOf,
   expect,
-  type Locator,
   mainOf,
+  messageActionOf,
   messageContaining,
   messageItemsOf,
   openChat,
@@ -21,14 +21,8 @@ import {
 
 const messagesOf = (page: Page) => page.getByRole('list', { name: 'Messages' })
 
-const openMessageMenu = async (message: Locator) => {
-  await message.hover()
-  await message.getByRole('button', { name: 'Message actions' }).click()
-}
-const openMessageAction = async (page: Page, messageText: string, actionName: string) => {
-  await openMessageMenu(messageContaining(page, messageText))
-  await page.getByRole('menuitem', { name: actionName }).click()
-}
+const openMessageAction = async (page: Page, messageText: string, actionName: string) =>
+  (await messageActionOf(messageContaining(page, messageText), actionName)).click()
 const deleteDialogOf = (page: Page) => page.getByRole('dialog', { name: 'Delete message' })
 const agentPromptJobs = async (workerStack: WorkerStack) =>
   (await workerStack.database.select().from(jobs)).filter((job) => job.type === 'agent.prompt')
@@ -291,21 +285,19 @@ test.describe('Messaging', () => {
       await expect(draftIconOf(page, 'Welcome')).toHaveCount(0)
     })
 
-    await test.step('offers the three actions, with edit and delete enabled on own messages', async () => {
-      await openMessageMenu(messageContaining(page, 'Thanks, glad to be here.'))
-      await expect(page.getByRole('menuitem', { name: 'Start runtime from this message' })).toBeEnabled()
-      await expect(page.getByRole('menuitem', { name: 'Edit' })).toBeEnabled()
-      await expect(page.getByRole('menuitem', { name: 'Delete' })).toBeEnabled()
-      await page.keyboard.press('Escape')
+    await test.step('offers the actions side by side, with edit and delete on own messages', async () => {
+      const ownMessage = messageContaining(page, 'Thanks, glad to be here.')
+      await expect(await messageActionOf(ownMessage, 'Start runtime from this message')).toBeEnabled()
+      await expect(await messageActionOf(ownMessage, /^Copy (message|thread) as context$/)).toBeEnabled()
+      await expect(await messageActionOf(ownMessage, 'Edit')).toBeEnabled()
+      await expect(await messageActionOf(ownMessage, 'Delete')).toBeEnabled()
     })
 
-    await test.step('disables edit and delete on messages of other members', async () => {
-      await openMessageMenu(messageContaining(page, 'Welcome to the team!'))
-      await expect(page.getByRole('menuitem', { name: 'Start runtime from this message' })).toBeEnabled()
-      await expect(page.getByRole('menuitem', { name: 'Edit' })).toBeDisabled()
-      await expect(page.getByRole('menuitem', { name: 'Delete' })).toBeDisabled()
-      await page.keyboard.press('Escape')
-      await expect(page.getByRole('menuitem')).toHaveCount(0)
+    await test.step('leaves edit and delete out on messages of other members', async () => {
+      const othersMessage = messageContaining(page, 'Welcome to the team!')
+      await expect(await messageActionOf(othersMessage, 'Start runtime from this message')).toBeEnabled()
+      await expect(await messageActionOf(othersMessage, 'Edit')).toHaveCount(0)
+      await expect(await messageActionOf(othersMessage, 'Delete')).toHaveCount(0)
     })
 
     await test.step('keeps the original text on cancel', async () => {
@@ -356,7 +348,7 @@ test.describe('Messaging', () => {
     })
 
     await test.step('has no message menu in a runtime chat', async () => {
-      await expect(page.getByRole('button', { name: 'Message actions' })).toHaveCount(0)
+      await expect(page.getByRole('toolbar', { name: 'Message actions' })).toHaveCount(0)
     })
 
     await test.step('collapses and expands a tool call', async () => {
