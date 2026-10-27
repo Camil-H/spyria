@@ -106,16 +106,16 @@ test('a pending sign-in left behind does not block Connect, and Connect while si
   expect(fakeMcp.records.slice(callsBefore)).toEqual([])
 })
 
-test('a member acts only on their own key: unknown servers and members without a key are refused, and Bob never touches Alice’s connection', async () => {
+test('a member acts only on their own key: unknown servers are refused, a member without an LLM key connects on a key that serves only tools, and Bob never touches Alice’s connection', async () => {
   expect(await asMember(alice, 'POST', '/api/tool-connections/Jira/connect')).toEqual({
     status: 400,
     body: JSON.stringify({ error: 'tool_not_in_catalog', message: 'Tool Jira is not in the catalog' }),
   })
-  expect(await asMember(bob, 'POST', connectionPath('connect'))).toEqual({
-    status: 400,
-    body: JSON.stringify({ error: 'no_gateway_key', message: 'Add an LLM key before connecting tools' }),
-  })
+  expect((await asMember(bob, 'POST', connectionPath('connect'))).status).toBe(200)
+  const bobKey = await virtualKeyOf(bob)
+  expect(bobKey.provider_configs ?? []).toEqual([])
   await connectAlice(aliceCookie)
+  expect((await virtualKeyOf(alice)).id).not.toBe(bobKey.id)
   expect((await asMember(bob, 'POST', connectionPath('disconnect'))).status).toBe(204)
   expect(await asMember(bob, 'POST', connectionPath('refresh'))).toEqual({
     status: 200,
@@ -123,7 +123,6 @@ test('a member acts only on their own key: unknown servers and members without a
   })
   expect(await connectionRows()).toEqual([{ user_id: alice, tool: 'fake', status: 'Connected' }])
   expect((await sessionsOf((await virtualKeyOf(alice)).id)).map((session) => session.status)).toEqual(['active'])
-  expect((await asMember(bob, 'POST', connectionPath('connect'))).status).toBe(400)
 })
 
 test('/mcp runs as the chat owner with Spyria’s attribution, lists tools outside a turn but calls them only during one, and refuses another host’s token', async () => {
@@ -168,7 +167,7 @@ test('/mcp runs as the chat owner with Spyria’s attribution, lists tools outsi
   }
 })
 
-test('/mcp for a chat owner without an LLM key connects with no tools instead of refusing the runtime token, and a tool call answers that the owner needs to connect', async () => {
+test('/mcp for a chat owner without an LLM key runs the workspace tools on a key that serves only tools, and a personal tool call answers that the owner needs to connect', async () => {
   const host = await fakeHost('Keyless tools host')
   const { token } = await runtimeTurn(host, bob, bob)
   const initialized = await mcpCall(
@@ -176,8 +175,11 @@ test('/mcp for a chat owner without an LLM key connects with no tools instead of
     token,
     rpcOf('initialize', { protocolVersion: '2025-06-18', capabilities: {} }),
   )
-  expect(initialized).toMatchObject({ status: 200, result: { serverInfo: { name: 'spyria' } } })
-  expect(await mcpCall(host, token, rpcOf('tools/list'))).toMatchObject({ status: 200, result: { tools: [] } })
+  expect(initialized.status).toBe(200)
+  expect((await virtualKeyOf(bob)).provider_configs ?? []).toEqual([])
+  const listed = await mcpCall(host, token, rpcOf('tools/list'))
+  expect(listed.result.tools.map((tool: { name: string }) => tool.name)).toContain(`${sharedToolServer}-lookup`)
+  expect(textOf((await mcpCall(host, token, lookup)).result)).toBe('ran lookup')
   const called = await mcpCall(host, token, whoami)
   expect(called).toMatchObject({ status: 200, result: { isError: true } })
   expect(textOf(called.result)).toBe('Bob needs to connect fake')

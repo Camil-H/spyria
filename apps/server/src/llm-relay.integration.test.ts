@@ -14,8 +14,11 @@ import {
   createFakeHosts,
   type FakeHost,
   gatewayLogsOf,
+  lee,
   llmGatewayAt,
+  mcpCall,
   openSharedTestApp,
+  rpcOf,
   runtimeTurn,
   testAuthSettings,
   testSecretsKey,
@@ -174,6 +177,24 @@ test('a prompter without a gateway key is refused and Spyria’s notice is recor
   const refused = await host.modelCall({ headers: { authorization: `Bearer ${token}` }, body: completion })
   expect(refused.status).toBe(401)
   expect(await failureOf(chatId)).toBe('Alice has no LLM key in this workspace')
+})
+
+test('a prompter whose gateway key serves only tools, with no LLM key, is refused before the gateway', async () => {
+  const host = await fakeHost('Tools-only key host')
+  await database.$client`delete from llm_credentials where workspace_id = ${acme} and user_id = ${lee}`
+  const { chatId, token } = await runtimeTurn(host, lee, lee)
+  const initialized = await mcpCall(
+    host,
+    token,
+    rpcOf('initialize', { protocolVersion: '2025-06-18', capabilities: {} }),
+  )
+  expect(initialized.status).toBe(200)
+  expect(await database.$client`select 1 from member_gateway_keys where user_id = ${lee}`).toHaveLength(1)
+  const callsBefore = fakeLlmCalls.length
+  const refused = await host.modelCall({ headers: { authorization: `Bearer ${token}` }, body: completion })
+  expect(refused.status).toBe(401)
+  expect(await failureOf(chatId)).toBe('Lee has no LLM key in this workspace')
+  expect(fakeLlmCalls.length).toBe(callsBefore)
 })
 
 test('a key the provider refuses is classified on the turn without provider text', async () => {

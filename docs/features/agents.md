@@ -96,4 +96,4 @@ The **Usage** tab of a chat shows its spend per member.
 
 ## Keys
 
-A member adds their LLM API keys in **Profile > LLM access**, per workspace. Keys are stored in the model gateway only; Spyria keeps a reference and the last four characters. A member without a key can read runtime chats but cannot prompt on a Spyria runtime. Tool accounts are connected in **Profile > Connections** (**Shared with me** lists the workspace connections available to you, **My connections** your personal ones). See [Security](../architecture/security.md).
+A member adds their LLM API keys in **Profile > LLM access**, per workspace. Keys are stored in the model gateway only; Spyria keeps a reference and the last four characters. A member without a key can read runtime chats but cannot prompt on a Spyria runtime; tools work for them all the same. Tool accounts are connected in **Profile > Connections** (**Shared with me** lists the workspace connections available to you, **My connections** your personal ones). See [Security](../architecture/security.md).

@@ -34,7 +34,7 @@ The permissions and built-in roles are defined in `packages/kernel/src/workspace
 The agent of a chat acts for the chat's **owner**, and its model calls are paid by the member who **prompted**:
 
 - **Model calls** run on the prompter's own provider key, through the gateway. Each call records the chat, the prompter and the owner.
-- **Tool calls** (MCP) use the owner's connections. On the owner's own prompt the agent may use the workspace connections the owner can use and the owner's personal connections. An owner without a provider key has no tool connections: the agent still connects to Spyria's tool server, sees no tools, and a tool call answers that the owner needs to connect it.
+- **Tool calls** (MCP) use the owner's connections. On the owner's own prompt the agent may use the workspace connections the owner can use and the owner's personal connections. An owner needs no provider key for this: their gateway key serves tools on its own ([0023](../decisions/0023-gateway-keys-serve-tools-without-model-keys.md)).
 - **On a guest's prompt** (an Editor or Prompter), the agent may use only the workspace connections that both the owner and the guest can use, never the owner's personal connections, and every tool call that is not marked read-only waits for the owner's approval in the chat. The agent never exceeds what the person prompting could do, and the owner is never answerable for an action they did not approve.
 - **Sessions on a member's own machine** accept prompts from their owner only.
 - **Publishing to GitHub** is reserved to the chat owner, with the owner's own GitHub account (see below).
