@@ -168,6 +168,21 @@ test('/mcp runs as the chat owner with Spyria’s attribution, lists tools outsi
   }
 })
 
+test('/mcp for a chat owner without an LLM key connects with no tools instead of refusing the runtime token, and a tool call answers that the owner needs to connect', async () => {
+  const host = await fakeHost('Keyless tools host')
+  const { token } = await runtimeTurn(host, bob, bob)
+  const initialized = await mcpCall(
+    host,
+    token,
+    rpcOf('initialize', { protocolVersion: '2025-06-18', capabilities: {} }),
+  )
+  expect(initialized).toMatchObject({ status: 200, result: { serverInfo: { name: 'spyria' } } })
+  expect(await mcpCall(host, token, rpcOf('tools/list'))).toMatchObject({ status: 200, result: { tools: [] } })
+  const called = await mcpCall(host, token, whoami)
+  expect(called).toMatchObject({ status: 200, result: { isError: true } })
+  expect(textOf(called.result)).toBe('Bob needs to connect fake')
+})
+
 test('the profile lists only personal servers, and a workspace server cannot be connected', async () => {
   expect(JSON.parse((await asMember(alice, 'GET', '/api/tool-connections')).body).available).toEqual(['fake'])
   expect(await asMember(alice, 'POST', `/api/tool-connections/${sharedToolServer}/connect`)).toMatchObject({
