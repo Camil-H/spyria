@@ -83,6 +83,8 @@ jobs:
       - run: bun scripts/ci-suite.ts integration
         env:
           PLAN: ${{ needs.plan.outputs.plan }}
+      - if: failure()
+        uses: ./.github/actions/test-stack-logs
 
   bundle:
     needs: plan
@@ -114,6 +116,8 @@ jobs:
           PLAN: ${{ needs.plan.outputs.plan }}
           WORKERS: 2
       - if: failure()
+        uses: ./.github/actions/test-stack-logs
+      - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: e2e-shard-${{ matrix.shard }}
@@ -135,6 +139,8 @@ jobs:
           PLAN: ${{ needs.plan.outputs.plan }}
           WORKERS: 2
       - if: failure()
+        uses: ./.github/actions/test-stack-logs
+      - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: e2e-repeat
@@ -151,6 +157,8 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup
       - run: bun run check:docker
+      - if: failure()
+        uses: ./.github/actions/test-stack-logs
 
   ci-ok:
     if: always()

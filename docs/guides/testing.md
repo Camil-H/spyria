@@ -93,7 +93,7 @@ CI is `.github/workflows/ci.yml` on GitHub Actions' standard runners ([decision 
 | `promote` | not run | fast-forwards `main` to the commit once `ci-ok` passes |
 | `report-failure` | not run | comments the failed jobs on each pull request merged since `main` |
 
-`scripts/ci-suite.ts <suite> [shard]` runs one suite from the plan in `PLAN`. In CI, Playwright retries a failed test once and reports a test that passed on retry as flaky; a flaky test is fixed or deleted when found. A failed e2e shard keeps `apps/web/test-results` as an artifact for 7 days.
+`scripts/ci-suite.ts <suite> [shard]` runs one suite from the plan in `PLAN`. In CI, Playwright retries a failed test once and reports a test that passed on retry as flaky; a flaky test is fixed or deleted when found. A failed e2e shard keeps `apps/web/test-results` as an artifact for 7 days. A failed integration, e2e or docker job prints the last 200 lines of each `spyria-test-*` container's log, one folded group per container.
 
 The repository settings that go with it:
 
