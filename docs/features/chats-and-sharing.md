@@ -41,7 +41,7 @@ In a channel, the message menu of a top-level message offers **Reply in thread**
 
 ## Unread state
 
-A chat with messages a member has not seen shows an **Unread messages** icon in the sidebar. Opening the chat marks it read. In channels only top-level messages count: a new reply never makes the channel unread. Each thread keeps its own read marker per member; opening a thread marks it read, and its toggle shows how many replies are new.
+A chat with messages a member has not seen shows an **Unread messages** icon in the sidebar. Opening the chat marks it read. In a runtime chat, the icon's color and tooltip tell where the agent is: **working** on a turn, **waiting** for an answer to a question or a tool approval, stopped with an **error**, or **done**. A channel's icon keeps the text color. In channels only top-level messages count: a new reply never makes the channel unread. Each thread keeps its own read marker per member; opening a thread marks it read, and its toggle shows how many replies are new.
 
 ## Sharing a chat and chat roles
 

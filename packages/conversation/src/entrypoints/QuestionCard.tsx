@@ -1,5 +1,6 @@
 import { buttonClass, fieldClass, ghostButtonClass, Spinner } from '@spyria/ui'
 import { type FormEvent, use, useState } from 'react'
+import { isOpenQuestion } from '../domain/agent-status.ts'
 import type { AgentQuestion, AgentStep } from '../domain/agent-steps.ts'
 import type { ConversationMessage } from '../queries/get-conversation.ts'
 import type { QuestionAnswer } from './endpoints.ts'
@@ -38,7 +39,7 @@ const QuestionCard = ({ message }: { message: ConversationMessage }) => {
   const [free, setFree] = useState<Record<string, string>>({})
   const [notice, setNotice] = useState<string>()
   const [sentAnswer, setSentAnswer] = useState<QuestionAnswer>()
-  const isPending = step.closed === undefined && step.answers === undefined && step.approved === undefined
+  const isPending = isOpenQuestion(step)
   const answerer = use(QuestionAnswererContext)
   const canAnswer = isPending && (step.kind === 'approval' ? answerer.isOwner : answerer.mayAnswerAsPrompter)
   const isSending = sentAnswer !== undefined

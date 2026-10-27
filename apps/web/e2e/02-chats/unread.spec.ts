@@ -6,12 +6,32 @@ import {
   messageContaining,
   messageItemsOf,
   openChat,
+  research,
   sendMessage,
   sidebarOf,
   switchWorkspace,
   test,
   unreadIconOf,
 } from './fixtures'
+
+const agentStoppedWithError = async (workerStack: WorkerStack, chatId: string) => {
+  await workerStack.database.$client.begin(async (sql) => {
+    await sql`select 1 from chats where id = ${chatId} for update`
+    await sql`
+      with agent_rows as (
+        select id, kind, body, (select max(seq) from events where chat_id = ${chatId}) + number as seq
+        from (values (1, 'reply-before-failure', 'agent', 'Looking into it.'),
+          (2, 'failure-notice', 'notice', 'The agent stopped with an error')) as row (number, id, kind, body)
+      ), posted as (
+        insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
+        select 'workspace-acme', ${chatId}, id, seq, 'message.posted', null,
+          jsonb_build_object('kind', kind, 'body', body, 'detail', null, 'replyToId', null), now()
+        from agent_rows
+      )
+      insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
+      select 'workspace-acme', ${chatId}, id, seq, kind, null, body, now() from agent_rows`
+  })
+}
 
 const makeAliceAdminOf = async (workerStack: WorkerStack, chatId: string) => {
   await workerStack.database.$client`
@@ -76,7 +96,7 @@ test.describe('Unread', () => {
       await openChat(page, 'Research')
       await sendMessage(page, 'Question to the agent')
       await chatLinkOf(page, 'Welcome').click()
-      await expect(unreadIconOf(page, 'Research')).toBeVisible()
+      await expect(unreadIconOf(page, 'Research')).toHaveAccessibleName('Unread messages · The agent is done')
       await openChat(page, 'Research')
       await expect(unreadIconOf(page, 'Research')).toHaveCount(0)
       await expect(messageContaining(page, agentReplyText)).toHaveCount(1)
@@ -89,6 +109,32 @@ test.describe('Unread', () => {
       await expect(unreadIconOf(page, 'Setup helper')).toHaveCount(0)
       await openChat(page, 'Welcome')
       await expect(unreadIconOf(page, 'Setup helper')).toHaveCount(0)
+    })
+  })
+
+  test('As a member, the unread icon of a runtime chat shows when its agent stopped with an error, and a channel keeps the plain icon', async ({
+    page,
+    workerStack,
+  }) => {
+    await makeAliceAdminOf(workerStack, 'chat-standup')
+    await openChat(page, 'Welcome')
+    await agentStoppedWithError(workerStack, research)
+
+    await test.step('names the error in the icon and its tooltip', async () => {
+      await expect(unreadIconOf(page, 'Research')).toHaveAccessibleName(
+        'Unread messages · The agent stopped with an error',
+      )
+      await unreadIconOf(page, 'Research').hover()
+      await expect(
+        page.getByRole('tooltip', { name: 'Unread messages · The agent stopped with an error' }),
+      ).toBeVisible()
+    })
+
+    await test.step('colors the error apart from the done and channel icons', async () => {
+      const colorOf = (chatName: string) =>
+        unreadIconOf(page, chatName).evaluate((icon) => getComputedStyle(icon).color)
+      await expect(unreadIconOf(page, 'Standup')).toHaveAccessibleName('Unread messages')
+      expect(await colorOf('Research')).not.toBe(await colorOf('Standup'))
     })
   })
 })

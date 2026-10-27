@@ -55,6 +55,20 @@ const visibleTo = (snapshot: Snapshot, viewerId: MemberId, workspaceIds: readonl
       .slice(0, 1)
       .map((message) => ({ ...message, needsReply: false })),
   )
+  const latestAgentActivity = readableChats.flatMap((chat) =>
+    readableMessages
+      .filter(
+        (message) =>
+          chat.type === 'runtime' &&
+          message.chatId === chat.id &&
+          message.workspaceId === chat.workspaceId &&
+          (message.kind === 'agent' || message.kind === 'step' || message.kind === 'notice') &&
+          message.authorId === null,
+      )
+      .toSorted((first, second) => second.seq - first.seq)
+      .slice(0, 1)
+      .map((message) => ({ ...message, needsReply: false })),
+  )
   const readableChatOwners = new Set(readableChats.map((chat) => `${chat.workspaceId}/${chat.ownerId}`))
   const ownedByViewerOrReadableChatOwner = <Row extends { workspaceId: WorkspaceId; memberId: MemberId }>(
     rows: readonly Row[],
@@ -72,6 +86,7 @@ const visibleTo = (snapshot: Snapshot, viewerId: MemberId, workspaceIds: readonl
     chatRoles: inWorkspaces(snapshot.chatRoles),
     messages: readableMessages,
     latestMessages,
+    latestAgentActivity,
     pinnedSteps: readableMessages
       .filter((message) => message.kind === 'step' && pinnedStepTypes.includes(message.body))
       .map((message) => ({ ...message, needsReply: false })),
