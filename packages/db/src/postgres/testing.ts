@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { once } from 'node:events'
 import { openSync, readFileSync, realpathSync, rmSync, writeFileSync, writeSync } from 'node:fs'
 import { get } from 'node:http'
+import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -167,38 +168,84 @@ const outputOf = (command: string, args: string[]) => String(spawnSync(command, 
 
 const isZeroCacheCommand = (command: string) => zeroPackageDirectories.some((directory) => command.includes(directory))
 
-export const processTable = () =>
-  outputOf('ps', ['-eo', 'pid=,pgid=,args='])
+export type ProcessRow = { pid: number; parent: number; group: number; command: string }
+
+export const processTable = (): ProcessRow[] =>
+  outputOf('ps', ['-eo', 'pid=,ppid=,pgid=,args='])
     .split('\n')
     .map((line) => line.trim().split(/\s+/))
-    .filter((fields) => fields.length >= 3)
-    .map(([pid = '', group = '', ...command]) => ({
+    .filter((fields) => fields.length >= 4)
+    .map(([pid = '', parent = '', group = '', ...command]) => ({
       pid: Number(pid),
+      parent: Number(parent),
       group: Number(group),
       command: command.join(' '),
     }))
 
-const leftoverZeroCacheGroupsOn = (ports: number[]) => {
-  const listeners = new Set(
-    outputOf('lsof', ['-t', `-iTCP:${ports.join(',')}`, '-sTCP:LISTEN'])
-      .split('\n')
-      .filter(Boolean)
-      .map(Number),
-  )
+export const describeProcesses = (rows: readonly ProcessRow[]) =>
+  rows.map(({ pid, parent, group, command }) => `${pid} (parent ${parent}, group ${group}): ${command.slice(0, 200)}`)
+
+export const noteTestStack = (line: string) => process.stderr.write(`[test stack] ${line}\n`)
+
+const lsofPortsPerCall = 50
+const isLsofWarning = (line: string) => line === '' || /^lsof: WARNING/.test(line)
+
+export const listenersOn = (ports: readonly (number | string)[]): ProcessRow[] => {
+  const listenerIds = new Set<number>()
+  for (let start = 0; start < ports.length; start += lsofPortsPerCall) {
+    const batch = ports.slice(start, start + lsofPortsPerCall)
+    const lookup = spawnSync('lsof', ['-t', `-iTCP:${batch.join(',')}`, '-sTCP:LISTEN'])
+    const failure =
+      lookup.error?.message ??
+      String(lookup.stderr ?? '')
+        .split('\n')
+        .find((line) => !isLsofWarning(line.trim()))
+    if (failure) {
+      noteTestStack(
+        `lsof could not list the listeners on ports ${batch.join(',')}, so no listener is stopped: ${failure}`,
+      )
+      return []
+    }
+    for (const line of String(lookup.stdout ?? '').split('\n')) if (line.trim()) listenerIds.add(Number(line))
+  }
   const table = processTable()
-  const listeningGroups = new Set(table.filter(({ pid }) => listeners.has(pid)).map(({ group }) => group))
+  return [...listenerIds].map(
+    (pid) => table.find((row) => row.pid === pid) ?? { pid, parent: 0, group: 0, command: '(exited)' },
+  )
+}
+
+const isListeningAt = (port: number | string, host: string) =>
+  new Promise<boolean>((resolve) => {
+    const socket = connect({ port: Number(port), host })
+    socket.once('connect', () => {
+      socket.destroy()
+      resolve(true)
+    })
+    socket.once('error', () => resolve(false))
+  })
+
+export const busyPortsOf = async (ports: readonly (number | string)[]) => {
+  const answers = await Promise.all(
+    ports.map(async (port) => (await isListeningAt(port, '127.0.0.1')) || isListeningAt(port, '::1')),
+  )
+  return ports.filter((_, index) => answers[index])
+}
+
+const leftoverZeroCacheGroupsOn = (ports: number[]) => {
+  const listeningGroups = new Set(listenersOn(ports).map(({ group }) => group))
+  const table = processTable()
   return [...listeningGroups].filter(
     (group) => group > 1 && table.filter((row) => row.group === group).every((row) => isZeroCacheCommand(row.command)),
   )
 }
 
-const busyPortsOf = async (ports: number[]) => {
-  const answers = await Promise.all(ports.map((port) => httpStatusOf(`http://localhost:${port}/`)))
-  return ports.filter((_, index) => typeof answers[index] === 'number')
-}
-
 const freeZeroCachePorts = async (ports: number[]) => {
-  for (const group of new Set(leftoverZeroCacheGroupsOn(ports))) signalGroup(group, 'SIGKILL')
+  const table = processTable()
+  for (const group of new Set(leftoverZeroCacheGroupsOn(ports))) {
+    const members = describeProcesses(table.filter((row) => row.group === group))
+    noteTestStack(`SIGKILL to the leftover zero-cache group ${group}: ${members.join('; ')}`)
+    signalGroup(group, 'SIGKILL')
+  }
   for (let attempt = 1; ; attempt++) {
     const busyPorts = await busyPortsOf(ports)
     if (busyPorts.length === 0) return
