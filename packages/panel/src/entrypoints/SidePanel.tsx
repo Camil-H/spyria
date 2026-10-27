@@ -106,6 +106,7 @@ export const SidePanel = ({ usageTab, ...panelProps }: PanelProps & { usageTab: 
   const tabIds = useQuery(getPanelTabs, workspaceId, chatId)
   const { isOpen, width, fitWithin, toggle, open } = usePanel()
   const [selected, setSelected] = useState<{ chatId: string; tabId: string }>()
+  if (selected && selected.chatId !== chatId) setSelected(undefined)
   const selectedTabId =
     selected?.chatId === chatId && tabIds?.some((tabId) => tabId === selected.tabId) ? selected.tabId : tabIds?.[0]
   const selectTab = (tabId: string) => setSelected({ chatId, tabId })
