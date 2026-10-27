@@ -1,5 +1,5 @@
 import { chatId as toChatId, type WorkspaceId } from '@spyria/kernel'
-import { type Ref, Suspense, useEffect, useState } from 'react'
+import { type Ref, Suspense, use, useEffect, useState } from 'react'
 import { Link, useOutletContext, useParams } from 'react-router'
 import { isUnreachableSessionNotice } from '../domain/session-routing.ts'
 import type { ConversationMessage } from '../queries/get-conversation.ts'
@@ -12,7 +12,7 @@ import { ForkButton } from './ForkButton.tsx'
 import { LazyMarkdown } from './LazyMarkdown.tsx'
 import { AttachmentList } from './Media.tsx'
 import { MessageMenu } from './MessageMenu.tsx'
-import { useConversationCommands } from './providers.tsx'
+import { MentionNamesContext, useConversationCommands } from './providers.tsx'
 
 const plainTextClassName = 'text-sm whitespace-pre-wrap'
 
@@ -97,6 +97,7 @@ export const MessageItem = ({
 }) => {
   const [mode, setMode] = useState<'view' | 'edit' | 'delete'>('view')
   const [threadOpenings, setThreadOpenings] = useState(0)
+  const mentionNames = use(MentionNamesContext)
   const close = () => setMode('view')
   const { thread } = message
   return (
@@ -124,7 +125,11 @@ export const MessageItem = ({
               <p className="text-sm text-muted italic">This message was deleted</p>
             ) : !message.isStreamed ? (
               <Suspense fallback={<p className={plainTextClassName}>{message.body}</p>}>
-                <LazyMarkdown text={message.body} keepsLineBreaks={message.kind === 'member'} />
+                <LazyMarkdown
+                  text={message.body}
+                  keepsLineBreaks={message.kind === 'member'}
+                  mentionNames={mentionNames}
+                />
               </Suspense>
             ) : (
               <p className={plainTextClassName}>{message.body}</p>
