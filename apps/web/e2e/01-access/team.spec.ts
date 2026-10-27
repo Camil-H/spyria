@@ -277,5 +277,51 @@ test.describe('Team', () => {
       await panelTabOf(page, 'Members').click()
       await expect(tabPanelOf(page).getByRole('listitem').filter({ hasText: 'Alice D.' })).toContainText('Owner')
     })
+
+    test('As a member, I upload a profile picture that shows next to my name in chat, and remove it', async ({
+      page,
+    }) => {
+      const pictureSection = sectionOf(page, 'Profile picture')
+      const onePixelPng = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==',
+        'base64',
+      )
+      await openProfile(page)
+
+      await test.step('shows my initials until I upload a picture', async () => {
+        await expect(pictureSection.getByRole('img')).toHaveCount(0)
+        await expect(pictureSection).toContainText('A')
+        await pictureSection.getByLabel('Picture file').setInputFiles({
+          name: 'me.png',
+          mimeType: 'image/png',
+          buffer: onePixelPng,
+        })
+        await expect(pictureSection.locator('img')).toHaveAttribute('src', /^data:image\/jpeg;base64,/)
+        await expect(pictureSection.getByRole('button', { name: 'Change picture' })).toBeVisible()
+      })
+
+      await test.step('refuses a file that is not an image', async () => {
+        await pictureSection.getByLabel('Picture file').setInputFiles({
+          name: 'notes.txt',
+          mimeType: 'text/plain',
+          buffer: Buffer.from('not an image'),
+        })
+        await expect(pictureSection).toContainText('A profile picture must be a small PNG, JPEG or WebP image')
+      })
+
+      await test.step('shows the picture next to my name in a chat, and initials for members without one', async () => {
+        await openChat(page, 'Welcome')
+        await expect(messageItemsOf(page).nth(1).locator('img')).toHaveAttribute('src', /^data:image\/jpeg;base64,/)
+        await expect(messageItemsOf(page).nth(0).locator('img')).toHaveCount(0)
+        await expect(messageItemsOf(page).nth(0)).toContainText('B')
+      })
+
+      await test.step('removes the picture', async () => {
+        await openProfile(page)
+        await pictureSection.getByRole('button', { name: 'Remove picture' }).click()
+        await expect(pictureSection.locator('img')).toHaveCount(0)
+        await expect(pictureSection.getByRole('button', { name: 'Upload picture' })).toBeVisible()
+      })
+    })
   })
 })

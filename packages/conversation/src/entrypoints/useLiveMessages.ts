@@ -63,6 +63,7 @@ const liveMessageOf = (
   ...fields,
   attachments: [],
   authorName: 'Agent',
+  authorAvatar: null,
   createdAt: messages.find((message) => message.id === promptId)?.createdAt ?? new Date(0).toISOString(),
   replyToId: messageId(promptId),
   canEdit: false,

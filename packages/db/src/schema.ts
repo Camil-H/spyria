@@ -19,6 +19,7 @@ type MembershipRow = {
   memberId: MemberId
   workspaceId: WorkspaceId
   displayName: string
+  avatar: string | null
   email: string
   role: string
   removedAt: string | null

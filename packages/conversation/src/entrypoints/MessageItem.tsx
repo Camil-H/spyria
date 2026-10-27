@@ -1,4 +1,5 @@
 import { chatId as toChatId, type WorkspaceId } from '@spyria/kernel'
+import { AgentAvatar, MemberAvatar } from '@spyria/ui'
 import { type Ref, Suspense, use, useEffect, useState } from 'react'
 import { Link, useOutletContext, useParams } from 'react-router'
 import { isUnreachableSessionNotice } from '../domain/session-routing.ts'
@@ -112,7 +113,12 @@ export const MessageItem = ({
           <AgentStep message={message} />
         ) : (
           <>
-            <div className="flex items-baseline gap-2">
+            <div className="flex items-center gap-2">
+              {message.kind === 'agent' ? (
+                <AgentAvatar />
+              ) : (
+                <MemberAvatar name={message.authorName} image={message.authorAvatar} />
+              )}
               <span className="text-sm font-medium">{message.authorName}</span>
               <time dateTime={message.createdAt} className="text-xs text-muted">
                 {timeFormat.format(new Date(message.createdAt))}

@@ -102,6 +102,7 @@ export const memberships = table(
       .references(() => users.id),
     role: text().notNull(),
     displayName: text().notNull(),
+    avatar: text(),
     removedAt: instant(),
   },
   (table) => [

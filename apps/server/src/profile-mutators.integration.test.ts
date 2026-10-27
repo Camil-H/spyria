@@ -234,6 +234,27 @@ test('renameMember changes the display name of the member in the current workspa
   )
 })
 
+test('changeAvatar stores a picture of the member in the current workspace only, refuses anything but a small image, and removes it', async () => {
+  const picture = `data:image/png;base64,${Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...Array(24).fill(0)]).toString('base64')}`
+  const avatarOf = async (workspaceId: string, userId: string) =>
+    (await database.query.memberships.findFirst({ where: { workspaceId, userId } }))?.avatar
+  expect(await resultOf(aliceInAcme, 'profile.changeAvatar', { workspaceId: acme, avatar: picture })).toEqual(succeeded)
+  expect(await avatarOf(acme, alice)).toBe(picture)
+  expect(await avatarOf(globex, alice)).toBeNull()
+  expect(
+    await resultOf(aliceInAcme, 'profile.changeAvatar', {
+      workspaceId: acme,
+      avatar: `data:image/svg+xml;base64,${btoa('<svg xmlns="http://www.w3.org/2000/svg"/>')}`,
+    }),
+  ).toEqual(failedWith('A profile picture must be a small PNG, JPEG or WebP image'))
+  expect(await resultOf(aliceInAcme, 'profile.changeAvatar', { workspaceId: globex, avatar: null })).toEqual(
+    failedWith('A member can only change their own profile in their current workspace'),
+  )
+  expect(await avatarOf(acme, alice)).toBe(picture)
+  expect(await resultOf(aliceInAcme, 'profile.changeAvatar', { workspaceId: acme, avatar: null })).toEqual(succeeded)
+  expect(await avatarOf(acme, alice)).toBeNull()
+})
+
 test.each([
   ['OpenRouter', 'openrouter'],
   ['Google', 'gemini'],
