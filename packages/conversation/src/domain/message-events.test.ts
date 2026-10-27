@@ -20,7 +20,7 @@ const eventAt = (
 })
 const posted = { kind: 'member', detail: null, replyToId: null } as const
 
-test('messagesFromEvents folds posted, replied, thread reply, edited and deleted events into message rows', () => {
+test('messagesFromEvents folds posted, replied, thread reply, edited and deleted events into message rows, a deleted one keeping its body', () => {
   expect(
     messagesFromEvents([
       eventAt(1, 'message.posted', 'alice', { ...posted, body: 'Hello' }, 'question'),
@@ -33,7 +33,7 @@ test('messagesFromEvents folds posted, replied, thread reply, edited and deleted
       ),
       eventAt(3, 'message.edited', 'alice', { messageId: 'question', body: 'Hello there' }),
       eventAt(4, 'message.posted', 'alice', { ...posted, body: 'Oops', threadRootId: 'question' }, 'mistake'),
-      eventAt(5, 'message.deleted', 'alice', { messageId: 'mistake' }),
+      eventAt(5, 'message.deleted', 'alice', { messageId: 'mistake', body: 'Oops' }),
     ]),
   ).toEqual([
     {
@@ -77,7 +77,7 @@ test('messagesFromEvents folds posted, replied, thread reply, edited and deleted
       seq: 4,
       kind: 'member',
       authorId: 'alice',
-      body: '',
+      body: 'Oops',
       attachments: [],
       detail: null,
       step: null,
@@ -110,12 +110,20 @@ test('messagesFromEvents keeps messages of different workspaces apart', () => {
   const inAcme = eventAt(1, 'message.posted', 'alice', { ...posted, body: 'Hello' }, 'same-id')
   expect(
     messagesFromEvents([inGlobex, inAcme, eventAt(2, 'message.deleted', 'alice', { messageId: 'same-id' })]).map(
-      ({ workspaceId, body }) => ({ workspaceId, body }),
+      ({ workspaceId, deletedAt }) => ({ workspaceId, deletedAt }),
     ),
   ).toEqual([
-    { workspaceId: 'globex', body: 'Hello' },
-    { workspaceId: 'acme', body: '' },
+    { workspaceId: 'globex', deletedAt: null },
+    { workspaceId: 'acme', deletedAt: minute(2) },
   ])
+})
+
+test('a deletion recorded before tombstones kept the body stays blank', () => {
+  const [deleted] = messagesFromEvents([
+    eventAt(1, 'message.posted', 'alice', { ...posted, body: 'Hello' }, 'hello'),
+    eventAt(2, 'message.deleted', 'alice', { messageId: 'hello' }),
+  ])
+  expect(deleted).toMatchObject({ body: '', deletedAt: minute(2) })
 })
 
 test('a posted step keeps its step and a step change replaces it in place', () => {
@@ -145,7 +153,7 @@ test('messagesFromEvents keeps attachments through an edit and drops them with a
   expect(attachmentsAfter(eventAt(2, 'message.edited', 'alice', { messageId: 'photo', body: 'Look' }))).toEqual([
     { body: 'Look', attachments: [photo] },
   ])
-  expect(attachmentsAfter(eventAt(2, 'message.deleted', 'alice', { messageId: 'photo' }))).toEqual([
+  expect(attachmentsAfter(eventAt(2, 'message.deleted', 'alice', { messageId: 'photo', body: '' }))).toEqual([
     { body: '', attachments: [] },
   ])
 })

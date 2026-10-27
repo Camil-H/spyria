@@ -17,7 +17,7 @@ export const startRuntimeFromMessage = (
     const { messages, chats } = unitOfWork
     const source = await messages.get(messageId)
     await requireChatPermission(chats, source.chatId, memberId, 'chat.read')
-    if (source.deletedAt) throw new MessageDeleted()
+    if (source.status === 'deleted') throw new MessageDeleted()
     const sourceChat = await chats.get(source.chatId)
     if (sourceChat.type !== 'channel') throw new RuntimeOnlyFromChannel()
     const rootId = source.threadRootId ?? source.id
@@ -39,7 +39,9 @@ export const startRuntimeFromMessage = (
       startedBy: memberId,
     })
     const otherAuthorIds = new Set(
-      thread.flatMap(({ authorId, deletedAt }) => (authorId && authorId !== memberId && !deletedAt ? [authorId] : [])),
+      thread.flatMap(({ authorId, status }) =>
+        authorId && authorId !== memberId && status === 'live' ? [authorId] : [],
+      ),
     )
     for (const authorId of otherAuthorIds)
       if (can(await chats.permissions(source.chatId, authorId), 'chat.read'))

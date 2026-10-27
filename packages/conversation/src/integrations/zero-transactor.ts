@@ -51,29 +51,41 @@ import type { StoredStep } from '../domain/agent-steps.ts'
 import { ChatNotFound, ForeignWorkspace, MessageNotFound } from '../domain/errors.ts'
 import { agentActivityKinds, type Message, type MessageChange } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
-import type { AgentEventPayload, ChangedPayload, PostedPayload, StepChangedPayload } from '../domain/message-events.ts'
+import type {
+  AgentEventPayload,
+  ChangedPayload,
+  DeletedPayload,
+  PostedPayload,
+  StepChangedPayload,
+} from '../domain/message-events.ts'
 
 const dateOrNull = (time: number | null) => (time === null ? null : new Date(time))
 const timeOrNull = (date: Date | null) => date?.getTime() ?? null
 
-const toMessage = ({ seq, attachments, ...row }: MessageRow): Message => ({
-  ...row,
-  id: messageId(row.id),
-  workspaceId: workspaceId(row.workspaceId),
-  chatId: chatId(row.chatId),
-  authorId: row.authorId === null ? null : memberId(row.authorId),
-  attachments: attachments ?? [],
-  body:
-    row.deletedAt === null
-      ? MessageBody(row.body, { allowsBlank: (attachments ?? []).length > 0 })
-      : (row.body as MessageBody),
-  createdAt: new Date(row.createdAt),
-  editedAt: dateOrNull(row.editedAt),
-  deletedAt: dateOrNull(row.deletedAt),
-  replyToId: row.replyToId === null ? null : messageId(row.replyToId),
-  threadRootId: row.threadRootId === null ? null : messageId(row.threadRootId),
-  step: row.step as StoredStep | null,
-})
+const toMessage = ({ seq, attachments, deletedAt, ...row }: MessageRow): Message => {
+  const fields = {
+    ...row,
+    id: messageId(row.id),
+    workspaceId: workspaceId(row.workspaceId),
+    chatId: chatId(row.chatId),
+    authorId: row.authorId === null ? null : memberId(row.authorId),
+    attachments: attachments ?? [],
+    createdAt: new Date(row.createdAt),
+    editedAt: dateOrNull(row.editedAt),
+    replyToId: row.replyToId === null ? null : messageId(row.replyToId),
+    threadRootId: row.threadRootId === null ? null : messageId(row.threadRootId),
+    step: row.step as StoredStep | null,
+  }
+  return deletedAt === null
+    ? {
+        ...fields,
+        status: 'live',
+        body: MessageBody(row.body, { allowsBlank: fields.attachments.length > 0 }),
+      }
+    : { ...fields, status: 'deleted', body: row.body as MessageBody, deletedAt: new Date(deletedAt) }
+}
+
+const withoutStatus = ({ status, ...message }: Message) => message
 
 const advanceReadMarker = async (
   newest: { seq: number } | undefined,
@@ -88,7 +100,7 @@ const isPosted = (type: MessageChange['type']) => type === 'message.posted' || t
 const payloadOf = ({
   type,
   message,
-}: MessageChange): PostedPayload | ChangedPayload | StepChangedPayload | Pick<ChangedPayload, 'messageId'> =>
+}: MessageChange): PostedPayload | ChangedPayload | StepChangedPayload | DeletedPayload =>
   isPosted(type)
     ? {
         kind: message.kind,
@@ -103,7 +115,7 @@ const payloadOf = ({
       ? { messageId: message.id, body: message.body }
       : type === 'message.step_changed'
         ? { messageId: message.id, step: message.step }
-        : { messageId: message.id }
+        : { messageId: message.id, body: message.body }
 
 export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: WorkspaceId): ConversationTransactor => {
   const newestInChat = (id: ChatId) =>
@@ -120,7 +132,9 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       createdAt:
         change.type === 'message.step_changed'
           ? new Date()
-          : (message.deletedAt ?? message.editedAt ?? message.createdAt),
+          : message.status === 'deleted'
+            ? message.deletedAt
+            : (message.editedAt ?? message.createdAt),
       ...(isPosted(change.type) && { id: message.id }),
     })
   }
@@ -168,11 +182,10 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
     return toMessage(row)
   }
   const rowOf = (message: Message) => ({
-    ...inContextWorkspace(message),
-    body: message.deletedAt === null ? message.body : '',
+    ...withoutStatus(inContextWorkspace(message)),
     createdAt: message.createdAt.getTime(),
     editedAt: timeOrNull(message.editedAt),
-    deletedAt: timeOrNull(message.deletedAt),
+    deletedAt: message.status === 'deleted' ? message.deletedAt.getTime() : null,
   })
   const unitOfWork: UnitOfWork = {
     messages: {
