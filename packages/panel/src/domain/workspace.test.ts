@@ -13,7 +13,7 @@ import {
   hasNothingToCommit,
   hasNothingToPush,
   isCollapsedByDefault,
-  splitColumnsOf,
+  lineNumberDigitsOf,
   splitRowsOf,
   treeEntriesOf,
 } from './workspace.ts'
@@ -230,21 +230,21 @@ test('the diff shows side by side from a 560px panel and unified below, where si
   expect(diffLayoutFor(900)).toBe('split')
 })
 
-test('the side-by-side columns fit the widest line number, at least four digits, and the longest line with tabs expanded, ignoring hunk headers', () => {
+test('the side-by-side line number columns fit the widest line number, at least four digits', () => {
   const lineOf = (kind: DiffLine['kind'], text: string, oldNumber: number | null, newNumber: number | null) => ({
     kind,
     text,
     oldNumber,
     newNumber,
   })
-  expect(splitColumnsOf([])).toEqual({ numberDigits: 4, longestText: 0 })
+  expect(lineNumberDigitsOf([])).toBe(4)
   expect(
-    splitColumnsOf([
-      lineOf('hunk', '@@ -99998,3 +99998,4 @@ a much longer hunk header than any line', null, null),
+    lineNumberDigitsOf([
+      lineOf('hunk', '@@ -99998,3 +99998,4 @@', null, null),
       lineOf('context', 'short', 99998, 99998),
-      lineOf('added', '\tindented', null, 100001),
+      lineOf('added', 'added', null, 100001),
     ]),
-  ).toEqual({ numberDigits: 6, longestText: 16 })
+  ).toBe(6)
 })
 
 test('there is nothing to commit with no uncommitted file, and nothing to push with no commit ahead of the pushed branch, or of the base before a first push; an unknown status allows both', () => {

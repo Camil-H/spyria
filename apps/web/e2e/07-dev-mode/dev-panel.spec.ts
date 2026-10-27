@@ -18,6 +18,7 @@ const commitCommand = (subject: string) =>
 const appEdit = (from: number, to: number) => ({
   edit: { path: 'src/app.ts', oldText: `export const total = ${from}\n`, newText: `export const total = ${to}\n` },
 })
+const longLine = `export const added = [${'"a long value", '.repeat(12)}]`
 const finished = (page: Page) => expect(workingIndicatorOf(page)).toHaveCount(0)
 const diffOf = (page: Page, path: string) => tabPanelOf(page).getByRole('table', { name: `Diff of ${path}` })
 const cellsOfRow = (page: Page, path: string, row: number) =>
@@ -56,7 +57,7 @@ test.describe('Dev panel', () => {
       page,
       agentScript,
       chatId,
-      [{ edit: { path: 'src/new.ts', create: 'export const added = true\n' } }],
+      [{ edit: { path: 'src/new.ts', create: `${longLine}\n` } }],
       'Added a file.',
     )
     await expect(diffOf(page, 'src/new.ts')).toBeVisible()
@@ -78,7 +79,7 @@ test.describe('Dev panel', () => {
       await expect(diffOf(page, 'src/app.ts')).toBeVisible()
     })
 
-    await test.step('switches to side by side when the panel is widened to 560px, without breaking words and with the halves lined up across files, and back when narrowed', async () => {
+    await test.step('switches to side by side when the panel is widened to 560px, without breaking words, with the halves lined up across files and a long added line wrapped in view, and back when narrowed', async () => {
       const separator = page.getByRole('separator', { name: 'Resize panel' })
       await separator.focus()
       for (let press = 0; press < 13; press++) await page.keyboard.press('ArrowLeft')
@@ -92,6 +93,8 @@ test.describe('Dev panel', () => {
       await expectReadableRow(page, 'src/app.ts', 1)
       const rightHalfStartOf = async (path: string) => (await cellsOfRow(page, path, 1).nth(2).boundingBox())!.x
       expect(await rightHalfStartOf('src/new.ts')).toBeCloseTo(await rightHalfStartOf('src/app.ts'), 0)
+      await expect(cellsOfRow(page, 'src/new.ts', 1).nth(3)).toHaveText(`+ ${longLine}`)
+      await expect(cellsOfRow(page, 'src/new.ts', 1).nth(3)).toBeInViewport()
       await page.keyboard.press('ArrowRight')
       await expect(separator).toHaveAttribute('aria-valuenow', '552')
       await expect(cellsOfRow(page, 'src/app.ts', 1)).toHaveText(['1', '', '- export const total = 1'])
