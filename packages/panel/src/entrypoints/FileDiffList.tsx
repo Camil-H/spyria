@@ -7,7 +7,7 @@ import {
   diffLayoutFor,
   type FileChange,
   isCollapsedByDefault,
-  splitColumnsOf,
+  lineNumberDigitsOf,
   splitRowsOf,
 } from '../domain/workspace.ts'
 import { usePanel } from './providers.tsx'
@@ -20,28 +20,27 @@ const lineClasses: Record<DiffLine['kind'], string> = {
   hunk: 'bg-hover text-muted',
 }
 const numberClass = 'w-px whitespace-nowrap select-none px-1 text-right align-top text-muted tabular-nums'
-const textClass = 'whitespace-pre px-2 align-top'
-const splitTextClass = 'overflow-x-auto'
+const textClass = 'px-2 align-top'
+const unifiedTextClass = 'whitespace-pre'
+const splitTextClass = 'whitespace-pre-wrap break-words'
 
 const lineKeyOf = (line: DiffLine | null) =>
   line ? `${line.kind}:${line.oldNumber}:${line.newNumber}:${line.kind === 'hunk' ? line.text : ''}` : 'none'
 
-const markerWidth = 2
 const numberPadding = '0.5rem'
-const textPadding = '1rem'
 
 const LineCells = ({
   line,
   number,
-  widthClass = '',
+  wrapClass = unifiedTextClass,
 }: {
   line: DiffLine | null
   number: number | null | undefined
-  widthClass?: string
+  wrapClass?: string
 }) => (
   <>
     <td className={`${numberClass} ${line ? lineClasses[line.kind] : ''}`}>{number ?? ''}</td>
-    <td className={`${textClass} ${widthClass} ${line ? lineClasses[line.kind] : ''}`}>
+    <td className={`${textClass} ${wrapClass} ${line ? lineClasses[line.kind] : ''}`}>
       {line && `${markers[line.kind]} ${line.text}`}
     </td>
   </>
@@ -61,15 +60,9 @@ const UnifiedTable = ({ change }: { change: FileChange }) => (
 )
 
 const SplitTable = ({ change }: { change: FileChange }) => {
-  const { numberDigits, longestText } = splitColumnsOf(change.lines)
-  const numberWidth = `calc(${numberDigits}ch + ${numberPadding})`
-  const halfWidth = `calc(${numberDigits}ch + ${numberPadding} + ${longestText + markerWidth}ch + ${textPadding})`
+  const numberWidth = `calc(${lineNumberDigitsOf(change.lines)}ch + ${numberPadding})`
   return (
-    <table
-      aria-label={`Diff of ${change.path}`}
-      style={{ minWidth: `calc(2 * ${halfWidth})` }}
-      className="w-full table-fixed font-mono text-xs"
-    >
+    <table aria-label={`Diff of ${change.path}`} className="w-full table-fixed font-mono text-xs">
       <colgroup>
         <col style={{ width: numberWidth }} />
         <col />
@@ -80,13 +73,13 @@ const SplitTable = ({ change }: { change: FileChange }) => {
         {splitRowsOf(change.lines).map(({ left, right }) => (
           <tr key={`${lineKeyOf(left)}|${lineKeyOf(right)}`}>
             {left?.kind === 'hunk' ? (
-              <td colSpan={4} className={`${textClass} ${lineClasses.hunk}`}>
+              <td colSpan={4} className={`${textClass} ${splitTextClass} ${lineClasses.hunk}`}>
                 {left.text}
               </td>
             ) : (
               <>
-                <LineCells line={left} number={left?.oldNumber} widthClass={splitTextClass} />
-                <LineCells line={right} number={right?.newNumber} widthClass={splitTextClass} />
+                <LineCells line={left} number={left?.oldNumber} wrapClass={splitTextClass} />
+                <LineCells line={right} number={right?.newNumber} wrapClass={splitTextClass} />
               </>
             )}
           </tr>
