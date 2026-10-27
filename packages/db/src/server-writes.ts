@@ -695,6 +695,24 @@ export const linkAttachments = (tx: Transaction, workspaceId: string, messageId:
     [workspaceId, messageId, ids],
   )
 
+export const keepDeletedMessageText = (
+  tx: Transaction,
+  deleted: { workspaceId: string; chatId: string; messageId: string; body: string; deletedBy: string; deletedAt: Date },
+) =>
+  onServer(
+    tx,
+    `insert into deleted_message_texts (workspace_id, chat_id, message_id, body, deleted_by, deleted_at)
+     values ($1, $2, $3, $4, $5, $6::timestamptz)`,
+    [
+      deleted.workspaceId,
+      deleted.chatId,
+      deleted.messageId,
+      deleted.body,
+      deleted.deletedBy,
+      deleted.deletedAt.toISOString(),
+    ],
+  )
+
 export const deleteMessageAttachments = (tx: Transaction, workspaceId: string, messageId: string) =>
   onServer(tx, 'delete from message_attachments where workspace_id = $1 and message_id = $2', [workspaceId, messageId])
 
@@ -718,6 +736,7 @@ export const workspaceTablesInPurgeOrder = [
   'usage_entries',
   'events',
   'message_attachments',
+  'deleted_message_texts',
   'messages',
   'runtimes',
   'runtime_hosts',
@@ -769,6 +788,7 @@ const chunkedTablesInPurgeOrder = [
   'read_markers',
   'runtime_origins',
   'message_attachments',
+  'deleted_message_texts',
   'tool_calls',
   'usage_entries',
   'model_calls',

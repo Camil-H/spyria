@@ -421,6 +421,23 @@ export const messages = table(
   ],
 )
 
+export const deletedMessageTexts = table(
+  'deleted_message_texts',
+  {
+    ...chatScoped,
+    messageId: text().notNull(),
+    body: text().notNull(),
+    deletedBy: text().notNull(),
+    deletedAt: instant().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.messageId] }),
+    chatReference(table),
+    memberReference(table, table.deletedBy),
+    index().on(table.workspaceId, table.deletedAt),
+  ],
+)
+
 export const messageAttachments = table(
   'message_attachments',
   {

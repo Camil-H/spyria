@@ -12,6 +12,7 @@ import {
   insertToolCall,
   isChatEventStored,
   isSessionStartPending,
+  keepDeletedMessageText,
   lastAgentEvent,
   lastSessionId,
   linkAttachments,
@@ -51,13 +52,7 @@ import type { StoredStep } from '../domain/agent-steps.ts'
 import { ChatNotFound, ForeignWorkspace, MessageNotFound } from '../domain/errors.ts'
 import { agentActivityKinds, type Message, type MessageChange } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
-import type {
-  AgentEventPayload,
-  ChangedPayload,
-  DeletedPayload,
-  PostedPayload,
-  StepChangedPayload,
-} from '../domain/message-events.ts'
+import type { AgentEventPayload, ChangedPayload, PostedPayload, StepChangedPayload } from '../domain/message-events.ts'
 
 const dateOrNull = (time: number | null) => (time === null ? null : new Date(time))
 const timeOrNull = (date: Date | null) => date?.getTime() ?? null
@@ -100,7 +95,7 @@ const isPosted = (type: MessageChange['type']) => type === 'message.posted' || t
 const payloadOf = ({
   type,
   message,
-}: MessageChange): PostedPayload | ChangedPayload | StepChangedPayload | DeletedPayload =>
+}: MessageChange): PostedPayload | ChangedPayload | StepChangedPayload | Pick<ChangedPayload, 'messageId'> =>
   isPosted(type)
     ? {
         kind: message.kind,
@@ -115,7 +110,7 @@ const payloadOf = ({
       ? { messageId: message.id, body: message.body }
       : type === 'message.step_changed'
         ? { messageId: message.id, step: message.step }
-        : { messageId: message.id, body: message.body }
+        : { messageId: message.id }
 
 export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: WorkspaceId): ConversationTransactor => {
   const newestInChat = (id: ChatId) =>
@@ -183,6 +178,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
   }
   const rowOf = (message: Message) => ({
     ...withoutStatus(inContextWorkspace(message)),
+    body: message.status === 'deleted' ? '' : message.body,
     createdAt: message.createdAt.getTime(),
     editedAt: timeOrNull(message.editedAt),
     deletedAt: message.status === 'deleted' ? message.deletedAt.getTime() : null,
@@ -195,6 +191,15 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         const seq = await appendEvent(change)
         if (isPosted(change.type)) await tx.mutate.messages.insert({ ...row, seq })
         else await tx.mutate.messages.update(row)
+        if (change.type === 'message.deleted' && change.message.status === 'deleted' && change.actorId)
+          await keepDeletedMessageText(tx, {
+            workspaceId: contextWorkspaceId,
+            chatId: change.message.chatId,
+            messageId: change.message.id,
+            body: change.message.body,
+            deletedBy: change.actorId,
+            deletedAt: change.message.deletedAt,
+          })
       },
       project: (message, seq) => tx.mutate.messages.insert({ ...rowOf(message), seq }),
       find: async (id) => {

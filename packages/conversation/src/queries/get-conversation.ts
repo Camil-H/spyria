@@ -287,7 +287,7 @@ export const getConversation =
         authorName: memberName(message.authorId),
         authorAvatar: (message.authorId && avatarByMemberId.get(message.authorId)) ?? null,
         createdAt: message.createdAt,
-        body: message.deletedAt === null ? message.body : '',
+        body: message.body,
         attachments: message.attachments,
         step,
         replyToId: message.replyToId,
