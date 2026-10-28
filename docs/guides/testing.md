@@ -85,6 +85,7 @@ CI is `.github/workflows/ci.yml` and `.github/workflows/promote.yml` on GitHub A
 |---|---|---|
 | `plan` | `check:related --plan` against the merge base with `develop` | `check:related --plan --full` |
 | `checks` | lint, typecheck, boundaries, locks | the same |
+| `secrets` | gitleaks on the pull request's commits; fails when one adds a credential (key, token, private key) | gitleaks on the pushed commits |
 | `unit`, `integration` | the selected test files, or the whole suite | the whole suite |
 | `bundle` | when the web app or a package changed | always |
 | `e2e` | the selected segments and specs, in 4 shards of 2 workers | the whole suite, in 4 shards |

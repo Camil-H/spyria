@@ -13,93 +13,92 @@ import {
 } from '@spyria/db/server-writes'
 import {
   isActiveMember,
-  skippingRefusedRebase,
   type Transact,
+  transactingTransactor,
+  transactorOver,
   workspacePermissionsOf,
   type ZeroContext,
   zql,
 } from '@spyria/db/zero-queries'
-import { type MemberId, memberId as toMemberId, type WorkspaceId } from '@spyria/kernel'
+import {
+  gatewayKeyOf,
+  type MemberId,
+  MemberNotFound,
+  gatewayKeyRefOf as refOf,
+  memberId as toMemberId,
+  type WorkspaceId,
+} from '@spyria/kernel'
 import type { ProfileTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import type { Avatar } from '../domain/avatar.ts'
 import { DisplayName } from '../domain/display-name.ts'
-import { ConnectionNotFound, CredentialNotFound, MemberNotFound, NotOwnProfile } from '../domain/errors.ts'
-import { gatewayKeyOf, profileJobTypes, gatewayKeyRefOf as refOf } from '../domain/llm-credential.ts'
+import { ConnectionNotFound, CredentialNotFound, NotOwnProfile } from '../domain/errors.ts'
+import { profileJobTypes } from '../domain/llm-credential.ts'
 import type { WorkspaceConnection } from '../domain/workspace-connection.ts'
 
 export const createZeroTransactor = (tx: Transaction, context: ZeroContext): ProfileTransactor => {
-  const asContextMember = (workspaceId: WorkspaceId, memberId: MemberId) => {
-    if (workspaceId !== context.workspaceId || memberId !== context.userId) throw new NotOwnProfile()
-    return { workspaceId, userId: memberId }
+  const { workspaceId, userId } = context
+  const member = { workspaceId, memberId: userId }
+  const owner = { workspaceId, userId }
+  const inContextWorkspace = (id: WorkspaceId) => {
+    if (id !== workspaceId) throw new NotOwnProfile()
+    return id
   }
-  const inContextWorkspace = (workspaceId: WorkspaceId) => {
-    if (workspaceId !== context.workspaceId) throw new NotOwnProfile()
-    return workspaceId
+  const requireContextMember = (workspace: WorkspaceId, id: MemberId) => {
+    if (workspace !== workspaceId || id !== userId) throw new NotOwnProfile()
   }
   const connectionOf = (row: Omit<WorkspaceConnection, 'workspaceId'> & { workspaceId: string }) =>
     ({ ...row, workspaceId: inContextWorkspace(row.workspaceId as WorkspaceId) }) as WorkspaceConnection
-  const connectionRows = (workspaceId: WorkspaceId) =>
-    zql.workspaceConnections.where('workspaceId', inContextWorkspace(workspaceId))
+  const connectionRows = (id: WorkspaceId) => zql.workspaceConnections.where('workspaceId', inContextWorkspace(id))
+  const ownToolConnections = zql.toolConnections.where('workspaceId', workspaceId).where('userId', userId)
+  const gatewayKeys = async () =>
+    (await gatewayKeyRefsOf(tx, workspaceId, userId)).flatMap((ref) => gatewayKeyOf(ref) ?? [])
   const unitOfWork: UnitOfWork = {
     members: {
-      get: async (workspaceId, memberId) => {
-        asContextMember(workspaceId, memberId)
-        const row = await tx.run(zql.memberships.where('workspaceId', workspaceId).where('userId', memberId).one())
-        if (!row) throw new MemberNotFound(memberId)
+      get: async () => {
+        const row = await tx.run(zql.memberships.where('workspaceId', workspaceId).where('userId', userId).one())
+        if (!row) throw new MemberNotFound(userId)
         return {
           workspaceId,
-          id: memberId,
+          id: userId,
           name: DisplayName(row.displayName),
           avatar: (row.avatar ?? null) as Avatar | null,
         }
       },
-      save: (member) =>
-        tx.mutate.memberships.update({
-          ...asContextMember(member.workspaceId, member.id),
-          displayName: member.name,
-          avatar: member.avatar,
-        }),
-      permissions: (workspaceId, memberId) => workspacePermissionsOf(tx, inContextWorkspace(workspaceId), memberId),
-      isActive: (workspaceId, memberId) => isActiveMember(tx, inContextWorkspace(workspaceId), memberId),
+      save: async (changed) => {
+        requireContextMember(changed.workspaceId, changed.id)
+        await tx.mutate.memberships.update({ ...owner, displayName: changed.name, avatar: changed.avatar })
+      },
+      permissions: () => workspacePermissionsOf(tx, workspaceId, userId),
+      isActive: (workspace, id) => isActiveMember(tx, inContextWorkspace(workspace), id),
     },
     llmCredentials: {
-      add: async ({ workspaceId, memberId, id, provider, last4 }, key) => {
-        asContextMember(workspaceId, memberId)
-        await insertLlmCredential(tx, { workspaceId, id, userId: memberId, provider, last4, secretRef: refOf(key) })
+      add: async ({ id, provider, last4 }, key) => {
+        await insertLlmCredential(tx, { workspaceId, id, userId, provider, last4, secretRef: refOf(key) })
       },
-      remove: async (workspaceId, memberId, id) => {
-        asContextMember(workspaceId, memberId)
+      remove: async (id) => {
         const row = await tx.run(
-          zql.llmCredentials.where('workspaceId', workspaceId).where('userId', memberId).where('id', id).one(),
+          zql.llmCredentials.where('workspaceId', workspaceId).where('userId', userId).where('id', id).one(),
         )
         if (!row) throw new CredentialNotFound(id)
         const storedRef = await gatewayKeyRefOf(tx, workspaceId, id)
         await tx.mutate.llmCredentials.delete({ workspaceId, id })
         return storedRef ? gatewayKeyOf(storedRef) : undefined
       },
-      removeAll: async (workspaceId, memberId) => {
-        const refs = await gatewayKeyRefsOf(tx, workspaceId, memberId)
-        for (const row of await tx.run(
-          zql.llmCredentials
-            .where('workspaceId', asContextMember(workspaceId, memberId).workspaceId)
-            .where('userId', memberId),
-        ))
+      removeAll: async () => {
+        const keys = await gatewayKeys()
+        for (const row of await tx.run(zql.llmCredentials.where('workspaceId', workspaceId).where('userId', userId)))
           await tx.mutate.llmCredentials.delete({ workspaceId, id: row.id })
-        return refs.flatMap((ref) => gatewayKeyOf(ref) ?? [])
+        return keys
       },
-      gatewayKeysOf: async (workspaceId, memberId) => {
-        asContextMember(workspaceId, memberId)
-        return (await gatewayKeyRefsOf(tx, workspaceId, memberId)).flatMap((ref) => gatewayKeyOf(ref) ?? [])
-      },
+      gatewayKeys,
     },
     memberGatewayKeys: {
-      virtualKeyOf: (workspaceId, memberId) => virtualKeyIdOf(tx, workspaceId, memberId),
-      setVirtualKey: async (workspaceId, memberId, virtualKeyId) => {
-        asContextMember(workspaceId, memberId)
-        await setVirtualKeyId(tx, workspaceId, memberId, virtualKeyId)
+      virtualKey: () => virtualKeyIdOf(tx, workspaceId, userId),
+      setVirtualKey: async (virtualKeyId) => {
+        await setVirtualKeyId(tx, workspaceId, userId, virtualKeyId)
       },
-      virtualKeysIn: async (workspaceId) =>
-        (await virtualKeyIdsIn(tx, inContextWorkspace(workspaceId))).map((row) => ({
+      virtualKeysIn: async (workspace) =>
+        (await virtualKeyIdsIn(tx, inContextWorkspace(workspace))).map((row) => ({
           ...row,
           memberId: toMemberId(row.memberId),
         })),
@@ -107,15 +106,15 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
     gatewayJobs: {
       syncLater: async (job) => {
         await enqueueJob(tx, {
-          workspaceId: job.workspaceId,
+          workspaceId,
           type: profileJobTypes.gatewaySync,
-          payload: job,
+          payload: { ...job, workspaceId, memberId: userId },
           delayMilliseconds: 0,
         })
       },
-      removeToolServerLater: async ({ workspaceId, gatewayName }) => {
+      removeToolServerLater: async ({ workspaceId: workspace, gatewayName }) => {
         await enqueueJob(tx, {
-          workspaceId: inContextWorkspace(workspaceId),
+          workspaceId: inContextWorkspace(workspace),
           type: profileJobTypes.toolServerRemoval,
           payload: { gatewayName },
           delayMilliseconds: 0,
@@ -123,36 +122,22 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
       },
     },
     personalConnections: {
-      connect: async ({ workspaceId, memberId, tool, status }) => {
-        const owner = asContextMember(workspaceId, memberId)
-        await lockMembership(tx, workspaceId, memberId)
-        const stored = await tx.run(zql.toolConnections.where('workspaceId', workspaceId).where('userId', memberId))
+      connect: async ({ tool, status }) => {
+        await lockMembership(tx, workspaceId, userId)
+        const stored = await tx.run(ownToolConnections)
         if (stored.some((row) => row.tool === tool)) await tx.mutate.toolConnections.update({ ...owner, tool, status })
         else {
           const position = Math.max(0, ...stored.map((row) => row.position)) + 1
           await tx.mutate.toolConnections.insert({ ...owner, tool, status, position })
         }
       },
-      disconnect: (workspaceId, memberId, tool) =>
-        tx.mutate.toolConnections.delete({ ...asContextMember(workspaceId, memberId), tool }),
-      removeAll: async (workspaceId, memberId) => {
-        const owner = asContextMember(workspaceId, memberId)
-        for (const { tool } of await tx.run(
-          zql.toolConnections.where('workspaceId', workspaceId).where('userId', memberId),
-        ))
+      disconnect: (tool) => tx.mutate.toolConnections.delete({ ...owner, tool }),
+      removeAll: async () => {
+        for (const { tool } of await tx.run(ownToolConnections))
           await tx.mutate.toolConnections.delete({ ...owner, tool })
-        await deleteGitHubConnection(tx, workspaceId, memberId)
+        await deleteGitHubConnection(tx, workspaceId, userId)
       },
-      statusOf: async (workspaceId, memberId, tool) =>
-        (
-          await tx.run(
-            zql.toolConnections
-              .where('workspaceId', asContextMember(workspaceId, memberId).workspaceId)
-              .where('userId', memberId)
-              .where('tool', tool)
-              .one(),
-          )
-        )?.status,
+      statusOf: async (tool) => (await tx.run(ownToolConnections.where('tool', tool).one()))?.status,
     },
     workspaceConnections: {
       list: async (workspaceId) => (await tx.run(connectionRows(workspaceId))).map(connectionOf),
@@ -199,12 +184,12 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
       },
     },
     workspaceEvents: {
-      record: async ({ workspaceId, ...event }) => {
-        await appendWorkspaceEvent(tx, { ...event, workspaceId: inContextWorkspace(workspaceId) })
+      record: async ({ workspaceId: workspace, ...event }) => {
+        await appendWorkspaceEvent(tx, { ...event, workspaceId: inContextWorkspace(workspace), actorId: userId })
       },
     },
   }
-  return { run: (work) => skippingRefusedRebase(tx, () => work(unitOfWork)) }
+  return { ...transactorOver(tx, unitOfWork), member }
 }
 
 export const memberContext = (workspace: WorkspaceId, member: MemberId): ZeroContext => ({
@@ -213,5 +198,6 @@ export const memberContext = (workspace: WorkspaceId, member: MemberId): ZeroCon
 })
 
 export const createTransactingZeroTransactor = (transact: Transact, context: ZeroContext): ProfileTransactor => ({
-  run: (work) => transact((tx) => createZeroTransactor(tx, context).run(work)),
+  ...transactingTransactor(transact, (tx) => createZeroTransactor(tx, context)),
+  member: { workspaceId: context.workspaceId, memberId: context.userId },
 })

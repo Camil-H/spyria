@@ -14,7 +14,18 @@ import { useWorkspaceReading } from './useWorkspaceReading.ts'
 type Choice = Readonly<{ page: BrowserPage | null; isTyped: boolean; seenOpenedAt: string }>
 
 const frameClass = 'min-h-80 w-full flex-1 rounded-md border border-line bg-white'
+const reportFramePath = '/report-frame.html'
 const webPageSandbox = 'allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox'
+
+const ReportFrame = ({ title, content }: { title: string; content: string }) => (
+  <iframe
+    title={title}
+    src={reportFramePath}
+    sandbox="allow-scripts"
+    onLoad={(event) => event.currentTarget.contentWindow?.postMessage(content, '*')}
+    className={frameClass}
+  />
+)
 
 const WorkspaceFile = ({
   workspaceId,
@@ -25,12 +36,12 @@ const WorkspaceFile = ({
   chatId: ChatId
   page: BrowserPage
 }) => {
-  const { reading } = useWorkspaceReading(workspaceId, chatId, 'file', page.url)
+  const { reading, readingVersion } = useWorkspaceReading(workspaceId, chatId, 'file', page.url)
   if (!reading) return null
   if (typeof reading.content !== 'string' || reading.isBinary === true)
     return <p className={emptyClass}>This file cannot be shown now</p>
   return isHtmlFile(page.url) ? (
-    <iframe title={page.url} sandbox="allow-scripts" srcDoc={reading.content} className={frameClass} />
+    <ReportFrame key={`${page.url}|${readingVersion}`} title={page.url} content={reading.content} />
   ) : (
     <pre className="min-h-0 flex-1 overflow-auto rounded-md border border-line bg-app p-2 font-mono text-xs whitespace-pre-wrap">
       {reading.content}

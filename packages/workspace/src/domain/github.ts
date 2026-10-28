@@ -23,6 +23,7 @@ export const githubAppPermissions = {
   issues: 'read',
   checks: 'read',
   metadata: 'read',
+  workflows: 'write',
 } as const
 export const githubAppEvents = [
   'pull_request',

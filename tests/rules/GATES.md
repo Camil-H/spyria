@@ -52,7 +52,7 @@ Every rule of the architecture standard (`.agents/skills/architecture`) and what
 | TX5b | Idempotent consumers | integration `agent-bridge` "each completed event is stored exactly once by its id" (a duplicated frame and a replay after reconnect are ignored by the event id), "prompts to one chat are delivered one turn at a time, in order, each exactly once, even with two workers"; runtime jobs act only when the locked row is in their state and check the container's status before `create`, `stop` or `remove` (integration `runtimes` "commands to an offline host retry ...", where a retried and a re-enqueued `stop` run for one runtime); Stop, the sweep and reopen end a turn only if it is still the prompt they read (`closeAgentTurn` under the chat row lock): integration `runtime-state` "an interrupt racing the finished event ends the turn once"; a waiting notice is added once per prompt (`hasNotice`), integration `runtime-state` "a prompt while the host is offline gets one notice ..." and "a conversation missing on the Agent Server ... notice recorded once"; usage sync: `model_calls` keyed by the gateway log id, aggregates incremented only for inserted rows, integration `usage` "the sync records each gateway call once across overlapping windows and reruns" |
 | TX6 | Stated ordering | per-chat `seq` under the chat row lock, unique `(chat_id, seq)`; integration `event-store` "unique gap-free seqs per chat", `conversation-mutators` "30 distinct contiguous seqs", `constraints` duplicate seq |
 | TX7 | Retry bound, dead letter, replay | integration `job-worker` (5 attempts, `jobs:failed`, `jobs:retry`), `event-store` rebuild tests; `runtime.create` and `runtime.start` record `failed/create_failed` or `failed/start_failed` on their last attempt instead of dead-lettering, and `hello` re-enqueues `stop` and `remove` for rows left `stopping` or `removing` |
-| E1a | Typed error hierarchy with codes | review: `WorkspaceError`, `ConversationError`, `ProfileError`, `RuntimeError` carry `code` |
+| E1a | Typed error hierarchy with codes | review: `WorkspaceError`, `ConversationError`, `ProfileError`, `RuntimeError`, `UsageError` carry `code`, and kinds every context shares (`ChatNotFound`, `ForeignWorkspace`, `MemberNotFound`) are the kernel's; unit `kernel/src/errors.test.ts` "every error code is declared once across the packages", so a refusal read back on the client (`domainErrorOf`, from a mutator result or an HTTP answer) is its own kind again |
 | E1b | Error kinds are types | review |
 | E2 | Context on the original error | review |
 | E3 | Re-raise without re-wrapping | review |
@@ -99,6 +99,7 @@ Every rule of the architecture standard (`.agents/skills/architecture`) and what
 | `spyria-host` command set | unit `apps/host/src/commands.test.ts`: only create, prepare, start, stop, remove and status, the image prefix (also for `prepare`, and integration `sandbox` "... prepare refuses another image"), no extra request field (host paths, ports, privileges, capabilities, network, user, environment), runtime id and API key patterns, relay paths on the Agent Server origin only |
 | Agent Server hardening | unit `commands.test.ts` "creates the container with exactly the hardening flags"; integration `sandbox` inspects the created container's `HostConfig` (user 10001, `CapDrop ALL`, `no-new-privileges`, read-only root, 2 GiB, 2 CPUs, 512 PIDs, no port, no bind, named volumes only) |
 | Runtime host secrets never replicated | `claim_code_hash`, `token_hash` and `runtimes.llm_token_hash` are left out of the Zero schema and the `spyria_zero` column list (integration `schema` "the zero publication replicates exactly ...", `runtime-hosts` and `runtimes` publication checks); bundle gate fails on them in client assets |
+| Content Security Policy | unit `app.test.ts` "the web app runs only its own scripts and frames web pages and reports, while a report runs in a sandbox of its own" (app: `script-src 'self'`, no objects, never framed; `/report-frame.html`: `sandbox allow-scripts`, framed by the app only) |
 
 ## Dormant
 
@@ -135,7 +136,7 @@ Rules that apply today without a mechanism, or with a known hole.
 | Rule | Gap |
 |---|---|
 | S1 | no single policy component: membership is checked in `apps/server/src/auth/session-tokens.ts`, the workspace match in each mutator and transactor; roles arrive in Phase 3 |
-| S8 | no secret scan, neither pre-commit nor in `check:all` |
+| S8 | the CI job `secrets` runs gitleaks on every pull request and push to `develop`; no pre-commit scan, and none in `check:all` |
 | G2 | `packages/db/src/postgres/client.ts` reads `DATABASE_URL` at module level |
 | C7 | same module: importing `@spyria/db/postgres` reads configuration |
 | TX5a | `POST /api/llm-credentials` takes no idempotency key (Zero mutations are deduplicated by Zero's client mutation ids) |

@@ -1,5 +1,4 @@
-import type { RuntimeHostId, WorkspaceId } from '@spyria/kernel'
-import { RuntimeError } from '../domain/errors.ts'
+import { type RuntimeHostId, refusalOf, type WorkspaceId } from '@spyria/kernel'
 
 export const runtimeHostsPath = '/api/runtime-hosts'
 export const machinesPath = `${runtimeHostsPath}/machines`
@@ -9,8 +8,7 @@ type GetAsMember = (workspaceId: WorkspaceId, path: string) => Promise<Response>
 
 const resultOf = async <Result = { id: RuntimeHostId; code: string }>(response: Response) => {
   if (response.ok) return (await response.json()) as Result
-  const { error, message } = (await response.json().catch(() => ({}))) as { error?: string; message?: string }
-  throw new RuntimeError(error ?? 'internal', message ?? `The request was refused with ${response.status}`)
+  throw refusalOf(response.status, await response.json().catch(() => ({})))
 }
 
 export const createHttpRuntimeHostCommands = (postAsMember: PostAsMember, getAsMember: GetAsMember) => ({

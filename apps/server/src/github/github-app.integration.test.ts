@@ -93,6 +93,7 @@ test('the manifest carries Spyria permissions, events and URLs from the origin, 
       issues: 'read',
       checks: 'read',
       metadata: 'read',
+      workflows: 'write',
     },
     default_events: [
       'pull_request',
