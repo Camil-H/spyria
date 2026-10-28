@@ -4,20 +4,26 @@ import { pruneBuildCache } from './build-cache.ts'
 import { checkLicenses } from './check-licenses.ts'
 
 const agentDirectory = new URL('../apps/agent/', import.meta.url).pathname
-const piDirectory = `${agentDirectory}pi/`
-const piManifestFile = `${piDirectory}package.json`
+const imagePackageDirectories: Record<string, string> = {
+  pi: `${agentDirectory}pi/`,
+  playwright: `${agentDirectory}browser/`,
+}
 const imageIdFile = `${agentDirectory}image-id`
 const harnessesFile = new URL('../apps/host/src/harnesses.json', import.meta.url).pathname
 const testHarnessesVolume = 'spyria-test-harnesses'
 type Pinned = { package: string; version: string }
 type HarnessPins = Record<HarnessId, { packages: Record<string, string>; executables: Record<string, string> }>
-const piManifest = (): { dependencies: Record<string, string> } => JSON.parse(readFileSync(piManifestFile, 'utf8'))
+const manifestFileOf = (directory: string) => `${directory}package.json`
+const manifestOf = (directory: string): { dependencies: Record<string, string> } =>
+  JSON.parse(readFileSync(manifestFileOf(directory), 'utf8'))
 const imageVersions = (): Record<string, Pinned> =>
   Object.fromEntries(
-    Object.entries(piManifest().dependencies).map(([packageName, version]) => [
-      'pi',
-      { package: packageName, version },
-    ]),
+    Object.entries(imagePackageDirectories).flatMap(([tool, directory]) =>
+      Object.entries(manifestOf(directory).dependencies).map(([packageName, version]) => [
+        tool,
+        { package: packageName, version },
+      ]),
+    ),
   )
 const harnessPins = (): HarnessPins => JSON.parse(readFileSync(harnessesFile, 'utf8'))
 const harnessVersions = () =>
@@ -84,11 +90,12 @@ else if (command === 'bump') {
   const pinned = versions[tool ?? '']
   if (!pinned) throw new Error(`Unknown tool ${tool}; choose from ${Object.keys(versions).join(', ')}`)
   const latest = latestOf(pinned.package)
-  if (tool && tool in imageVersions()) {
-    const manifest = piManifest()
+  const imagePackageDirectory = imagePackageDirectories[tool ?? '']
+  if (imagePackageDirectory) {
+    const manifest = manifestOf(imagePackageDirectory)
     manifest.dependencies[pinned.package] = latest
-    writeFileSync(piManifestFile, `${JSON.stringify(manifest, null, 2)}\n`)
-    run(['npm', 'install', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund'], piDirectory)
+    writeFileSync(manifestFileOf(imagePackageDirectory), `${JSON.stringify(manifest, null, 2)}\n`)
+    run(['npm', 'install', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund'], imagePackageDirectory)
   } else {
     const pins = harnessPins()
     for (const { packages } of Object.values(pins)) if (pinned.package in packages) packages[pinned.package] = latest

@@ -131,10 +131,10 @@ Runtime hosts never pull images. Build Spyria's runtime image before the first r
 ```sh
 bun run agent:build          # compile spyria-agent and build the image; cached by Docker
 bun run agent:versions       # pinned versus latest on npm, per tool
-bun run agent:bump <tool>    # pin the latest of claude-code | claude-agent-acp | codex | codex-acp | pi, then rebuild
+bun run agent:bump <tool>    # pin the latest of claude-code | claude-agent-acp | codex | codex-acp | pi | playwright, then rebuild
 ```
 
-The image (`apps/agent`) holds spyria-agent with Pi, node and npm, git and ripgrep. Pi is pinned in `apps/agent/pi/package.json` with its `package-lock.json` and installed with `npm ci`; `agent:bump pi` regenerates that lockfile.
+The image (`apps/agent`) holds spyria-agent with Pi, node and npm, git and ripgrep, and for `take_screenshot` playwright-core with the system libraries Chromium needs. Pi is pinned in `apps/agent/pi/package.json` and playwright-core in `apps/agent/browser/package.json`, each with its `package-lock.json` and installed with `npm ci`; `agent:bump pi` and `agent:bump playwright` regenerate those lockfiles. Chromium itself is not in the image: spyria-agent downloads its headless shell into the runtime's home volume on the first screenshot, about 150 MB once per runtime, since the image's root file system is read-only at run time.
 
 Claude Code, Codex and their ACP adapters are never in the image. They are pinned in `apps/host/src/harnesses.json`, and a member's `spyria-host` installs them on that machine on first use (at `login`, or when a session starts, the chat showing "Installing Claude Code…") into the `spyria-harnesses` volume, one folder per pinned set, mounted read-only into the sessions. `SPYRIA_HARNESS_REGISTRY` points the install at another npm registry.
 
@@ -194,7 +194,7 @@ The host image installs exactly `apps/host/bun.lock`. After changing a host depe
 | `apps/server` | The Bun and Hono server: auth, HTTP API, Zero mutators, the job worker, the host WebSocket, the model and tool relays. Composition in `apps/server/src/index.ts`. |
 | `apps/web` | The React app (Vite). Composition in `apps/web/src/app/factory.ts`. e2e tests in `apps/web/e2e`. |
 | `apps/host` | `spyria-host`, the runtime host program. Imports nothing from `@spyria/*`. |
-| `apps/agent` | spyria-agent and the runtime image (Pi pinned in `apps/agent/pi`). Imports nothing from `@spyria/*`. |
+| `apps/agent` | spyria-agent and the runtime image (Pi pinned in `apps/agent/pi`, playwright-core in `apps/agent/browser`). Imports nothing from `@spyria/*`. |
 | `packages/conversation` | Chats, messages, the event store, agent turns, sharing, delegation, git actions. |
 | `packages/workspace` | Workspaces, projects, chat organization, members and invites, workspace and chat roles. |
 | `packages/profile` | A member's profile: LLM keys, tool connections. |
