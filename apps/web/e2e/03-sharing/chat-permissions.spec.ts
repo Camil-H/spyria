@@ -9,8 +9,8 @@ import {
   expectMembers,
   insertRole,
   inviteRoleOptionsOf,
-  type Locator,
   mainOf,
+  messageActionOf,
   messageContaining,
   messageItemsOf,
   newRuntimeChat,
@@ -79,11 +79,6 @@ test.describe('Chat permissions', () => {
   })
 
   test.describe(() => {
-    const openMessageMenu = async (message: Locator) => {
-      await message.hover()
-      await message.getByRole('button', { name: 'Message actions' }).click()
-    }
-
     test.beforeEach(async ({ page }) => {
       await page.clock.setFixedTime(new Date('2026-10-01T12:34:00Z'))
       await page.goto('/')
@@ -114,10 +109,10 @@ test.describe('Chat permissions', () => {
       await openChat(leePage, 'Welcome')
       await expect(sendButtonOf(leePage)).toBeDisabled()
       await expect(mainOf(leePage)).toContainText(readerNotice)
-      await openMessageMenu(messageContaining(leePage, 'Thanks, glad to be here.'))
-      await expect(leePage.getByRole('menuitem', { name: 'Start runtime from this message' })).toBeEnabled()
-      await expect(leePage.getByRole('menuitem', { name: 'Edit' })).toBeDisabled()
-      await expect(leePage.getByRole('menuitem', { name: 'Delete' })).toBeDisabled()
+      const welcomeMessage = messageContaining(leePage, 'Thanks, glad to be here.')
+      await expect(await messageActionOf(welcomeMessage, 'Start runtime from this message')).toBeEnabled()
+      await expect(await messageActionOf(welcomeMessage, 'Edit')).toHaveCount(0)
+      await expect(await messageActionOf(welcomeMessage, 'Delete')).toHaveCount(0)
       await leePage.context().close()
     })
   })

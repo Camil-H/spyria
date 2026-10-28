@@ -360,8 +360,13 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         Promise.all((await waitingPromptIds(id)).map((promptId) => getMessage(messageId(promptId)))),
       hasReply: async (promptId) =>
         (await tx.run(repliesTo(promptId).where('kind', '!=', 'notice').one())) !== undefined,
-      hasNotice: async (promptId, text) =>
-        (await tx.run(repliesTo(promptId).where('kind', 'notice').where('body', text).one())) !== undefined,
+      hasNotice: async (promptId, texts) =>
+        (await tx.run(
+          repliesTo(promptId)
+            .where('kind', 'notice')
+            .where('body', 'IN', [...texts])
+            .one(),
+        )) !== undefined,
       active: async () =>
         (await activeAgentTurns(tx, contextWorkspaceId)).map((turn) => ({
           chatId: chatId(turn.chatId),

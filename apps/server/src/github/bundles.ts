@@ -11,6 +11,13 @@ const commitPattern = /^[0-9a-f]{40}$/
 const maximumBundleBytes = 12_000_000
 const missingRemoteRef = /couldn't find remote ref/
 const lastLinesOf = (output: string) => output.trimEnd().split('\n').slice(-shownOutputLines).join('\n')
+const prerequisitesOf = (bundle: Buffer) =>
+  bundle
+    .subarray(0, bundle.indexOf('\n\n'))
+    .toString()
+    .split('\n')
+    .flatMap((line) => (line.startsWith('-') ? [line.slice(1).split(' ')[0] ?? ''] : []))
+    .filter((commit) => commitPattern.test(commit))
 
 const gitEnvironmentOf = (home: string, url: string, token: string) => {
   const { origin, protocol } = new URL(url)
@@ -83,14 +90,26 @@ export const pushBundle = ({ url, token, branch, baseBranch, bundleOf }: Push) =
     if ('failure' in bundled) return { failure: bundled.failure }
     if (bundled.bundle === '') return { head: remoteHeads.get(branchRef) }
     const bundle = join(directory, 'branch.bundle')
-    await writeFile(bundle, Buffer.from(bundled.bundle, 'base64'))
+    const bundleBytes = Buffer.from(bundled.bundle, 'base64')
+    await writeFile(bundle, bundleBytes)
     const heads = await inRepository('bundle', 'list-heads', bundle)
     const [head, ...otherHeads] = heads.stdout.trim().split('\n')
     if (!heads.isDone || otherHeads.length > 0 || head?.split(' ')[1] !== branchRef)
       return { failure: 'The runtime sent a bundle for other branches' }
-    if (prerequisite)
-      await inRepository('fetch', '--quiet', '--depth=1', url, `${prerequisiteRef}:refs/spyria/prerequisite`)
-    const verified = await inRepository('bundle', 'verify', '--quiet', bundle)
+    const prerequisites = prerequisitesOf(bundleBytes)
+    if (prerequisites.length > 0) {
+      const prerequisitesFetched = await inRepository(
+        'fetch',
+        '--quiet',
+        '--no-tags',
+        '--depth=1',
+        url,
+        ...prerequisites.map((commit) => `${commit}:refs/spyria/prerequisites/${commit}`),
+      )
+      if (!prerequisitesFetched.isDone)
+        return { failure: `GitHub refused the fetch: ${lastLinesOf(prerequisitesFetched.output)}` }
+    }
+    const verified = await inRepository('bundle', 'verify', bundle)
     if (!verified.isDone) return { failure: `The runtime's bundle is not valid: ${lastLinesOf(verified.output)}` }
     const fetched = await inRepository('fetch', '--quiet', bundle, `${branchRef}:${branchRef}`)
     if (!fetched.isDone) return { failure: `The runtime's bundle could not be read: ${lastLinesOf(fetched.output)}` }

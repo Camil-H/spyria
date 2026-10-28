@@ -165,7 +165,7 @@ The suite lives in `apps/web/e2e`, in segments that run in this order of depende
 |---|---|
 | `00-platform` | The gate: the stack itself works. |
 | `01-access` | Sign-in and its screens, sessions, SSO, workspaces, the team, roles. |
-| `02-chats` | Channels, messaging, threads, unread, organizing chats, the chat view, the sidebar, the side panel. |
+| `02-chats` | Channels, messaging, threads, unread, organizing chats, the chat view, the sidebar, the side panel, search, keyboard shortcuts. |
 | `03-sharing` | Chat members, chat permissions, fork, runtime from a thread. |
 | `04-agent` | Conversation, steps, questions, delegation, models, errors, runtime lifecycle. |
 | `05-machines` | Workspace hosts, a member's machine and its tools, harness install, machine sessions, the policy, where a chat runs. |

@@ -291,6 +291,7 @@ export const startZeroCache = async ({
       ZERO_CHANGE_STREAMER_PORT: String(port + 1),
       ZERO_REPLICA_FILE: replicaFile,
       ZERO_APP_ID: appId,
+      ZERO_TASK_ID: `spyria-${appId}`,
       ZERO_APP_PUBLICATIONS: 'spyria_zero',
       ZERO_ADMIN_PASSWORD: 'spyria-test',
       ZERO_NUM_SYNC_WORKERS: '1',

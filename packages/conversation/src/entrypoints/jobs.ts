@@ -99,11 +99,12 @@ export const createAgentHandlers = ({
   })
   return {
     jobs: {
-      [agentJobTypes.prompt]: ({ workspaceId, payload, isLastAttempt }: AgentJob) =>
+      [agentJobTypes.prompt]: ({ workspaceId, payload, isLastAttempt, isRetry = false }: AgentJob) =>
         promptAgent(dependenciesOf(workspaceId), {
           workspaceId,
           messageId: promptPayload.parse(payload).messageId,
           isLastAttempt,
+          isRetry,
         }),
       [agentJobTypes.startSession]: ({ workspaceId, payload }: AgentJob) =>
         startAgentSession(dependenciesOf(workspaceId), { workspaceId, ...startSessionPayload.parse(payload) }),
@@ -162,7 +163,8 @@ export const createAgentHandlers = ({
         { chat, memberId: member, permission: 'chat.post' },
         (conversation) => agentClient.answerQuestion(conversation, questionId, { ...answer, answeredBy: member }),
       ),
-    reopenTarget: (chat: AgentChat) => reopenAgentTurn(dependenciesOf(chat.workspaceId), chat),
+    reopenTarget: (chat: AgentChat, closedPromptId?: string) =>
+      reopenAgentTurn(dependenciesOf(chat.workspaceId), chat, closedPromptId),
     closeReopenedTurn: (chat: AgentChat, promptId: MessageId, outcome: TurnOutcome) =>
       closeReopenedTurn(dependenciesOf(chat.workspaceId), { chat, promptId, outcome }),
     promptWaiting: (host: AgentHost) => promptWaitingChats(dependenciesOf(host.workspaceId), host),

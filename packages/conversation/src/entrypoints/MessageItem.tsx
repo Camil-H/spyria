@@ -12,8 +12,9 @@ import { EditMessageForm } from './EditMessageForm.tsx'
 import { ForkButton } from './ForkButton.tsx'
 import { LazyMarkdown } from './LazyMarkdown.tsx'
 import { AttachmentList } from './Media.tsx'
-import { MessageMenu } from './MessageMenu.tsx'
-import { MentionNamesContext, useConversationCommands } from './providers.tsx'
+import { MessageActions } from './MessageActions.tsx'
+import { ChatNameContext, MentionNamesContext, useConversationCommands } from './providers.tsx'
+import { threadContextOf } from './thread-context.ts'
 
 const plainTextClassName = 'text-sm whitespace-pre-wrap'
 
@@ -39,7 +40,7 @@ const OpenThread = ({ root }: { root: ThreadRoot }) => {
       {root.thread.replies.length > 0 && (
         <ol aria-label="Thread replies" className="flex flex-col gap-1">
           {root.thread.replies.map((reply) => (
-            <MessageItem key={reply.id} message={reply} hasMenu />
+            <MessageItem key={reply.id} message={reply} hasMenu threadRoot={root} />
           ))}
         </ol>
       )}
@@ -88,22 +89,26 @@ const Thread = ({ root, isInitiallyOpen }: { root: ThreadRoot; isInitiallyOpen: 
 export const MessageItem = ({
   message,
   hasMenu,
+  threadRoot,
   onFork,
   ref,
 }: {
   message: ConversationMessage
   hasMenu: boolean
+  threadRoot?: ThreadRoot
   onFork?: (() => Promise<unknown>) | undefined
   ref?: Ref<HTMLLIElement>
 }) => {
   const [mode, setMode] = useState<'view' | 'edit' | 'delete'>('view')
   const [threadOpenings, setThreadOpenings] = useState(0)
   const mentionNames = use(MentionNamesContext)
+  const chatName = use(ChatNameContext)
   const close = () => setMode('view')
   const { thread } = message
+  const quotedThread = threadRoot ? [threadRoot, ...threadRoot.thread.replies] : [message, ...(thread?.replies ?? [])]
   return (
     <>
-      <li ref={ref} className="group relative rounded-md px-3 py-2 hover:bg-hover">
+      <li ref={ref} data-message-id={message.id} className="group relative rounded-md px-3 py-2 hover:bg-hover">
         {message.kind === 'notice' ? (
           <div className="flex flex-col gap-1">
             <p className="whitespace-pre-wrap text-sm text-muted">{message.body}</p>
@@ -143,8 +148,10 @@ export const MessageItem = ({
             {!message.isDeleted && mode !== 'edit' && <AttachmentList attachments={message.attachments} />}
             {message.runtimes.length > 0 && <RuntimeLinks runtimes={message.runtimes} />}
             {hasMenu && !message.isDeleted && mode !== 'edit' && (
-              <MessageMenu
+              <MessageActions
                 messageId={message.id}
+                isThread={quotedThread.length > 1}
+                contextText={() => threadContextOf(chatName, quotedThread)}
                 canEdit={message.canEdit}
                 canReply={message.canReply}
                 onReplyInThread={thread ? () => setThreadOpenings(threadOpenings + 1) : undefined}

@@ -4,10 +4,11 @@ import {
   alicesWelcomeMessage,
   expect,
   mainOf,
+  messageActionOf,
+  messageActionsOf,
   messageContaining,
   messageItemsOf,
   openChat,
-  openMessageMenu,
   openWelcome,
   type Page,
   repliesOf,
@@ -89,9 +90,9 @@ test.describe('Threads', () => {
     await replyInThread(page, 'Readers can see this')
     const leePage = await openPageAs(browser, workerStack, 'member-lee')
     await openWelcome(leePage)
-    await openMessageMenu(messageContaining(leePage, alicesWelcomeMessage))
-    await expect(leePage.getByRole('menuitem', { name: 'Reply in thread' })).toBeDisabled()
-    await leePage.keyboard.press('Escape')
+    await expect(
+      await messageActionOf(messageContaining(leePage, alicesWelcomeMessage), 'Reply in thread'),
+    ).toHaveCount(0)
     await threadToggleOf(leePage).click()
     await expect(repliesOf(leePage)).toHaveText([/Readers can see this/])
     await expect(threadOf(leePage).getByText('You can read this chat')).toBeVisible()
@@ -107,21 +108,18 @@ test.describe('Threads', () => {
     await openWelcome(bobPage)
     await replyInThread(bobPage, 'First draft')
     await replyInThread(bobPage, 'Keep this one')
-    await openMessageMenu(repliesOf(bobPage).filter({ hasText: 'First draft' }))
-    await bobPage.getByRole('menuitem', { name: 'Edit' }).click()
+    await (await messageActionOf(repliesOf(bobPage).filter({ hasText: 'First draft' }), 'Edit')).click()
     await bobPage.getByRole('textbox', { name: 'Edit message' }).fill('Second draft')
     await bobPage.getByRole('button', { name: 'Save' }).click()
     await expect(repliesOf(bobPage).filter({ hasText: 'Second draft' })).toContainText('(edited)')
-    await openMessageMenu(repliesOf(bobPage).filter({ hasText: 'Second draft' }))
-    await bobPage.getByRole('menuitem', { name: 'Delete' }).click()
+    await (await messageActionOf(repliesOf(bobPage).filter({ hasText: 'Second draft' }), 'Delete')).click()
     await bobPage.getByRole('dialog', { name: 'Delete message' }).getByRole('button', { name: 'Delete' }).click()
     await expect(repliesOf(bobPage)).toHaveText([/This message was deleted/, /Keep this one/])
 
-    await openMessageMenu(messageContaining(page, alicesWelcomeMessage))
-    await page.getByRole('menuitem', { name: 'Delete' }).click()
+    await (await messageActionOf(messageContaining(page, alicesWelcomeMessage), 'Delete')).click()
     await page.getByRole('dialog', { name: 'Delete message' }).getByRole('button', { name: 'Delete' }).click()
     const deletedRoot = messageItemsOf(page).filter({ hasText: 'This message was deleted' }).first()
-    await expect(deletedRoot.getByRole('button', { name: 'Message actions' })).toHaveCount(0)
+    await expect(messageActionsOf(deletedRoot)).toHaveCount(0)
     await expect(threadToggleOf(page)).toHaveText('2 replies · 1 new')
     await threadToggleOf(page).click()
     await expect(repliesOf(page)).toHaveText([/This message was deleted/, /Keep this one/])
@@ -134,7 +132,7 @@ test.describe('Threads', () => {
   }) => {
     await openChat(page, 'Invoice bug')
     await expect(messageContaining(page, 'Why do invoices show the wrong total?')).toBeVisible()
-    await expect(mainOf(page).getByRole('button', { name: 'Message actions' })).toHaveCount(0)
+    await expect(messageActionsOf(mainOf(page))).toHaveCount(0)
     await expect(threadToggleOf(page)).toHaveCount(0)
   })
 })

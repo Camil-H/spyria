@@ -106,6 +106,34 @@ test('prompts to one chat are delivered one turn at a time, in order, each exact
   await secondWorker.stop()
 })
 
+test('a prompt whose send answer is lost after the agent took it is sent again on retry, runs once and ends its turn once', async () => {
+  let isAnswerLost = true
+  const { relay } = await stack.agentHost('Agent host', {
+    holdUrl,
+    containerAgentOf: (relay) => ({
+      ...relay.containerAgent,
+      respond: async (request, container) => {
+        const response = await relay.containerAgent.respond(request, container)
+        if (!request.path.endsWith('/events') || !isAnswerLost) return response
+        isAnswerLost = false
+        throw new Error('The answer was lost')
+      },
+    }),
+  })
+  const chat = await newRuntimeChat()
+  const question = await prompt(chat, 'stub:linger Hello')
+  await waitFor(() => relay.prompts.length === 2)
+  expect(await turnOf(chat)).toBe(question)
+
+  await holds.release('linger')
+  await answered(question)
+  await turnEnded(chat)
+  expect(await repliesTo(question)).toEqual([replyOf(1)])
+  const next = await prompt(chat, 'Again')
+  await answered(next)
+  expect(await repliesTo(next)).toEqual([replyOf(2)])
+})
+
 test('starting a runtime from a runtime chat message is refused and that chat’s queued prompt still runs', async () => {
   const { relay } = await agentHost()
   const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'reader' }] })

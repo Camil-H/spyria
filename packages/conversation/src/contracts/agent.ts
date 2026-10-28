@@ -115,7 +115,7 @@ export type AgentClient = {
     checkout?: RepositoryCheckout,
   ): Promise<void>
   switchModel(conversation: AgentConversation, model: string | undefined, thoughtLevel?: string): Promise<void>
-  sendMessage(conversation: AgentConversation, text: string): Promise<void>
+  sendMessage(conversation: AgentConversation, text: string, promptId?: MessageId): Promise<void>
   answerQuestion(conversation: AgentConversation, questionId: string, answer: object): Promise<number>
   statusOf(conversation: AgentConversation): Promise<string | undefined>
   interrupt(conversation: AgentConversation): Promise<void>

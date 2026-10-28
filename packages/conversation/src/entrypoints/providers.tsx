@@ -32,4 +32,6 @@ export const ToolsAwaitingApprovalContext = createContext<ReadonlySet<string>>(n
 
 export const MentionNamesContext = createContext<readonly string[]>([])
 
+export const ChatNameContext = createContext('')
+
 export const ChatMediaContext = createContext<{ chatId: string; isRuntime: boolean } | null>(null)

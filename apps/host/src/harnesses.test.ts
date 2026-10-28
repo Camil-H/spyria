@@ -47,7 +47,7 @@ test('the install script installs the pinned list once into its folder, switches
   expect(installScriptOf('codex', '')).not.toContain('--registry')
 })
 
-test('the install container runs as uid 10001 with only the harnesses volume, writable, and the network', () => {
+test('the install container runs as uid 10001 with only the harnesses volume, writable, and the network, reaching the host machine by name', () => {
   expect(installContainerBodyOf('spyria-', image, 'claude-code')).toMatchObject({
     Image: image,
     User: '10001:10001',
@@ -56,6 +56,7 @@ test('the install container runs as uid 10001 with only the harnesses volume, wr
       CapDrop: ['ALL'],
       ReadonlyRootfs: true,
       NetworkMode: 'bridge',
+      ExtraHosts: ['host.docker.internal:host-gateway'],
       Mounts: [{ Type: 'volume', Source: 'spyria-harnesses', Target: '/harnesses', ReadOnly: false }],
     },
   })
