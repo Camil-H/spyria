@@ -46,8 +46,8 @@ test('the fallback is the best reachable model of the prompter: medium tier firs
   expect(sessionChoiceOf({ reachable: reachableModelsOf(['mistral', 'openai']), answers: undefined })?.model.id).toBe(
     'openai/gpt-5-mini',
   )
-  expect(sessionChoiceOf({ reachable: smallOnly, answers: classified('large') })?.model.id).toBe('xai/grok-code-fast-1')
-  expect(sessionChoiceOf({ reachable: smallOnly, answers: undefined })?.model.id).toBe('xai/grok-code-fast-1')
+  expect(sessionChoiceOf({ reachable: smallOnly, answers: classified('large') })?.model.id).toBe('xai/grok-code-fast')
+  expect(sessionChoiceOf({ reachable: smallOnly, answers: undefined })?.model.id).toBe('xai/grok-code-fast')
   expect(sessionChoiceOf({ reachable: [], answers: undefined })).toBeUndefined()
   expect(sessionChoiceOf({ reachable: jev, answers: undefined })).toBeUndefined()
   expect(sessionChoiceOf({ reachable: [...jev, ...mistral], answers: undefined })?.model.id).toBe(

@@ -23,7 +23,7 @@ const routableModels: readonly RoutableModel[] = [
   { id: 'gemini/gemini-flash-lite-latest', name: 'Gemini Flash-Lite', tier: 'small' },
   { id: 'xai/grok-4.7', name: 'Grok 4.7', tier: 'large' },
   { id: 'xai/grok-4.3', name: 'Grok 4.3', tier: 'medium' },
-  { id: 'xai/grok-code-fast-1', name: 'Grok Code Fast', tier: 'small' },
+  { id: 'xai/grok-code-fast', name: 'Grok Code Fast', tier: 'small' },
   { id: 'deepseek/deepseek-v4-pro', name: 'DeepSeek V4 Pro', tier: 'large' },
   { id: 'deepseek/deepseek-v4-flash', name: 'DeepSeek V4 Flash', tier: 'medium' },
   { id: 'deepseek/deepseek-v3.2', name: 'DeepSeek V3.2', tier: 'small' },
