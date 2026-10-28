@@ -58,11 +58,11 @@ export const requestNextPrompt = async ({ agentTurns, agentJobs }: UnitOfWork, c
 export const beginAgentTurn = async (
   unitOfWork: UnitOfWork,
   chatId: ChatId,
-  resumesHeldTurn = false,
+  resumedPromptId?: MessageId,
 ): Promise<Message | undefined> => {
   const { agentTurns, members } = unitOfWork
   const heldPromptId = await agentTurns.lock(chatId)
-  if (heldPromptId !== null) return resumesHeldTurn ? unitOfWork.messages.get(heldPromptId) : undefined
+  if (heldPromptId !== null) return heldPromptId === resumedPromptId ? unitOfWork.messages.get(heldPromptId) : undefined
   const prompt = await agentTurns.nextPrompt(chatId)
   if (prompt && hasOutlivedWait(prompt, Date.now()) && (await agentTurns.hasNotice(prompt.id, unavailableNotices))) {
     await appendNotice(unitOfWork, prompt, expiredPromptNotice)
@@ -81,8 +81,8 @@ export const beginAgentTurn = async (
   return prompt
 }
 
-export const releaseAgentTurn = async ({ agentTurns }: UnitOfWork, chatId: ChatId) => {
-  if ((await agentTurns.lock(chatId)) !== null) await agentTurns.set(chatId, null)
+export const releaseAgentTurn = async ({ agentTurns }: UnitOfWork, chatId: ChatId, promptId: MessageId) => {
+  if ((await agentTurns.lock(chatId)) === promptId) await agentTurns.set(chatId, null)
 }
 
 const finishAgentTurn = async (unitOfWork: UnitOfWork, chatId: ChatId, promptId: MessageId, noticeOf: NoticeOf) => {
