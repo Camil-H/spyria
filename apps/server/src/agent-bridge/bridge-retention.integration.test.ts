@@ -5,7 +5,14 @@ setDefaultTimeout(60_000)
 const { database, agentBridge, mutate, newRuntimeChat, prompt, turnIs, answered, holdUrl, openStream, ...stack } =
   await startAgentStack({ llm: { model: 'openai/fake' } })
 const retained = () => agentBridge.forDatabase(database).retained()
-const nothingRetained = { turnSpans: 0, viewers: 0, shownQuestions: 0, delegatedTexts: 0, streamedSeqs: 0 }
+const nothingRetained = {
+  turnSpans: 0,
+  viewers: 0,
+  watchingViewers: 0,
+  shownQuestions: 0,
+  delegatedTexts: 0,
+  streamedSeqs: 0,
+}
 const settlesEmpty = async () => {
   await waitFor(() => JSON.stringify(retained()) === JSON.stringify(nothingRetained))
   expect(retained()).toEqual(nothingRetained)
