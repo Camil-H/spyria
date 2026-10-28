@@ -360,11 +360,9 @@ export const promptAgent = async (
     const seed = await transactor.run(({ messages }) => messages.seedFor(prompt))
     await agentClient.sendMessage(conversation, agentPromptTextOf(prompt, seed), prompt.id)
   } catch (error) {
+    if (await runtimes.isWaitingOnHost(chat)) return waitForRuntime({ state: 'host_offline' }, true)
     if (!(error instanceof AgentStartFailure) && !isLastAttempt) throw error
-    const notice =
-      error instanceof AgentStartFailure || !(await runtimes.isWaitingOnHost(chat))
-        ? `${agentNotices.couldNotStart}: ${disclosableMessageOf(error)}`
-        : notReadyNoticeOf({ state: 'host_offline' }, localSession === true)
+    const notice = `${agentNotices.couldNotStart}: ${disclosableMessageOf(error)}`
     return transactor.run((unitOfWork) => closeAgentTurn(unitOfWork, chatId, prompt.id, () => notice))
   }
   if ((await transactor.run(({ agentTurns }) => agentTurns.lock(chatId))) === null)
