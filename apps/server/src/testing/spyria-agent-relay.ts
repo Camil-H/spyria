@@ -140,6 +140,7 @@ export const createSpyriaAgentRelay = ({
         PORT: '0',
         OH_SESSION_API_KEYS_0: apiKey,
         SPYRIA_WORKSPACE_DIR: workspaceOf(apiKey),
+        SPYRIA_BROWSER_DIR: `${repositoryRoot}apps/agent/fixtures/stub-browser`,
       },
       stdout: 'pipe',
       stderr: 'inherit',

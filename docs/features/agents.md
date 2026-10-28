@@ -56,6 +56,10 @@ On a guest's prompt, a tool call that is not read-only produces a **Tool approva
 
 The agent opens a page for the chat's members with `open_page`, a tool of Spyria's own tool server that Pi, Claude Code and Codex all have: a public web address, or a file of the project such as an HTML report it wrote. The server checks the address while answering the call, refuses addresses on the member's own machine or network with a reason the agent sees, and members load an opened page with a click. The page shows in the **Browser** tab of the side panel; see [Chats and sharing](./chats-and-sharing.md#browser).
 
+## Screenshots
+
+The agent takes a screenshot of a web page with `take_screenshot`, another tool of Spyria's tool server that Pi, Claude Code and Codex all have: typically the app it runs in the runtime, such as `http://localhost:3000`, or a public page. It picks a desktop (1280×800) or mobile (390×844) viewport, the first screen or the whole page up to 10,000 pixels tall, and a light or dark theme. The screenshot is taken inside the runtime, where the app under test listens, and saved as `.spyria/screenshots/<name>.png`, a folder kept out of git: screenshots belong in the conversation, not in commits or pull requests. The agent shows one in its reply as a Markdown image (see [Chats and sharing](./chats-and-sharing.md#projects-and-chats)). The first screenshot of a runtime downloads Chromium into it, about 280 MB once; a call made while it downloads answers the agent to try again in a minute. A page that does not load within 30 seconds, or does not answer, tells the agent why.
+
 ## Delegation and subagents
 
 On a Spyria runtime the agent has two tools for parallel work: `delegate` hands a self-contained task to a subagent that shares the runtime's files, and `await_task` waits for a task still running. A delegated task answers within 45 seconds when it can; otherwise the agent gets a task id and collects the answer later with `await_task`.

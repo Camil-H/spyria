@@ -3,10 +3,12 @@ import type { ChatId } from '@spyria/kernel'
 import {
   acme,
   addLlmKey,
+  alice,
   aliceInAcme,
   bob,
   bobInAcme,
   type Launch,
+  sessionTokenOf,
   startAgentStack,
   succeeded,
   waitFor,
@@ -301,6 +303,47 @@ test('the pages the agent opens with Spyria’s open_page tool are kept for the 
     { server: 'spyria', tool: 'open_page', status: 'refused' },
     { server: 'spyria', tool: 'open_page', status: 'refused' },
     { server: 'spyria', tool: 'open_page', status: 'succeeded' },
+  ])
+})
+
+test('the agent takes a screenshot of a page with Spyria’s take_screenshot tool, saved in the runtime and shown in the chat through the runtime’s media, and a page that fails or a request that is not valid answers why', async () => {
+  await stack.agentHost('Screenshot host', { routesModelCalls: true })
+  const chat = await newRuntimeChat()
+  const takeScreenshot = (fields: Record<string, unknown>) => ({
+    tool: 'mcp__spyria__take_screenshot',
+    arguments: fields,
+  })
+  stack.setFakeLlmScript({
+    steps: [
+      takeScreenshot({ url: 'http://localhost:3000/settings', theme: 'dark', viewport: 'mobile' }),
+      takeScreenshot({ url: 'http://localhost:9/refused' }),
+      takeScreenshot({ url: 'file:///etc/passwd' }),
+    ],
+    text: 'Here it is: ![Settings](.spyria/screenshots/localhost-3000-settings.png)',
+  })
+  const promptId = await prompt(chat, 'Show me the settings page')
+  await stack.finished(promptId, chat, 15_000, 'Here it is')
+  const results = (await stack.repliesTo(promptId, ['step'])).flatMap(({ step }) =>
+    (step as { name?: string })?.name === 'take_screenshot' ? [(step as { result?: string }).result] : [],
+  )
+  expect(results).toEqual([
+    'Saved .spyria/screenshots/localhost-3000-settings.png. Show it to the members with ![Screenshot of http://localhost:3000/settings](.spyria/screenshots/localhost-3000-settings.png)',
+    'The screenshot of http://localhost:9/refused failed: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:9/refused',
+    'Give the http or https address of the page to take a screenshot of',
+  ])
+  const shown = await stack.app.request(
+    `/api/chats/${chat}/media?${new URLSearchParams({ path: '.spyria/screenshots/localhost-3000-settings.png' })}`,
+    { headers: { authorization: `Bearer ${await sessionTokenOf(database, acme, alice)}` } },
+  )
+  expect(shown.status).toBe(200)
+  expect(shown.headers.get('content-type')).toBe('image/png')
+  expect(
+    await database.$client`
+      select tool, status from tool_calls where workspace_id = ${acme} and chat_id = ${chat} order by called_at`,
+  ).toMatchObject([
+    { tool: 'take_screenshot', status: 'succeeded' },
+    { tool: 'take_screenshot', status: 'refused' },
+    { tool: 'take_screenshot', status: 'refused' },
   ])
 })
 
