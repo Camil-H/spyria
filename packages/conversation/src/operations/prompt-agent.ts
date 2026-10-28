@@ -358,9 +358,9 @@ export const promptAgent = async (
   })
   if (type !== 'runtime') return undefined
   const chat = { workspaceId, chatId }
-  const waitForRuntime = (readiness: NotReady, releasesHeldTurn: boolean) =>
+  const waitForRuntime = (readiness: NotReady, releasedPromptId?: MessageId) =>
     transactor.run(async (unitOfWork) => {
-      if (releasesHeldTurn) await releaseAgentTurn(unitOfWork, chatId)
+      if (releasedPromptId) await releaseAgentTurn(unitOfWork, chatId, releasedPromptId)
       await noticeWaitingPrompts(unitOfWork, chatId, notReadyNoticeOf(readiness, localSession === true))
     })
   if (localSession && (await transactor.run(({ chats }) => chats.isSessionStartPending(chatId))))
@@ -372,9 +372,11 @@ export const promptAgent = async (
   }
   if (readiness.state !== 'ready') {
     earlyRoutes.delete(earlyRouteKeyOf(chat))
-    return waitForRuntime(readiness, isRetry)
+    return waitForRuntime(readiness, isRetry ? messageId : undefined)
   }
-  const prompt = await transactor.run((unitOfWork) => beginAgentTurn(unitOfWork, chatId, isRetry))
+  const prompt = await transactor.run((unitOfWork) =>
+    beginAgentTurn(unitOfWork, chatId, isRetry ? messageId : undefined),
+  )
   if (!prompt) return undefined
   let conversation: AgentConversation
   try {
@@ -392,8 +394,11 @@ export const promptAgent = async (
     const seed = await transactor.run(({ messages }) => messages.seedFor(prompt))
     await agentClient.sendMessage(conversation, agentPromptTextOf(prompt, seed), prompt.id)
   } catch (error) {
-    if (await runtimes.isWaitingOnHost(chat)) return waitForRuntime({ state: 'host_offline' }, true)
-    if (!(error instanceof AgentStartFailure) && !isLastAttempt) throw error
+    if (await runtimes.isWaitingOnHost(chat)) return waitForRuntime({ state: 'host_offline' }, prompt.id)
+    if (!(error instanceof AgentStartFailure) && !isLastAttempt) {
+      if (prompt.id !== messageId) await transactor.run((unitOfWork) => releaseAgentTurn(unitOfWork, chatId, prompt.id))
+      throw error
+    }
     const notice = `${agentNotices.couldNotStart}: ${disclosableMessageOf(error)}`
     return transactor.run((unitOfWork) => closeAgentTurn(unitOfWork, chatId, prompt.id, () => notice))
   }
