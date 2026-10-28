@@ -4,6 +4,7 @@ import {
   inChat,
   type MessageRow,
   memberNamesIn,
+  ownedBy,
   participantIn,
   type RuntimeOriginRow,
   type Snapshot,
@@ -72,6 +73,7 @@ export type Conversation = Readonly<{
   subagentPolicy: ChatRow['subagentPolicy']
   harness: ChatRow['harness']
   localSession: boolean
+  needsLlmKey: boolean
   context: Readonly<{ tokens: number; window: number | null }> | null
   runsOn: RunsOn | null
   isOwner: boolean
@@ -333,6 +335,10 @@ export const getConversation =
       subagentPolicy: chat.subagentPolicy,
       harness: chat.harness,
       localSession: chat.localSession === true,
+      needsLlmKey:
+        chat.type === 'runtime' &&
+        chat.localSession !== true &&
+        !snapshot.llmCredentials.some(ownedBy(workspaceId, viewerId)),
       context: chat.contextTokens === null ? null : { tokens: chat.contextTokens, window: chat.contextWindow },
       runsOn: runsOnOf(chat),
       isOwner,

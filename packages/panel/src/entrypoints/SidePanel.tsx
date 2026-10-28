@@ -19,11 +19,11 @@ import {
   Plug,
   Users,
 } from 'lucide-react'
-import { Activity, type ComponentType, lazy, type ReactNode, Suspense, useState } from 'react'
+import { Activity, type ComponentType, type CSSProperties, lazy, type ReactNode, Suspense, useState } from 'react'
 import { getPanelTabs, type PanelTabId } from '../queries/get-panel-tabs.ts'
 import { BrowserTab } from './BrowserTab.tsx'
 import { FilesTab } from './FilesTab.tsx'
-import { panelToggleLabelOf, usePanel } from './providers.tsx'
+import { panelToggleLabelOf, panelWidthVariable, usePanel } from './providers.tsx'
 import { ResizeHandle } from './ResizeHandle.tsx'
 import type { PanelProps, TabProps } from './TabProps.ts'
 import { tabClass } from './ui.ts'
@@ -133,8 +133,8 @@ export const SidePanel = ({ usageTab, ...panelProps }: PanelProps & { usageTab: 
         <section
           ref={fitWithinRow}
           aria-label="Side panel"
-          style={{ width }}
-          className="relative flex min-w-0 shrink-0 flex-col border-l border-line bg-raised text-ink"
+          style={{ [panelWidthVariable]: `${width}px` } as CSSProperties}
+          className="relative flex w-(--panel-width) min-w-0 shrink-0 flex-col border-l border-line bg-raised text-ink"
         >
           <ResizeHandle />
           <Root key={chatId} value={selectedTabId} onValueChange={selectTab} className="flex min-h-0 flex-1 flex-col">

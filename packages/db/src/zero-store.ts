@@ -36,6 +36,7 @@ type ZeroStoreOptions = {
   storageKeyPrefix?: string
   mutators?: AnyMutatorRegistry
   draftStorage?: Storage
+  syncedTablesStorage?: Storage
 }
 
 type Unbranded<Value> = Value extends string
@@ -60,6 +61,8 @@ const uniqueBy = <Row>(rows: readonly Row[], keyOf: (row: Row) => string) => [
   ...new Map(rows.map((row) => [keyOf(row), row])).values(),
 ]
 const withoutZeroRefCount = <Row extends object>(row: Row) => Object.fromEntries(Object.entries(row)) as Row
+const isWorkspaceRowIn = (rows: unknown, workspaceId: WorkspaceId) =>
+  (rows as readonly { workspaceId: string }[]).some((row) => row.workspaceId === workspaceId)
 const isSameSources = (previous: readonly unknown[], next: readonly unknown[]) =>
   previous.length === next.length && previous.every((source, index) => source === next[index])
 const scopedKeyOf = (workspaceId: WorkspaceId, name: ScopedQueryName, args: object) =>
@@ -280,7 +283,7 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
     }),
   )
   let previous: Snapshot | undefined
-  return (rowsByWorkspace: readonly SourceRows[], drafts: readonly DraftRow[]) => {
+  return (rowsByWorkspace: readonly SourceRows[]) => {
     const rowsOf = <Table extends TableName>(table: Table, source: string = table) => {
       const concatenatedRows =
         concatenatedRowsBySource.get(source) ??
@@ -300,7 +303,6 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
       latestMessages: latestMessagesOf(rowsOf('messages', 'latestMessages')),
       latestAgentActivity: latestAgentActivityOf(rowsOf('messages', 'latestAgentActivity')),
       pinnedSteps: pinnedStepsOf(rowsOf('messages', 'chatPinnedSteps')),
-      drafts,
       readMarkers: readMarkersOf(rowsOf('readMarkers')),
       threadReadMarkers: threadReadMarkersOf(rowsOf('threadReadMarkers')),
       runtimeOrigins: runtimeOriginsOf(rowsOf('runtimeOrigins')),
@@ -346,21 +348,32 @@ export const createZeroStore = ({
   storageKeyPrefix = '',
   mutators,
   draftStorage,
+  syncedTablesStorage,
 }: ZeroStoreOptions) => {
   const draftKeyPrefix = `spyria.draft:${memberId}:`
   const draftKeyOf = (draft: DraftRow) => `${draftKeyPrefix}${draft.workspaceId}:${draft.chatId}`
+  const syncedTablesKeyOf = (workspaceId: WorkspaceId) =>
+    `spyria.synced-tables:${memberId}:${storageKeyPrefix}${workspaceId}`
+  const isEveryTableCached = (workspaceId: WorkspaceId) => {
+    const syncedTables: readonly string[] = JSON.parse(
+      syncedTablesStorage?.getItem(syncedTablesKeyOf(workspaceId)) ?? '[]',
+    )
+    return materializedTables.every((table) => syncedTables.includes(table))
+  }
   let drafts: readonly DraftRow[] = Array.from({ length: draftStorage?.length ?? 0 }, (_, index) =>
     draftStorage?.key(index),
   ).flatMap((key) => (key?.startsWith(draftKeyPrefix) ? [JSON.parse(draftStorage?.getItem(key) ?? '{}')] : []))
   const snapshotOf = createSnapshotBuilder(memberId)
-  let snapshot = snapshotOf([], drafts)
+  let snapshot = snapshotOf([])
   const listeners = new Set<() => void>()
+  const draftListeners = new Set<() => void>()
   const renewalListeners = new Set<(workspaceId: WorkspaceId) => void>()
   const rowsByWorkspace = new Map<WorkspaceId, SourceRows>()
   const scopedWatches = new Map<string, ScopedWatch>()
   const zeroByWorkspace = new Map<WorkspaceId, Zero>()
   const tokenByWorkspace = new Map<WorkspaceId, string>()
   const loadedByWorkspace = new Map<WorkspaceId, PromiseWithResolvers<void>>()
+  const readableByWorkspace = new Map<WorkspaceId, PromiseWithResolvers<void>>()
   const completeTablesByWorkspace = new Map<WorkspaceId, ReadonlySet<string>>()
   const expiresAtByWorkspace = new Map<WorkspaceId, number>()
   const clientIdsByWorkspace = new Map<WorkspaceId, { clientID: string; clientGroupID?: string }>()
@@ -377,7 +390,7 @@ export const createZeroStore = ({
     isPublishScheduled = true
     queueMicrotask(() => {
       isPublishScheduled = false
-      snapshot = snapshotOf([...rowsByWorkspace.values()], drafts)
+      snapshot = snapshotOf([...rowsByWorkspace.values()])
       for (const listener of listeners) listener()
     })
   }
@@ -403,11 +416,15 @@ export const createZeroStore = ({
       feedScoped(watch.workspaceId, watch.name)
     })
   }
-  const loadedOf = (workspaceId: WorkspaceId) => {
-    const loaded = loadedByWorkspace.get(workspaceId) ?? Promise.withResolvers<void>()
-    loadedByWorkspace.set(workspaceId, loaded)
-    return loaded
+  const resolverIn = (resolvers: Map<WorkspaceId, PromiseWithResolvers<void>>, workspaceId: WorkspaceId) => {
+    const resolver = resolvers.get(workspaceId) ?? Promise.withResolvers<void>()
+    resolvers.set(workspaceId, resolver)
+    return resolver
   }
+  const loadedOf = (workspaceId: WorkspaceId) => resolverIn(loadedByWorkspace, workspaceId)
+  const readableOf = (workspaceId: WorkspaceId) => resolverIn(readableByWorkspace, workspaceId)
+  const isLoaded = (workspaceId: WorkspaceId) =>
+    completeTablesByWorkspace.get(workspaceId)?.size === materializedTables.length
   const renewLater = (workspaceId: WorkspaceId, delayMilliseconds: number) => {
     clearTimeout(renewalTimerByWorkspace.get(workspaceId))
     renewalTimerByWorkspace.set(workspaceId, setTimeout(renewNow, delayMilliseconds, workspaceId))
@@ -454,6 +471,7 @@ export const createZeroStore = ({
     zeroByWorkspace.set(workspaceId, zero)
     tokenByWorkspace.set(workspaceId, token)
     expiresAtByWorkspace.set(workspaceId, session.expiresAt)
+    const isCacheReadable = isEveryTableCached(workspaceId)
     for (const table of materializedTables)
       zero
         .materialize((queries[table] as () => Parameters<typeof zero.materialize>[0])())
@@ -463,8 +481,14 @@ export const createZeroStore = ({
             ? latestMessagesIn(data as readonly object[])
             : (data as object[])
           publish()
-          if (result === 'complete') completeTables.add(table)
-          if (completeTables.size === materializedTables.length) loadedOf(workspaceId).resolve()
+          if (isCacheReadable && table === 'workspaces' && isWorkspaceRowIn(data, workspaceId))
+            readableOf(workspaceId).resolve()
+          if (result !== 'complete' || completeTables.has(table)) return
+          completeTables.add(table)
+          if (!isLoaded(workspaceId)) return
+          syncedTablesStorage?.setItem(syncedTablesKeyOf(workspaceId), JSON.stringify(materializedTables))
+          readableOf(workspaceId).resolve()
+          loadedOf(workspaceId).resolve()
         })
     for (const watch of scopedWatches.values()) if (watch.workspaceId === workspaceId) materializeScoped(watch)
     zero.connection.state.subscribe((state) => {
@@ -485,6 +509,7 @@ export const createZeroStore = ({
       }
     zeroByWorkspace.delete(workspaceId)
     loadedByWorkspace.delete(workspaceId)
+    readableByWorkspace.delete(workspaceId)
     completeTablesByWorkspace.delete(workspaceId)
     signedInWorkspaceIds = new Set([...signedInWorkspaceIds].filter((signedInId) => signedInId !== workspaceId))
     rowsByWorkspace.set(workspaceId, { workspaces: rowsByWorkspace.get(workspaceId)?.workspaces ?? [] })
@@ -496,6 +521,7 @@ export const createZeroStore = ({
     publish()
   }
   const signOut = async (workspaceId: WorkspaceId) => {
+    syncedTablesStorage?.removeItem(syncedTablesKeyOf(workspaceId))
     await close(workspaceId)?.delete()
   }
   for (const session of sessions) connect(session)
@@ -507,6 +533,13 @@ export const createZeroStore = ({
         listeners.delete(listener)
       }
     },
+    readDrafts: () => drafts,
+    subscribeDrafts: (listener: () => void) => {
+      draftListeners.add(listener)
+      return () => {
+        draftListeners.delete(listener)
+      }
+    },
     replaceDraft: (draft: DraftRow) => {
       const isReplaced = (stored: DraftRow) =>
         stored.workspaceId === draft.workspaceId && stored.chatId === draft.chatId && stored.memberId === draft.memberId
@@ -514,9 +547,11 @@ export const createZeroStore = ({
       drafts = [...drafts.filter((stored) => !isReplaced(stored)), ...(draft.text === '' ? [] : [draft])]
       if (draft.text === '') draftStorage?.removeItem(draftKeyOf(draft))
       else draftStorage?.setItem(draftKeyOf(draft), JSON.stringify(draft))
-      publish()
+      for (const listener of draftListeners) listener()
     },
     whenLoaded: (workspaceId: WorkspaceId) => loadedOf(workspaceId).promise,
+    whenReadable: (workspaceId: WorkspaceId) => readableOf(workspaceId).promise,
+    isLoaded,
     diagnostics: () => ({
       cacheURL,
       connectionEvents,

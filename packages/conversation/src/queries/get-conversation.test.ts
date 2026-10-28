@@ -409,6 +409,20 @@ test.each([
   },
 )
 
+test('a chat on a Spyria runtime needs the viewer’s LLM key in its workspace; a channel or a session on their machine does not', () => {
+  const snapshot = createMockSnapshot()
+  const withoutKey = { ...snapshot, llmCredentials: [] }
+  const onMachine = {
+    ...withoutKey,
+    chats: withoutKey.chats.map((chat) => (chat.id === research ? { ...chat, localSession: true } : chat)),
+  }
+  const needsLlmKeyIn = (chat: string, from: Snapshot) => getConversation(acme, chatId(chat), alice)(from)?.needsLlmKey
+  expect(needsLlmKeyIn('chat-research', snapshot)).toBe(false)
+  expect(needsLlmKeyIn('chat-research', withoutKey)).toBe(true)
+  expect(needsLlmKeyIn('chat-research', onMachine)).toBe(false)
+  expect(needsLlmKeyIn('chat-welcome', withoutKey)).toBe(false)
+})
+
 test('messages carry their edited flag and the agent as their author', () => {
   const edited = { ...replyRow(2, 'agent'), editedAt: '2026-10-01T09:01:00.000Z' }
   const snapshot = snapshotWith({ turn: false, waiting: false })

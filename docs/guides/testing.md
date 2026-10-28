@@ -32,6 +32,7 @@ bun run test:e2e -- e2e/04-agent   # one segment (the platform gate still runs f
 bun run check:docker       # agent:build, check:trust, then the docker tests
 bun run check:trust        # the built runtime and host images hold no distrusted root
 bun run smoke:prod         # the production Compose file under a throwaway name; not in check:all
+bun run load:websockets    # server memory under many agent-stream sockets; not in check:all
 ```
 
 `check:all` runs, in order: `lint`, `typecheck`, `check:boundaries`, `check:locks`, `test`, `check:bundle`, `test:integration`, `test:e2e`. `check:docker` runs `agent:build`, `check:trust` and `test:docker:integration`. Both stop at the first failing step and end with the 20 slowest tests of each suite.
@@ -204,6 +205,24 @@ There are no screenshot baselines. Layout, keyboard, resize and colour rules a u
 | `apps/server/src/runtime-hosts/harness-install.docker.test.ts` | Harness install from a registry (the fake npm registry with stub packages) into the volume, mounted read-only. |
 | `apps/server/src/agent-bridge/machine-session.docker.test.ts` | A session on a member's machine. |
 | `apps/server/src/agent-bridge/pi.docker.test.ts` | Pi in the real runtime image. |
+
+## Load tests
+
+`bun run load:websockets` measures the server's memory under many long-lived agent-stream sockets (`/api/stream`, which the web app opens per workspace). It serves the real app on a fresh database in the test Postgres, starting the Docker container when nothing answers on port 5435 (any Postgres 18 there with user `spyria` and password `spyria-test` works too). A second Bun process plays the browsers: each socket sends `auth`, then `subscribe` for a chat. For each size the script samples `process.memoryUsage()` and the `bun:jsc` heap after a full collection at four points: before opening, while the sockets are held, after streaming token frames to every chat through the agent bridge, and after closing. A discarded warm-up round comes first. A size passes when the heap returns to within 2 MiB (or 10% of what the sockets held) and the bridge has forgotten every viewer. The script exits non-zero when a size fails or the server logged an error.
+
+Options: `--sockets 1000,5000,10000`, `--sockets-per-chat 1`, `--frames 20` (token frames per chat), `--hold-seconds 5`, `--warmup 500`, `--concurrency 200` (sockets opened at once). For example: `bun run load:websockets --sockets 10000 --sockets-per-chat 100`.
+
+Measured in October 2026 with Bun 1.4.4 on Linux arm64 (8 cores, Postgres 18):
+
+| Sockets | Chats | RSS before, held | RSS per socket | JS heap per socket | Token frames streamed | Viewers forgotten after close | Back to baseline |
+|---|---|---|---|---|---|---|---|
+| 1,000 | 1,000 | 99 → 109 MiB | 10 KiB | under 1 KiB | 20,000 in 0.2 s | 0.1 s | yes |
+| 5,000 | 5,000 | 101 → 134 MiB | 6.7 KiB | 2.2 KiB | 100,000 in 0.8–1.9 s | 0.1–0.4 s | yes |
+| 10,000 | 10,000 | 107 → 158 MiB | 5.2 KiB | 2.0 KiB | 200,000 in 2–12 s | 0.4–0.6 s | yes |
+| 10,000 | 100 | 98 → 150 MiB | 5.3 KiB | 1.6 KiB | 200,000 in 1.0 s | 0.3 s | yes |
+| 20,000 | 2,000 | 98 → 192 MiB | 4.8 KiB | 1.8 KiB | 400,000 in 2.3 s | 0.6 s | yes |
+
+A held socket costs about 5 KiB of RSS. About 2 KiB of that is JavaScript: Hono's socket context with its two `URL`s, the connection's closures, and its viewer entries. The rest is Bun's native socket. Streaming raises RSS (send buffers and frame strings) until the next collection, and the heap returns to baseline after every size. With 1,000 sockets the per-socket numbers are mostly noise. Streaming times vary a lot on a shared machine. The first run found that closing a socket scanned every watched chat, so forgetting 10,000 closed sockets on 10,000 chats took 2.2 s and grew quadratically. It now takes 0.4 s. Runtime-host sockets (one per machine) are not part of this test.
 
 ## Chasing a failure
 

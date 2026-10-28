@@ -125,11 +125,12 @@ export const createApp = async (
     logLevel: testStack && 'debug',
     mutators: { ...workspaceMutators, ...conversationMutators, ...profileMutators, ...runtimeMutators },
     draftStorage: localStorage,
+    syncedTablesStorage: localStorage,
   })
   storeCount++
   if (testStack) Object.assign(window, { spyriaZeroDiagnostics: () => ({ storeCount, ...store.diagnostics() }) })
   const isLoaded = await Promise.race([
-    store.whenLoaded(defaultWorkspaceId).then(() => true),
+    store.whenReadable(defaultWorkspaceId).then(() => true),
     new Promise<false>((resolve) => setTimeout(resolve, workspaceLoadMilliseconds, false)),
   ])
   if (!isLoaded) {
