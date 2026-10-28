@@ -109,7 +109,7 @@ export const pushBundle = ({ url, token, branch, baseBranch, bundleOf }: Push) =
       if (!prerequisitesFetched.isDone)
         return { failure: `GitHub refused the fetch: ${lastLinesOf(prerequisitesFetched.output)}` }
     }
-    const verified = await inRepository('bundle', 'verify', '--quiet', bundle)
+    const verified = await inRepository('bundle', 'verify', bundle)
     if (!verified.isDone) return { failure: `The runtime's bundle is not valid: ${lastLinesOf(verified.output)}` }
     const fetched = await inRepository('fetch', '--quiet', bundle, `${branchRef}:${branchRef}`)
     if (!fetched.isDone) return { failure: `The runtime's bundle could not be read: ${lastLinesOf(fetched.output)}` }
