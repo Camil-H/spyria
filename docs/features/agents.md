@@ -38,7 +38,7 @@ When another participant prompts later, their keys must reach the session's mode
 
 ## The session chip: model, effort, subagents
 
-The chip in the chat shows the session model and effort (before the first prompt: "Model chosen at first prompt"). A participant with `session.configure` (Owner and Editor) opens it to change:
+The chip in the chat shows the session model and effort (before the first prompt: "Model chosen at first prompt"; while the first prompt waits for its model: "Choosing model…"). A participant with `session.configure` (Owner and Editor) opens it to change:
 
 - **Main model:** any reachable model, or one found with **Search all models** among the models the gateway lists for the member's providers. A switch asks for confirmation and shows the estimated cost of the next reply, which rereads the whole conversation with the new model. It applies at the next prompt and keeps the conversation's context.
 - **Effort:** **Off**, **Minimal**, **Low**, **Medium**, **High** or **Extra high** (Pi's thinking levels).
