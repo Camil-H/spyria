@@ -441,6 +441,25 @@ test('a session start whose answer is lost to a host reconnect keeps its one con
   await waitFor(async () => (await startJobsOf(chat)).every(({ state }) => state === 'done'))
 })
 
+test('a host reconnect while a chosen session’s runtime starts keeps one conversation, and the first prompt joins it', async () => {
+  const { relay, host } = await stack.agentHost('Machine', { ownerId: alice, signedIn: [defaultHarness] })
+  const releaseStart = host.hold('start')
+  const chat = await newRuntimeChat()
+  expect(await chooseRunsOn(chat, defaultHarness)).toEqual(succeeded)
+  await waitFor(async () => host.commands.some(({ op }) => op === 'start'))
+  await host.disconnect()
+  await host.connect()
+  await stack.agentBridge.forDatabase(database).resumeHost({ workspaceId: acme, hostId: runtimeHostId(host.id) })
+  releaseStart()
+  await waitFor(async () => (await startedEventsOf(chat)).length === 1)
+
+  const replies = await finished(await prompt(chat, 'Hello'), chat)
+  expect(replies.at(-1)?.body).toContain('[t1] ')
+  expect(relay.adapterLaunches()).toEqual([defaultHarness])
+  expect(await startedEventsOf(chat)).toHaveLength(1)
+  await waitFor(async () => (await startJobsOf(chat)).every(({ state }) => state === 'done'))
+})
+
 test('the machine going offline as its agent takes a prompt shows "Your machine is offline", and back online the prompt runs once', async () => {
   const goesOffline = Promise.withResolvers<void>()
   const { relay, host } = await stack.agentHost('Machine', {
