@@ -1,11 +1,12 @@
 import { createHmac, createPrivateKey, timingSafeEqual } from 'node:crypto'
-import type {
-  AgentChat,
-  GitAuthor,
-  IssueFilter,
-  IssueSummary,
-  PullRequestStep,
-  RepositoryCheckouts,
+import {
+  type AgentChat,
+  checkStateOf,
+  type GitAuthor,
+  type IssueFilter,
+  type IssueSummary,
+  type PullRequestStep,
+  type RepositoryCheckouts,
 } from '@spyria/conversation/server'
 import type { Database } from '@spyria/db/postgres'
 import { DomainError, log } from '@spyria/kernel'
@@ -33,6 +34,8 @@ import { branchBundle, pushBundle } from './bundles.ts'
 import {
   appJwtOf,
   type GitHubApi,
+  type GitHubCheckAnnotation,
+  type GitHubCheckRun,
   type GitHubComment,
   type GitHubIssue,
   GitHubRequestFailed,
@@ -473,6 +476,18 @@ const issueSummaryOf = (issue: GitHubIssue): IssueSummary => ({
 
 const threadCommentOf = ({ user, body }: GitHubComment) => ({ author: authorOf(user), body: body ?? '' })
 
+const checkAnnotationOf = (annotation: GitHubCheckAnnotation) => ({
+  path: annotation.path,
+  startLine: annotation.start_line,
+  endLine: annotation.end_line,
+  level: annotation.annotation_level,
+  title: annotation.title ?? '',
+  message: annotation.message,
+})
+
+const isFailing = ({ status, conclusion }: GitHubCheckRun) =>
+  checkStateOf(status === 'completed', conclusion) === 'failing'
+
 export const createGitHubCheckouts = (database: Database, dependencies: GitHubDependencies): RepositoryCheckouts => {
   const { api } = dependencies
   const authorsByMember = new Map<string, { login: string; author: GitAuthor }>()
@@ -482,12 +497,12 @@ export const createGitHubCheckouts = (database: Database, dependencies: GitHubDe
     if (!repository || !baseBranch || !workingBranch || !token) throw new GitHubNotConfigured()
     return { repository, baseBranch, workingBranch, token }
   }
-  const readingOf = async (chat: AgentChat, permission: 'issues' | 'pull_requests', permissionName: string) => {
+  const readingOf = async (chat: AgentChat, permissions: Record<string, 'read'>, permissionName: string) => {
     const { repository } = (await chatRepositoryOf(database, chat)) ?? {}
     if (!repository) throw new GitHubNotConfigured()
     const credentials = await appCredentialsOf(database, dependencies, chat.workspaceId)
     const token = await githubCall(chat.workspaceId, () =>
-      repositoryTokenOf(api, credentials, repository, { [permission]: 'read' }).catch((error: unknown) => {
+      repositoryTokenOf(api, credentials, repository, permissions).catch((error: unknown) => {
         if (error instanceof GitHubRequestFailed && error.status === 422)
           throw new GitHubPermissionMissing(permissionName)
         throw error
@@ -561,7 +576,7 @@ export const createGitHubCheckouts = (database: Database, dependencies: GitHubDe
       )
     },
     reviewThreadsOf: async (chat, number) => {
-      const { repository, token } = await readingOf(chat, 'pull_requests', 'Pull requests')
+      const { repository, token } = await readingOf(chat, { pull_requests: 'read' }, 'Pull requests')
       const threads = await githubCall(chat.workspaceId, () => api.reviewThreads(token, repository, number))
       if (!threads) throw new GitHubRefused(`${repository} has no pull request #${number}`)
       return threads.map(({ path, line, originalLine, isResolved, isOutdated, comments }) => ({
@@ -572,15 +587,38 @@ export const createGitHubCheckouts = (database: Database, dependencies: GitHubDe
         comments: comments.nodes.map(({ author, body }) => ({ author: authorOf(author), body })),
       }))
     },
+    checkRunsOf: async (chat, number) => {
+      const { repository, token } = await readingOf(chat, { pull_requests: 'read', checks: 'read' }, 'Checks')
+      return githubCall(chat.workspaceId, async () => {
+        const { head } = await api.pullRequest(token, repository, number).catch((error: unknown) => {
+          if (error instanceof GitHubRequestFailed && error.status === 404)
+            throw new GitHubRefused(`${repository} has no pull request #${number}`)
+          throw error
+        })
+        const { check_runs } = await api.checkRuns(token, repository, head.sha)
+        const runs = await Promise.all(
+          check_runs.map(async (run) => ({
+            name: run.name,
+            isCompleted: run.status === 'completed',
+            conclusion: run.conclusion,
+            url: run.html_url,
+            annotations: isFailing(run)
+              ? (await api.checkRunAnnotations(token, repository, run.id)).map(checkAnnotationOf)
+              : [],
+          })),
+        )
+        return { headSha: head.sha, runs }
+      })
+    },
     issuesOf: async (chat, filter) => {
-      const { repository, token } = await readingOf(chat, 'issues', 'Issues')
+      const { repository, token } = await readingOf(chat, { issues: 'read' }, 'Issues')
       const { items } = await githubCall(chat.workspaceId, () =>
         api.searchIssues(token, issueSearchOf(repository, filter)),
       )
       return items.map(issueSummaryOf)
     },
     issueOf: async (chat, number) => {
-      const { repository, token } = await readingOf(chat, 'issues', 'Issues')
+      const { repository, token } = await readingOf(chat, { issues: 'read' }, 'Issues')
       const [issue, comments] = await githubCall(chat.workspaceId, () =>
         Promise.all([api.issue(token, repository, number), api.issueComments(token, repository, number)]),
       )
