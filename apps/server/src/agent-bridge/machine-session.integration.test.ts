@@ -441,6 +441,38 @@ test('a session start whose answer is lost to a host reconnect keeps its one con
   await waitFor(async () => (await startJobsOf(chat)).every(({ state }) => state === 'done'))
 })
 
+test('the machine going offline as its agent takes a prompt shows "Your machine is offline", and back online the prompt runs once', async () => {
+  const goesOffline = Promise.withResolvers<void>()
+  const { relay, host } = await stack.agentHost('Machine', {
+    ownerId: alice,
+    signedIn: [defaultHarness],
+    containerAgentOf: (relay) => ({
+      ...relay.containerAgent,
+      respond: async (request, container) => {
+        const response = await relay.containerAgent.respond(request, container)
+        if (!request.path.endsWith('/events') || relay.prompts.length > 1) return response
+        goesOffline.resolve()
+        return new Promise(() => {})
+      },
+    }),
+  })
+  const chat = await newMachineChat()
+  const question = await prompt(chat, 'Hello')
+  await goesOffline.promise
+  await host.disconnect()
+  await waitFor(async () => (await repliesTo(question)).length > 0)
+  expect(bodiesOf(await repliesTo(question))).toEqual(['notice:Your machine is offline'])
+
+  await host.connect()
+  await stack.agentBridge.forDatabase(database).resumeHost({ workspaceId: acme, hostId: runtimeHostId(host.id) })
+  expect((await finished(question, chat)).at(-1)?.body).toBe(
+    '[t1] Hello from the stub (model stub-default, mode bypassPermissions).',
+  )
+  expect(relay.prompts).toEqual(['Hello', 'Hello'])
+  expect(relay.adapterLaunches()).toEqual([defaultHarness])
+  expect(bodiesOf(await repliesTo(question)).filter((body) => body.includes('[t'))).toHaveLength(1)
+})
+
 test('the machine going offline while its runtime starts shows "Your machine is offline", not a start failure', async () => {
   const { relay, host } = await stack.agentHost('Machine', { ownerId: alice, signedIn: [defaultHarness] })
   host.hold('start')
