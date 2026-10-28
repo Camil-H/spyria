@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { branchBundle } from './bundles.ts'
+import { branchBundle, pushBundle } from './bundles.ts'
 
 const directory = mkdtempSync(join(tmpdir(), 'spyria-bundles-'))
 afterAll(() => rmSync(directory, { recursive: true, force: true }))
@@ -65,4 +65,39 @@ test('a branch bundle excludes what the runtime holds, falls back to the base fo
   expect(await branchBundle({ url, token: 'unused', branch: 'gone', baseBranch: 'main', runtimeHeads: [] })).toEqual({
     failure: 'There is no branch gone on GitHub',
   })
+}, 30_000)
+
+test('a branch that merged its base pushes, with the base commits its bundle starts from fetched by id', async () => {
+  git('init', '-q', '--bare', 'merge-upstream.git')
+  git('clone', '-q', 'merge-upstream.git', 'merge-runtime')
+  const runtime = join(directory, 'merge-runtime')
+  const commit = (message: string) => {
+    writeFileSync(join(runtime, `${message}.txt`), message)
+    git('-C', 'merge-runtime', 'add', '.')
+    git('-C', 'merge-runtime', 'commit', '-q', '-m', message)
+  }
+  commit('base')
+  git('-C', 'merge-runtime', 'push', '-q', 'origin', 'main')
+  git('-C', 'merge-runtime', 'checkout', '-q', '-b', 'feature')
+  commit('feature')
+  git('-C', 'merge-runtime', 'push', '-q', 'origin', 'feature')
+  git('-C', 'merge-runtime', 'checkout', '-q', 'main')
+  commit('first-base-update')
+  commit('second-base-update')
+  git('-C', 'merge-runtime', 'push', '-q', 'origin', 'main')
+  git('-C', 'merge-runtime', 'checkout', '-q', 'feature')
+  git('-C', 'merge-runtime', 'merge', '-q', '--no-edit', 'main')
+  const mergedHead = git('-C', 'merge-runtime', 'rev-parse', 'HEAD')
+  const bundleOf = async (branch: string, prerequisite: string | null) => {
+    const bundled = Bun.spawnSync(['git', 'bundle', 'create', '-', `refs/heads/${branch}`, `^${prerequisite}`], {
+      cwd: runtime,
+      stderr: 'pipe',
+    })
+    return { bundle: Buffer.from(bundled.stdout).toString('base64') }
+  }
+  const url = `file://${join(directory, 'merge-upstream.git')}`
+  expect(await pushBundle({ url, token: 'unused', branch: 'feature', baseBranch: 'main', bundleOf })).toEqual({
+    head: mergedHead,
+  })
+  expect(git('-C', 'merge-upstream.git', 'rev-parse', 'feature')).toBe(mergedHead)
 }, 30_000)
