@@ -78,6 +78,24 @@ test('a Pi provider error ends the turn with an error update and the next prompt
   expect(socket.events.filter(kindOf('error'))).toHaveLength(1)
 })
 
+test('a prompt sent while a Pi turn runs waits for it, since Pi refuses a second prompt, and each ends its own turn', async () => {
+  const { call, open, create } = started()
+  const id = await create(piLaunchOf())
+  const socket = open(id)
+  const promptWithId = (text: string, promptId: string) =>
+    call('POST', `/api/conversations/${id}/events`, { content: [{ type: 'text', text }], prompt_id: promptId })
+  await promptWithId('stub:terminal', 'prompt-1')
+  await socket.until((event) => event.update.toolCallId === 'terminal-1')
+  await promptWithId('hello', 'prompt-2')
+  await socket.until(kindOf('turn_end'), 2)
+  expect(socket.events.filter(kindOf('turn_end')).map(({ update }) => update)).toEqual([
+    { sessionUpdate: 'turn_end', stopReason: 'end_turn', promptId: 'prompt-1' },
+    { sessionUpdate: 'turn_end', stopReason: 'end_turn', promptId: 'prompt-2' },
+  ])
+  expect(socket.events.filter(kindOf('error'))).toEqual([])
+  expect(textOf(socket.events)).toEndWith(piHello(2))
+})
+
 test('Stop aborts a Pi turn as cancelled and the next prompt continues the session', async () => {
   const { call, open, create, prompt } = started()
   const id = await create(piLaunchOf())
