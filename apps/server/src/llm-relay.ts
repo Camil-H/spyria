@@ -174,8 +174,8 @@ export const createModelCallRelay = ({
     const answerWithSpyriaTools = async (response: Response) => {
       if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) return stream(response)
       const listed = jsonOf(await response.text()) as { result?: { tools?: object[] } }
-      const tools = [...spyriaTools, ...(listed.result?.tools ?? [])]
-      answer(200, { ...listed, result: { ...listed.result, tools } }, picked(response.headers, ['mcp-session-id']))
+      const result = listed.result && { ...listed.result, tools: [...spyriaTools, ...(listed.result.tools ?? [])] }
+      answer(200, result ? { ...listed, result } : listed, picked(response.headers, ['mcp-session-id']))
     }
     const path = relayPathOf(String(frame.path ?? ''))
     const method = String(frame.method ?? 'POST')
