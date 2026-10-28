@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { Dialog } from './Dialog.tsx'
-import { ShortcutLabel } from './ShortcutLabel.tsx'
 import { useShortcut, useShortcuts } from './shortcuts.ts'
 
 const kbdClass = 'min-w-6 rounded border border-line bg-app px-1.5 py-0.5 text-center font-sans text-xs text-ink'
@@ -27,9 +26,7 @@ export const KeyboardShortcuts = () => {
       <ul aria-label="Keyboard shortcuts" className="-mx-2 flex flex-col overflow-y-auto">
         {listed.map(({ keys, label }) => (
           <li key={keys} className="flex items-center justify-between gap-4 rounded-md px-2 py-1.5 text-sm">
-            <span>
-              <ShortcutLabel label={label} shortcut={keys.split(' ')[0] ?? keys} />
-            </span>
+            <span>{label}</span>
             <KeySequence keys={keys} />
           </li>
         ))}
