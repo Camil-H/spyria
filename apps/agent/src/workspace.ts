@@ -97,26 +97,82 @@ const baseRefOf = async (root: string, base: string, env: Record<string, string>
   return undefined
 }
 
-export const changesOf = async (root: string, base: string, env: Record<string, string>) => {
+const cappedGit = async (cwd: string, args: string[], env: Record<string, string>) => {
+  const child = Bun.spawn(['git', '-C', cwd, ...args], { env, stdin: 'ignore', stdout: 'pipe', stderr: 'ignore' })
+  const decoder = new TextDecoder()
+  let text = ''
+  for await (const chunk of child.stdout) {
+    text += decoder.decode(chunk, { stream: true })
+    if (text.length > maximumPatchCharacters) break
+  }
+  const isCut = text.length > maximumPatchCharacters
+  if (isCut) child.kill()
+  const isDone = (await child.exited) === 0
+  return isCut || isDone ? { text: text.slice(0, maximumPatchCharacters), isCut } : { text: '', isCut }
+}
+
+const mergeBaseOf = async (root: string, base: string, env: Record<string, string>) => {
   const ref = await baseRefOf(root, base, env)
-  const mergeBase = ref ? (await git(root, ['merge-base', ref, 'HEAD'], env)).trim() : ''
-  if (!mergeBase) return { patch: '', log: '', truncated: false }
+  return ref ? (await git(root, ['merge-base', ref, 'HEAD'], env)).trim() : ''
+}
+
+const cutPartsOf = (parts: Record<string, { isCut: boolean }>) =>
+  Object.entries(parts)
+    .filter(([, { isCut }]) => isCut)
+    .map(([name]) => name)
+
+export const changesOf = async (root: string, base: string, env: Record<string, string>) => {
+  const mergeBase = await mergeBaseOf(root, base, env)
+  if (!mergeBase) return { patch: '', unstaged: '', staged: '', truncated: false, cut: [] }
   const index = join(tmpdir(), `spyria-index-${crypto.randomUUID()}`)
   try {
     await copyFile(join(root, '.git', 'index'), index).catch(() => undefined)
     const indexEnvironment = { ...env, GIT_INDEX_FILE: index }
-    await git(root, ['add', '--all', '--intent-to-add'], indexEnvironment)
-    const [patch, log] = await Promise.all([
-      git(root, ['diff', '--no-renames', '--no-color', mergeBase], indexEnvironment),
-      git(root, ['log', `--max-count=${maximumCommits}`, '--format=%H%x1f%s%x1f%an%x1f%aI', `${mergeBase}..HEAD`], env),
+    await git(root, ['add', '--ignore-removal', '--intent-to-add', '.'], indexEnvironment)
+    const [patch, unstaged, staged] = await Promise.all([
+      cappedGit(root, ['diff', '--no-renames', '--no-color', mergeBase], indexEnvironment),
+      cappedGit(root, ['diff', '--no-renames', '--no-color'], indexEnvironment),
+      cappedGit(root, ['diff', '--cached', '--no-renames', '--no-color', 'HEAD'], env),
     ])
-    return {
-      patch: patch.slice(0, maximumPatchCharacters),
-      log,
-      truncated: patch.length > maximumPatchCharacters,
-    }
+    const cut = cutPartsOf({ patch, unstaged, staged })
+    return { patch: patch.text, unstaged: unstaged.text, staged: staged.text, truncated: cut.length > 0, cut }
   } finally {
     await rm(index, { force: true })
+  }
+}
+
+export const commitLogOf = async (root: string, base: string, env: Record<string, string>) => {
+  const mergeBase = await mergeBaseOf(root, base, env)
+  if (!mergeBase) return { log: '', commitPatches: '', hasMoreCommits: false, truncated: false, cut: [] }
+  const range = `${mergeBase}..HEAD`
+  const [log, commitPatches, count] = await Promise.all([
+    cappedGit(
+      root,
+      ['log', '-z', `--max-count=${maximumCommits}`, '--format=%H%x00%s%x00%an%x00%aI%x00%b', range],
+      env,
+    ),
+    cappedGit(
+      root,
+      [
+        'log',
+        '--remerge-diff',
+        '--no-renames',
+        '--no-color',
+        `--max-count=${maximumCommits}`,
+        '--format=%x00%H',
+        range,
+      ],
+      env,
+    ),
+    git(root, ['rev-list', '--count', range], env),
+  ])
+  const cut = cutPartsOf({ log, commitPatches })
+  return {
+    log: log.text,
+    commitPatches: commitPatches.text,
+    hasMoreCommits: Number(count) > maximumCommits,
+    truncated: cut.length > 0,
+    cut,
   }
 }
 
