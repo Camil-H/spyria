@@ -1,8 +1,10 @@
+import { connectionStatuses, notConnectedStatus } from './personal-connection.ts'
+
 export type GitHubConnection = { login: string; state: 'connected' | 'needs_reconnection' } | null
 
 export const githubConnectionStatusOf = (connection: GitHubConnection) =>
   !connection
-    ? 'Not connected'
+    ? notConnectedStatus
     : connection.state === 'connected'
-      ? `Connected (${connection.login})`
-      : 'Needs reconnection'
+      ? `${connectionStatuses.connected} (${connection.login})`
+      : connectionStatuses.needsReconnection

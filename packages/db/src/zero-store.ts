@@ -1,5 +1,5 @@
 import { type AnyMutatorRegistry, type MutatorResultDetails, type Row, Zero } from '@rocicorp/zero'
-import { DomainError, type MemberId, type WorkspaceId, workspacePermissions } from '@spyria/kernel'
+import { domainErrorOf, type MemberId, type WorkspaceId, workspacePermissions } from '@spyria/kernel'
 import type { DraftRow, MessageRow, Snapshot } from './schema.ts'
 import { type Schema, schema } from './zero.ts'
 import { queries } from './zero-queries.ts'
@@ -59,7 +59,7 @@ const withoutCreatedAt = <Row extends { createdAt: number }>({ createdAt, ...row
 const uniqueBy = <Row>(rows: readonly Row[], keyOf: (row: Row) => string) => [
   ...new Map(rows.map((row) => [keyOf(row), row])).values(),
 ]
-const plainOf = <Row extends object>(row: Row) => Object.fromEntries(Object.entries(row)) as Row
+const withoutZeroRefCount = <Row extends object>(row: Row) => Object.fromEntries(Object.entries(row)) as Row
 const isSameSources = (previous: readonly unknown[], next: readonly unknown[]) =>
   previous.length === next.length && previous.every((source, index) => source === next[index])
 const scopedKeyOf = (workspaceId: WorkspaceId, name: ScopedQueryName, args: object) =>
@@ -94,7 +94,7 @@ const mappedRows = <ZeroRow extends object, SnapshotRow>(map: (row: ZeroRow) => 
   const snapshotRowOf = (row: ZeroRow) => {
     const cached = snapshotRowByZeroRow.get(row)
     if (cached) return cached
-    const mapped = map(plainOf(row))
+    const mapped = map(withoutZeroRefCount(row))
     snapshotRowByZeroRow.set(row, mapped)
     return mapped
   }
@@ -110,7 +110,7 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
   const messageRowOf = (row: ZeroRows['messages'][number], needsReply: boolean) => {
     const cached = messageRowByZeroRow.get(row)
     if (cached?.needsReply === needsReply) return cached
-    const { createdAt, editedAt, deletedAt, attachments, ...message } = plainOf(row)
+    const { createdAt, editedAt, deletedAt, attachments, ...message } = withoutZeroRefCount(row)
     const mapped = {
       ...message,
       attachments: attachments ?? [],
@@ -162,7 +162,7 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
   const workspaceRolesOf = memoizedOnSources(
     (roles: ZeroRows['workspaceRoles'], rolePermissions: ZeroRows['workspaceRolePermissions']) =>
       roles.map((role) => ({
-        ...plainOf(role),
+        ...withoutZeroRefCount(role),
         permissions: workspacePermissions.filter((permission) =>
           rolePermissions.some(
             (granted) =>
@@ -332,7 +332,7 @@ const failureOf = (details: MutatorResultDetails) => {
   const domainCode =
     details.error.type === 'app' ? (details.error.details as { code?: unknown } | null | undefined)?.code : undefined
   return typeof domainCode === 'string'
-    ? new DomainError(domainCode, details.error.message)
+    ? domainErrorOf(domainCode, details.error.message)
     : new Error(details.error.message)
 }
 

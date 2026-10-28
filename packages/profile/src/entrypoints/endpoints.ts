@@ -36,8 +36,6 @@ export const addLlmCredentialFromRequest = (
     { transactor: createTransactingZeroTransactor(transact, context), gateway },
     {
       id: crypto.randomUUID(),
-      workspaceId: context.workspaceId,
-      memberId: context.userId,
       provider: textOf(provider),
       secret: new Secret(textOf(secret)),
     },
@@ -46,10 +44,10 @@ export const addLlmCredentialFromRequest = (
 
 export const createMemberKeyReader =
   (transact: Transact, gateway: LlmGateway) => (workspace: WorkspaceId, member: MemberId) =>
-    virtualKeyValueOf(
-      { transactor: createTransactingZeroTransactor(transact, memberContext(workspace, member)), gateway },
-      { workspaceId: workspace, memberId: member },
-    )
+    virtualKeyValueOf({
+      transactor: createTransactingZeroTransactor(transact, memberContext(workspace, member)),
+      gateway,
+    })
 
 const toolActions = { connect: startToolConnection, refresh: refreshToolConnection, disconnect: disconnectTool }
 
@@ -61,10 +59,7 @@ export const toolConnectionFromRequest = (
   action: string,
 ) => {
   const act = toolActions[action as keyof typeof toolActions]
-  return act?.(
-    { transactor: createTransactingZeroTransactor(transact, context), gateway },
-    { workspaceId: context.workspaceId, memberId: context.userId, tool },
-  )
+  return act?.({ transactor: createTransactingZeroTransactor(transact, context), gateway }, { tool })
 }
 
 export const availableToolsFromRequest = async (gateway: ToolGateway) => ({
@@ -77,19 +72,13 @@ export const createToolCallOwnerAccess = (transact: Transact, gateway: LlmGatewa
     gateway,
   })
   return {
-    keyOf: (workspace: WorkspaceId, member: MemberId) =>
-      toolKeyValueOf(dependenciesOf(workspace, member), { workspaceId: workspace, memberId: member }),
+    keyOf: (workspace: WorkspaceId, member: MemberId) => toolKeyValueOf(dependenciesOf(workspace, member)),
     grantMemberTools: (workspace: WorkspaceId, member: MemberId) =>
       grantMemberTools(dependenciesOf(workspace, member), { workspaceId: workspace, memberId: member }),
     flagToolConnection: (workspace: WorkspaceId, member: MemberId, tool: string) =>
-      flagToolConnection(dependenciesOf(workspace, member), { workspaceId: workspace, memberId: member, tool }),
+      flagToolConnection(dependenciesOf(workspace, member), { tool }),
     toolCallAccess: (workspace: WorkspaceId, owner: MemberId, prompter: MemberId, toolName: string) =>
-      toolCallAccess(dependenciesOf(workspace, owner), {
-        workspaceId: workspace,
-        ownerId: owner,
-        prompterId: prompter,
-        toolName,
-      }),
+      toolCallAccess(dependenciesOf(workspace, owner), { prompterId: prompter, toolName }),
   }
 }
 
@@ -111,7 +100,7 @@ export const workspaceConnectionFromRequest = (
 ) => {
   const fields = (body ?? {}) as Record<string, unknown>
   const dependencies = { transactor: createTransactingZeroTransactor(transact, context), gateway }
-  const target = { workspaceId: context.workspaceId, actorId: context.userId, connectionId }
+  const target = { workspaceId: context.workspaceId, connectionId }
   const connection = {
     name: textOf(fields.name),
     url: textOf(fields.url),

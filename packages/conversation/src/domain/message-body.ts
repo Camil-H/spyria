@@ -1,13 +1,10 @@
-import type { Brand } from '@spyria/kernel'
+import { type Brand, nonBlank } from '@spyria/kernel'
 import { BlankMessageBody } from './errors.ts'
 
 export type MessageBody = Brand<'MessageBody'>
 
-export const MessageBody = (rawValue: string, { allowsBlank = false } = {}): MessageBody => {
-  const trimmedValue = rawValue.trim()
-  if (trimmedValue === '' && !allowsBlank) throw new BlankMessageBody()
-  return trimmedValue as MessageBody
-}
+export const MessageBody = (rawValue: string, { allowsBlank = false } = {}) =>
+  (allowsBlank ? rawValue.trim() : nonBlank(rawValue, BlankMessageBody)) as MessageBody
 
 const chatNameMaxLength = 60
 

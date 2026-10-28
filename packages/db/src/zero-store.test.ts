@@ -103,6 +103,7 @@ test('a messages change shows inserts, updates and deletes, keeps unchanged rows
     ['message-3', 'Body 3'],
   ])
   expect(Object.getOwnPropertySymbols(first.messages[0])).toEqual([])
+  expect(Object.getOwnPropertySymbols(first.readMarkers[0])).toEqual([])
   expect(first.messages[0]?.createdAt).toBe('2026-10-01T09:01:00.000Z')
   const edited = { ...answer, body: 'Edited answer', editedAt: Date.UTC(2026, 9, 1, 10) }
   const late = messageOf(4, { replyToId: 'message-1' })
