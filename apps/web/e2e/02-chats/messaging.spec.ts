@@ -73,10 +73,18 @@ test.describe('Messaging', () => {
       await expect(messageContaining(page, 'Standup at 10.')).toBeVisible()
       await expect(composerOf(page)).toHaveValue('')
       await expect(draftIconOf(page, 'Welcome')).toBeVisible()
+      await expect(chatLinkOf(page, 'Welcome')).toHaveAccessibleName('Welcome')
+      await expect(chatLinkOf(page, 'Welcome')).toHaveAccessibleDescription('Channel Has unsent draft')
       await expect(draftIconOf(page, 'Standup')).toHaveCount(0)
       await openChat(page, 'Welcome')
       await expect(messageContaining(page, 'Sent from the keyboard')).toBeVisible()
       await expect(composerOf(page)).toHaveValue('Work in progress')
+    })
+
+    await test.step('keeps the draft typed just before a reload', async () => {
+      await composerOf(page).fill('Work in progress, typed just before a reload')
+      await page.reload()
+      await expect(composerOf(page)).toHaveValue('Work in progress, typed just before a reload')
     })
 
     await test.step('clears the draft and the pencil when the message is sent', async () => {
@@ -108,6 +116,25 @@ test.describe('Messaging', () => {
       await openChat(page, 'Standup')
       await openChat(page, 'Welcome')
       await expect(messageContaining(page, 'Filler 30')).toBeInViewport()
+    })
+
+    await test.step('shows the messages of a chat all at once when opening it, not the newest first', async () => {
+      await openChat(page, 'Standup')
+      await page.evaluate(() => {
+        const welcomeCounts = new Set<number>()
+        Object.assign(window, { welcomeCounts })
+        new MutationObserver(() => {
+          if (document.querySelector('main h1')?.textContent !== 'Welcome') return
+          const count = document.querySelectorAll('ol[aria-label="Messages"] > li').length
+          if (count > 0) welcomeCounts.add(count)
+        }).observe(document.body, { childList: true, subtree: true, characterData: true })
+      })
+      await openChat(page, 'Welcome')
+      await expect(messageContaining(page, 'Filler 30')).toBeInViewport()
+      const welcomeCounts = await page.evaluate(() => [
+        ...(window as unknown as { welcomeCounts: Set<number> }).welcomeCounts,
+      ])
+      expect(welcomeCounts).toHaveLength(1)
     })
 
     await test.step('offers Go to last message while reading earlier messages, and goes back to the newest', async () => {

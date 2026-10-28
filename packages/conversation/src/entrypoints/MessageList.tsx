@@ -59,7 +59,10 @@ export const MessageList = ({
   const isFollowingNewest = useRef(true)
   const [isAwayFromNewest, setIsAwayFromNewest] = useState(false)
   const renderedItems = useDeferredValue(items)
-  const shownItems = renderedItems === items ? items : items.slice(-(renderedItems.length + newItemsPaintedFirst))
+  const shownItems =
+    renderedItems === items || renderedItems.length === 0
+      ? items
+      : items.slice(-(renderedItems.length + newItemsPaintedFirst))
   const followNewest = (element: HTMLElement | null) => {
     if (isFollowingNewest.current) scrollIntoView(element)
   }

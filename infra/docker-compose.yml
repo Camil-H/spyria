@@ -19,9 +19,11 @@ services:
       retries: 30
 
   dex:
-    image: dexidp/dex:v2.43.1
+    image: dexidp/dex:v2.46.1
     container_name: spyria-dex
     command: dex serve /etc/dex/config.yaml
+    environment:
+      DEX_SESSIONS_ENABLED: true
     ports:
       - 5556:5556
     volumes:

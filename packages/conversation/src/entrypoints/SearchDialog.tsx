@@ -10,7 +10,6 @@ import { dateLabelOf } from './date-label.ts'
 import { type FindRequest, findRequestKey } from './useFindInChat.ts'
 
 const typingPauseMilliseconds = 250
-const focusOnMount = (element: HTMLInputElement | null) => element?.focus()
 
 const useSettledText = (text: string) => {
   const [settled, setSettled] = useState(text)
@@ -99,7 +98,6 @@ const SearchDialog = ({ workspaceId, onClose }: { workspaceId: WorkspaceId; onCl
         placeholder="Search the messages of the chats you can read"
         className={fieldClass}
         value={text}
-        ref={focusOnMount}
         onChange={(event) => {
           setText(event.target.value)
           setSelectedIndex(0)
