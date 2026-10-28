@@ -1,5 +1,5 @@
 import { Provider } from '@radix-ui/react-tooltip'
-import { useChatMessages, useQuery } from '@spyria/db/react'
+import { useChatMessages, useIsWorkspaceLoaded, useQuery } from '@spyria/db/react'
 import { type ChatId, type MessageId, chatId as toChatId, type WorkspaceId } from '@spyria/kernel'
 import { useSession } from '@spyria/session'
 import {
@@ -89,6 +89,7 @@ export const ChatView = ({
     spyriaRuntime?.chatId === chatId ? spyriaRuntime.isAvailable : undefined,
   )
   const chatMessages = useChatMessages(workspaceId, chatId)
+  const isWorkspaceLoaded = useIsWorkspaceLoaded(workspaceId)
   const findState = useFindState(chatId)
   const [messagesElement, setMessagesElement] = useState<HTMLElement | null>(null)
   const findTargetId = findState.find?.messageId ?? null
@@ -124,7 +125,7 @@ export const ChatView = ({
   useEffect(() => {
     if (soleChoice) commands.updateChatRouting({ workspaceId, chatId, runsOn: soleChoice })
   }, [commands, workspaceId, chatId, soleChoice])
-  if (!conversation) return <Navigate to={`/w/${workspaceId}`} replace />
+  if (!conversation) return isWorkspaceLoaded ? <Navigate to={`/w/${workspaceId}`} replace /> : null
   const isRunsOnOpen = conversation.type === 'runtime' && conversation.runsOn === null
   const mayPrompt =
     conversation.type === 'runtime' &&
