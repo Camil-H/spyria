@@ -218,6 +218,8 @@ const listedModelIds = [
   'mistral-small-latest',
   'codestral-latest',
   'grok-4.7',
+  'grok-4.3',
+  'grok-code-fast',
   'anthropic/claude-opus-5.5',
   'anthropic/claude-sonnet-5.5',
   'anthropic/claude-haiku-5.5',
