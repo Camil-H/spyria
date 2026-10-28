@@ -60,6 +60,8 @@ const uniqueBy = <Row>(rows: readonly Row[], keyOf: (row: Row) => string) => [
   ...new Map(rows.map((row) => [keyOf(row), row])).values(),
 ]
 const plainOf = <Row extends object>(row: Row) => Object.fromEntries(Object.entries(row)) as Row
+const isWorkspaceRowIn = (rows: unknown, workspaceId: WorkspaceId) =>
+  (rows as readonly { workspaceId: string }[]).some((row) => row.workspaceId === workspaceId)
 const isSameSources = (previous: readonly unknown[], next: readonly unknown[]) =>
   previous.length === next.length && previous.every((source, index) => source === next[index])
 const scopedKeyOf = (workspaceId: WorkspaceId, name: ScopedQueryName, args: object) =>
@@ -361,6 +363,7 @@ export const createZeroStore = ({
   const zeroByWorkspace = new Map<WorkspaceId, Zero>()
   const tokenByWorkspace = new Map<WorkspaceId, string>()
   const loadedByWorkspace = new Map<WorkspaceId, PromiseWithResolvers<void>>()
+  const readableByWorkspace = new Map<WorkspaceId, PromiseWithResolvers<void>>()
   const completeTablesByWorkspace = new Map<WorkspaceId, ReadonlySet<string>>()
   const expiresAtByWorkspace = new Map<WorkspaceId, number>()
   const clientIdsByWorkspace = new Map<WorkspaceId, { clientID: string; clientGroupID?: string }>()
@@ -403,11 +406,15 @@ export const createZeroStore = ({
       feedScoped(watch.workspaceId, watch.name)
     })
   }
-  const loadedOf = (workspaceId: WorkspaceId) => {
-    const loaded = loadedByWorkspace.get(workspaceId) ?? Promise.withResolvers<void>()
-    loadedByWorkspace.set(workspaceId, loaded)
-    return loaded
+  const resolverIn = (resolvers: Map<WorkspaceId, PromiseWithResolvers<void>>, workspaceId: WorkspaceId) => {
+    const resolver = resolvers.get(workspaceId) ?? Promise.withResolvers<void>()
+    resolvers.set(workspaceId, resolver)
+    return resolver
   }
+  const loadedOf = (workspaceId: WorkspaceId) => resolverIn(loadedByWorkspace, workspaceId)
+  const readableOf = (workspaceId: WorkspaceId) => resolverIn(readableByWorkspace, workspaceId)
+  const isLoaded = (workspaceId: WorkspaceId) =>
+    completeTablesByWorkspace.get(workspaceId)?.size === materializedTables.length
   const renewLater = (workspaceId: WorkspaceId, delayMilliseconds: number) => {
     clearTimeout(renewalTimerByWorkspace.get(workspaceId))
     renewalTimerByWorkspace.set(workspaceId, setTimeout(renewNow, delayMilliseconds, workspaceId))
@@ -463,8 +470,11 @@ export const createZeroStore = ({
             ? latestMessagesIn(data as readonly object[])
             : (data as object[])
           publish()
+          if (table === 'workspaces' && isWorkspaceRowIn(data, workspaceId)) readableOf(workspaceId).resolve()
           if (result === 'complete') completeTables.add(table)
-          if (completeTables.size === materializedTables.length) loadedOf(workspaceId).resolve()
+          if (!isLoaded(workspaceId)) return
+          readableOf(workspaceId).resolve()
+          loadedOf(workspaceId).resolve()
         })
     for (const watch of scopedWatches.values()) if (watch.workspaceId === workspaceId) materializeScoped(watch)
     zero.connection.state.subscribe((state) => {
@@ -485,6 +495,7 @@ export const createZeroStore = ({
       }
     zeroByWorkspace.delete(workspaceId)
     loadedByWorkspace.delete(workspaceId)
+    readableByWorkspace.delete(workspaceId)
     completeTablesByWorkspace.delete(workspaceId)
     signedInWorkspaceIds = new Set([...signedInWorkspaceIds].filter((signedInId) => signedInId !== workspaceId))
     rowsByWorkspace.set(workspaceId, { workspaces: rowsByWorkspace.get(workspaceId)?.workspaces ?? [] })
@@ -524,6 +535,8 @@ export const createZeroStore = ({
       for (const listener of draftListeners) listener()
     },
     whenLoaded: (workspaceId: WorkspaceId) => loadedOf(workspaceId).promise,
+    whenReadable: (workspaceId: WorkspaceId) => readableOf(workspaceId).promise,
+    isLoaded,
     diagnostics: () => ({
       cacheURL,
       connectionEvents,

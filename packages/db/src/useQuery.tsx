@@ -62,6 +62,11 @@ export const useDraftQuery = <Args extends readonly unknown[], Result>(
   return useSyncExternalStore(store.subscribeDrafts, () => query(...args)(store.readDrafts()))
 }
 
+export const useIsWorkspaceLoaded = (workspaceId: WorkspaceId) => {
+  const store = useStore()
+  return useSyncExternalStore(store.subscribe, () => store.isLoaded(workspaceId))
+}
+
 export const useScoped = (
   workspaceId: WorkspaceId,
   name: ScopedQueryName,

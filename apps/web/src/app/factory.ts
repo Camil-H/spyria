@@ -129,7 +129,7 @@ export const createApp = async (
   storeCount++
   if (testStack) Object.assign(window, { spyriaZeroDiagnostics: () => ({ storeCount, ...store.diagnostics() }) })
   const isLoaded = await Promise.race([
-    store.whenLoaded(defaultWorkspaceId).then(() => true),
+    store.whenReadable(defaultWorkspaceId).then(() => true),
     new Promise<false>((resolve) => setTimeout(resolve, workspaceLoadMilliseconds, false)),
   ])
   if (!isLoaded) {
