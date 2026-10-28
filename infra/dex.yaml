@@ -27,3 +27,9 @@ staticPasswords:
     hash: "$2b$10$VQQ8E.Dr9ub0UjJjMVwrZ.z8mmsId1wLzJ7vu9Bnkm1mbOIqJk45y"
     username: nina
     userID: 6f1c2a4e-8d3b-4f7a-9c5e-2b1d0e9a7c31
+frontend:
+  issuer: Spyria
+sessions:
+  absoluteLifetime: 168h
+  validIfNotUsedFor: 24h
+  rememberMeCheckedByDefault: true
