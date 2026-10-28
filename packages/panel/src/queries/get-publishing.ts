@@ -1,10 +1,11 @@
-import { findChat, inChat, type Snapshot } from '@spyria/db'
+import { inChat, type Snapshot } from '@spyria/db'
 import type { ChatId, MemberId, WorkspaceId } from '@spyria/kernel'
+import { panelChatIn } from './panel-chat.ts'
 
 const openStates = ['open', 'draft']
 
 export const getPublishing = (workspaceId: WorkspaceId, chatId: ChatId, viewerId: MemberId) => (snapshot: Snapshot) => {
-  const chat = findChat(snapshot, workspaceId, chatId)
+  const chat = panelChatIn(snapshot, workspaceId, chatId)
   const card = [...snapshot.pinnedSteps, ...snapshot.messages]
     .filter((message) => inChat(workspaceId, chatId)(message) && message.step?.type === 'pull_request')
     .reduce<Snapshot['messages'][number] | undefined>(

@@ -1,11 +1,16 @@
-import { findChat, inChat, memberNamesIn, type Snapshot } from '@spyria/db'
+import { chatIn, inChat, memberNamesIn, type Snapshot } from '@spyria/db'
 import { type ChatId, can, type MemberId, type WorkspaceId } from '@spyria/kernel'
-import { type ChatUsage, monthsNewestFirst, sumUsage, type UsageMonth } from '../domain/usage.ts'
+import { type ChatUsage, monthsNewestFirst, showsChatUsage, sumUsage, type UsageMonth } from '../domain/usage.ts'
+
+const usageChatIn = (snapshot: Snapshot, workspaceId: WorkspaceId, chatId: ChatId) => {
+  const chat = chatIn(snapshot, workspaceId, chatId)
+  return chat && showsChatUsage(chat) ? chat : undefined
+}
 
 export const getChatUsage =
   (workspaceId: WorkspaceId, chatId: ChatId, month: UsageMonth) =>
   (snapshot: Snapshot): ChatUsage => {
-    const chat = findChat(snapshot, workspaceId, chatId)
+    const chat = usageChatIn(snapshot, workspaceId, chatId)
     const entries = snapshot.usageEntries.filter(inChat(workspaceId, chatId))
     const entriesOfMonth = entries.filter((entry) => entry.month === month)
     const nameOf = memberNamesIn(snapshot, workspaceId)
@@ -30,4 +35,4 @@ export const getChatUsage =
   }
 
 export const isLocalSession = (workspaceId: WorkspaceId, chatId: ChatId) => (snapshot: Snapshot) =>
-  findChat(snapshot, workspaceId, chatId)?.localSession === true
+  usageChatIn(snapshot, workspaceId, chatId)?.localSession === true
