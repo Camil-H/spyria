@@ -22,6 +22,15 @@ test.describe('Search', () => {
   test('As a member, I search the messages of the chats I can read and open a match highlighted in its chat', {
     tag: ['@spec-52', '@smoke'],
   }, async ({ page }) => {
+    await test.step('asks for a second character only once a first one is typed', async () => {
+      await searchFor(page, '')
+      await expect(searchDialogOf(page)).not.toContainText('Type at least')
+      await page.keyboard.type('g')
+      await expect(searchDialogOf(page)).toContainText('Type at least 2 characters')
+      await page.keyboard.press('Escape')
+      await expect(searchDialogOf(page)).toHaveCount(0)
+    })
+
     await test.step('lists the matching messages with their chat and the match marked', async () => {
       await searchFor(page, 'GLAD to')
       const result = searchResultsOf(page).getByRole('button', { name: /Welcome/ })
