@@ -7,6 +7,7 @@ import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
+import { gatewayKeyRefOf } from '@spyria/kernel'
 import { type SQL, sql } from 'drizzle-orm'
 import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import postgres from 'postgres'
@@ -631,7 +632,7 @@ export const prepareSeededGatewayKeys = async (
   const { workspaceId, id, userId } = aliceSeededCredential
   const write = async (writer: SeedWriter) => {
     await writer.execute(
-      sql`update llm_credentials set secret_ref = ${`gateway:mistral/${keyId}`} where workspace_id = ${workspaceId} and id = ${id}`,
+      sql`update llm_credentials set secret_ref = ${gatewayKeyRefOf({ provider: 'mistral', id: keyId })} where workspace_id = ${workspaceId} and id = ${id}`,
     )
     await writer.execute(
       sql`insert into member_gateway_keys (workspace_id, user_id, virtual_key_id) values (${workspaceId}, ${userId}, ${virtual_key.id})`,

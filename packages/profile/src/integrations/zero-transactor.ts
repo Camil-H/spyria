@@ -20,12 +20,19 @@ import {
   type ZeroContext,
   zql,
 } from '@spyria/db/zero-queries'
-import { type MemberId, MemberNotFound, memberId as toMemberId, type WorkspaceId } from '@spyria/kernel'
+import {
+  gatewayKeyOf,
+  type MemberId,
+  MemberNotFound,
+  gatewayKeyRefOf as refOf,
+  memberId as toMemberId,
+  type WorkspaceId,
+} from '@spyria/kernel'
 import type { ProfileTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import type { Avatar } from '../domain/avatar.ts'
 import { DisplayName } from '../domain/display-name.ts'
 import { ConnectionNotFound, CredentialNotFound, NotOwnProfile } from '../domain/errors.ts'
-import { gatewayKeyOf, profileJobTypes, gatewayKeyRefOf as refOf } from '../domain/llm-credential.ts'
+import { profileJobTypes } from '../domain/llm-credential.ts'
 import type { WorkspaceConnection } from '../domain/workspace-connection.ts'
 
 export const createZeroTransactor = (tx: Transaction, context: ZeroContext): ProfileTransactor => {

@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { memberId, workspaceId } from '@spyria/kernel'
 import { BlankProvider, UnsupportedProvider } from './errors.ts'
-import { gatewayKeyOf, gatewayKeyRefOf, newLlmCredential } from './llm-credential.ts'
+import { newLlmCredential } from './llm-credential.ts'
 import { Secret } from './secret.ts'
 
 const owner = { workspaceId: workspaceId('acme'), memberId: memberId('alice') }
@@ -40,11 +40,4 @@ test.each([
   ['Foo', expect.any(UnsupportedProvider)],
 ])('newLlmCredential maps the provider %p to the gateway, or refuses it', (provider, expected) => {
   expect(gatewayProviderOrErrorOf(provider)).toEqual(expected)
-})
-
-test('a gateway key reference round-trips and refuses anything else', () => {
-  const key = { provider: 'openai', id: '8ec7907d-bef5-433b-92b8-df18842db1f2' }
-  expect(gatewayKeyOf(gatewayKeyRefOf(key))).toEqual(key)
-  expect(gatewayKeyOf('gateway:credential-alice-anthropic')).toBeUndefined()
-  expect(gatewayKeyOf('placeholder:abc')).toBeUndefined()
 })
