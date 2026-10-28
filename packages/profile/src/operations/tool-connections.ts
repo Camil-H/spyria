@@ -2,7 +2,7 @@ import { type MemberId, MemberNotFound, toolNamePartsOf, type WorkspaceId } from
 import type { LlmGateway, ToolGateway } from '../contracts/repositories.ts'
 import type { ProfileTransactor } from '../contracts/transactor.ts'
 import { ToolNotInCatalog, ToolStillConnected } from '../domain/errors.ts'
-import { connectedTool, connectionStatusOf } from '../domain/personal-connection.ts'
+import { connectedTool, connectionStatuses, connectionStatusOf } from '../domain/personal-connection.ts'
 import { memberToolsOf } from '../domain/workspace-connection.ts'
 import { grantMemberTools } from './grant-tools.ts'
 import { ensureMemberGatewayKey } from './sync-member-gateway-key.ts'
@@ -65,7 +65,7 @@ export const flagToolConnection = ({ transactor }: Pick<Dependencies, 'transacto
   transactor.run(async ({ personalConnections }) => {
     const isConnected =
       (await personalConnections.statusOf(input.workspaceId, input.memberId, input.tool)) !== undefined
-    if (isConnected) await personalConnections.connect({ ...input, status: 'Needs reconnection' })
+    if (isConnected) await personalConnections.connect({ ...input, status: connectionStatuses.needsReconnection })
     return isConnected
   })
 
