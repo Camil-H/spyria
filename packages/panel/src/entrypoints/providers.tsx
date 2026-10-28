@@ -3,7 +3,7 @@ import { createContext, type ReactNode, useContext, useState } from 'react'
 import type { PanelCommands } from './commands.ts'
 
 export const minimumPanelWidth = 280
-export const panelToggleLabelOf = (isOpen: boolean) => (isOpen ? 'Hide right panel' : 'Show right panel')
+export const panelToggleLabelOf = (isOpen: boolean) => (isOpen ? 'Hide panel' : 'Show panel')
 export const minimumChatWidth = 320
 
 type PanelState = {

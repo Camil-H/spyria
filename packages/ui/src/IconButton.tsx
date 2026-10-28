@@ -1,7 +1,7 @@
 import { Content, Portal, Root, Trigger } from '@radix-ui/react-tooltip'
 import type { LucideIcon } from 'lucide-react'
 import { iconButtonClass, tooltipClass } from './classes.ts'
-import { ShortcutLabel } from './ShortcutLabel.tsx'
+import { ShortcutKeys } from './ShortcutKeys.tsx'
 
 export const IconButton = ({
   label,
@@ -34,7 +34,13 @@ export const IconButton = ({
     </Trigger>
     <Portal>
       <Content sideOffset={6} className={tooltipClass}>
-        {shortcut ? <ShortcutLabel label={label} shortcut={shortcut} /> : label}
+        {label}
+        {shortcut && (
+          <>
+            {' '}
+            <ShortcutKeys keys={shortcut} />
+          </>
+        )}
       </Content>
     </Portal>
   </Root>

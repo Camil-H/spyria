@@ -69,7 +69,7 @@ export const Sidebar = ({
   const [openDialog, setOpenDialog] = useState<'project' | 'chat' | 'channels' | 'search' | null>(null)
   const closeDialog = () => setOpenDialog(null)
   const { isCollapsed, toggleCollapsed } = useCollapsed()
-  const toggleLabel = isCollapsed ? 'Expand left sidebar' : 'Collapse left sidebar'
+  const toggleLabel = isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'
   useShortcut('l', toggleLabel, toggleCollapsed)
   useShortcut('/', 'Search the workspace', () => setOpenDialog('search'), searchDialog !== undefined)
   useShortcut('c', 'New chat', () => setOpenDialog('chat'))

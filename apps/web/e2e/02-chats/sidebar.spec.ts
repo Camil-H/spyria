@@ -97,8 +97,8 @@ test.describe('Sidebar', () => {
   test('As a member, I collapse the sidebar from the icon left of the workspace name and find it collapsed after a reload', async ({
     page,
   }) => {
-    const collapseButton = sidebarOf(page).getByRole('button', { name: 'Collapse left sidebar' })
-    const expandButton = sidebarOf(page).getByRole('button', { name: 'Expand left sidebar' })
+    const collapseButton = sidebarOf(page).getByRole('button', { name: 'Collapse sidebar' })
+    const expandButton = sidebarOf(page).getByRole('button', { name: 'Expand sidebar' })
 
     await test.step('shows the collapse icon at the top left, before the workspace name', async () => {
       const sidebarBox = (await sidebarOf(page).boundingBox())!

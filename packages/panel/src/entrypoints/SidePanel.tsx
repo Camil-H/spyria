@@ -7,7 +7,7 @@ import {
   Trigger as TooltipTrigger,
 } from '@radix-ui/react-tooltip'
 import { useQuery } from '@spyria/db/react'
-import { tooltipClass, useShortcut } from '@spyria/ui'
+import { ShortcutKeys, tooltipClass, useShortcut } from '@spyria/ui'
 import {
   BookOpen,
   ChartColumn,
@@ -67,10 +67,7 @@ const TabTrigger = ({ tabId, index }: { tabId: PanelTabId; index: number }) => {
       </Trigger>
       <TooltipPortal>
         <TooltipContent sideOffset={6} className={tooltipClass}>
-          {label}{' '}
-          <kbd aria-hidden className="font-sans text-muted">
-            R then {index + 1}
-          </kbd>
+          {label} <ShortcutKeys keys={tabShortcutOf(index)} />
         </TooltipContent>
       </TooltipPortal>
     </TooltipRoot>
@@ -97,7 +94,7 @@ const TabPanel = ({ tabId, usageTab, ...panelProps }: PanelProps & { tabId: Pane
 }
 
 const TabShortcut = ({ tabId, index, onSelect }: { tabId: PanelTabId; index: number; onSelect: () => void }) => {
-  useShortcut(tabShortcutOf(index), `Right panel: ${tabs[tabId].label}`, onSelect)
+  useShortcut(tabShortcutOf(index), `Panel: ${tabs[tabId].label}`, onSelect)
   return null
 }
 
