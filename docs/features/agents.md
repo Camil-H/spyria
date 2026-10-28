@@ -28,7 +28,7 @@ Subscription harnesses run only on the member's own machine because a subscripti
 
 On a Spyria runtime, the session's model is chosen once, at the first prompt, from the models the prompting member's keys can reach. A model is reachable when its provider has one of the member's keys in the gateway. The catalog in `packages/kernel/src/models.ts` assigns each model a tier (large, medium or small) and covers Anthropic, OpenAI, Mistral, Google Gemini, xAI, DeepSeek, Z.ai and OpenRouter.
 
-1. A classifier reads the first message and answers two questions: the tier the task needs, and the reasoning effort (high, medium or low). It runs on the member's cheapest reachable model (a dedicated decision model when the member's keys reach one), with a 3-second timeout, and is billed to the prompter like any model call.
+1. A classifier reads the first message and answers two questions: the tier the task needs, and the reasoning effort (high, medium or low). It runs on the member's cheapest reachable model (a dedicated decision model when the member's keys reach one), with a 3-second timeout, and is billed to the prompter like any model call. On a new session it runs while the runtime starts, so it rarely delays the first reply.
 2. Only a confident answer (at least 0.8) of `large` or `small` moves away from the default. The default is the prompter's best reachable **medium** model; when a tier has no reachable model, the nearest tier is used.
 3. If the classifier fails or times out, the session falls back to the default and the decision is recorded with its reason.
 
