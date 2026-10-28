@@ -66,6 +66,7 @@ Admins can turn these sessions off for the workspace. See [machines](../features
 
 - **Cloning** uses a short-lived installation token of the workspace's GitHub App, limited to reading that one repository. It is passed to `git` as a one-off header, so it is not left in the runtime's environment or in `.git/config`.
 - **Publishing** runs on the server: the runtime hands over a git bundle of the working branch, and the server pushes it with the owner's own token. A runtime has nothing it could push with.
+- **Workflows.** The GitHub App asks for the Workflows permission, so the agent can change files under `.github/workflows` and the server pushes them with the owner's token. A pushed workflow runs on GitHub with the repository's secrets. An admin who does not want agents to change workflows does not accept that permission on the installation; GitHub then refuses any push that changes one.
 - **Fetching and reading** run on the server too: the agent's `fetch_branch` gets a git bundle the server built with a read-only installation token, and its review-thread and issue tools answer from read-only installation tokens. Issue and comment text comes from anyone who can comment on the repository and reaches the agent unchanged.
 - **Webhooks** are accepted only with a valid `X-Hub-Signature-256` for the App's webhook secret; a delivery id already received is ignored.
 
@@ -75,6 +76,10 @@ Admins can turn these sessions off for the workspace. See [machines](../features
 - Each runtime container runs as an unprivileged user with all capabilities dropped, `no-new-privileges`, a read-only root filesystem, and limits on memory (2 GiB), CPU (2) and processes (512). It runs only an image identified by its local content ID; hosts never pull.
 - Each runtime has its own Docker network, so runtimes on one host cannot reach each other where Docker isolates networks (Docker Engine on Linux). The name `host.docker.internal` resolves to the host machine in every runtime, as on Docker Desktop, so a host run outside a container can give its runtimes its model relay address; the machine was already reachable through the network's gateway.
 - Spyria does not filter runtimes' outbound traffic. On cloud machines, block the metadata endpoint (`169.254.169.254`) and private ranges in the provider's firewall. See [self-hosting](../guides/self-hosting.md).
+
+## In the browser
+
+The server sends the web app with a Content Security Policy (`apps/server/src/web-app.ts`): it runs only its own scripts, connects only to its own origin, and cannot be framed by another site. The **Browser** tab frames any web address in a sandbox. A report the agent wrote never runs in the app's page: it is handed to `/report-frame.html`, a sandboxed frame with a policy of its own that lets the report run its scripts and load what it needs, without the app's origin, storage or session.
 
 ## Rate limits and retries
 
