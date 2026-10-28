@@ -227,10 +227,8 @@ export const createApp = async (
       createWorkspace: async (input) => {
         const bearerToken = store.tokenOf(input.workspaceId)
         const { id, confirmation } = await mutate(workspaceMutators.workspace.createWorkspace, input)
-        store.signInToNew(
-          workspaceId(id),
-          confirmation.then(() => openSession(workspaceId(id), bearerToken)),
-        )
+        await confirmation
+        await store.signIn(await openSession(workspaceId(id), bearerToken))
         return id
       },
       changeVisibility: mutateConfirmed(workspaceMutators.workspace.changeVisibility),
