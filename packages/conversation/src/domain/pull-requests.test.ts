@@ -1,11 +1,18 @@
 import { expect, test } from 'bun:test'
-import { checksOf, publishingRefusalOf, reviewPromptOf } from './pull-requests.ts'
+import { checkStateOf, checksOf, publishingRefusalOf, reviewPromptOf } from './pull-requests.ts'
 
 test('the checks summary is failing if any check fails, pending while any is pending or none ran, else passing', () => {
   expect(checksOf({ checks: {} })).toBe('pending')
   expect(checksOf({ checks: { a: 'passing', b: 'pending' } })).toBe('pending')
   expect(checksOf({ checks: { a: 'passing', b: 'failing' } })).toBe('failing')
   expect(checksOf({ checks: { a: 'passing' } })).toBe('passing')
+})
+
+test('a check is pending until it completes, then passes on success, neutral or skipped and fails otherwise', () => {
+  expect(checkStateOf(false, null)).toBe('pending')
+  for (const conclusion of ['success', 'neutral', 'skipped']) expect(checkStateOf(true, conclusion)).toBe('passing')
+  for (const conclusion of ['failure', 'cancelled', 'timed_out', 'action_required', null])
+    expect(checkStateOf(true, conclusion)).toBe('failing')
 })
 
 test('the review prompt lists every unresolved comment with file, line, author and body', () => {
