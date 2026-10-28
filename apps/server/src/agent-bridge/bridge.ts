@@ -457,6 +457,7 @@ export const createAgentBridge = ({
       recordPullRequest: handlers.recordPullRequest,
       wakeWorkspace: handlers.wakeWorkspace,
       recordModelCallFailure: handlers.recordModelCallFailure,
+      recordContextSize: handlers.recordContextSize,
       recordToolCall: handlers.recordToolCall,
       authorizeToolCall: handlers.authorizeToolCall,
       resumeHost: async (host: AgentHost) => {

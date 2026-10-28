@@ -27,6 +27,7 @@ import { interruptOwnedTurns } from '../operations/interrupt-owned-turns.ts'
 import {
   findModelCallTurn,
   findToolCallTurn,
+  recordContextSize,
   recordModelCallFailure,
   recordToolCall,
 } from '../operations/model-calls.ts'
@@ -177,6 +178,8 @@ export const createAgentHandlers = ({
     awaitTask: (input: Parameters<typeof awaitTask>[1]) => awaitTask(dependenciesOf(input.chat.workspaceId), input),
     recordModelCallFailure: (call: Parameters<typeof recordModelCallFailure>[1]) =>
       recordModelCallFailure(dependenciesOf(call.chat.workspaceId), call),
+    recordContextSize: (call: Parameters<typeof recordContextSize>[1]) =>
+      recordContextSize(dependenciesOf(call.chat.workspaceId), call),
     authorizeToolCall: (
       input: Parameters<typeof authorizeToolCall>[1],
       checks: Parameters<typeof authorizeToolCall>[2],

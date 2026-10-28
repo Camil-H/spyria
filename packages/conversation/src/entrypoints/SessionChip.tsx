@@ -67,6 +67,7 @@ export const SessionChip = (chip: {
   localSession: boolean
   isOwner: boolean
   canConfigure: boolean
+  contextTokens: number | null
 }) => {
   const { workspaceId, chatId } = chip
   const commands = useConversationCommands()

@@ -80,6 +80,8 @@ const anthropicPathPrefix = '/v1/messages'
 const usagePatterns = {
   'gen_ai.usage.input_tokens': /"(?:input_tokens|prompt_tokens)"\s*:\s*(\d+)/g,
   'gen_ai.usage.output_tokens': /"(?:output_tokens|completion_tokens)"\s*:\s*(\d+)/g,
+  'gen_ai.usage.cache_read.input_tokens': /"cache_read_input_tokens"\s*:\s*(\d+)/g,
+  'gen_ai.usage.cache_creation.input_tokens': /"cache_creation_input_tokens"\s*:\s*(\d+)/g,
 }
 
 const usageCarryCharacters = 64
@@ -98,6 +100,9 @@ export const createUsageReader = () => {
     },
   }
 }
+
+export const contextTokensOf = (usage: Record<string, number>) =>
+  Object.keys(usagePatterns).reduce((total, name) => total + (usage[name] ?? 0), 0)
 
 export const createModelCallRelay = ({
   llmGateway,
@@ -482,6 +487,16 @@ export const createModelCallRelay = ({
       callAttributes,
       async (span) => {
         const { status, isUnexplained, gatewayRequestId } = await relayed()
+        const contextTokens = contextTokensOf(usageReader.usage)
+        if (status !== undefined && status < 400 && !isTokenCount && !turn.delegationId && contextTokens > 0)
+          await handlers.recordContextSize({ chat: turn.chat, model, tokens: contextTokens }).catch((error) =>
+            log.error({
+              event: 'context_size.record_failed',
+              body: 'Recording the context size failed',
+              attributes: { 'workspace.id': host.workspaceId, 'chat.id': turn.chat.chatId },
+              error,
+            }),
+          )
         const attributes = {
           ...callAttributes,
           ...usageReader.usage,
