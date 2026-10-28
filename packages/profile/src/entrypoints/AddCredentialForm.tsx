@@ -5,49 +5,45 @@ import { Secret } from '../domain/secret.ts'
 import { useProfileCommands } from './providers.tsx'
 import { credentialGridClass } from './ui.ts'
 
-const emptyForm = { provider: '', secret: '' }
+const isFilledIn = (form: HTMLFormElement) =>
+  [...new FormData(form).values()].every((value) => typeof value === 'string' && value.trim() !== '')
 
 export const AddCredentialForm = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
   const commands = useProfileCommands()
-  const { errorMessage, run } = useGuardedAction()
-  const [form, setForm] = useState(emptyForm)
-  const submit = async (event: SubmitEvent) => {
+  const { errorMessage, isPending, run } = useGuardedAction()
+  const [isComplete, setIsComplete] = useState(false)
+  const submit = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const submittedForm = form
-    setForm(emptyForm)
-    const addSubmitted = () =>
+    const form = event.currentTarget
+    const fields = new FormData(form)
+    form.reset()
+    setIsComplete(false)
+    const isAdded = await run(() =>
       commands.addLlmCredential({
         workspaceId,
-        provider: submittedForm.provider,
-        secret: new Secret(submittedForm.secret),
-      })
-    if (!(await run(addSubmitted))) setForm(submittedForm)
+        provider: String(fields.get('provider')),
+        secret: new Secret(String(fields.get('secret'))),
+      }),
+    )
+    if (isAdded) return
+    for (const [name, value] of fields) (form.elements.namedItem(name) as HTMLInputElement).value = String(value)
+    setIsComplete(isFilledIn(form))
   }
   return (
-    <form onSubmit={submit} className={`${credentialGridClass} items-end gap-y-3`}>
+    <form
+      onSubmit={submit}
+      onInput={(event) => setIsComplete(isFilledIn(event.currentTarget))}
+      className={`${credentialGridClass} items-end gap-y-3`}
+    >
       <label className={labelClass}>
         Provider
-        <input
-          className={`${fieldClass} h-9`}
-          value={form.provider}
-          onChange={(event) => setForm({ ...form, provider: event.target.value })}
-        />
+        <input name="provider" className={`${fieldClass} h-9`} />
       </label>
       <label className={labelClass}>
         Secret
-        <input
-          type="password"
-          autoComplete="off"
-          className={`${fieldClass} h-9`}
-          value={form.secret}
-          onChange={(event) => setForm({ ...form, secret: event.target.value })}
-        />
+        <input name="secret" type="password" autoComplete="off" className={`${fieldClass} h-9`} />
       </label>
-      <button
-        type="submit"
-        className={`${buttonClass} h-9`}
-        disabled={form.provider.trim() === '' || form.secret.trim() === ''}
-      >
+      <button type="submit" className={`${buttonClass} h-9`} disabled={!isComplete || isPending}>
         Add
       </button>
       <div className="empty:hidden sm:col-span-full">

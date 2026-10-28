@@ -43,6 +43,7 @@ const removeMember = async (page: Page, name: string) => {
     .getByRole('button', { name: `Remove ${name}` })
     .click()
   await page.getByRole('dialog', { name: 'Remove member' }).getByRole('button', { name: 'Remove' }).click()
+  await expect(page.getByRole('dialog', { name: 'Remove member' })).toHaveCount(0)
   await expect(memberRowOf(page, name)).toHaveCount(0)
 }
 

@@ -171,9 +171,9 @@ export const Composer = ({
     textareaRef.current?.focus()
     if (threadRootId) return
     const saveLatestText = () => commands.saveDraft({ workspaceId, chatId, text: latestText.current })
-    window.addEventListener('pagehide', saveLatestText)
+    document.addEventListener('visibilitychange', saveLatestText)
     return () => {
-      window.removeEventListener('pagehide', saveLatestText)
+      document.removeEventListener('visibilitychange', saveLatestText)
       saveLatestText()
     }
   }, [commands, workspaceId, chatId, threadRootId])

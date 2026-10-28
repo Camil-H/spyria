@@ -16,7 +16,7 @@ import {
   type useGuardedAction,
 } from '@spyria/ui'
 import { Ellipsis } from 'lucide-react'
-import { type ReactNode, useState } from 'react'
+import { type ReactNode, useId, useState } from 'react'
 import { NavLink } from 'react-router'
 import type { Sidebar } from '../queries/get-sidebar.ts'
 import { NameDialog } from './NameDialog.tsx'
@@ -44,15 +44,25 @@ export const ChatRow = ({
   const [openDialog, setOpenDialog] = useState<'rename' | 'archive' | null>(null)
   const closeDialog = () => setOpenDialog(null)
   const { Icon: ChatTypeIcon, label: chatTypeLabel } = chatTypeIconOf(chat.type)
+  const chatTypeId = useId()
+  const indicatorsId = useId()
   return (
     <li className="flex items-center">
       <NavLink
         to={`/w/${workspaceId}/chats/${chat.id}`}
+        aria-label={chat.name}
+        aria-describedby={`${chatTypeId} ${indicatorsId}`}
         className={navLinkClass('flex min-w-0 flex-1 items-center gap-2 py-1')}
       >
         <TooltipRoot disableHoverableContent>
           <TooltipTrigger asChild>
-            <ChatTypeIcon aria-label={chatTypeLabel} role="img" size={14} className="shrink-0 text-muted" />
+            <ChatTypeIcon
+              id={chatTypeId}
+              aria-label={chatTypeLabel}
+              role="img"
+              size={14}
+              className="shrink-0 text-muted"
+            />
           </TooltipTrigger>
           <TooltipPortal>
             <TooltipContent sideOffset={6} className={tooltipClass}>
@@ -61,18 +71,16 @@ export const ChatRow = ({
           </TooltipPortal>
         </TooltipRoot>
         <span className="min-w-0 flex-1 truncate">{chat.name}</span>
-        {chatAdornment?.(chat.id)}
+        <span id={indicatorsId} className="flex shrink-0 items-center gap-2 empty:hidden">
+          {chatAdornment?.(chat.id)}
+        </span>
       </NavLink>
       {(chat.canAdmin || chat.canLeave) && (
         <Root>
           <Trigger aria-label={`Chat actions for ${chat.name}`} className={menuTriggerClass}>
             <Ellipsis aria-hidden className="size-4" />
           </Trigger>
-          <Content
-            align="start"
-            className={menuContentClass}
-            onCloseAutoFocus={(event) => openDialog === 'rename' && event.preventDefault()}
-          >
+          <Content align="start" className={menuContentClass}>
             {chat.canAdmin && (
               <>
                 <Item className={menuItemClass} onSelect={() => setOpenDialog('rename')}>

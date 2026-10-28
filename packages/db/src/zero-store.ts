@@ -615,13 +615,6 @@ export const createZeroStore = ({
       await loadedOf(session.workspaceId).promise
       markSignedIn(session.workspaceId)
     },
-    signInToNew: (workspaceId: WorkspaceId, session: Promise<WorkspaceSession>) => {
-      markSignedIn(workspaceId)
-      session.then(connect, (error) => {
-        close(workspaceId)
-        console.error(error)
-      })
-    },
     close: () => Promise.all([...zeroByWorkspace.keys()].map((workspaceId) => close(workspaceId)?.close())),
   }
 }
