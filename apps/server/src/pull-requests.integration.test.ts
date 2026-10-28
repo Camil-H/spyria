@@ -582,7 +582,7 @@ test('any prompter’s agent reads review threads and issues of the chat’s rep
   ])
 })
 
-test('any prompter’s agent reads the checks of a pull request’s head with a read-only installation token, failing ones with the errors their CI annotated; a pull request that does not exist is named', async () => {
+test('any prompter’s agent reads the checks of a pull request’s head with read-only installation tokens, failing ones with the errors their CI annotated, the failed step and the end of its log; without the Actions permission the logs are left out and the permission is named; a pull request that does not exist is named', async () => {
   const { host } = await stack.agentHost('GitHub checks host', { routesModelCalls: true })
   const { id, branch } = await newDevChat()
   await committedWorkspace(id)
@@ -607,8 +607,23 @@ test('any prompter’s agent reads the checks of a pull request’s head with a 
           message: 'Expected: 1\nReceived: 2',
         },
       ],
+      steps: [
+        { name: 'Set up job', conclusion: 'success' },
+        { name: 'Run bun test', conclusion: 'failure' },
+        { name: 'Post Set up job', conclusion: 'success' },
+      ],
+      log: [
+        '2026-10-28T20:00:00.0000001Z ##[group]Run bun install',
+        '2026-10-28T20:00:00.0000002Z ##[endgroup]',
+        '2026-10-28T20:00:00.0000003Z ##[group]Run bun test',
+        '2026-10-28T20:00:00.0000004Z ##[endgroup]',
+        '2026-10-28T20:00:00.0000005Z \u001b[31m1 fail\u001b[0m',
+        '2026-10-28T20:00:00.0000006Z ##[error]Process completed with exit code 1.',
+        '2026-10-28T20:00:00.0000007Z ##[group]Post Set up job',
+      ].join('\r\n'),
     },
     { ...run, name: 'e2e', status: 'in_progress', conclusion: null },
+    { ...run, name: 'preview', status: 'completed', conclusion: 'failure', app: 'vercel' },
     {
       ...run,
       headSha: '0000000000000000000000000000000000000000',
@@ -624,11 +639,17 @@ test('any prompter’s agent reads the checks of a pull request’s head with a 
     {
       name: 'read_checks',
       result: [
-        `Pull request #${number} at ${headSha.slice(0, 7)}: 3 checks, 1 failing, 1 pending, 1 passing`,
+        `Pull request #${number} at ${headSha.slice(0, 7)}: 4 checks, 2 failing, 1 pending, 1 passing`,
         `- unit: failure ${runUrlOf(1)}`,
+        '  failed step: Run bun test',
         '  src/app.test.ts:3 failure: totals add up',
         '    Expected: 1',
         '    Received: 2',
+        '  log:',
+        '    Run bun test',
+        '    1 fail',
+        '    error: Process completed with exit code 1.',
+        `- preview: failure ${runUrlOf(4)}`,
         `- e2e: pending ${runUrlOf(2)}`,
         `- lint: success ${runUrlOf(0)}`,
       ].join('\n'),
@@ -637,9 +658,13 @@ test('any prompter’s agent reads the checks of a pull request’s head with a 
   const readTokens = [...fakeGitHub.installationTokens.values()].filter(({ token }) => !issuedBefore.has(token))
   expect(readTokens.map(({ repositories, permissions }) => ({ repositories, permissions }))).toEqual([
     { repositories: ['app'], permissions: { pull_requests: 'read', checks: 'read', metadata: 'read' } },
+    { repositories: ['app'], permissions: { actions: 'read', metadata: 'read' } },
   ])
-  expect(fakeGitHub.apiRequests.filter((line) => line.includes('/annotations'))).toEqual([
+  expect(fakeGitHub.apiRequests.filter((line) => /annotations|actions/.test(line))).toEqual([
     `GET /repos/acme/app/check-runs/${firstRunId + 1}/annotations`,
+    `GET /repos/acme/app/check-runs/${firstRunId + 4}/annotations`,
+    `GET /repos/acme/app/actions/jobs/${firstRunId + 1}`,
+    `GET /repos/acme/app/actions/jobs/${firstRunId + 1}/logs`,
   ])
   expect(
     (await toolCallRows(id)).map(({ prompter_id, tool, read_only, status }) => ({
@@ -655,6 +680,17 @@ test('any prompter’s agent reads the checks of a pull request’s head with a 
     update chats set repository = 'acme/app', base_branch = 'main', git_branch = 'spyria/guest-checks'
     where id = ${guest.chatId}`
   expect(await guestToolCall(host, guest.token, 'read_checks', { number })).toMatchObject({ isError: false })
+  fakeGitHub.setInstallationPermissions({ contents: 'write', pull_requests: 'write', checks: 'read', metadata: 'read' })
+  try {
+    const { text } = await guestToolCall(host, guest.token, 'read_checks', { number })
+    expect(text).toContain(
+      "\nLogs not read: Ask a GitHub admin to accept the Actions permission for this workspace's GitHub App\n",
+    )
+    expect(text).toContain('  src/app.test.ts:3 failure: totals add up\n')
+    expect(text).not.toContain('log:')
+  } finally {
+    fakeGitHub.setInstallationPermissions()
+  }
   expect(await guestToolCall(host, guest.token, 'read_checks', {})).toEqual({
     isError: true,
     text: 'This chat has no pull request: give the number of the one to read',

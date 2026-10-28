@@ -65,6 +65,9 @@ export type FakeCheckRun = {
   status: 'queued' | 'in_progress' | 'completed'
   conclusion: string | null
   annotations: { path: string; line: number; title: string; message: string }[]
+  app?: string
+  steps?: { name: string; conclusion: string }[]
+  log?: string
 }
 
 export const fakeGitHubRepositories: Repository[] = [
@@ -443,6 +446,7 @@ export const startFakeGitHub = () => {
                 status: run.status,
                 conclusion: run.conclusion,
                 html_url: `${origin}/${repository}/runs/${index + 1}`,
+                app: { slug: run.app ?? 'github-actions' },
               },
             ]
           : [],
@@ -466,6 +470,24 @@ export const startFakeGitHub = () => {
           message,
         })),
       )
+    }
+    const job = /^\/repos\/([\w.-]+\/[\w.-]+)\/actions\/jobs\/(\d+)(\/logs)?$/.exec(path)
+    if (job) {
+      const [, repository = '', id, isLog] = job
+      const refused = installationTokenAllows(request, repository, 'actions', 'read')
+      if (refused) return refused
+      const run = checkRuns[Number(id) - 1]
+      if (run?.repository !== repository) return notFound()
+      if (isLog) return Response.redirect(`${new URL(request.url).origin}/_logs/${id}`, 302)
+      return Response.json({
+        id: Number(id),
+        steps: (run.steps ?? []).map(({ name, conclusion }, number) => ({
+          name,
+          status: 'completed',
+          conclusion,
+          number: number + 1,
+        })),
+      })
     }
     const issueRead = /^\/repos\/([\w.-]+\/[\w.-]+)\/issues\/(\d+)(\/comments)?$/.exec(path)
     if (issueRead) {
@@ -544,6 +566,8 @@ export const startFakeGitHub = () => {
       const url = new URL(request.url)
       if (url.pathname === '/api/graphql' && request.method === 'POST') return graphql(request)
       if (url.pathname.startsWith('/api/v3')) return api(request, url.pathname.slice('/api/v3'.length))
+      const jobLog = /^\/_logs\/(\d+)$/.exec(url.pathname)
+      if (jobLog) return new Response(checkRuns[Number(jobLog[1]) - 1]?.log ?? '')
       if (url.pathname === '/login/oauth/authorize') {
         const code = `code-${crypto.randomUUID()}`
         codes.add(code)

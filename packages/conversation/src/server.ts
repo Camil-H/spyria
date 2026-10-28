@@ -24,6 +24,7 @@ export {
   chatAttachmentsPathOf,
   chatMediaPathOf,
 } from './domain/attachments.ts'
+export { logExcerptOf } from './domain/ci-logs.ts'
 export { awaitTaskTool, routerTools, stillRunningOf, subagentFailureOf, unknownTaskOf } from './domain/delegation.ts'
 export { type GitAction, isGitAction } from './domain/git-actions.ts'
 export {
