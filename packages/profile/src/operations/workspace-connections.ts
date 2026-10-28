@@ -13,16 +13,12 @@ import {
 import { grantMemberTools, grantWorkspaceTools } from './grant-tools.ts'
 
 type Dependencies = { transactor: ProfileTransactor; gateway: ToolGateway }
-type ConnectionManager = { workspaceId: WorkspaceId; actorId: MemberId }
-type ConnectionTarget = ConnectionManager & { connectionId: string }
+type InWorkspace = { workspaceId: WorkspaceId }
+type ConnectionTarget = InWorkspace & { connectionId: string }
 
-const asConnectionManager = <Result>(
-  { transactor }: Dependencies,
-  { workspaceId, actorId }: ConnectionManager,
-  work: (unitOfWork: UnitOfWork) => Promise<Result>,
-) =>
+const asConnectionManager = <Result>({ transactor }: Dependencies, work: (unitOfWork: UnitOfWork) => Promise<Result>) =>
   transactor.run(async (unitOfWork) => {
-    requirePermissionIn(await unitOfWork.members.permissions(workspaceId, actorId), 'tools.manage')
+    requirePermissionIn(await unitOfWork.members.permissions(), 'tools.manage')
     return work(unitOfWork)
   })
 
@@ -36,13 +32,10 @@ const registeredTools = async (
   throw new ConnectionUnreachable(server.url)
 }
 
-export const addWorkspaceConnection = async (
-  dependencies: Dependencies,
-  input: ConnectionManager & ConnectionInput,
-) => {
-  const { workspaceId, actorId } = input
+export const addWorkspaceConnection = async (dependencies: Dependencies, input: InWorkspace & ConnectionInput) => {
+  const { workspaceId } = input
   const { name, url, secretHeader } = connectionInputOf(input)
-  await asConnectionManager(dependencies, input, async () => {})
+  await asConnectionManager(dependencies, async () => {})
   const gatewayName = gatewayNameOf(name)
   const tools = await registeredTools(dependencies.gateway, { name: gatewayName, url, secretHeader })
   const connection = {
@@ -56,12 +49,11 @@ export const addWorkspaceConnection = async (
     allowedTools: tools.map((tool) => tool.name),
   }
   try {
-    await asConnectionManager(dependencies, input, async ({ workspaceConnections, workspaceEvents }) => {
+    await asConnectionManager(dependencies, async ({ workspaceConnections, workspaceEvents }) => {
       await workspaceConnections.add(connection)
       await workspaceEvents.record({
         workspaceId,
         type: 'connection.added',
-        actorId,
         payload: {
           connectionId: connection.id,
           name,
@@ -82,10 +74,10 @@ export const editWorkspaceConnection = async (
   dependencies: Dependencies,
   input: ConnectionTarget & ConnectionInput,
 ) => {
-  const { workspaceId, actorId, connectionId } = input
+  const { workspaceId, connectionId } = input
   const { name, url, secretHeader } = connectionInputOf(input)
   const { gateway } = dependencies
-  const previous = await asConnectionManager(dependencies, input, ({ workspaceConnections }) =>
+  const previous = await asConnectionManager(dependencies, ({ workspaceConnections }) =>
     workspaceConnections.get(workspaceId, connectionId),
   )
   const isUrlChanged = url !== previous.url
@@ -102,12 +94,11 @@ export const editWorkspaceConnection = async (
     allowedTools: allowedAfterRelisting(previous, tools),
     headerName: secretHeader === undefined ? previous.headerName : (secretHeader?.name ?? null),
   }
-  await asConnectionManager(dependencies, input, async ({ workspaceConnections, workspaceEvents }) => {
+  await asConnectionManager(dependencies, async ({ workspaceConnections, workspaceEvents }) => {
     await workspaceConnections.save(connection)
     await workspaceEvents.record({
       workspaceId,
       type: 'connection.updated',
-      actorId,
       payload: { connectionId, name, url, isSecretReplaced: secretHeader !== undefined },
     })
   })
@@ -117,17 +108,16 @@ export const editWorkspaceConnection = async (
 }
 
 export const removeWorkspaceConnection = async (dependencies: Dependencies, input: ConnectionTarget) => {
-  const { workspaceId, actorId, connectionId } = input
-  const connection = await asConnectionManager(dependencies, input, ({ workspaceConnections }) =>
+  const { workspaceId, connectionId } = input
+  const connection = await asConnectionManager(dependencies, ({ workspaceConnections }) =>
     workspaceConnections.get(workspaceId, connectionId),
   )
   await dependencies.gateway.removeToolServer(connection.gatewayName)
-  await asConnectionManager(dependencies, input, async ({ workspaceConnections, workspaceEvents }) => {
+  await asConnectionManager(dependencies, async ({ workspaceConnections, workspaceEvents }) => {
     await workspaceConnections.remove(workspaceId, connectionId)
     await workspaceEvents.record({
       workspaceId,
       type: 'connection.removed',
-      actorId,
       payload: { connectionId, name: connection.name },
     })
   })
@@ -137,15 +127,14 @@ export const allowConnectionTools = async (
   dependencies: Dependencies,
   input: ConnectionTarget & { allowedTools: string[] },
 ) => {
-  const { workspaceId, actorId, connectionId } = input
-  await asConnectionManager(dependencies, input, async ({ workspaceConnections, workspaceEvents }) => {
+  const { workspaceId, connectionId } = input
+  await asConnectionManager(dependencies, async ({ workspaceConnections, workspaceEvents }) => {
     const connection = await workspaceConnections.get(workspaceId, connectionId)
     const allowedTools = knownToolsOf(connection, input.allowedTools)
     await workspaceConnections.save({ ...connection, allowedTools })
     await workspaceEvents.record({
       workspaceId,
       type: 'connection.updated',
-      actorId,
       payload: { connectionId, allowedTools },
     })
   })
@@ -156,8 +145,8 @@ export const restrictConnectionMember = async (
   dependencies: Dependencies,
   input: ConnectionTarget & { memberId: MemberId; allowedTools: string[] | null },
 ) => {
-  const { workspaceId, actorId, connectionId, memberId } = input
-  await asConnectionManager(dependencies, input, async ({ members, workspaceConnections, workspaceEvents }) => {
+  const { workspaceId, connectionId, memberId } = input
+  await asConnectionManager(dependencies, async ({ members, workspaceConnections, workspaceEvents }) => {
     if (!(await members.isActive(workspaceId, memberId))) throw new MemberNotFound(memberId)
     const connection = await workspaceConnections.get(workspaceId, connectionId)
     const allowedTools = input.allowedTools && knownToolsOf(connection, input.allowedTools)
@@ -166,7 +155,6 @@ export const restrictConnectionMember = async (
     await workspaceEvents.record({
       workspaceId,
       type: 'connection.restricted',
-      actorId,
       payload: { connectionId, memberId, allowedTools },
     })
   })
