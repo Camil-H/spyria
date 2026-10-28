@@ -46,7 +46,7 @@ The chip in the chat shows the session model and effort (before the first prompt
 
 In a session on a member's machine, the owner picks the tool's own **Model** and **Effort** instead, from the lists Claude Code or Codex report.
 
-Next to the chip, a circle shows how full the agent's context is: the tokens of its latest model call out of the model's context window, turning red from 80%, with the figures in its tooltip. It updates after every model call of the main agent, not its subagents, and shows the tokens alone when the gateway does not know the model's window. It shows only for the calls Spyria relays, so not for Claude Code or Codex on a member's subscription.
+Next to the chip, a circle shows how full the agent's context is: the tokens of its latest model call out of the model's context window, turning red from 80%, with the figures in its tooltip. It updates after every model call of the main agent, not its subagents, empties when the model is switched or a new session starts until the next call, and shows the tokens alone when the gateway does not know the model's window. The tooltip shows on hover and on keyboard focus. It shows only for the calls Spyria relays, so not for Claude Code or Codex on a member's subscription.
 
 ## Questions
 

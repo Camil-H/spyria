@@ -347,7 +347,7 @@ test('the agent takes a screenshot of a page with Spyria’s take_screenshot too
   ])
 })
 
-test('the chat keeps how full the agent’s context is from its latest model call, with the window of the model it ran on', async () => {
+test('the chat keeps how full the agent’s context is from its latest model call, with the window of the model it ran on, and forgets it when the model changes', async () => {
   await stack.agentHost('Context host', { routesModelCalls: true })
   const chat = await newRuntimeChat()
   const contextOf = async () =>
@@ -364,6 +364,27 @@ test('the chat keeps how full the agent’s context is from its latest model cal
     context_tokens: 2,
     context_window: stack.llmGateway.listedModels().find((listed) => listed.id === model)?.contextWindow ?? null,
   })
+  const unknown = { context_tokens: null, context_window: null }
+
+  expect(
+    await mutate(aliceInAcme, 'conversation.updateChatRouting', {
+      workspaceId: acme,
+      chatId: chat,
+      sessionModel: 'mistral/mistral-large-latest',
+    }),
+  ).toEqual(succeeded)
+  expect(await contextOf()).toMatchObject(unknown)
+})
+
+test('a new session of the agent forgets the context size its chat kept from the one before', async () => {
+  await workspaceHost()
+  const chat = await newRuntimeChat()
+  await database.$client`
+    update chats set context_tokens = 5000, context_window = 128000 where workspace_id = ${acme} and id = ${chat}`
+  await finished(await prompt(chat, 'Hello'), chat)
+  const [context] = await database.$client`
+    select context_tokens, context_window from chats where workspace_id = ${acme} and id = ${chat}`
+  expect(context).toEqual({ context_tokens: null, context_window: null })
 })
 
 test('after a runtime restart the next prompt loads the Pi session and no earlier message is duplicated', async () => {
