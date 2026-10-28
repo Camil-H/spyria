@@ -43,8 +43,9 @@ import {
 } from './agent-turn.ts'
 import { decide, routingUnavailableOf } from './decide.ts'
 
-type Input = { workspaceId: WorkspaceId; messageId: MessageId; isLastAttempt: boolean }
+type Input = { workspaceId: WorkspaceId; messageId: MessageId; isLastAttempt: boolean; isRetry: boolean }
 type Prepared = { conversation: AgentConversation } | { refusal: string }
+type NotReady = Exclude<RuntimeReadiness, { state: 'ready' | 'starting' }>
 
 const runtimeStartPollMilliseconds = 500
 
@@ -322,7 +323,7 @@ export const startAgentSession = async (
 
 export const promptAgent = async (
   dependencies: AgentDependencies,
-  { workspaceId, messageId, isLastAttempt }: Input,
+  { workspaceId, messageId, isLastAttempt, isRetry }: Input,
 ) => {
   const { transactor, runtimes, agentClient, eventSockets } = dependencies
   const { chatId, type, localSession, harness } = await transactor.run(async ({ messages, chats }) => {
@@ -331,15 +332,17 @@ export const promptAgent = async (
   })
   if (type !== 'runtime') return undefined
   const chat = { workspaceId, chatId }
+  const waitForRuntime = (readiness: NotReady, releasesHeldTurn: boolean) =>
+    transactor.run(async (unitOfWork) => {
+      if (releasesHeldTurn) await releaseAgentTurn(unitOfWork, chatId)
+      await noticeWaitingPrompts(unitOfWork, chatId, notReadyNoticeOf(readiness, localSession === true))
+    })
   if (localSession && (await transactor.run(({ chats }) => chats.isSessionStartPending(chatId))))
     return { retryInMilliseconds: runtimeStartPollMilliseconds }
   const readiness = await runtimes.ensureRunning(chat)
   if (readiness.state === 'starting') return { retryInMilliseconds: runtimeStartPollMilliseconds }
-  if (readiness.state !== 'ready')
-    return transactor.run((unitOfWork) =>
-      noticeWaitingPrompts(unitOfWork, chatId, notReadyNoticeOf(readiness, localSession === true)),
-    )
-  const prompt = await transactor.run((unitOfWork) => beginAgentTurn(unitOfWork, chatId))
+  if (readiness.state !== 'ready') return waitForRuntime(readiness, isRetry)
+  const prompt = await transactor.run((unitOfWork) => beginAgentTurn(unitOfWork, chatId, isRetry))
   if (!prompt) return undefined
   let conversation: AgentConversation
   try {
@@ -357,10 +360,7 @@ export const promptAgent = async (
     const seed = await transactor.run(({ messages }) => messages.seedFor(prompt))
     await agentClient.sendMessage(conversation, agentPromptTextOf(prompt, seed), prompt.id)
   } catch (error) {
-    if (!(error instanceof AgentStartFailure) && !isLastAttempt) {
-      await transactor.run((unitOfWork) => releaseAgentTurn(unitOfWork, chatId, prompt.id))
-      throw error
-    }
+    if (!(error instanceof AgentStartFailure) && !isLastAttempt) throw error
     const notice =
       error instanceof AgentStartFailure || !(await runtimes.isWaitingOnHost(chat))
         ? `${agentNotices.couldNotStart}: ${disclosableMessageOf(error)}`

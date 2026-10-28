@@ -99,11 +99,12 @@ export const createAgentHandlers = ({
   })
   return {
     jobs: {
-      [agentJobTypes.prompt]: ({ workspaceId, payload, isLastAttempt }: AgentJob) =>
+      [agentJobTypes.prompt]: ({ workspaceId, payload, isLastAttempt, isRetry = false }: AgentJob) =>
         promptAgent(dependenciesOf(workspaceId), {
           workspaceId,
           messageId: promptPayload.parse(payload).messageId,
           isLastAttempt,
+          isRetry,
         }),
       [agentJobTypes.startSession]: ({ workspaceId, payload }: AgentJob) =>
         startAgentSession(dependenciesOf(workspaceId), { workspaceId, ...startSessionPayload.parse(payload) }),
