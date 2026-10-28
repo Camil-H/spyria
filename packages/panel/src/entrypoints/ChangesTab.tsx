@@ -4,7 +4,7 @@ import { iconButtonClass } from '@spyria/ui'
 import { FileDiff, RefreshCw } from 'lucide-react'
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
-import { branchStatusOf, changeGroupsOf, commitsOf } from '../domain/workspace.ts'
+import { branchStatusOf, changeGroupsOf, commitsOf, isCollapsedByDefault } from '../domain/workspace.ts'
 import { getPublishing } from '../queries/get-publishing.ts'
 import { BranchStatusLine } from './BranchStatusLine.tsx'
 import { EmptyState } from './EmptyState.tsx'
@@ -12,7 +12,7 @@ import { FileDiffList } from './FileDiffList.tsx'
 import { GitActions } from './GitActions.tsx'
 import { PublishActions } from './PublishActions.tsx'
 import type { TabProps } from './TabProps.ts'
-import { emptyClass } from './ui.ts'
+import { emptyClass, moreCommitsNotice } from './ui.ts'
 import { useActionNotice } from './useActionNotice.tsx'
 import { useWorkspaceReading } from './useWorkspaceReading.ts'
 import { WorkspaceStatus } from './WorkspaceStatus.tsx'
@@ -21,19 +21,23 @@ const ChangesTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
   const { memberId } = useSession()
   const { workingBranch, baseBranch } = useQuery(getPublishing, workspaceId, chatId, memberId)
   const changesReading = useWorkspaceReading(workspaceId, chatId, 'changes')
+  const commitsReading = useWorkspaceReading(workspaceId, chatId, 'commits')
   const statusReading = useWorkspaceReading(workspaceId, chatId, 'status')
   const { toast, notify } = useActionNotice()
   const [isRefreshAsked, setIsRefreshAsked] = useState(false)
-  const reading = changesReading.reading
-  const changeGroups = changeGroupsOf(reading)
+  const commits = commitsReading.reading
+  const isRead = changesReading.reading !== undefined && commits !== undefined
+  const changeGroups = changeGroupsOf(changesReading.reading, commits)
+  const isCollapsed = isCollapsedByDefault(changeGroups.flatMap(({ changes }) => changes))
   const status = branchStatusOf(statusReading.reading)
-  const isRefreshing = changesReading.isLoading || statusReading.isLoading
+  const isRefreshing = changesReading.isLoading || commitsReading.isLoading || statusReading.isLoading
   if (isRefreshAsked && !isRefreshing) {
     setIsRefreshAsked(false)
     notify({ isRefused: false, text: 'Changes refreshed' })
   }
   const refresh = () => {
     changesReading.refresh()
+    commitsReading.refresh()
     statusReading.refresh()
   }
   const refreshAsked = () => {
@@ -51,7 +55,7 @@ const ChangesTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
         chatId={chatId}
         actionsSlot={actionsSlot}
         status={status}
-        commitSubjects={commitsOf(reading?.log).map(({ subject }) => subject)}
+        commitSubjects={commitsOf(commits?.log).map(({ subject }) => subject)}
         onPublished={statusReading.refresh}
         onOutcome={notify}
       />
@@ -80,10 +84,10 @@ const ChangesTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
           </button>,
           actionsSlot,
         )}
-      {reading && changeGroups.length === 0 && (
+      {isRead && changeGroups.length === 0 && (
         <EmptyState Icon={FileDiff} title="No changes" hint="Edits on the working branch against its base show here." />
       )}
-      {changeGroups.map(({ sha, title, changes }) => (
+      {changeGroups.map(({ sha, title, changes, isCut }) => (
         <section
           key={sha ?? title}
           aria-label={sha ? `Commit ${sha}` : title || undefined}
@@ -95,10 +99,15 @@ const ChangesTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
               {title}
             </h3>
           )}
-          <FileDiffList changes={changes} />
+          <FileDiffList
+            changes={changes}
+            groupName={sha ? `commit ${sha}` : title.toLowerCase()}
+            isCollapsed={isCollapsed}
+          />
+          {isCut && <p className={emptyClass}>Diff truncated</p>}
         </section>
       ))}
-      {reading?.truncated === true && <p className={emptyClass}>Diff truncated</p>}
+      {commits?.hasMoreCommits === true && <p className={emptyClass}>{moreCommitsNotice}</p>}
       {toast}
     </div>
   )
