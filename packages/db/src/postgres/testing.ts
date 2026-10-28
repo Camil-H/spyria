@@ -345,7 +345,7 @@ const testModelPrices = {
   'gemini-flash-lite-latest': 0.0000005,
   'grok-4.7': 0.000004,
   'grok-4.3': 0.000002,
-  'grok-code-fast-1': 0.0000005,
+  'grok-code-fast': 0.0000005,
   'deepseek-v4-pro': 0.000004,
   'deepseek-v4-flash': 0.000002,
   'deepseek-v3.2': 0.0000005,

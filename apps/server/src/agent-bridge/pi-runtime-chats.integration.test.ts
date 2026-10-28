@@ -78,7 +78,7 @@ test.each([
       provider: 'Google',
       models: ['gemini/gemini-pro-latest', 'gemini/gemini-flash-latest', 'gemini/gemini-flash-lite-latest'],
     },
-    { provider: 'xAI', models: ['xai/grok-4.7', 'xai/grok-4.3', 'xai/grok-code-fast-1'] },
+    { provider: 'xAI', models: ['xai/grok-4.7', 'xai/grok-4.3', 'xai/grok-code-fast'] },
     {
       provider: 'DeepSeek',
       models: ['deepseek/deepseek-v4-pro', 'deepseek/deepseek-v4-flash', 'deepseek/deepseek-v3.2'],

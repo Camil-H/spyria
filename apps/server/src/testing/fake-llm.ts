@@ -219,7 +219,7 @@ const listedModelIds = [
   'codestral-latest',
   'grok-4.7',
   'grok-4.3',
-  'grok-code-fast-1',
+  'grok-code-fast',
   'deepseek-v4-pro',
   'deepseek-v4-flash',
   'deepseek-v3.2',
