@@ -13,8 +13,9 @@ import {
 } from '@spyria/db/server-writes'
 import {
   isActiveMember,
-  skippingRefusedRebase,
   type Transact,
+  transactingTransactor,
+  transactorOver,
   workspacePermissionsOf,
   type ZeroContext,
   zql,
@@ -204,7 +205,7 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
       },
     },
   }
-  return { run: (work) => skippingRefusedRebase(tx, () => work(unitOfWork)) }
+  return transactorOver(tx, unitOfWork)
 }
 
 export const memberContext = (workspace: WorkspaceId, member: MemberId): ZeroContext => ({
@@ -212,6 +213,5 @@ export const memberContext = (workspace: WorkspaceId, member: MemberId): ZeroCon
   userId: member,
 })
 
-export const createTransactingZeroTransactor = (transact: Transact, context: ZeroContext): ProfileTransactor => ({
-  run: (work) => transact((tx) => createZeroTransactor(tx, context).run(work)),
-})
+export const createTransactingZeroTransactor = (transact: Transact, context: ZeroContext): ProfileTransactor =>
+  transactingTransactor(transact, (tx) => createZeroTransactor(tx, context))

@@ -32,7 +32,14 @@ import {
   storedAttachmentBytesOf,
 } from '@spyria/db/server-writes'
 import type { Message as MessageRow } from '@spyria/db/zero'
-import { chatPermissionsOf, isOwnerRemoved, skippingRefusedRebase, type Transact, zql } from '@spyria/db/zero-queries'
+import {
+  chatPermissionsOf,
+  isOwnerRemoved,
+  type Transact,
+  transactingTransactor,
+  transactorOver,
+  zql,
+} from '@spyria/db/zero-queries'
 import {
   type ChatId,
   type ChatPermission,
@@ -551,12 +558,8 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         )) !== undefined,
     },
   }
-  return { run: (work) => skippingRefusedRebase(tx, () => work(unitOfWork)) }
+  return transactorOver(tx, unitOfWork)
 }
 
-export const createTransactingZeroTransactor = (
-  transact: Transact,
-  workspaceId: WorkspaceId,
-): ConversationTransactor => ({
-  run: (work) => transact((tx) => createZeroTransactor(tx, workspaceId).run(work)),
-})
+export const createTransactingZeroTransactor = (transact: Transact, workspaceId: WorkspaceId): ConversationTransactor =>
+  transactingTransactor(transact, (tx) => createZeroTransactor(tx, workspaceId))

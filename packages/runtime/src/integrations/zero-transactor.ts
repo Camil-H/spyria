@@ -15,8 +15,9 @@ import {
 } from '@spyria/db/server-writes'
 import type { RuntimeHost as RuntimeHostRow, Runtime as RuntimeRow } from '@spyria/db/zero'
 import {
-  skippingRefusedRebase,
   type Transact,
+  transactingTransactor,
+  transactorOver,
   workspacePermissionsOf,
   type ZeroContext,
   zql,
@@ -159,9 +160,8 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
       setLocalSessions: (workspaceId, isOn) => tx.mutate.workspaces.update({ workspaceId, localSessions: isOn }),
     },
   }
-  return { run: (work) => skippingRefusedRebase(tx, () => work(unitOfWork)) }
+  return transactorOver(tx, unitOfWork)
 }
 
-export const createTransactingZeroTransactor = (transact: Transact): RuntimeTransactor => ({
-  run: (work) => transact((tx) => createZeroTransactor(tx).run(work)),
-})
+export const createTransactingZeroTransactor = (transact: Transact): RuntimeTransactor =>
+  transactingTransactor(transact, createZeroTransactor)

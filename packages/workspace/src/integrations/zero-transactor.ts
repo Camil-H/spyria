@@ -17,7 +17,7 @@ import type {
 } from '@spyria/db/zero'
 import {
   chatPermissionsOf,
-  skippingRefusedRebase,
+  transactorOver,
   workspacePermissionsOf,
   type ZeroContext,
   zql,
@@ -407,5 +407,5 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
       stop: (chatId) => stopChatRuntimeOnServer(tx, context.workspaceId, chatId),
     },
   }
-  return { run: (work) => skippingRefusedRebase(tx, () => work(unitOfWork)) }
+  return transactorOver(tx, unitOfWork)
 }
