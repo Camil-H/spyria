@@ -317,6 +317,7 @@ export const ChatView = ({
                   subagentPolicy={conversation.subagentPolicy}
                   harness={conversation.harness}
                   localSession={conversation.localSession}
+                  isAgentWorking={conversation.isAgentWorking}
                   isOwner={conversation.isOwner}
                   canConfigure={conversation.canConfigure}
                 />

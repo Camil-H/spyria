@@ -84,11 +84,13 @@ export const chipLabelOf = (
     harness,
     model,
     reasoningEffort,
+    isAgentWorking = false,
   }: {
     localSession: boolean
     harness: HarnessId | null
     model: string | null
     reasoningEffort: string | null
+    isAgentWorking?: boolean
   },
   nameOf: (id: string) => string,
   adapterNameOf: (id: string) => string,
@@ -97,4 +99,6 @@ export const chipLabelOf = (
     ? `${harnesses[harnessOf(harness)].name} · ${model ? adapterNameOf(model) : 'subscription'}${effortSuffixOf(reasoningEffort)}`
     : model
       ? `${nameOf(model)}${effortSuffixOf(reasoningEffort)}`
-      : 'Model chosen at first prompt'
+      : isAgentWorking
+        ? 'Choosing model…'
+        : 'Model chosen at first prompt'
