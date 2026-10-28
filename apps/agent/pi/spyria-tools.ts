@@ -16,15 +16,4 @@ export default (pi: ExtensionAPI) => {
       return resultOf(answer ? `The member answered: ${answer}` : 'The member did not answer.')
     },
   })
-  pi.registerTool({
-    name: 'open_page',
-    label: 'Open',
-    description:
-      "Open a page in the member's Browser panel: a public http or https address, or the path of a file in the project such as an HTML report you wrote. Addresses on a local or private network, such as localhost or 192.168.x.x, are not opened.",
-    promptGuidelines: [
-      'When you build something the member should look at, such as a report or a page, open it with open_page.',
-    ],
-    parameters: Type.Object({ address: Type.String(), title: Type.Optional(Type.String()) }),
-    execute: async () => resultOf("The page is open in the member's Browser panel."),
-  })
 }

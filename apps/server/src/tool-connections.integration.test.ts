@@ -125,7 +125,7 @@ test('a member acts only on their own key: unknown servers are refused, a member
   expect((await sessionsOf((await virtualKeyOf(alice)).id)).map((session) => session.status)).toEqual(['active'])
 })
 
-test('/mcp runs as the chat owner with Spyria’s attribution, lists tools outside a turn but calls them only during one, and refuses another host’s token', async () => {
+test('/mcp runs as the chat owner with Spyria’s attribution, lists Spyria’s own tools first then the gateway’s outside a turn but calls them only during one, and refuses another host’s token', async () => {
   await connectAlice(aliceCookie)
   const host = await fakeHost('Tools host')
   const otherHost = await fakeHost('Other tools host')
@@ -139,7 +139,9 @@ test('/mcp runs as the chat owner with Spyria’s attribution, lists tools outsi
   )
   expect(initialized.status).toBe(200)
   const listed = await mcpCall(host, token, rpcOf('tools/list'))
-  expect(listed.result.tools.map((tool: { name: string }) => tool.name)).toContain('fake-whoami')
+  const listedNames = listed.result.tools.map((tool: { name: string }) => tool.name)
+  expect(listedNames[0]).toBe('open_page')
+  expect(listedNames).toContain('fake-whoami')
   const duringTurn = await mcpCall(host, token, whoami)
   expect(textOf(duringTurn.result)).toBe(`you are ${aliceAccount}`)
 

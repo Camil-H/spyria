@@ -11,7 +11,6 @@ import {
   turnEndNoticeOf,
 } from '../domain/agent-events.ts'
 import type { StepDelegation } from '../domain/agent-steps.ts'
-import { openedPageOf } from '../domain/browser-pages.ts'
 import { newMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
 import { closeAgentTurn } from './agent-turn.ts'
@@ -80,8 +79,6 @@ const recordIn = async (
       action?.step && observedProjectionStep(action.step, projection, recordedAt.getTime() - action.createdAt.getTime())
     if (action && step) await unitOfWork.messages.setStep(action.id, step)
   }
-  const openedPage = seq !== undefined && !delegation ? openedPageOf(event) : undefined
-  if (openedPage) await unitOfWork.browserPages.open(chatId, openedPage, recordedAt)
   const endsSignedOut =
     turnEnd &&
     previous?.sessionUpdate === 'error' &&

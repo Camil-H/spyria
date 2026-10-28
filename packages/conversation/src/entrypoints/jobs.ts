@@ -19,6 +19,7 @@ import { createTransactingZeroTransactor } from '../integrations/zero-transactor
 import { closeReopenedTurn, reopenAgentTurn, sweepAgentTurns } from '../operations/agent-turn-safety.ts'
 import { authorizeToolCall } from '../operations/authorize-tool-call.ts'
 import { callGitHubTool } from '../operations/call-github-tool.ts'
+import { callSpyriaTool } from '../operations/call-spyria-tool.ts'
 import { awaitTask, delegateTask } from '../operations/delegate-task.ts'
 import { forwardToAgent } from '../operations/forward-to-agent.ts'
 import { runGitAction } from '../operations/git-actions.ts'
@@ -147,6 +148,8 @@ export const createAgentHandlers = ({
       readRuntimeMedia(dependenciesOf(chat.workspaceId), { chat, memberId: member, path }),
     publishBranch: (input: Parameters<typeof publishBranch>[1]) =>
       publishBranch(dependenciesOf(input.chat.workspaceId), input),
+    callSpyriaTool: (input: Parameters<typeof callSpyriaTool>[1]) =>
+      callSpyriaTool(dependenciesOf(input.chat.workspaceId), input),
     callGitHubTool: (input: Parameters<typeof callGitHubTool>[1]) =>
       callGitHubTool(dependenciesOf(input.chat.workspaceId), input),
     runGitAction: (input: Parameters<typeof runGitAction>[1]) =>
