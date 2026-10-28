@@ -384,7 +384,7 @@ export const startFakeGitHub = () => {
       const [, repository = '', number] = pulls
       const refused = installationTokenAllows(request, repository, 'pull_requests', 'read')
       if (refused) return refused
-      const pullRequest = pullRequests.find(
+      const pullRequest = pullRequests.findLast(
         (known) => known.repository === repository && known.number === Number(number),
       )
       return request.method === 'GET' && pullRequest
