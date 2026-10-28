@@ -1,5 +1,6 @@
 import {
   type ChatId,
+  can,
   chatModelsOf,
   cheapestModelOf,
   defaultDeployment,
@@ -21,7 +22,7 @@ import {
   AgentStartFailure,
   type RuntimeReadiness,
 } from '../contracts/agent.ts'
-import { agentNotices, notReadyNoticeOf } from '../domain/agent-events.ts'
+import { agentNotices, hasOutlivedWait, notReadyNoticeOf } from '../domain/agent-events.ts'
 import { noReplyAuthorOf } from '../domain/git-actions.ts'
 import type { Message } from '../domain/message.ts'
 import { noLlmKeyNoticeOf } from '../domain/model-call-failures.ts'
@@ -43,8 +44,9 @@ import {
 } from './agent-turn.ts'
 import { decide, routingUnavailableOf } from './decide.ts'
 
-type Input = { workspaceId: WorkspaceId; messageId: MessageId; isLastAttempt: boolean }
+type Input = { workspaceId: WorkspaceId; messageId: MessageId; isLastAttempt: boolean; isRetry: boolean }
 type Prepared = { conversation: AgentConversation } | { refusal: string }
+type NotReady = Exclude<RuntimeReadiness, { state: 'ready' | 'starting' }>
 
 const runtimeStartPollMilliseconds = 500
 
@@ -114,6 +116,48 @@ const routeSession = async (
     costMicros: decision?.costMicros ?? 0,
     inputsDigest: decision?.inputsDigest ?? null,
   }
+}
+
+type EarlyRoute = { promptId: MessageId; routed: Awaited<ReturnType<typeof routeSession>> }
+const earlyRoutes = new Map<string, Promise<EarlyRoute | undefined>>()
+const earlyRouteKeyOf = ({ workspaceId, chatId }: AgentChat) => `${workspaceId}:${chatId}`
+
+const firstPromptRouteOf = async (dependencies: AgentDependencies, chat: AgentChat) => {
+  const prompt = await dependencies.transactor.run(async ({ chats, agentTurns }) => {
+    const next = (await chats.hasAgentSession(chat.chatId)) ? undefined : await agentTurns.nextPrompt(chat.chatId)
+    const isRunnable =
+      next?.authorId &&
+      !hasOutlivedWait(next, Date.now()) &&
+      can(await chats.permissions(chat.chatId, next.authorId), 'chat.post')
+    return isRunnable ? next : undefined
+  })
+  if (!prompt?.authorId) return undefined
+  return { promptId: prompt.id, routed: await routeSession(dependencies, chat, prompt.authorId, prompt) }
+}
+
+const routeWhileStarting = (dependencies: AgentDependencies, chat: AgentChat) => {
+  if (dependencies.fixedLlm || earlyRoutes.has(earlyRouteKeyOf(chat))) return
+  earlyRoutes.set(
+    earlyRouteKeyOf(chat),
+    firstPromptRouteOf(dependencies, chat).catch(() => undefined),
+  )
+}
+
+const takeEarlyRoute = (chat: AgentChat) => {
+  const early = earlyRoutes.get(earlyRouteKeyOf(chat))
+  earlyRoutes.delete(earlyRouteKeyOf(chat))
+  return early
+}
+
+const routedFor = async (
+  dependencies: AgentDependencies,
+  chat: AgentChat,
+  earlyRoute: Promise<EarlyRoute | undefined> | undefined,
+  prompterId: MemberId,
+  prompt: Message,
+) => {
+  const early = await earlyRoute
+  return early?.promptId === prompt.id ? early.routed : routeSession(dependencies, chat, prompterId, prompt)
 }
 
 const relaunchedConversationOf = async (
@@ -255,6 +299,7 @@ const conversationFor = async (
   harness: HarnessId | undefined,
 ): Promise<Prepared> => {
   const { transactor, fixedLlm, deployment = defaultDeployment } = dependencies
+  const earlyRoute = takeEarlyRoute(chat)
   const prompterId = prompt.authorId
   if (harness && !signedIn.includes(harness)) return { refusal: signInNoticeOf(harness, deployment) }
   const storedConversation = await storedConversationOf(dependencies, chat, endpoint)
@@ -265,7 +310,8 @@ const conversationFor = async (
       : keepSession(dependencies, chat, storedConversation, prompterId)
   }
   if (harness) return { conversation: await machineConversationFor(dependencies, chat, endpoint, harness) }
-  const routed = fixedLlm || !prompterId ? undefined : await routeSession(dependencies, chat, prompterId, prompt)
+  const routed =
+    fixedLlm || !prompterId ? undefined : await routedFor(dependencies, chat, earlyRoute, prompterId, prompt)
   const llm: AgentLlmChoice | undefined =
     routed?.choice && prompterId
       ? {
@@ -322,7 +368,7 @@ export const startAgentSession = async (
 
 export const promptAgent = async (
   dependencies: AgentDependencies,
-  { workspaceId, messageId, isLastAttempt }: Input,
+  { workspaceId, messageId, isLastAttempt, isRetry }: Input,
 ) => {
   const { transactor, runtimes, agentClient, eventSockets } = dependencies
   const { chatId, type, localSession, harness } = await transactor.run(async ({ messages, chats }) => {
@@ -331,15 +377,25 @@ export const promptAgent = async (
   })
   if (type !== 'runtime') return undefined
   const chat = { workspaceId, chatId }
+  const waitForRuntime = (readiness: NotReady, releasedPromptId?: MessageId) =>
+    transactor.run(async (unitOfWork) => {
+      if (releasedPromptId) await releaseAgentTurn(unitOfWork, chatId, releasedPromptId)
+      await noticeWaitingPrompts(unitOfWork, chatId, notReadyNoticeOf(readiness, localSession === true))
+    })
   if (localSession && (await transactor.run(({ chats }) => chats.isSessionStartPending(chatId))))
     return { retryInMilliseconds: runtimeStartPollMilliseconds }
   const readiness = await runtimes.ensureRunning(chat)
-  if (readiness.state === 'starting') return { retryInMilliseconds: runtimeStartPollMilliseconds }
-  if (readiness.state !== 'ready')
-    return transactor.run((unitOfWork) =>
-      noticeWaitingPrompts(unitOfWork, chatId, notReadyNoticeOf(readiness, localSession === true)),
-    )
-  const prompt = await transactor.run((unitOfWork) => beginAgentTurn(unitOfWork, chatId))
+  if (readiness.state === 'starting') {
+    if (!localSession) routeWhileStarting(dependencies, chat)
+    return { retryInMilliseconds: runtimeStartPollMilliseconds }
+  }
+  if (readiness.state !== 'ready') {
+    takeEarlyRoute(chat)
+    return waitForRuntime(readiness, isRetry ? messageId : undefined)
+  }
+  const prompt = await transactor.run((unitOfWork) =>
+    beginAgentTurn(unitOfWork, chatId, isRetry ? messageId : undefined),
+  )
   if (!prompt) return undefined
   let conversation: AgentConversation
   try {
@@ -355,16 +411,14 @@ export const promptAgent = async (
     conversation = prepared.conversation
     await eventSockets.ensureOpen(chat, conversation, prompt.id)
     const seed = await transactor.run(({ messages }) => messages.seedFor(prompt))
-    await agentClient.sendMessage(conversation, agentPromptTextOf(prompt, seed))
+    await agentClient.sendMessage(conversation, agentPromptTextOf(prompt, seed), prompt.id)
   } catch (error) {
+    if (await runtimes.isWaitingOnHost(chat)) return waitForRuntime({ state: 'host_offline' }, prompt.id)
     if (!(error instanceof AgentStartFailure) && !isLastAttempt) {
-      await transactor.run((unitOfWork) => releaseAgentTurn(unitOfWork, chatId, prompt.id))
+      if (prompt.id !== messageId) await transactor.run((unitOfWork) => releaseAgentTurn(unitOfWork, chatId, prompt.id))
       throw error
     }
-    const notice =
-      error instanceof AgentStartFailure || !(await runtimes.isWaitingOnHost(chat))
-        ? `${agentNotices.couldNotStart}: ${disclosableMessageOf(error)}`
-        : notReadyNoticeOf({ state: 'host_offline' }, localSession === true)
+    const notice = `${agentNotices.couldNotStart}: ${disclosableMessageOf(error)}`
     return transactor.run((unitOfWork) => closeAgentTurn(unitOfWork, chatId, prompt.id, () => notice))
   }
   if ((await transactor.run(({ agentTurns }) => agentTurns.lock(chatId))) === null)

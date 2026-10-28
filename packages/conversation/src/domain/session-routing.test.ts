@@ -69,6 +69,12 @@ test.each([
   ],
   [{ localSession: false, harness: null, model: 'mistral/mistral-small-latest' }, 'Named mistral/mistral-small-latest'],
   [{ localSession: false, harness: 'codex', model: null }, 'Model chosen at first prompt'],
+  [{ localSession: false, harness: null, model: null, isAgentWorking: true }, 'Choosing model…'],
+  [{ localSession: true, harness: null, model: null, isAgentWorking: true }, 'Claude Code · subscription'],
+  [
+    { localSession: false, harness: null, model: 'mistral/mistral-small-latest', isAgentWorking: true },
+    'Named mistral/mistral-small-latest',
+  ],
 ] as const)(
   'the session chip reads %o as %s: model and effort only, the subagent policy stays in the dialog',
   (fields, label) => {

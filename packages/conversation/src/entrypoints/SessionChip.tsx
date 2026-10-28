@@ -65,6 +65,7 @@ export const SessionChip = (chip: {
   subagentPolicy: Policy
   harness: HarnessId | null
   localSession: boolean
+  isAgentWorking: boolean
   isOwner: boolean
   canConfigure: boolean
 }) => {

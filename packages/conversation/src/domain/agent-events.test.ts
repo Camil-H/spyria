@@ -4,6 +4,8 @@ import {
   agentNotices,
   agentProjectionOf,
   executionStatusOf,
+  expiredPromptNotice,
+  hasOutlivedWait,
   isStoredAgentEvent,
   notReadyNoticeOf,
   reopenedTurnOutcomeOf,
@@ -12,6 +14,8 @@ import {
   subagentDelegationOf,
   toolCallIdOf,
   turnEndNoticeOf,
+  turnEndPromptIdOf,
+  unavailableNotices,
   waitingNotices,
 } from './agent-events.ts'
 import claudeCodeToolCalls from './claude-code-tool-calls.fixture.json'
@@ -48,6 +52,24 @@ test('a local session waiting on its unplaced or offline machine reads as your m
   expect(notReadyNoticeOf({ state: 'host_offline' }, false)).toBe(agentNotices.hostOffline)
   expect(notReadyNoticeOf({ state: 'failed', failure: 'no_host' }, false)).toBe(agentNotices.noHost)
   expect(waitingNotices).toContain(agentNotices.machineOffline)
+})
+
+test('a prompt that waited an hour has outlived its wait, which counts unavailability and not a new session; the expiry notice answers it', () => {
+  const sentAt = new Date('2026-10-28T09:00:00Z')
+  expect(hasOutlivedWait({ createdAt: sentAt }, Date.parse('2026-10-28T09:59:59Z'))).toBe(false)
+  expect(hasOutlivedWait({ createdAt: sentAt }, Date.parse('2026-10-28T10:00:00Z'))).toBe(true)
+  expect(unavailableNotices).toContain(agentNotices.machineOffline)
+  expect(unavailableNotices).not.toContain(agentNotices.newSession)
+  expect(waitingNotices).not.toContain(expiredPromptNotice)
+})
+
+test('a turn end names its prompt only when spyria-agent sent one', () => {
+  const turnEnd = (update: object) => ({ id: 'event', kind: 'ACPUpdate', timestamp: '', update })
+  expect(turnEndPromptIdOf(turnEnd({ sessionUpdate: 'turn_end', stopReason: 'end_turn', promptId: 'prompt-1' }))).toBe(
+    'prompt-1',
+  )
+  expect(turnEndPromptIdOf(turnEnd({ sessionUpdate: 'turn_end', stopReason: 'end_turn' }))).toBeUndefined()
+  expect(turnEndPromptIdOf(turnEnd({ sessionUpdate: 'agent_message', promptId: 'prompt-1' }))).toBeUndefined()
 })
 
 const repliesOf =
