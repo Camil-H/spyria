@@ -340,6 +340,7 @@ const testModelPrices = {
   'mistral-medium-latest': 0.000015,
   'mistral-small-latest': 0.000006,
   'codestral-latest': 0.000009,
+  'grok-4.7': 0.000004,
   'gemini-pro-latest': 0.000004,
   'gemini-flash-latest': 0.000002,
   'gemini-flash-lite-latest': 0.0000005,
