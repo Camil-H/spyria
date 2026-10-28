@@ -17,7 +17,7 @@ import type {
 } from '@spyria/db/zero'
 import {
   chatPermissionsOf,
-  skippingRefusedRebase,
+  transactorOver,
   workspacePermissionsOf,
   type ZeroContext,
   zql,
@@ -26,9 +26,11 @@ import {
   adminRoleId,
   builtInChatRoles,
   builtInWorkspaceRoles,
+  ChatNotFound,
   type ChatPermission,
   type ChatRole,
   chatId,
+  ForeignWorkspace,
   memberId,
   memberRoleId,
   projectId,
@@ -45,7 +47,7 @@ import {
 } from '@spyria/runtime/published'
 import type { UnitOfWork, WorkspaceTransactor } from '../contracts/transactor.ts'
 import type { Chat, ChatChange } from '../domain/chat.ts'
-import { ChatNotFound, ForeignWorkspace, ProjectNotFound } from '../domain/errors.ts'
+import { ProjectNotFound } from '../domain/errors.ts'
 import type { Invitation } from '../domain/invitation.ts'
 import { type Member, workspaceJobTypes } from '../domain/member.ts'
 import { Name } from '../domain/name.ts'
@@ -407,5 +409,5 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
       stop: (chatId) => stopChatRuntimeOnServer(tx, context.workspaceId, chatId),
     },
   }
-  return { run: (work) => skippingRefusedRebase(tx, () => work(unitOfWork)) }
+  return transactorOver(tx, unitOfWork)
 }

@@ -18,7 +18,7 @@ export const createProfileJobs = (gateway: LlmGateway & ToolGateway) => ({
   [profileJobTypes.gatewaySync]: ({ workspaceId: workspace, payload, transact }: Job) => {
     const job = gatewaySyncPayload.parse(payload)
     const transactor = createTransactingZeroTransactor(transact, memberContext(workspaceId(workspace), job.memberId))
-    return runGatewaySync({ transactor, gateway }, { ...job, workspaceId: workspaceId(workspace) })
+    return runGatewaySync({ transactor, gateway }, job)
   },
   [profileJobTypes.toolServerRemoval]: ({ payload }: Job) =>
     gateway.removeToolServer(toolServerRemovalPayload.parse(payload).gatewayName),

@@ -1,5 +1,5 @@
-import type { CredentialId, MemberId, WorkspaceId, WorkspacePermission } from '@spyria/kernel'
-import type { GatewayKey, LlmCredential } from '../domain/llm-credential.ts'
+import type { CredentialId, GatewayKey, MemberId, WorkspaceId, WorkspacePermission } from '@spyria/kernel'
+import type { LlmCredential } from '../domain/llm-credential.ts'
 import type { Member } from '../domain/member.ts'
 import type { PersonalConnection } from '../domain/personal-connection.ts'
 import type { Secret } from '../domain/secret.ts'
@@ -11,29 +11,29 @@ import type {
 } from '../domain/workspace-connection.ts'
 
 export type MemberRepository = {
-  get(workspaceId: WorkspaceId, memberId: MemberId): Promise<Member>
+  get(): Promise<Member>
   save(member: Member): Promise<void>
-  permissions(workspaceId: WorkspaceId, memberId: MemberId): Promise<readonly WorkspacePermission[]>
+  permissions(): Promise<readonly WorkspacePermission[]>
   isActive(workspaceId: WorkspaceId, memberId: MemberId): Promise<boolean>
 }
 
 export type LlmCredentialRepository = {
   add(credential: LlmCredential, key: GatewayKey): Promise<void>
-  remove(workspaceId: WorkspaceId, memberId: MemberId, credentialId: CredentialId): Promise<GatewayKey | undefined>
-  removeAll(workspaceId: WorkspaceId, memberId: MemberId): Promise<GatewayKey[]>
-  gatewayKeysOf(workspaceId: WorkspaceId, memberId: MemberId): Promise<GatewayKey[]>
+  remove(credentialId: CredentialId): Promise<GatewayKey | undefined>
+  removeAll(): Promise<GatewayKey[]>
+  gatewayKeys(): Promise<GatewayKey[]>
 }
 
 export type MemberGatewayKeyRepository = {
-  virtualKeyOf(workspaceId: WorkspaceId, memberId: MemberId): Promise<string | undefined>
-  setVirtualKey(workspaceId: WorkspaceId, memberId: MemberId, virtualKeyId: string | null): Promise<void>
+  virtualKey(): Promise<string | undefined>
+  setVirtualKey(virtualKeyId: string | null): Promise<void>
   virtualKeysIn(workspaceId: WorkspaceId): Promise<{ memberId: MemberId; virtualKeyId: string }[]>
 }
 
 export type GatewaySyncJob = { workspaceId: WorkspaceId; memberId: MemberId; key?: GatewayKey; isLeaving?: boolean }
 export type ToolServerRemovalJob = { workspaceId: WorkspaceId; gatewayName: string }
 export type GatewayJobs = {
-  syncLater(job: GatewaySyncJob): Promise<void>
+  syncLater(job: Pick<GatewaySyncJob, 'key' | 'isLeaving'>): Promise<void>
   removeToolServerLater(job: ToolServerRemovalJob): Promise<void>
 }
 
@@ -47,9 +47,9 @@ export type LlmGateway = {
 
 export type PersonalConnectionRepository = {
   connect(connection: PersonalConnection): Promise<void>
-  disconnect(workspaceId: WorkspaceId, memberId: MemberId, tool: string): Promise<void>
-  statusOf(workspaceId: WorkspaceId, memberId: MemberId, tool: string): Promise<string | undefined>
-  removeAll(workspaceId: WorkspaceId, memberId: MemberId): Promise<void>
+  disconnect(tool: string): Promise<void>
+  statusOf(tool: string): Promise<string | undefined>
+  removeAll(): Promise<void>
 }
 
 export type WorkspaceConnectionRepository = {
@@ -66,7 +66,7 @@ export type WorkspaceConnectionRepository = {
 }
 
 export type WorkspaceEventLog = {
-  record(event: { workspaceId: WorkspaceId; type: string; actorId: MemberId; payload: object }): Promise<void>
+  record(event: { workspaceId: WorkspaceId; type: string; payload: object }): Promise<void>
 }
 
 export type ToolServer = { id: string; name: string; tools: string[]; isPersonal: boolean }

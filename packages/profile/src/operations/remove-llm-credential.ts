@@ -1,11 +1,10 @@
-import type { CredentialId, MemberId, WorkspaceId } from '@spyria/kernel'
+import type { CredentialId } from '@spyria/kernel'
 import type { ProfileTransactor } from '../contracts/transactor.ts'
 
 type Dependencies = { transactor: ProfileTransactor }
-type Input = { workspaceId: WorkspaceId; memberId: MemberId; credentialId: CredentialId }
 
-export const removeLlmCredential = ({ transactor }: Dependencies, { workspaceId, memberId, credentialId }: Input) =>
+export const removeLlmCredential = ({ transactor }: Dependencies, { credentialId }: { credentialId: CredentialId }) =>
   transactor.run(async ({ llmCredentials, gatewayJobs }) => {
-    const key = await llmCredentials.remove(workspaceId, memberId, credentialId)
-    if (key) await gatewayJobs.syncLater({ workspaceId, memberId, key })
+    const key = await llmCredentials.remove(credentialId)
+    if (key) await gatewayJobs.syncLater({ key })
   })

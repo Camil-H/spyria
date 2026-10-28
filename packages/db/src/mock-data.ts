@@ -218,7 +218,6 @@ export const createMockSnapshot = (): Snapshot => {
     latestMessages: [],
     latestAgentActivity: [],
     pinnedSteps: [],
-    drafts: [],
     readMarkers: [
       { workspaceId: acme, memberId: alice, chatId: welcomeChat, lastReadSeq: 2 },
       { workspaceId: acme, memberId: alice, chatId: invoiceChat, lastReadSeq: 4 },

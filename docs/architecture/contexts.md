@@ -64,7 +64,7 @@ A context exposes up to three entries in its `package.json`:
 
 ### How contexts talk
 
-A context reaches another only from its `integrations/`, through that context's `published.ts`. Everything else meets in the apps: the server composes the contexts' server entries, and the web app composes their client entries. Each context reads and writes its own tables through its own integrations; another context's data arrives through a published entry or through the shared Zero schema.
+A context reaches another only from its `integrations/`, through that context's `published.ts`. Everything else meets in the apps: the server composes the contexts' server entries, and the web app composes their client entries. Each context reads and writes its own tables through its own integrations; another context's data arrives through a published entry or through the shared Zero schema. The shared layer only looks rows up (`chatIn`, `inChat`); what a context makes of another context's facts, such as an archived chat or an owner who left, is a rule in its own domain (`showsConversation`, `isFrozen`).
 
 ## The shared layer
 

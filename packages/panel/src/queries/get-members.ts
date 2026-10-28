@@ -1,8 +1,9 @@
-import { chatParticipantsIn, chatPermissionsIn, findChat, memberNamesIn, type Snapshot } from '@spyria/db'
+import { chatParticipantsIn, chatPermissionsIn, memberNamesIn, type Snapshot } from '@spyria/db'
 import { type ChatId, can, canGrant, isRoleAllowedIn, type MemberId, type WorkspaceId } from '@spyria/kernel'
+import { panelChatIn } from './panel-chat.ts'
 
 export const getMembers = (workspaceId: WorkspaceId, chatId: ChatId, viewerId: MemberId) => (snapshot: Snapshot) => {
-  const chat = findChat(snapshot, workspaceId, chatId)
+  const chat = panelChatIn(snapshot, workspaceId, chatId)
   if (!chat) return undefined
   const memberName = memberNamesIn(snapshot, workspaceId)
   const permissions = chatPermissionsIn(snapshot, workspaceId, viewerId)(chat)

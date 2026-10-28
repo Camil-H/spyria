@@ -1,8 +1,9 @@
-import { findChat, memberToolsIn, ownedBy, type Snapshot, workspaceConnectionsIn } from '@spyria/db'
+import { memberToolsIn, ownedBy, type Snapshot, workspaceConnectionsIn } from '@spyria/db'
 import type { ChatId, WorkspaceId } from '@spyria/kernel'
+import { panelChatIn } from './panel-chat.ts'
 
 export const getConnections = (workspaceId: WorkspaceId, chatId: ChatId) => (snapshot: Snapshot) => {
-  const chat = findChat(snapshot, workspaceId, chatId)
+  const chat = panelChatIn(snapshot, workspaceId, chatId)
   if (!chat) return null
   return {
     workspace: workspaceConnectionsIn(snapshot, workspaceId).map((connection) => ({

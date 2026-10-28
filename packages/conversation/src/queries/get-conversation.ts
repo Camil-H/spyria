@@ -1,10 +1,10 @@
 import {
   type ChatRow,
   chatPermissionsIn,
-  findChat,
   inChat,
   type MessageRow,
   memberNamesIn,
+  ownedBy,
   participantIn,
   type RuntimeOriginRow,
   type Snapshot,
@@ -26,13 +26,14 @@ import { stillRunningOf } from '../domain/delegation.ts'
 import { isAgentActivity, isFrozen } from '../domain/message.ts'
 import type { PullRequestStep } from '../domain/pull-requests.ts'
 import { type RunsOn, runsOnOf } from '../domain/session-routing.ts'
+import { conversationChatIn } from './conversation-chat.ts'
 
 export type ConversationMessage = Readonly<{
   id: MessageId
   kind: 'member' | 'agent' | 'step' | 'notice'
   authorName: string
   authorAvatar: string | null
-  createdAt: string
+  createdAt: Date
   body: string
   attachments: readonly Attachment[]
   step: AgentStep | null
@@ -72,6 +73,7 @@ export type Conversation = Readonly<{
   subagentPolicy: ChatRow['subagentPolicy']
   harness: ChatRow['harness']
   localSession: boolean
+  needsLlmKey: boolean
   context: Readonly<{ tokens: number; window: number | null }> | null
   runsOn: RunsOn | null
   isOwner: boolean
@@ -158,7 +160,7 @@ const withDelegationsGrouped = (replies: readonly ConversationMessage[], isStopp
             ? 'stopped'
             : 'failed'
           : 'finished'
-    const times = [host, ...steps, ...resumes].map((message) => Date.parse(message.createdAt))
+    const times = [host, ...steps, ...resumes].map((message) => message.createdAt.getTime())
     groupsByHostId.set(host.id, {
       ...host,
       delegation: {
@@ -206,7 +208,7 @@ const turnItemsOf = (messages: readonly ConversationMessage[]): ConversationItem
       !isStopped &&
       !steps.some((step) => step.step?.type === 'error')
     ) {
-      const workedFor = durationLabelOf(Date.parse(answer.createdAt) - Date.parse(firstStep.createdAt))
+      const workedFor = durationLabelOf(answer.createdAt.getTime() - firstStep.createdAt.getTime())
       const label = `Worked for ${workedFor} · ${steps.length} steps`
       const narration = replies.filter(
         (reply, index) => reply.kind === 'agent' && reply !== answer && index > firstStepIndex,
@@ -224,7 +226,7 @@ const turnItemsOf = (messages: readonly ConversationMessage[]): ConversationItem
 export const getConversation =
   (workspaceId: WorkspaceId, chatId: ChatId, viewerId: MemberId, spyriaRuntimeAvailable?: boolean) =>
   (snapshot: Snapshot): Conversation | null => {
-    const chat = findChat(snapshot, workspaceId, chatId)
+    const chat = conversationChatIn(snapshot, workspaceId, chatId)
     if (!chat) return null
     const memberNameOf = memberNamesIn(snapshot, workspaceId)
     const memberName = (memberId: MemberId | null) => (memberId ? memberNameOf(memberId) : 'Agent')
@@ -233,7 +235,7 @@ export const getConversation =
         .filter((membership) => membership.workspaceId === workspaceId)
         .map((membership) => [membership.memberId, membership.avatar]),
     )
-    const origin = chat.originChatId ? findChat(snapshot, workspaceId, chat.originChatId) : undefined
+    const origin = chat.originChatId ? conversationChatIn(snapshot, workspaceId, chat.originChatId) : undefined
     const chatMessages = snapshot.messages.filter((message) => message.chatId === chatId)
     const hasActiveTurn = chat.agentTurnMessageId !== null
     const isOwner = chat.ownerId === viewerId
@@ -274,7 +276,7 @@ export const getConversation =
       (origin) => origin.messageId,
     )
     const runtimeLinkOf = ({ runtimeChatId, startedBy }: RuntimeOriginRow): RuntimeLink => {
-      const runtimeChat = findChat(snapshot, workspaceId, runtimeChatId)
+      const runtimeChat = conversationChatIn(snapshot, workspaceId, runtimeChatId)
       const canOpen = runtimeChat && can(chatPermissionsIn(snapshot, workspaceId, viewerId)(runtimeChat), 'chat.read')
       return { chatId: runtimeChatId, startedByName: memberName(startedBy), name: canOpen ? runtimeChat.name : null }
     }
@@ -287,7 +289,7 @@ export const getConversation =
         kind: message.kind,
         authorName: memberName(message.authorId),
         authorAvatar: (message.authorId && avatarByMemberId.get(message.authorId)) ?? null,
-        createdAt: message.createdAt,
+        createdAt: new Date(message.createdAt),
         body: message.body,
         attachments: message.attachments,
         step,
@@ -333,6 +335,10 @@ export const getConversation =
       subagentPolicy: chat.subagentPolicy,
       harness: chat.harness,
       localSession: chat.localSession === true,
+      needsLlmKey:
+        chat.type === 'runtime' &&
+        chat.localSession !== true &&
+        !snapshot.llmCredentials.some(ownedBy(workspaceId, viewerId)),
       context: chat.contextTokens === null ? null : { tokens: chat.contextTokens, window: chat.contextWindow },
       runsOn: runsOnOf(chat),
       isOwner,
