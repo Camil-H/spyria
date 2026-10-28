@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test'
 import { log } from '@spyria/kernel'
-import { contextTokensOf, createUsageReader } from './llm-relay.ts'
+import { contextTokensOf, createUsageReader, rpcAnswerOf } from './llm-relay.ts'
 import { contextOf, startTelemetry, traceHeadersOf, withSpan } from './telemetry.ts'
 
 let lines: Record<string, unknown>[] = []
@@ -137,4 +137,16 @@ test('a call’s context size counts its input, cached and written cache tokens 
     ),
   ).toBe(4370)
   expect(contextOf('data: {"choices":[]}')).toBe(0)
+})
+
+test('a JSON-RPC answer is read from plain JSON or from the event of an event stream that carries it', () => {
+  const answer = { jsonrpc: '2.0', id: 7, result: { tools: [] } }
+  expect(rpcAnswerOf(JSON.stringify(answer), 'application/json')).toEqual(answer)
+  expect(
+    rpcAnswerOf(
+      `event: message\ndata: {"jsonrpc":"2.0","method":"notifications/progress"}\n\nevent: message\r\ndata: ${JSON.stringify(answer)}\r\n\r\n`,
+      'text/event-stream',
+    ),
+  ).toEqual(answer)
+  expect(rpcAnswerOf(': keep-alive\n\n', 'text/event-stream')).toBeUndefined()
 })
