@@ -36,6 +36,10 @@ export const noGitHubConnection = 'Connect your GitHub account in your profile t
 export const publishingRefusalOf = (ownerName: string) =>
   `Only ${ownerName} can push or open pull requests in this chat`
 
+const passingConclusions = ['success', 'neutral', 'skipped']
+export const checkStateOf = (isCompleted: boolean, conclusion: string | null): CheckState =>
+  !isCompleted ? 'pending' : passingConclusions.includes(conclusion ?? '') ? 'passing' : 'failing'
+
 export const checksOf = ({ checks }: Pick<PullRequestStep, 'checks'>): CheckState => {
   const states = Object.values(checks)
   return states.includes('failing')

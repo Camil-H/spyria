@@ -39,6 +39,7 @@ export {
 } from './domain/github-tools.ts'
 export { genericModelCallNoticeOf, type ModelCallFailure } from './domain/model-call-failures.ts'
 export {
+  checkStateOf,
   checksOf,
   noGitHubConnection,
   type PublishAction,
