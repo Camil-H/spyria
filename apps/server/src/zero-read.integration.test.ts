@@ -526,3 +526,33 @@ test('a member watching a chat he cannot read receives none of its messages, ste
   await database.$client`delete from chat_participants where chat_id = ${chat} and user_id = ${bob}`
   await waitFor(() => rowsOfChat() === 0)
 })
+
+test('a member searching messages finds none from a private chat he cannot read until he joins it, accented capitals match their lower case, and a wildcard matches only itself', async () => {
+  const chat = await newChat({ type: 'channel', visibility: 'private' })
+  const aliceStore = await openZeroStore(createZeroStore, alice, [acme])
+  await waitFor(() => aliceStore.read().chats.some((row) => row.id === chat))
+  const send = async (id: string, text: string) =>
+    (
+      await aliceStore.mutate(
+        acme,
+        conversationMutators.conversation.sendMessage({ workspaceId: acme, id: `${chat}-${id}`, chatId: chat, text }),
+      )
+    ).confirmation
+  await send('figures', 'The quarterly figures stay between us')
+  await send('summer', "L'ÉTÉ arrive, puis l'Été indien")
+  const bobStore = await openZeroStore(createZeroStore, bob, [acme])
+  const searchedIds = async (text: string) => {
+    bobStore.watch(acme, 'searchMessages', { text })
+    await waitFor(() => bobStore.scopedStatus(acme, 'searchMessages', { text })?.isComplete === true)
+    return (bobStore.scopedStatus(acme, 'searchMessages', { text })?.rows ?? []).map(
+      (row) => (row as { id: string }).id,
+    )
+  }
+  expect(await searchedIds('QUARTERLY figures')).toEqual([])
+  await database.$client`
+    insert into chat_participants (workspace_id, chat_id, user_id, role_id) values (${acme}, ${chat}, ${bob}, 'reader')`
+  await waitFor(async () => (await searchedIds('QUARTERLY figures')).length === 1)
+  expect(await searchedIds('QUARTERLY figures')).toEqual([`${chat}-figures`])
+  expect(await searchedIds('été')).toEqual([`${chat}-summer`])
+  expect(await searchedIds('%%')).toEqual([])
+})

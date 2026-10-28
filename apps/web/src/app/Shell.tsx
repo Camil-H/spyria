@@ -1,10 +1,18 @@
-import { ChatIndicators, ChatView, ConversationProvider, Markdown, RuntimeMenu } from '@spyria/conversation'
+import {
+  ChatIndicators,
+  ChatView,
+  ConversationProvider,
+  Markdown,
+  RuntimeMenu,
+  SearchDialog,
+} from '@spyria/conversation'
 import { StoreProvider } from '@spyria/db/react'
 import { chatId as toChatId, type WorkspaceId } from '@spyria/kernel'
 import { PanelProvider, PanelToggle, SidePanel } from '@spyria/panel'
 import { ProfileProvider, useHasLlmCredential } from '@spyria/profile'
 import { RuntimeProvider, RuntimeStatus } from '@spyria/runtime'
 import { SessionProvider, useSession } from '@spyria/session'
+import { KeyboardShortcuts } from '@spyria/ui'
 import { BudgetNotice, UsageProvider } from '@spyria/usage'
 import { TransferChatForm, WorkspaceLayout, WorkspaceProvider } from '@spyria/workspace'
 import { lazy, Suspense } from 'react'
@@ -76,7 +84,16 @@ export const App = ({ app }: { app: Application }) => (
                     <Routes>
                       <Route
                         path="/w/:workspaceId"
-                        element={<WorkspaceLayout chatAdornment={(chatId) => <ChatIndicators chatId={chatId} />} />}
+                        element={
+                          <WorkspaceLayout
+                            chatAdornment={(chatId) => <ChatIndicators chatId={chatId} />}
+                            searchDialog={(props) => (
+                              <Suspense>
+                                <SearchDialog {...props} />
+                              </Suspense>
+                            )}
+                          />
+                        }
                       >
                         <Route index element={<p className="p-6 text-muted">Select a chat</p>} />
                         <Route path="chats/:chatId" element={<ChatRoute commands={app.conversationCommands} />} />
@@ -99,6 +116,7 @@ export const App = ({ app }: { app: Application }) => (
                       </Route>
                       <Route path="*" element={<Navigate to={`/w/${app.session.defaultWorkspaceId}`} replace />} />
                     </Routes>
+                    <KeyboardShortcuts />
                   </PanelProvider>
                 </BrowserRouter>
               </UsageProvider>
