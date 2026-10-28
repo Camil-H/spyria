@@ -57,6 +57,14 @@ export type FakeReviewThread = {
   isOutdated: boolean
   comments: FakeComment[]
 }
+export type FakeCheckRun = {
+  repository: string
+  headSha: string
+  name: string
+  status: 'queued' | 'in_progress' | 'completed'
+  conclusion: string | null
+  annotations: { path: string; line: number; title: string; message: string }[]
+}
 
 export const fakeGitHubRepositories: Repository[] = [
   {
@@ -156,6 +164,7 @@ export const startFakeGitHub = () => {
   const pullRequests: FakePullRequest[] = []
   const issues: FakeIssue[] = []
   const reviewThreads: FakeReviewThread[] = []
+  const checkRuns: FakeCheckRun[] = []
   const searches: string[] = []
   const appCreations: FakeAppCreation[] = []
   const manifestCodes = new Map<string, FakeAppCreation>()
@@ -367,6 +376,17 @@ export const startFakeGitHub = () => {
       return repository ? Response.json(branchNamesOf(repository).map((name) => ({ name }))) : notFound()
     }
     const pulls = /^\/repos\/([\w.-]+\/[\w.-]+)\/pulls(?:\/(\d+))?$/.exec(path)
+    if (pulls && installationTokenOf(request)) {
+      const [, repository = '', number] = pulls
+      const refused = installationTokenAllows(request, repository, 'pull_requests', 'read')
+      if (refused) return refused
+      const pullRequest = pullRequests.find(
+        (known) => known.repository === repository && known.number === Number(number),
+      )
+      return request.method === 'GET' && pullRequest
+        ? Response.json(pullRequestJsonOf(new URL(request.url).origin, pullRequest))
+        : notFound()
+    }
     if (pulls) {
       const [, repository = '', number] = pulls
       const token = bearerOf(request)
@@ -406,6 +426,45 @@ export const startFakeGitHub = () => {
             status: request.method === 'POST' ? 201 : 200,
           })
         : notFound()
+    }
+    const commitCheckRuns = /^\/repos\/([\w.-]+\/[\w.-]+)\/commits\/(\w+)\/check-runs$/.exec(path)
+    if (commitCheckRuns) {
+      const [, repository = '', sha] = commitCheckRuns
+      const refused = installationTokenAllows(request, repository, 'checks', 'read')
+      if (refused) return refused
+      const origin = new URL(request.url).origin
+      const runs = checkRuns.flatMap((run, index) =>
+        run.repository === repository && run.headSha === sha
+          ? [
+              {
+                id: index + 1,
+                name: run.name,
+                status: run.status,
+                conclusion: run.conclusion,
+                html_url: `${origin}/${repository}/runs/${index + 1}`,
+              },
+            ]
+          : [],
+      )
+      return Response.json({ total_count: runs.length, check_runs: runs })
+    }
+    const annotations = /^\/repos\/([\w.-]+\/[\w.-]+)\/check-runs\/(\d+)\/annotations$/.exec(path)
+    if (annotations) {
+      const [, repository = '', id] = annotations
+      const refused = installationTokenAllows(request, repository, 'checks', 'read')
+      if (refused) return refused
+      const run = checkRuns[Number(id) - 1]
+      if (run?.repository !== repository) return notFound()
+      return Response.json(
+        run.annotations.map(({ path: file, line, title, message }) => ({
+          path: file,
+          start_line: line,
+          end_line: line,
+          annotation_level: 'failure',
+          title,
+          message,
+        })),
+      )
     }
     const issueRead = /^\/repos\/([\w.-]+\/[\w.-]+)\/issues\/(\d+)(\/comments)?$/.exec(path)
     if (issueRead) {
@@ -527,6 +586,7 @@ export const startFakeGitHub = () => {
     pullRequests,
     issues,
     reviewThreads,
+    checkRuns,
     searches,
     appCreations,
     branchHeadOf,

@@ -581,3 +581,86 @@ test('any prompter’s agent reads review threads and issues of the chat’s rep
     { prompter_id: bob, tool: 'list_issues', status: 'refused' },
   ])
 })
+
+test('any prompter’s agent reads the checks of a pull request’s head with a read-only installation token, failing ones with the errors their CI annotated; a pull request that does not exist is named', async () => {
+  const { host } = await stack.agentHost('GitHub checks host', { routesModelCalls: true })
+  const { id, branch } = await newDevChat()
+  await committedWorkspace(id)
+  await connectGitHub(alice)
+  expect((await publish(alice, id, 'pull_request', { title: 'Checked totals' })).status).toBe(200)
+  const number = Number(fakeGitHub.pullRequests.at(-1)?.number)
+  const headSha = fakeGitHub.branchHeadOf('acme/app', branch)
+  const firstRunId = fakeGitHub.checkRuns.length + 1
+  const run = { repository: 'acme/app', headSha, annotations: [] }
+  fakeGitHub.checkRuns.push(
+    { ...run, name: 'lint', status: 'completed', conclusion: 'success' },
+    {
+      ...run,
+      name: 'unit',
+      status: 'completed',
+      conclusion: 'failure',
+      annotations: [
+        {
+          path: 'src/app.test.ts',
+          line: 3,
+          title: 'totals add up',
+          message: 'Expected: 1\nReceived: 2',
+        },
+      ],
+    },
+    { ...run, name: 'e2e', status: 'in_progress', conclusion: null },
+    {
+      ...run,
+      headSha: '0000000000000000000000000000000000000000',
+      name: 'unit',
+      status: 'completed',
+      conclusion: 'failure',
+    },
+  )
+  const runUrlOf = (offset: number) => `${fakeGitHub.urls.webUrl}/acme/app/runs/${firstRunId + offset}`
+  const issuedBefore = new Set(fakeGitHub.installationTokens.keys())
+  stack.setFakeLlmScript({ steps: [{ tool: 'read_checks' }], text: 'Read.' })
+  expect(toolResultsOf(await promptAndWait(id, 'Why does CI fail?'))).toEqual([
+    {
+      name: 'read_checks',
+      result: [
+        `Pull request #${number} at ${headSha.slice(0, 7)}: 3 checks, 1 failing, 1 pending, 1 passing`,
+        `- unit: failure ${runUrlOf(1)}`,
+        '  src/app.test.ts:3 failure: totals add up',
+        '    Expected: 1',
+        '    Received: 2',
+        `- e2e: pending ${runUrlOf(2)}`,
+        `- lint: success ${runUrlOf(0)}`,
+      ].join('\n'),
+    },
+  ])
+  const readTokens = [...fakeGitHub.installationTokens.values()].filter(({ token }) => !issuedBefore.has(token))
+  expect(readTokens.map(({ repositories, permissions }) => ({ repositories, permissions }))).toEqual([
+    { repositories: ['app'], permissions: { pull_requests: 'read', checks: 'read', metadata: 'read' } },
+  ])
+  expect(fakeGitHub.apiRequests.filter((line) => line.includes('/annotations'))).toEqual([
+    `GET /repos/acme/app/check-runs/${firstRunId + 1}/annotations`,
+  ])
+  expect(
+    (await toolCallRows(id)).map(({ prompter_id, tool, read_only, status }) => ({
+      prompter_id,
+      tool,
+      read_only,
+      status,
+    })),
+  ).toEqual([{ prompter_id: alice, tool: 'read_checks', read_only: true, status: 'succeeded' }])
+
+  const guest = await runtimeTurn(host, bob)
+  await database.$client`
+    update chats set repository = 'acme/app', base_branch = 'main', git_branch = 'spyria/guest-checks'
+    where id = ${guest.chatId}`
+  expect(await guestToolCall(host, guest.token, 'read_checks', { number })).toMatchObject({ isError: false })
+  expect(await guestToolCall(host, guest.token, 'read_checks', {})).toEqual({
+    isError: true,
+    text: 'This chat has no pull request: give the number of the one to read',
+  })
+  expect(await guestToolCall(host, guest.token, 'read_checks', { number: 999 })).toEqual({
+    isError: true,
+    text: 'GitHub refused: acme/app has no pull request #999',
+  })
+})
