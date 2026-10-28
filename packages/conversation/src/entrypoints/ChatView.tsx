@@ -213,7 +213,7 @@ export const ChatView = ({
                 <div ref={setMessagesElement} className="flex min-h-0 flex-1 flex-col">
                   <MessageList
                     conversation={conversation}
-                    items={withLiveMessages(conversation.items, live)}
+                    items={chatMessages.hasWindow ? withLiveMessages(conversation.items, live) : []}
                     isComplete={chatMessages.isComplete}
                     onLoadEarlier={
                       chatMessages.isComplete && chatMessages.hasEarlier ? chatMessages.loadEarlier : undefined

@@ -110,6 +110,25 @@ test.describe('Messaging', () => {
       await expect(messageContaining(page, 'Filler 30')).toBeInViewport()
     })
 
+    await test.step('shows the messages of a chat all at once when opening it, not the newest first', async () => {
+      await openChat(page, 'Standup')
+      await page.evaluate(() => {
+        const welcomeCounts = new Set<number>()
+        Object.assign(window, { welcomeCounts })
+        new MutationObserver(() => {
+          if (document.querySelector('main h1')?.textContent !== 'Welcome') return
+          const count = document.querySelectorAll('ol[aria-label="Messages"] > li').length
+          if (count > 0) welcomeCounts.add(count)
+        }).observe(document.body, { childList: true, subtree: true, characterData: true })
+      })
+      await openChat(page, 'Welcome')
+      await expect(messageContaining(page, 'Filler 30')).toBeInViewport()
+      const welcomeCounts = await page.evaluate(() => [
+        ...(window as unknown as { welcomeCounts: Set<number> }).welcomeCounts,
+      ])
+      expect(welcomeCounts).toHaveLength(1)
+    })
+
     await test.step('offers Go to last message while reading earlier messages, and goes back to the newest', async () => {
       const goToLastMessage = mainOf(page).getByRole('button', { name: 'Go to last message' })
       await expect(goToLastMessage).toHaveCount(0)
