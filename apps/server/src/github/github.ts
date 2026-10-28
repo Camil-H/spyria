@@ -5,6 +5,7 @@ import {
   type GitAuthor,
   type IssueFilter,
   type IssueSummary,
+  logExcerptOf,
   type PullRequestStep,
   type RepositoryCheckouts,
 } from '@spyria/conversation/server'
@@ -38,6 +39,7 @@ import {
   type GitHubCheckRun,
   type GitHubComment,
   type GitHubIssue,
+  type GitHubJobStep,
   GitHubRequestFailed,
   type UserTokens,
 } from './github-api.ts'
@@ -485,8 +487,14 @@ const checkAnnotationOf = (annotation: GitHubCheckAnnotation) => ({
   message: annotation.message,
 })
 
-const isFailing = ({ status, conclusion }: GitHubCheckRun) =>
+const isFailing = ({ status, conclusion }: Pick<GitHubCheckRun, 'status' | 'conclusion'>) =>
   checkStateOf(status === 'completed', conclusion) === 'failing'
+
+const isActionsJob = ({ app }: GitHubCheckRun) => app?.slug === 'github-actions'
+
+const failedStepOf = (steps: GitHubJobStep[]) => steps.find(isFailing)?.name ?? null
+
+const isPermissionRefused = (error: unknown) => error instanceof GitHubRequestFailed && error.status === 422
 
 export const createGitHubCheckouts = (database: Database, dependencies: GitHubDependencies): RepositoryCheckouts => {
   const { api } = dependencies
@@ -501,14 +509,14 @@ export const createGitHubCheckouts = (database: Database, dependencies: GitHubDe
     const { repository } = (await chatRepositoryOf(database, chat)) ?? {}
     if (!repository) throw new GitHubNotConfigured()
     const credentials = await appCredentialsOf(database, dependencies, chat.workspaceId)
+    const tokenOf = (requested: Record<string, 'read'>) => repositoryTokenOf(api, credentials, repository, requested)
     const token = await githubCall(chat.workspaceId, () =>
-      repositoryTokenOf(api, credentials, repository, permissions).catch((error: unknown) => {
-        if (error instanceof GitHubRequestFailed && error.status === 422)
-          throw new GitHubPermissionMissing(permissionName)
+      tokenOf(permissions).catch((error: unknown) => {
+        if (isPermissionRefused(error)) throw new GitHubPermissionMissing(permissionName)
         throw error
       }),
     )
-    return { repository, token }
+    return { repository, token, tokenOf }
   }
   return {
     checkoutOf: async (chat) => {
@@ -588,7 +596,7 @@ export const createGitHubCheckouts = (database: Database, dependencies: GitHubDe
       }))
     },
     checkRunsOf: async (chat, number) => {
-      const { repository, token } = await readingOf(chat, { pull_requests: 'read', checks: 'read' }, 'Checks')
+      const { repository, token, tokenOf } = await readingOf(chat, { pull_requests: 'read', checks: 'read' }, 'Checks')
       return githubCall(chat.workspaceId, async () => {
         const { head } = await api.pullRequest(token, repository, number).catch((error: unknown) => {
           if (error instanceof GitHubRequestFailed && error.status === 404)
@@ -596,6 +604,22 @@ export const createGitHubCheckouts = (database: Database, dependencies: GitHubDe
           throw error
         })
         const { check_runs } = await api.checkRuns(token, repository, head.sha)
+        const failingJobs = check_runs.filter((run) => isFailing(run) && isActionsJob(run))
+        const actionsToken =
+          failingJobs.length === 0
+            ? null
+            : await tokenOf({ actions: 'read' }).catch((error: unknown) => {
+                if (isPermissionRefused(error)) return null
+                throw error
+              })
+        const jobFailureOf = async (run: GitHubCheckRun) => {
+          if (!actionsToken || !failingJobs.includes(run)) return { failedStep: null, logExcerpt: null }
+          const [{ steps }, log] = await Promise.all([
+            api.job(actionsToken, repository, run.id),
+            api.jobLog(actionsToken, repository, run.id),
+          ])
+          return { failedStep: failedStepOf(steps), logExcerpt: logExcerptOf(log) }
+        }
         const runs = await Promise.all(
           check_runs.map(async (run) => ({
             name: run.name,
@@ -605,9 +629,14 @@ export const createGitHubCheckouts = (database: Database, dependencies: GitHubDe
             annotations: isFailing(run)
               ? (await api.checkRunAnnotations(token, repository, run.id)).map(checkAnnotationOf)
               : [],
+            ...(await jobFailureOf(run)),
           })),
         )
-        return { headSha: head.sha, runs }
+        return {
+          headSha: head.sha,
+          runs,
+          logsRefusal: failingJobs.length > 0 && !actionsToken ? new GitHubPermissionMissing('Actions').message : null,
+        }
       })
     },
     issuesOf: async (chat, filter) => {

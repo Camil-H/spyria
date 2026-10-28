@@ -151,10 +151,11 @@ test('review threads, issue lists and issues read as text, with long bodies trun
 })
 
 test('checks read failing first with their annotations, then pending, then passing, with long messages truncated', () => {
-  const run = { isCompleted: true, conclusion: 'success', annotations: [] }
+  const run = { isCompleted: true, conclusion: 'success', annotations: [], failedStep: null, logExcerpt: null }
   expect(
     checkRunsTextOf(7, {
       headSha: 'abcdef0123456789',
+      logsRefusal: null,
       runs: [
         { ...run, name: 'lint', url: 'https://github.com/acme/app/runs/1' },
         { ...run, name: 'e2e', isCompleted: false, conclusion: null, url: 'https://github.com/acme/app/runs/2' },
@@ -192,11 +193,12 @@ test('checks read failing first with their annotations, then pending, then passi
       '- lint: success https://github.com/acme/app/runs/1',
     ].join('\n'),
   )
-  expect(checkRunsTextOf(7, { headSha: 'abcdef0123456789', runs: [] })).toBe(
+  expect(checkRunsTextOf(7, { headSha: 'abcdef0123456789', runs: [], logsRefusal: null })).toBe(
     'Pull request #7 at abcdef0: no check has run',
   )
   const long = checkRunsTextOf(7, {
     headSha: 'abcdef0123456789',
+    logsRefusal: null,
     runs: [
       {
         ...run,
@@ -210,4 +212,69 @@ test('checks read failing first with their annotations, then pending, then passi
     ],
   })
   expect(long).toEndWith(`    ${'x'.repeat(2_000)}\n    [truncated]`)
+})
+
+test('failing jobs name their failed step and show their log once, the same log points to the first job, and logs stop at 40,000 characters', () => {
+  const failed = (name: string, logExcerpt: string | null, failedStep = 'Run bun test') => ({
+    name,
+    isCompleted: true,
+    conclusion: 'failure',
+    url: `u/${name}`,
+    annotations: [],
+    failedStep,
+    logExcerpt,
+  })
+  const checks = { headSha: 'abcdef0123456789', logsRefusal: null }
+  expect(
+    checkRunsTextOf(7, {
+      ...checks,
+      runs: [
+        failed('e2e (1/2)', 'Run bun test\n1 fail\nerror: exit 1'),
+        failed('e2e (2/2)', 'Run bun test\n1 fail\nerror: exit 1'),
+        failed('ci-ok', 'Run exit 1\nerror: exit 1', 'Run exit 1'),
+        failed('docker', null, 'Build'),
+      ],
+    }),
+  ).toBe(
+    [
+      'Pull request #7 at abcdef0: 4 checks, 4 failing',
+      '- e2e (1/2): failure u/e2e (1/2)',
+      '  failed step: Run bun test',
+      '  log:',
+      '    Run bun test',
+      '    1 fail',
+      '    error: exit 1',
+      '- e2e (2/2): failure u/e2e (2/2)',
+      '  failed step: Run bun test',
+      '  same log as e2e (1/2)',
+      '- ci-ok: failure u/ci-ok',
+      '  failed step: Run exit 1',
+      '  log:',
+      '    Run exit 1',
+      '    error: exit 1',
+      '- docker: failure u/docker',
+      '  failed step: Build',
+    ].join('\n'),
+  )
+  const full = checkRunsTextOf(7, {
+    ...checks,
+    runs: [failed('a', 'x'.repeat(30_000)), failed('b', 'y'.repeat(10_001)), failed('c', 'z'.repeat(10_000))],
+  })
+  expect(full).toContain(
+    `- b: failure u/b\n  failed step: Run bun test\n  log left out: the reply is full\n- c: failure u/c\n  failed step: Run bun test\n  log:\n    ${'z'.repeat(10_000)}`,
+  )
+  expect(
+    checkRunsTextOf(7, {
+      ...checks,
+      logsRefusal: 'Ask a GitHub admin to accept the Actions permission',
+      runs: [failed('a', null)],
+    }),
+  ).toBe(
+    [
+      'Pull request #7 at abcdef0: 1 checks, 1 failing',
+      'Logs not read: Ask a GitHub admin to accept the Actions permission',
+      '- a: failure u/a',
+      '  failed step: Run bun test',
+    ].join('\n'),
+  )
 })
