@@ -82,7 +82,7 @@ zero-cache follows Postgres through a logical replication slot. If zero-cache st
 | What | Cleaned by | Yours to prune |
 |---|---|---|
 | Runtimes | Stopped after 60 minutes idle, removed 30 days after they stopped. A runtime's Docker network is released as soon as it stops. | Runtimes of removed hosts. |
-| Runtime image | `bun run agent:build` removes the image it replaces, unless a container still uses it (old runtimes keep theirs until removed). | Old runtime images once their runtimes are gone. |
+| Runtime image | About 300 MB of it is Chromium's headless shell for `take_screenshot`, shared by every runtime of a host. `bun run agent:build` removes the image it replaces, unless a container still uses it (old runtimes keep theirs until removed). | Old runtime images once their runtimes are gone. |
 | Docker build cache | `agent:build`, `check:trust` and `smoke:prod` prune it down to 10 GB (`docker builder prune --max-used-space 10GB`). The cache belongs to the whole Docker daemon, so this also trims other projects' cache beyond that limit, oldest first. | Below 10 GB: `docker builder prune`. |
 | Base images | | Images replaced by `--pull`: `docker image ls --filter dangling=true`. |
 | Test harness volume | `agent:build` fills `spyria-test-harnesses` for the Docker tests. | Remove it on a production-only machine if you do not run the tests. |

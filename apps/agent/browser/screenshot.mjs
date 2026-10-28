@@ -1,5 +1,7 @@
 import { spawnSync } from 'node:child_process'
-import { chromium } from 'playwright-core'
+
+process.env.PLAYWRIGHT_BROWSERS_PATH ??= new URL('./chromium', import.meta.url).pathname
+const { chromium } = await import('playwright-core')
 
 const playwrightCli = new URL('./node_modules/playwright-core/cli.js', import.meta.url).pathname
 const loadTimeoutMilliseconds = 20_000
