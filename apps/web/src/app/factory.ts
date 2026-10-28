@@ -125,6 +125,7 @@ export const createApp = async (
     logLevel: testStack && 'debug',
     mutators: { ...workspaceMutators, ...conversationMutators, ...profileMutators, ...runtimeMutators },
     draftStorage: localStorage,
+    syncedTablesStorage: localStorage,
   })
   storeCount++
   if (testStack) Object.assign(window, { spyriaZeroDiagnostics: () => ({ storeCount, ...store.diagnostics() }) })

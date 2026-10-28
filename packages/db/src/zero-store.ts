@@ -36,6 +36,7 @@ type ZeroStoreOptions = {
   storageKeyPrefix?: string
   mutators?: AnyMutatorRegistry
   draftStorage?: Storage
+  syncedTablesStorage?: Storage
 }
 
 type Unbranded<Value> = Value extends string
@@ -347,9 +348,18 @@ export const createZeroStore = ({
   storageKeyPrefix = '',
   mutators,
   draftStorage,
+  syncedTablesStorage,
 }: ZeroStoreOptions) => {
   const draftKeyPrefix = `spyria.draft:${memberId}:`
   const draftKeyOf = (draft: DraftRow) => `${draftKeyPrefix}${draft.workspaceId}:${draft.chatId}`
+  const syncedTablesKeyOf = (workspaceId: WorkspaceId) =>
+    `spyria.synced-tables:${memberId}:${storageKeyPrefix}${workspaceId}`
+  const isEveryTableCached = (workspaceId: WorkspaceId) => {
+    const syncedTables: readonly string[] = JSON.parse(
+      syncedTablesStorage?.getItem(syncedTablesKeyOf(workspaceId)) ?? '[]',
+    )
+    return materializedTables.every((table) => syncedTables.includes(table))
+  }
   let drafts: readonly DraftRow[] = Array.from({ length: draftStorage?.length ?? 0 }, (_, index) =>
     draftStorage?.key(index),
   ).flatMap((key) => (key?.startsWith(draftKeyPrefix) ? [JSON.parse(draftStorage?.getItem(key) ?? '{}')] : []))
@@ -461,6 +471,7 @@ export const createZeroStore = ({
     zeroByWorkspace.set(workspaceId, zero)
     tokenByWorkspace.set(workspaceId, token)
     expiresAtByWorkspace.set(workspaceId, session.expiresAt)
+    const isCacheReadable = isEveryTableCached(workspaceId)
     for (const table of materializedTables)
       zero
         .materialize((queries[table] as () => Parameters<typeof zero.materialize>[0])())
@@ -470,9 +481,12 @@ export const createZeroStore = ({
             ? latestMessagesIn(data as readonly object[])
             : (data as object[])
           publish()
-          if (table === 'workspaces' && isWorkspaceRowIn(data, workspaceId)) readableOf(workspaceId).resolve()
-          if (result === 'complete') completeTables.add(table)
+          if (isCacheReadable && table === 'workspaces' && isWorkspaceRowIn(data, workspaceId))
+            readableOf(workspaceId).resolve()
+          if (result !== 'complete' || completeTables.has(table)) return
+          completeTables.add(table)
           if (!isLoaded(workspaceId)) return
+          syncedTablesStorage?.setItem(syncedTablesKeyOf(workspaceId), JSON.stringify(materializedTables))
           readableOf(workspaceId).resolve()
           loadedOf(workspaceId).resolve()
         })
@@ -507,6 +521,7 @@ export const createZeroStore = ({
     publish()
   }
   const signOut = async (workspaceId: WorkspaceId) => {
+    syncedTablesStorage?.removeItem(syncedTablesKeyOf(workspaceId))
     await close(workspaceId)?.delete()
   }
   for (const session of sessions) connect(session)
