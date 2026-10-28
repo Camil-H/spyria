@@ -73,6 +73,8 @@ test.describe('Messaging', () => {
       await expect(messageContaining(page, 'Standup at 10.')).toBeVisible()
       await expect(composerOf(page)).toHaveValue('')
       await expect(draftIconOf(page, 'Welcome')).toBeVisible()
+      await expect(chatLinkOf(page, 'Welcome')).toHaveAccessibleName('Welcome')
+      await expect(chatLinkOf(page, 'Welcome')).toHaveAccessibleDescription('Channel Has unsent draft')
       await expect(draftIconOf(page, 'Standup')).toHaveCount(0)
       await openChat(page, 'Welcome')
       await expect(messageContaining(page, 'Sent from the keyboard')).toBeVisible()
