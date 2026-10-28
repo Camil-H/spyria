@@ -48,14 +48,9 @@ const tabs: Record<PanelTabId, { label: string; Icon: LucideIcon; Component: Com
 const tabShortcutOf = (index: number) => `r ${index + 1}`
 
 const TabTrigger = ({ tabId, index }: { tabId: PanelTabId; index: number }) => {
-  const [isTooltipOpen, setIsTooltipOpen] = useState(false)
   const { label, Icon } = tabs[tabId]
   return (
-    <TooltipRoot
-      open={isTooltipOpen}
-      onOpenChange={(isOpen) => setTimeout(() => setIsTooltipOpen(isOpen), 100)}
-      disableHoverableContent
-    >
+    <TooltipRoot disableHoverableContent>
       <Trigger
         asChild
         value={tabId}
