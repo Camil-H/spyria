@@ -12,6 +12,7 @@ export type FileStatus = 'Added' | 'Modified' | 'Deleted'
 export type FileChange = { path: string; status: FileStatus; additions: number; deletions: number; lines: DiffLine[] }
 export type TreeEntry = { name: string; path: string; isFolder: boolean }
 export type Commit = { sha: string; subject: string; author: string; committedAt: string; body: string }
+export type ChangeGroup = { sha?: string; title: string; changes: FileChange[] }
 export type BranchStatus = {
   aheadOfBase?: number
   behindBase?: number
@@ -101,6 +102,30 @@ export const commitsOf = (log: unknown): Commit[] =>
           }
         })
     : []
+
+const commitGroupsOf = (commitPatches: string, log: unknown) => {
+  const subjects = new Map(commitsOf(log).map(({ sha, subject }) => [sha, subject]))
+  return commitPatches
+    .split('\x1e')
+    .filter(Boolean)
+    .map((record): ChangeGroup => {
+      const [fullSha = '', ...patch] = record.split('\n')
+      const sha = fullSha.slice(0, 7)
+      return { sha, title: subjects.get(sha) ?? '', changes: fileChangesOf(patch.join('\n').trim()) }
+    })
+}
+
+export const changeGroupsOf = (reading: WorkspaceReading | undefined): ChangeGroup[] => {
+  const groups: ChangeGroup[] =
+    typeof reading?.commitPatches === 'string'
+      ? [
+          { title: 'Not added', changes: fileChangesOf(reading.unstaged) },
+          { title: 'Added, not committed', changes: fileChangesOf(reading.staged) },
+          ...commitGroupsOf(reading.commitPatches, reading.log),
+        ]
+      : [{ title: '', changes: fileChangesOf(reading?.patch) }]
+  return groups.filter(({ changes }) => changes.length > 0)
+}
 
 export const treeEntriesOf = (reading: WorkspaceReading | undefined) =>
   Array.isArray(reading?.entries) ? (reading.entries as TreeEntry[]) : []
