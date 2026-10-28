@@ -16,6 +16,7 @@ import { contextOf, log, withSpan } from './telemetry.ts'
 import {
   bundleOf,
   changesOf,
+  commitLogOf,
   commitOf,
   fetchOf,
   fileOf,
@@ -97,7 +98,8 @@ const terminalToolStatuses = ['completed', 'failed']
 const conversationRoute =
   /^\/api\/conversations\/([\w-]+)(?:\/(events|interrupt|restart|switch_acp_model)|\/questions\/([\w-]+))?$/
 const socketRoute = /^\/sockets\/events\/([\w-]+)$/
-const workspaceRoute = /^\/api\/workspace\/(tree|file|media|changes|status)$/
+const workspaceRoute = /^\/api\/workspace\/(tree|file|media|changes|commits|status)$/
+const branchReads = { changes: changesOf, commits: commitLogOf, status: statusOf }
 const workspaceActions = { bundle: bundleOf, commit: commitOf, fetch: fetchOf, merge: mergeOf, pushed: pushedOf }
 const workspaceActionRoute = /^\/api\/workspace\/(bundle|commit|fetch|merge|pushed)$/
 const setupToolCallId = 'spyria-setup'
@@ -446,14 +448,8 @@ export const startAgent = ({
     const environment = adapterEnvironmentOf({})
     const path = parameters.get('path') ?? ''
     if (read === 'tree') return Response.json(await treeOf(workspaceDirectory, path, environment))
-    if (read === 'changes' || read === 'status')
-      return Response.json(
-        await (read === 'changes' ? changesOf : statusOf)(
-          workspaceDirectory,
-          parameters.get('base') ?? '',
-          environment,
-        ),
-      )
+    if (read === 'changes' || read === 'commits' || read === 'status')
+      return Response.json(await branchReads[read](workspaceDirectory, parameters.get('base') ?? '', environment))
     if (read === 'media') {
       const media = await mediaOf(workspaceDirectory, path)
       if (media && 'isTooLarge' in media) return Response.json({ error: 'Too large' }, { status: 413 })

@@ -6,7 +6,6 @@ import {
   type DiffLine,
   diffLayoutFor,
   type FileChange,
-  isCollapsedByDefault,
   lineNumberDigitsOf,
   splitRowsOf,
 } from '../domain/workspace.ts'
@@ -46,8 +45,8 @@ const LineCells = ({
   </>
 )
 
-const UnifiedTable = ({ change }: { change: FileChange }) => (
-  <table aria-label={`Diff of ${change.path}`} className="w-full font-mono text-xs">
+const UnifiedTable = ({ change, label }: { change: FileChange; label: string }) => (
+  <table aria-label={`Diff of ${label}`} className="w-full font-mono text-xs">
     <tbody>
       {change.lines.map((line) => (
         <tr key={lineKeyOf(line)}>
@@ -59,10 +58,10 @@ const UnifiedTable = ({ change }: { change: FileChange }) => (
   </table>
 )
 
-const SplitTable = ({ change }: { change: FileChange }) => {
+const SplitTable = ({ change, label }: { change: FileChange; label: string }) => {
   const numberWidth = `calc(${lineNumberDigitsOf(change.lines)}ch + ${numberPadding})`
   return (
-    <table aria-label={`Diff of ${change.path}`} className="w-full table-fixed font-mono text-xs">
+    <table aria-label={`Diff of ${label}`} className="w-full table-fixed font-mono text-xs">
       <colgroup>
         <col style={{ width: numberWidth }} />
         <col />
@@ -89,16 +88,27 @@ const SplitTable = ({ change }: { change: FileChange }) => {
   )
 }
 
-const DiffTable = ({ change, layout }: { change: FileChange; layout: DiffLayout }) => (
+const DiffTable = ({ change, label, layout }: { change: FileChange; label: string; layout: DiffLayout }) => (
   <div className="overflow-x-auto border-t border-line scrollbar-thin">
-    {layout === 'unified' ? <UnifiedTable change={change} /> : <SplitTable change={change} />}
+    {layout === 'unified' ? (
+      <UnifiedTable change={change} label={label} />
+    ) : (
+      <SplitTable change={change} label={label} />
+    )}
   </div>
 )
 
-export const FileDiffList = ({ changes }: { changes: readonly FileChange[] }) => {
+export const FileDiffList = ({
+  changes,
+  groupName,
+  isCollapsed,
+}: {
+  changes: readonly FileChange[]
+  groupName: string
+  isCollapsed: boolean
+}) => {
   const layout = diffLayoutFor(usePanel().width)
   const [toggledPaths, setToggledPaths] = useState<ReadonlySet<string>>(new Set())
-  const isCollapsed = isCollapsedByDefault(changes)
   const toggle = (path: string) => {
     const toggled = new Set(toggledPaths)
     if (!toggled.delete(path)) toggled.add(path)
@@ -109,10 +119,11 @@ export const FileDiffList = ({ changes }: { changes: readonly FileChange[] }) =>
     <div className="flex flex-col gap-3">
       {changes.map((change) => {
         const isExpanded = toggledPaths.has(change.path) === isCollapsed
+        const label = groupName ? `${change.path} (${groupName})` : change.path
         return (
           <section
             key={change.path}
-            aria-label={`Changes in ${change.path}`}
+            aria-label={`Changes in ${label}`}
             className="overflow-hidden rounded-md border border-line"
           >
             <button
@@ -127,7 +138,7 @@ export const FileDiffList = ({ changes }: { changes: readonly FileChange[] }) =>
                 {change.status} +{change.additions} −{change.deletions}
               </span>
             </button>
-            {isExpanded && <DiffTable change={change} layout={layout} />}
+            {isExpanded && <DiffTable change={change} label={label} layout={layout} />}
           </section>
         )
       })}

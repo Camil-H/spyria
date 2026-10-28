@@ -99,31 +99,96 @@ test('a media read returns the whole file in base64 by relative or absolute path
   expect((await read('/api/workspace/media?path=huge.mp4')).status).toBe(413)
 })
 
-test('changes are the diff against the base branch with commits, uncommitted edits and new files, without ignored files', async () => {
+test('changes are the diff against the base branch, and apart the files not staged, deleted ones included, and the staged ones, without ignored files', async () => {
   const changes = join(directory, 'changes')
   git(directory, 'clone', '-q', source, changes)
   git(changes, 'checkout', '-q', '-b', 'spyria/fix')
-  write(changes, { 'src/app.ts': 'export const total = 2\n' })
-  git(changes, 'commit', '-q', '-am', 'Fix the total')
-  write(changes, { 'README.md': '# app\nFixed.\n', 'src/new.ts': 'export {}\n', 'node_modules/x.js': '' })
+  write(changes, { 'src/app.ts': 'export const total = 2\n', 'notes.txt': 'notes\n' })
+  git(changes, 'add', '.')
+  git(changes, 'commit', '-q', '-m', 'Fix the total')
+  write(changes, { 'README.md': '# app\nFixed.\n' })
+  git(changes, 'add', 'README.md')
+  write(changes, { 'README.md': '# app\nFixed twice.\n', 'src/new.ts': 'export {}\n', 'node_modules/x.js': '' })
+  rmSync(join(changes, 'notes.txt'))
   const { call } = started({ workspaceDirectory: changes })
   const { body } = await call('GET', '/api/workspace/changes?base=main')
   const patch = String(body.patch)
   expect(patch).toContain('diff --git a/README.md b/README.md')
-  expect(patch).toContain('+Fixed.')
+  expect(patch).toContain('+Fixed twice.')
   expect(patch).toContain('-export const total = 1\n+export const total = 2')
   expect(patch).toContain('diff --git a/src/new.ts b/src/new.ts\nnew file mode 100644')
   expect(patch).not.toContain('node_modules')
-  expect(body.truncated).toBe(false)
-  expect(String(body.log).trim().split('\x1f').slice(1, 3)).toEqual(['Fix the total', 'Agent'])
+  expect(patch).not.toContain('notes.txt')
+  const pathsOf = (text: unknown) => [...String(text).matchAll(/^diff --git a\/(\S+)/gm)].map(([, path]) => path)
+  expect(pathsOf(body.unstaged)).toEqual(['README.md', 'notes.txt', 'src/new.ts'])
+  expect(String(body.unstaged)).toContain('-Fixed.\n+Fixed twice.')
+  expect(String(body.unstaged)).toContain('deleted file mode 100644')
+  expect(pathsOf(body.staged)).toEqual(['README.md'])
+  expect(String(body.staged)).toContain('+Fixed.')
+  expect(body).toMatchObject({ truncated: false, cut: [] })
   const status = Bun.spawnSync(['git', 'status', '--porcelain'], { cwd: changes }).stdout.toString()
   expect(status).toContain('?? src/new.ts')
+  expect(status).toContain(' D notes.txt')
   for (const base of ['missing', '--output=x', ''])
     expect((await call('GET', `/api/workspace/changes?base=${encodeURIComponent(base)}`)).body).toEqual({
       patch: '',
-      log: '',
+      unstaged: '',
+      staged: '',
       truncated: false,
+      cut: [],
     })
+})
+
+test('commits are the log since the base with each body and each patch, a merge showing only how its conflicts were resolved, all separated by a character no message or text file holds', async () => {
+  const commits = join(directory, 'commits')
+  git(directory, 'clone', '-q', source, commits)
+  git(commits, 'checkout', '-q', '-b', 'other')
+  write(commits, { 'README.md': '# other\n' })
+  git(commits, 'commit', '-q', '-am', 'Rename on other')
+  git(commits, 'checkout', '-q', '-b', 'spyria/log', 'origin/main')
+  write(commits, { 'README.md': '# log\n', 'fixture.txt': 'x\x1ey\x1fz\n' })
+  git(commits, 'add', '.')
+  git(commits, 'commit', '-q', '-m', 'Rename \x1f here', '-m', 'Body with \x1e and \x1f inside.')
+  expect(() => git(commits, 'merge', '-q', 'other')).toThrow()
+  write(commits, { 'README.md': '# resolved\n' })
+  git(commits, 'commit', '-q', '-am', 'Merge other')
+  const { call } = started({ workspaceDirectory: commits })
+  const { body } = await call('GET', '/api/workspace/commits?base=main')
+  const fields = String(body.log).split('\0')
+  expect(fields.length).toBe(16)
+  expect([0, 5, 10].map((start) => fields.slice(start + 1, start + 3))).toEqual([
+    ['Merge other', 'Agent'],
+    ['Rename \x1f here', 'Agent'],
+    ['Rename on other', 'Agent'],
+  ])
+  expect(fields[9]).toBe('Body with \x1e and \x1f inside.\n')
+  const records = String(body.commitPatches).split('\0').slice(1)
+  expect(records.map((record) => record.slice(0, 40))).toEqual([0, 5, 10].map((start) => fields[start] ?? ''))
+  const [merge = '', renamed = ''] = records
+  expect(merge).toContain('diff --git a/README.md b/README.md')
+  expect(merge).toContain('+# resolved')
+  expect(merge).not.toContain('fixture.txt')
+  expect(renamed).toContain('+x\x1ey\x1fz')
+  expect(body).toMatchObject({ hasMoreCommits: false, truncated: false, cut: [] })
+  expect((await call('GET', '/api/workspace/commits?base=missing')).body).toEqual({
+    log: '',
+    commitPatches: '',
+    hasMoreCommits: false,
+    truncated: false,
+    cut: [],
+  })
+})
+
+test('a diff longer than 400,000 characters is cut there, naming the parts cut', async () => {
+  const large = join(directory, 'large')
+  git(directory, 'clone', '-q', source, large)
+  git(large, 'checkout', '-q', '-b', 'spyria/large')
+  write(large, { 'big.txt': 'line\n'.repeat(100_000) })
+  const { call } = started({ workspaceDirectory: large })
+  const { body } = await call('GET', '/api/workspace/changes?base=main')
+  expect(String(body.patch).length).toBe(400_000)
+  expect(String(body.unstaged).length).toBe(400_000)
+  expect(body).toMatchObject({ staged: '', truncated: true, cut: ['patch', 'unstaged'] })
 })
 
 test('a bundle carries the working branch from a prerequisite the remote has, or whole when none; it holds no credential and refuses bad requests', async () => {

@@ -1,7 +1,7 @@
 import { useQuery } from '@spyria/db/react'
 import type { ChatId, WorkspaceId } from '@spyria/kernel'
 import { useSession } from '@spyria/session'
-import { buttonClass, fieldClass, ghostButtonClass, labelClass, Spinner } from '@spyria/ui'
+import { buttonClass, fieldClass, ghostButtonClass, labelClass, Spinner, smallGhostButtonClass } from '@spyria/ui'
 import { type FormEvent, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { type BranchStatus, conflictPromptOf, hasNothingToCommit } from '../domain/workspace.ts'
@@ -13,7 +13,7 @@ import type { ActionOutcome } from './useActionNotice.tsx'
 
 type ConflictOutcome = GitActionOutcome & { conflicts: string[] }
 
-const actionButtonClass = `inline-flex items-center gap-1.5 ${ghostButtonClass}`
+const actionButtonClass = `inline-flex items-center gap-1.5 ${smallGhostButtonClass}`
 
 export const GitActions = ({
   workspaceId,
@@ -81,7 +81,7 @@ export const GitActions = ({
               disabled={isDisabled || isCommitPointless}
               title={unavailableReason ?? (isCommitPointless ? 'Nothing to commit' : undefined)}
               onClick={() => setMessage('')}
-              className={ghostButtonClass}
+              className={smallGhostButtonClass}
             >
               Commit
             </button>
