@@ -18,6 +18,7 @@ const grantedAppPermissions: Permissions = {
   issues: 'read',
   checks: 'read',
   metadata: 'read',
+  workflows: 'write',
 }
 const levels: Record<string, number> = { read: 1, write: 2 }
 
