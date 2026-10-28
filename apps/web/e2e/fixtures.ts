@@ -279,13 +279,13 @@ export const threadToggleOf = (page: Page) => mainOf(page).getByRole('button', {
 export const repliesOf = (page: Page) =>
   mainOf(page).getByRole('list', { name: 'Thread replies' }).getByRole('listitem')
 export const replyBoxOf = (page: Page) => mainOf(page).getByRole('textbox', { name: 'Reply' })
-export const openMessageMenu = async (message: Locator) => {
+export const messageActionsOf = (message: Locator) => message.getByRole('toolbar', { name: 'Message actions' })
+export const messageActionOf = async (message: Locator, actionName: string | RegExp) => {
   await message.hover()
-  await message.getByRole('button', { name: 'Message actions' }).click()
+  return messageActionsOf(message).getByRole('button', { name: actionName, exact: true })
 }
 export const replyInThread = async (page: Page, text: string) => {
-  await openMessageMenu(messageContaining(page, alicesWelcomeMessage).first())
-  await page.getByRole('menuitem', { name: 'Reply in thread' }).click()
+  await (await messageActionOf(messageContaining(page, alicesWelcomeMessage).first(), 'Reply in thread')).click()
   await expect(replyBoxOf(page)).toBeFocused()
   await replyBoxOf(page).fill(text)
   await replyBoxOf(page).press('ControlOrMeta+Enter')

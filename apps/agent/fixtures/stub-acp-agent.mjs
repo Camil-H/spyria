@@ -452,6 +452,7 @@ const turn = async (id, { sessionId, prompt }) => {
   const finish = (stopReason) => {
     if (!isPi) return send({ id, result: { stopReason } })
     closePiBlock()
+    isPiRunning = false
     piSend({ type: 'agent_settled', aborted: stopReason === 'cancelled' })
   }
   const refuse = (message) =>
@@ -813,6 +814,7 @@ const handlers = {
   },
 }
 const queue = (sessionId, run) => queues.set(sessionId, (queues.get(sessionId) ?? Promise.resolve()).then(run))
+let isPiRunning = false
 const cancel = (session) => {
   if (session?.current) session.current.cancelled = true
   session?.current?.abort.abort()
@@ -855,8 +857,16 @@ const onPiCommand = async ({ id, type, ...fields }) => {
   if (type === 'extension_ui_response') return dialogs.get(id)?.(fields)
   if (isSilentOn(type)) return
   const respond = (data) => piSend({ id, type: 'response', command: type, success: true, data })
-  if (type === 'prompt')
-    return queue(piSessionId, () => turn(id, { sessionId: piSessionId, prompt: [{ text: fields.message }] }))
+  if (type === 'prompt' && isPiRunning)
+    return piSend({ id, type: 'response', command: type, success: false, error: 'Agent is already processing.' })
+  if (type === 'prompt') {
+    isPiRunning = true
+    return queue(piSessionId, () =>
+      turn(id, { sessionId: piSessionId, prompt: [{ text: fields.message }] }).finally(() => {
+        isPiRunning = false
+      }),
+    )
+  }
   if (!piCommands[type]) return piSend({ id, type: 'response', command: type, success: false, error: `stub: ${type}` })
   try {
     respond(await piCommands[type](fields))

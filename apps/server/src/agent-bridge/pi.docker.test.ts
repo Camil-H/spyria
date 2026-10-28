@@ -112,6 +112,8 @@ const startRuntime = async () => {
   await runtimeHosts.prepare(host, spyriaImage)
   const runtime = { ...host, runtimeId: 'pi-smoke' }
   await runtimeHosts.sandboxProvider.create({ ...runtime, image: spyriaImage })
+  const [created] = JSON.parse(docker('inspect', `${prefix}rt-pi-smoke`).stdout.toString())
+  expect(created.HostConfig.ExtraHosts).toEqual(['host.docker.internal:host-gateway'])
   await runtimeHosts.sandboxProvider.start(runtime)
   const transport = runtimeHosts.sandboxProvider.connect(runtime)
   const isReady = () =>

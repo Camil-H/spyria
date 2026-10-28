@@ -92,6 +92,26 @@ test('the first prompt is classified once, on the prompter’s cheapest model wi
   ])
 })
 
+test('the first prompt is classified while its runtime starts, once, and the session then runs on the routed model', async () => {
+  const { host, launches } = await fakeAgent()
+  const releaseStart = host.hold('start')
+  const chat = await newRuntimeChat()
+  routeWith({ tier: 'large', confidence: 'high', effort: 'high' })
+  const question = await prompt(chat, 'Refactor the whole billing architecture')
+  const routerCalls = (await logsOf(chat, 1)).filter((log) => log.metadata.role === 'router')
+  expect(routerCalls.map((log) => log.model)).toEqual(['mistral-small-latest'])
+  expect(launches()).toHaveLength(0)
+
+  releaseStart()
+  expect(await answered(question)).toEqual([{ kind: 'agent', body: 'Understood, working on it.' }])
+  expect(launches()[0]?.agent).toMatchObject({
+    acp_model: 'spyria/mistral/mistral-large-latest',
+    acp_thought_level: 'high',
+  })
+  expect(await routerLogsOf(chat)).toEqual(['mistral-small-latest'])
+  expect(await decisionsOf(chat)).toHaveLength(1)
+})
+
 test('a lost conversation is routed again for the new session', async () => {
   let lostConversationId = ''
   await stack.agentHost('Routing host', {

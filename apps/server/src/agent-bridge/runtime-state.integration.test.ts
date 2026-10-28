@@ -394,6 +394,28 @@ test('on reconnect, a turn spyria-agent finished while away is closed from the r
   await endsWith(lost, stoppedEarly.body)
 })
 
+test('a prompt that waited over an hour for an offline host is not sent when it is back: it gets a notice and a newer one runs', async () => {
+  const { relay, host } = await agentHost()
+  const chat = await newRuntimeChat()
+  await answered(await prompt(chat, 'Warm up'))
+  await turnIs(chat, null)
+  await host.disconnect()
+  const stale = await prompt(chat, 'From yesterday')
+  await jobDone('agent.prompt', { messageId: stale })
+  const fresh = await prompt(chat, 'From now')
+  await jobDone('agent.prompt', { messageId: fresh })
+  await database.$client`update messages set created_at = now() - interval '2 hours' where id = ${stale}`
+
+  await host.connect()
+  await answered(fresh, 2)
+  expect(await repliesTo(stale)).toEqual([
+    notice('The runtime host is offline'),
+    notice('Not sent: it waited more than an hour for the agent. Send it again if it still applies'),
+  ])
+  expect(await repliesTo(fresh)).toEqual([notice('The runtime host is offline'), agentReply(2)])
+  expect(relay.prompts).toEqual(['Warm up', 'From now'])
+})
+
 test('runtimes.host_online follows its host through hello and offline', async () => {
   const { host } = await agentHost()
   const chat = await newRuntimeChat()

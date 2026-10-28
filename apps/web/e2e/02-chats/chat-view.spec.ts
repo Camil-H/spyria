@@ -4,6 +4,8 @@ import {
   expect,
   type Locator,
   mainOf,
+  messageActionOf,
+  messageActionsOf,
   messageContaining,
   newRuntimeChat,
   openChat,
@@ -17,14 +19,8 @@ import {
   workingIndicatorOf,
 } from '../fixtures'
 
-const openMessageMenu = async (message: Locator) => {
-  await message.hover()
-  await message.getByRole('button', { name: 'Message actions' }).click()
-}
-const openMessageAction = async (page: Page, messageText: string, actionName: string) => {
-  await openMessageMenu(messageContaining(page, messageText))
-  await page.getByRole('menuitem', { name: actionName }).click()
-}
+const openMessageAction = async (page: Page, messageText: string, actionName: string) =>
+  (await messageActionOf(messageContaining(page, messageText), actionName)).click()
 const deleteDialogOf = (page: Page) => page.getByRole('dialog', { name: 'Delete message' })
 const workingDirectoryOf = (page: Page) =>
   mainOf(page).getByRole('img', { name: 'Working directory' }).locator('xpath=..')
@@ -58,12 +54,27 @@ test.describe('Chat view', () => {
       await sendButtonOf(page).hover()
       await expect(page.getByRole('tooltip', { name: /^Send \((⌘↵|Ctrl\+Enter)\)$/ })).toBeVisible()
     })
-    await test.step('reveals the menu button on keyboard focus', async () => {
-      const messageActionsButton = messageContaining(page, 'Thanks, glad to be here.').getByRole('button', {
-        name: 'Message actions',
-      })
-      await messageActionsButton.focus()
-      await expect(messageActionsButton).toBeVisible()
+    await test.step('reveals the message actions on keyboard focus', async () => {
+      const messageActions = messageActionsOf(messageContaining(page, 'Thanks, glad to be here.'))
+      await expect(messageActions).toHaveCSS('opacity', '0')
+      await messageActions.getByRole('button', { name: 'Start runtime from this message' }).focus()
+      await expect(messageActions).toHaveCSS('opacity', '1')
+    })
+    await test.step('stops Tab once on the message actions and moves between them with the arrow keys, Home and End', async () => {
+      const messageActions = messageActionsOf(messageContaining(page, 'Thanks, glad to be here.'))
+      const actionNamed = (name: string) => messageActions.getByRole('button', { name, exact: true })
+      await expect(messageActions.locator('button[tabindex="0"]')).toHaveCount(1)
+      await expect(actionNamed('Start runtime from this message')).toBeFocused()
+      await page.keyboard.press('ArrowRight')
+      await expect(actionNamed('Copy message as context')).toBeFocused()
+      await page.keyboard.press('End')
+      await expect(actionNamed('Delete')).toBeFocused()
+      await page.keyboard.press('ArrowRight')
+      await expect(actionNamed('Reply in thread')).toBeFocused()
+      await page.keyboard.press('ArrowLeft')
+      await expect(actionNamed('Delete')).toBeFocused()
+      await expect(messageActions.locator('button[tabindex="0"]')).toHaveCount(1)
+      await expect(actionNamed('Delete')).toHaveAttribute('tabindex', '0')
     })
     await test.step('uses the text color of the app for the delete message dialog title in dark mode', async () => {
       await page.emulateMedia({ colorScheme: 'dark' })

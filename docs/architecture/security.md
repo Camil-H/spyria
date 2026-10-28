@@ -73,7 +73,7 @@ Admins can turn these sessions off for the workspace. See [machines](../features
 
 - A runtime host **dials out** to the server and accepts a fixed set of commands, each validated field by field. Spyria never opens a port on a host and never gets general access to its Docker.
 - Each runtime container runs as an unprivileged user with all capabilities dropped, `no-new-privileges`, a read-only root filesystem, and limits on memory (2 GiB), CPU (2) and processes (512). It runs only an image identified by its local content ID; hosts never pull.
-- Each runtime has its own Docker network, so runtimes on one host cannot reach each other where Docker isolates networks (Docker Engine on Linux).
+- Each runtime has its own Docker network, so runtimes on one host cannot reach each other where Docker isolates networks (Docker Engine on Linux). The name `host.docker.internal` resolves to the host machine in every runtime, as on Docker Desktop, so a host run outside a container can give its runtimes its model relay address; the machine was already reachable through the network's gateway.
 - Spyria does not filter runtimes' outbound traffic. On cloud machines, block the metadata endpoint (`169.254.169.254`) and private ranges in the provider's firewall. See [self-hosting](../guides/self-hosting.md).
 
 ## Rate limits and retries

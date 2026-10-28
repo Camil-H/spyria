@@ -160,7 +160,9 @@ test('the agent commits as the owner’s GitHub account, set when the runtime st
   const githubAuthor = `${fakeGitHubLogin}|${fakeGitHubUserId}+${fakeGitHubLogin}@users.noreply.github.com`
   const agentCommitAuthorIn = (workspace: string) => {
     writeFileSync(join(workspace, 'src/app.ts'), 'export const total = 5\n')
-    Bun.spawnSync(['git', 'commit', '-qam', 'Set the total to 5'], { cwd: workspace })
+    const commit = Bun.spawnSync(['git', 'commit', '-qam', 'Set the total to 5'], { cwd: workspace })
+    expect(commit.stderr.toString()).toBe('')
+    expect(commit.exitCode).toBe(0)
     return Bun.spawnSync(['git', 'log', '-1', '--format=%an|%ae|%cn|%ce'], { cwd: workspace }).stdout.toString()
   }
   const first = await runtimeWorkspaceOf((await newDevChat(baseBranchOf('author-first'))).id)

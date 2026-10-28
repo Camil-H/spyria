@@ -18,6 +18,7 @@ const quotedTimeOf = (at: Date) => `${at.toISOString().slice(0, 16).replace('T',
 
 export const channelThreadHeaderOf = (channelName: string) =>
   `Conversation so far, from the channel thread in #${channelName}:`
+export const copiedThreadHeaderOf = (channelName: string) => `Conversation from channel thread in #${channelName}`
 export const runtimeChatHeaderOf = (chatName: string) => `Conversation so far, from the runtime chat ${chatName}:`
 
 export const seedMessageBodyOf = (header: string, messages: readonly QuotedMessage[]) =>

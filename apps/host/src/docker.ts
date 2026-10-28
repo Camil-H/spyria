@@ -7,6 +7,8 @@ export class DockerError extends Error {
   }
 }
 
+export const hostMachineMapping = 'host.docker.internal:host-gateway'
+
 export type Mount = { Type: 'volume'; Source: string; Target: string; ReadOnly?: boolean }
 
 export type Docker = <Result = unknown>(

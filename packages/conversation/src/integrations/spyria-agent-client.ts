@@ -215,11 +215,12 @@ export const createSpyriaAgentClient = (): AgentClient => ({
       ...(thoughtLevel && { thoughtLevel }),
     })
   },
-  sendMessage: async (conversation, text) => {
+  sendMessage: async (conversation, text, promptId) => {
     await call(conversation, 'POST', `/api/conversations/${conversation.conversationId}/events`, {
       role: 'user',
       content: [{ type: 'text', text }],
       run: true,
+      ...(promptId && { prompt_id: promptId }),
     })
   },
   answerQuestion: async (conversation, questionId, answer) =>

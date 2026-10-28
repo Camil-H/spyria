@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { type Docker, DockerError, type Mount } from './docker.ts'
+import { type Docker, DockerError, hostMachineMapping, type Mount } from './docker.ts'
 import pins from './harnesses.json'
 
 export type HarnessId = keyof typeof pins
@@ -77,6 +77,7 @@ export const installContainerBodyOf = (prefix: string, image: string, harness: H
     SecurityOpt: ['no-new-privileges'],
     ReadonlyRootfs: true,
     NetworkMode: 'bridge',
+    ExtraHosts: [hostMachineMapping],
     Tmpfs: { '/home/openhands': 'uid=10001,gid=10001,mode=0700', '/tmp': '' },
     Mounts: [harnessesMountOf(prefix, false)],
   },

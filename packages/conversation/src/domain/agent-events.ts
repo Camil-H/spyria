@@ -33,14 +33,19 @@ export const agentNotices = {
 }
 export const setupFailedNoticeOf = (exitCode: unknown, output: unknown) =>
   `The setup script .spyria/setup.sh failed with exit code ${exitCode}; the session started anyway.\n${output}`
-export const waitingNotices = [
+export const unavailableNotices = [
   agentNotices.noHost,
   agentNotices.couldNotStart,
   agentNotices.imageNotBuilt,
   agentNotices.hostOffline,
   agentNotices.machineOffline,
-  agentNotices.newSession,
 ]
+export const waitingNotices = [...unavailableNotices, agentNotices.newSession]
+export const waitingPromptLifetimeMilliseconds = 60 * 60_000
+export const expiredPromptNotice =
+  'Not sent: it waited more than an hour for the agent. Send it again if it still applies'
+export const hasOutlivedWait = (prompt: { createdAt: Date }, now: number) =>
+  now - prompt.createdAt.getTime() >= waitingPromptLifetimeMilliseconds
 export const stoppedByPrefix = 'Stopped by '
 export const stoppedByNoticeOf = (memberName: string) => `${stoppedByPrefix}${memberName}`
 export const silentTurnMilliseconds = 10 * 60_000
@@ -227,6 +232,11 @@ const authRequiredCode = -32000
 export const isAuthRequiredError = (event: AgentEvent) => {
   const update = event.update as Fields
   return update?.sessionUpdate === 'error' && update.code === authRequiredCode
+}
+
+export const turnEndPromptIdOf = (event: AgentEvent) => {
+  const update = event.update as Fields
+  return update?.sessionUpdate === 'turn_end' && typeof update.promptId === 'string' ? update.promptId : undefined
 }
 
 export const streamedTextOf = (event: AgentEvent) => {

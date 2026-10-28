@@ -17,6 +17,7 @@ export {
   isStoredAgentEvent,
   streamedTextOf,
   toolCallIdOf,
+  turnEndPromptIdOf,
 } from './domain/agent-events.ts'
 export {
   chatAttachmentPathOf,
