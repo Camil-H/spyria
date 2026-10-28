@@ -135,6 +135,7 @@ export const startJobWorker = (
           workspaceId: workspaceId(job.workspace_id),
           payload: job.payload,
           isLastAttempt,
+          isRetry: job.attempt > 1,
           transact,
         })) as { retryInMilliseconds?: number } | undefined
         await database.$client.unsafe(

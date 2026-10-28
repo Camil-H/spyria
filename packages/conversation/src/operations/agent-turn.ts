@@ -54,9 +54,14 @@ export const requestNextPrompt = async ({ agentTurns, agentJobs }: UnitOfWork, c
   if (next) await agentJobs.prompt(next)
 }
 
-export const beginAgentTurn = async (unitOfWork: UnitOfWork, chatId: ChatId): Promise<Message | undefined> => {
+export const beginAgentTurn = async (
+  unitOfWork: UnitOfWork,
+  chatId: ChatId,
+  resumesHeldTurn = false,
+): Promise<Message | undefined> => {
   const { agentTurns, members } = unitOfWork
-  if ((await agentTurns.lock(chatId)) !== null) return undefined
+  const heldPromptId = await agentTurns.lock(chatId)
+  if (heldPromptId !== null) return resumesHeldTurn ? unitOfWork.messages.get(heldPromptId) : undefined
   const prompt = await agentTurns.nextPrompt(chatId)
   if (prompt?.authorId && !can(await unitOfWork.chats.permissions(chatId, prompt.authorId), 'chat.post')) {
     await appendNotice(unitOfWork, prompt, noLongerPromptsNoticeOf(await members.displayNameOf(prompt.authorId)))
@@ -71,8 +76,8 @@ export const beginAgentTurn = async (unitOfWork: UnitOfWork, chatId: ChatId): Pr
   return prompt
 }
 
-export const releaseAgentTurn = async ({ agentTurns }: UnitOfWork, chatId: ChatId, promptId: MessageId) => {
-  if ((await agentTurns.lock(chatId)) === promptId) await agentTurns.set(chatId, null)
+export const releaseAgentTurn = async ({ agentTurns }: UnitOfWork, chatId: ChatId) => {
+  if ((await agentTurns.lock(chatId)) !== null) await agentTurns.set(chatId, null)
 }
 
 const finishAgentTurn = async (unitOfWork: UnitOfWork, chatId: ChatId, promptId: MessageId, noticeOf: NoticeOf) => {
