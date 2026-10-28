@@ -99,6 +99,7 @@ Every rule of the architecture standard (`.agents/skills/architecture`) and what
 | `spyria-host` command set | unit `apps/host/src/commands.test.ts`: only create, prepare, start, stop, remove and status, the image prefix (also for `prepare`, and integration `sandbox` "... prepare refuses another image"), no extra request field (host paths, ports, privileges, capabilities, network, user, environment), runtime id and API key patterns, relay paths on the Agent Server origin only |
 | Agent Server hardening | unit `commands.test.ts` "creates the container with exactly the hardening flags"; integration `sandbox` inspects the created container's `HostConfig` (user 10001, `CapDrop ALL`, `no-new-privileges`, read-only root, 2 GiB, 2 CPUs, 512 PIDs, no port, no bind, named volumes only) |
 | Runtime host secrets never replicated | `claim_code_hash`, `token_hash` and `runtimes.llm_token_hash` are left out of the Zero schema and the `spyria_zero` column list (integration `schema` "the zero publication replicates exactly ...", `runtime-hosts` and `runtimes` publication checks); bundle gate fails on them in client assets |
+| Content Security Policy | unit `app.test.ts` "the web app runs only its own scripts and frames web pages and reports, while a report runs in a sandbox of its own" (app: `script-src 'self'`, no objects, never framed; `/report-frame.html`: `sandbox allow-scripts`, framed by the app only) |
 
 ## Dormant
 
