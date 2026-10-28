@@ -125,8 +125,8 @@ export const MessageItem = ({
                 <MemberAvatar name={message.authorName} image={message.authorAvatar} />
               )}
               <span className="text-sm font-medium">{message.authorName}</span>
-              <time dateTime={message.createdAt} className="text-xs text-muted">
-                {timeFormat.format(new Date(message.createdAt))}
+              <time dateTime={message.createdAt.toISOString()} className="text-xs text-muted">
+                {timeFormat.format(message.createdAt)}
               </time>
               {message.isEdited && !message.isDeleted && <span className="text-xs text-muted">(edited)</span>}
             </div>

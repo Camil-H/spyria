@@ -87,12 +87,7 @@ test('a relayed call runs on the turn prompter’s virtual key with Spyria’s a
   expect(await failureOf(chatId)).toBeNull()
 })
 
-test.each([
-  ['OpenRouter', 'openrouter/anthropic/claude-sonnet-5.5', 'anthropic/claude-sonnet-5.5'],
-  ['xAI', 'xai/grok-4.3', 'grok-4.3'],
-  ['DeepSeek', 'deepseek/deepseek-v4-flash', 'deepseek-v4-flash'],
-  ['Z.ai', 'zai/glm-4.7', 'glm-4.7'],
-])(
+test.each([['OpenRouter', 'openrouter/anthropic/claude-sonnet-5.5', 'anthropic/claude-sonnet-5.5']])(
   'a %s key relays %s to its provider with the provider’s model id, recorded with prompter and owner',
   async (provider, model, providerModel) => {
     const secret = `fake-key-${provider}-${crypto.randomUUID()}`

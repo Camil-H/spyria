@@ -7,6 +7,7 @@ import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
+import { gatewayKeyRefOf } from '@spyria/kernel'
 import { type SQL, sql } from 'drizzle-orm'
 import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import postgres from 'postgres'
@@ -339,18 +340,12 @@ const testModelPrices = {
   'mistral-medium-latest': 0.000015,
   'mistral-small-latest': 0.000006,
   'codestral-latest': 0.000009,
+  'grok-4.7': 0.000004,
+  'grok-4.3': 0.000002,
+  'grok-code-fast': 0.0000005,
   'gemini-pro-latest': 0.000004,
   'gemini-flash-latest': 0.000002,
   'gemini-flash-lite-latest': 0.0000005,
-  'grok-4.7': 0.000004,
-  'grok-4.3': 0.000002,
-  'grok-code-fast-1': 0.0000005,
-  'deepseek-v4-pro': 0.000004,
-  'deepseek-v4-flash': 0.000002,
-  'deepseek-v3.2': 0.0000005,
-  'glm-5.3': 0.000004,
-  'glm-4.7': 0.000002,
-  'glm-5.3-flash': 0.0000005,
   'anthropic/claude-opus-5.5': 0.000004,
   'anthropic/claude-sonnet-5.5': 0.000002,
   'anthropic/claude-haiku-5.5': 0.0000005,
@@ -631,7 +626,7 @@ export const prepareSeededGatewayKeys = async (
   const { workspaceId, id, userId } = aliceSeededCredential
   const write = async (writer: SeedWriter) => {
     await writer.execute(
-      sql`update llm_credentials set secret_ref = ${`gateway:mistral/${keyId}`} where workspace_id = ${workspaceId} and id = ${id}`,
+      sql`update llm_credentials set secret_ref = ${gatewayKeyRefOf({ provider: 'mistral', id: keyId })} where workspace_id = ${workspaceId} and id = ${id}`,
     )
     await writer.execute(
       sql`insert into member_gateway_keys (workspace_id, user_id, virtual_key_id) values (${workspaceId}, ${userId}, ${virtual_key.id})`,

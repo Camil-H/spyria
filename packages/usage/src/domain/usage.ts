@@ -5,6 +5,8 @@ export type UsageTotals = { tokens: number; costMicros: number; calls: number }
 type MemberUsage = UsageTotals & { memberId: MemberId; name: string }
 export type ChatUsage = { months: readonly UsageMonth[]; rows: readonly MemberUsage[]; total: UsageTotals }
 
+export const showsChatUsage = (chat: Readonly<{ archived: boolean }>) => !chat.archived
+
 export type ModelCall = {
   id: string
   chatId: ChatId

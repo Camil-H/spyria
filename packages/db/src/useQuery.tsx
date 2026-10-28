@@ -1,6 +1,6 @@
 import type { ChatId, WorkspaceId } from '@spyria/kernel'
 import { createContext, type ReactNode, use, useEffect, useState, useSyncExternalStore } from 'react'
-import type { Snapshot } from './schema.ts'
+import type { DraftRow, Snapshot } from './schema.ts'
 import type { ScopedQueryName, Store } from './zero-store.ts'
 
 const isContainer = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
@@ -16,19 +16,19 @@ const replaceEqualDeep = <Value,>(previous: unknown, next: Value): Value => {
   return (isUnchanged ? previous : merged) as Value
 }
 
-type Query<Args extends readonly unknown[], Result> = (...args: Args) => (snapshot: Snapshot) => Result
+type Query<Source, Args extends readonly unknown[], Result> = (...args: Args) => (source: Source) => Result
 
 const isSameArgs = (previous: readonly unknown[], next: readonly unknown[]) =>
   previous.length === next.length && previous.every((arg, index) => Object.is(arg, next[index]))
 
-export const createQueryCache = () => {
-  let previous: { snapshot: Snapshot; query: unknown; args: readonly unknown[]; value: unknown } | undefined
-  return <Args extends readonly unknown[], Result>(snapshot: Snapshot, query: Query<Args, Result>, args: Args) => {
-    if (previous?.snapshot === snapshot && previous.query === query && isSameArgs(previous.args, args))
+export const createQueryCache = <Source,>() => {
+  let previous: { source: Source; query: unknown; args: readonly unknown[]; value: unknown } | undefined
+  return <Args extends readonly unknown[], Result>(source: Source, query: Query<Source, Args, Result>, args: Args) => {
+    if (previous?.source === source && previous.query === query && isSameArgs(previous.args, args))
       return previous.value as Result
-    const next = query(...args)(snapshot)
+    const next = query(...args)(source)
     const value = previous ? replaceEqualDeep(previous.value, next) : next
-    previous = { snapshot, query, args, value }
+    previous = { source, query, args, value }
     return value
   }
 }
@@ -46,12 +46,26 @@ export const useStore = () => {
 }
 
 export const useQuery = <Args extends readonly unknown[], Result>(
-  query: Query<Args, Result>,
+  query: Query<Snapshot, Args, Result>,
   ...args: Args
 ): Result => {
   const store = useStore()
-  const [readQuery] = useState(createQueryCache)
+  const [readQuery] = useState(createQueryCache<Snapshot>)
   return useSyncExternalStore(store.subscribe, () => readQuery(store.read(), query, args))
+}
+
+export const useDraftQuery = <Args extends readonly unknown[], Result>(
+  query: Query<readonly DraftRow[], Args, Result>,
+  ...args: Args
+): Result => {
+  const store = useStore()
+  const [readQuery] = useState(createQueryCache<readonly DraftRow[]>)
+  return useSyncExternalStore(store.subscribeDrafts, () => readQuery(store.readDrafts(), query, args))
+}
+
+export const useIsWorkspaceLoaded = (workspaceId: WorkspaceId) => {
+  const store = useStore()
+  return useSyncExternalStore(store.subscribe, () => store.isLoaded(workspaceId))
 }
 
 export const useScoped = (

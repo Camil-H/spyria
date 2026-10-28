@@ -1,7 +1,7 @@
+import type { GatewayKey } from '@spyria/kernel'
 import { type ListedModel, withRetries } from '@spyria/kernel'
 import type { LlmGateway, ToolGateway, ToolServer } from '../contracts/repositories.ts'
 import { UnsupportedProvider } from '../domain/errors.ts'
-import type { GatewayKey } from '../domain/llm-credential.ts'
 import type { ConnectionTool } from '../domain/workspace-connection.ts'
 
 export type LlmGatewaySettings = {

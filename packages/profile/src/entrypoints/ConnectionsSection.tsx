@@ -3,6 +3,7 @@ import { useQuery } from '@spyria/db/react'
 import type { MemberId, WorkspaceId } from '@spyria/kernel'
 import { ErrorMessage, ghostButtonClass, LabelledSection, tabTriggerClass, useGuardedAction } from '@spyria/ui'
 import { useEffect, useState } from 'react'
+import { connectionStatuses, notConnectedStatus } from '../domain/personal-connection.ts'
 import { getPersonalConnections } from '../queries/get-personal-connections.ts'
 import { getSharedConnections } from '../queries/get-shared-connections.ts'
 import { GitHubConnectionRow } from './GitHubConnectionRow.tsx'
@@ -63,7 +64,7 @@ export const ConnectionsSection = ({ workspaceId, memberId }: { workspaceId: Wor
                 <span className="font-medium">{tool}</span>
                 <span className="text-muted">{status}</span>
                 <span className="ml-auto flex gap-2">
-                  {status === 'Needs reconnection' && (
+                  {status === connectionStatuses.needsReconnection && (
                     <button type="button" className={ghostButtonClass} onClick={connect(tool)}>
                       Reconnect {tool}
                     </button>
@@ -78,7 +79,7 @@ export const ConnectionsSection = ({ workspaceId, memberId }: { workspaceId: Wor
           {available.map((tool) => (
             <fieldset key={tool} aria-label={tool} className={`${rowClass} text-sm`}>
               <span className="font-medium">{tool}</span>
-              <span className="text-muted">Not connected</span>
+              <span className="text-muted">{notConnectedStatus}</span>
               <button type="button" className={`${ghostButtonClass} ml-auto`} onClick={connect(tool)}>
                 Connect {tool}
               </button>
