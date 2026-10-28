@@ -1,4 +1,4 @@
-import { DomainError, errorKind } from '@spyria/kernel'
+import { blankKind, DomainError, errorKind } from '@spyria/kernel'
 
 export class RuntimeError extends DomainError {}
 
@@ -19,11 +19,7 @@ export const NotCurrentWorkspace = errorKind(
   () => 'A runtime host can only be managed in the current workspace',
   RuntimeError,
 )
-export const BlankHostName = errorKind(
-  'blank_host_name',
-  () => 'A host name must contain at least one non-blank character',
-  RuntimeError,
-)
+export const BlankHostName = blankKind('blank_host_name', 'A host name', RuntimeError)
 export const HostNameTooLong = errorKind(
   'host_name_too_long',
   () => 'A host name has at most 60 characters',

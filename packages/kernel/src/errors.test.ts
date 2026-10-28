@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { DomainError, disclosableMessageOf, errorSummaryOf } from './errors.ts'
+import { blankKind, DomainError, disclosableMessageOf, errorSummaryOf, nonBlank } from './errors.ts'
 
 const failedQuery = Object.assign(new Error('Failed query: insert into runtimes values ($1)\nparams: s3cret'), {
   name: 'DrizzleQueryError',
@@ -23,4 +23,11 @@ test.each([
 test('a disclosable message hides the parameters of a failed query and keeps any other message', () => {
   expect(disclosableMessageOf(failedQuery)).toBe('DrizzleQueryError 23505')
   expect(disclosableMessageOf(new Error('The agent server answered 502'))).toBe('The agent server answered 502')
+})
+
+test('a non-blank value is trimmed, and a blank one is refused with its own kind', () => {
+  const BlankTitle = blankKind('blank_title', 'A title', DomainError)
+  expect(nonBlank('  Launch plan ', BlankTitle)).toBe('Launch plan')
+  expect(() => nonBlank(' \n ', BlankTitle)).toThrow(BlankTitle)
+  expect(() => nonBlank('', BlankTitle)).toThrow('A title must contain at least one non-blank character')
 })

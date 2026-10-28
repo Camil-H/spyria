@@ -1,27 +1,15 @@
-import { DomainError, errorKind } from '@spyria/kernel'
+import { blankKind, DomainError, errorKind } from '@spyria/kernel'
 
 export class ProfileError extends DomainError {}
 
-export const BlankDisplayName = errorKind(
-  'blank_display_name',
-  () => 'A display name must contain at least one non-blank character',
-  ProfileError,
-)
-export const BlankProvider = errorKind(
-  'blank_provider',
-  () => 'A provider must contain at least one non-blank character',
-  ProfileError,
-)
+export const BlankDisplayName = blankKind('blank_display_name', 'A display name', ProfileError)
+export const BlankProvider = blankKind('blank_provider', 'A provider', ProfileError)
 export const UnsupportedProvider = errorKind(
   'unsupported_provider',
   (provider: string) => `${provider} is not a supported provider`,
   ProfileError,
 )
-export const BlankSecret = errorKind(
-  'blank_secret',
-  () => 'A secret must contain at least one non-blank character',
-  ProfileError,
-)
+export const BlankSecret = blankKind('blank_secret', 'A secret', ProfileError)
 export const CredentialNotFound = errorKind(
   'credential_not_found',
   (credentialId: string) => `LLM credential ${credentialId} was not found`,

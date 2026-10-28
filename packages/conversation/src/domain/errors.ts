@@ -1,12 +1,8 @@
-import { DomainError, errorKind } from '@spyria/kernel'
+import { blankKind, DomainError, errorKind } from '@spyria/kernel'
 
 class ConversationError extends DomainError {}
 
-export const BlankMessageBody = errorKind(
-  'blank_message_body',
-  () => 'A message must contain at least one non-blank character',
-  ConversationError,
-)
+export const BlankMessageBody = blankKind('blank_message_body', 'A message', ConversationError)
 export const NotMessageAuthor = errorKind(
   'not_message_author',
   () => 'Only the author can change a message',

@@ -1,4 +1,4 @@
-import type { CredentialId, MemberId, WorkspaceId } from '@spyria/kernel'
+import { type CredentialId, type MemberId, nonBlank, type WorkspaceId } from '@spyria/kernel'
 import { BlankProvider, UnsupportedProvider } from './errors.ts'
 import type { Secret } from './secret.ts'
 
@@ -42,8 +42,7 @@ export const gatewayKeyOf = (ref: string): GatewayKey | undefined => {
 type NewLlmCredential = Omit<LlmCredential, 'last4' | 'gatewayProvider'> & { secret: Secret }
 
 export const newLlmCredential = ({ secret, provider, ...fields }: NewLlmCredential): LlmCredential => {
-  const trimmedProvider = provider.trim()
-  if (trimmedProvider === '') throw new BlankProvider()
+  const trimmedProvider = nonBlank(provider, BlankProvider)
   const gatewayProvider = gatewayProviders[trimmedProvider.toLowerCase()]
   if (!gatewayProvider) throw new UnsupportedProvider(trimmedProvider)
   return { ...fields, provider: trimmedProvider, gatewayProvider, last4: secret.last4() }
