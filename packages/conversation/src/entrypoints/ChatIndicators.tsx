@@ -1,5 +1,5 @@
 import { Content, Portal, Provider, Root, Trigger } from '@radix-ui/react-tooltip'
-import { useQuery } from '@spyria/db/react'
+import { useDraftQuery, useQuery } from '@spyria/db/react'
 import { type ChatId, workspaceId } from '@spyria/kernel'
 import { useSession } from '@spyria/session'
 import { tooltipClass } from '@spyria/ui'
@@ -21,7 +21,7 @@ export const ChatIndicators = ({ chatId }: { chatId: ChatId }) => {
   const { memberId } = useSession()
   const chatWorkspaceId = workspaceId(useParams().workspaceId ?? '')
   const isUnread = useQuery(hasUnread, chatWorkspaceId, chatId, memberId)
-  const isDraftPresent = useQuery(getDraft, chatWorkspaceId, chatId, memberId) !== ''
+  const isDraftPresent = useDraftQuery(getDraft, chatWorkspaceId, chatId, memberId) !== ''
   const agentStatus = useQuery(getAgentStatus, chatWorkspaceId, chatId)
   const unreadLabel = agentStatus ? `Unread messages · ${agentStatusLabels[agentStatus]}` : 'Unread messages'
   return (

@@ -1,6 +1,6 @@
 import type { ChatId, WorkspaceId } from '@spyria/kernel'
 import { createContext, type ReactNode, use, useEffect, useState, useSyncExternalStore } from 'react'
-import type { Snapshot } from './schema.ts'
+import type { DraftRow, Snapshot } from './schema.ts'
 import type { ScopedQueryName, Store } from './zero-store.ts'
 
 const isContainer = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
@@ -52,6 +52,14 @@ export const useQuery = <Args extends readonly unknown[], Result>(
   const store = useStore()
   const [readQuery] = useState(createQueryCache)
   return useSyncExternalStore(store.subscribe, () => readQuery(store.read(), query, args))
+}
+
+export const useDraftQuery = <Args extends readonly unknown[], Result>(
+  query: (...args: Args) => (drafts: readonly DraftRow[]) => Result,
+  ...args: Args
+): Result => {
+  const store = useStore()
+  return useSyncExternalStore(store.subscribeDrafts, () => query(...args)(store.readDrafts()))
 }
 
 export const useScoped = (

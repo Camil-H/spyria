@@ -148,7 +148,9 @@ export const Composer = ({
   const commands = useConversationCommands()
   const { memberId } = useSession()
   const store = useStore()
-  const [text, setText] = useState(() => (threadRootId ? '' : getDraft(workspaceId, chatId, memberId)(store.read())))
+  const [text, setText] = useState(() =>
+    threadRootId ? '' : getDraft(workspaceId, chatId, memberId)(store.readDrafts()),
+  )
   const [pending, setPending] = useState<readonly PendingAttachment[]>([])
   const latestText = useRef(text)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
