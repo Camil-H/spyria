@@ -23,7 +23,7 @@ const messageOf = (message: Partial<ConversationMessage>): ConversationMessage =
   ...message,
 })
 
-test('a thread copied as context reads like the seed of a runtime started from it, without its deleted messages', () => {
+test('a thread copied as context names its channel and quotes its messages like a runtime seed, without its deleted messages', () => {
   const context = threadContextOf('ops', [
     messageOf({}),
     messageOf({ id: messageId('message-gone'), body: '', isDeleted: true }),
@@ -38,7 +38,7 @@ test('a thread copied as context reads like the seed of a runtime started from i
   ])
   expect<string>(context).toBe(
     [
-      'Conversation so far, from the channel thread in #ops:',
+      'Conversation from channel thread in #ops',
       'Alice (member, human) · 2026-10-01 09:00 UTC\nCan someone look at the flaky deploy?',
       'Agent (agent) · 2026-10-01 09:05 UTC\nThe cache key changed.\n\nAttached, not readable by you: log.txt (text/plain, 2 KB)',
     ].join('\n\n'),
