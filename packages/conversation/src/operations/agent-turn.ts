@@ -7,6 +7,7 @@ import type {
   SessionClassifier,
 } from '../contracts/agent.ts'
 import type { ConversationTransactor, UnitOfWork } from '../contracts/transactor.ts'
+import { expiredPromptNotice, hasOutlivedWait, unavailableNotices } from '../domain/agent-events.ts'
 import { type Message, newMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
 import { noLlmKeyNoticeOf, noLongerPromptsNoticeOf } from '../domain/model-call-failures.ts'
@@ -46,7 +47,7 @@ export const appendNotice = ({ messages }: UnitOfWork, prompt: Message, text: st
 export const noticeWaitingPrompts = async (unitOfWork: UnitOfWork, chatId: ChatId, text: string) => {
   await unitOfWork.agentTurns.lock(chatId)
   for (const prompt of await unitOfWork.agentTurns.waitingPrompts(chatId))
-    if (!(await unitOfWork.agentTurns.hasNotice(prompt.id, text))) await appendNotice(unitOfWork, prompt, text)
+    if (!(await unitOfWork.agentTurns.hasNotice(prompt.id, [text]))) await appendNotice(unitOfWork, prompt, text)
 }
 
 export const requestNextPrompt = async ({ agentTurns, agentJobs }: UnitOfWork, chatId: ChatId) => {
@@ -54,10 +55,19 @@ export const requestNextPrompt = async ({ agentTurns, agentJobs }: UnitOfWork, c
   if (next) await agentJobs.prompt(next)
 }
 
-export const beginAgentTurn = async (unitOfWork: UnitOfWork, chatId: ChatId): Promise<Message | undefined> => {
+export const beginAgentTurn = async (
+  unitOfWork: UnitOfWork,
+  chatId: ChatId,
+  resumedPromptId?: MessageId,
+): Promise<Message | undefined> => {
   const { agentTurns, members } = unitOfWork
-  if ((await agentTurns.lock(chatId)) !== null) return undefined
+  const heldPromptId = await agentTurns.lock(chatId)
+  if (heldPromptId !== null) return heldPromptId === resumedPromptId ? unitOfWork.messages.get(heldPromptId) : undefined
   const prompt = await agentTurns.nextPrompt(chatId)
+  if (prompt && hasOutlivedWait(prompt, Date.now()) && (await agentTurns.hasNotice(prompt.id, unavailableNotices))) {
+    await appendNotice(unitOfWork, prompt, expiredPromptNotice)
+    return beginAgentTurn(unitOfWork, chatId)
+  }
   if (prompt?.authorId && !can(await unitOfWork.chats.permissions(chatId, prompt.authorId), 'chat.post')) {
     await appendNotice(unitOfWork, prompt, noLongerPromptsNoticeOf(await members.displayNameOf(prompt.authorId)))
     return beginAgentTurn(unitOfWork, chatId)

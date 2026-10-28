@@ -25,7 +25,13 @@ export type ZeroContext = {
 }
 
 export type Transact = <Result>(work: (tx: ServerTransaction) => Promise<Result>) => Promise<Result>
-export type Job = { workspaceId: WorkspaceId; payload: unknown; isLastAttempt: boolean; transact: Transact }
+export type Job = {
+  workspaceId: WorkspaceId
+  payload: unknown
+  isLastAttempt: boolean
+  isRetry?: boolean
+  transact: Transact
+}
 
 export const zql = createBuilder(schema)
 

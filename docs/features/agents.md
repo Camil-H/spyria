@@ -6,7 +6,7 @@ This page explains what happens in a runtime chat: which agent (harness) runs, h
 
 A runtime chat pairs a conversation with an agent running in its own sandboxed **runtime**. The first prompt starts the runtime if needed (the header shows **Starting…**, then **Ready**), and the agent's reply streams into the chat as it is written. An idle runtime goes to sleep and wakes on the next prompt; its files stay.
 
-Prompts are handled one turn at a time. A prompt sent while the agent works waits and runs after the current turn, in order. Before each turn the server checks again that its author may still post in the chat and, on a Spyria runtime, has an LLM key in the workspace; otherwise the prompt gets a notice such as "*Name* has no LLM key in this workspace" and the next one runs.
+Prompts are handled one turn at a time. A prompt sent while the agent works waits and runs after the current turn, in order. A prompt sent while the agent cannot run (no host, a start failure, a host or machine offline) gets a notice saying so and runs when the agent is back, unless it waited more than an hour: it then gets "Not sent: it waited more than an hour for the agent" and is skipped, so a prompt is not answered days after it was written. Before each turn the server checks again that its author may still post in the chat and, on a Spyria runtime, has an LLM key in the workspace; otherwise the prompt gets a notice such as "*Name* has no LLM key in this workspace" and the next one runs.
 
 The agent acts as the chat owner for tools (**Agent acts as** *owner* in the header), and each model call runs on the key of the member who sent the prompt. Every model call records both.
 
@@ -28,7 +28,7 @@ Subscription harnesses run only on the member's own machine because a subscripti
 
 On a Spyria runtime, the session's model is chosen once, at the first prompt, from the models the prompting member's keys can reach. A model is reachable when its provider has one of the member's keys in the gateway. The catalog in `packages/kernel/src/models.ts` assigns each model a tier (large, medium or small) and covers Anthropic, OpenAI, Mistral, Google Gemini, xAI, DeepSeek, Z.ai and OpenRouter.
 
-1. A classifier reads the first message and answers two questions: the tier the task needs, and the reasoning effort (high, medium or low). It runs on the member's cheapest reachable model (a dedicated decision model when the member's keys reach one), with a 3-second timeout, and is billed to the prompter like any model call.
+1. A classifier reads the first message and answers two questions: the tier the task needs, and the reasoning effort (high, medium or low). It runs on the member's cheapest reachable model (a dedicated decision model when the member's keys reach one), with a 3-second timeout, and is billed to the prompter like any model call. On a new session it runs while the runtime starts, so it rarely delays the first reply.
 2. Only a confident answer (at least 0.8) of `large` or `small` moves away from the default. The default is the prompter's best reachable **medium** model; when a tier has no reachable model, the nearest tier is used.
 3. If the classifier fails or times out, the session falls back to the default and the decision is recorded with its reason.
 
@@ -38,7 +38,7 @@ When another participant prompts later, their keys must reach the session's mode
 
 ## The session chip: model, effort, subagents
 
-The chip in the chat shows the session model and effort (before the first prompt: "Model chosen at first prompt"). A participant with `session.configure` (Owner and Editor) opens it to change:
+The chip in the chat shows the session model and effort (before the first prompt: "Model chosen at first prompt"; while the first prompt waits for its model: "Choosing model…"). A participant with `session.configure` (Owner and Editor) opens it to change:
 
 - **Main model:** any reachable model, or one found with **Search all models** among the models the gateway lists for the member's providers. A switch asks for confirmation and shows the estimated cost of the next reply, which rereads the whole conversation with the new model. It applies at the next prompt and keeps the conversation's context.
 - **Effort:** **Off**, **Minimal**, **Low**, **Medium**, **High** or **Extra high** (Pi's thinking levels).
