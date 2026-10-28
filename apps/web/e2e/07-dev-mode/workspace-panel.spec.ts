@@ -88,7 +88,7 @@ test.describe('Workspace panel', () => {
     await expect(diff).toContainText('+ export const total = 2')
   })
 
-  test('As a member, I see the agent’s commit with its description in Commits, and Changes still shows the diff against the base', {
+  test('As a member, I see the agent’s commit with its description in Commits, and Changes splits the files not added from the commit’s files', {
     tag: ['@spec-40'],
   }, async ({ page, agentScript }) => {
     await devChatWithEdits(page, agentScript, 'Commit totals', [{ command: commitCommand }])
@@ -99,8 +99,14 @@ test.describe('Workspace panel', () => {
     await expect(commits.first()).toContainText(/Pi Agent · \d\d:\d\d UTC/)
     await expect(commits.first()).toContainText('The total was off by one.')
     await panelTabOf(page, 'Changes').click()
-    await expect(changeOf(page, 'src/app.ts')).toContainText(/Modified \+1 [−-]1/)
-    await expect(changeOf(page, 'src/new.ts')).toContainText(/Added \+1 [−-]0/)
+    await expect(tabPanelOf(page).getByRole('heading', { level: 3 })).toHaveText([
+      'Not added',
+      /^[0-9a-f]{7} Fix the totals$/,
+    ])
+    const notAdded = tabPanelOf(page).getByRole('region', { name: 'Not added' })
+    await expect(notAdded.getByRole('button', { name: /^src\/new\.ts/ })).toContainText(/Added \+1 [−-]0/)
+    const commit = tabPanelOf(page).getByRole('region', { name: /^Commit [0-9a-f]{7}$/ })
+    await expect(commit.getByRole('button', { name: /^src\/app\.ts/ })).toContainText(/Modified \+1 [−-]1/)
   })
 
   test('As a member, I see a stopped runtime’s last snapshot as asleep, and Wake restarts it and refreshes the tabs', {

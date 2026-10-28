@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test'
 import {
   branchStatusOf,
   branchStatusPartsOf,
+  changeGroupsOf,
   changeMarkOf,
   codeFenceOf,
   commitsOf,
@@ -109,6 +110,24 @@ test('a git log becomes commits with a short sha and their body', () => {
     { sha: 'c3d4e5f', subject: 'No date', author: '', committedAt: '', body: '' },
     { sha: 'd4e5f6a', subject: 'No body', author: '', committedAt: '', body: '' },
   ])
+})
+
+test('changes split into the files not added, the files added but not committed, then each commit with a change', () => {
+  const [readme = '', added = ''] = patch.split(/(?=^diff --git a\/src)/m)
+  const groups = changeGroupsOf({
+    isLive: true,
+    unstaged: added,
+    staged: '',
+    commitPatches: `\x1ea1b2c3d4e5f6\n\n${readme}\x1eb2c3d4e5f6a7\n\x1ec3d4e5f6a7b8\n\n${readme}`,
+    log: 'a1b2c3d4e5f6\x1fFix the readme\x1fAlice\x1f\x1f\x1e\nb2c3d4e5f6a7\x1fMerge main\x1fAlice\x1f\x1f\x1e\n',
+  })
+  expect(groups.map(({ sha, title, changes }) => [sha, title, changes.map(({ path }) => path)])).toEqual([
+    [undefined, 'Not added', ['src/new.ts', 'old.txt', 'logo.png']],
+    ['a1b2c3d', 'Fix the readme', ['README.md']],
+    ['c3d4e5f', '', ['README.md']],
+  ])
+  expect(changeGroupsOf({ isLive: false, patch: readme })).toEqual([{ title: '', changes: fileChangesOf(readme) }])
+  expect(changeGroupsOf(undefined)).toEqual([])
 })
 
 test('tree entries are marked by their change, folders when they contain one', () => {
