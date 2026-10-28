@@ -172,6 +172,7 @@ test.each([
   ['GET', '/api/workspace/file?path=README.md'],
   ['GET', '/api/workspace/media?path=out%2Fchart.png'],
   ['GET', '/api/workspace/changes?base=main'],
+  ['GET', '/api/workspace/commits?base=main'],
   ['GET', '/api/workspace/status?base=main'],
   ['POST', '/api/workspace/bundle'],
   ['POST', '/api/workspace/commit'],
