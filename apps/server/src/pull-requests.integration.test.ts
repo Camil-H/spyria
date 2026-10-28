@@ -649,7 +649,7 @@ test('any prompter’s agent reads the checks of a pull request’s head with re
         '    Run bun test',
         '    1 fail',
         '    error: Process completed with exit code 1.',
-        `- preview: failure ${runUrlOf(4)}`,
+        `- preview: failure ${runUrlOf(3)}`,
         `- e2e: pending ${runUrlOf(2)}`,
         `- lint: success ${runUrlOf(0)}`,
       ].join('\n'),
@@ -662,7 +662,7 @@ test('any prompter’s agent reads the checks of a pull request’s head with re
   ])
   expect(fakeGitHub.apiRequests.filter((line) => /annotations|actions/.test(line))).toEqual([
     `GET /repos/acme/app/check-runs/${firstRunId + 1}/annotations`,
-    `GET /repos/acme/app/check-runs/${firstRunId + 4}/annotations`,
+    `GET /repos/acme/app/check-runs/${firstRunId + 3}/annotations`,
     `GET /repos/acme/app/actions/jobs/${firstRunId + 1}`,
     `GET /repos/acme/app/actions/jobs/${firstRunId + 1}/logs`,
   ])
