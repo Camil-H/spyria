@@ -27,6 +27,8 @@ export const errorKind = <Details extends unknown[]>(
   return Kind
 }
 
+// A kind registers when its module loads: a code whose module is not loaded yet (a lazy chunk) comes back as a
+// plain DomainError, so a client that checks instanceof imports the kind it checks, as NewChatDialog does.
 export const domainErrorOf = (code: string, message: string): DomainError =>
   Reflect.construct(DomainError, [code, message], kindByCode.get(code) ?? DomainError)
 
