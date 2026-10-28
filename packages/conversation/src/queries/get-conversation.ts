@@ -72,6 +72,7 @@ export type Conversation = Readonly<{
   subagentPolicy: ChatRow['subagentPolicy']
   harness: ChatRow['harness']
   localSession: boolean
+  context: Readonly<{ tokens: number; window: number | null }> | null
   runsOn: RunsOn | null
   isOwner: boolean
   isFrozen: boolean
@@ -332,6 +333,7 @@ export const getConversation =
       subagentPolicy: chat.subagentPolicy,
       harness: chat.harness,
       localSession: chat.localSession === true,
+      context: chat.contextTokens === null ? null : { tokens: chat.contextTokens, window: chat.contextWindow },
       runsOn: runsOnOf(chat),
       isOwner,
       isFrozen: isFrozen({

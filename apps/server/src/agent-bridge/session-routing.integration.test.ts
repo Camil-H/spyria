@@ -214,13 +214,8 @@ test('a prompter whose keys reach another provider routes to its model, and is r
   ).toContain('Your keys cannot reach Mistral Large')
 })
 
-test('the routing read lists the member’s reachable models and the context tokens of the latest call from model_calls', async () => {
+test('the routing read lists the member’s reachable models with their prices', async () => {
   const chat = await newRuntimeChat()
-  await database.$client`
-    insert into model_calls (workspace_id, id, chat_id, prompter_id, owner_id, model, provider, input_tokens, output_tokens, cost_micros, status, called_at)
-    values (${acme}, ${crypto.randomUUID()}, ${chat}, ${alice}, ${alice}, 'mistral-large-latest', 'mistral', 100, 20, 3600, 'success', now() - interval '1 minute'),
-           (${acme}, ${crypto.randomUUID()}, ${chat}, ${bob}, ${alice}, 'mistral-large-latest', 'mistral', 300, 30, 9900, 'success', now() - interval '40 days'),
-           (${acme}, ${crypto.randomUUID()}, ${chat}, ${alice}, ${alice}, 'mistral-small-latest', 'mistral', 400, 50, 2700, 'success', now())`
   const response = await app.request(`/api/chats/${chat}/routing`, {
     headers: { authorization: `Bearer ${await sessionTokenOf(database, acme, alice)}` },
   })
@@ -230,7 +225,6 @@ test('the routing read lists the member’s reachable models and the context tok
       { id: 'mistral/mistral-medium-latest', dollarsPerMillionInputTokens: 15 },
       { id: 'mistral/mistral-small-latest', dollarsPerMillionInputTokens: 6 },
     ],
-    contextTokens: 450,
   })
 })
 

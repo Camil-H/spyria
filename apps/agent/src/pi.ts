@@ -14,7 +14,7 @@ type PiEdit = { oldText?: string; newText?: string }
 
 const otherChoice = 'Other…'
 const dialogMethods = ['select', 'confirm', 'input', 'editor']
-const askingTool = 'ask_member'
+const confirmChoices = { yes: 'Yes', no: 'No' }
 const toolKinds: Record<string, string> = { bash: 'execute', read: 'read', edit: 'edit', write: 'edit' }
 
 const textOf = (result: Json) =>
@@ -51,7 +51,7 @@ export const connectPi = (launch: AdapterLaunch, { onUpdate, onExit, onRequest }
   const toolInputs = new Map<string, Json>()
   let nextId = 0
   let isAborting = false
-  let askingToolCallId: unknown
+  const runningToolCallIds = new Set<string>()
   let freeAnswer: string | undefined
   let providerError: string | undefined
   const update = (fields: Json) => onUpdate({ update: fields })
@@ -72,22 +72,24 @@ export const connectPi = (launch: AdapterLaunch, { onUpdate, onExit, onRequest }
       freeAnswer = undefined
       return
     }
-    const choices = (request.options ?? []) as string[]
+    const isConfirm = method === 'confirm'
+    const choices = isConfirm ? Object.values(confirmChoices) : ((request.options ?? []) as string[])
     const asked = {
       method: 'elicitation/create',
       params: {
         mode: 'form',
-        toolCallId: askingToolCallId,
+        toolCallId: [...runningToolCallIds].at(-1),
         message: request.title,
         requestedSchema: {
           properties: {
             answer: {
               type: 'string',
+              ...(isConfirm && request.message ? { title: request.title, description: request.message } : {}),
               oneOf: choices
                 .filter((choice) => choice !== otherChoice)
                 .map((choice) => ({ const: choice, title: choice })),
             },
-            answer_custom: { type: 'string' },
+            ...(!isConfirm && { answer_custom: { type: 'string' } }),
           },
         },
       },
@@ -95,6 +97,7 @@ export const connectPi = (launch: AdapterLaunch, { onUpdate, onExit, onRequest }
     const responseOf = ({ action, content }: Json) => {
       const { answer, answer_custom: free } = (content ?? {}) as Record<string, string | undefined>
       if (action !== 'accept') return { cancelled: true }
+      if (isConfirm) return { confirmed: answer === confirmChoices.yes }
       if (!free) return { value: answer }
       if (method !== 'select' || !choices.includes(otherChoice)) return { value: free }
       freeAnswer = free
@@ -136,7 +139,7 @@ export const connectPi = (launch: AdapterLaunch, { onUpdate, onExit, onRequest }
     if (type === 'tool_execution_start') {
       const input = (record.args ?? {}) as Json
       toolInputs.set(toolCallId, input)
-      if (toolName === askingTool) askingToolCallId = toolCallId
+      runningToolCallIds.add(toolCallId)
       return update({
         sessionUpdate: 'tool_call',
         toolCallId,
@@ -156,6 +159,7 @@ export const connectPi = (launch: AdapterLaunch, { onUpdate, onExit, onRequest }
     if (type === 'tool_execution_end') {
       const input = toolInputs.get(toolCallId) ?? {}
       toolInputs.delete(toolCallId)
+      runningToolCallIds.delete(toolCallId)
       return update({
         sessionUpdate: 'tool_call_update',
         toolCallId,
