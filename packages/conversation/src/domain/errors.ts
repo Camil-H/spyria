@@ -28,17 +28,7 @@ export const MessageNotFound = errorKind(
   (messageId: string) => `Message ${messageId} was not found`,
   ConversationError,
 )
-export const ChatNotFound = errorKind(
-  'chat_not_found',
-  (chatId: string) => `Chat ${chatId} was not found`,
-  ConversationError,
-)
 export const NoLlmKey = errorKind('no_llm_key', (notice: string) => notice, ConversationError)
-export const ForeignWorkspace = errorKind(
-  'foreign_workspace',
-  () => 'The change targets a workspace other than the current one',
-  ConversationError,
-)
 export const InvalidRouting = errorKind('invalid_routing', (message: string) => message, ConversationError)
 export const RunsOnNotChosen = errorKind('runs_on_not_chosen', (notice: string) => notice, ConversationError)
 export const NotWorkspaceMember = errorKind(

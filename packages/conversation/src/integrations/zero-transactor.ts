@@ -42,8 +42,10 @@ import {
 } from '@spyria/db/zero-queries'
 import {
   type ChatId,
+  ChatNotFound,
   type ChatPermission,
   chatId,
+  ForeignWorkspace,
   type HarnessId,
   type MemberId,
   type MessageId,
@@ -57,7 +59,7 @@ import type { ParticipantChange } from '../contracts/repositories.ts'
 import type { ConversationTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import { agentJobTypes, agentSweepIntervalMilliseconds, waitingNotices } from '../domain/agent-events.ts'
 import type { StoredStep } from '../domain/agent-steps.ts'
-import { ChatNotFound, ForeignWorkspace, MessageNotFound } from '../domain/errors.ts'
+import { MessageNotFound } from '../domain/errors.ts'
 import { agentActivityKinds, type Message, type MessageChange } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
 import type { AgentEventPayload, ChangedPayload, PostedPayload, StepChangedPayload } from '../domain/message-events.ts'

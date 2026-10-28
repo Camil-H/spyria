@@ -1,5 +1,5 @@
 import { type AnyMutatorRegistry, type MutatorResultDetails, type Row, Zero } from '@rocicorp/zero'
-import { DomainError, type MemberId, type WorkspaceId, workspacePermissions } from '@spyria/kernel'
+import { domainErrorOf, type MemberId, type WorkspaceId, workspacePermissions } from '@spyria/kernel'
 import type { DraftRow, MessageRow, Snapshot } from './schema.ts'
 import { type Schema, schema } from './zero.ts'
 import { queries } from './zero-queries.ts'
@@ -332,7 +332,7 @@ const failureOf = (details: MutatorResultDetails) => {
   const domainCode =
     details.error.type === 'app' ? (details.error.details as { code?: unknown } | null | undefined)?.code : undefined
   return typeof domainCode === 'string'
-    ? new DomainError(domainCode, details.error.message)
+    ? domainErrorOf(domainCode, details.error.message)
     : new Error(details.error.message)
 }
 

@@ -8,11 +8,6 @@ export const ProjectNotFound = errorKind(
   (projectId: string) => `Project ${projectId} was not found`,
   WorkspaceError,
 )
-export const ChatNotFound = errorKind(
-  'chat_not_found',
-  (chatId: string) => `Chat ${chatId} was not found`,
-  WorkspaceError,
-)
 export const CrossWorkspaceMove = errorKind(
   'cross_workspace_move',
   () => 'A chat can only move to a project of its own workspace',
@@ -21,11 +16,6 @@ export const CrossWorkspaceMove = errorKind(
 export const SourceChatArchived = errorKind(
   'source_chat_archived',
   () => 'A runtime chat cannot start from an archived chat',
-  WorkspaceError,
-)
-export const ForeignWorkspace = errorKind(
-  'foreign_workspace',
-  () => 'The change targets a workspace other than the current one',
   WorkspaceError,
 )
 export const RuntimeChatPrivate = errorKind(
@@ -47,11 +37,6 @@ export const InviteAlreadyPending = errorKind(
 export const InviteNotFound = errorKind(
   'invite_not_found',
   (invitationId: string) => `Invite ${invitationId} is not pending`,
-  WorkspaceError,
-)
-export const MemberNotFound = errorKind(
-  'member_not_found',
-  (memberId: string) => `${memberId} is not a member of this workspace`,
   WorkspaceError,
 )
 export const OwnMembership = errorKind(

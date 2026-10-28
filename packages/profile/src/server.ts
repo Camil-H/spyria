@@ -1,4 +1,3 @@
-export { ProfileError } from './domain/errors.ts'
 export type { ProfileCommands } from './entrypoints/commands.ts'
 export {
   addLlmCredentialFromRequest,

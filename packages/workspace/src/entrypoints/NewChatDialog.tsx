@@ -1,4 +1,4 @@
-import { type ChatVisibility, DomainError, type ProjectId, projectId, type WorkspaceId } from '@spyria/kernel'
+import { type ChatVisibility, type ProjectId, projectId, type WorkspaceId } from '@spyria/kernel'
 import {
   buttonClass,
   Dialog,
@@ -11,6 +11,7 @@ import {
 import { type SubmitEvent, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import type { Chat } from '../domain/chat.ts'
+import { GitHubNotConfigured } from '../domain/errors.ts'
 import type { GitHubRepository } from '../domain/github.ts'
 import { Name } from '../domain/name.ts'
 import type { Sidebar } from '../queries/get-sidebar.ts'
@@ -48,7 +49,7 @@ export const NewChatDialog = ({
     if (isDev && !repositories)
       commands.listRepositories({ workspaceId }).then(setRepositories, (error: Error) => {
         setRepositories([])
-        if (error instanceof DomainError && error.code === 'github_not_configured') setIsGitHubMissing(true)
+        if (error instanceof GitHubNotConfigured) setIsGitHubMissing(true)
         else setLoadFailure(error.message)
       })
   }, [commands, workspaceId, isDev, repositories])
