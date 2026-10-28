@@ -77,11 +77,7 @@ const SearchDialog = ({ workspaceId, onClose }: { workspaceId: WorkspaceId; onCl
     navigate(`/w/${workspaceId}/chats/${result.chatId}`, { state: { [findRequestKey]: find } })
     onClose()
   }
-  const handleKey = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      onClose()
-    }
+  const moveSelection = (event: KeyboardEvent<HTMLInputElement>) => {
     const step = { ArrowDown: 1, ArrowUp: -1 }[event.key]
     if (step !== undefined && results.length > 0) {
       event.preventDefault()
@@ -106,7 +102,7 @@ const SearchDialog = ({ workspaceId, onClose }: { workspaceId: WorkspaceId; onCl
           setText(event.target.value)
           setSelectedIndex(0)
         }}
-        onKeyDown={handleKey}
+        onKeyDown={moveSelection}
       />
       {typedLength > 0 && typedLength < searchTextMinimumLength ? (
         <p className="text-sm text-muted">Type at least {searchTextMinimumLength} characters</p>

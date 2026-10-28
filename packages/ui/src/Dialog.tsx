@@ -24,6 +24,11 @@ export const Dialog = ({
     ref={showModal}
     aria-label={label}
     onClose={onClose}
+    onKeyDown={(event) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      onClose()
+    }}
     className={`fixed inset-0 z-40 m-auto flex h-fit max-h-[calc(100vh-4rem)] ${isWide ? 'w-[min(36rem,calc(100vw-2rem))]' : 'w-80'} flex-col gap-3 rounded-xl border border-line bg-raised p-5 text-ink shadow-2xl backdrop:bg-black/40`}
   >
     <h2 className="text-[1rem] font-medium">{label}</h2>
