@@ -16,7 +16,7 @@ afterAll(() => {
   docker('volume', 'rm', '-f', ...Object.keys(volumes).map((suffix) => `${container}-${suffix}`))
 })
 
-test('in the runtime image, run with a runtime’s limits, spyria-agent downloads Chromium on the first screenshot and saves a PNG of a page served inside the runtime', async () => {
+test('in the runtime image, run with a runtime’s limits, spyria-agent saves a PNG of a page served inside the runtime with the Chromium the image holds', async () => {
   const started = docker(
     ...['run', '-d', '--name', container, '--user', '10001:10001', '--read-only', '--cap-drop', 'ALL'],
     ...['--security-opt', 'no-new-privileges', '--memory', '2g', '--pids-limit', '512'],
@@ -42,11 +42,7 @@ test('in the runtime image, run with a runtime’s limits, spyria-agent download
     fullPage: true,
     theme: 'dark',
   }
-  let taken: Record<string, unknown> = {}
-  await waitFor(async () => {
-    taken = await call('POST', '/api/workspace/screenshot', request)
-    return !String(taken.error).startsWith('Chromium is still being installed')
-  }, 240_000)
+  const taken = await call('POST', '/api/workspace/screenshot', request)
   expect(taken).toEqual({ path: '.spyria/screenshots/ready.png' })
   const { content } = await call('GET', `/api/workspace/media?${new URLSearchParams({ path: String(taken.path) })}`)
   const png = Buffer.from(String(content), 'base64')

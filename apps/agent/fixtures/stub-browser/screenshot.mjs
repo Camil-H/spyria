@@ -8,22 +8,12 @@ const onePixelPng = Buffer.from(
 const log = (file, line) =>
   process.env.STUB_BROWSER_LOG && appendFileSync(join(process.env.STUB_BROWSER_LOG, file), `${line}\n`)
 const pause = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))
-const [command, request] = process.argv.slice(2)
-
-if (command === 'install') {
-  if (process.env.STUB_INSTALL === 'slow') await pause(400)
-  if (process.env.STUB_INSTALL === 'fail') {
-    console.error('download failed: no network')
-    process.exit(1)
-  }
-  log('installs', 'installed')
-} else {
-  const { output, ...capture } = JSON.parse(request)
-  if (capture.url.includes('refused')) {
-    console.error(`page.goto: net::ERR_CONNECTION_REFUSED at ${capture.url}`)
-    process.exit(1)
-  }
-  if (capture.url.includes('slow')) await pause(5000)
-  log('captures', JSON.stringify(capture))
-  writeFileSync(output, capture.url.includes('huge') ? Buffer.alloc(21 * 1024 * 1024) : onePixelPng)
+const [, request] = process.argv.slice(2)
+const { output, ...capture } = JSON.parse(request)
+if (capture.url.includes('refused')) {
+  console.error(`page.goto: net::ERR_CONNECTION_REFUSED at ${capture.url}`)
+  process.exit(1)
 }
+if (capture.url.includes('slow')) await pause(5000)
+log('captures', JSON.stringify(capture))
+writeFileSync(output, capture.url.includes('huge') ? Buffer.alloc(21 * 1024 * 1024) : onePixelPng)
