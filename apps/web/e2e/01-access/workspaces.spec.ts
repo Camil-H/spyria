@@ -52,7 +52,7 @@ test.describe('Workspaces', () => {
   test('As a member, I create a workspace, signed in at once, build in it without touching the others, then log out of another and go to the next', async ({
     page,
   }) => {
-    await test.step('opens the new empty workspace and lists it in the menu', async () => {
+    await test.step('opens the new workspace signed in, and it stays signed in on a reload right after', async () => {
       await openMenu(page)
       await page.getByRole('menuitem', { name: 'New workspace' }).click()
       await page.getByRole('textbox', { name: 'Workspace name' }).fill(' Initech ')
@@ -61,8 +61,13 @@ test.describe('Workspaces', () => {
       )
       await page.getByRole('button', { name: 'Confirm' }).click()
       await expect(page.getByRole('dialog', { name: 'New workspace' })).toHaveCount(0)
+      await page.reload()
       await expect(switcherOf(page)).toContainText('Initech')
+      await expect(anySignedOutScreenOf(page)).toHaveCount(0)
       expect((await sessionOpened).status()).toBe(200)
+    })
+
+    await test.step('opens the new empty workspace and lists it in the menu', async () => {
       await expect(sidebarOf(page).getByRole('link')).toHaveCount(1)
       await expect(sidebarOf(page).getByRole('group')).toHaveCount(1)
       await expect(mainOf(page)).toContainText('Select a chat')
@@ -75,13 +80,6 @@ test.describe('Workspaces', () => {
         'Initech',
         'Log out of Initech',
       ])
-    })
-
-    await test.step('a new workspace is signed in at once and stays signed in after a reload', async () => {
-      await page.reload()
-      await expect(switcherOf(page)).toContainText('Initech')
-      await expect(sidebarOf(page).getByRole('group')).toHaveCount(1)
-      await expect(anySignedOutScreenOf(page)).toHaveCount(0)
     })
 
     await test.step('lets the member build content in it without touching the other workspaces', async () => {
