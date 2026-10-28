@@ -53,6 +53,17 @@ const readableBy = (userId: MemberId) => (chat: Query<'chats', Schema>) =>
 
 const id = z.string().check(z.minLength(1))
 export const pinnedStepTypes = ['question', 'pull_request']
+export const searchTextMinimumLength = 2
+export const searchResultLimit = 30
+export const searchTextMaximumLength = 200
+const searchText = z.string().check(z.minLength(searchTextMinimumLength), z.maxLength(searchTextMaximumLength))
+export const likeEscaped = (text: string) => text.replace(/[\\%_]/g, '\\$&')
+export const caseVariantsOf = (text: string) => {
+  const lowered = text.toLowerCase()
+  if (!/[^\p{ASCII}]/u.test(lowered)) return [lowered]
+  const titled = lowered.replace(/(^|\s)(\S)/gu, (_, space: string, letter: string) => space + letter.toUpperCase())
+  return [...new Set([lowered, titled, lowered.toUpperCase()])]
+}
 
 const messagesOf = (ctx: ZeroContext, chatId: string) =>
   zql.messages.where('workspaceId', ctx.workspaceId).where('chatId', chatId).whereExists('chat', readableBy(ctx.userId))
@@ -161,6 +172,18 @@ export const queries = defineQueries({
       .limit(args.limit)
       .related('replies')
       .related('threadReplies'),
+  ),
+  searchMessages: defineQuery(z.object({ text: searchText }), ({ ctx, args }) =>
+    zql.messages
+      .where('workspaceId', ctx.workspaceId)
+      .where('kind', 'IN', ['member', 'agent'])
+      .where('deletedAt', 'IS', null)
+      .where(({ or, cmp }) =>
+        or(...caseVariantsOf(args.text).map((variant) => cmp('body', 'ILIKE', `%${likeEscaped(variant)}%`))),
+      )
+      .whereExists('chat', readableBy(ctx.userId))
+      .orderBy('createdAt', 'desc')
+      .limit(searchResultLimit),
   ),
   chatPinnedSteps: defineQuery(z.object({ chatId: id }), ({ ctx, args }) =>
     messagesOf(ctx, args.chatId).where('kind', 'step').where('body', 'IN', pinnedStepTypes),

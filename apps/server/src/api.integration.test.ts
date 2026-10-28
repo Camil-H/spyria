@@ -179,7 +179,7 @@ const tenantTables = replicatedTables
   .map((table) => serverNameOf(table.name, table))
   .filter((table) => table !== 'users' && table !== 'workspaces')
 
-test('there is one synced query per replicated table, messages, usage and pages read per chat or month', () => {
+test('there is one synced query per replicated table, messages, usage and pages read per chat or month, and messages searched by text', () => {
   expect(
     Object.keys(queries)
       .filter((key) => key !== '~')
@@ -194,6 +194,7 @@ test('there is one synced query per replicated table, messages, usage and pages 
       'chatBrowserPages',
       'chatUsage',
       'monthUsage',
+      'searchMessages',
     ].sort(),
   )
 })
