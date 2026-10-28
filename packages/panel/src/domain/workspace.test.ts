@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test'
 import {
   branchStatusOf,
   branchStatusPartsOf,
+  changeGroupsOf,
   changeMarkOf,
   codeFenceOf,
   commitsOf,
@@ -89,19 +90,78 @@ test('a patch becomes one change per file with its status, counts and diff lines
   expect(fileChangesOf(undefined)).toEqual([])
 })
 
-test('a git log becomes commits with a short sha', () => {
-  expect(
-    commitsOf(
-      'a1b2c3d4e5f6\x1fFix the totals\x1fPi Agent\x1f2026-10-18T13:20:00+02:00\nb2c3d4e5f6a7\x1fAdd tax\x1fAlice\x1f2026-10-18T10:00:00+00:00\n',
-    ),
-  ).toEqual([
-    { sha: 'a1b2c3d', subject: 'Fix the totals', author: 'Pi Agent', committedAt: '2026-10-18T11:20:00.000Z' },
-    { sha: 'b2c3d4e', subject: 'Add tax', author: 'Alice', committedAt: '2026-10-18T10:00:00.000Z' },
+const shaOf = (digit: string) => digit.repeat(40)
+
+test('a NUL-separated git log becomes commits with a short sha and their body, whatever other control characters their messages hold', () => {
+  const log = [
+    shaOf('a'),
+    'Fix \x1f the totals',
+    'Pi Agent',
+    '2026-10-18T13:20:00+02:00',
+    'The total was off.\n\nSee \x1e #12.\n',
+    shaOf('b'),
+    'Add tax',
+    'Alice',
+    '2026-10-18T10:00:00+00:00',
+    '',
+    '',
+  ].join('\0')
+  expect(commitsOf(log)).toEqual([
+    {
+      sha: 'aaaaaaa',
+      subject: 'Fix \x1f the totals',
+      author: 'Pi Agent',
+      committedAt: '2026-10-18T11:20:00.000Z',
+      body: 'The total was off.\n\nSee \x1e #12.',
+    },
+    { sha: 'bbbbbbb', subject: 'Add tax', author: 'Alice', committedAt: '2026-10-18T10:00:00.000Z', body: '' },
   ])
+  expect(commitsOf(log.slice(0, log.indexOf('Add tax')))).toHaveLength(1)
   expect(commitsOf('')).toEqual([])
-  expect(commitsOf('c3d4e5f6a7b8\x1fNo date')).toEqual([
-    { sha: 'c3d4e5f', subject: 'No date', author: '', committedAt: '' },
+})
+
+test('a log from before the NUL separators still reads, one commit per line', () => {
+  expect(commitsOf(`${shaOf('c')}\x1fNo date\n${shaOf('d')}\x1fFix\x1fAlice\x1f2026-10-18T10:00:00+00:00\n`)).toEqual([
+    { sha: 'ccccccc', subject: 'No date', author: '', committedAt: '', body: '' },
+    { sha: 'ddddddd', subject: 'Fix', author: 'Alice', committedAt: '2026-10-18T10:00:00.000Z', body: '' },
   ])
+})
+
+test('changes split into the files not staged, the files staged but not committed, then each commit with a change, the oldest marked when cut', () => {
+  const [readme = '', added = ''] = patch.split(/(?=^diff --git a\/src)/m)
+  const changes = { isLive: true, unstaged: added, staged: readme, cut: ['staged'] }
+  const commits = {
+    isLive: true,
+    commitPatches: `\0${shaOf('a')}\n\n${readme}\0${shaOf('b')}\n\0${shaOf('c')}\n\n${readme}\0${shaOf('d').slice(0, 9)}`,
+    log: [shaOf('a'), 'Fix the readme', 'Alice', '', '', shaOf('b'), 'Merge main', 'Alice', '', '', ''].join('\0'),
+    cut: ['commitPatches'],
+  }
+  expect(
+    changeGroupsOf(changes, commits).map(({ sha, title, changes, isCut }) => [
+      sha,
+      title,
+      changes.map(({ path }) => path),
+      isCut,
+    ]),
+  ).toEqual([
+    [undefined, 'Not staged', ['src/new.ts', 'old.txt', 'logo.png'], false],
+    [undefined, 'Staged, not committed', ['README.md'], true],
+    ['aaaaaaa', 'Fix the readme', ['README.md'], false],
+    ['ccccccc', '', ['README.md'], true],
+  ])
+  expect(changeGroupsOf({ ...changes, cut: [] }, { ...commits, cut: [] }).map(({ isCut }) => isCut)).toEqual([
+    false,
+    false,
+    false,
+    false,
+  ])
+})
+
+test('changes from a snapshot taken before the split read as one untitled group, cut when the snapshot was', () => {
+  const older = { isLive: false, patch, log: '', truncated: true }
+  expect(changeGroupsOf(older, older)).toEqual([{ title: '', changes: fileChangesOf(patch), isCut: true }])
+  expect(changeGroupsOf({ isLive: true, unstaged: '', staged: '', patch: '' }, undefined)).toEqual([])
+  expect(changeGroupsOf(undefined, undefined)).toEqual([])
 })
 
 test('tree entries are marked by their change, folders when they contain one', () => {

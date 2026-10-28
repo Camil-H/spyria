@@ -1,7 +1,15 @@
 import { useQuery } from '@spyria/db/react'
 import type { ChatId, WorkspaceId } from '@spyria/kernel'
 import { useSession } from '@spyria/session'
-import { buttonClass, fieldClass, ghostButtonClass, labelClass, Spinner } from '@spyria/ui'
+import {
+  buttonClass,
+  fieldClass,
+  ghostButtonClass,
+  labelClass,
+  Spinner,
+  smallButtonClass,
+  smallGhostButtonClass,
+} from '@spyria/ui'
 import { type FormEvent, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { type BranchStatus, hasNothingToPush } from '../domain/workspace.ts'
@@ -93,7 +101,7 @@ export const PublishActions = ({
             disabled={isPublishing || isPushPointless}
             title={isPushPointless ? 'Nothing to push' : undefined}
             onClick={() => publish('push')}
-            className={`inline-flex items-center gap-1.5 ${ghostButtonClass}`}
+            className={`inline-flex items-center gap-1.5 ${smallGhostButtonClass}`}
           >
             {publishingAction === 'push' && <Spinner />}
             Push
@@ -105,7 +113,7 @@ export const PublishActions = ({
               onClick={() =>
                 setDraft({ title: chatName, body: commitSubjects.map((subject) => `- ${subject}`).join('\n') })
               }
-              className={buttonClass}
+              className={smallButtonClass}
             >
               Open pull request
             </button>
