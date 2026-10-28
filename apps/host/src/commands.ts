@@ -1,4 +1,4 @@
-import { type Docker, DockerError, type Mount } from './docker.ts'
+import { type Docker, DockerError, hostMachineMapping, type Mount } from './docker.ts'
 import {
   type HarnessId,
   harnessEnvironment,
@@ -98,6 +98,7 @@ export const containerBodyOf = ({
     Labels: { 'spyria.managed': '1', 'spyria.runtime': runtimeId },
     HostConfig: {
       NetworkMode: networkNameOf(prefix, runtimeId),
+      ExtraHosts: [hostMachineMapping],
       CapDrop: ['ALL'],
       SecurityOpt: ['no-new-privileges'],
       ReadonlyRootfs: true,

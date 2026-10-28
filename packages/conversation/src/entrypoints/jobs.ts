@@ -162,7 +162,8 @@ export const createAgentHandlers = ({
         { chat, memberId: member, permission: 'chat.post' },
         (conversation) => agentClient.answerQuestion(conversation, questionId, { ...answer, answeredBy: member }),
       ),
-    reopenTarget: (chat: AgentChat) => reopenAgentTurn(dependenciesOf(chat.workspaceId), chat),
+    reopenTarget: (chat: AgentChat, closedPromptId?: string) =>
+      reopenAgentTurn(dependenciesOf(chat.workspaceId), chat, closedPromptId),
     closeReopenedTurn: (chat: AgentChat, promptId: MessageId, outcome: TurnOutcome) =>
       closeReopenedTurn(dependenciesOf(chat.workspaceId), { chat, promptId, outcome }),
     promptWaiting: (host: AgentHost) => promptWaitingChats(dependenciesOf(host.workspaceId), host),
