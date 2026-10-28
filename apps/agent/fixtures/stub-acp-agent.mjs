@@ -576,6 +576,14 @@ const turn = async (id, { sessionId, prompt }) => {
         content: [{ type: 'content', content: { type: 'text', text: 'Tests failed' } }],
       })
     }
+    if (isPi && has('confirm')) {
+      const confirmed = await piTool(`deploy-${session.prompts}`, 'deploy', {}, update, async () => {
+        const { confirmed } = await piDialog('confirm', { title: 'Deploy now?', message: 'This ships to production.' })
+        return String(confirmed)
+      })
+      await say(`confirmed:${confirmed} `)
+      await step()
+    }
     if (isPi && has('ask')) {
       const question = { question: 'Which database should we use?', options: ['Postgres', 'SQLite'] }
       await say(`answer:${await askMember(`ask-${session.prompts}`, question, update)} `)
