@@ -16,6 +16,7 @@ type StepOf<Type extends Step['type']> = Extract<Step, { type: Type }>
 
 const failedPreviewLines = 5
 const toolSummaryLength = 80
+const emptyArguments = ['', '{}']
 const outputClassName =
   'mt-1 max-h-96 overflow-auto rounded-md border border-line bg-app p-2 font-mono text-xs whitespace-pre-wrap'
 
@@ -94,21 +95,25 @@ const ToolStep = ({ step }: { step: StepOf<'tool'> }) => {
   const workspaceId = useOutletContext<WorkspaceId>()
   const { connection } = step
   const isAwaitingApproval = step.result === null && use(ToolsAwaitingApprovalContext).has(step.name)
+  const shownArguments = emptyArguments.includes(step.arguments.trim()) ? '' : step.arguments
+  const action = `${isAwaitingApproval ? 'Waiting to use' : 'Used'} ${step.name}`
   return (
     <>
-      <Disclosure
-        label={
-          <>
-            <span className="shrink-0">
-              {isAwaitingApproval ? 'Waiting to use' : 'Used'} {step.name}
-            </span>
-            <code className="truncate font-mono text-xs">{step.arguments.slice(0, toolSummaryLength)}</code>
-          </>
-        }
-      >
-        <pre className={outputClassName}>{step.arguments}</pre>
-        {step.result !== null && <pre className={outputClassName}>{step.result}</pre>}
-      </Disclosure>
+      {shownArguments === '' && !step.result ? (
+        <p className="pl-5.5 text-sm text-muted">{action}</p>
+      ) : (
+        <Disclosure
+          label={
+            <>
+              <span className="shrink-0">{action}</span>
+              <code className="truncate font-mono text-xs">{shownArguments.slice(0, toolSummaryLength)}</code>
+            </>
+          }
+        >
+          {shownArguments !== '' && <pre className={outputClassName}>{shownArguments}</pre>}
+          {step.result && <pre className={outputClassName}>{step.result}</pre>}
+        </Disclosure>
+      )}
       {connection &&
         (use(QuestionAnswererContext).isOwner ? (
           <button
