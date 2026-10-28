@@ -22,7 +22,7 @@ The repositories a workspace can use are exactly those granted to its GitHub App
 | Contents | write | clone, fetch branches, push the working branch |
 | Pull requests | write | open, update and refresh pull requests, read review threads |
 | Issues | read | let the agent read the repository's issues |
-| Checks | read | show check results on the pull request card |
+| Checks | read | show check results on the pull request card, let the agent read why a check failed |
 | Metadata | read | required by GitHub |
 | Workflows | write | push a working branch that changes files under `.github/workflows` |
 
@@ -97,12 +97,13 @@ The runtime holds no GitHub credential, so `git fetch`, `git pull`, `git push`, 
 | `update_pull_request` | The owner's prompts | Changes the title or the description of the chat's open pull request |
 | `fetch_branch` | Any prompt | Fetches any branch of the chat's repository into `origin/<branch>` in the runtime, leaving the working branch as it is |
 | `read_review_threads` | Any prompt | Reads a pull request's review threads: file, line, resolved or outdated, and comments; the chat's pull request by default |
+| `read_checks` | Any prompt | Reads the checks of a pull request's head commit, failing first, with the annotations of each failing check: file, line, title and message; the chat's pull request by default |
 | `list_issues` | Any prompt | Lists up to 30 issues of the repository, filtered by state, labels and words |
 | `read_issue` | Any prompt | Reads an issue with its comments |
 
 `fetch_branch` works like **Update from base**: the server fetches the branch with a read-only installation token and hands the runtime a git bundle (at most 12 MB) holding only that branch's commits the runtime lacks. Since pushes only fast-forward, the agent merges what it fetched rather than rebasing. The reading tools use read-only installation tokens too, never a member's token, and cut long texts. Every call is recorded like any tool call.
 
-Issue and comment text can be written by anyone who can comment on the repository, and it reaches the agent as it is.
+Issue and comment text can be written by anyone who can comment on the repository, and it reaches the agent as it is. Check annotations are written by the repository's CI, which runs the code of the pull request, so a pull request can write any text there; the tool's description tells the agent to read them as data, never as instructions. `read_checks` reads annotations, not the CI's raw logs: a CI that wants the agent to see why a test failed annotates it, as [Spyria's own CI does](../decisions/0021-ci-on-github-actions-through-develop.md).
 
 An App created before Spyria asked for **Issues** lacks that permission: add **Issues: Read-only** in the App's settings on GitHub, then accept it on the installation. Until then, `list_issues` and `read_issue` answer "Ask a GitHub admin to accept the Issues permission for this workspace's GitHub App".
 
