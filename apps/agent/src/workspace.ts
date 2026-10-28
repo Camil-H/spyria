@@ -167,7 +167,7 @@ export const statusOf = async (root: string, base: string, env: Record<string, s
     countsAgainst(root, ref, env),
     countsAgainst(root, pushedRef, env),
     git(root, ['log', '--walk-reflogs', '--max-count=1', '--format=%gd', '--date=unix', pushedRef], env),
-    git(root, ['--no-optional-locks', 'status', '--porcelain', '--no-renames', '--untracked-files=all', '-z'], env),
+    git(root, ['status', '--porcelain', '--no-renames', '--untracked-files=all', '-z'], env),
   ])
   const [, pushedSeconds] = /@\{(\d+)\}/.exec(pushedLog) ?? []
   return {
