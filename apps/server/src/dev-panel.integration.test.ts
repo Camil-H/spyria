@@ -108,10 +108,15 @@ test('a dev chat reads its tree, files, changes against base and commits through
   expect(changes.isLive).toBe(true)
   expect(changes.patch).toContain('-export const total = 1\n+export const total = 2')
   expect(changes.patch).toContain('diff --git a/src/new.ts b/src/new.ts\nnew file mode 100644')
-  expect(String(changes.log).split('\x1f').slice(1, 3)).toEqual(['Fix the totals', 'Pi Agent'])
+  expect(changes.unstaged).toContain('diff --git a/src/new.ts b/src/new.ts')
+  const commits = (await read(alice, id, 'commits')).body
+  expect(commits).toMatchObject({ isLive: true, hasMoreCommits: false, truncated: false })
+  expect(String(commits.log).split('\0').slice(1, 3)).toEqual(['Fix the totals', 'Pi Agent'])
+  expect(commits.commitPatches).toContain('-export const total = 1\n+export const total = 2')
   expect((await request(alice, 'GET', `/api/chats/${id}/workspace/remove`)).status).toBe(400)
 
-  for (const kind of ['tree', 'file', 'changes']) expect((await read(bob, id, kind, 'README.md')).status).toBe(403)
+  for (const kind of ['tree', 'file', 'changes', 'commits'])
+    expect((await read(bob, id, kind, 'README.md')).status).toBe(403)
   expect((await request(bob, 'POST', `/api/chats/${id}/workspace/wake`)).status).toBe(403)
   await database.$client`
     insert into chat_participants (workspace_id, chat_id, user_id, role_id) values (${acme}, ${id}, ${bob}, 'reader')`
@@ -124,7 +129,7 @@ test('a dev chat reads its tree, files, changes against base and commits through
   const many = (await read(alice, id, 'tree', 'many')).body
   expect([many.entries.length, many.truncated]).toEqual([500, true])
   expect((await read(alice, id, 'file', 'large.txt')).body).toMatchObject({ truncated: true })
-  expect((await read(alice, id, 'changes')).body).toMatchObject({ truncated: true })
+  expect((await read(alice, id, 'changes')).body).toMatchObject({ truncated: true, cut: ['patch', 'unstaged'] })
 })
 
 test('a file the agent made is shown inline through the server, only to readers, only as allowed media from inside the workspace', async () => {
@@ -165,6 +170,7 @@ test('an asleep runtime serves the snapshot of the last turn end, a read never w
   await promptAndWait(id, 'stub:ls')
   const workspace = await workspaceOf(id)
   writeFileSync(join(workspace, 'src/app.ts'), 'export const total = 3\n')
+  git(workspace, 'commit', '-qam', 'Raise the totals')
   await promptAndWait(id, 'stub:ls')
   await waitFor(async () => String(await snapshotOf(id)).includes('export const total = 3'))
 
@@ -186,6 +192,10 @@ test('an asleep runtime serves the snapshot of the last turn end, a read never w
   expect((await read(alice, id, 'changes')).body).toMatchObject({
     isLive: false,
     patch: expect.stringContaining('+export const total = 3'),
+  })
+  expect((await read(alice, id, 'commits')).body).toMatchObject({
+    isLive: false,
+    log: expect.stringContaining('Raise the totals'),
   })
   expect((await read(alice, id, 'tree', 'src')).body).toEqual({ isLive: false })
   expect((await read(alice, id, 'file', 'README.md')).body).toEqual({ isLive: false })
