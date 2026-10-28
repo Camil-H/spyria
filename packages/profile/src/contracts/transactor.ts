@@ -1,4 +1,4 @@
-import type { Transactor } from '@spyria/kernel'
+import type { MemberId, Transactor, WorkspaceId } from '@spyria/kernel'
 import type {
   GatewayJobs,
   LlmCredentialRepository,
@@ -19,4 +19,6 @@ export type UnitOfWork = {
   workspaceEvents: WorkspaceEventLog
 }
 
-export type ProfileTransactor = Transactor<UnitOfWork>
+export type ActingMember = Readonly<{ workspaceId: WorkspaceId; memberId: MemberId }>
+
+export type ProfileTransactor = Transactor<UnitOfWork> & { member: ActingMember }

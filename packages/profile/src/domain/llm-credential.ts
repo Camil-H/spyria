@@ -1,4 +1,4 @@
-import { type CredentialId, type MemberId, nonBlank, type WorkspaceId } from '@spyria/kernel'
+import { type CredentialId, nonBlank } from '@spyria/kernel'
 import { BlankProvider, UnsupportedProvider } from './errors.ts'
 import type { Secret } from './secret.ts'
 
@@ -9,8 +9,6 @@ export const profileJobTypes = {
 
 export type LlmCredential = Readonly<{
   id: CredentialId
-  workspaceId: WorkspaceId
-  memberId: MemberId
   provider: string
   gatewayProvider: string
   last4: string

@@ -1,14 +1,10 @@
 import { expect, test } from 'bun:test'
-import { memberId, workspaceId } from '@spyria/kernel'
 import { BlankProvider, UnsupportedProvider } from './errors.ts'
 import { newLlmCredential } from './llm-credential.ts'
 import { Secret } from './secret.ts'
 
-const owner = { workspaceId: workspaceId('acme'), memberId: memberId('alice') }
-
 test('newLlmCredential trims, derives last4 and never carries the secret', () => {
   const credential = newLlmCredential({
-    ...owner,
     id: 'credential' as never,
     provider: '  OpenAI ',
     secret: new Secret('sk-test-1234567890'),
@@ -19,8 +15,7 @@ test('newLlmCredential trims, derives last4 and never carries the secret', () =>
 
 const gatewayProviderOrErrorOf = (provider: string) => {
   try {
-    return newLlmCredential({ ...owner, id: 'credential' as never, provider, secret: new Secret('abcd') })
-      .gatewayProvider
+    return newLlmCredential({ id: 'credential' as never, provider, secret: new Secret('abcd') }).gatewayProvider
   } catch (error) {
     return error
   }
