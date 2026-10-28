@@ -17,7 +17,7 @@ const appFix = {
   oldText: 'export const total = 1\n',
   newText: 'export const total = 2\n',
 }
-const commitCommand = `git add -A && git -c user.name='Pi Agent' -c user.email=agent@example.com commit -qm 'Fix the totals'`
+const commitCommand = `git add src/app.ts && git -c user.name='Pi Agent' -c user.email=agent@example.com commit -qm 'Fix the totals' -m 'The total was off by one.'`
 const treeRowOf = (page: Page, name: string) => tabPanelOf(page).getByRole('button', { name, exact: false })
 const changeOf = (page: Page, path: string) =>
   tabPanelOf(page).getByRole('button', { name: new RegExp(`^${path.replace('.', '\\.')}`) })
@@ -88,7 +88,7 @@ test.describe('Workspace panel', () => {
     await expect(diff).toContainText('+ export const total = 2')
   })
 
-  test('As a member, I see the agent’s commit in Commits while Changes still shows the diff against the base', {
+  test('As a member, I see the agent’s commit with its description in Commits, and Changes still shows the diff against the base', {
     tag: ['@spec-40'],
   }, async ({ page, agentScript }) => {
     await devChatWithEdits(page, agentScript, 'Commit totals', [{ command: commitCommand }])
@@ -97,6 +97,7 @@ test.describe('Workspace panel', () => {
     await expect(commits).toHaveCount(1)
     await expect(commits.first()).toContainText('Fix the totals')
     await expect(commits.first()).toContainText(/Pi Agent · \d\d:\d\d UTC/)
+    await expect(commits.first()).toContainText('The total was off by one.')
     await panelTabOf(page, 'Changes').click()
     await expect(changeOf(page, 'src/app.ts')).toContainText(/Modified \+1 [−-]1/)
     await expect(changeOf(page, 'src/new.ts')).toContainText(/Added \+1 [−-]0/)

@@ -11,7 +11,7 @@ export type DiffLayout = 'unified' | 'split'
 export type FileStatus = 'Added' | 'Modified' | 'Deleted'
 export type FileChange = { path: string; status: FileStatus; additions: number; deletions: number; lines: DiffLine[] }
 export type TreeEntry = { name: string; path: string; isFolder: boolean }
-export type Commit = { sha: string; subject: string; author: string; committedAt: string }
+export type Commit = { sha: string; subject: string; author: string; committedAt: string; body: string }
 export type BranchStatus = {
   aheadOfBase?: number
   behindBase?: number
@@ -86,16 +86,18 @@ export const fileChangesOf = (patch: unknown) =>
 export const commitsOf = (log: unknown): Commit[] =>
   typeof log === 'string'
     ? log
-        .split('\n')
+        .split(log.includes('\x1e') ? '\x1e' : '\n')
+        .map((record) => record.trim())
         .filter(Boolean)
-        .map((line) => {
-          const [sha = '', subject = '', author = '', committedAt = ''] = line.split('\x1f')
+        .map((record) => {
+          const [sha = '', subject = '', author = '', committedAt = '', body = ''] = record.split('\x1f')
           const time = Date.parse(committedAt)
           return {
             sha: sha.slice(0, 7),
             subject,
             author,
             committedAt: Number.isNaN(time) ? '' : new Date(time).toISOString(),
+            body: body.trim(),
           }
         })
     : []
