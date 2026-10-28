@@ -112,3 +112,11 @@ test('custom roles are assignable within the actor’s own permissions, never as
     invitable: ['superuser', 'editor', 'poster', 'prompter'],
   })
 })
+
+test('an archived chat shows no members panel', () => {
+  const archived = {
+    ...snapshot,
+    chats: snapshot.chats.map((chat) => (chat.id === invoiceBug ? { ...chat, archived: true } : chat)),
+  }
+  expect(getMembers(acme, invoiceBug, alice)(archived)).toBeUndefined()
+})

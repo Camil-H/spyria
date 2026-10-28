@@ -1,7 +1,6 @@
 import {
   type ChatRow,
   chatPermissionsIn,
-  findChat,
   inChat,
   type MessageRow,
   memberNamesIn,
@@ -26,6 +25,7 @@ import { stillRunningOf } from '../domain/delegation.ts'
 import { isAgentActivity, isFrozen } from '../domain/message.ts'
 import type { PullRequestStep } from '../domain/pull-requests.ts'
 import { type RunsOn, runsOnOf } from '../domain/session-routing.ts'
+import { conversationChatIn } from './conversation-chat.ts'
 
 export type ConversationMessage = Readonly<{
   id: MessageId
@@ -224,7 +224,7 @@ const turnItemsOf = (messages: readonly ConversationMessage[]): ConversationItem
 export const getConversation =
   (workspaceId: WorkspaceId, chatId: ChatId, viewerId: MemberId, spyriaRuntimeAvailable?: boolean) =>
   (snapshot: Snapshot): Conversation | null => {
-    const chat = findChat(snapshot, workspaceId, chatId)
+    const chat = conversationChatIn(snapshot, workspaceId, chatId)
     if (!chat) return null
     const memberNameOf = memberNamesIn(snapshot, workspaceId)
     const memberName = (memberId: MemberId | null) => (memberId ? memberNameOf(memberId) : 'Agent')
@@ -233,7 +233,7 @@ export const getConversation =
         .filter((membership) => membership.workspaceId === workspaceId)
         .map((membership) => [membership.memberId, membership.avatar]),
     )
-    const origin = chat.originChatId ? findChat(snapshot, workspaceId, chat.originChatId) : undefined
+    const origin = chat.originChatId ? conversationChatIn(snapshot, workspaceId, chat.originChatId) : undefined
     const chatMessages = snapshot.messages.filter((message) => message.chatId === chatId)
     const hasActiveTurn = chat.agentTurnMessageId !== null
     const isOwner = chat.ownerId === viewerId
@@ -274,7 +274,7 @@ export const getConversation =
       (origin) => origin.messageId,
     )
     const runtimeLinkOf = ({ runtimeChatId, startedBy }: RuntimeOriginRow): RuntimeLink => {
-      const runtimeChat = findChat(snapshot, workspaceId, runtimeChatId)
+      const runtimeChat = conversationChatIn(snapshot, workspaceId, runtimeChatId)
       const canOpen = runtimeChat && can(chatPermissionsIn(snapshot, workspaceId, viewerId)(runtimeChat), 'chat.read')
       return { chatId: runtimeChatId, startedByName: memberName(startedBy), name: canOpen ? runtimeChat.name : null }
     }
