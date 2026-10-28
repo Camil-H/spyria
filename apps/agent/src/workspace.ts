@@ -100,20 +100,28 @@ const baseRefOf = async (root: string, base: string, env: Record<string, string>
 export const changesOf = async (root: string, base: string, env: Record<string, string>) => {
   const ref = await baseRefOf(root, base, env)
   const mergeBase = ref ? (await git(root, ['merge-base', ref, 'HEAD'], env)).trim() : ''
-  if (!mergeBase) return { patch: '', log: '', truncated: false }
+  if (!mergeBase) return { patch: '', unstaged: '', staged: '', commitPatches: '', log: '', truncated: false }
   const index = join(tmpdir(), `spyria-index-${crypto.randomUUID()}`)
   try {
     await copyFile(join(root, '.git', 'index'), index).catch(() => undefined)
     const indexEnvironment = { ...env, GIT_INDEX_FILE: index }
     await git(root, ['add', '--all', '--intent-to-add'], indexEnvironment)
-    const [patch, log] = await Promise.all([
+    const commits = [`--max-count=${maximumCommits}`, `${mergeBase}..HEAD`]
+    const [patch, unstaged, staged, commitPatches, log] = await Promise.all([
       git(root, ['diff', '--no-renames', '--no-color', mergeBase], indexEnvironment),
-      git(root, ['log', `--max-count=${maximumCommits}`, '--format=%H%x1f%s%x1f%an%x1f%aI', `${mergeBase}..HEAD`], env),
+      git(root, ['diff', '--no-renames', '--no-color'], indexEnvironment),
+      git(root, ['diff', '--cached', '--no-renames', '--no-color', 'HEAD'], env),
+      git(root, ['log', '--patch', '--no-renames', '--no-color', '--format=%x1e%H', ...commits], env),
+      git(root, ['log', '--format=%H%x1f%s%x1f%an%x1f%aI%x1f%b%x1e', ...commits], env),
     ])
+    const patches = [patch, unstaged, staged, commitPatches]
     return {
       patch: patch.slice(0, maximumPatchCharacters),
+      unstaged: unstaged.slice(0, maximumPatchCharacters),
+      staged: staged.slice(0, maximumPatchCharacters),
+      commitPatches: commitPatches.slice(0, maximumPatchCharacters),
       log,
-      truncated: patch.length > maximumPatchCharacters,
+      truncated: patches.some((text) => text.length > maximumPatchCharacters),
     }
   } finally {
     await rm(index, { force: true })
