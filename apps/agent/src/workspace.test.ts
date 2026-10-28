@@ -104,8 +104,9 @@ test('changes are the diff against the base branch with commits, uncommitted edi
   git(directory, 'clone', '-q', source, changes)
   git(changes, 'checkout', '-q', '-b', 'spyria/fix')
   write(changes, { 'src/app.ts': 'export const total = 2\n' })
-  git(changes, 'commit', '-q', '-am', 'Fix the total')
+  git(changes, 'commit', '-q', '-am', 'Fix the total', '-m', 'The total was off by one.')
   write(changes, { 'README.md': '# app\nFixed.\n', 'src/new.ts': 'export {}\n', 'node_modules/x.js': '' })
+  git(changes, 'add', 'README.md')
   const { call } = started({ workspaceDirectory: changes })
   const { body } = await call('GET', '/api/workspace/changes?base=main')
   const patch = String(body.patch)
@@ -115,12 +116,29 @@ test('changes are the diff against the base branch with commits, uncommitted edi
   expect(patch).toContain('diff --git a/src/new.ts b/src/new.ts\nnew file mode 100644')
   expect(patch).not.toContain('node_modules')
   expect(body.truncated).toBe(false)
-  expect(String(body.log).trim().split('\x1f').slice(1, 3)).toEqual(['Fix the total', 'Agent'])
+  const [commit = ''] = String(body.log).split('\x1e')
+  expect(commit.split('\x1f').slice(1)).toEqual([
+    'Fix the total',
+    'Agent',
+    expect.any(String),
+    'The total was off by one.\n',
+  ])
+  expect(String(body.unstaged)).toStartWith('diff --git a/src/new.ts b/src/new.ts\nnew file mode 100644')
+  expect(String(body.unstaged)).not.toContain('README.md')
+  expect(String(body.staged)).toStartWith('diff --git a/README.md b/README.md')
+  expect(String(body.staged)).not.toContain('src/new.ts')
+  const [beforeCommit, commitPatch] = String(body.commitPatches).split('\x1e')
+  expect(beforeCommit).toBe('')
+  expect(commitPatch).toMatch(/^[0-9a-f]{40}\n\ndiff --git a\/src\/app\.ts b\/src\/app\.ts\n/)
+  expect(String(body.commitPatches)).not.toContain('README.md')
   const status = Bun.spawnSync(['git', 'status', '--porcelain'], { cwd: changes }).stdout.toString()
   expect(status).toContain('?? src/new.ts')
   for (const base of ['missing', '--output=x', ''])
     expect((await call('GET', `/api/workspace/changes?base=${encodeURIComponent(base)}`)).body).toEqual({
       patch: '',
+      unstaged: '',
+      staged: '',
+      commitPatches: '',
       log: '',
       truncated: false,
     })
