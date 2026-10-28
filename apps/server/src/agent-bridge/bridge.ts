@@ -131,23 +131,34 @@ export const createAgentBridge = ({
     >()
     const streamedSeqs = new Map<string, number>()
     const viewers = new Map<string, Map<WSContext, MemberId>>()
+    const watchedKeys = new Map<WSContext, Set<string>>()
     const streams = new Map<WSContext, StreamSession>()
     const closeStreamsWhere = (isClosed: (session: StreamSession) => boolean) => {
       for (const [viewer, session] of streams)
         if (isClosed(session)) viewer.close(notSignedInCloseCode, 'Not signed in')
     }
     const viewersOf = (chat: AgentChat) => viewers.get(keyOf(chat))?.keys() ?? []
+    const watchChat = (viewer: WSContext, key: string, memberId: MemberId) => {
+      viewers.set(key, (viewers.get(key) ?? new Map()).set(viewer, memberId))
+      watchedKeys.set(viewer, (watchedKeys.get(viewer) ?? new Set()).add(key))
+    }
     const unwatchChat = (viewer: WSContext, key: string) => {
       const watching = viewers.get(key)
       watching?.delete(viewer)
       if (watching?.size === 0) viewers.delete(key)
+      const watched = watchedKeys.get(viewer)
+      watched?.delete(key)
+      if (watched?.size === 0) watchedKeys.delete(viewer)
+    }
+    const unwatchEveryChat = (viewer: WSContext) => {
+      for (const key of [...(watchedKeys.get(viewer) ?? [])]) unwatchChat(viewer, key)
     }
     const delegatedTexts = new Map<string, Map<string, DelegatedFrame>>()
     const shownQuestions = new Map<string, Map<string, QuestionFrame>>()
     const sendText = (viewer: WSContext, text: string) => {
       if (((viewer.raw as ServerWebSocket | undefined)?.getBufferedAmount() ?? 0) <= slowViewerBytes)
         return viewer.send(text)
-      for (const key of [...viewers.keys()]) unwatchChat(viewer, key)
+      unwatchEveryChat(viewer)
       viewer.close(slowViewerCloseCode, 'Too slow; reconnect to catch up')
     }
     const frameTextOf = (chat: AgentChat, frame: object) => JSON.stringify({ chatId: chat.chatId, ...frame })
@@ -481,7 +492,7 @@ export const createAgentBridge = ({
           await Bun.sleep(readableRetryMilliseconds)
         }
         if (viewer.readyState !== 1) return
-        viewers.set(keyOf(chat), (viewers.get(keyOf(chat)) ?? new Map()).set(viewer, context.userId))
+        watchChat(viewer, keyOf(chat), context.userId)
         const streaming = sockets.get(keyOf(chat))
         if (streaming?.promptId && streaming.streamedText)
           send(viewer, chat, {
@@ -515,16 +526,15 @@ export const createAgentBridge = ({
       openStream: (viewer: WSContext, session: StreamSession) => {
         streams.set(viewer, session)
       },
-      unwatch: (viewer: WSContext, chat?: AgentChat) => {
-        for (const key of chat ? [keyOf(chat)] : [...viewers.keys()]) unwatchChat(viewer, key)
-      },
+      unwatch: (viewer: WSContext, chat: AgentChat) => unwatchChat(viewer, keyOf(chat)),
       endStream: (viewer: WSContext) => {
         streams.delete(viewer)
-        for (const key of [...viewers.keys()]) unwatchChat(viewer, key)
+        unwatchEveryChat(viewer)
       },
       retained: () => ({
         turnSpans: turnSpans.size,
         viewers: viewers.size,
+        watchingViewers: watchedKeys.size,
         shownQuestions: shownQuestions.size,
         delegatedTexts: delegatedTexts.size,
         streamedSeqs: streamedSeqs.size,
