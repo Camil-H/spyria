@@ -762,6 +762,7 @@ export const workspaceTablesInPurgeOrder = [
   'invitations',
   'llm_credentials',
   'member_gateway_keys',
+  'member_onboarding',
   'sessions',
   'tool_connections',
   'memberships',
@@ -776,6 +777,7 @@ export const workspaceTablesInPurgeOrder = [
   'workspace_sso',
   'usage_sync_marks',
   'workspace_events',
+  'workspace_onboarding',
   'workspaces',
 ] as const
 

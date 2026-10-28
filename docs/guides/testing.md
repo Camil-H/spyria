@@ -59,6 +59,7 @@ Run `typecheck`, `lint`, `check:boundaries` and `check:related`. Run `check:all`
 | `packages/profile` | `06-connectors` |
 | `packages/runtime`, `apps/server/src/agent-bridge`, `apps/server/src/runtime-hosts` | `04-agent`, `05-machines` |
 | `packages/usage` | `08-admin` |
+| `packages/onboarding` | `01-access`, `08-admin` |
 | `apps/server/src/github` | `07-dev-mode` |
 | `apps/server/src/auth` | `01-access` |
 | `apps/agent`, `apps/host` | `04-agent`, `05-machines`, `07-dev-mode` |
