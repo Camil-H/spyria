@@ -29,12 +29,15 @@ const capture = async ({ url, output, viewport, fullPage, theme }) => {
     const page = await browser.newPage({ ...viewports[viewport], colorScheme: theme })
     await page.goto(url, { waitUntil: 'load', timeout: loadTimeoutMilliseconds })
     await page.waitForLoadState('networkidle', { timeout: settleTimeoutMilliseconds }).catch(() => {})
-    const { width, height } = viewports[viewport].viewport
-    const pageHeight = fullPage ? await page.evaluate(() => document.documentElement.scrollHeight) : height
+    const { scrollWidth, scrollHeight } = await page.evaluate(() => {
+      const { scrollWidth, scrollHeight } = document.documentElement
+      return { scrollWidth, scrollHeight }
+    })
+    const isCut = fullPage && scrollHeight > maximumPageHeight
     await page.screenshot({
       path: output,
       fullPage,
-      clip: { x: 0, y: 0, width, height: Math.min(Math.max(pageHeight, height), maximumPageHeight) },
+      ...(isCut && { clip: { x: 0, y: 0, width: scrollWidth, height: maximumPageHeight } }),
     })
   } finally {
     await browser.close()

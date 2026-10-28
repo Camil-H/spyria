@@ -35,20 +35,26 @@ test('in the runtime image, run with a runtime’s limits, spyria-agent saves a 
     ).json() as Promise<Record<string, unknown>>
   await waitFor(async () => (await fetch(`http://127.0.0.1:${port}/ready`).catch(() => undefined))?.ok === true)
 
-  const request = {
-    url: 'http://localhost:8000/ready',
-    name: 'ready',
-    viewport: 'mobile',
-    fullPage: true,
-    theme: 'dark',
+  const request = { url: 'http://localhost:8000/ready', viewport: 'mobile', fullPage: false, theme: 'dark' }
+  const sizeOf = async (fields: object) => {
+    const taken = await call('POST', '/api/workspace/screenshot', { ...request, ...fields })
+    const { content } = await call('GET', `/api/workspace/media?${new URLSearchParams({ path: String(taken.path) })}`)
+    const png = Buffer.from(String(content), 'base64')
+    return { path: taken.path, type: png.subarray(1, 4).toString(), size: [png.readUInt32BE(16), png.readUInt32BE(20)] }
   }
-  const taken = await call('POST', '/api/workspace/screenshot', request)
-  expect(taken).toEqual({ path: '.spyria/screenshots/ready.png' })
-  const { content } = await call('GET', `/api/workspace/media?${new URLSearchParams({ path: String(taken.path) })}`)
-  const png = Buffer.from(String(content), 'base64')
-  expect(png.subarray(1, 4).toString()).toBe('PNG')
-  expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([390, 844])
-  expect(await call('POST', '/api/workspace/screenshot', { ...request, url: 'http://localhost:9/' })).toEqual({
+  expect(await sizeOf({ name: 'phone' })).toEqual({
+    path: '.spyria/screenshots/phone.png',
+    type: 'PNG',
+    size: [390, 844],
+  })
+  expect(await sizeOf({ name: 'desktop', viewport: 'desktop', fullPage: true })).toEqual({
+    path: '.spyria/screenshots/desktop.png',
+    type: 'PNG',
+    size: [1280, 800],
+  })
+  expect(
+    await call('POST', '/api/workspace/screenshot', { ...request, name: 'down', url: 'http://localhost:9/' }),
+  ).toEqual({
     error:
       'The screenshot of http://localhost:9/ failed: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:9/',
   })
