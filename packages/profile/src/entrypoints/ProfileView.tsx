@@ -9,7 +9,7 @@ import { DisplayNameForm } from './DisplayNameForm.tsx'
 import { LlmAccessSection } from './LlmAccessSection.tsx'
 import { ProfilePictureSection } from './ProfilePictureSection.tsx'
 
-export const ProfileView = ({ children }: { children?: ReactNode }) => {
+export const ProfileView = ({ intro, children }: { intro?: ReactNode; children?: ReactNode }) => {
   const workspaceId = useOutletContext<WorkspaceId>()
   const { memberId } = useSession()
   const profile = useQuery(getProfile, workspaceId, memberId)
@@ -17,6 +17,7 @@ export const ProfileView = ({ children }: { children?: ReactNode }) => {
   return (
     <div className="flex max-w-3xl flex-col gap-8">
       <h1 className="text-2xl font-semibold">Profile</h1>
+      {intro}
       <ProfilePictureSection
         workspaceId={workspaceId}
         name={profile.displayName}

@@ -515,6 +515,27 @@ export const memberGatewayKeys = table(
   (table) => [primaryKey({ columns: [table.workspaceId, table.userId] }), memberReference(table, table.userId)],
 )
 
+export const workspaceOnboarding = table(
+  'workspace_onboarding',
+  {
+    workspaceId: text()
+      .notNull()
+      .references(() => workspaces.workspaceId),
+    task: text().notNull(),
+    completedAt: instant().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.workspaceId, table.task] })],
+)
+
+export const memberOnboarding = table(
+  'member_onboarding',
+  { ...tenant, userId: text().notNull(), task: text().notNull(), completedAt: instant(), skippedAt: instant() },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.userId, table.task] }),
+    memberReference(table, table.userId),
+  ],
+)
+
 export type ConnectionTool = { name: string; readOnly: boolean }
 
 export const workspaceConnections = table(

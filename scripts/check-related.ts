@@ -89,6 +89,7 @@ const e2eSegmentsByArea: [RegExp, string[]][] = [
   [/^packages\/profile\//, ['06-connectors']],
   [/^packages\/runtime\//, ['04-agent', '05-machines']],
   [/^packages\/usage\//, ['08-admin']],
+  [/^packages\/onboarding\//, ['01-access', '08-admin']],
   [/^apps\/server\/src\/(agent-bridge|runtime-hosts)\//, ['04-agent', '05-machines']],
   [/^apps\/server\/src\/github\//, ['07-dev-mode']],
   [/^apps\/server\/src\/auth\//, ['01-access']],

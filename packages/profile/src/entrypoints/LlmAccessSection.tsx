@@ -11,7 +11,7 @@ export const LlmAccessSection = ({ workspaceId, memberId }: { workspaceId: Works
   const credentials = useQuery(getLlmCredentials, workspaceId, memberId)
   const [removing, setRemoving] = useState<{ id: CredentialId; provider: string } | null>(null)
   return (
-    <LabelledSection title="LLM access">
+    <LabelledSection id="llm-access" title="LLM access">
       <AddCredentialForm workspaceId={workspaceId} />
       {credentials.length === 0 ? (
         <p className="text-sm text-muted">No LLM keys yet</p>

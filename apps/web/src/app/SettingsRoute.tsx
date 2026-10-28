@@ -1,6 +1,7 @@
 import type { Snapshot } from '@spyria/db'
 import { useQuery, useScoped } from '@spyria/db/react'
 import type { WorkspaceId, WorkspacePermission } from '@spyria/kernel'
+import { ChecklistBlock } from '@spyria/onboarding'
 import { WorkspaceConnectionsSection } from '@spyria/profile'
 import { RuntimeHostsSection } from '@spyria/runtime'
 import { focusRing, formatCost, iconButtonClass, LabelledSection } from '@spyria/ui'
@@ -17,7 +18,7 @@ import {
 import { ArrowLeft } from 'lucide-react'
 import { type ComponentType, use } from 'react'
 import { Link, useOutletContext, useParams } from 'react-router'
-import { loadAuthMode } from './auth.ts'
+import { sharedAuthMode } from './auth.ts'
 
 type SettingsCard = {
   path: string
@@ -106,8 +107,6 @@ const cardSections: readonly { title: string; cards: readonly SettingsCard[] }[]
   },
 ]
 
-const authModeLoading = loadAuthMode()
-
 const countLabelOf = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`
 
 const cardStatusesOf =
@@ -146,7 +145,7 @@ const cardStatusesOf =
 const SettingsRoute = () => {
   const workspaceId = useOutletContext<WorkspaceId>()
   const permissions = useWorkspacePermissions(workspaceId)
-  const authMode = use(authModeLoading)
+  const authMode = use(sharedAuthMode())
   const isDexSignIn = authMode.authMode === 'dex'
   const { card } = useParams()
   const syncedStatuses = useQuery(cardStatusesOf, workspaceId, isDexSignIn)
@@ -185,6 +184,7 @@ const SettingsRoute = () => {
   return (
     <div className="flex max-w-4xl flex-col gap-8 p-6">
       <h1 className="text-2xl font-semibold">Workspace settings</h1>
+      <ChecklistBlock workspaceId={workspaceId} scope="workspace" usesSingleSignOn={!isDexSignIn} />
       {allowedSections.length > 0 ? (
         allowedSections.map(({ title, cards }) => (
           <LabelledSection key={title} title={title}>

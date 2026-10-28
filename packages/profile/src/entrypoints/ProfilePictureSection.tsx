@@ -42,7 +42,7 @@ export const ProfilePictureSection = ({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-4">
-        <section aria-label="Profile picture" className="flex">
+        <section id="profile-picture" aria-label="Profile picture" className="flex">
           <input
             ref={fileInputRef}
             type="file"

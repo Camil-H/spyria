@@ -266,6 +266,29 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
   const chatMembersOf = mappedRows(withMemberId<ZeroRows['chatParticipants'][number]>)
   const chatRolesOf = mappedRows((role: ZeroRows['chatRoles'][number]) => role)
   const llmCredentialsOf = mappedRows(withMemberId<ZeroRows['llmCredentials'][number]>)
+  const ssoDomainsOf = mappedRows(({ workspaceId, domain, verifiedAt }: ZeroRows['ssoDomains'][number]) => ({
+    workspaceId,
+    domain,
+    isVerified: verifiedAt != null,
+  }))
+  const githubAppsOf = mappedRows(({ workspaceId }: ZeroRows['githubApps'][number]) => ({ workspaceId }))
+  const githubConnectionsOf = mappedRows(({ workspaceId, userId }: ZeroRows['githubConnections'][number]) => ({
+    workspaceId,
+    memberId: userId,
+  }))
+  const workspaceOnboardingOf = mappedRows(({ workspaceId, task }: ZeroRows['workspaceOnboarding'][number]) => ({
+    workspaceId,
+    task,
+  }))
+  const memberOnboardingOf = mappedRows(
+    ({ workspaceId, userId, task, completedAt, skippedAt }: ZeroRows['memberOnboarding'][number]) => ({
+      workspaceId,
+      memberId: userId,
+      task,
+      isCompleted: completedAt != null,
+      isSkipped: skippedAt != null,
+    }),
+  )
   const workspaceConnectionsOf = mappedRows((connection: ZeroRows['workspaceConnections'][number]) => connection)
   const connectionRestrictionsOf = mappedRows(withMemberId<ZeroRows['connectionRestrictions'][number]>)
   const runtimeHostsOf = mappedRows(
@@ -316,6 +339,11 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
       chatMembers: chatMembersOf(rowsOf('chatParticipants')),
       chatRoles: chatRolesOf(rowsOf('chatRoles')),
       llmCredentials: llmCredentialsOf(rowsOf('llmCredentials')),
+      ssoDomains: ssoDomainsOf(rowsOf('ssoDomains')),
+      githubApps: githubAppsOf(rowsOf('githubApps')),
+      githubConnections: githubConnectionsOf(rowsOf('githubConnections')),
+      workspaceOnboarding: workspaceOnboardingOf(rowsOf('workspaceOnboarding')),
+      memberOnboarding: memberOnboardingOf(rowsOf('memberOnboarding')),
       workspaceConnections: workspaceConnectionsOf(rowsOf('workspaceConnections')),
       connectionRestrictions: connectionRestrictionsOf(rowsOf('connectionRestrictions')),
       runtimeHosts: runtimeHostsOf(rowsOf('runtimeHosts')),

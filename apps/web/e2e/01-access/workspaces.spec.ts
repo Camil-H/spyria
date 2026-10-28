@@ -69,9 +69,10 @@ test.describe('Workspaces', () => {
 
     await test.step('opens the new empty workspace and lists it in the menu', async () => {
       const sidebarLinks = sidebarOf(page).getByRole('link')
-      await expect(sidebarLinks).toHaveCount(2)
-      await expect(sidebarLinks.nth(0)).toHaveAccessibleName(/^Workspace settings/)
-      await expect(sidebarLinks.nth(1)).toHaveAccessibleName(/^Profile/)
+      await expect(sidebarLinks).toHaveCount(3)
+      await expect(sidebarLinks.nth(0)).toHaveAccessibleName('Get started: 0 of 5 done')
+      await expect(sidebarLinks.nth(1)).toHaveAccessibleName(/^Workspace settings/)
+      await expect(sidebarLinks.nth(2)).toHaveAccessibleName(/^Profile/)
       await expect(sidebarOf(page).getByRole('group')).toHaveCount(1)
       await expect(mainOf(page)).toContainText('Select a chat')
       expect(await menuItemNamesOf(page)).toEqual([

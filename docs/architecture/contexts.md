@@ -60,6 +60,7 @@ A context exposes up to three entries in its `package.json`:
 | `runtime` | Where agents run: runtime hosts, members' own machines and the runtimes on them. |
 | `profile` | What belongs to one member: their profile, keys and personal connections. |
 | `usage` | Metering: usage, spend, budgets and the audit log. |
+| `onboarding` | The setup checklist: the tasks each member sees, which are done for good and which they skipped. It owns only its records and reads the facts it checks (a verified domain, a GitHub App, a key…) through the shared Zero schema. |
 | `panel` | The chat's side panel, a read-only view over the other contexts' data. |
 
 ### How contexts talk
