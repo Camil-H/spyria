@@ -24,6 +24,7 @@ export {
   chatAttachmentsPathOf,
   chatMediaPathOf,
 } from './domain/attachments.ts'
+export { logExcerptOf } from './domain/ci-logs.ts'
 export { awaitTaskTool, routerTools, stillRunningOf, subagentFailureOf, unknownTaskOf } from './domain/delegation.ts'
 export { type GitAction, isGitAction } from './domain/git-actions.ts'
 export {
@@ -35,10 +36,12 @@ export {
   type IssueSummary,
   isReadOnlyGitHubTool,
   type PullRequestChange,
+  type PullRequestChecks,
   type ReviewThread,
 } from './domain/github-tools.ts'
 export { genericModelCallNoticeOf, type ModelCallFailure } from './domain/model-call-failures.ts'
 export {
+  checkStateOf,
   checksOf,
   noGitHubConnection,
   type PublishAction,
