@@ -34,9 +34,13 @@ export const sweepAgentTurns = async (
   await transactor.run(({ agentJobs }) => agentJobs.sweepLater())
 }
 
-export const reopenAgentTurn = async ({ transactor, runtimes, agentClient }: AgentDependencies, chat: AgentChat) => {
+export const reopenAgentTurn = async (
+  { transactor, runtimes, agentClient }: AgentDependencies,
+  chat: AgentChat,
+  closedPromptId?: string,
+) => {
   const promptId = await transactor.run(({ agentTurns }) => agentTurns.lock(chat.chatId))
-  if (promptId === null) return undefined
+  if (promptId === null || (closedPromptId && promptId !== closedPromptId)) return undefined
   const endpoint = await runtimes.endpointOf(chat)
   if (!endpoint && (await runtimes.isWaitingOnHost(chat))) return undefined
   const conversation = endpoint?.conversationId ? { ...endpoint, conversationId: endpoint.conversationId } : undefined

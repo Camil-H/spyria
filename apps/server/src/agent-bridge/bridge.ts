@@ -218,7 +218,7 @@ export const createAgentBridge = ({
       setTimeout(() => void reopen(chat, closedPromptId), reopenDelayMilliseconds)
     const reopen = async (chat: AgentChat, closedPromptId?: string) => {
       if (isReleased || sockets.has(keyOf(chat))) return
-      const target = await handlers.reopenTarget(chat).catch((error) => {
+      const target = await handlers.reopenTarget(chat, closedPromptId).catch((error) => {
         logFailure(chat)(error)
         reopenLater(chat, closedPromptId)
         return null
