@@ -1,4 +1,4 @@
-import { type ChatId, chatId, DomainError, type ProjectId, type WorkspaceId } from '@spyria/kernel'
+import { type ChatId, chatId, type ProjectId, refusalOf, type WorkspaceId } from '@spyria/kernel'
 import type { GitHubRepository, GitHubSettingsInput, GitHubSettingsView } from '../domain/github.ts'
 
 export const githubSettingsPath = '/api/github-settings'
@@ -14,13 +14,11 @@ type GetAsMember = (workspaceId: WorkspaceId, path: string) => Promise<Response>
 const bodyOf = async <Body>(response: Response) => {
   const body = (await response.json().catch(() => ({}))) as Body & { error?: string; message?: string }
   if (!response.ok)
-    throw new DomainError(
-      body.error ?? 'internal',
-      body.message ??
-        (response.status >= 502
-          ? `The server could not be reached (${response.status})`
-          : `The request was refused with ${response.status}`),
-    )
+    throw refusalOf(response.status, {
+      error: body.error,
+      message:
+        body.message ?? (response.status >= 502 ? `The server could not be reached (${response.status})` : undefined),
+    })
   return body
 }
 

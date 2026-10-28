@@ -19,17 +19,14 @@ const dependenciesOf = (tx: Transaction, context: ZeroContext, args: { workspace
   return { transactor: createZeroTransactor(tx, context) }
 }
 
-const contextMember = (context: ZeroContext) => ({ workspaceId: context.workspaceId, memberId: context.userId })
-
 export const profileMutators = defineMutators({
   profile: {
     renameMember: defineMutator(
       z.extend(workspaceArguments, { name: z.pipe(z.string(), z.transform(DisplayName)) }),
-      ({ tx, ctx, args }) => renameMember(dependenciesOf(tx, ctx, args), { ...args, ...contextMember(ctx) }),
+      ({ tx, ctx, args }) => renameMember(dependenciesOf(tx, ctx, args), args),
     ),
     changeAvatar: defineMutator(z.extend(workspaceArguments, { avatar: z.nullable(z.string()) }), ({ tx, ctx, args }) =>
       changeAvatar(dependenciesOf(tx, ctx, args), {
-        ...contextMember(ctx),
         avatar: args.avatar === null ? null : Avatar(args.avatar),
       }),
     ),
@@ -37,17 +34,14 @@ export const profileMutators = defineMutators({
       z.extend(workspaceArguments, {
         credentialId: z.pipe(z.string().check(z.minLength(1)), z.transform(credentialId)),
       }),
-      ({ tx, ctx, args }) => removeLlmCredential(dependenciesOf(tx, ctx, args), { ...args, ...contextMember(ctx) }),
+      ({ tx, ctx, args }) => removeLlmCredential(dependenciesOf(tx, ctx, args), args),
     ),
   },
 })
 
 export const removeMemberProfileOnServer = async (tx: Transaction, workspaceId: WorkspaceId, memberId: MemberId) => {
   if (tx.location === 'server')
-    await removeMemberProfile(
-      { transactor: createZeroTransactor(tx, memberContext(workspaceId, memberId)) },
-      { workspaceId, memberId },
-    )
+    await removeMemberProfile({ transactor: createZeroTransactor(tx, memberContext(workspaceId, memberId)) })
 }
 
 export const releaseWorkspaceConnectionsOnServer = async (

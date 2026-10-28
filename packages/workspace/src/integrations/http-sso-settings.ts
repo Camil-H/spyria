@@ -1,4 +1,4 @@
-import { DomainError, type WorkspaceId } from '@spyria/kernel'
+import { refusalOf, type WorkspaceId } from '@spyria/kernel'
 import type { SsoSettingsInput, SsoSettingsView } from '../domain/sso.ts'
 
 export const ssoSettingsPath = '/api/sso-settings'
@@ -13,8 +13,7 @@ const settingsOf = async (response: Response) => {
     error?: string
     message?: string
   }
-  if (!response.ok)
-    throw new DomainError(body.error ?? 'internal', body.message ?? `The request was refused with ${response.status}`)
+  if (!response.ok) throw refusalOf(response.status, body)
   return body.settings ?? null
 }
 

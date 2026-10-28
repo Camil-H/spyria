@@ -233,8 +233,8 @@ export type Snapshot = {
 
 type ChatScoped = { workspaceId: WorkspaceId; chatId: ChatId }
 
-export const findChat = (snapshot: Snapshot, workspaceId: WorkspaceId, chatId: ChatId) =>
-  snapshot.chats.find((chat) => chat.id === chatId && chat.workspaceId === workspaceId && !chat.archived)
+export const chatIn = (snapshot: Snapshot, workspaceId: WorkspaceId, chatId: ChatId) =>
+  snapshot.chats.find((chat) => chat.id === chatId && chat.workspaceId === workspaceId)
 
 export const inChat = (workspaceId: WorkspaceId, chatId: ChatId) => (row: ChatScoped) =>
   row.workspaceId === workspaceId && row.chatId === chatId

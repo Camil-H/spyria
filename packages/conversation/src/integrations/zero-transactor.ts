@@ -32,11 +32,20 @@ import {
   storedAttachmentBytesOf,
 } from '@spyria/db/server-writes'
 import type { Message as MessageRow } from '@spyria/db/zero'
-import { chatPermissionsOf, isOwnerRemoved, skippingRefusedRebase, type Transact, zql } from '@spyria/db/zero-queries'
+import {
+  chatPermissionsOf,
+  isOwnerRemoved,
+  type Transact,
+  transactingTransactor,
+  transactorOver,
+  zql,
+} from '@spyria/db/zero-queries'
 import {
   type ChatId,
+  ChatNotFound,
   type ChatPermission,
   chatId,
+  ForeignWorkspace,
   type HarnessId,
   type MemberId,
   type MessageId,
@@ -50,7 +59,7 @@ import type { ParticipantChange } from '../contracts/repositories.ts'
 import type { ConversationTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import { agentJobTypes, agentSweepIntervalMilliseconds, waitingNotices } from '../domain/agent-events.ts'
 import type { StoredStep } from '../domain/agent-steps.ts'
-import { ChatNotFound, ForeignWorkspace, MessageNotFound } from '../domain/errors.ts'
+import { MessageNotFound } from '../domain/errors.ts'
 import { agentActivityKinds, type Message, type MessageChange } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
 import type { AgentEventPayload, ChangedPayload, PostedPayload, StepChangedPayload } from '../domain/message-events.ts'
@@ -551,12 +560,8 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         )) !== undefined,
     },
   }
-  return { run: (work) => skippingRefusedRebase(tx, () => work(unitOfWork)) }
+  return transactorOver(tx, unitOfWork)
 }
 
-export const createTransactingZeroTransactor = (
-  transact: Transact,
-  workspaceId: WorkspaceId,
-): ConversationTransactor => ({
-  run: (work) => transact((tx) => createZeroTransactor(tx, workspaceId).run(work)),
-})
+export const createTransactingZeroTransactor = (transact: Transact, workspaceId: WorkspaceId): ConversationTransactor =>
+  transactingTransactor(transact, (tx) => createZeroTransactor(tx, workspaceId))

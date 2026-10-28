@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { acme, alice, bob } from '@spyria/db'
 import { chatId } from '@spyria/kernel'
-import { getChatUsage } from './get-chat-usage.ts'
+import { getChatUsage, isLocalSession } from './get-chat-usage.ts'
 import { earlier, month, snapshot } from './testing.ts'
 
 test('chat usage lists the owner and participants who can post, with zeros, plus any other prompter of the month', () => {
@@ -44,4 +44,14 @@ test('chat usage uses the workspace display name and ignores other workspaces', 
     rows: [],
     total: { tokens: 0, costMicros: 0, calls: 0 },
   })
+})
+
+test('an archived chat no longer counts as a session on a member’s machine', () => {
+  const welcome = chatId('chat-welcome')
+  const withLocalSession = (archived: boolean) => ({
+    ...snapshot,
+    chats: snapshot.chats.map((chat) => (chat.id === welcome ? { ...chat, localSession: true, archived } : chat)),
+  })
+  expect(isLocalSession(acme, welcome)(withLocalSession(false))).toBe(true)
+  expect(isLocalSession(acme, welcome)(withLocalSession(true))).toBe(false)
 })

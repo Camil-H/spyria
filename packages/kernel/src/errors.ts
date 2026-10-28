@@ -11,16 +11,50 @@ export class DomainError extends Error {
   }
 }
 
+const kindByCode = new Map<string, new (...details: never) => DomainError>()
+
 export const errorKind = <Details extends unknown[]>(
   code: string,
   messageOf: (...details: Details) => string,
   Base: typeof DomainError,
-) =>
-  class extends Base {
+) => {
+  const Kind = class extends Base {
     constructor(...details: Details) {
       super(code, messageOf(...details))
     }
   }
+  kindByCode.set(code, Kind)
+  return Kind
+}
+
+// A kind registers when its module loads: a code whose module is not loaded yet (a lazy chunk) comes back as a
+// plain DomainError, so a client that checks instanceof imports the kind it checks, as NewChatDialog does.
+export const domainErrorOf = (code: string, message: string): DomainError =>
+  Reflect.construct(DomainError, [code, message], kindByCode.get(code) ?? DomainError)
+
+export const refusalOf = (status: number, { error, message }: { error?: string; message?: string }) =>
+  domainErrorOf(error ?? 'internal', message ?? `The request was refused with ${status}`)
+
+export const ForeignWorkspace = errorKind(
+  'foreign_workspace',
+  () => 'The change targets a workspace other than the current one',
+  DomainError,
+)
+export const ChatNotFound = errorKind('chat_not_found', (chatId: string) => `Chat ${chatId} was not found`, DomainError)
+export const MemberNotFound = errorKind(
+  'member_not_found',
+  (memberId: string) => `${memberId} is not a member of this workspace`,
+  DomainError,
+)
+
+export const blankKind = (code: string, subject: string, Base: typeof DomainError) =>
+  errorKind(code, () => `${subject} must contain at least one non-blank character`, Base)
+
+export const nonBlank = (rawValue: string, Blank: new () => DomainError) => {
+  const trimmedValue = rawValue.trim()
+  if (trimmedValue === '') throw new Blank()
+  return trimmedValue
+}
 
 const codeOf = (error: Error) => {
   const code = (error as { code?: unknown }).code ?? (error.cause as { code?: unknown } | undefined)?.code
