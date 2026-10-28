@@ -12,7 +12,7 @@ const stepMessageOf = (step: Step): ConversationMessage => ({
   kind: 'step',
   authorName: 'Agent',
   authorAvatar: null,
-  createdAt: '2026-10-01T09:00:00.000Z',
+  createdAt: new Date('2026-10-01T09:00:00.000Z'),
   body: 'tool',
   attachments: [],
   step,

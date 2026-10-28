@@ -32,7 +32,7 @@ export type ConversationMessage = Readonly<{
   kind: 'member' | 'agent' | 'step' | 'notice'
   authorName: string
   authorAvatar: string | null
-  createdAt: string
+  createdAt: Date
   body: string
   attachments: readonly Attachment[]
   step: AgentStep | null
@@ -158,7 +158,7 @@ const withDelegationsGrouped = (replies: readonly ConversationMessage[], isStopp
             ? 'stopped'
             : 'failed'
           : 'finished'
-    const times = [host, ...steps, ...resumes].map((message) => Date.parse(message.createdAt))
+    const times = [host, ...steps, ...resumes].map((message) => message.createdAt.getTime())
     groupsByHostId.set(host.id, {
       ...host,
       delegation: {
@@ -206,7 +206,7 @@ const turnItemsOf = (messages: readonly ConversationMessage[]): ConversationItem
       !isStopped &&
       !steps.some((step) => step.step?.type === 'error')
     ) {
-      const workedFor = durationLabelOf(Date.parse(answer.createdAt) - Date.parse(firstStep.createdAt))
+      const workedFor = durationLabelOf(answer.createdAt.getTime() - firstStep.createdAt.getTime())
       const label = `Worked for ${workedFor} · ${steps.length} steps`
       const narration = replies.filter(
         (reply, index) => reply.kind === 'agent' && reply !== answer && index > firstStepIndex,
@@ -287,7 +287,7 @@ export const getConversation =
         kind: message.kind,
         authorName: memberName(message.authorId),
         authorAvatar: (message.authorId && avatarByMemberId.get(message.authorId)) ?? null,
-        createdAt: message.createdAt,
+        createdAt: new Date(message.createdAt),
         body: message.body,
         attachments: message.attachments,
         step,
