@@ -12,6 +12,7 @@ import {
 import { checkOut, lastLinesOf, type Repository, runSetup, setupCommand } from './checkout.ts'
 import { connectPi } from './pi.ts'
 import { redacted } from './redaction.ts'
+import { createScreenshotTaker } from './screenshots.ts'
 import { contextOf, log, withSpan } from './telemetry.ts'
 import {
   bundleOf,
@@ -98,7 +99,7 @@ const conversationRoute =
 const socketRoute = /^\/sockets\/events\/([\w-]+)$/
 const workspaceRoute = /^\/api\/workspace\/(tree|file|media|changes|status)$/
 const workspaceActions = { bundle: bundleOf, commit: commitOf, fetch: fetchOf, merge: mergeOf, pushed: pushedOf }
-const workspaceActionRoute = /^\/api\/workspace\/(bundle|commit|fetch|merge|pushed)$/
+const workspaceActionRoute = /^\/api\/workspace\/(bundle|commit|fetch|merge|pushed|screenshot)$/
 const setupToolCallId = 'spyria-setup'
 const conversationIdPattern = /^[\w-]{1,64}$/
 const exitedUnexpectedly = /exited unexpectedly/i
@@ -209,6 +210,7 @@ export const startAgent = ({
   authTimeoutMilliseconds = 5_000,
   requestTimeoutMilliseconds = 60_000,
   workspaceDirectory = '/workspace/project',
+  browserDirectory = '/usr/local/lib/spyria/browser',
 }: {
   apiKey: string
   port: number
@@ -217,7 +219,9 @@ export const startAgent = ({
   authTimeoutMilliseconds?: number
   requestTimeoutMilliseconds?: number
   workspaceDirectory?: string
+  browserDirectory?: string
 }) => {
+  const actions = { ...workspaceActions, screenshot: createScreenshotTaker(browserDirectory) }
   const conversations = new Map<string, Conversation>()
   const checkouts = new Map<string, ReturnType<typeof checkOut>>()
   const apiKeyBytes = Buffer.from(apiKey)
@@ -675,7 +679,7 @@ export const startAgent = ({
     if (read && method === 'GET') return readWorkspace(read, searchParams)
     const [, workspaceAction] = workspaceActionRoute.exec(pathname) ?? []
     if (method === 'POST' && workspaceAction) {
-      const acted = await workspaceActions[workspaceAction as keyof typeof workspaceActions](
+      const acted = await actions[workspaceAction as keyof typeof actions](
         workspaceDirectory,
         await request.json(),
         adapterEnvironmentOf({}),
