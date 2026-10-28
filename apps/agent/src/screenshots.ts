@@ -56,8 +56,7 @@ export const createScreenshotTaker = (
     const installed = await Promise.race([installChromium(env), Bun.sleep(installWaitMilliseconds)])
     if (!installed)
       return {
-        failure:
-          'Chromium is still being installed for screenshots, about 150 MB once per runtime: try again in a minute',
+        failure: 'Chromium is still being installed for screenshots, once per runtime: try again in a minute',
       }
     if (!installed.isDone) return { failure: `Installing Chromium for screenshots failed: ${installed.errorOutput}` }
     const path = `${screenshotsDirectory}/${request.name}.png`
