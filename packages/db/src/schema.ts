@@ -101,6 +101,8 @@ export type ChatRow = {
   baseBranch: string | null
   originChatId: ChatId | null
   agentTurnMessageId: MessageId | null
+  contextTokens: number | null
+  contextWindow: number | null
 }
 export type MessageRow = {
   id: MessageId

@@ -233,6 +233,44 @@ test("a Pi question from the extension's select is one free question: a pick, an
   expect(textOf(socket.events.slice(-6))).toContain('answer:The member did not answer. ')
 })
 
+test("a Pi extension's confirm is a Yes or No question on the tool that asked it, answered to Pi as confirmed or not", async () => {
+  const { call, open, create, prompt } = started()
+  const id = await create(piLaunchOf())
+  const socket = open(id)
+  const answerTo = (questionId: string, body: object) =>
+    call('POST', `/api/conversations/${id}/questions/${questionId}`, body)
+
+  await prompt(id, 'stub:confirm')
+  const questionId = await questionAt(socket, 1)
+  expect(socket.events.find(kindOf('question'))?.update).toEqual({
+    sessionUpdate: 'question',
+    questionId,
+    toolCallId: 'deploy-1',
+    kind: 'question',
+    questions: [
+      {
+        id: 'answer',
+        header: 'Deploy now?',
+        text: 'This ships to production.',
+        options: [
+          { value: 'Yes', label: 'Yes' },
+          { value: 'No', label: 'No' },
+        ],
+        multi: false,
+        free: false,
+      },
+    ],
+  })
+  expect((await answerTo(questionId, { answers: { answer: 'Yes' } })).status).toBe(200)
+  await socket.until(kindOf('turn_end'))
+  expect(textOf(socket.events)).toStartWith('[t1] confirmed:true ')
+
+  await prompt(id, 'stub:confirm')
+  expect((await answerTo(await questionAt(socket, 2), { answers: { answer: 'No' } })).status).toBe(200)
+  await socket.until(kindOf('turn_end'), 2)
+  expect(textOf(socket.events.slice(-6))).toContain('confirmed:false ')
+})
+
 test('Stop while a Pi question waits closes it as stopped and cancels the dialog; a sub-conversation answers Pi questions itself', async () => {
   const { call, open, create, prompt } = started()
   const id = await create(piLaunchOf())

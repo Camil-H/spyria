@@ -32,6 +32,8 @@ export default drizzleZeroConfig(tables, {
       baseBranch: true,
       originChatId: true,
       agentTurnMessageId: true,
+      contextTokens: true,
+      contextWindow: true,
       archived: true,
       createdAt: true,
     },

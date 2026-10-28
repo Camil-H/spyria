@@ -1,15 +1,26 @@
-import type { AgentEvent } from './agent-events.ts'
-import { type Fields, pathOf } from './agent-steps.ts'
+import { pathOf } from './agent-steps.ts'
 
 export type OpenedPage = Readonly<{ url: string; title: string }>
+type Refusal = { refusal: string }
 
-export const openPageToolName = 'open_page'
 const maximumAddressLength = 2048
 const maximumTitleLength = 200
 const webAddress = /^https?:\/\//i
 const anyScheme = /^[a-z][\w+.-]*:/i
 const ipv4Address = /^\d+\.\d+\.\d+\.\d+$/
 const localName = /(^|\.)(localhost|local)$/
+
+export const openPageTool = {
+  name: 'open_page',
+  description:
+    "Open a page in the member's Browser panel: a public http or https address, or the path of a file in the project such as an HTML report you wrote. When you build something the member should look at, such as a report or a page, open it with open_page. Addresses on the member's own machine or network, such as localhost or 192.168.x.x, are not opened.",
+  inputSchema: {
+    type: 'object',
+    required: ['address'],
+    properties: { address: { type: 'string' }, title: { type: 'string' } },
+  },
+}
+export const pageOpenedText = "The page is open in the member's Browser panel."
 
 const isPrivateIpv4 = ([first = 0, second = 0]: readonly number[]) =>
   first === 0 ||
@@ -43,22 +54,28 @@ const isOnMembersNetwork = (url: string) => {
   return !host.includes('.') || localName.test(host)
 }
 
-const addressOf = (address: unknown) => {
+const addressOf = (address: unknown): string | Refusal => {
   const text = typeof address === 'string' ? address.trim() : ''
-  if (text === '' || text.length > maximumAddressLength) return undefined
-  if (webAddress.test(text)) return URL.canParse(text) && !isOnMembersNetwork(text) ? text : undefined
-  if (anyScheme.test(text)) return undefined
+  if (text === '') return { refusal: 'Give the address of the page to open' }
+  if (text.length > maximumAddressLength)
+    return { refusal: `The address is longer than ${maximumAddressLength} characters` }
+  if (webAddress.test(text)) {
+    if (!URL.canParse(text)) return { refusal: `${text} is not a valid web address` }
+    return isOnMembersNetwork(text)
+      ? { refusal: `${text} is on the member's own machine or network, so it is not opened` }
+      : text
+  }
+  if (anyScheme.test(text)) return { refusal: 'Only http and https addresses and project files are opened' }
   const path = pathOf(text).replace(/^(\.?\/)+/, '')
-  return path === '' || path.split('/').includes('..') ? undefined : path
+  return path === '' || path.split('/').includes('..')
+    ? { refusal: 'A project file is opened by its path inside the project' }
+    : path
 }
 
-export const openedPageOf = (event: AgentEvent): OpenedPage | undefined => {
-  const update = event.update as Fields
-  if (event.kind !== 'ACPUpdate' || update?.sessionUpdate !== 'tool_call' || update.title !== openPageToolName)
-    return undefined
-  const input = update.rawInput as Fields
-  const url = addressOf(input?.address)
-  if (!url) return undefined
-  const title = typeof input?.title === 'string' ? input.title.trim().slice(0, maximumTitleLength) : ''
-  return { url, title: title || url }
+export const openedPageOf = (input: unknown): OpenedPage | Refusal => {
+  const { address, title } = (input ?? {}) as { address?: unknown; title?: unknown }
+  const url = addressOf(address)
+  if (typeof url !== 'string') return url
+  const trimmedTitle = typeof title === 'string' ? title.trim().slice(0, maximumTitleLength) : ''
+  return { url, title: trimmedTitle || url }
 }

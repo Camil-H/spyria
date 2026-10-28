@@ -26,7 +26,7 @@ Subscription harnesses run only on the member's own machine because a subscripti
 
 ## Models and routing
 
-On a Spyria runtime, the session's model is chosen once, at the first prompt, from the models the prompting member's keys can reach. A model is reachable when its provider has one of the member's keys in the gateway. The catalog in `packages/kernel/src/models.ts` assigns each model a tier (large, medium or small) and covers Anthropic, OpenAI, Mistral, Google Gemini, xAI, DeepSeek, Z.ai and OpenRouter.
+On a Spyria runtime, the session's model is chosen once, at the first prompt, from the models the prompting member's keys can reach. A model is reachable when its provider has one of the member's keys in the gateway. The catalog in `packages/kernel/src/models.ts` assigns each model a tier (large, medium or small) and covers Anthropic, OpenAI, Mistral, Google Gemini, xAI, DeepSeek, Z.ai and OpenRouter. Prices and context windows come from the gateway's model list, refreshed every hour.
 
 1. A classifier reads the first message and answers two questions: the tier the task needs, and the reasoning effort (high, medium or low). It runs on the member's cheapest reachable model (a dedicated decision model when the member's keys reach one), with a 3-second timeout, and is billed to the prompter like any model call. On a new session it runs while the runtime starts, so it rarely delays the first reply.
 2. Only a confident answer (at least 0.8) of `large` or `small` moves away from the default. The default is the prompter's best reachable **medium** model; when a tier has no reachable model, the nearest tier is used.
@@ -46,6 +46,8 @@ The chip in the chat shows the session model and effort (before the first prompt
 
 In a session on a member's machine, the owner picks the tool's own **Model** and **Effort** instead, from the lists Claude Code or Codex report.
 
+Next to the chip, a circle shows how full the agent's context is: the tokens of its latest model call out of the model's context window, turning red from 80%, with the figures in its tooltip. It updates after every model call of the main agent, not its subagents, empties when the model is switched or a new session starts until the next call, and shows the tokens alone when the gateway does not know the model's window. The tooltip shows on hover and on keyboard focus. It shows only for the calls Spyria relays, so not for Claude Code or Codex on a member's subscription.
+
 ## Questions
 
 The agent can ask the member a question with suggested answers and a free answer. A question card appears in the chat; anyone who may prompt the chat answers it, and others see it read-only. Pending questions survive a page reload. A subagent cannot ask: its questions are answered automatically with "No member is available; decide yourself and state your assumption."
@@ -54,7 +56,11 @@ On a guest's prompt, a tool call that is not read-only produces a **Tool approva
 
 ## Opening pages
 
-On a Spyria runtime the agent opens a page for the chat's members with `open_page`: a public web address, or a file of the project such as an HTML report it wrote. The server refuses addresses on the member's own machine or network, and members load an opened page with a click. The page shows in the **Browser** tab of the side panel; see [Chats and sharing](./chats-and-sharing.md#browser).
+The agent opens a page for the chat's members with `open_page`, a tool of Spyria's own tool server that Pi, Claude Code and Codex all have: a public web address, or a file of the project such as an HTML report it wrote. The server checks the address while answering the call, refuses addresses on the member's own machine or network with a reason the agent sees, and members load an opened page with a click. The page shows in the **Browser** tab of the side panel; see [Chats and sharing](./chats-and-sharing.md#browser).
+
+## Screenshots
+
+The agent takes a screenshot of a web page with `take_screenshot`, another tool of Spyria's tool server that Pi, Claude Code and Codex all have: typically the app it runs in the runtime, such as `http://localhost:3000`, or a public page. It picks a desktop (1280×800) or mobile (390×844) viewport, the first screen or the whole page up to 10,000 pixels tall, and a light or dark theme. The screenshot is taken inside the runtime, where the app under test listens, and saved as `.spyria/screenshots/<name>.png`, a folder kept out of git: screenshots belong in the conversation, not in commits or pull requests. The agent shows one in its reply as a Markdown image (see [Chats and sharing](./chats-and-sharing.md#projects-and-chats)). Chromium comes with the runtime image, so screenshots need no download. A page that does not load within 30 seconds, or does not answer, tells the agent why.
 
 ## Delegation and subagents
 

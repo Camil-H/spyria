@@ -303,6 +303,8 @@ export const chats = table(
     agentTurnMessageId: text(),
     agentTurnPrompterId: text(),
     agentTurnFailure: text(),
+    contextTokens: integer(),
+    contextWindow: integer(),
     archived: boolean().notNull(),
     createdAt: instant().notNull(),
   },

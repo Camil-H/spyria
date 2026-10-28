@@ -242,6 +242,8 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
       subagentPolicy: chat.subagentPolicy ?? 'auto',
       harness: chat.harness ?? null,
       localSession: chat.localSession ?? null,
+      contextTokens: chat.contextTokens ?? null,
+      contextWindow: chat.contextWindow ?? null,
       ownerId: ownerUserId ?? '',
     }),
   )
