@@ -19,6 +19,23 @@ export type GitHubIssue = {
   updated_at: string
 }
 export type GitHubComment = { user: { login: string } | null; body: string | null }
+export type GitHubCheckRun = {
+  id: number
+  name: string
+  status: string
+  conclusion: string | null
+  html_url: string
+  app: { slug: string } | null
+}
+export type GitHubJobStep = { name: string; status: string; conclusion: string | null }
+export type GitHubCheckAnnotation = {
+  path: string
+  start_line: number
+  end_line: number
+  annotation_level: string
+  title: string | null
+  message: string
+}
 export type GitHubReviewThreads = {
   repository: {
     pullRequest: {
@@ -85,7 +102,7 @@ export const appJwtOf = (appId: string, privateKey: string, now = Date.now()) =>
 
 export const createGitHubApi = ({ apiUrl, webUrl }: GitHubUrls) => {
   const graphqlBaseUrl = apiUrl.replace(/\/v3$/, '')
-  const request = async <Result>(path: string, { token, method = 'GET', body, baseUrl = apiUrl }: Requested) => {
+  const respond = async (path: string, { token, method = 'GET', body, baseUrl = apiUrl }: Requested) => {
     const send = (signal: AbortSignal) =>
       fetch(`${baseUrl}${path}`, {
         method,
@@ -106,8 +123,10 @@ export const createGitHubApi = ({ apiUrl, webUrl }: GitHubUrls) => {
       const { message } = (await response.json().catch(() => ({}))) as { message?: string }
       throw new GitHubRequestFailed(response.status, method, pathOf(path), message ?? response.statusText)
     }
-    return (await response.json()) as Result
+    return response
   }
+  const request = async <Result>(path: string, requested: Requested) =>
+    (await respond(path, requested).then((response) => response.json())) as Result
   const userTokensOf = async (parameters: Record<string, string>): Promise<UserTokens> => {
     const response = await fetch(`${webUrl}/login/oauth/access_token`, {
       method: 'POST',
@@ -184,6 +203,16 @@ export const createGitHubApi = ({ apiUrl, webUrl }: GitHubUrls) => {
         throw new GitHubRequestFailed(error.type === 'NOT_FOUND' ? 404 : 422, 'POST', '/graphql', error.message)
       return answer.data?.repository?.pullRequest?.reviewThreads.nodes
     },
+    checkRuns: (token: string, fullName: string, sha: string) =>
+      request<{ check_runs: GitHubCheckRun[] }>(`/repos/${fullName}/commits/${sha}/check-runs?per_page=100`, { token }),
+    checkRunAnnotations: (token: string, fullName: string, checkRunId: number) =>
+      request<GitHubCheckAnnotation[]>(`/repos/${fullName}/check-runs/${checkRunId}/annotations?per_page=50`, {
+        token,
+      }),
+    job: (token: string, fullName: string, jobId: number) =>
+      request<{ steps: GitHubJobStep[] }>(`/repos/${fullName}/actions/jobs/${jobId}`, { token }),
+    jobLog: async (token: string, fullName: string, jobId: number) =>
+      (await respond(`/repos/${fullName}/actions/jobs/${jobId}/logs`, { token })).text(),
     searchIssues: (token: string, query: string) =>
       request<{ items: GitHubIssue[] }>(
         `/search/issues?${new URLSearchParams({ q: query, sort: 'updated', order: 'desc', per_page: '30' })}`,

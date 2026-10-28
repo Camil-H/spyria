@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
-import type { PullRequestStep, ReviewComment } from '@spyria/conversation/server'
+import { checkStateOf, type PullRequestStep, type ReviewComment } from '@spyria/conversation/server'
 
 export type GitHubPullRequest = {
   number: number
@@ -32,7 +32,6 @@ export type WebhookPayload = {
   check_run?: Check
 }
 
-const passingConclusions = ['success', 'neutral', 'skipped']
 const reviewStates = ['approved', 'changes_requested', 'commented'] as const
 
 export const isSignedBy = (secret: string, body: string, signature: string | undefined) => {
@@ -110,7 +109,6 @@ export const updatedPullRequest = (step: PullRequestStep, event: string, payload
     return { ...step, comments: step.comments.map((known) => (ids.has(known.id) ? { ...known, isResolved } : known)) }
   }
   if (!check || check.head_sha !== step.headSha) return step
-  const state =
-    action !== 'completed' ? 'pending' : passingConclusions.includes(check.conclusion ?? '') ? 'passing' : 'failing'
+  const state = checkStateOf(action === 'completed', check.conclusion)
   return { ...step, checks: { ...step.checks, [`${event}:${check.id}`]: state } }
 }

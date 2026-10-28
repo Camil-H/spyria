@@ -9,7 +9,14 @@ import type {
   WorkspaceId,
 } from '@spyria/kernel'
 import type { AgentEvent } from '../domain/agent-events.ts'
-import type { Issue, IssueFilter, IssueSummary, PullRequestChange, ReviewThread } from '../domain/github-tools.ts'
+import type {
+  Issue,
+  IssueFilter,
+  IssueSummary,
+  PullRequestChange,
+  PullRequestChecks,
+  ReviewThread,
+} from '../domain/github-tools.ts'
 import type { PullRequestDraft, PullRequestStep } from '../domain/pull-requests.ts'
 import type { DelegatedFrame, QuestionFrame } from '../domain/streamed-reply.ts'
 
@@ -103,6 +110,7 @@ export type RepositoryCheckouts = {
     change: PullRequestChange,
   ): Promise<PullRequestStep>
   reviewThreadsOf(chat: AgentChat, number: number): Promise<ReviewThread[]>
+  checkRunsOf(chat: AgentChat, number: number): Promise<PullRequestChecks>
   issuesOf(chat: AgentChat, filter: IssueFilter): Promise<IssueSummary[]>
   issueOf(chat: AgentChat, number: number): Promise<Issue>
 }

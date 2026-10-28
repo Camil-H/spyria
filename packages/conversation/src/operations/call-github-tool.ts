@@ -2,6 +2,7 @@ import { DomainError, type MemberId, requireChatPermission } from '@spyria/kerne
 import type { AgentChat, RepositoryCheckouts } from '../contracts/agent.ts'
 import { asleepRefusal } from '../domain/git-actions.ts'
 import {
+  checkRunsTextOf,
   type GitHubToolCall,
   githubToolCallOf,
   issuesTextOf,
@@ -35,13 +36,14 @@ const fetchBranch = async (
   return answered(`Fetched ${branch} at ${bundled.head.slice(0, 7)} into origin/${branch}`)
 }
 
-const readReviewThreads = async (
+const readPullRequest = async (
   { checkouts }: RepositoryDependencies,
   { chat, pullRequestNumber }: RepositoryChat,
-  number: number | null,
+  { tool, number }: Extract<GitHubToolCall, { tool: 'read_review_threads' | 'read_checks' }>,
 ) => {
   const read = number ?? pullRequestNumber
   if (read === null) return refused('This chat has no pull request: give the number of the one to read')
+  if (tool === 'read_checks') return answered(checkRunsTextOf(read, await checkouts.checkRunsOf(chat, read)))
   return answered(reviewThreadsTextOf(read, await checkouts.reviewThreadsOf(chat, read)))
 }
 
@@ -53,7 +55,8 @@ const repositoryTool = (
   const { checkouts } = dependencies
   const { chat } = repositoryChat
   if (call.tool === 'fetch_branch') return fetchBranch(dependencies, repositoryChat, call.branch)
-  if (call.tool === 'read_review_threads') return readReviewThreads(dependencies, repositoryChat, call.number)
+  if (call.tool === 'read_review_threads' || call.tool === 'read_checks')
+    return readPullRequest(dependencies, repositoryChat, call)
   if (call.tool === 'list_issues') return checkouts.issuesOf(chat, call.filter).then(issuesTextOf).then(answered)
   return checkouts.issueOf(chat, call.number).then(issueTextOf).then(answered)
 }
