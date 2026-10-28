@@ -9,7 +9,7 @@ import {
 import { StoreProvider } from '@spyria/db/react'
 import { chatId as toChatId, type WorkspaceId } from '@spyria/kernel'
 import { PanelProvider, PanelToggle, SidePanel } from '@spyria/panel'
-import { ProfileProvider, useHasLlmCredential } from '@spyria/profile'
+import { ProfileProvider } from '@spyria/profile'
 import { RuntimeProvider, RuntimeStatus } from '@spyria/runtime'
 import { SessionProvider, useSession } from '@spyria/session'
 import { KeyboardShortcuts } from '@spyria/ui'
@@ -26,7 +26,6 @@ const ChatUsageTable = lazy(() => import('@spyria/usage').then(({ ChatUsageTable
 const ChatRoute = ({ commands }: { commands: Application['conversationCommands'] }) => {
   const workspaceId = useOutletContext<WorkspaceId>()
   const chatId = toChatId(useParams().chatId ?? '')
-  const hasLlmKey = useHasLlmCredential(workspaceId)
   const { memberId } = useSession()
   const blockedNotice = (
     <>
@@ -56,7 +55,6 @@ const ChatRoute = ({ commands }: { commands: Application['conversationCommands']
             }
           />
         )}
-        hasLlmKey={hasLlmKey}
         blockedNotice={blockedNotice}
         budgetNotice={<BudgetNotice workspaceId={workspaceId} memberId={memberId} />}
         frozenActions={<TransferChatForm workspaceId={workspaceId} chatId={chatId} />}

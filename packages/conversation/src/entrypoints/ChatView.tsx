@@ -1,5 +1,5 @@
 import { Provider } from '@radix-ui/react-tooltip'
-import { useChatMessages, useQuery } from '@spyria/db/react'
+import { useChatMessages, useIsWorkspaceLoaded, useQuery } from '@spyria/db/react'
 import { type ChatId, type MessageId, chatId as toChatId, type WorkspaceId } from '@spyria/kernel'
 import { useSession } from '@spyria/session'
 import {
@@ -67,14 +67,12 @@ const workspaceChipClass =
 export const ChatView = ({
   headerActions,
   runtimeStatus,
-  hasLlmKey,
   blockedNotice,
   budgetNotice,
   frozenActions,
 }: {
   headerActions: ReactNode
   runtimeStatus: (access: { canRetry: boolean; canManage: boolean; isAgentWorking: boolean }) => ReactNode
-  hasLlmKey: boolean
   blockedNotice: ReactNode
   budgetNotice: ReactNode
   frozenActions: ReactNode
@@ -91,6 +89,7 @@ export const ChatView = ({
     spyriaRuntime?.chatId === chatId ? spyriaRuntime.isAvailable : undefined,
   )
   const chatMessages = useChatMessages(workspaceId, chatId)
+  const isWorkspaceLoaded = useIsWorkspaceLoaded(workspaceId)
   const findState = useFindState(chatId)
   const [messagesElement, setMessagesElement] = useState<HTMLElement | null>(null)
   const findTargetId = findState.find?.messageId ?? null
@@ -126,12 +125,12 @@ export const ChatView = ({
   useEffect(() => {
     if (soleChoice) commands.updateChatRouting({ workspaceId, chatId, runsOn: soleChoice })
   }, [commands, workspaceId, chatId, soleChoice])
-  if (!conversation) return <Navigate to={`/w/${workspaceId}`} replace />
+  if (!conversation) return isWorkspaceLoaded ? <Navigate to={`/w/${workspaceId}`} replace /> : null
   const isRunsOnOpen = conversation.type === 'runtime' && conversation.runsOn === null
   const mayPrompt =
     conversation.type === 'runtime' &&
     conversation.runsOn !== null &&
-    (conversation.localSession ? conversation.isOwner : conversation.canPost && hasLlmKey)
+    (conversation.localSession ? conversation.isOwner : conversation.canPost && !conversation.needsLlmKey)
   const answerQuestion = (questionId: string, answer: QuestionAnswer) =>
     commands.answerQuestion({ workspaceId, chatId, questionId, answer })
   const fork = async () =>
@@ -259,11 +258,7 @@ export const ChatView = ({
         <Composer
           workspaceId={workspaceId}
           chatId={chatId}
-          isBlocked={
-            isRunsOnOpen ||
-            !conversation.canPost ||
-            (conversation.type === 'runtime' && !conversation.localSession && !hasLlmKey)
-          }
+          isBlocked={isRunsOnOpen || !conversation.canPost || conversation.needsLlmKey}
           blockedNotice={
             isRunsOnOpen
               ? conversation.isOwner
