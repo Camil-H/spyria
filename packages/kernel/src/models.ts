@@ -49,8 +49,15 @@ export const routableModelOf = (text: string) => {
   )
 }
 export const modelNameOf = (id: string) => routableModels.find((model) => model.id === id)?.name ?? id
+export type GatewayKey = Readonly<{ provider: string; id: string }>
+const gatewayKeyRefPattern = /^gateway:([a-z]+)\/(.+)$/
+export const gatewayKeyRefOf = (key: GatewayKey) => `gateway:${key.provider}/${key.id}`
+export const gatewayKeyOf = (ref: string): GatewayKey | undefined => {
+  const [, provider, id] = ref.match(gatewayKeyRefPattern) ?? []
+  return provider && id ? { provider, id } : undefined
+}
 export const providersOfGatewayRefs = (refs: readonly string[]) => [
-  ...new Set(refs.flatMap((ref) => ref.match(/^gateway:([a-z]+)\//)?.[1] ?? [])),
+  ...new Set(refs.flatMap((ref) => gatewayKeyOf(ref)?.provider ?? [])),
 ]
 const providerOf = (id: string) => id.split('/')[0] ?? ''
 export const reachableModelsOf = (providers: readonly string[]): Model[] =>

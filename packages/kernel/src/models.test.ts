@@ -2,6 +2,8 @@ import { expect, test } from 'bun:test'
 import {
   chatModelsOf,
   classifierModelOf,
+  gatewayKeyOf,
+  gatewayKeyRefOf,
   isPickableModel,
   type ListedModel,
   listedChatModelIdsOf,
@@ -126,4 +128,12 @@ test('the reread estimate uses the conversation tokens and the input price, unkn
 
 test('an unknown model id is shown as itself', () => {
   expect(modelNameOf('somewhere/other-model')).toBe('somewhere/other-model')
+})
+
+test('a gateway key reference round-trips and refuses anything else', () => {
+  const key = { provider: 'openai', id: '8ec7907d-bef5-433b-92b8-df18842db1f2' }
+  expect(gatewayKeyOf(gatewayKeyRefOf(key))).toEqual(key)
+  expect(gatewayKeyOf('gateway:credential-alice-anthropic')).toBeUndefined()
+  expect(gatewayKeyOf('gateway:mistral/')).toBeUndefined()
+  expect(gatewayKeyOf('placeholder:abc')).toBeUndefined()
 })

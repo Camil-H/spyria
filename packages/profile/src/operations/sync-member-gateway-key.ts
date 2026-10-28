@@ -1,7 +1,7 @@
-import { log, type MemberId, type WorkspaceId } from '@spyria/kernel'
+import { type GatewayKey, log, type MemberId, type WorkspaceId } from '@spyria/kernel'
 import type { GatewaySyncJob, LlmGateway, ToolGateway } from '../contracts/repositories.ts'
 import type { ProfileTransactor } from '../contracts/transactor.ts'
-import type { GatewayKey, LlmCredential } from '../domain/llm-credential.ts'
+import type { LlmCredential } from '../domain/llm-credential.ts'
 import { grantMemberTools } from './grant-tools.ts'
 
 type Dependencies = { transactor: ProfileTransactor; gateway: LlmGateway & ToolGateway }

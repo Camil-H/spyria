@@ -15,7 +15,6 @@ export type LlmCredential = Readonly<{
   gatewayProvider: string
   last4: string
 }>
-export type GatewayKey = Readonly<{ provider: string; id: string }>
 
 const gatewayProviders: Record<string, string> = {
   openai: 'openai',
@@ -29,14 +28,6 @@ const gatewayProviders: Record<string, string> = {
   deepseek: 'deepseek',
   zai: 'zai',
   'z.ai': 'zai',
-}
-const gatewayKeyRefPattern = /^gateway:([a-z]+)\/(.+)$/
-
-export const gatewayKeyRefOf = (key: GatewayKey) => `gateway:${key.provider}/${key.id}`
-
-export const gatewayKeyOf = (ref: string): GatewayKey | undefined => {
-  const [, provider, id] = ref.match(gatewayKeyRefPattern) ?? []
-  return provider && id ? { provider, id } : undefined
 }
 
 type NewLlmCredential = Omit<LlmCredential, 'last4' | 'gatewayProvider'> & { secret: Secret }
