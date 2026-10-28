@@ -76,6 +76,29 @@ test('a prompt sent again with its id runs once: while it runs the repeat is ign
   ])
 })
 
+test('a conversation remembers the last 50 prompt ids: an older one sent again runs again', async () => {
+  const { call, open, create } = started()
+  const id = await create(launchOf())
+  const socket = open(id)
+  const promptWithId = (promptId: string) =>
+    call('POST', `/api/conversations/${id}/events`, { content: [{ type: 'text', text: 'hello' }], prompt_id: promptId })
+  for (let index = 0; index <= 50; index++) {
+    await promptWithId(`prompt-${index}`)
+    await socket.until(kindOf('turn_end'), index + 1)
+  }
+  await promptWithId('prompt-1')
+  await socket.until(kindOf('turn_end'), 52)
+  await promptWithId('prompt-0')
+  await socket.until(kindOf('turn_end'), 53)
+  expect(
+    socket.events
+      .filter(kindOf('turn_end'))
+      .slice(-2)
+      .map(({ update }) => update.promptId),
+  ).toEqual(['prompt-1', 'prompt-0'])
+  expect(textOf(socket.events)).toEndWith('[t52] Hello from the stub (model stub-default, mode bypassPermissions).')
+})
+
 test('events are numbered per conversation, resent after a sequence number, from a bounded buffer', async () => {
   const { open, create, prompt } = started({ bufferSize: 4 })
   const id = await create(launchOf())

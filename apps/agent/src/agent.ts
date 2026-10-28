@@ -106,6 +106,7 @@ const exitedUnexpectedly = /exited unexpectedly/i
 const restartedNotice = 'The agent restarted; send your message again'
 const errorSummaryCharacters = 300
 const adapterCloseWaitMilliseconds = 2_000
+const rememberedPromptCount = 50
 
 const adapterEnvironmentOf = (secrets: Launch['secrets']) => ({
   ...Object.fromEntries(inheritedEnvironment.flatMap((name) => (process.env[name] ? [[name, process.env[name]]] : []))),
@@ -129,6 +130,11 @@ const errorUpdateOf = (error: unknown) => ({
 const isDeadSession = (error: unknown) =>
   error instanceof AcpError &&
   (error.code === internalError || exitedUnexpectedly.test(`${error.message} ${error.details ?? ''}`))
+
+const rememberPrompt = ({ turnEnds }: Conversation, promptId: string) => {
+  turnEnds.set(promptId, undefined)
+  for (const oldest of [...turnEnds.keys()].slice(0, -rememberedPromptCount)) turnEnds.delete(oldest)
+}
 
 const secretsOf = ({ secrets }: Launch) => Object.values(secrets ?? {}).map((secret) => String(secret?.value ?? ''))
 
@@ -594,7 +600,7 @@ export const startAgent = ({
     }
     if (!conversation.sessionId || conversation.status === 'error')
       return Response.json({ error: 'The conversation has no running session' }, { status: 409 })
-    if (promptId) conversation.turnEnds.set(promptId, undefined)
+    if (promptId) rememberPrompt(conversation, promptId)
     conversation.status = 'running'
     const startedAt = performance.now()
     const promptParams = () => ({
