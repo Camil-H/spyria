@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test'
 import {
+  checkRunsTextOf,
   githubToolCallOf,
   githubTools,
   isReadOnlyGitHubTool,
@@ -53,6 +54,8 @@ test('a fetched branch name drops refs/heads/ or origin/ and refuses option-like
 test('read tools take a positive number, issue filters default to open and every argument is checked', () => {
   expect(githubToolCallOf('read_review_threads', {})).toEqual({ tool: 'read_review_threads', number: null })
   expect(githubToolCallOf('read_review_threads', { number: 4 })).toEqual({ tool: 'read_review_threads', number: 4 })
+  expect(githubToolCallOf('read_checks', {})).toEqual({ tool: 'read_checks', number: null })
+  expect(githubToolCallOf('read_checks', { number: 4 })).toEqual({ tool: 'read_checks', number: 4 })
   expect(githubToolCallOf('read_issue', { number: 7 })).toEqual({ tool: 'read_issue', number: 7 })
   expect(githubToolCallOf('list_issues', {})).toEqual({
     tool: 'list_issues',
@@ -64,6 +67,7 @@ test('read tools take a positive number, issue filters default to open and every
   })
   for (const [name, input] of [
     ['read_review_threads', { number: 0 }],
+    ['read_checks', { number: -1 }],
     ['read_issue', {}],
     ['read_issue', { number: '7' }],
     ['read_issue', { number: 1.5 }],
@@ -78,6 +82,7 @@ test('read tools take a positive number, issue filters default to open and every
 test('only the reading tools are read-only, and every tool is listed', () => {
   expect(githubTools.filter(({ name }) => isReadOnlyGitHubTool(name)).map(({ name }) => name)).toEqual([
     'read_review_threads',
+    'read_checks',
     'list_issues',
     'read_issue',
   ])
@@ -87,6 +92,7 @@ test('only the reading tools are read-only, and every tool is listed', () => {
     'update_pull_request',
     'fetch_branch',
     'read_review_threads',
+    'read_checks',
     'list_issues',
     'read_issue',
   ])
@@ -142,4 +148,66 @@ test('review threads, issue lists and issues read as text, with long bodies trun
   expect(text).toContain(`${'x'.repeat(4_000)}\n[truncated]`)
   expect(text).toEndWith('\n\nComments:\n  lee: Seen it too')
   expect(issueTextOf({ ...issue, url: 'u', body: ' ', thread: [] })).toEndWith('\n(no description)')
+})
+
+test('checks read failing first with their annotations, then pending, then passing, with long messages truncated', () => {
+  const run = { isCompleted: true, conclusion: 'success', annotations: [] }
+  expect(
+    checkRunsTextOf(7, {
+      headSha: 'abcdef0123456789',
+      runs: [
+        { ...run, name: 'lint', url: 'https://github.com/acme/app/runs/1' },
+        { ...run, name: 'e2e', isCompleted: false, conclusion: null, url: 'https://github.com/acme/app/runs/2' },
+        {
+          ...run,
+          name: 'unit',
+          conclusion: 'failure',
+          url: 'https://github.com/acme/app/runs/3',
+          annotations: [
+            {
+              path: 'src/app.test.ts',
+              startLine: 12,
+              endLine: 12,
+              level: 'failure',
+              title: 'totals add up',
+              message: 'expect(received).toBe(expected)\n\nExpected: 2\nReceived: 3',
+            },
+            { path: 'src/app.ts', startLine: 3, endLine: 5, level: 'warning', title: '', message: 'Unused total' },
+          ],
+        },
+      ],
+    }),
+  ).toBe(
+    [
+      'Pull request #7 at abcdef0: 3 checks, 1 failing, 1 pending, 1 passing',
+      '- unit: failure https://github.com/acme/app/runs/3',
+      '  src/app.test.ts:12 failure: totals add up',
+      '    expect(received).toBe(expected)',
+      '    ',
+      '    Expected: 2',
+      '    Received: 3',
+      '  src/app.ts:3-5 warning',
+      '    Unused total',
+      '- e2e: pending https://github.com/acme/app/runs/2',
+      '- lint: success https://github.com/acme/app/runs/1',
+    ].join('\n'),
+  )
+  expect(checkRunsTextOf(7, { headSha: 'abcdef0123456789', runs: [] })).toBe(
+    'Pull request #7 at abcdef0: no check has run',
+  )
+  const long = checkRunsTextOf(7, {
+    headSha: 'abcdef0123456789',
+    runs: [
+      {
+        ...run,
+        name: 'unit',
+        conclusion: 'failure',
+        url: 'u',
+        annotations: [
+          { path: 'a.ts', startLine: 1, endLine: 1, level: 'failure', title: 't', message: 'x'.repeat(2_001) },
+        ],
+      },
+    ],
+  })
+  expect(long).toEndWith(`    ${'x'.repeat(2_000)}\n    [truncated]`)
 })

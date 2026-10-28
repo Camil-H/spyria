@@ -302,6 +302,7 @@ test('the agent pushes and opens a pull request with its tools on the owner’s 
     'update_pull_request',
     'fetch_branch',
     'read_review_threads',
+    'read_checks',
     'list_issues',
     'read_issue',
   ])

@@ -35,6 +35,7 @@ export {
   type IssueSummary,
   isReadOnlyGitHubTool,
   type PullRequestChange,
+  type PullRequestChecks,
   type ReviewThread,
 } from './domain/github-tools.ts'
 export { genericModelCallNoticeOf, type ModelCallFailure } from './domain/model-call-failures.ts'

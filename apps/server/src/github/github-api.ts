@@ -19,6 +19,21 @@ export type GitHubIssue = {
   updated_at: string
 }
 export type GitHubComment = { user: { login: string } | null; body: string | null }
+export type GitHubCheckRun = {
+  id: number
+  name: string
+  status: string
+  conclusion: string | null
+  html_url: string
+}
+export type GitHubCheckAnnotation = {
+  path: string
+  start_line: number
+  end_line: number
+  annotation_level: string
+  title: string | null
+  message: string
+}
 export type GitHubReviewThreads = {
   repository: {
     pullRequest: {
@@ -184,6 +199,12 @@ export const createGitHubApi = ({ apiUrl, webUrl }: GitHubUrls) => {
         throw new GitHubRequestFailed(error.type === 'NOT_FOUND' ? 404 : 422, 'POST', '/graphql', error.message)
       return answer.data?.repository?.pullRequest?.reviewThreads.nodes
     },
+    checkRuns: (token: string, fullName: string, sha: string) =>
+      request<{ check_runs: GitHubCheckRun[] }>(`/repos/${fullName}/commits/${sha}/check-runs?per_page=100`, { token }),
+    checkRunAnnotations: (token: string, fullName: string, checkRunId: number) =>
+      request<GitHubCheckAnnotation[]>(`/repos/${fullName}/check-runs/${checkRunId}/annotations?per_page=50`, {
+        token,
+      }),
     searchIssues: (token: string, query: string) =>
       request<{ items: GitHubIssue[] }>(
         `/search/issues?${new URLSearchParams({ q: query, sort: 'updated', order: 'desc', per_page: '30' })}`,
