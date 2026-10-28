@@ -1,5 +1,5 @@
 import { Content, Portal, Provider, Root, Trigger } from '@radix-ui/react-tooltip'
-import { tooltipClass } from '@spyria/ui'
+import { focusRing, tooltipClass } from '@spyria/ui'
 import { type ContextSize, contextFullnessOf } from '../domain/context-size.ts'
 
 const radius = 6
@@ -11,10 +11,10 @@ export const ContextChip = ({ context }: { context: ContextSize }) => {
     <Provider>
       <Root>
         <Trigger asChild>
-          <span
-            role="img"
+          <button
+            type="button"
             aria-label={label}
-            className={`flex shrink-0 items-center gap-1 px-2 py-1 text-xs ${isNearlyFull ? 'text-agent-error' : 'text-muted'}`}
+            className={`flex shrink-0 cursor-default items-center gap-1 rounded-md px-2 py-1 text-xs ${focusRing} ${isNearlyFull ? 'text-agent-error' : 'text-muted'}`}
           >
             <svg aria-hidden viewBox="0 0 16 16" width={14} height={14} className="-rotate-90">
               <circle cx={8} cy={8} r={radius} fill="none" stroke="currentColor" strokeOpacity={0.25} strokeWidth={2} />
@@ -29,7 +29,7 @@ export const ContextChip = ({ context }: { context: ContextSize }) => {
               />
             </svg>
             <span>{shown}</span>
-          </span>
+          </button>
         </Trigger>
         <Portal>
           <Content sideOffset={6} className={tooltipClass}>

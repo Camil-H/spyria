@@ -16,6 +16,7 @@ import { MessageBody } from '../domain/message-body.ts'
 import { closeAgentTurn } from './agent-turn.ts'
 
 type Dependencies = { transactor: ConversationTransactor }
+const unknownContext = { contextTokens: null, contextWindow: null }
 type Input = {
   workspaceId: WorkspaceId
   chatId: ChatId
@@ -40,6 +41,12 @@ const recordIn = async (
   const seq = await unitOfWork.agentEvents.append(chatId, event, promptId, recordedAt, delegation)
   const projected = agentProjectionOf(event)
   const isOwnTurn = (input.turnPromptId ?? activePromptId) === activePromptId
+  if (
+    seq !== undefined &&
+    !delegation &&
+    (event.update as { sessionUpdate?: unknown })?.sessionUpdate === 'session_started'
+  )
+    await unitOfWork.routing.update(chatId, unknownContext)
   const turnEnd =
     seq !== undefined && !delegation && isOwnTurn && projected?.type === 'turn-end' ? projected : undefined
   const isError = seq !== undefined && !delegation && projected?.type === 'step' && projected.step.type === 'error'

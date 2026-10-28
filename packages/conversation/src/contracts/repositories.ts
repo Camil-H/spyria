@@ -206,7 +206,7 @@ export type RoutingRepository = {
       subagentPolicy: string
       harness: HarnessId | null
       localSession: boolean
-      contextTokens: number
+      contextTokens: number | null
       contextWindow: number | null
     }>,
   ): Promise<void>
