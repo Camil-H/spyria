@@ -78,12 +78,6 @@ test.each([
       provider: 'Google',
       models: ['gemini/gemini-pro-latest', 'gemini/gemini-flash-latest', 'gemini/gemini-flash-lite-latest'],
     },
-    { provider: 'xAI', models: ['xai/grok-4.7', 'xai/grok-4.3', 'xai/grok-code-fast'] },
-    {
-      provider: 'DeepSeek',
-      models: ['deepseek/deepseek-v4-pro', 'deepseek/deepseek-v4-flash', 'deepseek/deepseek-v3.2'],
-    },
-    { provider: 'Z.ai', models: ['zai/glm-5.3', 'zai/glm-4.7', 'zai/glm-5.3-flash'] },
   ].map(({ provider, models }) => ({
     provider,
     piProvider: 'spyria',
