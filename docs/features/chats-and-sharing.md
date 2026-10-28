@@ -106,7 +106,7 @@ When a participant other than the owner prompts the agent, the agent still acts 
 
 - The owner's **personal connections** are not available on a guest's prompt.
 - A **workspace connection** is available only if both the owner and the prompter may use it.
-- A tool call that is not read-only (the tool does not declare the MCP `readOnlyHint`) waits for the **owner's approval**. The owner sees a **Tool approval** card with Approve and Deny; everyone else sees that it is waiting. Without an answer within 5 minutes the call expires. Deny, expiry or **Stop** answer the agent that the owner did not approve the call.
+- A tool call that is not read-only (the tool does not declare the MCP `readOnlyHint`) waits for the **owner's approval**, except Spyria's own `open_page` and `take_screenshot`, which use none of the owner's connections. The owner sees a **Tool approval** card with Approve and Deny; everyone else sees that it is waiting. Without an answer within 5 minutes the call expires. Deny, expiry or **Stop** answer the agent that the owner did not approve the call.
 - Model calls always run on the **prompter's own key**, never the owner's (see [Agents](./agents.md)).
 
 Every tool call is recorded with its prompter, owner and approval decision, and appears in the audit log.
