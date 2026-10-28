@@ -68,11 +68,7 @@ export const ChatRow = ({
           <Trigger aria-label={`Chat actions for ${chat.name}`} className={menuTriggerClass}>
             <Ellipsis aria-hidden className="size-4" />
           </Trigger>
-          <Content
-            align="start"
-            className={menuContentClass}
-            onCloseAutoFocus={(event) => openDialog === 'rename' && event.preventDefault()}
-          >
+          <Content align="start" className={menuContentClass}>
             {chat.canAdmin && (
               <>
                 <Item className={menuItemClass} onSelect={() => setOpenDialog('rename')}>

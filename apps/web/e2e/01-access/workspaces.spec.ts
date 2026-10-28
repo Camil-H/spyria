@@ -140,6 +140,7 @@ test.describe('Workspaces', () => {
       await page.getByRole('menuitem', { name: 'New workspace' }).click()
       const dialog = page.getByRole('dialog', { name: 'New workspace' })
       await expect(dialog.getByRole('textbox', { name: 'Workspace name' })).toBeFocused()
+      expect(await dialog.evaluate((element) => element.matches(':modal'))).toBe(true)
       await expect(dialog.getByRole('button', { name: 'Confirm' })).toBeDisabled()
       await dialog.getByRole('textbox', { name: 'Workspace name' }).fill('   ')
       await expect(dialog.getByRole('button', { name: 'Confirm' })).toBeDisabled()
