@@ -24,6 +24,7 @@ The repositories a workspace can use are exactly those granted to its GitHub App
 | Issues | read | let the agent read the repository's issues |
 | Checks | read | show check results on the pull request card |
 | Metadata | read | required by GitHub |
+| Workflows | write | push a working branch that changes files under `.github/workflows` |
 
 Events: `pull_request`, `pull_request_review`, `pull_request_review_comment`, `pull_request_review_thread`, `check_suite`, `check_run`.
 
@@ -104,6 +105,8 @@ The runtime holds no GitHub credential, so `git fetch`, `git pull`, `git push`, 
 Issue and comment text can be written by anyone who can comment on the repository, and it reaches the agent as it is.
 
 An App created before Spyria asked for **Issues** lacks that permission: add **Issues: Read-only** in the App's settings on GitHub, then accept it on the installation. Until then, `list_issues` and `read_issue` answer "Ask a GitHub admin to accept the Issues permission for this workspace's GitHub App".
+
+An App created before Spyria asked for **Workflows** lacks that permission too: add **Workflows: Read and write** in the App's settings on GitHub, then accept it on the installation. Until then, GitHub refuses to push a working branch that changes a file under `.github/workflows`.
 
 ## The pull request card and header chip
 
