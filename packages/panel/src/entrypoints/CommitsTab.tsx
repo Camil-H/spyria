@@ -17,12 +17,12 @@ const CommitsTab = ({ workspaceId, chatId }: TabProps) => {
       <ul className="flex flex-col gap-2 text-sm">
         {commits.map((commit) => (
           <li key={commit.sha} className="flex flex-col gap-0.5">
-            <span>
-              <span className="font-mono text-xs text-muted">{commit.sha}</span> {commit.subject}
-            </span>
+            <span className="font-mono text-xs text-muted">{commit.sha}</span>
+            <span className="font-semibold break-words">{commit.subject}</span>
             <span className="text-xs text-muted">
               {commit.author} · {commit.committedAt.slice(11, 16)} UTC
             </span>
+            {commit.body && <p className="mt-1 whitespace-pre-wrap break-words text-xs">{commit.body}</p>}
           </li>
         ))}
       </ul>

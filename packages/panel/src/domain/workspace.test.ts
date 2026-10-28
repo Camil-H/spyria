@@ -89,18 +89,25 @@ test('a patch becomes one change per file with its status, counts and diff lines
   expect(fileChangesOf(undefined)).toEqual([])
 })
 
-test('a git log becomes commits with a short sha', () => {
+test('a git log becomes commits with a short sha and their body', () => {
   expect(
     commitsOf(
-      'a1b2c3d4e5f6\x1fFix the totals\x1fPi Agent\x1f2026-10-18T13:20:00+02:00\nb2c3d4e5f6a7\x1fAdd tax\x1fAlice\x1f2026-10-18T10:00:00+00:00\n',
+      'a1b2c3d4e5f6\x1fFix the totals\x1fPi Agent\x1f2026-10-18T13:20:00+02:00\x1fThe total was off.\n\nSee #12.\n\x1e\nb2c3d4e5f6a7\x1fAdd tax\x1fAlice\x1f2026-10-18T10:00:00+00:00\x1f\x1e\n',
     ),
   ).toEqual([
-    { sha: 'a1b2c3d', subject: 'Fix the totals', author: 'Pi Agent', committedAt: '2026-10-18T11:20:00.000Z' },
-    { sha: 'b2c3d4e', subject: 'Add tax', author: 'Alice', committedAt: '2026-10-18T10:00:00.000Z' },
+    {
+      sha: 'a1b2c3d',
+      subject: 'Fix the totals',
+      author: 'Pi Agent',
+      committedAt: '2026-10-18T11:20:00.000Z',
+      body: 'The total was off.\n\nSee #12.',
+    },
+    { sha: 'b2c3d4e', subject: 'Add tax', author: 'Alice', committedAt: '2026-10-18T10:00:00.000Z', body: '' },
   ])
   expect(commitsOf('')).toEqual([])
-  expect(commitsOf('c3d4e5f6a7b8\x1fNo date')).toEqual([
-    { sha: 'c3d4e5f', subject: 'No date', author: '', committedAt: '' },
+  expect(commitsOf('c3d4e5f6a7b8\x1fNo date\nd4e5f6a7b8c9\x1fNo body')).toEqual([
+    { sha: 'c3d4e5f', subject: 'No date', author: '', committedAt: '', body: '' },
+    { sha: 'd4e5f6a', subject: 'No body', author: '', committedAt: '', body: '' },
   ])
 })
 
