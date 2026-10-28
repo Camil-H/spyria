@@ -24,7 +24,7 @@ type TreeProps = {
 }
 
 const markLetters: Record<string, string> = { Added: 'A', Modified: 'M', Deleted: 'D', 'Contains changes': '•' }
-const rowClass = `flex w-full items-center gap-1 rounded-md px-1 py-0.5 text-left hover:bg-hover ${focusRing}`
+const rowClass = `flex w-full cursor-pointer items-center gap-1 rounded-md px-1 py-0.5 text-left hover:bg-hover ${focusRing}`
 
 const ChangeMark = ({ mark }: { mark: string | undefined }) =>
   mark ? (
