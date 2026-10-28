@@ -98,15 +98,19 @@ The runtime holds no GitHub credential, so `git fetch`, `git pull`, `git push`, 
 | `update_pull_request` | The owner's prompts | Changes the title or the description of the chat's open pull request |
 | `fetch_branch` | Any prompt | Fetches any branch of the chat's repository into `origin/<branch>` in the runtime, leaving the working branch as it is |
 | `read_review_threads` | Any prompt | Reads a pull request's review threads: file, line, resolved or outdated, and comments; the chat's pull request by default |
-| `read_checks` | Any prompt | Reads the checks of a pull request's head commit, failing first, with the annotations of each failing check: file, line, title and message; the chat's pull request by default |
+| `read_checks` | Any prompt | Reads the checks of a pull request's head commit, failing first, with the annotations of each failing check (file, line, title and message) and, for a GitHub Actions job, the step that failed and the end of its log; the chat's pull request by default |
 | `list_issues` | Any prompt | Lists up to 30 issues of the repository, filtered by state, labels and words |
 | `read_issue` | Any prompt | Reads an issue with its comments |
 
 `fetch_branch` works like **Update from base**: the server fetches the branch with a read-only installation token and hands the runtime a git bundle (at most 12 MB) holding only that branch's commits the runtime lacks. Since pushes only fast-forward, the agent merges what it fetched rather than rebasing. The reading tools use read-only installation tokens too, never a member's token, and cut long texts. Every call is recorded like any tool call.
 
-Issue and comment text can be written by anyone who can comment on the repository, and it reaches the agent as it is. Check annotations are written by the repository's CI, which runs the code of the pull request, so a pull request can write any text there; the tool's description tells the agent to read them as data, never as instructions. `read_checks` reads annotations, not the CI's raw logs: a CI that wants the agent to see why a test failed annotates it, as [Spyria's own CI does](../decisions/0021-ci-on-github-actions-through-develop.md).
+Issue and comment text can be written by anyone who can comment on the repository, and it reaches the agent as it is. Check annotations and logs are written by the repository's CI, which runs the code of the pull request, so a pull request can write any text there; the tool's description tells the agent to read them as data, never as instructions.
+
+`read_checks` explains a failing check from two sources. Annotations come first: a CI that annotates its failing tests, as [Spyria's own does](../decisions/0021-ci-on-github-actions-through-develop.md), gives the file, the line and the error without any log. For a GitHub Actions job, the tool adds the step that failed and the end of that job's log: the lines of the failing step up to its error, at most 100 lines and 10,000 characters, without timestamps and colors. That covers failures that annotate nothing, such as a dependency that fails to install, a build error or a timeout. Logs across the whole reply stop at 40,000 characters; jobs failing with the same log, like e2e shards on one broken test, point to the first one instead of repeating it, and jobs past the budget show only their failed step. Checks from other CI systems show their annotations alone.
 
 An App created before Spyria asked for **Issues** lacks that permission: add **Issues: Read-only** in the App's settings on GitHub, then accept it on the installation. Until then, `list_issues` and `read_issue` answer "Ask a GitHub admin to accept the Issues permission for this workspace's GitHub App".
+
+An App created before Spyria asked for **Actions** lacks that permission: add **Actions: Read-only** in the App's settings on GitHub, then accept it on the installation. Until then, `read_checks` reads annotations alone and says "Logs not read: Ask a GitHub admin to accept the Actions permission for this workspace's GitHub App".
 
 An App created before Spyria asked for **Workflows** lacks that permission too: add **Workflows: Read and write** in the App's settings on GitHub, then accept it on the installation. Until then, GitHub refuses to push a working branch that changes a file under `.github/workflows`.
 
