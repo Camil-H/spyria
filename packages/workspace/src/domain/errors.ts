@@ -1,12 +1,8 @@
-import { DomainError, errorKind } from '@spyria/kernel'
+import { blankKind, DomainError, errorKind } from '@spyria/kernel'
 
 class WorkspaceError extends DomainError {}
 
-export const BlankName = errorKind(
-  'blank_name',
-  () => 'A name must contain at least one non-blank character',
-  WorkspaceError,
-)
+export const BlankName = blankKind('blank_name', 'A name', WorkspaceError)
 export const ProjectNotFound = errorKind(
   'project_not_found',
   (projectId: string) => `Project ${projectId} was not found`,

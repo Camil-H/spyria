@@ -22,6 +22,15 @@ export const errorKind = <Details extends unknown[]>(
     }
   }
 
+export const blankKind = (code: string, subject: string, Base: typeof DomainError) =>
+  errorKind(code, () => `${subject} must contain at least one non-blank character`, Base)
+
+export const nonBlank = (rawValue: string, Blank: new () => DomainError) => {
+  const trimmedValue = rawValue.trim()
+  if (trimmedValue === '') throw new Blank()
+  return trimmedValue
+}
+
 const codeOf = (error: Error) => {
   const code = (error as { code?: unknown }).code ?? (error.cause as { code?: unknown } | undefined)?.code
   return typeof code === 'string' ? code : undefined
