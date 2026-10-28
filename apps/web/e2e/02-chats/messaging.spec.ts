@@ -81,6 +81,12 @@ test.describe('Messaging', () => {
       await expect(composerOf(page)).toHaveValue('Work in progress')
     })
 
+    await test.step('keeps the draft typed just before a reload', async () => {
+      await composerOf(page).fill('Work in progress, typed just before a reload')
+      await page.reload()
+      await expect(composerOf(page)).toHaveValue('Work in progress, typed just before a reload')
+    })
+
     await test.step('clears the draft and the pencil when the message is sent', async () => {
       await composerOf(page).press('ControlOrMeta+Enter')
       await expect(draftIconOf(page, 'Welcome')).toHaveCount(0)
