@@ -88,7 +88,7 @@ test.describe('Workspace panel', () => {
     await expect(diff).toContainText('+ export const total = 2')
   })
 
-  test('As a member, I see the agent’s commit with its description in Commits, and Changes splits the files not added from the commit’s files', {
+  test('As a member, I see the agent’s commit with its description in Commits, and Changes splits the files not staged from the commit’s files', {
     tag: ['@spec-40'],
   }, async ({ page, agentScript }) => {
     await devChatWithEdits(page, agentScript, 'Commit totals', [{ command: commitCommand }])
@@ -100,11 +100,11 @@ test.describe('Workspace panel', () => {
     await expect(commits.first()).toContainText('The total was off by one.')
     await panelTabOf(page, 'Changes').click()
     await expect(tabPanelOf(page).getByRole('heading', { level: 3 })).toHaveText([
-      'Not added',
+      'Not staged',
       /^[0-9a-f]{7} Fix the totals$/,
     ])
-    const notAdded = tabPanelOf(page).getByRole('region', { name: 'Not added' })
-    await expect(notAdded.getByRole('button', { name: /^src\/new\.ts/ })).toContainText(/Added \+1 [−-]0/)
+    const notStaged = tabPanelOf(page).getByRole('region', { name: 'Not staged', exact: true })
+    await expect(notStaged.getByRole('button', { name: /^src\/new\.ts/ })).toContainText(/Added \+1 [−-]0/)
     const commit = tabPanelOf(page).getByRole('region', { name: /^Commit [0-9a-f]{7}$/ })
     await expect(commit.getByRole('button', { name: /^src\/app\.ts/ })).toContainText(/Modified \+1 [−-]1/)
   })

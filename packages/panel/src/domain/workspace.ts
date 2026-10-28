@@ -1,4 +1,4 @@
-export type WorkspaceRead = 'tree' | 'file' | 'changes' | 'status'
+export type WorkspaceRead = 'tree' | 'file' | 'changes' | 'commits' | 'status'
 export type WorkspaceReading = Readonly<{ isLive: boolean; [field: string]: unknown }>
 export type DiffLine = {
   kind: 'added' | 'removed' | 'context' | 'hunk'
@@ -12,7 +12,7 @@ export type FileStatus = 'Added' | 'Modified' | 'Deleted'
 export type FileChange = { path: string; status: FileStatus; additions: number; deletions: number; lines: DiffLine[] }
 export type TreeEntry = { name: string; path: string; isFolder: boolean }
 export type Commit = { sha: string; subject: string; author: string; committedAt: string; body: string }
-export type ChangeGroup = { sha?: string; title: string; changes: FileChange[] }
+export type ChangeGroup = { sha?: string; title: string; changes: FileChange[]; isCut: boolean }
 export type BranchStatus = {
   aheadOfBase?: number
   behindBase?: number
@@ -84,14 +84,22 @@ export const fileChangesOf = (patch: unknown) =>
         .map(fileChangeOf)
     : []
 
+const commitFieldCount = 5
+const fullShaPattern = /^[0-9a-f]{40}$/
+
+const commitRecordsOf = (log: string) => {
+  if (!log.includes('\0')) return log.split('\n').map((line) => line.split('\x1f'))
+  const fields = log.split('\0')
+  return Array.from({ length: Math.floor(fields.length / commitFieldCount) }, (_, index) =>
+    fields.slice(index * commitFieldCount, (index + 1) * commitFieldCount),
+  )
+}
+
 export const commitsOf = (log: unknown): Commit[] =>
   typeof log === 'string'
-    ? log
-        .split(log.includes('\x1e') ? '\x1e' : '\n')
-        .map((record) => record.trim())
-        .filter(Boolean)
-        .map((record) => {
-          const [sha = '', subject = '', author = '', committedAt = '', body = ''] = record.split('\x1f')
+    ? commitRecordsOf(log)
+        .filter(([sha]) => sha)
+        .map(([sha = '', subject = '', author = '', committedAt = '', body = '']) => {
           const time = Date.parse(committedAt)
           return {
             sha: sha.slice(0, 7),
@@ -103,28 +111,40 @@ export const commitsOf = (log: unknown): Commit[] =>
         })
     : []
 
-const commitGroupsOf = (commitPatches: string, log: unknown) => {
-  const subjects = new Map(commitsOf(log).map(({ sha, subject }) => [sha, subject]))
-  return commitPatches
-    .split('\x1e')
-    .filter(Boolean)
-    .map((record): ChangeGroup => {
+const isPartCut = (reading: WorkspaceReading | undefined, part: string) =>
+  Array.isArray(reading?.cut) ? reading.cut.includes(part) : reading?.truncated === true
+
+const commitGroupsOf = (commits: WorkspaceReading) => {
+  const subjects = new Map(commitsOf(commits.log).map(({ sha, subject }) => [sha, subject]))
+  const groups = String(commits.commitPatches)
+    .split('\0')
+    .flatMap((record): ChangeGroup[] => {
       const [fullSha = '', ...patch] = record.split('\n')
+      if (!fullShaPattern.test(fullSha)) return []
       const sha = fullSha.slice(0, 7)
-      return { sha, title: subjects.get(sha) ?? '', changes: fileChangesOf(patch.join('\n').trim()) }
+      return [
+        { sha, title: subjects.get(sha) ?? '', changes: fileChangesOf(patch.join('\n').trimStart()), isCut: false },
+      ]
     })
+  const oldest = groups.at(-1)
+  if (oldest) oldest.isCut = isPartCut(commits, 'commitPatches')
+  return groups
 }
 
-export const changeGroupsOf = (reading: WorkspaceReading | undefined): ChangeGroup[] => {
+export const changeGroupsOf = (changes: WorkspaceReading | undefined, commits: WorkspaceReading | undefined) => {
   const groups: ChangeGroup[] =
-    typeof reading?.commitPatches === 'string'
+    typeof changes?.unstaged === 'string' && typeof commits?.commitPatches === 'string'
       ? [
-          { title: 'Not added', changes: fileChangesOf(reading.unstaged) },
-          { title: 'Added, not committed', changes: fileChangesOf(reading.staged) },
-          ...commitGroupsOf(reading.commitPatches, reading.log),
+          { title: 'Not staged', changes: fileChangesOf(changes.unstaged), isCut: isPartCut(changes, 'unstaged') },
+          {
+            title: 'Staged, not committed',
+            changes: fileChangesOf(changes.staged),
+            isCut: isPartCut(changes, 'staged'),
+          },
+          ...commitGroupsOf(commits),
         ]
-      : [{ title: '', changes: fileChangesOf(reading?.patch) }]
-  return groups.filter(({ changes }) => changes.length > 0)
+      : [{ title: '', changes: fileChangesOf(changes?.patch), isCut: isPartCut(changes, 'patch') }]
+  return groups.filter((group) => group.changes.length > 0)
 }
 
 export const treeEntriesOf = (reading: WorkspaceReading | undefined) =>

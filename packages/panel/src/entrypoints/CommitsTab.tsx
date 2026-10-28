@@ -2,11 +2,12 @@ import { GitCommitHorizontal } from 'lucide-react'
 import { commitsOf } from '../domain/workspace.ts'
 import { EmptyState } from './EmptyState.tsx'
 import type { TabProps } from './TabProps.ts'
+import { emptyClass, moreCommitsNotice } from './ui.ts'
 import { useWorkspaceReading } from './useWorkspaceReading.ts'
 import { WorkspaceStatus } from './WorkspaceStatus.tsx'
 
 const CommitsTab = ({ workspaceId, chatId }: TabProps) => {
-  const { reading } = useWorkspaceReading(workspaceId, chatId, 'changes')
+  const { reading } = useWorkspaceReading(workspaceId, chatId, 'commits')
   const commits = commitsOf(reading?.log)
   return (
     <>
@@ -26,6 +27,7 @@ const CommitsTab = ({ workspaceId, chatId }: TabProps) => {
           </li>
         ))}
       </ul>
+      {reading?.hasMoreCommits === true && <p className={emptyClass}>{moreCommitsNotice}</p>}
     </>
   )
 }
