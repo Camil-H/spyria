@@ -76,6 +76,8 @@ export const useChatMessages = (workspaceId: WorkspaceId, chatId: ChatId) => {
   useScoped(workspaceId, 'chatPinnedSteps', { chatId })
   const hasEarlier = roots?.rows.length === limit
   const oldestSeq = roots?.isComplete && roots.rows.length > 0 ? oldestSeqOf(roots.rows) : undefined
+  const hasWindow =
+    roots?.isComplete === true || (shown.chatId === chatId && shown.oldestSeq !== Number.POSITIVE_INFINITY)
   if (shown.chatId !== chatId) setShown({ chatId, limit, oldestSeq: Number.POSITIVE_INFINITY })
   else if (oldestSeq !== undefined && oldestSeq !== shown.oldestSeq)
     setShown(
@@ -83,6 +85,7 @@ export const useChatMessages = (workspaceId: WorkspaceId, chatId: ChatId) => {
     )
   return {
     isComplete: roots?.isComplete === true,
+    hasWindow,
     hasEarlier,
     loadEarlier: () => setShown({ ...shown, chatId, limit: limit + chatPageSize }),
   }
