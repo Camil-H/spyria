@@ -255,20 +255,25 @@ test('Stop mid-command cancels the turn without deleting the conversation, and t
   expect(await sessionsStartedOf(chat)).toHaveLength(1)
 })
 
-test('the pages Pi opens with open_page are kept for the chat’s Browser, newest first, and an address of another scheme or on the member’s own network is not', async () => {
+test('the pages the agent opens with Spyria’s open_page tool are kept for the chat’s Browser, newest first, and an address of another scheme or on the member’s own network is refused with a reason the agent sees', async () => {
   await stack.agentHost('Browser host', { routesModelCalls: true })
   const chat = await newRuntimeChat()
+  const openPage = (address: string, title?: string) => ({
+    tool: 'mcp__spyria__open_page',
+    arguments: { address, ...(title && { title }) },
+  })
   stack.setFakeLlmScript({
     steps: [
-      { tool: 'open_page', arguments: { address: '/workspace/project/reports/totals.html', title: 'Invoice totals' } },
-      { tool: 'open_page', arguments: { address: 'javascript:alert(1)', title: 'Script' } },
-      { tool: 'open_page', arguments: { address: 'http://localhost:3000/admin', title: 'Admin' } },
-      { tool: 'open_page', arguments: { address: 'http://192.168.1.1', title: 'Router' } },
-      { tool: 'open_page', arguments: { address: 'https://example.com/docs' } },
+      openPage('/workspace/project/reports/totals.html', 'Invoice totals'),
+      openPage('javascript:alert(1)', 'Script'),
+      openPage('http://localhost:3000/admin', 'Admin'),
+      openPage('http://192.168.1.1', 'Router'),
+      openPage('https://example.com/docs'),
     ],
     text: 'Opened.',
   })
-  const replies = await stack.finished(await prompt(chat, 'Show me the totals'), chat, 15_000, 'Opened.')
+  const promptId = await prompt(chat, 'Show me the totals')
+  const replies = await stack.finished(promptId, chat, 15_000, 'Opened.')
   expect(replies.at(-1)?.body).toBe('Opened.')
   expect([
     ...(await database.$client`
@@ -276,6 +281,26 @@ test('the pages Pi opens with open_page are kept for the chat’s Browser, newes
   ]).toEqual([
     { url: 'https://example.com/docs', title: 'https://example.com/docs' },
     { url: 'reports/totals.html', title: 'Invoice totals' },
+  ])
+  const results = (await stack.repliesTo(promptId, ['step'])).flatMap(({ step }) =>
+    (step as { name?: string })?.name === 'open_page' ? [(step as { result?: string }).result] : [],
+  )
+  expect(results).toEqual([
+    "The page is open in the member's Browser panel.",
+    'Only http and https addresses and project files are opened',
+    "http://localhost:3000/admin is on the member's own machine or network, so it is not opened",
+    "http://192.168.1.1 is on the member's own machine or network, so it is not opened",
+    "The page is open in the member's Browser panel.",
+  ])
+  expect(
+    await database.$client`
+      select server, tool, status from tool_calls where workspace_id = ${acme} and chat_id = ${chat} order by called_at`,
+  ).toMatchObject([
+    { server: 'spyria', tool: 'open_page', status: 'succeeded' },
+    { server: 'spyria', tool: 'open_page', status: 'refused' },
+    { server: 'spyria', tool: 'open_page', status: 'refused' },
+    { server: 'spyria', tool: 'open_page', status: 'refused' },
+    { server: 'spyria', tool: 'open_page', status: 'succeeded' },
   ])
 })
 

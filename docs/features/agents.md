@@ -54,7 +54,7 @@ On a guest's prompt, a tool call that is not read-only produces a **Tool approva
 
 ## Opening pages
 
-On a Spyria runtime the agent opens a page for the chat's members with `open_page`: a public web address, or a file of the project such as an HTML report it wrote. The server refuses addresses on the member's own machine or network, and members load an opened page with a click. The page shows in the **Browser** tab of the side panel; see [Chats and sharing](./chats-and-sharing.md#browser).
+The agent opens a page for the chat's members with `open_page`, a tool of Spyria's own tool server that Pi, Claude Code and Codex all have: a public web address, or a file of the project such as an HTML report it wrote. The server checks the address while answering the call, refuses addresses on the member's own machine or network with a reason the agent sees, and members load an opened page with a click. The page shows in the **Browser** tab of the side panel; see [Chats and sharing](./chats-and-sharing.md#browser).
 
 ## Delegation and subagents
 

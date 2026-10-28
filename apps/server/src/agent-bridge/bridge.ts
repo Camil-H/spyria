@@ -452,6 +452,7 @@ export const createAgentBridge = ({
       readRuntimeMedia: handlers.readRuntimeMedia,
       publishBranch: handlers.publishBranch,
       callGitHubTool: handlers.callGitHubTool,
+      callSpyriaTool: handlers.callSpyriaTool,
       runGitAction: handlers.runGitAction,
       recordPullRequest: handlers.recordPullRequest,
       wakeWorkspace: handlers.wakeWorkspace,

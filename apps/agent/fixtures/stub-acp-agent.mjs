@@ -283,7 +283,7 @@ const completionOf = async (session, signal, update) => {
     {
       model: session.model.slice(provider.length + 1),
       messages: session.history,
-      tools: [...piTools, 'ask_member', 'open_page', ...Object.keys(session.tools)].map((name) => ({
+      tools: [...piTools, 'ask_member', ...Object.keys(session.tools)].map((name) => ({
         type: 'function',
         function: { name },
       })),
@@ -418,8 +418,6 @@ const runTool = async ({ id, function: { name, arguments: json } }, session, sta
   if (['read', 'edit', 'write'].includes(name)) return editFile(id, name, input, update)
   if (name === 'think') return 'Your thought has been logged.'
   if (name === 'ask_member') return askMember(id, input, update)
-  if (name === 'open_page')
-    return piTool(id, name, input, update, async () => "The page is open in the member's Browser panel.")
   return callMcpTool(id, name, input, session, state, update)
 }
 const gatewayTurn = async (session, text, state, update) => {
