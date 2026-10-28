@@ -1,7 +1,7 @@
-import { type MemberId, requirePermissionIn, type WorkspaceId } from '@spyria/kernel'
+import { type MemberId, MemberNotFound, requirePermissionIn, type WorkspaceId } from '@spyria/kernel'
 import type { ToolGateway } from '../contracts/repositories.ts'
 import type { ProfileTransactor, UnitOfWork } from '../contracts/transactor.ts'
-import { ConnectionUnreachable, MemberNotFound, SecretRequired } from '../domain/errors.ts'
+import { ConnectionUnreachable, SecretRequired } from '../domain/errors.ts'
 import {
   allowedAfterRelisting,
   type ConnectionInput,

@@ -1,7 +1,6 @@
-import { type ChatId, type ChatPermission, type MemberId, requireChatPermission } from '@spyria/kernel'
+import { type ChatId, ChatNotFound, type ChatPermission, type MemberId, requireChatPermission } from '@spyria/kernel'
 import type { AgentChat, AgentConversation } from '../contracts/agent.ts'
 import type { UnitOfWork } from '../contracts/transactor.ts'
-import { ChatNotFound } from '../domain/errors.ts'
 import type { AgentDependencies } from './agent-turn.ts'
 
 const forbiddenStatus = 403

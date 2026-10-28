@@ -20,11 +20,6 @@ export const NotOwnProfile = errorKind(
   () => 'A member can only change their own profile in their current workspace',
   ProfileError,
 )
-export const MemberNotFound = errorKind(
-  'member_not_found',
-  (memberId: string) => `Member ${memberId} was not found`,
-  ProfileError,
-)
 export const ToolNotInCatalog = errorKind(
   'tool_not_in_catalog',
   (tool: string) => `Tool ${tool} is not in the catalog`,
