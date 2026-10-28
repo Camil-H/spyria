@@ -297,7 +297,11 @@ test('a subscription launch gets no gateway URL and no key, spyria-agent never l
   const secretValues = ['inherited-anthropic-key-0001', 'http://gateway.invalid/v1', 'sk-spyria-llm-token-0002', apiKey]
   const fakeGitDirectory = mkdtempSync(join(tmpdir(), 'spyria-agent-git-'))
   const gitEnvironmentPath = join(fakeGitDirectory, 'environment')
-  writeFileSync(join(fakeGitDirectory, 'git'), `#!/bin/sh\nenv > ${gitEnvironmentPath}\nexit 1\n`, { mode: 0o755 })
+  writeFileSync(
+    join(fakeGitDirectory, 'git'),
+    `#!/bin/sh\nenv > ${gitEnvironmentPath}.$$ && mv ${gitEnvironmentPath}.$$ ${gitEnvironmentPath}\nexit 1\n`,
+    { mode: 0o755 },
+  )
   const child = Bun.spawn(['bun', new URL('./main.ts', import.meta.url).pathname], {
     env: {
       PATH: `${fakeGitDirectory}:${process.env.PATH}`,
