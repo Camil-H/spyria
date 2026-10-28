@@ -70,6 +70,17 @@ export const findToolCallTurn = async (dependencies: Dependencies, host: AgentHo
   })
 }
 
+export const recordContextSize = (
+  { transactor }: Dependencies,
+  { chat, model, tokens }: { chat: AgentChat; model: string | undefined; tokens: number },
+) =>
+  transactor.run(({ routing }) =>
+    routing.update(chat.chatId, {
+      contextTokens: tokens,
+      contextWindow: routing.listedModels().find((listed) => listed.id === model)?.contextWindow ?? null,
+    }),
+  )
+
 export const recordToolCall = ({ transactor }: Dependencies, call: ToolCall) =>
   transactor.run(({ toolCalls }) => toolCalls.record(call))
 

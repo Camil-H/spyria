@@ -18,7 +18,7 @@ const microsPerDollar = 1_000_000
 const searchedModelsShown = 50
 
 const SessionDialog = ({
-  chip: { workspaceId, chatId, model, reasoningEffort, subagentPolicy, harness, localSession, isOwner },
+  chip: { workspaceId, chatId, model, reasoningEffort, subagentPolicy, harness, localSession, isOwner, contextTokens },
   routing,
   nameOf,
   adapterNameOf,
@@ -32,6 +32,7 @@ const SessionDialog = ({
     harness: HarnessId | null
     localSession: boolean
     isOwner: boolean
+    contextTokens: number | null
   }
   routing: ChatRoutingRead | undefined
   nameOf: (id: string) => string
@@ -66,7 +67,7 @@ const SessionDialog = ({
   const estimate = pendingModel
     ? rereadDollarsOf(
         routing?.reachableModels.find(({ id }) => id === pendingModel),
-        routing?.contextTokens ?? null,
+        contextTokens,
       )
     : undefined
   return (

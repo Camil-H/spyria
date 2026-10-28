@@ -46,6 +46,7 @@ export {
   type PullRequestStep,
   type ReviewComment,
 } from './domain/pull-requests.ts'
+export { isSpyriaTool, spyriaTools } from './domain/spyria-tools.ts'
 export type { CommandOutputFrame, DelegatedFrame, QuestionFrame } from './domain/streamed-reply.ts'
 export {
   guestPrompterOf,

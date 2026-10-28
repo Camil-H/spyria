@@ -9,8 +9,10 @@ import {
   guestPrompterOf,
   isGuestToolMethod,
   isReadOnlyGitHubTool,
+  isSpyriaTool,
   type ModelCallFailure,
   routerTools,
+  spyriaTools,
   type ToolCallDecision,
   type ToolCallFailure,
   toolCallFailureOf,
@@ -78,6 +80,8 @@ const anthropicPathPrefix = '/v1/messages'
 const usagePatterns = {
   'gen_ai.usage.input_tokens': /"(?:input_tokens|prompt_tokens)"\s*:\s*(\d+)/g,
   'gen_ai.usage.output_tokens': /"(?:output_tokens|completion_tokens)"\s*:\s*(\d+)/g,
+  'gen_ai.usage.cache_read.input_tokens': /"cache_read_input_tokens"\s*:\s*(\d+)/g,
+  'gen_ai.usage.cache_creation.input_tokens': /"cache_creation_input_tokens"\s*:\s*(\d+)/g,
 }
 
 const usageCarryCharacters = 64
@@ -96,6 +100,23 @@ export const createUsageReader = () => {
     },
   }
 }
+
+export const rpcAnswerOf = (text: string, contentType: string) => {
+  if (!contentType.includes('text/event-stream')) return jsonOf(text)
+  const eventData = text.split(/\r?\n\r?\n/).map((event) =>
+    event
+      .split(/\r?\n/)
+      .flatMap((line) => (line.startsWith('data:') ? [line.slice(5).replace(/^ /, '')] : []))
+      .join('\n'),
+  )
+  return eventData
+    .filter(Boolean)
+    .map(jsonOf)
+    .find((message) => typeof message === 'object' && message !== null && ('result' in message || 'error' in message))
+}
+
+export const contextTokensOf = (usage: Record<string, number>) =>
+  Object.keys(usagePatterns).reduce((total, name) => total + (usage[name] ?? 0), 0)
 
 export const createModelCallRelay = ({
   llmGateway,
@@ -163,6 +184,15 @@ export const createModelCallRelay = ({
       } catch {
         send({ type: 'gw_error', sid })
       }
+    }
+    const answerWithSpyriaTools = async (id: unknown, response: Response) => {
+      const contentType = response.headers.get('content-type') ?? ''
+      if (!response.ok || !/application\/json|text\/event-stream/.test(contentType)) return stream(response)
+      const listed = rpcAnswerOf(await response.text(), contentType) as { result?: { tools?: object[] } } | undefined
+      const result = listed?.result && { ...listed.result, tools: [...spyriaTools, ...(listed.result.tools ?? [])] }
+      const sessionHeaders = picked(response.headers, ['mcp-session-id'])
+      if (!listed) return answerRpc(id, { result: { tools: spyriaTools } }, sessionHeaders)
+      answer(200, result ? { ...listed, result } : listed, sessionHeaders)
     }
     const path = relayPathOf(String(frame.path ?? ''))
     const method = String(frame.method ?? 'POST')
@@ -292,7 +322,8 @@ export const createModelCallRelay = ({
       const rpc = jsonOf(body) as RouterCall | undefined
       const isToolCall = rpc?.method === 'tools/call'
       const toolName = String(rpc?.params?.name ?? '')
-      const { server, tool } = toolNamePartsOf(toolName)
+      const isSpyriaCall = isToolCall && isSpyriaTool(toolName)
+      const { server, tool } = isSpyriaCall ? { server: 'spyria', tool: toolName } : toolNamePartsOf(toolName)
       const { ownerId, prompterId, ownerName } = turn
       const call = {
         readOnly: null as boolean | null,
@@ -310,13 +341,29 @@ export const createModelCallRelay = ({
         return answerRpc(rpc?.id ?? null, methodNotFound)
       const isGuestCall = isToolCall && isGuestTurn
       try {
+        if (isSpyriaCall) {
+          const { isRefused, text, status } = await handlers
+            .callSpyriaTool({ chat: turn.chat, name: toolName, input: rpc?.params?.arguments })
+            .then((outcome) => ({ ...outcome, status: outcome.isRefused ? 'refused' : 'succeeded' }) as const)
+            .catch((error: unknown) => {
+              log.error({
+                event: 'spyria_tool.failed',
+                body: 'A Spyria tool call failed',
+                attributes: { 'workspace.id': host.workspaceId, 'chat.id': turn.chat.chatId, 'tool.name': toolName },
+                error,
+              })
+              return { isRefused: true, text: `${toolName} failed`, status: 'failed' } as const
+            })
+          call.status = status
+          return answerRpc(rpc?.id, { result: { content: [{ type: 'text', text }], isError: isRefused } })
+        }
         const virtualKey = await tools.keyOf(host.workspaceId, ownerId).then(
           (key) => key ?? undefined,
           () => null,
         )
-        if (virtualKey === null) return isToolCall ? toolError(toolGatewayUnreachable) : answer(502, unreachable)
-        if (!virtualKey)
-          return isToolCall ? toolError(noticeOf('needs_connection')) : answerSpyriaServer(rpc, 'spyria', [])
+        const spyriaToolsAlone = () => answerSpyriaServer(rpc, 'spyria', spyriaTools)
+        if (virtualKey === null) return isToolCall ? toolError(toolGatewayUnreachable) : spyriaToolsAlone()
+        if (!virtualKey) return isToolCall ? toolError(noticeOf('needs_connection')) : spyriaToolsAlone()
         if (rpc?.method === 'initialize') await tools.grantMemberTools(host.workspaceId, ownerId).catch(() => undefined)
         const callHeaders = {
           ...picked(headers, toolHeaders),
@@ -344,8 +391,10 @@ export const createModelCallRelay = ({
           response = await gatewayCall(callHeaders, AbortSignal.timeout(headTimeoutMilliseconds))
         } catch {
           if (signal.aborted) return
-          return isToolCall ? toolError(toolGatewayUnreachable) : answer(502, unreachable)
+          return isToolCall ? toolError(toolGatewayUnreachable) : spyriaToolsAlone()
         }
+        if (!isToolCall && response.status >= 500) return spyriaToolsAlone()
+        if (rpc?.method === 'tools/list') return answerWithSpyriaTools(rpc.id, response)
         if (!isToolCall) return stream(response)
         if (!response.ok) return toolError(toolGatewayUnreachable)
         call.status = 'succeeded'
@@ -456,6 +505,16 @@ export const createModelCallRelay = ({
       callAttributes,
       async (span) => {
         const { status, isUnexplained, gatewayRequestId } = await relayed()
+        const contextTokens = contextTokensOf(usageReader.usage)
+        if (status !== undefined && status < 400 && !isTokenCount && !turn.delegationId && contextTokens > 0)
+          await handlers.recordContextSize({ chat: turn.chat, model, tokens: contextTokens }).catch((error) =>
+            log.error({
+              event: 'context_size.record_failed',
+              body: 'Recording the context size failed',
+              attributes: { 'workspace.id': host.workspaceId, 'chat.id': turn.chat.chatId },
+              error,
+            }),
+          )
         const attributes = {
           ...callAttributes,
           ...usageReader.usage,

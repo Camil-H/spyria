@@ -80,7 +80,7 @@ export type RepositoryCheckout = Readonly<{
   startBranch?: string
   author?: GitAuthor
 }>
-export type WorkspaceAction = 'commit' | 'fetch' | 'merge' | 'pushed'
+export type WorkspaceAction = 'commit' | 'fetch' | 'merge' | 'pushed' | 'screenshot'
 export type BranchBundle = Readonly<{ bundle: string } | { failure: string }>
 export type BundleOf = (branch: string, prerequisite: string | null) => Promise<BranchBundle>
 export type GitAuthor = Readonly<{ name: string; email: string }>
