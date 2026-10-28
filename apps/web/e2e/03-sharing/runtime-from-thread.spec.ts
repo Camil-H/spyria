@@ -137,7 +137,7 @@ test.describe('Runtime from a thread', () => {
     await expectMembers(page, [['Alice', 'Owner']])
   })
 
-  test('As a member, I copy a thread as context: the clipboard holds the quote a runtime started from it would get', {
+  test('As a member, I copy a thread as context: the clipboard holds its channel and its messages quoted with their authors and times', {
     tag: ['@spec-32'],
   }, async ({ page }) => {
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
@@ -149,7 +149,7 @@ test.describe('Runtime from a thread', () => {
     expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(
       new RegExp(
         `^${[
-          'Conversation so far, from the channel thread in #Welcome:',
+          'Conversation from channel thread in #Welcome',
           `Alice \\(member, human\\) · ${quotedTime}\\n${alicesWelcomeMessage.replace('.', '\\.')}`,
           `Alice \\(member, human\\) · ${quotedTime}\\n${alicesReply}`,
         ].join('\\n\\n')}$`,

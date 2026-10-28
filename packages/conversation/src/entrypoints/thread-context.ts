@@ -1,5 +1,5 @@
 import { MessageBody } from '../domain/message-body.ts'
-import { channelThreadHeaderOf, type QuotedMessage, seedMessageBodyOf } from '../domain/seed-message.ts'
+import { copiedThreadHeaderOf, type QuotedMessage, seedMessageBodyOf } from '../domain/seed-message.ts'
 import type { ConversationMessage } from '../queries/get-conversation.ts'
 
 const quotedOf = (message: ConversationMessage): QuotedMessage => ({
@@ -12,4 +12,4 @@ const quotedOf = (message: ConversationMessage): QuotedMessage => ({
 })
 
 export const threadContextOf = (channelName: string, thread: readonly ConversationMessage[]) =>
-  seedMessageBodyOf(channelThreadHeaderOf(channelName), thread.map(quotedOf))
+  seedMessageBodyOf(copiedThreadHeaderOf(channelName), thread.map(quotedOf))
