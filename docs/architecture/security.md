@@ -76,6 +76,10 @@ Admins can turn these sessions off for the workspace. See [machines](../features
 - Each runtime has its own Docker network, so runtimes on one host cannot reach each other where Docker isolates networks (Docker Engine on Linux). The name `host.docker.internal` resolves to the host machine in every runtime, as on Docker Desktop, so a host run outside a container can give its runtimes its model relay address; the machine was already reachable through the network's gateway.
 - Spyria does not filter runtimes' outbound traffic. On cloud machines, block the metadata endpoint (`169.254.169.254`) and private ranges in the provider's firewall. See [self-hosting](../guides/self-hosting.md).
 
+## In the browser
+
+The server sends the web app with a Content Security Policy (`apps/server/src/web-app.ts`): it runs only its own scripts, connects only to its own origin, and cannot be framed by another site. The **Browser** tab frames any web address in a sandbox. A report the agent wrote never runs in the app's page: it is handed to `/report-frame.html`, a sandboxed frame with a policy of its own that lets the report run its scripts and load what it needs, without the app's origin, storage or session.
+
 ## Rate limits and retries
 
 The server limits sign-in, host connections, webhooks, invites, prompts, messages and new chats with in-memory token buckets, keyed by client address, workspace or member, and answers `429` with `Retry-After`. The budgets are defined in `apps/server/src/rate-limits.ts`. Behind a proxy, the client address is the socket address unless `SPYRIA_TRUSTED_PROXY=cloudflare` makes the server read Cloudflare's `CF-Connecting-IP` header; set it only when the server is reachable through Cloudflare alone.
