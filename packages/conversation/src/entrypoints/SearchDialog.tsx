@@ -71,6 +71,7 @@ const SearchDialog = ({ workspaceId, onClose }: { workspaceId: WorkspaceId; onCl
   const status = useScoped(workspaceId, 'searchMessages', isSearchable ? { text: needle } : null)
   const results = useQuery(getSearchResults, workspaceId, (status?.rows ?? []) as readonly SearchHit[], needle)
   const isSearching = isSearchable && status?.isComplete !== true && results.length === 0
+  const typedLength = searchNeedleOf(text).length
   const shownIndex = Math.min(selectedIndex, results.length - 1)
   const open = (result: SearchResult) => {
     const find: FindRequest = { text: needle, messageId: result.messageId }
@@ -105,9 +106,9 @@ const SearchDialog = ({ workspaceId, onClose }: { workspaceId: WorkspaceId; onCl
         }}
         onKeyDown={moveSelection}
       />
-      {!isSearchable ? (
+      {typedLength > 0 && typedLength < searchTextMinimumLength ? (
         <p className="text-sm text-muted">Type at least {searchTextMinimumLength} characters</p>
-      ) : isSearching ? (
+      ) : typedLength === 0 || !isSearchable ? null : isSearching ? (
         <p className="text-sm text-muted">Searching…</p>
       ) : results.length === 0 ? (
         <p className="text-sm text-muted">No messages match “{text.trim()}”</p>
