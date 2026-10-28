@@ -1,20 +1,11 @@
-import { DomainError, errorKind } from '@spyria/kernel'
+import { blankKind, DomainError, errorKind } from '@spyria/kernel'
 
 class WorkspaceError extends DomainError {}
 
-export const BlankName = errorKind(
-  'blank_name',
-  () => 'A name must contain at least one non-blank character',
-  WorkspaceError,
-)
+export const BlankName = blankKind('blank_name', 'A name', WorkspaceError)
 export const ProjectNotFound = errorKind(
   'project_not_found',
   (projectId: string) => `Project ${projectId} was not found`,
-  WorkspaceError,
-)
-export const ChatNotFound = errorKind(
-  'chat_not_found',
-  (chatId: string) => `Chat ${chatId} was not found`,
   WorkspaceError,
 )
 export const CrossWorkspaceMove = errorKind(
@@ -25,11 +16,6 @@ export const CrossWorkspaceMove = errorKind(
 export const SourceChatArchived = errorKind(
   'source_chat_archived',
   () => 'A runtime chat cannot start from an archived chat',
-  WorkspaceError,
-)
-export const ForeignWorkspace = errorKind(
-  'foreign_workspace',
-  () => 'The change targets a workspace other than the current one',
   WorkspaceError,
 )
 export const RuntimeChatPrivate = errorKind(
@@ -51,11 +37,6 @@ export const InviteAlreadyPending = errorKind(
 export const InviteNotFound = errorKind(
   'invite_not_found',
   (invitationId: string) => `Invite ${invitationId} is not pending`,
-  WorkspaceError,
-)
-export const MemberNotFound = errorKind(
-  'member_not_found',
-  (memberId: string) => `${memberId} is not a member of this workspace`,
   WorkspaceError,
 )
 export const OwnMembership = errorKind(

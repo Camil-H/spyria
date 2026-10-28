@@ -6,7 +6,7 @@ const quotedOf = (message: ConversationMessage): QuotedMessage => ({
   kind: message.kind,
   body: MessageBody(message.body, { allowsBlank: true }),
   attachments: message.attachments,
-  createdAt: new Date(message.createdAt),
+  createdAt: message.createdAt,
   status: message.isDeleted ? 'deleted' : 'live',
   authorName: message.authorName,
 })

@@ -1,5 +1,6 @@
-import { findChat, inChat, type MessageStep, type Snapshot } from '@spyria/db'
+import { inChat, type MessageStep, type Snapshot } from '@spyria/db'
 import type { ChatId, WorkspaceId } from '@spyria/kernel'
+import { panelChatIn } from './panel-chat.ts'
 
 const asleepStates = ['stopping', 'stopped']
 
@@ -17,7 +18,7 @@ export const getDevWorkspace = (workspaceId: WorkspaceId, chatId: ChatId) => (sn
     isAsleep: runtimeState !== null && asleepStates.includes(runtimeState),
     refreshKey: [
       runtimeState,
-      findChat(snapshot, workspaceId, chatId)?.agentTurnMessageId ?? null,
+      panelChatIn(snapshot, workspaceId, chatId)?.agentTurnMessageId ?? null,
       fileChangingSteps,
     ].join('|'),
   }

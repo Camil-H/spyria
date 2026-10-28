@@ -1,6 +1,7 @@
-import { type ChatRow, findChat, memberNamesIn, type Snapshot } from '@spyria/db'
+import { type ChatRow, memberNamesIn, type Snapshot } from '@spyria/db'
 import { type ChatId, chatId, type MemberId, type MessageId, messageId, type WorkspaceId } from '@spyria/kernel'
 import { type Snippet, snippetOf } from '../domain/text-search.ts'
+import { conversationChatIn } from './conversation-chat.ts'
 
 export type SearchHit = Readonly<{
   id: string
@@ -27,7 +28,7 @@ export const getSearchResults =
   (snapshot: Snapshot): readonly SearchResult[] => {
     const memberName = memberNamesIn(snapshot, workspaceId)
     return hits.flatMap((hit) => {
-      const chat = findChat(snapshot, workspaceId, chatId(hit.chatId))
+      const chat = conversationChatIn(snapshot, workspaceId, chatId(hit.chatId))
       if (!chat) return []
       return [
         {

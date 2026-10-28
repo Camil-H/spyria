@@ -1,6 +1,5 @@
-import type { WorkspaceId } from '@spyria/kernel'
+import { refusalOf, type WorkspaceId } from '@spyria/kernel'
 import type { AuditPage } from '../domain/audit.ts'
-import { UsageError } from '../domain/errors.ts'
 
 export const auditLogPath = '/api/audit-log'
 export const auditCsvPath = `${auditLogPath}/csv`
@@ -12,8 +11,7 @@ type AuditSearch = Readonly<Record<string, string>>
 
 export const succeeded = async (response: Response) => {
   if (response.ok) return response
-  const { error, message } = (await response.json().catch(() => ({}))) as { error?: string; message?: string }
-  throw new UsageError(error ?? 'internal', message ?? `The request was refused with ${response.status}`)
+  throw refusalOf(response.status, await response.json().catch(() => ({})))
 }
 const withSearch = (path: string, search: AuditSearch) => `${path}?${new URLSearchParams(search)}`
 const retentionOf = async (response: Response) =>

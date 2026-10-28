@@ -1,3 +1,4 @@
+import { nonBlank } from '@spyria/kernel'
 import { BlankSecret } from './errors.ts'
 
 const redaction = '[redacted]'
@@ -7,7 +8,7 @@ export class Secret {
   readonly #value: string
 
   constructor(rawValue: string) {
-    if (rawValue.trim() === '') throw new BlankSecret()
+    nonBlank(rawValue, BlankSecret)
     this.#value = rawValue
   }
 

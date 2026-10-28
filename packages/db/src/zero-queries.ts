@@ -11,6 +11,7 @@ import {
   DomainError,
   type MemberId,
   permissionsOf,
+  type Transactor,
   type WorkspaceId,
   type WorkspacePermission,
 } from '@spyria/kernel'
@@ -35,13 +36,24 @@ export type Job = {
 
 export const zql = createBuilder(schema)
 
-export const skippingRefusedRebase = <Result>(tx: Transaction, work: () => Promise<Result>) =>
+const skippingRefusedRebase = <Result>(tx: Transaction, work: () => Promise<Result>) =>
   tx.location === 'client' && tx.reason === 'rebase'
     ? work().catch((error: unknown) => {
         if (error instanceof DomainError) return undefined as Result
         throw error
       })
     : work()
+
+export const transactorOver = <UnitOfWork>(tx: Transaction, unitOfWork: UnitOfWork): Transactor<UnitOfWork> => ({
+  run: (work) => skippingRefusedRebase(tx, () => work(unitOfWork)),
+})
+
+export const transactingTransactor = <UnitOfWork>(
+  transact: Transact,
+  transactorOf: (tx: Transaction) => Transactor<UnitOfWork>,
+): Transactor<UnitOfWork> => ({
+  run: (work) => transact((tx) => transactorOf(tx).run(work)),
+})
 
 declare module '@rocicorp/zero' {
   interface DefaultTypes {

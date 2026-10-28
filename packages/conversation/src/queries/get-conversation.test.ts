@@ -729,3 +729,13 @@ test('the pull request chip shows the newest card of the chat, also one older th
   expect(pullRequestWith([card(2, 7)], [card(9, 8)])).toEqual({ number: 8, state: 'open', url: 'pr/8' })
   expect(pullRequestWith([], [])).toBeNull()
 })
+
+test('an archived chat shows no conversation', () => {
+  const snapshot = snapshotWith({ turn: false, waiting: false })
+  expect(getConversation(acme, research, alice)(snapshot)).not.toBeNull()
+  const archived = {
+    ...snapshot,
+    chats: snapshot.chats.map((chat) => (chat.id === research ? { ...chat, archived: true } : chat)),
+  }
+  expect(getConversation(acme, research, alice)(archived)).toBeNull()
+})

@@ -49,6 +49,8 @@ export const isAgentActivity = (message: Pick<Message, 'kind' | 'authorId'>) =>
 export const isFrozen = (chat: Pick<ConversationChat, 'type' | 'isOwnerRemoved'>) =>
   chat.type === 'runtime' && chat.isOwnerRemoved
 
+export const showsConversation = (chat: Readonly<{ archived: boolean }>) => !chat.archived
+
 export const requireNotFrozen = (chat: Pick<ConversationChat, 'type' | 'isOwnerRemoved'>) => {
   if (isFrozen(chat)) throw new ChatFrozen()
 }

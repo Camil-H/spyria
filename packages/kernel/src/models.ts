@@ -23,7 +23,7 @@ const routableModels: readonly RoutableModel[] = [
   { id: 'gemini/gemini-flash-lite-latest', name: 'Gemini Flash-Lite', tier: 'small' },
   { id: 'xai/grok-4.7', name: 'Grok 4.7', tier: 'large' },
   { id: 'xai/grok-4.3', name: 'Grok 4.3', tier: 'medium' },
-  { id: 'xai/grok-code-fast-1', name: 'Grok Code Fast', tier: 'small' },
+  { id: 'xai/grok-code-fast', name: 'Grok Code Fast', tier: 'small' },
   { id: 'deepseek/deepseek-v4-pro', name: 'DeepSeek V4 Pro', tier: 'large' },
   { id: 'deepseek/deepseek-v4-flash', name: 'DeepSeek V4 Flash', tier: 'medium' },
   { id: 'deepseek/deepseek-v3.2', name: 'DeepSeek V3.2', tier: 'small' },
@@ -49,8 +49,15 @@ export const routableModelOf = (text: string) => {
   )
 }
 export const modelNameOf = (id: string) => routableModels.find((model) => model.id === id)?.name ?? id
+export type GatewayKey = Readonly<{ provider: string; id: string }>
+const gatewayKeyRefPattern = /^gateway:([a-z]+)\/(.+)$/
+export const gatewayKeyRefOf = (key: GatewayKey) => `gateway:${key.provider}/${key.id}`
+export const gatewayKeyOf = (ref: string): GatewayKey | undefined => {
+  const [, provider, id] = ref.match(gatewayKeyRefPattern) ?? []
+  return provider && id ? { provider, id } : undefined
+}
 export const providersOfGatewayRefs = (refs: readonly string[]) => [
-  ...new Set(refs.flatMap((ref) => ref.match(/^gateway:([a-z]+)\//)?.[1] ?? [])),
+  ...new Set(refs.flatMap((ref) => gatewayKeyOf(ref)?.provider ?? [])),
 ]
 const providerOf = (id: string) => id.split('/')[0] ?? ''
 export const reachableModelsOf = (providers: readonly string[]): Model[] =>
