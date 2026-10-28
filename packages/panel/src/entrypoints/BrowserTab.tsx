@@ -36,12 +36,12 @@ const WorkspaceFile = ({
   chatId: ChatId
   page: BrowserPage
 }) => {
-  const { reading } = useWorkspaceReading(workspaceId, chatId, 'file', page.url)
+  const { reading, readingVersion } = useWorkspaceReading(workspaceId, chatId, 'file', page.url)
   if (!reading) return null
   if (typeof reading.content !== 'string' || reading.isBinary === true)
     return <p className={emptyClass}>This file cannot be shown now</p>
   return isHtmlFile(page.url) ? (
-    <ReportFrame key={reading.content} title={page.url} content={reading.content} />
+    <ReportFrame key={`${page.url}|${readingVersion}`} title={page.url} content={reading.content} />
   ) : (
     <pre className="min-h-0 flex-1 overflow-auto rounded-md border border-line bg-app p-2 font-mono text-xs whitespace-pre-wrap">
       {reading.content}
