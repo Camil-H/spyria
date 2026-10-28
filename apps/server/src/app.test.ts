@@ -56,6 +56,32 @@ test('with a web build, the server serves the app with SPA fallback and cache ru
   rmSync(webDist, { recursive: true })
 })
 
+test('the web app runs only its own scripts and frames web pages and reports, while a report runs in a sandbox of its own', async () => {
+  const webDist = mkdtempSync(join(tmpdir(), 'spyria-web-dist-'))
+  writeFileSync(join(webDist, 'index.html'), '<!doctype html><title>Spyria</title>')
+  writeFileSync(join(webDist, 'report-frame.html'), '<!doctype html><script></script>')
+  const webApp = createApp({ database: unreachableDatabase, ...testAuthSettings, webDist })
+  const directivesOf = async (path: string) =>
+    new Map(
+      ((await webApp.request(path)).headers.get('content-security-policy') ?? '').split('; ').map((directive) => {
+        const [name = '', ...sources] = directive.split(' ')
+        return [name, sources]
+      }),
+    )
+  for (const appRoute of ['/', '/w/workspace-acme/chats/chat-1']) {
+    const app = await directivesOf(appRoute)
+    expect(app.get('script-src')).toEqual(["'self'"])
+    expect(app.get('object-src')).toEqual(["'none'"])
+    expect(app.get('frame-ancestors')).toEqual(["'none'"])
+    expect(app.get('frame-src')).toEqual(["'self'", 'http:', 'https:'])
+  }
+  const reportFrame = await directivesOf('/report-frame.html')
+  expect(reportFrame.get('sandbox')).toEqual(['allow-scripts'])
+  expect(reportFrame.get('default-src')).toContain("'unsafe-inline'")
+  expect(reportFrame.get('frame-ancestors')).toEqual(["'self'"])
+  rmSync(webDist, { recursive: true })
+})
+
 test('the web app serves the precompressed variant the browser accepts, with its encoding and Vary, else the file itself', async () => {
   const webDist = mkdtempSync(join(tmpdir(), 'spyria-web-dist-'))
   mkdirSync(join(webDist, 'assets'))

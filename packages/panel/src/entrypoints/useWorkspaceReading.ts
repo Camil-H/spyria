@@ -23,6 +23,7 @@ export const useWorkspaceReading = (workspaceId: WorkspaceId, chatId: ChatId, re
   }, [readWorkspace, workspaceId, chatId, read, path, version])
   return {
     reading: reading?.value,
+    readingVersion: reading?.version,
     isLoading: reading?.version !== version,
     refresh: () => setRefreshCount(refreshCount + 1),
   }
