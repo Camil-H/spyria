@@ -8,6 +8,7 @@ import {
 } from '@spyria/conversation/server'
 import { createZeroStore, type Store, type WorkspaceSession } from '@spyria/db/zero-store'
 import { type ChatId, type MemberId, type WorkspaceId, workspaceId } from '@spyria/kernel'
+import { type OnboardingCommands, onboardingMutators } from '@spyria/onboarding/server'
 import type { PanelCommands } from '@spyria/panel'
 import {
   createHttpGitHubConnection,
@@ -55,6 +56,7 @@ export type Application = {
   profileCommands: ProfileCommands
   runtimeCommands: RuntimeCommands
   usageCommands: UsageCommands
+  onboardingCommands: OnboardingCommands
 }
 
 const streamReconnectMilliseconds = 1000
@@ -123,7 +125,13 @@ export const createApp = async (
     renew,
     cacheURL: testStack?.zeroCacheURL ?? zeroCacheURL,
     logLevel: testStack && 'debug',
-    mutators: { ...workspaceMutators, ...conversationMutators, ...profileMutators, ...runtimeMutators },
+    mutators: {
+      ...workspaceMutators,
+      ...conversationMutators,
+      ...profileMutators,
+      ...runtimeMutators,
+      ...onboardingMutators,
+    },
     draftStorage: localStorage,
     syncedTablesStorage: localStorage,
   })
@@ -278,5 +286,6 @@ export const createApp = async (
       ...createHttpSpendCommands(fetchAsMember),
       ...createHttpBudgetCommands(postAsMember, fetchAsMember),
     },
+    onboardingCommands: commandsOf<OnboardingCommands>(onboardingMutators.onboarding, {}),
   }
 }

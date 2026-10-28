@@ -38,6 +38,7 @@ import {
   type RuntimeHostId,
   workspaceId as toWorkspaceId,
 } from '@spyria/kernel'
+import { onboardingMutators } from '@spyria/onboarding/server'
 import {
   addLlmCredentialFromRequest,
   availableToolsFromRequest,
@@ -262,6 +263,7 @@ export const createApp = ({
     getMutator(workspaceMutators, name) ??
     getMutator(profileMutators, name) ??
     getMutator(runtimeMutators, name) ??
+    getMutator(onboardingMutators, name) ??
     mustGetMutator(conversationMutators, name)
   const databaseOf = (databaseName: string | undefined) =>
     databaseName === undefined ? database : testDatabaseByName?.(databaseName)

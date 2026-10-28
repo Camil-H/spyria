@@ -74,6 +74,29 @@ const readSnapshot = async () => {
     llmCredentials: (await database.select().from(tables.llmCredentials)).map(({ secretRef, ...credential }) =>
       userAsMember(credential),
     ),
+    ssoDomains: (await database.select().from(tables.ssoDomains)).map(({ workspaceId, domain, verifiedAt }) => ({
+      workspaceId,
+      domain,
+      isVerified: verifiedAt !== null,
+    })),
+    githubApps: (await database.select().from(tables.githubApps)).map(({ workspaceId }) => ({ workspaceId })),
+    githubConnections: (await database.select().from(tables.githubConnections)).map(({ workspaceId, userId }) => ({
+      workspaceId,
+      memberId: userId,
+    })),
+    workspaceOnboarding: (await database.select().from(tables.workspaceOnboarding)).map(({ workspaceId, task }) => ({
+      workspaceId,
+      task,
+    })),
+    memberOnboarding: (await database.select().from(tables.memberOnboarding)).map(
+      ({ workspaceId, userId, task, completedAt, skippedAt }) => ({
+        workspaceId,
+        memberId: userId,
+        task,
+        isCompleted: completedAt !== null,
+        isSkipped: skippedAt !== null,
+      }),
+    ),
     workspaceConnections: await database.select().from(tables.workspaceConnections),
     connectionRestrictions: (await database.select().from(tables.connectionRestrictions)).map(userAsMember),
     toolConnections: (

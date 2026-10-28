@@ -224,6 +224,15 @@ export const queries = defineQueries({
   llmCredentials: defineQuery(({ ctx }) =>
     zql.llmCredentials.where('workspaceId', ctx.workspaceId).where('userId', ctx.userId),
   ),
+  ssoDomains: defineQuery(({ ctx }) => zql.ssoDomains.where('workspaceId', ctx.workspaceId)),
+  githubApps: defineQuery(({ ctx }) => zql.githubApps.where('workspaceId', ctx.workspaceId)),
+  githubConnections: defineQuery(({ ctx }) =>
+    zql.githubConnections.where('workspaceId', ctx.workspaceId).where('userId', ctx.userId),
+  ),
+  workspaceOnboarding: defineQuery(({ ctx }) => zql.workspaceOnboarding.where('workspaceId', ctx.workspaceId)),
+  memberOnboarding: defineQuery(({ ctx }) =>
+    zql.memberOnboarding.where('workspaceId', ctx.workspaceId).where('userId', ctx.userId),
+  ),
   workspaceConnections: defineQuery(({ ctx }) =>
     zql.workspaceConnections.where('workspaceId', ctx.workspaceId).orderBy('name', 'asc'),
   ),

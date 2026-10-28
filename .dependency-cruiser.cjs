@@ -1,4 +1,4 @@
-const contexts = '(workspace|conversation|profile|panel|runtime|usage)'
+const contexts = '(workspace|conversation|profile|panel|runtime|usage|onboarding)'
 const contextLayers = ['domain', 'contracts', 'operations', 'queries', 'integrations', 'entrypoints']
 const contextEntry = (entry) => `^packages/${contexts}/src/${entry}\\.ts$`
 const clientEntry = contextEntry('client')

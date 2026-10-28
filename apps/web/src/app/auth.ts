@@ -31,6 +31,12 @@ export const loadAuthMode = async (): Promise<{
   instanceApps: ('google' | 'microsoft')[]
 }> => (await fetch('/auth/mode')).json()
 
+let sharedAuthModeLoading: ReturnType<typeof loadAuthMode> | undefined
+export const sharedAuthMode = () => {
+  sharedAuthModeLoading ??= loadAuthMode()
+  return sharedAuthModeLoading
+}
+
 export const renew = async (workspaceId: WorkspaceId): Promise<WorkspaceSession | undefined> => {
   const response = await postAuth('/auth/renew', workspaceId)
   if (response.status === 401 || response.status === 403) return undefined
