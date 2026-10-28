@@ -104,7 +104,6 @@ const readSnapshot = async () => {
 
 const expectSnapshotRoundTrip = async () => {
   const {
-    drafts,
     latestMessages,
     latestAgentActivity,
     pinnedSteps,

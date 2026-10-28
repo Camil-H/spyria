@@ -38,8 +38,8 @@ test('keeps the drafts of the same chat id in two workspaces apart and stores ea
     'spyria.draft:member-alice:workspace-globex:chat-shared-id',
   ])
   await Promise.resolve()
-  expect(store.read().drafts).toEqual([draftIn('workspace-acme', 'In Acme'), draftIn('workspace-globex', 'In Globex')])
-  expect(storeOn(items).read().drafts).toEqual(store.read().drafts)
+  expect(store.readDrafts()).toEqual([draftIn('workspace-acme', 'In Acme'), draftIn('workspace-globex', 'In Globex')])
+  expect(storeOn(items).readDrafts()).toEqual(store.readDrafts())
 })
 
 test('an empty draft removes the stored one', () => {
@@ -48,7 +48,21 @@ test('an empty draft removes the stored one', () => {
   store.replaceDraft(draftIn('workspace-acme', 'In Acme'))
   store.replaceDraft(draftIn('workspace-acme', ''))
   expect(items.size).toBe(0)
-  expect(storeOn(items).read().drafts).toEqual([])
+  expect(storeOn(items).readDrafts()).toEqual([])
+})
+
+test('a draft change notifies the draft listeners and keeps the shared snapshot and its listeners still', async () => {
+  const store = storeOn(new Map())
+  const snapshotBefore = store.read()
+  let snapshotNotifications = 0
+  let draftNotifications = 0
+  store.subscribe(() => snapshotNotifications++)
+  store.subscribeDrafts(() => draftNotifications++)
+  store.replaceDraft(draftIn('workspace-acme', 'In Acme'))
+  await Promise.resolve()
+  expect(draftNotifications).toBe(1)
+  expect(snapshotNotifications).toBe(0)
+  expect(store.read()).toBe(snapshotBefore)
 })
 
 const zeroRowSymbol = Symbol('zero-ref-count')
@@ -74,8 +88,7 @@ const workspaceRows = {
   workspaces: [zeroRowOf({ workspaceId: 'workspace-acme', name: 'Acme', localSessions: true })],
   readMarkers: [zeroRowOf({ workspaceId: 'workspace-acme', userId: alice, chatId: 'chat-research', lastReadSeq: 1 })],
 }
-const noDrafts = [] as const
-const snapshotFrom = (build: ReturnType<typeof createSnapshotBuilder>, rows: object) => build([rows as never], noDrafts)
+const snapshotFrom = (build: ReturnType<typeof createSnapshotBuilder>, rows: object) => build([rows as never])
 
 test('a change rebuilds only its table: other tables keep their identity, and no change keeps the snapshot', () => {
   const build = createSnapshotBuilder(alice)

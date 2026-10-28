@@ -280,7 +280,7 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
     }),
   )
   let previous: Snapshot | undefined
-  return (rowsByWorkspace: readonly SourceRows[], drafts: readonly DraftRow[]) => {
+  return (rowsByWorkspace: readonly SourceRows[]) => {
     const rowsOf = <Table extends TableName>(table: Table, source: string = table) => {
       const concatenatedRows =
         concatenatedRowsBySource.get(source) ??
@@ -300,7 +300,6 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
       latestMessages: latestMessagesOf(rowsOf('messages', 'latestMessages')),
       latestAgentActivity: latestAgentActivityOf(rowsOf('messages', 'latestAgentActivity')),
       pinnedSteps: pinnedStepsOf(rowsOf('messages', 'chatPinnedSteps')),
-      drafts,
       readMarkers: readMarkersOf(rowsOf('readMarkers')),
       threadReadMarkers: threadReadMarkersOf(rowsOf('threadReadMarkers')),
       runtimeOrigins: runtimeOriginsOf(rowsOf('runtimeOrigins')),
@@ -353,8 +352,9 @@ export const createZeroStore = ({
     draftStorage?.key(index),
   ).flatMap((key) => (key?.startsWith(draftKeyPrefix) ? [JSON.parse(draftStorage?.getItem(key) ?? '{}')] : []))
   const snapshotOf = createSnapshotBuilder(memberId)
-  let snapshot = snapshotOf([], drafts)
+  let snapshot = snapshotOf([])
   const listeners = new Set<() => void>()
+  const draftListeners = new Set<() => void>()
   const renewalListeners = new Set<(workspaceId: WorkspaceId) => void>()
   const rowsByWorkspace = new Map<WorkspaceId, SourceRows>()
   const scopedWatches = new Map<string, ScopedWatch>()
@@ -377,7 +377,7 @@ export const createZeroStore = ({
     isPublishScheduled = true
     queueMicrotask(() => {
       isPublishScheduled = false
-      snapshot = snapshotOf([...rowsByWorkspace.values()], drafts)
+      snapshot = snapshotOf([...rowsByWorkspace.values()])
       for (const listener of listeners) listener()
     })
   }
@@ -507,6 +507,13 @@ export const createZeroStore = ({
         listeners.delete(listener)
       }
     },
+    readDrafts: () => drafts,
+    subscribeDrafts: (listener: () => void) => {
+      draftListeners.add(listener)
+      return () => {
+        draftListeners.delete(listener)
+      }
+    },
     replaceDraft: (draft: DraftRow) => {
       const isReplaced = (stored: DraftRow) =>
         stored.workspaceId === draft.workspaceId && stored.chatId === draft.chatId && stored.memberId === draft.memberId
@@ -514,7 +521,7 @@ export const createZeroStore = ({
       drafts = [...drafts.filter((stored) => !isReplaced(stored)), ...(draft.text === '' ? [] : [draft])]
       if (draft.text === '') draftStorage?.removeItem(draftKeyOf(draft))
       else draftStorage?.setItem(draftKeyOf(draft), JSON.stringify(draft))
-      publish()
+      for (const listener of draftListeners) listener()
     },
     whenLoaded: (workspaceId: WorkspaceId) => loadedOf(workspaceId).promise,
     diagnostics: () => ({
