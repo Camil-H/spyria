@@ -16,6 +16,8 @@ export const AddCredentialForm = ({ workspaceId }: { workspaceId: WorkspaceId })
     event.preventDefault()
     const form = event.currentTarget
     const fields = new FormData(form)
+    form.reset()
+    setIsComplete(false)
     const isAdded = await run(() =>
       commands.addLlmCredential({
         workspaceId,
@@ -23,9 +25,9 @@ export const AddCredentialForm = ({ workspaceId }: { workspaceId: WorkspaceId })
         secret: new Secret(String(fields.get('secret'))),
       }),
     )
-    if (!isAdded) return
-    form.reset()
-    setIsComplete(false)
+    if (isAdded) return
+    for (const [name, value] of fields) (form.elements.namedItem(name) as HTMLInputElement).value = String(value)
+    setIsComplete(isFilledIn(form))
   }
   return (
     <form
