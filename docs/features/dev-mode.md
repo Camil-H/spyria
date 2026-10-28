@@ -23,6 +23,7 @@ The repositories a workspace can use are exactly those granted to its GitHub App
 | Pull requests | write | open, update and refresh pull requests, read review threads |
 | Issues | read | let the agent read the repository's issues |
 | Checks | read | show check results on the pull request card, let the agent read why a check failed |
+| Actions | read | let the agent read the failed step and the end of the log of a failing GitHub Actions job |
 | Metadata | read | required by GitHub |
 | Workflows | write | push a working branch that changes files under `.github/workflows` |
 

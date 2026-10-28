@@ -17,6 +17,7 @@ const grantedAppPermissions: Permissions = {
   pull_requests: 'write',
   issues: 'read',
   checks: 'read',
+  actions: 'read',
   metadata: 'read',
   workflows: 'write',
 }

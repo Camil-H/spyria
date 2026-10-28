@@ -61,6 +61,7 @@ test.describe('GitHub setup', () => {
         pull_requests: 'write',
         issues: 'read',
         checks: 'read',
+        actions: 'read',
         metadata: 'read',
         workflows: 'write',
       },
@@ -104,7 +105,7 @@ test.describe('GitHub setup', () => {
     for (const name of ['Homepage URL', 'Callback URL', 'Webhook URL'])
       await expect(section.getByRole('button', { name: `Copy ${name}` })).toBeVisible()
     await expect(section).toContainText(
-      'Repository permissions: Contents: Read and write, Pull requests: Read and write, Issues: Read-only, Checks: Read-only, Metadata: Read-only, Workflows: Read and write.',
+      'Repository permissions: Contents: Read and write, Pull requests: Read and write, Issues: Read-only, Checks: Read-only, Actions: Read-only, Metadata: Read-only, Workflows: Read and write.',
     )
     await expect(section).toContainText(
       'Subscribe to events: Pull request, Pull request review, Pull request review comment, Pull request review thread, Check suite, Check run.',
