@@ -17,11 +17,12 @@ import {
   type SessionClassifier,
   streamedTextOf,
   toolCallIdOf,
+  turnEndPromptIdOf,
 } from '@spyria/conversation/server'
 import type { Database } from '@spyria/db/postgres'
 import { schema } from '@spyria/db/zero'
 import { chatPermissionsOf, type Transact, type ZeroContext, zql } from '@spyria/db/zero-queries'
-import { can, chatId, log, type MemberId, type MessageId, workspaceId } from '@spyria/kernel'
+import { can, chatId, log, type MemberId, type MessageId, messageId, workspaceId } from '@spyria/kernel'
 import type { SandboxProvider } from '@spyria/runtime/server'
 import type { ServerWebSocket } from 'bun'
 import { upgradeWebSocket } from 'hono/bun'
@@ -369,6 +370,9 @@ export const createAgentBridge = ({
           }
           if (update?.sessionUpdate === 'question_answered' || update?.sessionUpdate === 'question_closed')
             chatSocket.questions.delete(String(update.questionId))
+          const endedPromptId = turnEndPromptIdOf(event)
+          if (endedPromptId && endedPromptId !== chatSocket.promptId && endedPromptId !== chatSocket.drainingPromptId)
+            return record(event, messageId(endedPromptId))
           const drainedPromptId = chatSocket.drainingPromptId ?? undefined
           if (update?.sessionUpdate === 'turn_end') {
             flushOutputs()

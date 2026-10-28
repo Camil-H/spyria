@@ -355,7 +355,7 @@ export const promptAgent = async (
     conversation = prepared.conversation
     await eventSockets.ensureOpen(chat, conversation, prompt.id)
     const seed = await transactor.run(({ messages }) => messages.seedFor(prompt))
-    await agentClient.sendMessage(conversation, agentPromptTextOf(prompt, seed))
+    await agentClient.sendMessage(conversation, agentPromptTextOf(prompt, seed), prompt.id)
   } catch (error) {
     if (!(error instanceof AgentStartFailure) && !isLastAttempt) {
       await transactor.run((unitOfWork) => releaseAgentTurn(unitOfWork, chatId, prompt.id))
