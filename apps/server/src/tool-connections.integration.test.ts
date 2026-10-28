@@ -19,6 +19,7 @@ import {
   consentThroughSpyria,
   createFakeHosts,
   everyStoredText,
+  type FakeHost,
   lookup,
   mcpCall,
   openSharedTestApp,
@@ -214,22 +215,27 @@ test('a server the owner has not connected, or whose token was revoked, answers 
   }
 })
 
-test('session headers pass through, gateway failures become error results instead of 5xx, model calls carry an empty include-clients header and guest calls their server only', async () => {
+test('session headers pass through, Spyria’s tools join the gateway’s list whether it answers in JSON or as an event stream and stay listed while the gateway is down, gateway failures become error results instead of 5xx, model calls carry an empty include-clients header and guest calls their server only', async () => {
   const seen: { path: string; headers: Record<string, string> }[] = []
   const readOnlyLookup = { name: `${sharedToolServer}-lookup`, annotations: { readOnlyHint: true } }
   let gatewayAnswer = 200
+  let isEventStream = false
   const stubGateway = Bun.serve({
     port: 0,
     fetch: async (request) => {
       const url = new URL(request.url)
       seen.push({ path: url.pathname, headers: Object.fromEntries(request.headers) })
       if (gatewayAnswer !== 200) return new Response('down', { status: gatewayAnswer })
-      return Response.json(
-        { jsonrpc: '2.0', id: 7, result: { tools: [readOnlyLookup] } },
-        { headers: { 'mcp-session-id': 'gateway-session' } },
-      )
+      const answer = { jsonrpc: '2.0', id: 7, result: { tools: [readOnlyLookup] } }
+      if (isEventStream)
+        return new Response(`event: message\ndata: ${JSON.stringify(answer)}\n\n`, {
+          headers: { 'content-type': 'text/event-stream', 'mcp-session-id': 'gateway-session' },
+        })
+      return Response.json(answer, { headers: { 'mcp-session-id': 'gateway-session' } })
     },
   })
+  const listedNamesOf = async (host: FakeHost, token: string) =>
+    (await mcpCall(host, token, rpcOf('tools/list'))).result?.tools?.map((tool: { name: string }) => tool.name)
   let gatewayUrl = stubGateway.url.origin
   const runtimeHosts = createRuntimeHostGateway({
     runtimeKeySecret: testSecretsKey,
@@ -265,12 +271,19 @@ test('session headers pass through, gateway failures become error results instea
     expect(Object.keys(forwarded).filter((name) => /x-bf-vk|x-api-key/.test(name))).toEqual([])
     expect(host.receivedFrames.join('\n')).toContain('gateway-session')
     expect(host.receivedFrames.join('\n')).not.toContain(ownerKey.value)
+    const allTools = ['open_page', 'take_screenshot', readOnlyLookup.name]
+    expect(listed.result.tools.map((tool: { name: string }) => tool.name)).toEqual(allTools)
+    isEventStream = true
+    expect(await listedNamesOf(host, token)).toEqual(allTools)
+    isEventStream = false
 
     gatewayAnswer = 503
+    expect(await listedNamesOf(host, token)).toEqual(['open_page', 'take_screenshot'])
     const failed = await mcpCall(host, token, whoami)
     expect(failed).toMatchObject({ status: 200, result: { isError: true } })
     expect(textOf(failed.result)).toBe('The tool gateway is unreachable, try again shortly')
     gatewayUrl = 'http://127.0.0.1:9'
+    expect(await listedNamesOf(host, token)).toEqual(['open_page', 'take_screenshot'])
     const unreachable = await mcpCall(host, token, whoami)
     expect(unreachable).toMatchObject({ status: 200, result: { isError: true } })
     expect(textOf(unreachable.result)).toBe('The tool gateway is unreachable, try again shortly')
