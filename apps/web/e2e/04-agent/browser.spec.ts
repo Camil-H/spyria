@@ -24,7 +24,7 @@ test.describe('Browser', () => {
     await agentScript(chatId, {
       steps: [
         { edit: { path: 'reports/totals.html', create: report } },
-        { tool: 'open_page', arguments: { address: 'reports/totals.html', title: 'Invoice totals' } },
+        { tool: 'mcp__spyria__open_page', arguments: { address: 'reports/totals.html', title: 'Invoice totals' } },
       ],
       text: 'The report is open.',
     })

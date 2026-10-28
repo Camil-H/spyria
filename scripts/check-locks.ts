@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 const repositoryRoot = process.argv[2] ?? new URL('../', import.meta.url).pathname
 const hostDirectory = join(repositoryRoot, 'apps/host')
-const piDirectory = join(repositoryRoot, 'apps/agent/pi')
+const npmDirectories = ['apps/agent/pi', 'apps/agent/browser']
 
 const isInSync = (directory: string, files: string[], command: string[]) => {
   const copy = mkdtempSync(join(tmpdir(), 'spyria-lock-'))
@@ -27,10 +27,18 @@ const problems = [
   ...resolvedPackagesOf(join(hostDirectory, 'bun.lock'))
     .filter((resolved) => !rootPackages.has(resolved))
     .map((resolved) => `apps/host/bun.lock resolves ${resolved.split(' ')[0]}, which the root bun.lock does not`),
-  ...(isInSync(piDirectory, ['package.json', 'package-lock.json'], ['npm', 'ci', '--dry-run', '--ignore-scripts'])
-    ? []
-    : ['apps/agent/pi/package-lock.json does not match apps/agent/pi/package.json']),
+  ...npmDirectories.flatMap((directory) =>
+    isInSync(
+      join(repositoryRoot, directory),
+      ['package.json', 'package-lock.json'],
+      ['npm', 'ci', '--dry-run', '--ignore-scripts'],
+    )
+      ? []
+      : [`${directory}/package-lock.json does not match ${directory}/package.json`],
+  ),
 ]
 for (const problem of problems) console.error(problem)
 if (problems.length > 0) process.exit(1)
-console.log('apps/host/bun.lock and apps/agent/pi/package-lock.json match their package.json and the root lockfile')
+console.log(
+  `apps/host/bun.lock and the package-lock.json of ${npmDirectories.join(' and ')} match their package.json and the root lockfile`,
+)

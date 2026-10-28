@@ -20,6 +20,7 @@ import { runsOnNames, runsOnWaitingNoticeOf } from '../domain/session-routing.ts
 import { getConversation } from '../queries/get-conversation.ts'
 import { getMentionableNames } from '../queries/get-mentionable-names.ts'
 import { Composer } from './Composer.tsx'
+import { ContextChip } from './ContextChip.tsx'
 import type { QuestionAnswer } from './endpoints.ts'
 import { FindBar } from './FindBar.tsx'
 import { ForkButton } from './ForkButton.tsx'
@@ -320,7 +321,9 @@ export const ChatView = ({
                   isAgentWorking={conversation.isAgentWorking}
                   isOwner={conversation.isOwner}
                   canConfigure={conversation.canConfigure}
+                  contextTokens={conversation.context?.tokens ?? null}
                 />
+                {conversation.context && <ContextChip context={conversation.context} />}
               </>
             )
           }

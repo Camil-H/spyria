@@ -19,6 +19,7 @@ import { createTransactingZeroTransactor } from '../integrations/zero-transactor
 import { closeReopenedTurn, reopenAgentTurn, sweepAgentTurns } from '../operations/agent-turn-safety.ts'
 import { authorizeToolCall } from '../operations/authorize-tool-call.ts'
 import { callGitHubTool } from '../operations/call-github-tool.ts'
+import { callSpyriaTool } from '../operations/call-spyria-tool.ts'
 import { awaitTask, delegateTask } from '../operations/delegate-task.ts'
 import { forwardToAgent } from '../operations/forward-to-agent.ts'
 import { runGitAction } from '../operations/git-actions.ts'
@@ -26,6 +27,7 @@ import { interruptOwnedTurns } from '../operations/interrupt-owned-turns.ts'
 import {
   findModelCallTurn,
   findToolCallTurn,
+  recordContextSize,
   recordModelCallFailure,
   recordToolCall,
 } from '../operations/model-calls.ts'
@@ -148,6 +150,8 @@ export const createAgentHandlers = ({
       readRuntimeMedia(dependenciesOf(chat.workspaceId), { chat, memberId: member, path }),
     publishBranch: (input: Parameters<typeof publishBranch>[1]) =>
       publishBranch(dependenciesOf(input.chat.workspaceId), input),
+    callSpyriaTool: (input: Parameters<typeof callSpyriaTool>[1]) =>
+      callSpyriaTool(dependenciesOf(input.chat.workspaceId), input),
     callGitHubTool: (input: Parameters<typeof callGitHubTool>[1]) =>
       callGitHubTool(dependenciesOf(input.chat.workspaceId), input),
     runGitAction: (input: Parameters<typeof runGitAction>[1]) =>
@@ -175,6 +179,8 @@ export const createAgentHandlers = ({
     awaitTask: (input: Parameters<typeof awaitTask>[1]) => awaitTask(dependenciesOf(input.chat.workspaceId), input),
     recordModelCallFailure: (call: Parameters<typeof recordModelCallFailure>[1]) =>
       recordModelCallFailure(dependenciesOf(call.chat.workspaceId), call),
+    recordContextSize: (call: Parameters<typeof recordContextSize>[1]) =>
+      recordContextSize(dependenciesOf(call.chat.workspaceId), call),
     authorizeToolCall: (
       input: Parameters<typeof authorizeToolCall>[1],
       checks: Parameters<typeof authorizeToolCall>[2],

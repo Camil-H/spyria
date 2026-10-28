@@ -11,12 +11,12 @@ import {
   turnEndNoticeOf,
 } from '../domain/agent-events.ts'
 import type { StepDelegation } from '../domain/agent-steps.ts'
-import { openedPageOf } from '../domain/browser-pages.ts'
 import { newMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
 import { closeAgentTurn } from './agent-turn.ts'
 
 type Dependencies = { transactor: ConversationTransactor }
+const unknownContext = { contextTokens: null, contextWindow: null }
 type Input = {
   workspaceId: WorkspaceId
   chatId: ChatId
@@ -41,6 +41,12 @@ const recordIn = async (
   const seq = await unitOfWork.agentEvents.append(chatId, event, promptId, recordedAt, delegation)
   const projected = agentProjectionOf(event)
   const isOwnTurn = (input.turnPromptId ?? activePromptId) === activePromptId
+  if (
+    seq !== undefined &&
+    !delegation &&
+    (event.update as { sessionUpdate?: unknown })?.sessionUpdate === 'session_started'
+  )
+    await unitOfWork.routing.update(chatId, unknownContext)
   const turnEnd =
     seq !== undefined && !delegation && isOwnTurn && projected?.type === 'turn-end' ? projected : undefined
   const isError = seq !== undefined && !delegation && projected?.type === 'step' && projected.step.type === 'error'
@@ -80,8 +86,6 @@ const recordIn = async (
       action?.step && observedProjectionStep(action.step, projection, recordedAt.getTime() - action.createdAt.getTime())
     if (action && step) await unitOfWork.messages.setStep(action.id, step)
   }
-  const openedPage = seq !== undefined && !delegation ? openedPageOf(event) : undefined
-  if (openedPage) await unitOfWork.browserPages.open(chatId, openedPage, recordedAt)
   const endsSignedOut =
     turnEnd &&
     previous?.sessionUpdate === 'error' &&

@@ -56,7 +56,9 @@ export const updateChatRouting = (
         costMicros: 0,
       })
     }
+    const isModelChanged = (sessionModel ?? adapterModel ?? runsOn) !== undefined
     await routing.update(chatId, {
+      ...(isModelChanged && { contextTokens: null, contextWindow: null }),
       ...(sessionModel !== undefined && { model: sessionModel }),
       ...(subagentPolicy !== undefined && { subagentPolicy }),
       ...(runsOn !== undefined && { ...runsOnFieldsOf(runsOn), model: null }),

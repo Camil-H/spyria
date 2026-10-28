@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test'
 import { log } from '@spyria/kernel'
-import { createUsageReader } from './llm-relay.ts'
+import { contextTokensOf, createUsageReader, rpcAnswerOf } from './llm-relay.ts'
 import { contextOf, startTelemetry, traceHeadersOf, withSpan } from './telemetry.ts'
 
 let lines: Record<string, unknown>[] = []
@@ -109,9 +109,44 @@ test('the usage reader takes the token counts of OpenAI, Responses and Anthropic
       `event: content_block_delta\ndata: {"delta":{"text":"${'x'.repeat(5000)}"}}\n\n`,
       'event: message_delta\ndata: {"usage":{"output_tokens":7}}\n\n',
     ]),
-  ).toEqual({ 'gen_ai.usage.input_tokens': 20, 'gen_ai.usage.output_tokens': 7 })
+  ).toEqual({
+    'gen_ai.usage.input_tokens': 20,
+    'gen_ai.usage.cache_read.input_tokens': 100,
+    'gen_ai.usage.output_tokens': 7,
+  })
   expect(usageOf(['data: {"usage":{"input_tok', 'ens":12,"output_tokens":4', '2}}\n\n', 'data: [DONE]\n\n'])).toEqual({
     'gen_ai.usage.input_tokens': 12,
     'gen_ai.usage.output_tokens': 42,
   })
+})
+
+test('a call’s context size counts its input, cached and written cache tokens and its output, whichever API it used', () => {
+  const contextOf = (chunk: string) => {
+    const reader = createUsageReader()
+    reader.read(chunk)
+    return contextTokensOf(reader.usage)
+  }
+  expect(
+    contextOf(
+      'data: {"usage":{"prompt_tokens":1200,"prompt_tokens_details":{"cached_tokens":1000},"completion_tokens":80}}',
+    ),
+  ).toBe(1280)
+  expect(
+    contextOf(
+      'data: {"usage":{"input_tokens":20,"cache_creation_input_tokens":300,"cache_read_input_tokens":4000,"output_tokens":50}}',
+    ),
+  ).toBe(4370)
+  expect(contextOf('data: {"choices":[]}')).toBe(0)
+})
+
+test('a JSON-RPC answer is read from plain JSON or from the event of an event stream that carries it', () => {
+  const answer = { jsonrpc: '2.0', id: 7, result: { tools: [] } }
+  expect(rpcAnswerOf(JSON.stringify(answer), 'application/json')).toEqual(answer)
+  expect(
+    rpcAnswerOf(
+      `event: message\ndata: {"jsonrpc":"2.0","method":"notifications/progress"}\n\nevent: message\r\ndata: ${JSON.stringify(answer)}\r\n\r\n`,
+      'text/event-stream',
+    ),
+  ).toEqual(answer)
+  expect(rpcAnswerOf(': keep-alive\n\n', 'text/event-stream')).toBeUndefined()
 })
