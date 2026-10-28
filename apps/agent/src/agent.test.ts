@@ -47,6 +47,35 @@ test('a prompt streams chunks and ends its turn; Stop cancels the next turn and 
   expect((await call('GET', `/api/conversations/${id}`)).status).toBe(404)
 })
 
+test('a prompt sent again with its id runs once: while it runs the repeat is ignored, once ended the repeat resends its turn end', async () => {
+  const { call, open, create } = started()
+  const id = await create(launchOf())
+  const socket = open(id)
+  const promptWithId = (text: string, promptId: string) =>
+    call('POST', `/api/conversations/${id}/events`, { content: [{ type: 'text', text }], prompt_id: promptId })
+  expect((await promptWithId('stub:long', 'prompt-1')).status).toBe(200)
+  await socket.until((event) => event.update.status === 'in_progress')
+  expect((await promptWithId('stub:long', 'prompt-1')).status).toBe(200)
+  await call('POST', `/api/conversations/${id}/interrupt`, {})
+  await socket.until(kindOf('turn_end'))
+  expect(socket.events.find(kindOf('turn_end'))?.update).toEqual({
+    sessionUpdate: 'turn_end',
+    stopReason: 'cancelled',
+    promptId: 'prompt-1',
+  })
+
+  await promptWithId('hello', 'prompt-2')
+  await socket.until(kindOf('turn_end'), 2)
+  await promptWithId('hello', 'prompt-2')
+  await socket.until(kindOf('turn_end'), 3)
+  expect(textOf(socket.events)).toBe('[t1] [t2] Hello from the stub (model stub-default, mode bypassPermissions).')
+  expect(socket.events.filter(kindOf('turn_end')).map(({ update }) => update.promptId)).toEqual([
+    'prompt-1',
+    'prompt-2',
+    'prompt-2',
+  ])
+})
+
 test('events are numbered per conversation, resent after a sequence number, from a bounded buffer', async () => {
   const { open, create, prompt } = started({ bufferSize: 4 })
   const id = await create(launchOf())

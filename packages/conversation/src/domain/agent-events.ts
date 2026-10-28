@@ -229,6 +229,11 @@ export const isAuthRequiredError = (event: AgentEvent) => {
   return update?.sessionUpdate === 'error' && update.code === authRequiredCode
 }
 
+export const turnEndPromptIdOf = (event: AgentEvent) => {
+  const update = event.update as Fields
+  return update?.sessionUpdate === 'turn_end' && typeof update.promptId === 'string' ? update.promptId : undefined
+}
+
 export const streamedTextOf = (event: AgentEvent) => {
   const update = event.update as Fields
   const isReasoning = update?.sessionUpdate === 'agent_thought_chunk'

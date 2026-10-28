@@ -66,6 +66,7 @@ type Conversation = {
   bufferedBytes: number
   lastSeq: number
   toolCalls: Map<string, Json>
+  turnEnds: Map<string, Json | undefined>
   sockets: Set<ServerWebSocket<SocketData>>
   started: Promise<void>
 }
@@ -559,6 +560,7 @@ export const startAgent = ({
       bufferedBytes: 0,
       lastSeq: 0,
       toolCalls: new Map(),
+      turnEnds: new Map(),
       sockets: new Set(),
       started: Promise.resolve(),
       connection: connectionOf(() => conversation, launch, command, cwd),
@@ -581,11 +583,18 @@ export const startAgent = ({
 
   const prompt = (
     conversation: Conversation,
-    body: { content?: { type?: string; text?: string }[] },
+    body: { content?: { type?: string; text?: string }[]; prompt_id?: unknown },
     traceHeaders: Record<string, unknown>,
   ) => {
+    const promptId = typeof body.prompt_id === 'string' ? body.prompt_id : undefined
+    if (promptId && conversation.turnEnds.has(promptId)) {
+      const turnEnd = conversation.turnEnds.get(promptId)
+      if (turnEnd) emit(conversation, turnEnd)
+      return Response.json({})
+    }
     if (!conversation.sessionId || conversation.status === 'error')
       return Response.json({ error: 'The conversation has no running session' }, { status: 409 })
+    if (promptId) conversation.turnEnds.set(promptId, undefined)
     conversation.status = 'running'
     const startedAt = performance.now()
     const promptParams = () => ({
@@ -602,11 +611,16 @@ export const startAgent = ({
           duration_ms: Math.round(performance.now() - startedAt),
         },
       })
+    const endTurn = (stopReason: unknown) => {
+      const update = { sessionUpdate: 'turn_end', stopReason, ...(promptId && { promptId }) }
+      if (promptId) conversation.turnEnds.set(promptId, update)
+      emit(conversation, update)
+    }
     const ended = (result: Json) => {
       turnEnded(result.stopReason)
       conversation.status = 'finished'
       closeQuestions(conversation, 'turn_end')
-      emit(conversation, { sessionUpdate: 'turn_end', stopReason: result.stopReason })
+      endTurn(result.stopReason)
       void reportWorkspace(conversation)
     }
     const failed = (error: unknown) => {
@@ -624,12 +638,12 @@ export const startAgent = ({
         emit(conversation, errorUpdateOf(error))
       }
       closeQuestions(conversation, 'turn_end')
-      emit(conversation, { sessionUpdate: 'turn_end', stopReason: 'error' })
+      endTurn('error')
       void reportWorkspace(conversation)
     }
     const endedByRestart = () => {
       turnEnded('restarted')
-      emit(conversation, { sessionUpdate: 'turn_end', stopReason: 'cancelled' })
+      endTurn('cancelled')
     }
     const promptOnce = async (onDeadSession: (errorOutput: string[], hasStreamed: boolean) => Promise<void>) => {
       const { connection } = conversation
