@@ -60,7 +60,7 @@ export type AgentTurnRepository = {
   nextPrompt(chatId: ChatId): Promise<Message | undefined>
   waitingPrompts(chatId: ChatId): Promise<Message[]>
   hasReply(promptId: MessageId): Promise<boolean>
-  hasNotice(promptId: MessageId, text: string): Promise<boolean>
+  hasNotice(promptId: MessageId, texts: readonly string[]): Promise<boolean>
   active(): Promise<{ chatId: ChatId; promptId: MessageId; lastEventAt: number }[]>
 }
 
