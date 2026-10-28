@@ -1,0 +1,165 @@
+import type { WorkspaceId } from '@spyria/kernel'
+import { ErrorMessage, focusRing, smallGhostButtonClass, useGuardedAction } from '@spyria/ui'
+import { ChevronDown, Circle, CircleCheck, CircleMinus, Lock } from 'lucide-react'
+import { useId, useState } from 'react'
+import { Link } from 'react-router'
+import { isSettled, type TaskScope, type TaskState, type TaskView } from '../domain/tasks.ts'
+import { useOnboardingCommands } from './providers.tsx'
+import { blockedExplanation, taskTextOf } from './task-text.ts'
+import { useOnboarding } from './useOnboarding.ts'
+
+const titleByScope: Record<TaskScope, string> = {
+  workspace: 'Get your workspace ready',
+  member: 'Set up your profile',
+}
+
+const stateLook: Record<TaskState, { label: string; Icon: typeof Circle; iconClass: string }> = {
+  done: { label: 'Done', Icon: CircleCheck, iconClass: 'text-agent-done' },
+  skipped: { label: 'Skipped', Icon: CircleMinus, iconClass: 'text-muted' },
+  blocked: { label: 'Not available yet', Icon: Lock, iconClass: 'text-muted' },
+  open: { label: 'To do', Icon: Circle, iconClass: 'text-ink' },
+}
+
+const storedIsCollapsed = (storageKey: string) => {
+  try {
+    return localStorage.getItem(storageKey) === 'true'
+  } catch {
+    return false
+  }
+}
+
+const useStoredCollapse = (storageKey: string) => {
+  const [isCollapsed, setIsCollapsed] = useState(() => storedIsCollapsed(storageKey))
+  const toggleCollapsed = () => {
+    setIsCollapsed(!isCollapsed)
+    try {
+      localStorage.setItem(storageKey, String(!isCollapsed))
+    } catch {}
+  }
+  return { isCollapsed, toggleCollapsed }
+}
+
+const TaskRow = ({
+  workspaceId,
+  view,
+  domain,
+  onSkip,
+  onRestore,
+  isPending,
+}: {
+  workspaceId: WorkspaceId
+  view: TaskView
+  domain: string | undefined
+  onSkip: () => void
+  onRestore: () => void
+  isPending: boolean
+}) => {
+  const { title, explanation, page, section } = taskTextOf(view.task, domain)
+  const { label, Icon, iconClass } = stateLook[view.state]
+  const linkClass = `font-medium underline-offset-2 hover:underline ${focusRing}`
+  const isActionable = view.state === 'open' || view.state === 'skipped'
+  return (
+    <li className={`flex items-start gap-3 py-2 ${view.state === 'blocked' ? 'opacity-60' : ''}`}>
+      <Icon aria-hidden className={`mt-0.5 size-4 shrink-0 ${iconClass}`} />
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className={view.state === 'done' ? 'text-muted line-through' : ''}>
+          <span className="sr-only">{label}: </span>
+          {!isActionable ? (
+            <span className="font-medium">{title}</span>
+          ) : view.scope === 'member' && section ? (
+            <a href={`#${section}`} className={linkClass}>
+              {title}
+            </a>
+          ) : (
+            <Link to={`/w/${workspaceId}/${page}`} className={linkClass}>
+              {title}
+            </Link>
+          )}
+        </span>
+        {view.state !== 'done' && (
+          <span className="text-sm text-muted">{view.state === 'blocked' ? blockedExplanation : explanation}</span>
+        )}
+      </div>
+      {view.state === 'open' && (
+        <button
+          type="button"
+          aria-label={`Skip ${title}`}
+          disabled={isPending}
+          className={smallGhostButtonClass}
+          onClick={onSkip}
+        >
+          Skip
+        </button>
+      )}
+      {view.state === 'skipped' && (
+        <button
+          type="button"
+          aria-label={`Restore ${title}`}
+          disabled={isPending}
+          className={smallGhostButtonClass}
+          onClick={onRestore}
+        >
+          Restore
+        </button>
+      )}
+    </li>
+  )
+}
+
+export const ChecklistBlock = ({
+  workspaceId,
+  scope,
+  usesSingleSignOn,
+}: {
+  workspaceId: WorkspaceId
+  scope: TaskScope
+  usesSingleSignOn: boolean
+}) => {
+  const commands = useOnboardingCommands()
+  const { tasks, domain } = useOnboarding(workspaceId, usesSingleSignOn)
+  const { isCollapsed, toggleCollapsed } = useStoredCollapse(`spyria.onboarding-collapsed.${scope}.${workspaceId}`)
+  const { errorMessage, isPending, run } = useGuardedAction()
+  const headingId = useId()
+  const listId = useId()
+  const shownTasks = tasks.filter((view) => view.scope === scope)
+  if (shownTasks.every(isSettled)) return null
+  const title = titleByScope[scope]
+  return (
+    <section
+      aria-labelledby={headingId}
+      className="flex flex-col gap-2 rounded-lg border border-accent/40 bg-accent/10 px-4 py-3"
+    >
+      <h2 id={headingId}>
+        <button
+          type="button"
+          aria-expanded={!isCollapsed}
+          aria-controls={listId}
+          className={`flex w-full items-center gap-2 rounded-md text-left ${focusRing}`}
+          onClick={toggleCollapsed}
+        >
+          <span className="flex-1 font-semibold">{title}</span>
+          <span className="text-sm text-muted">
+            {shownTasks.filter(isSettled).length} of {shownTasks.length} done
+          </span>
+          <ChevronDown aria-hidden className={`size-4 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
+        </button>
+      </h2>
+      {!isCollapsed && (
+        <ul id={listId} className="flex flex-col divide-y divide-accent/20">
+          {shownTasks.map((view) => (
+            <TaskRow
+              key={view.task}
+              workspaceId={workspaceId}
+              view={view}
+              domain={domain}
+              isPending={isPending}
+              onSkip={() => run(() => commands.skipTask({ workspaceId, task: view.task }))}
+              onRestore={() => run(() => commands.restoreTask({ workspaceId, task: view.task }))}
+            />
+          ))}
+        </ul>
+      )}
+      <ErrorMessage message={errorMessage} />
+    </section>
+  )
+}

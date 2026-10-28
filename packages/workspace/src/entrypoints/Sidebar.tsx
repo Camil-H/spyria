@@ -20,6 +20,7 @@ import { WorkspaceSwitcher } from './WorkspaceSwitcher.tsx'
 const BrowseChannelsDialog = lazy(() => import('./BrowseChannelsDialog.tsx'))
 
 export type SearchDialog = (props: { workspaceId: WorkspaceId; onClose: () => void }) => ReactNode
+export type SidebarItem = (props: { workspaceId: WorkspaceId; isCollapsed: boolean }) => ReactNode
 
 const collapsedStorageKey = 'spyria.sidebar-collapsed'
 const headerRowClass = 'flex h-9 shrink-0 items-center'
@@ -54,10 +55,12 @@ export const Sidebar = ({
   workspaceId,
   chatAdornment,
   searchDialog,
+  topItem,
 }: {
   workspaceId: WorkspaceId
   chatAdornment?: ChatAdornment
   searchDialog?: SearchDialog
+  topItem?: SidebarItem
 }) => {
   const { memberId } = useSession()
   const sidebar = useQuery(getSidebar, workspaceId, memberId)
@@ -101,10 +104,11 @@ export const Sidebar = ({
   if (isCollapsed)
     return (
       <Provider delayDuration={300}>
-        <nav aria-label="Sidebar" className="flex h-full shrink-0 flex-col border-r border-line bg-sidebar p-3">
+        <nav aria-label="Sidebar" className="flex h-full shrink-0 flex-col gap-3 border-r border-line bg-sidebar p-3">
           <div className={headerRowClass}>
             <IconButton label={toggleLabel} shortcut="l" icon={PanelLeftOpen} onClick={toggleCollapsed} />
           </div>
+          {topItem?.({ workspaceId, isCollapsed })}
           {dialogs}
         </nav>
       </Provider>
@@ -123,6 +127,7 @@ export const Sidebar = ({
             <IconButton label="New chat" shortcut="c" icon={SquarePen} onClick={() => setOpenDialog('chat')} />
           </div>
         </div>
+        {topItem?.({ workspaceId, isCollapsed })}
         {searchDialog && (
           <button
             type="button"

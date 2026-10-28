@@ -15,6 +15,22 @@ Everything here is in **Workspace settings** (the workspace menu), as cards in t
 | Analyze usage | **Analyze costs** | `costs.view` or `budgets.manage` |
 | | **Audit log** | `audit.view` |
 
+## Setup checklist
+
+Until the workspace is set up, the top of the sidebar shows **Get started** with how many tasks are done and the next one; it opens that task's page. **Workspace settings** lists the workspace tasks at the top (**Get your workspace ready**) and **Profile** the personal ones (**Set up your profile**). Each list can be collapsed, which the browser remembers.
+
+| Task | Who sees it | Done once |
+|---|---|---|
+| Verify your email domain | `sso.manage`, on SSO deployments | the domain is verified |
+| Connect the GitHub App | `github.manage` | the workspace has a GitHub App |
+| Connect a runtime | `runtimes.manage` | a workspace runtime host has been claimed |
+| Add your AI key | every member | they have an LLM key in the workspace |
+| Invite members | `members.invite` | there is a pending invite or another member |
+| Link your GitHub account | every member, once the workspace has had a GitHub App | they linked their GitHub account |
+| Add a profile picture | every member | they have a picture |
+
+Workspace tasks are shared: done by one admin, done for all. A task stays done even if what completed it is undone later (the GitHub App removed, the last key deleted); the cards show the current state. On SSO deployments, **Invite members** stays greyed out until the domain is verified. Anyone can **Skip** a task they see, which counts it as done for them only, and **Restore** it. A list disappears once all its tasks are done or skipped, and the sidebar entry once all of the member's are.
+
 ## Workspace roles
 
 A workspace role is a named set of permissions. Two are built in and cannot be changed: **Admin** has every permission, **Member** has none. With `roles.manage` you can create custom workspace roles from these permissions:

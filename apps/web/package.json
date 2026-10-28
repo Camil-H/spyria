@@ -13,6 +13,7 @@
     "@spyria/conversation": "workspace:*",
     "@spyria/db": "workspace:*",
     "@spyria/kernel": "workspace:*",
+    "@spyria/onboarding": "workspace:*",
     "@spyria/panel": "workspace:*",
     "@spyria/profile": "workspace:*",
     "@spyria/runtime": "workspace:*",
