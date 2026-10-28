@@ -55,7 +55,7 @@ In a channel, the actions of a top-level message offer **Reply in thread**. Repl
 
 ## Keyboard shortcuts
 
-Single keys move around the workspace. They do nothing while typing in a field or while a dialog or menu is open, and **?** lists the ones available on the current page. A button's tooltip shows its shortcut's letter in bold, for example "Collapse **l**eft sidebar" or "New **c**hat".
+Single keys move around the workspace. They do nothing while typing in a field or while a dialog or menu is open, and **?** lists the ones available on the current page. A button's tooltip shows its shortcut after its name, for example "Collapse sidebar L" or "New chat C", as the side panel's tabs show "Files R then 1".
 
 | Key | Action |
 |---|---|
@@ -123,7 +123,7 @@ In a channel, every message's actions include **Start runtime from this message*
 
 This lets members discuss freely in a channel and bring an agent in only when there is work to do, without moving the conversation by hand.
 
-**Copy thread as context** (**Copy message as context** for a message without replies) puts the same quote in the clipboard instead, to paste into an agent elsewhere, such as a runtime chat already under way or a tool outside Spyria. The quote is built in the browser from the messages it shows, and the clipboard is the only place it goes.
+**Copy thread as context** (**Copy message as context** for a message without replies) puts the thread in the clipboard instead, headed "Conversation from channel thread in #*channel*" and quoting each message with its author and time as a runtime's first message does, to paste into an agent elsewhere, such as a runtime chat already under way or a tool outside Spyria. The quote is built in the browser from the messages it shows, and the clipboard is the only place it goes.
 
 ## When a chat owner leaves the workspace
 
@@ -131,7 +131,7 @@ When an admin removes a member, that member's runtime chats are **frozen**: they
 
 ## Side panel
 
-The side panel next to a chat has tabs that depend on the chat type. Runtime chats have **Files**, **Changes**, **Commits**, **Browser**, **Usage**, **Connected tools** and **Members**; channels have **Browser**, **Sources**, **Usage**, **Connected tools** and **Members**. **Usage** breaks down the chat's model spend per member, and **Connected tools** lists the workspace and personal connections the agent can use. The dev tabs are described in [Dev mode](./dev-mode.md). **Sources** is a placeholder: nothing fills it yet. **R** collapses or expands the side panel, and **R** then a number opens it on that tab; each tab's tooltip shows its number.
+The side panel next to a chat has tabs that depend on the chat type. Runtime chats have **Files**, **Changes**, **Commits**, **Browser**, **Usage**, **Connected tools** and **Members**; channels have **Browser**, **Sources**, **Usage**, **Connected tools** and **Members**. **Usage** breaks down the chat's model spend per member, and **Connected tools** lists the workspace and personal connections the agent can use. The dev tabs are described in [Dev mode](./dev-mode.md). **Sources** is a placeholder: nothing fills it yet. **R** collapses or expands the side panel, and **R** then a number opens it on that tab; each tab's tooltip shows its shortcut.
 
 ### Browser
 
