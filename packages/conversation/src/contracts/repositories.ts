@@ -206,6 +206,8 @@ export type RoutingRepository = {
       subagentPolicy: string
       harness: HarnessId | null
       localSession: boolean
+      contextTokens: number
+      contextWindow: number | null
     }>,
   ): Promise<void>
   setAgentModel(chatId: ChatId, model: string | null, reasoningEffort: string | null): Promise<void>

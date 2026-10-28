@@ -619,16 +619,6 @@ export const runningDelegationOfTokenHash = (tx: Transaction, workspaceId: strin
     [workspaceId, hostId, hash],
   )
 
-export const chatContextTokens = async (tx: Transaction, workspaceId: string, chatId: string) =>
-  (
-    await firstOnServer<{ tokens: number }>(
-      tx,
-      `select input_tokens + output_tokens as tokens from model_calls
-       where workspace_id = $1 and chat_id = $2 and role is null order by called_at desc limit 1`,
-      [workspaceId, chatId],
-    )
-  )?.tokens ?? null
-
 type StoredAttachment = { id: string; name: string; mediaType: string; size: number }
 const attachmentColumns = 'id, name, media_type as "mediaType", size'
 

@@ -347,6 +347,25 @@ test('the agent takes a screenshot of a page with Spyria’s take_screenshot too
   ])
 })
 
+test('the chat keeps how full the agent’s context is from its latest model call, with the window of the model it ran on', async () => {
+  await stack.agentHost('Context host', { routesModelCalls: true })
+  const chat = await newRuntimeChat()
+  const contextOf = async () =>
+    (
+      await database.$client`
+        select agent_model, context_tokens, context_window from chats where workspace_id = ${acme} and id = ${chat}`
+    )[0]
+  expect(await contextOf()).toMatchObject({ context_tokens: null, context_window: null })
+
+  stack.setFakeLlmScript({ text: 'Hi.' })
+  await stack.finished(await prompt(chat, 'Hello'), chat, 15_000, 'Hi.')
+  const { agent_model: model, ...context } = (await contextOf()) ?? {}
+  expect(context).toEqual({
+    context_tokens: 2,
+    context_window: stack.llmGateway.listedModels().find((listed) => listed.id === model)?.contextWindow ?? null,
+  })
+})
+
 test('after a runtime restart the next prompt loads the Pi session and no earlier message is duplicated', async () => {
   const { relay, launches } = await workspaceHost()
   const chat = await newRuntimeChat()

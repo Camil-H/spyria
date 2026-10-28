@@ -57,6 +57,8 @@ const chat = (
   baseBranch: null,
   originChatId: null,
   agentTurnMessageId: null,
+  contextTokens: null,
+  contextWindow: null,
 })
 const participant = (chat: string, memberId: MemberId, roleId: string) => ({
   workspaceId: acme,

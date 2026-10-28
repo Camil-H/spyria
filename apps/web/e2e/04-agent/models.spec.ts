@@ -163,6 +163,16 @@ test.describe('Models', () => {
     await bobPage.context().close()
   })
 
+  test('As a prompter, I see how full the agent’s context is next to the model once it has answered', {
+    tag: ['@spec-15'],
+  }, async ({ page }) => {
+    await newRuntimeChat(page, 'Context')
+    const context = mainOf(page).getByRole('img', { name: /^Context: / })
+    await expect(context).toHaveCount(0)
+    await promptAndWait(page, 'How full are you?', 1)
+    await expect(context).toHaveAccessibleName(/^Context: (\d+% full, 2 of [\d,]+|2) tokens$/)
+  })
+
   test('As a prompter, I switch the model by hand: I am warned about the reread, the history stays and every viewer sees the new model', {
     tag: ['@spec-15', '@smoke'],
   }, async ({ page, browser, workerStack }) => {

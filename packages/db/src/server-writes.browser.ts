@@ -57,7 +57,6 @@ export const setDelegationFields = skippedOnClient
 export const insertToolCall = skippedOnClient
 export const runningDelegationOfTokenHash = skippedOnClient
 export const stopRunningDelegations = async () => []
-export const chatContextTokens = skippedOnClient
 export const appendChatEvent = () => Promise.reject(new Error('Chat events are appended on the server only'))
 export const isSessionStartPending = async () => false
 export const scheduleWorkspaceDeletion = skippedOnClient
