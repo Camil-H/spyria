@@ -53,9 +53,9 @@ test('in the runtime image, run with a runtime’s limits, spyria-agent saves a 
     size: [1280, 800],
   })
   expect(
-    await call('POST', '/api/workspace/screenshot', { ...request, name: 'down', url: 'http://localhost:9/' }),
+    await call('POST', '/api/workspace/screenshot', { ...request, name: 'down', url: 'http://localhost:4999/' }),
   ).toEqual({
     error:
-      'The screenshot of http://localhost:9/ failed: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:9/',
+      'The screenshot of http://localhost:4999/ failed: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:4999/',
   })
 })
