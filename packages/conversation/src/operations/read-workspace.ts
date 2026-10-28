@@ -44,13 +44,13 @@ export const readRuntimeMedia = async (dependencies: Dependencies, input: Input 
 
 export const snapshotWorkspace = async (dependencies: Dependencies, chat: AgentChat) => {
   const { baseBranch } = await dependencies.transactor.run(({ chats }) => chats.get(chat.chatId))
-  const [tree, changes, status] = await Promise.all([
+  const [tree, changes, commits, status] = await Promise.all([
     liveReadingOf(dependencies, chat, agentWorkspacePathOf('tree', '', '')),
     ...branchReads.map((read) =>
       baseBranch ? liveReadingOf(dependencies, chat, agentWorkspacePathOf(read, '', baseBranch)) : undefined,
     ),
   ])
-  if (tree) await dependencies.runtimes.keepSnapshot(chat, JSON.stringify({ tree, changes, status }))
+  if (tree) await dependencies.runtimes.keepSnapshot(chat, JSON.stringify({ tree, changes, commits, status }))
 }
 
 export const wakeWorkspace = async (dependencies: Dependencies, input: Input) => {
