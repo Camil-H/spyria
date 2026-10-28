@@ -50,11 +50,7 @@ export const ProjectGroup = ({
           <Trigger aria-label={`Project actions for ${project.name}`} className={menuTriggerClass}>
             <Ellipsis aria-hidden className="size-4" />
           </Trigger>
-          <Content
-            align="start"
-            className={menuContentClass}
-            onCloseAutoFocus={(event) => (openDialog === 'chat' || openDialog === 'rename') && event.preventDefault()}
-          >
+          <Content align="start" className={menuContentClass}>
             <Item className={menuItemClass} onSelect={() => setOpenDialog('chat')}>
               New chat
             </Item>

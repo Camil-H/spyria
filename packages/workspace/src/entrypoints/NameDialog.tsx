@@ -2,6 +2,8 @@ import { buttonClass, Dialog, fieldClass, labelClass } from '@spyria/ui'
 import { type SubmitEvent, useState } from 'react'
 import { Name } from '../domain/name.ts'
 
+const selectOnMount = (input: HTMLInputElement | null) => input?.select()
+
 export const NameDialog = ({
   label,
   fieldLabel,
@@ -30,7 +32,7 @@ export const NameDialog = ({
             className={fieldClass}
             value={draftName}
             onChange={(event) => setDraftName(event.target.value)}
-            ref={(input) => void setTimeout(() => input?.select())}
+            ref={selectOnMount}
           />
         </label>
         <button type="submit" className={buttonClass} disabled={draftName.trim() === ''}>

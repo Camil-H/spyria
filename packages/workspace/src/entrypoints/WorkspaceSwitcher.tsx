@@ -28,12 +28,7 @@ export const WorkspaceSwitcher = ({ workspaceId }: { workspaceId: WorkspaceId })
         >
           {workspaces.find((workspace) => workspace.id === workspaceId)?.name}
         </Trigger>
-        <Content
-          align="start"
-          sideOffset={4}
-          className={menuContentClass}
-          onCloseAutoFocus={(event) => openDialog && event.preventDefault()}
-        >
+        <Content align="start" sideOffset={4} className={menuContentClass}>
           <Item className={`${menuItemClass} justify-start gap-2`} onSelect={() => setOpenDialog({ kind: 'new' })}>
             <Plus aria-hidden className="size-4" />
             New workspace
