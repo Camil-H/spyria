@@ -136,7 +136,7 @@ Rules that apply today without a mechanism, or with a known hole.
 | Rule | Gap |
 |---|---|
 | S1 | no single policy component: membership is checked in `apps/server/src/auth/session-tokens.ts`, the workspace match in each mutator and transactor; roles arrive in Phase 3 |
-| S8 | no secret scan, neither pre-commit nor in `check:all` |
+| S8 | the CI job `secrets` runs gitleaks on every pull request and push to `develop`; no pre-commit scan, and none in `check:all` |
 | G2 | `packages/db/src/postgres/client.ts` reads `DATABASE_URL` at module level |
 | C7 | same module: importing `@spyria/db/postgres` reads configuration |
 | TX5a | `POST /api/llm-credentials` takes no idempotency key (Zero mutations are deduplicated by Zero's client mutation ids) |
