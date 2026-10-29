@@ -92,7 +92,7 @@ test.describe('Personal tools', () => {
       await openMyConnectionsTab(page)
       const personalSection = connectionsPanelOf(page)
       for (const tool of ['GitHub', 'Slack', 'Notion', 'Linear']) {
-        await expect(personalSection.getByRole('group', { name: tool })).toContainText('Not connected')
+        await expect(personalSection.getByRole('group', { name: tool, exact: true })).toContainText('Not connected')
         await expect(personalSection.getByRole('button', { name: `Connect ${tool}`, exact: true })).toBeVisible()
       }
       await expect(personalSection.getByRole('button', { name: /^(Disconnect|Reconnect) / })).toHaveCount(0)
