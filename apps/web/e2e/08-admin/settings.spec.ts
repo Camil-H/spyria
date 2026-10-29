@@ -2,7 +2,7 @@ import { expect, mainOf, type Page, sidebarOf, test } from '../fixtures'
 
 const cardsBySection = {
   'Setup your organization': ['Setup SSO', 'Connect GitHub', 'Roles and Permissions', 'Manage Team'],
-  'Setup your agents': ['Connect runtime', 'MCP tools', 'AI providers'],
+  'Setup your agents': ['Connect runtime', 'AI providers', 'MCP tools'],
   'Analyze usage': ['Analyze costs', 'Audit log'],
 }
 const sectionShownBy: Record<string, string> = {
