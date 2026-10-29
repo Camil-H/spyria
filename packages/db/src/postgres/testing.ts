@@ -9,9 +9,9 @@ import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { gatewayKeyRefOf } from '@spyria/kernel'
 import { type SQL, sql } from 'drizzle-orm'
-import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import postgres from 'postgres'
 import { createDatabase } from './client.ts'
+import { migrateDatabase } from './migrate.ts'
 import { resetDatabase } from './seed.ts'
 
 const templateDatabaseName = 'spyria_test_template'
@@ -59,8 +59,7 @@ export const dropDatabase = async (name: string) => {
     }
 }
 
-export const migrateDatabase = (database: ReturnType<typeof createDatabase>) =>
-  migrate(database, { migrationsFolder: new URL('../../drizzle', import.meta.url).pathname })
+export { migrateDatabase }
 
 export const createTestDatabase = async (
   template = templateDatabaseName,
