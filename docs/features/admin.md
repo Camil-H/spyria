@@ -11,8 +11,8 @@ Everything here is in **Workspace settings** (the workspace menu), as cards in t
 | | **Roles and Permissions** | `roles.manage` |
 | | **Manage Team** | `members.invite` or `members.manage` |
 | Setup your agents | **Connect runtime** | `runtimes.manage` |
-| | **MCP tools** | `tools.manage` |
 | | **AI providers** | `providers.manage` |
+| | **MCP tools** | `tools.manage` |
 | Analyze usage | **Analyze costs** | `costs.view` or `budgets.manage` |
 | | **Audit log** | `audit.view` |
 
