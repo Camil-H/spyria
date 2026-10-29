@@ -153,8 +153,7 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
         await setServerOnlyRuntimeValue(tx, runtime.workspaceId, runtime.id, secret, value)
       },
       discard: async (runtime) => {
-        for (const secret of ['llmTokenHash', 'llmSwitchTokenHash'] as const)
-          await setServerOnlyRuntimeValue(tx, runtime.workspaceId, runtime.id, secret, null)
+        await setServerOnlyRuntimeValue(tx, runtime.workspaceId, runtime.id, 'llmTokenHash', null)
       },
     },
     jobs: {

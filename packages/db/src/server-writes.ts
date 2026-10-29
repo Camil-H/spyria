@@ -267,7 +267,6 @@ export const lockRuntimeHostLoads = (tx: Transaction, workspaceId: string, chatI
 
 const serverOnlyRuntimeColumns = {
   llmTokenHash: 'llm_token_hash',
-  llmSwitchTokenHash: 'llm_switch_token_hash',
   agentConversation: 'agent_conversation_id',
   workspaceSnapshot: 'workspace_snapshot',
 }
@@ -367,7 +366,7 @@ export const runtimeChatOfLlmTokenHash = async (tx: Transaction, workspaceId: st
   (
     await firstOnServer<{ chatId: string }>(
       tx,
-      `select chat_id as "chatId" from runtimes where workspace_id = $1 and host_id = $2 and $3 in (llm_token_hash, llm_switch_token_hash)
+      `select chat_id as "chatId" from runtimes where workspace_id = $1 and host_id = $2 and llm_token_hash = $3
          and exists(select 1 from workspaces where workspaces.workspace_id = $1 and workspaces.deleted_at is null)`,
       [workspaceId, hostId, hash],
     )
