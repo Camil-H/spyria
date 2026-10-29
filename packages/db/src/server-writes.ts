@@ -761,7 +761,7 @@ export const redactDeletedMessageEvents = async (
   ])
   await onServer(
     tx,
-    `update events set payload = payload || '{"body": "", "redacted": true}'::jsonb
+    `update events set payload = (payload - 'attachments') || '{"body": "", "redacted": true}'::jsonb
      where workspace_id = $1 and chat_id = $2
        and ((type in ('message.posted', 'message.replied') and id = $3)
          or (type = 'message.edited' and payload->>'messageId' = $3))`,

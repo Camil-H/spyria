@@ -96,7 +96,7 @@ When a turn delegates work, `spyria-agent` runs sub-conversations in the same ru
 | State | Where | Notes |
 |---|---|---|
 | Workspaces, members, chats, messages, roles, budgets, audit log | Postgres | Every table except a member's own identity (`users`) carries `workspace_id`. |
-| Event history of chats | Postgres, `events` | Append-only: a trigger rejects updates and deletes, except a workspace purge and blanking the text of a deleted message. Every chat's history starts with its `chat.created` event, seeded demo chats included. The `messages` table is a projection that can be rebuilt from it; a fork quotes its source from the history itself. |
+| Event history of chats | Postgres, `events` | Append-only: a trigger rejects updates and deletes, except a workspace purge and blanking the text and attachment names of a deleted message. Every chat's history starts with its `chat.created` event, seeded demo chats included. The `messages` table is a projection that can be rebuilt from it; a fork quotes its source from the history itself. |
 | Background work | Postgres, `jobs` | The job queue; no other broker. |
 | The browser's view of the data | Each browser's Zero replica, and zero-cache's replica | Rebuilt from Postgres when lost. |
 | Provider API keys, tool OAuth tokens, usage logs | The gateway's own database | Spyria keeps a reference to each key and its last four characters. |
