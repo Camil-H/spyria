@@ -68,14 +68,15 @@ const deletedMessageRecords = `
 
 const toolCallRecords = `
   select call.called_at as at, 't:' || call.id as key, 'tool.called' as kind, call.prompter_id as actor_id,
-    call.server || ' · ' || call.tool as target,
-    json_build_object('chat', chat.name, 'server', call.server, 'tool', call.tool,
+    coalesce(connection.name, call.server) || ' · ' || call.tool as target,
+    json_build_object('chat', chat.name, 'server', coalesce(connection.name, call.server), 'tool', call.tool,
       'readOnly', call.read_only, 'decision', replace(call.decision, '_', ' '), 'decidedBy', decider.display_name,
       'owner', owner.display_name, 'status', call.status) as details
   from tool_calls call
   ${chatNamed('chat', 'call.chat_id')}
   ${memberNamed('decider', 'call.decided_by')}
   ${memberNamed('owner', 'call.owner_id')}
+  left join workspace_connections connection on connection.workspace_id = $1 and connection.gateway_name = call.server
   where call.workspace_id = $1`
 
 const pullRequestRecords = `

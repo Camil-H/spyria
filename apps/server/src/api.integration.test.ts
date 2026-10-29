@@ -173,7 +173,9 @@ await testDatabase.database.$client`
   values (${acme}, 'connection-acme-crm', ${bob}, '["lookup"]'), (${acme}, 'connection-acme-crm', ${lee}, '[]')`
 await testDatabase.database.$client`
   insert into tool_connections (workspace_id, user_id, tool, status, position)
-  values (${acme}, ${bob}, 'Linear', 'Connected', 0)`
+  values (${acme}, ${alice}, 'Notion', 'Needs reconnection', 3), (${acme}, ${alice}, 'GitHub', 'Connected', 1),
+    (${acme}, ${alice}, 'Slack', 'Connected', 2),
+    (${acme}, ${bob}, 'Linear', 'Connected', 0)`
 const rowsByReader = new Map(
   await Promise.all(
     readers.map(async (reader) => [reader.name, await readAll(reader.workspace, reader.user)] as const),

@@ -42,6 +42,7 @@ import { onboardingMutators } from '@spyria/onboarding/server'
 import {
   addLlmCredentialFromRequest,
   availableToolsFromRequest,
+  checkToolConnectionsFromRequest,
   type createLlmGateway,
   createMemberKeyReader,
   githubConnectionChannel,
@@ -139,6 +140,7 @@ import {
 } from './rate-limits.ts'
 import { createRuntimeHostGateway, type RuntimeHostGateway } from './runtime-hosts/gateway.ts'
 import { contextOf, withSpan } from './telemetry.ts'
+import { announceToolListChange } from './tool-list-changes.ts'
 import { webAppResponse } from './web-app.ts'
 
 const healthCheckMilliseconds = 2000
@@ -287,16 +289,19 @@ export const createApp = ({
   }
   const workspaceConnectionResponse = async (context: ApiContext, action: string, connectionId: string) => {
     const body = await context.req.json().catch(() => null)
-    return endpointResponse('A workspace connection request', action === 'add' ? 201 : 200, () =>
-      workspaceConnectionFromRequest(
+    return endpointResponse('A workspace connection request', action === 'add' ? 201 : 200, async () => {
+      const zeroContext = context.get('zeroContext')
+      const result = await workspaceConnectionFromRequest(
         context.get('transact'),
-        context.get('zeroContext'),
+        zeroContext,
         gatewayOf(),
         action,
         connectionId,
         body,
-      ),
-    )
+      )
+      announceToolListChange(zeroContext.workspaceId)
+      return result
+    })
   }
   const app = new Hono<ApiEnvironment>()
     .use((context, next) => {
@@ -659,6 +664,11 @@ export const createApp = ({
     )
     .get(toolConnectionsPath, () =>
       endpointResponse('Listing tool servers', 200, () => availableToolsFromRequest(gatewayOf())),
+    )
+    .post(`${toolConnectionsPath}/check`, (context) =>
+      endpointResponse('Checking tool connections', 204, () =>
+        checkToolConnectionsFromRequest(context.get('transact'), context.get('zeroContext'), gatewayOf()),
+      ),
     )
     .post(`${toolConnectionsPath}/:tool/:action{connect|refresh|disconnect}`, (context) => {
       const action = context.req.param('action')

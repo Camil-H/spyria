@@ -21,6 +21,7 @@ export type ProfileCommands = {
   connectTool: Command<{ tool: string }>
   disconnectTool: Command<{ tool: string }>
   availableTools: (input: { workspaceId: WorkspaceId }) => Promise<string[]>
+  checkTools: Command<object>
   addLlmCredential: Command<{ provider: string; secret: Secret }>
   readGitHubConnection: (input: { workspaceId: WorkspaceId }) => Promise<GitHubConnection>
   connectGitHub: (input: { workspaceId: WorkspaceId }) => Promise<GitHubConnection>

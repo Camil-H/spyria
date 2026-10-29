@@ -17,7 +17,7 @@ const recordsOf = (page: Page) =>
   auditSectionOf(page).getByRole('list', { name: 'Audit records' }).getByRole('listitem')
 const recordOf = (page: Page, text: RegExp) => recordsOf(page).filter({ hasText: text })
 const filtersOf = (page: Page) => auditSectionOf(page).getByRole('group', { name: 'Filters' })
-const toolCallText = /Bob\s*Called a tool\s*crm · update/
+const toolCallText = /Bob\s*Called a tool\s*CRM · update/
 const removalText = /Alice\s*Removed a member\s*Bob/
 const inviteText = /Alice\s*Invited a member\s*nina@example\.com/
 
@@ -84,7 +84,7 @@ test.describe('Audit log', () => {
       'Owner',
       'Status',
     ])
-    await expect(details).toContainText(['Research', 'crm', 'update', 'No', 'approved', 'Alice', 'Alice', 'succeeded'])
+    await expect(details).toContainText(['Research', 'CRM', 'update', 'No', 'approved', 'Alice', 'Alice', 'succeeded'])
   })
 
   test('As a member who can view the audit log, I filter by person and type, and a date range leaves out older rows', {

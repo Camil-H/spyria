@@ -30,7 +30,6 @@ const welcomeChat = chatId('chat-welcome')
 
 const currentMonth = () => new Date().toISOString().slice(0, 7)
 const invoiceBug = { workspaceId: acme, chatId: invoiceChat }
-const toolConnection = (tool: string, status: string) => ({ workspaceId: acme, memberId: alice, tool, status })
 const chat = (
   id: string,
   workspace: WorkspaceId,
@@ -273,11 +272,7 @@ export const createMockSnapshot = (): Snapshot => {
       { workspaceId: acme, chatId: welcomeChat, name: 'Employee handbook', origin: 'Onyx' },
       { workspaceId: acme, chatId: welcomeChat, name: 'Onboarding wiki page', origin: 'Wiki' },
     ],
-    toolConnections: [
-      toolConnection('GitHub', 'Connected'),
-      toolConnection('Slack', 'Connected'),
-      toolConnection('Notion', 'Needs reconnection'),
-    ],
+    toolConnections: [],
     chatMembers: [
       ...chats.map((chat) => ({
         workspaceId: chat.workspaceId,
