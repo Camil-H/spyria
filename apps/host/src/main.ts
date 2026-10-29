@@ -15,7 +15,7 @@ import {
   runCredentialsCommand,
 } from './personal.ts'
 import { proxyOf, takeProxySettings, webSocketThrough } from './proxy.ts'
-import { createRelay, type Frame, frameTextOf, messageOf } from './relay.ts'
+import { createRelay, type Frame, frameTextOf, messageOf, relayVersion } from './relay.ts'
 import { freeMemoryBytes, systemOf } from './system.ts'
 import { contextOf, log, startTelemetry, withSpan } from './telemetry.ts'
 
@@ -108,6 +108,7 @@ const gatewayUrl = `http://${isInContainer ? gatewayRelayAlias : 'host.docker.in
 const heartbeatMilliseconds = Number(process.env.SPYRIA_HOST_HEARTBEAT_MS ?? 30_000)
 const maximumBufferedBytes = 16 * 1024 * 1024
 const maximumReconnectDelayMilliseconds = 30_000
+const relayedFrameTypes = ['http', 'http_body', 'http_end', 'ws_connect', 'ws_msg', 'ws_ack', 'ws_close']
 let reconnectDelayMilliseconds = 1000
 
 try {
@@ -179,7 +180,7 @@ const connect = () => {
     const system = await systemOf(docker)
     const declared = await declaration()
     if (socket.readyState !== WebSocket.OPEN) return
-    send({ type: 'hello', token, gatewayUrl, system, ...declared })
+    send({ type: 'hello', token, gatewayUrl, system, relayVersion, ...declared })
     sendToSpyria = (frame) => socket.readyState === WebSocket.OPEN && send(frame)
     reconnectDelayMilliseconds = 1000
     heartbeatTimer = setInterval(() => sendHeartbeat().catch(() => {}), heartbeatMilliseconds)
@@ -226,7 +227,7 @@ const connect = () => {
       return void hello(frame.token).catch(logHelloFailure)
     }
     if (frame.type === 'cmd') return void runCommand(frame)
-    if (['http', 'ws_connect', 'ws_msg', 'ws_close'].includes(frame.type)) return void relay.handle(frame)
+    if (relayedFrameTypes.includes(frame.type)) return void relay.handle(frame)
     if (frame.type.startsWith('gw_')) return modelRelay.handle(frame)
     log.warn({
       event: 'host.frame_refused',
