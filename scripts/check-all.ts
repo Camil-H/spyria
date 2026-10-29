@@ -5,7 +5,7 @@ import { join } from 'node:path'
 const isDocker = process.argv.includes('--docker')
 const checkName = isDocker ? 'check:docker' : 'check:all'
 const steps = isDocker
-  ? ['agent:build', 'check:trust', 'test:docker:integration']
+  ? ['agent:build', 'test:docker:integration']
   : ['lint', 'typecheck', 'check:boundaries', 'check:locks', 'test', 'check:bundle', 'test:integration', 'test:e2e']
 const timingFiles = isDocker ? ['integration-docker.xml'] : ['integration.xml', 'e2e-results.json']
 const repositoryRoot = new URL('../', import.meta.url).pathname

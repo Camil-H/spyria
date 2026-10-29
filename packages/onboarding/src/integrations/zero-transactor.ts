@@ -9,7 +9,7 @@ export const createZeroTransactor = (tx: Transaction, { workspaceId, userId }: Z
   const isFound = async (row: Promise<unknown>) => (await row) !== undefined
   const ownRows = zql.memberOnboarding.where('workspaceId', workspaceId).where('userId', userId)
   const ownRow = (task: OnboardingTask) => tx.run(ownRows.where('task', task).one())
-  const saveOwnRow = async (task: OnboardingTask, change: { completedAt?: number; skippedAt?: number | null }) => {
+  const saveOwnRow = async (task: OnboardingTask, change: { completedAt?: number; skippedAt?: number }) => {
     const key = { workspaceId, userId, task }
     if (await ownRow(task)) await tx.mutate.memberOnboarding.update({ ...key, ...change })
     else await tx.mutate.memberOnboarding.insert({ completedAt: null, skippedAt: null, ...key, ...change })
@@ -82,9 +82,6 @@ export const createZeroTransactor = (tx: Transaction, { workspaceId, userId }: Z
         await tx.mutate.workspaceOnboarding.upsert({ workspaceId, task, completedAt: Date.now() })
       },
       skip: (task) => saveOwnRow(task, { skippedAt: Date.now() }),
-      restore: async (task) => {
-        if (await ownRow(task)) await tx.mutate.memberOnboarding.update({ workspaceId, userId, task, skippedAt: null })
-      },
     },
   }
   return transactorOver(tx, unitOfWork)

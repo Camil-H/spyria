@@ -7,5 +7,4 @@ export type OnboardingRepository = {
   permissions(): Promise<readonly WorkspacePermission[]>
   recordCompleted(task: OnboardingTask): Promise<void>
   skip(task: OnboardingTask): Promise<void>
-  restore(task: OnboardingTask): Promise<void>
 }

@@ -238,8 +238,10 @@ test.describe('Organize', () => {
       await expect(chatRowIn(looseChatsOf(page), 'Standup')).toBeVisible()
     })
 
-    await test.step('archives a chat of a project and keeps the project', async () => {
-      await archiveChat(page, 'Invoice bug')
+    await test.step('archives a chat of a project with Enter, the confirmation opening on Archive, and keeps the project', async () => {
+      await chatAction(page, 'Invoice bug', 'Archive chat')
+      await expect(dialogOf(page, 'Archive chat').getByRole('button', { name: 'Archive' })).toBeFocused()
+      await page.keyboard.press('Enter')
       await expect(sidebarOf(page).getByRole('link', { name: 'Invoice bug' })).toHaveCount(0)
       await expect(projectGroupOf(page, 'Billing')).toBeVisible()
     })

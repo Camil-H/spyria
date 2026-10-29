@@ -81,16 +81,33 @@ test('a recorded task stays done after its condition goes back', () => {
   })
 })
 
-test('done wins over skipped, and a skipped task no longer counts as next', () => {
+test('a skipped task is no longer listed, even once done', () => {
   const states = statesOf(
-    { ...nothingDone, hasAiKey: true },
+    { ...nothingDone, hasAiKey: true, hasGitHubApp: true },
     recordsOf([], ['add-ai-key', 'add-profile-picture']),
     member,
   )
-  expect(states).toEqual({ 'add-ai-key': 'done', 'add-profile-picture': 'skipped' })
+  expect(states).toEqual({ 'link-github-account': 'open' })
 })
 
-test('the next task is the first open one, skipping blocked and settled tasks', () => {
+test('skipping the domain verification keeps invites blocked, and skipping them too clears the workspace tasks', () => {
+  const allButDomainDone = { ...nothingDone, hasGitHubApp: true, hasClaimedRuntimeHost: true }
+  const workspaceStatesOf = (skipped: OnboardingTask[]) =>
+    taskViewsOf(allButDomainDone, recordsOf([], skipped), admin)
+      .filter(({ scope }) => scope === 'workspace')
+      .map(({ task, state }) => [task, state])
+  expect(workspaceStatesOf(['verify-domain'])).toEqual([
+    ['connect-github-app', 'done'],
+    ['connect-runtime', 'done'],
+    ['invite-members', 'blocked'],
+  ])
+  expect(workspaceStatesOf(['verify-domain', 'invite-members'])).toEqual([
+    ['connect-github-app', 'done'],
+    ['connect-runtime', 'done'],
+  ])
+})
+
+test('the next task is the first open one, past blocked, done and skipped tasks', () => {
   const views = taskViewsOf(
     { ...nothingDone, hasGitHubApp: true },
     recordsOf([], ['verify-domain', 'connect-runtime']),

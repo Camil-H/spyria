@@ -55,7 +55,7 @@ In a channel, the actions of a top-level message offer **Reply in thread**. Repl
 
 ## Keyboard shortcuts
 
-Single keys move around the workspace. They do nothing while typing in a field or while a dialog or menu is open, and **?** lists the ones available on the current page. A button's tooltip shows its shortcut after its name, for example "Collapse sidebar L" or "New chat C", as the side panel's tabs show "Files R then 1".
+Single keys move around the workspace. They do nothing while typing in a field or while a dialog or menu is open (Escape leaves the composer), and **?** lists the ones available on the current page. A button's tooltip shows its shortcut after its name, for example "Collapse sidebar L" or "New chat C", as the side panel's tabs show "Files R then 1".
 
 | Key | Action |
 |---|---|
@@ -66,6 +66,7 @@ Single keys move around the workspace. They do nothing while typing in a field o
 | **C** | Create a chat |
 | **P** | Create a project |
 | **S** | Workspace settings (for members who can open them) |
+| **Esc** | Back to Workspace settings from one of its pages |
 | **I** | Profile |
 | **/** | Search the workspace |
 | **F** | Find in this chat |
