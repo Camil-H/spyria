@@ -32,7 +32,7 @@ test('sendMessage in a channel appends a posted event and the projection at the 
     seq: 4,
     type: 'message.posted',
     actor: alice,
-    payload: { kind: 'member', body: 'Hello', detail: null, replyToId: null },
+    payload: { kind: 'member', body: 'Hello', replyToId: null },
   })
   expect(await jobsOf('message-sent')).toEqual([])
 })
