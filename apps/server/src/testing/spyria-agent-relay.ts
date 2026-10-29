@@ -32,6 +32,7 @@ export type ContainerAgent = {
   stopped?(container: FakeContainer): void
 }
 export type ModelCall = (request: {
+  method?: string
   path?: string
   headers?: Record<string, string>
   body?: string
@@ -67,6 +68,7 @@ const serveGateway = (modelCall: () => ModelCall) =>
         start: (controller) =>
           void request.text().then((body) =>
             modelCall()({
+              method: request.method,
               path: `${pathname}${search}`,
               headers: Object.fromEntries(request.headers),
               body,

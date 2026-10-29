@@ -111,6 +111,18 @@ test.describe('Shared tools', () => {
     await bobPage.context().close()
   })
 
+  test('As a member who can manage MCP tools, I register CRM while a chat’s agent is running, and its next prompt uses CRM without a restart', {
+    tag: ['@spec-38'],
+  }, async ({ page, workerStack, agentScript }) => {
+    await agentScript(research, { text: 'Ready.' })
+    await openChat(page, 'Research')
+    await sendMessage(page, 'Get ready')
+    await expect(workingIndicatorOf(page)).toHaveCount(0)
+    const gatewayName = await registerCrm(page, workerStack)
+    const lookup = toolScriptOf(gatewayName, 'lookup', 'Looked it up.')
+    await expect(await promptIn(page, agentScript, lookup, 'Look it up')).toContainText('ran lookup')
+  })
+
   test('As a member who can manage MCP tools, I restrict Bob to lookup and his update is refused, also after he removes his LLM key and adds it again', {
     tag: ['@spec-38'],
   }, async ({ page, browser, workerStack, agentScript }) => {

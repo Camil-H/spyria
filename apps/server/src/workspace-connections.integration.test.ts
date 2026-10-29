@@ -111,6 +111,45 @@ test('an admin registers a shared server with a secret header: Spyria lists its 
   })
 })
 
+test('a running agent’s MCP stream hears that its tool list changed when a connection is added, restricted or removed, and its next listing has the change', async () => {
+  const host = await fakeHost('Tool list changes host')
+  const { token } = await runtimeTurn(host, alice)
+  const streamed: string[] = []
+  const opened = Promise.withResolvers<number | undefined>()
+  const closing = new AbortController()
+  const stream = host.modelCall({
+    method: 'GET',
+    path: '/mcp',
+    headers: { authorization: `Bearer ${token}`, accept: 'text/event-stream' },
+    onHead: opened.resolve,
+    onChunk: (data) => streamed.push(data),
+    signal: closing.signal,
+  })
+  expect(await opened.promise).toBe(200)
+  const changeCount = () => streamed.filter((data) => data.includes('"notifications/tools/list_changed"')).length
+  const listedNames = async () =>
+    ((await mcpCall(host, token, rpcOf('tools/list'))).result.tools as { name: string }[]).map(({ name }) => name)
+
+  const { connectionId } = await register('Orders')
+  const gatewayName = (await connectionRow(connectionId))?.gatewayName ?? ''
+  await waitFor(() => changeCount() === 1)
+  expect(await listedNames()).toContain(`${gatewayName}-update`)
+
+  const ordersPath = (action: string) => `${connectionsPath}/${connectionId}/${action}`
+  expect(
+    (await asMember(alice, 'POST', ordersPath('restrict'), { memberId: alice, allowedTools: ['lookup'] })).status,
+  ).toBe(200)
+  await waitFor(() => changeCount() === 2)
+  expect(await listedNames()).toContain(`${gatewayName}-lookup`)
+  expect(await listedNames()).not.toContain(`${gatewayName}-update`)
+
+  expect((await asMember(alice, 'POST', ordersPath('remove'))).status).toBe(200)
+  await waitFor(() => changeCount() === 3)
+  expect((await listedNames()).filter((name) => name.startsWith(`${gatewayName}-`))).toEqual([])
+  closing.abort()
+  await stream
+})
+
 test('a server that lists no tools is refused and left out of the gateway', async () => {
   const before = await gatewayClientNames()
   const answer = await asMember(alice, 'POST', connectionsPath, {

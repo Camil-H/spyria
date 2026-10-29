@@ -27,6 +27,7 @@ import type { ConnectedHost } from '@spyria/runtime/server'
 import { createBudgetGuard } from '@spyria/usage/server'
 import type { AgentBridge } from './agent-bridge/bridge.ts'
 import { traceHeadersOf, withSpan } from './telemetry.ts'
+import { watchToolLists } from './tool-list-changes.ts'
 
 export type RelayFrame = { sid?: unknown; method?: unknown; path?: unknown; headers?: unknown; body?: unknown }
 type Send = (frame: object) => void
@@ -48,6 +49,8 @@ const toolHeaders = [...forwardedHeaders, 'mcp-session-id', 'mcp-protocol-versio
 const answeredHeaders = ['content-type', 'x-request-id', 'mcp-session-id']
 const headTimeoutMilliseconds = 300_000
 const readOnlyHintMilliseconds = 10_000
+const toolStreamHeartbeatMilliseconds = 15_000
+const toolListChanged = { jsonrpc: '2.0', method: 'notifications/tools/list_changed' }
 const unreachable = { error: { message: 'The model gateway is unreachable', type: 'gateway_unavailable' } }
 const refusalOf = (message: string) => ({ error: { message, type: 'spyria_refused' } })
 const routerPath = '/mcp/router'
@@ -194,6 +197,19 @@ export const createModelCallRelay = ({
       if (!listed) return answerRpc(id, { result: { tools: spyriaTools } }, sessionHeaders)
       answer(200, result ? { ...listed, result } : listed, sessionHeaders)
     }
+    const answerToolListChanges = async () => {
+      const event = (data: string) => send({ type: 'gw_chunk', sid, data })
+      send({ type: 'gw_head', sid, status: 200, headers: { 'content-type': 'text/event-stream' } })
+      const stopWatching = watchToolLists(host.workspaceId, () =>
+        event(`event: message\ndata: ${JSON.stringify(toolListChanged)}\n\n`),
+      )
+      const heartbeat = setInterval(() => event(': ping\n\n'), toolStreamHeartbeatMilliseconds)
+      await new Promise((closed) =>
+        signal.aborted ? closed(undefined) : signal.addEventListener('abort', closed, { once: true }),
+      )
+      stopWatching()
+      clearInterval(heartbeat)
+    }
     const path = relayPathOf(String(frame.path ?? ''))
     const method = String(frame.method ?? 'POST')
     const isToolPath = path === '/mcp' || path.startsWith('/mcp?')
@@ -319,6 +335,7 @@ export const createModelCallRelay = ({
     if (isToolPath) {
       const turn = token ? await handlers.toolCallTurn(host, token) : undefined
       if (!turn) return answer(401, refusalOf('This runtime has no chat owner'))
+      if (method === 'GET') return answerToolListChanges()
       const rpc = jsonOf(body) as RouterCall | undefined
       const isToolCall = rpc?.method === 'tools/call'
       const toolName = String(rpc?.params?.name ?? '')
