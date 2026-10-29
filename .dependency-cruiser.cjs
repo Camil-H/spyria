@@ -185,7 +185,9 @@ module.exports = {
   ],
   options: {
     tsConfig: { fileName: 'tsconfig.base.json' },
-    exclude: { path: '^(apps|packages)/[^/]+/(node_modules|dist|test-results|playwright-report)/' },
+    exclude: {
+      path: ['^(apps|packages)/[^/]+/(node_modules|dist|test-results|playwright-report)/', '/__boundary-probes__/'],
+    },
     doNotFollow: { path: ['node_modules', zeroConfig] },
     enhancedResolveOptions: { exportsFields: ['exports'], conditionNames: ['import', 'default'] },
   },

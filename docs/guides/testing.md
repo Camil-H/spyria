@@ -21,7 +21,7 @@ bun run check:all          # everything below in order, failing fast; never touc
 bun run check:all --verify # does the last check:all match the current tree, and did it pass?
 bun run typecheck
 bun run lint               # biome; `bunx biome check --write .` fixes formatting and import order
-bun run check:boundaries   # dependency-cruiser layer and context rules
+bun run check:boundaries   # dependency-cruiser layer and context rules, and probes that prove they still read the sources
 bun run check:locks        # the host and Pi lockfiles agree with their manifests and the root lock
 bun run test               # unit tests
 bun run test:integration   # integration tests
@@ -36,7 +36,7 @@ bun run load:websockets    # server memory under many agent-stream sockets; not 
 
 `check:all` runs, in order: `lint`, `typecheck`, `check:boundaries`, `check:locks`, `test`, `check:bundle`, `test:integration`, `test:e2e`. `check:docker` runs `agent:build` and `test:docker:integration`. Both stop at the first failing step and end with the 20 slowest tests of each suite.
 
-`check:bundle` builds the app and fails when the main chunk is over 250,000 bytes, when it contains code that belongs in a lazy chunk, when it holds more than one React version, or when any client asset contains server-only SQL (for example `into events` or `skip locked`).
+`check:bundle` builds the app and fails when the main chunk is over 250,000 bytes, when it contains code that belongs in a lazy chunk, when it holds more than one React version, when React, react-dom, react-router or Zero is installed more than once across the web app and the packages, or when any client asset contains server-only SQL (for example `into events` or `skip locked`).
 
 `smoke:prod` is described in [Self-hosting](./self-hosting.md).
 
