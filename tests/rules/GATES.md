@@ -58,7 +58,7 @@ Every rule of the architecture standard (`.agents/skills/architecture`) and what
 | E3 | Re-raise without re-wrapping | review |
 | E4 | Security failures propagate | unit `session-tokens.test.ts`; integration `auth` refusals, `app` "%s refuses a request without a bearer token" and `api` "%s refuses with 403 a valid token without membership" on every `/api/*` route |
 | E5 | Degradation by contract, by type | review; the `/mcp` relay answers every failed `tools/call` (gateway unreachable, 5xx, not connected, not allowed, server down) as an MCP error result with HTTP 200, never a 5xx that would disable the Agent Server's MCP client for the conversation: integration `tool-connections` "session headers pass through, gateway failures become error results instead of 5xx ..." |
-| E8 | Inputs validated once at entry | zod mutator schemas in `entrypoints/mutators.ts`; integration `workspace-mutators` "refuses invalid arguments", `profile-mutators` "refuses blank, missing or malformed fields" |
+| E8 | Inputs validated once at entry | zod mutator schemas in `entrypoints/mutators.ts`; integration `workspace-mutators` "refuses invalid arguments", `profile-mutators` "refuses blank, missing or malformed fields"; zod schemas on every synced query that takes arguments (`packages/db/src/zero-queries.ts`), unit `zero-queries` "every synced query either takes no arguments or validates them ..." |
 | E9 | Exceptions are the error channel | review |
 | RS1 | Retry policy in the operation | review: the job worker owns job retries |
 | RS2 | Retries need idempotency | review: a job handler commits with its `done` mark (TX5b) |
