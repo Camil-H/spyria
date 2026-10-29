@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test'
+import { type Actor, actorOf, agentActor, chatId, memberId, systemActor } from '@spyria/kernel'
 import { messagesFromEvents, type StoredEvent } from './message-events.ts'
 
 const minute = (value: number) => new Date(Date.UTC(2026, 9, 1, 9, value))
@@ -14,7 +15,7 @@ const eventAt = (
   id,
   seq,
   type,
-  actor,
+  actor: actorOf({ kind: null, id: actor, onBehalfOf: null }),
   payload,
   createdAt: minute(seq),
 })
@@ -146,4 +147,20 @@ test('a posted reply keeps the message it quotes, also in a thread', () => {
   ])
   expect(reply).toMatchObject({ id: 'reply', quotedMessageId: 'hello', threadRootId: null })
   expect(threadReply).toMatchObject({ quotedMessageId: 'reply', threadRootId: 'hello' })
+})
+
+test('a card posted by an agent keeps the member it acts for as author, and a notice written for a member has none', () => {
+  const byActor = (actor: Actor, payload: object) => ({
+    ...eventAt(1, 'message.posted', null, payload, `by-${actor.kind}`),
+    actor,
+  })
+  expect(
+    messagesFromEvents([
+      byActor(agentActor(chatId('chat'), memberId('alice')), { ...posted, kind: 'step', body: 'pull_request' }),
+      byActor(systemActor('agent.turn', memberId('alice')), { ...posted, kind: 'notice', body: 'Stopped' }),
+    ]).map(({ kind, authorId }) => ({ kind, authorId })),
+  ).toEqual([
+    { kind: 'step', authorId: 'alice' },
+    { kind: 'notice', authorId: null },
+  ])
 })

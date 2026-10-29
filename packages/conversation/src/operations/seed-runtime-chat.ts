@@ -1,4 +1,4 @@
-import { type ChatId, type MemberId, messageId as toMessageId, type WorkspaceId } from '@spyria/kernel'
+import { type ChatId, type MemberId, memberActor, messageId as toMessageId, type WorkspaceId } from '@spyria/kernel'
 import type { MemberDirectory } from '../contracts/repositories.ts'
 import type { RuntimeChatStarter } from '../contracts/runtime-chat-starter.ts'
 import type { UnitOfWork } from '../contracts/transactor.ts'
@@ -35,7 +35,7 @@ export const seedRuntimeChat = async (
   const seedId = toMessageId(id)
   await messages.record({
     type: 'message.posted',
-    actorId: memberId,
+    actor: memberActor(memberId),
     message: newMessage({
       id: seedId,
       workspaceId,

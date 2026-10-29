@@ -26,7 +26,7 @@ import type { UnitOfWork } from '../contracts/transactor.ts'
 import { agentNotices, hasOutlivedWait, notReadyNoticeOf } from '../domain/agent-events.ts'
 import { noReplyAuthorOf } from '../domain/git-actions.ts'
 import type { Message } from '../domain/message.ts'
-import { noLlmKeyNoticeOf } from '../domain/model-call-failures.ts'
+import { modelNotAllowedNoticeOf, noLlmKeyNoticeOf, publicModelNameOf } from '../domain/model-call-failures.ts'
 import { agentPromptTextOf, type QuotedMessage } from '../domain/seed-message.ts'
 import {
   piModelOf,
@@ -188,12 +188,17 @@ const keepSession = async (
   prompterId: MemberId,
 ): Promise<Prepared> => {
   const { transactor, agentClient, classifier } = dependencies
-  const { routing, reachable } = await transactor.run(async ({ routing }) => ({
-    routing: await routing.chatRouting(chat.chatId),
-    reachable: (await routing.reachableModels(prompterId)) ?? [],
-  }))
+  const { routing, reachable, isAllowed } = await transactor.run(async ({ routing }) => {
+    const chatRouting = await routing.chatRouting(chat.chatId)
+    return {
+      routing: chatRouting,
+      reachable: (await routing.reachableModels(prompterId)) ?? [],
+      isAllowed: !chatRouting.model || (await routing.allowsModel(chatRouting.model)),
+    }
+  })
   const { model, reasoningEffort, agentModel, agentReasoningEffort } = routing
   if (!model) return { conversation }
+  if (!isAllowed) return { refusal: modelNotAllowedNoticeOf(publicModelNameOf(model)) }
   if (!isPickableModel(model, reachable, classifier?.listedModels() ?? []))
     return { refusal: unreachableSessionNoticeOf(model) }
   if (agentModel === model && agentReasoningEffort === reasoningEffort) return { conversation }

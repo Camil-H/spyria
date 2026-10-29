@@ -1,4 +1,4 @@
-import type { CredentialId, MemberId, WorkspaceId } from '@spyria/kernel'
+import type { AiProviderAllowList, CredentialId, MemberId, WorkspaceId } from '@spyria/kernel'
 import type { Avatar } from '../domain/avatar.ts'
 import type { DisplayName } from '../domain/display-name.ts'
 import type { GitHubConnection } from '../domain/github-connection.ts'
@@ -18,6 +18,7 @@ export type ProfileCommands = {
   renameMember: Command<{ name: DisplayName }>
   changeAvatar: Command<{ avatar: Avatar | null }>
   removeLlmCredential: Command<{ credentialId: CredentialId }>
+  setAiProviders: Command<{ allowList: AiProviderAllowList | null }>
   connectTool: Command<{ tool: string }>
   disconnectTool: Command<{ tool: string }>
   availableTools: (input: { workspaceId: WorkspaceId }) => Promise<string[]>

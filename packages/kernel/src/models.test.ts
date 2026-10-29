@@ -1,9 +1,14 @@
 import { expect, test } from 'bun:test'
 import {
+  aiProviderAllowListFrom,
+  aiProviderOf,
+  allowedModelsOf,
   chatModelsOf,
   classifierModelOf,
   gatewayKeyOf,
   gatewayKeyRefOf,
+  isAllowedModel,
+  isAllowedProvider,
   isPickableModel,
   type ListedModel,
   listedChatModelIdsOf,
@@ -12,6 +17,7 @@ import {
   providersOfGatewayRefs,
   reachableModelsOf,
   rereadDollarsOf,
+  soleRequestedModelOf,
   withPricesOf,
 } from './models.ts'
 
@@ -136,4 +142,48 @@ test('a gateway key reference round-trips and refuses anything else', () => {
   expect(gatewayKeyOf('gateway:credential-alice-anthropic')).toBeUndefined()
   expect(gatewayKeyOf('gateway:mistral/')).toBeUndefined()
   expect(gatewayKeyOf('placeholder:abc')).toBeUndefined()
+})
+
+test('a provider is found by its id, its name or an alias, and nothing else', () => {
+  expect(aiProviderOf(' Google ')?.id).toBe('gemini')
+  expect(aiProviderOf('google gemini')?.id).toBe('gemini')
+  expect(aiProviderOf('Z.ai')?.id).toBe('zai')
+  expect(aiProviderOf('openai')?.name).toBe('OpenAI')
+  expect(aiProviderOf('fake')).toBeUndefined()
+})
+
+test('without an allow-list every provider is allowed; with one, only the models of the providers it names', () => {
+  expect(isAllowedProvider(null, 'fake')).toBe(true)
+  expect(isAllowedModel(null, 'fake/fake-medium')).toBe(true)
+  const allowList = ['anthropic', 'openai']
+  expect(isAllowedProvider(allowList, 'openai')).toBe(true)
+  expect(isAllowedProvider(allowList, 'mistral')).toBe(false)
+  expect(isAllowedModel(allowList, 'anthropic/claude-haiku-5-5')).toBe(true)
+  expect(isAllowedModel(allowList, 'openai/gpt-5-mini')).toBe(true)
+  expect(isAllowedModel(allowList, 'mistral/mistral-large-latest')).toBe(false)
+  expect(allowedModelsOf(allowList, [{ id: 'openai/gpt-5' }, { id: 'mistral/x' }, { id: 'anthropic/x' }])).toEqual([
+    { id: 'openai/gpt-5' },
+    { id: 'anthropic/x' },
+  ])
+})
+
+test('only a request naming one plain model is checked against the allow-list', () => {
+  expect(soleRequestedModelOf({ model: 'openai/gpt-5', messages: [] })).toBe('openai/gpt-5')
+  expect(soleRequestedModelOf({ model: 'openai/gpt-5', Model: 'mistral/x' })).toBeUndefined()
+  expect(soleRequestedModelOf({ model: 'openai/gpt-5', fallbacks: ['mistral/x'] })).toBeUndefined()
+  expect(soleRequestedModelOf({ MODEL: 'openai/gpt-5' })).toBeUndefined()
+  expect(soleRequestedModelOf({ model: 42 })).toBeUndefined()
+  expect(soleRequestedModelOf({ messages: [] })).toBeUndefined()
+  expect(soleRequestedModelOf(undefined)).toBeUndefined()
+})
+
+test('a stored allow-list reads as provider ids, the providers of an earlier per-model list included, and anything else as none', () => {
+  expect(aiProviderAllowListFrom(['openai', 3, 'mistral'])).toEqual(['openai', 'mistral'])
+  expect(aiProviderAllowListFrom({ anthropic: 'all', mistral: ['mistral/codestral-latest'] })).toEqual([
+    'anthropic',
+    'mistral',
+  ])
+  expect(aiProviderAllowListFrom(null)).toBeNull()
+  expect(aiProviderAllowListFrom(undefined)).toBeNull()
+  expect(aiProviderAllowListFrom('openai')).toBeNull()
 })

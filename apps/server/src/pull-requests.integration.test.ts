@@ -284,6 +284,23 @@ test('the agent pushes and opens a pull request with its tools on the owner’s 
       status: 'succeeded',
     },
   ])
+  expect([
+    ...(await database.$client`select type, actor_kind as "actorKind", actor, on_behalf_of as "onBehalfOf" from events
+      where chat_id = ${id} and (type = 'branch.pushed' or payload->'step'->>'type' = 'pull_request') order by seq`),
+  ]).toEqual([
+    { type: 'branch.pushed', actorKind: 'agent', actor: id, onBehalfOf: alice },
+    { type: 'message.posted', actorKind: 'agent', actor: id, onBehalfOf: alice },
+  ])
+  stack.setFakeLlmScript({
+    steps: [{ tool: 'update_pull_request', arguments: { title: 'Agent totals, renamed' } }],
+    text: 'Renamed.',
+  })
+  const renamed = await promptAndWait(id, 'Rename the pull request')
+  expect(renamed.find((reply) => reply.step?.type === 'tool')?.step).toMatchObject({
+    name: 'update_pull_request',
+    result: expect.stringMatching(/^Updated pull request #/),
+  })
+  expect((await cardOf(id))?.step).toMatchObject({ title: 'Agent totals, renamed', state: 'open' })
 
   const guest = await runtimeTurn(host, bob)
   for (const tool of ['push_branch', 'open_pull_request']) {

@@ -1,4 +1,4 @@
-import { type ChatId, can, type MessageId, messageId } from '@spyria/kernel'
+import { type ChatId, can, type MessageId, messageId, systemActor } from '@spyria/kernel'
 import type {
   AgentClient,
   AgentEventSockets,
@@ -14,6 +14,7 @@ import { noLlmKeyNoticeOf, noLongerPromptsNoticeOf } from '../domain/model-call-
 import { cancelToolApprovalsOf } from './pending-approvals.ts'
 import { forgetDelegationsOf } from './running-delegations.ts'
 
+const agentTurnJob = 'agent.turn'
 type NoticeOf = (hasReply: boolean) => string | undefined
 export type AgentDependencies = {
   transactor: ConversationTransactor
@@ -31,7 +32,7 @@ export type AgentDependencies = {
 export const appendNotice = ({ messages }: UnitOfWork, prompt: Message, text: string) =>
   messages.record({
     type: 'message.replied',
-    actorId: null,
+    actor: systemActor(agentTurnJob, prompt.authorId),
     message: newMessage({
       id: messageId(crypto.randomUUID()),
       workspaceId: prompt.workspaceId,
