@@ -5,6 +5,7 @@ import { executionStatusOf, isStoredAgentEvent, streamedTextOf, toolCallIdOf } f
 import type { StepDelegation } from '../domain/agent-steps.ts'
 import {
   askedChoiceOf,
+  cancelledTaskOf,
   defaultResumeAfterMilliseconds,
   delegationChoiceOf,
   delegationStateOf,
@@ -12,6 +13,7 @@ import {
   stillRunningOf,
   subagentFailureOf,
   subagentStopped,
+  taskProgressOf,
   unknownTaskOf,
 } from '../domain/delegation.ts'
 import { sessionQuestions } from '../domain/session-routing.ts'
@@ -150,6 +152,8 @@ const runDelegation = async (
     await transactor.run(({ delegations }) =>
       delegations.update(delegation.id, { conversationId: conversation.conversationId }),
     )
+    running.conversation = conversation
+    if (running.isCancelled) return { text: subagentStopped, isError: true }
     const { status: endStatus, answer } = await runSubConversation(
       dependencies,
       input.chat,
@@ -179,6 +183,34 @@ export const awaitTask = async (
   if (running?.chatId !== chat.chatId || running.promptId !== turn.promptId)
     return { text: unknownTaskOf(id), isError: true }
   return answerWithin(dependencies, id, running)
+}
+
+const cancelDelegation = async (
+  { transactor, agentClient }: AgentDependencies,
+  id: string,
+  running: RunningDelegation,
+) => {
+  running.isCancelled = true
+  runningDelegations.delete(id)
+  await transactor.run(({ delegations }) => delegations.update(id, { status: 'stopped' }))
+  if (running.conversation) await agentClient.interrupt(running.conversation).catch(() => undefined)
+}
+
+export const checkTask = async (
+  dependencies: AgentDependencies,
+  { chat, turn, taskId, cancel }: { chat: AgentChat; turn: ModelCallTurn; taskId: unknown; cancel?: unknown },
+): Promise<DelegationResult> => {
+  const id = String(taskId ?? '')
+  const running = runningDelegations.get(id)
+  if (running?.chatId !== chat.chatId || running.promptId !== turn.promptId)
+    return { text: unknownTaskOf(id), isError: true }
+  if (running.isSettled) return answerWithin(dependencies, id, running)
+  const steps = (await dependencies.transactor.run(({ messages }) => messages.replies(turn.promptId))).flatMap(
+    ({ step }) => (step?.delegation?.id === id ? [step] : []),
+  )
+  if (cancel !== true) return { text: taskProgressOf(id, steps), isError: false }
+  await cancelDelegation(dependencies, id, running)
+  return { text: cancelledTaskOf(id, steps), isError: false }
 }
 
 export const delegateTask = async (dependencies: AgentDependencies, input: Input): Promise<DelegationResult> => {
@@ -220,6 +252,8 @@ export const delegateTask = async (dependencies: AgentDependencies, input: Input
     { ...endpoint, conversationId: endpoint.conversationId },
     choice,
     { token, delegation, running },
-  )
+  ).finally(() => {
+    running.isSettled = true
+  })
   return answerWithin(dependencies, id, running)
 }

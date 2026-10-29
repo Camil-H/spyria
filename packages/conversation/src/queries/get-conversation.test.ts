@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { acme, alice, bob, createMockSnapshot, lee, type Snapshot } from '@spyria/db'
 import { chatId, messageId, runtimeHostId, runtimeId } from '@spyria/kernel'
-import { stillRunningOf } from '../domain/delegation.ts'
+import { cancelledTaskOf, stillRunningOf, taskProgressOf } from '../domain/delegation.ts'
 import type { RunsOn } from '../domain/session-routing.ts'
 import { durationLabelOf, getConversation } from './get-conversation.ts'
 
@@ -365,6 +365,29 @@ test('an awaited delegation stays one group with await_task’s answer, and the 
   ])
 })
 
+const checkAction = (id: string, result: string | null, cancel?: true) => ({
+  type: 'tool' as const,
+  name: 'check_task',
+  arguments: JSON.stringify({ taskId: id, ...(cancel && { cancel }) }),
+  result,
+})
+
+test('check_task folds into its delegation: a progress report leaves it running, a cancel reads stopped, and a finished answer is its result', () => {
+  const delegated = [
+    replyRow(2, 'step', { step: delegateAction('List the files', stillRunningOf('delegation-1')) }),
+    replyRow(3, 'step', { step: delegatedEdit('delegation-1') }),
+  ]
+  const checked = (step: ReturnType<typeof checkAction>, isRunning = false) =>
+    conversationWith([...delegated, replyRow(4, 'step', { step })], isRunning)
+  const progress = checked(checkAction('delegation-1', taskProgressOf('delegation-1', [])), true)
+  expect(itemSummaryOf(progress)).toEqual(['member', 'step tool'])
+  expect(delegationStatesOf(progress)).toEqual([{ id: 'message-2', status: 'running', result: null, steps: 1 }])
+  const cancelled = checked(checkAction('delegation-1', cancelledTaskOf('delegation-1', []), true), true)
+  expect(delegationStatesOf(cancelled)).toEqual([{ id: 'message-2', status: 'stopped', result: null, steps: 1 }])
+  expect(delegationStatesOf(checked(checkAction('delegation-1', 'Two files.')))).toEqual([
+    { id: 'message-2', status: 'finished', result: 'Two files.', steps: 1 },
+  ])
+})
 test('a delegation still running reads running, without its still-running answer as a result; an error reads failed, stopped once the turn is', () => {
   const stillRunning = conversationWith(
     [

@@ -22,6 +22,8 @@ export type ModelCall = {
   provider: string
   inputTokens: number
   outputTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
   costMicros: number
   status: 'success' | 'error'
   role: string | null

@@ -34,6 +34,8 @@ On a Spyria runtime, the session's model is chosen once, at the first prompt, fr
 
 The model is chosen once per session, not per turn, because switching models discards the provider's prompt cache and makes every turn reread the whole conversation.
 
+On Spyria runtimes, the main agent asks Anthropic models to keep the conversation's prompt cache for an hour instead of five minutes, since the members of a shared chat often take longer than five minutes between prompts. Writing the hour-long cache costs more than the five-minute one, while reading it costs the same, so it pays off from the first cache hit after five minutes. Subagents keep the five-minute cache, since their task ends within one burst of calls. Each model call records the tokens it read from and wrote to the cache.
+
 When another participant prompts later, their keys must reach the session's model; otherwise the prompt is refused with "Your keys cannot reach *model*; switch the model or add a key". Prompts from different members use different keys, so they do not share a provider's prompt cache.
 
 ## The session chip: model, effort, subagents
@@ -64,7 +66,7 @@ The agent takes a screenshot of a web page with `take_screenshot`, another tool 
 
 ## Delegation and subagents
 
-On a Spyria runtime the agent has two tools for parallel work: `delegate` hands a self-contained task to a subagent that shares the runtime's files, and `await_task` waits for a task still running. A delegated task answers within 45 seconds when it can; otherwise the agent gets a task id and collects the answer later with `await_task`.
+On a Spyria runtime the agent has three tools for parallel work: `delegate` hands a self-contained task to a subagent that shares the runtime's files, `await_task` waits for a task still running, and `check_task` reads the steps a running task has taken so far, or cancels it. A delegated task answers within 45 seconds when it can; otherwise the agent gets a task id and collects the answer later with `await_task`. A cancelled task reads as stopped in the chat, like one stopped with the turn; `check_task` on a task that has finished returns its answer.
 
 The subagent's model is chosen in this order:
 
