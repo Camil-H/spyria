@@ -1,7 +1,14 @@
 import type { Transaction } from '@rocicorp/zero'
-import { isWorkspaceHostOnline, lastAdapterModelsOf, listedModelsOf, memberModelsOf } from '@spyria/db/server-writes'
+import {
+  aiProviderAllowListOf,
+  isWorkspaceHostOnline,
+  lastAdapterModelsOf,
+  listedModelsOf,
+  memberModelsOf,
+} from '@spyria/db/server-writes'
 import { chatPermissionsOf, type ZeroContext } from '@spyria/db/zero-queries'
 import {
+  allowedModelsOf,
   chatModelsOf,
   listedChatModelIdsOf,
   type Model,
@@ -25,17 +32,18 @@ export const getChatRouting = async (
   { workspaceId, userId }: ZeroContext,
   chatId: string,
 ): Promise<ChatRoutingRead> => {
-  const { reachable, adapterModels, spyriaRuntimeAvailable } = await transact(async (tx) => {
+  const { reachable, allowList, adapterModels, spyriaRuntimeAvailable } = await transact(async (tx) => {
     await requireChatPermission(chatPermissionsOf(tx, workspaceId), toChatId(chatId), userId, 'chat.read')
     return {
       reachable: chatModelsOf((await memberModelsOf(tx, workspaceId, userId)) ?? []),
+      allowList: await aiProviderAllowListOf(tx, workspaceId),
       adapterModels: await lastAdapterModelsOf(tx, workspaceId, chatId),
       spyriaRuntimeAvailable: await isWorkspaceHostOnline(tx, workspaceId),
     }
   })
   return {
     reachableModels: withPricesOf(reachable, listedModelsOf()),
-    listedModelIds: listedChatModelIdsOf(reachable, listedModelsOf()).filter(
+    listedModelIds: listedChatModelIdsOf(reachable, allowedModelsOf(allowList, listedModelsOf())).filter(
       (id) => !reachable.some((model) => model.id === id),
     ),
     modelNames: routableModelNames(),

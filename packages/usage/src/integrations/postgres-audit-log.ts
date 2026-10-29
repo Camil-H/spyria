@@ -7,7 +7,8 @@ const pageOf = (branch: string) => `(select * from (${branch}) branch
   where ($2::timestamptz is null or branch.at <= $2 and (branch.at, branch.key) < ($2, $3::text))
     and ($4::timestamptz is null or branch.at >= $4)
     and ($5::timestamptz is null or branch.at < $5)
-    and ($6::text is null or branch.actor_id = $6)
+    and ($6::text is null or branch.on_behalf_of = $6
+      or coalesce(branch.actor_kind, 'member') = 'member' and branch.actor_id = $6)
     and ($7::text[] is null or branch.kind = any($7))
   order by branch.at desc, branch.key desc limit $8)`
 
@@ -17,7 +18,8 @@ const chatNamed = (alias: string, idExpression: string) =>
   `left join chats ${alias} on ${alias}.workspace_id = $1 and ${alias}.id = ${idExpression}`
 
 const workspaceEventRecords = `
-  select event.created_at as at, 'w:' || event.id as key, event.type as kind, event.actor_id,
+  select event.created_at as at, 'w:' || event.id as key, event.type as kind,
+    event.actor_kind, event.actor_id, event.on_behalf_of,
     case
       when event.type like 'connection.%' then coalesce(event.payload->>'name', connection.name)
       when event.type like 'role.%' or event.type like 'workspace_role.%' then event.payload->>'name'
@@ -44,7 +46,7 @@ const chatEventRecords = `
   select event.created_at as at, 'c:' || event.id as key,
     case when event.type like 'member.%' then 'chat.' || event.type
       when event.type = 'chat.created' then 'chat.forked' else event.type end as kind,
-    event.actor as actor_id, chat.name as target,
+    event.actor_kind, event.actor as actor_id, event.on_behalf_of, chat.name as target,
     json_build_object('member', member.display_name, 'role', role.name,
       'visibility', event.payload->>'visibility', 'fromChat', origin.name, 'branch', event.payload->>'branch',
       'head', event.payload->>'head') as details
@@ -60,14 +62,15 @@ const chatEventRecords = `
 
 const deletedMessageRecords = `
   select deleted.deleted_at as at, 'd:' || deleted.message_id as key, 'message.deleted' as kind,
-    deleted.deleted_by as actor_id, chat.name as target,
+    'member' as actor_kind, deleted.deleted_by as actor_id, null as on_behalf_of, chat.name as target,
     json_build_object('chat', chat.name, 'text', deleted.body) as details
   from deleted_message_texts deleted
   ${chatNamed('chat', 'deleted.chat_id')}
   where deleted.workspace_id = $1`
 
 const toolCallRecords = `
-  select call.called_at as at, 't:' || call.id as key, 'tool.called' as kind, call.prompter_id as actor_id,
+  select call.called_at as at, 't:' || call.id as key, 'tool.called' as kind,
+    'agent' as actor_kind, call.chat_id as actor_id, call.prompter_id as on_behalf_of,
     coalesce(connection.name, call.server) || ' · ' || call.tool as target,
     json_build_object('chat', chat.name, 'server', coalesce(connection.name, call.server), 'tool', call.tool,
       'readOnly', call.read_only, 'decision', replace(call.decision, '_', ' '), 'decidedBy', decider.display_name,
@@ -83,11 +86,12 @@ const pullRequestRecords = `
   select change.at, change.key,
     case when change.type = 'message.posted' then 'pull_request.opened'
       else 'pull_request.' || (change.step->>'state') end as kind,
-    change.actor_id, (change.step->>'repository') || '#' || (change.step->>'number') as target,
+    change.actor_kind, change.actor_id, change.on_behalf_of, (change.step->>'repository') || '#' || (change.step->>'number') as target,
     json_build_object('chat', change.chat_name, 'title', change.step->>'title',
       'state', change.step->>'state', 'url', change.step->>'url') as details
   from (
-    select event.created_at as at, 'c:' || event.id as key, event.type, event.actor as actor_id,
+    select event.created_at as at, 'c:' || event.id as key, event.type,
+      event.actor_kind, event.actor as actor_id, event.on_behalf_of,
       chat.name as chat_name, event.payload->'step' as step,
       lag(event.payload->'step'->>'state') over (
         partition by event.chat_id, coalesce(event.payload->>'messageId', event.id) order by event.seq
@@ -106,9 +110,11 @@ export const workspacePermissionsStatement = `select granted.permission from mem
 
 const auditRecordsStatement = `
   select to_char(page.at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as at, page.key, page.kind,
-    page.actor_id as "actorId", actor.display_name as "actorName", page.target, page.details
+    page.actor_kind as "actorKind", page.actor_id as "actorId", actor.display_name as "actorName",
+    behalf.display_name as "onBehalfOfName", page.target, page.details
   from (${[workspaceEventRecords, chatEventRecords, deletedMessageRecords, toolCallRecords, pullRequestRecords].map(pageOf).join(' union all ')}) page
-  ${memberNamed('actor', 'page.actor_id')}
+  ${memberNamed('actor', "case when coalesce(page.actor_kind, 'member') = 'member' then page.actor_id end")}
+  ${memberNamed('behalf', 'page.on_behalf_of')}
   order by page.at desc, page.key desc limit $8`
 
 export const createPostgresAuditTransactor = (transact: Transact, workspaceId: WorkspaceId): AuditTransactor => ({
@@ -146,8 +152,8 @@ export const createPostgresAuditTransactor = (transact: Transact, workspaceId: W
             [days],
           )
           await query(
-            `insert into workspace_events (workspace_id, id, type, actor_id, payload, created_at)
-             values ($1, $2, 'audit.retention_changed', $3, $4::jsonb, $5::timestamptz)`,
+            `insert into workspace_events (workspace_id, id, type, actor_kind, actor_id, payload, created_at)
+             values ($1, $2, 'audit.retention_changed', 'member', $3, $4::jsonb, $5::timestamptz)`,
             [crypto.randomUUID(), actorId, JSON.stringify({ retentionDays: days }), new Date().toISOString()],
           )
         },

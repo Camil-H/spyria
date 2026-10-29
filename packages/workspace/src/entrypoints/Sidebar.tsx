@@ -2,9 +2,9 @@ import { Provider } from '@radix-ui/react-tooltip'
 import { useQuery } from '@spyria/db/react'
 import type { WorkspaceId } from '@spyria/kernel'
 import { useSession } from '@spyria/session'
-import { ErrorMessage, IconButton, useGuardedAction, useShortcut } from '@spyria/ui'
+import { ErrorMessage, IconButton, ResizeHandle, useGuardedAction, useShortcut } from '@spyria/ui'
 import { CircleUser, FolderPlus, Hash, PanelLeftClose, PanelLeftOpen, Search, Settings, SquarePen } from 'lucide-react'
-import { lazy, type ReactNode, Suspense, useState } from 'react'
+import { type CSSProperties, lazy, type ReactNode, Suspense, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router'
 import { getSidebar } from '../queries/get-sidebar.ts'
 import { listJoinableChannels } from '../queries/list-joinable-channels.ts'
@@ -14,6 +14,7 @@ import { NewChatDialog } from './NewChatDialog.tsx'
 import { ProjectGroup } from './ProjectGroup.tsx'
 import { useWorkspaceCommands } from './providers.tsx'
 import { navLinkClass } from './ui.ts'
+import { maximumSidebarWidth, minimumSidebarWidth, sidebarWidthVariable, useSidebarWidth } from './useSidebarWidth.ts'
 import { useWorkspacePermissions } from './useWorkspacePermissions.ts'
 import { WorkspaceSwitcher } from './WorkspaceSwitcher.tsx'
 
@@ -72,6 +73,7 @@ export const Sidebar = ({
   const [openDialog, setOpenDialog] = useState<'project' | 'chat' | 'channels' | 'search' | null>(null)
   const closeDialog = () => setOpenDialog(null)
   const { isCollapsed, toggleCollapsed } = useCollapsed()
+  const { width, resizeTo } = useSidebarWidth()
   const toggleLabel = isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'
   useShortcut('l', toggleLabel, toggleCollapsed)
   useShortcut('/', 'Search the workspace', () => setOpenDialog('search'), searchDialog !== undefined)
@@ -117,7 +119,8 @@ export const Sidebar = ({
     <Provider delayDuration={300}>
       <nav
         aria-label="Sidebar"
-        className="flex h-full w-64 shrink-0 flex-col gap-3 border-r border-line bg-sidebar p-3"
+        style={{ [sidebarWidthVariable]: `${width}px` } as CSSProperties}
+        className="relative flex h-full w-(--sidebar-width) shrink-0 flex-col gap-3 border-r border-line bg-sidebar p-3"
       >
         <div className={`${headerRowClass} justify-between gap-2`}>
           <IconButton label={toggleLabel} shortcut="l" icon={PanelLeftClose} onClick={toggleCollapsed} />
@@ -198,6 +201,15 @@ export const Sidebar = ({
             <ShortcutHint shortcut="I" />
           </NavLink>
         </div>
+        <ResizeHandle
+          label="Resize sidebar"
+          edge="right"
+          width={width}
+          minimumWidth={minimumSidebarWidth}
+          maximumWidth={maximumSidebarWidth}
+          widthVariable={sidebarWidthVariable}
+          resizeTo={resizeTo}
+        />
       </nav>
     </Provider>
   )

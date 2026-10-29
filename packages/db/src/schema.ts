@@ -1,4 +1,5 @@
 import {
+  type AiProviderAllowList,
   type ChatId,
   type ChatPermission,
   type ChatVisibility,
@@ -14,7 +15,12 @@ import {
   type WorkspacePermission,
 } from '@spyria/kernel'
 
-type WorkspaceRow = { id: WorkspaceId; name: string; localSessions: boolean }
+type WorkspaceRow = {
+  id: WorkspaceId
+  name: string
+  localSessions: boolean
+  aiProviderAllowList: AiProviderAllowList | null
+}
 type MembershipRow = {
   memberId: MemberId
   workspaceId: WorkspaceId

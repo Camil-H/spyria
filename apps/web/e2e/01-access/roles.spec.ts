@@ -194,7 +194,7 @@ test.describe('Roles', () => {
       workspaceRolesOf(page).getByRole('list', { name: 'Workspace roles' }).getByRole('listitem', { name: /.+/ }),
     ).toHaveCount(2)
     await expect(workspaceRoleItemOf(page, 'Admin')).toContainText(
-      /^Admin\s*Invite members\s*Change roles and remove members\s*Manage roles\s*Set up SSO\s*Connect GitHub\s*Manage shared MCP tools\s*Manage runtime hosts and local sessions\s*View costs\s*Manage budgets\s*View the audit log$/,
+      /^Admin\s*Invite members\s*Change roles and remove members\s*Manage roles\s*Set up SSO\s*Connect GitHub\s*Manage shared MCP tools\s*Manage AI providers\s*Manage runtime hosts and local sessions\s*View costs\s*Manage budgets\s*View the audit log$/,
     )
     await expect(workspaceRoleItemOf(page, 'Member')).toHaveText(/^Member\s*No permissions$/)
     for (const builtInName of ['Admin', 'Member'])

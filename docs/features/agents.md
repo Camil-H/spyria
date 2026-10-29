@@ -26,7 +26,7 @@ Subscription harnesses run only on the member's own machine because a subscripti
 
 ## Models and routing
 
-On a Spyria runtime, the session's model is chosen once, at the first prompt, from the models the prompting member's keys can reach. A model is reachable when its provider has one of the member's keys in the gateway. The catalog in `packages/kernel/src/models.ts` assigns each model a tier (large, medium or small) and covers Anthropic, OpenAI, Mistral, Google Gemini, xAI, DeepSeek, Z.ai and OpenRouter. Prices and context windows come from the gateway's model list, refreshed every hour.
+On a Spyria runtime, the session's model is chosen once, at the first prompt, from the models the prompting member's keys can reach. A model is reachable when its provider has one of the member's keys in the gateway. The catalog in `packages/kernel/src/models.ts` assigns each model a tier (large, medium or small) and covers Anthropic, OpenAI, Mistral, Google Gemini, xAI, DeepSeek, Z.ai and OpenRouter. When the workspace has an AI providers allow-list (see [Administration](admin.md#ai-providers)), only the models of the providers it allows are reachable. Prices and context windows come from the gateway's model list, refreshed every hour.
 
 1. A classifier reads the first message and answers two questions: the tier the task needs, and the reasoning effort (high, medium or low). It runs on the member's cheapest reachable model (a dedicated decision model when the member's keys reach one), with a 3-second timeout, and is billed to the prompter like any model call. On a new session it runs while the runtime starts, so it rarely delays the first reply.
 2. Only a confident answer (at least 0.8) of `large` or `small` moves away from the default. The default is the prompter's best reachable **medium** model; when a tier has no reachable model, the nearest tier is used.
@@ -98,7 +98,7 @@ Admins can set a monthly AI budget per member and a monthly total for the worksp
 
 - **Profile > My usage** shows your **Monthly AI budget** with a progress bar ("$0.70 of $1.00 (70%)" or "No monthly budget") and your own spend by chat and model, with its breakdown into factors, each with a line chart over time, for all your usage or one chat or model. You never see other members' spend there.
 - At 80%, a notice above the composer of agent chats says "You have used 80% of your monthly AI budget".
-- At 100%, your model calls are refused, including your subagent and routing calls: the chat shows "*Name*'s monthly AI budget is used up; an admin can raise it in Workspace settings" (or the workspace wording when the workspace total is reached). A raised or removed budget applies to the next call.
+- At 100%, your model calls are refused, including your subagent and routing calls: the chat shows "*Name*'s monthly AI budget is used up; a member with the Manage budgets permission can raise it in Workspace settings" (or the workspace wording when the workspace total is reached). A raised or removed budget applies to the next call.
 
 Budgets are checked against recorded spend, which is synced from the gateway every few seconds, so a member can go slightly over the limit (typically cents). Sessions on a member's own machine use their subscription and are neither metered nor stopped by budgets.
 

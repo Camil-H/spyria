@@ -33,8 +33,10 @@ import {
   chatId,
   DomainError,
   defaultDeployment,
+  integrationActor,
   log,
   MissingChatPermission,
+  memberActor,
   messageId,
   type RuntimeHostId,
   workspaceId as toWorkspaceId,
@@ -408,7 +410,7 @@ export const createApp = ({
         (card, step) =>
           agentBridge.forDatabase(webhookDatabase).recordPullRequest({
             chat: { workspaceId: toWorkspaceId(card.workspaceId), chatId: chatId(card.chatId) },
-            actorId: null,
+            actor: integrationActor('github'),
             step,
             cardId: messageId(card.id),
           }),
@@ -579,7 +581,7 @@ export const createApp = ({
       const { workspaceId, userId } = context.get('zeroContext')
       const publication = await agentBridge.forDatabase(context.get('database')).publishBranch({
         chat: { workspaceId, chatId: chatId(context.req.param('chatId') ?? '') },
-        memberId: userId,
+        actor: memberActor(userId),
         action: context.req.param('action') as PublishAction,
         draft: { title: typeof title === 'string' ? title : '', body: typeof body === 'string' ? body : '' },
       })

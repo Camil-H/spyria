@@ -14,7 +14,6 @@ type PanelState = {
   toggle: () => void
   open: () => void
   resizeTo: (width: number) => void
-  boundedWidthOf: (width: number) => number
   fitWithin: (availableWidth: number) => void
 }
 
@@ -28,7 +27,6 @@ export const PanelProvider = ({ commands, children }: { commands: PanelCommands;
   const [preferredWidth, setPreferredWidth] = useState(360)
   const [availableWidth, setAvailableWidth] = useState(Number.POSITIVE_INFINITY)
   const maximumWidth = Math.max(minimumPanelWidth, Math.floor(availableWidth - minimumChatWidth))
-  const boundedWidthOf = (nextWidth: number) => Math.min(maximumWidth, Math.max(minimumPanelWidth, nextWidth))
   return (
     <CommandsProvider commands={commands}>
       <PanelContext
@@ -38,8 +36,7 @@ export const PanelProvider = ({ commands, children }: { commands: PanelCommands;
           maximumWidth,
           toggle: () => setIsOpen(!isOpen),
           open: () => setIsOpen(true),
-          resizeTo: (nextWidth) => setPreferredWidth(boundedWidthOf(nextWidth)),
-          boundedWidthOf,
+          resizeTo: setPreferredWidth,
           fitWithin: setAvailableWidth,
         }}
       >

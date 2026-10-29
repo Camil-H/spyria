@@ -12,6 +12,8 @@ import {
   isReadOnlyGitHubTool,
   isSpyriaTool,
   type ModelCallFailure,
+  modelNotAllowedNoticeOf,
+  publicModelNameOf,
   routerTools,
   spyriaTools,
   type ToolCallDecision,
@@ -33,8 +35,20 @@ import {
 } from '@spyria/conversation/server'
 import type { Database } from '@spyria/db/postgres'
 import { schema } from '@spyria/db/zero'
-import { isConnectionRefused, log, type MemberId, toolNamePartsOf, withRetries } from '@spyria/kernel'
-import { type createLlmGateway, createMemberKeyReader, createToolCallOwnerAccess } from '@spyria/profile/server'
+import {
+  isConnectionRefused,
+  log,
+  type MemberId,
+  soleRequestedModelOf,
+  toolNamePartsOf,
+  withRetries,
+} from '@spyria/kernel'
+import {
+  type createLlmGateway,
+  createMemberKeyReader,
+  createModelGuard,
+  createToolCallOwnerAccess,
+} from '@spyria/profile/server'
 import type { ConnectedHost } from '@spyria/runtime/server'
 import { createBudgetGuard } from '@spyria/usage/server'
 import type { AgentBridge } from './agent-bridge/bridge.ts'
@@ -155,6 +169,7 @@ export const createModelCallRelay = ({
     return {
       keyOf: createMemberKeyReader(transact, llmGateway),
       usedUpBudgetOf: createBudgetGuard(transact),
+      isModelAllowed: createModelGuard(transact),
       tools: createToolCallOwnerAccess(transact, llmGateway),
       readOnlyHints: new Map<string, { isReadOnly: boolean; listedAt: number }>(),
     }
@@ -335,7 +350,7 @@ export const createModelCallRelay = ({
             : await handlers.delegate({ chat: turn.chat, turn, task: String(task ?? ''), effort, model })
       return reply({ content: [{ type: 'text', text }], isError })
     }
-    const { keyOf, usedUpBudgetOf, tools, readOnlyHints } = databaseAccess(database)
+    const { keyOf, usedUpBudgetOf, isModelAllowed, tools, readOnlyHints } = databaseAccess(database)
 
     const searchWeb = async (
       turn: ModelCallTurn,
@@ -346,7 +361,8 @@ export const createModelCallRelay = ({
       if (await usedUpBudgetOf(host.workspaceId, turn.prompterId))
         return { text: webSearchOverBudget, status: 'refused' }
       const model = await handlers.webSearchModel(turn.chat, turn.prompterId)
-      if (!model) return { text: webSearchUnavailable, status: 'refused' }
+      if (!model || !(await isModelAllowed(host.workspaceId, turn.prompterId, model)))
+        return { text: webSearchUnavailable, status: 'refused' }
       const virtualKey = await keyOf(host.workspaceId, turn.prompterId).catch(() => null)
       if (!virtualKey) return { text: webSearchFailedOf(unreachable.error.message), status: 'failed' }
       const response = await fetch(`${gatewayUrlOf(database)}${webSearchPath}`, {
@@ -558,6 +574,13 @@ export const createModelCallRelay = ({
       const record = (failure: ModelCallFailure) => handlers.recordModelCallFailure({ ...turn, model, failure })
       const usedUpBudget = isTokenCount ? null : await usedUpBudgetOf(host.workspaceId, turn.prompterId)
       if (usedUpBudget) return answered(402, refusalOf(await record({ reached: 'over_budget', budget: usedUpBudget })))
+      if (!(await isModelAllowed(host.workspaceId, turn.prompterId, soleRequestedModelOf(jsonOf(body)))))
+        return answered(
+          403,
+          refusalOf(
+            isTokenCount ? modelNotAllowedNoticeOf(publicModelNameOf(model)) : await record({ reached: 'not_allowed' }),
+          ),
+        )
       const virtualKey = await keyOf(host.workspaceId, turn.prompterId).catch(() => null)
       if (virtualKey === null) {
         await record({ reached: 'unreachable' })

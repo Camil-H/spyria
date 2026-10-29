@@ -63,10 +63,14 @@ test.describe('Sidebar', () => {
       await expect(sidebarOf(page)).not.toContainText('Bob')
     })
     await test.step('explains the chat type in a tooltip when hovering its icon', async () => {
-      await chatRowIn(projectGroupOf(page, 'Billing'), 'Invoice bug').getByRole('img', { name: 'Runtime chat' }).hover()
-      await expect(page.getByRole('tooltip', { name: 'Runtime chat' })).toBeVisible()
-      await chatRowIn(projectGroupOf(page, 'Onboarding'), 'Welcome').getByRole('img', { name: 'Channel' }).hover()
-      await expect(page.getByRole('tooltip', { name: 'Channel' })).toBeVisible()
+      for (const [groupName, chatName, typeName] of [
+        ['Billing', 'Invoice bug', 'Runtime chat'],
+        ['Onboarding', 'Welcome', 'Channel'],
+      ] as const)
+        await expect(async () => {
+          await chatRowIn(projectGroupOf(page, groupName), chatName).getByRole('img', { name: typeName }).hover()
+          await expect(page.getByRole('tooltip', { name: typeName })).toBeVisible({ timeout: 2_000 })
+        }).toPass()
     })
     for (const actionName of ['New project', 'New chat'])
       await test.step(`shows ${actionName} as an icon at the top right with a tooltip`, async () => {
@@ -127,6 +131,66 @@ test.describe('Sidebar', () => {
       await expandButton.click()
       await expect(switcherOf(page)).toBeVisible()
       await expect(looseChatsOf(page)).toBeVisible()
+    })
+  })
+
+  test('As a member, I resize the sidebar within its bounds, with the mouse or the keyboard, and find the width after a reload', async ({
+    page,
+  }) => {
+    const separator = sidebarOf(page).getByRole('separator', { name: 'Resize sidebar' })
+    const sidebarWidth = async () => (await sidebarOf(page).boundingBox())!.width
+    const dragSeparatorBy = async (horizontalOffset: number) => {
+      const handleBox = (await separator.boundingBox())!
+      const handleCenterX = handleBox.x + handleBox.width / 2
+      const handleCenterY = handleBox.y + handleBox.height / 2
+      await page.mouse.move(handleCenterX, handleCenterY)
+      await page.mouse.down()
+      await page.mouse.move(handleCenterX + horizontalOffset, handleCenterY, { steps: 8 })
+      await page.mouse.up()
+    }
+
+    await test.step('exposes the separator on the right edge with its bounds and the default width', async () => {
+      await expect(separator).toHaveAttribute('aria-valuemin', '240')
+      await expect(separator).toHaveAttribute('aria-valuemax', '400')
+      await expect(separator).toHaveAttribute('aria-valuenow', '256')
+      const sidebarBox = (await sidebarOf(page).boundingBox())!
+      const separatorBox = (await separator.boundingBox())!
+      const borderWidth = await sidebarOf(page).evaluate((element) =>
+        Number.parseFloat(getComputedStyle(element).borderRightWidth),
+      )
+      expect(separatorBox.x + separatorBox.width).toBeCloseTo(sidebarBox.x + sidebarBox.width - borderWidth, 0)
+      expect(sidebarBox.width).toBeCloseTo(256, 0)
+    })
+
+    await test.step('changes the width by 16px with the arrow keys', async () => {
+      await separator.focus()
+      await page.keyboard.press('ArrowRight')
+      await expect(separator).toHaveAttribute('aria-valuenow', '272')
+      await page.keyboard.press('ArrowLeft')
+      await page.keyboard.press('ArrowLeft')
+      await expect(separator).toHaveAttribute('aria-valuenow', '240')
+      expect(await sidebarWidth()).toBeCloseTo(240, 0)
+    })
+
+    await test.step('widens when dragged right, stopping at the maximum, and narrows down to the minimum', async () => {
+      await dragSeparatorBy(100)
+      expect(await sidebarWidth()).toBeCloseTo(340, 0)
+      expect(await page.evaluate(() => getSelection()?.toString())).toBe('')
+      await dragSeparatorBy(300)
+      expect(await sidebarWidth()).toBeCloseTo(400, 0)
+      await dragSeparatorBy(-400)
+      expect(await sidebarWidth()).toBeCloseTo(240, 0)
+      await expect(switcherOf(page)).toBeVisible()
+      const sidebarBox = (await sidebarOf(page).boundingBox())!
+      const newChatBox = (await sidebarOf(page).getByRole('button', { name: 'New chat' }).boundingBox())!
+      expect(newChatBox.x + newChatBox.width).toBeLessThanOrEqual(sidebarBox.x + sidebarBox.width - 12)
+    })
+
+    await test.step('keeps the width after a reload', async () => {
+      await dragSeparatorBy(60)
+      await page.reload()
+      await expect(separator).toHaveAttribute('aria-valuenow', '300')
+      expect(await sidebarWidth()).toBeCloseTo(300, 0)
     })
   })
 
@@ -269,7 +333,7 @@ test.describe('Sidebar', () => {
       await expect(unreadIconOf(page, 'Setup helper')).toBeVisible()
       await expect(draftIconOf(page, 'Setup helper')).toBeVisible()
 
-      await test.step('shows the exclamation left of the pencil, both before the menu button', async () => {
+      await test.step('shows the agent status icon left of the pencil, both before the menu button', async () => {
         const unreadBox = (await unreadIconOf(page, 'Setup helper').boundingBox())!
         const draftBox = (await draftIconOf(page, 'Setup helper').boundingBox())!
         const menuButtonBox = (await menuButtonOf(page, 'Setup helper').boundingBox())!
@@ -278,7 +342,7 @@ test.describe('Sidebar', () => {
       })
 
       for (const colorScheme of ['light', 'dark'] as const)
-        await test.step(`distinguishes the exclamation from the pencil in ${colorScheme} mode`, async () => {
+        await test.step(`distinguishes the agent status icon from the pencil in ${colorScheme} mode`, async () => {
           await page.emulateMedia({ colorScheme })
           const colorOf = (iconName: string) =>
             chatLinkOf(page, 'Setup helper')

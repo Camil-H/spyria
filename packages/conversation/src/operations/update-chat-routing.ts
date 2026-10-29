@@ -1,6 +1,7 @@
 import { type ChatId, harnesses, isPickableModel, type MemberId, requireChatPermission } from '@spyria/kernel'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { InvalidRouting } from '../domain/errors.ts'
+import { modelNotAllowedNoticeOf, publicModelNameOf } from '../domain/model-call-failures.ts'
 import { type RunsOn, runsOnFieldsOf, runsOnOf, unreachableSessionNoticeOf } from '../domain/session-routing.ts'
 
 type Input = {
@@ -44,6 +45,8 @@ export const updateChatRouting = (
       const reachable = await routing.reachableModels(memberId)
       if (reachable && !isPickableModel(sessionModel, reachable, routing.listedModels()))
         throw new InvalidRouting(unreachableSessionNoticeOf(sessionModel))
+      if (!(await routing.allowsModel(sessionModel)))
+        throw new InvalidRouting(modelNotAllowedNoticeOf(publicModelNameOf(sessionModel)))
       await routing.record({
         chatId,
         conversationId: null,
