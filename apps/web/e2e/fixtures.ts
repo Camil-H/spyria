@@ -178,10 +178,27 @@ export const chooseRunsOn = async (page: Page, runsOn: string) => {
   if (await radio.isVisible()) await radio.click()
   await expect(runsOnChoiceOf(page)).toHaveCount(0)
 }
+export const newChatDialogOf = (page: Page) => page.getByRole('dialog', { name: 'New chat' })
+const newChatQuestions = {
+  isPublic: 'Is it public, so everyone in the workspace can join?',
+  audience: 'Is it for members messaging each other, or an AI chat?',
+  github: 'Does it need GitHub access?',
+}
+export const newChatAnswerOf = (dialog: Locator, question: keyof typeof newChatQuestions, answer: string) =>
+  dialog.getByRole('radiogroup', { name: newChatQuestions[question] }).getByRole('radio', { name: answer, exact: true })
+export const answerNewChannel = async (dialog: Locator, visibility: 'public' | 'private') => {
+  await newChatAnswerOf(dialog, 'isPublic', visibility === 'public' ? 'Yes' : 'No').check()
+  await newChatAnswerOf(dialog, 'audience', 'Members messaging').check()
+}
+export const answerNewAiChat = async (dialog: Locator, { needsGitHub = false } = {}) => {
+  await newChatAnswerOf(dialog, 'isPublic', 'No').check()
+  await newChatAnswerOf(dialog, 'audience', 'AI chat').check()
+  await newChatAnswerOf(dialog, 'github', needsGitHub ? 'Yes' : 'No').check()
+}
 export const newRuntimeChat = async (page: Page, name: string, runsOn: string | null = 'Spyria runtime') => {
   await page.getByRole('button', { name: 'New chat' }).click()
-  const dialog = page.getByRole('dialog', { name: 'New chat' })
-  await dialog.getByRole('radio', { name: 'Runtime' }).check()
+  const dialog = newChatDialogOf(page)
+  await answerNewAiChat(dialog)
   await dialog.getByRole('textbox', { name: 'Chat name' }).fill(name)
   await dialog.getByRole('button', { name: 'Confirm' }).click()
   await expect(mainOf(page).getByRole('heading', { level: 1, name })).toBeVisible()

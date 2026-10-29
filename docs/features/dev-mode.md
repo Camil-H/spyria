@@ -31,7 +31,7 @@ Events: `pull_request`, `pull_request_review`, `pull_request_review_comment`, `p
 
 ## Creating a dev chat
 
-**New chat** > **Runtime** > **Dev**, then pick a **Repository** (from the granted ones) and a **Base branch** (the default branch is preselected). Without a GitHub App the dialog says "Connect GitHub in Workspace settings" instead of the pickers.
+In **New chat**, answer No to "Is it public", **AI chat**, and Yes to "Does it need GitHub access?", then pick a **Repository** (from the granted ones) and a **Base branch** (the default branch is preselected). Without a GitHub App the dialog says "Connect GitHub in Workspace settings" instead of the pickers.
 
 The chat gets its own working branch, `spyria/<chat name slug>-<6 characters of the chat id>`, created from the base branch. The composer's folder chip shows the repository and the branch chip the working branch.
 
