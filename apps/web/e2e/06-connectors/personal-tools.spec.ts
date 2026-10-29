@@ -135,6 +135,17 @@ test.describe('Personal tools', () => {
     })
   })
 
+  test('As a member whose access was revoked at the provider, I see Reconnect when I open my profile, before any chat call', {
+    tag: ['@spec-14'],
+  }, async ({ page }) => {
+    const account = accountOf('alice-acme')
+    await connectFake(page, account)
+    await fetch(`${fakeMcpUrl}/_admin/expire?user=${account}`, { method: 'POST' })
+    await openMyConnections(page)
+    await expect(connectedRowOf(page)).toContainText('Needs reconnection')
+    await expect(connectionsOf(page).getByRole('button', { name: 'Reconnect fake' })).toBeVisible()
+  })
+
   test('As a member, I connect a tool from the chat when the agent needs it, and my next prompt uses it', {
     tag: ['@spec-14', '@smoke'],
   }, async ({ page, agentScript }) => {
