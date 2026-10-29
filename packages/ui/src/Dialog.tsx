@@ -2,7 +2,9 @@ import type { ReactNode } from 'react'
 import { ghostButtonClass } from './classes.ts'
 
 const showModal = (dialog: HTMLDialogElement | null) => {
-  if (dialog && !dialog.open) dialog.showModal()
+  if (!dialog || dialog.open) return
+  dialog.showModal()
+  dialog.querySelector<HTMLElement>('[data-initial-focus]')?.focus({ focusVisible: true })
 }
 
 export const Dialog = ({

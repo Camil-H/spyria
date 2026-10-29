@@ -147,6 +147,7 @@ export const ChatRow = ({
         <Dialog label="Archive chat" subject={chat.name} onClose={closeDialog}>
           <button
             type="button"
+            data-initial-focus
             className={buttonClass}
             onClick={async () => {
               await commands.archiveChat({ workspaceId, chatId: chat.id })
