@@ -98,7 +98,7 @@ Admins can set a monthly AI budget per member and a monthly total for the worksp
 
 Budgets are checked against recorded spend, which is synced from the gateway every few seconds, so a member can go slightly over the limit (typically cents). Sessions on a member's own machine use their subscription and are neither metered nor stopped by budgets.
 
-The **Usage** tab of a chat shows its spend per member.
+The **Usage** tab of a chat shows its spend per member and per model (tokens, cost and requests), for the month you pick.
 
 ## Keys
 
