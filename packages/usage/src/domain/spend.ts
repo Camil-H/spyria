@@ -47,7 +47,6 @@ export type SpendDecomposition = {
   current: SpendCounts
   previous: SpendCounts
 }
-export type SpendTrendPoint = SpendDecomposition & { bucket: string }
 export type MergedPull = {
   chatId: string
   chatName: string
@@ -67,7 +66,6 @@ export type SpendReport = {
   charts: Partial<Record<SpendDimension, SpendChart>>
   tables: Partial<Record<SpendDimension, SpendRow[]>>
   decomposition: SpendDecomposition
-  trend: SpendTrendPoint[]
   mergedPulls: MergedPullsCost | null
 }
 
@@ -186,7 +184,7 @@ export const spendChartOf = (
 
 const ratioOf = (numerator: number, denominator: number) => (denominator === 0 ? null : numerator / denominator)
 
-const factorValuesOf = (counts: SpendCounts): Record<SpendFactorName, number | null> => ({
+export const factorValuesOf = (counts: SpendCounts): Record<SpendFactorName, number | null> => ({
   users: counts.users,
   sessionsPerUser: ratioOf(counts.sessions, counts.users),
   turnsPerSession: ratioOf(counts.turns, counts.sessions),
@@ -220,16 +218,11 @@ export const decompositionOf = (current: SpendCounts, previous: SpendCounts): Sp
 
 export const noSpendCounts: SpendCounts = { users: 0, sessions: 0, turns: 0, requests: 0, tokens: 0, costMicros: 0 }
 
-export const spendTrendOf = (
-  buckets: readonly string[],
-  bucketCounts: readonly SpendBucketCounts[],
-): SpendTrendPoint[] => {
-  const countsByBucket = new Map(bucketCounts.map(({ bucket, ...counts }) => [bucket, counts]))
-  const countsInOrder = buckets.map((bucket) => countsByBucket.get(bucket) ?? noSpendCounts)
-  return buckets.map((bucket, index) => ({
-    bucket,
-    ...decompositionOf(countsInOrder[index] ?? noSpendCounts, countsInOrder[index - 1] ?? noSpendCounts),
-  }))
+export const spendTrendOf = (filter: SpendFilter, bucketCounts: readonly SpendBucketCounts[]): SpendBucketCounts[] => {
+  const countsByBucket = new Map(bucketCounts.map((counts) => [counts.bucket, counts]))
+  return bucketStartsOf(filter.current, filter.granularity).map(
+    (bucket) => countsByBucket.get(bucket) ?? { ...noSpendCounts, bucket },
+  )
 }
 
 export const mergedPullsCostOf = (pulls: readonly MergedPull[]): MergedPullsCost => {
@@ -244,7 +237,6 @@ export const spendReportOf = ({
   filter,
   rows,
   counts,
-  bucketCounts,
   tableDimensions,
   chartDimensions,
   mergedPulls,
@@ -252,7 +244,6 @@ export const spendReportOf = ({
   filter: SpendFilter
   rows: readonly SpendDimensionRow[]
   counts: { current: SpendCounts; previous: SpendCounts }
-  bucketCounts: readonly SpendBucketCounts[]
   tableDimensions: readonly SpendDimension[]
   chartDimensions: readonly SpendDimension[]
   mergedPulls: readonly MergedPull[] | null
@@ -267,7 +258,6 @@ export const spendReportOf = ({
     charts: Object.fromEntries(chartDimensions.map((dimension) => [dimension, spendChartOf(rows, dimension, buckets)])),
     tables: Object.fromEntries(tableDimensions.map((dimension) => [dimension, spendRowsOf(rows, dimension)])),
     decomposition: decompositionOf(counts.current, counts.previous),
-    trend: spendTrendOf(buckets, bucketCounts),
     mergedPulls: mergedPulls && mergedPullsCostOf(mergedPulls),
   }
 }

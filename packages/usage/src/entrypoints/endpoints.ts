@@ -7,7 +7,7 @@ import { createPostgresBudgetTransactor } from '../integrations/postgres-budgets
 import { createPostgresSpendTransactor } from '../integrations/postgres-spend.ts'
 import { readAuditPage, readAuditRetention, setAuditRetention } from '../operations/audit-log.ts'
 import { findUsedUpBudget, readBudgets, readOwnBudget, setBudget } from '../operations/budgets.ts'
-import { readOwnSpend, readWorkspaceSpend } from '../operations/spend.ts'
+import { readOwnSpend, readOwnSpendTrend, readWorkspaceSpend, readWorkspaceSpendTrend } from '../operations/spend.ts'
 
 type Query = Readonly<Record<string, string | undefined>>
 
@@ -64,6 +64,12 @@ export const workspaceSpendFromRequest = (transact: Transact, context: ZeroConte
 
 export const ownSpendFromRequest = (transact: Transact, context: ZeroContext, query: Query) =>
   readOwnSpend(...spendRequestOf(transact, context, query))
+
+export const workspaceSpendTrendFromRequest = (transact: Transact, context: ZeroContext, query: Query) =>
+  readWorkspaceSpendTrend(...spendRequestOf(transact, context, query))
+
+export const ownSpendTrendFromRequest = (transact: Transact, context: ZeroContext, query: Query) =>
+  readOwnSpendTrend(...spendRequestOf(transact, context, query))
 
 const budgetDependenciesOf = (transact: Transact, workspaceId: WorkspaceId) => ({
   transactor: createPostgresBudgetTransactor(transact, workspaceId),

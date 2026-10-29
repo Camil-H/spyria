@@ -19,6 +19,7 @@ export const UsageSection = ({
           title="Usage"
           workspaceId={workspaceId}
           readReport={commands.readWorkspaceSpend}
+          readTrend={commands.readWorkspaceSpendTrend}
           chartDimensions={['member', 'project', 'model']}
           tableDimensions={['member', 'project', 'chat', 'model']}
         />
