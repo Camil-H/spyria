@@ -1,6 +1,5 @@
 import { focusRing } from '@spyria/ui'
 import { ChevronRight } from 'lucide-react'
-import { useState } from 'react'
 import {
   type DiffLayout,
   type DiffLine,
@@ -101,24 +100,20 @@ const DiffTable = ({ change, label, layout }: { change: FileChange; label: strin
 export const FileDiffList = ({
   changes,
   groupName,
-  isCollapsed,
+  isExpanded,
+  onToggle,
 }: {
   changes: readonly FileChange[]
   groupName: string
-  isCollapsed: boolean
+  isExpanded: (path: string) => boolean
+  onToggle: (path: string) => void
 }) => {
   const layout = diffLayoutFor(usePanel().width)
-  const [toggledPaths, setToggledPaths] = useState<ReadonlySet<string>>(new Set())
-  const toggle = (path: string) => {
-    const toggled = new Set(toggledPaths)
-    if (!toggled.delete(path)) toggled.add(path)
-    setToggledPaths(toggled)
-  }
   if (changes.length === 0) return null
   return (
     <div className="flex flex-col gap-3">
       {changes.map((change) => {
-        const isExpanded = toggledPaths.has(change.path) === isCollapsed
+        const isOpen = isExpanded(change.path)
         const label = groupName ? `${change.path} (${groupName})` : change.path
         return (
           <section
@@ -128,17 +123,17 @@ export const FileDiffList = ({
           >
             <button
               type="button"
-              aria-expanded={isExpanded}
-              onClick={() => toggle(change.path)}
+              aria-expanded={isOpen}
+              onClick={() => onToggle(change.path)}
               className={`flex w-full flex-wrap items-center gap-x-2 gap-y-1 px-2 py-1 text-left text-sm hover:bg-hover ${focusRing}`}
             >
-              <ChevronRight aria-hidden className={`size-4 shrink-0 text-muted ${isExpanded ? 'rotate-90' : ''}`} />
+              <ChevronRight aria-hidden className={`size-4 shrink-0 text-muted ${isOpen ? 'rotate-90' : ''}`} />
               <span className="mr-auto break-all">{change.path}</span>
               <span className="font-mono text-xs text-muted">
                 {change.status} +{change.additions} −{change.deletions}
               </span>
             </button>
-            {isExpanded && <DiffTable change={change} label={label} layout={layout} />}
+            {isOpen && <DiffTable change={change} label={label} layout={layout} />}
           </section>
         )
       })}

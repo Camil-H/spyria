@@ -1,7 +1,14 @@
 import type { ChatId, ChatVisibility, HarnessId, MemberId, MessageId, WorkspaceId } from '@spyria/kernel'
 import type { StoredStep } from './agent-steps.ts'
 import type { Attachment } from './attachments.ts'
-import { ChatFrozen, InvalidThreadRoot, MessageDeleted, NoThreadsInRuntimeChat, NotMessageAuthor } from './errors.ts'
+import {
+  ChatFrozen,
+  InvalidQuotedMessage,
+  InvalidThreadRoot,
+  MessageDeleted,
+  NoThreadsInRuntimeChat,
+  NotMessageAuthor,
+} from './errors.ts'
 import type { MessageBody } from './message-body.ts'
 
 type MessageFields = Readonly<{
@@ -18,6 +25,7 @@ type MessageFields = Readonly<{
   editedAt: Date | null
   replyToId: MessageId | null
   threadRootId: MessageId | null
+  quotedMessageId: MessageId | null
 }>
 
 export type LiveMessage = MessageFields & Readonly<{ status: 'live' }>
@@ -81,15 +89,24 @@ export const threadRootOf = (chat: ConversationChat, chatId: ChatId, root: Messa
   return root.id
 }
 
+export const quotableKinds: readonly Message['kind'][] = ['member', 'agent']
+
+export const quotedMessageOf = (chatId: ChatId, quoted: Message | undefined) => {
+  if (!quoted || quoted.chatId !== chatId || quoted.status === 'deleted' || !quotableKinds.includes(quoted.kind))
+    throw new InvalidQuotedMessage()
+  return quoted.id
+}
+
 export const newMessage = (
   fields: Pick<
     MessageFields,
     'id' | 'workspaceId' | 'chatId' | 'kind' | 'authorId' | 'body' | 'createdAt' | 'replyToId'
   > &
-    Partial<Pick<MessageFields, 'step' | 'threadRootId' | 'attachments'>>,
+    Partial<Pick<MessageFields, 'step' | 'threadRootId' | 'quotedMessageId' | 'attachments'>>,
 ): LiveMessage => ({
   step: null,
   threadRootId: null,
+  quotedMessageId: null,
   attachments: [],
   ...fields,
   detail: null,

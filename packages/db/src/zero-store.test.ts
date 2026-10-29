@@ -80,6 +80,7 @@ const messageOf = (seq: number, fields: { replyToId?: string; body?: string } = 
     step: null,
     replyToId: fields.replyToId ?? null,
     threadRootId: null,
+    quotedMessageId: null,
     createdAt: Date.UTC(2026, 9, 1, 9, seq),
     editedAt: null,
     deletedAt: null,

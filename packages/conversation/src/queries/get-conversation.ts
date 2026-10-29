@@ -25,7 +25,7 @@ import type { AgentStep, StoredStep, ThoughtStep } from '../domain/agent-steps.t
 import { toolServerNamerOf } from '../domain/agent-steps.ts'
 import type { Attachment } from '../domain/attachments.ts'
 import { stillRunningOf } from '../domain/delegation.ts'
-import { isAgentActivity, isFrozen } from '../domain/message.ts'
+import { isAgentActivity, isFrozen, quotableKinds } from '../domain/message.ts'
 import type { PullRequestStep } from '../domain/pull-requests.ts'
 import { type RunsOn, runsOnOf } from '../domain/session-routing.ts'
 import { conversationChatIn } from './conversation-chat.ts'
@@ -46,6 +46,11 @@ export type ConversationMessage = Readonly<{
   isRunning: boolean
   isStreamed?: true
   canReply: boolean
+  canQuote: boolean
+  quote: Readonly<{
+    id: MessageId
+    original: Readonly<{ authorName: string; body: string; isDeleted: boolean }> | null
+  }> | null
   thread: Readonly<{ replies: readonly ConversationMessage[]; newCount: number }> | null
   runtimes: readonly RuntimeLink[]
   answeredByName?: string
@@ -285,6 +290,21 @@ export const getConversation =
     const withServerNames = toolServerNamerOf(
       new Map(workspaceConnectionsIn(snapshot, workspaceId).map(({ gatewayName, name }) => [gatewayName, name])),
     )
+    const chatMessageById = new Map(chatMessages.map((message) => [message.id, message]))
+    const quoteOf = (quotedMessageId: MessageId | null): ConversationMessage['quote'] => {
+      if (quotedMessageId === null) return null
+      const quoted = chatMessageById.get(quotedMessageId)
+      return {
+        id: quotedMessageId,
+        original: quoted
+          ? {
+              authorName: memberName(quoted.authorId),
+              body: quoted.deletedAt === null ? quoted.body : '',
+              isDeleted: quoted.deletedAt !== null,
+            }
+          : null,
+      }
+    }
     const conversationMessageOf = (message: (typeof chatMessages)[number]): ConversationMessage => {
       const step = message.step && withServerNames(message.step as StoredStep)
       const replies = repliesByRootId.get(message.id) ?? []
@@ -304,6 +324,8 @@ export const getConversation =
         isEdited: message.editedAt !== null,
         isRunning: hasActiveTurn && message.replyToId === chat.agentTurnMessageId,
         canReply: isThreadRoot && canPost && message.deletedAt === null,
+        canQuote: canPost && message.deletedAt === null && quotableKinds.includes(message.kind),
+        quote: quoteOf(message.quotedMessageId),
         thread: isThreadRoot
           ? {
               replies: replies.map(conversationMessageOf),

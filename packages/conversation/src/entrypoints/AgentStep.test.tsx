@@ -22,6 +22,8 @@ const stepMessageOf = (step: Step): ConversationMessage => ({
   isEdited: false,
   isRunning: true,
   canReply: false,
+  canQuote: false,
+  quote: null,
   thread: null,
   runtimes: [],
 })
