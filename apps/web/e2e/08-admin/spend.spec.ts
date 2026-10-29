@@ -103,6 +103,41 @@ test.describe('Spend', () => {
       await expect(decomposition.getByRole('row').last()).toHaveCSS('font-weight', '600')
     })
 
+    test('As a member who can view costs, I follow the spend factors day by day for one model and see which factor moved each day', {
+      tag: ['@spec-45'],
+    }, async ({ page }) => {
+      await openSettings(page, 'Analyze costs')
+      const section = usageSectionOf(page, 'Usage')
+      await section.getByRole('combobox', { name: 'For' }).selectOption({ label: 'anthropic/claude-sonnet' })
+      const trend = tableOf(section, 'Spend factors over time')
+      const now = new Date()
+      const dayOf = (day: number) =>
+        new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), day)).toLocaleDateString('en-US', {
+          timeZone: 'UTC',
+          month: 'short',
+          day: 'numeric',
+        })
+      await expect(rowOf(trend, dayOf(3)).getByRole('cell').last()).toHaveText('Requests per turn +100%')
+      expect(await cellTextsOf(rowOf(trend, dayOf(2)))).toEqual(['$0.01', '1', '1', '1', '1', '1,000', '$10.00', '—'])
+      expect(await cellTextsOf(rowOf(trend, dayOf(3)))).toEqual([
+        '$0.02',
+        '1',
+        '1',
+        '1',
+        '2',
+        '1,000',
+        '$10.00',
+        'Requests per turn +100%',
+      ])
+      await expect(rowOf(trend, dayOf(3)).locator('td.bg-selected')).toHaveText('2')
+      const decomposition = tableOf(section, 'Spend decomposition')
+      expect(await cellTextsOf(rowOf(decomposition, 'Users'))).toEqual(['1', '1', '0%'])
+      await expect(decomposition.locator('tr[aria-current="true"]').getByRole('rowheader')).toHaveText(
+        'Tokens per request · Biggest mover',
+      )
+      await expect(rowOf(tableOf(section, 'Usage by member'), 'Total')).toContainText('$0.08')
+    })
+
     test('As a member who can view costs, I see the cost per merged PR with each merged PR and its chat’s cost', {
       tag: ['@spec-45'],
     }, async ({ page }) => {
