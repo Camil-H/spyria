@@ -21,6 +21,7 @@ import {
   toolGatewayUnreachable,
   webSearchAnswerOf,
   webSearchFailedOf,
+  webSearchMilliseconds,
   webSearchNotRun,
   webSearchOverBudget,
   webSearchPath,
@@ -352,7 +353,7 @@ export const createModelCallRelay = ({
         method: 'POST',
         headers: { 'content-type': 'application/json', ...billedHeadersOf(turn, virtualKey) },
         body: JSON.stringify(webSearchRequestOf(model, query)),
-        signal: AbortSignal.any([signal, AbortSignal.timeout(headTimeoutMilliseconds)]),
+        signal: AbortSignal.any([signal, AbortSignal.timeout(webSearchMilliseconds)]),
       }).catch(() => undefined)
       const answered = jsonOf((await response?.text().catch(() => '')) ?? '') as { error?: { message?: unknown } }
       if (!response?.ok) {
@@ -372,6 +373,7 @@ export const createModelCallRelay = ({
       if (rpc?.method !== 'tools/call' || rpc.id === undefined)
         return answerSpyriaServer(rpc, 'spyria-web', [webSearchTool])
       if (!turn) return answerRpc(rpc.id, toolErrorOf('This runtime has no active turn'))
+      if (rpc.params?.name !== webSearchTool.name) return answerRpc(rpc.id, toolErrorOf('Unknown tool'))
       const calledAt = new Date()
       const { text, status } = await withSpan(
         'execute_tool web_search',

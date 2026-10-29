@@ -9,6 +9,8 @@ type ResponseItem = {
 
 export const webToolsPath = '/mcp/web'
 export const webSearchPath = '/v1/responses'
+export const webSearchTimeoutSeconds = 120
+export const webSearchMilliseconds = (webSearchTimeoutSeconds - 20) * 1000
 const maximumQueryLength = 400
 const maximumOutputTokens = 2048
 const maximumSources = 10
