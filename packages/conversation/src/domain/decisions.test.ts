@@ -6,14 +6,27 @@ const jev = { id: 'typesafe/jev-latest', name: 'Jev' }
 const fakeSmall = { id: 'mistral/mistral-small-latest', name: 'Mistral Small', tier: 'small' as const }
 const chatReply = (content: string) => ({ choices: [{ message: { content } }] })
 
-test('a decision model gets choice questions, a chat model the json_schema request', () => {
+const choicesOf = (criteria: Record<string, string>) =>
+  Object.entries(criteria).map(([value, description]) => ({ value, description }))
+
+test('a decision model gets a list of named choice questions, a chat model the json_schema request', () => {
   expect(decisionRequestOf(jev, 'Chat mode: dev', sessionQuestions)).toEqual({
     model: 'typesafe/jev-latest',
-    state: 'Chat mode: dev',
-    questions: {
-      tier: { kind: 'choice', ...sessionQuestions.tier },
-      effort: { kind: 'choice', ...sessionQuestions.effort },
-    },
+    input: 'Chat mode: dev',
+    questions: [
+      {
+        type: 'choice',
+        name: 'tier',
+        instructions: sessionQuestions.tier.instructions,
+        choices: choicesOf(sessionQuestions.tier.criteria),
+      },
+      {
+        type: 'choice',
+        name: 'effort',
+        instructions: sessionQuestions.effort.instructions,
+        choices: choicesOf(sessionQuestions.effort.criteria),
+      },
+    ],
   })
   const chatRequest = decisionRequestOf(fakeSmall, 'Refactor the billing module', sessionQuestions)
   expect(chatRequest).toMatchObject({
@@ -23,13 +36,16 @@ test('a decision model gets choice questions, a chat model the json_schema reque
   expect(JSON.stringify(chatRequest)).toContain('Refactor the billing module')
 })
 
-test('decision answers keep their confidence and need a valid choice for every question', () => {
-  const answers = { tier: { kind: 'choice', value: 'large', confidence: 0.9 }, effort: { value: 'low' } }
-  expect(answersOf(jev, sessionQuestions, { answers })).toEqual({
+test('decision answers are matched by name, keep their confidence and need a valid choice for every question', () => {
+  const effort = { type: 'choice', name: 'effort', choice: 'low' }
+  const tier = { type: 'choice', name: 'tier', choice: 'large', confidence: 0.9 }
+  expect(answersOf(jev, sessionQuestions, { answers: [effort, tier] })).toEqual({
     tier: { value: 'large', confidence: 0.9 },
     effort: { value: 'low', confidence: 0 },
   })
-  expect(answersOf(jev, sessionQuestions, { answers: { ...answers, tier: { value: 'huge' } } })).toBeUndefined()
+  expect(answersOf(jev, sessionQuestions, { answers: [{ ...tier, choice: 'huge' }, effort] })).toBeUndefined()
+  expect(answersOf(jev, sessionQuestions, { answers: [{ type: 'refusal', name: 'tier' }, effort] })).toBeUndefined()
+  expect(answersOf(jev, sessionQuestions, { answers: { tier: { value: 'large' } } })).toBeUndefined()
   expect(answersOf(jev, sessionQuestions, {})).toBeUndefined()
 })
 

@@ -3,7 +3,7 @@ import { createAgentTestbed, kindOf, piHello, questionAt, textOf } from './testi
 
 const { stateDirectory, piLaunchOf, started } = createAgentTestbed()
 
-test('a Pi turn over RPC streams thought and text, a command with its output and exit code and an edit diff, and ends the turn', async () => {
+test('a Pi turn over RPC streams thought and text, a command with its output and the exit code Pi reported and an edit diff, and ends the turn', async () => {
   const { open, create, prompt } = started()
   const id = await create(piLaunchOf())
   const socket = open(id)
@@ -32,7 +32,7 @@ test('a Pi turn over RPC streams thought and text, a command with its output and
       title: 'npm test',
       kind: 'execute',
       status: 'failed',
-      rawOutput: { formatted_output: 'exit code 1', exit_code: 1 },
+      rawOutput: { formatted_output: 'exit code 1' },
     },
     {
       toolCallId: 'terminal-1',
@@ -42,6 +42,7 @@ test('a Pi turn over RPC streams thought and text, a command with its output and
       rawOutput: { formatted_output: 'one\ntwo\nfailed', exit_code: 2 },
     },
   ])
+  expect(finals[1]?.update.rawOutput).not.toHaveProperty('exit_code')
   const live = socket.events.filter(
     (event) => kindOf('tool_call_update')(event) && !event.completed && event.update.toolCallId === 'terminal-1',
   )

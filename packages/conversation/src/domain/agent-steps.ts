@@ -9,6 +9,7 @@ export type AgentStep =
       type: 'command'
       command: string
       exitCode: number | null
+      isExitCodeDerived?: true
       durationMilliseconds: number | null
       output: string
       truncatedLines: number
@@ -116,6 +117,7 @@ export const observedStep = (
       ...step,
       command: typeof observation?.command === 'string' ? observation.command : step.command,
       exitCode: typeof observation?.exit_code === 'number' ? observation.exit_code : null,
+      ...(observation?.is_exit_code_derived === true && { isExitCodeDerived: true }),
       durationMilliseconds,
       ...keptOutputOf(textOf(observation?.content)),
     }
