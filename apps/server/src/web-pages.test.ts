@@ -20,6 +20,14 @@ const site = Bun.serve({
       })
     if (pathname === '/large')
       return new Response('x'.repeat(6 * 1024 * 1024), { headers: { 'content-type': 'text/html' } })
+    if (pathname === '/corrupt')
+      return new Response(new Uint8Array([1, 2, 3]), {
+        headers: { 'content-type': 'text/html', 'content-encoding': 'gzip' },
+      })
+    if (pathname === '/bomb')
+      return new Response(gzipSync('x'.repeat(6 * 1024 * 1024)), {
+        headers: { 'content-type': 'text/html', 'content-encoding': 'gzip' },
+      })
     if (pathname === '/report.pdf') return new Response('%PDF', { headers: { 'content-type': 'application/pdf' } })
     return new Response(`<h1>Docs</h1><p>${request.headers.get('accept-language')}</p>`, {
       headers: { 'content-type': 'text/html; charset=utf-8' },
@@ -59,8 +67,10 @@ test('an address on the server’s own machine or network is refused, also after
   expect(await messageOf(readOnLoopback(`${siteUrl}/to-another-host`, undefined))).toBe(notPublic)
 })
 
-test('a page over 5 MB, an endless redirect or another scheme is not read', async () => {
+test('a page over 5 MB once unpacked, a corrupt one, an endless redirect or another scheme is not read', async () => {
   expect(await messageOf(readOnLoopback(`${siteUrl}/large`, undefined))).toBe('This page is over 5 MB')
+  expect(await messageOf(readOnLoopback(`${siteUrl}/bomb`, undefined))).toBe('This page is over 5 MB')
+  expect(await messageOf(readOnLoopback(`${siteUrl}/corrupt`, undefined))).toBe('This page could not be reached')
   expect(await messageOf(readOnLoopback(`${siteUrl}/loop`, undefined))).toBe('This page could not be reached')
   expect(await messageOf(readOnLoopback('file:///etc/passwd', undefined))).toBe('This page could not be reached')
 })
