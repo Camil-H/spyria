@@ -1,6 +1,13 @@
 import { expect, test } from 'bun:test'
 import type { Model } from '@spyria/kernel'
-import { webSearchAnswerOf, webSearchModelOf, webSearchQueryOf, webSearchRequestOf } from './web-search.ts'
+import {
+  webSearchAnswerOf,
+  webSearchMilliseconds,
+  webSearchModelOf,
+  webSearchQueryOf,
+  webSearchRequestOf,
+  webSearchTimeoutSeconds,
+} from './web-search.ts'
 
 const model = (id: string, tier: Model['tier']) => ({ id, name: id, tier }) as Model
 
@@ -72,4 +79,8 @@ test('an answer without a search is told apart, and a search without text still 
   ).toBeUndefined()
   expect(webSearchAnswerOf({})).toBeUndefined()
   expect(webSearchAnswerOf({ output: [{ type: 'web_search_call' }] })).toBe('The search found nothing to say.')
+})
+
+test('the server gives up on a search before Pi gives up on the call', () => {
+  expect(webSearchMilliseconds).toBeLessThan(webSearchTimeoutSeconds * 1000)
 })

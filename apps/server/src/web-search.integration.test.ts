@@ -86,12 +86,15 @@ test('a web search runs on the prompter’s own key through the provider’s sea
   ])
 })
 
-test('a blank query is refused without a model call', async () => {
+test('a blank query or another tool name is refused without a model call', async () => {
   const host = await fakeHost('Blank web search host')
   const { token } = await runtimeTurn(host, bob)
   const callsBefore = fakeLlmCalls.length
   expect(
     (await webToolCall(host, token, rpcOf('tools/call', { name: 'web_search', arguments: { query: ' ' } }))).result,
   ).toEqual({ content: [{ type: 'text', text: 'Give the words to search for' }], isError: true })
+  expect(
+    (await webToolCall(host, token, rpcOf('tools/call', { name: 'fetch', arguments: { query: 'zero' } }))).result,
+  ).toEqual({ content: [{ type: 'text', text: 'Unknown tool' }], isError: true })
   expect(fakeLlmCalls.length).toBe(callsBefore)
 })

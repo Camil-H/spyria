@@ -76,6 +76,7 @@ export {
 export {
   webSearchAnswerOf,
   webSearchFailedOf,
+  webSearchMilliseconds,
   webSearchNotRun,
   webSearchOverBudget,
   webSearchPath,
