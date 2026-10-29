@@ -696,6 +696,7 @@ export const runtimes = table(
     chatReference(table),
     tenantReference([table.workspaceId, table.hostId], [runtimeHosts.workspaceId, runtimeHosts.id]),
     index().on(table.workspaceId, table.hostId),
+    index().on(table.workspaceId, table.state, table.lastActiveAt),
   ],
 )
 

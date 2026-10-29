@@ -104,6 +104,13 @@ export const placementOf = (hosts: readonly HostLoad[]): Placement => {
   return leastLoaded ? { hostId: leastLoaded.hostId } : { failure: 'no_capacity' }
 }
 
+export type IdleCutoffs = { stopBefore: number; removeBefore: number }
+
+export const idleCutoffsAt = (now: number): IdleCutoffs => ({
+  stopBefore: now - idleStopMilliseconds,
+  removeBefore: now - idleRemovalMilliseconds,
+})
+
 export const idleStepOf = (runtime: Runtime, now: number) => {
   const idleMilliseconds = now - runtime.lastActiveAt
   if (runtime.state === 'running' && idleMilliseconds > idleStopMilliseconds) return 'stopping'
