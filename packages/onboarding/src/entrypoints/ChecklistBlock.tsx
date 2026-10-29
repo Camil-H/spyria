@@ -127,7 +127,7 @@ export const ChecklistBlock = ({
   return (
     <section
       aria-labelledby={headingId}
-      className="flex flex-col gap-2 rounded-lg border border-accent/40 bg-accent/10 px-4 py-3"
+      className="flex flex-col gap-2 rounded-lg border border-callout-edge bg-callout px-4 py-3"
     >
       <h2 id={headingId}>
         <button
@@ -145,7 +145,7 @@ export const ChecklistBlock = ({
         </button>
       </h2>
       {!isCollapsed && (
-        <ul id={listId} className="flex flex-col divide-y divide-accent/20">
+        <ul id={listId} className="flex flex-col divide-y divide-callout-edge/40">
           {shownTasks.map((view) => (
             <TaskRow
               key={view.task}
