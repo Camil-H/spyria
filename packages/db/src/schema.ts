@@ -120,7 +120,6 @@ export type MessageRow = {
   authorId: MemberId | null
   body: string
   attachments: readonly MessageAttachment[]
-  detail: string | null
   step: MessageStep | null
   replyToId: MessageId | null
   threadRootId: MessageId | null

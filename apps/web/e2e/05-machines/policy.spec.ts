@@ -1,5 +1,6 @@
 import { openPageAs, type WorkerStack } from '../stack'
 import {
+  answerNewAiChat,
   chipOf,
   expect,
   hostsSectionOf,
@@ -82,8 +83,8 @@ test.describe('Policy', () => {
     await expect(machineSectionOf(bobPage)).toContainText('Online')
     await expect(machineSectionOf(bobPage).getByRole('button', { name: 'Remove' })).toBeVisible()
     const dialog = await openNewChat(bobPage)
-    await expect(dialog.getByRole('radiogroup', { name: 'Chat type' }).getByRole('radio')).toHaveCount(2)
-    await dialog.getByRole('radio', { name: 'Runtime' }).check()
+    await expect(dialog.getByRole('radiogroup', { name: /AI chat\?$/ }).getByRole('radio')).toHaveCount(2)
+    await answerNewAiChat(dialog)
     await dialog.getByRole('textbox', { name: 'Chat name' }).fill('Bob while off')
     await dialog.getByRole('button', { name: 'Confirm' }).click()
     await expect(mainOf(bobPage).getByRole('heading', { level: 1, name: 'Bob while off' })).toBeVisible()

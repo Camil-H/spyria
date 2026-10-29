@@ -19,19 +19,13 @@ const eventAt = (
   payload,
   createdAt: minute(seq),
 })
-const posted = { kind: 'member', detail: null, replyToId: null } as const
+const posted = { kind: 'member', replyToId: null } as const
 
 test('messagesFromEvents folds posted, replied, thread reply, edited and deleted events into message rows', () => {
   expect(
     messagesFromEvents([
       eventAt(1, 'message.posted', 'alice', { ...posted, body: 'Hello' }, 'question'),
-      eventAt(
-        2,
-        'message.replied',
-        null,
-        { kind: 'agent', body: 'Hi', detail: 'Read 2 files', replyToId: 'question' },
-        'answer',
-      ),
+      eventAt(2, 'message.replied', null, { kind: 'agent', body: 'Hi', replyToId: 'question' }, 'answer'),
       eventAt(3, 'message.edited', 'alice', { messageId: 'question', body: 'Hello there' }),
       eventAt(4, 'message.posted', 'alice', { ...posted, body: 'Oops', threadRootId: 'question' }, 'mistake'),
       eventAt(5, 'message.deleted', 'alice', { messageId: 'mistake' }),
@@ -46,7 +40,6 @@ test('messagesFromEvents folds posted, replied, thread reply, edited and deleted
       authorId: 'alice',
       body: 'Hello there',
       attachments: [],
-      detail: null,
       step: null,
       replyToId: null,
       threadRootId: null,
@@ -64,7 +57,6 @@ test('messagesFromEvents folds posted, replied, thread reply, edited and deleted
       authorId: null,
       body: 'Hi',
       attachments: [],
-      detail: 'Read 2 files',
       step: null,
       replyToId: 'question',
       threadRootId: null,
@@ -82,7 +74,6 @@ test('messagesFromEvents folds posted, replied, thread reply, edited and deleted
       authorId: 'alice',
       body: '',
       attachments: [],
-      detail: null,
       step: null,
       replyToId: null,
       threadRootId: 'question',
@@ -125,13 +116,7 @@ test('messagesFromEvents keeps messages of different workspaces apart', () => {
 test('a posted step keeps its step and a step change replaces it in place', () => {
   const card = { type: 'pull_request', number: 1, state: 'open' }
   const [projected] = messagesFromEvents([
-    eventAt(
-      1,
-      'message.posted',
-      'alice',
-      { kind: 'step', body: 'pull_request', detail: null, replyToId: null, step: card },
-      'card',
-    ),
+    eventAt(1, 'message.posted', 'alice', { kind: 'step', body: 'pull_request', replyToId: null, step: card }, 'card'),
     eventAt(2, 'message.step_changed', null, { messageId: 'card', step: { ...card, state: 'merged' } }),
     eventAt(3, 'message.step_changed', null, { messageId: 'unknown', step: card }),
   ])

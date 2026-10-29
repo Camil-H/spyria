@@ -42,7 +42,7 @@ export const issueAgentLlmToken = ({ transactor }: Dependencies, { workspaceId, 
     const runtime = await runtimes.findByChat(workspaceId, chatId)
     if (!runtime) throw new RuntimeNotFound(chatId)
     const token = newSecretToken()
-    await secrets.keep(runtime, 'llmTokenHash', await hashSecret(token))
+    await secrets.keepLlmTokenHash(runtime, await hashSecret(token))
     return token
   })
 

@@ -164,10 +164,10 @@ test.describe('Sidebar', () => {
       await expectDialogTitleToUseAppTextColor('Rename project')
       await cancelDialog(page, 'Rename project')
     })
-    await test.step('offers channel and runtime as one row of options', async () => {
+    await test.step('offers Team channel and AI chat as one row of options', async () => {
       await page.getByRole('button', { name: 'New chat' }).click()
-      const channelOptionBox = await page.getByRole('radio', { name: 'Channel' }).locator('..').boundingBox()
-      const runtimeOptionBox = await page.getByRole('radio', { name: 'Runtime' }).locator('..').boundingBox()
+      const channelOptionBox = await page.getByRole('radio', { name: 'Team channel' }).locator('..').boundingBox()
+      const runtimeOptionBox = await page.getByRole('radio', { name: 'AI chat' }).locator('..').boundingBox()
       expect(Math.abs(channelOptionBox!.y - runtimeOptionBox!.y)).toBeLessThan(2)
       expect(runtimeOptionBox!.x).toBeGreaterThan(channelOptionBox!.x + channelOptionBox!.width - 1)
     })

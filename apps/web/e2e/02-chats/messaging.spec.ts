@@ -104,7 +104,7 @@ test.describe('Messaging', () => {
         ), posted as (
           insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
           select 'workspace-acme', 'chat-welcome', id, seq, 'message.posted', 'member-alice',
-            jsonb_build_object('kind', 'member', 'body', body, 'detail', null, 'replyToId', null), now()
+            jsonb_build_object('kind', 'member', 'body', body, 'replyToId', null), now()
           from fillers
         )
         insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
@@ -160,7 +160,7 @@ test.describe('Messaging', () => {
         ), posted as (
           insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
           select 'workspace-acme', 'chat-welcome', id, seq, 'message.posted', 'member-alice',
-            jsonb_build_object('kind', 'member', 'body', body, 'detail', null, 'replyToId', null), now()
+            jsonb_build_object('kind', 'member', 'body', body, 'replyToId', null), now()
           from fillers
         )
         insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
@@ -334,6 +334,14 @@ test.describe('Messaging', () => {
       await page.getByRole('button', { name: 'Cancel' }).click()
       await expect(messageContaining(page, 'Thanks, glad to be here.')).not.toContainText('(edited)')
       await expect(page.getByRole('textbox', { name: 'Edit message' })).toHaveCount(0)
+    })
+
+    await test.step('cancels the edit with Escape', async () => {
+      await openMessageAction(page, 'Thanks, glad to be here.', 'Edit')
+      await page.getByRole('textbox', { name: 'Edit message' }).fill('Something else')
+      await page.getByRole('textbox', { name: 'Edit message' }).press('Escape')
+      await expect(page.getByRole('textbox', { name: 'Edit message' })).toHaveCount(0)
+      await expect(messageContaining(page, 'Thanks, glad to be here.')).not.toContainText('(edited)')
     })
 
     await test.step('cannot save a blank text', async () => {

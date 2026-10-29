@@ -404,7 +404,7 @@ export const createZeroStore = ({
   const zeroByWorkspace = new Map<WorkspaceId, Zero>()
   const tokenByWorkspace = new Map<WorkspaceId, string>()
   const loadedByWorkspace = new Map<WorkspaceId, PromiseWithResolvers<void>>()
-  const readableByWorkspace = new Map<WorkspaceId, PromiseWithResolvers<void>>()
+  const readableByWorkspace = new Map<WorkspaceId, PromiseWithResolvers<'readable' | 'closed'>>()
   const completeTablesByWorkspace = new Map<WorkspaceId, ReadonlySet<string>>()
   const expiresAtByWorkspace = new Map<WorkspaceId, number>()
   const clientIdsByWorkspace = new Map<WorkspaceId, { clientID: string; clientGroupID?: string }>()
@@ -447,8 +447,11 @@ export const createZeroStore = ({
       feedScoped(watch.workspaceId, watch.name)
     })
   }
-  const resolverIn = (resolvers: Map<WorkspaceId, PromiseWithResolvers<void>>, workspaceId: WorkspaceId) => {
-    const resolver = resolvers.get(workspaceId) ?? Promise.withResolvers<void>()
+  const resolverIn = <Outcome>(
+    resolvers: Map<WorkspaceId, PromiseWithResolvers<Outcome>>,
+    workspaceId: WorkspaceId,
+  ) => {
+    const resolver = resolvers.get(workspaceId) ?? Promise.withResolvers<Outcome>()
     resolvers.set(workspaceId, resolver)
     return resolver
   }
@@ -513,12 +516,12 @@ export const createZeroStore = ({
             : (data as object[])
           publish()
           if (isCacheReadable && table === 'workspaces' && isWorkspaceRowIn(data, workspaceId))
-            readableOf(workspaceId).resolve()
+            readableOf(workspaceId).resolve('readable')
           if (result !== 'complete' || completeTables.has(table)) return
           completeTables.add(table)
           if (!isLoaded(workspaceId)) return
           syncedTablesStorage?.setItem(syncedTablesKeyOf(workspaceId), JSON.stringify(materializedTables))
-          readableOf(workspaceId).resolve()
+          readableOf(workspaceId).resolve('readable')
           loadedOf(workspaceId).resolve()
         })
     for (const watch of scopedWatches.values()) if (watch.workspaceId === workspaceId) materializeScoped(watch)
@@ -540,6 +543,7 @@ export const createZeroStore = ({
       }
     zeroByWorkspace.delete(workspaceId)
     loadedByWorkspace.delete(workspaceId)
+    readableByWorkspace.get(workspaceId)?.resolve('closed')
     readableByWorkspace.delete(workspaceId)
     completeTablesByWorkspace.delete(workspaceId)
     signedInWorkspaceIds = new Set([...signedInWorkspaceIds].filter((signedInId) => signedInId !== workspaceId))

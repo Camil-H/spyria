@@ -32,7 +32,6 @@ const messageByAlice: Message = {
   authorId: alice,
   body: MessageBody('Hello'),
   attachments: [],
-  detail: null,
   step: null,
   createdAt: new Date('2026-10-01T09:00:00Z'),
   editedAt: null,
