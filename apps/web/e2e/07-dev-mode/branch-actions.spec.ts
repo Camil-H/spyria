@@ -179,7 +179,7 @@ test.describe('Branch actions', () => {
     await expect(commits.first()).toContainText(/alice-martin · \d\d:\d\d UTC/)
   })
 
-  test('As a chat owner, I merge a new base commit with Update from base: the status line counts the merge, Changes leaves out the clean merge and Files shows the base’s new file', {
+  test('As a chat owner, I merge a new base commit with Update from base: the status line counts the merge, Changes lists the clean merge without files and Files shows the base’s new file', {
     tag: ['@spec-43'],
   }, async ({ page, agentScript }) => {
     await configureGitHubApp(page)
@@ -198,7 +198,8 @@ test.describe('Branch actions', () => {
     await expect(statusLine).toContainText(`2 ahead of ${baseBranch}`)
     await expect(statusLine).not.toContainText('behind')
     await expect(tabPanelOf(page).getByRole('region', { name: 'Changes in docs/from-base.md' })).toHaveCount(0)
-    await expect(commitsOf(page)).toHaveCount(1)
+    const merge = commitsOf(page).first()
+    await expect(merge).toContainText(new RegExp(`Merge branch '${baseBranch}' into spyria/update-totals-`))
     await panelTabOf(page, 'Files').click()
     await tabPanelOf(page).getByRole('button', { name: 'docs', exact: false }).click()
     await expect(tabPanelOf(page).getByRole('button', { name: 'from-base.md', exact: false })).toBeVisible()
