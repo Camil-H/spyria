@@ -25,8 +25,8 @@ const ConnectionsTab = lazy(() => import('./ConnectionsTab.tsx'))
 const MembersTab = lazy(() => import('./MembersTab.tsx'))
 
 const tabs: Record<PanelTabId, { label: string; Icon: LucideIcon; Component: ComponentType<TabProps> | null }> = {
-  files: { label: 'Files', Icon: FolderTree, Component: FilesTab },
   changes: { label: 'Changes', Icon: FileDiff, Component: ChangesTab },
+  files: { label: 'Files', Icon: FolderTree, Component: FilesTab },
   browser: { label: 'Browser', Icon: Globe, Component: BrowserTab },
   sources: { label: 'Sources', Icon: BookOpen, Component: SourcesTab },
   usage: { label: 'Usage', Icon: ChartColumn, Component: null },

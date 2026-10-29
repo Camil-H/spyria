@@ -5,10 +5,10 @@ import { getPanelTabs } from './get-panel-tabs.ts'
 
 const snapshot = createMockSnapshot()
 
-test('a runtime chat shows its files and changes, a channel its sources', () => {
+test('a runtime chat shows its changes first, then its files, a channel its sources', () => {
   expect(getPanelTabs(acme, chatId('chat-invoice-bug'), alice)(snapshot)).toEqual([
-    'files',
     'changes',
+    'files',
     'browser',
     'usage',
     'connections',

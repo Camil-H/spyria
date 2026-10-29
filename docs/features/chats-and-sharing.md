@@ -6,12 +6,16 @@ This page describes how conversations are organized in a Spyria workspace and ho
 
 The sidebar lists a workspace's **projects**, each with its chats, then the **Loose chats** that belong to no project. **New project** and **New chat** sit at the top of the sidebar, above **Search**.
 
-A chat has one of two types, chosen in **New chat**:
+A chat has one of two types. **New chat** asks questions instead of naming them, and creates the chat once every question shown is answered (none is answered in advance):
+
+1. **Is it public, so everyone in the workspace can join?** Yes makes a public channel, No a private chat.
+2. **Is it a team channel or an AI chat?** Team channel makes a channel, AI chat a runtime chat. AI chat cannot be chosen for a public chat, since runtime chats are always private.
+3. **Does it need GitHub access?** Asked for an AI chat only. Yes makes it a dev chat and shows the **Repository** and **Base branch** pickers (see [Dev mode](./dev-mode.md#creating-a-dev-chat)).
 
 | Type | Who talks | Visibility | Notes |
 |---|---|---|---|
 | **Channel** | members only | **Public** or **Private** | threads, "Start runtime from this message" |
-| **Runtime** | members and an agent | always private | **Non-dev** or **Dev** mode; dev chats need a GitHub repository |
+| **Runtime** | members and an agent | always private | with or without GitHub access; with it, a dev chat on a repository |
 
 The member who creates a chat owns it, and stays its owner. Ownership matters beyond the chat itself: the agent of a runtime chat acts with its owner's tool connections (the header says **Agent acts as** *owner*), so there is always one accountable identity for what the agent does. See [Security](../architecture/security.md).
 
@@ -43,7 +47,7 @@ Changing a channel's visibility needs the chat admin permission. When a channel 
 
 ## Message actions
 
-In a channel, pointing at a message, or moving the keyboard focus into it, shows its actions side by side at its top right, each an icon that names itself on hover: **Reply in thread** (top-level messages, for members who can post), **Reply** (for members who can post), **Start runtime from this message**, **Copy message as context** (**Copy thread as context** when the message has replies or is one), **Copy link to message**, and, for its author only, **Edit** and **Delete**. An action a member cannot take is not shown. The actions are one stop for Tab; the left and right arrow keys, Home and End move between them. In a runtime chat, members' messages and the agent's replies offer **Reply** (for members who can post) and **Copy link to message** only.
+In a channel, pointing at a message, or moving the keyboard focus into it, shows its actions side by side at its top right, each an icon that names itself on hover: **Reply in thread** (top-level messages, for members who can post), **Reply** (for members who can post), **Start runtime from this message**, **Copy message as context** (**Copy thread as context** when the message has replies or is one), **Copy link to message**, and, for its author only, **Edit** and **Delete**. An action a member cannot take is not shown. The actions are one stop for Tab; the left and right arrow keys, Home and End move between them. In a runtime chat, members' messages and the agent's replies offer **Reply** (for members who can post) and **Copy link to message** only. **Edit** turns the message into a text box with **Save** and **Cancel**; Escape cancels too.
 
 ## Replies
 
@@ -67,7 +71,7 @@ In a channel, the actions of a top-level message offer **Reply in thread**. Repl
 
 ## Keyboard shortcuts
 
-Single keys move around the workspace. They do nothing while typing in a field or while a dialog or menu is open (Escape leaves the composer), and **?** lists the ones available on the current page. A button's tooltip shows its shortcut after its name, for example "Collapse sidebar L" or "New chat C", as the side panel's tabs show "Files R then 1".
+Single keys move around the workspace. They do nothing while typing in a field or while a dialog or menu is open (Escape leaves the composer), and **?** lists the ones available on the current page. A button's tooltip shows its shortcut after its name, for example "Collapse sidebar L" or "New chat C", as the side panel's tabs show "Changes R then 1".
 
 | Key | Action |
 |---|---|
@@ -144,7 +148,7 @@ When an admin removes a member, that member's runtime chats are **frozen**: they
 
 ## Side panel
 
-The side panel next to a chat has tabs that depend on the chat type. Runtime chats have **Files**, **Changes**, **Browser**, **Usage**, **Connected tools** and **Members**; channels have **Browser**, **Sources**, **Usage**, **Connected tools** and **Members**. **Usage** breaks down the chat's model spend per member and per model, and **Connected tools** lists the workspace and personal connections the agent can use; it shows only to the chat's participants, so a member reading a public channel does not see its owner's connections. The dev tabs are described in [Dev mode](./dev-mode.md). **Sources** is a placeholder: nothing fills it yet. **R** collapses or expands the side panel, and **R** then a number opens it on that tab; each tab's tooltip shows its shortcut.
+The side panel next to a chat has tabs that depend on the chat type. Runtime chats have **Changes**, **Files**, **Browser**, **Usage**, **Connected tools** and **Members**; channels have **Browser**, **Sources**, **Usage**, **Connected tools** and **Members**. **Usage** breaks down the chat's model spend per member and per model, and **Connected tools** lists the workspace and personal connections the agent can use; it shows only to the chat's participants, so a member reading a public channel does not see its owner's connections. The dev tabs are described in [Dev mode](./dev-mode.md). **Sources** is a placeholder: nothing fills it yet. **R** collapses or expands the side panel, and **R** then a number opens it on that tab; each tab's tooltip shows its shortcut.
 
 ### Browser
 

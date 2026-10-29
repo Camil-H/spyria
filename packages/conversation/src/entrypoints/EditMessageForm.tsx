@@ -1,6 +1,6 @@
 import type { MessageId, WorkspaceId } from '@spyria/kernel'
 import { buttonClass, fieldClass, ghostButtonClass } from '@spyria/ui'
-import { type SubmitEvent, useState } from 'react'
+import { type KeyboardEvent, type SubmitEvent, useState } from 'react'
 import { useOutletContext } from 'react-router'
 import { useConversationCommands } from './providers.tsx'
 
@@ -23,8 +23,14 @@ export const EditMessageForm = ({
     await commands.editMessage({ workspaceId, messageId, text })
     onClose()
   }
+  const cancelOnEscape = (event: KeyboardEvent) => {
+    if (event.key !== 'Escape' || event.nativeEvent.isComposing) return
+    event.preventDefault()
+    event.stopPropagation()
+    onClose()
+  }
   return (
-    <form onSubmit={save} className="flex flex-col gap-2">
+    <form onSubmit={save} onKeyDown={cancelOnEscape} className="flex flex-col gap-2">
       <textarea
         ref={focusOnMount}
         aria-label="Edit message"

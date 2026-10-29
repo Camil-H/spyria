@@ -40,7 +40,6 @@ const testStack =
     ? (window as Window & { spyriaTestStack?: { zeroCacheURL: string } }).spyriaTestStack
     : undefined
 
-const workspaceLoadMilliseconds = 30_000
 let storeCount = 0
 
 type CommandInput = { workspaceId: WorkspaceId; [argument: string]: unknown }
@@ -137,11 +136,7 @@ export const createApp = async (
   })
   storeCount++
   if (testStack) Object.assign(window, { spyriaZeroDiagnostics: () => ({ storeCount, ...store.diagnostics() }) })
-  const isLoaded = await Promise.race([
-    store.whenReadable(defaultWorkspaceId).then(() => true),
-    new Promise<false>((resolve) => setTimeout(resolve, workspaceLoadMilliseconds, false)),
-  ])
-  if (!isLoaded) {
+  if ((await store.whenReadable(defaultWorkspaceId)) === 'closed') {
     await store.close()
     return undefined
   }
