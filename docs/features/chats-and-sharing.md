@@ -71,7 +71,7 @@ In a channel, the actions of a top-level message offer **Reply in thread**. Repl
 
 ## Keyboard shortcuts
 
-Single keys move around the workspace. They do nothing while typing in a field or while a dialog or menu is open (Escape leaves the composer), and **?** lists the ones available on the current page. A button's tooltip shows its shortcut after its name, for example "Collapse sidebar L" or "New chat C", as the side panel's tabs show "Files R then 1".
+Single keys move around the workspace. They do nothing while typing in a field or while a dialog or menu is open (Escape leaves the composer), and **?** lists the ones available on the current page. A button's tooltip shows its shortcut after its name, for example "Collapse sidebar L" or "New chat C", as the side panel's tabs show "Changes R then 1".
 
 | Key | Action |
 |---|---|
@@ -148,7 +148,7 @@ When an admin removes a member, that member's runtime chats are **frozen**: they
 
 ## Side panel
 
-The side panel next to a chat has tabs that depend on the chat type. Runtime chats have **Files**, **Changes**, **Browser**, **Usage**, **Connected tools** and **Members**; channels have **Browser**, **Sources**, **Usage**, **Connected tools** and **Members**. **Usage** breaks down the chat's model spend per member and per model, and **Connected tools** lists the workspace and personal connections the agent can use; it shows only to the chat's participants, so a member reading a public channel does not see its owner's connections. The dev tabs are described in [Dev mode](./dev-mode.md). **Sources** is a placeholder: nothing fills it yet. **R** collapses or expands the side panel, and **R** then a number opens it on that tab; each tab's tooltip shows its shortcut.
+The side panel next to a chat has tabs that depend on the chat type. Runtime chats have **Changes**, **Files**, **Browser**, **Usage**, **Connected tools** and **Members**; channels have **Browser**, **Sources**, **Usage**, **Connected tools** and **Members**. **Usage** breaks down the chat's model spend per member and per model, and **Connected tools** lists the workspace and personal connections the agent can use; it shows only to the chat's participants, so a member reading a public channel does not see its owner's connections. The dev tabs are described in [Dev mode](./dev-mode.md). **Sources** is a placeholder: nothing fills it yet. **R** collapses or expands the side panel, and **R** then a number opens it on that tab; each tab's tooltip shows its shortcut.
 
 ### Browser
 
