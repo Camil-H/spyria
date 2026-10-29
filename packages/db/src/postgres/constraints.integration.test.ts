@@ -150,18 +150,26 @@ test('rejects UPDATE and DELETE on events', async () => {
   expect(await database.$count(events)).toBe(19)
 })
 
-test('an event changes only to blank the body of a deleted message, in a transaction that names that message', async () => {
+test('an event changes only to blank the body and drop the attachments of a deleted message, in a transaction that names that message', async () => {
   const blanked = { body: '', redacted: true }
+  const attachments = [{ id: 'attachment-1', name: 'salaries.xlsx', type: 'application/octet-stream', size: 10 }]
   const posted = async (id: string, seq: number, deletedAt: Date | null) => {
     await database
       .insert(messages)
       .values(message({ workspaceId: 'workspace-acme', chatId: 'chat-welcome', id, seq, body: '', deletedAt }))
-    await database.insert(events).values(event({ id, seq, payload: { kind: 'member', body: 'hunter2' } }))
+    await database.insert(events).values(event({ id, seq, payload: { kind: 'member', body: 'hunter2', attachments } }))
   }
-  const redaction = (id: string, { naming = id, payload = blanked }: { naming?: string; payload?: object } = {}) =>
+  const redaction = (
+    id: string,
+    {
+      naming = id,
+      payload = blanked,
+      dropped = 'attachments',
+    }: { naming?: string; payload?: object; dropped?: string } = {},
+  ) =>
     database.$client.begin(async (sql) => {
       await sql`select set_config('spyria.redacting_message', ${`workspace-acme/${naming}`}, true)`
-      await sql`update events set payload = payload || ${JSON.stringify(payload)}::jsonb
+      await sql`update events set payload = (payload - ${dropped}::text) || ${JSON.stringify(payload)}::jsonb
         where workspace_id = 'workspace-acme' and id = ${id}`
     })
   const payloadOf = async (id: string) => (await database.select().from(events).where(eq(events.id, id)))[0]?.payload
@@ -172,9 +180,10 @@ test('an event changes only to blank the body of a deleted message, in a transac
   expect(await refusalOf(redaction('message-live'))).toMatchObject(updateRejected)
   expect(await refusalOf(redaction('message-deleted', { naming: 'message-live' }))).toMatchObject(updateRejected)
   expect(await refusalOf(redaction('message-deleted', { payload: { body: 'forged' } }))).toMatchObject(updateRejected)
-  expect(await payloadOf('message-deleted')).toEqual({ kind: 'member', body: 'hunter2' })
+  expect(await refusalOf(redaction('message-deleted', { dropped: 'nothing' }))).toMatchObject(updateRejected)
+  expect(await payloadOf('message-deleted')).toEqual({ kind: 'member', body: 'hunter2', attachments })
 
   expect(await refusalOf(redaction('message-deleted'))).toBe('accepted')
   expect(await payloadOf('message-deleted')).toEqual({ kind: 'member', ...blanked })
-  expect(await payloadOf('message-live')).toEqual({ kind: 'member', body: 'hunter2' })
+  expect(await payloadOf('message-live')).toEqual({ kind: 'member', body: 'hunter2', attachments })
 })

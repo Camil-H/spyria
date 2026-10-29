@@ -1,4 +1,4 @@
-import type { RuntimeHostRow } from '@spyria/db'
+import type { MachineCountsRow, RuntimeHostRow } from '@spyria/db'
 import { useQuery } from '@spyria/db/react'
 import type { WorkspaceId } from '@spyria/kernel'
 import {
@@ -12,9 +12,9 @@ import {
   Switch,
   useGuardedAction,
 } from '@spyria/ui'
-import { type SubmitEvent, useEffect, useState } from 'react'
+import { type SubmitEvent, useState } from 'react'
 import { isClaimExpired } from '../domain/claim.ts'
-import { listRuntimeHosts, localSessionsOf } from '../queries/list-runtime-hosts.ts'
+import { listRuntimeHosts, localSessionsOf, machineCountsOf } from '../queries/list-runtime-hosts.ts'
 import { HostCommandDialog } from './HostCommandDialog.tsx'
 import { useRuntimeCommands } from './providers.tsx'
 
@@ -27,6 +27,8 @@ type OpenDialog =
 const gibibyte = 1024 ** 3
 const badgeClass = 'rounded-full border border-line px-2 py-0.5 text-xs text-muted'
 const statusLabels = { waiting: 'Waiting for the host', online: 'Online', offline: 'Offline', expired: 'Code expired' }
+const machineUsageOf = ({ machines, claudeCode, codex }: Omit<MachineCountsRow, 'workspaceId'>) =>
+  `${machines === 1 ? '1 member uses' : `${machines} members use`} their machine: ${claudeCode} signed in to Claude Code, ${codex} to Codex`
 
 export const statusOf = (host: RuntimeHostRow) =>
   host.status === 'waiting' && host.claimExpiresAt !== null && isClaimExpired(host.claimExpiresAt, Date.now())
@@ -63,10 +65,7 @@ export const RuntimeHostsSection = ({ workspaceId }: { workspaceId: WorkspaceId 
   const hosts = useQuery(listRuntimeHosts, workspaceId)
   const localSessions = useQuery(localSessionsOf, workspaceId)
   const [openDialog, setOpenDialog] = useState<OpenDialog>(null)
-  const [machineCount, setMachineCount] = useState(0)
-  useEffect(() => {
-    commands.countMachines({ workspaceId }).then(setMachineCount)
-  }, [commands, workspaceId])
+  const machineCounts = useQuery(machineCountsOf, workspaceId)
   const closeDialog = () => setOpenDialog(null)
   const showCommand = (label: string, code: string) => setOpenDialog({ kind: 'command', label, code })
   return (
@@ -129,11 +128,7 @@ export const RuntimeHostsSection = ({ workspaceId }: { workspaceId: WorkspaceId 
           })}
         </ul>
       )}
-      {machineCount > 0 && (
-        <p className="text-sm text-muted">
-          {machineCount === 1 ? '1 member uses their machine' : `${machineCount} members use their machine`}
-        </p>
-      )}
+      {machineCounts.machines > 0 && <p className="text-sm text-muted">{machineUsageOf(machineCounts)}</p>}
       <Switch
         label="Members can run sessions on their own machine"
         isOn={localSessions}

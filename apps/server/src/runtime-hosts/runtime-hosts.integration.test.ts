@@ -403,13 +403,6 @@ const pairedMachine = async (member: Member) => {
   await waitFor(async () => (await hostRow(body.id as string)).status === 'online')
   return { id: body.id, token, host }
 }
-const countMachines = async (member: Member) =>
-  (
-    await app.request('/api/runtime-hosts/machines', {
-      headers: { authorization: `Bearer ${await sessionTokenOf(database, member.workspaceId, member.userId)}` },
-    })
-  ).json()
-
 test('a member adds one machine of their own under a lock on their membership; a second one is refused until it is removed', async () => {
   await database.$client`update runtime_hosts set removed_at = now() where owner_id is not null`
   const { status, body } = await addMachine(bobInAcme)
@@ -477,21 +470,27 @@ test('an offline machine gets a new command from its owner, which revokes its ol
   })
 })
 
-test('a machine is read and removed by its owner only, and admins see only how many members use one', async () => {
+test('a machine is read and removed by its owner only, and admins see only how many members use one and with which tool, kept in sync', async () => {
   await database.$client`update runtime_hosts set removed_at = now() where owner_id is not null`
   const { id, host } = await pairedMachine(bobInAcme)
   const bobsAcme = await openStore(bobInAcme)
   await waitFor(() => bobsAcme.read().runtimeHosts.some((machine) => machine.id === id && machine.status === 'online'))
   expect(bobsAcme.read().runtimeHosts.map((machine) => String(machine.id))).toEqual([id])
+  expect(bobsAcme.read().machineCounts).toEqual([])
   const alicesAcme = await openStore(aliceInAcme)
   expect(alicesAcme.read().runtimeHosts.some((machine) => machine.id === id)).toBe(false)
-  expect(await countMachines(aliceInAcme)).toEqual({ count: 1 })
-  expect(await countMachines(bobInAcme)).toMatchObject({ error: 'missing_workspace_permission' })
+  const countsSeenByAlice = () => alicesAcme.read().machineCounts.map(({ workspaceId, ...counts }) => counts)
+  const aliceSees = (counts: { machines: number; claudeCode: number; codex: number }) =>
+    waitFor(() => JSON.stringify(countsSeenByAlice()) === JSON.stringify([counts]))
+  await aliceSees({ machines: 1, claudeCode: 0, codex: 0 })
+  host.send({ type: 'heartbeat', memoryFreeBytes: gibibyte, running: 0, signedIn: ['codex'] })
+  await aliceSees({ machines: 1, claudeCode: 0, codex: 1 })
   expect(await removeHost(aliceInAcme, acme, id)).toEqual(failedWith(`Runtime host ${id} was not found`))
   expect(await renewCode(aliceInAcme, id)).toMatchObject({ status: 404, body: { error: 'host_not_found' } })
   expect(await removeHost(bobInAcme, acme, id)).toEqual(succeeded)
   await host.closed
-  expect(await countMachines(aliceInAcme)).toEqual({ count: 0 })
+  await aliceSees({ machines: 0, claudeCode: 0, codex: 0 })
+  expect(bobsAcme.read().machineCounts).toEqual([])
 })
 
 test('removing a member removes their machine and closes its connection', async () => {

@@ -132,8 +132,9 @@ const readAll = async (workspace: string, user: string) => {
 }
 
 const expectedCount = async (table: string, workspace: string, user: string) => {
+  const participatedChats = `select chat_id from chat_participants where workspace_id = '${workspace}' and user_id = '${user}'`
   const readableChats = `select id from chats where workspace_id = '${workspace}' and (visibility = 'public'
-    or id in (select chat_id from chat_participants where workspace_id = '${workspace}' and user_id = '${user}'))`
+    or id in (${participatedChats}))`
   const userCondition = memberPrivateTables.includes(table) ? `and user_id = '${user}'` : ''
   const adminCondition = `or exists (select 1 from memberships where workspace_id = '${workspace}'
     and user_id = '${user}' and role = 'admin' and removed_at is null)`
@@ -143,7 +144,7 @@ const expectedCount = async (table: string, workspace: string, user: string) => 
       : serverSchema[table]?.chat_id
         ? `and chat_id in (${readableChats})`
         : chatOwnerConnectionTables.includes(table)
-          ? `and (user_id = '${user}' or user_id in (select owner_user_id from chats where id in (${readableChats}))
+          ? `and (user_id = '${user}' or user_id in (select owner_user_id from chats where id in (${participatedChats}))
               ${table === 'connection_restrictions' ? adminCondition : ''})`
           : ''
   const [{ count }] = await testDatabase.database.$client.unsafe<[{ count: number }]>(
@@ -173,7 +174,8 @@ await testDatabase.database.$client`
 await testDatabase.database.$client`
   insert into tool_connections (workspace_id, user_id, tool, status, position)
   values (${acme}, ${alice}, 'Notion', 'Needs reconnection', 3), (${acme}, ${alice}, 'GitHub', 'Connected', 1),
-    (${acme}, ${alice}, 'Slack', 'Connected', 2)`
+    (${acme}, ${alice}, 'Slack', 'Connected', 2),
+    (${acme}, ${bob}, 'Linear', 'Connected', 0)`
 const rowsByReader = new Map(
   await Promise.all(
     readers.map(async (reader) => [reader.name, await readAll(reader.workspace, reader.user)] as const),
@@ -269,7 +271,7 @@ test('the member-private rows of Bob are not visible to Alice', () => {
   }
 })
 
-test('workspace connections are visible to every member of their workspace, a restriction to its member, to readers of their chats and to admins', () => {
+test('workspace connections are visible to every member of their workspace, a restriction to its member, to participants of their chats and to admins', () => {
   const columnOf = (reader: string, table: string, column: string) =>
     rowsByReader
       .get(reader)
@@ -280,8 +282,22 @@ test('workspace connections are visible to every member of their workspace, a re
   expect(columnOf('Alice in Globex', 'workspace_connections', 'name')).toEqual(['ERP'])
   expect(columnOf('Alice in Acme', 'connection_restrictions', 'user_id')?.toSorted()).toEqual([bob, lee])
   expect(columnOf('Bob in Acme', 'connection_restrictions', 'user_id')).toEqual([bob])
-  expect(columnOf('Lee in Acme', 'connection_restrictions', 'user_id')?.toSorted()).toEqual([bob, lee])
+  expect(columnOf('Lee in Acme', 'connection_restrictions', 'user_id')).toEqual([lee])
   expect(columnOf('Alice in Globex', 'connection_restrictions', 'user_id')).toEqual([])
+})
+
+test('personal connections are visible to their member and to participants of the chats they own, not to every reader of a public channel', () => {
+  const ownersOf = (reader: string) => [
+    ...new Set(
+      rowsByReader
+        .get(reader)
+        ?.get('tool_connections')
+        ?.map((row) => row.user_id),
+    ),
+  ]
+  expect(ownersOf('Alice in Acme').toSorted()).toEqual([alice, bob].toSorted())
+  expect(ownersOf('Bob in Acme').toSorted()).toEqual([alice, bob].toSorted())
+  expect(ownersOf('Lee in Acme')).toEqual([alice])
 })
 
 test('workspaces lists every workspace of the member and users lists the members of the current workspace', () => {
@@ -297,9 +313,11 @@ test('workspaces lists every workspace of the member and users lists the members
   expect(idsOf('Alice in Globex', 'users', 'id')).toEqual([alice])
 })
 
-test('an ownership change hides the restriction of Bob from a member who no longer reads any chat of his', async () => {
+test('an ownership change shows the restriction of Bob to the participants of a chat he takes over, and hides it once he no longer owns one they take part in', async () => {
   const restrictedOf = async (workspace: string, user: string) =>
     ((await readAll(workspace, user)).get('connection_restrictions') ?? []).map((row) => row.user_id).toSorted()
+  expect(await restrictedOf(acme, lee)).toEqual([lee])
+  await testDatabase.database.$client`update chats set owner_user_id = ${bob} where id = 'chat-invoice-bug'`
   expect(await restrictedOf(acme, lee)).toEqual([bob, lee])
   await testDatabase.database.$client`update chats set owner_user_id = ${alice} where owner_user_id = ${bob}`
   expect(await restrictedOf(acme, lee)).toEqual([lee])
@@ -312,7 +330,8 @@ test('the connections keep their position order', () => {
     rowsByReader
       .get('Alice in Acme')
       ?.get('tool_connections')
-      ?.map((row) => row.tool),
+      ?.filter((row) => row.user_id === alice)
+      .map((row) => row.tool),
   ).toEqual(['GitHub', 'Slack', 'Notion'])
 })
 
