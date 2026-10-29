@@ -18,12 +18,11 @@ test.describe('Onboarding', () => {
     await sidebarOf(page).getByRole('link', { name: 'Workspace settings' }).click()
     const checklist = checklistOf(page, 'Get your workspace ready')
 
-    await test.step('lists the workspace tasks I can do, in order, with what each is for', async () => {
+    await test.step('lists the workspace tasks left to do, in order, with what each is for, and counts the done ones', async () => {
       await expect(checklist).toContainText('1 of 3 done')
       await expect(checklist.getByRole('listitem')).toHaveText([
         /^To do: Connect the GitHub App.*open pull requests from dev chats/,
         /^To do: Connect a runtime.*isolated containers/,
-        /^Done: Invite members/,
       ])
     })
 
@@ -41,7 +40,7 @@ test.describe('Onboarding', () => {
 
     await test.step('a skipped task leaves the list and the count, and skipping all that is left removes the checklist', async () => {
       await checklist.getByRole('button', { name: 'Skip Connect the GitHub App' }).click()
-      await expect(checklist.getByRole('listitem')).toHaveText([/^To do: Connect a runtime/, /^Done: Invite members/])
+      await expect(checklist.getByRole('listitem')).toHaveText([/^To do: Connect a runtime/])
       await expect(checklist).toContainText('1 of 2 done')
       await checklist.getByRole('button', { name: 'Skip Connect a runtime' }).click()
       await expect(checklist).toHaveCount(0)

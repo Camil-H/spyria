@@ -1,6 +1,6 @@
 import type { WorkspaceId } from '@spyria/kernel'
 import { ErrorMessage, focusRing, smallGhostButtonClass, useGuardedAction } from '@spyria/ui'
-import { ChevronDown, Circle, CircleCheck, Lock } from 'lucide-react'
+import { ChevronDown, Circle, Lock } from 'lucide-react'
 import { useId, useState } from 'react'
 import { Link } from 'react-router'
 import { isDoneView, type TaskScope, type TaskState, type TaskView } from '../domain/tasks.ts'
@@ -13,8 +13,9 @@ const titleByScope: Record<TaskScope, string> = {
   member: 'Set up your profile',
 }
 
-const stateLook: Record<TaskState, { label: string; Icon: typeof Circle; iconClass: string }> = {
-  done: { label: 'Done', Icon: CircleCheck, iconClass: 'text-agent-done' },
+type LeftTaskView = TaskView & { state: Exclude<TaskState, 'done'> }
+
+const stateLook: Record<LeftTaskView['state'], { label: string; Icon: typeof Circle; iconClass: string }> = {
   blocked: { label: 'Not available yet', Icon: Lock, iconClass: 'text-muted' },
   open: { label: 'To do', Icon: Circle, iconClass: 'text-ink' },
 }
@@ -46,7 +47,7 @@ const TaskRow = ({
   isPending,
 }: {
   workspaceId: WorkspaceId
-  view: TaskView
+  view: LeftTaskView
   domain: string | undefined
   onSkip: () => void
   isPending: boolean
@@ -59,9 +60,9 @@ const TaskRow = ({
     <li className="flex items-start gap-3 py-2">
       <Icon aria-hidden className={`mt-0.5 size-4 shrink-0 ${iconClass} ${blockedClass}`} />
       <div className={`flex min-w-0 flex-1 flex-col gap-0.5 ${blockedClass}`}>
-        <span className={view.state === 'done' ? 'text-muted line-through' : ''}>
+        <span>
           <span className="sr-only">{label}: </span>
-          {view.state !== 'open' ? (
+          {view.state === 'blocked' ? (
             <span className="font-medium">{title}</span>
           ) : view.scope === 'member' && section ? (
             <a href={`#${section}`} className={linkClass}>
@@ -73,21 +74,17 @@ const TaskRow = ({
             </Link>
           )}
         </span>
-        {view.state !== 'done' && (
-          <span className="text-sm text-muted">{view.state === 'blocked' ? blockedExplanation : explanation}</span>
-        )}
+        <span className="text-sm text-muted">{view.state === 'blocked' ? blockedExplanation : explanation}</span>
       </div>
-      {view.state !== 'done' && (
-        <button
-          type="button"
-          aria-label={`Skip ${title}`}
-          disabled={isPending}
-          className={smallGhostButtonClass}
-          onClick={onSkip}
-        >
-          Skip
-        </button>
-      )}
+      <button
+        type="button"
+        aria-label={`Skip ${title}`}
+        disabled={isPending}
+        className={smallGhostButtonClass}
+        onClick={onSkip}
+      >
+        Skip
+      </button>
     </li>
   )
 }
@@ -108,7 +105,8 @@ export const ChecklistBlock = ({
   const headingId = useId()
   const listId = useId()
   const shownTasks = tasks.filter((view) => view.scope === scope)
-  if (shownTasks.every(isDoneView)) return null
+  const leftTasks = shownTasks.filter((view): view is LeftTaskView => !isDoneView(view))
+  if (leftTasks.length === 0) return null
   const title = titleByScope[scope]
   return (
     <section
@@ -132,7 +130,7 @@ export const ChecklistBlock = ({
       </h2>
       {!isCollapsed && (
         <ul id={listId} className="flex flex-col divide-y divide-callout-edge/40">
-          {shownTasks.map((view) => (
+          {leftTasks.map((view) => (
             <TaskRow
               key={view.task}
               workspaceId={workspaceId}
