@@ -24,6 +24,12 @@ export {
   chatAttachmentsPathOf,
   chatMediaPathOf,
 } from './domain/attachments.ts'
+export {
+  isPrivateNetworkAddress,
+  maximumWebPageBytes,
+  type WebPage,
+  webPagePath,
+} from './domain/browser-pages.ts'
 export { logExcerptOf } from './domain/ci-logs.ts'
 export {
   awaitTaskTool,
@@ -33,6 +39,7 @@ export {
   subagentFailureOf,
   unknownTaskOf,
 } from './domain/delegation.ts'
+export { WebPageNotPublic, WebPageTooLarge, WebPageUnreachable } from './domain/errors.ts'
 export { type GitAction, isGitAction } from './domain/git-actions.ts'
 export {
   githubTools,
@@ -71,9 +78,26 @@ export {
   toolCallNoticeOf,
   toolGatewayUnreachable,
 } from './domain/tool-calls.ts'
+export {
+  webSearchAnswerOf,
+  webSearchFailedOf,
+  webSearchMilliseconds,
+  webSearchNotRun,
+  webSearchOverBudget,
+  webSearchPath,
+  webSearchQueryOf,
+  webSearchRequestOf,
+  webSearchTool,
+  webSearchUnavailable,
+  webToolsPath,
+} from './domain/web-search.ts'
 export { isWorkspaceRead } from './domain/workspace-reads.ts'
 export type { AgentStream, ConversationCommands } from './entrypoints/commands.ts'
-export { mediaResponseOf, questionAnswerOf, uploadAttachmentFromRequest } from './entrypoints/endpoints.ts'
+export {
+  mediaResponseOf,
+  questionAnswerOf,
+  uploadAttachmentFromRequest,
+} from './entrypoints/endpoints.ts'
 export { createAgentHandlers } from './entrypoints/jobs.ts'
 export { conversationMutators } from './entrypoints/mutators.ts'
 export { createGatewaySessionClassifier } from './integrations/gateway-session-classifier.ts'

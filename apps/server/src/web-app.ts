@@ -4,6 +4,7 @@ const serverPaths = /^\/(api|auth|host|health|mcp|test|fake-llm|gateway-oauth)(\
 const hashedAssetsPath = '/assets/'
 const immutable = 'public, max-age=31536000, immutable'
 const reportFramePath = '/report-frame.html'
+const pageFramePath = '/page-frame.html'
 const appPolicy = [
   "default-src 'self'",
   "script-src 'self'",
@@ -22,6 +23,13 @@ const reportFramePolicy = [
   "default-src * data: blob: 'unsafe-inline' 'unsafe-eval'",
   "frame-ancestors 'self'",
 ].join('; ')
+const pageFramePolicy = [
+  'sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox',
+  "default-src * data: blob: 'unsafe-inline'",
+  "script-src 'self'",
+  "frame-ancestors 'self'",
+].join('; ')
+const policyByPath: Record<string, string> = { [reportFramePath]: reportFramePolicy, [pageFramePath]: pageFramePolicy }
 const precompressedVariants = [
   { encoding: 'br', extension: '.br' },
   { encoding: 'gzip', extension: '.gz' },
@@ -38,8 +46,13 @@ const acceptedEncodingsOf = (request: Request) =>
 
 const fileResponse = async (request: Request, path: string, cacheControl: string) => {
   const file = Bun.file(path)
-  const policy = new URL(request.url).pathname === reportFramePath ? reportFramePolicy : appPolicy
-  const headers = { 'cache-control': cacheControl, vary: 'accept-encoding', 'content-security-policy': policy }
+  const framePolicy = policyByPath[new URL(request.url).pathname]
+  const headers = {
+    'cache-control': cacheControl,
+    vary: 'accept-encoding',
+    'content-security-policy': framePolicy ?? appPolicy,
+    ...(framePolicy && { 'referrer-policy': 'no-referrer' }),
+  }
   const acceptedEncodings = request.headers.has('range') ? new Set() : acceptedEncodingsOf(request)
   for (const { encoding, extension } of precompressedVariants) {
     const variant = Bun.file(`${path}${extension}`)

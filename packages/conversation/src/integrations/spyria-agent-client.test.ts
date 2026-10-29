@@ -285,7 +285,7 @@ test.each([
   expect(command).toContain(`SPYRIA_COMPACTION_MODEL=spyria/${id}`)
 })
 
-test('a parent Pi reaches Spyria tools and the router with its LLM token; a sub reaches only Spyria tools with its own token from its own directory, on the default 5-minute cache', async () => {
+test('a parent Pi reaches Spyria tools, web search and the router with its LLM token; a sub reaches only Spyria tools and web search with its own token from its own directory, on the default 5-minute cache', async () => {
   const parent = await createdPiOf()
   const toolServer = (path: string) => ({
     url: `http://spyria-gateway-relay:4000${path}`,
@@ -295,11 +295,17 @@ test('a parent Pi reaches Spyria tools and the router with its LLM token; a sub 
   expect(parent.mcp).toEqual({
     mcpServers: {
       spyria: { ...toolServer('/mcp'), timeout: spyriaToolTimeoutSeconds },
+      web: { ...toolServer('/mcp/web'), timeout: 120 },
       router: { ...toolServer('/mcp/router'), timeout: delegateTimeoutSeconds },
     },
   })
   const sub = await createdPiOf({ parentConversationId: 'conversation-1' })
-  expect(sub.mcp).toEqual({ mcpServers: { spyria: { ...toolServer('/mcp'), timeout: spyriaToolTimeoutSeconds } } })
+  expect(sub.mcp).toEqual({
+    mcpServers: {
+      spyria: { ...toolServer('/mcp'), timeout: spyriaToolTimeoutSeconds },
+      web: { ...toolServer('/mcp/web'), timeout: 120 },
+    },
+  })
   expect(sub.created.secrets).toEqual({
     SPYRIA_LLM_TOKEN: { kind: 'StaticSecret', value: 'runtime-llm-token' },
     SPYRIA_MCP_TOKEN: { kind: 'StaticSecret', value: 'runtime-llm-token' },
@@ -321,8 +327,11 @@ test('a parent Pi in a dev chat also reaches the GitHub tools; a sub never does'
     exposure: 'direct',
     timeout: 120,
   })
-  expect(Object.keys(mcpOf(piCommandOf(gateway, piLaunch, { sub: true, hasRepository: true })))).toEqual(['spyria'])
-  expect(Object.keys(mcpOf(piCommandOf(gateway, piLaunch, { sub: false })))).toEqual(['spyria', 'router'])
+  expect(Object.keys(mcpOf(piCommandOf(gateway, piLaunch, { sub: true, hasRepository: true })))).toEqual([
+    'spyria',
+    'web',
+  ])
+  expect(Object.keys(mcpOf(piCommandOf(gateway, piLaunch, { sub: false })))).toEqual(['spyria', 'web', 'router'])
 })
 
 test('the router answers a running delegation well before Pi gives up on the delegate call', () => {

@@ -21,6 +21,17 @@ import {
   toolCallFailureOf,
   toolCallNoticeOf,
   toolGatewayUnreachable,
+  webSearchAnswerOf,
+  webSearchFailedOf,
+  webSearchMilliseconds,
+  webSearchNotRun,
+  webSearchOverBudget,
+  webSearchPath,
+  webSearchQueryOf,
+  webSearchRequestOf,
+  webSearchTool,
+  webSearchUnavailable,
+  webToolsPath,
 } from '@spyria/conversation/server'
 import type { Database } from '@spyria/db/postgres'
 import { schema } from '@spyria/db/zero'
@@ -49,6 +60,10 @@ type Send = (frame: object) => void
 type ToolResult = { content?: { text?: string }[]; isError?: boolean }
 type ListedTool = { name?: string; annotations?: { readOnlyHint?: boolean } }
 type ToolCallStatus = 'succeeded' | 'failed' | 'refused'
+type ModelCallTurn = Exclude<
+  Awaited<ReturnType<ReturnType<AgentBridge['forDatabase']>['modelCallTurn']>>,
+  false | undefined | null
+>
 
 const forwardedHeaders = [
   'content-type',
@@ -229,13 +244,26 @@ export const createModelCallRelay = ({
     const path = relayPathOf(String(frame.path ?? ''))
     const method = String(frame.method ?? 'POST')
     const isToolPath = path === '/mcp' || path.startsWith('/mcp?')
-    if (!path.startsWith('/v1/') && !isToolPath && path !== routerPath && path !== githubToolsPath)
+    if (![routerPath, githubToolsPath, webToolsPath].includes(path) && !path.startsWith('/v1/') && !isToolPath)
       return answer(404, { error: { message: 'Not found', type: 'not_found' } })
     const headers = Object.entries((frame.headers ?? {}) as Record<string, string>)
     const { authorization, 'x-api-key': apiKey } = picked(headers, ['authorization', 'x-api-key'])
     const token = String(authorization ?? apiKey ?? '').replace(/^Bearer /i, '')
     const handlers = agentBridge().forDatabase(database)
     const body = typeof frame.body === 'string' ? frame.body : ''
+    const billedHeadersOf = (turn: ModelCallTurn, virtualKey: string) => ({
+      ...traceHeadersOf(),
+      authorization: `Bearer ${virtualKey}`,
+      'x-bf-dim-chat': turn.chat.chatId,
+      'x-bf-dim-prompter': turn.prompterId,
+      'x-bf-dim-owner': turn.ownerId ?? '',
+      'x-bf-dim-workspace': host.workspaceId,
+      'x-bf-dim-turn': turn.promptId,
+      'x-bf-dim-session': turn.sessionId ?? '',
+      'x-bf-mcp-include-clients': '',
+      ...(turn.delegationId && { 'x-bf-dim-role': 'delegate', 'x-bf-dim-delegation': turn.delegationId }),
+      ...providerHeadersOf?.(database, turn.chat),
+    })
     const answerSpyriaServer = (
       rpc: RouterCall | undefined,
       name: string,
@@ -323,6 +351,69 @@ export const createModelCallRelay = ({
       return reply({ content: [{ type: 'text', text }], isError })
     }
     const { keyOf, usedUpBudgetOf, isModelAllowed, tools, readOnlyHints } = databaseAccess(database)
+
+    const searchWeb = async (
+      turn: ModelCallTurn,
+      input: unknown,
+    ): Promise<{ text: string; status: ToolCallStatus }> => {
+      const query = webSearchQueryOf(input)
+      if (typeof query !== 'string') return { text: query.refusal, status: 'refused' }
+      if (await usedUpBudgetOf(host.workspaceId, turn.prompterId))
+        return { text: webSearchOverBudget, status: 'refused' }
+      const model = await handlers.webSearchModel(turn.chat, turn.prompterId)
+      if (!model || !(await isModelAllowed(host.workspaceId, turn.prompterId, model)))
+        return { text: webSearchUnavailable, status: 'refused' }
+      const virtualKey = await keyOf(host.workspaceId, turn.prompterId).catch(() => null)
+      if (!virtualKey) return { text: webSearchFailedOf(unreachable.error.message), status: 'failed' }
+      const response = await fetch(`${gatewayUrlOf(database)}${webSearchPath}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...billedHeadersOf(turn, virtualKey) },
+        body: JSON.stringify(webSearchRequestOf(model, query)),
+        signal: AbortSignal.any([signal, AbortSignal.timeout(webSearchMilliseconds)]),
+      }).catch(() => undefined)
+      const answered = jsonOf((await response?.text().catch(() => '')) ?? '') as { error?: { message?: unknown } }
+      if (!response?.ok) {
+        const reason = response ? answered?.error?.message : unreachable.error.message
+        return { text: webSearchFailedOf(typeof reason === 'string' ? reason : undefined), status: 'failed' }
+      }
+      const text = webSearchAnswerOf(answered)
+      return text ? { text, status: 'succeeded' } : { text: webSearchNotRun, status: 'failed' }
+    }
+
+    if (path === webToolsPath) {
+      if (method !== 'POST') return answer(method === 'DELETE' ? 200 : 405, undefined)
+      const turn = token ? await handlers.modelCallTurn(host, token) : undefined
+      const runtime = turn ?? (token ? await handlers.toolCallTurn(host, token) : undefined)
+      if (!runtime) return answer(401, refusalOf('This runtime has no chat owner'))
+      const rpc = jsonOf(body) as RouterCall | undefined
+      if (rpc?.method !== 'tools/call' || rpc.id === undefined)
+        return answerSpyriaServer(rpc, 'spyria-web', [webSearchTool])
+      if (!turn) return answerRpc(rpc.id, toolErrorOf('This runtime has no active turn'))
+      if (rpc.params?.name !== webSearchTool.name) return answerRpc(rpc.id, toolErrorOf('Unknown tool'))
+      const calledAt = new Date()
+      const { text, status } = await withSpan(
+        'execute_tool web_search',
+        { 'workspace.id': host.workspaceId, 'chat.id': turn.chat.chatId, 'turn.id': turn.promptId },
+        () => searchWeb(turn, rpc.params?.arguments),
+        agentBridge().turnContextOf(host.workspaceId, turn.promptId),
+      )
+      if (turn.ownerId)
+        await handlers
+          .recordToolCall(host.workspaceId, {
+            chatId: turn.chat.chatId,
+            prompterId: turn.prompterId,
+            ownerId: turn.ownerId,
+            server: 'spyria',
+            tool: webSearchTool.name,
+            readOnly: true,
+            decision: 'not_needed',
+            decidedBy: null,
+            status,
+            calledAt,
+          })
+          .catch((error) => logToolCallFailure(turn.chat.chatId, error))
+      return answerRpc(rpc.id, { result: { content: [{ type: 'text', text }], isError: status !== 'succeeded' } })
+    }
     const isAnthropicPath = path.startsWith(anthropicPathPrefix)
     const isTokenCount = path.startsWith(`${anthropicPathPrefix}/count_tokens`)
     const isReadOnly = async (callHeaders: Record<string, string>, toolName: string) => {
@@ -502,20 +593,7 @@ export const createModelCallRelay = ({
       try {
         const modelCall = () =>
           gatewayCall(
-            {
-              ...picked(headers, forwardedHeaders),
-              ...traceHeadersOf(),
-              authorization: `Bearer ${virtualKey}`,
-              'x-bf-dim-chat': turn.chat.chatId,
-              'x-bf-dim-prompter': turn.prompterId,
-              'x-bf-dim-owner': turn.ownerId ?? '',
-              'x-bf-dim-workspace': host.workspaceId,
-              'x-bf-dim-turn': turn.promptId,
-              'x-bf-dim-session': turn.sessionId ?? '',
-              'x-bf-mcp-include-clients': '',
-              ...(turn.delegationId && { 'x-bf-dim-role': 'delegate', 'x-bf-dim-delegation': turn.delegationId }),
-              ...providerHeadersOf?.(database, turn.chat),
-            },
+            { ...picked(headers, forwardedHeaders), ...billedHeadersOf(turn, virtualKey) },
             headTimeout.signal,
           )
         response = await withRetries(modelCall, {
