@@ -8,14 +8,13 @@ import {
 } from '@radix-ui/react-tooltip'
 import { useQuery } from '@spyria/db/react'
 import { useSession } from '@spyria/session'
-import { ShortcutKeys, tooltipClass, useShortcut } from '@spyria/ui'
+import { ResizeHandle, ShortcutKeys, tooltipClass, useShortcut } from '@spyria/ui'
 import { BookOpen, ChartColumn, FileDiff, FolderTree, Globe, type LucideIcon, Plug, Users } from 'lucide-react'
 import { Activity, type ComponentType, type CSSProperties, lazy, type ReactNode, Suspense, useState } from 'react'
 import { getPanelTabs, type PanelTabId } from '../queries/get-panel-tabs.ts'
 import { BrowserTab } from './BrowserTab.tsx'
 import { FilesTab } from './FilesTab.tsx'
-import { panelToggleLabelOf, panelWidthVariable, usePanel } from './providers.tsx'
-import { ResizeHandle } from './ResizeHandle.tsx'
+import { minimumPanelWidth, panelToggleLabelOf, panelWidthVariable, usePanel } from './providers.tsx'
 import type { PanelProps, TabProps } from './TabProps.ts'
 import { tabClass } from './ui.ts'
 
@@ -86,7 +85,7 @@ export const SidePanel = ({ usageTab, ...panelProps }: PanelProps & { usageTab: 
   const { workspaceId, chatId } = panelProps
   const { memberId } = useSession()
   const tabIds = useQuery(getPanelTabs, workspaceId, chatId, memberId)
-  const { isOpen, width, fitWithin, toggle, open } = usePanel()
+  const { isOpen, width, maximumWidth, resizeTo, fitWithin, toggle, open } = usePanel()
   const [selected, setSelected] = useState<{ chatId: string; tabId: string }>()
   if (selected && selected.chatId !== chatId) setSelected(undefined)
   const selectedTabId =
@@ -121,7 +120,15 @@ export const SidePanel = ({ usageTab, ...panelProps }: PanelProps & { usageTab: 
           style={{ [panelWidthVariable]: `${width}px` } as CSSProperties}
           className="relative flex w-(--panel-width) min-w-0 shrink-0 flex-col border-l border-line bg-raised text-ink"
         >
-          <ResizeHandle />
+          <ResizeHandle
+            label="Resize panel"
+            edge="left"
+            width={width}
+            minimumWidth={minimumPanelWidth}
+            maximumWidth={maximumWidth}
+            widthVariable={panelWidthVariable}
+            resizeTo={resizeTo}
+          />
           <Root key={chatId} value={selectedTabId} onValueChange={selectTab} className="flex min-h-0 flex-1 flex-col">
             <TooltipProvider>
               <List

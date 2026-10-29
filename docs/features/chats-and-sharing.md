@@ -4,7 +4,7 @@ This page describes how conversations are organized in a Spyria workspace and ho
 
 ## Projects and chats
 
-The sidebar lists a workspace's **projects**, each with its chats, then the **Loose chats** that belong to no project. **New project** and **New chat** sit at the top of the sidebar, above **Search**.
+The sidebar lists a workspace's **projects**, each with its chats, then the **Loose chats** that belong to no project. **New project** and **New chat** sit at the top of the sidebar, above **Search**. Dragging its right edge, or the arrow keys on that edge, resizes it between 240 and 400 pixels; the browser remembers the width.
 
 A chat has one of two types. **New chat** asks questions instead of naming them, and creates the chat once every question shown is answered (none is answered in advance):
 
@@ -90,7 +90,7 @@ Single keys move around the workspace. They do nothing while typing in a field o
 
 ## Unread state
 
-A chat with messages a member has not seen shows an **Unread messages** icon in the sidebar. Opening the chat marks it read. In a runtime chat, the icon's color and tooltip tell where the agent is: **working** on a turn, **waiting** for an answer to a question or a tool approval, stopped with an **error**, or **done**. A channel's icon keeps the text color. In channels only top-level messages count: a new reply never makes the channel unread. Each thread keeps its own read marker per member; opening a thread marks it read, and its toggle shows how many replies are new.
+A chat with messages a member has not seen shows an **Unread messages** icon in the sidebar. Opening the chat marks it read. In a runtime chat, the icon, its color and its tooltip tell where the agent is: an hourglass while it is **working** on a turn, a question mark while it is **waiting** for an answer to a question or a tool approval, a cross when it stopped with an **error**, a check mark when it is **done**, and a sleep sign (two Zs) in the muted text color once its runtime is **asleep**, after an idle stop or a member stopping it. They are outline icons, not emoji. A channel's icon, and a runtime chat's before its agent first answers, is an exclamation mark in the text color. In channels only top-level messages count: a new reply never makes the channel unread. Each thread keeps its own read marker per member; opening a thread marks it read, and its toggle shows how many replies are new.
 
 ## Sharing a chat and chat roles
 

@@ -8,6 +8,13 @@ export const getAgentStatus = (workspaceId: WorkspaceId, chatId: ChatId) => (sna
   if (chat?.type !== 'runtime') return null
   return agentStatusOf({
     isTurnActive: chat.agentTurnMessageId !== null,
+    isRuntimeAsleep: snapshot.runtimes.some(
+      (runtime) =>
+        runtime.workspaceId === workspaceId &&
+        runtime.chatId === chatId &&
+        runtime.hostOnline &&
+        (runtime.state === 'stopping' || runtime.state === 'stopped'),
+    ),
     latestActivity: snapshot.latestAgentActivity.find(
       (message) => message.workspaceId === workspaceId && message.chatId === chatId,
     ),

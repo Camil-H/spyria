@@ -1,6 +1,6 @@
 import { agentNotices, stoppedByPrefix } from './agent-events.ts'
 
-export type AgentStatus = 'working' | 'waiting' | 'error' | 'done'
+export type AgentStatus = 'working' | 'waiting' | 'error' | 'sleeping' | 'done'
 type AgentActivity = Readonly<{
   kind: 'member' | 'agent' | 'step' | 'notice'
   body: string
@@ -11,6 +11,7 @@ export const agentStatusLabels: Record<AgentStatus, string> = {
   working: 'The agent is working',
   waiting: 'The agent is waiting for an answer',
   error: 'The agent stopped with an error',
+  sleeping: 'The agent is asleep',
   done: 'The agent is done',
 }
 
@@ -24,13 +25,16 @@ const isFailure = ({ kind, body, step }: AgentActivity) =>
 
 export const agentStatusOf = ({
   isTurnActive,
+  isRuntimeAsleep,
   latestActivity,
 }: {
   isTurnActive: boolean
+  isRuntimeAsleep: boolean
   latestActivity: AgentActivity | undefined
 }): AgentStatus | null => {
   if (latestActivity && isOpenQuestion(latestActivity.step)) return 'waiting'
   if (isTurnActive) return 'working'
   if (!latestActivity) return null
-  return isFailure(latestActivity) ? 'error' : 'done'
+  if (isFailure(latestActivity)) return 'error'
+  return isRuntimeAsleep ? 'sleeping' : 'done'
 }
