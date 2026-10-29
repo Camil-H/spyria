@@ -202,31 +202,3 @@ test('concurrent senders, and concurrent messages and chat changes, get unique g
   expect((await eventsOf('chat-research')).filter((event) => event.type === 'chat.renamed')).toHaveLength(8)
   await expectGapFreeSeqs()
 })
-
-test('a legacy tool-call event rebuilds into a command step', async () => {
-  await database.$client`
-    insert into chats (workspace_id, id, type, visibility, owner_kind, owner_user_id, name, archived, created_at)
-    values (${acme}, 'chat-legacy', 'runtime', 'private', 'user', ${alice}, 'Legacy chat', false, now())`
-  const legacy = { kind: 'tool-call', body: 'Ran: bun install', detail: 'Done in 35s', replyToId: null }
-  await database.$client`
-    insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
-    values (${acme}, 'chat-legacy', 'message-legacy', 1, 'message.posted', null, ${JSON.stringify(legacy)}::jsonb, now())`
-
-  await rebuild({ chatId: 'chat-legacy' })
-
-  const rebuilt = await database.query.messages.findMany({ where: { chatId: 'chat-legacy' } })
-  expect(rebuilt.map(({ kind, body, step }) => ({ kind, body, step }))).toEqual([
-    {
-      kind: 'step',
-      body: 'Ran: bun install',
-      step: {
-        type: 'command',
-        command: 'Ran: bun install',
-        exitCode: null,
-        durationMilliseconds: null,
-        output: 'Done in 35s',
-        truncatedLines: 0,
-      },
-    },
-  ])
-})

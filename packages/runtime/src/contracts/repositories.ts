@@ -43,7 +43,7 @@ export type RuntimeRepository = {
 }
 
 export type RuntimeSecrets = {
-  keep(runtime: Runtime, secret: 'llmTokenHash', value: string | null): Promise<void>
+  keepLlmTokenHash(runtime: Runtime, hash: string): Promise<void>
   discard(runtime: Runtime): Promise<void>
 }
 
