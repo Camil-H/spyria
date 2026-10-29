@@ -36,19 +36,30 @@ const isPrivateIpv4 = ([first = 0, second = 0]: readonly number[]) =>
   (first === 198 && (second === 18 || second === 19)) ||
   first >= 224
 
+const dottedTail = /^(.*:)(\d+)\.(\d+)\.(\d+)\.(\d+)$/
+const withHexTail = (address: string) =>
+  address.replace(dottedTail, (_match, head: string, ...bytes: string[]) => {
+    const [a = 0, b = 0, c = 0, d = 0] = bytes.slice(0, 4).map(Number)
+    return `${head}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`
+  })
+
 const ipv6GroupsOf = (address: string) => {
   const groupsOf = (part: string) => (part === '' ? [] : part.split(':').map((group) => Number.parseInt(group, 16)))
-  const [head = '', tail] = address.split('::')
+  const [head = '', tail] = withHexTail(address).split('::')
   if (tail === undefined) return groupsOf(head)
   const [headGroups, tailGroups] = [groupsOf(head), groupsOf(tail)]
   return [...headGroups, ...Array<number>(8 - headGroups.length - tailGroups.length).fill(0), ...tailGroups]
 }
 
+const isPrivateEmbeddedIpv4 = (high = 0, low = 0) => isPrivateIpv4([high >> 8, high & 0xff, low >> 8, low & 0xff])
+
 const isPrivateIpv6 = (address: string) => {
   const groups = ipv6GroupsOf(address)
-  const [first = 0, , , , , sixth = 0, seventh = 0] = groups
+  const [first = 0, second = 0, third = 0, , , sixth = 0, seventh = 0, eighth = 0] = groups
   const isMappedIpv4 = groups.slice(0, 5).every((group) => group === 0) && sixth === 0xffff
-  if (isMappedIpv4) return isPrivateIpv4([seventh >> 8, seventh & 0xff])
+  const isNat64 = first === 0x64 && second === 0xff9b && groups.slice(2, 6).every((group) => group === 0)
+  if (isMappedIpv4 || isNat64) return isPrivateEmbeddedIpv4(seventh, eighth)
+  if (first === 0x2002) return isPrivateEmbeddedIpv4(second, third)
   return groups.slice(0, 7).every((group) => group === 0) || (first & 0xfe00) === 0xfc00 || (first & 0xffc0) === 0xfe80
 }
 

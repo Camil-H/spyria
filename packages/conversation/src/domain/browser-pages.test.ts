@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { openedPageOf } from './browser-pages.ts'
+import { isPrivateNetworkAddress, openedPageOf } from './browser-pages.ts'
 
 const refusalOf = (address: unknown) => (openedPageOf({ address }) as { refusal?: string }).refusal
 
@@ -85,4 +85,25 @@ test('a public address next to a private range still opens', () => {
     'https://local.example.com',
   ])
     expect(openedPageOf({ address })).toEqual({ url: address, title: address })
+})
+
+test('a resolved address is private in any IPv6 spelling that carries a private IPv4 address', () => {
+  for (const address of [
+    '127.0.0.1',
+    '169.254.169.254',
+    '198.18.0.1',
+    '224.0.0.1',
+    '::1',
+    '::ffff:127.0.0.1',
+    '::ffff:10.0.0.1',
+    '::ffff:7f00:1',
+    '64:ff9b::169.254.169.254',
+    '64:ff9b::a9fe:a9fe',
+    '2002:7f00:1::',
+    'fd00::1',
+    'fe80::1',
+  ])
+    expect({ address, isPrivate: isPrivateNetworkAddress(address) }).toEqual({ address, isPrivate: true })
+  for (const address of ['8.8.8.8', '::ffff:8.8.8.8', '64:ff9b::8.8.8.8', '2002:808:808::', '2606:4700::1111'])
+    expect({ address, isPrivate: isPrivateNetworkAddress(address) }).toEqual({ address, isPrivate: false })
 })
