@@ -89,6 +89,7 @@ test.describe('Side panel', () => {
     })
 
     await test.step('files: shows no files for a chat without a workspace', async () => {
+      await tabOf(page, 'Files').click()
       await expect(tabPanelOf(page)).toContainText('No files')
     })
 
