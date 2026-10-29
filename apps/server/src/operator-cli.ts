@@ -81,8 +81,10 @@ const commands: Record<string, () => Promise<void>> = {
   'retry-jobs': async () => {
     const [target] = options
     if (!target) throw new Error('Usage: bun run jobs:retry <id>|--all')
-    const jobIds = await retryFailedJobs(database, target === '--all' ? 'all' : target)
-    console.log(jobIds.length === 0 ? 'No failed job matched' : `Requeued ${jobIds.join(', ')}`)
+    const { requeued, dropped } = await retryFailedJobs(database, target === '--all' ? 'all' : target)
+    if (requeued.length + dropped.length === 0) console.log('No failed job matched')
+    if (requeued.length > 0) console.log(`Requeued ${requeued.join(', ')}`)
+    if (dropped.length > 0) console.log(`Dropped ${dropped.join(', ')}, a sweep already scheduled`)
   },
 }
 try {
