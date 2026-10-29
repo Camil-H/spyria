@@ -103,13 +103,22 @@ test.describe('Spend', () => {
       await expect(decomposition.getByRole('row').last()).toHaveCSS('font-weight', '600')
     })
 
-    test('As a member who can view costs, I follow the spend factors day by day for one model and see which factor moved each day', {
+    test('As a member who can view costs, I narrow the decomposition to one model, open a factor’s daily line chart under it and close it again, and the same for the total', {
       tag: ['@spec-45'],
     }, async ({ page }) => {
       await openSettings(page, 'Analyze costs')
       const section = usageSectionOf(page, 'Usage')
-      await section.getByRole('combobox', { name: 'For' }).selectOption({ label: 'anthropic/claude-sonnet' })
-      const trend = tableOf(section, 'Spend factors over time')
+      await section.getByRole('combobox', { name: 'For' }).selectOption({ label: 'Model' })
+      await section.getByRole('combobox', { name: 'Model' }).selectOption({ label: 'anthropic/claude-sonnet' })
+      const decomposition = tableOf(section, 'Spend decomposition')
+      await expect(rowOf(decomposition, 'Users').getByRole('cell').first()).toHaveText('1')
+      expect(await cellTextsOf(rowOf(decomposition, 'Users'))).toEqual(['1', '1', '0%'])
+      await expect(decomposition.locator('tr[aria-current="true"]').getByRole('rowheader')).toHaveText(
+        'Tokens per request · Biggest mover',
+      )
+      await expect(section).toContainText('$0.08 · 8 requests')
+      await expect(rowOf(tableOf(section, 'Usage by member'), 'Total')).toContainText('$0.08')
+
       const now = new Date()
       const dayOf = (day: number) =>
         new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), day)).toLocaleDateString('en-US', {
@@ -117,26 +126,22 @@ test.describe('Spend', () => {
           month: 'short',
           day: 'numeric',
         })
-      await expect(rowOf(trend, dayOf(3)).getByRole('cell').last()).toHaveText('Requests per turn +100%')
-      expect(await cellTextsOf(rowOf(trend, dayOf(2)))).toEqual(['$0.01', '1', '1', '1', '1', '1,000', '$10.00', '—'])
-      expect(await cellTextsOf(rowOf(trend, dayOf(3)))).toEqual([
-        '$0.02',
-        '1',
-        '1',
-        '1',
-        '2',
-        '1,000',
-        '$10.00',
-        'Requests per turn +100%',
-      ])
-      await expect(rowOf(trend, dayOf(3)).locator('td.bg-selected')).toHaveText('2')
-      const decomposition = tableOf(section, 'Spend decomposition')
-      expect(await cellTextsOf(rowOf(decomposition, 'Users'))).toEqual(['1', '1', '0%'])
-      await expect(decomposition.locator('tr[aria-current="true"]').getByRole('rowheader')).toHaveText(
-        'Tokens per request · Biggest mover',
-      )
-      await expect(rowOf(tableOf(section, 'Usage by member'), 'Total')).toContainText('$0.08')
-      await expect(section).toContainText('$0.08 · 8 requests')
+      const requestsPerTurn = decomposition.getByRole('button', { name: 'Requests per turn' })
+      await requestsPerTurn.click()
+      await expect(requestsPerTurn).toHaveAttribute('aria-expanded', 'true')
+      await expect(decomposition.getByRole('img', { name: 'Requests per turn over time' })).toBeVisible()
+      const requestsChart = decomposition.getByRole('table', { name: 'Requests per turn over time' })
+      expect(await cellTextsOf(rowOf(requestsChart, dayOf(2)))).toEqual(['1'])
+      expect(await cellTextsOf(rowOf(requestsChart, dayOf(3)))).toEqual(['2'])
+      await requestsPerTurn.click()
+      await expect(requestsPerTurn).toHaveAttribute('aria-expanded', 'false')
+      await expect(decomposition.getByRole('img', { name: 'Requests per turn over time' })).toHaveCount(0)
+
+      await decomposition.getByRole('button', { name: 'Total spend' }).click()
+      const totalChart = decomposition.getByRole('table', { name: 'Total spend over time' })
+      await expect(rowOf(totalChart, dayOf(3))).toBeVisible()
+      expect(await cellTextsOf(rowOf(totalChart, dayOf(2)))).toEqual(['$0.01'])
+      expect(await cellTextsOf(rowOf(totalChart, dayOf(3)))).toEqual(['$0.02'])
     })
 
     test('As a member who can view costs, I see the cost per merged PR with each merged PR and its chat’s cost', {
@@ -174,9 +179,12 @@ test.describe('Spend', () => {
         await expect(rowOf(decomposition, 'Users')).toHaveCount(0)
         expect(await cellTextsOf(rowOf(decomposition, 'Sessions'))).toEqual(['1', '1', '0%'])
         await expect(decomposition).not.toContainText('Sessions per user')
-        await expect(usageSectionOf(page, 'Spend decomposition')).toContainText(
-          'Spend = sessions × turns per session × requests per turn × tokens per request × price per token',
-        )
+        await expect(usageSectionOf(page, 'Spend decomposition')).not.toContainText('Spend =')
+        await expect(section.getByRole('combobox', { name: 'For' }).getByRole('option')).toHaveText([
+          'All my usage',
+          'Chat',
+          'Model',
+        ])
         await expect(section.getByRole('table', { name: 'Usage by member' })).toHaveCount(0)
         await expect(section).not.toContainText(/Alice|Lee|Invoice bug|claude/)
       })
