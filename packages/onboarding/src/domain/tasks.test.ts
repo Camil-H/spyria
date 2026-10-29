@@ -90,6 +90,23 @@ test('a skipped task is no longer listed, even once done', () => {
   expect(states).toEqual({ 'link-github-account': 'open' })
 })
 
+test('skipping the domain verification keeps invites blocked, and skipping them too clears the workspace tasks', () => {
+  const allButDomainDone = { ...nothingDone, hasGitHubApp: true, hasClaimedRuntimeHost: true }
+  const workspaceStatesOf = (skipped: OnboardingTask[]) =>
+    taskViewsOf(allButDomainDone, recordsOf([], skipped), admin)
+      .filter(({ scope }) => scope === 'workspace')
+      .map(({ task, state }) => [task, state])
+  expect(workspaceStatesOf(['verify-domain'])).toEqual([
+    ['connect-github-app', 'done'],
+    ['connect-runtime', 'done'],
+    ['invite-members', 'blocked'],
+  ])
+  expect(workspaceStatesOf(['verify-domain', 'invite-members'])).toEqual([
+    ['connect-github-app', 'done'],
+    ['connect-runtime', 'done'],
+  ])
+})
+
 test('the next task is the first open one, past blocked, done and skipped tasks', () => {
   const views = taskViewsOf(
     { ...nothingDone, hasGitHubApp: true },

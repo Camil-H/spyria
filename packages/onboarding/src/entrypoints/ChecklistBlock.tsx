@@ -54,10 +54,11 @@ const TaskRow = ({
   const { title, explanation, page, section } = taskTextOf(view.task, domain)
   const { label, Icon, iconClass } = stateLook[view.state]
   const linkClass = `font-medium underline-offset-2 hover:underline ${focusRing}`
+  const blockedClass = view.state === 'blocked' ? 'opacity-60' : ''
   return (
-    <li className={`flex items-start gap-3 py-2 ${view.state === 'blocked' ? 'opacity-60' : ''}`}>
-      <Icon aria-hidden className={`mt-0.5 size-4 shrink-0 ${iconClass}`} />
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+    <li className="flex items-start gap-3 py-2">
+      <Icon aria-hidden className={`mt-0.5 size-4 shrink-0 ${iconClass} ${blockedClass}`} />
+      <div className={`flex min-w-0 flex-1 flex-col gap-0.5 ${blockedClass}`}>
         <span className={view.state === 'done' ? 'text-muted line-through' : ''}>
           <span className="sr-only">{label}: </span>
           {view.state !== 'open' ? (
@@ -76,7 +77,7 @@ const TaskRow = ({
           <span className="text-sm text-muted">{view.state === 'blocked' ? blockedExplanation : explanation}</span>
         )}
       </div>
-      {view.state === 'open' && (
+      {view.state !== 'done' && (
         <button
           type="button"
           aria-label={`Skip ${title}`}
