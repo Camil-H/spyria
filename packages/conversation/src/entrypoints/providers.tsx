@@ -40,3 +40,5 @@ export const LoadedRemoteImagesContext = createContext<{
   sources: ReadonlySet<string>
   load: (source: string) => void
 } | null>(null)
+
+export const LinkedMessageContext = createContext<string | null>(null)

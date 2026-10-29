@@ -9,6 +9,7 @@ import {
   expect,
   mainOf,
   messageActionOf,
+  messageActionsOf,
   messageContaining,
   messageItemsOf,
   openChat,
@@ -374,8 +375,12 @@ test.describe('Messaging', () => {
       await expect(messageContaining(page, 'The tax is applied twice.')).toContainText('Agent')
     })
 
-    await test.step('has no message menu in a runtime chat', async () => {
-      await expect(page.getByRole('toolbar', { name: 'Message actions' })).toHaveCount(0)
+    await test.step('offers only Copy link to message in a runtime chat’s message menu', async () => {
+      const actions = messageActionsOf(messageContaining(page, 'Why do invoices show the wrong total?')).getByRole(
+        'button',
+      )
+      await expect(actions).toHaveCount(1)
+      await expect(actions).toHaveAccessibleName('Copy link to message')
     })
 
     await test.step('collapses and expands a tool call', async () => {

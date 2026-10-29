@@ -13,7 +13,7 @@ import { ForkButton } from './ForkButton.tsx'
 import { LazyMarkdown } from './LazyMarkdown.tsx'
 import { AttachmentList } from './Media.tsx'
 import { MessageActions } from './MessageActions.tsx'
-import { ChatNameContext, MentionNamesContext, useConversationCommands } from './providers.tsx'
+import { ChatNameContext, LinkedMessageContext, MentionNamesContext, useConversationCommands } from './providers.tsx'
 import { threadContextOf } from './thread-context.ts'
 
 const plainTextClassName = 'text-sm whitespace-pre-wrap'
@@ -40,7 +40,7 @@ const OpenThread = ({ root }: { root: ThreadRoot }) => {
       {root.thread.replies.length > 0 && (
         <ol aria-label="Thread replies" className="flex flex-col gap-1">
           {root.thread.replies.map((reply) => (
-            <MessageItem key={reply.id} message={reply} hasMenu threadRoot={root} />
+            <MessageItem key={reply.id} message={reply} hasMenu isChannel threadRoot={root} />
           ))}
         </ol>
       )}
@@ -89,26 +89,35 @@ const Thread = ({ root, isInitiallyOpen }: { root: ThreadRoot; isInitiallyOpen: 
 export const MessageItem = ({
   message,
   hasMenu,
+  isChannel = false,
   threadRoot,
   onFork,
   ref,
 }: {
   message: ConversationMessage
   hasMenu: boolean
+  isChannel?: boolean
   threadRoot?: ThreadRoot
   onFork?: (() => Promise<unknown>) | undefined
   ref?: Ref<HTMLLIElement>
 }) => {
   const [mode, setMode] = useState<'view' | 'edit' | 'delete'>('view')
+  const { thread } = message
   const [threadOpenings, setThreadOpenings] = useState(0)
   const mentionNames = use(MentionNamesContext)
   const chatName = use(ChatNameContext)
+  const linkedMessageId = use(LinkedMessageContext)
+  const hasLinkedReply = thread?.replies.some((reply) => reply.id === linkedMessageId) === true
   const close = () => setMode('view')
-  const { thread } = message
   const quotedThread = threadRoot ? [threadRoot, ...threadRoot.thread.replies] : [message, ...(thread?.replies ?? [])]
   return (
     <>
-      <li ref={ref} data-message-id={message.id} className="group relative rounded-md px-3 py-2 hover:bg-hover">
+      <li
+        ref={ref}
+        data-message-id={message.id}
+        aria-current={message.id === linkedMessageId || undefined}
+        className="group relative rounded-md px-3 py-2 hover:bg-hover aria-current:bg-hover aria-current:ring-1 aria-current:ring-accent"
+      >
         {message.kind === 'notice' ? (
           <div className="flex flex-col gap-1">
             <p className="whitespace-pre-wrap text-sm text-muted">{message.body}</p>
@@ -150,6 +159,7 @@ export const MessageItem = ({
             {hasMenu && !message.isDeleted && mode !== 'edit' && (
               <MessageActions
                 messageId={message.id}
+                isChannel={isChannel}
                 isThread={quotedThread.length > 1}
                 contextText={() => threadContextOf(chatName, quotedThread)}
                 canEdit={message.canEdit}
@@ -164,7 +174,11 @@ export const MessageItem = ({
         )}
       </li>
       {thread && (thread.replies.length > 0 || threadOpenings > 0) && (
-        <Thread key={threadOpenings} root={{ ...message, thread }} isInitiallyOpen={threadOpenings > 0} />
+        <Thread
+          key={`${threadOpenings}-${hasLinkedReply}`}
+          root={{ ...message, thread }}
+          isInitiallyOpen={threadOpenings > 0 || hasLinkedReply}
+        />
       )}
     </>
   )
