@@ -142,9 +142,11 @@ export const signInUser = (database: Database, identity: Identity, isSso = false
 
 const enqueueSweepStatement = `
   insert into jobs (workspace_id, id, type, payload, run_at, attempts, state)
-  select workspace_id, gen_random_uuid()::text, type, '{}'::jsonb, now() + $2::interval, 0, 'queued'
-  from workspaces cross join unnest($3::text[]) as type where workspace_id = coalesce($1::text, workspace_id)
+  select workspace_id, gen_random_uuid()::text, sweep.type, '{}'::jsonb, now() + $2::interval, 0, 'queued'
+  from workspaces cross join unnest($3::text[]) as sweep(type) where workspace_id = coalesce($1::text, workspace_id)
     and deleted_at is null
+    and not exists(select 1 from jobs where jobs.workspace_id = workspaces.workspace_id and jobs.type = sweep.type
+      and (jobs.state = 'running' or jobs.state = 'failed' and jobs.finished_at > now() - interval '1 hour'))
   on conflict do nothing`
 
 export const recurringJobTypes = ['sessions.sweep', 'runtime.sweep', 'agent.sweep', 'usage.sync', 'audit.sweep']

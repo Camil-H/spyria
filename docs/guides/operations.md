@@ -49,7 +49,7 @@ A new runtime image (`agent:build`) applies to runtimes started after the server
 
 ## Jobs
 
-Background work (starting and stopping runtimes, agent turns, sweeps, usage sync) runs from a job queue in Postgres. A job is retried up to 5 attempts in all, with a growing delay, then marked failed with its last error. The operator CLI is in the server image:
+Background work (starting and stopping runtimes, agent turns, sweeps, usage sync) runs from a job queue in Postgres. A job is retried up to 5 attempts in all, with a growing delay, then marked failed with its last error. Every workspace has its sweeps and usage sync scheduled within a minute of being created or restored; a dead one is scheduled again an hour after it failed. The operator CLI is in the server image:
 
 ```sh
 spyria exec server bun apps/server/src/operator-cli.ts failed-jobs
@@ -58,7 +58,7 @@ spyria exec server bun apps/server/src/operator-cli.ts retry-jobs --all
 spyria exec server bun apps/server/src/operator-cli.ts rebuild-messages [--chat <chat id>]
 ```
 
-`failed-jobs` lists failed jobs with their workspace, type, attempts and last error; `retry-jobs` requeues them with their attempts reset; `rebuild-messages` rebuilds the messages projection from the append-only event store, for one chat or all. `workspace:restore` and `workspace:purge` restore a deleted workspace or erase it before its seven days are over ([Self-hosting](./self-hosting.md#deleting-a-workspace)). In development the same commands are `bun run jobs:failed`, `bun run jobs:retry` and `bun run db:rebuild-messages` (they read `.env.dev`).
+`failed-jobs` lists failed jobs with their workspace, type, attempts, last error and when they failed; `retry-jobs` requeues them with their attempts reset (a dead sweep whose next run is already queued is dropped instead); `rebuild-messages` rebuilds the messages projection from the append-only event store, for one chat or all. `workspace:restore` and `workspace:purge` restore a deleted workspace or erase it before its seven days are over ([Self-hosting](./self-hosting.md#deleting-a-workspace)). In development the same commands are `bun run jobs:failed`, `bun run jobs:retry` and `bun run db:rebuild-messages` (they read `.env.dev`).
 
 ## Database connections
 

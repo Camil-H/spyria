@@ -197,3 +197,28 @@ test('the session sweep runs without a log line, deletes only expired sessions, 
   for (const workspaceId of [acme, globex])
     expect((await sweepsOf(workspaceId)).filter((job) => job.state === 'queued')).toHaveLength(1)
 })
+
+test('jobs:retry drops a dead sweep whose workspace already has one queued, and a sweep that failed within the hour is not scheduled again', async () => {
+  const jobsOf = async (workspaceId: string, type: string) =>
+    (await database.select().from(jobs)).filter((job) => job.workspaceId === workspaceId && job.type === type)
+  await database.$client`
+    insert into jobs (workspace_id, id, type, payload, run_at, attempts, state, finished_at) values
+      (${acme}, 'job-dead-session-sweep', 'sessions.sweep', '{}', now(), 5, 'failed', now())`
+  expect(await retryFailedJobs(database, 'job-dead-session-sweep')).toEqual(['job-dead-session-sweep'])
+  expect(await jobRow('job-dead-session-sweep')).toBeUndefined()
+  expect((await jobsOf(acme, 'sessions.sweep')).filter((job) => job.state === 'queued')).toHaveLength(1)
+
+  await database.$client`delete from jobs where workspace_id = ${globex} and type = 'runtime.sweep'`
+  await database.$client`
+    insert into jobs (workspace_id, id, type, payload, run_at, attempts, state, finished_at) values
+      (${globex}, 'job-dead-runtime-sweep', 'runtime.sweep', '{}', now(), 5, 'failed', now())`
+  await enqueueSweeps(database)
+  expect((await jobsOf(globex, 'runtime.sweep')).map((job) => job.id)).toEqual(['job-dead-runtime-sweep'])
+
+  await database.$client`
+    update jobs set finished_at = now() - interval '2 hours' where id = 'job-dead-runtime-sweep'`
+  await enqueueSweeps(database)
+  expect((await jobsOf(globex, 'runtime.sweep')).map((job) => job.state).toSorted()).toEqual(['failed', 'queued'])
+  expect(await retryFailedJobs(database, 'job-dead-runtime-sweep')).toEqual(['job-dead-runtime-sweep'])
+  expect((await jobsOf(globex, 'runtime.sweep')).map((job) => job.state)).toEqual(['queued'])
+})
