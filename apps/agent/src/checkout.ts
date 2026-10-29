@@ -17,6 +17,7 @@ export const setupCommand = `sh ${setupScript}`
 const shownOutputLines = 20
 const keptOutputCharacters = 20_000
 const shownOutputIntervalMilliseconds = 250
+const outputDrainMilliseconds = 1_000
 
 export const lastLinesOf = (output: string) => output.trimEnd().split('\n').slice(-shownOutputLines).join('\n')
 
@@ -76,15 +77,37 @@ export const checkOut = async (
   repository: Repository,
   environment: Record<string, string>,
 ): Promise<Checkout> => {
-  const checkout = existsSync(join(cwd, '.git')) ? {} : await cloned(cwd, repository, environment)
+  const checkout = existsSync(join(cwd, '.git'))
+    ? { hasSetup: existsSync(join(cwd, setupScript)) }
+    : await cloned(cwd, repository, environment)
   if (checkout.failure || (await identified(cwd, repository.author, environment))) return checkout
   return { failure: 'The commit author could not be set in the repository' }
 }
 
-export const runSetup = async (cwd: string, env: Record<string, string>, onOutput: (output: string) => void) => {
-  const child = Bun.spawn(['sh', '-c', `${setupCommand} 2>&1`], { cwd, env, stdin: 'ignore', stdout: 'pipe' })
+const killGroup = (leaderPid: number) => {
+  try {
+    process.kill(-leaderPid, 'SIGKILL')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error
+  }
+}
+
+export const runSetup = async (
+  cwd: string,
+  env: Record<string, string>,
+  timeoutMilliseconds: number,
+  onOutput: (output: string) => void,
+) => {
+  const child = Bun.spawn(['sh', '-c', `${setupCommand} 2>&1`], {
+    cwd,
+    env,
+    stdin: 'ignore',
+    stdout: 'pipe',
+    detached: true,
+  })
   const decoder = new TextDecoder()
   let output = ''
+  let isOver = false
   let shownAt = Number.NEGATIVE_INFINITY
   let pendingShow: ReturnType<typeof setTimeout> | undefined
   const show = () => {
@@ -92,13 +115,27 @@ export const runSetup = async (cwd: string, env: Record<string, string>, onOutpu
     shownAt = performance.now()
     onOutput(output)
   }
-  for await (const chunk of child.stdout) {
-    output = (output + decoder.decode(chunk, { stream: true })).slice(-keptOutputCharacters)
-    if (pendingShow) continue
-    const wait = shownAt + shownOutputIntervalMilliseconds - performance.now()
-    if (wait <= 0) show()
-    else pendingShow = setTimeout(show, wait)
-  }
+  const reading = (async () => {
+    for await (const chunk of child.stdout) {
+      if (isOver) continue
+      output = (output + decoder.decode(chunk, { stream: true })).slice(-keptOutputCharacters)
+      if (pendingShow) continue
+      const wait = shownAt + shownOutputIntervalMilliseconds - performance.now()
+      if (wait <= 0) show()
+      else pendingShow = setTimeout(show, wait)
+    }
+  })()
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  const exitCode = await Promise.race([
+    child.exited,
+    new Promise<undefined>((resolve) => {
+      timeout = setTimeout(() => resolve(undefined), timeoutMilliseconds)
+    }),
+  ])
+  clearTimeout(timeout)
+  if (exitCode === undefined) killGroup(child.pid)
+  await Promise.race([reading, Bun.sleep(outputDrainMilliseconds)])
+  isOver = true
   clearTimeout(pendingShow)
-  return { exitCode: await child.exited, output }
+  return { exitCode, output }
 }

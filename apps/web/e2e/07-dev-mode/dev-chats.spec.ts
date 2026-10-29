@@ -50,18 +50,19 @@ test.describe('Dev chats', () => {
     await expect(workingIndicatorOf(page)).toHaveCount(0)
   })
 
-  test('As a member, I get answers while a slow .spyria/setup.sh still runs, its output streaming into its conversation step', {
+  test('As a member, my first message waits for a slow .spyria/setup.sh, whose output streams into its conversation step, and is answered once it ends', {
     tag: ['@spec-40', '@slow'],
   }, async ({ page }) => {
     await configureGitHubApp(page)
     await newDevChat(page, 'Docs setup', 'acme/docs')
     await sendMessage(page, 'stub:ls')
-    await expect(messageContaining(page, 'files:.git,.spyria,README.md')).toHaveCount(1)
     const setup = await openCommandStep(page, 'sh .spyria/setup.sh')
     await expect(setup.locator('pre')).toContainText('installing the docs toolchain')
     await expect(setup).not.toContainText('exit 127')
+    await expect(messageContaining(page, 'files:.git,.spyria,README.md')).toHaveCount(0)
     await expect(setup.locator('pre')).toContainText('docs-tool: command not found')
     await expect(setup).toContainText('exit 127')
     await expect(messageContaining(page, 'The setup script .spyria/setup.sh failed with exit code 127')).toHaveCount(1)
+    await expect(messageContaining(page, 'files:.git,.spyria,README.md')).toHaveCount(1)
   })
 })
