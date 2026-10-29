@@ -49,6 +49,7 @@ export const conversationMutators = defineMutators({
         chatId: chatIdArgument,
         text: z.string(),
         threadRootId: z.optional(messageIdArgument),
+        quotedMessageId: z.optional(messageIdArgument),
         attachments: z.optional(z.array(attachmentArgument).check(z.maxLength(maximumAttachmentsPerMessage))),
       }),
       ({ tx, ctx, args }) =>

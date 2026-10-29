@@ -403,6 +403,7 @@ export const messages = table(
     step: jsonb().$type<MessageStep>(),
     replyToId: text(),
     threadRootId: text(),
+    quotedMessageId: text(),
     createdAt: instant().notNull(),
     editedAt: instant(),
     deletedAt: instant(),
@@ -414,8 +415,10 @@ export const messages = table(
     memberReference(table, table.authorId),
     tenantReference([table.workspaceId, table.replyToId], [table.workspaceId, table.id]),
     tenantReference([table.workspaceId, table.threadRootId], [table.workspaceId, table.id]),
+    tenantReference([table.workspaceId, table.quotedMessageId], [table.workspaceId, table.id]),
     index().on(table.workspaceId, table.replyToId),
     index().on(table.workspaceId, table.threadRootId),
+    index().on(table.workspaceId, table.quotedMessageId),
     index().on(table.workspaceId, table.chatId, table.seq.asc().nullsFirst()),
     index('messages_pull_request_index')
       .on(table.workspaceId, sql`(${table.step} ->> 'repository')`, sql`(${table.step} ->> 'number')`)

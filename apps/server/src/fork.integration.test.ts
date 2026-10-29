@@ -51,21 +51,25 @@ test.each(chatAccessRows(readers))(
   },
 )
 
-test('forkChat gives the forker a private runtime chat seeded with the source’s member and agent messages, and leaves the source unchanged', async () => {
+test('forkChat gives the forker a private runtime chat seeded with the source’s member and agent messages read from its event log, edits and deletions applied, and leaves the source unchanged', async () => {
   const source = await newChat({ participants: [{ memberId: bob, roleId: 'reader' }] })
   const at = (minute: number) => `2026-10-17T09:0${minute}:00.000Z`
-  const rows = [
-    { seq: 1, kind: 'member', authorId: alice, body: 'Find the bug.', deletedAt: null },
-    { seq: 2, kind: 'step', authorId: null, body: 'Read invoice.ts', deletedAt: null },
-    { seq: 3, kind: 'agent', authorId: null, body: 'Found it.', deletedAt: null },
-    { seq: 4, kind: 'notice', authorId: null, body: 'Stopped by Alice', deletedAt: null },
-    { seq: 5, kind: 'member', authorId: alice, body: '', deletedAt: at(6) },
-    { seq: 6, kind: 'member', authorId: alice, body: 'Fix it.', deletedAt: null },
+  const [firstId, deletedId] = [`message-${crypto.randomUUID()}`, `message-${crypto.randomUUID()}`]
+  const posted = (kind: string, body: string) => ({ kind, body, detail: null, replyToId: null })
+  const events = [
+    { id: firstId, type: 'message.posted', actor: alice, payload: posted('member', 'Find the bug.') },
+    { type: 'message.posted', actor: null, payload: posted('step', 'Read invoice.ts') },
+    { type: 'message.posted', actor: null, payload: posted('agent', 'Found it.') },
+    { type: 'message.posted', actor: null, payload: posted('notice', 'Stopped by Alice') },
+    { id: deletedId, type: 'message.posted', actor: alice, payload: { ...posted('member', ''), redacted: true } },
+    { type: 'message.edited', actor: alice, payload: { messageId: firstId, body: 'Find the bug, please.' } },
+    { type: 'message.deleted', actor: alice, payload: { messageId: deletedId } },
+    { type: 'message.posted', actor: alice, payload: posted('member', 'Fix it.') },
   ]
-  for (const { seq, kind, authorId, body, deletedAt } of rows)
+  for (const [index, { id = crypto.randomUUID(), type, actor, payload }] of events.entries())
     await database.$client`
-      insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at, deleted_at)
-      values (${acme}, ${source}, ${`message-${crypto.randomUUID()}`}, ${seq}, ${kind}, ${authorId}, ${body}, ${at(seq)}, ${deletedAt})`
+      insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
+      values (${acme}, ${source}, ${id}, ${index + 1}, ${type}, ${actor}, ${JSON.stringify(payload)}::jsonb, ${at(index + 1)})`
   const sourceBefore = {
     messages: await messagesOf(source),
     chat: await chatRow(source),
@@ -87,9 +91,9 @@ test('forkChat gives the forker a private runtime chat seeded with the source’
   ] as never)
   const wrapper = [
     'Conversation so far, from the runtime chat Runtime chat:',
-    'Alice (member, human) · 2026-10-17 09:01 UTC\nFind the bug.',
+    'Alice (member, human) · 2026-10-17 09:01 UTC\nFind the bug, please.',
     'Agent (agent) · 2026-10-17 09:03 UTC\nFound it.',
-    'Alice (member, human) · 2026-10-17 09:06 UTC\nFix it.',
+    'Alice (member, human) · 2026-10-17 09:08 UTC\nFix it.',
   ].join('\n\n')
   expect(await messagesOf(forked)).toMatchObject([
     { id: wrapperId, seq: 2, kind: 'member', authorId: bob, body: wrapper, replyToId: wrapperId },

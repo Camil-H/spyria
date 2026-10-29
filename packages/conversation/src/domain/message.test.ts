@@ -1,12 +1,20 @@
 import { expect, test } from 'bun:test'
 import { chatId, memberId, messageId, workspaceId } from '@spyria/kernel'
-import { ChatFrozen, InvalidThreadRoot, MessageDeleted, NoThreadsInRuntimeChat, NotMessageAuthor } from './errors.ts'
+import {
+  ChatFrozen,
+  InvalidQuotedMessage,
+  InvalidThreadRoot,
+  MessageDeleted,
+  NoThreadsInRuntimeChat,
+  NotMessageAuthor,
+} from './errors.ts'
 import {
   type ConversationChat,
   deletedMessage,
   editedMessage,
   isAgentActivity,
   type Message,
+  quotedMessageOf,
   requireNotFrozen,
   threadRootOf,
 } from './message.ts'
@@ -31,6 +39,7 @@ const messageByAlice: Message = {
   status: 'live',
   replyToId: null,
   threadRootId: null,
+  quotedMessageId: null,
 }
 
 test('editedMessage and deletedMessage reject other members', () => {
@@ -99,4 +108,24 @@ test('only what the agent wrote is agent activity: its replies and steps, not a 
   expect(isAgentActivity({ kind: 'step', authorId: alice })).toBe(false)
   expect(isAgentActivity({ kind: 'member', authorId: alice })).toBe(false)
   expect(isAgentActivity({ kind: 'notice', authorId: null })).toBe(false)
+})
+
+test('quotedMessageOf accepts a member’s or the agent’s live message of the same chat, a thread reply included', () => {
+  expect(quotedMessageOf(chatId('chat'), messageByAlice)).toBe(messageId('message'))
+  expect(quotedMessageOf(chatId('chat'), { ...messageByAlice, kind: 'agent', authorId: null })).toBe(
+    messageId('message'),
+  )
+  expect(quotedMessageOf(chatId('chat'), { ...messageByAlice, threadRootId: messageId('root') })).toBe(
+    messageId('message'),
+  )
+})
+
+test.each<[string, Message | undefined, string]>([
+  ['a missing message', undefined, 'chat'],
+  ['a message of another chat', messageByAlice, 'chat-other'],
+  ['a deleted message', { ...messageByAlice, status: 'deleted', deletedAt: editedAt }, 'chat'],
+  ['an agent step', { ...messageByAlice, kind: 'step', authorId: null }, 'chat'],
+  ['a notice', { ...messageByAlice, kind: 'notice', authorId: null }, 'chat'],
+])('quotedMessageOf refuses %s', (_, quoted, chat) => {
+  expect(() => quotedMessageOf(chatId(chat), quoted)).toThrow(InvalidQuotedMessage)
 })
