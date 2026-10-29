@@ -63,10 +63,14 @@ test.describe('Sidebar', () => {
       await expect(sidebarOf(page)).not.toContainText('Bob')
     })
     await test.step('explains the chat type in a tooltip when hovering its icon', async () => {
-      await chatRowIn(projectGroupOf(page, 'Billing'), 'Invoice bug').getByRole('img', { name: 'Runtime chat' }).hover()
-      await expect(page.getByRole('tooltip', { name: 'Runtime chat' })).toBeVisible()
-      await chatRowIn(projectGroupOf(page, 'Onboarding'), 'Welcome').getByRole('img', { name: 'Channel' }).hover()
-      await expect(page.getByRole('tooltip', { name: 'Channel' })).toBeVisible()
+      for (const [groupName, chatName, typeName] of [
+        ['Billing', 'Invoice bug', 'Runtime chat'],
+        ['Onboarding', 'Welcome', 'Channel'],
+      ] as const)
+        await expect(async () => {
+          await chatRowIn(projectGroupOf(page, groupName), chatName).getByRole('img', { name: typeName }).hover()
+          await expect(page.getByRole('tooltip', { name: typeName })).toBeVisible({ timeout: 2_000 })
+        }).toPass()
     })
     for (const actionName of ['New project', 'New chat'])
       await test.step(`shows ${actionName} as an icon at the top right with a tooltip`, async () => {
@@ -171,6 +175,7 @@ test.describe('Sidebar', () => {
     await test.step('widens when dragged right, stopping at the maximum, and narrows down to the minimum', async () => {
       await dragSeparatorBy(100)
       expect(await sidebarWidth()).toBeCloseTo(340, 0)
+      expect(await page.evaluate(() => getSelection()?.toString())).toBe('')
       await dragSeparatorBy(300)
       expect(await sidebarWidth()).toBeCloseTo(400, 0)
       await dragSeparatorBy(-400)
