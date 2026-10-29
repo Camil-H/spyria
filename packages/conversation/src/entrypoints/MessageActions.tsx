@@ -1,9 +1,19 @@
 import { Provider } from '@radix-ui/react-tooltip'
-import type { MessageId, WorkspaceId } from '@spyria/kernel'
+import { type MessageId, chatId as toChatId, type WorkspaceId } from '@spyria/kernel'
 import { ErrorMessage, IconButton, useGuardedAction } from '@spyria/ui'
-import { Check, ClipboardCopy, type LucideIcon, MessageSquareReply, Pencil, SquareTerminal, Trash2 } from 'lucide-react'
+import {
+  Check,
+  ClipboardCopy,
+  Link,
+  type LucideIcon,
+  MessageSquareReply,
+  Pencil,
+  SquareTerminal,
+  Trash2,
+} from 'lucide-react'
 import { type FocusEvent, type KeyboardEvent, useEffect, useState } from 'react'
-import { useNavigate, useOutletContext } from 'react-router'
+import { useNavigate, useOutletContext, useParams } from 'react-router'
+import { messageLinkOf } from './message-link.ts'
 import { useConversationCommands } from './providers.tsx'
 
 const copyFeedbackMilliseconds = 2000
@@ -30,6 +40,7 @@ const useCopyFeedback = () => {
 
 export const MessageActions = ({
   messageId,
+  isChannel,
   isThread,
   contextText,
   canEdit,
@@ -39,6 +50,7 @@ export const MessageActions = ({
   onDelete,
 }: {
   messageId: MessageId
+  isChannel: boolean
   isThread: boolean
   contextText: () => string
   canEdit: boolean
@@ -49,18 +61,27 @@ export const MessageActions = ({
 }) => {
   const commands = useConversationCommands()
   const workspaceId = useOutletContext<WorkspaceId>()
+  const chatId = toChatId(useParams().chatId ?? '')
   const navigate = useNavigate()
   const { errorMessage, isPending, run } = useGuardedAction()
   const { feedback, copy } = useCopyFeedback()
+  const link = useCopyFeedback()
   const copyLabel = `Copy ${isThread ? 'thread' : 'message'} as context`
-  const isPinned = isPending || errorMessage !== null || feedback !== null
+  const isPinned = isPending || errorMessage !== null || feedback !== null || link.feedback !== null
   const [focusedIndex, setFocusedIndex] = useState(0)
   const startRuntime = () =>
     run(async () => {
       const newChatId = await commands.startRuntimeFromMessage({ workspaceId, messageId })
       navigate(`../${newChatId}`, { relative: 'path' })
     })
-  const actions: Action[] = [
+  const copyLinkAction: Action = {
+    id: 'link',
+    label:
+      link.feedback === 'copied' ? 'Link copied' : link.feedback === 'failed' ? 'Copy failed' : 'Copy link to message',
+    icon: link.feedback === 'copied' ? Check : Link,
+    onClick: () => link.copy(messageLinkOf(window.location.origin, workspaceId, chatId, messageId)),
+  }
+  const channelActions: Action[] = [
     ...(onReplyInThread && canReply
       ? [{ id: 'reply', label: 'Reply in thread', icon: MessageSquareReply, onClick: onReplyInThread }]
       : []),
@@ -77,6 +98,7 @@ export const MessageActions = ({
       icon: feedback === 'copied' ? Check : ClipboardCopy,
       onClick: () => copy(contextText()),
     },
+    copyLinkAction,
     ...(canEdit
       ? [
           { id: 'edit', label: 'Edit', icon: Pencil, onClick: onEdit },
@@ -84,6 +106,7 @@ export const MessageActions = ({
         ]
       : []),
   ]
+  const actions = isChannel ? channelActions : [copyLinkAction]
   const tabStopIndex = Math.min(focusedIndex, actions.length - 1)
   const buttonsOf = (toolbar: HTMLDivElement) => [...toolbar.querySelectorAll('button')]
   const followFocus = (event: FocusEvent<HTMLDivElement>) => {

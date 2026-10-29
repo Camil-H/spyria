@@ -1,6 +1,6 @@
 # Chats and sharing
 
-This page describes how conversations are organized in a Spyria workspace and how members share them: projects, channels, runtime chats, threads, search, keyboard shortcuts, unread state, chat roles, forking and starting an agent from a channel thread. It is written for members and for contributors who need the rules the server enforces. Agent behaviour inside a runtime chat is in [Agents](./agents.md); dev chats on repositories are in [Dev mode](./dev-mode.md).
+This page describes how conversations are organized in a Spyria workspace and how members share them: projects, channels, runtime chats, threads, links to messages, search, keyboard shortcuts, unread state, chat roles, forking and starting an agent from a channel thread. It is written for members and for contributors who need the rules the server enforces. Agent behaviour inside a runtime chat is in [Agents](./agents.md); dev chats on repositories are in [Dev mode](./dev-mode.md).
 
 ## Projects and chats
 
@@ -43,7 +43,11 @@ Changing a channel's visibility needs the chat admin permission. When a channel 
 
 ## Message actions
 
-In a channel, pointing at a message, or moving the keyboard focus into it, shows its actions side by side at its top right, each an icon that names itself on hover: **Reply in thread** (top-level messages, for members who can post), **Start runtime from this message**, **Copy message as context** (**Copy thread as context** when the message has replies or is one), and, for its author only, **Edit** and **Delete**. An action a member cannot take is not shown. The actions are one stop for Tab; the left and right arrow keys, Home and End move between them. Runtime chats have no message actions.
+In a channel, pointing at a message, or moving the keyboard focus into it, shows its actions side by side at its top right, each an icon that names itself on hover: **Reply in thread** (top-level messages, for members who can post), **Start runtime from this message**, **Copy message as context** (**Copy thread as context** when the message has replies or is one), **Copy link to message**, and, for its author only, **Edit** and **Delete**. An action a member cannot take is not shown. The actions are one stop for Tab; the left and right arrow keys, Home and End move between them. In a runtime chat, members' messages and the agent's replies offer **Copy link to message** only.
+
+## Links to messages
+
+**Copy link to message** puts the message's address in the clipboard: the chat's address with `?message=` and the message's id. Opening it opens the chat on that message, marked, loading earlier messages until it is on screen; a link to a thread reply opens its thread. The link gives no access: a member who cannot read the chat lands on the workspace, as for any link to that chat.
 
 ## Threads
 

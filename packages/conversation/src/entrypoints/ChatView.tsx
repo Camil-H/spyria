@@ -14,7 +14,7 @@ import {
 } from '@spyria/ui'
 import { Folder, GitBranch, TextSearch } from 'lucide-react'
 import { type ReactNode, useEffect, useState } from 'react'
-import { Link, Navigate, useLocation, useNavigate, useOutletContext, useParams } from 'react-router'
+import { Link, Navigate, useLocation, useNavigate, useOutletContext, useParams, useSearchParams } from 'react-router'
 import { ChatFrozen } from '../domain/errors.ts'
 import { runsOnNames, runsOnWaitingNoticeOf } from '../domain/session-routing.ts'
 import { getConversation } from '../queries/get-conversation.ts'
@@ -25,9 +25,11 @@ import type { QuestionAnswer } from './endpoints.ts'
 import { FindBar } from './FindBar.tsx'
 import { ForkButton } from './ForkButton.tsx'
 import { MessageList } from './MessageList.tsx'
+import { linkedMessageParam } from './message-link.ts'
 import {
   ChatMediaContext,
   ChatNameContext,
+  LinkedMessageContext,
   LoadedRemoteImagesContext,
   MentionNamesContext,
   QuestionAnswererContext,
@@ -95,6 +97,7 @@ export const ChatView = ({
   const findState = useFindState(chatId)
   const [messagesElement, setMessagesElement] = useState<HTMLElement | null>(null)
   const findTargetId = findState.find?.messageId ?? null
+  const linkedMessageId = useSearchParams()[0].get(linkedMessageParam)
   const find = useFindInChat(messagesElement, findState.find?.text ?? '', findTargetId)
   useShortcut('f', 'Find in this chat', findState.open)
   const mentionNames = useQuery(getMentionableNames, workspaceId)
@@ -118,9 +121,11 @@ export const ChatView = ({
   useEffect(() => {
     if (isReadMarkerBehind) commands.markChatRead({ workspaceId, chatId })
   }, [commands, workspaceId, chatId, isReadMarkerBehind])
-  const isFindTargetMissing = findTargetId !== null && !live.messages.some((message) => message.id === findTargetId)
+  const isShown = (id: string) =>
+    live.messages.some((message) => message.id === id || message.thread?.replies.some((reply) => reply.id === id))
+  const isTargetMissing = [findTargetId, linkedMessageId].some((id) => id !== null && !isShown(id))
   const loadEarlierTowardsTarget =
-    isFindTargetMissing && chatMessages.isComplete && chatMessages.hasEarlier ? chatMessages.loadEarlier : undefined
+    isTargetMissing && chatMessages.isComplete && chatMessages.hasEarlier ? chatMessages.loadEarlier : undefined
   useEffect(() => loadEarlierTowardsTarget?.(), [loadEarlierTowardsTarget])
   const soleChoice =
     conversation?.isOwner && conversation.runsOn === null && runsOnChoices?.length === 1 ? runsOnChoices[0] : null
@@ -216,22 +221,26 @@ export const ChatView = ({
         <ToolsAwaitingApprovalContext value={toolsAwaitingApproval}>
           <ChatMediaContext value={{ chatId, isRuntime: conversation.type === 'runtime' }}>
             <LoadedRemoteImagesContext value={{ sources: remoteImagesLoadedHere, load: loadRemoteImage }}>
-              <MentionNamesContext value={mentionNames}>
-                <ChatNameContext value={conversation.title}>
-                  <div ref={setMessagesElement} className="flex min-h-0 flex-1 flex-col">
-                    <MessageList
-                      conversation={conversation}
-                      items={chatMessages.hasWindow ? withLiveMessages(conversation.items, live) : []}
-                      isComplete={chatMessages.isComplete}
-                      onLoadEarlier={
-                        chatMessages.isComplete && chatMessages.hasEarlier ? chatMessages.loadEarlier : undefined
-                      }
-                      onStop={conversation.canConfigure ? () => commands.stopAgent({ workspaceId, chatId }) : undefined}
-                      onFork={conversation.isOwner ? undefined : fork}
-                    />
-                  </div>
-                </ChatNameContext>
-              </MentionNamesContext>
+              <LinkedMessageContext value={linkedMessageId}>
+                <MentionNamesContext value={mentionNames}>
+                  <ChatNameContext value={conversation.title}>
+                    <div ref={setMessagesElement} className="flex min-h-0 flex-1 flex-col">
+                      <MessageList
+                        conversation={conversation}
+                        items={chatMessages.hasWindow ? withLiveMessages(conversation.items, live) : []}
+                        isComplete={chatMessages.isComplete}
+                        onLoadEarlier={
+                          chatMessages.isComplete && chatMessages.hasEarlier ? chatMessages.loadEarlier : undefined
+                        }
+                        onStop={
+                          conversation.canConfigure ? () => commands.stopAgent({ workspaceId, chatId }) : undefined
+                        }
+                        onFork={conversation.isOwner ? undefined : fork}
+                      />
+                    </div>
+                  </ChatNameContext>
+                </MentionNamesContext>
+              </LinkedMessageContext>
             </LoadedRemoteImagesContext>
           </ChatMediaContext>
         </ToolsAwaitingApprovalContext>
