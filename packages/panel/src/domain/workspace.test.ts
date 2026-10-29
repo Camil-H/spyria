@@ -127,7 +127,7 @@ test('a log from before the NUL separators still reads, one commit per line', ()
   ])
 })
 
-test('changes split into the files not staged, the files staged but not committed, then each commit with a change, the oldest marked when cut', () => {
+test('changes split into the files not staged, the files staged but not committed, then every commit, one without a change listed without files, the oldest with a patch marked when cut', () => {
   const [readme = '', added = ''] = patch.split(/(?=^diff --git a\/src)/m)
   const changes = { isLive: true, unstaged: added, staged: readme, cut: ['staged'] }
   const commits = {
@@ -148,9 +148,11 @@ test('changes split into the files not staged, the files staged but not committe
     [undefined, 'Not staged', undefined, ['src/new.ts', 'old.txt', 'logo.png'], false],
     [undefined, 'Staged, not committed', undefined, ['README.md'], true],
     ['aaaaaaa', 'Fix the readme', 'Alice', ['README.md'], false],
+    ['bbbbbbb', 'Merge main', 'Alice', [], false],
     ['ccccccc', '', undefined, ['README.md'], true],
   ])
   expect(changeGroupsOf({ ...changes, cut: [] }, { ...commits, cut: [] }).map(({ isCut }) => isCut)).toEqual([
+    false,
     false,
     false,
     false,
