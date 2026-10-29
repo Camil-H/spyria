@@ -264,6 +264,18 @@ export const listFailedJobs = (database: Database) =>
 export const retryFailedJobs = async (database: Database, jobIdOrAll: string) =>
   (
     await database.$client<{ id: string }[]>`
-      update jobs set state = 'queued', attempts = 0, run_at = now(), finished_at = null
-      where state = 'failed' and (${jobIdOrAll} = 'all' or id = ${jobIdOrAll}) returning id`
+      with retried as (
+        select workspace_id, id, exists(select 1 from jobs as queued
+          where queued.workspace_id = jobs.workspace_id and queued.type = jobs.type and queued.state = 'queued'
+            and (queued.type like '%.sweep' or queued.type = 'usage.sync')) as is_already_queued
+        from jobs where state = 'failed' and (${jobIdOrAll} = 'all' or id = ${jobIdOrAll})),
+      superseded as (
+        delete from jobs using retried
+        where (jobs.workspace_id, jobs.id) = (retried.workspace_id, retried.id) and retried.is_already_queued
+        returning jobs.id),
+      requeued as (
+        update jobs set state = 'queued', attempts = 0, run_at = now(), finished_at = null from retried
+        where (jobs.workspace_id, jobs.id) = (retried.workspace_id, retried.id) and not retried.is_already_queued
+        returning jobs.id)
+      select id from superseded union all select id from requeued`
   ).map((job) => job.id)
