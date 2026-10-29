@@ -116,7 +116,7 @@ Every tool call is recorded with its prompter, owner and approval decision, and 
 
 ## Forking a runtime chat
 
-**Fork into my session** in a runtime chat's header creates a new runtime chat owned by the member who forked it, in the same project. Any participant who can read the chat can fork it; the owner sees the button too. The fork starts with one message that quotes the conversation so far (members' messages and the agent's replies, with their authors and times), and its header links back with "Forked from". A fork is the way to continue someone else's work with your own tools, machine or model. A fork of a dev chat continues on the original's branch; see [Dev mode](./dev-mode.md#forking-a-dev-chat).
+**Fork into my session** in a runtime chat's header creates a new runtime chat owned by the member who forked it, in the same project. Any participant who can read the chat can fork it; the owner sees the button too. The fork starts with one message that quotes the conversation so far (members' messages and the agent's replies, with their authors and times, as they read after every edit and deletion), read by the server from the chat's history in the event store, and its header links back with "Forked from". A fork is the way to continue someone else's work with your own tools, machine or model. A fork of a dev chat continues on the original's branch; see [Dev mode](./dev-mode.md#forking-a-dev-chat).
 
 Only runtime chats can be forked.
 
