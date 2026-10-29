@@ -18,11 +18,6 @@ export const SourceChatArchived = errorKind(
   () => 'A runtime chat cannot start from an archived chat',
   WorkspaceError,
 )
-export const RuntimeChatPrivate = errorKind(
-  'runtime_chat_private',
-  () => 'A runtime chat is always private',
-  WorkspaceError,
-)
 export const InvalidEmail = errorKind('invalid_email', (email: string) => `${email} is not an email`, WorkspaceError)
 export const AlreadyMember = errorKind(
   'already_member',

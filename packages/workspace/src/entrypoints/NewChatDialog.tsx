@@ -8,7 +8,7 @@ import {
   SegmentedChoice,
   useGuardedAction,
 } from '@spyria/ui'
-import { type SubmitEvent, useEffect, useId, useState } from 'react'
+import { type SubmitEvent, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { GitHubNotConfigured } from '../domain/errors.ts'
 import type { GitHubRepository } from '../domain/github.ts'
@@ -24,42 +24,28 @@ const Question = <Answer extends string>({
   name,
   answers,
   value,
-  disabledAnswers,
-  hint,
   onAnswer,
 }: {
   question: string
   name: string
   answers: Record<Answer, string>
   value: Answer | null
-  disabledAnswers?: readonly Answer[]
-  hint?: string
   onAnswer: (answer: Answer) => void
-}) => {
-  const hintId = useId()
-  return (
-    <div className="flex flex-col gap-1">
-      <p aria-hidden className="text-sm text-muted">
-        {question}
-      </p>
-      <SegmentedChoice
-        label={question}
-        describedBy={hint && hintId}
-        name={name}
-        options={Object.keys(answers) as Answer[]}
-        labels={answers}
-        value={value}
-        disabledOptions={disabledAnswers}
-        onChange={onAnswer}
-      />
-      {hint && (
-        <p id={hintId} className="text-xs text-muted">
-          {hint}
-        </p>
-      )}
-    </div>
-  )
-}
+}) => (
+  <div className="flex flex-col gap-1">
+    <p aria-hidden className="text-sm text-muted">
+      {question}
+    </p>
+    <SegmentedChoice
+      label={question}
+      name={name}
+      options={Object.keys(answers) as Answer[]}
+      labels={answers}
+      value={value}
+      onChange={onAnswer}
+    />
+  </div>
+)
 
 export const NewChatDialog = ({
   workspaceId,
@@ -87,13 +73,9 @@ export const NewChatDialog = ({
   const isAiChat = audience === 'ai'
   const isDev = isAiChat && needsGitHub === 'yes'
   const isAnswered = visibility !== null && audience !== null && (!isAiChat || needsGitHub !== null)
-  const chooseAudience = (chosen: Audience | null) => {
+  const chooseAudience = (chosen: Audience) => {
     setAudience(chosen)
     setNeedsGitHub(null)
-  }
-  const chooseVisibility = (chosen: ChatVisibility) => {
-    setVisibility(chosen)
-    if (chosen === 'public' && isAiChat) chooseAudience(null)
   }
   const canConnectGitHub = useWorkspacePermissions(workspaceId).includes('github.manage')
   const [loadFailure, setLoadFailure] = useState<string | null>(null)
@@ -127,11 +109,12 @@ export const NewChatDialog = ({
             projectId: selectedProjectId,
             repository,
             baseBranch,
+            ...(visibility && { visibility }),
           })
         : commands.createChat({
             workspaceId,
             type: isAiChat ? 'runtime' : 'channel',
-            ...(!isAiChat && visibility && { visibility }),
+            ...(visibility && { visibility }),
             name: Name(draftName),
             projectId: selectedProjectId,
           })
@@ -149,15 +132,13 @@ export const NewChatDialog = ({
           name="visibility"
           answers={{ public: 'Yes', private: 'No' }}
           value={visibility}
-          onAnswer={chooseVisibility}
+          onAnswer={setVisibility}
         />
         <Question
           question="Is it a team channel or an AI chat?"
           name="audience"
           answers={{ members: 'Team channel', ai: 'AI chat' }}
           value={audience}
-          disabledAnswers={visibility === 'public' ? ['ai'] : []}
-          hint={visibility === 'public' ? 'AI chats are always private.' : undefined}
           onAnswer={chooseAudience}
         />
         {isAiChat && (

@@ -23,7 +23,7 @@ export type WorkspaceCommands = {
   archiveProject: Command<{ projectId: ProjectId; chatsPolicy: ChatsPolicy }>
   renameChat: Command<{ chatId: ChatId; name: Name }>
   changeVisibility: Command<{ chatId: ChatId; visibility: ChatVisibility }>
-  joinChannel: Command<{ chatId: ChatId }>
+  joinChat: Command<{ chatId: ChatId }>
   leaveChat: Command<{ chatId: ChatId }>
   renameProject: Command<{ projectId: ProjectId; name: Name }>
   createWorkspace: Command<{ name: Name }>
@@ -55,5 +55,11 @@ export type WorkspaceCommands = {
   }) => Promise<{ formAction: string; manifest: string }>
   listRepositories: (input: { workspaceId: WorkspaceId }) => Promise<GitHubRepository[]>
   listBranches: (input: { workspaceId: WorkspaceId; repository: string }) => Promise<string[]>
-  createDevChat: Command<{ name: Name; projectId: ProjectId | null; repository: string; baseBranch: string }>
+  createDevChat: Command<{
+    name: Name
+    projectId: ProjectId | null
+    repository: string
+    baseBranch: string
+    visibility?: ChatVisibility
+  }>
 }

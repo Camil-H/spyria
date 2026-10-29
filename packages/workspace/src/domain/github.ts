@@ -1,3 +1,4 @@
+import type { ChatVisibility } from '@spyria/kernel'
 import { BranchNotFound, InvalidGitHubSettings, RepositoryNotGranted } from './errors.ts'
 
 export type GitHubSettingsInput = {
@@ -11,7 +12,13 @@ export type GitHubSettings = { appId: string; clientId: string }
 export type GitHubSecrets = Required<Pick<GitHubSettingsInput, 'clientSecret' | 'privateKey' | 'webhookSecret'>>
 export type GitHubRepository = { fullName: string; defaultBranch: string }
 export type GitHubSettingsView = GitHubSettings & { repositories: GitHubRepository[]; listingFailure: string | null }
-export type DevChatInput = { name: string; projectId: string | null; repository: string; baseBranch: string }
+export type DevChatInput = {
+  name: string
+  projectId: string | null
+  repository: string
+  baseBranch: string
+  visibility?: ChatVisibility
+}
 
 export const githubSecretNames = ['clientSecret', 'privateKey', 'webhookSecret'] as const
 export const githubCallbackPath = '/auth/github/callback'

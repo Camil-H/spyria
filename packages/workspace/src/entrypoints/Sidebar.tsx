@@ -7,7 +7,7 @@ import { CircleUser, FolderPlus, Hash, PanelLeftClose, PanelLeftOpen, Search, Se
 import { type CSSProperties, lazy, type ReactNode, Suspense, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router'
 import { getSidebar } from '../queries/get-sidebar.ts'
-import { listJoinableChannels } from '../queries/list-joinable-channels.ts'
+import { listJoinableChats } from '../queries/list-joinable-chats.ts'
 import { type ChatAdornment, ChatRow } from './ChatRow.tsx'
 import { NameDialog } from './NameDialog.tsx'
 import { NewChatDialog } from './NewChatDialog.tsx'
@@ -18,7 +18,7 @@ import { maximumSidebarWidth, minimumSidebarWidth, sidebarWidthVariable, useSide
 import { useWorkspacePermissions } from './useWorkspacePermissions.ts'
 import { WorkspaceSwitcher } from './WorkspaceSwitcher.tsx'
 
-const BrowseChannelsDialog = lazy(() => import('./BrowseChannelsDialog.tsx'))
+const BrowseChatsDialog = lazy(() => import('./BrowseChatsDialog.tsx'))
 
 export type SearchDialog = (props: { workspaceId: WorkspaceId; onClose: () => void }) => ReactNode
 export type SidebarItem = (props: { workspaceId: WorkspaceId; isCollapsed: boolean }) => ReactNode
@@ -65,12 +65,12 @@ export const Sidebar = ({
 }) => {
   const { memberId } = useSession()
   const sidebar = useQuery(getSidebar, workspaceId, memberId)
-  const joinableChannels = useQuery(listJoinableChannels, workspaceId, memberId)
+  const joinableChats = useQuery(listJoinableChats, workspaceId, memberId)
   const commands = useWorkspaceCommands()
   const navigate = useNavigate()
   const hasWorkspaceSettings = useWorkspacePermissions(workspaceId).length > 0
   const chatAction = useGuardedAction()
-  const [openDialog, setOpenDialog] = useState<'project' | 'chat' | 'channels' | 'search' | null>(null)
+  const [openDialog, setOpenDialog] = useState<'project' | 'chat' | 'chats' | 'search' | null>(null)
   const closeDialog = () => setOpenDialog(null)
   const { isCollapsed, toggleCollapsed } = useCollapsed()
   const { width, resizeTo } = useSidebarWidth()
@@ -79,7 +79,7 @@ export const Sidebar = ({
   useShortcut('/', 'Search the workspace', () => setOpenDialog('search'), searchDialog !== undefined)
   useShortcut('c', 'New chat', () => setOpenDialog('chat'))
   useShortcut('p', 'New project', () => setOpenDialog('project'))
-  useShortcut('b', 'Browse channels', () => setOpenDialog('channels'))
+  useShortcut('b', 'Browse public chats', () => setOpenDialog('chats'))
   useShortcut('s', 'Workspace settings', () => navigate(`/w/${workspaceId}/settings`), hasWorkspaceSettings)
   useShortcut('i', 'Profile', () => navigate(`/w/${workspaceId}/profile`))
   const dialogs = (
@@ -95,9 +95,9 @@ export const Sidebar = ({
       {openDialog === 'chat' && (
         <NewChatDialog workspaceId={workspaceId} projects={sidebar.projects} onClose={closeDialog} />
       )}
-      {openDialog === 'channels' && (
+      {openDialog === 'chats' && (
         <Suspense>
-          <BrowseChannelsDialog workspaceId={workspaceId} channels={joinableChannels} onClose={closeDialog} />
+          <BrowseChatsDialog workspaceId={workspaceId} chats={joinableChats} onClose={closeDialog} />
         </Suspense>
       )}
       {openDialog === 'search' && searchDialog?.({ workspaceId, onClose: closeDialog })}
@@ -181,12 +181,12 @@ export const Sidebar = ({
             type="button"
             aria-keyshortcuts="B"
             className={footerLinkClass({ isActive: false })}
-            onClick={() => setOpenDialog('channels')}
+            onClick={() => setOpenDialog('chats')}
           >
             <Hash aria-hidden className="size-4" />
-            <span className="flex-1">Browse channels</span>
+            <span className="flex-1">Browse public chats</span>
             <ShortcutHint shortcut="B" />
-            {joinableChannels.length > 0 && <span className="text-xs text-muted">{joinableChannels.length}</span>}
+            {joinableChats.length > 0 && <span className="text-xs text-muted">{joinableChats.length}</span>}
           </button>
           {hasWorkspaceSettings && (
             <NavLink to={`/w/${workspaceId}/settings`} aria-keyshortcuts="S" className={footerLinkClass}>

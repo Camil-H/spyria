@@ -8,18 +8,18 @@ The sidebar lists a workspace's **projects**, each with its chats, then the **Lo
 
 A chat has one of two types. **New chat** asks questions instead of naming them, and creates the chat once every question shown is answered (none is answered in advance):
 
-1. **Is it public, so everyone in the workspace can join?** Yes makes a public channel, No a private chat.
-2. **Is it a team channel or an AI chat?** Team channel makes a channel, AI chat a runtime chat. AI chat cannot be chosen for a public chat, since runtime chats are always private.
+1. **Is it public, so everyone in the workspace can join?** Yes makes a public chat, No a private one.
+2. **Is it a team channel or an AI chat?** Team channel makes a channel, AI chat a runtime chat.
 3. **Does it need GitHub access?** Asked for an AI chat only. Yes makes it a dev chat and shows the **Repository** and **Base branch** pickers (see [Dev mode](./dev-mode.md#creating-a-dev-chat)).
 
-| Type | Who talks | Visibility | Notes |
-|---|---|---|---|
-| **Channel** | members only | **Public** or **Private** | threads, "Start runtime from this message" |
-| **Runtime** | members and an agent | always private | with or without GitHub access; with it, a dev chat on a repository |
+| Type | Who talks | Notes |
+|---|---|---|
+| **Channel** | members only | threads, "Start runtime from this message" |
+| **Runtime** | members and an agent | with or without GitHub access; with it, a dev chat on a repository |
 
 The member who creates a chat owns it, and stays its owner. Ownership matters beyond the chat itself: the agent of a runtime chat acts with its owner's tool connections (the header says **Agent acts as** *owner*), so there is always one accountable identity for what the agent does. See [Security](../architecture/security.md).
 
-From a chat's menu in the sidebar, a member with the right permission can **Move to** another project (or **No project**), rename, **Make private** / **Make public** (channels only), **Archive chat**, or leave (**Leave channel**, **Leave chat**). Archiving a chat also removes its runtime. A project's menu offers **New chat**, which opens the new chat dialog with that project already chosen, **Rename project** and **Archive project**. **Archive project** offers two choices: **Archive with its chats**, or **Archive, keep chats**, which moves them to Loose chats.
+From a chat's menu in the sidebar, a member with the right permission can **Move to** another project (or **No project**), rename, **Make private** / **Make public**, **Archive chat**, or leave (**Leave channel**, **Leave chat**). Archiving a chat also removes its runtime. A project's menu offers **New chat**, which opens the new chat dialog with that project already chosen, **Rename project** and **Archive project**. **Archive project** offers two choices: **Archive with its chats**, or **Archive, keep chats**, which moves them to Loose chats.
 
 Every chat keeps one unsent draft per member; a pencil icon in the sidebar marks a chat with a draft. In the composer, Ctrl+Enter (Cmd+Enter on a Mac) sends.
 
@@ -39,11 +39,11 @@ In a runtime chat, the agent can show a file it made, or a screenshot it took wi
 
 An image with a web address in a message shows as a **Load image from** *site* button and loads only on click, from the viewer's browser, so that site sees the viewer's address. Once loaded, the same image stays loaded in that chat until the page is reloaded, also when the agent's reply that holds it is stored or folded into its steps.
 
-## Channels
+## Public and private chats
 
-Channels are where members talk without an agent. A **public** channel is open to every member of the workspace: anyone can read it, and anyone can post after **Join channel**. **Browse channels** in the sidebar lists the public channels a member has not joined. A **private** channel is visible only to its participants.
+Channels are where members talk without an agent; AI chats add one. Either kind is public or private. A **public** chat is open to every member of the workspace: anyone can read it, and anyone can post after **Join channel** (**Join chat** for an AI chat). **Browse public chats** in the sidebar lists the public chats a member has not joined, channels and AI chats alike. A **private** chat is visible only to its participants. A runtime chat started from a channel message, and a fork, start private.
 
-Changing a channel's visibility needs the chat admin permission. When a channel becomes public, any participant whose role gives less than read and post (a Reader) becomes a Prompter, because a public channel already lets everyone post.
+Changing a chat's visibility needs the chat admin permission. When a chat becomes public, any participant whose role gives less than read and post (a Reader) becomes a Prompter, because a public chat already lets everyone post. In a public AI chat, anyone who joins prompts the agent as a guest, on their own key, with the reach described in [Prompts from someone other than the owner](#prompts-from-someone-other-than-the-owner); a session on the owner's machine still answers only its owner.
 
 ## Message actions
 
@@ -78,7 +78,7 @@ Single keys move around the workspace. They do nothing while typing in a field o
 | **L** | Collapse or expand the left sidebar |
 | **R** | Hide or show the side panel on the right |
 | **R** then **1**, **2**… | Open the side panel on its first, second… tab |
-| **B** | Browse channels |
+| **B** | Browse public chats |
 | **C** | Create a chat |
 | **P** | Create a project |
 | **S** | Workspace settings (for members who can open them) |
@@ -112,7 +112,7 @@ The server applies these rules on every request:
 
 - **Nobody grants more than they hold.** A member can only give a role whose permissions are all within their own.
 - **The Owner role is not assignable**, and the owner keeps it and stays in the chat.
-- **Public channels are open to all.** In a public channel every member already reads and posts, so a role below that (Reader) cannot be given there: make the channel private to restrict someone.
+- **Public chats are open to all.** In a public chat every member already reads and posts, so a role below that (Reader) cannot be given there: make the chat private to restrict someone.
 - **Members outside the workspace cannot be invited.**
 
 The `tools.manage` chat permission is defined and shown in the roles editor, but no chat action checks it yet.

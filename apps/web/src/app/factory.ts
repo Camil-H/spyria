@@ -202,7 +202,7 @@ export const createApp = async (
     inviteMember: mutateConfirmed(conversationMutators.conversation.inviteMember),
     changeMemberRole: mutateConfirmed(conversationMutators.conversation.changeMemberRole),
     removeMember: mutateConfirmed(conversationMutators.conversation.removeMember),
-    joinChannel: mutateConfirmed(conversationMutators.conversation.joinChannel),
+    joinChat: mutateConfirmed(conversationMutators.conversation.joinChat),
     leaveChat: mutateConfirmed(conversationMutators.conversation.leaveChat),
     retryAgent: mutateConfirmed(conversationMutators.conversation.retryAgent),
     restartSession: mutateConfirmed(conversationMutators.conversation.restartSession),
@@ -260,7 +260,7 @@ export const createApp = async (
         await whenChatSynced(chatId)
         return chatId
       },
-      joinChannel: mutateConfirmed(conversationMutators.conversation.joinChannel),
+      joinChat: mutateConfirmed(conversationMutators.conversation.joinChat),
       leaveChat: mutateConfirmed(conversationMutators.conversation.leaveChat),
     }),
     conversationCommands,

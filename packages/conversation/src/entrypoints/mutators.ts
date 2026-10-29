@@ -12,7 +12,7 @@ import { deleteMessage } from '../operations/delete-message.ts'
 import { editMessage } from '../operations/edit-message.ts'
 import { forkChat } from '../operations/fork-chat.ts'
 import { inviteMember } from '../operations/invite-member.ts'
-import { joinChannel } from '../operations/join-channel.ts'
+import { joinChat } from '../operations/join-chat.ts'
 import { leaveChat } from '../operations/leave-chat.ts'
 import { markChatRead } from '../operations/mark-chat-read.ts'
 import { markThreadRead } from '../operations/mark-thread-read.ts'
@@ -107,8 +107,8 @@ export const conversationMutators = defineMutators({
     removeMember: defineMutator(memberArguments, ({ tx, ctx, args }) =>
       removeMember(dependenciesOf(tx, ctx, args), { ...args, actorId: ctx.userId }),
     ),
-    joinChannel: defineMutator(chatArguments, ({ tx, ctx, args }) =>
-      joinChannel(dependenciesOf(tx, ctx, args), { ...args, memberId: ctx.userId }),
+    joinChat: defineMutator(chatArguments, ({ tx, ctx, args }) =>
+      joinChat(dependenciesOf(tx, ctx, args), { ...args, memberId: ctx.userId }),
     ),
     leaveChat: defineMutator(chatArguments, ({ tx, ctx, args }) =>
       leaveChat(dependenciesOf(tx, ctx, args), { ...args, memberId: ctx.userId }),

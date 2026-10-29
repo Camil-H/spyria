@@ -1,5 +1,5 @@
 import type { ChatId, ChatVisibility, MemberId, ProjectId, WorkspaceId } from '@spyria/kernel'
-import { CrossWorkspaceMove, RuntimeChatPrivate, SourceChatArchived } from './errors.ts'
+import { CrossWorkspaceMove, SourceChatArchived } from './errors.ts'
 import { workingBranchOf } from './github.ts'
 import type { Name } from './name.ts'
 
@@ -36,10 +36,7 @@ export const archivedChat = (chat: Chat): Chat => ({ ...chat, archived: true })
 
 export const renamedChat = (chat: Chat, name: Name): Chat => ({ ...chat, name })
 
-export const visibleChat = (chat: Chat, visibility: ChatVisibility): Chat => {
-  if (chat.type === 'runtime') throw new RuntimeChatPrivate()
-  return { ...chat, visibility }
-}
+export const visibleChat = (chat: Chat, visibility: ChatVisibility): Chat => ({ ...chat, visibility })
 
 type StartedChatFields = { id: ChatId; name: Name; ownerId: MemberId }
 

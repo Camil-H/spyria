@@ -146,6 +146,7 @@ Rules that apply today without a mechanism, or with a known hole.
 | RS6 | the postgres.js pool is bounded (default 10) but has no statement timeout |
 | RS8 | no retry of serialization or deadlock failures around a mutator (only the e2e reset retries `40P01`) |
 | O1, O2a, O2b, O3, O4, O5, O7 | no OpenTelemetry: server logs are plain `console` lines without trace ids, no spans, no `traceparent` across browser, server and zero-cache |
+| O4, O7 | the model gateway exports no spans: the server forwards `traceparent` to Bifrost, but Bifrost v2.3.2's `otel` plugin puts the full prompt and answer in every span (`gen_ai.input.messages`, `gen_ai.output.messages`), even with `disable_content_logging`, so it stays off; a turn's trace ends at the server's model call span |
 | T6a | no coverage measured |
 | T7 | no property-based state machine for the event store or the transactors |
 | N1 | return types are inferred, not annotated (`isolatedDeclarations` is off) |

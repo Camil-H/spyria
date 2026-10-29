@@ -100,23 +100,21 @@ export const ChatRow = ({
                     ))}
                   </SubContent>
                 </Sub>
-                {chat.type === 'channel' && (
-                  <Item
-                    className={menuItemClass}
-                    disabled={chatAction.isPending}
-                    onSelect={() =>
-                      chatAction.run(() =>
-                        commands.changeVisibility({
-                          workspaceId,
-                          chatId: chat.id,
-                          visibility: chat.visibility === 'public' ? 'private' : 'public',
-                        }),
-                      )
-                    }
-                  >
-                    {chat.visibility === 'public' ? 'Make private' : 'Make public'}
-                  </Item>
-                )}
+                <Item
+                  className={menuItemClass}
+                  disabled={chatAction.isPending}
+                  onSelect={() =>
+                    chatAction.run(() =>
+                      commands.changeVisibility({
+                        workspaceId,
+                        chatId: chat.id,
+                        visibility: chat.visibility === 'public' ? 'private' : 'public',
+                      }),
+                    )
+                  }
+                >
+                  {chat.visibility === 'public' ? 'Make private' : 'Make public'}
+                </Item>
                 <Item className={menuItemClass} onSelect={() => setOpenDialog('archive')}>
                   Archive chat
                 </Item>
