@@ -262,7 +262,7 @@ test('a Codex command and a Spyria tool call start in progress and finish with C
   ])
 })
 
-test('a real Claude Code sequence of pending then completed or failed calls ends with the final titles and inputs, every step done', () => {
+test('a real Claude Code sequence of pending then completed or failed calls ends with the final titles and inputs, every step done, its commands’ exit codes marked derived since Claude Code sends none', () => {
   const steps = messagesFromEvents(storedEventsOf(claudeCodeToolCalls.map((event) => ({ event })))).map(
     ({ id, step }) => ({ id, step }),
   )
@@ -273,6 +273,7 @@ test('a real Claude Code sequence of pending then completed or failed calls ends
         type: 'command',
         command: 'ls -la /workspace/project && git -C /workspace/project log --oneline -5 2>&1 | head -20',
         exitCode: 0,
+        isExitCodeDerived: true,
         output: expect.stringContaining('total 0'),
       },
     },
@@ -282,12 +283,18 @@ test('a real Claude Code sequence of pending then completed or failed calls ends
         type: 'command',
         command: expect.stringMatching(/^cat \/workspace\/project\/CLAUDE\.md/),
         exitCode: 1,
+        isExitCodeDerived: true,
         output: 'Exit code 1',
       },
     },
     {
       id: 'conversation-1:toolu_01V5JoN21hHzqnuw2hL9qAoH',
-      step: { type: 'command', command: expect.stringMatching(/^which python3 node npx/), exitCode: 0 },
+      step: {
+        type: 'command',
+        command: expect.stringMatching(/^which python3 node npx/),
+        exitCode: 0,
+        isExitCodeDerived: true,
+      },
     },
     {
       id: 'conversation-1:toolu_01MNfMCpA947uCwubk6pYiyY',

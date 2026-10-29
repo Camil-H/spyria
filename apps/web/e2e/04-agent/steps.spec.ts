@@ -92,7 +92,9 @@ test.describe('Steps', () => {
         await edit.getByRole('button').click()
         await expect(edit).toContainText('one')
         await expect(edit).toContainText('two')
-        await expect(messageContaining(page, '$ npm test')).toContainText('exit 1')
+        const failedCommand = messageContaining(page, '$ npm test')
+        await expect(failedCommand).toContainText('Failed')
+        await expect(failedCommand).not.toContainText('exit 1')
         await expect(mainOf(page)).not.toContainText('$ Terminal')
         await expect(messageContaining(page, 'Hello from the stub')).toHaveCount(1)
 
