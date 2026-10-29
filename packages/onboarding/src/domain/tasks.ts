@@ -12,7 +12,7 @@ export const onboardingTasks = [
 
 export type OnboardingTask = (typeof onboardingTasks)[number]
 export type TaskScope = 'workspace' | 'member'
-export type TaskState = 'done' | 'skipped' | 'blocked' | 'open'
+export type TaskState = 'done' | 'blocked' | 'open'
 export type TaskView = Readonly<{ task: OnboardingTask; scope: TaskScope; state: TaskState }>
 
 export type OnboardingFacts = Readonly<{
@@ -70,6 +70,7 @@ export const taskViewsOf = (facts: OnboardingFacts, records: OnboardingRecords, 
   const isDone = (task: OnboardingTask) => records.completed.has(task) || facts[factByTask[task]]
   const isShown = (task: OnboardingTask) => {
     if (!mayDo(task, viewer.permissions)) return false
+    if (records.skipped.has(task)) return false
     if (task === 'verify-domain') return viewer.usesSingleSignOn
     if (task === 'link-github-account') return isDone('connect-github-app')
     return true
@@ -78,12 +79,11 @@ export const taskViewsOf = (facts: OnboardingFacts, records: OnboardingRecords, 
     task === 'invite-members' && viewer.usesSingleSignOn && !isDone('verify-domain')
   const stateOf = (task: OnboardingTask): TaskState => {
     if (isDone(task)) return 'done'
-    if (records.skipped.has(task)) return 'skipped'
     return isBlocked(task) ? 'blocked' : 'open'
   }
   return onboardingTasks.filter(isShown).map((task) => ({ task, scope: scopeOf(task), state: stateOf(task) }))
 }
 
-export const isSettled = (view: TaskView) => view.state === 'done' || view.state === 'skipped'
+export const isDoneView = (view: TaskView) => view.state === 'done'
 
 export const nextTaskOf = (views: readonly TaskView[]) => views.find((view) => view.state === 'open')?.task

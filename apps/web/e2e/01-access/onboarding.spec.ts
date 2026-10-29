@@ -18,12 +18,11 @@ test.describe('Onboarding', () => {
     await sidebarOf(page).getByRole('link', { name: 'Workspace settings' }).click()
     const checklist = checklistOf(page, 'Get your workspace ready')
 
-    await test.step('lists the workspace tasks I can do, in order, with what each is for', async () => {
+    await test.step('lists the workspace tasks left to do, in order, with what each is for, and counts the done ones', async () => {
       await expect(checklist).toContainText('1 of 3 done')
       await expect(checklist.getByRole('listitem')).toHaveText([
         /^To do: Connect the GitHub App.*open pull requests from dev chats/,
         /^To do: Connect a runtime.*isolated containers/,
-        /^Done: Invite members/,
       ])
     })
 
@@ -39,12 +38,10 @@ test.describe('Onboarding', () => {
       await checklist.getByRole('button', { name: /^Get your workspace ready/ }).click()
     })
 
-    await test.step('skipping a task can be undone, and skipping all that is left removes the checklist', async () => {
+    await test.step('a skipped task leaves the list and the count, and skipping all that is left removes the checklist', async () => {
       await checklist.getByRole('button', { name: 'Skip Connect the GitHub App' }).click()
-      await expect(checklist.getByRole('listitem').first()).toHaveText(/^Skipped: Connect the GitHub App/)
-      await checklist.getByRole('button', { name: 'Restore Connect the GitHub App' }).click()
-      await expect(checklist.getByRole('listitem').first()).toHaveText(/^To do: Connect the GitHub App/)
-      await checklist.getByRole('button', { name: 'Skip Connect the GitHub App' }).click()
+      await expect(checklist.getByRole('listitem')).toHaveText([/^To do: Connect a runtime/])
+      await expect(checklist).toContainText('1 of 2 done')
       await checklist.getByRole('button', { name: 'Skip Connect a runtime' }).click()
       await expect(checklist).toHaveCount(0)
       await expect(startLinkOf(page)).toHaveAccessibleDescription('Next: Add a profile picture')
@@ -64,7 +61,8 @@ test.describe('Onboarding', () => {
     const checklist = checklistOf(bobPage, 'Set up your profile')
     await expect(checklist).toContainText("Spyria doesn't sell AI usage")
     await checklist.getByRole('button', { name: 'Skip Add your AI key' }).click()
-    await expect(startLink).toHaveAccessibleName('Get started: 1 of 2 done')
+    await expect(checklist.getByRole('listitem')).toHaveText([/^To do: Add a profile picture/])
+    await expect(startLink).toHaveAccessibleName('Get started: 0 of 1 done')
     await expect(startLink).toHaveAccessibleDescription('Next: Add a profile picture')
 
     const fileChooser = bobPage.waitForEvent('filechooser')

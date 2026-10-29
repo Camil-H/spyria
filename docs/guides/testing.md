@@ -29,13 +29,12 @@ bun run check:bundle       # builds the web app and checks its main chunk
 bun run test:e2e           # the e2e suite
 bun run test:e2e:smoke     # only the tests tagged @smoke, after the platform gate
 bun run test:e2e -- e2e/04-agent   # one segment (the platform gate still runs first)
-bun run check:docker       # agent:build, check:trust, then the docker tests
-bun run check:trust        # the built runtime and host images hold no distrusted root
+bun run check:docker       # agent:build, then the docker tests
 bun run smoke:prod         # the production Compose file under a throwaway name; not in check:all
 bun run load:websockets    # server memory under many agent-stream sockets; not in check:all
 ```
 
-`check:all` runs, in order: `lint`, `typecheck`, `check:boundaries`, `check:locks`, `test`, `check:bundle`, `test:integration`, `test:e2e`. `check:docker` runs `agent:build`, `check:trust` and `test:docker:integration`. Both stop at the first failing step and end with the 20 slowest tests of each suite.
+`check:all` runs, in order: `lint`, `typecheck`, `check:boundaries`, `check:locks`, `test`, `check:bundle`, `test:integration`, `test:e2e`. `check:docker` runs `agent:build` and `test:docker:integration`. Both stop at the first failing step and end with the 20 slowest tests of each suite.
 
 `check:bundle` builds the app and fails when the main chunk is over 250,000 bytes, when it contains code that belongs in a lazy chunk, when it holds more than one React version, or when any client asset contains server-only SQL (for example `into events` or `skip locked`).
 

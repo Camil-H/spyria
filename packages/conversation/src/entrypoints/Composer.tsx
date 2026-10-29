@@ -259,6 +259,10 @@ export const Composer = ({
     const isOtherModifier = event.altKey || (isApplePlatform ? event.ctrlKey : event.metaKey)
     const isPlainKey = !isPrimary && !isOtherModifier && !event.nativeEvent.isComposing
     if (mentionCandidates.length > 0 && isPlainKey && handleMentionKey(event)) return
+    if (event.key === 'Escape' && isPlainKey) {
+      textarea.blur()
+      return
+    }
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
       event.preventDefault()
       send()

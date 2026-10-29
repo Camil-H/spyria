@@ -16,6 +16,18 @@
   --color-accent: var(--color-primary-500);
   --color-accent-hover: var(--color-primary-400);
   --color-accent-ink: var(--color-primary-985);
+  --color-callout: light-dark(
+    var(--color-primary-100),
+    color-mix(in oklab, var(--color-primary-500) 14%, var(--color-grey-950))
+  );
+  --color-callout-hover: light-dark(
+    var(--color-primary-200),
+    color-mix(in oklab, var(--color-primary-500) 22%, var(--color-grey-950))
+  );
+  --color-callout-edge: light-dark(
+    var(--color-primary-600),
+    color-mix(in oklab, var(--color-primary-500) 40%, var(--color-grey-950))
+  );
   --color-added: light-dark(var(--color-green-100), var(--color-green-950));
   --color-removed: light-dark(var(--color-red-100), var(--color-red-950));
   --color-link: light-dark(var(--color-primary-900), var(--color-primary-500));
