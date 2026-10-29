@@ -1,6 +1,6 @@
 import { getTableName, is, sql } from 'drizzle-orm'
 import { PgTable } from 'drizzle-orm/pg-core'
-import { createMockSnapshot } from '../mock-data.ts'
+import { createMockSnapshot, seededChatCreatedSeq } from '../mock-data.ts'
 import type { Snapshot } from '../schema.ts'
 import { createDatabase, type Database } from './client.ts'
 import * as tables from './tables.ts'
@@ -53,13 +53,26 @@ const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
     })),
   )
   await transaction.insert(tables.projects).values(snapshot.projects.map(createdInOrder))
+  const chats = snapshot.chats.map(createdInOrder)
   await transaction.insert(tables.chats).values(
-    snapshot.chats.map(({ ownerId, ...chat }, index) => ({
-      ...createdInOrder(chat, index),
+    chats.map(({ ownerId, ...chat }) => ({
+      ...chat,
       mode: null,
       ownerKind: 'user' as const,
       ownerUserId: ownerId,
       ownerServiceIdentityId: null,
+    })),
+  )
+  await transaction.insert(tables.events).values(
+    chats.map(({ workspaceId, id, ownerId, name, type, projectId, createdAt }) => ({
+      workspaceId,
+      chatId: id,
+      id: `${id}-created`,
+      seq: seededChatCreatedSeq,
+      type: 'chat.created',
+      actor: ownerId,
+      payload: { name, type, projectId },
+      createdAt,
     })),
   )
   await transaction

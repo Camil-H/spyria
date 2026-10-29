@@ -1,6 +1,6 @@
 # Chats and sharing
 
-This page describes how conversations are organized in a Spyria workspace and how members share them: projects, channels, runtime chats, threads, search, keyboard shortcuts, unread state, chat roles, forking and starting an agent from a channel thread. It is written for members and for contributors who need the rules the server enforces. Agent behaviour inside a runtime chat is in [Agents](./agents.md); dev chats on repositories are in [Dev mode](./dev-mode.md).
+This page describes how conversations are organized in a Spyria workspace and how members share them: projects, channels, runtime chats, threads, replies, links to messages, search, keyboard shortcuts, unread state, chat roles, forking and starting an agent from a channel thread. It is written for members and for contributors who need the rules the server enforces. Agent behaviour inside a runtime chat is in [Agents](./agents.md); dev chats on repositories are in [Dev mode](./dev-mode.md).
 
 ## Projects and chats
 
@@ -33,6 +33,8 @@ The paperclip next to **Send** attaches up to six files of up to 20 MB each: ima
 
 In a runtime chat, the agent can show a file it made, or a screenshot it took with `take_screenshot` (see [Agents](./agents.md#screenshots)), by writing a Markdown image with the file's path in its workspace, such as `![Sales chart](out/chart.png)`. The server fetches the file from the runtime through its existing host connection, checks that it is an image, a sound or a video of up to 20 MB, and shows it inline. The first four such images of a message load on their own; later ones load on click. Such files show only while the runtime is running. On a member's own machine, a file that holds one of that member's sign-in tokens is not shown.
 
+An image with a web address in a message shows as a **Load image from** *site* button and loads only on click, from the viewer's browser, so that site sees the viewer's address. Once loaded, the same image stays loaded in that chat until the page is reloaded, also when the agent's reply that holds it is stored or folded into its steps.
+
 ## Channels
 
 Channels are where members talk without an agent. A **public** channel is open to every member of the workspace: anyone can read it, and anyone can post after **Join channel**. **Browse channels** in the sidebar lists the public channels a member has not joined. A **private** channel is visible only to its participants.
@@ -41,7 +43,17 @@ Changing a channel's visibility needs the chat admin permission. When a channel 
 
 ## Message actions
 
-In a channel, pointing at a message, or moving the keyboard focus into it, shows its actions side by side at its top right, each an icon that names itself on hover: **Reply in thread** (top-level messages, for members who can post), **Start runtime from this message**, **Copy message as context** (**Copy thread as context** when the message has replies or is one), and, for its author only, **Edit** and **Delete**. An action a member cannot take is not shown. The actions are one stop for Tab; the left and right arrow keys, Home and End move between them. Runtime chats have no message actions.
+In a channel, pointing at a message, or moving the keyboard focus into it, shows its actions side by side at its top right, each an icon that names itself on hover: **Reply in thread** (top-level messages, for members who can post), **Reply** (for members who can post), **Start runtime from this message**, **Copy message as context** (**Copy thread as context** when the message has replies or is one), **Copy link to message**, and, for its author only, **Edit** and **Delete**. An action a member cannot take is not shown. The actions are one stop for Tab; the left and right arrow keys, Home and End move between them. In a runtime chat, members' messages and the agent's replies offer **Reply** (for members who can post) and **Copy link to message** only.
+
+## Replies
+
+**Reply** quotes a member's message or the agent's reply in the next message: the composer shows "Replying to" its author with the start of its text, and **Cancel reply** drops it. Replying to a thread reply quotes it in that thread's composer. The sent message shows the quote above its text, with the original's author and current text; clicking it goes to the original, as a [link to it](#links-to-messages) does, loading earlier messages if needed. The quote holds no copy of the text: an edit of the original shows in it, and a deleted original shows as "This message was deleted". The server accepts a quote only of a member's or the agent's message of the same chat that is not deleted.
+
+In a runtime chat, a prompt that replies to a message reaches the agent with that message quoted before the prompt, with its author and time, so the agent knows what it answers.
+
+## Links to messages
+
+**Copy link to message** puts the message's address in the clipboard: the chat's address with `?message=` and the message's id. Opening it opens the chat on that message, marked, loading earlier messages until it is on screen; a link to a thread reply opens its thread. The link gives no access: a member who cannot read the chat lands on the workspace, as for any link to that chat.
 
 ## Threads
 
@@ -114,7 +126,7 @@ Every tool call is recorded with its prompter, owner and approval decision, and 
 
 ## Forking a runtime chat
 
-**Fork into my session** in a runtime chat's header creates a new runtime chat owned by the member who forked it, in the same project. Any participant who can read the chat can fork it; the owner sees the button too. The fork starts with one message that quotes the conversation so far (members' messages and the agent's replies, with their authors and times), and its header links back with "Forked from". A fork is the way to continue someone else's work with your own tools, machine or model. A fork of a dev chat continues on the original's branch; see [Dev mode](./dev-mode.md#forking-a-dev-chat).
+**Fork into my session** in a runtime chat's header creates a new runtime chat owned by the member who forked it, in the same project. Any participant who can read the chat can fork it; the owner sees the button too. The fork starts with one message that quotes the conversation so far (members' messages and the agent's replies, with their authors and times, as they read after every edit and deletion), read by the server from the chat's history in the event store, and its header links back with "Forked from". A fork is the way to continue someone else's work with your own tools, machine or model. A fork of a dev chat continues on the original's branch; see [Dev mode](./dev-mode.md#forking-a-dev-chat).
 
 Only runtime chats can be forked.
 
@@ -132,7 +144,7 @@ When an admin removes a member, that member's runtime chats are **frozen**: they
 
 ## Side panel
 
-The side panel next to a chat has tabs that depend on the chat type. Runtime chats have **Files**, **Changes**, **Commits**, **Browser**, **Usage**, **Connected tools** and **Members**; channels have **Browser**, **Sources**, **Usage**, **Connected tools** and **Members**. **Usage** breaks down the chat's model spend per member and per model, and **Connected tools** lists the workspace and personal connections the agent can use. The dev tabs are described in [Dev mode](./dev-mode.md). **Sources** is a placeholder: nothing fills it yet. **R** collapses or expands the side panel, and **R** then a number opens it on that tab; each tab's tooltip shows its shortcut.
+The side panel next to a chat has tabs that depend on the chat type. Runtime chats have **Files**, **Changes**, **Browser**, **Usage**, **Connected tools** and **Members**; channels have **Browser**, **Sources**, **Usage**, **Connected tools** and **Members**. **Usage** breaks down the chat's model spend per member and per model, and **Connected tools** lists the workspace and personal connections the agent can use. The dev tabs are described in [Dev mode](./dev-mode.md). **Sources** is a placeholder: nothing fills it yet. **R** collapses or expands the side panel, and **R** then a number opens it on that tab; each tab's tooltip shows its shortcut.
 
 ### Browser
 

@@ -30,6 +30,7 @@ const snapshotWith = ({ turn, waiting }: { turn: boolean; waiting: boolean }): S
         step: null,
         replyToId: null,
         threadRootId: null,
+        quotedMessageId: null,
         createdAt: '2026-10-01T09:00:00.000Z',
         editedAt: null,
         deletedAt: null,
@@ -85,6 +86,7 @@ const replyRow = (
   step: fields.step ?? null,
   replyToId: fields.replyToId === undefined ? prompt : fields.replyToId === null ? null : messageId(fields.replyToId),
   threadRootId: null,
+  quotedMessageId: null,
   createdAt: new Date(turnStart + (fields.at ?? seq) * 1000).toISOString(),
   editedAt: null,
   deletedAt: null,
@@ -752,4 +754,40 @@ test('an archived chat shows no conversation', () => {
     chats: snapshot.chats.map((chat) => (chat.id === research ? { ...chat, archived: true } : chat)),
   }
   expect(getConversation(acme, research, alice)(archived)).toBeNull()
+})
+
+test('a reply shows the message it quotes with its author, a deleted one as deleted, and one not loaded by its id only', () => {
+  const quoting = (seq: number, quotedMessageId: string) => ({
+    ...threadReply(seq, alice),
+    threadRootId: null,
+    quotedMessageId: messageId(quotedMessageId),
+  })
+  const conversation = welcomeFor(alice, [
+    { ...threadReply(4, bob), threadRootId: null, deletedAt: '2026-10-01T09:10:00.000Z' },
+    quoting(5, 'message-welcome-1'),
+    quoting(6, 'reply-4'),
+    quoting(7, 'message-not-loaded'),
+  ])
+  expect(conversation?.messages.slice(-3).map((message) => message.quote)).toEqual([
+    {
+      id: messageId('message-welcome-1'),
+      original: { authorName: 'Bob', body: 'Welcome to the team!', isDeleted: false },
+    },
+    { id: messageId('reply-4'), original: { authorName: 'Bob', body: '', isDeleted: true } },
+    { id: messageId('message-not-loaded'), original: null },
+  ])
+  expect(conversation?.messages.map(({ canQuote }) => canQuote)).toEqual([true, true, false, true, true, true])
+  const invoiceBugFor = (viewer: typeof alice) =>
+    getConversation(
+      acme,
+      chatId('chat-invoice-bug'),
+      viewer,
+    )(createMockSnapshot())?.messages.map(({ kind, canQuote }) => ({ kind, canQuote }))
+  expect(invoiceBugFor(alice)).toEqual([
+    { kind: 'member', canQuote: true },
+    { kind: 'agent', canQuote: true },
+    { kind: 'step', canQuote: false },
+    { kind: 'agent', canQuote: true },
+  ])
+  expect(invoiceBugFor(lee)?.map(({ canQuote }) => canQuote)).toEqual([false, false, false, false])
 })

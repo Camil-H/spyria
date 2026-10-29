@@ -18,6 +18,8 @@ const messageOf = (message: Partial<ConversationMessage>): ConversationMessage =
   isEdited: false,
   isRunning: false,
   canReply: true,
+  canQuote: true,
+  quote: null,
   thread: null,
   runtimes: [],
   ...message,

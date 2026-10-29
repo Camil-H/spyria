@@ -48,6 +48,7 @@ export const setRuntimesHostOnline = skippedOnClient
 export const isChatEventStored = async () => false
 export const lastAgentEvent = skippedOnClient
 export const lastSessionId = skippedOnClient
+export const chatEventsOf = async () => []
 export const finishedToolCallEventOf = skippedOnClient
 export const lastAdapterModelsOf = skippedOnClient
 export const isWorkspaceHostOnline = async () => false
