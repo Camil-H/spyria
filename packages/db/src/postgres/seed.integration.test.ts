@@ -30,11 +30,14 @@ const readSnapshot = async () => {
   const chatType = new Map(chats.map((chat) => [chat.id, chat.type]))
   const answeredIds = new Set(messages.map((message) => message.replyToId))
   return {
-    workspaces: (await database.select().from(tables.workspaces)).map(({ workspaceId, name, localSessions }) => ({
-      id: workspaceId,
-      name,
-      localSessions,
-    })),
+    workspaces: (await database.select().from(tables.workspaces)).map(
+      ({ workspaceId, name, localSessions, aiProviderAllowList }) => ({
+        id: workspaceId,
+        name,
+        localSessions,
+        aiProviderAllowList,
+      }),
+    ),
     memberships: memberships.map((membership) => ({
       ...userAsMember(membership),
       email: users.find((user) => user.id === membership.userId)?.email,

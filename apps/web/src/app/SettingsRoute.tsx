@@ -2,7 +2,7 @@ import type { Snapshot } from '@spyria/db'
 import { useQuery, useScoped } from '@spyria/db/react'
 import type { WorkspaceId, WorkspacePermission } from '@spyria/kernel'
 import { ChecklistBlock } from '@spyria/onboarding'
-import { WorkspaceConnectionsSection } from '@spyria/profile'
+import { AiProvidersSection, WorkspaceConnectionsSection } from '@spyria/profile'
 import { RuntimeHostsSection } from '@spyria/runtime'
 import { focusRing, formatCost, iconButtonClass, LabelledSection, useShortcut } from '@spyria/ui'
 import { AuditLogSection, countBudgetAlerts, UsageSection } from '@spyria/usage'
@@ -84,6 +84,13 @@ const cardSections: readonly { title: string; cards: readonly SettingsCard[] }[]
         permissions: ['tools.manage'],
         Page: WorkspaceConnectionsSection,
       },
+      {
+        path: 'ai-providers',
+        title: 'AI providers',
+        description: 'The providers and models members can use',
+        permissions: ['providers.manage'],
+        Page: AiProvidersSection,
+      },
     ],
   },
   {
@@ -106,6 +113,11 @@ const cardSections: readonly { title: string; cards: readonly SettingsCard[] }[]
     ],
   },
 ]
+
+const aiProvidersStatusOf = (workspace: Snapshot['workspaces'][number] | undefined) => {
+  const allowList = workspace?.aiProviderAllowList ?? null
+  return allowList === null ? 'Every provider allowed' : countLabelOf(Object.keys(allowList).length, 'allowed provider')
+}
 
 const countLabelOf = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`
 
@@ -138,6 +150,7 @@ const cardStatusesOf =
         'runtime host',
       ),
       'mcp-tools': countLabelOf(inWorkspace(snapshot.workspaceConnections).length, 'shared connection'),
+      'ai-providers': aiProvidersStatusOf(snapshot.workspaces.find((workspace) => workspace.id === workspaceId)),
       costs: `${formatCost(monthCostMicros)} this month`,
     }
   }

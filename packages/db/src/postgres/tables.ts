@@ -1,5 +1,6 @@
 import {
   type ActorKind,
+  type AiProviderAllowList,
   actorKinds,
   type ChatPermission,
   type ChatVisibility,
@@ -66,6 +67,7 @@ export const workspaces = table('workspaces', {
     .notNull()
     .references(() => users.id),
   localSessions: boolean().notNull().default(true),
+  aiProviderAllowList: jsonb().$type<AiProviderAllowList>(),
   createdAt: instant().notNull(),
   deletedAt: instant(),
   purgeAt: instant(),

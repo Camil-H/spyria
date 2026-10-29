@@ -72,6 +72,11 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
       permissions: () => workspacePermissionsOf(tx, workspaceId, userId),
       isActive: (workspace, id) => isActiveMember(tx, inContextWorkspace(workspace), id),
     },
+    aiProviders: {
+      allowList: async () =>
+        (await tx.run(zql.workspaces.where('workspaceId', workspaceId).one()))?.aiProviderAllowList ?? null,
+      setAllowList: (aiProviderAllowList) => tx.mutate.workspaces.update({ workspaceId, aiProviderAllowList }),
+    },
     llmCredentials: {
       add: async ({ id, provider, last4 }, key) => {
         await insertLlmCredential(tx, { workspaceId, id, userId, provider, last4, secretRef: refOf(key) })
