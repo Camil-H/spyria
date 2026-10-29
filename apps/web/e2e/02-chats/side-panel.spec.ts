@@ -40,10 +40,7 @@ const expectOwnerConnections = async (page: Page) => {
   await expect(tabPanelOf(page)).not.toContainText('Connections of')
   const workspaceGroup = tabPanelOf(page).getByRole('region', { name: 'Workspace' })
   await expect(workspaceGroup.getByRole('listitem').filter({ hasText: 'CRM' })).toContainText('lookup, update')
-  const personalGroup = tabPanelOf(page).getByRole('region', { name: 'Personal' })
-  await expect(personalGroup.getByRole('listitem').filter({ hasText: 'GitHub' })).toContainText('Connected')
-  await expect(personalGroup.getByRole('listitem').filter({ hasText: 'Slack' })).toContainText('Connected')
-  await expect(personalGroup.getByRole('listitem').filter({ hasText: 'Notion' })).toContainText('Needs reconnection')
+  await expect(tabPanelOf(page).getByRole('region', { name: 'Personal' })).toContainText('No personal connections')
 }
 
 test.describe('Side panel', () => {
@@ -136,7 +133,7 @@ test.describe('Side panel', () => {
       await expect(tabPanelOf(page).locator('iframe')).toHaveCount(0)
     })
 
-    await test.step('lists the workspace and personal connections of the owner on Invoice bug', async () => {
+    await test.step('lists the workspace connections of the owner, who has no personal one, on Invoice bug', async () => {
       await openPanelTab(page, 'Invoice bug', 'Connected tools')
       await expectOwnerConnections(page)
     })
@@ -181,7 +178,7 @@ test.describe('Side panel', () => {
       await expect(usageTable.getByRole('row', { name: /Total/ })).toContainText('$0.00')
     })
 
-    await test.step('lists the workspace and personal connections of the owner on Welcome', async () => {
+    await test.step('lists the workspace connections of the owner, who has no personal one, on Welcome', async () => {
       await openPanelTab(page, 'Welcome', 'Connected tools')
       await expectOwnerConnections(page)
     })
