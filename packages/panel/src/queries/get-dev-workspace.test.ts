@@ -13,7 +13,6 @@ const stepAt = (seq: number, step: MessageRow['step']): MessageRow => ({
   authorId: null,
   body: '',
   attachments: [],
-  detail: null,
   step,
   replyToId: null,
   threadRootId: null,

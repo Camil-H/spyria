@@ -39,7 +39,7 @@ test.each(chatAccessRows(posters))(
             seq: expect.any(Number),
             type: 'message.posted',
             actor: member.userId,
-            payload: { kind: 'member', body: 'In the thread', detail: null, replyToId: null, threadRootId: root },
+            payload: { kind: 'member', body: 'In the thread', replyToId: null, threadRootId: root },
           }
         : expect.objectContaining({ payload: expect.objectContaining({ body: 'Root' }) }),
     )

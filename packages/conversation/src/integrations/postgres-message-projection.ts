@@ -13,7 +13,7 @@ type EventRow = {
 }
 
 const updatedColumns =
-  'chat_id, seq, kind, author_id, body, attachments, detail, reply_to_id, thread_root_id, quoted_message_id, created_at, edited_at, deleted_at'
+  'chat_id, seq, kind, author_id, body, attachments, reply_to_id, thread_root_id, quoted_message_id, created_at, edited_at, deleted_at'
 const inScope = (chatColumn: string) =>
   `workspace_id = coalesce($1::text, workspace_id) and ${chatColumn} = coalesce($2::text, ${chatColumn})`
 const snakeCased = (message: ProjectedMessage) =>

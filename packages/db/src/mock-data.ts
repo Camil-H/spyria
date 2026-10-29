@@ -76,7 +76,6 @@ const message = (
   kind: MessageRow['kind'],
   body: string,
   time: string,
-  detail: string | null = null,
   step: MessageRow['step'] = null,
 ): MessageRow => ({
   id: messageId(`message-${id}`),
@@ -87,7 +86,6 @@ const message = (
   authorId,
   body,
   attachments: [],
-  detail,
   step,
   replyToId: null,
   threadRootId: null,
@@ -102,7 +100,7 @@ const member = (id: string, chat: string, workspace: WorkspaceId, author: Member
 const agent = (id: string, chat: string, workspace: WorkspaceId, body: string, time: string) =>
   message(id, chat, workspace, null, 'agent', body, time)
 const command = (id: string, chat: string, workspace: WorkspaceId, body: string, time: string, output: string) =>
-  message(id, chat, workspace, null, 'step', body, time, null, {
+  message(id, chat, workspace, null, 'step', body, time, {
     type: 'command',
     command: body,
     exitCode: null,

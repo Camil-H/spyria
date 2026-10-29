@@ -42,9 +42,8 @@ export type RuntimeRepository = {
   chatOfLlmTokenHash(workspaceId: WorkspaceId, hostId: RuntimeHostId, hash: string): Promise<ChatId | undefined>
 }
 
-type RuntimeSecret = 'llmTokenHash' | 'llmSwitchTokenHash'
 export type RuntimeSecrets = {
-  keep(runtime: Runtime, secret: RuntimeSecret, value: string | null): Promise<void>
+  keepLlmTokenHash(runtime: Runtime, hash: string): Promise<void>
   discard(runtime: Runtime): Promise<void>
 }
 
