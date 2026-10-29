@@ -15,7 +15,7 @@ export const ProfileView = ({ intro, children }: { intro?: ReactNode; children?:
   const profile = useQuery(getProfile, workspaceId, memberId)
   if (!profile?.displayName) return null
   return (
-    <div className="flex max-w-3xl flex-col gap-8">
+    <div className="flex flex-col gap-8">
       <h1 className="text-2xl font-semibold">Profile</h1>
       {intro}
       <ProfilePictureSection
