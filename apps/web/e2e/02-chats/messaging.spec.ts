@@ -336,6 +336,14 @@ test.describe('Messaging', () => {
       await expect(page.getByRole('textbox', { name: 'Edit message' })).toHaveCount(0)
     })
 
+    await test.step('cancels the edit with Escape', async () => {
+      await openMessageAction(page, 'Thanks, glad to be here.', 'Edit')
+      await page.getByRole('textbox', { name: 'Edit message' }).fill('Something else')
+      await page.getByRole('textbox', { name: 'Edit message' }).press('Escape')
+      await expect(page.getByRole('textbox', { name: 'Edit message' })).toHaveCount(0)
+      await expect(messageContaining(page, 'Thanks, glad to be here.')).not.toContainText('(edited)')
+    })
+
     await test.step('cannot save a blank text', async () => {
       await openMessageAction(page, 'Thanks, glad to be here.', 'Edit')
       await page.getByRole('textbox', { name: 'Edit message' }).fill('   ')

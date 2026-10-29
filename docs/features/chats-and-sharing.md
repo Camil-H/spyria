@@ -43,7 +43,7 @@ Changing a channel's visibility needs the chat admin permission. When a channel 
 
 ## Message actions
 
-In a channel, pointing at a message, or moving the keyboard focus into it, shows its actions side by side at its top right, each an icon that names itself on hover: **Reply in thread** (top-level messages, for members who can post), **Reply** (for members who can post), **Start runtime from this message**, **Copy message as context** (**Copy thread as context** when the message has replies or is one), **Copy link to message**, and, for its author only, **Edit** and **Delete**. An action a member cannot take is not shown. The actions are one stop for Tab; the left and right arrow keys, Home and End move between them. In a runtime chat, members' messages and the agent's replies offer **Reply** (for members who can post) and **Copy link to message** only.
+In a channel, pointing at a message, or moving the keyboard focus into it, shows its actions side by side at its top right, each an icon that names itself on hover: **Reply in thread** (top-level messages, for members who can post), **Reply** (for members who can post), **Start runtime from this message**, **Copy message as context** (**Copy thread as context** when the message has replies or is one), **Copy link to message**, and, for its author only, **Edit** and **Delete**. An action a member cannot take is not shown. The actions are one stop for Tab; the left and right arrow keys, Home and End move between them. In a runtime chat, members' messages and the agent's replies offer **Reply** (for members who can post) and **Copy link to message** only. **Edit** turns the message into a text box with **Save** and **Cancel**; Escape cancels too.
 
 ## Replies
 
