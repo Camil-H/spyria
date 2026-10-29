@@ -82,9 +82,6 @@ export const createZeroTransactor = (tx: Transaction, { workspaceId, userId }: Z
         await tx.mutate.workspaceOnboarding.upsert({ workspaceId, task, completedAt: Date.now() })
       },
       skip: (task) => saveOwnRow(task, { skippedAt: Date.now() }),
-      restore: async (task) => {
-        if (await ownRow(task)) await tx.mutate.memberOnboarding.update({ workspaceId, userId, task, skippedAt: null })
-      },
     },
   }
   return transactorOver(tx, unitOfWork)

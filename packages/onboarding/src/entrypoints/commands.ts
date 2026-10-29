@@ -6,5 +6,4 @@ type Command<Input> = (input: Input & { workspaceId: WorkspaceId }) => Promise<u
 export type OnboardingCommands = {
   recordCompletedTasks: Command<object>
   skipTask: Command<{ task: OnboardingTask }>
-  restoreTask: Command<{ task: OnboardingTask }>
 }

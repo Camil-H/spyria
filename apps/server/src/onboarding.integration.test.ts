@@ -66,20 +66,18 @@ test('a recorded task stays recorded after its condition goes back', async () =>
   expect(await workspaceTasks()).toContain('connect-github-app')
 })
 
-test('a member skips and restores a task for themselves only, and an unknown task is refused', async () => {
+test('a member skips a task for themselves only, and an unknown task is refused', async () => {
   const skip = { workspaceId: acme, task: 'connect-runtime' }
   expect(await resultOf(bobInAcme, 'onboarding.skipTask', skip)).toEqual(succeeded)
   expect(await memberRows(bob)).toEqual([{ task: 'connect-runtime', isCompleted: false, isSkipped: true }])
   expect(await memberRows(alice)).toEqual([])
-  expect(await resultOf(bobInAcme, 'onboarding.restoreTask', skip)).toEqual(succeeded)
-  expect(await memberRows(bob)).toEqual([{ task: 'connect-runtime', isCompleted: false, isSkipped: false }])
   expect(await resultOf(bobInAcme, 'onboarding.skipTask', { workspaceId: acme, task: 'drop-tables' })).toEqual(
     expect.objectContaining({ error: expect.any(String) }),
   )
   expect(await resultOf(bobInAcme, 'onboarding.skipTask', { ...skip, workspaceId: globex })).toEqual(
     expect.objectContaining({ error: expect.any(String) }),
   )
-  expect(await memberRows(bob)).toEqual([{ task: 'connect-runtime', isCompleted: false, isSkipped: false }])
+  expect(await memberRows(bob)).toEqual([{ task: 'connect-runtime', isCompleted: false, isSkipped: true }])
 })
 
 test('a member’s checklist rows and GitHub link reach only their replica, workspace records and the GitHub App reach every member', async () => {
