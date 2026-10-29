@@ -66,6 +66,7 @@ Single keys move around the workspace. They do nothing while typing in a field o
 | **C** | Create a chat |
 | **P** | Create a project |
 | **S** | Workspace settings (for members who can open them) |
+| **Esc** | Back to Workspace settings from one of its pages |
 | **I** | Profile |
 | **/** | Search the workspace |
 | **F** | Find in this chat |
