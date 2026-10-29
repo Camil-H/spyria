@@ -1,4 +1,4 @@
-import { type ChatId, type MemberId, messageId, requireChatPermission } from '@spyria/kernel'
+import { type ChatId, type MemberId, memberActor, messageId, requireChatPermission } from '@spyria/kernel'
 import type { RuntimeChatStarter } from '../contracts/runtime-chat-starter.ts'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { NotForkable } from '../domain/errors.ts'
@@ -35,7 +35,7 @@ export const forkChat = (
     if (card?.step?.type !== 'pull_request' || !isOpenPullRequest(card.step)) return
     await unitOfWork.messages.record({
       type: 'message.posted',
-      actorId: memberId,
+      actor: memberActor(memberId),
       message: newMessage({
         id: messageId(`${id}-pull-request`),
         workspaceId: source.workspaceId,

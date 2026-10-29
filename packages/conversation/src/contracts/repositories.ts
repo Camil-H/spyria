@@ -1,4 +1,5 @@
 import type {
+  Actor,
   ChatId,
   ChatPermission,
   ChatRole,
@@ -142,7 +143,7 @@ export type ChatRepository = {
   role(roleId: string): Promise<ChatRole | undefined>
   changeParticipant(change: ParticipantChange): Promise<void>
   recordRuntimeOrigin(origin: RuntimeOrigin): Promise<void>
-  recordPush(push: { chatId: ChatId; actorId: MemberId; branch: string; head: string | null }): Promise<void>
+  recordPush(push: { chatId: ChatId; actor: Actor; branch: string; head: string | null }): Promise<void>
   localSessionsAllowed(): Promise<boolean>
   hasAgentSession(chatId: ChatId): Promise<boolean>
   isSessionStartPending(chatId: ChatId): Promise<boolean>

@@ -1,4 +1,13 @@
-import { DomainError, type MemberId, type MessageId, messageId, requireChatPermission } from '@spyria/kernel'
+import {
+  type Actor,
+  actingMemberOf,
+  DomainError,
+  type MemberId,
+  type MessageId,
+  memberBehind,
+  messageId,
+  requireChatPermission,
+} from '@spyria/kernel'
 import type { AgentChat } from '../contracts/agent.ts'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import type { PullRequestChange } from '../domain/github-tools.ts'
@@ -15,36 +24,31 @@ import {
 import type { AgentDependencies } from './agent-turn.ts'
 
 type Dependencies = Pick<AgentDependencies, 'transactor' | 'runtimes' | 'agentClient' | 'checkouts'>
-type Input = { chat: AgentChat; memberId: MemberId; action: PublishAction; draft: PullRequestDraft }
+type Input = { chat: AgentChat; actor: Actor; action: PublishAction; draft: PullRequestDraft }
 export type Publication = { isRefused: boolean; text: string }
 
 const refused = (text: string): Publication => ({ isRefused: true, text })
 
 export const recordPullRequest = (
   { transactor }: { transactor: ConversationTransactor },
-  {
-    chat,
-    actorId,
-    step,
-    cardId,
-  }: { chat: AgentChat; actorId: MemberId | null; step: PullRequestStep; cardId?: MessageId },
+  { chat, actor, step, cardId }: { chat: AgentChat; actor: Actor; step: PullRequestStep; cardId?: MessageId },
 ) =>
   transactor.run(async ({ messages }) => {
     if (cardId)
       return messages.record({
         type: 'message.step_changed',
-        actorId,
+        actor,
         message: { ...(await messages.get(cardId)), step },
       })
     await messages.record({
       type: 'message.posted',
-      actorId,
+      actor,
       message: newMessage({
         id: messageId(crypto.randomUUID()),
         workspaceId: chat.workspaceId,
         chatId: chat.chatId,
         kind: 'step',
-        authorId: actorId,
+        authorId: actingMemberOf(actor),
         body: MessageBody(step.type),
         step,
         createdAt: new Date(),
@@ -55,7 +59,7 @@ export const recordPullRequest = (
 
 const pushAndRecord = async (
   { runtimes, agentClient, checkouts, transactor }: Required<Dependencies>,
-  { chat, ownerId, action, card, draft }: Omit<Input, 'memberId'> & { ownerId: MemberId; card: Message | undefined },
+  { chat, actor, ownerId, action, card, draft }: Input & { ownerId: MemberId; card: Message | undefined },
 ): Promise<Publication> => {
   const pushed = await checkouts.pushBranch(chat, ownerId, async (branch, prerequisite) => {
     const endpoint = await runtimes.endpointOf(chat)
@@ -66,7 +70,7 @@ const pushAndRecord = async (
   if (!pushed) return refused(noGitHubConnection)
   if (pushed.failure) return refused(pushed.failure)
   await transactor.run(({ chats }) =>
-    chats.recordPush({ chatId: chat.chatId, actorId: ownerId, branch: pushed.branch, head: pushed.head ?? null }),
+    chats.recordPush({ chatId: chat.chatId, actor, branch: pushed.branch, head: pushed.head ?? null }),
   )
   const endpoint = pushed.head && (await runtimes.endpointOf(chat))
   if (endpoint) await agentClient.actOnWorkspace(endpoint, 'pushed', { head: pushed.head })
@@ -76,7 +80,7 @@ const pushAndRecord = async (
   const step = openPullRequest
     ? await checkouts.refreshPullRequest(chat, ownerId, openPullRequest)
     : await checkouts.openPullRequest(chat, ownerId, draft)
-  await recordPullRequest({ transactor }, { chat, actorId: ownerId, step, cardId: openPullRequest && card?.id })
+  await recordPullRequest({ transactor }, { chat, actor, step, cardId: openPullRequest && card?.id })
   return {
     isRefused: false,
     text: openPullRequest
@@ -99,22 +103,26 @@ const refusedOnDomainError = (error: unknown) => {
   throw error
 }
 
-export const publishBranch = async (dependencies: Dependencies, { chat, memberId, action, draft }: Input) => {
+export const publishBranch = async (dependencies: Dependencies, { chat, actor, action, draft }: Input) => {
   const { checkouts } = dependencies
+  const memberId = memberBehind(actor)
+  if (!memberId) return refused(publishingRefusalOf('the owner'))
   const { publisherId, ownerName, baseBranch, name, card } = await publishingChatOf(dependencies, chat, memberId)
   if (!publisherId) return refused(publishingRefusalOf(ownerName))
   if (!baseBranch || !checkouts) return refused('This chat has no repository')
   return pushAndRecord(
     { ...dependencies, checkouts },
-    { chat, ownerId: publisherId, action, card, draft: { ...draft, title: draft.title.trim() || name } },
+    { chat, actor, ownerId: publisherId, action, card, draft: { ...draft, title: draft.title.trim() || name } },
   ).catch(refusedOnDomainError)
 }
 
 export const updatePullRequest = async (
   dependencies: Dependencies,
-  { chat, memberId, change }: { chat: AgentChat; memberId: MemberId; change: PullRequestChange },
+  { chat, actor, change }: { chat: AgentChat; actor: Actor; change: PullRequestChange },
 ): Promise<Publication> => {
   const { transactor, checkouts } = dependencies
+  const memberId = memberBehind(actor)
+  if (!memberId) return refused(publishingRefusalOf('the owner'))
   const { publisherId, ownerName, baseBranch, card } = await publishingChatOf(dependencies, chat, memberId)
   if (!publisherId) return refused(publishingRefusalOf(ownerName))
   if (!baseBranch || !checkouts) return refused('This chat has no repository')
@@ -122,7 +130,7 @@ export const updatePullRequest = async (
   if (!card || !pullRequest) return refused('This chat has no open pull request: open one first')
   try {
     const step = await checkouts.updatePullRequest(chat, publisherId, pullRequest, change)
-    await recordPullRequest({ transactor }, { chat, actorId: publisherId, step, cardId: card.id })
+    await recordPullRequest({ transactor }, { chat, actor, step, cardId: card.id })
     return { isRefused: false, text: `Updated pull request #${step.number}: ${step.url}` }
   } catch (error) {
     return refusedOnDomainError(error)

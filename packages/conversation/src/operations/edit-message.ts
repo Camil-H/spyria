@@ -1,4 +1,4 @@
-import { type MemberId, type MessageId, requireChatPermission } from '@spyria/kernel'
+import { type MemberId, type MessageId, memberActor, requireChatPermission } from '@spyria/kernel'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { editedMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
@@ -12,7 +12,7 @@ export const editMessage = ({ transactor }: Dependencies, { messageId, editorId,
     await requireChatPermission(unitOfWork.chats, message.chatId, editorId, 'chat.post')
     await unitOfWork.messages.record({
       type: 'message.edited',
-      actorId: editorId,
+      actor: memberActor(editorId),
       message: editedMessage(
         message,
         editorId,

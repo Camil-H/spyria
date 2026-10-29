@@ -1,3 +1,4 @@
+import { type Actor, actingMemberOf } from '@spyria/kernel'
 import { type AgentEvent, agentProjectionOf, delegatedProjectionOf, observedProjectionStep } from './agent-events.ts'
 import { legacyToolCallStep, type StepDelegation, type StoredStep } from './agent-steps.ts'
 import type { Attachment } from './attachments.ts'
@@ -9,7 +10,7 @@ export type StoredEvent = Readonly<{
   id: string
   seq: number
   type: string
-  actor: string | null
+  actor: Actor
   payload: unknown
   createdAt: Date
 }>
@@ -82,8 +83,25 @@ export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMes
       } = payload as PostedPayload
       project(
         kind === 'tool-call'
-          ? { kind: 'step', authorId: actor, body, detail, step: legacyToolCallStep(body, detail), replyToId }
-          : { kind, authorId: actor, body, attachments, detail, step, replyToId, threadRootId, quotedMessageId },
+          ? {
+              kind: 'step',
+              authorId: actingMemberOf(actor),
+              body,
+              detail,
+              step: legacyToolCallStep(body, detail),
+              replyToId,
+            }
+          : {
+              kind,
+              authorId: actingMemberOf(actor),
+              body,
+              attachments,
+              detail,
+              step,
+              replyToId,
+              threadRootId,
+              quotedMessageId,
+            },
       )
     }
     if (type === 'agent.event') {

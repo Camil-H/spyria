@@ -17,7 +17,7 @@ const recordsOf = (page: Page) =>
   auditSectionOf(page).getByRole('list', { name: 'Audit records' }).getByRole('listitem')
 const recordOf = (page: Page, text: RegExp) => recordsOf(page).filter({ hasText: text })
 const filtersOf = (page: Page) => auditSectionOf(page).getByRole('group', { name: 'Filters' })
-const toolCallText = /Bob\s*Called a tool\s*CRM · update/
+const toolCallText = /Bob's agent\s*Called a tool\s*CRM · update/
 const removalText = /Alice\s*Removed a member\s*Bob/
 const inviteText = /Alice\s*Invited a member\s*nina@example\.com/
 

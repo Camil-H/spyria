@@ -24,6 +24,7 @@ import {
   gatewayKeyOf,
   type MemberId,
   MemberNotFound,
+  memberActor,
   gatewayKeyRefOf as refOf,
   memberId as toMemberId,
   type WorkspaceId,
@@ -186,7 +187,11 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
     },
     workspaceEvents: {
       record: async ({ workspaceId: workspace, ...event }) => {
-        await appendWorkspaceEvent(tx, { ...event, workspaceId: inContextWorkspace(workspace), actorId: userId })
+        await appendWorkspaceEvent(tx, {
+          ...event,
+          workspaceId: inContextWorkspace(workspace),
+          actor: memberActor(userId),
+        })
       },
     },
   }
