@@ -111,6 +111,7 @@ const databaseByName = (databaseName: string) => {
   servedDatabaseByName.set(databaseName, {
     database,
     jobWorker: startJobWorker(database, {
+      pollIntervalMilliseconds: 100,
       sandboxProvider: sandboxProviderOf(databaseName),
       agentBridge,
       llmGateway,
