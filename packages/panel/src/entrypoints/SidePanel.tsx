@@ -7,6 +7,7 @@ import {
   Trigger as TooltipTrigger,
 } from '@radix-ui/react-tooltip'
 import { useQuery } from '@spyria/db/react'
+import { useSession } from '@spyria/session'
 import { ShortcutKeys, tooltipClass, useShortcut } from '@spyria/ui'
 import {
   BookOpen,
@@ -95,7 +96,8 @@ const TabShortcut = ({ tabId, index, onSelect }: { tabId: PanelTabId; index: num
 
 export const SidePanel = ({ usageTab, ...panelProps }: PanelProps & { usageTab: ReactNode }) => {
   const { workspaceId, chatId } = panelProps
-  const tabIds = useQuery(getPanelTabs, workspaceId, chatId)
+  const { memberId } = useSession()
+  const tabIds = useQuery(getPanelTabs, workspaceId, chatId, memberId)
   const { isOpen, width, fitWithin, toggle, open } = usePanel()
   const [selected, setSelected] = useState<{ chatId: string; tabId: string }>()
   if (selected && selected.chatId !== chatId) setSelected(undefined)
