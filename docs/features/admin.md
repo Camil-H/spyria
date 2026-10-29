@@ -82,7 +82,7 @@ A custom chat role always includes `chat.read`. It can be given in a chat only b
 - An invite expires after 7 days and can be revoked. There is one pending invite per address; inviting a current member is refused. Email addresses are compared without regard to case.
 - In SSO mode, invites open only once the workspace's email domain is verified (see below), so nobody new gets in before the admin has proven they control the domain.
 - Someone who signs in without a membership or an open invite sees that no workspace has invited them.
-- If a sign-in succeeds but the workspace does not load within 30 seconds, the sign-in screen says so and asks to sign in again, instead of waiting without end.
+- A signed-in member whose workspace takes more than 10 seconds to load, for example right after a deploy or while the connection is down, sees that it is taking longer than usual, with a **Try again** button; the app keeps trying and opens as soon as the workspace arrives, rather than sending them back to sign in.
 
 ### Removing a member
 

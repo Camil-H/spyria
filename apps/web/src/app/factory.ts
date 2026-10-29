@@ -40,7 +40,6 @@ const testStack =
     ? (window as Window & { spyriaTestStack?: { zeroCacheURL: string } }).spyriaTestStack
     : undefined
 
-const workspaceLoadMilliseconds = 30_000
 let storeCount = 0
 
 type CommandInput = { workspaceId: WorkspaceId; [argument: string]: unknown }
@@ -118,7 +117,7 @@ export const createApp = async (
   defaultWorkspaceId: WorkspaceId,
   sessions: readonly WorkspaceSession[],
   deployment: string,
-): Promise<Application | undefined> => {
+): Promise<Application> => {
   const store = createZeroStore({
     memberId,
     sessions,
@@ -137,14 +136,7 @@ export const createApp = async (
   })
   storeCount++
   if (testStack) Object.assign(window, { spyriaZeroDiagnostics: () => ({ storeCount, ...store.diagnostics() }) })
-  const isLoaded = await Promise.race([
-    store.whenReadable(defaultWorkspaceId).then(() => true),
-    new Promise<false>((resolve) => setTimeout(resolve, workspaceLoadMilliseconds, false)),
-  ])
-  if (!isLoaded) {
-    await store.close()
-    return undefined
-  }
+  await store.whenReadable(defaultWorkspaceId)
   const mutate = async (mutator: Mutator, input: CommandInput) => {
     const id = crypto.randomUUID()
     const { confirmation } = await store.mutate(input.workspaceId, mutator({ ...input, id } as never))
