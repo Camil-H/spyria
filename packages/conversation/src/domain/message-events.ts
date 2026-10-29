@@ -82,7 +82,7 @@ export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMes
       } = payload as PostedPayload
       project(
         kind === 'tool-call'
-          ? { kind: 'step', authorId: actor, body, step: legacyToolCallStep(body, detail ?? null), replyToId }
+          ? { kind: 'step', authorId: actor, body, step: legacyToolCallStep(body, detail), replyToId }
           : { kind, authorId: actor, body, attachments, step, replyToId, threadRootId, quotedMessageId },
       )
     }

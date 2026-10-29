@@ -98,7 +98,7 @@ const lineDiffOf = (before: readonly string[], after: readonly string[]): DiffLi
 
 export const pathOf = (path: unknown) => String(path ?? '').replace(workingDirectory, '')
 
-export const legacyToolCallStep = (command: string, output: string | null): StoredStep => ({
+export const legacyToolCallStep = (command: string, output?: string | null): StoredStep => ({
   type: 'command',
   command,
   exitCode: null,
