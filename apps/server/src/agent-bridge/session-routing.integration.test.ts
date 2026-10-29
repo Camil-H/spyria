@@ -418,6 +418,32 @@ test('a first prompt deleted before it was sent leaves the seed to the next prom
   expect(relay.prompts).toEqual([`${wrapper}\n\nSummarise the thread.`])
 })
 
+test('a prompt that replies to the agent’s answer reaches the agent with that answer quoted, its author and time first', async () => {
+  const { relay } = await fakeAgent()
+  const chat = await newRuntimeChat()
+  routeWith({ tier: 'small', confidence: 'high', effort: 'low' })
+  await answered(await prompt(chat, 'What is wrong?'))
+  const promptsBefore = relay.prompts.length
+  const [answer] = await database.$client<{ id: string }[]>`
+    select id from messages where chat_id = ${chat} and kind = 'agent' order by seq desc limit 1`
+  const id = `message-${crypto.randomUUID()}`
+  expect(
+    await mutate(aliceInAcme, 'conversation.sendMessage', {
+      workspaceId: acme,
+      id,
+      chatId: chat,
+      text: 'Why?',
+      quotedMessageId: answer?.id,
+    }),
+  ).toEqual(succeeded)
+  await answered(id)
+  expect(relay.prompts.slice(promptsBefore)).toEqual([
+    expect.stringMatching(
+      /^In reply to Agent \(agent\) · \d{4}-\d\d-\d\d \d\d:\d\d UTC:\n> Understood, working on it\.\n\nWhy\?$/,
+    ),
+  ])
+})
+
 test('a fork sends nothing until the forker’s first prompt, which reaches the model as the source history then the prompt, once, routed on the forker’s keys', async () => {
   const { relay } = await fakeAgent()
   await addLlmKey(bob, 'OpenAI')

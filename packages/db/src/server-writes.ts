@@ -832,7 +832,7 @@ const chunkedTablesInPurgeOrder = [
 const unreferencedMessages = `
   select message.ctid from messages message where message.workspace_id = $1
     and not exists(select 1 from messages other where other.workspace_id = message.workspace_id
-      and other.id <> message.id and message.id in (other.reply_to_id, other.thread_root_id))
+      and other.id <> message.id and message.id in (other.reply_to_id, other.thread_root_id, other.quoted_message_id))
   limit $2`
 
 export const scheduleWorkspaceDeletion = (tx: Transaction, workspaceId: string, purgeAt: number) =>

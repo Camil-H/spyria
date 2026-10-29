@@ -92,6 +92,7 @@ const message = (
   step,
   replyToId: null,
   threadRootId: null,
+  quotedMessageId: null,
   createdAt: `2026-09-30T${time}:00.000Z`,
   editedAt: null,
   deletedAt: null,

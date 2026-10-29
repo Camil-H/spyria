@@ -8,6 +8,7 @@ import {
   type LucideIcon,
   MessageSquareReply,
   Pencil,
+  Reply,
   SquareTerminal,
   Trash2,
 } from 'lucide-react'
@@ -46,6 +47,7 @@ export const MessageActions = ({
   canEdit,
   canReply,
   onReplyInThread,
+  onQuote,
   onEdit,
   onDelete,
 }: {
@@ -56,6 +58,7 @@ export const MessageActions = ({
   canEdit: boolean
   canReply: boolean
   onReplyInThread: (() => void) | undefined
+  onQuote: (() => void) | undefined
   onEdit: () => void
   onDelete: () => void
 }) => {
@@ -81,10 +84,12 @@ export const MessageActions = ({
     icon: link.feedback === 'copied' ? Check : Link,
     onClick: () => link.copy(messageLinkOf(window.location.origin, workspaceId, chatId, messageId)),
   }
+  const quoteActions: Action[] = onQuote ? [{ id: 'quote', label: 'Reply', icon: Reply, onClick: onQuote }] : []
   const channelActions: Action[] = [
     ...(onReplyInThread && canReply
       ? [{ id: 'reply', label: 'Reply in thread', icon: MessageSquareReply, onClick: onReplyInThread }]
       : []),
+    ...quoteActions,
     {
       id: 'runtime',
       label: isPending ? 'Starting runtime…' : 'Start runtime from this message',
@@ -106,7 +111,7 @@ export const MessageActions = ({
         ]
       : []),
   ]
-  const actions = isChannel ? channelActions : [copyLinkAction]
+  const actions = isChannel ? channelActions : [...quoteActions, copyLinkAction]
   const tabStopIndex = Math.min(focusedIndex, actions.length - 1)
   const buttonsOf = (toolbar: HTMLDivElement) => [...toolbar.querySelectorAll('button')]
   const followFocus = (event: FocusEvent<HTMLDivElement>) => {

@@ -29,10 +29,12 @@ import { linkedMessageParam } from './message-link.ts'
 import {
   ChatMediaContext,
   ChatNameContext,
+  type ComposerQuote,
   LinkedMessageContext,
   LoadedRemoteImagesContext,
   MentionNamesContext,
   QuestionAnswererContext,
+  QuoteContext,
   ToolsAwaitingApprovalContext,
   useConversationCommands,
 } from './providers.tsx'
@@ -85,6 +87,7 @@ export const ChatView = ({
   const chatId = toChatId(useParams().chatId ?? '')
   const [spyriaRuntime, setSpyriaRuntime] = useState<{ chatId: ChatId; isAvailable: boolean }>()
   const [loadedRemoteImages, setLoadedRemoteImages] = useState<{ chatId: ChatId; sources: ReadonlySet<string> }>()
+  const [quoting, setQuoting] = useState<{ chatId: ChatId; threadRootId: MessageId | null; quote: ComposerQuote }>()
   const conversation = useQuery(
     getConversation,
     workspaceId,
@@ -148,6 +151,15 @@ export const ChatView = ({
       chatId,
       sources: new Set([...(loaded?.chatId === chatId ? loaded.sources : []), source]),
     }))
+  const isQuotingIn = (threadRootId: MessageId | null, current = quoting) =>
+    current?.chatId === chatId && current.threadRootId === threadRootId
+  const quotes = {
+    quoteIn: (threadRootId: MessageId | null) => (quoting && isQuotingIn(threadRootId) ? quoting.quote : null),
+    setQuote: (threadRootId: MessageId | null, quote: ComposerQuote | null) =>
+      setQuoting((current) =>
+        quote ? { chatId, threadRootId, quote } : isQuotingIn(threadRootId, current) ? undefined : current,
+      ),
+  }
   const toolsAwaitingApproval = new Set(
     live.messages.flatMap(({ step }) =>
       step?.type === 'question' && step.approval ? [`${step.approval.tool} (${step.approval.server})`] : [],
@@ -222,24 +234,26 @@ export const ChatView = ({
           <ChatMediaContext value={{ chatId, isRuntime: conversation.type === 'runtime' }}>
             <LoadedRemoteImagesContext value={{ sources: remoteImagesLoadedHere, load: loadRemoteImage }}>
               <LinkedMessageContext value={linkedMessageId}>
-                <MentionNamesContext value={mentionNames}>
-                  <ChatNameContext value={conversation.title}>
-                    <div ref={setMessagesElement} className="flex min-h-0 flex-1 flex-col">
-                      <MessageList
-                        conversation={conversation}
-                        items={chatMessages.hasWindow ? withLiveMessages(conversation.items, live) : []}
-                        isComplete={chatMessages.isComplete}
-                        onLoadEarlier={
-                          chatMessages.isComplete && chatMessages.hasEarlier ? chatMessages.loadEarlier : undefined
-                        }
-                        onStop={
-                          conversation.canConfigure ? () => commands.stopAgent({ workspaceId, chatId }) : undefined
-                        }
-                        onFork={conversation.isOwner ? undefined : fork}
-                      />
-                    </div>
-                  </ChatNameContext>
-                </MentionNamesContext>
+                <QuoteContext value={quotes}>
+                  <MentionNamesContext value={mentionNames}>
+                    <ChatNameContext value={conversation.title}>
+                      <div ref={setMessagesElement} className="flex min-h-0 flex-1 flex-col">
+                        <MessageList
+                          conversation={conversation}
+                          items={chatMessages.hasWindow ? withLiveMessages(conversation.items, live) : []}
+                          isComplete={chatMessages.isComplete}
+                          onLoadEarlier={
+                            chatMessages.isComplete && chatMessages.hasEarlier ? chatMessages.loadEarlier : undefined
+                          }
+                          onStop={
+                            conversation.canConfigure ? () => commands.stopAgent({ workspaceId, chatId }) : undefined
+                          }
+                          onFork={conversation.isOwner ? undefined : fork}
+                        />
+                      </div>
+                    </ChatNameContext>
+                  </MentionNamesContext>
+                </QuoteContext>
               </LinkedMessageContext>
             </LoadedRemoteImagesContext>
           </ChatMediaContext>
@@ -277,6 +291,8 @@ export const ChatView = ({
         <Composer
           workspaceId={workspaceId}
           chatId={chatId}
+          quote={quotes.quoteIn(null)}
+          onQuoteChange={(quote) => quotes.setQuote(null, quote)}
           isBlocked={isRunsOnOpen || !conversation.canPost || conversation.needsLlmKey}
           blockedNotice={
             isRunsOnOpen

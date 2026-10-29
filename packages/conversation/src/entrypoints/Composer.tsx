@@ -3,7 +3,7 @@ import { useQuery, useStore } from '@spyria/db/react'
 import type { ChatId, MessageId, WorkspaceId } from '@spyria/kernel'
 import { useSession } from '@spyria/session'
 import { ErrorMessage, focusRing, tooltipClass, useGuardedAction } from '@spyria/ui'
-import { ArrowUp, Paperclip, X } from 'lucide-react'
+import { ArrowUp, Paperclip, Reply, X } from 'lucide-react'
 import {
   type ClipboardEvent,
   type DragEvent,
@@ -19,7 +19,7 @@ import { mentionCandidatesOf, mentionQueryAt, mentionTextOf } from '../domain/me
 import { getDraft } from '../queries/get-draft.ts'
 import { getMentionableNames } from '../queries/get-mentionable-names.ts'
 import { continuedList, formattedText, formattingOfKey, linkedPaste, type TextEdit } from './composer-formatting.ts'
-import { useConversationCommands } from './providers.tsx'
+import { type ComposerQuote, useConversationCommands } from './providers.tsx'
 
 const isBlank = (text: string) => text.trim() === ''
 const isApplePlatform = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent)
@@ -128,10 +128,30 @@ const PendingAttachments = ({
   </ul>
 )
 
+const QuoteBar = ({ quote, onCancel }: { quote: ComposerQuote; onCancel: () => void }) => (
+  <div className="flex items-center gap-2 border-b border-line py-1.5 pr-1.5 pl-3 text-xs">
+    <Reply aria-hidden size={14} className="shrink-0 text-muted" />
+    <p className="min-w-0 flex-1 truncate">
+      <span className="font-medium">Replying to {quote.authorName}</span>{' '}
+      <span className="text-muted">{quote.body}</span>
+    </p>
+    <button
+      type="button"
+      aria-label="Cancel reply"
+      onClick={onCancel}
+      className={`rounded p-0.5 text-muted hover:bg-hover hover:text-ink ${focusRing}`}
+    >
+      <X aria-hidden size={14} />
+    </button>
+  </div>
+)
+
 export const Composer = ({
   workspaceId,
   chatId,
   threadRootId,
+  quote = null,
+  onQuoteChange,
   isBlocked,
   blockedNotice,
   aboveBox,
@@ -140,6 +160,8 @@ export const Composer = ({
   workspaceId: WorkspaceId
   chatId: ChatId
   threadRootId?: MessageId
+  quote?: ComposerQuote | null
+  onQuoteChange?: (quote: ComposerQuote | null) => void
   isBlocked: boolean
   blockedNotice: ReactNode
   aboveBox?: ReactNode
@@ -177,6 +199,10 @@ export const Composer = ({
       saveLatestText()
     }
   }, [commands, workspaceId, chatId, threadRootId])
+  const quotedMessageId = quote?.id
+  useEffect(() => {
+    if (quotedMessageId) textareaRef.current?.focus()
+  }, [quotedMessageId])
   const readyAttachments = pending.flatMap(({ attachment }) => (attachment ? [attachment] : []))
   const isUploading = pending.some(({ attachment, failure }) => !attachment && !failure)
   const isUnsendable = (isBlank(text) && readyAttachments.length === 0) || isBlocked || isUploading
@@ -214,11 +240,18 @@ export const Composer = ({
     const sentPending = pending
     change('')
     setPending([])
+    onQuoteChange?.(null)
     textareaRef.current?.focus()
     const attachments = readyAttachments.length > 0 ? readyAttachments : undefined
-    if (await sending.run(() => commands.sendMessage({ workspaceId, chatId, text, threadRootId, attachments }))) return
+    if (
+      await sending.run(() =>
+        commands.sendMessage({ workspaceId, chatId, text, threadRootId, quotedMessageId, attachments }),
+      )
+    )
+      return
     change(isBlank(latestText.current) ? text : `${text}\n${latestText.current}`)
     setPending((current) => [...sentPending, ...current])
+    if (quote) onQuoteChange?.(quote)
   }
   const edit = (textarea: HTMLTextAreaElement, textEdit: TextEdit | undefined) => {
     if (!textEdit) return false
@@ -302,6 +335,7 @@ export const Composer = ({
         {mentionCandidates.length > 0 && (
           <MentionList id={mentionListId} names={mentionCandidates} highlighted={highlighted} onChoose={mention} />
         )}
+        {quote && onQuoteChange && <QuoteBar quote={quote} onCancel={() => onQuoteChange(null)} />}
         {pending.length > 0 && (
           <PendingAttachments
             pending={pending}

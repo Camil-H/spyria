@@ -86,6 +86,7 @@ const toMessage = ({ seq, attachments, deletedAt, ...row }: MessageRow): Message
     editedAt: dateOrNull(row.editedAt),
     replyToId: row.replyToId === null ? null : messageId(row.replyToId),
     threadRootId: row.threadRootId === null ? null : messageId(row.threadRootId),
+    quotedMessageId: row.quotedMessageId === null ? null : messageId(row.quotedMessageId),
     step: row.step as StoredStep | null,
   }
   return deletedAt === null
@@ -120,6 +121,7 @@ const payloadOf = ({
         detail: message.detail,
         replyToId: message.replyToId,
         ...(message.threadRootId && { threadRootId: message.threadRootId }),
+        ...(message.quotedMessageId && { quotedMessageId: message.quotedMessageId }),
         ...(message.step && { step: message.step }),
         ...(message.attachments.length > 0 && { attachments: message.attachments }),
       }

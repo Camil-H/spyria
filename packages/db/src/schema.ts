@@ -117,6 +117,7 @@ export type MessageRow = {
   step: MessageStep | null
   replyToId: MessageId | null
   threadRootId: MessageId | null
+  quotedMessageId: MessageId | null
   createdAt: string
   editedAt: string | null
   deletedAt: string | null
