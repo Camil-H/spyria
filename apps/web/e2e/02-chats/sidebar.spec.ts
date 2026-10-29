@@ -130,6 +130,60 @@ test.describe('Sidebar', () => {
     })
   })
 
+  test('As a member, I resize the sidebar within its bounds, with the mouse or the keyboard, and find the width after a reload', async ({
+    page,
+  }) => {
+    const separator = sidebarOf(page).getByRole('separator', { name: 'Resize sidebar' })
+    const sidebarWidth = async () => (await sidebarOf(page).boundingBox())!.width
+    const dragSeparatorBy = async (horizontalOffset: number) => {
+      const handleBox = (await separator.boundingBox())!
+      const handleCenterX = handleBox.x + handleBox.width / 2
+      const handleCenterY = handleBox.y + handleBox.height / 2
+      await page.mouse.move(handleCenterX, handleCenterY)
+      await page.mouse.down()
+      await page.mouse.move(handleCenterX + horizontalOffset, handleCenterY, { steps: 8 })
+      await page.mouse.up()
+    }
+
+    await test.step('exposes the separator on the right edge with its bounds and the default width', async () => {
+      await expect(separator).toHaveAttribute('aria-valuemin', '240')
+      await expect(separator).toHaveAttribute('aria-valuemax', '400')
+      await expect(separator).toHaveAttribute('aria-valuenow', '256')
+      const sidebarBox = (await sidebarOf(page).boundingBox())!
+      const separatorBox = (await separator.boundingBox())!
+      expect(separatorBox.x + separatorBox.width).toBeCloseTo(sidebarBox.x + sidebarBox.width, 0)
+      expect(sidebarBox.width).toBeCloseTo(256, 0)
+    })
+
+    await test.step('changes the width by 16px with the arrow keys', async () => {
+      await separator.focus()
+      await page.keyboard.press('ArrowRight')
+      await expect(separator).toHaveAttribute('aria-valuenow', '272')
+      await page.keyboard.press('ArrowLeft')
+      await page.keyboard.press('ArrowLeft')
+      await expect(separator).toHaveAttribute('aria-valuenow', '240')
+      expect(await sidebarWidth()).toBeCloseTo(240, 0)
+    })
+
+    await test.step('widens when dragged right, stopping at the maximum, and narrows down to the minimum', async () => {
+      await dragSeparatorBy(100)
+      expect(await sidebarWidth()).toBeCloseTo(340, 0)
+      await dragSeparatorBy(300)
+      expect(await sidebarWidth()).toBeCloseTo(400, 0)
+      await dragSeparatorBy(-400)
+      expect(await sidebarWidth()).toBeCloseTo(240, 0)
+      await expect(switcherOf(page)).toBeVisible()
+      await expect(sidebarOf(page).getByRole('button', { name: 'New chat' })).toBeInViewport()
+    })
+
+    await test.step('keeps the width after a reload', async () => {
+      await dragSeparatorBy(60)
+      await page.reload()
+      await expect(separator).toHaveAttribute('aria-valuenow', '300')
+      expect(await sidebarWidth()).toBeCloseTo(300, 0)
+    })
+  })
+
   test('As a member, I see dialogs titled in the app text colour and the chat types offered in one row', async ({
     page,
   }) => {
