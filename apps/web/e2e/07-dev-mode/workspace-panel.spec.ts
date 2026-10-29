@@ -105,6 +105,26 @@ test.describe('Workspace panel', () => {
     await expect(commit.getByRole('button', { name: /^src\/app\.ts/ })).toContainText(/Modified \+1 [−-]1/)
   })
 
+  test('As a member, I close every file in Changes with Collapse all and open them all again with Open all', {
+    tag: ['@spec-40'],
+  }, async ({ page, agentScript }) => {
+    await devChatWithEdits(page, agentScript, 'Fold totals', [{ command: commitCommand }])
+    await panelTabOf(page, 'Changes').click()
+    const files = tabPanelOf(page).getByRole('button', { name: /^src\// })
+    await expect(files).toHaveCount(2)
+    await files.first().click()
+    await expect(files.first()).toHaveAttribute('aria-expanded', 'false')
+    await expect(files.last()).toHaveAttribute('aria-expanded', 'true')
+
+    await tabPanelOf(page).getByRole('button', { name: 'Collapse all' }).click()
+    for (const file of await files.all()) await expect(file).toHaveAttribute('aria-expanded', 'false')
+    await expect(tabPanelOf(page).getByRole('table')).toHaveCount(0)
+
+    await tabPanelOf(page).getByRole('button', { name: 'Open all' }).click()
+    for (const file of await files.all()) await expect(file).toHaveAttribute('aria-expanded', 'true')
+    await expect(tabPanelOf(page).getByRole('button', { name: 'Collapse all' })).toBeVisible()
+  })
+
   test('As a member, I see a stopped runtime’s last snapshot as asleep, and Wake restarts it and refreshes the tabs', {
     tag: ['@spec-40', '@slow'],
   }, async ({ page, agentScript, workerStack }) => {

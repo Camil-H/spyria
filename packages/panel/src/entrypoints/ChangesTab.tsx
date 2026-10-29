@@ -1,10 +1,10 @@
 import { useQuery } from '@spyria/db/react'
 import { useSession } from '@spyria/session'
 import { iconButtonClass } from '@spyria/ui'
-import { FileDiff, RefreshCw } from 'lucide-react'
+import { ChevronsDownUp, ChevronsUpDown, FileDiff, RefreshCw } from 'lucide-react'
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
-import { branchStatusOf, changeGroupsOf, commitsOf, isCollapsedByDefault } from '../domain/workspace.ts'
+import { branchStatusOf, changeGroupsOf, commitsOf } from '../domain/workspace.ts'
 import { getPublishing } from '../queries/get-publishing.ts'
 import { BranchStatusLine } from './BranchStatusLine.tsx'
 import { EmptyState } from './EmptyState.tsx'
@@ -14,6 +14,7 @@ import { PublishActions } from './PublishActions.tsx'
 import type { TabProps } from './TabProps.ts'
 import { emptyClass, moreCommitsNotice } from './ui.ts'
 import { useActionNotice } from './useActionNotice.tsx'
+import { groupKeyOf, useFileExpansion } from './useFileExpansion.ts'
 import { useWorkspaceReading } from './useWorkspaceReading.ts'
 import { WorkspaceStatus } from './WorkspaceStatus.tsx'
 
@@ -28,7 +29,9 @@ const ChangesTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
   const commits = commitsReading.reading
   const isRead = changesReading.reading !== undefined && commits !== undefined
   const changeGroups = changeGroupsOf(changesReading.reading, commits)
-  const isCollapsed = isCollapsedByDefault(changeGroups.flatMap(({ changes }) => changes))
+  const { isExpanded, toggle, isAnyExpanded, setAllCollapsed } = useFileExpansion(changeGroups)
+  const ExpansionIcon = isAnyExpanded ? ChevronsDownUp : ChevronsUpDown
+  const expansionLabel = isAnyExpanded ? 'Collapse all' : 'Open all'
   const status = branchStatusOf(statusReading.reading)
   const isRefreshing = changesReading.isLoading || commitsReading.isLoading || statusReading.isLoading
   if (isRefreshAsked && !isRefreshing) {
@@ -72,16 +75,29 @@ const ChangesTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
       )}
       {actionsSlot &&
         createPortal(
-          <button
-            type="button"
-            aria-label="Refresh"
-            title="Refresh"
-            aria-busy={isRefreshing}
-            onClick={refreshAsked}
-            className={`-order-1 ${iconButtonClass}`}
-          >
-            <RefreshCw aria-hidden className={`size-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-          </button>,
+          <>
+            <button
+              type="button"
+              aria-label="Refresh"
+              title="Refresh"
+              aria-busy={isRefreshing}
+              onClick={refreshAsked}
+              className={`-order-1 ${iconButtonClass}`}
+            >
+              <RefreshCw aria-hidden className={`size-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            </button>
+            {changeGroups.length > 0 && (
+              <button
+                type="button"
+                aria-label={expansionLabel}
+                title={expansionLabel}
+                onClick={() => setAllCollapsed(isAnyExpanded)}
+                className={`-order-1 ${iconButtonClass}`}
+              >
+                <ExpansionIcon aria-hidden className="size-4" />
+              </button>
+            )}
+          </>,
           actionsSlot,
         )}
       {isRead && changeGroups.length === 0 && (
@@ -89,7 +105,7 @@ const ChangesTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
       )}
       {changeGroups.map(({ sha, title, commit, changes, isCut }) => (
         <section
-          key={sha ?? title}
+          key={groupKeyOf({ sha, title })}
           aria-label={sha ? `Commit ${sha}` : title || undefined}
           className="flex flex-col gap-2"
         >
@@ -110,7 +126,8 @@ const ChangesTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
           <FileDiffList
             changes={changes}
             groupName={sha ? `commit ${sha}` : title.toLowerCase()}
-            isCollapsed={isCollapsed}
+            isExpanded={(path) => isExpanded(groupKeyOf({ sha, title }), path)}
+            onToggle={(path) => toggle(groupKeyOf({ sha, title }), path)}
           />
           {isCut && <p className={emptyClass}>Diff truncated</p>}
         </section>
