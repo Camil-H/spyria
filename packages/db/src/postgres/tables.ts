@@ -770,6 +770,8 @@ export const modelCalls = table(
     provider: text().notNull(),
     inputTokens: integer().notNull(),
     outputTokens: integer().notNull(),
+    cacheReadTokens: integer().notNull().default(0),
+    cacheWriteTokens: integer().notNull().default(0),
     costMicros: integer().notNull(),
     status: text().$type<'success' | 'error'>().notNull(),
     role: text(),

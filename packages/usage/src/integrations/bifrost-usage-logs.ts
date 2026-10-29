@@ -11,7 +11,11 @@ type LogRow = {
   model: string
   status: string
   cost?: number
-  token_usage?: { prompt_tokens?: number; completion_tokens?: number }
+  token_usage?: {
+    prompt_tokens?: number
+    completion_tokens?: number
+    prompt_tokens_details?: { cached_tokens?: number; cache_write_tokens?: number }
+  }
   metadata?: Record<string, string> | null
 }
 
@@ -87,6 +91,8 @@ export const createBifrostUsageLogs = ({
                   provider,
                   inputTokens: token_usage?.prompt_tokens ?? 0,
                   outputTokens: token_usage?.completion_tokens ?? 0,
+                  cacheReadTokens: token_usage?.prompt_tokens_details?.cached_tokens ?? 0,
+                  cacheWriteTokens: token_usage?.prompt_tokens_details?.cache_write_tokens ?? 0,
                   costMicros: Math.round((cost ?? 0) * 1_000_000),
                   status,
                   role: metadata.role ?? null,
