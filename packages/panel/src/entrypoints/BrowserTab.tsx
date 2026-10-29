@@ -82,6 +82,8 @@ const WebPageFrame = ({
   const { readWebPage } = usePanelCommands()
   const [reading, setReading] = useState<Reading>()
   const frame = useRef<HTMLIFrameElement>(null)
+  const isPosted = useRef(false)
+  const [frameToken] = useState(() => crypto.randomUUID())
   useEffect(() => {
     let isCurrent = true
     void readWebPage({ workspaceId, url }).then(
@@ -94,13 +96,14 @@ const WebPageFrame = ({
   }, [readWebPage, workspaceId, url])
   useEffect(() => {
     const follow = (event: MessageEvent) => {
-      if (event.source !== frame.current?.contentWindow) return
-      const page = followedPageOf((event.data as { navigate?: unknown } | null)?.navigate)
+      const message = event.data as { navigate?: unknown; token?: unknown } | null
+      if (event.source !== frame.current?.contentWindow || message?.token !== frameToken) return
+      const page = followedPageOf(message.navigate)
       if (page) onFollow(page)
     }
     addEventListener('message', follow)
     return () => removeEventListener('message', follow)
-  }, [onFollow])
+  }, [onFollow, frameToken])
   if (reading?.url !== url) return <p className={emptyClass}>Loading the page…</p>
   const { page, failure } = reading
   if (!page)
@@ -119,7 +122,14 @@ const WebPageFrame = ({
       title={url}
       src={pageFramePath}
       sandbox={webPageSandbox}
-      onLoad={(event) => event.currentTarget.contentWindow?.postMessage({ html: framedHtmlOf(page) }, '*')}
+      onLoad={(event) => {
+        if (isPosted.current) return
+        isPosted.current = true
+        event.currentTarget.contentWindow?.postMessage(
+          { html: framedHtmlOf(page), url: page.url, token: frameToken },
+          '*',
+        )
+      }}
       className={frameClass}
     />
   )
@@ -189,7 +199,9 @@ export const BrowserTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
   const trail = isNewlyOpened ? [] : (choice?.trail ?? [])
   const choose = (page: BrowserPage | null, isTyped = false, nextTrail: readonly BrowserPage[] = []) =>
     setChoice({ page, isTyped, seenOpenedAt: latestOpenedAt, trail: nextTrail })
-  const follow = (page: BrowserPage) => choose(page, true, shown ? [...trail, shown] : trail)
+  const follow = (page: BrowserPage) => {
+    if (page.url !== shown?.url) choose(page, true, shown ? [...trail, shown] : trail)
+  }
   const goBack = () => choose(trail.at(-1) ?? null, true, trail.slice(0, -1))
   const browse = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()

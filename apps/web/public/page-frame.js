@@ -1,12 +1,14 @@
-const navigate = (url) => parent.postMessage({ navigate: url }, '*')
+let frameToken = ''
+const navigate = (url) => parent.postMessage({ navigate: url, token: frameToken }, '*')
 const pageAddressOf = (url) => url.split('#')[0]
+let shownAddress = ''
 
 const followLink = (event) => {
   const link = event.target instanceof Element ? event.target.closest('a[href], area[href]') : null
   if (!link || event.ctrlKey || event.metaKey || event.shiftKey || !/^https?:/i.test(link.href)) return
   event.preventDefault()
   const { hash } = new URL(link.href)
-  if (hash && pageAddressOf(link.href) === pageAddressOf(document.baseURI))
+  if (hash && pageAddressOf(link.href) === pageAddressOf(shownAddress))
     return document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView()
   navigate(link.href)
 }
@@ -30,6 +32,8 @@ const followRefresh = () => {
 
 addEventListener('message', (event) => {
   if (event.source !== parent || typeof event.data?.html !== 'string') return
+  shownAddress = String(event.data.url ?? '')
+  frameToken = String(event.data.token ?? '')
   document.open()
   document.write(event.data.html)
   document.close()
