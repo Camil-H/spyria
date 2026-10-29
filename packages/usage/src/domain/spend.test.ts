@@ -8,6 +8,7 @@ import {
   type SpendTotals,
   spendChartOf,
   spendFilterFrom,
+  spendReportOf,
   spendRowsOf,
   spendTrendOf,
 } from './spend.ts'
@@ -257,4 +258,21 @@ test('the trend gives each bucket its factors against the bucket before, the fir
     change: 1,
   })
   expect(trend[0]?.factors.every((factor) => factor.change === null)).toBe(true)
+})
+
+test('the report total sums the whole period from the tables, whatever scope narrows the counts', () => {
+  const report = spendReportOf({
+    filter: { ...spendFilterFrom({ scope: 'model', scopeKey: 'openai/gpt-5' }, now) },
+    rows: [
+      ...call({ costMicros: 30_000, tokens: 3000, requests: 3 }),
+      ...call({ model: 'openai/gpt-5', costMicros: 10_000, tokens: 1000, requests: 1 }),
+    ],
+    counts: { current: counts({ costMicros: 10_000, tokens: 1000, requests: 1 }), previous: counts() },
+    bucketCounts: [],
+    tableDimensions: ['member', 'model'],
+    chartDimensions: [],
+    mergedPulls: null,
+  })
+  expect(report.total).toEqual({ costMicros: 40_000, tokens: 4000, requests: 4 })
+  expect(report.decomposition.current.costMicros).toBe(10_000)
 })

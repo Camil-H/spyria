@@ -167,6 +167,7 @@ test('the trend gives each day its factors and biggest mover against the day bef
   expect([dayFour?.current.requests, dayFour?.biggestMover]).toEqual([0, null])
   expect(report.trend.reduce((sum, point) => sum + point.current.costMicros, 0)).toBe(30_000)
   expect(report.decomposition.biggestMover).toBe('tokensPerRequest')
+  expect(report.total).toEqual({ costMicros: 80_000, tokens: 8000, requests: 8 })
   expect(rowsOf(report.tables.member)).toEqual([
     ['Alice', 40_000, 4],
     ['Bob', 20_000, 2],

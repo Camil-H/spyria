@@ -263,7 +263,7 @@ export const spendReportOf = ({
     to: filter.current.to.toISOString(),
     previousFrom: filter.previous.from.toISOString(),
     granularity: filter.granularity,
-    total: spendTotalOf([counts.current]),
+    total: spendTotalOf(rows.filter((row) => row.dimension === tableDimensions[0])),
     charts: Object.fromEntries(chartDimensions.map((dimension) => [dimension, spendChartOf(rows, dimension, buckets)])),
     tables: Object.fromEntries(tableDimensions.map((dimension) => [dimension, spendRowsOf(rows, dimension)])),
     decomposition: decompositionOf(counts.current, counts.previous),
