@@ -233,31 +233,14 @@ test('cost per merged PR counts a chat once and has no value without merged PRs'
   expect(mergedPullsCostOf([])).toEqual({ pulls: [], costMicros: 0, perPullMicros: null })
 })
 
-test('the trend gives each bucket its factors against the bucket before, the first and empty ones without a mover', () => {
-  const trend = spendTrendOf(
-    ['2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04'],
-    [
-      { bucket: '2026-10-01', ...counts() },
-      {
-        bucket: '2026-10-02',
-        ...counts({ users: 6, sessions: 6, turns: 8, requests: 16, tokens: 8000, costMicros: 80_000 }),
-      },
-      { bucket: '2026-10-04', ...counts({ tokens: 8000, costMicros: 80_000 }) },
-    ],
-  )
-  expect(trend.map(({ bucket, biggestMover, current }) => [bucket, biggestMover, current.costMicros])).toEqual([
-    ['2026-10-01', null, 40_000],
-    ['2026-10-02', 'users', 80_000],
-    ['2026-10-03', null, 0],
-    ['2026-10-04', null, 80_000],
+test('the trend fills every bucket of the period with its counts, zero where nothing was spent', () => {
+  const filter = spendFilterFrom({ period: 'custom', from: '2026-10-01', to: '2026-10-03' }, now)
+  const busyDay = { bucket: '2026-10-02', ...counts({ users: 6, sessions: 6 }) }
+  expect(spendTrendOf(filter, [busyDay])).toEqual([
+    { bucket: '2026-10-01', users: 0, sessions: 0, turns: 0, requests: 0, tokens: 0, costMicros: 0 },
+    busyDay,
+    { bucket: '2026-10-03', users: 0, sessions: 0, turns: 0, requests: 0, tokens: 0, costMicros: 0 },
   ])
-  expect(trend[1]?.factors.find((factor) => factor.name === 'users')).toEqual({
-    name: 'users',
-    current: 6,
-    previous: 3,
-    change: 1,
-  })
-  expect(trend[0]?.factors.every((factor) => factor.change === null)).toBe(true)
 })
 
 test('the report total sums the whole period from the tables, whatever scope narrows the counts', () => {
@@ -268,7 +251,6 @@ test('the report total sums the whole period from the tables, whatever scope nar
       ...call({ model: 'openai/gpt-5', costMicros: 10_000, tokens: 1000, requests: 1 }),
     ],
     counts: { current: counts({ costMicros: 10_000, tokens: 1000, requests: 1 }), previous: counts() },
-    bucketCounts: [],
     tableDimensions: ['member', 'model'],
     chartDimensions: [],
     mergedPulls: null,
