@@ -176,6 +176,10 @@ Each running runtime gets its own Docker bridge network, released when the runti
 
 That gives 4,096 networks.
 
+### Behind an outbound proxy
+
+A host that reaches Spyria only through an HTTP proxy takes it from `HTTPS_PROXY` (`HTTP_PROXY` for an `http://` origin), skipping the names in `NO_PROXY`. The host command passes these three variables on from the shell it runs in, so set them there before running it. The host uses the proxy for its connection to Spyria alone: the calls it relays to its runtimes, and its own health check, never go through it. Runtimes get no proxy settings.
+
 ### Egress
 
 Spyria does not filter runtimes' outbound traffic. On a cloud machine, block the metadata endpoint (`169.254.169.254`) and private address ranges in the provider's firewall, so an agent cannot read the machine's cloud credentials or reach internal services.
