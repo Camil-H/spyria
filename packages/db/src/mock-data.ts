@@ -246,8 +246,24 @@ export const createMockSnapshot = (): Snapshot => {
       },
     ],
     usageEntries: [
-      { ...invoiceBug, month: currentMonth(), memberId: alice, tokens: 12400, costMicros: 180_000, calls: 3 },
-      { ...invoiceBug, month: currentMonth(), memberId: bob, tokens: 3100, costMicros: 50_000, calls: 1 },
+      {
+        ...invoiceBug,
+        month: currentMonth(),
+        memberId: alice,
+        model: 'anthropic/claude-sonnet-5-5',
+        tokens: 12400,
+        costMicros: 180_000,
+        calls: 3,
+      },
+      {
+        ...invoiceBug,
+        month: currentMonth(),
+        memberId: bob,
+        model: 'anthropic/claude-sonnet-5-5',
+        tokens: 3100,
+        costMicros: 50_000,
+        calls: 1,
+      },
     ],
     budgetAlerts: [],
     sources: [

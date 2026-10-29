@@ -8,7 +8,9 @@ import {
   type SpendTotals,
   spendChartOf,
   spendFilterFrom,
+  spendReportOf,
   spendRowsOf,
+  spendTrendOf,
 } from './spend.ts'
 
 const now = new Date('2026-10-18T15:30:00Z')
@@ -83,6 +85,18 @@ test.each([
     current: rangeOf(`${from}T00:00:00Z`, `${to}T00:00:00Z`),
     previous: rangeOf(`${previousFrom}T00:00:00Z`, `${previousTo}T00:00:00Z`),
     granularity: 'day',
+    scope: null,
+  })
+})
+
+test('a scope narrows the filter to one member, project, chat or model, keys kept as given', () => {
+  expect(spendFilterFrom({ scope: 'model', scopeKey: 'openai/gpt-5' }, now).scope).toEqual({
+    dimension: 'model',
+    key: 'openai/gpt-5',
+  })
+  expect(spendFilterFrom({ scope: 'project', scopeKey: 'none' }, now).scope).toEqual({
+    dimension: 'project',
+    key: 'none',
   })
 })
 
@@ -100,6 +114,9 @@ test.each([
   { period: 'custom', from: '2026-10-05', to: 'soon' },
   { period: 'custom', from: '2026-10-05', to: '2026-10-04' },
   { period: 'custom', from: '2025-01-01', to: '2026-10-04' },
+  { scope: 'team', scopeKey: 'team-1' },
+  { scope: 'chat' },
+  { scopeKey: 'chat-research' },
 ])('the filter %p is refused', (query) => {
   expect(() => spendFilterFrom(query, now)).toThrow('The spend filter is not valid')
 })
@@ -214,4 +231,30 @@ test('cost per merged PR counts a chat once and has no value without merged PRs'
     ]),
   ).toMatchObject({ costMicros: 90_000, perPullMicros: 30_000 })
   expect(mergedPullsCostOf([])).toEqual({ pulls: [], costMicros: 0, perPullMicros: null })
+})
+
+test('the trend fills every bucket of the period with its counts, zero where nothing was spent', () => {
+  const filter = spendFilterFrom({ period: 'custom', from: '2026-10-01', to: '2026-10-03' }, now)
+  const busyDay = { bucket: '2026-10-02', ...counts({ users: 6, sessions: 6 }) }
+  expect(spendTrendOf(filter, [busyDay])).toEqual([
+    { bucket: '2026-10-01', users: 0, sessions: 0, turns: 0, requests: 0, tokens: 0, costMicros: 0 },
+    busyDay,
+    { bucket: '2026-10-03', users: 0, sessions: 0, turns: 0, requests: 0, tokens: 0, costMicros: 0 },
+  ])
+})
+
+test('the report total sums the whole period from the tables, whatever scope narrows the counts', () => {
+  const report = spendReportOf({
+    filter: { ...spendFilterFrom({ scope: 'model', scopeKey: 'openai/gpt-5' }, now) },
+    rows: [
+      ...call({ costMicros: 30_000, tokens: 3000, requests: 3 }),
+      ...call({ model: 'openai/gpt-5', costMicros: 10_000, tokens: 1000, requests: 1 }),
+    ],
+    counts: { current: counts({ costMicros: 10_000, tokens: 1000, requests: 1 }), previous: counts() },
+    tableDimensions: ['member', 'model'],
+    chartDimensions: [],
+    mergedPulls: null,
+  })
+  expect(report.total).toEqual({ costMicros: 40_000, tokens: 4000, requests: 4 })
+  expect(report.decomposition.current.costMicros).toBe(10_000)
 })

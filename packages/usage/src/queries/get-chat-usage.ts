@@ -1,5 +1,5 @@
 import { chatIn, inChat, memberNamesIn, type Snapshot } from '@spyria/db'
-import { type ChatId, can, type MemberId, type WorkspaceId } from '@spyria/kernel'
+import { type ChatId, can, type MemberId, modelNameOf, type WorkspaceId } from '@spyria/kernel'
 import { type ChatUsage, monthsNewestFirst, showsChatUsage, sumUsage, type UsageMonth } from '../domain/usage.ts'
 
 const usageChatIn = (snapshot: Snapshot, workspaceId: WorkspaceId, chatId: ChatId) => {
@@ -31,7 +31,14 @@ export const getChatUsage =
       name: nameOf(memberId),
       ...sumUsage(entriesOfMonth.filter((entry) => entry.memberId === memberId)),
     }))
-    return { months: monthsNewestFirst(entries), rows, total: sumUsage(rows) }
+    const models = [...new Set(entriesOfMonth.map((entry) => entry.model))]
+      .map((model) => ({
+        model,
+        name: modelNameOf(model),
+        ...sumUsage(entriesOfMonth.filter((entry) => entry.model === model)),
+      }))
+      .toSorted((first, second) => second.costMicros - first.costMicros || first.name.localeCompare(second.name))
+    return { months: monthsNewestFirst(entries), rows, models, total: sumUsage(rows) }
   }
 
 export const isLocalSession = (workspaceId: WorkspaceId, chatId: ChatId) => (snapshot: Snapshot) =>

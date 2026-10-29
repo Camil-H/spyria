@@ -16,15 +16,15 @@ const recordCalls = `
       "inputTokens", "outputTokens", "costMicros", status, role, "turnId", "sessionId", "calledAt" from incoming
     on conflict do nothing
     returning *)
-  insert into usage_entries (workspace_id, month, chat_id, user_id, tokens, cost_micros, calls)
-  select workspace_id, to_char(called_at at time zone 'UTC', 'YYYY-MM'), chat_id, prompter_id,
+  insert into usage_entries (workspace_id, month, chat_id, user_id, model, tokens, cost_micros, calls)
+  select workspace_id, to_char(called_at at time zone 'UTC', 'YYYY-MM'), chat_id, prompter_id, provider || '/' || model,
     sum(input_tokens + output_tokens), sum(cost_micros), count(*)
   from inserted
   where exists (select 1 from chats where chats.workspace_id = inserted.workspace_id and chats.id = inserted.chat_id)
     and exists (select 1 from memberships
       where memberships.workspace_id = inserted.workspace_id and memberships.user_id = inserted.prompter_id)
-  group by 1, 2, 3, 4
-  on conflict (workspace_id, month, chat_id, user_id) do update set
+  group by 1, 2, 3, 4, 5
+  on conflict (workspace_id, month, chat_id, user_id, model) do update set
     tokens = usage_entries.tokens + excluded.tokens,
     cost_micros = usage_entries.cost_micros + excluded.cost_micros,
     calls = usage_entries.calls + excluded.calls`

@@ -43,6 +43,8 @@ test('members are refused the workspace spend; their own usage is open to them',
   })
   expect((await asMember(bob, 'GET', '/api/spend/mine')).status).toBe(200)
   expect((await asMember(alice, 'GET', '/api/spend?period=yesterday')).status).toBe(400)
+  expect((await asMember(alice, 'GET', '/api/spend?scope=chat')).status).toBe(400)
+  expect((await asMember(bob, 'GET', '/api/spend/mine?scope=member&scopeKey=member-alice')).status).toBe(400)
 })
 
 test('this month totals each member, project, chat and model of the workspace only, with shares and a chart per day', async () => {
@@ -135,4 +137,53 @@ test('own usage holds only the requester’s calls, whatever member the request 
     ['pricePerToken', 10, 10],
   ])
   expect(JSON.stringify(report)).not.toMatch(/Alice|Lee|Invoice bug|Setup helper|claude/)
+})
+
+const factorsOf = (point: Pick<Report['decomposition'], 'factors'> | undefined) =>
+  Object.fromEntries((point?.factors ?? []).map(({ name, current }) => [name, current]))
+
+test('a decomposition narrowed to one model leaves the total and the tables whole', async () => {
+  const report = await reportOf('/api/spend?scope=model&scopeKey=anthropic/claude-sonnet')
+  expect(report.decomposition.biggestMover).toBe('tokensPerRequest')
+  expect(factorsOf(report.decomposition).users).toBe(1)
+  expect(report.total).toEqual({ costMicros: 80_000, tokens: 8000, requests: 8 })
+  expect(rowsOf(report.tables.member)).toEqual([
+    ['Alice', 40_000, 4],
+    ['Bob', 20_000, 2],
+    ['Lee', 20_000, 2],
+  ])
+})
+
+test('the spend over time gives each day of the period its counts over the scope picked, read apart from the report', async () => {
+  const trendOf = async (path: string, userId = alice) => {
+    const response = await asMember(userId, 'GET', path)
+    expect(response.status).toBe(200)
+    return JSON.parse(response.body) as ({ bucket: string } & Record<string, number>)[]
+  }
+  const trend = await trendOf(
+    '/api/spend/trend?period=this_month&granularity=day&scope=model&scopeKey=anthropic/claude-sonnet',
+  )
+  const secondDay = trend.findIndex((point) => point.bucket.endsWith('-02'))
+  const [, ...counts] = trend.slice(secondDay - 1, secondDay + 3).map(({ bucket: _, ...rest }) => rest)
+  const nothing = { users: 0, sessions: 0, turns: 0, requests: 0, tokens: 0, costMicros: 0 }
+  expect(trend[secondDay - 1]).toMatchObject(nothing)
+  expect(counts).toEqual([
+    { users: 1, sessions: 1, turns: 1, requests: 1, tokens: 1000, costMicros: 10_000 },
+    { users: 1, sessions: 1, turns: 1, requests: 2, tokens: 2000, costMicros: 20_000 },
+    nothing,
+  ])
+  expect(trend.reduce((sum, point) => sum + (point.costMicros ?? 0), 0)).toBe(30_000)
+  expect((await asMember(bob, 'GET', '/api/spend/trend')).status).toBe(403)
+  expect((await asMember(bob, 'GET', '/api/spend/mine/trend?scope=member&scopeKey=member-alice')).status).toBe(400)
+  const bobInInvoiceBug = await trendOf('/api/spend/mine/trend?scope=chat&scopeKey=chat-invoice-bug', bob)
+  expect(bobInInvoiceBug.every((point) => point.requests === 0)).toBe(true)
+})
+
+test('a scope narrows the decomposition to one member, the chats without project, a model, or one of my own chats', async () => {
+  const usersOf = async (path: string, userId = alice) => factorsOf((await reportOf(path, userId)).decomposition).users
+  expect(await usersOf('/api/spend?scope=member&scopeKey=member-bob')).toBe(1)
+  expect(await usersOf('/api/spend?scope=project&scopeKey=none')).toBe(1)
+  expect(await usersOf('/api/spend?scope=model&scopeKey=openai/gpt-5')).toBe(2)
+  const bobInInvoiceBug = await reportOf('/api/spend/mine?scope=chat&scopeKey=chat-invoice-bug', bob)
+  expect(bobInInvoiceBug.decomposition.factors.every((factor) => !factor.current)).toBe(true)
 })

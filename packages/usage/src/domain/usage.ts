@@ -3,7 +3,13 @@ import type { ChatId, MemberId } from '@spyria/kernel'
 export type UsageMonth = string
 export type UsageTotals = { tokens: number; costMicros: number; calls: number }
 type MemberUsage = UsageTotals & { memberId: MemberId; name: string }
-export type ChatUsage = { months: readonly UsageMonth[]; rows: readonly MemberUsage[]; total: UsageTotals }
+type ModelUsage = UsageTotals & { model: string; name: string }
+export type ChatUsage = {
+  months: readonly UsageMonth[]
+  rows: readonly MemberUsage[]
+  models: readonly ModelUsage[]
+  total: UsageTotals
+}
 
 export const showsChatUsage = (chat: Readonly<{ archived: boolean }>) => !chat.archived
 

@@ -1,7 +1,18 @@
 import type { WorkspaceId } from '@spyria/kernel'
-import { ErrorMessage, fieldClass, formatCost, LabelledSection, labelClass, SegmentedChoice } from '@spyria/ui'
-import { lazy, type ReactNode, Suspense, useEffect, useState } from 'react'
 import {
+  ErrorMessage,
+  fieldClass,
+  focusRing,
+  formatCost,
+  LabelledSection,
+  labelClass,
+  SegmentedChoice,
+} from '@spyria/ui'
+import { ChevronRight } from 'lucide-react'
+import { Fragment, lazy, type ReactNode, Suspense, useEffect, useId, useState } from 'react'
+import {
+  factorValuesOf,
+  type SpendBucketCounts,
   type SpendDimension,
   type SpendFactorName,
   type SpendGranularity,
@@ -15,8 +26,9 @@ import { formatChange, formatFactor } from './format.ts'
 import { UsageTable } from './UsageTable.tsx'
 
 const SpendChart = lazy(() => import('./SpendChart.tsx').then(({ SpendChart }) => ({ default: SpendChart })))
+const TrendChart = lazy(() => import('./TrendChart.tsx').then(({ TrendChart }) => ({ default: TrendChart })))
 
-type Search = { period: SpendPeriod; from: string; to: string; granularity: SpendGranularity }
+type Search = { period: SpendPeriod; from: string; to: string; granularity: SpendGranularity; scope: string }
 
 const periodLabels: Record<SpendPeriod, string> = {
   this_month: 'This month',
@@ -41,75 +53,194 @@ const workspaceFactorLabels: Record<SpendFactorName, string> = {
   pricePerToken: 'Price per 1M tokens',
 }
 const personalFactorLabels = { ...workspaceFactorLabels, sessionsPerUser: 'Sessions' }
-const workspaceFormula =
-  'users × sessions per user × turns per session × requests per turn × tokens per request × price per token'
-const personalFormula = workspaceFormula.replace('users × sessions per user', 'sessions')
 const cellClass = 'px-2 py-1.5 text-right'
+const operatorClass = 'w-4 py-1.5 pl-2 text-center text-muted'
 const today = () => new Date().toISOString().slice(0, 10)
 
-const searchOf = ({ period, from, to, granularity }: Search): Record<string, string> =>
-  period === 'custom' ? { period, from, to, granularity } : { period, granularity }
+const scopeSearchOf = (scope: string): Record<string, string> => {
+  const separator = scope.indexOf(':')
+  return separator < 0 ? {} : { scope: scope.slice(0, separator), scopeKey: scope.slice(separator + 1) }
+}
+const searchOf = ({ period, from, to, granularity, scope }: Search): Record<string, string> => ({
+  ...(period === 'custom' ? { period, from, to, granularity } : { period, granularity }),
+  ...scopeSearchOf(scope),
+})
 
 const usageRowsOf = (rows: readonly SpendRow[]) => rows.map((row) => ({ ...row, calls: row.requests }))
+
+type DecompositionRow = SpendFactorName | 'total'
+type ReadTrend = (input: {
+  workspaceId: WorkspaceId
+  search: Readonly<Record<string, string>>
+}) => Promise<SpendBucketCounts[]>
+type Trend = { key: string; counts: SpendBucketCounts[] | null; error: string | null }
+
+const trendPointsOf = (counts: readonly SpendBucketCounts[], row: DecompositionRow) =>
+  counts.map((bucketCounts) => ({
+    bucket: bucketCounts.bucket,
+    value: row === 'total' ? bucketCounts.costMicros : factorValuesOf(bucketCounts)[row],
+  }))
+const formatRowValue = (row: DecompositionRow) => (value: number | null) =>
+  row !== 'total' ? formatFactor(row, value) : value === null ? '—' : formatCost(value)
+
+const RowToggle = ({
+  label,
+  isOpen,
+  controls,
+  onToggle,
+}: {
+  label: string
+  isOpen: boolean
+  controls: string
+  onToggle: () => void
+}) => (
+  <button
+    type="button"
+    aria-expanded={isOpen}
+    aria-controls={isOpen ? controls : undefined}
+    onClick={onToggle}
+    className={`inline-flex items-center gap-1 rounded-md text-left hover:underline ${focusRing} aria-expanded:[&>svg]:rotate-90`}
+  >
+    {label}
+    <ChevronRight aria-hidden className="size-3.5 shrink-0 text-muted transition-transform" />
+  </button>
+)
 
 export const Decomposition = ({
   decomposition,
   isPersonal,
+  granularity,
+  workspaceId,
+  trendKey,
+  readTrend,
+  children,
 }: {
   decomposition: SpendReport['decomposition']
   isPersonal: boolean
-}) => (
-  <LabelledSection title="Spend decomposition" Heading="h3" titleClass="font-medium">
-    <p className="text-sm text-muted">Spend = {isPersonal ? personalFormula : workspaceFormula}</p>
-    <table aria-label="Spend decomposition" className="w-full text-sm">
-      <thead className="text-xs text-muted">
-        <tr>
-          {['Factor', 'This period', 'Previous period', 'Change'].map((title, index) => (
-            <th key={title} scope="col" className={`${index === 0 ? 'px-2 py-1.5 text-left' : cellClass} font-medium`}>
-              {title}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {decomposition.factors
-          .filter((factor) => !isPersonal || factor.name !== 'users')
-          .map((factor) => {
-            const isBiggestMover = factor.name === decomposition.biggestMover
-            return (
-              <tr
-                key={factor.name}
-                aria-current={isBiggestMover || undefined}
-                className={`border-t border-line ${isBiggestMover ? 'bg-selected font-semibold' : ''}`}
+  granularity: SpendGranularity
+  workspaceId: WorkspaceId
+  trendKey: string
+  readTrend: ReadTrend
+  children?: ReactNode
+}) => {
+  const chartIdPrefix = useId()
+  const [openRow, setOpenRow] = useState<DecompositionRow | null>(null)
+  const [trend, setTrend] = useState<Trend | null>(null)
+  const isOpen = openRow !== null
+  const isTrendCurrent = trend?.key === trendKey
+  useEffect(() => {
+    if (!isOpen || isTrendCurrent) return
+    let isCurrent = true
+    readTrend({ workspaceId, search: JSON.parse(trendKey) }).then(
+      (counts) => isCurrent && setTrend({ key: trendKey, counts, error: null }),
+      (error: Error) => isCurrent && setTrend({ key: trendKey, counts: null, error: error.message }),
+    )
+    return () => {
+      isCurrent = false
+    }
+  }, [isOpen, isTrendCurrent, readTrend, workspaceId, trendKey])
+  const factorLabels = isPersonal ? personalFactorLabels : workspaceFactorLabels
+  const toggle = (row: DecompositionRow) => setOpenRow(openRow === row ? null : row)
+  const chartIdOf = (row: DecompositionRow) => `${chartIdPrefix}-${row}`
+  const chartRowOf = (row: DecompositionRow, label: string) =>
+    openRow === row && (
+      <tr id={chartIdOf(row)}>
+        <td colSpan={5} className="px-2 pt-1 pb-3">
+          {!isTrendCurrent ? (
+            <p className="text-sm text-muted">Loading…</p>
+          ) : trend.counts === null ? (
+            <ErrorMessage message={trend.error} />
+          ) : (
+            <Suspense fallback={<p className="text-sm text-muted">Loading the chart…</p>}>
+              <TrendChart
+                points={trendPointsOf(trend.counts, row)}
+                granularity={granularity}
+                formatValue={formatRowValue(row)}
+                label={`${label} over time`}
+              />
+            </Suspense>
+          )}
+        </td>
+      </tr>
+    )
+  return (
+    <LabelledSection title="Spend decomposition" Heading="h3" titleClass="font-medium">
+      {children}
+      <table aria-label="Spend decomposition" className="w-full text-sm">
+        <thead className="text-xs text-muted">
+          <tr>
+            <td aria-hidden className={operatorClass} />
+            {['Factor', 'This period', 'Previous period', 'Change'].map((title, index) => (
+              <th
+                key={title}
+                scope="col"
+                className={`${index === 0 ? 'px-2 py-1.5 text-left' : cellClass} font-medium`}
               >
-                <th scope="row" className="px-2 py-1.5 text-left font-normal">
-                  {(isPersonal ? personalFactorLabels : workspaceFactorLabels)[factor.name]}
-                  {isBiggestMover && <span className="ml-1 text-xs text-muted"> · Biggest mover</span>}
-                </th>
-                <td className={cellClass}>{formatFactor(factor.name, factor.current)}</td>
-                <td className={cellClass}>{formatFactor(factor.name, factor.previous)}</td>
-                <td className={cellClass}>{formatChange(factor.change)}</td>
-              </tr>
-            )
-          })}
-        <tr className="border-t border-line font-semibold">
-          <th scope="row" className="px-2 py-1.5 text-left">
-            Total spend
-          </th>
-          <td className={cellClass}>{formatCost(decomposition.current.costMicros)}</td>
-          <td className={cellClass}>{formatCost(decomposition.previous.costMicros)}</td>
-          <td className={cellClass}>
-            {formatChange(
-              decomposition.previous.costMicros === 0
-                ? null
-                : decomposition.current.costMicros / decomposition.previous.costMicros - 1,
-            )}
-          </td>
-        </tr>
-      </tbody>
-    </table>
-  </LabelledSection>
-)
+                {title}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {decomposition.factors
+            .filter((factor) => !isPersonal || factor.name !== 'users')
+            .map((factor, index) => {
+              const isBiggestMover = factor.name === decomposition.biggestMover
+              const label = factorLabels[factor.name]
+              return (
+                <Fragment key={factor.name}>
+                  <tr
+                    aria-current={isBiggestMover || undefined}
+                    className={`border-t border-line ${isBiggestMover ? 'bg-selected font-semibold' : ''}`}
+                  >
+                    <td aria-hidden className={operatorClass}>
+                      {index > 0 && '×'}
+                    </td>
+                    <th scope="row" className="px-2 py-1.5 text-left font-normal">
+                      <RowToggle
+                        label={label}
+                        isOpen={openRow === factor.name}
+                        controls={chartIdOf(factor.name)}
+                        onToggle={() => toggle(factor.name)}
+                      />
+                      {isBiggestMover && <span className="ml-1 text-xs text-muted"> · Biggest mover</span>}
+                    </th>
+                    <td className={cellClass}>{formatFactor(factor.name, factor.current)}</td>
+                    <td className={cellClass}>{formatFactor(factor.name, factor.previous)}</td>
+                    <td className={cellClass}>{formatChange(factor.change)}</td>
+                  </tr>
+                  {chartRowOf(factor.name, label)}
+                </Fragment>
+              )
+            })}
+          <tr className="border-t border-line font-semibold">
+            <td aria-hidden className={operatorClass}>
+              =
+            </td>
+            <th scope="row" className="px-2 py-1.5 text-left">
+              <RowToggle
+                label="Total spend"
+                isOpen={openRow === 'total'}
+                controls={chartIdOf('total')}
+                onToggle={() => toggle('total')}
+              />
+            </th>
+            <td className={cellClass}>{formatCost(decomposition.current.costMicros)}</td>
+            <td className={cellClass}>{formatCost(decomposition.previous.costMicros)}</td>
+            <td className={cellClass}>
+              {formatChange(
+                decomposition.previous.costMicros === 0
+                  ? null
+                  : decomposition.current.costMicros / decomposition.previous.costMicros - 1,
+              )}
+            </td>
+          </tr>
+          {chartRowOf('total', 'Total spend')}
+        </tbody>
+      </table>
+    </LabelledSection>
+  )
+}
 
 const MergedPulls = ({ mergedPulls }: { mergedPulls: NonNullable<SpendReport['mergedPulls']> }) => (
   <LabelledSection title="Cost per merged PR" Heading="h3" titleClass="font-medium">
@@ -157,10 +288,63 @@ const MergedPulls = ({ mergedPulls }: { mergedPulls: NonNullable<SpendReport['me
   </LabelledSection>
 )
 
+const ScopePicker = ({
+  tables,
+  dimensions,
+  isPersonal,
+  value,
+  onChange,
+}: {
+  tables: SpendReport['tables']
+  dimensions: readonly SpendDimension[]
+  isPersonal: boolean
+  value: string
+  onChange: (scope: string) => void
+}) => {
+  const dimension = (scopeSearchOf(value).scope ?? '') as SpendDimension | ''
+  const rows = dimension ? (tables[dimension] ?? []) : []
+  return (
+    <fieldset aria-label="Narrow the decomposition" className="flex flex-wrap items-end gap-2">
+      <label className={labelClass}>
+        For
+        <select
+          className={fieldClass}
+          value={dimension}
+          onChange={(event) => {
+            const picked = event.target.value as SpendDimension | ''
+            const firstRow = picked ? tables[picked]?.[0] : undefined
+            onChange(firstRow ? `${picked}:${firstRow.key}` : '')
+          }}
+        >
+          <option value="">{isPersonal ? 'All my usage' : 'Whole workspace'}</option>
+          {dimensions.map((choice) => (
+            <option key={choice} value={choice} disabled={(tables[choice] ?? []).length === 0}>
+              {dimensionLabels[choice]}
+            </option>
+          ))}
+        </select>
+      </label>
+      {dimension && (
+        <label className={labelClass}>
+          {dimensionLabels[dimension]}
+          <select className={fieldClass} value={value} onChange={(event) => onChange(event.target.value)}>
+            {rows.map((row) => (
+              <option key={row.key} value={`${dimension}:${row.key}`}>
+                {row.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+    </fieldset>
+  )
+}
+
 export const SpendReportView = ({
   title,
   workspaceId,
   readReport,
+  readTrend,
   chartDimensions,
   tableDimensions,
   children,
@@ -170,6 +354,7 @@ export const SpendReportView = ({
   title: string
   workspaceId: WorkspaceId
   readReport: (input: { workspaceId: WorkspaceId; search: Readonly<Record<string, string>> }) => Promise<SpendReport>
+  readTrend: ReadTrend
   chartDimensions: readonly SpendDimension[]
   tableDimensions: readonly SpendDimension[]
   isPersonal?: boolean
@@ -179,6 +364,7 @@ export const SpendReportView = ({
     from: `${today().slice(0, 7)}-01`,
     to: today(),
     granularity: 'day',
+    scope: '',
   })
   const [stack, setStack] = useState(chartDimensions[0] ?? 'model')
   const [report, setReport] = useState<SpendReport | null>(null)
@@ -207,7 +393,7 @@ export const SpendReportView = ({
           <select
             className={fieldClass}
             value={search.period}
-            onChange={(event) => setSearch({ ...search, period: event.target.value as SpendPeriod })}
+            onChange={(event) => setSearch({ ...search, period: event.target.value as SpendPeriod, scope: '' })}
           >
             {spendPeriods.map((period) => (
               <option key={period} value={period}>
@@ -224,7 +410,9 @@ export const SpendReportView = ({
                 type="date"
                 className={fieldClass}
                 value={search[bound]}
-                onChange={(event) => event.target.value && setSearch({ ...search, [bound]: event.target.value })}
+                onChange={(event) =>
+                  event.target.value && setSearch({ ...search, [bound]: event.target.value, scope: '' })
+                }
               />
             </label>
           ))}
@@ -280,7 +468,22 @@ export const SpendReportView = ({
               ))}
             </>
           )}
-          <Decomposition decomposition={report.decomposition} isPersonal={isPersonal} />
+          <Decomposition
+            decomposition={report.decomposition}
+            isPersonal={isPersonal}
+            granularity={search.granularity}
+            workspaceId={workspaceId}
+            trendKey={JSON.stringify(searchOf(search))}
+            readTrend={readTrend}
+          >
+            <ScopePicker
+              tables={report.tables}
+              dimensions={tableDimensions}
+              isPersonal={isPersonal}
+              value={search.scope}
+              onChange={(scope) => setSearch({ ...search, scope })}
+            />
+          </Decomposition>
           {report.mergedPulls && <MergedPulls mergedPulls={report.mergedPulls} />}
         </>
       )}

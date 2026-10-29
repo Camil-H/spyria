@@ -110,6 +110,29 @@ export const openPanelTab = async (page: Page, chatName: string, tabName: string
   await expect(panelTabOf(page, tabName)).toHaveAttribute('aria-selected', 'true')
 }
 
+export const syncUsage = async (workerStack: WorkerStack) => {
+  const synced = await fetch(`${serverUrl}/test/usage-sync?db=${workerStack.databaseName}`, { method: 'POST' })
+  expect(synced.ok).toBe(true)
+}
+export const modelUsageRowOf = (page: Page, modelName: string) =>
+  tabPanelOf(page)
+    .getByRole('table', { name: 'Usage by model' })
+    .getByRole('row', { name: new RegExp(`^${modelName}(?![\\w.])`) })
+export const expectModelMetered = async (page: Page, workerStack: WorkerStack, modelName: string) => {
+  const row = modelUsageRowOf(page, modelName)
+  await expect
+    .poll(async () => {
+      await syncUsage(workerStack)
+      return row.count()
+    })
+    .toBe(1)
+  const [tokens = '', cost = '', requests = ''] = await row.getByRole('cell').allTextContents()
+  expect(Number(tokens.replaceAll(',', ''))).toBeGreaterThan(0)
+  expect(cost).toMatch(/^(\$\d+\.\d{2}|< \$0\.01)$/)
+  expect(cost).not.toBe('$0.00')
+  expect(Number(requests)).toBeGreaterThan(0)
+}
+
 export const openProfile = async (page: Page) => {
   await sidebarOf(page).getByRole('link', { name: 'Profile' }).click()
   await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Profile' })).toBeVisible()

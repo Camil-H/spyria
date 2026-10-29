@@ -139,6 +139,8 @@ When an agent acts, it uses the chat owner's access. On a guest's prompt it uses
 - spend over time, stacked by member, project or model;
 - tables per member, project, chat and model with cost, tokens, requests and share;
 - a breakdown of spend into users × sessions per user × turns per session × requests per turn × tokens per request × price per token, compared with the previous period of the same length, with the factor that moved spend the most highlighted;
+- clicking a factor or the total spend opens a line chart of it per day, week or month under its row, and clicking it again closes it;
+- **For** narrows the breakdown and its charts to one member, project, chat or model (the tables and the spend chart stay whole);
 - the cost per merged pull request, with the list of those pull requests.
 
 Calls delegated to sub-agents count in the turn that delegated them. Every member sees their own figures in **Profile** > **My usage**, and never anyone else's. Sessions on a member's own Claude or ChatGPT subscription are not metered by Spyria and do not appear.
