@@ -86,7 +86,7 @@ zero-cache follows Postgres through a logical replication slot. If zero-cache st
 | Docker build cache | `agent:build` and `smoke:prod` prune it down to 10 GB (`docker builder prune --max-used-space 10GB`). The cache belongs to the whole Docker daemon, so this also trims other projects' cache beyond that limit, oldest first. | Below 10 GB: `docker builder prune`. |
 | Base images | | Images replaced by `--pull`: `docker image ls --filter dangling=true`. |
 | Test harness volume | `agent:build` fills `spyria-test-harnesses` for the Docker tests. | Remove it on a production-only machine if you do not run the tests. |
-| Postgres | The event store is append-only, except the workspace purge and the redaction of a deleted message's text, both enforced by the event trigger; the audit log, the last text of deleted messages included, is kept forever unless an Admin sets a retention in the workspace settings. | |
+| Postgres | The event store is append-only, except the workspace purge and the redaction of a deleted message's text and attachment names, both enforced by the event trigger; the audit log, the last text of deleted messages included, is kept forever unless an Admin sets a retention in the workspace settings. | |
 
 ## Backups
 
