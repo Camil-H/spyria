@@ -9,7 +9,7 @@ The sidebar lists a workspace's **projects**, each with its chats, then the **Lo
 A chat has one of two types. **New chat** asks questions instead of naming them, and creates the chat once every question shown is answered (none is answered in advance):
 
 1. **Is it public, so everyone in the workspace can join?** Yes makes a public channel, No a private chat.
-2. **Is it for members messaging each other, or an AI chat?** Members messaging makes a channel, AI chat a runtime chat. AI chat cannot be chosen for a public chat, since runtime chats are always private.
+2. **Is it a team channel or an AI chat?** Team channel makes a channel, AI chat a runtime chat. AI chat cannot be chosen for a public chat, since runtime chats are always private.
 3. **Does it need GitHub access?** Asked for an AI chat only. Yes makes it a dev chat and shows the **Repository** and **Base branch** pickers (see [Dev mode](./dev-mode.md#creating-a-dev-chat)).
 
 | Type | Who talks | Visibility | Notes |

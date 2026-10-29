@@ -152,9 +152,9 @@ export const NewChatDialog = ({
           onAnswer={chooseVisibility}
         />
         <Question
-          question="Is it for members messaging each other, or an AI chat?"
+          question="Is it a team channel or an AI chat?"
           name="audience"
-          answers={{ members: 'Members messaging', ai: 'AI chat' }}
+          answers={{ members: 'Team channel', ai: 'AI chat' }}
           value={audience}
           disabledAnswers={visibility === 'public' ? ['ai'] : []}
           hint={visibility === 'public' ? 'AI chats are always private.' : undefined}

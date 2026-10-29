@@ -127,7 +127,7 @@ test.describe('Channels', () => {
     await leePage.context().close()
   })
 
-  test('As a member, I see no agent bar in a channel, and a public new chat is for members messaging, since AI chats are always private', {
+  test('As a member, I see no agent bar in a channel, and a public new chat is a team channel, since AI chats are always private', {
     tag: ['@spec-30'],
   }, async ({ page }) => {
     await chatLinkOf(page, 'Welcome').click()
@@ -144,10 +144,10 @@ test.describe('Channels', () => {
     await expect(newChatAnswerOf(dialog, 'audience', 'AI chat')).toBeDisabled()
     await expect(dialog).toContainText('AI chats are always private.')
     await expect(dialog.getByRole('radiogroup', { name: 'Does it need GitHub access?' })).toHaveCount(0)
-    await newChatAnswerOf(dialog, 'audience', 'Members messaging').check()
+    await newChatAnswerOf(dialog, 'audience', 'Team channel').check()
     await newChatAnswerOf(dialog, 'isPublic', 'No').check()
     await expect(newChatAnswerOf(dialog, 'audience', 'AI chat')).toBeEnabled()
-    await expect(newChatAnswerOf(dialog, 'audience', 'Members messaging')).toBeChecked()
+    await expect(newChatAnswerOf(dialog, 'audience', 'Team channel')).toBeChecked()
     await newChatAnswerOf(dialog, 'audience', 'AI chat').check()
     await newChatAnswerOf(dialog, 'github', 'Yes').check()
     await newChatAnswerOf(dialog, 'isPublic', 'Yes').check()
