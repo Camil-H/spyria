@@ -2,7 +2,7 @@ import { expect, mainOf, type Page, sidebarOf, test } from '../fixtures'
 
 const cardsBySection = {
   'Setup your organization': ['Setup SSO', 'Connect GitHub', 'Roles and Permissions', 'Manage Team'],
-  'Setup your agents': ['Connect runtime', 'MCP tools'],
+  'Setup your agents': ['Connect runtime', 'AI providers', 'MCP tools'],
   'Analyze usage': ['Analyze costs', 'Audit log'],
 }
 const sectionShownBy: Record<string, string> = {
@@ -12,6 +12,7 @@ const sectionShownBy: Record<string, string> = {
   'Manage Team': 'Members',
   'Connect runtime': 'Runtime hosts',
   'MCP tools': 'Connections',
+  'AI providers': 'AI providers',
   'Analyze costs': 'Usage',
   'Audit log': 'Audit log',
 }
@@ -38,6 +39,7 @@ test.describe('Settings', () => {
     await expect(cardOf(page, 'Manage Team')).toContainText('3 members')
     await expect(cardOf(page, 'Connect runtime')).toContainText('1 runtime host')
     await expect(cardOf(page, 'MCP tools')).toContainText('1 shared connection')
+    await expect(cardOf(page, 'AI providers')).toContainText('Every provider allowed')
     await expect(cardOf(page, 'Analyze costs')).toContainText(/\$\d+\.\d\d this month/)
 
     for (const [index, cardTitle] of Object.values(cardsBySection).flat().entries()) {

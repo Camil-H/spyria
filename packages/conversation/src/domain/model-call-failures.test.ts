@@ -154,12 +154,12 @@ test.each([
   [
     "the prompter's budget used up",
     { reached: 'over_budget', budget: 'member' },
-    "Alice's monthly AI budget is used up; an admin can raise it in Workspace settings",
+    "Alice's monthly AI budget is used up; a member with the Manage budgets permission can raise it in Workspace settings",
   ],
   [
     "the workspace's budget used up",
     { reached: 'over_budget', budget: 'workspace' },
-    "The workspace's monthly AI budget is used up; an admin can raise it in Workspace settings",
+    "The workspace's monthly AI budget is used up; a member with the Manage budgets permission can raise it in Workspace settings",
   ],
 ] as [string, ModelCallFailure, string][])('%s', (_, failure, notice) => {
   expect(modelCallNoticeOf(failure, names)).toBe(notice)

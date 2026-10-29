@@ -1,9 +1,9 @@
-import type { MemberId } from '@spyria/kernel'
+import type { ActorKind, Integration, MemberId } from '@spyria/kernel'
 import { InvalidAuditFilter, InvalidRetention } from './errors.ts'
 
 export const auditKindsByGroup = {
   Members: ['member.invited', 'invite.revoked', 'member.joined', 'member.role_changed', 'member.removed'],
-  Workspace: ['workspace.deleted', 'workspace.restored'],
+  Workspace: ['workspace.deleted', 'workspace.restored', 'ai_providers.changed'],
   'Sign-in': ['sso.configured', 'sso.secret_rotated', 'sso.domain_verified'],
   GitHub: ['github.configured', 'github.secret_rotated'],
   Connections: ['connection.added', 'connection.updated', 'connection.removed', 'connection.restricted'],
@@ -82,14 +82,17 @@ const actionByKind: Record<string, string> = {
   'workspace_role.deleted': 'Deleted a workspace role',
   'workspace.deleted': 'Deleted the workspace',
   'workspace.restored': 'Restored the workspace',
+  'ai_providers.changed': 'Changed the allowed AI providers',
 }
 
 export type AuditRecord = {
   key: string
   at: string
   kind: string
+  actorKind: ActorKind | null
   actorId: string | null
   actorName: string | null
+  onBehalfOfName: string | null
   target: string | null
   details: Readonly<Record<string, unknown>>
 }
@@ -134,11 +137,20 @@ const valueTextOf = (value: unknown): string => {
 export const retentionLabelOf = (retentionDays: number | null) =>
   retentionDays === null ? 'Forever' : `${retentionDays} day${retentionDays === 1 ? '' : 's'}`
 
+const integrationNames: Record<Integration, string> = { github: 'GitHub' }
+
+const personOf = ({ actorKind, actorId, actorName, onBehalfOfName }: AuditRecord) => {
+  if (actorKind === 'agent') return onBehalfOfName ? `${onBehalfOfName}'s agent` : 'An agent'
+  if (actorKind === 'integration') return integrationNames[actorId as Integration] ?? 'An integration'
+  if (actorKind === 'system' || !actorName) return onBehalfOfName ? `System, for ${onBehalfOfName}` : 'System'
+  return actorName
+}
+
 export const auditEntryOf = (record: AuditRecord): AuditEntry => ({
   key: record.key,
   at: record.at,
   actorId: record.actorId,
-  person: record.actorName ?? 'System',
+  person: personOf(record),
   action: actionByKind[record.kind] ?? record.kind,
   target:
     record.kind === 'audit.retention_changed'

@@ -10,7 +10,7 @@ import {
   type RepositoryCheckouts,
 } from '@spyria/conversation/server'
 import type { Database } from '@spyria/db/postgres'
-import { DomainError, log } from '@spyria/kernel'
+import { DomainError, log, memberActor, memberId } from '@spyria/kernel'
 import {
   enteredSecretsOf,
   GitHubNotConfigured,
@@ -245,11 +245,23 @@ export const saveGitHubSettings = async (
         encrypted_private_key = excluded.encrypted_private_key,
         encrypted_webhook_secret = excluded.encrypted_webhook_secret, updated_at = now()`
     if (previous?.appId !== settings.appId || previous.clientId !== settings.clientId)
-      await recordWorkspaceEvent(sql, member.workspaceId, 'github.configured', member.userId, settings)
+      await recordWorkspaceEvent(
+        sql,
+        member.workspaceId,
+        'github.configured',
+        memberActor(memberId(member.userId)),
+        settings,
+      )
     if (previous && Object.keys(entered).length > 0)
-      await recordWorkspaceEvent(sql, member.workspaceId, 'github.secret_rotated', member.userId, {
-        secrets: Object.keys(entered),
-      })
+      await recordWorkspaceEvent(
+        sql,
+        member.workspaceId,
+        'github.secret_rotated',
+        memberActor(memberId(member.userId)),
+        {
+          secrets: Object.keys(entered),
+        },
+      )
   })
   return readGitHubSettings(database, dependencies, member)
 }

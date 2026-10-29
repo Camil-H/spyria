@@ -9,8 +9,9 @@ type Dependencies = { transactor: ProfileTransactor; gateway: LlmGateway & ToolG
 type Input = { id: string; provider: string; secret: Secret }
 
 export const addLlmCredential = async (dependencies: Dependencies, { id, ...input }: Input) => {
-  const { gateway } = dependencies
-  const credential = newLlmCredential({ ...input, id: credentialId(id) })
+  const { gateway, transactor } = dependencies
+  const allowList = await transactor.run(({ aiProviders }) => aiProviders.allowList())
+  const credential = newLlmCredential({ ...input, id: credentialId(id), allowList })
   const key = await gateway.addProviderKey({
     provider: credential.gatewayProvider,
     name: `cred_${id}`,

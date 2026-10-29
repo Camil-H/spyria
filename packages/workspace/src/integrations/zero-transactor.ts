@@ -31,6 +31,7 @@ import {
   type ChatRole,
   chatId,
   ForeignWorkspace,
+  memberActor,
   memberId,
   memberRoleId,
   projectId,
@@ -249,8 +250,8 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
       },
     },
     workspaceEvents: {
-      record: async (event) => {
-        await appendWorkspaceEvent(tx, { ...event, workspaceId: context.workspaceId })
+      record: async ({ actorId, ...event }) => {
+        await appendWorkspaceEvent(tx, { ...event, actor: memberActor(actorId), workspaceId: context.workspaceId })
       },
     },
     projects: {
@@ -292,7 +293,7 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
             workspaceId: chat.workspaceId,
             chatId: chat.id,
             type,
-            actor: actorId,
+            actor: memberActor(actorId),
             payload: eventPayloadOf[type](chat),
             createdAt: changedAt,
           })
@@ -320,7 +321,7 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
         await recordChatEvent({
           chatId: id,
           type: 'member.role_changed',
-          actor: actorId,
+          actor: memberActor(actorId),
           payload: { memberId: member, roleId },
         })
       },
@@ -337,7 +338,12 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
         ).map(toChat),
       removeParticipant: async ({ chatId: id, memberId: member, actorId }) => {
         await tx.mutate.chatParticipants.delete({ workspaceId: context.workspaceId, chatId: id, userId: member })
-        await recordChatEvent({ chatId: id, type: 'member.removed', actor: actorId, payload: { memberId: member } })
+        await recordChatEvent({
+          chatId: id,
+          type: 'member.removed',
+          actor: memberActor(actorId),
+          payload: { memberId: member },
+        })
       },
       transfer: async ({ chat, ownerId, actorId }) => {
         const participant = { workspaceId: context.workspaceId, chatId: chat.id }
@@ -347,7 +353,7 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
         await recordChatEvent({
           chatId: chat.id,
           type: 'chat.transferred',
-          actor: actorId,
+          actor: memberActor(actorId),
           payload: { fromId: chat.ownerId, toId: ownerId },
         })
       },

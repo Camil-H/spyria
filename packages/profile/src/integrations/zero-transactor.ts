@@ -21,9 +21,11 @@ import {
   zql,
 } from '@spyria/db/zero-queries'
 import {
+  aiProviderAllowListFrom,
   gatewayKeyOf,
   type MemberId,
   MemberNotFound,
+  memberActor,
   gatewayKeyRefOf as refOf,
   memberId as toMemberId,
   type WorkspaceId,
@@ -70,6 +72,13 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
       },
       permissions: () => workspacePermissionsOf(tx, workspaceId, userId),
       isActive: (workspace, id) => isActiveMember(tx, inContextWorkspace(workspace), id),
+    },
+    aiProviders: {
+      allowList: async () =>
+        aiProviderAllowListFrom(
+          (await tx.run(zql.workspaces.where('workspaceId', workspaceId).one()))?.aiProviderAllowList,
+        ),
+      setAllowList: (aiProviderAllowList) => tx.mutate.workspaces.update({ workspaceId, aiProviderAllowList }),
     },
     llmCredentials: {
       add: async ({ id, provider, last4 }, key) => {
@@ -186,7 +195,11 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
     },
     workspaceEvents: {
       record: async ({ workspaceId: workspace, ...event }) => {
-        await appendWorkspaceEvent(tx, { ...event, workspaceId: inContextWorkspace(workspace), actorId: userId })
+        await appendWorkspaceEvent(tx, {
+          ...event,
+          workspaceId: inContextWorkspace(workspace),
+          actor: memberActor(userId),
+        })
       },
     },
   }

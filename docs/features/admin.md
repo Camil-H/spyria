@@ -11,6 +11,7 @@ Everything here is in **Workspace settings** (the workspace menu), as cards in t
 | | **Roles and Permissions** | `roles.manage` |
 | | **Manage Team** | `members.invite` or `members.manage` |
 | Setup your agents | **Connect runtime** | `runtimes.manage` |
+| | **AI providers** | `providers.manage` |
 | | **MCP tools** | `tools.manage` |
 | Analyze usage | **Analyze costs** | `costs.view` or `budgets.manage` |
 | | **Audit log** | `audit.view` |
@@ -43,6 +44,7 @@ A workspace role is a named set of permissions. Two are built in and cannot be c
 | `sso.manage` | Set up SSO |
 | `github.manage` | Connect GitHub |
 | `tools.manage` | Manage shared MCP tools |
+| `providers.manage` | Manage AI providers |
 | `runtimes.manage` | Manage runtime hosts and local sessions |
 | `costs.view` | View costs |
 | `budgets.manage` | Manage budgets |
@@ -132,6 +134,18 @@ Each member's gateway key is given exactly the workspace's connections with the 
 
 When an agent acts, it uses the chat owner's access. On a guest's prompt it uses only what both the owner and the guest may use on shared connections, never the owner's personal connections, and write calls wait for the owner's approval (see [Agents](./agents.md)).
 
+## AI providers
+
+**AI providers** chooses which model providers members can use. By default every provider is allowed. Turning a provider off turns the setting into an allow-list of providers; a provider that is on allows all its models:
+
+- a member cannot add a key for a provider that is off ("OpenAI is not allowed in this workspace");
+- the models of a provider that is off are not offered in the model picker, nor chosen by routing or for sub-agents;
+- the model relay refuses a call to such a model before it reaches the gateway, and the chat shows "*Model* is not allowed in this workspace".
+
+**Allow every provider** removes the allow-list. Keys already added for a provider turned off stay in the member's profile but reach no model. Sessions on a member's own machine (Claude Code, Codex) use the member's own subscription and are not covered. Each change is recorded in the audit log.
+
+The providers are Anthropic, OpenAI, Google Gemini, Mistral, xAI, DeepSeek, Z.ai, OpenRouter and TypeSafe (decision models for routing), listed once in `packages/kernel/src/models.ts`.
+
 ## Spend
 
 **Analyze costs** reports the cost of model calls made through the gateway, for a period (this month, last month, last 30 or 90 days, or custom up to a year) at a day, week or month granularity:
@@ -150,7 +164,7 @@ Calls delegated to sub-agents count in the turn that delegated them. Every membe
 On the same page, a member with `budgets.manage` sets an optional monthly budget in dollars per member and an optional monthly total for the workspace. Months are calendar months in UTC.
 
 - **Alerts** at 80% and 100%, once per threshold per month: the member sees a banner in **My usage** and a notice above the composer; admins see a badge on the **Analyze costs** card and the list of members above 80%.
-- **Hard stop** at 100%: the member's model calls are refused before reaching the provider, including the calls of their running sub-agents and the routing call of their next turn. The chat shows "<Name>'s monthly AI budget is used up; an admin can raise it in Workspace settings". Once the workspace total is reached, every member is refused with the workspace's wording.
+- **Hard stop** at 100%: the member's model calls are refused before reaching the provider, including the calls of their running sub-agents and the routing call of their next turn. The chat shows "<Name>'s monthly AI budget is used up; a member with the Manage budgets permission can raise it in Workspace settings". Once the workspace total is reached, every member is refused with the workspace's wording.
 - Raising or removing the budget lets the member prompt again at once.
 
 Spend is counted from the gateway's usage records, which Spyria reads every few seconds, and a call is priced only after it ran. A budget can therefore be exceeded by the calls of the last few seconds, typically cents.
@@ -167,12 +181,12 @@ At the bottom of **Workspace settings**, an Admin finds **Delete workspace**. It
 
 ## Audit log
 
-**Audit log** shows, newest first, who changed what in the workspace: time, person ("System" when no member acted), action in plain words, target, and details on expand. It merges:
+**Audit log** shows, newest first, who changed what in the workspace: time, person (a member; "Alice's agent" for what an agent did in Alice's turn; "System" for a job, with the member it acted for when there is one; "GitHub" for pull request changes from GitHub), action in plain words, target, and details on expand. It merges:
 
 | Group | Records |
 |---|---|
 | Members | invites, revoked invites, joins, role changes, removals |
-| Workspace | workspace deleted, restored by the operator |
+| Workspace | workspace deleted, restored by the operator, AI providers allow-list changed |
 | Sign-in | SSO configured, client secret replaced, domain verified |
 | GitHub | App configured, App secrets replaced |
 | Connections | shared connections added, changed, removed, member restrictions |
@@ -182,7 +196,7 @@ At the bottom of **Workspace settings**, an Admin finds **Delete workspace**. It
 | Budgets | budget changes, thresholds reached |
 | Roles | custom chat and workspace roles created, changed, deleted |
 
-The log records metadata only, with one exception: a **Deleted a message** record shows the text the message had when it was deleted, in any chat, private ones included, since that text is no longer shown in the chat itself. It never shows the body of a message that is still in a chat. Filter by person, group and date range; **Export CSV** downloads the filtered records.
+The log records metadata only, with one exception: a **Deleted a message** record shows the text the message had when it was deleted, in any chat, private ones included, since that text is no longer shown in the chat itself. It never shows the body of a message that is still in a chat. Filter by person (which also lists what was done on their behalf), group and date range; **Export CSV** downloads the filtered records.
 
 **Keep audit records** is Forever by default, or a number of days (1 to 36,500). A daily job deletes workspace events, tool call records and the texts of deleted messages older than that. Chat events are the conversation history itself and are deleted only with the workspace; past the retention they only drop out of the audit view. Changing the retention is itself recorded.
 

@@ -28,5 +28,21 @@ test.each([
   ['a member stopping the agent is done', false, notice(stoppedByNoticeOf('Alice')), 'done'],
   ['a new session notice is done', false, notice(agentNotices.newSession), 'done'],
 ] as const)('%s', (_, isTurnActive, latestActivity, status) => {
-  expect(agentStatusOf({ isTurnActive, latestActivity })).toBe(status)
+  expect(agentStatusOf({ isTurnActive, isRuntimeAsleep: false, latestActivity })).toBe(status)
+})
+
+test.each([
+  ['a finished turn on a runtime asleep is sleeping', false, answer, 'sleeping'],
+  [
+    'a member stopping the agent before its runtime fell asleep is sleeping',
+    false,
+    notice(stoppedByNoticeOf('Alice')),
+    'sleeping',
+  ],
+  ['an error stays an error once the runtime is asleep', false, notice(agentNotices.stoppedWithError), 'error'],
+  ['an open question still waits once the runtime is asleep', false, question(), 'waiting'],
+  ['a turn waking the runtime is working', true, answer, 'working'],
+  ['a runtime asleep before the agent ever answered has no status', false, undefined, null],
+] as const)('%s', (_, isTurnActive, latestActivity, status) => {
+  expect(agentStatusOf({ isTurnActive, isRuntimeAsleep: true, latestActivity })).toBe(status)
 })

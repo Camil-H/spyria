@@ -1,4 +1,4 @@
-import { DomainError, type MemberId, requireChatPermission } from '@spyria/kernel'
+import { agentActor, DomainError, type MemberId, requireChatPermission } from '@spyria/kernel'
 import type { AgentChat, RepositoryCheckouts } from '../contracts/agent.ts'
 import { asleepRefusal } from '../domain/git-actions.ts'
 import {
@@ -65,9 +65,14 @@ export const callGitHubTool = async (dependencies: Dependencies, { chat, memberI
   const call = githubToolCallOf(name, input)
   if ('refusal' in call) return refused(call.refusal)
   if (call.tool === 'publish')
-    return publishBranch(dependencies, { chat, memberId, action: call.action, draft: call.draft })
+    return publishBranch(dependencies, {
+      chat,
+      actor: agentActor(chat.chatId, memberId),
+      action: call.action,
+      draft: call.draft,
+    })
   if (call.tool === 'update_pull_request')
-    return updatePullRequest(dependencies, { chat, memberId, change: call.change })
+    return updatePullRequest(dependencies, { chat, actor: agentActor(chat.chatId, memberId), change: call.change })
   const { transactor, checkouts } = dependencies
   const { baseBranch, pullRequestNumber } = await transactor.run(async ({ chats, messages }) => {
     await requireChatPermission(chats, chat.chatId, memberId, 'chat.read')

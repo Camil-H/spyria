@@ -11,8 +11,8 @@ export const restoreWorkspace = async (database: Database, workspaceId: string) 
     if (!workspace) return false
     await sql`delete from jobs where workspace_id = ${workspaceId} and type = ${workspacePurgeJobType}`
     await sql`
-      insert into workspace_events (workspace_id, id, type, actor_id, payload, created_at)
-      values (${workspaceId}, ${crypto.randomUUID()}, 'workspace.restored', 'operator', '{}'::jsonb, now())`
+      insert into workspace_events (workspace_id, id, type, actor_kind, actor_id, payload, created_at)
+      values (${workspaceId}, ${crypto.randomUUID()}, 'workspace.restored', 'system', 'operator', '{}'::jsonb, now())`
     return true
   })
   if (!restored) throw new Error(`Workspace ${workspaceId} is not scheduled for deletion, or its purge has started`)

@@ -17,7 +17,7 @@ export const BudgetNotice = ({ workspaceId, memberId }: { workspaceId: Workspace
       className={`rounded-md px-3 py-2 text-sm ${threshold >= 100 ? 'bg-removed' : 'border border-line bg-raised'}`}
     >
       {threshold >= 100
-        ? 'Your monthly AI budget is used up; an admin can raise it in Workspace settings'
+        ? 'Your monthly AI budget is used up; a member with the Manage budgets permission can raise it in Workspace settings'
         : `You have used ${threshold}% of your monthly AI budget`}
     </p>
   )
