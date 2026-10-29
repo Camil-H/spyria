@@ -373,9 +373,8 @@ test('a private channel reaches only its participants; one made private through 
   await waitFor(() => sees(leeStore, lounge)() && sees(bobStore, lounge)())
   expect(sees(leeStore, backroom)()).toBe(false)
   expect(sees(bobStore, backroom)()).toBe(false)
-  await (
-    await bobStore.mutate(acme, conversationMutators.conversation.joinChannel({ workspaceId: acme, chatId: lounge }))
-  ).confirmation
+  await (await bobStore.mutate(acme, conversationMutators.conversation.joinChat({ workspaceId: acme, chatId: lounge })))
+    .confirmation
   const changeVisibility = (visibility: 'public' | 'private') =>
     aliceStore.mutate(
       acme,

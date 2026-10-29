@@ -281,9 +281,9 @@ export const ChatView = ({
             type="button"
             className={buttonClass}
             disabled={join.isPending}
-            onClick={() => join.run(() => commands.joinChannel({ workspaceId, chatId }))}
+            onClick={() => join.run(() => commands.joinChat({ workspaceId, chatId }))}
           >
-            Join channel
+            {conversation.type === 'channel' ? 'Join channel' : 'Join chat'}
           </button>
           <ErrorMessage message={join.errorMessage} />
         </div>

@@ -250,10 +250,10 @@ test.each(
     refusal:
       row.role === 'outsider' ? missingPermission('chat.read') : failedWith('This member is already in the chat'),
   })),
-)('joinChannel joins a public channel once, as Prompter: $name', async ({ member, isAllowed, refusal, ...role }) => {
+)('joinChat joins a public channel once, as Prompter: $name', async ({ member, isAllowed, refusal, ...role }) => {
   const chat = await chatAs(role, 'channel')
   const participantsBefore = await participantsOf(chat)
-  expect(await memberChange(member, 'joinChannel', chat)).toEqual(isAllowed ? succeeded : refusal)
+  expect(await memberChange(member, 'joinChat', chat)).toEqual(isAllowed ? succeeded : refusal)
   expect(await participantsOf(chat)).toEqual(
     isAllowed ? { ...participantsBefore, [member.userId]: 'prompter' } : participantsBefore,
   )
@@ -270,11 +270,14 @@ test.each(
       : [],
   )
   if (isAllowed)
-    expect(await memberChange(member, 'joinChannel', chat)).toEqual(failedWith('This member is already in the chat'))
+    expect(await memberChange(member, 'joinChat', chat)).toEqual(failedWith('This member is already in the chat'))
 })
 
-test('joinChannel refuses a runtime chat to a non-participant', async () => {
-  const chat = await newChat()
-  expect(await memberChange(bobInAcme, 'joinChannel', chat)).toEqual(missingPermission('chat.read'))
-  expect(await participantsOf(chat)).toEqual({ [alice]: 'owner' })
+test('joinChat refuses a private AI chat to a non-participant and joins a public one as Prompter', async () => {
+  const privateChat = await newChat()
+  expect(await memberChange(bobInAcme, 'joinChat', privateChat)).toEqual(missingPermission('chat.read'))
+  expect(await participantsOf(privateChat)).toEqual({ [alice]: 'owner' })
+  const publicChat = await newChat({ visibility: 'public' })
+  expect(await memberChange(bobInAcme, 'joinChat', publicChat)).toEqual(succeeded)
+  expect(await participantsOf(publicChat)).toEqual({ [alice]: 'owner', [bob]: 'prompter' })
 })

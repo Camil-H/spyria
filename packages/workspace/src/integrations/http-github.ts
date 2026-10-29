@@ -1,4 +1,4 @@
-import { type ChatId, chatId, type ProjectId, refusalOf, type WorkspaceId } from '@spyria/kernel'
+import { type ChatId, type ChatVisibility, chatId, type ProjectId, refusalOf, type WorkspaceId } from '@spyria/kernel'
 import type { GitHubRepository, GitHubSettingsInput, GitHubSettingsView } from '../domain/github.ts'
 
 export const githubSettingsPath = '/api/github-settings'
@@ -56,6 +56,7 @@ export const createHttpGitHubCommands = (postAsMember: PostAsMember, getAsMember
     projectId: ProjectId | null
     repository: string
     baseBranch: string
+    visibility?: ChatVisibility
   }): Promise<ChatId> =>
     chatId(
       (await bodyOf<{ chatId: string }>(await postAsMember(workspaceId, devChatsPath, JSON.stringify(input)))).chatId,

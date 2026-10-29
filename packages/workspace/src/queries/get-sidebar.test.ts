@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { acme, alice, bob, createMockSnapshot, lee } from '@spyria/db'
 import type { MemberId } from '@spyria/kernel'
-import { withChannel } from '../domain/testing.ts'
+import { withChat } from '../domain/testing.ts'
 import { getSidebar } from './get-sidebar.ts'
 
 const sidebarChatsOf = (viewerId: MemberId, snapshot = createMockSnapshot()) => {
@@ -40,7 +40,7 @@ test.each([
 
 test('a public channel joins the sidebar when the member becomes a participant, a private one too', () => {
   const lounge = (participantIds: MemberId[]) =>
-    withChannel(withChannel(createMockSnapshot(), { name: 'Lounge', visibility: 'public', participantIds }), {
+    withChat(withChat(createMockSnapshot(), { name: 'Lounge', visibility: 'public', participantIds }), {
       name: 'Backroom',
       visibility: 'private',
       participantIds,

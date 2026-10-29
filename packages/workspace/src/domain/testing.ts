@@ -32,19 +32,20 @@ export const chatInAcme: Chat = {
   originChatId: null,
 }
 
-export const withChannel = (
+export const withChat = (
   snapshot: Snapshot,
   {
     name,
     visibility,
+    type = 'channel',
     participantIds = [],
-  }: { name: string; visibility: ChatRow['visibility']; participantIds?: MemberId[] },
+  }: { name: string; visibility: ChatRow['visibility']; type?: ChatRow['type']; participantIds?: MemberId[] },
 ): Snapshot => {
   const welcome = snapshot.chats.find((chat) => chat.name === 'Welcome') as ChatRow
   const id = chatId(`chat-${name.toLowerCase()}`)
   return {
     ...snapshot,
-    chats: [...snapshot.chats, { ...welcome, id, name, visibility, ownerId: bob, projectId: null }],
+    chats: [...snapshot.chats, { ...welcome, id, name, type, visibility, ownerId: bob, projectId: null }],
     chatMembers: [
       ...snapshot.chatMembers,
       { workspaceId: welcome.workspaceId, chatId: id, memberId: bob, roleId: 'owner' },
