@@ -203,27 +203,19 @@ test('concurrent senders, and concurrent messages and chat changes, get unique g
   await expectGapFreeSeqs()
 })
 
-test('a migrated tool-call row equals the rebuild of its events', async () => {
+test('a legacy tool-call event rebuilds into a command step', async () => {
   await database.$client`
     insert into chats (workspace_id, id, type, visibility, owner_kind, owner_user_id, name, archived, created_at)
     values (${acme}, 'chat-legacy', 'runtime', 'private', 'user', ${alice}, 'Legacy chat', false, now())`
-  const migrations = new URL('../../../packages/db/drizzle/', import.meta.url).pathname
-  const [migrationPath] = await Array.fromAsync(new Bun.Glob('*_agent_steps/migration.sql').scan(migrations))
-  const migration = await Bun.file(`${migrations}${migrationPath}`).text()
-  const update = migration.split('--> statement-breakpoint').find((statement) => statement.includes("'tool-call'"))
-  const createdAt = '2026-09-30T10:02:00.000Z'
   const legacy = { kind: 'tool-call', body: 'Ran: bun install', detail: 'Done in 35s', replyToId: null }
   await database.$client`
-    insert into messages (workspace_id, chat_id, id, seq, kind, body, detail, created_at)
-    values (${acme}, 'chat-legacy', 'message-legacy', 1, 'tool-call', ${legacy.body}, ${legacy.detail}, ${createdAt}::timestamptz)`
-  await database.$client`
     insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
-    values (${acme}, 'chat-legacy', 'message-legacy', 1, 'message.posted', null, ${JSON.stringify(legacy)}::jsonb, ${createdAt}::timestamptz)`
-  await database.$client.unsafe(update ?? 'missing migration')
+    values (${acme}, 'chat-legacy', 'message-legacy', 1, 'message.posted', null, ${JSON.stringify(legacy)}::jsonb, now())`
 
-  const legacyMessages = () => database.query.messages.findMany({ where: { chatId: 'chat-legacy' } })
-  const migrated = await legacyMessages()
-  expect(migrated.map(({ kind, body, step }) => ({ kind, body, step }))).toEqual([
+  await rebuild({ chatId: 'chat-legacy' })
+
+  const rebuilt = await database.query.messages.findMany({ where: { chatId: 'chat-legacy' } })
+  expect(rebuilt.map(({ kind, body, step }) => ({ kind, body, step }))).toEqual([
     {
       kind: 'step',
       body: 'Ran: bun install',
@@ -237,6 +229,4 @@ test('a migrated tool-call row equals the rebuild of its events', async () => {
       },
     },
   ])
-  await rebuild({ chatId: 'chat-legacy' })
-  expect(await legacyMessages()).toEqual(migrated)
 })

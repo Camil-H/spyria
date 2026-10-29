@@ -28,7 +28,7 @@ const agentStoppedWithError = async (workerStack: WorkerStack, chatId: string) =
       ), posted as (
         insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
         select 'workspace-acme', ${chatId}, id, seq, 'message.posted', null,
-          jsonb_build_object('kind', kind, 'body', body, 'detail', null, 'replyToId', null), now()
+          jsonb_build_object('kind', kind, 'body', body, 'replyToId', null), now()
         from agent_rows
       )
       insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)

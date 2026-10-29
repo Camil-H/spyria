@@ -98,7 +98,6 @@ const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
       payload: {
         kind: message.kind,
         body: message.body,
-        detail: message.detail,
         step: message.step,
         replyToId: message.replyToId,
       },

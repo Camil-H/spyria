@@ -102,13 +102,7 @@ const agentStored = (seq: number, event: AgentEvent) =>
 test('messagesFromEvents projects stored agent events into steps like the live recorder and maps legacy tool calls', () => {
   const command = { title: 'echo hello', kind: 'execute', rawInput: { command: 'echo hello' } }
   const projected = messagesFromEvents([
-    storedEvent(
-      1,
-      'message.posted',
-      { kind: 'member', body: 'Say hello', detail: null, replyToId: null },
-      'prompt',
-      10,
-    ),
+    storedEvent(1, 'message.posted', { kind: 'member', body: 'Say hello', replyToId: null }, 'prompt', 10),
     agentStored(2, toolCall(14, 'echo', command)),
     agentStored(3, finished(15, 'echo', { ...command, rawOutput: { formatted_output: 'hello', exit_code: 0 } })),
     agentStored(4, acpUpdate(16, { sessionUpdate: 'agent_message', text: 'Done.' })),
