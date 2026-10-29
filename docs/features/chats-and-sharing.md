@@ -1,6 +1,6 @@
 # Chats and sharing
 
-This page describes how conversations are organized in a Spyria workspace and how members share them: projects, channels, runtime chats, threads, links to messages, search, keyboard shortcuts, unread state, chat roles, forking and starting an agent from a channel thread. It is written for members and for contributors who need the rules the server enforces. Agent behaviour inside a runtime chat is in [Agents](./agents.md); dev chats on repositories are in [Dev mode](./dev-mode.md).
+This page describes how conversations are organized in a Spyria workspace and how members share them: projects, channels, runtime chats, threads, replies, links to messages, search, keyboard shortcuts, unread state, chat roles, forking and starting an agent from a channel thread. It is written for members and for contributors who need the rules the server enforces. Agent behaviour inside a runtime chat is in [Agents](./agents.md); dev chats on repositories are in [Dev mode](./dev-mode.md).
 
 ## Projects and chats
 
@@ -43,7 +43,13 @@ Changing a channel's visibility needs the chat admin permission. When a channel 
 
 ## Message actions
 
-In a channel, pointing at a message, or moving the keyboard focus into it, shows its actions side by side at its top right, each an icon that names itself on hover: **Reply in thread** (top-level messages, for members who can post), **Start runtime from this message**, **Copy message as context** (**Copy thread as context** when the message has replies or is one), **Copy link to message**, and, for its author only, **Edit** and **Delete**. An action a member cannot take is not shown. The actions are one stop for Tab; the left and right arrow keys, Home and End move between them. In a runtime chat, members' messages and the agent's replies offer **Copy link to message** only.
+In a channel, pointing at a message, or moving the keyboard focus into it, shows its actions side by side at its top right, each an icon that names itself on hover: **Reply in thread** (top-level messages, for members who can post), **Reply** (for members who can post), **Start runtime from this message**, **Copy message as context** (**Copy thread as context** when the message has replies or is one), **Copy link to message**, and, for its author only, **Edit** and **Delete**. An action a member cannot take is not shown. The actions are one stop for Tab; the left and right arrow keys, Home and End move between them. In a runtime chat, members' messages and the agent's replies offer **Reply** (for members who can post) and **Copy link to message** only.
+
+## Replies
+
+**Reply** quotes a member's message or the agent's reply in the next message: the composer shows "Replying to" its author with the start of its text, and **Cancel reply** drops it. Replying to a thread reply quotes it in that thread's composer. The sent message shows the quote above its text, with the original's author and current text; clicking it goes to the original, as a [link to it](#links-to-messages) does, loading earlier messages if needed. The quote holds no copy of the text: an edit of the original shows in it, and a deleted original shows as "This message was deleted". The server accepts a quote only of a member's or the agent's message of the same chat that is not deleted.
+
+In a runtime chat, a prompt that replies to a message reaches the agent with that message quoted before the prompt, with its author and time, so the agent knows what it answers.
 
 ## Links to messages
 

@@ -1,3 +1,4 @@
+import type { MessageId } from '@spyria/kernel'
 import { createCommandsContext } from '@spyria/ui'
 import { createContext, type ReactNode } from 'react'
 import type { AgentStream, ConversationCommands } from './commands.ts'
@@ -42,3 +43,10 @@ export const LoadedRemoteImagesContext = createContext<{
 } | null>(null)
 
 export const LinkedMessageContext = createContext<string | null>(null)
+
+export type ComposerQuote = Readonly<{ id: MessageId; authorName: string; body: string }>
+
+export const QuoteContext = createContext<{
+  quoteIn: (threadRootId: MessageId | null) => ComposerQuote | null
+  setQuote: (threadRootId: MessageId | null, quote: ComposerQuote | null) => void
+} | null>(null)

@@ -56,6 +56,8 @@ const crossTenantWrites = {
     database.insert(messages).values(message({ replyToId: 'message-welcome-1' })),
   'a thread reply to a message of another workspace': () =>
     database.insert(messages).values(message({ threadRootId: 'message-welcome-1' })),
+  'a reply quoting a message of another workspace': () =>
+    database.insert(messages).values(message({ quotedMessageId: 'message-welcome-1' })),
   'a thread read marker on a message of another workspace': () =>
     database.insert(threadReadMarkers).values({
       workspaceId: 'workspace-globex',
@@ -117,9 +119,12 @@ test('refuses a chat role without chat.read', async () => {
   ).toMatchObject({ code: '23514' })
 })
 
-test('a same-tenant message and thread reply are accepted', async () => {
+test('a same-tenant message, thread reply and quoting reply are accepted', async () => {
   expect(await refusalOf(database.insert(messages).values(message({})))).toBe('accepted')
   expect(await refusalOf(database.insert(messages).values(message({ threadRootId: 'message-general-1' })))).toBe(
+    'accepted',
+  )
+  expect(await refusalOf(database.insert(messages).values(message({ quotedMessageId: 'message-general-1' })))).toBe(
     'accepted',
   )
 })

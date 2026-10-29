@@ -49,6 +49,7 @@ test('messagesFromEvents folds posted, replied, thread reply, edited and deleted
       step: null,
       replyToId: null,
       threadRootId: null,
+      quotedMessageId: null,
       createdAt: minute(1),
       editedAt: minute(3),
       deletedAt: null,
@@ -66,6 +67,7 @@ test('messagesFromEvents folds posted, replied, thread reply, edited and deleted
       step: null,
       replyToId: 'question',
       threadRootId: null,
+      quotedMessageId: null,
       createdAt: minute(2),
       editedAt: null,
       deletedAt: null,
@@ -83,6 +85,7 @@ test('messagesFromEvents folds posted, replied, thread reply, edited and deleted
       step: null,
       replyToId: null,
       threadRootId: 'question',
+      quotedMessageId: null,
       createdAt: minute(4),
       editedAt: null,
       deletedAt: minute(5),
@@ -148,4 +151,14 @@ test('messagesFromEvents keeps attachments through an edit and drops them with a
   expect(attachmentsAfter(eventAt(2, 'message.deleted', 'alice', { messageId: 'photo' }))).toEqual([
     { body: '', attachments: [] },
   ])
+})
+
+test('a posted reply keeps the message it quotes, also in a thread', () => {
+  const [, reply, threadReply] = messagesFromEvents([
+    eventAt(1, 'message.posted', 'alice', { ...posted, body: 'Hello' }, 'hello'),
+    eventAt(2, 'message.posted', 'bob', { ...posted, body: 'Hi', quotedMessageId: 'hello' }, 'reply'),
+    eventAt(3, 'message.posted', 'bob', { ...posted, body: 'Yes', threadRootId: 'hello', quotedMessageId: 'reply' }),
+  ])
+  expect(reply).toMatchObject({ id: 'reply', quotedMessageId: 'hello', threadRootId: null })
+  expect(threadReply).toMatchObject({ quotedMessageId: 'reply', threadRootId: 'hello' })
 })
