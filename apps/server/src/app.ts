@@ -77,8 +77,12 @@ import {
   ownBudgetPath,
   ownSpendFromRequest,
   ownSpendPath,
+  ownSpendTrendFromRequest,
+  ownSpendTrendPath,
   spendPath,
+  spendTrendPath,
   workspaceSpendFromRequest,
+  workspaceSpendTrendFromRequest,
 } from '@spyria/usage/server'
 import {
   createDevChatFromRequest,
@@ -616,6 +620,16 @@ export const createApp = ({
     .get(ownSpendPath, (context) =>
       endpointResponse('Reading own usage', 200, () =>
         ownSpendFromRequest(context.get('transact'), context.get('zeroContext'), context.req.query()),
+      ),
+    )
+    .get(spendTrendPath, (context) =>
+      endpointResponse('Reading the workspace spend over time', 200, () =>
+        workspaceSpendTrendFromRequest(context.get('transact'), context.get('zeroContext'), context.req.query()),
+      ),
+    )
+    .get(ownSpendTrendPath, (context) =>
+      endpointResponse('Reading own usage over time', 200, () =>
+        ownSpendTrendFromRequest(context.get('transact'), context.get('zeroContext'), context.req.query()),
       ),
     )
     .get(auditRetentionPath, (context) =>

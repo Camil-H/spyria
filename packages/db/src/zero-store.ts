@@ -228,7 +228,7 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
   const usageRowsOf = memoizedOnSources((chatUsage: ZeroRows['usageEntries'], monthUsage: ZeroRows['usageEntries']) =>
     uniqueBy(
       [...chatUsage, ...monthUsage],
-      (entry) => `${entry.workspaceId}/${entry.month}/${entry.chatId}/${entry.userId}`,
+      (entry) => `${entry.workspaceId}/${entry.month}/${entry.chatId}/${entry.userId}/${entry.model}`,
     ),
   )
   const invitationsOf = mappedRows(({ workspaceId, id, email, role, expiresAt }: ZeroRows['invitations'][number]) => ({

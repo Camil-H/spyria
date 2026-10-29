@@ -5,10 +5,12 @@ import {
   agentReplyText,
   chipOf,
   expect,
+  expectModelMetered,
   mainOf,
   messageItemsOf,
   newRuntimeChat,
   openChat,
+  openPanelTab,
   openSession,
   type Page,
   sendMessage,
@@ -175,7 +177,7 @@ test.describe('Models', () => {
     await expect(page.getByRole('tooltip')).toHaveText(/^Context: (\d+% full, 2 of [\d,]+|2) tokens$/)
   })
 
-  test('As a prompter, I switch the model by hand: I am warned about the reread, the history stays and every viewer sees the new model', {
+  test('As a prompter, I switch the model by hand: I am warned about the reread, the history stays, every viewer sees the new model and the chat’s Usage tab meters both models', {
     tag: ['@spec-15', '@smoke'],
   }, async ({ page, browser, workerStack }) => {
     await addParticipant(workerStack, await newRuntimeChat(page, 'Switched'), 'member-bob', 'reader')
@@ -199,6 +201,10 @@ test.describe('Models', () => {
     await promptAndWait(page, 'Continue on large', 2)
     await expect(messageItemsOf(page).filter({ hasText: 'Start on the default' })).toBeVisible()
     await expect(mainOf(page)).not.toContainText('new session')
+
+    await openPanelTab(page, 'Switched', 'Usage')
+    await expectModelMetered(page, workerStack, 'Mistral Medium')
+    await expectModelMetered(page, workerStack, 'Mistral Large')
   })
 
   test('As a prompter, I change the effort, set between the main model and the subagents, and the next turn runs on the same model at that effort with the context kept', {

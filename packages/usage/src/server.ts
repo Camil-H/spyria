@@ -7,7 +7,9 @@ export {
   createBudgetGuard,
   ownBudgetFromRequest,
   ownSpendFromRequest,
+  ownSpendTrendFromRequest,
   workspaceSpendFromRequest,
+  workspaceSpendTrendFromRequest,
 } from './entrypoints/endpoints.ts'
 export { auditJobs, createUsageJobs, syncUsageNow } from './entrypoints/jobs.ts'
 export { createBifrostUsageLogs } from './integrations/bifrost-usage-logs.ts'
@@ -18,4 +20,10 @@ export {
   createHttpAuditLogCommands,
 } from './integrations/http-audit-log.ts'
 export { budgetsPath, createHttpBudgetCommands, ownBudgetPath } from './integrations/http-budgets.ts'
-export { createHttpSpendCommands, ownSpendPath, spendPath } from './integrations/http-spend.ts'
+export {
+  createHttpSpendCommands,
+  ownSpendPath,
+  ownSpendTrendPath,
+  spendPath,
+  spendTrendPath,
+} from './integrations/http-spend.ts'

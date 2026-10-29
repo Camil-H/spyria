@@ -22,6 +22,12 @@ export const ChatUsageTable = ({ workspaceId, chatId }: { workspaceId: Workspace
         rows={usage.rows.map((row) => ({ ...row, key: row.memberId }))}
         total={usage.total}
       />
+      <UsageTable
+        label="Usage by model"
+        heading="Model"
+        rows={usage.models.map((row) => ({ ...row, key: row.model }))}
+        total={usage.total}
+      />
     </div>
   )
 }

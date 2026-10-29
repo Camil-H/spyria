@@ -4,9 +4,16 @@ export const spendPeriods = ['this_month', 'last_month', 'last_30_days', 'last_9
 export const spendGranularities = ['day', 'week', 'month'] as const
 export type SpendPeriod = (typeof spendPeriods)[number]
 export type SpendGranularity = (typeof spendGranularities)[number]
-export type SpendDimension = 'member' | 'project' | 'chat' | 'model'
+export const spendDimensions = ['member', 'project', 'chat', 'model'] as const
+export type SpendDimension = (typeof spendDimensions)[number]
 export type SpendRange = { from: Date; to: Date }
-export type SpendFilter = { current: SpendRange; previous: SpendRange; granularity: SpendGranularity }
+export type SpendScope = { dimension: SpendDimension; key: string }
+export type SpendFilter = {
+  current: SpendRange
+  previous: SpendRange
+  granularity: SpendGranularity
+  scope: SpendScope | null
+}
 
 export type SpendTotals = { costMicros: number; tokens: number; requests: number }
 export type SpendDimensionRow = SpendTotals & {
@@ -16,6 +23,7 @@ export type SpendDimensionRow = SpendTotals & {
   name: string
 }
 export type SpendCounts = SpendTotals & { users: number; sessions: number; turns: number }
+export type SpendBucketCounts = SpendCounts & { bucket: string }
 export type SpendRow = SpendTotals & { key: string; name: string; share: number }
 export type SpendChart = { buckets: string[]; series: { key: string; name: string; costs: number[] }[] }
 export const spendFactorNames = [
@@ -102,11 +110,17 @@ const rangesOf = (period: SpendPeriod, query: Readonly<Record<string, string | u
   return { current, previous: precedingRangeOf(current) }
 }
 
+const scopeOf = ({ scope, scopeKey }: Readonly<Record<string, string | undefined>>): SpendScope | null => {
+  if (!scope && !scopeKey) return null
+  if (!spendDimensions.includes(scope as SpendDimension) || !scopeKey) throw new InvalidSpendFilter()
+  return { dimension: scope as SpendDimension, key: scopeKey }
+}
+
 export const spendFilterFrom = (query: Readonly<Record<string, string | undefined>>, now: Date): SpendFilter => {
   const period = (query.period || 'this_month') as SpendPeriod
   const granularity = (query.granularity || 'day') as SpendGranularity
   if (!spendPeriods.includes(period) || !spendGranularities.includes(granularity)) throw new InvalidSpendFilter()
-  return { ...rangesOf(period, query, now), granularity }
+  return { ...rangesOf(period, query, now), granularity, scope: scopeOf(query) }
 }
 
 const bucketStartOf = (date: Date, granularity: SpendGranularity) => {
@@ -170,7 +184,7 @@ export const spendChartOf = (
 
 const ratioOf = (numerator: number, denominator: number) => (denominator === 0 ? null : numerator / denominator)
 
-const factorValuesOf = (counts: SpendCounts): Record<SpendFactorName, number | null> => ({
+export const factorValuesOf = (counts: SpendCounts): Record<SpendFactorName, number | null> => ({
   users: counts.users,
   sessionsPerUser: ratioOf(counts.sessions, counts.users),
   turnsPerSession: ratioOf(counts.turns, counts.sessions),
@@ -202,6 +216,15 @@ export const decompositionOf = (current: SpendCounts, previous: SpendCounts): Sp
   return { factors, biggestMover: biggest?.name ?? null, current, previous }
 }
 
+export const noSpendCounts: SpendCounts = { users: 0, sessions: 0, turns: 0, requests: 0, tokens: 0, costMicros: 0 }
+
+export const spendTrendOf = (filter: SpendFilter, bucketCounts: readonly SpendBucketCounts[]): SpendBucketCounts[] => {
+  const countsByBucket = new Map(bucketCounts.map((counts) => [counts.bucket, counts]))
+  return bucketStartsOf(filter.current, filter.granularity).map(
+    (bucket) => countsByBucket.get(bucket) ?? { ...noSpendCounts, bucket },
+  )
+}
+
 export const mergedPullsCostOf = (pulls: readonly MergedPull[]): MergedPullsCost => {
   const costMicros = [...new Map(pulls.map((pull) => [pull.chatId, pull.costMicros])).values()].reduce(
     (sum, cost) => sum + cost,
@@ -231,7 +254,7 @@ export const spendReportOf = ({
     to: filter.current.to.toISOString(),
     previousFrom: filter.previous.from.toISOString(),
     granularity: filter.granularity,
-    total: spendTotalOf([counts.current]),
+    total: spendTotalOf(rows.filter((row) => row.dimension === tableDimensions[0])),
     charts: Object.fromEntries(chartDimensions.map((dimension) => [dimension, spendChartOf(rows, dimension, buckets)])),
     tables: Object.fromEntries(tableDimensions.map((dimension) => [dimension, spendRowsOf(rows, dimension)])),
     decomposition: decompositionOf(counts.current, counts.previous),

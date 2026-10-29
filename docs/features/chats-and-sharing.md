@@ -132,7 +132,7 @@ When an admin removes a member, that member's runtime chats are **frozen**: they
 
 ## Side panel
 
-The side panel next to a chat has tabs that depend on the chat type. Runtime chats have **Files**, **Changes**, **Commits**, **Browser**, **Usage**, **Connected tools** and **Members**; channels have **Browser**, **Sources**, **Usage**, **Connected tools** and **Members**. **Usage** breaks down the chat's model spend per member, and **Connected tools** lists the workspace and personal connections the agent can use. The dev tabs are described in [Dev mode](./dev-mode.md). **Sources** is a placeholder: nothing fills it yet. **R** collapses or expands the side panel, and **R** then a number opens it on that tab; each tab's tooltip shows its shortcut.
+The side panel next to a chat has tabs that depend on the chat type. Runtime chats have **Files**, **Changes**, **Commits**, **Browser**, **Usage**, **Connected tools** and **Members**; channels have **Browser**, **Sources**, **Usage**, **Connected tools** and **Members**. **Usage** breaks down the chat's model spend per member and per model, and **Connected tools** lists the workspace and personal connections the agent can use. The dev tabs are described in [Dev mode](./dev-mode.md). **Sources** is a placeholder: nothing fills it yet. **R** collapses or expands the side panel, and **R** then a number opens it on that tab; each tab's tooltip shows its shortcut.
 
 ### Browser
 

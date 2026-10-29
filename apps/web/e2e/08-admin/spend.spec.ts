@@ -13,7 +13,7 @@ import {
   openSettings,
   type Page,
   sendMessage,
-  serverUrl,
+  syncUsage,
   tabPanelOf,
   test,
 } from '../fixtures'
@@ -103,6 +103,47 @@ test.describe('Spend', () => {
       await expect(decomposition.getByRole('row').last()).toHaveCSS('font-weight', '600')
     })
 
+    test('As a member who can view costs, I narrow the decomposition to one model, open a factor’s daily line chart under it and close it again, and the same for the total', {
+      tag: ['@spec-45'],
+    }, async ({ page }) => {
+      await openSettings(page, 'Analyze costs')
+      const section = usageSectionOf(page, 'Usage')
+      await section.getByRole('combobox', { name: 'For' }).selectOption({ label: 'Model' })
+      await section.getByRole('combobox', { name: 'Model' }).selectOption({ label: 'anthropic/claude-sonnet' })
+      const decomposition = tableOf(section, 'Spend decomposition')
+      await expect(rowOf(decomposition, 'Users').getByRole('cell').first()).toHaveText('1')
+      expect(await cellTextsOf(rowOf(decomposition, 'Users'))).toEqual(['1', '1', '0%'])
+      await expect(decomposition.locator('tr[aria-current="true"]').getByRole('rowheader')).toHaveText(
+        'Tokens per request · Biggest mover',
+      )
+      await expect(section).toContainText('$0.08 · 8 requests')
+      await expect(rowOf(tableOf(section, 'Usage by member'), 'Total')).toContainText('$0.08')
+
+      const now = new Date()
+      const dayOf = (day: number) =>
+        new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), day)).toLocaleDateString('en-US', {
+          timeZone: 'UTC',
+          month: 'short',
+          day: 'numeric',
+        })
+      const requestsPerTurn = decomposition.getByRole('button', { name: 'Requests per turn' })
+      await requestsPerTurn.click()
+      await expect(requestsPerTurn).toHaveAttribute('aria-expanded', 'true')
+      await expect(decomposition.getByRole('img', { name: 'Requests per turn over time' })).toBeVisible()
+      const requestsChart = decomposition.getByRole('table', { name: 'Requests per turn over time' })
+      expect(await cellTextsOf(rowOf(requestsChart, dayOf(2)))).toEqual(['1'])
+      expect(await cellTextsOf(rowOf(requestsChart, dayOf(3)))).toEqual(['2'])
+      await requestsPerTurn.click()
+      await expect(requestsPerTurn).toHaveAttribute('aria-expanded', 'false')
+      await expect(decomposition.getByRole('img', { name: 'Requests per turn over time' })).toHaveCount(0)
+
+      await decomposition.getByRole('button', { name: 'Total spend' }).click()
+      const totalChart = decomposition.getByRole('table', { name: 'Total spend over time' })
+      await expect(rowOf(totalChart, dayOf(3))).toBeVisible()
+      expect(await cellTextsOf(rowOf(totalChart, dayOf(2)))).toEqual(['$0.01'])
+      expect(await cellTextsOf(rowOf(totalChart, dayOf(3)))).toEqual(['$0.02'])
+    })
+
     test('As a member who can view costs, I see the cost per merged PR with each merged PR and its chat’s cost', {
       tag: ['@spec-45'],
     }, async ({ page }) => {
@@ -138,9 +179,12 @@ test.describe('Spend', () => {
         await expect(rowOf(decomposition, 'Users')).toHaveCount(0)
         expect(await cellTextsOf(rowOf(decomposition, 'Sessions'))).toEqual(['1', '1', '0%'])
         await expect(decomposition).not.toContainText('Sessions per user')
-        await expect(usageSectionOf(page, 'Spend decomposition')).toContainText(
-          'Spend = sessions × turns per session × requests per turn × tokens per request × price per token',
-        )
+        await expect(usageSectionOf(page, 'Spend decomposition')).not.toContainText('Spend =')
+        await expect(section.getByRole('combobox', { name: 'For' }).getByRole('option')).toHaveText([
+          'All my usage',
+          'Chat',
+          'Model',
+        ])
         await expect(section.getByRole('table', { name: 'Usage by member' })).toHaveCount(0)
         await expect(section).not.toContainText(/Alice|Lee|Invoice bug|claude/)
       })
@@ -177,11 +221,6 @@ test.describe('Spend', () => {
     const openUsageSettings = async (page: Page) => {
       await openSettings(page, 'Analyze costs')
       await expect(usageSectionOf(page).getByRole('heading', { level: 2, name: 'Usage' })).toBeVisible()
-    }
-
-    const syncUsage = async (workerStack: WorkerStack) => {
-      const synced = await fetch(`${serverUrl}/test/usage-sync?db=${workerStack.databaseName}`, { method: 'POST' })
-      expect(synced.ok).toBe(true)
     }
 
     const researchTotalsInDatabase = async (workerStack: WorkerStack) =>
@@ -230,7 +269,7 @@ test.describe('Spend', () => {
       await bobPage.context().close()
 
       await openUsageTab(page, 'Research')
-      const researchTable = tabPanelOf(page).getByRole('table')
+      const researchTable = tabPanelOf(page).getByRole('table', { name: 'Chat usage' })
       await expectMeteredRow(rowOf(researchTable, 'Alice'), 2)
       await expectMeteredRow(rowOf(researchTable, 'Bob'), 1)
       const research = await cellsOf(rowOf(researchTable, 'Total'))
@@ -239,7 +278,7 @@ test.describe('Spend', () => {
       expect(research.tokens).toBe(aliceInResearch.tokens + bobInResearch.tokens)
       expect(research.calls).toBe(3)
       await openUsageTab(page, 'Invoice bug')
-      const invoiceTable = tabPanelOf(page).getByRole('table')
+      const invoiceTable = tabPanelOf(page).getByRole('table', { name: 'Chat usage' })
       await expect(rowOf(invoiceTable, 'Total')).toContainText('15,500')
       const invoiceBug = await cellsOf(rowOf(invoiceTable, 'Total'))
       const aliceInInvoiceBug = await cellsOf(rowOf(invoiceTable, 'Alice'))
@@ -263,8 +302,8 @@ test.describe('Spend', () => {
       tag: ['@spec-13'],
     }, async ({ page, workerStack }) => {
       await workerStack.database.$client`
-    insert into usage_entries (workspace_id, month, chat_id, user_id, tokens, cost_micros, calls)
-    values ('workspace-acme', ${earlierMonth}, 'chat-research', 'member-alice', 4321, 70000, 3)`
+    insert into usage_entries (workspace_id, month, chat_id, user_id, model, tokens, cost_micros, calls)
+    values ('workspace-acme', ${earlierMonth}, 'chat-research', 'member-alice', 'mistral/codestral-latest', 4321, 70000, 3)`
       await workerStack.database.$client`
     insert into model_calls (workspace_id, id, chat_id, prompter_id, owner_id, model, provider, input_tokens, output_tokens, cost_micros, status, called_at)
     select 'workspace-acme', 'earlier-' || n, 'chat-research', 'member-alice', 'member-alice', 'codestral-latest', 'mistral',
@@ -273,7 +312,7 @@ test.describe('Spend', () => {
     from generate_series(1, 3) n`
 
       await openUsageTab(page, 'Research')
-      const usageTable = tabPanelOf(page).getByRole('table')
+      const usageTable = tabPanelOf(page).getByRole('table', { name: 'Chat usage' })
       await expect(monthPickerOf(tabPanelOf(page))).toHaveValue(currentMonth)
       await expect(rowOf(usageTable, 'Total')).not.toContainText('4,321')
       await monthPickerOf(tabPanelOf(page)).selectOption(earlierMonth)
@@ -301,7 +340,7 @@ test.describe('Spend', () => {
         await expect(usageSectionOf(page)).toHaveCount(0)
 
         await openUsageTab(page, 'Invoice bug')
-        const usageTable = tabPanelOf(page).getByRole('table')
+        const usageTable = tabPanelOf(page).getByRole('table', { name: 'Chat usage' })
         await expect(rowOf(usageTable, 'Alice')).toContainText('12,400')
         await expect(rowOf(usageTable, 'Bob')).toContainText('3,100')
         await expect(rowOf(usageTable, 'Total')).toContainText('15,500')

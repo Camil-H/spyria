@@ -34,6 +34,7 @@ export const MyUsageSection = ({ workspaceId, memberId }: { workspaceId: Workspa
       title="My usage"
       workspaceId={workspaceId}
       readReport={commands.readOwnSpend}
+      readTrend={commands.readOwnSpendTrend}
       chartDimensions={['model', 'chat']}
       tableDimensions={['chat', 'model']}
       isPersonal

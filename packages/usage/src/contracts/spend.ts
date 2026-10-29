@@ -1,6 +1,7 @@
 import type { MemberId, Transactor, WorkspacePermission } from '@spyria/kernel'
 import type {
   MergedPull,
+  SpendBucketCounts,
   SpendCounts,
   SpendDimension,
   SpendDimensionRow,
@@ -18,6 +19,7 @@ export type SpendLedger = {
     dimensions: { tableDimensions: readonly SpendDimension[]; chartDimensions: readonly SpendDimension[] },
   ): Promise<SpendDimensionRow[]>
   counts(filter: SpendFilter, prompterId: MemberId | null): Promise<{ current: SpendCounts; previous: SpendCounts }>
+  bucketCounts(filter: SpendFilter, prompterId: MemberId | null): Promise<SpendBucketCounts[]>
   mergedPulls(range: SpendRange): Promise<MergedPull[]>
 }
 
