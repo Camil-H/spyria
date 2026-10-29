@@ -25,6 +25,20 @@ Hosts never pull images: the runtime image is built on the server's machine with
 
 Each host row shows its CPUs, memory, how many runtimes run against its cap, and badges: **Docker: rootless** or **Docker: root** (a rooted daemon has root on the host, even though containers are isolated), and **Limits not enforced** when Docker cannot apply memory and process limits on that machine. **Remove** disconnects a host and revokes its token.
 
+## Removing a host
+
+Removing a host (or a member's machine) disconnects it: `spyria-host` logs "This host was removed", turns off its container's restart policy so Docker does not restart it, and stops. Its runtimes show **Could not start** in their chats. Nothing is deleted on the machine: the stopped host container, the runtime containers and their volumes stay until you remove them there, here for the default deployment `spyria`:
+
+```sh
+docker rm -f spyria-host
+docker rm -f $(docker ps -aq --filter label=spyria.managed=1 --filter name=^spyria-rt-)
+docker volume rm $(docker volume ls -q --filter name=^spyria-rt-)
+docker network rm $(docker network ls -q --filter label=spyria.managed=1 --filter name=^spyria-rt-)
+docker volume rm spyria-host
+```
+
+The runtime volumes hold the files the agents worked on, so remove them only once nothing in them is needed. With another deployment name, replace `spyria-` with `<deployment>-`; the name filter keeps another deployment's runtimes on the same Docker daemon. On a member's machine, the sign-ins (`spyria-cred-claude-code`, `spyria-cred-codex`) and installed harnesses (`spyria-harnesses`) stay too; `docker volume rm` them if the machine is not added again.
+
 ## Where a chat runs
 
 A Spyria runtime is placed on the least loaded online workspace host that has room. A host's cap is one runtime per GiB of memory above the first 2 GiB. When no host is online the chat says "No runtime host is available"; when the chosen host goes offline, "The runtime host is offline".
