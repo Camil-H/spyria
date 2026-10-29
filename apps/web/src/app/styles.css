@@ -1,8 +1,43 @@
 @import "tailwindcss";
-@import "@openhands/ui/styles";
-@import "../../node_modules/@openhands/ui/dist/tokens.css";
 @plugin "tailwind-scrollbar";
 @source "../../../../packages";
+
+@theme {
+  --color-primary-100: #fff3c0;
+  --color-primary-200: #ffeeaa;
+  --color-primary-300: #ffea92;
+  --color-primary-400: #ffe57b;
+  --color-primary-500: #ffe165;
+  --color-primary-600: #dcc257;
+  --color-primary-700: #bba54a;
+  --color-primary-800: #99873d;
+  --color-primary-900: #76682f;
+  --color-primary-985: #2d2812;
+  --color-light-neutral-15: #f7f8fb;
+  --color-light-neutral-30: #f0f2f7;
+  --color-light-neutral-50: #ebedf3;
+  --color-light-neutral-100: #dfe2ed;
+  --color-light-neutral-800: #6a6f7f;
+  --color-light-neutral-985: #1f2125;
+  --color-grey-200: #9a9ca2;
+  --color-grey-500: #494c57;
+  --color-grey-800: #2c2e34;
+  --color-grey-900: #222328;
+  --color-grey-950: #18191c;
+  --color-grey-970: #131417;
+  --color-grey-985: #0d0d0f;
+  --color-green-100: #e4ffd0;
+  --color-green-400: #c6ff9d;
+  --color-green-500: #bcff8c;
+  --color-green-900: #577641;
+  --color-green-950: #3d532e;
+  --color-aqua-500: #8dfff9;
+  --color-aqua-900: #417673;
+  --color-red-100: #ffc1b7;
+  --color-red-500: #ff684e;
+  --color-red-800: #993e2f;
+  --color-red-950: #532219;
+}
 
 @theme inline {
   --color-app: light-dark(var(--color-light-neutral-15), var(--color-grey-985));
