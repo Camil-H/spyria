@@ -1,20 +1,37 @@
 import { useQuery, useScoped } from '@spyria/db/react'
 import type { ChatId, WorkspaceId } from '@spyria/kernel'
 import { fieldClass, focusRing, ghostButtonClass, iconButtonClass } from '@spyria/ui'
-import { ArrowLeft, ExternalLink, Globe } from 'lucide-react'
-import { type FormEvent, useState } from 'react'
+import { ArrowLeft, ExternalLink, Globe, List } from 'lucide-react'
+import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { type BrowserPage, browsedPageOf, isHtmlFile, isWebAddress } from '../domain/browser.ts'
+import {
+  type BrowserPage,
+  browsedPageOf,
+  followedPageOf,
+  framedHtmlOf,
+  isHtmlFile,
+  isOnMembersMachine,
+  isWebAddress,
+  type WebPage,
+} from '../domain/browser.ts'
 import { getOpenedPages } from '../queries/get-browser.ts'
 import { EmptyState } from './EmptyState.tsx'
+import { usePanelCommands } from './providers.tsx'
 import type { TabProps } from './TabProps.ts'
 import { emptyClass } from './ui.ts'
 import { useWorkspaceReading } from './useWorkspaceReading.ts'
 
-type Choice = Readonly<{ page: BrowserPage | null; isTyped: boolean; seenOpenedAt: string }>
+type Choice = Readonly<{
+  page: BrowserPage | null
+  isTyped: boolean
+  seenOpenedAt: string
+  trail: readonly BrowserPage[]
+}>
+type Reading = Readonly<{ url: string; page?: WebPage; failure?: string }>
 
 const frameClass = 'min-h-80 w-full flex-1 rounded-md border border-line bg-white'
 const reportFramePath = '/report-frame.html'
+const pageFramePath = '/page-frame.html'
 const webPageSandbox = 'allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox'
 
 const ReportFrame = ({ title, content }: { title: string; content: string }) => (
@@ -49,6 +66,65 @@ const WorkspaceFile = ({
   )
 }
 
+const DirectFrame = ({ url }: { url: string }) => (
+  <iframe title={url} src={url} sandbox={webPageSandbox} referrerPolicy="no-referrer" className={frameClass} />
+)
+
+const WebPageFrame = ({
+  workspaceId,
+  url,
+  onFollow,
+}: {
+  workspaceId: WorkspaceId
+  url: string
+  onFollow: (page: BrowserPage) => void
+}) => {
+  const { readWebPage } = usePanelCommands()
+  const [reading, setReading] = useState<Reading>()
+  const frame = useRef<HTMLIFrameElement>(null)
+  useEffect(() => {
+    let isCurrent = true
+    void readWebPage({ workspaceId, url }).then(
+      (page) => isCurrent && setReading({ url, page }),
+      (error: Error) => isCurrent && setReading({ url, failure: error.message }),
+    )
+    return () => {
+      isCurrent = false
+    }
+  }, [readWebPage, workspaceId, url])
+  useEffect(() => {
+    const follow = (event: MessageEvent) => {
+      if (event.source !== frame.current?.contentWindow) return
+      const page = followedPageOf((event.data as { navigate?: unknown } | null)?.navigate)
+      if (page) onFollow(page)
+    }
+    addEventListener('message', follow)
+    return () => removeEventListener('message', follow)
+  }, [onFollow])
+  if (reading?.url !== url) return <p className={emptyClass}>Loading the page…</p>
+  const { page, failure } = reading
+  if (!page)
+    return (
+      <div className="flex flex-col items-start gap-2 rounded-md border border-dashed border-line p-3 text-sm">
+        <p>{failure}</p>
+        <a href={url} target="_blank" rel="noopener noreferrer" className={ghostButtonClass}>
+          Open it in a new tab
+        </a>
+      </div>
+    )
+  if (page.html === undefined) return <DirectFrame url={page.url} />
+  return (
+    <iframe
+      ref={frame}
+      title={url}
+      src={pageFramePath}
+      sandbox={webPageSandbox}
+      onLoad={(event) => event.currentTarget.contentWindow?.postMessage({ html: framedHtmlOf(page) }, '*')}
+      className={frameClass}
+    />
+  )
+}
+
 const OpenedPages = ({ pages, onOpen }: { pages: readonly BrowserPage[]; onOpen: (page: BrowserPage) => void }) => (
   <ul aria-label="Pages the agent opened" className="flex flex-col gap-1 text-sm">
     {pages.map((page) => (
@@ -71,11 +147,13 @@ const ShownPage = ({
   chatId,
   page,
   isTyped,
+  onFollow,
 }: {
   workspaceId: WorkspaceId
   chatId: ChatId
   page: BrowserPage
   isTyped: boolean
+  onFollow: (page: BrowserPage) => void
 }) => {
   const [isLoaded, setIsLoaded] = useState(false)
   if (!isTyped && !isLoaded)
@@ -88,16 +166,11 @@ const ShownPage = ({
         </button>
       </div>
     )
-  return isWebAddress(page.url) ? (
-    <iframe
-      title={page.url}
-      src={page.url}
-      sandbox={webPageSandbox}
-      referrerPolicy="no-referrer"
-      className={frameClass}
-    />
+  if (!isWebAddress(page.url)) return <WorkspaceFile workspaceId={workspaceId} chatId={chatId} page={page} />
+  return isOnMembersMachine(page.url) ? (
+    <DirectFrame url={page.url} />
   ) : (
-    <WorkspaceFile workspaceId={workspaceId} chatId={chatId} page={page} />
+    <WebPageFrame workspaceId={workspaceId} url={page.url} onFollow={onFollow} />
   )
 }
 
@@ -108,16 +181,20 @@ export const BrowserTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
   const isLoaded = isComplete && pages.length === status?.rows.length
   const latestOpenedAt = pages[0]?.openedAt ?? ''
   const [choice, setChoice] = useState<Choice>()
-  if (isLoaded && choice === undefined) setChoice({ page: null, isTyped: false, seenOpenedAt: latestOpenedAt })
+  if (isLoaded && choice === undefined)
+    setChoice({ page: null, isTyped: false, seenOpenedAt: latestOpenedAt, trail: [] })
   const isNewlyOpened = choice !== undefined && latestOpenedAt > choice.seenOpenedAt
   const shown = isNewlyOpened ? (pages[0] ?? null) : (choice?.page ?? null)
   const isTyped = !isNewlyOpened && choice?.isTyped === true
-  const choose = (page: BrowserPage | null, isTyped = false) =>
-    setChoice({ page, isTyped, seenOpenedAt: latestOpenedAt })
+  const trail = isNewlyOpened ? [] : (choice?.trail ?? [])
+  const choose = (page: BrowserPage | null, isTyped = false, nextTrail: readonly BrowserPage[] = []) =>
+    setChoice({ page, isTyped, seenOpenedAt: latestOpenedAt, trail: nextTrail })
+  const follow = (page: BrowserPage) => choose(page, true, shown ? [...trail, shown] : trail)
+  const goBack = () => choose(trail.at(-1) ?? null, true, trail.slice(0, -1))
   const browse = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const page = browsedPageOf(String(new FormData(event.currentTarget).get('address') ?? ''))
-    if (page) choose(page, true)
+    if (page) follow(page)
   }
   return (
     <div className="flex h-full flex-col gap-3">
@@ -137,6 +214,11 @@ export const BrowserTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
       {shown ? (
         <>
           <div className="flex items-center gap-1">
+            {trail.length > 0 && (
+              <button type="button" aria-label="Back" title="Back" onClick={goBack} className={iconButtonClass}>
+                <ArrowLeft aria-hidden className="size-4" />
+              </button>
+            )}
             <button
               type="button"
               aria-label="All pages"
@@ -144,7 +226,7 @@ export const BrowserTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
               onClick={() => choose(null)}
               className={iconButtonClass}
             >
-              <ArrowLeft aria-hidden className="size-4" />
+              <List aria-hidden className="size-4" />
             </button>
             <p className="min-w-0 truncate text-sm font-medium" title={shown.url}>
               {shown.url}
@@ -156,6 +238,7 @@ export const BrowserTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
             chatId={chatId}
             page={shown}
             isTyped={isTyped}
+            onFollow={follow}
           />
         </>
       ) : pages.length > 0 ? (
