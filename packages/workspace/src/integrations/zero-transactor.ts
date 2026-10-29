@@ -188,7 +188,7 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
         await tx.mutate.memberships.insert({
           workspaceId: membership.workspaceId,
           userId: membership.memberId,
-          role: adminRoleId,
+          role: membership.role,
           displayName: creator?.displayName ?? '',
         })
       },
