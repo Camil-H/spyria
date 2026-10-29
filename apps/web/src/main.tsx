@@ -1,5 +1,5 @@
 import { Toast } from '@spyria/ui'
-import { SignInScreen } from '@spyria/workspace'
+import { SignInScreen, WorkspaceLoadingScreen } from '@spyria/workspace'
 import { createRoot } from 'react-dom/client'
 import { createWorkspaceWithPopup, loadAuthMode, loadSessions, signInWithPopup } from './app/auth.ts'
 import './app/styles.css'
@@ -45,10 +45,7 @@ const domainVerificationToast = (ssoSettingsPath?: string) =>
     </Toast>
   )
 
-const workspaceNotLoaded = {
-  status: 'refused',
-  message: 'You are signed in, but your workspace did not load. Check your connection and sign in again.',
-} as const
+const slowWorkspaceLoadMilliseconds = 10_000
 const sessionMissing = {
   status: 'refused',
   message: 'Sign-in finished without opening your workspace. Try again.',
@@ -60,8 +57,9 @@ const openApp = async () => {
   if (!userId || !defaultSession) return 'signed_out'
   const [{ createApp }, { App }] = await (earlyAppModules ?? appModules())
   rememberSignedIn()
+  const slowLoadTimer = setTimeout(() => root.render(<WorkspaceLoadingScreen />), slowWorkspaceLoadMilliseconds)
   const app = await createApp(userId, defaultSession.workspaceId, sessions, deployment)
-  if (!app) return 'not_loaded'
+  clearTimeout(slowLoadTimer)
   root.render(
     <>
       <App app={app} />
@@ -73,9 +71,7 @@ const openApp = async () => {
 
 const openAppWhenSignedIn = async (result: Awaited<ReturnType<typeof signInWithPopup>>) => {
   if (result.status !== 'signed_in') return result
-  const opened = await openApp()
-  if (opened === 'opened') return result
-  return opened === 'not_loaded' ? workspaceNotLoaded : sessionMissing
+  return (await openApp()) === 'opened' ? result : sessionMissing
 }
 
 const showSignIn = async (notice?: string) => {
@@ -96,4 +92,4 @@ const showSignIn = async (notice?: string) => {
 }
 
 const opened = await openApp()
-if (opened !== 'opened') await showSignIn(opened === 'not_loaded' ? workspaceNotLoaded.message : undefined)
+if (opened !== 'opened') await showSignIn()
