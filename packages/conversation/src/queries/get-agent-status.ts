@@ -12,6 +12,7 @@ export const getAgentStatus = (workspaceId: WorkspaceId, chatId: ChatId) => (sna
       (runtime) =>
         runtime.workspaceId === workspaceId &&
         runtime.chatId === chatId &&
+        runtime.hostOnline &&
         (runtime.state === 'stopping' || runtime.state === 'stopped'),
     ),
     latestActivity: snapshot.latestAgentActivity.find(
