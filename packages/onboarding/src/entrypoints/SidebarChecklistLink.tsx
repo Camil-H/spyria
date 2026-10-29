@@ -3,7 +3,7 @@ import { focusRing, iconButtonClass } from '@spyria/ui'
 import { ListChecks } from 'lucide-react'
 import { useEffect, useId, useState } from 'react'
 import { NavLink } from 'react-router'
-import { isSettled, nextTaskOf, type OnboardingTask } from '../domain/tasks.ts'
+import { isDoneView, nextTaskOf, type OnboardingTask } from '../domain/tasks.ts'
 import { useOnboardingCommands } from './providers.tsx'
 import { taskTextOf } from './task-text.ts'
 import { useOnboarding } from './useOnboarding.ts'
@@ -31,12 +31,12 @@ export const SidebarChecklistLink = ({
   const { tasks, tasksToRecord, domain } = useOnboarding(workspaceId, usesSingleSignOn)
   useRecordCompletedTasks(workspaceId, tasksToRecord)
   const nextTaskId = useId()
-  const settledCount = tasks.filter(isSettled).length
-  if (settledCount === tasks.length) return null
+  const doneCount = tasks.filter(isDoneView).length
+  if (doneCount === tasks.length) return null
   const nextTask = nextTaskOf(tasks)
   const nextText = nextTask && taskTextOf(nextTask, domain)
   const target = `/w/${workspaceId}/${nextText ? `${nextText.page}${nextText.section ? `#${nextText.section}` : ''}` : 'settings'}`
-  const label = `Get started: ${settledCount} of ${tasks.length} done`
+  const label = `Get started: ${doneCount} of ${tasks.length} done`
   if (isCollapsed)
     return (
       <NavLink to={target} aria-label={label} title={label} className={`${iconButtonClass} self-start`}>
@@ -54,7 +54,7 @@ export const SidebarChecklistLink = ({
         <ListChecks aria-hidden className="size-4" />
         <span className="flex-1">Get started</span>
         <span className="text-xs text-muted">
-          {settledCount}/{tasks.length}
+          {doneCount}/{tasks.length}
         </span>
       </span>
       {nextText && (

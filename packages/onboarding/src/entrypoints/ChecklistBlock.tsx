@@ -1,9 +1,9 @@
 import type { WorkspaceId } from '@spyria/kernel'
 import { ErrorMessage, focusRing, smallGhostButtonClass, useGuardedAction } from '@spyria/ui'
-import { ChevronDown, Circle, CircleCheck, CircleMinus, Lock } from 'lucide-react'
+import { ChevronDown, Circle, CircleCheck, Lock } from 'lucide-react'
 import { useId, useState } from 'react'
 import { Link } from 'react-router'
-import { isSettled, type TaskScope, type TaskState, type TaskView } from '../domain/tasks.ts'
+import { isDoneView, type TaskScope, type TaskState, type TaskView } from '../domain/tasks.ts'
 import { useOnboardingCommands } from './providers.tsx'
 import { blockedExplanation, taskTextOf } from './task-text.ts'
 import { useOnboarding } from './useOnboarding.ts'
@@ -15,7 +15,6 @@ const titleByScope: Record<TaskScope, string> = {
 
 const stateLook: Record<TaskState, { label: string; Icon: typeof Circle; iconClass: string }> = {
   done: { label: 'Done', Icon: CircleCheck, iconClass: 'text-agent-done' },
-  skipped: { label: 'Skipped', Icon: CircleMinus, iconClass: 'text-muted' },
   blocked: { label: 'Not available yet', Icon: Lock, iconClass: 'text-muted' },
   open: { label: 'To do', Icon: Circle, iconClass: 'text-ink' },
 }
@@ -44,27 +43,24 @@ const TaskRow = ({
   view,
   domain,
   onSkip,
-  onRestore,
   isPending,
 }: {
   workspaceId: WorkspaceId
   view: TaskView
   domain: string | undefined
   onSkip: () => void
-  onRestore: () => void
   isPending: boolean
 }) => {
   const { title, explanation, page, section } = taskTextOf(view.task, domain)
   const { label, Icon, iconClass } = stateLook[view.state]
   const linkClass = `font-medium underline-offset-2 hover:underline ${focusRing}`
-  const isActionable = view.state === 'open' || view.state === 'skipped'
   return (
     <li className={`flex items-start gap-3 py-2 ${view.state === 'blocked' ? 'opacity-60' : ''}`}>
       <Icon aria-hidden className={`mt-0.5 size-4 shrink-0 ${iconClass}`} />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className={view.state === 'done' ? 'text-muted line-through' : ''}>
           <span className="sr-only">{label}: </span>
-          {!isActionable ? (
+          {view.state !== 'open' ? (
             <span className="font-medium">{title}</span>
           ) : view.scope === 'member' && section ? (
             <a href={`#${section}`} className={linkClass}>
@@ -91,17 +87,6 @@ const TaskRow = ({
           Skip
         </button>
       )}
-      {view.state === 'skipped' && (
-        <button
-          type="button"
-          aria-label={`Restore ${title}`}
-          disabled={isPending}
-          className={smallGhostButtonClass}
-          onClick={onRestore}
-        >
-          Restore
-        </button>
-      )}
     </li>
   )
 }
@@ -122,7 +107,7 @@ export const ChecklistBlock = ({
   const headingId = useId()
   const listId = useId()
   const shownTasks = tasks.filter((view) => view.scope === scope)
-  if (shownTasks.every(isSettled)) return null
+  if (shownTasks.every(isDoneView)) return null
   const title = titleByScope[scope]
   return (
     <section
@@ -139,7 +124,7 @@ export const ChecklistBlock = ({
         >
           <span className="flex-1 font-semibold">{title}</span>
           <span className="text-sm text-muted">
-            {shownTasks.filter(isSettled).length} of {shownTasks.length} done
+            {shownTasks.filter(isDoneView).length} of {shownTasks.length} done
           </span>
           <ChevronDown aria-hidden className={`size-4 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
         </button>
@@ -154,7 +139,6 @@ export const ChecklistBlock = ({
               domain={domain}
               isPending={isPending}
               onSkip={() => run(() => commands.skipTask({ workspaceId, task: view.task }))}
-              onRestore={() => run(() => commands.restoreTask({ workspaceId, task: view.task }))}
             />
           ))}
         </ul>

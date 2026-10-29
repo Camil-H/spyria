@@ -29,7 +29,7 @@ Until the workspace is set up, the top of the sidebar shows **Get started** with
 | Link your GitHub account | every member, once the workspace has had a GitHub App | they linked their GitHub account |
 | Add a profile picture | every member | they have a picture |
 
-Workspace tasks are shared: done by one admin, done for all. A task stays done even if what completed it is undone later (the GitHub App removed, the last key deleted); the cards show the current state. On SSO deployments, **Invite members** stays greyed out until the domain is verified. Anyone can **Skip** a task they see, which counts it as done for them only, and **Restore** it. A list disappears once all its tasks are done or skipped, and the sidebar entry once all of the member's are.
+Workspace tasks are shared: done by one admin, done for all. A task stays done even if what completed it is undone later (the GitHub App removed, the last key deleted); the cards show the current state. On SSO deployments, **Invite members** stays greyed out until the domain is verified. Anyone can **Skip** a task they see: it leaves their lists and their count, for them only. A list disappears once all its remaining tasks are done, and the sidebar entry once all of the member's are.
 
 ## Workspace roles
 
