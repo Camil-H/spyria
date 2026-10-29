@@ -168,7 +168,7 @@ const SettingsRoute = () => {
     return <p className="p-6 text-muted">Your workspace role does not give access to this page</p>
   if (openCard)
     return (
-      <div className="flex flex-col gap-6 p-6">
+      <div className="flex flex-col gap-6 px-6 py-6 md:px-12 xl:px-16">
         <div className="flex items-center gap-2">
           <Link to={settingsPath} aria-label="Back to Workspace settings" className={iconButtonClass}>
             <ArrowLeft aria-hidden className="size-5" />
@@ -184,7 +184,7 @@ const SettingsRoute = () => {
       </div>
     )
   return (
-    <div className="flex flex-col gap-8 p-6">
+    <div className="flex flex-col gap-8 px-6 py-6 md:px-12 xl:px-16">
       <h1 className="text-2xl font-semibold">Workspace settings</h1>
       <ChecklistBlock workspaceId={workspaceId} scope="workspace" usesSingleSignOn={!isDexSignIn} />
       {allowedSections.length > 0 ? (
