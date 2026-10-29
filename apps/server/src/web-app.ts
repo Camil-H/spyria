@@ -46,8 +46,13 @@ const acceptedEncodingsOf = (request: Request) =>
 
 const fileResponse = async (request: Request, path: string, cacheControl: string) => {
   const file = Bun.file(path)
-  const policy = policyByPath[new URL(request.url).pathname] ?? appPolicy
-  const headers = { 'cache-control': cacheControl, vary: 'accept-encoding', 'content-security-policy': policy }
+  const framePolicy = policyByPath[new URL(request.url).pathname]
+  const headers = {
+    'cache-control': cacheControl,
+    vary: 'accept-encoding',
+    'content-security-policy': framePolicy ?? appPolicy,
+    ...(framePolicy && { 'referrer-policy': 'no-referrer' }),
+  }
   const acceptedEncodings = request.headers.has('range') ? new Set() : acceptedEncodingsOf(request)
   for (const { encoding, extension } of precompressedVariants) {
     const variant = Bun.file(`${path}${extension}`)
