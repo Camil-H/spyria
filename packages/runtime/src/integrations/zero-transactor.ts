@@ -1,6 +1,7 @@
 import type { Transaction } from '@rocicorp/zero'
 import {
   enqueueJob,
+  expireRuntimeHostClaims,
   findRuntimeHostBySecretHash,
   lockMembership,
   lockRuntimeHost,
@@ -91,6 +92,9 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
               .where('removedAt', 'IS', null),
           )
         ).map(hostOf),
+      expireClaims: async (workspaceId, now) => {
+        await expireRuntimeHostClaims(tx, workspaceId, now)
+      },
     },
     runtimes: {
       lock: async (workspaceId, id) => {

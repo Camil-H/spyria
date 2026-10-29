@@ -189,6 +189,14 @@ export const setRuntimeHostSecretHash = (
 export const lockRuntimeHost = (tx: Transaction, workspaceId: string, id: string) =>
   onServer(tx, 'select 1 from runtime_hosts where workspace_id = $1 and id = $2 for update', [workspaceId, id])
 
+export const expireRuntimeHostClaims = (tx: Transaction, workspaceId: string, now: number) =>
+  onServer(
+    tx,
+    `update runtime_hosts set status = 'expired'
+     where workspace_id = $1 and status = 'waiting' and claim_expires_at <= to_timestamp($2::double precision / 1000)`,
+    [workspaceId, now],
+  )
+
 export const findRuntimeHostBySecretHash = (tx: Transaction, secret: RuntimeHostSecret, hash: string) =>
   firstOnServer<RuntimeHostKey & { claimed: boolean }>(
     tx,

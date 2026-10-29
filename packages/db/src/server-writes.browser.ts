@@ -29,6 +29,7 @@ export const sentAttachmentOf = skippedOnClient
 export const setRuntimeHostSecretHash = skippedOnClient
 export const lockRuntimeHost = skippedOnClient
 export const findRuntimeHostBySecretHash = skippedOnClient
+export const expireRuntimeHostClaims = skippedOnClient
 export const lockRuntimes = async () => []
 export const lockRuntimeHostLoads = async () => []
 export const serverOnlyRuntimeValueOf = skippedOnClient
