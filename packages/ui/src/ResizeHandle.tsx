@@ -21,7 +21,7 @@ export const ResizeHandle = ({
   resizeTo: (width: number) => void
 }) => {
   const growthPerPixel = edge === 'left' ? -1 : 1
-  const boundedWidthOf = (nextWidth: number) => Math.min(maximumWidth, Math.max(minimumWidth, nextWidth))
+  const boundedWidthOf = (nextWidth: number) => Math.min(maximumWidth, Math.max(minimumWidth, Math.round(nextWidth)))
   const drag = useRef<{ startX: number; startWidth: number; draggedWidth: number } | null>(null)
   const startDrag = (event: PointerEvent<HTMLHRElement>) => {
     event.currentTarget.setPointerCapture(event.pointerId)
