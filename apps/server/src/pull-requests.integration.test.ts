@@ -43,8 +43,13 @@ const request = async (userId: string, method: string, path: string, body?: obje
 }
 const publish = (userId: string, chat: ChatId, action: string, draft: object = {}) =>
   request(userId, 'POST', `/api/chats/${chat}/publish/${action}`, draft)
-const git = (cwd: string, ...command: string[]) =>
-  Bun.spawnSync(['git', '-c', 'user.name=Pi Agent', '-c', 'user.email=agent@example.com', ...command], { cwd })
+const git = (cwd: string, ...command: string[]) => {
+  const result = Bun.spawnSync(['git', '-c', 'user.name=Pi Agent', '-c', 'user.email=agent@example.com', ...command], {
+    cwd,
+    stderr: 'pipe',
+  })
+  if (result.exitCode !== 0) throw new Error(result.stderr.toString())
+}
 const signatureOf = (body: string, secret = webhookSecret) =>
   `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`
 const sendWebhook = async (
@@ -121,6 +126,12 @@ const promptAndWait = async (id: ChatId, text: string) => {
 }
 const committedWorkspace = async (id: ChatId) => {
   await promptAndWait(id, 'stub:ls')
+  await waitFor(
+    async () =>
+      (await database.$client`select workspace_snapshot from runtimes where chat_id = ${id}`)[0]?.workspace_snapshot !=
+      null,
+    20_000,
+  )
   const frames = (await stack.subscribedFrames(id)).map((frame) => JSON.parse(frame))
   const workspace = String(frames.find((frame) => frame.workspace)?.workspace.cwd)
   writeFileSync(join(workspace, 'src/app.ts'), 'export const total = 2\n')
