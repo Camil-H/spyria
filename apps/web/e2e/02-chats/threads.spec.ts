@@ -132,7 +132,8 @@ test.describe('Threads', () => {
   }) => {
     await openChat(page, 'Invoice bug')
     await expect(messageContaining(page, 'Why do invoices show the wrong total?')).toBeVisible()
-    await expect(messageActionsOf(mainOf(page))).toHaveCount(0)
+    await expect(messageActionsOf(mainOf(page)).first()).toBeAttached()
+    await expect(messageActionsOf(mainOf(page)).getByRole('button', { name: 'Reply in thread' })).toHaveCount(0)
     await expect(threadToggleOf(page)).toHaveCount(0)
   })
 })

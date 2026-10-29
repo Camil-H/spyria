@@ -264,7 +264,7 @@ test('an optimistic message takes the next seq of its chat before the server con
   )
   await Bun.sleep(0)
   const invoiceMessages = store.read().messages.filter((message) => message.chatId === 'chat-invoice-bug')
-  expect(invoiceMessages.at(-1)).toMatchObject({ id: 'message-optimistic', seq: 5 })
+  expect(invoiceMessages.at(-1)).toMatchObject({ id: 'message-optimistic', seq: 6 })
   await confirmation
 })
 

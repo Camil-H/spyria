@@ -32,7 +32,7 @@ const tabLabelsOf = (page: Page) =>
 const isTabListScrollable = (page: Page) =>
   tabListOf(page).evaluate((element) => element.scrollWidth > element.clientWidth)
 
-const runtimeTabNames = ['Files', 'Changes', 'Commits', 'Browser', 'Usage', 'Connected tools', 'Members']
+const runtimeTabNames = ['Files', 'Changes', 'Browser', 'Usage', 'Connected tools', 'Members']
 const channelTabNames = ['Browser', 'Sources', 'Usage', 'Connected tools', 'Members']
 
 const expectOwnerConnections = async (page: Page) => {
@@ -93,8 +93,8 @@ test.describe('Side panel', () => {
     })
 
     await test.step('explains each tab in a tooltip on hover', async () => {
-      await tabOf(page, 'Commits').hover()
-      await expect(page.getByRole('tooltip', { name: 'Commits' })).toBeVisible()
+      await tabOf(page, 'Changes').hover()
+      await expect(page.getByRole('tooltip', { name: 'Changes' })).toBeVisible()
     })
 
     await test.step('selects a tab on click and shows its content', async () => {
@@ -200,18 +200,13 @@ test.describe('Side panel', () => {
       await expect(panelOf(page)).toHaveCount(0)
     })
 
-    await test.step('shows the empty state of each runtime tab without data', async () => {
+    await test.step('shows the empty state of Changes without data', async () => {
       await openChat(page, 'Research')
       await expect(tabOf(page, 'Files')).toHaveAttribute('aria-selected', 'true')
-      for (const [tabName, emptyText] of [
-        ['Changes', 'No changes'],
-        ['Commits', 'No commits'],
-      ] as const) {
-        await tabOf(page, tabName).click()
-        await expect(tabOf(page, tabName)).toHaveAttribute('aria-selected', 'true')
-        await expect(tabPanelOf(page).getByRole('heading', { level: 2, name: tabName })).toBeVisible()
-        await expect(tabPanelOf(page)).toContainText(emptyText)
-      }
+      await tabOf(page, 'Changes').click()
+      await expect(tabOf(page, 'Changes')).toHaveAttribute('aria-selected', 'true')
+      await expect(tabPanelOf(page).getByRole('heading', { level: 2, name: 'Changes' })).toBeVisible()
+      await expect(tabPanelOf(page)).toContainText('No changes')
     })
 
     await test.step('usage: shows zeros for the owner of a chat without data', async () => {
@@ -267,7 +262,7 @@ test.describe('Side panel', () => {
     })
 
     await test.step('jumps to the first and last tab with Home and End', async () => {
-      await tabOf(page, 'Commits').focus()
+      await tabOf(page, 'Changes').focus()
       await page.keyboard.press('End')
       await expect(tabOf(page, 'Members')).toHaveAttribute('aria-selected', 'true')
       await page.keyboard.press('Home')
@@ -275,7 +270,7 @@ test.describe('Side panel', () => {
     })
 
     await test.step('selects the first tab again when another chat is opened', async () => {
-      await openPanelTab(page, 'Invoice bug', 'Commits')
+      await openPanelTab(page, 'Invoice bug', 'Changes')
       await openChat(page, 'Welcome')
       await expect(tabOf(page, 'Browser')).toHaveAttribute('aria-selected', 'true')
       await openChat(page, 'Invoice bug')
@@ -284,7 +279,7 @@ test.describe('Side panel', () => {
   })
 
   test('As a member, I hide and show the panel, which keeps its width and tab', async ({ page }) => {
-    await openPanelTab(page, 'Invoice bug', 'Commits')
+    await openPanelTab(page, 'Invoice bug', 'Changes')
     await dragResizeHandleBy(page, -100)
     const widthBeforeHiding = await panelWidthOf(page)
 
@@ -303,7 +298,7 @@ test.describe('Side panel', () => {
       await expect(panelOf(page)).toBeVisible()
       await expect(page.getByRole('button', { name: 'Hide panel' })).toBeVisible()
       expect(await panelWidthOf(page)).toBeCloseTo(widthBeforeHiding, 0)
-      await expect(tabOf(page, 'Commits')).toHaveAttribute('aria-selected', 'true')
+      await expect(tabOf(page, 'Changes')).toHaveAttribute('aria-selected', 'true')
     })
 
     await test.step('keeps the panel hidden when switching chats', async () => {

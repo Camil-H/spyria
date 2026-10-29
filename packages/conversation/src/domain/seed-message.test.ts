@@ -110,3 +110,20 @@ test('attachments are named to the agent, which cannot read them, also on a prom
     ),
   ).toContain('Alice (member, human) · 2026-10-17 09:05 UTC\nLook\n\nAttached, not readable by you: photo.png')
 })
+
+test('a prompt that replies to a message quotes it to the agent with its author and time, after the seed message, unless it was deleted', () => {
+  const prompt = { body: MessageBody('Why?'), attachments: [] }
+  const answer = quoted('Agent', 'The tax is applied twice.\nSee invoice.ts.', '09:07', { kind: 'agent' })
+  expect(agentPromptTextOf(prompt, { body: MessageBody('Conversation so far…') }, answer)).toBe(
+    [
+      'Conversation so far…',
+      '',
+      'In reply to Agent (agent) · 2026-10-17 09:07 UTC:',
+      '> The tax is applied twice.',
+      '> See invoice.ts.',
+      '',
+      'Why?',
+    ].join('\n'),
+  )
+  expect(agentPromptTextOf(prompt, undefined, { ...answer, status: 'deleted' })).toBe('Why?')
+})

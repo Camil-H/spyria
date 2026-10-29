@@ -9,7 +9,6 @@ test('a runtime chat shows its files and changes, a channel its sources', () => 
   expect(getPanelTabs(acme, chatId('chat-invoice-bug'), alice)(snapshot)).toEqual([
     'files',
     'changes',
-    'commits',
     'browser',
     'usage',
     'connections',

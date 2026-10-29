@@ -22,6 +22,7 @@ export type ConversationCommands = {
     chatId: ChatId
     text: string
     threadRootId?: MessageId | undefined
+    quotedMessageId?: MessageId | undefined
     attachments?: readonly Attachment[] | undefined
   }>
   uploadAttachment: Command<{ chatId: ChatId; file: File }, Attachment>
