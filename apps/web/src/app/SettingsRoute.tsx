@@ -4,7 +4,7 @@ import type { WorkspaceId, WorkspacePermission } from '@spyria/kernel'
 import { ChecklistBlock } from '@spyria/onboarding'
 import { WorkspaceConnectionsSection } from '@spyria/profile'
 import { RuntimeHostsSection } from '@spyria/runtime'
-import { focusRing, formatCost, iconButtonClass, LabelledSection } from '@spyria/ui'
+import { focusRing, formatCost, iconButtonClass, LabelledSection, useShortcut } from '@spyria/ui'
 import { AuditLogSection, countBudgetAlerts, UsageSection } from '@spyria/usage'
 import {
   DeleteWorkspaceSection,
@@ -17,7 +17,7 @@ import {
 } from '@spyria/workspace'
 import { ArrowLeft } from 'lucide-react'
 import { type ComponentType, use } from 'react'
-import { Link, useOutletContext, useParams } from 'react-router'
+import { Link, useNavigate, useOutletContext, useParams } from 'react-router'
 import { sharedAuthMode } from './auth.ts'
 
 type SettingsCard = {
@@ -162,6 +162,8 @@ const SettingsRoute = () => {
     .filter((section) => section.cards.length > 0)
   const openCard = cardSections.flatMap(({ cards }) => cards).find(({ path }) => path === card)
   const settingsPath = `/w/${workspaceId}/settings`
+  const navigate = useNavigate()
+  useShortcut('escape', 'Back to Workspace settings', () => navigate(settingsPath), openCard !== undefined)
   if (openCard && !isAllowed(openCard))
     return <p className="p-6 text-muted">Your workspace role does not give access to this page</p>
   if (openCard)
