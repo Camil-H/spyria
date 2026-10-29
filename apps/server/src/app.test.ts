@@ -56,10 +56,11 @@ test('with a web build, the server serves the app with SPA fallback and cache ru
   rmSync(webDist, { recursive: true })
 })
 
-test('the web app runs only its own scripts and frames web pages and reports, while a report runs in a sandbox of its own', async () => {
+test('the web app runs only its own scripts and frames web pages and reports, while a report runs in a sandbox of its own and a web page in one without its scripts, neither telling the sites they load where they are framed', async () => {
   const webDist = mkdtempSync(join(tmpdir(), 'spyria-web-dist-'))
   writeFileSync(join(webDist, 'index.html'), '<!doctype html><title>Spyria</title>')
   writeFileSync(join(webDist, 'report-frame.html'), '<!doctype html><script></script>')
+  writeFileSync(join(webDist, 'page-frame.html'), '<!doctype html><script src="/page-frame.js"></script>')
   const webApp = createApp({ database: unreachableDatabase, ...testAuthSettings, webDist })
   const directivesOf = async (path: string) =>
     new Map(
@@ -79,6 +80,18 @@ test('the web app runs only its own scripts and frames web pages and reports, wh
   expect(reportFrame.get('sandbox')).toEqual(['allow-scripts'])
   expect(reportFrame.get('default-src')).toContain("'unsafe-inline'")
   expect(reportFrame.get('frame-ancestors')).toEqual(["'self'"])
+  const pageFrame = await directivesOf('/page-frame.html')
+  expect(pageFrame.get('sandbox')).toEqual([
+    'allow-scripts',
+    'allow-forms',
+    'allow-popups',
+    'allow-popups-to-escape-sandbox',
+  ])
+  expect(pageFrame.get('script-src')).toEqual(["'self'"])
+  expect(pageFrame.get('frame-ancestors')).toEqual(["'self'"])
+  for (const framePath of ['/report-frame.html', '/page-frame.html'])
+    expect((await webApp.request(framePath)).headers.get('referrer-policy')).toBe('no-referrer')
+  expect((await webApp.request('/')).headers.get('referrer-policy')).toBeNull()
   rmSync(webDist, { recursive: true })
 })
 

@@ -1,4 +1,4 @@
-import type { MessageId } from '@spyria/kernel'
+import type { MemberId, MessageId } from '@spyria/kernel'
 import type { AgentChat, AgentHost } from '../contracts/agent.ts'
 import type { ToolCall } from '../contracts/repositories.ts'
 import {
@@ -7,6 +7,7 @@ import {
   modelCallNoticeOf,
   publicModelNameOf,
 } from '../domain/model-call-failures.ts'
+import { webSearchModelOf } from '../domain/web-search.ts'
 import type { AgentDependencies } from './agent-turn.ts'
 import { digestOf } from './decide.ts'
 import { noteSubagentFailure } from './delegate-task.ts'
@@ -96,3 +97,6 @@ export const recordModelCallFailure = async (
     return notice
   })
 }
+
+export const findWebSearchModel = ({ transactor }: Dependencies, prompterId: MemberId) =>
+  transactor.run(async ({ routing }) => webSearchModelOf((await routing.reachableModels(prompterId)) ?? []))

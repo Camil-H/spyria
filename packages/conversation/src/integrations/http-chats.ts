@@ -1,5 +1,6 @@
 import type { ChatId, WorkspaceId } from '@spyria/kernel'
 import { type Attachment, chatAttachmentsPathOf, isChatAttachmentPath } from '../domain/attachments.ts'
+import { type WebPage, webPagePath } from '../domain/browser-pages.ts'
 import type { GitAction, GitActionOutcome } from '../domain/git-actions.ts'
 import type { PublishAction, PullRequestDraft } from '../domain/pull-requests.ts'
 import type { WorkspaceRead, WorkspaceReading } from '../domain/workspace-reads.ts'
@@ -90,6 +91,12 @@ export const createHttpChatCommands = (postAsMember: PostAsMember, getAsMember: 
       throw new Error(message ?? `The media read answered ${response.status}`)
     }
     return response.blob()
+  },
+  readWebPage: async ({ workspaceId, url }: { workspaceId: WorkspaceId; url: string }) => {
+    const response = await getAsMember(workspaceId, `${webPagePath}?${new URLSearchParams({ url })}`)
+    const answer = (await response.json().catch(() => ({}))) as WebPage & { message?: string }
+    if (!response.ok) throw new Error(answer.message ?? `Reading the page answered ${response.status}`)
+    return answer
   },
   wakeWorkspace: async ({ workspaceId, chatId }: ChatInput) => {
     const response = await postAsMember(workspaceId, chatWorkspacePathOf(chatId, 'wake'))
