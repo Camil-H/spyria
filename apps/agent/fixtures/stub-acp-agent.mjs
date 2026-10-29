@@ -264,13 +264,37 @@ const mcpCall = async (server, method, params = {}, signal = undefined) => {
   if (!response) return { isError: true, content: [{ text: `MCP request timed out after ${timeout * 1000}ms` }] }
   return response.status === 200 ? JSON.parse((await response.text()) || '{}').result : undefined
 }
+const toolListStreamMilliseconds = 60_000
+const toolListChangeRetryMilliseconds = 1_000
+const watchToolList = async (server, onChange) => {
+  const { url, headers } = mcpServers[server]
+  for (;;) {
+    const response = await fetch(`${gatewayUrl}${new URL(url).pathname}`, {
+      headers: { authorization: withEnvironment(headers.Authorization), accept: 'text/event-stream' },
+      signal: AbortSignal.timeout(toolListStreamMilliseconds),
+    }).catch(() => undefined)
+    if (response?.status !== 200 || !response.body) return
+    const decoder = new TextDecoder()
+    await onChange()
+    try {
+      for await (const chunk of response.body)
+        if (decoder.decode(chunk, { stream: true }).includes('notifications/tools/list_changed')) await onChange()
+    } catch {}
+    await sleep(toolListChangeRetryMilliseconds)
+  }
+}
 const mcpToolsOf = async () => {
   const tools = {}
+  const listTools = async (server) => {
+    const listed = (await mcpCall(server, 'tools/list'))?.tools ?? []
+    for (const [key, tool] of Object.entries(tools)) if (tool.server === server) delete tools[key]
+    for (const { name } of listed) tools[`mcp__${server}__${name}`] = { server, name }
+  }
   for (const server of Object.keys(mcpServers)) {
     await mcpCall(server, 'initialize', { protocolVersion: '2025-06-18', capabilities: {} })
     await mcpCall(server, 'notifications/initialized')
-    for (const { name } of (await mcpCall(server, 'tools/list'))?.tools ?? [])
-      tools[`mcp__${server}__${name}`] = { server, name }
+    await listTools(server)
+    void watchToolList(server, () => listTools(server))
   }
   return tools
 }
