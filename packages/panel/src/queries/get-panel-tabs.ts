@@ -2,7 +2,7 @@ import { participantIn, type Snapshot } from '@spyria/db'
 import type { ChatId, MemberId, WorkspaceId } from '@spyria/kernel'
 import { panelChatIn } from './panel-chat.ts'
 
-const allTabs = ['files', 'changes', 'browser', 'sources', 'usage', 'connections', 'members'] as const
+const allTabs = ['changes', 'files', 'browser', 'sources', 'usage', 'connections', 'members'] as const
 
 export type PanelTabId = (typeof allTabs)[number]
 

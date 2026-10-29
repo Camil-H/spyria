@@ -32,7 +32,7 @@ const tabLabelsOf = (page: Page) =>
 const isTabListScrollable = (page: Page) =>
   tabListOf(page).evaluate((element) => element.scrollWidth > element.clientWidth)
 
-const runtimeTabNames = ['Files', 'Changes', 'Browser', 'Usage', 'Connected tools', 'Members']
+const runtimeTabNames = ['Changes', 'Files', 'Browser', 'Usage', 'Connected tools', 'Members']
 const channelTabNames = ['Browser', 'Sources', 'Usage', 'Connected tools', 'Members']
 
 const expectOwnerConnections = async (page: Page) => {
@@ -57,7 +57,7 @@ test.describe('Side panel', () => {
     await test.step('shows the runtime tabs in order with the first selected', async () => {
       await openChat(page, 'Invoice bug')
       expect(await tabLabelsOf(page)).toEqual(runtimeTabNames)
-      await expect(tabOf(page, 'Files')).toHaveAttribute('aria-selected', 'true')
+      await expect(tabOf(page, 'Changes')).toHaveAttribute('aria-selected', 'true')
     })
 
     await test.step('shows icon-only tabs without visible text', async () => {
@@ -200,10 +200,8 @@ test.describe('Side panel', () => {
       await expect(panelOf(page)).toHaveCount(0)
     })
 
-    await test.step('shows the empty state of Changes without data', async () => {
+    await test.step('shows the empty state of Changes, the first tab, without data', async () => {
       await openChat(page, 'Research')
-      await expect(tabOf(page, 'Files')).toHaveAttribute('aria-selected', 'true')
-      await tabOf(page, 'Changes').click()
       await expect(tabOf(page, 'Changes')).toHaveAttribute('aria-selected', 'true')
       await expect(tabPanelOf(page).getByRole('heading', { level: 2, name: 'Changes' })).toBeVisible()
       await expect(tabPanelOf(page)).toContainText('No changes')
@@ -247,34 +245,34 @@ test.describe('Side panel', () => {
     await openChat(page, 'Invoice bug')
 
     await test.step('moves between tabs with the arrow keys, wrapping at both ends, with a tooltip on keyboard focus', async () => {
-      await tabOf(page, 'Files').focus()
+      await tabOf(page, 'Changes').focus()
       await page.keyboard.press('ArrowRight')
-      await expect(tabOf(page, 'Changes')).toBeFocused()
-      await expect(tabOf(page, 'Changes')).toHaveAttribute('aria-selected', 'true')
-      await expect(page.getByRole('tooltip', { name: 'Changes' })).toBeVisible()
-      await page.keyboard.press('ArrowLeft')
       await expect(tabOf(page, 'Files')).toBeFocused()
+      await expect(tabOf(page, 'Files')).toHaveAttribute('aria-selected', 'true')
+      await expect(page.getByRole('tooltip', { name: 'Files' })).toBeVisible()
+      await page.keyboard.press('ArrowLeft')
+      await expect(tabOf(page, 'Changes')).toBeFocused()
       await page.keyboard.press('ArrowLeft')
       await expect(tabOf(page, 'Members')).toBeFocused()
       await expect(tabOf(page, 'Members')).toHaveAttribute('aria-selected', 'true')
       await page.keyboard.press('ArrowRight')
-      await expect(tabOf(page, 'Files')).toBeFocused()
+      await expect(tabOf(page, 'Changes')).toBeFocused()
     })
 
     await test.step('jumps to the first and last tab with Home and End', async () => {
-      await tabOf(page, 'Changes').focus()
+      await tabOf(page, 'Files').focus()
       await page.keyboard.press('End')
       await expect(tabOf(page, 'Members')).toHaveAttribute('aria-selected', 'true')
       await page.keyboard.press('Home')
-      await expect(tabOf(page, 'Files')).toHaveAttribute('aria-selected', 'true')
+      await expect(tabOf(page, 'Changes')).toHaveAttribute('aria-selected', 'true')
     })
 
     await test.step('selects the first tab again when another chat is opened', async () => {
-      await openPanelTab(page, 'Invoice bug', 'Changes')
+      await openPanelTab(page, 'Invoice bug', 'Files')
       await openChat(page, 'Welcome')
       await expect(tabOf(page, 'Browser')).toHaveAttribute('aria-selected', 'true')
       await openChat(page, 'Invoice bug')
-      await expect(tabOf(page, 'Files')).toHaveAttribute('aria-selected', 'true')
+      await expect(tabOf(page, 'Changes')).toHaveAttribute('aria-selected', 'true')
     })
   })
 
