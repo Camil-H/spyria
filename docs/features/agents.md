@@ -34,6 +34,8 @@ On a Spyria runtime, the session's model is chosen once, at the first prompt, fr
 
 The model is chosen once per session, not per turn, because switching models discards the provider's prompt cache and makes every turn reread the whole conversation.
 
+On Spyria runtimes, the main agent asks Anthropic models to keep the conversation's prompt cache for an hour instead of five minutes, since the members of a shared chat often take longer than five minutes between prompts. Writing the hour-long cache costs more than the five-minute one, while reading it costs the same, so it pays off from the first cache hit after five minutes. Subagents keep the five-minute cache, since their task ends within one burst of calls. Each model call records the tokens it read from and wrote to the cache.
+
 When another participant prompts later, their keys must reach the session's model; otherwise the prompt is refused with "Your keys cannot reach *model*; switch the model or add a key". Prompts from different members use different keys, so they do not share a provider's prompt cache.
 
 ## The session chip: model, effort, subagents

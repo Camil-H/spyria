@@ -7,6 +7,7 @@ import { type WorkspaceId, workspaceId } from '@spyria/kernel'
 import { createBifrostUsageLogs, createUsageJobs, syncUsageNow } from '@spyria/usage/server'
 import {
   acme,
+  addLlmKey,
   alice,
   bob,
   captureLogs,
@@ -18,7 +19,7 @@ import {
 } from './testing/testing.ts'
 
 setDefaultTimeout(60_000)
-const { database, gateway } = await openSharedTestApp()
+const { database, gateway, fakeLlmBodies, setFakeLlmScript } = await openSharedTestApp()
 const gatewayAdmin = { adminUser: testGatewayAdmin.user, adminPassword: testGatewayAdmin.password }
 const zeroDatabase = zeroDrizzle(schema, database)
 const transact = <Result>(work: Parameters<typeof zeroDatabase.transaction<Result>>[0]) =>
@@ -29,6 +30,8 @@ const logs = createBifrostUsageLogs({ url: gateway.url, ...gatewayAdmin, labels:
 const sync = (workspace: WorkspaceId = acme) => syncUsageNow(logs, { workspaceId: workspace, transact })
 
 const aliceKey = await virtualKeyOf(alice)
+const dimensionHeadersOf = (labels: Record<string, string>) =>
+  Object.fromEntries(Object.entries({ ...labels, run }).map(([name, value]) => [`x-bf-dim-${name}`, value]))
 let callsMade = 0
 const modelCall = async (labels: Record<string, string>, model = 'mistral/codestral-latest') => {
   callsMade++
@@ -37,7 +40,7 @@ const modelCall = async (labels: Record<string, string>, model = 'mistral/codest
     headers: {
       authorization: `Bearer ${aliceKey.value}`,
       'content-type': 'application/json',
-      ...Object.fromEntries(Object.entries({ ...labels, run }).map(([name, value]) => [`x-bf-dim-${name}`, value])),
+      ...dimensionHeadersOf(labels),
     },
     body: JSON.stringify({ model, messages: [{ role: 'user', content: 'hi' }] }),
   })
@@ -114,6 +117,41 @@ test('failed provider calls count as calls with zero tokens, logs of other works
   ])
   expect([...(await database.$client`select 1 from usage_entries where workspace_id = ${globex}`)]).toEqual([])
   expect([...(await database.$client`select 1 from model_calls where workspace_id = ${globex}`)]).toEqual([])
+})
+
+test('an Anthropic call cached for an hour reaches the provider with its 1-hour TTL, and the sync records its cache reads and writes', async () => {
+  await addLlmKey(bob, 'Anthropic')
+  const bobKey = await virtualKeyOf(bob)
+  const system = [{ type: 'text', text: 'You are Spyria.', cache_control: { type: 'ephemeral', ttl: '1h' } }]
+  const providerCallsBefore = fakeLlmBodies.length
+  setFakeLlmScript({ cache: { read: 4000, write: 300 } })
+  callsMade++
+  const answered = await fetch(`${gateway.url}/anthropic/v1/messages`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${bobKey.value}`,
+      'content-type': 'application/json',
+      'anthropic-version': '2023-06-01',
+      ...dimensionHeadersOf({ ...research, chat: 'chat-cached', prompter: bob }),
+    },
+    body: JSON.stringify({
+      model: 'anthropic/claude-opus-5-5',
+      max_tokens: 64,
+      system,
+      messages: [{ role: 'user', content: 'hi' }],
+    }),
+  }).finally(() => setFakeLlmScript(undefined))
+  expect(answered.status).toBe(200)
+  expect(JSON.parse(fakeLlmBodies[providerCallsBefore] ?? '{}').system).toEqual(system)
+  await landed()
+  await sync()
+  expect([
+    ...(await database.$client`
+      select provider, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens
+      from model_calls where chat_id = 'chat-cached'`),
+  ]).toEqual([
+    { provider: 'anthropic', input_tokens: 4301, output_tokens: 1, cache_read_tokens: 4000, cache_write_tokens: 300 },
+  ])
 })
 
 test('with the gateway down the sync changes nothing and the job reschedules itself', async () => {

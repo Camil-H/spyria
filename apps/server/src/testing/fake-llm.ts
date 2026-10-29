@@ -21,6 +21,7 @@ export type FakeLlmScript = {
   subagents?: Record<string, FakeLlmScript>
   summary?: string
   hold?: string
+  cache?: { read: number; write: number }
   held?: (name: string) => Promise<unknown>
 }
 type CompletionRequest = {
@@ -98,7 +99,11 @@ type AnthropicRequest = {
   tools?: { name: string }[]
 }
 type AnthropicTurn = { thinking: string[]; step?: FakeLlmStep }
-const anthropicUsage = { input_tokens: 1, output_tokens: 1 }
+const anthropicUsageOf = (cache: FakeLlmScript['cache']) => ({
+  input_tokens: 1,
+  output_tokens: 1,
+  ...(cache && { cache_read_input_tokens: cache.read, cache_creation_input_tokens: cache.write }),
+})
 const typedEventOf = (data: { type: string; [field: string]: unknown }) =>
   new TextEncoder().encode(`event: ${data.type}\ndata: ${JSON.stringify(data)}\n\n`)
 const promptTextOf = (content: string | AnthropicBlock[]) =>
@@ -183,12 +188,13 @@ const anthropicReplyOf = async (request: AnthropicRequest, script: FakeLlmScript
   const stopReason = toolUse ? 'tool_use' : 'end_turn'
   const message = { id: `msg_${crypto.randomUUID()}`, type: 'message', role: 'assistant', model: 'fake' }
   const ending = { stop_reason: stopReason, stop_sequence: null }
+  const messageUsage = anthropicUsageOf(script.cache)
   if (!request.stream)
-    return Response.json({ ...message, content: blocks.map(({ whole }) => whole), ...ending, usage: anthropicUsage })
+    return Response.json({ ...message, content: blocks.map(({ whole }) => whole), ...ending, usage: messageUsage })
   const stream = new ReadableStream({
     start: async (controller) => {
       const send = (data: Parameters<typeof typedEventOf>[0]) => controller.enqueue(typedEventOf(data))
-      send({ type: 'message_start', message: { ...message, content: [], usage: anthropicUsage } })
+      send({ type: 'message_start', message: { ...message, content: [], usage: messageUsage } })
       for (const [index, block] of blocks.entries()) {
         send({ type: 'content_block_start', index, content_block: block.start })
         for (const delta of block.deltas) {
@@ -197,7 +203,7 @@ const anthropicReplyOf = async (request: AnthropicRequest, script: FakeLlmScript
         }
         send({ type: 'content_block_stop', index })
       }
-      send({ type: 'message_delta', delta: ending, usage: anthropicUsage })
+      send({ type: 'message_delta', delta: ending, usage: messageUsage })
       send({ type: 'message_stop' })
       controller.close()
     },
