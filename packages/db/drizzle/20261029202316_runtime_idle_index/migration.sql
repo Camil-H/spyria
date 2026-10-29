@@ -1,0 +1,1 @@
+CREATE INDEX "runtimes_workspace_id_state_last_active_at_index" ON "runtimes" ("workspace_id","state","last_active_at");

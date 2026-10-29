@@ -1,5 +1,5 @@
 import type { ChatId, HarnessId, MemberId, RuntimeHostId, RuntimeId, WorkspaceId } from '@spyria/kernel'
-import type { HostLoad, Runtime } from '../domain/runtime.ts'
+import type { HostLoad, IdleCutoffs, Runtime } from '../domain/runtime.ts'
 import type { RuntimeHost } from '../domain/runtime-host.ts'
 
 type HostSecret = 'claimCode' | 'token'
@@ -27,7 +27,7 @@ export type RuntimeRepository = {
   lockByChat(workspaceId: WorkspaceId, chatId: ChatId): Promise<Runtime | undefined>
   lockOnHost(workspaceId: WorkspaceId, hostId: RuntimeHostId): Promise<Runtime[]>
   lockWaitingOnHost(workspaceId: WorkspaceId, hostId: RuntimeHostId): Promise<Runtime[]>
-  lockSweepable(workspaceId: WorkspaceId): Promise<Runtime[]>
+  lockIdle(workspaceId: WorkspaceId, cutoffs: IdleCutoffs): Promise<Runtime[]>
   findByChat(workspaceId: WorkspaceId, chatId: ChatId): Promise<Runtime | undefined>
   localHarnessOf(runtime: Runtime): Promise<HarnessId | undefined>
   add(runtime: Runtime): Promise<void>

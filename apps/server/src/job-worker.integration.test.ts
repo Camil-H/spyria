@@ -60,6 +60,7 @@ describe('the dead jobs left by a throwing job', () => {
       state: 'failed',
       lastError: missingMessageError,
     })
+    expect((await jobRow('job-broken'))?.finishedAt?.getTime()).toBeGreaterThan(startedAt)
     logged.restore()
     const brokenJobErrors = logged.events.filter(
       ({ severity, attributes }) => severity === 'ERROR' && attributes?.['job.id'] === 'job-broken',
@@ -79,8 +80,8 @@ describe('the dead jobs left by a throwing job', () => {
     ])
     expect((await listFailedJobs(database))[0]?.failedAt).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/)
 
-    expect(await retryFailedJobs(database, 'job-dead-1')).toEqual(['job-dead-1'])
-    expect(await jobRow('job-dead-1')).toMatchObject({ state: 'queued', attempts: 0 })
+    expect(await retryFailedJobs(database, 'job-dead-1')).toEqual({ requeued: ['job-dead-1'], dropped: [] })
+    expect(await jobRow('job-dead-1')).toMatchObject({ state: 'queued', attempts: 0, finishedAt: null })
     expect(await jobRow('job-dead-2')).toMatchObject({ state: 'failed' })
     const worker = startWorker()
     await waitFor(async () => (await jobRow('job-dead-1'))?.state === 'done')
@@ -91,7 +92,7 @@ describe('the dead jobs left by a throwing job', () => {
   })
 
   test('jobs:retry --all requeues every dead job', async () => {
-    expect((await retryFailedJobs(database, 'all')).toSorted()).toEqual(['job-broken', 'job-dead-2'])
+    expect((await retryFailedJobs(database, 'all')).requeued.toSorted()).toEqual(['job-broken', 'job-dead-2'])
     expect(await jobRow('job-broken')).toMatchObject({ state: 'queued', attempts: 0 })
     const logged = captureLogs()
     const worker = startWorker({ retryDelayMilliseconds: 0 })
@@ -101,8 +102,42 @@ describe('the dead jobs left by a throwing job', () => {
     await worker.stop()
     logged.restore()
     expect(await jobRow('job-dead-2')).toMatchObject({ state: 'done', attempts: 1 })
-    expect(await retryFailedJobs(database, 'job-unknown')).toEqual([])
+    expect(await retryFailedJobs(database, 'job-unknown')).toEqual({ requeued: [], dropped: [] })
   })
+})
+
+describe('a job longer than its lease', () => {
+  test('keeps its lease while it runs, so a second worker never claims it again', async () => {
+    let removals = 0
+    const sandboxProvider = {
+      remove: async () => {
+        removals++
+        await sleep(1200)
+      },
+    } as unknown as SandboxProvider
+    await addAgentPromptJob('job-long', 'unused', {
+      type: 'runtime.discard',
+      payload: { runtimeId: 'runtime-long', hostId: 'host-long' },
+    })
+    const workers = [1, 2].map(() => startWorker({ sandboxProvider, leaseMilliseconds: 300 }))
+    await waitFor(async () => (await jobRow('job-long'))?.state === 'done')
+    await Promise.all(workers.map((worker) => worker.stop()))
+    expect(removals).toBe(1)
+    expect(await jobRow('job-long')).toMatchObject({ state: 'done', attempts: 1 })
+    expect((await jobRow('job-long'))?.finishedAt).toBeInstanceOf(Date)
+  })
+})
+
+test('a queued job wakes an idle worker at once instead of waiting for its next poll', async () => {
+  const sandboxProvider = { remove: async () => {} } as unknown as SandboxProvider
+  const worker = startWorker({ sandboxProvider, pollIntervalMilliseconds: 60_000 })
+  await worker.whenListening()
+  await sleep(100)
+  await database.$client`
+    insert into jobs (workspace_id, id, type, payload, run_at, attempts, state) values
+      (${acme}, 'job-woken', 'runtime.discard', '{"runtimeId": "runtime-woken", "hostId": "host-woken"}', now(), 0, 'queued')`
+  await waitFor(async () => (await jobRow('job-woken'))?.state === 'done', 2_000)
+  await worker.stop()
 })
 
 test('the session sweep runs without a log line, deletes only expired sessions, done jobs older than a day and webhook deliveries older than a week, then reschedules itself once, a day later', async () => {
@@ -114,11 +149,11 @@ test('the session sweep runs without a log line, deletes only expired sessions, 
       (${globex}, 'session-expired-in-globex', ${alice}, now() - interval '8 days', now() - interval '1 day'),
       (${globex}, 'session-live-in-globex', ${alice}, now(), now() + interval '1 hour')`
   await database.$client`
-    insert into jobs (workspace_id, id, type, payload, run_at, attempts, state) values
-      (${acme}, 'job-done-old', 'agent.prompt', '{}', now() - interval '25 hours', 1, 'done'),
-      (${acme}, 'job-done-recent', 'agent.prompt', '{}', now() - interval '23 hours', 1, 'done'),
-      (${acme}, 'job-failed-old', 'agent.prompt', '{}', now() - interval '25 hours', 5, 'failed'),
-      (${globex}, 'job-done-old-in-globex', 'agent.prompt', '{}', now() - interval '25 hours', 1, 'done')`
+    insert into jobs (workspace_id, id, type, payload, run_at, attempts, state, finished_at) values
+      (${acme}, 'job-done-old', 'agent.prompt', '{}', now() - interval '26 hours', 1, 'done', now() - interval '25 hours'),
+      (${acme}, 'job-done-recent', 'agent.prompt', '{}', now() - interval '26 hours', 1, 'done', now() - interval '23 hours'),
+      (${acme}, 'job-failed-old', 'agent.prompt', '{}', now() - interval '26 hours', 5, 'failed', now() - interval '25 hours'),
+      (${globex}, 'job-done-old-in-globex', 'agent.prompt', '{}', now() - interval '26 hours', 1, 'done', now() - interval '25 hours')`
   await database.$client`
     insert into github_apps (workspace_id, app_id, client_id, encrypted_client_secret, encrypted_private_key,
       encrypted_webhook_secret, updated_at)
@@ -161,4 +196,39 @@ test('the session sweep runs without a log line, deletes only expired sessions, 
   await enqueueSweeps(database)
   for (const workspaceId of [acme, globex])
     expect((await sweepsOf(workspaceId)).filter((job) => job.state === 'queued')).toHaveLength(1)
+})
+
+test('jobs:retry drops a dead sweep already scheduled or superseded by a later failure, and a sweep that failed within the hour is not scheduled again', async () => {
+  const runtimeSweepsOfGlobex = async () =>
+    (await database.select().from(jobs))
+      .filter((job) => job.workspaceId === globex && job.type === 'runtime.sweep')
+      .map(({ id, state }) => ({ id, state }))
+      .toSorted((first, second) => first.id.localeCompare(second.id))
+  await database.$client`delete from jobs where workspace_id = ${globex} and type = 'runtime.sweep'`
+  await database.$client`
+    insert into jobs (workspace_id, id, type, payload, run_at, attempts, state, finished_at) values
+      (${globex}, 'job-next-runtime-sweep', 'runtime.sweep', '{}', now() + interval '5 minutes', 0, 'queued', null),
+      (${globex}, 'job-dead-runtime-sweep-1', 'runtime.sweep', '{}', now(), 5, 'failed', now() - interval '3 hours')`
+  expect(await retryFailedJobs(database, 'job-dead-runtime-sweep-1')).toEqual({
+    requeued: [],
+    dropped: ['job-dead-runtime-sweep-1'],
+  })
+  expect(await runtimeSweepsOfGlobex()).toEqual([{ id: 'job-next-runtime-sweep', state: 'queued' }])
+
+  await database.$client`delete from jobs where workspace_id = ${globex} and type = 'runtime.sweep'`
+  await database.$client`
+    insert into jobs (workspace_id, id, type, payload, run_at, attempts, state, finished_at) values
+      (${globex}, 'job-dead-runtime-sweep-2', 'runtime.sweep', '{}', now(), 5, 'failed', now() - interval '3 hours'),
+      (${globex}, 'job-dead-runtime-sweep-3', 'runtime.sweep', '{}', now(), 5, 'failed', now())`
+  await enqueueSweeps(database, globex)
+  expect((await runtimeSweepsOfGlobex()).map((job) => job.state)).toEqual(['failed', 'failed'])
+  const { requeued, dropped } = await retryFailedJobs(database, 'all')
+  expect(requeued).toContain('job-dead-runtime-sweep-3')
+  expect(dropped).toEqual(['job-dead-runtime-sweep-2'])
+  expect(await runtimeSweepsOfGlobex()).toEqual([{ id: 'job-dead-runtime-sweep-3', state: 'queued' }])
+
+  await database.$client`
+    update jobs set state = 'failed', finished_at = now() - interval '2 hours' where id = 'job-dead-runtime-sweep-3'`
+  await enqueueSweeps(database, globex)
+  expect((await runtimeSweepsOfGlobex()).map((job) => job.state).toSorted()).toEqual(['failed', 'queued'])
 })

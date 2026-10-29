@@ -1,6 +1,6 @@
 import { createDatabase } from '@spyria/db/postgres'
 import { setModelDirectory } from '@spyria/db/server-writes'
-import { deploymentOf } from '@spyria/kernel'
+import { deploymentOf, log } from '@spyria/kernel'
 import { createLlmGateway } from '@spyria/profile/server'
 import { createBifrostUsageLogs } from '@spyria/usage/server'
 import { createAgentBridge } from './agent-bridge/bridge.ts'
@@ -36,6 +36,7 @@ const instanceSignInAppOf = (preset: 'google' | 'microsoft', clientIdName: strin
 
 const telemetry = startTelemetry()
 const shutdownMilliseconds = 25_000
+const sweepSchedulingMilliseconds = 60_000
 const authModes = ['dex', 'sso'] as const
 const authMode = authModes.find((mode) => mode === (process.env.SPYRIA_AUTH_MODE ?? 'dex'))
 if (!authMode) throw new Error('SPYRIA_AUTH_MODE must be dex or sso')
@@ -105,7 +106,16 @@ const jobWorker = startJobWorker(database, {
   llmGateway,
   usageLogs: createBifrostUsageLogs(gatewaySettings),
 })
-await enqueueSweeps(database)
+const enqueueMissingSweeps = () =>
+  enqueueSweeps(database).catch((error) =>
+    log.error({
+      event: 'job.sweeps_enqueue_failed',
+      body: 'The server could not schedule the workspace sweeps',
+      error,
+    }),
+  )
+await enqueueMissingSweeps()
+const sweepScheduling = setInterval(enqueueMissingSweeps, sweepSchedulingMilliseconds)
 await agentBridge.forDatabase(database).resumeActiveTurns()
 const server = Bun.serve({
   port: Number(process.env.PORT ?? 3000),
@@ -117,6 +127,7 @@ const server = Bun.serve({
 const shutDown = async () => {
   setTimeout(() => process.exit(1), shutdownMilliseconds).unref()
   void server.stop()
+  clearInterval(sweepScheduling)
   await jobWorker.stop()
   await runtimeHosts.close()
   await server.stop(true)

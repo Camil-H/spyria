@@ -404,7 +404,8 @@ const promptly = <Result>(work: Promise<Result>) =>
 const transactionsLeftOpen = () =>
   database.$client`
     select pid, query from pg_stat_activity
-    where datname = current_database() and state like 'idle in transaction%'`
+    where datname = current_database() and application_name = current_setting('application_name')
+      and state like 'idle in transaction%'`
 const sweepsDone = async () =>
   (await database.$client`select id from jobs where type = 'sessions.sweep' and state = 'done'`).length
 

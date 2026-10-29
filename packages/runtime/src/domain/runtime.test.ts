@@ -4,6 +4,7 @@ import {
   canTransition,
   ensureStepOf,
   haltStepOf,
+  idleCutoffsAt,
   idleStepOf,
   installFailureOf,
   installFailureReasonOf,
@@ -104,6 +105,14 @@ test('a runtime idle for more than an hour stops, a stopped or failed one idle f
   expect(idleFor('failed', 30 * 24 * 60 * minute + 1)).toBe('removing')
   for (const state of ['creating', 'starting', 'stopping', 'removing', 'removed'] as const)
     expect(idleFor(state, 365 * 24 * 60 * minute)).toBeUndefined()
+})
+
+test('the idle cutoffs the sweep locks by are the last activity times past which a runtime stops or is removed', () => {
+  const { stopBefore, removeBefore } = idleCutoffsAt(now)
+  expect(idleStepOf(runtime({ state: 'running', lastActiveAt: stopBefore }), now)).toBeUndefined()
+  expect(idleStepOf(runtime({ state: 'running', lastActiveAt: stopBefore - 1 }), now)).toBe('stopping')
+  expect(idleStepOf(runtime({ state: 'stopped', lastActiveAt: removeBefore }), now)).toBeUndefined()
+  expect(idleStepOf(runtime({ state: 'stopped', lastActiveAt: removeBefore - 1 }), now)).toBe('removing')
 })
 
 test('a touch writes at most once a minute, for a running runtime only', () => {

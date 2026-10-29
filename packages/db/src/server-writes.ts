@@ -233,21 +233,23 @@ const runtimeLocks = {
     select chats.id from chats join runtime_hosts on runtime_hosts.workspace_id = chats.workspace_id
       and runtime_hosts.owner_id = chats.owner_user_id
     where chats.workspace_id = $1 and chats.local_session and runtime_hosts.id = $2)) for update`,
-  sweepable: "(state in ('running', 'stopped') or state = 'failed' and host_id is not null) for update skip locked",
+  idle: `(state = 'running' and last_active_at < to_timestamp($2::double precision / 1000)
+    or (state = 'stopped' or state = 'failed' and host_id is not null)
+      and last_active_at < to_timestamp($3::double precision / 1000)) for update skip locked`,
 }
 
 export const lockRuntimes = async (
   tx: Transaction,
   workspaceId: string,
   scope: keyof typeof runtimeLocks,
-  key?: string,
+  ...keys: (string | number)[]
 ) => {
   if (scope === 'chat')
-    await onServer(tx, 'select 1 from chats where workspace_id = $1 and id = $2 for update', [workspaceId, key])
+    await onServer(tx, 'select 1 from chats where workspace_id = $1 and id = $2 for update', [workspaceId, ...keys])
   const rows = await onServer<{ id: string }>(
     tx,
     `select id from runtimes where workspace_id = $1 and ${runtimeLocks[scope]}`,
-    key === undefined ? [workspaceId] : [workspaceId, key],
+    [workspaceId, ...keys],
   )
   return rows.map((row) => row.id)
 }

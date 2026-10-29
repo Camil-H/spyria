@@ -115,8 +115,8 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
         runtimesWithIds(workspaceId, await lockRuntimes(tx, workspaceId, 'host', hostId)),
       lockWaitingOnHost: async (workspaceId, hostId) =>
         runtimesWithIds(workspaceId, await lockRuntimes(tx, workspaceId, 'waitingOnHost', hostId)),
-      lockSweepable: async (workspaceId) =>
-        runtimesWithIds(workspaceId, await lockRuntimes(tx, workspaceId, 'sweepable')),
+      lockIdle: async (workspaceId, { stopBefore, removeBefore }) =>
+        runtimesWithIds(workspaceId, await lockRuntimes(tx, workspaceId, 'idle', stopBefore, removeBefore)),
       findByChat: async (workspaceId, chatId) => {
         const row = await tx.run(zql.runtimes.where('workspaceId', workspaceId).where('chatId', chatId).one())
         return row && runtimeOf(row)
