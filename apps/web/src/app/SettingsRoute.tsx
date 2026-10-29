@@ -4,7 +4,7 @@ import type { WorkspaceId, WorkspacePermission } from '@spyria/kernel'
 import { ChecklistBlock } from '@spyria/onboarding'
 import { WorkspaceConnectionsSection } from '@spyria/profile'
 import { RuntimeHostsSection } from '@spyria/runtime'
-import { focusRing, formatCost, iconButtonClass, LabelledSection } from '@spyria/ui'
+import { focusRing, formatCost, iconButtonClass, LabelledSection, useShortcut } from '@spyria/ui'
 import { AuditLogSection, countBudgetAlerts, UsageSection } from '@spyria/usage'
 import {
   DeleteWorkspaceSection,
@@ -17,7 +17,7 @@ import {
 } from '@spyria/workspace'
 import { ArrowLeft } from 'lucide-react'
 import { type ComponentType, use } from 'react'
-import { Link, useOutletContext, useParams } from 'react-router'
+import { Link, useNavigate, useOutletContext, useParams } from 'react-router'
 import { sharedAuthMode } from './auth.ts'
 
 type SettingsCard = {
@@ -162,11 +162,13 @@ const SettingsRoute = () => {
     .filter((section) => section.cards.length > 0)
   const openCard = cardSections.flatMap(({ cards }) => cards).find(({ path }) => path === card)
   const settingsPath = `/w/${workspaceId}/settings`
+  const navigate = useNavigate()
+  useShortcut('escape', 'Back to Workspace settings', () => navigate(settingsPath), openCard !== undefined)
   if (openCard && !isAllowed(openCard))
     return <p className="p-6 text-muted">Your workspace role does not give access to this page</p>
   if (openCard)
     return (
-      <div className="flex max-w-3xl flex-col gap-6 p-6">
+      <div className="flex flex-col gap-6 px-6 py-6 md:px-12 xl:px-16">
         <div className="flex items-center gap-2">
           <Link to={settingsPath} aria-label="Back to Workspace settings" className={iconButtonClass}>
             <ArrowLeft aria-hidden className="size-5" />
@@ -182,13 +184,13 @@ const SettingsRoute = () => {
       </div>
     )
   return (
-    <div className="flex max-w-4xl flex-col gap-8 p-6">
+    <div className="flex flex-col gap-8 px-6 py-6 md:px-12 xl:px-16">
       <h1 className="text-2xl font-semibold">Workspace settings</h1>
       <ChecklistBlock workspaceId={workspaceId} scope="workspace" usesSingleSignOn={!isDexSignIn} />
       {allowedSections.length > 0 ? (
         allowedSections.map(({ title, cards }) => (
           <LabelledSection key={title} title={title}>
-            <ul className="grid gap-3 sm:grid-cols-2">
+            <ul className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
               {cards.map(({ path, title: cardTitle, description }) => (
                 <li key={path}>
                   <Link

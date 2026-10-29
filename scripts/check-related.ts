@@ -80,7 +80,7 @@ const isInWebBundle = (file: string) =>
     file,
   ) && !isTestCode(file)
 const isDockerArea = (file: string) =>
-  /^(apps\/(host|agent)\/|infra\/|apps\/server\/src\/(runtime-hosts|agent-bridge)\/|apps\/server\/src\/(spyria-agent-image|testing\/harnesses)\.ts$|scripts\/(agent-image|check-trust|build-cache)\.ts$)/.test(
+  /^(apps\/(host|agent)\/|infra\/|apps\/server\/src\/(runtime-hosts|agent-bridge)\/|apps\/server\/src\/(spyria-agent-image|testing\/harnesses)\.ts$|scripts\/(agent-image|build-cache)\.ts$)/.test(
     file,
   )
 const e2eSegmentsByArea: [RegExp, string[]][] = [
