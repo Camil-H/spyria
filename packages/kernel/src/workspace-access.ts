@@ -24,7 +24,7 @@ export const workspacePermissionLabels: Record<WorkspacePermission, string> = {
   'sso.manage': 'Set up SSO',
   'github.manage': 'Connect GitHub',
   'tools.manage': 'Manage shared MCP tools',
-  'providers.manage': 'Manage AI providers and models',
+  'providers.manage': 'Manage AI providers',
   'runtimes.manage': 'Manage runtime hosts and local sessions',
   'costs.view': 'View costs',
   'budgets.manage': 'Manage budgets',

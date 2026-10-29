@@ -40,8 +40,8 @@ test.each([
   expect(gatewayProviderOrErrorOf(provider)).toEqual(expected)
 })
 
-test('newLlmCredential refuses a provider the workspace allow-list leaves out, whatever models it allows', () => {
-  const allowList = { anthropic: 'all', openai: ['openai/gpt-5'] } as const
+test('newLlmCredential refuses a provider the workspace allow-list leaves out, and accepts the ones it names', () => {
+  const allowList = ['anthropic', 'openai']
   expect(gatewayProviderOrErrorOf('Anthropic', allowList)).toBe('anthropic')
   expect(gatewayProviderOrErrorOf('openai', allowList)).toBe('openai')
   const refusal = gatewayProviderOrErrorOf('Google', allowList)

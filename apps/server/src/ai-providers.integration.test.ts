@@ -42,24 +42,24 @@ afterEach(async () => {
 })
 
 test('only a member allowed to manage AI providers changes the allow-list, and each change is audited in plain words', async () => {
-  expect(await setAllowList({ anthropic: 'all' }, bobInAcme)).toEqual(
-    failedWith('Your workspace role does not allow this: Manage AI providers and models'),
+  expect(await setAllowList(['anthropic'], bobInAcme)).toEqual(
+    failedWith('Your workspace role does not allow this: Manage AI providers'),
   )
-  expect(await setAllowList({ fake: 'all' })).toEqual(failedWith('fake is not a supported provider'))
-  expect(await setAllowList({ anthropic: 'all', mistral: ['mistral/codestral-latest'], openai: [] })).toEqual(succeeded)
+  expect(await setAllowList(['fake'])).toEqual(failedWith('fake is not a supported provider'))
+  expect(await setAllowList(['mistral', 'anthropic', 'mistral'])).toEqual(succeeded)
   const [workspace] = await database.$client`select ai_provider_allow_list from workspaces where workspace_id = ${acme}`
-  expect(workspace?.ai_provider_allow_list).toEqual({ anthropic: 'all', mistral: ['mistral/codestral-latest'] })
+  expect(workspace?.ai_provider_allow_list).toEqual(['anthropic', 'mistral'])
   expect((await workspaceEventsOf(database)).filter(({ type }) => type === 'ai_providers.changed')).toEqual([
     {
       type: 'ai_providers.changed',
       actorId: aliceInAcme.userId,
-      payload: { allowed: ['Anthropic', 'Mistral (mistral/codestral-latest)'] },
+      payload: { allowed: ['Anthropic', 'Mistral'] },
     },
   ])
 })
 
 test('a key for a provider left out of the allow-list is refused before it reaches the gateway', async () => {
-  await setAllowList({ anthropic: 'all' })
+  await setAllowList(['anthropic'])
   const refused = await asMember(bob, 'POST', '/api/llm-credentials', { provider: 'OpenAI', secret: 'sk-test-1234' })
   expect(refused.status).toBe(400)
   expect(JSON.parse(refused.body)).toEqual({
@@ -68,14 +68,15 @@ test('a key for a provider left out of the allow-list is refused before it reach
   })
 })
 
-test('the relay refuses a model the allow-list leaves out, before the gateway, and lets an allowed one through', async () => {
-  await setAllowList({ mistral: ['mistral/codestral-latest'] })
-  expect(await relayedCallOf('mistral/mistral-large-latest')).toEqual({
+test('the relay refuses a model of a provider the allow-list leaves out, before the gateway, and lets an allowed one through', async () => {
+  await setAllowList(['anthropic'])
+  expect(await relayedCallOf('mistral/codestral-latest')).toEqual({
     status: 403,
-    body: { error: { message: 'mistral-large-latest is not allowed in this workspace', type: 'spyria_refused' } },
+    body: { error: { message: 'codestral-latest is not allowed in this workspace', type: 'spyria_refused' } },
     reached: 0,
   })
+  await setAllowList(['mistral'])
   expect(await relayedCallOf('mistral/codestral-latest')).toMatchObject({ status: 200, reached: 1 })
-  for (const fields of [{ fallbacks: ['mistral/mistral-large-latest'] }, { Model: 'mistral/mistral-large-latest' }])
+  for (const fields of [{ fallbacks: ['openai/gpt-5'] }, { Model: 'openai/gpt-5' }])
     expect(await relayedCallOf('mistral/codestral-latest', fields)).toMatchObject({ status: 403, reached: 0 })
 })

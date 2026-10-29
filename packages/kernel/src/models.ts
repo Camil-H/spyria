@@ -20,7 +20,7 @@ export const aiProviders = [
   { id: 'typesafe', name: 'TypeSafe', aliases: [] },
 ] as const satisfies readonly { id: string; name: string; aliases: readonly string[] }[]
 export type AiProviderId = (typeof aiProviders)[number]['id']
-export type AiProviderAllowList = Readonly<Partial<Record<string, 'all' | readonly string[]>>>
+export type AiProviderAllowList = readonly string[]
 
 export const aiProviderOf = (text: string) => {
   const wanted = text.trim().toLowerCase()
@@ -84,12 +84,9 @@ export const providersOfGatewayRefs = (refs: readonly string[]) => [
 ]
 export const providerOf = (id: string) => id.split('/')[0] ?? ''
 export const isAllowedProvider = (allowList: AiProviderAllowList | null, provider: string) =>
-  allowList === null || Object.hasOwn(allowList, provider)
-export const isAllowedModel = (allowList: AiProviderAllowList | null, id: string) => {
-  const provider = providerOf(id)
-  const models = allowList === null ? 'all' : Object.hasOwn(allowList, provider) ? allowList[provider] : undefined
-  return models === 'all' || (models?.includes(id) ?? false)
-}
+  allowList === null || allowList.includes(provider)
+export const isAllowedModel = (allowList: AiProviderAllowList | null, id: string) =>
+  isAllowedProvider(allowList, providerOf(id))
 export const soleRequestedModelOf = (request: unknown) => {
   if (request === null || typeof request !== 'object' || Array.isArray(request)) return undefined
   const routingFields = Object.entries(request).filter(([name]) => ['model', 'fallbacks'].includes(name.toLowerCase()))

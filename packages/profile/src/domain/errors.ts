@@ -14,11 +14,6 @@ export const ProviderNotAllowed = errorKind(
   (provider: string) => `${provider} is not allowed in this workspace`,
   ProfileError,
 )
-export const ModelOfAnotherProvider = errorKind(
-  'model_of_another_provider',
-  (model: string, provider: string) => `${model} is not a model of ${provider}`,
-  ProfileError,
-)
 export const BlankSecret = blankKind('blank_secret', 'A secret', ProfileError)
 export const CredentialNotFound = errorKind(
   'credential_not_found',

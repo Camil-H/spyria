@@ -39,7 +39,7 @@ export const profileMutators = defineMutators({
     ),
     setAiProviders: defineMutator(
       z.extend(workspaceArguments, {
-        allowList: z.nullable(z.record(z.string(), z.union([z.literal('all'), z.array(z.string())]))),
+        allowList: z.nullable(z.array(z.string())),
       }),
       ({ tx, ctx, args }) => setAiProviders(dependenciesOf(tx, ctx, args), args),
     ),

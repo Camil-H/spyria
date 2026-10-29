@@ -44,7 +44,7 @@ A workspace role is a named set of permissions. Two are built in and cannot be c
 | `sso.manage` | Set up SSO |
 | `github.manage` | Connect GitHub |
 | `tools.manage` | Manage shared MCP tools |
-| `providers.manage` | Manage AI providers and models |
+| `providers.manage` | Manage AI providers |
 | `runtimes.manage` | Manage runtime hosts and local sessions |
 | `costs.view` | View costs |
 | `budgets.manage` | Manage budgets |
@@ -136,13 +136,13 @@ When an agent acts, it uses the chat owner's access. On a guest's prompt it uses
 
 ## AI providers
 
-**AI providers** chooses which model providers and models members can use. By default every provider and model is allowed. Turning a provider off, or narrowing it to some of its models (the catalog's models, plus any model id of that provider added by hand), turns the setting into an allow-list:
+**AI providers** chooses which model providers members can use. By default every provider is allowed. Turning a provider off turns the setting into an allow-list of providers; a provider that is on allows all its models:
 
 - a member cannot add a key for a provider that is off ("OpenAI is not allowed in this workspace");
-- models left out are not offered in the model picker, nor chosen by routing or for sub-agents;
-- the model relay refuses a call to a model left out before it reaches the gateway, and the chat shows "*Model* is not allowed in this workspace".
+- the models of a provider that is off are not offered in the model picker, nor chosen by routing or for sub-agents;
+- the model relay refuses a call to such a model before it reaches the gateway, and the chat shows "*Model* is not allowed in this workspace".
 
-**Allow every provider and model** removes the allow-list. Keys already added for a provider turned off stay in the member's profile but reach no model. Sessions on a member's own machine (Claude Code, Codex) use the member's own subscription and are not covered. Each change is recorded in the audit log.
+**Allow every provider** removes the allow-list. Keys already added for a provider turned off stay in the member's profile but reach no model. Sessions on a member's own machine (Claude Code, Codex) use the member's own subscription and are not covered. Each change is recorded in the audit log.
 
 The providers are Anthropic, OpenAI, Google Gemini, Mistral, xAI, DeepSeek, Z.ai, OpenRouter and TypeSafe (decision models for routing), listed once in `packages/kernel/src/models.ts`.
 
