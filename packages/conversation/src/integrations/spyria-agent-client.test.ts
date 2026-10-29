@@ -189,7 +189,7 @@ const createdPiOf = async (sub?: { parentConversationId: string }, llm = {}) => 
   return { created, command, envOf, models: filesOf('SPYRIA_PI_MODELS'), mcp: filesOf('SPYRIA_PI_MCP') }
 }
 
-test("a Pi launch passes the tokens only as secrets, runs offline, writes its files atomically and execs Pi's RPC mode last", async () => {
+test("a Pi launch passes the tokens only as secrets, runs offline, keeps its Anthropic prompt cache for an hour, writes its files atomically and execs Pi's RPC mode last", async () => {
   const { created, command, envOf } = await createdPiOf()
   expect(created.secrets).toEqual({
     SPYRIA_LLM_TOKEN: { kind: 'StaticSecret', value: 'runtime-llm-token' },
@@ -199,7 +199,13 @@ test("a Pi launch passes the tokens only as secrets, runs offline, writes its fi
   expect(created.agent.adapter).toBe('pi-rpc')
   expect(created.agent).not.toHaveProperty('mcp_config')
   expect(JSON.stringify(command)).not.toContain('runtime-llm-token')
-  expect(command.slice(0, 4)).toEqual(['env', 'PI_OFFLINE=1', 'PI_SKIP_VERSION_CHECK=1', 'PI_TELEMETRY=0'])
+  expect(command.slice(0, 5)).toEqual([
+    'env',
+    'PI_OFFLINE=1',
+    'PI_SKIP_VERSION_CHECK=1',
+    'PI_TELEMETRY=0',
+    'PI_CACHE_RETENTION=long',
+  ])
   expect(envOf('SPYRIA_COMPACTION_MODEL')).toBe('spyria/mistral/mistral-small-latest')
   expect(JSON.parse(envOf('SPYRIA_PI_SETTINGS') ?? '')).toEqual({
     quietStartup: true,
@@ -218,7 +224,7 @@ test("a Pi launch passes the tokens only as secrets, runs offline, writes its fi
   expect(script.split('\n').at(-1)).toBe('exec pi --mode rpc --no-themes')
 })
 
-test('Pi lists Anthropic models on the Anthropic route without /v1 and the others on the chat route, with names, reasoning and context windows', async () => {
+test('Pi lists Anthropic models on the Anthropic route without /v1 and the others on the chat route, with names, reasoning and context windows, the others without the long cache', async () => {
   const { models } = await createdPiOf()
   expect(models).toEqual({
     providers: {
@@ -227,12 +233,18 @@ test('Pi lists Anthropic models on the Anthropic route without /v1 and the other
         api: 'openai-completions',
         apiKey: `\${SPYRIA_LLM_TOKEN}`,
         models: [
-          { id: 'openai/gpt-6.1-sol', name: 'GPT-6.1-Sol', reasoning: true, contextWindow: 1050000 },
+          {
+            id: 'openai/gpt-6.1-sol',
+            name: 'GPT-6.1-Sol',
+            reasoning: true,
+            contextWindow: 1050000,
+            compat: { supportsLongCacheRetention: false },
+          },
           {
             id: 'mistral/mistral-small-latest',
             name: 'Mistral Small',
             reasoning: false,
-            compat: { supportsDeveloperRole: false },
+            compat: { supportsLongCacheRetention: false, supportsDeveloperRole: false },
           },
         ],
       },
@@ -265,13 +277,15 @@ test.each([
   expect(models.providers).toEqual({
     spyria: expect.objectContaining({
       api: 'openai-completions',
-      models: [{ id, name: id, reasoning: true, compat: { supportsDeveloperRole: false } }],
+      models: [
+        { id, name: id, reasoning: true, compat: { supportsLongCacheRetention: false, supportsDeveloperRole: false } },
+      ],
     }),
   })
   expect(command).toContain(`SPYRIA_COMPACTION_MODEL=spyria/${id}`)
 })
 
-test('a parent Pi reaches Spyria tools and the router with its LLM token; a sub reaches only Spyria tools with its own token from its own directory', async () => {
+test('a parent Pi reaches Spyria tools and the router with its LLM token; a sub reaches only Spyria tools with its own token from its own directory, on the default 5-minute cache', async () => {
   const parent = await createdPiOf()
   const toolServer = (path: string) => ({
     url: `http://spyria-gateway-relay:4000${path}`,
@@ -292,6 +306,7 @@ test('a parent Pi reaches Spyria tools and the router with its LLM token; a sub 
   })
   expect(JSON.stringify(sub.command)).not.toMatch(/runtime-llm-token/)
   expect(sub.command.at(-1)).toContain('export PI_CODING_AGENT_DIR="$HOME/.pi/sub"')
+  expect(sub.command).not.toContain('PI_CACHE_RETENTION=long')
   expect(piCommandOf('http://spyria-gateway-relay:4000/v1', piLaunch, { sub: true })).toEqual(sub.command)
 })
 

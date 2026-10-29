@@ -1,4 +1,5 @@
 import { chatModelsOf, type Model, type ModelTier, nearestModelOf, routableModelOf } from '@spyria/kernel'
+import type { AgentStep } from './agent-steps.ts'
 import { type Answers, confidenceThreshold } from './decisions.ts'
 
 const efforts = ['small', 'medium', 'large']
@@ -26,7 +27,17 @@ export const awaitTaskTool = {
     'Wait for a delegated task that is still running; returns its final answer, or that it is still running.',
   inputSchema: { type: 'object', required: ['taskId'], properties: { taskId: { type: 'string' } } },
 }
-export const routerTools = [delegateTool, awaitTaskTool]
+export const checkTaskTool = {
+  name: 'check_task',
+  description:
+    'Read the steps a delegated task has taken so far, or stop it with cancel=true; returns its final answer once it has finished.',
+  inputSchema: {
+    type: 'object',
+    required: ['taskId'],
+    properties: { taskId: { type: 'string' }, cancel: { type: 'boolean' } },
+  },
+}
+export const routerTools = [delegateTool, awaitTaskTool, checkTaskTool]
 
 export const effortHintOf = (effort: unknown) => (efforts.includes(String(effort)) ? String(effort) : 'medium')
 
@@ -69,3 +80,36 @@ export const stillRunningOf = (id: string) => `Task ${id} is still running; call
 export const unknownTaskOf = (id: string) => `There is no task ${id} running in this turn`
 export const defaultResumeAfterMilliseconds = 45_000
 export const delegateTimeoutSeconds = 120
+
+const shownTaskSteps = 20
+const shownThoughtCharacters = 200
+const fileVerbs = { read: 'read', create: 'created', edit: 'edited' }
+const taskStepLineOf = (step: AgentStep) => {
+  if (step.type === 'command') return `ran ${step.command}${step.exitCode === null ? '' : ` (exit ${step.exitCode})`}`
+  if (step.type === 'file') return `${fileVerbs[step.operation]} ${step.path}`
+  if (step.type === 'tool') return `called ${step.name}${step.isError ? ' (failed)' : ''}`
+  if (step.type === 'thought') return `thought: ${step.text.slice(0, shownThoughtCharacters)}`
+  if (step.type === 'error') return `error: ${step.message}`
+  return step.type.replace('_', ' ')
+}
+const taskStepsOf = (steps: readonly AgentStep[]) => {
+  const hidden = steps.length - shownTaskSteps
+  return [
+    ...(hidden > 0 ? [`(${hidden} earlier steps not shown)`] : []),
+    ...steps.slice(-shownTaskSteps).map((step) => `- ${taskStepLineOf(step)}`),
+  ].join('\n')
+}
+export const taskProgressOf = (id: string, steps: readonly AgentStep[]) =>
+  steps.length === 0
+    ? `Task ${id} is running and has taken no step yet`
+    : `Task ${id} is running; its steps so far:\n${taskStepsOf(steps)}`
+export const cancelledTaskOf = (id: string, steps: readonly AgentStep[]) =>
+  steps.length === 0
+    ? `Task ${id} was cancelled before taking any step`
+    : `Task ${id} was cancelled; its steps:\n${taskStepsOf(steps)}`
+export const taskReportOf = (id: string, text: string | null) =>
+  text?.startsWith(`Task ${id} is running`)
+    ? 'running'
+    : text?.startsWith(`Task ${id} was cancelled`)
+      ? 'cancelled'
+      : undefined

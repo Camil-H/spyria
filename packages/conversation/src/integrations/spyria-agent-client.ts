@@ -112,7 +112,9 @@ const piProviderOf = (baseUrl: string, api: string, models: readonly PiModel[]) 
     name,
     reasoning,
     ...(contextWindow !== undefined && { contextWindow }),
-    ...(api === 'openai-completions' && !id.startsWith('openai/') && { compat: { supportsDeveloperRole: false } }),
+    ...(api === 'openai-completions' && {
+      compat: { supportsLongCacheRetention: false, ...(!id.startsWith('openai/') && { supportsDeveloperRole: false }) },
+    }),
   })),
 })
 const piMcpServerOf = (gatewayUrl: string, path: string) => ({
@@ -155,6 +157,7 @@ export const piCommandOf = (
     'PI_OFFLINE=1',
     'PI_SKIP_VERSION_CHECK=1',
     'PI_TELEMETRY=0',
+    ...(sub ? [] : ['PI_CACHE_RETENTION=long']),
     `SPYRIA_COMPACTION_MODEL=${piModelOf(compactionModel)}`,
     `SPYRIA_PI_MODELS=${JSON.stringify({ providers })}`,
     `SPYRIA_PI_SETTINGS=${JSON.stringify({ ...piSettings, ...(compaction && { compaction }) })}`,

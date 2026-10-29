@@ -185,7 +185,7 @@ const modelCallsOf = async (chatId: string, minimum: number) => {
     select prompter_id, owner_id, model, provider, status from model_calls where chat_id = ${chatId}`
 }
 
-test("Pi in Spyria's image answers through the LLM relay on the chat and Anthropic routes, streams its text to the events socket, ends the turn and each call is attributed to the prompter and the owner", async () => {
+test("Pi in Spyria's image answers through the LLM relay on the chat and Anthropic routes, its Anthropic prompt cached for an hour through the gateway, streams its text to the events socket, ends the turn and each call is attributed to the prompter and the owner", async () => {
   await addLlmKey(bob, 'Mistral')
   await addLlmKey(bob, 'Anthropic')
   const { id, transport } = await runtime()
@@ -203,6 +203,9 @@ test("Pi in Spyria's image answers through the LLM relay on the chat and Anthrop
   expect(await answerOf('Hello Pi')).toBe('Understood, working on it.')
   await agentClient.switchModel(conversation, 'spyria-anthropic/anthropic/claude-haiku-5-5')
   expect(await answerOf('Hello Pi on Anthropic')).toContain('Understood')
+  const anthropicRequest = fakeLlmBodies.findLast((body) => body.includes('Hello Pi on Anthropic')) ?? ''
+  expect(anthropicRequest).toContain('"ttl":"1h"')
+  expect(fakeLlmBodies.find((body) => body.includes('Hello Pi'))).not.toContain('prompt_cache_retention')
   expect(turnEnds().map((update) => update.stopReason)).toEqual(['end_turn', 'end_turn'])
   close()
 
