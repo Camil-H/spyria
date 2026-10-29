@@ -148,6 +148,14 @@ test.describe('Channels', () => {
     await newChatAnswerOf(dialog, 'isPublic', 'No').check()
     await expect(newChatAnswerOf(dialog, 'audience', 'AI chat')).toBeEnabled()
     await expect(newChatAnswerOf(dialog, 'audience', 'Members messaging')).toBeChecked()
+    await newChatAnswerOf(dialog, 'audience', 'AI chat').check()
+    await newChatAnswerOf(dialog, 'github', 'Yes').check()
+    await newChatAnswerOf(dialog, 'isPublic', 'Yes').check()
+    await newChatAnswerOf(dialog, 'isPublic', 'No').check()
+    await newChatAnswerOf(dialog, 'audience', 'AI chat').check()
+    await expect(
+      dialog.getByRole('radiogroup', { name: 'Does it need GitHub access?' }).getByRole('radio', { checked: true }),
+    ).toHaveCount(0)
   })
 
   test('As a channel owner, I get no Reader role and no Remove in a public channel’s Members tab, both come back once it is private, and making it public again turns a Reader into a Prompter', {
