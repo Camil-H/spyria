@@ -151,7 +151,10 @@ test.describe('Sidebar', () => {
       await expect(separator).toHaveAttribute('aria-valuenow', '256')
       const sidebarBox = (await sidebarOf(page).boundingBox())!
       const separatorBox = (await separator.boundingBox())!
-      expect(separatorBox.x + separatorBox.width).toBeCloseTo(sidebarBox.x + sidebarBox.width, 0)
+      const borderWidth = await sidebarOf(page).evaluate((element) =>
+        Number.parseFloat(getComputedStyle(element).borderRightWidth),
+      )
+      expect(separatorBox.x + separatorBox.width).toBeCloseTo(sidebarBox.x + sidebarBox.width - borderWidth, 0)
       expect(sidebarBox.width).toBeCloseTo(256, 0)
     })
 
