@@ -1,5 +1,6 @@
 import { chatId as toChatId, type WorkspaceId } from '@spyria/kernel'
-import { AgentAvatar, MemberAvatar } from '@spyria/ui'
+import { AgentAvatar, focusRing, MemberAvatar } from '@spyria/ui'
+import { Reply } from 'lucide-react'
 import { type Ref, Suspense, use, useEffect, useState } from 'react'
 import { Link, useOutletContext, useParams } from 'react-router'
 import { isUnreachableSessionNotice } from '../domain/session-routing.ts'
@@ -13,7 +14,14 @@ import { ForkButton } from './ForkButton.tsx'
 import { LazyMarkdown } from './LazyMarkdown.tsx'
 import { AttachmentList } from './Media.tsx'
 import { MessageActions } from './MessageActions.tsx'
-import { ChatNameContext, MentionNamesContext, useConversationCommands } from './providers.tsx'
+import { linkedMessageParam } from './message-link.ts'
+import {
+  ChatNameContext,
+  LinkedMessageContext,
+  MentionNamesContext,
+  QuoteContext,
+  useConversationCommands,
+} from './providers.tsx'
 import { threadContextOf } from './thread-context.ts'
 
 const plainTextClassName = 'text-sm whitespace-pre-wrap'
@@ -31,6 +39,7 @@ const OpenThread = ({ root }: { root: ThreadRoot }) => {
   const workspaceId = useOutletContext<WorkspaceId>()
   const chatId = toChatId(useParams().chatId ?? '')
   const commands = useConversationCommands()
+  const quotes = use(QuoteContext)
   const newestReplyId = root.thread.replies.at(-1)?.id
   useEffect(() => {
     if (newestReplyId) commands.markThreadRead({ workspaceId, chatId, threadRootId: root.id })
@@ -40,7 +49,7 @@ const OpenThread = ({ root }: { root: ThreadRoot }) => {
       {root.thread.replies.length > 0 && (
         <ol aria-label="Thread replies" className="flex flex-col gap-1">
           {root.thread.replies.map((reply) => (
-            <MessageItem key={reply.id} message={reply} hasMenu threadRoot={root} />
+            <MessageItem key={reply.id} message={reply} hasMenu isChannel threadRoot={root} />
           ))}
         </ol>
       )}
@@ -49,6 +58,8 @@ const OpenThread = ({ root }: { root: ThreadRoot }) => {
           workspaceId={workspaceId}
           chatId={chatId}
           threadRootId={root.id}
+          quote={quotes?.quoteIn(root.id)}
+          onQuoteChange={(quote) => quotes?.setQuote(root.id, quote)}
           isBlocked={!root.canReply}
           blockedNotice="You can read this chat"
         />
@@ -72,6 +83,26 @@ const RuntimeLinks = ({ runtimes }: { runtimes: ConversationMessage['runtimes'] 
   )
 }
 
+const QuotedMessage = ({ quote }: { quote: NonNullable<ConversationMessage['quote']> }) => (
+  <Link
+    to={`?${new URLSearchParams({ [linkedMessageParam]: quote.id })}`}
+    className={`mt-1 flex max-w-full items-center gap-1.5 rounded-sm border-l-2 border-line pl-2 text-xs text-muted hover:text-ink ${focusRing}`}
+  >
+    <Reply aria-hidden size={12} className="shrink-0" />
+    <span className="sr-only">{'In reply to '}</span>
+    {quote.original ? (
+      <>
+        <span className="shrink-0 font-medium">{quote.original.authorName}</span>{' '}
+        <span className={`truncate ${quote.original.isDeleted ? 'italic' : ''}`}>
+          {quote.original.isDeleted ? 'This message was deleted' : quote.original.body}
+        </span>
+      </>
+    ) : (
+      <span>an earlier message</span>
+    )}
+  </Link>
+)
+
 const Thread = ({ root, isInitiallyOpen }: { root: ThreadRoot; isInitiallyOpen: boolean }) => {
   const { replies, newCount } = root.thread
   return (
@@ -89,26 +120,36 @@ const Thread = ({ root, isInitiallyOpen }: { root: ThreadRoot; isInitiallyOpen: 
 export const MessageItem = ({
   message,
   hasMenu,
+  isChannel = false,
   threadRoot,
   onFork,
   ref,
 }: {
   message: ConversationMessage
   hasMenu: boolean
+  isChannel?: boolean
   threadRoot?: ThreadRoot
   onFork?: (() => Promise<unknown>) | undefined
   ref?: Ref<HTMLLIElement>
 }) => {
   const [mode, setMode] = useState<'view' | 'edit' | 'delete'>('view')
+  const { thread } = message
   const [threadOpenings, setThreadOpenings] = useState(0)
   const mentionNames = use(MentionNamesContext)
   const chatName = use(ChatNameContext)
+  const linkedMessageId = use(LinkedMessageContext)
+  const quotes = use(QuoteContext)
+  const hasLinkedReply = thread?.replies.some((reply) => reply.id === linkedMessageId) === true
   const close = () => setMode('view')
-  const { thread } = message
   const quotedThread = threadRoot ? [threadRoot, ...threadRoot.thread.replies] : [message, ...(thread?.replies ?? [])]
   return (
     <>
-      <li ref={ref} data-message-id={message.id} className="group relative rounded-md px-3 py-2 hover:bg-hover">
+      <li
+        ref={ref}
+        data-message-id={message.id}
+        aria-current={message.id === linkedMessageId || undefined}
+        className="group relative rounded-md px-3 py-2 hover:bg-hover aria-current:bg-hover aria-current:ring-1 aria-current:ring-accent"
+      >
         {message.kind === 'notice' ? (
           <div className="flex flex-col gap-1">
             <p className="whitespace-pre-wrap text-sm text-muted">{message.body}</p>
@@ -130,6 +171,7 @@ export const MessageItem = ({
               </time>
               {message.isEdited && !message.isDeleted && <span className="text-xs text-muted">(edited)</span>}
             </div>
+            {message.quote && !message.isDeleted && <QuotedMessage quote={message.quote} />}
             {mode === 'edit' ? (
               <EditMessageForm messageId={message.id} initialText={message.body} onClose={close} />
             ) : message.isDeleted ? (
@@ -150,11 +192,22 @@ export const MessageItem = ({
             {hasMenu && !message.isDeleted && mode !== 'edit' && (
               <MessageActions
                 messageId={message.id}
+                isChannel={isChannel}
                 isThread={quotedThread.length > 1}
                 contextText={() => threadContextOf(chatName, quotedThread)}
                 canEdit={message.canEdit}
                 canReply={message.canReply}
                 onReplyInThread={thread ? () => setThreadOpenings(threadOpenings + 1) : undefined}
+                onQuote={
+                  message.canQuote && quotes
+                    ? () =>
+                        quotes.setQuote(threadRoot?.id ?? null, {
+                          id: message.id,
+                          authorName: message.authorName,
+                          body: message.body,
+                        })
+                    : undefined
+                }
                 onEdit={() => setMode('edit')}
                 onDelete={() => setMode('delete')}
               />
@@ -164,7 +217,11 @@ export const MessageItem = ({
         )}
       </li>
       {thread && (thread.replies.length > 0 || threadOpenings > 0) && (
-        <Thread key={threadOpenings} root={{ ...message, thread }} isInitiallyOpen={threadOpenings > 0} />
+        <Thread
+          key={`${threadOpenings}-${hasLinkedReply}`}
+          root={{ ...message, thread }}
+          isInitiallyOpen={threadOpenings > 0 || hasLinkedReply}
+        />
       )}
     </>
   )

@@ -27,6 +27,7 @@ export type ProjectedMessage = Readonly<{
   step: StoredStep | null
   replyToId: string | null
   threadRootId: string | null
+  quotedMessageId: string | null
   createdAt: Date
   editedAt: Date | null
   deletedAt: Date | null
@@ -36,6 +37,7 @@ export type PostedPayload = Pick<ProjectedMessage, 'body' | 'detail' | 'replyToI
   kind: ProjectedMessage['kind'] | 'tool-call'
   step?: StoredStep | null
   threadRootId?: string
+  quotedMessageId?: string
   attachments?: readonly Attachment[]
 }
 export type ChangedPayload = { messageId: string; body: string }
@@ -51,7 +53,7 @@ export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMes
   for (const { workspaceId, chatId, id, seq, type, actor, payload, createdAt } of events) {
     const project = (
       fields: Pick<ProjectedMessage, 'kind' | 'authorId' | 'body' | 'detail' | 'step' | 'replyToId'> &
-        Partial<Pick<ProjectedMessage, 'threadRootId' | 'attachments'>>,
+        Partial<Pick<ProjectedMessage, 'threadRootId' | 'quotedMessageId' | 'attachments'>>,
       projectedId = id,
     ) =>
       messageByKey.set(`${workspaceId}/${projectedId}`, {
@@ -60,6 +62,7 @@ export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMes
         id: projectedId,
         seq,
         threadRootId: null,
+        quotedMessageId: null,
         attachments: [],
         ...fields,
         createdAt,
@@ -74,12 +77,13 @@ export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMes
         replyToId,
         step = null,
         threadRootId = null,
+        quotedMessageId = null,
         attachments = [],
       } = payload as PostedPayload
       project(
         kind === 'tool-call'
           ? { kind: 'step', authorId: actor, body, detail, step: legacyToolCallStep(body, detail), replyToId }
-          : { kind, authorId: actor, body, attachments, detail, step, replyToId, threadRootId },
+          : { kind, authorId: actor, body, attachments, detail, step, replyToId, threadRootId, quotedMessageId },
       )
     }
     if (type === 'agent.event') {

@@ -21,20 +21,29 @@ export const channelThreadHeaderOf = (channelName: string) =>
 export const copiedThreadHeaderOf = (channelName: string) => `Conversation from channel thread in #${channelName}`
 export const runtimeChatHeaderOf = (chatName: string) => `Conversation so far, from the runtime chat ${chatName}:`
 
+const speakerOf = ({ authorName, kind, createdAt }: QuotedMessage) =>
+  `${authorName} (${kind === 'agent' ? 'agent' : 'member, human'}) · ${quotedTimeOf(createdAt)}`
+
 export const seedMessageBodyOf = (header: string, messages: readonly QuotedMessage[]) =>
   MessageBody(
     [
       header,
       ...messages
         .filter((message) => message.status === 'live')
-        .map(
-          ({ authorName, kind, createdAt, ...message }) =>
-            `${authorName} (${kind === 'agent' ? 'agent' : 'member, human'}) · ${quotedTimeOf(createdAt)}\n${withAttachmentsNoted(message)}`,
-        ),
+        .map((message) => `${speakerOf(message)}\n${withAttachmentsNoted(message)}`),
     ].join('\n\n'),
   )
+
+const inReplyToOf = (quoted: QuotedMessage) =>
+  `In reply to ${speakerOf(quoted)}:\n${withAttachmentsNoted(quoted).replace(/^/gm, '> ')}`
 
 export const agentPromptTextOf = (
   prompt: Pick<Message, 'body' | 'attachments'>,
   seed: Pick<Message, 'body'> | undefined,
-) => (seed ? `${seed.body}\n\n${withAttachmentsNoted(prompt)}` : withAttachmentsNoted(prompt))
+  quoted?: QuotedMessage | undefined,
+) =>
+  [
+    ...(seed ? [seed.body] : []),
+    ...(quoted?.status === 'live' ? [inReplyToOf(quoted)] : []),
+    withAttachmentsNoted(prompt),
+  ].join('\n\n')
