@@ -136,6 +136,7 @@ test.describe('Spend', () => {
         'Tokens per request · Biggest mover',
       )
       await expect(rowOf(tableOf(section, 'Usage by member'), 'Total')).toContainText('$0.08')
+      await expect(section).toContainText('$0.08 · 8 requests')
     })
 
     test('As a member who can view costs, I see the cost per merged PR with each merged PR and its chat’s cost', {
