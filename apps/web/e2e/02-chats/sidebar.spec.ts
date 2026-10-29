@@ -173,7 +173,9 @@ test.describe('Sidebar', () => {
       await dragSeparatorBy(-400)
       expect(await sidebarWidth()).toBeCloseTo(240, 0)
       await expect(switcherOf(page)).toBeVisible()
-      await expect(sidebarOf(page).getByRole('button', { name: 'New chat' })).toBeInViewport()
+      const sidebarBox = (await sidebarOf(page).boundingBox())!
+      const newChatBox = (await sidebarOf(page).getByRole('button', { name: 'New chat' }).boundingBox())!
+      expect(newChatBox.x + newChatBox.width).toBeLessThanOrEqual(sidebarBox.x + sidebarBox.width - 12)
     })
 
     await test.step('keeps the width after a reload', async () => {

@@ -122,15 +122,6 @@ export const Sidebar = ({
         style={{ [sidebarWidthVariable]: `${width}px` } as CSSProperties}
         className="relative flex h-full w-(--sidebar-width) shrink-0 flex-col gap-3 border-r border-line bg-sidebar p-3"
       >
-        <ResizeHandle
-          label="Resize sidebar"
-          edge="right"
-          width={width}
-          minimumWidth={minimumSidebarWidth}
-          maximumWidth={maximumSidebarWidth}
-          widthVariable={sidebarWidthVariable}
-          resizeTo={resizeTo}
-        />
         <div className={`${headerRowClass} justify-between gap-2`}>
           <IconButton label={toggleLabel} shortcut="l" icon={PanelLeftClose} onClick={toggleCollapsed} />
           <WorkspaceSwitcher workspaceId={workspaceId} />
@@ -210,6 +201,15 @@ export const Sidebar = ({
             <ShortcutHint shortcut="I" />
           </NavLink>
         </div>
+        <ResizeHandle
+          label="Resize sidebar"
+          edge="right"
+          width={width}
+          minimumWidth={minimumSidebarWidth}
+          maximumWidth={maximumSidebarWidth}
+          widthVariable={sidebarWidthVariable}
+          resizeTo={resizeTo}
+        />
       </nav>
     </Provider>
   )
