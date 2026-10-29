@@ -1,7 +1,13 @@
 import type { Transact } from '@spyria/db/zero-queries'
 import type { WorkspaceId, WorkspacePermission } from '@spyria/kernel'
 import type { SpendTransactor } from '../contracts/spend.ts'
-import type { MergedPull, SpendCounts, SpendDimensionRow } from '../domain/spend.ts'
+import {
+  type MergedPull,
+  noSpendCounts,
+  type SpendBucketCounts,
+  type SpendCounts,
+  type SpendDimensionRow,
+} from '../domain/spend.ts'
 import { workspacePermissionsStatement } from './postgres-audit-log.ts'
 
 const rowsStatement = `
@@ -28,14 +34,32 @@ const rowsStatement = `
   where dimension.name = any($6::text[])
   group by 1, 2, 3, 4`
 
-const countsStatement = `
-  select call.called_at >= $3 as "isCurrent", count(distinct call.prompter_id collate "C")::int as users,
+const scopeCondition = (dimension: string, key: string) => `
+  (${dimension}::text is null or ${key} = case ${dimension}
+    when 'member' then call.prompter_id
+    when 'chat' then call.chat_id
+    when 'model' then call.provider || '/' || call.model
+    when 'project' then coalesce(
+      (select chat.project_id from chats chat where chat.workspace_id = $1 and chat.id = call.chat_id), 'none')
+  end)`
+
+const countColumns = `count(distinct call.prompter_id collate "C")::int as users,
     count(distinct call.session_id collate "C")::int as sessions,
     count(distinct call.turn_id collate "C")::int as turns, count(*)::int as requests,
-    sum(call.input_tokens + call.output_tokens)::float8 as tokens, sum(call.cost_micros)::float8 as "costMicros"
+    sum(call.input_tokens + call.output_tokens)::float8 as tokens, sum(call.cost_micros)::float8 as "costMicros"`
+
+const countsStatement = `
+  select call.called_at >= $3 as "isCurrent", ${countColumns}
   from model_calls call
   where call.workspace_id = $1 and call.called_at >= $2 and call.called_at < $4
-    and ($5::text is null or call.prompter_id = $5)
+    and ($5::text is null or call.prompter_id = $5) and ${scopeCondition('$6', '$7')}
+  group by 1`
+
+const bucketCountsStatement = `
+  select to_char(date_trunc($4::text, call.called_at at time zone 'UTC'), 'YYYY-MM-DD') as bucket, ${countColumns}
+  from model_calls call
+  where call.workspace_id = $1 and call.called_at >= $2 and call.called_at < $3
+    and ($5::text is null or call.prompter_id = $5) and ${scopeCondition('$6', '$7')}
   group by 1`
 
 const mergedPullsStatement = `
@@ -59,8 +83,6 @@ const mergedPullsStatement = `
   where merged.step->>'state' = 'merged' and merged.previous_state is distinct from 'merged' and merged.created_at >= $2
   order by merged.created_at`
 
-const noCounts: SpendCounts = { users: 0, sessions: 0, turns: 0, requests: 0, tokens: 0, costMicros: 0 }
-
 export const createPostgresSpendTransactor = (transact: Transact, workspaceId: WorkspaceId): SpendTransactor => ({
   run: (work) =>
     transact(async (tx) => {
@@ -80,22 +102,33 @@ export const createPostgresSpendTransactor = (transact: Transact, workspaceId: W
             tableDimensions,
             chartDimensions,
           ]),
-        counts: async ({ current, previous }, prompterId) => {
+        counts: async ({ current, previous, scope }, prompterId) => {
           const rows = await query<SpendCounts & { isCurrent: boolean }>(countsStatement, [
             previous.from.toISOString(),
             current.from.toISOString(),
             current.to.toISOString(),
             prompterId,
+            scope?.dimension ?? null,
+            scope?.key ?? null,
           ])
           const countsOf = (isCurrent: boolean) => {
             const { isCurrent: _, ...counts } = rows.find((row) => row.isCurrent === isCurrent) ?? {
-              ...noCounts,
+              ...noSpendCounts,
               isCurrent,
             }
             return counts
           }
           return { current: countsOf(true), previous: countsOf(false) }
         },
+        bucketCounts: ({ current, granularity, scope }, prompterId) =>
+          query<SpendBucketCounts>(bucketCountsStatement, [
+            current.from.toISOString(),
+            current.to.toISOString(),
+            granularity,
+            prompterId,
+            scope?.dimension ?? null,
+            scope?.key ?? null,
+          ]),
         mergedPulls: (range) =>
           query<MergedPull>(mergedPullsStatement, [range.from.toISOString(), range.to.toISOString()]),
       })

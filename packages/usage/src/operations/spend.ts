@@ -1,5 +1,6 @@
 import { type MemberId, requireWorkspacePermission } from '@spyria/kernel'
 import type { SpendLedger, SpendTransactor } from '../contracts/spend.ts'
+import { InvalidSpendFilter } from '../domain/errors.ts'
 import { type SpendDimension, type SpendFilter, type SpendReport, spendReportOf } from '../domain/spend.ts'
 
 type Dependencies = { transactor: SpendTransactor }
@@ -13,15 +14,18 @@ const reportOf = async (
     tableDimensions,
     chartDimensions,
   }: { prompterId: MemberId | null; tableDimensions: SpendDimension[]; chartDimensions: SpendDimension[] },
-) =>
-  spendReportOf({
+) => {
+  if (filter.scope && !tableDimensions.includes(filter.scope.dimension)) throw new InvalidSpendFilter()
+  return spendReportOf({
     filter,
     rows: await ledger.rows(filter.current, filter.granularity, prompterId, { tableDimensions, chartDimensions }),
     counts: await ledger.counts(filter, prompterId),
+    bucketCounts: await ledger.bucketCounts(filter, prompterId),
     tableDimensions,
     chartDimensions,
     mergedPulls: prompterId ? null : await ledger.mergedPulls(filter.current),
   })
+}
 
 export const readWorkspaceSpend = ({ transactor }: Dependencies, { memberId, filter }: Request) =>
   transactor.run(async (ledger): Promise<SpendReport> => {
