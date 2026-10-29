@@ -1,5 +1,6 @@
 import type { MemberId, Transactor, WorkspaceId } from '@spyria/kernel'
 import type {
+  AiProviderRepository,
   GatewayJobs,
   LlmCredentialRepository,
   MemberGatewayKeyRepository,
@@ -12,6 +13,7 @@ import type {
 export type UnitOfWork = {
   members: MemberRepository
   llmCredentials: LlmCredentialRepository
+  aiProviders: AiProviderRepository
   memberGatewayKeys: MemberGatewayKeyRepository
   gatewayJobs: GatewayJobs
   personalConnections: PersonalConnectionRepository

@@ -22,7 +22,12 @@ import {
 import type { Database } from '@spyria/db/postgres'
 import { schema } from '@spyria/db/zero'
 import { isConnectionRefused, log, type MemberId, toolNamePartsOf, withRetries } from '@spyria/kernel'
-import { type createLlmGateway, createMemberKeyReader, createToolCallOwnerAccess } from '@spyria/profile/server'
+import {
+  type createLlmGateway,
+  createMemberKeyReader,
+  createModelGuard,
+  createToolCallOwnerAccess,
+} from '@spyria/profile/server'
 import type { ConnectedHost } from '@spyria/runtime/server'
 import { createBudgetGuard } from '@spyria/usage/server'
 import type { AgentBridge } from './agent-bridge/bridge.ts'
@@ -139,6 +144,7 @@ export const createModelCallRelay = ({
     return {
       keyOf: createMemberKeyReader(transact, llmGateway),
       usedUpBudgetOf: createBudgetGuard(transact),
+      isModelAllowed: createModelGuard(transact),
       tools: createToolCallOwnerAccess(transact, llmGateway),
       readOnlyHints: new Map<string, { isReadOnly: boolean; listedAt: number }>(),
     }
@@ -303,7 +309,7 @@ export const createModelCallRelay = ({
           : await handlers.delegate({ chat: turn.chat, turn, task: String(task ?? ''), effort, model })
       return reply({ content: [{ type: 'text', text }], isError })
     }
-    const { keyOf, usedUpBudgetOf, tools, readOnlyHints } = databaseAccess(database)
+    const { keyOf, usedUpBudgetOf, isModelAllowed, tools, readOnlyHints } = databaseAccess(database)
     const isAnthropicPath = path.startsWith(anthropicPathPrefix)
     const isTokenCount = path.startsWith(`${anthropicPathPrefix}/count_tokens`)
     const isReadOnly = async (callHeaders: Record<string, string>, toolName: string) => {
@@ -464,6 +470,8 @@ export const createModelCallRelay = ({
       const record = (failure: ModelCallFailure) => handlers.recordModelCallFailure({ ...turn, model, failure })
       const usedUpBudget = isTokenCount ? null : await usedUpBudgetOf(host.workspaceId, turn.prompterId)
       if (usedUpBudget) return answered(402, refusalOf(await record({ reached: 'over_budget', budget: usedUpBudget })))
+      if (!isTokenCount && model && !(await isModelAllowed(host.workspaceId, turn.prompterId, model)))
+        return answered(403, refusalOf(await record({ reached: 'not_allowed' })))
       const virtualKey = await keyOf(host.workspaceId, turn.prompterId).catch(() => null)
       if (virtualKey === null) {
         await record({ reached: 'unreachable' })

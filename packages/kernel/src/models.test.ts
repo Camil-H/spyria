@@ -1,9 +1,13 @@
 import { expect, test } from 'bun:test'
 import {
+  aiProviderOf,
+  allowedModelsOf,
   chatModelsOf,
   classifierModelOf,
   gatewayKeyOf,
   gatewayKeyRefOf,
+  isAllowedModel,
+  isAllowedProvider,
   isPickableModel,
   type ListedModel,
   listedChatModelIdsOf,
@@ -136,4 +140,27 @@ test('a gateway key reference round-trips and refuses anything else', () => {
   expect(gatewayKeyOf('gateway:credential-alice-anthropic')).toBeUndefined()
   expect(gatewayKeyOf('gateway:mistral/')).toBeUndefined()
   expect(gatewayKeyOf('placeholder:abc')).toBeUndefined()
+})
+
+test('a provider is found by its id, its name or an alias, and nothing else', () => {
+  expect(aiProviderOf(' Google ')?.id).toBe('gemini')
+  expect(aiProviderOf('google gemini')?.id).toBe('gemini')
+  expect(aiProviderOf('Z.ai')?.id).toBe('zai')
+  expect(aiProviderOf('openai')?.name).toBe('OpenAI')
+  expect(aiProviderOf('fake')).toBeUndefined()
+})
+
+test('without an allow-list every provider and model is allowed; with one, only what it names', () => {
+  expect(isAllowedProvider(null, 'fake')).toBe(true)
+  expect(isAllowedModel(null, 'fake/fake-medium')).toBe(true)
+  const allowList = { anthropic: 'all', openai: ['openai/gpt-5'] } as const
+  expect(isAllowedProvider(allowList, 'openai')).toBe(true)
+  expect(isAllowedProvider(allowList, 'mistral')).toBe(false)
+  expect(isAllowedModel(allowList, 'anthropic/claude-haiku-5-5')).toBe(true)
+  expect(isAllowedModel(allowList, 'openai/gpt-5')).toBe(true)
+  expect(isAllowedModel(allowList, 'openai/gpt-5-mini')).toBe(false)
+  expect(isAllowedModel(allowList, 'mistral/mistral-large-latest')).toBe(false)
+  expect(
+    allowedModelsOf(allowList, [{ id: 'openai/gpt-5' }, { id: 'openai/gpt-5-nano' }, { id: 'anthropic/x' }]),
+  ).toEqual([{ id: 'openai/gpt-5' }, { id: 'anthropic/x' }])
 })

@@ -129,10 +129,11 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
     uniqueBy(workspaces, (workspace) => workspace.workspaceId),
   )
   const workspaceRowsOf = memoizedOnSources((workspaces: ZeroRows['workspaces']) =>
-    workspaces.map(({ workspaceId, name, localSessions }) => ({
+    workspaces.map(({ workspaceId, name, localSessions, aiProviderAllowList }) => ({
       id: workspaceId,
       name,
       localSessions: localSessions ?? true,
+      aiProviderAllowList: aiProviderAllowList ?? null,
     })),
   )
   const membershipsOf = memoizedOnSources(

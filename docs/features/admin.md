@@ -12,6 +12,7 @@ Everything here is in **Workspace settings** (the workspace menu), as cards in t
 | | **Manage Team** | `members.invite` or `members.manage` |
 | Setup your agents | **Connect runtime** | `runtimes.manage` |
 | | **MCP tools** | `tools.manage` |
+| | **AI providers** | `providers.manage` |
 | Analyze usage | **Analyze costs** | `costs.view` or `budgets.manage` |
 | | **Audit log** | `audit.view` |
 
@@ -43,6 +44,7 @@ A workspace role is a named set of permissions. Two are built in and cannot be c
 | `sso.manage` | Set up SSO |
 | `github.manage` | Connect GitHub |
 | `tools.manage` | Manage shared MCP tools |
+| `providers.manage` | Manage AI providers and models |
 | `runtimes.manage` | Manage runtime hosts and local sessions |
 | `costs.view` | View costs |
 | `budgets.manage` | Manage budgets |
@@ -132,6 +134,18 @@ Each member's gateway key is given exactly the workspace's connections with the 
 
 When an agent acts, it uses the chat owner's access. On a guest's prompt it uses only what both the owner and the guest may use on shared connections, never the owner's personal connections, and write calls wait for the owner's approval (see [Agents](./agents.md)).
 
+## AI providers
+
+**AI providers** chooses which model providers and models members can use. By default every provider and model is allowed. Turning a provider off, or narrowing it to some of its models (the catalog's models, plus any model id of that provider added by hand), turns the setting into an allow-list:
+
+- a member cannot add a key for a provider that is off ("OpenAI is not allowed in this workspace");
+- models left out are not offered in the model picker, nor chosen by routing or for sub-agents;
+- the model relay refuses a call to a model left out before it reaches the gateway, and the chat shows "*Model* is not allowed in this workspace".
+
+**Allow every provider and model** removes the allow-list. Keys already added for a provider turned off stay in the member's profile but reach no model. Sessions on a member's own machine (Claude Code, Codex) use the member's own subscription and are not covered. Each change is recorded in the audit log.
+
+The providers are Anthropic, OpenAI, Google Gemini, Mistral, xAI, DeepSeek, Z.ai, OpenRouter and TypeSafe (decision models for routing), listed once in `packages/kernel/src/models.ts`.
+
 ## Spend
 
 **Analyze costs** reports the cost of model calls made through the gateway, for a period (this month, last month, last 30 or 90 days, or custom up to a year) at a day, week or month granularity:
@@ -167,12 +181,12 @@ At the bottom of **Workspace settings**, an Admin finds **Delete workspace**. It
 
 ## Audit log
 
-**Audit log** shows, newest first, who changed what in the workspace: time, person ("System" when no member acted), action in plain words, target, and details on expand. It merges:
+**Audit log** shows, newest first, who changed what in the workspace: time, person (a member; "Alice's agent" for what an agent did in Alice's turn; "System" for a job, with the member it acted for when there is one; "GitHub" for pull request changes from GitHub), action in plain words, target, and details on expand. It merges:
 
 | Group | Records |
 |---|---|
 | Members | invites, revoked invites, joins, role changes, removals |
-| Workspace | workspace deleted, restored by the operator |
+| Workspace | workspace deleted, restored by the operator, AI providers allow-list changed |
 | Sign-in | SSO configured, client secret replaced, domain verified |
 | GitHub | App configured, App secrets replaced |
 | Connections | shared connections added, changed, removed, member restrictions |

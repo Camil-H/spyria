@@ -2,7 +2,9 @@ import { context, propagation } from '@opentelemetry/api'
 import type { ServerTransaction, Transaction } from '@rocicorp/zero'
 import {
   type Actor,
+  type AiProviderAllowList,
   actorOf,
+  allowedModelsOf,
   type HarnessId,
   type ListedModel,
   memberActor,
@@ -66,9 +68,20 @@ export const setModelDirectory = (directory: typeof listedModels) => {
   listedModels = directory
 }
 export const listedModelsOf = () => listedModels()
+export const aiProviderAllowListOf = async (tx: Transaction, workspaceId: string) =>
+  (
+    await firstOnServer<{ allowList: AiProviderAllowList | null }>(
+      tx,
+      'select ai_provider_allow_list as "allowList" from workspaces where workspace_id = $1',
+      [workspaceId],
+    )
+  )?.allowList ?? null
 export const memberModelsOf = async (tx: Transaction, workspaceId: string, userId: string) =>
   tx.location === 'server'
-    ? reachableModelsOf(providersOfGatewayRefs(await gatewayKeyRefsOf(tx, workspaceId, userId)))
+    ? allowedModelsOf(
+        await aiProviderAllowListOf(tx, workspaceId),
+        reachableModelsOf(providersOfGatewayRefs(await gatewayKeyRefsOf(tx, workspaceId, userId))),
+      )
     : undefined
 
 export const setVirtualKeyId = (tx: Transaction, workspaceId: string, userId: string, id: string | null) =>

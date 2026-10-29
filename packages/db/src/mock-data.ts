@@ -152,8 +152,8 @@ export const createMockSnapshot = (): Snapshot => {
   const chats = createChats()
   return {
     workspaces: [
-      { id: acme, name: 'Acme', localSessions: true },
-      { id: globex, name: 'Globex', localSessions: true },
+      { id: acme, name: 'Acme', localSessions: true, aiProviderAllowList: null },
+      { id: globex, name: 'Globex', localSessions: true, aiProviderAllowList: null },
     ],
     memberships: [
       {

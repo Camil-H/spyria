@@ -6,6 +6,7 @@ import { Avatar } from '../domain/avatar.ts'
 import { DisplayName } from '../domain/display-name.ts'
 import { NotOwnProfile } from '../domain/errors.ts'
 import { createZeroTransactor, memberContext } from '../integrations/zero-transactor.ts'
+import { setAiProviders } from '../operations/ai-providers.ts'
 import { changeAvatar } from '../operations/change-avatar.ts'
 import { releaseWorkspaceConnections } from '../operations/release-workspace-connections.ts'
 import { removeLlmCredential } from '../operations/remove-llm-credential.ts'
@@ -35,6 +36,12 @@ export const profileMutators = defineMutators({
         credentialId: z.pipe(z.string().check(z.minLength(1)), z.transform(credentialId)),
       }),
       ({ tx, ctx, args }) => removeLlmCredential(dependenciesOf(tx, ctx, args), args),
+    ),
+    setAiProviders: defineMutator(
+      z.extend(workspaceArguments, {
+        allowList: z.nullable(z.record(z.string(), z.union([z.literal('all'), z.array(z.string())]))),
+      }),
+      ({ tx, ctx, args }) => setAiProviders(dependenciesOf(tx, ctx, args), args),
     ),
   },
 })

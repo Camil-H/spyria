@@ -5,6 +5,7 @@ import { Secret } from '../domain/secret.ts'
 import { toolConsentChannel } from '../integrations/http-tool-connections.ts'
 import { createTransactingZeroTransactor, memberContext } from '../integrations/zero-transactor.ts'
 import { addLlmCredential } from '../operations/add-llm-credential.ts'
+import { isModelAllowed } from '../operations/ai-providers.ts'
 import { grantMemberTools } from '../operations/grant-tools.ts'
 import { toolKeyValueOf, virtualKeyValueOf } from '../operations/sync-member-gateway-key.ts'
 import {
@@ -50,6 +51,9 @@ export const createMemberKeyReader =
       transactor: createTransactingZeroTransactor(transact, memberContext(workspace, member)),
       gateway,
     })
+
+export const createModelGuard = (transact: Transact) => (workspace: WorkspaceId, member: MemberId, model: string) =>
+  isModelAllowed({ transactor: createTransactingZeroTransactor(transact, memberContext(workspace, member)) }, { model })
 
 const toolActions = { connect: startToolConnection, refresh: refreshToolConnection, disconnect: disconnectTool }
 
