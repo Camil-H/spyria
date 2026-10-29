@@ -35,3 +35,8 @@ export const MentionNamesContext = createContext<readonly string[]>([])
 export const ChatNameContext = createContext('')
 
 export const ChatMediaContext = createContext<{ chatId: string; isRuntime: boolean } | null>(null)
+
+export const LoadedRemoteImagesContext = createContext<{
+  sources: ReadonlySet<string>
+  load: (source: string) => void
+} | null>(null)

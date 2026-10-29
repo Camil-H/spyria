@@ -33,6 +33,8 @@ The paperclip next to **Send** attaches up to six files of up to 20 MB each: ima
 
 In a runtime chat, the agent can show a file it made, or a screenshot it took with `take_screenshot` (see [Agents](./agents.md#screenshots)), by writing a Markdown image with the file's path in its workspace, such as `![Sales chart](out/chart.png)`. The server fetches the file from the runtime through its existing host connection, checks that it is an image, a sound or a video of up to 20 MB, and shows it inline. The first four such images of a message load on their own; later ones load on click. Such files show only while the runtime is running. On a member's own machine, a file that holds one of that member's sign-in tokens is not shown.
 
+An image with a web address in a message shows as a **Load image from** *site* button and loads only on click, from the viewer's browser, so that site sees the viewer's address. Once loaded, the same image stays loaded in that chat until the page is reloaded, also when the agent's reply that holds it is stored or folded into its steps.
+
 ## Channels
 
 Channels are where members talk without an agent. A **public** channel is open to every member of the workspace: anyone can read it, and anyone can post after **Join channel**. **Browse channels** in the sidebar lists the public channels a member has not joined. A **private** channel is visible only to its participants.
