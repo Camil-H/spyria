@@ -10,6 +10,7 @@ apps/agent/image-id
 .env
 .env.dev
 .env.prod
+__boundary-probes__/
 .claude/*
 !.claude/skills/
 .claude/skills/*

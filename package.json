@@ -15,7 +15,7 @@
     "test:docker:integration": "bun test --preload ./apps/server/src/testing/integration-setup.ts --reporter=junit --reporter-outfile=.check/integration-docker.xml .docker.test.ts",
     "test:e2e": "bun run --cwd apps/web test:e2e",
     "test:e2e:smoke": "bun run --cwd apps/web test:e2e:smoke",
-    "check:boundaries": "depcruise apps packages --config .dependency-cruiser.cjs",
+    "check:boundaries": "bun scripts/check-boundaries.ts",
     "check:locks": "bun scripts/check-locks.ts",
     "check:bundle": "bun run --cwd apps/web build && bun scripts/check-bundle.ts",
     "check:all": "bun scripts/check-all.ts",
