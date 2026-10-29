@@ -133,7 +133,8 @@ Runtime hosts never pull images. Build Spyria's runtime image before the first r
 ```sh
 bun run agent:build          # compile spyria-agent and build the image; cached by Docker
 bun run agent:versions       # pinned versus latest on npm, per tool
-bun run agent:bump <tool>    # pin the latest of claude-code | claude-agent-acp | codex | codex-acp | pi | playwright, then rebuild
+bun run agent:bump           # pin the latest of every tool, then rebuild if one changed
+bun run agent:bump <tool>    # only one of claude-code | claude-agent-acp | codex | codex-acp | pi | playwright
 ```
 
 The image (`apps/agent`) holds spyria-agent with Pi, node and npm, git and ripgrep, and for `take_screenshot` playwright-core with the system libraries Chromium needs. Pi is pinned in `apps/agent/pi/package.json` and playwright-core in `apps/agent/browser/package.json`, each with its `package-lock.json` and installed with `npm ci`; `agent:bump pi` and `agent:bump playwright` regenerate those lockfiles. The image build also installs Chromium's headless shell next to playwright-core (about 280 MB), so a runtime takes screenshots without downloading anything or reaching the internet.

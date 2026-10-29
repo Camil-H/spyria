@@ -76,6 +76,24 @@ const build = () => {
   console.log(`Spyria runtime image ${image}`)
 }
 
+const pinLatest = (tool: string, pinned: Pinned) => {
+  const latest = latestOf(pinned.package)
+  if (latest === pinned.version) return false
+  const imagePackageDirectory = imagePackageDirectories[tool]
+  if (imagePackageDirectory) {
+    const manifest = manifestOf(imagePackageDirectory)
+    manifest.dependencies[pinned.package] = latest
+    writeFileSync(manifestFileOf(imagePackageDirectory), `${JSON.stringify(manifest, null, 2)}\n`)
+    run(['npm', 'install', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund'], imagePackageDirectory)
+  } else {
+    const pins = harnessPins()
+    for (const { packages } of Object.values(pins)) if (pinned.package in packages) packages[pinned.package] = latest
+    writeFileSync(harnessesFile, `${JSON.stringify(pins, null, 2)}\n`)
+  }
+  console.log(`${tool} ${pinned.version} -> ${latest}`)
+  return true
+}
+
 const [command, tool] = process.argv.slice(2)
 if (command === 'build') build()
 else if (command === 'versions')
@@ -87,19 +105,10 @@ else if (command === 'versions')
   }
 else if (command === 'bump') {
   const versions = readVersions()
-  const pinned = versions[tool ?? '']
-  if (!pinned) throw new Error(`Unknown tool ${tool}; choose from ${Object.keys(versions).join(', ')}`)
-  const latest = latestOf(pinned.package)
-  const imagePackageDirectory = imagePackageDirectories[tool ?? '']
-  if (imagePackageDirectory) {
-    const manifest = manifestOf(imagePackageDirectory)
-    manifest.dependencies[pinned.package] = latest
-    writeFileSync(manifestFileOf(imagePackageDirectory), `${JSON.stringify(manifest, null, 2)}\n`)
-    run(['npm', 'install', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund'], imagePackageDirectory)
-  } else {
-    const pins = harnessPins()
-    for (const { packages } of Object.values(pins)) if (pinned.package in packages) packages[pinned.package] = latest
-    writeFileSync(harnessesFile, `${JSON.stringify(pins, null, 2)}\n`)
-  }
-  build()
-} else throw new Error('Usage: agent-image.ts build | versions | bump <tool>')
+  if (tool && !versions[tool]) throw new Error(`Unknown tool ${tool}; choose from ${Object.keys(versions).join(', ')}`)
+  const bumped = Object.entries(versions).filter(
+    ([name, pinned]) => (!tool || name === tool) && pinLatest(name, pinned),
+  )
+  if (bumped.length > 0) build()
+  else console.log(`${tool ?? 'Every tool'} is already on its latest version`)
+} else throw new Error('Usage: agent-image.ts build | versions | bump [tool]')
