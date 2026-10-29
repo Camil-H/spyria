@@ -30,13 +30,17 @@ type Connection = {
     handlers: HostSessionHandlers
     database?: Database
     gatewayUrl: string
+    relayVersion: number
   }
   missedPings: number
   identifying: PromiseWithResolvers<void>
   pending: Map<number, PromiseWithResolvers<Frame>>
   streams: Map<number, SandboxSocketListener>
+  receivedStreamBytes: Map<number, number>
+  incomingBodies: Map<number, IncomingBody>
   modelCalls: Map<number, AbortController>
 }
+type IncomingBody = { head: Frame; parts: Buffer[]; size: number }
 
 const refusedCloseCode = 4001
 const replacedCloseCode = 4002
@@ -45,12 +49,26 @@ const installTimeoutMilliseconds = 240_000
 const identifyTimeoutMilliseconds = 10_000
 const defaultGatewayRelayUrl = 'http://spyria-gateway-relay:4000/v1'
 export const maximumFrameBytes = 64 * 1024 * 1024
+const chunkedRelayVersion = 2
+const relayChunkBytes = 256 * 1024
+const maximumRelayedBodyBytes = 256 * 1024 * 1024
+const streamCreditBytes = 1024 * 1024
 export const serverWebSocket = {
   ...websocket,
   maxPayloadLength: maximumFrameBytes,
   backpressureLimit: 16 * 1024 * 1024,
   closeOnBackpressureLimit: true,
 }
+
+const bodyFramesOf = (sid: number, body: string) => {
+  const bytes = Buffer.from(body)
+  const frames: object[] = []
+  for (let offset = 0; offset < bytes.length; offset += relayChunkBytes)
+    frames.push({ type: 'http_body', sid, data: bytes.subarray(offset, offset + relayChunkBytes).toString('base64') })
+  return [...frames, { type: 'http_end', sid }]
+}
+
+const speaksChunkedRelay = (connection: Connection) => (connection.identified?.relayVersion ?? 1) >= chunkedRelayVersion
 
 const hostAttributesOf = (host: ConnectedHost) => ({ 'workspace.id': host.workspaceId, 'runtime_host.id': host.hostId })
 const frameOf = (text: string): Frame => {
@@ -113,6 +131,8 @@ export const createRuntimeHostGateway = ({
     for (const call of modelCalls.values()) call.abort()
     for (const listener of streams.values()) listener.onClose()
     streams.clear()
+    connection.receivedStreamBytes.clear()
+    connection.incomingBodies.clear()
     if (!identified || connectionByHost.get(keyOf(identified.host)) !== connection) return
     connectionByHost.delete(keyOf(identified.host))
     inOrder(identified.token, () => identified.handlers.offline(identified.host)).catch((error) =>
@@ -144,6 +164,7 @@ export const createRuntimeHostGateway = ({
             token: frame.token,
             handlers,
             gatewayUrl: frame.gatewayUrl ?? defaultGatewayRelayUrl,
+            relayVersion: frame.relayVersion ?? 1,
           }
           connectionByHost.set(keyOf(identifiedHost), connection)
           if (replaced !== connection)
@@ -192,16 +213,51 @@ export const createRuntimeHostGateway = ({
       .finally(() => modelCalls.delete(sid))
   }
 
+  const receiveBody = (connection: Connection, requestId: number, frame: Frame) => {
+    const incoming = connection.incomingBodies.get(requestId)
+    if (!incoming) return
+    if (frame.type === 'http_end') {
+      connection.incomingBodies.delete(requestId)
+      return connection.pending
+        .get(requestId)
+        ?.resolve({ ...incoming.head, body: Buffer.concat(incoming.parts).toString('utf8') })
+    }
+    const part = Buffer.from(String(frame.data), 'base64')
+    incoming.size += part.length
+    incoming.parts.push(part)
+    if (incoming.size <= maximumRelayedBodyBytes) return
+    connection.incomingBodies.delete(requestId)
+    connection.pending.get(requestId)?.reject(new Error('The response is too large to relay'))
+  }
+
+  const acknowledgeStream = (connection: Connection, sid: number, data: string) => {
+    if (!speaksChunkedRelay(connection)) return
+    const received = (connection.receivedStreamBytes.get(sid) ?? 0) + Buffer.byteLength(data)
+    if (received < streamCreditBytes / 2) return void connection.receivedStreamBytes.set(sid, received)
+    connection.receivedStreamBytes.set(sid, 0)
+    sendTo(connection, { type: 'ws_ack', sid, bytes: received })
+  }
+
   const settle = (connection: Connection, frame: Frame) => {
     const requestId = Number(frame.id ?? frame.sid)
     if (frame.type === 'res' || frame.type === 'http_res') {
       const pending = connection.pending.get(requestId)
-      return typeof frame.error === 'string' ? pending?.reject(new Error(frame.error)) : pending?.resolve(frame)
+      if (typeof frame.error === 'string') return pending?.reject(new Error(frame.error))
+      if (frame.chunked !== true) return pending?.resolve(frame)
+      if (pending) connection.incomingBodies.set(requestId, { head: frame, parts: [], size: 0 })
+      return
     }
+    if (frame.type === 'http_body' || frame.type === 'http_end') return receiveBody(connection, requestId, frame)
     const listener = connection.streams.get(requestId)
     if (frame.type === 'ws_open') listener?.onOpen()
-    if (frame.type === 'ws_msg') listener?.onMessage(String(frame.data))
-    if (frame.type === 'ws_close' && connection.streams.delete(requestId)) listener?.onClose()
+    if (frame.type === 'ws_msg' && listener) {
+      listener.onMessage(String(frame.data))
+      acknowledgeStream(connection, requestId, String(frame.data))
+    }
+    if (frame.type === 'ws_close' && connection.streams.delete(requestId)) {
+      connection.receivedStreamBytes.delete(requestId)
+      listener?.onClose()
+    }
   }
 
   const receive = async (connection: Connection, text: string) => {
@@ -232,6 +288,8 @@ export const createRuntimeHostGateway = ({
       identifying: Promise.withResolvers(),
       pending: new Map(),
       streams: new Map(),
+      receivedStreamBytes: new Map(),
+      incomingBodies: new Map(),
       modelCalls: new Map(),
     }
     let pingTimer: ReturnType<typeof setInterval> | undefined
@@ -273,6 +331,7 @@ export const createRuntimeHostGateway = ({
     target: ConnectedHost & { runtimeId?: string },
     frame: object,
     timeoutMilliseconds = requestTimeoutMilliseconds,
+    chunkedBody?: string,
   ) => {
     const connection = connectionOf(target)
     const id = nextRequestId++
@@ -283,9 +342,11 @@ export const createRuntimeHostGateway = ({
     )
     connection.pending.set(id, response)
     sendTo(connection, { ...frame, id, sid: id, runtimeId: target.runtimeId, ...traceHeadersOf() })
+    if (chunkedBody !== undefined) for (const bodyFrame of bodyFramesOf(id, chunkedBody)) sendTo(connection, bodyFrame)
     return response.promise.finally(() => {
       clearTimeout(timer)
       connection.pending.delete(id)
+      connection.incomingBodies.delete(id)
     })
   }
 
@@ -319,18 +380,23 @@ export const createRuntimeHostGateway = ({
     },
     connect: (sandbox) => ({
       gatewayUrl: connectionByHost.get(keyOf(sandbox))?.identified?.gatewayUrl ?? defaultGatewayRelayUrl,
-      fetch: async (sandboxRequest) => {
-        const { status, headers, body } = await request(sandbox, { type: 'http', ...sandboxRequest })
+      fetch: async ({ body: requestBody, ...sandboxRequest }) => {
+        const isChunked = speaksChunkedRelay(connectionOf(sandbox))
+        const { status, headers, body } = isChunked
+          ? await request(sandbox, { type: 'http', ...sandboxRequest, chunked: true }, undefined, requestBody ?? '')
+          : await request(sandbox, { type: 'http', ...sandboxRequest, body: requestBody })
         return { status, headers, body } as SandboxResponse
       },
       openSocket: (path, listener) => {
         const connection = connectionOf(sandbox)
         const sid = nextRequestId++
         connection.streams.set(sid, listener)
-        sendTo(connection, { type: 'ws_connect', sid, runtimeId: sandbox.runtimeId, path })
+        const credit = speaksChunkedRelay(connection) ? { creditBytes: streamCreditBytes } : {}
+        sendTo(connection, { type: 'ws_connect', sid, runtimeId: sandbox.runtimeId, path, ...credit })
         return {
           send: (data) => sendTo(connection, { type: 'ws_msg', sid, data }),
           close: () => {
+            connection.receivedStreamBytes.delete(sid)
             if (connection.streams.delete(sid)) sendTo(connection, { type: 'ws_close', sid })
           },
         }

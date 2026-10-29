@@ -78,7 +78,7 @@ test('createChat makes a channel public with its creator as Owner', async () => 
   expect(await participantsOf('chat-new-channel')).toEqual([{ userId: bob, roleId: 'owner' }])
 })
 
-test('createChat makes a channel private on request and refuses a visibility for a runtime chat', async () => {
+test('createChat makes a channel private and an AI chat public on request', async () => {
   const create = (id: string, type: 'channel' | 'runtime', visibility: 'public' | 'private') =>
     resultOf(aliceInAcme, 'workspace.createChat', {
       workspaceId: acme,
@@ -90,12 +90,8 @@ test('createChat makes a channel private on request and refuses a visibility for
     })
   expect(await create('chat-private-channel', 'channel', 'private')).toEqual(succeeded)
   expect(await chatRow('chat-private-channel')).toMatchObject({ type: 'channel', visibility: 'private' })
-  for (const visibility of ['public', 'private'] as const) {
-    expect(await create(`chat-${visibility}-runtime`, 'runtime', visibility)).toEqual(
-      failedWith('A runtime chat is always private'),
-    )
-    expect(await chatRow(`chat-${visibility}-runtime`)).toBeUndefined()
-  }
+  expect(await create('chat-public-runtime', 'runtime', 'public')).toEqual(succeeded)
+  expect(await chatRow('chat-public-runtime')).toMatchObject({ type: 'runtime', visibility: 'public' })
 })
 
 test.each([
@@ -368,14 +364,18 @@ test('making a channel public turns its Readers into Prompters, recorded as role
   ])
 })
 
-test('changeVisibility refuses a runtime chat, even for its owner', async () => {
-  const chat = await newChat()
-  expect(
-    await resultOf(aliceInAcme, 'workspace.changeVisibility', {
-      workspaceId: acme,
-      chatId: chat,
-      visibility: 'public',
-    }),
-  ).toEqual(failedWith('A runtime chat is always private'))
+test('the owner makes an AI chat public, which turns its Readers into Prompters, and private again', async () => {
+  const chat = await newChat({ participants: [{ memberId: bob, roleId: 'reader' }] })
+  const changeTo = (visibility: 'public' | 'private') =>
+    resultOf(aliceInAcme, 'workspace.changeVisibility', { workspaceId: acme, chatId: chat, visibility })
+  expect(await changeTo('public')).toEqual(succeeded)
+  expect(await chatRow(chat)).toMatchObject({ type: 'runtime', visibility: 'public' })
+  expect(await participantsOf(chat)).toEqual(
+    expect.arrayContaining([
+      { userId: alice, roleId: 'owner' },
+      { userId: bob, roleId: 'prompter' },
+    ]),
+  )
+  expect(await changeTo('private')).toEqual(succeeded)
   expect(await chatRow(chat)).toMatchObject({ visibility: 'private' })
 })

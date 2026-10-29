@@ -54,7 +54,7 @@ test.describe('Keyboard shortcuts', () => {
     await test.step('opens chat creation, project creation and browsing channels with C, P and B', async () => {
       await pressAndClose(page, 'c', 'New chat')
       await pressAndClose(page, 'p', 'New project')
-      await pressAndClose(page, 'b', 'Browse channels')
+      await pressAndClose(page, 'b', 'Browse public chats')
     })
 
     await test.step('goes to the workspace settings with S and the profile with I', async () => {

@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import { defaultDeployment, harnessIds } from '@spyria/kernel'
 import { hostCommandOf } from './host-command.ts'
 
-test('the host command replaces spyria-host and its state, picks rootless or rooted Docker itself and rewrites localhost', () => {
+test("the host command replaces spyria-host and its state, picks rootless or rooted Docker itself, passes on the shell's proxy settings and rewrites localhost", () => {
   const workspaceCommand = hostCommandOf({
     deployment: defaultDeployment,
     origin: 'https://spyria.test',
@@ -16,6 +16,7 @@ test('the host command replaces spyria-host and its state, picks rootless or roo
   expect(workspaceCommand).toContain('--group-add $(')
   expect(workspaceCommand).toContain('-v /var/run/docker.sock:/var/run/docker.sock')
   expect(workspaceCommand).not.toContain('--add-host')
+  expect(workspaceCommand).toContain(' --restart unless-stopped -e HTTPS_PROXY -e HTTP_PROXY -e NO_PROXY ')
   expect(workspaceCommand).toEndWith(' spyria-host https://spyria.test/h/ABCDEFGH')
 
   const localCommand = hostCommandOf({

@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { connect, type Socket } from 'node:net'
 import { hostname, tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -121,5 +122,61 @@ test('a personal host told its sign-ins changed reads them and sends a heartbeat
     host.kill()
     await host.exited
     void listeningSpyria.stop(true)
+  }
+}, 15_000)
+
+test('a host given HTTP_PROXY dials Spyria through that proxy', async () => {
+  writeFileSync(join(directory, 'token'), 'host-token')
+  const tunnels: string[] = []
+  const proxy = Bun.listen<{ upstream?: Socket }>({
+    hostname: '127.0.0.1',
+    port: 0,
+    socket: {
+      data: (client, data) => {
+        if (client.data?.upstream) return void client.data.upstream.write(data)
+        const [, target = ''] = data.toString().match(/^CONNECT (\S+) /) ?? []
+        tunnels.push(target)
+        const [host, port] = target.split(':')
+        const upstream = connect(Number(port), host, () => client.write('HTTP/1.1 200 Connection Established\r\n\r\n'))
+        upstream.on('data', (chunk) => client.write(chunk))
+        upstream.on('close', () => client.end())
+        client.data = { upstream }
+      },
+      close: (client) => void client.data?.upstream?.destroy(),
+    },
+  })
+  const frames: { type: string }[] = []
+  const listeningSpyria = Bun.serve({
+    port: 0,
+    fetch: (request, server) => (server.upgrade(request) ? undefined : new Response('Not found', { status: 404 })),
+    websocket: { message: (_, message) => void frames.push(JSON.parse(String(message))) },
+  })
+  const host = Bun.spawn(
+    ['bun', new URL('./main.ts', import.meta.url).pathname, `ws://127.0.0.1:${listeningSpyria.port}/h/CODE`],
+    {
+      env: {
+        ...process.env,
+        DOCKER_SOCKET: dockerSocket,
+        SPYRIA_DEPLOYMENT: 'spyria',
+        SPYRIA_HOST_STATE_DIR: directory,
+        SPYRIA_HOST_GATEWAY_PORT: '0',
+        SPYRIA_HOST_HEARTBEAT_MS: '600000',
+        OTEL_EXPORTER_OTLP_ENDPOINT: '',
+        HTTP_PROXY: `http://127.0.0.1:${proxy.port}`,
+        NO_PROXY: '',
+      },
+      stdout: 'ignore',
+      stderr: 'ignore',
+    },
+  )
+  try {
+    for (const deadline = Date.now() + 5_000; !frames.some(({ type }) => type === 'hello'); await Bun.sleep(20))
+      if (Date.now() > deadline) throw new Error('The host did not say hello')
+    expect(tunnels).toEqual([`127.0.0.1:${listeningSpyria.port}`])
+  } finally {
+    host.kill()
+    await host.exited
+    void listeningSpyria.stop(true)
+    proxy.stop(true)
   }
 }, 15_000)

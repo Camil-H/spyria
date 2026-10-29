@@ -125,13 +125,13 @@ const claim = async (code: string) => {
 const refusalOf = async (outcome: Awaited<ReturnType<typeof claim>>['outcome']) =>
   'closed' in outcome ? outcome.closed.reason : 'not refused'
 
-const pairedHost = async (name = 'Home server', options?: { answersPings: boolean }) => {
+const pairedHost = async (name = 'Home server', options?: { answersPings?: boolean; relayVersion?: number }) => {
   const { id, code } = await addedHost(name)
   const { host: claimingHost, token } = await claim(code)
   if (!token) throw new Error('Claiming failed')
   claimingHost.socket.close()
   const host = await connectFakeHost(options)
-  host.send({ type: 'hello', token, system: hostSystem })
+  host.send({ type: 'hello', token, system: hostSystem, relayVersion: options?.relayVersion })
   await waitFor(async () => (await hostRow(id)).status === 'online')
   return { id, code, token, host }
 }
@@ -318,6 +318,62 @@ test('a host frame at the explicit 64 MiB limit is relayed and the host stays on
   expect((await host.closed).code).toBe(1009)
   await waitFor(async () => (await hostRow(id)).status === 'offline')
 }, 30_000)
+
+test('a host on relay version 2 gets a request body and answers in base64 chunks, and its stream is acknowledged per stream', async () => {
+  const { id, host } = await pairedHost('Chunked host', { relayVersion: 2 })
+  const sandbox = { workspaceId: acme, hostId: runtimeHostId(id), runtimeId: 'chunked' }
+  const transport = gateway.sandboxProvider.connect(sandbox)
+  const requestBody = 'é'.repeat(300_000)
+  const relayed = transport.fetch({ method: 'POST', path: '/api/workspace/bundle', body: requestBody })
+  await host.frameOrClose('http_end')
+  const request = host.frames.find((frame) => frame.type === 'http')
+  expect(request).toMatchObject({ chunked: true, runtimeId: 'chunked' })
+  expect(request?.body).toBeUndefined()
+  const decodedOf = (frames: Frame[]) =>
+    Buffer.concat(frames.map((frame) => Buffer.from(String(frame.data), 'base64'))).toString()
+  const requestChunks = host.frames.filter((frame) => frame.type === 'http_body')
+  expect(requestChunks.length).toBeGreaterThan(1)
+  expect(decodedOf(requestChunks)).toBe(requestBody)
+  const answer = Buffer.from(`{"bundle":"${'b'.repeat(100)}"}`)
+  host.send({ type: 'http_res', sid: request?.sid, status: 200, headers: {}, chunked: true })
+  for (const part of [answer.subarray(0, 40), answer.subarray(40)])
+    host.send({ type: 'http_body', sid: request?.sid, data: part.toString('base64') })
+  host.send({ type: 'http_end', sid: request?.sid })
+  expect((await relayed).body).toBe(answer.toString())
+
+  const received: string[] = []
+  transport.openSocket('/sockets/events/chunked', {
+    onOpen: () => {},
+    onMessage: (data) => received.push(data),
+    onClose: () => {},
+  })
+  const { frame: connect } = (await host.frameOrClose('ws_connect')) as { frame: Frame }
+  expect(connect).toMatchObject({ creditBytes: 1024 * 1024 })
+  host.send({ type: 'ws_open', sid: connect.sid })
+  host.send({ type: 'ws_msg', sid: connect.sid, data: 'e'.repeat(400_000) })
+  host.send({ type: 'ws_msg', sid: connect.sid, data: 'e'.repeat(200_000) })
+  const { frame: acknowledged } = (await host.frameOrClose('ws_ack')) as { frame: Frame }
+  expect(acknowledged).toEqual({ type: 'ws_ack', sid: connect.sid, bytes: 600_000 })
+  expect(received.map((data) => data.length)).toEqual([400_000, 200_000])
+})
+
+test('a host that declares no relay version gets bodies and streams the way it always did', async () => {
+  const { id, host } = await pairedHost('Older host')
+  const transport = gateway.sandboxProvider.connect({
+    workspaceId: acme,
+    hostId: runtimeHostId(id),
+    runtimeId: 'older',
+  })
+  const relayed = transport.fetch({ method: 'POST', path: '/api/workspace/commit', body: '{"message":"x"}' })
+  const { frame: request } = (await host.frameOrClose('http')) as { frame: Frame }
+  expect(request).toMatchObject({ body: '{"message":"x"}' })
+  expect(request.chunked).toBeUndefined()
+  host.send({ type: 'http_res', sid: request.sid, status: 200, headers: {}, body: '{}' })
+  expect((await relayed).body).toBe('{}')
+  transport.openSocket('/sockets/events/older', { onOpen: () => {}, onMessage: () => {}, onClose: () => {} })
+  const { frame: connect } = (await host.frameOrClose('ws_connect')) as { frame: Frame }
+  expect(connect.creditBytes).toBeUndefined()
+})
 
 test('closing the connection marks the host offline', async () => {
   const { id, host } = await pairedHost()

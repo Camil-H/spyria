@@ -446,6 +446,17 @@ test('a chat on a Spyria runtime needs the viewer’s LLM key in its workspace; 
   expect(needsLlmKeyIn('chat-welcome', withoutKey)).toBe(false)
 })
 
+test('a public AI chat offers to join to a member who is not in it, a private one does not', () => {
+  const snapshot = createMockSnapshot()
+  const withResearch = (visibility: 'public' | 'private') => ({
+    ...snapshot,
+    chats: snapshot.chats.map((chat) => (chat.id === research ? { ...chat, visibility } : chat)),
+  })
+  expect(getConversation(acme, research, lee)(withResearch('public'))).toMatchObject({ type: 'runtime', canJoin: true })
+  expect(getConversation(acme, research, alice)(withResearch('public'))?.canJoin).toBe(false)
+  expect(getConversation(acme, research, lee)(withResearch('private'))?.canJoin).toBe(false)
+})
+
 test('messages carry their edited flag and the agent as their author', () => {
   const edited = { ...replyRow(2, 'agent'), editedAt: '2026-10-01T09:01:00.000Z' }
   const snapshot = snapshotWith({ turn: false, waiting: false })
