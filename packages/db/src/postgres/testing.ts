@@ -645,11 +645,11 @@ export const seedModelCall = (writer: SeedWriter, prompterId: string, costMicros
       values ('workspace-acme', ${`call-${crypto.randomUUID()}`}, 'chat-research', ${prompterId}, null,
         'codestral-latest', 'mistral', 1, 1, ${costMicros}, 'success', ${calledAt.toISOString()}::timestamptz)
       returning *)
-    insert into usage_entries (workspace_id, month, chat_id, user_id, tokens, cost_micros, calls)
-    select workspace_id, to_char(called_at at time zone 'UTC', 'YYYY-MM'), chat_id, prompter_id,
+    insert into usage_entries (workspace_id, month, chat_id, user_id, model, tokens, cost_micros, calls)
+    select workspace_id, to_char(called_at at time zone 'UTC', 'YYYY-MM'), chat_id, prompter_id, provider || '/' || model,
       input_tokens + output_tokens, cost_micros, 1
     from call
-    on conflict (workspace_id, month, chat_id, user_id) do update set
+    on conflict (workspace_id, month, chat_id, user_id, model) do update set
       tokens = usage_entries.tokens + excluded.tokens,
       cost_micros = usage_entries.cost_micros + excluded.cost_micros,
       calls = usage_entries.calls + excluded.calls`)

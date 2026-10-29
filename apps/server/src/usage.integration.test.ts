@@ -46,8 +46,8 @@ const landed = () => gatewayLogsOf(gateway, `metadata_run=${run}`, callsMade)
 const research = { workspace: acme, chat: 'chat-research', owner: alice }
 const usageRows = async () =>
   database.$client`
-    select workspace_id, month, chat_id, user_id, tokens, cost_micros::int, calls from usage_entries
-    where chat_id <> 'chat-invoice-bug' order by chat_id, user_id`
+    select workspace_id, month, chat_id, user_id, model, tokens, cost_micros::int, calls from usage_entries
+    where chat_id <> 'chat-invoice-bug' order by chat_id, user_id, model`
 const modelCallsOf = async (prompter: string) =>
   database.$client`select chat_id, owner_id, model, provider, input_tokens, output_tokens, cost_micros, status
     from model_calls where prompter_id = ${prompter} order by called_at`
@@ -60,7 +60,13 @@ test('the sync records each gateway call once across overlapping windows and rer
   await landed()
   await sync()
   await sync()
-  const aliceRow = { workspace_id: acme, month, chat_id: 'chat-research', user_id: alice }
+  const aliceRow = {
+    workspace_id: acme,
+    month,
+    chat_id: 'chat-research',
+    user_id: alice,
+    model: 'mistral/codestral-latest',
+  }
   const bobRow = { ...aliceRow, user_id: bob, tokens: 2, cost_micros: 18, calls: 1 }
   const afterTwoCalls = [{ ...aliceRow, tokens: 4, cost_micros: 36, calls: 2 }, bobRow]
   expect([...(await usageRows())]).toEqual(afterTwoCalls)
@@ -85,9 +91,14 @@ test('the sync records each gateway call once across overlapping windows and rer
 
   await database.$client`update usage_sync_marks set logs_since = now() - interval '1 hour' where workspace_id = ${acme}`
   await modelCall({ ...research, prompter: alice })
+  await modelCall({ ...research, prompter: alice }, 'mistral/mistral-small-latest')
   await landed()
   await sync()
-  expect([...(await usageRows())]).toEqual([{ ...aliceRow, tokens: 6, cost_micros: 54, calls: 3 }, bobRow])
+  expect([...(await usageRows())]).toEqual([
+    { ...aliceRow, tokens: 6, cost_micros: 54, calls: 3 },
+    { ...aliceRow, model: 'mistral/mistral-small-latest', tokens: 2, cost_micros: 12, calls: 1 },
+    bobRow,
+  ])
 })
 
 test('failed provider calls count as calls with zero tokens, logs of other workspaces are ignored', async () => {

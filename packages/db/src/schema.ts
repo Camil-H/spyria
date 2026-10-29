@@ -140,6 +140,7 @@ type UsageEntryRow = {
   month: string
   chatId: ChatId
   memberId: MemberId
+  model: string
   tokens: number
   costMicros: number
   calls: number

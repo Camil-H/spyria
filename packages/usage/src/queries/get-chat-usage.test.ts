@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import { acme, alice, bob } from '@spyria/db'
 import { chatId } from '@spyria/kernel'
 import { getChatUsage, isLocalSession } from './get-chat-usage.ts'
-import { earlier, month, snapshot } from './testing.ts'
+import { earlier, haiku, month, snapshot, sonnet } from './testing.ts'
 
 test('chat usage lists the owner and participants who can post, with zeros, plus any other prompter of the month', () => {
   expect(getChatUsage(acme, chatId('chat-welcome'), month)(snapshot).rows).toEqual([
@@ -15,6 +15,7 @@ test('chat usage lists the owner and participants who can post, with zeros, plus
       { memberId: alice, name: 'Alice', tokens: 0, costMicros: 0, calls: 0 },
       { memberId: bob, name: 'Bob', tokens: 50, costMicros: 1_000, calls: 1 },
     ],
+    models: [{ model: sonnet, name: 'Sonnet 5.5', tokens: 50, costMicros: 1_000, calls: 1 }],
     total: { tokens: 50, costMicros: 1_000, calls: 1 },
   })
 })
@@ -42,6 +43,7 @@ test('chat usage uses the workspace display name and ignores other workspaces', 
   expect(getChatUsage(acme, chatId('chat-launch-plan'), month)(snapshot)).toEqual({
     months: [],
     rows: [],
+    models: [],
     total: { tokens: 0, costMicros: 0, calls: 0 },
   })
 })
@@ -54,4 +56,14 @@ test('an archived chat no longer counts as a session on a member’s machine', (
   })
   expect(isLocalSession(acme, welcome)(withLocalSession(false))).toBe(true)
   expect(isLocalSession(acme, welcome)(withLocalSession(true))).toBe(false)
+})
+
+test('chat usage sums each model of the picked month across members, the costliest first, named as in the picker', () => {
+  expect(getChatUsage(acme, chatId('chat-invoice-bug'), month)(snapshot).models).toEqual([
+    { model: sonnet, name: 'Sonnet 5.5', tokens: 1100, costMicros: 23_000, calls: 2 },
+    { model: haiku, name: 'Haiku 5.5', tokens: 200, costMicros: 2_000, calls: 1 },
+  ])
+  expect(getChatUsage(acme, chatId('chat-invoice-bug'), earlier)(snapshot).models).toEqual([
+    { model: sonnet, name: 'Sonnet 5.5', tokens: 7, costMicros: 70, calls: 7 },
+  ])
 })
