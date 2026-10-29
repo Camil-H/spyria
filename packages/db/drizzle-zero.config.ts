@@ -70,6 +70,7 @@ export default drizzleZeroConfig(tables, {
       createdAt: true,
       removedAt: true,
     },
+    machineCounts: true,
     runtimes: {
       workspaceId: true,
       chatId: true,

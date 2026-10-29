@@ -9,3 +9,8 @@ export const localSessionsOf = (workspaceId: WorkspaceId) => (snapshot: Snapshot
 
 export const getMachine = (workspaceId: WorkspaceId, memberId: MemberId) => (snapshot: Snapshot) =>
   snapshot.runtimeHosts.find((host) => host.workspaceId === workspaceId && host.ownerId === memberId)
+
+const noMachines = { machines: 0, claudeCode: 0, codex: 0 }
+
+export const machineCountsOf = (workspaceId: WorkspaceId) => (snapshot: Snapshot) =>
+  snapshot.machineCounts.find((counts) => counts.workspaceId === workspaceId) ?? noMachines

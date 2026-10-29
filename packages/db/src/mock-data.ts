@@ -308,6 +308,7 @@ export const createMockSnapshot = (): Snapshot => {
     workspaceConnections: [],
     connectionRestrictions: [],
     runtimeHosts: [],
+    machineCounts: [],
     runtimes: [],
   }
 }

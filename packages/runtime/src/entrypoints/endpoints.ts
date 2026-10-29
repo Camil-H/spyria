@@ -31,14 +31,6 @@ export const addRuntimeHostFromRequest = async (tx: Transaction, context: ZeroCo
     now: Date.now(),
   })
 
-export const countMachinesFromRequest = async (tx: Transaction, context: ZeroContext) => {
-  requirePermissionIn(await contextPermissionsOf(tx, context), 'runtimes.manage')
-  const machines = await createZeroTransactor(tx).run(({ runtimeHosts }) =>
-    runtimeHosts.listMachines(context.workspaceId),
-  )
-  return { count: machines.length }
-}
-
 export const renewClaimCodeFromRequest = async (tx: Transaction, context: ZeroContext, hostId: string) =>
   renewClaimCode(dependenciesOf(tx), {
     workspaceId: context.workspaceId,

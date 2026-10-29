@@ -121,6 +121,7 @@ const readSnapshot = async () => {
     usageEntries: (await database.select().from(tables.usageEntries)).map(userAsMember),
     budgetAlerts: (await database.select().from(tables.budgetAlerts)).map(({ reachedAt, ...alert }) => alert),
     runtimeHosts: await database.select().from(tables.runtimeHosts),
+    machineCounts: await database.select().from(tables.machineCounts),
     runtimes: await database.select().from(tables.runtimes),
   }
 }
