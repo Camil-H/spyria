@@ -2,6 +2,7 @@ import type { Transaction } from '@rocicorp/zero'
 import {
   activeAgentTurns,
   appendChatEvent,
+  chatEventsOf,
   chatRoutingOf,
   chatTurnOf,
   deleteMessageAttachments,
@@ -62,7 +63,13 @@ import type { StoredStep } from '../domain/agent-steps.ts'
 import { MessageNotFound } from '../domain/errors.ts'
 import { agentActivityKinds, type Message, type MessageChange } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
-import type { AgentEventPayload, ChangedPayload, PostedPayload, StepChangedPayload } from '../domain/message-events.ts'
+import {
+  type AgentEventPayload,
+  type ChangedPayload,
+  messagesFromEvents,
+  type PostedPayload,
+  type StepChangedPayload,
+} from '../domain/message-events.ts'
 
 const dateOrNull = (time: number | null) => (time === null ? null : new Date(time))
 const timeOrNull = (date: Date | null) => date?.getTime() ?? null
@@ -235,15 +242,16 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
           )
         ).map(toMessage),
       history: async (id) =>
-        (
-          await tx.run(
-            zql.messages
-              .where('workspaceId', contextWorkspaceId)
-              .where('chatId', id)
-              .where('kind', 'IN', ['member', 'agent'])
-              .orderBy('seq', 'asc'),
-          )
-        ).map(toMessage),
+        messagesFromEvents(await chatEventsOf(tx, contextWorkspaceId, id))
+          .filter((message) => message.kind === 'member' || message.kind === 'agent')
+          .map(({ createdAt, editedAt, deletedAt, ...message }) =>
+            toMessage({
+              ...message,
+              createdAt: createdAt.getTime(),
+              editedAt: timeOrNull(editedAt),
+              deletedAt: timeOrNull(deletedAt),
+            }),
+          ),
       pullRequestCard: async (id) => {
         const row = await tx.run(
           zql.messages

@@ -422,10 +422,13 @@ test('a fork sends nothing until the forker’s first prompt, which reaches the 
   const { relay } = await fakeAgent()
   await addLlmKey(bob, 'OpenAI')
   const source = await newRuntimeChat(alice, [{ memberId: bob, roleId: 'reader' }])
+  const posted = (kind: string, body: string) => JSON.stringify({ kind, body, detail: null, replyToId: null })
   await database.$client`
-    insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
-    values (${acme}, ${source}, ${`message-${crypto.randomUUID()}`}, 1, 'member', ${alice}, 'Find the bug.', now()),
-      (${acme}, ${source}, ${`message-${crypto.randomUUID()}`}, 2, 'agent', null, 'Found it.', now())`
+    insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
+    values (${acme}, ${source}, ${`message-${crypto.randomUUID()}`}, 1, 'message.posted', ${alice},
+        ${posted('member', 'Find the bug.')}::jsonb, now()),
+      (${acme}, ${source}, ${`message-${crypto.randomUUID()}`}, 2, 'message.posted', null,
+        ${posted('agent', 'Found it.')}::jsonb, now())`
   const fork = `chat-${crypto.randomUUID()}` as ChatId
   expect(
     await mutate(bobInAcme, 'conversation.forkChat', {
@@ -439,6 +442,8 @@ test('a fork sends nothing until the forker’s first prompt, which reaches the 
   expect(relay.prompts).toEqual([])
   const wrapper = (await database.query.messages.findFirst({ where: { chatId: fork } }))?.body
   expect(wrapper).toStartWith('Conversation so far, from the runtime chat Runtime chat:')
+  expect(wrapper).toContain('Find the bug.')
+  expect(wrapper).toEndWith('Found it.')
   routeWith({ tier: 'small', confidence: 'high', effort: 'low' })
   await answered(await prompt(fork, 'Fix it.', bobInAcme))
   await answered(await prompt(fork, 'And then?', bobInAcme))

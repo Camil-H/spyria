@@ -428,6 +428,26 @@ export const lastSessionId = async (tx: Transaction, workspaceId: string, chatId
     )
   )?.sessionId ?? undefined
 
+export const chatEventsOf = async (tx: Transaction, workspaceId: string, chatId: string) =>
+  (
+    await onServer<{
+      workspaceId: string
+      chatId: string
+      id: string
+      seq: number
+      type: string
+      actor: string | null
+      payload: unknown
+      createdAtMilliseconds: string
+    }>(
+      tx,
+      `select workspace_id as "workspaceId", chat_id as "chatId", id, seq, type, actor, payload,
+         extract(epoch from created_at) * 1000 as "createdAtMilliseconds"
+       from events where workspace_id = $1 and chat_id = $2 order by seq`,
+      [workspaceId, chatId],
+    )
+  ).map(({ createdAtMilliseconds, ...event }) => ({ ...event, createdAt: new Date(Number(createdAtMilliseconds)) }))
+
 export const openTaskStepsOf = <Step>(tx: Transaction, workspaceId: string, promptId: string) =>
   onServer<{ id: string; step: Step }>(
     tx,

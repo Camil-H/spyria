@@ -129,7 +129,7 @@ test.each(Object.entries(crossTenantWrites))('refuses %s', async (_, write) => {
 })
 
 test('refuses a duplicate (chat_id, seq) on messages and on events', async () => {
-  expect(await refusalOf(database.insert(messages).values(message({ seq: 1 })))).toMatchObject({ code: '23505' })
+  expect(await refusalOf(database.insert(messages).values(message({ seq: 2 })))).toMatchObject({ code: '23505' })
   expect(await refusalOf(database.insert(events).values(event({ seq: 1 })))).toMatchObject({ code: '23505' })
 })
 
@@ -142,7 +142,7 @@ test('rejects UPDATE and DELETE on events', async () => {
     code: 'P0001',
     message: 'events are append-only: DELETE rejected',
   })
-  expect(await database.$count(events)).toBe(12)
+  expect(await database.$count(events)).toBe(19)
 })
 
 test('an event changes only to blank the body of a deleted message, in a transaction that names that message', async () => {
