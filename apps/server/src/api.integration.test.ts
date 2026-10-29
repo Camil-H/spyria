@@ -170,6 +170,10 @@ await testDatabase.database.$client`
 await testDatabase.database.$client`
   insert into connection_restrictions (workspace_id, connection_id, user_id, allowed_tools)
   values (${acme}, 'connection-acme-crm', ${bob}, '["lookup"]'), (${acme}, 'connection-acme-crm', ${lee}, '[]')`
+await testDatabase.database.$client`
+  insert into tool_connections (workspace_id, user_id, tool, status, position)
+  values (${acme}, ${alice}, 'Notion', 'Needs reconnection', 3), (${acme}, ${alice}, 'GitHub', 'Connected', 1),
+    (${acme}, ${alice}, 'Slack', 'Connected', 2)`
 const rowsByReader = new Map(
   await Promise.all(
     readers.map(async (reader) => [reader.name, await readAll(reader.workspace, reader.user)] as const),
