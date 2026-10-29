@@ -21,6 +21,9 @@ export const openPageTool = {
   },
 }
 export const pageOpenedText = "The page is open in the member's Browser panel."
+export const webPagePath = '/api/web-page'
+export const maximumWebPageBytes = 5 * 1024 * 1024
+export type WebPage = Readonly<{ url: string; html?: string }>
 
 const isPrivateIpv4 = ([first = 0, second = 0]: readonly number[]) =>
   first === 0 ||
@@ -29,7 +32,9 @@ const isPrivateIpv4 = ([first = 0, second = 0]: readonly number[]) =>
   (first === 100 && second >= 64 && second < 128) ||
   (first === 169 && second === 254) ||
   (first === 172 && second >= 16 && second < 32) ||
-  (first === 192 && second === 168)
+  (first === 192 && second === 168) ||
+  (first === 198 && (second === 18 || second === 19)) ||
+  first >= 224
 
 const ipv6GroupsOf = (address: string) => {
   const groupsOf = (part: string) => (part === '' ? [] : part.split(':').map((group) => Number.parseInt(group, 16)))
@@ -47,10 +52,13 @@ const isPrivateIpv6 = (address: string) => {
   return groups.slice(0, 7).every((group) => group === 0) || (first & 0xfe00) === 0xfc00 || (first & 0xffc0) === 0xfe80
 }
 
+export const isPrivateNetworkAddress = (address: string) =>
+  address.includes(':') ? isPrivateIpv6(address) : isPrivateIpv4(address.split('.').map(Number))
+
 const isOnMembersNetwork = (url: string) => {
   const host = new URL(url).hostname.replace(/\.$/, '')
   if (host.startsWith('[')) return isPrivateIpv6(host.slice(1, -1))
-  if (ipv4Address.test(host)) return isPrivateIpv4(host.split('.').map(Number))
+  if (ipv4Address.test(host)) return isPrivateNetworkAddress(host)
   return !host.includes('.') || localName.test(host)
 }
 

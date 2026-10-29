@@ -24,6 +24,7 @@ import {
   type PublishAction,
   questionAnswerOf,
   uploadAttachmentFromRequest,
+  webPagePath,
 } from '@spyria/conversation/server'
 import type { Database } from '@spyria/db/postgres'
 import { schema } from '@spyria/db/zero'
@@ -142,6 +143,7 @@ import { createRuntimeHostGateway, type RuntimeHostGateway } from './runtime-hos
 import { contextOf, withSpan } from './telemetry.ts'
 import { announceToolListChange } from './tool-list-changes.ts'
 import { webAppResponse } from './web-app.ts'
+import { createWebPageReader } from './web-pages.ts'
 
 const healthCheckMilliseconds = 2000
 const passesWithinTimeout = (check: () => Promise<boolean>) =>
@@ -184,6 +186,8 @@ export const sessionClassifierOf =
     })
   }
 
+const readWebPage = createWebPageReader()
+
 const statusByErrorCode: Record<string, number> = {
   missing_workspace_permission: 403,
   missing_chat_permission: 403,
@@ -197,6 +201,9 @@ const statusByErrorCode: Record<string, number> = {
   attachment_storage_full: 413,
   attachment_not_found: 404,
   runtime_media_unavailable: 404,
+  web_page_unreachable: 502,
+  web_page_not_public: 403,
+  web_page_too_large: 413,
 }
 
 const endpointResponse = async (request: string, successStatus: number, endpoint: () => Promise<unknown>) => {
@@ -547,6 +554,11 @@ export const createApp = ({
           )),
           isImmutable: true,
         }),
+      ),
+    )
+    .get(webPagePath, rateLimited('webPageReads'), (context) =>
+      endpointResponse('Reading a web page', 200, () =>
+        readWebPage(context.req.query('url') ?? '', context.req.header('accept-language')),
       ),
     )
     .get(chatMediaPathOf(':chatId'), rateLimited('runtimeMediaReads'), (context) => {

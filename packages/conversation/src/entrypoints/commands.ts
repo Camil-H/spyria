@@ -1,5 +1,6 @@
 import type { ChatId, MemberId, MessageId, WorkspaceId } from '@spyria/kernel'
 import type { Attachment } from '../domain/attachments.ts'
+import type { WebPage } from '../domain/browser-pages.ts'
 import type { GitAction, GitActionOutcome } from '../domain/git-actions.ts'
 import type { PublishAction, PullRequestDraft } from '../domain/pull-requests.ts'
 import type { RunsOn } from '../domain/session-routing.ts'
@@ -57,6 +58,7 @@ export type ConversationCommands = {
   answerQuestion: Command<{ chatId: ChatId; questionId: string; answer: QuestionAnswer }, number>
   readWorkspace: Command<{ chatId: ChatId; read: WorkspaceRead; path: string }, WorkspaceReading>
   wakeWorkspace: Command<{ chatId: ChatId }, void>
+  readWebPage: Command<{ url: string }, WebPage>
   publishBranch: Command<
     { chatId: ChatId; action: PublishAction; draft: PullRequestDraft },
     { isRefused: boolean; text: string }
