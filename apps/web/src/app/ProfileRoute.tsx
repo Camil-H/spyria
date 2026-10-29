@@ -13,7 +13,7 @@ const ProfileRoute = () => {
   const { memberId } = useSession()
   const usesSingleSignOn = use(sharedAuthMode()).authMode === 'sso'
   return (
-    <div className="p-6">
+    <div className="px-6 py-6 md:px-12 xl:px-16">
       <ProfileView
         intro={<ChecklistBlock workspaceId={workspaceId} scope="member" usesSingleSignOn={usesSingleSignOn} />}
       >

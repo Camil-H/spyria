@@ -2,7 +2,7 @@
 
 This page covers what workspace admins manage: members and invites, workspace and chat roles, sign-in, GitHub, shared tools, spend, budgets and the audit log, and deleting the workspace. It describes the features as admins and members see them; deployment steps (SMTP, the identity provider, the GitHub App) are in [Self-hosting](../guides/self-hosting.md).
 
-Everything here is in **Workspace settings** (the workspace menu), as cards in three sections. A member sees only the cards their workspace role allows, and the server checks the same permission on every request, so hiding a card is a convenience, not the protection.
+Everything here is in **Workspace settings** (the workspace menu), as cards in three sections; Escape goes back from a card's page to the cards. A member sees only the cards their workspace role allows, and the server checks the same permission on every request, so hiding a card is a convenience, not the protection.
 
 | Section | Card | Permission needed |
 |---|---|---|
@@ -29,7 +29,7 @@ Until the workspace is set up, the top of the sidebar shows **Get started** with
 | Link your GitHub account | every member, once the workspace has had a GitHub App | they linked their GitHub account |
 | Add a profile picture | every member | they have a picture |
 
-Workspace tasks are shared: done by one admin, done for all. A task stays done even if what completed it is undone later (the GitHub App removed, the last key deleted); the cards show the current state. On SSO deployments, **Invite members** stays greyed out until the domain is verified. Anyone can **Skip** a task they see, which counts it as done for them only, and **Restore** it. A list disappears once all its tasks are done or skipped, and the sidebar entry once all of the member's are.
+Workspace tasks are shared: done by one admin, done for all. A task stays done even if what completed it is undone later (the GitHub App removed, the last key deleted); the cards show the current state. On SSO deployments, **Invite members** stays greyed out until the domain is verified. Anyone can **Skip** a task they see, greyed out or not: it leaves their lists and their count, for them only. A done task leaves the list and only counts in its "x of y done"; a list disappears once all its tasks are done, and the sidebar entry once all of the member's are.
 
 ## Workspace roles
 

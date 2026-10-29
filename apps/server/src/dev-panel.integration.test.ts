@@ -30,8 +30,13 @@ const request = async (userId: string, method: string, path: string, body?: obje
 }
 const read = (userId: string, chat: ChatId, kind: string, path = '') =>
   request(userId, 'GET', `/api/chats/${chat}/workspace/${kind}?${new URLSearchParams({ path })}`)
-const git = (cwd: string, ...command: string[]) =>
-  Bun.spawnSync(['git', '-c', 'user.name=Pi Agent', '-c', 'user.email=agent@example.com', ...command], { cwd })
+const git = (cwd: string, ...command: string[]) => {
+  const result = Bun.spawnSync(['git', '-c', 'user.name=Pi Agent', '-c', 'user.email=agent@example.com', ...command], {
+    cwd,
+    stderr: 'pipe',
+  })
+  if (result.exitCode !== 0) throw new Error(result.stderr.toString())
+}
 
 expect(
   await request(alice, 'POST', '/api/github-settings', {
@@ -75,6 +80,7 @@ test('a dev chat reads its tree, files, changes against base and commits through
   await stack.agentHost('panel host')
   const id = await newDevChat('acme/app')
   await promptAndWait(id, 'stub:ls')
+  await waitFor(async () => (await snapshotOf(id)) != null, 20_000)
   const workspace = await workspaceOf(id)
   writeFileSync(join(workspace, 'src/app.ts'), 'export const total = 2\n')
   git(workspace, 'commit', '-qam', 'Fix the totals')
@@ -168,6 +174,7 @@ test('an asleep runtime serves the snapshot of the last turn end, a read never w
   const { host, relay } = await stack.agentHost('sleep host')
   const id = await newDevChat('acme/app')
   await promptAndWait(id, 'stub:ls')
+  await waitFor(async () => (await snapshotOf(id)) != null, 20_000)
   const workspace = await workspaceOf(id)
   writeFileSync(join(workspace, 'src/app.ts'), 'export const total = 3\n')
   git(workspace, 'commit', '-qam', 'Raise the totals')

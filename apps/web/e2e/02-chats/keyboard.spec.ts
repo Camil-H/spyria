@@ -65,7 +65,7 @@ test.describe('Keyboard shortcuts', () => {
     })
   })
 
-  test('As a member, I type a letter in the composer and it stays text instead of a shortcut', {
+  test('As a member, I type a letter in the composer and it stays text, then leave it with Escape to use shortcuts', {
     tag: ['@spec-53'],
   }, async ({ page }) => {
     await composerOf(page).focus()
@@ -73,5 +73,10 @@ test.describe('Keyboard shortcuts', () => {
     await expect(composerOf(page)).toHaveValue('cpl')
     await expect(page.getByRole('dialog')).toHaveCount(0)
     await expect(sidebarOf(page).getByRole('button', { name: 'Collapse sidebar' })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(composerOf(page)).not.toBeFocused()
+    await expect(composerOf(page)).toHaveValue('cpl')
+    await page.keyboard.press('l')
+    await expect(sidebarOf(page).getByRole('button', { name: 'Expand sidebar' })).toBeVisible()
   })
 })

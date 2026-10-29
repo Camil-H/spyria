@@ -39,10 +39,14 @@ const gitAction = (userId: string, chat: ChatId, action: string, message = '') =
   request(userId, 'POST', `/api/chats/${chat}/git/${action}`, { message })
 const statusOf = async (userId: string, chat: ChatId) =>
   (await request(userId, 'GET', `/api/chats/${chat}/workspace/status?path=`)).body
-const gitIn = (cwd: string, ...command: string[]) =>
-  Bun.spawnSync(['git', '-c', 'user.name=Pi Agent', '-c', 'user.email=agent@example.com', ...command], {
+const gitIn = (cwd: string, ...command: string[]) => {
+  const result = Bun.spawnSync(['git', '-c', 'user.name=Pi Agent', '-c', 'user.email=agent@example.com', ...command], {
     cwd,
-  }).stdout.toString()
+    stderr: 'pipe',
+  })
+  if (result.exitCode !== 0) throw new Error(result.stderr.toString())
+  return result.stdout.toString()
+}
 
 expect(
   await request(alice, 'POST', '/api/github-settings', {
@@ -92,6 +96,12 @@ const runtimeWorkspaceOf = async (id: ChatId) => {
   const promptId = await stack.prompt(id, 'stub:ls')
   await stack.answered(promptId)
   await waitFor(async () => (await stack.turnOf(id)) === null, 20_000)
+  await waitFor(
+    async () =>
+      (await database.$client`select workspace_snapshot from runtimes where chat_id = ${id}`)[0]?.workspace_snapshot !=
+      null,
+    20_000,
+  )
   const frames = (await stack.subscribedFrames(id)).map((frame) => JSON.parse(frame))
   return { promptId, workspace: String(frames.find((frame) => frame.workspace)?.workspace.cwd) }
 }
