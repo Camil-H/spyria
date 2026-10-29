@@ -1,4 +1,4 @@
-import { type Actor, actingMemberOf } from '@spyria/kernel'
+import { type Actor, actingMemberOf, memberBehind } from '@spyria/kernel'
 import { type AgentEvent, agentProjectionOf, delegatedProjectionOf, observedProjectionStep } from './agent-events.ts'
 import { legacyToolCallStep, type StepDelegation, type StoredStep } from './agent-steps.ts'
 import type { Attachment } from './attachments.ts'
@@ -93,7 +93,7 @@ export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMes
             }
           : {
               kind,
-              authorId: actingMemberOf(actor),
+              authorId: kind === 'notice' ? null : memberBehind(actor),
               body,
               attachments,
               detail,

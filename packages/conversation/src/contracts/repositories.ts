@@ -199,6 +199,7 @@ export type RoutingRepository = {
   chatRouting(chatId: ChatId): Promise<ChatRouting>
   reachableModels(memberId: MemberId): Promise<readonly Model[] | undefined>
   listedModels(): readonly ListedModel[]
+  allowsModel(model: string): Promise<boolean>
   update(
     chatId: ChatId,
     fields: Partial<{

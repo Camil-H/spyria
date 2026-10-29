@@ -10,7 +10,7 @@ Chat events and workspace events recorded a single `actor` text, filled with a m
 - The member an agent, job or integration acts for is kept apart, in `on_behalf_of`, as model and tool calls already keep the prompter apart from the owner ([0004](0004-members-keys-through-a-gateway.md), [0009](0009-agent-acts-as-the-owner.md)). A member actor has no `on_behalf_of`.
 - `events` and `workspace_events` carry `actor_kind` and `on_behalf_of` next to the existing actor id. Operations a member runs from a mutator keep taking a `MemberId` and record a member actor; operations that something else can run (publishing a branch, recording a pull request, turn notices, agent events) take an `Actor`.
 - The event store stays append-only: chat events written before this change are not rewritten. A chat event without `actor_kind` reads as a member when it has an actor id and as the system otherwise. Workspace events, which the trigger does not guard, were backfilled.
-- A message's author is the actor only when that actor is a member; an agent's pull request card has no member author.
+- A message's author is the member behind the actor: an agent's pull request card keeps the owner it acts for as its author, so the chat still finds its card, while notices have no author.
 
 ## Consequences
 

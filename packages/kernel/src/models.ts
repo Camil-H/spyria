@@ -84,10 +84,17 @@ export const providersOfGatewayRefs = (refs: readonly string[]) => [
 ]
 export const providerOf = (id: string) => id.split('/')[0] ?? ''
 export const isAllowedProvider = (allowList: AiProviderAllowList | null, provider: string) =>
-  allowList === null || allowList[provider] !== undefined
+  allowList === null || Object.hasOwn(allowList, provider)
 export const isAllowedModel = (allowList: AiProviderAllowList | null, id: string) => {
-  const models = allowList === null ? 'all' : allowList[providerOf(id)]
+  const provider = providerOf(id)
+  const models = allowList === null ? 'all' : Object.hasOwn(allowList, provider) ? allowList[provider] : undefined
   return models === 'all' || (models?.includes(id) ?? false)
+}
+export const soleRequestedModelOf = (request: unknown) => {
+  if (request === null || typeof request !== 'object' || Array.isArray(request)) return undefined
+  const routingFields = Object.entries(request).filter(([name]) => ['model', 'fallbacks'].includes(name.toLowerCase()))
+  const [field] = routingFields
+  return routingFields.length === 1 && field?.[0] === 'model' && typeof field[1] === 'string' ? field[1] : undefined
 }
 export const allowedModelsOf = <Listed extends { id: string }>(
   allowList: AiProviderAllowList | null,

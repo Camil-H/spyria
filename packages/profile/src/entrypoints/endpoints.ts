@@ -52,8 +52,12 @@ export const createMemberKeyReader =
       gateway,
     })
 
-export const createModelGuard = (transact: Transact) => (workspace: WorkspaceId, member: MemberId, model: string) =>
-  isModelAllowed({ transactor: createTransactingZeroTransactor(transact, memberContext(workspace, member)) }, { model })
+export const createModelGuard =
+  (transact: Transact) => (workspace: WorkspaceId, member: MemberId, model: string | undefined) =>
+    isModelAllowed(
+      { transactor: createTransactingZeroTransactor(transact, memberContext(workspace, member)) },
+      { model },
+    )
 
 const toolActions = { connect: startToolConnection, refresh: refreshToolConnection, disconnect: disconnectTool }
 

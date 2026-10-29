@@ -34,7 +34,7 @@ const ModelChoices = ({
     event.preventDefault()
     const model = addedModel.trim()
     if (!model) return
-    save([...new Set([...chosen, model.includes('/') ? model : `${provider.id}/${model}`])])
+    save([...new Set([...chosen, model.startsWith(`${provider.id}/`) ? model : `${provider.id}/${model}`])])
     setAddedModel('')
   }
   return (
@@ -101,7 +101,7 @@ export const AiProvidersSection = ({ workspaceId }: { workspaceId: WorkspaceId }
             <Switch
               label={provider.name}
               isOn={provider.isAllowed}
-              onToggle={() => save(withProvider(allowList, provider.id, !provider.isAllowed))}
+              onToggle={() => !isPending && save(withProvider(allowList, provider.id, !provider.isAllowed))}
             />
             {provider.isAllowed && (
               <ModelChoices
