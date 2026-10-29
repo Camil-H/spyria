@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from 'bun:test'
-import { createRelay, frameTextOf } from './relay.ts'
+import { bodyFramesOf, createRelay, frameTextOf, relayChunkBytes } from './relay.ts'
 import { nextFrameOf, waitFor } from './testing.ts'
 
 const spyriaAgent = Bun.serve({
@@ -259,4 +259,82 @@ test('a personal host relays a workspace file whose bytes hold no secret, and re
     path: '/api/workspace/media?path=stolen.png',
   })
   expect(await nextOf('http_res')).toEqual({ type: 'http_res', sid: 7, error: 'refused: this file holds a secret' })
+})
+
+const binaryBody = Buffer.from(Array.from({ length: relayChunkBytes * 2 + 7 }, (_, index) => (index * 31) % 256))
+const binaryAgent = Bun.serve({
+  port: 0,
+  fetch: (request, server) => {
+    if (server.upgrade(request)) return undefined
+    if (request.method === 'GET') return new Response(binaryBody, { headers: { 'content-type': 'image/png' } })
+    return request.text().then((text) => new Response(`received ${text.length} ${text.slice(-3)}`))
+  },
+  websocket: {
+    message: (socket, message) => {
+      const [count, size] = String(message).split(' ').map(Number)
+      for (let index = 0; index < (count ?? 0); index++) socket.send(`${index}:${'x'.repeat(size ?? 0)}`)
+    },
+  },
+})
+afterAll(() => binaryAgent.stop(true))
+
+const chunkedRelay = (maximumHeldBytes?: number) => {
+  const sent: Record<string, unknown>[] = []
+  const relay = createRelay({
+    addressOf: async () => `http://localhost:${binaryAgent.port}`,
+    send: (frame) => sent.push(frame),
+    isBackedUp: () => true,
+    maximumHeldBytes,
+  })
+  return { relay, sent, nextOf: (type: string) => nextFrameOf(sent, type) }
+}
+
+test('a chunked request reaches the runtime whole, and its answer comes back in base64 chunks, byte for byte', async () => {
+  const { relay, sent, nextOf } = chunkedRelay()
+  const requestBody = `${'é'.repeat(relayChunkBytes)}end`
+  await relay.handle({ type: 'http', sid: 1, runtimeId: 'runtime-1', method: 'POST', path: '/upload', chunked: true })
+  for (const frame of bodyFramesOf(1, Buffer.from(requestBody))) await relay.handle(frame)
+  expect(await nextOf('http_res')).toMatchObject({ sid: 1, status: 200, chunked: true })
+  await nextOf('http_end')
+  const answered = sent.filter((frame) => frame.type === 'http_body').map((frame) => String(frame.data))
+  expect(Buffer.concat(answered.map((data) => Buffer.from(data, 'base64'))).toString()).toBe(
+    `received ${requestBody.length} end`,
+  )
+
+  sent.length = 0
+  await relay.handle({ type: 'http', sid: 2, runtimeId: 'runtime-1', method: 'GET', path: '/chart.png', chunked: true })
+  for (const frame of bodyFramesOf(2, new Uint8Array())) await relay.handle(frame)
+  expect(await nextOf('http_res')).toMatchObject({ sid: 2, status: 200, chunked: true })
+  await nextOf('http_end')
+  const chunks = sent
+    .filter((frame) => frame.type === 'http_body')
+    .map((frame) => Buffer.from(String(frame.data), 'base64'))
+  expect(chunks.map((chunk) => chunk.length)).toEqual([relayChunkBytes, relayChunkBytes, 7])
+  expect(Buffer.concat(chunks).equals(binaryBody)).toBe(true)
+})
+
+test('a stream with credit holds what the server has not acknowledged, whatever the socket buffers, and closes alone once it holds too much', async () => {
+  const { relay, sent, nextOf } = chunkedRelay(2_500)
+  await relay.handle({ type: 'ws_connect', sid: 5, runtimeId: 'runtime-1', path: '/events', creditBytes: 1_000 })
+  await relay.handle({ type: 'ws_connect', sid: 6, runtimeId: 'runtime-1', path: '/events', creditBytes: 1_000 })
+  await nextOf('ws_open')
+  await nextOf('ws_open')
+  await relay.handle({ type: 'ws_msg', sid: 5, data: '4 400' })
+  await waitFor(() => sent.filter((frame) => frame.type === 'ws_msg').length >= 2)
+  await Bun.sleep(50)
+  const relayedOf = (sid: number) =>
+    sent
+      .filter((frame) => frame.type === 'ws_msg' && frame.sid === sid)
+      .map((frame) => String(frame.data).split(':')[0])
+  expect(relayedOf(5)).toEqual(['0', '1'])
+  await relay.handle({ type: 'ws_ack', sid: 5, bytes: 804 })
+  await waitFor(() => relayedOf(5).length === 4)
+  expect(relayedOf(5)).toEqual(['0', '1', '2', '3'])
+
+  await relay.handle({ type: 'ws_msg', sid: 6, data: '10 400' })
+  expect(await nextOf('ws_close')).toEqual({ type: 'ws_close', sid: 6 })
+  expect(sent.some((frame) => frame.type === 'ws_close' && frame.sid === 5)).toBe(false)
+  await relay.handle({ type: 'ws_msg', sid: 5, data: '1 10' })
+  await waitFor(() => relayedOf(5).length === 5)
+  expect(relayedOf(5).at(-1)).toBe('0')
 })
