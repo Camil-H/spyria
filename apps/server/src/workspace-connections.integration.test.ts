@@ -1,5 +1,6 @@
 import { afterAll, afterEach, expect, setDefaultTimeout, test } from 'bun:test'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
+import { testCrmConnection } from '@spyria/db/testing'
 import { schema } from '@spyria/db/zero'
 import { createZeroStore } from '@spyria/db/zero-store'
 import { createToolCallOwnerAccess } from '@spyria/profile/server'
@@ -135,7 +136,7 @@ test('a member restricted to lookup is refused update on their own prompts, thei
   const { token } = await runtimeTurn(host, bob, bob)
   expect(textOf((await mcpCall(host, token, callOf(sharedToolServer, 'lookup'))).result)).toBe('ran lookup')
   expect(textOf((await mcpCall(host, token, callOf(sharedToolServer, 'update'))).result)).toBe(
-    `${sharedToolServer} isn't available on Bob's prompts in this chat`,
+    `${testCrmConnection.name} isn't available on Bob's prompts in this chat`,
   )
 
   const keyBefore = (await virtualKeyOf(bob)).id
@@ -146,7 +147,7 @@ test('a member restricted to lookup is refused update on their own prompts, thei
   await addLlmKey(bob, 'Mistral')
   expect((await virtualKeyOf(bob)).id).toBe(keyBefore)
   expect(textOf((await mcpCall(host, token, callOf(sharedToolServer, 'update'))).result)).toBe(
-    `${sharedToolServer} isn't available on Bob's prompts in this chat`,
+    `${testCrmConnection.name} isn't available on Bob's prompts in this chat`,
   )
 
   expect((await restrict(bob, [])).status).toBe(200)
@@ -191,7 +192,7 @@ test('unticking a tool for the workspace removes it from every key and every pro
   const host = await fakeHost('Workspace untick host')
   const { token } = await runtimeTurn(host, alice)
   expect(textOf((await mcpCall(host, token, callOf(sharedToolServer, 'update'))).result)).toBe(
-    `${sharedToolServer} isn't available on Alice's prompts in this chat`,
+    `${testCrmConnection.name} isn't available on Alice's prompts in this chat`,
   )
   expect(textOf((await mcpCall(host, token, callOf(sharedToolServer, 'lookup'))).result)).toBe('ran lookup')
   expect((await asMember(bob, 'POST', crmPath('tools'), { allowedTools: ['lookup', 'update'] })).status).toBe(403)

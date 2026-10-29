@@ -31,7 +31,7 @@ test.describe('Shared tools', () => {
   const settingsSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Connections' })
   const crmCardOf = (page: Page) =>
     settingsSectionOf(page).getByRole('list', { name: 'Workspace connections' }).getByRole('listitem', { name: 'CRM' })
-  const notOffered = (gatewayName: string, tool: string) => `Tool ${gatewayName}-${tool} not found`
+  const notOffered = (serverName: string, tool: string) => `Tool ${serverName}-${tool} not found`
 
   const registerCrm = async (page: Page, workerStack: WorkerStack) => {
     await openSettings(page, 'MCP tools')
@@ -46,10 +46,10 @@ test.describe('Shared tools', () => {
     select gateway_name as "gatewayName" from workspace_connections where name = 'CRM'`
     return row?.gatewayName ?? ''
   }
-  const toolScriptOf = (gatewayName: string, tool: string, text: string) => ({
+  const toolScriptOf = (gatewayName: string, tool: string, text: string, serverName = 'CRM') => ({
     steps: [{ tool: `${gatewayName}-${tool}`, arguments: {} }],
     text,
-    stepName: `Used ${tool} (${gatewayName})`,
+    stepName: `Used ${tool} (${serverName})`,
   })
   const giveResearchToBob = async (workerStack: WorkerStack) => {
     await workerStack.database.$client.begin(async (sql) => {
@@ -119,9 +119,7 @@ test.describe('Shared tools', () => {
     await giveResearchToBob(workerStack)
     const bobPage = await openAsBobWithKey(browser, workerStack)
     const update = toolScriptOf(gatewayName, 'update', 'Tried to update.')
-    await expect(await promptIn(bobPage, agentScript, update, 'Update it')).toContainText(
-      notOffered(gatewayName, 'update'),
-    )
+    await expect(await promptIn(bobPage, agentScript, update, 'Update it')).toContainText(notOffered('CRM', 'update'))
 
     await openProfile(bobPage)
     await llmSectionOf(bobPage).getByRole('button', { name: 'Remove Mistral' }).click()
@@ -138,7 +136,7 @@ test.describe('Shared tools', () => {
       .toBe(0)
     await addLlmKey(bobPage, 'Mistral')
     await expect(await promptIn(bobPage, agentScript, update, 'Update it again')).toContainText(
-      notOffered(gatewayName, 'update'),
+      notOffered('CRM', 'update'),
     )
     const lookup = toolScriptOf(gatewayName, 'lookup', 'Looked it up.')
     await expect(await promptIn(bobPage, agentScript, lookup, 'Look it up')).toContainText('ran lookup')
@@ -153,9 +151,7 @@ test.describe('Shared tools', () => {
     await addParticipant(workerStack, research, 'member-bob', 'prompter')
     const bobPage = await openAsBobWithKey(browser, workerStack)
     const update = toolScriptOf(gatewayName, 'update', 'Tried to update.')
-    await expect(await promptIn(bobPage, agentScript, update, 'Update it')).toContainText(
-      notOffered(gatewayName, 'update'),
-    )
+    await expect(await promptIn(bobPage, agentScript, update, 'Update it')).toContainText(notOffered('CRM', 'update'))
     const lookup = toolScriptOf(gatewayName, 'lookup', 'Looked it up.')
     await expect(await promptIn(bobPage, agentScript, lookup, 'Look it up')).toContainText('ran lookup')
     await bobPage.context().close()
@@ -171,7 +167,7 @@ test.describe('Shared tools', () => {
     await untick(update)
     await expect(
       await promptIn(page, agentScript, toolScriptOf(gatewayName, 'update', 'Tried to update.'), 'Update it'),
-    ).toContainText(notOffered(gatewayName, 'update'))
+    ).toContainText(notOffered('CRM', 'update'))
     await openPanelTab(page, 'Research', 'Connected tools')
     const workspaceGroup = tabPanelOf(page).getByRole('region', { name: 'Workspace' })
     await expect(workspaceGroup.getByRole('listitem')).toHaveText(['CRMlookup'])
@@ -192,7 +188,12 @@ test.describe('Shared tools', () => {
     await openPanelTab(page, 'Research', 'Connected tools')
     await expect(tabPanelOf(page).getByRole('region', { name: 'Workspace' })).toContainText('No workspace connections')
     await expect(
-      await promptIn(page, agentScript, toolScriptOf(gatewayName, 'lookup', 'Tried to look it up.'), 'Look it up'),
+      await promptIn(
+        page,
+        agentScript,
+        toolScriptOf(gatewayName, 'lookup', 'Tried to look it up.', gatewayName),
+        'Look it up',
+      ),
     ).toContainText(notOffered(gatewayName, 'lookup'))
     await expect(messageItemsOf(page).filter({ hasText: 'ran lookup' })).toHaveCount(0)
     await bobPage.context().close()

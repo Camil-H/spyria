@@ -61,6 +61,12 @@ export const flagToolConnection = ({ transactor }: Pick<Dependencies, 'transacto
     return isConnected
   })
 
+export const toolServerNameOf = ({ transactor }: Pick<Dependencies, 'transactor'>, { tool }: Input) =>
+  transactor.run(
+    async ({ workspaceConnections }) =>
+      (await workspaceConnections.findByGatewayName(transactor.member.workspaceId, tool))?.name ?? tool,
+  )
+
 export const toolCallAccess = async ({ transactor, gateway }: Dependencies, { prompterId, toolName }: ToolCall) => {
   const { workspaceId, memberId: ownerId } = transactor.member
   const { server, tool } = toolNamePartsOf(toolName)

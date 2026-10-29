@@ -157,7 +157,7 @@ test('workspace events, chat events, tool calls, pushes and pull requests merge 
   expect(entries.map(summaryOf)).toEqual([
     'Bob | Added a member to a chat | Bob private',
     'Alice | Invited a member | nina@example.com',
-    'Bob | Called a tool | crm · update',
+    'Bob | Called a tool | CRM · update',
     'System | Merged a pull request | acme/app#7',
     'Bob | Opened a pull request | acme/app#7',
     'Bob | Pushed a branch | Bob private',
@@ -172,7 +172,7 @@ test('workspace events, chat events, tool calls, pushes and pull requests merge 
   expect(detailsOf(entries[1])).toEqual({ Email: 'nina@example.com', Role: 'Member' })
   expect(detailsOf(entries[2])).toEqual({
     Chat: 'Research',
-    Server: 'crm',
+    Server: 'CRM',
     Tool: 'update',
     'Read only': 'No',
     Decision: 'approved',
@@ -279,7 +279,7 @@ test('filters by person, grouped type and date range, and the CSV holds the same
     'Alice | Invited a member | nina@example.com',
   ])
   expect((await auditPageOf({ group: 'Tool calls' })).entries.map(summaryOf)).toEqual([
-    'Bob | Called a tool | crm · update',
+    'Bob | Called a tool | CRM · update',
   ])
   expect((await asMember(alice, 'GET', '/api/audit-log?group=Everything')).status).toBe(400)
 

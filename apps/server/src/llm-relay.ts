@@ -325,6 +325,10 @@ export const createModelCallRelay = ({
       const isSpyriaCall = isToolCall && isSpyriaTool(toolName)
       const { server, tool } = isSpyriaCall ? { server: 'spyria', tool: toolName } : toolNamePartsOf(toolName)
       const { ownerId, prompterId, ownerName } = turn
+      const serverName =
+        isToolCall && !isSpyriaCall
+          ? await tools.serverNameOf(host.workspaceId, ownerId, server).catch(() => server)
+          : server
       const call = {
         readOnly: null as boolean | null,
         status: 'refused' as ToolCallStatus,
@@ -334,7 +338,7 @@ export const createModelCallRelay = ({
       }
       const toolError = (text: string) => answerRpc(rpc?.id, toolErrorOf(text))
       const noticeOf = (failure: ToolCallFailure, isReconnect = false) =>
-        toolCallNoticeOf(failure, { ownerName, server, isReconnect })
+        toolCallNoticeOf(failure, { ownerName, server: serverName, isReconnect })
       if (isToolCall && !prompterId) return toolError('This runtime has no active turn')
       const isGuestTurn = guestPrompterOf(turn) !== null
       if (method === 'POST' && (Array.isArray(rpc) || (isGuestTurn && !isGuestToolMethod(rpc))))
@@ -376,7 +380,7 @@ export const createModelCallRelay = ({
         }
         if (isToolCall) {
           const { refusal, ...authorization } = await handlers.authorizeToolCall(
-            { turn, toolName, toolArguments: rpc?.params?.arguments, signal },
+            { turn, toolName, serverName, toolArguments: rpc?.params?.arguments, signal },
             {
               accessOf: (prompter) => tools.toolCallAccess(host.workspaceId, ownerId, prompter, toolName),
               isReadOnly: () => isReadOnly(callHeaders, toolName),

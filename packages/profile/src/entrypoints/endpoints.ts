@@ -14,6 +14,7 @@ import {
   refreshToolConnection,
   startToolConnection,
   toolCallAccess,
+  toolServerNameOf,
 } from '../operations/tool-connections.ts'
 import {
   addWorkspaceConnection,
@@ -79,6 +80,8 @@ export const createToolCallOwnerAccess = (transact: Transact, gateway: LlmGatewa
       flagToolConnection(dependenciesOf(workspace, member), { tool }),
     toolCallAccess: (workspace: WorkspaceId, owner: MemberId, prompter: MemberId, toolName: string) =>
       toolCallAccess(dependenciesOf(workspace, owner), { prompterId: prompter, toolName }),
+    serverNameOf: (workspace: WorkspaceId, owner: MemberId, server: string) =>
+      toolServerNameOf(dependenciesOf(workspace, owner), { tool: server }),
   }
 }
 
