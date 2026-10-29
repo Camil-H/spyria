@@ -619,6 +619,8 @@ export const jobs = table(
     attempts: integer().notNull(),
     state: text().$type<'queued' | 'running' | 'done' | 'failed'>().notNull(),
     lastError: text(),
+    claimedAt: instant(),
+    finishedAt: instant(),
   },
   (table) => [
     primaryKey({ columns: [table.workspaceId, table.id] }),

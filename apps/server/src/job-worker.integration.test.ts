@@ -60,6 +60,7 @@ describe('the dead jobs left by a throwing job', () => {
       state: 'failed',
       lastError: missingMessageError,
     })
+    expect((await jobRow('job-broken'))?.finishedAt?.getTime()).toBeGreaterThan(startedAt)
     logged.restore()
     const brokenJobErrors = logged.events.filter(
       ({ severity, attributes }) => severity === 'ERROR' && attributes?.['job.id'] === 'job-broken',
@@ -80,7 +81,7 @@ describe('the dead jobs left by a throwing job', () => {
     expect((await listFailedJobs(database))[0]?.failedAt).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/)
 
     expect(await retryFailedJobs(database, 'job-dead-1')).toEqual(['job-dead-1'])
-    expect(await jobRow('job-dead-1')).toMatchObject({ state: 'queued', attempts: 0 })
+    expect(await jobRow('job-dead-1')).toMatchObject({ state: 'queued', attempts: 0, finishedAt: null })
     expect(await jobRow('job-dead-2')).toMatchObject({ state: 'failed' })
     const worker = startWorker()
     await waitFor(async () => (await jobRow('job-dead-1'))?.state === 'done')
@@ -105,6 +106,40 @@ describe('the dead jobs left by a throwing job', () => {
   })
 })
 
+describe('a job longer than its lease', () => {
+  test('keeps its lease while it runs, so a second worker never claims it again', async () => {
+    let removals = 0
+    const sandboxProvider = {
+      remove: async () => {
+        removals++
+        await sleep(400)
+      },
+    } as unknown as SandboxProvider
+    await addAgentPromptJob('job-long', 'unused', {
+      type: 'runtime.discard',
+      payload: { runtimeId: 'runtime-long', hostId: 'host-long' },
+    })
+    const workers = [1, 2].map(() => startWorker({ sandboxProvider, leaseMilliseconds: 90 }))
+    await waitFor(async () => (await jobRow('job-long'))?.state === 'done')
+    await Promise.all(workers.map((worker) => worker.stop()))
+    expect(removals).toBe(1)
+    expect(await jobRow('job-long')).toMatchObject({ state: 'done', attempts: 1 })
+    expect((await jobRow('job-long'))?.finishedAt).toBeInstanceOf(Date)
+  })
+})
+
+test('a queued job wakes an idle worker at once instead of waiting for its next poll', async () => {
+  const sandboxProvider = { remove: async () => {} } as unknown as SandboxProvider
+  const worker = startWorker({ sandboxProvider, pollIntervalMilliseconds: 60_000 })
+  await sleep(200)
+  await addAgentPromptJob('job-woken', 'unused', {
+    type: 'runtime.discard',
+    payload: { runtimeId: 'runtime-woken', hostId: 'host-woken' },
+  })
+  await waitFor(async () => (await jobRow('job-woken'))?.state === 'done', 2_000)
+  await worker.stop()
+})
+
 test('the session sweep runs without a log line, deletes only expired sessions, done jobs older than a day and webhook deliveries older than a week, then reschedules itself once, a day later', async () => {
   await database.$client`
     insert into sessions (workspace_id, id, user_id, created_at, expires_at) values
@@ -114,11 +149,11 @@ test('the session sweep runs without a log line, deletes only expired sessions, 
       (${globex}, 'session-expired-in-globex', ${alice}, now() - interval '8 days', now() - interval '1 day'),
       (${globex}, 'session-live-in-globex', ${alice}, now(), now() + interval '1 hour')`
   await database.$client`
-    insert into jobs (workspace_id, id, type, payload, run_at, attempts, state) values
-      (${acme}, 'job-done-old', 'agent.prompt', '{}', now() - interval '25 hours', 1, 'done'),
-      (${acme}, 'job-done-recent', 'agent.prompt', '{}', now() - interval '23 hours', 1, 'done'),
-      (${acme}, 'job-failed-old', 'agent.prompt', '{}', now() - interval '25 hours', 5, 'failed'),
-      (${globex}, 'job-done-old-in-globex', 'agent.prompt', '{}', now() - interval '25 hours', 1, 'done')`
+    insert into jobs (workspace_id, id, type, payload, run_at, attempts, state, finished_at) values
+      (${acme}, 'job-done-old', 'agent.prompt', '{}', now() - interval '26 hours', 1, 'done', now() - interval '25 hours'),
+      (${acme}, 'job-done-recent', 'agent.prompt', '{}', now() - interval '26 hours', 1, 'done', now() - interval '23 hours'),
+      (${acme}, 'job-failed-old', 'agent.prompt', '{}', now() - interval '26 hours', 5, 'failed', now() - interval '25 hours'),
+      (${globex}, 'job-done-old-in-globex', 'agent.prompt', '{}', now() - interval '26 hours', 1, 'done', now() - interval '25 hours')`
   await database.$client`
     insert into github_apps (workspace_id, app_id, client_id, encrypted_client_secret, encrypted_private_key,
       encrypted_webhook_secret, updated_at)
