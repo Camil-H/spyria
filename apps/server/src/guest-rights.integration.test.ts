@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeEach, expect, setDefaultTimeout, test } from 'bun:test'
 import { createHash } from 'node:crypto'
+import { testCrmConnection } from '@spyria/db/testing'
 import { chatId as toChatId } from '@spyria/kernel'
 import { sharedToolServer } from './testing/fake-mcp.ts'
 import {
@@ -97,13 +98,13 @@ test('on a guest’s prompt a workspace tool needs both the owner’s and the pr
     await restrictSharedTools(bob, ['update'])
     expect(refused(await mcpCall(host, token, lookup))).toEqual({
       status: 200,
-      text: `${sharedToolServer} isn't available on Bob's prompts in this chat`,
+      text: `${testCrmConnection.name} isn't available on Bob's prompts in this chat`,
     })
     await restrictSharedTools(bob, null)
     await restrictSharedTools(alice, ['update'])
     expect(refused(await mcpCall(host, token, lookup))).toEqual({
       status: 200,
-      text: `${sharedToolServer} isn't available on Bob's prompts in this chat`,
+      text: `${testCrmConnection.name} isn't available on Bob's prompts in this chat`,
     })
   } finally {
     await restrictSharedTools(alice, null)
@@ -227,7 +228,7 @@ test('a guest’s write call waits for the owner: approved it runs, denied it ge
   expect(first).toMatchObject({
     sessionUpdate: 'question',
     approval: {
-      server: sharedToolServer,
+      server: testCrmConnection.name,
       tool: 'update',
       arguments: '{"text":"new"}',
       prompterName: 'Bob',
