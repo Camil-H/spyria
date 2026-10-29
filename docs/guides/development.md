@@ -167,12 +167,17 @@ To run the host as a process instead of a container, against the local Docker:
 SPYRIA_HOST_STATE_DIR=.spyria-host bun apps/host/src/main.ts http://localhost:5173/h/<code>
 ```
 
-When you are done, remove the host in Workspace settings, then:
+When you are done, remove the host in Workspace settings, then remove what it leaves on Docker:
 
 ```sh
 docker rm -f spyria-host
+docker rm -f $(docker ps -aq --filter label=spyria.managed=1 --filter name=^spyria-rt-)
+docker volume rm $(docker volume ls -q --filter name=^spyria-rt-)
+docker network rm $(docker network ls -q --filter label=spyria.managed=1 --filter name=^spyria-rt-)
 docker volume rm spyria-host
 ```
+
+A removed host stops for good: it turns off its container's restart policy on the refusal, so `--restart unless-stopped` does not restart it in a loop. See [Removing a host](../features/machines.md#removing-a-host).
 
 ### Deployment names
 

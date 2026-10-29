@@ -113,6 +113,21 @@ const storedToken = () => (existsSync(tokenPath) ? readFileSync(tokenPath, 'utf8
 const isRefusal = (closeCode: number) => closeCode >= 4000 && closeCode < 4100
 const logHelloFailure = (error: unknown) =>
   log.error({ event: 'host.hello_failed', body: 'Saying hello to Spyria failed', error })
+const ownContainer = `${prefix}host`
+const stopRestarting = async () => {
+  const container = await docker<{ Config?: { Hostname?: string } }>('GET', `/containers/${ownContainer}/json`).catch(
+    () => undefined,
+  )
+  if (container?.Config?.Hostname === hostname())
+    await docker('POST', `/containers/${ownContainer}/update`, { RestartPolicy: { Name: 'no' } })
+}
+const exitForGood = () =>
+  void stopRestarting()
+    .catch((error) =>
+      log.warn({ event: 'host.restart_not_stopped', body: 'Turning off the restart of this host failed', error }),
+    )
+    .then(() => telemetry.shutdown())
+    .finally(() => process.exit(1))
 type Carrier = Record<string, unknown>
 
 const connect = () => {
@@ -185,7 +200,7 @@ const connect = () => {
     if (token && !isTokenRefused) return void hello(token).catch(logHelloFailure)
     if (claimCode) return send({ type: 'claim', code: claimCode })
     log.error({ event: 'host.unpaired', body: 'No stored token and no code in the URL' })
-    void telemetry.shutdown().finally(() => process.exit(1))
+    exitForGood()
   }
   socket.onmessage = (message) => {
     const frame = JSON.parse(String(message.data))
@@ -223,7 +238,7 @@ const connect = () => {
         body: 'Spyria refused this host',
         attributes: { 'host.close_reason': event.reason },
       })
-      return void telemetry.shutdown().finally(() => process.exit(1))
+      return exitForGood()
     }
     log.warn({
       event: 'host.disconnected',
