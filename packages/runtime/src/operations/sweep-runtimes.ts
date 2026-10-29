@@ -1,6 +1,12 @@
 import type { WorkspaceId } from '@spyria/kernel'
 import type { RuntimeTransactor } from '../contracts/transactor.ts'
-import { idleStepOf, runtimeJobTypes, sweepIntervalMilliseconds, transitioned } from '../domain/runtime.ts'
+import {
+  idleCutoffsAt,
+  idleStepOf,
+  runtimeJobTypes,
+  sweepIntervalMilliseconds,
+  transitioned,
+} from '../domain/runtime.ts'
 import { requestRemoval } from './remove-chat-runtime.ts'
 
 type Dependencies = { transactor: RuntimeTransactor }
@@ -10,7 +16,7 @@ export const sweepRuntimes = (
   { workspaceId, now }: { workspaceId: WorkspaceId; now: number },
 ) =>
   transactor.run(async (unitOfWork) => {
-    for (const runtime of await unitOfWork.runtimes.lockSweepable(workspaceId)) {
+    for (const runtime of await unitOfWork.runtimes.lockIdle(workspaceId, idleCutoffsAt(now))) {
       const step = idleStepOf(runtime, now)
       if (step === 'removing') await requestRemoval(unitOfWork, runtime, now)
       if (step === 'stopping') {
