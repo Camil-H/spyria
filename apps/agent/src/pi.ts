@@ -38,7 +38,7 @@ const toolOutputOf = (toolName: string, result: Json, isError: boolean, input: J
     return {
       rawOutput: {
         formatted_output: structured?.output ?? textOf(result),
-        exit_code: structured?.exit_code ?? Number(isError),
+        ...(typeof structured?.exit_code === 'number' && { exit_code: structured.exit_code }),
       },
     }
   return diff
