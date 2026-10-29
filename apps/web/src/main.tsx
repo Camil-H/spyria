@@ -46,6 +46,7 @@ const domainVerificationToast = (ssoSettingsPath?: string) =>
   )
 
 const slowWorkspaceLoadMilliseconds = 10_000
+const sessionEndedNotice = 'Your session ended while your workspace was opening. Sign in again.'
 const sessionMissing = {
   status: 'refused',
   message: 'Sign-in finished without opening your workspace. Try again.',
@@ -58,8 +59,10 @@ const openApp = async () => {
   const [{ createApp }, { App }] = await (earlyAppModules ?? appModules())
   rememberSignedIn()
   const slowLoadTimer = setTimeout(() => root.render(<WorkspaceLoadingScreen />), slowWorkspaceLoadMilliseconds)
-  const app = await createApp(userId, defaultSession.workspaceId, sessions, deployment)
-  clearTimeout(slowLoadTimer)
+  const app = await createApp(userId, defaultSession.workspaceId, sessions, deployment).finally(() =>
+    clearTimeout(slowLoadTimer),
+  )
+  if (!app) return 'session_ended'
   root.render(
     <>
       <App app={app} />
@@ -71,7 +74,11 @@ const openApp = async () => {
 
 const openAppWhenSignedIn = async (result: Awaited<ReturnType<typeof signInWithPopup>>) => {
   if (result.status !== 'signed_in') return result
-  return (await openApp()) === 'opened' ? result : sessionMissing
+  const opened = await openApp()
+  if (opened === 'opened') return result
+  if (opened !== 'session_ended') return sessionMissing
+  await showSignIn(sessionEndedNotice)
+  return { status: 'refused', message: sessionEndedNotice } as const
 }
 
 const showSignIn = async (notice?: string) => {
@@ -92,4 +99,4 @@ const showSignIn = async (notice?: string) => {
 }
 
 const opened = await openApp()
-if (opened !== 'opened') await showSignIn()
+if (opened !== 'opened') await showSignIn(opened === 'session_ended' ? sessionEndedNotice : undefined)

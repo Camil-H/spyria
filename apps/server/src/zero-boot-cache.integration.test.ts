@@ -33,7 +33,10 @@ const openStore = async (cacheURL: string, syncedTables: Map<string, string>) =>
   return store
 }
 const isReadableWithin = (store: Awaited<ReturnType<typeof openStore>>, milliseconds: number) =>
-  Promise.race([store.whenReadable(acme).then(() => true), Bun.sleep(milliseconds).then(() => false)])
+  Promise.race([
+    store.whenReadable(acme).then((outcome) => outcome === 'readable'),
+    Bun.sleep(milliseconds).then(() => false),
+  ])
 const syncedTablesWithout = (table: string | null) => {
   const tables: string[] = JSON.parse(syncedTables.get(syncedTablesKey) ?? '[]')
   return new Map([[syncedTablesKey, JSON.stringify(tables.filter((synced) => synced !== table))]])
@@ -63,4 +66,11 @@ test('a cache that lacks a table the app reads, or has no record, waits for the 
     false,
   )
   expect(await isReadableWithin(await openStore(unreachableCacheUrl, new Map()), 500)).toBe(false)
+})
+
+test('closing a workspace that never became readable ends the wait for it as closed, so opening the app does not wait without end', async () => {
+  const unsynced = await openStore(unreachableCacheUrl, new Map())
+  const readable = unsynced.whenReadable(acme)
+  await unsynced.close()
+  expect(await readable).toBe('closed')
 })
