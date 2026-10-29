@@ -53,10 +53,8 @@ test('workspace records are shared and member records are the member’s own', (
       { workspaceId: acme, memberId: alice, task: 'not-a-task', isCompleted: true, isSkipped: false },
     ],
   }
-  expect(statesOf(recorded)).toMatchObject({
-    'connect-github-app': 'done',
-    'connect-runtime': 'open',
-    'add-profile-picture': 'skipped',
-  })
+  const states = statesOf(recorded)
+  expect(states).toMatchObject({ 'connect-github-app': 'done', 'connect-runtime': 'open' })
+  expect(states['add-profile-picture']).toBeUndefined()
   expect(getOnboarding(acme, alice, true)(recorded).tasksToRecord).toEqual(['add-ai-key', 'invite-members'])
 })
