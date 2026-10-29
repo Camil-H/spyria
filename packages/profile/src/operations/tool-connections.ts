@@ -1,8 +1,13 @@
 import { type MemberId, MemberNotFound, toolNamePartsOf } from '@spyria/kernel'
-import type { LlmGateway, ToolGateway } from '../contracts/repositories.ts'
+import type { LlmGateway, ToolGateway, ToolServer } from '../contracts/repositories.ts'
 import type { ProfileTransactor } from '../contracts/transactor.ts'
 import { ToolNotInCatalog, ToolStillConnected } from '../domain/errors.ts'
-import { connectedTool, connectionStatuses, connectionStatusOf } from '../domain/personal-connection.ts'
+import {
+  checkedConnectionStatusOf,
+  connectedTool,
+  connectionStatuses,
+  connectionStatusOf,
+} from '../domain/personal-connection.ts'
 import { memberToolsOf } from '../domain/workspace-connection.ts'
 import { grantMemberTools } from './grant-tools.ts'
 import { ensureMemberGatewayKey } from './sync-member-gateway-key.ts'
@@ -46,6 +51,34 @@ export const refreshToolConnection = async (dependencies: Dependencies, { tool }
     status ? personalConnections.connect(connectedTool(tool, catalog, status)) : personalConnections.disconnect(tool),
   )
   return { status: status ?? null }
+}
+
+const checkedStatusOf = async (gateway: ToolGateway, virtualKeyId: string, server: ToolServer) => {
+  const sessionStatusOf = async () =>
+    connectionStatusOf((await gateway.toolSessions(virtualKeyId, server)).map(({ status }) => status))
+  const sessionStatus = await sessionStatusOf()
+  if (sessionStatus !== connectionStatuses.connected) return { sessionStatus, isAuthorized: undefined }
+  const isAuthorized = await gateway.isToolSessionAuthorized(virtualKeyId, server)
+  return { sessionStatus: await sessionStatusOf(), isAuthorized }
+}
+
+export const checkToolConnections = async ({ transactor, gateway }: Dependencies) => {
+  const { stored, virtualKeyId } = await transactor.run(async ({ personalConnections, memberGatewayKeys }) => ({
+    stored: await personalConnections.tools(),
+    virtualKeyId: await memberGatewayKeys.virtualKey(),
+  }))
+  const servers = virtualKeyId ? await personalServersOf(gateway) : []
+  for (const tool of new Set([...stored, ...servers.map(({ name }) => name)])) {
+    const server = servers.find(({ name }) => name === tool)
+    const checked =
+      server && virtualKeyId
+        ? await checkedStatusOf(gateway, virtualKeyId, server)
+        : { sessionStatus: undefined, isAuthorized: undefined }
+    await transactor.run(async ({ personalConnections }) => {
+      const status = checkedConnectionStatusOf({ ...checked, storedStatus: await personalConnections.statusOf(tool) })
+      await (status ? personalConnections.connect({ tool, status }) : personalConnections.disconnect(tool))
+    })
+  }
 }
 
 export const disconnectTool = async (dependencies: Dependencies, { tool }: Input) => {
