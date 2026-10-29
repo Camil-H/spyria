@@ -137,17 +137,18 @@ test('changes split into the files not staged, the files staged but not committe
     cut: ['commitPatches'],
   }
   expect(
-    changeGroupsOf(changes, commits).map(({ sha, title, changes, isCut }) => [
+    changeGroupsOf(changes, commits).map(({ sha, title, commit, changes, isCut }) => [
       sha,
       title,
+      commit?.author,
       changes.map(({ path }) => path),
       isCut,
     ]),
   ).toEqual([
-    [undefined, 'Not staged', ['src/new.ts', 'old.txt', 'logo.png'], false],
-    [undefined, 'Staged, not committed', ['README.md'], true],
-    ['aaaaaaa', 'Fix the readme', ['README.md'], false],
-    ['ccccccc', '', ['README.md'], true],
+    [undefined, 'Not staged', undefined, ['src/new.ts', 'old.txt', 'logo.png'], false],
+    [undefined, 'Staged, not committed', undefined, ['README.md'], true],
+    ['aaaaaaa', 'Fix the readme', 'Alice', ['README.md'], false],
+    ['ccccccc', '', undefined, ['README.md'], true],
   ])
   expect(changeGroupsOf({ ...changes, cut: [] }, { ...commits, cut: [] }).map(({ isCut }) => isCut)).toEqual([
     false,
