@@ -655,6 +655,20 @@ export const runtimeHosts = table(
   ],
 )
 
+export const machineCounts = table(
+  'machine_counts',
+  {
+    ...tenant,
+    machines: integer().notNull(),
+    claudeCode: integer().notNull(),
+    codex: integer().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId] }),
+    foreignKey({ columns: [table.workspaceId], foreignColumns: [workspaces.workspaceId] }),
+  ],
+)
+
 export const runtimes = table(
   'runtimes',
   {
@@ -870,6 +884,7 @@ export const relations = defineRelations(
     usageEntries,
     budgetAlerts,
     runtimeHosts,
+    machineCounts,
     runtimes,
   },
   (r) => {
@@ -902,6 +917,9 @@ export const relations = defineRelations(
       },
       budgetAlerts: {
         memberships: r.many.memberships({ from: r.budgetAlerts.workspaceId, to: r.memberships.workspaceId }),
+      },
+      machineCounts: {
+        memberships: r.many.memberships({ from: r.machineCounts.workspaceId, to: r.memberships.workspaceId }),
       },
       connectionRestrictions: {
         ownedChats: r.many.chats({

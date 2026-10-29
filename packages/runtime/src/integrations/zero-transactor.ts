@@ -7,6 +7,7 @@ import {
   lockRuntimeHost,
   lockRuntimeHostLoads,
   lockRuntimes,
+  refreshMachineCounts,
   rememberAgentConversation,
   runtimeChatOfLlmTokenHash,
   serverOnlyRuntimeValueOf,
@@ -60,7 +61,10 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
       : (await tx.run(zql.runtimes.where('workspaceId', workspaceId).where('id', 'IN', ids))).map(runtimeOf)
   const unitOfWork: UnitOfWork = {
     runtimeHosts: {
-      add: (host) => tx.mutate.runtimeHosts.insert(host),
+      add: async (host) => {
+        await tx.mutate.runtimeHosts.insert(host)
+        if (host.ownerId !== null) await refreshMachineCounts(tx, host.workspaceId)
+      },
       get: async (workspaceId, hostId) => {
         await lockRuntimeHost(tx, workspaceId, hostId)
         const host = await hostOrUndefined(workspaceId, hostId)
@@ -68,7 +72,10 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
         return host
       },
       find: hostOrUndefined,
-      save: (host) => tx.mutate.runtimeHosts.update(host),
+      save: async (host) => {
+        await tx.mutate.runtimeHosts.update(host)
+        if (host.ownerId !== null) await refreshMachineCounts(tx, host.workspaceId)
+      },
       setSecretHash: async (host, secret, hash) => {
         await setRuntimeHostSecretHash(tx, host, secret, hash)
       },
