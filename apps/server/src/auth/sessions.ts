@@ -156,7 +156,7 @@ export const sessionJobs = {
   'sessions.sweep': async (tx: ServerTransaction, workspaceId: WorkspaceId) => {
     await tx.dbTransaction.query('delete from sessions where workspace_id = $1 and expires_at < now()', [workspaceId])
     await tx.dbTransaction.query(
-      `delete from jobs where workspace_id = $1 and state = 'done' and run_at < now() - interval '1 day'`,
+      `delete from jobs where workspace_id = $1 and state = 'done' and finished_at < now() - interval '1 day'`,
       [workspaceId],
     )
     await tx.dbTransaction.query(
