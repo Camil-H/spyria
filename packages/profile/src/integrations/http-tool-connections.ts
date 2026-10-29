@@ -34,5 +34,6 @@ export const createHttpToolConnections = (requestAsMember: RequestAsMember) => {
       return call(workspaceId, `/${tool}/refresh`)
     },
     disconnectTool: ({ workspaceId, tool }: ToolInput) => call(workspaceId, `/${tool}/disconnect`),
+    checkTools: ({ workspaceId }: { workspaceId: WorkspaceId }) => call(workspaceId, '/check'),
   }
 }

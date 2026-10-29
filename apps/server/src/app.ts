@@ -42,6 +42,7 @@ import { onboardingMutators } from '@spyria/onboarding/server'
 import {
   addLlmCredentialFromRequest,
   availableToolsFromRequest,
+  checkToolConnectionsFromRequest,
   type createLlmGateway,
   createMemberKeyReader,
   githubConnectionChannel,
@@ -665,6 +666,11 @@ export const createApp = ({
     )
     .get(toolConnectionsPath, () =>
       endpointResponse('Listing tool servers', 200, () => availableToolsFromRequest(gatewayOf())),
+    )
+    .post(`${toolConnectionsPath}/check`, (context) =>
+      endpointResponse('Checking tool connections', 204, () =>
+        checkToolConnectionsFromRequest(context.get('transact'), context.get('zeroContext'), gatewayOf()),
+      ),
     )
     .post(`${toolConnectionsPath}/:tool/:action{connect|refresh|disconnect}`, (context) => {
       const action = context.req.param('action')

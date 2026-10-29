@@ -2,6 +2,7 @@ export type { ProfileCommands } from './entrypoints/commands.ts'
 export {
   addLlmCredentialFromRequest,
   availableToolsFromRequest,
+  checkToolConnectionsFromRequest,
   createMemberKeyReader,
   createToolCallOwnerAccess,
   toolConnectionFromRequest,

@@ -28,6 +28,7 @@ type BifrostGateway = LlmGateway &
   }
 
 const notFound = 404
+const unauthorizedToolAnswer = /Authentication required for |request failed with status 401\b/
 const zaiProviderSetup = {
   network_config: { base_url: 'https://api.z.ai/api/paas/v4' },
   custom_provider_config: {
@@ -173,6 +174,10 @@ export const createLlmGateway = ({
     }
     return result?.tools ?? []
   }
+  const readOnlyToolOf = async (virtualKeyValue: string | undefined, server: ToolServer) =>
+    (await listedToolsOf(virtualKeyValue)).find(
+      (tool) => tool.name.startsWith(`${server.name}-`) && tool.annotations?.readOnlyHint === true,
+    )?.name
   const gateway: BifrostGateway = {
     url,
     refreshListedModels: () => {
@@ -273,10 +278,7 @@ export const createLlmGateway = ({
     },
     startToolConsent: async (virtualKeyId, server) => {
       const virtualKeyValue = await gateway.virtualKeyValue(virtualKeyId)
-      const readOnlyTool = (await listedToolsOf(virtualKeyValue)).find(
-        (tool) => tool.name.startsWith(`${server.name}-`) && tool.annotations?.readOnlyHint === true,
-      )
-      const consentTool = readOnlyTool?.name ?? `${server.name}-${server.tools[0]}`
+      const consentTool = (await readOnlyToolOf(virtualKeyValue, server)) ?? `${server.name}-${server.tools[0]}`
       const response = await mcpRequest(virtualKeyValue, 'tools/call', { name: consentTool, arguments: {} })
       const flowId = (await response.text()).match(/flow=([0-9a-f-]{36})/)?.[1]
       if (!flowId) throw new Error(`The gateway started no consent for ${server.name}`)
@@ -287,6 +289,15 @@ export const createLlmGateway = ({
         (await request('GET', `/api/mcp/sessions?virtual_key_id=${virtualKeyId}&mcp_client_id=${server.id}`)).body
           .sessions as { id: string; status: string; kind: string }[]
       ).filter(({ kind }) => kind !== 'flow'),
+    isToolSessionAuthorized: async (virtualKeyId, server) => {
+      const virtualKeyValue = await gateway.virtualKeyValue(virtualKeyId)
+      const readOnlyTool = await readOnlyToolOf(virtualKeyValue, server)
+      if (!readOnlyTool) return undefined
+      const answer = await (
+        await mcpRequest(virtualKeyValue, 'tools/call', { name: readOnlyTool, arguments: {} })
+      ).text()
+      return !unauthorizedToolAnswer.test(answer)
+    },
     removeToolSession: async (sessionId) => {
       await request('DELETE', `/api/mcp/sessions/${sessionId}`)
     },
