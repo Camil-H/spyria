@@ -28,6 +28,7 @@ import { MessageList } from './MessageList.tsx'
 import {
   ChatMediaContext,
   ChatNameContext,
+  LoadedRemoteImagesContext,
   MentionNamesContext,
   QuestionAnswererContext,
   ToolsAwaitingApprovalContext,
@@ -81,6 +82,7 @@ export const ChatView = ({
   const { memberId } = useSession()
   const chatId = toChatId(useParams().chatId ?? '')
   const [spyriaRuntime, setSpyriaRuntime] = useState<{ chatId: ChatId; isAvailable: boolean }>()
+  const [loadedRemoteImages, setLoadedRemoteImages] = useState<{ chatId: ChatId; sources: ReadonlySet<string> }>()
   const conversation = useQuery(
     getConversation,
     workspaceId,
@@ -135,6 +137,12 @@ export const ChatView = ({
     commands.answerQuestion({ workspaceId, chatId, questionId, answer })
   const fork = async () =>
     navigate(`/w/${workspaceId}/chats/${await commands.forkChat({ workspaceId, sourceChatId: chatId })}`)
+  const remoteImagesLoadedHere = loadedRemoteImages?.chatId === chatId ? loadedRemoteImages.sources : new Set<string>()
+  const loadRemoteImage = (source: string) =>
+    setLoadedRemoteImages((loaded) => ({
+      chatId,
+      sources: new Set([...(loaded?.chatId === chatId ? loaded.sources : []), source]),
+    }))
   const toolsAwaitingApproval = new Set(
     live.messages.flatMap(({ step }) =>
       step?.type === 'question' && step.approval ? [`${step.approval.tool} (${step.approval.server})`] : [],
@@ -207,22 +215,24 @@ export const ChatView = ({
       >
         <ToolsAwaitingApprovalContext value={toolsAwaitingApproval}>
           <ChatMediaContext value={{ chatId, isRuntime: conversation.type === 'runtime' }}>
-            <MentionNamesContext value={mentionNames}>
-              <ChatNameContext value={conversation.title}>
-                <div ref={setMessagesElement} className="flex min-h-0 flex-1 flex-col">
-                  <MessageList
-                    conversation={conversation}
-                    items={chatMessages.hasWindow ? withLiveMessages(conversation.items, live) : []}
-                    isComplete={chatMessages.isComplete}
-                    onLoadEarlier={
-                      chatMessages.isComplete && chatMessages.hasEarlier ? chatMessages.loadEarlier : undefined
-                    }
-                    onStop={conversation.canConfigure ? () => commands.stopAgent({ workspaceId, chatId }) : undefined}
-                    onFork={conversation.isOwner ? undefined : fork}
-                  />
-                </div>
-              </ChatNameContext>
-            </MentionNamesContext>
+            <LoadedRemoteImagesContext value={{ sources: remoteImagesLoadedHere, load: loadRemoteImage }}>
+              <MentionNamesContext value={mentionNames}>
+                <ChatNameContext value={conversation.title}>
+                  <div ref={setMessagesElement} className="flex min-h-0 flex-1 flex-col">
+                    <MessageList
+                      conversation={conversation}
+                      items={chatMessages.hasWindow ? withLiveMessages(conversation.items, live) : []}
+                      isComplete={chatMessages.isComplete}
+                      onLoadEarlier={
+                        chatMessages.isComplete && chatMessages.hasEarlier ? chatMessages.loadEarlier : undefined
+                      }
+                      onStop={conversation.canConfigure ? () => commands.stopAgent({ workspaceId, chatId }) : undefined}
+                      onFork={conversation.isOwner ? undefined : fork}
+                    />
+                  </div>
+                </ChatNameContext>
+              </MentionNamesContext>
+            </LoadedRemoteImagesContext>
           </ChatMediaContext>
         </ToolsAwaitingApprovalContext>
       </QuestionAnswererContext>
