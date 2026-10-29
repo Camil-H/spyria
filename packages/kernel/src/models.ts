@@ -22,6 +22,11 @@ export const aiProviders = [
 export type AiProviderId = (typeof aiProviders)[number]['id']
 export type AiProviderAllowList = readonly string[]
 
+export const aiProviderAllowListFrom = (stored: unknown): AiProviderAllowList | null => {
+  if (Array.isArray(stored)) return stored.filter((provider): provider is string => typeof provider === 'string')
+  return stored !== null && typeof stored === 'object' ? Object.keys(stored) : null
+}
+
 export const aiProviderOf = (text: string) => {
   const wanted = text.trim().toLowerCase()
   return aiProviders.find(

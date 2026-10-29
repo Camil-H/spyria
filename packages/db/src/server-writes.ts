@@ -2,8 +2,8 @@ import { context, propagation } from '@opentelemetry/api'
 import type { ServerTransaction, Transaction } from '@rocicorp/zero'
 import {
   type Actor,
-  type AiProviderAllowList,
   actorOf,
+  aiProviderAllowListFrom,
   allowedModelsOf,
   type HarnessId,
   type ListedModel,
@@ -69,13 +69,15 @@ export const setModelDirectory = (directory: typeof listedModels) => {
 }
 export const listedModelsOf = () => listedModels()
 export const aiProviderAllowListOf = async (tx: Transaction, workspaceId: string) =>
-  (
-    await firstOnServer<{ allowList: AiProviderAllowList | null }>(
-      tx,
-      'select ai_provider_allow_list as "allowList" from workspaces where workspace_id = $1',
-      [workspaceId],
-    )
-  )?.allowList ?? null
+  aiProviderAllowListFrom(
+    (
+      await firstOnServer<{ allowList: unknown }>(
+        tx,
+        'select ai_provider_allow_list as "allowList" from workspaces where workspace_id = $1',
+        [workspaceId],
+      )
+    )?.allowList,
+  )
 export const memberModelsOf = async (tx: Transaction, workspaceId: string, userId: string) =>
   tx.location === 'server'
     ? allowedModelsOf(
