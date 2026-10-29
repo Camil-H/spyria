@@ -346,9 +346,11 @@ export const createFakeLlm = (
           { type: 'error', error: { type: 'overloaded_error', message: step.fail } },
           { status: 529 },
         )
-      const taskId = JSON.stringify(request.messages?.findLast((message) => message.role === 'tool') ?? '').match(
-        /taskId=\\"([^"\\]+)/,
-      )?.[1]
+      const taskId = [
+        ...JSON.stringify(request.messages?.filter((message) => message.role === 'tool') ?? []).matchAll(
+          /taskId=\\"([^"\\]+)/g,
+        ),
+      ].at(-1)?.[1]
       const toolCall = toolCallOf(
         step,
         request.tools?.map((tool) => tool.function.name),

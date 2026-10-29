@@ -20,7 +20,7 @@ import { closeReopenedTurn, reopenAgentTurn, sweepAgentTurns } from '../operatio
 import { authorizeToolCall } from '../operations/authorize-tool-call.ts'
 import { callGitHubTool } from '../operations/call-github-tool.ts'
 import { callSpyriaTool } from '../operations/call-spyria-tool.ts'
-import { awaitTask, delegateTask } from '../operations/delegate-task.ts'
+import { awaitTask, checkTask, delegateTask } from '../operations/delegate-task.ts'
 import { forwardToAgent } from '../operations/forward-to-agent.ts'
 import { runGitAction } from '../operations/git-actions.ts'
 import { interruptOwnedTurns } from '../operations/interrupt-owned-turns.ts'
@@ -177,6 +177,7 @@ export const createAgentHandlers = ({
     delegate: (input: Parameters<typeof delegateTask>[1]) =>
       delegateTask(dependenciesOf(input.chat.workspaceId), input),
     awaitTask: (input: Parameters<typeof awaitTask>[1]) => awaitTask(dependenciesOf(input.chat.workspaceId), input),
+    checkTask: (input: Parameters<typeof checkTask>[1]) => checkTask(dependenciesOf(input.chat.workspaceId), input),
     recordModelCallFailure: (call: Parameters<typeof recordModelCallFailure>[1]) =>
       recordModelCallFailure(dependenciesOf(call.chat.workspaceId), call),
     recordContextSize: (call: Parameters<typeof recordContextSize>[1]) =>

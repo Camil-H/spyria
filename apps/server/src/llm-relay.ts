@@ -2,6 +2,7 @@ import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import {
   type AgentChat,
   awaitTaskTool,
+  checkTaskTool,
   genericModelCallNoticeOf,
   githubTools,
   githubToolsInstructions,
@@ -296,11 +297,14 @@ export const createModelCallRelay = ({
         return reply({ content: [{ type: 'text', text }], isError: isRefused })
       }
       if (!turn) return answerRpc(rpc.id, toolErrorOf('This runtime has no active turn'))
-      const { task, effort, model, taskId } = rpc.params?.arguments ?? {}
+      const { task, effort, model, taskId, cancel } = rpc.params?.arguments ?? {}
+      const toolName = rpc.params?.name
       const { text, isError } =
-        rpc.params?.name === awaitTaskTool.name
+        toolName === awaitTaskTool.name
           ? await handlers.awaitTask({ chat: turn.chat, turn, taskId })
-          : await handlers.delegate({ chat: turn.chat, turn, task: String(task ?? ''), effort, model })
+          : toolName === checkTaskTool.name
+            ? await handlers.checkTask({ chat: turn.chat, turn, taskId, cancel })
+            : await handlers.delegate({ chat: turn.chat, turn, task: String(task ?? ''), effort, model })
       return reply({ content: [{ type: 'text', text }], isError })
     }
     const { keyOf, usedUpBudgetOf, tools, readOnlyHints } = databaseAccess(database)
