@@ -24,6 +24,8 @@ export const ResizeHandle = ({
   const boundedWidthOf = (nextWidth: number) => Math.min(maximumWidth, Math.max(minimumWidth, Math.round(nextWidth)))
   const drag = useRef<{ startX: number; startWidth: number; draggedWidth: number } | null>(null)
   const startDrag = (event: PointerEvent<HTMLHRElement>) => {
+    event.preventDefault()
+    event.currentTarget.focus()
     event.currentTarget.setPointerCapture(event.pointerId)
     drag.current = { startX: event.clientX, startWidth: width, draggedWidth: width }
   }
