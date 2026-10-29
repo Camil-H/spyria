@@ -73,6 +73,18 @@ export {
   toolCallNoticeOf,
   toolGatewayUnreachable,
 } from './domain/tool-calls.ts'
+export {
+  webSearchAnswerOf,
+  webSearchFailedOf,
+  webSearchNotRun,
+  webSearchOverBudget,
+  webSearchPath,
+  webSearchQueryOf,
+  webSearchRequestOf,
+  webSearchTool,
+  webSearchUnavailable,
+  webToolsPath,
+} from './domain/web-search.ts'
 export { isWorkspaceRead } from './domain/workspace-reads.ts'
 export type { AgentStream, ConversationCommands } from './entrypoints/commands.ts'
 export {

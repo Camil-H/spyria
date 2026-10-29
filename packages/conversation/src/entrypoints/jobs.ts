@@ -27,6 +27,7 @@ import { interruptOwnedTurns } from '../operations/interrupt-owned-turns.ts'
 import {
   findModelCallTurn,
   findToolCallTurn,
+  findWebSearchModel,
   recordContextSize,
   recordModelCallFailure,
   recordToolCall,
@@ -174,6 +175,8 @@ export const createAgentHandlers = ({
     promptWaiting: (host: AgentHost) => promptWaitingChats(dependenciesOf(host.workspaceId), host),
     modelCallTurn: (host: AgentHost, token: string) => findModelCallTurn(dependenciesOf(host.workspaceId), host, token),
     toolCallTurn: (host: AgentHost, token: string) => findToolCallTurn(dependenciesOf(host.workspaceId), host, token),
+    webSearchModel: (chat: AgentChat, prompterId: MemberId) =>
+      findWebSearchModel(dependenciesOf(chat.workspaceId), prompterId),
     delegate: (input: Parameters<typeof delegateTask>[1]) =>
       delegateTask(dependenciesOf(input.chat.workspaceId), input),
     awaitTask: (input: Parameters<typeof awaitTask>[1]) => awaitTask(dependenciesOf(input.chat.workspaceId), input),

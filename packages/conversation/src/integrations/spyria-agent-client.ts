@@ -15,6 +15,7 @@ import { delegateTimeoutSeconds } from '../domain/delegation.ts'
 import { githubToolsPath } from '../domain/github-tools.ts'
 import { piModelOf } from '../domain/session-routing.ts'
 import { spyriaToolTimeoutSeconds } from '../domain/tool-calls.ts'
+import { webToolsPath } from '../domain/web-search.ts'
 
 export type AgentLlm = { model: string }
 
@@ -22,6 +23,7 @@ const requestTimeoutMilliseconds = 30_000
 const checkoutTimeoutMilliseconds = 120_000
 const bundleTimeoutMilliseconds = 110_000
 const githubToolTimeoutSeconds = 120
+const webSearchTimeoutSeconds = 120
 const notFoundStatus = 404
 
 const send = (
@@ -146,6 +148,7 @@ export const piCommandOf = (
   }
   const mcpServers = {
     spyria: { ...piMcpServerOf(gatewayUrl, '/mcp'), timeout: spyriaToolTimeoutSeconds },
+    web: { ...piMcpServerOf(gatewayUrl, webToolsPath), timeout: webSearchTimeoutSeconds },
     ...(!sub && { router: { ...piMcpServerOf(gatewayUrl, '/mcp/router'), timeout: delegateTimeoutSeconds } }),
     ...(!sub &&
       hasRepository && {
