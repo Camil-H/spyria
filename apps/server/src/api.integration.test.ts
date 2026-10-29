@@ -311,9 +311,11 @@ test('workspaces lists every workspace of the member and users lists the members
   expect(idsOf('Alice in Globex', 'users', 'id')).toEqual([alice])
 })
 
-test('an ownership change hides the restriction of Bob from a member who no longer reads any chat of his', async () => {
+test('an ownership change shows the restriction of Bob to the participants of a chat he takes over, and hides it once he no longer owns one they take part in', async () => {
   const restrictedOf = async (workspace: string, user: string) =>
     ((await readAll(workspace, user)).get('connection_restrictions') ?? []).map((row) => row.user_id).toSorted()
+  expect(await restrictedOf(acme, lee)).toEqual([lee])
+  await testDatabase.database.$client`update chats set owner_user_id = ${bob} where id = 'chat-invoice-bug'`
   expect(await restrictedOf(acme, lee)).toEqual([bob, lee])
   await testDatabase.database.$client`update chats set owner_user_id = ${alice} where owner_user_id = ${bob}`
   expect(await restrictedOf(acme, lee)).toEqual([lee])
@@ -326,7 +328,8 @@ test('the connections keep their position order', () => {
     rowsByReader
       .get('Alice in Acme')
       ?.get('tool_connections')
-      ?.map((row) => row.tool),
+      ?.filter((row) => row.user_id === alice)
+      .map((row) => row.tool),
   ).toEqual(['GitHub', 'Slack', 'Notion'])
 })
 
