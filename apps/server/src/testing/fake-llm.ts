@@ -96,7 +96,7 @@ type AnthropicRequest = {
   stream?: boolean
   system?: unknown
   messages?: { role: string; content: string | AnthropicBlock[] }[]
-  tools?: { name: string }[]
+  tools?: { name: string; type?: string }[]
 }
 type AnthropicTurn = { thinking: string[]; step?: FakeLlmStep }
 const anthropicUsageOf = (cache: FakeLlmScript['cache']) => ({
@@ -142,6 +142,38 @@ const toolUseOf = (step: FakeLlmStep | undefined, offeredTools: readonly string[
         : undefined
   return call && { type: 'tool_use', id: `toolu_${crypto.randomUUID().replaceAll('-', '')}`, ...call }
 }
+export const fakeSearchResult = { url: 'https://zero.rocicorp.dev/docs/introduction', title: 'Introducing Zero' }
+const webSearchReplyOf = (query: string) =>
+  Response.json({
+    id: `msg_${crypto.randomUUID()}`,
+    type: 'message',
+    role: 'assistant',
+    model: 'claude-haiku-5-5',
+    content: [
+      { type: 'server_tool_use', id: 'srvtoolu_fake', name: 'web_search', input: { query } },
+      {
+        type: 'web_search_tool_result',
+        tool_use_id: 'srvtoolu_fake',
+        content: [{ type: 'web_search_result', ...fakeSearchResult, encrypted_content: 'fake', page_age: null }],
+      },
+      {
+        type: 'text',
+        text: `Zero syncs Postgres to the browser (searched: ${query}).`,
+        citations: [
+          {
+            type: 'web_search_result_location',
+            ...fakeSearchResult,
+            encrypted_index: 'fake',
+            cited_text: 'Zero syncs',
+          },
+        ],
+      },
+    ],
+    stop_reason: 'end_turn',
+    stop_sequence: null,
+    usage: { input_tokens: 40, output_tokens: 12, server_tool_use: { web_search_requests: 1 } },
+  })
+
 const anthropicReplyOf = async (request: AnthropicRequest, script: FakeLlmScript) => {
   const messages = request.messages ?? []
   const promptIndex = messages.findLastIndex((message) => message.role === 'user' && promptTextOf(message.content))
@@ -284,6 +316,8 @@ export const createFakeLlm = (
     .post('/v1/messages', async (context) => {
       const request = await context.req.json<AnthropicRequest>()
       const prompt = request.messages?.findLast((message) => message.role === 'user' && promptTextOf(message.content))
+      if (request.tools?.some((tool) => tool.type?.startsWith('web_search')))
+        return webSearchReplyOf(prompt ? promptTextOf(prompt.content) : '')
       return anthropicReplyOf(
         request,
         (await scriptOf(context.req.raw, false, prompt && promptTextOf(prompt.content))) ?? {},

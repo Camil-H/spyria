@@ -460,6 +460,7 @@ export const createAgentBridge = ({
       ensureOpen,
       modelCallTurn: handlers.modelCallTurn,
       toolCallTurn: handlers.toolCallTurn,
+      webSearchModel: handlers.webSearchModel,
       delegate: handlers.delegate,
       awaitTask: handlers.awaitTask,
       checkTask: handlers.checkTask,
