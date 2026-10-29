@@ -53,6 +53,7 @@ export type RuntimeHostRow = {
   runningRuntimes: number
   ownerId: MemberId | null
 }
+export type MachineCountsRow = { workspaceId: WorkspaceId; machines: number; claudeCode: number; codex: number }
 export type RuntimeState =
   | 'creating'
   | 'installing'
@@ -246,6 +247,7 @@ export type Snapshot = {
   workspaceConnections: readonly WorkspaceConnectionRow[]
   connectionRestrictions: readonly ConnectionRestrictionRow[]
   runtimeHosts: readonly RuntimeHostRow[]
+  machineCounts: readonly MachineCountsRow[]
   runtimes: readonly RuntimeRow[]
 }
 

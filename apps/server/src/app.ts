@@ -58,8 +58,6 @@ import {
 } from '@spyria/profile/server'
 import {
   addRuntimeHostFromRequest,
-  countMachinesFromRequest,
-  machinesPath,
   renewClaimCodeFromRequest,
   runtimeHostsPath,
   runtimeMutators,
@@ -789,11 +787,6 @@ export const createApp = ({
         context.get('transact')((tx) => addRuntimeHostFromRequest(tx, context.get('zeroContext'), body)),
       )
     })
-    .get(machinesPath, (context) =>
-      endpointResponse('A runtime host request', 200, () =>
-        context.get('transact')((tx) => countMachinesFromRequest(tx, context.get('zeroContext'))),
-      ),
-    )
     .post(`${runtimeHostsPath}/:hostId/code`, (context) =>
       endpointResponse('A runtime host request', 200, () =>
         context.get('transact')((tx) =>

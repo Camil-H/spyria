@@ -21,7 +21,7 @@ import {
   succeeded,
 } from './testing/testing.ts'
 
-const { app, database, resultOf, changesOf } = await openSharedTestApp()
+const { app, database, resultOf, changesOf, eventsOf } = await openSharedTestApp()
 
 const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 73, 72, 68, 82])
 const upload = async (userId: string, chat: string, content: Uint8Array<ArrayBuffer>, name = 'chart.png') => {
@@ -146,11 +146,13 @@ test.each(chatAccessRows(readers))(
   },
 )
 
-test('an attachment is not served before it is sent, through another chat, or after its message is deleted', async () => {
+test('an attachment is not served before it is sent, through another chat, or after its message is deleted, and its name leaves the chat history', async () => {
   const chat = await newChat({ type: 'channel' })
   const { body } = await upload(alice, chat, png)
   expect((await download(alice, chat, String(body.id))).status).toBe(404)
   const { id } = await sendWith(aliceInAcme, chat, [body])
+  const postedPayloadOf = async () => (await eventsOf(chat)).find((event) => event.id === id)?.payload
+  expect(JSON.stringify(await postedPayloadOf())).toContain('chart.png')
   const otherChat = await newChat({ type: 'channel' })
   expect((await download(alice, otherChat, String(body.id))).status).toBe(404)
   expect((await download(alice, chat, String(body.id))).status).toBe(200)
@@ -159,6 +161,9 @@ test('an attachment is not served before it is sent, through another chat, or af
   )
   expect((await download(alice, chat, String(body.id))).status).toBe(404)
   expect(await messageRow(id)).toEqual(expect.objectContaining({ body: '', attachments: [] }))
+  const redactedPayload = await postedPayloadOf()
+  expect(redactedPayload).toMatchObject({ body: '', redacted: true })
+  expect(JSON.stringify(redactedPayload)).not.toContain('chart.png')
   expect(
     (await database.$client`select 1 from message_attachments where workspace_id = ${acme} and id = ${String(body.id)}`)
       .length,
