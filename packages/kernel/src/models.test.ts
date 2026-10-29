@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test'
 import {
+  aiProviderAllowListFrom,
   aiProviderOf,
   allowedModelsOf,
   chatModelsOf,
@@ -174,4 +175,15 @@ test('only a request naming one plain model is checked against the allow-list', 
   expect(soleRequestedModelOf({ model: 42 })).toBeUndefined()
   expect(soleRequestedModelOf({ messages: [] })).toBeUndefined()
   expect(soleRequestedModelOf(undefined)).toBeUndefined()
+})
+
+test('a stored allow-list reads as provider ids, the providers of an earlier per-model list included, and anything else as none', () => {
+  expect(aiProviderAllowListFrom(['openai', 3, 'mistral'])).toEqual(['openai', 'mistral'])
+  expect(aiProviderAllowListFrom({ anthropic: 'all', mistral: ['mistral/codestral-latest'] })).toEqual([
+    'anthropic',
+    'mistral',
+  ])
+  expect(aiProviderAllowListFrom(null)).toBeNull()
+  expect(aiProviderAllowListFrom(undefined)).toBeNull()
+  expect(aiProviderAllowListFrom('openai')).toBeNull()
 })

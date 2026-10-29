@@ -1,5 +1,11 @@
 import { type AnyMutatorRegistry, type MutatorResultDetails, type Row, Zero } from '@rocicorp/zero'
-import { domainErrorOf, type MemberId, type WorkspaceId, workspacePermissions } from '@spyria/kernel'
+import {
+  aiProviderAllowListFrom,
+  domainErrorOf,
+  type MemberId,
+  type WorkspaceId,
+  workspacePermissions,
+} from '@spyria/kernel'
 import type { DraftRow, MessageRow, Snapshot } from './schema.ts'
 import { type Schema, schema } from './zero.ts'
 import { queries } from './zero-queries.ts'
@@ -133,7 +139,7 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
       id: workspaceId,
       name,
       localSessions: localSessions ?? true,
-      aiProviderAllowList: aiProviderAllowList ?? null,
+      aiProviderAllowList: aiProviderAllowListFrom(aiProviderAllowList),
     })),
   )
   const membershipsOf = memoizedOnSources(

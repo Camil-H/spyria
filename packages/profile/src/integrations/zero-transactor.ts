@@ -21,6 +21,7 @@ import {
   zql,
 } from '@spyria/db/zero-queries'
 import {
+  aiProviderAllowListFrom,
   gatewayKeyOf,
   type MemberId,
   MemberNotFound,
@@ -74,7 +75,9 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
     },
     aiProviders: {
       allowList: async () =>
-        (await tx.run(zql.workspaces.where('workspaceId', workspaceId).one()))?.aiProviderAllowList ?? null,
+        aiProviderAllowListFrom(
+          (await tx.run(zql.workspaces.where('workspaceId', workspaceId).one()))?.aiProviderAllowList,
+        ),
       setAllowList: (aiProviderAllowList) => tx.mutate.workspaces.update({ workspaceId, aiProviderAllowList }),
     },
     llmCredentials: {
