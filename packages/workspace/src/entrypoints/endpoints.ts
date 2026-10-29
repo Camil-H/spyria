@@ -1,5 +1,5 @@
 import type { Transact, ZeroContext } from '@spyria/db/zero-queries'
-import { projectId } from '@spyria/kernel'
+import { type ChatVisibility, projectId } from '@spyria/kernel'
 import type { GitHubRepositories } from '../contracts/repositories.ts'
 import { type DevChatInput, existingBranchOf, repositoryNameOf } from '../domain/github.ts'
 import { Name } from '../domain/name.ts'
@@ -7,6 +7,8 @@ import { createZeroTransactor } from '../integrations/zero-transactor.ts'
 import { createChat } from '../operations/create-chat.ts'
 
 const textOf = (value: unknown) => (typeof value === 'string' ? value : '')
+const requestedVisibilityOf = (value: unknown): ChatVisibility | undefined =>
+  value === 'public' || value === 'private' ? value : undefined
 
 export const createDevChatFromRequest = async (
   transact: Transact,
@@ -27,6 +29,7 @@ export const createDevChatFromRequest = async (
         workspaceId: context.workspaceId,
         ownerId: context.userId,
         type: 'runtime',
+        visibility: requestedVisibilityOf(input.visibility),
         name,
         projectId: input.projectId ? projectId(textOf(input.projectId)) : null,
         repository: { fullName: repository, baseBranch },

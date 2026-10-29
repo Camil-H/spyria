@@ -172,10 +172,10 @@ test.describe('Chat permissions', () => {
     }, async ({ browser, workerStack }) => {
       const leePage = await openPageAs(browser, workerStack, 'member-lee')
       await sidebarOf(leePage)
-        .getByRole('button', { name: /^Browse channels/ })
+        .getByRole('button', { name: /^Browse public chats/ })
         .click()
       await leePage
-        .getByRole('dialog', { name: 'Browse channels' })
+        .getByRole('dialog', { name: 'Browse public chats' })
         .getByRole('link', { name: /Welcome/ })
         .click()
       await tabOf(leePage, 'Members').click()

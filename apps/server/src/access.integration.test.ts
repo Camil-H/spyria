@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test'
 import {
   acme,
+  addLlmKey,
   alice,
   bob,
   bobInAcme,
@@ -8,8 +9,10 @@ import {
   chatAs,
   countOf,
   failedWith,
+  jobsOf,
   messageRow,
   missingPermission,
+  newChat,
   openSharedTestApp,
   posters,
   readers,
@@ -121,3 +124,14 @@ test.each(chatAccessRows(readers))(
     )
   },
 )
+
+test('a member who never joined a public AI chat prompts it on their own key and joins it as Prompter', async () => {
+  await addLlmKey(bob, 'Mistral')
+  const chat = await newChat({ visibility: 'public' })
+  const prompt = `message-${crypto.randomUUID()}`
+  expect(await sendTo(bobInAcme, chat, prompt, 'Summarize the plan')).toEqual(succeeded)
+  expect(await database.query.chatParticipants.findFirst({ where: { chatId: chat, userId: bob } })).toMatchObject({
+    roleId: 'prompter',
+  })
+  expect(await jobsOf(prompt)).toMatchObject([{ type: 'agent.prompt' }])
+})

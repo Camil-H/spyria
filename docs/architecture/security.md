@@ -25,7 +25,7 @@ Spyria checks permissions, never role names. A role is a named set of permission
 
 - **Workspace roles** carry workspace permissions (inviting, managing members and roles, SSO, GitHub, runtimes, costs, budgets, audit). The built-in Admin role has all of them, Member none; admins can add custom roles.
 - **Chat roles** carry chat permissions (reading, prompting, configuring the session, inviting, managing participants, administering the chat). The built-ins go from Owner to Reader, and custom roles work the same way.
-- A member can grant only a role whose permissions they hold themselves. Public channels give every workspace member read and post without a role; agent chats are private to their owner and invitees.
+- A member can grant only a role whose permissions they hold themselves. Public chats, channels or AI chats, give every workspace member read and post without a role; private chats are open to their owner and invitees only. In a public AI chat a member who is not the owner prompts as a guest ([0009](../decisions/0009-agent-acts-as-the-owner.md)).
 
 The permissions and built-in roles are defined in `packages/kernel/src/workspace-access.ts` and `packages/kernel/src/chat-access.ts`. How admins and owners use them: [admin](../features/admin.md) and [chats and sharing](../features/chats-and-sharing.md).
 

@@ -383,7 +383,7 @@ export const getConversation =
         ),
       }),
       canPost,
-      canJoin: chat.type === 'channel' && !participantIn(snapshot, workspaceId, viewerId)(chat),
+      canJoin: chat.visibility === 'public' && !participantIn(snapshot, workspaceId, viewerId)(chat),
       canConfigure: can(permissions, 'session.configure'),
       runsOnChoices,
       gitBranch: chat.gitBranch,

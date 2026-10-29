@@ -230,6 +230,14 @@ test('a dev chat needs a granted repository and an existing base branch, and sto
     type: 'chat.created',
     payload: { repository: 'acme/app', baseBranch: 'release' },
   })
+  const publicChat = await request(alice, 'POST', '/api/dev-chats', {
+    name: 'Share the totals',
+    projectId: null,
+    repository: 'acme/app',
+    baseBranch: 'release',
+    visibility: 'public',
+  })
+  expect(await stack.chatRow(String(publicChat.body.chatId))).toMatchObject({ mode: 'dev', visibility: 'public' })
 })
 
 test('GitHub enforces token permissions: branches need contents read; a refusal answers 422 with GitHub reason and logs one github.refused line without secrets', async () => {

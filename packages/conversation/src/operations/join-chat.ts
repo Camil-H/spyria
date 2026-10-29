@@ -5,7 +5,7 @@ import { AlreadyParticipant } from '../domain/errors.ts'
 type Dependencies = { transactor: ConversationTransactor }
 type Input = { chatId: ChatId; memberId: MemberId }
 
-export const joinChannel = ({ transactor }: Dependencies, { chatId, memberId }: Input) =>
+export const joinChat = ({ transactor }: Dependencies, { chatId, memberId }: Input) =>
   transactor.run(async (unitOfWork) => {
     await requireChatPermission(unitOfWork.chats, chatId, memberId, 'chat.read')
     if (await unitOfWork.chats.roleOf(chatId, memberId)) throw new AlreadyParticipant()
