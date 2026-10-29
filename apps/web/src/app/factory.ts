@@ -117,7 +117,7 @@ export const createApp = async (
   defaultWorkspaceId: WorkspaceId,
   sessions: readonly WorkspaceSession[],
   deployment: string,
-): Promise<Application> => {
+): Promise<Application | undefined> => {
   const store = createZeroStore({
     memberId,
     sessions,
@@ -136,7 +136,10 @@ export const createApp = async (
   })
   storeCount++
   if (testStack) Object.assign(window, { spyriaZeroDiagnostics: () => ({ storeCount, ...store.diagnostics() }) })
-  await store.whenReadable(defaultWorkspaceId)
+  if ((await store.whenReadable(defaultWorkspaceId)) === 'closed') {
+    await store.close()
+    return undefined
+  }
   const mutate = async (mutator: Mutator, input: CommandInput) => {
     const id = crypto.randomUUID()
     const { confirmation } = await store.mutate(input.workspaceId, mutator({ ...input, id } as never))
