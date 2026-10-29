@@ -13,7 +13,7 @@ import {
   openSettings,
   type Page,
   sendMessage,
-  serverUrl,
+  syncUsage,
   tabPanelOf,
   test,
 } from '../fixtures'
@@ -179,11 +179,6 @@ test.describe('Spend', () => {
       await expect(usageSectionOf(page).getByRole('heading', { level: 2, name: 'Usage' })).toBeVisible()
     }
 
-    const syncUsage = async (workerStack: WorkerStack) => {
-      const synced = await fetch(`${serverUrl}/test/usage-sync?db=${workerStack.databaseName}`, { method: 'POST' })
-      expect(synced.ok).toBe(true)
-    }
-
     const researchTotalsInDatabase = async (workerStack: WorkerStack) =>
       workerStack.database.$client`
     select coalesce(sum(tokens), 0)::int as tokens, coalesce(sum(cost_micros), 0)::int as cost_micros,
@@ -230,7 +225,7 @@ test.describe('Spend', () => {
       await bobPage.context().close()
 
       await openUsageTab(page, 'Research')
-      const researchTable = tabPanelOf(page).getByRole('table')
+      const researchTable = tabPanelOf(page).getByRole('table', { name: 'Chat usage' })
       await expectMeteredRow(rowOf(researchTable, 'Alice'), 2)
       await expectMeteredRow(rowOf(researchTable, 'Bob'), 1)
       const research = await cellsOf(rowOf(researchTable, 'Total'))
@@ -239,7 +234,7 @@ test.describe('Spend', () => {
       expect(research.tokens).toBe(aliceInResearch.tokens + bobInResearch.tokens)
       expect(research.calls).toBe(3)
       await openUsageTab(page, 'Invoice bug')
-      const invoiceTable = tabPanelOf(page).getByRole('table')
+      const invoiceTable = tabPanelOf(page).getByRole('table', { name: 'Chat usage' })
       await expect(rowOf(invoiceTable, 'Total')).toContainText('15,500')
       const invoiceBug = await cellsOf(rowOf(invoiceTable, 'Total'))
       const aliceInInvoiceBug = await cellsOf(rowOf(invoiceTable, 'Alice'))
@@ -263,8 +258,8 @@ test.describe('Spend', () => {
       tag: ['@spec-13'],
     }, async ({ page, workerStack }) => {
       await workerStack.database.$client`
-    insert into usage_entries (workspace_id, month, chat_id, user_id, tokens, cost_micros, calls)
-    values ('workspace-acme', ${earlierMonth}, 'chat-research', 'member-alice', 4321, 70000, 3)`
+    insert into usage_entries (workspace_id, month, chat_id, user_id, model, tokens, cost_micros, calls)
+    values ('workspace-acme', ${earlierMonth}, 'chat-research', 'member-alice', 'mistral/codestral-latest', 4321, 70000, 3)`
       await workerStack.database.$client`
     insert into model_calls (workspace_id, id, chat_id, prompter_id, owner_id, model, provider, input_tokens, output_tokens, cost_micros, status, called_at)
     select 'workspace-acme', 'earlier-' || n, 'chat-research', 'member-alice', 'member-alice', 'codestral-latest', 'mistral',
@@ -273,7 +268,7 @@ test.describe('Spend', () => {
     from generate_series(1, 3) n`
 
       await openUsageTab(page, 'Research')
-      const usageTable = tabPanelOf(page).getByRole('table')
+      const usageTable = tabPanelOf(page).getByRole('table', { name: 'Chat usage' })
       await expect(monthPickerOf(tabPanelOf(page))).toHaveValue(currentMonth)
       await expect(rowOf(usageTable, 'Total')).not.toContainText('4,321')
       await monthPickerOf(tabPanelOf(page)).selectOption(earlierMonth)
@@ -301,7 +296,7 @@ test.describe('Spend', () => {
         await expect(usageSectionOf(page)).toHaveCount(0)
 
         await openUsageTab(page, 'Invoice bug')
-        const usageTable = tabPanelOf(page).getByRole('table')
+        const usageTable = tabPanelOf(page).getByRole('table', { name: 'Chat usage' })
         await expect(rowOf(usageTable, 'Alice')).toContainText('12,400')
         await expect(rowOf(usageTable, 'Bob')).toContainText('3,100')
         await expect(rowOf(usageTable, 'Total')).toContainText('15,500')
