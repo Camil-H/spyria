@@ -140,6 +140,7 @@ const acpToolCallProjectionOf = (call: AcpToolCall): AgentProjection => {
           },
         ],
         exit_code: output.exit_code ?? (call.status === 'failed' ? 1 : 0),
+        is_exit_code_derived: output.exit_code === undefined,
         old_content: diff?.oldText,
         new_content: diff?.newText,
         is_error: call.status === 'failed',
