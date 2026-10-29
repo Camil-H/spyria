@@ -32,8 +32,8 @@ const sync = () =>
     { since: async () => ({ calls: [] }) },
     { workspaceId: acme, transact: (work) => zeroDatabase.transaction(work) },
   )
-const memberNotice = "Bob's monthly AI budget is used up; an admin can raise it in Workspace settings"
-const workspaceNotice = "The workspace's monthly AI budget is used up; an admin can raise it in Workspace settings"
+const memberNotice = "Bob's monthly AI budget is used up; a member with the Manage budgets permission can raise it in Workspace settings"
+const workspaceNotice = "The workspace's monthly AI budget is used up; a member with the Manage budgets permission can raise it in Workspace settings"
 const completion = JSON.stringify({ model: 'mistral/codestral-latest', messages: [{ role: 'user', content: 'hi' }] })
 const month = new Date().toISOString().slice(0, 7)
 
@@ -204,7 +204,7 @@ test('once the prompter’s budget is used up, a running sub-agent’s calls and
   expect(subCall.status).toBe(402)
   expect(JSON.parse(subCall.body)).toEqual({
     error: {
-      message: "Alice's monthly AI budget is used up; an admin can raise it in Workspace settings",
+      message: "Alice's monthly AI budget is used up; a member with the Manage budgets permission can raise it in Workspace settings",
       type: 'spyria_refused',
     },
   })

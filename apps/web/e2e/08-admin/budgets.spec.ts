@@ -18,8 +18,8 @@ import {
 } from '../fixtures'
 import { openPageAs, type WorkerStack } from '../stack'
 
-const bobNotice = "Bob's monthly AI budget is used up; an admin can raise it in Workspace settings"
-const workspaceNotice = "The workspace's monthly AI budget is used up; an admin can raise it in Workspace settings"
+const bobNotice = "Bob's monthly AI budget is used up; a member with the Manage budgets permission can raise it in Workspace settings"
+const workspaceNotice = "The workspace's monthly AI budget is used up; a member with the Manage budgets permission can raise it in Workspace settings"
 const budgetsOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Budgets' })
 const budgetRowOf = (page: Page, name: string) =>
   budgetsOf(page)
