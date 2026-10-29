@@ -14,7 +14,7 @@ import { PublishActions } from './PublishActions.tsx'
 import type { TabProps } from './TabProps.ts'
 import { emptyClass, moreCommitsNotice } from './ui.ts'
 import { useActionNotice } from './useActionNotice.tsx'
-import { groupKeyOf, useFileExpansion } from './useFileExpansion.ts'
+import { useFileExpansion } from './useFileExpansion.ts'
 import { useWorkspaceReading } from './useWorkspaceReading.ts'
 import { WorkspaceStatus } from './WorkspaceStatus.tsx'
 
@@ -86,7 +86,7 @@ const ChangesTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
             >
               <RefreshCw aria-hidden className={`size-4 ${isRefreshing ? 'animate-spin' : ''}`} />
             </button>
-            {changeGroups.length > 0 && (
+            {changeGroups.some(({ changes }) => changes.length > 0) && (
               <button
                 type="button"
                 aria-label={expansionLabel}
@@ -105,7 +105,7 @@ const ChangesTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
       )}
       {changeGroups.map(({ sha, title, commit, changes, isCut }) => (
         <section
-          key={groupKeyOf({ sha, title })}
+          key={sha ?? title}
           aria-label={sha ? `Commit ${sha}` : title || undefined}
           className="flex flex-col gap-2"
         >
@@ -126,8 +126,8 @@ const ChangesTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
           <FileDiffList
             changes={changes}
             groupName={sha ? `commit ${sha}` : title.toLowerCase()}
-            isExpanded={(path) => isExpanded(groupKeyOf({ sha, title }), path)}
-            onToggle={(path) => toggle(groupKeyOf({ sha, title }), path)}
+            isExpanded={(path) => isExpanded(sha ?? title, path)}
+            onToggle={(path) => toggle(sha ?? title, path)}
           />
           {isCut && <p className={emptyClass}>Diff truncated</p>}
         </section>
