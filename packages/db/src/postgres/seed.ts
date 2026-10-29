@@ -113,7 +113,8 @@ const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
         secretRef: `gateway:${credential.id}`,
       })),
     )
-  await transaction.insert(tables.toolConnections).values(snapshot.toolConnections.map(withUserIdAndPosition))
+  if (snapshot.toolConnections.length > 0)
+    await transaction.insert(tables.toolConnections).values(snapshot.toolConnections.map(withUserIdAndPosition))
   await transaction
     .insert(tables.browserPages)
     .values(snapshot.browserPages.map((page) => ({ ...page, openedAt: new Date(page.openedAt) })))
