@@ -1,9 +1,11 @@
 import { openPageAs } from '../stack'
 import {
+  answerNewAiChat,
   configureGitHubApp,
   expect,
   githubSectionOf,
   mainOf,
+  newChatAnswerOf,
   newChatDialogOf,
   openSettings,
   sidebarOf,
@@ -117,7 +119,7 @@ test.describe('GitHub setup', () => {
     await expect(section.getByText(`${appOrigin}/api/github/webhooks`, { exact: true })).toBeVisible()
   })
 
-  test('As a member without the Connect GitHub permission, I see no GitHub settings, and a non-dev runtime chat asks me for no repository', {
+  test('As a member without the Connect GitHub permission, I see no GitHub settings, and an AI chat without GitHub access asks me for no repository', {
     tag: ['@spec-39'],
   }, async ({ page, browser, workerStack }) => {
     await configureGitHubApp(page)
@@ -127,21 +129,20 @@ test.describe('GitHub setup', () => {
     await expect(githubSectionOf(bobPage)).toHaveCount(0)
     await bobPage.getByRole('button', { name: 'New chat' }).click()
     const dialog = newChatDialogOf(bobPage)
-    await dialog.getByRole('radio', { name: 'Runtime' }).check()
-    await expect(dialog.getByRole('radio', { name: 'Non-dev' })).toBeChecked()
+    await answerNewAiChat(dialog)
     await expect(dialog.getByLabel('Repository')).toHaveCount(0)
     await expect(dialog.getByLabel('Base branch')).toHaveCount(0)
     await bobPage.context().close()
   })
 
-  test('As a member, without a GitHub App I see Connect GitHub instead of the pickers in a dev chat (a link if I can connect GitHub, text otherwise), and Non-dev shows no repository', {
+  test('As a member, without a GitHub App I see Connect GitHub instead of the pickers in an AI chat with GitHub access (a link if I can connect GitHub, text otherwise), and one without shows no repository', {
     tag: ['@spec-42'],
   }, async ({ page, browser, workerStack }) => {
     await page.getByRole('button', { name: 'New chat' }).click()
     const dialog = newChatDialogOf(page)
-    await dialog.getByRole('radio', { name: 'Runtime' }).check()
+    await answerNewAiChat(dialog)
     await expect(dialog.getByLabel('Repository')).toHaveCount(0)
-    await dialog.getByRole('radio', { name: 'Dev', exact: true }).check()
+    await newChatAnswerOf(dialog, 'github', 'Yes').check()
     const connectLink = dialog.getByRole('link', { name: 'Connect GitHub in Workspace settings' })
     await expect(connectLink).toBeVisible()
     await expect(dialog.getByLabel('Repository')).toHaveCount(0)
@@ -155,8 +156,7 @@ test.describe('GitHub setup', () => {
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
     await bobPage.getByRole('button', { name: 'New chat' }).click()
     const bobDialog = newChatDialogOf(bobPage)
-    await bobDialog.getByRole('radio', { name: 'Runtime' }).check()
-    await bobDialog.getByRole('radio', { name: 'Dev', exact: true }).check()
+    await answerNewAiChat(bobDialog, { needsGitHub: true })
     await expect(bobDialog.getByText('Connect GitHub in Workspace settings')).toBeVisible()
     await expect(bobDialog.getByRole('link', { name: 'Connect GitHub in Workspace settings' })).toHaveCount(0)
     await bobPage.context().close()

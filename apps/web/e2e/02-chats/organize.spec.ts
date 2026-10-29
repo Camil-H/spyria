@@ -1,9 +1,13 @@
 import {
+  answerNewAiChat,
+  answerNewChannel,
   chatAction,
   chatRowIn,
   expect,
   looseChatsOf,
   mainOf,
+  newChatAnswerOf,
+  newChatDialogOf,
   type Page,
   projectAction,
   projectGroupOf,
@@ -85,9 +89,24 @@ test.describe('Organize', () => {
       await cancelDialog(page, 'New project')
     })
 
+    await test.step('new chat: cannot confirm before answering every question', async () => {
+      await page.getByRole('button', { name: 'New chat' }).click()
+      const dialog = newChatDialogOf(page)
+      await dialog.getByRole('textbox', { name: 'Chat name' }).fill('Unanswered')
+      await expect(dialog.getByRole('radio', { checked: true })).toHaveCount(0)
+      await expect(dialog.getByRole('button', { name: 'Confirm' })).toBeDisabled()
+      await newChatAnswerOf(dialog, 'isPublic', 'No').check()
+      await expect(dialog.getByRole('button', { name: 'Confirm' })).toBeDisabled()
+      await newChatAnswerOf(dialog, 'audience', 'AI chat').check()
+      await expect(dialog.getByRole('button', { name: 'Confirm' })).toBeDisabled()
+      await newChatAnswerOf(dialog, 'github', 'No').check()
+      await expect(dialog.getByRole('button', { name: 'Confirm' })).toBeEnabled()
+      await cancelDialog(page, 'New chat')
+    })
+
     await test.step('new chat: cannot confirm a blank name', async () => {
       await page.getByRole('button', { name: 'New chat' }).click()
-      await page.getByRole('radio', { name: 'Channel' }).check()
+      await answerNewChannel(newChatDialogOf(page), 'public')
       await expect(page.getByRole('button', { name: 'Confirm' })).toBeDisabled()
       await page.getByRole('textbox', { name: 'Chat name' }).fill('   ')
       await expect(page.getByRole('button', { name: 'Confirm' })).toBeDisabled()
@@ -172,7 +191,7 @@ test.describe('Organize', () => {
 
     await test.step('creates a channel inside a project and selects it', async () => {
       await page.getByRole('button', { name: 'New chat' }).click()
-      await page.getByRole('radio', { name: 'Channel' }).check()
+      await answerNewChannel(newChatDialogOf(page), 'public')
       await page.getByRole('textbox', { name: 'Chat name' }).fill('Planning')
       await page.getByRole('combobox', { name: 'Project' }).selectOption('Billing')
       await page.getByRole('button', { name: 'Confirm' }).click()
@@ -185,6 +204,7 @@ test.describe('Organize', () => {
     await test.step('starts a chat from a project’s menu with that project already chosen', async () => {
       await projectAction(page, 'Billing', 'New chat')
       await expect(page.getByRole('combobox', { name: 'Project' }).locator('option:checked')).toHaveText('Billing')
+      await answerNewChannel(newChatDialogOf(page), 'public')
       await page.getByRole('textbox', { name: 'Chat name' }).fill('Quarter close')
       await page.getByRole('button', { name: 'Confirm' }).click()
       await expect(chatRowIn(projectGroupOf(page, 'Billing'), 'Quarter close')).toBeVisible()
@@ -193,7 +213,7 @@ test.describe('Organize', () => {
 
     await test.step('creates a runtime chat without a project as a loose chat', async () => {
       await page.getByRole('button', { name: 'New chat' }).click()
-      await page.getByRole('radio', { name: 'Runtime' }).check()
+      await answerNewAiChat(newChatDialogOf(page))
       await page.getByRole('textbox', { name: 'Chat name' }).fill('Scratchpad')
       await page.getByRole('button', { name: 'Confirm' }).click()
       await expect(chatRowIn(looseChatsOf(page), 'Scratchpad')).toBeVisible()

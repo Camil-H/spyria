@@ -1,9 +1,16 @@
 import { expect, type Page } from '@playwright/test'
-import { chooseRunsOn, connectionsOf, inPopup, mainOf, openMyConnections } from '../fixtures.ts'
+import {
+  answerNewAiChat,
+  chooseRunsOn,
+  connectionsOf,
+  inPopup,
+  mainOf,
+  newChatDialogOf,
+  openMyConnections,
+} from '../fixtures.ts'
 
 export * from '../fixtures.ts'
 
-export const newChatDialogOf = (page: Page) => page.getByRole('dialog', { name: 'New chat' })
 export const connectGitHub = async (page: Page) => {
   await openMyConnections(page)
   const github = connectionsOf(page).getByRole('group', { name: 'GitHub account' })
@@ -14,8 +21,7 @@ export const connectGitHub = async (page: Page) => {
 export const newDevChat = async (page: Page, name: string, repository: string, baseBranch = 'main') => {
   await page.getByRole('button', { name: 'New chat' }).click()
   const dialog = newChatDialogOf(page)
-  await dialog.getByRole('radio', { name: 'Runtime' }).check()
-  await dialog.getByRole('radio', { name: 'Dev', exact: true }).check()
+  await answerNewAiChat(dialog, { needsGitHub: true })
   await dialog.getByLabel('Repository').selectOption(repository)
   await expect(dialog.getByLabel('Base branch')).toHaveValue('main')
   await dialog.getByLabel('Base branch').selectOption(baseBranch)

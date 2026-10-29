@@ -1,5 +1,6 @@
 import { openPageAs } from '../stack'
 import {
+  answerNewChannel,
   chatAction,
   chatLinkOf,
   chipOf,
@@ -9,6 +10,8 @@ import {
   mainOf,
   messageContaining,
   mutationGateOf,
+  newChatAnswerOf,
+  newChatDialogOf,
   type Page,
   panelTabOf,
   runsOnOf,
@@ -18,12 +21,9 @@ import {
   test,
 } from './fixtures'
 
-const newChatDialogOf = (page: Page) => page.getByRole('dialog', { name: 'New chat' })
-const visibilityOf = (page: Page) => newChatDialogOf(page).getByRole('radiogroup', { name: 'Visibility' })
 const newChannel = async (page: Page, name: string, visibility: 'Public' | 'Private') => {
   await page.getByRole('button', { name: 'New chat' }).click()
-  await newChatDialogOf(page).getByRole('radio', { name: 'Channel' }).check()
-  await visibilityOf(page).getByRole('radio', { name: visibility }).check()
+  await answerNewChannel(newChatDialogOf(page), visibility === 'Public' ? 'public' : 'private')
   await newChatDialogOf(page).getByRole('textbox', { name: 'Chat name' }).fill(name)
   await newChatDialogOf(page).getByRole('button', { name: 'Confirm' }).click()
   await expect(mainOf(page).getByRole('heading', { level: 1, name })).toBeVisible()
@@ -127,7 +127,7 @@ test.describe('Channels', () => {
     await leePage.context().close()
   })
 
-  test('As a member, I see no agent bar in a channel, and only a new channel offers Public or Private', {
+  test('As a member, I see no agent bar in a channel, and a public new chat is for members messaging, since AI chats are always private', {
     tag: ['@spec-30'],
   }, async ({ page }) => {
     await chatLinkOf(page, 'Welcome').click()
@@ -136,10 +136,18 @@ test.describe('Channels', () => {
     await expect(runsOnOf(page)).toHaveCount(0)
     await expect(chipOf(page, 'any')).toHaveCount(0)
     await page.getByRole('button', { name: 'New chat' }).click()
-    await expect(visibilityOf(page).getByRole('radio', { name: 'Public' })).toBeChecked()
-    await expect(visibilityOf(page).getByRole('radio', { name: 'Private' })).not.toBeChecked()
-    await newChatDialogOf(page).getByRole('radio', { name: 'Runtime' }).check()
-    await expect(visibilityOf(page)).toHaveCount(0)
+    const dialog = newChatDialogOf(page)
+    await newChatAnswerOf(dialog, 'isPublic', 'No').check()
+    await newChatAnswerOf(dialog, 'audience', 'AI chat').check()
+    await newChatAnswerOf(dialog, 'isPublic', 'Yes').check()
+    await expect(newChatAnswerOf(dialog, 'audience', 'AI chat')).not.toBeChecked()
+    await expect(newChatAnswerOf(dialog, 'audience', 'AI chat')).toBeDisabled()
+    await expect(dialog).toContainText('AI chats are always private.')
+    await expect(dialog.getByRole('radiogroup', { name: 'Does it need GitHub access?' })).toHaveCount(0)
+    await newChatAnswerOf(dialog, 'audience', 'Members messaging').check()
+    await newChatAnswerOf(dialog, 'isPublic', 'No').check()
+    await expect(newChatAnswerOf(dialog, 'audience', 'AI chat')).toBeEnabled()
+    await expect(newChatAnswerOf(dialog, 'audience', 'Members messaging')).toBeChecked()
   })
 
   test('As a channel owner, I get no Reader role and no Remove in a public channel’s Members tab, both come back once it is private, and making it public again turns a Reader into a Prompter', {
@@ -203,7 +211,7 @@ test.describe('Channels', () => {
   }, async ({ page, browser, workerStack }) => {
     await newChannel(page, 'Lounge', 'Public')
     await page.getByRole('button', { name: 'New chat' }).click()
-    await newChatDialogOf(page).getByRole('radio', { name: 'Channel' }).check()
+    await answerNewChannel(newChatDialogOf(page), 'public')
     await newChatDialogOf(page).getByRole('textbox', { name: 'Chat name' }).fill('Invoices')
     await newChatDialogOf(page).getByLabel('Project').selectOption({ label: 'Billing' })
     await newChatDialogOf(page).getByRole('button', { name: 'Confirm' }).click()
