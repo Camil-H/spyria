@@ -39,7 +39,12 @@ export {
   type PullRequestChecks,
   type ReviewThread,
 } from './domain/github-tools.ts'
-export { genericModelCallNoticeOf, type ModelCallFailure } from './domain/model-call-failures.ts'
+export {
+  genericModelCallNoticeOf,
+  type ModelCallFailure,
+  modelNotAllowedNoticeOf,
+  publicModelNameOf,
+} from './domain/model-call-failures.ts'
 export {
   checkStateOf,
   checksOf,

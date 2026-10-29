@@ -1,6 +1,7 @@
 import type { Transaction } from '@rocicorp/zero'
 import {
   activeAgentTurns,
+  aiProviderAllowListOf,
   appendChatEvent,
   chatEventsOf,
   chatRoutingOf,
@@ -49,6 +50,7 @@ import {
   chatId,
   ForeignWorkspace,
   type HarnessId,
+  isAllowedModel,
   type MemberId,
   type MessageId,
   memberActor,
@@ -441,6 +443,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       },
       reachableModels: (id) => memberModelsOf(tx, contextWorkspaceId, id),
       listedModels: listedModelsOf,
+      allowsModel: async (model) => isAllowedModel(await aiProviderAllowListOf(tx, contextWorkspaceId), model),
       update: (id, fields) =>
         tx.mutate.chats.update({
           workspaceId: contextWorkspaceId,

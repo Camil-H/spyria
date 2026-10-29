@@ -16,6 +16,7 @@ import {
   providersOfGatewayRefs,
   reachableModelsOf,
   rereadDollarsOf,
+  soleRequestedModelOf,
   withPricesOf,
 } from './models.ts'
 
@@ -163,4 +164,18 @@ test('without an allow-list every provider and model is allowed; with one, only 
   expect(
     allowedModelsOf(allowList, [{ id: 'openai/gpt-5' }, { id: 'openai/gpt-5-nano' }, { id: 'anthropic/x' }]),
   ).toEqual([{ id: 'openai/gpt-5' }, { id: 'anthropic/x' }])
+})
+
+test('an allow-list ignores names inherited from objects, and only a request naming one plain model is checked', () => {
+  const allowList = { openai: 'all' } as const
+  expect(isAllowedProvider(allowList, 'constructor')).toBe(false)
+  expect(isAllowedModel(allowList, 'constructor/x')).toBe(false)
+  expect(isAllowedModel(allowList, '__proto__/x')).toBe(false)
+  expect(soleRequestedModelOf({ model: 'openai/gpt-5', messages: [] })).toBe('openai/gpt-5')
+  expect(soleRequestedModelOf({ model: 'openai/gpt-5', Model: 'mistral/x' })).toBeUndefined()
+  expect(soleRequestedModelOf({ model: 'openai/gpt-5', fallbacks: ['mistral/x'] })).toBeUndefined()
+  expect(soleRequestedModelOf({ MODEL: 'openai/gpt-5' })).toBeUndefined()
+  expect(soleRequestedModelOf({ model: 42 })).toBeUndefined()
+  expect(soleRequestedModelOf({ messages: [] })).toBeUndefined()
+  expect(soleRequestedModelOf(undefined)).toBeUndefined()
 })

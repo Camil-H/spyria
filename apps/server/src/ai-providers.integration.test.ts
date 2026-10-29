@@ -21,13 +21,13 @@ await addLlmKey(bob, 'Mistral')
 
 const setAllowList = (allowList: object | null, member = aliceInAcme) =>
   resultOf(member, 'profile.setAiProviders', { workspaceId: acme, allowList })
-const relayedCallOf = async (model: string) => {
+const relayedCallOf = async (model: string, fields: object = {}) => {
   const host = await fakeHost('Provider host')
   const { token } = await runtimeTurn(host, bob)
   const callsBefore = fakeLlmCalls.length
   const answer = await host.modelCall({
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ model, messages: [{ role: 'user', content: 'hi' }] }),
+    body: JSON.stringify({ model, messages: [{ role: 'user', content: 'hi' }], ...fields }),
   })
   return { status: answer.status, body: JSON.parse(answer.body), reached: fakeLlmCalls.length - callsBefore }
 }
@@ -76,4 +76,6 @@ test('the relay refuses a model the allow-list leaves out, before the gateway, a
     reached: 0,
   })
   expect(await relayedCallOf('mistral/codestral-latest')).toMatchObject({ status: 200, reached: 1 })
+  for (const fields of [{ fallbacks: ['mistral/mistral-large-latest'] }, { Model: 'mistral/mistral-large-latest' }])
+    expect(await relayedCallOf('mistral/codestral-latest', fields)).toMatchObject({ status: 403, reached: 0 })
 })

@@ -1,6 +1,5 @@
 import {
   type Actor,
-  actingMemberOf,
   DomainError,
   type MemberId,
   type MessageId,
@@ -48,7 +47,7 @@ export const recordPullRequest = (
         workspaceId: chat.workspaceId,
         chatId: chat.chatId,
         kind: 'step',
-        authorId: actingMemberOf(actor),
+        authorId: memberBehind(actor),
         body: MessageBody(step.type),
         step,
         createdAt: new Date(),

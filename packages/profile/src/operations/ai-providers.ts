@@ -19,5 +19,8 @@ export const setAiProviders = (
     })
   })
 
-export const isModelAllowed = ({ transactor }: Dependencies, { model }: { model: string }) =>
-  transactor.run(async ({ aiProviders }) => isAllowedModel(await aiProviders.allowList(), model))
+export const isModelAllowed = ({ transactor }: Dependencies, { model }: { model: string | undefined }) =>
+  transactor.run(async ({ aiProviders }) => {
+    const allowList = await aiProviders.allowList()
+    return allowList === null || (model !== undefined && isAllowedModel(allowList, model))
+  })
