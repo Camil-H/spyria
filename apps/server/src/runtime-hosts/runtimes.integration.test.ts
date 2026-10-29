@@ -288,6 +288,28 @@ test('the sweep removes runtimes stopped for 30 days with their container and vo
   expect(await historyOf()).toEqual(history)
 })
 
+test('the sweep marks hosts whose claim code expired unclaimed as expired, leaving live codes and paired hosts', async () => {
+  const insertHost = async (status: string, claimExpiresIn: string) => {
+    const id = `host-${crypto.randomUUID()}`
+    await database.$client`
+      insert into runtime_hosts (workspace_id, id, name, status, claim_expires_at, running_runtimes, created_by, created_at)
+      values (${acme}, ${id}, 'Claim host', ${status}, now() + ${claimExpiresIn}::interval, 0, ${alice}, now())`
+    return id
+  }
+  const statusOf = async (hostId: string) =>
+    (await database.$client`select status from runtime_hosts where id = ${hostId}`)[0]?.status
+  const [lapsed, live, paired] = [
+    await insertHost('waiting', '-1 second'),
+    await insertHost('waiting', '10 minutes'),
+    await insertHost('offline', '-1 day'),
+  ]
+
+  await sweep()
+  expect(await statusOf(lapsed)).toBe('expired')
+  expect(await statusOf(live)).toBe('waiting')
+  expect(await statusOf(paired)).toBe('offline')
+})
+
 test('archiving a runtime chat removes its runtime', async () => {
   const host = await fakeHost('Archiving host')
   const chat = await newRuntimeChat()
