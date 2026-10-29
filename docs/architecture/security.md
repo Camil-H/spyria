@@ -79,7 +79,7 @@ Admins can turn these sessions off for the workspace. See [machines](../features
 
 ## In the browser
 
-The server sends the web app with a Content Security Policy (`apps/server/src/web-app.ts`): it runs only its own scripts, connects only to its own origin, and cannot be framed by another site. The **Browser** tab frames any web address in a sandbox. A report the agent wrote never runs in the app's page: it is handed to `/report-frame.html`, a sandboxed frame with a policy of its own that lets the report run its scripts and load what it needs, without the app's origin, storage or session.
+The server sends the web app with a Content Security Policy (`apps/server/src/web-app.ts`): it runs only its own scripts, connects only to its own origin, and cannot be framed by another site. The **Browser** tab asks the server for a web page (`/api/web-page`, rate limited per member): the server resolves the name, refuses private, loopback, link-local and reserved addresses, connects to the address it checked so a second DNS answer cannot point it elsewhere, checks every redirect the same way, and stops after 15 seconds or 5 MB. The page is handed to `/page-frame.html`, a sandboxed frame whose policy blocks the page's scripts; the frame's own script only reports the links and forms the member follows. A page on the member's own machine (`localhost`) is framed directly in a sandbox. A report the agent wrote never runs in the app's page: it is handed to `/report-frame.html`, a sandboxed frame with a policy of its own that lets the report run its scripts and load what it needs, without the app's origin, storage or session.
 
 ## Rate limits and retries
 
