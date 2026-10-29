@@ -323,7 +323,7 @@ test.describe('Sidebar', () => {
       await expect(unreadIconOf(page, 'Setup helper')).toBeVisible()
       await expect(draftIconOf(page, 'Setup helper')).toBeVisible()
 
-      await test.step('shows the exclamation left of the pencil, both before the menu button', async () => {
+      await test.step('shows the agent status icon left of the pencil, both before the menu button', async () => {
         const unreadBox = (await unreadIconOf(page, 'Setup helper').boundingBox())!
         const draftBox = (await draftIconOf(page, 'Setup helper').boundingBox())!
         const menuButtonBox = (await menuButtonOf(page, 'Setup helper').boundingBox())!
@@ -332,7 +332,7 @@ test.describe('Sidebar', () => {
       })
 
       for (const colorScheme of ['light', 'dark'] as const)
-        await test.step(`distinguishes the exclamation from the pencil in ${colorScheme} mode`, async () => {
+        await test.step(`distinguishes the agent status icon from the pencil in ${colorScheme} mode`, async () => {
           await page.emulateMedia({ colorScheme })
           const colorOf = (iconName: string) =>
             chatLinkOf(page, 'Setup helper')

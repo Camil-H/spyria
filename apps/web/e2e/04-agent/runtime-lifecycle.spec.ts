@@ -2,6 +2,7 @@ import { openPageAs, runtimeStateOf, type WorkerStack } from '../stack'
 import {
   addParticipant,
   agentReplyText,
+  chatLinkOf,
   expect,
   mainOf,
   messageContaining,
@@ -12,6 +13,7 @@ import {
   research,
   sendMessage,
   machineTest as test,
+  unreadIconOf,
   workingIndicatorOf,
 } from './fixtures'
 
@@ -155,6 +157,21 @@ test.describe('Runtime lifecycle', () => {
       await expect(messageItemsOf(page).nth(0)).toContainText('Before the sleep')
       await expect(messageItemsOf(page).nth(2)).toContainText('After the sleep')
       await expect(mainOf(page)).not.toContainText(newSessionNotice)
+    })
+
+    test('As a member, I see the unread icon of a chat turn from done to asleep when its runtime falls asleep', {
+      tag: ['@spec-10', '@slow'],
+    }, async ({ page, workerStack }) => {
+      await openChat(page, 'Research')
+      await expect(runtimeStatusOf(page)).toHaveText('Ready')
+      await sendMessage(page, 'Before the sleep')
+      await chatLinkOf(page, 'Welcome').click()
+      await expect(unreadIconOf(page, 'Research')).toHaveAccessibleName('Unread messages · The agent is done')
+
+      await triggerIdleStop(workerStack, research)
+      await expect(unreadIconOf(page, 'Research')).toHaveAccessibleName('Unread messages · The agent is asleep')
+      await unreadIconOf(page, 'Research').hover()
+      await expect(page.getByRole('tooltip', { name: 'Unread messages · The agent is asleep' })).toBeVisible()
     })
 
     test('As the owner, I restart the session or stop the runtime from the status menu, confirming while the agent works; a prompter gets no menu', {
