@@ -21,7 +21,7 @@ bun run check:all          # everything below in order, failing fast; never touc
 bun run check:all --verify # does the last check:all match the current tree, and did it pass?
 bun run typecheck
 bun run lint               # biome; `bunx biome check --write .` fixes formatting and import order
-bun run check:boundaries   # dependency-cruiser layer and context rules
+bun run check:boundaries   # dependency-cruiser layer and context rules, and probes that prove they still read the sources
 bun run check:locks        # the host and Pi lockfiles agree with their manifests and the root lock
 bun run test               # unit tests
 bun run test:integration   # integration tests
