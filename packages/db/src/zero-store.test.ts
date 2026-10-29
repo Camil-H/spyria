@@ -76,7 +76,6 @@ const messageOf = (seq: number, fields: { replyToId?: string; body?: string } = 
     kind: fields.replyToId ? 'agent' : 'member',
     authorId: fields.replyToId ? null : alice,
     body: fields.body ?? `Body ${seq}`,
-    detail: null,
     step: null,
     replyToId: fields.replyToId ?? null,
     threadRootId: null,

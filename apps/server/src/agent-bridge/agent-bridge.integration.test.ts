@@ -42,13 +42,12 @@ const {
   jobDone,
   ...stack
 } = await startAgentStack({ llm: { model: 'openai/mistral/codestral-latest' } })
-const repliesTo = (messageId: string) => stack.repliesTo(messageId, ['kind', 'body', 'detail'])
+const repliesTo = (messageId: string) => stack.repliesTo(messageId, ['kind', 'body'])
 const answered = stack.answered
 const agentHost = () => stack.agentHost('Agent host', { holdUrl })
 const replyOf = (turn: number) => ({
   kind: 'agent' as const,
   body: `[t${turn}] Hello from the stub (model spyria/mistral/codestral-latest, mode default).`,
-  detail: null,
 })
 const outputOf = async (path: string, workspaceId: string, userId: string) => {
   const response = await app.request(path, {
@@ -387,15 +386,15 @@ test('a failed start and a turn error each end with one notice and no endless tu
   await answered(failedTurn, 2)
   await turnEnded(erroring)
   expect(await repliesTo(failedTurn)).toEqual([
-    { kind: 'step', body: 'error', detail: null },
-    { kind: 'notice', body: 'The agent stopped with an error', detail: null },
+    { kind: 'step', body: 'error' },
+    { kind: 'notice', body: 'The agent stopped with an error' },
   ])
 
   host.failing('create')
   const unstartable = await newRuntimeChat()
   const neverStarted = await prompt(unstartable, 'Start please')
   await answered(neverStarted)
-  expect(await repliesTo(neverStarted)).toEqual([{ kind: 'notice', body: 'The agent could not start', detail: null }])
+  expect(await repliesTo(neverStarted)).toEqual([{ kind: 'notice', body: 'The agent could not start' }])
   expect(await turnOf(unstartable)).toBeNull()
 })
 
@@ -439,9 +438,7 @@ test('a prompt whose author has no LLM key at turn time ends with Spyria’s not
   const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'prompter' }] })
   const promptId = await queuedPrompt(chat, bob)
   await answered(promptId)
-  expect(await repliesTo(promptId)).toEqual([
-    { kind: 'notice', body: 'Bob has no LLM key in this workspace', detail: null },
-  ])
+  expect(await repliesTo(promptId)).toEqual([{ kind: 'notice', body: 'Bob has no LLM key in this workspace' }])
   expect(relay.prompts).toEqual([])
   expect(await turnOf(chat)).toBeNull()
 })
@@ -455,7 +452,7 @@ test('a model failure recorded by the relay shows as the error at the turn end, 
   await holds.release('slow')
   await answered(question, 2)
   await turnEnded(chat)
-  expect(await repliesTo(question)).toEqual([replyOf(1), { kind: 'step', body: 'error', detail: null }])
+  expect(await repliesTo(question)).toEqual([replyOf(1), { kind: 'step', body: 'error' }])
   expect((await messagesOf(chat)).find((message) => message.kind === 'step')?.step).toEqual({
     type: 'error',
     message: 'The LLM key of Alice was refused',
@@ -471,9 +468,7 @@ test('a prompter removed after posting is refused at turn time with Spyria’s n
     (sql) => sql`delete from chat_participants where chat_id = ${chat} and user_id = ${bob}`,
   )
   await answered(promptId)
-  expect(await repliesTo(promptId)).toEqual([
-    { kind: 'notice', body: 'Bob can no longer prompt in this chat', detail: null },
-  ])
+  expect(await repliesTo(promptId)).toEqual([{ kind: 'notice', body: 'Bob can no longer prompt in this chat' }])
   expect(relay.prompts).toEqual([])
   expect(await turnOf(chat)).toBeNull()
 })
@@ -608,7 +603,7 @@ test('removing the owner of a runtime chat closes their stream, stops the turn a
   expect(await mutate(aliceInAcme, 'workspace.removeMember', { workspaceId: acme, memberId: bob })).toEqual(succeeded)
   await bobViewer.closed
   await turnEnded(chat)
-  expect(await repliesTo(question)).toContainEqual({ kind: 'notice', body: 'Stopped by Alice', detail: null })
+  expect(await repliesTo(question)).toContainEqual({ kind: 'notice', body: 'Stopped by Alice' })
   await waitFor(async () => (await runtimeOf(chat)).state === 'stopped')
   await holds.release('linger')
   expect(

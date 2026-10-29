@@ -55,7 +55,7 @@ test('forkChat gives the forker a private runtime chat seeded with the source’
   const source = await newChat({ participants: [{ memberId: bob, roleId: 'reader' }] })
   const at = (minute: number) => `2026-10-17T09:0${minute}:00.000Z`
   const [firstId, deletedId] = [`message-${crypto.randomUUID()}`, `message-${crypto.randomUUID()}`]
-  const posted = (kind: string, body: string) => ({ kind, body, detail: null, replyToId: null })
+  const posted = (kind: string, body: string) => ({ kind, body, replyToId: null })
   const events = [
     { id: firstId, type: 'message.posted', actor: alice, payload: posted('member', 'Find the bug.') },
     { type: 'message.posted', actor: null, payload: posted('step', 'Read invoice.ts') },

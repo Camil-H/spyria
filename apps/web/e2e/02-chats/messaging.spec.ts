@@ -104,7 +104,7 @@ test.describe('Messaging', () => {
         ), posted as (
           insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
           select 'workspace-acme', 'chat-welcome', id, seq, 'message.posted', 'member-alice',
-            jsonb_build_object('kind', 'member', 'body', body, 'detail', null, 'replyToId', null), now()
+            jsonb_build_object('kind', 'member', 'body', body, 'replyToId', null), now()
           from fillers
         )
         insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
@@ -160,7 +160,7 @@ test.describe('Messaging', () => {
         ), posted as (
           insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
           select 'workspace-acme', 'chat-welcome', id, seq, 'message.posted', 'member-alice',
-            jsonb_build_object('kind', 'member', 'body', body, 'detail', null, 'replyToId', null), now()
+            jsonb_build_object('kind', 'member', 'body', body, 'replyToId', null), now()
           from fillers
         )
         insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
