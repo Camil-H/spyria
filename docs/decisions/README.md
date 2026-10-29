@@ -28,3 +28,4 @@ Each record states one decision: the context that called for it, what was decide
 | [0022](0022-no-screenshot-baselines.md) | No screenshot baselines; reviewers judge the looks |
 | [0023](0023-gateway-keys-serve-tools-without-model-keys.md) | Every member's gateway key serves tools, with or without a model key |
 | [0024](0024-typed-actors-on-events.md) | Events record a typed actor and the member it acts for |
+| [0025](0025-dev-loop.md) | The dev loop: server-run steps between the agent's turns |
