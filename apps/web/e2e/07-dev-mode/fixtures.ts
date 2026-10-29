@@ -7,6 +7,7 @@ import {
   mainOf,
   newChatDialogOf,
   openMyConnections,
+  panelTabOf,
 } from '../fixtures.ts'
 
 export * from '../fixtures.ts'
@@ -29,5 +30,6 @@ export const newDevChat = async (page: Page, name: string, repository: string, b
   await dialog.getByRole('button', { name: 'Confirm' }).click()
   await expect(mainOf(page).getByRole('heading', { level: 1, name })).toBeVisible()
   await chooseRunsOn(page, 'Spyria runtime')
+  await panelTabOf(page, 'Files').click()
   return page.url().split('/').at(-1) ?? ''
 }
