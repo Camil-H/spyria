@@ -42,6 +42,7 @@ export const startJobWorker = (
     pollIntervalMilliseconds = 1000,
     retryDelayMilliseconds = 1000,
     leaseMilliseconds = 5 * 60_000,
+    maximumRunMilliseconds = 30 * 60_000,
     concurrency = 4,
     cleanupPollMilliseconds = 30_000,
     failedCleanupRetryMilliseconds = 60 * 60_000,
@@ -53,6 +54,7 @@ export const startJobWorker = (
     pollIntervalMilliseconds?: number
     retryDelayMilliseconds?: number
     leaseMilliseconds?: number
+    maximumRunMilliseconds?: number
     concurrency?: number
     cleanupPollMilliseconds?: number
     failedCleanupRetryMilliseconds?: number
@@ -78,25 +80,57 @@ export const startJobWorker = (
   let isRunning = true
   let hasLoggedPollFailure = false
   let isJobQueuedSinceClaim = false
+  let hasLoggedListenFailure = false
   let wakeUp = () => {}
-  const waitForQueuedJob = () =>
-    new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, pollIntervalMilliseconds)
+  let listening: Promise<{ unlisten: () => Promise<void> } | undefined> | undefined
+  const listenUnlessListening = () => {
+    listening ??= database.$client
+      .listen(queuedJobsChannel, () => {
+        isJobQueuedSinceClaim = true
+        wakeUp()
+      })
+      .then(
+        (listener) => {
+          hasLoggedListenFailure = false
+          return listener
+        },
+        (error) => {
+          if (!hasLoggedListenFailure)
+            log.warn({
+              event: 'job.listen_failed',
+              body: 'The job worker polls its queue without notifications',
+              error,
+            })
+          hasLoggedListenFailure = true
+          listening = undefined
+          return undefined
+        },
+      )
+  }
+  const millisecondsUntilNextJob = async () => {
+    const [next] = await database.$client.unsafe<{ waitMilliseconds: number | null }[]>(
+      `select (extract(epoch from min(run_at) - now()) * 1000)::float8 as "waitMilliseconds"
+       from jobs where state in ('queued', 'running') and run_at > now() and type = any($1::text[])`,
+      [jobTypes],
+    )
+    return next?.waitMilliseconds ?? pollIntervalMilliseconds
+  }
+  const waitForQueuedJob = async () => {
+    listenUnlessListening()
+    const waitMilliseconds = Math.min(
+      pollIntervalMilliseconds,
+      await millisecondsUntilNextJob().catch(() => pollIntervalMilliseconds),
+    )
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, waitMilliseconds)
       wakeUp = () => {
         clearTimeout(timer)
         resolve()
       }
       if (isJobQueuedSinceClaim || !isRunning) wakeUp()
     })
-  const listening = database.$client
-    .listen(queuedJobsChannel, () => {
-      isJobQueuedSinceClaim = true
-      wakeUp()
-    })
-    .catch((error) => {
-      log.warn({ event: 'job.listen_failed', body: 'The job worker polls its queue without notifications', error })
-      return undefined
-    })
+  }
+  listenUnlessListening()
   const claimNextJob = async () =>
     (
       await database.$client.unsafe<ClaimedJob[]>(
@@ -152,7 +186,11 @@ export const startJobWorker = (
           extending = undefined
         })
     }
-    const timer = setInterval(extendLease, leaseMilliseconds / 3)
+    const extendUntil = Date.now() + maximumRunMilliseconds
+    const timer = setInterval(() => {
+      if (Date.now() < extendUntil) extendLease()
+      else clearInterval(timer)
+    }, leaseMilliseconds / 3)
     try {
       return await work()
     } finally {
@@ -251,6 +289,9 @@ export const startJobWorker = (
       await polling
       await (await listening)?.unlisten()
     },
+    whenListening: async () => {
+      await listening
+    },
   }
 }
 
@@ -261,21 +302,26 @@ export const listFailedJobs = (database: Database) =>
     select workspace_id as "workspaceId", id, type, attempts, last_error as "lastError", finished_at as "failedAt"
     from jobs where state = 'failed' order by finished_at`
 
-export const retryFailedJobs = async (database: Database, jobIdOrAll: string) =>
-  (
-    await database.$client<{ id: string }[]>`
-      with retried as (
-        select workspace_id, id, exists(select 1 from jobs as queued
-          where queued.workspace_id = jobs.workspace_id and queued.type = jobs.type and queued.state = 'queued'
-            and (queued.type like '%.sweep' or queued.type = 'usage.sync')) as is_already_queued
-        from jobs where state = 'failed' and (${jobIdOrAll} = 'all' or id = ${jobIdOrAll})),
-      superseded as (
-        delete from jobs using retried
-        where (jobs.workspace_id, jobs.id) = (retried.workspace_id, retried.id) and retried.is_already_queued
-        returning jobs.id),
-      requeued as (
-        update jobs set state = 'queued', attempts = 0, run_at = now(), finished_at = null from retried
-        where (jobs.workspace_id, jobs.id) = (retried.workspace_id, retried.id) and not retried.is_already_queued
-        returning jobs.id)
-      select id from superseded union all select id from requeued`
-  ).map((job) => job.id)
+export const retryFailedJobs = async (database: Database, jobIdOrAll: string) => {
+  const retried = await database.$client<{ id: string; isRequeued: boolean }[]>`
+    with matched as (
+      select workspace_id, id, (type like '%.sweep' or type = 'usage.sync') and (
+        exists(select 1 from jobs as queued
+          where queued.workspace_id = jobs.workspace_id and queued.type = jobs.type and queued.state = 'queued')
+        or row_number() over (partition by workspace_id, type order by finished_at desc nulls last, id) > 1
+      ) as is_superseded
+      from jobs where state = 'failed' and (${jobIdOrAll} = 'all' or id = ${jobIdOrAll})),
+    superseded as (
+      delete from jobs using matched
+      where (jobs.workspace_id, jobs.id) = (matched.workspace_id, matched.id) and matched.is_superseded
+      returning jobs.id),
+    requeued as (
+      update jobs set state = 'queued', attempts = 0, run_at = now(), finished_at = null from matched
+      where (jobs.workspace_id, jobs.id) = (matched.workspace_id, matched.id) and not matched.is_superseded
+      returning jobs.id)
+    select id, false as "isRequeued" from superseded union all select id, true from requeued`
+  return {
+    requeued: retried.filter((job) => job.isRequeued).map((job) => job.id),
+    dropped: retried.filter((job) => !job.isRequeued).map((job) => job.id),
+  }
+}
