@@ -79,3 +79,47 @@ test('a refused host turns off the restart policy of its own container before it
   expect(await host.exited).toBe(1)
   expect(restartPolicyUpdates).toEqual([{ RestartPolicy: { Name: 'no' } }])
 }, 15_000)
+
+test('a personal host told its sign-ins changed reads them and sends a heartbeat at once', async () => {
+  writeFileSync(join(directory, 'token'), 'host-token')
+  const frames: { type: string }[] = []
+  const listeningSpyria = Bun.serve({
+    port: 0,
+    fetch: (request, server) => (server.upgrade(request) ? undefined : new Response('Not found', { status: 404 })),
+    websocket: { message: (_, message) => void frames.push(JSON.parse(String(message))) },
+  })
+  const host = Bun.spawn(
+    [
+      'bun',
+      new URL('./main.ts', import.meta.url).pathname,
+      '--personal',
+      `ws://127.0.0.1:${listeningSpyria.port}/h/CODE`,
+    ],
+    {
+      env: {
+        ...process.env,
+        DOCKER_SOCKET: dockerSocket,
+        SPYRIA_DEPLOYMENT: 'spyria',
+        SPYRIA_HOST_STATE_DIR: directory,
+        SPYRIA_HOST_GATEWAY_PORT: '0',
+        SPYRIA_HOST_HEARTBEAT_MS: '600000',
+        OTEL_EXPORTER_OTLP_ENDPOINT: '',
+      },
+      stdout: 'ignore',
+      stderr: 'ignore',
+    },
+  )
+  const typesOf = () => frames.map(({ type }) => type)
+  try {
+    for (const deadline = Date.now() + 5_000; !typesOf().includes('hello'); await Bun.sleep(20))
+      if (Date.now() > deadline) throw new Error('The host did not say hello')
+    host.kill('SIGUSR2')
+    for (const deadline = Date.now() + 5_000; !typesOf().includes('heartbeat'); await Bun.sleep(20))
+      if (Date.now() > deadline) throw new Error('The host sent no heartbeat')
+    expect(typesOf()).toEqual(['hello', 'heartbeat'])
+  } finally {
+    host.kill()
+    await host.exited
+    void listeningSpyria.stop(true)
+  }
+}, 15_000)

@@ -25,6 +25,17 @@ const dockerSocket = process.env.DOCKER_SOCKET ?? '/var/run/docker.sock'
 const deployment = process.env.SPYRIA_DEPLOYMENT || 'spyria'
 const prefix = `${deployment}-`
 const docker = createDocker(dockerSocket)
+const signInsChangedSignal = 'SIGUSR2'
+const containerHostPid = 1
+const tellRunningHostSignInsChanged = () => {
+  try {
+    const hostArguments = readFileSync(`/proc/${containerHostPid}/cmdline`, 'utf8').split('\0')
+    if (process.pid !== containerHostPid && hostArguments.includes('--personal'))
+      process.kill(containerHostPid, signInsChangedSignal)
+  } catch {
+    return
+  }
+}
 if (claimUrlArgument === 'health') {
   const relayUrl = `http://127.0.0.1:${process.env.SPYRIA_HOST_GATEWAY_PORT ?? 4000}/`
   const isRelayUp = await fetch(relayUrl).then(Boolean, () => false)
@@ -47,6 +58,7 @@ if (claimUrlArgument === 'login' || claimUrlArgument === 'logout') {
   })
   const { signedIn } = await readCredentials(docker, prefix)
   console.log(`${signedIn.includes(tool) ? 'Signed in' : 'Not signed in'} to ${harnessNames[tool]}`)
+  tellRunningHostSignInsChanged()
   process.exit(0)
 }
 if (!claimUrlArgument) {
@@ -79,6 +91,7 @@ const declaration = async () => {
   return { personal: true, signedIn: credentials.signedIn, credentialsChangedAt: credentials.credentialsChangedAt }
 }
 let sendToSpyria = (_frame: Frame) => false
+let sendSignInsNow: () => Promise<unknown> = declaration
 const modelRelay = createModelRelay({
   send: (frame) => sendToSpyria(frame),
   redact: isPersonal ? (text) => redacted(text, credentials.secrets) : undefined,
@@ -168,6 +181,7 @@ const connect = () => {
     sendToSpyria = (frame) => socket.readyState === WebSocket.OPEN && send(frame)
     reconnectDelayMilliseconds = 1000
     heartbeatTimer = setInterval(() => sendHeartbeat().catch(() => {}), heartbeatMilliseconds)
+    sendSignInsNow = sendHeartbeat
     log.info({ event: 'host.connected', body: 'Connected to Spyria', attributes: { 'server.address': socketUrl.host } })
   }
   const runCommand = (frame: { id?: unknown; op?: unknown; args?: unknown; runtimeId?: unknown } & Carrier) => {
@@ -222,6 +236,7 @@ const connect = () => {
     clearInterval(heartbeatTimer)
     relay.closeAll()
     sendToSpyria = () => false
+    sendSignInsNow = declaration
     modelRelay.closeAll()
     if (isRefusal(event.code) && storedToken() && claimCode && !isTokenRefused) {
       log.warn({
@@ -252,4 +267,5 @@ const connect = () => {
 
 for (const signal of ['SIGTERM', 'SIGINT'])
   process.on(signal, () => void telemetry.shutdown().finally(() => process.exit(0)))
+if (isPersonal) process.on(signInsChangedSignal, () => void sendSignInsNow().catch(() => {}))
 connect()
