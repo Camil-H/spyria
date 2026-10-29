@@ -24,7 +24,6 @@ export type ProjectedMessage = Readonly<{
   authorId: string | null
   body: string
   attachments: readonly Attachment[]
-  detail: string | null
   step: StoredStep | null
   replyToId: string | null
   threadRootId: string | null
@@ -34,7 +33,8 @@ export type ProjectedMessage = Readonly<{
   deletedAt: Date | null
 }>
 
-export type PostedPayload = Pick<ProjectedMessage, 'body' | 'detail' | 'replyToId'> & {
+export type PostedPayload = Pick<ProjectedMessage, 'body' | 'replyToId'> & {
+  detail?: string | null
   kind: ProjectedMessage['kind'] | 'tool-call'
   step?: StoredStep | null
   threadRootId?: string
@@ -53,7 +53,7 @@ export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMes
   const messageByKey = new Map<string, ProjectedMessage>()
   for (const { workspaceId, chatId, id, seq, type, actor, payload, createdAt } of events) {
     const project = (
-      fields: Pick<ProjectedMessage, 'kind' | 'authorId' | 'body' | 'detail' | 'step' | 'replyToId'> &
+      fields: Pick<ProjectedMessage, 'kind' | 'authorId' | 'body' | 'step' | 'replyToId'> &
         Partial<Pick<ProjectedMessage, 'threadRootId' | 'quotedMessageId' | 'attachments'>>,
       projectedId = id,
     ) =>
@@ -83,20 +83,12 @@ export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMes
       } = payload as PostedPayload
       project(
         kind === 'tool-call'
-          ? {
-              kind: 'step',
-              authorId: actingMemberOf(actor),
-              body,
-              detail,
-              step: legacyToolCallStep(body, detail),
-              replyToId,
-            }
+          ? { kind: 'step', authorId: actingMemberOf(actor), body, step: legacyToolCallStep(body, detail), replyToId }
           : {
               kind,
               authorId: kind === 'notice' ? null : memberBehind(actor),
               body,
               attachments,
-              detail,
               step,
               replyToId,
               threadRootId,
@@ -118,10 +110,7 @@ export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMes
         const step = projection.type === 'step' ? projection.step : (projection.thought ?? null)
         const body = projection.type === 'step' ? projection.step.type : projection.body
         const kind = projection.type === 'step' ? 'step' : (projection.kind ?? 'agent')
-        project(
-          { kind, authorId: null, body, detail: null, step, replyToId },
-          (projection.type === 'step' && projection.id) || id,
-        )
+        project({ kind, authorId: null, body, step, replyToId }, (projection.type === 'step' && projection.id) || id)
       }
     }
     if (type === 'message.step_changed') {

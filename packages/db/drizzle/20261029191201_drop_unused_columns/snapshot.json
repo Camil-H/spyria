@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "84cdbb99-b318-44f5-a3fe-3691365a6de6",
+  "id": "c87ad66f-8583-47bb-944b-55061b2ab1d3",
   "prevIds": ["3205136f-92bb-423a-9ac7-f12d36bea47f", "c3651bcf-7c63-4ff7-8e74-3d61eb18cc04"],
   "ddl": [
     {
@@ -1424,32 +1424,6 @@
       "table": "events"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "actor_kind",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "events"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "on_behalf_of",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "events"
-    },
-    {
       "type": "jsonb",
       "typeSchema": null,
       "notNull": true,
@@ -2529,19 +2503,6 @@
       "table": "messages"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "detail",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "messages"
-    },
-    {
       "type": "jsonb",
       "typeSchema": null,
       "notNull": false,
@@ -3472,19 +3433,6 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "llm_switch_token_hash",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "runtimes"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
       "name": "agent_conversation_id",
       "entityType": "columns",
       "schema": "public",
@@ -4370,32 +4318,6 @@
       "generated": null,
       "identity": null,
       "name": "actor_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "workspace_events"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "actor_kind",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "workspace_events"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "on_behalf_of",
       "entityType": "columns",
       "schema": "public",
       "table": "workspace_events"
@@ -5637,41 +5559,6 @@
       "method": "btree",
       "concurrently": false,
       "name": "workspace_events_actor_index",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "workspace_events"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "workspace_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "on_behalf_of",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "created_at",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "workspace_events_on_behalf_of_index",
       "entityType": "indexes",
       "schema": "public",
       "table": "workspace_events"
@@ -7159,13 +7046,6 @@
       "table": "chats"
     },
     {
-      "value": "\"actor_kind\" in ('member', 'agent', 'system', 'integration')",
-      "name": "events_actor_kind",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "events"
-    },
-    {
       "value": "\"email\" = lower(btrim(\"email\"))",
       "name": "invitations_email_normalized",
       "entityType": "checks",
@@ -7178,13 +7058,6 @@
       "entityType": "checks",
       "schema": "public",
       "table": "users"
-    },
-    {
-      "value": "\"actor_kind\" in ('member', 'agent', 'system', 'integration')",
-      "name": "workspace_events_actor_kind",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "workspace_events"
     }
   ],
   "renames": []

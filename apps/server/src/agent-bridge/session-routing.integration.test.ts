@@ -448,7 +448,7 @@ test('a fork sends nothing until the forker’s first prompt, which reaches the 
   const { relay } = await fakeAgent()
   await addLlmKey(bob, 'OpenAI')
   const source = await newRuntimeChat(alice, [{ memberId: bob, roleId: 'reader' }])
-  const posted = (kind: string, body: string) => JSON.stringify({ kind, body, detail: null, replyToId: null })
+  const posted = (kind: string, body: string) => JSON.stringify({ kind, body, replyToId: null })
   await database.$client`
     insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
     values (${acme}, ${source}, ${`message-${crypto.randomUUID()}`}, 1, 'message.posted', ${alice},

@@ -19,7 +19,6 @@ type MessageFields = Readonly<{
   authorId: MemberId | null
   body: MessageBody
   attachments: readonly Attachment[]
-  detail: string | null
   step: StoredStep | null
   createdAt: Date
   editedAt: Date | null
@@ -109,7 +108,6 @@ export const newMessage = (
   quotedMessageId: null,
   attachments: [],
   ...fields,
-  detail: null,
   editedAt: null,
   status: 'live',
 })

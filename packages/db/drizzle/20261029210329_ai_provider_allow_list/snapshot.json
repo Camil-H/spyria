@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "d8b5a164-8b21-4d1d-9cac-1cd7fdf2f554",
-  "prevIds": ["84cdbb99-b318-44f5-a3fe-3691365a6de6"],
+  "id": "ee9f4f2b-6969-4fae-847e-fb6a69049e99",
+  "prevIds": ["dcb46b30-eccd-4583-a7c5-20869c4c2bc0"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -2529,19 +2529,6 @@
       "table": "messages"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "detail",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "messages"
-    },
-    {
       "type": "jsonb",
       "typeSchema": null,
       "notNull": false,
@@ -3460,19 +3447,6 @@
       "generated": null,
       "identity": null,
       "name": "llm_token_hash",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "runtimes"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "llm_switch_token_hash",
       "entityType": "columns",
       "schema": "public",
       "table": "runtimes"

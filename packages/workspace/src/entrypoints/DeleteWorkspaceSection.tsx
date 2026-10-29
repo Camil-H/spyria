@@ -33,13 +33,15 @@ export const DeleteWorkspaceSection = ({ workspaceId }: { workspaceId: Workspace
   })
   return (
     <LabelledSection title="Delete workspace">
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-line bg-raised p-4">
-        <p className="max-w-xl text-sm text-muted">
-          Everyone loses access at once. Seven days later, everything in {workspace.name} is erased for good.
-        </p>
-        <button type="button" className={dangerButtonClass} onClick={() => setIsConfirming(true)}>
-          Delete workspace
-        </button>
+      <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
+        <div className="flex flex-col items-start gap-4 rounded-lg border border-line bg-raised p-4">
+          <p className="text-sm text-muted">
+            Everyone loses access at once. Seven days later, everything in {workspace.name} is erased for good.
+          </p>
+          <button type="button" className={dangerButtonClass} onClick={() => setIsConfirming(true)}>
+            Delete workspace
+          </button>
+        </div>
       </div>
       {isConfirming && (
         <Dialog label="Delete workspace" subject={workspace.name} onClose={close}>

@@ -1,5 +1,5 @@
 import { Toast } from '@spyria/ui'
-import { SignInScreen } from '@spyria/workspace'
+import { SignInScreen, WorkspaceLoadingScreen } from '@spyria/workspace'
 import { createRoot } from 'react-dom/client'
 import { createWorkspaceWithPopup, loadAuthMode, loadSessions, signInWithPopup } from './app/auth.ts'
 import './app/styles.css'
@@ -45,10 +45,8 @@ const domainVerificationToast = (ssoSettingsPath?: string) =>
     </Toast>
   )
 
-const workspaceNotLoaded = {
-  status: 'refused',
-  message: 'You are signed in, but your workspace did not load. Check your connection and sign in again.',
-} as const
+const slowWorkspaceLoadMilliseconds = 10_000
+const sessionEndedNotice = 'Your session ended while your workspace was opening. Sign in again.'
 const sessionMissing = {
   status: 'refused',
   message: 'Sign-in finished without opening your workspace. Try again.',
@@ -60,8 +58,11 @@ const openApp = async () => {
   if (!userId || !defaultSession) return 'signed_out'
   const [{ createApp }, { App }] = await (earlyAppModules ?? appModules())
   rememberSignedIn()
-  const app = await createApp(userId, defaultSession.workspaceId, sessions, deployment)
-  if (!app) return 'not_loaded'
+  const slowLoadTimer = setTimeout(() => root.render(<WorkspaceLoadingScreen />), slowWorkspaceLoadMilliseconds)
+  const app = await createApp(userId, defaultSession.workspaceId, sessions, deployment).finally(() =>
+    clearTimeout(slowLoadTimer),
+  )
+  if (!app) return 'session_ended'
   root.render(
     <>
       <App app={app} />
@@ -75,7 +76,9 @@ const openAppWhenSignedIn = async (result: Awaited<ReturnType<typeof signInWithP
   if (result.status !== 'signed_in') return result
   const opened = await openApp()
   if (opened === 'opened') return result
-  return opened === 'not_loaded' ? workspaceNotLoaded : sessionMissing
+  if (opened !== 'session_ended') return sessionMissing
+  await showSignIn(sessionEndedNotice)
+  return { status: 'refused', message: sessionEndedNotice } as const
 }
 
 const showSignIn = async (notice?: string) => {
@@ -96,4 +99,4 @@ const showSignIn = async (notice?: string) => {
 }
 
 const opened = await openApp()
-if (opened !== 'opened') await showSignIn(opened === 'not_loaded' ? workspaceNotLoaded.message : undefined)
+if (opened !== 'opened') await showSignIn(opened === 'session_ended' ? sessionEndedNotice : undefined)

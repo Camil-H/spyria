@@ -122,7 +122,6 @@ const payloadOf = ({
     ? {
         kind: message.kind,
         body: message.body,
-        detail: message.detail,
         replyToId: message.replyToId,
         ...(message.threadRootId && { threadRootId: message.threadRootId }),
         ...(message.quotedMessageId && { quotedMessageId: message.quotedMessageId }),

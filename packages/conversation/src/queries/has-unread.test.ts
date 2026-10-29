@@ -14,7 +14,6 @@ const messageOf = (seq: number, authorId: MessageRow['authorId']): MessageRow =>
   authorId,
   body: `Message ${seq}`,
   attachments: [],
-  detail: null,
   step: null,
   replyToId: null,
   threadRootId: null,
