@@ -1,4 +1,12 @@
-import type { ChatPermission, ChatVisibility, HarnessId, WorkspacePermission } from '@spyria/kernel'
+import {
+  type ActorKind,
+  type AiProviderAllowList,
+  actorKinds,
+  type ChatPermission,
+  type ChatVisibility,
+  type HarnessId,
+  type WorkspacePermission,
+} from '@spyria/kernel'
 import { sql } from 'drizzle-orm'
 import {
   bigint,
@@ -37,6 +45,10 @@ const chatScoped = { ...tenant, chatId: text().notNull() }
 const tenantReference = (columns: [PgColumn, PgColumn], foreignColumns: [PgColumn, PgColumn]) =>
   foreignKey({ columns, foreignColumns })
 
+const actorColumns = { actorKind: text().$type<ActorKind>(), onBehalfOf: text() }
+const knownActorKind = (name: string, kind: PgColumn) =>
+  check(name, sql`${kind} in (${sql.raw(actorKinds.map((actorKind) => `'${actorKind}'`).join(', '))})`)
+
 const normalizedEmail = (name: string, email: PgColumn) => check(name, sql`${email} = lower(btrim(${email}))`)
 
 export const users = table(
@@ -55,6 +67,7 @@ export const workspaces = table('workspaces', {
     .notNull()
     .references(() => users.id),
   localSessions: boolean().notNull().default(true),
+  aiProviderAllowList: jsonb().$type<AiProviderAllowList>(),
   createdAt: instant().notNull(),
   deletedAt: instant(),
   purgeAt: instant(),
@@ -149,6 +162,7 @@ export const workspaceEvents = table(
     id: text().notNull(),
     type: text().notNull(),
     actorId: text(),
+    ...actorColumns,
     payload: jsonb().notNull(),
     createdAt: instant().notNull(),
   },
@@ -156,6 +170,8 @@ export const workspaceEvents = table(
     primaryKey({ columns: [table.workspaceId, table.id] }),
     index('workspace_events_created_at_index').on(table.workspaceId, table.createdAt),
     index('workspace_events_actor_index').on(table.workspaceId, table.actorId, table.createdAt),
+    index('workspace_events_on_behalf_of_index').on(table.workspaceId, table.onBehalfOf, table.createdAt),
+    knownActorKind('workspace_events_actor_kind', table.actorKind),
   ],
 )
 
@@ -366,6 +382,7 @@ export const events = table(
     seq: integer().notNull(),
     type: text().notNull(),
     actor: text(),
+    ...actorColumns,
     payload: jsonb().notNull(),
     createdAt: instant().notNull(),
   },
@@ -373,6 +390,7 @@ export const events = table(
     primaryKey({ columns: [table.workspaceId, table.id] }),
     unique().on(table.chatId, table.seq),
     chatReference(table),
+    knownActorKind('events_actor_kind', table.actorKind),
     index('events_audit_index')
       .on(table.workspaceId, table.createdAt)
       .where(sql`${table.type} in (${sql.raw(auditedChatEventTypes.map((type) => `'${type}'`).join(', '))})`),

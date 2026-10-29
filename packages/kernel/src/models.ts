@@ -8,6 +8,34 @@ export type ListedModel = Readonly<{
 }>
 export type Model = RoutableModel & Omit<ListedModel, 'id'>
 
+export const aiProviders = [
+  { id: 'anthropic', name: 'Anthropic', aliases: [] },
+  { id: 'openai', name: 'OpenAI', aliases: [] },
+  { id: 'gemini', name: 'Google Gemini', aliases: ['google'] },
+  { id: 'mistral', name: 'Mistral', aliases: [] },
+  { id: 'xai', name: 'xAI', aliases: [] },
+  { id: 'deepseek', name: 'DeepSeek', aliases: [] },
+  { id: 'zai', name: 'Z.ai', aliases: ['z.ai'] },
+  { id: 'openrouter', name: 'OpenRouter', aliases: [] },
+  { id: 'typesafe', name: 'TypeSafe', aliases: [] },
+] as const satisfies readonly { id: string; name: string; aliases: readonly string[] }[]
+export type AiProviderId = (typeof aiProviders)[number]['id']
+export type AiProviderAllowList = readonly string[]
+
+export const aiProviderAllowListFrom = (stored: unknown): AiProviderAllowList | null => {
+  if (Array.isArray(stored)) return stored.filter((provider): provider is string => typeof provider === 'string')
+  return stored !== null && typeof stored === 'object' ? Object.keys(stored) : null
+}
+
+export const aiProviderOf = (text: string) => {
+  const wanted = text.trim().toLowerCase()
+  return aiProviders.find(
+    ({ id, name, aliases }) =>
+      id === wanted || name.toLowerCase() === wanted || (aliases as readonly string[]).includes(wanted),
+  )
+}
+export const aiProviderNameOf = (id: string) => aiProviders.find((provider) => provider.id === id)?.name ?? id
+
 const routableModels: readonly RoutableModel[] = [
   { id: 'anthropic/claude-opus-5-5', name: 'Opus 5.5', tier: 'large' },
   { id: 'openai/gpt-5', name: 'GPT-5', tier: 'large' },
@@ -59,7 +87,21 @@ export const gatewayKeyOf = (ref: string): GatewayKey | undefined => {
 export const providersOfGatewayRefs = (refs: readonly string[]) => [
   ...new Set(refs.flatMap((ref) => gatewayKeyOf(ref)?.provider ?? [])),
 ]
-const providerOf = (id: string) => id.split('/')[0] ?? ''
+export const providerOf = (id: string) => id.split('/')[0] ?? ''
+export const isAllowedProvider = (allowList: AiProviderAllowList | null, provider: string) =>
+  allowList === null || allowList.includes(provider)
+export const isAllowedModel = (allowList: AiProviderAllowList | null, id: string) =>
+  isAllowedProvider(allowList, providerOf(id))
+export const soleRequestedModelOf = (request: unknown) => {
+  if (request === null || typeof request !== 'object' || Array.isArray(request)) return undefined
+  const routingFields = Object.entries(request).filter(([name]) => ['model', 'fallbacks'].includes(name.toLowerCase()))
+  const [field] = routingFields
+  return routingFields.length === 1 && field?.[0] === 'model' && typeof field[1] === 'string' ? field[1] : undefined
+}
+export const allowedModelsOf = <Listed extends { id: string }>(
+  allowList: AiProviderAllowList | null,
+  models: readonly Listed[],
+) => models.filter((model) => isAllowedModel(allowList, model.id))
 export const reachableModelsOf = (providers: readonly string[]): Model[] =>
   routableModels.filter((model) => providers.includes(providerOf(model.id)))
 export const withPricesOf = (models: readonly Model[], listed: readonly ListedModel[]): Model[] =>

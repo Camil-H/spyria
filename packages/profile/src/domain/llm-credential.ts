@@ -1,5 +1,5 @@
-import { type CredentialId, nonBlank } from '@spyria/kernel'
-import { BlankProvider, UnsupportedProvider } from './errors.ts'
+import { type AiProviderAllowList, aiProviderOf, type CredentialId, isAllowedProvider, nonBlank } from '@spyria/kernel'
+import { BlankProvider, ProviderNotAllowed, UnsupportedProvider } from './errors.ts'
 import type { Secret } from './secret.ts'
 
 export const profileJobTypes = {
@@ -14,25 +14,15 @@ export type LlmCredential = Readonly<{
   last4: string
 }>
 
-const gatewayProviders: Record<string, string> = {
-  openai: 'openai',
-  anthropic: 'anthropic',
-  mistral: 'mistral',
-  typesafe: 'typesafe',
-  openrouter: 'openrouter',
-  google: 'gemini',
-  gemini: 'gemini',
-  xai: 'xai',
-  deepseek: 'deepseek',
-  zai: 'zai',
-  'z.ai': 'zai',
+type NewLlmCredential = Omit<LlmCredential, 'last4' | 'gatewayProvider'> & {
+  secret: Secret
+  allowList: AiProviderAllowList | null
 }
 
-type NewLlmCredential = Omit<LlmCredential, 'last4' | 'gatewayProvider'> & { secret: Secret }
-
-export const newLlmCredential = ({ secret, provider, ...fields }: NewLlmCredential): LlmCredential => {
+export const newLlmCredential = ({ secret, provider, allowList, ...fields }: NewLlmCredential): LlmCredential => {
   const trimmedProvider = nonBlank(provider, BlankProvider)
-  const gatewayProvider = gatewayProviders[trimmedProvider.toLowerCase()]
+  const gatewayProvider = aiProviderOf(trimmedProvider)
   if (!gatewayProvider) throw new UnsupportedProvider(trimmedProvider)
-  return { ...fields, provider: trimmedProvider, gatewayProvider, last4: secret.last4() }
+  if (!isAllowedProvider(allowList, gatewayProvider.id)) throw new ProviderNotAllowed(gatewayProvider.name)
+  return { ...fields, provider: trimmedProvider, gatewayProvider: gatewayProvider.id, last4: secret.last4() }
 }

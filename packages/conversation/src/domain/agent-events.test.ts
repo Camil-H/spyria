@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test'
+import { agentActor, chatId } from '@spyria/kernel'
 import {
   type AgentEvent,
   agentNotices,
@@ -161,7 +162,7 @@ const storedEventsOf = (entries: readonly { event: AgentEvent; delegation?: obje
     id: event.id,
     seq: index + 1,
     type: 'agent.event',
-    actor: null,
+    actor: agentActor(chatId('chat-research'), null),
     payload: { replyToId: 'prompt-1', event, ...(delegation && { delegation }) },
     createdAt: new Date(Date.parse('2026-10-12T17:56:00Z') + index * 1000),
   }))

@@ -1,4 +1,5 @@
 import type { ServerTransaction } from '@rocicorp/zero'
+import { actorOf } from '@spyria/kernel'
 import { messagesFromEvents, type ProjectedMessage } from '../domain/message-events.ts'
 
 type EventRow = {
@@ -8,6 +9,8 @@ type EventRow = {
   seq: number
   type: string
   actor: string | null
+  actor_kind: string | null
+  on_behalf_of: string | null
   payload: unknown
   created_at_milliseconds: string
 }
@@ -34,7 +37,7 @@ export const rebuildMessages = async (
   const scope = [workspaceId, chatId]
   await query(`select 1 from chats where ${inScope('id')} order by workspace_id, id for update`, scope)
   const eventRows = (await query(
-    `select workspace_id, chat_id, id, seq, type, actor, payload,
+    `select workspace_id, chat_id, id, seq, type, actor, actor_kind, on_behalf_of, payload,
        extract(epoch from created_at) * 1000 as created_at_milliseconds
      from events where ${inScope('chat_id')} order by workspace_id, chat_id, seq`,
     scope,
@@ -46,7 +49,7 @@ export const rebuildMessages = async (
       id: row.id,
       seq: row.seq,
       type: row.type,
-      actor: row.actor,
+      actor: actorOf({ kind: row.actor_kind, id: row.actor, onBehalfOf: row.on_behalf_of }),
       payload: row.payload,
       createdAt: new Date(Number(row.created_at_milliseconds)),
     })),

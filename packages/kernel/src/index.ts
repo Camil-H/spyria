@@ -1,3 +1,4 @@
+export * from './actors.ts'
 export * from './chat-access.ts'
 export * from './deployment.ts'
 export * from './errors.ts'

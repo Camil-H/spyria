@@ -62,9 +62,17 @@ const insertToolCall = (
   sql`insert into tool_calls (workspace_id, chat_id, id, prompter_id, owner_id, server, tool, read_only, decision, decided_by, status, called_at)
       values (${acme}, 'chat-research', ${id}, ${fields.prompter_id ?? bob}, ${alice}, 'crm', 'update', false,
         ${fields.decision ?? 'approved'}, ${fields.decided_by ?? alice}, 'succeeded', ${at.toISOString()}::timestamptz)`
-const insertChatEvent = (chatId: string, id: string, type: string, actor: string | null, payload: object, at: Date) =>
-  sql`insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
-      select ${acme}, ${chatId}, ${id}, coalesce(max(seq), 0) + 1, ${type}, ${actor}, ${JSON.stringify(payload)}::jsonb, ${at.toISOString()}::timestamptz
+const insertChatEvent = (
+  chatId: string,
+  id: string,
+  type: string,
+  actor: string | null,
+  payload: object,
+  at: Date,
+  actorKind: string | null = null,
+) =>
+  sql`insert into events (workspace_id, chat_id, id, seq, type, actor_kind, actor, payload, created_at)
+      select ${acme}, ${chatId}, ${id}, coalesce(max(seq), 0) + 1, ${type}, ${actorKind}, ${actor}, ${JSON.stringify(payload)}::jsonb, ${at.toISOString()}::timestamptz
       from events where workspace_id = ${acme} and chat_id = ${chatId}`
 const pullRequestStep = (state: string) => ({
   type: 'pull_request',
@@ -129,9 +137,10 @@ test('workspace events, chat events, tool calls, pushes and pull requests merge 
     privateChat,
     'merged',
     'message.step_changed',
-    null,
+    'github',
     { messageId: 'pull-request', step: pullRequestStep('merged') },
     minutesAgo(7),
+    'integration',
   )
   await insertChatEvent(
     privateChat,
@@ -157,8 +166,8 @@ test('workspace events, chat events, tool calls, pushes and pull requests merge 
   expect(entries.map(summaryOf)).toEqual([
     'Bob | Added a member to a chat | Bob private',
     'Alice | Invited a member | nina@example.com',
-    'Bob | Called a tool | CRM · update',
-    'System | Merged a pull request | acme/app#7',
+    "Bob's agent | Called a tool | CRM · update",
+    'GitHub | Merged a pull request | acme/app#7',
     'Bob | Opened a pull request | acme/app#7',
     'Bob | Pushed a branch | Bob private',
   ])
@@ -260,8 +269,12 @@ test('filters by person, grouped type and date range, and the CSV holds the same
   await insertWorkspaceEvent('old-removal', 'member.removed', alice, { memberId: bob }, daysAgo(3))
   await insertToolCall('bobs-call', minutesAgo(3))
   await insertWorkspaceEvent('globex', 'member.invited', alice, { email: 'globex@example.com' }, minutesAgo(2), globex)
+  await sql`insert into workspace_events (workspace_id, id, type, actor_kind, actor_id, on_behalf_of, payload, created_at)
+    values (${acme}, 'purge', 'connection.removed', 'system', 'workspace.purge', ${alice}, '{"name": "CRM"}'::jsonb,
+      ${minutesAgo(1).toISOString()}::timestamptz)`
 
   expect((await auditPageOf({ person: alice })).entries.map(summaryOf)).toEqual([
+    'System, for Alice | Removed a shared connection | CRM',
     'Alice | Configured SSO | https://login.example.com',
     'Alice | Invited a member | nina@example.com',
     'Alice | Removed a member | Bob',
@@ -279,7 +292,10 @@ test('filters by person, grouped type and date range, and the CSV holds the same
     'Alice | Invited a member | nina@example.com',
   ])
   expect((await auditPageOf({ group: 'Tool calls' })).entries.map(summaryOf)).toEqual([
-    'Bob | Called a tool | CRM · update',
+    "Bob's agent | Called a tool | CRM · update",
+  ])
+  expect((await auditPageOf({ person: bob })).entries.map(summaryOf)).toEqual([
+    "Bob's agent | Called a tool | CRM · update",
   ])
   expect((await asMember(alice, 'GET', '/api/audit-log?group=Everything')).status).toBe(400)
 

@@ -6,6 +6,7 @@ export const gatewayKeyRefOf = skippedOnClient
 export const virtualKeyIdOf = skippedOnClient
 export const virtualKeyIdsIn = async () => []
 export const memberModelsOf = skippedOnClient
+export const aiProviderAllowListOf = async () => null
 export const setModelDirectory = skippedOnClient
 export const listedModelsOf = () => []
 export const setVirtualKeyId = skippedOnClient

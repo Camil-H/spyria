@@ -34,8 +34,8 @@ const recordAlertsStatement = `
     from jsonb_to_recordset($3::jsonb) as alert(id text, "memberId" text, threshold int)
     on conflict do nothing
     returning member_id, threshold)
-  insert into workspace_events (workspace_id, id, type, actor_id, payload, created_at)
-  select $1, gen_random_uuid()::text, 'budget.threshold_reached', null,
+  insert into workspace_events (workspace_id, id, type, actor_kind, actor_id, payload, created_at)
+  select $1, gen_random_uuid()::text, 'budget.threshold_reached', 'system', 'budget.alerts',
     jsonb_strip_nulls(jsonb_build_object('memberId', member_id, 'threshold', threshold, 'month', $2::text)), $4::timestamptz
   from inserted`
 
@@ -67,8 +67,8 @@ export const createPostgresBudgetTransactor = (transact: Transact, workspaceId: 
             limitMicros === null ? [memberId] : [memberId, limitMicros],
           )
           await query(
-            `insert into workspace_events (workspace_id, id, type, actor_id, payload, created_at)
-             values ($1, $2, 'budget.changed', $3, $4::jsonb, $5::timestamptz)`,
+            `insert into workspace_events (workspace_id, id, type, actor_kind, actor_id, payload, created_at)
+             values ($1, $2, 'budget.changed', 'member', $3, $4::jsonb, $5::timestamptz)`,
             [
               crypto.randomUUID(),
               actorId,

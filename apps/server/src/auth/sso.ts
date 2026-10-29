@@ -1,10 +1,15 @@
 import { createHash } from 'node:crypto'
 import type { Database } from '@spyria/db/postgres'
 import {
+  type Actor,
   adminRoleId,
   builtInChatRoles,
   builtInWorkspaceRoles,
   MissingWorkspacePermission,
+  memberActor,
+  memberId,
+  storedActorOf,
+  systemActor,
   type WorkspacePermission,
 } from '@spyria/kernel'
 import {
@@ -90,16 +95,13 @@ export const requireMemberPermission = async (
   if (!granted) throw new MissingWorkspacePermission(permission)
 }
 
-export const recordWorkspaceEvent = (
-  sql: Sql,
-  workspaceId: string,
-  type: string,
-  actorId: string | null,
-  payload: object,
-) =>
-  sql`
-    insert into workspace_events (workspace_id, id, type, actor_id, payload, created_at)
-    values (${workspaceId}, ${crypto.randomUUID()}, ${type}, ${actorId}, ${JSON.stringify(payload)}::jsonb, now())`
+export const recordWorkspaceEvent = (sql: Sql, workspaceId: string, type: string, actor: Actor, payload: object) => {
+  const { kind, id, onBehalfOf } = storedActorOf(actor)
+  return sql`
+    insert into workspace_events (workspace_id, id, type, actor_kind, actor_id, on_behalf_of, payload, created_at)
+    values (${workspaceId}, ${crypto.randomUUID()}, ${type}, ${kind}, ${id}, ${onBehalfOf},
+      ${JSON.stringify(payload)}::jsonb, now())`
+}
 
 const checkedSettings = async (input: SsoSettingsInput, { microsoftLoginOrigin, instanceApps }: SsoDependencies) => {
   const clientId = input.usesInstanceApp ? instanceAppFor(instanceApps ?? {}, input.preset).clientId : input.clientId
@@ -169,11 +171,12 @@ const storeSsoSettings = async (
     previous.usesInstanceApp !== usesInstanceApp ||
     (['preset', 'issuer', 'clientId'] as const).some((key) => previous[key] !== settings[key])
   if (isChanged)
-    await recordWorkspaceEvent(sql, workspaceId, 'sso.configured', actorId, {
+    await recordWorkspaceEvent(sql, workspaceId, 'sso.configured', memberActor(memberId(actorId)), {
       ...settings,
       ...(usesInstanceApp && { usesInstanceApp }),
     })
-  if (previous && encryptedClientSecret) await recordWorkspaceEvent(sql, workspaceId, 'sso.secret_rotated', actorId, {})
+  if (previous && encryptedClientSecret)
+    await recordWorkspaceEvent(sql, workspaceId, 'sso.secret_rotated', memberActor(memberId(actorId)), {})
 }
 
 const ssoSettingsViewOf = async (sql: Sql, member: Member): Promise<SsoSettingsView | null> => {
@@ -296,7 +299,10 @@ export const createFirstWorkspace = async (
     await sql`
       insert into memberships (workspace_id, user_id, role, display_name)
       values (${workspaceId}, ${userId}, ${adminRoleId}, ${displayNameFrom({ ...identity, email })})`
-    await recordWorkspaceEvent(sql, workspaceId, 'member.joined', userId, { memberId: userId, role: adminRoleId })
+    await recordWorkspaceEvent(sql, workspaceId, 'member.joined', memberActor(memberId(userId)), {
+      memberId: userId,
+      role: adminRoleId,
+    })
     await storeSsoSettings(sql, {
       workspaceId,
       actorId: userId,
@@ -313,12 +319,7 @@ export const createFirstWorkspace = async (
 
 const markDomainVerified = async (
   sql: Sql,
-  {
-    workspaceId,
-    domain,
-    actorId,
-    email,
-  }: { workspaceId: string; domain: string; actorId: string | null; email?: string },
+  { workspaceId, domain, actor, email }: { workspaceId: string; domain: string; actor: Actor; email?: string },
 ) => {
   const [claim] = await sql<{ issuer: string }[]>`
     select issuer from sso_domains join workspace_sso using (workspace_id)
@@ -328,7 +329,7 @@ const markDomainVerified = async (
   await sql`
     update sso_domains set verified_at = now(), verification_token_hash = null, verification_expires_at = null
     where workspace_id = ${workspaceId} and domain = ${domain}`
-  await recordWorkspaceEvent(sql, workspaceId, 'sso.domain_verified', actorId, { domain, ...(email && { email }) })
+  await recordWorkspaceEvent(sql, workspaceId, 'sso.domain_verified', actor, { domain, ...(email && { email }) })
 }
 
 export const sendDomainVerification = async (
@@ -387,12 +388,12 @@ export const verifyDomainByToken = (database: Database, token: string) =>
       where verification_token_hash = ${hashOf(token)} and verification_expires_at > now() and verified_at is null
       for update`
     if (!pending) return undefined
-    await markDomainVerified(sql, { ...pending, actorId: null })
+    await markDomainVerified(sql, { ...pending, actor: systemActor('sso.verification_link') })
     return pending
   })
 
 export const verifyDomainByOperator = (database: Database, workspaceId: string, domain: string) =>
-  database.$client.begin((sql) => markDomainVerified(sql, { workspaceId, domain, actorId: null }))
+  database.$client.begin((sql) => markDomainVerified(sql, { workspaceId, domain, actor: systemActor('operator') }))
 
 export const assertInstanceAppsConfigured = async (database: Database, instanceApps: InstanceApps) => {
   const missing = (

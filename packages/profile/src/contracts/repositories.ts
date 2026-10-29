@@ -1,4 +1,11 @@
-import type { CredentialId, GatewayKey, MemberId, WorkspaceId, WorkspacePermission } from '@spyria/kernel'
+import type {
+  AiProviderAllowList,
+  CredentialId,
+  GatewayKey,
+  MemberId,
+  WorkspaceId,
+  WorkspacePermission,
+} from '@spyria/kernel'
 import type { LlmCredential } from '../domain/llm-credential.ts'
 import type { Member } from '../domain/member.ts'
 import type { PersonalConnection } from '../domain/personal-connection.ts'
@@ -22,6 +29,11 @@ export type LlmCredentialRepository = {
   remove(credentialId: CredentialId): Promise<GatewayKey | undefined>
   removeAll(): Promise<GatewayKey[]>
   gatewayKeys(): Promise<GatewayKey[]>
+}
+
+export type AiProviderRepository = {
+  allowList(): Promise<AiProviderAllowList | null>
+  setAllowList(allowList: AiProviderAllowList | null): Promise<void>
 }
 
 export type MemberGatewayKeyRepository = {
