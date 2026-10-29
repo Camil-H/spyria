@@ -72,7 +72,9 @@ A member can run Claude Code on their Claude subscription, or Codex on their Cha
 2. Sign in once, in a terminal:
    - Claude Code: `docker exec -it spyria-host spyria-host login claude-code`, open the printed URL, sign in and paste the code.
    - Codex: `docker exec -it spyria-host spyria-host login codex`, open the printed URL and enter the one-time code. ChatGPT may ask you to enable device code sign-in first, in its **Security** settings.
-3. The button turns to "✓ Claude Code connected" (or Codex). In a new runtime chat, set **Runs on** to **Local · Claude Code** or **Local · Codex**.
+3. The button turns to "✓ Claude Code connected" (or Codex) as soon as the sign-in ends. In a new runtime chat, set **Runs on** to **Local · Claude Code** or **Local · Codex**.
+
+The sign-in waits until `spyria-host --personal` has connected to Spyria once ("Waiting for spyria-host to connect to Spyria…"), since Spyria tells it which runtime image to sign in with. If it never connects, the sign-in stops after 15 minutes and points to `docker logs spyria-host`.
 
 The container name follows the deployment name (`<deployment>-host`); the default deployment is `spyria`, so the commands above use `spyria-host`. The commands Spyria shows always carry the right name.
 
