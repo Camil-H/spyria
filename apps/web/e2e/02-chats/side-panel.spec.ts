@@ -104,15 +104,18 @@ test.describe('Side panel', () => {
       await expect(tabPanelOf(page)).toContainText('Invoices')
     })
 
-    await test.step('usage: shows one row per member and a total on a runtime chat', async () => {
+    await test.step('usage: shows one row per member and a total on a runtime chat, and one row per model', async () => {
       await openPanelTab(page, 'Invoice bug', 'Usage')
-      const usageTable = tabPanelOf(page).getByRole('table')
+      const usageTable = tabPanelOf(page).getByRole('table', { name: 'Chat usage' })
       await expect(usageTable.getByRole('row', { name: /Alice/ })).toContainText('12,400')
       await expect(usageTable.getByRole('row', { name: /Alice/ })).toContainText('$0.18')
       await expect(usageTable.getByRole('row', { name: /Bob/ })).toContainText('3,100')
       await expect(usageTable.getByRole('row', { name: /Bob/ })).toContainText('$0.05')
       await expect(usageTable.getByRole('row', { name: /Total/ })).toContainText('15,500')
       await expect(usageTable.getByRole('row', { name: /Total/ })).toContainText('$0.23')
+      const modelTable = tabPanelOf(page).getByRole('table', { name: 'Usage by model' })
+      await expect(modelTable.getByRole('row', { name: /^Sonnet 5.5/ })).toContainText('15,500')
+      await expect(modelTable.getByRole('row', { name: /^Sonnet 5.5/ })).toContainText('$0.23')
     })
 
     await test.step('browser: lists the pages the agent opened in a runtime chat, newest first, by address', async () => {
@@ -172,7 +175,7 @@ test.describe('Side panel', () => {
 
     await test.step('usage: shows zeros for every member on a channel', async () => {
       await openPanelTab(page, 'Welcome', 'Usage')
-      const usageTable = tabPanelOf(page).getByRole('table')
+      const usageTable = tabPanelOf(page).getByRole('table', { name: 'Chat usage' })
       await expect(usageTable.getByRole('row', { name: /Alice/ })).toContainText('$0.00')
       await expect(usageTable.getByRole('row', { name: /Bob/ })).toContainText('$0.00')
       await expect(usageTable.getByRole('row', { name: /Total/ })).toContainText('$0.00')
@@ -213,7 +216,7 @@ test.describe('Side panel', () => {
 
     await test.step('usage: shows zeros for the owner of a chat without data', async () => {
       await openPanelTab(page, 'Research', 'Usage')
-      const usageTable = tabPanelOf(page).getByRole('table')
+      const usageTable = tabPanelOf(page).getByRole('table', { name: 'Chat usage' })
       await expect(usageTable.getByRole('row', { name: /Alice/ })).toContainText('$0.00')
       await expect(usageTable.getByRole('row', { name: /Total/ })).toContainText('$0.00')
     })

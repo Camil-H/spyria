@@ -3,10 +3,12 @@ import {
   addLlmKey,
   delegationsFinished,
   expect,
+  expectModelMetered,
   mainOf,
   messageItemsOf,
   newRuntimeChat,
   openChat,
+  openPanelTab,
   openSession,
   type Page,
   sendMessage,
@@ -35,9 +37,9 @@ test.describe('Delegation', () => {
     await openChat(page, 'Research')
   })
 
-  test('As a prompter, I see a small task delegated to a sub-conversation on the small model, shown as one collapsed group before the answer, which is the sub’s final message', {
+  test('As a prompter, I see a small task delegated to a sub-conversation on the small model, shown as one collapsed group before the answer, which is the sub’s final message, and the chat’s Usage tab meters both models', {
     tag: ['@spec-16', '@smoke'],
-  }, async ({ page, agentScript }) => {
+  }, async ({ page, agentScript, workerStack }) => {
     const answer = 'The subagent listed the files.'
     const work = {
       ...subagentWork,
@@ -57,6 +59,10 @@ test.describe('Delegation', () => {
     await expect(steps).toContainText('$ echo listing')
     await expect(steps).toContainText('$ echo done')
     await expect(messageItemsOf(page).filter({ has: steps })).toContainText('Two files.')
+
+    await openPanelTab(page, 'Research', 'Usage')
+    await expectModelMetered(page, workerStack, 'Mistral Medium')
+    await expectModelMetered(page, workerStack, 'Mistral Small')
   })
 
   test('As a prompter with the policy on Same as main, I see the subagent run on the session model without a routing call', {
