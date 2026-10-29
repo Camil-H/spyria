@@ -87,7 +87,7 @@ const cardSections: readonly { title: string; cards: readonly SettingsCard[] }[]
       {
         path: 'ai-providers',
         title: 'AI providers',
-        description: 'The providers and models members can use',
+        description: 'The model providers members can use',
         permissions: ['providers.manage'],
         Page: AiProvidersSection,
       },
@@ -116,7 +116,7 @@ const cardSections: readonly { title: string; cards: readonly SettingsCard[] }[]
 
 const aiProvidersStatusOf = (workspace: Snapshot['workspaces'][number] | undefined) => {
   const allowList = workspace?.aiProviderAllowList ?? null
-  return allowList === null ? 'Every provider allowed' : countLabelOf(Object.keys(allowList).length, 'allowed provider')
+  return allowList === null ? 'Every provider allowed' : countLabelOf(allowList.length, 'allowed provider')
 }
 
 const countLabelOf = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`

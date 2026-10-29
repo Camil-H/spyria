@@ -151,26 +151,22 @@ test('a provider is found by its id, its name or an alias, and nothing else', ()
   expect(aiProviderOf('fake')).toBeUndefined()
 })
 
-test('without an allow-list every provider and model is allowed; with one, only what it names', () => {
+test('without an allow-list every provider is allowed; with one, only the models of the providers it names', () => {
   expect(isAllowedProvider(null, 'fake')).toBe(true)
   expect(isAllowedModel(null, 'fake/fake-medium')).toBe(true)
-  const allowList = { anthropic: 'all', openai: ['openai/gpt-5'] } as const
+  const allowList = ['anthropic', 'openai']
   expect(isAllowedProvider(allowList, 'openai')).toBe(true)
   expect(isAllowedProvider(allowList, 'mistral')).toBe(false)
   expect(isAllowedModel(allowList, 'anthropic/claude-haiku-5-5')).toBe(true)
-  expect(isAllowedModel(allowList, 'openai/gpt-5')).toBe(true)
-  expect(isAllowedModel(allowList, 'openai/gpt-5-mini')).toBe(false)
+  expect(isAllowedModel(allowList, 'openai/gpt-5-mini')).toBe(true)
   expect(isAllowedModel(allowList, 'mistral/mistral-large-latest')).toBe(false)
-  expect(
-    allowedModelsOf(allowList, [{ id: 'openai/gpt-5' }, { id: 'openai/gpt-5-nano' }, { id: 'anthropic/x' }]),
-  ).toEqual([{ id: 'openai/gpt-5' }, { id: 'anthropic/x' }])
+  expect(allowedModelsOf(allowList, [{ id: 'openai/gpt-5' }, { id: 'mistral/x' }, { id: 'anthropic/x' }])).toEqual([
+    { id: 'openai/gpt-5' },
+    { id: 'anthropic/x' },
+  ])
 })
 
-test('an allow-list ignores names inherited from objects, and only a request naming one plain model is checked', () => {
-  const allowList = { openai: 'all' } as const
-  expect(isAllowedProvider(allowList, 'constructor')).toBe(false)
-  expect(isAllowedModel(allowList, 'constructor/x')).toBe(false)
-  expect(isAllowedModel(allowList, '__proto__/x')).toBe(false)
+test('only a request naming one plain model is checked against the allow-list', () => {
   expect(soleRequestedModelOf({ model: 'openai/gpt-5', messages: [] })).toBe('openai/gpt-5')
   expect(soleRequestedModelOf({ model: 'openai/gpt-5', Model: 'mistral/x' })).toBeUndefined()
   expect(soleRequestedModelOf({ model: 'openai/gpt-5', fallbacks: ['mistral/x'] })).toBeUndefined()
