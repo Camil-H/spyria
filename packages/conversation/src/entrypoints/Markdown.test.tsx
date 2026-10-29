@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { ConversationCommands } from './commands.ts'
 import Markdown from './Markdown.tsx'
-import { ChatMediaContext, ConversationProvider } from './providers.tsx'
+import { ChatMediaContext, ConversationProvider, LoadedRemoteImagesContext } from './providers.tsx'
 
 const render = (text: string) => renderToStaticMarkup(<Markdown text={text} />)
 
@@ -100,4 +100,17 @@ test('in a runtime chat, only the first four images load on their own; later one
   expect(html).toContain('Chart 5')
   expect(html).not.toContain('Loading Chart 5')
   expect(html).not.toContain('Loading Chart 6')
+})
+
+test('a remote image the viewer loaded in this chat shows at once, so a stored reply keeps the click made on its earlier copy', () => {
+  const html = renderToStaticMarkup(
+    <LoadedRemoteImagesContext value={{ sources: new Set(['https://images.example.com/chart.png']), load: () => {} }}>
+      <Markdown
+        text={'![Chart](https://images.example.com/chart.png)\n\n![Logo](https://images.example.com/logo.png)'}
+      />
+    </LoadedRemoteImagesContext>,
+  )
+  expect(html).toContain('<img src="https://images.example.com/chart.png" alt="Chart"')
+  expect(html).not.toContain('logo.png')
+  expect(html).toContain('Load image from images.example.com')
 })

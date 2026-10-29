@@ -157,8 +157,32 @@ test('every message has its event with the same seq', async () => {
     database.select().from(tables.messages).orderBy(tables.messages.id),
     database.select().from(tables.events).orderBy(tables.events.id),
   ])
-  expect(events.map(({ id, chatId, seq, actor }) => ({ id, chatId, seq, authorId: actor }))).toEqual(
-    messages.map(({ id, chatId, seq, authorId }) => ({ id, chatId, seq, authorId })),
+  expect(
+    events
+      .filter(({ type }) => type === 'message.posted')
+      .map(({ id, chatId, seq, actor }) => ({ id, chatId, seq, authorId: actor })),
+  ).toEqual(messages.map(({ id, chatId, seq, authorId }) => ({ id, chatId, seq, authorId })))
+})
+
+test('every chat starts its events with chat.created, before its first message', async () => {
+  const [chats, events] = await Promise.all([
+    database.select().from(tables.chats).orderBy(tables.chats.id),
+    database.select().from(tables.events).orderBy(tables.events.chatId, tables.events.seq),
+  ])
+  const firstEvents = [...Map.groupBy(events, (event) => event.chatId).values()].map(([first]) => first)
+  expect(
+    firstEvents.map(
+      (event) =>
+        event && { chatId: event.chatId, seq: event.seq, type: event.type, actor: event.actor, payload: event.payload },
+    ),
+  ).toEqual(
+    chats.map(({ id, ownerUserId, name, type, projectId }) => ({
+      chatId: id,
+      seq: 1,
+      type: 'chat.created',
+      actor: ownerUserId,
+      payload: { name, type, projectId },
+    })),
   )
 })
 

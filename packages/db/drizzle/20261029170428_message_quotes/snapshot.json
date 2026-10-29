@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "2e238db4-45f0-42ab-84ed-4bf0555a712a",
+  "id": "28432339-3b8e-40a3-b551-247b4287cbc0",
   "prevIds": ["7cb52acf-cb40-483a-9744-f75206ce00b6"],
   "ddl": [
     {
@@ -109,12 +109,6 @@
     {
       "isRlsEnabled": false,
       "name": "llm_credentials",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "machine_counts",
       "entityType": "tables",
       "schema": "public"
     },
@@ -2045,58 +2039,6 @@
       "name": "workspace_id",
       "entityType": "columns",
       "schema": "public",
-      "table": "machine_counts"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "machines",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "machine_counts"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "claude_code",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "machine_counts"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "codex",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "machine_counts"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "workspace_id",
-      "entityType": "columns",
-      "schema": "public",
       "table": "member_gateway_keys"
     },
     {
@@ -2550,6 +2492,19 @@
       "generated": null,
       "identity": null,
       "name": "thread_root_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "messages"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "quoted_message_id",
       "entityType": "columns",
       "schema": "public",
       "table": "messages"
@@ -5195,6 +5150,34 @@
           "opclass": null
         },
         {
+          "value": "quoted_message_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "messages_workspace_id_quoted_message_id_index",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "messages"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        {
+          "value": "workspace_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
           "value": "chat_id",
           "isExpression": false,
           "asc": true,
@@ -5942,19 +5925,6 @@
     },
     {
       "nameExplicit": false,
-      "columns": ["workspace_id"],
-      "schemaTo": "public",
-      "tableTo": "workspaces",
-      "columnsTo": ["workspace_id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "NO ACTION",
-      "name": "machine_counts_workspace_id_workspaces_workspace_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "machine_counts"
-    },
-    {
-      "nameExplicit": false,
       "columns": ["workspace_id", "user_id"],
       "schemaTo": "public",
       "tableTo": "memberships",
@@ -6105,6 +6075,19 @@
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "messages_3vmeRlAcBGif_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "messages"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["workspace_id", "quoted_message_id"],
+      "schemaTo": "public",
+      "tableTo": "messages",
+      "columnsTo": ["workspace_id", "id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "messages_Ol4c5GLLZdnM_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "messages"
@@ -6644,14 +6627,6 @@
       "entityType": "pks",
       "schema": "public",
       "table": "llm_credentials"
-    },
-    {
-      "columns": ["workspace_id"],
-      "nameExplicit": false,
-      "name": "machine_counts_pkey",
-      "entityType": "pks",
-      "schema": "public",
-      "table": "machine_counts"
     },
     {
       "columns": ["workspace_id", "user_id"],

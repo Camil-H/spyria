@@ -1,10 +1,11 @@
 import { CopyButton, focusRing } from '@spyria/ui'
-import { Children, type ReactElement, type ReactNode, useEffect, useState } from 'react'
+import { Children, type ReactElement, type ReactNode, use, useEffect, useState } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { isRuntimeMediaPath } from '../domain/attachments.ts'
 import { mentionSegmentsOf } from '../domain/mentions.ts'
 import { RuntimeMedia } from './Media.tsx'
+import { LoadedRemoteImagesContext } from './providers.tsx'
 
 type MarkdownNode = {
   type: string
@@ -95,13 +96,18 @@ const domainOf = (url: string | undefined) => {
 }
 
 const RemoteImage = ({ src, alt }: { src?: string; alt?: string }) => {
-  const [isLoaded, setIsLoaded] = useState(false)
-  return isLoaded ? (
+  const loadedInChat = use(LoadedRemoteImagesContext)
+  const [isLoadedHere, setIsLoadedHere] = useState(false)
+  const load = () => {
+    setIsLoadedHere(true)
+    if (src) loadedInChat?.load(src)
+  }
+  return isLoadedHere || (src !== undefined && loadedInChat?.sources.has(src)) ? (
     <img src={src} alt={alt} className="max-w-full rounded-md" />
   ) : (
     <button
       type="button"
-      onClick={() => setIsLoaded(true)}
+      onClick={load}
       className={`rounded-md border border-dashed border-line px-2 py-1 text-xs text-muted hover:bg-hover ${focusRing}`}
     >
       Load image from {domainOf(src) || 'this message'}

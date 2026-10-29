@@ -1,8 +1,10 @@
 import { focusRing } from '@spyria/ui'
 import { ArrowDown, ChevronRight } from 'lucide-react'
-import { type Ref, useDeferredValue, useRef, useState } from 'react'
+import { type Ref, use, useDeferredValue, useEffect, useRef, useState } from 'react'
+import { useLocation } from 'react-router'
 import type { Conversation, ConversationItem } from '../queries/get-conversation.ts'
 import { MessageItem } from './MessageItem.tsx'
+import { LinkedMessageContext } from './providers.tsx'
 
 const scrollIntoView = (element: HTMLElement | null) => element?.scrollIntoView({ block: 'end' })
 const isSentByViewer = (item: ConversationItem | undefined) =>
@@ -58,6 +60,17 @@ export const MessageList = ({
   const scrollerRef = useRef<HTMLDivElement>(null)
   const isFollowingNewest = useRef(true)
   const [isAwayFromNewest, setIsAwayFromNewest] = useState(false)
+  const linkedMessageId = use(LinkedMessageContext)
+  const linkOpening = `${useLocation().key}/${linkedMessageId}`
+  const scrolledForLinkOpening = useRef<string | null>(null)
+  useEffect(() => {
+    if (!linkedMessageId || scrolledForLinkOpening.current === linkOpening) return
+    const linked = scrollerRef.current?.querySelector(`[data-message-id="${CSS.escape(linkedMessageId)}"]`)
+    if (!linked) return
+    scrolledForLinkOpening.current = linkOpening
+    isFollowingNewest.current = false
+    linked.scrollIntoView({ block: 'center' })
+  })
   const renderedItems = useDeferredValue(items)
   const shownItems =
     renderedItems === items || renderedItems.length === 0
@@ -105,7 +118,8 @@ export const MessageList = ({
                 <MessageItem
                   key={item.message.id}
                   message={item.message}
-                  hasMenu={conversation.type === 'channel'}
+                  hasMenu={!item.message.isStreamed}
+                  isChannel={conversation.type === 'channel'}
                   onFork={onFork}
                   ref={ref}
                 />

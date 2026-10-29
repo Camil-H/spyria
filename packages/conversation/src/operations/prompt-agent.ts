@@ -22,11 +22,12 @@ import {
   AgentStartFailure,
   type RuntimeReadiness,
 } from '../contracts/agent.ts'
+import type { UnitOfWork } from '../contracts/transactor.ts'
 import { agentNotices, hasOutlivedWait, notReadyNoticeOf } from '../domain/agent-events.ts'
 import { noReplyAuthorOf } from '../domain/git-actions.ts'
 import type { Message } from '../domain/message.ts'
 import { noLlmKeyNoticeOf } from '../domain/model-call-failures.ts'
-import { agentPromptTextOf } from '../domain/seed-message.ts'
+import { agentPromptTextOf, type QuotedMessage } from '../domain/seed-message.ts'
 import {
   piModelOf,
   sessionChoiceOf,
@@ -49,6 +50,13 @@ type Prepared = { conversation: AgentConversation } | { refusal: string }
 type NotReady = Exclude<RuntimeReadiness, { state: 'ready' | 'starting' }>
 
 const runtimeStartPollMilliseconds = 500
+
+const quotedByPrompt = async ({ messages, members }: UnitOfWork, prompt: Message) => {
+  const quoted = prompt.quotedMessageId ? await messages.find(prompt.quotedMessageId) : undefined
+  if (!quoted) return undefined
+  const authorName = quoted.authorId ? await members.displayNameOf(quoted.authorId) : 'Agent'
+  return { ...quoted, authorName } satisfies QuotedMessage
+}
 
 const reachableChatModelsOf = async (
   { transactor, classifier }: Pick<AgentDependencies, 'transactor' | 'classifier'>,
@@ -410,8 +418,11 @@ export const promptAgent = async (
       return transactor.run((unitOfWork) => closeAgentTurn(unitOfWork, chatId, prompt.id, () => prepared.refusal))
     conversation = prepared.conversation
     await eventSockets.ensureOpen(chat, conversation, prompt.id)
-    const seed = await transactor.run(({ messages }) => messages.seedFor(prompt))
-    await agentClient.sendMessage(conversation, agentPromptTextOf(prompt, seed), prompt.id)
+    const { seed, quoted } = await transactor.run(async (unitOfWork) => ({
+      seed: await unitOfWork.messages.seedFor(prompt),
+      quoted: await quotedByPrompt(unitOfWork, prompt),
+    }))
+    await agentClient.sendMessage(conversation, agentPromptTextOf(prompt, seed, quoted), prompt.id)
   } catch (error) {
     if (await runtimes.isWaitingOnHost(chat)) return waitForRuntime({ state: 'host_offline' }, prompt.id)
     if (!(error instanceof AgentStartFailure) && !isLastAttempt) {

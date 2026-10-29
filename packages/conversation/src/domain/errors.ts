@@ -18,6 +18,11 @@ export const NoThreadsInRuntimeChat = errorKind(
   () => 'A runtime chat has no threads',
   ConversationError,
 )
+export const InvalidQuotedMessage = errorKind(
+  'invalid_quoted_message',
+  () => 'A reply quotes a member’s or the agent’s message of this chat that is not deleted',
+  ConversationError,
+)
 export const InvalidThreadRoot = errorKind(
   'invalid_thread_root',
   () => 'A thread starts on a message of this chat that is not a reply and not deleted',
