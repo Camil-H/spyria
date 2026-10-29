@@ -26,7 +26,7 @@ export const SegmentedChoice = <Option extends string>({
     {options.map((option) => (
       <label
         key={option}
-        className="relative flex flex-1 cursor-pointer items-center justify-center rounded-md px-3 py-1 text-sm text-muted hover:bg-hover hover:text-ink has-checked:bg-selected has-checked:font-medium has-checked:text-ink has-disabled:cursor-not-allowed has-disabled:opacity-50 has-disabled:hover:bg-transparent has-disabled:hover:text-muted has-focus-visible:outline-2 has-focus-visible:outline-focus"
+        className="relative flex flex-1 cursor-pointer items-center justify-center rounded-md px-3 py-1 text-center text-sm text-muted hover:bg-hover hover:text-ink has-checked:bg-selected has-checked:font-medium has-checked:text-ink has-disabled:cursor-not-allowed has-disabled:opacity-50 has-disabled:hover:bg-transparent has-disabled:hover:text-muted has-focus-visible:outline-2 has-focus-visible:outline-focus"
       >
         <input
           type="radio"

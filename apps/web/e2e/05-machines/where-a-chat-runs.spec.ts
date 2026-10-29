@@ -143,10 +143,10 @@ test.describe('Where a chat runs', () => {
     tag: ['@spec-24'],
   }, async ({ page, machine }) => {
     await machine(signedInMachine)
-    await test.step('New chat offers only members messaging and an AI chat, even to a member with a machine', async () => {
+    await test.step('New chat offers only Team channel and AI chat, even to a member with a machine', async () => {
       await page.getByRole('button', { name: 'New chat' }).click()
       const dialog = page.getByRole('dialog', { name: 'New chat' })
-      await expect(newChatAnswerOf(dialog, 'audience', 'Members messaging')).toBeVisible()
+      await expect(newChatAnswerOf(dialog, 'audience', 'Team channel')).toBeVisible()
       await expect(newChatAnswerOf(dialog, 'audience', 'AI chat')).toBeVisible()
       await expect(dialog.getByRole('radiogroup', { name: /AI chat\?$/ }).getByRole('radio')).toHaveCount(2)
       await dialog.getByRole('button', { name: 'Cancel' }).click()

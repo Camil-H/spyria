@@ -181,14 +181,14 @@ export const chooseRunsOn = async (page: Page, runsOn: string) => {
 export const newChatDialogOf = (page: Page) => page.getByRole('dialog', { name: 'New chat' })
 const newChatQuestions = {
   isPublic: 'Is it public, so everyone in the workspace can join?',
-  audience: 'Is it for members messaging each other, or an AI chat?',
+  audience: 'Is it a team channel or an AI chat?',
   github: 'Does it need GitHub access?',
 }
 export const newChatAnswerOf = (dialog: Locator, question: keyof typeof newChatQuestions, answer: string) =>
   dialog.getByRole('radiogroup', { name: newChatQuestions[question] }).getByRole('radio', { name: answer, exact: true })
 export const answerNewChannel = async (dialog: Locator, visibility: 'public' | 'private') => {
   await newChatAnswerOf(dialog, 'isPublic', visibility === 'public' ? 'Yes' : 'No').check()
-  await newChatAnswerOf(dialog, 'audience', 'Members messaging').check()
+  await newChatAnswerOf(dialog, 'audience', 'Team channel').check()
 }
 export const answerNewAiChat = async (dialog: Locator, { needsGitHub = false } = {}) => {
   await newChatAnswerOf(dialog, 'isPublic', 'No').check()
