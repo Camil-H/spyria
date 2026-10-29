@@ -56,6 +56,11 @@ export const rebuildMessages = async (
     [...scope, messages.map((message) => `${message.workspaceId}/${message.id}`)],
   )
   await query(
+    `update messages set seq = -seq
+     where ${inScope('chat_id')} and not (workspace_id || '/' || id || '/' || seq = any($3::text[]))`,
+    [...scope, messages.map((message) => `${message.workspaceId}/${message.id}/${message.seq}`)],
+  )
+  await query(
     `insert into messages select * from jsonb_populate_recordset(null::messages, $1::jsonb)
      on conflict (workspace_id, id) do update set (${updatedColumns}) =
        row(${updatedColumns.replaceAll(/\w+/g, (column) => `excluded.${column}`)})`,

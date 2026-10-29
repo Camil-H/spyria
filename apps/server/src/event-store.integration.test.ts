@@ -164,6 +164,17 @@ describe('the history written by the rebuild test, then drifted', () => {
     await rebuild()
     expect(await allMessages()).toEqual(live)
   })
+
+  test('rebuilding repairs two messages of one chat whose seqs were swapped', async () => {
+    const live = await allMessages()
+    const seqOf = (id: string) => live.find((message) => message.id === id)?.seq ?? 0
+    const [firstSeq, replySeq] = [seqOf('message-history-1'), seqOf('message-history-reply')]
+    await database.$client`update messages set seq = -1 where id = 'message-history-1'`
+    await database.$client`update messages set seq = ${firstSeq} where id = 'message-history-reply'`
+    await database.$client`update messages set seq = ${replySeq} where id = 'message-history-1'`
+    await rebuild({ chatId: 'chat-standup' })
+    expect(await allMessages()).toEqual(live)
+  })
 })
 
 test('concurrent senders, and concurrent messages and chat changes, get unique gap-free seqs per chat', async () => {
