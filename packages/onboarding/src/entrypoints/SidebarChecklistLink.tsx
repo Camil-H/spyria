@@ -48,7 +48,7 @@ export const SidebarChecklistLink = ({
       to={target}
       aria-label={label}
       aria-describedby={nextText && nextTaskId}
-      className={`flex flex-col gap-0.5 rounded-md border border-accent/40 bg-accent/10 px-2 py-1.5 text-sm hover:bg-accent/20 ${focusRing}`}
+      className={`flex flex-col gap-0.5 rounded-md border border-callout-edge bg-callout px-2 py-1.5 text-sm hover:bg-callout-hover ${focusRing}`}
     >
       <span className="flex items-center gap-2 font-medium">
         <ListChecks aria-hidden className="size-4" />
