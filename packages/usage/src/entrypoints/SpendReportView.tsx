@@ -8,15 +8,17 @@ import {
   type SpendPeriod,
   type SpendReport,
   type SpendRow,
+  type SpendTrendPoint,
+  spendFactorNames,
   spendGranularities,
   spendPeriods,
 } from '../domain/spend.ts'
-import { formatChange, formatFactor } from './format.ts'
+import { formatBucket, formatChange, formatFactor } from './format.ts'
 import { UsageTable } from './UsageTable.tsx'
 
 const SpendChart = lazy(() => import('./SpendChart.tsx').then(({ SpendChart }) => ({ default: SpendChart })))
 
-type Search = { period: SpendPeriod; from: string; to: string; granularity: SpendGranularity }
+type Search = { period: SpendPeriod; from: string; to: string; granularity: SpendGranularity; scope: string }
 
 const periodLabels: Record<SpendPeriod, string> = {
   this_month: 'This month',
@@ -47,8 +49,14 @@ const personalFormula = workspaceFormula.replace('users × sessions per user', '
 const cellClass = 'px-2 py-1.5 text-right'
 const today = () => new Date().toISOString().slice(0, 10)
 
-const searchOf = ({ period, from, to, granularity }: Search): Record<string, string> =>
-  period === 'custom' ? { period, from, to, granularity } : { period, granularity }
+const scopeSearchOf = (scope: string): Record<string, string> => {
+  const separator = scope.indexOf(':')
+  return separator < 0 ? {} : { scope: scope.slice(0, separator), scopeKey: scope.slice(separator + 1) }
+}
+const searchOf = ({ period, from, to, granularity, scope }: Search): Record<string, string> => ({
+  ...(period === 'custom' ? { period, from, to, granularity } : { period, granularity }),
+  ...scopeSearchOf(scope),
+})
 
 const usageRowsOf = (rows: readonly SpendRow[]) => rows.map((row) => ({ ...row, calls: row.requests }))
 
@@ -157,6 +165,100 @@ const MergedPulls = ({ mergedPulls }: { mergedPulls: NonNullable<SpendReport['me
   </LabelledSection>
 )
 
+const ScopePicker = ({
+  tables,
+  dimensions,
+  isPersonal,
+  value,
+  onChange,
+}: {
+  tables: SpendReport['tables']
+  dimensions: readonly SpendDimension[]
+  isPersonal: boolean
+  value: string
+  onChange: (scope: string) => void
+}) => (
+  <label className={labelClass}>
+    For
+    <select className={fieldClass} value={value} onChange={(event) => onChange(event.target.value)}>
+      <option value="">{isPersonal ? 'All my usage' : 'Whole workspace'}</option>
+      {dimensions.map((dimension) => (
+        <optgroup key={dimension} label={dimensionLabels[dimension]}>
+          {(tables[dimension] ?? []).map((row) => (
+            <option key={row.key} value={`${dimension}:${row.key}`}>
+              {row.name}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+    </select>
+  </label>
+)
+
+export const SpendTrend = ({
+  trend,
+  granularity,
+  isPersonal,
+}: {
+  trend: readonly SpendTrendPoint[]
+  granularity: SpendGranularity
+  isPersonal: boolean
+}) => {
+  const factorLabels = isPersonal ? personalFactorLabels : workspaceFactorLabels
+  const shownFactorNames = spendFactorNames.filter((name) => !isPersonal || name !== 'users')
+  return (
+    <LabelledSection title="Spend factors over time" Heading="h3" titleClass="font-medium">
+      <p className="text-sm text-muted">
+        Each {granularityLabels[granularity].toLowerCase()} against the one before, with the factor that moved spend the
+        most
+      </p>
+      <div className="overflow-x-auto">
+        <table aria-label="Spend factors over time" className="w-full text-sm">
+          <thead className="text-xs text-muted">
+            <tr>
+              {['Period', 'Spend', ...shownFactorNames.map((name) => factorLabels[name]), 'Biggest mover'].map(
+                (title, index) => (
+                  <th
+                    key={title}
+                    scope="col"
+                    className={`${index === 0 ? 'px-2 py-1.5 text-left' : cellClass} font-medium`}
+                  >
+                    {title}
+                  </th>
+                ),
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {trend.map((point) => {
+              const mover = point.factors.find((factor) => factor.name === point.biggestMover)
+              return (
+                <tr key={point.bucket} className="border-t border-line">
+                  <th scope="row" className="px-2 py-1.5 text-left font-normal whitespace-nowrap">
+                    {formatBucket(point.bucket, granularity)}
+                  </th>
+                  <td className={cellClass}>{formatCost(point.current.costMicros)}</td>
+                  {shownFactorNames.map((name) => (
+                    <td
+                      key={name}
+                      className={`${cellClass} ${name === point.biggestMover ? 'bg-selected font-semibold' : ''}`}
+                    >
+                      {formatFactor(name, point.factors.find((factor) => factor.name === name)?.current ?? null)}
+                    </td>
+                  ))}
+                  <td className={`${cellClass} whitespace-nowrap`}>
+                    {mover ? `${factorLabels[mover.name]} ${formatChange(mover.change)}` : '—'}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </LabelledSection>
+  )
+}
+
 export const SpendReportView = ({
   title,
   workspaceId,
@@ -179,6 +281,7 @@ export const SpendReportView = ({
     from: `${today().slice(0, 7)}-01`,
     to: today(),
     granularity: 'day',
+    scope: '',
   })
   const [stack, setStack] = useState(chartDimensions[0] ?? 'model')
   const [report, setReport] = useState<SpendReport | null>(null)
@@ -207,7 +310,7 @@ export const SpendReportView = ({
           <select
             className={fieldClass}
             value={search.period}
-            onChange={(event) => setSearch({ ...search, period: event.target.value as SpendPeriod })}
+            onChange={(event) => setSearch({ ...search, period: event.target.value as SpendPeriod, scope: '' })}
           >
             {spendPeriods.map((period) => (
               <option key={period} value={period}>
@@ -224,7 +327,9 @@ export const SpendReportView = ({
                 type="date"
                 className={fieldClass}
                 value={search[bound]}
-                onChange={(event) => event.target.value && setSearch({ ...search, [bound]: event.target.value })}
+                onChange={(event) =>
+                  event.target.value && setSearch({ ...search, [bound]: event.target.value, scope: '' })
+                }
               />
             </label>
           ))}
@@ -280,7 +385,15 @@ export const SpendReportView = ({
               ))}
             </>
           )}
+          <ScopePicker
+            tables={report.tables}
+            dimensions={tableDimensions}
+            isPersonal={isPersonal}
+            value={search.scope}
+            onChange={(scope) => setSearch({ ...search, scope })}
+          />
           <Decomposition decomposition={report.decomposition} isPersonal={isPersonal} />
+          <SpendTrend trend={report.trend} granularity={report.granularity} isPersonal={isPersonal} />
           {report.mergedPulls && <MergedPulls mergedPulls={report.mergedPulls} />}
         </>
       )}

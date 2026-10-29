@@ -9,6 +9,7 @@ import {
   spendChartOf,
   spendFilterFrom,
   spendRowsOf,
+  spendTrendOf,
 } from './spend.ts'
 
 const now = new Date('2026-10-18T15:30:00Z')
@@ -83,6 +84,18 @@ test.each([
     current: rangeOf(`${from}T00:00:00Z`, `${to}T00:00:00Z`),
     previous: rangeOf(`${previousFrom}T00:00:00Z`, `${previousTo}T00:00:00Z`),
     granularity: 'day',
+    scope: null,
+  })
+})
+
+test('a scope narrows the filter to one member, project, chat or model, keys kept as given', () => {
+  expect(spendFilterFrom({ scope: 'model', scopeKey: 'openai/gpt-5' }, now).scope).toEqual({
+    dimension: 'model',
+    key: 'openai/gpt-5',
+  })
+  expect(spendFilterFrom({ scope: 'project', scopeKey: 'none' }, now).scope).toEqual({
+    dimension: 'project',
+    key: 'none',
   })
 })
 
@@ -100,6 +113,9 @@ test.each([
   { period: 'custom', from: '2026-10-05', to: 'soon' },
   { period: 'custom', from: '2026-10-05', to: '2026-10-04' },
   { period: 'custom', from: '2025-01-01', to: '2026-10-04' },
+  { scope: 'team', scopeKey: 'team-1' },
+  { scope: 'chat' },
+  { scopeKey: 'chat-research' },
 ])('the filter %p is refused', (query) => {
   expect(() => spendFilterFrom(query, now)).toThrow('The spend filter is not valid')
 })
@@ -214,4 +230,31 @@ test('cost per merged PR counts a chat once and has no value without merged PRs'
     ]),
   ).toMatchObject({ costMicros: 90_000, perPullMicros: 30_000 })
   expect(mergedPullsCostOf([])).toEqual({ pulls: [], costMicros: 0, perPullMicros: null })
+})
+
+test('the trend gives each bucket its factors against the bucket before, the first and empty ones without a mover', () => {
+  const trend = spendTrendOf(
+    ['2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04'],
+    [
+      { bucket: '2026-10-01', ...counts() },
+      {
+        bucket: '2026-10-02',
+        ...counts({ users: 6, sessions: 6, turns: 8, requests: 16, tokens: 8000, costMicros: 80_000 }),
+      },
+      { bucket: '2026-10-04', ...counts({ tokens: 8000, costMicros: 80_000 }) },
+    ],
+  )
+  expect(trend.map(({ bucket, biggestMover, current }) => [bucket, biggestMover, current.costMicros])).toEqual([
+    ['2026-10-01', null, 40_000],
+    ['2026-10-02', 'users', 80_000],
+    ['2026-10-03', null, 0],
+    ['2026-10-04', null, 80_000],
+  ])
+  expect(trend[1]?.factors.find((factor) => factor.name === 'users')).toEqual({
+    name: 'users',
+    current: 6,
+    previous: 3,
+    change: 1,
+  })
+  expect(trend[0]?.factors.every((factor) => factor.change === null)).toBe(true)
 })
