@@ -87,7 +87,7 @@ const ChangesTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
       {isRead && changeGroups.length === 0 && (
         <EmptyState Icon={FileDiff} title="No changes" hint="Edits on the working branch against its base show here." />
       )}
-      {changeGroups.map(({ sha, title, changes, isCut }) => (
+      {changeGroups.map(({ sha, title, commit, changes, isCut }) => (
         <section
           key={sha ?? title}
           aria-label={sha ? `Commit ${sha}` : title || undefined}
@@ -98,6 +98,14 @@ const ChangesTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
               {sha && <span className="font-mono font-normal">{sha} </span>}
               {title}
             </h3>
+          )}
+          {commit && (
+            <div className="-mt-1.5 flex flex-col gap-1 text-xs text-muted">
+              <span>
+                {commit.author} · {commit.committedAt.slice(11, 16)} UTC
+              </span>
+              {commit.body && <p className="whitespace-pre-wrap break-words text-ink">{commit.body}</p>}
+            </div>
           )}
           <FileDiffList
             changes={changes}

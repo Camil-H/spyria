@@ -12,7 +12,7 @@ export type FileStatus = 'Added' | 'Modified' | 'Deleted'
 export type FileChange = { path: string; status: FileStatus; additions: number; deletions: number; lines: DiffLine[] }
 export type TreeEntry = { name: string; path: string; isFolder: boolean }
 export type Commit = { sha: string; subject: string; author: string; committedAt: string; body: string }
-export type ChangeGroup = { sha?: string; title: string; changes: FileChange[]; isCut: boolean }
+export type ChangeGroup = { sha?: string; title: string; commit?: Commit; changes: FileChange[]; isCut: boolean }
 export type BranchStatus = {
   aheadOfBase?: number
   behindBase?: number
@@ -115,16 +115,16 @@ const isPartCut = (reading: WorkspaceReading | undefined, part: string) =>
   Array.isArray(reading?.cut) ? reading.cut.includes(part) : reading?.truncated === true
 
 const commitGroupsOf = (commits: WorkspaceReading) => {
-  const subjects = new Map(commitsOf(commits.log).map(({ sha, subject }) => [sha, subject]))
+  const commitsBySha = new Map(commitsOf(commits.log).map((commit) => [commit.sha, commit]))
   const groups = String(commits.commitPatches)
     .split('\0')
     .flatMap((record): ChangeGroup[] => {
       const [fullSha = '', ...patch] = record.split('\n')
       if (!fullShaPattern.test(fullSha)) return []
       const sha = fullSha.slice(0, 7)
-      return [
-        { sha, title: subjects.get(sha) ?? '', changes: fileChangesOf(patch.join('\n').trimStart()), isCut: false },
-      ]
+      const commit = commitsBySha.get(sha)
+      const changes = fileChangesOf(patch.join('\n').trimStart())
+      return [{ sha, title: commit?.subject ?? '', commit, changes, isCut: false }]
     })
   const oldest = groups.at(-1)
   if (oldest) oldest.isCut = isPartCut(commits, 'commitPatches')
