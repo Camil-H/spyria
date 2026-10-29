@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test'
 import { memberId } from '@spyria/kernel'
 import {
+  type AuditRecord,
   auditCsvHeader,
   auditCsvLinesOf,
   auditEntryOf,
@@ -10,12 +11,14 @@ import {
   retentionDaysFrom,
 } from './audit.ts'
 
-const record = {
+const record: AuditRecord = {
   key: 't:call-1',
   at: '2026-10-18T10:00:00.123456Z',
   kind: 'tool.called',
+  actorKind: 'member',
   actorId: 'member-bob',
   actorName: 'Bob',
+  onBehalfOfName: null,
   target: 'crm · update',
   details: { server: 'crm', readOnly: false, decision: 'approved', decidedBy: 'Alice', allowedTools: [] },
 }
@@ -36,11 +39,29 @@ test('a record reads in plain words with labelled details, and a missing actor i
       { label: 'Allowed tools', value: 'None' },
     ],
   })
-  expect(auditEntryOf({ ...record, actorId: null, actorName: null }).person).toBe('System')
+  expect(auditEntryOf({ ...record, actorKind: null, actorId: null, actorName: null }).person).toBe('System')
   expect(
     auditEntryOf({ ...record, kind: 'audit.retention_changed', target: null, details: { retentionDays: 30 } }),
   ).toMatchObject({ action: 'Changed how long audit records are kept', target: '30 days' })
   expect(auditEntryOf({ ...record, kind: 'audit.retention_changed', target: null, details: {} }).target).toBe('Forever')
+})
+
+test('an agent, a job and an integration read as such, naming the member they act for', () => {
+  const personOf = (actor: Pick<AuditRecord, 'actorKind' | 'actorId' | 'actorName' | 'onBehalfOfName'>) =>
+    auditEntryOf({ ...record, ...actor }).person
+  expect(personOf({ actorKind: 'agent', actorId: 'chat-1', actorName: null, onBehalfOfName: 'Bob' })).toBe(
+    "Bob's agent",
+  )
+  expect(personOf({ actorKind: 'agent', actorId: 'chat-1', actorName: null, onBehalfOfName: null })).toBe('An agent')
+  expect(personOf({ actorKind: 'system', actorId: 'workspace.purge', actorName: null, onBehalfOfName: 'Bob' })).toBe(
+    'System, for Bob',
+  )
+  expect(personOf({ actorKind: 'system', actorId: 'budget.alerts', actorName: null, onBehalfOfName: null })).toBe(
+    'System',
+  )
+  expect(personOf({ actorKind: 'integration', actorId: 'github', actorName: null, onBehalfOfName: null })).toBe(
+    'GitHub',
+  )
 })
 
 test('a deleted message reads as such with its chat and its text, and pages on from its key', () => {

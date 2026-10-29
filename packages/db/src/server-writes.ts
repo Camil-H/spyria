@@ -1,6 +1,16 @@
 import { context, propagation } from '@opentelemetry/api'
 import type { ServerTransaction, Transaction } from '@rocicorp/zero'
-import { type HarnessId, type ListedModel, providersOfGatewayRefs, reachableModelsOf } from '@spyria/kernel'
+import {
+  type Actor,
+  actorOf,
+  type HarnessId,
+  type ListedModel,
+  memberActor,
+  memberId,
+  providersOfGatewayRefs,
+  reachableModelsOf,
+  storedActorOf,
+} from '@spyria/kernel'
 
 const onServer = async <Row = unknown>(tx: Transaction, statement: string, parameters: unknown[]) =>
   (tx.location === 'server' ? [...(await tx.dbTransaction.query(statement, parameters))] : []) as Row[]
@@ -95,20 +105,25 @@ export const deleteGitHubConnection = (tx: Transaction, workspaceId: string, use
 
 export const appendWorkspaceEvent = (
   tx: Transaction,
-  event: { workspaceId: string; type: string; actorId: string; payload: object },
-) =>
-  onServer(
+  event: { workspaceId: string; type: string; actor: Actor; payload: object },
+) => {
+  const actor = storedActorOf(event.actor)
+  return onServer(
     tx,
-    'insert into workspace_events (workspace_id, id, type, actor_id, payload, created_at) values ($1, $2, $3, $4, $5::jsonb, $6::timestamptz)',
+    `insert into workspace_events (workspace_id, id, type, actor_kind, actor_id, on_behalf_of, payload, created_at)
+     values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::timestamptz)`,
     [
       event.workspaceId,
       crypto.randomUUID(),
       event.type,
-      event.actorId,
+      actor.kind,
+      actor.id,
+      actor.onBehalfOf,
       JSON.stringify(event.payload),
       new Date().toISOString(),
     ],
   )
+}
 
 export const copyWorkspaceSignIn = async (
   tx: Transaction,
@@ -133,7 +148,7 @@ export const copyWorkspaceSignIn = async (
   await appendWorkspaceEvent(tx, {
     workspaceId: toWorkspaceId,
     type: 'sso.configured',
-    actorId: userId,
+    actor: memberActor(memberId(userId)),
     payload: { ...provider, domain: copied?.domain },
   })
 }
@@ -466,16 +481,23 @@ export const chatEventsOf = async (tx: Transaction, workspaceId: string, chatId:
       seq: number
       type: string
       actor: string | null
+      actorKind: string | null
+      onBehalfOf: string | null
       payload: unknown
       createdAtMilliseconds: string
     }>(
       tx,
-      `select workspace_id as "workspaceId", chat_id as "chatId", id, seq, type, actor, payload,
+      `select workspace_id as "workspaceId", chat_id as "chatId", id, seq, type, actor, actor_kind as "actorKind",
+         on_behalf_of as "onBehalfOf", payload,
          extract(epoch from created_at) * 1000 as "createdAtMilliseconds"
        from events where workspace_id = $1 and chat_id = $2 order by seq`,
       [workspaceId, chatId],
     )
-  ).map(({ createdAtMilliseconds, ...event }) => ({ ...event, createdAt: new Date(Number(createdAtMilliseconds)) }))
+  ).map(({ createdAtMilliseconds, actor, actorKind, onBehalfOf, ...event }) => ({
+    ...event,
+    actor: actorOf({ kind: actorKind, id: actor, onBehalfOf }),
+    createdAt: new Date(Number(createdAtMilliseconds)),
+  }))
 
 export const openTaskStepsOf = <Step>(tx: Transaction, workspaceId: string, promptId: string) =>
   onServer<{ id: string; step: Step }>(
@@ -546,7 +568,7 @@ type ChatEvent = {
   workspaceId: string
   chatId: string
   type: string
-  actor: string | null
+  actor: Actor
   payload: object
   createdAt: Date
   id?: string
@@ -561,9 +583,10 @@ export const appendChatEvent = async (tx: ServerTransaction, { workspaceId, chat
     chatId,
   ])
   if (lockedChats.length === 0) throw new Error(`Chat ${chatId} was not found`)
+  const actor = storedActorOf(event.actor)
   const [appended] = await query(
-    `insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
-     select $1, $2, $3::text, coalesce(max(seq), 0) + 1, $4::text, $5::text, $6::jsonb, $7::timestamptz
+    `insert into events (workspace_id, chat_id, id, seq, type, actor_kind, actor, on_behalf_of, payload, created_at)
+     select $1, $2, $3::text, coalesce(max(seq), 0) + 1, $4::text, $5::text, $6::text, $7::text, $8::jsonb, $9::timestamptz
      from events where workspace_id = $1 and chat_id = $2
      returning seq`,
     [
@@ -571,7 +594,9 @@ export const appendChatEvent = async (tx: ServerTransaction, { workspaceId, chat
       chatId,
       event.id ?? crypto.randomUUID(),
       event.type,
-      event.actor,
+      actor.kind,
+      actor.id,
+      actor.onBehalfOf,
       JSON.stringify(event.payload),
       event.createdAt.toISOString(),
     ],

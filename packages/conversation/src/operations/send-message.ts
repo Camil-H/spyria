@@ -1,4 +1,11 @@
-import { type ChatId, type MemberId, type MessageId, messageId, requireChatPermission } from '@spyria/kernel'
+import {
+  type ChatId,
+  type MemberId,
+  type MessageId,
+  memberActor,
+  messageId,
+  requireChatPermission,
+} from '@spyria/kernel'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { type Attachment, maximumAttachmentsPerMessage } from '../domain/attachments.ts'
 import { AttachmentNotFound, NoLlmKey, RunsOnNotChosen, TooManyAttachments } from '../domain/errors.ts'
@@ -52,7 +59,7 @@ export const sendMessage = (
       quotedMessageId: quoted,
     })
     if (chat.visibility === 'public') await unitOfWork.chats.join(chatId, authorId)
-    await unitOfWork.messages.record({ type: 'message.posted', actorId: authorId, message })
+    await unitOfWork.messages.record({ type: 'message.posted', actor: memberActor(authorId), message })
     await unitOfWork.attachments.link(message.id, claimed)
     if (chat.localSession && authorId !== chat.ownerId)
       await appendNotice(unitOfWork, message, localSessionNotices.ownerOnly)

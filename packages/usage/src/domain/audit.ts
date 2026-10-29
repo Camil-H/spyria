@@ -1,4 +1,4 @@
-import type { MemberId } from '@spyria/kernel'
+import type { ActorKind, Integration, MemberId } from '@spyria/kernel'
 import { InvalidAuditFilter, InvalidRetention } from './errors.ts'
 
 export const auditKindsByGroup = {
@@ -88,8 +88,10 @@ export type AuditRecord = {
   key: string
   at: string
   kind: string
+  actorKind: ActorKind | null
   actorId: string | null
   actorName: string | null
+  onBehalfOfName: string | null
   target: string | null
   details: Readonly<Record<string, unknown>>
 }
@@ -134,11 +136,20 @@ const valueTextOf = (value: unknown): string => {
 export const retentionLabelOf = (retentionDays: number | null) =>
   retentionDays === null ? 'Forever' : `${retentionDays} day${retentionDays === 1 ? '' : 's'}`
 
+const integrationNames: Record<Integration, string> = { github: 'GitHub' }
+
+const personOf = ({ actorKind, actorId, actorName, onBehalfOfName }: AuditRecord) => {
+  if (actorKind === 'agent') return onBehalfOfName ? `${onBehalfOfName}'s agent` : 'An agent'
+  if (actorKind === 'integration') return integrationNames[actorId as Integration] ?? 'An integration'
+  if (actorKind === 'system' || !actorName) return onBehalfOfName ? `System, for ${onBehalfOfName}` : 'System'
+  return actorName
+}
+
 export const auditEntryOf = (record: AuditRecord): AuditEntry => ({
   key: record.key,
   at: record.at,
   actorId: record.actorId,
-  person: record.actorName ?? 'System',
+  person: personOf(record),
   action: actionByKind[record.kind] ?? record.kind,
   target:
     record.kind === 'audit.retention_changed'

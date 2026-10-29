@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test'
+import { actorOf } from '@spyria/kernel'
 import { messagesFromEvents, type StoredEvent } from './message-events.ts'
 
 const minute = (value: number) => new Date(Date.UTC(2026, 9, 1, 9, value))
@@ -14,7 +15,7 @@ const eventAt = (
   id,
   seq,
   type,
-  actor,
+  actor: actorOf({ kind: null, id: actor, onBehalfOf: null }),
   payload,
   createdAt: minute(seq),
 })

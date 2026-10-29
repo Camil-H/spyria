@@ -1,4 +1,4 @@
-import { type MemberId, type MessageId, requireChatPermission } from '@spyria/kernel'
+import { type MemberId, type MessageId, memberActor, requireChatPermission } from '@spyria/kernel'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { deletedMessage } from '../domain/message.ts'
 
@@ -11,7 +11,7 @@ export const deleteMessage = ({ transactor }: Dependencies, { messageId, deleter
     await requireChatPermission(unitOfWork.chats, message.chatId, deleterId, 'chat.post')
     await unitOfWork.messages.record({
       type: 'message.deleted',
-      actorId: deleterId,
+      actor: memberActor(deleterId),
       message: deletedMessage(message, deleterId, new Date()),
     })
     await unitOfWork.attachments.discard(messageId)

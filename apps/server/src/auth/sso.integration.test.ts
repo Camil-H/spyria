@@ -383,9 +383,13 @@ test('a domain verifies through a single-use emailed link; until then it does no
   })
   expect(await openLink(link)).toEqual(invalidLinkRedirect)
   const verifiedEvent = (await workspaceEventsOf(database)).at(-1)
-  expect(verifiedEvent?.actorId).toBeNull()
+  expect([
+    ...(await database.$client`select actor_kind as "actorKind", on_behalf_of as "onBehalfOf" from workspace_events
+      where workspace_id = ${acme} and type = 'sso.domain_verified'`),
+  ]).toEqual([{ actorKind: 'system', onBehalfOf: null }])
   expect(verifiedEvent).toMatchObject({
     type: 'sso.domain_verified',
+    actorId: 'sso.verification_link',
     payload: { domain: 'example.com', email: 'it@example.com' },
   })
   expect(JSON.parse((await readSso(acme)).body).settings.domainState).toEqual({

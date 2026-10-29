@@ -42,6 +42,7 @@ import {
   zql,
 } from '@spyria/db/zero-queries'
 import {
+  agentActor,
   type ChatId,
   ChatNotFound,
   type ChatPermission,
@@ -50,6 +51,7 @@ import {
   type HarnessId,
   type MemberId,
   type MessageId,
+  memberActor,
   memberId,
   messageId,
   type WorkspaceId,
@@ -141,7 +143,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       workspaceId: message.workspaceId,
       chatId: message.chatId,
       type: change.type,
-      actor: change.actorId,
+      actor: change.actor,
       payload: payloadOf(change),
       createdAt:
         change.type === 'message.step_changed'
@@ -171,7 +173,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         workspaceId: contextWorkspaceId,
         chatId: id,
         type,
-        actor: actorId,
+        actor: memberActor(actorId),
         payload: { memberId: member, ...(roleId !== null && { roleId }) },
         createdAt: new Date(),
       })
@@ -210,7 +212,11 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         const seq = await appendEvent(change)
         if (isPosted(change.type)) await tx.mutate.messages.insert({ ...row, seq })
         else await tx.mutate.messages.update(row)
-        if (change.type === 'message.deleted' && change.message.status === 'deleted' && change.actorId) {
+        if (
+          change.type === 'message.deleted' &&
+          change.message.status === 'deleted' &&
+          change.actor.kind === 'member'
+        ) {
           const deleted = {
             workspaceId: contextWorkspaceId,
             chatId: change.message.chatId,
@@ -219,7 +225,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
           await keepDeletedMessageText(tx, {
             ...deleted,
             body: change.message.body,
-            deletedBy: change.actorId,
+            deletedBy: change.actor.id,
             deletedAt: change.message.deletedAt,
           })
           await redactDeletedMessageEvents(tx, deleted)
@@ -401,12 +407,13 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
           event,
           ...(delegation && { delegation }),
         }
+        const prompter = replyToId && (await messageRow(replyToId))?.authorId
         return appendChatEvent(tx, {
           workspaceId: contextWorkspaceId,
           chatId: id,
           id: event.id,
           type: 'agent.event',
-          actor: null,
+          actor: agentActor(id, prompter ? memberId(prompter) : null),
           payload,
           createdAt: at,
         })
@@ -530,13 +537,13 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       },
       changeParticipant,
       recordRuntimeOrigin: (origin) => tx.mutate.runtimeOrigins.insert({ workspaceId: contextWorkspaceId, ...origin }),
-      recordPush: async ({ chatId: id, actorId, branch, head }) => {
+      recordPush: async ({ chatId: id, actor, branch, head }) => {
         if (tx.location === 'server')
           await appendChatEvent(tx, {
             workspaceId: contextWorkspaceId,
             chatId: id,
             type: 'branch.pushed',
-            actor: actorId,
+            actor,
             payload: { branch, head },
             createdAt: new Date(),
           })

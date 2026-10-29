@@ -1,4 +1,4 @@
-import type { ChatId, ChatVisibility, HarnessId, MemberId, MessageId, WorkspaceId } from '@spyria/kernel'
+import type { Actor, ChatId, ChatVisibility, HarnessId, MemberId, MessageId, WorkspaceId } from '@spyria/kernel'
 import type { StoredStep } from './agent-steps.ts'
 import type { Attachment } from './attachments.ts'
 import {
@@ -34,7 +34,7 @@ export type Message = LiveMessage | DeletedMessage
 
 export type MessageChange = Readonly<{
   type: 'message.posted' | 'message.replied' | 'message.edited' | 'message.deleted' | 'message.step_changed'
-  actorId: MemberId | null
+  actor: Actor
   message: Message
 }>
 

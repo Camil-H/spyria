@@ -126,8 +126,8 @@ export const signInUser = (database: Database, identity: Identity, isSso = false
       await sql`update invitations set accepted_at = now() where workspace_id = ${invitation.workspaceId} and id = ${invitation.id}`
       if (joined.length > 0)
         await sql`
-          insert into workspace_events (workspace_id, id, type, actor_id, payload, created_at)
-          values (${invitation.workspaceId}, ${crypto.randomUUID()}, 'member.joined', ${userId},
+          insert into workspace_events (workspace_id, id, type, actor_kind, actor_id, payload, created_at)
+          values (${invitation.workspaceId}, ${crypto.randomUUID()}, 'member.joined', 'member', ${userId},
             ${JSON.stringify({ memberId: userId, role: invitation.role, invitationId: invitation.id })}::jsonb, now())`
     }
     if (isSso)

@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test'
+import { agentActor, chatId, memberActor, memberId } from '@spyria/kernel'
 import { type AgentEvent, agentProjectionOf } from './agent-events.ts'
 import { observedStep, type StoredStep } from './agent-steps.ts'
 import { messagesFromEvents, type StoredEvent } from './message-events.ts'
@@ -92,7 +93,7 @@ const storedEvent = (seq: number, type: string, payload: unknown, id: string, se
   id,
   seq,
   type,
-  actor: type === 'agent.event' ? null : 'alice',
+  actor: type === 'agent.event' ? agentActor(chatId('chat'), null) : memberActor(memberId('alice')),
   payload,
   createdAt: new Date(Date.UTC(2026, 9, 6, 11, 19, second)),
 })
