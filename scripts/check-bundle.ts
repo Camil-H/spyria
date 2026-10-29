@@ -1,7 +1,9 @@
-import { readdirSync, readFileSync } from 'node:fs'
+import { readdirSync, readFileSync, realpathSync } from 'node:fs'
 
-const distDirectory = new URL('../apps/web/dist/', import.meta.url).pathname
+const rootDirectory = new URL('../', import.meta.url).pathname
+const distDirectory = `${rootDirectory}apps/web/dist/`
 const mainChunkLimitBytes = 250_000
+const singletonPackages = ['react', 'react-dom', 'react-router', '@rocicorp/zero']
 const serverOnlySql = [
   'into events',
   'into sessions',
@@ -24,7 +26,9 @@ if (!mainChunkPath) throw new Error('No main chunk in apps/web/dist/index.html')
 const mainChunk = readFileSync(`${distDirectory}${mainChunkPath}`, 'utf8')
 const mainChunkBytes = Buffer.byteLength(mainChunk)
 if (mainChunkBytes > mainChunkLimitBytes)
-  failures.push(`${mainChunkPath} is ${mainChunkBytes} bytes, over the ${mainChunkLimitBytes} byte limit`)
+  failures.push(
+    `${mainChunkPath} is ${mainChunkBytes} bytes, over the ${mainChunkLimitBytes} byte limit: move a route or a vendor library into a lazy chunk before raising the limit`,
+  )
 for (const marker of lazyChunkMarkers)
   if (mainChunk.includes(marker)) failures.push(`${mainChunkPath} contains "${marker}", which belongs in a lazy chunk`)
 const reactVersions = new Set(Array.from(mainChunk.matchAll(/version[=:]`(19\.\d+\.\d+)`/g), (match) => match[1]))
@@ -40,10 +44,25 @@ for (const statement of serverOnlySql)
   if (clientCode.includes(statement)) failures.push(`client assets contain server-only SQL "${statement}"`)
 if (clientCode.includes('spyriateststack')) failures.push('client assets contain the e2e test hook spyriaTestStack')
 
+const webWorkspaces = ['apps/web', ...readdirSync(`${rootDirectory}packages`).map((name) => `packages/${name}`)]
+for (const packageName of singletonPackages) {
+  const workspacesByInstall = Map.groupBy(
+    webWorkspaces.filter((workspace) => {
+      const manifest = JSON.parse(readFileSync(`${rootDirectory}${workspace}/package.json`, 'utf8'))
+      return packageName in { ...manifest.dependencies, ...manifest.peerDependencies }
+    }),
+    (workspace) => realpathSync(Bun.resolveSync(packageName, `${rootDirectory}${workspace}/package.json`)),
+  )
+  if (workspacesByInstall.size > 1)
+    failures.push(
+      `${packageName} is installed ${workspacesByInstall.size} times (${[...workspacesByInstall.values()].map((workspaces) => workspaces.join(', ')).join(' / ')}): align its version and peer dependencies, then reinstall`,
+    )
+}
+
 if (failures.length > 0) {
   console.error(failures.join('\n'))
   process.exit(1)
 }
 console.log(
-  `Bundle gates passed: main chunk ${mainChunkBytes} bytes, React ${[...reactVersions].join('')}, no server-only SQL, no test hook, Markdown and highlighting lazy`,
+  `Bundle gates passed: main chunk ${mainChunkBytes} bytes, React ${[...reactVersions].join('')}, ${singletonPackages.join(', ')} installed once, no server-only SQL, no test hook, Markdown and highlighting lazy`,
 )

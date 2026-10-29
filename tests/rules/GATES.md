@@ -85,7 +85,8 @@ Every rule of the architecture standard (`.agents/skills/architecture`) and what
 
 | Gate | Mechanism |
 |---|---|
-| Main chunk at most 760 kB | `scripts/check-bundle.ts` on `apps/web/dist` |
+| Main chunk at most 250 kB | `scripts/check-bundle.ts` on `apps/web/dist`; its failure asks to move a route or a vendor library into a lazy chunk before raising the limit |
+| React, react-dom, react-router and Zero installed once | `scripts/check-bundle.ts` resolves each from `apps/web` and every package declaring it, and fails when they reach different installs (a lockfile duplicate or a stale install); the main chunk must also hold one React version |
 | Markdown and highlighting stay lazy | `scripts/check-bundle.ts` fails when the main chunk contains `Load image from` (Markdown) or `registerLanguage` (highlight.js) |
 | Model output never renders raw HTML | unit `Markdown.test.tsx` (script and `onerror` tags as text, image placeholder, link attributes, no `javascript:`); e2e `04-agent/steps` "Markdown answers" |
 | No server-only SQL in client assets | `scripts/check-bundle.ts` fails on `into events`, `into sessions`, `skip locked`, `for update`, `into jobs`, `into llm_credentials`, `member_gateway_keys`, `claim_code_hash`, `token_hash` (and so `llm_token_hash`), `agent_turn_failure`, `agent_conversation_id` or `api/governance` in any client asset; server SQL that runs in shared mutator code lives in `@spyria/db/server-writes`, whose `browser` condition points at stubs |
