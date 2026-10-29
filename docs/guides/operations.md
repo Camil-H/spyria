@@ -18,6 +18,8 @@ Tokens, keys, cookies, request bodies, prompts and model output stay out of logs
 
 Tracing is opt-in. Set `OTEL_EXPORTER_OTLP_ENDPOINT` (and `OTEL_EXPORTER_OTLP_HEADERS` if your collector needs a token) in `.env.prod` to export traces and logs over OTLP/HTTP; without it, nothing leaves the machine and logs still go to stdout. The host passes the endpoint on to its runtimes, so a turn shows as one trace from the HTTP request through the job, the host and the agent to each model call.
 
+The model gateway exports no spans of its own: Bifrost's tracing plugin writes the full prompt and answer into every span, which Spyria keeps out of telemetry, so a trace ends at the server's model call span, which carries the model, the token counts and the gateway's request id.
+
 The Compose file samples 10% of new traces (`OTEL_TRACES_SAMPLER=parentbased_traceidratio`, `OTEL_TRACES_SAMPLER_ARG=0.1`); child spans follow their parent's decision. Set both in `.env.prod` to change it.
 
 ## Health
