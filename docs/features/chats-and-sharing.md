@@ -12,11 +12,10 @@ A chat has one of two types. **New chat** asks questions instead of naming them,
 2. **Is it for members messaging each other, or an AI chat?** Members messaging makes a channel, AI chat a runtime chat. AI chat cannot be chosen for a public chat, since runtime chats are always private.
 3. **Does it need GitHub access?** Asked for an AI chat only. Yes makes it a dev chat and shows the **Repository** and **Base branch** pickers (see [Dev mode](./dev-mode.md#creating-a-dev-chat)).
 
-
 | Type | Who talks | Visibility | Notes |
 |---|---|---|---|
 | **Channel** | members only | **Public** or **Private** | threads, "Start runtime from this message" |
-| **Runtime** | members and an agent | always private | **Non-dev** or **Dev** mode; dev chats need a GitHub repository |
+| **Runtime** | members and an agent | always private | with or without GitHub access; with it, a dev chat on a repository |
 
 The member who creates a chat owns it, and stays its owner. Ownership matters beyond the chat itself: the agent of a runtime chat acts with its owner's tool connections (the header says **Agent acts as** *owner*), so there is always one accountable identity for what the agent does. See [Security](../architecture/security.md).
 

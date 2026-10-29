@@ -8,7 +8,7 @@ import {
   SegmentedChoice,
   useGuardedAction,
 } from '@spyria/ui'
-import { type ReactNode, type SubmitEvent, useEffect, useState } from 'react'
+import { type SubmitEvent, useEffect, useId, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { GitHubNotConfigured } from '../domain/errors.ts'
 import type { GitHubRepository } from '../domain/github.ts'
@@ -25,33 +25,41 @@ const Question = <Answer extends string>({
   answers,
   value,
   disabledAnswers,
+  hint,
   onAnswer,
-  children,
 }: {
   question: string
   name: string
   answers: Record<Answer, string>
   value: Answer | null
   disabledAnswers?: readonly Answer[]
+  hint?: string
   onAnswer: (answer: Answer) => void
-  children?: ReactNode
-}) => (
-  <div className="flex flex-col gap-1">
-    <p aria-hidden className="text-sm text-muted">
-      {question}
-    </p>
-    <SegmentedChoice
-      label={question}
-      name={name}
-      options={Object.keys(answers) as Answer[]}
-      labels={answers}
-      value={value}
-      disabledOptions={disabledAnswers}
-      onChange={onAnswer}
-    />
-    {children}
-  </div>
-)
+}) => {
+  const hintId = useId()
+  return (
+    <div className="flex flex-col gap-1">
+      <p aria-hidden className="text-sm text-muted">
+        {question}
+      </p>
+      <SegmentedChoice
+        label={question}
+        describedBy={hint && hintId}
+        name={name}
+        options={Object.keys(answers) as Answer[]}
+        labels={answers}
+        value={value}
+        disabledOptions={disabledAnswers}
+        onChange={onAnswer}
+      />
+      {hint && (
+        <p id={hintId} className="text-xs text-muted">
+          {hint}
+        </p>
+      )}
+    </div>
+  )
+}
 
 export const NewChatDialog = ({
   workspaceId,
@@ -79,9 +87,13 @@ export const NewChatDialog = ({
   const isAiChat = audience === 'ai'
   const isDev = isAiChat && needsGitHub === 'yes'
   const isAnswered = visibility !== null && audience !== null && (!isAiChat || needsGitHub !== null)
+  const chooseAudience = (chosen: Audience | null) => {
+    setAudience(chosen)
+    setNeedsGitHub(null)
+  }
   const chooseVisibility = (chosen: ChatVisibility) => {
     setVisibility(chosen)
-    if (chosen === 'public' && isAiChat) setAudience(null)
+    if (chosen === 'public' && isAiChat) chooseAudience(null)
   }
   const canConnectGitHub = useWorkspacePermissions(workspaceId).includes('github.manage')
   const [loadFailure, setLoadFailure] = useState<string | null>(null)
@@ -145,10 +157,9 @@ export const NewChatDialog = ({
           answers={{ members: 'Members messaging', ai: 'AI chat' }}
           value={audience}
           disabledAnswers={visibility === 'public' ? ['ai'] : []}
-          onAnswer={setAudience}
-        >
-          {visibility === 'public' && <p className="text-xs text-muted">AI chats are always private.</p>}
-        </Question>
+          hint={visibility === 'public' ? 'AI chats are always private.' : undefined}
+          onAnswer={chooseAudience}
+        />
         {isAiChat && (
           <Question
             question="Does it need GitHub access?"
@@ -218,7 +229,7 @@ export const NewChatDialog = ({
             ))}
           </select>
         </label>
-        <ErrorMessage message={errorMessage ?? loadFailure} />
+        <ErrorMessage message={errorMessage ?? (isDev ? loadFailure : null)} />
         <button
           type="submit"
           className={buttonClass}

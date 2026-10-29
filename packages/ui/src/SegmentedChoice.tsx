@@ -1,5 +1,6 @@
 export const SegmentedChoice = <Option extends string>({
   label,
+  describedBy,
   name,
   options,
   labels,
@@ -8,6 +9,7 @@ export const SegmentedChoice = <Option extends string>({
   onChange,
 }: {
   label?: string
+  describedBy?: string
   name: string
   options: readonly Option[]
   labels: Record<Option, string>
@@ -15,7 +17,12 @@ export const SegmentedChoice = <Option extends string>({
   disabledOptions?: readonly Option[]
   onChange: (option: Option) => void
 }) => (
-  <div role="radiogroup" aria-label={label} className="flex gap-1 rounded-lg border border-line bg-app p-1">
+  <div
+    role="radiogroup"
+    aria-label={label}
+    aria-describedby={describedBy}
+    className="flex gap-1 rounded-lg border border-line bg-app p-1"
+  >
     {options.map((option) => (
       <label
         key={option}
