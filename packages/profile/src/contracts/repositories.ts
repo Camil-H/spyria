@@ -49,6 +49,7 @@ export type PersonalConnectionRepository = {
   connect(connection: PersonalConnection): Promise<void>
   disconnect(tool: string): Promise<void>
   statusOf(tool: string): Promise<string | undefined>
+  tools(): Promise<string[]>
   removeAll(): Promise<void>
 }
 
@@ -78,6 +79,7 @@ export type ToolGateway = {
   setToolGrants(virtualKeyId: string, workspaceGrants: Record<string, string[]>): Promise<void>
   startToolConsent(virtualKeyId: string, server: ToolServer): Promise<string>
   toolSessions(virtualKeyId: string, server: ToolServer): Promise<{ id: string; status: string }[]>
+  isToolSessionAuthorized(virtualKeyId: string, server: ToolServer): Promise<boolean | undefined>
   removeToolSession(sessionId: string): Promise<void>
   finishToolConsent(callbackQuery: string): Promise<boolean>
 }

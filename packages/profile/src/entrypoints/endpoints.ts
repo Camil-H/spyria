@@ -9,11 +9,13 @@ import { grantMemberTools } from '../operations/grant-tools.ts'
 import { toolKeyValueOf, virtualKeyValueOf } from '../operations/sync-member-gateway-key.ts'
 import {
   availableTools,
+  checkToolConnections,
   disconnectTool,
   flagToolConnection,
   refreshToolConnection,
   startToolConnection,
   toolCallAccess,
+  toolServerNameOf,
 } from '../operations/tool-connections.ts'
 import {
   addWorkspaceConnection,
@@ -66,6 +68,9 @@ export const availableToolsFromRequest = async (gateway: ToolGateway) => ({
   available: await availableTools({ gateway }),
 })
 
+export const checkToolConnectionsFromRequest = (transact: Transact, context: ZeroContext, gateway: ToolGateway) =>
+  checkToolConnections({ transactor: createTransactingZeroTransactor(transact, context), gateway })
+
 export const createToolCallOwnerAccess = (transact: Transact, gateway: LlmGateway & ToolGateway) => {
   const dependenciesOf = (workspace: WorkspaceId, member: MemberId) => ({
     transactor: createTransactingZeroTransactor(transact, memberContext(workspace, member)),
@@ -79,6 +84,8 @@ export const createToolCallOwnerAccess = (transact: Transact, gateway: LlmGatewa
       flagToolConnection(dependenciesOf(workspace, member), { tool }),
     toolCallAccess: (workspace: WorkspaceId, owner: MemberId, prompter: MemberId, toolName: string) =>
       toolCallAccess(dependenciesOf(workspace, owner), { prompterId: prompter, toolName }),
+    serverNameOf: (workspace: WorkspaceId, owner: MemberId, server: string) =>
+      toolServerNameOf(dependenciesOf(workspace, owner), { tool: server }),
   }
 }
 

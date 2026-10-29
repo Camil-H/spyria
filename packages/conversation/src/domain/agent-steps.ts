@@ -138,3 +138,15 @@ export const observedStep = (
   }
   return undefined
 }
+
+export const toolServerNamerOf = (nameByServer: ReadonlyMap<string, string>) => {
+  const escapedServers = [...nameByServer.keys()].map((server) => server.replace(/\W/g, '\\$&'))
+  const servers = new RegExp(`\\b(?:${escapedServers.join('|')})\\b`, 'g')
+  const named = (text: string) => text.replace(servers, (server) => nameByServer.get(server) ?? server)
+  return <Step extends AgentStep>(step: Step): Step => {
+    if (nameByServer.size === 0) return step
+    if (step.type === 'tool') return { ...step, name: named(step.name), result: step.result && named(step.result) }
+    if (step.type !== 'question' || !step.approval) return step
+    return { ...step, approval: { ...step.approval, server: named(step.approval.server) } }
+  }
+}

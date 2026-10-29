@@ -939,6 +939,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
       },
       receivedFrames,
       modelCall: (async ({
+        method = 'POST',
         path = '/v1/chat/completions',
         headers = {},
         body = '',
@@ -956,7 +957,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
         }
         signal?.addEventListener('abort', cancel)
         modelCalls.set(sid, { frames, done: resolve, onChunk, onHead })
-        socket?.send(JSON.stringify({ type: 'gw_req', sid, method: 'POST', path, headers, body }))
+        socket?.send(JSON.stringify({ type: 'gw_req', sid, method, path, headers, body }))
         const isAnswered = await Promise.race([
           promise.then(() => true),
           Bun.sleep(timeoutMilliseconds).then(() => false),

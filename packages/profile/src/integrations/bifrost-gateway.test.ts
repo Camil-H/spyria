@@ -205,6 +205,48 @@ test('a consent starts on a read-only tool of the server, or on its first tool w
   }
 })
 
+test('a session is checked with a read-only tool only, and reads unauthorized when the provider refuses its token', async () => {
+  const calledTools: string[] = []
+  let answer = '{"result":{"content":[{"type":"text","text":"you are alice"}]}}'
+  const checkServer = Bun.serve({
+    port: 0,
+    fetch: async (request) => {
+      if (new URL(request.url).pathname === '/api/governance/virtual-keys/key-1')
+        return Response.json({ virtual_key: { id: 'key-1', value: 'sk-bf-1' } })
+      const { method, params } = (await request.json()) as { method: string; params?: { name: string } }
+      if (method === 'tools/list')
+        return Response.json({
+          result: {
+            tools: [
+              { name: 'docs-delete_page', annotations: { readOnlyHint: false } },
+              { name: 'docs-get_me', annotations: { readOnlyHint: true } },
+              { name: 'wiki-update' },
+            ],
+          },
+        })
+      calledTools.push(String(params?.name))
+      return new Response(answer)
+    },
+  })
+  const checkGateway = createLlmGateway({
+    url: `http://localhost:${checkServer.port}`,
+    adminUser: 'admin',
+    adminPassword: 'secret',
+  })
+  try {
+    const docs = { id: 'docs', name: 'docs', tools: ['delete_page', 'get_me'], isPersonal: true }
+    expect(await checkGateway.isToolSessionAuthorized('key-1', docs)).toBe(true)
+    answer =
+      '{"result":{"isError":true,"content":[{"type":"text","text":"Tool execution failed: failed to establish ephemeral MCP connection: transport error: request failed with status 401: invalid_token"}]}}'
+    expect(await checkGateway.isToolSessionAuthorized('key-1', docs)).toBe(false)
+    const wiki = { id: 'wiki', name: 'wiki', tools: ['update'], isPersonal: true }
+    expect(await checkGateway.isToolSessionAuthorized('key-1', wiki)).toBeUndefined()
+    expect(calledTools).toEqual(['docs-get_me', 'docs-get_me'])
+  } finally {
+    checkServer.stop(true)
+  }
+})
+
 test('a tool server with a per-member sign-in is not set up without an operator login', async () => {
   const setUpServer = Bun.serve({ port: 0, fetch: () => Response.json({ clients: [] }) })
   const setUpGateway = createLlmGateway({

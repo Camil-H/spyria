@@ -215,6 +215,29 @@ test('a server the owner has not connected, or whose token was revoked, answers 
   }
 })
 
+test('checking the connections, as the profile does when it opens, follows the gateway: a row without a session goes, an active session gets its row, and a token revoked at the provider reads Needs reconnection without any chat call', async () => {
+  const check = () => asMember(alice, 'POST', '/api/tool-connections/check')
+  const slackRows = () =>
+    database.$client`select tool from tool_connections where user_id = ${alice} and tool = 'Slack'`
+  await connectAlice(aliceCookie)
+  await database.$client`
+    insert into tool_connections (workspace_id, user_id, tool, status, position)
+    values (${acme}, ${alice}, 'Slack', 'Connected', 99)`
+  expect((await check()).status).toBe(204)
+  expect((await slackRows()).length).toBe(0)
+  expect(await connectionRows()).toEqual([{ user_id: alice, tool: 'fake', status: 'Connected' }])
+
+  await database.$client`delete from tool_connections where user_id = ${alice}`
+  expect((await check()).status).toBe(204)
+  expect(await connectionRows()).toEqual([{ user_id: alice, tool: 'fake', status: 'Connected' }])
+
+  await fakeMcp.fetch(new Request(`http://fake-mcp/_admin/expire?user=${aliceAccount}`, { method: 'POST' }))
+  expect((await check()).status).toBe(204)
+  expect(await connectionRows()).toEqual([{ user_id: alice, tool: 'fake', status: 'Needs reconnection' }])
+  expect(await asMember(bob, 'POST', '/api/tool-connections/check')).toMatchObject({ status: 204 })
+  expect(await connectionRows()).toEqual([{ user_id: alice, tool: 'fake', status: 'Needs reconnection' }])
+})
+
 test('session headers pass through, Spyria’s tools join the gateway’s list whether it answers in JSON or as an event stream and stay listed while the gateway is down, gateway failures become error results instead of 5xx, model calls carry an empty include-clients header and guest calls their server only', async () => {
   const seen: { path: string; headers: Record<string, string> }[] = []
   const readOnlyLookup = { name: `${sharedToolServer}-lookup`, annotations: { readOnlyHint: true } }

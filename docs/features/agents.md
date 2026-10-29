@@ -76,7 +76,7 @@ Each delegation appears as one step, "Delegated to *model* · N steps · duratio
 
 ## Steps
 
-Between messages, the agent's work shows as collapsible steps: thoughts, commands with their output, files created or edited, tool calls ("Used *tool* (*server*)"), questions and errors. When a tool needs the owner to connect or reconnect an account, the step says so with a **Connect** or **Reconnect** link. Secrets that appear in output from a member's machine are stored as `[redacted]`.
+Between messages, the agent's work shows as collapsible steps: thoughts, commands with their output, files created or edited, tool calls ("Used *tool* (*server*)", the server named as the workspace registered it), questions and errors. When a tool needs the owner to connect or reconnect an account, the step says so with a **Connect** or **Reconnect** link. Secrets that appear in output from a member's machine are stored as `[redacted]`.
 
 Live text streams to viewers over a WebSocket; only completed events are stored in Postgres, so a reload shows the finished steps and the turn in progress resumes streaming. See [Architecture overview](../architecture/overview.md).
 
@@ -102,4 +102,4 @@ The **Usage** tab of a chat shows its spend per member and per model (tokens, co
 
 ## Keys
 
-A member adds their LLM API keys in **Profile > LLM access**, per workspace. Keys are stored in the model gateway only; Spyria keeps a reference and the last four characters. A member without a key can read runtime chats but cannot prompt on a Spyria runtime; tools work for them all the same. Tool accounts are connected in **Profile > Connections** (**Shared with me** lists the workspace connections available to you, **My connections** your personal ones). See [Security](../architecture/security.md).
+A member adds their LLM API keys in **Profile > LLM access**, per workspace. Keys are stored in the model gateway only; Spyria keeps a reference and the last four characters. A member without a key can read runtime chats but cannot prompt on a Spyria runtime; tools work for them all the same. Tool accounts are connected in **Profile > Connections** (**Shared with me** lists the workspace connections available to you, **My connections** your personal ones). Opening the profile checks each personal connection with the model gateway: one without a sign-in there reads **Not connected**, and for a signed-in one Spyria runs one read-only tool of the server, so access revoked at the provider reads **Needs reconnection** before a chat runs into it. See [Security](../architecture/security.md).

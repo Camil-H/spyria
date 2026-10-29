@@ -8,6 +8,7 @@ import {
   participantIn,
   type RuntimeOriginRow,
   type Snapshot,
+  workspaceConnectionsIn,
   workspacePermissionsIn,
 } from '@spyria/db'
 import {
@@ -21,6 +22,7 @@ import {
 } from '@spyria/kernel'
 import { stoppedByPrefix } from '../domain/agent-events.ts'
 import type { AgentStep, StoredStep, ThoughtStep } from '../domain/agent-steps.ts'
+import { toolServerNamerOf } from '../domain/agent-steps.ts'
 import type { Attachment } from '../domain/attachments.ts'
 import { stillRunningOf } from '../domain/delegation.ts'
 import { isAgentActivity, isFrozen, quotableKinds } from '../domain/message.ts'
@@ -285,6 +287,9 @@ export const getConversation =
       const canOpen = runtimeChat && can(chatPermissionsIn(snapshot, workspaceId, viewerId)(runtimeChat), 'chat.read')
       return { chatId: runtimeChatId, startedByName: memberName(startedBy), name: canOpen ? runtimeChat.name : null }
     }
+    const withServerNames = toolServerNamerOf(
+      new Map(workspaceConnectionsIn(snapshot, workspaceId).map(({ gatewayName, name }) => [gatewayName, name])),
+    )
     const chatMessageById = new Map(chatMessages.map((message) => [message.id, message]))
     const quoteOf = (quotedMessageId: MessageId | null): ConversationMessage['quote'] => {
       if (quotedMessageId === null) return null
@@ -301,7 +306,7 @@ export const getConversation =
       }
     }
     const conversationMessageOf = (message: (typeof chatMessages)[number]): ConversationMessage => {
-      const step = message.step as StoredStep | null
+      const step = message.step && withServerNames(message.step as StoredStep)
       const replies = repliesByRootId.get(message.id) ?? []
       const isThreadRoot = isChannel && message.threadRootId === null
       return {

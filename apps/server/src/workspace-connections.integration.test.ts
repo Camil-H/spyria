@@ -1,5 +1,6 @@
 import { afterAll, afterEach, expect, setDefaultTimeout, test } from 'bun:test'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
+import { testCrmConnection } from '@spyria/db/testing'
 import { schema } from '@spyria/db/zero'
 import { createZeroStore } from '@spyria/db/zero-store'
 import { createToolCallOwnerAccess } from '@spyria/profile/server'
@@ -135,7 +136,7 @@ test('a member restricted to lookup is refused update on their own prompts, thei
   const { token } = await runtimeTurn(host, bob, bob)
   expect(textOf((await mcpCall(host, token, callOf(sharedToolServer, 'lookup'))).result)).toBe('ran lookup')
   expect(textOf((await mcpCall(host, token, callOf(sharedToolServer, 'update'))).result)).toBe(
-    `${sharedToolServer} isn't available on Bob's prompts in this chat`,
+    `${testCrmConnection.name} isn't available on Bob's prompts in this chat`,
   )
 
   const keyBefore = (await virtualKeyOf(bob)).id
@@ -146,7 +147,7 @@ test('a member restricted to lookup is refused update on their own prompts, thei
   await addLlmKey(bob, 'Mistral')
   expect((await virtualKeyOf(bob)).id).toBe(keyBefore)
   expect(textOf((await mcpCall(host, token, callOf(sharedToolServer, 'update'))).result)).toBe(
-    `${sharedToolServer} isn't available on Bob's prompts in this chat`,
+    `${testCrmConnection.name} isn't available on Bob's prompts in this chat`,
   )
 
   expect((await restrict(bob, [])).status).toBe(200)
@@ -191,7 +192,7 @@ test('unticking a tool for the workspace removes it from every key and every pro
   const host = await fakeHost('Workspace untick host')
   const { token } = await runtimeTurn(host, alice)
   expect(textOf((await mcpCall(host, token, callOf(sharedToolServer, 'update'))).result)).toBe(
-    `${sharedToolServer} isn't available on Alice's prompts in this chat`,
+    `${testCrmConnection.name} isn't available on Alice's prompts in this chat`,
   )
   expect(textOf((await mcpCall(host, token, callOf(sharedToolServer, 'lookup'))).result)).toBe('ran lookup')
   expect((await asMember(bob, 'POST', crmPath('tools'), { allowedTools: ['lookup', 'update'] })).status).toBe(403)
@@ -308,4 +309,43 @@ test('editing replaces the secret in place, a new URL registers the server again
   ])
   for (const secret of ['first-secret', 'second-secret', 'third-secret'])
     expect(await everyStoredText(database)).not.toContain(secret)
+})
+
+test('a running agent’s MCP stream hears that its tool list changed when a connection is added, restricted or removed, and its next listing has the change', async () => {
+  const host = await fakeHost('Tool list changes host')
+  const { token } = await runtimeTurn(host, alice)
+  const streamed: string[] = []
+  const opened = Promise.withResolvers<number | undefined>()
+  const closing = new AbortController()
+  const stream = host.modelCall({
+    method: 'GET',
+    path: '/mcp',
+    headers: { authorization: `Bearer ${token}`, accept: 'text/event-stream' },
+    onHead: opened.resolve,
+    onChunk: (data) => streamed.push(data),
+    signal: closing.signal,
+  })
+  expect(await opened.promise).toBe(200)
+  const changeCount = () => streamed.filter((data) => data.includes('"notifications/tools/list_changed"')).length
+  const listedNames = async () =>
+    ((await mcpCall(host, token, rpcOf('tools/list'))).result.tools as { name: string }[]).map(({ name }) => name)
+
+  const { connectionId } = await register('Orders')
+  const gatewayName = (await connectionRow(connectionId))?.gatewayName ?? ''
+  await waitFor(() => changeCount() === 1)
+  expect(await listedNames()).toContain(`${gatewayName}-update`)
+
+  const ordersPath = (action: string) => `${connectionsPath}/${connectionId}/${action}`
+  expect(
+    (await asMember(alice, 'POST', ordersPath('restrict'), { memberId: alice, allowedTools: ['lookup'] })).status,
+  ).toBe(200)
+  await waitFor(() => changeCount() === 2)
+  expect(await listedNames()).toContain(`${gatewayName}-lookup`)
+  expect(await listedNames()).not.toContain(`${gatewayName}-update`)
+
+  expect((await asMember(alice, 'POST', ordersPath('remove'))).status).toBe(200)
+  await waitFor(() => changeCount() === 3)
+  expect((await listedNames()).filter((name) => name.startsWith(`${gatewayName}-`))).toEqual([])
+  closing.abort()
+  await stream
 })

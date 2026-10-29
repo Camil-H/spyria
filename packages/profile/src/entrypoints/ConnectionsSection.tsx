@@ -21,6 +21,7 @@ export const ConnectionsSection = ({ workspaceId, memberId }: { workspaceId: Wor
   const [disconnectedTool, setDisconnectedTool] = useState<string>()
   useEffect(() => {
     commands.availableTools({ workspaceId }).then(setServers, () => setServers([]))
+    commands.checkTools({ workspaceId }).catch(() => undefined)
   }, [commands, workspaceId])
   const available = servers.filter((server) => !connected.some(({ tool }) => tool === server))
   const connect = (tool: string) => () => {

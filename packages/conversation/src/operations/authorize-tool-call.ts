@@ -13,7 +13,7 @@ type Turn = {
   ownerName: string
   prompterName: string | null
 }
-type Input = { turn: Turn; toolName: string; toolArguments: unknown; signal: AbortSignal }
+type Input = { turn: Turn; toolName: string; serverName: string; toolArguments: unknown; signal: AbortSignal }
 type Checks = {
   accessOf: (prompterId: MemberId) => Promise<'allowed' | 'personal' | 'not_allowed'>
   isReadOnly: () => Promise<boolean>
@@ -29,17 +29,21 @@ const notNeeded = { decision: 'not_needed', decidedBy: null } as const
 
 export const authorizeToolCall = async (
   dependencies: AgentDependencies,
-  { turn, toolName, toolArguments, signal }: Input,
+  { turn, toolName, serverName, toolArguments, signal }: Input,
   { accessOf, isReadOnly }: Checks,
 ): Promise<Authorization> => {
-  const { server, tool } = toolNamePartsOf(toolName)
+  const { tool } = toolNamePartsOf(toolName)
   const { chat, promptId, ownerId, ownerName } = turn
   const prompterName = turn.prompterName ?? ''
   const guestId = guestPrompterOf(turn)
   const access = await accessOf(turn.prompterId ?? ownerId).catch(() => null)
   if (!access) return { refusal: toolGatewayUnreachable, readOnly: null, ...notNeeded }
   if (access !== 'allowed')
-    return { refusal: guestToolRefusalOf(access, { ownerName, prompterName, server }), readOnly: null, ...notNeeded }
+    return {
+      refusal: guestToolRefusalOf(access, { ownerName, prompterName, server: serverName }),
+      readOnly: null,
+      ...notNeeded,
+    }
   const readOnly = await isReadOnly()
   if (!guestId || readOnly) return { readOnly, ...notNeeded }
   const decided = await requestToolApproval(dependencies, {
@@ -47,7 +51,7 @@ export const authorizeToolCall = async (
     promptId,
     ownerId,
     signal,
-    approval: { server, tool, arguments: JSON.stringify(toolArguments ?? {}), prompterName, ownerName },
+    approval: { server: serverName, tool, arguments: JSON.stringify(toolArguments ?? {}), prompterName, ownerName },
   })
   return { readOnly, ...decided, ...(decided.decision !== 'approved' && { refusal: notApprovedOf(ownerName) }) }
 }

@@ -138,6 +138,7 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
         await deleteGitHubConnection(tx, workspaceId, userId)
       },
       statusOf: async (tool) => (await tx.run(ownToolConnections.where('tool', tool).one()))?.status,
+      tools: async () => (await tx.run(ownToolConnections)).map(({ tool }) => tool),
     },
     workspaceConnections: {
       list: async (workspaceId) => (await tx.run(connectionRows(workspaceId))).map(connectionOf),

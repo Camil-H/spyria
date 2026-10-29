@@ -22,7 +22,7 @@ const updateScript = (text: string) => ({
   text,
 })
 const approvalCardOf = (page: Page) => messageItemsOf(page).getByRole('region', { name: 'Tool approval' })
-const updateStepOf = (page: Page) => messageItemsOf(page).getByRole('button', { name: 'Used update (crm)' })
+const updateStepOf = (page: Page) => messageItemsOf(page).getByRole('button', { name: 'Used update (CRM)' })
 
 const openAsBob = async (browser: Parameters<typeof openPageAs>[0], workerStack: WorkerStack) => {
   await addParticipant(workerStack, research, 'member-bob', 'prompter')
@@ -69,11 +69,11 @@ test.describe('Guest rights', () => {
     const bobPage = await openAsBob(browser, workerStack)
     await agentScript(research, updateScript('Updated the record.'))
     await sendMessage(bobPage, 'Bob asks to update the record')
-    await expect(approvalCardOf(page)).toContainText('Bob asks to run update (crm)')
+    await expect(approvalCardOf(page)).toContainText('Bob asks to run update (CRM)')
     await expect(approvalCardOf(page)).toContainText('{"text":"Renewal on 1 May"}')
     await expect(approvalCardOf(bobPage)).toContainText("Waiting for Alice's approval")
     await expect(approvalCardOf(bobPage).getByRole('button', { name: 'Approve' })).toHaveCount(0)
-    await expect(messageItemsOf(bobPage).getByRole('button', { name: 'Waiting to use update (crm)' })).toBeVisible()
+    await expect(messageItemsOf(bobPage).getByRole('button', { name: 'Waiting to use update (CRM)' })).toBeVisible()
     await expect(updateStepOf(bobPage)).toHaveCount(0)
 
     await approvalCardOf(page).getByRole('button', { name: 'Approve' }).click()
@@ -110,7 +110,7 @@ test.describe('Guest rights', () => {
     await agentScript(research, { steps: [{ tool: 'crm-lookup' }], text: 'Looked the record up.' })
     await sendMessage(bobPage, 'Bob asks to look the record up')
     await expect(workingIndicatorOf(bobPage)).toHaveCount(0)
-    await messageItemsOf(bobPage).getByRole('button', { name: 'Used lookup (crm)' }).click()
+    await messageItemsOf(bobPage).getByRole('button', { name: 'Used lookup (CRM)' }).click()
     await expect(messageItemsOf(bobPage).filter({ hasText: 'ran lookup' })).not.toHaveCount(0)
     await expect(approvalCardOf(bobPage)).toHaveCount(0)
     await expect(approvalCardOf(page)).toHaveCount(0)

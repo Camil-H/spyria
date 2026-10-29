@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { agentProjectionOf } from './agent-events.ts'
-import { observedStep, type StoredStep } from './agent-steps.ts'
+import { observedStep, type StoredStep, toolServerNamerOf } from './agent-steps.ts'
 import { acpUpdate } from './testing.ts'
 import { toolCallFailureOf, toolCallNoticeOf, toolConnectionOf, toolDisplayNameOf } from './tool-calls.ts'
 
@@ -44,6 +44,33 @@ test('tool errors the member must act on map to Spyria wording, without the cons
     expect(notice).not.toContain('http')
     expect(notice).not.toContain('vk_')
   }
+})
+
+test('a workspace connection’s gateway name reads as its display name in tool steps and approvals', () => {
+  const named = toolServerNamerOf(new Map([['crm_1a2b3c', 'CRM']]))
+  const refused: StoredStep = {
+    type: 'tool',
+    name: 'update (crm_1a2b3c)',
+    arguments: '{}',
+    result: 'Tool crm_1a2b3c-update not found',
+    isError: true,
+  }
+  expect(named(refused)).toEqual({
+    ...refused,
+    name: 'update (CRM)',
+    result: 'Tool CRM-update not found',
+  })
+  const running: StoredStep = { type: 'tool', name: 'lookup (crm_1a2b3c)', arguments: '{}', result: null }
+  expect(named(running)).toEqual({ ...running, name: 'lookup (CRM)' })
+  const approval = { server: 'crm_1a2b3c', tool: 'update', arguments: '{}', prompterName: 'Bob', ownerName: 'Alice' }
+  expect(named({ type: 'question', questionId: 'q1', kind: 'approval', approval })).toEqual({
+    type: 'question',
+    questionId: 'q1',
+    kind: 'approval',
+    approval: { ...approval, server: 'CRM' },
+  })
+  const personal: StoredStep = { type: 'tool', name: 'whoami (fake)', arguments: '{}', result: 'you are crm_1a2b3cd' }
+  expect(named(personal)).toEqual(personal)
 })
 
 test('a connection notice in a tool result names the server and whether it is a reconnection', () => {
