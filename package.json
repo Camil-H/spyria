@@ -17,7 +17,6 @@
     "test:e2e:smoke": "bun run --cwd apps/web test:e2e:smoke",
     "check:boundaries": "depcruise apps packages --config .dependency-cruiser.cjs",
     "check:locks": "bun scripts/check-locks.ts",
-    "check:trust": "bun scripts/check-trust.ts",
     "check:bundle": "bun run --cwd apps/web build && bun scripts/check-bundle.ts",
     "check:all": "bun scripts/check-all.ts",
     "check:docker": "bun scripts/check-all.ts --docker",

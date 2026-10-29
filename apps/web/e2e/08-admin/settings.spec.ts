@@ -25,7 +25,7 @@ test.describe('Settings', () => {
     await expect(settingsHeadingOf(page)).toBeVisible()
   })
 
-  test('As a member who can manage the workspace, I see the settings cards in three sections with their status, each opening its page with a back arrow', {
+  test('As a member who can manage the workspace, I see the settings cards in three sections with their status, each opening its page that the back arrow or Escape leaves', {
     tag: ['@spec-42'],
   }, async ({ page }) => {
     for (const [sectionTitle, cardTitles] of Object.entries(cardsBySection)) {
@@ -40,11 +40,12 @@ test.describe('Settings', () => {
     await expect(cardOf(page, 'MCP tools')).toContainText('1 shared connection')
     await expect(cardOf(page, 'Analyze costs')).toContainText(/\$\d+\.\d\d this month/)
 
-    for (const cardTitle of Object.values(cardsBySection).flat()) {
+    for (const [index, cardTitle] of Object.values(cardsBySection).flat().entries()) {
       await cardOf(page, cardTitle).click()
       await expect(mainOf(page).getByRole('heading', { level: 1, name: cardTitle })).toBeVisible()
       await expect(mainOf(page).getByRole('region', { name: sectionShownBy[cardTitle] })).toBeVisible()
-      await mainOf(page).getByRole('link', { name: 'Back to Workspace settings' }).click()
+      if (index % 2 === 0) await mainOf(page).getByRole('link', { name: 'Back to Workspace settings' }).click()
+      else await page.keyboard.press('Escape')
       await expect(settingsHeadingOf(page)).toBeVisible()
     }
   })

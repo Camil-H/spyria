@@ -5,7 +5,6 @@ import { NotOwnOnboarding } from '../domain/errors.ts'
 import { onboardingTasks } from '../domain/tasks.ts'
 import { createZeroTransactor } from '../integrations/zero-transactor.ts'
 import { recordCompletedTasks } from '../operations/record-completed-tasks.ts'
-import { restoreTask } from '../operations/restore-task.ts'
 import { skipTask } from '../operations/skip-task.ts'
 
 const workspaceArguments = z.object({ workspaceId: z.string().check(z.minLength(1)) })
@@ -22,6 +21,5 @@ export const onboardingMutators = defineMutators({
       recordCompletedTasks(dependenciesOf(tx, ctx, args)),
     ),
     skipTask: defineMutator(taskArguments, ({ tx, ctx, args }) => skipTask(dependenciesOf(tx, ctx, args), args)),
-    restoreTask: defineMutator(taskArguments, ({ tx, ctx, args }) => restoreTask(dependenciesOf(tx, ctx, args), args)),
   },
 })
