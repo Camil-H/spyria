@@ -17,6 +17,7 @@ const cardAt = (seq: number, state: string): MessageRow => ({
   step: { type: 'pull_request', number: seq, state, url: `pr/${seq}` },
   replyToId: null,
   threadRootId: null,
+  quotedMessageId: null,
   createdAt: '2026-10-16T10:00:00.000Z',
   editedAt: null,
   deletedAt: null,

@@ -27,6 +27,7 @@ const finished = (page: Page) => expect(workingIndicatorOf(page)).toHaveCount(0)
 const statusLineOf = (page: Page) => tabPanelOf(page).getByRole('region', { name: 'Branch status' })
 const headerButtonOf = (page: Page, name: string) => tabPanelOf(page).getByRole('button', { name, exact: true })
 const diffOf = (page: Page, path: string) => tabPanelOf(page).getByRole('table', { name: `Diff of ${path}` })
+const commitsOf = (page: Page) => tabPanelOf(page).getByRole('region', { name: /^Commit [0-9a-f]{7}$/ })
 
 const runAgent = async (page: Page, agentScript: AgentScript, chatId: string, steps: object[], text: string) => {
   await agentScript(chatId, { steps, text })
@@ -77,7 +78,7 @@ test.describe('Branch actions', () => {
     await expect(statusLine).toContainText('1 ahead of main')
   })
 
-  test('As a chat owner, I commit with a message under my name: Commits lists it, and the status line shows nothing uncommitted and one commit ahead of the pushed branch', {
+  test('As a chat owner, I commit with a message under my name: Changes lists it, and the status line shows nothing uncommitted and one commit ahead of the pushed branch', {
     tag: ['@spec-43', '@smoke'],
   }, async ({ page, agentScript }) => {
     await configureGitHubApp(page)
@@ -106,8 +107,7 @@ test.describe('Branch actions', () => {
     await expect(statusLine).toContainText('1 ahead of the pushed branch')
     await expect(statusLine).toContainText('2 ahead of main')
 
-    await panelTabOf(page, 'Commits').click()
-    const commits = tabPanelOf(page).getByRole('listitem')
+    const commits = commitsOf(page)
     await expect(commits).toHaveCount(2)
     await expect(commits.first()).toContainText('Raise the total')
     await expect(commits.first()).toContainText(/alice-martin · \d\d:\d\d UTC/)
@@ -172,14 +172,14 @@ test.describe('Branch actions', () => {
       [appEdit(1, 2), { command: "git add -A && git commit -qm 'Fix the totals'" }],
       'Fixed.',
     )
-    await panelTabOf(page, 'Commits').click()
-    const commits = tabPanelOf(page).getByRole('listitem')
+    await panelTabOf(page, 'Changes').click()
+    const commits = commitsOf(page)
     await expect(commits).toHaveCount(1)
     await expect(commits.first()).toContainText('Fix the totals')
     await expect(commits.first()).toContainText(/alice-martin · \d\d:\d\d UTC/)
   })
 
-  test('As a chat owner, I merge a new base commit with Update from base: the status line counts the merge, Commits shows it and Files shows the base’s new file', {
+  test('As a chat owner, I merge a new base commit with Update from base: the status line counts the merge, Changes lists the clean merge without files and Files shows the base’s new file', {
     tag: ['@spec-43'],
   }, async ({ page, agentScript }) => {
     await configureGitHubApp(page)
@@ -198,11 +198,8 @@ test.describe('Branch actions', () => {
     await expect(statusLine).toContainText(`2 ahead of ${baseBranch}`)
     await expect(statusLine).not.toContainText('behind')
     await expect(tabPanelOf(page).getByRole('region', { name: 'Changes in docs/from-base.md' })).toHaveCount(0)
-
-    await panelTabOf(page, 'Commits').click()
-    await expect(tabPanelOf(page).getByRole('listitem').first()).toContainText(
-      new RegExp(`Merge branch '${baseBranch}' into spyria/update-totals-`),
-    )
+    const merge = commitsOf(page).first()
+    await expect(merge).toContainText(new RegExp(`Merge branch '${baseBranch}' into spyria/update-totals-`))
     await panelTabOf(page, 'Files').click()
     await tabPanelOf(page).getByRole('button', { name: 'docs', exact: false }).click()
     await expect(tabPanelOf(page).getByRole('button', { name: 'from-base.md', exact: false })).toBeVisible()

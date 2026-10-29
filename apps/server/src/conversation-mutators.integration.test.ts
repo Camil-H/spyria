@@ -25,11 +25,11 @@ test('sendMessage in a channel appends a posted event and the projection at the 
   const before = Date.now()
   expect(await sendTo(aliceInAcme, 'chat-welcome', 'message-sent', '  Hello  ')).toEqual(succeeded)
   const message = await messageRow('message-sent')
-  expect(message).toMatchObject({ chatId: 'chat-welcome', seq: 3, kind: 'member', authorId: alice, body: 'Hello' })
+  expect(message).toMatchObject({ chatId: 'chat-welcome', seq: 4, kind: 'member', authorId: alice, body: 'Hello' })
   expect(message?.createdAt.getTime()).toBeGreaterThanOrEqual(before)
   expect((await eventsOf('chat-welcome')).at(-1)).toMatchObject({
     id: 'message-sent',
-    seq: 3,
+    seq: 4,
     type: 'message.posted',
     actor: alice,
     payload: { kind: 'member', body: 'Hello', detail: null, replyToId: null },
@@ -39,7 +39,7 @@ test('sendMessage in a channel appends a posted event and the projection at the 
 
 test('sendMessage in a runtime chat enqueues one agent prompt job in the same transaction', async () => {
   expect(await sendTo(aliceInAcme, 'chat-invoice-bug', 'message-to-agent', 'Fix it')).toEqual(succeeded)
-  expect(await messageRow('message-to-agent')).toMatchObject({ seq: 5, replyToId: null })
+  expect(await messageRow('message-to-agent')).toMatchObject({ seq: 6, replyToId: null })
   expect(await jobsOf('message-to-agent')).toMatchObject([
     { workspaceId: acme, type: 'agent.prompt', attempts: 0, state: 'queued' },
   ])
@@ -59,18 +59,19 @@ test('editMessage and deleteMessage append events and edit the projection, and a
   expect(
     await resultOf(bobInAcme, 'conversation.deleteMessage', { workspaceId: acme, messageId: 'message-to-change' }),
   ).toEqual(succeeded)
-  expect(await messageRow('message-to-change')).toMatchObject({ seq: 2, body: '' })
+  expect(await messageRow('message-to-change')).toMatchObject({ seq: 3, body: '' })
   expect((await messageRow('message-to-change'))?.deletedAt).not.toBeNull()
   expect(await changesOf('chat-standup')).toEqual([
-    { seq: 1, type: 'message.posted', actor: bob, payload: expect.anything() },
-    { seq: 2, type: 'message.posted', actor: bob, payload: expect.objectContaining({ body: '', redacted: true }) },
+    { seq: 1, type: 'chat.created', actor: bob, payload: { name: 'Standup', type: 'channel', projectId: null } },
+    { seq: 2, type: 'message.posted', actor: bob, payload: expect.anything() },
+    { seq: 3, type: 'message.posted', actor: bob, payload: expect.objectContaining({ body: '', redacted: true }) },
     {
-      seq: 3,
+      seq: 4,
       type: 'message.edited',
       actor: bob,
       payload: { messageId: 'message-to-change', body: '', redacted: true },
     },
-    { seq: 4, type: 'message.deleted', actor: bob, payload: { messageId: 'message-to-change' } },
+    { seq: 5, type: 'message.deleted', actor: bob, payload: { messageId: 'message-to-change' } },
   ])
   expect([
     ...(await database.$client`
@@ -85,7 +86,7 @@ test('markChatRead moves the marker to the newest seq and never backwards', asyn
   expect(
     await resultOf(aliceInAcme, 'conversation.markChatRead', { workspaceId: acme, chatId: 'chat-standup' }),
   ).toEqual(succeeded)
-  expect(await markerOf('chat-standup')).toBe(2)
+  expect(await markerOf('chat-standup')).toBe(3)
   await database.$client`update read_markers set last_read_seq = 99 where chat_id = 'chat-standup' and user_id = ${alice}`
   expect(
     await resultOf(aliceInAcme, 'conversation.markChatRead', { workspaceId: acme, chatId: 'chat-standup' }),
