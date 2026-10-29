@@ -14,10 +14,12 @@ import {
   redacted,
   runCredentialsCommand,
 } from './personal.ts'
+import { proxyOf, takeProxySettings, webSocketThrough } from './proxy.ts'
 import { createRelay, type Frame, frameTextOf, messageOf } from './relay.ts'
 import { freeMemoryBytes, systemOf } from './system.ts'
 import { contextOf, log, startTelemetry, withSpan } from './telemetry.ts'
 
+const proxySettings = takeProxySettings(process.env)
 const givenArguments = process.argv.slice(2)
 const isPersonal = givenArguments.includes('--personal')
 const [claimUrlArgument] = givenArguments.filter((argument) => argument !== '--personal')
@@ -144,7 +146,7 @@ const exitForGood = () =>
 type Carrier = Record<string, unknown>
 
 const connect = () => {
-  const socket = new WebSocket(socketUrl)
+  const socket = webSocketThrough(proxyOf(socketUrl, proxySettings), socketUrl)
   const send = (frame: Frame) => {
     const text = frameTextOf(frame)
     if (text) socket.send(text)
