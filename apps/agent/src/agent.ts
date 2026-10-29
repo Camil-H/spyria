@@ -71,6 +71,8 @@ type Conversation = {
   turnEnds: Map<string, Json | undefined>
   sockets: Set<ServerWebSocket<SocketData>>
   started: Promise<void>
+  setup: Promise<void>
+  stopWaitingForSetup?: () => void
 }
 type Launch = {
   id?: string
@@ -104,6 +106,8 @@ const branchReads = { changes: changesOf, commits: commitLogOf, status: statusOf
 const workspaceActions = { bundle: bundleOf, commit: commitOf, fetch: fetchOf, merge: mergeOf, pushed: pushedOf }
 const workspaceActionRoute = /^\/api\/workspace\/(bundle|commit|fetch|merge|pushed|screenshot)$/
 const setupToolCallId = 'spyria-setup'
+const setupCall = { toolCallId: setupToolCallId, title: setupCommand, kind: 'execute' }
+const setupStart = { sessionUpdate: 'tool_call', ...setupCall, status: 'in_progress' }
 const conversationIdPattern = /^[\w-]{1,64}$/
 const exitedUnexpectedly = /exited unexpectedly/i
 const restartedNotice = 'The agent restarted; send your message again'
@@ -218,6 +222,7 @@ export const startAgent = ({
   bufferBytes = 8 * 1024 * 1024,
   authTimeoutMilliseconds = 5_000,
   requestTimeoutMilliseconds = 60_000,
+  setupTimeoutMilliseconds = 45 * 60_000,
   workspaceDirectory = '/workspace/project',
   browserDirectory = '/usr/local/lib/spyria/browser',
 }: {
@@ -227,12 +232,15 @@ export const startAgent = ({
   bufferBytes?: number
   authTimeoutMilliseconds?: number
   requestTimeoutMilliseconds?: number
+  setupTimeoutMilliseconds?: number
   workspaceDirectory?: string
   browserDirectory?: string
 }) => {
   const actions = { ...workspaceActions, screenshot: createScreenshotTaker(browserDirectory) }
   const conversations = new Map<string, Conversation>()
   const checkouts = new Map<string, ReturnType<typeof checkOut>>()
+  const setups = new Map<string, Promise<void>>()
+  const runningSetups = new Set<string>()
   const apiKeyBytes = Buffer.from(apiKey)
   const isApiKey = (given: unknown) => {
     const givenBytes = Buffer.from(String(given ?? ''))
@@ -424,29 +432,72 @@ export const startAgent = ({
     conversation.status = 'idle'
   }
 
-  const setUp = async (conversation: Conversation) => {
-    const call = { toolCallId: setupToolCallId, title: setupCommand, kind: 'execute' }
-    emit(conversation, { sessionUpdate: 'tool_call', ...call, status: 'in_progress' })
-    const { exitCode, output } = await runSetup(conversation.cwd, adapterEnvironmentOf({}), (soFar) =>
-      emit(conversation, {
+  const emitToCheckout = (cwd: string, update: Json, completed?: boolean) => {
+    for (const conversation of conversations.values())
+      if (conversation.cwd === cwd && !conversation.isSub) emit(conversation, update, completed)
+  }
+
+  const setUp = async (cwd: string) => {
+    const startedAt = performance.now()
+    runningSetups.add(cwd)
+    emitToCheckout(cwd, setupStart)
+    const { exitCode, output } = await runSetup(cwd, adapterEnvironmentOf({}), setupTimeoutMilliseconds, (soFar) =>
+      emitToCheckout(cwd, {
         sessionUpdate: 'tool_call_update',
         toolCallId: setupToolCallId,
         status: 'in_progress',
         rawOutput: { formatted_output: soFar.slice(-liveOutputCharacters) },
       }),
-    )
-    emit(
-      conversation,
+    ).finally(() => runningSetups.delete(cwd))
+    log.info({
+      event: 'agent.setup',
+      body: 'Setup script ended',
+      attributes: {
+        'process.exit.code': exitCode,
+        'setup.timed_out': exitCode === undefined,
+        duration_ms: Math.round(performance.now() - startedAt),
+      },
+    })
+    emitToCheckout(
+      cwd,
       {
         sessionUpdate: 'tool_call_update',
-        ...call,
+        ...setupCall,
         status: exitCode === 0 ? 'completed' : 'failed',
-        rawOutput: { formatted_output: output, exit_code: exitCode },
+        rawOutput: { formatted_output: output, ...(exitCode !== undefined && { exit_code: exitCode }) },
       },
       true,
     )
-    if (exitCode !== 0) emit(conversation, { sessionUpdate: 'setup_failed', exitCode, output: lastLinesOf(output) })
+    if (exitCode === undefined)
+      emitToCheckout(cwd, {
+        sessionUpdate: 'setup_failed',
+        timeoutMinutes: setupTimeoutMilliseconds / 60_000,
+        output: lastLinesOf(output),
+      })
+    else if (exitCode !== 0)
+      emitToCheckout(cwd, { sessionUpdate: 'setup_failed', exitCode, output: lastLinesOf(output) })
   }
+
+  const setUpOnce = (conversation: Conversation) => {
+    const { cwd } = conversation
+    if (runningSetups.has(cwd)) emit(conversation, setupStart)
+    const setup =
+      setups.get(cwd) ??
+      setUp(cwd).catch((error) => log.warn({ event: 'agent.setup', body: 'The setup script could not run', error }))
+    setups.set(cwd, setup)
+    return setup
+  }
+
+  const isStoppedDuringSetup = (conversation: Conversation) =>
+    new Promise<boolean>((resolve) => {
+      conversation.stopWaitingForSetup = () => resolve(true)
+      conversation.setup.then(
+        () => resolve(false),
+        () => resolve(false),
+      )
+    }).finally(() => {
+      conversation.stopWaitingForSetup = undefined
+    })
 
   const readWorkspace = async (read: string, parameters: URLSearchParams) => {
     const environment = adapterEnvironmentOf({})
@@ -569,6 +620,7 @@ export const startAgent = ({
       turnEnds: new Map(),
       sockets: new Set(),
       started: Promise.resolve(),
+      setup: Promise.resolve(),
       connection: connectionOf(() => conversation, launch, command, cwd),
     }
     conversations.set(id, conversation)
@@ -577,7 +629,7 @@ export const startAgent = ({
       conversation.connection.close()
     })
     await conversation.started
-    if (hasSetup && conversation.status !== 'error') void setUp(conversation)
+    if (hasSetup && conversation.status !== 'error') conversation.setup = setUpOnce(conversation)
     return Response.json({ id, ...summaryOf(conversation) }, { status: 201 })
   }
 
@@ -670,13 +722,15 @@ export const startAgent = ({
     void withSpan(
       'agent.turn',
       { 'conversation.id': conversation.id },
-      () =>
-        promptOnce(async (errorOutput, hasStreamed) => {
+      async () => {
+        if (await isStoppedDuringSetup(conversation)) return ended({ stopReason: 'cancelled' })
+        await promptOnce(async (errorOutput, hasStreamed) => {
           const notice = new AcpError(withSummary(restartedNotice, errorOutput))
           if (hasStreamed) return failed(notice)
           conversation.status = 'running'
           await promptOnce(async () => failed(notice))
-        }),
+        })
+      },
       contextOf(traceHeaders),
     )
     return Response.json({})
@@ -729,6 +783,7 @@ export const startAgent = ({
     if (action === 'interrupt') {
       if (conversation.sessionId)
         conversation.connection.notify('session/cancel', { sessionId: conversation.sessionId })
+      conversation.stopWaitingForSetup?.()
       closeQuestions(conversation, 'stopped')
       return Response.json({})
     }

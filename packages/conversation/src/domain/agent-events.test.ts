@@ -493,3 +493,12 @@ test('a failed setup script is stored and shown as a notice with its exit code a
     kind: 'notice',
   })
 })
+
+test('a setup script stopped by its time limit is shown as a notice with the limit and its last output lines', () => {
+  const setupTimedOut = acpUpdate(1, { sessionUpdate: 'setup_failed', timeoutMinutes: 45, output: 'downloading' })
+  expect(agentProjectionOf(setupTimedOut)).toEqual({
+    type: 'message',
+    body: 'The setup script .spyria/setup.sh did not finish within 45 minutes and was stopped; the session started anyway.\ndownloading',
+    kind: 'notice',
+  })
+})
