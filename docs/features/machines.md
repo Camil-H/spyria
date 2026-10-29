@@ -25,6 +25,20 @@ Hosts never pull images: the runtime image is built on the server's machine with
 
 Each host row shows its CPUs, memory, how many runtimes run against its cap, and badges: **Docker: rootless** or **Docker: root** (a rooted daemon has root on the host, even though containers are isolated), and **Limits not enforced** when Docker cannot apply memory and process limits on that machine. **Remove** disconnects a host and revokes its token.
 
+## Removing a host
+
+Removing a host (or a member's machine) disconnects it: `spyria-host` logs "This host was removed", turns off its container's restart policy so Docker does not restart it, and stops. Its runtimes show **Could not start** in their chats. Nothing is deleted on the machine: the stopped host container, the runtime containers and their volumes stay until you remove them there, here for the default deployment `spyria`:
+
+```sh
+docker rm -f spyria-host
+docker rm -f $(docker ps -aq --filter label=spyria.managed=1 --filter name=^spyria-rt-)
+docker volume rm $(docker volume ls -q --filter name=^spyria-rt-)
+docker network rm $(docker network ls -q --filter label=spyria.managed=1 --filter name=^spyria-rt-)
+docker volume rm spyria-host
+```
+
+The runtime volumes hold the files the agents worked on, so remove them only once nothing in them is needed. With another deployment name, replace `spyria-` with `<deployment>-`; the name filter keeps another deployment's runtimes on the same Docker daemon. On a member's machine, the sign-ins (`spyria-cred-claude-code`, `spyria-cred-codex`) and installed harnesses (`spyria-harnesses`) stay too; `docker volume rm` them if the machine is not added again.
+
 ## Where a chat runs
 
 A Spyria runtime is placed on the least loaded online workspace host that has room. A host's cap is one runtime per GiB of memory above the first 2 GiB. When no host is online the chat says "No runtime host is available"; when the chosen host goes offline, "The runtime host is offline".
@@ -58,7 +72,9 @@ A member can run Claude Code on their Claude subscription, or Codex on their Cha
 2. Sign in once, in a terminal:
    - Claude Code: `docker exec -it spyria-host spyria-host login claude-code`, open the printed URL, sign in and paste the code.
    - Codex: `docker exec -it spyria-host spyria-host login codex`, open the printed URL and enter the one-time code. ChatGPT may ask you to enable device code sign-in first, in its **Security** settings.
-3. The button turns to "✓ Claude Code connected" (or Codex). In a new runtime chat, set **Runs on** to **Local · Claude Code** or **Local · Codex**.
+3. The button turns to "✓ Claude Code connected" (or Codex) as soon as the sign-in ends. In a new runtime chat, set **Runs on** to **Local · Claude Code** or **Local · Codex**.
+
+The sign-in waits until `spyria-host --personal` has connected to Spyria once ("Waiting for spyria-host to connect to Spyria…"), since Spyria tells it which runtime image to sign in with. If it never connects, the sign-in stops after 15 minutes and points to `docker logs spyria-host`.
 
 The container name follows the deployment name (`<deployment>-host`); the default deployment is `spyria`, so the commands above use `spyria-host`. The commands Spyria shows always carry the right name.
 
@@ -86,7 +102,7 @@ Claude Code, Codex and their adapters are not in the runtime image. Their versio
 
 ## Turning members' machines off
 
-Admins control this for the workspace with the switch **Members can run sessions on their own machine** in **Workspace settings > Connect runtime** (on by default). The page also counts how many members use their machine. When it is off, members cannot add a machine or start such a session (Profile says "Your workspace turned off sessions on members' machines"), and prompts in existing machine sessions get a notice.
+Admins control this for the workspace with the switch **Members can run sessions on their own machine** in **Workspace settings > Connect runtime** (on by default). The page also counts how many members use their machine and how many of them are signed in to Claude Code and to Codex, kept up to date as machines are added, removed or signed in; it never shows whose machines they are. When it is off, members cannot add a machine or start such a session (Profile says "Your workspace turned off sessions on members' machines"), and prompts in existing machine sessions get a notice.
 
 ## Several deployments on one machine
 

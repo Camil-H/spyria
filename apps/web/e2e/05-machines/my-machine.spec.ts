@@ -68,7 +68,9 @@ test.describe('My machine', () => {
 
       const adminPage = await openPageAs(browser, workerStack, 'member-alice')
       await openSettings(adminPage, 'Connect runtime')
-      await expect(hostsSectionOf(adminPage)).toContainText('1 member uses their machine')
+      await expect(hostsSectionOf(adminPage)).toContainText(
+        '1 member uses their machine: 1 signed in to Claude Code, 0 to Codex',
+      )
       await expect(hostsSectionOf(adminPage).getByRole('listitem')).toHaveCount(0)
       await expect(hostsSectionOf(adminPage)).not.toContainText('My machine')
       await openProfile(adminPage)

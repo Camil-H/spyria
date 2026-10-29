@@ -189,6 +189,35 @@ export const setRuntimeHostSecretHash = (
 export const lockRuntimeHost = (tx: Transaction, workspaceId: string, id: string) =>
   onServer(tx, 'select 1 from runtime_hosts where workspace_id = $1 and id = $2 for update', [workspaceId, id])
 
+export const refreshMachineCounts = async (tx: Transaction, workspaceId: string) => {
+  await onServer(
+    tx,
+    'insert into machine_counts (workspace_id, machines, claude_code, codex) values ($1, 0, 0, 0) on conflict do nothing',
+    [workspaceId],
+  )
+  await onServer(tx, 'select 1 from machine_counts where workspace_id = $1 for update', [workspaceId])
+  await onServer(
+    tx,
+    `with counted as (
+       select count(*)::int as machines, count(*) filter (where capacity->'signedIn' ? 'claude-code')::int as claude_code,
+         count(*) filter (where capacity->'signedIn' ? 'codex')::int as codex
+       from runtime_hosts where workspace_id = $1 and owner_id is not null and removed_at is null)
+     update machine_counts set (machines, claude_code, codex) = (counted.machines, counted.claude_code, counted.codex)
+     from counted where machine_counts.workspace_id = $1
+       and (machine_counts.machines, machine_counts.claude_code, machine_counts.codex)
+         is distinct from (counted.machines, counted.claude_code, counted.codex)`,
+    [workspaceId],
+  )
+}
+
+export const expireRuntimeHostClaims = (tx: Transaction, workspaceId: string, now: number) =>
+  onServer(
+    tx,
+    `update runtime_hosts set status = 'expired'
+     where workspace_id = $1 and status = 'waiting' and claim_expires_at <= to_timestamp($2::double precision / 1000)`,
+    [workspaceId, now],
+  )
+
 export const findRuntimeHostBySecretHash = (tx: Transaction, secret: RuntimeHostSecret, hash: string) =>
   firstOnServer<RuntimeHostKey & { claimed: boolean }>(
     tx,
@@ -768,6 +797,7 @@ export const workspaceTablesInPurgeOrder = [
   'messages',
   'runtimes',
   'runtime_hosts',
+  'machine_counts',
   'chat_participants',
   'chats',
   'chat_roles',

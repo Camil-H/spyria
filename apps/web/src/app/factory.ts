@@ -277,10 +277,7 @@ export const createApp = async (
       ...createHttpWorkspaceConnections(postAsMember),
       ...createHttpGitHubConnection(fetchAsMember),
     }),
-    runtimeCommands: commandsOf<RuntimeCommands>(
-      runtimeMutators.runtime,
-      createHttpRuntimeHostCommands(postAsMember, fetchAsMember),
-    ),
+    runtimeCommands: commandsOf<RuntimeCommands>(runtimeMutators.runtime, createHttpRuntimeHostCommands(postAsMember)),
     usageCommands: {
       ...createHttpAuditLogCommands(postAsMember, fetchAsMember),
       ...createHttpSpendCommands(fetchAsMember),

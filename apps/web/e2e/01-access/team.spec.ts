@@ -155,9 +155,7 @@ test.describe('Team', () => {
               ?.removed_at,
         )
         .toBeTruthy()
-      const machinesCounted = page.waitForResponse((response) => response.url().endsWith('/runtime-hosts/machines'))
       await page.goto('/w/workspace-acme/settings/runtime')
-      await machinesCounted
       await expect(hostsSectionOf(page)).not.toContainText('uses their machine')
 
       await openChat(page, bobsChatName)

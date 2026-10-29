@@ -293,6 +293,11 @@ export const queries = defineQueries({
       .where('removedAt', 'IS', null)
       .orderBy('createdAt', 'asc'),
   ),
+  machineCounts: defineQuery(({ ctx }) =>
+    zql.machineCounts
+      .where('workspaceId', ctx.workspaceId)
+      .whereExists('memberships', activeMemberWith(ctx.userId, 'runtimes.manage')),
+  ),
   runtimes: defineQuery(({ ctx }) =>
     zql.runtimes.where('workspaceId', ctx.workspaceId).whereExists('chat', readableBy(ctx.userId)),
   ),

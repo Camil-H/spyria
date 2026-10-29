@@ -25,6 +25,17 @@ const dockerSocket = process.env.DOCKER_SOCKET ?? '/var/run/docker.sock'
 const deployment = process.env.SPYRIA_DEPLOYMENT || 'spyria'
 const prefix = `${deployment}-`
 const docker = createDocker(dockerSocket)
+const signInsChangedSignal = 'SIGUSR2'
+const containerHostPid = 1
+const tellRunningHostSignInsChanged = () => {
+  try {
+    const hostArguments = readFileSync(`/proc/${containerHostPid}/cmdline`, 'utf8').split('\0')
+    if (process.pid !== containerHostPid && hostArguments.includes('--personal'))
+      process.kill(containerHostPid, signInsChangedSignal)
+  } catch {
+    return
+  }
+}
 if (claimUrlArgument === 'health') {
   const relayUrl = `http://127.0.0.1:${process.env.SPYRIA_HOST_GATEWAY_PORT ?? 4000}/`
   const isRelayUp = await fetch(relayUrl).then(Boolean, () => false)
@@ -47,6 +58,7 @@ if (claimUrlArgument === 'login' || claimUrlArgument === 'logout') {
   })
   const { signedIn } = await readCredentials(docker, prefix)
   console.log(`${signedIn.includes(tool) ? 'Signed in' : 'Not signed in'} to ${harnessNames[tool]}`)
+  tellRunningHostSignInsChanged()
   process.exit(0)
 }
 if (!claimUrlArgument) {
@@ -79,6 +91,7 @@ const declaration = async () => {
   return { personal: true, signedIn: credentials.signedIn, credentialsChangedAt: credentials.credentialsChangedAt }
 }
 let sendToSpyria = (_frame: Frame) => false
+let sendSignInsNow: () => Promise<unknown> = declaration
 const modelRelay = createModelRelay({
   send: (frame) => sendToSpyria(frame),
   redact: isPersonal ? (text) => redacted(text, credentials.secrets) : undefined,
@@ -113,6 +126,21 @@ const storedToken = () => (existsSync(tokenPath) ? readFileSync(tokenPath, 'utf8
 const isRefusal = (closeCode: number) => closeCode >= 4000 && closeCode < 4100
 const logHelloFailure = (error: unknown) =>
   log.error({ event: 'host.hello_failed', body: 'Saying hello to Spyria failed', error })
+const ownContainer = `${prefix}host`
+const stopRestarting = async () => {
+  const container = await docker<{ Config?: { Hostname?: string } }>('GET', `/containers/${ownContainer}/json`).catch(
+    () => undefined,
+  )
+  if (container?.Config?.Hostname === hostname())
+    await docker('POST', `/containers/${ownContainer}/update`, { RestartPolicy: { Name: 'no' } })
+}
+const exitForGood = () =>
+  void stopRestarting()
+    .catch((error) =>
+      log.warn({ event: 'host.restart_not_stopped', body: 'Turning off the restart of this host failed', error }),
+    )
+    .then(() => telemetry.shutdown())
+    .finally(() => process.exit(1))
 type Carrier = Record<string, unknown>
 
 const connect = () => {
@@ -153,6 +181,7 @@ const connect = () => {
     sendToSpyria = (frame) => socket.readyState === WebSocket.OPEN && send(frame)
     reconnectDelayMilliseconds = 1000
     heartbeatTimer = setInterval(() => sendHeartbeat().catch(() => {}), heartbeatMilliseconds)
+    sendSignInsNow = sendHeartbeat
     log.info({ event: 'host.connected', body: 'Connected to Spyria', attributes: { 'server.address': socketUrl.host } })
   }
   const runCommand = (frame: { id?: unknown; op?: unknown; args?: unknown; runtimeId?: unknown } & Carrier) => {
@@ -185,7 +214,7 @@ const connect = () => {
     if (token && !isTokenRefused) return void hello(token).catch(logHelloFailure)
     if (claimCode) return send({ type: 'claim', code: claimCode })
     log.error({ event: 'host.unpaired', body: 'No stored token and no code in the URL' })
-    void telemetry.shutdown().finally(() => process.exit(1))
+    exitForGood()
   }
   socket.onmessage = (message) => {
     const frame = JSON.parse(String(message.data))
@@ -207,6 +236,7 @@ const connect = () => {
     clearInterval(heartbeatTimer)
     relay.closeAll()
     sendToSpyria = () => false
+    sendSignInsNow = declaration
     modelRelay.closeAll()
     if (isRefusal(event.code) && storedToken() && claimCode && !isTokenRefused) {
       log.warn({
@@ -223,7 +253,7 @@ const connect = () => {
         body: 'Spyria refused this host',
         attributes: { 'host.close_reason': event.reason },
       })
-      return void telemetry.shutdown().finally(() => process.exit(1))
+      return exitForGood()
     }
     log.warn({
       event: 'host.disconnected',
@@ -237,4 +267,5 @@ const connect = () => {
 
 for (const signal of ['SIGTERM', 'SIGINT'])
   process.on(signal, () => void telemetry.shutdown().finally(() => process.exit(0)))
+if (isPersonal) process.on(signInsChangedSignal, () => void sendSignInsNow().catch(() => {}))
 connect()

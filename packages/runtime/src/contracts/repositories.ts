@@ -13,6 +13,7 @@ export type RuntimeHostRepository = {
   findBySecretHash(secret: HostSecret, hash: string): Promise<{ host: RuntimeHost; claimed: boolean } | undefined>
   lockLoads(workspaceId: WorkspaceId, chatId: ChatId): Promise<HostLoad[]>
   listMachines(workspaceId: WorkspaceId): Promise<RuntimeHost[]>
+  expireClaims(workspaceId: WorkspaceId, now: number): Promise<void>
 }
 
 export type WorkspaceSettings = {

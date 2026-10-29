@@ -294,6 +294,7 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
   const runtimeHostsOf = mappedRows(
     ({ lastSeenAt, createdBy, createdAt, removedAt, ...host }: ZeroRows['runtimeHosts'][number]) => host,
   )
+  const machineCountsOf = mappedRows((counts: ZeroRows['machineCounts'][number]) => counts)
   const runtimesOf = mappedRows(
     ({ workspaceId, id, chatId, hostId, state, failure, hostOnline }: ZeroRows['runtimes'][number]) => ({
       workspaceId,
@@ -347,6 +348,7 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
       workspaceConnections: workspaceConnectionsOf(rowsOf('workspaceConnections')),
       connectionRestrictions: connectionRestrictionsOf(rowsOf('connectionRestrictions')),
       runtimeHosts: runtimeHostsOf(rowsOf('runtimeHosts')),
+      machineCounts: machineCountsOf(rowsOf('machineCounts')),
       runtimes: runtimesOf(rowsOf('runtimes')),
     }
     if (previous && isSameSources(Object.values(previous), Object.values(snapshot))) return previous
