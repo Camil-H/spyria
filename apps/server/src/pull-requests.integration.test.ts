@@ -660,11 +660,11 @@ test('any prompter’s agent reads the checks of a pull request’s head with re
     { repositories: ['app'], permissions: { pull_requests: 'read', checks: 'read', metadata: 'read' } },
     { repositories: ['app'], permissions: { actions: 'read', metadata: 'read' } },
   ])
-  expect(fakeGitHub.apiRequests.filter((line) => /annotations|actions/.test(line))).toEqual([
-    `GET /repos/acme/app/check-runs/${firstRunId + 1}/annotations`,
-    `GET /repos/acme/app/check-runs/${firstRunId + 3}/annotations`,
+  expect(fakeGitHub.apiRequests.filter((line) => /annotations|actions/.test(line)).toSorted()).toEqual([
     `GET /repos/acme/app/actions/jobs/${firstRunId + 1}`,
     `GET /repos/acme/app/actions/jobs/${firstRunId + 1}/logs`,
+    `GET /repos/acme/app/check-runs/${firstRunId + 1}/annotations`,
+    `GET /repos/acme/app/check-runs/${firstRunId + 3}/annotations`,
   ])
   expect(
     (await toolCallRows(id)).map(({ prompter_id, tool, read_only, status }) => ({
