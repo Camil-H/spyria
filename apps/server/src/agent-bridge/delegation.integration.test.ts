@@ -306,6 +306,32 @@ test('g-4. a long task answers still running before Pi’s timeout for the route
   ])
 })
 
+test('check_task reads a running subagent’s steps so far, and with cancel stops it, marks its delegation stopped and interrupts its conversation', async () => {
+  const { relay } = await fakeAgent()
+  const chat = await newRuntimeChat()
+  const check = { tool: 'check_task', arguments: { taskId: '$taskId' } }
+  const cancel = { tool: 'check_task', arguments: { taskId: '$taskId', cancel: true } }
+  setFakeLlmScript(
+    delegatingScript({ steps: [delegatedTask, check, cancel], subagents: { 'mistral-small-latest': heldWork } }),
+  )
+  const promptId = await promptAndAnswer(chat, 'Delegate, check and cancel')
+  const [delegation] = await delegationsOf(chat)
+  const id = String(delegation?.id)
+  const routerSteps = (await stepsOf(promptId)).filter((step) =>
+    ['delegate', 'check_task'].includes(String(step?.name)),
+  )
+  expect(routerSteps.map((step) => [step?.name, step?.isError ?? false])).toEqual([
+    ['delegate', false],
+    ['check_task', false],
+    ['check_task', false],
+  ])
+  expect(routerSteps[1]?.result).toStartWith(`Task ${id} is running; its steps so far:\n- ran echo started`)
+  expect(routerSteps[2]?.result).toStartWith(`Task ${id} was cancelled; its steps:\n- ran echo started`)
+  expect(delegation?.status).toBe('stopped')
+  expect(relay.interrupts).toContain(String(delegation?.conversation_id))
+  await holds.release('sub')
+})
+
 test('a long task the turn never resumed is forgotten and stopped when the turn ends, and its token is refused from then on', async () => {
   const { host, subs } = await fakeAgent()
   const chat = await newRuntimeChat()

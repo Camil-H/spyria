@@ -1,4 +1,5 @@
 import type { ChatId, MessageId } from '@spyria/kernel'
+import type { AgentConversation } from '../contracts/agent.ts'
 
 export type DelegationResult = { text: string; isError: boolean }
 export type RunningDelegation = {
@@ -6,6 +7,9 @@ export type RunningDelegation = {
   promptId: MessageId
   result: Promise<DelegationResult>
   failure?: string
+  conversation?: AgentConversation
+  isSettled?: boolean
+  isCancelled?: boolean
 }
 
 export const runningDelegations = new Map<string, RunningDelegation>()

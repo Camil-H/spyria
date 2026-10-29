@@ -66,7 +66,7 @@ The agent takes a screenshot of a web page with `take_screenshot`, another tool 
 
 ## Delegation and subagents
 
-On a Spyria runtime the agent has two tools for parallel work: `delegate` hands a self-contained task to a subagent that shares the runtime's files, and `await_task` waits for a task still running. A delegated task answers within 45 seconds when it can; otherwise the agent gets a task id and collects the answer later with `await_task`.
+On a Spyria runtime the agent has three tools for parallel work: `delegate` hands a self-contained task to a subagent that shares the runtime's files, `await_task` waits for a task still running, and `check_task` reads the steps a running task has taken so far, or cancels it. A delegated task answers within 45 seconds when it can; otherwise the agent gets a task id and collects the answer later with `await_task`. A cancelled task reads as stopped in the chat, like one stopped with the turn; `check_task` on a task that has finished returns its answer.
 
 The subagent's model is chosen in this order:
 

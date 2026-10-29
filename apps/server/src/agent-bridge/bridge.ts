@@ -462,6 +462,7 @@ export const createAgentBridge = ({
       toolCallTurn: handlers.toolCallTurn,
       delegate: handlers.delegate,
       awaitTask: handlers.awaitTask,
+      checkTask: handlers.checkTask,
       answerQuestion: handlers.answerQuestion,
       readWorkspace: handlers.readWorkspace,
       readRuntimeMedia: handlers.readRuntimeMedia,

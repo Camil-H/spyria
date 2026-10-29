@@ -186,7 +186,7 @@ export type Delegation = Readonly<{
 }>
 export type DelegationRepository = {
   start(delegation: Delegation): Promise<void>
-  update(id: string, fields: { conversationId?: string; status?: 'finished' | 'failed' }): Promise<void>
+  update(id: string, fields: { conversationId?: string; status?: 'finished' | 'failed' | 'stopped' }): Promise<void>
   stopRunning(chatId: ChatId, promptId: MessageId): Promise<string[]>
   runningOfTokenHash(
     hostId: string,

@@ -24,7 +24,7 @@ import { stoppedByPrefix } from '../domain/agent-events.ts'
 import type { AgentStep, StoredStep, ThoughtStep } from '../domain/agent-steps.ts'
 import { toolServerNamerOf } from '../domain/agent-steps.ts'
 import type { Attachment } from '../domain/attachments.ts'
-import { stillRunningOf } from '../domain/delegation.ts'
+import { stillRunningOf, taskReportOf } from '../domain/delegation.ts'
 import { isAgentActivity, isFrozen, quotableKinds } from '../domain/message.ts'
 import type { PullRequestStep } from '../domain/pull-requests.ts'
 import { type RunsOn, runsOnOf } from '../domain/session-routing.ts'
@@ -126,7 +126,7 @@ const withThoughtsApart = (message: ConversationMessage): ConversationMessage[] 
 }
 
 const delegationOf = (message: ConversationMessage) => (message.step as StoredStep | null)?.delegation
-const routerArgumentsOf = (message: ConversationMessage, name: 'delegate' | 'await_task') => {
+const routerArgumentsOf = (message: ConversationMessage, name: 'delegate' | 'await_task' | 'check_task') => {
   if (message.step?.type !== 'tool' || message.step.name !== name) return undefined
   try {
     return JSON.parse(message.step.arguments) as { task?: unknown; taskId?: unknown }
@@ -151,15 +151,21 @@ const withDelegationsGrouped = (replies: readonly ConversationMessage[], isStopp
         ...firstStep,
         step: { type: 'tool', name: 'delegate', arguments: '', result: firstStep.isRunning ? null : '' },
       }
-    const resumes = replies.filter((reply) => routerArgumentsOf(reply, 'await_task')?.taskId === delegation.id)
+    const resumes = replies.filter((reply) =>
+      (['await_task', 'check_task'] as const).some((name) => routerArgumentsOf(reply, name)?.taskId === delegation.id),
+    )
     for (const resume of resumes) resumeIds.add(resume.id)
-    const lastStep = [host, ...resumes].at(-1)?.step
+    const reportOf = ({ step }: ConversationMessage) =>
+      step?.type === 'tool' && step.name === 'check_task' ? taskReportOf(delegation.id, step.result) : undefined
+    const answers = resumes.filter((resume) => !reportOf(resume))
+    const isCancelled = resumes.some((resume) => reportOf(resume) === 'cancelled')
+    const lastStep = [host, ...answers].at(-1)?.step
     const answered = lastStep?.type === 'tool' ? lastStep.result : null
     const result = answered === stillRunningOf(delegation.id) ? null : answered
     const isError = lastStep?.type === 'tool' && lastStep.isError === true
     const status =
       result === null
-        ? host.isRunning
+        ? host.isRunning && !isCancelled
           ? 'running'
           : 'stopped'
         : isError
