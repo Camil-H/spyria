@@ -88,56 +88,50 @@ test.describe('Personal tools', () => {
       await expect(connectionsTabOf(page, 'Shared with me')).toHaveAttribute('aria-selected', 'true')
     })
 
-    await test.step('lists the connections with their status and the matching actions', async () => {
+    await test.step('lists every server of the catalog as not connected, each with Connect', async () => {
       await openMyConnectionsTab(page)
       const personalSection = connectionsPanelOf(page)
-      await expect(personalSection.getByRole('listitem').filter({ hasText: 'GitHub' })).toContainText('Connected')
-      await expect(personalSection.getByRole('listitem').filter({ hasText: 'Slack' })).toContainText('Connected')
-      await expect(personalSection.getByRole('listitem').filter({ hasText: 'Notion' })).toContainText(
-        'Needs reconnection',
-      )
-      await expect(personalSection.getByRole('button', { name: 'Disconnect GitHub' })).toBeVisible()
-      await expect(personalSection.getByRole('button', { name: 'Reconnect Notion' })).toBeVisible()
-      await expect(personalSection.getByRole('button', { name: 'Connect Linear', exact: true })).toBeVisible()
+      for (const tool of ['GitHub', 'Slack', 'Notion', 'Linear']) {
+        await expect(personalSection.getByRole('group', { name: tool })).toContainText('Not connected')
+        await expect(personalSection.getByRole('button', { name: `Connect ${tool}`, exact: true })).toBeVisible()
+      }
+      await expect(personalSection.getByRole('button', { name: /^(Disconnect|Reconnect) / })).toHaveCount(0)
     })
   })
 
-  test('As a member, I reconnect, connect and disconnect my tools, and the chat’s Connected tools panel follows', async ({
+  test('As a member, I connect and disconnect a tool, and the chat’s Connected tools panel follows', async ({
     page,
   }) => {
     await openProfile(page)
     await openMyConnectionsTab(page)
 
-    await test.step('reconnects a tool that needs reconnection', async () => {
-      await connectionsPanelOf(page).getByRole('button', { name: 'Reconnect Notion' }).click()
-      await expect(connectionsPanelOf(page).getByRole('listitem').filter({ hasText: 'Notion' })).toContainText(
-        'Connected',
-      )
-      await expect(connectionsPanelOf(page).getByRole('listitem').filter({ hasText: 'Notion' })).not.toContainText(
-        'Needs reconnection',
-      )
-      await expect(connectionsPanelOf(page).getByRole('button', { name: 'Reconnect Notion' })).toHaveCount(0)
-    })
-
     await test.step('connects a tool of the catalog', async () => {
-      await connectionsPanelOf(page).getByRole('button', { name: 'Connect Linear', exact: true }).click()
+      await inPopup(page, () =>
+        connectionsPanelOf(page).getByRole('button', { name: 'Connect Linear', exact: true }).click(),
+      )
       await expect(connectionsPanelOf(page).getByRole('listitem').filter({ hasText: 'Linear' })).toContainText(
         'Connected',
       )
       await expect(connectionsPanelOf(page).getByRole('button', { name: 'Connect Linear', exact: true })).toHaveCount(0)
     })
 
-    await test.step('disconnects a tool and offers to connect it again', async () => {
-      await connectionsPanelOf(page).getByRole('button', { name: 'Disconnect GitHub' }).click()
-      await expect(connectionsPanelOf(page).getByRole('listitem').filter({ hasText: 'GitHub' })).toHaveCount(0)
-      await expect(connectionsPanelOf(page).getByRole('button', { name: 'Connect GitHub', exact: true })).toBeVisible()
-    })
-
-    await test.step('reflects a disconnection made in the profile', async () => {
+    await test.step('shows it in the chat’s Connected tools panel', async () => {
       await openPanelTab(page, 'Invoice bug', 'Connected tools')
       const personalGroup = tabPanelOf(page).getByRole('region', { name: 'Personal' })
-      await expect(personalGroup.getByRole('listitem').filter({ hasText: 'GitHub' })).toHaveCount(0)
-      await expect(personalGroup.getByRole('listitem').filter({ hasText: 'Slack' })).toBeVisible()
+      await expect(personalGroup.getByRole('listitem').filter({ hasText: 'Linear' })).toContainText('Connected')
+    })
+
+    await test.step('disconnects it and offers to connect it again', async () => {
+      await openProfile(page)
+      await openMyConnectionsTab(page)
+      await connectionsPanelOf(page).getByRole('button', { name: 'Disconnect Linear' }).click()
+      await expect(connectionsPanelOf(page).getByRole('listitem').filter({ hasText: 'Linear' })).toHaveCount(0)
+      await expect(connectionsPanelOf(page).getByRole('button', { name: 'Connect Linear', exact: true })).toBeVisible()
+    })
+
+    await test.step('reflects the disconnection in the panel', async () => {
+      await openPanelTab(page, 'Invoice bug', 'Connected tools')
+      await expect(tabPanelOf(page).getByRole('region', { name: 'Personal' })).toContainText('No personal connections')
     })
   })
 
