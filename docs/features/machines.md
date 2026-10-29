@@ -82,6 +82,7 @@ Claude Code, Codex and their adapters are not in the runtime image. Their versio
 - The tool runs on your plan's models, chosen in the session chip; Spyria does not route, meter or budget it.
 - The agent's tools (MCP) still go through Spyria's gateway, as the chat owner.
 - If your machine is offline, prompts wait with "Your machine is offline".
+- If your machine is online but cannot reach the internet, a Codex session waits about 20 to 30 seconds before it starts: Codex first tries to fetch its model list and your ChatGPT workspace, then gives up. The turn then fails, since Codex needs ChatGPT to answer.
 
 ## Turning members' machines off
 

@@ -13,8 +13,13 @@ export const decisionRequestOf = (model: Model, state: string, questions: Questi
   isDecisionModel(model)
     ? {
         model: model.id,
-        state,
-        questions: mapQuestions(questions, (question) => ({ kind: 'choice', ...question })),
+        input: state,
+        questions: Object.entries(questions).map(([name, { instructions, criteria }]) => ({
+          type: 'choice',
+          name,
+          instructions,
+          choices: Object.entries(criteria).map(([value, description]) => ({ value, description })),
+        })),
       }
     : {
         model: model.id,
@@ -70,11 +75,11 @@ const validAnswersOf = (questions: Questions, answerOf: (name: string) => { valu
 
 export const answersOf = (model: Model, questions: Questions, body: unknown): Answers | undefined => {
   if (isDecisionModel(model)) {
-    const answers = (body as { answers?: Record<string, { value?: unknown; confidence?: unknown }> })?.answers
-    return validAnswersOf(questions, (name) => ({
-      value: answers?.[name]?.value,
-      confidence: answers?.[name]?.confidence ?? 0,
-    }))
+    const answers = (body as { answers?: { name?: unknown; choice?: unknown; confidence?: unknown }[] })?.answers
+    return validAnswersOf(questions, (name) => {
+      const answer = Array.isArray(answers) ? answers.find((candidate) => candidate?.name === name) : undefined
+      return { value: answer?.choice, confidence: answer?.confidence ?? 0 }
+    })
   }
   const content = (body as { choices?: { message?: { content?: unknown } }[] })?.choices?.[0]?.message?.content
   const parsed = typeof content === 'string' ? firstJsonObjectOf(content) : undefined

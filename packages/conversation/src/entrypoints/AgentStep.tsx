@@ -42,7 +42,7 @@ const CommandStep = ({ id, step, isRunning }: { id: string; step: StepOf<'comman
           <code className="truncate font-mono text-ink">$ {step.command}</code>
           {step.exitCode !== null && (
             <span className="shrink-0 text-xs">
-              exit {step.exitCode}
+              {step.isExitCodeDerived ? (hasFailed ? 'Failed' : 'Succeeded') : `exit ${step.exitCode}`}
               {step.durationMilliseconds !== null && ` · ${durationLabelOf(step.durationMilliseconds)}`}
             </span>
           )}

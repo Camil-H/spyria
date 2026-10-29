@@ -172,9 +172,10 @@ test('each step is stored once and updated by its final call, the full command o
   expect(steps).toMatchObject([
     { type: 'thought', text: 'Thinking about the plan.' },
     { type: 'file', operation: 'edit', path: 'app.ts', added: 1, removed: 1 },
-    { type: 'command', command: 'npm test', exitCode: 1, output: 'exit code 1' },
+    { type: 'command', command: 'npm test', exitCode: 1, isExitCodeDerived: true, output: 'exit code 1' },
     { type: 'command', command: 'npm test', exitCode: 2, output: 'one\ntwo\nfailed' },
   ])
+  expect(steps[3]).not.toHaveProperty('isExitCodeDerived')
   expect(live.at(-1)?.kind).toBe('agent')
   expect(live.at(-1)?.body).toContain('Hello from the stub')
   const stored = await storedAgentEventsOf(chat)
