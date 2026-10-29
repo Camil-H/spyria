@@ -148,7 +148,7 @@ export const MessageItem = ({
         ref={ref}
         data-message-id={message.id}
         aria-current={message.id === linkedMessageId || undefined}
-        className="group relative rounded-md px-3 py-2 hover:bg-hover aria-current:bg-hover aria-current:ring-1 aria-current:ring-accent"
+        className="group relative rounded-md px-3 py-2 hover:bg-hover aria-current:bg-hover aria-current:ring-1 aria-current:ring-accent aria-current:ring-inset"
       >
         {message.kind === 'notice' ? (
           <div className="flex flex-col gap-1">
