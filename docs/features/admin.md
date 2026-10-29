@@ -150,7 +150,7 @@ Calls delegated to sub-agents count in the turn that delegated them. Every membe
 On the same page, a member with `budgets.manage` sets an optional monthly budget in dollars per member and an optional monthly total for the workspace. Months are calendar months in UTC.
 
 - **Alerts** at 80% and 100%, once per threshold per month: the member sees a banner in **My usage** and a notice above the composer; admins see a badge on the **Analyze costs** card and the list of members above 80%.
-- **Hard stop** at 100%: the member's model calls are refused before reaching the provider, including the calls of their running sub-agents and the routing call of their next turn. The chat shows "<Name>'s monthly AI budget is used up; an admin can raise it in Workspace settings". Once the workspace total is reached, every member is refused with the workspace's wording.
+- **Hard stop** at 100%: the member's model calls are refused before reaching the provider, including the calls of their running sub-agents and the routing call of their next turn. The chat shows "<Name>'s monthly AI budget is used up; a member with the Manage budgets permission can raise it in Workspace settings". Once the workspace total is reached, every member is refused with the workspace's wording.
 - Raising or removing the budget lets the member prompt again at once.
 
 Spend is counted from the gateway's usage records, which Spyria reads every few seconds, and a call is priced only after it ran. A budget can therefore be exceeded by the calls of the last few seconds, typically cents.

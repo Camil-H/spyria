@@ -18,7 +18,7 @@ const unavailableStatuses = [500, 502, 503, 529]
 export const noLlmKeyNoticeOf = (memberName: string) => `${memberName} has no LLM key in this workspace`
 export const noLongerPromptsNoticeOf = (memberName: string) => `${memberName} can no longer prompt in this chat`
 export const budgetUsedUpNoticeOf = (budget: 'member' | 'workspace', memberName: string) =>
-  `${budget === 'member' ? `${memberName}'s` : "The workspace's"} monthly AI budget is used up; an admin can raise it in Workspace settings`
+  `${budget === 'member' ? `${memberName}'s` : "The workspace's"} monthly AI budget is used up; a member with the Manage budgets permission can raise it in Workspace settings`
 export const genericModelCallNoticeOf = (status: number) => `The model call failed (error ${status})`
 
 const codesOf = (body: unknown) => {

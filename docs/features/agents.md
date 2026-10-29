@@ -94,7 +94,7 @@ Admins can set a monthly AI budget per member and a monthly total for the worksp
 
 - **Profile > My usage** shows your **Monthly AI budget** with a progress bar ("$0.70 of $1.00 (70%)" or "No monthly budget") and your own spend by chat and model, with its breakdown into factors, each with a line chart over time, for all your usage or one chat or model. You never see other members' spend there.
 - At 80%, a notice above the composer of agent chats says "You have used 80% of your monthly AI budget".
-- At 100%, your model calls are refused, including your subagent and routing calls: the chat shows "*Name*'s monthly AI budget is used up; an admin can raise it in Workspace settings" (or the workspace wording when the workspace total is reached). A raised or removed budget applies to the next call.
+- At 100%, your model calls are refused, including your subagent and routing calls: the chat shows "*Name*'s monthly AI budget is used up; a member with the Manage budgets permission can raise it in Workspace settings" (or the workspace wording when the workspace total is reached). A raised or removed budget applies to the next call.
 
 Budgets are checked against recorded spend, which is synced from the gateway every few seconds, so a member can go slightly over the limit (typically cents). Sessions on a member's own machine use their subscription and are neither metered nor stopped by budgets.
 
