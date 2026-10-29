@@ -79,8 +79,10 @@ const decompressed = (body: Uint8Array, encoding: string | undefined) => {
   if (!decompress) return body
   try {
     return decompress(body, { maxOutputLength: maximumWebPageBytes })
-  } catch {
-    throw new WebPageTooLarge()
+  } catch (error) {
+    throw (error as { code?: string }).code === 'ERR_BUFFER_TOO_LARGE'
+      ? new WebPageTooLarge()
+      : new WebPageUnreachable()
   }
 }
 
