@@ -66,6 +66,8 @@ const participant = (chat: string, memberId: MemberId, roleId: string) => ({
   roleId,
 })
 
+export const seededChatCreatedSeq = 1
+
 const message = (
   id: string,
   chat: string,
@@ -80,7 +82,7 @@ const message = (
   id: messageId(`message-${id}`),
   workspaceId: workspace,
   chatId: chatId(chat),
-  seq: Number(id.slice(id.lastIndexOf('-') + 1)),
+  seq: seededChatCreatedSeq + Number(id.slice(id.lastIndexOf('-') + 1)),
   kind,
   authorId,
   body,
@@ -89,6 +91,7 @@ const message = (
   step,
   replyToId: null,
   threadRootId: null,
+  quotedMessageId: null,
   createdAt: `2026-09-30T${time}:00.000Z`,
   editedAt: null,
   deletedAt: null,
@@ -218,8 +221,8 @@ export const createMockSnapshot = (): Snapshot => {
     latestAgentActivity: [],
     pinnedSteps: [],
     readMarkers: [
-      { workspaceId: acme, memberId: alice, chatId: welcomeChat, lastReadSeq: 2 },
-      { workspaceId: acme, memberId: alice, chatId: invoiceChat, lastReadSeq: 4 },
+      { workspaceId: acme, memberId: alice, chatId: welcomeChat, lastReadSeq: seededChatCreatedSeq + 2 },
+      { workspaceId: acme, memberId: alice, chatId: invoiceChat, lastReadSeq: seededChatCreatedSeq + 4 },
     ],
     threadReadMarkers: [],
     runtimeOrigins: [],
