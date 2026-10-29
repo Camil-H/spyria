@@ -54,8 +54,7 @@ test.describe('Workspace panel', () => {
     await sendMessage(page, 'stub:ls')
     await expect(messageContaining(page, 'only-in-acme-app.txt')).toHaveCount(1)
     await finished(page)
-    await expect(panelTabOf(page, 'Changes')).toHaveAttribute('aria-selected', 'true')
-    await panelTabOf(page, 'Files').click()
+    await expect(panelTabOf(page, 'Files')).toHaveAttribute('aria-selected', 'true')
     const rows = tabPanelOf(page).getByRole('list').first().getByRole('listitem')
     await expect(rows).toHaveText(['src', 'AGENTS.md', 'only-in-acme-app.txt', 'README.md'])
     await expect(tabPanelOf(page).getByText('.git', { exact: true })).toHaveCount(0)
@@ -74,7 +73,6 @@ test.describe('Workspace panel', () => {
     tag: ['@spec-40'],
   }, async ({ page, agentScript }) => {
     await devChatWithEdits(page, agentScript, 'Edit totals')
-    await panelTabOf(page, 'Files').click()
     const src = treeRowOf(page, 'src')
     await expect(src.getByRole('img', { name: 'Contains changes' })).toBeVisible()
     await src.click()
