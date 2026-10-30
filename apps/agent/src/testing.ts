@@ -73,7 +73,7 @@ export const createAgentTestbed = () => {
   })
   afterAll(() => rmSync(stateDirectory, { recursive: true, force: true }))
   const started = (options: Partial<Parameters<typeof startAgent>[0]> = {}) => {
-    const agent = startAgent({ apiKey, port: 0, ...options })
+    const agent = startAgent({ apiKey, port: 0, homeDirectory: join(stateDirectory, 'home'), ...options })
     running.push(agent)
     return { agent, ...clientOf(agent.port) }
   }

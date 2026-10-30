@@ -121,9 +121,13 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
         const row = await tx.run(zql.runtimes.where('workspaceId', workspaceId).where('chatId', chatId).one())
         return row && runtimeOf(row)
       },
-      localHarnessOf: async (runtime) => {
+      launchOptionsOf: async (runtime) => {
         const chat = await tx.run(zql.chats.where('workspaceId', runtime.workspaceId).where('id', runtime.chatId).one())
-        return chat?.localSession ? harnessOf(chat.harness) : undefined
+        const ownerId = chat?.ownerUserId ?? chat?.ownerServiceIdentityId
+        return {
+          harness: chat?.localSession ? harnessOf(chat.harness) : undefined,
+          packageCache: chat?.repository && ownerId ? { repository: chat.repository, ownerId } : undefined,
+        }
       },
       add: (runtime) => tx.mutate.runtimes.insert(runtime),
       save: (runtime) => tx.mutate.runtimes.update(runtime),

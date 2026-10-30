@@ -22,7 +22,7 @@ const timeoutOf = (requested: unknown) =>
 
 export const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
-export const relayVersion = 2
+export const relayVersion = 3
 export const relayChunkBytes = 256 * 1024
 const maximumRelayedBodyBytes = 256 * 1024 * 1024
 const maximumHeldStreamBytes = 8 * 1024 * 1024

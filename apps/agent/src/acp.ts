@@ -161,3 +161,11 @@ export const connectAdapter = (
 }
 
 export type AdapterConnection = ReturnType<typeof connectAdapter>
+
+export const unspawnedConnection: AdapterConnection = {
+  request: () => Promise.reject(new AcpError('The adapter has not started')),
+  notify: () => {},
+  errorOutput: () => [],
+  closed: Promise.resolve(),
+  close: () => false,
+}

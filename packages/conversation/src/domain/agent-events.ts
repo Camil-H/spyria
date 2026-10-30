@@ -78,6 +78,11 @@ type AcpToolCall = {
   rawOutput: unknown
   content: Fields[] | undefined
 }
+const setupToolCallId = 'spyria-setup'
+export const isRunningSetupStep = ({ id, step }: { id: string; step: unknown }) => {
+  const stored = step as StoredStep | null
+  return id.endsWith(`:${setupToolCallId}`) && stored?.type === 'command' && stored.exitCode === null
+}
 const spyriaAgentToolCallOf = (event: AgentEvent, update: Fields): AcpToolCall => ({
   id: `${event.id.split(':')[0]}:${update?.toolCallId}`,
   title: String(update?.title),

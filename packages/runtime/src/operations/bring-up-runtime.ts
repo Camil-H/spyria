@@ -33,16 +33,16 @@ export const bringUpRuntime = async (
   { transactor, provider }: Dependencies,
   { workspaceId, runtimeId, now, isLastAttempt }: Input,
 ) => {
-  const { runtime, harness } = await transactor.run(async ({ runtimes }) => {
+  const { runtime, harness, packageCache } = await transactor.run(async ({ runtimes }) => {
     const runtime = await runtimes.lock(workspaceId, runtimeId)
-    return { runtime, harness: await runtimes.localHarnessOf(runtime) }
+    return { runtime, ...(await runtimes.launchOptionsOf(runtime)) }
   })
   const sandbox = locationOf(runtime)
   if (!['creating', 'starting', 'installing'].includes(runtime.state) || !sandbox) return
   let started = runtime
   try {
     const status = await provider.status(sandbox)
-    if (status === 'missing') await provider.create({ ...sandbox, image: runtime.image })
+    if (status === 'missing') await provider.create({ ...sandbox, image: runtime.image, packageCache })
     if (harness && !(await provider.hasHarness({ ...sandbox, harness }))) {
       const installing = runtime.state === 'installing' ? runtime : transitioned(runtime, 'installing', now)
       await recordIfUnchanged(transactor, runtime, ({ runtimes }) => runtimes.save(installing))
