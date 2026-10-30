@@ -10,8 +10,8 @@ import {
   useGuardedAction,
 } from '@spyria/ui'
 import { useEffect, useRef, useState } from 'react'
-import type { GitHubRepository } from '../domain/github.ts'
-import { setupCommandsOf } from '../queries/get-dev-loop-settings.ts'
+import { listedRepositoriesOf, type RepositoryListing, repositoryPromptOf } from '../domain/github.ts'
+import { setupCommandsOf } from '../queries/get-setup-commands.ts'
 import { useWorkspaceCommands } from './providers.tsx'
 
 type Row = { repository: string | null; command: string }
@@ -21,25 +21,24 @@ const rowsOf = (commands: readonly SetupCommand[]): Row[] => [
   ...commands.filter(({ repository }) => repository !== null),
 ]
 const commandsOf = (rows: Row[]) => rows.filter(({ command }) => command.trim() !== '')
-const repositoryPromptOf = (repositories: number, withoutOwnCommand: number) =>
-  repositories === 0
-    ? 'No repository yet: connect GitHub to list them'
-    : withoutOwnCommand === 0
-      ? 'Every repository has its own setup command'
-      : 'Give a repository its own setup command…'
 
 export const SetupCommandsSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
   const commands = useWorkspaceCommands()
   const stored = useQuery(setupCommandsOf, workspaceId)
   const [rows, setRows] = useState(rowsOf(stored))
-  const [repositories, setRepositories] = useState<GitHubRepository[]>([])
+  const [listing, setListing] = useState<RepositoryListing>({ state: 'loading' })
+  const repositories = listedRepositoriesOf(listing)
   const [added, setAdded] = useState('')
   const [isSaved, setIsSaved] = useState(false)
   const [isDirty, setIsDirty] = useState(false)
+  const [blankRepository, setBlankRepository] = useState<string | null>(null)
   const edits = useRef(0)
   const { errorMessage, isPending, run } = useGuardedAction()
   useEffect(() => {
-    commands.listRepositories({ workspaceId }).then(setRepositories, () => setRepositories([]))
+    commands.listRepositories({ workspaceId }).then(
+      (repositories) => setListing({ state: 'listed', repositories }),
+      () => setListing({ state: 'failed' }),
+    )
   }, [commands, workspaceId])
   useEffect(() => {
     if (!isDirty) setRows(rowsOf(stored))
@@ -49,8 +48,11 @@ export const SetupCommandsSection = ({ workspaceId }: { workspaceId: WorkspaceId
     setRows(next)
     setIsSaved(false)
     setIsDirty(true)
+    setBlankRepository(null)
   }
   const save = () => {
+    const blank = rows.find(({ repository, command }) => repository !== null && command.trim() === '')
+    if (blank?.repository) return setBlankRepository(blank.repository)
     const savedEdits = edits.current
     return run(async () => {
       await commands.setSetupCommands({ workspaceId, commands: commandsOf(rows) })
@@ -108,7 +110,7 @@ export const SetupCommandsSection = ({ workspaceId }: { workspaceId: WorkspaceId
             value={added}
             onChange={(event) => setAdded(event.target.value)}
           >
-            <option value="">{repositoryPromptOf(repositories.length, withoutOwn.length)}</option>
+            <option value="">{repositoryPromptOf(listing, withoutOwn.length, 'setup command')}</option>
             {withoutOwn.map(({ fullName }) => (
               <option key={fullName} value={fullName}>
                 {fullName}
@@ -133,6 +135,7 @@ export const SetupCommandsSection = ({ workspaceId }: { workspaceId: WorkspaceId
           </button>
           {isSaved && <span className="text-sm text-muted">Saved</span>}
         </div>
+        {blankRepository && <ErrorMessage message={`Give ${blankRepository} a setup command, or remove it`} />}
       </form>
       <ErrorMessage message={errorMessage} />
     </LabelledSection>

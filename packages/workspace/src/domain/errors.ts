@@ -168,7 +168,7 @@ export const AdminOnly = errorKind('admin_only', () => 'Only an Admin can delete
 export const InvalidDevLoopSettings = errorKind(
   'invalid_dev_loop_settings',
   () =>
-    'Each command step needs a name of its own, a command and a timeout of 1 to 120 minutes; fixes go from 0 to 10; a pipeline has at most 20 steps, one review, one pull request and one CI step, and only CI may follow the pull request; the time limit goes from 10 minutes to 24 hours and a cost limit is above 0',
+    'Each command gate needs a name of its own, a command and a timeout of 1 to 120 minutes; fixes go from 0 to 10; a repository has at most 20 gates, one code review, one pull request and one CI gate, and only CI may follow the pull request; the time limit goes from 10 minutes to 24 hours and a cost limit is above 0',
   WorkspaceError,
 )
 export const InvalidSetupCommands = errorKind(

@@ -148,9 +148,9 @@ export const finished = (step: DevLoopStep, outcome: string): DevLoopStep => ({
 export const limitOutcomeOf = (step: DevLoopStep, now: number, costMicros: number | null) => {
   const minutes = Math.floor((now - step.startedAt) / 60_000)
   if (minutes >= step.timeLimitMinutes)
-    return `Stopped after ${step.timeLimitMinutes} minutes, the time limit of a loop: over to you`
+    return `Stopped after ${step.timeLimitMinutes} minutes, the time limit of a run through the gates: over to you`
   if (costMicros !== null && step.costLimitMicros !== null && costMicros >= step.costLimitMicros)
-    return `Stopped at $${(step.costLimitMicros / 1_000_000).toFixed(2)}, the cost limit of a loop: over to you`
+    return `Stopped at $${(step.costLimitMicros / 1_000_000).toFixed(2)}, the cost limit of a run through the gates: over to you`
   return undefined
 }
 

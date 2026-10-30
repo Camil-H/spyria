@@ -20,7 +20,7 @@ import {
 } from '@spyria/ui'
 import { useEffect, useRef, useState } from 'react'
 import { invalidPipelineOf, withoutPipeline, withPipeline } from '../domain/dev-loop.ts'
-import type { GitHubRepository } from '../domain/github.ts'
+import { listedRepositoriesOf, type RepositoryListing, repositoryPromptOf } from '../domain/github.ts'
 import { devLoopSettingsOf } from '../queries/get-dev-loop-settings.ts'
 import { DevLoopPipelineEditor } from './DevLoopPipelineEditor.tsx'
 import { useWorkspaceCommands } from './providers.tsx'
@@ -28,12 +28,6 @@ import { useWorkspaceCommands } from './providers.tsx'
 const offSettings: DevLoopSettings = { ...defaultDevLoopSettings, isOn: false }
 const dollarsOf = (micros: number | null) => (micros === null ? '' : String(micros / 1_000_000))
 const pipelineLabelOf = (repository: string | null) => repository ?? 'Every other repository'
-const repositoryPromptOf = (repositories: number, withoutOwnGates: number) =>
-  repositories === 0
-    ? 'No repository yet: connect GitHub to list them'
-    : withoutOwnGates === 0
-      ? 'Every repository has its own gates'
-      : 'Give a repository its own gates…'
 
 export const DevLoopSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
   const commands = useWorkspaceCommands()
@@ -41,7 +35,8 @@ export const DevLoopSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
   const [draft, setDraft] = useState(stored ?? offSettings)
   const [costDollars, setCostDollars] = useState(dollarsOf(draft.costLimitMicros))
   const [selected, setSelected] = useState<string | null>(null)
-  const [repositories, setRepositories] = useState<GitHubRepository[]>([])
+  const [listing, setListing] = useState<RepositoryListing>({ state: 'loading' })
+  const repositories = listedRepositoriesOf(listing)
   const [added, setAdded] = useState('')
   const [checkNames, setCheckNames] = useState<string[]>([])
   const [isSaved, setIsSaved] = useState(false)
@@ -49,7 +44,10 @@ export const DevLoopSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
   const [invalidPipeline, setInvalidPipeline] = useState<string | null | undefined>()
   const { errorMessage, isPending, run } = useGuardedAction()
   useEffect(() => {
-    commands.listRepositories({ workspaceId }).then(setRepositories, () => setRepositories([]))
+    commands.listRepositories({ workspaceId }).then(
+      (repositories) => setListing({ state: 'listed', repositories }),
+      () => setListing({ state: 'failed' }),
+    )
   }, [commands, workspaceId])
   useEffect(() => {
     if (!stored || isDirty) return
@@ -184,7 +182,7 @@ export const DevLoopSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
               value={added}
               onChange={(event) => setAdded(event.target.value)}
             >
-              <option value="">{repositoryPromptOf(repositories.length, withoutOwn.length)}</option>
+              <option value="">{repositoryPromptOf(listing, withoutOwn.length, 'gates')}</option>
               {withoutOwn.map(({ fullName }) => (
                 <option key={fullName} value={fullName}>
                   {fullName}
