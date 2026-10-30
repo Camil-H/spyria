@@ -2,7 +2,7 @@ import { configureGitHubApp, expect, mainOf, openSettings, type Page, test } fro
 
 const sectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Setup commands' })
 const tabOf = (page: Page, name: string) =>
-  sectionOf(page).getByRole('tablist', { name: 'Setup commands' }).getByRole('tab', { name })
+  sectionOf(page).getByRole('tablist', { name: 'Setup commands' }).getByRole('tab', { name, exact: true })
 const commandOf = (page: Page) => sectionOf(page).getByLabel('Setup command', { exact: true })
 
 test.describe('Setup commands', () => {
@@ -37,6 +37,8 @@ test.describe('Setup commands', () => {
     await commandOf(page).fill('')
     await section.getByRole('button', { name: 'Save' }).click()
     await expect(section.getByText('Saved')).toBeVisible()
+    await page.reload()
+    await expect(commandOf(page)).toHaveValue('')
     await expect(tabOf(page, 'acme/app')).toHaveCount(0)
   })
 })
