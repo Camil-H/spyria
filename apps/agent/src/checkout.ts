@@ -92,13 +92,14 @@ const killGroup = (leaderPid: number) => {
   }
 }
 
-export const runSetup = async (
+export const runCommand = async (
+  command: string,
   cwd: string,
   env: Record<string, string>,
   timeoutMilliseconds: number,
   onOutput: (output: string) => void,
 ) => {
-  const child = Bun.spawn(['sh', '-c', `${setupCommand} 2>&1`], {
+  const child = Bun.spawn(['sh', '-c', `exec 2>&1\n${command}`], {
     cwd,
     env,
     stdin: 'ignore',
