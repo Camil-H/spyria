@@ -107,6 +107,7 @@ const socketRoute = /^\/sockets\/events\/([\w-]+)$/
 const workspaceRoute = /^\/api\/workspace\/(tree|file|media|changes|commits|status|checks)$/
 const branchReads = { changes: changesOf, commits: commitLogOf, status: statusOf }
 const workspaceActions = { bundle: bundleOf, commit: commitOf, fetch: fetchOf, merge: mergeOf, pushed: pushedOf }
+const actionsRunningHooks = ['commit', 'merge']
 const workspaceActionRoute = /^\/api\/workspace\/(bundle|commit|fetch|merge|pushed|screenshot|checks)$/
 const setupToolCallId = 'spyria-setup'
 const setupCallOf = (command: string) => ({ toolCallId: setupToolCallId, title: command, kind: 'execute' })
@@ -451,7 +452,7 @@ export const startAgent = ({
     if (agent?.acp_model || agent?.acp_thought_level)
       await switchModel(conversation, agent.acp_model, agent.acp_thought_level)
     await reportWorkspace(conversation)
-    conversation.status = 'idle'
+    if (conversation.status === 'starting') conversation.status = 'idle'
   }
 
   const emitToCheckout = (cwd: string, update: Json, completed?: boolean) => {
@@ -460,7 +461,11 @@ export const startAgent = ({
   }
 
   const runSetup = async (cwd: string, command: string) => {
-    emptySetupFiles(homeDirectory)
+    try {
+      emptySetupFiles(homeDirectory)
+    } catch (error) {
+      log.warn({ event: 'agent.setup', body: 'The setup files could not be emptied', error })
+    }
     return runCommand(
       command,
       cwd,
@@ -705,6 +710,7 @@ export const startAgent = ({
     if (conversation.status === 'error')
       return Response.json({ error: 'The conversation has no running session' }, { status: 409 })
     if (promptId) rememberPrompt(conversation, promptId)
+    conversation.status = 'running'
     const startedAt = performance.now()
     const promptParams = () => ({
       sessionId: conversation.sessionId,
@@ -798,10 +804,7 @@ export const startAgent = ({
   }
 
   const actedWhileSettingUp = async (conversation: Conversation, action: string | undefined, request: Request) => {
-    if (action === 'interrupt') {
-      conversation.stopWaitingToStart?.()
-      return Response.json({})
-    }
+    if (action === 'interrupt') return Response.json({})
     if (action === 'restart') return Response.json({ id: conversation.id, ...summaryOf(conversation) })
     if (action !== 'switch_acp_model') return Response.json({ error: 'Not found' }, { status: 404 })
     const { model, thoughtLevel } = (await request.json()) as { model?: string; thoughtLevel?: string }
@@ -826,7 +829,7 @@ export const startAgent = ({
       const acted = await actions[workspaceAction as keyof typeof actions](
         workspaceDirectory,
         await request.json(),
-        toolEnvironmentWith({}),
+        actionsRunningHooks.includes(workspaceAction) ? toolEnvironmentWith({}) : inheritedEnvironmentOf(),
       )
       return 'failure' in acted ? Response.json({ error: acted.failure }, { status: 422 }) : Response.json(acted)
     }
@@ -849,6 +852,10 @@ export const startAgent = ({
         traceparent: request.headers.get('traceparent'),
         tracestate: request.headers.get('tracestate'),
       })
+    if (action === 'interrupt' && conversation.stopWaitingToStart) {
+      conversation.stopWaitingToStart()
+      return Response.json({})
+    }
     if (conversation.isSettingUp) return actedWhileSettingUp(conversation, action, request)
     await conversation.started
     if (action === 'restart') {
