@@ -33,7 +33,9 @@ const statusOf = (step: DevLoopStep, index: number): StepStatus =>
   index === step.position && activeStates.includes(step.state) ? 'running' : (step.outcomes[index] ?? 'waiting')
 
 const fixesOf = (config: DevLoopStepConfig, round: number) =>
-  'fixes' in config && round > 0 ? `fixed ${round} of ${config.fixes} times` : undefined
+  'fixes' in config && config.fixes > 0 && round > 0
+    ? `sent back ${Math.min(round, config.fixes)} of ${config.fixes} times`
+    : undefined
 
 const DevLoopCard = ({ step }: { step: DevLoopStep }) => {
   const important = step.findings.filter((finding) => finding.severity === 'important').length

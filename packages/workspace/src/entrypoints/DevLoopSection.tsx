@@ -19,7 +19,7 @@ import {
   useGuardedAction,
 } from '@spyria/ui'
 import { useEffect, useState } from 'react'
-import { withoutPipeline, withPipeline } from '../domain/dev-loop.ts'
+import { invalidPipelineOf, withoutPipeline, withPipeline } from '../domain/dev-loop.ts'
 import type { GitHubRepository } from '../domain/github.ts'
 import { devLoopSettingsOf } from '../queries/get-dev-loop-settings.ts'
 import { DevLoopPipelineEditor } from './DevLoopPipelineEditor.tsx'
@@ -39,29 +39,48 @@ export const DevLoopSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
   const [added, setAdded] = useState('')
   const [checkNames, setCheckNames] = useState<string[]>([])
   const [isSaved, setIsSaved] = useState(false)
+  const [isDirty, setIsDirty] = useState(false)
+  const [invalidPipeline, setInvalidPipeline] = useState<string | null | undefined>()
   const { errorMessage, isPending, run } = useGuardedAction()
   useEffect(() => {
     commands.listRepositories({ workspaceId }).then(setRepositories, () => setRepositories([]))
   }, [commands, workspaceId])
   useEffect(() => {
-    if (!stored) return
+    if (!stored || isDirty) return
     setDraft(stored)
     setCostDollars(dollarsOf(stored.costLimitMicros))
-  }, [stored])
+    if (!stored.pipelines.some(({ repository }) => repository === selected)) setSelected(null)
+  }, [stored, isDirty, selected])
   const branch = repositories.find((repository) => repository.fullName === selected)?.defaultBranch
   useEffect(() => {
-    if (!selected || !branch) return setCheckNames([])
-    commands.listCheckNames({ workspaceId, repository: selected, branch }).then(setCheckNames, () => setCheckNames([]))
+    let isCurrent = true
+    const show = (names: string[]) => {
+      if (isCurrent) setCheckNames(names)
+    }
+    if (!selected || !branch) show([])
+    else commands.listCheckNames({ workspaceId, repository: selected, branch }).then(show, () => show([]))
+    return () => {
+      isCurrent = false
+    }
   }, [commands, workspaceId, selected, branch])
   const edit = (next: DevLoopSettings) => {
     setDraft(next)
     setIsSaved(false)
+    setIsDirty(true)
+    setInvalidPipeline(undefined)
   }
   const save = (next: DevLoopSettings) =>
     run(async () => {
       await commands.setDevLoop({ workspaceId, settings: next })
       setIsSaved(true)
+      setIsDirty(false)
     })
+  const saveDraft = (next: DevLoopSettings) => {
+    const invalid = invalidPipelineOf(next)
+    if (!invalid) return save(next)
+    setSelected(invalid.repository)
+    setInvalidPipeline(invalid.repository)
+  }
   const pipeline = pipelineOf(draft, selected)
   const editPipeline = (next: DevLoopPipeline) => edit(withPipeline(draft, { ...next, repository: selected }))
   const withoutOwn = repositories.filter(
@@ -77,13 +96,16 @@ export const DevLoopSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
       <Switch
         label="Agents in dev chats check their own work"
         isOn={draft.isOn}
-        onToggle={() => save({ ...draft, isOn: !draft.isOn })}
+        onToggle={() => {
+          setDraft({ ...draft, isOn: !draft.isOn })
+          save({ ...(stored ?? offSettings), isOn: !draft.isOn })
+        }}
       />
       <form
         className="flex flex-col gap-6"
         onSubmit={(event) => {
           event.preventDefault()
-          save({
+          saveDraft({
             ...draft,
             costLimitMicros: costDollars.trim() === '' ? null : Math.round(Number(costDollars) * 1_000_000),
           })
@@ -120,6 +142,7 @@ export const DevLoopSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
               value={costDollars}
               onChange={(event) => {
                 setCostDollars(event.target.value)
+                setIsDirty(true)
                 setIsSaved(false)
               }}
             />
@@ -193,6 +216,11 @@ export const DevLoopSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
           </button>
           {isSaved && <span className="text-sm text-muted">Saved</span>}
         </div>
+        {invalidPipeline !== undefined && (
+          <ErrorMessage
+            message={`The pipeline of ${pipelineLabelOf(invalidPipeline)} is not complete: give each command a name of its own, a command and a timeout, and each failure rule a number of times`}
+          />
+        )}
       </form>
       <ErrorMessage message={errorMessage} />
     </LabelledSection>

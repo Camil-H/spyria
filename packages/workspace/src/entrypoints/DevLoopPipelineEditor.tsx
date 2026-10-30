@@ -47,7 +47,7 @@ const FailureRule = ({
           min={1}
           max={devLoopRange.fixes.maximum}
           required
-          aria-label={`Times ${label.toLowerCase()} goes back to the agent`}
+          aria-label="Times a failure goes back to the agent"
           className={`${fieldClass} w-16`}
           value={Number.isNaN(step.fixes) ? '' : step.fixes}
           onChange={(event) => change({ fixes: numberOf(event.target.value) })}
@@ -224,6 +224,10 @@ export const DevLoopPipelineEditor = ({
           }
         />
       </label>
+      <p className="text-sm text-muted">
+        The setup command runs in every dev chat of the repository, also when the loop is off. Every member can read the
+        pipelines: never put a secret in a command.
+      </p>
       <ol aria-label="Steps" className="flex flex-col gap-2">
         {pipeline.steps.map((step, index) => {
           const Icon = kindIcons[step.kind]
