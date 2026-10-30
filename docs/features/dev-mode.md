@@ -101,6 +101,8 @@ The runtime holds no GitHub credential, so `git fetch`, `git pull`, `git push`, 
 | `read_checks` | Any prompt | Reads the checks of a pull request's head commit, failing first, with the annotations of each failing check (file, line, title and message) and, for a GitHub Actions job, the step that failed and the end of its log; the chat's pull request by default |
 | `list_issues` | Any prompt | Lists up to 30 issues of the repository, filtered by state, labels and words |
 | `read_issue` | Any prompt | Reads an issue with its comments |
+| `finish_work` | The owner's prompts and the dev loop's | Says the work is done, with the pull request's title and description; listed only when the [dev loop](#dev-loop) is on |
+| `report_review` | The dev loop's review prompt | Reports the review's findings, each important, nit or pre-existing |
 
 `fetch_branch` works like **Update from base**: the server fetches the branch with a read-only installation token and hands the runtime a git bundle (at most 12 MB) holding only that branch's commits the runtime lacks. Since pushes only fast-forward, the agent merges what it fetched rather than rebasing. The reading tools use read-only installation tokens too, never a member's token, and cut long texts. Every call is recorded like any tool call.
 
@@ -113,6 +115,36 @@ An App created before Spyria asked for **Issues** lacks that permission: add **I
 An App created before Spyria asked for **Actions** lacks that permission: add **Actions: Read-only** in the App's settings on GitHub, then accept it on the installation. Until then, `read_checks` reads annotations alone and says "Logs not read: Ask a GitHub admin to accept the Actions permission for this workspace's GitHub App".
 
 An App created before Spyria asked for **Workflows** lacks that permission too: add **Workflows: Read and write** in the App's settings on GitHub, then accept it on the installation. Until then, GitHub refuses to push a working branch that changes a file under `.github/workflows`.
+
+## Dev loop
+
+When an admin turns the dev loop on, the agent of a dev chat checks its own work before the owner sees it. It ends the work the owner asked for by calling `finish_work`; after that turn, Spyria:
+
+1. **Runs the checks** of `.spyria/dev-loop.json` in the runtime, one after the other, each with 20 minutes and the setup script's environment. A failing check goes back to the agent with the end of its output.
+2. **Has the diff reviewed**: it asks the agent to start a subagent with a fresh context on the branch's diff (then, in later rounds, on what changed since the last review), guided by the repository's `REVIEW.md` and `AGENTS.md`, and to report each finding with `report_review` as important, nit or pre-existing. Important findings that were not reported before go back to the agent; nits and pre-existing defects do not.
+3. **Pushes the branch and opens the pull request**, or pushes to the open one, as the owner, with the title and description given to `finish_work`.
+4. **Waits for CI**: every minute it reads the checks of the pushed commit, and once every counted check has finished, it sends the failing ones back to the agent, as `read_checks` shows them. When no check reports within 15 minutes, it hands over.
+
+```json
+{
+  "checks": { "Lint": "bun run lint", "Types": "bun run typecheck", "Tests": "bun run check:related" },
+  "ci": ["ci-ok"]
+}
+```
+
+`checks` maps each check's name to a command; without the file there are no checks. `ci` lists the CI checks that count; without it, every check of the pushed commit counts. An invalid file stops the loop with the reason.
+
+Each message the loop sends is the owner's, marked **Sent by the dev loop**, and runs on the owner's key; in the audit log it reads as the system acting for the owner. A **Dev loop** card in the chat shows where the loop is, the checks, the rounds used and the review findings. The loop hands over to the owner, with a notice, when:
+
+- everything passed: "Ready for your review on pull request #N";
+- a phase still fails after its fixes: the agent is first asked to say what it would change about the approach, without fixing again;
+- the agent ends a turn without `finish_work` (it is waiting for the owner, or asked a question);
+- the loop reaches its time limit, its cost limit, or the owner's monthly budget;
+- any member writes in the chat: the loop stops, and the message it had queued is not sent.
+
+Only the owner's own prompts start a loop: `finish_work` from another member's prompt is refused. The loop works the same on a member's machine, except that a subscription is not metered, so the cost limit does not apply there.
+
+Admins set the loop in **Workspace settings > Dev loop**, with the **Connect GitHub** permission: on or off, how many times the agent may fix failing checks (3), review findings (3, 0 turns the review off) and failing CI (2, 0 does not wait for CI), the time limit of a loop (4 hours) and an optional cost limit. See [decision 0025](../decisions/0025-dev-loop.md).
 
 ## The pull request card and header chip
 
