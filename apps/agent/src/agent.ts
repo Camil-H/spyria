@@ -8,6 +8,7 @@ import {
   internalError,
   type Json,
   liveOutputCharacters,
+  unspawnedConnection,
 } from './acp.ts'
 import { checkOut, lastLinesOf, type Repository, runCommand } from './checkout.ts'
 import { createChecksRunner } from './checks.ts'
@@ -15,6 +16,7 @@ import { connectPi } from './pi.ts'
 import { redacted } from './redaction.ts'
 import { createScreenshotTaker } from './screenshots.ts'
 import { contextOf, log, withSpan } from './telemetry.ts'
+import { emptySetupFiles, packageCacheEnvironmentOf, setupFilesOf, toolEnvironmentOf } from './tool-environment.ts'
 import {
   bundleOf,
   changesOf,
@@ -72,9 +74,10 @@ type Conversation = {
   turnEnds: Map<string, Json | undefined>
   sockets: Set<ServerWebSocket<SocketData>>
   started: Promise<void>
-  setup: Promise<void>
-  stopWaitingForSetup?: () => void
+  isSettingUp: boolean
+  stopWaitingToStart?: () => void
 }
+type ModelChoice = { model?: string; thoughtLevel?: string }
 type Launch = {
   id?: string
   agent?: {
@@ -105,6 +108,7 @@ const socketRoute = /^\/sockets\/events\/([\w-]+)$/
 const workspaceRoute = /^\/api\/workspace\/(tree|file|media|changes|commits|status|checks)$/
 const branchReads = { changes: changesOf, commits: commitLogOf, status: statusOf }
 const workspaceActions = { bundle: bundleOf, commit: commitOf, fetch: fetchOf, merge: mergeOf, pushed: pushedOf }
+const actionsRunningHooks = ['commit', 'merge']
 const workspaceActionRoute = /^\/api\/workspace\/(bundle|commit|fetch|merge|pushed|screenshot|checks)$/
 const setupToolCallId = 'spyria-setup'
 const setupCallOf = (command: string) => ({ toolCallId: setupToolCallId, title: command, kind: 'execute' })
@@ -120,10 +124,11 @@ const errorSummaryCharacters = 300
 const adapterCloseWaitMilliseconds = 2_000
 const rememberedPromptCount = 50
 
-const adapterEnvironmentOf = (secrets: Launch['secrets']) => ({
-  ...Object.fromEntries(inheritedEnvironment.flatMap((name) => (process.env[name] ? [[name, process.env[name]]] : []))),
-  ...Object.fromEntries(Object.entries(secrets ?? {}).map(([name, secret]) => [name, String(secret?.value ?? '')])),
-})
+const inheritedEnvironmentOf = (): Record<string, string> =>
+  Object.fromEntries(inheritedEnvironment.flatMap((name) => (process.env[name] ? [[name, process.env[name]]] : [])))
+
+const secretEnvironmentOf = (secrets: Launch['secrets']) =>
+  Object.fromEntries(Object.entries(secrets ?? {}).map(([name, secret]) => [name, String(secret?.value ?? '')]))
 
 const mcpServersOf = (config: NonNullable<Launch['agent']>['mcp_config']) =>
   Object.entries(config ?? {}).map(([name, { url, headers }]) => ({
@@ -170,7 +175,7 @@ const currentValueOf = (configOptions: Json[], category: string) =>
 const branchOf = async (cwd: string) => {
   try {
     const git = Bun.spawn(['git', '-C', cwd, 'branch', '--show-current'], {
-      env: adapterEnvironmentOf({}),
+      env: inheritedEnvironmentOf(),
       stdout: 'pipe',
       stderr: 'ignore',
     })
@@ -230,6 +235,8 @@ export const startAgent = ({
   setupTimeoutMilliseconds = 45 * 60_000,
   workspaceDirectory = '/workspace/project',
   browserDirectory = '/usr/local/lib/spyria/browser',
+  homeDirectory = process.env.HOME ?? '/home/openhands',
+  packageCacheDirectory = '/var/cache/spyria',
 }: {
   apiKey: string
   port: number
@@ -240,8 +247,15 @@ export const startAgent = ({
   setupTimeoutMilliseconds?: number
   workspaceDirectory?: string
   browserDirectory?: string
+  homeDirectory?: string
+  packageCacheDirectory?: string
 }) => {
-  const checksRunner = createChecksRunner({ cwd: workspaceDirectory, environment: () => adapterEnvironmentOf({}) })
+  const packageCacheEnvironment = packageCacheEnvironmentOf(packageCacheDirectory)
+  const toolEnvironmentWith = (secrets: Launch['secrets']) => ({
+    ...toolEnvironmentOf({ ...inheritedEnvironmentOf(), ...packageCacheEnvironment }, homeDirectory),
+    ...secretEnvironmentOf(secrets),
+  })
+  const checksRunner = createChecksRunner({ cwd: workspaceDirectory, environment: () => toolEnvironmentWith({}) })
   const actions = {
     ...workspaceActions,
     screenshot: createScreenshotTaker(browserDirectory),
@@ -439,7 +453,7 @@ export const startAgent = ({
     if (agent?.acp_model || agent?.acp_thought_level)
       await switchModel(conversation, agent.acp_model, agent.acp_thought_level)
     await reportWorkspace(conversation)
-    conversation.status = 'idle'
+    if (conversation.status === 'starting') conversation.status = 'idle'
   }
 
   const emitToCheckout = (cwd: string, update: Json, completed?: boolean) => {
@@ -447,14 +461,16 @@ export const startAgent = ({
       if (conversation.cwd === cwd && !conversation.isSub) emit(conversation, update, completed)
   }
 
-  const setUp = async (cwd: string, command: string) => {
-    const startedAt = performance.now()
-    runningSetups.set(cwd, command)
-    emitToCheckout(cwd, setupStartOf(command))
-    const { exitCode, output } = await runCommand(
+  const runSetup = async (cwd: string, command: string) => {
+    try {
+      emptySetupFiles(homeDirectory)
+    } catch (error) {
+      log.warn({ event: 'agent.setup', body: 'The setup files could not be emptied', error })
+    }
+    return runCommand(
       command,
       cwd,
-      adapterEnvironmentOf({}),
+      { ...toolEnvironmentWith({}), ...setupFilesOf(homeDirectory) },
       setupTimeoutMilliseconds,
       (soFar) =>
         emitToCheckout(cwd, {
@@ -463,7 +479,14 @@ export const startAgent = ({
           status: 'in_progress',
           rawOutput: { formatted_output: soFar.slice(-liveOutputCharacters) },
         }),
-    ).finally(() => runningSetups.delete(cwd))
+    )
+  }
+
+  const setUp = async (cwd: string, command: string) => {
+    const startedAt = performance.now()
+    runningSetups.set(cwd, command)
+    emitToCheckout(cwd, setupStartOf(command))
+    const { exitCode, output } = await runSetup(cwd, command).finally(() => runningSetups.delete(cwd))
     log.info({
       event: 'agent.setup',
       body: 'Setup script ended',
@@ -507,19 +530,19 @@ export const startAgent = ({
     return setup
   }
 
-  const isStoppedDuringSetup = (conversation: Conversation) =>
+  const isStoppedWhileStarting = (conversation: Conversation) =>
     new Promise<boolean>((resolve) => {
-      conversation.stopWaitingForSetup = () => resolve(true)
-      conversation.setup.then(
+      conversation.stopWaitingToStart = () => resolve(true)
+      conversation.started.then(
         () => resolve(false),
         () => resolve(false),
       )
     }).finally(() => {
-      conversation.stopWaitingForSetup = undefined
+      conversation.stopWaitingToStart = undefined
     })
 
   const readWorkspace = async (read: string, parameters: URLSearchParams) => {
-    const environment = adapterEnvironmentOf({})
+    const environment = inheritedEnvironmentOf()
     const path = parameters.get('path') ?? ''
     if (read === 'checks') return Response.json(checksRunner.status())
     if (read === 'tree') return Response.json(await treeOf(workspaceDirectory, path, environment))
@@ -535,7 +558,7 @@ export const startAgent = ({
   }
 
   const checkedOut = (id: string, cwd: string, repository: Repository) => {
-    const checkout = checkouts.get(id) ?? checkOut(cwd, repository, adapterEnvironmentOf({}))
+    const checkout = checkouts.get(id) ?? checkOut(cwd, repository, inheritedEnvironmentOf())
     checkouts.set(id, checkout)
     return checkout.finally(() => checkouts.delete(id))
   }
@@ -551,7 +574,7 @@ export const startAgent = ({
   const connectionOf = (conversation: () => Conversation, launch: Launch, command: string[], cwd: string) => {
     const isCurrent = () => conversation().connection === connection
     const connection: AdapterConnection = (launch.agent?.adapter === 'pi-rpc' ? connectPi : connectAdapter)(
-      { command, env: adapterEnvironmentOf(launch.secrets), cwd },
+      { command, env: toolEnvironmentWith(launch.secrets), cwd },
       {
         onUpdate: (params) => {
           if (isCurrent()) onUpdate(conversation(), (params.update ?? {}) as Json)
@@ -603,6 +626,29 @@ export const startAgent = ({
     await conversation.started
   }
 
+  const launched = async (conversation: Conversation) => {
+    conversation.isSettingUp = false
+    if (conversations.get(conversation.id) !== conversation) return
+    const { launch } = conversation
+    try {
+      conversation.connection = connectionOf(
+        () => conversation,
+        launch,
+        launch.agent?.acp_command as string[],
+        conversation.cwd,
+      )
+      await start(conversation, launch)
+    } catch (error) {
+      fail(conversation, error)
+      conversation.connection.close()
+    }
+  }
+
+  const startedUnlessSettingUp = async (conversation: Conversation) => {
+    if (!conversation.isSettingUp) await conversation.started
+    return Response.json({ id: conversation.id, ...summaryOf(conversation) })
+  }
+
   const create = async (launch: Launch) => {
     const command = launch.agent?.acp_command
     if (!Array.isArray(command) || command.length === 0 || !command.every((part) => typeof part === 'string'))
@@ -610,19 +656,13 @@ export const startAgent = ({
     if (launch.id !== undefined && !conversationIdPattern.test(String(launch.id)))
       return Response.json({ error: 'id must be letters, digits, - or _' }, { status: 400 })
     const known = launch.id === undefined ? undefined : conversations.get(launch.id)
-    if (known) {
-      await known.started
-      return Response.json({ id: known.id, ...summaryOf(known) })
-    }
+    if (known) return startedUnlessSettingUp(known)
     const id = launch.id ?? crypto.randomUUID()
     const cwd = launch.workspace?.working_dir ?? workspaceDirectory
     const { failure, setupCommand } =
       launch.repository && !launch.parent_conversation_id ? await checkedOut(id, cwd, launch.repository) : {}
     const raced = conversations.get(id)
-    if (raced) {
-      await raced.started
-      return Response.json({ id, ...summaryOf(raced) })
-    }
+    if (raced) return startedUnlessSettingUp(raced)
     if (failure) return Response.json({ id, execution_status: 'error', error: failure }, { status: 201 })
     const conversation: Conversation = {
       id,
@@ -640,16 +680,14 @@ export const startAgent = ({
       turnEnds: new Map(),
       sockets: new Set(),
       started: Promise.resolve(),
-      setup: Promise.resolve(),
-      connection: connectionOf(() => conversation, launch, command, cwd),
+      isSettingUp: false,
+      connection: unspawnedConnection,
     }
     conversations.set(id, conversation)
-    conversation.started = start(conversation, launch).catch((error) => {
-      fail(conversation, error)
-      conversation.connection.close()
-    })
-    await conversation.started
-    if (setupCommand && conversation.status !== 'error') conversation.setup = setUpOnce(conversation, setupCommand)
+    const setup = setupCommand ? setUpOnce(conversation, setupCommand) : Promise.resolve()
+    conversation.isSettingUp = Boolean(setupCommand) && runningSetups.has(cwd)
+    conversation.started = setup.then(() => launched(conversation))
+    if (!conversation.isSettingUp) await conversation.started
     return Response.json({ id, ...summaryOf(conversation) }, { status: 201 })
   }
 
@@ -670,7 +708,7 @@ export const startAgent = ({
       if (turnEnd) emit(conversation, turnEnd)
       return Response.json({})
     }
-    if (!conversation.sessionId || conversation.status === 'error')
+    if (conversation.status === 'error')
       return Response.json({ error: 'The conversation has no running session' }, { status: 409 })
     if (promptId) rememberPrompt(conversation, promptId)
     conversation.status = 'running'
@@ -743,7 +781,10 @@ export const startAgent = ({
       'agent.turn',
       { 'conversation.id': conversation.id },
       async () => {
-        if (await isStoppedDuringSetup(conversation)) return ended({ stopReason: 'cancelled' })
+        if (await isStoppedWhileStarting(conversation)) return ended({ stopReason: 'cancelled' })
+        if (!conversation.sessionId || conversation.status === 'error')
+          return failed(new AcpError(conversation.failure ?? 'The agent could not start'))
+        conversation.status = 'running'
         await promptOnce(async (errorOutput, hasStreamed) => {
           const notice = new AcpError(withSummary(restartedNotice, errorOutput))
           if (hasStreamed) return failed(notice)
@@ -763,6 +804,23 @@ export const startAgent = ({
     return Response.json({})
   }
 
+  const actedWhileSettingUp = (conversation: Conversation, action: string | undefined, choice?: ModelChoice) => {
+    if (action === 'interrupt') return Response.json({})
+    if (action === 'restart') return Response.json({ id: conversation.id, ...summaryOf(conversation) })
+    if (action !== 'switch_acp_model' || !choice) return Response.json({ error: 'Not found' }, { status: 404 })
+    const { model, thoughtLevel } = choice
+    const { agent } = conversation.launch
+    conversation.launch = {
+      ...conversation.launch,
+      agent: {
+        ...agent,
+        acp_model: model ?? agent?.acp_model,
+        acp_thought_level: thoughtLevel ?? agent?.acp_thought_level,
+      },
+    }
+    return Response.json({})
+  }
+
   const route = async (method: string, { pathname, searchParams }: URL, request: Request) => {
     if (method === 'POST' && pathname === '/api/conversations') return create(await request.json())
     const [, read] = workspaceRoute.exec(pathname) ?? []
@@ -772,7 +830,7 @@ export const startAgent = ({
       const acted = await actions[workspaceAction as keyof typeof actions](
         workspaceDirectory,
         await request.json(),
-        adapterEnvironmentOf({}),
+        actionsRunningHooks.includes(workspaceAction) ? toolEnvironmentWith({}) : inheritedEnvironmentOf(),
       )
       return 'failure' in acted ? Response.json({ error: acted.failure }, { status: 422 }) : Response.json(acted)
     }
@@ -790,12 +848,18 @@ export const startAgent = ({
     if (method === 'GET' && !action) return Response.json({ id: conversation.id, ...summaryOf(conversation) })
     if (method === 'DELETE' && !action) return remove(conversation)
     if (method !== 'POST') return Response.json({ error: 'Not found' }, { status: 404 })
-    await conversation.started
     if (action === 'events')
       return prompt(conversation, await request.json(), {
         traceparent: request.headers.get('traceparent'),
         tracestate: request.headers.get('tracestate'),
       })
+    if (action === 'interrupt' && conversation.stopWaitingToStart) {
+      conversation.stopWaitingToStart()
+      return Response.json({})
+    }
+    const choice = action === 'switch_acp_model' ? ((await request.json()) as ModelChoice) : undefined
+    if (conversation.isSettingUp) return actedWhileSettingUp(conversation, action, choice)
+    await conversation.started
     if (action === 'restart') {
       await restart(conversation)
       return Response.json({ id: conversation.id, ...summaryOf(conversation) })
@@ -803,13 +867,12 @@ export const startAgent = ({
     if (action === 'interrupt') {
       if (conversation.sessionId)
         conversation.connection.notify('session/cancel', { sessionId: conversation.sessionId })
-      conversation.stopWaitingForSetup?.()
+      conversation.stopWaitingToStart?.()
       closeQuestions(conversation, 'stopped')
       return Response.json({})
     }
-    if (action === 'switch_acp_model') {
-      const { model, thoughtLevel } = (await request.json()) as { model?: string; thoughtLevel?: string }
-      await switchModel(conversation, model, thoughtLevel)
+    if (choice) {
+      await switchModel(conversation, choice.model, choice.thoughtLevel)
       return Response.json({})
     }
     return Response.json({ error: 'Not found' }, { status: 404 })

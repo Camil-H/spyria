@@ -2,9 +2,9 @@ import { afterAll, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { type AgentEvent, createAgentTestbed, kindOf, textOf } from './testing.ts'
+import { type AgentEvent, apiKey, createAgentTestbed, kindOf, textOf } from './testing.ts'
 
-const { stubCommand, launchOf, started } = createAgentTestbed()
+const { stateDirectory, stubCommand, launchOf, started } = createAgentTestbed()
 const directory = mkdtempSync(join(tmpdir(), 'spyria-agent-checkout-'))
 afterAll(() => rmSync(directory, { recursive: true, force: true }))
 const token = 'ghs_installation_token_never_kept'
@@ -27,6 +27,14 @@ const bareRepository = (name: string, files: Record<string, string>) => {
   git(source, '-c', 'user.name=t', '-c', 'user.email=t@example.com', 'commit', '-q', '-m', 'first')
   git(directory, 'clone', '-q', '--bare', source, `${name}.git`)
   return `file://${join(directory, `${name}.git`)}`
+}
+
+const startedStatusOf = async (call: ReturnType<typeof started>['call'], id: string) => {
+  for (const deadline = Date.now() + 10_000; Date.now() < deadline; await Bun.sleep(10)) {
+    const { body } = await call('GET', `/api/conversations/${id}`)
+    if (body.execution_status !== 'starting') return body.execution_status
+  }
+  throw new Error('The agent did not finish starting')
 }
 
 const launchIn = (name: string, url: string, extra: object = {}) => {
@@ -52,7 +60,7 @@ const launchIn = (name: string, url: string, extra: object = {}) => {
   }
 }
 
-test('a launch with a repository clones it, checks out the working branch and runs the setup script once the agent started, as a command step; the token stays out of the agent and the repository config', async () => {
+test('a launch with a repository clones it, checks out the working branch and runs the setup script before the agent starts, as a command step; the token stays out of the agent and the repository config', async () => {
   const url = bareRepository('app', {
     'AGENTS.md': 'Rules',
     'src/AGENTS.md': 'Nested rules',
@@ -70,7 +78,7 @@ test('a launch with a repository clones it, checks out the working branch and ru
   })
   await socket.until(setupEnded)
   const setupEvents = socket.events.filter(isSetup).map(({ update }) => update)
-  expect(socket.events.findIndex(isSetup)).toBeGreaterThan(socket.events.findIndex(kindOf('session_started')))
+  expect(socket.events.findIndex(setupEnded)).toBeLessThan(socket.events.findIndex(kindOf('session_started')))
   expect(setupEvents.at(0)).toEqual({
     sessionUpdate: 'tool_call',
     toolCallId: 'spyria-setup',
@@ -96,7 +104,7 @@ test('a launch with a repository clones it, checks out the working branch and ru
   expect(resumedSocket.events.some(isSetup)).toBe(false)
 })
 
-test('a failing setup script shows its exit code and last output lines and the session still starts; a clone failure fails the launch', async () => {
+test('a failing setup script shows its exit code and last output lines and the agent still starts; a clone failure fails the launch', async () => {
   const lines = Array.from({ length: 25 }, (_, index) => `echo line ${index + 1}`).join('\n')
   const url = bareRepository('broken', { '.spyria/setup.sh': `${lines}\necho missing tool >&2\nexit 3\n` })
   const { call, open, create } = started()
@@ -115,7 +123,8 @@ test('a failing setup script shows its exit code and last output lines and the s
     exitCode: 3,
     output: [...Array.from({ length: 19 }, (_, index) => `line ${index + 7}`), 'missing tool'].join('\n'),
   })
-  expect((await call('GET', `/api/conversations/${id}`)).body).toMatchObject({ execution_status: 'idle' })
+  await socket.until(kindOf('session_started'))
+  expect(await startedStatusOf(call, id)).toBe('idle')
   const missing = await call(
     'POST',
     '/api/conversations',
@@ -126,15 +135,17 @@ test('a failing setup script shows its exit code and last output lines and the s
   expect(String(missing.body.error)).toStartWith('The repository could not be cloned: ')
 })
 
-test('a slow setup script does not hold the launch: the session starts at once and the output streams as live updates', async () => {
+test('a slow setup script does not hold the launch: the conversation answers at once, starting, the output streams as live updates and the agent starts once setup ends', async () => {
   const url = bareRepository('slow', { '.spyria/setup.sh': 'echo installing\nsleep 1\necho installed\n' })
   const { call, open, create } = started()
   const startedAt = Date.now()
   const id = await create(launchIn('slow', url).launch)
   expect(Date.now() - startedAt).toBeLessThan(1000)
-  expect((await call('GET', `/api/conversations/${id}`)).body).toMatchObject({ execution_status: 'idle' })
+  expect((await call('GET', `/api/conversations/${id}`)).body).toMatchObject({ execution_status: 'starting' })
   const socket = open(id)
-  await socket.until(setupEnded)
+  await socket.until(kindOf('session_started'))
+  expect(socket.events.findIndex(kindOf('session_started'))).toBeGreaterThan(socket.events.findIndex(setupEnded))
+  expect(await startedStatusOf(call, id)).toBe('idle')
   const updates = socket.events.filter(isSetup)
   expect(updates.find((event) => !event.completed && event.update.rawOutput)?.update.rawOutput).toEqual({
     formatted_output: 'installing\n',
@@ -263,13 +274,14 @@ test('a setup script that leaves a service running in the background ends when t
   process.kill(servicePid, 'SIGKILL')
 })
 
-test('a prompt sent while the setup script runs reaches the agent once setup ends; Stop while it waits ends the turn without reaching the agent', async () => {
+test('a prompt sent while the setup script runs counts as running and reaches the agent once setup ends; Stop while it waits ends the turn without reaching the agent', async () => {
   const url = bareRepository('waiting', { '.spyria/setup.sh': 'sleep 1\necho ready\n' })
   const { call, open, create, prompt } = started()
   const { launch } = launchIn('waiting', url)
   const id = await create(launch)
   const socket = open(id)
   await prompt(id, 'hello')
+  expect((await call('GET', `/api/conversations/${id}`)).body).toMatchObject({ execution_status: 'running' })
   await socket.until(kindOf('turn_end'))
   const setupEndIndex = socket.events.findIndex(setupEnded)
   expect(setupEndIndex).toBeGreaterThan(-1)
@@ -348,4 +360,120 @@ test('a repository’s .spyria/setup.sh does not run on its own: only a setup co
   await Bun.sleep(300)
   expect(socket.events.some(isSetup)).toBe(false)
   expect(existsSync(join(workingDirectory, 'ran.txt'))).toBe(false)
+})
+
+const environmentIn = (file: string) =>
+  Object.fromEntries(
+    readFileSync(file, 'utf8')
+      .split('\n')
+      .filter((line) => line.includes('='))
+      .map((line) => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]),
+  )
+
+test('what the setup installs reaches the agent, the checks and the commit hooks: the well-known tool directories, SPYRIA_PATH, SPYRIA_ENV and the package caches', async () => {
+  const url = bareRepository('tools', {
+    '.spyria/setup.sh': [
+      'mkdir -p "$HOME/.local/bin" tools',
+      `printf '#!/bin/sh\\necho from-local-bin\\n' > "$HOME/.local/bin/local-tool"`,
+      `printf '#!/bin/sh\\necho from-spyria-path\\n' > tools/path-tool`,
+      'chmod +x "$HOME/.local/bin/local-tool" tools/path-tool',
+      'echo "$PWD/tools" >> "$SPYRIA_PATH"',
+      'echo "GREETING=hello from setup" >> "$SPYRIA_ENV"',
+      'local-tool > setup-saw.txt',
+      `printf '#!/bin/sh\\nlocal-tool > hook-saw.txt\\n' > .git/hooks/pre-commit`,
+      'chmod +x .git/hooks/pre-commit',
+    ].join('\n'),
+  })
+  const cache = join(directory, 'tools-cache')
+  mkdirSync(cache)
+  const home = join(stateDirectory, 'home')
+  const { launch, workingDirectory, environmentFile } = launchIn('tools', url)
+  const { call, open, create } = started({ workspaceDirectory: workingDirectory, packageCacheDirectory: cache })
+  await open(await create(launch)).until(kindOf('session_started'))
+  expect(readFileSync(join(workingDirectory, 'setup-saw.txt'), 'utf8')).toBe('from-local-bin\n')
+  const adapterEnvironment = environmentIn(environmentFile)
+  expect(adapterEnvironment.PATH).toStartWith(`${join(workingDirectory, 'tools')}:${join(home, '.local/bin')}:`)
+  expect(adapterEnvironment).toMatchObject({
+    HOME: home,
+    GREETING: 'hello from setup',
+    BUN_INSTALL_CACHE_DIR: join(cache, 'bun'),
+  })
+  expect(adapterEnvironment.SPYRIA_PATH).toBeUndefined()
+
+  const command = 'local-tool && path-tool && echo "$GREETING"'
+  await call('POST', '/api/workspace/checks', { checks: [{ name: 'Tools', command, timeout_minutes: 1 }] })
+  const finished = async () => {
+    for (const deadline = Date.now() + 10_000; Date.now() < deadline; await Bun.sleep(20)) {
+      const { body } = await call('GET', '/api/workspace/checks')
+      if (body.state === 'finished') return body
+    }
+    throw new Error('The checks did not finish')
+  }
+  expect((await finished()).results).toEqual([
+    { name: 'Tools', command, exitCode: 0, output: 'from-local-bin\nfrom-spyria-path\nhello from setup' },
+  ])
+
+  writeFileSync(join(workingDirectory, 'change.txt'), 'changed')
+  const author = { name: 'Alice', email: 'alice@example.com' }
+  expect((await call('POST', '/api/workspace/commit', { message: 'Change', author })).status).toBe(200)
+  expect(readFileSync(join(workingDirectory, 'hook-saw.txt'), 'utf8')).toBe('from-local-bin\n')
+})
+
+test('while the setup script runs, a model switch is kept for the agent’s start, a restart has nothing to restart, and the conversation created again answers at once', async () => {
+  const url = bareRepository('switching', { '.spyria/setup.sh': 'sleep 1\n' })
+  const { call, open, create, prompt } = started()
+  const { launch } = launchIn('switching', url)
+  const id = await create({ ...launch, id: 'switching' })
+  const startedAt = Date.now()
+  expect((await call('POST', `/api/conversations/${id}/switch_acp_model`, { model: 'stub-large' })).status).toBe(200)
+  expect((await call('POST', `/api/conversations/${id}/restart`, {})).body).toMatchObject({
+    execution_status: 'starting',
+  })
+  expect((await call('POST', '/api/conversations', { ...launch, id })).body).toMatchObject({
+    execution_status: 'starting',
+  })
+  expect(Date.now() - startedAt).toBeLessThan(800)
+  const socket = open(id)
+  await prompt(id, 'hello')
+  await socket.until(kindOf('turn_end'))
+  expect(textOf(socket.events)).toBe('[t1] Hello from the stub (model stub-large, mode bypassPermissions).')
+})
+
+test('a model switch whose request arrives during setup and whose body arrives after the agent started still switches the model', async () => {
+  const url = bareRepository('late-switch', { '.spyria/setup.sh': 'sleep 0.3\n' })
+  const { agent, open, create, prompt } = started()
+  const { launch } = launchIn('late-switch', url)
+  const id = await create({ ...launch, id: 'late-switch' })
+  const socket = open(id)
+  const body = JSON.stringify({ model: 'stub-large' })
+  const answer = Promise.withResolvers<string>()
+  let received = ''
+  const connection = await Bun.connect({
+    hostname: 'localhost',
+    port: agent.port,
+    socket: {
+      data: (_, data) => {
+        received += data.toString()
+        if (received.includes('\r\n\r\n')) answer.resolve(received)
+      },
+    },
+  })
+  connection.write(
+    [
+      `POST /api/conversations/${id}/switch_acp_model HTTP/1.1`,
+      `Host: localhost:${agent.port}`,
+      'Content-Type: application/json',
+      `X-Session-Api-Key: ${apiKey}`,
+      `Content-Length: ${body.length}`,
+      '',
+      '',
+    ].join('\r\n'),
+  )
+  await socket.until(kindOf('session_started'))
+  connection.write(body)
+  expect(await answer.promise).toStartWith('HTTP/1.1 200')
+  connection.end()
+  await prompt(id, 'hello')
+  await socket.until(kindOf('turn_end'))
+  expect(textOf(socket.events)).toBe('[t1] Hello from the stub (model stub-large, mode bypassPermissions).')
 })

@@ -20,7 +20,7 @@ import {
   messageId,
   type WorkspaceId,
 } from '@spyria/kernel'
-import { stoppedByPrefix } from '../domain/agent-events.ts'
+import { isRunningSetupStep, stoppedByPrefix } from '../domain/agent-events.ts'
 import type { AgentStep, StoredStep, ThoughtStep } from '../domain/agent-steps.ts'
 import { toolServerNamerOf } from '../domain/agent-steps.ts'
 import type { Attachment } from '../domain/attachments.ts'
@@ -95,6 +95,7 @@ export type Conversation = Readonly<{
   ownerName: string
   origin: Readonly<{ chatId: ChatId; name: string; type: 'channel' | 'runtime' }> | null
   isAgentWorking: boolean
+  isSettingUp: boolean
   hasActiveTurn: boolean
   isReadMarkerBehind: boolean
   messages: readonly ConversationMessage[]
@@ -392,6 +393,9 @@ export const getConversation =
       ownerName: memberName(chat.ownerId),
       origin: origin ? { chatId: origin.id, name: origin.name, type: origin.type } : null,
       isAgentWorking: hasActiveTurn || chatMessages.some((message) => message.needsReply),
+      isSettingUp:
+        hasActiveTurn &&
+        chatMessages.some((message) => message.replyToId === chat.agentTurnMessageId && isRunningSetupStep(message)),
       hasActiveTurn,
       isReadMarkerBehind: flowMessages.some((message) => message.seq > lastReadSeq),
       messages,

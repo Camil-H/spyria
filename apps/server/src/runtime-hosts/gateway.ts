@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto'
+import { createHash, createHmac } from 'node:crypto'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import type { Database } from '@spyria/db/postgres'
 import { schema } from '@spyria/db/zero'
@@ -8,6 +8,7 @@ import {
   createHostSessionHandlers,
   HostRefused,
   type HostSessionFrame,
+  type PackageCacheScope,
   parseHostSessionFrame,
   type SandboxLocation,
   type SandboxProvider,
@@ -50,6 +51,7 @@ const identifyTimeoutMilliseconds = 10_000
 const defaultGatewayRelayUrl = 'http://spyria-gateway-relay:4000/v1'
 export const maximumFrameBytes = 64 * 1024 * 1024
 const chunkedRelayVersion = 2
+const packageCacheRelayVersion = 3
 const relayChunkBytes = 256 * 1024
 const maximumRelayedBodyBytes = 256 * 1024 * 1024
 const streamCreditBytes = 1024 * 1024
@@ -361,12 +363,22 @@ export const createRuntimeHostGateway = ({
     await command(sandbox, op, { runtimeId: sandbox.runtimeId })
   }
 
+  const packageCacheKeyOf = (workspaceId: WorkspaceId, { repository, ownerId }: PackageCacheScope) =>
+    createHash('sha256').update(`package-cache.${workspaceId}.${repository}.${ownerId}`).digest('hex').slice(0, 32)
+
   const apiKeyOf: SandboxProvider['apiKeyOf'] = ({ workspaceId, runtimeId }) =>
     createHmac('sha256', runtimeKeySecret).update(`runtime-api-key.${workspaceId}.${runtimeId}`).digest('base64url')
 
   const sandboxProvider: SandboxProvider = {
-    create: async ({ image, ...sandbox }) => {
-      await command(sandbox, 'create', { runtimeId: sandbox.runtimeId, image, apiKey: apiKeyOf(sandbox) })
+    create: async ({ image, packageCache, ...sandbox }) => {
+      const hasPackageCache = (connectionOf(sandbox).identified?.relayVersion ?? 1) >= packageCacheRelayVersion
+      await command(sandbox, 'create', {
+        runtimeId: sandbox.runtimeId,
+        image,
+        apiKey: apiKeyOf(sandbox),
+        ...(packageCache &&
+          hasPackageCache && { packageCacheKey: packageCacheKeyOf(sandbox.workspaceId, packageCache) }),
+      })
     },
     apiKeyOf,
     start: commandWithoutResult('start'),
