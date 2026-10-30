@@ -1,3 +1,4 @@
+import { DevLoopSection } from '@spyria/conversation'
 import type { Snapshot } from '@spyria/db'
 import { useQuery, useScoped } from '@spyria/db/react'
 import type { WorkspaceId, WorkspacePermission } from '@spyria/kernel'
@@ -91,6 +92,13 @@ const cardSections: readonly { title: string; cards: readonly SettingsCard[] }[]
         permissions: ['tools.manage'],
         Page: WorkspaceConnectionsSection,
       },
+      {
+        path: 'dev-loop',
+        title: 'Dev loop',
+        description: 'How the agents of dev chats check, review and publish their own work',
+        permissions: ['github.manage'],
+        Page: DevLoopSection,
+      },
     ],
   },
   {
@@ -151,6 +159,7 @@ const cardStatusesOf =
       ),
       'mcp-tools': countLabelOf(inWorkspace(snapshot.workspaceConnections).length, 'shared connection'),
       'ai-providers': aiProvidersStatusOf(snapshot.workspaces.find((workspace) => workspace.id === workspaceId)),
+      'dev-loop': snapshot.workspaces.find((workspace) => workspace.id === workspaceId)?.devLoop ? 'On' : 'Off',
       costs: `${formatCost(monthCostMicros)} this month`,
     }
   }

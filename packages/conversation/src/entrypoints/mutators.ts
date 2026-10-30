@@ -6,7 +6,7 @@ import { maximumAttachmentsPerMessage } from '../domain/attachments.ts'
 import { runsOns } from '../domain/session-routing.ts'
 import { createZeroRuntimeRetrier } from '../integrations/runtime-agent-runtimes.ts'
 import { createZeroRuntimeChatStarter } from '../integrations/workspace-runtime-chat-starter.ts'
-import { createZeroTransactor } from '../integrations/zero-transactor.ts'
+import { contextPermissionsOf, createZeroTransactor } from '../integrations/zero-transactor.ts'
 import { changeMemberRole } from '../operations/change-member-role.ts'
 import { deleteMessage } from '../operations/delete-message.ts'
 import { editMessage } from '../operations/edit-message.ts'
@@ -20,6 +20,7 @@ import { removeMember } from '../operations/remove-member.ts'
 import { restartSession } from '../operations/restart-session.ts'
 import { retryAgent } from '../operations/retry-agent.ts'
 import { sendMessage } from '../operations/send-message.ts'
+import { setDevLoop } from '../operations/set-dev-loop.ts'
 import { startRuntimeFromMessage } from '../operations/start-runtime-from-message.ts'
 import { stopAgent } from '../operations/stop-agent.ts'
 import { stopRuntime } from '../operations/stop-runtime.ts'
@@ -78,6 +79,24 @@ export const conversationMutators = defineMutators({
       if (tx.location === 'server')
         await restartSession(dependenciesOf(tx, ctx, args), { ...args, memberId: ctx.userId })
     }),
+    setDevLoop: defineMutator(
+      z.extend(workspaceArguments, {
+        settings: z.nullable(
+          z.object({
+            checkRounds: z.number(),
+            reviewRounds: z.number(),
+            ciRounds: z.number(),
+            timeLimitMinutes: z.number(),
+            costLimitMicros: z.nullable(z.number()),
+          }),
+        ),
+      }),
+      async ({ tx, ctx, args }) =>
+        setDevLoop(dependenciesOf(tx, ctx, args), {
+          permissions: await contextPermissionsOf(tx, ctx),
+          settings: args.settings,
+        }),
+    ),
     stopRuntime: defineMutator(chatArguments, async ({ tx, ctx, args }) => {
       if (tx.location === 'server') await stopRuntime(dependenciesOf(tx, ctx, args), { ...args, memberId: ctx.userId })
     }),

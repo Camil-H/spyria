@@ -40,6 +40,8 @@ import {
   type Transact,
   transactingTransactor,
   transactorOver,
+  workspacePermissionsOf,
+  type ZeroContext,
   zql,
 } from '@spyria/db/zero-queries'
 import {
@@ -48,6 +50,7 @@ import {
   ChatNotFound,
   type ChatPermission,
   chatId,
+  devLoopSettingsFrom,
   ForeignWorkspace,
   type HarnessId,
   isAllowedModel,
@@ -456,6 +459,11 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         await insertRoutingDecision(tx, { workspaceId: contextWorkspaceId, ...decision })
       },
     },
+    devLoop: {
+      settings: async () =>
+        devLoopSettingsFrom((await tx.run(zql.workspaces.where('workspaceId', contextWorkspaceId).one()))?.devLoop),
+      setSettings: (settings) => tx.mutate.workspaces.update({ workspaceId: contextWorkspaceId, devLoop: settings }),
+    },
     toolCalls: {
       record: async (call) => {
         await insertToolCall(tx, { workspaceId: contextWorkspaceId, ...call })
@@ -584,3 +592,6 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
 
 export const createTransactingZeroTransactor = (transact: Transact, workspaceId: WorkspaceId): ConversationTransactor =>
   transactingTransactor(transact, (tx) => createZeroTransactor(tx, workspaceId))
+
+export const contextPermissionsOf = (tx: Transaction, context: ZeroContext) =>
+  workspacePermissionsOf(tx, context.workspaceId, context.userId)

@@ -4,6 +4,7 @@ import {
   actorKinds,
   type ChatPermission,
   type ChatVisibility,
+  type DevLoopSettings,
   type HarnessId,
   type WorkspacePermission,
 } from '@spyria/kernel'
@@ -68,6 +69,7 @@ export const workspaces = table('workspaces', {
     .references(() => users.id),
   localSessions: boolean().notNull().default(true),
   aiProviderAllowList: jsonb().$type<AiProviderAllowList>(),
+  devLoop: jsonb().$type<DevLoopSettings>(),
   createdAt: instant().notNull(),
   deletedAt: instant(),
   purgeAt: instant(),
