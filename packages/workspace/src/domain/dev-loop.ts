@@ -3,6 +3,7 @@ import {
   type DevLoopSettings,
   type DevLoopStepConfig,
   type DevLoopStepKind,
+  defaultDevLoopSettings,
   isDevLoopSettings,
   isInPublishingOrder,
 } from '@spyria/kernel'
@@ -15,7 +16,7 @@ export const stepKindLabels: Record<DevLoopStepKind, string> = {
 }
 const singleKinds: DevLoopStepKind[] = ['review', 'pull_request', 'ci']
 
-export const newStepOf = (kind: DevLoopStepKind): DevLoopStepConfig =>
+const newStepOf = (kind: DevLoopStepKind): DevLoopStepConfig =>
   kind === 'command'
     ? { kind, name: '', command: '', timeoutMinutes: 15, fixes: 3 }
     : kind === 'review'
@@ -67,4 +68,4 @@ export const withoutPipeline = (settings: DevLoopSettings, repository: string) =
 })
 
 export const invalidPipelineOf = (settings: DevLoopSettings) =>
-  settings.pipelines.find((pipeline) => !isDevLoopSettings({ ...settings, pipelines: [pipeline] }))
+  settings.pipelines.find((pipeline) => !isDevLoopSettings({ ...defaultDevLoopSettings, pipelines: [pipeline] }))

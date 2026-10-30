@@ -43,8 +43,6 @@ export { isDevLoopTool } from './domain/dev-loop.ts'
 export { WebPageNotPublic, WebPageTooLarge, WebPageUnreachable } from './domain/errors.ts'
 export { type GitAction, isGitAction } from './domain/git-actions.ts'
 export {
-  githubTools,
-  githubToolsInstructions,
   githubToolsPath,
   type Issue,
   type IssueFilter,

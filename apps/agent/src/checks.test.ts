@@ -29,15 +29,15 @@ const finishedChecks = async (call: ReturnType<typeof started>['call']) => {
 
 test('the checks the server sends run one after the other in the background, each with its exit code and the end of its output, both streams together', async () => {
   const { call } = started({ workspaceDirectory: workspaceNamed('two-checks') })
-  expect((await call('GET', '/api/workspace/checks')).body).toEqual({ state: 'idle', names: [], results: [] })
+  expect((await call('GET', '/api/workspace/checks')).body).toEqual({ state: 'idle', id: null, results: [] })
   const checks = [check('Lint', 'echo linted'), check('Types', 'echo "src/a.ts: type error" >&2 && exit 2')]
-  expect(await call('POST', '/api/workspace/checks', { checks })).toMatchObject({
+  expect(await call('POST', '/api/workspace/checks', { checks, run_id: 'run-1' })).toMatchObject({
     status: 200,
-    body: { state: 'running', names: ['Lint', 'Types'] },
+    body: { state: 'running', id: 'run-1' },
   })
   expect(await finishedChecks(call)).toEqual({
     state: 'finished',
-    names: ['Lint', 'Types'],
+    id: 'run-1',
     results: [
       { name: 'Lint', command: 'echo linted', exitCode: 0, output: 'linted' },
       {
@@ -54,9 +54,10 @@ test('starting checks while they run returns the running checks instead of start
   const workspace = workspaceNamed('running')
   const { call } = started({ workspaceDirectory: workspace })
   const checks = [check('Slow', 'sleep 0.5; echo once >> runs.txt')]
-  await call('POST', '/api/workspace/checks', { checks })
-  expect((await call('POST', '/api/workspace/checks', { checks })).body).toMatchObject({
+  await call('POST', '/api/workspace/checks', { checks, run_id: 'first' })
+  expect((await call('POST', '/api/workspace/checks', { checks, run_id: 'second' })).body).toMatchObject({
     state: 'running',
+    id: 'first',
     results: [],
   })
   await finishedChecks(call)

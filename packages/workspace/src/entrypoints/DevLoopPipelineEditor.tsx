@@ -225,8 +225,8 @@ export const DevLoopPipelineEditor = ({
         />
       </label>
       <p className="text-sm text-muted">
-        The setup command runs in every dev chat of the repository, also when the loop is off. Every member can read the
-        pipelines: never put a secret in a command.
+        The setup command runs in every dev chat of the repositories this pipeline applies to, also when the loop is
+        off. Every member can read the pipelines: never put a secret in a command.
       </p>
       <ol aria-label="Steps" className="flex flex-col gap-2">
         {pipeline.steps.map((step, index) => {
@@ -248,7 +248,7 @@ export const DevLoopPipelineEditor = ({
                     type="button"
                     aria-label={`Move ${name} up`}
                     className={iconButtonClass}
-                    disabled={index === 0}
+                    disabled={withStepMoved(pipeline.steps, index, -1) === pipeline.steps}
                     onClick={() => setSteps(withStepMoved(pipeline.steps, index, -1))}
                   >
                     <ArrowUp aria-hidden size={14} />
@@ -257,7 +257,7 @@ export const DevLoopPipelineEditor = ({
                     type="button"
                     aria-label={`Move ${name} down`}
                     className={iconButtonClass}
-                    disabled={index === pipeline.steps.length - 1}
+                    disabled={withStepMoved(pipeline.steps, index, 1) === pipeline.steps}
                     onClick={() => setSteps(withStepMoved(pipeline.steps, index, 1))}
                   >
                     <ArrowDown aria-hidden size={14} />

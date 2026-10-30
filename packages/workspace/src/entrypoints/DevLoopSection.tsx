@@ -18,7 +18,7 @@ import {
   tabTriggerClass,
   useGuardedAction,
 } from '@spyria/ui'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { invalidPipelineOf, withoutPipeline, withPipeline } from '../domain/dev-loop.ts'
 import type { GitHubRepository } from '../domain/github.ts'
 import { devLoopSettingsOf } from '../queries/get-dev-loop-settings.ts'
@@ -63,17 +63,30 @@ export const DevLoopSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
       isCurrent = false
     }
   }, [commands, workspaceId, selected, branch])
-  const edit = (next: DevLoopSettings) => {
-    setDraft(next)
+  const edits = useRef(0)
+  const markEdited = () => {
+    edits.current += 1
     setIsSaved(false)
     setIsDirty(true)
     setInvalidPipeline(undefined)
   }
-  const save = (next: DevLoopSettings) =>
-    run(async () => {
+  const edit = (next: DevLoopSettings) => {
+    setDraft(next)
+    markEdited()
+  }
+  const save = (next: DevLoopSettings) => {
+    const savedEdits = edits.current
+    return run(async () => {
       await commands.setDevLoop({ workspaceId, settings: next })
       setIsSaved(true)
-      setIsDirty(false)
+      if (edits.current === savedEdits) setIsDirty(false)
+    })
+  }
+  const toggle = () =>
+    run(async () => {
+      const isOn = !draft.isOn
+      await commands.setDevLoop({ workspaceId, settings: { ...(stored ?? offSettings), isOn } })
+      setDraft((current) => ({ ...current, isOn }))
     })
   const saveDraft = (next: DevLoopSettings) => {
     const invalid = invalidPipelineOf(next)
@@ -93,14 +106,7 @@ export const DevLoopSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
         When the agent of a dev chat says its work is done, Spyria runs the steps of the repository's pipeline, in
         order. A failing step goes back to the agent or hands over to the chat owner, as each step says.
       </p>
-      <Switch
-        label="Agents in dev chats check their own work"
-        isOn={draft.isOn}
-        onToggle={() => {
-          setDraft({ ...draft, isOn: !draft.isOn })
-          save({ ...(stored ?? offSettings), isOn: !draft.isOn })
-        }}
-      />
+      <Switch label="Agents in dev chats check their own work" isOn={draft.isOn} onToggle={toggle} />
       <form
         className="flex flex-col gap-6"
         onSubmit={(event) => {
@@ -142,8 +148,7 @@ export const DevLoopSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
               value={costDollars}
               onChange={(event) => {
                 setCostDollars(event.target.value)
-                setIsDirty(true)
-                setIsSaved(false)
+                markEdited()
               }}
             />
           </label>
@@ -218,7 +223,7 @@ export const DevLoopSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
         </div>
         {invalidPipeline !== undefined && (
           <ErrorMessage
-            message={`The pipeline of ${pipelineLabelOf(invalidPipeline)} is not complete: give each command a name of its own, a command and a timeout, and each failure rule a number of times`}
+            message={`The pipeline of ${pipelineLabelOf(invalidPipeline)} cannot be saved: each command needs a name of its own, a command and a timeout of 1 to 120 minutes, each failure rule 1 to 10 times, each CI check a name, and only CI may follow the pull request, in at most 20 steps`}
           />
         )}
       </form>
