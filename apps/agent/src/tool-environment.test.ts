@@ -25,17 +25,31 @@ test('without setup files, the well-known tool directories of the home come befo
   })
 })
 
-test('directories the setup wrote to SPYRIA_PATH come first, the last line first; SPYRIA_ENV variables are added and may replace PATH', () => {
+test('directories the setup wrote to SPYRIA_PATH come first, the last line first; SPYRIA_ENV adds variables but never replaces PATH, HOME or an inherited one', () => {
   const home = homeNamed('written')
   emptySetupFiles(home)
   const { SPYRIA_PATH, SPYRIA_ENV } = setupFilesOf(home)
   writeFileSync(SPYRIA_PATH, '/opt/first\n\n  /opt/second  \n')
-  writeFileSync(SPYRIA_ENV, 'GREETING=hello = world\nPATH=/custom/bin\n=nameless\nnot a variable\n1BAD=x\nEMPTY=\n')
-  expect(toolEnvironmentOf({ PATH: '/usr/bin' }, home)).toEqual({
-    PATH: ['/opt/second', '/opt/first', ...wellKnown(home), '/custom/bin'].join(':'),
+  writeFileSync(
+    SPYRIA_ENV,
+    'GREETING=hello = world\nPATH=/custom/bin\nHOME=/elsewhere\nLANG=fr\n=nameless\nnot a variable\n1BAD=x\nEMPTY=\n',
+  )
+  expect(toolEnvironmentOf({ PATH: '/usr/bin', LANG: 'C' }, home)).toEqual({
+    PATH: ['/opt/second', '/opt/first', ...wellKnown(home), '/usr/bin'].join(':'),
     HOME: home,
+    LANG: 'C',
     GREETING: 'hello = world',
     EMPTY: '',
+  })
+})
+
+test('setup files that cannot be read count as empty', () => {
+  const home = homeNamed('unreadable')
+  mkdirSync(setupFilesOf(home).SPYRIA_ENV, { recursive: true })
+  mkdirSync(setupFilesOf(home).SPYRIA_PATH, { recursive: true })
+  expect(toolEnvironmentOf({ PATH: '/usr/bin' }, home)).toEqual({
+    PATH: [...wellKnown(home), '/usr/bin'].join(':'),
+    HOME: home,
   })
 })
 

@@ -31,9 +31,8 @@ const linesOf = (file: string) => {
       .split('\n')
       .map((line) => line.trim())
       .filter(Boolean)
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
-    throw error
+  } catch {
+    return []
   }
 }
 
@@ -52,9 +51,9 @@ export const toolEnvironmentOf = (base: Environment, home: string): Environment 
   const path = [
     ...linesOf(files.SPYRIA_PATH).reverse(),
     ...toolDirectories.map((directory) => join(home, directory)),
-    variables.PATH ?? base.PATH,
+    base.PATH,
   ]
-  return { ...base, HOME: home, ...variables, PATH: path.filter(Boolean).join(':') }
+  return { ...variables, ...base, HOME: home, PATH: path.filter(Boolean).join(':') }
 }
 
 const isWritable = (directory: string) => {

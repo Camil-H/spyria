@@ -266,13 +266,14 @@ test('a setup script that leaves a service running in the background ends when t
   process.kill(servicePid, 'SIGKILL')
 })
 
-test('a prompt sent while the setup script runs reaches the agent once setup ends; Stop while it waits ends the turn without reaching the agent', async () => {
+test('a prompt sent while the setup script runs counts as running and reaches the agent once setup ends; Stop while it waits ends the turn without reaching the agent', async () => {
   const url = bareRepository('waiting', { '.spyria/setup.sh': 'sleep 1\necho ready\n' })
   const { call, open, create, prompt } = started()
   const { launch } = launchIn('waiting', url)
   const id = await create(launch)
   const socket = open(id)
   await prompt(id, 'hello')
+  expect((await call('GET', `/api/conversations/${id}`)).body).toMatchObject({ execution_status: 'running' })
   await socket.until(kindOf('turn_end'))
   const setupEndIndex = socket.events.findIndex(setupEnded)
   expect(setupEndIndex).toBeGreaterThan(-1)
