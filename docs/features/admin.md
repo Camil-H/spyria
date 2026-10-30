@@ -13,6 +13,7 @@ Everything here is in **Workspace settings** (the workspace menu), as cards in t
 | Setup your agents | **Connect runtime** | `runtimes.manage` |
 | | **AI providers** | `providers.manage` |
 | | **MCP tools** | `tools.manage` |
+| | **Dev loop** | `github.manage` |
 | Analyze usage | **Analyze costs** | `costs.view` or `budgets.manage` |
 | | **Audit log** | `audit.view` |
 
@@ -120,6 +121,10 @@ Accounts are matched on the provider's issuer and subject, not the email, so a c
 ## Runtime hosts and members' machines
 
 **Connect runtime** lists the workspace's runtime hosts, adds new ones, and holds the switch **Members can run sessions on their own machine**. Turning it off stops members from adding a machine or starting a chat on one, and prompts in existing ones get a notice. See [Machines](./machines.md).
+
+## Dev loop
+
+**Dev loop** turns on the loop in which the agents of dev chats check, review and publish their own work, and sets its limits: how many times the agent may fix failing checks, review findings and failing CI, the time limit of a loop and an optional cost limit. See [Dev mode](./dev-mode.md#dev-loop).
 
 ## Shared tools
 
