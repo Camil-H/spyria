@@ -77,6 +77,7 @@ type Conversation = {
   isSettingUp: boolean
   stopWaitingToStart?: () => void
 }
+type ModelChoice = { model?: string; thoughtLevel?: string }
 type Launch = {
   id?: string
   agent?: {
@@ -803,11 +804,11 @@ export const startAgent = ({
     return Response.json({})
   }
 
-  const actedWhileSettingUp = async (conversation: Conversation, action: string | undefined, request: Request) => {
+  const actedWhileSettingUp = (conversation: Conversation, action: string | undefined, choice?: ModelChoice) => {
     if (action === 'interrupt') return Response.json({})
     if (action === 'restart') return Response.json({ id: conversation.id, ...summaryOf(conversation) })
-    if (action !== 'switch_acp_model') return Response.json({ error: 'Not found' }, { status: 404 })
-    const { model, thoughtLevel } = (await request.json()) as { model?: string; thoughtLevel?: string }
+    if (action !== 'switch_acp_model' || !choice) return Response.json({ error: 'Not found' }, { status: 404 })
+    const { model, thoughtLevel } = choice
     const { agent } = conversation.launch
     conversation.launch = {
       ...conversation.launch,
@@ -856,7 +857,8 @@ export const startAgent = ({
       conversation.stopWaitingToStart()
       return Response.json({})
     }
-    if (conversation.isSettingUp) return actedWhileSettingUp(conversation, action, request)
+    const choice = action === 'switch_acp_model' ? ((await request.json()) as ModelChoice) : undefined
+    if (conversation.isSettingUp) return actedWhileSettingUp(conversation, action, choice)
     await conversation.started
     if (action === 'restart') {
       await restart(conversation)
@@ -869,9 +871,8 @@ export const startAgent = ({
       closeQuestions(conversation, 'stopped')
       return Response.json({})
     }
-    if (action === 'switch_acp_model') {
-      const { model, thoughtLevel } = (await request.json()) as { model?: string; thoughtLevel?: string }
-      await switchModel(conversation, model, thoughtLevel)
+    if (choice) {
+      await switchModel(conversation, choice.model, choice.thoughtLevel)
       return Response.json({})
     }
     return Response.json({ error: 'Not found' }, { status: 404 })

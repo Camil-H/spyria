@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { type AgentEvent, createAgentTestbed, kindOf, textOf } from './testing.ts'
+import { type AgentEvent, apiKey, createAgentTestbed, kindOf, textOf } from './testing.ts'
 
 const { stateDirectory, stubCommand, launchOf, started } = createAgentTestbed()
 const directory = mkdtempSync(join(tmpdir(), 'spyria-agent-checkout-'))
@@ -434,6 +434,45 @@ test('while the setup script runs, a model switch is kept for the agent’s star
   })
   expect(Date.now() - startedAt).toBeLessThan(800)
   const socket = open(id)
+  await prompt(id, 'hello')
+  await socket.until(kindOf('turn_end'))
+  expect(textOf(socket.events)).toBe('[t1] Hello from the stub (model stub-large, mode bypassPermissions).')
+})
+
+test('a model switch whose request arrives during setup and whose body arrives after the agent started still switches the model', async () => {
+  const url = bareRepository('late-switch', { '.spyria/setup.sh': 'sleep 0.3\n' })
+  const { agent, open, create, prompt } = started()
+  const { launch } = launchIn('late-switch', url)
+  const id = await create({ ...launch, id: 'late-switch' })
+  const socket = open(id)
+  const body = JSON.stringify({ model: 'stub-large' })
+  const answer = Promise.withResolvers<string>()
+  let received = ''
+  const connection = await Bun.connect({
+    hostname: 'localhost',
+    port: agent.port,
+    socket: {
+      data: (_, data) => {
+        received += data.toString()
+        if (received.includes('\r\n\r\n')) answer.resolve(received)
+      },
+    },
+  })
+  connection.write(
+    [
+      `POST /api/conversations/${id}/switch_acp_model HTTP/1.1`,
+      `Host: localhost:${agent.port}`,
+      'Content-Type: application/json',
+      `X-Session-Api-Key: ${apiKey}`,
+      `Content-Length: ${body.length}`,
+      '',
+      '',
+    ].join('\r\n'),
+  )
+  await socket.until(kindOf('session_started'))
+  connection.write(body)
+  expect(await answer.promise).toStartWith('HTTP/1.1 200')
+  connection.end()
   await prompt(id, 'hello')
   await socket.until(kindOf('turn_end'))
   expect(textOf(socket.events)).toBe('[t1] Hello from the stub (model stub-large, mode bypassPermissions).')
