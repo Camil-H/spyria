@@ -56,6 +56,11 @@ export const appendNotice = ({ messages }: UnitOfWork, prompt: Message, text: st
     }),
   })
 
+const skipPrompt = async (unitOfWork: UnitOfWork, prompt: Message, notice: string) => {
+  await appendNotice(unitOfWork, prompt, notice)
+  await afterLoopTurn(unitOfWork, prompt.id)
+}
+
 export const noticeWaitingPrompts = async (unitOfWork: UnitOfWork, chatId: ChatId, text: string) => {
   await unitOfWork.agentTurns.lock(chatId)
   for (const prompt of await unitOfWork.agentTurns.waitingPrompts(chatId))
@@ -77,16 +82,16 @@ export const beginAgentTurn = async (
   if (heldPromptId !== null) return heldPromptId === resumedPromptId ? unitOfWork.messages.get(heldPromptId) : undefined
   const prompt = await agentTurns.nextPrompt(chatId)
   if (prompt && hasOutlivedWait(prompt, Date.now()) && (await agentTurns.hasNotice(prompt.id, unavailableNotices))) {
-    await appendNotice(unitOfWork, prompt, expiredPromptNotice)
+    await skipPrompt(unitOfWork, prompt, expiredPromptNotice)
     return beginAgentTurn(unitOfWork, chatId)
   }
   if (prompt?.authorId && !can(await unitOfWork.chats.permissions(chatId, prompt.authorId), 'chat.post')) {
-    await appendNotice(unitOfWork, prompt, noLongerPromptsNoticeOf(await members.displayNameOf(prompt.authorId)))
+    await skipPrompt(unitOfWork, prompt, noLongerPromptsNoticeOf(await members.displayNameOf(prompt.authorId)))
     return beginAgentTurn(unitOfWork, chatId)
   }
   const needsLlmKey = !(await unitOfWork.chats.get(chatId)).localSession
   if (prompt?.authorId && needsLlmKey && !(await members.hasLlmCredential(prompt.authorId))) {
-    await appendNotice(unitOfWork, prompt, noLlmKeyNoticeOf(await members.displayNameOf(prompt.authorId)))
+    await skipPrompt(unitOfWork, prompt, noLlmKeyNoticeOf(await members.displayNameOf(prompt.authorId)))
     return beginAgentTurn(unitOfWork, chatId)
   }
   if (prompt) await agentTurns.set(chatId, prompt)

@@ -121,6 +121,7 @@ export type DevLoopRepository = {
   setSettings(settings: DevLoopSettings | null): Promise<void>
   costSince(chatId: ChatId, since: number): Promise<number>
   enqueue(job: DevLoopJobType, loopId: MessageId, delayMilliseconds?: number): Promise<void>
+  recordChange(memberId: MemberId, settings: DevLoopSettings | null): Promise<void>
 }
 
 export type BrowserPageRepository = { open(chatId: ChatId, page: OpenedPage, openedAt: Date): Promise<void> }

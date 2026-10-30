@@ -93,6 +93,7 @@ export const conversationMutators = defineMutators({
       }),
       async ({ tx, ctx, args }) =>
         setDevLoop(dependenciesOf(tx, ctx, args), {
+          memberId: ctx.userId,
           permissions: await contextPermissionsOf(tx, ctx),
           settings: args.settings,
         }),

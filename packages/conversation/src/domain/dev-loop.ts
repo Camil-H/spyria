@@ -175,6 +175,9 @@ export const handOffOutcomeOf = (phase: DevLoopPhase, limit: number) =>
 export const pausedOutcome = 'The agent stopped without saying its work is done: over to you'
 export const memberWroteOutcomeOf = (name: string) => `Stopped: ${name} wrote in the chat`
 export const memberWroteNoticeOf = (name: string) => `Not sent: ${name} wrote in the meantime`
+export const loopStoppedNoticeOf = (name: string) => `Not sent: ${name} stopped the dev loop`
+export const turnedOffOutcome = 'Stopped: the dev loop was turned off in this workspace'
+export const notRunOutcome = "Stopped: the dev loop's message could not run: over to you"
 const passedPartsOf = ({ limits }: DevLoopStep) => [
   'checks',
   ...(limits.reviewRounds > 0 ? ['review'] : []),

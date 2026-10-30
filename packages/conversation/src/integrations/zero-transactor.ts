@@ -3,6 +3,7 @@ import {
   activeAgentTurns,
   aiProviderAllowListOf,
   appendChatEvent,
+  appendWorkspaceEvent,
   chatEventsOf,
   chatRoutingOf,
   chatTurnOf,
@@ -469,6 +470,13 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       setSettings: (settings) => tx.mutate.workspaces.update({ workspaceId: contextWorkspaceId, devLoop: settings }),
       costSince: (id, since) => modelCallCostSince(tx, contextWorkspaceId, id, since),
       enqueue: (job, loopId, delayMilliseconds) => enqueue(job, { loopId }, delayMilliseconds),
+      recordChange: (memberId, settings) =>
+        appendWorkspaceEvent(tx, {
+          workspaceId: contextWorkspaceId,
+          type: 'dev_loop.changed',
+          actor: memberActor(memberId),
+          payload: { settings },
+        }).then(() => undefined),
     },
     toolCalls: {
       record: async (call) => {

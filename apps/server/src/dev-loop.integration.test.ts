@@ -269,7 +269,7 @@ test('As a chat owner, checks that keep failing end with the agent saying what i
   expect(await noticesOf(id)).toContain('The checks still failed after 1 attempt to fix: over to you')
 })
 
-test('As a member, writing in the chat stops the dev loop and the message it queued; a guest’s prompt cannot start a loop; members who cannot connect GitHub cannot change the loop', async () => {
+test('As a member, writing in the chat stops the dev loop; another member’s prompt cannot start a loop; members who cannot connect GitHub cannot change the loop', async () => {
   expect(await setDevLoop(bob, defaultDevLoopSettings)).toEqual(
     failedWith('Your workspace role does not allow this: Connect GitHub'),
   )
@@ -280,7 +280,7 @@ test('As a member, writing in the chat stops the dev loop and the message it que
   await stack.agentHost('Interrupted loop host', { routesModelCalls: true })
   await connectGitHub(alice)
   const { id } = await newDevChat()
-  await workspaceWithChecks(id, { checks: { Slow: 'sleep 1 && exit 1' } })
+  await workspaceWithChecks(id, { checks: { Slow: 'sleep 3 && exit 1' } })
   stack.setFakeLlmScript({ steps: [committing('one', 'Try once'), finish], text: 'Done.' })
   await stack.prompt(id, 'Fix the totals')
   await loopStateIs(id, 'checking')
@@ -295,4 +295,37 @@ test('As a member, writing in the chat stops the dev loop and the message it que
   expect(refusals).toEqual([{ tool: 'finish_work', status: 'refused' }])
   expect((await loopOf(id))?.step.state).toBe('stopped')
   expect(await loopPromptsOf(id)).toEqual([])
+})
+
+test('As a chat owner, Stop stops the dev loop while it runs the checks, and turning the loop off stops the loops still running', async () => {
+  expect(await setDevLoop(alice, defaultDevLoopSettings)).toEqual(succeeded)
+  await stack.agentHost('Stopped loop host', { routesModelCalls: true })
+  await connectGitHub(alice)
+  const stoppedChat = await newDevChat()
+  await workspaceWithChecks(stoppedChat.id, { checks: { Slow: 'sleep 3 && exit 1' } })
+  stack.setFakeLlmScript({ steps: [committing('one', 'Try once'), finish], text: 'Done.' })
+  await stack.prompt(stoppedChat.id, 'Fix the totals')
+  await loopStateIs(stoppedChat.id, 'checking')
+  expect(
+    await stack.mutate({ workspaceId: acme, userId: alice }, 'conversation.stopAgent', {
+      workspaceId: acme,
+      chatId: stoppedChat.id,
+    }),
+  ).toEqual(succeeded)
+  expect((await loopOf(stoppedChat.id))?.step).toMatchObject({ state: 'stopped', outcome: 'Stopped by Alice' })
+
+  const turnedOffChat = await newDevChat()
+  await workspaceWithChecks(turnedOffChat.id, { checks: { Slow: 'sleep 3 && exit 1' } })
+  stack.setFakeLlmScript({ steps: [committing('one', 'Try once'), finish], text: 'Done.' })
+  await stack.prompt(turnedOffChat.id, 'Fix the totals')
+  await loopStateIs(turnedOffChat.id, 'checking')
+  expect(await setDevLoop(alice, null)).toEqual(succeeded)
+  await loopStateIs(turnedOffChat.id, 'stopped')
+  expect((await loopOf(turnedOffChat.id))?.step.outcome).toBe('Stopped: the dev loop was turned off in this workspace')
+  expect(await loopPromptsOf(turnedOffChat.id)).toEqual([])
+  expect(
+    (
+      await database.$client`select payload from workspace_events where type = 'dev_loop.changed' order by created_at`
+    ).map(({ payload }) => payload.settings),
+  ).toContainEqual(null)
 })
