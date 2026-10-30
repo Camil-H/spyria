@@ -45,9 +45,10 @@ When the chat's runtime starts, spyria-agent clones the repository into the runt
 
 - The clone uses an installation token scoped to that one repository with read access only. The token lives only in the environment of the `git clone` process: it is not in the agent's environment and the remote in `.git/config` carries no credential.
 - Clone and checkout are part of the runtime's start, which the host relay limits to 2 minutes. A failed clone fails the start with "The repository could not be cloned" and git's reason.
-- If the repository has `.spyria/setup.sh`, it runs after the session has started, as a command step in the chat with live output, alongside the first turn. It runs without any token. When it fails, the chat shows a notice with its exit code and its last lines; the session keeps going.
+- The setup command runs after the session has started, as a command step in the chat with live output: the one set for its repository in **Workspace settings > Connect runtime > Setup commands**, else the default one there. Nothing runs without one, even if the repository has a `.spyria/setup.sh`: set `sh .spyria/setup.sh` to run it. Members who manage runtime hosts set them; every member can read them, so they hold no secret. It runs without any token. A prompt sent while it runs waits for it to end before it reaches the agent, so the agent never works on a half-installed checkout; **Stop** ends a waiting prompt. The step ends when the script exits: a service it starts in the background keeps running without holding the step open. When it fails, the chat shows a notice with its exit code and its last lines; the session keeps going.
+- The setup command has 45 minutes. Past that, it is stopped with every process in its process group (a daemon that detaches itself with `setsid` escapes), and the chat shows a notice with the limit and its last lines; the session keeps going.
 - The clone's git identity (`user.name` and `user.email` in `.git/config`) is the chat owner, so the agent's commits show the owner as their author: their GitHub login and `<id>+<login>@users.noreply.github.com` when their GitHub account is linked, else their Spyria name and a no-reply address. The server reads the owner's GitHub account with their token once per member and caches it; only the name and address reach the runtime. The identity is set again each time the agent starts.
-- A runtime that restarts keeps its clone: no new clone, checkout or setup.
+- A runtime that restarts keeps its clone (no new clone or checkout) and runs the setup command again, since the processes it started are gone. A setup command must therefore be safe to run twice: install what is missing, skip what is there.
 
 Rules files come with the clone, so every agent can read them. Pi loads `AGENTS.md` (or `CLAUDE.md`) from the working directory upward; Claude Code reads `CLAUDE.md` files; Codex reads `AGENTS.md`. A repository that wants all three to follow the same rules keeps an `AGENTS.md` and a `CLAUDE.md` that points to it.
 
@@ -100,6 +101,8 @@ The runtime holds no GitHub credential, so `git fetch`, `git pull`, `git push`, 
 | `read_checks` | Any prompt | Reads the checks of a pull request's head commit, failing first, with the annotations of each failing check (file, line, title and message) and, for a GitHub Actions job, the step that failed and the end of its log; the chat's pull request by default |
 | `list_issues` | Any prompt | Lists up to 30 issues of the repository, filtered by state, labels and words |
 | `read_issue` | Any prompt | Reads an issue with its comments |
+| `finish_work` | The owner's prompts and those of quality gates | Says the work is done, with the pull request's title and description; listed only when [quality gates](#quality-gates) are on |
+| `report_review` | The review prompt of quality gates | Reports the review's findings, each important, nit or pre-existing |
 
 `fetch_branch` works like **Update from base**: the server fetches the branch with a read-only installation token and hands the runtime a git bundle (at most 12 MB) holding only that branch's commits the runtime lacks. Since pushes only fast-forward, the agent merges what it fetched rather than rebasing. The reading tools use read-only installation tokens too, never a member's token, and cut long texts. Every call is recorded like any tool call.
 
@@ -112,6 +115,30 @@ An App created before Spyria asked for **Issues** lacks that permission: add **I
 An App created before Spyria asked for **Actions** lacks that permission: add **Actions: Read-only** in the App's settings on GitHub, then accept it on the installation. Until then, `read_checks` reads annotations alone and says "Logs not read: Ask a GitHub admin to accept the Actions permission for this workspace's GitHub App".
 
 An App created before Spyria asked for **Workflows** lacks that permission too: add **Workflows: Read and write** in the App's settings on GitHub, then accept it on the installation. Until then, GitHub refuses to push a working branch that changes a file under `.github/workflows`.
+
+## Quality gates
+
+When an admin turns quality gates on, the agent of a dev chat checks its own work before the owner sees it. It ends the work the owner asked for by calling `finish_work`; after that turn, Spyria runs the work through the repository's gates, in order. Gates are set in **Workspace settings > Quality gates**: the **Default rules**, and rules for each repository that needs its own. Each set of rules has its own switch, its gates and the limits of a run. A gate is one of these:
+
+- **Command**: a name, one command run in the runtime with the setup command's environment, and a timeout. Keep the logic in a script in the repository, such as a package script or `scripts/check.sh`, so the gate only runs it and developers run the same thing. Consecutive commands run one after the other and fail together, so the agent gets every failure at once, with the end of each one's output.
+- **Code review**: the agent starts a subagent with a fresh context on the branch's diff (then, in later rounds, on what changed since the last review), guided by the repository's `REVIEW.md` and `AGENTS.md`, and reports each finding with `report_review` as important, nit or pre-existing. Important findings that were not reported before count as a failure; nits and pre-existing defects do not.
+- **Pull request**: pushes the branch and opens the pull request, or pushes to the open one, as the owner, with the title and description given to `finish_work`.
+- **CI**: every minute it reads the checks of the pushed commit, and once every one of them has finished, any failing one counts as a failure, as `read_checks` shows them. It is all or nothing: every check GitHub reports counts, and a skipped check counts as passed. When no check reports within 15 minutes, it hands over.
+
+Each gate but the pull request says what a failure does: **send it back to the agent, up to N times**, or **stop and hand over to the owner**. After a fix the agent calls `finish_work` again and the gates run from the first one. If the agent commits during the review turn, that commit goes through the gates again before anything is pushed. Only CI may come after the pull request, so nothing the agent commits stays unpushed, and each command has a name of its own. The built-in gates, before an admin changes them, are a code review, the pull request and CI. Every member can read the gates, so a command must hold no secret.
+
+Each message the gates send is the owner's, marked **Sent by quality gates**, and runs on the owner's key; in the audit log it reads as the system acting for the owner. A **Quality gates** card in the chat shows each gate passed, failed, running or waiting, how many times it went back to the agent, the review findings and the pull request. The gates hand over to the owner, with a notice, when:
+
+- every gate passed: "Ready for your review on pull request #N", naming the gates that passed;
+- a gate still fails after its fixes: the agent is first asked to say what it would change about the approach, without fixing again; or a gate set to stop fails;
+- the agent ends a turn without `finish_work` (it is waiting for the owner, or asked a question);
+- the run reaches its time limit (counted from the owner's prompt), its cost limit, or the owner's monthly budget;
+- the owner presses **Stop**, or an admin turns off the gates of the repository;
+- any member writes in the chat, even before the run starts: it stops, and the message it had queued is not sent.
+
+Only the owner's own prompts start a run: `finish_work` from another member's prompt is refused. It works the same on a member's machine, except that a subscription is not metered, so neither the cost limit nor the monthly budget applies there.
+
+Admins set quality gates in **Workspace settings > Quality gates**, with the **Connect GitHub** permission. The **Default rules** apply to every repository without rules of its own; **New repository rules** gives a repository its own, starting as a copy of the default rules. Each set of rules holds its switch (off by default), its gates and the limits of a run: a time limit, 4 hours by default, and an optional cost limit. Repositories are listed once GitHub is connected; until then only the default rules can be set. See [decision 0025](../decisions/0025-dev-loop.md).
 
 ## The pull request card and header chip
 

@@ -2,8 +2,10 @@ import type {
   ChatId,
   ChatPermission,
   ChatRole,
+  DevLoopSettings,
   MemberId,
   ProjectId,
+  SetupCommand,
   WorkspacePermission,
   WorkspaceRole,
 } from '@spyria/kernel'
@@ -54,6 +56,8 @@ export type WorkspaceRoleRepository = {
 export type WorkspaceRepository = {
   add(workspace: Workspace): Promise<void>
   scheduleDeletion(deletion: { purgeAt: number; haltDelayMilliseconds: number; actorId: MemberId }): Promise<void>
+  setDevLoop(settings: DevLoopSettings | null): Promise<void>
+  setSetupCommands(commands: readonly SetupCommand[]): Promise<void>
 }
 
 export type WorkspaceCleanup = { isPending: boolean; failed: readonly { type: string; count: number }[] }

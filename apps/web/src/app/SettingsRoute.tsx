@@ -1,6 +1,6 @@
 import type { Snapshot } from '@spyria/db'
 import { useQuery, useScoped } from '@spyria/db/react'
-import type { WorkspaceId, WorkspacePermission } from '@spyria/kernel'
+import { isAnyRuleOn, type WorkspaceId, type WorkspacePermission } from '@spyria/kernel'
 import { ChecklistBlock } from '@spyria/onboarding'
 import { AiProvidersSection, WorkspaceConnectionsSection } from '@spyria/profile'
 import { RuntimeHostsSection } from '@spyria/runtime'
@@ -8,9 +8,11 @@ import { focusRing, formatCost, iconButtonClass, LabelledSection, useShortcut } 
 import { AuditLogSection, countBudgetAlerts, UsageSection } from '@spyria/usage'
 import {
   DeleteWorkspaceSection,
+  DevLoopSection,
   GitHubSection,
   MembersSection,
   RolesSection,
+  SetupCommandsSection,
   SignInSection,
   useIsGitHubConfigured,
   useWorkspacePermissions,
@@ -32,6 +34,13 @@ type SettingsCard = {
     permissions: readonly WorkspacePermission[]
   }>
 }
+
+const RuntimeSettings = ({ workspaceId }: { workspaceId: WorkspaceId }) => (
+  <>
+    <RuntimeHostsSection workspaceId={workspaceId} />
+    <SetupCommandsSection workspaceId={workspaceId} />
+  </>
+)
 
 const cardSections: readonly { title: string; cards: readonly SettingsCard[] }[] = [
   {
@@ -73,9 +82,9 @@ const cardSections: readonly { title: string; cards: readonly SettingsCard[] }[]
       {
         path: 'runtime',
         title: 'Connect runtime',
-        description: "Runtime hosts and members' own machines",
+        description: "Runtime hosts, members' own machines and setup commands",
         permissions: ['runtimes.manage'],
-        Page: RuntimeHostsSection,
+        Page: RuntimeSettings,
       },
       {
         path: 'ai-providers',
@@ -90,6 +99,13 @@ const cardSections: readonly { title: string; cards: readonly SettingsCard[] }[]
         description: 'Tool servers shared with the workspace',
         permissions: ['tools.manage'],
         Page: WorkspaceConnectionsSection,
+      },
+      {
+        path: 'quality-gates',
+        title: 'Quality gates',
+        description: "The gates an agent's work goes through before it reaches you",
+        permissions: ['github.manage'],
+        Page: DevLoopSection,
       },
     ],
   },
@@ -151,6 +167,11 @@ const cardStatusesOf =
       ),
       'mcp-tools': countLabelOf(inWorkspace(snapshot.workspaceConnections).length, 'shared connection'),
       'ai-providers': aiProvidersStatusOf(snapshot.workspaces.find((workspace) => workspace.id === workspaceId)),
+      'quality-gates': isAnyRuleOn(
+        snapshot.workspaces.find((workspace) => workspace.id === workspaceId)?.devLoop ?? null,
+      )
+        ? 'On'
+        : 'Off',
       costs: `${formatCost(monthCostMicros)} this month`,
     }
   }

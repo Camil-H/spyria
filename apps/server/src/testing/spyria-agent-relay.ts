@@ -21,6 +21,7 @@ export type Launch = {
   agent: { acp_command: string[]; acp_model?: string; acp_thought_level?: string; acp_resume_session_id?: string }
   secrets: Record<string, { value: string }>
   parent_conversation_id?: string
+  repository?: { setup_command?: string }
 }
 export type FakeContainer = { running: boolean; apiKey: string; isBooted?: boolean }
 export type ContainerAgent = {

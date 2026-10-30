@@ -13,6 +13,7 @@ Everything here is in **Workspace settings** (the workspace menu), as cards in t
 | Setup your agents | **Connect runtime** | `runtimes.manage` |
 | | **AI providers** | `providers.manage` |
 | | **MCP tools** | `tools.manage` |
+| | **Quality gates** | `github.manage` |
 | Analyze usage | **Analyze costs** | `costs.view` or `budgets.manage` |
 | | **Audit log** | `audit.view` |
 
@@ -121,6 +122,12 @@ Accounts are matched on the provider's issuer and subject, not the email, so a c
 
 **Connect runtime** lists the workspace's runtime hosts, adds new ones, and holds the switch **Members can run sessions on their own machine**. Turning it off stops members from adding a machine or starting a chat on one, and prompts in existing ones get a notice. See [Machines](./machines.md).
 
+Its **Setup commands** set what a dev chat's runtime runs when it starts, before the agent gets a message: a **Default setup command** tab for the repositories without one of their own, a tab for each repository that has its own, and a **New repository setup command** tab to add one, as the quality gates do. Nothing runs without one, even a repository's `.spyria/setup.sh`. Every member can read them, so they hold no secret. See [Dev mode](./dev-mode.md#clone-and-setup-script).
+
+## Quality gates
+
+**Quality gates** sets the gates the work of dev chat agents goes through before it reaches the owner: the **Default rules**, and rules for each repository that needs its own, each with its own switch, its gates and the limits of a run (time and cost). Gates run in order (commands, a code review, the pull request, CI), each saying whether a failure goes back to the agent, and how many times, or hands over to the owner. Repositories are listed once GitHub is connected. See [Dev mode](./dev-mode.md#quality-gates).
+
 ## Shared tools
 
 **MCP tools** registers tool servers (MCP) for the whole workspace: a display name, the server's URL and an optional secret header (name and value). The secret is stored in the model gateway only, never in Spyria's database, and is never shown again. Changing the URL or the header recreates the connection in the gateway.
@@ -186,7 +193,7 @@ At the bottom of **Workspace settings**, an Admin finds **Delete workspace**. It
 | Group | Records |
 |---|---|
 | Members | invites, revoked invites, joins, role changes, removals |
-| Workspace | workspace deleted, restored by the operator, AI providers allow-list changed |
+| Workspace | workspace deleted, restored by the operator, AI providers allow-list changed, quality gates changed, setup commands changed |
 | Sign-in | SSO configured, client secret replaced, domain verified |
 | GitHub | App configured, App secrets replaced |
 | Connections | shared connections added, changed, removed, member restrictions |

@@ -116,3 +116,22 @@ export const githubAppManifestOf = ({
   default_permissions: githubAppPermissions,
   default_events: githubAppEvents,
 })
+
+export type RepositoryListing =
+  | { state: 'loading' }
+  | { state: 'failed' }
+  | { state: 'listed'; repositories: GitHubRepository[] }
+
+export const listedRepositoriesOf = (listing: RepositoryListing) =>
+  listing.state === 'listed' ? listing.repositories : []
+
+export const repositoryPromptOf = (listing: RepositoryListing, withoutOwn: number, own: string) =>
+  listing.state === 'loading'
+    ? 'Listing repositories…'
+    : listing.state === 'failed'
+      ? 'The repositories could not be listed: check Connect GitHub'
+      : listing.repositories.length === 0
+        ? 'No repository yet: connect GitHub and grant it repositories'
+        : withoutOwn === 0
+          ? `Every repository has its own ${own}`
+          : `Give a repository its own ${own}…`

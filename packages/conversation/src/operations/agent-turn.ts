@@ -1,4 +1,12 @@
-import { type ChatId, can, type MessageId, messageId, systemActor } from '@spyria/kernel'
+import {
+  type ChatId,
+  can,
+  type MemberId,
+  type MessageId,
+  messageId,
+  systemActor,
+  type WorkspaceId,
+} from '@spyria/kernel'
 import type {
   AgentClient,
   AgentEventSockets,
@@ -11,6 +19,7 @@ import { expiredPromptNotice, hasOutlivedWait, unavailableNotices } from '../dom
 import { type Message, newMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
 import { noLlmKeyNoticeOf, noLongerPromptsNoticeOf } from '../domain/model-call-failures.ts'
+import { afterLoopTurn } from './dev-loop-turns.ts'
 import { cancelToolApprovalsOf } from './pending-approvals.ts'
 import { forgetDelegationsOf } from './running-delegations.ts'
 
@@ -25,8 +34,10 @@ export type AgentDependencies = {
   checkouts?: RepositoryCheckouts
   fixedLlm?: { model: string }
   resumeAfterMilliseconds?: number
+  devLoopPollMilliseconds?: number
   approvalWindowMilliseconds?: number
   deployment?: string
+  isBudgetUsedUp?: (workspaceId: WorkspaceId, memberId: MemberId) => Promise<boolean>
 }
 
 export const appendNotice = ({ messages }: UnitOfWork, prompt: Message, text: string) =>
@@ -44,6 +55,11 @@ export const appendNotice = ({ messages }: UnitOfWork, prompt: Message, text: st
       replyToId: prompt.id,
     }),
   })
+
+const skipPrompt = async (unitOfWork: UnitOfWork, prompt: Message, notice: string) => {
+  await appendNotice(unitOfWork, prompt, notice)
+  await afterLoopTurn(unitOfWork, prompt.id)
+}
 
 export const noticeWaitingPrompts = async (unitOfWork: UnitOfWork, chatId: ChatId, text: string) => {
   await unitOfWork.agentTurns.lock(chatId)
@@ -66,16 +82,16 @@ export const beginAgentTurn = async (
   if (heldPromptId !== null) return heldPromptId === resumedPromptId ? unitOfWork.messages.get(heldPromptId) : undefined
   const prompt = await agentTurns.nextPrompt(chatId)
   if (prompt && hasOutlivedWait(prompt, Date.now()) && (await agentTurns.hasNotice(prompt.id, unavailableNotices))) {
-    await appendNotice(unitOfWork, prompt, expiredPromptNotice)
+    await skipPrompt(unitOfWork, prompt, expiredPromptNotice)
     return beginAgentTurn(unitOfWork, chatId)
   }
   if (prompt?.authorId && !can(await unitOfWork.chats.permissions(chatId, prompt.authorId), 'chat.post')) {
-    await appendNotice(unitOfWork, prompt, noLongerPromptsNoticeOf(await members.displayNameOf(prompt.authorId)))
+    await skipPrompt(unitOfWork, prompt, noLongerPromptsNoticeOf(await members.displayNameOf(prompt.authorId)))
     return beginAgentTurn(unitOfWork, chatId)
   }
   const needsLlmKey = !(await unitOfWork.chats.get(chatId)).localSession
   if (prompt?.authorId && needsLlmKey && !(await members.hasLlmCredential(prompt.authorId))) {
-    await appendNotice(unitOfWork, prompt, noLlmKeyNoticeOf(await members.displayNameOf(prompt.authorId)))
+    await skipPrompt(unitOfWork, prompt, noLlmKeyNoticeOf(await members.displayNameOf(prompt.authorId)))
     return beginAgentTurn(unitOfWork, chatId)
   }
   if (prompt) await agentTurns.set(chatId, prompt)
@@ -93,6 +109,7 @@ const finishAgentTurn = async (unitOfWork: UnitOfWork, chatId: ChatId, promptId:
   cancelToolApprovalsOf(promptId)
   const notice = noticeOf(await unitOfWork.agentTurns.hasReply(promptId))
   if (notice) await appendNotice(unitOfWork, await unitOfWork.messages.get(promptId), notice)
+  await afterLoopTurn(unitOfWork, promptId)
   await requestNextPrompt(unitOfWork, chatId)
 }
 

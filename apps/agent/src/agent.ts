@@ -9,7 +9,8 @@ import {
   type Json,
   liveOutputCharacters,
 } from './acp.ts'
-import { checkOut, lastLinesOf, type Repository, runSetup, setupCommand } from './checkout.ts'
+import { checkOut, lastLinesOf, type Repository, runCommand } from './checkout.ts'
+import { createChecksRunner } from './checks.ts'
 import { connectPi } from './pi.ts'
 import { redacted } from './redaction.ts'
 import { createScreenshotTaker } from './screenshots.ts'
@@ -71,6 +72,8 @@ type Conversation = {
   turnEnds: Map<string, Json | undefined>
   sockets: Set<ServerWebSocket<SocketData>>
   started: Promise<void>
+  setup: Promise<void>
+  stopWaitingForSetup?: () => void
 }
 type Launch = {
   id?: string
@@ -99,11 +102,17 @@ const terminalToolStatuses = ['completed', 'failed']
 const conversationRoute =
   /^\/api\/conversations\/([\w-]+)(?:\/(events|interrupt|restart|switch_acp_model)|\/questions\/([\w-]+))?$/
 const socketRoute = /^\/sockets\/events\/([\w-]+)$/
-const workspaceRoute = /^\/api\/workspace\/(tree|file|media|changes|commits|status)$/
+const workspaceRoute = /^\/api\/workspace\/(tree|file|media|changes|commits|status|checks)$/
 const branchReads = { changes: changesOf, commits: commitLogOf, status: statusOf }
 const workspaceActions = { bundle: bundleOf, commit: commitOf, fetch: fetchOf, merge: mergeOf, pushed: pushedOf }
-const workspaceActionRoute = /^\/api\/workspace\/(bundle|commit|fetch|merge|pushed|screenshot)$/
+const workspaceActionRoute = /^\/api\/workspace\/(bundle|commit|fetch|merge|pushed|screenshot|checks)$/
 const setupToolCallId = 'spyria-setup'
+const setupCallOf = (command: string) => ({ toolCallId: setupToolCallId, title: command, kind: 'execute' })
+const setupStartOf = (command: string) => ({
+  sessionUpdate: 'tool_call',
+  ...setupCallOf(command),
+  status: 'in_progress',
+})
 const conversationIdPattern = /^[\w-]{1,64}$/
 const exitedUnexpectedly = /exited unexpectedly/i
 const restartedNotice = 'The agent restarted; send your message again'
@@ -218,6 +227,7 @@ export const startAgent = ({
   bufferBytes = 8 * 1024 * 1024,
   authTimeoutMilliseconds = 5_000,
   requestTimeoutMilliseconds = 60_000,
+  setupTimeoutMilliseconds = 45 * 60_000,
   workspaceDirectory = '/workspace/project',
   browserDirectory = '/usr/local/lib/spyria/browser',
 }: {
@@ -227,12 +237,20 @@ export const startAgent = ({
   bufferBytes?: number
   authTimeoutMilliseconds?: number
   requestTimeoutMilliseconds?: number
+  setupTimeoutMilliseconds?: number
   workspaceDirectory?: string
   browserDirectory?: string
 }) => {
-  const actions = { ...workspaceActions, screenshot: createScreenshotTaker(browserDirectory) }
+  const checksRunner = createChecksRunner({ cwd: workspaceDirectory, environment: () => adapterEnvironmentOf({}) })
+  const actions = {
+    ...workspaceActions,
+    screenshot: createScreenshotTaker(browserDirectory),
+    checks: async (_directory: string, body: unknown) => checksRunner.start(body),
+  }
   const conversations = new Map<string, Conversation>()
   const checkouts = new Map<string, ReturnType<typeof checkOut>>()
+  const setups = new Map<string, Promise<void>>()
+  const runningSetups = new Map<string, string>()
   const apiKeyBytes = Buffer.from(apiKey)
   const isApiKey = (given: unknown) => {
     const givenBytes = Buffer.from(String(given ?? ''))
@@ -424,33 +442,86 @@ export const startAgent = ({
     conversation.status = 'idle'
   }
 
-  const setUp = async (conversation: Conversation) => {
-    const call = { toolCallId: setupToolCallId, title: setupCommand, kind: 'execute' }
-    emit(conversation, { sessionUpdate: 'tool_call', ...call, status: 'in_progress' })
-    const { exitCode, output } = await runSetup(conversation.cwd, adapterEnvironmentOf({}), (soFar) =>
-      emit(conversation, {
-        sessionUpdate: 'tool_call_update',
-        toolCallId: setupToolCallId,
-        status: 'in_progress',
-        rawOutput: { formatted_output: soFar.slice(-liveOutputCharacters) },
-      }),
-    )
-    emit(
-      conversation,
+  const emitToCheckout = (cwd: string, update: Json, completed?: boolean) => {
+    for (const conversation of conversations.values())
+      if (conversation.cwd === cwd && !conversation.isSub) emit(conversation, update, completed)
+  }
+
+  const setUp = async (cwd: string, command: string) => {
+    const startedAt = performance.now()
+    runningSetups.set(cwd, command)
+    emitToCheckout(cwd, setupStartOf(command))
+    const { exitCode, output } = await runCommand(
+      command,
+      cwd,
+      adapterEnvironmentOf({}),
+      setupTimeoutMilliseconds,
+      (soFar) =>
+        emitToCheckout(cwd, {
+          sessionUpdate: 'tool_call_update',
+          toolCallId: setupToolCallId,
+          status: 'in_progress',
+          rawOutput: { formatted_output: soFar.slice(-liveOutputCharacters) },
+        }),
+    ).finally(() => runningSetups.delete(cwd))
+    log.info({
+      event: 'agent.setup',
+      body: 'Setup script ended',
+      attributes: {
+        'process.exit.code': exitCode,
+        'setup.timed_out': exitCode === undefined,
+        duration_ms: Math.round(performance.now() - startedAt),
+      },
+    })
+    emitToCheckout(
+      cwd,
       {
         sessionUpdate: 'tool_call_update',
-        ...call,
+        ...setupCallOf(command),
         status: exitCode === 0 ? 'completed' : 'failed',
-        rawOutput: { formatted_output: output, exit_code: exitCode },
+        rawOutput: { formatted_output: output, ...(exitCode !== undefined && { exit_code: exitCode }) },
       },
       true,
     )
-    if (exitCode !== 0) emit(conversation, { sessionUpdate: 'setup_failed', exitCode, output: lastLinesOf(output) })
+    if (exitCode === undefined)
+      emitToCheckout(cwd, {
+        sessionUpdate: 'setup_failed',
+        command,
+        timeoutMinutes: setupTimeoutMilliseconds / 60_000,
+        output: lastLinesOf(output),
+      })
+    else if (exitCode !== 0)
+      emitToCheckout(cwd, { sessionUpdate: 'setup_failed', command, exitCode, output: lastLinesOf(output) })
   }
+
+  const setUpOnce = (conversation: Conversation, command: string) => {
+    const { cwd } = conversation
+    const running = runningSetups.get(cwd)
+    if (running) emit(conversation, setupStartOf(running))
+    const setup =
+      setups.get(cwd) ??
+      setUp(cwd, command).catch((error) =>
+        log.warn({ event: 'agent.setup', body: 'The setup script could not run', error }),
+      )
+    setups.set(cwd, setup)
+    return setup
+  }
+
+  const isStoppedDuringSetup = (conversation: Conversation) =>
+    new Promise<boolean>((resolve) => {
+      conversation.stopWaitingForSetup = () => resolve(true)
+      conversation.setup.then(
+        () => resolve(false),
+        () => resolve(false),
+      )
+    }).finally(() => {
+      conversation.stopWaitingForSetup = undefined
+    })
 
   const readWorkspace = async (read: string, parameters: URLSearchParams) => {
     const environment = adapterEnvironmentOf({})
     const path = parameters.get('path') ?? ''
+    if (read === 'checks') return Response.json(checksRunner.status())
     if (read === 'tree') return Response.json(await treeOf(workspaceDirectory, path, environment))
     if (read === 'changes' || read === 'commits' || read === 'status')
       return Response.json(await branchReads[read](workspaceDirectory, parameters.get('base') ?? '', environment))
@@ -545,7 +616,7 @@ export const startAgent = ({
     }
     const id = launch.id ?? crypto.randomUUID()
     const cwd = launch.workspace?.working_dir ?? workspaceDirectory
-    const { failure, hasSetup } =
+    const { failure, setupCommand } =
       launch.repository && !launch.parent_conversation_id ? await checkedOut(id, cwd, launch.repository) : {}
     const raced = conversations.get(id)
     if (raced) {
@@ -569,6 +640,7 @@ export const startAgent = ({
       turnEnds: new Map(),
       sockets: new Set(),
       started: Promise.resolve(),
+      setup: Promise.resolve(),
       connection: connectionOf(() => conversation, launch, command, cwd),
     }
     conversations.set(id, conversation)
@@ -577,7 +649,7 @@ export const startAgent = ({
       conversation.connection.close()
     })
     await conversation.started
-    if (hasSetup && conversation.status !== 'error') void setUp(conversation)
+    if (setupCommand && conversation.status !== 'error') conversation.setup = setUpOnce(conversation, setupCommand)
     return Response.json({ id, ...summaryOf(conversation) }, { status: 201 })
   }
 
@@ -670,13 +742,15 @@ export const startAgent = ({
     void withSpan(
       'agent.turn',
       { 'conversation.id': conversation.id },
-      () =>
-        promptOnce(async (errorOutput, hasStreamed) => {
+      async () => {
+        if (await isStoppedDuringSetup(conversation)) return ended({ stopReason: 'cancelled' })
+        await promptOnce(async (errorOutput, hasStreamed) => {
           const notice = new AcpError(withSummary(restartedNotice, errorOutput))
           if (hasStreamed) return failed(notice)
           conversation.status = 'running'
           await promptOnce(async () => failed(notice))
-        }),
+        })
+      },
       contextOf(traceHeaders),
     )
     return Response.json({})
@@ -729,6 +803,7 @@ export const startAgent = ({
     if (action === 'interrupt') {
       if (conversation.sessionId)
         conversation.connection.notify('session/cancel', { sessionId: conversation.sessionId })
+      conversation.stopWaitingForSetup?.()
       closeQuestions(conversation, 'stopped')
       return Response.json({})
     }

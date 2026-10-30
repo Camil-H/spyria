@@ -4,7 +4,9 @@ import {
   actorKinds,
   type ChatPermission,
   type ChatVisibility,
+  type DevLoopSettings,
   type HarnessId,
+  type SetupCommand,
   type WorkspacePermission,
 } from '@spyria/kernel'
 import { sql } from 'drizzle-orm'
@@ -68,6 +70,8 @@ export const workspaces = table('workspaces', {
     .references(() => users.id),
   localSessions: boolean().notNull().default(true),
   aiProviderAllowList: jsonb().$type<AiProviderAllowList>(),
+  devLoop: jsonb().$type<DevLoopSettings>(),
+  setupCommands: jsonb().$type<readonly SetupCommand[]>(),
   createdAt: instant().notNull(),
   deletedAt: instant(),
   purgeAt: instant(),

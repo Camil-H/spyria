@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { type AgentEvent, createAgentTestbed, kindOf } from './testing.ts'
+import { type AgentEvent, createAgentTestbed, kindOf, textOf } from './testing.ts'
 
 const { stubCommand, launchOf, started } = createAgentTestbed()
 const directory = mkdtempSync(join(tmpdir(), 'spyria-agent-checkout-'))
@@ -32,7 +32,13 @@ const bareRepository = (name: string, files: Record<string, string>) => {
 const launchIn = (name: string, url: string, extra: object = {}) => {
   const workingDirectory = join(directory, `${name}-workspace`)
   const environmentFile = join(directory, `${name}-environment`)
-  const repository = { url, token, base_branch: 'main', working_branch: 'spyria/fix-totals-1a2b3c' }
+  const repository = {
+    url,
+    token,
+    base_branch: 'main',
+    working_branch: 'spyria/fix-totals-1a2b3c',
+    setup_command: 'sh .spyria/setup.sh',
+  }
   const command = ['sh', '-c', `env > ${environmentFile}; exec "$@"`, 'sh', ...stubCommand]
   return {
     launch: {
@@ -105,6 +111,7 @@ test('a failing setup script shows its exit code and last output lines and the s
   expect(setupFailed?.completed).toBe(true)
   expect(setupFailed?.update).toEqual({
     sessionUpdate: 'setup_failed',
+    command: 'sh .spyria/setup.sh',
     exitCode: 3,
     output: [...Array.from({ length: 19 }, (_, index) => `line ${index + 7}`), 'missing tool'].join('\n'),
   })
@@ -213,4 +220,132 @@ test('a launch with a start branch builds the working branch on that branch when
       start_branch: 'spyria/never-pushed-9f8e7d',
     }),
   ).toMatchObject({ branch: 'spyria/other-fork-3c4d5e', hasFix: false })
+})
+
+const isAlive = (pid: number) => {
+  const stat = `/proc/${pid}/stat`
+  return existsSync(stat) && readFileSync(stat, 'utf8').split(') ')[1]?.[0] !== 'Z'
+}
+
+test('a setup script past its time limit is stopped with every process it started, and the notice gives the limit', async () => {
+  const url = bareRepository('stuck', {
+    '.spyria/setup.sh': 'echo downloading\nsleep 30 &\necho $! > sleep.pid\nwait\n',
+  })
+  const { open, create } = started({ setupTimeoutMilliseconds: 300 })
+  const { launch, workingDirectory } = launchIn('stuck', url)
+  const socket = open(await create(launch))
+  await socket.until(kindOf('setup_failed'))
+  expect(socket.events.filter(isSetup).at(-1)?.update).toMatchObject({
+    status: 'failed',
+    rawOutput: { formatted_output: 'downloading\n' },
+  })
+  expect(socket.events.filter(isSetup).at(-1)?.update.rawOutput).not.toHaveProperty('exit_code')
+  expect(socket.events.find(kindOf('setup_failed'))?.update).toEqual({
+    sessionUpdate: 'setup_failed',
+    command: 'sh .spyria/setup.sh',
+    timeoutMinutes: 0.005,
+    output: 'downloading',
+  })
+  expect(isAlive(Number(readFileSync(join(workingDirectory, 'sleep.pid'), 'utf8')))).toBe(false)
+})
+
+test('a setup script that leaves a service running in the background ends when the script itself exits, and the service keeps running', async () => {
+  const url = bareRepository('service', {
+    '.spyria/setup.sh': 'sh -c "sleep 30" &\necho $! > service.pid\necho ready\n',
+  })
+  const { open, create } = started()
+  const { launch, workingDirectory } = launchIn('service', url)
+  const socket = open(await create(launch))
+  await socket.until(setupEnded)
+  expect(socket.events.filter(isSetup).at(-1)?.update.rawOutput).toEqual({ formatted_output: 'ready\n', exit_code: 0 })
+  const servicePid = Number(readFileSync(join(workingDirectory, 'service.pid'), 'utf8'))
+  expect(isAlive(servicePid)).toBe(true)
+  process.kill(servicePid, 'SIGKILL')
+})
+
+test('a prompt sent while the setup script runs reaches the agent once setup ends; Stop while it waits ends the turn without reaching the agent', async () => {
+  const url = bareRepository('waiting', { '.spyria/setup.sh': 'sleep 1\necho ready\n' })
+  const { call, open, create, prompt } = started()
+  const { launch } = launchIn('waiting', url)
+  const id = await create(launch)
+  const socket = open(id)
+  await prompt(id, 'hello')
+  await socket.until(kindOf('turn_end'))
+  const setupEndIndex = socket.events.findIndex(setupEnded)
+  expect(setupEndIndex).toBeGreaterThan(-1)
+  expect(socket.events.findIndex(kindOf('agent_message_chunk'))).toBeGreaterThan(setupEndIndex)
+
+  const stopped = await create({
+    ...launch,
+    workspace: { working_dir: join(directory, 'waiting-stopped') },
+    id: 'stopped',
+  })
+  const stoppedSocket = open(stopped)
+  await prompt(stopped, 'hello')
+  expect((await call('POST', `/api/conversations/${stopped}/interrupt`, {})).status).toBe(200)
+  await stoppedSocket.until(kindOf('turn_end'))
+  expect(stoppedSocket.events.find(kindOf('turn_end'))?.update.stopReason).toBe('cancelled')
+  expect(stoppedSocket.events.some(setupEnded)).toBe(false)
+  await stoppedSocket.until(setupEnded)
+  await prompt(stopped, 'again')
+  await stoppedSocket.until(kindOf('turn_end'), 2)
+  expect(textOf(stoppedSocket.events)).toStartWith('[t1] ')
+})
+
+test('a conversation created again while the setup script runs shows the running setup, its end and its notice, and its prompt waits for it', async () => {
+  const url = bareRepository('recreated', { '.spyria/setup.sh': 'echo installing\nsleep 1\nexit 4\n' })
+  const { call, open, create, prompt } = started()
+  const { launch } = launchIn('recreated', url)
+  const first = await create({ ...launch, id: 'first' })
+  await open(first).until(isSetup)
+  await call('DELETE', `/api/conversations/${first}`)
+  const again = await create({ ...launch, id: 'again' })
+  const socket = open(again)
+  await prompt(again, 'hello')
+  await socket.until(kindOf('turn_end'))
+  expect(socket.events.find(isSetup)?.update).toMatchObject({ sessionUpdate: 'tool_call', status: 'in_progress' })
+  expect(socket.events.filter(isSetup).at(-1)?.update).toMatchObject({ status: 'failed', rawOutput: { exit_code: 4 } })
+  expect(socket.events.find(kindOf('setup_failed'))?.update).toMatchObject({ exitCode: 4 })
+  expect(socket.events.findIndex(kindOf('agent_message_chunk'))).toBeGreaterThan(socket.events.findIndex(setupEnded))
+  expect(socket.events.filter((event) => isSetup(event) && event.update.sessionUpdate === 'tool_call')).toHaveLength(1)
+})
+
+test('a restarted runtime runs the setup script again on its existing clone', async () => {
+  const url = bareRepository('restarted', { '.spyria/setup.sh': 'echo run >> runs.txt\n' })
+  const { launch, workingDirectory } = launchIn('restarted', url)
+  for (const id of ['before-restart', 'after-restart']) {
+    const { open, create } = started()
+    await open(await create({ ...launch, id })).until(setupEnded)
+  }
+  expect(readFileSync(join(workingDirectory, 'runs.txt'), 'utf8')).toBe('run\nrun\n')
+})
+
+test('a setup command given with the repository runs instead of .spyria/setup.sh, and its step and notice name it', async () => {
+  const url = bareRepository('configured', { '.spyria/setup.sh': 'echo from the file > from-file.txt\n' })
+  const { open, create } = started()
+  const { launch, workingDirectory } = launchIn('configured', url)
+  const repository = { ...launch.repository, setup_command: 'echo configured > configured.txt && exit 5' }
+  const socket = open(await create({ ...launch, repository }))
+  await socket.until(kindOf('setup_failed'))
+  expect(socket.events.find(isSetup)?.update).toMatchObject({ title: 'echo configured > configured.txt && exit 5' })
+  expect(socket.events.find(kindOf('setup_failed'))?.update).toEqual({
+    sessionUpdate: 'setup_failed',
+    command: 'echo configured > configured.txt && exit 5',
+    exitCode: 5,
+    output: '',
+  })
+  expect(existsSync(join(workingDirectory, 'configured.txt'))).toBe(true)
+  expect(existsSync(join(workingDirectory, 'from-file.txt'))).toBe(false)
+})
+
+test('a repository’s .spyria/setup.sh does not run on its own: only a setup command given with the repository runs', async () => {
+  const url = bareRepository('unasked', { '.spyria/setup.sh': 'echo ran > ran.txt\n' })
+  const { open, create } = started()
+  const { launch, workingDirectory } = launchIn('unasked', url)
+  const { setup_command: _, ...repository } = launch.repository
+  const socket = open(await create({ ...launch, repository }))
+  await socket.until(kindOf('workspace'))
+  await Bun.sleep(300)
+  expect(socket.events.some(isSetup)).toBe(false)
+  expect(existsSync(join(workingDirectory, 'ran.txt'))).toBe(false)
 })

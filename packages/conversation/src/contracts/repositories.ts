@@ -3,6 +3,7 @@ import type {
   ChatId,
   ChatPermission,
   ChatRole,
+  DevLoopSettings,
   HarnessId,
   ListedModel,
   MemberId,
@@ -14,6 +15,7 @@ import type { AgentEvent } from '../domain/agent-events.ts'
 import type { StepDelegation, StoredStep } from '../domain/agent-steps.ts'
 import type { Attachment, StoredBytes } from '../domain/attachments.ts'
 import type { OpenedPage } from '../domain/browser-pages.ts'
+import type { DevLoopJobType } from '../domain/dev-loop.ts'
 import type { ConversationChat, Message, MessageChange } from '../domain/message.ts'
 import type { AgentInterrupt, SessionRestart } from './agent.ts'
 
@@ -31,6 +33,7 @@ export type MessageRepository = {
   history(chatId: ChatId): Promise<Message[]>
   seedFor(prompt: Message): Promise<Message | undefined>
   pullRequestCard(chatId: ChatId): Promise<Message | undefined>
+  devLoopCard(chatId: ChatId): Promise<Message | undefined>
 }
 
 export type AttachmentRepository = {
@@ -113,6 +116,12 @@ export type AgentEventRepository = {
 
 export type DraftRepository = { replace(draft: Draft): Promise<void> }
 
+export type DevLoopRepository = {
+  settings(): Promise<DevLoopSettings | null>
+  costSince(chatId: ChatId, since: number): Promise<number>
+  enqueue(job: DevLoopJobType, loopId: MessageId, delayMilliseconds?: number): Promise<void>
+}
+
 export type BrowserPageRepository = { open(chatId: ChatId, page: OpenedPage, openedAt: Date): Promise<void> }
 
 export type ReadMarkerRepository = {
@@ -145,6 +154,7 @@ export type ChatRepository = {
   recordRuntimeOrigin(origin: RuntimeOrigin): Promise<void>
   recordPush(push: { chatId: ChatId; actor: Actor; branch: string; head: string | null }): Promise<void>
   localSessionsAllowed(): Promise<boolean>
+  setupCommandOf(repository: string | null): Promise<string | null>
   hasAgentSession(chatId: ChatId): Promise<boolean>
   isSessionStartPending(chatId: ChatId): Promise<boolean>
   dropRuntime(chatId: ChatId): Promise<void>

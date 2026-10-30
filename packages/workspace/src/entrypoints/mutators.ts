@@ -22,6 +22,8 @@ import { removeMember } from '../operations/remove-member.ts'
 import { renameChat } from '../operations/rename-chat.ts'
 import { renameProject } from '../operations/rename-project.ts'
 import { revokeInvite } from '../operations/revoke-invite.ts'
+import { setDevLoop } from '../operations/set-dev-loop.ts'
+import { setSetupCommands } from '../operations/set-setup-commands.ts'
 import { transferChat } from '../operations/transfer-chat.ts'
 import { updateChatRole } from '../operations/update-chat-role.ts'
 import { updateWorkspaceRole } from '../operations/update-workspace-role.ts'
@@ -39,6 +41,32 @@ const roleArguments = {
   permissions: z.array(z.string().check(z.maxLength(64))).check(z.maxLength(16)),
 }
 
+const stepArgument = z.union([
+  z.object({
+    kind: z.literal('command'),
+    name: z.string(),
+    command: z.string(),
+    timeoutMinutes: z.number(),
+    fixes: z.number(),
+  }),
+  z.object({ kind: z.literal('review'), fixes: z.number() }),
+  z.object({ kind: z.literal('pull_request') }),
+  z.object({ kind: z.literal('ci'), fixes: z.number() }),
+])
+export const setupCommandsArgument = z.array(z.object({ repository: z.nullable(z.string()), command: z.string() }))
+export const devLoopArgument = z.nullable(
+  z.object({
+    rules: z.array(
+      z.object({
+        repository: z.nullable(z.string()),
+        isOn: z.boolean(),
+        timeLimitMinutes: z.number(),
+        costLimitMicros: z.nullable(z.number()),
+        steps: z.array(stepArgument),
+      }),
+    ),
+  }),
+)
 const workspaceArguments = z.object({ workspaceId: z.pipe(id, z.transform(workspaceId)) })
 
 const dependenciesOf = (tx: Transaction, context: ZeroContext, args: { workspaceId: string }) => {
@@ -100,6 +128,16 @@ export const workspaceMutators = defineMutators({
     ),
     removeMember: defineMutator(z.extend(workspaceArguments, { memberId: memberIdArgument }), ({ tx, ctx, args }) =>
       removeMember(dependenciesOf(tx, ctx, args), { ...args, actorId: ctx.userId, now: Date.now() }),
+    ),
+    setSetupCommands: defineMutator(
+      z.extend(workspaceArguments, {
+        commands: setupCommandsArgument,
+      }),
+      ({ tx, ctx, args }) =>
+        setSetupCommands(dependenciesOf(tx, ctx, args), { actorId: ctx.userId, commands: args.commands }),
+    ),
+    setDevLoop: defineMutator(z.extend(workspaceArguments, { settings: devLoopArgument }), ({ tx, ctx, args }) =>
+      setDevLoop(dependenciesOf(tx, ctx, args), { actorId: ctx.userId, settings: args.settings }),
     ),
     deleteWorkspace: defineMutator(
       z.extend(workspaceArguments, { confirmation: z.literal('DELETE') }),
