@@ -207,6 +207,7 @@ export const createApp = async (
     retryAgent: mutateConfirmed(conversationMutators.conversation.retryAgent),
     restartSession: mutateConfirmed(conversationMutators.conversation.restartSession),
     stopRuntime: mutateConfirmed(conversationMutators.conversation.stopRuntime),
+    setDevLoop: mutateConfirmed(conversationMutators.conversation.setDevLoop),
   })
   const agentStream = createAgentStream(store)
   return {

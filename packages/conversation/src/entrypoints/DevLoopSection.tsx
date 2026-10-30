@@ -45,7 +45,17 @@ export const DevLoopSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
   const [draft, setDraft] = useState(draftOf(settings ?? defaultDevLoopSettings))
   const { errorMessage, isPending, run } = useGuardedAction()
   useEffect(() => setDraft(draftOf(settings ?? defaultDevLoopSettings)), [settings])
-  const save = (next: DevLoopSettings | null) => run(() => commands.setDevLoop({ workspaceId, settings: next }))
+  const [isSaved, setIsSaved] = useState(false)
+  const edit = (next: Draft) => {
+    setDraft(next)
+    setIsSaved(false)
+  }
+  const save = (next: DevLoopSettings | null) =>
+    run(async () => {
+      setIsSaved(false)
+      await commands.setDevLoop({ workspaceId, settings: next })
+      setIsSaved(true)
+    })
   return (
     <LabelledSection title="Dev loop">
       <p className="text-sm text-muted">
@@ -74,9 +84,10 @@ export const DevLoopSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
                 min={devLoopRange[key].minimum}
                 max={devLoopRange[key].maximum}
                 step={1}
+                required
                 className={fieldClass}
                 value={draft[key]}
-                onChange={(event) => setDraft({ ...draft, [key]: event.target.value })}
+                onChange={(event) => edit({ ...draft, [key]: event.target.value })}
               />
             </label>
           ))}
@@ -84,18 +95,21 @@ export const DevLoopSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
             Cost limit of a loop, in dollars (sessions on an API key only)
             <input
               type="number"
-              min={0}
+              min={0.01}
               step="0.01"
               inputMode="decimal"
               placeholder="No limit"
               className={fieldClass}
               value={draft.costLimitDollars}
-              onChange={(event) => setDraft({ ...draft, costLimitDollars: event.target.value })}
+              onChange={(event) => edit({ ...draft, costLimitDollars: event.target.value })}
             />
           </label>
-          <button type="submit" className={`self-start ${buttonClass}`} disabled={isPending}>
-            Save
-          </button>
+          <div className="flex items-center gap-3">
+            <button type="submit" className={buttonClass} disabled={isPending}>
+              Save
+            </button>
+            {isSaved && <span className="text-sm text-muted">Saved</span>}
+          </div>
         </form>
       )}
       <ErrorMessage message={errorMessage} />

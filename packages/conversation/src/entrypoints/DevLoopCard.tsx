@@ -47,9 +47,9 @@ const DevLoopCard = ({ step }: { step: DevLoopStep }) => {
           {step.checks.map(({ name, passed }) => (
             <li key={name} className="flex items-center gap-1">
               {passed ? (
-                <CircleCheck aria-label="passed" size={14} className="text-muted" />
+                <CircleCheck role="img" aria-label="passed" size={14} className="text-muted" />
               ) : (
-                <CircleX aria-label="failed" size={14} className="text-muted" />
+                <CircleX role="img" aria-label="failed" size={14} className="text-muted" />
               )}
               {name}
             </li>

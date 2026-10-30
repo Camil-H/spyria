@@ -21,6 +21,7 @@ test.describe('Dev loop settings', () => {
     await section.getByLabel('Times the agent fixes review findings (0 turns the review off)').fill('0')
     await section.getByLabel('Cost limit of a loop, in dollars (sessions on an API key only)').fill('2.5')
     await section.getByRole('button', { name: 'Save' }).click()
+    await expect(section.getByText('Saved')).toBeVisible()
     await page.reload()
     await expect(section.getByLabel('Times the agent fixes failing checks')).toHaveValue('5')
     await expect(section.getByLabel('Times the agent fixes review findings (0 turns the review off)')).toHaveValue('0')
