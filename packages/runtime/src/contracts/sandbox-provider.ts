@@ -2,6 +2,7 @@ import type { HarnessId, RuntimeHostId, WorkspaceId } from '@spyria/kernel'
 
 export type SandboxLocation = { workspaceId: WorkspaceId; hostId: RuntimeHostId; runtimeId: string }
 export type SandboxStatus = 'running' | 'stopped' | 'missing'
+export type PackageCacheScope = { repository: string; ownerId: string }
 type SandboxRequest = {
   method: string
   path: string
@@ -24,7 +25,7 @@ export type SandboxTransport = {
 }
 
 export type SandboxProvider = {
-  create(sandbox: SandboxLocation & { image: string }): Promise<void>
+  create(sandbox: SandboxLocation & { image: string; packageCache?: PackageCacheScope }): Promise<void>
   apiKeyOf(sandbox: Pick<SandboxLocation, 'workspaceId' | 'runtimeId'>): string
   start(sandbox: SandboxLocation): Promise<void>
   stop(sandbox: SandboxLocation): Promise<void>

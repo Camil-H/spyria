@@ -20,6 +20,7 @@ import {
   bob,
   captureConsole,
   createFakeHosts,
+  type FakeHost,
   globex,
   openSharedTestApp,
   openZeroStore,
@@ -530,6 +531,34 @@ test('a failed bring-up stops its container to release its network; a retry remo
   await runtimeIn(abandonedChat, 'removed')
   expect(machine.containers.has(abandoned.id)).toBe(false)
   expect(opsOf(abandoned.id).at(-1)).toBe('remove')
+})
+
+const chatOn = async (repository: string | null, ownerId = alice) => {
+  const chat = await newRuntimeChat()
+  await database.$client`update chats set repository = ${repository}, owner_user_id = ${ownerId} where id = ${chat}`
+  return chat
+}
+const packageCacheKeyOf = async (host: FakeHost, chat: ChatId) => {
+  const { id } = await runningRuntime(chat)
+  return host.commands.find((command) => command.op === 'create' && command.runtimeId === id)?.packageCacheKey
+}
+
+test('a runtime on a repository mounts a package cache its owner’s runtimes on that repository share; another owner, another repository or a chat without a repository get none of it', async () => {
+  const host = await fakeHost('Cache host', { relayVersion: 3, memoryGibibytes: 32 })
+  const first = await packageCacheKeyOf(host, await chatOn('acme/app'))
+  expect(first).toMatch(/^[a-f0-9]{32}$/)
+  expect(await packageCacheKeyOf(host, await chatOn('acme/app'))).toBe(first)
+  const others = [
+    await packageCacheKeyOf(host, await chatOn('acme/app', bob)),
+    await packageCacheKeyOf(host, await chatOn('acme/site')),
+  ]
+  expect(new Set([first, ...others]).size).toBe(3)
+  expect(await packageCacheKeyOf(host, await chatOn(null))).toBeUndefined()
+})
+
+test('a host too old to know package caches creates the runtime without one', async () => {
+  const olderHost = await fakeHost('Older host', { relayVersion: 2 })
+  expect(await packageCacheKeyOf(olderHost, await chatOn('acme/app'))).toBeUndefined()
 })
 
 test('a Claude Code or Codex session is never placed on a workspace host: with only a workspace host online it fails with no_host', async () => {
