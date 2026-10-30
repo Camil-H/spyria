@@ -129,9 +129,13 @@ export const MessageList = ({
         )}
         {conversation.isAgentWorking && (
           <div ref={followNewest} className="flex items-center gap-2 px-3 py-2 text-sm text-muted">
-            <span role="status" aria-label="Agent is working" className="flex items-center gap-2">
+            <span
+              role="status"
+              aria-label={conversation.isSettingUp ? 'Setting up the repository' : 'Agent is working'}
+              className="flex items-center gap-2"
+            >
               <span aria-hidden className="size-2 animate-pulse rounded-full bg-accent" />
-              Agent is working…
+              {conversation.isSettingUp ? 'Setting up the repository…' : 'Agent is working…'}
             </span>
             {conversation.hasActiveTurn && onStop && (
               <button
