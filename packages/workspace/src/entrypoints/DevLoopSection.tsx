@@ -28,6 +28,12 @@ import { useWorkspaceCommands } from './providers.tsx'
 const offSettings: DevLoopSettings = { ...defaultDevLoopSettings, isOn: false }
 const dollarsOf = (micros: number | null) => (micros === null ? '' : String(micros / 1_000_000))
 const pipelineLabelOf = (repository: string | null) => repository ?? 'Every other repository'
+const repositoryPromptOf = (repositories: number, withoutOwnGates: number) =>
+  repositories === 0
+    ? 'No repository yet: connect GitHub to list them'
+    : withoutOwnGates === 0
+      ? 'Every repository has its own gates'
+      : 'Give a repository its own gates…'
 
 export const DevLoopSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
   const commands = useWorkspaceCommands()
@@ -101,12 +107,12 @@ export const DevLoopSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
   )
   const tabs = [null, ...draft.pipelines.flatMap(({ repository }) => (repository === null ? [] : [repository]))]
   return (
-    <LabelledSection title="Dev loop">
+    <LabelledSection title="Quality gates">
       <p className="text-sm text-muted">
-        When the agent of a dev chat says its work is done, Spyria runs the steps of the repository's pipeline, in
-        order. A failing step goes back to the agent or hands over to the chat owner, as each step says.
+        When the agent of a dev chat says its work is done, Spyria runs it through the repository's gates, in order. A
+        gate that fails sends the work back to the agent, or hands it over to the chat owner, as the gate says.
       </p>
-      <Switch label="Agents in dev chats check their own work" isOn={draft.isOn} onToggle={toggle} />
+      <Switch label="Agents in dev chats go through quality gates" isOn={draft.isOn} onToggle={toggle} />
       <form
         className="flex flex-col gap-6"
         onSubmit={(event) => {
@@ -118,7 +124,7 @@ export const DevLoopSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
         }}
       >
         <fieldset className="flex flex-wrap gap-4">
-          <legend className="mb-2 font-medium">Limits of a loop</legend>
+          <legend className="mb-2 font-medium">Limits of a run through the gates</legend>
           <label className={labelClass}>
             Time limit (minutes)
             <input
@@ -153,8 +159,8 @@ export const DevLoopSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
             />
           </label>
         </fieldset>
-        <section aria-label="Pipelines" className="flex flex-col gap-4">
-          <h3 className="font-medium">Pipelines</h3>
+        <section aria-label="Gates by repository" className="flex flex-col gap-4">
+          <h3 className="font-medium">Gates by repository</h3>
           <div role="tablist" aria-label="Repositories" className="flex flex-wrap gap-4 border-b border-line">
             {tabs.map((repository) => (
               <button
@@ -170,35 +176,34 @@ export const DevLoopSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
               </button>
             ))}
           </div>
-          {withoutOwn.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2 text-sm">
-              <select
-                aria-label="Repository"
-                className={fieldClass}
-                value={added}
-                onChange={(event) => setAdded(event.target.value)}
-              >
-                <option value="">Give a repository its own pipeline…</option>
-                {withoutOwn.map(({ fullName }) => (
-                  <option key={fullName} value={fullName}>
-                    {fullName}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                className={ghostButtonClass}
-                disabled={!added}
-                onClick={() => {
-                  edit(withPipeline(draft, { ...pipelineOf(draft, null), repository: added }))
-                  setSelected(added)
-                  setAdded('')
-                }}
-              >
-                Add pipeline
-              </button>
-            </div>
-          )}
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <select
+              aria-label="Repository"
+              className={fieldClass}
+              disabled={withoutOwn.length === 0}
+              value={added}
+              onChange={(event) => setAdded(event.target.value)}
+            >
+              <option value="">{repositoryPromptOf(repositories.length, withoutOwn.length)}</option>
+              {withoutOwn.map(({ fullName }) => (
+                <option key={fullName} value={fullName}>
+                  {fullName}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className={ghostButtonClass}
+              disabled={!added}
+              onClick={() => {
+                edit(withPipeline(draft, { ...pipelineOf(draft, null), repository: added }))
+                setSelected(added)
+                setAdded('')
+              }}
+            >
+              Give it its own gates
+            </button>
+          </div>
           <div role="tabpanel" aria-label={pipelineLabelOf(selected)} className="flex flex-col gap-4">
             <DevLoopPipelineEditor pipeline={pipeline} checkNames={checkNames} onChange={editPipeline} />
             {selected !== null && (
@@ -210,7 +215,7 @@ export const DevLoopSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
                   setSelected(null)
                 }}
               >
-                Use the default pipeline for {selected}
+                Use the gates of every other repository for {selected}
               </button>
             )}
           </div>
@@ -223,7 +228,7 @@ export const DevLoopSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
         </div>
         {invalidPipeline !== undefined && (
           <ErrorMessage
-            message={`The pipeline of ${pipelineLabelOf(invalidPipeline)} cannot be saved: each command needs a name of its own, a command and a timeout of 1 to 120 minutes, each failure rule 1 to 10 times, each CI check a name, and only CI may follow the pull request, in at most 20 steps`}
+            message={`The gates of ${pipelineLabelOf(invalidPipeline)} cannot be saved: each command needs a name of its own, a command and a timeout of 1 to 120 minutes, each failure rule 1 to 10 times, each CI check a name, and only CI may follow the pull request, in at most 20 steps`}
           />
         )}
       </form>

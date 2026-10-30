@@ -39,7 +39,7 @@ test('a step moves up or down, never past either end; removing the pull request 
 })
 
 test('a pipeline replaces the one of its repository or is added; a repository pipeline can be removed', () => {
-  const app = { repository: 'acme/app', setupCommand: null, steps: [lint] }
+  const app = { repository: 'acme/app', steps: [lint] }
   const added = withPipeline(defaultDevLoopSettings, app)
   expect(added.pipelines).toEqual([defaultDevLoopPipeline, app])
   expect(withPipeline(added, { ...app, steps: [] }).pipelines).toEqual([defaultDevLoopPipeline, { ...app, steps: [] }])
@@ -47,7 +47,7 @@ test('a pipeline replaces the one of its repository or is added; a repository pi
 })
 
 test('the first pipeline that cannot be saved is found, so its tab can be shown', () => {
-  const broken = { repository: 'acme/app', setupCommand: null, steps: [{ ...lint, command: '' }] }
+  const broken = { repository: 'acme/app', steps: [{ ...lint, command: '' }] }
   expect(invalidPipelineOf(withPipeline(defaultDevLoopSettings, broken))).toBe(broken)
   expect(invalidPipelineOf(defaultDevLoopSettings)).toBeUndefined()
 })

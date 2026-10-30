@@ -12,6 +12,7 @@ import {
   GitHubSection,
   MembersSection,
   RolesSection,
+  SetupCommandsSection,
   SignInSection,
   useIsGitHubConfigured,
   useWorkspacePermissions,
@@ -33,6 +34,13 @@ type SettingsCard = {
     permissions: readonly WorkspacePermission[]
   }>
 }
+
+const RuntimeSettings = ({ workspaceId }: { workspaceId: WorkspaceId }) => (
+  <>
+    <RuntimeHostsSection workspaceId={workspaceId} />
+    <SetupCommandsSection workspaceId={workspaceId} />
+  </>
+)
 
 const cardSections: readonly { title: string; cards: readonly SettingsCard[] }[] = [
   {
@@ -76,7 +84,7 @@ const cardSections: readonly { title: string; cards: readonly SettingsCard[] }[]
         title: 'Connect runtime',
         description: "Runtime hosts and members' own machines",
         permissions: ['runtimes.manage'],
-        Page: RuntimeHostsSection,
+        Page: RuntimeSettings,
       },
       {
         path: 'ai-providers',
@@ -93,9 +101,9 @@ const cardSections: readonly { title: string; cards: readonly SettingsCard[] }[]
         Page: WorkspaceConnectionsSection,
       },
       {
-        path: 'dev-loop',
-        title: 'Dev loop',
-        description: 'How the agents of dev chats check, review and publish their own work',
+        path: 'quality-gates',
+        title: 'Quality gates',
+        description: "The gates an agent's work goes through before it reaches you",
         permissions: ['github.manage'],
         Page: DevLoopSection,
       },
@@ -159,7 +167,9 @@ const cardStatusesOf =
       ),
       'mcp-tools': countLabelOf(inWorkspace(snapshot.workspaceConnections).length, 'shared connection'),
       'ai-providers': aiProvidersStatusOf(snapshot.workspaces.find((workspace) => workspace.id === workspaceId)),
-      'dev-loop': snapshot.workspaces.find((workspace) => workspace.id === workspaceId)?.devLoop?.isOn ? 'On' : 'Off',
+      'quality-gates': snapshot.workspaces.find((workspace) => workspace.id === workspaceId)?.devLoop?.isOn
+        ? 'On'
+        : 'Off',
       costs: `${formatCost(monthCostMicros)} this month`,
     }
   }

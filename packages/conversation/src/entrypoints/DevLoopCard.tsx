@@ -40,7 +40,10 @@ const fixesOf = (config: DevLoopStepConfig, round: number) =>
 const DevLoopCard = ({ step }: { step: DevLoopStep }) => {
   const important = step.findings.filter((finding) => finding.severity === 'important').length
   return (
-    <section aria-label="Dev loop" className="flex flex-col gap-2 rounded-lg border border-line bg-raised p-3 text-sm">
+    <section
+      aria-label="Quality gates"
+      className="flex flex-col gap-2 rounded-lg border border-line bg-raised p-3 text-sm"
+    >
       <div className="flex flex-wrap items-center gap-2">
         <IterationCw aria-hidden size={16} className="shrink-0 text-muted" />
         <span className="font-medium">{step.summary.title}</span>

@@ -6,7 +6,6 @@ export type DevLoopStepConfig =
 export type DevLoopStepKind = DevLoopStepConfig['kind']
 export type DevLoopPipeline = Readonly<{
   repository: string | null
-  setupCommand: string | null
   steps: readonly DevLoopStepConfig[]
 }>
 export type DevLoopSettings = Readonly<{
@@ -28,7 +27,6 @@ const singleKinds: DevLoopStepKind[] = ['review', 'pull_request', 'ci']
 
 export const defaultDevLoopPipeline: DevLoopPipeline = {
   repository: null,
-  setupCommand: null,
   steps: [{ kind: 'review', fixes: 2 }, { kind: 'pull_request' }, { kind: 'ci', checks: null, fixes: 2 }],
 }
 
@@ -71,9 +69,8 @@ export const isInPublishingOrder = (steps: readonly DevLoopStepConfig[]) => {
 }
 
 const isPipeline = (value: unknown): value is DevLoopPipeline => {
-  const { repository, setupCommand, steps } = (value ?? {}) as Record<string, unknown>
+  const { repository, steps } = (value ?? {}) as Record<string, unknown>
   if (repository !== null && !isText(repository, 200)) return false
-  if (setupCommand !== null && !isText(setupCommand, maximumCommandLength)) return false
   if (!Array.isArray(steps) || steps.length > maximumSteps || !steps.every(isStep)) return false
   const isSingle = singleKinds.every((kind) => steps.filter((step) => step.kind === kind).length <= 1)
   const names = steps.flatMap((step) => (step.kind === 'command' ? [step.name.trim().toLowerCase()] : []))
@@ -97,3 +94,22 @@ export const pipelineOf = (settings: DevLoopSettings | null, repository: string 
   settings?.pipelines.find((pipeline) => pipeline.repository === repository) ??
   settings?.pipelines.find((pipeline) => pipeline.repository === null) ??
   defaultDevLoopPipeline
+
+export type SetupCommand = Readonly<{ repository: string | null; command: string }>
+const maximumSetupCommands = 100
+
+export const isSetupCommands = (value: unknown): value is readonly SetupCommand[] => {
+  if (!Array.isArray(value) || value.length > maximumSetupCommands) return false
+  const isEach = value.every((setup) => {
+    const { repository, command } = (setup ?? {}) as Record<string, unknown>
+    return (repository === null || isText(repository, 200)) && isText(command, maximumCommandLength)
+  })
+  return isEach && new Set(value.map(({ repository }) => repository)).size === value.length
+}
+
+export const setupCommandsFrom = (stored: unknown) => (isSetupCommands(stored) ? stored : [])
+
+export const setupCommandOf = (commands: readonly SetupCommand[], repository: string | null) =>
+  commands.find((setup) => setup.repository === repository)?.command ??
+  commands.find((setup) => setup.repository === null)?.command ??
+  null

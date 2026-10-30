@@ -10,7 +10,6 @@ import {
   isPickableModel,
   type MemberId,
   type MessageId,
-  pipelineOf,
   signInNoticeOf,
   type WorkspaceId,
   withPricesOf,
@@ -258,11 +257,11 @@ const storedConversationOf = async (
 const checkoutWithOwnerOf = async ({ transactor, checkouts }: AgentDependencies, chat: AgentChat) => {
   const checkout = await checkouts?.checkoutOf(chat)
   if (!checkouts || !checkout) return checkout
-  const { owner, setupCommand } = await transactor.run(async ({ chats, members, devLoop }) => {
+  const { owner, setupCommand } = await transactor.run(async ({ chats, members }) => {
     const { ownerId, repository } = await chats.get(chat.chatId)
     return {
       owner: ownerId && { ownerId, ownerName: await members.displayNameOf(ownerId) },
-      setupCommand: pipelineOf(await devLoop.settings(), repository).setupCommand,
+      setupCommand: await chats.setupCommandOf(repository),
     }
   })
   const configured = { ...checkout, ...(setupCommand && { setupCommand }) }

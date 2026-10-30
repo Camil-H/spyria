@@ -13,7 +13,7 @@ Everything here is in **Workspace settings** (the workspace menu), as cards in t
 | Setup your agents | **Connect runtime** | `runtimes.manage` |
 | | **AI providers** | `providers.manage` |
 | | **MCP tools** | `tools.manage` |
-| | **Dev loop** | `github.manage` |
+| | **Quality gates** | `github.manage` |
 | Analyze usage | **Analyze costs** | `costs.view` or `budgets.manage` |
 | | **Audit log** | `audit.view` |
 
@@ -122,9 +122,11 @@ Accounts are matched on the provider's issuer and subject, not the email, so a c
 
 **Connect runtime** lists the workspace's runtime hosts, adds new ones, and holds the switch **Members can run sessions on their own machine**. Turning it off stops members from adding a machine or starting a chat on one, and prompts in existing ones get a notice. See [Machines](./machines.md).
 
-## Dev loop
+Its **Setup commands** set what a dev chat's runtime runs when it starts, before the agent gets a message: one for each repository that needs its own, and one for every other repository. Without one, the runtime runs `.spyria/setup.sh` when the repository has it. Every member can read them, so they hold no secret. See [Dev mode](./dev-mode.md#clone-and-setup-script).
 
-**Dev loop** turns on the loop in which the agents of dev chats check, review and publish their own work, sets the limits of a loop (time and cost), and defines the pipelines: one per repository that needs its own, and a default for the others. A pipeline holds the setup command and its steps in order (commands, a code review, the pull request, CI), each saying whether a failure goes back to the agent, and how many times, or hands over to the owner. See [Dev mode](./dev-mode.md#dev-loop).
+## Quality gates
+
+**Quality gates** turns on the gates the work of dev chat agents goes through before it reaches the owner, sets the limits of a run (time and cost), and defines the gates: for each repository that needs its own, and for every other one. Gates run in order (commands, a code review, the pull request, CI), each saying whether a failure goes back to the agent, and how many times, or hands over to the owner. Repositories are listed once GitHub is connected. See [Dev mode](./dev-mode.md#quality-gates).
 
 ## Shared tools
 

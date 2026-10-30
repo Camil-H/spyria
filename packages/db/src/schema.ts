@@ -12,6 +12,7 @@ import {
   permissionsOf,
   type RuntimeHostId,
   type RuntimeId,
+  type SetupCommand,
   type WorkspaceId,
   type WorkspacePermission,
 } from '@spyria/kernel'
@@ -22,6 +23,7 @@ type WorkspaceRow = {
   localSessions: boolean
   aiProviderAllowList: AiProviderAllowList | null
   devLoop: DevLoopSettings | null
+  setupCommands: readonly SetupCommand[]
 }
 type MembershipRow = {
   memberId: MemberId

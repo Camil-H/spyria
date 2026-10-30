@@ -45,7 +45,7 @@ When the chat's runtime starts, spyria-agent clones the repository into the runt
 
 - The clone uses an installation token scoped to that one repository with read access only. The token lives only in the environment of the `git clone` process: it is not in the agent's environment and the remote in `.git/config` carries no credential.
 - Clone and checkout are part of the runtime's start, which the host relay limits to 2 minutes. A failed clone fails the start with "The repository could not be cloned" and git's reason.
-- The setup command runs after the session has started, as a command step in the chat with live output: the one the repository's [dev loop pipeline](#dev-loop) sets, else `sh .spyria/setup.sh` when the repository has that file. It runs without any token. A prompt sent while it runs waits for it to end before it reaches the agent, so the agent never works on a half-installed checkout; **Stop** ends a waiting prompt. The step ends when the script exits: a service it starts in the background keeps running without holding the step open. When it fails, the chat shows a notice with its exit code and its last lines; the session keeps going.
+- The setup command runs after the session has started, as a command step in the chat with live output: the one set for its repository (or for every other repository) in **Workspace settings > Connect runtime > Setup commands**, else `sh .spyria/setup.sh` when the repository has that file. Members who manage runtime hosts set them; every member can read them, so they hold no secret. It runs without any token. A prompt sent while it runs waits for it to end before it reaches the agent, so the agent never works on a half-installed checkout; **Stop** ends a waiting prompt. The step ends when the script exits: a service it starts in the background keeps running without holding the step open. When it fails, the chat shows a notice with its exit code and its last lines; the session keeps going.
 - The setup command has 45 minutes. Past that, it is stopped with every process in its process group (a daemon that detaches itself with `setsid` escapes), and the chat shows a notice with the limit and its last lines; the session keeps going.
 - The clone's git identity (`user.name` and `user.email` in `.git/config`) is the chat owner, so the agent's commits show the owner as their author: their GitHub login and `<id>+<login>@users.noreply.github.com` when their GitHub account is linked, else their Spyria name and a no-reply address. The server reads the owner's GitHub account with their token once per member and caches it; only the name and address reach the runtime. The identity is set again each time the agent starts.
 - A runtime that restarts keeps its clone (no new clone or checkout) and runs the setup command again, since the processes it started are gone. A setup command must therefore be safe to run twice: install what is missing, skip what is there.
@@ -101,8 +101,8 @@ The runtime holds no GitHub credential, so `git fetch`, `git pull`, `git push`, 
 | `read_checks` | Any prompt | Reads the checks of a pull request's head commit, failing first, with the annotations of each failing check (file, line, title and message) and, for a GitHub Actions job, the step that failed and the end of its log; the chat's pull request by default |
 | `list_issues` | Any prompt | Lists up to 30 issues of the repository, filtered by state, labels and words |
 | `read_issue` | Any prompt | Reads an issue with its comments |
-| `finish_work` | The owner's prompts and the dev loop's | Says the work is done, with the pull request's title and description; listed only when the [dev loop](#dev-loop) is on |
-| `report_review` | The dev loop's review prompt | Reports the review's findings, each important, nit or pre-existing |
+| `finish_work` | The owner's prompts and those of quality gates | Says the work is done, with the pull request's title and description; listed only when [quality gates](#quality-gates) are on |
+| `report_review` | The review prompt of quality gates | Reports the review's findings, each important, nit or pre-existing |
 
 `fetch_branch` works like **Update from base**: the server fetches the branch with a read-only installation token and hands the runtime a git bundle (at most 12 MB) holding only that branch's commits the runtime lacks. Since pushes only fast-forward, the agent merges what it fetched rather than rebasing. The reading tools use read-only installation tokens too, never a member's token, and cut long texts. Every call is recorded like any tool call.
 
@@ -116,29 +116,29 @@ An App created before Spyria asked for **Actions** lacks that permission: add **
 
 An App created before Spyria asked for **Workflows** lacks that permission too: add **Workflows: Read and write** in the App's settings on GitHub, then accept it on the installation. Until then, GitHub refuses to push a working branch that changes a file under `.github/workflows`.
 
-## Dev loop
+## Quality gates
 
-When an admin turns the dev loop on, the agent of a dev chat checks its own work before the owner sees it. It ends the work the owner asked for by calling `finish_work`; after that turn, Spyria runs the steps of the repository's pipeline, in order. A pipeline is defined in **Workspace settings > Dev loop**, for one repository or as the default for every other one, and holds the setup command and any of these steps:
+When an admin turns quality gates on, the agent of a dev chat checks its own work before the owner sees it. It ends the work the owner asked for by calling `finish_work`; after that turn, Spyria runs the work through the repository's gates, in order. Gates are set in **Workspace settings > Quality gates**, for one repository or for every other one, and are any of these:
 
-- **Command**: a name, one command run in the runtime with the setup command's environment, and a timeout. Keep the logic in a script in the repository, such as a package script or `scripts/check.sh`, so the step only runs it and developers run the same thing. Consecutive commands run one after the other and fail together, so the agent gets every failure at once, with the end of each one's output.
+- **Command**: a name, one command run in the runtime with the setup command's environment, and a timeout. Keep the logic in a script in the repository, such as a package script or `scripts/check.sh`, so the gate only runs it and developers run the same thing. Consecutive commands run one after the other and fail together, so the agent gets every failure at once, with the end of each one's output.
 - **Code review**: the agent starts a subagent with a fresh context on the branch's diff (then, in later rounds, on what changed since the last review), guided by the repository's `REVIEW.md` and `AGENTS.md`, and reports each finding with `report_review` as important, nit or pre-existing. Important findings that were not reported before count as a failure; nits and pre-existing defects do not.
 - **Pull request**: pushes the branch and opens the pull request, or pushes to the open one, as the owner, with the title and description given to `finish_work`.
 - **CI**: every minute it reads the checks of the pushed commit, and once every check that counts has finished, the failing ones count as a failure, as `read_checks` shows them. The checks that count are picked from those GitHub reports on the repository's default branch, or typed; with none picked, every check counts. When no counted check reports within 15 minutes, it hands over.
 
-Each step but the pull request says what a failure does: **send it back to the agent, up to N times**, or **stop and hand over to the owner**. After a fix the agent calls `finish_work` again and the pipeline runs from its first step. If the agent commits during the review turn, that commit goes through the pipeline again before anything is pushed. Only CI may come after the pull request, so nothing the agent commits stays unpushed, and each command has a name of its own. The built-in pipeline, before an admin changes it, is a code review, the pull request and CI. The setup command of a pipeline runs in every dev chat of its repositories, also when the loop is off; every member can read the pipelines, so a command must hold no secret.
+Each gate but the pull request says what a failure does: **send it back to the agent, up to N times**, or **stop and hand over to the owner**. After a fix the agent calls `finish_work` again and the gates run from the first one. If the agent commits during the review turn, that commit goes through the gates again before anything is pushed. Only CI may come after the pull request, so nothing the agent commits stays unpushed, and each command has a name of its own. The built-in gates, before an admin changes them, are a code review, the pull request and CI. Every member can read the gates, so a command must hold no secret.
 
-Each message the loop sends is the owner's, marked **Sent by the dev loop**, and runs on the owner's key; in the audit log it reads as the system acting for the owner. A **Dev loop** card in the chat shows the pipeline, each step passed, failed, running or waiting, how many times it went back to the agent, the review findings and the pull request. The loop hands over to the owner, with a notice, when:
+Each message the gates send is the owner's, marked **Sent by quality gates**, and runs on the owner's key; in the audit log it reads as the system acting for the owner. A **Quality gates** card in the chat shows each gate passed, failed, running or waiting, how many times it went back to the agent, the review findings and the pull request. The gates hand over to the owner, with a notice, when:
 
-- every step passed: "Ready for your review on pull request #N", naming the steps that passed;
-- a step still fails after its fixes: the agent is first asked to say what it would change about the approach, without fixing again; or a step set to stop fails;
+- every gate passed: "Ready for your review on pull request #N", naming the gates that passed;
+- a gate still fails after its fixes: the agent is first asked to say what it would change about the approach, without fixing again; or a gate set to stop fails;
 - the agent ends a turn without `finish_work` (it is waiting for the owner, or asked a question);
-- the loop reaches its time limit (counted from the owner's prompt), its cost limit, or the owner's monthly budget;
-- the owner presses **Stop**, or an admin turns the loop off;
-- any member writes in the chat, even before the loop starts: the loop stops, and the message it had queued is not sent.
+- the run reaches its time limit (counted from the owner's prompt), its cost limit, or the owner's monthly budget;
+- the owner presses **Stop**, or an admin turns quality gates off;
+- any member writes in the chat, even before the run starts: it stops, and the message it had queued is not sent.
 
-Only the owner's own prompts start a loop: `finish_work` from another member's prompt is refused. The loop works the same on a member's machine, except that a subscription is not metered, so neither the cost limit nor the monthly budget applies there.
+Only the owner's own prompts start a run: `finish_work` from another member's prompt is refused. It works the same on a member's machine, except that a subscription is not metered, so neither the cost limit nor the monthly budget applies there.
 
-Admins set the loop in **Workspace settings > Dev loop**, with the **Connect GitHub** permission: on or off, the limits of a loop (a time limit, 4 hours by default, and an optional cost limit), and the pipelines. See [decision 0025](../decisions/0025-dev-loop.md).
+Admins set quality gates in **Workspace settings > Quality gates**, with the **Connect GitHub** permission: on or off, the limits of a run (a time limit, 4 hours by default, and an optional cost limit), and the gates of each repository. Repositories are listed once GitHub is connected; until then only the gates of every other repository can be set. See [decision 0025](../decisions/0025-dev-loop.md).
 
 ## The pull request card and header chip
 

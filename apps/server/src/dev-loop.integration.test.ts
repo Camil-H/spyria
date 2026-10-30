@@ -68,12 +68,14 @@ const commandStep = (name: string, command: string, fixes = 3): Step => ({
   timeoutMinutes: 5,
   fixes,
 })
-const settingsWith = (steps: Step[], setupCommand: string | null = null): DevLoopSettings => ({
+const settingsWith = (steps: Step[]): DevLoopSettings => ({
   isOn: true,
   timeLimitMinutes: 240,
   costLimitMicros: null,
-  pipelines: [{ repository: 'acme/app', setupCommand, steps }],
+  pipelines: [{ repository: 'acme/app', steps }],
 })
+const setSetupCommands = (userId: string, commands: { repository: string | null; command: string }[]) =>
+  stack.mutate({ workspaceId: acme, userId }, 'workspace.setSetupCommands', { workspaceId: acme, commands })
 const setDevLoop = (userId: string, settings: DevLoopSettings | null) =>
   stack.mutate({ workspaceId: acme, userId }, 'workspace.setDevLoop', { workspaceId: acme, settings })
 const newDevChat = async () => {
@@ -133,18 +135,24 @@ test('As a chat owner whose agent says its work is done, the repository pipeline
   expect(
     await setDevLoop(
       alice,
-      settingsWith(
-        [
-          commandStep('Totals', 'grep -q fixed src/app.ts', 2),
-          { kind: 'review', fixes: 1 },
-          { kind: 'pull_request' },
-          { kind: 'ci', checks: ['unit'], fixes: 1 },
-        ],
-        'echo set up > set-up.txt',
-      ),
+      settingsWith([
+        commandStep('Totals', 'grep -q fixed src/app.ts', 2),
+        { kind: 'review', fixes: 1 },
+        { kind: 'pull_request' },
+        { kind: 'ci', checks: ['unit'], fixes: 1 },
+      ]),
     ),
   ).toEqual(succeeded)
-  const { launches } = await stack.agentHost('Dev loop host', { routesModelCalls: true })
+  expect(await setSetupCommands(bob, [{ repository: 'acme/app', command: 'echo set up > set-up.txt' }])).toEqual(
+    failedWith('Your workspace role does not allow this: Manage runtime hosts and local sessions'),
+  )
+  expect(
+    await setSetupCommands(alice, [
+      { repository: null, command: 'echo default > set-up.txt' },
+      { repository: 'acme/app', command: 'echo set up > set-up.txt' },
+    ]),
+  ).toEqual(succeeded)
+  const { launches } = await stack.agentHost('Quality gates host', { routesModelCalls: true })
   await connectGitHub(alice)
   const { id, branch } = await newDevChat()
   await readyChat(id)
@@ -154,11 +162,11 @@ test('As a chat owner whose agent says its work is done, the repository pipeline
     text: 'Done.',
     whenPrompted: [
       {
-        includes: "The dev loop ran the repository's checks",
+        includes: "Quality gates ran the repository's checks",
         script: { steps: [committing('// fixed', 'Fix the totals'), finish], text: 'Fixed.' },
       },
       {
-        includes: 'The dev loop reviews your work',
+        includes: 'Quality gates review your work',
         script: {
           steps: [
             {
@@ -214,17 +222,17 @@ test('As a chat owner whose agent says its work is done, the repository pipeline
   expect((await loopOf(id))?.author_id).toBe(alice)
   expect(await loopPromptsOf(id)).toEqual([
     {
-      body: "The dev loop ran the repository's checks and 1 failed. Fix the cause, commit, then call finish_work again.",
+      body: "Quality gates ran the repository's checks and 1 failed. Fix the cause, commit, then call finish_work again.",
       phase: 'command',
       ...byTheLoop,
     },
-    { body: 'The dev loop reviews your work before it is published.', phase: 'review_request', ...byTheLoop },
+    { body: 'Quality gates review your work before it is published.', phase: 'review_request', ...byTheLoop },
     {
       body: 'CI failed on the pull request (attempt 1 of 1). Fix the cause, commit, then call finish_work again.',
       phase: 'ci',
       ...byTheLoop,
     },
-    { body: 'The dev loop reviews your work before it is published.', phase: 'review_request', ...byTheLoop },
+    { body: 'Quality gates review your work before it is published.', phase: 'review_request', ...byTheLoop },
   ])
   expect(fakeGitHub.pullRequests.filter(({ head }) => head === branch)).toHaveLength(1)
   expect(await noticesOf(id)).toContain(ready)
@@ -248,7 +256,7 @@ test('As a chat owner, a command that keeps failing ends with the agent saying w
   expect((await loopPromptsOf(id)).map(({ phase, body }) => ({ phase, body }))).toEqual([
     {
       phase: 'command',
-      body: "The dev loop ran the repository's checks and 1 failed. Fix the cause, commit, then call finish_work again.",
+      body: "Quality gates ran the repository's checks and 1 failed. Fix the cause, commit, then call finish_work again.",
     },
     {
       phase: 'command',
@@ -273,7 +281,7 @@ test('As a chat owner, a command that keeps failing ends with the agent saying w
   expect(await loopPromptsOf(strict.id)).toEqual([])
 })
 
-test('As a member, writing in the chat stops the dev loop; another member’s prompt cannot start a loop; members who cannot connect GitHub cannot change the loop, and a pipeline must make sense', async () => {
+test('As a member, writing in the chat stops the quality gates; another member’s prompt cannot start a loop; members who cannot connect GitHub cannot change the loop, and a pipeline must make sense', async () => {
   const slow = settingsWith([commandStep('Slow', 'sleep 3 && exit 1', 2)])
   expect(await setDevLoop(bob, slow)).toEqual(failedWith('Your workspace role does not allow this: Connect GitHub'))
   expect(await setDevLoop(alice, settingsWith([commandStep('Lint', 'bun run lint', 11)]))).toEqual(
@@ -308,12 +316,12 @@ test('As a member, writing in the chat stops the dev loop; another member’s pr
   const { result } = JSON.parse(answer.body)
   expect({ isError: result.isError, text: textOf(result) }).toEqual({
     isError: true,
-    text: "Only Alice's prompts start the dev loop: tell the members here that the work is done",
+    text: "Only Alice's prompts start quality gates: tell the members here that the work is done",
   })
   expect(await loopOf(chatId(guest.chatId))).toBeUndefined()
 })
 
-test('As a chat owner, Stop stops the dev loop while it runs a command, and turning the loop off stops the loops still running', async () => {
+test('As a chat owner, Stop stops the quality gates while it runs a command, and turning the loop off stops the loops still running', async () => {
   const slow = settingsWith([commandStep('Slow', 'sleep 3 && exit 1', 2)])
   expect(await setDevLoop(alice, slow)).toEqual(succeeded)
   await stack.agentHost('Stopped loop host', { routesModelCalls: true })
@@ -338,7 +346,9 @@ test('As a chat owner, Stop stops the dev loop while it runs a command, and turn
   await loopStateIs(turnedOffChat.id, 'running')
   expect(await setDevLoop(alice, { ...slow, isOn: false })).toEqual(succeeded)
   await loopStateIs(turnedOffChat.id, 'stopped')
-  expect((await loopOf(turnedOffChat.id))?.step.outcome).toBe('Stopped: the dev loop was turned off in this workspace')
+  expect((await loopOf(turnedOffChat.id))?.step.outcome).toBe(
+    'Stopped: quality gates were turned off in this workspace',
+  )
   expect(await loopPromptsOf(turnedOffChat.id)).toEqual([])
   expect(
     (
@@ -347,7 +357,7 @@ test('As a chat owner, Stop stops the dev loop while it runs a command, and turn
   ).toContain(false)
 })
 
-test('As a member setting up the dev loop, I see the names of the checks GitHub reports on a branch, each once', async () => {
+test('As a member setting up quality gates, I see the names of the checks GitHub reports on a branch, each once', async () => {
   for (const name of ['unit', 'lint', 'unit']) pushCheckRun('main', name, 'success')
   expect(await request(alice, 'GET', '/api/github/check-names?repository=acme%2Fapp&branch=main')).toEqual({
     status: 200,
