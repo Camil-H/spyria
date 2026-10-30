@@ -4,7 +4,7 @@ import { configureGitHubApp, expect, mainOf, openSettings, type Page, test } fro
 const sectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Quality gates' })
 const gatesOf = (page: Page) => sectionOf(page).getByRole('list', { name: 'Gates' }).locator(':scope > li')
 const tabOf = (page: Page, name: string) =>
-  sectionOf(page).getByRole('tablist', { name: 'Rules' }).getByRole('tab', { name })
+  sectionOf(page).getByRole('tablist', { name: 'Rules' }).getByRole('tab', { name, exact: true })
 const switchOf = (page: Page) =>
   sectionOf(page).getByRole('switch', { name: 'Agents in dev chats go through these gates' })
 
@@ -62,6 +62,8 @@ test.describe('Quality gates settings', () => {
     await switchOf(page).click()
     await section.getByRole('button', { name: 'Save' }).click()
     await expect(section.getByText('Saved')).toBeVisible()
+    await page.reload()
+    await expect(switchOf(page)).toHaveAttribute('aria-checked', 'false')
     await expect(tabOf(page, 'acme/app')).toHaveCount(0)
   })
 })
