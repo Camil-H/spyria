@@ -1,18 +1,10 @@
-import type { DevLoopSettings, MessageId } from '@spyria/kernel'
+import type { DevLoopPipeline, DevLoopSettings, DevLoopStepConfig, DevLoopStepKind, MessageId } from '@spyria/kernel'
 import type { CheckRun } from './github-tools.ts'
 import { type CheckState, checkStateOf } from './pull-requests.ts'
 
-export type DevLoopState =
-  | 'working'
-  | 'checking'
-  | 'reviewing'
-  | 'publishing'
-  | 'waiting_for_ci'
-  | 'handing_off'
-  | 'done'
-  | 'stopped'
-export type DevLoopPhase = 'checks' | 'review' | 'ci'
-export type DevLoopNext = 'checks' | 'review_verdict'
+export type DevLoopState = 'working' | 'running' | 'reviewing' | 'waiting_for_ci' | 'handing_off' | 'done' | 'stopped'
+export type DevLoopNext = 'run' | 'review_verdict'
+export type StepOutcome = 'passed' | 'failed' | null
 export type CheckResult = { name: string; command: string; exitCode?: number; output: string }
 export type FindingSeverity = 'important' | 'nit' | 'pre_existing'
 export type ReviewFinding = {
@@ -26,31 +18,37 @@ export type DevLoopStep = {
   type: 'dev_loop'
   startPromptId: MessageId
   startedAt: number
+  lastPromptId: MessageId
   state: DevLoopState
   next: DevLoopNext | null
-  rounds: Record<DevLoopPhase, number>
-  limits: DevLoopSettings
+  position: number
+  pipeline: readonly DevLoopStepConfig[]
+  timeLimitMinutes: number
+  costLimitMicros: number | null
+  rounds: number[]
+  outcomes: StepOutcome[]
   summary: { title: string; body: string }
-  checks: { name: string; passed: boolean }[]
-  ci: string[] | null
   findings: ReviewFinding[]
-  lastPromptId: MessageId
+  reportedFindings: ReviewFinding[] | null
   checkedHead: string | null
   reviewedHead: string | null
-  reportedFindings: ReviewFinding[] | null
   pushedHead: string | null
   pullRequestNumber: number | null
   publishedAt: number | null
   outcome: string | null
 }
-export type DevLoopPromptStep = { type: 'dev_loop_prompt'; loopId: MessageId; phase: DevLoopPhase | 'review_request' }
+export type DevLoopPromptStep = {
+  type: 'dev_loop_prompt'
+  loopId: MessageId
+  phase: DevLoopStepKind | 'review_request'
+}
+type FailureVerdict = { rounds: number[]; kind: 'fix' | 'reconsider' | 'stop'; name: string; limit: number }
 
 export type DevLoopJobType = (typeof devLoopJobTypes)[keyof typeof devLoopJobTypes]
 export const devLoopJobTypes = {
   afterTurn: 'dev_loop.after_turn',
-  checks: 'dev_loop.checks',
+  run: 'dev_loop.run',
   pollChecks: 'dev_loop.poll_checks',
-  publish: 'dev_loop.publish',
   ci: 'dev_loop.ci',
 } as const
 export const checksPollMilliseconds = 5_000
@@ -65,37 +63,70 @@ export const isActiveLoop = (step: DevLoopStep) => !finishedStates.includes(step
 export const newDevLoop = (
   startPromptId: MessageId,
   startedAt: number,
-  limits: DevLoopSettings,
+  settings: DevLoopSettings,
+  pipeline: DevLoopPipeline,
   summary: DevLoopStep['summary'],
 ): DevLoopStep => ({
   type: 'dev_loop',
   startPromptId,
   startedAt,
-  state: 'working',
-  next: 'checks',
-  rounds: { checks: 0, review: 0, ci: 0 },
-  limits,
-  summary,
-  checks: [],
-  ci: null,
-  findings: [],
   lastPromptId: startPromptId,
+  state: 'working',
+  next: 'run',
+  position: 0,
+  pipeline: pipeline.steps,
+  timeLimitMinutes: settings.timeLimitMinutes,
+  costLimitMicros: settings.costLimitMicros,
+  rounds: pipeline.steps.map(() => 0),
+  outcomes: pipeline.steps.map(() => null),
+  summary,
+  findings: [],
+  reportedFindings: null,
   checkedHead: null,
   reviewedHead: null,
-  reportedFindings: null,
   pushedHead: null,
   pullRequestNumber: null,
   publishedAt: null,
   outcome: null,
 })
 
-const fixLimitOf = (limits: DevLoopSettings, phase: DevLoopPhase) =>
-  phase === 'checks' ? limits.checkRounds : phase === 'review' ? limits.reviewRounds : limits.ciRounds
+export const stepNameOf = (config: DevLoopStepConfig) =>
+  config.kind === 'command'
+    ? config.name
+    : config.kind === 'review'
+      ? 'Code review'
+      : config.kind === 'pull_request'
+        ? 'Pull request'
+        : 'CI'
 
-export const failedOnce = (step: DevLoopStep, phase: DevLoopPhase) => {
-  const round = step.rounds[phase] + 1
-  const limit = fixLimitOf(step.limits, phase)
-  return { round, limit, isOverLimit: round > limit, rounds: { ...step.rounds, [phase]: round } }
+export const commandGroupAt = (pipeline: readonly DevLoopStepConfig[], position: number) => {
+  const end = pipeline.findIndex((config, index) => index >= position && config.kind !== 'command')
+  return Array.from({ length: (end === -1 ? pipeline.length : end) - position }, (_, offset) => position + offset)
+}
+
+export const withOutcomes = (step: DevLoopStep, outcomes: [index: number, outcome: StepOutcome][]): DevLoopStep => ({
+  ...step,
+  outcomes: step.outcomes.map((known, index) => outcomes.find(([at]) => at === index)?.[1] ?? known),
+})
+
+export const restarted = (step: DevLoopStep): DevLoopStep => ({
+  ...step,
+  position: 0,
+  checkedHead: null,
+  outcomes: step.pipeline.map(() => null),
+})
+
+const fixesOf = (config: DevLoopStepConfig | undefined) => (config && 'fixes' in config ? config.fixes : 0)
+
+export const failedAt = (step: DevLoopStep, failing: number[]): FailureVerdict => {
+  const rounds = step.rounds.map((round, index) => (failing.includes(index) ? round + 1 : round))
+  const stopping = failing.find((index) => fixesOf(step.pipeline[index]) === 0)
+  const over = failing.find((index) => (rounds[index] ?? 0) > fixesOf(step.pipeline[index]))
+  const decisive = stopping ?? over ?? failing[0] ?? 0
+  const config = step.pipeline[decisive]
+  const name = config ? stepNameOf(config) : 'A step'
+  const limit = fixesOf(config)
+  return { rounds, kind: stopping !== undefined ? 'stop' : over !== undefined ? 'reconsider' : 'fix', name, limit }
 }
 
 export const stopped = (step: DevLoopStep, outcome: string): DevLoopStep => ({
@@ -114,10 +145,10 @@ export const finished = (step: DevLoopStep, outcome: string): DevLoopStep => ({
 
 export const limitOutcomeOf = (step: DevLoopStep, now: number, costMicros: number | null) => {
   const minutes = Math.floor((now - step.startedAt) / 60_000)
-  if (minutes >= step.limits.timeLimitMinutes)
-    return `Stopped after ${step.limits.timeLimitMinutes} minutes, the time limit of a loop: over to you`
-  if (costMicros !== null && step.limits.costLimitMicros !== null && costMicros >= step.limits.costLimitMicros)
-    return `Stopped at $${(step.limits.costLimitMicros / 1_000_000).toFixed(2)}, the cost limit of a loop: over to you`
+  if (minutes >= step.timeLimitMinutes)
+    return `Stopped after ${step.timeLimitMinutes} minutes, the time limit of a loop: over to you`
+  if (costMicros !== null && step.costLimitMicros !== null && costMicros >= step.costLimitMicros)
+    return `Stopped at $${(step.costLimitMicros / 1_000_000).toFixed(2)}, the cost limit of a loop: over to you`
   return undefined
 }
 
@@ -128,14 +159,14 @@ const untrusted =
 
 export const failedChecksOf = (results: CheckResult[]) => results.filter((result) => result.exitCode !== 0)
 
-export const checksFixPromptOf = (results: CheckResult[], round: number, limit: number) =>
+export const checksFixPromptOf = (results: CheckResult[], attempts: Map<string, { round: number; limit: number }>) =>
   [
-    `The dev loop ran the repository's checks and ${failedChecksOf(results).length} failed (${attemptOf(round, limit)}). Fix the cause, commit, then call finish_work again.`,
+    `The dev loop ran the repository's checks and ${failedChecksOf(results).length} failed. Fix the cause, commit, then call finish_work again.`,
     untrusted,
-    ...failedChecksOf(results).map(
-      ({ name, command, exitCode, output }) =>
-        `${name} (\`${command}\`) ${exitCode === undefined ? 'did not finish in time' : `exited with ${exitCode}`}:\n${fence(output)}`,
-    ),
+    ...failedChecksOf(results).map(({ name, command, exitCode, output }) => {
+      const attempt = attempts.get(name)
+      return `${name} (\`${command}\`) ${exitCode === undefined ? 'did not finish in time' : `exited with ${exitCode}`}${attempt ? ` (${attemptOf(attempt.round, attempt.limit)})` : ''}:\n${fence(output)}`
+    }),
   ].join('\n\n')
 
 const findingLineOf = ({ severity, path, line, title, detail }: ReviewFinding) =>
@@ -165,28 +196,28 @@ export const ciFixPromptOf = (checksText: string, round: number, limit: number) 
     fence(checksText),
   ].join('\n\n')
 
-const phaseNames: Record<DevLoopPhase, string> = { checks: 'The checks', review: 'The review', ci: 'CI' }
+const attemptsOf = (limit: number) => `${limit} ${limit === 1 ? 'attempt' : 'attempts'}`
 
-export const reconsiderPromptOf = (phase: DevLoopPhase, limit: number) =>
-  `${phaseNames[phase]} still fail${phase === 'checks' ? '' : 's'} after ${limit} ${limit === 1 ? 'attempt' : 'attempts'} to fix. Do not fix again: write for the owner what you think is wrong with the approach, what you would change, and what you need from them. Do not call finish_work.`
+export const reconsiderPromptOf = (name: string, limit: number) =>
+  `${name} still fails after ${attemptsOf(limit)} to fix. Do not fix again: write for the owner what you think is wrong with the approach, what you would change, and what you need from them. Do not call finish_work.`
 
-export const handOffOutcomeOf = (phase: DevLoopPhase, limit: number) =>
-  `${phaseNames[phase]} still failed after ${limit} ${limit === 1 ? 'attempt' : 'attempts'} to fix: over to you`
+export const handOffOutcomeOf = (name: string, limit: number) =>
+  `${name} still failed after ${attemptsOf(limit)} to fix: over to you`
+export const stopOutcomeOf = (name: string) => `${name} failed: over to you`
 export const pausedOutcome = 'The agent stopped without saying its work is done: over to you'
 export const memberWroteOutcomeOf = (name: string) => `Stopped: ${name} wrote in the chat`
 export const memberWroteNoticeOf = (name: string) => `Not sent: ${name} wrote in the meantime`
 export const loopStoppedNoticeOf = (name: string) => `Not sent: ${name} stopped the dev loop`
 export const turnedOffOutcome = 'Stopped: the dev loop was turned off in this workspace'
 export const notRunOutcome = "Stopped: the dev loop's message could not run: over to you"
-const passedPartsOf = ({ limits }: DevLoopStep) => [
-  'checks',
-  ...(limits.reviewRounds > 0 ? ['review'] : []),
-  ...(limits.ciRounds > 0 ? ['CI'] : []),
-]
 const listOf = (parts: string[]) =>
   parts.length < 2 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}`
-export const readyOutcomeOf = (step: DevLoopStep) =>
-  `Ready for your review${step.pullRequestNumber === null ? '' : ` on pull request #${step.pullRequestNumber}`}: ${listOf(passedPartsOf(step))} passed`
+export const readyOutcomeOf = (step: DevLoopStep) => {
+  const passed = step.pipeline.filter(
+    (config, index) => config.kind !== 'pull_request' && step.outcomes[index] === 'passed',
+  )
+  return `Ready for your review${step.pullRequestNumber === null ? '' : ` on pull request #${step.pullRequestNumber}`}${passed.length === 0 ? '' : `: ${listOf(passed.map(stepNameOf))} passed`}`
+}
 export const noCiOutcomeOf = (minutes: number) =>
   `No CI check reported within ${minutes} minutes: ready for your review`
 
@@ -228,7 +259,7 @@ export const reviewFindingsOf = (input: unknown): ReviewFinding[] | undefined =>
 export const finishWorkTool = {
   name: 'finish_work',
   description:
-    "Say that the work the owner asked for is done. Commit first. After this turn, Spyria runs the repository's checks, has the diff reviewed, pushes the branch and opens or updates the pull request with this title and description, then waits for CI; any failure comes back to you as a new message. Do not push yourself. End your turn right after calling it.",
+    "Say that the work the owner asked for is done. Commit first. After this turn, Spyria runs the workspace's dev loop on it (checks, review, pull request with this title and description, CI); any failure comes back to you as a new message. Do not push yourself. End your turn right after calling it.",
   inputSchema: {
     type: 'object',
     properties: {
@@ -267,14 +298,14 @@ export const devLoopTools = [finishWorkTool, reportReviewTool]
 export const devLoopInstructions =
   'This workspace runs a dev loop: when the work the owner asked for is done and committed, call finish_work instead of pushing or opening a pull request yourself.'
 export const isDevLoopTool = (name: string) => devLoopTools.some((tool) => tool.name === name)
-export const countedRunsOf = (step: Pick<DevLoopStep, 'ci'>, runs: CheckRun[]) =>
-  step.ci === null ? runs : runs.filter((run) => step.ci?.includes(run.name))
+export const countedRunsOf = (checks: readonly string[] | null, runs: CheckRun[]) =>
+  checks === null ? runs : runs.filter((run) => checks.includes(run.name))
 
-export const ciVerdictOf = (step: Pick<DevLoopStep, 'ci'>, runs: CheckRun[]): CheckState | 'none' => {
-  const counted = countedRunsOf(step, runs)
+export const ciVerdictOf = (checks: readonly string[] | null, runs: CheckRun[]): CheckState | 'none' => {
+  const counted = countedRunsOf(checks, runs)
   if (counted.length === 0) return 'none'
   const states = counted.map((run) => checkStateOf(run.isCompleted, run.conclusion))
-  const isEveryNameReported = step.ci === null || step.ci.every((name) => counted.some((run) => run.name === name))
+  const isEveryNameReported = checks === null || checks.every((name) => counted.some((run) => run.name === name))
   if (!isEveryNameReported || states.includes('pending')) return 'pending'
   return states.includes('failing') ? 'failing' : 'passing'
 }

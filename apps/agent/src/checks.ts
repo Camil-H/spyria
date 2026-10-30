@@ -1,38 +1,30 @@
-import { existsSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { runCommand } from './checkout.ts'
 
 export type CheckResult = { name: string; command: string; exitCode?: number; output: string }
-export type ChecksRun = { state: 'idle' | 'running' | 'finished'; results: CheckResult[]; ci?: string[] }
-type DevLoopConfig = { checks: [name: string, command: string][]; ci?: string[] }
+export type ChecksRun = { state: 'idle' | 'running' | 'finished'; results: CheckResult[] }
+type Check = { name: string; command: string; timeoutMilliseconds: number }
 
-const devLoopConfigPath = '.spyria/dev-loop.json'
 const shownOutputLines = 80
 const shownOutputCharacters = 8_000
+const maximumChecks = 20
+const maximumTimeoutMinutes = 120
 
-const isStringList = (value: unknown): value is string[] =>
-  Array.isArray(value) && value.every((item) => typeof item === 'string' && item.trim() !== '')
+const isText = (value: unknown): value is string => typeof value === 'string' && value.trim() !== ''
 
-const isCommandMap = (value: unknown): value is Record<string, string> =>
-  typeof value === 'object' &&
-  value !== null &&
-  !Array.isArray(value) &&
-  Object.values(value).every((command) => typeof command === 'string' && command.trim() !== '')
-
-export const devLoopConfigOf = (cwd: string): DevLoopConfig | { failure: string } => {
-  const path = join(cwd, devLoopConfigPath)
-  if (!existsSync(path)) return { checks: [] }
-  const invalid = (reason: string) => ({ failure: `${devLoopConfigPath} is not valid: ${reason}` })
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(readFileSync(path, 'utf8'))
-  } catch {
-    return invalid('it is not JSON')
-  }
-  const { checks = {}, ci } = (parsed ?? {}) as { checks?: unknown; ci?: unknown }
-  if (!isCommandMap(checks)) return invalid('"checks" must map each check name to a command')
-  if (ci !== undefined && !isStringList(ci)) return invalid('"ci" must list the names of the CI checks that count')
-  return { checks: Object.entries(checks), ...(ci !== undefined && { ci }) }
+export const checksOf = (body: unknown): Check[] | { failure: string } => {
+  const checks = (body as { checks?: unknown } | undefined)?.checks
+  if (!Array.isArray(checks) || checks.length === 0 || checks.length > maximumChecks)
+    return { failure: `Give between 1 and ${maximumChecks} checks` }
+  const parsed = checks.map((check) => {
+    const { name, command, timeout_minutes: minutes } = (check ?? {}) as Record<string, unknown>
+    const isTimeout = Number.isSafeInteger(minutes) && Number(minutes) > 0 && Number(minutes) <= maximumTimeoutMinutes
+    return isText(name) && isText(command) && isTimeout
+      ? { name, command, timeoutMilliseconds: Number(minutes) * 60_000 }
+      : undefined
+  })
+  return parsed.every((check) => check !== undefined)
+    ? parsed
+    : { failure: 'Each check needs a name, a command and a timeout in minutes' }
 }
 
 const shownOutputOf = (output: string) =>
@@ -41,14 +33,12 @@ const shownOutputOf = (output: string) =>
 export const createChecksRunner = ({
   cwd,
   environment,
-  timeoutMilliseconds,
 }: {
   cwd: string
   environment: () => Record<string, string>
-  timeoutMilliseconds: number
 }) => {
   let run: ChecksRun = { state: 'idle', results: [] }
-  const resultOf = async (name: string, command: string): Promise<CheckResult> => {
+  const resultOf = async ({ name, command, timeoutMilliseconds }: Check): Promise<CheckResult> => {
     try {
       const { exitCode, output } = await runCommand(command, cwd, environment(), timeoutMilliseconds, () => undefined)
       return { name, command, ...(exitCode !== undefined && { exitCode }), output: shownOutputOf(output) }
@@ -56,17 +46,17 @@ export const createChecksRunner = ({
       return { name, command, output: `The check could not start: ${error instanceof Error ? error.message : error}` }
     }
   }
-  const runAll = async (current: ChecksRun, checks: DevLoopConfig['checks']) => {
-    for (const [name, command] of checks) current.results.push(await resultOf(name, command))
+  const runAll = async (current: ChecksRun, checks: Check[]) => {
+    for (const check of checks) current.results.push(await resultOf(check))
     current.state = 'finished'
   }
   return {
-    start: (): ChecksRun | { failure: string } => {
+    start: (body: unknown): ChecksRun | { failure: string } => {
       if (run.state === 'running') return run
-      const config = devLoopConfigOf(cwd)
-      if ('failure' in config) return config
-      run = { state: 'running', results: [], ...(config.ci && { ci: config.ci }) }
-      void runAll(run, config.checks)
+      const checks = checksOf(body)
+      if ('failure' in checks) return checks
+      run = { state: 'running', results: [] }
+      void runAll(run, checks)
       return run
     },
     status: () => run,

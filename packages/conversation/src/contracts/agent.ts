@@ -86,6 +86,7 @@ export type RepositoryCheckout = Readonly<{
   workingBranch: string
   startBranch?: string
   author?: GitAuthor
+  setupCommand?: string
 }>
 export type WorkspaceAction = 'commit' | 'fetch' | 'merge' | 'pushed' | 'screenshot' | 'checks'
 export type BranchBundle = Readonly<{ bundle: string } | { failure: string }>

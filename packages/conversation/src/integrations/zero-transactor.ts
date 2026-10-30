@@ -3,7 +3,6 @@ import {
   activeAgentTurns,
   aiProviderAllowListOf,
   appendChatEvent,
-  appendWorkspaceEvent,
   chatEventsOf,
   chatRoutingOf,
   chatTurnOf,
@@ -467,16 +466,8 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
     devLoop: {
       settings: async () =>
         devLoopSettingsFrom((await tx.run(zql.workspaces.where('workspaceId', contextWorkspaceId).one()))?.devLoop),
-      setSettings: (settings) => tx.mutate.workspaces.update({ workspaceId: contextWorkspaceId, devLoop: settings }),
       costSince: (id, since) => modelCallCostSince(tx, contextWorkspaceId, id, since),
       enqueue: (job, loopId, delayMilliseconds) => enqueue(job, { loopId }, delayMilliseconds),
-      recordChange: (memberId, settings) =>
-        appendWorkspaceEvent(tx, {
-          workspaceId: contextWorkspaceId,
-          type: 'dev_loop.changed',
-          actor: memberActor(memberId),
-          payload: { settings },
-        }).then(() => undefined),
     },
     toolCalls: {
       record: async (call) => {
@@ -539,6 +530,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
           harness: row.harness ?? null,
           ownerId: row.ownerUserId ? memberId(row.ownerUserId) : null,
           localSession: row.localSession ?? null,
+          repository: row.repository ?? null,
           baseBranch: row.baseBranch ?? null,
           isOwnerRemoved: await isOwnerRemoved(tx, contextWorkspaceId, row.ownerUserId),
         }
@@ -606,6 +598,3 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
 
 export const createTransactingZeroTransactor = (transact: Transact, workspaceId: WorkspaceId): ConversationTransactor =>
   transactingTransactor(transact, (tx) => createZeroTransactor(tx, workspaceId))
-
-export const contextPermissionsOf = (tx: Transaction, context: ZeroContext) =>
-  workspacePermissionsOf(tx, context.workspaceId, context.userId)

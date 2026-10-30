@@ -163,6 +163,9 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
           userId: context.userId,
         })
       },
+      setDevLoop: async (settings) => {
+        await tx.mutate.workspaces.update({ workspaceId: context.workspaceId, devLoop: settings })
+      },
       scheduleDeletion: async ({ purgeAt, haltDelayMilliseconds, actorId }) => {
         await scheduleWorkspaceDeletion(tx, context.workspaceId, purgeAt)
         await enqueueJob(tx, {

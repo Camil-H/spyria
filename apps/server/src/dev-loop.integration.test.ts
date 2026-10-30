@@ -1,7 +1,6 @@
 import { expect, setDefaultTimeout, test } from 'bun:test'
-import { mkdirSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
-import { type ChatId, chatId, type DevLoopSettings, defaultDevLoopSettings } from '@spyria/kernel'
+
+import { type ChatId, chatId, type DevLoopSettings, type DevLoopStepConfig } from '@spyria/kernel'
 import { createSecretBox } from './auth/secret-box.ts'
 import { createGitHubApi } from './github/github-api.ts'
 import { fakeGitHubAppId, fakeGitHubClientId, fakeGitHubClientSecret, startFakeGitHub } from './testing/fake-github.ts'
@@ -61,8 +60,22 @@ const connectGitHub = async (userId: string) => {
   const callback = new URL(authorized.headers.get('location') ?? '')
   expect((await app.request(`${callback.pathname}${callback.search}`)).status).toBe(200)
 }
+type Step = DevLoopStepConfig
+const commandStep = (name: string, command: string, fixes = 3): Step => ({
+  kind: 'command',
+  name,
+  command,
+  timeoutMinutes: 5,
+  fixes,
+})
+const settingsWith = (steps: Step[], setupCommand: string | null = null): DevLoopSettings => ({
+  isOn: true,
+  timeLimitMinutes: 240,
+  costLimitMicros: null,
+  pipelines: [{ repository: 'acme/app', setupCommand, steps }],
+})
 const setDevLoop = (userId: string, settings: DevLoopSettings | null) =>
-  stack.mutate({ workspaceId: acme, userId }, 'conversation.setDevLoop', { workspaceId: acme, settings })
+  stack.mutate({ workspaceId: acme, userId }, 'workspace.setDevLoop', { workspaceId: acme, settings })
 const newDevChat = async () => {
   const created = await request(alice, 'POST', '/api/dev-chats', {
     name: 'Fix totals',
@@ -81,20 +94,11 @@ const newDevChat = async () => {
   const [{ git_branch: branch } = {}] = await database.$client`select git_branch from chats where id = ${id}`
   return { id, branch: String(branch) }
 }
-const workspaceWithChecks = async (id: ChatId, config: object) => {
+const readyChat = async (id: ChatId) => {
   stack.setFakeLlmScript({ text: 'Ready.' })
   const promptId = await stack.prompt(id, 'Get ready')
   await stack.answered(promptId)
   await waitFor(async () => (await stack.turnOf(id)) === null, 20_000)
-  const frames = (await stack.subscribedFrames(id)).map((frame) => JSON.parse(frame))
-  const workspace = String(frames.find((frame) => frame.workspace)?.workspace.cwd)
-  mkdirSync(join(workspace, '.spyria'), { recursive: true })
-  writeFileSync(join(workspace, '.spyria/dev-loop.json'), JSON.stringify(config))
-  Bun.spawnSync(['git', '-c', 'user.name=Pi', '-c', 'user.email=pi@example.com', 'add', '-A'], { cwd: workspace })
-  Bun.spawnSync(['git', '-c', 'user.name=Pi', '-c', 'user.email=pi@example.com', 'commit', '-qm', 'Add checks'], {
-    cwd: workspace,
-  })
-  return workspace
 }
 const loopOf = async (id: ChatId) =>
   (
@@ -121,24 +125,30 @@ const noticesOf = async (id: ChatId) =>
     ({ body }) => String(body),
   )
 type Annotation = { path: string; line: number; title: string; message: string }
-const pushCheckRun = (branch: string, name: string, conclusion: string, annotations: Annotation[] = []) =>
-  fakeGitHub.checkRuns.push({
-    repository: 'acme/app',
-    headSha: fakeGitHub.branchHeadOf('acme/app', branch),
-    name,
-    status: 'completed',
-    conclusion,
-    annotations,
-  })
+const pushCheckRun = (headSha: string, name: string, conclusion: string, annotations: Annotation[] = []) =>
+  fakeGitHub.checkRuns.push({ repository: 'acme/app', headSha, name, status: 'completed', conclusion, annotations })
+const byTheLoop = { author_id: alice, actor: 'dev_loop', actor_kind: 'system', on_behalf_of: alice }
 
-test('As a chat owner whose agent says its work is done, the dev loop runs the checks and sends the failure back, has the diff reviewed, opens the pull request, sends failing CI back, and hands over once CI passes', async () => {
-  expect(await setDevLoop(alice, { ...defaultDevLoopSettings, checkRounds: 2, reviewRounds: 1, ciRounds: 1 })).toEqual(
-    succeeded,
-  )
-  await stack.agentHost('Dev loop host', { routesModelCalls: true })
+test('As a chat owner whose agent says its work is done, the repository pipeline runs in order: a failing command goes back to the agent, then the review, the pull request, failing CI back to the agent, and the hand-over once CI passes', async () => {
+  expect(
+    await setDevLoop(
+      alice,
+      settingsWith(
+        [
+          commandStep('Totals', 'grep -q fixed src/app.ts', 2),
+          { kind: 'review', fixes: 1 },
+          { kind: 'pull_request' },
+          { kind: 'ci', checks: ['unit'], fixes: 1 },
+        ],
+        'echo set up > set-up.txt',
+      ),
+    ),
+  ).toEqual(succeeded)
+  const { launches } = await stack.agentHost('Dev loop host', { routesModelCalls: true })
   await connectGitHub(alice)
   const { id, branch } = await newDevChat()
-  await workspaceWithChecks(id, { checks: { Totals: 'grep -q fixed src/app.ts' }, ci: ['unit'] })
+  await readyChat(id)
+  expect(launches().map((launch) => launch.repository?.setup_command)).toContain('echo set up > set-up.txt')
   stack.setFakeLlmScript({
     steps: [committing('export const total = 3', 'Change the totals'), finish],
     text: 'Done.',
@@ -169,18 +179,18 @@ test('As a chat owner whose agent says its work is done, the dev loop runs the c
   await stack.prompt(id, 'Fix the totals')
   await loopStateIs(id, 'waiting_for_ci')
   const opened = fakeGitHub.pullRequests.at(-1)
-  const firstHead = (await loopOf(id))?.step.pushedHead
+  const firstHead = String((await loopOf(id))?.step.pushedHead)
   expect(opened).toMatchObject({ title: 'Fix totals', body: 'The totals add up again' })
   expect((await loopOf(id))?.step).toMatchObject({
-    rounds: { checks: 1, review: 0, ci: 0 },
-    checks: [{ name: 'Totals', passed: true }],
-    ci: ['unit'],
+    position: 3,
+    rounds: [1, 0, 0, 0],
+    outcomes: ['passed', 'passed', 'passed', null],
     findings: [{ severity: 'nit', path: 'src/app.ts', title: 'Name the constant' }],
     pullRequestNumber: opened?.number,
   })
 
-  pushCheckRun(branch, 'lint', 'failure')
-  pushCheckRun(branch, 'unit', 'failure', [
+  pushCheckRun(firstHead, 'lint', 'failure')
+  pushCheckRun(firstHead, 'unit', 'failure', [
     { path: 'src/app.test.ts', line: 3, title: 'totals add up', message: 'Expected: 3\nReceived: 2' },
   ])
   await waitFor(async () => (await loopPromptsOf(id)).some(({ phase }) => phase === 'ci'), 60_000)
@@ -195,60 +205,39 @@ test('As a chat owner whose agent says its work is done, the dev loop runs the c
     const step = (await loopOf(id))?.step
     return step?.state === 'waiting_for_ci' && step.pushedHead !== firstHead
   }, 60_000)
-  expect((await loopOf(id))?.step.pushedHead).toBe(fakeGitHub.branchHeadOf('acme/app', branch))
-  pushCheckRun(branch, 'unit', 'success')
+  const secondHead = fakeGitHub.branchHeadOf('acme/app', branch)
+  expect((await loopOf(id))?.step.pushedHead).toBe(secondHead)
+  pushCheckRun(secondHead, 'unit', 'success')
   await loopStateIs(id, 'done')
-  expect((await loopOf(id))?.step).toMatchObject({
-    rounds: { checks: 1, review: 0, ci: 1 },
-    outcome: `Ready for your review on pull request #${opened?.number}: checks, review and CI passed`,
-  })
+  const ready = `Ready for your review on pull request #${opened?.number}: Totals, Code review and CI passed`
+  expect((await loopOf(id))?.step).toMatchObject({ rounds: [1, 0, 0, 1], outcome: ready })
   expect((await loopOf(id))?.author_id).toBe(alice)
   expect(await loopPromptsOf(id)).toEqual([
     {
-      body: "The dev loop ran the repository's checks and 1 failed (attempt 1 of 2). Fix the cause, commit, then call finish_work again.",
-      author_id: alice,
-      phase: 'checks',
-      actor: 'dev_loop',
-      actor_kind: 'system',
-      on_behalf_of: alice,
+      body: "The dev loop ran the repository's checks and 1 failed. Fix the cause, commit, then call finish_work again.",
+      phase: 'command',
+      ...byTheLoop,
     },
-    {
-      body: 'The dev loop reviews your work before it is published.',
-      author_id: alice,
-      phase: 'review_request',
-      actor: 'dev_loop',
-      actor_kind: 'system',
-      on_behalf_of: alice,
-    },
+    { body: 'The dev loop reviews your work before it is published.', phase: 'review_request', ...byTheLoop },
     {
       body: 'CI failed on the pull request (attempt 1 of 1). Fix the cause, commit, then call finish_work again.',
-      author_id: alice,
       phase: 'ci',
-      actor: 'dev_loop',
-      actor_kind: 'system',
-      on_behalf_of: alice,
+      ...byTheLoop,
     },
-    {
-      body: 'The dev loop reviews your work before it is published.',
-      author_id: alice,
-      phase: 'review_request',
-      actor: 'dev_loop',
-      actor_kind: 'system',
-      on_behalf_of: alice,
-    },
+    { body: 'The dev loop reviews your work before it is published.', phase: 'review_request', ...byTheLoop },
   ])
   expect(fakeGitHub.pullRequests.filter(({ head }) => head === branch)).toHaveLength(1)
-  expect(await noticesOf(id)).toContain(
-    `Ready for your review on pull request #${opened?.number}: checks, review and CI passed`,
-  )
+  expect(await noticesOf(id)).toContain(ready)
 })
 
-test('As a chat owner, checks that keep failing end with the agent saying what it would change, then the loop hands over to me', async () => {
-  expect(await setDevLoop(alice, { ...defaultDevLoopSettings, checkRounds: 1 })).toEqual(succeeded)
+test('As a chat owner, a command that keeps failing ends with the agent saying what it would change, and a command that may not be fixed hands over at once', async () => {
+  expect(await setDevLoop(alice, settingsWith([commandStep('Never', 'echo "still broken" && exit 1', 1)]))).toEqual(
+    succeeded,
+  )
   await stack.agentHost('Failing checks host', { routesModelCalls: true })
   await connectGitHub(alice)
   const { id } = await newDevChat()
-  await workspaceWithChecks(id, { checks: { Never: 'echo "still broken" && exit 1' } })
+  await readyChat(id)
   stack.setFakeLlmScript({
     steps: [committing('one', 'Try once'), finish],
     text: 'Done.',
@@ -258,38 +247,49 @@ test('As a chat owner, checks that keep failing end with the agent saying what i
   await loopStateIs(id, 'stopped')
   expect((await loopPromptsOf(id)).map(({ phase, body }) => ({ phase, body }))).toEqual([
     {
-      phase: 'checks',
-      body: "The dev loop ran the repository's checks and 1 failed (attempt 1 of 1). Fix the cause, commit, then call finish_work again.",
+      phase: 'command',
+      body: "The dev loop ran the repository's checks and 1 failed. Fix the cause, commit, then call finish_work again.",
     },
     {
-      phase: 'checks',
-      body: 'The checks still fail after 1 attempt to fix. Do not fix again: write for the owner what you think is wrong with the approach, what you would change, and what you need from them. Do not call finish_work.',
+      phase: 'command',
+      body: 'Never still fails after 1 attempt to fix. Do not fix again: write for the owner what you think is wrong with the approach, what you would change, and what you need from them. Do not call finish_work.',
     },
   ])
   expect((await loopOf(id))?.step).toMatchObject({
-    rounds: { checks: 2 },
+    rounds: [2],
+    outcomes: ['failed'],
     pullRequestNumber: null,
-    outcome: 'The checks still failed after 1 attempt to fix: over to you',
+    outcome: 'Never still failed after 1 attempt to fix: over to you',
   })
-  expect(await noticesOf(id)).toContain('The checks still failed after 1 attempt to fix: over to you')
+  expect(await noticesOf(id)).toContain('Never still failed after 1 attempt to fix: over to you')
+
+  expect(await setDevLoop(alice, settingsWith([commandStep('Strict', 'exit 1', 0)]))).toEqual(succeeded)
+  const strict = await newDevChat()
+  await readyChat(strict.id)
+  stack.setFakeLlmScript({ steps: [committing('one', 'Try once'), finish], text: 'Done.' })
+  await stack.prompt(strict.id, 'Fix the totals')
+  await loopStateIs(strict.id, 'stopped')
+  expect((await loopOf(strict.id))?.step.outcome).toBe('Strict failed: over to you')
+  expect(await loopPromptsOf(strict.id)).toEqual([])
 })
 
-test('As a member, writing in the chat stops the dev loop; another member’s prompt cannot start a loop; members who cannot connect GitHub cannot change the loop', async () => {
-  expect(await setDevLoop(bob, defaultDevLoopSettings)).toEqual(
-    failedWith('Your workspace role does not allow this: Connect GitHub'),
+test('As a member, writing in the chat stops the dev loop; another member’s prompt cannot start a loop; members who cannot connect GitHub cannot change the loop, and a pipeline must make sense', async () => {
+  const slow = settingsWith([commandStep('Slow', 'sleep 3 && exit 1', 2)])
+  expect(await setDevLoop(bob, slow)).toEqual(failedWith('Your workspace role does not allow this: Connect GitHub'))
+  expect(await setDevLoop(alice, settingsWith([commandStep('Lint', 'bun run lint', 11)]))).toEqual(
+    failedWith(
+      'Each command step needs a name, a command and a timeout of 1 to 120 minutes; fixes go from 0 to 10; a pipeline has at most one review, pull request and CI step, with CI after the pull request; the time limit goes from 10 minutes to 24 hours',
+    ),
   )
-  expect(await setDevLoop(alice, { ...defaultDevLoopSettings, checkRounds: 0 } as DevLoopSettings)).toEqual(
-    failedWith('Rounds, the time limit and the cost limit must be whole numbers within their ranges'),
-  )
-  expect(await setDevLoop(alice, { ...defaultDevLoopSettings, checkRounds: 2 })).toEqual(succeeded)
+  expect(await setDevLoop(alice, slow)).toEqual(succeeded)
   const { host } = await stack.agentHost('Interrupted loop host', { routesModelCalls: true })
   await addLlmKey(lee, 'Anthropic')
   await connectGitHub(alice)
   const { id } = await newDevChat()
-  await workspaceWithChecks(id, { checks: { Slow: 'sleep 3 && exit 1' } })
+  await readyChat(id)
   stack.setFakeLlmScript({ steps: [committing('one', 'Try once'), finish], text: 'Done.' })
   await stack.prompt(id, 'Fix the totals')
-  await loopStateIs(id, 'checking')
+  await loopStateIs(id, 'running')
   const leesPrompt = await stack.prompt(id, 'Wait, use the ledger instead', { workspaceId: acme, userId: lee })
   expect((await loopOf(id))?.step).toMatchObject({ state: 'stopped', outcome: 'Stopped: Lee wrote in the chat' })
   await stack.answered(leesPrompt)
@@ -313,15 +313,16 @@ test('As a member, writing in the chat stops the dev loop; another member’s pr
   expect(await loopOf(chatId(guest.chatId))).toBeUndefined()
 })
 
-test('As a chat owner, Stop stops the dev loop while it runs the checks, and turning the loop off stops the loops still running', async () => {
-  expect(await setDevLoop(alice, defaultDevLoopSettings)).toEqual(succeeded)
+test('As a chat owner, Stop stops the dev loop while it runs a command, and turning the loop off stops the loops still running', async () => {
+  const slow = settingsWith([commandStep('Slow', 'sleep 3 && exit 1', 2)])
+  expect(await setDevLoop(alice, slow)).toEqual(succeeded)
   await stack.agentHost('Stopped loop host', { routesModelCalls: true })
   await connectGitHub(alice)
   const stoppedChat = await newDevChat()
-  await workspaceWithChecks(stoppedChat.id, { checks: { Slow: 'sleep 3 && exit 1' } })
+  await readyChat(stoppedChat.id)
   stack.setFakeLlmScript({ steps: [committing('one', 'Try once'), finish], text: 'Done.' })
   await stack.prompt(stoppedChat.id, 'Fix the totals')
-  await loopStateIs(stoppedChat.id, 'checking')
+  await loopStateIs(stoppedChat.id, 'running')
   expect(
     await stack.mutate({ workspaceId: acme, userId: alice }, 'conversation.stopAgent', {
       workspaceId: acme,
@@ -331,17 +332,17 @@ test('As a chat owner, Stop stops the dev loop while it runs the checks, and tur
   expect((await loopOf(stoppedChat.id))?.step).toMatchObject({ state: 'stopped', outcome: 'Stopped by Alice' })
 
   const turnedOffChat = await newDevChat()
-  await workspaceWithChecks(turnedOffChat.id, { checks: { Slow: 'sleep 3 && exit 1' } })
+  await readyChat(turnedOffChat.id)
   stack.setFakeLlmScript({ steps: [committing('one', 'Try once'), finish], text: 'Done.' })
   await stack.prompt(turnedOffChat.id, 'Fix the totals')
-  await loopStateIs(turnedOffChat.id, 'checking')
-  expect(await setDevLoop(alice, null)).toEqual(succeeded)
+  await loopStateIs(turnedOffChat.id, 'running')
+  expect(await setDevLoop(alice, { ...slow, isOn: false })).toEqual(succeeded)
   await loopStateIs(turnedOffChat.id, 'stopped')
   expect((await loopOf(turnedOffChat.id))?.step.outcome).toBe('Stopped: the dev loop was turned off in this workspace')
   expect(await loopPromptsOf(turnedOffChat.id)).toEqual([])
   expect(
     (
       await database.$client`select payload from workspace_events where type = 'dev_loop.changed' order by created_at`
-    ).map(({ payload }) => payload.settings),
-  ).toContainEqual(null)
+    ).map(({ payload }) => payload.settings.isOn),
+  ).toContain(false)
 })

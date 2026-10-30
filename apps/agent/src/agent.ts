@@ -9,7 +9,7 @@ import {
   type Json,
   liveOutputCharacters,
 } from './acp.ts'
-import { checkOut, lastLinesOf, type Repository, runCommand, setupCommand } from './checkout.ts'
+import { checkOut, lastLinesOf, type Repository, runCommand } from './checkout.ts'
 import { createChecksRunner } from './checks.ts'
 import { connectPi } from './pi.ts'
 import { redacted } from './redaction.ts'
@@ -107,8 +107,12 @@ const branchReads = { changes: changesOf, commits: commitLogOf, status: statusOf
 const workspaceActions = { bundle: bundleOf, commit: commitOf, fetch: fetchOf, merge: mergeOf, pushed: pushedOf }
 const workspaceActionRoute = /^\/api\/workspace\/(bundle|commit|fetch|merge|pushed|screenshot|checks)$/
 const setupToolCallId = 'spyria-setup'
-const setupCall = { toolCallId: setupToolCallId, title: setupCommand, kind: 'execute' }
-const setupStart = { sessionUpdate: 'tool_call', ...setupCall, status: 'in_progress' }
+const setupCallOf = (command: string) => ({ toolCallId: setupToolCallId, title: command, kind: 'execute' })
+const setupStartOf = (command: string) => ({
+  sessionUpdate: 'tool_call',
+  ...setupCallOf(command),
+  status: 'in_progress',
+})
 const conversationIdPattern = /^[\w-]{1,64}$/
 const exitedUnexpectedly = /exited unexpectedly/i
 const restartedNotice = 'The agent restarted; send your message again'
@@ -224,7 +228,6 @@ export const startAgent = ({
   authTimeoutMilliseconds = 5_000,
   requestTimeoutMilliseconds = 60_000,
   setupTimeoutMilliseconds = 45 * 60_000,
-  checkTimeoutMilliseconds = 20 * 60_000,
   workspaceDirectory = '/workspace/project',
   browserDirectory = '/usr/local/lib/spyria/browser',
 }: {
@@ -235,24 +238,19 @@ export const startAgent = ({
   authTimeoutMilliseconds?: number
   requestTimeoutMilliseconds?: number
   setupTimeoutMilliseconds?: number
-  checkTimeoutMilliseconds?: number
   workspaceDirectory?: string
   browserDirectory?: string
 }) => {
-  const checksRunner = createChecksRunner({
-    cwd: workspaceDirectory,
-    environment: () => adapterEnvironmentOf({}),
-    timeoutMilliseconds: checkTimeoutMilliseconds,
-  })
+  const checksRunner = createChecksRunner({ cwd: workspaceDirectory, environment: () => adapterEnvironmentOf({}) })
   const actions = {
     ...workspaceActions,
     screenshot: createScreenshotTaker(browserDirectory),
-    checks: async () => checksRunner.start(),
+    checks: async (_directory: string, body: unknown) => checksRunner.start(body),
   }
   const conversations = new Map<string, Conversation>()
   const checkouts = new Map<string, ReturnType<typeof checkOut>>()
   const setups = new Map<string, Promise<void>>()
-  const runningSetups = new Set<string>()
+  const runningSetups = new Map<string, string>()
   const apiKeyBytes = Buffer.from(apiKey)
   const isApiKey = (given: unknown) => {
     const givenBytes = Buffer.from(String(given ?? ''))
@@ -449,12 +447,12 @@ export const startAgent = ({
       if (conversation.cwd === cwd && !conversation.isSub) emit(conversation, update, completed)
   }
 
-  const setUp = async (cwd: string) => {
+  const setUp = async (cwd: string, command: string) => {
     const startedAt = performance.now()
-    runningSetups.add(cwd)
-    emitToCheckout(cwd, setupStart)
+    runningSetups.set(cwd, command)
+    emitToCheckout(cwd, setupStartOf(command))
     const { exitCode, output } = await runCommand(
-      setupCommand,
+      command,
       cwd,
       adapterEnvironmentOf({}),
       setupTimeoutMilliseconds,
@@ -479,7 +477,7 @@ export const startAgent = ({
       cwd,
       {
         sessionUpdate: 'tool_call_update',
-        ...setupCall,
+        ...setupCallOf(command),
         status: exitCode === 0 ? 'completed' : 'failed',
         rawOutput: { formatted_output: output, ...(exitCode !== undefined && { exit_code: exitCode }) },
       },
@@ -488,19 +486,23 @@ export const startAgent = ({
     if (exitCode === undefined)
       emitToCheckout(cwd, {
         sessionUpdate: 'setup_failed',
+        command,
         timeoutMinutes: setupTimeoutMilliseconds / 60_000,
         output: lastLinesOf(output),
       })
     else if (exitCode !== 0)
-      emitToCheckout(cwd, { sessionUpdate: 'setup_failed', exitCode, output: lastLinesOf(output) })
+      emitToCheckout(cwd, { sessionUpdate: 'setup_failed', command, exitCode, output: lastLinesOf(output) })
   }
 
-  const setUpOnce = (conversation: Conversation) => {
+  const setUpOnce = (conversation: Conversation, command: string) => {
     const { cwd } = conversation
-    if (runningSetups.has(cwd)) emit(conversation, setupStart)
+    const running = runningSetups.get(cwd)
+    if (running) emit(conversation, setupStartOf(running))
     const setup =
       setups.get(cwd) ??
-      setUp(cwd).catch((error) => log.warn({ event: 'agent.setup', body: 'The setup script could not run', error }))
+      setUp(cwd, command).catch((error) =>
+        log.warn({ event: 'agent.setup', body: 'The setup script could not run', error }),
+      )
     setups.set(cwd, setup)
     return setup
   }
@@ -614,7 +616,7 @@ export const startAgent = ({
     }
     const id = launch.id ?? crypto.randomUUID()
     const cwd = launch.workspace?.working_dir ?? workspaceDirectory
-    const { failure, hasSetup } =
+    const { failure, setupCommand } =
       launch.repository && !launch.parent_conversation_id ? await checkedOut(id, cwd, launch.repository) : {}
     const raced = conversations.get(id)
     if (raced) {
@@ -647,7 +649,7 @@ export const startAgent = ({
       conversation.connection.close()
     })
     await conversation.started
-    if (hasSetup && conversation.status !== 'error') conversation.setup = setUpOnce(conversation)
+    if (setupCommand && conversation.status !== 'error') conversation.setup = setUpOnce(conversation, setupCommand)
     return Response.json({ id, ...summaryOf(conversation) }, { status: 201 })
   }
 

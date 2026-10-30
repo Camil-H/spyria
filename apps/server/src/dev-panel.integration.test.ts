@@ -246,6 +246,6 @@ test('a slow .spyria/setup.sh no longer holds the launch past the relay limit: t
       ({ body }) => body,
     ),
   ).toEqual([
-    'The setup script .spyria/setup.sh failed with exit code 127; the session started anyway.\ninstalling the docs toolchain\ndocs-tool: command not found',
+    'The setup command "sh .spyria/setup.sh" failed with exit code 127; the session started anyway.\ninstalling the docs toolchain\ndocs-tool: command not found',
   ])
 })

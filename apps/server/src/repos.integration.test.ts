@@ -344,7 +344,7 @@ test('a dev chat clones its repository with a read-only installation token kept 
   expect(await notices()).toEqual([
     {
       kind: 'notice',
-      body: 'The setup script .spyria/setup.sh failed with exit code 127; the session started anyway.\ninstalling the docs toolchain\ndocs-tool: command not found',
+      body: 'The setup command "sh .spyria/setup.sh" failed with exit code 127; the session started anyway.\ninstalling the docs toolchain\ndocs-tool: command not found',
     },
   ])
   expect(existsSync(join(String(workspaceFrame?.workspace.cwd), 'only-in-acme-app.txt'))).toBe(true)

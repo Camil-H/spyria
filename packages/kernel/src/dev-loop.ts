@@ -1,47 +1,96 @@
+export type DevLoopStepConfig =
+  | Readonly<{ kind: 'command'; name: string; command: string; timeoutMinutes: number; fixes: number }>
+  | Readonly<{ kind: 'review'; fixes: number }>
+  | Readonly<{ kind: 'pull_request' }>
+  | Readonly<{ kind: 'ci'; checks: readonly string[] | null; fixes: number }>
+export type DevLoopStepKind = DevLoopStepConfig['kind']
+export type DevLoopPipeline = Readonly<{
+  repository: string | null
+  setupCommand: string | null
+  steps: readonly DevLoopStepConfig[]
+}>
 export type DevLoopSettings = Readonly<{
-  checkRounds: number
-  reviewRounds: number
-  ciRounds: number
+  isOn: boolean
   timeLimitMinutes: number
   costLimitMicros: number | null
+  pipelines: readonly DevLoopPipeline[]
 }>
 
 export const devLoopRange = {
-  checkRounds: { minimum: 1, maximum: 10 },
-  reviewRounds: { minimum: 0, maximum: 10 },
-  ciRounds: { minimum: 0, maximum: 10 },
+  fixes: { minimum: 0, maximum: 10 },
+  timeoutMinutes: { minimum: 1, maximum: 120 },
   timeLimitMinutes: { minimum: 10, maximum: 24 * 60 },
 } as const
+const maximumSteps = 20
+const maximumNameLength = 60
+const maximumCommandLength = 2_000
+const singleKinds: DevLoopStepKind[] = ['review', 'pull_request', 'ci']
+
+export const defaultDevLoopPipeline: DevLoopPipeline = {
+  repository: null,
+  setupCommand: null,
+  steps: [{ kind: 'review', fixes: 2 }, { kind: 'pull_request' }, { kind: 'ci', checks: null, fixes: 2 }],
+}
 
 export const defaultDevLoopSettings: DevLoopSettings = {
-  checkRounds: 3,
-  reviewRounds: 3,
-  ciRounds: 2,
+  isOn: true,
   timeLimitMinutes: 4 * 60,
   costLimitMicros: null,
+  pipelines: [defaultDevLoopPipeline],
 }
 
 const isWithin = (value: unknown, { minimum, maximum }: { minimum: number; maximum: number }): value is number =>
   Number.isSafeInteger(value) && Number(value) >= minimum && Number(value) <= maximum
 
-export const isDevLoopSettings = (value: unknown): value is DevLoopSettings => {
-  if (!value || typeof value !== 'object') return false
-  const settings = value as Record<string, unknown>
-  const { costLimitMicros } = settings
+const isText = (value: unknown, maximumLength: number) =>
+  typeof value === 'string' && value.trim() !== '' && value.length <= maximumLength
+
+const isStep = (value: unknown): value is DevLoopStepConfig => {
+  const step = (value ?? {}) as Record<string, unknown>
+  if (step.kind === 'pull_request') return true
+  if (!isWithin(step.fixes, devLoopRange.fixes)) return false
+  if (step.kind === 'review') return true
+  if (step.kind === 'ci')
+    return step.checks === null || (Array.isArray(step.checks) && step.checks.every((name) => isText(name, 200)))
   return (
-    (Object.keys(devLoopRange) as (keyof typeof devLoopRange)[]).every((key) =>
-      isWithin(settings[key], devLoopRange[key]),
-    ) &&
-    (costLimitMicros === null || (Number.isSafeInteger(costLimitMicros) && Number(costLimitMicros) > 0))
+    step.kind === 'command' &&
+    isText(step.name, maximumNameLength) &&
+    isText(step.command, maximumCommandLength) &&
+    isWithin(step.timeoutMinutes, devLoopRange.timeoutMinutes)
   )
 }
 
+const kindIndexOf = (steps: readonly DevLoopStepConfig[], kind: DevLoopStepKind) =>
+  steps.findIndex((step) => step.kind === kind)
+
+const isPipeline = (value: unknown): value is DevLoopPipeline => {
+  const { repository, setupCommand, steps } = (value ?? {}) as Record<string, unknown>
+  if (repository !== null && !isText(repository, 200)) return false
+  if (setupCommand !== null && !isText(setupCommand, maximumCommandLength)) return false
+  if (!Array.isArray(steps) || steps.length > maximumSteps || !steps.every(isStep)) return false
+  const isSingle = singleKinds.every((kind) => steps.filter((step) => step.kind === kind).length <= 1)
+  const ci = kindIndexOf(steps, 'ci')
+  return (
+    isSingle &&
+    (ci === -1 || ci > kindIndexOf(steps, 'pull_request')) &&
+    (ci === -1 || kindIndexOf(steps, 'pull_request') !== -1)
+  )
+}
+
+export const isDevLoopSettings = (value: unknown): value is DevLoopSettings => {
+  if (!value || typeof value !== 'object') return false
+  const { isOn, timeLimitMinutes, costLimitMicros, pipelines } = value as Record<string, unknown>
+  if (typeof isOn !== 'boolean' || !isWithin(timeLimitMinutes, devLoopRange.timeLimitMinutes)) return false
+  if (costLimitMicros !== null && !(Number.isSafeInteger(costLimitMicros) && Number(costLimitMicros) > 0)) return false
+  if (!Array.isArray(pipelines) || !pipelines.every(isPipeline)) return false
+  const repositories = pipelines.map((pipeline) => pipeline.repository)
+  return new Set(repositories).size === repositories.length
+}
+
 export const devLoopSettingsFrom = (stored: unknown): DevLoopSettings | null =>
-  stored && typeof stored === 'object'
-    ? (Object.fromEntries(
-        Object.entries(defaultDevLoopSettings).map(([key, fallback]) => {
-          const value = (stored as Record<string, unknown>)[key]
-          return [key, isDevLoopSettings({ ...defaultDevLoopSettings, [key]: value }) ? value : fallback]
-        }),
-      ) as DevLoopSettings)
-    : null
+  isDevLoopSettings(stored) ? stored : null
+
+export const pipelineOf = (settings: DevLoopSettings | null, repository: string | null) =>
+  settings?.pipelines.find((pipeline) => pipeline.repository === repository) ??
+  settings?.pipelines.find((pipeline) => pipeline.repository === null) ??
+  defaultDevLoopPipeline

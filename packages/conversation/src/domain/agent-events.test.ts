@@ -489,7 +489,7 @@ test('a failed setup script is stored and shown as a notice with its exit code a
   expect(isStoredAgentEvent(setupFailed)).toBe(true)
   expect(agentProjectionOf(setupFailed)).toEqual({
     type: 'message',
-    body: 'The setup script .spyria/setup.sh failed with exit code 127; the session started anyway.\ninstalling\ntool: not found',
+    body: 'The setup command "sh .spyria/setup.sh" failed with exit code 127; the session started anyway.\ninstalling\ntool: not found',
     kind: 'notice',
   })
 })
@@ -498,7 +498,7 @@ test('a setup script stopped by its time limit is shown as a notice with the lim
   const setupTimedOut = acpUpdate(1, { sessionUpdate: 'setup_failed', timeoutMinutes: 45, output: 'downloading' })
   expect(agentProjectionOf(setupTimedOut)).toEqual({
     type: 'message',
-    body: 'The setup script .spyria/setup.sh did not finish within 45 minutes and was stopped; the session started anyway.\ndownloading',
+    body: 'The setup command "sh .spyria/setup.sh" did not finish within 45 minutes and was stopped; the session started anyway.\ndownloading',
     kind: 'notice',
   })
 })

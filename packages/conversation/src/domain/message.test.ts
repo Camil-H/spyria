@@ -71,6 +71,7 @@ const channel: ConversationChat = {
   harness: null,
   ownerId: alice,
   localSession: null,
+  repository: null,
   baseBranch: null,
   isOwnerRemoved: false,
 }

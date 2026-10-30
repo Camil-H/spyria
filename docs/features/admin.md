@@ -124,7 +124,7 @@ Accounts are matched on the provider's issuer and subject, not the email, so a c
 
 ## Dev loop
 
-**Dev loop** turns on the loop in which the agents of dev chats check, review and publish their own work, and sets its limits: how many times the agent may fix failing checks, review findings and failing CI, the time limit of a loop and an optional cost limit. See [Dev mode](./dev-mode.md#dev-loop).
+**Dev loop** turns on the loop in which the agents of dev chats check, review and publish their own work, sets the limits of a loop (time and cost), and defines the pipelines: one per repository that needs its own, and a default for the others. A pipeline holds the setup command and its steps in order (commands, a code review, the pull request, CI), each saying whether a failure goes back to the agent, and how many times, or hands over to the owner. See [Dev mode](./dev-mode.md#dev-loop).
 
 ## Shared tools
 
