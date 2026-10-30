@@ -95,7 +95,6 @@ import {
   githubAppManifestPath,
   githubBranchesPath,
   githubCallbackPath,
-  githubCheckNamesPath,
   githubConfiguredPath,
   githubRepositoriesPath,
   githubSettingsPath,
@@ -127,7 +126,6 @@ import {
   readGitHubSettings,
   receiveGitHubWebhook,
   repositoryBranches,
-  repositoryCheckNames,
   saveGitHubSettings,
   startGitHubAppCreation,
   startGitHubConnection,
@@ -767,17 +765,6 @@ export const createApp = ({
           githubDependencies,
           context.get('zeroContext').workspaceId,
           context.req.query('repository') ?? '',
-        ),
-      })),
-    )
-    .get(githubCheckNamesPath, (context) =>
-      endpointResponse('Listing GitHub check names', 200, async () => ({
-        names: await repositoryCheckNames(
-          context.get('database'),
-          githubDependencies,
-          context.get('zeroContext').workspaceId,
-          context.req.query('repository') ?? '',
-          context.req.query('branch') ?? '',
         ),
       })),
     )

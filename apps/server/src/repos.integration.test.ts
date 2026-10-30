@@ -337,6 +337,12 @@ test('a dev chat clones its repository with a read-only installation token kept 
   expect(gitConfig).toContain(`url = ${fakeGitHub.urls.webUrl}/acme/app.git`)
   expect(gitConfig).toContain(`name = Alice\n\temail = ${alice}@users.noreply.spyria`)
 
+  expect(
+    await stack.mutate({ workspaceId: acme, userId: alice }, 'workspace.setSetupCommands', {
+      workspaceId: acme,
+      commands: [{ repository: 'acme/docs', command: 'sh .spyria/setup.sh' }],
+    }),
+  ).toEqual(succeeded)
   const failing = await devChatAndPrompt('acme/docs', 'stub:ls')
   expect(failing.replies.map(({ body }) => body).join('')).toContain('files:.git,.spyria,README.md')
   const notices = async () => (await stack.repliesTo(failing.promptId)).filter(({ kind }) => kind === 'notice')

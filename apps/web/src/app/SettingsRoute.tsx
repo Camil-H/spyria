@@ -1,6 +1,6 @@
 import type { Snapshot } from '@spyria/db'
 import { useQuery, useScoped } from '@spyria/db/react'
-import type { WorkspaceId, WorkspacePermission } from '@spyria/kernel'
+import { isAnyRuleOn, type WorkspaceId, type WorkspacePermission } from '@spyria/kernel'
 import { ChecklistBlock } from '@spyria/onboarding'
 import { AiProvidersSection, WorkspaceConnectionsSection } from '@spyria/profile'
 import { RuntimeHostsSection } from '@spyria/runtime'
@@ -167,7 +167,9 @@ const cardStatusesOf =
       ),
       'mcp-tools': countLabelOf(inWorkspace(snapshot.workspaceConnections).length, 'shared connection'),
       'ai-providers': aiProvidersStatusOf(snapshot.workspaces.find((workspace) => workspace.id === workspaceId)),
-      'quality-gates': snapshot.workspaces.find((workspace) => workspace.id === workspaceId)?.devLoop?.isOn
+      'quality-gates': isAnyRuleOn(
+        snapshot.workspaces.find((workspace) => workspace.id === workspaceId)?.devLoop ?? null,
+      )
         ? 'On'
         : 'Off',
       costs: `${formatCost(monthCostMicros)} this month`,

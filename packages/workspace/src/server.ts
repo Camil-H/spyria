@@ -60,7 +60,6 @@ export {
   devChatsPath,
   githubAppManifestPath,
   githubBranchesPath,
-  githubCheckNamesPath,
   githubConfiguredPath,
   githubRepositoriesPath,
   githubSettingsPath,

@@ -184,22 +184,6 @@ export const repositoryBranches = async (
   })
 }
 
-export const repositoryCheckNames = async (
-  database: Database,
-  dependencies: GitHubDependencies,
-  workspaceId: string,
-  repository: string,
-  branch: string,
-) => {
-  const fullName = repositoryNameOf(repository)
-  const credentials = await appCredentialsOf(database, dependencies, workspaceId)
-  return githubCall(workspaceId, async () => {
-    const token = await repositoryTokenOf(dependencies.api, credentials, fullName, { checks: 'read' })
-    const { check_runs } = await dependencies.api.checkRuns(token, fullName, encodeURIComponent(branch))
-    return [...new Set(check_runs.map(({ name }) => name))].toSorted()
-  })
-}
-
 export const isGitHubConfigured = async (database: Database, member: Member) => {
   await database.$client.begin((sql) => requireMemberPermission(sql, member, 'github.manage'))
   return (await appRowOf(database, member.workspaceId)) !== undefined

@@ -13,12 +13,8 @@ export type Repository = {
 }
 export type Checkout = { failure?: string; setupCommand?: string }
 
-const setupScript = '.spyria/setup.sh'
-
-const setupCommandOf = (cwd: string, repository: Repository) =>
-  repository.setup_command?.trim() || (existsSync(join(cwd, setupScript)) ? `sh ${setupScript}` : undefined)
-const withSetup = (cwd: string, repository: Repository): Checkout => {
-  const setupCommand = setupCommandOf(cwd, repository)
+const withSetup = (repository: Repository): Checkout => {
+  const setupCommand = repository.setup_command?.trim()
   return setupCommand ? { setupCommand } : {}
 }
 const shownOutputLines = 20
@@ -68,7 +64,7 @@ const cloned = async (cwd: string, repository: Repository, environment: Record<s
   )
   if (branch.exitCode !== 0)
     return { failure: `The working branch could not be created: ${lastLinesOf(branch.output)}` }
-  return withSetup(cwd, repository)
+  return withSetup(repository)
 }
 
 const identified = async (cwd: string, author: unknown, environment: Record<string, string>) => {
@@ -84,9 +80,7 @@ export const checkOut = async (
   repository: Repository,
   environment: Record<string, string>,
 ): Promise<Checkout> => {
-  const checkout = existsSync(join(cwd, '.git'))
-    ? withSetup(cwd, repository)
-    : await cloned(cwd, repository, environment)
+  const checkout = existsSync(join(cwd, '.git')) ? withSetup(repository) : await cloned(cwd, repository, environment)
   if (checkout.failure || (await identified(cwd, repository.author, environment))) return checkout
   return { failure: 'The commit author could not be set in the repository' }
 }

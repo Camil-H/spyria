@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { type DevLoopPipeline, type DevLoopStepConfig, defaultDevLoopSettings, messageId } from '@spyria/kernel'
+import { type DevLoopRules, type DevLoopStepConfig, defaultDevLoopRules, messageId } from '@spyria/kernel'
 import {
   blockingFindingsOf,
   checksFixPromptOf,
@@ -27,11 +27,12 @@ const types: DevLoopStepConfig = {
   timeoutMinutes: 10,
   fixes: 0,
 }
-const pipeline: DevLoopPipeline = {
+const pipeline: DevLoopRules = {
+  ...defaultDevLoopRules,
   repository: 'acme/app',
-  steps: [lint, types, { kind: 'review', fixes: 2 }, { kind: 'pull_request' }, { kind: 'ci', checks: null, fixes: 1 }],
+  steps: [lint, types, { kind: 'review', fixes: 2 }, { kind: 'pull_request' }, { kind: 'ci', fixes: 1 }],
 }
-const loop = newDevLoop(messageId('prompt-1'), startedAt, defaultDevLoopSettings, pipeline, {
+const loop = newDevLoop(messageId('prompt-1'), startedAt, 'acme/app', pipeline, {
   title: 'Fix totals',
   body: '',
 })
@@ -157,16 +158,11 @@ const run = (name: string, isCompleted: boolean, conclusion: string | null = nul
   logExcerpt: null,
 })
 
-test('CI is judged once every counted check has finished; with no list, every check counts; no check at all is told apart', () => {
-  expect(ciVerdictOf(null, [])).toBe('none')
-  expect(ciVerdictOf(null, [run('lint', true, 'failure'), run('e2e', false)])).toBe('pending')
-  expect(ciVerdictOf(null, [run('lint', true, 'failure'), run('e2e', true, 'success')])).toBe('failing')
-  expect(ciVerdictOf(null, [run('lint', true, 'success'), run('e2e', true, 'skipped')])).toBe('passing')
-  const named = ['ci-ok', 'docker']
-  expect(ciVerdictOf(named, [run('lint', true, 'failure')])).toBe('none')
-  expect(ciVerdictOf(named, [run('lint', true, 'failure'), run('ci-ok', true, 'success')])).toBe('pending')
-  expect(ciVerdictOf(named, [run('ci-ok', true, 'success'), run('docker', true, 'success')])).toBe('passing')
-  expect(ciVerdictOf(named, [run('ci-ok', true, 'failure'), run('docker', true, 'success')])).toBe('failing')
+test('CI is judged once every check of the commit has finished, all or nothing; no check at all is told apart', () => {
+  expect(ciVerdictOf([])).toBe('none')
+  expect(ciVerdictOf([run('lint', true, 'failure'), run('e2e', false)])).toBe('pending')
+  expect(ciVerdictOf([run('lint', true, 'failure'), run('e2e', true, 'success')])).toBe('failing')
+  expect(ciVerdictOf([run('lint', true, 'success'), run('e2e', true, 'skipped')])).toBe('passing')
 })
 
 test('the hand-over names the steps that passed and the pull request; the last round asks to reconsider instead of fixing', () => {

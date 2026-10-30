@@ -65,9 +65,9 @@ export const SetupCommandsSection = ({ workspaceId }: { workspaceId: WorkspaceId
     <LabelledSection title="Setup commands">
       <p className="text-sm text-muted">
         When a dev chat's runtime starts, and again after each restart, it runs the setup command of its repository
-        before the agent gets a message. Without one, it runs .spyria/setup.sh when the repository has it. Keep the
-        logic in a script of the repository, and make it safe to run twice. Every member can read these commands: never
-        put a secret in one.
+        before the agent gets a message: the repository's own, else the default one. Nothing runs without one. Keep the
+        logic in a script of the repository, such as sh .spyria/setup.sh, and make it safe to run twice. Every member
+        can read these commands: never put a secret in one.
       </p>
       <form
         className="flex flex-col gap-3"
@@ -76,32 +76,6 @@ export const SetupCommandsSection = ({ workspaceId }: { workspaceId: WorkspaceId
           save()
         }}
       >
-        <ul aria-label="Setup commands" className="flex flex-col gap-2">
-          {rows.map((row) => (
-            <li key={row.repository ?? 'default'} className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="w-48 shrink-0">{row.repository ?? 'Every other repository'}</span>
-              <input
-                aria-label={`Setup command of ${row.repository ?? 'every other repository'}`}
-                placeholder={row.repository ? 'bun install' : 'sh .spyria/setup.sh, when the repository has it'}
-                maxLength={2_000}
-                className={`${fieldClass} min-w-64 flex-1 font-mono`}
-                value={row.command}
-                onChange={(event) =>
-                  edit(rows.map((known) => (known === row ? { ...row, command: event.target.value } : known)))
-                }
-              />
-              {row.repository !== null && (
-                <button
-                  type="button"
-                  className={smallGhostButtonClass}
-                  onClick={() => edit(rows.filter((known) => known !== row))}
-                >
-                  Remove
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <select
             aria-label="Repository"
@@ -126,9 +100,35 @@ export const SetupCommandsSection = ({ workspaceId }: { workspaceId: WorkspaceId
               setAdded('')
             }}
           >
-            Give it its own setup command
+            Add
           </button>
         </div>
+        <ul aria-label="Setup commands" className="flex flex-col gap-2">
+          {rows.map((row) => (
+            <li key={row.repository ?? 'default'} className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="w-48 shrink-0">{row.repository ?? 'Default'}</span>
+              <input
+                aria-label={row.repository ? `Setup command of ${row.repository}` : 'Default setup command'}
+                placeholder={row.repository ? 'sh .spyria/setup.sh' : 'None'}
+                maxLength={2_000}
+                className={`${fieldClass} min-w-64 flex-1 font-mono`}
+                value={row.command}
+                onChange={(event) =>
+                  edit(rows.map((known) => (known === row ? { ...row, command: event.target.value } : known)))
+                }
+              />
+              {row.repository !== null && (
+                <button
+                  type="button"
+                  className={smallGhostButtonClass}
+                  onClick={() => edit(rows.filter((known) => known !== row))}
+                >
+                  Remove
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
         <div className="flex items-center gap-3">
           <button type="submit" className={buttonClass} disabled={isPending}>
             Save

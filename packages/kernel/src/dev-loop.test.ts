@@ -1,76 +1,69 @@
 import { expect, test } from 'bun:test'
 import {
-  type DevLoopPipeline,
+  type DevLoopRules,
   type DevLoopSettings,
-  defaultDevLoopPipeline,
+  defaultDevLoopRules,
   defaultDevLoopSettings,
   devLoopSettingsFrom,
+  isAnyRuleOn,
   isDevLoopSettings,
   isSetupCommands,
-  pipelineOf,
+  rulesOf,
   setupCommandOf,
   setupCommandsFrom,
 } from './dev-loop.ts'
 
 const lint = { kind: 'command', name: 'Lint', command: 'bun run lint', timeoutMinutes: 10, fixes: 3 } as const
-const appPipeline: DevLoopPipeline = {
+const appRules: DevLoopRules = {
   repository: 'acme/app',
-  steps: [lint, { kind: 'review', fixes: 2 }, { kind: 'pull_request' }, { kind: 'ci', checks: ['ci-ok'], fixes: 1 }],
+  isOn: true,
+  timeLimitMinutes: 60,
+  costLimitMicros: 5_000_000,
+  steps: [lint, { kind: 'review', fixes: 2 }, { kind: 'pull_request' }, { kind: 'ci', fixes: 1 }],
 }
-const withPipelines = (...pipelines: DevLoopPipeline[]): DevLoopSettings => ({ ...defaultDevLoopSettings, pipelines })
+const withRules = (...rules: DevLoopRules[]): DevLoopSettings => ({ rules })
+const withAppSteps = (steps: DevLoopRules['steps']) => withRules({ ...appRules, steps })
 
 test('stored settings read back as they are; anything invalid reads as no settings', () => {
-  const settings = withPipelines(defaultDevLoopPipeline, appPipeline)
+  const settings = withRules(defaultDevLoopRules, appRules)
   expect(devLoopSettingsFrom(settings)).toEqual(settings)
   expect(devLoopSettingsFrom(null)).toBeNull()
-  expect(devLoopSettingsFrom({ ...settings, timeLimitMinutes: 5 })).toBeNull()
+  expect(devLoopSettingsFrom(withRules({ ...appRules, timeLimitMinutes: 5 }))).toBeNull()
 })
 
-test('a repository uses its own pipeline, else the workspace default, else the built-in one', () => {
-  const settings = withPipelines({ ...defaultDevLoopPipeline, steps: [lint] }, appPipeline)
-  expect(pipelineOf(settings, 'acme/app')).toBe(appPipeline)
-  expect(pipelineOf(settings, 'acme/docs').steps).toEqual([lint])
-  expect(pipelineOf(withPipelines(appPipeline), 'acme/docs')).toBe(defaultDevLoopPipeline)
-  expect(pipelineOf(null, 'acme/app')).toBe(defaultDevLoopPipeline)
+test('a repository follows its own rules, else the default rules, else the built-in ones, which are off', () => {
+  const settings = withRules({ ...defaultDevLoopRules, steps: [lint] }, appRules)
+  expect(rulesOf(settings, 'acme/app')).toBe(appRules)
+  expect(rulesOf(settings, 'acme/docs').steps).toEqual([lint])
+  expect(rulesOf(withRules(appRules), 'acme/docs')).toBe(defaultDevLoopRules)
+  expect(rulesOf(null, 'acme/app').isOn).toBe(false)
+  expect(isAnyRuleOn(withRules(defaultDevLoopRules, appRules))).toBe(true)
+  expect(isAnyRuleOn(defaultDevLoopSettings)).toBe(false)
 })
 
 test.each([
   ['the defaults', defaultDevLoopSettings, true],
-  ['a repository pipeline', withPipelines(appPipeline), true],
-  ['no fixes, which stops and hands over', withPipelines({ ...appPipeline, steps: [{ ...lint, fixes: 0 }] }), true],
-  ['a blank command', withPipelines({ ...appPipeline, steps: [{ ...lint, command: ' ' }] }), false],
-  ['a timeout of 0', withPipelines({ ...appPipeline, steps: [{ ...lint, timeoutMinutes: 0 }] }), false],
-  ['11 fixes', withPipelines({ ...appPipeline, steps: [{ ...lint, fixes: 11 }] }), false],
+  ['rules for a repository', withRules(appRules), true],
+  ['no fixes, which stops and hands over', withAppSteps([{ ...lint, fixes: 0 }]), true],
+  ['a blank command', withAppSteps([{ ...lint, command: ' ' }]), false],
+  ['a timeout of 0', withAppSteps([{ ...lint, timeoutMinutes: 0 }]), false],
+  ['11 fixes', withAppSteps([{ ...lint, fixes: 11 }]), false],
   [
     'two reviews',
-    withPipelines({
-      ...appPipeline,
-      steps: [
-        { kind: 'review', fixes: 1 },
-        { kind: 'review', fixes: 1 },
-      ],
-    }),
+    withAppSteps([
+      { kind: 'review', fixes: 1 },
+      { kind: 'review', fixes: 1 },
+    ]),
     false,
   ],
-  [
-    'CI without a pull request',
-    withPipelines({ ...appPipeline, steps: [{ kind: 'ci', checks: null, fixes: 1 }] }),
-    false,
-  ],
-  [
-    'CI before the pull request',
-    withPipelines({ ...appPipeline, steps: [{ kind: 'ci', checks: null, fixes: 1 }, { kind: 'pull_request' }] }),
-    false,
-  ],
-  [
-    'a review after the pull request',
-    withPipelines({ ...appPipeline, steps: [{ kind: 'pull_request' }, { kind: 'review', fixes: 1 }] }),
-    false,
-  ],
-  ['two commands with one name', withPipelines({ ...appPipeline, steps: [lint, { ...lint, name: 'lint ' }] }), false],
-  ['two pipelines for one repository', withPipelines(appPipeline, appPipeline), false],
-  ['a cost limit of 0', { ...defaultDevLoopSettings, costLimitMicros: 0 }, false],
-  ['no switch', { ...defaultDevLoopSettings, isOn: undefined }, false],
+  ['CI without a pull request', withAppSteps([{ kind: 'ci', fixes: 1 }]), false],
+  ['CI before the pull request', withAppSteps([{ kind: 'ci', fixes: 1 }, { kind: 'pull_request' }]), false],
+  ['a review after the pull request', withAppSteps([{ kind: 'pull_request' }, { kind: 'review', fixes: 1 }]), false],
+  ['two commands with one name', withAppSteps([lint, { ...lint, name: 'lint ' }]), false],
+  ['two rules for one repository', withRules(appRules, appRules), false],
+  ['a cost limit of 0', withRules({ ...appRules, costLimitMicros: 0 }), false],
+  ['a time limit of 5 minutes', withRules({ ...appRules, timeLimitMinutes: 5 }), false],
+  ['no switch', withRules({ ...appRules, isOn: undefined as unknown as boolean }), false],
 ])('%s: valid %p', (_, settings, isValid) => {
   expect(isDevLoopSettings(settings)).toBe(isValid)
 })

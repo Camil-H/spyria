@@ -1,4 +1,4 @@
-import { type MessageId, messageId, systemActor, type WorkspaceId } from '@spyria/kernel'
+import { type MessageId, messageId, rulesOf, systemActor, type WorkspaceId } from '@spyria/kernel'
 import type { AgentChat, AgentEndpoint } from '../contracts/agent.ts'
 import type { UnitOfWork } from '../contracts/transactor.ts'
 import {
@@ -11,7 +11,6 @@ import {
   ciQuietMilliseconds,
   ciVerdictOf,
   commandGroupAt,
-  countedRunsOf,
   type DevLoopPromptStep,
   type DevLoopStep,
   devLoopJobTypes,
@@ -138,7 +137,9 @@ const withLoop = <Result>(
     const loop = await lockedLoopOf(unitOfWork, loopId)
     if (!loop || !states.includes(loop.step.state)) return undefined
     const settings = await unitOfWork.devLoop.settings()
-    const outcome = settings?.isOn ? await limitOrBudgetOutcomeOf(dependencies, unitOfWork, loop) : turnedOffOutcome
+    const outcome = rulesOf(settings, loop.step.repository).isOn
+      ? await limitOrBudgetOutcomeOf(dependencies, unitOfWork, loop)
+      : turnedOffOutcome
     if (outcome) {
       await endLoop(unitOfWork, loop, stopped(loop.step, outcome))
       return undefined
@@ -334,15 +335,11 @@ const ciRunsOf = async ({ checkouts }: Dependencies, loop: Loop) =>
 export const judgeLoopCi = async (dependencies: Dependencies, job: LoopJob) => {
   const loop = await loopIn(dependencies, job)
   if (loop?.step.state !== 'waiting_for_ci') return undefined
-  const config = loop.step.pipeline[loop.step.position]
-  const counted = config?.kind === 'ci' ? config.checks : null
   const checks = await ciRunsOf(dependencies, loop).catch(() => undefined)
   const isCurrent = checks !== undefined && checks.headSha === loop.step.pushedHead
-  const verdict = isCurrent ? ciVerdictOf(counted, checks.runs) : 'pending'
+  const verdict = isCurrent ? ciVerdictOf(checks.runs) : 'pending'
   const isQuiet = verdict === 'none' && Date.now() - (loop.step.publishedAt ?? 0) >= ciQuietMilliseconds
-  const text =
-    checks &&
-    checkRunsTextOf(loop.step.pullRequestNumber ?? 0, { ...checks, runs: countedRunsOf(counted, checks.runs) })
+  const text = checks && checkRunsTextOf(loop.step.pullRequestNumber ?? 0, checks)
   return withLoop(dependencies, job, ['waiting_for_ci'], async (unitOfWork, current) => {
     const { position } = current.step
     if (current.step.pushedHead !== loop.step.pushedHead) return undefined

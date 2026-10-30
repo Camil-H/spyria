@@ -1,11 +1,11 @@
 import {
-  type DevLoopPipeline,
+  type DevLoopRules,
   type DevLoopSettings,
   type DevLoopStepConfig,
   type DevLoopStepKind,
-  defaultDevLoopSettings,
-  isDevLoopSettings,
+  isDevLoopRules,
   isInPublishingOrder,
+  rulesOf,
 } from '@spyria/kernel'
 
 export const stepKindLabels: Record<DevLoopStepKind, string> = {
@@ -19,11 +19,9 @@ const singleKinds: DevLoopStepKind[] = ['review', 'pull_request', 'ci']
 const newStepOf = (kind: DevLoopStepKind): DevLoopStepConfig =>
   kind === 'command'
     ? { kind, name: '', command: '', timeoutMinutes: 15, fixes: 3 }
-    : kind === 'review'
-      ? { kind, fixes: 2 }
-      : kind === 'ci'
-        ? { kind, checks: null, fixes: 2 }
-        : { kind }
+    : kind === 'pull_request'
+      ? { kind }
+      : { kind, fixes: 2 }
 
 export const addableKindsOf = (steps: readonly DevLoopStepConfig[]) =>
   (Object.keys(stepKindLabels) as DevLoopStepKind[]).filter(
@@ -55,17 +53,19 @@ export const withStepChanged = (
 export const withoutStep = (steps: readonly DevLoopStepConfig[], index: number) =>
   steps.filter((step, at) => at !== index && !(step.kind === 'ci' && steps[index]?.kind === 'pull_request'))
 
-export const withPipeline = (settings: DevLoopSettings, pipeline: DevLoopPipeline) => ({
-  ...settings,
-  pipelines: settings.pipelines.some((known) => known.repository === pipeline.repository)
-    ? settings.pipelines.map((known) => (known.repository === pipeline.repository ? pipeline : known))
-    : [...settings.pipelines, pipeline],
+export const withRules = (settings: DevLoopSettings, rules: DevLoopRules): DevLoopSettings => ({
+  rules: settings.rules.some((known) => known.repository === rules.repository)
+    ? settings.rules.map((known) => (known.repository === rules.repository ? rules : known))
+    : [...settings.rules, rules],
 })
 
-export const withoutPipeline = (settings: DevLoopSettings, repository: string) => ({
-  ...settings,
-  pipelines: settings.pipelines.filter((pipeline) => pipeline.repository !== repository),
+export const withNewRules = (settings: DevLoopSettings, repository: string) =>
+  withRules(settings, { ...rulesOf(settings, null), repository })
+
+export const withoutRules = (settings: DevLoopSettings, repository: string): DevLoopSettings => ({
+  rules: settings.rules.filter((known) => known.repository !== repository),
 })
 
-export const invalidPipelineOf = (settings: DevLoopSettings) =>
-  settings.pipelines.find((pipeline) => !isDevLoopSettings({ ...defaultDevLoopSettings, pipelines: [pipeline] }))
+const isValidRules = (rules: DevLoopRules): boolean => isDevLoopRules(rules)
+
+export const invalidRulesOf = (settings: DevLoopSettings) => settings.rules.find((rules) => !isValidRules(rules))

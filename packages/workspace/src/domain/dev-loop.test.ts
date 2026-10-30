@@ -1,11 +1,12 @@
 import { expect, test } from 'bun:test'
-import { type DevLoopStepConfig, defaultDevLoopPipeline, defaultDevLoopSettings } from '@spyria/kernel'
+import { type DevLoopStepConfig, defaultDevLoopRules, defaultDevLoopSettings } from '@spyria/kernel'
 import {
   addableKindsOf,
-  invalidPipelineOf,
-  withoutPipeline,
+  invalidRulesOf,
+  withNewRules,
+  withoutRules,
   withoutStep,
-  withPipeline,
+  withRules,
   withStep,
   withStepMoved,
 } from './dev-loop.ts'
@@ -13,10 +14,10 @@ import {
 const lint: DevLoopStepConfig = { kind: 'command', name: 'Lint', command: 'bun run lint', timeoutMinutes: 10, fixes: 3 }
 const review: DevLoopStepConfig = { kind: 'review', fixes: 2 }
 const pullRequest: DevLoopStepConfig = { kind: 'pull_request' }
-const ci: DevLoopStepConfig = { kind: 'ci', checks: null, fixes: 2 }
+const ci: DevLoopStepConfig = { kind: 'ci', fixes: 2 }
 const kindsOf = (steps: readonly DevLoopStepConfig[]) => steps.map(({ kind }) => kind)
 
-test('a new step goes before the pull request, a pull request before CI, and CI last', () => {
+test('a new gate goes before the pull request, a pull request before CI, and CI last', () => {
   expect(kindsOf(withStep([review, pullRequest, ci], 'command'))).toEqual(['review', 'command', 'pull_request', 'ci'])
   expect(kindsOf(withStep([lint, ci], 'pull_request'))).toEqual(['command', 'pull_request', 'ci'])
   expect(kindsOf(withStep([lint, pullRequest], 'ci'))).toEqual(['command', 'pull_request', 'ci'])
@@ -29,7 +30,7 @@ test('commands can always be added; review, pull request and CI once each, and C
   expect(addableKindsOf([review, pullRequest, ci])).toEqual(['command'])
 })
 
-test('a step moves up or down, never past either end; removing the pull request removes CI with it', () => {
+test('a gate moves up or down, never past either end nor out of publishing order; removing the pull request removes CI', () => {
   expect(withStepMoved([lint, review], 1, -1)).toEqual([review, lint])
   expect(withStepMoved([lint, review], 0, -1)).toEqual([lint, review])
   expect(withStepMoved([lint, pullRequest, ci], 2, -1)).toEqual([lint, pullRequest, ci])
@@ -38,16 +39,16 @@ test('a step moves up or down, never past either end; removing the pull request 
   expect(withoutStep([lint, pullRequest, ci], 0)).toEqual([pullRequest, ci])
 })
 
-test('a pipeline replaces the one of its repository or is added; a repository pipeline can be removed', () => {
-  const app = { repository: 'acme/app', steps: [lint] }
-  const added = withPipeline(defaultDevLoopSettings, app)
-  expect(added.pipelines).toEqual([defaultDevLoopPipeline, app])
-  expect(withPipeline(added, { ...app, steps: [] }).pipelines).toEqual([defaultDevLoopPipeline, { ...app, steps: [] }])
-  expect(withoutPipeline(added, 'acme/app').pipelines).toEqual([defaultDevLoopPipeline])
+test('new repository rules start as a copy of the default rules; rules replace those of their repository and can be removed', () => {
+  const custom = withRules(defaultDevLoopSettings, { ...defaultDevLoopRules, isOn: true, steps: [lint] })
+  const added = withNewRules(custom, 'acme/app')
+  expect(added.rules.at(-1)).toEqual({ ...defaultDevLoopRules, isOn: true, steps: [lint], repository: 'acme/app' })
+  expect(withRules(added, { ...defaultDevLoopRules, repository: 'acme/app' }).rules).toHaveLength(2)
+  expect(withoutRules(added, 'acme/app')).toEqual(custom)
 })
 
-test('the first pipeline that cannot be saved is found, so its tab can be shown', () => {
-  const broken = { repository: 'acme/app', steps: [{ ...lint, command: '' }] }
-  expect(invalidPipelineOf(withPipeline(defaultDevLoopSettings, broken))).toBe(broken)
-  expect(invalidPipelineOf(defaultDevLoopSettings)).toBeUndefined()
+test('the first rules that cannot be saved are found, so their tab can be shown', () => {
+  const broken = { ...defaultDevLoopRules, repository: 'acme/app', steps: [{ ...lint, command: '' }] }
+  expect(invalidRulesOf(withRules(defaultDevLoopSettings, broken))?.repository).toBe('acme/app')
+  expect(invalidRulesOf(defaultDevLoopSettings)).toBeUndefined()
 })
