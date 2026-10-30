@@ -6,13 +6,15 @@ import {
   defaultDevLoopSettings,
   devLoopSettingsFrom,
   isDevLoopSettings,
+  isSetupCommands,
   pipelineOf,
+  setupCommandOf,
+  setupCommandsFrom,
 } from './dev-loop.ts'
 
 const lint = { kind: 'command', name: 'Lint', command: 'bun run lint', timeoutMinutes: 10, fixes: 3 } as const
 const appPipeline: DevLoopPipeline = {
   repository: 'acme/app',
-  setupCommand: 'bun install',
   steps: [lint, { kind: 'review', fixes: 2 }, { kind: 'pull_request' }, { kind: 'ci', checks: ['ci-ok'], fixes: 1 }],
 }
 const withPipelines = (...pipelines: DevLoopPipeline[]): DevLoopSettings => ({ ...defaultDevLoopSettings, pipelines })
@@ -71,4 +73,18 @@ test.each([
   ['no switch', { ...defaultDevLoopSettings, isOn: undefined }, false],
 ])('%s: valid %p', (_, settings, isValid) => {
   expect(isDevLoopSettings(settings)).toBe(isValid)
+})
+
+test('a repository runs its own setup command, else the default one, else none; setup commands need a command and one per repository', () => {
+  const commands = [
+    { repository: null, command: 'bun install' },
+    { repository: 'acme/app', command: 'bun install && bun run db:migrate' },
+  ]
+  expect(setupCommandOf(commands, 'acme/app')).toBe('bun install && bun run db:migrate')
+  expect(setupCommandOf(commands, 'acme/docs')).toBe('bun install')
+  expect(setupCommandOf([], 'acme/docs')).toBeNull()
+  expect(isSetupCommands(commands)).toBe(true)
+  expect(isSetupCommands([{ repository: 'acme/app', command: ' ' }])).toBe(false)
+  expect(isSetupCommands([...commands, { repository: null, command: 'make' }])).toBe(false)
+  expect(setupCommandsFrom('bun install')).toEqual([])
 })

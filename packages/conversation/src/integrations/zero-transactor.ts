@@ -58,6 +58,8 @@ import {
   memberActor,
   memberId,
   messageId,
+  setupCommandOf,
+  setupCommandsFrom,
   type WorkspaceId,
   workspaceId,
 } from '@spyria/kernel'
@@ -564,6 +566,13 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       },
       localSessionsAllowed: async () =>
         (await tx.run(zql.workspaces.where('workspaceId', contextWorkspaceId).one()))?.localSessions ?? true,
+      setupCommandOf: async (repository) =>
+        setupCommandOf(
+          setupCommandsFrom(
+            (await tx.run(zql.workspaces.where('workspaceId', contextWorkspaceId).one()))?.setupCommands,
+          ),
+          repository,
+        ),
       hasAgentSession: async (id) =>
         Boolean(
           (await tx.run(zql.chats.where('workspaceId', contextWorkspaceId).where('id', id).one()))?.agentTurnMessageId,

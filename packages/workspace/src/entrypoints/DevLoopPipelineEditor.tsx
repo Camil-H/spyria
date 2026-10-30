@@ -213,22 +213,12 @@ export const DevLoopPipelineEditor = ({
   const setSteps = (steps: readonly DevLoopStepConfig[]) => onChange({ ...pipeline, steps })
   return (
     <div className="flex flex-col gap-4">
-      <label className={labelClass}>
-        Setup command, run when the runtime starts
-        <input
-          placeholder="sh .spyria/setup.sh, when the repository has it"
-          className={`${fieldClass} font-mono`}
-          value={pipeline.setupCommand ?? ''}
-          onChange={(event) =>
-            onChange({ ...pipeline, setupCommand: event.target.value.trim() ? event.target.value : null })
-          }
-        />
-      </label>
       <p className="text-sm text-muted">
-        The setup command runs in every dev chat of the repositories this pipeline applies to, also when the loop is
-        off. Every member can read the pipelines: never put a secret in a command.
+        Keep each check's logic in a script in the repository, such as a package script or scripts/check.sh: a gate only
+        runs it, so developers and agents run the same thing. Every member can read the gates: never put a secret in a
+        command.
       </p>
-      <ol aria-label="Steps" className="flex flex-col gap-2">
+      <ol aria-label="Gates" className="flex flex-col gap-2">
         {pipeline.steps.map((step, index) => {
           const Icon = kindIcons[step.kind]
           const name = step.kind === 'command' && step.name ? step.name : stepKindLabels[step.kind]
@@ -236,7 +226,7 @@ export const DevLoopPipelineEditor = ({
             <li
               // biome-ignore lint/suspicious/noArrayIndexKey: steps have no identity, and a key from their content would remount the field being typed in
               key={`${step.kind}-${index}`}
-              aria-label={`Step ${index + 1}: ${name}`}
+              aria-label={`Gate ${index + 1}: ${name}`}
               className="flex flex-col gap-3 rounded-lg border border-line bg-raised p-3"
             >
               <div className="flex items-center gap-2">
@@ -282,7 +272,7 @@ export const DevLoopPipelineEditor = ({
         })}
       </ol>
       {pipeline.steps.length === 0 && (
-        <p className="text-sm text-muted">No step: the owner reviews the work as it is.</p>
+        <p className="text-sm text-muted">No gate: the owner reviews the work as it is.</p>
       )}
       <div className="flex flex-wrap items-center gap-2">
         {addableKindsOf(pipeline.steps).map((kind) => (
@@ -297,10 +287,6 @@ export const DevLoopPipelineEditor = ({
           </button>
         ))}
       </div>
-      <p className="text-sm text-muted">
-        Keep each check's logic in a script in the repository, such as a package script or scripts/check.sh: a step only
-        runs it, so developers and agents run the same thing.
-      </p>
     </div>
   )
 }

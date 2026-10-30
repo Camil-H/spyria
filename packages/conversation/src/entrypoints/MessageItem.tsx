@@ -171,7 +171,7 @@ export const MessageItem = ({
               </time>
               {message.isEdited && !message.isDeleted && <span className="text-xs text-muted">(edited)</span>}
               {message.step?.type === 'dev_loop_prompt' && (
-                <span className="text-xs text-muted">Sent by the dev loop</span>
+                <span className="text-xs text-muted">Sent by quality gates</span>
               )}
             </div>
             {message.quote && !message.isDeleted && <QuotedMessage quote={message.quote} />}

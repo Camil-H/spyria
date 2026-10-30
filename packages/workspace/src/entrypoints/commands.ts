@@ -5,6 +5,7 @@ import type {
   DevLoopSettings,
   MemberId,
   ProjectId,
+  SetupCommand,
   WorkspaceId,
   WorkspacePermission,
 } from '@spyria/kernel'
@@ -41,6 +42,7 @@ export type WorkspaceCommands = {
   deleteWorkspaceRole: Command<{ roleId: string }>
   deleteWorkspace: Command<{ confirmation: 'DELETE' }>
   setDevLoop: Command<{ settings: DevLoopSettings | null }>
+  setSetupCommands: Command<{ commands: readonly SetupCommand[] }>
   listCheckNames: (input: { workspaceId: WorkspaceId; repository: string; branch: string }) => Promise<string[]>
   readSsoSettings: (input: { workspaceId: WorkspaceId }) => Promise<SsoSettingsView | null>
   saveSsoSettings: (input: SsoSettingsInput & { workspaceId: WorkspaceId }) => Promise<SsoSettingsView | null>

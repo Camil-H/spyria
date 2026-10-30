@@ -171,3 +171,8 @@ export const InvalidDevLoopSettings = errorKind(
     'Each command step needs a name of its own, a command and a timeout of 1 to 120 minutes; fixes go from 0 to 10; a pipeline has at most 20 steps, one review, one pull request and one CI step, and only CI may follow the pull request; the time limit goes from 10 minutes to 24 hours and a cost limit is above 0',
   WorkspaceError,
 )
+export const InvalidSetupCommands = errorKind(
+  'invalid_setup_commands',
+  () => 'Each setup command needs a command of at most 2,000 characters, with one command per repository',
+  WorkspaceError,
+)

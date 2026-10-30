@@ -4,6 +4,7 @@ import {
   devLoopSettingsFrom,
   domainErrorOf,
   type MemberId,
+  setupCommandsFrom,
   type WorkspaceId,
   workspacePermissions,
 } from '@spyria/kernel'
@@ -136,12 +137,13 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
     uniqueBy(workspaces, (workspace) => workspace.workspaceId),
   )
   const workspaceRowsOf = memoizedOnSources((workspaces: ZeroRows['workspaces']) =>
-    workspaces.map(({ workspaceId, name, localSessions, aiProviderAllowList, devLoop }) => ({
+    workspaces.map(({ workspaceId, name, localSessions, aiProviderAllowList, devLoop, setupCommands }) => ({
       id: workspaceId,
       name,
       localSessions: localSessions ?? true,
       aiProviderAllowList: aiProviderAllowListFrom(aiProviderAllowList),
       devLoop: devLoopSettingsFrom(devLoop),
+      setupCommands: setupCommandsFrom(setupCommands),
     })),
   )
   const membershipsOf = memoizedOnSources(

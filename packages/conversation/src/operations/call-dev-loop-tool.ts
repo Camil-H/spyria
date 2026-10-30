@@ -34,7 +34,7 @@ const startLoop = async (
 ) => {
   if (!prompt.authorId || prompt.authorId !== chat.ownerId || chat.isOwnerRemoved) {
     const ownerName = chat.ownerId ? await unitOfWork.members.displayNameOf(chat.ownerId) : 'the owner'
-    return refused(`Only ${ownerName}'s prompts start the dev loop: tell the members here that the work is done`)
+    return refused(`Only ${ownerName}'s prompts start quality gates: tell the members here that the work is done`)
   }
   await unitOfWork.messages.record({
     type: 'message.posted',
@@ -62,12 +62,12 @@ const finishWork = async (unitOfWork: UnitOfWork, turn: Turn, input: unknown) =>
   const { loop, prompt } = turn
   if (!loop)
     return prompt.step?.type === 'dev_loop_prompt'
-      ? refused('This dev loop has ended')
+      ? refused('These quality gates have ended')
       : startLoop(unitOfWork, turn, summary)
   if (loop.step.state === 'reviewing' && loop.step.lastPromptId === prompt.id)
     return refused('This turn is for the review: call report_review with what the review found')
   if (!isActiveLoop(loop.step) || loop.step.lastPromptId !== prompt.id || loop.step.state !== 'working')
-    return refused('This dev loop has ended: tell the owner the work is done')
+    return refused('These quality gates have ended: tell the owner the work is done')
   await saveLoop(unitOfWork, loop, { ...loop.step, next: 'run', summary })
   return answered(finishedWorkText)
 }
@@ -87,7 +87,7 @@ const reportReview = async (unitOfWork: UnitOfWork, { loop, prompt }: Turn, inpu
 export const callDevLoopTool = ({ transactor }: Dependencies, { chat, name, input }: Input) =>
   transactor.run(async (unitOfWork) => {
     const settings = await unitOfWork.devLoop.settings()
-    if (!settings?.isOn) return refused('The dev loop is off in this workspace')
+    if (!settings?.isOn) return refused('Quality gates are off in this workspace')
     const stored = await unitOfWork.chats.get(chat.chatId)
     if (!stored.baseBranch) return refused('This chat has no repository')
     const promptId = await unitOfWork.agentTurns.lock(chat.chatId)

@@ -163,7 +163,7 @@ const failedChecksOf = (results: CheckResult[]) => results.filter((result) => re
 
 export const checksFixPromptOf = (results: CheckResult[], attempts: Map<string, { round: number; limit: number }>) =>
   [
-    `The dev loop ran the repository's checks and ${failedChecksOf(results).length} failed. Fix the cause, commit, then call finish_work again.`,
+    `Quality gates ran the repository's checks and ${failedChecksOf(results).length} failed. Fix the cause, commit, then call finish_work again.`,
     untrusted,
     ...failedChecksOf(results).map(({ name, command, exitCode, output }) => {
       const attempt = attempts.get(name)
@@ -176,7 +176,7 @@ const findingLineOf = ({ severity, path, line, title, detail }: ReviewFinding) =
 
 export const reviewRequestOf = (step: DevLoopStep, baseBranch: string) =>
   [
-    'The dev loop reviews your work before it is published.',
+    'Quality gates review your work before it is published.',
     `Start a subagent with a fresh context to review ${step.reviewedHead ? `only what changed since the last review: \`git diff ${step.reviewedHead}..HEAD\`` : `the diff of this branch: \`git diff origin/${baseBranch}...HEAD\``}. Give it the repository's REVIEW.md and AGENTS.md (or CLAUDE.md) when they exist, and ask it to look for real defects: bugs, security holes, broken rules of the repository. Each finding needs a file and a line, and it must check each finding against the code before reporting it.`,
     'If you cannot start a subagent, review the diff yourself as a strict reviewer who did not write it. Do not change any file in this turn.',
     'Then call report_review with every finding: severity important (a defect this diff introduces), nit (style or taste) or pre_existing (a defect in code this diff did not change). An empty list is a valid report.',
@@ -209,9 +209,9 @@ export const stopOutcomeOf = (name: string) => `${name} failed: over to you`
 export const pausedOutcome = 'The agent stopped without saying its work is done: over to you'
 export const memberWroteOutcomeOf = (name: string) => `Stopped: ${name} wrote in the chat`
 export const memberWroteNoticeOf = (name: string) => `Not sent: ${name} wrote in the meantime`
-export const loopStoppedNoticeOf = (name: string) => `Not sent: ${name} stopped the dev loop`
-export const turnedOffOutcome = 'Stopped: the dev loop was turned off in this workspace'
-export const notRunOutcome = "Stopped: the dev loop's message could not run: over to you"
+export const loopStoppedNoticeOf = (name: string) => `Not sent: ${name} stopped the quality gates`
+export const turnedOffOutcome = 'Stopped: quality gates were turned off in this workspace'
+export const notRunOutcome = 'Stopped: a message of the quality gates could not run: over to you'
 const listOf = (parts: string[]) =>
   parts.length < 2 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}`
 export const readyOutcomeOf = (step: DevLoopStep) => {
@@ -261,7 +261,7 @@ export const reviewFindingsOf = (input: unknown): ReviewFinding[] | undefined =>
 const finishWorkTool = {
   name: 'finish_work',
   description:
-    "Say that the work the owner asked for is done. Commit first. After this turn, Spyria runs the workspace's dev loop on it (checks, review, pull request with this title and description, CI); any failure comes back to you as a new message. Do not push yourself. End your turn right after calling it.",
+    "Say that the work the owner asked for is done. Commit first. After this turn, Spyria runs the workspace's quality gates on it (checks, review, pull request with this title and description, CI); any failure comes back to you as a new message. Do not push yourself. End your turn right after calling it.",
   inputSchema: {
     type: 'object',
     properties: {
@@ -274,7 +274,7 @@ const finishWorkTool = {
 export const reportReviewTool = {
   name: 'report_review',
   description:
-    'Report the findings of the review the dev loop asked for, then end your turn. An empty list means the review found nothing.',
+    'Report the findings of the review the quality gates asked for, then end your turn. An empty list means the review found nothing.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -298,7 +298,7 @@ export const reportReviewTool = {
 }
 export const devLoopTools = [finishWorkTool, reportReviewTool]
 export const devLoopInstructions =
-  'This workspace runs a dev loop: when the work the owner asked for is done and committed, call finish_work instead of pushing or opening a pull request yourself.'
+  'This workspace runs quality gates: when the work the owner asked for is done and committed, call finish_work instead of pushing or opening a pull request yourself.'
 export const isDevLoopTool = (name: string) => devLoopTools.some((tool) => tool.name === name)
 export const countedRunsOf = (checks: readonly string[] | null, runs: CheckRun[]) =>
   checks === null ? runs : runs.filter((run) => checks.includes(run.name))

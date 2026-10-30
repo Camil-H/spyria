@@ -23,6 +23,7 @@ import { renameChat } from '../operations/rename-chat.ts'
 import { renameProject } from '../operations/rename-project.ts'
 import { revokeInvite } from '../operations/revoke-invite.ts'
 import { setDevLoop } from '../operations/set-dev-loop.ts'
+import { setSetupCommands } from '../operations/set-setup-commands.ts'
 import { transferChat } from '../operations/transfer-chat.ts'
 import { updateChatRole } from '../operations/update-chat-role.ts'
 import { updateWorkspaceRole } from '../operations/update-workspace-role.ts'
@@ -127,6 +128,13 @@ export const workspaceMutators = defineMutators({
     ),
     removeMember: defineMutator(z.extend(workspaceArguments, { memberId: memberIdArgument }), ({ tx, ctx, args }) =>
       removeMember(dependenciesOf(tx, ctx, args), { ...args, actorId: ctx.userId, now: Date.now() }),
+    ),
+    setSetupCommands: defineMutator(
+      z.extend(workspaceArguments, {
+        commands: z.array(z.object({ repository: z.nullable(z.string()), command: z.string() })),
+      }),
+      ({ tx, ctx, args }) =>
+        setSetupCommands(dependenciesOf(tx, ctx, args), { actorId: ctx.userId, commands: args.commands }),
     ),
     setDevLoop: defineMutator(z.extend(workspaceArguments, { settings: devLoopArgument }), ({ tx, ctx, args }) =>
       setDevLoop(dependenciesOf(tx, ctx, args), { actorId: ctx.userId, settings: args.settings }),
