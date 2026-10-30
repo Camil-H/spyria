@@ -1,3 +1,4 @@
+import type { DevLoopPromptStep, DevLoopStep } from './dev-loop.ts'
 import type { PullRequestStep } from './pull-requests.ts'
 import { toolConnectionOf } from './tool-calls.ts'
 
@@ -32,6 +33,8 @@ export type AgentStep =
     }
   | { type: 'error'; message: string; signIn?: string }
   | PullRequestStep
+  | DevLoopStep
+  | DevLoopPromptStep
   | {
       type: 'question'
       questionId: string

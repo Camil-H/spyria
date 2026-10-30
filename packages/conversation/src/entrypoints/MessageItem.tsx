@@ -170,6 +170,9 @@ export const MessageItem = ({
                 {timeFormat.format(message.createdAt)}
               </time>
               {message.isEdited && !message.isDeleted && <span className="text-xs text-muted">(edited)</span>}
+              {message.step?.type === 'dev_loop_prompt' && (
+                <span className="text-xs text-muted">Sent by the dev loop</span>
+              )}
             </div>
             {message.quote && !message.isDeleted && <QuotedMessage quote={message.quote} />}
             {mode === 'edit' ? (

@@ -14,6 +14,7 @@ import { MessageBody } from '../domain/message-body.ts'
 import { noLlmKeyNoticeOf } from '../domain/model-call-failures.ts'
 import { localSessionNotices, runsOnWaitingNoticeOf } from '../domain/session-routing.ts'
 import { appendNotice } from './agent-turn.ts'
+import { stopDevLoopForMessage } from './stop-dev-loop.ts'
 
 type Dependencies = { transactor: ConversationTransactor; limitMessage?: ((isPrompt: boolean) => void) | undefined }
 type Input = {
@@ -61,6 +62,7 @@ export const sendMessage = (
     if (chat.visibility === 'public') await unitOfWork.chats.join(chatId, authorId)
     await unitOfWork.messages.record({ type: 'message.posted', actor: memberActor(authorId), message })
     await unitOfWork.attachments.link(message.id, claimed)
+    if (chat.type === 'runtime') await stopDevLoopForMessage(unitOfWork, chatId, authorId)
     if (chat.localSession && authorId !== chat.ownerId)
       await appendNotice(unitOfWork, message, localSessionNotices.ownerOnly)
     else if (chat.localSession && !(await unitOfWork.chats.localSessionsAllowed()))

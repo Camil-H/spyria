@@ -4,10 +4,9 @@ import {
   awaitTaskTool,
   checkTaskTool,
   genericModelCallNoticeOf,
-  githubTools,
-  githubToolsInstructions,
   githubToolsPath,
   guestPrompterOf,
+  isDevLoopTool,
   isGuestToolMethod,
   isReadOnlyGitHubTool,
   isSpyriaTool,
@@ -299,20 +298,22 @@ export const createModelCallRelay = ({
       if (rpc?.id === undefined) return answer(202, undefined)
       const reply = (result: object, replyHeaders?: Record<string, string>) =>
         answerRpc(rpc.id, { result }, replyHeaders)
+      const answerGitHubServer = async (call: RouterCall) => {
+        const { tools, instructions } = await handlers.githubToolsOf(runtime.chat)
+        return answerSpyriaServer(call, 'spyria-github', tools, instructions)
+      }
       if (rpc.method !== 'tools/call')
-        return isRouter
-          ? answerSpyriaServer(rpc, 'spyria-router', routerTools)
-          : answerSpyriaServer(rpc, 'spyria-github', githubTools, githubToolsInstructions)
+        return isRouter ? answerSpyriaServer(rpc, 'spyria-router', routerTools) : answerGitHubServer(rpc)
       if (!isRouter && 'ownerId' in runtime && runtime.prompterId && runtime.ownerId) {
         const toolName = String(rpc.params?.name ?? '')
         const calledAt = new Date()
-        const { isRefused, text, status } = await handlers
-          .callGitHubTool({
-            chat: runtime.chat,
-            memberId: runtime.prompterId,
-            name: toolName,
-            input: rpc.params?.arguments,
-          })
+        const callTool = isDevLoopTool(toolName) ? handlers.callDevLoopTool : handlers.callGitHubTool
+        const { isRefused, text, status } = await callTool({
+          chat: runtime.chat,
+          memberId: runtime.prompterId,
+          name: toolName,
+          input: rpc.params?.arguments,
+        })
           .then((outcome) => ({ ...outcome, status: outcome.isRefused ? 'refused' : 'succeeded' }) as const)
           .catch((error: unknown) => {
             log.error({

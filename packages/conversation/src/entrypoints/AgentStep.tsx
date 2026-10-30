@@ -11,6 +11,7 @@ import { QuestionAnswererContext, ToolsAwaitingApprovalContext, useConversationC
 const QuestionCard = lazy(() => import('./QuestionCard.tsx'))
 const DelegationStep = lazy(() => import('./DelegationStep.tsx'))
 const PullRequestCard = lazy(() => import('./PullRequestCard.tsx'))
+const DevLoopCard = lazy(() => import('./DevLoopCard.tsx'))
 
 type StepOf<Type extends Step['type']> = Extract<Step, { type: Type }>
 
@@ -170,6 +171,12 @@ export const AgentStep = ({ message }: { message: ConversationMessage }) => {
       </Suspense>
     )
   if (step?.type === 'error') return <ErrorStep step={step} />
+  if (step?.type === 'dev_loop')
+    return (
+      <Suspense>
+        <DevLoopCard step={step} />
+      </Suspense>
+    )
   if (step?.type === 'pull_request')
     return (
       <Suspense>

@@ -18,7 +18,7 @@ type Draft = Record<RoundField | 'costLimitDollars', string>
 
 const roundFields: { key: RoundField; label: string }[] = [
   { key: 'checkRounds', label: 'Times the agent fixes failing checks' },
-  { key: 'reviewRounds', label: 'Review rounds (0 turns the review off)' },
+  { key: 'reviewRounds', label: 'Times the agent fixes review findings (0 turns the review off)' },
   { key: 'ciRounds', label: 'Times the agent fixes failing CI (0 does not wait for CI)' },
   { key: 'timeLimitMinutes', label: 'Time limit of a loop, in minutes' },
 ]

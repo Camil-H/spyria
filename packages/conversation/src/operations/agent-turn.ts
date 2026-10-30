@@ -1,4 +1,12 @@
-import { type ChatId, can, type MessageId, messageId, systemActor } from '@spyria/kernel'
+import {
+  type ChatId,
+  can,
+  type MemberId,
+  type MessageId,
+  messageId,
+  systemActor,
+  type WorkspaceId,
+} from '@spyria/kernel'
 import type {
   AgentClient,
   AgentEventSockets,
@@ -11,6 +19,7 @@ import { expiredPromptNotice, hasOutlivedWait, unavailableNotices } from '../dom
 import { type Message, newMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
 import { noLlmKeyNoticeOf, noLongerPromptsNoticeOf } from '../domain/model-call-failures.ts'
+import { afterLoopTurn } from './dev-loop-turns.ts'
 import { cancelToolApprovalsOf } from './pending-approvals.ts'
 import { forgetDelegationsOf } from './running-delegations.ts'
 
@@ -25,8 +34,10 @@ export type AgentDependencies = {
   checkouts?: RepositoryCheckouts
   fixedLlm?: { model: string }
   resumeAfterMilliseconds?: number
+  devLoopPollMilliseconds?: number
   approvalWindowMilliseconds?: number
   deployment?: string
+  isBudgetUsedUp?: (workspaceId: WorkspaceId, memberId: MemberId) => Promise<boolean>
 }
 
 export const appendNotice = ({ messages }: UnitOfWork, prompt: Message, text: string) =>
@@ -93,6 +104,7 @@ const finishAgentTurn = async (unitOfWork: UnitOfWork, chatId: ChatId, promptId:
   cancelToolApprovalsOf(promptId)
   const notice = noticeOf(await unitOfWork.agentTurns.hasReply(promptId))
   if (notice) await appendNotice(unitOfWork, await unitOfWork.messages.get(promptId), notice)
+  await afterLoopTurn(unitOfWork, promptId)
   await requestNextPrompt(unitOfWork, chatId)
 }
 
