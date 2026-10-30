@@ -32,7 +32,7 @@ export const agentNotices = {
   newSession: 'The agent started a new session; it does not remember earlier messages',
 }
 export const setupFailedNoticeOf = ({ command, exitCode, timeoutMinutes, output }: Record<string, unknown> = {}) =>
-  `The setup command "${command ?? 'sh .spyria/setup.sh'}" ${timeoutMinutes === undefined ? `failed with exit code ${exitCode}` : `did not finish within ${timeoutMinutes} minutes and was stopped`}; the session started anyway.\n${output}`
+  `The setup command "${command}" ${timeoutMinutes === undefined ? `failed with exit code ${exitCode}` : `did not finish within ${timeoutMinutes} minutes and was stopped`}; the session started anyway.\n${output}`
 export const unavailableNotices = [
   agentNotices.noHost,
   agentNotices.couldNotStart,
