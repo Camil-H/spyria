@@ -50,6 +50,38 @@ test('the agent works while the chat has an active turn or a prompt waiting for 
   expect(activityOf({ turn: true, waiting: true })).toEqual({ isAgentWorking: true, hasActiveTurn: true })
 })
 
+test('the chat is setting up while the setup command of the active turn runs, and no longer once it ended', () => {
+  const isSettingUpWith = ({
+    turn,
+    exitCode,
+    id = 'conversation-1:spyria-setup',
+  }: {
+    turn: boolean
+    exitCode: number | null
+    id?: string
+  }) => {
+    const snapshot = snapshotWith({ turn, waiting: false })
+    const prompted = snapshot.messages.find((message) => message.id === prompt)
+    if (!prompted) throw new Error('No prompt')
+    const step = { type: 'command', command: 'sh .spyria/setup.sh', exitCode, durationMilliseconds: null, output: '' }
+    const setup = {
+      ...prompted,
+      id: messageId(id),
+      seq: 2,
+      kind: 'step' as const,
+      authorId: null,
+      body: 'command',
+      step,
+      replyToId: prompt,
+    }
+    return getConversation(acme, research, alice)({ ...snapshot, messages: [...snapshot.messages, setup] })?.isSettingUp
+  }
+  expect(isSettingUpWith({ turn: true, exitCode: null })).toBe(true)
+  expect(isSettingUpWith({ turn: true, exitCode: 0 })).toBe(false)
+  expect(isSettingUpWith({ turn: false, exitCode: null })).toBe(false)
+  expect(isSettingUpWith({ turn: true, exitCode: null, id: 'conversation-1:toolu_1' })).toBe(false)
+})
+
 test('the read marker is behind until it reaches the newest message of the chat flow', () => {
   const snapshot = snapshotWith({ turn: false, waiting: false })
   const isBehindAt = (lastReadSeq: number | null) =>
