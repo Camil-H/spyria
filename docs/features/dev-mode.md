@@ -45,10 +45,10 @@ When the chat's runtime starts, spyria-agent clones the repository into the runt
 
 - The clone uses an installation token scoped to that one repository with read access only. The token lives only in the environment of the `git clone` process: it is not in the agent's environment and the remote in `.git/config` carries no credential.
 - Clone and checkout are part of the runtime's start, which the host relay limits to 2 minutes. A failed clone fails the start with "The repository could not be cloned" and git's reason.
-- If the repository has `.spyria/setup.sh`, it runs after the session has started, as a command step in the chat with live output. It runs without any token. A prompt sent while it runs waits for it to end before it reaches the agent, so the agent never works on a half-installed checkout; **Stop** ends a waiting prompt. The step ends when the script exits: a service it starts in the background keeps running without holding the step open. When it fails, the chat shows a notice with its exit code and its last lines; the session keeps going.
-- The setup script has 45 minutes. Past that, it is stopped with every process in its process group (a daemon that detaches itself with `setsid` escapes), and the chat shows a notice with the limit and its last lines; the session keeps going.
+- The setup command runs after the session has started, as a command step in the chat with live output: the one the repository's [dev loop pipeline](#dev-loop) sets, else `sh .spyria/setup.sh` when the repository has that file. It runs without any token. A prompt sent while it runs waits for it to end before it reaches the agent, so the agent never works on a half-installed checkout; **Stop** ends a waiting prompt. The step ends when the script exits: a service it starts in the background keeps running without holding the step open. When it fails, the chat shows a notice with its exit code and its last lines; the session keeps going.
+- The setup command has 45 minutes. Past that, it is stopped with every process in its process group (a daemon that detaches itself with `setsid` escapes), and the chat shows a notice with the limit and its last lines; the session keeps going.
 - The clone's git identity (`user.name` and `user.email` in `.git/config`) is the chat owner, so the agent's commits show the owner as their author: their GitHub login and `<id>+<login>@users.noreply.github.com` when their GitHub account is linked, else their Spyria name and a no-reply address. The server reads the owner's GitHub account with their token once per member and caches it; only the name and address reach the runtime. The identity is set again each time the agent starts.
-- A runtime that restarts keeps its clone (no new clone or checkout) and runs the setup script again, since the processes it started are gone. A setup script must therefore be safe to run twice: install what is missing, skip what is there.
+- A runtime that restarts keeps its clone (no new clone or checkout) and runs the setup command again, since the processes it started are gone. A setup command must therefore be safe to run twice: install what is missing, skip what is there.
 
 Rules files come with the clone, so every agent can read them. Pi loads `AGENTS.md` (or `CLAUDE.md`) from the working directory upward; Claude Code reads `CLAUDE.md` files; Codex reads `AGENTS.md`. A repository that wants all three to follow the same rules keeps an `AGENTS.md` and a `CLAUDE.md` that points to it.
 
@@ -118,28 +118,19 @@ An App created before Spyria asked for **Workflows** lacks that permission too: 
 
 ## Dev loop
 
-When an admin turns the dev loop on, the agent of a dev chat checks its own work before the owner sees it. It ends the work the owner asked for by calling `finish_work`; after that turn, Spyria:
+When an admin turns the dev loop on, the agent of a dev chat checks its own work before the owner sees it. It ends the work the owner asked for by calling `finish_work`; after that turn, Spyria runs the steps of the repository's pipeline, in order. A pipeline is defined in **Workspace settings > Dev loop**, for one repository or as the default for every other one, and holds the setup command and any of these steps:
 
-1. **Runs the checks** of `.spyria/dev-loop.json` in the runtime, one after the other, each with 20 minutes and the setup script's environment. A failing check goes back to the agent with the end of its output.
-2. **Has the diff reviewed**: it asks the agent to start a subagent with a fresh context on the branch's diff (then, in later rounds, on what changed since the last review), guided by the repository's `REVIEW.md` and `AGENTS.md`, and to report each finding with `report_review` as important, nit or pre-existing. Important findings that were not reported before go back to the agent; nits and pre-existing defects do not.
-3. **Pushes the branch and opens the pull request**, or pushes to the open one, as the owner, with the title and description given to `finish_work`.
-4. **Waits for CI**: every minute it reads the checks of the pushed commit, and once every counted check has finished, it sends the failing ones back to the agent, as `read_checks` shows them. When no counted check reports within 15 minutes, it hands over.
+- **Command**: a name, one command run in the runtime with the setup command's environment, and a timeout. Keep the logic in a script in the repository, such as a package script or `scripts/check.sh`, so the step only runs it and developers run the same thing. Consecutive commands run one after the other and fail together, so the agent gets every failure at once, with the end of each one's output.
+- **Code review**: the agent starts a subagent with a fresh context on the branch's diff (then, in later rounds, on what changed since the last review), guided by the repository's `REVIEW.md` and `AGENTS.md`, and reports each finding with `report_review` as important, nit or pre-existing. Important findings that were not reported before count as a failure; nits and pre-existing defects do not.
+- **Pull request**: pushes the branch and opens the pull request, or pushes to the open one, as the owner, with the title and description given to `finish_work`.
+- **CI**: every minute it reads the checks of the pushed commit, and once every check that counts has finished, the failing ones count as a failure, as `read_checks` shows them. The checks that count are picked from those GitHub reports on the base branch, or typed; with none picked, every check counts. When no counted check reports within 15 minutes, it hands over.
 
-If the agent commits during the review turn, that commit goes through the checks and the review again before anything is pushed.
+Each step but the pull request says what a failure does: **send it back to the agent, up to N times**, or **stop and hand over to the owner**. After a fix the agent calls `finish_work` again and the pipeline runs from its first step. If the agent commits during the review turn, that commit goes through the pipeline again before anything is pushed. The built-in pipeline, before an admin changes it, is a code review, the pull request and CI.
 
-```json
-{
-  "checks": { "Lint": "bun run lint", "Types": "bun run typecheck", "Tests": "bun run check:related" },
-  "ci": ["ci-ok"]
-}
-```
+Each message the loop sends is the owner's, marked **Sent by the dev loop**, and runs on the owner's key; in the audit log it reads as the system acting for the owner. A **Dev loop** card in the chat shows the pipeline, each step passed, failed, running or waiting, how many times it was fixed, the review findings and the pull request. The loop hands over to the owner, with a notice, when:
 
-`checks` maps each check's name to a command; without the file there are no checks. `ci` lists the CI checks that count; without it, every check of the pushed commit counts. An invalid file stops the loop with the reason.
-
-Each message the loop sends is the owner's, marked **Sent by the dev loop**, and runs on the owner's key; in the audit log it reads as the system acting for the owner. A **Dev loop** card in the chat shows where the loop is, the checks, the rounds used and how many review findings there were. The loop hands over to the owner, with a notice, when:
-
-- everything passed: "Ready for your review on pull request #N";
-- a phase still fails after its fixes: the agent is first asked to say what it would change about the approach, without fixing again;
+- every step passed: "Ready for your review on pull request #N", naming the steps that passed;
+- a step still fails after its fixes: the agent is first asked to say what it would change about the approach, without fixing again; or a step set to stop fails;
 - the agent ends a turn without `finish_work` (it is waiting for the owner, or asked a question);
 - the loop reaches its time limit (counted from the owner's prompt), its cost limit, or the owner's monthly budget;
 - the owner presses **Stop**, or an admin turns the loop off;
@@ -147,7 +138,7 @@ Each message the loop sends is the owner's, marked **Sent by the dev loop**, and
 
 Only the owner's own prompts start a loop: `finish_work` from another member's prompt is refused. The loop works the same on a member's machine, except that a subscription is not metered, so neither the cost limit nor the monthly budget applies there.
 
-Admins set the loop in **Workspace settings > Dev loop**, with the **Connect GitHub** permission: on or off, how many times the agent may fix failing checks (3), review findings (3, 0 turns the review off) and failing CI (2, 0 does not wait for CI), the time limit of a loop (4 hours) and an optional cost limit. See [decision 0025](../decisions/0025-dev-loop.md).
+Admins set the loop in **Workspace settings > Dev loop**, with the **Connect GitHub** permission: on or off, the limits of a loop (a time limit, 4 hours by default, and an optional cost limit), and the pipelines. See [decision 0025](../decisions/0025-dev-loop.md).
 
 ## The pull request card and header chip
 

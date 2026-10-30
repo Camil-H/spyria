@@ -17,13 +17,7 @@ import { createRuntimeAgentRuntimes, type SandboxProvider } from '../integration
 import { type AgentLlm, createSpyriaAgentClient } from '../integrations/spyria-agent-client.ts'
 import { workspaceJobTypes } from '../integrations/workspace-jobs.ts'
 import { createTransactingZeroTransactor } from '../integrations/zero-transactor.ts'
-import {
-  continueLoopAfterTurn,
-  judgeLoopCi,
-  pollLoopChecks,
-  publishLoop,
-  startLoopChecks,
-} from '../operations/advance-dev-loop.ts'
+import { continueLoopAfterTurn, judgeLoopCi, pollLoopChecks, runLoop } from '../operations/advance-dev-loop.ts'
 import { closeReopenedTurn, reopenAgentTurn, sweepAgentTurns } from '../operations/agent-turn-safety.ts'
 import { authorizeToolCall } from '../operations/authorize-tool-call.ts'
 import { callDevLoopTool, githubToolsOf } from '../operations/call-dev-loop-tool.ts'
@@ -135,12 +129,10 @@ export const createAgentHandlers = ({
         sweepAgentTurns(dependenciesOf(workspaceId), { workspaceId, now: now() }),
       [devLoopJobTypes.afterTurn]: ({ workspaceId, payload }: AgentJob) =>
         continueLoopAfterTurn(dependenciesOf(workspaceId), { workspaceId, ...loopPayload.parse(payload) }),
-      [devLoopJobTypes.checks]: ({ workspaceId, payload }: AgentJob) =>
-        startLoopChecks(dependenciesOf(workspaceId), { workspaceId, ...loopPayload.parse(payload) }),
+      [devLoopJobTypes.run]: ({ workspaceId, payload }: AgentJob) =>
+        runLoop(dependenciesOf(workspaceId), { workspaceId, ...loopPayload.parse(payload) }),
       [devLoopJobTypes.pollChecks]: ({ workspaceId, payload }: AgentJob) =>
         pollLoopChecks(dependenciesOf(workspaceId), { workspaceId, ...loopPayload.parse(payload) }),
-      [devLoopJobTypes.publish]: ({ workspaceId, payload }: AgentJob) =>
-        publishLoop(dependenciesOf(workspaceId), { workspaceId, ...loopPayload.parse(payload) }),
       [devLoopJobTypes.ci]: ({ workspaceId, payload }: AgentJob) =>
         judgeLoopCi(dependenciesOf(workspaceId), { workspaceId, ...loopPayload.parse(payload) }),
       [workspaceJobTypes.memberRemoved]: ({ workspaceId, payload }: AgentJob) =>

@@ -10,6 +10,7 @@ import {
   isPickableModel,
   type MemberId,
   type MessageId,
+  pipelineOf,
   signInNoticeOf,
   type WorkspaceId,
   withPricesOf,
@@ -257,14 +258,18 @@ const storedConversationOf = async (
 const checkoutWithOwnerOf = async ({ transactor, checkouts }: AgentDependencies, chat: AgentChat) => {
   const checkout = await checkouts?.checkoutOf(chat)
   if (!checkouts || !checkout) return checkout
-  const owner = await transactor.run(async ({ chats, members }) => {
-    const { ownerId } = await chats.get(chat.chatId)
-    return ownerId && { ownerId, ownerName: await members.displayNameOf(ownerId) }
+  const { owner, setupCommand } = await transactor.run(async ({ chats, members, devLoop }) => {
+    const { ownerId, repository } = await chats.get(chat.chatId)
+    return {
+      owner: ownerId && { ownerId, ownerName: await members.displayNameOf(ownerId) },
+      setupCommand: pipelineOf(await devLoop.settings(), repository).setupCommand,
+    }
   })
-  if (!owner) return checkout
+  const configured = { ...checkout, ...(setupCommand && { setupCommand }) }
+  if (!owner) return configured
   const githubAuthor = await checkouts.authorOf(chat, owner.ownerId).catch(() => undefined)
   const author = githubAuthor ?? noReplyAuthorOf(owner.ownerName, owner.ownerId)
-  return { ...checkout, author }
+  return { ...configured, author }
 }
 
 const createdConversationOf = async (

@@ -1,4 +1,3 @@
-import { DevLoopSection } from '@spyria/conversation'
 import type { Snapshot } from '@spyria/db'
 import { useQuery, useScoped } from '@spyria/db/react'
 import type { WorkspaceId, WorkspacePermission } from '@spyria/kernel'
@@ -9,6 +8,7 @@ import { focusRing, formatCost, iconButtonClass, LabelledSection, useShortcut } 
 import { AuditLogSection, countBudgetAlerts, UsageSection } from '@spyria/usage'
 import {
   DeleteWorkspaceSection,
+  DevLoopSection,
   GitHubSection,
   MembersSection,
   RolesSection,
@@ -159,7 +159,7 @@ const cardStatusesOf =
       ),
       'mcp-tools': countLabelOf(inWorkspace(snapshot.workspaceConnections).length, 'shared connection'),
       'ai-providers': aiProvidersStatusOf(snapshot.workspaces.find((workspace) => workspace.id === workspaceId)),
-      'dev-loop': snapshot.workspaces.find((workspace) => workspace.id === workspaceId)?.devLoop ? 'On' : 'Off',
+      'dev-loop': snapshot.workspaces.find((workspace) => workspace.id === workspaceId)?.devLoop?.isOn ? 'On' : 'Off',
       costs: `${formatCost(monthCostMicros)} this month`,
     }
   }

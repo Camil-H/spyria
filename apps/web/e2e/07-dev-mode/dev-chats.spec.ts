@@ -44,7 +44,7 @@ test.describe('Dev chats', () => {
     await configureGitHubApp(page)
     await newDevChat(page, 'Docs work', 'acme/docs')
     await sendMessage(page, 'stub:ls')
-    const notice = messageContaining(page, 'The setup script .spyria/setup.sh failed with exit code 127')
+    const notice = messageContaining(page, 'The setup command "sh .spyria/setup.sh" failed with exit code 127')
     await expect(notice).toContainText('docs-tool: command not found')
     await expect(messageContaining(page, 'files:.git,.spyria,README.md')).toHaveCount(1)
     await expect(workingIndicatorOf(page)).toHaveCount(0)
@@ -62,7 +62,9 @@ test.describe('Dev chats', () => {
     await expect(messageContaining(page, 'files:.git,.spyria,README.md')).toHaveCount(0)
     await expect(setup.locator('pre')).toContainText('docs-tool: command not found')
     await expect(setup).toContainText('exit 127')
-    await expect(messageContaining(page, 'The setup script .spyria/setup.sh failed with exit code 127')).toHaveCount(1)
+    await expect(
+      messageContaining(page, 'The setup command "sh .spyria/setup.sh" failed with exit code 127'),
+    ).toHaveCount(1)
     await expect(messageContaining(page, 'files:.git,.spyria,README.md')).toHaveCount(1)
   })
 })

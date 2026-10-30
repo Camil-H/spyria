@@ -1,5 +1,4 @@
-import type { DevLoopSettings, MemberId } from '@spyria/kernel'
-import { messageId, systemActor } from '@spyria/kernel'
+import { type DevLoopSettings, type MemberId, messageId, pipelineOf, systemActor } from '@spyria/kernel'
 import type { AgentChat } from '../contracts/agent.ts'
 import type { UnitOfWork } from '../contracts/transactor.ts'
 import {
@@ -47,7 +46,7 @@ const startLoop = async (
       kind: 'step',
       authorId: prompt.authorId,
       body: MessageBody('dev_loop'),
-      step: newDevLoop(prompt.id, prompt.createdAt.getTime(), settings, summary),
+      step: newDevLoop(prompt.id, prompt.createdAt.getTime(), settings, pipelineOf(settings, chat.repository), summary),
       createdAt: new Date(),
       replyToId: null,
     }),
@@ -69,7 +68,7 @@ const finishWork = async (unitOfWork: UnitOfWork, turn: Turn, input: unknown) =>
     return refused('This turn is for the review: call report_review with what the review found')
   if (!isActiveLoop(loop.step) || loop.step.lastPromptId !== prompt.id || loop.step.state !== 'working')
     return refused('This dev loop has ended: tell the owner the work is done')
-  await saveLoop(unitOfWork, loop, { ...loop.step, next: 'checks', summary })
+  await saveLoop(unitOfWork, loop, { ...loop.step, next: 'run', summary })
   return answered(finishedWorkText)
 }
 
@@ -88,7 +87,7 @@ const reportReview = async (unitOfWork: UnitOfWork, { loop, prompt }: Turn, inpu
 export const callDevLoopTool = ({ transactor }: Dependencies, { chat, name, input }: Input) =>
   transactor.run(async (unitOfWork) => {
     const settings = await unitOfWork.devLoop.settings()
-    if (!settings) return refused('The dev loop is off in this workspace')
+    if (!settings?.isOn) return refused('The dev loop is off in this workspace')
     const stored = await unitOfWork.chats.get(chat.chatId)
     if (!stored.baseBranch) return refused('This chat has no repository')
     const promptId = await unitOfWork.agentTurns.lock(chat.chatId)
@@ -100,7 +99,7 @@ export const callDevLoopTool = ({ transactor }: Dependencies, { chat, name, inpu
 
 export const githubToolsOf = ({ transactor }: Dependencies, chat: AgentChat) =>
   transactor.run(async ({ devLoop, chats }) =>
-    (await devLoop.settings()) && (await chats.get(chat.chatId)).baseBranch
+    (await devLoop.settings())?.isOn && (await chats.get(chat.chatId)).baseBranch
       ? { tools: [...githubTools, ...devLoopTools], instructions: `${githubToolsInstructions} ${devLoopInstructions}` }
       : { tools: githubTools, instructions: githubToolsInstructions },
   )

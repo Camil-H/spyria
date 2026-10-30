@@ -6,6 +6,7 @@ export const githubConfiguredPath = '/api/github-settings/configured'
 export const githubAppManifestPath = '/api/github-settings/manifest'
 export const githubRepositoriesPath = '/api/github/repositories'
 export const githubBranchesPath = '/api/github/branches'
+export const githubCheckNamesPath = '/api/github/check-names'
 export const devChatsPath = '/api/dev-chats'
 
 type PostAsMember = (workspaceId: WorkspaceId, path: string, body?: string) => Promise<Response>
@@ -47,6 +48,20 @@ export const createHttpGitHubCommands = (postAsMember: PostAsMember, getAsMember
         await getAsMember(workspaceId, `${githubBranchesPath}?${new URLSearchParams({ repository })}`),
       )
     ).branches,
+  listCheckNames: async ({
+    workspaceId,
+    repository,
+    branch,
+  }: {
+    workspaceId: WorkspaceId
+    repository: string
+    branch: string
+  }) =>
+    (
+      await bodyOf<{ names: string[] }>(
+        await getAsMember(workspaceId, `${githubCheckNamesPath}?${new URLSearchParams({ repository, branch })}`),
+      )
+    ).names,
   createDevChat: async ({
     workspaceId,
     ...input

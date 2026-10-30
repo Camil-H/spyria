@@ -125,8 +125,3 @@ export const WebPageNotPublic = errorKind(
   ConversationError,
 )
 export const WebPageTooLarge = errorKind('web_page_too_large', () => 'This page is over 5 MB', ConversationError)
-export const InvalidDevLoopSettings = errorKind(
-  'invalid_dev_loop_settings',
-  () => 'Rounds, the time limit and the cost limit must be whole numbers within their ranges',
-  ConversationError,
-)

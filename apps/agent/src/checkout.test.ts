@@ -105,6 +105,7 @@ test('a failing setup script shows its exit code and last output lines and the s
   expect(setupFailed?.completed).toBe(true)
   expect(setupFailed?.update).toEqual({
     sessionUpdate: 'setup_failed',
+    command: 'sh .spyria/setup.sh',
     exitCode: 3,
     output: [...Array.from({ length: 19 }, (_, index) => `line ${index + 7}`), 'missing tool'].join('\n'),
   })
@@ -235,6 +236,7 @@ test('a setup script past its time limit is stopped with every process it starte
   expect(socket.events.filter(isSetup).at(-1)?.update.rawOutput).not.toHaveProperty('exit_code')
   expect(socket.events.find(kindOf('setup_failed'))?.update).toEqual({
     sessionUpdate: 'setup_failed',
+    command: 'sh .spyria/setup.sh',
     timeoutMinutes: 0.005,
     output: 'downloading',
   })
@@ -310,4 +312,22 @@ test('a restarted runtime runs the setup script again on its existing clone', as
     await open(await create({ ...launch, id })).until(setupEnded)
   }
   expect(readFileSync(join(workingDirectory, 'runs.txt'), 'utf8')).toBe('run\nrun\n')
+})
+
+test('a setup command given with the repository runs instead of .spyria/setup.sh, and its step and notice name it', async () => {
+  const url = bareRepository('configured', { '.spyria/setup.sh': 'echo from the file > from-file.txt\n' })
+  const { open, create } = started()
+  const { launch, workingDirectory } = launchIn('configured', url)
+  const repository = { ...launch.repository, setup_command: 'echo configured > configured.txt && exit 5' }
+  const socket = open(await create({ ...launch, repository }))
+  await socket.until(kindOf('setup_failed'))
+  expect(socket.events.find(isSetup)?.update).toMatchObject({ title: 'echo configured > configured.txt && exit 5' })
+  expect(socket.events.find(kindOf('setup_failed'))?.update).toEqual({
+    sessionUpdate: 'setup_failed',
+    command: 'echo configured > configured.txt && exit 5',
+    exitCode: 5,
+    output: '',
+  })
+  expect(existsSync(join(workingDirectory, 'configured.txt'))).toBe(true)
+  expect(existsSync(join(workingDirectory, 'from-file.txt'))).toBe(false)
 })

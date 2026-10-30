@@ -1,11 +1,11 @@
-import { CircleCheck, CircleX, IterationCw } from 'lucide-react'
-import type { DevLoopState, DevLoopStep } from '../domain/dev-loop.ts'
+import type { DevLoopStepConfig } from '@spyria/kernel'
+import { CircleCheck, CircleDashed, CircleX, IterationCw, LoaderCircle } from 'lucide-react'
+import { type DevLoopState, type DevLoopStep, stepNameOf } from '../domain/dev-loop.ts'
 
 const stateLabels: Record<DevLoopState, string> = {
   working: 'Agent working',
-  checking: 'Running checks',
+  running: 'Running',
   reviewing: 'Reviewing',
-  publishing: 'Publishing',
   waiting_for_ci: 'Waiting for CI',
   handing_off: 'Handing over',
   done: 'Done',
@@ -13,23 +13,27 @@ const stateLabels: Record<DevLoopState, string> = {
 }
 const stateClasses: Record<DevLoopState, string> = {
   working: 'bg-hover text-muted',
-  checking: 'bg-hover text-muted',
+  running: 'bg-hover text-muted',
   reviewing: 'bg-hover text-muted',
-  publishing: 'bg-hover text-muted',
   waiting_for_ci: 'bg-hover text-muted',
   handing_off: 'bg-removed text-ink',
   done: 'bg-added text-ink',
   stopped: 'bg-removed text-ink',
 }
+const activeStates: DevLoopState[] = ['running', 'reviewing', 'waiting_for_ci']
+type StepStatus = 'passed' | 'failed' | 'running' | 'waiting'
+const statusIcons = {
+  passed: CircleCheck,
+  failed: CircleX,
+  running: LoaderCircle,
+  waiting: CircleDashed,
+} satisfies Record<StepStatus, unknown>
 
-const roundsOf = ({ rounds, limits }: DevLoopStep) =>
-  [
-    `Checks fixed ${rounds.checks} of ${limits.checkRounds}`,
-    limits.reviewRounds > 0 && `review ${rounds.review} of ${limits.reviewRounds}`,
-    limits.ciRounds > 0 && `CI ${rounds.ci} of ${limits.ciRounds}`,
-  ]
-    .filter(Boolean)
-    .join(' · ')
+const statusOf = (step: DevLoopStep, index: number): StepStatus =>
+  index === step.position && activeStates.includes(step.state) ? 'running' : (step.outcomes[index] ?? 'waiting')
+
+const fixesOf = (config: DevLoopStepConfig, round: number) =>
+  'fixes' in config && round > 0 ? `fixed ${round} of ${config.fixes} times` : undefined
 
 const DevLoopCard = ({ step }: { step: DevLoopStep }) => {
   const important = step.findings.filter((finding) => finding.severity === 'important').length
@@ -42,26 +46,34 @@ const DevLoopCard = ({ step }: { step: DevLoopStep }) => {
           {stateLabels[step.state]}
         </span>
       </div>
-      {step.checks.length > 0 && (
-        <ul aria-label="Checks" className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
-          {step.checks.map(({ name, passed }) => (
-            <li key={name} className="flex items-center gap-1">
-              {passed ? (
-                <CircleCheck role="img" aria-label="passed" size={14} className="text-muted" />
-              ) : (
-                <CircleX role="img" aria-label="failed" size={14} className="text-muted" />
+      <ol aria-label="Steps" className="flex flex-col gap-1 text-xs">
+        {step.pipeline.map((config, index) => {
+          const status = statusOf(step, index)
+          const Icon = statusIcons[status]
+          const fixes = fixesOf(config, step.rounds[index] ?? 0)
+          return (
+            // biome-ignore lint/suspicious/noArrayIndexKey: a pipeline never changes during a loop, and its steps have no identity
+            <li key={`${config.kind}-${index}`} className="flex items-center gap-1.5">
+              <Icon
+                role="img"
+                aria-label={status}
+                size={14}
+                className={`shrink-0 text-muted ${status === 'running' ? 'animate-spin' : ''}`}
+              />
+              <span>{stepNameOf(config)}</span>
+              {config.kind === 'review' && step.findings.length > 0 && (
+                <span className="text-muted">
+                  {step.findings.length} {step.findings.length === 1 ? 'finding' : 'findings'}, {important} important
+                </span>
               )}
-              {name}
+              {config.kind === 'pull_request' && step.pullRequestNumber !== null && (
+                <span className="text-muted">#{step.pullRequestNumber}</span>
+              )}
+              {fixes && <span className="text-muted">· {fixes}</span>}
             </li>
-          ))}
-        </ul>
-      )}
-      <p className="text-xs text-muted">
-        {roundsOf(step)}
-        {step.findings.length > 0 &&
-          ` · ${step.findings.length} review ${step.findings.length === 1 ? 'finding' : 'findings'}, ${important} important`}
-        {step.pullRequestNumber !== null && ` · pull request #${step.pullRequestNumber}`}
-      </p>
+          )
+        })}
+      </ol>
       {step.outcome && <p>{step.outcome}</p>}
     </section>
   )

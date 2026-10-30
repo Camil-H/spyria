@@ -2,6 +2,7 @@ import type {
   ChatId,
   ChatPermission,
   ChatRole,
+  DevLoopSettings,
   MemberId,
   ProjectId,
   WorkspacePermission,
@@ -54,6 +55,7 @@ export type WorkspaceRoleRepository = {
 export type WorkspaceRepository = {
   add(workspace: Workspace): Promise<void>
   scheduleDeletion(deletion: { purgeAt: number; haltDelayMilliseconds: number; actorId: MemberId }): Promise<void>
+  setDevLoop(settings: DevLoopSettings | null): Promise<void>
 }
 
 export type WorkspaceCleanup = { isPending: boolean; failed: readonly { type: string; count: number }[] }
