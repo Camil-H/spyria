@@ -35,11 +35,7 @@ export const bringUpRuntime = async (
 ) => {
   const { runtime, harness, packageCache } = await transactor.run(async ({ runtimes }) => {
     const runtime = await runtimes.lock(workspaceId, runtimeId)
-    return {
-      runtime,
-      harness: await runtimes.localHarnessOf(runtime),
-      packageCache: await runtimes.packageCacheScopeOf(runtime),
-    }
+    return { runtime, ...(await runtimes.launchOptionsOf(runtime)) }
   })
   const sandbox = locationOf(runtime)
   if (!['creating', 'starting', 'installing'].includes(runtime.state) || !sandbox) return
