@@ -12,10 +12,13 @@ import {
   bob,
   failedWith,
   lee,
+  rpcOf,
+  runtimeTurn,
   sessionTokenOf,
   startAgentStack,
   succeeded,
   testSecretsKey,
+  textOf,
   waitFor,
 } from './testing/testing.ts'
 
@@ -279,7 +282,7 @@ test('As a member, writing in the chat stops the dev loop; another member’s pr
     failedWith('Rounds, the time limit and the cost limit must be whole numbers within their ranges'),
   )
   expect(await setDevLoop(alice, { ...defaultDevLoopSettings, checkRounds: 2 })).toEqual(succeeded)
-  await stack.agentHost('Interrupted loop host', { routesModelCalls: true })
+  const { host } = await stack.agentHost('Interrupted loop host', { routesModelCalls: true })
   await addLlmKey(lee, 'Anthropic')
   await connectGitHub(alice)
   const { id } = await newDevChat()
@@ -291,13 +294,23 @@ test('As a member, writing in the chat stops the dev loop; another member’s pr
   expect((await loopOf(id))?.step).toMatchObject({ state: 'stopped', outcome: 'Stopped: Lee wrote in the chat' })
   await stack.answered(leesPrompt)
   await waitFor(async () => (await stack.turnOf(id)) === null, 20_000)
-  const refusals = (
-    await database.$client`
-      select tool, status from tool_calls where chat_id = ${id} and prompter_id = ${lee} order by called_at`
-  ).map(({ tool, status }) => ({ tool, status }))
-  expect(refusals).toEqual([{ tool: 'finish_work', status: 'refused' }])
   expect((await loopOf(id))?.step.state).toBe('stopped')
   expect(await loopPromptsOf(id)).toEqual([])
+
+  const guest = await runtimeTurn(host, lee)
+  await database.$client`
+    update chats set repository = 'acme/app', base_branch = 'main', git_branch = 'spyria/guest-loop' where id = ${guest.chatId}`
+  const answer = await host.modelCall({
+    path: '/mcp/github',
+    headers: { authorization: `Bearer ${guest.token}`, 'content-type': 'application/json' },
+    body: rpcOf('tools/call', { name: 'finish_work', arguments: { title: 'Mine', body: '' } }),
+  })
+  const { result } = JSON.parse(answer.body)
+  expect({ isError: result.isError, text: textOf(result) }).toEqual({
+    isError: true,
+    text: "Only Alice's prompts start the dev loop: tell the members here that the work is done",
+  })
+  expect(await loopOf(chatId(guest.chatId))).toBeUndefined()
 })
 
 test('As a chat owner, Stop stops the dev loop while it runs the checks, and turning the loop off stops the loops still running', async () => {
