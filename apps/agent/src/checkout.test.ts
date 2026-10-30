@@ -29,6 +29,14 @@ const bareRepository = (name: string, files: Record<string, string>) => {
   return `file://${join(directory, `${name}.git`)}`
 }
 
+const startedStatusOf = async (call: ReturnType<typeof started>['call'], id: string) => {
+  for (const deadline = Date.now() + 10_000; Date.now() < deadline; await Bun.sleep(10)) {
+    const { body } = await call('GET', `/api/conversations/${id}`)
+    if (body.execution_status !== 'starting') return body.execution_status
+  }
+  throw new Error('The agent did not finish starting')
+}
+
 const launchIn = (name: string, url: string, extra: object = {}) => {
   const workingDirectory = join(directory, `${name}-workspace`)
   const environmentFile = join(directory, `${name}-environment`)
@@ -116,7 +124,7 @@ test('a failing setup script shows its exit code and last output lines and the a
     output: [...Array.from({ length: 19 }, (_, index) => `line ${index + 7}`), 'missing tool'].join('\n'),
   })
   await socket.until(kindOf('session_started'))
-  expect((await call('GET', `/api/conversations/${id}`)).body).toMatchObject({ execution_status: 'idle' })
+  expect(await startedStatusOf(call, id)).toBe('idle')
   const missing = await call(
     'POST',
     '/api/conversations',
@@ -137,7 +145,7 @@ test('a slow setup script does not hold the launch: the conversation answers at 
   const socket = open(id)
   await socket.until(kindOf('session_started'))
   expect(socket.events.findIndex(kindOf('session_started'))).toBeGreaterThan(socket.events.findIndex(setupEnded))
-  expect((await call('GET', `/api/conversations/${id}`)).body).toMatchObject({ execution_status: 'idle' })
+  expect(await startedStatusOf(call, id)).toBe('idle')
   const updates = socket.events.filter(isSetup)
   expect(updates.find((event) => !event.completed && event.update.rawOutput)?.update.rawOutput).toEqual({
     formatted_output: 'installing\n',
