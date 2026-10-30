@@ -3,6 +3,7 @@ import type {
   ChatId,
   ChatPermission,
   ChatRole,
+  DevLoopSettings,
   HarnessId,
   ListedModel,
   MemberId,
@@ -112,6 +113,11 @@ export type AgentEventRepository = {
 }
 
 export type DraftRepository = { replace(draft: Draft): Promise<void> }
+
+export type DevLoopRepository = {
+  settings(): Promise<DevLoopSettings | null>
+  setSettings(settings: DevLoopSettings | null): Promise<void>
+}
 
 export type BrowserPageRepository = { open(chatId: ChatId, page: OpenedPage, openedAt: Date): Promise<void> }
 

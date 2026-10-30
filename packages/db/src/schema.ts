@@ -4,6 +4,7 @@ import {
   type ChatPermission,
   type ChatVisibility,
   type CredentialId,
+  type DevLoopSettings,
   type HarnessId,
   type MemberId,
   type MessageId,
@@ -20,6 +21,7 @@ type WorkspaceRow = {
   name: string
   localSessions: boolean
   aiProviderAllowList: AiProviderAllowList | null
+  devLoop: DevLoopSettings | null
 }
 type MembershipRow = {
   memberId: MemberId

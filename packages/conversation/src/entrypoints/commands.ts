@@ -1,4 +1,4 @@
-import type { ChatId, MemberId, MessageId, WorkspaceId } from '@spyria/kernel'
+import type { ChatId, DevLoopSettings, MemberId, MessageId, WorkspaceId } from '@spyria/kernel'
 import type { Attachment } from '../domain/attachments.ts'
 import type { WebPage } from '../domain/browser-pages.ts'
 import type { GitAction, GitActionOutcome } from '../domain/git-actions.ts'
@@ -36,6 +36,7 @@ export type ConversationCommands = {
   retryAgent: Command<{ chatId: ChatId }>
   restartSession: Command<{ chatId: ChatId }>
   stopRuntime: Command<{ chatId: ChatId }>
+  setDevLoop: Command<{ settings: DevLoopSettings | null }>
   startRuntimeFromMessage: Command<{ messageId: MessageId }>
   forkChat: Command<{ sourceChatId: ChatId }>
   inviteMember: Command<{ chatId: ChatId; memberId: MemberId; roleId: string }>
