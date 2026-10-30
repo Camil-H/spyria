@@ -37,12 +37,14 @@ export const newDevChat = async (page: Page, name: string, repository: string, b
 export const setSetupCommand = async (page: Page, repository: string, command: string) => {
   await openSettings(page, 'Connect runtime')
   const section = mainOf(page).getByRole('region', { name: 'Setup commands' })
-  const field = section.getByLabel(`Setup command of ${repository}`)
-  if ((await field.count()) === 0) {
+  const tab = section.getByRole('tablist', { name: 'Setup commands' }).getByRole('tab', { name: repository })
+  if ((await tab.count()) === 0) {
+    await section.getByRole('tab', { name: 'New repository setup command' }).click()
     await section.getByRole('combobox', { name: 'Repository' }).selectOption(repository)
-    await section.getByRole('button', { name: 'Add', exact: true }).click()
+  } else {
+    await tab.click()
   }
-  await field.fill(command)
+  await section.getByLabel('Setup command', { exact: true }).fill(command)
   await section.getByRole('button', { name: 'Save' }).click()
   await expect(section.getByText('Saved')).toBeVisible()
   await page.goto('/')
