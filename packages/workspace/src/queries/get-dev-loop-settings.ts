@@ -3,6 +3,3 @@ import type { WorkspaceId } from '@spyria/kernel'
 
 export const devLoopSettingsOf = (workspaceId: WorkspaceId) => (snapshot: Snapshot) =>
   snapshot.workspaces.find((workspace) => workspace.id === workspaceId)?.devLoop ?? null
-
-export const setupCommandsOf = (workspaceId: WorkspaceId) => (snapshot: Snapshot) =>
-  snapshot.workspaces.find((workspace) => workspace.id === workspaceId)?.setupCommands ?? []

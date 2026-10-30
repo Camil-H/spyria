@@ -193,7 +193,7 @@ At the bottom of **Workspace settings**, an Admin finds **Delete workspace**. It
 | Group | Records |
 |---|---|
 | Members | invites, revoked invites, joins, role changes, removals |
-| Workspace | workspace deleted, restored by the operator, AI providers allow-list changed |
+| Workspace | workspace deleted, restored by the operator, AI providers allow-list changed, quality gates changed, setup commands changed |
 | Sign-in | SSO configured, client secret replaced, domain verified |
 | GitHub | App configured, App secrets replaced |
 | Connections | shared connections added, changed, removed, member restrictions |

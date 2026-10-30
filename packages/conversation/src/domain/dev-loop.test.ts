@@ -85,9 +85,11 @@ test('the loop stops at its time limit, and at its cost limit only when the cost
   const capped = { ...loop, timeLimitMinutes: 60, costLimitMicros: 5_000_000 }
   expect(limitOutcomeOf(capped, startedAt + 59 * 60_000, 4_999_999)).toBeUndefined()
   expect(limitOutcomeOf(capped, startedAt + 60 * 60_000, 0)).toBe(
-    'Stopped after 60 minutes, the time limit of a loop: over to you',
+    'Stopped after 60 minutes, the time limit of a run through the gates: over to you',
   )
-  expect(limitOutcomeOf(capped, startedAt, 5_000_000)).toBe('Stopped at $5.00, the cost limit of a loop: over to you')
+  expect(limitOutcomeOf(capped, startedAt, 5_000_000)).toBe(
+    'Stopped at $5.00, the cost limit of a run through the gates: over to you',
+  )
   expect(limitOutcomeOf(capped, startedAt, null)).toBeUndefined()
 })
 

@@ -53,7 +53,8 @@ const stepArgument = z.union([
   z.object({ kind: z.literal('pull_request') }),
   z.object({ kind: z.literal('ci'), checks: z.nullable(z.array(z.string())), fixes: z.number() }),
 ])
-const devLoopArgument = z.nullable(
+export const setupCommandsArgument = z.array(z.object({ repository: z.nullable(z.string()), command: z.string() }))
+export const devLoopArgument = z.nullable(
   z.object({
     isOn: z.boolean(),
     timeLimitMinutes: z.number(),
@@ -61,7 +62,6 @@ const devLoopArgument = z.nullable(
     pipelines: z.array(
       z.object({
         repository: z.nullable(z.string()),
-        setupCommand: z.nullable(z.string()),
         steps: z.array(stepArgument),
       }),
     ),
@@ -131,7 +131,7 @@ export const workspaceMutators = defineMutators({
     ),
     setSetupCommands: defineMutator(
       z.extend(workspaceArguments, {
-        commands: z.array(z.object({ repository: z.nullable(z.string()), command: z.string() })),
+        commands: setupCommandsArgument,
       }),
       ({ tx, ctx, args }) =>
         setSetupCommands(dependenciesOf(tx, ctx, args), { actorId: ctx.userId, commands: args.commands }),

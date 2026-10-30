@@ -82,7 +82,7 @@ const cardSections: readonly { title: string; cards: readonly SettingsCard[] }[]
       {
         path: 'runtime',
         title: 'Connect runtime',
-        description: "Runtime hosts and members' own machines",
+        description: "Runtime hosts, members' own machines and setup commands",
         permissions: ['runtimes.manage'],
         Page: RuntimeSettings,
       },
